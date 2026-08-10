@@ -68,6 +68,10 @@ public:
     void setDecay   (double seconds) noexcept { decaySec_   = clampTime (seconds); }
     void setSustain (double level)   noexcept { sustain_    = clamp01  (level);   }
     void setRelease (double seconds) noexcept { releaseSec_ = clampTime (seconds); }
+    // fb297 — DECLICK FLOOR: minimum release length (seconds). release=0 on a gate/square amp env
+    // otherwise steps sustain→0 in ONE sample = a note-off click. The owner sets this on the AMP env
+    // only (~5 ms) so "zero release" stays tight but the VCA always ramps down. 0 = off (other envs).
+    void setMinRelease (double seconds) noexcept { minReleaseSec_ = seconds < 0.0 ? 0.0 : seconds; }
 
     // curve/tension per time-segment, each in [-1,+1]
     void setAttackCurve  (double t) noexcept { curveA_ = clampCurve (t); }
@@ -215,10 +219,15 @@ private:
                 segTarget_ = sustain_;
                 break;
             case Stage::Release:
-                segLen_    = releaseSec_ * sampleRate_;
+            {
+                // fb297 — never a 1-sample step: a 0 (or sub-ms) release is floored to minReleaseSec_
+                // so the amp VCA ramps down over a few ms (declick) instead of jumping sustain→0.
+                const double relSec = (releaseSec_ > minReleaseSec_) ? releaseSec_ : minReleaseSec_;
+                segLen_    = relSec * sampleRate_;
                 segTarget_ = 0.0;
                 if (segLen_ < 1.0) { level_ = 0.0; enterStage (Stage::Idle); return; }
                 break;
+            }
             case Stage::Idle:
                 segLen_ = 0.0; level_ = 0.0; segStart_ = 0.0; segTarget_ = 0.0;
                 break;
@@ -281,6 +290,7 @@ private:
     double susSm_      = 0.70;   // fb204 — glided sustain (2.5ms one-pole toward sustain_)
     double susSmCoef_  = 0.02;   // fb204 — set in prepare()
     double releaseSec_ = 0.20;
+    double minReleaseSec_ = 0.0;   // fb297 — declick floor for the release (0 = off; amp env sets ~5ms)
     double curveA_     = 0.0;
     double curveD_     = 0.0;
     double curveR_     = 0.0;

@@ -3409,7 +3409,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "Clean","Warm","Vintage","Modern","Lo-Fi","Bright","Dark","Wide" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SYN_DLY_SYNCDIV, 1 }, "Delay Sync Division",
-        juce::StringArray { "Free","1/4","1/8","1/8T","1/8D","1/16" }, 2));   // default 1/8
+        juce::StringArray { "Free","1/1","1/2","1/4","1/4D","1/4T","1/8","1/8D","1/8T","1/16","1/16T","1/32" }, 6));   // default 1/8
     auto addDlyF = [&] (const char* id, const char* nm, float def) {
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
@@ -7011,10 +7011,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     float bpm = currentBPM.load(); if (bpm < 20.0f) bpm = 120.0f;
                     const float qms = 60000.0f / bpm;            // quarter-note ms
-                    float mult = 0.5f;
-                    switch (syncDiv) { case 1: mult = 1.0f; break; case 2: mult = 0.5f; break;
-                                       case 3: mult = 0.5f * 2.0f / 3.0f; break; case 4: mult = 0.5f * 1.5f; break;
-                                       case 5: mult = 0.25f; break; }
+                    float mult = 0.5f;   // index → multiplier of a QUARTER note (qms)
+                    switch (syncDiv) {
+                        case 1:  mult = 4.0f;            break;   // 1/1
+                        case 2:  mult = 2.0f;            break;   // 1/2
+                        case 3:  mult = 1.0f;            break;   // 1/4
+                        case 4:  mult = 1.5f;            break;   // 1/4 dotted
+                        case 5:  mult = 1.0f*2.0f/3.0f;  break;   // 1/4 triplet
+                        case 6:  mult = 0.5f;            break;   // 1/8
+                        case 7:  mult = 0.75f;           break;   // 1/8 dotted
+                        case 8:  mult = 0.5f*2.0f/3.0f;  break;   // 1/8 triplet
+                        case 9:  mult = 0.25f;           break;   // 1/16
+                        case 10: mult = 0.25f*2.0f/3.0f; break;   // 1/16 triplet
+                        case 11: mult = 0.125f;          break;   // 1/32
+                    }
                     timeMs = qms * mult;
                 }
                 else

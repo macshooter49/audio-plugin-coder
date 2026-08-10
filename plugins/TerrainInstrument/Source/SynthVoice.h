@@ -63,6 +63,8 @@ namespace tw
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
             noiseSR_ = (float) sampleRate_;   // NOISE engine Hz-based math (hum/wind/rumble/SVF)
             ampEnv_.prepare (sampleRate_);
+            ampEnv_.setMinRelease (0.005);   // fb297 — 5ms declick FLOOR on the AMP env only: release=0 stays tight
+                                             // but the VCA ramps sustain→0 instead of stepping = no note-off click.
             for (auto& de : dynEnv_) de.prepare (sampleRate_);   // fb177 — dynamic pool
             fltEnvT_.prepare (sampleRate_);
             pitchEnvT_.prepare (sampleRate_);
