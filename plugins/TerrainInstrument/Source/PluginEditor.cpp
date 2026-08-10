@@ -778,6 +778,64 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                         v = p->getValue();
                 complete (juce::var (v));
             })
+            .withNativeFunction("getConvIR", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb292 — Convolution baked-IR waveform envelope + name/dur for the FX-rack core viz.
+                // args = [ N ] (bucket count). Returns JSON {user, durMs, name, peaks:[...N]}.
+                int N = 160; if (args.size() >= 1) { int n = (int) static_cast<double> (args[0]); if (n > 8 && n <= 512) N = n; }
+                std::vector<float> buf ((size_t) N, 0.0f);
+                int len = audioProcessor.getConvIREnvelope (buf.data(), N);
+                double sr = audioProcessor.getSampleRate(); if (sr < 1.0) sr = 48000.0;
+                juce::String js;
+                js << "{\"user\":" << (audioProcessor.isConvIRUser() ? "true" : "false")
+                   << ",\"durMs\":" << juce::String (len / sr * 1000.0, 1)
+                   << ",\"name\":" << juce::JSON::toString (juce::var (audioProcessor.getConvIRName()))
+                   << ",\"peaks\":[";
+                for (int i = 0; i < N; ++i) { if (i) js << ","; js << juce::String (buf[(size_t) i], 4); }
+                js << "]}";
+                complete (juce::var (js));
+            })
+            .withNativeFunction("loadConvIRFromBase64", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb292 — drag-drop IR: args = [ base64, filename ] → decode IN-MEMORY → processor loads it. NO disk.
+                if (args.size() >= 1)
+                {
+                    juce::MemoryOutputStream decoded;
+                    if (juce::Base64::convertFromBase64 (decoded, args[0].toString()))
+                    {
+                        juce::String nm = args.size() >= 2 ? args[1].toString() : juce::String ("User IR");
+                        bool ok = audioProcessor.loadConvIRFromMemory (decoded.getData(), decoded.getDataSize(), nm);
+                        complete (juce::var (ok ? nm : juce::String()));
+                        return;
+                    }
+                }
+                complete (juce::var (juce::String()));
+            })
+            .withNativeFunction("loadConvIRChooser", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb292 — "Load IR…" menu item → native file chooser → processor decodes from file. Async.
+                auto safe = juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> (this);
+                auto chooser = std::make_shared<juce::FileChooser> ("Load impulse response",
+                    juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3");
+                auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
+                chooser->launchAsync (flags, [safe, chooser, complete] (const juce::FileChooser& fc)
+                {
+                    juce::File f = fc.getResult();
+                    juce::String nm;
+                    if (safe != nullptr && f.existsAsFile())
+                        if (safe->audioProcessor.loadConvIRFromFile (f)) nm = f.getFileName();
+                    complete (juce::var (nm));
+                });
+            })
+            .withNativeFunction("clearConvIR", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.clearConvUserIR();
+                complete (juce::var{});
+            })
             .withNativeFunction("grabKeys", [this](const juce::Array<juce::var>&,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -878,6 +936,13 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // fb280 — audio-reactive reverb bloom (0..1.5 smoothed wet level); the FX-rack
                 // reverb core rAF-polls this so the purple core breathes with the tail.
                 complete (juce::var ((double) audioProcessor.getReverbBloom()));
+            })
+            .withNativeFunction("getDelayBloom", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb296 — audio-reactive delay wet level (0..1.5); the FX-rack delay core rAF-polls this
+                // so the tap envelope / scan line breathe with the echoes.
+                complete (juce::var ((double) audioProcessor.getDelayBloom()));
             })
             .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>&,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)

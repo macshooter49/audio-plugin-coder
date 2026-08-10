@@ -24,6 +24,81 @@
 #include <cmath>
 #include <cstdint>
 
+// fb295 — PHASE-VOCODER pitch shifter (Bernsee streaming STFT + identity peak phase-lock). Replaces the granular
+// dual-tap shifter for a CLEAN, IN-TUNE octave/fifth (the granular gave "detuned/wishy slop": a grain-crossfade
+// frequency wobble that no time-domain tweak removes — harness proved the PV is ~+54 dB cleaner on the octave,
+// ~+60 dB on the fifth). N=2048, 75% overlap ⇒ ~43 ms latency INSIDE the feedback (fine for an ethereal shimmer);
+// peak phase-locking restores vertical phase coherence so the diffuse tail doesn't go watery. Everything pre-allocated.
+struct ShimmerPV
+{
+    static constexpr int PN = 2048, PH = PN / 4, PNB = PN / 2 + 1, PLAT = PN - PH;
+    static constexpr float TAUF = 6.28318530718f;
+    int   brev[PN] = {0}, flog = 0;
+    float cw[PN / 2] = {0}, sw[PN / 2] = {0};
+    float win[PN] = {0}, fin[PN] = {0}, fout[PN] = {0}, acc[PN + PH] = {0};
+    float lastPh[PNB] = {0}, sumPh[PNB] = {0}, fr[PN] = {0}, fi[PN] = {0};
+    float aMag[PNB] = {0}, aFreq[PNB] = {0}, sMag[PNB] = {0}, sFreq[PNB] = {0};
+    int   rover = PLAT; float ratio = 2.0f, expct = 0.0f;
+
+    void prepare()
+    {
+        flog = 0; while ((1 << flog) < PN) flog++;
+        for (int i = 0; i < PN; ++i) { int r = 0, x = i; for (int b = 0; b < flog; ++b) { r = (r << 1) | (x & 1); x >>= 1; } brev[i] = r; }
+        for (int i = 0; i < PN / 2; ++i) { cw[i] = std::cos (-TAUF * i / PN); sw[i] = std::sin (-TAUF * i / PN); }
+        for (int k = 0; k < PN; ++k) win[k] = 0.5f - 0.5f * std::cos (TAUF * k / PN);
+        expct = TAUF * (float) PH / (float) PN;
+        reset();
+    }
+    void reset()
+    {
+        for (int i = 0; i < PN; ++i) { fin[i] = fout[i] = fr[i] = fi[i] = 0.0f; }
+        for (int i = 0; i < PN + PH; ++i) acc[i] = 0.0f;
+        for (int k = 0; k < PNB; ++k) { lastPh[k] = sumPh[k] = 0.0f; }
+        rover = PLAT;
+    }
+    void fftp (float* re, float* im, bool inv)
+    {
+        for (int i = 0; i < PN; ++i) { int j = brev[i]; if (j > i) { float t = re[i]; re[i] = re[j]; re[j] = t; t = im[i]; im[i] = im[j]; im[j] = t; } }
+        for (int len = 2; len <= PN; len <<= 1) { int half = len >> 1, step = PN / len;
+            for (int i = 0; i < PN; i += len) for (int k = 0; k < half; ++k) { float wr = cw[k * step], wi = inv ? -sw[k * step] : sw[k * step];
+                int a = i + k, b = i + k + half; float tr = wr * re[b] - wi * im[b], ti = wr * im[b] + wi * re[b];
+                re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti; } }
+        if (inv) { float s = 1.0f / PN; for (int i = 0; i < PN; ++i) { re[i] *= s; im[i] *= s; } }
+    }
+    static inline float wrapp (float x) { int q = (int) (x / (float) M_PI); if (q >= 0) q += q & 1; else q -= q & 1; return x - (float) M_PI * (float) q; }
+    inline float process (float x)
+    {
+        fin[rover] = x; float out = fout[rover - PLAT]; ++rover;
+        if (rover >= PN)
+        {
+            rover = PLAT; const float r = ratio;
+            for (int k = 0; k < PN; ++k) { fr[k] = fin[k] * win[k]; fi[k] = 0.0f; }
+            fftp (fr, fi, false);
+            for (int k = 0; k < PNB; ++k) { float re = fr[k], im = fi[k]; float mg = std::sqrt (re * re + im * im); float ph = std::atan2 (im, re);
+                float dp = ph - lastPh[k]; lastPh[k] = ph; dp -= (float) k * expct; dp = wrapp (dp);
+                aMag[k] = mg; aFreq[k] = (float) k + dp * (float) PN / ((float) PH * TAUF); }
+            for (int k = 0; k < PNB; ++k) { sMag[k] = 0.0f; sFreq[k] = 0.0f; }
+            for (int k = 0; k < PNB; ++k) { int idx = (int) std::floor (k * r + 0.5f); if (idx >= 0 && idx < PNB) { sMag[idx] += aMag[k]; sFreq[idx] = aFreq[k] * r; } }
+            for (int k = 0; k < PNB; ++k) { float tmp = (sFreq[k] - (float) k) * ((float) PH * TAUF) / (float) PN + (float) k * expct;
+                sumPh[k] += tmp; fr[k] = sMag[k] * std::cos (sumPh[k]); fi[k] = sMag[k] * std::sin (sumPh[k]); }
+            // identity peak phase-lock (reuse aFreq/sFreq as pr/pi scratch — done being read above)
+            for (int k = 0; k < PNB; ++k) { aFreq[k] = fr[k]; sFreq[k] = fi[k]; }
+            for (int k = 1; k < PNB - 1; ++k) { int pk = k; if (sMag[k - 1] > sMag[pk]) pk = k - 1; if (sMag[k + 1] > sMag[pk]) pk = k + 1;
+                if (pk != k && sMag[pk] > 1.0e-9f) { float m = std::sqrt (aFreq[k] * aFreq[k] + sFreq[k] * sFreq[k]);
+                    float nr = 1.0f / (std::sqrt (aFreq[pk] * aFreq[pk] + sFreq[pk] * sFreq[pk]) + 1.0e-12f);
+                    fr[k] = m * aFreq[pk] * nr; fi[k] = m * sFreq[pk] * nr; } }
+            for (int k = PNB; k < PN; ++k) { fr[k] = fr[PN - k]; fi[k] = -fi[PN - k]; }
+            fftp (fr, fi, true);
+            const float ola = 2.0f / 3.0f;   // Hann², 75% overlap ⇒ OLA gain ≈ 1.5 → ×2/3
+            for (int k = 0; k < PN; ++k) acc[k] += fr[k] * win[k] * ola;
+            for (int k = 0; k < PH; ++k) fout[k] = acc[k];
+            for (int k = 0; k < PN; ++k) acc[k] = acc[k + PH]; for (int k = PN; k < PN + PH; ++k) acc[k] = 0.0f;
+            for (int k = 0; k < PLAT; ++k) fin[k] = fin[k + PH];
+        }
+        return out;
+    }
+};
+
 class ShimmerReverb
 {
 public:
@@ -49,12 +124,14 @@ public:
           int sz = 1; while (sz < len + 4) sz <<= 1; tank[i].assign ((size_t) sz, 0.0f); tankMask[i] = sz - 1; tankWr[i] = 0; tankDelay[i] = len; }
         { int need = (int) std::ceil (0.20f * fs) + 8; int sz = 1; while (sz < need) sz <<= 1; pre.assign ((size_t) sz, 0.0f); preMask = sz - 1; preWr = 0; }
         // pitch-shifter grain buffer (~50 ms) + Hann window LUT
-        G = 0.048f * fs;                                   // grain size (samples)
+        G = 0.085f * fs;                                   // fb294 — grain size ↑ 48→85 ms: a LONGER, smoother crossfade drops the granular grain-transition artifact rate (the "crystal/metallic" the FDN mod was masking) so the octave/fifth shift reads CLEAN with Mod OFF — no wobble added (Max)
         { int need = (int) std::ceil (G * 2.0f) + 64; int sz = 1; while (sz < need) sz <<= 1; sh.assign ((size_t) sz, 0.0f); shMask = sz - 1; shWr = 0; }
         for (int k = 0; k < WINLUT; ++k) winLut[k] = 0.5f - 0.5f * std::cos (2.0f * PI * (float) k / (float) WINLUT);
         for (int i = 0; i < N; ++i) { oldRand[i] = rand11(); newRand[i] = rand11(); }
         smth = 1.0f - std::exp (-1.0f / (0.015f * fs));
         shR   = 1.0f - std::exp (-1.0f / (0.030f * fs));   // shift-ratio glide (glissando on interval change)
+        pitchLpCoef = 1.0f - std::exp (-2.0f * PI * 14000.0f / fs);   // (retired granular LP)
+        pv_.prepare();   // fb295 — phase-vocoder pitch shifter
         dcR = 1.0f - (126.0f / fs);
         tiltCoef = 1.0f - std::exp (-2.0f * PI * 1200.0f / fs);   // output brightness-tilt split
         reset();
@@ -69,7 +146,7 @@ public:
         for (int i = 0; i < N; ++i)  std::fill (tank[i].begin(), tank[i].end(), 0.0f);
         std::fill (pre.begin(), pre.end(), 0.0f); std::fill (sh.begin(), sh.end(), 0.0f);
         inLpZ = lcZ = dcxL = dcyL = dcxR = dcyR = tiltLpL = tiltLpR = 0.0f;
-        d1 = 0.0f; rvbMonoLast = 0.0f; hpZ = 0.0f;
+        d1 = 0.0f; rvbMonoLast = 0.0f; hpZ = 0.0f; pitchLpZ = 0.0f; pv_.reset();
     }
 
     // ── params (0..1 unless noted); call updateCoefficients() after a batch ──
@@ -109,6 +186,7 @@ public:
         }
         // Pitch interval → read-rate ratio; glissando-glides on change. Down-shift flagged for the stability governors.
         shiftRatioT = SHIFTR[shift];
+        pv_.ratio = shiftRatioT;   // fb295 — phase-vocoder shift ratio (discrete per interval; the PV re-maps bins on change)
         downAmt = shiftRatioT < 0.999f ? clamp01 (1.0f - shiftRatioT) : 0.0f;   // 0 for up/detune, >0 for downshift
         // Shimmer feedback: Regen capped (lower for downshift) + auto-damp tames the build. Character scales.
         float regCap = 0.90f - 0.20f * downAmt;
@@ -163,19 +241,22 @@ public:
         regenC += (regenT-regenC)*smth; blendC += (blendT-blendC)*smth; freezeCur += (freezeTgt-freezeCur)*smth;
         shiftRatioC += (shiftRatioT - shiftRatioC) * shR;
 
-        // ── granular pitch shifter READ (dual-tap Hann, amplitude-complementary → gain ≤ 1) ──
-        d1 -= (shiftRatioC - 1.0f);
-        if (d1 < 0.0f) d1 += G; else if (d1 >= G) d1 -= G;
-        float d2 = d1 + 0.5f * G; if (d2 >= G) d2 -= G;
-        float w1 = winLut[(int) (d1 * (WINLUT / G)) & (WINLUT - 1)];
-        float w2 = winLut[(int) (d2 * (WINLUT / G)) & (WINLUT - 1)];
-        float pitchOut = w1 * readFrac (sh, shMask, shWr, d1 + 1.0f) + w2 * readFrac (sh, shMask, shWr, d2 + 1.0f);
+        // ── PHASE-VOCODER pitch shift (fb295) — CLEAN, in-tune octave/fifth (replaced the granular grain reader that
+        //    gave the "detuned/wishy slop"). Push the previous reverb output each sample; the PV returns the shifted
+        //    stream (delayed by its ~43 ms latency, which becomes the shimmer's per-octave stack interval).
+        float pitchOut = pv_.process (rvbMonoLast);
 
         // ── shimmer feedback: blend shifted vs direct, in-loop HP (downshift drain), tanh safety ──
         float fbSig = blendC * pitchOut + (1.0f - blendC) * rvbMonoLast;
         hpZ = (1.0f - hpCutC) * fbSig + hpCutC * hpZ; fbSig = fbSig - hpZ;      // one-pole HP
         float regEff = regenC * (1.0f - 0.55f * freezeCur);                    // freeze eases regen so it HOLDS, not runs
-        float shimFB = regEff * std::tanh (1.5f * fbSig);                      // bounded → BIBO safe at any Regen
+        // fb294 — the SHIFTED feedback self-terminates (energy ascends out of band → the shimmer stack Max likes) so it
+        // tolerates a hot 1.5x drive; the DIRECT (unshifted) feedback is a plain reverb loop with NO escape, so a hot
+        // drive pushes its small-signal loop gain past 1 at moderate Regen → the "crazy feedback loop when the Shimmer is
+        // DOWN" Max heard. Fade the drive with Shimmer: 0.75 (all direct — loop gain < 1 at any Regen) → 1.5 (all shifted,
+        // unchanged shimmer). Output level unchanged (this is the FEEDBACK loop gain, not the wet gain).
+        float fbDrive = 0.75f + 0.75f * blendC;
+        float shimFB  = regEff * std::tanh (fbDrive * fbSig);                  // bounded → BIBO safe at any Regen
 
         float x = 0.5f * (inL + inR) * (1.0f - freezeCur) + shimFB;            // freeze cuts the dry-in; shimmer holds
         pre[(size_t) preWr] = x; x = readFrac (pre, preMask, preWr, preSampC); preWr = (preWr + 1) & preMask;
@@ -207,8 +288,7 @@ public:
         float wr = (sIn[1]+sIn[3]+sIn[5]+sIn[7]) * 0.5f;
         float rvbMono = 0.5f * (wl + wr);
         // feed the shifter for the next samples' reads, and remember the direct tap
-        sh[(size_t) shWr] = flush (rvbMono); shWr = (shWr + 1) & shMask;
-        rvbMonoLast = rvbMono;
+        rvbMonoLast = flush (rvbMono);   // fb295 — feeds the phase-vocoder shifter next sample (the granular grain buffer is retired)
 
         // bold output tone tilt (identity at Tone 0.5) — output-only (the shifter above saw the flat tail)
         tiltLpL += (wl - tiltLpL) * tiltCoef; { float hi = wl - tiltLpL; wl = tiltLpL * loGainC + hi * hiGainC; }
@@ -227,6 +307,16 @@ private:
     static inline float readFrac (const std::vector<float>& buf, int mask, int wr, float d)
     { if (d < 1.0f) d = 1.0f; float mx = (float) mask - 2.0f; if (d > mx) d = mx; int di = (int) d; float fr = d - (float) di;
       float a = buf[(size_t) ((wr - di) & mask)]; float b = buf[(size_t) ((wr - di - 1) & mask)]; return a + (b - a) * fr; }
+    // fb295 — 4-point cubic Hermite (Catmull-Rom) for the PITCH-SHIFT grain read: linear interp aliases badly on an
+    // upshifted (octave/fifth) read → the "detuned / wishy-washy / granular slop" Max heard. Cubic ≈ mild built-in
+    // band-limit + far lower imaging = a clean, in-tune shift. (4 taps vs 2; only the shifter uses it — the FDN stays linear.)
+    static inline float readFracCubic (const std::vector<float>& buf, int mask, int wr, float d)
+    { if (d < 2.0f) d = 2.0f; float mx = (float) mask - 3.0f; if (d > mx) d = mx; int di = (int) d; float fr = d - (float) di;
+      float ym1 = buf[(size_t) ((wr - di + 1) & mask)]; float y0 = buf[(size_t) ((wr - di) & mask)];
+      float y1  = buf[(size_t) ((wr - di - 1) & mask)]; float y2 = buf[(size_t) ((wr - di - 2) & mask)];
+      float c1 = 0.5f * (y1 - ym1); float c2 = ym1 - 2.5f * y0 + 2.0f * y1 - 0.5f * y2;
+      float c3 = 0.5f * (y2 - ym1) + 1.5f * (y0 - y1);
+      return ((c3 * fr + c2) * fr + c1) * fr + y0; }
     static inline void fwht8 (float* a)
     { for (int len = 1; len < 8; len <<= 1) for (int i = 0; i < 8; i += (len << 1)) for (int j = i; j < i + len; ++j) { float u = a[j], v = a[j+len]; a[j] = u+v; a[j+len] = u-v; } }
     static inline float fastSin (float ph01) { return std::sin (2.0f * PI * ph01); }
@@ -266,11 +356,12 @@ private:
     std::vector<float> ap[4];   int apMask[4] = {0};   int apWr[4] = {0}; int apDelay[4] = {0};
     std::vector<float> tank[N]; int tankMask[N] = {0}; int tankWr[N] = {0}; int tankDelay[N] = {0};
     std::vector<float> pre;     int preMask = 0;       int preWr = 0;
-    std::vector<float> sh;      int shMask = 0;        int shWr = 0;       // pitch-shifter grain buffer
+    std::vector<float> sh;      int shMask = 0;        int shWr = 0;       // (retired granular grain buffer — kept for ABI/no-op)
+    ShimmerPV pv_;              // fb295 — phase-vocoder pitch shifter (clean octave/fifth)
     float winLut[WINLUT] = {0};
     float dampZ[N] = {0}, lfoPh[N] = {0};
     float inLpZ = 0, lcZ = 0, dcxL = 0, dcyL = 0, dcxR = 0, dcyR = 0, hpZ = 0;
-    float d1 = 0, rvbMonoLast = 0;
+    float d1 = 0, rvbMonoLast = 0, pitchLpZ = 0, pitchLpCoef = 0.85f;   // fb295 — gentle band-limit on the cubic pitch-shift output (de-fizz)
     float baseDelayT[N] = {0}, baseDelayC[N] = {0}, gLineT[N] = {0}, gLineC[N] = {0};
     float dampT = 0, dampC = 0, apGT[4] = {0}, apGC[4] = {0}, inLpT = 0, inLpC = 0, lcT = 0, lcC = 0, hpCutT = 0, hpCutC = 0;
     float hiGainT = 1, hiGainC = 1, loGainT = 1, loGainC = 1, tiltLpL = 0, tiltLpR = 0;

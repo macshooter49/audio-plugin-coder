@@ -26,7 +26,7 @@ public:
     static constexpr int FN   = 1024;        // FFT size (2B)
     static constexpr int FLOG = 10;          // log2(FN)
     static constexpr int HB   = FN / 2 + 1;  // half-spectrum bins (real FFT)
-    static constexpr int MAXP = 288;         // max partitions → ~3.07 s @48k
+    static constexpr int MAXP = 576;         // max partitions → ~6.14 s @48k (bumped from 288 so real cathedral/ambience USER IRs aren't truncated — Max)
 
     void prepare (double sampleRate)
     {
@@ -41,6 +41,7 @@ public:
         baseL.assign ((size_t) MAXP * B, 0.0f); baseR.assign ((size_t) MAXP * B, 0.0f);
         bakeL.assign ((size_t) MAXP * B, 0.0f); bakeR.assign ((size_t) MAXP * B, 0.0f);
         tmpL.assign ((size_t) MAXP * B, 0.0f);  tmpR.assign ((size_t) MAXP * B, 0.0f);
+        userL.reserve ((size_t) MAXP * B); userR.reserve ((size_t) MAXP * B);   // fb293 — reserve so setUserIR never reallocs (no use-after-free vs the audio thread)
         preMax = (int) (0.25f * fs) + 16; { int sz = 1; while (sz < preMax + 4) sz <<= 1; preBuf.assign ((size_t) sz, 0.0f); preMask = sz - 1; }
         modMax = (int) (0.03f * fs) + 8;  { int sz = 1; while (sz < modMax + 8) sz <<= 1; modBufL.assign ((size_t) sz, 0.0f); modBufR.assign ((size_t) sz, 0.0f); modMask = sz - 1; }
         smth = 1.0f - std::exp (-1.0f / (0.015f * fs));
@@ -85,10 +86,16 @@ public:
     // load an arbitrary user IR (stereo; if mono pass same for L/R). len in samples. Triggers a rebake.
     void setUserIR (const float* irL, const float* irR, int len)
     {
-        userLen = len < 4 ? 0 : (len > MAXP * B ? MAXP * B : len);
-        if (userLen > 0) { userL.assign ((size_t) userLen, 0.0f); userR.assign ((size_t) userLen, 0.0f);
-                           for (int i = 0; i < userLen; ++i) { userL[i] = irL[i]; userR[i] = irR ? irR[i] : irL[i]; } }
-        baseChar = -1; irDirty = true;   // force re-synth from the user IR
+        int n = len < 4 ? 0 : (len > MAXP * B ? MAXP * B : len);
+        if (n > 0)
+        {   // userL/userR RESERVED to MAXP*B in prepare() ⇒ resize stays within capacity ⇒ NO realloc/free ⇒ no
+            // use-after-free race with the audio thread reading them mid-rebake (a 2nd+ message-thread drop otherwise crashed).
+            userL.resize ((size_t) n); userR.resize ((size_t) n);
+            for (int i = 0; i < n; ++i) { userL[(size_t) i] = irL[i]; userR[(size_t) i] = irR ? irR[i] : irL[i]; }
+        }
+        baseChar = -1;
+        userLen  = n;       // publish LENGTH after the samples are written (audio reads userLen, then userL[0..userLen))
+        irDirty  = true;
     }
     void clearUserIR () { userLen = 0; baseChar = -1; irDirty = true; }
 
@@ -160,6 +167,30 @@ public:
 
     // expose the current baked IR (for offline validation / a future viz)
     const std::vector<float>& bakedL () const { return bakeL; }  const std::vector<float>& bakedR () const { return bakeR; }  int bakedLen () const { return curBakeLen; }
+    // fb292 — peak-per-bucket envelope of the CURRENT baked IR (post-bake: reshapes with Size/Decay/Attack/Reverse/Density)
+    // into N buckets, normalized to 0..1 for the FX-rack waveform viz. Returns the baked length in samples (→ duration).
+    // (message-thread read of the audio-thread-written bake buffers: pre-allocated fixed-size vectors, bounds-checked ⇒ no
+    //  crash; a rare torn frame just draws one slightly-stale envelope, which is fine for a viz.)
+    int irEnvelope (float* out, int N) const
+    {
+        if (N < 1) return 0;
+        int len = curBakeLen; int cap = (int) bakeL.size();
+        if (len > cap) len = cap;
+        if (len < 1) { for (int b = 0; b < N; ++b) out[b] = 0.0f; return 0; }
+        float peak = 1e-9f;
+        for (int b = 0; b < N; ++b)
+        {
+            long long i0 = (long long) b * len / N, i1 = (long long) (b + 1) * len / N;
+            if (i1 <= i0) i1 = i0 + 1; if (i1 > len) i1 = len;
+            float m = 0.0f;
+            for (long long i = i0; i < i1; ++i)
+            { float a = std::fabs (bakeL[(size_t) i]), c = std::fabs (bakeR[(size_t) i]); float v = a > c ? a : c; if (v > m) m = v; }
+            out[b] = m; if (m > peak) peak = m;
+        }
+        const float inv = 1.0f / peak;
+        for (int b = 0; b < N; ++b) out[b] *= inv;   // normalize to 0..1 so the viz uses full height for any IR level
+        return len;
+    }
     // offline self-test of the FFT (0 = OK; 1/2/3 = which check failed)
     int selfTestFFT ()
     {
@@ -176,6 +207,9 @@ public:
         return 0;
     }
     void forceRebake () { irDirty = true; sinceBake = 1 << 30; rebake(); xfActive = false; xfPending = false; xfGain = 1.0f; }   // HARD swap (no crossfade)
+    // fb293 — off-loop HARD bake used ONLY when the reverb is IDLE (no route active): a dropped/selected IR must update
+    // the VIZ (bakeL, read by irEnvelope) immediately even with no audio running. Idle ⇒ no output ⇒ hard swap = click-free.
+    void bakeIfDirtyIdle () { if (irDirty) forceRebake(); }
 
 private:
     static inline float clamp01 (float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }

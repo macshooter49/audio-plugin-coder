@@ -115,6 +115,16 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
 - VST3: `~/Library/Audio/Plug-Ins/VST3/`
 - AU:   `~/Library/Audio/Plug-Ins/Components/`
 
+### E. RE-INSTALL: `rm -rf` the old bundle FIRST, then `cp`, then RE-SIGN (fb292 trap — cost hours)
+**Never `cp -R` a rebuilt bundle *over* an existing installed one** — macOS caches the code signature per inode, so an in-place overwrite of a hot (recently-loaded) bundle leaves a STALE signature → the kernel `SIGKILL`s the host on load with **"Code Signature Invalid" / CODESIGNING "Invalid Page"**. In pluginval this looks exactly like a **hang/crash at "Open plugin (cold)" (exit 137)** and masquerades as a code bug (it is NOT). The build's own signature is fine ("valid on disk"); the corruption is purely at install. **Correct install, every time:**
+```bash
+rm -rf "$DST/Terrain Instrument.vst3"                 # fresh inode
+cp -R "$ART/VST3/Terrain Instrument.vst3" "$DST/"
+codesign --force --deep --sign - "$DST/Terrain Instrument.vst3"   # ad-hoc re-sign
+xattr -cr "$DST/Terrain Instrument.vst3"              # clear quarantine
+```
+Same for the `.component`. If pluginval `Open plugin (cold)` fails with exit 137 / no assert, **check `~/Library/Logs/DiagnosticReports/pluginval-*.ips` FIRST** — an `EXC_BAD_ACCESS … SIGKILL (Code Signature Invalid)` in `dyld dlopen` = this trap, not your code.
+
 ---
 
 ## 3. NAMING LOCK (do not violate)
@@ -225,6 +235,45 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
   do its actual JOB — a **decay** param changes the DECAY (per-band ring time), NOT act as a static EQ; validate
   each with the perceptual harness. Prefer ESSENTIAL params: don't bloat effects with filter/EQ knobs the
   Terrain-Patcher (downstream EQ/filters) already covers. Reverb design laws: `feedback-reverb-device-design-laws`.
+- **🔬📚 RESEARCH BEFORE ANY DSP + FULL IMMERSION (Max, PERMANENT — 2026-08-09).** Before building ANY
+  DSP, make SURE you hold the correct research; if there's a gap, GO FIND IT — deep research, clean-room:
+  articles, GitHub, **Arturia**, **Serum 2**, reference manuals, academic. Scan everywhere, gather as many
+  sources as possible; know what it **looks/sounds/IS** — you *live* it. DSP is THE most important thing:
+  it must **always sound good** AND stay **CPU-friendly**. And **FULL IMMERSION** — whatever you're building,
+  you're in it DEEP like it's the only thing you know (now = impulse-response convolution reverb; next = delay);
+  one domain at a time, don't switch until it's shipped + Max-approved. Memory:
+  `feedback-research-before-dsp-and-full-immersion-hardrule`.
+- **♻️ NO NEW CODE FOR EXISTING THINGS — RECYCLE (Max, PERMANENT — 2026-08-09).** We already have our style: menus,
+  pills, centerlines, dots, fonts, wings, knobs, the **preset menu**. NEVER build a new version of a thing we already
+  have — go get the existing code and reuse it verbatim. THIS is what keeps everything ONE style. Canonical **PRESET
+  MENU** = `TIC.presets` / the `.pmenu` glass: `savePreset/getPresets/deletePreset` natives (generic per-`id`), `.pi.cur`
+  **bullet `•`** selection (NOT a checkmark), name-first save + "Overwrite X?" flow (fb138/154), appended to
+  `document.body`, clamped so it never clips. Reuse it for every new surface (reverb devices, future effects). Memory:
+  `feedback-no-new-code-recycle-existing`.
+- **💦 MIX 100% = FULLY WET, ZERO DRY (Max, PERMANENT — the effects endgame).** Every effect: when the Mix is up, the
+  Mix is UP. At 100% you hear ONLY the wet effect — no dry oscillator (A/B/C/D) at all. A send/duck must FULLY remove the
+  routed dry at 100%. Verify offline (dry residual < −60 dB at Mix 100%). Same law for Delay + every future effect.
+- **🚫✂️ MENUS/POPUPS NEVER CUT OFF (Max, PERMANENT).** Any menu/popup must reposition (flip up / clamp) to stay fully
+  visible — never clipped by the plugin bounds, especially devices at the BOTTOM of the plugin (the reverb rack). Reuse
+  the `.pmenu` clamp (`top = min(__vh()-h-6, …)`) so a downward menu at the bottom edge flips up automatically.
+- **📐🔒 FIXED POSITIONS — NO PAD / NUDGE / RESIZE ON ANY CONTENT CHANGE (Max, PERMANENT — 2026-08-09).** When content
+  changes — a loaded name, a dropped waveform, a value, any text — **nothing else may move, pad, nudge, or resize.**
+  Elements hold their EXACT position + size; only the content inside swaps. Dropping an IR **switches the waveform ONLY** —
+  the pill, header, knobs, everything stays put (no full re-render reflow; a longer name never grows a pill). Build with
+  **fixed-size boxes + overflow/ellipsis** and update **surgically** (never a whole re-render that reflows). Same family
+  as the centerline law: things don't move. Memory: `feedback-no-new-code-recycle-existing` (Fixed-positions section).
+- **🔒💾 STATE PERSISTS — NOTHING TURNS OFF BY ITSELF (Max, PERMANENT — 2026-08-09).** Every control stays EXACTLY where
+  the user set it. On UI close/reopen, plugin close/reopen, or a type/view SWITCH, nothing resets, toggles off, or drifts —
+  a click stays HELD until the user turns it off. Two failure modes to always guard (both bit the fb294 reverb): (1) a
+  re-render must read state from the JS model, so **every toggle writes back to that model** (not just the param) or the
+  next render drops it; (2) on init the UI must **READ BACK its state from the params** (`getSynParam`) — never rebuild from
+  hardcoded defaults, or a reopen shows defaults while the DSP holds the real (restored) state. Memory:
+  `feedback-no-new-code-recycle-existing` (State-persists section).
+- **🧩🔌 CPU-FRIENDLY FOR THE DYNAMIC NODE CHAIN (Max, PERMANENT — the Terrain Patcher endgame).** Effects become a
+  dynamic chain of **nodes** — multiple reverbs/delays, custom user buses, semi-modular like the infinite-envelope
+  (one convolution → one plate here, one hall there). So every effect must be as CPU-cheap as possible (one engine
+  active at a time, no waste). Never forget the endgame: everything you see becomes a custom-linkable NODE — the
+  Terrain Patcher / sandbox, the final boss. `terrain-instrument-node-architecture-patcher`.
 - **📚 LEARN FROM THE GREATS (Max, PERMANENT).** For every effect, study **Serum 2 FIRST** (its
   per-type param sets — e.g. reverb Vintage ~8 knobs, Basin ~3 — and what each does), then Arturia /
   Valhalla / Phase Plant / Omnisphere / GitHub+academic. A reference's param COUNT ≠ ours (fixed 8
@@ -235,6 +284,10 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
 - **Defer to manuals + research, never guess from training** when referencing other
   synths/tools for design. Read the actual manual or do real research first.
 - **Build a standalone HTML mockup and get sign-off before wiring UI into the plugin.**
+- **🎧 MOCKUPS ARE INTERACTIVE + AUDIBLE (Max, PERMANENT — fb296).** Every mockup must ACTUALLY PROCESS
+  AUDIO (Web Audio / AudioWorklet in local Safari) and be interactive — never a static HTML picture. Max
+  needs to HEAR what a control does and watch the viz react, so he can react to it, before any C++ is
+  written. (When a UI is already built + approved, wire it up directly — no new mockup needed.)
 
 ---
 

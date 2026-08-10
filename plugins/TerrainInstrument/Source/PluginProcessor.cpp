@@ -3400,6 +3400,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  true));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_DUCK,   1 }, "Reverb Duck",   false));
 
+    // ════════ FX RACK · DELAY — fb296. setSynParam-only; choices = INDEX; routes default OFF; parallel to reverb. ════════
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DLY_TYPE, 1 }, "Delay Type",
+        juce::StringArray { "Digital","Tape","BBD","Diffuse" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DLY_CHARACTER, 1 }, "Delay Character",
+        juce::StringArray { "Clean","Warm","Vintage","Modern","Lo-Fi","Bright","Dark","Wide" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DLY_SYNCDIV, 1 }, "Delay Sync Division",
+        juce::StringArray { "Free","1/4","1/8","1/8T","1/8D","1/16" }, 2));   // default 1/8
+    auto addDlyF = [&] (const char* id, const char* nm, float def) {
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
+    addDlyF (ParameterIDs::SYN_DLY_TIME,     "Delay Time",       0.50f);
+    addDlyF (ParameterIDs::SYN_DLY_FEEDBACK, "Delay Feedback",   0.58f);
+    addDlyF (ParameterIDs::SYN_DLY_TONE,     "Delay Tone",       0.44f);
+    addDlyF (ParameterIDs::SYN_DLY_MIX,      "Delay Mix",        0.34f);
+    addDlyF (ParameterIDs::SYN_DLY_LOWCUT,   "Delay Low Cut",    0.22f);
+    addDlyF (ParameterIDs::SYN_DLY_HICUT,    "Delay Hi Cut",     0.72f);
+    addDlyF (ParameterIDs::SYN_DLY_SPREAD,   "Delay Spread",     0.60f);
+    addDlyF (ParameterIDs::SYN_DLY_WIDTH,    "Delay Width",      0.78f);
+    addDlyF (ParameterIDs::SYN_DLY_MODRATE,  "Delay Mod Rate",   0.40f);
+    addDlyF (ParameterIDs::SYN_DLY_MODDEPTH, "Delay Mod Depth",  0.30f);
+    addDlyF (ParameterIDs::SYN_DLY_WOW,      "Delay Wow",        0.18f);
+    addDlyF (ParameterIDs::SYN_DLY_DUCK,     "Delay Ducking",    0.26f);
+    for (const char* rid : { ParameterIDs::SYN_DLY_SRC_A, ParameterIDs::SYN_DLY_SRC_B, ParameterIDs::SYN_DLY_SRC_C,
+                             ParameterIDs::SYN_DLY_SRC_D, ParameterIDs::SYN_DLY_SRC_SUB, ParameterIDs::SYN_DLY_SRC_NOISE })
+        layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_SYNC,  1 }, "Delay Sync",  true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_PING,  1 }, "Delay Ping-Pong", false));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
+
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
         juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
@@ -3662,6 +3695,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     basinReverb.prepare (sampleRate);  // fb289 — synth FX-rack Basin reverb (huge dark wash)
     shimmerReverb.prepare (sampleRate);// fb290 — synth FX-rack Shimmer reverb (octave wash)
     convolutionReverb.prepare (sampleRate);// fb291 — synth FX-rack Convolution reverb (FFT convolution)
+    delayEngine.prepare (sampleRate);      // fb296 — synth FX-rack Delay (Digital/Tape/BBD/Diffuse)
+    activeDlyType_ = -1; dlySwapping_ = false;
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
     // fb287 — DUCK follower: fast attack (grab transients ~5 ms), slow release (bloom back ~280 ms) → the
@@ -3671,6 +3706,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     duckEnv_ = 0.0f;
     reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
     reverbSendBuf_.clear();
+    delaySendBuf_.clear();
     hallBloomEnv_ = 0.0f; hallBloomViz_.store (0.0f, std::memory_order_relaxed);
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
@@ -5635,14 +5671,31 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (rawParam (ParameterIDs::SYN_RVB_POWER)->load() <= 0.5f)
         for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
     hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
+    // fb296 — DELAY per-osc route resolution (independent mask + power gate), parallel to the reverb send.
+    if (delaySendBuf_.getNumSamples() < numSamples)
+        delaySendBuf_.setSize (2, numSamples, false, true, true);
+    delaySendBuf_.clear (0, numSamples);
+    dlyG_[0] = rawParam (ParameterIDs::SYN_DLY_SRC_A)->load()     > 0.5f ? 1.0f : 0.0f;
+    dlyG_[1] = rawParam (ParameterIDs::SYN_DLY_SRC_B)->load()     > 0.5f ? 1.0f : 0.0f;
+    dlyG_[2] = rawParam (ParameterIDs::SYN_DLY_SRC_C)->load()     > 0.5f ? 1.0f : 0.0f;
+    dlyG_[3] = rawParam (ParameterIDs::SYN_DLY_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
+    dlyG_[4] = rawParam (ParameterIDs::SYN_DLY_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
+    dlyG_[5] = rawParam (ParameterIDs::SYN_DLY_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    if (rawParam (ParameterIDs::SYN_DLY_POWER)->load() <= 0.5f)          // power gates routing (same law as reverb)
+        for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
+    dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
+        float* dsL = dlyRouteActive_  ? delaySendBuf_.getWritePointer (0) : nullptr;
+        float* dsR = dlyRouteActive_  ? delaySendBuf_.getWritePointer (1) : nullptr;
         for (int vi = 0; vi < kSynthVoiceCount; ++vi)
             if (auto* sv = synthVoices_[(size_t) vi])
             {
                 sv->setReverbRoutes (hallRvbG_[0], hallRvbG_[1], hallRvbG_[2], hallRvbG_[3], hallRvbG_[4], hallRvbG_[5]);
                 sv->setReverbSendTarget (rsL, rsR);
+                sv->setDelayRoutes (dlyG_[0], dlyG_[1], dlyG_[2], dlyG_[3], dlyG_[4], dlyG_[5]);
+                sv->setDelaySendTarget (dsL, dsR);
             }
     }
 
@@ -6206,6 +6259,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const float* rvbSendL = reverbSendBuf_.getReadPointer (0);   // fb280 — routed-osc send (filled during synth render)
     const float* rvbSendR = reverbSendBuf_.getReadPointer (1);
     float hallBlockWetPk = 0.0f;                                 // fb280 — peak wet this block → bloom viz
+    const float* dlySendL = delaySendBuf_.getReadPointer (0);    // fb296 — delay routed-osc send
+    const float* dlySendR = delaySendBuf_.getReadPointer (1);
+    float dlyBlockWetPk = 0.0f;                                  // fb296 — peak wet this block → delay core viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
     // Walk all voices across all 4 layers. For each voice that's currently
@@ -6864,16 +6920,38 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 rvbDuckActive_ = (activeRvbType_ == 1 || activeRvbType_ == 3)
                                  && rawParam (ParameterIDs::SYN_RVB_DUCK)->load() > 0.5f;
             }
+            // fb293 — CONVOLUTION IDLE BAKE: keep the IR baked for the VIZ even when NO reverb route is active, so a
+            // dropped user IR / selected Space / bake-knob change shows its REAL waveform immediately. bakeL (the
+            // getConvIR envelope) is ONLY written by a rebake; without this it stays the default = the "placeholder"
+            // Max saw. Bake-affecting params only; bakeIfDirtyIdle hard-bakes off the tight loop (idle ⇒ no click).
+            else if (activeRvbType_ == 8 && ! rvbSwapping_)
+            {
+                convolutionReverb.setSize     (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
+                convolutionReverb.setDecay    (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
+                convolutionReverb.setDensity  (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
+                convolutionReverb.setAttack   (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
+                convolutionReverb.setDistance (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());
+                convolutionReverb.setCharacter((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
+                convolutionReverb.setShape    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
+                convolutionReverb.setReverse  (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
+                convolutionReverb.updateCoefficients();
+                convolutionReverb.bakeIfDirtyIdle();
+            }
         }
         if (hallRouteActive_ || hallRvbEnv_ > 1.0e-4f)
         {
             hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
             hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
             hallRvbWet_ += (hallRvbWetT_ - hallRvbWet_) * hallSm_;
-            // Send = routed oscs (voice-level), scaled by outputGain so it matches the dry mix level.
+            // Send = routed oscs (voice-level), scaled by outputGain AND the -6 dB kVoiceToFxPad (buffer.applyGain
+            // near L6055) so sgL/sgR match the routed dry EXACTLY as it sits in the master mix. fb292 BUGFIX (Max:
+            // "Mix up = fully wet"): the pad was MISSING here, so the duck subtracted 2x the routed dry actually in
+            // leftChannel → at Mix 100% the dry was only half-cancelled (phase-inverted, still audible). Padding
+            // sgL/sgR corrects BOTH the duck term and the wet input (equal-power) for all 9 types. Proven offline:
+            // Mix 100% dry residual 0 dB → -93 dB. Routes off ⇒ send=nullptr ⇒ raw=0 ⇒ byte-identical default.
             const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
             const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
-            const float sgL = rawL * outputGain, sgR = rawR * outputGain;
+            const float sgL = rawL * outputGain * kVoiceToFxPad, sgR = rawR * outputGain * kVoiceToFxPad;
             float rl, rr;
             if      (activeRvbType_ == 8) convolutionReverb.processSample (sgL, sgR, rl, rr);  // fb291 — Convolution (internally block-buffered, B-latency)
             else if (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
@@ -6907,6 +6985,82 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float bt = (hallBlockWetPk > hallBloomEnv_) ? 0.40f : 0.05f;
             hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * bt;
             hallBloomViz_.store (juce::jlimit (0.0f, 1.5f, hallBloomEnv_), std::memory_order_relaxed);
+        }
+
+        // ── fb296 — synth FX-rack DELAY (parallel per-osc send). Click-free type swap + Mix-100%-wet, mirrors
+        //    the reverb above. Own send bus (delaySendBuf_) so its routing is fully independent of the reverb.
+        if (i == 0)
+        {
+            int dpend = (int) *rawParam (ParameterIDs::SYN_DLY_TYPE);
+            if (dpend < 0 || dpend > 3) dpend = 0;               // Digital/Tape/BBD/Diffuse
+            if (activeDlyType_ < 0) activeDlyType_ = dpend;
+            if (dpend != activeDlyType_)
+            {
+                dlySwapping_ = true;
+                if (dlyEnv_ < 1.0e-3f) { activeDlyType_ = dpend; delayEngine.reset(); dlySwapping_ = false; }
+            }
+            else dlySwapping_ = false;
+            dlyEnvT_ = (dlyRouteActive_ && ! dlySwapping_) ? 1.0f : 0.0f;
+            if (dlyRouteActive_)
+            {
+                // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
+                const bool sync    = rawParam (ParameterIDs::SYN_DLY_SYNC)->load() > 0.5f;
+                const int  syncDiv = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV);   // 0 Free/1 1-4/2 1-8/3 1-8T/4 1-8D/5 1-16
+                float timeMs;
+                if (sync && syncDiv > 0)
+                {
+                    float bpm = currentBPM.load(); if (bpm < 20.0f) bpm = 120.0f;
+                    const float qms = 60000.0f / bpm;            // quarter-note ms
+                    float mult = 0.5f;
+                    switch (syncDiv) { case 1: mult = 1.0f; break; case 2: mult = 0.5f; break;
+                                       case 3: mult = 0.5f * 2.0f / 3.0f; break; case 4: mult = 0.5f * 1.5f; break;
+                                       case 5: mult = 0.25f; break; }
+                    timeMs = qms * mult;
+                }
+                else
+                    timeMs = std::pow (2000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // 1 ms → 2000 ms (exp)
+                delayEngine.setType      (activeDlyType_);
+                delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
+                delayEngine.setTimeMs    (timeMs);
+                delayEngine.setFeedback  (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)->load() * 1.1f);           // 0..110%
+                delayEngine.setTone      (rawParam (ParameterIDs::SYN_DLY_TONE)->load());
+                delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, rawParam (ParameterIDs::SYN_DLY_LOWCUT)->load()));  // 20..1000 Hz
+                delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, rawParam (ParameterIDs::SYN_DLY_HICUT)->load()));   // 1.2k..18k Hz
+                delayEngine.setSpread    (rawParam (ParameterIDs::SYN_DLY_SPREAD)->load());
+                delayEngine.setWidth     (rawParam (ParameterIDs::SYN_DLY_WIDTH)->load() * 1.6f);              // 0..1.6 M/S
+                delayEngine.setModRate   (0.05f + rawParam (ParameterIDs::SYN_DLY_MODRATE)->load() * 7.95f);   // 0.05..8 Hz
+                delayEngine.setModDepth  (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)->load());
+                delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());
+                delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());
+                delayEngine.setPing      (rawParam (ParameterIDs::SYN_DLY_PING)->load() > 0.5f);
+                delayEngine.setHQ        (rawParam (ParameterIDs::SYN_DLY_HQ)->load()   > 0.5f);
+                delayEngine.updateCoefficients();
+                const float mixv = rawParam (ParameterIDs::SYN_DLY_MIX)->load();
+                dlyWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+                dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+            }
+        }
+        if (dlyRouteActive_ || dlyEnv_ > 1.0e-4f)
+        {
+            dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
+            dlyDry_ += (dlyDryT_ - dlyDry_) * hallSm_;           // ramp mix (no zipper)
+            dlyWet_ += (dlyWetT_ - dlyWet_) * hallSm_;
+            const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
+            const float rawR = (dlySendR != nullptr) ? dlySendR[i] : rawL;
+            const float sgL = rawL * outputGain * kVoiceToFxPad, sgR = rawR * outputGain * kVoiceToFxPad;
+            float dl, dr; delayEngine.processSample (sgL, sgR, dl, dr);
+            const float e = dlyEnv_, duck = e * (1.0f - dlyDry_), wet = e * dlyWet_;
+            leftChannel[i]  += wet * dl - duck * sgL;            // Mix 100% ⇒ dry crossfade→0 ⇒ routed dry fully removed
+            if (rightChannel != nullptr)
+                rightChannel[i] += wet * dr - duck * sgR;
+            const float wmag = 0.5f * (std::abs (dl) + std::abs (dr)) * e;
+            if (wmag > dlyBlockWetPk) dlyBlockWetPk = wmag;
+        }
+        if (i == numSamples - 1)
+        {
+            const float bt = (dlyBlockWetPk > dlyBloomEnv_) ? 0.40f : 0.05f;
+            dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * bt;
+            dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
         }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked
@@ -9128,6 +9282,88 @@ TerrainInstrumentAudioProcessor::snapshotFxParamTargets() const noexcept
     }
 
     return t;
+}
+
+//==============================================================================
+// fb292 — Convolution USER IR loader. Decode IN-MEMORY (no disk — [[feedback-plugin-no-disk-writes-decode-in-memory]])
+// → SR-correct to the host rate (one-time, offline → LagrangeInterpolator; else echoes run fast/slow + amplitude drifts)
+// → onset-trim leading silence (else user IRs read as phantom latency) → channel-map → cap+fade → setUserIR. The engine's
+// bake then applies Size/Decay/Attack/Distance/Density/Reverse + energy-normalizes, so a user IR behaves like a factory one.
+static bool tw_decodeResampleTrimIR (juce::AudioFormatReader* reader, double hostSR,
+                                     std::vector<float>& outL, std::vector<float>& outR)
+{
+    if (reader == nullptr) return false;
+    const int srcLen = (int) reader->lengthInSamples;
+    const int nCh    = (int) reader->numChannels;
+    if (srcLen < 4 || nCh < 1) return false;
+    // read the first two channels (the AudioBuffer<float> reader fills at most 2): mono → dual-mono ·
+    // stereo → L/R · 4-ch true-stereo (LL/LR/RL/RR) degrades to ch0/ch1 (full true-stereo = a v1 follow-up).
+    juce::AudioBuffer<float> src (2, srcLen); src.clear();
+    reader->read (&src, 0, srcLen, 0, true, true);
+    if (nCh == 1) src.copyFrom (1, 0, src, 0, 0, srcLen);   // ensure dual-mono (don't rely on reader duplication)
+    const float* sL = src.getReadPointer (0);
+    const float* sR = src.getReadPointer (1);
+    const double srcSR = reader->sampleRate > 0.0 ? reader->sampleRate : hostSR;
+    const double ratio = srcSR / (hostSR > 0.0 ? hostSR : srcSR);   // input samples consumed per output sample
+    const int MAXLEN = ConvolutionReverb::MAXP * ConvolutionReverb::B;
+
+    std::vector<float> rL, rR;
+    if (std::abs (ratio - 1.0) < 1.0e-4)
+    { rL.assign (sL, sL + srcLen); rR.assign (sR, sR + srcLen); }
+    else
+    {
+        const int outLen = juce::jlimit (4, MAXLEN + 64, (int) std::floor ((double) srcLen / ratio));
+        rL.assign ((size_t) outLen, 0.0f); rR.assign ((size_t) outLen, 0.0f);
+        juce::LagrangeInterpolator iL, iR; iL.reset(); iR.reset();
+        iL.process (ratio, sL, rL.data(), outLen);
+        iR.process (ratio, sR, rR.data(), outLen);
+    }
+    int len = (int) rL.size();
+    // onset-trim: first sample past -60 dB of peak, backed up 4 samples
+    float pk = 1.0e-9f;
+    for (int i = 0; i < len; ++i) { float a = std::fabs (rL[(size_t) i]), b = std::fabs (rR[(size_t) i]); float v = a > b ? a : b; if (v > pk) pk = v; }
+    const float thr = pk * 0.001f;
+    int onset = 0; while (onset < len && std::fabs (rL[(size_t) onset]) < thr && std::fabs (rR[(size_t) onset]) < thr) ++onset;
+    onset = juce::jmax (0, onset - 4);
+    int keep = len - onset; if (keep > MAXLEN) keep = MAXLEN;
+    if (keep < 4) return false;
+    outL.assign ((size_t) keep, 0.0f); outR.assign ((size_t) keep, 0.0f);
+    for (int i = 0; i < keep; ++i) { outL[(size_t) i] = rL[(size_t) (onset + i)]; outR[(size_t) i] = rR[(size_t) (onset + i)]; }
+    // if we truncated a longer IR, raised-cosine fade the last 64 samples so the cut doesn't gate-click
+    if (onset + keep < len)
+    { int fl = juce::jmin (64, keep);
+      for (int i = 0; i < fl; ++i) { float g = 0.5f - 0.5f * std::cos (juce::MathConstants<float>::pi * (float) (fl - 1 - i) / (float) fl);
+                                     outL[(size_t) (keep - fl + i)] *= g; outR[(size_t) (keep - fl + i)] *= g; } }
+    return true;
+}
+
+bool TerrainInstrumentAudioProcessor::loadConvIRFromMemory (const void* data, size_t size, const juce::String& name)
+{
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (
+        std::make_unique<juce::MemoryInputStream> (data, size, false)));
+    std::vector<float> L, R;
+    if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
+    convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
+    convIRName_ = name; convIRUser_ = true;
+    return true;
+}
+
+bool TerrainInstrumentAudioProcessor::loadConvIRFromFile (const juce::File& f)
+{
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
+    std::vector<float> L, R;
+    if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
+    convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
+    convIRName_ = f.getFileName(); convIRUser_ = true;
+    return true;
+}
+
+void TerrainInstrumentAudioProcessor::clearConvUserIR ()
+{
+    convolutionReverb.clearUserIR();
+    convIRName_ = juce::String(); convIRUser_ = false;
 }
 
 //==============================================================================

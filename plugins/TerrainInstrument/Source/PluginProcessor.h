@@ -17,6 +17,7 @@
 #include "BasinReverb.h"       // fb289 — synth FX-rack Basin reverb (huge dark ambient wash: Hall FDN retuned + bass-safe crossover + deep motion)
 #include "ShimmerReverb.h"     // fb290 — synth FX-rack Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
 #include "ConvolutionReverb.h" // fb291 — synth FX-rack Convolution reverb (true FFT convolution + synth/user IR + Reverse/Attack/Distance/Density bake)
+#include "DelayEngine.h"       // fb296 — synth FX-rack Delay (one shared fractional line: Digital/Tape/BBD/Diffuse + ping-pong + HQ interp)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -692,6 +693,14 @@ public:
     std::atomic<int> flowPlayingViz_ { 0 };   // fb137 — transport state for the feeds ("pl")
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
+    float             getDelayBloom()  const noexcept { return dlyBloomViz_.load  (std::memory_order_relaxed); }  // fb296 — delay wet level 0..1 for the delay core viz
+    // fb292 — Convolution USER IR loading: decode IN-MEMORY → SR-correct → trim leading silence → convolutionReverb.setUserIR.
+    bool          loadConvIRFromMemory (const void* data, size_t size, const juce::String& name);  // drag-drop (base64 → bytes) — no disk
+    bool          loadConvIRFromFile   (const juce::File& f);                                       // "Load IR…" file chooser
+    void          clearConvUserIR      ();                                                          // revert to the synthetic factory Space
+    int           getConvIREnvelope    (float* out, int n) const { return convolutionReverb.irEnvelope (out, n); }  // baked-IR viz envelope; returns baked len
+    juce::String  getConvIRName        () const { return convIRName_; }                             // "" ⇒ synthetic factory Space
+    bool          isConvIRUser         () const { return convIRUser_; }
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
@@ -1486,6 +1495,8 @@ private:
     BasinReverb  basinReverb;                      // fb289 — Basin reverb (huge dark ambient wash: Hall FDN retuned + bass-safe crossover + deep motion)
     ShimmerReverb shimmerReverb;                   // fb290 — Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
     ConvolutionReverb convolutionReverb;           // fb291 — Convolution reverb (true FFT partitioned convolution + synth/user IR + Reverse/Attack/Distance/Density)
+    juce::String       convIRName_;                // fb292 — current USER IR filename ("" ⇒ synthetic factory Space)
+    bool               convIRUser_ = false;        // fb292 — true when a user IR is loaded (vs a synthetic factory Space)
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
@@ -1506,6 +1517,21 @@ private:
     // self-normalizing). Fast attack, slow release. Only engages when the Duck pill is on for Room/Spring.
     float duckEnv_ = 0.0f, duckAtkCoef_ = 0.0f, duckRelCoef_ = 0.0f;
     bool  rvbDuckActive_ = false;                   // resolved per block (Duck pill on AND type is Room/Spring)
+
+    // ── fb296 — FX-RACK DELAY: parallel per-osc send, mirrors the reverb above. One shared DelayEngine
+    // (4 characters). Its own route pills + send bus; the wet is added back with the same Mix-100%-wet
+    // duck term so the routed dry is fully cancelled at Mix=1. Power gates routing exactly like the reverb.
+    DelayEngine delayEngine;
+    int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
+    bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
+    bool  dlyRouteActive_ = false;                  // any delay route enabled this block
+    float dlyEnv_ = 0.0f, dlyEnvT_ = 0.0f;          // on/off FADE env (0 = fully bypassed)
+    float dlyDry_ = 1.0f, dlyWet_ = 0.0f;           // equal-power mix — RAMPED per sample
+    float dlyDryT_ = 1.0f, dlyWetT_ = 0.0f;         // mix targets
+    juce::AudioBuffer<float> delaySendBuf_;         // routed-osc send bus (parallel to reverbSendBuf_)
+    float dlyG_[6] = { 0,0,0,0,0,0 };               // per-source delay route gains (A,B,C,D,Sub,Noise)
+    std::atomic<float> dlyBloomViz_ { 0.0f };       // audio-reactive wet level for the delay core viz
+    float dlyBloomEnv_ = 0.0f;
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)

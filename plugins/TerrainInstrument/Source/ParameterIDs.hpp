@@ -368,6 +368,35 @@ namespace ParameterIDs
     constexpr char SYN_RVB_POWER[]     = "SYN_RVB_POWER";     // fb287 bool — device power (OFF = full bypass + routing disabled), default ON
     constexpr char SYN_RVB_DUCK[]      = "SYN_RVB_DUCK";      // fb287 bool — Room/Spring 2nd pill (ducking reverb), default OFF
 
+    // ════════ FX RACK · DELAY (fb296) — parallel per-osc send, mirrors the reverb device.
+    // 4 CHARACTER types (Digital/Tape/BBD/Diffuse) share one DelayEngine; Ping-Pong is a ROUTING pill.
+    // 3 front params + Mix, 2 dropdowns + 8 back knobs, 6 route sources, 2 front pills, power. ════════
+    constexpr char SYN_DLY_TYPE[]      = "SYN_DLY_TYPE";       // choice: Digital/Tape/BBD/Diffuse (4)
+    constexpr char SYN_DLY_CHARACTER[] = "SYN_DLY_CHARACTER";  // choice: per-type sub-voicing
+    constexpr char SYN_DLY_SYNCDIV[]   = "SYN_DLY_SYNCDIV";    // choice: Free/1-4/1-8/1-8T/1-8D/1-16 (time division)
+    constexpr char SYN_DLY_TIME[]      = "SYN_DLY_TIME";       // float 0..1 (front) -> 1..2000 ms (or synced)
+    constexpr char SYN_DLY_FEEDBACK[]  = "SYN_DLY_FEEDBACK";   // float 0..1 (front) -> 0..~110%
+    constexpr char SYN_DLY_TONE[]      = "SYN_DLY_TONE";       // float 0..1 (front) bipolar tilt (0.5 neutral)
+    constexpr char SYN_DLY_MIX[]       = "SYN_DLY_MIX";        // float 0..1 (front) equal-power (100% = fully wet)
+    constexpr char SYN_DLY_LOWCUT[]    = "SYN_DLY_LOWCUT";     // float 0..1 -> 20..1000 Hz (in-loop HP)
+    constexpr char SYN_DLY_HICUT[]     = "SYN_DLY_HICUT";      // float 0..1 -> 1.2k..18k Hz (in-loop LP)
+    constexpr char SYN_DLY_SPREAD[]    = "SYN_DLY_SPREAD";     // float 0..1 -> L/R time offset
+    constexpr char SYN_DLY_WIDTH[]     = "SYN_DLY_WIDTH";      // float 0..1 -> 0..1.6 M/S width
+    constexpr char SYN_DLY_MODRATE[]   = "SYN_DLY_MODRATE";    // float 0..1 -> 0.05..8 Hz
+    constexpr char SYN_DLY_MODDEPTH[]  = "SYN_DLY_MODDEPTH";   // float 0..1 (chorus / Diffuse smear)
+    constexpr char SYN_DLY_WOW[]       = "SYN_DLY_WOW";        // float 0..1 (tape wow+flutter)
+    constexpr char SYN_DLY_DUCK[]      = "SYN_DLY_DUCK";       // float 0..1 (input-ducking amount)
+    constexpr char SYN_DLY_SRC_A[]     = "SYN_DLY_SRC_A";      // bool, default OFF (per-osc send)
+    constexpr char SYN_DLY_SRC_B[]     = "SYN_DLY_SRC_B";
+    constexpr char SYN_DLY_SRC_C[]     = "SYN_DLY_SRC_C";
+    constexpr char SYN_DLY_SRC_D[]     = "SYN_DLY_SRC_D";
+    constexpr char SYN_DLY_SRC_SUB[]   = "SYN_DLY_SRC_SUB";
+    constexpr char SYN_DLY_SRC_NOISE[] = "SYN_DLY_SRC_NOISE";
+    constexpr char SYN_DLY_SYNC[]      = "SYN_DLY_SYNC";       // bool — front Sync toggle (tempo sync on/off), default ON
+    constexpr char SYN_DLY_PING[]      = "SYN_DLY_PING";       // bool — front Ping toggle (ping-pong routing), default OFF
+    constexpr char SYN_DLY_POWER[]     = "SYN_DLY_POWER";      // bool — device power (OFF = full bypass + routing disabled), default ON
+    constexpr char SYN_DLY_HQ[]        = "SYN_DLY_HQ";         // bool — High-Quality interpolation (cubic vs linear), default ON
+
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)
     constexpr char SYN_ENV_FLT_D[]     = "SYN_ENV_FLT_D";      // float ms (skewed)

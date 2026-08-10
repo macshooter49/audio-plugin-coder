@@ -1,0 +1,212 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Convolution IR core — mockup</title>
+<style>
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-surface:#232340;
+  --purple-400:#B794FF;
+  --border:rgba(58,58,88,0.55); --border-strong:rgba(140,130,180,0.45);
+  --text-primary:#ECE8F2; --text-secondary:#C5BFD2; --text-muted:#908599; --text-dim:#6E6580;
+}
+*{box-sizing:border-box}
+body{margin:0;background:linear-gradient(180deg,#161428,#0f0f1c);color:var(--text-primary);
+  font-family:-apple-system,'SF Pro Text','SF Pro Display',sans-serif;padding:26px 30px 60px;}
+h1{font-size:15px;font-weight:600;margin:0 0 3px;letter-spacing:.02em}
+.sub{font-size:11px;color:var(--text-muted);margin:0 0 20px;line-height:1.5;max-width:1000px}
+.sub b{color:var(--text-secondary);font-weight:600}
+.bar{display:flex;gap:22px;align-items:center;margin:0 0 22px;padding:11px 14px;border:1px solid var(--border-strong);
+  border-radius:9px;background:rgba(255,255,255,.015);flex-wrap:wrap}
+.bar label{font-size:10.5px;color:var(--text-secondary);display:flex;align-items:center;gap:8px}
+.bar input[type=range]{width:150px}
+.seg{display:inline-flex;border:1px solid var(--border-strong);border-radius:7px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--text-muted);font:inherit;font-size:10px;padding:5px 11px;cursor:pointer}
+.seg button.on{background:var(--purple-400);color:#1a1430;font-weight:600}
+.lane-title{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--text-dim);margin:26px 0 9px}
+.row{display:flex;gap:20px;align-items:flex-start;flex-wrap:wrap}
+.cap{font-size:10px;color:var(--text-muted);margin-top:8px;text-align:center;width:272px;line-height:1.45}
+.cap b{color:var(--text-secondary)}
+
+/* ── verbatim .fxr chassis subset (from index.html 7122-7204) ── */
+.fxr-dev{ flex:0 0 272px; height:150px; min-height:0; background:transparent; border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; position:relative; }
+.fxr-dev:hover{ border-color:rgba(255,255,255,.34); }
+.fxr-head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }
+.fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+.fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; display:flex; align-items:center; }
+.fxr-type{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300; line-height:1; margin-left:3px; white-space:nowrap; }
+.fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; }
+.fxr-preset{ position:relative; display:flex; align-items:center; gap:5px; max-width:88px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; cursor:pointer; line-height:1; overflow:hidden; }
+.fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+.fxr-preset .fxr-pname{ font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; position:relative; top:.5px; }
+.fxr-spacer{ flex:1; }
+.fxr-headr{ display:flex; align-items:center; gap:9px; }
+.fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:0 0 auto; }
+.fxr-swap, .fxr-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; padding:0; background:transparent; border:none; color:var(--text-muted); }
+.fxr-swap svg, .fxr-x svg{ width:14px; height:14px; display:block; }
+.fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+.fxr-core svg.wave{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+.fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+.fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+.fxr-dial{ width:29px; height:29px; }
+.fxr-dial svg{ width:100%; height:100%; display:block; }
+.fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+.fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
+.fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+.fxr-pills{ display:flex; gap:5px; width:100%; }
+.fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+.fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+.fxr-route{ display:flex; gap:3px; width:100%; }
+.fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+.fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+
+/* ── NEW conv IR core overlays ── */
+.conv-name{ position:absolute; left:1px; bottom:1px; display:flex; align-items:center; gap:4px; font-size:9.5px;
+  color:var(--text-secondary); font-weight:500; letter-spacing:.01em; cursor:pointer; padding:2px 5px; border-radius:6px;
+  max-width:74%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; z-index:3; }
+.conv-name:hover{ color:#fff; background:rgba(255,255,255,.05); }
+.conv-name .car{ color:var(--text-muted); font-size:8px; }
+.conv-name .usr{ color:var(--purple-400); font-size:8px; margin-right:1px; }   /* dot before a USER ir */
+.conv-dur{ position:absolute; right:2px; bottom:2px; font-size:8px; color:var(--text-dim); font-variant-numeric:tabular-nums; z-index:3; }
+.conv-drop{ position:absolute; inset:0; z-index:5; display:none; align-items:center; justify-content:center; flex-direction:column; gap:3px;
+  border:1px dashed var(--purple-400); border-radius:6px; background:rgba(18,16,30,.66); color:var(--purple-400);
+  font-size:11px; letter-spacing:.04em; }
+.conv-drop .big{ font-size:19px; font-weight:200; line-height:.8; }
+.fxr-dev.dragover .conv-drop{ display:flex; }
+/* glass menu (matches the plugin syn-ctx aesthetic) */
+.conv-menu{ position:absolute; z-index:20; min-width:150px; padding:5px 0; border-radius:10px;
+  background:rgba(22,20,34,0.86); -webkit-backdrop-filter:blur(20px) saturate(1.4); backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.11); box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+  font-size:11px; color:var(--text-secondary); }
+.conv-menu .mi{ display:flex; align-items:center; gap:8px; padding:6px 13px 6px 11px; cursor:pointer; white-space:nowrap; }
+.conv-menu .mi:hover{ background:rgba(255,255,255,.07); color:#fff; }
+.conv-menu .mi .ck{ width:10px; color:#fff; font-size:9px; }
+.conv-menu .mi .ar{ margin-left:auto; color:var(--text-muted); font-size:9px; }
+.conv-menu .sep{ height:1px; margin:4px 10px; background:rgba(255,255,255,.08); }
+.conv-sub{ position:absolute; z-index:21; min-width:128px; padding:5px 0; border-radius:10px;
+  background:rgba(22,20,34,0.9); -webkit-backdrop-filter:blur(20px); backdrop-filter:blur(20px);
+  border:1px solid rgba(255,255,255,0.11); box-shadow:0 20px 50px rgba(0,0,0,.6); font-size:11px; color:var(--text-secondary); }
+.conv-sub .mi{ padding:5px 13px 5px 11px; }
+/* centerline overlay for header-symmetry verification */
+.cl .fxr-head::after{ content:''; position:absolute; left:0; right:0; top:13px; height:1px; background:rgba(255,80,80,.7); pointer-events:none; z-index:9; }
+</style></head>
+<body>
+<h1>Convolution — IR waveform core + load menu <span style="color:var(--text-dim);font-weight:400">(mockup, pixel-true chassis)</span></h1>
+<p class="sub">When the reverb type is <b>Convolution</b>, the shared grid core is replaced by the <b>impulse-response waveform</b> +
+the IR <b>name</b> (bottom-left, click → menu) + a <b>duration</b> readout, and the whole core is a <b>drop target</b>. Every other
+type keeps its grid. The waveform is drawn on a <b>compressed amplitude (γ)</b> so the 40-60 dB tail stays visible and reshapes with
+Size/Decay/Attack/Reverse/Density. Two waveform styles below — <b>tell me which</b>, and dial γ to taste.</p>
+
+<div class="bar">
+  <label>Waveform style
+    <span class="seg" id="segStyle"><button data-s="sym" class="on">Symmetric (noise-engine match)</button><button data-s="base">Baseline energy-decay</button></span>
+  </label>
+  <label>Display γ (tail visibility) <input id="gamma" type="range" min="25" max="100" value="45"><b id="gv" style="color:var(--text-secondary)">0.45</b></label>
+  <label><span class="seg" id="segCL"><button data-c="0" class="on">Centerline off</button><button data-c="1">Header centerline</button></span></label>
+</div>
+
+<div class="lane-title">Convolution device — states</div>
+<div class="row" id="row"></div>
+
+<script>
+// ── knob (from index.html knobSVG) ──
+function knobSVG(pct){ pct=Math.max(0,Math.min(100,Math.round(pct))); var cx=15,cy=15,r=11.5;
+  function pt(d){var a=d*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+  return '<svg viewBox="0 0 30 30"><path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/><path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/><text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,sans-serif" font-size="8" font-weight="300" fill="var(--text-secondary)">'+pct+'</text></svg>'; }
+var IC_PLUS='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>';
+var IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+
+// ── deterministic pseudo-random ──
+function mkRnd(seed){ var s=seed>>>0; return function(){ s^=s<<13; s^=s>>>17; s^=s<<5; s>>>=0; return s/4294967296; }; }
+// ── synth an IR peak-envelope (N buckets, 0..1): onset spike + ER cluster + exp tail ──
+function makeIR(N, seed, tau, erN, erGain, tailGain, dense){
+  var r=mkRnd(seed), a=new Array(N).fill(0);
+  a[0]=1.0; a[1]=0.86; a[2]=0.62;                 // direct onset
+  for(var e=0;e<erN;e++){ var i=3+((Math.pow((e+1)/erN,1.6)* (N*0.16))|0); if(i<N) a[i]=Math.max(a[i], erGain*Math.pow(0.86,e)*(0.6+0.4*r())); } // ER cluster
+  var zl=0;
+  for(var i=Math.max(3,(N*0.02)|0);i<N;i++){ var t=i; var env=Math.exp(-t/(N*tau))*tailGain; zl=(1-0.4)*(r()*2-1)+0.4*zl; var v=Math.abs(zl)*env*(dense?(0.7+0.5*Math.abs(Math.sin(i*0.5))):1); a[i]=Math.max(a[i], v); }
+  return a;
+}
+// ── build the waveform SVG for the core (style: 'sym' | 'base'), gamma-compressed ──
+function waveSVG(peaks, style, gamma){
+  var W=250,H=76,mid=H*0.5, N=peaks.length;
+  function g(v){ return Math.pow(Math.max(0,v), gamma); }         // display compression
+  function xat(i){ return (i/(N-1))*W; }
+  var s='<svg class="wave" viewBox="0 0 '+W+' '+H+'" preserveAspectRatio="none">';
+  if(style==='sym'){
+    var amp=H*0.44;
+    s+='<line x1="0" y1="'+mid+'" x2="'+W+'" y2="'+mid+'" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>';
+    var up='', dn='';
+    for(var i=0;i<N;i++){ var y=mid-g(peaks[i])*amp; up+=(i?'L':'M')+xat(i).toFixed(2)+' '+y.toFixed(2)+' '; }
+    for(var j=N-1;j>=0;j--){ var y2=mid+g(peaks[j])*amp; dn+='L'+xat(j).toFixed(2)+' '+y2.toFixed(2)+' '; }
+    s+='<path d="'+up+dn+'Z" fill="rgba(255,255,255,0.06)"/>';
+    s+='<path d="'+up+'" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="1.1" stroke-linejoin="round"/>';
+    var dn2=''; for(var k=0;k<N;k++){ var y3=mid+g(peaks[k])*amp; dn2+=(k?'L':'M')+xat(k).toFixed(2)+' '+y3.toFixed(2)+' '; }
+    s+='<path d="'+dn2+'" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="1.1" stroke-linejoin="round"/>';
+  } else {
+    var base=H-3, amp2=H*0.82;
+    s+='<line x1="0" y1="'+base+'" x2="'+W+'" y2="'+base+'" stroke="rgba(255,255,255,0.14)" stroke-width="1"/>';
+    var up2='M0 '+base+' ';
+    for(var i=0;i<N;i++){ var y=base-g(peaks[i])*amp2; up2+='L'+xat(i).toFixed(2)+' '+y.toFixed(2)+' '; }
+    up2+='L'+W+' '+base+' Z';
+    s+='<path d="'+up2+'" fill="rgba(255,255,255,0.07)"/>';
+    var ln='M0 '+base+' '; for(var i=0;i<N;i++){ ln+='L'+xat(i).toFixed(2)+' '+(base-g(peaks[i])*amp2).toFixed(2)+' '; }
+    s+='<path d="'+ln+'" fill="none" stroke="rgba(255,255,255,0.82)" stroke-width="1.1" stroke-linejoin="round"/>';
+  }
+  s+='</svg>';
+  return s;
+}
+
+var STATES=[
+  {ir:makeIR(200,1337,0.34,10,0.55,0.9,false), name:'Cathedral', user:false, dur:'4.1 s', star:'Cave', note:'<b>Factory space</b> — the 8 synthetic spaces are the Factory list (Hall/Room/Chamber/Cathedral/Plate/Ambience/Cave/Tunnel).'},
+  {ir:makeIR(200,88,0.20,16,0.5,0.75,true), name:'wet chimes.wav', user:true, dur:'2.4 s', star:'User', note:'<b>User IR loaded</b> — purple dot marks a user file; name = the filename. Waveform is the decoded IR, SR-corrected + onset-trimmed.'},
+  {ir:makeIR(200,1337,0.34,10,0.55,0.9,false), name:'Cathedral', user:false, dur:'4.1 s', star:'Cave', menu:true, note:'<b>Left-click the name (or core)</b> → menu: ✓ Factory ▸ (the 8 spaces) · Load IR… (native file picker, decode in-memory).'},
+  {ir:makeIR(200,1337,0.34,10,0.55,0.9,false), name:'Cathedral', user:false, dur:'4.1 s', star:'Cave', drag:true, note:'<b>Drag any WAV/AIFF/FLAC onto the core</b> → same load path. "Anything can be an IR."'}
+];
+
+function devHTML(st, idx){
+  var kn=[['Size',30],['Decay',55],['Tone',50],['Mix',35]];
+  var knobs=kn.map(function(k){return '<div class="fxr-knob"><div class="fxr-dial">'+knobSVG(k[1])+'</div><span class="fxr-lab">'+k[0]+'</span></div>';}).join('');
+  var pills='<span class="fxr-pill fxr-on"><span>Mod</span></span><span class="fxr-pill"><span>Reverse</span></span>';
+  var route=['A','B','C','D','S','N'].map(function(l,i){return '<span class="fxr-r'+(i===0?' fxr-on':'')+'">'+l+'</span>';}).join('');
+  var menu = st.menu ? ('<div class="conv-menu" style="left:9px;top:116px">'
+      +'<div class="mi"><span class="ck">✓</span>Factory<span class="ar">▸</span></div>'
+      +'<div class="mi"><span class="ck"></span>Load IR…</div>'
+      +'<div class="sep"></div>'
+      +'<div class="mi" style="color:var(--text-muted)"><span class="ck"></span>Clear (synthetic)</div>'
+      +'</div>'
+      +'<div class="conv-sub" style="left:158px;top:104px">'
+      +['Hall','Room','Chamber','Cathedral','Plate','Ambience','Cave','Tunnel'].map(function(s){return '<div class="mi"><span class="ck">'+(s==='Cathedral'?'✓':'')+'</span>'+s+'</div>';}).join('')
+      +'</div>') : '';
+  return '<div>'
+   +'<div class="fxr-dev'+(st.drag?' dragover':'')+'" data-idx="'+idx+'">'
+    +'<div class="fxr-head">'
+      +'<span class="fxr-grip">⋮⋮</span><span class="fxr-name">Reverb</span>'
+      +'<span class="fxr-type">Convolution<span class="fxr-car">▾</span></span>'
+      +'<span class="fxr-preset"><span class="fxr-star">✦</span><span class="fxr-pname">'+st.star+'</span><span class="fxr-car">▾</span></span>'
+      +'<span class="fxr-spacer"></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap">'+IC_PLUS+'</span><span class="fxr-pwr"></span><span class="fxr-x">'+IC_X+'</span></span>'
+    +'</div>'
+    +'<div class="fxr-core" data-core="conv">'+waveSVG(st.ir, window.__style, window.__gamma)
+      +'<span class="conv-name">'+(st.user?'<span class="usr">●</span>':'')+st.name+'<span class="car">▾</span></span>'
+      +'<span class="conv-dur">'+st.dur+'</span>'
+      +'<div class="conv-drop"><span class="big">＋</span>Drop IR</div>'
+    +'</div>'
+    +'<div class="fxr-ctrls"><div class="fxr-knobs">'+knobs+'</div><div class="fxr-divider"></div>'
+      +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div></div>'
+    +menu
+   +'</div>'
+   +'<div class="cap">'+st.note+'</div></div>';
+}
+
+window.__style=(location.hash==='#base'?'base':'sym'); window.__gamma=0.45;
+function render(){ document.getElementById('row').innerHTML=STATES.map(devHTML).join(''); }
+render();
+
+document.getElementById('segStyle').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b)return;
+  [].forEach.call(this.children,function(x){x.classList.remove('on');}); b.classList.add('on'); window.__style=b.dataset.s; render(); });
+document.getElementById('gamma').addEventListener('input',function(){ window.__gamma=this.value/100; document.getElementById('gv').textContent=(this.value/100).toFixed(2); render(); });
+document.getElementById('segCL').addEventListener('click',function(e){ var b=e.target.closest('button'); if(!b)return;
+  [].forEach.call(this.children,function(x){x.classList.remove('on');}); b.classList.add('on'); document.body.classList.toggle('cl', b.dataset.c==='1'); });
+</script>
+</body></html>
