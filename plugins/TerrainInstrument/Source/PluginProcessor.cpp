@@ -3393,11 +3393,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     for (const char* rid : { ParameterIDs::SYN_RVB_SRC_A, ParameterIDs::SYN_RVB_SRC_B, ParameterIDs::SYN_RVB_SRC_C,
                              ParameterIDs::SYN_RVB_SRC_D, ParameterIDs::SYN_RVB_SRC_SUB, ParameterIDs::SYN_RVB_SRC_NOISE })
         layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
-    // fb279 — front Mod / Freeze toggles (Mod default ON so the reverb moves; Freeze default OFF)
-    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_MOD,    1 }, "Reverb Mod",    true));
+    // fb279 — front Mod / Freeze toggles. fb303 — Mod default OFF (Max: static by default; mod is opt-in) + Freeze OFF.
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_MOD,    1 }, "Reverb Mod",    false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_FREEZE, 1 }, "Reverb Freeze", false));
-    // fb287 — device POWER (default ON so a fresh patch works) + DUCK (Room/Spring 2nd pill, default OFF).
-    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  true));
+    // fb287 device POWER + DUCK. fb303 — POWER default OFF: a fresh patch is DRY; turning a device ON with no
+    // route pills = MAIN SEND (whole synth through it). Existing saved projects restore their own power state.
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_POWER,  1 }, "Reverb Power",  false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_RVB_DUCK,   1 }, "Reverb Duck",   false));
 
     // ════════ FX RACK · DELAY — fb296. setSynParam-only; choices = INDEX; routes default OFF; parallel to reverb. ════════
@@ -3422,15 +3423,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addDlyF (ParameterIDs::SYN_DLY_SPREAD,   "Delay Spread",     0.60f);
     addDlyF (ParameterIDs::SYN_DLY_WIDTH,    "Delay Width",      0.78f);
     addDlyF (ParameterIDs::SYN_DLY_MODRATE,  "Delay Mod Rate",   0.40f);
-    addDlyF (ParameterIDs::SYN_DLY_MODDEPTH, "Delay Mod Depth",  0.30f);
-    addDlyF (ParameterIDs::SYN_DLY_WOW,      "Delay Wow",        0.18f);
-    addDlyF (ParameterIDs::SYN_DLY_DUCK,     "Delay Ducking",    0.26f);
+    addDlyF (ParameterIDs::SYN_DLY_MODDEPTH, "Delay Mod Depth",  0.0f);    // fb303 — Mod OFF by default (Max: delay was wonky-on-turn-on)
+    addDlyF (ParameterIDs::SYN_DLY_WOW,      "Delay Wow",        0.0f);    // fb303 — OFF by default (Max: only natural/Tape wow)
+    addDlyF (ParameterIDs::SYN_DLY_DUCK,     "Delay Ducking",    0.0f);    // fb303 — OFF by default (Max never liked ducking)
     for (const char* rid : { ParameterIDs::SYN_DLY_SRC_A, ParameterIDs::SYN_DLY_SRC_B, ParameterIDs::SYN_DLY_SRC_C,
                              ParameterIDs::SYN_DLY_SRC_D, ParameterIDs::SYN_DLY_SRC_SUB, ParameterIDs::SYN_DLY_SRC_NOISE })
         layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_SYNC,  1 }, "Delay Sync",  true));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_PING,  1 }, "Delay Ping-Pong", false));
-    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", false));   // fb303 — OFF by default (dry init; on = main send)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
@@ -5668,9 +5669,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // fb287 — POWER GATES EVERYTHING (Max): the device power pill OFF fully bypasses the reverb AND
     // disables its per-osc routing — zero the send gains so nothing passes regardless of the A/B/C/D/S/N
     // pills (the routing OBEYS the power button; you never turn it off by clearing already-grayed routes).
-    if (rawParam (ParameterIDs::SYN_RVB_POWER)->load() <= 0.5f)
+    hallPower_ = rawParam (ParameterIDs::SYN_RVB_POWER)->load() > 0.5f;
+    if (! hallPower_)
         for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
     hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
+    hallMainSend_ = hallPower_ && ! hallRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     // fb296 — DELAY per-osc route resolution (independent mask + power gate), parallel to the reverb send.
     if (delaySendBuf_.getNumSamples() < numSamples)
         delaySendBuf_.setSize (2, numSamples, false, true, true);
@@ -5681,9 +5684,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     dlyG_[3] = rawParam (ParameterIDs::SYN_DLY_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
     dlyG_[4] = rawParam (ParameterIDs::SYN_DLY_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
     dlyG_[5] = rawParam (ParameterIDs::SYN_DLY_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
-    if (rawParam (ParameterIDs::SYN_DLY_POWER)->load() <= 0.5f)          // power gates routing (same law as reverb)
+    dlyPower_ = rawParam (ParameterIDs::SYN_DLY_POWER)->load() > 0.5f;
+    if (! dlyPower_)          // power gates routing (same law as reverb)
         for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
+    dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
@@ -6714,8 +6719,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
             }
             else rvbSwapping_ = false;
-            hallEnvT_ = (hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
-            if (hallRouteActive_)
+            hallEnvT_ = (hallPower_ && ! rvbSwapping_) ? 1.0f : 0.0f;   // fb303 — reverb runs on POWER (main-send or per-osc)
+            if (hallPower_)
             {
                 if (activeRvbType_ == 8)
                 {
@@ -6938,7 +6943,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 convolutionReverb.bakeIfDirtyIdle();
             }
         }
-        if (hallRouteActive_ || hallRvbEnv_ > 1.0e-4f)
+        if (hallPower_ || hallRvbEnv_ > 1.0e-4f)
         {
             hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
             hallRvbDry_ += (hallRvbDryT_ - hallRvbDry_) * hallSm_;   // ramp mix
@@ -6949,9 +6954,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // leftChannel → at Mix 100% the dry was only half-cancelled (phase-inverted, still audible). Padding
             // sgL/sgR corrects BOTH the duck term and the wet input (equal-power) for all 9 types. Proven offline:
             // Mix 100% dry residual 0 dB → -93 dB. Routes off ⇒ send=nullptr ⇒ raw=0 ⇒ byte-identical default.
-            const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
-            const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
-            const float sgL = rawL * outputGain * kVoiceToFxPad, sgR = rawR * outputGain * kVoiceToFxPad;
+            // fb303 — MAIN SEND (no pills): feed the WHOLE current mix so "add wet − duck·input" becomes a
+            // wet/dry INSERT on the whole synth; running before the delay below ⇒ the delay hears this reverb
+            // output (serial). Per-osc (pills) ⇒ the padded routed send bus, exactly as before.
+            float sgL, sgR;
+            if (hallMainSend_) { sgL = leftChannel[i]; sgR = (rightChannel != nullptr) ? rightChannel[i] : sgL; }
+            else { const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
+                   const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
+                   sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
             float rl, rr;
             if      (activeRvbType_ == 8) convolutionReverb.processSample (sgL, sgR, rl, rr);  // fb291 — Convolution (internally block-buffered, B-latency)
             else if (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
@@ -7000,8 +7010,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (dlyEnv_ < 1.0e-3f) { activeDlyType_ = dpend; delayEngine.reset(); dlySwapping_ = false; }
             }
             else dlySwapping_ = false;
-            dlyEnvT_ = (dlyRouteActive_ && ! dlySwapping_) ? 1.0f : 0.0f;
-            if (dlyRouteActive_)
+            dlyEnvT_ = (dlyPower_ && ! dlySwapping_) ? 1.0f : 0.0f;   // fb303 — delay runs on POWER (main-send or per-osc)
+            if (dlyPower_)
             {
                 // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
                 const bool sync    = rawParam (ParameterIDs::SYN_DLY_SYNC)->load() > 0.5f;
@@ -7032,7 +7042,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 delayEngine.setType      (activeDlyType_);
                 delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
                 delayEngine.setTimeMs    (timeMs);
-                delayEngine.setFeedback  (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)->load() * 1.1f);           // 0..110%
+                delayEngine.setFeedback  (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)->load() * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
                 delayEngine.setTone      (rawParam (ParameterIDs::SYN_DLY_TONE)->load());
                 delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, rawParam (ParameterIDs::SYN_DLY_LOWCUT)->load()));  // 20..1000 Hz
                 delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, rawParam (ParameterIDs::SYN_DLY_HICUT)->load()));   // 1.2k..18k Hz
@@ -7040,8 +7050,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 delayEngine.setWidth     (rawParam (ParameterIDs::SYN_DLY_WIDTH)->load() * 1.6f);              // 0..1.6 M/S
                 delayEngine.setModRate   (0.05f + rawParam (ParameterIDs::SYN_DLY_MODRATE)->load() * 7.95f);   // 0.05..8 Hz
                 delayEngine.setModDepth  (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)->load());
-                delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());
-                delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());
+                delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());    // fb303 — default 0 now (off); kept for Tape. Full removal + L/R redesign next.
+                delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());   // fb303 — default 0 now (Max never liked it)
                 delayEngine.setPing      (rawParam (ParameterIDs::SYN_DLY_PING)->load() > 0.5f);
                 delayEngine.setHQ        (rawParam (ParameterIDs::SYN_DLY_HQ)->load()   > 0.5f);
                 delayEngine.updateCoefficients();
@@ -7050,14 +7060,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             }
         }
-        if (dlyRouteActive_ || dlyEnv_ > 1.0e-4f)
+        if (dlyPower_ || dlyEnv_ > 1.0e-4f)
         {
             dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
             dlyDry_ += (dlyDryT_ - dlyDry_) * hallSm_;           // ramp mix (no zipper)
             dlyWet_ += (dlyWetT_ - dlyWet_) * hallSm_;
-            const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
-            const float rawR = (dlySendR != nullptr) ? dlySendR[i] : rawL;
-            const float sgL = rawL * outputGain * kVoiceToFxPad, sgR = rawR * outputGain * kVoiceToFxPad;
+            // fb303 — MAIN SEND (no pills): feed the WHOLE current mix (already post-reverb this block ⇒ serial)
+            // as a wet/dry insert. Per-osc (pills) ⇒ the padded routed send bus, as before.
+            float sgL, sgR;
+            if (dlyMainSend_) { sgL = leftChannel[i]; sgR = (rightChannel != nullptr) ? rightChannel[i] : sgL; }
+            else { const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
+                   const float rawR = (dlySendR != nullptr) ? dlySendR[i] : rawL;
+                   sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
             float dl, dr; delayEngine.processSample (sgL, sgR, dl, dr);
             const float e = dlyEnv_, duck = e * (1.0f - dlyDry_), wet = e * dlyWet_;
             leftChannel[i]  += wet * dl - duck * sgL;            // Mix 100% ⇒ dry crossfade→0 ⇒ routed dry fully removed

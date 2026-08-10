@@ -1499,7 +1499,9 @@ private:
     bool               convIRUser_ = false;        // fb292 — true when a user IR is loaded (vs a synthetic factory Space)
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
-    bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block
+    bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block (PILLS ⇒ per-osc send)
+    bool  hallPower_    = false;                   // fb303 — SYN_RVB_POWER on ⇒ reverb runs (main-send OR per-osc)
+    bool  hallMainSend_ = false;                   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix through it, serial insert)
     float hallRvbEnv_ = 0.0f, hallEnvT_ = 0.0f;   // fb277 — on/off FADE env (0 = fully bypassed) so route toggles don't click
     float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix — RAMPED per sample (no zipper)
     float hallRvbDryT_ = 1.0f, hallRvbWetT_ = 0.0f; // mix targets
@@ -1524,7 +1526,9 @@ private:
     DelayEngine delayEngine;
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
-    bool  dlyRouteActive_ = false;                  // any delay route enabled this block
+    bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)
+    bool  dlyPower_    = false;                      // fb303 — SYN_DLY_POWER on ⇒ delay runs (main-send OR per-osc)
+    bool  dlyMainSend_ = false;                      // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     float dlyEnv_ = 0.0f, dlyEnvT_ = 0.0f;          // on/off FADE env (0 = fully bypassed)
     float dlyDry_ = 1.0f, dlyWet_ = 0.0f;           // equal-power mix — RAMPED per sample
     float dlyDryT_ = 1.0f, dlyWetT_ = 0.0f;         // mix targets
