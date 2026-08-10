@@ -156,7 +156,7 @@ public:
             // out-of-range mipLevel into [0, numMipLevels-1].
             tw::Wavetable wt;
             wt.buildFromSpec (tw::Wavetable::makeDX7EPSpec());
-            expectEquals (wt.getNumMipLevels(), 8, "spec table should be 8-tier");
+            expectEquals (wt.getNumMipLevels(), tw::Wavetable::kNumMipLevels, "spec table should have all mip tiers");
             const float vHi  = wt.lookup (99, 0.5f, 0.25f);                       // clamps to top mip
             const float vTop = wt.lookup (wt.getNumMipLevels() - 1, 0.5f, 0.25f);
             expectWithinAbsoluteError (vHi, vTop, 1.0e-6f);
@@ -183,25 +183,25 @@ public:
             }
         }
 
-        beginTest ("mipLevelForPhaseIncrement breakpoints at 48 kHz");
+        beginTest ("mipLevelForPhaseIncrement picks the RICHEST alias-safe level across the whole range");
         {
-            const double sr = 48000.0;
-            // C2 ~ 65.4 Hz → phaseInc ~ 0.00136 → maxSafe ~ 367 → level 0 (256 OK)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (36, sr), 0);
-            // C3 ~ 130.8 Hz → maxSafe ~ 183 → level 1 (128 OK, 256 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (48, sr), 1);
-            // C4 ~ 261.6 Hz → maxSafe ~ 91 → level 2 (64 OK, 128 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (60, sr), 2);
-            // C5 ~ 523 Hz → maxSafe ~ 45 → level 3 (32 OK, 64 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (72, sr), 3);
-            // C6 ~ 1046 Hz → maxSafe ~ 22 → level 4 (16 OK, 32 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (84, sr), 4);
-            // C7 ~ 2093 Hz → maxSafe ~ 11 → level 5 (8 OK, 16 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (96, sr), 5);
-            // C8 ~ 4186 Hz → maxSafe ~ 5 → level 6 (4 OK, 8 no)
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (108, sr), 6);
-            // Above C8 → level 7
-            expectEquals (tw::Wavetable::mipLevelForMidiNote (120, sr), 7);
+            // fb300 — ladder-independent invariant (survives any retune of kMipMaxHarmonics):
+            // for every MIDI note the selected level must (a) be alias-safe (its harmonic cap
+            // sits at/under Nyquist for that pitch) and (b) be the richest such level (the next
+            // level up would alias). This is the anti-aliasing + no-wasted-bandwidth guarantee.
+            const double sr   = 48000.0;
+            const auto&  caps = tw::Wavetable::kMipMaxHarmonics;
+            for (int note = 12; note <= 127; ++note)
+            {
+                const double hz      = 440.0 * std::pow (2.0, (note - 69) / 12.0);
+                const double maxSafe = 0.5 / (hz / sr);                 // harmonics that fit under Nyquist
+                const int    lvl     = tw::Wavetable::mipLevelForMidiNote (note, sr);
+                expect ((double) caps[(size_t) lvl] <= maxSafe + 1.0e-6,
+                        juce::String ("note ") + juce::String (note) + " picked an ALIASING level");
+                if (lvl > 0)
+                    expect ((double) caps[(size_t) (lvl - 1)] > maxSafe,
+                            juce::String ("note ") + juce::String (note) + " left safe harmonics on the table");
+            }
         }
 
         beginTest ("mipLevelForPhaseIncrement monotonic — higher phaseInc never picks lower level");
@@ -334,14 +334,15 @@ public:
             }
         }
 
-        beginTest ("Anti-aliasing: Square at C7 mip-5 contains only ≤8 harmonics");
+        beginTest ("Anti-aliasing: Square at C7 selects the 8-harmonic cap (≤8 harmonics)");
         {
             tw::Wavetable wt;
             wt.buildFromSpec (tw::Wavetable::makeSquareSpec());
-            // C7 ~ 2093 Hz at 48 kHz → phaseInc ~ 0.0436 → mip-5 (8 harmonics).
+            // C7 ~ 2093 Hz at 48 kHz → maxSafe ~ 11.5 → the cap-8 mip level (fb300: index 16 in
+            // the 19-level ladder; was index 5 in the old 8-level one — same 8-harmonic cap).
             const double phaseIncC7 = 2093.0 / 48000.0;
             const int lvl = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncC7);
-            expectEquals (lvl, 5);
+            expectEquals (tw::Wavetable::kMipMaxHarmonics[(size_t) lvl], 8);
 
             // Quick DFT: read one cycle and find magnitude at each harmonic bin.
             constexpr int N = 2048;
@@ -349,7 +350,7 @@ public:
             for (int i = 0; i < N; ++i)
                 waveform[(size_t) i] = wt.lookup (lvl, 0.5f, (float) i / (float) N);
 
-            // Check harmonics 9, 11, 13 (odd, beyond our mip-5 cap of 8) are silent.
+            // Check harmonics 9, 11, 13 (odd, beyond the cap-8 level) are silent.
             constexpr double pi2 = 2.0 * 3.14159265358979323846;
             for (int h : { 9, 11, 13, 15 })
             {
@@ -363,7 +364,7 @@ public:
                 expect (mag < 1.0e-3, juce::String ("harmonic ") + juce::String (h) + " mag=" + juce::String ((float) mag));
             }
 
-            // And harmonic 7 (within mip-5 cap) should be non-trivially present.
+            // And harmonic 7 (within the cap-8 level) should be non-trivially present.
             {
                 double mag = 0.0;
                 for (int i = 0; i < N; ++i)

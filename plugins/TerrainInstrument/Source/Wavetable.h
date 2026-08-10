@@ -32,7 +32,7 @@ namespace tw
      *  reconstruction loop skips them via an amp==0 fast path. */
     struct FrameSpec
     {
-        static constexpr int kMaxHarmonics = 256;
+        static constexpr int kMaxHarmonics = 512;   // fb300 — 256→512 (Serum-grade). frameSize 2048 → up to 1024 harmonics are representable; 512 lets deep-bass notes (f0 ≤ ~46 Hz) reach ~Nyquist instead of the old 256-cap wall at ~12.5 kHz. The mip SELECTION still guarantees no aliasing (it only ever picks a cap ≤ Nyquist/f0), so a higher ceiling is strictly richer, never dirtier.
         std::array<float, kMaxHarmonics> amplitudes {};  // value-initialized to 0
         std::array<float, kMaxHarmonics> phases     {};  // value-initialized to 0
         int numHarmonics = 0;
@@ -64,13 +64,20 @@ namespace tw
     {
     public:
         static constexpr int kFrameSize    = 2048;  // power of 2 → cheap modulo via mask
-        static constexpr int kNumMipLevels = 8;     // 256/128/64/32/16/8/4/2 harmonics
+        static constexpr int kNumMipLevels = 34;    // fb301 — SIXTH-OCTAVE ladder (was fb300 third-octave / 19 levels). EDGE-TO-EDGE harmonics: the picked cap now sits within ~1.12× of Nyquist, so G#3's top harmonic reaches ~23.5 kHz (was 21 kHz at third-octave) — flush with Serum's ~23.9 kHz meter edge, no top-right gap. Old octave ladder wasted up to a full octave; third-octave left a ~3 kHz notch at 21–24 kHz; sixth-octave closes it. Cost: 34×16×2048×4B = 4.46 MB/table (~134 MB across 30 factory tables) — the edge-to-edge quality tier, chosen by Max (dial to quarter-octave/24 levels/94 MB if RAM matters more). Affects ALL wavetables: buildFromSpec (30 factory) + buildFromPcm (imports) share this ladder.
         static constexpr int kMaxFrames    = 256;   // hard ceiling on frame count (imported tables);
                                                     // also sizes renderBlend's stack weight array
 
         // Maximum-harmonic count per mip level. Index 0 = full bandwidth.
+        // fb301 — SIXTH-OCTAVE ladder (2^-1/6 ≈ 1.122× per step) from 512→16, then octave
+        // for the sparse top (8/4/2 — high notes have too few harmonics for finer spacing to
+        // matter). The playback selection picks the highest cap ≤ Nyquist/f0, so tighter
+        // spacing = the picked cap sits closer to the true Nyquist limit = EDGE-TO-EDGE (G#3
+        // 23.5 kHz vs Serum's 23.9). MUST stay monotonically DECREASING (selection scans
+        // front→back for the first fit).
         static constexpr std::array<int, kNumMipLevels> kMipMaxHarmonics
-            { 256, 128, 64, 32, 16, 8, 4, 2 };
+            { 512, 456, 406, 362, 323, 287, 256, 228, 203, 181, 161, 144, 128, 114, 102, 91,
+              81, 72, 64, 57, 51, 45, 40, 36, 32, 29, 25, 23, 20, 18, 16, 8, 4, 2 };
 
         Wavetable() = default;
 
@@ -414,6 +421,12 @@ namespace tw
         // interpolation lookup() uses, so blur = 0 reproduces lookup() exactly.
         static float readCycle (const float* buf, float phase) noexcept
         {
+            // LINEAR interpolation. fb302 measured cubic (Catmull-Rom) here and REVERTED it: on
+            // these 2048-point tables linear's interp error is already −98…−115 dB (below the
+            // 16-bit floor, inaudible + below any analyzer floor); cubic only pushed it to
+            // −130…−170 dB — no perceptible or on-meter gain for ~3× the read cost. Per the
+            // CPU-friendly rule, linear stays. (The faint "grunge" between harmonics on a spectrum
+            // analyzer is FFT WINDOW LEAKAGE, not interp imaging — Serum shows it too.)
             const float p     = phase - std::floor (phase);
             const float pIdx  = p * (float) kFrameSize;
             const int   p0    = (int) pIdx;

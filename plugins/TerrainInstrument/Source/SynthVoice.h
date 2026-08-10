@@ -343,6 +343,13 @@ namespace tw
             driftCoef_  = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi
                                                  * driftCutHz / (float) sr);
 
+            // fb302 — ANALOG DETUNE rng (subtle always-on pitch character; decorrelated from
+            // the erosion-drift rng). State must be non-zero for the xorshift in waverGaussian.
+            analogRng_         = (voiceHash ^ 0x27D4EB2Fu) | 1u;
+            analogStaticCents_ = 0.0f;
+            analogDriftCents_  = 0.0f;
+            analogDetuneSemis_ = 0.0;
+
             // Phase 8a — HORIZON shelves (one per stereo channel, mono spec)
             juce::dsp::ProcessSpec monoSpec;
             monoSpec.sampleRate       = sr;
@@ -1790,6 +1797,15 @@ namespace tw
                 waverCentsD_[(size_t) u] = 0.0f;
             }
 
+            // fb302 — pick THIS note's static ANALOG DETUNE: a gaussian tuning error (~±2¢ typical,
+            // hard-capped ±6¢), seeded per voice so different notes/voices sit at slightly different
+            // pitches. CENTERED on 0 → the synth averages perfectly in tune (this models an analog
+            // VCO's per-note tuning imperfection, NOT a global flat offset). The slow drift is layered
+            // on per-block below; together they make the pitch dance a few cents, like Serum's analog.
+            analogStaticCents_ = juce::jlimit (-6.0f, 6.0f, waverGaussian (analogRng_) * 2.0f);
+            analogDriftCents_  = 0.0f;
+            analogDetuneSemis_ = (double) analogStaticCents_ * 0.01;   // cents → semitones
+
             // KEYTRACK — latch the note-pitch source for this voice: a low-anchored
             // unipolar ramp, 0 at kKtLowNote up to 1 at kKtHighNote (held for the note).
             ktRamp_ = juce::jlimit (0.0f, 1.0f,
@@ -2197,6 +2213,19 @@ namespace tw
                 updateWaverOU (waverCentsB_, waverRngB_, waverB_, dt);
                 updateWaverOU (waverCentsC_, waverRngC_, waverC_, dt);
                 updateWaverOU (waverCentsD_, waverRngD_, waverD_, dt);
+
+                // fb302 — advance the subtle ALWAYS-ON analog pitch drift (single per-voice OU
+                // wander; same AR(1) form as WAVER but slow τ≈1.2 s and shallow ~±2¢, no depth gate).
+                // Combined with the per-note static offset → analogDetuneSemis_ feeds every osc pitch.
+                {
+                    const float phi = std::exp (-dt / 1.2f);                 // τ = 1.2 s (slow)
+                    const float sig = 2.0f * std::sqrt (1.0f - phi * phi);   // ~±2¢ drift σ
+                    float x = phi * analogDriftCents_ + sig * waverGaussian (analogRng_);
+                    x = juce::jlimit (-6.0f, 6.0f, x);                       // never run away
+                    if (x < 1.0e-20f && x > -1.0e-20f) x = 0.0f;            // denormal flush
+                    analogDriftCents_  = x;
+                    analogDetuneSemis_ = (double) (analogStaticCents_ + analogDriftCents_) * 0.01;
+                }
             }
             // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
             advanceGlide (numSamples);
@@ -4380,7 +4409,8 @@ namespace tw
                     + static_cast<double> (uDetuneCentsA_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01
                     + (double) coarseModA_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
+                    + pitchEnvSemis_
+                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4398,7 +4428,8 @@ namespace tw
                     + static_cast<double> (uDetuneCentsB_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01
                     + (double) coarseModB_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
+                    + pitchEnvSemis_
+                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4415,7 +4446,8 @@ namespace tw
                     + static_cast<double> (uDetuneCentsC_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsC_[(size_t) u])  * 0.01
                     + (double) coarseModC_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_;
+                    + pitchEnvSemis_
+                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncC_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4432,7 +4464,8 @@ namespace tw
                     + static_cast<double> (uDetuneCentsD_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsD_[(size_t) u])  * 0.01
                     + (double) coarseModD_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_;
+                    + pitchEnvSemis_
+                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncD_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4746,6 +4779,12 @@ namespace tw
         juce::Random            driftRng_;
         float                   driftState_  = 0.0f;
         float                   driftCoef_   = 0.0f;   // 1 - exp(-2π·fc/sr)
+        // fb302 — ANALOG DETUNE (always-on, subtle, no knob): a per-note static tuning error +
+        // a slow OU drift, per voice, centered on 0 (averages in tune). Added to every osc pitch.
+        std::uint32_t           analogRng_         = 0x9E3779B9u;   // xorshift state (non-zero)
+        float                   analogStaticCents_ = 0.0f;          // this note's static error (~±2¢)
+        float                   analogDriftCents_  = 0.0f;          // slow OU wander (~±2¢)
+        double                  analogDetuneSemis_ = 0.0;           // (static+drift)/100 → semitones
 
         // 2× oversampling input-prev for linear-interp upsample (Ladder + Acid303)
         float                   osPrevL_     = 0.0f;
