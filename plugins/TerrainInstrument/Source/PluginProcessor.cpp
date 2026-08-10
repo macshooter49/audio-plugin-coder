@@ -3410,7 +3410,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::StringArray { "Clean","Warm","Vintage","Modern","Lo-Fi","Bright","Dark","Wide" }, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SYN_DLY_SYNCDIV, 1 }, "Delay Sync Division",
-        juce::StringArray { "Free","1/1","1/2","1/4","1/4D","1/4T","1/8","1/8D","1/8T","1/16","1/16T","1/32" }, 6));   // default 1/8
+        // fb304 — HARD RULE: time range 4 bar → 1/256 (Max: no "fast" beyond 1/256). Index-aligned with the
+        // multiplier switch in the delay block AND the UI dropdown. Default 1/8 (index 10).
+        juce::StringArray { "Free","4 bar","2 bar","1 bar","1/2","1/2D","1/2T","1/4","1/4D","1/4T",
+                            "1/8","1/8D","1/8T","1/16","1/16D","1/16T","1/32","1/64","1/128","1/256" }, 10));   // default 1/8
     auto addDlyF = [&] (const char* id, const char* nm, float def) {
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
@@ -7021,24 +7024,32 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     float bpm = currentBPM.load(); if (bpm < 20.0f) bpm = 120.0f;
                     const float qms = 60000.0f / bpm;            // quarter-note ms
-                    float mult = 0.5f;   // index → multiplier of a QUARTER note (qms)
+                    float mult = 0.5f;   // fb304 — index → multiplier of a QUARTER note (qms). Aligned with SYN_DLY_SYNCDIV (4 bar→1/256).
                     switch (syncDiv) {
-                        case 1:  mult = 4.0f;            break;   // 1/1
-                        case 2:  mult = 2.0f;            break;   // 1/2
-                        case 3:  mult = 1.0f;            break;   // 1/4
-                        case 4:  mult = 1.5f;            break;   // 1/4 dotted
-                        case 5:  mult = 1.0f*2.0f/3.0f;  break;   // 1/4 triplet
-                        case 6:  mult = 0.5f;            break;   // 1/8
-                        case 7:  mult = 0.75f;           break;   // 1/8 dotted
-                        case 8:  mult = 0.5f*2.0f/3.0f;  break;   // 1/8 triplet
-                        case 9:  mult = 0.25f;           break;   // 1/16
-                        case 10: mult = 0.25f*2.0f/3.0f; break;   // 1/16 triplet
-                        case 11: mult = 0.125f;          break;   // 1/32
+                        case 1:  mult = 16.0f;           break;   // 4 bar
+                        case 2:  mult = 8.0f;            break;   // 2 bar
+                        case 3:  mult = 4.0f;            break;   // 1 bar
+                        case 4:  mult = 2.0f;            break;   // 1/2
+                        case 5:  mult = 3.0f;            break;   // 1/2 dotted
+                        case 6:  mult = 2.0f*2.0f/3.0f;  break;   // 1/2 triplet
+                        case 7:  mult = 1.0f;            break;   // 1/4
+                        case 8:  mult = 1.5f;            break;   // 1/4 dotted
+                        case 9:  mult = 1.0f*2.0f/3.0f;  break;   // 1/4 triplet
+                        case 10: mult = 0.5f;            break;   // 1/8
+                        case 11: mult = 0.75f;           break;   // 1/8 dotted
+                        case 12: mult = 0.5f*2.0f/3.0f;  break;   // 1/8 triplet
+                        case 13: mult = 0.25f;           break;   // 1/16
+                        case 14: mult = 0.375f;          break;   // 1/16 dotted
+                        case 15: mult = 0.25f*2.0f/3.0f; break;   // 1/16 triplet
+                        case 16: mult = 0.125f;          break;   // 1/32
+                        case 17: mult = 0.0625f;         break;   // 1/64
+                        case 18: mult = 0.03125f;        break;   // 1/128
+                        case 19: mult = 0.015625f;       break;   // 1/256
                     }
                     timeMs = qms * mult;
                 }
                 else
-                    timeMs = std::pow (2000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // 1 ms → 2000 ms (exp)
+                    timeMs = std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // fb304 — 1 ms → 8000 ms (exp), free range widened toward the 4-bar sync ceiling
                 delayEngine.setType      (activeDlyType_);
                 delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
                 delayEngine.setTimeMs    (timeMs);

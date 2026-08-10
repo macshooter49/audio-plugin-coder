@@ -37,7 +37,7 @@ public:
     void prepare (double sampleRate)
     {
         fs = (float) sampleRate;
-        int need = (int) std::ceil (2.6f * fs) + 8;          // up to ~2.5 s + guard
+        int need = (int) std::ceil (16.5f * fs) + 8;         // fb304 — up to ~16 s (4 bars @ 60 BPM) for the new 4-bar sync ceiling + guard
         int sz = 1; while (sz < need) sz <<= 1;
         bufL.assign ((size_t) sz, 0.0f); bufR.assign ((size_t) sz, 0.0f);
         mask = sz - 1; wr = 0;
@@ -81,7 +81,7 @@ public:
     // ── setters (called once per block from the processor) ────────────────────
     void setType      (int t)     { type_ = t < 0 ? 0 : (t > 3 ? 3 : t); }
     void setCharacter (int c)     { character_ = c < 0 ? 0 : c; }
-    void setTimeMs    (float ms)  { timeMs_ = ms < 1.0f ? 1.0f : (ms > 2500.0f ? 2500.0f : ms); }
+    void setTimeMs    (float ms)  { timeMs_ = ms < 1.0f ? 1.0f : (ms > 16000.0f ? 16000.0f : ms); }   // fb304 — 4-bar ceiling (was 2.5 s)
     void setFeedback  (float f)   { fbTgt = f < 0.0f ? 0.0f : (f > 1.15f ? 1.15f : f); }
     void setTone      (float t)   { toneTgt = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t); }   // 0.5 neutral
     void setLowCutHz  (float hz)  { lowCutHz_ = hz; }
