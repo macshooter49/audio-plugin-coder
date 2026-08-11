@@ -399,8 +399,43 @@ namespace ParameterIDs
     constexpr char SYN_DLY_TIME_R[]    = "SYN_DLY_TIME_R";     // fb306 — float 0..1 RIGHT time (free ms) when UNLINKED
     constexpr char SYN_DLY_SYNCDIV_R[] = "SYN_DLY_SYNCDIV_R";  // fb306 — choice: RIGHT sync division (same 20-entry list) when UNLINKED
     constexpr char SYN_DLY_LINK[]      = "SYN_DLY_LINK";       // fb306 — bool: L/R times LINKED (R follows L +Spread), default ON
+    // ════════ FX RACK · DISTORTION — fb315. The 3rd FX device (the slot formerly called "Saturate").
+    // ONE device, 23 modes in 6 FAMILIES; the BACK-8 is keyed to the FAMILY (6 param sets, not 23).
+    // setSynParam-only; choices = INDEX; routes default OFF; POWER default OFF ⇒ byte-identical dry init.
+    // Spec: Design/DISTORTION-BUILD-BIBLE.md ════════
+    constexpr char SYN_DST_TYPE[]      = "SYN_DST_TYPE";       // choice(23): ANALOG(5) CLIP(4) DIODE(4) FOLD(3) SHAPER(4) DIGITAL(3)
+    constexpr char SYN_DST_CHARACTER[] = "SYN_DST_CHARACTER";  // choice(8): per-MODE voicing (23 x 8 = 184). Must change PHYSICS, not EQ.
+    constexpr char SYN_DST_QUALITY[]   = "SYN_DST_QUALITY";    // choice(4): Off/Standard/High/Ultra. A mode declares its FLOOR; this may only RAISE it.
+    constexpr char SYN_DST_DRIVE[]     = "SYN_DST_DRIVE";      // float 0..1 -> driveDb = D_max * t^0.8 (CLIP D_max = +48 dB). NOT a linear multiplier.
+    constexpr char SYN_DST_SIG[]       = "SYN_DST_SIG";        // float 0..1 — the SIGNATURE knob, relabelled per family:
+                                                               //   ANALOG=Bias · CLIP=Knee · DIODE=Asym · FOLD=Symmetry · SHAPER=Morph · DIGITAL=Crush
+    constexpr char SYN_DST_TONE[]      = "SYN_DST_TONE";       // float 0..1 — post tilt, 0.5 neutral
+    constexpr char SYN_DST_MIX[]       = "SYN_DST_MIX";        // float 0..1 — 100% = FULLY WET (hard rule; send padded by kVoiceToFxPad)
+    constexpr char SYN_DST_P1[]        = "SYN_DST_P1";         // back-8, relabelled per FAMILY (Model A). CLIP:
+    constexpr char SYN_DST_P2[]        = "SYN_DST_P2";         //   P1 Low Cut(pre) · P2 Hi Cut(post) · P3 Emphasis(the pre/de PAIR)
+    constexpr char SYN_DST_P3[]        = "SYN_DST_P3";         //   P4 Width(M/S DRIVE balance) · P5 Bias(+-1.0 FS) · P6 Gap(dead zone)
+    constexpr char SYN_DST_P4[]        = "SYN_DST_P4";         //   P7 Punch(bipolar transient drive) · P8 Feedback(loop gain -> 0.95)
+    constexpr char SYN_DST_P5[]        = "SYN_DST_P5";
+    constexpr char SYN_DST_P6[]        = "SYN_DST_P6";
+    constexpr char SYN_DST_P7[]        = "SYN_DST_P7";
+    constexpr char SYN_DST_P8[]        = "SYN_DST_P8";
+    constexpr char SYN_DST_SRC_A[]     = "SYN_DST_SRC_A";      // bool, default OFF (per-osc send; no pills lit = MAIN SEND)
+    constexpr char SYN_DST_SRC_B[]     = "SYN_DST_SRC_B";
+    constexpr char SYN_DST_SRC_C[]     = "SYN_DST_SRC_C";
+    constexpr char SYN_DST_SRC_D[]     = "SYN_DST_SRC_D";
+    constexpr char SYN_DST_SRC_SUB[]   = "SYN_DST_SRC_SUB";
+    constexpr char SYN_DST_SRC_NOISE[] = "SYN_DST_SRC_NOISE";
+    constexpr char SYN_DST_POWER[]     = "SYN_DST_POWER";      // bool — device power. DEFAULT OFF (dry init; on = main send). Gates routing too.
+    constexpr char SYN_DST_AUTO[]      = "SYN_DST_AUTO";       // bool — output compensation. DEFAULT OFF: full normalisation is THE timidity culprit
+                                                               // (Serum/Vital ship none). When ON it compensates only ~70% on a ~300 ms RMS tracker.
+    constexpr char SYN_DST_PILL2[]     = "SYN_DST_PILL2";      // bool — the FAMILY-UNIQUE 2nd pill, default OFF:
+                                                               //   ANALOG=Slam · CLIP=Wrap · DIODE=Octave · FOLD=Track · SHAPER=Sym · DIGITAL=Clean
+
     // ════════ FX RACK · CHAIN ORDER (fb307 — drag-to-reorder) ════════
     constexpr char SYN_FX_ORDER[]      = "SYN_FX_ORDER";       // fb307 — bool: false = Reverb→Delay (default serial order), true = Delay→Reverb
+                                                               // ⚠️ fb315 — with a THIRD device this must become a 6-way permutation index
+                                                               // (3 devices = 6 orders). Deferred until the distortion joins the drag chain;
+                                                               // today it is inserted at a FIXED position (last). See bible §4.5.
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

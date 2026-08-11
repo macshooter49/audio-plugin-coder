@@ -3444,6 +3444,55 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_FX_ORDER, 1 }, "FX Chain Order", false));   // fb307 — false = Reverb→Delay (default), true = Delay→Reverb
 
+    // ════════ FX RACK · DISTORTION — fb315. 23 modes / 6 families; back-8 keyed to the FAMILY.
+    // POWER default OFF ⇒ dry init ⇒ byte-identical default sound (same contract as reverb + delay).
+    // Spec: Design/DISTORTION-BUILD-BIBLE.md ════════
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DST_TYPE, 1 }, "Distortion Type",
+        // INDEX-ALIGNED with the DSP switch AND the UI optgroup list. Grouped by family, in family order.
+        juce::StringArray { "Tube","Tape","Transformer","Stomp Box","Overdrive",                  //  0-4  ANALOG
+                            "Soft Clip","Hard Clip","Zero-Square","Slew Clip",                    //  5-8  CLIP
+                            "Diode 1","Diode 2","Asym","Rectify",                                 //  9-12 DIODE
+                            "Linear Fold","Sine Fold","West Coast",                               // 13-15 FOLD
+                            "Shaper","Shaper Asym","Harmonics","Table",                           // 16-19 SHAPER
+                            "Downsample","Bitcrush","Overflow" }, 5));                            // 20-22 DIGITAL — default Soft Clip
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DST_CHARACTER, 1 }, "Distortion Character",
+        // Soft Clip's 8 voicings (the default mode). Relabelled per MODE by the UI; the DSP reads the index.
+        juce::StringArray { "Diff Pair","Glue","Cubic","Sine","Asym","Slam","Squeeze","Wall" }, 0));
+    layout.add (std::make_unique<juce::AudioParameterChoice>(
+        juce::ParameterID { ParameterIDs::SYN_DST_QUALITY, 1 }, "Distortion Quality",
+        juce::StringArray { "Off","Standard","High","Ultra" }, 1));   // default Standard (= each mode's declared FLOOR)
+
+    auto addDstF = [&] (const char* id, const char* nm, float def) {
+        layout.add (std::make_unique<juce::AudioParameterFloat>(
+            juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
+    // fb309 LESSON APPLIED: default Drive lands the signal right AT the knee — audibly saturating the
+    // moment you power it on, but NOT a blast. 0.20 ⇒ 48*0.20^0.8 ≈ +13.2 dB ⇒ a −26 dBFS bus signal
+    // arrives at u ≈ 0.92, i.e. just touching the ±1 threshold. Working from the first degree of travel
+    // (no dead first third) without the delay-feedback jumpscare. The RANGE still reaches +48 dB.
+    addDstF (ParameterIDs::SYN_DST_DRIVE, "Distortion Drive", 0.20f);
+    addDstF (ParameterIDs::SYN_DST_SIG,   "Distortion Knee",  0.65f);  // signature knob. 0.65 = Soft Clip's default Knee (Hard Clip's is 0.08 —
+                                                                       // the two defaults sit FAR APART so the modes never boot into their overlap zone).
+    addDstF (ParameterIDs::SYN_DST_TONE,  "Distortion Tone",  0.50f);  // post tilt, neutral
+    addDstF (ParameterIDs::SYN_DST_MIX,   "Distortion Mix",   1.00f);  // a distortion is normally a full-wet insert
+    // Back-8 (CLIP labels). All defaults are NO-OP values, so powering the device on gives clean drive
+    // and nothing else — every back knob starts out of the way.
+    addDstF (ParameterIDs::SYN_DST_P1, "Distortion Low Cut",  0.00f);  // pre HP, off
+    addDstF (ParameterIDs::SYN_DST_P2, "Distortion Hi Cut",   1.00f);  // post LP, open
+    addDstF (ParameterIDs::SYN_DST_P3, "Distortion Emphasis", 0.50f);  // pre/de tilt pair, neutral
+    addDstF (ParameterIDs::SYN_DST_P4, "Distortion Width",    0.50f);  // M/S drive balance, matched
+    addDstF (ParameterIDs::SYN_DST_P5, "Distortion Bias",     0.50f);  // centre = 0
+    addDstF (ParameterIDs::SYN_DST_P6, "Distortion Gap",      0.00f);  // dead zone off
+    addDstF (ParameterIDs::SYN_DST_P7, "Distortion Punch",    0.50f);  // centre = 0
+    addDstF (ParameterIDs::SYN_DST_P8, "Distortion Feedback", 0.00f);  // exactly off (ADAA stays exact)
+    for (const char* rid : { ParameterIDs::SYN_DST_SRC_A, ParameterIDs::SYN_DST_SRC_B, ParameterIDs::SYN_DST_SRC_C,
+                             ParameterIDs::SYN_DST_SRC_D, ParameterIDs::SYN_DST_SRC_SUB, ParameterIDs::SYN_DST_SRC_NOISE })
+        layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DST_POWER, 1 }, "Distortion Power", false));  // OFF = dry init
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DST_AUTO,  1 }, "Distortion Auto",  false));  // OFF — see bible §2.6/§4.2
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DST_PILL2, 1 }, "Distortion Wrap",  false));  // family-unique 2nd pill
+
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
         juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
@@ -3707,6 +3756,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     shimmerReverb.prepare (sampleRate);// fb290 — synth FX-rack Shimmer reverb (octave wash)
     convolutionReverb.prepare (sampleRate);// fb291 — synth FX-rack Convolution reverb (FFT convolution)
     delayEngine.prepare (sampleRate);      // fb296 — synth FX-rack Delay (Digital/Tape/BBD/Diffuse)
+    distortionEngine.prepare (sampleRate); // fb315 — synth FX-rack Distortion (23 modes / 6 families)
     activeDlyType_ = -1; dlySwapping_ = false;
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)
@@ -5700,6 +5750,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
     dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     fxDelayFirst_ = rawParam (ParameterIDs::SYN_FX_ORDER)->load() > 0.5f;   // fb307 — drag chain order (true = Delay→Reverb)
+    // fb315 — DISTORTION: power gates everything (same law as reverb/delay). MAIN SEND only today.
+    dstPower_ = rawParam (ParameterIDs::SYN_DST_POWER)->load() > 0.5f;
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
@@ -6278,6 +6330,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const float* dlySendL = delaySendBuf_.getReadPointer (0);    // fb296 — delay routed-osc send
     const float* dlySendR = delaySendBuf_.getReadPointer (1);
     float dlyBlockWetPk = 0.0f;                                  // fb296 — peak wet this block → delay core viz
+    float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
     // Walk all voices across all 4 layers. For each voice that's currently
@@ -7095,6 +7148,62 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             }
         }
+        // ════════ fb315 — DISTORTION setup (block-rate, i==0) ════════
+        if (i == 0)
+        {
+            dstEnvT_ = dstPower_ ? 1.0f : 0.0f;          // on/off FADE (never a hard cut)
+            if (dstPower_)
+            {
+                distortionEngine.setMode      ((int) *rawParam (ParameterIDs::SYN_DST_TYPE));
+                distortionEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DST_CHARACTER));
+                distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
+                distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
+                distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
+                // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
+                // linear multiplier, that is the dead-first-third bug this device exists to avoid.
+                distortionEngine.setDrive     (rawParam (ParameterIDs::SYN_DST_DRIVE)->load());
+                distortionEngine.setKnee      (rawParam (ParameterIDs::SYN_DST_SIG)->load());    // signature knob (CLIP = Knee)
+                distortionEngine.setTone      (rawParam (ParameterIDs::SYN_DST_TONE)->load());
+                // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
+                // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
+                static const char* const kDstP[8] = {
+                    ParameterIDs::SYN_DST_P1, ParameterIDs::SYN_DST_P2, ParameterIDs::SYN_DST_P3,
+                    ParameterIDs::SYN_DST_P4, ParameterIDs::SYN_DST_P5, ParameterIDs::SYN_DST_P6,
+                    ParameterIDs::SYN_DST_P7, ParameterIDs::SYN_DST_P8 };
+                for (int pIdx = 0; pIdx < 8; ++pIdx)
+                    distortionEngine.setP (pIdx, rawParam (kDstP[pIdx])->load());
+                // fb318 — the ENGINE owns Mix now (it is the only place the wet and the dry can be
+                // latency-aligned across the 2× resampler; see DistortionEngine::setMix).
+                distortionEngine.setMix (rawParam (ParameterIDs::SYN_DST_MIX)->load());
+            }
+        }
+
+        auto applyDst = [&]()   // fb315 — distortion INSERT. MAIN SEND: the whole mix through it.
+        {
+            if (dstPower_ || dstEnv_ > 1.0e-4f)
+            {
+                dstEnv_ += (dstEnvT_ - dstEnv_) * hallSm_;      // on/off fade (~15 ms, no click)
+                // fb305 — the main send excludes per-osc-routed oscs: subtract the routed dry exactly as
+                // it sits in leftChannel. The distortion has no send bus of its own yet, so this sum is
+                // still complete; the moment one is added, dstSend MUST be added here AND at :6979/:7111.
+                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                float sgL = leftChannel[i] - rtdL, sgR;
+                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                else sgR = sgL;
+                float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
+                // fb318 — ENV-GATED REPLACE. The engine returns the FINISHED signal (its own Mix
+                // applied, dry latency-aligned to the 2× resampler), so the insert is just a crossfade
+                // from the untouched mix to the engine's output. At env 0 this contributes EXACTLY 0 —
+                // no click on power toggle, and no delay line in circuit when the device is off.
+                const float e = dstEnv_;
+                leftChannel[i]  += e * (wl - sgL);
+                if (rightChannel != nullptr)
+                    rightChannel[i] += e * (wr - sgR);
+                const float wmag = 0.5f * (std::abs (wl) + std::abs (wr)) * e;
+                if (wmag > dstBlockWetPk) dstBlockWetPk = wmag;
+            }
+        };
+
         auto applyDly = [&]()   // fb307 — delay INSERT as a lambda (swapped with the reverb per the drag order)
         {
         if (dlyPower_ || dlyEnv_ > 1.0e-4f)
@@ -7132,6 +7241,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // what the drag controls (delay hears reverb, or reverb hears delay).
         if (fxDelayFirst_) { applyDly(); applyRvb(); }
         else               { applyRvb(); applyDly(); }
+        // fb315 — the distortion runs LAST for now (fixed position). SYN_FX_ORDER is still a BOOL, i.e.
+        // it only encodes the 2-device swap; three devices need a 6-way permutation index, which lands
+        // with the drag-reorder pass (bible §4.5). Power OFF ⇒ this is a single branch, nothing else.
+        applyDst();
         if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
             // fb312 — INSTANT attack (peak-hold): the smoothed 0.40 attack made the viz lag the audio
@@ -7142,6 +7255,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dlyBlockWetPk > dlyBloomEnv_)   dlyBloomEnv_ = dlyBlockWetPk;
             else                                dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * 0.05f;
             dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
+            // fb315 — distortion core viz. Same fb312 instant-attack / smoothed-fall shape, so the
+            // curve's excursion glow lands on the same block as the audio instead of lagging it.
+            if (dstBlockWetPk > dstBloomEnv_)   dstBloomEnv_ = dstBlockWetPk;
+            else                                dstBloomEnv_ += (dstBlockWetPk - dstBloomEnv_) * 0.05f;
+            dstBloomViz_.store (juce::jlimit (0.0f, 1.5f, dstBloomEnv_), std::memory_order_relaxed);
         }
 
         // fb249 — instrument makeup gain (Serum-matched loudness). fb264 — THEN a stereo-linked

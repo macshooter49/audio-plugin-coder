@@ -18,6 +18,7 @@
 #include "ShimmerReverb.h"     // fb290 — synth FX-rack Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
 #include "ConvolutionReverb.h" // fb291 — synth FX-rack Convolution reverb (true FFT convolution + synth/user IR + Reverse/Attack/Distance/Density bake)
 #include "DelayEngine.h"       // fb296 — synth FX-rack Delay (one shared fractional line: Digital/Tape/BBD/Diffuse + ping-pong + HQ interp)
+#include "DistortionEngine.h"  // fb315 — synth FX-rack Distortion (the 3rd device; 23 modes / 6 families, one shared shell)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
 #include "ParametricEQ.h"
@@ -1527,6 +1528,7 @@ private:
     // (4 characters). Its own route pills + send bus; the wet is added back with the same Mix-100%-wet
     // duck term so the routed dry is fully cancelled at Mix=1. Power gates routing exactly like the reverb.
     DelayEngine delayEngine;
+    tw::DistortionEngine distortionEngine;         // fb315 — FX-rack Distortion (POWER default OFF ⇒ dry init)
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)
@@ -1540,6 +1542,20 @@ private:
     float dlyG_[6] = { 0,0,0,0,0,0 };               // per-source delay route gains (A,B,C,D,Sub,Noise)
     std::atomic<float> dlyBloomViz_ { 0.0f };       // audio-reactive wet level for the delay core viz
     float dlyBloomEnv_ = 0.0f;
+
+    // fb315 — DISTORTION (3rd FX device). TODAY: MAIN SEND ONLY — power ON ⇒ the whole mix runs
+    // through it as a wet/dry insert, exactly like the reverb/delay main-send path. Power OFF ⇒ the
+    // insert never runs ⇒ byte-identical default sound.
+    // ⚠️ The per-osc route pills need their own send bus (distortionSendBuf_ + SynthVoice tap). That
+    // lands next, and it MUST carry the fb305 fix in the same commit: PluginProcessor.cpp:6979/:7111
+    // sum ONLY rvbSend+dlySend, so a third send bus silently re-breaks fb305 (an osc routed to the
+    // distortion would get its bus AND the reverb main send). See bible §4.5.
+    bool  dstPower_ = false;                         // SYN_DST_POWER (default OFF)
+    float dstEnv_ = 0.0f, dstEnvT_ = 0.0f;           // on/off FADE env (0 = fully bypassed, no click)
+    float dstDry_ = 1.0f, dstWet_ = 0.0f;            // equal-power mix — RAMPED per sample
+    float dstDryT_ = 1.0f, dstWetT_ = 0.0f;
+    float dstBloomEnv_ = 0.0f;
+    std::atomic<float> dstBloomViz_ { 0.0f };        // audio-reactive core (fb311 law: viz must be DRAMATIC)
 
     // (Parametric EQ moved to public section so editor's setEqSolo native fn can call setSolo)
     // (Spectrum analyzers moved to public section so editor can readLatest() for WebView push)
