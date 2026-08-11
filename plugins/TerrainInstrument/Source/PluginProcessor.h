@@ -701,6 +701,8 @@ public:
     int           getConvIREnvelope    (float* out, int n) const { return convolutionReverb.irEnvelope (out, n); }  // baked-IR viz envelope; returns baked len
     juce::String  getConvIRName        () const { return convIRName_; }                             // "" ⇒ synthetic factory Space
     bool          isConvIRUser         () const { return convIRUser_; }
+    juce::String  getConvIRRawJson     () const;                              // fb311 — {name,n,L,R} (base64 float) of the loaded user IR, for embedding in a preset
+    void          setConvIRRawFromJson (const juce::String& json);           // fb311 — restore a user IR from a preset's embedded base64 (recall the EXACT one-shot)
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
@@ -1497,6 +1499,7 @@ private:
     ConvolutionReverb convolutionReverb;           // fb291 — Convolution reverb (true FFT partitioned convolution + synth/user IR + Reverse/Attack/Distance/Density)
     juce::String       convIRName_;                // fb292 — current USER IR filename ("" ⇒ synthetic factory Space)
     bool               convIRUser_ = false;        // fb292 — true when a user IR is loaded (vs a synthetic factory Space)
+    std::vector<float> convUserIrL_, convUserIrR_;  // fb311 — RETAINED raw user IR (post decode/trim, pre-bake) so a preset can serialize the exact one-shot
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block (PILLS ⇒ per-osc send)

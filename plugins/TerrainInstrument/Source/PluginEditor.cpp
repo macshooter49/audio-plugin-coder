@@ -796,6 +796,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 js << "]}";
                 complete (juce::var (js));
             })
+            .withNativeFunction("getConvIRRaw", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getConvIRRawJson()));   // fb311 — {name,n,L,R base64} to embed the one-shot IN a preset
+            })
+            .withNativeFunction("setConvIRRaw", [this](const juce::Array<juce::var>& args,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.setConvIRRawFromJson (args[0].toString());   // fb311 — restore the EXACT one-shot from a preset
+                complete (juce::var{});
+            })
             .withNativeFunction("loadConvIRFromBase64", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

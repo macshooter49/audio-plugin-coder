@@ -9424,6 +9424,7 @@ bool TerrainInstrumentAudioProcessor::loadConvIRFromMemory (const void* data, si
     std::vector<float> L, R;
     if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
     convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
+    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);   // fb311 — retain raw IR for preset serialization
     convIRName_ = name; convIRUser_ = true;
     return true;
 }
@@ -9435,6 +9436,7 @@ bool TerrainInstrumentAudioProcessor::loadConvIRFromFile (const juce::File& f)
     std::vector<float> L, R;
     if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
     convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
+    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);   // fb311 — retain raw IR for preset serialization
     convIRName_ = f.getFileName(); convIRUser_ = true;
     return true;
 }
@@ -9442,7 +9444,51 @@ bool TerrainInstrumentAudioProcessor::loadConvIRFromFile (const juce::File& f)
 void TerrainInstrumentAudioProcessor::clearConvUserIR ()
 {
     convolutionReverb.clearUserIR();
+    convUserIrL_.clear(); convUserIrR_.clear();   // fb311
     convIRName_ = juce::String(); convIRUser_ = false;
+}
+
+// fb311 — serialize the RETAINED raw user IR as base64 float (L+R) so a Convolution preset recalls the EXACT
+// one-shot. {} when no user IR. Cap ~6 s (matches the load cap) so a preset .json can't balloon unbounded.
+juce::String TerrainInstrumentAudioProcessor::getConvIRRawJson () const
+{
+    if (! convIRUser_ || convUserIrL_.empty()) return "{}";
+    const int   n   = (int) convUserIrL_.size();
+    const int   nR  = (int) convUserIrR_.size();
+    juce::MemoryBlock mbL (convUserIrL_.data(), (size_t) n  * sizeof (float));
+    juce::MemoryBlock mbR (convUserIrR_.data(), (size_t) nR * sizeof (float));
+    juce::String out;
+    out << "{\"name\":" << convIRName_.quoted()
+        << ",\"n\":"    << n
+        << ",\"L\":\""  << mbL.toBase64Encoding() << "\""
+        << ",\"R\":\""  << mbR.toBase64Encoding() << "\"}";
+    return out;
+}
+
+// fb311 — restore a user IR from a preset's embedded base64. Runs on the message thread (native), same as the
+// drag-drop load path; setUserIR is thread-safe (pre-reserved, no realloc). Non-destructive: bad/empty ⇒ no-op.
+void TerrainInstrumentAudioProcessor::setConvIRRawFromJson (const juce::String& json)
+{
+    auto v = juce::JSON::parse (json);
+    auto* o = v.getDynamicObject();
+    if (o == nullptr) return;
+    const juce::String bL = o->getProperty ("L").toString();
+    const juce::String bR = o->getProperty ("R").toString();
+    const juce::String nm = o->getProperty ("name").toString();
+    if (bL.isEmpty()) return;
+    juce::MemoryBlock mbL, mbR;
+    if (! mbL.fromBase64Encoding (bL)) return;
+    mbR.fromBase64Encoding (bR);
+    const int nL = (int) (mbL.getSize() / sizeof (float));
+    const int nR = (int) (mbR.getSize() / sizeof (float));
+    if (nL <= 0) return;
+    std::vector<float> L ((size_t) nL), R ((size_t) juce::jmax (nL, nR), 0.0f);
+    std::memcpy (L.data(), mbL.getData(), (size_t) nL * sizeof (float));
+    if (nR > 0) std::memcpy (R.data(), mbR.getData(), (size_t) nR * sizeof (float));
+    else        R = L;                                   // mono → duplicate to R
+    convolutionReverb.setUserIR (L.data(), R.data(), nL);
+    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);
+    convIRName_ = nm; convIRUser_ = true;
 }
 
 //==============================================================================
