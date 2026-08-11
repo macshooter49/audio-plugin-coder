@@ -7134,11 +7134,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else               { applyRvb(); applyDly(); }
         if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
-            const float rbt = (hallBlockWetPk > hallBloomEnv_) ? 0.40f : 0.05f;
-            hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * rbt;
+            // fb312 — INSTANT attack (peak-hold): the smoothed 0.40 attack made the viz lag the audio
+            // ~20-60ms and read "late" (Max). The peak now lands the same block; only the fall smooths.
+            if (hallBlockWetPk > hallBloomEnv_) hallBloomEnv_ = hallBlockWetPk;
+            else                                hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * 0.05f;
             hallBloomViz_.store (juce::jlimit (0.0f, 1.5f, hallBloomEnv_), std::memory_order_relaxed);
-            const float dbt = (dlyBlockWetPk > dlyBloomEnv_) ? 0.40f : 0.05f;
-            dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * dbt;
+            if (dlyBlockWetPk > dlyBloomEnv_)   dlyBloomEnv_ = dlyBlockWetPk;
+            else                                dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * 0.05f;
             dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
         }
 
