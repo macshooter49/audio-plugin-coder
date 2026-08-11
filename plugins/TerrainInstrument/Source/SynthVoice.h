@@ -9,6 +9,8 @@
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
 #include "TerrainFilters.h"
+#include "Shapers.h"          // fb313 — shared waveshapers (tw::shapers): the fold + its ADAA antiderivative,
+                              // one copy for the oscillator path AND the FX-rack Distortion FOLD family.
 #include "TerrainEnvelope.h"
 #include "SynthModConfig.h"   // Batch 1 — per-voice LFOs + mod routing (namespace wc)
 #include "FlowRobin.h"        // fb122 — the ROBIN Wheel rotation brain (no-JUCE)
@@ -2912,8 +2914,14 @@ namespace tw
                         const float drive = 1.0f + spectralAmtA_ * spectralAmtA_ * 9.0f;
                         const float bias = 0.15f * spectralAmtA_;
                         const float invSat = 1.0f / std::tanh (drive);
-                        sA_L = std::tanh (sA_L * drive + bias) * invSat - bias * invSat;
-                        sA_R = std::tanh (sA_R * drive + bias) * invSat - bias * invSat;
+                        // fb313 — exact DC removal subtracts f(bias), NOT bias. The shaper's output at
+                        // zero input is tanh(bias)·invSat; subtracting `bias` leaves a residual offset.
+                        // Benign here (bias ≤ 0.15 ⇒ ~0.001 error) but the pattern is a guaranteed
+                        // note-off click at the ±1.0 bias ranges the Distortion device will use.
+                        // Correct form for every shaper: y = (f(g·x + b) − f(b)) · makeup.
+                        const float dcOff = std::tanh (bias) * invSat;
+                        sA_L = std::tanh (sA_L * drive + bias) * invSat - dcOff;
+                        sA_R = std::tanh (sA_R * drive + bias) * invSat - dcOff;
                     }
                     else if (spectralTypeA_ == 8)
                     {
@@ -4512,124 +4520,33 @@ namespace tw
         //   0 = Linear (Serge — triangle-wave fold, near-infinite odd harmonics)
         //   1 = Sine   (Vital — sin(drive·x), bounded, bell character)
         //   2 = Triangle (Buchla 259 — 3-stage cascade, warm West-Coast)
-        // amount in [0,1]; pre-gain is quadratic so the lower half of the knob
-        // ramps gently and the upper half drives hard.
+        //
+        // fb313 — THE IMPLEMENTATION MOVED TO Source/Shapers.h (namespace tw::shapers), VERBATIM,
+        // so the FX-rack Distortion device's FOLD family shares ONE copy with the oscillator path.
+        // These are thin forwarders: every call site below is unchanged and the audio is
+        // byte-identical. 🔑 The fold pre-gain constants (9.0f / 5.28318530f / 5.0f) used to be
+        // written TWICE — once here and once in foldAntideriv — and raising one without the other
+        // breaks ADAA's "F is the antiderivative of f" invariant, making the fold LOUDER *and*
+        // ALIAS WORSE simultaneously. Shapers.h now holds them in ONE table (kFoldPre), so a depth
+        // change is a single edit. Change fold depths THERE, never here.
         static inline float applyFold (float x, int shape, float amount) noexcept
         {
-            if (amount <= 1.0e-6f) return x;   // identity fast-path
-
-            switch (shape)
-            {
-                case 0:
-                {
-                    // Linear (Serge) — pre 1..10, closed-form triangle wave fold.
-                    const float pre    = 1.0f + amount * amount * 9.0f;
-                    const float driven = x * pre;
-                    const float q      = (driven + 1.0f) * 0.25f;
-                    return 4.0f * std::fabs (q - std::round (q)) - 1.0f;
-                }
-                case 1:
-                {
-                    // Sine (Vital) — pre 1..2π, sin(drive·x), bounded ±1.
-                    const float pre = 1.0f + amount * amount * 5.28318530f;
-                    return std::sin (x * pre);
-                }
-                case 2:
-                {
-                    // Triangle (Buchla 259) — 3-stage cascade.
-                    const float pre = 1.0f + amount * amount * 5.0f;
-                    const float driven = x * pre;
-                    auto linfold = [] (float v) -> float
-                    {
-                        const float q = (v + 1.0f) * 0.25f;
-                        return 4.0f * std::fabs (q - std::round (q)) - 1.0f;
-                    };
-                    const float s1 = linfold (driven * 1.0f)        * 0.50f;
-                    const float s2 = linfold (driven * 1.41421356f) * 0.35f;
-                    const float s3 = linfold (driven * 2.0f)        * 0.15f;
-                    return s1 + s2 + s3;
-                }
-                default: return x;
-            }
+            return tw::shapers::applyFold (x, shape, amount);
         }
 
-        // ── ADAA wavefolder (1st-order antiderivative anti-aliasing) ─────────
-        // The triangle-based folds (Linear/Serge, Buchla) generate dense high
-        // harmonics that alias badly at base rate. Rather than 2x oversample the
-        // whole voice, we apply 1st-order ADAA — the same technique as the
-        // nonlinear filters. Offline FFT proof: 2.4–5.6x less aliasing on the
-        // triangle folds, neutral on the (already-smooth) sine fold, low-freq
-        // shape preserved. State is per-sine (see foldStateA_/B_).
-        //
-        // foldAntideriv(x) = ∫ applyFold dx, so applyFold = d/dx foldAntideriv.
-        //   triangle-wave antiderivative: G(q) = 2 r|r| − r,  r = q − round(q)
-        //   ∫ linfold(x·a) dx = (4/a)·G((x·a+1)/4)
-        static inline float foldGtri (float q) noexcept
-        {
-            const float r = q - std::round (q);
-            return 2.0f * r * std::fabs (r) - r;
-        }
-        static inline float foldFlin (float x, float a) noexcept
-        {
-            return (4.0f / a) * foldGtri ((x * a + 1.0f) * 0.25f);
-        }
+        static inline float foldGtri (float q) noexcept { return tw::shapers::foldGtri (q); }
+        static inline float foldFlin (float x, float a) noexcept { return tw::shapers::foldFlin (x, a); }
+
         static inline float foldAntideriv (float x, int shape, float amount) noexcept
         {
-            switch (shape)
-            {
-                case 1: { const float pre = 1.0f + amount * amount * 5.28318530f; return -std::cos (pre * x) / pre; }
-                case 2: { const float pre = 1.0f + amount * amount * 5.0f;
-                          return 0.5f  * foldFlin (x, pre)
-                               + 0.35f * foldFlin (x, pre * 1.41421356f)
-                               + 0.15f * foldFlin (x, pre * 2.0f); }
-                default:{ const float pre = 1.0f + amount * amount * 9.0f; return foldFlin (x, pre); }
-            }
+            return tw::shapers::foldAntideriv (x, shape, amount);
         }
 
-        struct FoldState
-        {
-            float x1  = 0.0f;    // previous input sample
-            float Fx1 = 0.0f;    // cached antiderivative F(x1) for the (sh1,am1) curve below
-            int   sh1 = -1;      // shape Fx1 was computed under (-1 = cache invalid)
-            float am1 = -1.0f;   // amount Fx1 was computed under (-1 = cache invalid)
-        };
+        using FoldState = tw::shapers::FoldState;
 
-        // 1st-order ADAA: y[n] = (F(x[n]) − F(x[n−1])) / (x[n] − x[n−1]).
-        // WITHIN-BLOCK CACHE (CPU): shape/amount are pushed ONCE PER BLOCK (setFold), so across a
-        // block F(x[n−1]) this sample is bit-identical to last sample's F(x[n]) — cache it (st.Fx1)
-        // and reuse it ONLY while (shape,amount) are unchanged. ANY curve change (a block boundary
-        // that moved the knob, or per-block automation) forces a live recompute of F(x1) on the
-        // CURRENT curve, so the output is identical to the recompute-both version — this just skips
-        // recomputing a value that is provably unchanged. After a note-on reset (x1=0, sh1=-1) the
-        // first sample recomputes F(0) live (≠ 0 for any fold). The low-slew and fold-off branches
-        // produce no F, so they invalidate the cache (sh1=-1) → the next real sample recomputes.
-        // A midpoint-naive fallback handles the low-slew 0/0 case. [ADAA audit vs Waveshaper 75cb6a9]
         static inline float applyFoldADAA (float x, int shape, float amount, FoldState& st) noexcept
         {
-            float y, Fx = 0.0f;
-            bool  haveFx = false;
-            if (amount <= 1.0e-6f)
-            {
-                y = x;                                                   // fold off → identity
-            }
-            else if (std::fabs (x - st.x1) < 1.0e-5f)
-            {
-                y = applyFold (0.5f * (x + st.x1), shape, amount);       // low-slew fallback
-            }
-            else
-            {
-                Fx = foldAntideriv (x, shape, amount);
-                // F(x1): reuse the cache iff it was computed on the SAME curve, else recompute live.
-                const float Fx1 = (st.sh1 == shape && st.am1 == amount)
-                                    ? st.Fx1
-                                    : foldAntideriv (st.x1, shape, amount);
-                y = (Fx - Fx1) / (x - st.x1);
-                haveFx = true;
-            }
-            st.x1 = x;
-            if (haveFx) { st.Fx1 = Fx; st.sh1 = shape; st.am1 = amount; }
-            else          st.sh1 = -1;                                    // invalidate cache
-            return y;
+            return tw::shapers::applyFoldADAA (x, shape, amount, st);
         }
 
 
