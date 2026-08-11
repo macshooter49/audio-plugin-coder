@@ -81,7 +81,9 @@ public:
     // ── setters (called once per block from the processor) ────────────────────
     void setType      (int t)     { type_ = t < 0 ? 0 : (t > 3 ? 3 : t); }
     void setCharacter (int c)     { character_ = c < 0 ? 0 : c; }
-    void setTimeMs    (float ms)  { timeMs_ = ms < 1.0f ? 1.0f : (ms > 16000.0f ? 16000.0f : ms); }   // fb304 — 4-bar ceiling (was 2.5 s)
+    void setTimeMs    (float ms)  { timeMs_ = ms < 1.0f ? 1.0f : (ms > 16000.0f ? 16000.0f : ms); }   // fb304 — 4-bar ceiling (was 2.5 s); this is the LEFT time
+    void setTimeMsR   (float ms)  { timeMsR_ = ms < 1.0f ? 1.0f : (ms > 16000.0f ? 16000.0f : ms); }  // fb305 — independent RIGHT time (used when unlinked)
+    void setLink      (bool  l)   { linked_ = l; }                                                     // fb305 — Link on ⇒ R follows L (+Spread); off ⇒ independent
     void setFeedback  (float f)   { fbTgt = f < 0.0f ? 0.0f : (f > 1.15f ? 1.15f : f); }
     void setTone      (float t)   { toneTgt = t < 0.0f ? 0.0f : (t > 1.0f ? 1.0f : t); }   // 0.5 neutral
     void setLowCutHz  (float hz)  { lowCutHz_ = hz; }
@@ -104,7 +106,9 @@ public:
         // bounce + ping-pong swing; keeps L as the anchor.
         const float rMul = 1.0f + spreadCur * 0.35f;
         delTgtL = baseSamp;
-        delTgtR = baseSamp * rMul;
+        // fb305 — LINK: R follows L (+ Spread offset, the classic stereo bounce). UNLINKED: R is a fully
+        // independent time (its own knob / sync division), like Serum's L·R.
+        delTgtR = linked_ ? (baseSamp * rMul) : (timeMsR_ * 0.001f * fs);
         const float lim = (float) mask - 4.0f;
         if (delTgtL > lim) delTgtL = lim;
         if (delTgtR > lim) delTgtR = lim;
@@ -326,6 +330,8 @@ private:
     // params (targets set by setters; *Cur are the per-sample smoothed values)
     int   type_ = 0, character_ = 0;
     float timeMs_ = 350.0f, lowCutHz_ = 20.0f, hiCutHz_ = 16000.0f, modRateHz_ = 0.5f, duckAmt_ = 0.0f;
+    float timeMsR_ = 350.0f;   // fb305 — independent RIGHT delay time (used when unlinked)
+    bool  linked_  = true;     // fb305 — Link: R = L + Spread (default, = classic behavior); false ⇒ independent L/R
     bool  hq_ = true;
     float fbTgt = 0.45f, toneTgt = 0.5f, spreadTgt = 0.0f, widthTgt = 1.0f, pingTgt = 0.0f, modDepthTgt = 0.0f, wowTgt = 0.0f;
     float fbCur = 0.45f, toneCur = 0.5f, spreadCur = 0.0f, widthCur = 1.0f, pingCur = 0.0f, modDepthCur = 0.0f, wowCur = 0.0f;

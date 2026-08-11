@@ -6961,7 +6961,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // wet/dry INSERT on the whole synth; running before the delay below ⇒ the delay hears this reverb
             // output (serial). Per-osc (pills) ⇒ the padded routed send bus, exactly as before.
             float sgL, sgR;
-            if (hallMainSend_) { sgL = leftChannel[i]; sgR = (rightChannel != nullptr) ? rightChannel[i] : sgL; }
+            if (hallMainSend_) {
+                // fb305 — MAIN SEND excludes per-osc-routed oscs: an osc routed to ANY effect (its dry sits in
+                // reverbSendBuf_/delaySendBuf_) LEAVES the main send, so it is affected ONLY by the effect(s) it's
+                // routed to (Max: "osc C routed to delay should get delay, NOT the reverb main send"). Subtract that
+                // routed dry (send × outputGain × kVoiceToFxPad = exactly how it sits in leftChannel). No pills ⇒ 0.
+                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                sgL = leftChannel[i] - rtdL;
+                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                else sgR = sgL;
+            }
             else { const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
                    const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
                    sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
@@ -7079,7 +7088,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb303 — MAIN SEND (no pills): feed the WHOLE current mix (already post-reverb this block ⇒ serial)
             // as a wet/dry insert. Per-osc (pills) ⇒ the padded routed send bus, as before.
             float sgL, sgR;
-            if (dlyMainSend_) { sgL = leftChannel[i]; sgR = (rightChannel != nullptr) ? rightChannel[i] : sgL; }
+            if (dlyMainSend_) {
+                // fb305 — MAIN SEND excludes per-osc-routed oscs (see reverb block above): subtract the routed
+                // dry so an osc routed to the reverb (or any effect) is NOT re-processed by the delay main send.
+                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                sgL = leftChannel[i] - rtdL;
+                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                else sgR = sgL;
+            }
             else { const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
                    const float rawR = (dlySendR != nullptr) ? dlySendR[i] : rawL;
                    sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
