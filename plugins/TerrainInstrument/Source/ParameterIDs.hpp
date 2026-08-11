@@ -396,6 +396,9 @@ namespace ParameterIDs
     constexpr char SYN_DLY_PING[]      = "SYN_DLY_PING";       // bool — front Ping toggle (ping-pong routing), default OFF
     constexpr char SYN_DLY_POWER[]     = "SYN_DLY_POWER";      // bool — device power (OFF = full bypass + routing disabled), default ON
     constexpr char SYN_DLY_HQ[]        = "SYN_DLY_HQ";         // bool — High-Quality interpolation (cubic vs linear), default ON
+    constexpr char SYN_DLY_TIME_R[]    = "SYN_DLY_TIME_R";     // fb306 — float 0..1 RIGHT time (free ms) when UNLINKED
+    constexpr char SYN_DLY_SYNCDIV_R[] = "SYN_DLY_SYNCDIV_R";  // fb306 — choice: RIGHT sync division (same 20-entry list) when UNLINKED
+    constexpr char SYN_DLY_LINK[]      = "SYN_DLY_LINK";       // fb306 — bool: L/R times LINKED (R follows L +Spread), default ON
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

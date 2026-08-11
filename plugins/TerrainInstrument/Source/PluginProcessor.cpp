@@ -3414,10 +3414,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // multiplier switch in the delay block AND the UI dropdown. Default 1/8 (index 10).
         juce::StringArray { "Free","4 bar","2 bar","1 bar","1/2","1/2D","1/2T","1/4","1/4D","1/4T",
                             "1/8","1/8D","1/8T","1/16","1/16D","1/16T","1/32","1/64","1/128","1/256" }, 10));   // default 1/8
+    layout.add (std::make_unique<juce::AudioParameterChoice>(                                       // fb306 — RIGHT sync division (unlinked)
+        juce::ParameterID { ParameterIDs::SYN_DLY_SYNCDIV_R, 1 }, "Delay Sync Division R",
+        juce::StringArray { "Free","4 bar","2 bar","1 bar","1/2","1/2D","1/2T","1/4","1/4D","1/4T",
+                            "1/8","1/8D","1/8T","1/16","1/16D","1/16T","1/32","1/64","1/128","1/256" }, 10));   // default 1/8
     auto addDlyF = [&] (const char* id, const char* nm, float def) {
         layout.add (std::make_unique<juce::AudioParameterFloat>(
             juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
     addDlyF (ParameterIDs::SYN_DLY_TIME,     "Delay Time",       0.50f);
+    addDlyF (ParameterIDs::SYN_DLY_TIME_R,   "Delay Time R",     0.50f);   // fb306 — RIGHT time (free ms) when unlinked
     addDlyF (ParameterIDs::SYN_DLY_FEEDBACK, "Delay Feedback",   0.58f);
     addDlyF (ParameterIDs::SYN_DLY_TONE,     "Delay Tone",       0.44f);
     addDlyF (ParameterIDs::SYN_DLY_MIX,      "Delay Mix",        0.34f);
@@ -3433,6 +3438,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                              ParameterIDs::SYN_DLY_SRC_D, ParameterIDs::SYN_DLY_SRC_SUB, ParameterIDs::SYN_DLY_SRC_NOISE })
         layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { rid, 1 }, juce::String (rid), false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_SYNC,  1 }, "Delay Sync",  true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_LINK,  1 }, "Delay Link L/R", true));   // fb306 — default LINKED (R follows L; byte-identical)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_PING,  1 }, "Delay Ping-Pong", false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", false));   // fb303 — OFF by default (dry init; on = main send)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
@@ -7028,40 +7034,50 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
                 const bool sync    = rawParam (ParameterIDs::SYN_DLY_SYNC)->load() > 0.5f;
                 const int  syncDiv = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV);   // 0 Free/1 1-4/2 1-8/3 1-8T/4 1-8D/5 1-16
-                float timeMs;
-                if (sync && syncDiv > 0)
-                {
-                    float bpm = currentBPM.load(); if (bpm < 20.0f) bpm = 120.0f;
-                    const float qms = 60000.0f / bpm;            // quarter-note ms
-                    float mult = 0.5f;   // fb304 — index → multiplier of a QUARTER note (qms). Aligned with SYN_DLY_SYNCDIV (4 bar→1/256).
-                    switch (syncDiv) {
-                        case 1:  mult = 16.0f;           break;   // 4 bar
-                        case 2:  mult = 8.0f;            break;   // 2 bar
-                        case 3:  mult = 4.0f;            break;   // 1 bar
-                        case 4:  mult = 2.0f;            break;   // 1/2
-                        case 5:  mult = 3.0f;            break;   // 1/2 dotted
-                        case 6:  mult = 2.0f*2.0f/3.0f;  break;   // 1/2 triplet
-                        case 7:  mult = 1.0f;            break;   // 1/4
-                        case 8:  mult = 1.5f;            break;   // 1/4 dotted
-                        case 9:  mult = 1.0f*2.0f/3.0f;  break;   // 1/4 triplet
-                        case 10: mult = 0.5f;            break;   // 1/8
-                        case 11: mult = 0.75f;           break;   // 1/8 dotted
-                        case 12: mult = 0.5f*2.0f/3.0f;  break;   // 1/8 triplet
-                        case 13: mult = 0.25f;           break;   // 1/16
-                        case 14: mult = 0.375f;          break;   // 1/16 dotted
-                        case 15: mult = 0.25f*2.0f/3.0f; break;   // 1/16 triplet
-                        case 16: mult = 0.125f;          break;   // 1/32
-                        case 17: mult = 0.0625f;         break;   // 1/64
-                        case 18: mult = 0.03125f;        break;   // 1/128
-                        case 19: mult = 0.015625f;       break;   // 1/256
+                // fb304/fb306 — division index → multiplier of a QUARTER note (qms). Shared by L and (unlinked) R.
+                auto divMult = [] (int d) -> float {
+                    switch (d) {
+                        case 1:  return 16.0f;            // 4 bar
+                        case 2:  return 8.0f;             // 2 bar
+                        case 3:  return 4.0f;             // 1 bar
+                        case 4:  return 2.0f;             // 1/2
+                        case 5:  return 3.0f;             // 1/2 dotted
+                        case 6:  return 2.0f*2.0f/3.0f;   // 1/2 triplet
+                        case 7:  return 1.0f;             // 1/4
+                        case 8:  return 1.5f;             // 1/4 dotted
+                        case 9:  return 1.0f*2.0f/3.0f;   // 1/4 triplet
+                        case 10: return 0.5f;             // 1/8
+                        case 11: return 0.75f;            // 1/8 dotted
+                        case 12: return 0.5f*2.0f/3.0f;   // 1/8 triplet
+                        case 13: return 0.25f;            // 1/16
+                        case 14: return 0.375f;           // 1/16 dotted
+                        case 15: return 0.25f*2.0f/3.0f;  // 1/16 triplet
+                        case 16: return 0.125f;           // 1/32
+                        case 17: return 0.0625f;          // 1/64
+                        case 18: return 0.03125f;         // 1/128
+                        case 19: return 0.015625f;        // 1/256
                     }
-                    timeMs = qms * mult;
-                }
-                else
-                    timeMs = std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // fb304 — 1 ms → 8000 ms (exp), free range widened toward the 4-bar sync ceiling
+                    return 0.5f; };
+                float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+                const float qms = 60000.0f / bpmNow;            // quarter-note ms
+                const float timeMs = (sync && syncDiv > 0)
+                    ? qms * divMult (syncDiv)
+                    : std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // fb304 — 1 ms → 8000 ms (exp)
                 delayEngine.setType      (activeDlyType_);
                 delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
                 delayEngine.setTimeMs    (timeMs);
+                // fb306 — LINK + independent RIGHT time. Linked (default): DelayEngine derives R from L (+Spread) →
+                // byte-identical to before. Unlinked: R uses its OWN synced division (SYNCDIV_R) or free time (TIME_R).
+                const bool dlyLink = rawParam (ParameterIDs::SYN_DLY_LINK)->load() > 0.5f;
+                delayEngine.setLink (dlyLink);
+                if (! dlyLink)
+                {
+                    const int   syncDivR = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV_R);
+                    const float timeMsR  = (sync && syncDivR > 0)
+                        ? qms * divMult (syncDivR)
+                        : std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME_R)->load());
+                    delayEngine.setTimeMsR (timeMsR);
+                }
                 delayEngine.setFeedback  (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)->load() * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
                 delayEngine.setTone      (rawParam (ParameterIDs::SYN_DLY_TONE)->load());
                 delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, rawParam (ParameterIDs::SYN_DLY_LOWCUT)->load()));  // 20..1000 Hz
