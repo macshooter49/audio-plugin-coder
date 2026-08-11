@@ -3423,7 +3423,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
     addDlyF (ParameterIDs::SYN_DLY_TIME,     "Delay Time",       0.50f);
     addDlyF (ParameterIDs::SYN_DLY_TIME_R,   "Delay Time R",     0.50f);   // fb306 — RIGHT time (free ms) when unlinked
-    addDlyF (ParameterIDs::SYN_DLY_FEEDBACK, "Delay Feedback",   0.58f);
+    addDlyF (ParameterIDs::SYN_DLY_FEEDBACK, "Delay Feedback",   0.10f);   // fb309 — LOW default (Max: turning the delay on at 58% + the amplified feedback = jumpscare). Safe/subtle on turn-on.
     addDlyF (ParameterIDs::SYN_DLY_TONE,     "Delay Tone",       0.44f);
     addDlyF (ParameterIDs::SYN_DLY_MIX,      "Delay Mix",        0.34f);
     addDlyF (ParameterIDs::SYN_DLY_LOWCUT,   "Delay Low Cut",    0.22f);
@@ -3442,6 +3442,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_PING,  1 }, "Delay Ping-Pong", false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", false));   // fb303 — OFF by default (dry init; on = main send)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
+    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_FX_ORDER, 1 }, "FX Chain Order", false));   // fb307 — false = Reverb→Delay (default), true = Delay→Reverb
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
@@ -5698,6 +5699,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
     dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
+    fxDelayFirst_ = rawParam (ParameterIDs::SYN_FX_ORDER)->load() > 0.5f;   // fb307 — drag chain order (true = Delay→Reverb)
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
@@ -6952,6 +6954,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 convolutionReverb.bakeIfDirtyIdle();
             }
         }
+        auto applyRvb = [&]()   // fb307 — reverb INSERT as a lambda so the chain order (reverb↔delay) is swappable by drag; default reverb-first = byte-identical
+        {
         if (hallPower_ || hallRvbEnv_ > 1.0e-4f)
         {
             hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
@@ -7008,12 +7012,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e * duckG;   // fb280/fb287 — bloom follows audible (ducked) wet
             if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
         }
-        if (i == numSamples - 1)   // fb280 — publish the bloom once/block (fast swell, slow linger; releases to 0 when idle)
-        {
-            const float bt = (hallBlockWetPk > hallBloomEnv_) ? 0.40f : 0.05f;
-            hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * bt;
-            hallBloomViz_.store (juce::jlimit (0.0f, 1.5f, hallBloomEnv_), std::memory_order_relaxed);
-        }
+        };   // fb307 — end applyRvb (both blooms now publish AFTER the ordered chain below)
 
         // ── fb296 — synth FX-rack DELAY (parallel per-osc send). Click-free type swap + Mix-100%-wet, mirrors
         //    the reverb above. Own send bus (delaySendBuf_) so its routing is fully independent of the reverb.
@@ -7096,6 +7095,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             }
         }
+        auto applyDly = [&]()   // fb307 — delay INSERT as a lambda (swapped with the reverb per the drag order)
+        {
         if (dlyPower_ || dlyEnv_ > 1.0e-4f)
         {
             dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
@@ -7123,10 +7124,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float wmag = 0.5f * (std::abs (dl) + std::abs (dr)) * e;
             if (wmag > dlyBlockWetPk) dlyBlockWetPk = wmag;
         }
-        if (i == numSamples - 1)
+        };   // fb307 — end applyDly
+
+        // fb307 — SERIAL CHAIN ORDER (drag-to-reorder): run the two INSERTS in the dragged order. Both setups
+        // (i==0) have run above, so either order is valid. Default reverb→delay = byte-identical to fb306. Per-osc
+        // (parallel) sends are order-independent, so the swap only re-routes the MAIN-SEND serial case — exactly
+        // what the drag controls (delay hears reverb, or reverb hears delay).
+        if (fxDelayFirst_) { applyDly(); applyRvb(); }
+        else               { applyRvb(); applyDly(); }
+        if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
-            const float bt = (dlyBlockWetPk > dlyBloomEnv_) ? 0.40f : 0.05f;
-            dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * bt;
+            const float rbt = (hallBlockWetPk > hallBloomEnv_) ? 0.40f : 0.05f;
+            hallBloomEnv_ += (hallBlockWetPk - hallBloomEnv_) * rbt;
+            hallBloomViz_.store (juce::jlimit (0.0f, 1.5f, hallBloomEnv_), std::memory_order_relaxed);
+            const float dbt = (dlyBlockWetPk > dlyBloomEnv_) ? 0.40f : 0.05f;
+            dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * dbt;
             dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
         }
 

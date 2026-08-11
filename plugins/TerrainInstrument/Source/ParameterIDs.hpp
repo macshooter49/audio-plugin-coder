@@ -399,6 +399,8 @@ namespace ParameterIDs
     constexpr char SYN_DLY_TIME_R[]    = "SYN_DLY_TIME_R";     // fb306 — float 0..1 RIGHT time (free ms) when UNLINKED
     constexpr char SYN_DLY_SYNCDIV_R[] = "SYN_DLY_SYNCDIV_R";  // fb306 — choice: RIGHT sync division (same 20-entry list) when UNLINKED
     constexpr char SYN_DLY_LINK[]      = "SYN_DLY_LINK";       // fb306 — bool: L/R times LINKED (R follows L +Spread), default ON
+    // ════════ FX RACK · CHAIN ORDER (fb307 — drag-to-reorder) ════════
+    constexpr char SYN_FX_ORDER[]      = "SYN_FX_ORDER";       // fb307 — bool: false = Reverb→Delay (default serial order), true = Delay→Reverb
 
     // Filter ADSR (the envelope that the bipolar ENV knob scales into cutoff)
     constexpr char SYN_ENV_FLT_A[]     = "SYN_ENV_FLT_A";      // float ms (skewed)

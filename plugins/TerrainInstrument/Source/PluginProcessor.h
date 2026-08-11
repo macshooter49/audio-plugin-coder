@@ -1529,6 +1529,7 @@ private:
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)
     bool  dlyPower_    = false;                      // fb303 — SYN_DLY_POWER on ⇒ delay runs (main-send OR per-osc)
     bool  dlyMainSend_ = false;                      // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
+    bool  fxDelayFirst_ = false;                     // fb307 — drag chain order: false = Reverb→Delay (default), true = Delay→Reverb
     float dlyEnv_ = 0.0f, dlyEnvT_ = 0.0f;          // on/off FADE env (0 = fully bypassed)
     float dlyDry_ = 1.0f, dlyWet_ = 0.0f;           // equal-power mix — RAMPED per sample
     float dlyDryT_ = 1.0f, dlyWetT_ = 0.0f;         // mix targets

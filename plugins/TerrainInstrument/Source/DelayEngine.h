@@ -168,30 +168,37 @@ public:
         float rL = readAt (bufL.data(), delCurL + modL);
         float rR = readAt (bufR.data(), delCurR + modR);
 
-        // ── in-loop tone shaping (compounds each repeat = the dub darkening) ──
-        rL = loopFilter (rL, hpZL, lpZL, toneZL);
-        rR = loopFilter (rR, hpZR, lpZR, toneZR);
+        // ── in-loop band edges (low cut / hi cut) — tone tilt is now output-only (fb310) ──
+        rL = loopFilter (rL, hpZL, lpZL);
+        rR = loopFilter (rR, hpZR, lpZR);
 
         // ── per-type CHARACTER block ─────────────────────────────────────────
         float fL = rL, fR = rR;
         switch (type_)
         {
             case 1:  fL = tape (fL, tapeZL); fR = tape (fR, tapeZR); break;      // Tape
-            case 2:  fL = bbd  (fL, bbdZL, compEnvL, expEnvL);                   // BBD (Analog)
-                     fR = bbd  (fR, bbdZR, compEnvR, expEnvR); break;
+            case 2:  fL = bbd  (fL, bbdZL);                                      // BBD (Analog) — fb308: dark grit, no noise
+                     fR = bbd  (fR, bbdZR); break;
             case 3:  fL = diffuse (fL, apL);  fR = diffuse (fR, apR); break;     // Diffuse / Ghost
             default: break;                                                     // Digital = clean
         }
 
-        // WET output = the filtered/coloured tap (you hear the in-loop tone).
-        float wetL = fL, wetR = fR;
+        // WET output = the character tap, THEN the Tone tilt (fb310 — output-only, so Tone colours what you HEAR
+        // without changing the feedback loop gain). toneZL/R (freed from the loop) now hold the output-tilt state.
+        float wetL = toneTilt (fL, toneZL), wetR = toneTilt (fR, toneZR);
 
         // ── feedback write (Normal ↔ Ping-Pong crossfade via pingCur) ────────
         const float p   = pingCur;
         const float inM = 0.5f * (inL + inR);
         const float fb  = fbCur > 0.98f ? 0.98f : fbCur;                 // hard cap; loop soft-clips
-        float newL = (inL * (1.0f - p) + inM * p) + fb * (fL * (1.0f - p) + fR * p);
-        float newR = (inR * (1.0f - p))           + fb * (fR * (1.0f - p) + fL * p);
+        // fb308 — per-type FEEDBACK MAKEUP (Max: "feedback only works on Tape; amplify it for everything"). Only
+        // Tape's in-loop tanh gave loop-gain > 1 (so only Tape built up); Digital/Diffuse are ~unity and BBD's dark
+        // LP loses energy, so their echoes died. Lift each type's FEEDBACK (not the wet) to Tape-like loop gain so
+        // all build / near-self-oscillate; softClip still bounds the runaway → BIBO stable. Tape unchanged (1.0).
+        const float fbMk = (type_ == 1) ? 1.0f : (type_ == 2 ? 1.00f : (type_ == 3 ? 2.15f : 1.28f));   // fb310 — trimmed ~12% (the loop no longer sees the tone-tilt attenuation) so the consistent level ≈ Max's "perfect 40%"; Diffuse sits near threshold so it keeps its value. Tape · BBD · Diffuse · Digital
+        const float fbE  = fb * fbMk;
+        float newL = (inL * (1.0f - p) + inM * p) + fbE * (fL * (1.0f - p) + fR * p);
+        float newR = (inR * (1.0f - p))           + fbE * (fR * (1.0f - p) + fL * p);
         newL = softClip (newL);
         newR = softClip (newR);
         bufL[(size_t) wr] = flush (newL);
@@ -241,12 +248,21 @@ private:
         return ((c3 * fr + c2) * fr + c1) * fr + y0;
     }
 
-    // ── in-loop tone: HP (low cut) → LP (hi cut) → bipolar tilt ───────────────
-    inline float loopFilter (float x, float& hpZ, float& lpZ, float& toneZ) const
+    // ── in-loop band edges ONLY: HP (low cut) → LP (hi cut). ──────────────────
+    //    fb310 — the bipolar Tone TILT is NO LONGER here; it moved OUT of the feedback loop (toneTilt below) so
+    //    the feedback is INDEPENDENT of the Tone knob (Max: high Tone was cutting the loop's lows → starving the
+    //    buildup; "the feedback should keep playing no matter where Tone is"). Dub-darkening still comes from the
+    //    per-type character LPs (Tape/BBD) + the Hi-Cut, which stay in the loop.
+    inline float loopFilter (float x, float& hpZ, float& lpZ) const
     {
         hpZ += hpCoef * (x - hpZ);        x -= hpZ;             // one-pole HP (low cut)
         lpZ += lpCoef * (x - lpZ);        x  = lpZ;             // one-pole LP (hi cut)
-        toneZ += toneCoef * (x - toneZ);                        // split @ ~760 Hz
+        return x;
+    }
+    // ── OUTPUT-only bipolar Tone tilt (split @ ~760 Hz). NOT in the loop ⇒ colours the wet WITHOUT changing loop gain.
+    inline float toneTilt (float x, float& toneZ) const
+    {
+        toneZ += toneCoef * (x - toneZ);
         const float low = toneZ, high = x - toneZ;
         const float t = (toneCur - 0.5f) * 2.0f;                // -1..+1
         const float gLow  = t < 0.0f ? 1.0f : 1.0f - 0.85f * t; // right → thin (cut lows)
@@ -263,21 +279,17 @@ private:
         return z * 0.86f;                                              // gentle level trim (tanh makeup)
     }
 
-    // ── BBD: hard band-limit (tracks time) + companding noise-pump + grit ────
-    inline float bbd (float x, float& z, float& compEnv, float& expEnv)
+    // ── BBD (Analog): dark, gritty bucket-brigade — a hard, time-tracking band-limit + soft grit.
+    //    fb308 (Max): NO noise, and the feedback must BUILD like Tape. The old compander both SQUASHED the
+    //    feedback (so echoes died) and pumped an audible hiss (character-tied). Both are gone; what remains is
+    //    the dark time-tracking LP (the BBD signature) + a touch of Character-varied grit — and the shared
+    //    per-type feedback makeup below lets it build/self-oscillate cleanly.
+    inline float bbd (float x, float& z) const
     {
-        // compress → line → expand, with a fixed noise floor the expander PUMPS
-        const float a = std::abs (x);
-        compEnv += compCoef * (a - compEnv);
-        const float comp = x / (1.0f + 1.8f * compEnv);                 // pre-emphasis compression
-        float y = std::tanh (1.25f * comp);                            // clock/quantise grit
-        z += bbdLpCoef * (y - z); y = z;                               // steep, time-tracking LP (dark)
-        // additive hiss that BREATHES with the signal (the compander pump); param-gated → 0 = silent
-        const float ay = std::abs (y);
-        expEnv += compCoef * (ay - expEnv);
-        const float noiseAmt = 0.06f * (float) ((character_ % 3));      // 0 (Clean) → grows w/ variant
-        const float n = noiseAmt * (rand11() * 0.5f) * (0.35f + 1.4f * expEnv);
-        return (y + n) * (1.0f + 1.6f * expEnv);                        // expander makeup (level-dependent)
+        const float drive = 1.15f + 0.45f * (float) (character_ % 3);   // grit varies with Character (NOT noise)
+        float y = std::tanh (drive * x);                               // clock/quantise grit
+        z += bbdLpCoef * (y - z);                                      // steep, time-tracking LP (dark) = the BBD signature
+        return z;
     }
 
     // ── Diffuse: 4-stage allpass smear (delay → reverb wash) ─────────────────
