@@ -8290,6 +8290,90 @@ juce::String TerrainInstrumentAudioProcessor::getSynthLfoShapesJson() const
     return lfoShapesJson_.isNotEmpty() ? lfoShapesJson_ : juce::String ("{\"shapes\":[]}");
 }
 
+// ═══ fb328 — the DISTORTION curve-card blob (mirror of the LFO shaper transport) ═══════════════
+// { a:[[x,y,c]…], b:[[x,y,c]…], bars:[16], src:"Tube" } — pts in [0,1]², tension c ∈ [−1,1].
+// Banks bake to dense transfer tables HERE on the message thread; the engine picks them up at its
+// 64-sample dirty cadence and lands them through the 40 ms output crossfade (bible §6.5).
+static void dstBakePts (const juce::var& pv, float* out, int n)
+{
+    struct P { float x, y, c; };
+    P pts[32]; int np = 0;                                   // §6.8 — 32-pt cap (more = alias generators)
+    if (auto* pa = pv.getArray())
+        for (const auto& e : *pa)
+        {
+            if (np >= 32) break;
+            auto* t = e.getArray(); if (t == nullptr || t->size() < 2) continue;
+            pts[np++] = { juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]),
+                          juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]),
+                          t->size() > 2 ? juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]) : 0.0f };
+        }
+    if (np < 2) { for (int i = 0; i < n; ++i) out[i] = (float) i / (float) (n - 1) * 2.0f - 1.0f; return; }
+    std::sort (pts, pts + np, [] (const P& a, const P& b) { return a.x < b.x; });
+    pts[0].x = 0.0f; pts[np - 1].x = 1.0f;
+    int seg = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const float p = (float) i / (float) (n - 1);
+        while (seg < np - 2 && pts[seg + 1].x <= p) ++seg;
+        const float w = juce::jmax (1.0e-6f, pts[seg + 1].x - pts[seg].x);
+        float t = juce::jlimit (0.0f, 1.0f, (p - pts[seg].x) / w);
+        const float c = pts[seg].c;                          // the ONE house tension formula (:8046 twin)
+        if (std::fabs (c) > 1.0e-4f) { const float P8 = -c * 8.0f; t = (std::exp (P8 * t) - 1.0f) / (std::exp (P8) - 1.0f); }
+        out[i] = (pts[seg].y + (pts[seg + 1].y - pts[seg].y) * t) * 2.0f - 1.0f;   // NO periodicity (§6.8-1)
+    }
+}
+
+void TerrainInstrumentAudioProcessor::setDistortionCurves (const juce::String& json)
+{
+    auto v = juce::JSON::parse (json);
+    if (! v.isObject()) return;
+    if (v.getProperty ("a", juce::var()).getArray() != nullptr)
+    {
+        // fb330 — FOUR banks (A→B→C→D on one Morph). Absent banks keep the engine's generated defaults.
+        float a[257], b[257], c[257], d[257];
+        dstBakePts (v.getProperty ("a", juce::var()), a, 257);
+        const bool hasB = v.getProperty ("b", juce::var()).getArray() != nullptr;
+        const bool hasC = v.getProperty ("c", juce::var()).getArray() != nullptr;
+        const bool hasD = v.getProperty ("d", juce::var()).getArray() != nullptr;
+        if (hasB) dstBakePts (v.getProperty ("b", juce::var()), b, 257);
+        if (hasC) dstBakePts (v.getProperty ("c", juce::var()), c, 257);
+        if (hasD) dstBakePts (v.getProperty ("d", juce::var()), d, 257);
+        distortionEngine.setUserCurves (a, hasB ? b : nullptr, hasC ? c : nullptr, hasD ? d : nullptr, 257);
+    }
+    else distortionEngine.clearUserCurves();
+    if (auto* ba = v.getProperty ("bars", juce::var()).getArray())
+    {
+        float bars[16] {};
+        for (int i = 0; i < 16 && i < ba->size(); ++i)
+            bars[i] = juce::jlimit (-1.0f, 1.0f, (float) (double) (*ba)[i]);
+        distortionEngine.setHarmonicBars (bars);
+    }
+    { const juce::ScopedLock sl (dstCurveLock_); dstCurvesJson_ = json; }
+}
+
+juce::String TerrainInstrumentAudioProcessor::getDistortionCurvesJson() const
+{
+    const juce::ScopedLock sl (dstCurveLock_);
+    return dstCurvesJson_.isNotEmpty() ? dstCurvesJson_ : juce::String ("{}");
+}
+
+juce::String TerrainInstrumentAudioProcessor::getDistortionCurveVizJson()
+{
+    // fb328 — the §5.8 live core feed: {m,b,c[128],o[48]} — every mode's real stateless transfer at
+    // the CURRENT knobs + where the signal actually lives on it. UI rAF-polls this (~15 Hz).
+    float cv[128], oc[48];
+    distortionEngine.sampleCurve (cv, 128);
+    distortionEngine.copyOcc (oc);
+    juce::String s; s.preallocateBytes (1600);
+    s << "{\"m\":" << (int) *rawParam (ParameterIDs::SYN_DST_TYPE) << ",\"b\":"
+      << juce::String (dstBloomViz_.load (std::memory_order_relaxed), 3) << ",\"c\":[";
+    for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv[i], 3); }
+    s << "],\"o\":[";
+    for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc[i], 3); }
+    s << "]}";
+    return s;
+}
+
 // ── FLOW · ARP extension lanes (fb105): JS pushes the 7×16 pattern as one JSON blob
 // (mod-matrix lifecycle: parse on the message thread, swap under lock, version-bump
 // so the audio thread copies into the engine exactly once per change).
@@ -8556,6 +8640,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         const juce::ScopedLock lsl (lfoShapeLock_);
         if (lfoShapesJson_.isNotEmpty())
             state.setProperty ("lfoShapesJson", lfoShapesJson_, nullptr);   // LFO ARC L1 — drawn shapes
+        if (dstCurvesJson_.isNotEmpty())
+            state.setProperty ("dstCurvesJson", dstCurvesJson_, nullptr);   // fb328 — drawn distortion curves
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
@@ -8797,6 +8883,8 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 if (de.isNotEmpty()) setSynthDynEnvs (de);
                 auto lsj = newState.getProperty ("lfoShapesJson", "").toString();   // LFO ARC L1
                 if (lsj.isNotEmpty()) setSynthLfoShapes (lsj);
+                auto dcv = newState.getProperty ("dstCurvesJson", "").toString();   // fb328
+                if (dcv.isNotEmpty()) setDistortionCurves (dcv);
             }
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();

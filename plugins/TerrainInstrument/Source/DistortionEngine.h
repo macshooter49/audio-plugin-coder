@@ -2,6 +2,7 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <cmath>
+#include <atomic>   // fb328 — user-curve handoff flags (UI thread → audio-thread bake)
 // (no TerrainFilters.h include — the engine is self-contained, which also lets the offline harness
 //  compile THIS EXACT HEADER against a 20-line juce shim: zero transcription drift, per the fb283 law)
 
@@ -130,6 +131,7 @@ public:
 
         // fb325 — sag attack (~4 ms fixed; release = Recovery) and the input-envelope gate that
         // keeps every feedback path silent without input (2 ms attack / 250 ms release).
+        cvXfI_ = (float) (1.0 / (0.040 * fs_));   // fb326 — 40 ms curve crossfade
         aAtk4_ = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.004));
         envA_  = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.002));
         envR_  = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.060));   // fb325: the free-run gate closes in
@@ -169,8 +171,15 @@ public:
             bqX1_[c] = bqX2_[c] = bqY1_[c] = bqY2_[c] = 0.0f;
             hiCut2_[c] = hiCut3_[c] = inEnv_[c] = 0.0f;      // fb325
             sbFlip_[c] = 1.0f; sbPrev_[c] = sbEnv_[c] = sbLp2_[c] = fbLp_[c] = kpZ_[c] = 0.0f;
+            shEnv_[c] = shEnv2_[c] = shGrl_[c] = shStk_[c] = 0.0f;   // fb326
         }
         drNxt_ = 1.0f; drS_ = 0.0f; emphP_ = 9.0f; wRotP_ = -1.0f; fbLpP_ = -1.0f;
+        // fb326 — boot-bake the curve banks so the front table is never silence: bake lands in the
+        // back, flip immediately (no fade at init), and mark caches clean-at-current-settings.
+        cvMode_ = mode_; cvChr_ = chr_; cvPill_ = pill2_; cvSm_ = pT_[4]; cvMor_ = kneeT_;
+        cvForce_ = false; cvChk_ = 64;
+        bakeCurves();
+        cvFront_ ^= 1; cvXf_ = 1.0f; cvPend_ = false;
         // invalidate the analog caches so a flush (or sample-rate change) recomputes everything
         bqMode_ = -1; tubeCk_ = -1; sbChrP_ = -1; odChrP_ = -1;
         recovP_ = rateP_ = sbDrvP_ = odDrvP_ = tpDrvP_ = -1.0f;
@@ -282,6 +291,7 @@ public:
         dip_    += (1.0f    - dip_   ) * smth_;              // fb320 — mode-switch wet dip recovery
         slamC_  += (slamT_  - slamC_ ) * smth_;              // fb324 — ANALOG Slam pill (+20 dB), click-free
         for (int k = 0; k < 8; ++k) pC_[k] += (pT_[k] - pC_[k]) * smth_;
+        if (++occN_ >= 512) { occN_ = 0; for (int k = 0; k < 48; ++k) occ_[k] *= 0.85f; }   // fb328 — occupancy decay (~65 ms)
 
         // ── PER-FAMILY SLOT RESOLVE (bible §5.5) — the same 8 raw params mean different things ────
         //   emphasis: P3 everywhere EXCEPT DIGITAL (its P3 is the second destruction axis)
@@ -323,7 +333,14 @@ public:
                 else                          { fStB_ = 1.0f; fSpO_ = 0.0f; fRbM_ = 1.0f; fCnO_ = 0.0f; }
                 break;
             }
-            case FAM_SHAPER:  kneeE_ = 0.5f;    biasE_ = pC_[5] * 2.0f - 1.0f; asymE_ = 0.0f;               break;
+            case FAM_SHAPER:  kneeE_ = 0.5f;    biasE_ = pC_[5] * 2.0f - 1.0f; asymE_ = 0.0f;
+                              shaperCheckBake();                       // fb326 — dirty check @64-sample cadence
+                              if (cvXf_ < 1.0f)
+                              {
+                                  cvXf_ = juce::jmin (1.0f, cvXf_ + cvXfI_);
+                                  if (cvXf_ >= 1.0f && cvPend_) { cvFront_ ^= 1; cvPend_ = false; }
+                              }
+                              break;
             // fb324 — ANALOG: SIG = Bias (bipolar, consumed per-circuit in its own physical units);
             // Slam = Decapitator's Punish, +20 dB of pre-gain ON TOP of Drive (the ×10 target glides).
             case FAM_ANALOG:  kneeE_ = 0.5f;    biasE_ = kneeC_ * 2.0f - 1.0f; asymE_ = 0.0f;
@@ -525,13 +542,17 @@ private:
             // op-amp gain, cascade gain). The exact DC reference is impossible for a moving operating
             // point — the circuits self-centre (quiescent subtraction / differentiator / re-centre)
             // and the 10 Hz blocker takes the residue. Slam = +20 dB of pre-gain (Punish).
-            yA = shapeS (pA * kPreGain * slamC_ + fbIn, c);
+            const float vA = pA * kPreGain * slamC_ + fbIn;
+            yA = shapeS (vA, c);
             yB = shapeS (pB * kPreGain * slamC_ + fbIn, c);
+            if (c == 0) occAdd (vA);                     // fb328 — occupancy viz (driven axis)
         }
         else
         {
-            yA = shapeS (dzPost ((deadzone (pA * kPreGain) + biasE_ + fbIn) * dEff), c) - dcOff;
+            const float vA = (deadzone (pA * kPreGain) + biasE_ + fbIn) * dEff;
+            yA = shapeS (dzPost (vA), c) - dcOff;
             yB = shapeS (dzPost ((deadzone (pB * kPreGain) + biasE_ + fbIn) * dEff), c) - dcOff;
+            if (c == 0) occAdd (vA);                     // fb328 — occupancy viz (driven axis)
         }
 
         // ── DIODE SLEW (P7) — junction-capacitance edge limiter, post-shaper, inside the OS region.
@@ -658,6 +679,9 @@ private:
     {
         switch (mode_)
         {
+            case Shaper: case ShaperAsym: case Harmonics: case Table:
+                return shaperCore (u * kShDom, -1);        // fb326 — stateless DC reference
+
             default:
             case SoftClip:  return softClipF (u, kneeE_);
             case HardClip:  return hardClipF (kneePre (u), kneeWidth());
@@ -919,6 +943,9 @@ private:
                          + m * hardClipF (sv * (1.0f + drive01_ * 2.5f), 0.1f);
                 }
             }
+
+        case Shaper: case ShaperAsym: case Harmonics: case Table:
+            return shaperF (u, c);                         // fb326 — PHASE D: the curve IS data
 
         case Diode1: case Diode2:
             return kneePost (shapeM (u, c), c);            // fb325 — Knee's second life at ANY drive
@@ -1542,6 +1569,455 @@ private:
         return bqY1_[c];
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    //  fb326 — PHASE D: THE SHAPER FAMILY (bible §6 + §9.5). The curve is DATA: drawn (Shaper /
+    //  Shaper Asym), synthesised from a drawn SPECTRUM (Harmonics — Le Brun 1979 Chebyshev
+    //  waveshaping: T_k maps a unit sine to EXACTLY its k-th harmonic), or read from a morphing
+    //  wavetable frame (Table — 64 transfer functions on one knob). ONE core, four fronts.
+    //  Laws encoded here: the 40 ms OUTPUT-crossfade declick (§6.5 — swapping f() mid-stream is
+    //  textbook zipper; blending two memoryless maps of the same input is itself a valid transfer
+    //  curve at every instant) · the Beyond rule blends RULE OUTPUTS (§6.4: clamp↔reflect↔wrap;
+    //  reflect = a wavefolder built from your own curve) · per-bake slope normalisation (unity law:
+    //  a staircase and a gentle S must both power on at ≈ 0 dB) · Chebyshev domain HARD-clamped
+    //  (T16(1.5) ≈ 4.3e7 — BIBO, §9.5) · curves rebake on the audio thread, rate-limited, ~10 µs.
+    //  ⏭️ The drag-editor + Send To Shaper (§6.6) land next with the UI mockup; setCurve()/
+    //  setHarmonicBars() below are the ready-made receiving hooks.
+    // ════════════════════════════════════════════════════════════════════════
+
+    static constexpr int kCK = 2048;                  // curve cells over the bipolar domain
+    static constexpr float kShDom = 0.35f;            // driven-signal → curve-domain scale (drive 0
+                                                      // sits ~28% in — the Log voicing's home turf)
+
+public:
+    /** UI hooks (message thread ok — bakes are picked up at the 64-sample dirty cadence and always
+        land through the 40 ms crossfade). The editor's dense-curve setter rides this same path
+        next phase. */
+    void setHarmonicBars (const float* bars16) noexcept
+    {
+        for (int i = 0; i < 16; ++i) hBars_[i] = juce::jlimit (-1.0f, 1.0f, bars16[i]);
+        cvForce_ = true;
+    }
+
+    /** fb328 — the USER'S drawn banks (curve card / Send To Shaper). Transfer values over the
+        bipolar domain, any density ≥ 8 (linear-resampled to kCK). Message thread; the audio-thread
+        bake picks it up at the dirty cadence and lands through the 40 ms crossfade — the busy flag
+        makes a mid-write bake skip one round instead of reading a torn table. */
+    void setUserCurves (const float* a, const float* b, const float* c2, const float* d2, int n) noexcept
+    {
+        // fb330 — FOUR user banks (A→B→C→D on one Morph). A null bank keeps its generated default.
+        if (a == nullptr || n < 8)
+        {
+            for (int k2 = 0; k2 < 4; ++k2) uCvHas_[k2].store (false, std::memory_order_release);
+            uCvOn_.store (false, std::memory_order_release); cvForce_ = true; return;
+        }
+        const float* banks[4] = { a, b, c2, d2 };
+        uCvBusy_.store (true, std::memory_order_release);
+        for (int k2 = 0; k2 < 4; ++k2)
+        {
+            if (banks[k2] == nullptr) { uCvHas_[k2].store (false, std::memory_order_relaxed); continue; }
+            for (int cell = 0; cell <= kCK; ++cell)
+            {
+                const float s = (float) cell / (float) kCK * (float) (n - 1);
+                const int   k = juce::jmin (n - 2, (int) s);
+                const float d = s - (float) k;
+                uCv_[k2][cell] = juce::jlimit (-1.5f, 1.5f, banks[k2][k] + (banks[k2][k + 1] - banks[k2][k]) * d);
+            }
+            uCvHas_[k2].store (true, std::memory_order_relaxed);
+        }
+        uCvBusy_.store (false, std::memory_order_release);
+        uCvOn_.store (true, std::memory_order_release);
+        cvForce_ = true;
+    }
+    void clearUserCurves() noexcept
+    {
+        for (int k2 = 0; k2 < 4; ++k2) uCvHas_[k2].store (false, std::memory_order_release);
+        uCvOn_.store (false, std::memory_order_release); cvForce_ = true;
+    }
+    bool userCurvesActive() const noexcept { return uCvOn_.load (std::memory_order_relaxed); }
+
+    /** fb328 — the §5.8 core viz + Send To Shaper source: the CURRENT mode's stateless transfer on
+        the driven axis (x spans ±occSpan()). Message-thread safe: memoryless families ride the fb325
+        stateless reference (shapeM c = −1 advances no state); ANALOG/DIGITAL are static projections
+        of the circuit's front end from the live params (their memory cannot be a curve). A concurrent
+        bank swap mid-read tears one frame — viz-grade by design. */
+    void sampleCurve (float* out, int n) noexcept
+    {
+        if (out == nullptr || n < 2) return;
+        const Family fam  = family();
+        const float  sp   = occSpan();
+        const float  dEff = driveC_;
+        const float  gapV = (fam == FAM_CLIP) ? std::pow (pC_[5], 1.6f) * 0.45f * juce::jmax (1.0f, dEff) : 0.0f;
+        const float  dzU  = (fam == FAM_DIODE && mode_ != Diode2) ? pC_[5] * 3.0f : 0.0f;
+        auto dz = [dzU] (float v) noexcept -> float { if (dzU <= 1.0e-5f) return v;
+            return (v >= 0.0f) ? juce::jmax (0.0f, v - dzU) : juce::jmin (0.0f, v + dzU); };
+        const float dcOff = (fam == FAM_ANALOG || fam == FAM_DIGITAL) ? 0.0f : shapeM (dz (biasE_ * dEff), -1);
+        for (int i = 0; i < n; ++i)
+        {
+            const float v = ((float) i / (float) (n - 1) * 2.0f - 1.0f) * sp;
+            float y;
+            if (fam == FAM_ANALOG)
+            {   // static front-end skeletons — real topology class per circuit, driven by the live knobs
+                const float d1 = drive01_;
+                switch (mode_)
+                {
+                    case Tube:        { const float g = 1.0f + 6.0f * d1, b = biasE_ * 0.6f;
+                                        auto tb = [g] (float q) { return std::tanh (q * g * (q < 0.0f ? 1.3f : 0.9f)); };
+                                        y = tb (v + b) - tb (b); } break;
+                    case Tape:        { const float g = 0.8f + 5.0f * d1; y = std::tanh (v * g); } break;
+                    case Transformer: { const float g = 0.6f + 4.0f * d1; const float u2 = v * g;
+                                        y = u2 / std::pow (1.0f + std::pow (std::fabs (u2), 6.0f), 1.0f / 6.0f); } break;
+                    case StompBox:    { const float g = 1.0f + 10.0f * d1;
+                                        y = std::asinh (v * g) / std::asinh (juce::jmax (1.5f, g)); } break;
+                    default:          { float u2 = v * (1.0f + 14.0f * d1);
+                                        for (int s2 = 0; s2 < 3; ++s2) u2 = std::tanh (u2 * 1.4f); y = u2; } break;
+                }
+            }
+            else if (fam == FAM_DIGITAL)
+            {   // the grid's static transfer (Downsample's destruction is temporal — identity here)
+                const float crush = kneeC_;
+                if (mode_ == Bitcrush)      { const float steps = 2.0f + (1.0f - crush) * 60.0f;
+                                              y = std::round (juce::jlimit (-1.2f, 1.2f, v) * steps) / steps; }
+                else if (mode_ == Overflow) { const float thr = juce::jmax (0.03f, 1.0f - 0.97f * crush);
+                                              float t2 = (v / thr + 1.0f) * 0.5f; t2 -= std::floor (t2);
+                                              y = (t2 * 2.0f - 1.0f) * thr; }
+                else                          y = juce::jlimit (-1.0f, 1.0f, v);
+            }
+            else
+            {
+                float u = v;
+                if (gapV > 1.0e-5f) { const float a2 = std::fabs (u);
+                                      u = (a2 <= gapV) ? 0.0f : ((u < 0.0f) ? u + gapV : u - gapV); }
+                y = shapeM (dz (u), -1) - dcOff;
+            }
+            out[i] = juce::jlimit (-1.6f, 1.6f, y);
+        }
+    }
+
+    /** fb328 — max-normalised occupancy snapshot (48 bins over the same driven axis as sampleCurve).
+        Silence reads all-zero so the glow goes DARK at idle (the audio-reactive hard rule). */
+    void copyOcc (float* out48) noexcept
+    {
+        float mx = 1.0e-6f;
+        for (int i = 0; i < 48; ++i) mx = juce::jmax (mx, occ_[i]);
+        const float g = (mx > 0.02f) ? 1.0f / mx : 0.0f;
+        for (int i = 0; i < 48; ++i) out48[i] = occ_[i] * g;
+    }
+private:
+    float occSpan() const noexcept    // fb328 — display span of the driven axis, per family
+    {
+        switch (family())
+        {
+            case FAM_SHAPER:  return 1.0f / kShDom;   // fb330 — EXACTLY the drawn domain: the core viz,
+                                                      // the card and the ink share one x-axis (Max:
+                                                      // "they don't align which they SHOULD")
+            case FAM_FOLD:    return 4.5f;    // a few fold legs
+            case FAM_DIGITAL: return 1.6f;    // the grid is defined for ±1 FS
+            default:          return 3.0f;    // knee + rail run
+        }
+    }
+    void occAdd (float v) noexcept
+    {
+        const int b = (int) ((juce::jlimit (-1.0f, 1.0f, v / occSpan()) + 1.0f) * 23.99f);
+        occ_[b] += 0.01f;
+    }
+    float uCv_[4][kCK + 1] {};                          // fb328/330 — user banks A/B/C/D (resampled to the grid)
+    std::atomic<bool> uCvOn_ { false }, uCvBusy_ { false };
+    std::atomic<bool> uCvHas_[4] { {false}, {false}, {false}, {false} };   // fb330 — per-bank presence
+    float occ_[48] {};                                  // fb328 — signal occupancy (driven axis, ch 0)
+    int   occN_ = 0;
+
+    /** The stateless curve core — domain map (Beyond) + bank morph. c < 0 = the DC reference. */
+    float shaperCore (float v, int c) noexcept
+    {
+        // BEYOND (P7) — blend the OUTPUTS of neighbouring rules (§6.4). Harmonics: clamp is a HARD
+        // law (Chebyshev explodes outside [-1,1]) except its 'Beyond' voicing, which reflects.
+        float bey = (mode_ == Harmonics) ? ((chr_ == 7) ? 0.5f : 0.0f) : pC_[6];
+        float y;
+        if (bey < 1.0e-3f)       y = cvMorph (domClamp (v), c);
+        else if (bey < 0.5f)     { const float w = bey * 2.0f;
+                                   y = (1.0f - w) * cvMorph (domClamp (v), c) + w * cvMorph (domFold (v), c); }
+        else if (bey < 0.999f)   { const float w = bey * 2.0f - 1.0f;
+                                   y = (1.0f - w) * cvMorph (domFold (v), c) + w * cvMorph (domWrap (v), c); }
+        else                     y = cvMorph (domWrap (v), c);
+        return y;
+    }
+
+    static float domClamp (float v) noexcept { return juce::jlimit (-1.0f, 1.0f, v); }
+    static float domFold  (float v) noexcept
+    {
+        float t = (v + 1.0f) * 0.5f;
+        t = std::fmod (t, 2.0f); if (t < 0.0f) t += 2.0f;
+        return ((t <= 1.0f) ? t : 2.0f - t) * 2.0f - 1.0f;    // MIRROR: a folder from your own curve
+    }
+    static float domWrap  (float v) noexcept
+    {
+        float t = (v + 1.0f) * 0.5f;
+        t -= std::floor (t);
+        return t * 2.0f - 1.0f;                                // WRAP: the destruction rule
+    }
+
+    /** Morph (the family SIG) between banks A and B — gated to one read at the endpoints. */
+    float cvMorph (float x, int c) noexcept
+    {
+        // Shaper Asym 'Halves': the sign selects the bank; Morph SWAPS the halves.
+        if (mode_ == ShaperAsym && chr_ == 1)
+        {
+            const int bk = (x >= 0.0f) ? 0 : 1;
+            const float m = kneeC_;
+            if (m < 1.0e-3f) return cvEval (bk, x);
+            return (1.0f - m) * cvEval (bk, x) + m * cvEval (bk ^ 1, x);
+        }
+        // fb330 — the DRAWN modes sweep ALL FOUR banks A→B→C→D on one Morph (Max: "it needs to be
+        // ABCD so it morphs through all of them"). Adjacent-pair blend = piecewise-valid transfer.
+        if (mode_ == Shaper || mode_ == ShaperAsym)
+        {
+            const float s = juce::jlimit (0.0f, 1.0f, kneeC_) * 3.0f;
+            const int   k = juce::jmin (2, (int) s);
+            const float f = s - (float) k;
+            if (f < 1.0e-3f) return cvEval (k, x);
+            if (f > 0.999f)  return cvEval (k + 1, x);
+            return (1.0f - f) * cvEval (k, x) + f * cvEval (k + 1, x);
+        }
+        // Table sweeps FRAMES via rebake — Morph is not an A/B blend there (except Two-Table).
+        const float m = (mode_ == Table && chr_ != 7) ? 0.0f : kneeC_;
+        if (m < 1.0e-3f)  return cvEval (0, x);
+        if (m > 0.999f)   return cvEval (1, x);
+        return (1.0f - m) * cvEval (0, x) + m * cvEval (1, x);
+    }
+
+    float cvEval (int bank, float x) noexcept          // linear read + the 40 ms front/back blend
+    {
+        const float s = (x * 0.5f + 0.5f) * (float) kCK;
+        const int   k = juce::jlimit (0, kCK - 1, (int) s);
+        const float d = juce::jlimit (0.0f, 1.0f, s - (float) k);
+        const float* tf = cvT_[bank][cvFront_];
+        float y = (tf[k] + (tf[k + 1] - tf[k]) * d) * cvMk_[bank][cvFront_];
+        if (cvXf_ < 1.0f)
+        {
+            const float* tb = cvT_[bank][cvFront_ ^ 1];
+            const float yb = (tb[k] + (tb[k + 1] - tb[k]) * d) * cvMk_[bank][cvFront_ ^ 1];
+            y = (1.0f - cvXf_) * y + cvXf_ * yb;       // §6.5 — blend of two maps IS a valid map
+        }
+        return y;
+    }
+
+    /** The stateful front — Squash, the per-voicing machines, then the core. */
+    float shaperF (float u, int c) noexcept
+    {
+        // SQUASH (P8) — 3 ms/80 ms leveller INTO the curve: quiet passages traverse the full drawn
+        // shape (the no-dead-first-third clause as a knob). Byte-identical bypass at 0.
+        if (pC_[7] > 1.0e-4f)
+        {
+            const float a = std::fabs (u);
+            shEnv_[c] += (a - shEnv_[c]) * ((a > shEnv_[c]) ? 0.0032f : 0.00013f);
+            const float g = 0.9f / juce::jmax (0.045f, shEnv_[c]);
+            u *= 1.0f + pC_[7] * (juce::jmin (20.0f, g) - 1.0f);   // up to 20:1 (~30 dB)
+        }
+        float v = u * kShDom;
+        const bool sh = (mode_ == Shaper), as = (mode_ == ShaperAsym);
+        // ── the voicing machines (bible §9.5 — each changes PHYSICS) ─────────
+        if ((sh && chr_ == 1) || (as && chr_ == 2))               // Log / Log Both — traverse in dB:
+        {                                                          //   quiet detail owns the graph
+            const float s = (v < 0.0f) ? -1.0f : 1.0f;             //   (Trash 2's trick — what makes
+            v = s * std::log1p (std::fabs (v) * 999.0f) * (1.0f / 6.9077553f);   // a drawn curve usable)
+        }
+        if (sh && chr_ == 7)                                       // Squeeze — the input is levelled
+        {                                                          //   into the curve at ANY playing level
+            const float a = std::fabs (u);
+            shEnv2_[c] += (a - shEnv2_[c]) * ((a > shEnv2_[c]) ? 0.0032f : 0.00013f);
+            v = u * kShDom * (0.85f / juce::jmax (0.06f, shEnv2_[c] * kShDom));
+        }
+        if (mode_ == Harmonics)
+        {
+            if (chr_ == 0)                                         // Pure — input hard-normalised: the
+            {                                                      //   bars ARE the spectrum, guaranteed
+                const float a = std::fabs (u);
+                shEnv2_[c] += (a - shEnv2_[c]) * ((a > shEnv2_[c]) ? 0.008f : 0.0002f);
+                v = u / juce::jmax (0.05f, shEnv2_[c] * 1.05f);
+                v = juce::jlimit (-1.0f, 1.0f, v);
+            }
+            if (chr_ == 6)                                         // Stretch — warped domain: the ladder
+            {                                                      //   detunes inharmonically (bell/gong)
+                const float g2 = 0.4f + pC_[4] * 2.2f;
+                const float a2 = std::fabs (v);
+                if (a2 > 1.0e-9f) v = (v < 0.0f ? -1.0f : 1.0f) * std::pow (a2, g2);
+            }
+        }
+        if (mode_ == Table && chr_ == 5)                           // Phase — Bias ROTATES the frame under
+            v = domWrap (v + biasE_);                              //   the signal's zero crossing
+        if ((sh && chr_ == 5) || (as && chr_ == 6))                // Growl — 0.35·y[n-1] into the input:
+            v += 0.35f * shGrl_[c] * kShDom;                       //   the family's ONE memory voicing
+        if (as && chr_ == 7)                                       // Bias Walk — the operating point
+        {                                                          //   drifts with the program (grid bias)
+            const float a = std::fabs (u);
+            shEnv2_[c] += (a * a - shEnv2_[c]) * 0.0011f;          //   30 ms RMS-ish
+            v += biasE_ * juce::jmin (1.0f, std::sqrt (shEnv2_[c]) * 2.5f) * 0.5f;
+        }
+        if (sh && chr_ == 6)                                       // Sticky — hysteresis on the read:
+        {                                                          //   S&H grit that CLEANS UP when loud
+            const float a = std::fabs (u);
+            shEnv2_[c] += (a - shEnv2_[c]) * 0.004f;
+            const float win = 0.05f * (1.0f - juce::jmin (1.0f, shEnv2_[c] * 2.0f));
+            if (std::fabs (v - shStk_[c]) < win) v = shStk_[c]; else shStk_[c] = v;
+        }
+        float y = shaperCore (v, c);
+        if ((sh && chr_ == 4) || (as && chr_ == 5))                // Twice — g(g(x)): harmonic order
+            y = shaperCore (y, c);                                 //   SQUARES with nothing new drawn
+        if ((sh && chr_ == 5) || (as && chr_ == 6)) shGrl_[c] = y;
+        if ((sh && chr_ == 3) || (as && chr_ == 4))                // Glass — the curve becomes a COLOUR:
+        {                                                          //   distortion folded into the mids
+            wcLp_[c] += (y - wcLp_[c]) * 0.25f;
+            y = wcLp_[c] * 1.15f;
+        }
+        return y;
+    }
+
+    // ── the bakes (audio thread, rate-limited, ~10 µs; always land through the 40 ms fade) ──────
+    void shaperCheckBake() noexcept
+    {
+        if (--cvChk_ > 0) return;
+        cvChk_ = 64;
+        if (cvXf_ < 1.0f) return;                                  // one fade at a time
+        const float mSnap = kneeC_;
+        const bool dirty = cvForce_ || cvMode_ != mode_ || cvChr_ != chr_ || cvPill_ != pill2_
+                        || std::fabs (cvSm_ - pC_[4]) > 0.01f
+                        || (mode_ == Table && chr_ != 0 && chr_ != 7 && std::fabs (mSnap - cvMor_) > 0.008f);
+        if (! dirty) return;
+        cvForce_ = false; cvMode_ = mode_; cvChr_ = chr_; cvPill_ = pill2_; cvSm_ = pC_[4]; cvMor_ = mSnap;
+        bakeCurves();
+    }
+
+    void bakeCurves() noexcept
+    {
+        const int bk = cvFront_ ^ 1;
+        // Harmonics: build the (character-modified) bar sets once per bake
+        float bA[17] {}, bB[17] {};
+        if (mode_ == Harmonics)
+        {
+            for (int k = 1; k <= 16; ++k)
+            {
+                float a = hBars_[k - 1];
+                if (chr_ == 2 && (k % 2) == 0) a = 0.0f;                       // Odd Only
+                if (chr_ == 3 && k > 1 && (k % 2) == 1) a = 0.0f;              // Even Only (keep a1)
+                if (chr_ == 4) a /= (float) k;                                 // Ramp — musical draw
+                if (chr_ == 5 && (k % 2) == 0) a = -a;                         // Comb — flipped phases
+                bA[k] = a;
+                bB[k] = a / (float) k;                                         // bank B = tilted target
+            }
+        }
+        // fb330 — the DRAWN modes carry FOUR morphable banks (A→B→C→D); the others keep their two.
+        const int nBanks = (mode_ == Shaper || mode_ == ShaperAsym) ? 4 : 2;
+        for (int bank = 0; bank < nBanks; ++bank)
+        {
+            float* t = cvT_[bank][bk];
+            float pk = 1.0e-6f;
+            for (int cell = 0; cell <= kCK; ++cell)
+            {
+                const float x = (float) cell * (2.0f / (float) kCK) - 1.0f;
+                float y;
+                // fb328 — the USER'S drawn curve (card / Send To Shaper) replaces the generated
+                // banks on the two drawn modes; smooth / odd-enforce / slope-norm still apply, so
+                // every engine law holds on user ink. Busy write ⇒ skip this round (cvForce_ holds).
+                if (bank < 4 && uCvHas_[bank].load (std::memory_order_relaxed)
+                    && ! uCvBusy_.load (std::memory_order_acquire)
+                    && (mode_ == Shaper || mode_ == ShaperAsym))
+                    y = uCv_[bank][cell];
+                else switch (mode_)
+                {
+                    case ShaperAsym:                                     // fb330 — 4 generated banks
+                        if      (bank == 0) y = (x > 0.0f) ? 1.35f * x - 0.35f * x * x * x : 0.05f * x;   // half-wave A: fat + even-rich
+                        else if (bank == 1) y = 0.85f * std::sin (2.5f * 3.1415927f * x);                 // folder B
+                        else if (bank == 2) y = (x >= 0.0f) ? std::tanh (2.6f * x) : std::tanh (1.1f * x) * 0.7f;   // asym drive C
+                        else { float tw = (x + 1.0f) * 0.75f; tw -= std::floor (tw); y = tw * 2.0f - 1.0f; }        // wrap D
+                        break;
+                    case Harmonics:
+                    {
+                        // T0=1, T1=x, T_{k+1} = 2x·T_k − T_{k−1} (Le Brun) — bank-selected bars
+                        const float* bb = (bank == 0) ? bA : bB;
+                        float tm2 = 1.0f, tm1 = x, acc = bb[1] * x;
+                        for (int k = 2; k <= 16; ++k)
+                        {
+                            const float tk = 2.0f * x * tm1 - tm2;
+                            acc += bb[k] * tk;
+                            tm2 = tm1; tm1 = tk;
+                        }
+                        y = acc;
+                        break;
+                    }
+                    case Table:      y = (bank == 0 || chr_ == 7) ? ((bank == 1) ? 1.2f * x - 0.2f * x * x * x
+                                                                                : tableFrame (x))
+                                                                  : tableFrame (x);   // bank1 = hand curve (Two-Table)
+                                     break;
+                    default:                                             // Shaper — fb330: 4 generated banks
+                        if      (bank == 0) y = 1.25f * x - 0.25f * x * x * x;         // gentle S (A)
+                        else if (bank == 1) y = std::round (x * 2.5f) * 0.4f;          // razor staircase (B)
+                        else if (bank == 2) y = std::sin (2.3561945f * x);             // sine fold (C)
+                        else { float tw = (x + 1.0f) * 0.75f; tw -= std::floor (tw); y = tw * 2.0f - 1.0f; }   // wrap (D)
+                        break;
+                }
+                t[cell] = y;
+                pk = juce::jmax (pk, std::fabs (y));
+            }
+            // Harmonics/Table: peak-normalise (|f|≤Σ|a_k|≤16 — the §9.5 stability clamp; frame
+            // switching must never step the level)
+            if (mode_ == Harmonics || mode_ == Table)
+                for (int cell = 0; cell <= kCK; ++cell) t[cell] /= pk;
+            // SMOOTH (P5) — bake-time corner rounding: the most musical control AND the cheapest
+            // anti-aliasing control (§5.5). Razor voicings deliberately skip it.
+            const bool razor = ((mode_ == Shaper && chr_ == 2) || (mode_ == ShaperAsym && chr_ == 3)
+                             || (mode_ == Table && chr_ == 6));
+            int rad = razor ? 0 : (int) (pC_[4] * pC_[4] * 90.0f) + ((mode_ == Shaper && chr_ == 3) || (mode_ == ShaperAsym && chr_ == 4) ? 40 : 0)
+                                 + ((mode_ == Table && chr_ == 3) ? 60 : 0);
+            for (int pass = 0; pass < (rad > 0 ? 2 : 0); ++pass)
+            {
+                float acc = 0.0f; const int w = rad;
+                for (int cell = 0; cell <= kCK; ++cell) cvS1_[cell] = t[cell];
+                for (int cell = 0; cell <= kCK; ++cell)
+                {
+                    acc = 0.0f; int n = 0;
+                    for (int j = juce::jmax (0, cell - w); j <= juce::jmin (kCK, cell + w); ++j) { acc += cvS1_[j]; ++n; }
+                    t[cell] = acc / (float) n;
+                }
+            }
+            // Table 'Half' + Shaper mode + the Sym pill: enforce ODD (zero DC, zero evens — §6.9)
+            if (mode_ == Shaper || pill2_ || (mode_ == Table && chr_ == 4))
+                for (int cell = 0; cell <= kCK / 2; ++cell)
+                {
+                    const float odd = 0.5f * (t[kCK - cell] - t[cell]);
+                    t[kCK - cell] = odd; t[cell] = -odd;
+                }
+            // unity law: normalise the small-signal slope per bake (a staircase and a gentle S both
+            // power on at ≈ 0 dB; Drive earns the rest)
+            const float sl = std::fabs (t[kCK / 2 + 24] - t[kCK / 2 - 24]) / (48.0f / (float) kCK);
+            cvMk_[bank][bk] = juce::jlimit (0.8f, 3.0f, 1.0f / (kShDom * juce::jmax (0.35f, sl)));
+        }
+        cvXf_ = 0.0f;                                              // 40 ms output crossfade begins
+        cvPend_ = true;
+    }
+
+    /** The generated morph table (64+ distinct transfer functions on one knob) — sine → phase-
+        distorted saw → PWM square → rising fold chaos. The user-wavetable hookup rides the same
+        bake path next phase. */
+    float tableFrame (float x) noexcept
+    {
+        const float m = cvMor_;
+        const float ph = (x + 1.0f) * 0.5f;
+        if (m < 0.34f)                                             // sine → PD saw
+        {
+            const float t = m * 2.94f;
+            return std::sin (6.2831853f * (std::pow (ph, 1.0f + 3.0f * t) * (0.5f + 0.5f * t) + (1.0f - t) * 0.0f) - 3.1415927f * (1.0f - t) * 0.5f + 1.5707963f * t);
+        }
+        if (m < 0.67f)                                             // saw → PWM square
+        {
+            const float t = (m - 0.34f) * 3.03f;
+            const float s = std::sin (6.2831853f * std::pow (ph, 2.5f) + 1.5707963f);
+            return std::tanh (s * (1.0f + 14.0f * t)) * (1.0f - 0.25f * t)
+                 + 0.25f * t * std::sin (12.566371f * ph);
+        }
+        const float t = (m - 0.67f) * 3.03f;                       // square → folded chaos
+        return std::sin (6.2831853f * ph * (1.0f + 17.0f * t) + 3.0f * t * std::sin (6.2831853f * ph));
+    }
+
     // ── DIGITAL — sample-domain destruction, 1×, L/R, NO anti-aliasing (the artefacts ARE the
     // product). Recycles VintageReverb's proven formulas: phase-accumulator ZOH, mid-tread crush
     // with TPDF dither, reconstruction LP at 0.45·fs_r. Two axes per mode: SIG is the front axis,
@@ -1562,6 +2038,7 @@ private:
         // (0.47 vs a 0.15-peak signal) and "12-bit" had 250 steps of headroom (inaudible). ×8 into
         // the grid, ÷8 out: unity preserved, the destroyer operates like the machines it models.
         float u = x * kPreGain * drv * 0.25f * 8.0f;
+        if (c == 0) occAdd (u);                          // fb328 — occupancy viz (grid axis)
 
         // fb325 — Feedback amplified ×2.2 (Max: "supposed to be a crazy powerful knob") and gated
         // by the input envelope (nothing-sounds-without-input hard rule — Melt self-osc included).
@@ -1924,6 +2401,18 @@ private:
     float sbFlip_[2] { 1.0f, 1.0f }, sbPrev_[2] {}, sbEnv_[2] {}, sbLp2_[2] {};   // fb325 — the SUB flip-flop
     float fbLp_[2] {}, fbLpP_ = -1.0f, fbLpK_ = 0.3f; // fb325 — feedback scream-color pole
     float kpZ_[2] {};                                 // fb325 — Knee edge-slew state (post-rail)
+    // ── fb326 — SHAPER family state ──
+    float cvT_[4][2][kCK + 1] {};                     // curve tables [bank A/B/C/D][front/back] (fb330)
+    float cvMk_[4][2] { {1,1},{1,1},{1,1},{1,1} };    // per-bake slope normalisation (unity law) — 4 banks (fb330)
+    float cvS1_[kCK + 1] {};                          // smooth-pass scratch
+    int   cvFront_ = 0, cvChk_ = 1;
+    float cvXf_ = 1.0f, cvXfI_ = 0.0005f;             // the 40 ms output crossfade (§6.5)
+    bool  cvPend_ = false, cvForce_ = true, cvPill_ = false;
+    int   cvMode_ = -1, cvChr_ = -1;
+    float cvSm_ = -1.0f, cvMor_ = 0.35f;
+    float hBars_[16] { 1.0f, 0.55f, 0.8f, 0.3f, 0.65f, 0.2f, 0.5f, 0.15f,
+                       0.4f, 0.1f, 0.3f, 0.08f, 0.22f, 0.06f, 0.15f, 0.1f };   // default drawn spectrum
+    float shEnv_[2] {}, shEnv2_[2] {}, shGrl_[2] {}, shStk_[2] {};
     float odSl_[3][2] {}, odLp_[3][2] {};             // overdrive per-stage slew + inter-stage LP
     int   odChrP_ = -1; float odDrvP_ = -1.0f, odGs_ = 1.0f, odLpK_ = 0.1f;
     float slamT_ = 1.0f, slamC_ = 1.0f;               // the Slam pill's glided ×10

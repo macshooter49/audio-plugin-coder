@@ -1,0 +1,925 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — Distortion Curve Editor mockup (fb327)</title>
+<style>
+  :root{
+    --bg-main:#1A1A2E; --bg-surface:#232340; --purple-400:#B794FF; --purple-500:#8B5CF6;
+    --border-strong:rgba(88,88,128,0.5); --border:rgba(88,88,128,0.35);
+    --text-primary:#E0DCE8; --text-secondary:#9B93B0; --text-muted:#6B6080; --text-dim:#504870; --bg-hero:#232340;
+    --ghost:rgba(255,255,255,0.55); --ghost-dim:rgba(255,255,255,0.34);
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; min-height:100%; background:#12121f; }
+  body{ font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display","Helvetica Neue",sans-serif;
+        color:var(--text-primary); display:flex; flex-direction:column; align-items:center; gap:14px; padding:26px 22px 44px; }
+  .cap{ color:var(--text-dim); font-size:12px; letter-spacing:.04em; text-align:center; line-height:1.6; max-width:860px; }
+  .cap b{ color:var(--text-secondary); font-weight:500; }
+  .cap .k{ color:var(--purple-400); }
+  .stage{ background:var(--bg-main); border-radius:12px; padding:22px; display:flex; gap:18px; align-items:flex-start;
+          box-shadow:0 24px 60px rgba(0,0,0,.5); }
+  .cell{ position:relative; }
+  .stage-lbl{ position:absolute; margin-top:-17px; font-size:10px; letter-spacing:.12em; text-transform:uppercase; color:var(--text-dim); white-space:nowrap; }
+
+  /* ==== REAL FX-RACK CSS (fxr-*, canonical v7) ==== */
+  #syn-panel .fxr-dev{ flex:0 0 272px; width:272px; height:192px; background:transparent; border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, opacity .15s; position:relative; }
+  #syn-panel .fxr-dev:hover{ border-color:rgba(255,255,255,.34); }
+  #syn-panel .fxr-head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }
+  #syn-panel .fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+  #syn-panel .fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; display:flex; align-items:center; }
+  #syn-panel .fxr-type{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300; line-height:1; white-space:nowrap; margin-left:3px; }
+  #syn-panel .fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; }
+  #syn-panel .fxr-tw{ display:grid; align-items:center; justify-items:center; }
+  #syn-panel .fxr-tw > span{ grid-area:1/1; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+  #syn-panel .fxr-tg{ visibility:hidden; pointer-events:none; }
+  #syn-panel .fxr-preset{ position:relative; display:flex; align-items:center; gap:5px; max-width:88px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; cursor:pointer; line-height:1; overflow:hidden; }
+  #syn-panel .fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+  #syn-panel .fxr-preset .fxr-pname{ font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  #syn-panel .fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; position:relative; top:.5px; }
+  #syn-panel .fxr-spacer{ flex:1; }
+  #syn-panel .fxr-headr{ display:flex; align-items:center; gap:9px; }
+  #syn-panel .fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:0 0 auto; }
+  #syn-panel .fxr-pwr.off{ background:transparent; box-shadow:none; border-color:var(--text-muted); }
+  #syn-panel .fxr-swap, #syn-panel .fxr-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; padding:0; background:transparent; border:none; }
+  #syn-panel .fxr-swap svg, #syn-panel .fxr-x svg{ grid-area:1/1; width:14px; height:14px; display:block; }
+  #syn-panel .fxr-swap{ color:var(--text-muted); transition:color .12s, filter .12s; }
+  #syn-panel .fxr-swap:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
+  #syn-panel .fxr-x{ color:var(--text-muted); transition:color .12s; }
+  #syn-panel .fxr-x:hover{ color:#EF4444; }
+  #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+  #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  /* fb327 — the EDIT-CURVE affordance on the core of EVERY mode (§6.6) = the filter's EXTEND box
+     (.filt-exp) verbatim, a touch smaller. Shaper family: opens the editor. Any other mode: sends
+     the LIVE curve to the editor. Max: INSIDE the plot, bottom-right, above the axis. */
+  #syn-panel .fxr-edit{ position:absolute; right:18px; bottom:19px; width:13px; height:13px; display:inline-flex; align-items:center; justify-content:center; color:rgba(255,255,255,.92); cursor:pointer; z-index:4; transition:color .12s, filter .12s; }
+  #syn-panel .fxr-edit svg{ width:9.5px; height:9.5px; display:block; position:static; }
+  #syn-panel .fxr-edit:hover{ color:#fff; }
+  #syn-panel .fxr-edit.act{ color:var(--purple-400); }
+  #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+  #syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+  #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+  #syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
+  #syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
+  #syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+  #syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
+  #syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+  #syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
+  #syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+  #syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+  #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
+  #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+  #syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+  #syn-panel .fxr-type-native{ position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:none; background:transparent; color:transparent; opacity:0; cursor:pointer; -webkit-appearance:none; appearance:none; font-size:9px; }
+  #syn-panel .fxr-type-native:focus{ outline:none; }
+
+  /* ==== fb327 — THE CURVE EDITOR (the proposed surface; overlay-anchored over the rack in-plugin) ==== */
+  .dst-ed{ width:480px; background:var(--bg-hero); border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; overflow:hidden; }
+  .dst-ed .de-head{ display:flex; align-items:center; gap:7px; padding:5px 9px 4px; height:26px; }
+  .dst-ed .de-title{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; }
+  .dst-ed .de-src{ display:flex; align-items:center; gap:5px; max-width:110px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; line-height:1; overflow:hidden; }
+  .dst-ed .de-src .de-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+  .dst-ed .de-src .de-sname{ font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dst-ed .de-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; color:var(--text-muted); transition:color .12s; margin-left:auto; }
+  .dst-ed .de-x svg{ width:14px; height:14px; display:block; }
+  .dst-ed .de-x:hover{ color:#EF4444; }
+  .dst-ed .de-field{ position:relative; width:456px; height:220px; margin:1px 11px 0; }
+  .dst-ed .de-field svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  /* the LFO shaper's exact ink (fb206 family), namespaced */
+  .dst-ed .sh-grid line{ stroke:rgba(255,255,255,.065); stroke-width:.6; }
+  .dst-ed .sh-grid line.maj{ stroke:rgba(255,255,255,.14); }
+  .dst-ed .de-unity{ stroke:currentColor; stroke-width:1; opacity:.14; stroke-dasharray:2 3; }
+  .dst-ed .de-occ line{ stroke:var(--purple-400); stroke-width:5; stroke-linecap:round; }
+  .dst-ed .de-base{ fill:none; stroke:rgba(255,255,255,.25); stroke-width:1; stroke-dasharray:3 3; }
+  .dst-ed .de-mirror{ fill:none; stroke:rgba(255,255,255,.30); stroke-width:1.1; }
+  .dst-ed .mv-fill{ fill:rgba(224,216,245,0.07); }
+  .dst-ed .mv-stroke{ fill:none; stroke:#ECE8F2; stroke-width:1.7;
+    filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5)); }
+  .dst-ed .sh-nd{ fill:#ECE8F2; stroke:rgba(183,148,255,.65); stroke-width:.8; pointer-events:none; }
+  .dst-ed .sh-nd.sel{ fill:#8B5CF6; stroke:rgba(255,255,255,.85); }
+  .dst-ed .sh-nd.anchor{ fill:var(--bg-hero); }
+  .dst-ed .de-anchor-ring{ fill:none; stroke:rgba(255,255,255,.4); stroke-width:.8; stroke-dasharray:1.6 1.8; pointer-events:none; }
+  .dst-ed .sh-cd{ fill:rgba(231,222,255,.82); pointer-events:none; }
+  .dst-ed .sh-hit{ fill:transparent; cursor:grab; }
+  .dst-ed .sh-hit.cdh{ cursor:ns-resize; }
+  .dst-ed .de-bar{ fill:rgba(236,232,242,.82); }
+  .dst-ed .de-bar.neg{ fill:rgba(183,148,255,.72); }   /* phase-flipped bar = signal ink, purple */
+  .dst-ed .de-bar-hit{ fill:transparent; cursor:ns-resize; }
+  .dst-ed .de-bar-num{ font-size:7.5px; fill:var(--ghost-dim); text-anchor:middle; font-weight:300; }
+  .dst-ed .de-harm-ghost{ fill:none; stroke:rgba(255,255,255,.30); stroke-width:1; }
+  .dst-ed .de-frame-ghost{ fill:none; stroke:rgba(255,255,255,.16); stroke-width:.9; }
+  .dst-ed .de-foot{ position:relative; display:flex; align-items:center; gap:11px; padding:6px 11px 6px; }
+  .dst-ed .de-foot::before{ content:''; position:absolute; left:0; right:0; top:0; height:1px; background:rgba(255,255,255,.075); }
+  .dst-ed .mv-tabs{ display:flex; align-items:center; gap:5px; }
+  .dst-ed .mv-tabs .t{ position:relative; width:13px; flex:none; text-align:center; font-size:10px; font-weight:400; color:var(--ghost-dim); cursor:pointer; transition:.12s; }
+  .dst-ed .mv-tabs .t:hover{ color:var(--ghost); }
+  .dst-ed .mv-tabs .t.act{ color:#fff; font-weight:600; }
+  .dst-ed .mv-tabs .t.act::after{ content:''; position:absolute; left:0; right:0; bottom:-3px; height:1px; background:var(--purple-400); }
+  .dst-ed .de-morphrail{ position:relative; width:30px; height:2px; background:rgba(255,255,255,.14); border-radius:1px; }
+  .dst-ed .de-morphrail i{ position:absolute; top:-2px; width:6px; height:6px; margin-left:-3px; border-radius:50%; background:var(--purple-400); box-shadow:0 0 4px rgba(183,148,255,.6); }
+  .dst-ed .mv-c{ display:flex; align-items:center; gap:5px; font-size:9px; letter-spacing:1.1px; font-weight:300; color:var(--ghost); cursor:pointer; transition:color .12s; -webkit-user-select:none; user-select:none; }
+  .dst-ed .mv-c:hover{ color:#fff; }
+  .dst-ed .mv-c .ar{ font-size:8px; opacity:.55; }
+  .dst-ed .de-ro{ font-size:8.5px; color:var(--ghost-dim); letter-spacing:.06em; font-weight:300; white-space:nowrap; }
+  .dst-ed .de-srcpills{ display:flex; gap:4px; }
+  .dst-ed .de-srcpills .p{ height:14px; padding:0 7px; display:flex; align-items:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+  .dst-ed .de-srcpills .p.act{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+  .dst-ed.harm .mv-tabs, .dst-ed.harm .de-morphrail{ display:none; }
+  .dst-ed.table .mv-tabs{ display:none; }
+
+  /* the canonical syn-ctx menu (fb258 geometry) */
+  .ctx{ position:fixed; z-index:60; min-width:168px; background:#232340; border:1px solid var(--border-strong); border-radius:6px; padding:4px 0; box-shadow:0 12px 34px rgba(0,0,0,.55); display:none; }
+  .ctx .h{ padding:5px 12px 3px; font-size:8.5px; letter-spacing:.1em; color:var(--text-dim); text-transform:uppercase; }
+  .ctx .it{ position:relative; padding:5px 12px 5px 26px; font-size:11px; font-weight:300; color:var(--text-primary); cursor:pointer; white-space:nowrap; }
+  .ctx .it:hover{ background:rgba(139,92,246,.14); }
+  .ctx .it.on::before{ content:''; position:absolute; left:12px; top:50%; margin-top:-3px; width:6px; height:6px; border-radius:50%; background:var(--purple-400); }
+
+  /* ==== DEMO RIG — the mockup's listening harness, NOT proposed plugin UI ==== */
+  .rig{ width:820px; display:flex; align-items:center; gap:14px; padding:10px 16px; border:1px dashed var(--border); border-radius:8px; color:var(--text-muted); }
+  .rig .r-lbl{ font-size:9px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-dim); margin-right:2px; }
+  .rig .r-btn{ height:20px; padding:0 13px; display:flex; align-items:center; font-size:9.5px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:10px; cursor:pointer; background:transparent; font-weight:400; }
+  .rig .r-btn.on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+  .rig .r-sl{ display:flex; align-items:center; gap:6px; font-size:8.5px; color:var(--text-muted); }
+  .rig input[type=range]{ -webkit-appearance:none; width:74px; height:2px; background:rgba(255,255,255,.16); border-radius:1px; outline:none; }
+  .rig input[type=range]::-webkit-slider-thumb{ -webkit-appearance:none; width:9px; height:9px; border-radius:50%; background:var(--text-secondary); border:1px solid rgba(255,255,255,.4); cursor:pointer; }
+  .rig .r-meter{ width:5px; height:26px; border:1px solid var(--border-strong); border-radius:2px; position:relative; overflow:hidden; margin-left:auto; }
+  .rig .r-meter i{ position:absolute; left:0; right:0; bottom:0; height:0%; background:var(--purple-400); opacity:.85; }
+</style>
+</head>
+<body>
+  <div class="cap">
+    <b>Distortion — the transfer-curve editor + Send To Shaper</b> &nbsp;·&nbsp; real plugin CSS + the fb206 point model, standalone &amp; audible (fb327, not built)<br>
+    Hit <span class="k">Play</span>, then drag the curve and listen. The <span class="k">extend box</span> on the core of ANY mode (the filter's ⌜⌟ button) opens its live curve here as draggable points.
+    Right-click the field for seeds — including <b>From Oscillator</b> (fb248 pipeline) and <b>From LFO</b>.
+  </div>
+  <div id="syn-panel">
+    <div class="stage">
+      <div class="cell"><span class="stage-lbl">Distortion — front</span><div id="dev0"></div></div>
+      <div class="cell"><span class="stage-lbl">Curve editor (opens from the extend box · pops out like the LFO card)</span><div id="ed0"></div></div>
+    </div>
+  </div>
+  <div class="rig">
+    <span class="r-lbl">Demo rig</span>
+    <button class="r-btn" id="rg-play">Play</button>
+    <button class="r-btn pat on" data-pat="bass">Bass</button>
+    <button class="r-btn pat" data-pat="chord">Chord</button>
+    <button class="r-btn pat" data-pat="drone">Drone</button>
+    <span class="r-sl">Beyond <input type="range" id="rg-bey" min="0" max="100" value="0"><b id="rg-beyv">0</b></span>
+    <span class="r-sl">Smooth <input type="range" id="rg-smo" min="0" max="100" value="0"><b id="rg-smov">0</b></span>
+    <span class="r-sl">Volume <input type="range" id="rg-vol" min="0" max="100" value="70"></span>
+    <span class="r-meter"><i id="rg-m"></i></span>
+  </div>
+  <div class="cap" style="font-size:11px">
+    Beyond &amp; Smooth are back-panel P7/P5 mirrors so you can hear them without flipping the device.
+    In-plugin: the editor overlays the rack (LFO Extend pattern); curves ride <b>setDistortionCurves</b> → the fb326 bake +
+    40&nbsp;ms crossfade; Send To Shaper = 512-pt sample → <b>rdpSimplify</b> (≤32 pts) → exact tension fit — all three run live in this page.
+  </div>
+
+<div class="ctx" id="ctx"></div>
+
+<script>
+'use strict';
+/* ═══════════ shared bits (verbatim idioms from index.html) ═══════════ */
+function knobSVG(pct){
+  pct=Math.max(0,Math.min(100,Math.round(pct)));
+  var cx=15,cy=15,r=11.5;
+  function pt(deg){var a=deg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+  return '<svg viewBox="0 0 30 30">'
+   +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+   +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+   +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="8" font-weight="300" fill="var(--text-secondary)">'+pct+'</text></svg>';
+}
+var IC_PLUS ='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>';
+var IC_X    ='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+/* the filter's EXTEND box, verbatim (.filt-exp, index.html:24950) — Max: this replaces the arrow */
+var IC_EDIT ='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>';
+
+/* the house tension curve — ONE truth (index.html:23736 / PluginProcessor.cpp:8046) */
+function shBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
+/* transfer-curve evaluator — the fb206 evaluator MINUS periodicity (§6.8-1: PERIODICITY MUST DIE) */
+function tcEval(pts,p){ p=Math.max(0,Math.min(1,p)); var i=0; while(i<pts.length-2&&pts[i+1][0]<=p)i++;
+  var a=pts[i],b=pts[i+1],w=Math.max(1e-6,b[0]-a[0]);
+  return a[1]+(b[1]-a[1])*shBias((p-a[0])/w,a[2]||0); }
+/* rdpSimplify — verbatim fb248 (index.html:24232) */
+function rdpSimplify(pts,eps){
+  if(pts.length<3) return pts.slice();
+  var keep=new Array(pts.length); keep[0]=keep[pts.length-1]=true;
+  var stack=[[0,pts.length-1]];
+  while(stack.length){ var seg=stack.pop(), a=seg[0], b=seg[1];
+    var ax=pts[a][0], ay=pts[a][1], dx=pts[b][0]-ax, dy=pts[b][1]-ay, L=Math.sqrt(dx*dx+dy*dy)||1e-9, dmax=0, idx=-1;
+    for(var i=a+1;i<b;i++){ var d=Math.abs((pts[i][0]-ax)*dy-(pts[i][1]-ay)*dx)/L; if(d>dmax){ dmax=d; idx=i; } }
+    if(dmax>eps&&idx>0){ keep[idx]=true; stack.push([a,idx]); stack.push([idx,b]); } }
+  var out=[]; for(var j=0;j<pts.length;j++) if(keep[j]) out.push(pts[j]); return out; }
+/* §6.1 — the exact closed-form tension fit: c = 0.25·ln(r/(1−r)) from the segment's true midpoint */
+function fitTension(pts,fRaw){
+  for(var i=0;i<pts.length-1;i++){ var a=pts[i],b=pts[i+1];
+    if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
+    var ym=fRaw((a[0]+b[0])/2), r=(ym-a[1])/(b[1]-a[1]);
+    a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
+  return pts; }
+
+/* ═══════════ device data (the real fb319 tables, trimmed to this mockup's needs) ═══════════ */
+var DST_TYPES=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip',
+  'Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table',
+  'Downsample','Bitcrush','Overflow'];
+var DST_FAMS=['ANALOG','ANALOG','ANALOG','ANALOG','ANALOG','CLIP','CLIP','CLIP','CLIP','DIODE','DIODE','DIODE','DIODE',
+  'FOLD','FOLD','FOLD','SHAPER','SHAPER','SHAPER','SHAPER','DIGITAL','DIGITAL','DIGITAL'];
+var DST_SIG={ANALOG:'Bias',CLIP:'Knee',DIODE:'Asym',FOLD:'Symm',SHAPER:'Morph',DIGITAL:'Crush'};
+var DST_PILL={ANALOG:'Slam',CLIP:'Wrap',DIODE:'Octave',FOLD:'Track',SHAPER:'Sym',DIGITAL:'Clean'};
+
+/* approximate f(x) per mode — DISPLAY + Send-To-Shaper source in this mockup (the plugin samples the real engine) */
+function modeCurve(type){
+  var th=Math.tanh;
+  switch(type){
+    case 'Tube':        return function(x){ var u=x*1.6+0.22; return th(u<0?u*0.72:u)*1.05-th(0.22); };
+    case 'Tape':        return function(x){ return th(x*1.35)*1.02; };
+    case 'Transformer': return function(x){ return x/Math.pow(1+Math.pow(Math.abs(x*1.25),6),1/6); };
+    case 'Stomp Box':   return function(x){ return Math.asinh(x*2.4)/Math.asinh(2.4); };
+    case 'Overdrive':   return function(x){ return th(th(th(x*2.2)*1.8)*1.5)*1.08; };
+    case 'Soft Clip':   return function(x){ var v=x*1.5,x2=v*v; return v/Math.sqrt(Math.sqrt(1+0.62*x2*x2)); };
+    case 'Hard Clip':   return function(x){ var v=x*1.35; return Math.max(-1,Math.min(1,v)); };
+    case 'Zero-Square': return function(x){ var p=0.55, ped=Math.abs(x)>0.04?(x>0?p:-p):0; return ped+(1-p)*Math.max(-1,Math.min(1,x)); };
+    case 'Slew Clip':   return function(x){ return th(x*1.7)*0.96; };
+    case 'Diode 1':     return function(x){ var t2=0.35,a=Math.abs(x),s=x<0?-1:1; return a<t2?x*0.12:s*(0.12*t2+(a-t2))*1.15; };
+    case 'Diode 2':     return function(x){ var dz=0.22,a=Math.abs(x),s=x<0?-1:1; return a<dz?0:s*th((a-dz)*2.2); };
+    case 'Asym':        return function(x){ return x>=0?th(x*2.6)*0.95:th(x*1.15)*0.72; };
+    case 'Rectify':     return function(x){ return Math.abs(x)*1.6-0.5; };
+    case 'Linear Fold': return function(x){ var v=x*2.0,t2=(v+1)*0.5; t2=t2-Math.floor(t2/2)*2; return (t2<=1?t2:2-t2)*2-1; };
+    case 'Sine Fold':   return function(x){ return Math.sin(1.5707963*x*2.4); };
+    case 'West Coast':  return function(x){ return Math.sin(2.2*x+0.9*Math.sin(3.1*x))*0.95; };
+    case 'Downsample':  return function(x){ return Math.round(x*6)/6; };
+    case 'Bitcrush':    return function(x){ return Math.round(x*8)/8; };
+    case 'Overflow':    return function(x){ var v=x*1.7,t2=(v+1)*0.5; t2-=Math.floor(t2); return t2*2-1; };
+    default:            return null;   /* SHAPER family — the editor owns the curve */
+  }
+}
+
+/* ═══════════ editor state ═══════════ */
+var ED={
+  open:true, bank:0, sym:false, unpinned:false, srcName:'',
+  /* pts in [0,1]² + tension, endpoints + CENTRE ANCHOR pinned (§6.8-3): f(0)=0 by default */
+  ptsA:[[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],
+  ptsB:[[0,0.06,0],[0.20,0.20,0],[0.40,0.34,0],[0.5,0.5,0],[0.60,0.66,0],[0.80,0.80,0],[1,0.94,0]],
+  basePts:null,           /* dashed ghost — the sent mode's original curve */
+  bars:(function(){ var b=new Array(16); for(var i=0;i<16;i++)b[i]=0; b[0]=1; return b; })(),
+  tblSrc:'gen',
+  sel:-1
+};
+var DEV={ type:'Shaper Asym', on:true, drive:34, sig:0, tone:50, mix:100, pill1:false, pill2:false, route:[1,1,0,0,0,0] };
+function famOf(t){ return DST_FAMS[Math.max(0,DST_TYPES.indexOf(t))]; }
+function isShaperFam(t){ return famOf(t)==='SHAPER'; }
+function edPts(){ return ED.bank===0?ED.ptsA:ED.ptsB; }
+
+/* ═══════════ bake — pts/bars/frames → 2049-entry transfer table (mirrors fb326 bakeCurves) ═══════════ */
+var K=2048;
+function symmetrize(pts){   /* odd enforcement: right half rules, left = point mirror (bake-time, §6.9) */
+  var out=[],i,n=pts.length;
+  var right=pts.filter(function(p){return p[0]>=0.5-1e-6;});
+  if(!right.length||right[0][0]>0.5+1e-6) right.unshift([0.5,0.5,0]);
+  for(i=right.length-1;i>0;i--){ var p=right[i],q=right[i-1];
+    out.push([1-p[0], 1-p[1], q[2]||0]); }
+  for(i=0;i<right.length;i++) out.push(right[i].slice());
+  out[0][0]=0; out[out.length-1][0]=1;
+  return out; }
+function chebBake(bars,tilt){   /* Le Brun: T0=1,T1=x,T_{k+1}=2x·T_k−T_{k−1} — draw the SPECTRUM */
+  var t=new Float32Array(K+1),pk=1e-6,i,k;
+  for(i=0;i<=K;i++){ var x=i*(2/K)-1, tm2=1, tm1=x, acc=bars[0]*(tilt?1:1)*x;
+    for(k=2;k<=16;k++){ var tk=2*x*tm1-tm2; acc+=bars[k-1]*(tilt?1/k:1)*tk; tm2=tm1; tm1=tk; }
+    t[i]=acc; pk=Math.max(pk,Math.abs(acc)); }
+  for(i=0;i<=K;i++) t[i]/=pk;
+  return t; }
+function tableFrame(m,ph){   /* the fb326 generated 64-frame morph stack, ported verbatim */
+  if(m<0.34){ var t=m*2.94;
+    return Math.sin(6.2831853*(Math.pow(ph,1+3*t)*(0.5+0.5*t))-3.1415927*(1-t)*0.5+1.5707963*t); }
+  if(m<0.67){ var t2=(m-0.34)*3.03;
+    var s=Math.sin(6.2831853*Math.pow(ph,2.5)+1.5707963);
+    return Math.tanh(s*(1+14*t2))*(1-0.25*t2)+0.25*t2*Math.sin(12.566371*ph); }
+  var t3=(m-0.67)*3.03;
+  return Math.sin(6.2831853*ph*(1+17*t3)+3*t3*Math.sin(6.2831853*ph)); }
+var OSC_SRC={   /* demo stand-ins for getOscLfoWave frames — in-plugin these are the REAL osc frames */
+  a:function(m,ph){ var n=2+Math.round(m*10); var s=0; for(var k=1;k<=n;k++) s+=Math.sin(6.2831853*ph*k)/k; return s*0.7; },
+  b:function(m,ph){ return Math.sin(6.2831853*ph)+0.55*Math.sin(6.2831853*ph*(2+Math.round(m*3)))+0.3*Math.sin(6.2831853*ph*5+m*2); },
+  c:function(m,ph){ return Math.sin(6.2831853*ph)*Math.exp(-2.2*ph*(1-m*0.6))+0.35*Math.sin(6.2831853*ph*(6-m*2)); },
+  d:function(m,ph){ var w=0.5+0.42*Math.sin(m*3.1); return Math.tanh(Math.sin(6.2831853*ph)*8)*(ph%1<w?1:-1)*0.5+0.5*Math.tanh(Math.sin(6.2831853*ph)*8); }
+};
+function smoothTable(t,s01){   /* Smooth (P5) — bake-time corner rounding (2-pass box, radius s²·90) */
+  var rad=Math.round(s01*s01*90); if(rad<1)return t;
+  var tmp=new Float32Array(K+1),pass,i,j;
+  for(pass=0;pass<2;pass++){ tmp.set(t);
+    for(i=0;i<=K;i++){ var acc=0,n=0;
+      for(j=Math.max(0,i-rad);j<=Math.min(K,i+rad);j++){ acc+=tmp[j]; n++; }
+      t[i]=acc/n; } }
+  return t; }
+function bakeAll(){
+  var type=DEV.type, tabA,tabB,useB=0, mor=DEV.sig/100, smo=RIG.smooth/100;
+  if(type==='Harmonics'){ tabA=chebBake(ED.bars,false); tabB=chebBake(ED.bars,true); useB=1; }
+  else if(type==='Table'){
+    tabA=new Float32Array(K+1); var pk=1e-6,i;
+    var gen=ED.tblSrc==='gen'?tableFrame:OSC_SRC[ED.tblSrc];
+    for(i=0;i<=K;i++){ var ph=i/K; tabA[i]=gen(mor,ph); pk=Math.max(pk,Math.abs(tabA[i])); }
+    for(i=0;i<=K;i++) tabA[i]/=pk;
+    tabB=tabA; useB=0;
+  }
+  else if(isShaperFam(type)){
+    var pA=(type==='Shaper'||ED.sym)?symmetrize(ED.ptsA):ED.ptsA;
+    var pB=(type==='Shaper'||ED.sym)?symmetrize(ED.ptsB):ED.ptsB;
+    tabA=new Float32Array(K+1); tabB=new Float32Array(K+1);
+    for(var i2=0;i2<=K;i2++){ var p=i2/K; tabA[i2]=tcEval(pA,p)*2-1; tabB[i2]=tcEval(pB,p)*2-1; }
+    useB=1;
+  }
+  else{ var f=modeCurve(type)||function(x){return x;};
+    tabA=new Float32Array(K+1);
+    for(var i3=0;i3<=K;i3++) tabA[i3]=f(i3*(2/K)-1);
+    tabB=tabA; useB=0;
+  }
+  smoothTable(tabA,smo); if(useB)smoothTable(tabB,smo);
+  /* unity law — per-bake small-signal slope normalisation (fb326 cvMk, jlimit 0.8–3.0) */
+  function mk(t){ var sl=Math.abs(t[K/2+24]-t[K/2-24])/(48/K); return Math.max(0.8,Math.min(3.0,1/Math.max(0.35,sl))); }
+  return { a:tabA, b:tabB, useB:useB, mkA:mk(tabA), mkB:useB?mk(tabB):mk(tabA) };
+}
+
+/* ═══════════ audio engine — a real waveshaper so every control is AUDIBLE (fb296 law) ═══════════ */
+var RIG={ playing:false, pat:'bass', beyond:0, smooth:0, vol:0.7 };
+var AC=null, shaperNode=null, inBus=null, master=null, occData=new Float32Array(96), occDecay=null, lastRms=0;
+var WORKLET_SRC=[
+'class DstShaper extends AudioWorkletProcessor{',
+'  constructor(){ super(); var K=2048; this.K=K;',
+'    this.fa=new Float32Array(K+1); this.fb=new Float32Array(K+1);',
+'    this.ba=new Float32Array(K+1); this.bb=new Float32Array(K+1);',
+'    for(var i=0;i<=K;i++){ var x=i*(2/K)-1; this.fa[i]=x; this.fb[i]=x; this.ba[i]=x; this.bb[i]=x; }',
+'    this.mkFa=1; this.mkFb=1; this.mkBa=1; this.mkBb=1; this.useB=0; this.useBb=0;',
+'    this.xf=1; this.morph=0; this.drive=1; this.beyond=0; this.mix=1; this.on=1; this.tone=0;',
+'    this.lpL=0; this.lpR=0; this.occ=new Float32Array(96); this.acc=0; this.rms=0;',
+'    var self=this;',
+'    this.port.onmessage=function(e){ var d=e.data;',
+'      if(d.t===0){ self.ba.set(d.a); self.bb.set(d.b); self.mkBa=d.mkA; self.mkBb=d.mkB; self.useBb=d.useB; self.xf=0; }',
+'      else{ self.drive=d.drive; self.morph=d.morph; self.beyond=d.bey; self.mix=d.mix; self.on=d.on; self.tone=d.tone; } };',
+'  }',
+'  ev(t,mk,u){ var s=(u*0.5+0.5)*this.K; s=s<0?0:(s>this.K?this.K:s);',
+'    var k=s|0; if(k>=this.K)k=this.K-1; var d=s-k;',
+'    return (t[k]+(t[k+1]-t[k])*d)*mk; }',
+'  shape(t,mk,tb,mkb,useB,u){',
+'    var bey=this.beyond,y;',
+'    var uc=u<-1?-1:(u>1?1:u);',
+'    if(bey<0.001) y=this.rd(t,mk,tb,mkb,useB,uc);',
+'    else{ var tf=(u+1)*0.5; tf=tf%2; if(tf<0)tf+=2; var uf=(tf<=1?tf:2-tf)*2-1;',
+'      if(bey<0.5){ var w=bey*2; y=(1-w)*this.rd(t,mk,tb,mkb,useB,uc)+w*this.rd(t,mk,tb,mkb,useB,uf); }',
+'      else{ var tw=(u+1)*0.5; tw-=Math.floor(tw); var uw=tw*2-1; var w2=bey*2-1;',
+'        y=(1-w2)*this.rd(t,mk,tb,mkb,useB,uf)+w2*this.rd(t,mk,tb,mkb,useB,uw); } }',
+'    return y; }',
+'  rd(t,mk,tb,mkb,useB,u){ var m=useB?this.morph:0;',
+'    if(m<0.001) return this.ev(t,mk,u);',
+'    if(m>0.999) return this.ev(tb,mkb,u);',
+'    return (1-m)*this.ev(t,mk,u)+m*this.ev(tb,mkb,u); }',
+'  process(inp,out){ var xi=inp[0], xo=out[0]; if(!xo||!xo[0]) return true;',
+'    var n=xo[0].length, ch, xfStep=1/(0.04*sampleRate);',
+'    for(var i=0;i<n;i++){',
+'      var g=this.xf; if(g<1){ g+=xfStep; this.xf=g>1?1:g; }',
+'      for(ch=0;ch<xo.length;ch++){',
+'        var x=(xi&&xi[ch])?xi[ch][i]:0;',
+'        if(!this.on){ xo[ch][i]=x; continue; }',
+'        var u=x*this.drive, y;',
+'        var yN=this.shape(this.fa,this.mkFa,this.fb,this.mkFb,this.useB,u);',
+'        if(this.xf<1){ var yB=this.shape(this.ba,this.mkBa,this.bb,this.mkBb,this.useBb,u);',
+'          y=(1-this.xf)*yN+this.xf*yB; } else y=yN;',
+'        if(this.xf>=1&&this.pend){ this.fa.set(this.ba); this.fb.set(this.bb); this.mkFa=this.mkBa; this.mkFb=this.mkBb; this.useB=this.useBb; this.pend=0; }',
+'        var lp=ch?this.lpR:this.lpL; lp+=(y-lp)*0.12; if(ch)this.lpR=lp; else this.lpL=lp;',
+'        var tn=this.tone; if(tn>0) y=lp+(y-lp)*(1+tn*2.2); else if(tn<0) y=lp*(1-tn*0.5)+(y-lp)*(1+tn*0.85);',
+'        y=Math.tanh(y*0.85)*1.176;',
+'        y=this.mix*y+(1-this.mix)*x;',
+'        xo[ch][i]=y;',
+'        if(ch===0){ var uf2=(u+1)*0.5; uf2=uf2%2; if(uf2<0)uf2+=2; var occU=this.beyond<0.25?(u<-1?-1:(u>1?1:u)):((uf2<=1?uf2:2-uf2)*2-1);',
+'          var b=((occU+1)*0.5*95)|0; if(b<0)b=0; if(b>95)b=95; this.occ[b]+=Math.abs(x)*3;',
+'          this.rms+=y*y; }',
+'      }',
+'      this.acc++;',
+'      if(this.acc>=2048){ this.port.postMessage({occ:this.occ.slice(0),rms:Math.sqrt(this.rms/2048)});',
+'        for(var j=0;j<96;j++) this.occ[j]*=0.30; this.rms=0; this.acc=0; }',
+'    }',
+'    if(this.xf<1) this.pend=1;',
+'    return true; }',
+'}',
+'registerProcessor("dst-shaper",DstShaper);'
+].join('\n');
+
+function audioInit(){
+  if(AC) return Promise.resolve();
+  AC=new (window.AudioContext||window.webkitAudioContext)();
+  inBus=AC.createGain(); inBus.gain.value=1;
+  master=AC.createGain(); master.gain.value=RIG.vol*0.5;
+  var url=URL.createObjectURL(new Blob([WORKLET_SRC],{type:'application/javascript'}));
+  return AC.audioWorklet.addModule(url).then(function(){
+    shaperNode=new AudioWorkletNode(AC,'dst-shaper',{outputChannelCount:[2]});
+    inBus.connect(shaperNode); shaperNode.connect(master); master.connect(AC.destination);
+    shaperNode.port.onmessage=function(e){ var d=e.data;
+      for(var i=0;i<96;i++) occData[i]=occData[i]*0.45+d.occ[i];
+      lastRms=d.rms; };
+    pushCurves(); pushParams();
+  });
+}
+var bakeT=null;
+function pushCurves(){   /* §6.5 cadence — 40 ms leading edge so consecutive fades butt together */
+  if(bakeT) return;
+  bakeT=setTimeout(function(){ bakeT=null;
+    var bk=bakeAll(); LAST_BAKE=bk;
+    if(shaperNode) shaperNode.port.postMessage({t:0,a:bk.a,b:bk.b,mkA:bk.mkA,mkB:bk.mkB,useB:bk.useB});
+    paintCore();
+    if(DEV.type==='Harmonics') renderEdLight();   /* the solved-curve ghost follows the bake */
+    },40);
+}
+var LAST_BAKE=null;
+function pushParams(){
+  if(!shaperNode) return;
+  var t=DEV.drive/100, driveDb=36*Math.pow(t,0.8);   /* HOUSE DRIVE LAW — driveDb = D_max·t^0.8, never 1+amt·k */
+  shaperNode.port.postMessage({t:1,drive:Math.pow(10,driveDb/20),morph:DEV.sig/100,
+    bey:RIG.beyond/100,mix:DEV.mix/100,on:DEV.on?1:0,tone:(DEV.tone-50)/50});
+}
+
+/* pattern scheduler — plucked bass / chord pad / drone into the shaper bus */
+var schedT=null, nextNote=0, droneNodes=null;
+function noteAt(when,f0,dur,type2,lvl){
+  var o=AC.createOscillator(),o2=AC.createOscillator(),g=AC.createGain();
+  o.type=type2||'sawtooth'; o.frequency.value=f0;
+  o2.type='sine'; o2.frequency.value=f0*0.5;
+  var pk=lvl||0.5;
+  g.gain.setValueAtTime(0.0001,when);
+  g.gain.exponentialRampToValueAtTime(pk,when+0.006);
+  g.gain.exponentialRampToValueAtTime(0.0001,when+dur);
+  o.connect(g); o2.connect(g); g.connect(inBus);
+  o.start(when); o2.start(when); o.stop(when+dur+0.05); o2.stop(when+dur+0.05);
+}
+function schedule(){
+  if(!RIG.playing) return;
+  var bt=0.25;   /* 120 bpm 8ths */
+  while(nextNote<AC.currentTime+0.30){
+    if(RIG.pat==='bass'){
+      var stepArr=[0,0,12,0,0,7,10,12], si=Math.round(nextNote/bt)%8;
+      noteAt(nextNote,55*Math.pow(2,stepArr[si]/12),0.34,'sawtooth',0.55);
+      nextNote+=bt;
+    } else if(RIG.pat==='chord'){
+      [110,130.8,164.8,246.9].forEach(function(f,i2){ noteAt(nextNote,f*(1+(i2-1.5)*0.0011),1.9,'sawtooth',0.16); });
+      nextNote+=2.0;
+    } else nextNote+=0.5;
+  }
+}
+function droneOn(){
+  if(droneNodes) return;
+  var o=AC.createOscillator(),o2=AC.createOscillator(),g=AC.createGain();
+  o.type='sawtooth'; o.frequency.value=110; o2.type='sine'; o2.frequency.value=55;
+  g.gain.value=0.0001; o.connect(g); o2.connect(g); g.connect(inBus);
+  o.start(); o2.start(); g.gain.exponentialRampToValueAtTime(0.4,AC.currentTime+0.15);
+  droneNodes={o:o,o2:o2,g:g};
+}
+function droneOff(){
+  if(!droneNodes) return;
+  var d=droneNodes; droneNodes=null;
+  d.g.gain.exponentialRampToValueAtTime(0.0001,AC.currentTime+0.12);
+  setTimeout(function(){ d.o.stop(); d.o2.stop(); },250);
+}
+function setPlaying(on){
+  RIG.playing=on;
+  var b=document.getElementById('rg-play');
+  b.classList.toggle('on',on); b.textContent=on?'Stop':'Play';
+  if(on){ audioInit().then(function(){ AC.resume(); nextNote=AC.currentTime+0.06;
+    if(RIG.pat==='drone')droneOn();
+    schedT=setInterval(schedule,80); rafKick(); }); }
+  else{ clearInterval(schedT); droneOff(); }
+}
+
+/* ═══════════ device render (real devHTML shape) ═══════════ */
+function frontKnobs(){
+  var sig=DST_SIG[famOf(DEV.type)];
+  return [{l:'Drive',v:DEV.drive,k:'drive'},{l:sig,v:DEV.sig,k:'sig'},{l:'Tone',v:DEV.tone,k:'tone'},{l:'Mix',v:DEV.mix,k:'mix'}];
+}
+function devHTML(){
+  var pills=[{t:'Auto',on:DEV.pill1},{t:DST_PILL[famOf(DEV.type)],on:DEV.pill2}].map(function(p){
+    return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'" data-pill="'+p.t+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+  var route=DEV.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+['A','B','C','D','S','N'][i]+'</span></span>';}).join('');
+  var knobs=frontKnobs().map(function(k){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+k.k+'">'+knobSVG(k.v)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+  var topts=DST_TYPES.map(function(t){return '<option'+(t===DEV.type?' selected':'')+'>'+t+'</option>';}).join('');
+  return '<div class="fxr-dev">'
+    +'<div class="fxr-head">'
+      +'<span class="fxr-grip">⋮⋮</span><span class="fxr-name">Distortion</span>'
+      +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+DEV.type+'<span class="fxr-car">▾</span></span>'
+      +DST_TYPES.map(function(t){return '<span class="fxr-tg">'+t+'<span class="fxr-car">▾</span></span>';}).join('')
+      +'</span><select class="fxr-type-native">'+topts+'</select></span>'
+      +'<span class="fxr-preset"><span class="fxr-star">✦</span><span class="fxr-pname">Grit</span><span class="fxr-car">▾</span></span>'
+      +'<span class="fxr-spacer"></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap">'+IC_PLUS+'</span><span class="fxr-pwr'+(DEV.on?'':' off')+'"></span><span class="fxr-x">'+IC_X+'</span></span>'
+    +'</div>'
+    +'<div class="fxr-core">'+coreSVG()+'<span class="fxr-edit'+(ED.open&&isShaperFam(DEV.type)?' act':'')+'" title="Edit curve">'+IC_EDIT+'</span></div>'
+    +'<div class="fxr-ctrls">'
+      +'<div class="fxr-knobs">'+knobs+'</div>'
+      +'<div class="fxr-divider"></div>'
+      +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
+    +'</div></div>';
+}
+/* the §5.8 core — the LIVE transfer curve on the device face, occupancy-lit */
+function coreEvalF(x){
+  if(LAST_BAKE){ var bk=LAST_BAKE, s=(x*0.5+0.5)*K, k=Math.max(0,Math.min(K-1,s|0)), d=s-k;
+    var m=(bk.useB&&famOf(DEV.type)==='SHAPER'&&DEV.type!=='Table')?DEV.sig/100:0;
+    var ya=bk.a[k]+(bk.a[k+1]-bk.a[k])*d, yb=bk.b[k]+(bk.b[k+1]-bk.b[k])*d;
+    return (1-m)*ya+m*yb; }
+  var f=modeCurve(DEV.type); return f?f(x):x;
+}
+function coreSVG(){
+  var d='',occ='',i,N=64;
+  function cx(x){ return 14+(x+1)*0.5*(212-14); } function cy(y){ return 66-(y+1)*0.5*(66-10); }
+  var prev=null;
+  for(i=0;i<=N;i++){ var x=i/N*2-1, y=Math.max(-1.15,Math.min(1.15,coreEvalF(x)));
+    d+=(i?'L':'M')+cx(x).toFixed(1)+' '+cy(y).toFixed(1)+' '; }
+  for(i=0;i<48;i++){ var x0=i/48*2-1, x1=(i+1)/48*2-1;
+    occ+='<line class="co" data-b="'+i+'" x1="'+cx(x0).toFixed(1)+'" y1="'+cy(coreEvalF(x0)).toFixed(1)+'" x2="'+cx(x1).toFixed(1)+'" y2="'+cy(coreEvalF(x1)).toFixed(1)+'" stroke="var(--purple-400)" stroke-width="3.4" stroke-linecap="round" opacity="0"/>'; }
+  return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+   +'<line x1="14" y1="66" x2="212" y2="66" stroke="var(--border)" stroke-width="1"/>'
+   +'<line x1="14" y1="66" x2="14" y2="8" stroke="var(--border)" stroke-width="1"/>'
+   +'<g stroke="var(--border)" stroke-width="1"><line x1="63" y1="66" x2="63" y2="62"/><line x1="112" y1="66" x2="112" y2="62"/><line x1="161" y1="66" x2="161" y2="62"/><line x1="14" y1="49" x2="18" y2="49"/><line x1="14" y1="32" x2="18" y2="32"/><line x1="14" y1="15" x2="18" y2="15"/></g>'
+   +'<line x1="'+cx(-1)+'" y1="'+cy(-1)+'" x2="'+cx(1)+'" y2="'+cy(1)+'" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="2 3"/>'
+   +'<g class="core-occ">'+occ+'</g>'
+   +'<path class="core-curve" d="'+d+'" fill="none" stroke="currentColor" stroke-width="1.6"/></svg>';
+}
+function paintCore(){
+  var host=document.querySelector('#dev0 .fxr-core');
+  if(!host) return;
+  var ed=host.querySelector('.fxr-edit');
+  host.innerHTML=coreSVG()+(ed?ed.outerHTML:'');
+}
+
+/* ═══════════ editor render ═══════════ */
+var FW=456, FT=10, FB=210;
+function fx(x01){ return x01*FW; }
+function fy(y01){ return FB-(FB-FT)*y01; }
+function pathD(pts){
+  var d='M'+fx(pts[0][0]).toFixed(1)+' '+fy(pts[0][1]).toFixed(1)+' ',i;
+  for(i=0;i<pts.length-1;i++){ var a=pts[i],b=pts[i+1],x0=fx(a[0]),x1=fx(b[0]),cc=a[2]||0;
+    if(b[0]-a[0]<=1e-6||Math.abs(cc)<1e-4){ d+='L'+x1.toFixed(1)+' '+fy(b[1]).toFixed(1)+' '; continue; }
+    var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
+    for(var k2=1;k2<=n;k2++){ var t=k2/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+fy(a[1]+(b[1]-a[1])*shBias(t,cc)).toFixed(1)+' '; } }
+  return d;
+}
+function gridG(){
+  var g='',i;
+  for(i=1;i<8;i++){ var gx=fx(i/8).toFixed(1); g+='<line'+(i===4?' class="maj"':'')+' x1="'+gx+'" y1="'+FT+'" x2="'+gx+'" y2="'+FB+'"/>'; }
+  for(i=0;i<=8;i++){ var gy=fy(i/8).toFixed(1); g+='<line'+(i===4?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+FW+'" y2="'+gy+'"/>'; }
+  return '<g class="sh-grid">'+g+'</g>';
+}
+function occG(pts){
+  var s='',i;
+  for(i=0;i<95;i++){ var x0=(i/95),x1=((i+1)/95);
+    var y0=tcEval(pts,x0),y1=tcEval(pts,x1);
+    s+='<line class="eo" data-b="'+i+'" x1="'+fx(x0).toFixed(1)+'" y1="'+fy(y0).toFixed(1)+'" x2="'+fx(x1).toFixed(1)+'" y2="'+fy(y1).toFixed(1)+'" opacity="0"/>'; }
+  return '<g class="de-occ">'+s+'</g>';
+}
+function curveSVG(){
+  var type=DEV.type, sym=(type==='Shaper'||ED.sym), pts=edPts();
+  var full=sym?symmetrize(pts):pts;
+  /* odd mode: the RIGHT half is yours (bright); the left is GENERATED ink (dim) — §6.9 */
+  var d=pathD(sym?full.filter(function(p){return p[0]>=0.4999;}):full);
+  var fillD='M0 '+fy(full[0][1]).toFixed(1)+' '+pathD(full).replace(/^M/,'L')+'L'+FW+' '+fy(0.5)+' L0 '+fy(0.5)+' Z';
+  var base=ED.basePts?'<path class="de-base" d="'+pathD(ED.basePts)+'"/>':'';
+  var mirror='';
+  if(sym) mirror='<path class="de-mirror" d="'+pathD(full.filter(function(p){return p[0]<=0.5001;}))+'"/>';
+  var nd='',hd='',cdm='';
+  var vis=sym?pts.filter(function(p){return p[0]>=0.5-1e-6;}):pts;
+  vis.forEach(function(q){
+    var idx=pts.indexOf(q), cx2=fx(q[0]).toFixed(1), cy2=fy(q[1]).toFixed(1);
+    var isAnchor=(Math.abs(q[0]-0.5)<1e-6&&!ED.unpinned&&idx!==0&&idx!==pts.length-1);
+    nd+='<circle class="sh-nd'+(ED.sel===idx?' sel':'')+(isAnchor?' anchor':'')+'" data-i="'+idx+'" cx="'+cx2+'" cy="'+cy2+'" r="2.6"/>';
+    if(isAnchor) nd+='<circle class="de-anchor-ring" cx="'+cx2+'" cy="'+cy2+'" r="5.2"/>';
+    hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx2+'" cy="'+cy2+'" r="12"/>';
+  });
+  vis.forEach(function(q){
+    var idx=pts.indexOf(q); if(idx>=pts.length-1)return;
+    var r=pts[idx+1]; if(!r||r[0]-q[0]<=0.02)return;
+    if(sym&&(q[0]+r[0])/2<0.5)return;
+    var mx=fx((q[0]+r[0])/2).toFixed(1), my=fy(tcEval(pts,(q[0]+r[0])/2)).toFixed(1);
+    cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>';
+  });
+  return '<svg viewBox="0 0 '+FW+' 220">'+gridG()
+   +'<line class="de-unity" x1="0" y1="'+fy(0)+'" x2="'+FW+'" y2="'+fy(1)+'"/>'
+   +occG(full)
+   +'<path class="mv-fill" d="'+fillD+'"/>'+base+mirror
+   +'<path class="mv-stroke" d="'+d+'"/>'+nd+cdm+hd+'</svg>';
+}
+function harmSVG(){
+  var s='',i,bw=FW/16;
+  var ghost='',bk=LAST_BAKE;
+  if(bk){ for(i=0;i<=64;i++){ var x=i/64, k=Math.round(x*K); ghost+=(i?'L':'M')+fx(x).toFixed(1)+' '+fy((bk.a[k]+1)*0.5).toFixed(1)+' '; } }
+  for(i=0;i<16;i++){
+    var v=ED.bars[i], cx2=(i+0.5)*bw, y0=fy(0.5), y1=fy(0.5+v*0.48);
+    s+='<rect class="de-bar'+(v<0?' neg':'')+'" data-i="'+i+'" x="'+(cx2-bw*0.28).toFixed(1)+'" y="'+Math.min(y0,y1).toFixed(1)+'" width="'+(bw*0.56).toFixed(1)+'" height="'+Math.max(1.5,Math.abs(y1-y0)).toFixed(1)+'" rx="1"/>'
+     +'<rect class="de-bar-hit" data-i="'+i+'" x="'+(cx2-bw*0.5).toFixed(1)+'" y="'+FT+'" width="'+bw.toFixed(1)+'" height="'+(FB-FT)+'"/>'
+     +'<text class="de-bar-num" x="'+cx2.toFixed(1)+'" y="'+(FB+7)+'">'+(i+1)+'</text>';
+  }
+  return '<svg viewBox="0 0 '+FW+' 220">'+gridG()
+   +'<path class="de-harm-ghost" d="'+ghost+'"/>'+s+'</svg>';
+}
+function tableSVG(){
+  var mor=DEV.sig/100, gen=ED.tblSrc==='gen'?tableFrame:OSC_SRC[ED.tblSrc];
+  function fpath(m,cls){ var d2='',i2; for(i2=0;i2<=96;i2++){ var ph=i2/96, y=Math.max(-1.1,Math.min(1.1,gen(m,ph)));
+    d2+=(i2?'L':'M')+fx(ph).toFixed(1)+' '+fy((y+1)*0.5).toFixed(1)+' '; }
+    return '<path class="'+cls+'" d="'+d2+'"/>'; }
+  var pts=[[0,0.5,0],[1,0.5,0]];
+  return '<svg viewBox="0 0 '+FW+' 220">'+gridG()
+   +occG(ptsFromFrame(gen,mor))
+   +fpath(Math.max(0,mor-0.10),'de-frame-ghost')+fpath(Math.min(1,mor+0.10),'de-frame-ghost')
+   +fpath(mor,'mv-stroke')+'</svg>';
+}
+function ptsFromFrame(gen,m){ var out=[],i; for(i=0;i<=95;i++){ out.push([i/95,(Math.max(-1,Math.min(1,gen(m,i/95)))+1)*0.5,0]); } return out; }
+function footHTML(){
+  var type=DEV.type;
+  if(type==='Harmonics')
+    return '<span class="de-ro">Draw the spectrum — bars are harmonics 1–16, drag down for phase-flip</span>'
+      +'<span class="mv-c" data-act="clear">Clear</span>'
+      +'<span style="flex:1"></span><span class="de-ro" id="de-ro"></span>';
+  if(type==='Table')
+    return '<div class="de-srcpills">'
+      +['gen','a','b','c','d'].map(function(s){ return '<span class="p'+(ED.tblSrc===s?' act':'')+'" data-src="'+s+'">'+(s==='gen'?'Gen':'Osc '+s.toUpperCase())+'</span>'; }).join('')
+      +'</div><span style="flex:1"></span><span class="de-ro" id="de-ro">frame '+(1+Math.round(DEV.sig/100*63))+' / 64 — Morph sweeps</span>';
+  return '<div class="mv-tabs"><span class="t'+(ED.bank===0?' act':'')+'" data-bank="0">A</span><span class="t'+(ED.bank===1?' act':'')+'" data-bank="1">B</span></div>'
+    +'<span class="de-morphrail" title="Morph A→B"><i style="left:'+DEV.sig+'%"></i></span>'
+    +'<span class="mv-c" data-act="shapes">Shapes <span class="ar">▾</span></span>'
+    +'<span style="flex:1"></span><span class="de-ro" id="de-ro"></span>';
+}
+function edHTML(){
+  var type=DEV.type, cls=type==='Harmonics'?' harm':(type==='Table'?' table':'');
+  var field=type==='Harmonics'?harmSVG():(type==='Table'?tableSVG():curveSVG());
+  return '<div class="dst-ed'+cls+'" style="'+(ED.open?'':'display:none')+'">'
+    +'<div class="de-head"><span class="de-title">'+type+' — Curve</span>'
+    +(ED.srcName?'<span class="de-src"><span class="de-star">✦</span><span class="de-sname">'+ED.srcName+'</span></span>':'')
+    +'<span class="de-x" data-act="close">'+IC_X+'</span></div>'
+    +'<div class="de-field">'+field+'</div>'
+    +'<div class="de-foot">'+footHTML()+'</div></div>';
+}
+function roText(){
+  var type=DEV.type, pts=edPts();
+  if(type==='Harmonics') return 'beyond '+RIG.beyond;
+  var sym=(type==='Shaper')?'odd':(ED.sym?'odd':'free');
+  return sym+' · beyond '+RIG.beyond+' · '+pts.length+' pts';
+}
+function renderEd(){
+  var host=document.getElementById('ed0');
+  host.innerHTML=edHTML();
+  var ro=document.getElementById('de-ro');
+  if(ro&&DEV.type!=='Table') ro.textContent=roText();
+  bindEditor();
+}
+function renderDev(){
+  document.getElementById('dev0').innerHTML=devHTML();
+}
+function renderAll(){ renderDev(); renderEd(); pushCurves(); }
+
+/* ═══════════ occupancy paint (rAF — idle dim, playing bright: the audio-reactive law) ═══════════ */
+var rafOn=false;
+function rafKick(){ if(rafOn)return; rafOn=true; requestAnimationFrame(occPaint); }
+function occPaint(){
+  if(!RIG.playing&&lastRms<0.001){ rafOn=false;
+    document.querySelectorAll('.de-occ .eo, .core-occ .co').forEach(function(el){ el.setAttribute('opacity','0'); });
+    var m=document.getElementById('rg-m'); if(m)m.style.height='0%';
+    return; }
+  var eo=document.querySelectorAll('.de-occ .eo');
+  eo.forEach(function(el){ var b=+el.getAttribute('data-b');
+    el.setAttribute('opacity',Math.min(0.85,occData[Math.min(95,b)]*0.10).toFixed(3)); });
+  var co=document.querySelectorAll('.core-occ .co');
+  co.forEach(function(el){ var b=+el.getAttribute('data-b');
+    var v=(occData[Math.min(95,b*2)]+occData[Math.min(95,b*2+1)])*0.5;
+    el.setAttribute('opacity',Math.min(0.8,v*0.10).toFixed(3)); });
+  var m2=document.getElementById('rg-m'); if(m2)m2.style.height=Math.min(100,lastRms*260)+'%';
+  requestAnimationFrame(occPaint);
+}
+
+/* ═══════════ Send To Shaper — §6.6, the three real steps ═══════════ */
+function sendToShaper(){
+  var f=modeCurve(DEV.type); if(!f)return;
+  var t=DEV.drive/100, drv=Math.pow(10,(36*Math.pow(t,0.8))/20)*0.25;   /* curve at its CURRENT drive */
+  var raw=[],i,N=512,pk=1e-6;
+  for(i=0;i<=N;i++){ var x=i/N*2-1, y=f(x*Math.max(1,drv)); pk=Math.max(pk,Math.abs(y)); raw.push(y); }
+  var pts01=raw.map(function(y,i2){ return [i2/N, (y/pk+1)*0.5]; });
+  var simp=rdpSimplify(pts01,0.015);
+  if(simp.length>32) simp=rdpSimplify(pts01,0.03);
+  if(simp.length>32) simp=rdpSimplify(pts01,0.055);
+  if(simp.length>32) simp=simp.filter(function(_,i3){ return i3===0||i3===simp.length-1||i3%2===0; }).slice(0,32);
+  var pts=simp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; });
+  fitTension(pts,function(x01){ var y=f((x01*2-1)*Math.max(1,drv)); return (y/pk+1)*0.5; });
+  var name=DEV.type;
+  ED.basePts=pts.map(function(p){return p.slice();});
+  ED.ptsA=pts; ED.bank=0; ED.srcName=name; ED.sym=false; ED.open=true;
+  DEV.type='Shaper Asym'; DEV.sig=0;
+  renderAll();
+}
+
+/* ═══════════ seeds + context menu (fb258 geometry) ═══════════ */
+var SEEDS={
+  'Unity':      [[0,0,0],[0.5,0.5,0],[1,1,0]],
+  'Gentle S':   [[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],
+  'Razor Stair':[[0,0.06,0],[0.24,0.06,0],[0.245,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.755,0.70,0],[0.76,0.94,0],[1,0.94,0]],
+  'Fold Sine':  (function(){ var p=[],i; for(i=0;i<=16;i++){ var x=i/16; p.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*9.42477-4.71239)).toFixed(4),0]); } return p; })()
+};
+var LFO_SHAPES={   /* stand-ins for shapes[n].pts — the REAL LFO shapes share this exact model */
+  'LFO 1 — Ramp':[[0,0.02,0],[0.5,0.5,0],[1,0.98,0]],
+  'LFO 2 — Steps':[[0,0.14,0],[0.32,0.14,0],[0.33,0.5,0],[0.5,0.5,0],[0.66,0.5,0],[0.67,0.86,0],[1,0.86,0]],
+  'LFO 3 — Swell':[[0,0.30,0],[0.5,0.5,-0.8],[1,0.92,0.8]]
+};
+function seedTo(pts,nm){
+  var g=pts.map(function(p){return p.slice();});
+  /* the centre anchor (§6.8-3): guarantee a point at x=0.5 so f(0)=0 stays pinned */
+  var has=g.some(function(p){return Math.abs(p[0]-0.5)<1e-4;});
+  if(!has&&!ED.unpinned){ g.push([0.5,tcEval(g,0.5),0]); g.sort(function(a,b){return a[0]-b[0];}); }
+  if(ED.bank===0) ED.ptsA=g; else ED.ptsB=g;
+  ED.srcName=nm||''; ED.sel=-1;
+  renderAll();
+}
+function showMenu(x,y){
+  var c=document.getElementById('ctx'), rows='';
+  rows+='<div class="h">Seeds</div>';
+  Object.keys(SEEDS).forEach(function(k){ rows+='<div class="it" data-seed="'+k+'">'+k+'</div>'; });
+  rows+='<div class="h">From Oscillator</div>';
+  ['A','B','C','D'].forEach(function(o){ rows+='<div class="it" data-osc="'+o.toLowerCase()+'">Oscillator '+o+'</div>'; });
+  rows+='<div class="h">From LFO</div>';
+  Object.keys(LFO_SHAPES).forEach(function(k){ rows+='<div class="it" data-lfo="'+k+'">'+k+'</div>'; });
+  rows+='<div class="h">Curve</div>';
+  rows+='<div class="it'+(ED.unpinned?' on':'')+'" data-act="unpin">Unpin centre</div>';
+  rows+='<div class="it" data-act="clearcv">Clear to unity</div>';
+  c.innerHTML=rows;
+  c.style.display='block';
+  var W=c.offsetWidth,H=c.offsetHeight;
+  c.style.left=Math.min(window.innerWidth-W-8,x)+'px';
+  c.style.top=Math.min(window.innerHeight-H-8,y)+'px';
+}
+function hideMenu(){ document.getElementById('ctx').style.display='none'; }
+document.addEventListener('pointerdown',function(e){ if(!e.target.closest('.ctx')) hideMenu(); },true);
+document.getElementById('ctx').addEventListener('click',function(e){
+  var it=e.target.closest('.it'); if(!it)return;
+  if(it.dataset.seed){ seedTo(SEEDS[it.dataset.seed],it.dataset.seed==='Unity'?'':it.dataset.seed); }
+  else if(it.dataset.osc){ oscToCurve(it.dataset.osc); }
+  else if(it.dataset.lfo){ seedTo(LFO_SHAPES[it.dataset.lfo],it.dataset.lfo.split(' — ')[0]); }
+  else if(it.dataset.act==='unpin'){ ED.unpinned=!ED.unpinned; renderEd(); }
+  else if(it.dataset.act==='clearcv'){ ED.basePts=null; seedTo(SEEDS['Unity'],''); }
+  hideMenu();
+});
+function oscToCurve(o){   /* fb248 pipeline — in-plugin this reads getOscLfoWave(osc) */
+  var gen=OSC_SRC[o], raw=[],i,N=256;
+  for(i=0;i<=N;i++){ var ph=i/N, y=Math.max(-1,Math.min(1,gen(0.5,ph))); raw.push([ph,(y+1)*0.5]); }
+  var simp=rdpSimplify(raw,0.015);
+  if(simp.length>32) simp=rdpSimplify(raw,0.03);
+  if(simp.length>32) simp=rdpSimplify(raw,0.055);
+  var pts=simp.slice(0,32).map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; });
+  ED.basePts=null;
+  seedTo(pts,'Osc '+o.toUpperCase());
+}
+
+/* ═══════════ editor interactions ═══════════ */
+function fieldPos(sc,ev){
+  var r=sc.getBoundingClientRect();
+  var x=(ev.clientX-r.left)/r.width, yPix=(ev.clientY-r.top)/r.height*220;
+  return { x:Math.max(0,Math.min(1,x)), y:Math.max(0,Math.min(1,(FB-yPix)/(FB-FT))) };
+}
+function bindEditor(){
+  var ed=document.querySelector('.dst-ed'); if(!ed)return;
+  var field=ed.querySelector('.de-field'); if(!field)return;
+  field.addEventListener('contextmenu',function(e){ e.preventDefault();
+    var bar=e.target.closest('.de-bar-hit, .de-bar');
+    if(bar){ ED.bars[+bar.dataset.i]=0; renderEd(); pushCurves(); return; }
+    if(DEV.type==='Harmonics'||DEV.type==='Table')return;
+    showMenu(e.clientX,e.clientY); });
+  field.addEventListener('dblclick',function(e){
+    if(DEV.type==='Harmonics'||DEV.type==='Table')return;
+    var hit=e.target.closest('.sh-hit:not(.cdh)');
+    var pts=edPts();
+    if(hit){ var i=+hit.dataset.i;
+      if(i===0||i===pts.length-1)return;
+      if(Math.abs(pts[i][0]-0.5)<1e-6&&!ED.unpinned)return;
+      pts.splice(i,1); ED.sel=-1; renderEd(); pushCurves(); return; }
+    if(pts.length>=32)return;   /* §6.8 — 32-pt cap: more points = aliasing generators */
+    var q=fieldPos(field,e);
+    var sym=(DEV.type==='Shaper'||ED.sym); if(sym&&q.x<0.5)return;
+    pts.push([q.x,q.y,0]); pts.sort(function(a,b){return a[0]-b[0];});
+    renderEd(); pushCurves(); });
+  field.addEventListener('pointerdown',function(e){
+    if(e.button===2)return;
+    var pts=edPts(), sym=(DEV.type==='Shaper'||ED.sym);
+    var bar=e.target.closest('.de-bar-hit, .de-bar');
+    if(bar){ e.preventDefault();
+      var paint=function(ev){ var q=fieldPos(field,ev);
+        var bi=Math.max(0,Math.min(15,Math.floor(q.x*16)));
+        ED.bars[bi]=Math.max(-1,Math.min(1,(q.y-0.5)/0.48));
+        renderEdLight(); pushCurves(); };
+      paint(e);
+      var up=function(){ window.removeEventListener('pointermove',paint); window.removeEventListener('pointerup',up); renderEd(); };
+      window.addEventListener('pointermove',paint); window.addEventListener('pointerup',up); return; }
+    var cd=e.target.closest('.sh-hit.cdh');
+    if(cd){ e.preventDefault();
+      var i2=+cd.dataset.i, a=pts[i2], b=pts[i2+1], c0=a[2]||0, y0=e.clientY;
+      var mvT=function(ev){ var sgn=(b[1]>=a[1])?1:-1;
+        a[2]=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*sgn));
+        renderEdLight(); pushCurves(); };
+      var upT=function(){ window.removeEventListener('pointermove',mvT); window.removeEventListener('pointerup',upT); renderEd(); };
+      window.addEventListener('pointermove',mvT); window.addEventListener('pointerup',upT); return; }
+    var hit=e.target.closest('.sh-hit');
+    if(hit){ e.preventDefault();
+      var i3=+hit.dataset.i; ED.sel=i3;
+      var isEnd=(i3===0||i3===pts.length-1);
+      var isAnchor=(Math.abs(pts[i3][0]-0.5)<1e-6&&!ED.unpinned);
+      var mvP=function(ev){ var q=fieldPos(field,ev), p=pts[i3];
+        if(!isEnd&&!isAnchor){
+          var lo=(i3>0?pts[i3-1][0]:0)+0.004, hi=(i3<pts.length-1?pts[i3+1][0]:1)-0.004;
+          if(sym) lo=Math.max(lo,0.5);
+          p[0]=Math.max(lo,Math.min(hi,q.x)); }
+        if(!(isAnchor)) p[1]=q.y;
+        else if(ED.unpinned) p[1]=q.y;
+        renderEdLight(); pushCurves(); };
+      var upP=function(){ window.removeEventListener('pointermove',mvP); window.removeEventListener('pointerup',upP); renderEd(); };
+      window.addEventListener('pointermove',mvP); window.addEventListener('pointerup',upP); return; }
+  });
+  ed.addEventListener('click',function(e){
+    var t=e.target.closest('[data-bank],[data-act],[data-src]'); if(!t)return;
+    if(t.dataset.bank!==undefined){ ED.bank=+t.dataset.bank; ED.sel=-1; renderEd(); }
+    else if(t.dataset.src){ ED.tblSrc=t.dataset.src; renderEd(); pushCurves(); }
+    else if(t.dataset.act==='shapes'){ var r=t.getBoundingClientRect(); showMenu(r.left,r.bottom+4); }
+    else if(t.dataset.act==='clear'){ for(var i=0;i<16;i++)ED.bars[i]=0; ED.bars[0]=1; renderEd(); pushCurves(); }
+    else if(t.dataset.act==='close'){ ED.open=false; renderAll(); }
+  });
+}
+function renderEdLight(){   /* drag-time: redraw the field only (no foot/bind churn) */
+  var fieldHost=document.querySelector('.dst-ed .de-field'); if(!fieldHost)return;
+  var type=DEV.type;
+  fieldHost.innerHTML=type==='Harmonics'?harmSVG():(type==='Table'?tableSVG():curveSVG());
+}
+
+/* ═══════════ device interactions ═══════════ */
+var panel=document.getElementById('syn-panel');
+panel.addEventListener('change',function(e){
+  var t=e.target;
+  if(t.classList.contains('fxr-type-native')){
+    DEV.type=t.value;
+    if(DEV.type==='Shaper'){ ED.sym=true; DEV.pill2=true; }
+    if(!isShaperFam(DEV.type)) ED.open=false;   /* the editor belongs to the SHAPER family; ↗ re-opens */
+    ED.sel=-1;
+    renderAll();
+  }
+});
+panel.addEventListener('click',function(e){
+  if(e.target.closest('.fxr-edit')){
+    if(isShaperFam(DEV.type)){ ED.open=!ED.open; renderAll(); }
+    else sendToShaper();
+    return; }
+  var pw=e.target.closest('.fxr-pwr');
+  if(pw){ DEV.on=!DEV.on; pw.classList.toggle('off',!DEV.on); pushParams(); return; }
+  var pill=e.target.closest('.fxr-pill');
+  if(pill){ var nm=pill.dataset.pill;
+    if(nm==='Auto'){ DEV.pill1=!DEV.pill1; }
+    else { DEV.pill2=!DEV.pill2;
+      if(famOf(DEV.type)==='SHAPER'&&DEV.type!=='Shaper'){ ED.sym=DEV.pill2; renderEd(); pushCurves(); } }
+    pill.classList.toggle('fxr-on'); return; }
+  var r=e.target.closest('.fxr-r');
+  if(r){ var i=+r.dataset.r; DEV.route[i]=DEV.route[i]?0:1; r.classList.toggle('fxr-on'); return; }
+});
+panel.addEventListener('pointerdown',function(e){
+  var dial=e.target.closest('.fxr-dial'); if(!dial)return; e.preventDefault();
+  var key=dial.dataset.k, startY=e.clientY, startV=DEV[key];
+  function mv(ev){ var v=Math.max(0,Math.min(100,startV+(startY-ev.clientY)*0.6));
+    DEV[key]=v; dial.innerHTML=knobSVG(v);
+    if(key==='sig'){ var rail=document.querySelector('.de-morphrail i'); if(rail)rail.style.left=v+'%';
+      if(DEV.type==='Table'||DEV.type==='Harmonics'){ renderEdLight(); var ro=document.getElementById('de-ro'); if(ro&&DEV.type==='Table')ro.textContent='frame '+(1+Math.round(v/100*63))+' / 64 — Morph sweeps'; pushCurves(); }
+      pushParams(); }
+    else pushParams();
+    if(key==='drive') paintCore();
+  }
+  function up(){ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); }
+  window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+});
+
+/* ═══════════ rig wiring ═══════════ */
+document.getElementById('rg-play').addEventListener('click',function(){ setPlaying(!RIG.playing); });
+document.querySelectorAll('.rig .pat').forEach(function(b){
+  b.addEventListener('click',function(){
+    document.querySelectorAll('.rig .pat').forEach(function(x){x.classList.remove('on');});
+    b.classList.add('on'); var was=RIG.pat; RIG.pat=b.dataset.pat;
+    if(AC){ if(was==='drone')droneOff(); if(RIG.playing&&RIG.pat==='drone')droneOn(); }
+  });
+});
+document.getElementById('rg-bey').addEventListener('input',function(){
+  RIG.beyond=+this.value; document.getElementById('rg-beyv').textContent=this.value;
+  var ro=document.getElementById('de-ro'); if(ro&&DEV.type!=='Table'&&DEV.type!=='Harmonics')ro.textContent=roText();
+  pushParams(); });
+document.getElementById('rg-smo').addEventListener('input',function(){
+  RIG.smooth=+this.value; document.getElementById('rg-smov').textContent=this.value; pushCurves(); });
+document.getElementById('rg-vol').addEventListener('input',function(){
+  RIG.vol=+this.value/100; if(master)master.gain.value=RIG.vol*0.5; });
+
+/* ═══════════ boot + screenshot states ═══════════ */
+(function(){
+  var h=(location.hash||'').replace('#','');
+  if(h==='shaper'){ DEV.type='Shaper'; ED.sym=true; DEV.pill2=true; }
+  else if(h==='harm'){ DEV.type='Harmonics'; ED.bars[4]=0.8; ED.bars[7]=-0.5; ED.bars[10]=0.35; }
+  else if(h==='table'){ DEV.type='Table'; DEV.sig=38; }
+  else if(h==='tube'){ DEV.type='Tube'; ED.open=false; }
+  renderAll();
+  if(h==='send'){ DEV.type='Tube'; renderAll(); sendToShaper(); }
+  if(h==='menu'){ setTimeout(function(){ showMenu(560,290); },80); }
+})();
+</script>
+</body>
+</html>

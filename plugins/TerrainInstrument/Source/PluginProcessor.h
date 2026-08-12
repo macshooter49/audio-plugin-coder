@@ -679,6 +679,9 @@ public:
     juce::String      getSynthDynEnvsJson() const;
     void              setSynthLfoShapes (const juce::String& json);   // LFO ARC L1 — the shaper blob
     juce::String      getSynthLfoShapesJson() const;
+    void              setDistortionCurves (const juce::String& json);  // fb328 — curve-card blob (banks + bars)
+    juce::String      getDistortionCurvesJson() const;                 // fb328 — card boot + cross-window pull
+    juce::String      getDistortionCurveVizJson();                     // fb328 — live core feed (curve+occ+bloom)
 
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
@@ -1049,6 +1052,8 @@ public:
     // a pointer wired once at prepare — so table edits reach all consumers at ZERO per-block cost.
     juce::CriticalSection         lfoShapeLock_;
     juce::String                  lfoShapesJson_;
+    juce::CriticalSection         dstCurveLock_;    // fb328 — curve-card blob (source of truth for popout)
+    juce::String                  dstCurvesJson_;
     float                         lfoTableShared_[wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     float                         lfoTableAudio_ [wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     // fb238 — PER-POINT MODULATION (Serum 'Modulating LFO Points'): a drawn point may carry

@@ -955,6 +955,23 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // so the tap envelope / scan line breathe with the echoes.
                 complete (juce::var ((double) audioProcessor.getDelayBloom()));
             })
+            .withNativeFunction("setDistortionCurves", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0) audioProcessor.setDistortionCurves (args[0].toString());   // fb328 — curve card blob
+                complete (juce::var{});
+            })
+            .withNativeFunction("getDistortionCurves", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getDistortionCurvesJson()));   // fb328 — card boot + popped-window pull
+            })
+            .withNativeFunction("getDistortionCurveViz", [this](const juce::Array<juce::var>&,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb328 — the §5.8 live core: every mode's real transfer at the current knobs + occupancy + bloom
+                complete (juce::var (audioProcessor.getDistortionCurveVizJson()));
+            })
             .withNativeFunction("getChopFeed", [this](const juce::Array<juce::var>&,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4581,6 +4598,19 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
                          ? savedW : kBaseW;
         if (getenv ("TERRAIN_ZOOM_KILL") != nullptr) w0 = juce::roundToInt (kBaseW * 0.65);   // fb176 diag: worst case
+        // fb330 — STANDALONE: a size saved in the DAW can be TALLER than this screen once the
+        // wrapper adds its title + options bar — the bottom rack row (Distortion back panel +
+        // core viz) clipped (Max: "cut off at the bottom"). Clamp the BOOT size to the display's
+        // user area; the corner resizer still goes anywhere from there.
+        if (juce::JUCEApplicationBase::isStandaloneApp())
+            if (auto* disp = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+            {
+                const auto ua   = disp->userArea;
+                const int  maxH = ua.getHeight() - 90;                       // window title + options bar
+                const int  maxW = juce::roundToInt ((double) maxH * kBaseW / (double) kBaseH);
+                w0 = juce::jmin (w0, juce::jmax (juce::roundToInt (kBaseW * 0.65),
+                                                 juce::jmin (maxW, ua.getWidth() - 20)));
+            }
         intendedW_ = w0;   // fb103 — the self-heal defends this against host junk
         // Set size AFTER webView is created (setSize triggers resized())
         setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
@@ -4773,6 +4803,25 @@ public:
                                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var (proc.getSynthLfoShapesJson()));   // fb232 — boot pull + the cross-window sync poll
+                })
+                // fb328 — the CURVE card's natives. ⚠️ THE CARD WINDOW HAS ITS OWN NATIVE LIST (this one) —
+                // registering a native only on the main editor's WebView leaves the POPPED card's calls
+                // returning never-settling promises (Max's report: popped card = empty field).
+                .withNativeFunction ("setDistortionCurves", [&proc](const juce::Array<juce::var>& args,
+                                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() > 0) proc.setDistortionCurves (args[0].toString());
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getDistortionCurves", [&proc](const juce::Array<juce::var>&,
+                                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getDistortionCurvesJson()));
+                })
+                .withNativeFunction ("getDistortionCurveViz", [&proc](const juce::Array<juce::var>&,
+                                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getDistortionCurveVizJson()));
                 })
                 .withNativeFunction ("setCardState", [&proc](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -5165,8 +5214,11 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
                                                               std::optional<juce::Point<int>> grabOffset,
                                                               std::optional<juce::Point<int>> mouseScreen)
 {
-    // Whitelist — the id lands in window titles and dock evals; only the 4 FLOW cards exist.
-    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn" && id != "mod" && id != "lfo") return;   // fb149 — "mod" = the pop-out LFO palette · fb231 — "lfo" = the L5 card (the disappear-on-drag was THIS whitelist bouncing it)
+    // Whitelist — the id lands in window titles and dock evals.
+    // ⚠️ fb231's disappear-on-drag bug was THIS whitelist bouncing an unlisted id — every new card
+    // MUST be added here or dragging it out of the plugin silently deletes it (Max's exact report).
+    if (id != "arp" && id != "chop" && id != "gli" && id != "rbn" && id != "mod" && id != "lfo"
+        && id != "crv") return;   // fb149 — "mod" = the pop-out LFO palette · fb231 — "lfo" = the L5 card · fb328 — "crv" = the Distortion curve card
 
     auto& wins = audioProcessor.cardWindows_;
     if (auto it = wins.find (id); it != wins.end() && it->second != nullptr)

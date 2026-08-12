@@ -8,7 +8,7 @@
 /* fb82 — POPPED-CARD BOOT FLAG. A popped-out FLOW extension card is this SAME page
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
-window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */
+window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo|crv)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
    canvas that sizes buffers from clientWidth×dpr re-rasters at TRUE device
@@ -2514,6 +2514,60 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .lfo-ext .card-scope .mv-ctrail{fill:none;stroke:rgba(236,232,242,.72);stroke-width:.85;stroke-linejoin:round;stroke-linecap:round;pointer-events:none;}   /* fb242 */
 .lfo-ext .card-scope .sh-ring{fill:none;stroke:rgba(255,255,255,.06);stroke-width:1;}
 .lfo-ext .card-scope .sh-base{stroke:rgba(255,255,255,.10);stroke-width:1;}
+/* fb328 — THE DISTORTION CURVE CARD (crv). Body-level card: its own copy of the shaper ink (fb230).
+   fb329 — MATCH THE APPROVED MOCKUP EXACTLY (Max): flat bg-hero chassis (no glass gradient), slim
+   normal-case header + ✦ chip, morph rail in the FOOTER beside A/B, one quiet readout line, the
+   field edge-to-edge on the card bg. Only the graph ink stays as-built. `.ti-card.crv-ext` beats
+   the `.ti-card` base by specificity (this block sits ABOVE it in the file — ties would lose). */
+.ti-card.crv-ext{width:480px;border-radius:8px;background:#232340;background-image:none;
+  -webkit-backdrop-filter:none;backdrop-filter:none;border:1px solid rgba(88,88,128,.5);
+  box-shadow:0 24px 60px rgba(0,0,0,.5);}
+.ti-card.crv-ext .h{height:26px;padding:5px 9px 4px;gap:7px;border-bottom:none;}
+.ti-card.crv-ext .h .g,.ti-card.crv-ext .h .dot,.ti-card.crv-ext .h .mix{display:none;}
+.ti-card.crv-ext .h .tt{font-size:11.5px;font-weight:500;letter-spacing:0;text-transform:none;color:#E0DCE8;}
+.ti-card.crv-ext .h .crv-src{display:inline-flex;align-items:center;gap:5px;max-width:110px;height:16px;border:1px solid rgba(88,88,128,.5);border-radius:9px;padding:0 9px;line-height:1;overflow:hidden;font-size:9px;color:#9B93B0;font-weight:300;white-space:nowrap;text-overflow:ellipsis;}
+.ti-card.crv-ext .h .crv-src b{color:var(--purple-400,#B794FF);font-size:8px;font-weight:400;position:relative;top:-1px;}
+.ti-card.crv-ext .h .pop{margin-left:auto;font-size:9px;letter-spacing:1.1px;font-weight:300;text-transform:none;color:rgba(255,255,255,.55);cursor:pointer;transition:color .12s;}
+.ti-card.crv-ext .h .pop:hover{color:#fff;}
+.ti-card.crv-ext .b{padding:0;gap:0;}
+.crv-ext .card-scope{background:transparent;border:none;border-radius:0;margin:1px 11px 0;position:relative;overflow:hidden;cursor:crosshair;}
+.crv-ext .crv-rail{position:relative;width:30px;height:2px;background:rgba(255,255,255,.14);border-radius:1px;cursor:ew-resize;flex:none;}
+.crv-ext .crv-rail i{position:absolute;top:-2px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--purple-400,#B794FF);box-shadow:0 0 4px rgba(183,148,255,.6);pointer-events:none;}
+.crv-ext .crv-foot .qt{font-size:8.5px;color:rgba(255,255,255,.34);letter-spacing:.06em;font-weight:300;white-space:nowrap;cursor:pointer;transition:color .12s;}
+.crv-ext .crv-foot .qt:hover{color:#fff;}
+.crv-ext .card-scope svg{display:block;width:100%;height:auto;aspect-ratio:456/220;}
+.crv-ext .card-scope svg line,.crv-ext .card-scope svg path,.crv-ext .card-scope svg circle{vector-effect:non-scaling-stroke;}
+.crv-ext .card-scope .sh-grid line{stroke:rgba(255,255,255,.065);stroke-width:.6;}
+.crv-ext .card-scope .sh-grid line.maj{stroke:rgba(255,255,255,.14);}
+.crv-ext .card-scope .sh-nd{fill:#ECE8F2;stroke:rgba(183,148,255,.65);stroke-width:.8;pointer-events:none;}
+.crv-ext .card-scope .sh-nd.sel{fill:#8B5CF6;stroke:rgba(255,255,255,.85);}
+.crv-ext .card-scope .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
+.crv-ext .card-scope .sh-hit{fill:transparent;cursor:grab;}
+.crv-ext .card-scope .sh-hit.cdh{cursor:ns-resize;}
+.crv-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
+.crv-ext .card-scope .mv-fill{fill:rgba(224,216,245,0.07);}
+.crv-ext .card-scope .crv-unity{stroke:#E0DCE8;stroke-width:1;opacity:.14;stroke-dasharray:2 3;}
+.crv-ext .card-scope .crv-occ line{stroke:var(--purple-400,#B794FF);stroke-width:5;stroke-linecap:round;}
+.crv-ext .card-scope .crv-mir{fill:none;stroke:rgba(255,255,255,.30);stroke-width:1.1;}
+/* fb332 — .crv-ink carries NO style: the editor path wears .mv-stroke (ONE line = the mockup). .crv-ink survives only as the live-tick's querySelector hook. */
+.crv-ext .card-scope .crv-anc{fill:none;stroke:rgba(255,255,255,.4);stroke-width:.8;stroke-dasharray:1.6 1.8;pointer-events:none;}
+.crv-ext .card-scope .crv-bar{fill:rgba(236,232,242,.82);}
+.crv-ext .card-scope .crv-bar.neg{fill:rgba(183,148,255,.72);}
+.crv-ext .card-scope .crv-barh{fill:transparent;cursor:ns-resize;}
+.crv-ext .card-scope .crv-num{font-size:7.5px;fill:rgba(255,255,255,.34);text-anchor:middle;font-weight:300;}
+.crv-ext .card-scope .crv-hg{fill:none;stroke:rgba(255,255,255,.30);stroke-width:1;}
+.crv-ext .crv-foot{position:relative;display:flex;align-items:center;gap:11px;padding:8px 11px 8px;margin-top:2px;}
+.crv-ext .crv-foot::before{content:'';position:absolute;left:0;right:0;top:0;height:1px;background:rgba(255,255,255,.075);}
+.crv-ext .mv-tabs{display:flex;align-items:center;gap:5px;}
+.crv-ext .mv-tabs .t{position:relative;width:13px;flex:none;text-align:center;font-size:10px;font-weight:400;color:rgba(255,255,255,.34);cursor:pointer;transition:.12s;}
+.crv-ext .mv-tabs .t:hover{color:rgba(255,255,255,.55);}
+.crv-ext .mv-tabs .t.act{color:#fff;font-weight:600;}
+.crv-ext .mv-tabs .t.act::after{content:'';position:absolute;left:0;right:0;bottom:-3px;height:1px;background:var(--purple-400,#B794FF);}
+.crv-ext .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:rgba(255,255,255,.55);cursor:pointer;transition:color .12s;-webkit-user-select:none;user-select:none;}
+.crv-ext .mv-c:hover{color:#fff;}
+.crv-ext .mv-c .ar{font-size:8px;opacity:.55;}
+.crv-ext .crv-ro{font-size:8.5px;color:rgba(255,255,255,.34);letter-spacing:.06em;font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0;flex:0 1 auto;}
+.crv-ext .crv-src{display:inline-flex;align-items:center;gap:4px;font-size:9px;color:#9B93B0;font-weight:300;}
 .lfo-ext .b{gap:12px;}
 .lfo-ext .lsel{display:flex;justify-content:space-between;padding:0 6px;}
 .lfo-ext .lsel .lane{position:relative;font-size:7px;letter-spacing:.6px;text-transform:uppercase;color:rgba(255,255,255,.38);padding:0 6px 4px;cursor:pointer;transition:color .12s;}
@@ -7154,6 +7208,10 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-x:hover{ color:#EF4444; }
         #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
         #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+        /* fb330 — the core curve wears the EXACT LFO line grammar (Max: "use the exact LFO lines
+           for the main distortion VIZ") — same white, same purple glow as the card/LFO shaper. */
+        #syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.7;
+          filter:drop-shadow(0 0 2px rgba(183,148,255,.85)) drop-shadow(0 0 5px rgba(183,148,255,.5)); }
         #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
         #syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
         #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
@@ -7379,15 +7437,17 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                +'</g></svg>';
             },
             saturate:function(){
+              /* fb328 — the LIVE transfer curve (§5.8): path + occupancy driven by the
+                 getDistortionCurveViz rAF poll — EVERY mode's real curve at the current knobs.
+                 Right-click the core → Extend (the curve card). Idle = dark (the audio-reactive law). */
+              var occ=''; for(var i=0;i<48;i++) occ+='<line stroke="var(--purple-400)" stroke-width="3.4" stroke-linecap="round" opacity="0"/>';
               return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
                +'<line x1="14" y1="66" x2="212" y2="66" stroke="var(--border)" stroke-width="1"/>'
                +'<line x1="14" y1="66" x2="14" y2="8" stroke="var(--border)" stroke-width="1"/>'
                +'<g stroke="var(--border)" stroke-width="1"><line x1="63" y1="66" x2="63" y2="62"/><line x1="112" y1="66" x2="112" y2="62"/><line x1="161" y1="66" x2="161" y2="62"/><line x1="14" y1="49" x2="18" y2="49"/><line x1="14" y1="32" x2="18" y2="32"/><line x1="14" y1="15" x2="18" y2="15"/></g>'
-               +'<line x1="14" y1="66" x2="150" y2="10" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="2 3"/>'
-               +'<path d="M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10" fill="none" stroke="currentColor" stroke-width="1.6"/>'
-               +'<g fill="var(--bg-hero)" stroke="currentColor" stroke-width="1.2"><circle cx="62" cy="56" r="2.6"/><circle cx="112" cy="17" r="2.6"/><circle cx="161" cy="11.5" r="2.6"/></g>'
-               +'<circle r="2.6" fill="var(--purple-400)" style="offset-path:path(\'M14 66 C 62 56, 80 20, 150 13 C 176 10, 194 10, 212 10\'); animation:fxrRide 2.6s ease-in-out infinite alternate; filter:drop-shadow(0 0 4px rgba(183,148,255,.7))"/>'
-               +'<g stroke="var(--purple-400)" stroke-width="1.4" stroke-linecap="round"><line x1="182" y1="70" x2="182" y2="60" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite"/><line x1="190" y1="70" x2="190" y2="64" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .3s"/><line x1="198" y1="70" x2="198" y2="62" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .6s"/><line x1="206" y1="70" x2="206" y2="66" opacity=".6" style="animation:fxrGlow 1.8s ease-in-out infinite .9s"/></g></svg>';
+               +'<line x1="14" y1="66" x2="212" y2="10" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
+               +'<g class="dst-occ">'+occ+'</g>'
+               +'<path class="dst-curve" d=""/></svg>';
             }
           };
           var DEVS=[
@@ -7523,7 +7583,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // APART (Soft 65 · Hard 8 · Zero-Sq 45 · Slew 50) so the modes never boot in their overlap
           // zone. Pushed on USER type change only — restore-on-reopen never overwrites a saved value.
           var DST_SIG_DEF={'Soft Clip':65,'Hard Clip':8,'Zero-Square':35,'Slew Clip':50,
-                           'Shaper':0,'Shaper Asym':0,'Harmonics':0,'Table':0,
+                           'Shaper':0,'Shaper Asym':0,'Harmonics':40,'Table':35,   /* fb331 — drawn modes BOOT ON BANK A: SIG is the A→B→C→D sweep (×3 since fb330), so the old 10/20 boots parked the engine 30-60% into the staircase bank while the user edits A — the ink/viz "don't align" bug. 0 = the drawn curve IS what you hear. */
                            'Downsample':25,'Bitcrush':25,'Overflow':15};   // DIGITAL: 0=clean, up=destroy; boot audible-not-jumpscare (fb309). Bipolar sigs → 50 centre
           function dstApplyType(dev,typeName,pushSig){
             var ti=(dev.types||[]).indexOf(typeName); if(ti<0)ti=5;
@@ -7546,7 +7606,11 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               // timidity this rule exists to prevent"). Sine Fold boots 'Bell' (Shaper = the gentle one).
               var cdef={'West Coast':1,'Sine Fold':1,'Harmonics':1,'Table':1}[typeName]||0;
               dev.back.d1.v=dev.back.d1.opts[cdef];
-              try{ window.__setSynParam('SYN_DST_CHARACTER', cdef/7); }catch(e){} } }
+              try{ window.__setSynParam('SYN_DST_CHARACTER', cdef/7); }catch(e){}
+              // fb330 — Beyond (P7) boots at 0 for the SHAPER family: the drawn curve IS what you
+              // hear. The shared 50 default was a half-MIRROR fold = the card/core misalignment.
+              if(fam==='SHAPER'){ if(dev.back&&dev.back.knobs&&dev.back.knobs[6]) dev.back.knobs[6][1]=0;
+                try{ window.__setSynParam('SYN_DST_P7', 0); }catch(e2){} } } }
           /* fb275 — OFFICIAL back panel: 2 real dropdowns + 8-knob 4×2 grid + 3 column separators (params are placeholders, finalized per style after DSP research) */
           function bkKnob(l,v,col,row,p,lbl){ return '<div class="fxr-bk-knob" style="grid-column:'+col+';grid-row:'+row+'"><div class="fxr-dial" data-bk="'+l+'" data-p="'+(p||'')+'">'+knobSVG(v,lbl)+'</div><span class="fxr-lab">'+l+'</span></div>'; }
           // fb306 — DELAY Link chain glyph: thin WHITE (Max). Closed clasp = linked; open (gap) = independent. Small bg rect masks the divider behind the clasp.
@@ -7966,6 +8030,64 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             }catch(e){} requestAnimationFrame(tick); }
             requestAnimationFrame(tick);
           })();
+          /* fb328 — DISTORTION LIVE CORE: poll the engine's REAL transfer (all 23 modes) + signal
+             occupancy at ~15 fps. The purple lives ON the curve exactly where the signal is
+             (idle = dark, playing = bright — the audio-reactive hard rule). */
+          (function(){ var fn=null, busy=false;
+            function tick(){ try{
+              {  /* fb330 — EVERY frame (Max: "4K60fps, LIVE, no latency, just like the LFO extender") */
+                if(!fn&&window.Juce&&window.Juce.getNativeFunction) fn=window.Juce.getNativeFunction('getDistortionCurveViz');
+                if(fn&&!busy){ busy=true; fn().then(function(js){ busy=false; try{ var o=JSON.parse(String(js||'{}')); if(!o.c||!o.c.length)return;
+                  window.__dstViz=o;
+                  // fb330 — the rack FOLLOWS the type param (card sends, DAW automation): ONE truth
+                  var ddT=null; for(var kk=0;kk<DEVS.length;kk++){ if(DEVS[kk]&&DEVS[kk].core==='saturate'){ ddT=DEVS[kk]; break; } }
+                  if(ddT&&ddT.types){ var miT=Math.max(0,Math.min(22,o.m|0));
+                    if(ddT.types[miT]&&ddT.types[miT]!==ddT.type&&!window.__dstTfBusy){
+                      var devT=rack.querySelector('.fxr-core[data-core="saturate"]'); devT=devT&&devT.closest('.fxr-dev');
+                      var nsT=devT&&devT.querySelector('.fxr-type-native');
+                      if(nsT){ window.__dstTfBusy=1; nsT.value=ddT.types[miT];
+                        var evT=document.createEvent('HTMLEvents'); evT.initEvent('change',true,false); nsT.dispatchEvent(evT);
+                        setTimeout(function(){ window.__dstTfBusy=0; },120); } } }
+                  var core=rack.querySelector('.fxr-core[data-core="saturate"]');
+                  if(core){                                        // guard, no early return — the rAF loop must never die
+                    var svg=core.querySelector('svg');
+                    var path=svg?svg.querySelector('.dst-curve'):null, og=svg?svg.querySelector('.dst-occ'):null;
+                    var N=o.c.length, X0=14, X1=212, CY=38, SY=27, i;
+                    // fb333 — AUTHORITY FLIP (Max): on the DRAWN modes (Shaper 16 / Shaper Asym 17)
+                    // the mini viz mirrors the CARD's drawn curve — exact same lines and positions —
+                    // never the drive/character-transformed engine feed. Feed still lights it (o.o/o.b).
+                    var dc=(o.m===16||o.m===17)&&window.__crvDrawnCurve?window.__crvDrawnCurve(N):null;
+                    var C=dc||o.c;
+                    var pk=0.001; for(i=0;i<N;i++) pk=Math.max(pk,Math.abs(C[i]));
+                    var sc=(pk>1)?1/pk:1;                          // display-normalise hot curves
+                    function px(k){ return X0+(X1-X0)*k/(N-1); }
+                    function py(v){ return Math.max(8,Math.min(70,CY-Math.max(-1.1,Math.min(1.1,v))*SY)); }
+                    if(path){ var d=''; for(i=0;i<N;i++) d+=(i?'L':'M')+px(i).toFixed(1)+' '+py(C[i]*sc).toFixed(1)+' '; path.setAttribute('d',d); }
+                    if(og){ var segs=og.children, lum=0.15+0.85*Math.min(1,(+o.b||0)*2.0);
+                      for(var s2=0;s2<segs.length&&s2<48;s2++){ var i0=Math.round(s2*(N-1)/48), i1=Math.round((s2+1)*(N-1)/48);
+                        segs[s2].setAttribute('x1',px(i0).toFixed(1)); segs[s2].setAttribute('y1',py(C[i0]*sc).toFixed(1));
+                        segs[s2].setAttribute('x2',px(i1).toFixed(1)); segs[s2].setAttribute('y2',py(C[i1]*sc).toFixed(1));
+                        segs[s2].setAttribute('opacity',(Math.min(1,(o.o[s2]||0))*lum*0.85).toFixed(3)); } }
+                  }
+                  if(window.__crvLiveTick) window.__crvLiveTick(o);   // the curve card rides the same feed
+                }catch(e){} }).catch(function(){ busy=false; }); }
+              }
+            }catch(e){} requestAnimationFrame(tick); }
+            requestAnimationFrame(tick);
+          })();
+          /* fb328 — right-click the Distortion core → Extend (Max: NO icon on the face; the LFO's
+             right-click grammar). Non-shaper modes also offer the §6.6 send. */
+          rack.addEventListener('contextmenu',function(e){ try{
+            var c=e.target.closest&&e.target.closest('.fxr-core[data-core="saturate"]'); if(!c)return;
+            e.preventDefault();
+            var dd=null; for(var k=0;k<DEVS.length;k++){ if(DEVS[k]&&DEVS[k].core==='saturate'){ dd=DEVS[k]; break; } }
+            var ty=dd?dd.type:'Distortion';
+            var fam=DST_FAMS[Math.max(0,dd?dd.types.indexOf(dd.type):0)]||'CLIP';
+            var rows=[{isHeader:true,label:'Distortion — '+ty},
+                      {label:'Extend',white:true,onPick:function(){ if(window.__openCrvCard)window.__openCrvCard(); }}];
+            if(fam!=='SHAPER') rows.push({label:'Edit as Shaper curve',white:true,onPick:function(){ if(window.__crvSendToShaper)window.__crvSendToShaper(); }});
+            if(window.__synShowMenu) window.__synShowMenu('',rows,e.clientX,e.clientY);
+          }catch(err){} });
           function flash(el){ try{ el.style.borderColor='var(--purple-400)'; el.style.color='var(--purple-400)'; setTimeout(function(){el.style.borderColor='';el.style.color='';},180); }catch(e){} }
           // clicks (delegated)
           rack.addEventListener('click',function(e){ try{
@@ -27404,7 +27526,7 @@ restoreThemeFromBackend();
         else if(m==='drift')  rbnCard.open();   // mode 4 = ROBIN (key 'drift' frozen)
         else                  openCard();
       }catch(e){} };
-    window.__redockCard=function(id){ if(id==='mod')return; if(id==='lfo'){ if(window.__openLfoCard)window.__openLfoCard(); return; } window.__openFlowCard({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[id]||'arp'); };   /* fb149 — the palette has no docked twin · fb232 — lfo docks home through its own door (it fell to 'arp') */
+    window.__redockCard=function(id){ if(id==='mod')return; if(id==='lfo'){ if(window.__openLfoCard)window.__openLfoCard(); return; } if(id==='crv'){ if(window.__openCrvCard)window.__openCrvCard(); return; } window.__openFlowCard({arp:'arp',chop:'chop',gli:'glitch',rbn:'drift'}[id]||'arp'); };   /* fb149 — the palette has no docked twin · fb232 — lfo docks home through its own door (it fell to 'arp') */
     window.__cardWinGone=function(id){ if(window.__poppedCards) delete window.__poppedCards[id]; };
     // expand button → the active mode's extension card
     if(exp) exp.addEventListener('click', function(){ window.__openFlowCard(displayMode); });
@@ -27413,6 +27535,522 @@ restoreThemeFromBackend();
       tile.addEventListener('contextmenu', function(ev){ ev.preventDefault();
         window.__openFlowCard(tile.getAttribute('data-mode')); }); });
   }catch(e){}
+})();
+
+/* ════════════════════════════════════════════════════════════════════════════
+   fb328 — THE DISTORTION CURVE CARD ('crv'). Right-click the Distortion core → Extend.
+   EVERY mode: the LIVE transfer curve (the same getDistortionCurveViz feed as the core)
+   with signal occupancy riding it. SHAPER family: the full drag editor — the fb206
+   grammar (fat hit targets · tension midpoints · brushes · grid/snap) MINUS periodicity
+   (§6.8-1), centre anchor (§6.8-3), 32-pt cap, A/B banks (Morph blends them), Harmonics
+   bar-draw. Any OTHER mode: double-click = Send To Shaper (§6.6 — the mode's real
+   sampled curve becomes ~12 draggable points, type flips to Shaper Asym). Pops out via
+   the fb82 path exactly like the LFO card ('crv' is whitelisted in popOutCardWindow —
+   the fb231 drag-delete trap). Curves ride setDistortionCurves → the fb326 bake + 40 ms
+   crossfade; the processor blob is the one truth (persisted + cross-window).
+   ════════════════════════════════════════════════════════════════════════════ */
+(function(){
+  function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  var TYPES=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip','Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table','Downsample','Bitcrush','Overflow'];
+  function famOfI(i){ return i<=4?'ANALOG':i<=8?'CLIP':i<=12?'DIODE':i<=15?'FOLD':i<=19?'SHAPER':'DIGITAL'; }
+  var CGRIDS=[2,3,4,5,8,12,16,24,32];   // the LFO's grid ladder (fb212)
+  var CV={ bank:0, gh:8, gv:8, sn:1, tool:0, unpin:false, src:'',
+    a:[[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],           // gentle S = the engine's default bank A
+    b:[[0,0.10,0],[0.24,0.10,0],[0.25,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.75,0.70,0],[0.76,0.90,0],[1,0.90,0]],   // razor staircase = bank B
+    c:(function(){ var pF=[],i; for(i=0;i<=16;i++){ var x=i/16; pF.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*4.712389-2.3561945)).toFixed(4),0]); } return pF; })(),   // sine fold = bank C (fb330)
+    d:[[0,0,0],[0.6667,1,0],[0.668,0,0],[1,0.5,0]],   // wrap saw = bank D (fb330)
+    bars:[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] };
+  var card=null, crvSh=null, hero=null, foot=null, hdrChip=null, pSig=null, sel=-1, pushT=null, lastPush='', lastM=-1;
+  window.__crvTouchT=0;
+  function PS(id,def){ try{ if(window.__cardOnly&&window.__synSliderShim) return window.__synSliderShim(id,def);
+    return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
+  var pType=null,pPill=null,pP7=null;
+  function typeIdx(){ try{ var o=window.__dstViz; if(o&&o.m!=null)return Math.max(0,Math.min(22,o.m|0));
+    if(!pType)pType=PS('SYN_DST_TYPE',0); return pType?Math.round(pType.getNormalisedValue()*22):17; }catch(e){ return 17; } }
+  function pill2On(){ try{ if(!pPill)pPill=PS('SYN_DST_PILL2',0); return pPill?pPill.getNormalisedValue()>0.5:false; }catch(e){ return false; } }
+  function beyondV(){ try{ if(!pP7)pP7=PS('SYN_DST_P7',0.5); return pP7?Math.round(pP7.getNormalisedValue()*100):0; }catch(e){ return 0; } }
+  function isShFam(){ return famOfI(typeIdx())==='SHAPER'; }
+  function isOdd(){ var ti=typeIdx(); return TYPES[ti]==='Shaper' || (famOfI(ti)==='SHAPER'&&pill2On()); }
+  function cPts(){ return [CV.a,CV.b,CV.c,CV.d][Math.max(0,Math.min(3,CV.bank))]; }
+  function setPts(p){ var k=['a','b','c','d'][Math.max(0,Math.min(3,CV.bank))]; CV[k]=p; }
+
+  /* the house tension + NON-periodic evaluator (§6.8-1 — PERIODICITY MUST DIE) */
+  function cBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
+  function evalP(p,x){ x=Math.max(0,Math.min(1,x)); var i=0; while(i<p.length-2&&p[i+1][0]<=x)i++;
+    var a=p[i],b=p[i+1],w=Math.max(1e-6,b[0]-a[0]); return a[1]+(b[1]-a[1])*cBias((x-a[0])/w,a[2]||0); }
+  function cRdp(pp,eps){ if(pp.length<3)return pp.slice(); var keep=new Array(pp.length); keep[0]=keep[pp.length-1]=true;
+    var st2=[[0,pp.length-1]];
+    while(st2.length){ var sg=st2.pop(),a=sg[0],b=sg[1],ax=pp[a][0],ay=pp[a][1],dx=pp[b][0]-ax,dy=pp[b][1]-ay,L=Math.sqrt(dx*dx+dy*dy)||1e-9,dm=0,ix=-1;
+      for(var i=a+1;i<b;i++){ var d=Math.abs((pp[i][0]-ax)*dy-(pp[i][1]-ay)*dx)/L; if(d>dm){dm=d;ix=i;} }
+      if(dm>eps&&ix>0){ keep[ix]=true; st2.push([a,ix]); st2.push([ix,b]); } }
+    var out=[]; for(var j=0;j<pp.length;j++) if(keep[j])out.push(pp[j]); return out; }
+  function ensureAnchor(g){ if(CV.unpin)return g;   // §6.8-3 — f(0)=0 by default; Unpin = the deliberate Bias gesture
+    var has=false; for(var i=0;i<g.length;i++) if(Math.abs(g[i][0]-0.5)<1e-4){ has=true; g[i][1]=0.5; }
+    if(!has){ g.push([0.5,0.5,0]); g.sort(function(a,b){return a[0]-b[0];}); }
+    return g; }
+  function snapV(v,n){ return Math.round(v*n)/n; }
+
+  /* ── transport — §6.5 cadence: 40 ms leading edge so consecutive fades butt together ── */
+  function blob(){ function mp(P){ return P.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}); }
+    return JSON.stringify({ a:mp(CV.a), b:mp(CV.b), c:mp(CV.c), d:mp(CV.d),
+    bars:CV.bars.map(function(v){return +(+v).toFixed(3);}), src:CV.src, gh:CV.gh, gv:CV.gv, sn:CV.sn }); }
+  function pushNow(){ var j=blob(); if(j===lastPush)return; lastPush=j;
+    var f=NF('setDistortionCurves'); if(f){ try{ f(j); }catch(e){} } }
+  function cPush(){ window.__crvTouchT=Date.now(); if(pushT)return; pushT=setTimeout(function(){ pushT=null; pushNow(); },40); }
+  function applyBlob(j){ try{ var v=JSON.parse(j); if(!v)return;
+    if(v.a&&v.a.length>1) CV.a=v.a.map(function(q){return [q[0],q[1],q[2]||0];});
+    if(v.b&&v.b.length>1) CV.b=v.b.map(function(q){return [q[0],q[1],q[2]||0];});
+    if(v.c&&v.c.length>1) CV.c=v.c.map(function(q){return [q[0],q[1],q[2]||0];});
+    if(v.d&&v.d.length>1) CV.d=v.d.map(function(q){return [q[0],q[1],q[2]||0];});
+    if(v.bars&&v.bars.length===16) CV.bars=v.bars.slice();
+    if(v.gh)CV.gh=v.gh; if(v.gv)CV.gv=v.gv; if(v.sn!=null)CV.sn=v.sn?1:0; CV.src=v.src||'';
+  }catch(e){} }
+  function pullBlob(cb){ var f=NF('getDistortionCurves'); if(!f){ if(cb)cb(); return; }
+    try{ f().then(function(j){ j=String(j||''); if(j&&j!=='{}'){ applyBlob(j); lastPush=j; } if(cb)cb(); }).catch(function(){ if(cb)cb(); }); }catch(e){ if(cb)cb(); } }
+
+  /* ── render (456×220 field; strokes ride vector-effect at any card zoom — fb232 law) ── */
+  var W=456,H=220,FT=10,FB=210;
+  function fx(x){ return x*W; } function fy(y){ return FB-(FB-FT)*y; }
+  function gridG(){ var g='',i;
+    for(i=1;i<CV.gv;i++){ var gx=fx(i/CV.gv).toFixed(1); g+='<line'+(CV.gv%2===0&&i===CV.gv/2?' class="maj"':'')+' x1="'+gx+'" y1="'+FT+'" x2="'+gx+'" y2="'+FB+'"/>'; }
+    for(i=0;i<=CV.gh;i++){ var gy=fy(i/CV.gh).toFixed(1); g+='<line'+(CV.gh%2===0&&i===CV.gh/2?' class="maj"':'')+' x1="0" y1="'+gy+'" x2="'+W+'" y2="'+gy+'"/>'; }
+    return '<g class="sh-grid">'+g+'</g>'; }
+  function pathD(p){ var d='M'+fx(p[0][0]).toFixed(1)+' '+fy(p[0][1]).toFixed(1)+' ',i;
+    for(i=0;i<p.length-1;i++){ var a=p[i],b=p[i+1],x0=fx(a[0]),x1=fx(b[0]),cc=a[2]||0;
+      if(b[0]-a[0]<=1e-6||Math.abs(cc)<1e-4){ d+='L'+x1.toFixed(1)+' '+fy(b[1]).toFixed(1)+' '; continue; }
+      var n=Math.max(8,Math.min(48,Math.round((x1-x0)/3)));
+      for(var k=1;k<=n;k++){ var t=k/n; d+='L'+(x0+(x1-x0)*t).toFixed(1)+' '+fy(a[1]+(b[1]-a[1])*cBias(t,cc)).toFixed(1)+' '; } }
+    return d; }
+  function symm(p){ var right=p.filter(function(q){return q[0]>=0.5-1e-6;}),out=[],i;
+    if(!right.length||right[0][0]>0.5+1e-6) right.unshift([0.5,0.5,0]);
+    for(i=right.length-1;i>0;i--) out.push([1-right[i][0],1-right[i][1],right[i-1][2]||0]);   // fb221 — double mirror keeps tensions exact
+    for(i=0;i<right.length;i++) out.push(right[i].slice());
+    out[0][0]=0; out[out.length-1][0]=1; return out; }
+  function occG(){ var s='',i; for(i=0;i<48;i++) s+='<line class="crv-oc" data-b="'+i+'" opacity="0"/>'; return '<g class="crv-occ">'+s+'</g>'; }
+  function heroSVG(){
+    var ti=typeIdx(), ty=TYPES[ti];
+    if(!isShFam()||ty==='Table') return liveSVG();
+    if(ty==='Harmonics') return harmSVG();
+    var odd=isOdd(), p=ensureAnchor(cPts()), full=odd?symm(p):p;
+    var d=pathD(odd?full.filter(function(q){return q[0]>=0.4999;}):full);
+    var fillD='M0 '+fy(full[0][1]).toFixed(1)+' '+pathD(full).replace(/^M/,'L')+'L'+W+' '+fy(0.5)+' L0 '+fy(0.5)+' Z';
+    var mirror=odd?'<path class="crv-mir" d="'+pathD(full.filter(function(q){return q[0]<=0.5001;}))+'"/>':'';
+    var nd='',hd='',cdm='';
+    var vis=odd?p.filter(function(q){return q[0]>=0.5-1e-6;}):p;
+    vis.forEach(function(q){ var idx=p.indexOf(q),cx=fx(q[0]).toFixed(1),cy=fy(q[1]).toFixed(1);
+      var anc=(Math.abs(q[0]-0.5)<1e-4&&!CV.unpin&&idx!==0&&idx!==p.length-1);
+      nd+='<circle class="sh-nd'+(sel===idx?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
+      if(anc) nd+='<circle class="crv-anc" cx="'+cx+'" cy="'+cy+'" r="5.2"/>';
+      hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });
+    vis.forEach(function(q){ var idx=p.indexOf(q); if(idx>=p.length-1)return; var r=p[idx+1]; if(!r||r[0]-q[0]<=0.02)return;
+      if(odd&&(q[0]+r[0])/2<0.5)return;
+      var mx=fx((q[0]+r[0])/2).toFixed(1),my=fy(evalP(p,(q[0]+r[0])/2)).toFixed(1);
+      cdm+='<circle class="sh-cd" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="1.8"/><circle class="sh-hit cdh" data-i="'+idx+'" cx="'+mx+'" cy="'+my+'" r="10"/>'; });
+    return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()
+     +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
+     +occG()+'<path class="mv-fill" d="'+fillD+'"/>'+mirror
+     +'<path class="mv-stroke crv-ink" d="'+d+'"/>'             /* fb332 — ONE LINE (Max/mockup): your curve IS the display. The live feed animates THIS path (and the dots ride it) — no second line, ever */
+     +nd+cdm+hd+'</svg>'; }
+  function liveSVG(){   // any non-drawn mode + Table: the LIVE engine curve, occupancy-lit
+    return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()
+     +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
+     +occG()+'<path class="mv-stroke crv-live" d=""/></svg>'; }
+  function harmSVG(){ var s='',i,bw=W/16, ghost='';
+    var o=window.__dstViz;   // the Chebyshev-solved curve rides the live feed
+    if(o&&o.c&&o.c.length){ var N=o.c.length,pk=0.001; for(i=0;i<N;i++)pk=Math.max(pk,Math.abs(o.c[i]));
+      for(i=0;i<N;i++) ghost+=(i?'L':'M')+fx(i/(N-1)).toFixed(1)+' '+fy((o.c[i]/pk+1)*0.5*0.92+0.04).toFixed(1)+' '; }
+    for(i=0;i<16;i++){ var v=CV.bars[i],cx=(i+0.5)*bw,y0=fy(0.5),y1=fy(0.5+v*0.46);
+      s+='<rect class="crv-bar'+(v<0?' neg':'')+'" data-i="'+i+'" x="'+(cx-bw*0.28).toFixed(1)+'" y="'+Math.min(y0,y1).toFixed(1)+'" width="'+(bw*0.56).toFixed(1)+'" height="'+Math.max(1.5,Math.abs(y1-y0)).toFixed(1)+'" rx="1"/>'
+       +'<rect class="crv-barh" data-i="'+i+'" x="'+(cx-bw*0.5).toFixed(1)+'" y="'+FT+'" width="'+bw.toFixed(1)+'" height="'+(FB-FT)+'"/>'
+       +'<text class="crv-num" x="'+cx.toFixed(1)+'" y="'+(FB+8)+'">'+(i+1)+'</text>'; }
+    return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()+'<path class="crv-hg" d="'+ghost+'"/>'+s+'</svg>'; }
+
+  function footHTML(){
+    var ti=typeIdx(), ty=TYPES[ti];
+    if(!isShFam())
+      return '<span class="crv-ro">'+ty+' — live curve · double-click to edit as Shaper</span>'
+        +'<span style="flex:1"></span>';
+    if(ty==='Harmonics')
+      return '<span class="crv-ro">Bars 1–16 · down = phase-flip</span>'
+        +'<span class="mv-c" data-act="clearbars">Clear</span>'
+        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
+    if(ty==='Table')
+      return '<span class="crv-ro">Morph sweeps the frame stack</span>'
+        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
+    var tabs=''; for(var bi=0;bi<4;bi++) tabs+='<span class="t'+(CV.bank===bi?' act':'')+'" data-bank="'+bi+'">'+['A','B','C','D'][bi]+'</span>';
+    return '<div class="mv-tabs">'+tabs+'</div>'
+      +'<span class="crv-rail" data-act="morph" title="Morph A→B"><i style="left:'+morphPct()+'%"></i></span>'
+      +'<span class="mv-c" data-act="shapes">Shapes <span class="ar">▾</span></span>'
+      +'<span style="flex:1"></span>'
+      +'<span class="qt" data-act="sym" title="Odd: the right half rules, zero DC — the Sym pill">'+(isOdd()?'odd':'free')+'</span><span class="crv-ro">·</span>'
+      +'<span class="qt" data-act="beyond" title="Drag — Beyond (back P7)">beyond '+beyondV()+'</span><span class="crv-ro">·</span>'
+      +'<span class="crv-ro">'+cPts().length+' pts</span>'; }
+  function morphPct(){ try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); return pSig?Math.round(pSig.getNormalisedValue()*100):0; }catch(e){ return 0; } }
+
+  function paint(){ if(!card)return;
+    var tt=card.querySelector('.tt'); if(tt)tt.textContent=TYPES[typeIdx()]+' — Curve';   // fb329 — the mockup's title grammar
+    if(hdrChip){ if(CV.src&&isShFam()){ hdrChip.style.display='inline-flex'; hdrChip.innerHTML='<b>✦</b>'+CV.src; }
+      else hdrChip.style.display='none'; }
+    hero.innerHTML=heroSVG(); foot.innerHTML=footHTML(); bindHero(); }
+  function paintField(){ if(!card)return; hero.innerHTML=heroSVG(); bindHero(); }
+
+  /* the live overlay — fed by the rack driver in the main window, self-polled when card-only */
+  window.__crvLiveTick=function(o){ try{ if(!card||!card.classList.contains('open'))return;
+    if(o.m!==lastM){ lastM=o.m; paint(); return; }        // type moved (any window) → full repaint
+    var svg=hero.querySelector('svg'); if(!svg)return;
+    // fb330 — ONE transform for card + core (Max: "they should be moving equally, looking equally"):
+    // sc = display-normalise HOT curves only (same as the core); the x-axis is the drawn domain.
+    var N=o.c.length,pk=0.001,i; for(i=0;i<N;i++)pk=Math.max(pk,Math.abs(o.c[i]));
+    var sc=(pk>1)?1/pk:1;
+    function ly(v){ return fy((v*sc+1)*0.5); }
+    function pd(i0,i1){ var d='',j; for(j=i0;j<=i1;j++) d+=(j>i0?'L':'M')+fx(j/(N-1)).toFixed(1)+' '+ly(o.c[j]).toFixed(1)+' '; return d; }
+    // fb333 — AUTHORITY FLIP (Max: "the extension card should control my mini viz, not the
+    // opposite"): in the editor view the feed NEVER rewrites geometry — the drawn line IS the
+    // line. The feed only LIGHTS it: occupancy y rides the DRAWN curve, opacity/brightness
+    // come from the engine (o.o / o.b). Non-drawn views (.crv-live / .crv-hg) stay feed-shaped.
+    var ink=svg.querySelector('.crv-ink'), cv=ink?drawnC(N):null;
+    if(!ink){
+      var live=svg.querySelector('.crv-live');
+      if(live){ live.setAttribute('d',pd(0,N-1)); }
+      var hg=svg.querySelector('.crv-hg');
+      if(hg){ hg.setAttribute('d',pd(0,N-1)); }
+    }
+    var yAt=function(k){ return (ink&&cv)?fy((cv[k]+1)*0.5):ly(o.c[k]); };
+    var segs=svg.querySelectorAll('.crv-oc'); if(!segs.length)return;
+    var lum=0.15+0.85*Math.min(1,(+o.b||0)*2.0);
+    for(var s2=0;s2<segs.length;s2++){   // occupancy rides the ONE line — drawn y in the editor, feed y elsewhere
+      var q0=s2/48, q1=(s2+1)/48;
+      var i0=Math.round(q0*(N-1)),i1=Math.round(q1*(N-1));
+      segs[s2].setAttribute('x1',fx(q0).toFixed(1)); segs[s2].setAttribute('y1',yAt(i0).toFixed(1));
+      segs[s2].setAttribute('x2',fx(q1).toFixed(1)); segs[s2].setAttribute('y2',yAt(i1).toFixed(1));
+      segs[s2].setAttribute('opacity',(Math.min(1,(o.o[s2]||0))*lum*0.8).toFixed(3)); }
+  }catch(e){} };
+
+  /* fb333 — THE DRAWN CURVE AS SHARED TRUTH: bipolar samples of the EDITING bank's curve
+     (odd-mirror applied), in the feed's array convention so the mini viz can swap it in
+     1:1. null outside the drawn modes ⇒ callers fall back to the engine feed. */
+  function drawnC(N){ try{
+    var ty=TYPES[typeIdx()];
+    if(ty!=='Shaper'&&ty!=='Shaper Asym') return null;
+    var p=ensureAnchor(cPts()), full=isOdd()?symm(p):p, out=[],i;
+    for(i=0;i<N;i++) out.push(evalP(full, i/(N-1))*2-1);
+    return out;
+  }catch(e){ return null; } }
+  window.__crvDrawnCurve=drawnC;
+  /* fb333 — boot pull (the fb232 LFO law): CV must mirror the SAVED blob before the card ever
+     opens, or the mini viz would show default points over a saved curve. Retries while the
+     natives inject; plain-browser/headless ⇒ NF null ⇒ quiet no-op. */
+  (function bootPull(n){ var f=NF('getDistortionCurves');
+    if(f){ pullBlob(function(){ if(card&&card.classList.contains('open'))paint(); }); return; }
+    if(n<40) setTimeout(function(){ bootPull(n+1); },250); })(0);
+
+  /* ── interactions ─────────────────────────────────────────────────────── */
+  function heroPos(ev){ var r=hero.getBoundingClientRect();
+    return { x:Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)),
+             y:Math.max(0,Math.min(1,(FB-(ev.clientY-r.top)/r.height*H)/(FB-FT))) }; }
+  function stampCellC(q,T){   // fb213 brushes, transfer edition: the resting level is the CENTRE (the unity axis)
+    var p=cPts(), odd=isOdd(), gv=CV.gv, ci=Math.max(0,Math.min(gv-1,Math.floor(q.x*gv)));
+    if(odd&&(ci+0.5)/gv<0.5) return false;               // odd mode: the left half is generated ink
+    var c0=ci/gv,c1=(ci+1)/gv,m=(c0+c1)/2,lv=CV.sn?snapV(q.y,CV.gh):q.y,S,base=0.5;
+    var v0=evalP(p,Math.max(0,c0-1e-4)), v1=evalP(p,Math.min(0.9999,c1+1e-4));
+    if(T===1)S=[[c0,lv,0],[c1,lv,0]];
+    else if(T===2)S=[[c0,base,0],[c1,lv,0]];
+    else if(T===3)S=[[c0,lv,0],[c1,base,0]];
+    else if(T===4)S=[[c0,lv,0],[m,lv,0],[m,base,0],[c1,base,0]];
+    else if(T===5)S=[[c0,base,0],[m,lv,0],[c1,base,0]];
+    else S=[[c0,base,.5],[m,lv,-.5],[c1,base,0]];
+    var out=[]; p.forEach(function(pp){ if(pp[0]<c0-1e-6||pp[0]>c1+1e-6)out.push(pp); });
+    if(c0>1e-6)out.push([c0,v0,0]);
+    S.forEach(function(pp){ out.push(pp.slice()); });
+    if(c1<1-1e-6)out.push([c1,v1,0]);
+    if(out.length>32)return false;                       // §6.8 — the 32-pt cap (more points = alias generators)
+    out.sort(function(a,b){return a[0]-b[0];});
+    setPts(out); ensureAnchor(cPts()); return true; }
+  function stampGesture(e,T){
+    sel=-1; var lastCi=-1,lastLv=-9;
+    function apply(ev){ var q=heroPos(ev);
+      var ci=Math.max(0,Math.min(CV.gv-1,Math.floor(q.x*CV.gv))), lv=CV.sn?snapV(q.y,CV.gh):q.y;
+      if(ci===lastCi&&Math.abs(lv-lastLv)<0.002)return; lastCi=ci; lastLv=lv;
+      if(stampCellC(q,T)){ paintField(); cPush(); } }
+    apply(e);
+    function mv(ev){ apply(ev); }
+    function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); cPush(); paint(); }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
+  function bindHero(){ if(!hero)return;
+    var ti=typeIdx(), ty=TYPES[ti], drawn=(isShFam()&&ty!=='Harmonics'&&ty!=='Table');
+    hero.style.cursor=(drawn&&CV.tool)?'crosshair':'';
+    hero.oncontextmenu=function(e){ e.preventDefault();
+      var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
+      if(bar){ CV.bars[+bar.getAttribute('data-i')]=0; paintField(); cPush(); return; }
+      crvMenu(e); };
+    hero.ondblclick=function(e){
+      if(!isShFam()){ sendToShaper(); return; }           // §6.6 — ANY mode's curve becomes yours
+      if(!drawn)return;
+      var p=cPts(), t=e.target, hitCd=t.classList&&t.classList.contains('cdh'),
+          hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
+      if(hitCd||hitNd) ni=+t.getAttribute('data-i');
+      if(hitCd){ if(p[ni]&&(p[ni][2]||0)!==0){ p[ni][2]=0; cPush(); paintField(); } return; }   // dbl-click a curve dot = straight
+      if(hitNd){ if(ni>0&&ni<p.length-1&&p.length>2&&!(Math.abs(p[ni][0]-0.5)<1e-4&&!CV.unpin)){ sel=-1; p.splice(ni,1); cPush(); paintField(); } return; }
+      if(p.length>=32)return;
+      var q=heroPos(e), odd=isOdd(); if(odd&&q.x<0.5)return;
+      var nx=CV.sn?snapV(q.x,CV.gv):q.x, ny=CV.sn?snapV(q.y,CV.gh):q.y;
+      p.push([nx,ny,0]); p.sort(function(a,b){return a[0]-b[0];});
+      cPush(); paintField(); };
+    hero.onpointerdown=function(e){
+      if(e.button===2)return;
+      var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
+      if(bar){ e.preventDefault();
+        var pnt=function(ev){ var q=heroPos(ev); var bi=Math.max(0,Math.min(15,Math.floor(q.x*16)));
+          CV.bars[bi]=Math.max(-1,Math.min(1,(q.y-0.5)/0.46)); paintField(); cPush(); };
+        pnt(e);
+        var up0=function(){ window.removeEventListener('pointermove',pnt); window.removeEventListener('pointerup',up0); paint(); };
+        window.addEventListener('pointermove',pnt); window.addEventListener('pointerup',up0); return; }
+      if(!drawn)return;
+      if(CV.tool||e.shiftKey){ e.preventDefault(); stampGesture(e,CV.tool||1); return; }   // fb221 — Shift-drag = step-draw
+      var p=cPts();
+      var cd=e.target.closest&&e.target.closest('.sh-hit.cdh');
+      if(cd){ e.preventDefault();
+        var i2=+cd.getAttribute('data-i'), a=p[i2], b=p[i2+1], c0=a[2]||0, y0=e.clientY;
+        var mvT=function(ev){ var dir=(b[1]>=a[1])?1:-1;
+          var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0;   // fb208 — zero detent
+          a[2]=nc; paintField(); cPush(); };
+        var upT=function(){ window.removeEventListener('pointermove',mvT); window.removeEventListener('pointerup',upT); paint(); };
+        window.addEventListener('pointermove',mvT); window.addEventListener('pointerup',upT); return; }
+      var hit=e.target.closest&&e.target.closest('.sh-hit');
+      if(hit){ e.preventDefault();
+        var i3=+hit.getAttribute('data-i'); sel=i3;
+        var isEnd=(i3===0||i3===p.length-1);
+        var isAnc=(Math.abs(p[i3][0]-0.5)<1e-4&&!CV.unpin);
+        var odd=isOdd();
+        var mvP=function(ev){ var q=heroPos(ev), pt=p[i3]; if(!pt)return;
+          if(!isEnd&&!isAnc){
+            var lo=(i3>0?p[i3-1][0]:0)+0.004, hi=(i3<p.length-1?p[i3+1][0]:1)-0.004;
+            if(odd) lo=Math.max(lo,0.5);
+            var nx=CV.sn?snapV(q.x,CV.gv):q.x;
+            pt[0]=Math.max(lo,Math.min(hi,nx)); }
+          if(!isAnc) pt[1]=CV.sn?snapV(q.y,CV.gh):q.y;
+          paintField(); cPush(); };
+        var upP=function(){ window.removeEventListener('pointermove',mvP); window.removeEventListener('pointerup',upP); paint(); };
+        window.addEventListener('pointermove',mvP); window.addEventListener('pointerup',upP); return; }
+    }; }
+
+  /* ── the canonical right-click menu (grid sliders · Snap · brushes · seeds — the LFO grammar) ── */
+  function gridNode(lbl,key){   // the fb69 house slider VERBATIM, bound to the curve grid
+    var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
+    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;display:inline-flex;align-items:center;gap:5px;';
+    var GI = lbl==='lv' ? '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M1 1.5 H9 M1 4 H9 M1 6.5 H9"/></svg>'
+                        : '<svg viewBox="0 0 10 8" width="10" height="8" fill="none" stroke="currentColor" stroke-width="1.1"><path d="M2.5 1 V7 M5 1 V7 M7.5 1 V7"/></svg>';
+    lab.innerHTML=GI+'<span>'+(lbl==='lv'?'Level':'In')+'</span>';
+    var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
+    row.appendChild(lab); row.appendChild(val);
+    var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+    for(var i=0;i<CGRIDS.length;i++){ var nk=document.createElement('div');
+      nk.style.cssText='position:absolute;top:-2px;width:1px;height:6px;background:rgba(255,255,255,0.28);left:'+(i/(CGRIDS.length-1)*100)+'%;'; track.appendChild(nk); }
+    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;left:0;height:2px;border-radius:1px;background:#8B5CF6;';
+    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+    track.appendChild(fill); track.appendChild(marker);
+    wrap.appendChild(row); wrap.appendChild(track);
+    function pnt(){ var ix=CGRIDS.indexOf(CV[key]); if(ix<0)ix=4; var pct=ix/(CGRIDS.length-1)*100;
+      marker.style.left=pct+'%'; fill.style.width=pct+'%'; val.textContent=CGRIDS[ix]; }
+    pnt();
+    function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width)));
+      var ni=Math.round(t*(CGRIDS.length-1)); if(CGRIDS[ni]!==CV[key]){ CV[key]=CGRIDS[ni]; cPush(); pnt(); paintField(); } }
+    var dragging=false;
+    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; try{track.setPointerCapture(ev.pointerId);}catch(e2){} fromX(ev.clientX); });
+    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
+    function up2(ev){ if(dragging){ dragging=false; try{track.releasePointerCapture(ev.pointerId);}catch(e2){} } }
+    track.addEventListener('pointerup',up2); track.addEventListener('pointercancel',up2);
+    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); if(CV[key]!==8){ CV[key]=8; cPush(); pnt(); paintField(); } });
+    return wrap; }
+  var SEEDS={
+    'Unity':      [[0,0,0],[0.5,0.5,0],[1,1,0]],
+    'Gentle S':   [[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],
+    'Razor Stair':[[0,0.06,0],[0.24,0.06,0],[0.25,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.755,0.70,0],[0.76,0.94,0],[1,0.94,0]],
+    'Fold Sine':  (function(){ var p=[],i; for(i=0;i<=16;i++){ var x=i/16; p.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*9.42477-4.71239)).toFixed(4),0]); } return p; })() };
+  function seedTo(p2,nm){ var g=p2.map(function(q){return q.slice();});
+    setPts(g); ensureAnchor(cPts()); CV.src=nm||''; sel=-1; cPush(); paint(); }
+  function oscToCurve(o){   // fb248 pipeline — the REAL osc frame via getOscLfoWave, NON-cyclic (a transfer curve is not a cycle)
+    var f=NF('getOscLfoWave'); if(!f)return;
+    try{ f(o).then(function(js){ try{ var d=(typeof js==='string')?JSON.parse(js):js;
+      if(!d||!d.d||!d.d.length||!d.n)return;
+      var N=d.n,raw=[],i;
+      for(i=0;i<N;i++) raw.push([i/(N-1),Math.max(0,Math.min(1,(d.d[i]+1)/2))]);
+      var simp=cRdp(raw,0.015); if(simp.length>32)simp=cRdp(raw,0.03); if(simp.length>32)simp=cRdp(raw,0.055);
+      if(simp.length>32)simp=simp.slice(0,32);
+      CV.unpin=true;   // an osc wave needn't pass the centre — its shape lands verbatim
+      seedTo(simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];}),'Osc '+['A','B','C','D'][o]);
+    }catch(e2){} }).catch(function(){}); }catch(e3){} }
+  function lfoToCurve(n){   // the LFO shapes share this exact [x,y,c] model — a free curve library
+    var f=NF('getSynthLfoShapes'); if(!f)return;
+    try{ f().then(function(j){ try{ var v=JSON.parse(String(j||'{}'));
+      var hit=null; (v.shapes||[]).forEach(function(e2){ if(e2.n===n&&e2.pts&&e2.pts.length>1)hit=e2; });
+      if(!hit)return;
+      var p2=hit.pts.map(function(q){return [q[0],q[1],q[2]||0];}).slice(0,32);
+      CV.unpin=true;
+      seedTo(p2,'LFO '+n);
+    }catch(e2){} }).catch(function(){}); }catch(e3){} }
+  function crvMenu(e){ if(!window.__synShowMenu)return;
+    var ti=typeIdx(), ty=TYPES[ti], drawn=(isShFam()&&ty!=='Harmonics'&&ty!=='Table');
+    function tool(lbl,t){ return { label:lbl, isChecked:CV.tool===t, white:true, onPick:function(){ CV.tool=(CV.tool===t&&t!==0)?0:t; paintField(); } }; }
+    var rows=[];
+    if(!isShFam()){
+      rows.push({isHeader:true,label:'Distortion — '+ty});
+      rows.push({label:'Edit as Shaper curve',white:true,onPick:function(){ sendToShaper(); }});
+      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
+    if(ty==='Harmonics'){
+      rows.push({isHeader:true,label:'Harmonics — draw the spectrum'});
+      rows.push({label:'Clear bars',white:true,onPick:function(){ for(var i=0;i<16;i++)CV.bars[i]=0; CV.bars[0]=1; cPush(); paint(); }});
+      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
+    if(ty==='Table'){
+      rows.push({isHeader:true,label:'Table — Morph sweeps the frames'});
+      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
+    rows.push({ node:gridNode('lv','gh') });
+    rows.push({ node:gridNode('tm','gv') });
+    rows.push({ label:'Snap', isChecked:!!CV.sn, white:true, onPick:function(){ CV.sn=CV.sn?0:1; cPush(); } });
+    rows.push({ label:'Flip vertical', white:true, onPick:function(){ cPts().forEach(function(p2){ p2[1]=1-p2[1]; }); ensureAnchor(cPts()); cPush(); paint(); } });
+    rows.push({ label:'Flip horizontal', white:true, onPick:function(){ var p=cPts().map(function(q){ return [1-q[0],q[1],-(q[2]||0)]; }).reverse();
+      for(var i=0;i<p.length-1;i++)p[i][2]=p[i+1][2]; p[p.length-1][2]=0; setPts(p); ensureAnchor(cPts()); cPush(); paint(); } });
+    rows.push({isHeader:true,label:'Shape'});
+    rows.push(tool('Point · edit',0)); rows.push(tool('Straight line',1));
+    rows.push(tool('Ramp up',2)); rows.push(tool('Ramp down',3));
+    rows.push(tool('Square',4)); rows.push(tool('Triangle',5)); rows.push(tool('Sine',6));
+    rows.push({isHeader:true,label:'Seeds'});
+    Object.keys(SEEDS).forEach(function(k){ rows.push({label:k,white:true,onPick:function(){ CV.unpin=false; seedTo(SEEDS[k],k==='Unity'?'':k); }}); });
+    rows.push({isHeader:true,label:'Wavetable → Curve'});
+    ['A','B','C','D'].forEach(function(o,i2){ rows.push({label:'Oscillator '+o,white:true,onPick:function(){ oscToCurve(i2); }}); });
+    rows.push({isHeader:true,label:'LFO → Curve'});
+    for(var n=1;n<=10;n++)(function(nn){ rows.push({label:'LFO '+nn,white:true,onPick:function(){ lfoToCurve(nn); }}); })(n);
+    rows.push({isHeader:true,label:'Curve'});
+    rows.push({ label:'Unpin centre', isChecked:!!CV.unpin, white:true, onPick:function(){ CV.unpin=!CV.unpin; ensureAnchor(cPts()); cPush(); paint(); } });
+    rows.push({ label:'Clear to unity', white:true, onPick:function(){ CV.unpin=false; seedTo(SEEDS['Unity'],''); } });
+    window.__synShowMenu('',rows,e.clientX,e.clientY); }
+
+  /* ── Send To Shaper (§6.6) — the REAL engine curve → ≤32 points → exact tension fit ── */
+  function sendToShaper(){
+    var o=window.__dstViz, ti=typeIdx(), ty=TYPES[ti];
+    if(!o||!o.c||!o.c.length)return;
+    var N=o.c.length,pk=0.001,i; for(i=0;i<N;i++)pk=Math.max(pk,Math.abs(o.c[i]));
+    var raw=[]; for(i=0;i<N;i++) raw.push([i/(N-1),(o.c[i]/pk+1)*0.5]);
+    var simp=cRdp(raw,0.015); if(simp.length>32)simp=cRdp(raw,0.03); if(simp.length>32)simp=cRdp(raw,0.055);
+    if(simp.length>32)simp=simp.slice(0,32);
+    var p2=simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];});
+    for(i=0;i<p2.length-1;i++){ var a=p2[i],b=p2[i+1];   // §6.1 — c = 0.25·ln(r/(1−r)) from the true midpoint
+      if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
+      var im=Math.round((a[0]+b[0])/2*(N-1)), ym=(o.c[im]/pk+1)*0.5, r=(ym-a[1])/(b[1]-a[1]);
+      a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
+    CV.a=p2; CV.bank=0; CV.src=ty; CV.unpin=true;        // the sent curve lands VERBATIM (no forced centre)
+    setTypeUI('Shaper Asym');
+    // fb331 — the sent curve must BE what you hear: Morph→0 (bank A) + Beyond→0, forced HERE because
+    // the popped window's setTypeUI writes only the type param — dstApplyType's per-mode boots never
+    // run there. That's how Soft Clip's 0.65 knee leaked into the Morph slot = the engine sat at 95%
+    // bank C while Max drew on bank A (probe: corrC=.983/corrA=.218 at 0.65 → corrA=1.000 at 0).
+    try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(0); }catch(e){}
+    try{ if(!pP7)pP7=PS('SYN_DST_P7',0.5); if(pP7)pP7.setNormalisedValue(0); }catch(e){}
+    cPush(); if(card&&card.classList.contains('open'))paint(); else openCrv();
+  }
+  window.__crvSendToShaper=sendToShaper;
+  function setTypeUI(name){ try{
+    if(!window.__cardOnly){
+      var c0=document.querySelector('#syn-panel .fxr-core[data-core="saturate"]');
+      var dev=c0?c0.closest('.fxr-dev'):null, ns=dev?dev.querySelector('.fxr-type-native'):null;
+      if(ns){ ns.value=name; var ev=document.createEvent('HTMLEvents'); ev.initEvent('change',true,false); ns.dispatchEvent(ev); return; } }
+    var st2=PS('SYN_DST_TYPE',0); if(st2)st2.setNormalisedValue(TYPES.indexOf(name)/22);
+  }catch(e){} }
+  function toggleSym(){ try{
+    if(!window.__cardOnly){
+      var c0=document.querySelector('#syn-panel .fxr-core[data-core="saturate"]');
+      var dev=c0?c0.closest('.fxr-dev'):null, pills=dev?dev.querySelectorAll('.fxr-pill'):null;
+      if(pills&&pills[1]){ pills[1].click(); setTimeout(paint,30); return; } }
+    var p2=PS('SYN_DST_PILL2',0); if(p2){ p2.setNormalisedValue(pill2On()?0:1); setTimeout(paint,30); }
+  }catch(e){} }
+
+  /* ── the card shell ───────────────────────────────────────────────────── */
+  function buildCrv(){ if(card)return; var T=window.__TIC; if(!T)return;
+    crvSh=T.shell({ cls:'crv-ext', id:'crv', title:'Curve', mixId:'SYN_DST_SIG', mixDef:0.0,
+      mixLabel:'Morph', mixFmt:function(n){ return Math.round(n*100)+'%'; } });   // fb329 — .mix hidden by CSS; Morph lives in the FOOTER rail (the mockup)
+    card=crvSh.card;
+    hdrChip=T.el('<span class="crv-src" style="display:none"></span>');   // fb329 — the ✦ chip sits in the HEADER (the mockup)
+    (function(){ var tt0=card.querySelector('.h .tt'); if(tt0&&tt0.parentNode) tt0.parentNode.insertBefore(hdrChip, tt0.nextSibling); })();
+    if(!window.__cardOnly){ var sp0=document.getElementById('syn-panel'); if(sp0)sp0.appendChild(card); }   // fb231 stacking law
+    hero=T.el('<div class="card-scope crv-hero"></div>'); crvSh.body.appendChild(hero);
+    foot=T.el('<div class="crv-foot"></div>'); crvSh.body.appendChild(foot);
+    foot.addEventListener('click',function(e){
+      var t=e.target.closest&&e.target.closest('[data-bank],[data-act]'); if(!t)return;
+      if(t.getAttribute('data-bank')!=null){ CV.bank=+t.getAttribute('data-bank'); sel=-1; paint(); return; }
+      var a=t.getAttribute('data-act');
+      if(a==='shapes'){ var r=t.getBoundingClientRect(); var fake={clientX:r.left,clientY:r.bottom+4,preventDefault:function(){}}; crvMenu(fake); }
+      else if(a==='sym'){ toggleSym(); }
+      else if(a==='clearbars'){ for(var i=0;i<16;i++)CV.bars[i]=0; CV.bars[0]=1; cPush(); paint(); }
+    });
+    foot.addEventListener('pointerdown',function(e){
+      var r0=e.target.closest&&e.target.closest('.crv-rail');
+      if(r0){ e.preventDefault();                          // fb329 — the footer Morph rail is LIVE (writes SYN_DST_SIG)
+        if(!pSig)pSig=PS('SYN_DST_SIG',0); if(!pSig)return;
+        var rr=r0.getBoundingClientRect(), dot=r0.querySelector('i');
+        var setM=function(ev){ var nv=Math.max(0,Math.min(1,(ev.clientX-rr.left)/Math.max(1,rr.width)));
+          pSig.setNormalisedValue(nv); if(dot)dot.style.left=(nv*100)+'%'; };
+        setM(e);
+        var upM=function(){ window.removeEventListener('pointermove',setM); window.removeEventListener('pointerup',upM); };
+        window.addEventListener('pointermove',setM); window.addEventListener('pointerup',upM); return; }
+      var t=e.target.closest&&e.target.closest('[data-act="beyond"]'); if(!t)return;
+      e.preventDefault();
+      if(!pP7)pP7=PS('SYN_DST_P7',0.5); if(!pP7)return;
+      var v0=pP7.getNormalisedValue(), y0=e.clientY;
+      var mv=function(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.006));
+        pP7.setNormalisedValue(nv); t.textContent='beyond '+Math.round(nv*100); };
+      var up=function(){ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); };
+      window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+    });
+  }
+  function openCrv(){
+    if(!window.__cardOnly&&window.__poppedCards&&window.__poppedCards.crv){   // already floating — refocus, never duplicate
+      try{ var pf=NF('popOutCard'); if(pf){ pf('crv',0,0,0,0); return; } }catch(e){}
+      return; }
+    buildCrv(); if(!card)return;
+    if(!card.__placed){ card.__placed=1;
+      var dv=document.querySelector('#syn-panel .fxr-core[data-core="saturate"]');
+      var r=dv?dv.getBoundingClientRect():{left:300,top:300,right:560};
+      var px=Math.min((window.__vw?window.__vw():innerWidth)-514, Math.max(8, r.left-120)),
+          py=Math.max(8, r.top-330);
+      card.style.left=px+'px'; card.style.top=py+'px'; }
+    card.classList.add('open');
+    requestAnimationFrame(function(){ try{                // zoom-aware clamp: the 1.2× card must land FULLY inside (Max saw it clipped at the right edge)
+      var r=card.getBoundingClientRect(), vw=(window.__vw?window.__vw():innerWidth), vh=(window.__vh?window.__vh():innerHeight);
+      if(r.right>vw-4)  card.style.left=Math.max(4,vw-r.width-8)+'px';
+      if(r.bottom>vh-4) card.style.top =Math.max(4,vh-r.height-8)+'px';
+      if(r.left<4)      card.style.left='4px';
+      if(r.top<4)       card.style.top='4px';
+    }catch(e){} });
+    lastM=-1; paint();                                    // paint from CACHE first — the JUCE promise may never settle (the law)
+    pullBlob(function(){ lastM=-1; paint(); });
+  }
+  window.__openCrvCard=openCrv;
+
+  /* card-only window: self-poll the live feed (the main rack driver is frozen there) */
+  if(window.__cardOnly==='crv'){
+    var vf=null;
+    setInterval(function(){ try{
+      if(!card||!card.classList.contains('open'))return;
+      if(!vf)vf=NF('getDistortionCurveViz'); if(!vf)return;
+      vf().then(function(js){ try{ var o=JSON.parse(String(js||'{}'));
+        if(o.c&&o.c.length){ window.__dstViz=o; window.__crvLiveTick(o); } }catch(e){} }).catch(function(){});
+    }catch(e){} },66);
+  }
+  /* two windows, one blob (fb232 law): whichever side edits, the other pulls (compare-gated) */
+  (function crvXWin(){ var last=null;
+    setInterval(function(){
+      var need = window.__cardOnly==='crv' || (window.__poppedCards&&window.__poppedCards.crv);
+      if(!need)return;
+      if(Date.now()-(window.__crvTouchT||0)<450)return;
+      var f=NF('getDistortionCurves'); if(!f)return;
+      try{ f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
+        if(first)return;
+        if(Date.now()-(window.__crvTouchT||0)<450)return;
+        applyBlob(j); lastPush=j;
+        if(card&&card.classList.contains('open'))paint();
+      }).catch(function(){}); }catch(e){}
+    },150); })();
 })();
 
 /* ════════════════════════════════════════════════════════════════════════════
@@ -27426,7 +28064,7 @@ restoreThemeFromBackend();
    ════════════════════════════════════════════════════════════════════════════ */
 (function(){
   function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
-  var CARDS={arp:'arp-ext',chop:'chop-ext',gli:'gli-ext',rbn:'rbn-ext',lfo:'lfo-ext'};   /* fb229 */
+  var CARDS={arp:'arp-ext',chop:'chop-ext',gli:'gli-ext',rbn:'rbn-ext',lfo:'lfo-ext',crv:'crv-ext'};   /* fb229 · fb328 crv */
 
   // SliderState look-alike over the setSynParam/getSynParam bypass — the popped
   // window has NO WebSliderRelays (a relay serves exactly one WebView), so the
@@ -27474,7 +28112,7 @@ restoreThemeFromBackend();
       try{ Promise.resolve(g()).then(function(s){ String(s||'').split(',').forEach(function(id){ if(id)window.__poppedCards[id]=1; }); }).catch(function(){}); }catch(e){} })();
     document.addEventListener('click',function(e){
       var p=e.target&&e.target.closest?e.target.closest('.pop'):null; if(!p)return;
-      var card=p.closest('.arp-ext,.chop-ext,.gli-ext,.rbn-ext,.lfo-ext'); if(!card)return;
+      var card=p.closest('.arp-ext,.chop-ext,.gli-ext,.rbn-ext,.lfo-ext,.crv-ext'); if(!card)return;
       e.preventDefault(); e.stopPropagation();
       var id=null,k; for(k in CARDS){ if(card.classList.contains(CARDS[k])){ id=k; break; } }
       if(!id)return;
@@ -27532,6 +28170,10 @@ restoreThemeFromBackend();
       if(!window.__openLfoCard){ setTimeout(boot,150); return; }
       try{ if(typeof setActivePanel==='function')setActivePanel('syn'); }catch(eSA){}
       window.__openLfoCard(); }
+    else if(window.__cardOnly==='crv'){   // fb328 — the curve card boots through its own door (the fb232 lfo grammar)
+      if(!window.__openCrvCard){ setTimeout(boot,150); return; }
+      try{ if(typeof setActivePanel==='function')setActivePanel('syn'); }catch(eSA){}
+      window.__openCrvCard(); }
     else {
       if(!window.__openFlowCard){ setTimeout(boot,150); return; }
       window.__openFlowCard(MODE); }
@@ -27544,7 +28186,7 @@ restoreThemeFromBackend();
     // page init is done — freeze everything that isn't the card (kills hidden draw
     // cost); anything appended LATER (glass menus) stays visible over the card.
     Array.prototype.forEach.call(document.body.children,function(el){ if(el===card)return;
-      if(window.__cardOnly==='lfo'&&el.querySelector&&el.querySelector('#syn-ctx-menu')){ el.classList.add('ti-ghost'); return; }   // fb232 — the canonical menu's branch stays LAID OUT (invisible, inert) so the card's right-click menus can rise; the no-reparent law holds
+      if((window.__cardOnly==='lfo'||window.__cardOnly==='crv')&&el.querySelector&&el.querySelector('#syn-ctx-menu')){ el.classList.add('ti-ghost'); return; }   // fb232 — the canonical menu's branch stays LAID OUT (invisible, inert) so the card's right-click menus can rise; the no-reparent law holds
       if(el.classList&&(el.classList.contains('mv-menu')||el.classList.contains('mv-toast'))) return;   // body-level glass (shape menus, toast) stays live over the card
       el.classList.add('ti-preboot'); });
     document.documentElement.classList.add('card-only-late');
@@ -28904,7 +29546,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb325';   // fb325 = THE FIELD-REPORT SWEEP (Max's 30-min report, all of it): emphasis 25% click = DIVIDE-BY-ZERO killed (dB-symmetric tilt) · drift laser+left-ear = per-channel wander fed the M/S pair different op points (now SHARED one-motor wander, aperiodic, rate-tamed) · WestCoast right-side = stateful DC-reference corrupting mid state (stateless c=-1 law) · tape drive-0 noise = pinning k didn't scale with a · transformer bias crackle = static magnetisation inside the differentiator (subtracted; reach x2.2) · THE DIODE KILLER: P7 slew default clamped the whole family to a 0.36 triangle since fb320 (correct exponential slew law) · Stomp Snarl free-run 808 = feedback through the CLEAN bass path -> Snarl is now a CMOS flip-flop OCTAVE-DOWN SUB riding the input envelope (key-tracked by construction) + drive pulls the band-split into the 808 body · NOTHING FREE-RUNS (input-env gate on every feedback + dither path) · no-plateau law: gap/dz retapers, stages reach-coupling, knee pre-round + post edge-slew + conduction tilt (survives deep drive), fb color pole (scream pitch drops across the top), SlewClip/OD drive tails, SineFold spacing real · Soft=railless quartic vs Hard=rail (night and day) + rosters culled to the keepers + event machines: Growl (the published Serum-2 sine->clip morph), Modulo saw-wrap, ZS Sub Oct flip-flop + PWM Env · Asym louder + Screamer screams + all knees live · Rectify makeup + full-travel dz · 3-pole Hi Cut at 350 Hz reach (the power of Sag) · Tone full-kill · global fb302 analog detune REMOVED (perfectly tuned) · Quality/Character dropdowns ghost-sized (nothing moves). Matrix harness: 19 modes x ~10 params, free-run/mono-center/click gates ALL clean.
+  var TERRAIN_BUILD = 'fb333';   // fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
