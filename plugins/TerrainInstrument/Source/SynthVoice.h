@@ -1804,7 +1804,7 @@ namespace tw
             // pitches. CENTERED on 0 → the synth averages perfectly in tune (this models an analog
             // VCO's per-note tuning imperfection, NOT a global flat offset). The slow drift is layered
             // on per-block below; together they make the pitch dance a few cents, like Serum's analog.
-            analogStaticCents_ = juce::jlimit (-6.0f, 6.0f, waverGaussian (analogRng_) * 2.0f);
+            analogStaticCents_ = 0.0f;   // fb325 — GLOBAL ANALOG DETUNE REMOVED (Max: perfectly tuned; tape wow covers analog drift)
             analogDriftCents_  = 0.0f;
             analogDetuneSemis_ = (double) analogStaticCents_ * 0.01;   // cents → semitones
 
@@ -4417,8 +4417,7 @@ namespace tw
                     + static_cast<double> (uDetuneCentsA_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsA_[(size_t) u])  * 0.01
                     + (double) coarseModA_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_
-                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift                                  // PITCH envelope (Batch 3)
+                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncA_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4436,8 +4435,7 @@ namespace tw
                     + static_cast<double> (uDetuneCentsB_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsB_[(size_t) u])  * 0.01
                     + (double) coarseModB_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_
-                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift                                  // PITCH envelope (Batch 3)
+                    + pitchEnvSemis_;                                  // PITCH envelope (Batch 3)
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncB_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4454,8 +4452,7 @@ namespace tw
                     + static_cast<double> (uDetuneCentsC_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsC_[(size_t) u])  * 0.01
                     + (double) coarseModC_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_
-                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift
+                    + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncC_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
@@ -4472,8 +4469,7 @@ namespace tw
                     + static_cast<double> (uDetuneCentsD_[(size_t) u]) * 0.01
                     + static_cast<double> (waverCentsD_[(size_t) u])  * 0.01
                     + (double) coarseModD_                                   // COARSE mod lane (per-block)
-                    + pitchEnvSemis_
-                    + analogDetuneSemis_;                             // fb302 — subtle analog detune/drift
+                    + pitchEnvSemis_;
                 const double hz = 440.0 * std::pow (2.0, semitones / 12.0);
                 uPhaseIncD_[(size_t) u] = std::min (hz / sampleRate_, 0.5);   // ±64 st Coarse can exceed fs — clamp at Nyquist
             }
