@@ -1,7 +1,18 @@
-# TERRAIN INSTRUMENT — STATE (fb333, 2026-08-12, MAJOR CHECKPOINT)
+# TERRAIN INSTRUMENT — STATE (fb335, 2026-08-12, CLEAN-UP CLOSE-OUT)
+<!-- HEAD: __HEADHASH__ -->
+
+## Session close-out (fb334-335, after the fb326-333 MAJOR CHECKPOINT commit 377dcb2)
+* **fb334 ALWAYS EVOLVING**: mini-viz geometry repaints from LOCAL CV every rAF frame (mirror
+  pass in the rack driver, fully feed-independent) + a 300 ms `busy` watchdog on the viz poll —
+  a never-settling JUCE promise can no longer freeze the mini/light/type-follow. LAW: busy-gated
+  native polls need settle watchdogs; state-mirroring viz redraws from LOCAL state per frame.
+* **fb335 GRID TO GRID**: footer `snap on/off` toggle (visible state — it persisted invisibly in
+  the blob) + right-click 'Snap points to grid' (whole-bank quantise; vertical steps survive;
+  centre anchor keeps x=0.5). Root cause of "crooked flats": Send To Shaper lands points
+  VERBATIM (by law) — mixing off-grid sent points with snapped drags = micro-slants.
 
 ## Where we are
-THE CURVE ERA is complete and Max-approved through fb333. The Distortion device (3rd FX device,
+THE CURVE ERA is complete and Max-approved through fb335. The Distortion device (3rd FX device,
 ONE device / 23 modes / 6 families) has a live transfer-curve core viz on all 23 modes and a full
 curve-editor extension card ('crv') for the drawn modes.
 
