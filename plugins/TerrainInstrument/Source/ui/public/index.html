@@ -2481,6 +2481,13 @@ body {
   border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
   padding:5px;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;max-height:228px;overflow-y:auto;overflow-x:hidden;}
 .mv-menu.open{display:block;}
+/* fb343 review — .mv-toast had NO CSS anywhere: the mod-engine toast (24673) has been INVISIBLE
+   since it shipped, and the new seed watchdog toasts inherited the ghost. Same glass as .mv-menu. */
+.mv-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483646;
+  background:rgba(24,24,38,0.60);-webkit-backdrop-filter:blur(16px) saturate(1.4);backdrop-filter:blur(16px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.10);border-radius:9px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
+  padding:7px 14px;font-family:-apple-system,'SF Pro Text',sans-serif;font-size:11px;color:rgba(255,255,255,.92);
+  letter-spacing:.02em;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .18s;}
 .mv-menu::-webkit-scrollbar{display:none;}   /* fb219 — NO white bars (Max): wheel-scroll only */
 .mv-menu div{display:flex;align-items:center;gap:9px;padding:6px 12px 6px 8px;border-radius:6px;cursor:pointer;color:rgba(255,255,255,.55);font-size:9.5px;letter-spacing:1px;white-space:nowrap;transition:.1s;}
 .mv-menu div:hover{background:rgba(255,255,255,0.08);color:#fff;}
@@ -2544,7 +2551,14 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .crv-ext .card-scope .sh-cd{fill:rgba(231,222,255,.82);pointer-events:none;}
 .crv-ext .card-scope .sh-hit{fill:transparent;cursor:grab;}
 .crv-ext .card-scope .sh-hit.cdh{cursor:ns-resize;}
-.crv-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;filter:drop-shadow(0 0 2px rgba(183,148,255,0.85)) drop-shadow(0 0 5px rgba(183,148,255,0.5));}
+.crv-ext .card-scope .mv-stroke{fill:none;stroke:#ECE8F2;stroke-width:1.8;}
+/* fb343 — GRADUATED SVG HALO replaces the double drop-shadow filter: the filter re-rastered at
+   full card size on EVERY d mutation (drag, live feed, mirror) — measured 5.55→0.81 ms/frame.
+   Three under-strokes share the line's d; the glow look + fb311 brightness math are unchanged. */
+.crv-ext .card-scope .crv-halo{fill:none;stroke:#B794FF;pointer-events:none;stroke-linejoin:round;stroke-linecap:round;}
+.crv-ext .card-scope .crv-halo.h1{stroke-width:7.5;stroke-opacity:.10;}
+.crv-ext .card-scope .crv-halo.h2{stroke-width:4.6;stroke-opacity:.17;}
+.crv-ext .card-scope .crv-halo.h3{stroke-width:2.8;stroke-opacity:.30;}
 .crv-ext .card-scope .mv-fill{fill:rgba(224,216,245,0.07);}
 .crv-ext .card-scope .crv-unity{stroke:#E0DCE8;stroke-width:1;opacity:.14;stroke-dasharray:2 3;}
 .crv-ext .card-scope .crv-occ line{stroke:var(--purple-400,#B794FF);stroke-width:5;stroke-linecap:round;}
@@ -2564,6 +2578,11 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .crv-ext .mv-tabs .t:hover{color:rgba(255,255,255,.55);}
 .crv-ext .mv-tabs .t.act{color:#fff;font-weight:600;}
 .crv-ext .mv-tabs .t.act::after{content:'';position:absolute;left:0;right:0;bottom:-3px;height:1px;background:var(--purple-400,#B794FF);}
+/* fb343 — Table SOURCE pills are words ('Stock'), not single letters: the 13px fixed slot made
+   'Gen' bleed into 'A' (measured 22px text in a 13px box). Auto width + padding, scoped to .srcs
+   so the bank tabs keep their fixed-slot no-reflow law; the underline spans the box either way. */
+.crv-ext .mv-tabs.srcs{gap:7px;margin-right:12px;}
+.crv-ext .mv-tabs.srcs .t{width:auto;min-width:13px;padding:0 3px;}
 .crv-ext .mv-c{display:flex;align-items:center;gap:5px;font-size:9px;letter-spacing:1.1px;font-weight:300;color:rgba(255,255,255,.55);cursor:pointer;transition:color .12s;-webkit-user-select:none;user-select:none;}
 .crv-ext .mv-c:hover{color:#fff;}
 .crv-ext .mv-c .ar{font-size:8px;opacity:.55;}
@@ -7210,9 +7229,14 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
         #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
         /* fb330 — the core curve wears the EXACT LFO line grammar (Max: "use the exact LFO lines
-           for the main distortion VIZ") — same white, same purple glow as the card/LFO shaper. */
-        #syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.7;
-          filter:drop-shadow(0 0 2px rgba(183,148,255,.85)) drop-shadow(0 0 5px rgba(183,148,255,.5)); }
+           for the main distortion VIZ") — same white, same purple glow as the card/LFO shaper.
+           fb343 — glow now = the graduated halo trio (the filter re-rastered 1.2ms/frame on every
+           d write: mirror pass + feed; measured 1.21→0.42ms). Same purple, same read. */
+        #syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.7; }
+        #syn-panel .fxr-core .dst-halo{ fill:none; stroke:#B794FF; pointer-events:none; stroke-linejoin:round; stroke-linecap:round; }
+        #syn-panel .fxr-core .dst-halo.h1{ stroke-width:7; stroke-opacity:.10; }
+        #syn-panel .fxr-core .dst-halo.h2{ stroke-width:4.4; stroke-opacity:.17; }
+        #syn-panel .fxr-core .dst-halo.h3{ stroke-width:2.6; stroke-opacity:.30; }
         #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
         #syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
         #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
@@ -7448,6 +7472,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                +'<g stroke="var(--border)" stroke-width="1"><line x1="63" y1="66" x2="63" y2="62"/><line x1="112" y1="66" x2="112" y2="62"/><line x1="161" y1="66" x2="161" y2="62"/><line x1="14" y1="49" x2="18" y2="49"/><line x1="14" y1="32" x2="18" y2="32"/><line x1="14" y1="15" x2="18" y2="15"/></g>'
                +'<line x1="14" y1="66" x2="212" y2="10" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
                +'<g class="dst-occ">'+occ+'</g>'
+               +'<path class="dst-halo h1" d=""/><path class="dst-halo h2" d=""/><path class="dst-halo h3" d=""/>'   /* fb343 — halo trio (see .dst-halo CSS) */
                +'<path class="dst-curve" d=""/></svg>';
             }
           };
@@ -8119,6 +8144,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                     function pyM(v){ return Math.max(8,Math.min(70,38-Math.max(-1.1,Math.min(1.1,v))*27)); }
                     for(iM=0;iM<97;iM++) dM+=(iM?'L':'M')+(14+198*iM/96).toFixed(1)+' '+pyM(dcM[iM]).toFixed(1)+' ';
                     if(pM.getAttribute('d')!==dM){ pM.setAttribute('d',dM);   // compare vs the DOM, not a cached sig — survives mode round-trips
+                      var hlM=svgM.querySelectorAll('.dst-halo');   // fb343 — the halo trio rides the same d
+                      for(var hM=0;hM<hlM.length;hM++) hlM[hM].setAttribute('d',dM);
                       var ogM=svgM.querySelector('.dst-occ');
                       if(ogM){ var sgM=ogM.children;
                         for(var sM=0;sM<sgM.length&&sM<48;sM++){ var iA=sM*2, iB=(sM+1)*2;
@@ -8152,13 +8179,18 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                     var sc=(pk>1)?1/pk:1;                          // display-normalise hot curves
                     function px(k){ return X0+(X1-X0)*k/(N-1); }
                     function py(v){ return Math.max(8,Math.min(70,CY-Math.max(-1.1,Math.min(1.1,v))*SY)); }
-                    if(path&&!dcP){ var d=''; for(i=0;i<N;i++) d+=(i?'L':'M')+px(i).toFixed(1)+' '+py(o.c[i]*sc).toFixed(1)+' '; path.setAttribute('d',d); }
+                    if(path&&!dcP){ var d=''; for(i=0;i<N;i++) d+=(i?'L':'M')+px(i).toFixed(1)+' '+py(o.c[i]*sc).toFixed(1)+' ';
+                      if(path.getAttribute('d')!==d){ path.setAttribute('d',d);   // fb343 — write-gated + the halo trio rides along
+                        var hlF=svg.querySelectorAll('.dst-halo'); for(var hF=0;hF<hlF.length;hF++) hlF[hF].setAttribute('d',d); } }
                     if(og){ var segs=og.children, lum=0.15+0.85*Math.min(1,(+o.b||0)*2.0);
                       for(var s2=0;s2<segs.length&&s2<48;s2++){ var i0=Math.round(s2*(N-1)/48), i1=Math.round((s2+1)*(N-1)/48);
-                        if(!dcP){
-                          segs[s2].setAttribute('x1',px(i0).toFixed(1)); segs[s2].setAttribute('y1',py(o.c[i0]*sc).toFixed(1));
-                          segs[s2].setAttribute('x2',px(i1).toFixed(1)); segs[s2].setAttribute('y2',py(o.c[i1]*sc).toFixed(1)); }
-                        segs[s2].setAttribute('opacity',(Math.min(1,(o.o[s2]||0))*lum*0.85).toFixed(3)); } }
+                        // fb343 — formatted-string write gates (fb334 idiom): idle = zero writes
+                        var el3=segs[s2], y1F=py(o.c[i0]*sc).toFixed(1), y2F=py(o.c[i1]*sc).toFixed(1),
+                            opF=(Math.min(1,(o.o[s2]||0))*lum*0.85).toFixed(3);
+                        if(!dcP&&(el3.getAttribute('y1')!==y1F||el3.getAttribute('y2')!==y2F)){
+                          el3.setAttribute('x1',px(i0).toFixed(1)); el3.setAttribute('y1',y1F);
+                          el3.setAttribute('x2',px(i1).toFixed(1)); el3.setAttribute('y2',y2F); }
+                        if(el3.getAttribute('opacity')!==opF) el3.setAttribute('opacity',opF); } }
                   }
                   if(window.__crvLiveTick) window.__crvLiveTick(o);   // the curve card rides the same feed
                 }catch(e){} }).catch(function(){ busy=false; }); }
@@ -24110,6 +24142,7 @@ restoreThemeFromBackend();
     if(k===2)return 2*p-1; if(k===3)return 1-2*p; if(k===4)return p<0.5?1:-1;
     if(k===5){var i=Math.floor(p*SH.length)%SH.length;return SH[i]*2-1;}
     if(k===6)return smooth(RP,p)*2-1; return 0; }
+  window.__lfoStockVal=stockVal;   // fb343 — the distortion card's LFO clone samples THE STRIP'S OWN evaluator (recycle law: the clone can never drift from what this pane draws)
   function stockPathD(k,g){ var n=220,d='',i; for(i=0;i<=n;i++){ var t=(i>=n)?0.999999:i/n;
     d+=(i?'L':'M')+shX(i>=n?1:t).toFixed(1)+' '+shY(polFrac(stockVal(k,t)),g).toFixed(1)+' '; } return d; }   // fb247 — polarity folds the stroke (Uni → a half)
   function scopeSVG(){ return shaperSVG(); }   // fb212 — ONE WORLD (Max: 'the grid always plays the number one role'): every shape lives in the field
@@ -27789,12 +27822,16 @@ restoreThemeFromBackend();
     return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()
      +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
      +occG()+'<path class="mv-fill" d="'+fillD+'"/>'+mirror
+     +haloP(d)
      +'<path class="mv-stroke crv-ink" d="'+d+'"/>'             /* fb332 — ONE LINE (Max/mockup): your curve IS the display. The live feed animates THIS path (and the dots ride it) — no second line, ever */
      +mdb+nd+cdm+hd+'</svg>'; }
+  /* fb343 — the halo trio under the ONE line (see the .crv-halo CSS note); every d-writer
+     that moves the line also moves these (drag repaints rebuild them, the live tick loops). */
+  function haloP(d){ return '<path class="crv-halo h1" d="'+d+'"/><path class="crv-halo h2" d="'+d+'"/><path class="crv-halo h3" d="'+d+'"/>'; }
   function liveSVG(){   // any non-drawn mode + Table: the LIVE engine curve, occupancy-lit
     return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()
      +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
-     +occG()+'<path class="mv-stroke crv-live" d=""/></svg>'; }
+     +occG()+haloP('')+'<path class="mv-stroke crv-live" d=""/></svg>'; }
   function harmSVG(){ var s='',i,bw=W/16, ghost='';
     var o=window.__dstViz;   // the Chebyshev-solved curve rides the live feed
     if(o&&o.c&&o.c.length){ var N=o.c.length,pk=0.001; for(i=0;i<N;i++)pk=Math.max(pk,Math.abs(o.c[i]));
@@ -27815,9 +27852,12 @@ restoreThemeFromBackend();
         +'<span class="mv-c" data-act="clearbars">Clear</span>'
         +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
     if(ty==='Table'){
-      var srcs=['Gen','A','B','C','D'], tt2='';   // fb339 — SOURCE pills: the osc's REAL frame stack becomes the morph
-      for(var si2=0;si2<5;si2++) tt2+='<span class="t'+(CV.tsrc===si2-1?' act':'')+'" data-tsrc="'+(si2-1)+'">'+srcs[si2]+'</span>';
-      return '<div class="mv-tabs">'+tt2+'</div>'
+      // fb343 — 'Gen' renamed 'Stock' (Max: "whatever that is" = the name failed the pragmatic law);
+      // titles say what each source IS; .srcs class = word-width pills (see CSS).
+      var srcs=['Stock','A','B','C','D'], tt2='';   // fb339 — SOURCE pills: the osc's REAL frame stack becomes the morph
+      var tth=['Built-in morph table','Oscillator A’s wavetable','Oscillator B’s wavetable','Oscillator C’s wavetable','Oscillator D’s wavetable'];
+      for(var si2=0;si2<5;si2++) tt2+='<span class="t'+(CV.tsrc===si2-1?' act':'')+'" data-tsrc="'+(si2-1)+'" title="'+tth[si2]+'">'+srcs[si2]+'</span>';
+      return '<div class="mv-tabs srcs">'+tt2+'</div>'
         +'<span class="crv-ro">Morph sweeps the frame stack</span>'
         +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>'; }
     var tabs=''; for(var bi=0;bi<4;bi++) tabs+='<span class="t'+(CV.bank===bi?' act':'')+'" data-bank="'+bi+'">'+['A','B','C','D'][bi]+'</span>';
@@ -27855,9 +27895,14 @@ restoreThemeFromBackend();
     var ink=svg.querySelector('.crv-ink'), cv=ink?drawnC(N):null;
     if(!ink){
       var live=svg.querySelector('.crv-live');
-      if(live){ live.setAttribute('d',pd(0,N-1)); }
+      // fb343 — write-gated (the fb334 d-compare idiom: gate WRITES, never the loop) + the halo
+      // trio rides the same d so the glow moves with the line at zero filter cost.
+      if(live){ var dL=pd(0,N-1);
+        if(live.getAttribute('d')!==dL){ live.setAttribute('d',dL);
+          var hls=svg.querySelectorAll('.crv-halo');
+          for(var hh=0;hh<hls.length;hh++) hls[hh].setAttribute('d',dL); } }
       var hg=svg.querySelector('.crv-hg');
-      if(hg){ hg.setAttribute('d',pd(0,N-1)); }
+      if(hg){ var dG=pd(0,N-1); if(hg.getAttribute('d')!==dG) hg.setAttribute('d',dG); }
     }
     var yAt=function(k){ return (ink&&cv)?fy((cv[k]+1)*0.5):ly(o.c[k]); };
     var segs=svg.querySelectorAll('.crv-oc'); if(!segs.length)return;
@@ -27865,9 +27910,14 @@ restoreThemeFromBackend();
     for(var s2=0;s2<segs.length;s2++){   // occupancy rides the ONE line — drawn y in the editor, feed y elsewhere
       var q0=s2/48, q1=(s2+1)/48;
       var i0=Math.round(q0*(N-1)),i1=Math.round(q1*(N-1));
-      segs[s2].setAttribute('x1',fx(q0).toFixed(1)); segs[s2].setAttribute('y1',yAt(i0).toFixed(1));
-      segs[s2].setAttribute('x2',fx(q1).toFixed(1)); segs[s2].setAttribute('y2',yAt(i1).toFixed(1));
-      segs[s2].setAttribute('opacity',(Math.min(1,(o.o[s2]||0))*lum*0.8).toFixed(3)); }
+      // fb343 — formatted-string write gates (fb334 idiom): at idle every value is constant, so
+      // 48 segs x 5 attrs of style-recalc writes per tick become ZERO; pulses still always land.
+      var el2=segs[s2], y1v=yAt(i0).toFixed(1), y2v=yAt(i1).toFixed(1),
+          opv=(Math.min(1,(o.o[s2]||0))*lum*0.8).toFixed(3);
+      if(el2.getAttribute('y1')!==y1v||el2.getAttribute('y2')!==y2v){
+        el2.setAttribute('x1',fx(q0).toFixed(1)); el2.setAttribute('y1',y1v);
+        el2.setAttribute('x2',fx(q1).toFixed(1)); el2.setAttribute('y2',y2v); }
+      if(el2.getAttribute('opacity')!==opv) el2.setAttribute('opacity',opv); }
   }catch(e){} };
 
   /* fb333 — THE DRAWN CURVE AS SHARED TRUTH: bipolar samples of the EDITING bank's curve
@@ -27909,9 +27959,24 @@ restoreThemeFromBackend();
   }catch(e){} };
 
   /* ── interactions ─────────────────────────────────────────────────────── */
-  function heroPos(ev){ var r=hero.getBoundingClientRect();
+  // fb343 — the rect is cached for the drag's duration (set at pointerdown, cleared at pointerup):
+  // gBCR right after paintField()'s innerHTML rebuild forced one synchronous layout PER MOVE.
+  // The hero cannot resize mid-drag, so the cache is exact.
+  var heroR=null;
+  // (review fix) cleared at gesture START too — a trailing coalesced frame or a dblclick can
+  // re-arm the cache after pointerup, and pointercancel never fired the old clearer; clearing
+  // on pointerdown makes any stray arming self-correct at the next gesture.
+  window.addEventListener('pointerup',function(){ heroR=null; },true);
+  window.addEventListener('pointercancel',function(){ heroR=null; },true);
+  window.addEventListener('pointerdown',function(){ heroR=null; },true);
+  function heroPos(ev){ var r=heroR||(heroR=hero.getBoundingClientRect());
     return { x:Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)),
              y:Math.max(0,Math.min(1,(FB-(ev.clientY-r.top)/r.height*H)/(FB-FT))) }; }
+  // fb343 — rAF-coalesce a per-EVENT move handler to one run per FRAME (last event wins):
+  // >60Hz pointing devices doubled the drag work; rate stays 60fps per fb330, only dupes die.
+  function perFrame(fn){ var pe=null,rq=0;
+    return function(ev){ pe=ev; if(rq)return;
+      rq=requestAnimationFrame(function(){ rq=0; fn(pe); }); }; }
   function stampCellC(q,T){   // fb213 brushes, transfer edition: the resting level is the CENTRE (the unity axis)
     var p=cPts(), odd=isOdd(), gv=CV.gv, ci=Math.max(0,Math.min(gv-1,Math.floor(q.x*gv)));
     if(odd&&(ci+0.5)/gv<0.5) return false;               // odd mode: the left half is generated ink
@@ -27966,8 +28031,8 @@ restoreThemeFromBackend();
       if(e.button===2)return;
       var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
       if(bar){ e.preventDefault();
-        var pnt=function(ev){ var q=heroPos(ev); var bi=Math.max(0,Math.min(15,Math.floor(q.x*16)));
-          CV.bars[bi]=Math.max(-1,Math.min(1,(q.y-0.5)/0.46)); paintField(); cPush(); };
+        var pnt=perFrame(function(ev){ var q=heroPos(ev); var bi=Math.max(0,Math.min(15,Math.floor(q.x*16)));
+          CV.bars[bi]=Math.max(-1,Math.min(1,(q.y-0.5)/0.46)); paintField(); cPush(); });   // fb343 — coalesced
         pnt(e);
         var up0=function(){ window.removeEventListener('pointermove',pnt); window.removeEventListener('pointerup',up0); paint(); };
         window.addEventListener('pointermove',pnt); window.addEventListener('pointerup',up0); return; }
@@ -27977,9 +28042,9 @@ restoreThemeFromBackend();
       var cd=e.target.closest&&e.target.closest('.sh-hit.cdh');
       if(cd){ e.preventDefault();
         var i2=+cd.getAttribute('data-i'), a=p[i2], b=p[i2+1], c0=a[2]||0, y0=e.clientY;
-        var mvT=function(ev){ var dir=(b[1]>=a[1])?1:-1;
+        var mvT=perFrame(function(ev){ var dir=(b[1]>=a[1])?1:-1;
           var nc=Math.max(-1,Math.min(1,c0+(y0-ev.clientY)*0.012*dir)); if(Math.abs(nc)<0.06)nc=0;   // fb208 — zero detent
-          a[2]=nc; paintField(); cPush(); };
+          a[2]=nc; paintField(); cPush(); });   // fb343 — coalesced
         var upT=function(){ window.removeEventListener('pointermove',mvT); window.removeEventListener('pointerup',upT); paint(); };
         window.addEventListener('pointermove',mvT); window.addEventListener('pointerup',upT); return; }
       var hit=e.target.closest&&e.target.closest('.sh-hit');
@@ -27988,14 +28053,14 @@ restoreThemeFromBackend();
         var isEnd=(i3===0||i3===p.length-1);
         var isAnc=(Math.abs(p[i3][0]-0.5)<1e-4&&!CV.unpin);
         var odd=isOdd();
-        var mvP=function(ev){ var q=heroPos(ev), pt=p[i3]; if(!pt)return;
+        var mvP=perFrame(function(ev){ var q=heroPos(ev), pt=p[i3]; if(!pt)return;
           if(!isEnd&&!isAnc){
             var lo=(i3>0?p[i3-1][0]:0)+0.004, hi=(i3<p.length-1?p[i3+1][0]:1)-0.004;
             if(odd) lo=Math.max(lo,0.5);
             var nx=CV.sn?snapV(q.x,CV.gv):q.x;
             pt[0]=Math.max(lo,Math.min(hi,nx)); }
           if(!isAnc) pt[1]=CV.sn?snapV(q.y,CV.gh):q.y;
-          paintField(); cPush(); };
+          paintField(); cPush(); });   // fb343 — coalesced
         var upP=function(){ window.removeEventListener('pointermove',mvP); window.removeEventListener('pointerup',upP); paint(); };
         window.addEventListener('pointermove',mvP); window.addEventListener('pointerup',upP); return; }
     }; }
@@ -28036,26 +28101,65 @@ restoreThemeFromBackend();
     'Fold Sine':  (function(){ var p=[],i; for(i=0;i<=16;i++){ var x=i/16; p.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*9.42477-4.71239)).toFixed(4),0]); } return p; })() };
   function seedTo(p2,nm){ var g=p2.map(function(q){return q.slice();});
     setPts(g); ensureAnchor(cPts()); CV.src=nm||''; sel=-1; cPush(); paint(); }
+  // fb343 — seed toast (the .mv-toast glass, recycled): law-⑤ hardening — a never-settling
+  // native (the fb90 class that silently killed the osc clone in the popped window) now
+  // SURFACES instead of dying as a mystery no-op.
+  var crvTo=null,crvToT=0;
+  function crvToast(m){ try{ if(!crvTo){ crvTo=document.createElement('div'); crvTo.className='mv-toast'; document.body.appendChild(crvTo); }
+    crvTo.textContent=m; crvTo.style.opacity='1'; clearTimeout(crvToT); crvToT=setTimeout(function(){ crvTo.style.opacity='0'; },1400); }catch(e){} }
+  // fb343/fb331 — a clone seed must BE the sound: Morph lands on the SEEDED (current) bank —
+  // bank k is audible at SIG=k/3 (the engine's A→B→C→D sweep). Flat 0 would re-create the
+  // inaudible-seed bug whenever the edited bank is B-D. sendToShaper's force is the precedent.
+  function crvSigForce(){ try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(CV.bank/3); }catch(e){} }
   function oscToCurve(o){   // fb248 pipeline — the REAL osc frame via getOscLfoWave, NON-cyclic (a transfer curve is not a cycle)
-    var f=NF('getOscLfoWave'); if(!f)return;
-    try{ f(o).then(function(js){ try{ var d=(typeof js==='string')?JSON.parse(js):js;
+    var f=NF('getOscLfoWave'); if(!f){ crvToast('Seed unavailable'); return; }
+    var fired=false, wd=setTimeout(function(){ fired=true; crvToast('Osc '+['A','B','C','D'][o]+' didn’t answer — seed skipped'); },300);
+    try{ f(o).then(function(js){ clearTimeout(wd);
+      if(fired)return;   // (review fix) the toast already told Max it was skipped — a late apply would clobber whatever he's drawn since
+      try{ var d=(typeof js==='string')?JSON.parse(js):js;
       if(!d||!d.d||!d.d.length||!d.n)return;
       var N=d.n,raw=[],i;
       for(i=0;i<N;i++) raw.push([i/(N-1),Math.max(0,Math.min(1,(d.d[i]+1)/2))]);
       var simp=cRdp(raw,0.015); if(simp.length>32)simp=cRdp(raw,0.03); if(simp.length>32)simp=cRdp(raw,0.055);
       if(simp.length>32)simp=simp.slice(0,32);
       CV.unpin=true;   // an osc wave needn't pass the centre — its shape lands verbatim
+      crvSigForce();   // fb331 — the seeded ink IS the sound; BEFORE seedTo so its paint() reads the forced Morph (rail dot)
       seedTo(simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];}),'Osc '+['A','B','C','D'][o]);
-    }catch(e2){} }).catch(function(){}); }catch(e3){} }
+    }catch(e2){} }).catch(function(){ clearTimeout(wd); }); }catch(e3){ clearTimeout(wd); } }
   function lfoToCurve(n){   // the LFO shapes share this exact [x,y,c] model — a free curve library
-    var f=NF('getSynthLfoShapes'); if(!f)return;
-    try{ f().then(function(j){ try{ var v=JSON.parse(String(j||'{}'));
+    var f=NF('getSynthLfoShapes'); if(!f){ crvToast('Seed unavailable'); return; }
+    var fired=false, wd=setTimeout(function(){ fired=true; crvToast('LFO '+n+' didn’t answer — seed skipped'); },300);
+    function land(p2){ CV.unpin=true;
+      crvSigForce();   // fb331 — the seeded ink IS the sound; BEFORE seedTo so its paint() reads the forced Morph
+      seedTo(p2,'LFO '+n); }
+    try{ f().then(function(j){ clearTimeout(wd);
+      if(fired)return;   // (review fix) never apply after the toast said skipped
+      try{ var v=JSON.parse(String(j||'{}'));
       var hit=null; (v.shapes||[]).forEach(function(e2){ if(e2.n===n&&e2.pts&&e2.pts.length>1)hit=e2; });
-      if(!hit)return;
-      var p2=hit.pts.map(function(q){return [q[0],q[1],q[2]||0];}).slice(0,32);
-      CV.unpin=true;
-      seedTo(p2,'LFO '+n);
-    }catch(e2){} }).catch(function(){}); }catch(e3){} }
+      if(hit){ land(hit.pts.map(function(q){return [q[0],q[1],q[2]||0];}).slice(0,32)); return; }
+      // fb343 — no drawn entry: sample the STRIP's stock shape. The truth is the LFO<n>_SHAPE
+      // param (normalized over the 11-shape enum) + the strip's OWN evaluator __lfoStockVal
+      // (exported from the mv module — the verify agent caught the first draft reading the
+      // 3-LFO FX palette via getModState: WRONG SYSTEM, wrong enums, wrong random tables).
+      var pol=0; (v.shapes||[]).forEach(function(e2){ if(e2.n===n&&e2.mo)pol=e2.mo.pol||0; });   // fb246 Uni+/Bi
+      var fg=NF('getSynParam');
+      if(!fg||typeof window.__lfoStockVal!=='function'){ crvToast('Draw LFO '+n+'’s shape first'); return; }
+      var fired2=false, wd2=setTimeout(function(){ fired2=true; crvToast('LFO '+n+' didn’t answer — seed skipped'); },300);
+      fg('LFO'+n+'_SHAPE').then(function(sv){ clearTimeout(wd2); if(fired2)return;
+        try{ var fv=+sv; if(!isFinite(fv)){ crvToast('LFO '+n+' unavailable'); return; }
+          var sh=Math.round(fv*10);   // NSHAPE=11: Sine Tri Saw Saw↓ Sqr S&H Rand Custom Path Lorenz Rossler
+          if(sh===7){ crvToast('Draw LFO '+n+'’s shape first'); return; }   // Custom with no blob points = nothing to clone
+          if(sh>7){ crvToast((['Path','Lorenz','Rossler'][sh-8]||'This LFO')+' has no fixed shape to clone'); return; }
+          var N2=129,raw2=[],k2;
+          for(k2=0;k2<N2;k2++){ var x2=Math.min(0.999999,k2/(N2-1)),         // endpoint HOLDS — a transfer curve doesn't wrap (stockVal's %1 would snap x=1 back to phase 0)
+              vv=window.__lfoStockVal(sh,x2);
+            raw2.push([k2/(N2-1),Math.max(0,Math.min(1,pol?(vv+3)/4:(vv+1)/2))]); }   // Uni+ lives in the upper half, exactly as the strip draws it
+          var s3=cRdp(raw2,0.015); if(s3.length>32)s3=cRdp(raw2,0.03); if(s3.length>32)s3=cRdp(raw2,0.055);
+          if(s3.length>32)s3=s3.slice(0,32);
+          land(s3.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];}));
+        }catch(em){ crvToast('LFO '+n+' seed failed'); }                     // (verify fix) malformed data SURFACES
+      }).catch(function(){ clearTimeout(wd2); });
+    }catch(e2){} }).catch(function(){ clearTimeout(wd); }); }catch(e3){ clearTimeout(wd); } }
   /* fb340 — PER-POINT Y MOD (bible §6.7, the fb238 machinery verbatim-in-grammar): right-click a
      point → source picker (LFO 1..10) + the center-fill amount slider. The range bar shows the
      travel; the ENGINE re-bakes the audible curve at block rate (0.002-gated, 40 ms crossfade). */
@@ -28216,8 +28320,8 @@ restoreThemeFromBackend();
       if(r0){ e.preventDefault();                          // fb329 — the footer Morph rail is LIVE (writes SYN_DST_SIG)
         if(!pSig)pSig=PS('SYN_DST_SIG',0); if(!pSig)return;
         var rr=r0.getBoundingClientRect(), dot=r0.querySelector('i');
-        var setM=function(ev){ var nv=Math.max(0,Math.min(1,(ev.clientX-rr.left)/Math.max(1,rr.width)));
-          pSig.setNormalisedValue(nv); if(dot)dot.style.left=(nv*100)+'%'; };
+        var setM=perFrame(function(ev){ var nv=Math.max(0,Math.min(1,(ev.clientX-rr.left)/Math.max(1,rr.width)));
+          pSig.setNormalisedValue(nv); if(dot)dot.style.left=(nv*100)+'%'; });   // fb343 — coalesced: the popped rail fired one native write PER EVENT
         setM(e);
         var upM=function(){ window.removeEventListener('pointermove',setM); window.removeEventListener('pointerup',upM); };
         window.addEventListener('pointermove',setM); window.addEventListener('pointerup',upM); return; }
@@ -28255,16 +28359,38 @@ restoreThemeFromBackend();
   }
   window.__openCrvCard=openCrv;
 
-  /* card-only window: self-poll the live feed (the main rack driver is frozen there) */
+  /* card-only window: ADAPTIVE fallback self-poll. fb343 — the primary feed RIDES THE 60Hz C++
+     timer push (the fb232 LFO-card grammar, PluginEditor timerCallback → __crvLiveTick), which
+     is what makes main-window Drive/Asym motion mirror here like water (was 66ms = 15Hz chop).
+     But the push lives in the EDITOR's timer and popped cards OUTLIVE the editor (processor-
+     owned) — so this lane checks the __crvPushT freshness stamp at the old 66ms cadence and
+     only CALLS the native when the push lane has gone quiet >600ms (editor closed / boot).
+     Push alive = zero poll traffic; editor closed = the shipped 15Hz, never 2Hz. */
   if(window.__cardOnly==='crv'){
     var vf=null;
     setInterval(function(){ try{
       if(!card||!card.classList.contains('open'))return;
+      if(Date.now()-(window.__crvPushT||0)<600)return;   // push lane alive — sleep
       if(!vf)vf=NF('getDistortionCurveViz'); if(!vf)return;
       vf().then(function(js){ try{ var o=JSON.parse(String(js||'{}'));
         if(o.c&&o.c.length){ window.__dstViz=o; window.__crvLiveTick(o); } }catch(e){} }).catch(function(){});
     }catch(e){} },66);
   }
+  /* fb343 — the fb236-pattern TIMER RELAY lands here: C++ pushes the blob to both surfaces the
+     tick after dstPtVersion_ bumps, so cross-window ink edits mirror in <=56ms instead of the
+     150ms poll. Compare/touch-guarded exactly like crvXWin's apply — the poll below survives as
+     idle reconciliation (fb232: the blob truth lane stays a compare-safe pull). */
+  window.__crvXApply=function(ob){ try{ var j=(typeof ob==='string')?ob:JSON.stringify(ob);
+    if(!j||j.charAt(0)!=='{')return;
+    if(Date.now()-(window.__crvTouchT||0)<450)return;   // a local gesture owns the truth right now
+    // echo compare NORMALIZED: the relay arrives as an object literal, so its re-stringified
+    // form rarely byte-matches lastPush (pushNow's original string) — parse/restringify the
+    // stored side once so our own edits never re-apply.
+    if(j===lastPush)return;
+    if(lastPush){ try{ if(JSON.stringify(JSON.parse(lastPush))===j)return; }catch(eq){} }
+    applyBlob(j); lastPush=j;
+    if(card&&card.classList.contains('open'))paint();
+  }catch(e){} };
   /* two windows, one blob (fb232 law): whichever side edits, the other pulls (compare-gated) */
   (function crvXWin(){ var last=null;
     setInterval(function(){
@@ -29776,7 +29902,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb342';   // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
+  var TERRAIN_BUILD = 'fb343';   // fb343 = CARD LIKE WATER + THE CLONE FIX: (1) graduated SVG halo trio replaces the double drop-shadow filter on the curve card + rack core (measured 5.55->0.81ms/frame at card size — the filter re-rastered on EVERY d mutation; same purple read, A/B-matched), (2) popped crv card rides the 60Hz C++ timer push (fb232 LFO grammar; was a 66ms/15Hz self-poll = the choppy Drive/Asym mirror; self-poll demoted to 500ms fallback), (3) fb236-pattern blob relay via dstPtVersion_ -> __crvXApply both surfaces (<=56ms ink mirror; 150ms crvXWin poll = idle reconcile only), (4) drag hygiene: heroPos rect cached per gesture (was one forced layout PER MOVE), rAF-coalesced mvP/mvT/bars/Morph-rail (>60Hz devices doubled work), write-gated occ/live attrs (idle = zero style-recalcs), (5) OSC CLONE FIXED: getOscLfoWave was MAIN-LIST-ONLY -> in the popped card the Wavetable->Curve seed was a never-settling silent no-op (fb90 class again) — now on both lists + law-⑤ watchdog toast + fb331 force (seed sets SIG=bank/3 so the seeded ink IS the sound; LFO clone toasts on undrawn shapes instead of silent no-op), (6) Table source pills: 'Gen'->'Stock', word-width .srcs slots (13px fixed slot made Gen bleed into A). // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

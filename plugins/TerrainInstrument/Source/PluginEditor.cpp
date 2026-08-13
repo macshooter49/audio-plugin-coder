@@ -4864,6 +4864,24 @@ public:
                 {
                     complete (juce::var ((double) proc.getReverbBloom()));
                 })
+                // fb343 — the Wavetable→Curve seed calls this from the POPPED crv card (fb328 seeds);
+                // main-list-only registration made the seed a total silent no-op there (the fb90
+                // never-settling-promise class, again). Body mirrors the main list's fb248 handler.
+                .withNativeFunction ("getOscLfoWave", [&proc](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    const int oscIdx = args.size() > 0 ? juce::jlimit (0, 3, (int) args[0]) : 0;
+                    complete (juce::var (proc.getOscLfoWaveJson (oscIdx)));
+                })
+                // fb343 — both-lists hardening: getModState was MAIN-only (read-only JSON of the
+                // FX mod palette). Registered here so any future card-page caller can't recreate
+                // the never-settling-promise class. (Note: this is the 3-LFO FX palette, NOT the
+                // 10-LFO synth strip — the LFO clone seed reads LFO<n>_SHAPE via getSynParam.)
+                .withNativeFunction ("getModState", [&proc](const juce::Array<juce::var>&,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.modStateJson));
+                })
                 .withNativeFunction ("getDelayBloom", [&proc](const juce::Array<juce::var>&,
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -5546,6 +5564,41 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 cwv->evalJs ("try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];"
                              "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}"
                              "window.__mvLfoPhT=Date.now();}catch(e){}");   // fb238 vals + fb239 swirl + fb241 note flag ride to the card
+    }
+
+    // fb343 — the popped CRV card's live feed rode a 66ms self-poll (15Hz): Drive/Asym motion
+    // in the main window mirrored to the card in visible steps (Max: "moves very slow... like
+    // water" is the bar). It now rides THIS 60Hz timer exactly like the LFO card above (fb232
+    // grammar); the JS self-poll is demoted to a 500ms natives-absent fallback lane.
+    if (auto itCv = audioProcessor.cardWindows_.find ("crv");
+        itCv != audioProcessor.cardWindows_.end() && itCv->second != nullptr)
+        if (auto* cwv2 = dynamic_cast<TerrainCardWindow*> (itCv->second.get()))
+            cwv2->evalJs ("try{window.__crvPushT=Date.now();var o=" + audioProcessor.getDistortionCurveVizJson()
+                          + ";if(o&&o.c&&o.c.length){window.__dstViz=o;"
+                            "window.__crvLiveTick&&window.__crvLiveTick(o);}}catch(e){}");
+                          // fb343 review — __crvPushT = freshness stamp: the card's fallback poll
+                          // sleeps while this push lane is alive and revives at 15Hz when the
+                          // editor closes (popped cards OUTLIVE the editor — processor-owned).
+
+    // fb343 — fb236's relay, CURVE-BLOB edition: an ink edit on either surface lands on the
+    // OTHER window at timer rate via __crvXApply (which reuses crvXWin's compare/touch-guarded
+    // apply). The 150ms crvXWin poll stays as idle reconciliation. dstPtVersion_ bumps on every
+    // setDistortionCurves (any window), so this fires exactly once per landed edit batch.
+    {
+        const int dv = audioProcessor.dstPtVersion_.load (std::memory_order_acquire);
+        if (dv != dstPtRelaySeen_)
+        {
+            dstPtRelaySeen_ = dv;
+            const juce::String dj = audioProcessor.getDistortionCurvesJson();
+            if (dj.isNotEmpty() && dj.startsWithChar ('{'))
+            {
+                js << "try{if(window.__crvXApply){window.__crvXApply(" << dj << ");}}catch(e){}";
+                if (auto itC3 = audioProcessor.cardWindows_.find ("crv");
+                    itC3 != audioProcessor.cardWindows_.end() && itC3->second != nullptr)
+                    if (auto* cwc3 = dynamic_cast<TerrainCardWindow*> (itC3->second.get()))
+                        cwc3->evalJs ("try{if(window.__crvXApply){window.__crvXApply(" + dj + ");}}catch(e){}");
+            }
+        }
     }
 
     // fb236 — LIVE STROKE relay: a drawing gesture on either surface lands on the OTHER

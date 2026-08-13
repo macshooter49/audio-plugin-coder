@@ -851,6 +851,9 @@ private:
     // closed only by its own X), so it must keep the spectrum feed alive on ANY page. JS reports
     // open/close via setFltExtOpen; this ORs into the push gate.
     std::atomic<bool> fltExtOpen_ { false };
+    // fb343 — last-relayed curve-blob version (the lfoLiveSeen_ pattern). Starts at the counter's
+    // initial value so boot does NOT relay (crvXWin's boot pull already covers cold state).
+    int dstPtRelaySeen_ = 0;
 
     // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82/fb83) — ⧉ on a card header detaches
     // it into a borderless always-on-top native window holding its OWN WebView, booted
