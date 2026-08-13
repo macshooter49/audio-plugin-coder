@@ -966,6 +966,17 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete (juce::var (audioProcessor.getDistortionCurvesJson()));   // fb328 — card boot + popped-window pull
             })
+            .withNativeFunction("setDstTableSrc", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.setDistortionTableSrc (args.size() > 0 ? (int) args[0] : -1);   // fb339 — Table source pill
+                complete (juce::var (audioProcessor.getDistortionTableSrc()));
+            })
+            .withNativeFunction("getDstTableSrc", [this](const juce::Array<juce::var>&,
+                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getDistortionTableSrc()));
+            })
             .withNativeFunction("getDistortionCurveViz", [this](const juce::Array<juce::var>&,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4817,6 +4828,17 @@ public:
                                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
                     complete (juce::var (proc.getDistortionCurvesJson()));
+                })
+                .withNativeFunction ("setDstTableSrc", [&proc](const juce::Array<juce::var>& args,
+                                                                juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    proc.setDistortionTableSrc (args.size() > 0 ? (int) args[0] : -1);   // fb339 — the card window's own list (the law)
+                    complete (juce::var (proc.getDistortionTableSrc()));
+                })
+                .withNativeFunction ("getDstTableSrc", [&proc](const juce::Array<juce::var>&,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var (proc.getDistortionTableSrc()));
                 })
                 .withNativeFunction ("getDistortionCurveViz", [&proc](const juce::Array<juce::var>&,
                                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)

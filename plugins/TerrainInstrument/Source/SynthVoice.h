@@ -325,6 +325,8 @@ namespace tw
             sendFilterSlot2_.prepare (sr);
             sendFilterSlot3_.prepare (sr);   // fb296 — post-filter delay send (independent state)
             sendFilterSlot4_.prepare (sr);
+            sendFilterSlot5_.prepare (sr);   // fb338 — post-filter DISTORTION send (independent state)
+            sendFilterSlot6_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
             // frequency + shape are pushed per block via setModConfig).
@@ -406,6 +408,9 @@ namespace tw
             dlySendF1_ .setSize (2, spb, false, true,  true);   // fb296 — delay-send routing buses (independent mask)
             dlySendF2_ .setSize (2, spb, false, true,  true);
             dlySendDry_.setSize (2, spb, false, true,  true);
+            dstSendF1_ .setSize (2, spb, false, true,  true);   // fb338 — distortion-send routing buses
+            dstSendF2_ .setSize (2, spb, false, true,  true);
+            dstSendDry_.setSize (2, spb, false, true,  true);
             envScratch_.setSize (5, spb, false, true,  true);
             sampleBlkA_.setSize (2, spb, false, false, true);
             sampleBlkB_.setSize (2, spb, false, false, true);
@@ -497,6 +502,7 @@ namespace tw
             filterSlot_.setType (static_cast<tw::filters::Type> (clamped));
             sendFilterSlot_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
+            sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -511,6 +517,7 @@ namespace tw
             filterSlot2_.setType (static_cast<tw::filters::Type> (clamped));
             sendFilterSlot2_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
+            sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
         void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
@@ -555,7 +562,8 @@ namespace tw
         void setFilterPoles (int tap1, int tap2) noexcept
         { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2);      // tap 0..3 = 6/12/18/24 dB
           sendFilterSlot_.setPoles (tap1); sendFilterSlot2_.setPoles (tap2);     // fb287 — send mirror
-          sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2); }  // fb296 — delay-send mirror
+          sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2);     // fb296 — delay-send mirror
+          sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2); }  // fb338 — distortion-send mirror
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -1920,6 +1928,13 @@ namespace tw
             dlyG_[0] = a; dlyG_[1] = b; dlyG_[2] = c; dlyG_[3] = d; dlyG_[4] = sub; dlyG_[5] = noise;
             dlyAny_ = (a + b + c + d + sub + noise) > 0.0f;
         }
+        // fb338 — per-osc DISTORTION send (third parallel bus, fully independent mask).
+        void setDistortionSendTarget (float* L, float* R) noexcept { dstSendL_ = L; dstSendR_ = R; }
+        void setDistortionRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
+        {
+            dstG_[0] = a; dstG_[1] = b; dstG_[2] = c; dstG_[3] = d; dstG_[4] = sub; dstG_[5] = noise;
+            dstAny_ = (a + b + c + d + sub + noise) > 0.0f;
+        }
 
         void renderNextBlock (juce::AudioBuffer<float>& out,
                               int startSample, int numSamples) override
@@ -1983,6 +1998,16 @@ namespace tw
             float* dF2R = dlySendActive ? dlySendF2_.getWritePointer (1) : nullptr;
             float* dDryL = dlySendActive ? dlySendDry_.getWritePointer (0) : nullptr;
             float* dDryR = dlySendActive ? dlySendDry_.getWritePointer (1) : nullptr;
+            // fb338 — DISTORTION send buses (third mask, same filter split). Zero cost unless routed.
+            const bool dstSendActive = (dstSendL_ != nullptr) && dstAny_;
+            if (dstSendActive && (dstSendF1_.getNumChannels() < 2 || dstSendF1_.getNumSamples() < numSamples))
+            { dstSendF1_.setSize (2, numSamples, false, true, true); dstSendF2_.setSize (2, numSamples, false, true, true); dstSendDry_.setSize (2, numSamples, false, true, true); }
+            float* tF1L = dstSendActive ? dstSendF1_.getWritePointer (0) : nullptr;
+            float* tF1R = dstSendActive ? dstSendF1_.getWritePointer (1) : nullptr;
+            float* tF2L = dstSendActive ? dstSendF2_.getWritePointer (0) : nullptr;
+            float* tF2R = dstSendActive ? dstSendF2_.getWritePointer (1) : nullptr;
+            float* tDryL = dstSendActive ? dstSendDry_.getWritePointer (0) : nullptr;
+            float* tDryR = dstSendActive ? dstSendDry_.getWritePointer (1) : nullptr;
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
             // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
@@ -3974,6 +3999,17 @@ namespace tw
                     dDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
                     dDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
                 }
+                if (dstSendActive)   // fb338 — same per-osc filter split, gated by the DISTORTION's independent route mask
+                {
+                    const float rAL = dstG_[0]*oAL, rBL = dstG_[1]*oBL, rCL = dstG_[2]*oCL, rDL = dstG_[3]*oDL, rSL = dstG_[4]*subBL, rNL = dstG_[5]*noiseAddL;
+                    const float rAR = dstG_[0]*oAR, rBR = dstG_[1]*oBR, rCR = dstG_[2]*oCR, rDR = dstG_[3]*oDR, rSR = dstG_[4]*subBR, rNR = dstG_[5]*noiseAddR;
+                    tF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
+                    tF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
+                    tF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
+                    tF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
+                    tDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
+                    tDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -3990,6 +4026,7 @@ namespace tw
                     busDryL[i]  *= robinAmpL_;  busDryR[i]  *= robinAmpR_;
                     if (sendActive) { sF1L[i]*=robinAmpL_; sF1R[i]*=robinAmpR_; sF2L[i]*=robinAmpL_; sF2R[i]*=robinAmpR_; sDryL[i]*=robinAmpL_; sDryR[i]*=robinAmpR_; }   // fb287 — send matches
                     if (dlySendActive) { dF1L[i]*=robinAmpL_; dF1R[i]*=robinAmpR_; dF2L[i]*=robinAmpL_; dF2R[i]*=robinAmpR_; dDryL[i]*=robinAmpL_; dDryR[i]*=robinAmpR_; }   // fb296 — delay send matches
+                    if (dstSendActive) { tF1L[i]*=robinAmpL_; tF1R[i]*=robinAmpR_; tF2L[i]*=robinAmpL_; tF2R[i]*=robinAmpR_; tDryL[i]*=robinAmpL_; tDryR[i]*=robinAmpR_; }   // fb338 — distortion send matches
                 }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -4003,6 +4040,7 @@ namespace tw
                     busDryL[i]  *= sf;  busDryR[i]  *= sf;
                     if (sendActive) { sF1L[i]*=sf; sF1R[i]*=sf; sF2L[i]*=sf; sF2R[i]*=sf; sDryL[i]*=sf; sDryR[i]*=sf; }   // fb287 — send fades too
                     if (dlySendActive) { dF1L[i]*=sf; dF1R[i]*=sf; dF2L[i]*=sf; dF2R[i]*=sf; dDryL[i]*=sf; dDryR[i]*=sf; }   // fb296 — delay send fades too
+                    if (dstSendActive) { tF1L[i]*=sf; tF1R[i]*=sf; tF2L[i]*=sf; tF2R[i]*=sf; tDryL[i]*=sf; tDryR[i]*=sf; }   // fb338 — distortion send fades too
                     stealingFade_ *= stealingFadeStep_;
                 }
                 if (stealingFade_ < 0.001f)
@@ -4309,6 +4347,24 @@ namespace tw
                         {
                             dlySendL_[oi] += dF1L[i] + dF2L[i] + dDryL[i];
                             dlySendR_[oi] += dF1R[i] + dF2R[i] + dDryR[i];
+                        }
+                    }
+                    // fb338 — DISTORTION send: identical treatment through its own send-filters + bus.
+                    if (dstSendActive)
+                    {
+                        const int oi = startSample + i;
+                        if (a1 || a2)
+                        {
+                            sendFilterSlot5_.setParams (lastCutHz1_, res1, drvSm1_, sr);
+                            sendFilterSlot6_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            float soL, soR; filterBuses (tF1L[i], tF1R[i], tF2L[i], tF2R[i], soL, soR, sendFilterSlot5_, sendFilterSlot6_);
+                            dstSendL_[oi] += soL + tDryL[i];
+                            dstSendR_[oi] += soR + tDryR[i];
+                        }
+                        else
+                        {
+                            dstSendL_[oi] += tF1L[i] + tF2L[i] + tDryL[i];
+                            dstSendR_[oi] += tF1R[i] + tF2R[i] + tDryR[i];
                         }
                     }
                 }
@@ -4717,6 +4773,8 @@ namespace tw
         tw::filters::FilterSlot sendFilterSlot2_;
         tw::filters::FilterSlot sendFilterSlot3_;   // fb296 — delay-send filter mirror (independent from reverb send)
         tw::filters::FilterSlot sendFilterSlot4_;
+        tw::filters::FilterSlot sendFilterSlot5_;   // fb338 — distortion-send filter mirror
+        tw::filters::FilterSlot sendFilterSlot6_;
         float                   baseCutHz2_  = 20000.0f;
         float                   baseRes012_  = 0.0f;
         float                   drv012_      = 0.0f;
@@ -4761,6 +4819,12 @@ namespace tw
         float*                  dlySendR_ = nullptr;
         float                   dlyG_[6] = { 0, 0, 0, 0, 0, 0 };
         bool                    dlyAny_ = false;
+        // fb338 — per-osc DISTORTION send: third parallel bus, fully independent mask.
+        juce::AudioBuffer<float> dstSendF1_, dstSendF2_, dstSendDry_;
+        float*                  dstSendL_ = nullptr;
+        float*                  dstSendR_ = nullptr;
+        float                   dstG_[6] = { 0, 0, 0, 0, 0, 0 };
+        bool                    dstAny_ = false;
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
         float                   drvNorm1_ = 1.0f, drvNorm2_ = 1.0f;  // fb123 — bus send level (drive normalization)

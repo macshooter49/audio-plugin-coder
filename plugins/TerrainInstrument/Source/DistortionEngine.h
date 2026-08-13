@@ -119,6 +119,22 @@ public:
         // which is 38 Hz at 48k and 76 Hz at 96k — it changes character with sample rate).
         dcR_ = (float) (1.0 - 2.0 * juce::MathConstants<double>::pi * 10.0 / fs_);
         dcR_ = juce::jlimit (0.90f, 0.99999f, dcR_);
+        dcR2_ = (float) (1.0 - 2.0 * juce::MathConstants<double>::pi * 10.0 / (2.0 * fs_));   // fb336 — Octave's blocker runs at the 2× rate
+        dcR2_ = juce::jlimit (0.90f, 0.99999f, dcR2_);
+        // fb337 — F of the fb325 quartic Soft-Clip anchor C = x/(1+0.62x⁴)^¼ (no elementary closed
+        // form — the OLD cubic F in softClipA railed at 1.5 and no longer matched the curve, the
+        // Shapers.h lockstep trap). Simpson on a 8/1024 grid + linear tail at C's asymptote
+        // 0.62^(−¼) ≈ 1.12634. Interp error ≪ the 1e-5 ADAA divide gate.
+        {
+            double F = 0.0; fcLut_[0] = 0.0;
+            auto C = [] (double x) { const double x2 = x * x; return x / std::sqrt (std::sqrt (1.0 + 0.62 * x2 * x2)); };
+            for (int i = 1; i <= 1024; ++i)
+            {
+                const double x0 = (i - 1) / 128.0, x1 = i / 128.0;
+                F += (C (x0) + 4.0 * C (0.5 * (x0 + x1)) + C (x1)) * (x1 - x0) / 6.0;
+                fcLut_[i] = (float) F;
+            }
+        }
 
         // Auto-gain: ~300 ms. NOT 10 ms — a fast tracker level-compensates the sag duck away and
         // makes the stateful modes measure and sound like static curves.
@@ -153,6 +169,9 @@ public:
             fbZ_[c] = punchZ_[c] = 0.0f;
             toneZ_[c] = 0.0f;
             slewZ_[c] = holdV_[c] = holdPh_[c] = smZ_[c] = 0.0f;
+            octBx_[c] = octBy_[c] = 0.0f;                              // fb336 — Octave's blocker
+            for (int n = 0; n < 8; ++n) clnZ_[c][n] = 0.0f;            // fb336/337 — Clean's poles
+            for (int n = 0; n < 3; ++n) smZb_[c][n] = 0.0f;            // fb337 — Smooth's extra poles
             sqzZ_[c] = sagZ_[c] = zsSgn_[c] = zsEnv_[c] = zsLp_[c] = 0.0f;
             env40_[c] = jWalk_[c] = slewLim_[c] = prevU_[c] = 0.0f;
             hold2V_[c] = hold2Ph_[c] = errZ_[c] = telHp_[c] = wcLp_[c] = 0.0f;
@@ -201,8 +220,14 @@ public:
     }
     void setCharacter (int c) noexcept { chr_  = juce::jlimit (0, 7, c); }
     void setQuality   (int q) noexcept { qual_ = juce::jlimit (0, 3, q); }
+    // fb337 — NO dip on tier switches: dip_=0 jumps the output to FULL DRY in one sample (the dip
+    // is a wet-mute, not a fade) — measured as the 0.10 click the probe caught. The tier swap's own
+    // discontinuity is tiny (phase-B duplicate ↔ real, ADAA ↔ naive converge) — measured directly.
     void setAuto      (bool b) noexcept { autoOn_ = b; }
     void setPill2     (bool b) noexcept { pill2_  = b; }
+    /** fb336 — FOLD `Track`'s pitch input. Last-played note (mono assumption, documented: this is a
+        post-mix FX bus — polyphonic pitch does not exist here; the newest note wins, like glide). */
+    void setKeyHz     (float hz) noexcept { keyT_ = juce::jlimit (20.0f, 4200.0f, hz); }
 
     /** 0..1 -> driveDb = D_max * t^0.8, then linear. NEVER a `1 + amt*k` multiplier.
         ⚠️ FOLD is the one family with a DIFFERENT taper (bible §2.5): fold count is a FLOOR function
@@ -290,6 +315,11 @@ public:
         mixC_   += (mixT_   - mixC_  ) * smth_;
         dip_    += (1.0f    - dip_   ) * smth_;              // fb320 — mode-switch wet dip recovery
         slamC_  += (slamT_  - slamC_ ) * smth_;              // fb324 — ANALOG Slam pill (+20 dB), click-free
+        wrapC_  += (wrapT_  - wrapC_ ) * smth_;              // fb336 — the four family pills glide like Slam:
+        octC_   += (octT_   - octC_  ) * smth_;              //         a toggle is a ~20 ms crossfade, never a click
+        trkC_   += (trkT_   - trkC_  ) * smth_;
+        clnC_   += (clnT_   - clnC_  ) * smth_;
+        keyC_   += (keyT_   - keyC_  ) * smth_;
         for (int k = 0; k < 8; ++k) pC_[k] += (pT_[k] - pC_[k]) * smth_;
         if (++occN_ >= 512) { occN_ = 0; for (int k = 0; k < 48; ++k) occ_[k] *= 0.85f; }   // fb328 — occupancy decay (~65 ms)
 
@@ -302,7 +332,8 @@ public:
         emphC_ = (fam == FAM_DIGITAL) ? 0.0f : (pC_[2] * 2.0f - 1.0f);
         switch (fam)
         {
-            case FAM_CLIP:    kneeE_ = kneeC_;  biasE_ = pC_[4] * 2.0f - 1.0f; asymE_ = 0.0f;               break;
+            case FAM_CLIP:    kneeE_ = kneeC_;  biasE_ = pC_[4] * 2.0f - 1.0f; asymE_ = 0.0f;
+                              wrapT_ = pill2_ ? 1.0f : 0.0f;                   /* fb336 — Wrap */   break;
             // fb322 — the ASYM MODE's offset goes PRE-DRIVE via the bias path (the fb315 lesson,
             // relearned: a post-drive offset is swamped by the driven signal and the knob reads dead).
             case FAM_DIODE:   kneeE_ = pC_[4];
@@ -314,7 +345,8 @@ public:
                               // rectification amount, not an offset.
                               biasE_ = (mode_ == Asym)    ? asymE_ * 0.8f
                                      : (mode_ == Rectify) ? 0.0f
-                                                          : asymE_ * 0.3f;      break;
+                                                          : asymE_ * 0.3f;
+                              octT_  = pill2_ ? 1.0f : 0.0f;                   /* fb336 — Octave */ break;
             case FAM_FOLD:
             {
                 kneeE_ = 0.5f;  biasE_ = (kneeC_ * 2.0f - 1.0f) * 1.2f;  asymE_ = 0.0f;
@@ -331,6 +363,7 @@ public:
                 if      (mode_ == LinearFold) { fStB_ = LB[ci][0]; fSpO_ = LB[ci][1]; fRbM_ = LB[ci][2]; fCnO_ = LB[ci][3]; }
                 else if (mode_ == WestCoast)  { fStB_ = WB[ci][0]; fSpO_ = WB[ci][1]; fRbM_ = WB[ci][2]; fCnO_ = WB[ci][3]; }
                 else                          { fStB_ = 1.0f; fSpO_ = 0.0f; fRbM_ = 1.0f; fCnO_ = 0.0f; }
+                trkT_ = pill2_ ? 1.0f : 0.0f;                                  /* fb336 — Track */
                 break;
             }
             case FAM_SHAPER:  kneeE_ = 0.5f;    biasE_ = pC_[5] * 2.0f - 1.0f; asymE_ = 0.0f;
@@ -345,7 +378,25 @@ public:
             // Slam = Decapitator's Punish, +20 dB of pre-gain ON TOP of Drive (the ×10 target glides).
             case FAM_ANALOG:  kneeE_ = 0.5f;    biasE_ = kneeC_ * 2.0f - 1.0f; asymE_ = 0.0f;
                               slamT_ = pill2_ ? 10.0f : 1.0f;                                     break;
-            default:          kneeE_ = 0.0f;    biasE_ = 0.0f;                 asymE_ = 0.0f;               break;
+            default:          kneeE_ = 0.0f;    biasE_ = 0.0f;                 asymE_ = 0.0f;
+                              clnT_  = pill2_ ? 1.0f : 0.0f;                   /* fb336 — Clean (default = DIGITAL) */ break;
+        }
+
+        // fb337 — QUALITY LIVE (§3.7/3.8): Off/Standard/High/Ultra. AUTO-PROMOTION (one tier, free —
+        // latency never changes): razor knee · hot Snarl · Drive>80 · Octave lit · Beyond≥50. Never
+        // FROM Off — Off is the deliberate lo-fi escape hatch and stays exactly what it says.
+        {
+            int eq = qual_;
+            if (eq >= 1 && eq < 3)
+            {
+                const bool promo = drive01_ > 0.80f
+                                || (fam == FAM_CLIP && kneeE_ < 0.15f)
+                                || octC_ > 0.5f
+                                || ((fam == FAM_CLIP || fam == FAM_DIODE) && pC_[7] > 0.30f)
+                                || (fam == FAM_SHAPER && pC_[6] >= 0.50f);
+                if (promo) ++eq;
+            }
+            eqEff_ = eq;
         }
 
         // fb325 — emphasis gain, dB-symmetric (see one(); cached: exp only when the knob moves)
@@ -482,6 +533,17 @@ private:
             }
         }
 
+        // ── fb336 — FOLD `Track` (bible §898): fold-depth KEY TRACKING — pre-gain × (110/f0)^0.7,
+        // so the 32-fold patch that is glorious on a C1 bass folds gently instead of hashing on a
+        // C6 lead. Also a free aliasing control: cuts the worst-case corner rate ~4× up top.
+        // Pitch = the last-played note (setKeyHz; mono law — a post-mix bus has no polyphonic f0).
+        if (fam == FAM_FOLD && trkC_ > 1.0e-4f)
+        {
+            if (std::fabs (keyC_ - keyP_) > 0.5f)
+            { keyP_ = keyC_; trkG_ = juce::jlimit (0.08f, 2.5f, std::pow (110.0f / juce::jmax (20.0f, keyC_), 0.7f)); }
+            dEff *= 1.0f + trkC_ * (trkG_ - 1.0f);
+        }
+
         // ── GAP (CLIP P6) — class-B crossover dead zone BEFORE the shaper, input-referred: distorts
         // the QUIET parts; at max anything below ~−6 dBFS is silence and notes tear into fragments.
         // fb325 — power-1.6 taper (no-plateau law): linear reached total gating by ~60 % and the top
@@ -531,8 +593,42 @@ private:
         // stateful character paths (West Coast's output pole, Diode 2's Sputter walk), corrupting
         // MID state and mismatching the SIDE reference — measured as 'West Coast only plays on the
         // right side'. A reference must never advance anyone's state.
-        const float dcOff = (fam == FAM_ANALOG) ? 0.0f : shapeM (dzPost (biasE_ * dEff), -1);
+        // ── fb336 — CLIP `Wrap` (bible §896): instead of HOLDING at the rail, the driven value
+        // TELEPORTS to the opposite rail (y = 2·frac((u+1)/2) − 1). Identity for |v| ≤ 1 by
+        // construction, so the glided blend only ever touches beyond-rail content — the toggle's
+        // ~20 ms fade is silent on clean signal, and at Drive 100 the wrapped hard clip is a
+        // modulo-sawtooth of the input: a full-band scream that still tracks pitch.
+        // fb337 — the QUALITY tiers inside the (structurally constant) resampler skeleton:
+        //   Off      = 1×: phase B duplicates A — same delays, same latency, raw aliasing on purpose.
+        //   Standard = 2× naive (the shipped fb318 path).
+        //   High/Ultra = 2× + ADAA-1 inside the OS region, WHITELIST-gated: only modes whose anti()
+        //   provably matches today's curve (SoftClip w/ the LUT F · HardClip on the razor knee half,
+        //   kneePre inactive there · ZeroSquare incl. pedestal+gate F). Wrap lit ⇒ ADAA off (F of a
+        //   wrapped map is not F — the §1080 trap). Everything else: naive 2×, floors intact.
+        const bool os2 = (eqEff_ >= 1);
+        const float wrapA = (fam == FAM_CLIP) ? wrapC_ : 0.0f;
+        auto wrapR = [wrapA] (float v) noexcept -> float
+        {
+            if (wrapA <= 1.0e-4f) return v;
+            float w = (v + 1.0f) * 0.5f; w -= std::floor (w);
+            return v + wrapA * ((w * 2.0f - 1.0f) - v);
+        };
+        const float dcOff = (fam == FAM_ANALOG) ? 0.0f : shapeM (dzPost (wrapR (biasE_ * dEff)), -1);
         const float fbIn  = (fbA > 1.0e-5f) ? fbA * fbZ_[c] : 0.0f;
+        // ── fb336 — DIODE `Octave` (bible §897): full-wave rectifier + its OWN DC blocker BEFORE
+        // the mode's shaper, inside the 2× region (the blocker advances at 2fs, A then B
+        // chronological). The mid-chain re-centre is exactly why Rectify+Octave lands at 4·f0 —
+        // the second rectification is not idempotent. Diode 1 + Octave = an Octavia.
+        float pA2 = pA, pB2 = pB;
+        if (fam == FAM_DIODE && octC_ > 1.0e-4f)
+        {
+            float r  = std::fabs (pA2);
+            float d2 = r - octBx_[c] + dcR2_ * octBy_[c]; octBx_[c] = r; octBy_[c] = d2;
+            pA2 += octC_ * (2.0f * d2 - pA2);
+            r  = std::fabs (pB2);
+            d2 = r - octBx_[c] + dcR2_ * octBy_[c]; octBx_[c] = r; octBy_[c] = d2;
+            pB2 += octC_ * (2.0f * d2 - pB2);
+        }
         // A then B = chronological at the 2× rate, so stateful shapers (Slew Clip, DIODE slew) are exact.
         float yA, yB;
         if (fam == FAM_ANALOG)
@@ -544,14 +640,22 @@ private:
             // and the 10 Hz blocker takes the residue. Slam = +20 dB of pre-gain (Punish).
             const float vA = pA * kPreGain * slamC_ + fbIn;
             yA = shapeS (vA, c);
-            yB = shapeS (pB * kPreGain * slamC_ + fbIn, c);
+            yB = os2 ? shapeS (pB * kPreGain * slamC_ + fbIn, c) : yA;   // fb337 — Off = 1× (phase B duplicates A)
             if (c == 0) occAdd (vA);                     // fb328 — occupancy viz (driven axis)
         }
         else
         {
-            const float vA = (deadzone (pA * kPreGain) + biasE_ + fbIn) * dEff;
-            yA = shapeS (dzPost (vA), c) - dcOff;
-            yB = shapeS (dzPost ((deadzone (pB * kPreGain) + biasE_ + fbIn) * dEff), c) - dcOff;
+            adaaOn_ = eqEff_ >= 2 && wrapA <= 1.0e-4f
+                   && (mode_ == SoftClip || mode_ == ZeroSquare
+                       || (mode_ == HardClip && kneeE_ * 2.0f - 1.0f < 1.0e-3f));   // fb337 — the lockstep whitelist
+            const float vA = wrapR ((deadzone (pA2 * kPreGain) + biasE_ + fbIn) * dEff);   // fb336 — Wrap folds the DRIVEN value
+            yA = (adaaOn_ ? adaa (dzPost (vA), c) : shapeS (dzPost (vA), c)) - dcOff;
+            if (os2)
+            {
+                const float vB = wrapR ((deadzone (pB2 * kPreGain) + biasE_ + fbIn) * dEff);
+                yB = (adaaOn_ ? adaa (dzPost (vB), c) : shapeS (dzPost (vB), c)) - dcOff;
+            }
+            else yB = yA;                                // fb337 — Off = 1×
             if (c == 0) occAdd (vA);                     // fb328 — occupancy viz (driven axis)
         }
 
@@ -566,7 +670,8 @@ private:
             // 0 = off · default grazes only the razor tips · top = total sludge (no-playing-safe).
             const float sU = 0.35f * std::pow (0.0028f, pC_[6]) * (48000.0f / (float) fs_);
             yA = slewZ_[c] + juce::jlimit (-sU, sU, yA - slewZ_[c]); slewZ_[c] = yA;
-            yB = slewZ_[c] + juce::jlimit (-sU, sU, yB - slewZ_[c]); slewZ_[c] = yB;
+            if (os2) { yB = slewZ_[c] + juce::jlimit (-sU, sU, yB - slewZ_[c]); slewZ_[c] = yB; }
+            else       yB = yA;                          // fb337 — Off = 1×: the slew state advances once per base sample
         }
         if (fbA > 1.0e-5f)
         {
@@ -650,11 +755,9 @@ private:
             y = shapeM (0.5f * (u + s.x1));
             s.have = false;
         }
-        else if (std::fabs (dx) > 0.9f)        // big jump -> direct, so it cannot drop out
-        {
-            y = shapeM (u);
-            s.have = false;
-        }
+        // fb337 — the old ">0.9 big-jump -> naive" escape is GONE: at working drive |dx| exceeds it
+        // every cycle, so the kernel ping-ponged naive↔ADAA — measured as High LOSING 5 dB to
+        // Standard (the escape was itself a modulator). Averaging across the big jump IS the job.
         else
         {
             const float F = anti (u);
@@ -1635,6 +1738,32 @@ public:
     }
     bool userCurvesActive() const noexcept { return uCvOn_.load (std::memory_order_relaxed); }
 
+    /** fb339 — the USER FRAME STACK for Table mode (bible §9.5: an osc's wavetable frames AS the
+        transfer curves; Morph sweeps the frame index, neighbours blended AT BAKE TIME). Message
+        thread; flat array = nFrames × frameLen, each frame bipolar ±1. Busy flag = the same
+        torn-read guard as setUserCurves. */
+    void setUserTable (const float* d, int nFrames, int frameLen) noexcept
+    {
+        if (d == nullptr || nFrames < 1 || frameLen < 8)
+        { tblUOn_.store (false, std::memory_order_release); cvForce_ = true; return; }
+        tblUBusy_.store (true, std::memory_order_release);
+        const int nF = juce::jmin (kTF, nFrames);
+        for (int f = 0; f < nF; ++f)
+            for (int cell = 0; cell <= kTB; ++cell)
+            {
+                const float s2 = (float) cell / (float) kTB * (float) (frameLen - 1);
+                const int   k  = juce::jmin (frameLen - 2, (int) s2);
+                const float t  = s2 - (float) k;
+                const float* fr = d + (size_t) f * (size_t) frameLen;
+                tblU_[f][cell] = juce::jlimit (-1.5f, 1.5f, fr[k] + (fr[k + 1] - fr[k]) * t);
+            }
+        tblUN_ = nF;
+        tblUBusy_.store (false, std::memory_order_release);
+        tblUOn_.store (true, std::memory_order_release);
+        cvForce_ = true;
+    }
+    void clearUserTable() noexcept { tblUOn_.store (false, std::memory_order_release); cvForce_ = true; }
+
     /** fb328 — the §5.8 core viz + Send To Shaper source: the CURRENT mode's stateless transfer on
         the driven axis (x spans ±occSpan()). Message-thread safe: memoryless families ride the fb325
         stateless reference (shapeM c = −1 advances no state); ANALOG/DIGITAL are static projections
@@ -1685,8 +1814,14 @@ public:
             else
             {
                 float u = v;
+                // fb336 — the pills are VISIBLE on the curve (the everything-audible-shows law):
+                // Octave = the even-symmetric rectifier silhouette; Wrap = the rail teleport.
+                if (fam == FAM_DIODE && octC_ > 1.0e-4f)
+                    u += octC_ * ((std::fabs (u) - sp * 0.5f) * 2.0f - u);
                 if (gapV > 1.0e-5f) { const float a2 = std::fabs (u);
                                       u = (a2 <= gapV) ? 0.0f : ((u < 0.0f) ? u + gapV : u - gapV); }
+                if (fam == FAM_CLIP && wrapC_ > 1.0e-4f)
+                { float w2 = (u + 1.0f) * 0.5f; w2 -= std::floor (w2); u += wrapC_ * ((w2 * 2.0f - 1.0f) - u); }
                 y = shapeM (dz (u), -1) - dcOff;
             }
             out[i] = juce::jlimit (-1.6f, 1.6f, y);
@@ -2000,6 +2135,22 @@ private:
         bake path next phase. */
     float tableFrame (float x) noexcept
     {
+        // fb339 — USER FRAME STACK first (runs inside the BAKE — zero audio-thread cost; the
+        // 40 ms table crossfade lands the swap). Falls back to the generated morph table.
+        if (tblUOn_.load (std::memory_order_relaxed) && ! tblUBusy_.load (std::memory_order_acquire) && tblUN_ > 0)
+        {
+            const float fs2 = juce::jlimit (0.0f, 1.0f, cvMor_) * (float) (tblUN_ - 1);
+            const int   f0  = juce::jmin (tblUN_ - 1, (int) fs2);
+            const float ff  = fs2 - (float) f0;
+            const float ph  = juce::jlimit (0.0f, 1.0f, (x + 1.0f) * 0.5f);
+            const float s2  = ph * (float) kTB;
+            const int   k   = juce::jmin (kTB - 1, (int) s2);
+            const float t   = s2 - (float) k;
+            const float a   = tblU_[f0][k] + (tblU_[f0][k + 1] - tblU_[f0][k]) * t;
+            if (ff < 1.0e-3f || f0 + 1 >= tblUN_) return a;
+            const float b   = tblU_[f0 + 1][k] + (tblU_[f0 + 1][k + 1] - tblU_[f0 + 1][k]) * t;
+            return a + ff * (b - a);
+        }
         const float m = cvMor_;
         const float ph = (x + 1.0f) * 0.5f;
         if (m < 0.34f)                                             // sine → PD saw
@@ -2142,6 +2293,18 @@ private:
         {
             // 🔑 POLARITY: 0 = clean, up = destroy (harness-caught inversion, fb320).
             fsr = 20.0f * std::pow ((float) (fs_ / 20.0), 1.0f - rate01);
+            // fb336 — DIGITAL `Clean` (bible §900): 4-pole pre band-limit at 0.45·fs_r BEFORE the
+            // hold — true anti-aliasing, not post-hoc filtering (D16 Decimort's "Approximation
+            // filter"; `Smooth` stays its "Images filter"). OFF = raw hash (§13 asserts the
+            // inverse for DIGITAL); ON = band-limited lo-fi — telephone / AM radio.
+            if (clnC_ > 1.0e-4f)
+            {
+                if (std::fabs (fsr - clnFsrP_) > 1.0f) { clnFsrP_ = fsr; clnK_ = onePole (juce::jmax (200.0f, 0.45f * fsr)); }
+                float v5 = u;
+                const int nCl = (eqEff_ >= 3) ? 8 : 4;         // fb337 — §3.8: Ultra doubles the Clean order
+                for (int p5 = 0; p5 < nCl; ++p5) { clnZ_[c][p5] += (v5 - clnZ_[c][p5]) * clnK_; v5 = clnZ_[c][p5]; }
+                u += clnC_ * (v5 - u);
+            }
             if (mode_ == Downsample && chr_ == 6)              // Peak Hold — the clock locks to the MATERIAL:
             {                                                  //   track the cycle's peak, latch it at each rising
                 hold2V_[c] = juce::jmax (hold2V_[c] * 0.9999f, std::fabs (u));   // zero crossing ⇒ the staircase
@@ -2190,6 +2353,10 @@ private:
             const float kk = onePole (fc + (1.0f - pC_[3]) * (20000.0f - juce::jmin (20000.0f, fc)));
             smZ_[c] += (u - smZ_[c]) * kk;
             u = smZ_[c];
+            // fb337 — §3.8: for DIGITAL, Quality = reconstruction-filter ORDER, never oversampling
+            // (oversampling a sample-domain destroyer deletes the effect). Smooth: 1/1/2/4 poles.
+            const int nSm = (eqEff_ >= 3) ? 4 : (eqEff_ >= 2 ? 2 : 1);
+            for (int p6 = 1; p6 < nSm; ++p6) { smZb_[c][p6 - 1] += (u - smZb_[c][p6 - 1]) * kk; u = smZb_[c][p6 - 1]; }
         }
         float y = u * 0.125f;                                  // ÷8 grid denormalisation (net unity at Drive 0)
         const float d = y - dcX_[c] + dcR_ * dcY_[c];          // Overflow's asymmetric wraps park off zero
@@ -2212,14 +2379,39 @@ private:
         return flushDenorm (in0 * (1.0f - mw) + y * mw);
     }
 
-    float anti (float u) noexcept   // dormant until ADAA returns inside 4× oversampling
-    {
+    float anti (float u) noexcept   // fb337 — LIVE for the whitelist. LOCKSTEP LAW (Shapers.h): every
+    {                               // F here MUST match TODAY'S shapeM curve or ADAA ships wrong DSP.
         switch (mode_)
         {
-            case HardClip: return hardClipA (u, kneeWidth());
+            case HardClip: return hardClipA (u, kneeWidth());   // valid ONLY while kneePre is inactive — the whitelist gates on that
+            case ZeroSquare:
+            {   // F of: ped·sign(u)·[|u|>gate] + (1−p)·clip(u) — the pedestal AND its stability gate
+                const float p  = 0.92f * (1.0f - kneeE_);
+                const float a  = std::fabs (u);
+                const float Fp = (a > zsGate_) ? p * (a - zsGate_) : 0.0f;
+                const float Fc = (a <= 1.0f) ? a * a * 0.5f : (a - 0.5f);
+                return Fp + (1.0f - p) * Fc;
+            }
             case SoftClip:
-            default:       return softClipA (u, kneeE_);
+            default:       return softClipA2 (u, kneeE_);       // fb337 — the QUARTIC anchor's F (LUT), not the stale cubic
         }
+    }
+    /** fb337 — softClipA with the C anchor's F from the LUT (the fb325 quartic has no elementary F;
+        the old softClipA's cubic F silently stopped matching softClipF — kept below for reference). */
+    float softClipA2 (float x, float k) const noexcept
+    {
+        const float a  = std::fabs (x);
+        const float FA = a - std::log1p (a);
+        const float FB = std::sqrt (1.0f + x * x) - 1.0f;
+        const float FC = fcAnti (a);
+        return (k <= 0.5f) ? ((1.0f - 2.0f * k) * FC + (2.0f * k) * FB)
+                           : ((2.0f - 2.0f * k) * FB + (2.0f * k - 1.0f) * FA);
+    }
+    float fcAnti (float a) const noexcept
+    {
+        if (a >= 8.0f) return fcLut_[1024] + 1.12634f * (a - 8.0f);   // C's asymptote 0.62^(−¼)
+        const float s = a * 128.0f; const int i = (int) s; const float t = s - (float) i;
+        return fcLut_[i] + (fcLut_[i + 1] - fcLut_[i]) * t;
     }
 
     // ── SOFT CLIP — the BJT long-tailed pair. tanh is the LITERAL I-V law here, not an
@@ -2331,6 +2523,24 @@ private:
     double fs_ = 48000.0;
     int    mode_ = SoftClip, chr_ = 0, qual_ = 1;
     bool   autoOn_ = false, pill2_ = false;
+    // ── fb336 — the four family pills (bible §896-900), each glided like Slam (toggle = fade) ──
+    float wrapT_ = 0.0f, wrapC_ = 0.0f;               // CLIP    Wrap   — rail teleport
+    float octT_  = 0.0f, octC_  = 0.0f;               // DIODE   Octave — pre-rectifier + own blocker
+    float trkT_  = 0.0f, trkC_  = 0.0f;               // FOLD    Track  — fold-depth key tracking
+    float clnT_  = 0.0f, clnC_  = 0.0f;               // DIGITAL Clean  — 4-pole pre band-limit
+    float keyT_  = 110.0f, keyC_ = 110.0f, keyP_ = -1.0f, trkG_ = 1.0f;
+    float octBx_[2] {}, octBy_[2] {};                 // Octave's blocker state (advances at 2fs)
+    float dcR2_  = 0.99935f;
+    float clnZ_[2][8] {}; float clnFsrP_ = -1.0f, clnK_ = 1.0f;   // fb337 — 8 poles at Ultra
+    // fb339 — Table's user frame stack (an osc's wavetable as 16 transfer curves)
+    static constexpr int kTF = 16, kTB = 1024;
+    float tblU_[kTF][kTB + 1] {};
+    int   tblUN_ = 0;
+    std::atomic<bool> tblUOn_ { false }, tblUBusy_ { false };
+    float smZb_[2][3] {};                             // fb337 — Smooth's extra poles (High/Ultra)
+    float fcLut_[1025] {};                            // fb337 — F of the quartic Soft-Clip anchor
+    int   eqEff_ = 1;                                 // fb337 — effective quality (qual_ + promotion)
+    bool  adaaOn_ = false;                            // fb337 — ADAA live this sample (whitelist)
 
     float driveT_ = 1.0f, driveC_ = 1.0f;
     float kneeT_  = 0.65f, kneeC_ = 0.65f;
@@ -2435,7 +2645,7 @@ private:
     int   xi_[2] { 0, 0 }, si_[2] { 0, 0 }, di_[2] { 0, 0 };
     float dcR_ = 0.9987f, autoA_ = 0.9999f, autoZ_ = 0.0f, smth_ = 0.002f;
     bool  hiBypass_ = true;    // Hi Cut at max = TRUE bypass (an "open" 22 kHz pole still cost -1.1 dB @20k)
-    bool  useAdaa_  = false;   // ⚠️ OFF at 1x — its cos(pi*f/fs) aperture nulls Nyquist. ON once oversampled.
+    bool  useAdaa_  = false;   // fb337 — RETIRED: superseded by adaaOn_ (per-sample, whitelist-gated inside the 2× region). Kept so old notes still point somewhere.
 
     static constexpr float kEmphCoef  = 0.14f;   // ~1.2 kHz hinge at 48k
     static constexpr float kToneCoef  = 0.085f;  // ~700 Hz tilt hinge at 48k

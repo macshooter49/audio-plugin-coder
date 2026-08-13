@@ -407,6 +407,49 @@ juce::String TerrainInstrumentAudioProcessor::getOscLfoWaveJson (int osc)
     return out.toString();
 }
 
+// fb340 — the dstBakePts tension math on FLOAT points (the audio-thread per-point-mod rebake
+// cannot build juce::vars). MUST stay formula-identical to dstBakePts (the :8046 twin lineage).
+void TerrainInstrumentAudioProcessor::dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n) noexcept
+{
+    if (np < 2) { for (int i = 0; i < n; ++i) out[i] = (float) i / (float) (n - 1) * 2.0f - 1.0f; return; }
+    int seg = 0;
+    for (int i = 0; i < n; ++i)
+    {
+        const float p = (float) i / (float) (n - 1);
+        while (seg < np - 2 && pts[seg + 1].x <= p) ++seg;
+        const float w = juce::jmax (1.0e-6f, pts[seg + 1].x - pts[seg].x);
+        float t = juce::jlimit (0.0f, 1.0f, (p - pts[seg].x) / w);
+        const float c = pts[seg].c;
+        if (std::fabs (c) > 1.0e-4f) { const float P8 = -c * 8.0f; t = (std::exp (P8 * t) - 1.0f) / (std::exp (P8) - 1.0f); }
+        out[i] = (pts[seg].y + (pts[seg + 1].y - pts[seg].y) * t) * 2.0f - 1.0f;
+    }
+}
+
+// fb339 — TABLE SOURCE (bible §9.5): sample an osc's CURRENT wavetable into 16 frames × 1025 and
+// upload as the Table transfer stack. src -1 = the generated morph table. Persisted as the SOURCE
+// token only — reload re-reads whatever the osc holds then (the pill is a live link, not a copy).
+void TerrainInstrumentAudioProcessor::setDistortionTableSrc (int osc)
+{
+    dstTableSrc_ = juce::jlimit (-1, 3, osc);
+    if (dstTableSrc_ < 0) { distortionEngine.clearUserTable(); return; }
+    const tw::Wavetable* wt = importSlot_[dstTableSrc_].live.load (std::memory_order_acquire);
+    if (wt == nullptr)
+    {
+        static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                            ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[dstTableSrc_]));
+    }
+    if (wt == nullptr) { distortionEngine.clearUserTable(); return; }
+    std::vector<float> stack (16 * 1025);               // LOCAL — a static here is shared ACROSS INSTANCES (pluginval multi-instance = race/segv); this is a UI/state call, the allocation is fine
+    for (int f = 0; f < 16; ++f)
+    {
+        const float fp = (float) f / 15.0f;
+        for (int i = 0; i <= 1024; ++i)
+            stack[(size_t) f * 1025 + (size_t) i] = wt->lookup (0, fp, (float) i / 1024.0f);
+    }
+    distortionEngine.setUserTable (stack.data(), 16, 1025);
+}
+
 //==============================================================================
 // IMPORTS REGISTRY (fb60, 3-way fb74) — reference-in-place user imports (paths only, no audio copied).
 // kind: 0 = noise · 1 = wavetable · 2 = sample (Sample/Granular/Resynth share one registry).
@@ -3442,7 +3485,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_PING,  1 }, "Delay Ping-Pong", false));
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_POWER, 1 }, "Delay Power", false));   // fb303 — OFF by default (dry init; on = main send)
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DLY_HQ,    1 }, "Delay HQ",    true));
-    layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_FX_ORDER, 1 }, "FX Chain Order", false));   // fb307 — false = Reverb→Delay (default), true = Delay→Reverb
+    layout.add (std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { ParameterIDs::SYN_FX_ORDER, 1 }, "FX Chain Order",
+        juce::StringArray { "Reverb > Delay > Distortion",       // 0 — legacy false (norm 0.0) restores EXACTLY
+                            "Reverb > Distortion > Delay",
+                            "Distortion > Reverb > Delay",
+                            "Distortion > Delay > Reverb",
+                            "Delay > Distortion > Reverb",
+                            "Delay > Reverb > Distortion" },     // 5 — legacy true (norm 1.0) restores EXACTLY
+        0));   // fb341 — the 6-way serial permutation (was a bool; index order anchors both legacy states)
 
     // ════════ FX RACK · DISTORTION — fb315. 23 modes / 6 families; back-8 keyed to the FAMILY.
     // POWER default OFF ⇒ dry init ⇒ byte-identical default sound (same contract as reverb + delay).
@@ -3768,6 +3818,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     reverbSendBuf_.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);   // fb280 — per-osc no-bleed send bus
     reverbSendBuf_.clear();
     delaySendBuf_.clear();
+    distortionSendBuf_.clear();   // fb338
     hallBloomEnv_ = 0.0f; hallBloomViz_.store (0.0f, std::memory_order_relaxed);
     moogDelay.prepare(sampleRate, samplesPerBlock);
     terrainChorus.prepare (sampleRate, samplesPerBlock);
@@ -4618,6 +4669,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             return raw;
         };
+        // fb340 — Morph's mod resolve lives HERE (modP's scope closes before the FX push site):
+        dstMorphEff_ = modP (ParameterIDs::SYN_DST_SIG,
+                             rawParam (ParameterIDs::SYN_DST_SIG)->load(),
+                             (int) wc::ModDest::DstMorph);
         // dyn envs (blob ms, no APVTS param) — the editor's own norm curve (1..8000ms, skew .3)
         auto dynModMs = [&] (float ms, int d) -> float
         {
@@ -5675,6 +5730,59 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         eff[0].x = 0.0f; eff[np - 1].x = 1.0f;
         bakeLfoShapeTable (eff, np, lfoTableAudio_[nP]);
     }
+    // fb340 — LIVE PER-POINT CURVE MOD (the fb238 machinery on the distortion banks): re-bake the
+    // user banks from the current source-LFO peeks. Same gates: no mods = zero cost; sources
+    // still = skip. setUserCurves lands through the engine's 40 ms crossfade — mod becomes a
+    // continuous curve morph, not steps.
+    {
+        const int dv = dstPtVersion_.load (std::memory_order_acquire);
+        if (dv != dstPtSeen_)
+        {
+            std::memcpy (dstPtAudio_,   dstPtShared_,   sizeof (dstPtAudio_));
+            std::memcpy (dstPtNpAudio_, dstPtNpShared_, sizeof (dstPtNpAudio_));
+            dstPtHasModAudio_ = dstPtHasModShared_;
+            dstPtDirty_ = true; dstPtSeen_ = dv;
+        }
+        if (dstPtHasModAudio_)
+        {
+            float sv[wc::NUM_LFOS];
+            for (int mS = 0; mS < wc::NUM_LFOS; ++mS) sv[mS] = flowLfo_[mS].peek();
+            bool need = dstPtDirty_;
+            for (int bk = 0; bk < 4 && ! need; ++bk)
+                for (int i2 = 0; i2 < dstPtNpAudio_[bk] && ! need; ++i2)
+                {
+                    const auto& q = dstPtAudio_[bk][i2];
+                    if (q.ys > 0 && std::fabs (sv[q.ys - 1] - dstPtSrcLast_[q.ys - 1]) > 0.002f) need = true;
+                    if (q.xs > 0 && std::fabs (sv[q.xs - 1] - dstPtSrcLast_[q.xs - 1]) > 0.002f) need = true;
+                }
+            if (need)
+            {
+                dstPtDirty_ = false;
+                for (int mS = 0; mS < wc::NUM_LFOS; ++mS) dstPtSrcLast_[mS] = sv[mS];
+                float bkArr[4][257]; bool hasB2[4];
+                for (int bk = 0; bk < 4; ++bk)
+                {
+                    const int np2 = dstPtNpAudio_[bk];
+                    hasB2[bk] = np2 >= 2;
+                    if (! hasB2[bk]) continue;
+                    LfoShapePtM eff2[32];
+                    for (int i2 = 0; i2 < np2; ++i2)
+                    {
+                        eff2[i2] = dstPtAudio_[bk][i2];
+                        if (eff2[i2].ys > 0)
+                            eff2[i2].y = juce::jlimit (0.0f, 1.0f, eff2[i2].y + eff2[i2].ya * sv[eff2[i2].ys - 1]);
+                        if (eff2[i2].xs > 0 && i2 > 0 && i2 < np2 - 1)   // §6.7 — x-mod unadvertised, kept able
+                            eff2[i2].x = juce::jlimit (0.0f, 1.0f, eff2[i2].x + eff2[i2].xa * sv[eff2[i2].xs - 1]);
+                    }
+                    std::sort (eff2, eff2 + np2, [] (const LfoShapePtM& A2, const LfoShapePtM& B2) { return A2.x < B2.x; });
+                    eff2[0].x = 0.0f; eff2[np2 - 1].x = 1.0f;
+                    dstBakeEff (eff2, np2, bkArr[bk], 257);
+                }
+                distortionEngine.setUserCurves (hasB2[0] ? bkArr[0] : nullptr, hasB2[1] ? bkArr[1] : nullptr,
+                                                hasB2[2] ? bkArr[2] : nullptr, hasB2[3] ? bkArr[3] : nullptr, 257);
+            }
+        }
+    }
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
         {   // fb228 — the voice/mirror CONTRACT: the mirror (global dests + the viz dot) NEVER retrigs
@@ -5749,9 +5857,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
     dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
-    fxDelayFirst_ = rawParam (ParameterIDs::SYN_FX_ORDER)->load() > 0.5f;   // fb307 — drag chain order (true = Delay→Reverb)
-    // fb315 — DISTORTION: power gates everything (same law as reverb/delay). MAIN SEND only today.
+    fxPerm_ = juce::jlimit (0, 5, (int) rawParam (ParameterIDs::SYN_FX_ORDER)->load());   // fb341 — choice INDEX (the AudioParameterChoice law: raw = index)
+    // fb315/fb338 — DISTORTION: power gates everything (same law as reverb/delay); per-osc route
+    // resolution = the third parallel send bus (mirrors the delay's exactly).
     dstPower_ = rawParam (ParameterIDs::SYN_DST_POWER)->load() > 0.5f;
+    if (distortionSendBuf_.getNumSamples() < numSamples)
+        distortionSendBuf_.setSize (2, numSamples, false, true, true);
+    distortionSendBuf_.clear (0, numSamples);
+    dstG_[0] = rawParam (ParameterIDs::SYN_DST_SRC_A)->load()     > 0.5f ? 1.0f : 0.0f;
+    dstG_[1] = rawParam (ParameterIDs::SYN_DST_SRC_B)->load()     > 0.5f ? 1.0f : 0.0f;
+    dstG_[2] = rawParam (ParameterIDs::SYN_DST_SRC_C)->load()     > 0.5f ? 1.0f : 0.0f;
+    dstG_[3] = rawParam (ParameterIDs::SYN_DST_SRC_D)->load()     > 0.5f ? 1.0f : 0.0f;
+    dstG_[4] = rawParam (ParameterIDs::SYN_DST_SRC_SUB)->load()   > 0.5f ? 1.0f : 0.0f;
+    dstG_[5] = rawParam (ParameterIDs::SYN_DST_SRC_NOISE)->load() > 0.5f ? 1.0f : 0.0f;
+    if (! dstPower_)          // power gates routing (same law as reverb/delay)
+        for (int k = 0; k < 6; ++k) dstG_[k] = 0.0f;
+    dstRouteActive_ = (dstG_[0] + dstG_[1] + dstG_[2] + dstG_[3] + dstG_[4] + dstG_[5]) > 0.0f;
+    dstMainSend_ = dstPower_ && ! dstRouteActive_;   // fb303 grammar — power on + NO pills ⇒ MAIN SEND
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
@@ -5764,6 +5886,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setReverbSendTarget (rsL, rsR);
                 sv->setDelayRoutes (dlyG_[0], dlyG_[1], dlyG_[2], dlyG_[3], dlyG_[4], dlyG_[5]);
                 sv->setDelaySendTarget (dsL, dsR);
+                sv->setDistortionRoutes (dstG_[0], dstG_[1], dstG_[2], dstG_[3], dstG_[4], dstG_[5]);
+                sv->setDistortionSendTarget (dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr,
+                                             dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr);
             }
     }
 
@@ -6329,6 +6454,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     float hallBlockWetPk = 0.0f;                                 // fb280 — peak wet this block → bloom viz
     const float* dlySendL = delaySendBuf_.getReadPointer (0);    // fb296 — delay routed-osc send
     const float* dlySendR = delaySendBuf_.getReadPointer (1);
+    const float* dstSendL = distortionSendBuf_.getReadPointer (0);   // fb338 — distortion routed-osc send
+    const float* dstSendR = distortionSendBuf_.getReadPointer (1);
     float dlyBlockWetPk = 0.0f;                                  // fb296 — peak wet this block → delay core viz
     float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
 
@@ -7029,9 +7156,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // reverbSendBuf_/delaySendBuf_) LEAVES the main send, so it is affected ONLY by the effect(s) it's
                 // routed to (Max: "osc C routed to delay should get delay, NOT the reverb main send"). Subtract that
                 // routed dry (send × outputGain × kVoiceToFxPad = exactly how it sits in leftChannel). No pills ⇒ 0.
-                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
                 sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
                 else sgR = sgL;
             }
             else { const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
@@ -7159,10 +7286,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 distortionEngine.setQuality   ((int) *rawParam (ParameterIDs::SYN_DST_QUALITY));
                 distortionEngine.setAuto      (rawParam (ParameterIDs::SYN_DST_AUTO)->load()  > 0.5f);
                 distortionEngine.setPill2     (rawParam (ParameterIDs::SYN_DST_PILL2)->load() > 0.5f);
+                distortionEngine.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
                 // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
                 // linear multiplier, that is the dead-first-third bug this device exists to avoid.
                 distortionEngine.setDrive     (rawParam (ParameterIDs::SYN_DST_DRIVE)->load());
-                distortionEngine.setKnee      (rawParam (ParameterIDs::SYN_DST_SIG)->load());    // signature knob (CLIP = Knee)
+                distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7, resolved in modP's scope): env destroys the attack, the tail stays clean
                 distortionEngine.setTone      (rawParam (ParameterIDs::SYN_DST_TONE)->load());
                 // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
                 // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
@@ -7183,13 +7311,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dstPower_ || dstEnv_ > 1.0e-4f)
             {
                 dstEnv_ += (dstEnvT_ - dstEnv_) * hallSm_;      // on/off fade (~15 ms, no click)
-                // fb305 — the main send excludes per-osc-routed oscs: subtract the routed dry exactly as
-                // it sits in leftChannel. The distortion has no send bus of its own yet, so this sum is
-                // still complete; the moment one is added, dstSend MUST be added here AND at :6979/:7111.
-                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
-                float sgL = leftChannel[i] - rtdL, sgR;
-                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
-                else sgR = sgL;
+                // fb338 — PHASE E: per-osc routing live. Pills lit ⇒ the engine eats ONLY the routed
+                // oscs (the padded send bus, post-filter per the fb280 law); no pills ⇒ MAIN SEND =
+                // the whole mix MINUS every send-routed osc (the fb305 exclusion, all three buses).
+                float sgL, sgR;
+                if (dstRouteActive_)
+                {
+                    const float rawL = (dstSendL != nullptr) ? dstSendL[i] : 0.0f;
+                    const float rawR = (dstSendR != nullptr) ? dstSendR[i] : rawL;
+                    sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad;
+                }
+                else
+                {
+                    const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
+                    sgL = leftChannel[i] - rtdL;
+                    if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                    else sgR = sgL;
+                }
                 float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
                 // fb318 — ENV-GATED REPLACE. The engine returns the FINISHED signal (its own Mix
                 // applied, dry latency-aligned to the 2× resampler), so the insert is just a crossfade
@@ -7217,9 +7355,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dlyMainSend_) {
                 // fb305 — MAIN SEND excludes per-osc-routed oscs (see reverb block above): subtract the routed
                 // dry so an osc routed to the reverb (or any effect) is NOT re-processed by the delay main send.
-                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
                 sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
                 else sgR = sgL;
             }
             else { const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
@@ -7239,12 +7377,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // (i==0) have run above, so either order is valid. Default reverb→delay = byte-identical to fb306. Per-osc
         // (parallel) sends are order-independent, so the swap only re-routes the MAIN-SEND serial case — exactly
         // what the drag controls (delay hears reverb, or reverb hears delay).
-        if (fxDelayFirst_) { applyDly(); applyRvb(); }
-        else               { applyRvb(); applyDly(); }
-        // fb315 — the distortion runs LAST for now (fixed position). SYN_FX_ORDER is still a BOOL, i.e.
-        // it only encodes the 2-device swap; three devices need a 6-way permutation index, which lands
-        // with the drag-reorder pass (bible §4.5). Power OFF ⇒ this is a single branch, nothing else.
-        applyDst();
+        // fb341 — the REAL 6-way serial permutation (bible §4.5). Per-osc (parallel) sends are
+        // order-independent; the perm re-routes what the MAIN-SEND serial cases hear. Index order
+        // anchors the two legacy bool states (0 = R·D·T, 5 = D·R·T) so old sessions restore exactly.
+        switch (fxPerm_)
+        {
+            default:
+            case 0: applyRvb(); applyDly(); applyDst(); break;
+            case 1: applyRvb(); applyDst(); applyDly(); break;
+            case 2: applyDst(); applyRvb(); applyDly(); break;
+            case 3: applyDst(); applyDly(); applyRvb(); break;
+            case 4: applyDly(); applyDst(); applyRvb(); break;
+            case 5: applyDly(); applyRvb(); applyDst(); break;
+        }
         if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
             // fb312 — INSTANT attack (peak-hold): the smoothed 0.40 attack made the viz lag the audio
@@ -8327,6 +8472,25 @@ void TerrainInstrumentAudioProcessor::setDistortionCurves (const juce::String& j
 {
     auto v = juce::JSON::parse (json);
     if (! v.isObject()) return;
+    // fb341-sweep — SINGLE-WRITER LAW (the fb238 architecture): when per-point mods are live the
+    // AUDIO thread owns the engine bake (the block-rate rebake below picks up the new points via
+    // the version bump within one block); the message thread baking too was a dual-writer race
+    // on uCv_ under drag+mod. Pre-scan for mods; skip the direct bake when any are present.
+    bool anyPtMod = false;
+    {
+        static const char* const bks0[4] = { "a", "b", "c", "d" };
+        for (int bk = 0; bk < 4 && ! anyPtMod; ++bk)
+            if (auto* pa = v.getProperty (bks0[bk], juce::var()).getArray())
+                for (const auto& e : *pa)
+                {
+                    auto* t = e.getArray();
+                    if (t != nullptr && t->size() > 3 && (*t)[3].isObject())
+                    {
+                        const auto& m = (*t)[3];
+                        if ((int) m.getProperty ("ys", 0) > 0 || (int) m.getProperty ("xs", 0) > 0) { anyPtMod = true; break; }
+                    }
+                }
+    }
     if (v.getProperty ("a", juce::var()).getArray() != nullptr)
     {
         // fb330 — FOUR banks (A→B→C→D on one Morph). Absent banks keep the engine's generated defaults.
@@ -8338,7 +8502,8 @@ void TerrainInstrumentAudioProcessor::setDistortionCurves (const juce::String& j
         if (hasB) dstBakePts (v.getProperty ("b", juce::var()), b, 257);
         if (hasC) dstBakePts (v.getProperty ("c", juce::var()), c, 257);
         if (hasD) dstBakePts (v.getProperty ("d", juce::var()), d, 257);
-        distortionEngine.setUserCurves (a, hasB ? b : nullptr, hasC ? c : nullptr, hasD ? d : nullptr, 257);
+        if (! anyPtMod)
+            distortionEngine.setUserCurves (a, hasB ? b : nullptr, hasC ? c : nullptr, hasD ? d : nullptr, 257);
     }
     else distortionEngine.clearUserCurves();
     if (auto* ba = v.getProperty ("bars", juce::var()).getArray())
@@ -8349,6 +8514,40 @@ void TerrainInstrumentAudioProcessor::setDistortionCurves (const juce::String& j
         distortionEngine.setHarmonicBars (bars);
     }
     { const juce::ScopedLock sl (dstCurveLock_); dstCurvesJson_ = json; }
+    // fb340 — capture the point lists + per-point mods for the block-rate rebake (fb238 handoff:
+    // shared written here, version bumped after; the audio thread copies on version change).
+    {
+        static const char* const bks[4] = { "a", "b", "c", "d" };
+        bool hasMod = false;
+        for (int bk = 0; bk < 4; ++bk)
+        {
+            int np = 0;
+            if (auto* pa = v.getProperty (bks[bk], juce::var()).getArray())
+                for (const auto& e : *pa)
+                {
+                    if (np >= 32) break;
+                    auto* t = e.getArray(); if (t == nullptr || t->size() < 2) continue;
+                    auto& q = dstPtShared_[bk][np];
+                    q = LfoShapePtM{};
+                    q.x = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]);
+                    q.y = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]);
+                    if (t->size() > 2) q.c = juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]);
+                    if (t->size() > 3 && (*t)[3].isObject())
+                    {
+                        const auto& m = (*t)[3];
+                        q.xs = juce::jlimit (0, 10, (int) m.getProperty ("xs", 0));
+                        q.xa = juce::jlimit (-1.0f, 1.0f, (float) (double) m.getProperty ("xa", 0.0));
+                        q.ys = juce::jlimit (0, 10, (int) m.getProperty ("ys", 0));
+                        q.ya = juce::jlimit (-1.0f, 1.0f, (float) (double) m.getProperty ("ya", 0.0));
+                        if (q.ys > 0 || q.xs > 0) hasMod = true;
+                    }
+                    ++np;
+                }
+            dstPtNpShared_[bk] = np;
+        }
+        dstPtHasModShared_ = hasMod;
+        dstPtVersion_.fetch_add (1, std::memory_order_release);
+    }
 }
 
 juce::String TerrainInstrumentAudioProcessor::getDistortionCurvesJson() const
@@ -8642,6 +8841,8 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
             state.setProperty ("lfoShapesJson", lfoShapesJson_, nullptr);   // LFO ARC L1 — drawn shapes
         if (dstCurvesJson_.isNotEmpty())
             state.setProperty ("dstCurvesJson", dstCurvesJson_, nullptr);   // fb328 — drawn distortion curves
+        if (dstTableSrc_ >= 0)
+            state.setProperty ("dstTableSrc", dstTableSrc_, nullptr);       // fb339 — Table source pill
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
@@ -8885,6 +9086,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 if (lsj.isNotEmpty()) setSynthLfoShapes (lsj);
                 auto dcv = newState.getProperty ("dstCurvesJson", "").toString();   // fb328
                 if (dcv.isNotEmpty()) setDistortionCurves (dcv);
+                setDistortionTableSrc ((int) newState.getProperty ("dstTableSrc", -1));   // fb339 — re-reads the osc's CURRENT table
             }
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();

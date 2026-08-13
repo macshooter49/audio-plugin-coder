@@ -193,8 +193,12 @@ enum class ModDest : int
     EnvPBase,
     LfoRateBase = EnvPBase + 192,   // fb196 — env/LFO on an LFO's RATE (10 dests, Hz mode)
     LfoPhaseBase = LfoRateBase + 10,   // fb245 — env/LFO on an LFO's PHASE (10 dests, read-phase shift 0..1)
-    NumDests = LfoPhaseBase + 10
+    DstMorph = LfoPhaseBase + 10,      // fb340 — Distortion Morph (SYN_DST_SIG): the ABCD bank sweep / knee slot as a first-class dest (bible §6.7)
+    NumDests = DstMorph + 1
 };
+
+static_assert ((int) ModDest::DstMorph == 693,
+    "fb340 - the JS data-mod-dest anchor for Morph is hardcoded 693 (index.html stampMorphDest); update BOTH or saved routes break");
 
 // How a normalized modulation sum is converted to the parameter's real units.
 enum class ModDomain : int { Semitone = 0, Linear01, Bipolar };
@@ -904,6 +908,7 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // LfoPhase8
     { ModDomain::Linear01,  1.0f },  // LfoPhase9
     { ModDomain::Linear01,  1.0f },  // LfoPhase10
+    { ModDomain::Linear01,  1.0f },  // DstMorph (fb340 — index stays aligned with the JS anchor 693)
 };
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──

@@ -2550,6 +2550,7 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .crv-ext .card-scope .crv-occ line{stroke:var(--purple-400,#B794FF);stroke-width:5;stroke-linecap:round;}
 .crv-ext .card-scope .crv-mir{fill:none;stroke:rgba(255,255,255,.30);stroke-width:1.1;}
 /* fb332 — .crv-ink carries NO style: the editor path wears .mv-stroke (ONE line = the mockup). .crv-ink survives only as the live-tick's querySelector hook. */
+.crv-ext .card-scope .sh-modr{fill:rgba(139,92,246,.16);stroke:rgba(255,255,255,.35);stroke-width:.7;stroke-dasharray:2.2 2.2;pointer-events:none;}   /* fb340 — the fb238 range bar */
 .crv-ext .card-scope .crv-anc{fill:none;stroke:rgba(255,255,255,.4);stroke-width:.8;stroke-dasharray:1.6 1.8;pointer-events:none;}
 .crv-ext .card-scope .crv-bar{fill:rgba(236,232,242,.82);}
 .crv-ext .card-scope .crv-bar.neg{fill:rgba(183,148,255,.72);}
@@ -7889,10 +7890,17 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           function fxrRestoreOrder(){ try{
             var g=NFX('getSynParam'); if(!g) return;
             Promise.resolve(g('SYN_FX_ORDER')).then(function(v){ try{
-              var wantDelayFirst=(+v)>0.5;
-              var rvi=-1,dli=-1; for(var q=0;q<DEVS.length;q++){ if(DEVS[q]&&DEVS[q].core==='reverb')rvi=q; if(DEVS[q]&&DEVS[q].core==='delay')dli=q; }
-              if(rvi<0||dli<0) return;
-              if(wantDelayFirst !== (dli<rvi)){ var tmp=DEVS[rvi]; DEVS[rvi]=DEVS[dli]; DEVS[dli]=tmp; reRenderKeepSwap(); }
+              // fb341 — 6-way perm (norm → idx·5). Table mirrors the C++ choice order exactly.
+              var PERMS=[['reverb','delay','saturate'],['reverb','saturate','delay'],['saturate','reverb','delay'],
+                         ['saturate','delay','reverb'],['delay','saturate','reverb'],['delay','reverb','saturate']];
+              var want=PERMS[Math.max(0,Math.min(5,Math.round((+v)*5)))];
+              var slots=[],objs={};
+              for(var q=0;q<DEVS.length;q++){ var c3=DEVS[q]&&DEVS[q].core;
+                if(c3==='reverb'||c3==='delay'||c3==='saturate'){ slots.push(q); objs[c3]=DEVS[q]; } }
+              if(slots.length!==3||!objs.reverb||!objs.delay||!objs.saturate) return;
+              var moved=false;
+              for(var q2=0;q2<3;q2++){ if(DEVS[slots[q2]].core!==want[q2]){ moved=true; } DEVS[slots[q2]]=objs[want[q2]]; }
+              if(moved) reRenderKeepSwap();
             }catch(e){} }).catch(function(){});
           }catch(e){} }
           render();
@@ -8205,9 +8213,13 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); dev.classList.remove('fxr-drag');
               var order=[].map.call(rack.querySelectorAll('.fxr-dev'),function(n){return DEVS[+n.getAttribute('data-dev')];});
               DEVS=order; render();
-              // fb307 — bridge the drag to the DSP serial chain: delay BEFORE reverb ⇒ Delay→Reverb (SYN_FX_ORDER=1), else Reverb→Delay
-              var rvi=-1,dli=-1; for(var q=0;q<DEVS.length;q++){ if(DEVS[q]&&DEVS[q].core==='reverb')rvi=q; if(DEVS[q]&&DEVS[q].core==='delay')dli=q; }
-              if(rvi>=0&&dli>=0) window.__setSynParam('SYN_FX_ORDER',(dli<rvi)?1:0);
+              // fb341 — bridge the drag to the FULL 6-way serial permutation (norm = idx/5; table = the C++ choice order)
+              var seq=[]; for(var q=0;q<DEVS.length;q++){ var c3=DEVS[q]&&DEVS[q].core;
+                if(c3==='reverb'||c3==='delay'||c3==='saturate') seq.push(c3); }
+              var PERMS=[['reverb','delay','saturate'],['reverb','saturate','delay'],['saturate','reverb','delay'],
+                         ['saturate','delay','reverb'],['delay','saturate','reverb'],['delay','reverb','saturate']];
+              for(var pi=0;pi<6;pi++){ if(seq.length===3&&seq[0]===PERMS[pi][0]&&seq[1]===PERMS[pi][1]&&seq[2]===PERMS[pi][2]){
+                window.__setSynParam('SYN_FX_ORDER', pi/5); break; } }
             }catch(_){} }
             document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
           }catch(e){} });
@@ -27573,7 +27585,7 @@ restoreThemeFromBackend();
   var TYPES=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip','Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table','Downsample','Bitcrush','Overflow'];
   function famOfI(i){ return i<=4?'ANALOG':i<=8?'CLIP':i<=12?'DIODE':i<=15?'FOLD':i<=19?'SHAPER':'DIGITAL'; }
   var CGRIDS=[2,3,4,5,8,12,16,24,32];   // the LFO's grid ladder (fb212)
-  var CV={ bank:0, gh:8, gv:8, sn:1, tool:0, unpin:false, src:'',
+  var CV={ bank:0, gh:8, gv:8, sn:1, tool:0, unpin:false, src:'', tsrc:-1,   /* fb339 — Table source (-1 Gen, 0-3 A-D) */
     a:[[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],           // gentle S = the engine's default bank A
     b:[[0,0.10,0],[0.24,0.10,0],[0.25,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.75,0.70,0],[0.76,0.90,0],[1,0.90,0]],   // razor staircase = bank B
     c:(function(){ var pF=[],i; for(i=0;i<=16;i++){ var x=i/16; pF.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*4.712389-2.3561945)).toFixed(4),0]); } return pF; })(),   // sine fold = bank C (fb330)
@@ -27610,17 +27622,20 @@ restoreThemeFromBackend();
   function snapV(v,n){ return Math.round(v*n)/n; }
 
   /* ── transport — §6.5 cadence: 40 ms leading edge so consecutive fades butt together ── */
-  function blob(){ function mp(P){ return P.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];}); }
+  function blob(){ function mp(P){ return P.map(function(q){ var t3=[+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)];
+      if(q[3]&&(q[3].ys>0||q[3].xs>0)) t3.push({xs:q[3].xs||0,xa:+(+(q[3].xa||0)).toFixed(3),ys:q[3].ys||0,ya:+(+(q[3].ya||0)).toFixed(3)});   /* fb340 — per-point mods ride at index 3 (fb238 grammar) */
+      return t3; }); }
     return JSON.stringify({ a:mp(CV.a), b:mp(CV.b), c:mp(CV.c), d:mp(CV.d),
     bars:CV.bars.map(function(v){return +(+v).toFixed(3);}), src:CV.src, gh:CV.gh, gv:CV.gv, sn:CV.sn }); }
   function pushNow(){ var j=blob(); if(j===lastPush)return; lastPush=j;
     var f=NF('setDistortionCurves'); if(f){ try{ f(j); }catch(e){} } }
   function cPush(){ window.__crvTouchT=Date.now(); if(pushT)return; pushT=setTimeout(function(){ pushT=null; pushNow(); },40); }
   function applyBlob(j){ try{ var v=JSON.parse(j); if(!v)return;
-    if(v.a&&v.a.length>1) CV.a=v.a.map(function(q){return [q[0],q[1],q[2]||0];});
-    if(v.b&&v.b.length>1) CV.b=v.b.map(function(q){return [q[0],q[1],q[2]||0];});
-    if(v.c&&v.c.length>1) CV.c=v.c.map(function(q){return [q[0],q[1],q[2]||0];});
-    if(v.d&&v.d.length>1) CV.d=v.d.map(function(q){return [q[0],q[1],q[2]||0];});
+    function mpIn(q){ var p2=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')p2[3]=q[3]; return p2; }   /* fb340 — mods survive the round-trip */
+    if(v.a&&v.a.length>1) CV.a=v.a.map(mpIn);
+    if(v.b&&v.b.length>1) CV.b=v.b.map(mpIn);
+    if(v.c&&v.c.length>1) CV.c=v.c.map(mpIn);
+    if(v.d&&v.d.length>1) CV.d=v.d.map(mpIn);
     if(v.bars&&v.bars.length===16) CV.bars=v.bars.slice();
     if(v.gh)CV.gh=v.gh; if(v.gv)CV.gv=v.gv; if(v.sn!=null)CV.sn=v.sn?1:0; CV.src=v.src||'';
   }catch(e){} }
@@ -27654,8 +27669,12 @@ restoreThemeFromBackend();
     var d=pathD(odd?full.filter(function(q){return q[0]>=0.4999;}):full);
     var fillD='M0 '+fy(full[0][1]).toFixed(1)+' '+pathD(full).replace(/^M/,'L')+'L'+W+' '+fy(0.5)+' L0 '+fy(0.5)+' Z';
     var mirror=odd?'<path class="crv-mir" d="'+pathD(full.filter(function(q){return q[0]<=0.5001;}))+'"/>':'';
-    var nd='',hd='',cdm='';
+    var nd='',hd='',cdm='',mdb='';
     var vis=odd?p.filter(function(q){return q[0]>=0.5-1e-6;}):p;
+    vis.forEach(function(q){ var m=q[3]; if(!m||!(m.ys>0))return;   // fb340 — the Serum range bar: the shaded min→max travel of a modulated point
+      var cx=fx(q[0]), ay=Math.abs(m.ya||0);
+      var yT=Math.min(1,q[1]+ay), yB2=Math.max(0,q[1]-ay);
+      mdb+='<rect class="sh-modr" x="'+(cx-3).toFixed(1)+'" y="'+fy(yT).toFixed(1)+'" width="6" height="'+Math.max(2,(fy(yB2)-fy(yT))).toFixed(1)+'" rx="2"/>'; });
     vis.forEach(function(q){ var idx=p.indexOf(q),cx=fx(q[0]).toFixed(1),cy=fy(q[1]).toFixed(1);
       var anc=(Math.abs(q[0]-0.5)<1e-4&&!CV.unpin&&idx!==0&&idx!==p.length-1);
       nd+='<circle class="sh-nd'+(sel===idx?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
@@ -27669,7 +27688,7 @@ restoreThemeFromBackend();
      +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
      +occG()+'<path class="mv-fill" d="'+fillD+'"/>'+mirror
      +'<path class="mv-stroke crv-ink" d="'+d+'"/>'             /* fb332 — ONE LINE (Max/mockup): your curve IS the display. The live feed animates THIS path (and the dots ride it) — no second line, ever */
-     +nd+cdm+hd+'</svg>'; }
+     +mdb+nd+cdm+hd+'</svg>'; }
   function liveSVG(){   // any non-drawn mode + Table: the LIVE engine curve, occupancy-lit
     return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()
      +'<line class="crv-unity" x1="0" y1="'+fy(0)+'" x2="'+W+'" y2="'+fy(1)+'"/>'
@@ -27693,9 +27712,12 @@ restoreThemeFromBackend();
       return '<span class="crv-ro">Bars 1–16 · down = phase-flip</span>'
         +'<span class="mv-c" data-act="clearbars">Clear</span>'
         +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
-    if(ty==='Table')
-      return '<span class="crv-ro">Morph sweeps the frame stack</span>'
-        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
+    if(ty==='Table'){
+      var srcs=['Gen','A','B','C','D'], tt2='';   // fb339 — SOURCE pills: the osc's REAL frame stack becomes the morph
+      for(var si2=0;si2<5;si2++) tt2+='<span class="t'+(CV.tsrc===si2-1?' act':'')+'" data-tsrc="'+(si2-1)+'">'+srcs[si2]+'</span>';
+      return '<div class="mv-tabs">'+tt2+'</div>'
+        +'<span class="crv-ro">Morph sweeps the frame stack</span>'
+        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>'; }
     var tabs=''; for(var bi=0;bi<4;bi++) tabs+='<span class="t'+(CV.bank===bi?' act':'')+'" data-bank="'+bi+'">'+['A','B','C','D'][bi]+'</span>';
     return '<div class="mv-tabs">'+tabs+'</div>'
       +'<span class="crv-rail" data-act="morph" title="Morph A→B"><i style="left:'+morphPct()+'%"></i></span>'
@@ -27757,11 +27779,21 @@ restoreThemeFromBackend();
     return out;
   }catch(e){ return null; } }
   window.__crvDrawnCurve=drawnC;
+  /* fb340 — Morph joins the mod matrix (dest 693 = wc::ModDest::DstMorph): stamp the rack's SIG
+     dial + the card's footer rail as LFO drop targets (the data-mod-dest pool, fb75 grammar).
+     Interval = rebuild-proof (the rack re-renders on type changes; the pool re-collects on drag). */
+  (function stampMorphDest(){ try{
+      document.querySelectorAll('#syn-panel .fxr-dial[data-p="SYN_DST_SIG"], #syn-panel .crv-rail').forEach(function(el){
+        if(!el.hasAttribute('data-mod-dest')) el.setAttribute('data-mod-dest','693'); });
+    }catch(e){} setTimeout(stampMorphDest,1200); })();
   /* fb333 — boot pull (the fb232 LFO law): CV must mirror the SAVED blob before the card ever
      opens, or the mini viz would show default points over a saved curve. Retries while the
      natives inject; plain-browser/headless ⇒ NF null ⇒ quiet no-op. */
   (function bootPull(n){ var f=NF('getDistortionCurves');
-    if(f){ pullBlob(function(){ if(card&&card.classList.contains('open'))paint(); }); return; }
+    if(f){ pullBlob(function(){ if(card&&card.classList.contains('open'))paint(); });
+      var fT=NF('getDstTableSrc');   // fb339 — the Table source pill mirrors the processor's truth
+      if(fT){ try{ fT().then(function(v){ var nv=parseInt(v,10); if(!isNaN(nv)&&nv!==CV.tsrc){ CV.tsrc=nv; if(card&&card.classList.contains('open'))paint(); } }).catch(function(){}); }catch(e){} }
+      return; }
     if(n<40) setTimeout(function(){ bootPull(n+1); },250); })(0);
 
   /* ── interactions ─────────────────────────────────────────────────────── */
@@ -27802,6 +27834,8 @@ restoreThemeFromBackend();
     hero.oncontextmenu=function(e){ e.preventDefault();
       var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
       if(bar){ CV.bars[+bar.getAttribute('data-i')]=0; paintField(); cPush(); return; }
+      var nh=e.target.closest&&e.target.closest('.sh-hit');   // fb340 — right-click a POINT = the fb238 mod menu
+      if(nh&&drawn){ crvPtMenu(+nh.getAttribute('data-i'), e); return; }
       crvMenu(e); };
     hero.ondblclick=function(e){
       if(!isShFam()){ sendToShaper(); return; }           // §6.6 — ANY mode's curve becomes yours
@@ -27910,6 +27944,50 @@ restoreThemeFromBackend();
       CV.unpin=true;
       seedTo(p2,'LFO '+n);
     }catch(e2){} }).catch(function(){}); }catch(e3){} }
+  /* fb340 — PER-POINT Y MOD (bible §6.7, the fb238 machinery verbatim-in-grammar): right-click a
+     point → source picker (LFO 1..10) + the center-fill amount slider. The range bar shows the
+     travel; the ENGINE re-bakes the audible curve at block rate (0.002-gated, 40 ms crossfade). */
+  function crvAmtNode(ix){
+    function get(){ var q0=cPts()[ix]; return (q0&&q0[3]&&q0[3].ya)||0; }
+    var wrap=document.createElement('div'); wrap.style.cssText='padding:2px 14px 10px 14px;min-width:150px;';
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;justify-content:space-between;margin-bottom:7px;';
+    var lab=document.createElement('span'); lab.style.cssText='color:rgba(255,255,255,.55);font-size:9px;letter-spacing:1px;'; lab.textContent='Y amount';
+    var val=document.createElement('span'); val.style.cssText='color:#FFFFFF;font-size:10px;font-weight:400;font-variant-numeric:tabular-nums;';
+    row.appendChild(lab); row.appendChild(val);
+    var track=document.createElement('div'); track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+    var notch=document.createElement('div'); notch.style.cssText='position:absolute;top:-2.5px;left:50%;width:1px;height:7px;background:rgba(255,255,255,0.28);transform:translateX(-50%);';
+    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;height:2px;border-radius:1px;background:#8B5CF6;';
+    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+    track.appendChild(notch); track.appendChild(fill); track.appendChild(marker);
+    wrap.appendChild(row); wrap.appendChild(track);
+    function pnt(){ var a=get(), pct=(a+1)/2*100; marker.style.left=pct+'%'; val.textContent=(a>0?'+':'')+Math.round(a*100)+'%';
+      if(a>=0){ fill.style.left='50%'; fill.style.width=(a*50)+'%'; } else { fill.style.left=(50+a*50)+'%'; fill.style.width=(-a*50)+'%'; } }
+    pnt();
+    function fromX(cx2){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx2-r.left)/Math.max(1,r.width)));
+      var a=Math.round((t*2-1)*100)/100; var q=cPts()[ix]; if(q&&q[3]&&q[3].ys>0)q[3].ya=a;
+      cPush(); pnt(); paintField(); }
+    var dragging=false;
+    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; try{track.setPointerCapture(ev.pointerId);}catch(e2){} fromX(ev.clientX); });
+    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
+    function up2(ev){ if(dragging){ dragging=false; try{track.releasePointerCapture(ev.pointerId);}catch(e2){} } }
+    track.addEventListener('pointerup',up2); track.addEventListener('pointercancel',up2);
+    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation();
+      var q=cPts()[ix]; if(q&&q[3]&&q[3].ys>0){ q[3].ya=0.5; cPush(); pnt(); paintField(); } });
+    return wrap; }
+  function crvPtMenu(ix,e){ if(!window.__synShowMenu)return;
+    var p=cPts(), q=p[ix]; if(!q)return;
+    var cur=(q[3]&&q[3].ys)||0;
+    var rows=[{isHeader:true,label:'Point '+(ix+1)+' — modulate Y'}];
+    for(var mm=1;mm<=10;mm++)(function(m2){
+      rows.push({ label:'LFO '+m2, white:true, isChecked:cur===m2, onPick:function(){
+        var q2=cPts()[ix]; if(!q2)return;
+        q2[3]=q2[3]||{xs:0,xa:0,ys:0,ya:0}; q2[3].ys=m2; if(!q2[3].ya)q2[3].ya=0.5;
+        cPush(); paint(); } }); })(mm);
+    rows.push({ label:'Off', white:true, isChecked:cur===0, onPick:function(){
+      var q2=cPts()[ix]; if(q2&&q2[3]){ q2[3].ys=0; q2[3].ya=0; if(!(q2[3].xs>0))delete q2[3]; }
+      cPush(); paint(); } });
+    if(cur>0) rows.push({ node:crvAmtNode(ix) });
+    window.__synShowMenu('',rows,e.clientX,e.clientY); }
   function crvMenu(e){ if(!window.__synShowMenu)return;
     var ti=typeIdx(), ty=TYPES[ti], drawn=(isShFam()&&ty!=='Harmonics'&&ty!=='Table');
     function tool(lbl,t){ return { label:lbl, isChecked:CV.tool===t, white:true, onPick:function(){ CV.tool=(CV.tool===t&&t!==0)?0:t; paintField(); } }; }
@@ -28011,7 +28089,9 @@ restoreThemeFromBackend();
     hero=T.el('<div class="card-scope crv-hero"></div>'); crvSh.body.appendChild(hero);
     foot=T.el('<div class="crv-foot"></div>'); crvSh.body.appendChild(foot);
     foot.addEventListener('click',function(e){
-      var t=e.target.closest&&e.target.closest('[data-bank],[data-act]'); if(!t)return;
+      var t=e.target.closest&&e.target.closest('[data-bank],[data-act],[data-tsrc]'); if(!t)return;
+      if(t.getAttribute('data-tsrc')!=null){ CV.tsrc=+t.getAttribute('data-tsrc');   // fb339 — Table source pill
+        var fT=NF('setDstTableSrc'); if(fT){ try{ fT(CV.tsrc); }catch(e2){} } paint(); return; }
       if(t.getAttribute('data-bank')!=null){ CV.bank=+t.getAttribute('data-bank'); sel=-1; paint(); return; }
       var a=t.getAttribute('data-act');
       if(a==='shapes'){ var r=t.getBoundingClientRect(); var fake={clientX:r.left,clientY:r.bottom+4,preventDefault:function(){}}; crvMenu(fake); }
@@ -29582,7 +29662,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb335';   // fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
+  var TERRAIN_BUILD = 'fb341';   // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

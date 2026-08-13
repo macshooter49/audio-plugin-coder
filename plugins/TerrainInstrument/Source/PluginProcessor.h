@@ -682,6 +682,8 @@ public:
     void              setDistortionCurves (const juce::String& json);  // fb328 — curve-card blob (banks + bars)
     juce::String      getDistortionCurvesJson() const;                 // fb328 — card boot + cross-window pull
     juce::String      getDistortionCurveVizJson();                     // fb328 — live core feed (curve+occ+bloom)
+    void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
+    int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
     // ── FLOW · ARP extension card (fb105) — lane pattern + live playhead feed ──
     void              setArpLanesFromJson (const juce::String& json);   // message thread: parse -> swap under lock
@@ -1054,6 +1056,7 @@ public:
     juce::String                  lfoShapesJson_;
     juce::CriticalSection         dstCurveLock_;    // fb328 — curve-card blob (source of truth for popout)
     juce::String                  dstCurvesJson_;
+    int                           dstTableSrc_ = -1;   // fb339 — Table source (-1 gen, 0-3 osc)
     float                         lfoTableShared_[wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     float                         lfoTableAudio_ [wc::NUM_LFOS][wc::kLfoTableN + 1] {};
     // fb238 — PER-POINT MODULATION (Serum 'Modulating LFO Points'): a drawn point may carry
@@ -1064,9 +1067,19 @@ public:
     // (256 lerps) when a source it listens to actually moved.
     struct LfoShapePtM { float x = 0, y = 0, c = 0; int xs = 0; float xa = 0; int ys = 0; float ya = 0; };
     static void bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept;   // one bake, both threads
+    static void dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n) noexcept;  // fb340 — NON-periodic curve bake (the dstBakePts tension twin, float-point input)
     static void bakeLfoPathTable  (const LfoShapePtM* pts, int np, float* tb) noexcept;   // fb239 — Path: arc-length traversal of a free 2D drawing
     LfoShapePtM                   lfoPtShared_[wc::NUM_LFOS][160];
     LfoShapePtM                   lfoPtAudio_ [wc::NUM_LFOS][160];
+    // fb340 — per-point CURVE mod (the fb238 machinery on the distortion banks; same handoff grammar)
+    LfoShapePtM                   dstPtShared_[4][32];
+    LfoShapePtM                   dstPtAudio_ [4][32];
+    int                           dstPtNpShared_[4] { 0,0,0,0 }, dstPtNpAudio_[4] { 0,0,0,0 };
+    bool                          dstPtHasModShared_ = false, dstPtHasModAudio_ = false, dstPtDirty_ = false;
+    std::atomic<int>              dstPtVersion_ { 0 };
+    int                           dstPtSeen_ = 0;
+    float                         dstPtSrcLast_[10] {};
+    float                         dstMorphEff_ = 0.65f;   // fb340 — modded Morph, computed in modP's scope, consumed at the FX push
     int                           lfoPtNpShared_[wc::NUM_LFOS] {};
     int                           lfoPtNpAudio_ [wc::NUM_LFOS] {};
     bool                          lfoPtHasModShared_[wc::NUM_LFOS] {};
@@ -1539,7 +1552,7 @@ private:
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)
     bool  dlyPower_    = false;                      // fb303 — SYN_DLY_POWER on ⇒ delay runs (main-send OR per-osc)
     bool  dlyMainSend_ = false;                      // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
-    bool  fxDelayFirst_ = false;                     // fb307 — drag chain order: false = Reverb→Delay (default), true = Delay→Reverb
+    int   fxPerm_ = 0;                               // fb341 — serial chain permutation 0-5 (legacy bool: norm 0→0 R·D·T, norm 1→5 D·R·T)
     float dlyEnv_ = 0.0f, dlyEnvT_ = 0.0f;          // on/off FADE env (0 = fully bypassed)
     float dlyDry_ = 1.0f, dlyWet_ = 0.0f;           // equal-power mix — RAMPED per sample
     float dlyDryT_ = 1.0f, dlyWetT_ = 0.0f;         // mix targets
@@ -1556,6 +1569,10 @@ private:
     // sum ONLY rvbSend+dlySend, so a third send bus silently re-breaks fb305 (an osc routed to the
     // distortion would get its bus AND the reverb main send). See bible §4.5.
     bool  dstPower_ = false;                         // SYN_DST_POWER (default OFF)
+    juce::AudioBuffer<float> distortionSendBuf_;     // fb338 — routed-osc send bus (third, parallel to reverb/delay)
+    float dstG_[6] = { 0,0,0,0,0,0 };                // per-source distortion route gains (A,B,C,D,Sub,Noise)
+    bool  dstRouteActive_ = false;                   // any distortion route enabled this block
+    bool  dstMainSend_ = false;                      // power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     float dstEnv_ = 0.0f, dstEnvT_ = 0.0f;           // on/off FADE env (0 = fully bypassed, no click)
     float dstDry_ = 1.0f, dstWet_ = 0.0f;            // equal-power mix — RAMPED per sample
     float dstDryT_ = 1.0f, dstWetT_ = 0.0f;
