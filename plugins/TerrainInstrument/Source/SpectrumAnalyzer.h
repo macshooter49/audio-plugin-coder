@@ -76,6 +76,7 @@ public:
             for (int i = 0; i < NUM_BINS; ++i) dst[(size_t) i] = work[(size_t) i] * scale;
 
             readyIndex.store (writeIdx, std::memory_order_release);
+            frameCounter.fetch_add (1, std::memory_order_release);   // fb342 — publish count for the editor's fresh-frame gate
         }
     }
 
@@ -87,6 +88,12 @@ public:
         return magBuffers[(size_t) idx].data();
     }
 
+    // fb342 — monotone frame counter: readLatest() latches non-null FOREVER after the first
+    // note ever played, which made the editor push the ~40-80KB EQ string at 60Hz for the
+    // rest of the session even with every consumer hidden. The editor compares this count
+    // to skip pushes that would resend an identical frame (FFT publishes ~47/s, tick is 60/s).
+    uint32_t frameSeq() const noexcept { return frameCounter.load (std::memory_order_acquire); }
+
 private:
     juce::dsp::FFT fft;
     juce::dsp::WindowingFunction<float> window;
@@ -95,6 +102,7 @@ private:
     int writePos = 0;
     int hopCounter = 0;
     int nextBuf  = 0;
+    std::atomic<uint32_t> frameCounter { 0 };   // fb342 — see frameSeq()
 
     std::array<std::array<float, NUM_BINS>, NUM_BUFS> magBuffers;
     std::atomic<int> readyIndex { -1 };

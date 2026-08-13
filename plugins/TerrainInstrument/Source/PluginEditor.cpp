@@ -941,6 +941,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // (same pattern as getNoiseViz — costs nothing while the card is closed).
                 complete (juce::var (audioProcessor.getArpFeedJson()));
             })
+            .withNativeFunction("setFltExtOpen", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb342 review — the floating filter-extended overlay reports open/close so the
+                // spectrum push (gated on uiPage) stays live while it floats over any page.
+                if (args.size() >= 1) fltExtOpen_.store ((int) args[0] != 0, std::memory_order_relaxed);
+                complete (juce::var{});
+            })
             .withNativeFunction("getReverbBloom", [this](const juce::Array<juce::var>&,
                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -4845,6 +4853,22 @@ public:
                 {
                     complete (juce::var (proc.getDistortionCurveVizJson()));
                 })
+                // fb342 — fb328 both-lists law, gate #3: these were MAIN-ONLY, and a JUCE call to an
+                // unregistered native is dropped silently AFTER the IPC dispatch with NO completion —
+                // the page's promise Map grew ~7,200 entries/min/card while the fb90-unguarded rack
+                // loops polled them. The loops are guarded now (primary fix); registering the tiny
+                // atomic reads here makes the never-settling-promise class unrepeatable by ANY future
+                // card-page caller.
+                .withNativeFunction ("getReverbBloom", [&proc](const juce::Array<juce::var>&,
+                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var ((double) proc.getReverbBloom()));
+                })
+                .withNativeFunction ("getDelayBloom", [&proc](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    complete (juce::var ((double) proc.getDelayBloom()));
+                })
                 .withNativeFunction ("setCardState", [&proc](const juce::Array<juce::var>& args,
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -5507,6 +5531,13 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 
+        // fb342 — the FX-rack blooms ride THIS push instead of two 60fps JS native polls
+        // (each poll = 2 IPC hops + a completion eval on this same message thread — together
+        // they were ~half the main window's native traffic). Same source atomics, same 60Hz
+        // cadence, so the fb312 instant-attack peak-hold + JS rise/fall smoothing are unchanged.
+        js << "window.__fxBloomRvb=" << SF(audioProcessor.getReverbBloom(), 3)
+           << ";window.__fxBloomDly=" << SF(audioProcessor.getDelayBloom(), 3) << ";";
+
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.
         if (auto itL = audioProcessor.cardWindows_.find ("lfo");
@@ -5797,17 +5828,38 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // Push pre/post EQ analyzer bins to WebView every 60 Hz tick. Combined with
     // SpectrumAnalyzer's 75% FFT overlap (~47 fresh frames/s @ 48 kHz), this
     // gives a smooth 60 Hz visual on the EQ canvas.
+    //
+    // fb342 — TWO GATES on this push (it was the loudness-lag tax): readLatest() latches
+    // non-null FOREVER after the first note ever played, so this ~40-80KB string was built
+    // + pushed at 60Hz for the rest of the session even with every consumer hidden —
+    // measured ~0.29ms page-side parse per push plus the message-thread string build.
+    // Gate 1: a consumer must be VISIBLE — uiPage 1 (SYN: the filter analyzers chain off
+    // this feed at index.html:24874) or 2 (EQ panel). uiPage is the existing setUiPage
+    // truth the JS switcher already reports; front page/dly/mod have no bins consumer.
+    // Gate 2: only push a FRESH analyzer frame (FFT publishes ~47/s, tick is 60/s — the
+    // seq compare drops the ~13 duplicate pushes/s). Page-flip re-push is automatic:
+    // frames keep publishing, so the next tick after a flip always passes gate 2.
     {
+        const int   pg     = audioProcessor.uiPage.load (std::memory_order_relaxed);
+        const auto  seqPre  = audioProcessor.analyzerPre.frameSeq();
+        const auto  seqPost = audioProcessor.analyzerPost.frameSeq();
+        // fb342 review — fltExtOpen_ ORs in: the floating .filt-ext overlay outlives page
+        // switches, and its spectrum must stay live on ANY page (fb311).
+        const bool  wanted  = (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed));
+        const bool  fresh   = (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_);
         const float* preBins  = audioProcessor.analyzerPre.readLatest();
         const float* postBins = audioProcessor.analyzerPost.readLatest();
-        if (preBins != nullptr && postBins != nullptr && webView != nullptr)
+        if (wanted && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)
         {
+            eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost;
             // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});
             // ~80 KB string at 60 Hz. Modern WebView handles it.
             // VIZ-BULLETPROOF — sanitize like the main tick string: a NaN bin (filter
             // blowup under hot FM) would print 'nan' = ReferenceError = dead EQ eval.
             auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 6); };
-            juce::String s = "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
+            juce::String s;
+            s.preallocateBytes (96 * 1024);   // fb342 — was 4096 unreserved += appends
+            s << "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
             for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
             {
                 if (i > 0) s += ",";

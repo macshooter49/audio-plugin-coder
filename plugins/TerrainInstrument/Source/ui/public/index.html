@@ -7709,6 +7709,36 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             Tape:[{name:'Vintage Echo',k:[52,58,40,34],d1:'Vintage'},{name:'Dub Space',k:[62,76,34,40],d1:'Warm'}],
             BBD:[{name:'Analog Slap',k:[28,42,42,32],d1:'Warm'},{name:'Underwater',k:[56,70,28,38],d1:'Lo-Fi'}],
             Diffuse:[{name:'Ambient Wash',k:[58,66,52,40],d1:'Modern'},{name:'Ghost Cloud',k:[68,74,56,42],d1:'Wide'}] };
+          /* fb342 — DISTORTION factory presets, all 23 types (front [Drive,Sig,Tone,Mix] + Character verbatim from
+             DST_CHARS + back-8 in DST_BACK order + [Auto,familyPill]); values authored from the bible's §2.3/§9
+             sweet spots + destruction zones (one tasteful / one characterful / one destructive per type — the
+             no-playing-safe law). Drawn modes (Shaper/Shaper Asym/Harmonics/Table) carry k[1]=null so a preset
+             NEVER touches the user's Morph or ink (fb331/fb332: the ink IS the sound), and factory entries never
+             carry a crv blob. d2 (Quality) omitted except where the tier is the point (Ultra fold stacks, honest-Off shred). */
+          var DST_PRESETS={
+            'Tube':[{name:'Glow',k:[35,60,55,100],d1:'RSD 12AX7',bk:[0,100,55,25,50,0,50,5]},{name:'Breather',k:[55,62,50,100],d1:'Blocking',bk:[0,100,55,50,45,0,50,15]},{name:'Motorboat',k:[80,92,45,100],d1:'6V6 Power',bk:[0,100,50,75,20,0,50,45],pl:[0,1]}],
+            'Tape':[{name:'Warm Reel',k:[30,55,50,100],d1:'Studer 15',bk:[0,100,50,30,60,8,30,10]},{name:'Wobble',k:[45,50,42,100],d1:'Cassette',bk:[0,80,45,30,50,55,50,15]},{name:'Spit Reel',k:[60,10,55,100],d1:'Under-Bias',bk:[0,100,55,40,40,12,40,45]}],
+            'Transformer':[{name:'Iron Glue',k:[40,50,52,100],d1:'Marinair',bk:[0,100,45,30,50,0,50,10]},{name:'Radio Ring',k:[55,60,45,100],d1:'Ge Radio',bk:[30,85,40,30,50,0,50,20]},{name:'Sub Crush',k:[85,70,50,100],d1:'Cheap Line',bk:[0,100,25,50,50,0,50,35],pl:[0,1]}],
+            'Stomp Box':[{name:'Green Push',k:[35,55,55,100],d1:'Green 808',bk:[0,100,60,20,50,0,50,10]},{name:'Clear Lift',k:[30,50,58,100],d1:'Klon Ge',bk:[0,100,55,15,50,0,50,0]},{name:'Squeal',k:[92,95,55,100],d1:'Starved 9V',bk:[0,100,60,50,25,0,50,80],pl:[0,1]}],
+            'Overdrive':[{name:'Rat Crunch',k:[45,50,45,100],d1:'LM308 Rat',bk:[0,100,50,25,50,0,50,10]},{name:'Sustainer',k:[65,50,40,100],d1:'Big Muff',bk:[0,90,45,20,50,0,50,15]},{name:'Sludge',k:[100,30,45,100],d1:'Slew Kill',bk:[0,100,50,80,15,0,50,35],pl:[0,1]}],
+            'Soft Clip':[{name:'Warm Push',k:[30,75,52,100],d1:'Glue',bk:[0,100,50,50,50,0,50,0]},{name:'Thicken',k:[55,40,50,100],d1:'Dense',bk:[0,100,58,50,65,0,50,0]},{name:'Scorch',k:[85,20,55,100],d1:'Growl',bk:[0,85,60,50,65,0,50,25]}],
+            'Hard Clip':[{name:'Edge Trim',k:[25,45,50,100],d1:'Razor',bk:[0,100,50,35,50,0,35,0]},{name:'Roar',k:[55,8,50,100],d1:'Rails',bk:[0,100,55,50,72,0,50,10]},{name:'Shred',k:[90,0,55,100],d1:'Wrap Tip',d2:'Off',bk:[0,100,60,50,70,0,50,30],pl:[0,1]}],
+            'Zero-Square':[{name:'Buzz Weld',k:[25,45,45,100],d1:'Octave',bk:[0,64,50,50,50,0,50,0]},{name:'Pulse Bend',k:[30,40,50,100],d1:'PWM Env',bk:[0,70,50,50,80,0,50,0]},{name:'Flatline',k:[40,0,50,100],d1:'Comparator',bk:[0,80,55,50,50,0,50,15]}],
+            'Slew Clip':[{name:'Seventies',k:[45,62,48,100],d1:'Slow',bk:[0,100,48,50,50,0,50,0]},{name:'Zing',k:[40,50,60,100],d1:'Ring',bk:[0,100,55,50,50,0,60,0]},{name:'Tar Pit',k:[70,8,40,100],d1:'Stick',bk:[0,100,42,50,50,0,50,0]}],
+            'Diode 1':[{name:'No Ceiling',k:[45,50,52,100],d1:'Log',bk:[0,100,52,50,60,0,0,0]},{name:'Broke Amp',k:[75,75,50,100],d1:'Silicon',bk:[44,62,55,50,15,0,0,38]},{name:'Buzzsaw',k:[100,50,55,100],d1:'Schottky',bk:[0,100,55,50,5,0,0,80]}],
+            'Diode 2':[{name:'Tail Fizz',k:[40,50,50,100],d1:'Class AB',bk:[0,100,50,50,40,25,0,0]},{name:'Rasp',k:[50,55,48,100],d1:'Push-Pull',bk:[0,80,52,50,20,45,0,0]},{name:'Chatter',k:[55,60,50,100],d1:'Ratchet',bk:[0,71,50,50,10,70,0,0],pl:[1,0]}],
+            'Asym':[{name:'Peak Bend',k:[35,65,55,100],d1:'Screamer',bk:[0,100,58,50,50,0,0,0]},{name:'Bloom',k:[45,80,52,100],d1:'Grid Bias',bk:[0,100,65,50,45,0,0,0]},{name:'Half Dead',k:[80,98,45,100],d1:'Collapse',bk:[0,100,15,50,30,0,0,40]}],
+            'Rectify':[{name:'Green Ring',k:[35,75,52,100],d1:'Ringer',bk:[0,100,50,50,50,12,0,0]},{name:'Haze',k:[38,78,50,100],d1:'Octavia',bk:[0,67,50,50,20,16,0,0]},{name:'Clang',k:[60,100,55,100],d1:'Over-Rect',bk:[0,100,60,50,20,10,0,20],pl:[0,1]}],
+            'Linear Fold':[{name:'Bent Bell',k:[35,62,50,100],d1:'Lossy',bk:[0,100,50,48,75,50,40,50],pl:[0,1]},{name:'Reactive',k:[55,50,52,100],d1:'Expanded',bk:[0,100,50,48,87,50,20,50],pl:[0,1]},{name:'Razor Wire',k:[100,50,55,100],d1:'Ladder',d2:'Ultra',bk:[0,100,55,100,50,50,0,50]}],
+            'Sine Fold':[{name:'FM Bell',k:[22,50,55,100],d1:'Bell',bk:[0,100,50,48,50,50,50,50],pl:[0,1]},{name:'Vowel',k:[55,58,52,100],d1:'Formant',bk:[0,100,50,60,79,50,40,50]},{name:'Shriek',k:[100,50,55,100],d1:'Cluster',d2:'Ultra',bk:[0,100,55,100,50,50,30,50]}],
+            'West Coast':[{name:'Museum',k:[45,50,50,100],d1:'Buchla 259',bk:[0,100,50,13,50,50,50,50]},{name:'Big Sur',k:[60,65,52,100],d1:'Extended',bk:[0,100,50,35,50,50,50,50],pl:[0,1]},{name:'Howl',k:[95,90,55,100],d1:'Metalizer',d2:'Ultra',bk:[0,100,55,90,50,50,20,50]}],
+            'Shaper':[{name:'Ink Press',k:[40,null,52,100],d1:'Log',bk:[0,100,50,50,30,50,0,30]},{name:'Redouble',k:[55,null,50,100],d1:'Twice',bk:[0,100,50,50,25,50,0,20]},{name:'Siren',k:[85,null,55,100],d1:'Razor',d2:'Ultra',bk:[0,100,55,50,10,50,100,0]}],
+            'Shaper Asym':[{name:'Velvet',k:[45,null,50,100],d1:'Log Both',bk:[0,100,50,50,30,50,0,25]},{name:'One Sided',k:[75,null,52,100],d1:'Direct',bk:[0,100,55,50,15,92,60,0]}],
+            'Harmonics':[{name:'Brassy',k:[45,null,52,100],d1:'Ramp',bk:[0,100,50,50,50,50,0,30]},{name:'Overreach',k:[80,null,55,100],d1:'Beyond',d2:'Ultra',bk:[0,100,55,50,20,50,50,0]}],
+            'Table':[{name:'Silky',k:[45,null,52,100],d1:'Spectral',bk:[0,100,50,50,35,50,0,25]},{name:'White Out',k:[70,null,50,100],d1:'Noise',d2:'Ultra',bk:[0,100,50,50,0,50,0,0]}],
+            'Downsample':[{name:'Dusty',k:[45,20,48,100],d1:'SP-1200',bk:[0,100,11,20,15,0,0,0]},{name:'Hotline',k:[35,25,50,100],d1:'Telephone',bk:[0,55,0,60,20,0,0,0],pl:[0,1]},{name:'Gargle',k:[60,95,50,100],d1:'Shatter',bk:[0,100,0,0,0,60,80,20]}],
+            'Bitcrush':[{name:'Soft Grit',k:[40,44,50,100],d1:'Shaped',bk:[0,100,0,30,50,0,0,0]},{name:'Console',k:[50,50,50,100],d1:'Linear',bk:[0,100,10,10,25,0,0,0]},{name:'Gravel',k:[65,90,50,100],d1:'Sputter',bk:[0,100,0,0,0,0,40,30]}],
+            'Overflow':[{name:'Peak Tear',k:[30,40,50,100],d1:'Soft Wrap',bk:[0,100,0,20,0,0,0,0]},{name:'Undertow',k:[45,50,48,100],d1:'Mirror',bk:[0,100,0,10,0,0,0,0]},{name:'Ripper',k:[80,100,52,100],d1:'Overflow',bk:[0,100,0,0,0,0,20,40]}] };
           function reRenderKeepSwap(){ try{
             var sw=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
             var dv=rack.querySelectorAll('.fxr-dev'); for(var s=0;s<dv.length;s++){ if(sw[s]){ dv[s].classList.add('swapped'); var ac=dv[s].querySelector('[data-act="swap"]'); if(ac)ac.classList.add('act'); } }
@@ -7719,12 +7749,20 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           function rvbApply(idx,p){ try{ var d=DEVS[idx]; if(!d)return;
             if(p.k) d.knobs.forEach(function(x,i){ if(p.k[i]!=null){ x.v=p.k[i]; if(x.p)window.__setSynParam(x.p,x.v/100);} });
             if(p.bk) d.back.knobs.forEach(function(x,i){ if(p.bk[i]!=null){ x[1]=p.bk[i]; if(x[2])window.__setSynParam(x[2],x[1]/100);} });
-            if(p.d1!=null){ var i1=d.back.d1.opts.indexOf(p.d1); if(i1>=0){ d.back.d1.v=p.d1; if(d.back.d1.p){ var n1=d.back.d1.opts.length; window.__setSynParam(d.back.d1.p, n1>1?i1/(n1-1):0);} } }
+            if(p.d1!=null){ var i1=d.back.d1.opts.indexOf(p.d1); if(i1>=0){ d.back.d1.v=p.d1;
+              if(d.back.d1.p==='SYN_DST_CHARACTER'){ window.__setSynParam(d.back.d1.p, i1/7); }   // fb342 review — choice(8) param, but DST_CHARS lists run 4-8 entries: /(n-1) mis-scaled short lists (Soft/Hard Clip, Zero-Square) so 7 factory presets played the WRONG voicing. /7 = the dstApplyType cdef/7 convention.
+              else if(d.back.d1.p){ var n1=d.back.d1.opts.length; window.__setSynParam(d.back.d1.p, n1>1?i1/(n1-1):0);} } }
             if(p.d2!=null){ var i2=d.back.d2.opts.indexOf(p.d2); if(i2>=0){ d.back.d2.v=p.d2; if(d.back.d2.p){ var n2=d.back.d2.opts.length; window.__setSynParam(d.back.d2.p, n2>1?i2/(n2-1):0);} } }
             if(p.pl) d.pills.forEach(function(x,i){ if(p.pl[i]!=null){ x.on=!!p.pl[i]; if(d.pp&&d.pp[i])window.__setSynParam(d.pp[i], x.on?1:0);} });
             // fb311 — CONVOLUTION preset carries its one-shot IR: restore the exact audio (the poll redraws the waveform).
             if(p.convIR && p.convIR.L){ var sRaw=NFX('setConvIRRaw'); if(sRaw){ try{ sRaw(JSON.stringify(p.convIR)); }catch(e){} } d._irUser=true; }
             else if(d.core==='reverb' && d.type==='Convolution'){ var cf=NFX('clearConvIR'); if(cf){ try{ cf(); }catch(e){} } d._irUser=false; }   // preset with NO IR ⇒ back to the synthetic Space
+            // fb342 — distortion curve blob + Table source: apply ONLY when present. Deliberately
+            // UNLIKE convolution's clear-on-absent — a Soft Clip preset must never nuke the user's
+            // drawn Shaper curves. setDistortionCurves honors the fb341 single-writer law itself.
+            if(p.crv){ var sCrv=NFX('setDistortionCurves'); if(sCrv){ try{ sCrv(p.crv); }catch(e){} } }
+            if(p.tblSrc!=null){ var sT2=NFX('setDstTableSrc'); if(sT2){ try{ sT2(p.tblSrc); }catch(e){} } }
+            if((p.crv||p.tblSrc!=null)&&window.__crvPull){ try{ window.__crvPull(); }catch(e){} }   // card refreshes even if closed at apply time
             d.preset=p.name||d.preset; reRenderKeepSwap();
           }catch(e){} }
           var rvbMenu=null, rvbUserCache={};
@@ -7737,6 +7775,15 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             // fb311 — CONVOLUTION with a loaded one-shot: fetch the raw IR (base64 from C++) and embed it IN the preset so it recalls EXACTLY.
             if(saveFn && d.core==='reverb' && d.type==='Convolution' && d._irUser){ var gRaw=NFX('getConvIRRaw');
               if(gRaw){ Promise.resolve(gRaw()).then(function(js){ try{ var ir=JSON.parse(String(js||'{}')); if(ir&&ir.L)payload.convIR=ir; }catch(e){} put(); }).catch(function(){ put(); }); return; } }
+            // fb342 — SHAPER-family distortion preset carries the drawn-curve blob (fb332: the ink IS
+            // the sound — a Shaper preset without its curve captures nothing audible) + Table's source
+            // pill. Mirrors the fb311 conv-IR embed chain exactly. Morph mod-matrix ROUTES stay
+            // excluded, same as reverb/delay presets (rvbCollect has no route/power/type fields).
+            if(saveFn && d.core==='saturate' && d.types && DST_FAMS[d.types.indexOf(d.type)]==='SHAPER'){ var gCrv=NFX('getDistortionCurves');
+              if(gCrv){ Promise.resolve(gCrv()).then(function(js){ try{ var s2=String(js||''); if(s2&&s2!=='{}')payload.crv=s2; }catch(e){}
+                  if(d.type==='Table'){ var gT=NFX('getDstTableSrc');
+                    if(gT){ Promise.resolve(gT()).then(function(v){ var nv=parseInt(v,10); if(!isNaN(nv))payload.tblSrc=nv; put(); }).catch(function(){ put(); }); return; } }
+                  put(); }).catch(function(){ put(); }); return; } }
             put();
           }
           function rvbBeginSave(idx,pid,saveFn,rowEl){ if(rowEl.querySelector('input'))return; rowEl.textContent='';
@@ -7753,7 +7800,12 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
           function openRvbPreset(dev,idx,pillEl){ try{
             if(rvbMenu){ closeRvbMenu(); return; }
-            var d=DEVS[idx]; if(!d)return; var type=d.type, pid=(d.core==='delay'?'dly_':'rvb_')+type.toLowerCase();
+            var d=DEVS[idx]; if(!d)return; var type=d.type,
+                pfx=(d.core==='delay'?'dly_':d.core==='saturate'?'dst_':'rvb_'),
+                // fb342 — C++ tiPresetDir keeps ONLY a-z from the id, so 'Diode 1'/'Diode 2'
+                // would both file under 'dstdiode' and cross-list each other's user presets.
+                slug=(d.core==='saturate'&&({'Diode 1':'diodeone','Diode 2':'diodetwo'})[type])||type.toLowerCase(),
+                pid=pfx+slug;
             var saveFn=NFX('savePreset'), listFn=NFX('getPresets'), delFn=NFX('deletePreset');
             var user=rvbUserCache[pid]||[];
             var menu=document.createElement('div'); menu.className='pmenu'; rvbMenu=menu;
@@ -7780,7 +7832,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 var dv=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'); if(dv){ var bkv=dv.querySelector('.fxr-bk-sel .fxr-bk-v'); if(bkv&&bkv.firstChild) bkv.firstChild.nodeValue=sp; var bnat=dv.querySelector('.fxr-bk-native'); if(bnat) bnat.value=sp; }
                 setPillName(idx,sp); closeRvbMenu(); }); });
             }
-            var fac=((d.core==='delay'?DLY_PRESETS:RVB_PRESETS)[type]||[]); if(fac.length){ sect('Factory'); fac.forEach(prow); }
+            var fac=((d.core==='delay'?DLY_PRESETS:d.core==='saturate'?DST_PRESETS:RVB_PRESETS)[type]||[]); if(fac.length){ sect('Factory'); fac.forEach(prow); }   /* fb342 — three-way */
             if(user.length){ sect('User'); user.forEach(prow); }
             document.body.appendChild(menu);
             var rc=pillEl.getBoundingClientRect(), vw=(window.__vw?window.__vw():window.innerWidth), vh=(window.__vh?window.__vh():window.innerHeight);
@@ -7878,7 +7930,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               dstApplyType(d,d.type,false);
               if(v[1]!=null) d.on=v[1]>0.5;
               var fk=[2,3,4,5]; for(var i2=0;i2<4;i2++){ if(v[fk[i2]]!=null&&d.knobs[i2]) d.knobs[i2].v=Math.round(v[fk[i2]]*100); }
-              if(v[6]!=null){ var o1=d.back.d1.opts, ci=Math.round(v[6]*(o1.length-1)); if(ci>=0&&ci<o1.length) d.back.d1.v=o1[ci]; }
+              if(v[6]!=null){ var o1=d.back.d1.opts, ci=Math.min(o1.length-1,Math.round(v[6]*7)); if(ci>=0) d.back.d1.v=o1[ci]; }   // fb342 review — Character reads back on the choice(8) scale, clamped to the type's list
               if(v[7]!=null){ var o2=d.back.d2.opts, mi=Math.round(v[7]*(o2.length-1)); if(mi>=0&&mi<o2.length) d.back.d2.v=o2[mi]; }
               for(var i3=0;i3<6;i3++){ if(v[8+i3]!=null&&d.route) d.route[i3]=v[8+i3]>0.5?1:0; }
               var pv={'SYN_DST_AUTO':v[14],'SYN_DST_PILL2':v[15]};
@@ -7911,14 +7963,13 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // fb280/fb312 — AUDIO-REACTIVE BLOOM, LIVE: rAF-poll the reverb wet level (getReverbBloom, now
           // instant-attack in C++). Gamma-lifted response + instant rise / smooth fall in JS — the purple
           // lands on the SAME frame as the audio (no trailing smoothing), falls with the tail.
-          (function(){ var fn=null, smooth=0, cells=null, cellsCore=null, P=null, wasLive=false;
+          (function(){ var smooth=0, cells=null, cellsCore=null, P=null, wasLive=false, scF=0;   // fb342 — fn poll gone, bloom rides the push; scF halves the cell write rate
             function frac(a){ var s=Math.sin(a)*43758.5453; return s-Math.floor(s); }   // deterministic per-cell hash
-            function tick(ts){ try{
-              if(!fn && window.Juce && window.Juce.getNativeFunction) fn=window.Juce.getNativeFunction('getReverbBloom');
-              if(fn) fn().then(function(v){ try{
-                var b=Math.min(1,Math.pow(Math.max(0,+v)*3.0,0.65));                 // fb312 — gamma lift: moderate tails already read boldly
-                smooth += (b-smooth)*(b>smooth?0.85:0.30);                           // fb312 — rise ~1 frame, fall smooth (live, not late)
-              }catch(e){} }).catch(function(){});
+            function tick(ts){ if(window.__cardOnly)return;   // fb342 — fb90 guard: the rack is display:none in card windows, and getReverbBloom isn't registered there — each popped card was burning 60 never-settling natives/s on the shared message thread (the frame-drop bug)
+              try{
+              { var vB=+window.__fxBloomRvb||0;                                      // fb342 — rides the 60Hz C++ push (same atomic, same cadence); the per-frame native poll is gone
+                var b=Math.min(1,Math.pow(Math.max(0,vB)*3.0,0.65));                 // fb312 — gamma lift: moderate tails already read boldly
+                smooth += (b-smooth)*(b>smooth?0.85:0.30); }                         // fb312 — rise ~1 frame, fall smooth (live, not late)
               var core=rack.querySelector('.fxr-core[data-core="reverb"]');
               if(core){                                                              // guard, no early return — the rAF loop must never die
                 var g=core.querySelector('.fxr-rvb-bloom');
@@ -7937,11 +7988,15 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                   var dd=null; for(var k=0;k<DEVS.length;k++){ if(DEVS[k]&&DEVS[k].core==='reverb'){ dd=DEVS[k]; break; } }
                   var size=dd?Math.max(0,Math.min(1,(dd.knobs&&dd.knobs[0]?dd.knobs[0].v:30)/100)):0.3;
                   var T=0.06+1.09*size, t=ts*0.001;                                  // T>1 at size 100 ⇒ every cell saturates lit
-                  for(var i=0;i<cells.length;i++){ var q=P[i];
+                  // fb342 — WRITE gating only, the loop stays armed (fb312 law): cells update at
+                  // 30Hz (dwell is 4-12s — invisible) and an unchanged cell (|Δop|<=0.01, i.e. the
+                  // unlit majority at small Size) writes nothing. The values still compute every
+                  // pass, so nothing can freeze — only redundant setAttribute style-recalcs die.
+                  if(((scF=(scF+1)&1)===0)) for(var i=0;i<cells.length;i++){ var q=P[i];
                     var v=0.5+0.27*Math.sin(t*q.w1+q.p1)+0.23*Math.sin(t*q.w2+q.p2); // wandering 0..1 life value
                     var gate=Math.max(0,Math.min(1,(T-v)/0.18));                     // soft fade in/out as v dips under the Size threshold
-                    var op=gate*(0.6+0.35*Math.sin(t*q.w3+q.p3));                    // alive pulse when lit (.25-.95)
-                    cells[i].setAttribute('opacity',Math.max(0,op).toFixed(2));
+                    var op=Math.max(0,gate*(0.6+0.35*Math.sin(t*q.w3+q.p3)));        // alive pulse when lit (.25-.95)
+                    if(Math.abs(op-(q.lo||0))>0.01){ q.lo=op; cells[i].setAttribute('opacity',op.toFixed(2)); }
                   }
                 }
                 wasLive=live;
@@ -7954,7 +8009,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // Ping/Link change (signature check per frame — catches drags, dropdowns, preset loads, restores).
           // A purple pulse sweeps at the echo rate (one tap per Time) flashing taps as it crosses; the live
           // wet level (getDelayBloom, instant-attack) gates everything bright. Idle = dim skeleton, playing = alive.
-          (function(){ var fn=null, smooth=0, lastSig='', geo=null, pulseT=0, lastTs=0, prevPX=14;
+          (function(){ var smooth=0, lastSig='', geo=null, pulseT=0, lastTs=0, prevPX=14;   // fb342 — fn poll gone, bloom rides the push
             var DIVMS={'4 bar':8000,'2 bar':4000,'1 bar':2000,'1/2':1000,'1/2D':1500,'1/2T':667,'1/4':500,'1/4D':750,'1/4T':333,'1/8':250,'1/8D':375,'1/8T':167,'1/16':125,'1/16D':188,'1/16T':83,'1/32':63,'1/64':31,'1/128':16,'1/256':8};   // nominal @120bpm — the viz needs RELATIVE time, not host bpm
             function msFor(dd,side){ var syncOn=dd.pills&&dd.pills[0]&&dd.pills[0].on;
               var div=(side==='R')?(dd.divR||'1/8'):((dd.back&&dd.back.d2)?dd.back.d2.v:'1/8');
@@ -7993,30 +8048,37 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               return { core:core, msL:msL, spL:spL, taps:taps, els:tpG?tpG.querySelectorAll('.dtap'):[], flash:taps.map(function(){return 0;}),
                        pulse:core.querySelector('.dly-pulse'), bloomG:core.querySelector('.fxr-dly-bloom') };
             }
-            function tick(ts){ try{
-              if(!fn && window.Juce && window.Juce.getNativeFunction) fn=window.Juce.getNativeFunction('getDelayBloom');
-              if(fn) fn().then(function(v){ try{
-                var b=Math.min(1,Math.pow(Math.max(0,+v)*3.0,0.65));
-                smooth += (b-smooth)*(b>smooth?0.85:0.30);                 // fb312 — live: rise ~1 frame, fall smooth
-              }catch(e){} }).catch(function(){});
+            function tick(ts){ if(window.__cardOnly)return;   // fb342 — fb90 guard (see reverb bloom above)
+              try{
+              { var vB=+window.__fxBloomDly||0;                            // fb342 — rides the 60Hz C++ push (see reverb bloom)
+                var b=Math.min(1,Math.pow(Math.max(0,vB)*3.0,0.65));
+                smooth += (b-smooth)*(b>smooth?0.85:0.30); }               // fb312 — live: rise ~1 frame, fall smooth
               var dt=Math.max(0,Math.min(100,ts-lastTs)); lastTs=ts;
               var core=rack.querySelector('.fxr-core[data-core="delay"]');
               var dd=null; for(var k=0;k<DEVS.length;k++){ if(DEVS[k]&&DEVS[k].core==='delay'){ dd=DEVS[k]; break; } }
               if(core&&dd){                                                // guard, no early return — the rAF loop must NEVER die
                 var sig=[msFor(dd,'L').toFixed(1),(dd.link!==false)?'L':msFor(dd,'R').toFixed(1),(dd.knobs[1].v|0),(dd.pills&&dd.pills[1]&&dd.pills[1].on)?1:0].join('|');
                 if(sig!==lastSig||!geo||geo.core!==core){ geo=buildGeo(core,dd); lastSig=sig; prevPX=14; }
-                if(geo.bloomG) geo.bloomG.setAttribute('opacity',(0.30+0.70*smooth).toFixed(3));
+                // fb342 — WRITE gating via formatted-string compare (the fb334 d-compare idiom):
+                // at idle every opacity below is a CONSTANT reprinted at 60Hz — the compare kills
+                // those style-recalc writes while the loop + value math stay fully armed (fb312).
+                // The pulse x sweeps every frame, so it always writes — the motion never gates.
+                if(geo.bloomG){ var bop=(0.30+0.70*smooth).toFixed(3);
+                  if(bop!==geo.lbo){ geo.lbo=bop; geo.bloomG.setAttribute('opacity',bop); } }
                 // pulse sweeps at the echo rate: crossing one tap-spacing takes exactly ONE delay time
                 pulseT+=dt; var span=198, totMs=span/geo.spL*geo.msL;
                 var px=14+((pulseT%totMs)/totMs)*span;
                 if(geo.pulse){ geo.pulse.setAttribute('x1',px.toFixed(1)); geo.pulse.setAttribute('x2',px.toFixed(1));
-                  geo.pulse.setAttribute('opacity',(0.5+0.5*smooth).toFixed(2)); }
+                  var pop=(0.5+0.5*smooth).toFixed(2);
+                  if(pop!==geo.lpo){ geo.lpo=pop; geo.pulse.setAttribute('opacity',pop); } }
                 var wrapped=(px<prevPX);
                 var fdec=Math.pow(0.82,dt/16.7);                           // tap flash tail ~150ms
+                if(!geo.lop) geo.lop=[];
                 for(var t=0;t<geo.taps.length;t++){ var tap=geo.taps[t];
                   if(!wrapped&&prevPX<tap.x&&tap.x<=px) geo.flash[t]=1; else geo.flash[t]*=fdec;
                   var op=tap.base*(0.32+1.0*smooth)+geo.flash[t]*(0.30+0.70*smooth);   // idle floor .32 — dragging Time while STOPPED must still read (Max)
-                  if(geo.els[t]) geo.els[t].setAttribute('opacity',Math.max(0,Math.min(1,op)).toFixed(3));
+                  var ops=Math.max(0,Math.min(1,op)).toFixed(3);
+                  if(geo.els[t]&&ops!==geo.lop[t]){ geo.lop[t]=ops; geo.els[t].setAttribute('opacity',ops); }
                 }
                 prevPX=px;
               }
@@ -8025,7 +8087,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           })();
           /* fb292 — CONVOLUTION IR waveform poll: when a conv core exists, pull getConvIR (~8 fps) + redraw ON CHANGE (cheap) */
           (function(){ var fnConv=null, fc=0, lastSig='';
-            function tick(){ try{ fc++;
+            function tick(){ if(window.__cardOnly)return;   // fb342 — fb90 guard (see reverb bloom above)
+              try{ fc++;
               if(fc%8===0){ var core=rack.querySelector('.fxr-core[data-conv="1"]');
                 if(core){ if(!fnConv&&window.Juce&&window.Juce.getNativeFunction) fnConv=window.Juce.getNativeFunction('getConvIR');
                   if(fnConv) fnConv(160).then(function(js){ try{ var o=JSON.parse(String(js||'{}')); if(!o.peaks||!o.peaks.length)return;
@@ -8042,7 +8105,8 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
              occupancy at ~15 fps. The purple lives ON the curve exactly where the signal is
              (idle = dark, playing = bright — the audio-reactive hard rule). */
           (function(){ var fn=null, busy=false, busyT=0;
-            function tick(){ try{
+            function tick(){ if(window.__cardOnly)return;   // fb342 — fb90 guard: rack core is display:none in card windows; the crv CARD self-syncs via its own crvXWin poll, it never needed this driver
+              try{
               /* fb334 — MIRROR PASS (Max: "make sure it's ALWAYS evolving"): on drawn modes the
                  mini's geometry repaints from LOCAL CV every frame, feed-independent — a lost
                  JUCE promise (the house law: it may NEVER settle) used to freeze the mini at
@@ -8126,7 +8190,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               if(a==='x'){ DEVS.splice(idx,1); render(); return; }
               if(a==='swap'){ dev.classList.toggle('swapped'); act.classList.toggle('act'); return; }   /* fb274 — + flips the device to the back panel (header stays) */
               /* fb275 — type is now a native <select> dropdown (handled in the 'change' listener below); no more click-to-rotate */
-              if(a==='preset'){ if(DEVS[idx]&&(DEVS[idx].core==='reverb'||DEVS[idx].core==='delay')) openRvbPreset(dev,idx,act); return; }   /* fb292/fb296 — reuse the .pmenu preset menu (reverb + delay) */
+              if(a==='preset'){ if(DEVS[idx]&&(DEVS[idx].core==='reverb'||DEVS[idx].core==='delay'||DEVS[idx].core==='saturate')) openRvbPreset(dev,idx,act); return; }   /* fb292/fb296/fb342 — reuse the .pmenu preset menu (reverb + delay + distortion — the gate was THE bug: the pill rendered but 'saturate' fell through) */
             }
             var pill=e.target.closest('.fxr-pill');
             if(pill&&dev){ var pi=[].indexOf.call(dev.querySelectorAll('.fxr-pill'),pill); pill.classList.toggle('fxr-on'); var pon=pill.classList.contains('fxr-on'); var ddp=+dev.getAttribute('data-dev'), dd=DEVS[ddp]; if(dd&&dd.pills[pi]) dd.pills[pi].on=pon; if(dd&&dd.pp&&dd.pp[pi]) window.__setSynParam(dd.pp[pi], pon?1:0); if(dd&&dd.core==='delay'&&pi===0) refreshDlyTimeKnob(ddp); return; }   /* fb279 — front pills → real param; fb298 — Sync pill flips the Time knob to division/ms */
@@ -8151,7 +8215,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 var sw2=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
                 var dv3=rack.querySelectorAll('.fxr-dev'); for(var s2=0;s2<dv3.length;s2++){ if(sw2[s2]){ dv3[s2].classList.add('swapped'); var ac2=dv3[s2].querySelector('[data-act="swap"]'); if(ac2)ac2.classList.add('act'); } } }
               return; }
-            if(t.classList.contains('fxr-bk-native')){ var sel=t.closest('.fxr-bk-sel'), v=sel&&sel.querySelector('.fxr-bk-v'), kk=sel&&sel.querySelector('.fxr-bk-k'); if(v&&v.firstChild) v.firstChild.nodeValue=t.value; if(DEVS[di]&&DEVS[di].back&&kk){ if(DEVS[di].back.d1.k===kk.textContent) DEVS[di].back.d1.v=t.value; else if(DEVS[di].back.d2.k===kk.textContent) DEVS[di].back.d2.v=t.value; } var bpid=t.getAttribute('data-p'); if(bpid){ var bn=t.options.length; window.__setSynParam(bpid, bn>1?t.selectedIndex/(bn-1):0); } if(DEVS[di]&&DEVS[di].core==='delay'&&DEVS[di].back&&kk&&DEVS[di].back.d2.k===kk.textContent) refreshDlyTimeKnob(di);   /* fb298 — division dropdown updates the Time-knob label */ return; }
+            if(t.classList.contains('fxr-bk-native')){ var sel=t.closest('.fxr-bk-sel'), v=sel&&sel.querySelector('.fxr-bk-v'), kk=sel&&sel.querySelector('.fxr-bk-k'); if(v&&v.firstChild) v.firstChild.nodeValue=t.value; if(DEVS[di]&&DEVS[di].back&&kk){ if(DEVS[di].back.d1.k===kk.textContent) DEVS[di].back.d1.v=t.value; else if(DEVS[di].back.d2.k===kk.textContent) DEVS[di].back.d2.v=t.value; } var bpid=t.getAttribute('data-p'); if(bpid==='SYN_DST_CHARACTER'){ window.__setSynParam(bpid, t.selectedIndex/7); } else if(bpid){ var bn=t.options.length; window.__setSynParam(bpid, bn>1?t.selectedIndex/(bn-1):0); }   /* fb342 review — choice(8) scale for Character (see rvbApply) */ if(DEVS[di]&&DEVS[di].core==='delay'&&DEVS[di].back&&kk&&DEVS[di].back.d2.k===kk.textContent) refreshDlyTimeKnob(di);   /* fb298 — division dropdown updates the Time-knob label */ return; }
           }catch(e){} });
           // knob drag (visual only)
           rack.addEventListener('pointerdown',function(e){ try{
@@ -20460,11 +20524,7 @@ function drawLFOWaveform(idx) {
 
   // Waveform
   ctx.beginPath();
-  ctx.strokeStyle = MOD_COLORS[idx];
-  ctx.lineWidth = 2.5;
-  var lfoDepth = lfo.depth || 0;
-  ctx.shadowColor = MOD_COLORS[idx];
-  ctx.shadowBlur = 4 + lfoDepth * 6;
+  var lfoDepth = lfo.depth || 0;   // fb342 — glow now drawn as a layered halo AFTER the path builds (see below)
   for (let x = 0; x <= w; x++) {
     const phase = (x / w + lfo.phase) % 1.0;
     let val;
@@ -20491,8 +20551,22 @@ function drawLFOWaveform(idx) {
     if (x === 0) ctx.moveTo(x, py);
     else ctx.lineTo(x, py);
   }
+  // fb342 — layered halo replaces shadowBlur (2.6x stroke cost on a per-frame canvas):
+  // one wide faint pass whose width/alpha track lfoDepth exactly like the old 4+depth*6
+  // blur radius did, then the crisp core. Same color, same depth-responsive glow.
+  ctx.save();
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+  ctx.strokeStyle = MOD_COLORS[idx];
+  ctx.globalAlpha = 0.09 + lfoDepth * 0.06;
+  ctx.lineWidth = 2.5 + (4 + lfoDepth * 6) * 1.7;
   ctx.stroke();
-  ctx.shadowBlur = 0;
+  ctx.globalAlpha = 0.15 + lfoDepth * 0.09;
+  ctx.lineWidth = 2.5 + (4 + lfoDepth * 6) * 0.9;
+  ctx.stroke();
+  ctx.restore();
+  ctx.strokeStyle = MOD_COLORS[idx];
+  ctx.lineWidth = 2.5;
+  ctx.stroke();
 
   // Phase position dot with glowing halo
   const dotX = lfo._phase * w;
@@ -22035,8 +22109,12 @@ function initFxSuite() {
       ctx.arc(lx, ly, indR + 0.8, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(15, 6, 25, 0.5)';
       ctx.fill();
-      ctx.shadowColor = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + (brightness * 0.6) + ')';
-      ctx.shadowBlur = 6 * brightness;
+      // fb342 — halo circle replaces per-light shadowBlur (blur forced a layer per LED per
+      // frame); radius/alpha track brightness exactly like the old 6*brightness radius did.
+      ctx.beginPath();
+      ctx.arc(lx, ly, indR + 3.0 * brightness, 0, Math.PI * 2);
+      ctx.fillStyle = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + (brightness * 0.28) + ')';
+      ctx.fill();
       ctx.beginPath();
       ctx.arc(lx, ly, indR, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(' + light.r + ',' + light.g + ',' + light.b + ',' + brightness + ')';
@@ -22045,7 +22123,6 @@ function initFxSuite() {
       ctx.arc(lx - 0.5, ly - 0.5, indR * 0.4, 0, Math.PI * 2);
       ctx.fillStyle = 'rgba(255, 255, 255, ' + (brightness * 0.3) + ')';
       ctx.fill();
-      ctx.shadowBlur = 0;
     }
   }
 
@@ -24806,7 +24883,11 @@ restoreThemeFromBackend();
     shTrajTick();    /* fb239 — chaos/dune trajectory at frame rate */
     if(root) placeHead(root,amp);
     if(ext && ext.classList.contains('open')) placeHead(ext,amp);
-    if(root){ var sic=root.querySelector('#mv-shape .ic'); if(sic) sic.innerHTML=icon(st.shape, ph); }   // little living shape emblem
+    if(root){ var sic=root.querySelector('#mv-shape .ic');
+      // fb342 — the emblem was an innerHTML SVG RE-PARSE at 60Hz. Gate on shape + a 1/32
+      // phase bucket: it still visibly lives (32 steps/cycle) at ~1/8th the parse cost.
+      if(sic){ var ib=st.shape+'|'+((ph*32)|0);
+        if(ib!==sic.__b){ sic.__b=ib; sic.innerHTML=icon(st.shape, ph); } } }   // little living shape emblem
     requestAnimationFrame(tick); }
 
   function boot(){
@@ -24958,7 +25039,13 @@ restoreThemeFromBackend();
   function drawAnalyzer(){ if(anaCv) drawInto(anaCv,anaCtx,false); if(extOpen&&extCv) drawInto(extCv,extCtx,true); }
   function drawInto(cv,ctx,isExt){
     getP();
-    var r=cv.getBoundingClientRect(), W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
+    // fb342 — gBCR is a forced-layout read; at 60Hz interleaved with the rack's SVG writes it
+    // stacked style-recalc pressure. 32-frame TTL cache: sizes are fixed by law (fixed-positions),
+    // and a zoom/layout change self-heals within ~0.5s. (No ResizeObserver exists here to hook.)
+    // (review fix) a DEGENERATE cached rect always re-reads: while #syn-panel is display:none the
+    // cache latches 0x0, and without this the analyzer stayed blank up to 31 frames on page open.
+    cv.__rN=(cv.__rN||0)+1; if(!cv.__r||cv.__r.width<8||(cv.__rN&31)===1) cv.__r=cv.getBoundingClientRect();
+    var r=cv.__r, W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
     if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H;
     ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H);
     if(r.width<8||r.height<8) return;   // device not laid out yet — bail before drawing so a 1×1 buffer is never stretched into a solid block; next frame (once sized) draws the real curve
@@ -24991,13 +25078,25 @@ restoreThemeFromBackend();
       ctx.beginPath(); spec.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.strokeStyle='rgba(236,232,242,'+(0.5*specA).toFixed(3)+')'; ctx.lineWidth=dpr*0.8; ctx.stroke();
     }
     if(type!=='none'){
-      ctx.save(); ctx.shadowColor='rgba(183,148,255,0.85)'; ctx.shadowBlur=6*dpr;
-      ctx.beginPath(); crv.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }); ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore();
+      // fb342 — LAYERED HALO, not shadowBlur: blur multiplied this per-frame canvas's stroke
+      // cost 2.6x (measured 0.92→1.45ms audio-on). Path built ONCE, stroked 3x (wide-faint →
+      // mid → bright core) = the same purple glow; the fb311 idle→loud delta is untouched
+      // because the brightness math (inLvl gates/alphas) is identical.
+      ctx.save();
+      ctx.beginPath(); crv.forEach(function(p,i){ i?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); });
+      ctx.lineJoin='round'; ctx.lineCap='round';
+      ctx.strokeStyle='rgba(183,148,255,0.07)'; ctx.lineWidth=dpr*9.5; ctx.stroke();   // graduated 3-layer = gaussian-soft falloff (A/B'd vs blur, scratchpad glowab)
+      ctx.strokeStyle='rgba(183,148,255,0.12)'; ctx.lineWidth=dpr*5.5; ctx.stroke();
+      ctx.strokeStyle='rgba(183,148,255,0.20)'; ctx.lineWidth=dpr*3;   ctx.stroke();
+      ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore();
       // travelling energy highlight — a bright segment sweeping along the curve, faster when the audio is louder
       var sweep=(t*(0.06+inLvl*0.55))%1, c0=Math.floor(sweep*N), seg=Math.max(6,Math.round(N*0.05));
-      ctx.save(); ctx.shadowColor='rgba(201,179,255,0.95)'; ctx.shadowBlur=10*dpr; ctx.lineCap='round';
-      ctx.strokeStyle='rgba(245,240,255,'+(0.32+inLvl*0.5).toFixed(3)+')'; ctx.lineWidth=dpr*2.1;
-      ctx.beginPath(); for(var k=0;k<=seg;k++){ var idx=c0+k; if(idx>N)break; var p=crv[idx]; k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); } ctx.stroke(); ctx.restore();
+      ctx.save(); ctx.lineCap='round';
+      ctx.beginPath(); for(var k=0;k<=seg;k++){ var idx=c0+k; if(idx>N)break; var p=crv[idx]; k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }
+      ctx.strokeStyle='rgba(201,179,255,'+(0.05+inLvl*0.07).toFixed(3)+')'; ctx.lineWidth=dpr*14;  ctx.stroke();   // fb342 — graduated halo (was shadowBlur 10*dpr)
+      ctx.strokeStyle='rgba(201,179,255,'+(0.08+inLvl*0.11).toFixed(3)+')'; ctx.lineWidth=dpr*7.5; ctx.stroke();
+      ctx.strokeStyle='rgba(201,179,255,'+(0.12+inLvl*0.16).toFixed(3)+')'; ctx.lineWidth=dpr*4;   ctx.stroke();
+      ctx.strokeStyle='rgba(245,240,255,'+(0.32+inLvl*0.5).toFixed(3)+')'; ctx.lineWidth=dpr*2.1; ctx.stroke(); ctx.restore();
     }
   }
   // ---- emblems (TE×Serum: thin white, purple ping-pong follower, grab-aware) ----
@@ -25049,13 +25148,16 @@ restoreThemeFromBackend();
     ext=document.createElement('div'); ext.className='filt-ext';
     ext.innerHTML='<div class="fe-h"><span class="fe-g">⠇</span><span class="fe-t">Filter 1</span><span class="fe-x">✕</span></div><div class="fe-b"><canvas></canvas></div>';
     document.body.appendChild(ext); extCv=ext.querySelector('canvas'); extCtx=extCv.getContext('2d'); attachXY(ext.querySelector('.fe-b'));
-    ext.querySelector('.fe-x').onclick=function(){ ext.classList.remove('open'); extOpen=false; };
+    ext.querySelector('.fe-x').onclick=function(){ ext.classList.remove('open'); extOpen=false; fltExtReport(0); };
     var h=ext.querySelector('.fe-h'); h.onmousedown=function(e){ if(e.target.classList.contains('fe-x'))return; e.preventDefault(); var r=ext.getBoundingClientRect(),dx=e.clientX-r.left,dy=e.clientY-r.top;
       function mv(ev){ ext.style.left=Math.max(4,Math.min(window.__vw()-ext.offsetWidth-4,ev.clientX-dx))+'px'; ext.style.top=Math.max(4,Math.min(window.__vh()-60,ev.clientY-dy))+'px'; }
       function up(){ document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); };
   }
-  function openExt(){ if(!ext)buildExt(); var dev=document.getElementById('filter-device'); var r=dev.getBoundingClientRect(); ext.style.left=Math.max(8,Math.min(window.__vw()-478,r.left))+'px'; ext.style.top=Math.max(8,r.top-285)+'px'; ext.classList.add('open'); extOpen=true; }
+  // fb342 review — the overlay outlives page switches, so C++ must keep the spectrum push alive
+  // while it floats (the uiPage gate alone would freeze its 'live' FFT on front/DLY/MOD pages).
+  function fltExtReport(b){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setFltExtOpen'):null; if(f)f(b); }catch(e){} }
+  function openExt(){ if(!ext)buildExt(); var dev=document.getElementById('filter-device'); var r=dev.getBoundingClientRect(); ext.style.left=Math.max(8,Math.min(window.__vw()-478,r.left))+'px'; ext.style.top=Math.max(8,r.top-285)+'px'; ext.classList.add('open'); extOpen=true; fltExtReport(1); }
   /* fb161 — the display IS an instrument (Serum 2 homage; manual p.142: "graphically
      adjust the filter cutoff and resonance (in combination) by clicking and dragging in
      the filter display"). fb162: no grid hairlines (Max's call) — the CURSOR itself is
@@ -27796,6 +27898,16 @@ restoreThemeFromBackend();
       return; }
     if(n<40) setTimeout(function(){ bootPull(n+1); },250); })(0);
 
+  // fb342 — external pull hook: a PRESET apply (rvbApply) pushes a new blob while this card may be
+  // CLOSED — crvXWin only polls while the card is open AND skips its first diff, so without this
+  // the card opened later would paint stale pre-preset points over the new engine truth.
+  // Compare-safe PULL only (fb232 law: two windows, one blob — never a second push path).
+  window.__crvPull=function(){ try{
+    pullBlob(function(){ if(card&&card.classList.contains('open'))paint(); });
+    var fT2=NF('getDstTableSrc');
+    if(fT2){ try{ fT2().then(function(v){ var nv=parseInt(v,10); if(!isNaN(nv)&&nv!==CV.tsrc){ CV.tsrc=nv; if(card&&card.classList.contains('open'))paint(); } }).catch(function(){}); }catch(e){} }
+  }catch(e){} };
+
   /* ── interactions ─────────────────────────────────────────────────────── */
   function heroPos(ev){ var r=hero.getBoundingClientRect();
     return { x:Math.max(0,Math.min(1,(ev.clientX-r.left)/r.width)),
@@ -28519,13 +28631,15 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 
     // the waveform — one clean pass, sampled per pixel (exactly like the LFO).
     ctx.beginPath();
-    ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';   // LINE LAW: matches .mv-stroke (LFO) + harm viz
-    ctx.shadowColor = GLOW_COLOR; ctx.shadowBlur = 3;          // subtle glow, like the LFO
     for (var x = 0; x <= w; x++) {
       var v = sampleAt(x / w), py = h * 0.5 - v * h * 0.45;   // taller — fill the display more dramatically
       if (x === 0) ctx.moveTo(x, py); else ctx.lineTo(x, py);
     }
-    ctx.stroke(); ctx.shadowBlur = 0;
+    // fb342 — layered halo replaces shadowBlur 3 (per-frame canvas): faint wide pass = the
+    // subtle glow, then the crisp core. LINE LAW: core matches .mv-stroke (LFO) + harm viz.
+    ctx.save(); ctx.globalAlpha = 0.22; ctx.strokeStyle = GLOW_COLOR; ctx.lineWidth = 6; ctx.lineJoin = 'round'; ctx.lineCap = 'round'; ctx.stroke(); ctx.restore();
+    ctx.strokeStyle = WAVE_COLOR; ctx.lineWidth = 1.7; ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+    ctx.stroke();
     ctx.restore();
     return true;
   }
@@ -29662,7 +29776,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb341';   // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
+  var TERRAIN_BUILD = 'fb342';   // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

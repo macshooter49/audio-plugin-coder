@@ -844,6 +844,14 @@ private:
 
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
+    // fb342 — EQ/spectrum push gate: last-pushed analyzer frame counts. MEMBERS, not statics
+    // in timerCallback (a static there is shared across instances — the fb339 pluginval trap).
+    uint32_t eqPushSeqPre_ = 0xffffffff, eqPushSeqPost_ = 0xffffffff;
+    // fb342 review — the floating .filt-ext analyzer overlay outlives page switches (position:fixed,
+    // closed only by its own X), so it must keep the spectrum feed alive on ANY page. JS reports
+    // open/close via setFltExtOpen; this ORs into the push gate.
+    std::atomic<bool> fltExtOpen_ { false };
+
     // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82/fb83) — ⧉ on a card header detaches
     // it into a borderless always-on-top native window holding its OWN WebView, booted
     // with ?card=<id> so the page renders just that card (no relays — the popped card

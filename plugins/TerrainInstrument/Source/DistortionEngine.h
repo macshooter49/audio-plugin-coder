@@ -114,6 +114,10 @@ public:
             hb_[n] = (float) (s * w); sum += hb_[n];
         }
         for (int n = 0; n < kT; ++n) hb_[n] = (float) (hb_[n] / sum);
+        // fb342 — the 64 odd taps baked REVERSED (hoU_[j] = hb_[2(kNH−1−j)+1]) into one contiguous
+        // array: both polyphase dots then read an ascending-time window of the mirrored ring as a
+        // straight a[j]·b[j], which is the form clang auto-vectorises (NEON FMA). SAME coefficients.
+        for (int j = 0; j < kNH; ++j) hoU_[j] = hb_[2 * (kNH - 1 - j) + 1];
 
         // 10 Hz DC blocker, sample-rate aware (the in-tree TerrainFilters one hardcodes 0.995,
         // which is 38 Hz at 48k and 76 Hz at 96k — it changes character with sample rate).
@@ -164,7 +168,8 @@ public:
             dcX_[c] = dcY_[c] = 0.0f;
             emphZ_[c] = deEmphZ_[c] = 0.0f;
             hiCutZ_[c] = loCutZ_[c] = 0.0f;
-            for (int n = 0; n < kRB; ++n) { xr_[c][n] = se_[c][n] = so_[c][n] = dry_[c][n] = 0.0f; }
+            for (int n = 0; n < kRB; ++n) { se_[c][n] = dry_[c][n] = 0.0f; }
+            for (int n = 0; n < 2 * kRB; ++n) { xr_[c][n] = so_[c][n] = 0.0f; }   // fb342 — mirrored rings are 2·kRB
             xi_[c] = si_[c] = di_[c] = 0;
             fbZ_[c] = punchZ_[c] = 0.0f;
             toneZ_[c] = 0.0f;
@@ -193,6 +198,11 @@ public:
             shEnv_[c] = shEnv2_[c] = shGrl_[c] = shStk_[c] = 0.0f;   // fb326
         }
         drNxt_ = 1.0f; drS_ = 0.0f; emphP_ = 9.0f; wRotP_ = -1.0f; fbLpP_ = -1.0f;
+        // fb342 — pow-hoist caches (dslC_ embeds fs_, so a sample-rate change MUST re-key) + the
+        // dcOff reference cache + the silence gate all reset with the rest of the state.
+        gapP_ = dslP_ = rDzP_ = scKp_ = -1.0f; gapC_ = dslC_ = rDzC_ = scKc_ = 0.0f;
+        for (int c = 0; c < 2; ++c) { dcModeP_[c] = -1; dcKeyP_[c] = 1.0e9f; dcPKeyP_[c] = 1.0e9f; dcPKey2P_[c] = 1.0e9f; dcOffC_[c] = 0.0f; }
+        asleep_ = false; silN_ = 0; sleptN_ = 0;
         // fb326 — boot-bake the curve banks so the front table is never silence: bake lands in the
         // back, flip immediately (no fade at init), and mark caches clean-at-current-settings.
         cvMode_ = mode_; cvChr_ = chr_; cvPill_ = pill2_; cvSm_ = pT_[4]; cvMor_ = kneeT_;
@@ -304,6 +314,16 @@ public:
     // ── the hot path. Returns WET ONLY; the processor owns Mix. ───────────────
     void processSample (float inL, float inR, float& outL, float& outR) noexcept
     {
+        // ── fb342 — SILENCE SLEEP with hysteresis. Measured: silence cost the SAME as playing (the
+        // resampler + trackers run regardless), so 2048 consecutive samples with input AND wet
+        // output below 1e-9 park the SIGNAL PATH and return exact zero. Wake = the FIRST input
+        // sample above 1e-12 (more sensitive than the sleep side — that asymmetry IS the
+        // hysteresis). The detector needs BOTH sides quiet: input-only would sleep under a ringing
+        // feedback/scream tail. ⚠️ The asleep gate sits BELOW the control head, NOT here — see the
+        // review fix at the gate: everything from the glides to the bake cadence must keep running
+        // at idle or the core viz freezes against a knob drag (the curves-must-move law).
+        const float aIn = std::fabs (inL) + std::fabs (inR);
+
         // Per-sample glide on everything (no-clicks hard rule).
         driveC_ += (driveT_ - driveC_) * smth_;
         kneeC_  += (kneeT_  - kneeC_ ) * smth_;
@@ -402,6 +422,29 @@ public:
         // fb325 — emphasis gain, dB-symmetric (see one(); cached: exp only when the knob moves)
         if (std::fabs (emphC_ - emphP_) > 1.0e-4f) { emphP_ = emphC_; emphG_ = std::exp (2.0723f * emphC_); }
 
+        // fb342 — Rectify's dz taper hoisted to the knob edge (was a pow PER PHASE PER CHANNEL in
+        // shapeM). The recompute lives HERE, not in shapeM: the c=−1 reference path must stay
+        // write-free (the fb325 stateless-reference law — a cache write from sampleCurve's message-
+        // thread call would race the audio thread). shapeM only reads rDzC_; dcOff and shapeS see
+        // the same value within a sample, so this is bit-equivalent to the inline pow.
+        if (mode_ == Rectify && std::fabs (pC_[5] - rDzP_) > 1.0e-6f)
+        { rDzP_ = pC_[5]; rDzC_ = std::pow (pC_[5], 1.8f) * 2.6f; }
+
+        // ── fb342 (review fix) — THE ASLEEP GATE SITS BELOW THE CONTROL HEAD. Everything above —
+        // the glides, the family-slot resolve, quality promotion, the bake cadence, occ decay, the
+        // cached knob-edge resolves — keeps running at idle, so sampleCurve()'s picture tracks a
+        // knob drag and a family switch WHILE SILENT, and a curve sent from the card bakes at idle
+        // (curves-must-move law: the first cut returned before the glides and froze the core viz
+        // at its pre-sleep shape until a note woke the engine). Only the SIGNAL path below is
+        // skipped: resampler, shapers, trackers, blockers. ~9 ns idle instead of ~4 — the price
+        // of a live picture. wake() consequently advances ONLY the signal trackers: the glides and
+        // bake state advanced themselves here, identically to a never-slept engine, BY CONSTRUCTION.
+        if (asleep_)
+        {
+            if (aIn <= 1.0e-12f) { ++sleptN_; outL = 0.0f; outR = 0.0f; return; }
+            wake();
+        }
+
         if (fam == FAM_DIGITAL)
         {
             // ── DIGITAL runs in L/R, at 1×, with NO anti-aliasing — the artefacts ARE the product,
@@ -444,9 +487,49 @@ public:
             const float g = (autoZ_ > 1.0e-5f) ? std::pow (juce::jlimit (0.02f, 8.0f, refLevel_ / autoZ_), 0.7f) : 1.0f;
             outL *= g; outR *= g;
         }
+
+        // fb342 — the sleep detector (see the top of this function). Post-auto output on purpose:
+        // whatever leaves the engine is what must be provably silent before the body is skipped.
+        if (aIn < 1.0e-9f && std::fabs (outL) + std::fabs (outR) < 1.0e-9f)
+        {
+            if (++silN_ >= 2048) { asleep_ = true; silN_ = 0; sleptN_ = 0; }
+        }
+        else silN_ = 0;
     }
 
 private:
+    // ── fb342 — the WAKE path: closed-form advance ONLY for the SIGNAL trackers the asleep gate
+    // skips. The control head (glides, family resolve, bake cadence, occ decay) ran on every idle
+    // sample, so all of THAT state is bit-identical to a never-slept engine's by construction —
+    // the review fix retired the old glide closed-form here, and with it the whole ulp-stall class
+    // it needed guarding against. Each remaining closed form is the silent-input recursion solved
+    // exactly (signal-independent at zero input ⇒ click-free by construction). Deep circuit state
+    // (J-A magnetisation, transformer flux, grid-blocking, slew/od stages, drift walks) holds
+    // frozen: J-A does not move at H≈0, and the rest re-converge under signal inside their own
+    // time constants (measured, fb342 harness).
+    void wake() noexcept
+    {
+        const double S = (double) sleptN_;
+        asleep_ = false; silN_ = 0; sleptN_ = 0;
+        if (S <= 0.0) return;
+        // the two mandated long-memory trackers + the cheap exact release pair (pure decays at zero
+        // input: mag/|in0| ≈ 0 ⇒ z *= (1−coef) per sample ⇒ one pow each)
+        autoZ_ *= (float) std::pow ((double) autoA_, S);
+        const float er = (float) std::pow ((double) (1.0f - envR_),     S);
+        const float pr = (float) std::pow ((double) (1.0f - kPunchRel), S);
+        for (int c = 0; c < 2; ++c) { inEnv_[c] *= er; punchZ_[c] *= pr; }
+        // SAG: the silent-input fixed point is sagIn_, NOT zero — an ANALOG mode with standing bias
+        // (Stomp's diode current, Tape's remanence) keeps the reservoir CHARGED at rest, and the
+        // frozen sagIn_ is exactly what a never-slept engine would keep feeding (it is a pure
+        // function of the silent signal + params). Releasing to 0 here measured a 1.5× wake spike
+        // on Stomp (rail springs open, then re-sags in 4 ms) — the harness bug that almost shipped.
+        for (int c = 0; c < 2; ++c)
+        {
+            const float k = (sagIn_[c] > sagV_[c]) ? aAtk4_ : aRecC_;   // monotone approach: one regime
+            sagV_[c] = sagIn_[c] + (sagV_[c] - sagIn_[c]) * (float) std::pow ((double) (1.0f - k), S);
+        }
+    }
+
     struct AdaaState { float x1 = 0.0f, F1 = 0.0f; bool have = false; };
 
     // ── the per-channel chain ────────────────────────────────────────────────
@@ -495,12 +578,29 @@ private:
         // integrators and generate no HF; 1× state is what makes Tube as cheap as Stomp Box), and the
         // Drift pair's wow/bias wander is applied to the input BEFORE the resampler.
         if (fam == FAM_ANALOG) x = analogTick (x, c);
+        // fb342 — VECTORIZABLE POLYPHASE DOT. The old form (Σ h[2j+1]·xr[(xi−j)&kRM], one
+        // accumulator) is a modular gather + a serial reduction — clang cannot vectorise either.
+        // The ring is MIRRORED (every sample written at p AND p+kRB) so ANY 64-tap window is one
+        // contiguous ascending-time block; the odd taps are pre-REVERSED (hoU_, prepare()) so the
+        // dot is a straight a[j]·b[j]; 4 partial accumulators break the reduction chain for NEON
+        // FMA. Same 129 coefficients, same latency — only the summation ORDER differs (float-
+        // reassociation class, gated < 0.1 dB by the fb342 equivalence run).
         float* xr = xr_[c]; int& xi = xi_[c];
-        xr[xi & kRM] = x;
-        const float pA = xr[(xi - kC / 2) & kRM];                       // even branch = PURE DELAY
-        float pB = 0.0f;
-        for (int j = 0; j < kNH; ++j) pB += hb_[2 * j + 1] * xr[(xi - j) & kRM];
-        pB *= 2.0f;                                                      // zero-stuff gain
+        { const int p = xi & kRM; xr[p] = x; xr[p + kRB] = x; }
+        const float pA = xr[((xi - kC / 2) & kRM) + kRB];               // even branch = PURE DELAY
+        float pB;
+        {
+            const float* win = &xr[(xi & kRM) + kRB - (kNH - 1)];       // win[j] = x[n − (kNH−1−j)]
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            for (int j = 0; j < kNH; j += 4)
+            {
+                s0 += hoU_[j]     * win[j];
+                s1 += hoU_[j + 1] * win[j + 1];
+                s2 += hoU_[j + 2] * win[j + 2];
+                s3 += hoU_[j + 3] * win[j + 3];
+            }
+            pB = ((s0 + s1) + (s2 + s3)) * 2.0f;                        // zero-stuff gain
+        }
         ++xi;
         // ⚠️🔑 ADAA IS DISABLED UNTIL OVERSAMPLING LANDS — and that is a DELIBERATE, MEASURED choice.
         // At 1x, first-order ADAA is y = (F(x0)-F(x1))/(x0-x1), which in the shaper's near-linear
@@ -548,7 +648,14 @@ private:
         // the QUIET parts; at max anything below ~−6 dBFS is silence and notes tear into fragments.
         // fb325 — power-1.6 taper (no-plateau law): linear reached total gating by ~60 % and the top
         // of the knob measured frozen. The curve now keeps eating deeper across the whole travel.
-        const float gap = (fam == FAM_CLIP) ? std::pow (pC_[5], 1.6f) * 0.45f : 0.0f;
+        // fb342 — taper pow hoisted to the knob edge (the emphG_/fbLpP_ idiom): pC_[5] glides, so
+        // the 1e-6 gate recomputes only WHILE the knob moves; both channels share the one cache.
+        float gap = 0.0f;
+        if (fam == FAM_CLIP)
+        {
+            if (std::fabs (pC_[5] - gapP_) > 1.0e-6f) { gapP_ = pC_[5]; gapC_ = std::pow (pC_[5], 1.6f) * 0.45f; }
+            gap = gapC_;
+        }
         auto deadzone = [gap] (float v) noexcept -> float
         {
             if (gap <= 1.0e-5f) return v;
@@ -613,7 +720,50 @@ private:
             float w = (v + 1.0f) * 0.5f; w -= std::floor (w);
             return v + wrapA * ((w * 2.0f - 1.0f) - v);
         };
-        const float dcOff = (fam == FAM_ANALOG) ? 0.0f : shapeM (dzPost (wrapR (biasE_ * dEff)), -1);
+        // fb342 — the stateless DC reference is a pure function of its inputs, so it only moves when
+        // one of them does: cached PER CHANNEL, keyed on EVERYTHING shapeM(c=−1) can read on ANY
+        // mode/character path (the fb331 shared-default-audit discipline applied to a cache key):
+        //   · mode_/chr_/cvFront_ (curve selection + the bake front flip)
+        //   · biasE_·dEff — the argument itself. Also covers Width's per-channel dM/dS split and
+        //     Punch/Track per-sample dEff modulation: when those move, the key moves per sample and
+        //     the cache degrades to exactly today's per-sample recompute. Correct by construction.
+        //   · kneeE_ (knees/pedestals) · kneeC_ (SHAPER Morph, DIODE asymE_, ShAsym 'Halves')
+        //   · drive01_ (Diode1 falling threshold) · driveC_ (SineFold chr2 reads it RAW)
+        //   · wrapA/dzU/gap (the domain pre-maps) · pC_[3..6] (foldIter ladder, SineFold spacing/
+        //     stages/corner, Rectify dz, Diode2 gap, SHAPER Beyond)
+        //   · cvXf_ (a 40 ms bake fade moves the key per sample, so the reference tracks the blend
+        //     exactly; the completed flip re-keys via cvFront_ above).
+        // zsGate_ earns no slot: at biasE_=0 the argument is 0 (gate outcome moot); otherwise it is
+        // a pure function of dEff = key/biasE_ with biasE_ itself derived from pC_[4]. PER CHANNEL
+        // is load-bearing: Width drives M and S at different dEff (a shared cache measured 100%
+        // misses). ANALOG stays out (reference is identically 0 there). The float terms are hashed
+        // as TWO checksums — flat and integer-weighted — compared under the same 1e-6 gate, because
+        // a single flat sum aliases compensating knob pairs (see pKey2 below).
+        float dcOff = 0.0f;
+        if (fam != FAM_ANALOG)
+        {
+            const float aKey = biasE_ * dEff;
+            const float pKey = kneeE_ + kneeC_ + drive01_ + driveC_ + wrapA + dzU + gap + cvXf_
+                             + pC_[3] + pC_[4] + pC_[5] + pC_[6];
+            // fb342 (review fix) — a SECOND, differently-weighted checksum over the SAME terms: a
+            // flat sum aliases COMPENSATING pairs (FOLD Stages +δ with Spacing −δ verified to sit
+            // inside the 1e-6 gate while the true reference moved — a standing DC error into the
+            // 10 Hz blocker). A flat-sum cancel means Δa = −Δb, which shifts the weighted sum by
+            // Δa·(wa − wb) ≠ 0 — distinct integer weights break every pairwise alias for one extra
+            // fmadd chain.
+            const float pKey2 = kneeE_ + 2.0f * kneeC_ + 3.0f * drive01_ + 4.0f * driveC_
+                              + 5.0f * wrapA + 6.0f * dzU + 7.0f * gap + 8.0f * cvXf_
+                              + 9.0f * pC_[3] + 10.0f * pC_[4] + 11.0f * pC_[5] + 12.0f * pC_[6];
+            const int   iKey = mode_ + (chr_ << 5) + (cvFront_ << 8);
+            if (dcModeP_[c] != iKey
+                || std::fabs (aKey - dcKeyP_[c]) > 1.0e-6f || std::fabs (pKey - dcPKeyP_[c]) > 1.0e-6f
+                || std::fabs (pKey2 - dcPKey2P_[c]) > 1.0e-6f)
+            {
+                dcModeP_[c] = iKey; dcKeyP_[c] = aKey; dcPKeyP_[c] = pKey; dcPKey2P_[c] = pKey2;
+                dcOffC_[c] = shapeM (dzPost (wrapR (aKey)), -1);
+            }
+            dcOff = dcOffC_[c];
+        }
         const float fbIn  = (fbA > 1.0e-5f) ? fbA * fbZ_[c] : 0.0f;
         // ── fb336 — DIODE `Octave` (bible §897): full-wave rectifier + its OWN DC blocker BEFORE
         // the mode's shaper, inside the 2× region (the blocker advances at 2fs, A then B
@@ -668,7 +818,10 @@ private:
             // quiet triangle: threshold law, knee, makeup all erased = "Diode 1 and 2 are just
             // fucked up"). Correct law: knob up ⇒ the slope ceiling comes DOWN, exponentially:
             // 0 = off · default grazes only the razor tips · top = total sludge (no-playing-safe).
-            const float sU = 0.35f * std::pow (0.0028f, pC_[6]) * (48000.0f / (float) fs_);
+            // fb342 — pow hoisted (moved-knob cache; the fs_ factor is baked in, flush() re-keys it)
+            if (std::fabs (pC_[6] - dslP_) > 1.0e-6f)
+            { dslP_ = pC_[6]; dslC_ = 0.35f * std::pow (0.0028f, pC_[6]) * (48000.0f / (float) fs_); }
+            const float sU = dslC_;
             yA = slewZ_[c] + juce::jlimit (-sU, sU, yA - slewZ_[c]); slewZ_[c] = yA;
             if (os2) { yB = slewZ_[c] + juce::jlimit (-sU, sU, yB - slewZ_[c]); slewZ_[c] = yB; }
             else       yB = yA;                          // fb337 — Off = 1×: the slew state advances once per base sample
@@ -687,10 +840,23 @@ private:
         }
 
         float* se = se_[c]; float* so = so_[c]; int& si = si_[c];
-        se[si & kRM] = yA; so[si & kRM] = yB;
+        se[si & kRM] = yA;                                              // even ring: ONE delayed read — stays plain
+        { const int p = si & kRM; so[p] = yB; so[p + kRB] = yB; }       // odd ring MIRRORED (fb342 — see the upsampler)
         float y = hb_[kC] * se[(si - kC / 2) & kRM];
-        // ⚠️ (si - j - 1), NOT (si - j): s[2n−2j−1] is at an ODD index ⇒ sOdd[n−j−1].
-        for (int j = 0; j < kNH; ++j) y += hb_[2 * j + 1] * so[(si - j - 1) & kRM];
+        // ⚠️ the window base is (si − 1), NOT si: s[2n−2j−1] sits at an ODD index ⇒ sOdd[n−j−1] —
+        // the fb318 one-early trap, carried into the contiguous form (win[j] = sOdd[n−1−(kNH−1−j)]).
+        {
+            const float* win = &so[((si - 1) & kRM) + kRB - (kNH - 1)];
+            float s0 = 0.0f, s1 = 0.0f, s2 = 0.0f, s3 = 0.0f;
+            for (int j = 0; j < kNH; j += 4)
+            {
+                s0 += hoU_[j]     * win[j];
+                s1 += hoU_[j + 1] * win[j + 1];
+                s2 += hoU_[j + 2] * win[j + 2];
+                s3 += hoU_[j + 3] * win[j + 3];
+            }
+            y += (s0 + s1) + (s2 + s3);
+        }
         ++si;
         // 🔑 fb321 UNITY HEADROOM LAW (Max, from A/B'ing Serum): powering the device on must NOT jump
         // the level — Serum reads slightly QUIETER at low drive, and Drive buys the loudness INTO the
@@ -942,7 +1108,8 @@ private:
                     case 7:  R = 2.0f * std::fabs (u) - u;                               break; // Over-Rect — a locked at 2
                 }
                 float v = (1.0f - a) * u + a * R;
-                const float dz = std::pow (pC_[5], 1.8f) * 2.6f;   // fb325 — full-travel (was frozen past 60%)
+                const float dz = rDzC_;   // fb325 taper (full-travel) — fb342: baked in processSample
+                                          // (this path must stay WRITE-free — the c=−1 reference law)
                 if (dz > 1.0e-4f) v = (v >= 0.0f) ? juce::jmax (0.0f, v - dz)
                                                   : juce::jmin (0.0f, v + dz);
                 return 1.4f * hardClipF (v, 2.0f * kneeE_);   // fb325 — makeup: the octave must SPEAK
@@ -1137,7 +1304,11 @@ private:
             // Slope-ceiling family (dx/dt distortion). Character = WHICH op-amp is dying (bible §9.2):
             // fb325 — 160^k topped out ABOVE the signal's own slew by ~80% travel (SIG froze);
             // 60^k keeps the whole knob inside the limiting region.
-            float sU = 0.0005f * std::pow (60.0f, kneeE_) * kPreGain * 0.5f;
+            // fb342 — pow hoisted (kneeE_ glides ⇒ recompute only while the Knee moves; shapeS is
+            // audio-thread-only, so the cache write is race-free — sampleCurve never calls shapeS)
+            if (std::fabs (kneeE_ - scKp_) > 1.0e-6f)
+            { scKp_ = kneeE_; scKc_ = 0.0005f * std::pow (60.0f, kneeE_) * kPreGain * 0.5f; }
+            float sU = scKc_;
             switch (chr_)
             {
                 default: sU *= 3.0f;  break;                                 // 0 Fast — 5534-class: only the top octave
@@ -2641,8 +2812,26 @@ private:
     // 2× oversampler state (per channel): input ring, the two decimator phase rings, and the
     // latency-matched dry delay.
     float hb_[kT] {};
-    float xr_[2][kRB] {}, se_[2][kRB] {}, so_[2][kRB] {}, dry_[2][kRB] {};
+    float hoU_[kNH] {};                       // fb342 — the 64 odd taps REVERSED (contiguous-dot form)
+    // fb342 — xr_/so_ are MIRRORED rings (each sample written at p and p+kRB, size 2·kRB) so the
+    // polyphase windows are contiguous. They REPLACE the old kRB rings — keeping both copies alive
+    // measured a +5-9 ns DIGITAL regression in the scratch build (pure cache pressure). se_ (one
+    // delayed read) and dry_ stay plain.
+    float xr_[2][2 * kRB] {}, so_[2][2 * kRB] {};
+    float se_[2][kRB] {}, dry_[2][kRB] {};
     int   xi_[2] { 0, 0 }, si_[2] { 0, 0 }, di_[2] { 0, 0 };
+    // fb342 — the measured-CPU-pass state: dcOff reference cache (see the key comment at the use
+    // site), the four pow hoists, and the silence gate.
+    int   dcModeP_[2] { -1, -1 };
+    float dcKeyP_[2] { 1.0e9f, 1.0e9f }, dcPKeyP_[2] { 1.0e9f, 1.0e9f }, dcOffC_[2] {};
+    float dcPKey2P_[2] { 1.0e9f, 1.0e9f };    // review fix — the weighted anti-aliasing checksum
+    float gapP_ = -1.0f, gapC_ = 0.0f;        // CLIP Gap taper
+    float dslP_ = -1.0f, dslC_ = 0.0f;        // DIODE junction-slew ceiling (embeds fs_ — flush re-keys)
+    float rDzP_ = -1.0f, rDzC_ = 0.0f;        // Rectify dz taper (AUDIO thread writes; shapeM only reads)
+    float scKp_ = -1.0f, scKc_ = 0.0f;        // SlewClip slope ceiling
+    bool  asleep_ = false;
+    int   silN_ = 0;
+    long long sleptN_ = 0;
     float dcR_ = 0.9987f, autoA_ = 0.9999f, autoZ_ = 0.0f, smth_ = 0.002f;
     bool  hiBypass_ = true;    // Hi Cut at max = TRUE bypass (an "open" 22 kHz pole still cost -1.1 dB @20k)
     bool  useAdaa_  = false;   // fb337 — RETIRED: superseded by adaaOn_ (per-sample, whitelist-gated inside the 2× region). Kept so old notes still point somewhere.

@@ -22,16 +22,32 @@
 // All click-free (per-sample ramps; Td glides; sparkle/tilt gains ramp) + stable
 // (allpasses are unity-gain → loop gain = |feedback|·|damping| < 1) + denormal-flushed.
 // PURE C++ (no JUCE): offline-validates standalone AND drops into the voice path.
+// fb342 — arm64 runs the dispersion chains in 8 NEON lanes (stage-major SoA): every
+// spring shares the ONE ramped apCoefC (only state differs), so 6×180 loop-carried
+// stages collapse into 180 vector ops. 2605→~520 ns/smp at 6 springs, flat for 1..6,
+// null-tested bit-exact (max|diff| 0.000e+00 incl. tail). Scalar path kept verbatim.
 // ─────────────────────────────────────────────────────────────────────────────
 #include <vector>
 #include <cmath>
 #include <cstdint>
+// fb342 — NEON gate. SPRING_FORCE_SCALAR is a TEST SEAM only (never defined in plugin
+// builds — it lets the scalar #else path compile + null-test on an arm64 box); the
+// effective production guard is plain __aarch64__.
+#if defined(__aarch64__) && ! defined(SPRING_FORCE_SCALAR)
+ #define SPRINGREVERB_NEON 1
+ #include <arm_neon.h>
+#else
+ #define SPRINGREVERB_NEON 0
+#endif
 
 class SpringReverb
 {
 public:
     static constexpr int MAXSPRINGS = 6;
     static constexpr int NAP        = 180;   // first-order allpasses per dispersion chain (the chirp)
+#if SPRINGREVERB_NEON
+    static constexpr int LANES      = 8;     // fb342 — 2×float32x4; lanes 0..5 = springs, 6..7 idle (zero-fed)
+#endif
 
     void prepare (double sampleRate)
     {
@@ -63,7 +79,11 @@ public:
             modLp[s] = 0.0f;
         }
         transShL = transShR = 0.0f;
+#if SPRINGREVERB_NEON
+        for (int i = 0; i < NAP * LANES; ++i) { apX[i] = apY[i] = 0.0f; }         // fb342 — SoA layout size
+#else
         for (int i = 0; i < MAXSPRINGS * NAP; ++i) { apX[i] = apY[i] = 0.0f; }
+#endif
         std::fill (pre.begin(), pre.end(), 0.0f);
         inLpZ = lcZ = 0.0f; dcxL = dcyL = dcxR = dcyR = 0.0f; tbx1 = tbx2 = tby1 = tby2 = 0.0f; tiltLpL = tiltLpR = 0.0f;
     }
@@ -176,6 +196,66 @@ public:
 
         // ── parallel detuned springs ──
         float sumL = 0.0f, sumR = 0.0f;
+#if SPRINGREVERB_NEON
+        // fb342 — DISPERSION CHAINS IN LANES. The chains vectorize ACROSS springs (never along
+        // the stages — each stage is loop-carried u=y) because ALL springs use the same ramped
+        // apCoefC; the per-sample smoothing block above is untouched (no-clicks law). Lanes
+        // ≥ nSprings are zero-fed so their state DECAYS to silence, where the scalar loop left
+        // unused chains FROZEN — only observable as a cleaner transient when raising the
+        // Springs count mid-tail (accepted, fb342).
+        alignas(16) float uv[LANES] = { 0, 0, 0, 0, 0, 0, 0, 0 };
+        for (int s = 0; s < nSprings; ++s)
+        {
+            float u = drv + fbState[s];
+            // rattle excitation (Shake) — a touch of filtered noise into the loop
+            // (rng[s] streams are per-spring: rattle still draws before the modLp draw below)
+            if (rattleC > 1.0e-5f) u += rattleC * whiteNoise (rng[s]);
+            uv[s] = u;
+        }
+        {
+            // DISPERSION CHAIN — NAP first-order allpasses × 8 lanes, coeff apCoefC (negative
+            // → descending boing). vfma/vfms mirror clang's contraction of the scalar
+            // a*u + AX[i] - a*AY[i] — null-tested bit-exact against the scalar loop.
+            const float32x4_t aV   = vdupq_n_f32 (apCoefC);
+            const float32x4_t thr  = vdupq_n_f32 (1.0e-20f);   // flush(): SAME threshold, vectorized (FTZ-off host safety)
+            const float32x4_t zero = vdupq_n_f32 (0.0f);
+            float32x4_t u0 = vld1q_f32 (uv), u1 = vld1q_f32 (uv + 4);
+            float* AX = apX; float* AY = apY;                  // stage-major SoA: stage i lives at [i*LANES + lane]
+            for (int i = 0; i < NAP; ++i, AX += LANES, AY += LANES)
+            {
+                float32x4_t x0 = vld1q_f32 (AX),     y0 = vld1q_f32 (AY);
+                float32x4_t x1 = vld1q_f32 (AX + 4), y1 = vld1q_f32 (AY + 4);
+                float32x4_t t0 = vfmaq_f32 (x0, aV, u0);       // a·u + AX[i]
+                float32x4_t t1 = vfmaq_f32 (x1, aV, u1);
+                float32x4_t n0 = vfmsq_f32 (t0, aV, y0);       // − a·AY[i]
+                float32x4_t n1 = vfmsq_f32 (t1, aV, y1);
+                vst1q_f32 (AX,     vbslq_f32 (vcaltq_f32 (u0, thr), zero, u0));   // AX[i] = flush(u)
+                vst1q_f32 (AX + 4, vbslq_f32 (vcaltq_f32 (u1, thr), zero, u1));
+                vst1q_f32 (AY,     vbslq_f32 (vcaltq_f32 (n0, thr), zero, n0));   // AY[i] = flush(y)
+                vst1q_f32 (AY + 4, vbslq_f32 (vcaltq_f32 (n1, thr), zero, n1));
+                u0 = n0; u1 = n1;                              // propagate RAW y (unflushed), exactly the scalar u = y
+            }
+            vst1q_f32 (uv, u0); vst1q_f32 (uv + 4, u1);
+        }
+        for (int s = 0; s < nSprings; ++s)                     // scalar per-spring tail — math unchanged from pre-fb342
+        {
+            float u = uv[s];
+            // in-loop damping LP (highs die first, like a real spring)
+            dampZ[s] = (1.0f - dampC) * u + dampC * dampZ[s]; u = dampZ[s];
+            // feedback delay Td·detune + leaky-noise jitter (blurs the comb into a tail)
+            fb[s][(size_t) fbWr[s]] = flush (u);
+            modLp[s] += (whiteNoise (rng[s]) * modAmpC - modLp[s]) * modRateC;   // leaky random walk (Shake speed)
+            float rd = TdC * detune[s] + modLp[s];
+            float out = readFrac (fb[s], fbMask, fbWr[s], rd);
+            fbWr[s] = (fbWr[s] + 1) & fbMask;
+            fbState[s] = fbG * out;
+            // pan across the field (Width decorrelates the springs L/R)
+            float pan = (nSprings > 1) ? PAN[s] * widthC : 0.0f;
+            sumL += out * (0.5f - 0.5f * pan);
+            sumR += out * (0.5f + 0.5f * pan);
+        }
+#else
+        // pre-fb342 scalar path, VERBATIM (x86_64 / universal-binary safety)
         for (int s = 0; s < nSprings; ++s)
         {
             float u = drv + fbState[s];
@@ -202,6 +282,7 @@ public:
             sumL += out * (0.5f - 0.5f * pan);
             sumR += out * (0.5f + 0.5f * pan);
         }
+#endif
         sumL *= springNorm; sumR *= springNorm;
 
         // tank-body resonance (low hump) on the mono sum, added back for the physical "boom"
@@ -261,7 +342,12 @@ private:
     bool  primed = false;
     std::vector<float> fb[MAXSPRINGS]; int fbMask = 0, fbWr[MAXSPRINGS] = {0};
     std::vector<float> pre; int preMask = 0, preWr = 0;
+#if SPRINGREVERB_NEON
+    alignas(16) float apX[NAP * LANES] = {0};   // fb342 — dispersion allpass state, stage-major SoA [stage][lane]
+    alignas(16) float apY[NAP * LANES] = {0};   //         (16-byte aligned for the vld1q/vst1q pairs)
+#else
     float apX[MAXSPRINGS * NAP] = {0}, apY[MAXSPRINGS * NAP] = {0};   // dispersion allpass state
+#endif
     float fbState[MAXSPRINGS] = {0}, dampZ[MAXSPRINGS] = {0}, modLp[MAXSPRINGS] = {0};
     float transShL = 0, transShR = 0, transCoef = 0.4f;   // fb284 — output transition high-shelf state
     float detune[MAXSPRINGS] = {1,1,1,1,1,1}; uint32_t rng[MAXSPRINGS] = {0};
@@ -278,3 +364,5 @@ private:
     bool  modOn=true, freezeOn=false;
     float tension=0.5f, decay=0.5f, tone=0.5f, preMs=6.f, trans=0.5f, shake=0.2f, disp=0.5f, damp=0.4f, drive=0.2f, lowCut=20.f, width=0.85f;
 };
+
+#undef SPRINGREVERB_NEON   // fb342 — header-internal gate only; don't leak into including TUs
