@@ -1547,6 +1547,24 @@ private:
     // duck term so the routed dry is fully cancelled at Mix=1. Power gates routing exactly like the reverb.
     DelayEngine delayEngine;
     tw::DistortionEngine distortionEngine;         // fb315 — FX-rack Distortion (POWER default OFF ⇒ dry init)
+    // ── fb346 — THE INSTANCE POOL (the dynamic chain). Instance 1 is the member above; these are
+    //    instances 2..kFxInstances, pre-allocated because the audio thread may never allocate and the
+    //    host caches the param list at load. An UNCLAIMED instance costs only its (small) engine
+    //    state — no processing whatsoever: the chain loop skips any instance whose _ACTIVE is false,
+    //    which is the "an empty slot costs exactly zero" law Max set when he ruled the pool generous.
+    //    Delay + Distortion pool first because each is ONE engine object; the Reverb device is SIX
+    //    (Space/Hall/Digital/Basin/Shimmer/Convolution) and would cost 6x per slot, so its extra
+    //    instances get lazy construction in the next pass instead of eager allocation here.
+    static constexpr int kFxExtra = ParameterIDs::kFxInstances - 1;
+    std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
+    std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;
+    // per-extra-instance runtime state, mirroring the instance-1 members below
+    std::array<int,   (size_t) kFxExtra> poolDlyType_ {};    // active delay type per extra instance
+    std::array<float, (size_t) kFxExtra> poolDlyEnv_  {};    // on/off fade env (click-free power)
+    std::array<float, (size_t) kFxExtra> poolDstEnv_  {};
+    struct ChainEntry { int kind; int inst; float rank; };   // kind: 0=Reverb 1=Delay 2=Distortion
+    std::vector<ChainEntry> chainOrder_;                     // rebuilt per block from _ACTIVE/_RANK
+    void rebuildChainOrder();                                // sorts by rank; message/audio-safe (no alloc after reserve)
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)

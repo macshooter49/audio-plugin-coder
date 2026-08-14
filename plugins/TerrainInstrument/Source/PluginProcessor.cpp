@@ -3543,6 +3543,108 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DST_AUTO,  1 }, "Distortion Auto",  false));  // OFF — see bible §2.6/§4.2
     layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { ParameterIDs::SYN_DST_PILL2, 1 }, "Distortion Wrap",  false));  // family-unique 2nd pill
 
+    // ════════════════ fb346 — THE DYNAMIC CHAIN: chain membership + the instance pool ════════════════
+    // WHY THIS SHAPE (read before touching): JUCE/VST3/AU cache the parameter list at load, so params
+    // can never be born at runtime. The rack's + button therefore CLAIMS a pre-allocated instance; it
+    // never creates one. The user only sees a rack that grows. Serum 2 does the same trick (its LFOs
+    // 7-10 "appear" once you assign LFO 6).
+    //
+    // _ACTIVE = is this device IN the chain (the + adds it, the × removes it).
+    // _POWER  = bypass (the power dot) — a DIFFERENT thing, and both must survive independently.
+    // _RANK   = chain position, a FLOAT. This is why drag-reorder is now legal at all: a choice
+    //           param's cardinality is frozen at birth (the fb342 law), which is exactly why the old
+    //           6-way SYN_FX_ORDER could never describe a 4th device. Rank has no cardinality, so the
+    //           chain can hold any number of devices in any order, and reordering is click-free
+    //           (it re-sorts a list; it never renumbers a stored choice index).
+    {
+        // Instance 1 = the legacy blocks above (SYN_RVB_*/SYN_DLY_*/SYN_DST_*), so every one of the 66
+        // factory presets and every user preset keeps loading byte-identically. Default chain = the
+        // three shipped devices in their historical order, all ACTIVE (nothing changes for old sessions).
+        auto addChainSlot = [&] (const char* activeId, const char* rankId, const char* nm,
+                                 bool activeDef, float rankDef)
+        {
+            layout.add (std::make_unique<juce::AudioParameterBool>(
+                juce::ParameterID { activeId, 1 }, juce::String (nm) + " In Chain", activeDef));
+            layout.add (std::make_unique<juce::AudioParameterFloat>(
+                juce::ParameterID { rankId, 1 }, juce::String (nm) + " Chain Rank",
+                juce::NormalisableRange<float>(0.0f, 1.0f), rankDef));
+        };
+        addChainSlot (ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK, "Reverb",     true, 0.10f);
+        addChainSlot (ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK, "Delay",      true, 0.20f);
+        addChainSlot (ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK, "Distortion", true, 0.30f);
+
+        // ── Instances 2..kFxInstances. Delay and Distortion pool first because each is ONE engine
+        //    object; the Reverb device is SIX (Space/Hall/Digital/Basin/Shimmer/Convolution) and gets
+        //    lazily-built instances in the next pass rather than 6x memory per slot up front.
+        const juce::StringArray dlyTypes { "Digital","Tape","BBD","Diffuse" };
+        const juce::StringArray dlyChars { "Clean","Warm","Vintage","Modern","Lo-Fi","Bright","Dark","Wide" };
+        const juce::StringArray syncDiv  { "Free","4 bar","2 bar","1 bar","1/2","1/2D","1/2T","1/4","1/4D","1/4T",
+                                           "1/8","1/8D","1/8T","1/16","1/16D","1/16T","1/32","1/64","1/128","1/256" };
+        const juce::StringArray dstTypes { "Tube","Tape","Transformer","Stomp Box","Overdrive",
+                                           "Soft Clip","Hard Clip","Zero-Square","Slew Clip",
+                                           "Diode 1","Diode 2","Asym","Rectify",
+                                           "Linear Fold","Sine Fold","West Coast",
+                                           "Shaper","Shaper Asym","Harmonics","Table",
+                                           "Downsample","Bitcrush","Overflow" };
+        const juce::StringArray dstChars { "Diff Pair","Glue","Cubic","Sine","Asym","Slam","Squeeze","Wall" };
+        const juce::StringArray dstQual  { "Off","Standard","High","Ultra" };
+        const juce::StringArray srcSuf   { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+
+        auto F = [&] (const juce::String& id, const juce::String& nm, float def) {
+            layout.add (std::make_unique<juce::AudioParameterFloat>(
+                juce::ParameterID { id, 1 }, nm, juce::NormalisableRange<float>(0.0f, 1.0f), def)); };
+        auto C = [&] (const juce::String& id, const juce::String& nm, const juce::StringArray& o, int def) {
+            layout.add (std::make_unique<juce::AudioParameterChoice>(juce::ParameterID { id, 1 }, nm, o, def)); };
+        auto B = [&] (const juce::String& id, const juce::String& nm, bool def) {
+            layout.add (std::make_unique<juce::AudioParameterBool>(juce::ParameterID { id, 1 }, nm, def)); };
+
+        for (int n = 2; n <= ParameterIDs::kFxInstances; ++n)
+        {
+            // ── DELAY instance n — defaults IDENTICAL to instance 1 (a duplicate must sound like the
+            //    original the moment you add it; a differently-voiced clone is a bug, not a feature).
+            {
+                const juce::String p = "SYN_DLY" + juce::String (n) + "_";
+                const juce::String d = "Delay " + juce::String (n) + " ";
+                C (p + "TYPE", d + "Type", dlyTypes, 0);
+                C (p + "CHARACTER", d + "Character", dlyChars, 0);
+                C (p + "SYNCDIV",   d + "Sync Division",   syncDiv, 10);
+                C (p + "SYNCDIV_R", d + "Sync Division R", syncDiv, 10);
+                F (p + "TIME", d + "Time", 0.50f);   F (p + "TIME_R",   d + "Time R",    0.50f);
+                F (p + "FEEDBACK", d + "Feedback", 0.10f);
+                F (p + "TONE", d + "Tone", 0.44f);   F (p + "MIX",      d + "Mix",       0.34f);
+                F (p + "LOWCUT", d + "Low Cut", 0.22f); F (p + "HICUT", d + "Hi Cut",    0.72f);
+                F (p + "SPREAD", d + "Spread", 0.60f);  F (p + "WIDTH", d + "Width",     0.78f);
+                F (p + "MODRATE", d + "Mod Rate", 0.40f); F (p + "MODDEPTH", d + "Mod Depth", 0.0f);
+                F (p + "WOW", d + "Wow", 0.0f);      F (p + "DUCK",     d + "Ducking",   0.0f);
+                for (auto& s : srcSuf) B (p + s, d + s, false);
+                B (p + "SYNC", d + "Sync", true);    B (p + "LINK",  d + "Link L/R",  true);
+                B (p + "PING", d + "Ping-Pong", false);
+                B (p + "POWER", d + "Power", false); B (p + "HQ",    d + "HQ",        true);
+                B (p + "ACTIVE", d + "In Chain", false);          // not in the chain until the + adds it
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+            // ── DISTORTION instance n
+            {
+                const juce::String p = "SYN_DST" + juce::String (n) + "_";
+                const juce::String d = "Distortion " + juce::String (n) + " ";
+                C (p + "TYPE", d + "Type", dstTypes, 5);           // Soft Clip, same as instance 1
+                C (p + "CHARACTER", d + "Character", dstChars, 0);
+                C (p + "QUALITY",   d + "Quality",   dstQual, 1);
+                F (p + "DRIVE", d + "Drive", 0.20f); F (p + "SIG",  d + "Knee", 0.65f);
+                F (p + "TONE",  d + "Tone",  0.50f); F (p + "MIX",  d + "Mix",  1.00f);
+                F (p + "P1", d + "Low Cut",  0.00f); F (p + "P2", d + "Hi Cut",   1.00f);
+                F (p + "P3", d + "Emphasis", 0.50f); F (p + "P4", d + "Width",    0.50f);
+                F (p + "P5", d + "Bias",     0.50f); F (p + "P6", d + "Gap",      0.00f);
+                F (p + "P7", d + "Punch",    0.50f); F (p + "P8", d + "Feedback", 0.00f);
+                for (auto& s : srcSuf) B (p + s, d + s, false);
+                B (p + "POWER", d + "Power", false); B (p + "AUTO", d + "Auto", false);
+                B (p + "PILL2", d + "Wrap",  false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
+    }
+
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::FLOW_ARP_DIR, 1 }, "Arp Direction",
         juce::StringArray { "Up", "Down", "Up-Dn", "Random" }, 0));
@@ -3744,6 +3846,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 }
 
 //==============================================================================
+// ════════ fb346 — THE DYNAMIC CHAIN ORDER ════════
+// Builds the ordered list of devices that are IN the chain, sorted by their float _RANK.
+// ⚠️ MESSAGE THREAD ONLY — it builds juce::Strings and may grow the vector. processBlock reads
+// chainOrder_ but never rebuilds it; the UI calls this after any add / delete / drag-reorder.
+// Rank is a float precisely so this list has no fixed cardinality: the old 6-way SYN_FX_ORDER
+// choice param could never describe a 4th device (choice cardinality is frozen at birth, fb342).
+void TerrainInstrumentAudioProcessor::rebuildChainOrder()
+{
+    chainOrder_.clear();
+    auto add = [&] (int kind, int inst, const juce::String& activeId, const juce::String& rankId)
+    {
+        auto* a = apvts.getRawParameterValue (activeId);
+        if (a == nullptr || a->load() <= 0.5f) return;               // not in the chain — skipped entirely
+        auto* r = apvts.getRawParameterValue (rankId);
+        chainOrder_.push_back ({ kind, inst, r != nullptr ? r->load() : 0.5f });
+    };
+    add (0, 1, ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK);
+    add (1, 1, ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK);
+    add (2, 1, ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK);
+    for (int n = 2; n <= ParameterIDs::kFxInstances; ++n)
+    {
+        const juce::String dp = "SYN_DLY" + juce::String (n) + "_";
+        const juce::String sp = "SYN_DST" + juce::String (n) + "_";
+        add (1, n, dp + "ACTIVE", dp + "RANK");
+        add (2, n, sp + "ACTIVE", sp + "RANK");
+    }
+    // stable_sort so two devices sharing a rank keep a deterministic order (no audible reshuffle).
+    std::stable_sort (chainOrder_.begin(), chainOrder_.end(),
+                      [] (const ChainEntry& a, const ChainEntry& b) { return a.rank < b.rank; });
+}
+
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
     for (auto& e : monoLegEnv_) e.prepare (sampleRate);   // fb178 — mono env tap
@@ -3807,6 +3940,16 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     convolutionReverb.prepare (sampleRate);// fb291 — synth FX-rack Convolution reverb (FFT convolution)
     delayEngine.prepare (sampleRate);      // fb296 — synth FX-rack Delay (Digital/Tape/BBD/Diffuse)
     distortionEngine.prepare (sampleRate); // fb315 — synth FX-rack Distortion (23 modes / 6 families)
+    // fb346 — prepare the INSTANCE POOL. Every extra instance is prepared up front because the audio
+    // thread may never allocate; an instance the user has not added simply never runs (the chain loop
+    // skips it), which is the "an empty slot costs exactly zero" law.
+    for (auto& d : delayPool_) d.prepare (sampleRate);
+    for (auto& d : distPool_)  d.prepare (sampleRate);
+    poolDlyType_.fill (-1);
+    poolDlyEnv_.fill (0.0f);
+    poolDstEnv_.fill (0.0f);
+    chainOrder_.reserve ((size_t) ParameterIDs::kFxInstances * 3 + 4);   // reserve once — never allocates in processBlock
+    rebuildChainOrder();
     activeDlyType_ = -1; dlySwapping_ = false;
     activeRvbType_ = -1; rvbSwapping_ = false;
     hallSm_ = 1.0f - std::exp (-1.0f / (0.015f * (float) sampleRate));   // fb277 — ~15 ms mix/env smoothing (no clicks)

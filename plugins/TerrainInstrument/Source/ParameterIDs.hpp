@@ -1142,4 +1142,27 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_WSLOT2_MODE[] = "SYN_OSC_D_WSLOT2_MODE";  constexpr char SYN_OSC_D_WSLOT2_SRC[] = "SYN_OSC_D_WSLOT2_SRC";  constexpr char SYN_OSC_D_WSLOT2_DEPTH[] = "SYN_OSC_D_WSLOT2_DEPTH";
     constexpr char SYN_OSC_D_WSLOT3_MODE[] = "SYN_OSC_D_WSLOT3_MODE";  constexpr char SYN_OSC_D_WSLOT3_SRC[] = "SYN_OSC_D_WSLOT3_SRC";  constexpr char SYN_OSC_D_WSLOT3_DEPTH[] = "SYN_OSC_D_WSLOT3_DEPTH";
     constexpr char SYN_OSC_D_WSLOT4_MODE[] = "SYN_OSC_D_WSLOT4_MODE";  constexpr char SYN_OSC_D_WSLOT4_SRC[] = "SYN_OSC_D_WSLOT4_SRC";  constexpr char SYN_OSC_D_WSLOT4_DEPTH[] = "SYN_OSC_D_WSLOT4_DEPTH";
+
+    // ════════ fb346 — MULTI-INSTANCE FX (the dynamic chain) ════════
+    // 🔑 THE HOST CONSTRAINT: JUCE/VST3/AU cache the parameter list when the plugin loads — params
+    // can NEVER be created at runtime. So every extra device instance is PRE-ALLOCATED at startup
+    // and merely CLAIMED by the + button. The user only ever sees a rack that grows.
+    //
+    // Instance 1 == the legacy SYN_DLY_* / SYN_DST_* / SYN_RVB_* blocks above, untouched, so all 66
+    // factory presets and every user preset keep loading byte-identically. Instances 2..N are
+    // generated with the prefix "SYN_DLY2_", "SYN_DLY3_", … (see createParameterLayout).
+    //
+    // Per instance, beyond the device's own params:
+    //   _ACTIVE  bool  — is this instance IN the chain at all (the + adds / the × removes).
+    //                    Distinct from _POWER, which is bypass (the power dot).
+    //   _RANK    float — chain position. Sorting by a float rank is what makes drag-reorder legal:
+    //                    a choice param's cardinality is fixed at birth (the fb342 law), so the old
+    //                    6-way SYN_FX_ORDER could never grow past 3 devices. Rank has no cardinality.
+    constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
+    constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
+    constexpr char SYN_FX_ACTIVE_SUFFIX[] = "_ACTIVE";
+    // Legacy instance-1 chain membership (the three shipped devices).
+    constexpr char SYN_RVB_ACTIVE[] = "SYN_RVB_ACTIVE";   constexpr char SYN_RVB_RANK[] = "SYN_RVB_RANK";
+    constexpr char SYN_DLY_ACTIVE[] = "SYN_DLY_ACTIVE";   constexpr char SYN_DLY_RANK[] = "SYN_DLY_RANK";
+    constexpr char SYN_DST_ACTIVE[] = "SYN_DST_ACTIVE";   constexpr char SYN_DST_RANK[] = "SYN_DST_RANK";
 }
