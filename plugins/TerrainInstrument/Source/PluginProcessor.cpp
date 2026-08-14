@@ -6053,7 +6053,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (! hallPower_)
         for (int k = 0; k < 6; ++k) hallRvbG_[k] = 0.0f;
     hallRouteActive_ = (hallRvbG_[0] + hallRvbG_[1] + hallRvbG_[2] + hallRvbG_[3] + hallRvbG_[4] + hallRvbG_[5]) > 0.0f;
-    hallMainSend_ = hallPower_ && ! hallRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
+    // fb351 — MAIN SEND is retired: since fb348 an unrouted device is SILENT, so this branch
+    // could never be taken, and the serial behaviour it used to give one device is now what the
+    // chain does for ALL of them. The flag is gone so nobody wires a new device to it.
     // fb296 — DELAY per-osc route resolution (independent mask + power gate), parallel to the reverb send.
     if (delaySendBuf_.getNumSamples() < numSamples)
         delaySendBuf_.setSize (2, numSamples, false, true, true);
@@ -6068,7 +6070,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (! dlyPower_)          // power gates routing (same law as reverb)
         for (int k = 0; k < 6; ++k) dlyG_[k] = 0.0f;
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
-    dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     fxPerm_ = juce::jlimit (0, 5, (int) rawParam (ParameterIDs::SYN_FX_ORDER)->load());   // fb341 — choice INDEX (the AudioParameterChoice law: raw = index)
     rebuildChainOrder();   // fb346 — once per block: sort the ACTIVE devices by float _RANK. Audio-thread
                            // safe (cached pointers, fixed array, no alloc). The UI only writes params;
@@ -6112,6 +6113,43 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         poolRouteAny_[(size_t) (kFxExtra + e)] = ts > 0.0f;
     }
 
+    // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
+    // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
+    // device TAPS — a source enters the rack exactly once, at the first device routed to it — and
+    // (b) whose output feeds whom. Without this every device tapped its own sources and added to the
+    // output in parallel, so dragging a card changed nothing: Max's "it doesn't do any of that".
+    {
+        auto maskOf = [this] (const ChainEntry& ce) -> uint8_t
+        {
+            const float* g = nullptr;
+            if      (ce.kind == 0) g = hallRvbG_;
+            else if (ce.kind == 1) g = (ce.inst == 1) ? dlyG_ : &poolRouteG_[(size_t) ((ce.inst - 2) * 6)];
+            else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
+            uint8_t m = 0;
+            for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
+            return m;
+        };
+        uint8_t masks[(size_t) kChainMax] = {};
+        const int n = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+        for (int c = 0; c < n; ++c) masks[c] = maskOf (chainOrder_[(size_t) c]);
+        fxTopo_.build (masks, n);
+
+        // Scatter the ENTRY masks back to per-device arrays — these, not the full route masks, are
+        // what the voices tap, so a source routed to three devices is still summed only ONCE.
+        for (int s = 0; s < 6; ++s) { hallEntryG_[s] = 0.0f; dlyEntryG_[s] = 0.0f; dstEntryG_[s] = 0.0f; }
+        poolEntryG_.fill (0.0f);
+        for (int c = 0; c < n; ++c)
+        {
+            const auto& ce = chainOrder_[(size_t) c];
+            float* dstArr = nullptr;
+            if      (ce.kind == 0) dstArr = hallEntryG_;
+            else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
+            else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
+            for (int s = 0; s < 6; ++s)
+                dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
+        }
+    }
+
     exUnionAny_ = false;
     for (int s = 0; s < 6; ++s)
     {
@@ -6133,7 +6171,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (routedDryBuf_.getNumSamples() < numSamples)
         routedDryBuf_.setSize (2, numSamples, false, true, true);
     routedDryBuf_.clear (0, numSamples);
-    dstMainSend_ = dstPower_ && ! dstRouteActive_;   // fb303 grammar — power on + NO pills ⇒ MAIN SEND
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
@@ -6142,11 +6179,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (int vi = 0; vi < kSynthVoiceCount; ++vi)
             if (auto* sv = synthVoices_[(size_t) vi])
             {
-                sv->setReverbRoutes (hallRvbG_[0], hallRvbG_[1], hallRvbG_[2], hallRvbG_[3], hallRvbG_[4], hallRvbG_[5]);
+                // fb351 — ENTRY masks, not the full route masks: a source is tapped by the FIRST
+                // device routed to it and then travels the chain, so it is never summed twice.
+                sv->setReverbRoutes (hallEntryG_[0], hallEntryG_[1], hallEntryG_[2], hallEntryG_[3], hallEntryG_[4], hallEntryG_[5]);
                 sv->setReverbSendTarget (rsL, rsR);
-                sv->setDelayRoutes (dlyG_[0], dlyG_[1], dlyG_[2], dlyG_[3], dlyG_[4], dlyG_[5]);
+                sv->setDelayRoutes (dlyEntryG_[0], dlyEntryG_[1], dlyEntryG_[2], dlyEntryG_[3], dlyEntryG_[4], dlyEntryG_[5]);
                 sv->setDelaySendTarget (dsL, dsR);
-                sv->setDistortionRoutes (dstG_[0], dstG_[1], dstG_[2], dstG_[3], dstG_[4], dstG_[5]);
+                sv->setDistortionRoutes (dstEntryG_[0], dstEntryG_[1], dstEntryG_[2], dstEntryG_[3], dstEntryG_[4], dstEntryG_[5]);
                 sv->setDistortionSendTarget (dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr,
                                              dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr);
                 // fb347 — the shared routed-dry bus (each routed osc exactly once)
@@ -6159,7 +6198,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     const bool on = poolRouteAny_[(size_t) q];
                     if (on) sv->ensurePoolFilters (q);
-                    sv->setPoolSendRoutes (q, &poolRouteG_[(size_t) (q * 6)]);
+                    sv->setPoolSendRoutes (q, &poolEntryG_[(size_t) (q * 6)]);   // fb351 — entry mask
                     sv->setPoolSendTarget (q, on ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr,
                                               on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr);
                 }
@@ -6723,18 +6762,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // Per-sample processing
     auto* leftChannel  = buffer.getWritePointer(0);
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
-    const float* rvbSendL = reverbSendBuf_.getReadPointer (0);   // fb280 — routed-osc send (filled during synth render)
-    const float* rvbSendR = reverbSendBuf_.getReadPointer (1);
     // fb347 — the SHARED routed-dry bus. Every main-send device subtracts THIS one buffer; null
     // when nothing is routed anywhere, in which case the subtraction is skipped entirely (and the
     // output is bit-identical to fb346 — that is the null test this refactor had to pass).
+    // fb351 — each chain slot's OSCILLATOR TAP, resolved once per block (never per sample). A slot
+    // whose entry mask is empty has no tap at all: it is fed entirely by the device above it.
+    const float* chSendL[(size_t) kChainMax] = {};
+    const float* chSendR[(size_t) kChainMax] = {};
+    for (int c = 0; c < chainCount_ && c < (int) tw::FxChainTopology::kMaxSlots; ++c)
+    {
+        const auto& ce = chainOrder_[(size_t) c];
+        const juce::AudioBuffer<float>* b = nullptr;
+        if      (ce.kind == 0) { if (hallRouteActive_) b = &reverbSendBuf_; }
+        else if (ce.kind == 1) { b = (ce.inst == 1) ? (dlyRouteActive_ ? &delaySendBuf_ : nullptr)
+                                                    : (poolRouteAny_[(size_t) (ce.inst - 2)] ? &poolSendBuf_[(size_t) (ce.inst - 2)] : nullptr); }
+        else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
+                                                    : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
+        if (b != nullptr && b->getNumSamples() >= numSamples && b->getNumChannels() >= 2)
+        { chSendL[c] = b->getReadPointer (0); chSendR[c] = b->getReadPointer (1); }
+    }
     const float* exDryL = exUnionAny_ ? routedDryBuf_.getReadPointer (0) : nullptr;
     const float* exDryR = exUnionAny_ ? routedDryBuf_.getReadPointer (1) : nullptr;
     float hallBlockWetPk = 0.0f;                                 // fb280 — peak wet this block → bloom viz
-    const float* dlySendL = delaySendBuf_.getReadPointer (0);    // fb296 — delay routed-osc send
-    const float* dlySendR = delaySendBuf_.getReadPointer (1);
-    const float* dstSendL = distortionSendBuf_.getReadPointer (0);   // fb338 — distortion routed-osc send
-    const float* dstSendR = distortionSendBuf_.getReadPointer (1);
     float dlyBlockWetPk = 0.0f;                                  // fb296 — peak wet this block → delay core viz
     // fb350 — per-POOLED-instance wet peak. Each duplicate drives its OWN echo-timeline bloom;
     // sharing instance 1's scalar made delay 2's taps flash to delay 1's audio, which reads as
@@ -7420,8 +7469,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 convolutionReverb.bakeIfDirtyIdle();
             }
         }
-        auto applyRvb = [&]()   // fb307 — reverb INSERT as a lambda so the chain order (reverb↔delay) is swappable by drag; default reverb-first = byte-identical
+        // fb351 — every device is now IN → OUT instead of "add my wet to the master mix". The caller
+        // gathers the input (this slot's oscillator tap + whatever feeds it) and decides where the
+        // output goes: on to the next device, or to the mix if nothing downstream wants it. Bypass
+        // must PASS THE SIGNAL THROUGH, or a powered-off device would break the chain behind it.
+        auto applyRvb = [&](float sgL, float sgR, float& outL, float& outR)
         {
+        outL = sgL; outR = sgR;
         if (hallPower_ || hallRvbEnv_ > 1.0e-4f)
         {
             hallRvbEnv_ += (hallEnvT_    - hallRvbEnv_) * hallSm_;   // fade on/off
@@ -7433,23 +7487,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // leftChannel → at Mix 100% the dry was only half-cancelled (phase-inverted, still audible). Padding
             // sgL/sgR corrects BOTH the duck term and the wet input (equal-power) for all 9 types. Proven offline:
             // Mix 100% dry residual 0 dB → -93 dB. Routes off ⇒ send=nullptr ⇒ raw=0 ⇒ byte-identical default.
-            // fb303 — MAIN SEND (no pills): feed the WHOLE current mix so "add wet − duck·input" becomes a
-            // wet/dry INSERT on the whole synth; running before the delay below ⇒ the delay hears this reverb
-            // output (serial). Per-osc (pills) ⇒ the padded routed send bus, exactly as before.
-            float sgL, sgR;
-            if (hallMainSend_) {
-                // fb305 — MAIN SEND excludes per-osc-routed oscs: an osc routed to ANY effect (its dry sits in
-                // reverbSendBuf_/delaySendBuf_) LEAVES the main send, so it is affected ONLY by the effect(s) it's
-                // routed to (Max: "osc C routed to delay should get delay, NOT the reverb main send"). Subtract that
-                // routed dry (send × outputGain × kVoiceToFxPad = exactly how it sits in leftChannel). No pills ⇒ 0.
-                const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
-                sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
-                else sgR = sgL;
-            }
-            else { const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
-                   const float rawR = (rvbSendR != nullptr) ? rvbSendR[i] : rawL;
-                   sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
+            // fb351 — the input arrives from the chain (this slot's oscillator tap, already padded by
+            // the caller, plus any upstream device feeding it). The old MAIN-SEND branch is gone: since
+            // fb348 an unrouted device is silent, so nothing ever took it, and the serial behaviour it
+            // used to provide is now what the chain itself does — for EVERY device, routed or not.
             float rl, rr;
             if      (activeRvbType_ == 8) convolutionReverb.processSample (sgL, sgR, rl, rr);  // fb291 — Convolution (internally block-buffered, B-latency)
             else if (activeRvbType_ == 7) shimmerReverb.processSample (sgL, sgR, rl, rr);  // fb290 — Shimmer
@@ -7472,9 +7513,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 duckG = 1.0f / (1.0f + 7.0f * duckEnv_);   // 1 in the gaps → deep duck under signal
             }
             const float wetG = wet * duckG;
-            leftChannel[i]  += wetG * rl - duck * sgL;    // add wet (ducked); duck ONLY the routed dry (unrouted untouched)
-            if (rightChannel != nullptr)
-                rightChannel[i] += wetG * rr - duck * sgR;
+            outL = sgL + (wetG * rl - duck * sgL);       // fb351 — same math, but it OUTPUTS instead of
+            outR = sgR + (wetG * rr - duck * sgR);       //   adding to the mix (Mix 100% ⇒ dry gone)
             const float wmag = 0.5f * (std::abs (rl) + std::abs (rr)) * e * duckG;   // fb280/fb287 — bloom follows audible (ducked) wet
             if (wmag > hallBlockWetPk) hallBlockWetPk = wmag;
         }
@@ -7592,68 +7632,39 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
         }
 
-        auto applyDst = [&]()   // fb315 — distortion INSERT. MAIN SEND: the whole mix through it.
+        auto applyDst = [&](float sgL, float sgR, float& outL, float& outR)   // fb315/fb351 — distortion INSERT
         {
+            outL = sgL; outR = sgR;
             if (dstPower_ || dstEnv_ > 1.0e-4f)
             {
                 dstEnv_ += (dstEnvT_ - dstEnv_) * hallSm_;      // on/off fade (~15 ms, no click)
-                // fb338 — PHASE E: per-osc routing live. Pills lit ⇒ the engine eats ONLY the routed
-                // oscs (the padded send bus, post-filter per the fb280 law); no pills ⇒ MAIN SEND =
-                // the whole mix MINUS every send-routed osc (the fb305 exclusion, all three buses).
-                float sgL, sgR;
-                if (dstRouteActive_)
-                {
-                    const float rawL = (dstSendL != nullptr) ? dstSendL[i] : 0.0f;
-                    const float rawR = (dstSendR != nullptr) ? dstSendR[i] : rawL;
-                    sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad;
-                }
-                else
-                {
-                    const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
-                    sgL = leftChannel[i] - rtdL;
-                    if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
-                    else sgR = sgL;
-                }
+                // fb351 — input comes from the chain (see applyRvb). The MAIN-SEND branch is retired.
                 float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
                 // fb318 — ENV-GATED REPLACE. The engine returns the FINISHED signal (its own Mix
                 // applied, dry latency-aligned to the 2× resampler), so the insert is just a crossfade
                 // from the untouched mix to the engine's output. At env 0 this contributes EXACTLY 0 —
                 // no click on power toggle, and no delay line in circuit when the device is off.
                 const float e = dstEnv_;
-                leftChannel[i]  += e * (wl - sgL);
-                if (rightChannel != nullptr)
-                    rightChannel[i] += e * (wr - sgR);
+                outL = sgL + e * (wl - sgL);                  // fb351 — crossfade IN→engine, then hand it on
+                outR = sgR + e * (wr - sgR);
                 const float wmag = 0.5f * (std::abs (wl) + std::abs (wr)) * e;
                 if (wmag > dstBlockWetPk) dstBlockWetPk = wmag;
             }
         };
 
-        auto applyDly = [&]()   // fb307 — delay INSERT as a lambda (swapped with the reverb per the drag order)
+        auto applyDly = [&](float sgL, float sgR, float& outL, float& outR)   // fb307/fb351 — delay INSERT
         {
+        outL = sgL; outR = sgR;
         if (dlyPower_ || dlyEnv_ > 1.0e-4f)
         {
             dlyEnv_ += (dlyEnvT_ - dlyEnv_) * hallSm_;           // on/off fade
             dlyDry_ += (dlyDryT_ - dlyDry_) * hallSm_;           // ramp mix (no zipper)
             dlyWet_ += (dlyWetT_ - dlyWet_) * hallSm_;
-            // fb303 — MAIN SEND (no pills): feed the WHOLE current mix (already post-reverb this block ⇒ serial)
-            // as a wet/dry insert. Per-osc (pills) ⇒ the padded routed send bus, as before.
-            float sgL, sgR;
-            if (dlyMainSend_) {
-                // fb305 — MAIN SEND excludes per-osc-routed oscs (see reverb block above): subtract the routed
-                // dry so an osc routed to the reverb (or any effect) is NOT re-processed by the delay main send.
-                const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
-                sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
-                else sgR = sgL;
-            }
-            else { const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
-                   const float rawR = (dlySendR != nullptr) ? dlySendR[i] : rawL;
-                   sgL = rawL * outputGain * kVoiceToFxPad; sgR = rawR * outputGain * kVoiceToFxPad; }
+            // fb351 — input comes from the chain (see applyRvb); the MAIN-SEND branch is retired.
             float dl, dr; delayEngine.processSample (sgL, sgR, dl, dr);
             const float e = dlyEnv_, duck = e * (1.0f - dlyDry_), wet = e * dlyWet_;
-            leftChannel[i]  += wet * dl - duck * sgL;            // Mix 100% ⇒ dry crossfade→0 ⇒ routed dry fully removed
-            if (rightChannel != nullptr)
-                rightChannel[i] += wet * dr - duck * sgR;
+            outL = sgL + (wet * dl - duck * sgL);                // Mix 100% ⇒ dry crossfade→0
+            outR = sgR + (wet * dr - duck * sgR);
             const float wmag = 0.5f * (std::abs (dl) + std::abs (dr)) * e;
             if (wmag > dlyBlockWetPk) dlyBlockWetPk = wmag;
         }
@@ -7669,19 +7680,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // resolve that turns timeMs_ into the real delay-length target — so duplicates ran at ZERO
         // delay length and their Time knob was dead. When you pool a device, diff its call set
         // against instance 1's; a missing per-block resolve compiles clean and fails silently.
-        // The source is the current chain signal minus the routed-osc dry, identical to instance 1's
-        // main-send path — so a duplicate hears exactly what the original would hear in that slot.
-        auto excludeRouted = [&] (float& sgL, float& sgR)
+        // fb351 — the old excludeRouted() helper is GONE. Duplicates no longer reconstruct a
+        // "whole mix minus the routed dry" input; like every other device they are handed their
+        // input by the chain. That subtraction was the source of the fb347 phase-inversion class.
+        auto applyPoolDly = [&] (int e, float sgL, float sgR, float& outL, float& outR)
         {
-            // fb347 — the ONE shared routed-dry bus (each routed osc exactly once).
-            sgL = leftChannel[i] - (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;
-            if (rightChannel != nullptr)
-                sgR = rightChannel[i] - (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;
-            else sgR = sgL;
-        };
-
-        auto applyPoolDly = [&] (int e)
-        {
+            outL = sgL; outR = sgR;
             auto& R = dlyRefs_[(size_t) e];
             if (R.power == nullptr) return;
             // fb348 — NO GLOBAL SEND: an instance with no route pills lit is SILENT. It no longer
@@ -7757,21 +7761,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float mixv = R.mix->load();
             const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
             const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
-            // fb348 — the instance's OWN routed bus: only the oscs its pills select.
-            const float* pL = poolSendBuf_[(size_t) e].getReadPointer (0);
-            const float* pR = poolSendBuf_[(size_t) e].getReadPointer (1);
-            const float sgL = pL[i] * outputGain * kVoiceToFxPad;
-            const float sgR = pR[i] * outputGain * kVoiceToFxPad;
+            // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
             float dl, dr; eng.processSample (sgL, sgR, dl, dr);
             const float duck = env * (1.0f - dry);
-            leftChannel[i] += env * wet * dl - duck * sgL;       // Mix 100% ⇒ dry fully removed (law 4)
-            if (rightChannel != nullptr) rightChannel[i] += env * wet * dr - duck * sgR;
+            outL = sgL + (env * wet * dl - duck * sgL);          // Mix 100% ⇒ dry fully removed (law 4)
+            outR = sgR + (env * wet * dr - duck * sgR);
             const float wmagP = 0.5f * (std::abs (dl) + std::abs (dr)) * env;   // fb350 — its OWN bloom
             if (wmagP > poolDlyPk[(size_t) e]) poolDlyPk[(size_t) e] = wmagP;
         };
 
-        auto applyPoolDst = [&] (int e)
+        auto applyPoolDst = [&] (int e, float sgL, float sgR, float& outL, float& outR)
         {
+            outL = sgL; outR = sgR;
             auto& R = dstRefs_[(size_t) e];
             if (R.power == nullptr) return;
             // fb348 — NO GLOBAL SEND: unrouted ⇒ silent (never the whole mix).
@@ -7795,15 +7796,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int k = 0; k < 8; ++k) eng.setP (k, R.p[k]->load());
             }
             env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
-            const float* pL = poolSendBuf_[(size_t) (kFxExtra + e)].getReadPointer (0);
-            const float* pR = poolSendBuf_[(size_t) (kFxExtra + e)].getReadPointer (1);
-            const float sgL = pL[i] * outputGain * kVoiceToFxPad;   // fb348 — its OWN routed oscs
-            const float sgR = pR[i] * outputGain * kVoiceToFxPad;
+            // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
             float wl, wr; eng.processSample (sgL, sgR, wl, wr);
             // fb318 ENV-GATED REPLACE: the engine returns the FINISHED signal (its own Mix applied),
             // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
-            leftChannel[i] += env * (wl - sgL);
-            if (rightChannel != nullptr) rightChannel[i] += env * (wr - sgR);
+            outL = sgL + env * (wl - sgL);                       // fb351 — crossfade IN→engine, hand on
+            outR = sgR + env * (wr - sgR);
         };
 
         // fb307 — SERIAL CHAIN ORDER (drag-to-reorder): run the two INSERTS in the dragged order. Both setups
@@ -7823,24 +7821,57 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // all three ACTIVE-by-default reproduce case 0 exactly, and any old session that stored
         // SYN_FX_ORDER has its permutation translated into ranks once, on load (see below), so every
         // existing project restores byte-identically.
-        for (int c = 0; c < chainCount_; ++c)
+        // ════════ fb351 — RUN THE CHAIN SERIALLY ════════
+        // Every routed oscillator LEAVES the main mix here and travels the rack instead; whatever
+        // the rack hands back is added at the end. Before this, each device tapped its own sources
+        // and added straight to the mix, so the devices ran in parallel and chain order was inaudible
+        // (Max: "if the distortion is at the beginning it should then hit that delay — it doesn't do
+        // any of that"). Slots whose output feeds a later device do NOT reach the mix on their own.
         {
-            const auto& ce = chainOrder_[(size_t) c];
-            if (ce.inst == 1)
+            const float sc = outputGain * kVoiceToFxPad;
+            if (exUnionAny_)
             {
-                if      (ce.kind == 0) applyRvb();
-                else if (ce.kind == 1) applyDly();
-                else                   applyDst();
+                leftChannel[i] -= (exDryL != nullptr ? exDryL[i] : 0.0f) * sc;
+                if (rightChannel != nullptr) rightChannel[i] -= (exDryR != nullptr ? exDryR[i] : 0.0f) * sc;
             }
-            else
+            float pendL[(size_t) kChainMax] = {}, pendR[(size_t) kChainMax] = {};
+            const int nSlots = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+            for (int c = 0; c < nSlots; ++c)
             {
-                const int e = ce.inst - 2;                       // pool index
-                if (e >= 0 && e < kFxExtra)
+                const auto& ce = chainOrder_[(size_t) c];
+                // input = this slot's oscillator tap (ENTRY sources only) + every upstream output it eats
+                float inL = (chSendL[c] != nullptr) ? chSendL[c][i] * sc : 0.0f;
+                float inR = (chSendR[c] != nullptr) ? chSendR[c][i] * sc : inL;
+                const uint32_t fm = fxTopo_.feed[c];
+                if (fm != 0)
+                    for (int j = 0; j < c; ++j)
+                        if (fm & (1u << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
+
+                float oL = inL, oR = inR;
+                if (ce.inst == 1)
                 {
-                    if (ce.kind == 1) applyPoolDly (e);
-                    else if (ce.kind == 2) applyPoolDst (e);
+                    if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);
+                    else if (ce.kind == 1) applyDly (inL, inR, oL, oR);
+                    else                   applyDst (inL, inR, oL, oR);
                 }
+                else
+                {
+                    const int e = ce.inst - 2;                   // pool index
+                    if (e >= 0 && e < kFxExtra)
+                    {
+                        if      (ce.kind == 1) applyPoolDly (e, inL, inR, oL, oR);
+                        else if (ce.kind == 2) applyPoolDst (e, inL, inR, oL, oR);
+                    }
+                }
+                pendL[c] = oL; pendR[c] = oR;
             }
+            // whatever nothing downstream claimed comes back to the mix
+            for (int c = 0; c < nSlots; ++c)
+                if (! fxTopo_.consumed[c])
+                {
+                    leftChannel[i] += pendL[c];
+                    if (rightChannel != nullptr) rightChannel[i] += pendR[c];
+                }
         }
         if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {

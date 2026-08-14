@@ -18,6 +18,7 @@
 #include "ShimmerReverb.h"     // fb290 — synth FX-rack Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
 #include "ConvolutionReverb.h" // fb291 — synth FX-rack Convolution reverb (true FFT convolution + synth/user IR + Reverse/Attack/Distance/Density bake)
 #include "DelayEngine.h"       // fb296 — synth FX-rack Delay (one shared fractional line: Digital/Tape/BBD/Diffuse + ping-pong + HQ interp)
+#include "FxChainTopology.h"   // fb351 — who taps which osc + whose output feeds whom (the SERIAL rack)
 #include "DistortionEngine.h"  // fb315 — synth FX-rack Distortion (the 3rd device; 23 modes / 6 families, one shared shell)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
@@ -1526,7 +1527,6 @@ private:
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block (PILLS ⇒ per-osc send)
     bool  hallPower_    = false;                   // fb303 — SYN_RVB_POWER on ⇒ reverb runs (main-send OR per-osc)
-    bool  hallMainSend_ = false;                   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix through it, serial insert)
     float hallRvbEnv_ = 0.0f, hallEnvT_ = 0.0f;   // fb277 — on/off FADE env (0 = fully bypassed) so route toggles don't click
     float hallRvbDry_ = 1.0f, hallRvbWet_ = 0.0f; // equal-power mix — RAMPED per sample (no zipper)
     float hallRvbDryT_ = 1.0f, hallRvbWetT_ = 0.0f; // mix targets
@@ -1578,6 +1578,16 @@ private:
     static constexpr int kChainMax = 1 + 2 * ParameterIDs::kFxInstances;
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
     int chainCount_ = 0;
+    // fb351 — THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had
+    // each ADD its result into the output, which made the whole rack PARALLEL: chain order stopped
+    // meaning anything (Max: "I don't think the distortion is in the chain… it doesn't do any of
+    // that"). This works out, per block, which device TAPS which oscillator and whose output feeds
+    // whom. See FxChainTopology.h for the model + scratchpad/fx_topology_test.cpp for the proof.
+    tw::FxChainTopology fxTopo_;
+    float hallEntryG_[6] { 0,0,0,0,0,0 };            // ENTRY masks — a source enters the rack exactly
+    float dlyEntryG_ [6] { 0,0,0,0,0,0 };            // once, at the FIRST device routed to it. These
+    float dstEntryG_ [6] { 0,0,0,0,0,0 };            // (not the full route masks) are what the voices
+    std::array<float, (size_t) (2 * (ParameterIDs::kFxInstances - 1)) * 6> poolEntryG_ {};   // tap.
     void rebuildChainOrder() noexcept;                       // audio-thread safe (cached pointers only)
 
     // ── cached parameter pointers for the pooled instances (resolved once in prepareToPlay, where
@@ -1609,7 +1619,6 @@ private:
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)
     bool  dlyPower_    = false;                      // fb303 — SYN_DLY_POWER on ⇒ delay runs (main-send OR per-osc)
-    bool  dlyMainSend_ = false;                      // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     int   fxPerm_ = 0;                               // fb341 — serial chain permutation 0-5 (legacy bool: norm 0→0 R·D·T, norm 1→5 D·R·T)
     float dlyEnv_ = 0.0f, dlyEnvT_ = 0.0f;          // on/off FADE env (0 = fully bypassed)
     float dlyDry_ = 1.0f, dlyWet_ = 0.0f;           // equal-power mix — RAMPED per sample
@@ -1645,7 +1654,6 @@ private:
     std::array<float, (size_t) kPoolSendCount * 6> poolRouteG_ {};
     float dstG_[6] = { 0,0,0,0,0,0 };                // per-source distortion route gains (A,B,C,D,Sub,Noise)
     bool  dstRouteActive_ = false;                   // any distortion route enabled this block
-    bool  dstMainSend_ = false;                      // power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     float dstEnv_ = 0.0f, dstEnvT_ = 0.0f;           // on/off FADE env (0 = fully bypassed, no click)
     float dstDry_ = 1.0f, dstWet_ = 0.0f;            // equal-power mix — RAMPED per sample
     float dstDryT_ = 1.0f, dstWetT_ = 0.0f;
