@@ -153,6 +153,11 @@ public:
         // keeps every feedback path silent without input (2 ms attack / 250 ms release).
         cvXfI_ = (float) (1.0 / (0.040 * fs_));   // fb326 — 40 ms curve crossfade
         aAtk4_ = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.004));
+        dnDip_ = (float) std::exp (-1.0 / (fs_ * 0.0005));   // fb345 — char fade-down: 1→0.02 in ~2 ms
+        aTpDg_ = 1.0f - (float) std::exp (-1.0 / (fs_ * 2.0 * 0.040));   // fb345 — tape drive glide
+                 // (~40 ms at the 2× rate): a Drive yank .6→0 instantly multiplied the J-A output
+                 // normalisation ×0.6a by ~360 while M was still hot ⇒ measured +21.7 dBFS blast.
+                 // A 100 ms swept target measured clean, so 40 ms kills the blast inaudibly.
         envA_  = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.002));
         envR_  = 1.0f - (float) std::exp (-1.0 / (fs_ * 0.060));   // fb325: the free-run gate closes in
                                                                     // ~0.4 s — scream dies WITH the note
@@ -171,9 +176,9 @@ public:
             for (int n = 0; n < kRB; ++n) { se_[c][n] = dry_[c][n] = 0.0f; }
             for (int n = 0; n < 2 * kRB; ++n) { xr_[c][n] = so_[c][n] = 0.0f; }   // fb342 — mirrored rings are 2·kRB
             xi_[c] = si_[c] = di_[c] = 0;
-            fbZ_[c] = punchZ_[c] = 0.0f;
+            fbZ_[c] = punchZ_[c] = fbDc_[c] = 0.0f;
             toneZ_[c] = 0.0f;
-            slewZ_[c] = holdV_[c] = holdPh_[c] = smZ_[c] = 0.0f;
+            slewZ_[c] = holdV_[c] = holdPh_[c] = smZ_[c] = ringA_[c] = 0.0f;
             octBx_[c] = octBy_[c] = 0.0f;                              // fb336 — Octave's blocker
             for (int n = 0; n < 8; ++n) clnZ_[c][n] = 0.0f;            // fb336/337 — Clean's poles
             for (int n = 0; n < 3; ++n) smZb_[c][n] = 0.0f;            // fb337 — Smooth's extra poles
@@ -189,6 +194,7 @@ public:
             for (int n = 0; n < kDr; ++n) drRing_[c][n] = 0.0f;
             tubeBlk_[c] = tubeIgS_[c] = 0.0f;
             tapeM_[c] = tapeH1_[c] = tapeHd_[c] = tapeGl_[c] = wornW_[c] = 0.0f;
+            tpDrvG_ = -1.0f; wornPh_ = wornTg_ = 0.0f; wornNxt_ = 0.05f;   // fb345 (scalar; set twice, harmless)
             xfPhi_[c] = xfPhiP_[c] = xfB_[c] = xfEd_[c] = 0.0f;
             sbLp_[c] = sbTn_[c] = 0.0f;
             for (int s = 0; s < 3; ++s) odSl_[s][c] = odLp_[s][c] = 0.0f;
@@ -198,6 +204,8 @@ public:
             shEnv_[c] = shEnv2_[c] = shGrl_[c] = shStk_[c] = 0.0f;   // fb326
         }
         drNxt_ = 1.0f; drS_ = 0.0f; emphP_ = 9.0f; wRotP_ = -1.0f; fbLpP_ = -1.0f;
+        chrPend_ = chr_; dipT_ = 1.0f;   // fb345 — a flush cancels any armed char fade
+        drive01_ = drv01T_;              // fb345 — snap the glided drive (no boot glide)
         // fb342 — pow-hoist caches (dslC_ embeds fs_, so a sample-rate change MUST re-key) + the
         // dcOff reference cache + the silence gate all reset with the rest of the state.
         gapP_ = dslP_ = rDzP_ = scKp_ = -1.0f; gapC_ = dslC_ = rDzC_ = scKc_ = 0.0f;
@@ -228,7 +236,36 @@ public:
         if (nm != mode_) dip_ = 0.0f;      // fb320 — type switch dips the wet through 0 (~15 ms), no click
         mode_ = nm;
     }
-    void setCharacter (int c) noexcept { chr_  = juce::jlimit (0, 7, c); }
+    /** fb345 — a char switch swaps physics tables mid-note. The mode-switch dip (dip_=0) is an
+        INSTANT wet→dry jump — measured as the click itself (Tape ratio 6.2, Tube 3.0) — and hot
+        state vs new tables rings through its recovery (Xfmr pk 50.4 raw / 2.2 dipped). So chars
+        DEFER: fade the wet down ~2 ms with the OLD tables, swap + re-seat state at the bottom,
+        recover over the normal ~15 ms. Mode switches keep their shipped fb320 path. */
+    void setCharacter (int c) noexcept
+    {
+        const int nc = juce::jlimit (0, 7, c);
+        if (nc == chrPend_) return;                 // block-rate resolve re-sends the same value
+        chrPend_ = nc;
+        if (nc != chr_) dipT_ = 0.0f;               // arm the fade-down; the swap lands at the bottom
+    }
+    void applyPendingChar() noexcept                // runs at the dip bottom (control head)
+    {
+        if (chrPend_ != chr_)
+        {
+            chr_ = chrPend_;
+            for (int ch = 0; ch < 2; ++ch)
+            {   // re-seat the stateful circuits: zeroed state re-charges from the input under
+                // the dip's cover instead of clamping hot state against the new tables.
+                tapeM_[ch] = tapeH1_[ch] = tapeHd_[ch] = tapeGl_[ch] = 0.0f;
+                xfPhi_[ch] = xfPhiP_[ch] = xfB_[ch] = xfEd_[ch] = 0.0f;
+                tubeBlk_[ch] = tubeIgS_[ch] = 0.0f;
+                bqX1_[ch] = bqX2_[ch] = bqY1_[ch] = bqY2_[ch] = 0.0f;
+                holdV_[ch] = hold2V_[ch] = holdPh_[ch] = hold2Ph_[ch] = errZ_[ch] = 0.0f;   // fb345 —
+                fbLp_[ch] = fbZ_[ch] = fbDc_[ch] = 0.0f;   //   DIGITAL clocks + the feedback loop too
+            }                                              //   (Melt's hot loop rang through the fade)
+            bqMode_ = -1; tubeCk_ = -1;             // force coeff/op-point recompute vs the new tables
+        }
+    }
     void setQuality   (int q) noexcept { qual_ = juce::jlimit (0, 3, q); }
     // fb337 — NO dip on tier switches: dip_=0 jumps the output to FULL DRY in one sample (the dip
     // is a wet-mute, not a fade) — measured as the 0.10 click the probe caught. The tier swap's own
@@ -246,7 +283,11 @@ public:
     void setDrive (float t01) noexcept
     {
         const float t = juce::jlimit (0.0f, 1.0f, t01);
-        drive01_ = t;                                      // kept raw: the DIODE falling-threshold law needs it
+        drv01T_ = t;                                       // fb345 — now a GLIDE TARGET: raw per-sample
+                                                           // consumers (Diode threshold, Growl morph,
+                                                           // SlewClip makeup ×(0.75+0.5d)) stepped on a
+                                                           // knob yank — measured 4.3× click floor. The
+                                                           // control head glides drive01_ at smth_.
         if (family() == FAM_FOLD) driveT_ = 1.0f + t * 62.0f;
         else                      driveT_ = std::pow (10.0f, maxDriveDb() * std::pow (t, 0.8f) * 0.05f);
     }
@@ -326,6 +367,7 @@ public:
 
         // Per-sample glide on everything (no-clicks hard rule).
         driveC_ += (driveT_ - driveC_) * smth_;
+        drive01_ += (drv01T_ - drive01_) * smth_;          // fb345 — see setDrive
         kneeC_  += (kneeT_  - kneeC_ ) * smth_;
         biasC_  += (biasT_  - biasC_ ) * smth_;
         toneC_  += (toneT_  - toneC_ ) * smth_;
@@ -333,7 +375,13 @@ public:
         loC_    += (loT_    - loC_   ) * smth_;
         hiC_    += (hiT_    - hiC_   ) * smth_;
         mixC_   += (mixT_   - mixC_  ) * smth_;
-        dip_    += (1.0f    - dip_   ) * smth_;              // fb320 — mode-switch wet dip recovery
+        if (dipT_ < 0.5f)                                    // fb345 — char-swap fade-down (~2 ms):
+        {                                                    //   old tables render while the wet fades,
+            dip_ *= dnDip_;                                  //   the swap + state re-seat land at the
+            if (dip_ < 0.02f) { applyPendingChar(); dipT_ = 1.0f; }   // bottom, then normal recovery
+        }
+        else
+            dip_ += (1.0f - dip_) * smth_;                   // fb320 — mode-switch wet dip recovery
         slamC_  += (slamT_  - slamC_ ) * smth_;              // fb324 — ANALOG Slam pill (+20 dB), click-free
         wrapC_  += (wrapT_  - wrapC_ ) * smth_;              // fb336 — the four family pills glide like Slam:
         octC_   += (octT_   - octC_  ) * smth_;              //         a toggle is a ~20 ms crossfade, never a click
@@ -352,7 +400,16 @@ public:
         emphC_ = (fam == FAM_DIGITAL) ? 0.0f : (pC_[2] * 2.0f - 1.0f);
         switch (fam)
         {
-            case FAM_CLIP:    kneeE_ = kneeC_;  biasE_ = pC_[4] * 2.0f - 1.0f; asymE_ = 0.0f;
+            case FAM_CLIP:    kneeE_ = kneeC_;
+                              // fb345 — GRID-LEAK BIAS (the DIODE law, CLIP edition): the absolute
+                              // ±1 offset was ±dEff ≈ 5× the driven swing ⇒ DC-latch SILENCE past
+                              // ~±20% travel — and FOUR factory presets (authored Bias 65–72 for
+                              // warmth) measured −93 dBFS. Envelope-tracked: full knob = 0.9× the
+                              // swing (ZS 1.1 — just past full duty) at ANY level. Never silent.
+                              biasE_ = (pC_[4] * 2.0f - 1.0f)
+                                     * juce::jmax (inEnv_[0], inEnv_[1]) * kPreGain
+                                     * ((mode_ == ZeroSquare) ? 1.1f : 0.9f);
+                              asymE_ = 0.0f;
                               wrapT_ = pill2_ ? 1.0f : 0.0f;                   /* fb336 — Wrap */   break;
             // fb322 — the ASYM MODE's offset goes PRE-DRIVE via the bias path (the fb315 lesson,
             // relearned: a post-drive offset is swamped by the driven signal and the knob reads dead).
@@ -363,13 +420,27 @@ public:
                               // alone gives only DC + odd harmonics; even harmonics need the DUTY
                               // shift, which the bias provides). Rectify: NONE — its SIG is the
                               // rectification amount, not an offset.
-                              biasE_ = (mode_ == Asym)    ? asymE_ * 0.8f
-                                     : (mode_ == Rectify) ? 0.0f
-                                                          : asymE_ * 0.3f;
+                              // fb345 — GRID-LEAK BIAS: the old absolute offsets (0.8/0.3, pre-dEff)
+                              // were 1.5–4× the nominal driven swing ⇒ the wave went fully one-sided,
+                              // the flat threshold clamped it to a CONSTANT, the DC blocker erased it:
+                              // measured DEAD-SILENT at |SIG|>25% (Asym) / >85% (D1) at drive .5.
+                              // A real circuit self-biases ∝ signal (grid-leak/auto-bias): the offset
+                              // tracks the input envelope, so full knob = maximal duty-shift at ANY
+                              // level and the quiet tip always keeps conducting.
+                              biasE_ = ((mode_ == Asym)    ? asymE_ * 0.90f
+                                      : (mode_ == Rectify) ? 0.0f
+                                                           : asymE_ * 0.45f)
+                                     * juce::jmax (inEnv_[0], inEnv_[1]) * kPreGain;
                               octT_  = pill2_ ? 1.0f : 0.0f;                   /* fb336 — Octave */ break;
             case FAM_FOLD:
             {
-                kneeE_ = 0.5f;  biasE_ = (kneeC_ * 2.0f - 1.0f) * 1.2f;  asymE_ = 0.0f;
+                kneeE_ = 0.5f;
+                // fb345 — grid-leak law, FOLD edition: the static ×1.2 was 6× the pre-dEff swing
+                // (preset 'Howl' measured −93 dBFS). Env-tracked: full = 1.1× swing — the fold
+                // eats a full extra reflection at the top, never a latched constant.
+                biasE_ = (kneeC_ * 2.0f - 1.0f)
+                       * juce::jmax (inEnv_[0], inEnv_[1]) * kPreGain * 1.1f;
+                asymE_ = 0.0f;
                 // Character ladder biases (bible §9.4): Linear Fold = Serge/Ladder/Compressed/
                 // Expanded/Lossy/Runaway/Rounded/Broken-Mirror · West Coast circuits set their own
                 // stage caps (Buchla museum = 5 cells, uFold = 6). {stageMul, spacOff, rebMul, cornOff}
@@ -530,7 +601,10 @@ private:
         }
     }
 
-    struct AdaaState { float x1 = 0.0f, F1 = 0.0f; bool have = false; };
+    struct AdaaState { float x1 = 0.0f, F1 = 0.0f, kf = -1.0f; bool have = false; };
+    // fb345 — kf = the curve-param key F1 was computed under. A gliding Knee made
+    // y=(F_new(x0)−F_old(x1))/dx divide a parameter-induced F-mismatch by a small dx —
+    // measured 0.568 spikes (16.6× the steady floor) while turning Knee at an ADAA tier.
 
     // ── the per-channel chain ────────────────────────────────────────────────
     float one (float x, int c, float drv) noexcept
@@ -541,7 +615,12 @@ private:
         // Every self-oscillating feedback path is gated by the input envelope (2 ms / 250 ms): the
         // scream rings and DIES with the note — it follows what you play, never runs on its own.
         inEnv_[c] += (std::fabs (in0) - inEnv_[c]) * ((std::fabs (in0) > inEnv_[c]) ? envA_ : envR_);
-        const float fbGate = juce::jmin (1.0f, inEnv_[c] * 30.0f);
+        const float fbGate0 = juce::jmin (1.0f, inEnv_[c] * 30.0f);
+        const float fbGate  = fbGate0 * fbGate0;   // fb345 — SQUARED release: the AC-coupled loop
+                                                   //   genuinely oscillates now (the old DC latch
+                                                   //   fell silent by pathology) and rang ~0.9 s
+                                                   //   post-note; squared = ~0.4 s (the fb325 law).
+                                                   //   1 while playing — the live scream unchanged.
         // LOW CUT is PRE the shaper — it decides what is allowed to hog the curve at all.
         loCutZ_[c] += (x - loCutZ_[c]) * loC_;
         x -= loCutZ_[c];
@@ -742,7 +821,10 @@ private:
         float dcOff = 0.0f;
         if (fam != FAM_ANALOG)
         {
-            const float aKey = biasE_ * dEff;
+            const float aKey = ((fam == FAM_SHAPER) ? 0.0f : biasE_) * dEff
+                             + ((fam == FAM_SHAPER) ? biasE_ : 0.0f);   // fb345 — SHAPER bias moved
+                                                                        //   into shaperCore (domain
+                                                                        //   units); key still tracks it
             const float pKey = kneeE_ + kneeC_ + drive01_ + driveC_ + wrapA + dzU + gap + cvXf_
                              + pC_[3] + pC_[4] + pC_[5] + pC_[6];
             // fb342 (review fix) — a SECOND, differently-weighted checksum over the SAME terms: a
@@ -764,7 +846,11 @@ private:
             }
             dcOff = dcOffC_[c];
         }
-        const float fbIn  = (fbA > 1.0e-5f) ? fbA * fbZ_[c] : 0.0f;
+        const float fbIn  = (fbA > 1.0e-5f) ? fbA * (fbZ_[c] - fbDc_[c]) : 0.0f;
+        // fb345 — EVERY fbA loop is AC-COUPLED (the Fuzz Face coupling cap): the raw loop finds a
+        // DC fixed point against any constant-capable curve — DIODE Snarl>0.2 measured −122 dB, and
+        // presets 'Sludge' (OD Slew Kill + snarl) and 'Scorch' (Soft Growl + feedback) measured
+        // SILENT. A DC-less loop can't hold the latch ⇒ it screams instead. Screams are AC ⇒ pass.
         // ── fb336 — DIODE `Octave` (bible §897): full-wave rectifier + its OWN DC blocker BEFORE
         // the mode's shaper, inside the 2× region (the blocker advances at 2fs, A then B
         // chronological). The mid-chain re-centre is exactly why Rectify+Octave lands at 4·f0 —
@@ -796,14 +882,23 @@ private:
         else
         {
             adaaOn_ = eqEff_ >= 2 && wrapA <= 1.0e-4f
+                   && chr_ == 0                          // fb345 — the F-tables are CHARACTER-BLIND: with
+                                                         //   promo/High active, Rails/WrapTip/Modulo/Duty/…
+                                                         //   all rendered as char 0 (measured 0.00 dB apart).
+                                                         //   Chars ≠ 0 keep naive-2× — voicing beats ADAA-1.
                    && (mode_ == SoftClip || mode_ == ZeroSquare
                        || (mode_ == HardClip && kneeE_ * 2.0f - 1.0f < 1.0e-3f));   // fb337 — the lockstep whitelist
-            const float vA = wrapR ((deadzone (pA2 * kPreGain) + biasE_ + fbIn) * dEff);   // fb336 — Wrap folds the DRIVEN value
+            const float bInj = (fam == FAM_SHAPER) ? 0.0f : biasE_;   // fb345 — SHAPER bias is domain-side (shaperCore)
+            const float vA = wrapR ((deadzone (pA2 * kPreGain) + bInj + fbIn) * dEff);   // fb336 — Wrap folds the DRIVEN value
             yA = (adaaOn_ ? adaa (dzPost (vA), c) : shapeS (dzPost (vA), c)) - dcOff;
+            if (! adaaOn_) { st_[c].x1 = dzPost (vA); st_[c].have = false; }   // fb345 — keep x1 fresh so a
+                                                         //   promo/whitelist toggle re-enters ADAA on the REAL
+                                                         //   previous sample (seamless), not a stale one
             if (os2)
             {
-                const float vB = wrapR ((deadzone (pB2 * kPreGain) + biasE_ + fbIn) * dEff);
+                const float vB = wrapR ((deadzone (pB2 * kPreGain) + bInj + fbIn) * dEff);
                 yB = (adaaOn_ ? adaa (dzPost (vB), c) : shapeS (dzPost (vB), c)) - dcOff;
+                if (! adaaOn_) { st_[c].x1 = dzPost (vB); st_[c].have = false; }
             }
             else yB = yA;                                // fb337 — Off = 1×
             if (c == 0) occAdd (vA);                     // fb328 — occupancy viz (driven axis)
@@ -837,7 +932,8 @@ private:
             { fbLpP_ = pC_[7]; const float o = 1.0f - pC_[7]; fbLpK_ = onePole2 (400.0f + 14000.0f * o * o); }
             fbLp_[c] += (0.5f * (yA + yB) - fbLp_[c]) * fbLpK_;
             fbZ_[c] = flushDenorm (fbLp_[c]);
-        }
+            fbDc_[c] = flushDenorm (fbDc_[c] + (fbZ_[c] - fbDc_[c]) * 0.0013f);   // fb345 — the
+        }                                                    //   loop's coupling cap (~20 Hz), all fams
 
         float* se = se_[c]; float* so = so_[c]; int& si = si_[c];
         se[si & kRM] = yA;                                              // even ring: ONE delayed read — stays plain
@@ -926,10 +1022,11 @@ private:
         // Standard (the escape was itself a modulator). Averaging across the big jump IS the job.
         else
         {
+            const float kf = kneeE_ + zsGate_;               // fb345 — the F-relevant params this sample
             const float F = anti (u);
-            const float Fp = s.have ? s.F1 : anti (s.x1);
-            y = (F - Fp) / dx;
-            s.F1 = F; s.have = true;
+            const float Fp = (s.have && s.kf == kf) ? s.F1 : anti (s.x1);   // stale-curve F1 → recompute:
+            y = (F - Fp) / dx;                               // both F's on ONE curve ⇒ y = f(ξ), bounded
+            s.F1 = F; s.kf = kf; s.have = true;
         }
         s.x1 = u;
         return y;
@@ -1156,7 +1253,10 @@ private:
                 v *= 0.30f + pC_[3] * 2.2f;    // fb325 — Stages drives the fold density too (its old
                                                // clamp-only role went inert above ~10% — matrix-caught)
                 v = juce::jlimit (-(float) (2 * st), (float) (2 * st), v);
-                float yv = std::sin (1.5707963f * v);
+                // fb345 — Rebound was UNREAD by the closed-form sine fold (measured profD 0.00 at
+                // Corner 0 — a dead knob whenever Corner sits low). It now PHASE-WARPS the fold
+                // (skewed tip densities — a real folder morph); identity at knob 0, BIBO by sin().
+                float yv = std::sin (1.5707963f * v + pC_[5] * 0.9f * std::sin (3.1415927f * v));
                 if (chr_ == 5) yv *= 1.0f / (1.0f + 0.4f * std::fabs (v));
                 float crn = pC_[6];
                 if (chr_ == 7) crn = juce::jmax (crn, 0.45f);
@@ -1268,9 +1368,16 @@ private:
                     const float ped = (std::fabs (u) > zsGate_) ? (u > 0.0f ? p0 : -p0) : 0.0f;
                     return ped + (1.0f - p0) * core;
                 }
-                case 1:                                                       // Duty — the flip point rides Bias: free PWM
-                {                                                             //   + an enormous even-harmonic swing
-                    const float th = -biasE_ * driveC_ * 2.0f;
+                case 1:                                                       // Duty — a THIN pulse: the flip point rides
+                {                                                             //   the signal's own peak (~27% duty at any
+                                                                              //   level), so it reads nasal-thin against
+                                                                              //   the Comparator's square AT DEFAULT.
+                                                                              //   (fb345 — the old th=-bias·drive·2 was
+                                                                              //   the same crossing as chr 0: measured
+                                                                              //   0.00 dB apart at every bias.)
+                    if (c >= 0) zsEnv_[c] += (juce::jmin (2.5f, std::fabs (u)) - zsEnv_[c])
+                                           * (std::fabs (u) > zsEnv_[c] ? 0.01f : 0.0004f);
+                    const float th = 0.62f * ((c >= 0) ? zsEnv_[c] : 1.0f);   // c<0 = stateless DC ref
                     const float ped = (std::fabs (u - th) > zsGate_) ? (u > th ? p0 : -p0) : 0.0f;
                     return ped + (1.0f - p0) * core;
                 }
@@ -1329,19 +1436,30 @@ private:
                     float y = slewZ_[c] + juce::jlimit (-sU, sU, d2);
                     y = juce::jlimit (-1.35f, 1.35f, y); slewZ_[c] = y; return y;
                 }
-                case 5: sU *= 1.0f; break;                                   // Ring — overshoot on EXIT, added below
+                case 5: break;                                               // Ring — deficit-charged EXIT overshoot (below)
                 case 6:                                                       // Bounce — the ceiling rides a 40 ms envelope:
                 {                                                             //   loud passages slew FASTER (alive on hard playing)
                     env40_[c] += (juce::jmin (1.0f, std::fabs (u) * 0.5f) - env40_[c]) * 0.0005f;
                     sU *= 1.0f + 2.5f * env40_[c]; break;
                 }
-                case 7: if (c == 1) sU *= 1.15f; break;                      // Stereo — R ceiling +15%: opens on transients only
+                case 7: sU *= (c == 1) ? 1.35f : 0.78f; break;               // Stereo — complementary ceiling skew.
+                    // fb345 — the old "+15% on c==1 only" was a NO-OP on mono content: c1 is the
+                    // SIDE under the family's M/S topology (silent for mono) — measured R−L 0.00 dB.
+                    // Complementary: mono hears the darker M ceiling; Width>50 (L/R domain) hears
+                    // the true left/right skew the bible describes.
             }
             float d2 = u - slewZ_[c];
             if (chr_ == 2 && d2 < 0.0f) d2 = juce::jmax (d2 * 3.0f, d2);     // Asym: fall ceiling 3× (evens, level-dependent)
             const bool wasLim = std::fabs (d2) > sU;
             float y = slewZ_[c] + juce::jlimit (-sU * (chr_ == 2 && d2 < 0.0f ? 3.0f : 1.0f), sU * (chr_ == 2 && d2 < 0.0f ? 3.0f : 1.0f), d2);
-            if (chr_ == 5 && slewLim_[c] > 0.5f && ! wasLim) y += juce::jlimit (-0.2f, 0.2f, d2 * 0.6f);   // Ring: exit zing
+            if (chr_ == 5)
+            {   // fb345 — the one-sample d2·0.6 zing measured 0.00 dB vs Charge (too timid to hear).
+                // Real op-amp recovery OVERSHOOTS by the accumulated deficit: charge while limited,
+                // dump on exit — spiky corners, a bright nasty ring that scales with how hard it hit.
+                if (wasLim) ringA_[c] = juce::jlimit (-0.6f, 0.6f, ringA_[c] + d2 * 0.02f);
+                else if (slewLim_[c] > 0.5f) { y += ringA_[c]; ringA_[c] = 0.0f; }
+                else ringA_[c] = 0.0f;
+            }
             slewLim_[c] = wasLim ? 1.0f : 0.0f;
             y = juce::jlimit (-1.35f, 1.35f, y);
             slewZ_[c] = y;
@@ -1550,17 +1668,36 @@ private:
             {0.55f, 1.00f, 45.0f, 3.0f, 13000.0f, 0.90f},   // Under-Biased — spitty at Bias 0 already
         };
         const auto& t = TP[chr_];
+        // fb345 — the tape cook reads a GLIDED drive (shared, one machine): drive01_ is raw/unglided
+        // and `a` ∝ 1/(0.01+6d) with output ∝ a — the yank blast (see prepare()'s aTpDg_ note).
+        if (c == 0)
+        {
+            if (tpDrvG_ < 0.0f) tpDrvG_ = drive01_;             // first touch after reset: snap, no boot glide
+            tpDrvG_ += (drive01_ - tpDrvG_) * aTpDg_;
+        }
+        const float dG = tpDrvG_;
         const float Ms = 0.5f + 1.5f * (1.0f - t.sat);
         float b  = biasE_ + drW_[c];
         float kJ = 0.47875f * t.km;
         if (chr_ == 7) { kJ *= 1.8f; b -= 0.25f; }  // Under-Biased: the deadzone is OPEN at Bias 0
         if (b < 0.0f)  kJ *= 1.0f + 6.0f * (-b);    // UNDER-BIAS: crossover spit — QUIET material distorts hardest (fb325 reach ×2)
         float dropo = 0.0f;
-        if (chr_ == 6)                              // Worn: oxide dropouts — the loop width AND the
-        {                                           //   level flicker on a slow walk (~0.15 s)
-            wornW_[c] += (rnd11 (c) - wornW_[c]) * 7.0e-5f;
-            kJ *= 1.0f + 0.85f * wornW_[c];
-            dropo = juce::jmax (0.0f, wornW_[c]) * 0.45f;
+        if (chr_ == 6)                              // Worn: oxide dropouts — an aperiodic target-hold
+        {                                           //   walk (fb325 grammar: shared motor, random hold,
+                                                    //   double smoothing). fb345: the old per-sample
+                                                    //   noise smoother had stdev ~0.003 — the flicker
+                                                    //   mathematically never happened (Worn ≡ Under-Bias
+                                                    //   twin, measured env stdev 0.000 dB over 6 s).
+            if (c == 0)
+            {
+                wornPh_ += (float) (0.5 / fs_);
+                if (wornPh_ >= wornNxt_)
+                { wornPh_ = 0.0f; wornTg_ = rnd11 (0); wornNxt_ = 0.04f + rnd01 (0) * 0.22f; }
+                wornW_[0] += (wornTg_ - wornW_[0]) * aTpDg_;    // ~40 ms double smoothing (reuse the coef)
+                wornW_[1] += (wornW_[0] - wornW_[1]) * aTpDg_;
+            }
+            kJ *= 1.0f + 0.85f * wornW_[1];
+            dropo = juce::jmax (0.0f, wornW_[1]) * 0.45f;
         }
         // Snarl = loop WIDTH, floored at 0.35 — harness-caught: mapping Snarl 0 straight to
         // c = 0.98 made the irreversible term ×0.02, i.e. THE HYSTERESIS LOOP WAS OFF at default
@@ -1569,7 +1706,7 @@ private:
         const float cJ = juce::jlimit (0.005f, 0.81f, std::sqrt (0.65f - 0.65f * pC_[7]) - 0.01f);
         // Sag on tape = program-coupled compression depth: sustained level collapses `a` (the loop
         // pins deeper), Recovery brings it back — tape's own slot on the family pair.
-        const float a = (Ms * t.am / (0.01f + 6.0f * drive01_)) / (1.0f + pC_[3] * 1.5f * 1.5f * sagV_[c]);
+        const float a = (Ms * t.am / (0.01f + 6.0f * dG)) / (1.0f + pC_[3] * 1.5f * 1.5f * sagV_[c]);
         // fb325 — HARNESS/EAR-CAUGHT ("crazy tape noise at Drive 0"): the pinning k does NOT scale
         // with `a`, so at Drive 0 the loop was still fat relative to the signal and the ×(0.6a)
         // output normalisation amplified its residue ~60×. Below the working region the loop width
@@ -1577,7 +1714,7 @@ private:
         kJ *= juce::jmin (1.0f, 2.5f / a);
         // H grows with drive too (§2.4c: the pre-gain sits OUTSIDE the drive→a mapping, so the top
         // of Drive corners the loop instead of only re-pinning it — and Slam pushes far past it).
-        float H = u * 5.0f * (1.0f + 2.0f * drive01_) * (1.0f - dropo);
+        float H = u * 5.0f * (1.0f + 2.0f * dG) * (1.0f - dropo);
         H = juce::jlimit (-8.0f * a, 8.0f * a, H);          // solver guard BEFORE the RK step (§2.3)
         const float T  = (float) (0.5 / fs_);
         const float Hd = (1.75f / T) * (H - tapeH1_[c]) - 0.75f * tapeHd_[c];   // α-transform, dα = 0.75
@@ -1593,7 +1730,7 @@ private:
         // level-dependence being paid for): small-signal unity at every drive, then an EXPLICIT
         // dB-domain earned-loudness makeup (+13 dB at the top). Harness-caught: tape self-limits
         // (§2.4 says so outright), so a linear makeup measured FLAT from Drive 50 → 100.
-        if (std::fabs (drive01_ - tpDrvP_) > 1.0e-4f) { tpDrvP_ = drive01_; tpMk_ = std::pow (10.0f, 0.90f * drive01_); }
+        if (std::fabs (dG - tpDrvP_) > 1.0e-4f) { tpDrvP_ = dG; tpMk_ = std::pow (10.0f, 0.90f * dG); }
         float y = M * (0.6f * a / Ms) * tpMk_;
         const float glHz = t.gl * ((b > 0.0f) ? (1.0f - 0.60f * b) : 1.0f);   // over-bias kills top end (fb325 reach)
         tapeGl_[c] += (y - tapeGl_[c]) * onePole2 (glHz);   // playhead gap loss
@@ -1703,7 +1840,9 @@ private:
         // now sits just above the diode ceiling, so sagging genuinely bites into the sound.
         const float rail = 2.4f * juce::jmax (t.vp, t.vn) * t.rail
                          * (1.0f - juce::jmin (0.93f,
-                              juce::jmax (pC_[3] * 1.5f, (chr_ == 7) ? 1.2f : 0.0f) * 1.25f * sagV_[c]));
+                              (pC_[3] * 1.5f + ((chr_ == 7) ? 1.2f : 0.0f)) * 1.25f * sagV_[c]));
+                              // fb345 — was jmax(knob, 1.2 floor): Starved 9V masked the knob's
+                              // first 80%. Additive = floor intact at 0, travel un-masked.
         d = rail * hardClipF (d / juce::jmax (0.03f, rail), 0.35f);
         d *= 1.0f + 2.2f * drive01_ + 1.6f * drive01_ * drive01_;   // fb325 — the clamped band earns level as
                                                              // the split eats the body (loudness must RISE)
@@ -1755,7 +1894,10 @@ private:
             odLpK_ = onePole2 (t.lp * (1.0f - 0.35f * drive01_));
         }
         const float dmax = juce::jmax (2.0e-4f, t.sr * 48000.0f / (2.0f * (float) fs_));  // BIBO floor 2e-4
-        const float rail = t.rail * (1.0f - juce::jmin (0.94f, juce::jmax (t.sg, pC_[3] * 1.5f) * 0.62f * sagV_[c]));
+        const float rail = t.rail * (1.0f - juce::jmin (0.94f, (t.sg + pC_[3] * 1.5f) * 0.62f * sagV_[c]));
+                         // fb345 — was jmax(t.sg, knob): Plexi's 0.9 floor MASKED the knob's first 60%
+                         // (measured bit-identical 0→0.5) and Dying Battery's 1.3 masked 87%. Additive
+                         // keeps the character floor at knob 0 and un-masks the whole travel.
         const float bdc  = ((biasE_ > 0.0f) ?  biasE_ * 0.5f  : 0.0f)   // Bias+ : DC at the shunt node
                          + juce::jmax (0.0f, drive01_ - 0.6f) * 0.30f;  // fb325: top of Drive keeps evolving (evens)
         const float bdz  = (biasE_ < 0.0f) ? -biasE_ * 0.25f : 0.0f;   // Bias− : class-B deadzone
@@ -2035,6 +2177,13 @@ private:
     /** The stateless curve core — domain map (Beyond) + bank morph. c < 0 = the DC reference. */
     float shaperCore (float v, int c) noexcept
     {
+        // fb345 — BIAS lives HERE in DOMAIN units (±0.7 of the curve at full knob). The old family
+        // vA injection was biasE_·dEff ≈ ±8 curve-domains ⇒ the read clamped to an edge CONSTANT
+        // and the DC blocker erased it — measured SILENT at both Bias extremes on all four modes
+        // (spec0-100 = 0.00). Inside the core, signal + DC-reference + viz stay consistent free.
+        // (Table 'Phase' rotates the frame with biasE_ instead — shaperF, exempt here.)
+        if (! (mode_ == Table && chr_ == 5))
+            v += biasE_ * 0.7f;
         // BEYOND (P7) — blend the OUTPUTS of neighbouring rules (§6.4). Harmonics: clamp is a HARD
         // law (Chebyshev explodes outside [-1,1]) except its 'Beyond' voicing, which reflects.
         float bey = (mode_ == Harmonics) ? ((chr_ == 7) ? 0.5f : 0.0f) : pC_[6];
@@ -2285,6 +2434,12 @@ private:
                     t[cell] = acc / (float) n;
                 }
             }
+            if (mode_ == Table && chr_ == 2)                       // fb345 — 'Mip' had NO DSP (measured
+            {   // byte-identical to 'Sweep'). Now the mip ladder, transfer edition: the frame's
+                // resolution FALLS as Morph rises — chunky staircase frames by the top of the knob.
+                const int hold = 2 + (int) (cvMor_ * 22.0f);
+                for (int cell = 0; cell <= kCK; ++cell) t[cell] = t[(cell / hold) * hold];
+            }
             // Table 'Half' + Shaper mode + the Sym pill: enforce ODD (zero DC, zero evens — §6.9)
             if (mode_ == Shaper || pill2_ || (mode_ == Table && chr_ == 4))
                 for (int cell = 0; cell <= kCK / 2; ++cell)
@@ -2494,14 +2649,32 @@ private:
                 }
                 else if (jit > 1.0e-4f) inc *= 1.0f + jit * rnd11 (c);       // P6 Jitter — per-sample grid instability
                 if (c == 1 && pC_[6] > 1.0e-4f) inc *= 1.0f + pC_[6] * 0.13f;// P7 Spread — 0 = byte-identical
-                holdPh_[c] += inc;
-                if (holdPh_[c] >= 1.0f) { holdPh_[c] -= (float) (int) holdPh_[c]; holdV_[c] = u; }
+                if (c == 1 && pC_[6] <= 1.0e-4f)
+                {   // fb345 — Spread 0 = ONE converter clock (real stereo ADC). The spread/jitter
+                    // GLIDE (even just the boot default 0.5 gliding away) skewed c1's clock and the
+                    // phase split persisted FOREVER — measured maxLR 0.51 on mono input at Spread 0.
+                    // R follows L's tick decision exactly; values stay per-channel (stereo intact).
+                    holdPh_[1] = holdPh_[0];
+                    if (digTk_) holdV_[1] = u;
+                }
+                else
+                {
+                    holdPh_[c] += inc;
+                    if (holdPh_[c] >= 1.0f) { holdPh_[c] -= (float) (int) holdPh_[c]; holdV_[c] = u; if (c == 0) digTk_ = true; }
+                    else if (c == 0) digTk_ = false;
+                }
                 if (mode_ == Downsample && chr_ == 5) holdV_[c] *= 0.9896f;  // Track&Hold — the cap LEAKS (τ≈2 ms):
                 u = holdV_[c];                                               //   every step becomes a tiny ramp, audibly analogue
                 if (mode_ == Downsample && chr_ == 7)          // Shatter — a second clock at φ = 1.618:
                 {                                              //   two inharmonic staircases beating
-                    hold2Ph_[c] += inc * 1.618f;
-                    if (hold2Ph_[c] >= 1.0f) { hold2Ph_[c] -= (float) (int) hold2Ph_[c]; hold2V_[c] = u; }
+                    if (c == 1 && pC_[6] <= 1.0e-4f)
+                    { hold2Ph_[1] = hold2Ph_[0]; if (digTk2_) hold2V_[1] = u; }   // fb345 — same one-clock law
+                    else
+                    {
+                        hold2Ph_[c] += inc * 1.618f;
+                        if (hold2Ph_[c] >= 1.0f) { hold2Ph_[c] -= (float) (int) hold2Ph_[c]; hold2V_[c] = u; if (c == 0) digTk2_ = true; }
+                        else if (c == 0) digTk2_ = false;
+                    }
                     u = 0.5f * (u + hold2V_[c]);
                 }
             }
@@ -2726,13 +2899,18 @@ private:
     float pT_[8] { 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.0f, 0.5f, 0.0f };
     float pC_[8] { 0.0f, 1.0f, 0.5f, 0.5f, 0.5f, 0.0f, 0.5f, 0.0f };
     float fbZ_[2] {};        // CLIP Feedback / DIODE Snarl / DIGITAL Feedback — recursion state
+    float fbDc_[2] {};       // fb345 — DIODE Snarl's coupling-cap state (AC-coupled loop)
     float punchZ_[2] {};     // CLIP Punch — transient follower state
     float slewZ_[2] {};      // Slew Clip / DIODE Slew — slope-limiter state
     float holdV_[2] {}, holdPh_[2] {};   // DIGITAL — ZOH held value + phase accumulator
+    bool  digTk_ = false, digTk2_ = false;   // fb345 — L's tick decisions (Spread-0 one-clock lock)
     float smZ_[2] {};        // DIGITAL — reconstruction LP state
     uint32_t rngC_[2] { 0x12345678u, 0x12345678u };   // per-channel xorshift — SAME seed ⇒ Spread 0 is byte-identical L/R
-    float drive01_ = 0.2f;   // raw knob (the DIODE falling-threshold law reads it)
+    float drive01_ = 0.2f;   // GLIDED 0..1 knob (fb345; the DIODE falling-threshold law reads it)
+    float drv01T_  = 0.2f;   // fb345 — its target (setDrive writes here)
     float dip_ = 1.0f;       // mode-switch wet dip (0 → 1 over ~15 ms)
+    int   chrPend_ = 0;      // fb345 — deferred char swap (lands at the dip bottom)
+    float dipT_ = 1.0f, dnDip_ = 0.98f;   // fb345 — fade-down arm + ~0.5 ms-τ coefficient
     float kneeE_ = 0.65f, biasE_ = 0.0f, asymE_ = 0.0f, zsGate_ = 0.0f;   // per-family resolved
     // fb323 — Character voicing state (per channel). Shared across modes where the modes can never
     // be active simultaneously (env40_ serves SlewClip Bounce, Diode2 Ratchet AND WestCoast Timbre
@@ -2745,6 +2923,7 @@ private:
     float env40_[2] {};      // shared slow envelope (Slew Bounce / D2 Ratchet / WC Timbre Sweep)
     float jWalk_[2] {};      // random-walk state (Warble clock / D2 Sputter gap)
     float slewLim_[2] {};    // Slew Clip 'Ring' — was-limiting flag
+    float ringA_[2] {};      // fb345 — Ring's deficit accumulator (exit overshoot charge)
     float prevU_[2] {};      // crossing detector (Mirror / Peak Hold)
     float hold2V_[2] {}, hold2Ph_[2] {};   // second clock (Shatter) / peak accumulator (Peak Hold)
     float errZ_[2] {};       // Bitcrush 'Shaped' — noise-shaping error feedback
@@ -2774,6 +2953,8 @@ private:
     float tubeIL0_ = 0.0f, tubeG1_ = 1.0f;
     float tapeM_[2] {}, tapeH1_[2] {}, tapeHd_[2] {}, tapeGl_[2] {}, wornW_[2] {};   // J-A state
     float tpDrvP_ = -1.0f, tpMk_ = 1.0f;              // tape earned-loudness makeup cache
+    float tpDrvG_ = -1.0f, aTpDg_ = 0.001f;           // fb345 — glided tape drive (-1 = snap on first use)
+    float wornPh_ = 0.0f, wornNxt_ = 0.05f, wornTg_ = 0.0f;   // fb345 — Worn walk (shared motor)
     float xfPhi_[2] {}, xfPhiP_[2] {}, xfB_[2] {}, xfEd_[2] {};   // transformer flux/induction state
     float xfEdK_ = 0.1f;                              // 4 kHz core-loss pole (set in prepare)
     float sbLp_[2] {}, sbTn_[2] {};                   // stomp band split + tone LP
