@@ -5555,6 +5555,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         // cadence, so the fb312 instant-attack peak-hold + JS rise/fall smoothing are unchanged.
         js << "window.__fxBloomRvb=" << SF(audioProcessor.getReverbBloom(), 3)
            << ";window.__fxBloomDly=" << SF(audioProcessor.getDelayBloom(), 3) << ";";
+        // fb350 — one bloom per POOLED delay, so every duplicate's echo timeline lights from ITS
+        // own wet instead of instance 1's. Same push, same cadence; five extra numbers per frame.
+        js << "window.__fxBloomDlyP=[";
+        for (int q = 0; q < ParameterIDs::kFxInstances - 1; ++q)
+            js << (q ? "," : "") << SF (audioProcessor.getDelayBloomPool (q), 3);
+        js << "];";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

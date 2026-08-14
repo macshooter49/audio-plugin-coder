@@ -700,6 +700,9 @@ public:
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
     float             getDelayBloom()  const noexcept { return dlyBloomViz_.load  (std::memory_order_relaxed); }  // fb296 — delay wet level 0..1 for the delay core viz
+    // fb350 — the SAME reading for pooled delay instance e (0 = Delay 2 … 4 = Delay 6).
+    float             getDelayBloomPool (int e) const noexcept
+    { return ((unsigned) e < (unsigned) kFxExtra) ? poolDlyBloomViz_[(size_t) e].load (std::memory_order_relaxed) : 0.0f; }
     // fb292 — Convolution USER IR loading: decode IN-MEMORY → SR-correct → trim leading silence → convolutionReverb.setUserIR.
     bool          loadConvIRFromMemory (const void* data, size_t size, const juce::String& name);  // drag-drop (base64 → bytes) — no disk
     bool          loadConvIRFromFile   (const juce::File& f);                                       // "Load IR…" file chooser
@@ -1562,6 +1565,12 @@ private:
     std::array<int,   (size_t) kFxExtra> poolDlyType_ {};    // active delay type per extra instance
     std::array<float, (size_t) kFxExtra> poolDlyEnv_  {};    // on/off fade env (click-free power)
     std::array<float, (size_t) kFxExtra> poolDstEnv_  {};
+    // fb350 — per-pooled-delay type-swap fade (mirrors instance 1's dlySwapping_) + its OWN viz bloom.
+    // The bloom is per instance because a duplicate's echo timeline must light from ITS audio; sharing
+    // instance 1's scalar made delay 2's taps flash to delay 1 and read as "linked".
+    std::array<bool,  (size_t) kFxExtra> poolDlySwap_ {};
+    std::array<float, (size_t) kFxExtra> poolDlyBloomEnv_ {};
+    std::array<std::atomic<float>, (size_t) kFxExtra> poolDlyBloomViz_ {};
     // ── the chain order. Rebuilt at the TOP of each processBlock from CACHED param pointers, so it
     //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
     //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).

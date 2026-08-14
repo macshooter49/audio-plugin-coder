@@ -4010,6 +4010,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // skips it), which is the "an empty slot costs exactly zero" law.
     for (auto& d : delayPool_) d.prepare (sampleRate);
     for (auto& d : distPool_)  d.prepare (sampleRate);
+    poolDlyType_.fill (-1);        // fb350 — -1 = "not adopted yet": the first block takes the param's
+                                   // type WITHOUT a swap fade (0 would false-match Digital and, worse,
+                                   // meant setType() was never called at all for a fresh slot).
     poolDlyType_.fill (-1);
     poolDstType_.fill (-1);
     poolDlyEnv_.fill (0.0f);
@@ -6733,6 +6736,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const float* dstSendL = distortionSendBuf_.getReadPointer (0);   // fb338 — distortion routed-osc send
     const float* dstSendR = distortionSendBuf_.getReadPointer (1);
     float dlyBlockWetPk = 0.0f;                                  // fb296 — peak wet this block → delay core viz
+    // fb350 — per-POOLED-instance wet peak. Each duplicate drives its OWN echo-timeline bloom;
+    // sharing instance 1's scalar made delay 2's taps flash to delay 1's audio, which reads as
+    // "they're linked" even when the DSP is fully independent.
+    float poolDlyPk[(size_t) kFxExtra] = { 0.0f };
     float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
@@ -7653,10 +7660,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         };   // fb307 — end applyDly
 
         // ════════ fb346 — THE POOLED INSTANCES (Delay 2..6, Distortion 2..6) ════════
-        // Extra instances are MAIN-SEND ONLY by design: they have no per-osc route pills, so they
-        // need no send bus of their own — which is precisely how they sidestep the fb305/fb338
-        // landmine (every send bus must join EVERY main-send exclusion sum, six lines across three
-        // blocks). Instance 1 of each device keeps its routing; duplicates are pure serial inserts.
+        // ⚠️ fb348 SUPERSEDED the original "main-send only" design described here: every pooled
+        // instance now reads its OWN route pills and owns its OWN send bus, so a delay on osc C
+        // cannot touch osc A. The fb305/fb338 exclusion landmine is handled by the single shared
+        // routed-dry bus (fb347), not by keeping duplicates off the send path.
+        // 🔑 THE POOL LAW (fb350, learned the hard way): a pooled instance must make EVERY per-block
+        // engine call instance 1 makes. The pool was missing DelayEngine::updateCoefficients() — the
+        // resolve that turns timeMs_ into the real delay-length target — so duplicates ran at ZERO
+        // delay length and their Time knob was dead. When you pool a device, diff its call set
+        // against instance 1's; a missing per-block resolve compiles clean and fails silently.
         // The source is the current chain signal minus the routed-osc dry, identical to instance 1's
         // main-send path — so a duplicate hears exactly what the original would hear in that slot.
         auto excludeRouted = [&] (float& sgL, float& sgR)
@@ -7675,14 +7687,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // fb348 — NO GLOBAL SEND: an instance with no route pills lit is SILENT. It no longer
             // falls back to processing the whole mix, which is what made a delay routed to osc C
             // audibly chew on osc A.
-            const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) e];
+            const bool powered = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) e];
             float& env = poolDlyEnv_[(size_t) e];
-            if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
+            if (! powered && env <= 1.0e-4f) return;              // unrouted / powered off ⇒ zero cost
             auto& eng = delayPool_[(size_t) e];
             if (i == 0)                                          // per-block setup (never per sample)
             {
-                const int ty = (int) R.type->load();
-                if (ty != poolDlyType_[(size_t) e]) { poolDlyType_[(size_t) e] = ty; eng.setType (ty); }
+                // fb350 — TYPE SWAP, mirroring instance 1: fade the wet to zero FIRST, then switch and
+                // reset. The old code switched instantly mid-tail, which both clicks (the no-clicks law)
+                // and leaves the previous type's buffer state ringing under the new one.
+                int ty = (int) R.type->load();
+                if (ty < 0 || ty > 3) ty = 0;
+                int&  cur      = poolDlyType_[(size_t) e];
+                bool& swapping = poolDlySwap_[(size_t) e];
+                if (cur < 0) { cur = ty; eng.setType (ty); }      // first block for this slot — adopt, no fade
+                if (ty != cur)
+                {
+                    swapping = true;
+                    if (env < 1.0e-3f) { cur = ty; eng.setType (ty); eng.reset(); swapping = false; }
+                }
+                else swapping = false;
                 const bool sync = R.sync->load() > 0.5f;
                 const int  sdiv = (int) R.syncdiv->load();
                 auto divMult = [] (int d) -> float {
@@ -7719,7 +7743,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 eng.setDucking  (R.duck->load());
                 eng.setPing     (R.ping->load() > 0.5f);
                 eng.setHQ       (R.hq->load()   > 0.5f);
+                // 🔑🔑 fb350 — THE MISSING PER-BLOCK RESOLVE. Every setter above only stores a value;
+                // updateCoefficients() is what turns timeMs_ into the actual delay-length target
+                // (delTgtL/R) and computes every filter/mod/duck coefficient. Instance 1 calls it
+                // (see applyDly), the pool NEVER did — so delTgtL stayed at its 0.0f default and a
+                // duplicate delay ran at ZERO delay length: Time and Sync Division did nothing at all,
+                // while Feedback/Mix still worked (those setters write their smoothed targets direct).
+                // That is exactly the bug Max hit: "the time knob doesn't work at all" on delay 2.
+                eng.updateCoefficients();
             }
+            const bool on = powered && ! poolDlySwap_[(size_t) e];   // fb350 — a swapping type fades out first
             env += ((on ? 1.0f : 0.0f) - env) * hallSm_;         // click-free power fade
             const float mixv = R.mix->load();
             const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
@@ -7733,6 +7766,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float duck = env * (1.0f - dry);
             leftChannel[i] += env * wet * dl - duck * sgL;       // Mix 100% ⇒ dry fully removed (law 4)
             if (rightChannel != nullptr) rightChannel[i] += env * wet * dr - duck * sgR;
+            const float wmagP = 0.5f * (std::abs (dl) + std::abs (dr)) * env;   // fb350 — its OWN bloom
+            if (wmagP > poolDlyPk[(size_t) e]) poolDlyPk[(size_t) e] = wmagP;
         };
 
         auto applyPoolDst = [&] (int e)
@@ -7817,6 +7852,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dlyBlockWetPk > dlyBloomEnv_)   dlyBloomEnv_ = dlyBlockWetPk;
             else                                dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * 0.05f;
             dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
+            // fb350 — same instant-attack / smoothed-fall shape, once per POOLED instance.
+            for (int q = 0; q < kFxExtra; ++q)
+            {
+                float& be = poolDlyBloomEnv_[(size_t) q];
+                if (poolDlyPk[(size_t) q] > be) be = poolDlyPk[(size_t) q];
+                else                            be += (poolDlyPk[(size_t) q] - be) * 0.05f;
+                poolDlyBloomViz_[(size_t) q].store (juce::jlimit (0.0f, 1.5f, be), std::memory_order_relaxed);
+            }
             // fb315 — distortion core viz. Same fb312 instant-attack / smoothed-fall shape, so the
             // curve's excursion glow lands on the same block as the audio instead of lagging it.
             if (dstBlockWetPk > dstBloomEnv_)   dstBloomEnv_ = dstBlockWetPk;
