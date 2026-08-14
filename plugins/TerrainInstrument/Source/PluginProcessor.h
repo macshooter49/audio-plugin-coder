@@ -1580,12 +1580,14 @@ private:
         std::atomic<float>* lowcut; std::atomic<float>* hicut; std::atomic<float>* spread;
         std::atomic<float>* width; std::atomic<float>* modrate; std::atomic<float>* moddepth;
         std::atomic<float>* wow; std::atomic<float>* duck; std::atomic<float>* sync;
-        std::atomic<float>* link; std::atomic<float>* ping; std::atomic<float>* hq; };
+        std::atomic<float>* link; std::atomic<float>* ping; std::atomic<float>* hq;
+        std::atomic<float>* src[6]; };   // fb348 — per-osc route pills (A,B,C,D,Sub,Noise)
     struct DstRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* qual;
         std::atomic<float>* drive; std::atomic<float>* sig; std::atomic<float>* tone;
         std::atomic<float>* mix; std::atomic<float>* autoP; std::atomic<float>* pill2;
-        std::atomic<float>* p[8]; };
+        std::atomic<float>* p[8];
+        std::atomic<float>* src[6]; };   // fb348 — per-osc route pills
     std::array<DlyRefs, (size_t) kFxExtra> dlyRefs_ {};
     std::array<DstRefs, (size_t) kFxExtra> dstRefs_ {};
     // instance-1 chain membership (the three shipped devices)
@@ -1625,6 +1627,13 @@ private:
     juce::AudioBuffer<float> routedDryBuf_;
     float exUnionG_[6] { 0, 0, 0, 0, 0, 0 };         // union route mask (A,B,C,D,Sub,Noise)
     bool  exUnionAny_ = false;
+    // ── fb348 — one send bus per POOLED instance (Delay 2..6 = 0..4, Distortion 2..6 = 5..9).
+    //    NO GLOBAL SEND any more (Max): a device affects ONLY what it is routed to, so a delay on
+    //    osc C can never touch osc A. An unrouted device is silent.
+    static constexpr int kPoolSendCount = 10;
+    std::array<juce::AudioBuffer<float>, (size_t) kPoolSendCount> poolSendBuf_;
+    std::array<bool,  (size_t) kPoolSendCount> poolRouteAny_ {};
+    std::array<float, (size_t) kPoolSendCount * 6> poolRouteG_ {};
     float dstG_[6] = { 0,0,0,0,0,0 };                // per-source distortion route gains (A,B,C,D,Sub,Noise)
     bool  dstRouteActive_ = false;                   // any distortion route enabled this block
     bool  dstMainSend_ = false;                      // power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)

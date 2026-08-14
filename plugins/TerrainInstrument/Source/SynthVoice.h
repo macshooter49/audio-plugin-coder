@@ -328,6 +328,8 @@ namespace tw
             sendFilterSlot5_.prepare (sr);   // fb338 — post-filter DISTORTION send (independent state)
             sendFilterSlot6_.prepare (sr);
             sendFilterSlot7_.prepare (sr);   // fb347 — shared exclusion-bus filter pair
+            poolFltSr_ = sr;                 // fb348 — pooled slots prepare themselves on first use
+            for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->prepare (sr); if (ps.flt2) ps.flt2->prepare (sr); }
             sendFilterSlot8_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
@@ -506,6 +508,7 @@ namespace tw
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
             sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
             sendFilterSlot7_.setType (static_cast<tw::filters::Type> (clamped));  // fb347 — exclusion mirror
+            for (auto& ps : poolSend_) if (ps.flt1) ps.flt1->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -522,6 +525,7 @@ namespace tw
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
             sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
             sendFilterSlot8_.setType (static_cast<tw::filters::Type> (clamped));   // fb347 — exclusion mirror
+            for (auto& ps : poolSend_) if (ps.flt2) ps.flt2->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
         void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
@@ -568,7 +572,8 @@ namespace tw
           sendFilterSlot_.setPoles (tap1); sendFilterSlot2_.setPoles (tap2);     // fb287 — send mirror
           sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2);     // fb296 — delay-send mirror
           sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2);
-          sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2); }  // fb347 — exclusion mirror
+          sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2);
+          for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->setPoles (tap1); if (ps.flt2) ps.flt2->setPoles (tap2); } }  // fb348 — pooled mirrors
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -1948,7 +1953,37 @@ namespace tw
         // single subtraction that is correct no matter how many devices share a source.
         // It also retires the fb305/fb338 landmine: there is no longer a per-bus sum that a newly
         // added device can forget to join.
+        // ════════ fb348 — POOLED INSTANCE SENDS (Delay 2..6, Distortion 2..6) ════════
+        // Max: "there is no global send — an effect only affects what it is routed to."
+        // Instance 1 of each device keeps its proven send path above; these are the extra
+        // instances, each with its OWN mask and bus so a delay on osc C can never touch osc A.
+        // The filter pair is heap-allocated ON DEMAND (message thread) the first time that
+        // instance is routed, so an unrouted instance costs nothing: eager members would be
+        // 10 extra FilterSlot PAIRS x 96 voices.
+        static constexpr int kPoolSends = 10;              // 5 delay + 5 distortion
+        void setPoolSendTarget (int s, float* L, float* R) noexcept
+        { if ((unsigned) s < kPoolSends) { poolSend_[s].L = L; poolSend_[s].R = R; } }
+        void setPoolSendRoutes (int s, const float* g6) noexcept
+        {
+            if ((unsigned) s >= kPoolSends) return;
+            auto& p = poolSend_[s];
+            float sum = 0.0f;
+            for (int k = 0; k < 6; ++k) { p.g[k] = g6[k]; sum += g6[k]; }
+            p.any = sum > 0.0f;
+        }
         void setExclusionSendTarget (float* L, float* R) noexcept { exSendL_ = L; exSendR_ = R; }
+        // Build a pooled slot's send-filter pair on first use. ⚠️ ALLOCATES — call from the message
+        // thread only (PluginProcessor does this in its per-block param scope, before render).
+        void ensurePoolFilters (int s)
+        {
+            if ((unsigned) s >= kPoolSends) return;
+            auto& p = poolSend_[s];
+            if (p.flt1 != nullptr) return;
+            p.flt1 = std::make_unique<tw::filters::FilterSlot>();
+            p.flt2 = std::make_unique<tw::filters::FilterSlot>();
+            p.flt1->prepare (poolFltSr_); p.flt2->prepare (poolFltSr_);
+            p.flt1->setType (sendFilterSlot_.getType()); p.flt2->setType (sendFilterSlot2_.getType());
+        }
         void setExclusionRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
         {
             exG_[0] = a; exG_[1] = b; exG_[2] = c; exG_[3] = d; exG_[4] = sub; exG_[5] = noise;
@@ -2038,6 +2073,18 @@ namespace tw
             float* xF2R = exSendActive ? exSendF2_.getWritePointer (1) : nullptr;
             float* xDryL = exSendActive ? exSendDry_.getWritePointer (0) : nullptr;
             float* xDryR = exSendActive ? exSendDry_.getWritePointer (1) : nullptr;
+            // fb348 — POOLED instance sends. Only slots that are BOTH routed and given a bus do any
+            // work; everything else costs one bool test per block.
+            bool  poolOn[kPoolSends] = {};
+            for (int ps = 0; ps < kPoolSends; ++ps)
+            {
+                auto& P = poolSend_[ps];
+                poolOn[ps] = (P.L != nullptr) && P.any && (P.flt1 != nullptr);
+                if (poolOn[ps] && (P.f1.getNumChannels() < 2 || P.f1.getNumSamples() < numSamples))
+                { P.f1.setSize (2, numSamples, false, true, true);
+                  P.f2.setSize (2, numSamples, false, true, true);
+                  P.dry.setSize (2, numSamples, false, true, true); }
+            }
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
             // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
@@ -4055,6 +4102,24 @@ namespace tw
                     xDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
                     xDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
                 }
+                // fb348 — pooled instance sends: identical per-osc split, each gated by ITS OWN mask.
+                // This is what makes "delay on C" untouchable by "delay on A".
+                for (int ps = 0; ps < kPoolSends; ++ps)
+                {
+                    if (! poolOn[ps]) continue;
+                    auto& P = poolSend_[ps];
+                    float* pF1L = P.f1.getWritePointer (0);  float* pF1R = P.f1.getWritePointer (1);
+                    float* pF2L = P.f2.getWritePointer (0);  float* pF2R = P.f2.getWritePointer (1);
+                    float* pDL  = P.dry.getWritePointer (0); float* pDR  = P.dry.getWritePointer (1);
+                    const float rAL = P.g[0]*oAL, rBL = P.g[1]*oBL, rCL = P.g[2]*oCL, rDL = P.g[3]*oDL, rSL = P.g[4]*subBL, rNL = P.g[5]*noiseAddL;
+                    const float rAR = P.g[0]*oAR, rBR = P.g[1]*oBR, rCR = P.g[2]*oCR, rDR = P.g[3]*oDR, rSR = P.g[4]*subBR, rNR = P.g[5]*noiseAddR;
+                    pF1L[i] = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
+                    pF1R[i] = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
+                    pF2L[i] = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
+                    pF2R[i] = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
+                    pDL[i]  = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
+                    pDR[i]  = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -4073,6 +4138,10 @@ namespace tw
                     if (dlySendActive) { dF1L[i]*=robinAmpL_; dF1R[i]*=robinAmpR_; dF2L[i]*=robinAmpL_; dF2R[i]*=robinAmpR_; dDryL[i]*=robinAmpL_; dDryR[i]*=robinAmpR_; }   // fb296 — delay send matches
                     if (dstSendActive) { tF1L[i]*=robinAmpL_; tF1R[i]*=robinAmpR_; tF2L[i]*=robinAmpL_; tF2R[i]*=robinAmpR_; tDryL[i]*=robinAmpL_; tDryR[i]*=robinAmpR_; }   // fb338 — distortion send matches
                     if (exSendActive)  { xF1L[i]*=robinAmpL_; xF1R[i]*=robinAmpR_; xF2L[i]*=robinAmpL_; xF2R[i]*=robinAmpR_; xDryL[i]*=robinAmpL_; xDryR[i]*=robinAmpR_; }   // fb347 — the exclusion MUST track the sends exactly, or the subtraction stops cancelling
+                    for (int ps = 0; ps < kPoolSends; ++ps) if (poolOn[ps]) { auto& P = poolSend_[ps];
+                        P.f1.getWritePointer(0)[i]*=robinAmpL_; P.f1.getWritePointer(1)[i]*=robinAmpR_;
+                        P.f2.getWritePointer(0)[i]*=robinAmpL_; P.f2.getWritePointer(1)[i]*=robinAmpR_;
+                        P.dry.getWritePointer(0)[i]*=robinAmpL_; P.dry.getWritePointer(1)[i]*=robinAmpR_; }   // fb348
                 }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -4088,6 +4157,10 @@ namespace tw
                     if (dlySendActive) { dF1L[i]*=sf; dF1R[i]*=sf; dF2L[i]*=sf; dF2R[i]*=sf; dDryL[i]*=sf; dDryR[i]*=sf; }   // fb296 — delay send fades too
                     if (dstSendActive) { tF1L[i]*=sf; tF1R[i]*=sf; tF2L[i]*=sf; tF2R[i]*=sf; tDryL[i]*=sf; tDryR[i]*=sf; }   // fb338 — distortion send fades too
                     if (exSendActive)  { xF1L[i]*=sf; xF1R[i]*=sf; xF2L[i]*=sf; xF2R[i]*=sf; xDryL[i]*=sf; xDryR[i]*=sf; }   // fb347 — exclusion fades identically
+                    for (int ps = 0; ps < kPoolSends; ++ps) if (poolOn[ps]) { auto& P = poolSend_[ps];
+                        P.f1.getWritePointer(0)[i]*=sf; P.f1.getWritePointer(1)[i]*=sf;
+                        P.f2.getWritePointer(0)[i]*=sf; P.f2.getWritePointer(1)[i]*=sf;
+                        P.dry.getWritePointer(0)[i]*=sf; P.dry.getWritePointer(1)[i]*=sf; }   // fb348
                     stealingFade_ *= stealingFadeStep_;
                 }
                 if (stealingFade_ < 0.001f)
@@ -4431,6 +4504,30 @@ namespace tw
                         {
                             exSendL_[oi] += xF1L[i] + xF2L[i] + xDryL[i];
                             exSendR_[oi] += xF1R[i] + xF2R[i] + xDryR[i];
+                        }
+                    }
+                    // fb348 — pooled instance sends, same post-filter treatment, each through its
+                    // OWN lazily-built filter pair (its mask differs from every other slot's).
+                    for (int ps = 0; ps < kPoolSends; ++ps)
+                    {
+                        if (! poolOn[ps]) continue;
+                        auto& P = poolSend_[ps];
+                        const int oi = startSample + i;
+                        const float f1l = P.f1.getReadPointer(0)[i], f1r = P.f1.getReadPointer(1)[i];
+                        const float f2l = P.f2.getReadPointer(0)[i], f2r = P.f2.getReadPointer(1)[i];
+                        const float dl_ = P.dry.getReadPointer(0)[i], dr_ = P.dry.getReadPointer(1)[i];
+                        if (a1 || a2)
+                        {
+                            P.flt1->setParams (lastCutHz1_, res1, drvSm1_, sr);
+                            P.flt2->setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            float soL, soR; filterBuses (f1l, f1r, f2l, f2r, soL, soR, *P.flt1, *P.flt2);
+                            P.L[oi] += soL + dl_;
+                            P.R[oi] += soR + dr_;
+                        }
+                        else
+                        {
+                            P.L[oi] += f1l + f2l + dl_;
+                            P.R[oi] += f1r + f2r + dr_;
                         }
                     }
                 }
@@ -4893,6 +4990,18 @@ namespace tw
         float*                  dstSendR_ = nullptr;
         float                   dstG_[6] = { 0, 0, 0, 0, 0, 0 };
         bool                    dstAny_ = false;
+        // fb348 — one send slot per POOLED instance. Buffers and the filter pair are allocated only
+        // when that instance is actually routed, so unrouted slots cost ~nothing.
+        struct PoolSend
+        {
+            float* L = nullptr; float* R = nullptr;
+            float  g[6] { 0, 0, 0, 0, 0, 0 };
+            bool   any = false;
+            juce::AudioBuffer<float> f1, f2, dry;
+            std::unique_ptr<tw::filters::FilterSlot> flt1, flt2;   // lazy — see ensurePoolFilters()
+        };
+        PoolSend poolSend_[kPoolSends];
+        double   poolFltSr_ = 44100.0;
         // fb347 — the SHARED routed-dry exclusion bus (union of every device mask, each osc once).
         juce::AudioBuffer<float> exSendF1_, exSendF2_, exSendDry_;
         float*                  exSendL_ = nullptr;

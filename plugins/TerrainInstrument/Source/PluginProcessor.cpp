@@ -3869,6 +3869,8 @@ void TerrainInstrumentAudioProcessor::cacheFxInstanceParams()
         d.mix=R(p+"MIX"); d.lowcut=R(p+"LOWCUT"); d.hicut=R(p+"HICUT"); d.spread=R(p+"SPREAD");
         d.width=R(p+"WIDTH"); d.modrate=R(p+"MODRATE"); d.moddepth=R(p+"MODDEPTH"); d.wow=R(p+"WOW");
         d.duck=R(p+"DUCK"); d.sync=R(p+"SYNC"); d.link=R(p+"LINK"); d.ping=R(p+"PING"); d.hq=R(p+"HQ");
+        { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
+          for (int k = 0; k < 6; ++k) d.src[k] = R (p + sfx[k]); }   // fb348
 
         const juce::String s = "SYN_DST" + juce::String (e + 2) + "_";
         auto& t = dstRefs_[(size_t) e];
@@ -3877,6 +3879,8 @@ void TerrainInstrumentAudioProcessor::cacheFxInstanceParams()
         t.drive=R(s+"DRIVE"); t.sig=R(s+"SIG"); t.tone=R(s+"TONE"); t.mix=R(s+"MIX");
         t.autoP=R(s+"AUTO"); t.pill2=R(s+"PILL2");
         for (int k = 0; k < 8; ++k) t.p[k] = R (s + "P" + juce::String (k + 1));
+        { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
+          for (int k = 0; k < 6; ++k) t.src[k] = R (s + sfx[k]); }   // fb348
     }
 }
 
@@ -6086,12 +6090,42 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // An osc counts ONCE here no matter how many devices route it. Route gains are binary
     // (:6036/:6054/:6075 all read `> 0.5f ? 1 : 0`), so OR-ing them is exact — there is no
     // partial-fade case to average. This is the mask that fixes the double-subtract.
+    // fb348 — read EVERY pooled instance's route pills. This is what was missing: the pills
+    // rendered on duplicate cards but nothing read them, so those instances silently fell back to
+    // main-send and processed the WHOLE mix — "my delay on osc C is affecting osc A".
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        const auto& dR = dlyRefs_[(size_t) e];
+        const auto& tR = dstRefs_[(size_t) e];
+        float ds = 0.0f, ts = 0.0f;
+        for (int k = 0; k < 6; ++k)
+        {
+            const float dg = (dR.src[k] != nullptr && dR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            const float tg = (tR.src[k] != nullptr && tR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteG_[(size_t) (e * 6 + k)]                  = dg; ds += dg;
+            poolRouteG_[(size_t) ((kFxExtra + e) * 6 + k)]     = tg; ts += tg;
+        }
+        poolRouteAny_[(size_t) e]              = ds > 0.0f;
+        poolRouteAny_[(size_t) (kFxExtra + e)] = ts > 0.0f;
+    }
+
     exUnionAny_ = false;
     for (int s = 0; s < 6; ++s)
     {
-        const bool routed = (hallRvbG_[s] > 0.0f) || (dlyG_[s] > 0.0f) || (dstG_[s] > 0.0f);
+        bool routed = (hallRvbG_[s] > 0.0f) || (dlyG_[s] > 0.0f) || (dstG_[s] > 0.0f);
+        for (int q = 0; q < kPoolSendCount && ! routed; ++q)         // fb348 — pooled masks join the union
+            if (poolRouteAny_[(size_t) q] && poolRouteG_[(size_t) (q * 6 + s)] > 0.0f) routed = true;
         exUnionG_[s] = routed ? 1.0f : 0.0f;
         exUnionAny_ = exUnionAny_ || routed;
+    }
+    for (int q = 0; q < kPoolSendCount; ++q)                          // per-instance send buses
+    {
+        auto& b = poolSendBuf_[(size_t) q];
+        if (poolRouteAny_[(size_t) q])
+        {
+            if (b.getNumSamples() < numSamples) b.setSize (2, numSamples, false, true, true);
+            b.clear (0, numSamples);
+        }
     }
     if (routedDryBuf_.getNumSamples() < numSamples)
         routedDryBuf_.setSize (2, numSamples, false, true, true);
@@ -6116,6 +6150,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setExclusionRoutes (exUnionG_[0], exUnionG_[1], exUnionG_[2], exUnionG_[3], exUnionG_[4], exUnionG_[5]);
                 sv->setExclusionSendTarget (exUnionAny_ ? routedDryBuf_.getWritePointer (0) : nullptr,
                                             exUnionAny_ ? routedDryBuf_.getWritePointer (1) : nullptr);
+                // fb348 — every POOLED instance gets its own mask + its own bus, so its wet can only
+                // ever contain the oscs it is routed to. Filters are built on demand (message thread).
+                for (int q = 0; q < kPoolSendCount; ++q)
+                {
+                    const bool on = poolRouteAny_[(size_t) q];
+                    if (on) sv->ensurePoolFilters (q);
+                    sv->setPoolSendRoutes (q, &poolRouteG_[(size_t) (q * 6)]);
+                    sv->setPoolSendTarget (q, on ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr,
+                                              on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr);
+                }
             }
     }
 
@@ -7142,7 +7186,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
             }
             else rvbSwapping_ = false;
-            hallEnvT_ = (hallPower_ && ! rvbSwapping_) ? 1.0f : 0.0f;   // fb303 — reverb runs on POWER (main-send or per-osc)
+            // fb348 — NO GLOBAL SEND (Max): a device affects ONLY what it is routed to. Power alone
+            // is no longer enough — with no route pills lit the device is silent, which is what
+            // stops one instance bleeding onto oscs another instance owns.
+            hallEnvT_ = (hallPower_ && hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallPower_)
             {
                 if (activeRvbType_ == 8)
@@ -7439,7 +7486,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (dlyEnv_ < 1.0e-3f) { activeDlyType_ = dpend; delayEngine.reset(); dlySwapping_ = false; }
             }
             else dlySwapping_ = false;
-            dlyEnvT_ = (dlyPower_ && ! dlySwapping_) ? 1.0f : 0.0f;   // fb303 — delay runs on POWER (main-send or per-osc)
+            dlyEnvT_ = (dlyPower_ && dlyRouteActive_ && ! dlySwapping_) ? 1.0f : 0.0f;   // fb348 — routed or silent
             if (dlyPower_)
             {
                 // Resolve delay TIME — synced to a note division, or free ms from the Time knob.
@@ -7510,7 +7557,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // ════════ fb315 — DISTORTION setup (block-rate, i==0) ════════
         if (i == 0)
         {
-            dstEnvT_ = dstPower_ ? 1.0f : 0.0f;          // on/off FADE (never a hard cut)
+            dstEnvT_ = (dstPower_ && dstRouteActive_) ? 1.0f : 0.0f;   // fb348 — routed or silent (was: power alone ⇒ main send)
             if (dstPower_)
             {
                 distortionEngine.setMode      ((int) *rawParam (ParameterIDs::SYN_DST_TYPE));
@@ -7625,9 +7672,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             auto& R = dlyRefs_[(size_t) e];
             if (R.power == nullptr) return;
-            const bool on = R.power->load() > 0.5f;
+            // fb348 — NO GLOBAL SEND: an instance with no route pills lit is SILENT. It no longer
+            // falls back to processing the whole mix, which is what made a delay routed to osc C
+            // audibly chew on osc A.
+            const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) e];
             float& env = poolDlyEnv_[(size_t) e];
-            if (! on && env <= 1.0e-4f) return;                  // powered off and faded out ⇒ zero cost
+            if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
             auto& eng = delayPool_[(size_t) e];
             if (i == 0)                                          // per-block setup (never per sample)
             {
@@ -7674,7 +7724,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float mixv = R.mix->load();
             const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
             const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
-            float sgL, sgR; excludeRouted (sgL, sgR);
+            // fb348 — the instance's OWN routed bus: only the oscs its pills select.
+            const float* pL = poolSendBuf_[(size_t) e].getReadPointer (0);
+            const float* pR = poolSendBuf_[(size_t) e].getReadPointer (1);
+            const float sgL = pL[i] * outputGain * kVoiceToFxPad;
+            const float sgR = pR[i] * outputGain * kVoiceToFxPad;
             float dl, dr; eng.processSample (sgL, sgR, dl, dr);
             const float duck = env * (1.0f - dry);
             leftChannel[i] += env * wet * dl - duck * sgL;       // Mix 100% ⇒ dry fully removed (law 4)
@@ -7685,9 +7739,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             auto& R = dstRefs_[(size_t) e];
             if (R.power == nullptr) return;
-            const bool on = R.power->load() > 0.5f;
+            // fb348 — NO GLOBAL SEND: unrouted ⇒ silent (never the whole mix).
+            const bool on = (R.power->load() > 0.5f) && poolRouteAny_[(size_t) (kFxExtra + e)];
             float& env = poolDstEnv_[(size_t) e];
-            if (! on && env <= 1.0e-4f) return;                  // powered off and faded out ⇒ zero cost
+            if (! on && env <= 1.0e-4f) return;                  // unrouted / powered off ⇒ zero cost
             auto& eng = distPool_[(size_t) e];
             if (i == 0)
             {
@@ -7705,7 +7760,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int k = 0; k < 8; ++k) eng.setP (k, R.p[k]->load());
             }
             env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
-            float sgL, sgR; excludeRouted (sgL, sgR);
+            const float* pL = poolSendBuf_[(size_t) (kFxExtra + e)].getReadPointer (0);
+            const float* pR = poolSendBuf_[(size_t) (kFxExtra + e)].getReadPointer (1);
+            const float sgL = pL[i] * outputGain * kVoiceToFxPad;   // fb348 — its OWN routed oscs
+            const float sgR = pR[i] * outputGain * kVoiceToFxPad;
             float wl, wr; eng.processSample (sgL, sgR, wl, wr);
             // fb318 ENV-GATED REPLACE: the engine returns the FINISHED signal (its own Mix applied),
             // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
@@ -9397,6 +9455,53 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         p.setProperty ("value", 1.0f, nullptr);
                         newState.appendChild (p, nullptr);
                     }
+            }
+
+            // ── fb348 migration: THE GLOBAL SEND IS GONE.
+            // Until now, a POWERED device with no route pills lit meant "main send" — it processed
+            // the whole mix. That is exactly what let one instance bleed onto oscs another instance
+            // owned, so it was removed: a device now affects ONLY what it is routed to. But that
+            // would silently mute every existing project whose effects relied on the main send, so
+            // any powered-with-no-routes device is migrated to ALL SIX sources — the same audible
+            // result it had before, now stated explicitly.
+            {
+                struct DevMig { const char* power; const char* src[6]; };
+                const DevMig migs[3] = {
+                    { ParameterIDs::SYN_RVB_POWER, { ParameterIDs::SYN_RVB_SRC_A, ParameterIDs::SYN_RVB_SRC_B,
+                        ParameterIDs::SYN_RVB_SRC_C, ParameterIDs::SYN_RVB_SRC_D, ParameterIDs::SYN_RVB_SRC_SUB, ParameterIDs::SYN_RVB_SRC_NOISE } },
+                    { ParameterIDs::SYN_DLY_POWER, { ParameterIDs::SYN_DLY_SRC_A, ParameterIDs::SYN_DLY_SRC_B,
+                        ParameterIDs::SYN_DLY_SRC_C, ParameterIDs::SYN_DLY_SRC_D, ParameterIDs::SYN_DLY_SRC_SUB, ParameterIDs::SYN_DLY_SRC_NOISE } },
+                    { ParameterIDs::SYN_DST_POWER, { ParameterIDs::SYN_DST_SRC_A, ParameterIDs::SYN_DST_SRC_B,
+                        ParameterIDs::SYN_DST_SRC_C, ParameterIDs::SYN_DST_SRC_D, ParameterIDs::SYN_DST_SRC_SUB, ParameterIDs::SYN_DST_SRC_NOISE } } };
+                auto findVal = [&newState] (const char* id, float& out) -> bool {
+                    for (int c = 0; c < newState.getNumChildren(); ++c)
+                    {
+                        auto ch = newState.getChild (c);
+                        if (ch.hasType ("PARAM") && ch.getProperty ("id").toString() == id)
+                        { out = (float) ch.getProperty ("value"); return true; }
+                    }
+                    return false; };
+                for (const auto& m : migs)
+                {
+                    float pv = 0.0f;
+                    if (! findVal (m.power, pv) || pv <= 0.5f) continue;   // not powered ⇒ nothing to preserve
+                    bool anyRoute = false;
+                    for (auto* sid : m.src) { float v = 0.0f; if (findVal (sid, v) && v > 0.5f) { anyRoute = true; break; } }
+                    if (anyRoute) continue;                                 // already explicit ⇒ leave alone
+                    for (auto* sid : m.src)
+                    {
+                        bool set = false;
+                        for (int c = 0; c < newState.getNumChildren(); ++c)
+                        {
+                            auto ch = newState.getChild (c);
+                            if (ch.hasType ("PARAM") && ch.getProperty ("id").toString() == sid)
+                            { ch.setProperty ("value", 1.0f, nullptr); set = true; break; }
+                        }
+                        if (! set)
+                        { juce::ValueTree p ("PARAM"); p.setProperty ("id", sid, nullptr);
+                          p.setProperty ("value", 1.0f, nullptr); newState.appendChild (p, nullptr); }
+                    }
+                }
             }
 
             // rs6 migration (cleanup sweep): FRACTURE was a RESERVED no-op defaulting to 0.5; it is
