@@ -1562,9 +1562,38 @@ private:
     std::array<int,   (size_t) kFxExtra> poolDlyType_ {};    // active delay type per extra instance
     std::array<float, (size_t) kFxExtra> poolDlyEnv_  {};    // on/off fade env (click-free power)
     std::array<float, (size_t) kFxExtra> poolDstEnv_  {};
+    // ── the chain order. Rebuilt at the TOP of each processBlock from CACHED param pointers, so it
+    //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
+    //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).
     struct ChainEntry { int kind; int inst; float rank; };   // kind: 0=Reverb 1=Delay 2=Distortion
-    std::vector<ChainEntry> chainOrder_;                     // rebuilt per block from _ACTIVE/_RANK
-    void rebuildChainOrder();                                // sorts by rank; message/audio-safe (no alloc after reserve)
+    static constexpr int kChainMax = 1 + 2 * ParameterIDs::kFxInstances;
+    std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
+    int chainCount_ = 0;
+    void rebuildChainOrder() noexcept;                       // audio-thread safe (cached pointers only)
+
+    // ── cached parameter pointers for the pooled instances (resolved once in prepareToPlay, where
+    //    building juce::Strings is legal). The audio thread NEVER builds an ID string.
+    struct DlyRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* syncdiv;
+        std::atomic<float>* syncdivR; std::atomic<float>* time; std::atomic<float>* timeR;
+        std::atomic<float>* fb; std::atomic<float>* tone; std::atomic<float>* mix;
+        std::atomic<float>* lowcut; std::atomic<float>* hicut; std::atomic<float>* spread;
+        std::atomic<float>* width; std::atomic<float>* modrate; std::atomic<float>* moddepth;
+        std::atomic<float>* wow; std::atomic<float>* duck; std::atomic<float>* sync;
+        std::atomic<float>* link; std::atomic<float>* ping; std::atomic<float>* hq; };
+    struct DstRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* qual;
+        std::atomic<float>* drive; std::atomic<float>* sig; std::atomic<float>* tone;
+        std::atomic<float>* mix; std::atomic<float>* autoP; std::atomic<float>* pill2;
+        std::atomic<float>* p[8]; };
+    std::array<DlyRefs, (size_t) kFxExtra> dlyRefs_ {};
+    std::array<DstRefs, (size_t) kFxExtra> dstRefs_ {};
+    // instance-1 chain membership (the three shipped devices)
+    std::atomic<float> *rvbActive_ = nullptr, *rvbRank_ = nullptr;
+    std::atomic<float> *dlyActive_ = nullptr, *dlyRank_ = nullptr;
+    std::atomic<float> *dstActive_ = nullptr, *dstRank_ = nullptr;
+    void cacheFxInstanceParams();                            // message thread (builds ID strings)
+    std::array<int, (size_t) kFxExtra> poolDstType_ {};       // active distortion mode per extra instance
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
     bool  dlyRouteActive_ = false;                  // any delay route enabled this block (PILLS ⇒ per-osc send)

@@ -7256,6 +7256,21 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-add{ flex:0 0 110px; align-self:stretch; border:1px dashed var(--border-strong); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text-muted); cursor:pointer; transition:.15s; }
         #syn-panel .fxr-add:hover{ border-color:var(--purple-400); color:var(--purple-400); }
         #syn-panel .fxr-plus{ font-size:24px; font-weight:200; line-height:.7; }
+        /* fb346 — THE EMPTY RACK. A fresh instance has no devices, so the dashed panel FILLS the whole
+           row (flex:1) with the + and the label dead-centre — Max: "the dotted line should fill that
+           empty space … centered and symmetrical". Same dashed/hover grammar as .fxr-add so the two
+           read as one family; the + is an SVG (text glyphs miss the centerline, fb275). */
+        /* the rack is normally CONTENT-sized so the chain scrolls; when it holds only the empty
+           panel it must STRETCH instead, or flex:1 on the child has nothing to fill and the dashed
+           box collapses to ~136px (measured). Modifier class, so the populated case is untouched. */
+        #syn-panel .fxr-rack.fxr-blank{ flex:1 1 auto; min-width:0; }
+        #syn-panel .fxr-empty{ flex:1 1 auto; align-self:stretch; min-width:0; border:1px dashed var(--border-strong);
+          border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:9px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+        #syn-panel .fxr-empty:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+        #syn-panel .fxr-empty .fxr-eplus{ width:30px; height:30px; display:grid; place-items:center; }
+        #syn-panel .fxr-empty .fxr-eplus svg{ width:30px; height:30px; display:block; }
+        #syn-panel .fxr-empty .fxr-t{ font-size:10px; letter-spacing:.06em; font-weight:300; }
         #syn-panel .fxr-add .fxr-t{ font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.4; font-weight:300; }
         #syn-panel .fxr-dev.fxr-drag{ opacity:.85; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:5; }
         /* fb275 — FX device BACK PANEL (OFFICIAL): + flips → header stays, below → 2 real dropdowns + 8-knob 4×2 grid + 3 column separators. +/← swaps color only (box is shared with ×, so it never moves). */
@@ -7476,7 +7491,11 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                +'<path class="dst-curve" d=""/></svg>';
             }
           };
-          var DEVS=[
+          // fb346 — DEV_TEMPLATES: one descriptor per DEVICE TYPE. The live chain (DEVS, below) is
+          // built from CLONES of these, so the rack can hold several of the same device. Instance 1
+          // keeps the historical SYN_RVB_*/SYN_DLY_*/SYN_DST_* IDs untouched (every preset still
+          // loads); instances 2..6 get their IDs rewritten to the SYN_DLY2_* / SYN_DST2_* pool.
+          var DEV_TEMPLATES=[
             {name:'Reverb',core:'reverb',type:'Hall',types:['Hall','Room','Plate','Spring','Digital','Vintage','Basin','Shimmer','Convolution'],preset:'Cave',code:'rt 2.4s',on:false,pwrP:'SYN_RVB_POWER',tp:'SYN_RVB_TYPE',rp:['SYN_RVB_SRC_A','SYN_RVB_SRC_B','SYN_RVB_SRC_C','SYN_RVB_SRC_D','SYN_RVB_SRC_SUB','SYN_RVB_SRC_NOISE'],
              pills:[{t:'Mod',on:true},{t:'Freeze',on:false}],pp:['SYN_RVB_MOD','SYN_RVB_FREEZE'],route:[0,0,0,0,0,0],knobs:[{l:'Size',v:30,p:'SYN_RVB_SIZE'},{l:'Decay',v:55,p:'SYN_RVB_DECAY'},{l:'Tone',v:50,p:'SYN_RVB_TONE'},{l:'Mix',v:35,p:'SYN_RVB_MIX'}],
              back:{d1:{k:'Character',v:'Smooth',opts:['Smooth','Random','Vintage','Cathedral','Chamber','Dark','Bright','Ethereal'],p:'SYN_RVB_CHARACTER'},d2:{k:'Mod Mode',v:'Lush',opts:['Off','Subtle','Lush','Chorale','Random','Chaos'],p:'SYN_RVB_MODMODE'},knobs:[['Pre-Delay',10,'SYN_RVB_PREDELAY'],['Diffusion',70,'SYN_RVB_DIFFUSE'],['Mod Depth',25,'SYN_RVB_MODDEPTH'],['Mod Rate',30,'SYN_RVB_MODRATE'],['High Damping',35,'SYN_RVB_HIDAMP'],['Low Decay',50,'SYN_RVB_LOWDECAY'],['Low Cut',0,'SYN_RVB_LOWCUT'],['Width',80,'SYN_RVB_WIDTH']]}},
@@ -7503,6 +7522,78 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                    knobs:[['Low Cut',0,'SYN_DST_P1'],['Hi Cut',100,'SYN_DST_P2'],['Emphasis',50,'SYN_DST_P3'],['Width',50,'SYN_DST_P4'],
                           ['Bias',50,'SYN_DST_P5'],['Gap',0,'SYN_DST_P6'],['Punch',50,'SYN_DST_P7'],['Feedback',0,'SYN_DST_P8']]}}
           ];
+          // ═══ fb346 — THE DYNAMIC CHAIN (UI side) ═══════════════════════════════════════════════
+          // DEVS is now the LIVE chain, not a fixed list: built from the _ACTIVE/_RANK params on
+          // load, and mutated by the + menu / × / drag. It starts EMPTY — a fresh instance shows the
+          // "Add Effects" panel (Max's spec), and the C++ side skips any device that is not active.
+          var DEVS=[];
+          var FX_PREFIX={reverb:'SYN_RVB_',delay:'SYN_DLY_',saturate:'SYN_DST_'};
+          var FX_MAXINST={reverb:1,delay:6,saturate:6};   // reverb = 1 for now: that device is SIX
+                                                          // engines (Space/Hall/Digital/Basin/Shimmer/
+                                                          // Convolution); its pool lands with lazy alloc.
+          // Rewrites every param ID in a cloned descriptor from SYN_DLY_* to SYN_DLY<inst>_*.
+          function instPrefix(core,inst){ var b=FX_PREFIX[core]; return inst<=1?b:b.slice(0,-1)+inst+'_'; }
+          function reIdDeep(o,base,pre){
+            if(o==null) return o;
+            if(typeof o==='string') return (o.indexOf(base)===0)?(pre+o.slice(base.length)):o;
+            if(Object.prototype.toString.call(o)==='[object Array]'){
+              for(var i=0;i<o.length;i++) o[i]=reIdDeep(o[i],base,pre); return o; }
+            if(typeof o==='object'){ for(var k in o) if(Object.prototype.hasOwnProperty.call(o,k))
+              o[k]=reIdDeep(o[k],base,pre); return o; }
+            return o;
+          }
+          function makeInst(core,inst){
+            var t=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core===core) t=DEV_TEMPLATES[i];
+            if(!t) return null;
+            var c=JSON.parse(JSON.stringify(t));            // deep clone: instances never share state
+            var base=FX_PREFIX[core], pre=instPrefix(core,inst);
+            if(pre!==base) reIdDeep(c,base,pre);
+            c.inst=inst; c.pfx=pre;
+            c.actP=pre+'ACTIVE'; c.rankP=pre+'RANK';
+            return c;
+          }
+          // Rewrite every device's RANK so the stored order matches the on-screen order. Ranks are
+          // floats precisely so this never renumbers a fixed-cardinality choice (the fb342 trap that
+          // made the old 6-way SYN_FX_ORDER a dead end).
+          function fxPushRanks(){
+            for(var i=0;i<DEVS.length;i++){
+              var r=(i+1)/(DEVS.length+1);
+              DEVS[i].rank=r;
+              try{ window.__setSynParam(DEVS[i].rankP, r); }catch(e){}
+            }
+          }
+          function fxAdd(core){
+            var used={}; for(var i=0;i<DEVS.length;i++) if(DEVS[i].core===core) used[DEVS[i].inst]=1;
+            var inst=0; for(var n=1;n<=(FX_MAXINST[core]||1);n++) if(!used[n]){ inst=n; break; }
+            if(!inst){ try{ if(window.__tiToast) window.__tiToast('Max '+(FX_MAXINST[core]||1)+' × '+core); }catch(e){} return; }
+            var d=makeInst(core,inst); if(!d) return;
+            DEVS.push(d);
+            try{ window.__setSynParam(d.actP,1); }catch(e){}
+            // an explicitly ADDED device powers ON — the user asked for it, so it must be audible.
+            try{ if(d.pwrP) window.__setSynParam(d.pwrP,1); }catch(e){} d.on=true;
+            fxPushRanks(); render();
+          }
+          function fxRemove(idx){
+            var d=DEVS[idx]; if(!d) return;
+            try{ window.__setSynParam(d.actP,0); }catch(e){}      // out of the chain
+            try{ if(d.pwrP) window.__setSynParam(d.pwrP,0); }catch(e){}  // and silent (no ghost effect)
+            DEVS.splice(idx,1); fxPushRanks(); render();
+          }
+          // The + menu — reuses the shared purple glass (__synShowMenu), which already clamps so a
+          // menu opened at the BOTTOM of the plugin flips up instead of being cut off (Max's ask).
+          function fxAddMenu(x,y){
+            var rows=[];
+            for(var i=0;i<DEV_TEMPLATES.length;i++){
+              (function(t){
+                var used=0; for(var q=0;q<DEVS.length;q++) if(DEVS[q].core===t.core) used++;
+                var full=used>=(FX_MAXINST[t.core]||1);
+                rows.push({label:t.name+(full?'  (max)':(used?'  ×'+used:'')),white:!full,
+                           onPick:function(){ if(!full) fxAdd(t.core); }});
+              })(DEV_TEMPLATES[i]);
+            }
+            try{ if(window.__synShowMenu) window.__synShowMenu('Add effect',rows,x,y); }catch(e){}
+          }
+          window.__fxAdd=fxAdd; window.__fxAddMenu=fxAddMenu;
           var RLBL=['A','B','C','D','S','N'];
           // fb281 — TYPE-AWARE reverb back panel. Same 8 APVTS slots per type, relabeled + own Character/2nd
           // dropdown. Room repurposes Mod Rate→Reflections & Mod Mode→Shape (matches the RoomReverb mapping).
@@ -7700,7 +7791,16 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
               +'</div></div>';
           }
+          // fb346 — the + glyph at empty-rack size. SVG, centred at (15,15) like every other header
+          // glyph, so it sits exactly on the panel's centre in both axes.
+          var IC_BIGPLUS='<svg viewBox="0 0 30 30" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><line x1="15" y1="5" x2="15" y2="25"/><line x1="5" y1="15" x2="25" y2="15"/></svg>';
           function render(){ try{
+            rack.classList.toggle('fxr-blank', !DEVS.length);   // stretch the rack only when empty
+            if(!DEVS.length){   // EMPTY RACK — the dashed panel fills the row, + and label centred
+              rack.innerHTML='<div class="fxr-empty" data-act="add"><span class="fxr-eplus">'+IC_BIGPLUS
+                            +'</span><span class="fxr-t">Add Effects</span></div>';
+              return;
+            }
             var h=DEVS.map(devHTML).join('');
             h+='<div class="fxr-add" data-act="add"><span class="fxr-plus">+</span><span class="fxr-t">Add effect</span></div>';
             rack.innerHTML=h;
@@ -7985,11 +8085,39 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               if(moved) reRenderKeepSwap();
             }catch(e){} }).catch(function(){});
           }catch(e){} }
-          render();
-          fxrRestoreReverb();
-          fxrRestoreDelay();
-          fxrRestoreDistortion();   // fb319
-          fxrRestoreOrder();
+          // fb346 — REBUILD THE CHAIN FROM THE PARAMS. The rack is dynamic now, so the card list is
+          // no longer a constant: every instance's _ACTIVE says whether it is in the chain and _RANK
+          // says where. A fresh instance has none active ⇒ the empty "Add Effects" panel renders.
+          // (State-persists law: the UI reads its state back from the params, never from hardcoded
+          // defaults — otherwise a reopen shows defaults while the DSP holds the restored values.)
+          function fxrRestoreChain(){ try{
+            var g=NFX('getSynParam');
+            if(!g){ render(); return; }
+            var cores=['reverb','delay','saturate'], meta=[], jobs=[];
+            for(var ci=0;ci<cores.length;ci++){
+              var core=cores[ci], mx=FX_MAXINST[core]||1;
+              for(var n=1;n<=mx;n++){
+                var pre=instPrefix(core,n);
+                meta.push({core:core,inst:n});
+                jobs.push(Promise.resolve(g(pre+'ACTIVE')));
+                jobs.push(Promise.resolve(g(pre+'RANK')));
+              }
+            }
+            Promise.all(jobs).then(function(vals){ try{
+              var out=[];
+              for(var m=0;m<meta.length;m++){
+                if(+vals[m*2] > 0.5){
+                  var d=makeInst(meta[m].core,meta[m].inst);
+                  if(d){ d.rank=+vals[m*2+1]; out.push(d); }
+                }
+              }
+              out.sort(function(a,b){ return a.rank-b.rank; });
+              DEVS=out; render();
+              fxrRestoreReverb(); fxrRestoreDelay(); fxrRestoreDistortion();
+            }catch(e){} }).catch(function(){ try{ render(); }catch(_){} });
+          }catch(e){ try{ render(); }catch(_){} } }
+          render();                 // paint immediately (empty panel) so the rack is never blank…
+          fxrRestoreChain();        // …then reconcile against the real params when they arrive
           // fb280/fb312 — AUDIO-REACTIVE BLOOM, LIVE: rAF-poll the reverb wet level (getReverbBloom, now
           // instant-attack in C++). Gamma-lifted response + instant rise / smooth fall in JS — the purple
           // lands on the SAME frame as the audio (no trailing smoothing), falls with the tail.
@@ -8221,10 +8349,16 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           rack.addEventListener('click',function(e){ try{
             var dev=e.target.closest('.fxr-dev'), act=e.target.closest('[data-act]');
             if(act){ var a=act.getAttribute('data-act');
-              if(a==='add'){ flash(act); return; }
+              if(a==='add'){ flash(act);   // fb346 — the + is LIVE: the shared purple menu (it clamps,
+                             //   so a menu opened at the bottom of the plugin flips up, never cut off)
+                             var rb=act.getBoundingClientRect();
+                             fxAddMenu(rb.left+rb.width*0.5, rb.top+rb.height*0.5); return; }
               if(!dev) return; var idx=+dev.getAttribute('data-dev');
               if(a==='pwr'){ DEVS[idx].on=!DEVS[idx].on; dev.classList.toggle('fxr-off',!DEVS[idx].on); if(DEVS[idx].pwrP) window.__setSynParam(DEVS[idx].pwrP, DEVS[idx].on?1:0); return; }   /* fb287 — power OFF fully bypasses the device + disables its routing (gates the DSP, not just the visual) */
-              if(a==='x'){ DEVS.splice(idx,1); render(); return; }
+              // fb346 — × removes the device from the CHAIN (clears _ACTIVE) and powers it down.
+              // The old code only spliced the card out of the UI array, so the engine kept running:
+              // a deleted-but-powered effect stayed audible with no card to turn it off.
+              if(a==='x'){ fxRemove(idx); return; }
               if(a==='swap'){ dev.classList.toggle('swapped'); act.classList.toggle('act'); return; }   /* fb274 — + flips the device to the back panel (header stays) */
               /* fb275 — type is now a native <select> dropdown (handled in the 'change' listener below); no more click-to-rotate */
               if(a==='preset'){ if(DEVS[idx]&&(DEVS[idx].core==='reverb'||DEVS[idx].core==='delay'||DEVS[idx].core==='saturate')) openRvbPreset(dev,idx,act); return; }   /* fb292/fb296/fb342 — reuse the .pmenu preset menu (reverb + delay + distortion — the gate was THE bug: the pill rendered but 'saturate' fell through) */
@@ -8313,13 +8447,20 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             function up(){ try{
               document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); dev.classList.remove('fxr-drag');
               var order=[].map.call(rack.querySelectorAll('.fxr-dev'),function(n){return DEVS[+n.getAttribute('data-dev')];});
-              DEVS=order; render();
-              // fb341 — bridge the drag to the FULL 6-way serial permutation (norm = idx/5; table = the C++ choice order)
+              DEVS=order;
+              // fb346 — the drag now writes FLOAT RANKS, one per device, instead of the retired 6-way
+              // SYN_FX_ORDER choice. That param could only ever describe 3! = 6 arrangements of exactly
+              // three devices and could never grow (choice cardinality is frozen at birth, fb342).
+              // Ranks have no cardinality, so any number of devices reorder freely — and re-sorting a
+              // list can't renumber a stored index, which is what keeps the reorder click-free.
+              fxPushRanks(); render();
+              // Keep SYN_FX_ORDER in sync WHILE the chain is still exactly the three legacy devices, so
+              // a project saved now and opened on an older build restores the same order.
               var seq=[]; for(var q=0;q<DEVS.length;q++){ var c3=DEVS[q]&&DEVS[q].core;
-                if(c3==='reverb'||c3==='delay'||c3==='saturate') seq.push(c3); }
+                if(DEVS[q].inst===1&&(c3==='reverb'||c3==='delay'||c3==='saturate')) seq.push(c3); }
               var PERMS=[['reverb','delay','saturate'],['reverb','saturate','delay'],['saturate','reverb','delay'],
                          ['saturate','delay','reverb'],['delay','saturate','reverb'],['delay','reverb','saturate']];
-              for(var pi=0;pi<6;pi++){ if(seq.length===3&&seq[0]===PERMS[pi][0]&&seq[1]===PERMS[pi][1]&&seq[2]===PERMS[pi][2]){
+              for(var pi=0;pi<6;pi++){ if(seq.length===3&&DEVS.length===3&&seq[0]===PERMS[pi][0]&&seq[1]===PERMS[pi][1]&&seq[2]===PERMS[pi][2]){
                 window.__setSynParam('SYN_FX_ORDER', pi/5); break; } }
             }catch(_){} }
             document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up);
@@ -29910,7 +30051,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb345';   // fb345 = PHASE G CERTIFICATION (solo sweep, all 23 modes + 66 presets): char-switch deferred fade + state re-seat (Xfmr pk 50.4 explosion killed) · tape drive glide (yank blast +21.7 dBFS -> steady) · Worn oxide walk real (was mathematically dead) · sag masks additive (OD/Stomp knobs un-masked) · ADAA character-blind fix (chars survive High/Ultra) + F-cache param key (Knee-turn crackle 16.6x -> floor) · drive01_ glided · GRID-LEAK BIAS on CLIP/DIODE/FOLD (env-tracked — the DC-latch silence class killed; 5 dead presets revived) + SHAPER bias domain-side · ALL feedback loops AC-coupled (Fuzz Face cap; Snarl screams instead of latching) + squared release gate · Duty/Ring/Stereo/Mip re-voiced (were twins/no-ops) · SineFold Rebound phase-warp · DIGITAL one-clock law (Spread 0 = bit-identical restored) · P6 Bias=50 boot push on family SHAPER (ShAsym/Table quiet-boot trap). // fb344 = THE auval SIGBUS FIX (P1, shipped broken since fb122): FlowDrift::process writes a 2D lane-major buffer (numLanes*numSamples floats) but processBlock passed an 8-float stack array — silent stack corruption every Robin-active block, guard-page SIGBUS at 4096-frame renders (auval). Fix: nullptr outLanes + drift.value(i) per-lane finals (also fixes the silent data bug: driftLane_ was fed lane 0's early samples). // fb343 = CARD LIKE WATER + THE CLONE FIX: (1) graduated SVG halo trio replaces the double drop-shadow filter on the curve card + rack core (measured 5.55->0.81ms/frame at card size — the filter re-rastered on EVERY d mutation; same purple read, A/B-matched), (2) popped crv card rides the 60Hz C++ timer push (fb232 LFO grammar; was a 66ms/15Hz self-poll = the choppy Drive/Asym mirror; self-poll demoted to 500ms fallback), (3) fb236-pattern blob relay via dstPtVersion_ -> __crvXApply both surfaces (<=56ms ink mirror; 150ms crvXWin poll = idle reconcile only), (4) drag hygiene: heroPos rect cached per gesture (was one forced layout PER MOVE), rAF-coalesced mvP/mvT/bars/Morph-rail (>60Hz devices doubled work), write-gated occ/live attrs (idle = zero style-recalcs), (5) OSC CLONE FIXED: getOscLfoWave was MAIN-LIST-ONLY -> in the popped card the Wavetable->Curve seed was a never-settling silent no-op (fb90 class again) — now on both lists + law-⑤ watchdog toast + fb331 force (seed sets SIG=bank/3 so the seeded ink IS the sound; LFO clone toasts on undrawn shapes instead of silent no-op), (6) Table source pills: 'Gen'->'Stock', word-width .srcs slots (13px fixed slot made Gen bleed into A). // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
+  var TERRAIN_BUILD = 'fb346';   // fb346 = THE DYNAMIC CHAIN: the rack boots EMPTY (dashed "Add Effects" panel fills the row) and the + button is LIVE — the shared purple menu (clamped, so it flips up at the bottom of the plugin instead of being cut off) adds any device, MULTIPLE INSTANCES included (Delay ×6, Distortion ×6 from a pre-allocated pool; Reverb ×1 until its 6-engine stack gets lazy alloc). × removes the device from the chain AND powers it down (the old × only spliced the card, leaving a ghost effect running with no card to stop it). 🔑 CHAIN ORDER IS NOW A FLOAT _RANK per device, not the 6-way SYN_FX_ORDER choice — choice cardinality is frozen at birth (fb342), which is exactly why the old param could never describe a 4th device; ranks have no cardinality, so any number of devices reorder freely and the drag re-sorts a list instead of renumbering a stored index. Instance 1 keeps the historical SYN_RVB_*/SYN_DLY_*/SYN_DST_* IDs so all 66 factory presets load byte-identically; instances 2..6 are SYN_DLY2_*/SYN_DST2_* etc, pre-allocated at startup because JUCE/VST3/AU cache the param list at load and params can NEVER be born at runtime (the + CLAIMS an instance, it never creates one — Serum does the same trick with its LFOs 7-10). Extra instances are MAIN-SEND ONLY (no per-osc route pills), which is how they sidestep the fb305/fb338 landmine: every send bus must join EVERY main-send exclusion sum (PluginProcessor.cpp 7159/7161, 7326/7328, 7358/7360 — three blocks, SIX lines; only the L lines carry the comment). Pre-fb346 sessions are migrated in setStateInformation (absent _ACTIVE == the old fixed 3-device rack) so no existing project loses its effects. // fb345 = PHASE G CERTIFICATION (solo sweep, all 23 modes + 66 presets): char-switch deferred fade + state re-seat (Xfmr pk 50.4 explosion killed) · tape drive glide (yank blast +21.7 dBFS -> steady) · Worn oxide walk real (was mathematically dead) · sag masks additive (OD/Stomp knobs un-masked) · ADAA character-blind fix (chars survive High/Ultra) + F-cache param key (Knee-turn crackle 16.6x -> floor) · drive01_ glided · GRID-LEAK BIAS on CLIP/DIODE/FOLD (env-tracked — the DC-latch silence class killed; 5 dead presets revived) + SHAPER bias domain-side · ALL feedback loops AC-coupled (Fuzz Face cap; Snarl screams instead of latching) + squared release gate · Duty/Ring/Stereo/Mip re-voiced (were twins/no-ops) · SineFold Rebound phase-warp · DIGITAL one-clock law (Spread 0 = bit-identical restored) · P6 Bias=50 boot push on family SHAPER (ShAsym/Table quiet-boot trap). // fb344 = THE auval SIGBUS FIX (P1, shipped broken since fb122): FlowDrift::process writes a 2D lane-major buffer (numLanes*numSamples floats) but processBlock passed an 8-float stack array — silent stack corruption every Robin-active block, guard-page SIGBUS at 4096-frame renders (auval). Fix: nullptr outLanes + drift.value(i) per-lane finals (also fixes the silent data bug: driftLane_ was fed lane 0's early samples). // fb343 = CARD LIKE WATER + THE CLONE FIX: (1) graduated SVG halo trio replaces the double drop-shadow filter on the curve card + rack core (measured 5.55->0.81ms/frame at card size — the filter re-rastered on EVERY d mutation; same purple read, A/B-matched), (2) popped crv card rides the 60Hz C++ timer push (fb232 LFO grammar; was a 66ms/15Hz self-poll = the choppy Drive/Asym mirror; self-poll demoted to 500ms fallback), (3) fb236-pattern blob relay via dstPtVersion_ -> __crvXApply both surfaces (<=56ms ink mirror; 150ms crvXWin poll = idle reconcile only), (4) drag hygiene: heroPos rect cached per gesture (was one forced layout PER MOVE), rAF-coalesced mvP/mvT/bars/Morph-rail (>60Hz devices doubled work), write-gated occ/live attrs (idle = zero style-recalcs), (5) OSC CLONE FIXED: getOscLfoWave was MAIN-LIST-ONLY -> in the popped card the Wavetable->Curve seed was a never-settling silent no-op (fb90 class again) — now on both lists + law-⑤ watchdog toast + fb331 force (seed sets SIG=bank/3 so the seeded ink IS the sound; LFO clone toasts on undrawn shapes instead of silent no-op), (6) Table source pills: 'Gen'->'Stock', word-width .srcs slots (13px fixed slot made Gen bleed into A). // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;

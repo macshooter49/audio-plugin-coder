@@ -3569,9 +3569,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 juce::ParameterID { rankId, 1 }, juce::String (nm) + " Chain Rank",
                 juce::NormalisableRange<float>(0.0f, 1.0f), rankDef));
         };
-        addChainSlot (ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK, "Reverb",     true, 0.10f);
-        addChainSlot (ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK, "Delay",      true, 0.20f);
-        addChainSlot (ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK, "Distortion", true, 0.30f);
+        // 🔑 DEFAULT = NOT IN THE CHAIN. Max's spec: "whenever I open up Terrain … I should see a big
+        // plus button" — a fresh instance boots with an EMPTY rack. Pre-fb346 sessions are migrated in
+        // setStateInformation (they predate these params, so absence == "the old 3-device rack").
+        addChainSlot (ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK, "Reverb",     false, 0.10f);
+        addChainSlot (ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK, "Delay",      false, 0.20f);
+        addChainSlot (ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK, "Distortion", false, 0.30f);
 
         // ── Instances 2..kFxInstances. Delay and Distortion pool first because each is ONE engine
         //    object; the Reverb device is SIX (Space/Hall/Digital/Basin/Shimmer/Convolution) and gets
@@ -3846,35 +3849,93 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 }
 
 //==============================================================================
-// ════════ fb346 — THE DYNAMIC CHAIN ORDER ════════
-// Builds the ordered list of devices that are IN the chain, sorted by their float _RANK.
-// ⚠️ MESSAGE THREAD ONLY — it builds juce::Strings and may grow the vector. processBlock reads
-// chainOrder_ but never rebuilds it; the UI calls this after any add / delete / drag-reorder.
-// Rank is a float precisely so this list has no fixed cardinality: the old 6-way SYN_FX_ORDER
-// choice param could never describe a 4th device (choice cardinality is frozen at birth, fb342).
-void TerrainInstrumentAudioProcessor::rebuildChainOrder()
+// ════════ fb346 — THE DYNAMIC CHAIN ════════
+// Resolve every pooled instance's parameter pointers ONCE. Building juce::Strings is legal here
+// (message thread, prepareToPlay); it is NOT legal in processBlock, which is exactly why the audio
+// thread only ever dereferences these cached pointers.
+void TerrainInstrumentAudioProcessor::cacheFxInstanceParams()
 {
-    chainOrder_.clear();
-    auto add = [&] (int kind, int inst, const juce::String& activeId, const juce::String& rankId)
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    rvbActive_ = R (ParameterIDs::SYN_RVB_ACTIVE); rvbRank_ = R (ParameterIDs::SYN_RVB_RANK);
+    dlyActive_ = R (ParameterIDs::SYN_DLY_ACTIVE); dlyRank_ = R (ParameterIDs::SYN_DLY_RANK);
+    dstActive_ = R (ParameterIDs::SYN_DST_ACTIVE); dstRank_ = R (ParameterIDs::SYN_DST_RANK);
+    for (int e = 0; e < kFxExtra; ++e)
     {
-        auto* a = apvts.getRawParameterValue (activeId);
-        if (a == nullptr || a->load() <= 0.5f) return;               // not in the chain — skipped entirely
-        auto* r = apvts.getRawParameterValue (rankId);
-        chainOrder_.push_back ({ kind, inst, r != nullptr ? r->load() : 0.5f });
-    };
-    add (0, 1, ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_RVB_RANK);
-    add (1, 1, ParameterIDs::SYN_DLY_ACTIVE, ParameterIDs::SYN_DLY_RANK);
-    add (2, 1, ParameterIDs::SYN_DST_ACTIVE, ParameterIDs::SYN_DST_RANK);
-    for (int n = 2; n <= ParameterIDs::kFxInstances; ++n)
-    {
-        const juce::String dp = "SYN_DLY" + juce::String (n) + "_";
-        const juce::String sp = "SYN_DST" + juce::String (n) + "_";
-        add (1, n, dp + "ACTIVE", dp + "RANK");
-        add (2, n, sp + "ACTIVE", sp + "RANK");
+        const juce::String p = "SYN_DLY" + juce::String (e + 2) + "_";
+        auto& d = dlyRefs_[(size_t) e];
+        d.active=R(p+"ACTIVE"); d.rank=R(p+"RANK"); d.power=R(p+"POWER");
+        d.type=R(p+"TYPE"); d.chr=R(p+"CHARACTER"); d.syncdiv=R(p+"SYNCDIV"); d.syncdivR=R(p+"SYNCDIV_R");
+        d.time=R(p+"TIME"); d.timeR=R(p+"TIME_R"); d.fb=R(p+"FEEDBACK"); d.tone=R(p+"TONE");
+        d.mix=R(p+"MIX"); d.lowcut=R(p+"LOWCUT"); d.hicut=R(p+"HICUT"); d.spread=R(p+"SPREAD");
+        d.width=R(p+"WIDTH"); d.modrate=R(p+"MODRATE"); d.moddepth=R(p+"MODDEPTH"); d.wow=R(p+"WOW");
+        d.duck=R(p+"DUCK"); d.sync=R(p+"SYNC"); d.link=R(p+"LINK"); d.ping=R(p+"PING"); d.hq=R(p+"HQ");
+
+        const juce::String s = "SYN_DST" + juce::String (e + 2) + "_";
+        auto& t = dstRefs_[(size_t) e];
+        t.active=R(s+"ACTIVE"); t.rank=R(s+"RANK"); t.power=R(s+"POWER");
+        t.type=R(s+"TYPE"); t.chr=R(s+"CHARACTER"); t.qual=R(s+"QUALITY");
+        t.drive=R(s+"DRIVE"); t.sig=R(s+"SIG"); t.tone=R(s+"TONE"); t.mix=R(s+"MIX");
+        t.autoP=R(s+"AUTO"); t.pill2=R(s+"PILL2");
+        for (int k = 0; k < 8; ++k) t.p[k] = R (s + "P" + juce::String (k + 1));
     }
-    // stable_sort so two devices sharing a rank keep a deterministic order (no audible reshuffle).
-    std::stable_sort (chainOrder_.begin(), chainOrder_.end(),
-                      [] (const ChainEntry& a, const ChainEntry& b) { return a.rank < b.rank; });
+}
+
+// Build the ordered list of devices that are IN the chain, sorted by float _RANK.
+// Audio-thread safe: fixed array, cached pointers, no allocation, no strings.
+// 🔑 Rank is a FLOAT precisely so this list has no fixed cardinality — the old 6-way SYN_FX_ORDER
+// choice param could never describe a 4th device (choice cardinality is frozen at birth, fb342).
+void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
+{
+    chainCount_ = 0;
+    auto add = [this] (int kind, int inst, std::atomic<float>* a, std::atomic<float>* r) noexcept
+    {
+        if (a == nullptr || a->load() <= 0.5f) return;        // not in the chain — never runs
+        if (chainCount_ >= kChainMax) return;
+        chainOrder_[(size_t) chainCount_++] = { kind, inst, r != nullptr ? r->load() : 0.5f };
+    };
+    // ── LEGACY ORDER MIGRATION (stateless, no flag to persist or get out of sync):
+    // while the three shipped devices still carry their DEFAULT ranks, the old SYN_FX_ORDER
+    // permutation is what decides their order, so every pre-fb346 session restores byte-identically.
+    // The moment the user drags anything, the ranks stop being default and fxPerm_ is ignored forever.
+    float r0 = rvbRank_ != nullptr ? rvbRank_->load() : 0.10f;
+    float r1 = dlyRank_ != nullptr ? dlyRank_->load() : 0.20f;
+    float r2 = dstRank_ != nullptr ? dstRank_->load() : 0.30f;
+    const bool legacyRanks = std::abs (r0 - 0.10f) < 1.0e-6f
+                          && std::abs (r1 - 0.20f) < 1.0e-6f
+                          && std::abs (r2 - 0.30f) < 1.0e-6f;
+    if (legacyRanks)
+    {
+        // fxPerm_ index → (reverb, delay, distortion) positions, matching the retired switch exactly.
+        static constexpr int kPerm[6][3] = { {0,1,2}, {0,2,1}, {1,2,0}, {2,1,0}, {2,0,1}, {1,0,2} };
+        const int pi = juce::jlimit (0, 5, fxPerm_);
+        r0 = 0.10f + 0.10f * (float) kPerm[pi][0];
+        r1 = 0.10f + 0.10f * (float) kPerm[pi][1];
+        r2 = 0.10f + 0.10f * (float) kPerm[pi][2];
+    }
+    auto addFixed = [this] (int kind, std::atomic<float>* a, float rank) noexcept
+    {
+        if (a == nullptr || a->load() <= 0.5f) return;
+        if (chainCount_ >= kChainMax) return;
+        chainOrder_[(size_t) chainCount_++] = { kind, 1, rank };
+    };
+    addFixed (0, rvbActive_, r0);
+    addFixed (1, dlyActive_, r1);
+    addFixed (2, dstActive_, r2);
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        add (1, e + 2, dlyRefs_[(size_t) e].active, dlyRefs_[(size_t) e].rank);
+        add (2, e + 2, dstRefs_[(size_t) e].active, dstRefs_[(size_t) e].rank);
+    }
+    // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
+    // tie can never reshuffle audibly between blocks).
+    for (int i = 1; i < chainCount_; ++i)
+    {
+        const ChainEntry key = chainOrder_[(size_t) i];
+        int j = i - 1;
+        while (j >= 0 && chainOrder_[(size_t) j].rank > key.rank)
+        { chainOrder_[(size_t) (j + 1)] = chainOrder_[(size_t) j]; --j; }
+        chainOrder_[(size_t) (j + 1)] = key;
+    }
 }
 
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
@@ -3946,9 +4007,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& d : delayPool_) d.prepare (sampleRate);
     for (auto& d : distPool_)  d.prepare (sampleRate);
     poolDlyType_.fill (-1);
+    poolDstType_.fill (-1);
     poolDlyEnv_.fill (0.0f);
     poolDstEnv_.fill (0.0f);
-    chainOrder_.reserve ((size_t) ParameterIDs::kFxInstances * 3 + 4);   // reserve once — never allocates in processBlock
+    cacheFxInstanceParams();   // resolve every pooled instance's param pointers ONCE (strings legal here)
     rebuildChainOrder();
     activeDlyType_ = -1; dlySwapping_ = false;
     activeRvbType_ = -1; rvbSwapping_ = false;
@@ -6001,6 +6063,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     dlyRouteActive_ = (dlyG_[0] + dlyG_[1] + dlyG_[2] + dlyG_[3] + dlyG_[4] + dlyG_[5]) > 0.0f;
     dlyMainSend_ = dlyPower_ && ! dlyRouteActive_;   // fb303 — power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)
     fxPerm_ = juce::jlimit (0, 5, (int) rawParam (ParameterIDs::SYN_FX_ORDER)->load());   // fb341 — choice INDEX (the AudioParameterChoice law: raw = index)
+    rebuildChainOrder();   // fb346 — once per block: sort the ACTIVE devices by float _RANK. Audio-thread
+                           // safe (cached pointers, fixed array, no alloc). The UI only writes params;
+                           // the next block simply reads them, so add/delete/reorder need no handshake.
     // fb315/fb338 — DISTORTION: power gates everything (same law as reverb/delay); per-osc route
     // resolution = the third parallel send bus (mirrors the delay's exactly).
     dstPower_ = rawParam (ParameterIDs::SYN_DST_POWER)->load() > 0.5f;
@@ -7516,6 +7581,119 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         };   // fb307 — end applyDly
 
+        // ════════ fb346 — THE POOLED INSTANCES (Delay 2..6, Distortion 2..6) ════════
+        // Extra instances are MAIN-SEND ONLY by design: they have no per-osc route pills, so they
+        // need no send bus of their own — which is precisely how they sidestep the fb305/fb338
+        // landmine (every send bus must join EVERY main-send exclusion sum, six lines across three
+        // blocks). Instance 1 of each device keeps its routing; duplicates are pure serial inserts.
+        // The source is the current chain signal minus the routed-osc dry, identical to instance 1's
+        // main-send path — so a duplicate hears exactly what the original would hear in that slot.
+        auto excludeRouted = [&] (float& sgL, float& sgR)
+        {
+            const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)
+                              + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+            sgL = leftChannel[i] - rtdL;
+            if (rightChannel != nullptr)
+            {
+                const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)
+                                  + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad;
+                sgR = rightChannel[i] - rtdR;
+            }
+            else sgR = sgL;
+        };
+
+        auto applyPoolDly = [&] (int e)
+        {
+            auto& R = dlyRefs_[(size_t) e];
+            if (R.power == nullptr) return;
+            const bool on = R.power->load() > 0.5f;
+            float& env = poolDlyEnv_[(size_t) e];
+            if (! on && env <= 1.0e-4f) return;                  // powered off and faded out ⇒ zero cost
+            auto& eng = delayPool_[(size_t) e];
+            if (i == 0)                                          // per-block setup (never per sample)
+            {
+                const int ty = (int) R.type->load();
+                if (ty != poolDlyType_[(size_t) e]) { poolDlyType_[(size_t) e] = ty; eng.setType (ty); }
+                const bool sync = R.sync->load() > 0.5f;
+                const int  sdiv = (int) R.syncdiv->load();
+                auto divMult = [] (int d) -> float {
+                    switch (d) { case 1: return 16.0f;  case 2: return 8.0f;   case 3: return 4.0f;
+                                 case 4: return 2.0f;   case 5: return 3.0f;   case 6: return 2.0f*2.0f/3.0f;
+                                 case 7: return 1.0f;   case 8: return 1.5f;   case 9: return 1.0f*2.0f/3.0f;
+                                 case 10:return 0.5f;   case 11:return 0.75f;  case 12:return 0.5f*2.0f/3.0f;
+                                 case 13:return 0.25f;  case 14:return 0.375f; case 15:return 0.25f*2.0f/3.0f;
+                                 case 16:return 0.125f; case 17:return 0.0625f;case 18:return 0.03125f;
+                                 case 19:return 0.015625f; } return 0.5f; };
+                float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+                const float qms = 60000.0f / bpmNow;
+                const float timeMs = (sync && sdiv > 0) ? qms * divMult (sdiv)
+                                                        : std::pow (8000.0f, R.time->load());
+                eng.setCharacter ((int) R.chr->load());
+                eng.setTimeMs    (timeMs);
+                const bool lk = R.link->load() > 0.5f;
+                eng.setLink (lk);
+                if (! lk)
+                {
+                    const int sdR = (int) R.syncdivR->load();
+                    eng.setTimeMsR ((sync && sdR > 0) ? qms * divMult (sdR)
+                                                      : std::pow (8000.0f, R.timeR->load()));
+                }
+                eng.setFeedback (R.fb->load() * 1.2f);
+                eng.setTone     (R.tone->load());
+                eng.setLowCutHz (20.0f   * std::pow (50.0f, R.lowcut->load()));
+                eng.setHiCutHz  (1200.0f * std::pow (15.0f, R.hicut->load()));
+                eng.setSpread   (R.spread->load());
+                eng.setWidth    (R.width->load() * 1.6f);
+                eng.setModRate  (0.05f + R.modrate->load() * 7.95f);
+                eng.setModDepth (R.moddepth->load());
+                eng.setWow      (R.wow->load());
+                eng.setDucking  (R.duck->load());
+                eng.setPing     (R.ping->load() > 0.5f);
+                eng.setHQ       (R.hq->load()   > 0.5f);
+            }
+            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;         // click-free power fade
+            const float mixv = R.mix->load();
+            const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+            const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+            float sgL, sgR; excludeRouted (sgL, sgR);
+            float dl, dr; eng.processSample (sgL, sgR, dl, dr);
+            const float duck = env * (1.0f - dry);
+            leftChannel[i] += env * wet * dl - duck * sgL;       // Mix 100% ⇒ dry fully removed (law 4)
+            if (rightChannel != nullptr) rightChannel[i] += env * wet * dr - duck * sgR;
+        };
+
+        auto applyPoolDst = [&] (int e)
+        {
+            auto& R = dstRefs_[(size_t) e];
+            if (R.power == nullptr) return;
+            const bool on = R.power->load() > 0.5f;
+            float& env = poolDstEnv_[(size_t) e];
+            if (! on && env <= 1.0e-4f) return;                  // powered off and faded out ⇒ zero cost
+            auto& eng = distPool_[(size_t) e];
+            if (i == 0)
+            {
+                const int ty = (int) R.type->load();
+                if (ty != poolDstType_[(size_t) e]) { poolDstType_[(size_t) e] = ty; eng.setMode (ty); }
+                eng.setCharacter ((int) R.chr->load());
+                eng.setQuality   ((int) R.qual->load());
+                eng.setAuto      (R.autoP->load() > 0.5f);
+                eng.setPill2     (R.pill2->load() > 0.5f);
+                eng.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
+                eng.setDrive     (R.drive->load());
+                eng.setKnee      (R.sig->load());     // "Knee" is the SIG param (the signature knob)
+                eng.setTone      (R.tone->load());
+                eng.setMix       (R.mix->load());
+                for (int k = 0; k < 8; ++k) eng.setP (k, R.p[k]->load());
+            }
+            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
+            float sgL, sgR; excludeRouted (sgL, sgR);
+            float wl, wr; eng.processSample (sgL, sgR, wl, wr);
+            // fb318 ENV-GATED REPLACE: the engine returns the FINISHED signal (its own Mix applied),
+            // so the insert is a crossfade from the untouched mix to the engine output. env 0 = exactly 0.
+            leftChannel[i] += env * (wl - sgL);
+            if (rightChannel != nullptr) rightChannel[i] += env * (wr - sgR);
+        };
+
         // fb307 — SERIAL CHAIN ORDER (drag-to-reorder): run the two INSERTS in the dragged order. Both setups
         // (i==0) have run above, so either order is valid. Default reverb→delay = byte-identical to fb306. Per-osc
         // (parallel) sends are order-independent, so the swap only re-routes the MAIN-SEND serial case — exactly
@@ -7523,15 +7701,34 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // fb341 — the REAL 6-way serial permutation (bible §4.5). Per-osc (parallel) sends are
         // order-independent; the perm re-routes what the MAIN-SEND serial cases hear. Index order
         // anchors the two legacy bool states (0 = R·D·T, 5 = D·R·T) so old sessions restore exactly.
-        switch (fxPerm_)
+        // ════════ fb346 — THE DYNAMIC CHAIN, replacing the fixed 6-way permutation ════════
+        // chainOrder_ is rebuilt once per block (top of processBlock) by sorting the ACTIVE devices
+        // on their float _RANK, so the chain can hold ANY number of devices in ANY order — including
+        // several of the same device. The old switch could only ever express 3! = 6 arrangements of
+        // exactly three devices, and could never grow (choice cardinality is frozen at birth, fb342).
+        //
+        // BACKWARD COMPATIBILITY: the default ranks (Reverb .10 / Delay .20 / Distortion .30) plus
+        // all three ACTIVE-by-default reproduce case 0 exactly, and any old session that stored
+        // SYN_FX_ORDER has its permutation translated into ranks once, on load (see below), so every
+        // existing project restores byte-identically.
+        for (int c = 0; c < chainCount_; ++c)
         {
-            default:
-            case 0: applyRvb(); applyDly(); applyDst(); break;
-            case 1: applyRvb(); applyDst(); applyDly(); break;
-            case 2: applyDst(); applyRvb(); applyDly(); break;
-            case 3: applyDst(); applyDly(); applyRvb(); break;
-            case 4: applyDly(); applyDst(); applyRvb(); break;
-            case 5: applyDly(); applyRvb(); applyDst(); break;
+            const auto& ce = chainOrder_[(size_t) c];
+            if (ce.inst == 1)
+            {
+                if      (ce.kind == 0) applyRvb();
+                else if (ce.kind == 1) applyDly();
+                else                   applyDst();
+            }
+            else
+            {
+                const int e = ce.inst - 2;                       // pool index
+                if (e >= 0 && e < kFxExtra)
+                {
+                    if (ce.kind == 1) applyPoolDly (e);
+                    else if (ce.kind == 2) applyPoolDst (e);
+                }
+            }
         }
         if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
@@ -9157,6 +9354,31 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
         if (xmlState->hasTagName (apvts.state.getType()))
         {
             auto newState = juce::ValueTree::fromXml (*xmlState);
+
+            // ── fb346 migration: THE EMPTY RACK.
+            // A fresh instance now boots with an empty chain (SYN_*_ACTIVE default false) because the
+            // rack is dynamic. A session saved BEFORE fb346 has no _ACTIVE params at all, and for it
+            // "absent" means the old fixed 3-device rack — so restore exactly that, or the user's
+            // reverb/delay/distortion would silently vanish from a project that had them.
+            {
+                bool sawActive = false;
+                for (int c = 0; c < newState.getNumChildren() && ! sawActive; ++c)
+                {
+                    auto ch = newState.getChild (c);
+                    if (ch.hasType ("PARAM")
+                        && ch.getProperty ("id").toString() == ParameterIDs::SYN_RVB_ACTIVE)
+                        sawActive = true;
+                }
+                if (! sawActive)
+                    for (auto* id : { ParameterIDs::SYN_RVB_ACTIVE, ParameterIDs::SYN_DLY_ACTIVE,
+                                      ParameterIDs::SYN_DST_ACTIVE })
+                    {
+                        juce::ValueTree p ("PARAM");
+                        p.setProperty ("id", id, nullptr);
+                        p.setProperty ("value", 1.0f, nullptr);
+                        newState.appendChild (p, nullptr);
+                    }
+            }
 
             // rs6 migration (cleanup sweep): FRACTURE was a RESERVED no-op defaulting to 0.5; it is
             // now MELT (temporal smear, default 0). Pre-rs6 sessions all carry exactly 0.5 → snap to
