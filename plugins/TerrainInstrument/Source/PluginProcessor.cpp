@@ -7630,10 +7630,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float dVary  = flowBase (ParameterIDs::FLOW_DRF_VARY);    // VARY  = volatility/character
         const float dTraj  = flowBase (ParameterIDs::FLOW_DRF_TRAJ);    // TRAJ  = shape selector
         const float dDepth = flowKnob (ParameterIDs::FLOW_DRF_MORPH, wc::ModDest::FlowMorph);   // MORPH = DEPTH (the robin MIX header; LFO-moddable fb145)
-        float lanes[wc::kDriftLanes] = { 0.0f };
+        // fb344 SIGBUS FIX (the auval P1, shipped broken since fb122) — FlowDrift::process
+        // writes a 2D LANE-MAJOR buffer: outLanes[l*numSamples+i], numLanes*numSamples floats
+        // (FlowDrift.h:209; the offline harness allocates nLanes*blk). The old 8-float stack
+        // array here overran by numLanes*numSamples*4 bytes EVERY Robin-active block — silent
+        // caller-stack corruption at small blocks, a guard-page SIGBUS at 4096 frames (auval's
+        // render test; 15/15 crash reports + live lldb: fault = lanesBase + 3*16384, proven).
+        // It was ALSO a data bug: lanes[i] read lane 0's samples 0..7, never per-lane finals.
+        // We only need each lane's end-of-block value = Lane::outScaled via the bounds-checked
+        // value(i); process() guards `if (outLanes)`, so nullptr = zero writes, RT-safe.
         drift.process (dRate, dGlide, dVary, dTraj, dDepth,
-                       flowPpq, flowBpm, getSampleRate(), lanes, numSamples, flowPlaying);
-        for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = lanes[i];
+                       flowPpq, flowBpm, getSampleRate(), nullptr, numSamples, flowPlaying);
+        for (int i = 0; i < wc::kDriftLanes; ++i) driftLane_[i] = drift.value (i);
 
         // ── fb122 ROBIN Wheel card: the rotation brain, read per block ──
         {
