@@ -7,6 +7,24 @@ Research base: Serum 2 User Guide (local PDF, p.182), Ableton Utility (manual + 
 iZotope Ozone Imager/Insight, Waves PAZ, beis.de correlation-meter math, KA Electronics elliptical EQ.
 Repo recon: every recycle claim below is verified by reading the code — file:line cited._
 
+> **AUDIT PASS 2026-08-14 (adversarial).** Every repo `file:line` in this document was re-read and is
+> correct **except** the `:6979/:7111` pair (§7.3, §10-8), which was stale fb315-era numbering and is
+> now corrected. Corrections applied this pass are marked **[AUDIT]** inline. Claims that could not be
+> verified from a primary source are marked **[UNVERIFIED]** — do not quote those as fact.
+>
+> **Two in-tree conflicts a builder must resolve before writing code:**
+> 1. `Design/SERUM2-FX-REFERENCE.md:376-379` states Terrain gets **no Utility device** — "no dedicated
+>    bible — deliberately … a whole rack slot for trim is Serum's answer; ours should be chain-level
+>    plumbing." This bible argues the opposite (a chain cannot be *re-levelled between devices* by
+>    plumbing that has no gain knob). One of the two documents is wrong; Max decides (§12 Q0).
+> 2. `Design/SPLITTER-BUILD-BIBLE.md` — also written as "the 4th FX device" — already claims M/S
+>    width (−∞…+12 dB side gain, :191), **Bass Mono** as a side-HP (:195-197), a latching **Mono**
+>    audition pill (:299), a Haas-class **Slip** (:256) and correlation discriminators. That is a
+>    direct collision with §3.3/§3.4/§3.7/§5.1 here and with the house **no-doubles** rule. Utility and
+>    Splitter cannot both ship those controls under those names. (All the 2026-08-14 candidate bibles
+>    call themselves "the 4th device" — that is the parallel-research convention, not a claim on the
+>    slot.)
+
 ---
 
 ## 0. The scope decision
@@ -19,8 +37,15 @@ both sound-changing, every choice night-and-day measurable. There is no `Charact
 character: a utility that "colors" is a broken utility. The color knob it does get (**Tilt**) is an
 explicit, bounded, visible voicing move — not a hidden character.
 
-**Why this device matters more than its size.** The FX bus program sits at **≈ −26 dBFS** (measured,
-`PluginProcessor.cpp:46` + the fb299 comment; pad at `:6300-6301`). Three flagship devices now live on
+**Why this device matters more than its size.** The FX bus program sits at **≈ −26 dBFS** (the house
+figure, `DISTORTION-BUILD-BIBLE.md:175`; derived from the fb299 comment at `PluginProcessor.cpp:46`
+— "the real bounce measured -20 dBFS" pre-makeup — minus the `kVoiceToFxPad = 0.5f` −6.02 dB pad at
+`:6300-6301`). **[AUDIT]** Both citations are real and were re-read. ⚠️ The *derivation* has a known
+soft spot: the −20 dBFS bounce was measured at the plugin **output**, which is already **post**-pad, so
+subtracting the pad a second time may double-count it (bus would then be ≈ −20 dBFS, not −26). Every
+rack bible is calibrated to −26 and this one stays consistent with them, but **the first Utility build
+must re-measure the actual bus level with a meter tapped at the FX insert point** and, if it lands at
+−20, every dB-referenced ceiling in §3.1/§4 moves down 6 dB. Three flagship devices now live on
 that bus, serially permutable (`SYN_FX_ORDER`, `PluginProcessor.cpp:3488`, switch at `:7383`). Nothing
 in the chain can currently *re-level between devices*: you cannot drive the distortion harder without
 changing the patch, cannot trim a hot reverb before the delay, cannot mono a widened low end before it
@@ -39,28 +64,38 @@ modulation effect (nothing in it free-runs; there is no LFO).
 * **The console monitor/utility section.** Every large-format console ships a strip of "boring"
   blocks — phase (Ø) buttons, channel swap, mono sum, trim — because engineers check mono and polarity
   *constantly*. The DAW Utility device is that strip, extracted.
-* **Blumlein, 1931.** Alan Blumlein's stereo patent (EMI, GB 394325) contains the M/S sum/difference
-  matrix — `M=(L+R)/2, S=(L−R)/2` — which is the mathematical core of every Width knob ever shipped.
-  Width is 95 years old and still just "scale S."
+* **Blumlein, 1931.** Alan Blumlein's stereo patent (EMI, **GB 394,325**, applied 14 Dec 1931,
+  accepted 14 Jun 1933 — **verified**) contains the "shuffling" circuit and hybrid-transformer
+  matrixing between L/R and sum/difference — `M=(L+R)/2, S=(L−R)/2` — the mathematical core of every
+  Width knob ever shipped. Width is 95 years old and still just "scale S."
 * **Elliptical EQ (vinyl cutting, 1950s-70s).** Stereo bass = vertical stylus modulation = skipping
   needles and wasted groove. Cutting chains inserted an **elliptic equalizer: a high-pass on the SIDE
   channel only** (KA Electronics documents historic 6 dB/oct units; modern practice 12 dB/oct,
   engagement points ~100-300 Hz). This is the correct ancestor of "Bass Mono" — not a band-split. Our
   `Mono Below` is a straight clean-room descendant.
-* **Haas, 1949.** Helmut Haas's precedence-effect research: an identical signal delayed ≤ ~30 ms is not
-  heard as an echo but as *width/position*. The Haas-widener (delay one channel a few ms) is the
+* **Haas, 1949 thesis / 1951 paper.** **[AUDIT — the date was wrong.]** Helmut Haas's precedence-effect
+  work is a 1949 dissertation; the citable "Haas effect" reference is the **1951** *Acustica* paper.
+  Verified numbers: a single reflection at **5-30 ms** can be up to **10 dB louder** than the direct
+  sound without being heard as a separate event; the precedence window extends to ~50 ms (speech) /
+  ~100 ms (music). So: an identical signal delayed ≤ ~30 ms reads as *width/position*, not echo.
+  The Haas-widener (delay one channel a few ms) is the
   cheapest mono-to-stereo trick in existence — and the most mono-dangerous (comb filter on the sum).
   Kilohearts ships it as a dedicated snapin (Delay + which-channel selector).
 * **Pan law (BBC/console era).** A dual-gang pot crossfading L/R. The classic variants: −3 dB
   (equal-power sin/cos, the common compromise), −4.5 dB (SSL), −6 dB (equal-voltage, exact mono sum).
   §3.2 states which we use for `Balance` and why unity-through wins over pan-law purity here.
-* **Ableton Utility — the canon.** The reference feature set (Live 10+): Gain ±35 dB, Balance,
-  **Width 0-400 %** (0 = mono), **Bass Mono with 50-500 Hz crossover** + headphone audition, Ø L / Ø R
-  phase inverts, channel mode Left/Right/Swap/Stereo, DC filter, Mute. (Ranges cross-checked against the
-  Cycling '74 `abl.device.utility~` port: bass-mono freq `[50., 500.]` Hz, channel enum
-  `Left/Stereo/Right/Swap`; the port's gain range `[−70.6, +6]` documents the pre-Live-10 gain, the
-  modern device is ±35 dB.) Producers describe Utility as the most-used device in Live. That reputation
-  is the bar.
+* **Ableton Utility — the canon.** **[AUDIT — ranges re-verified against the Cycling '74 port; one
+  correction.]** The Cycling '74 `abl.device.utility~` reference (fetched and read this pass) documents
+  exactly: `gain` **[−70.6, +6] dB**, `balance` **[−1, +1]**, `bass_mono_frequency` **[50, 500] Hz**,
+  `midside` **[0, 1]** ("sets the gain of the mid and side stereo fields"), `invert_phase_l` /
+  `invert_phase_r`, `channelmode` **0 = Left, 1 = Stereo, 2 = Right, 3 = Swap**, `dcblock`, `mute`,
+  `mono`, `bass_mono`. The shipping Live device's Gain is **−∞ … +35 dB** (asymmetric — it is a
+  *boost* range with a mute tail, **not** "±35 dB" as an earlier draft of this file said), and its
+  Width reads **0-400 %** with 0 = mono — **[UNVERIFIED]**: the Live 12 manual page truncates on fetch,
+  so the +35 dB ceiling and the 400 % ceiling are from product knowledge, not a quoted manual line.
+  Note the port has **no "Mid audition" control** — it has a `mono` toggle and a `midside` gain; any
+  claim about an Ableton "Mid solo" button is wrong. Producers describe Utility as the most-used device
+  in Live. That reputation is the bar.
 * **Kilohearts Gain / Stereo / Haas snapins.** The modular decomposition: Stereo = Mid + Width + Pan
   with a mini balance/correlation meter that goes red below zero correlation. Their "small tools done
   perfectly" ethos is the personality target.
@@ -74,7 +109,10 @@ modulation effect (nothing in it free-runs; there is no LFO).
   length = amplitude, angle = stereo position), 45° "safe lines" (inside = in-phase, outside =
   out-of-phase), correlation meter, plus Stereoize (Haas-class widener, mode I "colorful phasing" /
   mode II "subtle").
-* **Serum 2 Utility (2025) — the direct competitor.** Manual p.182, exact list: **POLARITY INV**
+* **Serum 2 Utility (2025) — the direct competitor.** Manual p.182 (**[AUDIT]** the local PDF in this
+  tree is a 20-page extract and does not contain p.182; the list below is independently corroborated
+  in-tree by `Design/SERUM2-FX-REFERENCE.md:372-375`, an eyewitness survey of all 16 Serum FX strips),
+  exact list: **POLARITY INV**
   (per-channel L/R), **LPF**, **HPF**, **MONO BASS + FREQ** ("forces frequencies below the threshold to
   be monophonic"), **WIDTH**, **PAN**, **MIX**, **LEVEL** (dB). No dedicated visualizer beyond the
   module strip — **that is our opening**: Serum's Utility is knobs; ours is knobs + the only live
@@ -100,7 +138,10 @@ Each Route is a 2×2 mixing matrix `[out_L; out_R] = A·[in_L; in_R]`. The matri
 | **Right** | `[[0,1],[0,1]]` | Right to both ears | Mirror of Left |
 | **Swap** | `[[0,1],[1,0]]` | Exchange channels | L/R energy exchange, exact; gonio image mirrors |
 
-*(Ableton's `Mid` audition and `Mono` collapse are the same matrix — we ship it once, named Mono.)*
+*(**[AUDIT]** an earlier draft justified this list with "Ableton's `Mid` audition" — no such control
+exists in the device or its Cycling '74 port. The honest statement: a Mid solo and a Mono collapse are
+the **same matrix**, so we ship it once, named Mono. `Side` is the complement and has no Ableton
+equivalent at all — it is the MSED/console side-solo.)*
 
 ### 2.2 Dropdown 2 — `Flip` (polarity matrix, 4 states)
 
@@ -126,24 +167,36 @@ parameter. Flagged for Max in §12 anyway.
 
 ```
 in L/R
- → [DC pill]            10 Hz DC blocker (DCBlocker, TerrainFilters.h:69; r-law DistortionEngine.h:124)
+ → [DC pill]            10 Hz DC blocker — DCBlocker STRUCTURE from TerrainFilters.h:69, but with the
+                        sample-rate-aware r of DistortionEngine.h:124-125. ⚠️ [AUDIT] do NOT reuse
+                        TerrainFilters' hardcoded r = 0.995: DistortionEngine.h:122-123 measures that
+                        as 38 Hz @48 k / 76 Hz @96 k — it would eat the bass of a "utility".
  → Route matrix          glided 2×2 (§2.1)
  → Flip matrix           glided signs (§2.2)
  → Gain                  linear gain, one-pole 15 ms glide (§3.1)
  → Low Cut / High Cut    12 dB/oct SVF pair, both channels (§3.6)
  → Tilt @ Pivot          complementary dB-symmetric shelves (§3.5)
- → M/S block:            encode M=(L+R)/2, S=(L−R)/2
+ → M/S block:            encode M=(L+R)/2, S=(L−R)/2      [DETENT-BYPASSED — see §7.1]
       Center             mid gain (§3.4)
       Width              side gain ×0..4 (§3.3)
       Rotate             energy-preserving field rotation (§3.8)
    decode
  → Widen                 Haas micro-delay ±30 ms (§3.7)
  → Balance               opposite-channel attenuation (§3.2)
- → Mono Below            2nd-order side-HPF — LAST imaging op, enforces the contract (§3.4)
+ → Mono Below            2nd M/S encode/decode + side-HPF — LAST imaging op (§3.4)  [OFF-BYPASSED]
  → [Mono pill]           width→0 override, glided
- → Mix                   equal-power dry/processed (sin/cos idiom, PluginProcessor.cpp:7112)
+ → Mix                   LINEAR dry/processed — NOT equal-power (see §3.9 for why)
 out L/R
 ```
+
+**[AUDIT] Two encode/decodes, not one.** Mono Below sits after Balance (a channel-domain op), so it
+needs its own M/S round trip. Counted in the CPU budget (§9).
+
+**ZERO LATENCY — rack law A.** The device MUST report `setLatencySamples(0)` and must never contain a
+lookahead path. The fb305/fb338 main-send exclusion sums subtract the routed dry **sample-aligned**
+(`PluginProcessor.cpp:7159/:7161`, `:7326/:7328`, `:7358/:7360`); any reported latency makes that dry
+leak back phase-smeared. The Haas `Widen` delay is an *effect*, not latency — it is never compensated
+and never reported. This is also why Utility can never grow a lookahead limiter or a linear-phase cut.
 
 No feedback path exists anywhere in the device. **Unconditionally BIBO; max stable loop gain: N/A —
 there is no loop** (law 6 satisfied by construction; nothing can sound after the input dies because
@@ -158,10 +211,15 @@ why Terrain ever shipped timid).
 ```
 t = 0            → −∞ (hard mute; glided like everything else)
 t ∈ (0, 0.04]    → ramp −∞ → −60 dB   (the "reach silence" tail)
-t ∈ (0.04, 1]    → gainDb = −60 + 96·(t−0.04)/0.96      // linear in dB, 1 dB per ~1 % of travel
-unity 0 dB at t ≈ 0.665  → knob DETENT + double-click reset point
+t ∈ (0.04, 1]    → gainDb = −60 + 100·(t−0.04)          // ≡ −60 + 96·(t−0.04)/0.96; 1.04 dB per 1 %
+unity 0 dB at t = 0.64   → knob DETENT + double-click reset point
 max: +36 dB
 ```
+
+**[AUDIT] the unity point was wrong** — an earlier draft said `t ≈ 0.665`. Solve `−60 + 100(t−0.04) = 0`
+⇒ `t = 0.64` exactly. **Detent snap (required for the null gate, §7.1):** float round-trip through
+`10^(dB/20)` will not land on exactly 1.0f, so clamp `|gainDb| < 0.05 → gainLin = 1.0f` and let the
+detent capture that window. Without this, "bit-transparent at defaults" is false by ~1e-7.
 
 +36 dB on a −26 dBFS program = +10 dB over full scale into the next device or the fb264 limiter —
 deliberately past useful (law 5's "just past useful"; the limiter bounds it, and *slamming the next
@@ -178,17 +236,28 @@ gR = (b >= 0) ? 1 : cos(−b·π/2)
 ```
 
 * At center both channels are **exactly unity** — this is what makes the whole device null at defaults
-  (§7.1). A −3 dB equal-power pan law puts a dip at center and breaks unity-through; compensating it
-  (+3 dB at extremes) makes hard-pan land +3 dB hot into the next device. Rejected.
-* The attenuation curve is the equal-power quarter-cosine, so the travel is perceptually even
-  (no dead first third).
-* Full throw = one channel at −∞: a stereo source becomes one-sided — dramatic, mono-sum drops ~6 dB
-  of the removed channel's exclusive content. Correct behavior for a *balance*.
+  (§7.1). A −3 dB equal-power *pan* law puts a dip at center and breaks unity-through; compensating it
+  (+3 dB at extremes) makes hard-pan land +3 dB hot into the next device. Rejected. **This is the pan-law
+  decision, stated: we ship a −∞ balance (unity-through), not a −3 / −4.5 / −6 dB pan law.**
+* **[AUDIT] the curve is NOT "equal-power" and its first third IS soft — say so honestly.** `cos(bπ/2)`
+  is the *cosine leg* of an equal-power pair used as a one-sided attenuator; the pair L+R is not
+  constant-power (total power runs 2 → 1, i.e. −3 dB across the throw). Measured attenuation of the
+  receding channel: **b = 0.1 → −0.07 dB · 0.2 → −0.28 dB · 0.33 → −1.25 dB · 0.5 → −3.01 dB ·
+  0.75 → −8.3 dB · 0.9 → −16.4 dB · 1.0 → −∞.** The first fifth is effectively inaudible in level.
+  That is deliberate detent tolerance (a bipolar knob needs a flat neighbourhood at 0), and law 5 is
+  satisfied *visibly* — the goniometer centroid slides linearly from the first degree of travel (§6.3)
+  — but do not claim "perceptually even travel". If Max wants the first third to bite, the fallback is
+  the dB-linear law `attenDb = −40·|b|` with a −∞ tail in the last 2 % (−13.3 / −26.7 / −40 dB at the
+  thirds, and still 0 dB exactly at centre). **Open for Max — §12 Q9.**
+* Full throw = one channel at −∞: a stereo source becomes one-sided — dramatic. In the mono sum,
+  content **common** to both channels drops 6 dB; content **exclusive** to the removed channel
+  disappears entirely (−∞). Correct behavior for a *balance*.
 * This matches Ableton/Serum semantics (`PAN` = "stereo balance", Serum 2 manual p.182).
 
 ### 3.3 Width — M/S side gain, 0-400 %
 
-Blumlein matrix, wet path only, exactly the shipped delay idiom (`DelayEngine.h:208-210`):
+Blumlein matrix, wet path only, exactly the shipped delay idiom (`DelayEngine.h:209-211` — **[AUDIT]**
+the first draft cited :208-210, which starts on the comment line):
 
 ```
 M = 0.5·(L+R);  S = 0.5·(L−R)·w;   L' = M+S;  R' = M−S
@@ -322,7 +391,11 @@ S' = M·sinθ + S·cosθ
   param-reflecting control on the card). At ±45° a centered mono source lands hard on one diagonal =
   fully panned, but **wide material rotates as a field** — sides swing through center to the other
   side, which balance/pan cannot produce.
-* Energy-preserving (rotation matrix, det = 1): no level ambiguity, nothing to compensate.
+* Energy-preserving (orthonormal, det = 1): `M'²+S'² = M²+S²`, and since `L²+R² = 2(M²+S²)` the total
+  stereo energy is preserved exactly. Nothing to compensate. **[AUDIT] but state the per-channel
+  consequence:** a *mono* source (S = 0) at θ = 45° gives `M' = S' = x/√2` ⇒ `L = √2·x, R = 0` — the
+  surviving channel runs **+3.01 dB** hotter than the mono input while total energy is unchanged. On a
+  −26 dBFS bus that is free headroom, but it is the one place Rotate changes a peak meter.
 * Discriminator vs Balance: Balance attenuates a channel (total energy drops as you throw); Rotate
   preserves total M/S energy and *relocates* it. Measured: hard-throw Balance loses the opposite
   channel's exclusive energy; hard Rotate keeps total RMS within 0.1 dB while the inter-channel
@@ -341,8 +414,15 @@ S' = M·sinθ + S·cosθ
 * Filter cutoffs (cuts, Pivot, Mono Below): block-rate coefficient recompute on a change-gate,
   one-pole slew — the reverb-core pattern.
 * Widen: dual-tap crossfade (§3.7). Pills (Mono, DC): 30 ms equal-power fades.
-* Mix: equal-power `sin/cos(mix·π/2)` — the exact shipped idiom (`PluginProcessor.cpp:7112`,
-  `:7274`), 100 % = fully wet (law 4).
+* **Mix: LINEAR, not equal-power. [AUDIT — this is a real defect in the first draft.]** The house
+  sin/cos idiom (`PluginProcessor.cpp:7112-7114` reverb, `:7274-7276` delay — both re-read and correct)
+  exists because a reverb/delay wet signal is *decorrelated* from the dry, so the two sum in **power**
+  and `sin²+cos² = 1` holds level constant. Utility's wet is the dry with small linear edits — highly
+  **correlated** — so it sums in **amplitude**: at Mix = 50 % with the device at defaults, sin/cos gives
+  `0.707·x + 0.707·x = 1.414·x` = **+3.01 dB**, a level bump in the middle of the knob of a device whose
+  entire identity is unity-through. Use `y = (1−m)·dry + m·wet`, one-pole 15 ms glide on `m`. Law 4 is
+  unaffected: `m = 1` ⇒ fully wet, zero dry. The Mix × Flip=Both cancellation (§10-3) is also exact
+  under the linear law (`0.5x − 0.5x = 0`).
 
 ### 3.10 Oversampling verdict
 
@@ -377,7 +457,7 @@ The bus is −26 dBFS (law 1). Every ceiling below is set where the move stops b
 | **Center −∞** | Mid killed: instant karaoke / side-wash. On a mono patch: **silence** (side of mono = 0) — correct, visible on the meters | −20…−36 dB = "vocal drop" automation | The silence is truth, not a bug; document in tooltip |
 | **Tilt ±18 dB** | A full spectral seesaw — brilliance wall or felt-dark sludge. ±6 dB "would be the timid version" (DistortionEngine.h:333, verbatim) | ±10…18 with Pivot swept = a performable DJ-morph | Linear filter — unconditionally stable |
 | **Mono Below 500 Hz** | Everything below 500 Hz forced center: the whole low-mid field snaps mono — drastic on wide pads, THE club-safe move on bass patches | 120-300 Hz = club/vinyl duty | Q = 0.7071 fixed, no resonance, no clamp needed |
-| **Widen ±30 ms** | Past-textbook Haas: hard doubling at the edge of slapback; mono sum combs from 16.7 Hz spacing at full throw | 8-18 ms = huge fake stereo | The comb IS the trade — metered, not prevented |
+| **Widen ±30 ms** | Past-textbook Haas: hard doubling at the edge of slapback; at full throw (τ = 30 ms) the mono sum's **first null is 16.7 Hz and nulls repeat every 33.3 Hz** — i.e. the whole spectrum is combed *(the old "16.7 Hz spacing" wording conflated first-null with spacing — **[AUDIT]**)* | 8-18 ms = huge fake stereo | The comb IS the trade — metered, not prevented |
 | **Rotate ±45°** | The entire field lies on one diagonal — a mono source is hard-panned, a wide source folds through anti-phase | ±20-45 on wide material | Rotation matrix — lossless, no clamp |
 | **Low Cut 1 kHz + High Cut 200 Hz** | Crossed cuts: the program collapses to a resonance-free whisper — a "telephone made of fog" | Either alone at max = surgical destruction | 12 dB/oct fixed slopes — stable |
 | **Mix 100 %** | Fully wet (law 4). With Flip=Both and Mix 50 %: dry+inverted-wet **cancels to −∞** — a phase-blend comb tool, deliberate (§10) | Mix 40-60 under Flip = variable comb | Document; never "fix" |
@@ -398,7 +478,7 @@ in ms (Haas perception is roughly linear in τ); Rotate linear in degrees.
 | **Gain** *(hero, biggest)* | `SYN_UTL_GAIN` | −∞ → +36 dB, §3.1 taper, unity detent | 0 dB | THE chain-leveling knob — the device's reason to exist |
 | **Width** | `SYN_UTL_WIDTH` | 0-400 %, unity detent at center | 100 % | The imaging hero; drives the goniometer directly |
 | **Tilt** | `SYN_UTL_TILT` | ±18 dB, center detent | 0 | The one voicing move; bold, visible, bipolar |
-| **Mix** | `SYN_UTL_MIX` | equal-power, 100 % = fully wet | 100 % | House chassis law |
+| **Mix** | `SYN_UTL_MIX` | **linear** blend (§3.9), 100 % = fully wet | 100 % | House chassis law |
 | pill **Mono** | `SYN_UTL_MONO` | bool, latching, 30 ms glide to width 0 + Route-Mono matrix | OFF | The one-click mix check (Ableton's headphone audition, made a latch per the state-persists law) |
 | pill **DC** | `SYN_UTL_DC` | bool, 10 Hz blocker, 30 ms fade | OFF | Cleans upstream FM/fold/asym-distortion offset |
 
@@ -433,7 +513,7 @@ constexpr char SYN_UTL_FLIP[]     = "SYN_UTL_FLIP";      // choice(4): None/Left
 constexpr char SYN_UTL_GAIN[]     = "SYN_UTL_GAIN";      // float 0..1 -> −inf..+36 dB (§3.1; unity detent)
 constexpr char SYN_UTL_WIDTH[]    = "SYN_UTL_WIDTH";     // float 0..1 -> 0..400 % side gain (100 % at 0.5)
 constexpr char SYN_UTL_TILT[]     = "SYN_UTL_TILT";      // float 0..1 -> ±18 dB dB-symmetric tilt (0.5 = flat)
-constexpr char SYN_UTL_MIX[]      = "SYN_UTL_MIX";       // float 0..1 equal-power; 100 % = FULLY WET
+constexpr char SYN_UTL_MIX[]      = "SYN_UTL_MIX";       // float 0..1 LINEAR blend; 100 % = FULLY WET
 constexpr char SYN_UTL_BALANCE[]  = "SYN_UTL_BALANCE";   // float 0..1 -> ±100 % opposite-channel atten
 constexpr char SYN_UTL_CENTER[]   = "SYN_UTL_CENTER";    // float 0..1 -> −inf..+12 dB mid gain (0 dB at 0.5)
 constexpr char SYN_UTL_MONOFREQ[] = "SYN_UTL_MONOFREQ";  // float 0..1 -> Off/20..500 Hz side-HPF
@@ -445,12 +525,27 @@ constexpr char SYN_UTL_ROTATE[]   = "SYN_UTL_ROTATE";    // float 0..1 -> ±45°
 constexpr char SYN_UTL_MONO[]     = "SYN_UTL_MONO";      // bool pill — latching mono check
 constexpr char SYN_UTL_DC[]       = "SYN_UTL_DC";        // bool pill — 10 Hz DC blocker
 constexpr char SYN_UTL_POWER[]    = "SYN_UTL_POWER";     // bool — device power, DEFAULT OFF (house)
-constexpr char SYN_UTL_SRC_A..D/_SUB/_NOISE               // bools, per-osc routing — PENDING §12 Q2
+constexpr char SYN_UTL_SRC_A..D/_SUB/_NOISE               // bools, per-osc routing — ALLOCATE AT BIRTH
 constexpr char SYN_UTL_POS[]      = "SYN_UTL_POS";       // choice(2): First/Last — chain slot, §7.2
 ```
 
 Choice params are read as **index** via `getRawParameterValue` (the CLAUDE.md §4 law — never
 normalize). Every new param needs the 4-point WebSliderRelay chain or it silently no-ops.
+
+**[AUDIT] Two rack-wide laws the first draft did not honour — both are birth-time decisions:**
+
+* **Law B — parameters cannot be created at runtime.** JUCE/VST3/AU cache the parameter list at
+  construction; a param added in a later build shifts indices and breaks host automation and session
+  restore. So the six `SYN_UTL_SRC_*` bools **must be allocated in the very first build** even though
+  v1 ships main-insert only (§12-2) — declare them, default OFF, and simply don't read them yet. The
+  same goes for `SYN_UTL_POS`. A hidden/inert bool costs nothing; a retro-fitted one costs a migration.
+* **Law C — choice-param cardinality is fixed at birth (fb342).** `SYN_UTL_ROUTE` (6) and
+  `SYN_UTL_FLIP` (4) must be sized for their **final** roster on day one; extra entries may ship
+  disabled but the count can never grow. Route is believed complete at 6 (the 2×2 matrix has no other
+  musically distinct integer state), Flip is complete at 4 by construction (2² sign combinations) —
+  **so both are safe, but say it out loud, and if anyone ever wants e.g. a `Mid` or `L−R` route it must
+  be born now.** `SYN_UTL_POS` at 2 is the risk: if a third slot ("between devices 2 and 3") is ever
+  wanted, born-at-2 forbids it. Consider birthing it at 4 with two disabled entries.
 
 ---
 
@@ -470,10 +565,15 @@ normalize). Every new param needs the 4-point WebSliderRelay chain or it silentl
   *Polar Level:* **rays** whose length = amplitude and angle = stereo position — the most "meter-like"
   and least CPU-cloudy. 45° "safe lines" overlay: energy inside = in-phase, outside = out-of-phase.
 * **Correlation meter (the beis.de-correct math).** `c = LP(L·R) / √(LP(L²)·LP(R²) + ε)` with
-  **three identical low-pass integrators** (~150-300 ms; Bekkr documents Pearson + ~150 ms EMA).
-  +1 mono · 0 uncorrelated-wide · −1 anti-phase. beis.de's warning: the cheap zero-crossing/XOR
-  "phase meter" is NOT a correlation meter (reads 100 % on signals that are ~42 % correlated) — build
-  the real one, it is 3 one-poles and a sqrt per block.
+  **three identical low-pass integrators**. +1 mono · 0 uncorrelated-wide · −1 anti-phase.
+  **beis.de's warning — verified verbatim this pass:** the cheap zero-crossing/XOR "phase meter" is not
+  a correlation meter; on a sine + 3rd + 5th harmonic pair whose **actual correlation is ≈ 42 %** it
+  reports **100 %** ("a simple catastrophe"), and a 3rd-harmonic case measures ≈ 44 %. **[AUDIT] two
+  corrections:** (a) the page confirms the multiply/square/low-pass topology but states **no formula
+  and no time constants** — the ~150-300 ms integration figure is the Bekkr convention (Pearson +
+  ~150 ms EMA), attribute it there, not to beis; (b) the cost is **not** "3 one-poles per block" — the
+  three products `L·R, L², R²` must be accumulated **per sample** (3 mul + 3 add/sample), after which
+  one one-pole per accumulator and one `sqrt` run **per block**. Still trivial, but state it honestly.
 * **Waves PAZ — Stereo Position Display.** A semicircle of energy vs pan angle, with anti-phase
   energy shown separately — energy-domain (loudness-modeled), not sample-domain. Intuitive but
   FFT-adjacent in cost; noted, not copied.
@@ -500,11 +600,22 @@ law — layered strokes for glow, never filters):
   frame, drawn as 1-2 px dots; persistence via one `fillRect` of translucent background per frame
   (the classic trail trick — ~zero cost). Idle = dim floor glow; playing = bright cloud (law 9's
   idle/bright delta).
-* **Param reflection, every knob:** Width scales the cloud horizontally (S axis) in real time; Rotate
-  rotates the whole cloud (the knob IS the image); Flip L/R flips the cloud to horizontal; Balance
-  slides the cloud's centroid; Mono pill collapses it to the vertical line live; Mono Below draws a
-  faint horizontal "floor band" at the low-frequency zone whose cloud is forced narrow; Tilt tints
-  the dot color temperature warm↔cool (dark = −, bright = +); Gain scales dot brightness + the bars.
+* **Param reflection — all 14 sound-changing controls, none skipped (law 9). [AUDIT: the first draft
+  named only 8 and then claimed "every one of the 14"; the missing six are added here.]**
+  **Width** scales the cloud horizontally (S axis) live · **Rotate** rotates the whole cloud (the knob
+  IS the image) · **Flip** L/R flips the cloud to horizontal · **Balance** slides the cloud's centroid ·
+  **Mono pill** collapses it to the vertical line · **Mono Below** draws a faint horizontal "floor
+  band" over the low-frequency zone whose cloud is forced narrow · **Tilt** tints the dot colour
+  temperature warm↔cool (dark = −, bright = +) · **Gain** scales dot brightness + drives the true-dB
+  bars · **Route** snaps the cloud to its matrix's signature figure (Mono = vertical line, Side =
+  horizontal, Left/Right = the two diagonals, Swap = mirror) and the morph is visible during the glide
+  (§10-6) · **Center** scales the cloud **vertically** (M axis) — the exact orthogonal complement of
+  Width, which is the one-glance proof that the two knobs are not redundant (§3.4) · **Widen** skews
+  the cloud into the classic Haas ellipse and lights the correlation arc's negative half as τ grows ·
+  **Low Cut / High Cut** dim the outer/inner radius of the trail respectively (band-limited program
+  makes a smaller cloud) and draw their corner frequency as a tick on the frame edge · **Pivot** slides
+  that tick and shifts the Tilt tint's crossover point · **Mix** cross-fades the cloud between the
+  cached dry figure (ghost, 25 % alpha) and the live wet figure — at Mix 0 you see the ghost only.
 * **Correlation arc** along the bottom edge: −1…+1, white tick, the **negative half draws in the
   warning color** (Kilohearts red-zone lineage; purple-on-select stays the house accent).
 * **L/R peak bars** hugging left/right edges: true-dBFS, instant-attack/0.05-fall ballistics — the
@@ -524,11 +635,23 @@ corner tabs (`Cloud | Rays`) — a view gesture on the card, not a dropdown para
 L/R + M/S bar quartet + correlation bar + gain-reduction-style width readout. Cheapest, information-
 dense, zero drama — ships only as the collapsed/mini-card state, never the hero view.
 
-**Data path (the fb90/fb232 laws):** one native fn `getUtilityViz` returning the packed frame
-{128 pairs, corr, pkL, pkR, midRms, sideRms}; UI paints from cache when the JUCE promise never
-settles; the popped card rides the 60 Hz push lane, self-poll demoted to 500 ms reconcile; `__cardOnly`
-guards on the rack rAF driver. Decimation ×4 in the audio thread (write every 4th sample pair into a
-lock-free ring; the block publishes the read index atomically).
+**Data path (the fb90/fb232 laws) — and the proof the payload is affordable. [AUDIT: this was asserted,
+now it is evidenced.]** The frame is {128 L/R pairs, corr, pkL, pkR, midRms, sideRms} = **256 floats +
+5 scalars per frame at 60 Hz**. That is *exactly* the payload the product already ships: the osc scope
+publishes `SCOPE_SIZE = 256` atomics (`PluginProcessor.h:1125-1126`) serialised into the tick script at
+`PluginEditor.cpp:5464-5473` and pushed by the `startTimerHz(60)` (`:4647`) `timerCallback`
+(`:5356`) — so a 256-value 60 Hz lane is a measured, shipped cost, not a hope. Reuse that lane verbatim
+rather than inventing one. Two house rules that come with it: (1) every float printed into the tick
+string must be finite-sanitised (`SF()` at `:5461`) — one `nan` token kills every later segment in the
+same `evaluateJavascript` string; (2) the JSON-frame alternative is the `getDistortionCurveViz` native
+fn (`PluginEditor.cpp:988-993` → `PluginProcessor.cpp:8567`) — that is the poll path, demoted to a
+500 ms reconcile while the push lane is live. UI paints from cache when the JUCE promise never settles;
+`__cardOnly` guards on the rack rAF driver. Decimation ×4 in the audio thread (write every 4th sample
+pair into a lock-free ring; the block publishes the read index atomically) — at 48 k that is 12 000
+pairs/s feeding 200 pairs per 60 Hz frame, i.e. the ring never starves and never repeats.
+**Canvas rule:** draw the 256 dots as ONE `Path2D` of rects (or one `putImageData`), not 256 `fillRect`
+calls — 256 canvas calls × 60 Hz = 15 k calls/s is measurable in WKWebView. Zero `shadowBlur`, zero
+`filter` (fb342/343).
 
 ---
 
@@ -538,9 +661,23 @@ lock-free ring; the block publishes the read index atomically).
 
 At defaults (Route Stereo, Flip None, Gain 0 dB detent, Width 100 %, Tilt 0, Balance 0, Center 0 dB,
 Mono Below Off, Widen 0, cuts Off, Rotate 0, pills off, Mix 100 %) the device is **bit-transparent**:
-out − in ≡ 0.0 (not −60 dB — zero; every default multiplies by exactly 1.0 and no filter is in-path
-when Off). This is the harness gate #1 and the reason the Balance law and Off-bypasses are specified
-the way they are. A leveling tool that colors at rest cannot be trusted to level.
+out − in ≡ 0.0 (not −60 dB — zero). This is harness gate #1 and the reason the Balance law and the
+Off-bypasses are specified the way they are. A leveling tool that colors at rest cannot be trusted to
+level.
+
+**[AUDIT] "every default multiplies by exactly 1.0" was false — three things break bit-exactness, and
+each needs an explicit gate:**
+1. **The M/S round trip is not bit-exact in float32.** `0.5f*(L+R) + 0.5f*(L−R)` rounds twice and can
+   land 1 ULP off `L`. **Fix: detent-bypass the whole M/S block** — when `Center = 0 dB && Width = 100 %
+   && Rotate = 0°` (all at their detents *and* their glide targets reached), skip encode/decode
+   entirely. One branch per block, and it is also the cheapest common case.
+2. **Gain unity is a float round trip** through `10^(dB/20)`. Fix: the `|gainDb| < 0.05 → 1.0f` snap
+   of §3.1.
+3. **Mix must be the linear law** (§3.9) or `m = 1` is the only transparent setting *and* the sin/cos
+   evaluation of `sin(π/2)` is not exactly 1.0f on every libm. Fix: special-case `m ≥ 0.9995 → wet`.
+
+With those three gates the null is a true `memcmp`. Without them it is ≈ −140 dBFS — inaudible, but
+then the gate must be written as `< −140 dBFS`, not as "zero". State whichever you actually build.
 
 ### 7.2 Position in the chain — and the 24-permutation problem
 
@@ -556,8 +693,17 @@ the way they are. A leveling tool that colors at rest cannot be trusted to level
   (`:7414`) and the fb264 limiter.
 
 Two positions cover the two real jobs; the 6-way trio dropdown stays untouched; legacy sessions
-restore exactly. (Open question §12-1: Max may instead want Utility INSIDE the permutation — the cost
-is the 24-entry list.)
+restore exactly.
+
+**[AUDIT] §12-1 is not a "decide later" question — law C makes it a decide-NOW question.**
+`SYN_FX_ORDER` is an `AudioParameterChoice` born with a **6-entry** StringArray
+(`PluginProcessor.cpp:3488-3494`, re-read: the two legacy bool states are anchored at index 0 and
+index 5, and the switch that consumes it is at `:7383`). **Choice cardinality is fixed at birth — the
+list cannot grow from 6 to 24 in place.** Therefore: if Utility (or any 5th device) is *ever* to join
+the permutation, the list must be re-born at its final size **before Utility ships**, with the unused
+entries disabled and index 0 / index 5 still anchoring the legacy restores. Once a session exists that
+stores a 6-entry choice, growing it is a migration, not an edit. The `SYN_UTL_POS` proposal exists
+precisely to avoid that — but the choice must be made and written down at build time, not deferred.
 
 ### 7.3 What it does to the chain downstream
 
@@ -571,9 +717,15 @@ is the 24-entry list.)
 * **Width stacking multiplies:** Delay Width (×1.6 max, `DelayEngine.h:92`) × Utility 400 % = ×6.4
   side gain — correlation goes hard negative. Not clamped (law 5); the meter is the contract.
 * **Mix discipline:** the send/exclusion grammar means a 4th send bus must join EVERY main-send
-  exclusion sum — `PluginProcessor.cpp:7159/:7161`, `:7326/:7328`, `:7358/:7360` (the fb305/fb338
-  landmine, verbatim in the code comments) plus the block-setup pair at `:6979/:7111`. If Utility
-  ships **main-insert only** (recommended v1, §12-2), none of that is touched.
+  exclusion sum. **[AUDIT — line numbers corrected.]** There are exactly **three** such sums (each an
+  L/R pair), all re-read on 2026-08-14 and all carrying the verbatim comment *"fb338 — the fb305 law:
+  EVERY send bus joins EVERY main-send exclusion"*: **`PluginProcessor.cpp:7159/:7161` (reverb insert),
+  `:7326/:7328` (distortion insert), `:7358/:7360` (delay insert)**. There is **no** fourth
+  "block-setup pair": the `:6979/:7111` cited by the distortion bible (`DISTORTION-BUILD-BIBLE.md:622,
+  680, 1215`) is **stale fb315-era numbering for these same sums** — the file has since grown, and
+  today `:6979` is a `basinReverb.setModEnabled` call and `:7111` is a closing brace. Do not go looking
+  for a fourth site; there isn't one. (The read pointers the sums consume are declared at `:6457`.)
+  If Utility ships **main-insert only** (recommended v1, §12-2), none of that is touched.
 
 ### 7.4 Classic ordering wisdom (for the manual/tooltips)
 
@@ -603,18 +755,30 @@ is the professional pattern, not a smell.
 | 13 | **Rotor Pad** | Rotated, widened, doubled pad field | Rotate +30° · Width 160 % · Widen −8 ms |
 
 Preset infra: the fb342 `.fxr-preset` grammar (pid `utl_<slug>`), factory table beside `DST_PRESETS`.
-Level discipline: every preset's output within ±3 dB of bypass on the standard 3-note chord probe
-(the Phase-G preset-level-spread lesson — no Gargle-+28 outliers).
+
+**Level discipline — [AUDIT] the blanket "±3 dB of bypass" rule is unachievable for this device class
+and must be scoped.** The Phase-G lesson (no Gargle-+28 outliers) applies to presets whose job is a
+*voicing*: #1 Wire, #2 Club Sub Lock, #3 Vinyl Safe, #8 Haas Double, #9 Ultra Wide, #10 Air Push,
+#11 Seventies Glue, #13 Rotor Pad — those must land within **±3 dB** of bypass on the standard 3-note
+chord probe. Four presets are **removal by design and are exempt** — measure and *document* their
+delta instead of matching it: #4 Mono Maker (collapses uncorrelated content, typically −1…−4 dB),
+#5 Phone Check (band-limited + −6 dB by intent), #6 Karaoke Drop (mid killed — on centred material
+this is −20 dB or silence, §10-4), #7 Side Stage (−12 dB mid). #12 Feeder is exempt in the other
+direction: **+18 dB is its entire purpose.** A preset that is quiet *because it removed what you asked
+it to remove* is not an outlier; a preset that is quiet by accident is.
 
 ---
 
 ## 9. CPU — budget and tiering
 
-* **Audio path:** matrix 4 mul + gains ~6 + tilt 4 + 2 SVFs ~10 + side-HPF ~5 + rotate 4 + Haas read
-  (cubic) ~8 + mix 4 ≈ **45-70 flops/sample stereo** worst-case, ~15 when Off-paths are bypassed.
-  ≈ **0.1-0.3 % of one core @48 k** — the cheapest device in the rack by ~an order of magnitude.
-* **Meters:** correlation = 3 one-poles + 1 sqrt per **block**; peaks = 2 compares/sample; gonio ring
-  write = 1 store per 4 samples. Negligible.
+* **Audio path:** matrix 4 mul + gains ~6 + tilt 4 + 2 SVFs ~10 + **two** M/S encode/decodes ~12
+  (**[AUDIT]** the first draft counted one — Mono Below needs its own, §3.0) + side-HPF ~5 + rotate 4 +
+  Haas read (cubic) ~8 + mix 3 ≈ **55-80 flops/sample stereo** worst-case, ~15 when the Off/detent
+  bypasses (§7.1) are taken. ≈ **0.1-0.3 % of one core @48 k** — the figure is deliberately pessimistic
+  (80 flops × 48 k = 3.8 Mflop/s is ~0.04 % of a modern core); it is still the cheapest device in the
+  rack by ~an order of magnitude.
+* **Meters:** correlation = 3 mul + 3 add per **sample**, then 3 one-poles + 1 `sqrt` per **block**
+  (§6.1); peaks = 2 compares/sample; gonio ring write = 1 store per 4 samples. Negligible.
 * **Tiering: none.** No Quality dropdown, no oversampling (§3.10 — linear device, nothing to
   alias). What must NEVER be oversampled: all of it.
 * **Sleep:** the awake-head pattern (fb342) — when input is silent (< −90 dBFS for ~0.5 s) skip the
@@ -642,11 +806,15 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
    mono-ish middle) — benign and click-free, but the gonio will show the morph; that is a feature.
 7. **Denormals** in SVF/one-pole tails — `ScopedNoDenormals` + flush; no feedback so no bloom, but
    the Haas buffer of a decayed note still ticks denormal reads without FTZ.
-8. **The fb305/fb338 send landmine** — if Utility ever gets per-osc SRC pills, `utlSend` must join
-   every exclusion sum at `PluginProcessor.cpp:7159/:7161/:7326/:7328/:7358/:7360` AND the setup pair
-   at `:6979/:7111`, or Mix-100 dry-removal breaks for every OTHER device. v1 recommendation:
-   main-insert only, no send bus (§12-2).
-9. **24-permutation trap** — do not extend `SYN_FX_ORDER`; use `SYN_UTL_POS` First/Last (§7.2).
+8. **The fb305/fb338 send landmine** — if Utility ever gets per-osc SRC pills, `utlSend` must join all
+   **three** exclusion sums at `PluginProcessor.cpp:7159/:7161`, `:7326/:7328`, `:7358/:7360`, or
+   Mix-100 dry-removal breaks for every OTHER device. **[AUDIT]** the "setup pair at `:6979/:7111`" in
+   the first draft does not exist — those are stale fb315-era numbers for the same three sums (§7.3).
+   v1 recommendation: main-insert only, no send bus (§12-2).
+9. **24-permutation trap** — do not extend `SYN_FX_ORDER`; use `SYN_UTL_POS` First/Last (§7.2). And
+   note you *cannot* extend it later either: choice cardinality is fixed at birth (law C) — the 6-entry
+   list at `PluginProcessor.cpp:3488-3494` can only be re-sized *before* the first session that stores
+   it. Decide at build time.
 10. **Goniometer autoscale lying about level** — AGC-normalized cloud + true-dB bars split (§6.2);
     never AGC the bars.
 11. **Meter native promise never settles** — paint from cache (the JUCE-promise house law); 500 ms
@@ -659,8 +827,14 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
     everything law), fade-swapped 30 ms, and MUST also bypass the meters' *published activity* (idle
     frames) so the card dims (law 9's idle state).
 15. **Don't oversample it** — someone will suggest it "for quality." There is nothing to oversample
-    (§3.10); it would only add latency risk and the fb305-class latency maths says any device latency
-    must be compensated-internal and reported zero.
+    (§3.10); it would only add latency, and rack law A says a Utility must report **zero** latency or
+    the sample-aligned fb305 exclusion sums leak phase-smeared dry.
+16. **[AUDIT] The equal-power-mix trap** — copying the reverb/delay `sin/cos` Mix into a device whose
+    wet is *correlated* with the dry gives **+3.01 dB at Mix 50 %**. Utility's Mix is linear (§3.9).
+    Any future near-linear device (EQ, Splitter trim) inherits this trap.
+17. **[AUDIT] "It nulls" is a claim you must actually gate** — a float32 M/S round trip, a `10^(dB/20)`
+    unity gain and a `sin(π/2)` mix all land ~1 ULP off unity. Three explicit bypass/snap gates make the
+    null a true `memcmp` (§7.1). Do not write the null test before you write the gates.
 
 ---
 
@@ -668,13 +842,17 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
 
 1. **Bus reality (−26 dBFS):** Gain ceiling +36 dB chosen to cross full scale from −26 (§3.1); viz
    AGC/true-bar split (§6.2); preset levels probed on the real bus (§8). No literature range copied
-   raw (Ableton's ±35 informs but the taper is house-law `dB-linear`, unity-detent).
+   raw (Ableton's −∞…+35 dB informs but the taper is house-law `dB-linear` with a unity detent at
+   t = 0.64). ⚠️ the −26 figure itself carries a flagged derivation caveat — §0.
 2. **Chassis fb275:** front 3 + Mix + 2 pills; back exactly 2 dropdowns (Route, Flip) + 8 knobs 4×2
    (§5.2); pragmatic Title-case names throughout; dropdowns are real selects.
 3. **Time params 4 bars→1/256:** N/A — Widen (±30 ms) is a psychoacoustic micro-delay, not a
    tempo-relevant echo; it must NOT sync (syncing 30 ms is meaningless). Stated so the rule is
    consciously inapplicable, not forgotten.
-4. **Mix 100 % = fully wet** (§3.9); Route/Flip switches glide-morph, never cut (§3.9).
+4. **Mix 100 % = fully wet** (§3.9 — **linear** blend, not the sin/cos idiom; see §3.9 for the +3 dB
+   proof); Route/Flip switches glide-morph, never cut (§3.9). No block in this device has a `setType()`
+   that resets state — the matrices ARE the state — so no fade-swap-recover machinery is needed
+   anywhere except the two filter engage points (§3.4, §3.6) and the Haas dual-tap (§3.7).
 5. **Params evolve 0→100:** every taper specified with no plateaus (§4 taper laws); conditional pairs
    (Tilt+Pivot) follow the sanctioned matched-pair law; no fake Types — the dropdowns' every entry
    carries a stated measurable discriminator (§2).
@@ -683,20 +861,45 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
 7. **No clicks:** glide table §3.9 covers every param class incl. matrices, coefficients, delay taps,
    pills, power.
 8. **CPU-friendly:** 0.1-0.3 % core, no oversampling ever, sleep-when-silent (§9).
-9. **Audible ⇒ visible + dramatic:** every one of the 14 sound-changing controls has a named viz
-   reaction (§6.3); idle-dim/playing-bright specified; the −26 dB smallness defeated by design (§6.2).
-10. **Recycle first (verified by reading):** DCBlocker `TerrainFilters.h:69`; TPTOnePole `:83`;
-    SvfMultimode `:317`; M/S wet-width idiom `DelayEngine.h:208-210`; output tilt `DelayEngine.h:
-    262-263`; dB-symmetric emphasis + "±6 dB is timid" `DistortionEngine.h:333/:630`; DC r-law
-    `DistortionEngine.h:124-125`; equal-power mix `PluginProcessor.cpp:7112`; bloom-viz publish
-    `:7393-7407`; preset infra fb342; fx-rack v7 chassis + `engine-select` + `.pmenu`. New code is
-    limited to: the 2×2 glided matrix, the side-HPF wrapper, the Haas dual-tap, the rotation, and
-    the viz frame packer.
+9. **Audible ⇒ visible + dramatic:** all 14 sound-changing controls now have a named viz reaction
+   (§6.3 — **[AUDIT]** only 8 did in the first draft, the other 6 were written this pass);
+   idle-dim/playing-bright specified; the −26 dB smallness defeated by design (§6.2).
+### 11.1 The four rack-wide laws (A-D) — walked separately, because the first draft missed three
+
+* **A · ZERO LOOKAHEAD, zero reported latency.** Stated as a build law in §3.0. Consequence recorded:
+  no lookahead limiting, no linear-phase cut option, ever. The Haas delay is an effect, not latency.
+* **B · No runtime parameter creation.** All 6 `SYN_UTL_SRC_*` bools + `SYN_UTL_POS` are allocated in
+  the first build even though v1 does not read them (§5.3).
+* **C · Choice cardinality fixed at birth.** `Route`(6) / `Flip`(4) are argued complete; `SYN_UTL_POS`
+  and — critically — `SYN_FX_ORDER` must be born at final size *before Utility ships* (§5.3, §7.2).
+* **D · Any new send bus joins all three exclusion sums** at `PluginProcessor.cpp:7159/:7161`,
+  `:7326/:7328`, `:7358/:7360` (§7.3). v1 avoids this entirely by being main-insert only.
+
+### 11.2 Recycle inventory (every claim below re-read at the cited line on 2026-08-14)
+
+10. **Recycle first (verified by reading, every line re-opened this pass):** DCBlocker
+    `TerrainFilters.h:69` (structure only — take the r-law from `DistortionEngine.h:124-125`, never the
+    hardcoded 0.995); TPTOnePole `:83`; SvfMultimode `:317`; M/S wet-width idiom `DelayEngine.h:209-211`;
+    output tilt `DelayEngine.h:262-263`; dB-symmetric emphasis + "±6 dB is timid"
+    `DistortionEngine.h:333/:630`; Tone hinge `:988`; bloom-viz publish `PluginProcessor.cpp:7393-7407`;
+    the 256-value 60 Hz scope push lane `PluginEditor.cpp:4647/:5461/:5464-5473` +
+    `PluginProcessor.h:1125`; the JSON-frame native fn pattern `PluginEditor.cpp:988-993`; preset infra
+    fb342; fx-rack v7 chassis + `engine-select` + `.pmenu`. **Deliberately NOT recycled:** the sin/cos
+    Mix at `PluginProcessor.cpp:7112-7114` — see §3.9. New code is limited to: the 2×2 glided matrix,
+    the side-HPF wrapper, the Haas dual-tap, the rotation, and the viz frame packer.
 
 ---
 
 ## 12. Open questions for Max
 
+0. **[AUDIT — the question that gates all the others] Does Utility ship at all, and if so what does the
+   Splitter give up?** `SERUM2-FX-REFERENCE.md:376-379` argues the opposite of this bible (utility duties
+   = chain plumbing, not a rack slot), and `SPLITTER-BUILD-BIBLE.md` already claims M/S width, Bass
+   Mono, a latching Mono pill and a Haas-class Slip. Under the no-doubles rule those controls belong to
+   exactly one device. Three coherent answers: (a) Utility ships and Splitter drops its imaging trim
+   (Splitter becomes purely *lanes*); (b) Splitter ships and Utility shrinks to Gain/Balance/cuts/Tilt
+   + the meters; (c) Utility ships as the *chain plumbing* both other documents describe — always
+   present between slots rather than occupying one. This must be answered before any code.
 1. **Chain slot:** First/Last toggle (`SYN_UTL_POS`, recommended — keeps `SYN_FX_ORDER` at 6) vs
    folding Utility into a 24-entry permutation? (§7.2)
 2. **Per-osc SRC pills for Utility?** A 4th send bus costs the full fb305/fb338 exclusion-sum surgery
@@ -711,21 +914,45 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
 7. **Widen bipolar ±30 ms** with sign = channel — confirmed over a separate channel selector?
 8. **Does Utility deserve the 6th device-viz slot polish pass** (The Field concept A) now, or ship
    Strip Meters first and upgrade with the chain epic?
+9. **[AUDIT] Balance taper:** keep the cosine law (first fifth < 0.3 dB — soft but standard, and the
+   goniometer shows the move from the first degree) or switch to the dB-linear `−40·|b|` law with a
+   −∞ tail (§3.2)?
 
 ---
 
 ## 13. Sources
 
-* Serum 2 User Guide (local PDF), "Using Serum FX → Utility", p.182 — the competitor param set.
-* Ableton Live manual — Live Audio Effect Reference (Utility): https://www.ableton.com/en/live-manual/12/live-audio-effect-reference/
-* Cycling '74 `abl.device.utility~` reference (Ableton Utility port; exact attribute ranges): https://docs.cycling74.com/reference/abl.device.utility~
+**[AUDIT] Verification key:** ✅ = fetched and read this pass, the quoted numbers are confirmed ·
+🟡 = corroborated in-tree but the primary source was not readable · ⬜ = cited, not independently
+verified this pass (do not quote as measured fact).
+
+* 🟡 Serum 2 User Guide, "Using Serum FX → Utility", p.182 — the competitor param set. *The local PDF
+  in this tree is a 20-page extract with no p.182; the list is corroborated by the in-tree eyewitness
+  survey `Design/SERUM2-FX-REFERENCE.md:372-375` (POLARITY INV · LPF · HPF · MONO BASS + FREQ · WIDTH ·
+  PAN · MIX · LEVEL; visualizer: none).*
+* ⬜ Ableton Live manual — Live Audio Effect Reference (Utility): https://www.ableton.com/en/live-manual/12/live-audio-effect-reference/
+  *— the chapter page truncates on fetch before the Utility section; the +35 dB gain ceiling and the
+  0-400 % Width are product knowledge, not quoted manual text.*
+* ✅ Cycling '74 `abl.device.utility~` reference (Ableton Utility port; exact attribute ranges): https://docs.cycling74.com/reference/abl.device.utility~
+  *— confirmed: `gain [−70.6, 6]` dB · `balance [−1, 1]` · `bass_mono_frequency [50, 500]` Hz ·
+  `midside [0, 1]` · `channelmode` 0 Left / 1 Stereo / 2 Right / 3 Swap · `invert_phase_l|r` ·
+  `dcblock` · `mute` · `mono` · `bass_mono`. No "Mid audition" control exists.*
 * Kilohearts Stereo snapin: https://kilohearts.com/products/stereo
 * Kilohearts Haas snapin: https://kilohearts.com/products/haas
 * Voxengo MSED (M/S encoder/decoder, inline mid/side gain/pan/mute, Plasma Vector Scope): https://www.voxengo.com/product/msed/
 * Airwindows PurestGain (gain-smoothing/zipper doctrine): https://www.airwindows.com/purestgain/
 * iZotope Ozone Imager (Width, Stereoize I/II, three vectorscope modes): https://www.izotope.com/en/products/ozone-imager.html
-* Eberhard Beis, "False and Correct Audio Correlation Measurements" (the correct meter math): http://www.beis.de/Elektronik/Correlation/CorrelationCorrectAndWrong.html
-* Wikipedia — Goniometer (audio) (axes, patterns, persistence): https://en.wikipedia.org/wiki/Goniometer_(audio)
+* ✅ Eberhard Beis, "False and Correct Audio Correlation Measurements": http://www.beis.de/Elektronik/Correlation/CorrelationCorrectAndWrong.html
+  *— confirmed verbatim: the zero-crossing/XOR meter reports **100 %** on a sine + 3rd + 5th pair whose
+  actual correlation is **≈ 42 %** ("a simple catastrophe"); a 3rd-harmonic case measures ≈ 44 %. The
+  page confirms multiply → square → low-pass but states **no formula and no time constants** — the
+  ~150 ms EMA convention is Bekkr's, not Beis's.*
+* ✅ Wikipedia — Alan Blumlein (stereo patent **GB 394,325**, applied 14 Dec 1931, accepted 14 Jun 1933;
+  shuffling circuit + hybrid-transformer L/R ↔ sum/difference matrixing): https://en.wikipedia.org/wiki/Alan_Blumlein
+* ✅ Wikipedia — Precedence effect (**the Haas paper is 1951**, from the 1949 dissertation; a single
+  reflection at **5-30 ms** can be **+10 dB** on the direct sound without becoming a separate event;
+  window ~50 ms speech / ~100 ms music): https://en.wikipedia.org/wiki/Precedence_effect
+* ⬜ Wikipedia — Goniometer (audio) (axes, patterns, persistence): https://en.wikipedia.org/wiki/Goniometer_(audio)
 * Wikipedia — Panning law (−3/−4.5/−6 dB variants): https://en.wikipedia.org/wiki/Panning_law
 * KA Electronics — Elliptic Equalizer (side-HPF vinyl lineage, 6 dB/oct historic): http://ka-electronics.com/kaelectronics/Elliptic_EQ/Elliptic_EQ.htm
 * ASMR Education — side-channel HPF in M/S mastering: https://asmr.education/faq/music-mastering/high-pass-filter-side-channel-mid-side-mix
@@ -734,4 +961,22 @@ Level discipline: every preset's output within ±3 dB of bypass on the standard 
 * Softube — Tonelux Tilt manual (tilt topology, pivot ~600 Hz-1 kHz, ±10-12 dB extremes): https://www.softube.com/user-manuals/tonelux-tilt-and-tilt-live
 * Waves PAZ manual — Stereo Position Display mechanism: https://www.manualslib.com/manual/188619/Waves-Psychoacoustic-Analyzer-Paz.html
 * Bekkr correlation meter doc (Pearson + ~150 ms EMA convention): https://zsazsaroboto.com/docs/bekkr/components/master/corr/
-* Repo (all verified this session): `PluginProcessor.cpp` :46/:3488/:6300/:7112/:7159/:7326/:7358/:7383/:7393-7407/:7414 · `DelayEngine.h` :92/:208-210/:262-263 · `DistortionEngine.h` :124-125/:333/:528-549/:630/:965/:2706 · `TerrainFilters.h` :69/:83/:317 · `ParameterIDs.hpp` :374-401/:406-431.
+* ✅ **Repo (every line below re-opened and read on 2026-08-14, audit pass):**
+  `PluginProcessor.cpp` :46 (fb299 level comment) · :3488-3494 (`SYN_FX_ORDER`, 6 entries) ·
+  :6300-6301 (`kVoiceToFxPad = 0.5f`) · :6457 (send read pointers) · :7112-7114 / :7274-7276
+  (sin/cos mix idiom — **not** what Utility uses, see §3.9) · :7159/:7161, :7326/:7328, :7358/:7360
+  (the three fb305/fb338 exclusion sums) · :7383 (`switch (fxPerm_)`) · :7393-7407 (bloom publish) ·
+  :7414 (`kInstrumentMakeup`) · :8567 (`getDistortionCurveVizJson`).
+  `PluginProcessor.h` :1125-1126 (`SCOPE_SIZE = 256`).
+  `PluginEditor.cpp` :4647 (`startTimerHz(60)`) · :5356 (`timerCallback`) · :5461 (`SF()` finite
+  sanitiser) · :5464-5473 (the 256-value scope push) · :988-993 (`getDistortionCurveViz` native fn).
+  `DelayEngine.h` :92 (width ≤ 1.6) · **:209-211** (M/S wet width — the first draft said :208-210,
+  which is the comment line above it) · :262-263 (output tone tilt @ ~760 Hz).
+  `DistortionEngine.h` :122-125 (10 Hz sample-rate-aware DC r + the warning about TerrainFilters'
+  hardcoded 0.995 = 38 Hz @48 k) · :333 ("±18 dB of tilt hinged ~1.2 kHz. ±6 dB would be the timid
+  version", verbatim) · :630 (fb325 dB-symmetric fix) · :965 · :988 (Tone hinge ~700 Hz) · :2706.
+  `TerrainFilters.h` :69 (DCBlocker) · :83 (TPTOnePole) · :317 (SvfMultimode).
+  `ParameterIDs.hpp` :381 (delay Low Cut 20-1000 Hz grammar) · :374-401 · :406-431.
+  ❌ **Stale and now corrected:** `PluginProcessor.cpp:6979` / `:7111` — fb315-era numbering carried
+  over from `DISTORTION-BUILD-BIBLE.md:622/680/1215`; today they are a `basinReverb.setModEnabled`
+  call and a closing brace. There is no fourth exclusion site.

@@ -6,6 +6,31 @@ on this machine, read out of a cited manual/paper, or read out of this repo with
 No DSP written yet. Companion to `DISTORTION-BUILD-BIBLE.md` / `REVERB-BUILD-BIBLE.md` —
 same structure, same laws, same chassis.
 
+> ### 🔴 v1.1 — ADVERSARIAL AUDIT PASS (every C++ `file:line` in v1 was re-read against the tree)
+> v1 shipped unaudited. These are the substantive corrections; each is marked inline where it lives.
+> **Nine claims were factually wrong:**
+> 1. `excite()` fires **only** for `Type::KARPLUS` — the "Pluck" character silently would not pluck (§0, §5.3).
+> 2. The fb305 exclusion has **THREE** sites / six lines, not two — the **delay** block at `:7358/:7360` was missed (§3, §9).
+> 3. `needsOversampling()`'s membership list was wrong (Scream chars aren't in it; XPD/Polivoks/Germanium/French are) (§0).
+> 4. The Comb **Damp** citation `:1265` is `CombReverb`, not `COMB_DAMP` (`:1764`) — and it is a 3-place edit, not 5 lines (§4.6).
+> 5. The free-run gate release coefficient is **60 ms** (applied squared), not "400 ms" (§6.5).
+> 6. The fb304 sync list is **20 entries with `Free` at index 0** — a 19-entry clone is off by one (§2, §5.2).
+> 7. Cutoff tops out at **20 kHz** and the clamp ceiling is `min(20 000, 0.45·fs_eff)`, not bare `0.45·fs_eff` (§2, §5).
+> 8. The formant bank is **4 resonators** (F1..F4, Csound bass-singer table), not 3 (§4, §13).
+> 9. Serum 2's Filter **FX module already has keytrack** — the "only we can" framing was false (§1.4, §5.3).
+> **Plus four design defects:** the "internal latency compensation is a solved precedent" claim is
+> **wrong and inherits a live comb from the shipped Distortion** (§6.3 MUST-RESOLVE) · Ring's
+> "Shift Up / Shift Down" are the same sound (law 5 cut, §4) and Bode's Cutoff is a **bipolar shift,
+> not a carrier** (which broke preset 12) · Type/Character choice sizes had zero headroom against
+> law C while §16 Q5 proposes a 10th type (§7) · the DJ type cannot live in one `FilterSlot` (§4.9).
+> **Verified OK:** every other `TerrainFilters.h` / `SynthVoice.h` / `DistortionEngine.h` /
+> `DelayEngine.h` / `PluginProcessor.cpp` / `ParameterIDs.hpp` line reference in v1, the 94-type
+> enum and `kNumTypes` at `:138`, `setType()` really does call `reset()` (`:1426-1431` — the fade
+> law stands), all nine curated Types map to real in-tree enum values, the ±6 st `kSpreadSemis`
+> math, the `+14 dB` bus arithmetic, and the FabFilter Volcano 3 / Cytomic The Drop / Mu-Tron III
+> external claims (re-fetched from source). **Unverifiable at audit** (marked inline, not deleted):
+> the Vox wah 450–1600 Hz / +18 dB figures and the 10 ms/500 ms Mu-Tron detector constants.
+
 > ⚠️ **`index.html` line numbers drift with every UI build — re-grep the symbol, don't trust the
 > number.** C++ refs (`TerrainFilters.h`, `DistortionEngine.h`, `DelayEngine.h`, `SynthVoice.h`,
 > `PluginProcessor.cpp`) have been stable and were read directly for this doc.
@@ -32,10 +57,10 @@ bank, phaser, ring/Bode, and more), all reachable through one façade class — 
 | `setPoles(0..3)` | `:1435` | ladder slope 6/12/18/24 dB, CPU-free (both taps computed) |
 | `setSpread(0..1)` | `:1438` | L/R cutoff split, ±6 st at full (`kSpreadSemis`, `:1440`) |
 | `setParams(cutHz, res01, drv01, fs)` | `:1444` | per-sample; coefficient recompute change-gated `:1447-1454` |
-| `processStereo(l, r)` | `:1922` | one stereo sample in place — the slot is **stereo internally** (every core exists as an L/R pair) |
-| `needsOversampling()` | `:2085` | true for Ladder family + Diode + Acid + Waveshaper + Ring + Bode |
+| `processStereo(l, r)` | `:1923` | one stereo sample in place — the slot is **stereo internally** (every core exists as an L/R pair) |
+| `needsOversampling()` | `:2085` | ⚠️ **exact set (read `:2085-2099`)**: Ladder LP24/12/6/18 + HP24 + German + Germanium + French, `DIODE_LP`, `ACID_303`, `ACID_SCREAM`, `POLIVOKS`, `WAVESHAPER`, `RING_MOD`/`RING_X2`, `BODE_SHIFT`/`BODE_DOWN`, and the whole `XPD_HP6..XPD_LP1` range. **It does NOT include `MS20_LP`, `WASP`, `SCREAM_LP`, `SCREAM_BP`** — i.e. 4 of the 5 Scream characters are *not* flagged. (Harmless under our fixed 2×, §6.3, but do not quote the old "Ladder+Diode+Acid+Waveshaper+Ring+Bode" shorthand — it was wrong.) |
 | `setMorph(0..1)` | `:2103` | SEM/OB-X LP→Notch→HP morph — "wired for when a morph knob exists" (it now does: §7 Var) |
-| `excite(level)` | `:2107` | Karplus noise-burst pluck hook, no-op for other types |
+| `excite(level)` | `:2108` | 🚨 **fires ONLY for `Type::KARPLUS`** (`if (type_ == Type::KARPLUS)`, `:2110`). It is a **no-op for `KARPLUS_BRIGHT`, `KARPLUS_MUTE` and every `COMB_*`** — so the §4.6 "Pluck" character (= `KARPLUS_BRIGHT`) will NOT pluck without a core edit. Extend the `if` to the three Karplus types; that is a real (1-line) engine change, not free reuse. |
 
 So this device is **not** a filter-DSP project. It is a **hosting + motion project**: put one
 `FilterSlot` at the FX bus position, calibrate its gain staging to the real bus (§6.2), and build
@@ -43,9 +68,12 @@ the three modulation drivers that turn a static filter into an *effect*:
 
 1. **Env Follower** — the auto-wah. The star. (§5.1)
 2. **Synced LFO** — 4 bars → 1/256, the house sync law. (§5.2)
-3. **Key Track** — the killer feature only a synth-internal FX rack can ship: the rack *knows the
-   notes*. FabFilter, Soundtoys, Cytomic physically cannot do this without a MIDI routing safari;
-   we get it for free. (§5.3)
+3. **Key Track** — the rack *knows the notes*. FabFilter, Soundtoys and Cytomic cannot do this
+   without a MIDI routing safari. ⚠️ **but it is NOT unique among synth-internal racks** — Serum 2's
+   Filter FX module already ships a keytrack toggle on CUTOFF ("1 octave MIDI = 1 octave cutoff",
+   `Design/SERUM2-FX-REFERENCE.md §2.8`). Our differentiator is the *continuous* 0–200 % amount, the
+   20 ms glide, and what it unlocks on Comb/Ring — not the existence of the feature. Do not put
+   "only we can do this" in marketing copy. (§5.3)
 
 ### Why one device and not "Filter + AutoWah + Phaser + …"
 
@@ -56,7 +84,7 @@ Same argument that won the Distortion scope decision (`DISTORTION-BUILD-BIBLE.md
 | **Serum is the bar** | Serum 2 ships **one** Filter FX device — "operates identically to the per-voice synth filter … as a master effect" (Serum 2 User Guide p.170), one Type menu spanning ladder/SVF/comb/formant/ring/phaser-ish types, 8 controls. One device. |
 | **Our chassis is built for it** | 2 dropdowns + 8 back knobs + 3 front heroes + Mix (fb275). Ladder-vs-Comb is a smaller engine gap than Hall-FDN-vs-Convolution, which already ships behind one Type menu. |
 | **No-doubles** | A separate Phaser device would collide with the Phaser types already in the 94-type enum and force a duplicate Cutoff/Res pair. |
-| **The core is one object** | All 94 types live behind ONE `FilterSlot`. One device = one slot = the cheapest possible CPU story (§11). |
+| **The core is one object** | All 94 types live behind ONE `FilterSlot` (+ one parked SVF that only the DJ type instantiates — §4.9). One device ≈ one slot = the cheapest possible CPU story (§11). |
 
 **What is out of scope here:** EQ (BellEQ/tilt types stay synth-side; a future Equalizer device owns
 them), Bitcrush/Waveshaper types (`Type::BIT_CRUSH`, `Type::WAVESHAPER` — the Distortion device owns
@@ -77,20 +105,26 @@ The first filter effect. Invented November 1966 by Lester Kushner and Brad Plunk
 Electronics/Thomas Organ (repackaging the Vox Super Beatle's mid-voicing circuit), sold from 1967
 as the **Vox Clyde McCoy** and, for the US, the **Cry Baby**. Circuit: a single-transistor active
 **inductor-based resonant band-pass**, rocker pot sweeping the peak from roughly **450 Hz to
-1.6 kHz**, peak boost about **+18 dB**, fixed Q (ElectroSmash V847 analysis; GEO/geofex "Technology
-of Wah Pedals"). The lesson that survives into our device: *a resonant peak sweeping over ~2
+1.6 kHz**, peak boost about **+18 dB**, fixed Q. ⚠️ **UNVERIFIED at audit time** — electrosmash.com
+did not resolve and geofex.com could not be fetched; the 450/1600 Hz and +18 dB figures come from the
+original researcher's notes only. Treat as approximate colour, not as a spec to calibrate against.
+The lesson that survives into our device: *a resonant peak sweeping over ~2
 octaves of midrange is intrinsically vocal* — it tracks the F1/F2 region of human vowels. That is
 why a wah "talks."
 
 ### 1.2 Mu-Tron III (1972) — the envelope closes the loop
 
-Mike Beigel's Musitronics **Mu-Tron III**, "the world's first envelope-controlled filter": a
-**state-variable filter** (LP/BP/HP switchable) whose center frequency is driven by an **envelope
-follower** through opto-isolators (photocell pairs, because an SVF needs two elements moved
-simultaneously). Controls: **Sensitivity** (detector gain), **Peak** (resonance), **Range**
-(low/high), and the iconic **Up/Down drive switch** (sweep opens or closes with level). Typical
-detector constants in this lineage: attack ≈ **10 ms**, decay ≈ **500 ms** (geofex ECF-tech's
-worked example). Stevie Wonder's clav, Bootsy's bass, Jerry Garcia's leads — the auto-wah canon.
+Mike Beigel's Musitronics **Mu-Tron III** (1972). ✅ **Verified** (Wikipedia, fetched at audit):
+designed by Mike Beigel "at the instigation of Guild engineer Aaron Newman"; "the state variable
+filter in the Mu-tron III allowed for low-pass, bandpass, and high-pass filter response"; "used
+proprietary opto-isolators to control the filter, which was novel for the time". ⚠️ "**the world's
+first envelope-controlled filter**" is Musitronics' own marketing line, not an independently
+verified first — keep it in quotes or drop it. Controls: **Sensitivity** (detector gain), **Peak**
+(resonance), **Range** (low/high), and the iconic **Up/Down drive switch** (sweep opens or closes
+with level) — *control names unverified at audit; the up/down sweep is confirmed*. Detector
+constants attack ≈ **10 ms**, decay ≈ **500 ms** are **UNVERIFIED** (geofex ECF-tech unreachable) —
+our §5.1 defaults come from the in-tree `DelayEngine.h:133-134` (4 ms / 180 ms), which *is*
+measured, so nothing calibrates off these numbers. Stevie Wonder's clav, Bootsy's bass, Jerry Garcia's leads — the auto-wah canon.
 Our §5.1 env follower is a direct, calibrated descendant, and the front **Follow** knob is bipolar
 precisely because of that Up/Down switch.
 
@@ -131,16 +165,23 @@ precisely because of that Up/Down switch.
   sample-hold, French LP with "BOEUF" second resonance, German ZDF LP, Scream LP/BP with a
   feedback-cutoff VAR, Wasp, DJ Mixer, Diffusor, MG Dirty with the "PAIN" knob, Comb 2, expander
   MM/BPF), then **CUTOFF · RES · DRIVE · VAR (per-type relabel) · PAN (L/R cutoff offset) · MIX ·
-  LEVEL**, keytrack switch on the synth-side twin, and a right-click "Clean Mode" on Drive
-  (−24 dB pre / +24 dB post). Visualizer: §8.1.
-* **FabFilter Volcano 3**: 4 filters, shapes LP/HP/BP/Bell/Shelf/Notch/AP, slopes 6/12/24/48,
-  **11 filter "styles"** (Classic, Smooth, Raw, Hard, Hollow, Extreme, Gentle, Tube, Metal, Easy
-  Going, Clean) — a Character dropdown in all but name; XLFO, EG, **envelope follower with
-  Transient mode**, MIDI, XY pads; per-filter panning.
-* **Cytomic The Drop**: the analog-modeling quality bar. 11 circuit models (MS1/MS2 Korg, OSR
-  OSCar, JRP Jupiter/Juno, SHR SH-101, PRD Moog Prodigy, WSP Wasp, PT1 Prophet-5 rev 1, SMP/AMU/KSM
-  originals), dual HP+LP serial/parallel, two Taurus-modeled envelopes, env followers, audio-rate
-  LFO, self-oscillation with a "Safe" switch, ×2..×8 oversampling. Simper's published papers
+  LEVEL**, and a right-click "Clean Mode" on Drive (−24 dB pre / +24 dB post). ⚠️ **corrected:** the
+  keytrack toggle is **on the FX module's own CUTOFF**, not only on "the synth-side twin" — "CUTOFF
+  (keytrack toggle; 1 octave MIDI = 1 octave cutoff)" per the in-tree
+  `Design/SERUM2-FX-REFERENCE.md §2.8`. This is why §5.3's framing was softened. Visualizer: §8.1.
+* **FabFilter Volcano 3** — ✅ **verified at audit** (fabfilter.com/help/volcano/using/filtercontrols):
+  4 filters, shapes "low/high pass, band pass, bell, low/high shelf, notch or all pass", slopes
+  **6/12/24/48 dB/oct** (6 dB/oct not offered for band-pass or notch), and exactly **11 filter
+  "styles"** — Classic, Smooth, Raw, Hard, Hollow, Extreme, Gentle, Tube, Metal, Easy Going, Clean
+  — a Character dropdown in all but name; XLFO, EG, **envelope follower with Transient mode**,
+  MIDI, XY pads; per-filter panning.
+* **Cytomic The Drop** — ✅ **verified at audit** (cytomic.com/product/drop/): the analog-modeling
+  quality bar, exactly **11 filter models** — MS1 (Korg MS20 rev 1), MS2 (rev 2), OSR (OSCar), JRP
+  (Jupiter 8 / Juno 6), SHR (SH-101 / SH-09), PRD (Moog Prodigy), WSP (Wasp), PT1 (Prophet 5 rev 1),
+  SMP (custom Cytomic), AMU (transposed SVF), KSM (variation on MS2) — dual HP+LP serial/parallel,
+  two Taurus-modeled envelopes, env followers, audio-rate LFO, self-oscillation with a "**safe**"
+  button, and **separate realtime/offline oversampling** ("recommended settings are x2 for realtime
+  and x8 for offline render"). Simper's published papers
   (`SvfLinearTrapOptimised2.pdf`, `SkfLinearTrapOptimised2.pdf`, ADC-2020 "Circuit to Code") are
   the math our SVF core already stands on.
 * **Soundtoys FilterFreak**: 20 Hz–20 kHz cutoff, self-oscillates with no input, mod sources =
@@ -170,14 +211,14 @@ real bus.
 
 | Param | 100 % must be | Why that is "just past useful" |
 |---|---|---|
-| Cutoff | full 20 Hz → 19 kHz sweep (`cutKnobToHz = 20·1000^t`, `TerrainFilters.h:52-55`, clamped 0.45·fs) | at 20 Hz an LP is silence, at 19 k an HP is silence — the knob's ends ARE program mutes; that's the DJ gesture, not a bug |
+| Cutoff | full 20 Hz → **20 kHz** sweep (`cutKnobToHz = 20·1000^t`, `TerrainFilters.h:52-55` — `t=1` is exactly 20 000 Hz), clamp = **`min(20 000, 0.45·fs_eff)`** (the in-tree law, `SynthVoice.h:4190`: `fmax = jmin(20000, 0.45·coefSr)` — NOT bare `0.45·fs`) | at 20 Hz an LP is silence, at 20 k an HP is silence — the knob's ends ARE program mutes; that's the DJ gesture, not a bug |
 | Res | **self-oscillation** on every core that can (ladder k→4, acid k→17, scream loop ≥1) — envelope-gated per law 6 (§6.5) | a filter that can't whistle is a tone control; The Drop, FilterFreak, Volcano all self-osc; gating (not capping) is our compliance |
 | Drive | **+38 dB total** above bus program (fixed +14 dB bus lift + 0..+24 dB knob law, §6.2), taper `t^0.8` | +14 dB only *reaches* hardware nominal from −26; the knob's +24 on top is the actual push; at 100 % the ladder compresses to a fuzz — destruction allowed |
 | Follow (front) | **±100 % = ±7 octaves** of env-driven sweep (84 semis) | full-range Mutron slam; at −100 % a snare closes the filter to a thump — night-and-day both directions |
 | Sense | at 100 %, detector gain +48 dB — the filter pins full-sweep on **−48 dBFS** program (noise tails, reverb wash) | quiet material must be able to drive the wah; calibrated so 50 % ≈ full musical sweep at −26 dBFS program (§5.1 table) |
 | Attack | 0.2 ms → 300 ms log | 0.2 ms = per-cycle "tearing" on bass (an audible, intentional artifact); 300 ms = swell |
 | Release | 20 ms → 2 s log | 20 ms = stutter-wah on 1/16ths; 2 s = one slow exhale per phrase |
-| Rate | stepped synced list **4 bar → 1/256** (law 3; the fb304 delay list, `PluginProcessor.cpp:3456-3459`) | 1/256 at 174 BPM = 172 Hz = audio-rate AM-like sideband growl — deliberately past "useful" |
+| Rate | stepped synced list **4 bar → 1/256** (law 3). ⚠️ the fb304 delay list is **20 entries**, `"Free"` at **index 0** then the 19 divisions (`PluginProcessor.cpp:3458-3459`) — clone it **whole, including Free**, or the "index-aligned" claim is false | 1/256 at 174 BPM = 172 Hz = audio-rate AM-like sideband growl — deliberately past "useful" |
 | Sweep | 0 → ±5 octaves (60 semis) LFO depth, bipolar | ±5 oct traverses the whole keyboard span of cutoffs every cycle |
 | Track | 0 → **200 %** (0.5 = 100 % = 1 oct/oct) | 200 % over-tracking splays the keyboard — high notes scream open, low notes seal shut; 100 % is the "playable comb" sweet spot |
 | Var | per-type (§7) — each relabel reaches its own destruction (Morph full HP, Bite = scream, Blend full AM, Spin 180°) | |
@@ -230,14 +271,20 @@ Verified by reading, not assumed:
   choices, front floats, back P1–P8 relabelled per family, SRC_A..NOISE routing bools, POWER
   default OFF, family pill. We clone this grammar as `SYN_FLT_*` (no collision — grepped; the synth
   filters use `SYN_FILTER1_/SYN_FILTER2_`).
-* **The fb305/fb338 landmine** — every send bus must join EVERY main-send exclusion:
-  `PluginProcessor.cpp:7159/:7161` and `:7326/:7328` (`rvbSend + dlySend + dstSend` sums). A 4th
-  bus (`fltSend`) must be added to all four lines or main-send devices double-count the routed dry.
-  Documented defusal precedent: fb338.
+* **The fb305/fb338 landmine** — every send bus must join **EVERY** main-send exclusion.
+  🚨 **There are THREE sites, SIX lines** (verified by `grep -n "EVERY send bus joins EVERY
+  main-send exclusion" PluginProcessor.cpp`), not two:
+  **reverb** `:7159` / `:7161` · **distortion** `:7326` / `:7328` · **delay** `:7358` / `:7360`
+  (all three are the same `(rvbSend + dlySend + dstSend) * outputGain * kVoiceToFxPad` sum).
+  A 4th bus (`fltSend`) must be added to all **six** lines, **plus** the new device's own
+  main-send branch needs a **fourth site** written with all four buses in it. Miss the delay site
+  and the bug is silent on reverb/distortion tests. Documented defusal precedent: fb338.
 * **FX order** — `SYN_FX_ORDER` is a 6-way permutation of 3 devices
   (`PluginProcessor.cpp:3488, :5860`). A 4th device makes it 24-way — see §16 (open question).
-* **Karplus pluck** — `FilterSlot::excite()` (`:2107`) is a note-on hook the synth barely uses;
+* **Karplus pluck** — `FilterSlot::excite()` (`:2108`) is a note-on hook the synth barely uses;
   wired to the FX device's key listener it turns Comb/Karplus into a playable resonator (§4.6).
+  ⚠️ it currently guards `type_ == Type::KARPLUS` only (`:2110`) — the "Pluck"/"Bright" characters
+  need the guard widened to `KARPLUS_BRIGHT`/`KARPLUS_MUTE`. Budget the engine edit.
 
 ---
 
@@ -256,11 +303,19 @@ zero new DSP for characters; they are curated views of the 94.
 | 2 | **Acid** | diode-ladder — res character glued to cutoff, squelch, k≈17 scream | `ACID_303`, `ACID_SCREAM`, `DIODE_LP`, `GERMANIUM_LP`, `FRENCH_LP` | Squelch · Scream · Diode · Germanium · French | res-peak Q *varies with cutoff* (measure Q at 200 Hz vs 2 kHz — ladder's doesn't); scream onset at drive+res corner |
 | 3 | **Multi** | clean TPT SVF (Simper/trapezoidal), morphable response, no passband loss | `SVF_LP/HP/BP/NOTCH/PEAK`, `SVF_*24` (cascaded), `OBX_SVF` (SEM morph via `setMorph`) | Low 12 · Low 24 · High 12 · High 24 · Band · Notch · Peak · Morph | textbook magnitude match ±0.5 dB; **flat passband at any res**; Var sweeps LP→Notch→HP continuously (monotonic null-frequency track) |
 | 4 | **Scream** | Sallen-Key / clipped-feedback — the resonance path itself distorts | `MS20_LP`, `WASP`, `POLIVOKS`, `SCREAM_LP`, `SCREAM_BP` | MS-20 · Wasp · Polivoks · Scream Low · Scream Band | THD **of the resonant peak** rises with res (ladder/SVF: falls or flat); feedback scream sustains past the res=self-osc line — env-gated |
-| 5 | **Vowel** | 3-resonator formant bank — spectral envelope, not a cutoff | `FORMANT_A/E/I/O/U/MORPH/WIDE/GROWL` (Cutoff = vowel morph on Morph char) | Ah · Eh · Ee · Oh · Oo · Morph · Wide · Growl | 3 spectral peaks at published formant pairs (±3 %); vowel identity survives any input |
+| 5 | **Vowel** | **4-resonator** formant bank (F1..F4) — spectral envelope, not a cutoff. ⚠️ *not 3* — `FormantBank::VF[5][4]`, `TerrainFilters.h:770-790`, is a **bass-voice singer table (Csound Book)**, four formants per vowel | `FORMANT_A/E/I/O/U/MORPH/WIDE/GROWL` (Cutoff = vowel morph on Morph char) | Ah · Eh · Ee · Oh · Oo · Morph · Wide · Growl | **4** spectral peaks matching `VF[v][0..3]` (±3 %) — measure against the in-tree table, not a generic formant chart; vowel identity survives any input |
 | 6 | **Comb** | tuned delay feedback — harmonic spike series, *pitched* | `COMB_PLUS/MINUS/SHIMMER`, `COMB_OCTAVE/FIFTH/DAMP`, `KARPLUS`, `KARPLUS_BRIGHT` | Plus · Minus · Shimmer · Octave · Fifth · Damp · Karplus · Pluck | spike spacing = f0 (Track 100 % ⇒ spikes land on the played note ±1 cent); Minus offsets by f0/2 (odd-only) |
 | 7 | **Phaser** | all-pass cascade — notches in *phase*, flat in amplitude | `PHASER_4P/6P/8P/12P/16P`, `DIFFUSOR` | 4 · 6 · 8 · 12 · 16 · Diffuse | N/2 notches ≥30 dB (at internal mix); amplitude flat within 0.5 dB dry; group-delay signature |
-| 8 | **Ring** | multiply by carrier — inharmonic sidebands `f ± fc` | `RING_MOD`, `RING_X2`, `BODE_SHIFT`, `BODE_DOWN`, `RADIO` | Ring · Dual · Shift Up · Shift Down · Radio | sidebands at `f ± fc` (not harmonics); Bode chars: single sideband, opposite one suppressed > 30 dB |
+| 8 | **Ring** | multiply by carrier — inharmonic sidebands `f ± fc`. 🚨 **Cutoff means two different things inside this one Type** (read `RingMod::setParams` `:935` vs `BodeShifter::setParams` `:1145`): on `RING_MOD`/`RING_X2`/`RADIO` Cutoff **is** the carrier in Hz (exponential, keytracks correctly); on `BODE_SHIFT`/`BODE_DOWN` the slot re-derives `cut01 = log(cutHz/20)/log(1000)` and turns it into a **bipolar linear shift, noon (cut01 = 0.5) = ZERO shift, ±2000 Hz at the ends**. Also `RES` on this Type is *not* resonance — it is the sine→diode-bridge blend (Ring) / shift-loop feedback (Bode). | `RING_MOD`, `RING_X2`, `BODE_SHIFT`, `BODE_DOWN`, `RADIO` | Ring · Dual · **Shift** · Radio (see ⚠️ below) | sidebands at `f ± fc` (not harmonics); Bode: one sideband suppressed — *rejection depth is **unverified**: the in-tree Hilbert is only 4+4 all-passes (`:1127`), so the >30 dB figure in §13 must be MEASURED before it is quoted* |
 | 9 | **DJ** | one-knob bipolar LP⟷flat⟷HP, bit-flat at noon | `SVF_LP24` below center / `SVF_HP24` above (device-level bipolar map of Cutoff) | Clean · Color · Dub · Slam | **exact null at Cutoff = 50 %** (residual < −80 dB); res auto-rises toward the extremes (the DJM law) |
+
+> 🚨 **Law-5 cut applied to the Ring roster (audit fb-filter):** the original draft listed **Shift Up**
+> *and* **Shift Down** as two characters. They are **not night-and-day** — `BODE_DOWN` differs from
+> `BODE_SHIFT` by exactly one line, `dirMul = −1.0f` (`TerrainFilters.h:1611-1616` vs `:1821-1826`), and
+> the control it flips is *already bipolar*. "Shift Up at Cutoff 0.3" and "Shift Down at Cutoff 0.7"
+> are the **same sound**. Ship **one "Shift" character** (`BODE_SHIFT`, bipolar Cutoff, noon = no
+> shift) and let the knob choose direction. Inventing a second entry to fill the dropdown is the
+> other half of law 5. Ring drops 5 → **4** characters.
 
 **Cuts (and where their sounds live):** `BIT_CRUSH`, `WAVESHAPER` → the Distortion device (no-doubles).
 `REVERB_FILT/2/DARK/METAL` → the Reverb device's ground. `TILT/LOW_EQ/HIGH_EQ/BAND_EQ/AIR/ADD_BASS`
@@ -283,18 +338,40 @@ the synth filter menu; nothing is deleted.
 * **Vowel (4.5)** — Var = **Shift** → `FormantBank::setVowel(v, shift, …)` (`:824`) formant shift
   ±5 st: child ↔ giant. On the Morph character, Cutoff = vowel morph (`setMorph`, `:837`) — the
   knob literally talks.
-* **Comb (4.6)** — Var = **Damp** (in-loop brightness; `COMB_DAMP`'s `dmp` law at `:1265` is the
-  model — small parameterization of the existing damping, the one place a core gets a 5-line edit).
-  Note-on calls `excite()` on Karplus/Pluck chars.
+* **Comb (4.6)** — Var = **Damp** (in-loop brightness). ⚠️ **the draft cited `:1265` — that line is
+  inside `CombReverb` (`struct CombReverb`, `:1244`), the core behind `REVERB_FILT_2`, which this
+  bible explicitly cuts as Reverb-device ground.** The real targets are:
+  (a) `case Type::COMB_DAMP` at **`:1764-1772`**, where `dampL_.damp` / `dampR_.damp` are
+  **hard-coded `0.5f`** — that is the line the Var replaces;
+  (b) `DampComb<>::process` at `:1236-1242` (`lpZ = (1−damp)·y + damp·lpZ`) — the law itself;
+  (c) `CombCore` (`:606`) serves Plus/Minus/Shimmer/Karplus and has its **own** damping path.
+  So "Damp across all 8 Comb characters" is an edit in **three** places, **not** "the one place a
+  core gets a 5-line edit". Re-scope the build estimate accordingly.
+  Note-on calls `excite()` on the Karplus chars — **after** widening the `:2110` type guard (§0).
 * **Phaser (4.7)** — Var = **Spin**: L/R LFO phase offset 0..180° (device-level; quadrature phaser
   stereo). Phaser ignores Drive's color? No — drive feeds `PhaserCore.setParams` driveLin as today.
 * **Ring (4.8)** — Var = **Blend**: RM → AM (device-level: `out = x·(1−b) + b·(x·carrier)` re-mixed
-  with the dry leg so b=0.5 ≈ classic AM with carrier bleed). Cutoff = carrier freq (as in Serum).
-  Track 100 % = the shifter/ring tracks the note — sidebands become *playable*.
+  with the dry leg so b=0.5 ≈ classic AM with carrier bleed). Cutoff = carrier freq on the Ring/Dual/
+  Radio chars (as in Serum — `RingMod::setParams(carrierHz, …)`, `:935`). ⚠️ **On the Shift (Bode)
+  char, Cutoff is a bipolar ±2000 Hz shift with noon = zero shift** (`:1145-1152`), so:
+  (a) key-track in **semitone** space does **not** make a Bode shift track the note — a linear-Hz
+  shifter is inharmonic by definition; **Track has no musical meaning on Shift** — grey it or map it
+  to nothing and say so;
+  (b) **preset 12 "Bell Machine" (Ring/Shift Up, Cut .5) is broken as written** — Cut .5 is
+  *exactly zero shift*, i.e. bypass. Fixed in §10.
+  Track 100 % = the **Ring/Dual** carrier tracks the note — those sidebands become *playable*.
 * **DJ (4.9)** — Cutoff remap: `t<0.5 ⇒ LP, fc = 20·1000^(2t)` up to 20 kHz at noon;
   `t>0.5 ⇒ HP, fc = 20·1000^(2t−1)`; exact-flat bypass branch at `|t−0.5| < 0.004` (with 10 ms
   crossfade so the null engages click-free). Res auto-curve: `res_eff = res + curve·(2|t−0.5|)^1.5·(1−res)`
   (Var = **Curve**). Characters add drive coloration (Color/Slam) or LP-biased res voicing (Dub).
+  🚨 **DJ breaks the "one slot" claim of §0** — one `FilterSlot` holds **one** `type_` at a time, and
+  crossing noon means `setType(SVF_LP24) → setType(SVF_HP24)`, which **hard-resets** (`:1426-1431`).
+  Applying the §6.6 fade-dip on every noon crossing puts an audible 2 ms hole in the middle of the
+  single most-performed gesture in the device. **Fix: the DJ type instantiates a SECOND `FilterSlot`**
+  (`djHp_`) permanently on `SVF_HP24`, main slot permanently on `SVF_LP24`, both always in circuit
+  with the inactive leg parked at its transparent extreme (HP at 20 Hz / LP at 20 kHz). This is how
+  real DJ filters are built (serial LP+HP, one always wide open), it removes the type swap entirely,
+  and it costs one extra SVF (≈ 0.05 % — §11). Correct §0/§11 to "one slot **+ one parked SVF for DJ**".
 
 ---
 
@@ -308,8 +385,17 @@ cutSemis = hzToSemi( cutKnobToHz(cut01) )        // base — the front Cutoff kn
          + followSemis                           // §5.1 env follower (front Follow · back Sense/Attack/Release)
          + lfoSemis                              // §5.2 (back Rate/Sweep)
          + keySemis                              // §5.3 (back Track)
-cutHz    = clamp( semiToHz(cutSemis), 20, 0.45·fs_eff )
+cutHz    = clamp( semiToHz(cutSemis), 20, min(20000, 0.45·fs_eff) )   // ← the in-tree law
 ```
+
+⚠️ **The clamp ceiling is `min(20 000, 0.45·fs_eff)`, not bare `0.45·fs_eff`.** The voice does exactly
+this (`SynthVoice.h:4190`: `fmax = jmin(20000.0f, 0.45f * coefSr)`). At the device's fixed 2×,
+`0.45·fs_eff` = 43.2 kHz at 48 k — dropping the 20 kHz cap would let modulation drive the cutoff two
+octaves above anything audible. It matters *doubly* here because **seven of the nine types re-derive
+`cut01 = log(cutHz/20)/log(1000)` inside the slot** (Vowel `:1560`, Bode `:1147`, and every
+`cut01`-based case): above 20 kHz `cut01` saturates at 1.0 and the top of the modulation range goes
+**flat — a plateau, which is a law-5 failure**. Keep the cap and scale Follow/Sweep depth so the
+useful excursion lands inside it.
 
 Every term is glided (2.5 ms one-pole, the fb204 filter-lane law) before summing. `setParams` is
 called **per sample** with the summed value — the change-gate (`:1447-1454`) self-disables while
@@ -357,10 +443,13 @@ on attacks only. Front pill 2 (§7).
 
 ### 5.2 LFO — synced, one master clock
 
-* **Rate** = stepped knob over the house synced list, **4 bar → 1/256**, index-aligned with the
-  fb304 delay list (`4 bar, 2 bar, 1 bar, 1/2, 1/2D, 1/2T, 1/4, 1/4D, 1/4T, 1/8, 1/8D, 1/8T,
-  1/16, 1/16D, 1/16T, 1/32, 1/64, 1/128, 1/256` — 19 steps; `PluginProcessor.cpp:3456-3459`
-  grammar). Default 1/4.
+* **Rate** = stepped knob over the house synced list, **4 bar → 1/256**. ⚠️ **corrected:** the fb304
+  delay list (`PluginProcessor.cpp:3458-3459`, read verbatim) is **20 entries with `"Free"` at index
+  0**: `Free, 4 bar, 2 bar, 1 bar, 1/2, 1/2D, 1/2T, 1/4, 1/4D, 1/4T, 1/8, 1/8D, 1/8T, 1/16, 1/16D,
+  1/16T, 1/32, 1/64, 1/128, 1/256`. A 19-entry list that starts at "4 bar" is **off by one** against
+  it — "index-aligned" would be a lie and every saved Rate would read one division fast if the two
+  lists were ever cross-read. **Clone all 20 including `Free`** (Free = the free-run Hz fallback the
+  one-clock law already needs when the transport is stopped). Default **`1/4` = index 7**.
 * **Sweep** = depth, 0 → ±60 semis (5 octaves), sine.
 * 🔑 **ONE-CLOCK LAW (fb345):** derive phase from the host — `ph = fmod(ppqPosition /
   beatsPerDiv, 1)` at block start + in-block increment; never free-integrate a per-sample
@@ -371,9 +460,10 @@ on attacks only. Front pill 2 (§7).
   wants Tri/Saw/Square here.)
 * Stereo: the **Spin** Var (Phaser) and the Wide pill (§7) offset R-channel LFO phase.
 
-### 5.3 Key Track — the killer feature
+### 5.3 Key Track
 
-External filter plugins cannot know the note. We can:
+External filter plugins cannot know the note. We can. (Scope honestly: Serum 2's Filter FX already
+has a keytrack toggle — see §0 note. Ours is continuous 0–200 % + glided + wired to `excite()`.)
 
 ```
 keySemis_target = Track · 2 · (note − 60)     // Track 0..1 → 0..200 %; 0.5 = 100 % = 1 oct/oct
@@ -384,10 +474,12 @@ keySemis += (keySemis_target − keySemis) · g20ms   // 20 ms glide — legato 
   `int lastNoteFx_` written where the processor already dispatches note-ons
   (`PluginProcessor.cpp:6008` region, next to `flowArp.noteOn`). Note-off does NOT clear it — the
   filter holds the last pitch (release tails keep their color; law: nothing turns off by itself).
-* At Track 100 %, **Comb becomes a playable resonator** (spikes on the played note — verified
-  ±1 cent), **Ring becomes a playable sideband instrument**, and any res'd-up LP self-osc **plays
-  the keyboard** (env-gated, §6.5). These three demos are the marketing reel.
-* Karplus chars: note-on also fires `FilterSlot::excite(velocity)` (`:2107`) — a true pluck.
+* At Track 100 %, **Comb becomes a playable resonator** (spikes on the played note — target ±1 cent,
+  to be *measured*, §13), **Ring/Dual become a playable sideband instrument** (carrier = Cutoff in
+  Hz; **not** the Shift/Bode character, whose shift is linear-Hz — §4.8), and any res'd-up LP
+  self-osc **plays the keyboard** (env-gated, §6.5). These three demos are the marketing reel.
+* Karplus chars: note-on also fires `FilterSlot::excite(velocity)` (`:2108`) — a true pluck, **after**
+  the `:2110` guard is widened past `Type::KARPLUS` (§0).
 * Center C4 = MIDI 60, matching the synth's keytrack law (`SynthVoice.h:4088`).
 
 ---
@@ -436,10 +528,31 @@ lower, so we split the difference into an architecture:
 * **Uniform 2× for ALL types** (even SVF/comb/phaser that don't need it) because: (a) latency is
   then **constant and type-independent** — switching Type never changes delay, so type fades stay
   clean; (b) the CPU cost of 2× on the cheap cores is noise for ONE instance (§11).
-* 🔑 **Latency law (the Distortion §4.4 precedent):** the 64-sample latency is compensated
-  **internally** — the dry path for Mix runs through a 64-sample delay line so wet/dry stay
-  sample-aligned (no comb at 50 % Mix), and the device reports **zero** to the host (it's 1.3 ms,
-  inside the accepted FX-chain jitter; identical to the shipped Distortion decision).
+* 🔑 **Latency law — RACK LAW A (ZERO LOOKAHEAD / zero reported latency).** The device reports
+  **zero** to the host. That is non-negotiable: the fb305 main-send exclusions subtract the routed
+  dry **sample-aligned** (`leftChannel[i] − rtd[i]`, `PluginProcessor.cpp:7159` etc.), so any
+  latency-reporting device makes the dry leak back phase-smeared. No lookahead, no linear-phase
+  anything, anywhere in this device.
+* 🚨 **MUST RESOLVE BEFORE BUILD — the internal 64-sample delay is NOT a solved precedent.** The
+  draft said "identical to the shipped Distortion decision". Read what that decision actually is:
+  `DistortionEngine.h:997-1002` aligns Mix by **delaying the dry** (`dryAligned = dr[(di −
+  kOsLatency) & kRM]`), so at Mix 0 the engine returns `in[n−64]`, not `in[n]`. The host-side insert
+  is `leftChannel[i] += e · (wl − sgL)` (`PluginProcessor.cpp:7337-7339`), which subtracts the
+  **un-delayed** `sgL[n]`. At low Mix in main-send mode that evaluates to `in[n−64] − in[n]` — a
+  64-sample comb (nulls every ≈750 Hz at 48 k), inaudible at Mix 0 or 100 but present in between.
+  Copying the pattern blind copies the flaw. Pick one, explicitly, and write a §13 row for it:
+  1. **(recommended) Delay the insert's reference too** — keep a 64-sample ring of `sg` in the block
+     loop and subtract `sgDelayed[n−64]`; the device then contributes exactly 0 at Mix 0 and the
+     whole-mix insert is coherent. The routed-dry `rtd` used by the exclusion must be read from the
+     **same** delayed tap or the exclusion re-smears (law A). Costs one ring per bus.
+  2. **1× (no oversampling) for the linear types** (SVF/Multi/Comb/Phaser/Vowel/DJ — none of them
+     declare `needsOversampling()`), 2× only for Ladder/Acid/Scream/Ring. Zero latency in the common
+     case, but latency becomes **type-dependent**, which breaks the constant-latency argument below
+     and makes Type fades change delay. Only viable if paired with (1) for the 2× types.
+  3. Ship 2× everywhere and **accept the comb**, with Mix locked to 100 % on main-send. Worst option;
+     documented only so nobody rediscovers it as a "bug".
+  ⚠️ **Also file this against the shipped Distortion device** — the same arithmetic applies there and
+  it was never in the Phase G table. Run the null harness on DST main-send at Mix 0.5 before copying.
 
 ### 6.4 Stability + loop-gain ledger (law 6)
 
@@ -459,8 +572,18 @@ the full law-6 compliance sentence for the review.
 
 ### 6.5 Envelope-gated self-oscillation (nothing free-runs)
 
-Reuse the fb325/fb345 gate verbatim (`DistortionEngine.h:161-163` constants): input envelope
-`inEnv` with 2 ms attack, ~400 ms **squared** release. Law:
+Reuse the fb325/fb345 gate verbatim. ⚠️ **Use the literal constants — the draft's "~400 ms squared
+release" is the *observed behaviour*, not the coefficient, and a builder who writes
+`exp(−1/(fs·0.4))` gets a gate 6.7× too slow.** From `DistortionEngine.h:161-163`:
+
+```
+envA_ = 1 − exp(−1/(fs · 0.002));   // 2 ms attack
+envR_ = 1 − exp(−1/(fs · 0.060));   // 60 ms one-pole release  ← the actual number
+// the gate is applied SQUARED (fb345 grid-leak law); 60 ms squared ⇒ the audible
+// free-run gate closes in ~0.4 s — "scream dies WITH the note" (the header's own comment)
+```
+
+Law:
 
 ```
 g = inEnv gate ∈ [0,1]
@@ -525,10 +648,20 @@ Power pill. Default both OFF.
 
 ### Back panel — 2 dropdowns + 8 knobs (4×2)
 
-**Dropdown 1 — Type** (`SYN_FLT_TYPE`, choice 9): Ladder · Acid · Multi · Scream · Vowel · Comb ·
-Phaser · Ring · DJ. Default Ladder.
-**Dropdown 2 — Character** (`SYN_FLT_CHARACTER`, choice 8, per-type roster §4; unused tail entries
-hidden per type — the delay SYNCDIV precedent). Default = first entry.
+🚨 **RACK LAW C — choice cardinality is fixed at birth (fb342, session law ①).** An
+`AudioParameterChoice` list **cannot grow in place**; the host caches it. Sizing `SYN_FLT_TYPE` to
+exactly 9 while **§16 Q5 of this same document proposes a 10th type** is a self-contradiction and a
+guaranteed re-birth of the param. Size both dropdowns for the **final** roster on day one, with
+disabled/hidden tail entries (the delay `SYNCDIV` precedent):
+
+**Dropdown 1 — Type** (`SYN_FLT_TYPE`, **choice 12** — 9 live + 3 reserved, disabled in the UI):
+Ladder · Acid · Multi · Scream · Vowel · Comb · Phaser · Ring · DJ · *(Reserved 1..3)*.
+Default Ladder (index 0). The three spares cover §16 Q5 (Sample Hold), a future Formant-2, and one
+free slot — cheaper than ever re-versioning the param.
+**Dropdown 2 — Character** (`SYN_FLT_CHARACTER`, **choice 12**, per-type roster §4; unused tail
+entries hidden per type). Today's longest roster is 8 (Multi/Vowel/Comb); 8 with **zero** headroom is
+the same trap one level down — a single added voicing on any type re-births the param. Default =
+first entry.
 
 | Slot | Knob | ID | Range → mapping | Taper | Default |
 |---|---|---|---|---|---|
@@ -621,12 +754,21 @@ sample ramps to full brightness within 50 ms. A bloom you can barely see is a fa
   when feeding DST presets.
 * **Mono-sum:** Wide's ±3 st split partially combs on mono sum for Comb/Phaser types (their
   response is frequency-fine). Acceptable, documented; Wide defaults OFF.
-* **⚠️ THE fb305/fb338 LANDMINE (exact edits).** The 4th send bus (`fltSend`) MUST join **every**
-  main-send exclusion sum or main-send devices double-count the routed dry:
-  `PluginProcessor.cpp:7159` and `:7161` (first site), `:7326` and `:7328` (second site) — add
-  `+ (fltSendL ? fltSendL[i] : 0)` etc. to each. This is the documented re-break; fb338 defused it
-  for bus 3 on schedule. Grep `fb305 law` to find all sites at build time (lines will have
-  drifted).
+* **⚠️ THE fb305/fb338 LANDMINE (exact edits) — THREE existing sites, SIX lines, plus a fourth site
+  you author.** The draft listed only two sites and missed the **delay** block entirely. Verified
+  today by `grep -n "EVERY send bus joins EVERY main-send exclusion" PluginProcessor.cpp`:
+
+  | Site | Lines | Guarded by |
+  |---|---|---|
+  | Reverb main-send | `:7159` (L) / `:7161` (R) | `hallMainSend_` |
+  | Distortion main-send | `:7326` (L) / `:7328` (R) | `! dstRouteActive_` branch |
+  | **Delay main-send** ← *missed by the draft* | `:7358` (L) / `:7360` (R) | `dlyMainSend_` |
+  | **Filter main-send** ← *new, you write it* | — | `fltMainSend_` |
+
+  Add `+ (fltSendL ? fltSendL[i] : 0.0f)` / `…R…` to **all six** existing lines, and write the new
+  site with **all four** buses in its sum. Missing only the delay site is silent on reverb- and
+  distortion-only tests — exactly how this class of bug survives. Grep the sentinel comment at build
+  time (line numbers drift).
 * **FX order:** `SYN_FX_ORDER` is a 6-way permutation choice of 3 devices
   (`PluginProcessor.cpp:3488`, read as index per the choice law at `:5860`). Four devices = 24
   permutations — a UI and param-cardinality decision (session law ①: choice-param cardinality is
@@ -660,7 +802,9 @@ Format: name — intent — Type/Char, then the non-default values (knob 0–1 u
 10. **Slow Tide** — classic phaser drift. Phaser/8, **Wide ON**. Cut .5, Res .5, Rate 2 bar,
     Sweep .6, Var(Spin) .5.
 11. **Radio Poison** — lo-fi carrier trash. Ring/Radio. Cut .62, Res .3, Mix .7, Drive .3.
-12. **Bell Machine** — playable SSB bells. Ring/Shift Up. Cut .5, Track .5, Mix 1, Follow +.2.
+12. **Bell Machine** — SSB bells. Ring/**Shift**. **Cut .78** (⚠️ *was `.5` — corrected: on the Bode
+    core `cut01 = .5` is EXACTLY zero shift, i.e. bypass; `.78` ≈ +250 Hz*), Mix 1, Follow +.2.
+    **Track 0** — a linear-Hz shifter does not keytrack (§4.8).
 13. **Scream Lead** — the MS-20 howl that dies with the note. Scream/MS-20. Cut .4, Res .93
     (gated self-osc), Drive .6, Var(Bite) .7, Follow +.35, Rel 400 ms.
 
@@ -680,6 +824,7 @@ Estimate at 48 k, one instance, arm64:
 | Piece | Cost |
 |---|---|
 | FilterSlot heaviest type (Acid/Ladder) at 2×, stereo | ~20–30 tanh-class ops/sample ≈ 0.3–0.6 % of one core |
+| Second parked SVF for the DJ type (§4.9) | ≈ 0.05 % — only in circuit on Type = DJ |
 | Halfband pair (129-tap polyphase, fb342-vectorized) | ~0.3 % (measured class from DST) |
 | Motion block (env, LFO, key glides) | < 0.05 % |
 | Coefficient recompute under modulation | the real cost — see below |
@@ -724,9 +869,16 @@ Estimate at 48 k, one instance, arm64:
 
 ## 13. Verify — the perceptual harness
 
-Reuse the metric battery (`scratchpad/rvb_perceptual.cpp` grammar; sample-diff RMS BANNED per
+Reuse the metric battery (the `rvb_perceptual.cpp` / `dst_cert_*` grammar; sample-diff RMS BANNED per
 fb283 — magnitude-spectrum/centroid/HF-ratio/flux only). Compile-pattern:
 `clang++ -O2 -I shim -I Source flt_cert.cpp` (the dst_cert family precedent).
+
+⚠️ **`scratchpad/` is NOT in the repo** — verified: there is no `scratchpad/` directory anywhere
+under the worktree, and no `rvb_perceptual.cpp` / `dst_cert_*` on disk. Those harnesses live in
+**per-session scratchpads** (`/private/tmp/claude-501/…/scratchpad`, the Phase G one is `21b98786`)
+and evaporate. Before quoting "reuse the harness": either recover them from that scratchpad or
+budget re-authoring them. If they get recovered, **commit them into the repo this time** — every
+bible in this folder now cites a path that does not exist.
 
 | Gate | Metric | Pass |
 |---|---|---|
@@ -736,7 +888,8 @@ fb283 — magnitude-spectrum/centroid/HF-ratio/flux only). Compile-pattern:
 | Slope (Ladder 24) | fitted dB/oct over 2 octaves post-knee | −24 ± 1.5 |
 | Acid discriminator | res-peak Q at fc = 200 Hz vs 2 kHz | ratio > 1.5× (ladder control < 1.15×) |
 | Scream discriminator | THD of res peak, res .95 vs .6 | rises > 12 dB (Multi control: < 2 dB) |
-| Vowel | 3 peak freqs vs formant table | ± 3 % |
+| Vowel | **4** peak freqs vs `FormantBank::VF[v][0..3]` (`TerrainFilters.h:770-790`) | ± 3 % |
+| Unity at Mix 0, main-send (§6.3 ⚠️) | residual RMS of `device_out − device_in`, Mix 0, Power ON | < −80 dB — **this is the row that catches the 64-sample insert comb** |
 | Comb + Track 100 % | spike-1 freq vs played note | ± 1 cent |
 | Phaser 8 | notch count / depth at internal mix | 4 notches ≥ 30 dB |
 | Ring | sideband placement f ± fc; Bode: rejected sideband | exact bins; > 30 dB rejection |
@@ -765,8 +918,21 @@ thresholds (≥ 6 dB spectral change or ≥ 25 % centroid move — the DST §8.3
 5. **Self-osc DC latch** — the Phase G grid-leak class: gate states must env-track (squared
    release), or a rail-parked filter boots silent/latched.
 6. **LFO phase accumulator drift** — one-clock law (§5.2); derive from ppq.
-7. **Latency vs Mix** — the 64-sample dry delay is NOT optional; skipping it combs at 50 % Mix
-   (inaudible at 0/100, the worst kind of bug).
+7. **Latency vs Mix (RE-STATED — the draft had it backwards).** Delaying the internal dry is *half*
+   the job: the host-side insert `+= e·(wet − in)` must subtract the **same** delayed tap, or the
+   device combs at intermediate Mix in main-send mode (`in[n−64] − in[n]`, nulls every ≈750 Hz at
+   48 k). §6.3 MUST-RESOLVE. Inaudible at Mix 0/100 — the worst kind of bug — and it is *already*
+   in the shipped Distortion path.
+16. **`excite()` only fires on `Type::KARPLUS`** (`:2110`) — the Pluck/Bright characters silently
+    don't pluck. Widen the guard.
+17. **Bode ≠ carrier.** Cutoff on the Shift character is a bipolar ±2000 Hz *shift*, noon = zero.
+    Any preset or key-track that treats it as an exponential carrier is wrong (§4.8).
+18. **Choice cardinality at birth** — Type/Character must be sized for the FINAL roster (law C,
+    §7). Sizing to exactly today's count while an open question proposes a 10th type is the trap.
+19. **The sync list starts with `Free`** — 20 entries, not 19. Off-by-one against the delay list
+    (§5.2).
+20. **Cutoff clamp ceiling is `min(20 kHz, 0.45·fs_eff)`** — bare `0.45·fs_eff` at 2× lets
+    modulation run to 43 kHz and flat-tops seven of the nine types (§5).
 8. **fb305 exclusion** — §9; the double-count is quiet (+2 dB-ish on routed material) and will
    pass casual listening. Run the null harness.
 9. **Choice-index law** — Type/Character read raw index; `lround(raw·N)` is the fb50 bug class.
@@ -788,11 +954,14 @@ thresholds (≥ 6 dB spectral change or ≥ 25 % centroid move — the DST §8.3
    stated at −36/−26/−16 dBFS (§5.1); no literature range copied.
 2. **Chassis** ✅ — 2 dropdowns (Type, Character) + 8 back knobs 4×2 + 3 front heroes + Mix (§7);
    pragmatic Title-case names, no jargon (Follow/Sense/Track/Sweep say what they do).
-3. **Time params** ✅ — Rate spans 4 bar → 1/256, index-aligned with the fb304 list (§5.2).
-4. **Mix + no-cut switches** ✅ — 100 % = fully wet (verified row §13); every dropdown fades
-   (§6.6).
-5. **Params evolve / night-and-day types** ✅ — extremity table (§2), soft-knee env law (no
-   plateau), dead-knob audit (§7), 9 types each with a measured discriminator (§4, §13).
+3. **Time params** ⚠️→✅ — Rate spans 4 bar → 1/256; **index alignment only holds if the 20-entry
+   list including `Free` is cloned whole** (§5.2, corrected at audit).
+4. **Mix + no-cut switches** ⚠️ — 100 % = fully wet (row §13); dropdowns fade (§6.6); **but the DJ
+   type's noon crossing must NOT be a fade-dip** (§4.9 second-slot fix), and Mix < 100 % in
+   main-send mode is **open** until §6.3 is resolved.
+5. **Params evolve / night-and-day types** ⚠️→✅ — extremity table (§2), soft-knee env law, dead-knob
+   audit (§7). Types: 9 with measured discriminators (§4, §13) **after** cutting the duplicate
+   Bode "Shift Down" character at audit; watch the `cut01`-saturation plateau above 20 kHz (§5).
 6. **Nothing free-runs + loop-gain ledger** ✅ — self-osc env-gated with the fb325 constants
    (§6.5); per-loop max-gain table (§6.4).
 7. **No clicks** ✅ — glide table per knob (§7), fade-swap, comb glide, zipper gates (§13).
@@ -800,7 +969,21 @@ thresholds (≥ 6 dB spectral change or ≥ 25 % centroid move — the DST §8.3
    never-oversample list (§11).
 9. **Audible ⇒ visible + dramatic** ✅ — Concept A reflects every param, idle/active delta
    specified, trail shows *which* driver moves the filter (§8.2).
-10. **Recycle first** ✅ — §17: the device is ~90 % existing certified code by design.
+10. **Recycle first** ⚠️→✅ — §17: the device is ~90 % existing certified code by design, but the
+    audit found three "verbatim reuse" claims that are **not** free: `excite()` needs a type-guard
+    edit, Comb `Damp` needs three edits, and the perceptual harnesses are **not in the repo**.
+
+**RACK-WIDE LAWS (A–D) walked:**
+* **A — zero lookahead / zero reported latency** ⚠️ **OPEN** — no lookahead anywhere and the device
+  reports zero, but the 64-sample halfband group delay vs the sample-aligned exclusion sums is the
+  §6.3 MUST-RESOLVE. Nothing ships until a §13 "unity at Mix 0, main-send" row is green.
+* **B — no runtime param creation** ✅ — the `SYN_FLT_*` block is fully static; the Character roster
+  is a fixed-size list with per-type *hiding*, never per-type re-creation (§7).
+* **C — choice cardinality fixed at birth** ⚠️→✅ **after the audit fix** — Type 12 / Character 12
+  with disabled tails (§7). `SYN_FX_ORDER` cannot grow in place: §16 Q3 is a **blocker**, not a
+  nice-to-have — the 4th device cannot join the chain until Max picks 24-way-at-birth or a drag UI.
+* **D — every send bus joins every exclusion sum** ⚠️ **THREE sites / six lines + a new fourth
+  site** (§9, corrected at audit — the draft had two).
 
 ---
 
@@ -834,20 +1017,22 @@ thresholds (≥ 6 dB spectral change or ≥ 25 % centroid move — the DST §8.3
 | `LadderPoleMix` | `TerrainFilters.h:251` | Ladder Var = Slope |
 | `SvfMultimode::setDrive` / `setMorph` | `:363` / `:2103` | Scream Bite, Multi Morph |
 | `FormantBank::setVowel/setMorph` | `:824/:837` | Vowel Shift + Morph char |
-| `FilterSlot::excite` | `:2107` | Karplus note-on pluck |
+| `FilterSlot::excite` | `:2108` | Karplus note-on pluck — ⚠️ **needs the `:2110` type guard widened**, not verbatim reuse |
+| `DampComb<>::process` + `case COMB_DAMP` | `:1236-1242` + `:1764-1772` (`damp` hard-coded `0.5f`) | Comb **Damp** Var — ⚠️ *not* `:1265`, which is `CombReverb` (§4.6) |
 | semitone mod-sum + 2.5 ms lane glide + keytrack law | `SynthVoice.h:4113-4130, :4088, :4195` | §5 motion summing |
 | `coefSr` 2× doubling scheme | `SynthVoice.h:4080-4084` | §6.3 |
 | Halfband 2× (129-tap, vectorized) + internal-latency pattern | `DistortionEngine.h:74-97` (+ §4.4 fix) | §6.3 `Halfband2x` |
-| Input-env free-run gate (2 ms/0.4 s squared) | `DistortionEngine.h:161-163` | §6.5 self-osc gate |
+| Input-env free-run gate — coefficients **2 ms / 60 ms**, applied **squared** ⇒ ~0.4 s audible close | `DistortionEngine.h:161-163` | §6.5 self-osc gate |
 | Deferred char fade (`dnDip_`) | `DistortionEngine.h:156` | §6.6 type fades |
 | fs-aware 10 Hz DC blocker | `DistortionEngine.h:122-125` | §6.7 |
 | Env-follower one-pole idiom | `DelayEngine.h:213-218, :133-134` | §5.1 detector (+ its 4 ms/180 ms as defaults) |
 | Synced-division table 4 bar→1/256 | `PluginProcessor.cpp:3456-3459, :7237` | §5.2 Rate |
-| Send-bus + exclusion grammar | `PluginProcessor.cpp:7144-7166, :7322-:7328` | §9 4th bus |
+| Send-bus + exclusion grammar (**THREE** sites: `:7159/:7161`, `:7326/:7328`, `:7358/:7360`) | `PluginProcessor.cpp:7144-7166, :7316-:7340, :7350-:7362` | §9 4th bus |
+| Perceptual harnesses (`rvb_perceptual.cpp`, `dst_cert_*`) | ⚠️ **NOT in the repo** — session scratchpads only (§13) | §13 — budget recovery or re-authoring |
 | Filter analyzer curve math + live-node glide (fb163) | `index.html:25049-25090` (re-grep) | §8.2 Concept A |
 | Pre/post spectrum bins | `index.html:18372` (re-grep) | §8.2 Concept C |
 | FX rack chassis, `CORES`, preset menu, pills, halo trio | `index.html:7229-7500` region (re-grep) + `Design/fx-rack-v7-CANONICAL.html` | §7/§8/§10 UI |
-| Perceptual harness metrics | `scratchpad/rvb_perceptual.cpp`, dst_cert family | §13 |
+| Serum 2 Filter-FX param/viz breakdown (in-tree, read it before re-researching) | `Design/SERUM2-FX-REFERENCE.md §2.8` | §1.4 / §8.1 |
 
 ---
 

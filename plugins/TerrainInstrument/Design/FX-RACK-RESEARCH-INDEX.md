@@ -19,14 +19,14 @@ hard-rule checklist → open questions → recycle inventory (file:line, read-ve
 | `TAPE-BUILD-BIBLE.md` | The tape **machine** — heads, motor, loop, splice | 7 | — | **Three tapes already live in the tree** (DLY-panel color, TapeLoop looper, Distortion's hysteresis Tape). §0.2 draws a hard boundary law so they never tangle: Distortion owns the *magnetisation*, this device owns the *machine*. |
 | `DELAY-MOOG-PORT-PLAN.md` | Port `MoogDelay.h` into the Delay device | 6 | — | The Moog engine has **five capabilities the shipped Delay lacks** (true BBD companding, clock-tracked bandwidth both sides, pitch-shifted feedback, 7-wave time LFO, freeze) — and all five port in as 2 new Types + 1 rebuild with **zero new knobs**. |
 | `FILTER-BUILD-BIBLE.md` | The synth filter, hosted as an FX device | 9 | — | `TerrainFilters.h` is **2,195 lines / 94 filter types** behind one stable `FilterSlot` façade. This is not a DSP project — it is a hosting-and-motion project. The device's real new code is the env-follower / key-track motion block. |
-| `FX-CHAIN-BIBLE.md` | Multi-instance chain + the anti-mud doctrine | 6 | — | 🔑 **JUCE cannot create parameters at runtime.** The `+` button can therefore never *create* a device — it can only claim a **pre-allocated slot**. Design: K=5 slots × 26 params = 130 new params. This constraint shapes the entire epic. |
+| `FX-CHAIN-BIBLE.md` | Multi-instance chain + the anti-mud doctrine | 6 | — | 🔑 **The `+` button ships and behaves exactly as designed** — add any device, duplicate freely, drag to reorder. The implementation detail: hosts cache the param list at load, so the params are **pre-allocated at startup and the `+` button fills them**. Invisible to the user; the only real consequence is a max device count (K, a number we choose). Serum does the identical trick — its LFOs 7–10 "appear" once you assign LFO 6. |
 | `COMPRESSOR-BUILD-BIBLE.md` | Single-band, 8 topologies, zero latency | 8 | PATCHED | **Zero lookahead is non-negotiable** — not a taste call. The fb305 main-send exclusion math subtracts dry *sample-aligned*; any latency-reporting device makes the dry leak back phase-smeared. |
 | `OTT-BUILD-BIBLE.md` | 3-band up+down compression — the AIR machine | 8 | — | Your instinct was right and the bible confirms the boundary: OTT is a *fixed opinionated dynamics instrument*, the Splitter is *routing*. Serum 2 ships **both**. The upward computer on the high band is literally where the air comes from. |
 | `EQUALIZER-BUILD-BIBLE.md` | The device EQ + audit of our old one | 7 | PATCHED | 🚨 **Our shipped v6 EQ heap-allocates 9–15 times per sample per channel** (`ParametricEQ.h:135-158` runs the full RBJ design math at audio rate). It survives as one instance; it is disqualified as a rack device engine. |
 | `SPLITTER-BUILD-BIBLE.md` | ONE device, Mode dropdown (your call, confirmed) | 5–6 | PATCHED | Serum ships three splitters purely because their rack is a flat module list — **not a DSP argument**. Firm recommendation: one device, plus a dedicated `Sub Split` mode at 120 Hz (the club-mono line). |
 | `FLANGER-BUILD-BIBLE.md` | 0.05–40 ms comb territory, incl. through-zero | 6 | PATCHED | **Serum 2 has no through-zero flanging** — headline differentiator — and the flanger is *the cheapest flagship we will ever build*: two fractional delay reads and a few one-poles. |
 | `PHASER-BUILD-BIBLE.md` | 9 allpass topologies, 8 characters each | 9 | PATCHED | Serum's phaser is ~6 params, one topology, one LFO shape. Our roster lands in **Soundtoys PhaseMistress territory** — and allpass chains are nearly CPU-free, so the budget goes to voicing. |
-| `CHORUS-BUILD-BIBLE.md` | 7 tap-count × LFO-topology answers | 7 | — | The boundary math is exact: **below ~1.5 ms the comb fundamental enters the audible band** and it reads as filtering, not doubling. That number is what separates Chorus from Flanger. |
+| `CHORUS-BUILD-BIBLE.md` | 7 tap-count × LFO-topology answers | 7 | PATCHED | **There is no ms number that separates Chorus from Flanger** — the first draft's "below ~1.5 ms the comb fundamental enters the audible band" was backwards (shorter delay pushes the comb fundamental *up* and makes notches *sparser*). The real split is **notch density** (1/d spacing: 2 kHz at 0.5 ms = a resolvable swept filter, 50 Hz at 20 ms = two voices) plus **regeneration** and **through-zero**, neither of which this device has. The Time ranges deliberately overlap. |
 | `HYPER-BUILD-BIBLE.md` | Our unison-widener — working name **`Widen`** | 7 | — | Serum ships Hyper *and* Dimension as ONE menu item — a confession they are one job (thicken then widen). The pair-string "Hyper/Dimension" is the only thing that is actually theirs; the mechanisms are public-domain with 1979 precedent. |
 | `BODE-BUILD-BIBLE.md` | Frequency shifter (Hilbert SSB) | 7 | — | We already have a `BodeShifter` in `TerrainFilters.h`. Range chosen at **±5 kHz** (the 1630's), not Echobode's ±20 k — past ~5 k it is all foldover chatter on synth program. |
 | `UTILITY-BUILD-BIBLE.md` | Gain / width / bass-mono / meters — the joint | Route+Flip | — | **No fake Types** — law 5 cuts both ways. A utility that "colors" is a broken utility. Its dropdowns are Route and Flip, both discrete and sound-changing. It is also the rack's first real metering surface. |
@@ -55,8 +55,15 @@ Size the existing front-page granular UI into the rack card, same layout + heade
 * ⚠️ `FilterSlot::setType()` calls `reset()` internally (`TerrainFilters.h:1426`) → needs the fb345 deferred-fade + re-seat treatment or type switches click.
 
 ### Build 5 — MULTI-INSTANCE (`+` button, duplicates, reorder)
-* ⚠️ **This is the one with a hard host constraint.** Params cannot be born at runtime → pre-allocated slot pool (K=5 proposed, 130 params). Read `FX-CHAIN-BIBLE.md` §3.2 before any UI work.
-* ⚠️ Every new bus must join **all three** fb305/fb338 exclusion sums (`index.html:6979`, `:7111`) or sends double-count.
+**The feature is exactly what Max asked for: add any device, several of the same kind, drag to
+reorder.** Nothing about the host constraint changes the UX.
+* The build detail: hosts cache the parameter list at load time, so we **pre-allocate K device
+  slots at startup and the `+` button claims the next empty one**. The user only ever sees an empty
+  rack that grows. Same pattern as our own mod matrix, and as Serum's LFO 7–10 reveal.
+* ⚠️ The only real decision is **K — the max added devices** (K=5 proposed → 8 total). It costs 26
+  params each (130 total on top of 972 — trivial); the true ceiling is CPU, not params. **Raise K
+  freely if Max wants more headroom for stacking.** Read `FX-CHAIN-BIBLE.md` §3.2 before UI work.
+* ⚠️ Every new bus must join every fb305/fb338 exclusion sum or sends double-count. 🔑 **Audit-corrected addresses:** `PluginProcessor.cpp` **three blocks / six lines — 7159+7161 (reverb), 7326+7328 (distortion), 7358+7360 (delay)**. The `:6979/:7111` numbers previously carried here and in memory were stale (they point at a `setModEnabled` call and a closing brace). Only the **L** lines carry the `fb305 law` comment, so grepping it finds 3 — never 6.
 
 ### Then the big family
 Bode · Chorus · Flanger · Phaser · Widen · Compressor · OTT · Equalizer · Splitter · Utility.
@@ -122,10 +129,14 @@ position no screenshot war answers.
   but un-audited — the sweep hit the usage-credit ceiling mid-verify. They are structurally
   complete and internally consistent; treat their boldest hardware numbers as unconfirmed until
   the verify pass is re-run.
-* **No Serum 2 screenshots.** Their manual is not reliably fetchable and their visualizer
-  *motion* (does it react to audio?) is unverified. Twenty minutes of you eyeballing Serum 2 live
-  settles the visualizer baseline before any card mockup locks. Bode, Phaser and Serum2-Reference
-  each name this as their top open question.
+* ~~**Does Serum 2's visualizer move with audio?**~~ **RESOLVED — Max, 2026-08-14: YES, they move.**
+  Three bibles (Bode, Phaser, Serum2-Reference) named this as their top open question; it is closed.
+  **The consequence: stop treating "does it move" as the differentiator — the differentiator is that
+  ours move DRAMATICALLY and reflect every param (law 9, fb311).** Serum draws two FFT overlays
+  total; our bar is a live, param-reflecting card per device. Build the visualizers as specced in
+  each bible; no Serum screenshot is required to proceed.
+* **Serum 2 param inventories** rest on the official manual + What's New PDF (their manual is not
+  reliably fetchable). Good enough for competitive framing; do not quote their exact ranges as fact.
 * **Un-spot-checked history numbers** flagged in-file: Ableton Grain Delay specs (Granular §1),
   RE-201 head timings (Tape §12 Q7 — do not quote in marketing copy unverified).
 

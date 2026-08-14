@@ -2,6 +2,10 @@
 ### Multi-instance architecture + the Utility (gain-staging) device
 *The foundation document for the MULTI-DEVICE CHAIN epic — "the biggest task yet."*
 *Research locked 2026-08-14. Written against tree fb345 (70de2d9). Every file:line below was read, not assumed.*
+*Adversarially audited 2026-08-14 (same day): every in-tree citation re-opened, every arithmetic
+claim re-derived, the Serum 2 PDF re-extracted and the JUCE/Kilohearts sources re-fetched. Corrected
+numbers are marked "a prior draft said …" at the point of correction. Claims that could not be
+re-verified are marked ⚠️ **UNVERIFIED** inline — do not quote those as fact.*
 
 This bible has two halves plus a device:
 
@@ -26,8 +30,14 @@ than re-deriving it — those files are part of the build contract.
 Why this shape:
 
 1. Serum 2's rack — the competitive bar — ships **16 modules** (13 FX + 3 splitters, `Utility`
-   among them), **"Add multiple instances of a single effect"** verbatim, drag-reorder, per-module
-   bypass + Mix + output meter, across **Main / Bus 1 / Bus 2** (What's New in Serum 2, pp. 3, 11–12, 16).
+   among them; p. 3 verbatim: *"Choose from 13 effects and 3 splitter modules"*),
+   **"Add multiple instances of a single effect"** verbatim (p. 11), drag-reorder, per-module
+   bypass, across **two FX busses** (p. 11: *"Dual FX Busses — Two separate FX busses"*) plus the
+   mixer's separate **Main/Direct Outputs** channel (p. 16 — that is an output channel, NOT a third
+   FX rack). *(Text of the official* What's New in Serum 2 *PDF re-extracted and checked 2026-08-14;
+   quotes above are verbatim from the PDF text layer. Claims below sourced only to its SCREENSHOTS —
+   per-module Mix knob, per-module output meter, printed fader dB scales — are flagged inline as
+   figure-read.)*
    Terrain has 3 flagship devices + 5 more bibled (Chorus, Compressor, EQ, Flanger, Hyper, Phaser,
    Splitter). Multi-instance is the chassis they all land on — it must be designed BEFORE device 4
    ships, or every device ships twice.
@@ -50,13 +60,14 @@ Read this section with the code open. Every line number checked 2026-08-14.
 ### 1.1 The serial chain
 
 * Three insert lambdas run per-sample inside the master loop of `processBlock`:
-  `applyRvb` (`PluginProcessor.cpp:7137`), `applyDst` (`:7310`), `applyDly` (`:7347`),
+  `applyRvb` (`PluginProcessor.cpp:7137`), `applyDst` (`:7309`), `applyDly` (`:7345`),
   dispatched by `switch (fxPerm_)` over the **6-way permutation** (`:7383–7392`).
 * `fxPerm_` is read once per block at `:5860` from `SYN_FX_ORDER` — an `AudioParameterChoice(6)`
   built at `PluginProcessor.cpp:3488`. ⚠️ The comment at `ParameterIDs.hpp:435` still says
   *"bool: false = Reverb→Delay"* — stale since fb341; fix in passing.
-* Each device is an **env-gated insert**: reverb/delay use `leftChannel[i] += wet·w − duck·sg`
-  (equal-power sin/cos mix, `:7112–7114`); the distortion uses the fb318 **replace grammar**
+* Each device is an **env-gated insert**: reverb/delay use `leftChannel[i] += wetG·rl − duck·sgL`
+  (the add itself at `:7189/:7191`; the equal-power sin/cos mix TARGETS are computed once per block
+  at `:7112–7113`); the distortion uses the fb318 **replace grammar**
   `leftChannel[i] += e·(wl − sgL)` (`:7337`) — engine owns Mix, dry latency-aligned inside.
   All three fade power on/off through `hallSm_` (~15 ms one-pole) — the no-clicks law in code.
 
@@ -76,13 +87,22 @@ EVERY main-send exclusion."* Send buses live at `PluginProcessor.h:1534/1559/157
 **The landmine: every new send bus must join every sum, and every new main-send device adds a new
 sum.** Today that is 3×3; at 8 devices it is 8×8 = 64 hand-edited terms. §3.6 kills this class.
 
+⚠️ **Address correction (checked 2026-08-14).** `MEMORY.md` still carries the shorthand *"re-breaks
+fb305 at :6979/:7111"*. Those are **stale pre-fb341 `PluginProcessor.cpp` lines, and they are NOT
+`index.html` lines** — `index.html:6979` is the fb120 robin SVG and `index.html:7111` is the ribbon
+CSS block. The live addresses are the three C++ sites above (`:7159/7161`, `:7326/7328`,
+`:7358/7360`). Anyone touching the exclusion sums must use those, not the memory shorthand.
+
 ### 1.3 Gain constants (the −26 dBFS reality's plumbing)
 
 * `kVoiceToFxPad = 0.5f` (−6.02 dB) — the pre-FX pad on every send and main-send read
   (`PluginProcessor.cpp:6300`).
 * `kInstrumentMakeup = 2.0f` (+6.02 dB) — the fb299 measured-Serum-match output makeup
   (`PluginProcessor.cpp:46`; single note −20 → −14 dBFS = Serum's −14.01).
-* The fb264 master limiter soft-knees at **−0.3 dBFS** after makeup — the only clipper in the path.
+* The fb264 master stage after makeup is the only clipper in the path (`PluginProcessor.cpp:44–47`):
+  peak-limiter threshold **= soft-clip knee = 0.90 (−0.92 dBFS)**, hard ceiling **0.96605
+  (−0.30 dBFS)**. Quote the **−0.92 dB knee** when computing headroom — program meets the limiter
+  first; −0.3 dB is the DAC-protection catch behind it.
 * Net: **FX-bus program sits ≈ −26 dBFS** (measured, DISTORTION bible §2.1). Every threshold,
   drive, target and ceiling in this file is stated **relative to −26 dBFS program** (LAW 1).
 
@@ -93,11 +113,13 @@ sum.** Today that is 3×3; at 8 devices it is 8×8 = 64 hand-edited terms. §3.6
 * **The `+ Add effect` button already exists**: rendered at `:7705`
   (`<div class="fxr-add" data-act="add">`), styled `:7256–7259`, drag-insert respects it `:8311`.
   Today it spawns nothing — it is the door §3 walks through.
-* Drag order → `SYN_FX_ORDER` at `:8317–8324`: builds the core-key sequence, matches it against the
-  6-row `PERMS` table, writes `pi/5` normalized. Restore: `fxrRestoreOrder` (`:7974–7988`).
-* Per-device restore reads a **24-slot vector** (see `fxrRestoreDistortion`, `:7955–7972`):
-  `[type, power, front×4, d1, d2, route×6, pills×2, back×8]`. This vector IS the de-facto device
-  state ABI — §3.3 reuses it verbatim.
+* Drag order → `SYN_FX_ORDER` at `:8315–8323`: builds the core-key sequence, matches it against the
+  6-row `PERMS` table (`:8320`), writes `pi/5` normalized (`:8323`). Restore: `fxrRestoreOrder`
+  (`:7972–7987`, its `PERMS` twin at `:7976`).
+* Per-device restore reads a **24-slot vector** (see `fxrRestoreDistortion`, `:7947–7971`):
+  `[type, power, front×4, d1, d2, route×6, pills×2, back×8]` — counted against the code: 1+1+4+1+1+6+2+8
+  = 24 ✔. This vector IS the de-facto device state ABI — §3.3 reuses it verbatim. (For the distortion,
+  `d1 = SYN_DST_CHARACTER`, `d2 = SYN_DST_QUALITY`.)
 
 ### 1.5 The precedents the architecture stands on
 
@@ -109,12 +131,16 @@ sum.** Today that is 3×3; at 8 devices it is 8×8 = 64 hand-edited terms. §3.6
   has already built a second instance of a whole chain once. What it has never done is give an
   instance **independent parameters** — that is the actual new ground (§3.2).
 * **State:** `getStateInformation` (`PluginProcessor.cpp:8810`, `apvts.copyState()` + versioned
-  extras), `setStateInformation` (`:9008`, `replaceState` at `:9145`, V1→V2 migration precedent).
+  extras; the `state.setProperty ("version", 2, …)` marker is at `:8863`), `setStateInformation`
+  (`:9008`, `replaceState` at `:9145`, V1→V2 migration precedent).
 * **Latency:** DISTORTION bible §4.4 — fixed-8/report-0, dry-side delay composition
-  `delay8(left − duck·sg) = delay8(left) − duck·delay8(sg)`; `ConvolutionReverb.h:166` still runs
-  512 late and silent. The multi-instance ledger (§3.7) generalizes this.
-* Param registry: **972** `constexpr char` IDs in `ParameterIDs.hpp` (counted); FX today ≈ 76
-  (53 RVB+DLY, ~23 DST).
+  `delay8(left − duck·sg) = delay8(left) − duck·delay8(sg)`; `ConvolutionReverb.h:166`
+  (`getLatency() { return B; }`, `B = 512` at `:25`) still runs 512 late while reporting 0.
+  The multi-instance ledger (§3.7) generalizes this.
+* Param registry (re-counted 2026-08-14): **972** `constexpr char` IDs in `ParameterIDs.hpp`, of
+  which **964 are actually registered as APVTS parameters** — the 8 `FLOW_GLI_*_FLT` IDs are never
+  passed to `createParameterLayout`. FX today = **77** IDs: 25 `SYN_RVB_*` + 28 `SYN_DLY_*` +
+  24 `SYN_DST_*`. Use **964**, not 972, as the "existing parameter count" baseline in §3.2.
 
 ---
 
@@ -132,12 +158,21 @@ discipline built around it.
 * **The VCA fader / rider.** Broadcast AGC and later Waves Vocal Rider automated the trim: a slow
   servo drives gain toward a target level. This is the `Match` type's ancestry (§5.4) — a gain
   *rider*, not a compressor: seconds-scale, dB-domain, no waveshaping.
-* **M/S width.** Mid/Side matrixing (Blumlein, 1934) → every modern "utility": width is a single
-  multiplier on S. Ableton Live's Utility (Gain ±35 dB, Width 0–400 %, Bass Mono with adjustable
-  crossover, per-channel phase invert — Live 12 manual) made "the boring device" the most-used
-  device in the DAW. Serum 2's `Utility` module transcribes it into the synth rack: **Polarity Inv
-  L/R · LPF · HPF · Mono Bass + Freq · Width · Pan · Mix** (What's New p. 12) — that exact param set
-  is our competitive floor.
+* **M/S width.** Mid/Side matrixing (Blumlein's stereo patent — **filed 1931, accepted 1933**,
+  GB 394,325; the often-quoted "1934" is the US filing date, so do not print 1934 as *the* date)
+  → every modern "utility": width is a single multiplier on S. Ableton Live's Utility (Gain,
+  Width 0–400 %, Bass Mono with adjustable crossover, per-channel phase invert) made "the boring
+  device" the most-used device in the DAW.
+  ⚠️ **UNVERIFIED (2026-08-14):** the exact Live ranges — the Live 12 manual's Utility section could
+  not be reached (the audio-effect-reference page truncates before it) and no secondary source gave
+  numbers. A prior draft printed "Gain ±35 dB"; Live's Gain fader in fact bottoms at **−∞**, so
+  "±35 dB" is wrong as written. Treat *Width 0–400 %* and *Bass Mono crossover* as the load-bearing
+  facts and re-check the Gain top (commonly cited as +35 dB) against the device before quoting it.
+  Serum 2's `Utility` module transcribes the same idea into the synth rack.
+  ⚠️ **UNVERIFIED:** the param set **Polarity Inv L/R · LPF · HPF · Mono Bass + Freq · Width · Pan ·
+  Mix** is read off the *screenshot* on What's New p. 12 — the PDF's text layer for that page says
+  only *"Utility — New utility effect"*. Do not quote the list as documented; it is our best read of
+  the figure, and it is our competitive floor either way.
 * **The tilt EQ.** Quad 34 (1982) "tilt" control — one knob pivots the whole spectrum around a
   center frequency. The cheapest possible "make it darker/brighter without thinking" — a
   gain-staging tool in the frequency domain (`Tilt` type, §5.3).
@@ -157,47 +192,93 @@ Serum-killer without one loses every A/B where the user says "I just want it lou
 
 | Host | Dynamic list | Duplicates | Reorder | Leveling hooks |
 |---|---|---|---|---|
-| **Serum 2** | `+ FX` button, rack list per bus (Main/Bus 1/Bus 2) | **"Add multiple instances of a single effect"** (What's New p. 11) | drag-and-drop rows | per-module Mix + output meter on every row; mixer faders: osc channels 0…−48, FX bus channels **+12…−36**, Main **+3…−48** dB (p. 16) |
-| **Kilohearts Snap Heap** | click empty lane slot to add snapin | unlimited per lane | drag within/between **7 lanes**, serial L→R, adjacent lanes pairable parallel | per-lane footer **Gain / Pan / Mix**; docs: *"turn off all lanes that you are not using, to spare some CPU cycles"* |
+| **Serum 2** | `+ FX` button, rack list per bus — **two FX busses** (p. 11 verbatim: *"Dual FX Busses — Two separate FX busses"*), plus a separate Main/Direct output channel in the mixer (p. 16) | **"Add multiple instances of a single effect"** (What's New p. 11, verbatim) | drag-and-drop rows (p. 11: *"Rearrange Modules — Drag and drop"*) | per-module bypass (p. 11 text). ⚠️ **UNVERIFIED (figure-read):** per-row Mix knob + output meter, and the mixer fader scales *osc 0…−48, FX bus +12…−36, Main +3…−48 dB* — **no dB number appears anywhere in the PDF's text layer** (re-extracted 2026-08-14). Do not cite these as documented; re-read them off the running plugin before they gate a design decision |
+| **Kilohearts Snap Heap** | click empty lane slot to add snapin | unlimited per lane | drag within/between **7 lanes** (✔ verified 2026-08-14, kilohearts.com/docs/snap_heap: *"Snap Heap features seven lanes"*), serial L→R, adjacent lanes pairable parallel | per-lane footer **Gain / Pan / Mix** (✔ verified verbatim); docs verbatim: *"It is advisable that you turn off all lanes that you are not using, to spare some CPU cycles"* |
 | **Kilohearts Multipass** | same snapin grammar | unlimited | per-band chains | **up to 5 bands**, per-band chains (the splitter-lane cousin) |
 | **Ableton racks** | unlimited devices/chains | unlimited | drag | Utility everywhere; chain Volume per rack chain (Live 12 manual) |
 | **Serum 1 (the cautionary tale)** | fixed 10-row rack | **no** — users asked for it by name (r/serum, "Serum FX Tab: is there a way to add additional instances…") | reorder only | — |
 
 Two structural lessons: (a) *every* modern rack treats "device row + per-row mix/meter + drag" as
-the atomic unit — exactly Terrain's existing DEVS grammar; (b) Serum 2's LFO 7–10 "appear after you
-assign LFO 6" (What's New p. 14) — **grow-on-demand UI over a pre-allocated pool** is how a
-fixed-parameter plugin fakes a dynamic list. That is the entire trick of §3.2.
+the atomic unit — exactly Terrain's existing DEVS grammar; (b) Serum 2's *"LFO 7 to LFO 10 appear after
+you assign LFO 6"* (What's New p. 14 — ✔ verified verbatim in the PDF text layer 2026-08-14) —
+**grow-on-demand UI over a pre-allocated pool** is how a fixed-parameter plugin fakes a dynamic
+list. That is the entire trick of §3.2.
 
 ### 3.2 🔑 THE HOST CONSTRAINT — parameters cannot be born at runtime
 
-JUCE forum, verbatim: *"JUCE doesn't support a dynamic number of plug-in parameters. You can change
-the names of existing parameters and groups … but changing the number of them won't work."* VST3/AU
-hosts cache the parameter list at instantiation; add/remove breaks automation, preset diffing and
-some hosts outright. **Therefore: the + button can never create parameters. It can only claim a
-pre-allocated SLOT.**
+JUCE forum, verbatim (✔ **verified 2026-08-14** — t0m, 8 Jan 2020, thread *"Remove and create audio
+parameters after processor creation"*, forum.juce.com/t/…/36941; the URL a prior draft cited,
+`/t/adding-modify-audio-parameters-at-runtime/`, **404s and must not be quoted**):
+*"JUCE doesn't support a dynamic number of plug-in parameters."* … *"You can change the names of
+existing parameters and groups (and hide them in most hosts by giving them an empty name) but
+changing the number of them won't work."* VST3/AU hosts cache the parameter list at instantiation;
+add/remove breaks automation, preset diffing and some hosts outright. **Therefore: the + button can
+never create parameters. It can only claim a pre-allocated SLOT.**
 
-**THE SLOT POOL.** Ship `K = 5` generic slots (3 flagships + 5 slots = 8 devices max, §11 justifies
-the cap) with an instance-indexed namespace, mirroring the 24-vector ABI (§1.4) plus two:
+**THE SLOT POOL.** 🚨 **`K = 24` — MAX'S RULING, 2026-08-14 (supersedes the K=5 proposal below and
+the CPU-derived justification in §11).** Verbatim: *"You can stack an unlimited number of effects
+and use multiple instances of the same effect in Serum 2… we should have an unlimited amount of
+effects basically. If people want to choose to do that then their CPU is on them."*
+
+**The design consequences of that ruling, in order:**
+1. **We never cap for CPU — we SHOW CPU.** The slot count exists only because hosts cache the
+   parameter list, never as a taste or performance judgement.
+2. **K = 24** (3 flagships + 24 slots = 27 devices). 25 params/slot × 24 = **600 new params** on
+   top of the 964 registered ⇒ **1 564 total** — large but unremarkable (Serum-class plugins ship
+   more), and the count is what the host caches once at load, not a per-block cost.
+3. 🔑 **AN EMPTY OR BYPASSED SLOT MUST COST EXACTLY ZERO** — not "nearly zero". This is the price
+   of a generous pool and it is non-negotiable: no engine allocation until `DEVICE ≠ Empty`, no
+   per-block work for a powered-off slot, and the fb342 control-head sleep + fb345 silence-sleep
+   applied per slot. Verify with a 24-empty-slot CPU null against the 0-slot build.
+4. **Max's usage observation, which the CPU maths confirms:** the devices people actually stack —
+   chorus, compressors, EQ, filter, utility — are the *cheap* ones (one-poles, allpass chains, a
+   couple of gain computers). Reverb is the expensive device and nobody stacks five of them.
+   So the cost curve bends favourably exactly where users pile up. **Design corollary: the cheap
+   devices must be AGGRESSIVELY cheap**, because that is where the stacking happens.
+
+*(Original proposal, retained for its reasoning:)* Ship `K = 5` generic slots (3 flagships + 5
+slots = 8 devices max, §11 justifies the cap) with an instance-indexed namespace, mirroring the
+24-vector ABI (§1.4) plus exactly ONE new field (`DEVICE`):
 
 ```
-SYN_FXS{k}_DEVICE    choice(N_DEVICES+1)  0 = Empty · 1 = Reverb · 2 = Delay · 3 = Distortion
-                                          · 4 = Utility · 5.. = future devices (append-only!)
+SYN_FXS{k}_DEVICE    choice(16)  FIXED cardinality, sized for the FINAL roster on day one:
+                                 0 = Empty · 1 = Reverb · 2 = Delay · 3 = Distortion · 4 = Utility
+                                 · 5 = Chorus · 6 = Compressor · 7 = EQ · 8 = Flanger · 9 = Hyper
+                                 · 10 = Phaser · 11 = Splitter · 12..15 = "Reserved 1..4"
+                                 (registered, greyed in the UI until claimed). See LAW C below.
 SYN_FXS{k}_POWER     bool                  default OFF
-SYN_FXS{k}_TYPE      choice(23)            the device's Type list (max cardinality of any device —
-                                          the DST 23 sets the size; smaller lists clamp, the
-                                          fb342 short-list choice trap law)
+SYN_FXS{k}_TYPE      choice(32)            FIXED. 32 ≥ the largest Type list we can foresee
+                                          (DST is 23 today); entries past a device's list are
+                                          greyed and the value CLAMPS per device template — the
+                                          fb342 short-list choice trap law
 SYN_FXS{k}_K1..K4    float 0..1            front knobs (K4 = Mix, 100 % = fully wet)
-SYN_FXS{k}_D1        choice(8)             back dropdown 1 (Character-class)
-SYN_FXS{k}_D2        choice(20)            back dropdown 2 (largest existing d2 = delay's 20-row sync list)
+SYN_FXS{k}_D1        choice(16)            FIXED. back dropdown 1 (Character-class; 8 today)
+SYN_FXS{k}_D2        choice(24)            FIXED. back dropdown 2 (largest existing d2 = delay's
+                                          20-row sync list; 24 leaves 4 reserved rows)
 SYN_FXS{k}_P1..P8    float 0..1            back-8, relabelled per device+type (SPL/DST precedent)
 SYN_FXS{k}_PILL1/2   bool                  front pills
-SYN_FXS{k}_SRC_A..SRC_NOISE  bool ×6       route pills → the slot's send bus
+SYN_FXS{k}_SRC_A..SRC_NOISE  bool ×6       route pills → the slot's send bus (A/B/C/D/Sub/Noise,
+                                          matching `SYN_DST_SRC_*`, `PluginProcessor.cpp:3539`)
 ```
 
-26 params × 5 slots = **130 new params** on top of 972 — well inside APVTS practice. Host
-automation lanes read "FX Slot 2 P5" — generic, but Serum 2's own rack automation reads the same
-way; per-slot display names can be refreshed via `AudioProcessorListener::audioProcessorChanged`
-when DEVICE changes (names may update; the *count* never does).
+**Count it honestly:** 1 DEVICE + 1 POWER + 1 TYPE + 4 K + 1 D1 + 1 D2 + 8 P + 2 PILL + 6 SRC =
+**25 params per slot**. **At the ruled K = 24: 25 × 24 = 600 new params on top of the 964 already
+registered (§1.5) ⇒ 1 564 total.** (At the old K=5 it was 125 ⇒ 1 089. A prior draft said
+"26 × 5 = 130 on top of 972" — both numbers were wrong; the arithmetic and the baseline are
+corrected here.) If 1 564 ever proves unwieldy in a specific host, the honest lever is trimming the
+6 SRC route pills from slot devices (25 → 19/slot ⇒ 1 420), **not** shrinking K. Host automation lanes read
+"FX Slot 2 P5" — generic, but Serum 2's own rack automation reads the same way; per-slot display
+names can be refreshed via `AudioProcessorListener::audioProcessorChanged` when DEVICE changes
+(names may update; the *count* never does).
+
+🔑 **LAW C — CHOICE CARDINALITY IS FIXED AT BIRTH (fb342), and that binds every list above.**
+A choice param's option count is part of the parameter's identity: hosts normalize automation
+against it, and Terrain's own read/write path (`round(v·(N−1))`) silently retargets every existing
+automation lane and preset if `N` changes. So **`DEVICE`, `TYPE`, `D1` and `D2` may never grow
+after ship.** Any "append-only, we'll add devices later" plan is the same defect as adding
+parameters at runtime — it is why the counts above are over-sized with explicitly *Reserved*
+entries rather than sized to today's roster. The same law is why `SYN_FX_ORDER`'s `choice(6)`
+cannot be widened to cover more devices, which is exactly what forces §3.4.
 
 **The flagships stay singletons.** `SYN_RVB_*`, `SYN_DLY_*`, `SYN_DST_*` remain exactly as shipped
 — they are certified, preset-referenced, automation-referenced, and UI-bound. A *duplicate* reverb
@@ -231,11 +312,11 @@ automating it would click by construction (§12.9), the same class of host-machi
 type-dependent latency (DST §4.4). So:
 
 * **Truth:** a `fxChainOrder` **ValueTree property** (string of tokens, e.g. `"rvb dly dst s0 s2"`),
-  saved/restored inside the existing `getStateInformation` extras block (`PluginProcessor.cpp:8861`
+  saved/restored inside the existing `getStateInformation` extras block (`PluginProcessor.cpp:8863`
   version grammar). Not an APVTS param → not automatable → no host PDC/click trap.
 * **Legacy:** `SYN_FX_ORDER` stays registered (removing a param is as illegal as adding one). On
   restore: if `fxChainOrder` is absent, derive it from the choice(6) — the 6-row `PERMS` table
-  already in both C++ (`:7383`) and JS (`:7978`) is the migration table. Going forward the property
+  already in both C++ (`:7383`) and JS (`index.html:7976`) is the migration table. Going forward the property
   wins; the param is written once at migration and then frozen (documented stale, like the
   `ParameterIDs.hpp:435` comment it replaces).
 * **Dispatch:** the per-sample `switch (fxPerm_)` becomes a per-block-resolved ordered array of
@@ -252,7 +333,7 @@ type-dependent latency (DST §4.4). So:
 
 * `DEVS` becomes fully data-driven: the three flagship objects stay, and slot objects are minted
   from a `DEVICE→template` table (each device bible's chassis map is the template: names, opts,
-  param-ID stems `SYN_FXS{k}_`). The 24-vector restore loop (`:7955`) is already generic — point it
+  param-ID stems `SYN_FXS{k}_`). The 24-vector restore loop (`index.html:7947`) is already generic — point it
   at the slot stems.
 * `+ Add effect` (`:7705`) opens the device list (Reverb · Delay · Distortion · Utility · … greyed
   when all 5 slots claimed). Choosing writes `SYN_FXS{k}_DEVICE` on the first Empty slot, then the
@@ -288,11 +369,35 @@ automatically, forever.** The three duplicated sums (`:7159/7326/7358` + R twins
 the DST-bible §4.5 "two exact lines" ritual is retired. Verify by the fb305 harness: osc routed to
 slot-delay must vanish from every other device's main send, residual ≤ −90 dB.
 
-### 3.7 The latency ledger
+### 3.7 The latency ledger — and 🔑 LAW A: ZERO LOOKAHEAD, ZERO REPORTED LATENCY, RACK-WIDE
+
+**The rack reports `setLatencySamples(0)` forever, and no device in it may look ahead.** This is not
+a preference; it falls straight out of §1.2. The main-send exclusion subtracts the routed dry
+**sample-aligned** (`sg = left[i] − rtd[i]`, same index `i`). The moment any device delays the wet
+path by *L* samples and asks the host to compensate, the host slides the *whole* plugin output by
+*L* while the dry the exclusion subtracted is still the un-slid one — the cancelled dry stops
+cancelling and leaks back **phase-smeared** at every device downstream. Consequences, binding on
+every device bible:
+
+* **No lookahead limiting.** A ceiling device (§5.6 `Fence`) is a *waveshaper*, never a
+  peak-anticipating limiter. Any control that implies anticipation (a "Lead-In"/"Lookahead" knob)
+  is banned by construction — it was in a prior draft of §7 and has been cut.
+* **No linear-phase / FIR options** anywhere — the tilt, the crossovers, the oversamplers are all
+  minimum-phase IIR.
+* **Fixed, declared, type-INDEPENDENT latency only.** Latency may not vary with Type, Character or
+  Quality tier (the DST §4.4 trap): a device that is 0 at Standard and 4 at High makes the ledger a
+  function of a knob.
+* If a design genuinely needs latency, the device is **cut or redesigned** — it does not get to
+  report it.
 
 Per-device fixed latency constants (DST §4.4 law: fixed per device class, host told 0):
-`Reverb 0` (convolution's internal 512 stays its own documented outlier until fixed), `Delay 0`,
-`Distortion 8`, `Utility 0`, future devices declare theirs in their bibles. With N devices the
+`Reverb 0`, `Delay 0`, `Distortion 8`, `Utility 0` (in **every** Type and **every** Quality tier —
+§6.6), future devices declare theirs in their bibles.
+⚠️ **Known LAW-A violation, inherited:** the Convolution reverb type runs its wet **512 samples
+late** (`ConvolutionReverb.h:25 B = 512`, `:166 getLatency()`) while the rack reports 0 and the
+exclusion subtracts sample-aligned. Its dry therefore already leaks smeared today. Duplicating
+Convolution into slots multiplies that defect — see §14 Q2; the honest options are (a) fix it to
+zero-latency partitioning, or (b) grey Convolution in slots until it is fixed. With N devices the
 composition law generalizes:
 
 * Each main-send device delays its *retained-dry* subtraction by the **sum of latencies of devices
@@ -327,7 +432,9 @@ composition law generalizes:
   or slot." Lanes therefore multiply instances *through the same pool*: no second allocation
   grammar, and the ownership conflict rules (pills XOR lanes, one owner per device) apply per slot.
   Sizing note: a 3-lane split with 3 owned slots leaves 5 chain entries un-owned — the K = 5 pool
-  covers every demo in the Serum 2 splitter material (p. 13 shows lanes hosting 1–2 modules each).
+  covers every demo in the Serum 2 splitter material. (What's New p. 13 documents three splitter
+  modules by name — **Splitter L/H**, **Splitter L/M/H**, **Splitter M/S** — ✔ verified in the PDF
+  text; ⚠️ the "lanes host 1–2 modules each" reading is figure-read, not document text.)
 
 ---
 
@@ -335,8 +442,10 @@ composition law generalizes:
 
 ### 4.1 🔑 THE UNITY-THROUGH LAW
 
-**Every device, powered ON at its default settings, passes program within +1.0 dB RMS (dry-path
-devices: ±0.5 dB) of its powered-OFF level, measured on the −26 dBFS certified chord.**
+**Every device, powered ON at its default settings, passes program within ±1.0 dB RMS (dry-path
+devices: ±0.5 dB) of its powered-OFF level, measured on the certified chord.** (Nominal is the
+single note at ≈ −26 dBFS; the certified 3-note chord sits ≈ −20 dBFS = **+6 dBp** in the
+COMPRESSOR-bible dBp convention where 0 dBp ≡ −26 dBFS. Both numbers matter below.)
 
 Precedents already on the books: COMPRESSOR bible §4.1 (default bit-transparent), SPLITTER §6.6
 (unity ±0.05 dB gate). Serum 2 enforces the same discipline culturally: every module row carries an
@@ -358,18 +467,33 @@ Consequences:
 ### 4.2 Headroom policy on a −26 dBFS bus
 
 * The float engine cannot clip internally — headroom between devices is **not** a sample-format
-  problem; it is a *perceptual and limiter* problem. The only hard boundary is fb264's −0.3 dBFS
-  soft-knee after `kInstrumentMakeup` (+6.02 dB). Program at −26 dBFS has ≈ 19.7 dB of post-makeup
-  headroom before the knee.
-* **The stacking budget:** each device may boost; boosts SUM. Three devices at +7 dB each puts the
-  chord into the limiter, and *"clipping a sum of tones = broadband IMD"* (fb264 law) — that
-  grind is mud mechanism #0. Policy: any factory preset of any device lands its output ≤ −6 dB
-  under the knee on the chord test (i.e. ≤ +13 dB over nominal), and *chain* factory presets
-  (§10.5) are certified as a chain.
-* Serum 2's own numbers agree: FX-bus faders reach **+12 dB** max, Main **+3 dB** (What's New
-  p. 16) — the host grants each stage a bounded boost and keeps the sum survivable.
-* Between-device nominal stays −26 dBFS: a device expecting hotter input (compressor thresholds!)
-  states its ranges relative to it (COMPRESSOR bible §2.1 — thresholds −46…−6 dBFS ≡ −20…+20 rel).
+  problem; it is a *perceptual and limiter* problem. The hard boundary is the fb264 master stage
+  after `kInstrumentMakeup` (+6.02 dB): peak-limiter threshold = soft-clip knee at **0.90
+  (−0.92 dBFS)**, hard ceiling at **0.96605 (−0.30 dBFS)**. A single note at −26 dBFS lands at
+  −19.98 dBFS post-makeup ⇒ **≈ 19.1 dB to the limiter**, 19.7 dB to the ceiling.
+* **The stacking budget (do the arithmetic once, here).** Each device may boost; boosts SUM.
+  *"Clipping a sum of tones = broadband IMD"* (fb264 law) — that grind is mud mechanism #0.
+  - fb264 constants, read from source: `kMasterCeiling = 0.96605f` = **−0.30 dBFS**,
+    `kLimiterThresh = kSoftClipKnee = 0.90f` = **−0.92 dBFS** (`PluginProcessor.cpp:44–47`). The
+    limiter, not the clipper, is what program actually meets — so the **operative ceiling is
+    −0.92 dBFS**, and "−0.3" is the DAC-protection catch behind it.
+  - The certified chord at −20 dBFS post-`kInstrumentMakeup` (+6.02 dB) sits at **−13.98 dBFS**,
+    i.e. **13.1 dB below the limiter threshold**.
+  - **Policy:** a single device's factory preset lands ≤ **+7 dB** over its input on the chord
+    (leaving ~6 dB of chain headroom); a whole *chain* preset lands its output ≥ **6 dB below the
+    limiter threshold** on the chord — i.e. **≤ −20 dBFS at the master input**, measured, and
+    certified as a chain (§10.5). A single note (−26 dBFS nominal) therefore has ≈ 19.1 dB of
+    post-makeup room to the limiter — that is the number a solo-device preset may spend.
+    *(A prior draft's "≤ +13 dB over nominal" silently spent the chord's own +6 dB twice.)*
+* ⚠️ **UNVERIFIED:** the corroborating Serum 2 fader ranges (FX bus +12 dB max, Main +3 dB) are
+  figure-read from What's New p. 16 — **no dB value exists in that PDF's text layer** (re-extracted
+  2026-08-14). The house budget above is derived from OUR measured constants and does not depend
+  on them; keep them as colour, not as a source.
+* Between-device nominal stays −26 dBFS: a device expecting hotter input states its ranges relative
+  to it. COMPRESSOR bible §2.1, quoted correctly: the detector is lifted **+26.02 dB** so
+  `0 dBp ≡ −26 dBFS`, and Push maps `T_dBp = +9 − 48·push^0.9` ⇒ threshold travels **+9 dBp →
+  −39 dBp** (= **−17 dBFS → −65 dBFS**). *(A prior draft cited "−46…−6 dBFS ≡ −20…+20 rel"; no such
+  range exists in that bible.)*
 
 ### 4.3 Ordering wisdom (defaults, and the creative inversions)
 
@@ -382,7 +506,9 @@ The classic serial doctrine — **dynamics → gain/dirt → EQ/tone → modulat
   into hash (…which is precisely the shoegaze/dub inversion below).
 
 Terrain's grammar: with Utility in the pool, the recommended default order token list is
-`utl? · dst · dly · rvb` (dirt → echo → space), matching today's perm-2 family. Chain presets
+`utl? · dst · dly · rvb` (dirt → echo → space) = today's **perm 3**, `"Distortion > Delay > Reverb"`
+(`PluginProcessor.cpp:3488` StringArray index 3 / `switch` case 3 at `:7389`; a prior draft said
+perm 2, which is `Distortion > Reverb > Delay`). Chain presets
 (§10.5) teach the inversions instead of forbidding them:
 
 * **Reverb → Distortion** — the shoegaze wall: the tail becomes sustain; needs Fence after or it
@@ -398,8 +524,8 @@ Terrain's grammar: with Utility in the pool, the recommended default order token
 | # | Mechanism | Physics | Countermeasure (ours, concrete) |
 |---|---|---|---|
 | 0 | Loudness creep → limiter IMD | stacked boosts push the chord into the −0.3 dB knee; intermod products are broadband | unity gates (§4.1) + stacking budget (§4.2) + rack-rail meters (§8.4) + `Fence` |
-| 1 | Low-mid masking buildup | reverb + delay + chorus all *add* 200–500 Hz energy; masking hides transients first | wet-path Low Cut defaults already exist (`SYN_RVB_LOWCUT`, `SYN_DLY_LOWCUT` def 22); law: every wet device ships a low-cut param and a non-zero factory default in chain presets |
-| 2 | Cumulative resonance | multiple resonant stages within ~⅓ oct multiply: two +6 dB peaks aligned = +12 dB ring | spread factory centers; the EQ bible's dynamic-band note; audit chord spectra in the chain cert |
+| 1 | Low-mid masking buildup | reverb + delay + chorus all *add* 200–500 Hz energy; masking hides transients first | **Correction (source-checked):** the wet low-cut defaults are NOT already in place. `SYN_DLY_LOWCUT` defaults **0.22** (`PluginProcessor.cpp:3472`) but `SYN_RVB_LOWCUT` defaults **0.00** = 20 Hz = *no cut* (`:3434`, UI `index.html:7479` shows `['Low Cut',0,…]`), and the **Vintage** reverb type re-purposes that slot as `setDrive` entirely (`:6997`) so it has no low cut at all. Concrete law: (a) every wet device ships a low-cut param on every Type — Vintage must be re-slotted or given one; (b) the mapping is `20·50^x` Hz, so the chain-preset default is **x = 0.22 ⇒ ≈ 47 Hz** for one wet device and **x = 0.40 ⇒ ≈ 96 Hz** for the second and later wet devices in the same chain; (c) chain-cert gate: summed 100–400 Hz third-octave energy of the default chain ≤ **+3 dB** over the loudest single device in it |
+| 2 | Cumulative resonance | multiple resonant stages within ~⅓ oct multiply: two +6 dB peaks aligned = +12 dB ring | Concrete: (a) **≥ ⅓-octave minimum separation** between the resonant/shelf centres of any two factory defaults in a chain preset — enforced by listing the centres in the preset file and diffing them at cert; (b) chain-cert gate on the chord: **no third-octave band of the chain output exceeds the same band of the loudest single device by more than +4 dB**; (c) `Tilt`'s pivot default (632 Hz) is deliberately off the delay/reverb low-cut region so the two never stack |
 | 3 | Phase smear | cascaded allpasses (splitter crossovers, phaser stages, oversampler IIRs) rotate phase; crest factor drops, transients "blur" | prefer zero/fixed-latency paths (§3.7); SPL §6.5 phase-matched Mix law; measure crest Δ in chain cert (gate: ≤ 3 dB crest loss through the default chain) |
 | 4 | Tail overlap wash | delay feedback tail + reverb decay both exceed note gaps → sustained bed | duck pills (reverb has it, `:7185`), env-gated feedback (NOTHING FREE-RUNS), chain presets pair long-tail devices with ducking on |
 | 5 | Width collapse | stacked wideners drive correlation negative; mono playback cancels | correlation meter in Utility (§8), `Mono Below` default in wide chain presets, the SPL `Mono` audition pill precedent |
@@ -443,15 +569,29 @@ only type that is *provably transparent* apart from level.
 ### 5.2 `Stereo` — the width tool
 Ableton/Serum Utility's heart, plus rotation.
 **DSP:** M/S matrix `M=(L+R)/2, S=(L−R)/2`; `S *= width` (0–400 %); `Rotate` mixes M↔S by angle
-(−45°…+45°); `Mono Below` = LR4 split (in-tree TPT crossover, SPL §3.1) with the low band summed
-to mono; Haas `Skew` micro-delays one channel 0–12 ms (integer+frac delay line, MoogDelay grammar).
+(−45°…+45°); `Mono Below` = LR4 split with the low band summed to mono — the crossover is
+`juce::dsp::LinkwitzRileyFilter` (SPL §3.1; ⚠️ **note: it is a JUCE module class, NOT currently
+instantiated anywhere in Terrain's `Source/` — `grep -r LinkwitzRiley Source/` returns nothing.
+This device would be its FIRST use, so budget the wiring**); Haas `Skew` micro-delays one channel
+0–12 ms (integer+frac delay line, `MoogDelay.h` tap grammar).
 **Discriminator:** side/mid energy ratio sweeps −∞…+12 dB; correlation meter travels +1 → −1 —
 nothing else in the rack moves correlation at constant spectrum.
 
 ### 5.3 `Tilt` — the one-knob spectrum lever
 Quad 34 lineage.
 **DSP:** complementary low-shelf/high-shelf pair, ±9 dB each, pivot knob 100 Hz–6.3 kHz (log,
-default 632 Hz), RBJ shelves from `ParametricEQ.h`. `Focus` narrows shelf S. At max tilt: +9/−9 —
+default 632 Hz).
+🔑 **Recycle correction (read, not assumed):** the RBJ shelves are **NOT** in `ParametricEQ.h` — that
+class is HP-cascade → 7 peaking bells → LP-cascade and has **no shelf at all** (`ParametricEQ.h`
+header comment, `:8–21`). The shelf lives in **`TerrainFilters.h:1314`,
+`BellEQ::setShelf (fc, gainDb, bool high, fs)` (RBJ, TDF2)** — and Terrain **already ships this exact
+tilt**: `TerrainFilters` `Type::TILT` at `:1827–1833` runs `eqA.setShelf(cut, −g, low)` +
+`eqB.setShelf(cut, +g, high)` with `g = (res01 − 0.5)·18` ⇒ **±9 dB**, the identical law. Lift that
+case verbatim; do not re-derive it.
+⚠️ `BellEQ::setShelf` **hardcodes shelf slope S = 1** (`al = 0.5·sin(w)·√2`), so `Focus` needs the
+general term `α = sin(w)/2·√((A + 1/A)(1/S − 1) + 2)` — which already exists in
+**`MoogDelay.h:108–140` (`TiltShelf`)**. Take the α line from there.
+At max tilt: +9/−9 —
 "just past useful" (a full-bright pad is genuinely destroyed, LAW 5's max-position mandate).
 **Discriminator:** spectral slope: ±9 dB tilt = ±6 dB/decade measured pink-noise slope change;
 level at pivot unchanged ±0.3 dB (that's what makes it *staging*, not EQ).
@@ -508,7 +648,8 @@ at width 4 can double peak level → the card's correlation bar warns (LAW 9, vi
 catches. Rotation matrix stays orthogonal (energy-preserving by construction).
 
 ### 6.3 Tilt shelves
-RBJ high/low shelf pair, mirrored gains, shared pivot; recompute coefficients at block rate with
+RBJ high/low shelf pair, mirrored gains, shared pivot (`TerrainFilters.h:1314` +
+`Type::TILT` at `:1827`, see §5.3); recompute coefficients at block rate with
 the weighted-cache-key law (fb344) so sweeping Pivot doesn't churn; coefficient glide via the
 filter system's existing re-raster grammar (fb343 card-like-water).
 
@@ -527,10 +668,20 @@ under the −70 dB gate (denormal-safe by the freeze itself + FTZ).
 
 ### 6.6 Oversampling verdict
 **None**, except Fence's optional 2× (its clip is the only nonlinearity; everything else is LTI or
-control-rate gain — oversampling anything else is pure waste, LAW 8). Latency contribution: 0
-(Fence's 2× uses the polyphase IIR at 4-sample internal cost *inside* the fixed budget only if
-Quality ≥ High; Standard runs 1× tanh — knee softness hides the negligible alias at gain-staging
-levels ≥ −26 dBFS program).
+control-rate gain — oversampling anything else is pure waste, LAW 8).
+
+🔑 **Latency contribution must be EXACTLY 0, in every Type and every Quality tier** — LAW A (§3.7),
+and a prior draft contradicted itself here by budgeting "4 samples internal … only if Quality ≥
+High", which would make Utility's ledger entry a function of a dropdown. The binding rule:
+
+* Fence's 2× uses an **allpass-polyphase IIR halfband** — minimum-phase, **no compensation delay
+  line, no integer latency**. Its sub-sample group delay is phase, not delay; nothing downstream
+  and no exclusion sum is re-aligned for it.
+* Standard runs 1× tanh; the knee softness hides the negligible alias at gain-staging levels.
+  Switching tier therefore changes *alias floor only*, never timing.
+* **Verification gate:** null-test Fence at Quality Standard vs High on a sub-ceiling sine — the
+  peak of the difference must show **no sample-shift** (cross-correlation lag = 0). If an
+  implementation cannot hit that, **the 2× is cut**, not compensated (LAW A).
 
 ### 6.7 Param law table (range · taper · glide)
 
@@ -558,8 +709,8 @@ Speed is a physical time-constant, not a musical division (riders in the wild ar
 
 ## 7. Chassis map — the locked fb275 grammar
 
-**Front card:** hero knobs `Level` (=Gain) · `Width` · `Shape` (type's signature: Tilt/Target/
-Depth/Ceiling relabel) · `Mix` + the live visualizer (§8) + 2 pills.
+**Front card:** hero knobs `Level` (=Gain) · `Width` · `Shape` (the type's signature knob —
+per-type alias table below) · `Mix` + the live visualizer (§8) + 2 pills.
 **Pills:** `Auto` (loudness-matched output trim, default OFF — DST §4.2 grammar) · type's 2nd:
 Trim `Sum` (mono audition) / Stereo `Swap` / Tilt `Flat` / Match `Hold` / Pump `Invert` / Fence `Hard`.
 **Back:** d1 `Type` (choice 6, §5) · d2 `Meter` (choice 5: VU · RMS · Loud · Peak · Corr — feeds
@@ -568,7 +719,7 @@ the card meter AND Match's detector) · the 4×2:
 | | 1 | 2 | 3 | 4 |
 |---|---|---|---|---|
 | **Trim** | Gain | Pan | Low Cut | High Cut |
-| | Balance | Phase L | Phase R | Drift* |
+| | Width | Phase L | Phase R | Drift* |
 | **Stereo** | Width | Rotate | Mono Below | Skew |
 | | Pan | Side Tone | Gain | Center Keep |
 | **Tilt** | Tilt | Pivot | Focus | Gain |
@@ -577,12 +728,38 @@ the card meter AND Match's detector) · the 4×2:
 | | Attack Bias | Freeze Below | Pan | Width |
 | **Pump** | Depth | Curve | Floor | Gain |
 | | Attack Trim | Release Trim | Pan | Width |
-| **Fence** | Ceiling | Grab | Lead-In | Gain |
+| **Fence** | Ceiling | Grab | Knee | Gain |
 | | Low Cut | High Cut | Pan | Width |
 
 *Drift = ±0.5 dB slow stereo level wander, env-gated (character, honest, dies with the note).
-All names pragmatic (say what it DOES), Title-case, acronym-free. 11 params total per the spec:
-2 dropdowns + 8 knobs; front knobs alias back params (the DEVS `p:` grammar, like Delay's Time).
+
+Two corrections applied to this table (both were defects in the draft it replaces):
+
+1. **Fence's third knob was `Lead-In` — a lookahead control, and lookahead is banned rack-wide
+   (LAW A, §3.7).** It is now `Knee` (knee width 0–6 dB around Ceiling, default 3 dB). Nothing in
+   this device may anticipate the signal.
+2. **Trim's second row began `Balance`** — which is a near-twin of the `Pan` sitting one cell
+   earlier in the same type (the no-doubles rule), **and** it left the front hero `Width` with
+   nothing to alias in Trim. Replacing it with `Width` fixes both.
+
+**The front-hero alias table** (front knobs are aliases of back params — the DEVS `p:` grammar,
+like Delay's Time; a hero with no backing param in some type is a dead knob, LAW 5):
+
+| Type | `Level` → | `Width` → | `Shape` → | `Mix` |
+|---|---|---|---|---|
+| Trim | Gain | Width | Drift (default 0) | own param |
+| Stereo | Gain | Width | Rotate | own param |
+| Tilt | Gain | Width | Tilt | own param |
+| Match | Gain | Width | Target | own param |
+| Pump | Gain | Width | Depth | own param |
+| Fence | Gain | Width | Ceiling | own param |
+
+All names pragmatic (say what it DOES), Title-case, acronym-free.
+**Chassis arithmetic, stated explicitly so nobody re-litigates it:** the fb275 back panel is
+**2 dropdowns + 8 knobs = 10 back params**, and `Mix` is the one front knob that is *not* an alias
+⇒ **11 distinct automatable knob/dropdown params per device**, exactly as the spec says. `Power`
+and the 2 pills are booleans on the chassis frame, and the 6 route pills belong to the send bus —
+they are counted in the §3.2 slot total (25), not in the "11".
 
 Param IDs: singleton `SYN_UTL_*` if Utility also ships as a 4th flagship, else purely slot-hosted
 (`SYN_FXS{k}_*`) — **recommendation: slot-only.** Utility is the first *born-multi-instance* device
@@ -595,10 +772,14 @@ on day one instead of retrofitted.
 
 ### 8.1 How the greats draw gain staging (mechanisms, precisely)
 * **Serum 2 rack rail:** every FX row ends in a vertical stereo output meter beside its Mix knob;
-  the mixer page draws faders against printed dB scales (+12…−36 bus, +3…−48 main) with slim
-  peak bars (What's New pp. 11–12, 16). Mechanism: per-module post meters, always-on, tiny.
-* **Serum 2 Compressor row:** numeric THRESH readout (−18.1 dB) + X-LOW/BELOW/X-HIGH band meters
-  inline in the row (p. 11) — the *device teaches its own level math*.
+  the mixer page draws faders against printed dB scales with slim peak bars.
+  ⚠️ **UNVERIFIED — figure-read only.** What's New pp. 11–12/16 carry no meter or dB text in the
+  PDF text layer (re-extracted 2026-08-14); the specific scales (+12…−36 bus, +3…−48 main) could
+  not be confirmed. The *mechanism* we are copying — per-module post meters, always-on, tiny — is
+  what matters here and is visible in the figures.
+* **Serum 2 Compressor row:** numeric THRESH readout + inline band meters in the row — the *device
+  teaches its own level math*. ⚠️ **UNVERIFIED figure-read**: the "−18.1 dB" readout and the
+  X-LOW/BELOW/X-HIGH labels are our reading of the p. 11 screenshot, not document text.
 * **Ableton Utility:** no visualization at all — knobs only. The anti-example: users pair it with
   external meters; we get to fuse the two.
 * **Console VU:** 300 ms ballistic needle — the ur-meter; slow enough to read loudness, fast
@@ -719,18 +900,29 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
 14. **Latency ledger drift after reorders** — ledger re-derived with the order, crossfade masks (§3.7).
 15. **DC offsets accumulating across asymmetric devices** — Utility's always-on DC blocker +
     per-device DC laws (DST §4.1).
-16. **Preset short-list choice trap** on slot TYPE (choice(23) hosting shorter lists) — clamp per
+16. **Preset short-list choice trap** on slot TYPE (`choice(32)` hosting shorter lists) — clamp per
     device template (fb342 law, §3.2).
 17. **Denormals in idle detectors/meters** — FTZ + bias (§6.5); sleeping slots skip detectors entirely.
+18. **Growing a choice list after ship** ("we'll append device 6 later") — cardinality is fixed at
+    birth exactly like the param count; every list is over-sized with *Reserved* entries on day one
+    (LAW C, §3.2).
+19. **Any lookahead or latency-reporting device** — the sample-aligned exclusion sum makes the dry
+    leak back smeared; ZERO lookahead, ZERO reported latency, latency never a function of Type or
+    Quality (LAW A, §3.7/§6.6). The killed `Lead-In` knob (§7) is the canonical near-miss.
+20. **A front hero knob with no backing param in some Type** — a dead knob by construction; the
+    alias table in §7 must be complete for every Type before a Type ships.
 
 ---
 
 ## 13. Hard-rule compliance checklist (Laws 1–10, walked)
 
 1. **Bus reality (−26 dBFS):** every Target/Ceiling/threshold stated rel −26 (§5.4, §5.6, §6.7);
-   stacking budget derived from the measured −0.3 dB knee distance (§4.2). No literature range copied raw.
+   stacking budget derived from the measured **−0.92 dB limiter-threshold** distance, not the
+   −0.30 dB ceiling (§4.2). No literature range copied raw.
 2. **Chassis (fb275):** 2 dropdowns (`Type`, `Meter`) + 4×2 back knobs + front hero-4 + 2 pills
-   (§7); 11 params; pragmatic Title-case names throughout.
+   (§7); **11 automatable knob/dropdown params** (10 back + `Mix`, the one non-aliasing front
+   knob — arithmetic spelled out in §7); pragmatic Title-case names throughout, and every front
+   hero has a backing param in every Type (§7 alias table).
 3. **Time params 4 bars→1/256:** vacuously satisfied — no musical-division param exists; Speed is
    a physical constant, documented (§6.7).
 4. **Mix 100 % = fully wet; no switch cuts audio:** Mix is the standard equal-power insert; Type
@@ -741,12 +933,15 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
    feedback path in device or chain topology (§5.4, §5.5, §9).
 7. **No clicks:** glide table (§6.7), polarity crossfade, reorder crossfade (§3.4), sleep/wake
    re-seed (§3.8).
-8. **CPU-friendly:** §11; oversampling only Fence-High; sleep contract chain-wide; control-rate
-   detectors.
+8. **CPU-friendly:** §11; oversampling only Fence-High (and it must stay **zero-latency in every
+   tier**, §6.6); sleep contract chain-wide; control-rate detectors.
 9. **Audible ⇔ visible + dramatic:** Rider Rail/Orbit/Tilt Lens all param-reflecting with idle-dim
    deltas (§8.2–8.3); rack rail meters make the whole chain visible (§8.4).
-10. **Recycle first:** §15 — TPT crossover, ParametricEQ shelves, hallSm_ glide class, bloom
-    atomics, DEVS/24-vector ABI, sleep detector, IndyFxChain precedent, PERMS tables.
+10. **Recycle first:** §15 — `BellEQ::setShelf` + the already-shipped `Type::TILT` case, `MoogDelay`
+    `TiltShelf`/tap grammar, `hallSm_` glide class, bloom atomics, DEVS/24-vector ABI, the
+    `DistortionEngine` sleep detector, `IndyFxChain` precedent, PERMS tables. Two entries are
+    **new wiring, not recycling**, and are marked as such: `juce::dsp::LinkwitzRileyFilter` (never
+    instantiated in Terrain) and the rack-rail meters (§8.4).
 
 ---
 
@@ -773,19 +968,21 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
 
 | Need | Reuse | Address |
 |---|---|---|
-| Serial insert grammar + env fades | applyRvb/applyDst/applyDly lambdas + `hallSm_` | `PluginProcessor.cpp:7137/7310/7347` |
+| Serial insert grammar + env fades | applyRvb/applyDst/applyDly lambdas + `hallSm_` (`~15 ms`, set at `:3812`) | `PluginProcessor.cpp:7137/7309/7345` |
 | Exclusion-sum refactor seed | the three identical `rtd` expressions | `:7159/7161, :7326/7328, :7358/7360` |
 | Send-bus plumbing | reverb/delay/dst send buffers | `PluginProcessor.h:1534/1559/1572` |
 | Gain constants | `kVoiceToFxPad`, `kInstrumentMakeup` | `PluginProcessor.cpp:6300, :46` |
 | Sleep/wake | `asleep_` detector + closed-form wake | `DistortionEngine.h:513/566/572–584` |
 | Private-instance precedent | `IndyFxChain` (shared values, own state) | `IndyFxChain.h:1–40` |
-| Crossover (Mono Below) | TPT LR4 (SPL bible §3.1, in-tree) | filter system |
-| Shelves (Tilt) | RBJ shelf coefficients | `ParametricEQ.h` |
+| Crossover (Mono Below) | LR4 TPT — ⚠️ **JUCE module class, NOT yet used anywhere in Terrain `Source/`** (first use; SPL bible §3.1) | `_tools/JUCE/modules/juce_dsp/processors/juce_LinkwitzRileyFilter.h` |
+| Shelves (Tilt) | `BellEQ::setShelf` (RBJ, TDF2) — **not** `ParametricEQ.h`, which has no shelf | `TerrainFilters.h:1314` |
+| Tilt law itself (±9 dB mirrored pair) | `TerrainFilters` `Type::TILT` case — already shipped, lift verbatim | `TerrainFilters.h:1827–1833` |
+| Shelf slope `S` (for `Focus`) | `TiltShelf::update` general α term (BellEQ hardcodes S = 1) | `MoogDelay.h:108–140` |
 | Haas delay line | `MoogDelay.h` fractional tap grammar | `MoogDelay.h` |
-| Viz publish | bloom atomics + rAF poll | `PluginProcessor.cpp:7395+`, `index.html` bloom poll |
-| Rack UI + restore ABI | DEVS objects + 24-vector + `fxr-add` | `index.html:7479/7955/7705` |
-| Order migration | PERMS tables (C++/JS twins) | `PluginProcessor.cpp:7383`, `index.html:7978` |
-| State versioning | V2 extras block + migration | `PluginProcessor.cpp:8810/8861/9008` |
+| Viz publish | bloom atomics + rAF poll | `PluginProcessor.cpp:7393–7400`, `index.html` bloom poll |
+| Rack UI + restore ABI | DEVS objects + 24-vector + `fxr-add` | `index.html:7479 / 7947 / 7705` (styles `:7256–7259`) |
+| Order migration | PERMS tables (C++/JS twins) | `PluginProcessor.cpp:7383`, `index.html:7976` (restore) + `:8320` (drag) |
+| State versioning | V2 extras block + migration | `PluginProcessor.cpp:8810 / 8863 / 9008 / 9145` |
 | Auto pill law | measured-LUFS output match, default OFF | DISTORTION bible §4.2 |
 | Latency composition | fixed-N/report-0 + dry-side delay identity | DISTORTION bible §4.4 |
 | Lane ownership | claim/own/merge grammar | SPLITTER bible §6.3 |
@@ -796,6 +993,12 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
 
 * Serum 2 — *What's New in Serum 2* (official PDF; FX rack p. 11, modules/Utility p. 12, splitters
   p. 13, LFO 7–10 p. 14, Mixer p. 16): https://static.xferrecords.com/Serum%202%20What's%20New.pdf
+  ✔ **Re-fetched and text-extracted 2026-08-14 (20 pp.).** Verbatim in the text layer: *"Choose from
+  13 effects and 3 splitter modules"* (p. 3/11) · *"Add multiple instances of a single effect"*
+  (p. 11) · *"Dual FX Busses — Two separate FX busses"* (p. 11) · *"LFO 7 to LFO 10 appear after you
+  assign LFO 6"* (p. 14) · the three splitter names (p. 13) · *"Utility — New utility effect"*
+  (p. 12). ⚠️ **The document contains NO dB values anywhere in its text layer** — every dB number
+  attributed to it in earlier drafts is a figure-read and is flagged inline as unverified.
 * Serum 2 User Guide (official, v1.0.3): https://www.xferrecords.com/manual/serum-2/docs
 * Serum 2 effects guide (bus routing examples): https://monosounds.studio/serum-2-effects-guide/
 * Serum 2 feature breakdown ("unlimited FX duplication … two FX busses"):
@@ -803,13 +1006,23 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
 * Serum 1 duplicate-FX demand (the cautionary tale):
   https://www.reddit.com/r/serum/comments/1b4uqgf/serum_fx_tab_is_there_a_way_to_add_additional/
 * Kilohearts Snap Heap docs (7 lanes, lane Gain/Pan/Mix, CPU advice): https://kilohearts.com/docs/snap_heap
+  ✔ **Verified 2026-08-14** — *"Snap Heap features seven lanes"*; footer controls Gain/Pan/Mix;
+  *"It is advisable that you turn off all lanes that you are not using, to spare some CPU cycles."*
 * Kilohearts Snap Heap product page: https://kilohearts.com/products/snap_heap
 * Kilohearts Multipass (5 bands): https://kilohearts.com/products/multipass
-* JUCE forum — dynamic parameter counts unsupported (quoted §3.2):
-  https://forum.juce.com/t/adding-modify-audio-parameters-at-runtime/ (and the sibling
-  "Remove and create audio parameters after processor creation" thread)
+* JUCE forum — dynamic parameter counts unsupported (quoted §3.2). ✔ **Verified 2026-08-14**:
+  *"Remove and create audio parameters after processor creation"*, reply by **t0m, 8 Jan 2020** —
+  https://forum.juce.com/t/remove-and-create-audio-parameters-after-processor-creation/36941
+  Corroborating threads on the same site: *"Dynamic Number of Parameters"* (/t/…/8928),
+  *"Dynamically alter number of plugin parameters?"* (/t/…/4745),
+  *"AudioProcessor removeParameter?"* (/t/…/15608).
+  ⚠️ The URL a prior draft cited — `forum.juce.com/t/adding-modify-audio-parameters-at-runtime/` —
+  **404s; that thread does not exist.** Do not re-introduce it.
 * Ableton Live 12 manual, Audio Effect Reference (Utility):
   https://www.ableton.com/en/live-manual/12/live-audio-effect-reference/
+  ⚠️ **NOT verified 2026-08-14** — the page truncates at Filter Delay before the Utility section,
+  and the walkthrough below carries no numbers either. Every Live Utility RANGE in §2 is therefore
+  unverified; re-check against the device before quoting.
 * Ableton Utility walkthrough: https://www.musicguymixing.com/ableton-live-utility/
 * iZotope — Signal Chain: Order of Operations:
   https://www.izotope.com/community/blog/signal-chain-order-of-operations
