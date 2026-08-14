@@ -64,3 +64,6 @@ compile_commands.json
 
 # CMake build output (live build dir on this machine)
 build-release/
+
+# fb346 — agent verification scratch (Bode Hilbert checks etc). Keep on disk, out of git.
+scratchpad/
