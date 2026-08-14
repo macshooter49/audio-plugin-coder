@@ -694,9 +694,18 @@ fixed once, reappearing through a path nobody edited.
 both lines (and the R twins at `:6981` / `:7112`), and give the distortion's own main-send branch the
 symmetric three-way subtraction.
 
-**Also:** `SYN_FX_ORDER` (`ParameterIDs.hpp:403`) is a **bool** — `false = Reverb→Delay`. Three devices
-means **6 permutations**, so it must become a choice/permutation index, and each device's
+**Also:** `SYN_FX_ORDER` (`ParameterIDs.hpp:403`) **was** a bool — `false = Reverb→Delay`. Three devices
+means **6 permutations**, so it had to become a choice/permutation index, and each device's
 downstream-delay amount (§4.4) is derived from that order.
+
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] STATUS UPDATE — this paragraph is history, not a to-do.**
+> fb341 already did it: `SYN_FX_ORDER` is now an `AudioParameterChoice(6)` (declared
+> `PluginProcessor.cpp:3488`, clamped `:5860`, dispatched by the 6-case switch `:7383`). 🛑 **And it
+> can never be re-declared at any other size** — choice cardinality is fixed at birth (fb342 session
+> law ①). A 4th device therefore does **not** "bump the permutation": see `FX-CHAIN-BIBLE.md` §3.4,
+> which is the authority — the param is retired behind a `fxChainOrder` rank property and left
+> registered as the migration table. Any remaining "promote `SYN_FX_ORDER`" wording in this file
+> (e.g. §4.5 build-order notes) refers to work that is **already done**.
 
 ### 4.6 No clicks, no crackle — the five that will bite
 
@@ -1381,6 +1390,23 @@ blocking disabled — only peaks colour; the honest near-clean voicing and proof
 clean→ruined).
 
 #### Tape  *(the big one)*
+
+> 🔑 **BOUNDARY LAW — added by the 2026-08-14 cross-bible sweep. Terrain has FOUR tape surfaces and
+> they must never tangle.** `TAPE-BUILD-BIBLE.md` §0.2 is the authority; it is reproduced here so a
+> Distortion builder cannot miss it, and the two files now say the same thing:
+> ```
+> DISTORTION.Tape (this mode) = the MAGNETISATION.  Jiles-Atherton hysteresis. What the tape IS.
+> TAPE (the future device)    = the MACHINE.        Heads, motor, loop, splice, feedback. What it DOES.
+> DLY.Tape                    = a delay FLAVOR.     One tanh + LP colour inside a clean delay chassis.
+> TapeMachines.h / TapeLoop   = the CHANNEL COLOR / the LOOPER. Static sat+wow+hiss; recording.
+> ```
+> **Consequences a Distortion builder must respect:** this mode owns the hysteresis loop, record
+> bias, gap loss, head bump and its own wow/flutter *as magnetisation artefacts* — it must **never**
+> grow an echo, a motor, a transport or a loop. Conversely the Tape *device* deliberately ships a
+> **cheap memoryless soft stage**, NOT this Jiles-Atherton core (`TAPE-BUILD-BIBLE.md` §3.5), so the
+> deep smear stays exclusive to this mode. The user who wants both chains `Distortion (ANALOG/Tape)`
+> → `Tape` — the two devices **compose** instead of competing. Nothing about this mode changes when
+> the Tape device ships; nothing in the Tape device duplicates this mode.
 
 Magnetic hysteresis — **genuinely not waveshaping**. Magnetisation `M` depends on the applied field `H`
 **and on the state left by previous samples**; the I/O relation is a double-valued **loop** whose branch
@@ -3313,6 +3339,8 @@ by reading the files.
 `Source/ModalEngine.h` (299 `softClip` · 329 `DCBlock`) · `Source/ConvolutionReverb.h` (166
 `getLatency`, zero callers) · `Source/Wavetable.h` (66-67 `kFrameSize`/`kNumMipLevels`/`kMaxHarmonics`) ·
 `Source/SynthLFO.h` (27-29 `kLfoTableN` · 339-343 table read) · `Source/ParameterIDs.hpp` (403
-`SYN_FX_ORDER` — a bool) · `Source/IndyFxChain.h` · `Source/ui/public/index.html` (7155-7156 `.fxr-core` ·
+`SYN_FX_ORDER` — **[AUDIT 2026-08-14] no longer a bool: fb341 made it an `AudioParameterChoice(6)`,
+built at `PluginProcessor.cpp:3488`; cardinality is now frozen forever, see `FX-CHAIN-BIBLE.md`
+§3.4**) · `Source/IndyFxChain.h` · `Source/ui/public/index.html` (7155-7156 `.fxr-core` ·
 7506 `CORES` · 7717-7745 bloom rAF poll · 14736-14747 envelope bias · 23569-24107 the SHAPER module) ·
 `Design/fx-rack-v7-CANONICAL.html` · `Design/fx-back-panel-mockup.html` · `Design/REVERB-BUILD-BIBLE.md`

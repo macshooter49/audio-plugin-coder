@@ -470,6 +470,33 @@ follower — wired to the device power fade like DST.
 *(One engine; a Type = a topology/remap preset over §3.5. All eight back knobs stay live in every
 type — the per-type meaning table is in §5.3. Characters in §4.8 apply to all types.)*
 
+### 4.0-N 🏷️ **[CROSS-BIBLE AUDIT 2026-08-14] TWO NAME RULINGS + THE THREE-WAY BARBERPOLE BOUNDARY**
+
+**These apply to whichever roster §4.0 resolves to.**
+
+1. **Type `Shift` → `Fixed`.** The device's front hero knob is `Shift`; a Type of the same name is
+   the absolute no-doubles violation (same word twice inside one device, the exact defect the OTT
+   audit caught with `Air`). The knob keeps `Shift` — it is the hero and Max-facing. `Fixed` says
+   what the Type does relative to its siblings: a fixed shift, both channels, no motion, no split
+   (Barberpole moves, Spiral echoes, Split splits, Track follows). Renamed throughout §4.
+2. **Back knob P7 `Track` → `Touch`.** Same violation: a Type named `Track` next to a knob named
+   `Track`. The knob moves, because `Track` is the Type's identity. `Touch` is what the Phaser calls
+   the identical env→sweep job (`SYN_PHZ_TOUCH`, P5) — so the word now means exactly one thing
+   across the rack (Tier-3 shared vocabulary, `FX-CHAIN-BIBLE.md` §7.2), and it avoids clashing with
+   the Filter device's P3 `Track`, which means *key*-tracking, a completely different mechanism.
+3. 🔑 **`Barberpole` STAYS HERE, and it is the only true one.** Three devices ship an infinite-rise
+   illusion; two of them were using the identical word before this sweep. Settled split, stated
+   identically in all three bibles:
+   | Device | Type | Mechanism | Tell |
+   |---|---|---|---|
+   | **Bode** (this file) | **`Barberpole`** | true **SSB / Hilbert shift** — Harald Bode's own | every partial moves by a linear Hz offset: inharmonic, the source detunes |
+   | **Phaser** | **`Barber`** | M cascaded 2nd-order **notch EQs**, octave-spaced | a few deep octave-spaced notches; source stays in tune |
+   | **Flanger** | **`Endless`** *(was `Barberpole`; renamed at this audit)* | DAFx-15 **dual sawtooth comb** + crossfade | dense comb teeth (1/d spaced), scrolling fan |
+   **The Hilbert core is this device's, exclusively** — `PHASER-BUILD-BIBLE.md` §11 Q6 is now closed
+   in our favour (no SSB voicing in the Phaser), and `FLANGER-BUILD-BIBLE.md` §2.4 carries a
+   recommendation to cut its `Character: Shift` SSB variant for the same reason. If Max keeps that
+   flanger character, this device loses part of what it is sold on — say so before it ships.
+
 ### 4.0 ⚠️ **[AUDIT] THE ROSTER DOES NOT PASS LAW 5 AS DRAFTED — RESOLVE BEFORE LOCKING THE CHOICE COUNT**
 
 Law 5 cuts both ways: *"Every Type night-and-day distinct with a stated measurable discriminator, or
@@ -478,22 +505,22 @@ cut — and inventing fake Types to fill a dropdown is also a defect."* Reading 
 
 | Type | Actual topology | Verdict |
 |---|---|---|
-| `Shift` | SSB, loop bypassed | **real** |
+| `Fixed` | SSB, loop bypassed | **real** |
 | `Detune` | mirrored ±S, loop bypassed, sub-Hz remap | ⚠️ **= `Split` with a different Shift remap + Time default** |
 | `Split` | mirrored ±S, loop bypassed, full-range | ⚠️ **same topology as `Detune`** — §4.2 and §4.3 both specify "L +S, R −S at full Spread" |
 | `Barberpole` | shifter in a 1-sample–4 ms comb + fixed 50% internal mix | **real** (the internal mix is a genuine topology difference) |
 | `Spiral` | shifter inside the delay loop | **real** |
 | `Rotary` | mirrored ±S at a few Hz, loop bypassed | ⚠️ **same topology as `Detune`** — differs only in rate zone and Mix default |
-| `Track` | SSB + P7 ≠ 0 | ❌ **not a type.** §4.7's own discriminator says *"static-input spectrum is IDENTICAL to `Shift`"* and §5.2 says P7 is **"alive in all types"** — so `Track` is `Shift` with one knob turned up. That is a **preset**. |
+| `Track` | SSB + P7 ≠ 0 | ❌ **not a type.** §4.7's own discriminator says *"static-input spectrum is IDENTICAL to `Fixed`"* and §5.2 says P7 is **"alive in all types"** — so `Track` is `Fixed` with one knob turned up. That is a **preset**. |
 
 The harness cannot save these: `bod_cert` gate 3 (beat uniformity) and gate 6 (AM-burst tracking)
 would give **identical numbers** for `Detune`/`Split`/`Rotary` at matched knob settings, and for
-`Shift`/`Track` at matched P7. A discriminator you can only produce by also changing a knob default
+`Fixed`/`Track` at matched P7. A discriminator you can only produce by also changing a knob default
 is a preset discriminator, not a type discriminator.
 
 **Three admissible resolutions — Max picks ONE before a line of C++ is written**
 *(this is now the top item of §13, ahead of the viz question):*
-* **(A) Cut to 4 real types** — `Shift` · `Widen` (absorbs Detune+Split+Rotary; Spread + the Shift
+* **(A) Cut to 4 real types** — `Fixed` · `Widen` (absorbs Detune+Split+Rotary; Spread + the Shift
   taper already reach all three sounds) · `Barberpole` · `Spiral` — and **still declare the choice list
   at its FINAL size on day one** with the extra entries present-but-disabled (rack law C: cardinality
   is frozen at birth; see §5.2). Ship `Track` as **factory preset #11**, which is what it already is.
@@ -503,13 +530,13 @@ is a preset discriminator, not a type discriminator.
   decorrelation** (Mix 100 behaviour); `Rotary` = mirrored shift **through a 2-tap L/R amplitude
   rotator locked to the shift rate** (the actual Leslie construction — L/R *amplitude* motion, which
   §4.6's discriminator already claims but no §4.6 DSP produces). `Track` gets cut or becomes a pill.
-* **(C) Ship 5** — `Shift` · `Widen` · `Barberpole` · `Spiral` · `Rotary`-as-(B) — the smallest roster
+* **(C) Ship 5** — `Fixed` · `Widen` · `Barberpole` · `Spiral` · `Rotary`-as-(B) — the smallest roster
   where every entry has a distinct block diagram.
 
 **Until this is settled, treat the "7" in §0, §5.2 and §12 as UNRESOLVED.** Everything else in §4
 (the recipes, the discriminators, the harness gates) is sound and survives any of the three choices.
 
-### 4.1 `Shift` — the Bode 1630 *(reference type, default)*
+### 4.1 `Fixed` — the Bode 1630 *(reference type, default)* 🏷️ *[audit rename: was `Shift`]*
 Plain SSB. Delay defaults 0 (loop = phaser regen), full ±5 kHz on the knob, `Sideband` at up.
 **Recipe:** §3.3 verbatim. **Discriminator:** every partial displaced by the SAME Hz (spectrogram:
 parallel vertical translation, spacing preserved, harmonicity destroyed); image ≤ −44 dB (Pristine).
@@ -558,7 +585,7 @@ and from `Barberpole` (spectral notch motion, no L/R energy rotation).
 Positive: hits bloom upward into clang and fall home as they decay (laser zap that plays itself);
 negative: attacks collapse underwater and resurface. **Discriminator:** shift measurably follows the
 program envelope — on a −26 dBFS burst decaying 20 dB, the wet spectral displacement glides from
-depth·1.0 to depth·0.1 with the follower's release; static-input spectrum is IDENTICAL to `Shift`
+depth·1.0 to depth·0.1 with the follower's release; static-input spectrum is IDENTICAL to `Fixed`
 (the Phase G probe-craft law: transient params need AM probes — a static probe cannot see this type).
 
 ### 4.8 The `Character` dropdown — 6 voicings, physics not EQ
@@ -620,7 +647,20 @@ default ON) · power pill per house. Pills fade, never cut (law 4/7).
 
 ### 5.2 Back panel — EXACTLY 2 dropdowns + 8 knobs (4×2)
 
-**Dropdowns:** `SYN_BOD_TYPE` — choice(N) *(**⚠️ N is UNRESOLVED until §4.0 is answered.** Session
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified against the shipped tree (`index.html` `DEVS[].tp` + `Design/fx-back-panel-mockup.html`):
+> on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header `.fxr-type` `<select>` on the
+> card centerline, and the two **back** dropdowns are Character + a second selector (`Mod Mode` /
+> `Sync` / `Quality`). So `SYN_BOD_TYPE` belongs in the header, `SYN_BOD_CHARACTER` is back-d1, and
+> **this device has a free back-d2 it was not counting** — spend it or leave it, but do not
+> duplicate the header Type pill in the back panel.
+> This also **retires the note at the end of this section** claiming "DST ships 3 dropdowns, so it
+> is DST that bends the rule": it does not. DST ships the same 2 back dropdowns as everyone else
+> plus the universal header Type pill. See `FX-CHAIN-BIBLE.md` §7.1 for the full chassis ruling —
+> including that the honest knob count is **12** (3 heroes + Mix + 8 back), which is what this
+> section's own `[AUDIT]` arithmetic note already worked out independently. It was right.
+
+**Dropdowns:** `SYN_BOD_TYPE` (header pill) — choice(N) *(**⚠️ N is UNRESOLVED until §4.0 is answered.** Session
 law ① / rack law C: cardinality is forever. So **declare the list at its FINAL length on day one**
 and disable the entries the chosen resolution doesn't ship — do NOT declare 7 today and re-count
 later. Recommended: declare **8** and light up whichever roster §4.0 resolves to, leaving the rest
@@ -635,7 +675,7 @@ disabled for a future addition)*.
 | P4 | **Blur** | `SYN_BOD_P4` | 0..1 → 0–4 Schroeder allpasses wet, 5–35 ms coprime | 20 ms xfade | In-loop diffusion (Serum 2 `Blur` / Echobode `Smear`): echoes → wash. |
 | P5 | **Low Keep** | `SYN_BOD_P5` | 20 Hz…2 kHz log; 20 = off | 30 ms coeff | Crossover below which DRY bypasses the shifter — anchors the bass and keeps sub out of the loop. **[AUDIT] the "hides the <48 Hz image breakdown" rationale is DELETED — measured, there is no breakdown above ~22 Hz at 44.1/48 k (§3.1). It IS real at 96 k (edge ~44 Hz) ⇒ default P5 ≥ 60 Hz when fs ≥ 88.2 k.** LR2 (minimum-phase) crossover, phase-matched sum — **never linear-phase** (rack law A, §3.7b). |
 | P6 | **Damp** | `SYN_BOD_P6` | loop LP 700 Hz…40 kHz log (default 18 k) | 30 ms coeff | In-loop darkening — barberpole/spiral tails die dark like tape. |
-| P7 | **Track** | `SYN_BOD_P7` | bipolar → ±1200 Hz·t²·env (§3.6, −26 dBFS-calibrated) | follower does it | Envelope → shift. Center = off. The `Track` type's star; alive in all types. |
+| P7 | **Touch** 🏷️ | `SYN_BOD_P7` | bipolar → ±1200 Hz·t²·env (§3.6, −26 dBFS-calibrated) | follower does it | Envelope → shift: play harder, the shift moves. Center = off. The `Track` type's star; alive in all types. **[audit rename: was `Track`, which duplicated the `Track` Type name inside this device — the absolute no-doubles rule, `FX-CHAIN-BIBLE.md` §7.2. `Touch` is also what the Phaser calls the identical env→sweep job (P5), so the word now means one thing rack-wide — Tier-3 shared vocabulary.]** |
 | P8 | **Drift** | `SYN_BOD_P8` | 0..1 → shift random-walk 0–6 Hz @ 0.3 Hz (SmoothRandom reuse) + per-Character analog misbehavior (carrier leak ×, wow on Tape Loop) | walk is the glide | Age/instability. 0 = digital-still. |
 
 Param count the fb275 way: **3 hero + Mix on the front, 8 on the back**, 2 back dropdowns, pills —
@@ -815,7 +855,7 @@ fb305 six-line edit, FX_ORDER bump, viz. **B6** presets + certs ×2 (pluginval +
 5. **Monotone stripes (Barberpole)**: notch motion never reverses over 30 s; loop RMS bounded
    (fb 0.95, +20 dB cap, pad verified ±1.5 dB program RMS).
 6. **Track**: AM-burst probe (Phase G law — static probes are blind here) shows displacement tracking
-   the envelope within follower tolerances; static probe identical to `Shift` type.
+   the envelope within follower tolerances; static probe identical to `Fixed` type.
 7. **Click floors**: honest per-Character click floor first (Phase G probe-craft), then every knob
    0→100 sweep while playing ≤ floor + 3 dB; type/char/Guard switches ≤ floor.
 8. **Death test (law 6)**: input stops at fb 0.95, Spiral 1 s delay ⇒ wet < −90 dB within 4 s.
@@ -890,7 +930,7 @@ fb305 six-line edit, FX_ORDER bump, viz. **B6** presets + certs ×2 (pluginval +
 4. **Mix 100% = fully wet; switches never cut** ✅ §10 gate 9; fade-swap everywhere (§3.6, §11.7).
 5. **Params evolve 0→100, no dead knobs, types night-and-day** ❌ **FAILS AS DRAFTED** — tapers
    §3.6/§5 are fine and Ring is correctly a knob-center rather than a redundant type, **but 7 Type
-   names sit on 4 topologies and `Track` is `Shift` with one knob turned up (§4.0). Resolve §4.0
+   names sit on 4 topologies and `Track` is `Fixed` with one knob turned up (§4.0). Resolve §4.0
    before B3.** Everything else in this row passes.
 6. **Nothing free-runs + loop-gain law** ✅ §3.5: every loop stage audited (incl. the √2 comp),
    ceiling 0.95, envGate kills tails, death test §10.8.

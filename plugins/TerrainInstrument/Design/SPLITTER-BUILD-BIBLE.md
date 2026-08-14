@@ -271,6 +271,16 @@ Follows the Distortion precedent byte-for-byte: front 3 knobs + Mix, back 2 drop
 `SYN_DST_*` (`ParameterIDs.hpp:406-431`):
 
 ```
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
 SYN_SPL_MODE        choice(5|6): Low/High · Low/Mid/High · Mid/Side · Sub Split · Left/Right [· Punch/Tail]
 SYN_SPL_SLOPE       choice(4):  6 dB · 12 dB · 24 dB · 48 dB     (d2; relabels per mode, §5.3)
 SYN_SPL_SPLIT       float 0..1  — front hero, the SIGNATURE knob, relabelled per mode (like DST's SIG)
@@ -323,6 +333,17 @@ P5 High Gain                 P6 Low Width                     P7 High Width  P8 
 P1 Mid Gain      P2 Side Gain (−∞..+12)   P3 Bass Mono (Off–500 Hz)   P4 Side Tilt (dark↔bright ±6 dB tilt on S)
 P5 Rotate (±45°) P6 Asym (side L↔R skew)  P7 Slip (Side)              P8 Mid Tilt
 ```
+> ⚠️🔧 **[CROSS-BIBLE AUDIT 2026-08-14] P5 `Rotate` is a genuine duplicate — decide before wiring.**
+> `UTILITY-BUILD-BIBLE.md` §5.2 P8 ships `Rotate` at the identical ±45° on the identical M/S matrix.
+> The line the sweep drew between these two devices is **PER-LANE vs GLOBAL**: this device owns the
+> crossover and everything that exists *because lanes exist* (per-lane Gain/Width/Pan/Slip,
+> `Bass Mono` as the M/S crossover frequency) — Utility owns the **global image** (one Width, one
+> Haas `Widen`, one `Rotate`, one `Balance`, one `Center`, one `Mono Below` shelf). A whole-image
+> rotation is not a lane operation, so by that line it belongs to Utility.
+> **Recommendation: drop P5 `Rotate` here and spend the slot on something lane-specific** (a `Side
+> Delay`-style lane offset, or promote `Asym` to a proper per-side skew pair). A user who wants
+> rotation adds a Utility — which is the whole point of the chain epic. Everything else in these
+> six maps was checked and is clean; per-lane `Width`/`Slip` are legitimately this device's.
 **Sub Split**
 ```
 P1 Sub Cross (30–250, def 120)   P2 Sub Gain   P3 Body Gain   P4 Sub Mono (0–100 %)

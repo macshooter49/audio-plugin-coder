@@ -47,6 +47,38 @@ changes byte-wise when the new types are not selected.
 
 ---
 
+## 0.9 🔑 THE BOUNDARY LAW vs the GRANULAR device *(added by the 2026-08-14 cross-bible sweep)*
+
+Both devices own a long capture buffer and both have a Freeze. Neither bible stated the line, so
+here it is — `GRANULAR-FX-BUILD-BIBLE.md` §0.0 carries the identical text:
+
+```
+DELAY (this device) = RECIRCULATION.  A small number of read heads at MUSICAL intervals, fed by a
+                                      feedback loop. Its buffer is a LOOP; its identity is loop gain.
+GRANULAR            = RE-READ.        Many independent short heads scattered over the SAME captured
+                                      past, each with its own age / pitch / pan / window. Its buffer
+                                      is an ARCHIVE; its identity is the grain cloud.
+```
+
+* **The two Freezes are different mechanisms and both are correct.** This device's ported Freeze
+  law (`MoogDelay.h:265-266, 401-403, 431` — capability 5 above, parked for the Hold pill, §14 Q4)
+  fades the *input* out and drives `effectiveFb → 1`, so a short musical loop recirculates forever:
+  the buffer keeps moving and the *content* repeats. Granular's Freeze is a **write-blend** — the
+  write head keeps advancing but stops taking new audio, so the *archive* is held while grains graze
+  it. A frozen delay repeats a phrase; a frozen granular suspends a texture. **Do not implement
+  either one with the other's mechanism**, and do not "unify" them into a shared helper.
+* **The overlap is deliberate:** Granular's `Scatter` Type on a synced clock with long grains
+  approaches a smeared delay, and this device's `Diffuse` Type approaches a wash. They meet in the
+  middle from opposite directions — the "fewer, deeper" position, not duplication.
+* **Neither device grows into the other.** The Delay never gets per-grain pitch/pan/window scatter;
+  Granular never gets a tap/ping-pong/sync-division echo structure. Note this constrains capability
+  3 (pitch-shifted feedback): a *per-repeat* transposition is delay behaviour and stays here;
+  *per-grain* pitch scatter is Granular's and must not migrate into `DelayEngine`.
+* Related boundary laws: `TAPE-BUILD-BIBLE.md` §0.2 (four tape surfaces — and note `DLY.Tape` is
+  explicitly "a delay FLAVOR: one tanh + LP colour", never the tape *machine*).
+
+---
+
 ## 1. Repo recon — the complete inventory (line-anchored)
 
 ### 1.1 MoogDelay.h — engine anatomy
@@ -783,6 +815,16 @@ overwrites it), but it makes the card lie for one frame on first paint.
 | Viz | echo timeline | + the §7 per-type layers |
 
 ### 6.2 Back panel — 2 dropdowns + 4×2 knobs
+
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
 
 - **Dropdown 1 — Type:** `Digital · Tape · Bucket · Diffuse · Drift · Shift`
   (append-only; §3.5). Pragmatic names: *Bucket* says the mechanism without a trademark;

@@ -85,7 +85,9 @@ This expression is **duplicated at three sites** (L+R pairs): reverb `:7159/7161
 `:7326/7328`, delay `:7358/7360`, each carrying the comment *"the fb305 law: EVERY send bus joins
 EVERY main-send exclusion."* Send buses live at `PluginProcessor.h:1534/1559/1572`.
 **The landmine: every new send bus must join every sum, and every new main-send device adds a new
-sum.** Today that is 3×3; at 8 devices it is 8×8 = 64 hand-edited terms. §3.6 kills this class.
+sum.** Today that is 3×3; at 8 devices it is 8×8 = 64 hand-edited terms — **and at the ruled K = 24
+it is 27×27 = 729.** Hand-editing was never going to survive; §3.6 kills the class, and after the
+K = 24 ruling that refactor stops being a nicety and becomes a precondition.
 
 ⚠️ **Address correction (checked 2026-08-14).** `MEMORY.md` still carries the shorthand *"re-breaks
 fb305 at :6979/:7111"*. Those are **stale pre-fb341 `PluginProcessor.cpp` lines, and they are NOT
@@ -287,8 +289,10 @@ cannot be widened to cover more devices, which is exactly what forces §3.4.
 
 ### 3.3 Engine instances — allocate on claim, never on the audio thread
 
-A slot must be able to host any device, but 5 slots × (9 reverb engines + delay + distortion +
-utility) pre-allocated is megabytes of dead state. The law:
+A slot must be able to host any device, but **24 slots** × (9 reverb engines + delay + distortion +
+utility) pre-allocated is *hundreds* of megabytes of dead state — at the ruled K this stops being a
+tidiness argument and becomes the difference between shipping and not. The law (and note it is what
+makes the K = 24 ruling affordable: an unclaimed slot allocates **nothing**):
 
 1. Each slot owns `std::unique_ptr<SlotEngine>` where `SlotEngine` is a small variant wrapping ONE
    device's engine bank (for Reverb: the 9-engine set + swap machinery, exactly the members the
@@ -301,9 +305,12 @@ utility) pre-allocated is megabytes of dead state. The law:
 3. An `Empty`/powered-off slot is **zero cost**: its lambda body is `if (!engine_ || (!power_ &&
    env_ < 1e-4f)) return;` — the same guard the three flagships already run.
 
-Worst-case resident memory at 8 devices ≈ today's 3 + 5 × largest engine. Largest = a Reverb slot
-(the 9-bank ≈ convolution's IR + delay lines, low single-digit MB). Acceptable; convolution-in-slot
-memory is flagged in §14.
+**Resident memory scales with CLAIMED slots, never with K** — that is the whole reason rule 1 above
+is non-negotiable at K = 24. An unclaimed slot holds a null `unique_ptr`. Worst case is therefore
+the patch the *user* builds: today's 3 flagships + (claimed slots × their engines). Largest single
+engine = a Reverb slot (the 9-bank ≈ convolution's IR + delay lines, low single-digit MB), so a
+user who claims 24 Reverb slots pays tens of MB — **their choice, and we show it** (Max's ruling,
+§3.2). Convolution-in-slot memory is flagged in §14.
 
 ### 3.4 Ordering — the permutation dies, the rank list replaces it
 
@@ -336,7 +343,8 @@ type-dependent latency (DST §4.4). So:
   param-ID stems `SYN_FXS{k}_`). The 24-vector restore loop (`index.html:7947`) is already generic — point it
   at the slot stems.
 * `+ Add effect` (`:7705`) opens the device list (Reverb · Delay · Distortion · Utility · … greyed
-  when all 5 slots claimed). Choosing writes `SYN_FXS{k}_DEVICE` on the first Empty slot, then the
+  only when all **24** slots are claimed — at the ruled K the user should never realistically meet
+  the wall, which is the point). Choosing writes `SYN_FXS{k}_DEVICE` on the first Empty slot, then the
   slot card renders from its template with Power OFF — **spawning is silent** (Power-OFF default
   law, fb303).
 * A slot card gets a small `×` (Remove): confirms, fades power, writes `DEVICE = Empty`, releases
@@ -352,7 +360,8 @@ type-dependent latency (DST §4.4). So:
 ### 3.6 🔑 THE EXCLUSION-SUM REFACTOR — kill the landmine class, not the next instance of it
 
 Every slot with route pills owns a send bus → the fb305 law demands it join **every** main-send
-exclusion. At 8 devices, hand-copying is 64 terms of latent bugs. The fix is one mechanical
+exclusion. At 8 devices, hand-copying is 64 terms of latent bugs; **at the ruled K = 24 it is 729.**
+This refactor is now a precondition of the epic, not an option. The fix is one mechanical
 refactor, byte-identical for the flagships:
 
 ```cpp
@@ -416,9 +425,19 @@ composition law generalizes:
   precedent shows −35 % is real).
 * **The control head sleeps too** (fb344 law): a sleeping slot skips its per-block param mirror to
   the engine; it re-seats params on wake (the fb345 re-seat law prevents the stale-shape trap).
-* Budget gate (§11): 8 devices awake simultaneously must clear the Serum bar on the M1 reference;
-  the cap `K = 5` is chosen so the worst legal patch stays inside it.
-* UI: sleeping slots dim their rack meter to the idle state — visible truth (LAW 9).
+* 🚨 **THE ZERO-COST GATE (Max's ruling, §3.2 point 3) — the real budget law.** There is **no CPU
+  cap and no device cap.** The gate that replaces it: **an Empty or powered-off slot must cost
+  EXACTLY zero** — not "nearly zero", not "one branch". Acceptance test: a patch with all 24 slots
+  Empty must null against the 0-slot build on a CPU profile (measured, not eyeballed), and the same
+  test with all 24 slots *claimed but Power OFF*. Achieve it by: no engine allocation until
+  `DEVICE ≠ Empty` (§3.3), an early `continue` before any per-block param mirror for a slot at
+  `POWER = false` **and** for a slot whose env has faded to 0 (fb345 silence-sleep), and the
+  fb344 control-head sleep per slot.
+* Budget gate (§11): what we measure is the **cost per awake device**, and it is published on the
+  rack rail — we SHOW CPU, we never cap it. A patch the user builds that is too heavy for their
+  machine is their choice (Max, verbatim: *"their CPU is on them"*).
+* UI: sleeping slots dim their rack meter to the idle state — visible truth (LAW 9). An Empty slot
+  draws nothing and schedules no rAF work.
 
 ### 3.9 Mod matrix & splitter hooks
 
@@ -431,8 +450,8 @@ composition law generalizes:
   the three existing devices") generalizes verbatim to "a lane claims one *chain entry* — flagship
   or slot." Lanes therefore multiply instances *through the same pool*: no second allocation
   grammar, and the ownership conflict rules (pills XOR lanes, one owner per device) apply per slot.
-  Sizing note: a 3-lane split with 3 owned slots leaves 5 chain entries un-owned — the K = 5 pool
-  covers every demo in the Serum 2 splitter material. (What's New p. 13 documents three splitter
+  Sizing note: at the ruled **K = 24** a 3-lane split can own three slots and still leave 24 chain
+  entries un-owned — lane ownership is never the thing that runs the pool out. (What's New p. 13 documents three splitter
   modules by name — **Splitter L/H**, **Splitter L/M/H**, **Splitter M/S** — ✔ verified in the PDF
   text; ⚠️ the "lanes host 1–2 modules each" reading is figure-read, not document text.)
 
@@ -555,6 +574,29 @@ is doing. Factory chain presets put one Utility where each doctrine point lives 
 ---
 
 ## 5. The Utility device — Types (the `Type` dropdown, 6 ship)
+
+> 🚨🔧 **CROSS-BIBLE RULING, 2026-08-14 — READ BEFORE BUILDING FROM §5–§8.**
+> `UTILITY-BUILD-BIBLE.md` was written the same day and specs the **same device under the same
+> `SYN_UTL_*` prefix with an incompatible chassis**: **no Types at all** (its §0: *"One device, NO
+> fake Types… a utility that 'colors' is a broken utility"*), front heroes **Gain · Width · Tilt ·
+> Mix**, back dropdowns **`Route`** + **`Flip`**, back-8 = Balance · Center · Mono Below · Widen ·
+> Low Cut · High Cut · Pivot · Rotate. The version below is heroes **Level · Width · Shape · Mix**,
+> d1 `Type`(6), d2 `Meter`(5), and a per-type relabelled back-8. **Both cannot ship.**
+>
+> **The resolution, per this file's own preamble ("where a sibling bible owns a law, this file cites
+> it"): `UTILITY-BUILD-BIBLE.md` is the authority on the Utility DEVICE.** This file stays the
+> authority on the CHAIN (§3) and the anti-mud doctrine (§4). Build the device from that bible.
+>
+> **What §5–§8 below is *for*, then:** it is the surviving proposal for three behaviours the device
+> bible does **not** cover and the chain doctrine (§4) genuinely wants — **`Match`** (the −26 dBFS
+> rider, §5.4), **`Pump`** (Env-1-ridden gain, §5.5) and **`Fence`** (the local ceiling, §5.6).
+> Treat §5–§8 as *parked candidates for a second Utility Type axis*, not as a competing chassis, and
+> note two of the six names collide inside the device bible's own surface if merged naively
+> (`Tilt` is already its front hero; `Stereo` is already a `Route` entry). **Max decides** — logged
+> as the new §14 Q0. Nothing in §5–§8 overrides the device bible's front/back map.
+>
+> *(Related, already flagged by that bible: `SERUM2-FX-REFERENCE.md:376-379` claims Terrain gets no
+> Utility device at all. Three documents, three positions — Q0 closes all three at once.)*
 
 Every type is night-and-day with a measurable discriminator (LAW 5), and every type keeps *all 8*
 back knobs alive via per-type relabelling (the SPL/DST generic-P precedent — no dead knobs).
@@ -755,11 +797,72 @@ like Delay's Time; a hero with no backing param in some type is a dead knob, LAW
 | Fence | Gain | Width | Ceiling | own param |
 
 All names pragmatic (say what it DOES), Title-case, acronym-free.
-**Chassis arithmetic, stated explicitly so nobody re-litigates it:** the fb275 back panel is
-**2 dropdowns + 8 knobs = 10 back params**, and `Mix` is the one front knob that is *not* an alias
-⇒ **11 distinct automatable knob/dropdown params per device**, exactly as the spec says. `Power`
-and the 2 pills are booleans on the chassis frame, and the 6 route pills belong to the send bus —
-they are counted in the §3.2 slot total (25), not in the "11".
+
+### 🔑🔒 7.1 THE CHASSIS RULING — read this before writing any device's chassis map
+
+The 2026-08-14 cross-bible sweep found **every bible reconstructing the fb275 "11" differently**
+(this file said "2 dropdowns + 8 + Mix"; Granular §6 said "3 heroes + 8"; Chorus §4 said "2
+dropdowns + 8 + Mix"; Bode §5.2 correctly flagged the count as 12). They cannot all be right.
+**The shipped tree is the authority. Read from `index.html`'s `DEVS` table + `Design/fx-back-panel-mockup.html`:**
+
+```
+HEADER  (centerline):  grip · device name · TYPE pill (real <select>) · PRESET pill · ← · light · ×
+FRONT   card:          3 hero knobs + Mix  +  2 pills (+ POWER pill)  +  the live viz
+BACK    panel:         2 dropdowns + 8 knobs (4×2, three separators)
+BUS:                   6 route bools (A/B/C/D/Sub/Noise)
+```
+
+1. 🚨 **`Type` IS THE HEADER PILL, NOT A BACK DROPDOWN.** Verified on all three shipped devices:
+   `DEVS[].tp` (`SYN_RVB_TYPE` / `SYN_DLY_TYPE` / `SYN_DST_TYPE`) renders in the header
+   `.fxr-type` `<select>`; the back `d1`/`d2` are **Character + a second selector** (Reverb `Mod
+   Mode`, Delay `Sync`, Distortion `Quality`). Any bible that spends **back-d1 on `Type`** has (a)
+   duplicated the header pill — a straight no-doubles violation on the most visible label the card
+   has — and (b) silently thrown away a back dropdown it is entitled to. *(This also retires Bode
+   §5.2's note that "DST bends the rule by shipping 3 dropdowns": DST ships the same two back
+   dropdowns as everyone else; the third selector is the header Type pill every device has.)*
+2. **The honest param arithmetic is 12 continuous knobs, not 11:** 3 front heroes + `Mix` + 8 back
+   = **12 floats**, exactly as `SYN_DST_*` declares (`DRIVE, SIG, TONE, MIX` + `P1..P8`,
+   `ParameterIDs.hpp:409-421`). The legacy "11 params/device" label in CLAUDE.md §5 is an
+   off-by-one that has now been re-derived wrongly in four different bibles. **Stop quoting "11".**
+   The binding constraint is the *shape* above — **exactly 2 back dropdowns and exactly 8 back
+   knobs in a 4×2 grid** — and it is what every chassis map must be checked against.
+3. `Power`, the 2 front pills and the 6 route bools are chassis frame; they are counted in the
+   §3.2 slot total (25 per slot), never in the knob count.
+4. A device with **no natural Type axis** (Utility) legitimately leaves the header pill unused and
+   spends both back dropdowns on its own selectors (`Route` + `Flip`). That is the only exemption.
+5. A device that needs **more selectors than the chassis has** (Splitter's 3 lane-target dropdowns +
+   Solo) is adding a **new UI element**, not bending the chassis — it must be mocked up in Safari
+   and approved on its own terms (house mockup law), and it must not displace the back-8.
+
+### 🔑🏷️ 7.2 THE NO-DOUBLES LAW, AS THE RACK ACTUALLY APPLIES IT (3 tiers)
+
+The sweep also found the no-doubles law being read two incompatible ways — one bible rejecting a
+name because it appears *anywhere* in the tree, another keeping `Drive` because Distortion has one.
+The shipped tree settles it. **Three tiers, and one absolute:**
+
+* **THE ABSOLUTE — never the same word twice INSIDE one device, on any surface.** Device name, Type
+  entry, Character entry, hero knob, back knob, pill, dropdown header: all one namespace. This is
+  the rule that caught OTT's Type `Air` sitting next to hero knob `Air` (→ `Sheen`), and it is the
+  one that must be re-run on every chassis map before it locks.
+* **TIER 1 — globally unique:** device names, and any *coined* name (a word we invented for a
+  behaviour: `Snarl`, `Rebound`, `Dead Zone`, `Barberpole`, `Low Keep`, `Hear Cut`, `Mono Below`).
+  Two devices must never coin the same word for two different mechanisms.
+* **TIER 2 — unique across the rack:** **Type names** and **hero-knob names**. A Type is the most
+  visible label a device has after its own name; two devices offering the same Type word teaches
+  the user they are the same thing. (This is why `Squash` was unavailable to OTT: it is a shipped,
+  visible SHAPER back-8 label.)
+* **TIER 3 — deliberately SHARED house vocabulary, and the meaning must match everywhere:**
+  `Mix` · `Tone` · `Width` · `Low Cut` · `Hi Cut` · `Spread` · `Rate` · `Depth` · `Feedback` ·
+  `Drive` · `Attack` · `Release` · `Time` · and the pills `Power` · `Sync` · `Auto` · `Freeze` ·
+  `Mono` · `Solo` · `Duck`. Reverb and Delay both ship `Mix`, `Low Cut`, `Width`, `Mod Rate`; that
+  is the chassis being consistent, not a violation. Reusing one of these words for a *different*
+  job **is** a violation.
+
+Applied to the 2026-08-14 roster this produced: OTT `Squash`→`Amount` and Type `Air`→`Sheen`
+(already fixed); Granular Type `Freeze`→`Suspend`, `Shimmer`→`Rise`, `Reverse`→`Rewind`; Bode Type
+`Shift`→`Fixed` and back knob `Track`→`Touch`; Widen back knob `Delay`→`Offset` and the Shift-type
+hero relabel `Shift`→`Cents`; Flanger Type `Barberpole`→`Endless`; Equalizer Type `Air`→`Open`.
+Each is recorded in its own bible at the point of the change.
 
 Param IDs: singleton `SYN_UTL_*` if Utility also ships as a 4th flagship, else purely slot-hosted
 (`SYN_FXS{k}_*`) — **recommendation: slot-only.** Utility is the first *born-multi-instance* device
@@ -873,10 +976,16 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
   one M1 core at 48 k — the cheapest device in the rack. Fence at High (2×) ≈ 0.15 %. No tier
   needed below Fence-High: Quality dropdown reads `Off/Standard/High/Ultra` but only Fence listens
   (documented on the card tooltip; not a dead dropdown — it is chassis-shared).
-* **Chain scaling:** cost = Σ awake devices only (sleep law §3.8). Budget gate for the epic: the
-  8-device worst legal patch (3 flagships + 5 slots all awake, heaviest types) ≤ **2× today's
-  3-device worst case** on the reference machine — enforced by extending `dst_cpu` into a
-  `chain_cpu` harness. If it fails, K shrinks before quality does (Serum is the bar, LAW 8).
+* **Chain scaling:** cost = Σ **awake** devices only (sleep law §3.8) — the chain is linear in what
+  is *running*, not in K. 🚨 **Restated for the K = 24 ruling: there is no CPU-derived cap and the
+  budget is not a gate on the roster.** The two gates that survive are (a) **an Empty or bypassed
+  slot costs EXACTLY zero** (§3.8, measured null) and (b) **per-device cost** — each device is
+  benchmarked alone and must clear the Serum bar for its class (LAW 8), because "the cheap devices
+  must be aggressively cheap" is where the stacking actually happens (§3.2 point 4). Extend
+  `dst_cpu` into a `chain_cpu` harness that reports **cost per awake device** and the 24-empty null.
+  *(A prior draft said "if it fails, K shrinks before quality does" — that is the CPU-cap reasoning
+  Max's ruling overturned. Quality never gets traded for headroom the user did not ask for; the
+  answer to a heavy patch is the on-screen CPU readout, not a smaller pool.)*
 * Meters/viz: atomics + rAF only; no per-frame shadowBlur/filters (fb344 law).
 
 ---
@@ -947,8 +1056,17 @@ Chain templates (§4 doctrine as factory racks; each certified as a chain per §
 
 ## 14. Open questions for Max
 
-1. **Slot count:** K = 5 (8 devices total) is the CPU-derived proposal — enough? (Serum 2 is
-   unbounded but its modules are lighter than our reverbs.)
+0. 🚨 **WHICH UTILITY SHIPS (new, 2026-08-14 cross-bible sweep — blocks the Utility build).** Three
+   documents disagree: `UTILITY-BUILD-BIBLE.md` = no Types, Route+Flip, Gain/Width/Tilt/Mix (the
+   **recommended** authority — it is the dedicated device bible); this file §5–§8 = 6 Types
+   (Trim/Stereo/Tilt/Match/Pump/Fence), Level/Width/Shape/Mix, d2 `Meter`;
+   `SERUM2-FX-REFERENCE.md:376-379` = no Utility device at all. **Recommendation:** ship the device
+   bible's chassis, and fold `Match`/`Pump`/`Fence` in later as a *behaviour* dropdown if you want
+   them (they are the only three ideas here the device bible lacks). One word from you closes it.
+1. ~~**Slot count:** K = 5 (8 devices total) is the CPU-derived proposal — enough?~~
+   ✅ **CLOSED — Max ruled K = 24 on 2026-08-14** (§3.2). Not an open question any more. The
+   follow-on engineering question that replaces it: does the 24-empty-slot CPU null actually
+   measure zero on the reference machine (§3.8 gate)? That is a build task, not a decision.
 2. **Duplicates of Convolution reverb:** each claimed Reverb slot with Type Convolution costs IR
    memory + the 512-latency outlier — allow, or grey Convolution in slots until its latency fix lands?
 3. **Order automation:** the rank-property design deliberately makes order non-automatable

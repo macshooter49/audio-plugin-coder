@@ -19,10 +19,23 @@ the families share one shell — *N allpass stages + a motion source + a feedbac
 and only the stage law, the motion law and the loop nonlinearity change per Type.
 
 Explicitly **out of scope** (they are separate future devices in the Serum 2 menu we're chasing):
-**Flanger** (delay-line comb, not allpass comb — different physics, different bible), **Chorus**,
-and **Bode/frequency shifter** (Serum 2 lists Bode separately; our Barber Type gets the barberpole
-*illusion* without SSB, see §3.6 — if Max later wants a true Bode device, the Hilbert core belongs
-there, not here).
+**Flanger** (delay-line comb, not allpass comb — `FLANGER-BUILD-BIBLE.md`), **Chorus**
+(`CHORUS-BUILD-BIBLE.md`), and **Bode/frequency shifter**.
+
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] Bode is no longer hypothetical — `BODE-BUILD-BIBLE.md` exists
+> and is specced (7 Types, ±5 kHz Hilbert SSB).** The old wording here ("*if* Max later wants a true
+> Bode device") is retired. The settled three-way boundary, stated identically in the Flanger, Bode
+> and Phaser bibles:
+>
+> | Device | Type | Mechanism | Tell |
+> |---|---|---|---|
+> | **Phaser** (this file) | **`Barber`** | M cascaded **2nd-order notch EQs**, octave-spaced, sawtooth centre + raised-cosine window (§3.6) | a handful of deep octave-spaced notches; source stays in tune |
+> | **Flanger** | **`Endless`** *(was `Barberpole` — renamed at this audit)* | DAFx-15 **dual sawtooth comb** + crossfade | dense comb teeth (1/d spaced), scrolling fan |
+> | **Bode** | **`Barberpole`** | true **SSB / Hilbert shift** — the Harald Bode original | every partial moves by a linear Hz offset: inharmonic, detunes the source |
+>
+> **The Hilbert core belongs to Bode, exclusively.** §11 Q6's "cut a tenth SSB Type to keep Bode
+> territory clean" is therefore **CLOSED — yes, cut it**; the answer is no longer conditional on Max
+> confirming that Bode ships.
 
 **The scale of the competition, measured by param count:** Serum 2's phaser exposes Rate (sync),
 Depth, Freq, Feedback, Phase (stereo LFO offset), Mix + per-FX Level — one topology, one LFO shape
@@ -319,6 +332,16 @@ Plus the standard non-counted booleans: `SYN_PHZ_POWER` (default **OFF**, fb303)
 
 ### 4.2 Back panel — 2 dropdowns + 8 knobs (4×2)
 
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
 Dropdowns: **Type** (`SYN_PHZ_TYPE`, 9 — §2) · **Character** (`SYN_PHZ_CHARACTER`, 8 per Type).
 Both fade-swap-recover (law 4/7; the fb344 deferred-fade + re-seat law applies verbatim).
 
@@ -542,9 +565,22 @@ A fourth send bus (`phzSendL/R`) re-breaks the exclusion sums unless
 (`PluginProcessor.cpp:7159, 7326, 7358` — "EVERY send bus joins EVERY main-send exclusion") AND
 the phaser's own main-send branch gets the symmetric four-way subtraction. Also `SYN_FX_ORDER`
 (`PluginProcessor.cpp:3488`) is a 6-entry permutation choice for 3 devices; 4 devices = **24
-permutations** — either extend the choice list (state-compat: first 6 entries must preserve
-existing indices, the fb341 raw-=-index law) or graduate to the insert-lambda reorder grammar
-from the delay arc. Decision flagged in §11.
+permutations**.
+🛑 **[CROSS-BIBLE AUDIT 2026-08-14] The draft's first option — "extend the choice list, first 6
+entries preserve existing indices" — IS ILLEGAL AND MUST NOT BE FOLLOWED.** Preserving the leading
+indices does *not* make it safe: an `AudioParameterChoice`'s **cardinality** is part of its identity.
+Hosts normalize automation against `N`, and Terrain's own read/write path is `round(v·(N−1))` — so
+growing 6 → 24 silently retargets every saved preset and every automation lane (a patch saved as
+index 5 / norm 1.0 reloads as index 23). **Choice-param cardinality is fixed at birth (fb342 session
+law ①); it can never grow *or shrink*, index-preserving or not.**
+**`FX-CHAIN-BIBLE.md` §3.4 is the authority and this device defers to it.** Its ruling: the
+permutation param dies and a **`fxChainOrder` ValueTree property (rank/token list)** replaces it —
+not an APVTS param, therefore not automatable, therefore click-free by construction, and it is the
+only option that survives device #5 (120 permutations). `SYN_FX_ORDER` stays *registered* (removing
+a param is as illegal as adding one) and is read once as the migration table, then frozen. The only
+other legal shapes are a **brand-new** param born at its final size (e.g. `SYN_FX_ORDER4`, choice 24)
+or pinning the phaser to a fixed chain slot. Do not touch the existing param's list.
+Decision flagged in §11 — it belongs to the chain epic, not to this device's commit.
 
 ### Build order (dst §7 style)
 
@@ -574,13 +610,18 @@ from the delay arc. Decision flagged in §11.
    the Type slot advertises it; your call on menu length.
 3. **Flip pill double-duty** (invert wet ↔ Barber direction): OK per the relabel precedent, or
    would you rather Barber direction live in Character (4 up / 4 down voicings)?
-4. **FX_ORDER at 24 permutations** — extend the dropdown, or is this the moment the rack gets
-   drag-to-reorder (the insert-lambda grammar already supports it)?
+4. ~~**FX_ORDER at 24 permutations** — extend the dropdown, or…~~ **[AUDIT] Re-framed: "extend the
+   dropdown" was never on the table (illegal, §10.4).** The live question, owned by
+   `FX-CHAIN-BIBLE.md` §3.4 and §14: rank-property drag-list (recommended — click-free by
+   construction, at the cost of non-automatable order) · a new choice(24) param born at final size ·
+   or pin the phaser to a fixed slot. This is a chain-epic decision, not a phaser decision — the
+   phaser ships behind whichever wins.
 5. **Audio-rate top (Twelve Hi to 250 Hz):** keep as Characters (my rec) or promote a front
    `Ultra` pill Phasis-style?
-6. **A tenth Type — true SSB barberpole** (Bode's own method, §3.6): cut here to keep Bode
-   territory clean. Confirm you want Bode as its own future device (it's in your Serum 2 menu
-   screenshot), else I fold an SSB voicing into Barber's Characters.
+6. ~~**A tenth Type — true SSB barberpole**… confirm you want Bode as its own future device~~
+   ✅ **CLOSED by the 2026-08-14 cross-bible sweep: `BODE-BUILD-BIBLE.md` is written and specced,
+   so the SSB Type stays cut and no SSB voicing is folded into `Barber`'s Characters.** The Hilbert
+   core is Bode's, exclusively (§0 boundary table). Nothing to decide.
 7. **Vibe wet-only:** happy with Mix-100 as the vibrato mode, or do you want a dedicated
    `Solo` pill on Vibe (costs the Flip slot on that Type)?
 

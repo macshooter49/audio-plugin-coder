@@ -31,6 +31,36 @@ was read in this repo on 2026-08-14; every external claim carries a URL in §15.
 
 **ONE device, named `Granular`.** The fourth FX-rack flagship after Reverb, Delay, Distortion.
 
+### 🔑 0.0 THE BOUNDARY LAW vs the DELAY device *(added by the 2026-08-14 cross-bible sweep)*
+
+Both devices own a long capture buffer and both have a Freeze. Neither bible stated the line, so
+here it is — and `DELAY-MOOG-PORT-PLAN.md` §1.1 now carries the identical text:
+
+```
+DELAY    = RECIRCULATION.  A small number of read heads at MUSICAL intervals, fed by a
+                           feedback loop. Its buffer is a LOOP; its identity is loop gain.
+GRANULAR = RE-READ.        Many independent short heads scattered over the SAME captured
+                           past, each with its own age / pitch / pan / window. Its buffer is
+                           an ARCHIVE; its identity is the grain cloud.
+```
+
+* **Freeze means two different things and both are correct.** Delay's Freeze (ported law,
+  `MoogDelay.h:265-266/401-403/431`) fades the *input* out and drives `effectiveFb → 1` so a short
+  musical loop recirculates forever — the buffer keeps moving, the *content* repeats. Granular's
+  Freeze is a **write-blend** (`buf[w] = (in+fb·wet)·(1−f) + buf[w]·f`, §3.2): the write head keeps
+  advancing but stops taking new audio, so the *archive* is held and the grains keep grazing it. A
+  frozen delay repeats a phrase; a frozen granular suspends a texture. Never implement one with the
+  other's mechanism.
+* **The overlap is deliberate and it is a feature, not a duplication:** Granular's `Scatter` Type on
+  a synced clock at Size 100–900 ms with Feedback up *does* approach a smeared delay, and the
+  Delay's `Diffuse` type approaches a wash. They meet in the middle from opposite directions —
+  which is the "fewer, deeper" position, not mud.
+* **Neither device grows into the other.** Granular never gets a tap/ping-pong/sync-division *echo*
+  structure (that is the Delay's chassis), and the Delay never gets per-grain pitch/pan/window
+  scatter (that is this device's kernel). If a builder finds themselves adding a grain pool to
+  `DelayEngine` or a ping-pong to `GranularFxEngine`, stop — the feature belongs to the other card.
+* Related: `TAPE-BUILD-BIBLE.md` §0.2 draws the same kind of line for the four tape surfaces.
+
 ### Why this device is the headline
 
 **Serum 2 has NO granular FX.** Its full FX menu (Max's screenshot, 2026-08): Bode, Chorus,
@@ -438,19 +468,36 @@ policy + read policy** — night-and-day by construction, ~zero marginal code. D
 harness metrics per the fb283 perceptual law (magnitude-spectrum, centroid, flux, onset grid —
 never sample-diff RMS).
 
+> 🏷️🔧 **[CROSS-BIBLE AUDIT 2026-08-14] THREE TYPE NAMES CHANGED. Build 1 must use these.**
+> Checked against every name shipping in `index.html`'s `DEVS` table and against the other 15
+> bibles (`FX-CHAIN-BIBLE.md` §7.2 states the three-tier law):
+> * **`Freeze` → `Suspend`.** `Freeze` was about to appear **three times inside this one device** —
+>   as a Type, as back knob P8, and as a front pill. That is the absolute no-doubles violation
+>   (same word twice on one surface set), and it is worse than OTT's `Air` case because it was a
+>   *triple*. The **knob and the pill keep `Freeze`** — they are one control on two surfaces (the
+>   knob is the amount, the pill latches it), which the EQ bible's "one band, two surfaces" rule
+>   already permits. `Freeze` is also a shipped Reverb front pill, so the word keeps exactly one
+>   rack-wide meaning: *hold what is in the buffer*. The Type had to move.
+> * **`Shimmer` → `Rise`.** `Shimmer` is a **shipped Reverb Type** *and* a shipped Reverb back-knob
+>   label (`SYN_RVB_MODDEPTH` relabels to `Shimmer` on that type). Tier-2 violation. `Rise` says
+>   what the type does — every feedback generation climbs.
+> * **`Reverse` → `Rewind`.** `Reverse` is the shipped Convolution-reverb front pill
+>   (`RVB_PILLS.Convolution`). `Rewind` is unused anywhere in the tree and says the same thing.
+> *(`Cloud` · `Swarm` · `Scatter` · `Stretch` · `Pulverize` were checked and are clean.)*
+
 | # | Type | Lineage | Recipe (delta from the base kernel) | 🔑 Discriminator (measured gate) |
 |---|---|---|---|---|
 | 1 | **Cloud** | Clouds/Fragments Texture | async Poisson spawner (the stock :158 countdown), Size mid-long, overlap 4-16, Shape→Hann/Bell | spectral flux LOW (<0.5× input flux at Density>50 %); overlap ≥4 measured by grain census |
-| 2 | **Shimmer** | H3000 Crystal Echoes / Valhalla shimmer culture | Key forced ≥ Oct; per-grain +12/+7 draws (randKeyOffset weighting); **Feedback path re-enters the ring pitched** — every generation climbs | band-energy ABOVE the input's top partial GROWS per feedback pass: ≥ +6 dB/pass at Feedback 60 % (input band-limited probe) |
+| 2 | **Rise** | H3000 Crystal Echoes / Valhalla shimmer culture | Key forced ≥ Oct; per-grain +12/+7 draws (randKeyOffset weighting); **Feedback path re-enters the ring pitched** — every generation climbs | band-energy ABOVE the input's top partial GROWS per feedback pass: ≥ +6 dB/pass at Feedback 60 % (input band-limited probe) |
 | 3 | **Swarm** | Roads' stochastic cloud / Emergence | Density pushed 2× (up to 440 g/s — past Beads' C3≈131 Hz "audio-rate density" edge), Size forced short (2-60 ms), Detune draws UNIFORM ±cents..±4 st (not key-snapped), per-grain pan full | sideband spread: autocorrelation peak at the probe period widens ≥3× vs Cloud; grain census **≥20 concurrent, measured at Size max (60 ms)** — audit fix: the old "≥40" gate was arithmetically **unreachable** (440 g/s × 0.060 s = 26.4 max overlap, and only 0.9 at Size min), so it would have failed the cert on a correct build |
-| 4 | **Freeze** | Clouds FREEZE / our "living freeze" | write-blend held at knob value; Scan≈0 default; grains spray from the held slice; Detune/Key make it chordal | output magnitude spectrum STATIONARY (frame-to-frame correlation >0.99) while the input probe CHANGES; input-vs-output spectral divergence grows |
+| 4 | **Suspend** | Clouds FREEZE / our "living freeze" | write-blend held at knob value; Scan≈0 default; grains spray from the held slice; Detune/Key make it chordal | output magnitude spectrum STATIONARY (frame-to-frame correlation >0.99) while the input probe CHANGES; input-vs-output spectral divergence grows |
 | 5 | **Scatter** | Fragments Rhythmic / Portal synced rate | spawner is a **tempo clock** (Rate knob synced, 4 bars → 1/256), probability gate (Spray = skip/repeat chance), coin-flip reverse per hit, retrig quantized | onset autocorrelation peaks AT the clock lag (±2 ms) ≥12 dB above the floor; off-grid onsets <10 % |
-| 6 | **Reverse** | Crystallizer reverse-splice | all grains reversed (dir = −1), Size long (100-900 ms), spawn ~1/overlap so splices tile; Feedback = Recycle (re-enters pitched if Key on) | cross-correlation of output vs TIME-FLIPPED input ≥3× its correlation vs the input; envelope attack-inversion (rise-time ratio out/in >4) |
+| 6 | **Rewind** | Crystallizer reverse-splice | all grains reversed (dir = −1), Size long (100-900 ms), spawn ~1/overlap so splices tile; Feedback = Recycle (re-enters pitched if Key on) | cross-correlation of output vs TIME-FLIPPED input ≥3× its correlation vs the input; envelope attack-inversion (rise-time ratio out/in >4) |
 | 7 | **Stretch** | Paulstretch / Clouds WSOLA STRETCH | head advances at 1/(1+3·Stretch-knob-position) through the window (the EXACT :460-464 Sample-parity law, headDiv_); long Bell grains, high overlap | event dilation: probe click train spacing out/in = headDiv (measure 1×→4×); pitch UNCHANGED (centroid ±5 %) |
 | 8 | **Pulverize** | Clouds 8-bit µ-law "Fairlight" + GrainEngine Wander V3 | ring stored µ-law 8-bit + optional ÷2 SR (Clouds' kDownsamplingFactor law); Wander dice table verbatim (§2.3); per-grain tanh sat | noise floor rises to µ-law's −48 dB signal-correlated floor; SR images at fs/2ʲ; dropout census matches p-table ±20 % |
 
-**Cut candidates if Max wants 6:** fold Reverse into Scatter (its coin-flip already reverses) and
-Stretch into Freeze (Scan already slows) — but both survive the night-and-day gate as specced, and
+**Cut candidates if Max wants 6:** fold `Rewind` into Scatter (its coin-flip already reverses) and
+Stretch into `Suspend` (Scan already slows) — but both survive the night-and-day gate as specced, and
 the roster is the marketing sheet. **Open Question #3.**
 
 🚨 **fb342 — CHOICE CARDINALITY IS FIXED AT BIRTH, so OQ #3 is not a "we can grow later" question.**
@@ -484,7 +531,7 @@ swap of the live cloud).
 
 ### 5.1 The spawner (per Type)
 
-Async (Cloud/Swarm/Freeze/Reverse/Stretch/Pulverize): the stock countdown (:158-167),
+Async (Cloud/Swarm/Suspend/Rewind/Stretch/Pulverize): the stock countdown (:158-167),
 `interval = fs/densHz`, jitter U(−0.5, +0.5)·interval. Clocked (Scatter): `interval =
 hostSecondsPerDivision(div)·fs` from the Delay's resolver; jitter replaced by the probability gate.
 Density map stays `pow(220, d)` g/s (:421) — Swarm doubles it post-map. Spawn refusal when the pool
@@ -527,7 +574,7 @@ Max small-signal loop gain = 1.10 ⇒ regenerative but the tanh knee (drive cali
 sits at **−14 dBFS ≈ program +12 dB**; program = −26 dBFS, law 1) bounds every trajectory: growth
 saturates instead of exploding. **The env-gate enforces law 6**: follower attack 5 ms, release
 **squared-release mapped 0.2→4 s** (the Phase G squared-release law) from the Feedback knob's top
-half; silence at the input ⇒ gate → 0 ⇒ the spiral dies with the note. Shimmer's climb, Reverse's
+half; silence at the input ⇒ gate → 0 ⇒ the spiral dies with the note. Rise's climb, Rewind's
 recycle and Freeze's regeneration all live inside this ONE bounded loop.
 
 ### 5.5 Aliasing / oversampling verdict
@@ -602,9 +649,26 @@ Pills: `Freeze` (latched hold — §3.3 option C) · `Sync` (Rate/Window follow 
 
 ### Back panel — 2 dropdowns + 8 knobs (4×2)
 
-**Dropdown 1 — Type (8):** Cloud · Shimmer · Swarm · Freeze · Scatter · Reverse · Stretch ·
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: `DEVS[].tp` (`SYN_RVB_TYPE`/`SYN_DLY_TYPE`/`SYN_DST_TYPE`) renders
+> in the header `.fxr-type` `<select>` on the card centerline, and the two **back** dropdowns are
+> Character + a second selector (Reverb `Mod Mode`, Delay `Sync`, Distortion `Quality`). Putting
+> `SYN_GRN_TYPE` in back-d1 duplicates the header pill (no-doubles, on the most visible label the
+> card has) **and throws away a back dropdown this device desperately needs** — which is exactly
+> the slot Open Question #4 below is fighting over. 🔑 **So `Key` has a home: header pill = `Type`,
+> back-d1 = `Character`, back-d2 = `Key` (Off/Oct/5th/Chord/Maj/Min/Penta, 7 entries + reserve).**
+> No front mini-dropdown, no sacrificed `Width` knob, no stepped-knob-vs-dropdown fight. OQ #4 is
+> answered by the chassis, and the answer costs nothing. See `FX-CHAIN-BIBLE.md` §7.1.
+>
+> *(Also from §7.1: the honest knob count is **12** — 3 heroes + Mix + 8 back — not the "11" this
+> section computes as "3 front + 8 back". Four bibles reconstructed the fb275 "11" four different
+> ways; the binding constraint is the shape, not the total.)*
+
+**Header pill — Type (8):** Cloud · Rise · Swarm · Suspend · Scatter · Rewind · Stretch ·
 Pulverize.
-**Dropdown 2 — Character (6):** Clean · Tape · Cassette · Radio · Worn · Drift.
+**Dropdown 1 — Character (6):** Clean · Tape · Cassette · Radio · Worn · Drift.
+**Dropdown 2 — Key (7 + reserve):** Off · Oct · 5th · Chord · Maj · Min · Penta *(see the box above
+— this replaces the §6 "Key has nowhere to live" problem)*.
 
 | Slot | Name | Param | Range / taper | Glide | Does |
 |---|---|---|---|---|---|
@@ -614,18 +678,18 @@ Pulverize.
 | 4 | **Detune** | `SYN_GRN_DETUNE` | 0..1 → ±24 st scatter (key-snapped when Key on) | per-grain | per-grain pitch scatter — the shimmer/swarm fuel |
 | 5 | **Shape** | `SYN_GRN_SHAPE` | 0..1 Flat→Hann→Bell (+Skew via right-click? NO — see OQ #5) | normAlpha | grain window = attack character of every grain |
 | 6 | **Width** | `SYN_GRN_WIDTH` | 0..1 per-grain equal-power pan | per-grain | mono beam → full scatter field |
-| 7 | **Feedback** | `SYN_GRN_FEEDBACK` | 0..1.10, t^1.5 taper (drama at the top) | 15 ms | wet re-entry into the ring (§5.4); Shimmer's climb, Reverse's Recycle |
+| 7 | **Feedback** | `SYN_GRN_FEEDBACK` | 0..1.10, t^1.5 taper (drama at the top) | 15 ms | wet re-entry into the ring (§5.4); Rise's climb, Rewind's Recycle |
 | 8 | **Freeze** | `SYN_GRN_FREEZE` | 0..1 write-blend | 10 ms | continuous regeneration → full hold (env-obedient; the pill latches) |
 
-`Key` (Off/Oct/5th/Chord/Maj/Min/Penta) rides the **Detune knob's right-click** exactly as the osc
-page's stepped Key knob… **NO — dropdowns-not-click-rotate is absolute.** Key therefore lives as
-the 7 entries appended to nothing: it is **Character slot? No.** Resolution: `Key` is a stepped
-back knob is what the OSC page ships (`SYN_OSC_A_GRAIN_KEY` IS a knob, §2.1) — but the fb275 grid
-is full. **Decision proposed: Type carries the key policy** (Shimmer forces Oct/5th; other types
-read a global `SYN_GRN_KEY` choice exposed on the FRONT header as a small dropdown pill, the
-`engine-select` idiom — same pattern as the delay's front Sync-div selector). **Open Question #4 —
-Max picks:** (a) front mini-dropdown Key (recommended — it's the differentiator, show it), (b)
-sacrifice Width's slot to a stepped Key knob (osc-page parity), (c) Shimmer-only hardwired keys.
+✅ **`Key` — SOLVED, and Open Question #4 is CLOSED (2026-08-14 cross-bible audit).** This section
+spent three paragraphs agonising because it believed the two back dropdowns were `Type` +
+`Character` and the grid was full. It isn't: **`Type` is the header pill on every shipped device**
+(box above, `FX-CHAIN-BIBLE.md` §7.1), so back-d2 was never spent. **`Key` is back-d2** — a real
+`<select>` (dropdowns-not-click-rotate satisfied), `SYN_GRN_KEY` choice(8) declared at final size
+with one reserved entry (law C), values Off · Oct · 5th · Chord · Maj · Min · Penta. No front
+mini-dropdown, no sacrificing `Width`, no stepped knob, no per-Type hardwiring. The `Rise` Type
+still *defaults* the mapping toward Oct/5th, but as a table default, never a param write (the
+Chorus §4.1 law: a Type reshapes a mapping, it never writes a param).
 
 ⚠️ **The 4-bar sync division saturates below 60 BPM** (audit note): 4 bars of 4/4 at 60 BPM = 16 s,
 which is the ring's usable span. At 40 BPM the same division wants 24 s and will clamp to 16 s — the
@@ -682,7 +746,7 @@ possible "swapped" alt-view later.
 - **Latency: ZERO reported, zero actual.** All reads are strictly behind the write head — the
   device is causal, unlike the distortion's oversampling latency trap (§4.4 there). Nothing to
   compensate; the fb305 send maths stay exact.
-- **Spectrum downstream:** Cloud/Freeze/Stretch are near-energy-preserving but *decorrelate* — a
+- **Spectrum downstream:** Cloud/`Suspend`/Stretch are near-energy-preserving but *decorrelate* — a
   reverb after them blooms wider; the classic order is **Distortion → Granular → Delay → Reverb**
   (grain the saturated tone, echo the grains, wash the echoes). Granular BEFORE distortion turns
   every grain edge into a click-exciter — legal, loud, name it in the manual.
@@ -704,16 +768,16 @@ possible "swapped" alt-view later.
 | # | Name | Type/Char | Sketch (front · back) |
 |---|---|---|---|
 | 1 | First Cloud | Cloud/Clean | Grains 55 · Size 40 · Pitch 0 · Mix 45 · Scan +0.3, Window 1 bar, Spray 25, Shape 60, Width 60 |
-| 2 | Halo Choir | Shimmer/Clean | Grains 60 · Size 65 · Pitch +12 · Mix 55 · Detune 35 (Key Oct+5th), Feedback 65, Width 80 |
+| 2 | Halo Choir | Rise/Clean | Grains 60 · Size 65 · Pitch +12 · Mix 55 · Detune 35 (Key Oct+5th), Feedback 65, Width 80 |
 | 3 | Bee Math | Swarm/Clean | Grains 90 · Size 8 · Pitch 0 · Mix 60 · Spray 70, Detune 20, Width 100, Shape 15 |
-| 4 | Amber Hold | Freeze/Tape | Grains 50 · Size 70 · Mix 70 · Freeze 85, Scan 0, Shape 85, Detune 12 (Key Maj) |
+| 4 | Amber Hold | Suspend/Tape | Grains 50 · Size 70 · Mix 70 · Freeze 85, Scan 0, Shape 85, Detune 12 (Key Maj) |
 | 5 | Sixteenth Rain | Scatter/Clean | Sync on, Rate 1/16 · Size 20 · Mix 50 · Spray 30 (skip), Width 70, Feedback 25 |
-| 6 | Tape Ghost | Reverse/Tape | Grains 35 · Size 80 · Pitch 0 · Mix 55 · Feedback 55, Window 2 s, Width 40 |
+| 6 | Tape Ghost | Rewind/Tape | Grains 35 · Size 80 · Pitch 0 · Mix 55 · Feedback 55, Window 2 s, Width 40 |
 | 7 | Glacier Four | Stretch/Clean | Stretch head ÷4 · Size 85 · Mix 65 · Shape 90, Spray 15, Freeze 30 |
 | 8 | Fairlight Dust | Pulverize/Cassette | Grains 70 · Size 25 · Mix 60 · Wander-heavy, Detune 10, Feedback 30 |
-| 9 | Fifth Fountain | Shimmer/Drift | Pitch +7 · Key 5th · Feedback 75 · Size 55 · Mix 50 — the drifting +7 spiral |
+| 9 | Fifth Fountain | Rise/Drift | Pitch +7 · Key 5th · Feedback 75 · Size 55 · Mix 50 — the drifting +7 spiral |
 | 10 | Vinyl Memory | Cloud/Worn | Grains 45 · Size 50 · Mix 40 · Spray 40, dropout crackle rides the input |
-| 11 | Radio Séance | Freeze/Radio | Freeze 100 (pill) · Size 60 · Mix 80 · band-limited hold + env crackle |
+| 11 | Radio Séance | Suspend/Radio | Freeze 100 (pill) · Size 60 · Mix 80 · band-limited hold + env crackle |
 | 12 | Downstairs | Cloud/Clean | Pitch −12 · Detune 8 · Grains 65 · Mix 45 — the octave-under thickener |
 | 13 | Last Breath | Stretch/Tape | Stretch max · Freeze 60 · Mix 100 — note-off leaves a 4 s dying exhale (env-decayed — the law-6 demo) |
 
@@ -841,7 +905,7 @@ Per-family cert pattern (`dst_cert_*` grammar, clang++ -O2 -I shim -I Source):
 - **Click floor**: AM-probe sweeps of Scan/Window/Freeze/Feedback + Type/Character switches
   against the honest per-char click floor (Phase G probe-craft: PK_AM for static duck, silence
   metric for the freeze axes).
-- **Loop stability**: Feedback 110 % + Shimmer + Cassette worst case, 60 s program: peak bounded
+- **Loop stability**: Feedback 110 % + `Rise` + Cassette worst case, 60 s program: peak bounded
   < −3 dBFS, no growth after gate release.
 - **Mix wet law**: dry residual < −60 dB at 100 %.
 - **Knob evolution**: every back knob swept 0→100 in 10 steps — monotone audible delta per the
@@ -890,9 +954,11 @@ Per-family cert pattern (`dst_cert_*` grammar, clang++ -O2 -I shim -I Source):
    front (mirroring back params), or the shell + 4 heroes with the rest back-panel-only?
 2. **The Freeze law tension** (§3.3): env-decayed knob + latched pill (recommended C), or strict
    env-decay only?
-3. **Roster size**: 8 Types as specced, or cut to 6 (fold Reverse→Scatter, Stretch→Freeze)?
-4. **Where Key lives** (§6): front mini-dropdown (recommended), a back knob displacing Width, or
-   Shimmer-hardwired?
+3. **Roster size**: 8 Types as specced, or cut to 6 (fold `Rewind`→Scatter, Stretch→`Suspend`)?
+4. ~~**Where Key lives** (§6)~~ ✅ **CLOSED by the 2026-08-14 cross-bible audit — `Key` is back
+   dropdown 2.** The question only existed because this file believed back-d1 was `Type`; it isn't
+   (`Type` is the header pill on every shipped device, `FX-CHAIN-BIBLE.md` §7.1). Header = `Type`,
+   back-d1 = `Character`, back-d2 = `Key`. Nothing is displaced and no new UI is invented.
 5. **Skew**: ship it as Shape's right-click depth (osc parity) or drop it from v1?
 6. **Buffer**: 16.5 s (4-bar parity with Delay) or 8 s? **Corrected RAM (§3.2):** the mask ring
    rounds to a power of two, so 16.5 s costs **8.4 MB at 44.1/48 k and 16.8 MB at 96 k** per
@@ -908,6 +974,12 @@ Per-family cert pattern (`dst_cert_*` grammar, clang++ -O2 -I shim -I Source):
     devices need 24; fb342 forbids growing the list. Pick (a) new 24-entry param + migration,
     (b) send-only Granular with no chain position, or (c) a pinned position, not draggable in v1.
     **This must be answered before the param layout is written, not after.**
+    🔧 **[CROSS-BIBLE AUDIT] `FX-CHAIN-BIBLE.md` §3.4 is the authority and it recommends a fourth
+    option that dominates all three: retire the permutation param in favour of a `fxChainOrder`
+    ValueTree rank property** (not an APVTS param ⇒ not automatable ⇒ click-free by construction,
+    and it is the only shape that still works at device #5's 120 permutations). `SYN_FX_ORDER`
+    stays registered and is read once as the migration table. If Max wants Granular shipping before
+    the chain epic lands, (c) a pinned position is the safe interim — it changes no param list.
 
 ---
 

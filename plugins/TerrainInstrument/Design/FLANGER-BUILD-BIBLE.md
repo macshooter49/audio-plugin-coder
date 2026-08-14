@@ -19,9 +19,28 @@ The flanger owns the **0.05–40 ms modulated-comb territory**, and inside that 
 than anyone: through-zero tape flanging (Serum 2 does NOT have it — this is a headline differentiator),
 barberpole, envelope-driven, and stepped flanging alongside the classic jet and BBD pedal voices.
 
-Chorus territory (>20 ms centers, multi-voice ensembles, no feedback identity) is explicitly OUT —
-that is the future Chorus device. The `TerrainChorus.h` engine in-tree stays untouched; we steal its
-*components* (§Appendix A), not its role.
+🔧 **[CROSS-BIBLE AUDIT 2026-08-14] The old sentence here — "Chorus territory (>20 ms centers…) is
+explicitly OUT" — drew the line at a millisecond number, and `CHORUS-BUILD-BIBLE.md` §0 proves
+there is no such number.** That bible's corrected comb math (a dry+wet comb at delay *d* notches
+every 1/d Hz, first notch at 1/2d — so *shorter* delay pushes the fundamental UP and makes notches
+**sparser**) is right, and both files now state the same boundary:
+
+> **The Chorus/Flanger split is by IDENTITY, not by delay time, and the two Time ranges deliberately
+> OVERLAP (Chorus 0.5–40 ms · Flanger 0.05–40 ms).** Three things separate them, none of which is a
+> number on the Time knob:
+> 1. **Notch density** — can the ear resolve individual teeth? At 0.5 ms the teeth sit 2 kHz apart
+>    (5 below 10 k: a swept resonant filter = *flange*); at 20 ms they sit 50 Hz apart (200 below
+>    10 k: two voices = *chorus*). Same knob, different perception.
+> 2. **Regeneration** — flangers run 50–95 % feedback to sharpen the teeth into a resonant sweep.
+>    Ours goes to ±0.95; the Chorus device's ceiling is 0.82 and it has no through-zero path.
+> 3. **Through-zero** — a matched dry-path delay so the two paths cross d = 0. **Only this device
+>    has it.** It is the headline differentiator and the Chorus device explicitly does not compete.
+>
+> So the flanger does **not** cede ">20 ms" — it owns its full 0.05–40 ms range, including the long
+> end, which it voices as feedback-dominant/through-zero material. What it cedes is the *ensemble
+> job*: multi-voice choruses, static detune stacks and the June/Dimension voicings. Those are the
+> Chorus device (and the Widen device), and this file steals `TerrainChorus.h`'s *components*
+> (§Appendix A), never its role. The in-tree engine stays untouched.
 
 **Why the flanger earns flagship treatment:** Serum 2's flanger is 5 params and no through-zero. Every
 $99-tier competitor treats the flanger as a checkbox. A flanger with real TZF (u-he Satin / Strymon
@@ -126,7 +145,7 @@ harness before showing Max (§11).
 │ Tape Zero     │  dual-deck through-zero, polarity null        Itchycoo/Satin/Deco/BL-20
 │ Jet           │  high-resonance feedback comb, ± polarity     MXR 117 / Boss BF-2 / A-DA
 │ BBD           │  band-limited compander loop + Matrix freeze  Electric Mistress
-│ Barberpole    │  synchronized dual sawtooth combs, crossfade  DAFx-15 / Kilohearts Scroll
+│ Endless    │  synchronized dual sawtooth combs, crossfade  DAFx-15 / Kilohearts Scroll
 │ Envelope      │  input-envelope-driven sweep                  A/DA Threshold / Bel BF-20 / BL-20
 │ Step          │  tempo-quantized S+H sweep, glided            Subdecay Starlight / trance gate
 └───────────────┘
@@ -181,7 +200,30 @@ authentic BBD pump. **No noise injection ever** (the no-noise law); the BBD iden
   flat); plus compander gain-pump: 4 Hz amplitude modulation depth ≥ 2 dB on a sustained pad at
   Feedback 80.
 
-### 2.4 Barberpole *(the illusion — notches that rise forever)*
+### 2.4 Endless *(the illusion — notches that rise forever)*
+
+> 🏷️🔑 **[CROSS-BIBLE AUDIT 2026-08-14] RENAMED `Barberpole` → `Endless`, AND THE THREE-WAY
+> BOUNDARY.** Three separate devices ship an infinite-rise illusion and the sweep found two of them
+> using the *identical* Type word — a Tier-2 no-doubles violation (see `FX-CHAIN-BIBLE.md` §7.2).
+> The rack-wide split, now stated identically in all three files:
+>
+> | Device | Type | Mechanism | Tell |
+> |---|---|---|---|
+> | **Flanger** (this file) | **`Endless`** | DAFx-15 **dual sawtooth comb** + crossfade — delay lines, no Hilbert | comb teeth (1/d spaced), scrolling fan; feedback available |
+> | **Phaser** | **`Barber`** | M cascaded **2nd-order notch EQs**, octave-spaced, raised-cosine window | a handful of deep octave-spaced notches, no comb |
+> | **Bode** | **`Barberpole`** | true **SSB / Hilbert frequency shift** — the Harald Bode original | every partial moves by a *linear Hz offset*: inharmonic, the only one that detunes the source |
+>
+> **`Barberpole` stays with Bode** (its lineage — Bode built it) and this device's is renamed for
+> what it does. **Every `Barberpole` in this file below now reads `Endless`;** the DAFx-15 paper
+> title in §Sources is unchanged (it is a citation, not a label).
+>
+> ⚠️ **One live conflict this exposes, flagged for Max:** the `Character: Shift` variant below is
+> *literally SSB* — a Hilbert quadrature shifter inside the Flanger. That is the Bode device's
+> entire reason to exist (`BODE-BUILD-BIBLE.md`), and shipping it here as a character makes the Bode
+> device look redundant on the exact axis it is sold on. **Recommendation: cut `Shift` from this
+> Type's Character list and let Bode own SSB** (its `Barberpole` type covers it, better, with the
+> full ±5 kHz range and a feedback loop). The dual-comb + `Double Helix` characters keep this Type
+> night-and-day on its own. Preset 8 below (`Endless Fall (Shift)`) moves to Bode if `Shift` is cut.
 
 The DAFx-15 **synchronized dual flanger** (Esqueda/Välimäki/Parker), implemented verbatim:
 
@@ -246,7 +288,7 @@ Each Type ships 4–6 Characters that change the **mechanism's constants**, neve
   softclip engages 6 dB earlier — regen distorts before it runs away).
 * **BBD:** `Mistress` (recon 9→2.8 kHz law, matrix-ready) · `Deluxe` (recon corner +40 %, pump
   halved) · `Dark Bucket` (recon capped 4 kHz — dub flange) · `Pumped` (compander mismatch ×1.6).
-* **Barberpole:** `Rise/Fall` (dual-comb, bipolar Rate) · `Shift` (SSB) · `Double Helix` (L/R
+* **Endless:** `Rise/Fall` (dual-comb, bipolar Rate) · `Shift` (SSB) · `Double Helix` (L/R
   runs opposite directions — mono-safe check mandatory, §10) · `Stacked` (two dual-comb pairs an
   octave apart — 4 reads, the CPU ceiling voice).
 * **Envelope:** `Up` · `Down` · `Duck Zero` (env drives Δ toward zero — loud notes *cancel*,
@@ -301,7 +343,7 @@ clamp τ to [0.05 ms, 42 ms]          // fold the clamp SOFTLY: tanh-limit the o
   At 96 k allocate `2^ceil(log2(0.045·fs))`.
 * Per-Type overrides: **Tape Zero** sweeps `Δ = ±spanMs·lfo` *linearly* around τ0 = 8 ms (through-
   zero needs a linear crossing — an exponential sweep can never reach Δ = 0), spanMs = 7.5·d, and
-  `Manual` becomes **Zero Bias** (Δ center −6…+6 ms). **Barberpole** maps
+  `Manual` becomes **Zero Bias** (Δ center −6…+6 ms). **Endless** maps
   `Dmax = manualMs·(1 + 1.2·d)`, `Dmin = 0.55·Dmax` (the paper's reset-hiding rule, §2.4).
 * **Zipper law:** τ targets update per block; the *current* τ glides per sample with the
   `DelayEngine.h:141-150` one-pole idiom (~15 ms). The LFO itself runs per-sample (it must — a
@@ -469,7 +511,7 @@ dropdown slot anyway (both dropdowns are spoken for) and needs none.
 
 | Knob | Range / taper | Glide | What it does (pragmatic name check) |
 |---|---|---|---|
-| **Rate** | 0.02–20 Hz log free; synced = the 20-division list 4 bar→1/256. **Barberpole: bipolar** (CCW descend · CW ascend) | phase-continuous (rate changes never jump phase) | How fast the sweep moves. Envelope Type: how fast the comb chases the playing (§2.5) |
+| **Rate** | 0.02–20 Hz log free; synced = the 20-division list 4 bar→1/256. **Endless: bipolar** (CCW descend · CW ascend) | phase-continuous (rate changes never jump phase) | How fast the sweep moves. Envelope Type: how fast the comb chases the playing (§2.5) |
 | **Depth** | 0–100 → octSpan 0–±2.66 oct (40:1 at max) | target glide 15 ms | How far the sweep travels. 0 = parked comb (Manual is then the instrument — alive, not dead) |
 | **Feedback** | −100…+100, center-detent, `t^1.5` taper each side → |g| 0–0.95 | 15 ms | Resonance. CW = jet scream, CCW = hollow underwater, 100 = env-gated self-osc |
 | **Mix** | 0–100 equal-power sin/cos (house grammar `PluginProcessor.cpp:7113`) | 15 ms | 100 % = fully wet, zero dry (hard law) |
@@ -478,7 +520,17 @@ dropdown slot anyway (both dropdowns are spoken for) and needs none.
 
 ### Back — 2 dropdowns + 8 knobs (4×2, three separators, fb275 chassis)
 
-* **d1 `Type`** — Tape Zero · Jet · BBD · Barberpole · Envelope · Step (real `<select>`, never
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
+* **d1 `Type`** — Tape Zero · Jet · BBD · Endless · Envelope · Step (real `<select>`, never
   click-to-rotate; switch = fade-swap).
 * **d2 `Character`** — per-Type voicings (§2.7), 4–6 entries each.
 
@@ -525,7 +577,7 @@ and it is exactly the house law (everything audible is visible; the notches ARE 
 current response, redrawn per rAF frame from a tiny state push:
 `|H(f)| = |mixDry + mixWet·(a + b·e^{−j2πfτ} )/(1 − g·D(f)·e^{−j2πfτ})|` evaluated at the *current
 smoothed* τ_L, τ_R, g, polarity — L and R drawn as two strokes (Spread visibly splits them; Width
-fattens the pair). Barberpole draws the dual-comb crossfade sum — the fan visibly scrolls one way
+fattens the pair). Endless draws the dual-comb crossfade sum — the fan visibly scrolls one way
 forever. Feedback sharpens the drawn peaks 1:1 with the audible scream (peak height = 1/(1−|g|),
 the real number). **Audio-reactive drama (law 9):** the comb curve is the dim idle skeleton;
 the LIVE input envelope (poll the existing FX-viz push channel — the `window.__dstViz` grammar,
@@ -597,9 +649,9 @@ Format: `Type/Character · Rate · Depth · Feedback · Mix · [Manual · Spread
 6. **Matrix Chime** — frozen comb, played by hand. BBD/Mistress · Rate 0.02 Hz · Depth 0 ·
    +55 · 65 · [**Manual = the performance knob** init 62 · 0° · 100 · 55 · — · 5 · 55 · 100 Hz].
    Ships with a mod-matrix suggestion in the description (LFO→Manual once FX destinations land).
-7. **Barber Up** — the infinite riser. Barberpole/Rise-Fall · Rate +0.12 Hz · 65 · +40 · 60 ·
+7. **Endless Rise** — the infinite riser. Endless/Rise-Fall · Rate +0.12 Hz · 65 · +40 · 60 ·
    [40 · 30° · 120 · 55 · — · 0 · 35 · 60 Hz]. 30-second bounce audition: notches never reverse.
-8. **Barber Down (Shift)** — SSB glassy descent. Barberpole/Shift · −0.08 Hz · 55 · +30 · 55 ·
+8. **Endless Fall (Shift)** — SSB glassy descent. Endless/Shift · −0.08 Hz · 55 · +30 · 55 ·
    [35 · 0° · 100 · 50 · — · 0 · 30 · 40 Hz]. Mono-safe.
 9. **Touch Dive** — the comb chases velocity. Envelope/Up · Rate 70 (fast chase) · 75 · +45 ·
    60 · [30 · 30° · 110 · 55 · Shape 65 (snappy) · 10 · 50 · 80 Hz].
@@ -618,7 +670,7 @@ within ±3 dB of unity-through (the Phase-G preset-level lesson); the two 180°-
 
 ## 9. CPU — budget and tiers
 
-Per sample per channel, worst Type (Barberpole/Stacked): 4 Hermite reads (≈ 10 mul each), the
+Per sample per channel, worst Type (Endless/Stacked): 4 Hermite reads (≈ 10 mul each), the
 loop filters (4 one-poles), softClip branch, ≈ 6 smoothers — ≈ **90 mul-adds**. Typical Types
 (Jet/Tape Zero/Envelope/Step): 2 reads ≈ **55 mul-adds**. SSB Character adds 16 first-order
 allpasses ≈ +35. Block-rate: LFO increments, coefficient cooks, Bounce spring, viz push.
@@ -653,7 +705,7 @@ allpasses ≈ +35. Block-rate: LFO increments, coefficient cooks, Bounce spring,
    100, never "fix" with PDC (fb305 send maths).
 7. **Mono-sum collapse** — Spread 180°/counter-sweep voicings thin to half on mono; harness
    metric + preset discipline (§3.8).
-8. **Barberpole reset leak** — Dmin < 0.55·Dmax lets the sawtooth wrap poke through the
+8. **Endless reset leak** — Dmin < 0.55·Dmax lets the sawtooth wrap poke through the
    crossfade (DAFx-15's own warning); the mapping enforces the ratio at every Depth.
 9. **Two phase accumulators drift** — one master clock, offsets derived (Phase-G one-clock law);
    an L/R pair of accumulators integrates skew forever.
@@ -690,8 +742,13 @@ allpasses ≈ +35. Block-rate: LFO increments, coefficient cooks, Bounce spring,
 
 ## 12. Open questions for Max
 
-1. **Chain slot:** fixed post-distortion / pre-delay insert (recommended, §4.2) — or grow
-   `SYN_FX_ORDER` to 24 permutations? (I say fixed; the dropdown at 24 is unusable.)
+1. **Chain slot:** fixed post-distortion / pre-delay insert (recommended, §4.2) — or does the
+   flanger wait for the chain epic's ordering answer? **[AUDIT] "grow `SYN_FX_ORDER` to 24" is not
+   an option and never was** — choice cardinality is fixed at birth (fb342), so the param can
+   neither grow nor shrink. `FX-CHAIN-BIBLE.md` §3.4 is the authority: the permutation param is
+   retired in favour of a `fxChainOrder` rank property, with `SYN_FX_ORDER` left registered and read
+   once as the migration table. The legal alternatives are a **new** choice(24) param born at final
+   size, or the fixed slot recommended here. (I still say fixed for v1 — it ships before the epic.)
 2. **Front pill 2:** `Trig` (note-retriggered sweeps — the Satin move, my pick) or `Zero`
    (a Tape-Zero-only polarity flip pill)? Trig serves all six Types; Zero serves one.
 3. **Type roster trim:** is 6 right? `Step` is the most cuttable (its sound is reachable via the
@@ -700,7 +757,7 @@ allpasses ≈ +35. Block-rate: LFO increments, coefficient cooks, Bounce spring,
    tempo-locked, which the matrix route cannot do per-division without setup.
 4. **FX params as mod-matrix destinations** (Manual especially — preset 6 begs for it): in scope
    for this device, or the chain epic? The device is designed to survive either answer.
-5. **Barberpole default direction** at the bipolar Rate detent: frozen comb (technically honest)
+5. **Endless default direction** at the bipolar Rate detent: frozen comb (technically honest)
    or nudge to +0.05 Hz so the default always moves (dramaticism)? I lean +0.05 Hz default load.
 6. **The `Hollow` question:** wet-polarity lives in Characters (Jet/Hollow, Tape Zero/Sub). Fine,
    or promote to a global back-knob and drop `Low Cut` to per-Character fixed? (I keep Low Cut —

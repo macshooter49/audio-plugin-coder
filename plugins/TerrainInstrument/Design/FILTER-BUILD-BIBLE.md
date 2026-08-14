@@ -42,6 +42,42 @@ same structure, same laws, same chassis.
 **ONE device, named `Filter`.** The 4th flagship FX device in the rack, after Reverb, Delay,
 Distortion.
 
+### 🔑 0.0 THE BOUNDARY vs the synth FILTER panel *(added by the 2026-08-14 cross-bible sweep)*
+
+Terrain will have **two filter surfaces** and a user must never have to ask which one to reach for.
+`EQUALIZER-BUILD-BIBLE.md` §0.1 draws exactly this line for the two EQ surfaces; this is its twin,
+and it was missing.
+
+| | The synth FILTER panel (ships today) | The Filter DEVICE (this bible) |
+|---|---|---|
+| Where | The synth page, filter 1 / filter 2 tabs | The FX rack, a device card |
+| Params | `SYN_FILTER1_*` / `SYN_FILTER2_*` (+ `SYN_FILTER_ROUTING`, per-filter Mix) | `SYN_FLT_*` — 3 heroes + Mix + back-8 (§7) |
+| Instancing | **PER VOICE.** Two `FilterSlot`s live inside `SynthVoice`; every held note owns its own pair | **ONE stereo instance** on the FX bus, shared by everything routed to it |
+| Position | **Pre-FX, inside the voice** — the house law is *engine → FILTER → effects*, and every send taps POST-filter | **Post-mix, on the bus**, at a position in the chain |
+| What drives it | The voice's own envelopes, per-voice key-track, the mod matrix, per-voice unison detune | An **env follower on the bus** (§5.1), a **synced LFO** (§5.2), and key-track from the last note (§5.3) |
+| The sound it makes | Each note filtered independently — a chord's notes each sweep on their own envelope | The **whole mix** filtered as one — a chord ducks and opens together. This is the auto-wah / DJ-filter / dub-sweep sound the synth filters structurally *cannot* make |
+
+**The one-sentence law: per-voice filtering is the synth panel's job; whole-bus filtering that MOVES
+with the program is the device's job.** They are not redundant — they are the two halves a
+subtractive instrument needs, and Serum ships both for the same reason.
+
+**Consequences for this build:**
+* The device must **not** duplicate the synth panel's routing/series-parallel/two-filter grammar.
+  One `FilterSlot`, one position in the chain — stack a second Filter device if you want two (that
+  is what the chain epic is for, `FX-CHAIN-BIBLE.md` §3).
+* Its **9 curated Types are a curated subset of the same 94-type enum** the synth panel reaches
+  (`TerrainFilters.h:100-137`). That is deliberate reuse, not a second engine — but the device's
+  Type list is sized and named for the *rack*, and it never tries to expose all 94.
+* Where the two surfaces share a word (`Cutoff`, `Res`, `Drive`), the meaning must be identical —
+  Tier-3 shared vocabulary (`FX-CHAIN-BIBLE.md` §7.2).
+* ⚠️ **Type name check:** this device's Type `Phaser` sits in a rack that also ships a **Phaser
+  device**, and Type `Comb`/`Ring` overlap nothing today. `Phaser`-the-filter-type is one biquad
+  allpass chain used as a *static* coloured filter; `Phaser`-the-device is 9 topologies with motion
+  and feedback. That is a Tier-2 collision on the most visible label a card has. **Recommended:
+  rename this Type `Notches`** (what it does: a stack of fixed notches you sweep with Cutoff) and
+  leave `Phaser` to the device — flagged to Max rather than applied, because §4.0's roster is still
+  open and the rename should land with whatever roster wins.
+
 ### The thesis: we already own the hardest 90 %
 
 Terrain's synth filter system is **already built and certified**: `TerrainFilters.h` is 2,195 lines,
@@ -654,6 +690,16 @@ exactly 9 while **§16 Q5 of this same document proposes a 10th type** is a self
 guaranteed re-birth of the param. Size both dropdowns for the **final** roster on day one, with
 disabled/hidden tail entries (the delay `SYNCDIV` precedent):
 
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
 **Dropdown 1 — Type** (`SYN_FLT_TYPE`, **choice 12** — 9 live + 3 reserved, disabled in the UI):
 Ladder · Acid · Multi · Scream · Vowel · Comb · Phaser · Ring · DJ · *(Reserved 1..3)*.
 Default Ladder (index 0). The three spares cover §16 Q5 (Sample Hold), a future Formant-2, and one
@@ -994,9 +1040,14 @@ thresholds (≥ 6 dB spectral change or ≥ 25 % centroid move — the DST §8.3
 2. **LFO shapes:** sine-only (my rec — the 10-LFO mod-matrix system owns shapes) or add Tri/Saw/
    Square/S&H to the device? If yes, it costs the second Character-dropdown slot on some types or a
    pill.
-3. **FX order at 4 devices:** 24-way permutation dropdown, or a drag-order UI upgrade for the whole
-   rack? (The 6-way `SYN_FX_ORDER` choice param can't grow in place — append-only cardinality
-   trap.)
+3. **FX order at 4 devices** — **owned by `FX-CHAIN-BIBLE.md` §3.4; this device defers to it.**
+   The 6-way `SYN_FX_ORDER` choice param can't grow in place. **[AUDIT] "append-only cardinality
+   trap" was the wrong phrase** — it implies appending is allowed. It is not: cardinality is fixed
+   at birth in *both* directions (fb342), because hosts normalize automation against `N` and our
+   read path is `round(v·(N−1))`. The three legal shapes: (a) a **rank/drag-list ValueTree property**
+   replacing the param — the chain bible's recommendation, click-free by construction, the only one
+   that survives device #5's 120 permutations; (b) a **new** param born at choice(24); (c) pin the
+   Filter to a fixed chain position. Not an option: re-declaring `SYN_FX_ORDER` at any other size.
 4. **Acid 4×:** the core header asks for 4× (`:411`); I ship 2× (voice parity + the internal
    clamp). If scream sweeps alias to your ear, internal auto-4× on Acid only (+0.3 % CPU).
 5. **A tenth type — "Sample Hold"** (`SAMPHOLD/±` exist): I cut it as Distortion-family ground

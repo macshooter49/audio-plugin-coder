@@ -624,7 +624,7 @@ to the real **six** edit sites.
 
 | Slot | Name | Maps to |
 |---|---|---|
-| Hero 1 | **`Amount`** (relabel per Type — Model A, the SIG-knob precedent ParameterIDs.hpp:410): Stack `Detune` · Dimension `Depth` · Shift `Shift` · Ensemble `Depth` · Doubler `Drift` · Mirror `Scatter` · Bands `Split` | §3.6 Amount |
+| Hero 1 | **`Amount`** (relabel per Type — Model A, the SIG-knob precedent ParameterIDs.hpp:410): Stack `Detune` · Dimension `Depth` · Shift **`Cents`** 🏷️ · Ensemble `Depth` · Doubler `Drift` · Mirror `Scatter` · Bands `Split` | §3.6 Amount |
 | Hero 2 | **`Width`** | §3.4 rotation |
 | Hero 3 | **`Rate`** | §3.6 Rate |
 | 4th | **`Mix`** | equal-power, 100 % = FULLY WET (engine owns Mix — the fb318 law: wet/dry latency-aligned inside the engine) |
@@ -632,13 +632,27 @@ to the real **six** edit sites.
 | Pill 2 | **`Hear Mono`** | auditions (L+R)/2 on both outs — the mono-integrity check ON the card; UI-momentary, 15 ms fade both ways |
 | Power | standard | default OFF (distortion precedent, ParameterIDs.hpp:428) |
 
-**Back panel** — dropdown 1 `Type` (7), dropdown 2 `Character` (8 per Type), 8 knobs 4×2:
+> 🏷️🔧 **[CROSS-BIBLE AUDIT 2026-08-14] TWO NAME FIXES + ONE CHASSIS FIX.**
+> 1. **Hero relabel on the `Shift` Type: `Shift` → `Cents`.** A Type named `Shift` whose own hero
+>    knob is also labelled `Shift` is the absolute no-doubles violation (same word twice inside one
+>    device — OTT's `Air` case). `Cents` is what the knob actually reads out (±c cents L / −c R,
+>    §2.3) and it is unique in the rack. The Type keeps `Shift`.
+> 2. **P3 `Delay` → `Offset`.** A back knob may not carry a device's name. (`Shift`-the-Type also
+>    brushes Bode's hero knob `Shift`, but that is Tier-3 territory — two devices, same honest word,
+>    same idea; the Filter bible's `Drive` precedent applies. Left as is.)
+> 3. **`Type` is the HEADER PILL, not back-d1.** Verified in the shipped tree (`DEVS[].tp` renders
+>    in the header `.fxr-type` `<select>`; the back dropdowns are Character + a second selector).
+>    So this device has **a free back-d2** — `FX-CHAIN-BIBLE.md` §7.1 has the full ruling, including
+>    that the honest knob count is 12 (3 heroes + Mix + 8 back), not 11.
+
+**Back panel** — header pill `Type` (7), dropdown 1 `Character` (8 per Type), dropdown 2 **free**,
+8 knobs 4×2:
 
 | P | Name | What it does (one honest clause) |
 |---|---|---|
 | P1 | **`Voices`** | how many copies (1–8; Dimension: 2/4 lines; Mirror: AP stages 4/6/8/12; Bands: comb pairs 1–3) |
 | P2 | **`Spread`** | fans the copies across the stereo field |
-| P3 | **`Delay`** | how far behind the copies sit (scales base delays; Dimension `Size` lives here) |
+| P3 | **`Offset`** 🏷️ | how far behind the copies sit (scales base delays; Dimension `Size` lives here). **[audit rename: was `Delay` — a back knob may not carry a DEVICE's name; `Delay` is the most visible label in the rack after `Reverb`]** |
 | P4 | **`Wander`** | humanizes: random drift on every copy's time/pitch |
 | P5 | **`Low Keep`** | keeps everything below this frequency mono and centered (0 = off → 500 Hz; elliptical-filter style S-highpass) |
 | P6 | **`Tone`** | darkens/brightens the wet only (tilt, 0.5 neutral — the MicroShift Focus job) |

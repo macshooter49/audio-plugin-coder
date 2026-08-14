@@ -657,6 +657,16 @@ build without breaking every saved preset's index mapping. Therefore:
 ### Back panel — 2 dropdowns + 8 knobs (4×2, three separators)
 | Slot | Name | Param | Law |
 |---|---|---|---|
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
 | Dropdown 1 | **Type** | `SYN_TPE_TYPE` | choice(7) §2 |
 | Dropdown 2 | **Character** | `SYN_TPE_CHARACTER` | **choice(12) at birth**, 8 used per Type today (law C above) — head patterns on Space/Drum, machine voicings elsewhere |
 | K1 | **Wow** | `SYN_TPE_WOW` | §3.2, t^1.6, per-Type depth scale |

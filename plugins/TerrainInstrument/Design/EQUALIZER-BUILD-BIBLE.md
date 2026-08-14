@@ -167,7 +167,7 @@ BITE  bell          800 Hz–12 kHz  AIR   high shelf, analog corner 8–40 kHz 
 | 2 | **British** | Neve 1073 / inductor | Broad bells (Q 1.0 fixed), shelves with deliberate undershoot | Low-shelf +12 dB shows a **−1 to −2 dB undershoot notch at ~0.35×fc** (shelf S ≈ 1.5, the Bump center); Surgical shows none |
 | 3 | **American** | API 550 proportional Q | Q is a function of |gain| | −3 dB bandwidth at +2 dB boost ≥ **2.5×** the bandwidth at +12 dB boost, same knob |
 | 4 | **Passive** | Pultec EQP-1A | Boost knob also engages a shifted cut; high band is a peak with wide fixed Q | Low +6 dB @60 Hz with Dip 60 % → measured **−2.5 to −4 dB trough at 200–400 Hz** that no other Type produces |
-| 5 | **Air** | Maag EQ4 / Sie-Q | Everything widens (bell Q 0.35–0.5), Air shelf corner rides to 40 kHz | Air +10 dB: in-band slope **< 3 dB/oct below 20 kHz** while the matched analog prototype reaches full gain only above Nyquist; bells measure −3 dB bandwidth **> 3 octaves** |
+| 5 | **Open** | Maag EQ4 / Sie-Q | Everything widens (bell Q 0.35–0.5), Air shelf corner rides to 40 kHz | Air +10 dB: in-band slope **< 3 dB/oct below 20 kHz** while the matched analog prototype reaches full gain only above Nyquist; bells measure −3 dB bandwidth **> 3 octaves** |
 | 6 | **Dynamic** | TDR Nova / Pro-Q 3 dynamic | Band gains fade in/out with the per-band envelope vs a program-calibrated threshold | The family tell, EQ edition: probe at −40 / −26 / −12 dBFS → magnitude response at the band moves **≥ 6 dB** across the span (all other Types: 0 dB by construction) |
 | 7 | **Sculpt** | Digital-only, no ancestor | Gains ×1.67 (±30 dB), Ring drives Q 2→40, deep bells morph toward notches | Impulse through +24 dB Q 40 bell rings with **T60 > 60 ms** (2.2·Q/f); notch depth at min gain **< −40 dB** |
 
@@ -223,7 +223,7 @@ chassis. (Distortion learned this the hard way — Phase G flagged D1 Si/Ge/Scho
 * Signature = **`Dip`** 0–100 %: the atten ride-along amount. 0 % = modern clean boost;
   100 % = `−g·0.7` full trick. THE preset knob for kick/bass.
 
-#### 5 · Air — the opener
+#### 5 · Open — the opener  🏷️ *[audit rename: was `Air`]*
 
 * All bells widen: Q 0.35–0.5; gains map through a softener `g_eff = 18·tanh(g/14)` so extreme
   boosts stay silky (this is why Sie-Q "feels perfect no matter how much you boost" — the curve
@@ -277,7 +277,7 @@ chassis. (Distortion learned this the hard way — Phase G flagged D1 Si/Ge/Scho
 ```
 in ── Focus encode (M/S or L/R select) ──►
    Tilt (1st-order Baxandall pair, pivot 700 Hz)
-   ──► LOW ──► BODY ──► BITE ──► AIR ──► [Silk shelf — Air type only]
+   ──► LOW ──► BODY ──► BITE ──► AIR ──► [Silk shelf — `Open` type only]
    ──► Focus decode ──► Amount is INSIDE the band gains (not a post-fader)
    ──► Mix (LINEAR crossfade with dry) ──► out
 ```
@@ -439,9 +439,21 @@ const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 
 to all three L sites and their R twins, and give the Equalizer's own main-send branch the symmetric
 FOUR-way subtraction (its `rtd` must sum rvb+dly+dst). Grep `rtdL` — the count of sites grows with
 each device; fix them ALL or a pill-routed osc reaches the reverb twice (the original fb305 bug,
-third resurrection). `SYN_FX_ORDER` grows again too: 4 devices = 24 orderings — it is already an
-insert-lambda list (fb307 grammar, memory: delay arc); the EQ registers one more insert-lambda,
-no new mechanism.
+third resurrection).
+
+🛑 **[CROSS-BIBLE AUDIT 2026-08-14] `SYN_FX_ORDER` does NOT "grow again" — it cannot grow at all.**
+The old sentence here conflated two separate things. The **insert-lambda list** (fb307 grammar) is
+the *dispatch* mechanism, and yes, the EQ registers one more lambda with no new mechanism — that
+part is right. But the **order param** feeding it is an `AudioParameterChoice` with exactly 6
+entries (`PluginProcessor.cpp:3488`, clamp `:5860`, switch `:7383`), and **choice cardinality is
+fixed at birth (fb342 session law ①)**: hosts normalize automation against `N` and our own read path
+is `round(v·(N−1))`, so re-declaring it at 24 silently retargets every saved preset and automation
+lane. 4 devices = 24 orderings is a *decision*, not an edit.
+**`FX-CHAIN-BIBLE.md` §3.4 is the authority and the EQ defers to it:** the permutation param is
+retired in favour of a `fxChainOrder` ValueTree rank property (not an APVTS param ⇒ not automatable
+⇒ click-free by construction), with `SYN_FX_ORDER` left registered and read once as the migration
+table. The only other legal shapes are a **new** param born at its final size, or pinning the EQ to
+a fixed chain position. **Nothing in the EQ commit touches `SYN_FX_ORDER`'s list.**
 
 ### 4.2 Latency: the good news, stated once
 
@@ -505,7 +517,7 @@ in a big UI; a 500-series pedal solves it with fixed frequencies — ours is the
 | Knob | Param | Range / taper | Glide | What it does (tooltip voice) |
 |---|---|---|---|---|
 | **Tilt** | `SYN_EQZ_TILT` | ±12 dB, linear-in-dB, center detent | 15 ms | One knob, whole spectrum: right = brighter, left = darker, seesaw around 700 Hz |
-| **Air** | `SYN_EQZ_AIR` | ±18 dB, linear-in-dB, center detent | 15 ms | The shelf above everything — sheen up, harshness down. ×1.33 in Air type |
+| **Air** | `SYN_EQZ_AIR` | ±18 dB, linear-in-dB, center detent | 15 ms | The shelf above everything — sheen up, harshness down. ×1.33 in the `Open` type |
 | **Amount** | `SYN_EQZ_AMOUNT` | 0–200 %, linear, default 100 % | 10 ms | Scales the whole curve: 0 flat, 100 as drawn, 200 double strength |
 | **Mix** | `SYN_EQZ_MIX` | 0–100 %, default 100 % | 10 ms | 100 % = fully wet (law 4); below = parallel EQ |
 
@@ -515,6 +527,16 @@ makeup from the curve's power integral over a pink-weighted band set, **default 
 §4.2 precedent). Plus the standard POWER + A/B/C/D/S routing pills (chassis).
 
 ### 5.2 Back panel — 2 dropdowns + 8 knobs (4×2, columns = bands)
+
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
 
 Dropdowns: **`Type`** (7 — §2.1) · **`Focus`** (Stereo / Mid / Side / Left / Right).
 
@@ -527,15 +549,26 @@ APVTS: P1..P8 = LowHz, Low, BodyHz, Body, BiteHz, Bite, Reach, Shape (fixed orde
 per Type — the distortion Model-A grammar, `ParameterIDs.hpp:414-421` precedent).
 
 **The Shape (P8) relabels** (§2.2): Surgical `Width` (0.4–4× Q, log, center 1×) · British `Bump`
-(S 1.0–2.0) · American `Grip` (exponent 1.0–2.5) · Passive `Dip` (0–100 %) · Air `Silk`
+(S 1.0–2.0) · American `Grip` (exponent 1.0–2.5) · Passive `Dip` (0–100 %) · Open `Silk`
 (0–100 %) · Dynamic `Sense` (**−20…+20 dB around the −26 dBFS program anchor**, center detent) ·
 Sculpt `Ring` (Q 2–40, log). Default = center. Every relabel changes CURVE MATH, not cosmetics —
 the Phase G "no pointless characters" gate applies to these seven names.
 
 Defaults: LowHz 90 · BodyHz 450 · BiteHz 3.2 k · Reach 20 k · all gains 0 · Shape center.
-No doubles anywhere (Low/Body/Bite/Air/Reach/Shape/Tilt/Amount/Mix/Type/Focus — all unique;
-"Air" appears once, front). AIR band's gain deliberately lives on the FRONT (it is the hero Max
-asked for); its frequency (`Reach`) lives on the back — one band, two surfaces, zero duplication.
+No doubles anywhere (Low/Body/Bite/Air/Reach/Shape/Tilt/Amount/Mix/Type/Focus — all unique).
+AIR band's gain deliberately lives on the FRONT (it is the hero Max asked for); its frequency
+(`Reach`) lives on the back — one band, two surfaces, zero duplication.
+
+> 🏷️🔧 **[CROSS-BIBLE AUDIT 2026-08-14] The "'Air' appears once, front" claim was FALSE when
+> written — Type 5 was also named `Air`.** Front hero knob `Air` + Type `Air` inside one device is
+> the absolute no-doubles violation, and it is the *identical* defect the OTT audit had already
+> caught and fixed (its Type `Air` → `Sheen`, next to its hero knob `Air`). Two bibles independently
+> reached for the same name for the same reason; that is a pattern, not an accident.
+> **Type 5 is now `Open`** (Maag/Sie-Q: everything widens, the shelf corner rides to 40 kHz — the
+> type literally opens the top). The **knob keeps `Air`** — it is Max's mandate word and the hero.
+> `Sheen` was not available (OTT Type 4). Renamed throughout §2 and the preset list.
+> The band-role header `AIR` in the §5.2 grid is *not* a third instance: it is the column label for
+> the band whose gain is the `Air` knob and whose frequency is `Reach` — one band, two surfaces.
 
 ---
 
@@ -634,13 +667,13 @@ fb342 frame budget that the card-like-water pass certified.
 All values: Type · Focus · front (Tilt/Air/Amount) · bands (Hz/dB) · Shape. Unstated = default.
 
 1. **Init Flat** — Surgical · Stereo · all zero. The canvas.
-2. **Air Lift** — Air · Stereo · Air +8 · Reach 28 k · Silk 40 %. The one-knob "expensive" button.
+2. **Air Lift** — Open · Stereo · Air +8 · Reach 28 k · Silk 40 %. The one-knob "expensive" button.
 3. **Pultec Bass Trick** — Passive · Stereo · Low 60 Hz +6 · Dip 65 % · Air −2. Kick/bass focus + auto-scoop at ~250 Hz.
 4. **Smile** — American · Stereo · Low 90 +5 · Body 450 −3 · Bite 3.2 k +4 · Air +3. The hi-fi V.
 5. **De-Mud** — American · Stereo · Body 300 −6 (Grip 1.8 → tight only when deep) · Tilt +1.
 6. **Presence Push** — British · Stereo · Bite 4 k +6 · Bump 60 % · Low 100 +2. The 1073 vocal move.
 7. **Telephone** — Sculpt · Stereo · Amount 140 % · Low −18 @150 · Air −18 · Body +12 @1.2 k · Ring Q 8. Instant lo-fi; automate Amount 0→140 for the drop reveal.
-8. **Side Sparkle** — Air · **Side** · Air +10 · Reach 32 k. Width without a widener.
+8. **Side Sparkle** — Open · **Side** · Air +10 · Reach 32 k. Width without a widener.
 9. **Mono Anchor** — Surgical · **Side** · Low 120 −18 · Width 0.7×. Tightens stereo lows to mono.
 10. **Dynamic De-Harsh** — Dynamic · Stereo · Bite 6 k −8 · Sense +6 dB (fires above program) · Air +4. Cuts only when it hurts, air stays.
 11. **Quiet Bloom** — Dynamic · Stereo · Body 250 +6 · Sense −8 dB (below program ⇒ boost fades OUT on peaks) — swells warm on decays.

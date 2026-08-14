@@ -12,6 +12,39 @@ Repo recon: every recycle claim below is verified by reading the code — file:l
 > now corrected. Corrections applied this pass are marked **[AUDIT]** inline. Claims that could not be
 > verified from a primary source are marked **[UNVERIFIED]** — do not quote those as fact.
 >
+> **🔧 CROSS-BIBLE SWEEP 2026-08-14 — a THIRD conflict, and the resolution of all three.**
+> `FX-CHAIN-BIBLE.md` §5–§8 specs **this same device under this same `SYN_UTL_*` prefix with an
+> incompatible chassis**: 6 Types (`Trim`/`Stereo`/`Tilt`/`Match`/`Pump`/`Fence`), heroes
+> `Level·Width·Shape·Mix`, back dropdowns `Type` + `Meter`. **Ruling applied: THIS file is the
+> authority on the Utility DEVICE** (that file's own preamble says it cites sibling bibles rather
+> than re-deriving them, and it now carries a pointer here). That file stays the authority on the
+> CHAIN (§3) and the anti-mud doctrine (§4). Its §5–§8 is demoted to *parked candidates*, and it is
+> worth noting **two of its six Type names would collide inside this device if merged naively**:
+> `Tilt` is already the front hero here, and `Stereo` is already a `Route` entry — more evidence
+> the two chassis cannot be blended without a redesign.
+> **What is genuinely worth stealing from it: `Match` (the −26 dBFS rider), `Pump` (Env-1-ridden
+> gain) and `Fence` (the local ceiling).** This bible has no equivalent of any of the three, and
+> the anti-mud doctrine actually wants them. Recommendation: ship the chassis below, and if Max
+> wants those behaviours, they arrive later as a *behaviour* selector — never as a `Character`
+> (there is no character), and never by reintroducing a `Type` axis.
+> **Conflict 2 (Splitter) — RESOLVED at this sweep. The line is PER-LANE vs GLOBAL:**
+> ```
+> SPLITTER = LANES.  It owns the crossover, and it owns width/pan/slip/gain PER LANE —
+>                    those controls exist only because lanes exist. No lanes, no knob.
+> UTILITY  = THE JOINT.  It owns the GLOBAL image: one Width, one Widen (Haas), one Rotate,
+>                    one Balance, one Center, one Mono Below, on the full-band signal.
+> ```
+> So the Splitter's `Low Width`/`High Width`/`Side Width`, its per-lane `Slip`, and `Bass Mono`
+> (which is its M/S-mode relabel of the `Split` crossover *frequency*, not a shelf) are all
+> legitimate and stay. Utility's `Width`/`Widen`/`Mono Below` are full-band and stay. **Different
+> mechanisms, no renames needed.** ⚠️ **One genuine duplicate remains and is flagged to the Splitter
+> bible: its M/S-mode `Rotate` (P5, ±45°) is byte-for-byte this device's P8 `Rotate` (±45°) applied
+> to the whole image — not a lane operation.** Recommendation: the Splitter drops it and spends the
+> slot on something lane-specific; a user who wants rotation adds a Utility. The `Mono` and `Solo`
+> **audition pills** stay on BOTH devices deliberately — pill vocabulary is Tier-3 shared house
+> language (`Power`/`Sync`/`Auto`/`Freeze`/`Mono`/`Solo`), exactly as `Freeze` lives on both Reverb
+> and Granular.
+>
 > **Two in-tree conflicts a builder must resolve before writing code:**
 > 1. `Design/SERUM2-FX-REFERENCE.md:376-379` states Terrain gets **no Utility device** — "no dedicated
 >    bible — deliberately … a whole rack slot for trim is Serum's answer; ours should be chain-level

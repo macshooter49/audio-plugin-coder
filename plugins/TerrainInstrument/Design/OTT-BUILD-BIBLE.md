@@ -544,6 +544,16 @@ instead of being pre-inflated). Both glide their effect on/off over 20 ms.
 
 ### 5.2 Back panel — 2 dropdowns + 8 knobs (4×2), fb275-exact
 
+> 🔧 **[CROSS-BIBLE AUDIT 2026-08-14] CHASSIS CORRECTION — `Type` is the HEADER PILL, not back-d1.**
+> Verified in the shipped tree: on Reverb, Delay **and** Distortion, `*_TYPE` renders in the header
+> `.fxr-type` `<select>` on the card centerline (`index.html` `DEVS[].tp` +
+> `Design/fx-back-panel-mockup.html`); the two **back** dropdowns are `Character` + a second
+> selector (`Mod Mode` / `Sync` / `Quality`). Spending back-d1 on `Type` duplicates the header pill
+> — the most visible label the card has — and silently throws away a back dropdown this device is
+> entitled to. Move `Type` to the header, slide `Character` to back-d1, and back-d2 is free.
+> Full ruling (incl. that the honest knob count is **12** = 3 heroes + Mix + 8 back, not the "11"
+> four bibles reconstructed four different ways): `FX-CHAIN-BIBLE.md` §7.1.
+
 **Dropdown 1 — `Type`** (`SYN_OTT_TYPE`, choice(8)): Classic · Smooth · Heavy · Sheen · Bass-Safe ·
 Bloom · Duo · Quad (§3).
 **Dropdown 2 — `Stereo`** (`SYN_OTT_STEREO`, choice(3)): Linked · Dual · Mid-Side (§4.2).

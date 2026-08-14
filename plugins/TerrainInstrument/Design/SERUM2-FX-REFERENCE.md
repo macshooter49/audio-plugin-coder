@@ -7,6 +7,29 @@ against the extracted text of the local manual; every in-tree citation was re-ch
 Corrections are marked **[AUDIT]**; anything that could not be verified is marked **[UNVERIFIED]** and left
 in place rather than deleted. Do not quote an [UNVERIFIED] line as fact.
 
+🚨 **AUDIT 2 — 2026-08-14, later the same day.** A second adversarial pass re-read every in-tree anchor
+against the working tree and closed the web-research debt with direct WebFetch (WebSearch budget was
+exhausted again; the official product page, the "What's New in Serum 2" PDF, the Xfer CPU-optimisation KB
+and the v2.0.17 changelog were all fetched and re-read). Corrections from this pass are marked **[AUDIT2]**.
+**The four findings that change what this file says:**
+1. 👁️ **MAX'S RULING — Serum 2's visualizers DO react to live audio** (confirmed first-hand, he owns it).
+   This file's "~87 % visually dead to audio" survey conclusion was WRONG and is retracted (§3.1). The
+   differentiator is **not** "ours move" — it is that **ours move DRAMATICALLY and reflect every param**
+   (house law 9 / fb311). Every place that framed motion-vs-no-motion as the moat has been rewritten.
+2. 🔗 **MAX'S RULING — unlimited stacking + multiple instances of the same device, and Terrain MATCHES it.**
+   Verbatim: *"we should have an unlimited amount of effects basically. If people want to choose to do that
+   then their CPU is on them."* The slot pool is **`K = 24`** (`FX-CHAIN-BIBLE.md` §3.2), not 5. Every
+   sentence implying Terrain will be more device-limited than Serum is corrected.
+3. 🧮 **The chain-bible numbers this file quoted were stale**: it is **K = 24 slots × 25 params = 600 new
+   params on top of the 964 registered ⇒ 1 564 total**, not "K = 5 × 26 = 130".
+4. 🧵 **The exclusion sums are three BLOCKS but SIX LINES** — the R-channel sum sits on its own line in each
+   block (`7159`+`7161`, `7326`+`7328`, `7358`+`7360`). Editing only the three `rtdL` lines is a half-fix
+   that silently breaks the right channel. Only the L lines carry the `fb305 law` comment, so grepping the
+   comment finds 3, never 6.
+5. 🧩 **`IndyFxChain` is NOT "per-layer FX chains"** — there is exactly ONE instance in the whole processor
+   (`PluginProcessor.h:1666`) and it serves the per-CHOP FX-independence routing. That gap-analysis row was
+   overclaiming (§4.1, §10.1).
+
 **Primary source:** the OFFICIAL Serum 2 User Guide — found LOCALLY at
 `/Library/Audio/Presets/Xfer Records/Serum 2 Presets/Serum 2 User Guide.pdf` (355 pp., build of 2025-03-17;
 FX chapter pp. 152–182, Mixer pp. 144–151, filter-type table pp. 136–140, Clean Mode p. 142, Quality p. 319).
@@ -38,8 +61,12 @@ bible**) · `GRANULAR-FX-BUILD-BIBLE.md` · `TAPE-BUILD-BIBLE.md` · `FILTER-BUI
   **retained only as the competitive read-out**, not as the spec. See the box in §5.3.
 - **Utility** → `UTILITY-BUILD-BIBLE.md` (it IS a device, with Route + Flip dropdowns and the rack's first
   metering surface). This file's §2.16/§11-Q4 "fold it into the chain" recommendation is **superseded**.
-- **The chain / slot architecture** → `FX-CHAIN-BIBLE.md` (K = 5 pre-allocated slots × 26 params = 130 new
-  params). §4.4-B below states the same law; the sibling owns the numbers.
+- **The chain / slot architecture** → `FX-CHAIN-BIBLE.md`. **[AUDIT2 — the numbers this line carried were
+  stale.]** Max ruled on 2026-08-14 that Terrain matches Serum's unlimited stacking, so the pool is
+  **`K = 24` pre-allocated slots × 25 params = 600 new params** on top of the 964 already registered
+  ⇒ **1 564 total** (bible §3.2, verbatim: *"K = 24 — MAX'S RULING… supersedes the K=5 proposal"*).
+  The old "K = 5 × 26 = 130 on top of 972" was wrong in the cap, the per-slot count AND the baseline.
+  §4.4-B below states the law; the sibling owns the numbers.
 - **Filter device** → `FILTER-BUILD-BIBLE.md` (9 Types; 94 in-tree filter types to curate from).
 
 ---
@@ -51,12 +78,21 @@ with the manual open** — a full param inventory of all 16 FX menu entries, a p
 module visualizer (Max bases card mockups on visualizer research), the rack mechanics, and the two-way gap
 analysis against what Terrain has already shipped and bibled.
 
-**The one-sentence verdict, honest:** Serum 2's FX world-feel is **architectural, not per-device** — three
-parallel racks with arbitrary module order, counts, and nesting, everything modulatable and preset-able —
-while every individual device is intentionally **shallow (7–14 params, mostly no live visualizer)**
-[AUDIT — the draft said "5–11"; counted off the manual's own control tables the real spread is Flanger 7 at
-the low end to Compressor 14 in multiband at the high end]; Terrain beats every Serum device on per-device
-depth (Type × Character axes, measured extremity, dramatic visualizers) and loses on chain architecture.
+**The one-sentence verdict, honest:** Serum 2's FX world-feel is **architectural, not per-device** — a Main
+rack plus two aux busses with arbitrary module order, counts and nesting, everything modulatable and
+preset-able — while every individual device is intentionally **shallow (7–14 params, and only two modules
+carry a display with any depth of instrumentation)** [AUDIT — the draft said "5–11"; counted off the
+manual's own control tables the real spread is Flanger 7 at the low end to Compressor 14 in multiband at
+the high end]; Terrain beats every Serum device on per-device depth (Type × Character axes, measured
+extremity, dramatically audio-reactive visualizers) and loses on chain architecture.
+
+⚠️ **[AUDIT2] Do not read "shallow visualizers" as "static visualizers."** Max owns Serum 2 and confirmed
+first-hand on 2026-08-14 that **its module displays react to live audio**. The manual only ever documents
+the *opt-in FFT overlays* on Filter and Delay, and this file's first two passes wrongly inferred from that
+silence that the rest of the rack was frozen. The real competitive read is: **Serum's displays move, but
+they move a little and they show only a slice of what the module is doing.** Our bar (law 9 / fb311) is
+idle=dim → playing=bright with an obvious delta, on **every** card, reflecting **every** param. That is a
+difference of degree and coverage, not of kind — and it must be argued that way.
 
 **[AUDIT] Even the Filter — their deepest module — does not reverse this.** Serum's FX filter re-hosts their
 whole per-voice table, roughly 50 selectable types across five categories (§2.8). Ours is bigger:
@@ -90,8 +126,11 @@ answer, and which "Serum feature" is actually a 1970s box.
 
 **The lineage lesson:** Serum 2's FX rack is Serum 1's five effects (Chorus/Delay/Distortion/Filter/Reverb,
 plus Compressor/EQ/Flanger/Hyper/Phaser) re-chassised into an orderable rack, plus **four genuinely new
-modules — Bode, Convolve, Utility, and the three Splitters** (What's New pp. 12–13, verbatim headings:
-"Bode — New frequency shifter effect", "Convolve — New convolution effect", "Utility — New utility effect").
+modules — Bode, Convolve, Utility, and the three Splitters** (What's New **p. 12** for the three effects,
+verbatim headings: "Bode — New frequency shifter effect", "Convolve — New convolution effect",
+"Utility — New utility effect"; **p. 13** for "New Signal Splitter Modules" — Splitter L/H, Splitter
+L/M/H, Splitter M/S. [AUDIT2 — re-extracted from the PDF; the draft's "pp. 12–13" for all four was one
+page off on the effects]).
 The competitive gap they closed in v2 was *architecture*; the DSP they added was a shifter, a convolver,
 and a trim strip. That is exactly the shape of the epic in front of us.
 
@@ -103,23 +142,35 @@ Serum 2 ships **13 FX processors + 3 splitter modules = 16 menu entries** (manua
 section with 13 different FX processors that you can use in any order or combination, including multiple
 instances of the same processor. There are also three types of splitter modules."*).
 
-### 1.1 Three racks + a routable mixer (the real superpower)
+### 1.1 Main + two aux busses, plus a routable mixer (the real superpower)
 
-- FX tab holds **three tabs: MAIN, BUS 1, BUS 2** — three independent racks (p. 153).
+- **[AUDIT2 — naming, so this never reads as a contradiction again.]** Xfer's *marketing* term is
+  **"Dual FX Busses"** (What's New p. 11, verbatim: *"Dual FX Busses — Two separate FX busses for added
+  flexibility"*) and the *manual's* term is **three racks** (p. 153, verbatim: *"Serum offers three FX
+  racks: MAIN, BUS 1, and BUS 2"*). **Both are correct and they are the same architecture:** the MAIN rack
+  is the output insert chain, and **BUS 1 / BUS 2 are the two aux busses** the marketing counts. Say
+  "Main + two aux busses" when precision matters; a prior audit's correction to "dual FX busses" is
+  **confirmed**, not overturned.
 - The **Mixer page** routes every source (each oscillator channel, each filter, noise) to Main, Bus 1 or
-  Bus 2; the **busses themselves route to Main, Direct, or the OTHER bus** (p. 150) — so parallel chains,
-  serial bus-into-bus chains, and a dry Direct path all coexist. Per-bus one-click FX bypass on the mixer.
+  Bus 2 via per-source BUS send knobs; the **busses themselves route to Main, Direct, or the OTHER bus**
+  (p. 150, verbatim option row: *"Bus 1 or Bus 2 — Route the signal to the other bus"*) — so parallel
+  chains, serial bus-into-bus chains, and a dry Direct path all coexist. Per-bus one-click FX bypass on
+  the mixer.
 - This is the fb303 "main-send insert" idea generalized: N racks × per-source sends. It is also exactly the
   territory where **fb305/fb338's exclusion-sum landmine** lives on our side.
   **[AUDIT — the citation this file shipped with was WRONG.]** The exclusion sums are **not** in
-  `index.html` and there are **three** of them, not two. Verified by reading the tree:
-  `Source/PluginProcessor.cpp:7159` (reverb block), **`:7326`** (distortion / per-osc routing block) and
-  **`:7358`** (delay block) — each computes
+  `index.html`. Verified by reading the tree: **THREE blocks** —
+  `Source/PluginProcessor.cpp:7159` (reverb main-send), **`:7326`** (distortion main-send, in the
+  `applyDst` lambda's non-routed branch) and **`:7358`** (delay main-send, in `applyDly`) — each computes
   `rtdL = ((rvbSendL?…:0) + (dlySendL?…:0) + (dstSendL?…:0)) * outputGain * kVoiceToFxPad;`
   and subtracts it from the main send. The comment on every one of those lines states the law itself:
-  *"fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion."* Any Terrain bus expansion edits
-  **all three** sites or the new bus double-counts. (`index.html:6979`/`:7111` are unrelated UI markup —
-  a robin SVG and the ribbon-row CSS.)
+  *"fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion."*
+  🚨 **[AUDIT2] Three BLOCKS, but SIX LINES.** Each block's **right-channel** sum (`rtdR`) sits on its own
+  following line — **`:7161`, `:7328`, `:7360`** — and those lines carry **no** `fb305 law` comment. So
+  `grep 'fb305 law'` returns 3 and an editor who trusts that count patches the left channel only, leaving
+  the right channel double-counting its own dry. **Any Terrain bus expansion edits all SIX lines.**
+  (`index.html:6979`/`:7111` are unrelated UI markup — `:6979` is a `<path>` inside an SVG glyph and
+  `:7111` is a blank line just above the `#ribbon-redesign` `<style>` block. Neither is an exclusion sum.)
 
 ### 1.2 Module lifecycle (all p. 155–158, verified)
 
@@ -132,7 +183,25 @@ instances of the same processor. There are also three types of splitter modules.
 | Remove | ✕ in list view |
 | Rack presets | per-rack Save/Load FX Bus (the manual's operations table lists **Add FX Module · Cut / Copy / Paste FX Bus** (move whole chains between busses) **· Clear FX Bus · Lock FX Bus / Lock All FX Busses** (rack survives preset changes — but *"modulation assignments to module parameters in the locked rack are cleared when changing presets"*) **· Load FX Bus · Save FX Bus**). An "Init" entry is **[UNVERIFIED]** — it is not in the manual's operations table |
 | Module presets | per-module menu: Factory presets, Save FX Preset, **Save as Default Preset** (your settings become the spawn state for that module type) |
-| Expanded view | a toggle widens the FX tab into list-view + tall rack (Alt/Opt+F since v2.0.17) |
+| Expanded view | a toggle widens the FX tab into list-view + tall rack ("This provides more rack space to display modules without scrolling", p. 155). The **Alt/Opt+F** shortcut is a v2.0.17 changelog item, not in the v2.0 manual — [AUDIT2] the changelog page re-fetched today confirms 2.0.17 (25 Apr 2025) added keyboard-shortcut work but the summary did not quote the F binding verbatim, so treat the exact keystroke as **[UNVERIFIED]** and the feature as sourced |
+
+**[AUDIT2] How many modules can a rack hold? No documented limit.** The manual (p. 152) says *"13
+different FX processors that you can use in **any order or combination, including multiple instances of
+the same processor**"*; What's New p. 11 adds the headline *"Multiple Instances — Add multiple instances
+of a single effect."* Neither states a maximum, and the Expanded-view text implies the rack simply
+**scrolls** when it overflows. The Xfer CPU-optimisation KB (re-fetched 2026-08-14) likewise states no
+effect-count ceiling — its only quantified advice is about unison voices. So: **unbounded as far as any
+official source says**, which is exactly how a user experiences it. Mark the *absolute* absence of an
+internal cap as **[UNVERIFIED]** (no source can prove a negative), but do **not** hedge the user-facing
+claim — stacking is effectively unlimited in Serum 2.
+
+🔗 **[AUDIT2] MAX'S RULING — Terrain MATCHES this, and this file may not imply otherwise.** Verbatim
+(2026-08-14): *"You can stack an unlimited number of effects and use multiple instances of the same effect
+in Serum 2… we should have an unlimited amount of effects basically. If people want to choose to do that
+then their CPU is on them."* The implementation is `FX-CHAIN-BIBLE.md`'s **`K = 24` slot pool** (3
+flagships + 24 slots = **27 devices**), and the pool exists **only** because hosts cache the parameter
+list — never as a taste or CPU judgement. **We never cap for CPU; we SHOW CPU.** Any sentence anywhere in
+this file that reads "Terrain will be more device-limited than Serum" is a defect: at K = 24 we are not.
 
 ### 1.3 Modulation onto FX (p. 159 — the paraphonic caveat, quoted)
 
@@ -175,7 +244,9 @@ market the same "one chorus beats 16 unison voices" story.
 
 ### 1.7 Why it FEELS like a different world (the honest answer)
 
-1. **Combinatorics, not depth** — 16 modules × any order × any count × 3 racks × nested band/MS lanes.
+1. **Combinatorics, not depth** — 16 modules × any order × any count × Main + 2 aux racks × nested band/MS
+   lanes. **[AUDIT2] This is the one axis we now match rather than concede** (`K = 24`, §1.2) — the racks
+   are the only part still ahead of us, and only until Stage C.
 2. **Everything is a preset** — racks, busses, modules, module defaults. Sound designers ship FX racks as
    product. Lockable racks make the FX chain feel like an instrument of its own.
 3. **Everything is a mod target** — LFO on a crossover, env on Bode shift.
@@ -287,9 +358,12 @@ Generic convolution engine, sold as reverb-and-beyond ("blend sounds in unique w
 | IR GAIN | impulse volume |
 | MIX / LEVEL | standard |
 
-**Visualizer:** the best in the rack — a real **IR waveform display** (green on black) that redraws as
-SIZE/ATTACK/DECAY/DAMP reshape the impulse; drag-and-drop target; embed badge top-right. Still **not
-audio-reactive** — it shows the IR, never the program.
+**Visualizer:** the best *static* drawing in the rack — a real **IR waveform display** (green on black)
+that redraws as SIZE/ATTACK/DECAY/DAMP reshape the impulse; drag-and-drop target; embed badge top-right.
+**[AUDIT2]** The draft said "still not audio-reactive"; that is now **[UNVERIFIED]** and probably wrong —
+Max confirmed Serum 2's displays react to audio. What *is* verifiable and still the competitive point:
+this display's **subject** is the impulse response, not the program, so however much it animates it never
+tells you what the convolution is doing to *your* signal. Our answer is a wet-energy overlay on the IR.
 **Terrain counter:** `ConvolutionReverb.h` ships inside Reverb (type 9 of 9, ParameterIDs.hpp:345) and
 `CONVOLUTION-USER-IR-ADDENDUM.md` covers user IRs — ⚠️ under the **NO DISK WRITES / decode-in-memory**
 hard rule, and IR-embed-in-preset is exactly the pattern our addendum needs to match. ϕ MIN is the one
@@ -308,7 +382,9 @@ feature we should steal outright (minimum-phase IR = "any sound becomes an EQ").
 
 **Visualizer:** a purple **filter-curve display** (band-shape between HP and LP skirts) with a **draggable
 node** setting FREQ and Q at once; **double-click toggles a real-time frequency (FFT) overlay** under the
-curve — one of only two audio-reactive displays in the whole rack. No echo-timeline, no tap dots.
+curve — one of only **two documented program-spectrum displays** in the whole rack (the other is the
+Filter, §2.8). [AUDIT2 — reworded from "only two audio-reactive displays"; that framing is retracted.]
+No echo-timeline, no tap dots — it shows the in-loop filter, never the repeats.
 **Terrain counter:** shipped Delay (4 types Digital/Tape/BBD/Diffuse × per-type Characters,
 DelayEngine.h:1-8 — one shared fractional line with ping-pong, HQ toggle, in-loop tone, wow/flutter, BBD
 companding, diffusion, ducking, M/S width; ParameterIDs.hpp:374-375) + the **echo-timeline visualizer**
@@ -356,8 +432,11 @@ could not be determined from the manual or the binary's strings. Treat the *exis
 | MIX / LEVEL | standard |
 
 **Visualizer:** the **transfer-curve display** (orange curve on black) — **drag vertically in the display
-to set DRIVE**. X-Shaper opens a pop-up X-Y curve editor (Edit A / Edit B). Static with respect to audio —
-no signal occupancy on the curve.
+to set DRIVE**. X-Shaper opens a pop-up X-Y curve editor (Edit A / Edit B). **[AUDIT2]** The draft called
+it "static with respect to audio"; downgraded to **[UNVERIFIED]** (Max confirms Serum displays do move).
+The claim that survives is narrower and is the one our bible actually beats them on: the manual documents
+**no signal-occupancy readout** — no marker showing *how far up the curve the current program is driving*.
+That is what `DISTORTION-BUILD-BIBLE.md` §5.8 ships and what makes Drive legible instead of guessed.
 **Terrain counter:** shipped and certified (fb345): 23 modes × 6 families × 8 Characters
 (ParameterIDs.hpp:406-407), family-keyed back-8, house drive law `driveDb = D_max·t^0.8`, ADAA budget,
 transfer-curve display **with live signal occupancy** (distortion bible §5.8), Morph split from Drive, a
@@ -375,11 +454,17 @@ R band = High Shelf / Peak / **Low Pass**.
 | FREQ / Q / GAIN (R) | **2041 Hz / 0.60 / 0.0 dB** (GAIN dead when type=LP) |
 | LEVEL | note: **no MIX knob on the EQ** (the one module without it) |
 
-**Visualizer:** a thin **static response-curve line** between the two knob clusters. Not audio-reactive,
-not draggable (the manual documents dragging only for Filter/Delay/Distortion displays).
-**Terrain counter:** `EQUALIZER-BUILD-BIBLE.md` (7 Types on one chassis) + per-layer `ParametricEQ.h`
-already in-tree (IndyFxChain slot 6). An EQ with a live analyzer under the curve (our fb-filter-analyzer
-tech, SpectrumAnalyzer.h) beats a static line trivially.
+**Visualizer:** a thin **response-curve line** between the two knob clusters, **not draggable** (the
+manual documents dragging only for the Filter, Delay and Distortion displays) and with **no documented
+FFT/analyzer mode** — the right-click display-mode menu exists on the Filter, not here. [AUDIT2 — the
+draft's flat "not audio-reactive" is retracted; what is sourced is the absence of a *spectrum* under the
+curve, not the absence of motion.]
+**Terrain counter:** `EQUALIZER-BUILD-BIBLE.md` (7 Types on one chassis) + `ParametricEQ.h` already
+in-tree (module 6 of the `IndyFxChain` order). An EQ with a live analyzer under the curve (our
+fb-filter-analyzer tech, `SpectrumAnalyzer.h`) beats a bare line. ⚠️ **[AUDIT2] But do NOT plan to recycle
+`ParametricEQ.h` as the rack engine** — `EQUALIZER-BUILD-BIBLE.md` found it **heap-allocates 9–15 times
+per sample per channel** (`ParametricEQ.h:135-158` runs the full RBJ design math at audio rate). It
+survives as one instance; in a 24-slot pool it is disqualified. See the corrected §10.1 row.
 
 ### 2.8 Filter  *(the synth filter as a bus FX — their deepest single module)*
 
@@ -473,7 +558,10 @@ BASIN** (Vintage/Nitrous/Basin new in Serum 2 per What's New).
 | BASIN | SIZE · PRE-DLY · FEEDBACK · CHORUS (dual) |
 
 **Visualizer:** a small green **spectral-tilt graph** whose ends fall as LO/HI CUT rise (numeric boxes
-LO 0 / HI 35 beneath); knobs re-populate per type. Not audio-reactive.
+LO 0 / HI 35 beneath); knobs re-populate per type. **[AUDIT2]** "Not audio-reactive" retracted →
+**[UNVERIFIED]**. The sourced weakness is narrower: the graph is driven by **two of a type's eight-plus
+params** (LO CUT / HI CUT) and shows nothing of SIZE, DECAY, DIFFUSION or the MODE geometry — it fails our
+law 9 test of *reflecting every param*, whether or not it also moves with the signal.
 **Terrain counter:** shipped Reverb = **9 types × per-type Characters** (ParameterIDs.hpp:345-346: Hall,
 Room, Plate, Spring, Digital, Vintage, Basin, Shimmer, Convolution — note we already occupied the "Basin"
 name before reading their menu). Spring + Shimmer + Convolution are three whole types Serum lacks. NITROUS's
@@ -506,20 +594,38 @@ no §5.4 in this file.
 
 ## 3. Visualizer doctrine — what Serum draws, and the gap we attack
 
-### 3.1 Survey result (eyewitness, all 16 strips)
+🚨 **[AUDIT2] READ THIS BEFORE THE TABLE — the section's original conclusion was FALSE and is retracted.**
+This file's first two passes concluded *"Serum 2's rack is ~87 % visually dead to audio."*
+**Max owns Serum 2 and confirmed first-hand on 2026-08-14 that its visualizers DO react to live audio.**
+The 87 % number was inferred from the manual documenting FFT overlays only on Filter and Delay — an
+argument from silence, and a bad one: a manual documents *user-facing controls*, not whether a canvas
+animates. **Delete "ours move, theirs don't" from every pitch.** The differentiator that survives, and
+the only one worth building against, is **house law 9 / fb311: ours move DRAMATICALLY (idle = dim,
+playing = bright, an obvious delta you cannot miss) and reflect EVERY param** — where Serum's displays
+are small, partial (usually 1–2 params of a module's 7–14) and, on most strips, a badge rather than an
+instrument. That is a claim about **degree and coverage**, it is defensible, and it does not depend on
+any assertion about their code that Max can disprove in ten seconds.
 
-| Archetype | Modules | What actually reacts |
+### 3.1 Survey result (what the strips SHOW — eyewitness, all 16, corrected)
+
+The axis below is **what the display's subject is**, not "does it animate" (which is [UNVERIFIED] per
+module and no longer the point).
+
+| Archetype | Modules | What the display's subject is |
 |---|---|---|
-| **Logo badge only** (no display) | Bode, Chorus, Compressor*, Flanger, Hyper/Dimension, Phaser, Utility | nothing (*Compressor has numeric readouts + H/M/L mini-sliders, still no GR meter) |
-| **Param-reactive curve** (redraws on knobs, blind to audio) | Equalizer (static line), Reverb (tilt graph), Distortion (transfer curve, drag-to-drive), Convolve (IR waveform, drag-drop + embed badge) | params only |
-| **Audio-reactive** (live FFT) | Filter (FR+FFT / Phase+FFT modes), Delay (FFT overlay, **off by default**, double-click to enable) | the only two places the rack ever shows the signal |
-| **Structural** | Splitters (lane panels + crossover values) | selection state |
+| **Logo badge only** (no instrument display at all) | Bode, Chorus, Compressor*, Flanger, Hyper/Dimension, Phaser, Utility | nothing — branding (*Compressor has numeric readouts + H/M/L mini-sliders, and **still no GR meter**, which is the real indictment) |
+| **Param drawing** (its subject is the setting, not the signal) | Equalizer (response line), Reverb (LO/HI-CUT tilt graph — 2 of 8+ params), Distortion (transfer curve, drag-to-drive, **no signal-occupancy marker**), Convolve (IR waveform — the impulse, never the program) | the module's own parameters |
+| **Signal instrument** (documented spectrum of the actual audio) | Filter (Frequency Response **+ live FFT** / Phase + FFT, right-click menu, Option-click cycles), Delay (FFT overlay under the filter curve, **off by default**, double-click to enable) | the program — the only two places the manual documents a spectrum |
+| **Structural** | Splitters (lane panels + crossover values) | selection state; **no per-lane meters, no crossover curve** |
 
-**The honest conclusion:** Serum 2's rack is **~87 % visually dead to audio**. Two FFT overlays (one
-opt-in) is the entire live story. Max's hard rule 9 (idle=dim, playing=bright, obvious delta) applied
-across our SIXTEEN devices (§5 [AUDIT] — the draft said ten) is, by itself, a visible product-level differentiator no Serum screenshot can
-match. Their strength is **direct manipulation** (drag the curve, drag the node, drag the drive) — that we
-must match, not just their prettiness.
+**The honest conclusion, restated [AUDIT2]:** the manual documents a **program-spectrum instrument on
+exactly two of sixteen modules**, and seven of sixteen carry no display at all. Whatever motion the other
+strips have, **fourteen of sixteen never show you the signal**, and none of the four param drawings
+reflects more than a fraction of its module's controls. Max's law 9 applied across our **sixteen deep
+devices** (§5 [AUDIT] — the draft said ten), with every card reading the live audio *and* every param,
+is a product-level differentiator — stated as **"every card is an instrument"**, never as "theirs are
+frozen." Their real strength is **direct manipulation** (drag the curve, drag the node, drag the drive,
+drag the crossover) — that we must match, not just out-pretty.
 
 ### 3.2 Proposed concepts for OUR cards (canvas, CPU-cheap, law-9 compliant)
 
@@ -549,17 +655,17 @@ must match, not just their prettiness.
 | Delay: 4 types × Characters (BBD companding, Diffuse), ducking, echo-timeline viz | DelayEngine.h:1-8 | 1 delay, 3 routings, in-loop filter |
 | Tape machine (BPM-synced stereo tape looper) + TapeMachines/TapeProcessor | TapeLoopProcessor.h:8 [AUDIT — was cited as :6] | nothing |
 | Granular engine | GranularEngine.h | nothing (sampler ≠ granular FX) |
-| Per-layer independent FX chains (grain→delay→space→tape→june→eq per layer) | IndyFxChain.h:13 | none — their FX are strictly post-sum (self-admitted paraphonic) |
+| A second, state-independent FX chain (grain→delay→space→tape→june→eq) that runs beside the global one | `IndyFxChain.h:12-13` (the order comment) + `PluginProcessor.h:1666` (`tw::IndyFxChain indyChain`) ⚠️ **[AUDIT2] the draft called this "per-layer independent FX chains" and that OVERCLAIMS.** There is exactly **ONE** `IndyFxChain` instance in the processor, not one per layer. Its docstring says what it really is: *"One private FX-chain instance for the per-chop FX-independence routing… Shares APVTS parameter VALUES with the global chain… but has INDEPENDENT STATE (own reverb tail, grain history, delay line, etc.)"* (`IndyFxChain.h:2-8`) | their FX are strictly post-sum (self-admitted paraphonic). We have **two** parallel FX-state chains where they have one rack; that is still a real edge — just not "per layer" |
 | Four front-page performance modes ARP/CHOP/GLITCH/ROBIN chainable | FlowChain.h, fb105-132 | arp/clip-sequencer (not FX-domain) |
-| Dramatic audio-reactive visualizers as a hard rule | fb311 + shipped cards | two FFT overlays total (§3.1) |
+| Every card an instrument: live audio **and** every param, dramatically (law 9 / fb311) | fb311 + shipped cards | **[AUDIT2 — row rewritten; the old row said "two FFT overlays total" as if their rack were frozen. Max confirms their displays react.]** Their displays move, but the manual documents a *program-spectrum* instrument on only 2 of 16 modules, 7 of 16 carry no display at all, and no display reflects more than a fraction of its module's params (§3.1) |
 | Perceptual certification harnesses per family | Phase G ledger | (not a shipped feature, but our quality moat) |
 
 ### 4.2 Serum 2 HAS, Terrain LACKS (the epic's shopping list, priced)
 
 | Serum capability | Status in Terrain | Cost signal |
 |---|---|---|
-| **Free device ordering, any count, multiple instances** | **[AUDIT — this row was stale.]** fb307's boolean was replaced in **fb341**: `SYN_FX_ORDER` is now an `AudioParameterChoice` with the **6 permutations of THREE devices** (`PluginProcessor.cpp:3488-3496`, strings "Reverb > Delay > Distortion" … "Delay > Reverb > Distortion"; read as an index at `:5860` into `fxPerm_`; UI at `index.html:7943/:7974/:8323`, which writes `pi/5`). ⚠️ `ParameterIDs.hpp:435`'s comment still says "bool" and is itself stale. Engines remain one-instance members (distortion bible §0) | THE core epic work: N-slot chain + per-slot engine instances. **Note the cardinality trap (§4.4-C): a 6-choice param CANNOT grow to 4 devices (24 orders) in place — that needs a new, final-sized param, or an order representation that is not a choice list at all.** |
-| **Parallel busses (3 racks) + per-source sends + bus→bus routing** | fb303 main-send only | fb305/fb338 exclusion-sum landmine at **`PluginProcessor.cpp:7159`/`:7326`/`:7358`** (three sites — see §1.1 [AUDIT]; distortion bible §4.5) |
+| **Free device ordering, any count, multiple instances** | **[AUDIT — this row was stale.]** fb307's boolean was replaced in **fb341**: `SYN_FX_ORDER` is now an `AudioParameterChoice` with the **6 permutations of THREE devices** (`PluginProcessor.cpp:3488-3496`, strings "Reverb > Delay > Distortion" … "Delay > Reverb > Distortion"; read as an index at `:5860` into `fxPerm_`; UI at `index.html:7943/:7974/:8323`, which writes `pi/5`). ⚠️ `ParameterIDs.hpp:435`'s comment still says "bool" and is itself stale (verified 2026-08-14). Engines remain one-instance members (distortion bible §0) | THE core epic work: the K-slot chain + per-slot engine instances. **[AUDIT2] This is a gap in the CODE, not in the PLAN — Max ruled we match Serum's unlimited stacking and `FX-CHAIN-BIBLE.md` §3.2 has set `K = 24` (27 devices).** Note the cardinality trap (§4.4-C): a 6-choice param CANNOT grow to 4 devices (24 orders) in place — the slot pool makes it moot, because order becomes *which engine sits in which slot* |
+| **Parallel busses (Main + 2 aux) + per-source sends + bus→bus routing** | fb303 main-send only | fb305/fb338 exclusion-sum landmine — **three blocks / SIX lines**: `PluginProcessor.cpp:7159`+`:7161`, `:7326`+`:7328`, `:7358`+`:7360` (see §1.1 [AUDIT2]; distortion bible §4.5) |
 | **Splitters (band/MS lanes with nested racks)** | SPLITTER-BUILD-BIBLE ready, not built | chain-integration heavy (bible §6 is the hard part) |
 | **Bode frequency shifter** | [AUDIT — row was wrong] bible AND engine both exist: `BODE-BUILD-BIBLE.md` + `TerrainFilters.h:1110/:1127` (`BodeAP`/`BodeShifter`) | device build on the fb275 chassis; the SSB core is already written and certified as a filter type |
 | Compressor / EQ / Flanger / Phaser / Hyper / Chorus-as-bus-device | bibles ready, not built | per-device builds on the locked chassis |
@@ -573,18 +679,29 @@ must match, not just their prettiness.
 
 ### 4.3 The competitive frame ($99 vs $249)
 
-**[AUDIT — pricing re-verified live on the Xfer product page, 2026-08-14.]** Serum 2 is **$249.00 USD**
-today. The **$189 intro price EXPIRED on 1 June 2025** — quoting it as current pricing is wrong. And the
+**[AUDIT — pricing re-verified live on the Xfer product page, 2026-08-14. AUDIT2 — re-fetched the same
+day and CONFIRMED unchanged.]** Serum 2 is **$249.00 USD** today. The **$189 intro price EXPIRED on
+1 June 2025** (rekkerd changelog coverage, re-fetched) — quoting it as current pricing is wrong. And the
 number that actually matters competitively was missing from this file: the product page states
-**"Serum 2 is a free upgrade for Serum 1 owners"** plus **"Lifetime free updates."** So the realistic
-competitive frame is not "$99 vs $249" — it is **"$99 vs $0 for the enormous installed base of Serum 1
-owners, $249 for everyone else."**
+**"Serum 2 is a free upgrade for Serum 1 owners"** plus *"Lifetime free updates actually means lifetime
+free updates."* So the realistic competitive frame is not "$99 vs $249" — it is **"$99 vs $0 for the
+enormous installed base of Serum 1 owners, $249 for everyone else."**
 
 That sharpens, not weakens, the strategy. Against a free upgrade you cannot win on module count; you win on
 what the incumbent's rack demonstrably does not do. Terrain at $99 does not need 16 shallow modules; it
-needs the **chain architecture** (order/count/parallel/split) carrying its **sixteen deep devices** (§5 [AUDIT] — the draft undercounted at ten), each with a
-visualizer that moves. "Fewer, deeper, visibly alive" is the only defensible position — 14 of Serum's 16
-strips are visually dead to audio (§3.1) and every one of our deep devices is already certified or bibled.
+needs the **chain architecture** (order/count/parallel/split) carrying its **sixteen deep devices** (§5
+[AUDIT] — the draft undercounted at ten), each with a card that is a real instrument.
+
+⚠️ **[AUDIT2] The two pitch lines this section previously rested on are both retired.**
+- ~~"14 of Serum's 16 strips are visually dead to audio"~~ — **false**, retracted (§3.1). Never say it.
+  Say instead: *fourteen of their sixteen strips never show you the signal at all, and not one of their
+  displays reflects more than a fraction of its module's params; every Terrain card shows both, boldly.*
+- ~~"we'll be more limited on device count but deeper per device"~~ — **also retired.** Max ruled we match
+  Serum's unlimited stacking (`K = 24`, §1.2). The position is now **"as stackable as Serum, and every
+  device is deeper"** — we concede nothing on architecture ambition, only on ship *order*.
+
+"**Fewer devices, each far deeper, all of them stackable, every one of them visibly alive**" is the
+defensible position, and every one of our deep devices is already certified or bibled.
 
 ### 4.4 RACK-WIDE ARCHITECTURAL LAWS — the constraints the epic cannot design around
 
@@ -592,8 +709,8 @@ strips are visually dead to audio (§3.1) and every one of our deep devices is a
 did not exist. They are hard limits of the host formats and of our own signal topology, not preferences.]**
 
 **A. ZERO LOOKAHEAD ANYWHERE IN THE RACK.** The fb305/fb338 main-send exclusion sums subtract the routed dry
-**sample-aligned** (`PluginProcessor.cpp:7159/:7326/:7358` — a plain per-sample subtract, no delay
-compensation on the dry path). The instant any device reports latency, the dry it is supposed to cancel
+**sample-aligned** (`PluginProcessor.cpp:7159`+`:7161` / `:7326`+`:7328` / `:7358`+`:7360` — a plain
+per-sample subtract, no delay compensation on the dry path). The instant any device reports latency, the dry it is supposed to cancel
 leaks back *phase-smeared* instead of nulling. Consequences, stated so nobody re-proposes them:
 - **No lookahead limiting.** The Compressor device's Limit topology must be a zero-lookahead true-peak
   design (or a soft-knee clipper), never Serum's opt-in-latency limiter — §6.5 and §9.4 already call their
@@ -606,33 +723,68 @@ leaks back *phase-smeared* instead of nulling. Consequences, stated so nobody re
 
 **B. PARAMETERS CANNOT BE CREATED AT RUNTIME.** JUCE/VST3/AU cache the parameter list at construction; the
 host builds automation lanes from it once. "Add a device to the chain" therefore **cannot** allocate that
-device's 11 params on demand. The epic's chain must be a **PRE-ALLOCATED SLOT POOL**: N slots × the full
+device's 11 params on demand. The epic's chain must be a **PRE-ALLOCATED SLOT POOL**: K slots × the full
 fb275 param set (2 dropdowns + 8 knobs + Mix + hero knobs), created at construction, with a per-slot
-"device type" choice that *routes* those params to whichever engine occupies the slot. Anything in §11 Q1/Q2
-that reads as "unlimited instances" resolves to "N is chosen once, at birth, and never changes." Pick N with
-the automation-lane cost in mind (N × the per-slot param set × the host's lane UI), not with the CPU cost —
-CPU is handled by slot sleep (§8), lanes are not. **`FX-CHAIN-BIBLE.md` owns this decision and has already
-costed it: K = 5 slots × 26 params = 130 new params.** This file states the law; the chain bible states the
-number. (Corroboration that the law is real and independently derived: the chain bible's own headline find
-is *"JUCE cannot create parameters at runtime — the `+` button can therefore never create a device, only
-claim a pre-allocated slot."*)
+"device type" choice that *routes* those params to whichever engine occupies the slot. (Corroboration that
+the law is real and independently derived: the chain bible's own headline find is *"JUCE cannot create
+parameters at runtime — the `+` button can therefore never create a device, only claim a pre-allocated
+slot."* Serum does the identical trick elsewhere — its LFOs 7–10 "appear" only once you assign LFO 6.)
+
+🚨 **[AUDIT2 — this paragraph previously drew the WRONG conclusion from a correct law, and the numbers
+were stale. Both corrected.]**
+- **The law does NOT mean we are more limited than Serum.** The earlier text read "unlimited instances
+  resolves to 'N is chosen once at birth'" as though the user experience were capped. **Max ruled
+  otherwise on 2026-08-14: Terrain matches Serum's unlimited stacking, and the user never meets the cap.**
+  The pool exists **only** because hosts cache the parameter list — it is an implementation detail, never
+  a taste or CPU judgement. *"If people want to choose to do that then their CPU is on them."*
+- **The number is `K = 24`, not 5.** `FX-CHAIN-BIBLE.md` §3.2 is the authority and has been re-costed:
+  **25 params/slot × 24 slots = 600 new params** on top of the **964** already registered ⇒ **1 564
+  total** (3 flagships + 24 slots = **27 devices**). The old "K = 5 × 26 = 130 on top of 972" was wrong in
+  the cap, the per-slot count and the baseline — do not re-quote it from this file.
+- **The price of a generous pool, made explicit:** an empty or bypassed slot must cost **exactly zero**,
+  not "nearly zero" — no engine allocation until `DEVICE ≠ Empty`, no per-block work for a powered-off
+  slot, fb342 control-head sleep + fb345 silence sleep per slot, verified with a 24-empty-slot CPU null
+  against the 0-slot build. If K is ever revisited, the honest lever is trimming the 6 route pills per
+  slot (25 → 19 ⇒ 1 420 params), **not** shrinking K.
+- The remaining real cost of a large K is **host automation-lane clutter** (K × ~25 lanes), not CPU. Serum
+  2's own rack automation reads the same way ("FX Slot 2 P5"), so this is parity, not a regression.
 
 **C. CHOICE-PARAM CARDINALITY IS FIXED AT BIRTH (fb342 law).** A `juce::AudioParameterChoice`'s list length
 is frozen when it is constructed; growing it later silently re-maps every saved preset's normalised value.
 Two direct consequences for this file's own proposals:
-- The **per-slot device-type dropdown must be sized for the FINAL roster on day one** — all 12 entries of
-  §5 (Reverb, Delay, Distortion, Chorus, Compressor, Equalizer, Phaser, Flanger, Hyper, Splitter, Shift,
-  Filter) plus deliberate headroom, with not-yet-built entries shipped **disabled**. Shipping "the three we
-  have now and we'll extend it" is the defect.
+- The **per-slot device-type dropdown must be sized for the FINAL roster on day one**, with not-yet-built
+  entries shipped **disabled**. Shipping "the three we have now and we'll extend it" is the defect.
+  🚨 **[AUDIT2 — the draft said "all 12 entries of §5" and that is now internally inconsistent AND
+  inconsistent with the chain bible. This is an unresolved conflict, flagged rather than papered over:]**
+  - This file's own §5 roster is **16 devices** (Reverb, Delay, Distortion, Chorus, Compressor,
+    Equalizer, Phaser, Flanger, Hyper, Splitter, Bode, Filter, Utility, Granular, Tape, OTT) — the "12"
+    was left over from the pre-audit roster that omitted Utility/Granular/Tape/OTT and still called Bode
+    "Shift". With `0 = Empty` that needs **17 entries minimum**.
+  - `FX-CHAIN-BIBLE.md` §3.2 currently specs `SYN_FXS{k}_DEVICE` as **`choice(16)`** = Empty + 11 named
+    + 4 Reserved — which **cannot hold this file's own 16-device roster**, let alone headroom.
+  - ⚠️ **ACTION BEFORE ANY SLOT PARAM IS CREATED:** reconcile the two. Recommended sizing is
+    **`choice(24)`** (Empty + 16 named + 7 reserved), because law C makes this list unfixable after ship
+    and the marginal cost of reserved entries is zero. Settle it in `FX-CHAIN-BIBLE.md`, not here.
 - **`SYN_FX_ORDER` cannot grow in place.** It is a 6-entry choice (3 devices). Four devices is 24 orders,
-  five is 120 — a choice list is the wrong representation past three. The N-slot pool makes this moot
+  five is 120 — a choice list is the wrong representation past three. The K-slot pool makes this moot
   (order = which engine sits in which slot), which is another reason B and C must be decided together,
   before any device build.
 
-**D. EVERY NEW SEND BUS JOINS ALL THREE EXCLUSION SUMS.** Restated here because it is a rack law, not a
-distortion note: `PluginProcessor.cpp:7159`, `:7326`, `:7358`. Miss one and that bus's dry is counted twice.
-The verify gate is a null test: route one osc to the new bus, set its device Mix to 0, and confirm the
-output is bit-identical to the un-routed render.
+**D. EVERY NEW SEND BUS JOINS ALL SIX EXCLUSION-SUM LINES.** Restated here because it is a rack law, not a
+distortion note. **[AUDIT2 — the count was wrong: three BLOCKS, six LINES.]**
+
+| Block | L sum (`rtdL`) | R sum (`rtdR`) | carries the `fb305 law` comment |
+|---|---|---|---|
+| Reverb main-send | `PluginProcessor.cpp:7159` | `:7161` | L only |
+| Distortion main-send (`applyDst`, non-routed branch) | `:7326` | `:7328` | L only |
+| Delay main-send (`applyDly`) | `:7358` | `:7360` | L only |
+
+Because only the L lines carry the comment, `grep 'fb305 law'` returns **3** — trusting that count patches
+the left channel and leaves the right channel double-counting its own dry, which presents as a *stereo*
+bug (right-side dry bleed at Mix 100 %) and will be mis-diagnosed as a width/pan problem. Miss any of the
+six and that bus's dry is counted twice. The verify gate is a null test **run on both channels
+independently**: route one osc to the new bus, set its device Mix to 0, and confirm the output is
+bit-identical to the un-routed render, L and R.
 
 ---
 
@@ -804,15 +956,20 @@ from the tree: the fb342 spring-reverb SIMD pass moved 6 springs from 2353 → 5
 **12.5 % → 2.6 % of one core** — i.e. **~210 ns/sample ≈ 1 % of one core** is the working conversion at our
 sample rate. Budget the chain against that:
 
+**[AUDIT2] Re-scaled to the ruled `K = 24` pool. The doctrine changed with it: we do NOT cap for CPU, we
+SHOW CPU** (Max: *"their CPU is on them"*). So the ship gate is about the *realistic* patch and about
+empty slots costing literally nothing — there is no longer a "worst case must stay under X" gate that
+would justify shrinking K.
+
 | Slot state | Budget (per instance, one core) | Enforcement |
 |---|---|---|
-| Empty / powered-off slot | **≤ 0.05 %** | control-head sleep + silence sleep (fb342); no per-sample loop runs |
+| Empty / powered-off slot | **exactly 0** (not "≈ 0") — the price of a 24-slot pool | no engine allocated until `DEVICE ≠ Empty`; no per-block work; control-head sleep + silence sleep (fb342/fb345). **Verify: 24-empty-slot CPU null against the 0-slot build** |
 | Idle (device on, input silent) | **≤ 0.1 %** | denormal flush at slot bounds + silence sleep (§9.9) |
-| Cheap device active (EQ, Utility-trim, Chorus, Flanger, Phaser, Hyper) | **≤ 1 %** | no oversampling, ever |
-| Mid device active (Delay, Compressor, Filter, **Shift**) | **≤ 2.5 %** | Shift = 24 Hilbert biquads + 2 osc + 1 delay line ≈ 0.3× one reverb; no oversampling ever (§5.3) |
-| Expensive device active (Reverb, Distortion at High/Ultra, Convolve) | **≤ 5 %** | oversample only the modes that measurably alias |
-| **Whole chain, 8 slots, realistic patch (3–4 active)** | **≤ 10 % of one core** | the ship gate |
-| Absolute worst case (8 expensive slots, Ultra) | ≤ 35 % | must not glitch; may warn |
+| Cheap device active (EQ, Utility-trim, Chorus, Flanger, Phaser, Hyper) | **≤ 1 %** | no oversampling, ever. 🔑 **These are the ones users actually stack** (chain bible §3.2-4), so *aggressively* cheap is a requirement, not a nicety — the cost curve must bend down exactly where the piling-up happens |
+| Mid device active (Delay, Compressor, Filter, **Bode**) | **≤ 2.5 %** | Bode = 24 Hilbert biquads + 2 osc + 1 delay line ≈ 0.3× one reverb; no oversampling ever (§5.3) |
+| Expensive device active (Reverb, Distortion at High/Ultra, Convolve) | **≤ 5 %** | oversample only the modes that measurably alias. Nobody stacks five reverbs; do not design K around this row |
+| **Realistic patch (3–5 active devices of 24 slots)** | **≤ 10 % of one core** | the ship gate |
+| Pathological patch (many expensive slots at Ultra) | **no cap — meter it** | must not glitch or crash; the UI shows per-slot cost and the user decides. This replaces the draft's "8 expensive slots ≤ 35 %" gate, which encoded a device cap we no longer have |
 
 Their own optimisation guide is our benchmark harness input: one bus chorus must measure cheaper than a
 7-voice unison, or we have no right to repeat their "one chorus beats 16 unison voices" story.
@@ -821,9 +978,11 @@ Their own optimisation guide is our benchmark harness input: one bus chorus must
 
 ## 9. Pitfalls — collected for the epic (their warts + our known landmines)
 
-1. **Exclusion-sum landmine:** any new bus/send re-breaks fb305 at **`PluginProcessor.cpp:7159`, `:7326`,
-   `:7358` — THREE exact sites, not two, and not in index.html** [AUDIT, re-verified by reading the file;
-   see §1.1 and rack-law D in §4.4]. First edit of the epic.
+1. **Exclusion-sum landmine:** any new bus/send re-breaks fb305 at **`PluginProcessor.cpp:7159`+`:7161`,
+   `:7326`+`:7328`, `:7358`+`:7360` — THREE blocks / SIX lines, not two sites, and not in index.html**
+   [AUDIT2, re-verified by reading the file; see §1.1 and rack-law D in §4.4]. ⚠️ Only the three **L**
+   lines carry the `fb305 law` comment, so grepping it under-reports by half and yields a right-channel-
+   only dry-bleed bug. First edit of the epic.
 2. **Locked racks silently drop mods** (their documented behavior §1.2) — if we ship rack-lock, mods must
    survive or the UI must say so BEFORE the preset switch.
 3. **Paraphonic retrigger surprise** (§1.3) — env-on-FX needs an explicit trigger policy.
@@ -849,10 +1008,13 @@ Their own optimisation guide is our benchmark harness input: one bus chorus must
 
 **Rack-laws (§4.4) first, because they gate the rest:** **A** zero lookahead — no lookahead limiter, no
 linear-phase EQ, no framed spectral device; internal latency compensated and reported as zero (§6.5).
-**B** no runtime params — the chain is a pre-allocated slot pool, N frozen at birth (§11 Q2). **C** choice
-cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster with unbuilt entries disabled;
-`SYN_FX_ORDER` cannot grow past 3 devices (§4.2). **D** every new send bus joins all three exclusion sums at
-`PluginProcessor.cpp:7159/:7326/:7358`, null-tested (§9.1).
+**B** no runtime params — the chain is a pre-allocated slot pool, **`K = 24`** frozen at birth, which
+matches Serum's unlimited-stacking experience rather than limiting it (§11 Q2). **C** choice cardinality
+frozen — the device-type dropdown ships its FINAL roster (**≥ 17 entries: Empty + this file's 16 devices**;
+recommend `choice(24)` with reserved rows) with unbuilt entries disabled; `SYN_FX_ORDER` cannot grow past
+3 devices and is made moot by the slot pool (§4.2). **D** every new send bus joins **all six** exclusion-sum
+lines at `PluginProcessor.cpp:7159`+`:7161` / `:7326`+`:7328` / `:7358`+`:7360`, null-tested per channel
+(§9.1).
 
 
 1. **Bus reality −26 dBFS:** compressor thresholds and the Shift `Punch` env stated vs −26 dBFS program
@@ -870,9 +1032,15 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
    stage (§5.3); chain-level product clamp (§9.8).
 7. **No clicks:** glide every param; the global-smoothing-disable escape hatch is consciously NOT copied
    (§1.5).
-8. **CPU:** §8 — tiering only where aliasing is measured; slot sleep; Shift never oversampled.
-9. **Audible ⇒ visible + dramatic:** §3 is the doctrine; three concepts specified; the survey proves the
-   competitive gap (87 % of their rack is visually dead to audio).
+8. **CPU:** §8 — tiering only where aliasing is measured; slot sleep; **Bode** (the device formerly
+   sketched here as "Shift") never oversampled. **[AUDIT2] And the budget table now encodes the ruling:
+   an empty slot costs EXACTLY zero, and there is no worst-case cap — we meter rather than limit.**
+9. **Audible ⇒ visible + dramatic:** §3 is the doctrine; three concepts specified. **[AUDIT2] The old
+   proof-line ("87 % of their rack is visually dead to audio") is RETRACTED — Max confirmed first-hand
+   that Serum 2's visualizers react to live audio.** The surviving, sourced gap: the manual documents a
+   program-spectrum instrument on **2 of 16** modules, **7 of 16** carry no display at all, and no display
+   reflects more than a fraction of its module's params. Our compliance test is unchanged and is the real
+   bar — **every card, idle=dim → playing=bright with an obvious delta, reflecting every param** (fb311).
 10. **Recycle first:** see the verified inventory in §10.1 — nothing below was assumed; every row was
     opened and read during the audit.
 
@@ -883,12 +1051,12 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
 | Live spectrum taps (Chain X-Ray §3.2-2, Barber Falls §3.2-1, EQ analyzer) | `Source/SpectrumAnalyzer.h` | file present, already driving the shipped filter live-analyzer | do NOT write a second FFT |
 | Shift's feedback loop + damping + sync | `Source/DelayEngine.h:1-14` | header comment: one shared fractional stereo delay line, ping-pong, HQ interpolation, in-loop tone, wow/flutter, BBD companding, allpass diffusion, ducking, M/S width; **pure C++, no JUCE** (offline-validatable) | also the model for "returns WET only; processor owns Mix" |
 | Filter-as-FX device | `Source/TerrainFilters.h` — 2,195 lines, **94 types** behind one `FilterSlot` façade | line count read; 94 = `filterTypeChoices.add` calls in `PluginProcessor.cpp`; filter live-analyzer shipped | hosting + motion, not a DSP build (§11 Q3) |
-| Chorus device core | `Source/TerrainChorus.h:2` "Header-only Juno-60-inspired BBD chorus" | present AND already instantiated twice: `PluginProcessor.h:1502` and `IndyFxChain.h:282` | proves it survives multi-instancing — the slot-pool precedent |
-| EQ device core | `Source/ParametricEQ.h` | included at `IndyFxChain.h:31`; 7-band + HP/LP with per-band slope/bypass (`IndyFxChain.h:96-98`); it is the **6th** module of the per-layer chain (`IndyFxChain.h:13`) | |
+| Chorus device core | `Source/TerrainChorus.h:2` "Header-only Juno-60-inspired BBD chorus" | present AND already instantiated **twice** — `PluginProcessor.h:1502` (the global one) and `IndyFxChain.h:282` (inside the one `indyChain`). Both re-read this pass ✔ | proves the class survives multi-instancing. **[AUDIT2] Two is not twenty-four** — it is a proof of concept, not a load test. Before K = 24 ships, measure 24 concurrent instances for per-instance memory and the empty-slot zero-cost gate |
+| EQ device core | 🚨 **[AUDIT2] `Source/ParametricEQ.h` is NOT reusable as a rack engine — DO NOT plan on it.** | included at `IndyFxChain.h:31`; **7 bands (Freq/Gain/**Q**, not slope) + HP/LP cascades (slope is on the HP/LP only)** — `IndyFxChain.h:96-98`; it is the 6th module of the `IndyFxChain` order (`IndyFxChain.h:13`). ⚠️ **Verified by reading it this pass: `processSample()` (`:99-104`) calls `updateAllCoefficients()` EVERY SAMPLE, and that function (`:135-158`) calls `juce::dsp::IIR::Coefficients::makePeakFilter/makeHighPass/makeLowPass` — each returns a ref-counted heap object. That is 7 + hpN + lpN = up to 15 heap allocations per sample per channel on the audio thread.** The `EQUALIZER-BUILD-BIBLE.md` finding is CONFIRMED | Survives as the single per-chain instance it is today; in a 24-slot pool it is disqualified. The device EQ needs a coefficient-cached rewrite (compute on change, not on sample) — budget it as real work, not recycling |
 | IR / Convolve work | `Source/ConvolutionReverb.h` + `CONVOLUTION-USER-IR-ADDENDUM.md` | Convolution is reverb type **9 of 9** (`ParameterIDs.hpp:345`, choice list at `PluginProcessor.cpp:3414`: Hall, Room, Plate, Spring, Digital, Vintage, Basin, Shimmer, Convolution) | embed-in-preset must clear the NO-DISK-WRITES rule |
-| Per-slot independent FX state (the slot-pool precedent) | `Source/IndyFxChain.h:1-16` | "Owns its own copies of all 7 global FX modules… **shares APVTS parameter VALUES… but has INDEPENDENT STATE**" — exactly the shape a slot pool needs | read this before designing slots |
+| Per-slot independent FX state (the slot-pool precedent) | `Source/IndyFxChain.h:1-16` | Docstring verbatim: *"One private FX-chain instance for the per-chop FX-independence routing… Owns its own copies of all 7 global FX modules… Shares APVTS parameter VALUES with the global chain… but has INDEPENDENT STATE (own reverb tail, grain history, delay line, etc.)"* — exactly the shape a slot pool needs. **[AUDIT2] Precision: there is ONE instance (`PluginProcessor.h:1666`), and it serves the CHOP mode, not "per layer."** | Read this before designing slots — and read `:15-19` too: *"even when the mask is empty… the per-sample loop MUST still run"*. ⚠️ That is the **opposite** of the slot pool's zero-cost-empty-slot law (§4.4-B); the pattern to copy is the state-independence, **not** the always-run loop |
 | Chain-order plumbing | `SYN_FX_ORDER` — `PluginProcessor.cpp:3488-3496` (6-way choice), `:5860` (`fxPerm_` index read), `index.html:7943/:7974/:8323` | [AUDIT] it is a choice, not a bool | seed only — see the cardinality trap §4.4-C |
-| Exclusion-sum sites (touch all three) | `PluginProcessor.cpp:7159`, `:7326`, `:7358` | read verbatim during the audit | §4.4-D |
+| Exclusion-sum sites (touch **all six**) | `PluginProcessor.cpp:7159`+`:7161`, `:7326`+`:7328`, `:7358`+`:7360` | read verbatim during both audits; the `rtdR` lines confirmed at `:7161/:7328/:7360` this pass | §4.4-D. Only the L lines carry the `fb305 law` comment — never trust the grep count |
 | Bus-level calibration constant | `kVoiceToFxPad = 0.5f` (−6 dB), `PluginProcessor.cpp:6300-6301` | the pad every send is scaled by; the −26 dBFS program figure lives downstream of it (`DistortionEngine.h:28, 640`) | law 1 |
 | Type/character fade-swap machinery | Phase G char-switch deferred fade + state re-seat (fb345) | `DistortionEngine.h`, certified | reuse chain-wide (§9.11) |
 | Chassis + preset menu + dropdowns | `Design/fx-rack-v7-CANONICAL.html`, `Design/fx-back-panel-mockup.html`, `TIC.presets` / `.pmenu` glass | frozen canonical | never re-implement |
@@ -897,18 +1065,24 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
 
 ## 11. Open questions for Max
 
-1. **Rack architecture scope:** full Serum-style (3 busses + splitters + free order + multiple instances)
-   or staged — Stage A: N-slot single chain with drag order + multi-instance; Stage B: splitter lanes;
-   Stage C: busses? (fb305 landmine cost lives in Stage C.) ⚠️ **[AUDIT] Whatever the staging, N and the
-   device-type list length are decided ONCE, in Stage A, and are frozen forever (§4.4-B/C). This question
-   cannot be deferred past the first slot-pool commit.**
-2. **Multiple instances** require engine-per-slot allocation (today: one engine object per device,
-   distortion bible §0). ⚠️ **[AUDIT] "Unlimited with a CPU meter" is NOT AVAILABLE** — params cannot be
-   created at runtime (§4.4-B). The real question is: **what is N?** The cost of a large N is host
-   automation-lane clutter (N × ~11 lanes), not CPU (idle slots sleep, §8). **`FX-CHAIN-BIBLE.md` already
-   costed this and is the authority: K = 5 pre-allocated slots × 26 params = 130 new params.** Reconcile the
-   device-list length against the full 16-device roster in §5 (not the draft's 12) before that param is
-   created — see rack-law C.
+1. **Rack architecture scope:** full Serum-style (Main + 2 aux busses + splitters + free order + multiple
+   instances) or staged — Stage A: K-slot single chain with drag order + multi-instance; Stage B: splitter
+   lanes; Stage C: busses? (fb305 landmine cost lives in Stage C.) ⚠️ **[AUDIT] Whatever the staging, K and
+   the device-type list length are decided ONCE, in Stage A, and are frozen forever (§4.4-B/C). This
+   question cannot be deferred past the first slot-pool commit.** **[AUDIT2] K itself is no longer open —
+   Max ruled `K = 24`. What is still open is only the STAGING order above.**
+2. ~~**Multiple instances / what is N?**~~ **[AUDIT2] ANSWERED BY MAX, 2026-08-14 — CLOSED.** Verbatim:
+   *"You can stack an unlimited number of effects and use multiple instances of the same effect in Serum
+   2… we should have an unlimited amount of effects basically. If people want to choose to do that then
+   their CPU is on them."* ⇒ **`K = 24`** (3 flagships + 24 slots = 27 devices), **25 params/slot = 600 new
+   params on top of 964 ⇒ 1 564 total** (`FX-CHAIN-BIBLE.md` §3.2, the authority). The draft's framing here
+   — *"'unlimited with a CPU meter' is NOT AVAILABLE"* — was **half right and wholly misleading**: the
+   *parameter* count is fixed at birth (rack-law B stands), but the *user experience* is unlimited
+   stacking plus a CPU meter, which is exactly what Max asked for and exactly what Serum delivers. **We do
+   not cap for CPU; we show CPU.** What remains: (a) reconcile the device-list cardinality against §5's
+   16-device roster — the bible's `choice(16)` cannot hold it, recommend `choice(24)` (§4.4-C); (b) prove
+   the **exactly-zero empty slot** with a 24-empty-slot CPU null; (c) confirm 24 concurrent engine
+   instances for memory (the `TerrainChorus` ×2 precedent is not a load test).
 3. **Filter device Type list:** ship all existing synth filter types on the FX bus (Serum's move), or curate
    ~12 with Characters? (Their VAR knob ≈ our Character axis flattened — §2.8.)
 4. ~~**Utility:** fold into Splitter/chain-trim?~~ **[AUDIT] ANSWERED AND SUPERSEDED** —
@@ -940,13 +1114,40 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
      Distortion freq right-click menus, "Improved CPU usage spikes in Conv reverb". ⚠️ The installed build
      is **2.1.4** — everything between 2.0.17 and 2.1.4 is undocumented here.
    - **Still [UNVERIFIED], deliberately left in place:** the form of the Distortion DC-bias control (§2.6);
-     splitter nesting depth (§1.4); the "Init" entry in the rack-preset menu (§1.2); all screenshot-derived
-     numeric defaults (compressor −18.1 dB / 4:1 / 90.1 ms, EQ 210 Hz / 0.60 / 2041 Hz, distortion 425 Hz /
-     1.9, splitter 210 Hz default) — these came from reading images, not text, and no text source confirms
-     them; and whether the logo-badge strips animate with audio at all.
-   - Third-party review colour (SOS review is HTTP-410) and YouTube-walkthrough visualizer motion still
-     want 20 minutes of Max eyeballing Serum 2 live before card mockups lock. That is now the *only*
-     remaining research debt.
+     splitter nesting depth (§1.4 — [AUDIT2] re-grepped the FX chapter for "nest"/"inside a splitter":
+     **zero hits**, so the manual is simply silent; depth-1 remains an inference, not a fact); the "Init"
+     entry in the rack-preset menu (§1.2 — [AUDIT2] the ops table on manual p. 158 was re-extracted in
+     full and contains **Add FX Module · Cut / Copy / Paste FX Bus · Clear FX Bus · Lock FX Bus / Lock All
+     FX Busses · Load FX Bus · Save FX Bus** and nothing else, so "Init" stays unverified); the exact
+     **Alt/Opt+F** keystroke (§1.2); the existence of any hard cap on modules per rack (§1.2 — no source
+     states one, and a negative cannot be proved); and all screenshot-derived numeric defaults (compressor
+     −18.1 dB / 4:1 / 90.1 ms, EQ 210 Hz / 0.60 / 2041 Hz, distortion 425 Hz / 1.9, splitter 210 Hz) —
+     these came from reading images, not text, and no text source confirms them.
+   - ~~"whether the logo-badge strips animate with audio at all"~~ **[AUDIT2] RESOLVED BY MAX,
+     2026-08-14 — YES, Serum 2's visualizers react to live audio.** He owns it and checked. This was the
+     top open question in three sibling bibles (Bode, Phaser, and this file) and it is closed. **The
+     consequence, propagated through §0, §2.4, §2.6, §2.7, §2.12, §3.1, §4.1, §4.3 and §10-law-9: stop
+     treating "does it move" as the differentiator. The differentiator is that ours move DRAMATICALLY and
+     reflect every param (law 9 / fb311).** `FX-RACK-RESEARCH-INDEX.md` §6 carries the same ruling.
+
+   **[AUDIT2] Web debt, second pass.** WebSearch was again at 200/200, so the remaining sources were
+   pulled with **direct WebFetch** instead — this worked and should be the first move next time:
+   - Product page **re-fetched today**: $249.00 USD, "free upgrade for Serum 1 owners", "Lifetime free
+     updates actually means lifetime free updates." ✔ **Pricing claim CONFIRMED.**
+   - **What's New PDF re-fetched and text-extracted** (`pdftotext -layout`): "Dual FX Busses — Two separate
+     FX busses for added flexibility" · "Choose from 13 powerful effects and 3 types of splitter modules" ·
+     "Multiple Instances — Add multiple instances of a single effect" · "Rearrange Modules" · "Bypass
+     Modules" · "Expanded View" · "Presets — Access factory or user presets (racks and modules)" ·
+     "Direct Manipulation". ✔ **Bus architecture CONFIRMED** (Main + two aux = the manual's "three FX
+     racks"); ✔ **multiple instances CONFIRMED**; **no module-count limit stated anywhere.**
+   - **Xfer CPU KB re-fetched**: the 3–7-unison "red flag" and the "dedicated FX bus with a chorus" advice
+     are verbatim; **it states no ceiling on effect count.** ✔
+   - **v2.0.17 changelog re-fetched** (rekkerd, 25 Apr 2025): Key Track on Filter/Distortion freq
+     right-click menus ✔, conv-reverb CPU-spike fix ✔, intro $189 through 1 June 2025 / regular $249 ✔.
+     The Alt/Opt+F binding was not quoted verbatim in this fetch — downgraded to [UNVERIFIED] (§1.2).
+   - **Still unfetchable:** the Sound On Sound review (HTTP 410, both passes) and MusicRadar (404).
+     Third-party review colour remains the only open web item, and it is decorative — every load-bearing
+     claim now has an official or first-party source.
 
 ---
 
@@ -975,14 +1176,32 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
 - `/Library/Audio/Presets/Xfer Records/Serum 2 Presets/Effect Chains/` — **17 folders: the 16 FX modules
   plus `FX Rack`** (whole-rack presets). Independent confirmation of the 13 + 3 = 16 roster.
 
-**Web (fetched — re-fetched and re-read during the audit):**
+**Web (fetched — re-fetched and re-read during BOTH audits; AUDIT2 re-fetch dated 2026-08-14):**
 - Serum 2 product page: https://xferrecords.com/products/serum-2 — **"$249.00 USD"**, *"Serum 2 is a free
-  upgrade for Serum 1 owners"*, *"Lifetime free updates."* (§4.3)
+  upgrade for Serum 1 owners"*, *"Lifetime free updates actually means lifetime free updates."* (§4.3) ✔✔
 - What's New in Serum 2 (official PDF): https://static.xferrecords.com/Serum%202%20What's%20New.pdf —
-  pp. 11–13 verbatim: "Bode — New frequency shifter effect" · "Convolve — New convolution effect" ·
-  "Delay — New HQ mode (now default)" · "Distortion — New Overdrive mode and DC bias control" ·
-  "Reverb — Three new reverb types: Vintage, Nitrous, and Basin" · "Utility — New utility effect" ·
-  "Dual FX Busses" · "Multiple Instances" · "Expanded View" · "Direct Manipulation".
+  **re-fetched and `pdftotext -layout`-extracted in AUDIT2** (the raw fetch returns binary; extract it).
+  **p. 11 "Improved Serum FX"**, verbatim: *"Dual FX Busses — Two separate FX busses for added
+  flexibility"* · *"High Quality FX — Choose from 13 powerful effects and 3 types of splitter modules"* ·
+  *"Rearrange Modules — Drag and drop to quickly rearrange modules"* · *"Bypass Modules"* ·
+  *"Expanded View — Expanded rack view available"* · *"Presets — Access factory or user presets (racks and
+  modules)"* · *"Direct Manipulation — Directly adjust controls using the graphical display"* ·
+  *"Multiple Instances — Add multiple instances of a single effect."*
+  **p. 12 "New and Enhanced FX"**: "Bode — New frequency shifter effect" · "Convolve — New convolution
+  effect" · "Delay — New HQ mode (now default)" · "Distortion — New Overdrive mode and DC bias control" ·
+  "Reverb — Three new reverb types: Vintage, Nitrous, and Basin" · "Utility — New utility effect."
+  **p. 13 "New Signal Splitter Modules"**: Splitter L/H · Splitter L/M/H · Splitter M/S.
+  ⚠️ **Nothing in this PDF states any limit on module count or instance count.**
+- Manual p. 152, verbatim (re-extracted AUDIT2): *"Serum features an effects section with 13 different FX
+  processors that you can use in any order or combination, including multiple instances of the same
+  processor. There are also three types of splitter modules."*
+- Manual p. 153, verbatim: *"Serum offers three FX racks: MAIN, BUS 1, and BUS 2."* — the same architecture
+  the marketing calls "Dual FX Busses" (Main insert chain + two aux busses). Both terms are correct; §1.1.
+- Manual p. 150, verbatim bus-routing option: *"Bus 1 or Bus 2 — Route the signal to the other bus"*
+  (alongside Main and Direct) — bus→bus routing CONFIRMED.
+- **[AUDIT2] Fetched and FAILED (do not keep retrying):** Sound On Sound review
+  https://www.soundonsound.com/reviews/xfer-records-serum-2 → **HTTP 410 Gone** (both passes);
+  MusicRadar review → **HTTP 404**. No load-bearing claim depends on either.
 - Serum 2 v2.0.17 changelog coverage: https://rekkerd.org/xfer-records-updates-serum-2/ — confirms
   *"Added keyboard shortcut Alt/Option + F to toggle FX and Matrix expanded view"*, *"Added Key Track option
   to Filter and Distortion FX freq right-click menus"*, *"Improved CPU usage spikes in Conv reverb"*, and
@@ -997,11 +1216,22 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
 - `Source/ParameterIDs.hpp:345-346` (reverb type/character) · `:374-375` (delay) · `:406-407` (distortion,
   23 modes / 8 characters) · `:435` (`SYN_FX_ORDER` — ⚠️ its comment still says "bool" and is **stale**;
   the live definition is the 6-way choice at `PluginProcessor.cpp:3488`).
-- `Source/PluginProcessor.cpp:3414` (9 reverb types) · `:3488-3496` (FX chain order, 6 permutations) ·
-  `:5860` (`fxPerm_` index read) · `:6300-6301` (`kVoiceToFxPad = 0.5f`, −6 dB) ·
-  **`:7159`, `:7326`, `:7358` (the THREE fb305/fb338 exclusion sums)**.
-- `Source/IndyFxChain.h:1-16` (independent-state chain), `:13` (module order), `:31`/`:96-98` (ParametricEQ),
-  `:282` (second TerrainChorus instance) · `Source/PluginProcessor.h:1502` (first TerrainChorus instance).
+- `Source/PluginProcessor.cpp:3414` (9 reverb types — verbatim list re-read 2026-08-14: Hall, Room, Plate,
+  Spring, Digital, Vintage, Basin, Shimmer, Convolution) · `:3488-3496` (FX chain order, 6 permutations) ·
+  `:5860` (`fxPerm_` index read, `jlimit(0,5,…)`) · `:6300` (`constexpr float kVoiceToFxPad = 0.5f; // -6 dB`)
+  · **`:7159`+`:7161`, `:7326`+`:7328`, `:7358`+`:7360` — the fb305/fb338 exclusion sums: THREE blocks,
+  SIX lines** (L and R). [AUDIT2 — the previous revision listed three lines.]
+  · 94 × `filterTypeChoices.add(...)` (re-counted this pass: **94** ✔).
+- `Source/IndyFxChain.h:1-16` (the docstring — *"One private FX-chain instance for the per-chop
+  FX-independence routing"*, independent state, and the do-not-early-return warning), `:13` (module order
+  `grain→delay→space→tape→june→eq`), `:31` (`#include "ParametricEQ.h"`), `:96-98` (EQ HP/LP + 7 band
+  freqs), `:282` (second `TerrainChorus` instance) · `Source/PluginProcessor.h:1502` (first `TerrainChorus`
+  instance) · **`Source/PluginProcessor.h:1666` — `tw::IndyFxChain indyChain;`, the ONLY instance**
+  [AUDIT2; the "per-layer chains" claim was not supported by the tree].
+- `Source/ParametricEQ.h:99-104` (`processSample` → `updateAllCoefficients()` **per sample**) and
+  `:135-158` (that function's `makePeakFilter`/`makeHighPass`/`makeLowPass` calls — up to 15 heap
+  allocations per sample per channel). [AUDIT2 — independently confirms `EQUALIZER-BUILD-BIBLE.md`'s
+  disqualification of this class as a rack engine.]
 - `Source/DelayEngine.h:1-14` · `Source/TerrainChorus.h:2` · `Source/TapeLoopProcessor.h:8`
   (⚠️ the draft cited `:6`) · `Source/DistortionEngine.h:28, 640` (the −26 dBFS bus calibration) ·
   `Source/GranularEngine.h` · `Source/ParametricEQ.h` · `Source/SpectrumAnalyzer.h` ·
@@ -1013,7 +1243,9 @@ cardinality frozen — the device-type dropdown ships its FINAL 12-entry roster 
   · `BODE-BUILD-BIBLE.md` (device `Bode`, 7 Types, ±5 kHz, built on `TerrainFilters.h:1110/:1127`) ·
   `UTILITY-BUILD-BIBLE.md` (Utility IS a device: Route + Flip, the rack's metering surface — and it
   independently flags the same stale `:6979/:7111` citation this audit corrected) · `FX-CHAIN-BIBLE.md`
-  (K = 5 pre-allocated slots × 26 params; "JUCE cannot create parameters at runtime") ·
+  (**[AUDIT2] `K = 24` pre-allocated slots × 25 params = 600 new ⇒ 1 564 total** — Max's 2026-08-14 ruling,
+  which supersedes the K=5 proposal the previous revision quoted; "JUCE cannot create parameters at
+  runtime") ·
   `FILTER-BUILD-BIBLE.md` (94 in-tree filter types) · `COMPRESSOR-BUILD-BIBLE.md` (zero lookahead is
   non-negotiable — the independent derivation of rack-law A) · `OTT-BUILD-BIBLE.md` ·
   `GRANULAR-FX-BUILD-BIBLE.md` · `TAPE-BUILD-BIBLE.md` · `DELAY-MOOG-PORT-PLAN.md` · plus the per-effect
