@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Granular FX device card — mockup v1 (interactive + audible)</title>
+<style>
+/* ══ theme tokens: DARK, verbatim from index.html:104-126 ══ */
+:root{
+  --bg-main:#1A1A2E; --bg-hero:#12121F; --bg-card:#2A2A48; --bg-card-hover:#33335C;
+  --purple-400:#B794FF; --border-strong:rgba(88,88,128,0.5);
+  --text-primary:#E0DCE8; --text-secondary:#9B93B0; --text-muted:#6B6080; --text-dim:#504870;
+}
+*{box-sizing:border-box}
+body{background:var(--bg-main);color:var(--text-primary);
+  font-family:-apple-system,'SF Pro Display',BlinkMacSystemFont,sans-serif;
+  margin:0;padding:26px 30px 60px;-webkit-font-smoothing:antialiased}
+h1{font-size:15px;font-weight:500;letter-spacing:.02em;margin:0 0 3px}
+.sub{font-size:11px;color:var(--text-muted);font-weight:300;margin:0 0 18px;line-height:1.6}
+.sub b{color:var(--purple-400);font-weight:400}
+.bar{display:flex;align-items:center;gap:10px;margin:0 0 20px;flex-wrap:wrap}
+.btn{background:transparent;border:1px solid var(--border-strong);border-radius:9px;
+  color:var(--text-secondary);font-family:inherit;font-size:10px;letter-spacing:.03em;
+  padding:6px 13px;cursor:pointer;font-weight:300}
+.btn:hover{border-color:var(--purple-400);color:var(--purple-400)}
+.btn.on{border-color:var(--purple-400);color:var(--text-primary);
+  text-shadow:0 0 4px rgba(255,255,255,.5)}
+.note{font-size:10px;color:var(--text-dim);font-weight:300}
+.stage{display:flex;gap:38px;align-items:flex-start;flex-wrap:wrap}
+.cap{font-size:9px;color:var(--text-dim);letter-spacing:.08em;text-transform:uppercase;
+  font-weight:400;margin:0 0 8px}
+.zoom{transform-origin:top left}
+
+/* ══ FX RACK chassis — fxr-* copied from index.html:7160-7300 (scope prefix dropped) ══ */
+.fxr-dev{flex:0 0 272px;width:272px;height:152px;background:transparent;
+  border:1px solid var(--border-strong);border-radius:8px;display:flex;flex-direction:column;
+  transition:border-color .15s,opacity .15s;position:relative}
+.fxr-dev:hover{border-color:rgba(255,255,255,.34)}
+.fxr-dev.fxr-off{opacity:.45}
+.fxr-head{display:flex;align-items:center;gap:6px;padding:5px 8px 4px;height:26px}
+.fxr-grip{color:var(--text-dim);font-size:11px;line-height:1;letter-spacing:-2px;cursor:grab;
+  user-select:none;display:flex;align-items:center}
+.fxr-name{font-size:11.5px;color:var(--text-primary);font-weight:500;white-space:nowrap;
+  line-height:1;display:flex;align-items:center}
+.fxr-type{position:relative;font-size:9px;color:var(--text-secondary);
+  border:1px solid var(--border-strong);border-radius:9px;padding:0 7px;height:16px;display:flex;
+  align-items:center;gap:4px;cursor:pointer;font-weight:300;line-height:1;margin-left:3px;
+  white-space:nowrap}
+.fxr-type .fxr-car{color:var(--text-muted);font-size:8px;position:relative;top:.5px}
+.fxr-tw{display:grid;align-items:center;justify-items:center}
+.fxr-tw>span{grid-area:1/1;white-space:nowrap;display:inline-flex;align-items:center;gap:4px}
+.fxr-tg{visibility:hidden;pointer-events:none}
+.fxr-type-native,.fxr-bk-native{position:absolute;inset:0;width:100%;height:100%;margin:0;padding:0;
+  border:none;background:transparent;color:transparent;opacity:0;cursor:pointer;
+  -webkit-appearance:none;appearance:none;font-size:9px}
+.fxr-preset{position:relative;display:flex;align-items:center;gap:5px;flex:0 0 88px;width:88px;
+  height:16px;border:1px solid var(--border-strong);border-radius:9px;padding:0 9px;cursor:pointer;
+  line-height:1;overflow:hidden;box-sizing:border-box}
+.fxr-preset .fxr-star{color:var(--purple-400);font-size:8px;line-height:1;position:relative;top:-1px}
+.fxr-preset .fxr-pname{flex:1;min-width:0;text-align:center;font-size:9px;color:var(--text-secondary);
+  font-weight:300;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fxr-preset .fxr-car{color:var(--text-muted);font-size:8px;margin-left:auto;position:relative;top:.5px}
+.fxr-spacer{flex:1}
+.fxr-headr{display:flex;align-items:center;gap:9px}
+.fxr-code{font-weight:300;font-size:9px;color:var(--text-muted);line-height:1;white-space:nowrap}
+.fxr-pwr{width:9px;height:9px;border-radius:50%;border:1px solid var(--purple-400);
+  background:var(--purple-400);box-shadow:0 0 6px rgba(183,148,255,.5);cursor:pointer;flex:0 0 auto}
+.fxr-dev.fxr-off .fxr-pwr{background:transparent;border-color:var(--text-muted);box-shadow:none}
+.fxr-swap,.fxr-x{width:14px;height:14px;display:grid;place-items:center;cursor:pointer;padding:0;
+  background:transparent;border:none}
+.fxr-swap svg,.fxr-x svg{grid-area:1/1;width:14px;height:14px;display:block}
+.fxr-x{color:var(--text-muted)}
+.fxr-x:hover{color:#EF4444}
+.fxr-swap{color:var(--text-muted);transition:color .12s,filter .12s}
+.fxr-swap .ic-arrow{display:none}
+.fxr-swap.act .ic-plus{display:none}
+.fxr-swap.act .ic-arrow{display:block}
+.fxr-swap:hover{color:var(--purple-400);filter:drop-shadow(0 0 5px rgba(167,139,250,.6))}
+.fxr-swap.act{color:#fff}
+.fxr-core{flex:1 1 0;min-height:0;margin:1px 10px 0;position:relative;overflow:hidden;
+  color:var(--text-primary)}
+.fxr-core canvas{position:absolute;inset:0;width:100%;height:100%;display:block}
+.fxr-ctrls{display:flex;align-items:flex-end;gap:10px;padding:5px 10px 9px}
+.fxr-knobs{flex:1;display:grid;grid-template-columns:repeat(4,1fr);align-items:end;min-width:0}
+.fxr-knob{display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0}
+.fxr-dial{width:29px;height:29px;cursor:ns-resize}
+.fxr-dial svg{width:100%;height:100%;display:block}
+.fxr-lab{font-size:7px;letter-spacing:.01em;color:var(--text-secondary);white-space:nowrap;
+  text-align:center;font-weight:400}
+.fxr-divider{flex:0 0 auto;width:1px;height:92%;align-self:center;position:relative;left:-3.5px;
+  background:var(--border-strong)}
+.fxr-rightcol{flex:0 0 92px;display:flex;flex-direction:column;align-items:stretch;
+  justify-content:flex-end;gap:6px}
+.fxr-pills{display:flex;gap:5px;width:100%}
+.fxr-pill{flex:1;height:18px;display:flex;align-items:center;justify-content:center;
+  background:transparent;border:1px solid var(--border-strong);border-radius:9px;font-size:8.5px;
+  letter-spacing:.03em;color:var(--text-muted);font-weight:300;cursor:pointer}
+.fxr-pill.fxr-on{border-color:var(--purple-400);color:var(--text-primary);
+  text-shadow:0 0 4px rgba(255,255,255,.5)}
+.fxr-route{display:flex;gap:3px;width:100%}
+.fxr-r{flex:1;height:14px;display:flex;align-items:center;justify-content:center;font-size:8px;
+  font-weight:400;color:var(--text-muted);border:1px solid var(--border-strong);border-radius:3px;
+  cursor:pointer}
+.fxr-r.fxr-on{color:var(--text-primary);border-color:var(--purple-400);
+  text-shadow:0 0 4px rgba(255,255,255,.5)}
+/* back panel */
+.fxr-back{display:none;flex:1 1 0;min-height:0;flex-direction:column;padding:7px 12px 9px}
+.fxr-dev.swapped .fxr-core,.fxr-dev.swapped .fxr-ctrls{display:none}
+.fxr-dev.swapped .fxr-back{display:flex}
+.fxr-bk-row{display:flex;justify-content:space-between;align-items:center;flex:0 0 auto;
+  padding:0 2px 2px}
+.fxr-bk-sel{display:inline-flex;align-items:center;gap:6px;cursor:pointer;line-height:1}
+.fxr-bk-sel .fxr-bk-k{font-size:8.5px;color:var(--text-muted);font-weight:300;letter-spacing:.02em}
+.fxr-bk-vwrap{position:relative;display:inline-flex;align-items:center}
+.fxr-bk-sel .fxr-bk-v{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;
+  color:var(--text-primary);font-weight:400;white-space:nowrap}
+.fxr-bk-sel .fxr-bk-v .fxr-car{color:var(--text-muted);font-size:8px}
+.fxr-bk-sel:hover .fxr-bk-v{color:#fff}
+.fxr-bk-vw{display:grid;align-items:center;justify-items:center}
+.fxr-bk-vw>span{grid-area:1/1}
+.fxr-bk-sel .fxr-bk-g{display:inline-flex;align-items:center;gap:4px;font-size:9.5px;font-weight:400;
+  white-space:nowrap;visibility:hidden;pointer-events:none}
+.fxr-bk-grid{flex:1 1 0;min-height:0;display:grid;
+  grid-template-columns:1fr 11px 1fr 11px 1fr 11px 1fr;grid-template-rows:1fr 1fr;
+  align-items:center;justify-items:center}
+.fxr-bk-sep{grid-row:1/3;width:1px;align-self:stretch;justify-self:center;
+  background:var(--border-strong);margin:5px 0}
+.fxr-bk-knob{display:flex;flex-direction:column;align-items:center;gap:5px}
+.fxr-bk-knob .fxr-dial{width:32px;height:32px}
+.fxr-bk-knob .fxr-lab{font-size:7.5px}
+/* readout strip — mockup only, not part of the shipped chassis */
+.ro{margin-top:14px;font-size:10px;color:var(--text-muted);font-weight:300;line-height:1.9;
+  font-variant-numeric:tabular-nums}
+.ro b{color:var(--text-secondary);font-weight:400}
+</style>
+</head>
+<body>
+
+<h1>Granular — FX device card</h1>
+<p class="sub">Build 1 mockup. Real <b>fxr-</b> chassis (CSS copied from the shipped rack), real granular DSP in
+Web Audio, live viz.<br>
+<b>Press Start</b>, then turn <b>Mix</b> up and play with <b>Grains / Size / Pitch</b>. Drag knobs vertically.
+Click <b>+</b> in the header for the back panel.</p>
+
+<div class="bar">
+  <button class="btn" id="go">▶ Start audio</button>
+  <button class="btn" id="src">Source: Chords</button>
+  <button class="btn" id="zm">Zoom 2×</button>
+  <span class="note" id="st">idle</span>
+</div>
+
+<div class="stage">
+  <div>
+    <p class="cap">Device card — actual size (272 px)</p>
+    <div class="zoom" id="zwrap">
+      <div class="fxr-dev" id="dev">
+
+        <div class="fxr-head">
+          <span class="fxr-grip">⠿</span>
+          <span class="fxr-name">Granular</span>
+          <div class="fxr-type">
+            <span class="fxr-tw">
+              <span id="tlab">Cloud <span class="fxr-car">▾</span></span>
+              <span class="fxr-tg">Pulverize <span class="fxr-car">▾</span></span>
+            </span>
+            <select class="fxr-type-native" id="tsel"></select>
+          </div>
+          <div class="fxr-preset">
+            <span class="fxr-star">✦</span>
+            <span class="fxr-pname">Init</span>
+            <span class="fxr-car">▾</span>
+          </div>
+          <span class="fxr-spacer"></span>
+          <div class="fxr-headr">
+            <span class="fxr-code">GRN</span>
+            <span class="fxr-pwr" id="pwr"></span>
+            <button class="fxr-swap" id="swap"></button>
+            <button class="fxr-x"></button>
+          </div>
+        </div>
+
+        <div class="fxr-core"><canvas id="cv"></canvas></div>
+
+        <div class="fxr-ctrls">
+          <div class="fxr-knobs" id="front"></div>
+          <div class="fxr-divider"></div>
+          <div class="fxr-rightcol">
+            <div class="fxr-pills">
+              <div class="fxr-pill" data-pill="freeze"><span class="fxr-t">Freeze</span></div>
+              <div class="fxr-pill" data-pill="sync"><span class="fxr-t">Sync</span></div>
+            </div>
+            <div class="fxr-route" id="routes"></div>
+          </div>
+        </div>
+
+        <div class="fxr-back">
+          <div class="fxr-bk-row">
+            <div class="fxr-bk-sel">
+              <span class="fxr-bk-k">Character</span>
+              <span class="fxr-bk-vwrap">
+                <span class="fxr-bk-vw">
+                  <span class="fxr-bk-v" id="clab">Clean <span class="fxr-car">▾</span></span>
+                  <span class="fxr-bk-g">Cassette ▾</span>
+                </span>
+                <select class="fxr-bk-native" id="csel"></select>
+              </span>
+            </div>
+            <div class="fxr-bk-sel">
+              <span class="fxr-bk-k">Key</span>
+              <span class="fxr-bk-vwrap">
+                <span class="fxr-bk-vw">
+                  <span class="fxr-bk-v" id="klab">Off <span class="fxr-car">▾</span></span>
+                  <span class="fxr-bk-g">Penta ▾</span>
+                </span>
+                <select class="fxr-bk-native" id="ksel"></select>
+              </span>
+            </div>
+          </div>
+          <div class="fxr-bk-grid" id="back"></div>
+        </div>
+
+      </div>
+    </div>
+    <div class="ro" id="ro"></div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ═══════════ params ═══════════ */
+/* NOTE: the SHIPPED device boots POWER OFF / Mix 0 (distortion precedent — dry init, pluginval-safe).
+   This mockup boots audible (Mix 38 %) so the first press of Start demonstrates the device. */
+var P={grains:.42,size:.42,pitch:.5,mix:.38,
+        scan:.5,window:.45,spray:.18,detune:.12,shape:.5,width:.6,feedback:0,freeze:0};
+var TYPES=['Cloud','Rise','Swarm','Suspend','Scatter','Rewind','Stretch','Pulverize'];
+var CHARS=['Clean','Tape','Cassette','Radio','Worn','Drift'];
+var KEYS=['Off','Oct','5th','Chord','Maj','Min','Penta'];
+var KEYSETS={Off:null,Oct:[0,12,-12,24],'5th':[0,7,12,19,-12],Chord:[0,4,7,12],
+             Maj:[0,2,4,5,7,9,11],Min:[0,2,3,5,7,8,10],Penta:[0,3,5,7,10]};
+var typeIx=0,charIx=0,keyIx=0,power=true,freeze=false,sync=false;
+var routes=[1,0,0,0,0,0], RL=['A','B','C','D','S','N'];
+
+/* ═══════════ maps (ENGINE constants — bible §2.1: the osc page's numbers are stale) ═══════════ */
+function densHz(v){ return Math.pow(220,v); }          // 1..220 g/s   GranularEngine.h:421
+function sizeMs(v){ return 2*Math.pow(450,v); }        // 2..900 ms    GranularEngine.h:424
+function pitchSt(v){ return (v*2-1)*24; }              // ±24 st
+function winMs(v){ return 50*Math.pow(320,v); }        // 50 ms..16 s  (clamped 16000)
+function scanRate(v){ return (v*2-1); }                // −1..+1
+var FRONT=[['Grains','grains'],['Size','size'],['Pitch','pitch'],['Mix','mix']];
+var BACK=[['Scan','scan'],['Window','window'],['Spray','spray'],['Detune','detune'],
+          ['Shape','shape'],['Width','width'],['Feedback','feedback'],['Freeze','freeze']];
+
+/* ═══════════ knobSVG — verbatim from index.html:7413 ═══════════ */
+function knobSVG(pct,label){
+  pct=Math.max(0,Math.min(100,Math.round(pct)));
+  var cx=15,cy=15,r=11.5;
+  function pt(d){var a=d*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+  var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+  var txt=(label!=null)?(''+label):(''+pct);
+  var fs=(label==null)?8:(txt.length>=5?5.5:(txt.length>=4?6.5:7.5));
+  return '<svg viewBox="0 0 30 30">'
+   +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+   +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+   +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
+}
+var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>';
+var IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>';
+var IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+
+/* ═══════════ readouts ═══════════ */
+function fmt(k){
+  var v=P[k];
+  if(k==='grains') return densHz(v)<10?densHz(v).toFixed(1):Math.round(densHz(v));
+  if(k==='size')   return sizeMs(v)<100?Math.round(sizeMs(v)):(sizeMs(v)/1000).toFixed(2);
+  if(k==='pitch'){ var s=pitchSt(v); return (s>0?'+':'')+s.toFixed(0); }
+  if(k==='scan'){ var r=scanRate(v); return (r>0?'+':'')+r.toFixed(2); }
+  if(k==='window'){ var m=winMs(v); return m<1000?Math.round(m):(m/1000).toFixed(1)+'s'; }
+  return Math.round(v*100);
+}
+
+/* ═══════════ build controls ═══════════ */
+function dial(name,key,cls){
+  return '<div class="'+cls+'"><div class="fxr-dial" data-k="'+key+'">'
+       + knobSVG(P[key]*100,fmt(key))+'</div><span class="fxr-lab">'+name+'</span></div>';
+}
+document.getElementById('front').innerHTML=FRONT.map(function(f){return dial(f[0],f[1],'fxr-knob');}).join('');
+(function(){
+  var g=document.getElementById('back'),h='';
+  for(var i=0;i<8;i++){
+    var col=[1,3,5,7][i%4], row=(i<4)?1:2;
+    h+='<div class="fxr-bk-knob" style="grid-column:'+col+';grid-row:'+row+'">'
+      +'<div class="fxr-dial" data-k="'+BACK[i][1]+'">'+knobSVG(P[BACK[i][1]]*100,fmt(BACK[i][1]))
+      +'</div><span class="fxr-lab">'+BACK[i][0]+'</span></div>';
+  }
+  h+='<div class="fxr-bk-sep" style="grid-column:2"></div><div class="fxr-bk-sep" style="grid-column:4"></div><div class="fxr-bk-sep" style="grid-column:6"></div>';
+  g.innerHTML=h;
+})();
+document.getElementById('routes').innerHTML=RL.map(function(l,i){
+  return '<div class="fxr-r'+(routes[i]?' fxr-on':'')+'" data-ri="'+i+'"><span class="fxr-t">'+l+'</span></div>';}).join('');
+document.getElementById('swap').innerHTML=IC_PLUS+IC_ARROW;
+document.querySelector('.fxr-x').innerHTML=IC_X;
+function fill(sel,arr,ix){ sel.innerHTML=arr.map(function(o,i){
+  return '<option'+(i===ix?' selected':'')+'>'+o+'</option>';}).join(''); }
+fill(document.getElementById('tsel'),TYPES,0);
+fill(document.getElementById('csel'),CHARS,0);
+fill(document.getElementById('ksel'),KEYS,0);
+
+function refresh(){
+  document.querySelectorAll('.fxr-dial').forEach(function(d){
+    var k=d.dataset.k; if(!k)return;
+    d.innerHTML=knobSVG(P[k]*100,fmt(k));
+  });
+  document.getElementById('ro').innerHTML=
+     '<b>Grains</b> '+fmt('grains')+' g/s &nbsp;·&nbsp; <b>Size</b> '+(sizeMs(P.size)).toFixed(0)+' ms'
+   + ' &nbsp;·&nbsp; <b>Pitch</b> '+fmt('pitch')+' st &nbsp;·&nbsp; <b>Mix</b> '+Math.round(P.mix*100)+'%'
+   + ' &nbsp;·&nbsp; <b>Window</b> '+fmt('window')+' &nbsp;·&nbsp; <b>Scan</b> '+fmt('scan')
+   + '<br><b>Type</b> '+TYPES[typeIx]+' &nbsp;·&nbsp; <b>Character</b> '+CHARS[charIx]
+   + ' &nbsp;·&nbsp; <b>Key</b> '+KEYS[keyIx]
+   + ' &nbsp;·&nbsp; live grains <b>'+active+'</b>/64';
+}
+
+/* ═══════════ knob drag ═══════════ */
+(function(){
+  var drag=null,y0=0,v0=0;
+  document.addEventListener('mousedown',function(e){
+    var d=e.target.closest?e.target.closest('.fxr-dial'):null; if(!d)return;
+    drag=d.dataset.k; y0=e.clientY; v0=P[drag]; e.preventDefault();
+  });
+  document.addEventListener('mousemove',function(e){
+    if(!drag)return;
+    P[drag]=Math.max(0,Math.min(1,v0+(y0-e.clientY)/160));
+    if(drag==='freeze'){ freeze=P.freeze>.5;
+      document.querySelector('[data-pill=freeze]').classList.toggle('fxr-on',freeze); }
+    refresh();
+  });
+  document.addEventListener('mouseup',function(){drag=null;});
+})();
+document.querySelectorAll('.fxr-pill').forEach(function(p){
+  p.onclick=function(){
+    var w=p.dataset.pill;
+    if(w==='freeze'){ freeze=!freeze; P.freeze=freeze?1:0; }
+    else { sync=!sync; }
+    p.classList.toggle('fxr-on'); refresh();
+  };
+});
+document.getElementById('routes').onclick=function(e){
+  var r=e.target.closest('.fxr-r'); if(!r)return;
+  var i=+r.dataset.ri; routes[i]=routes[i]?0:1; r.classList.toggle('fxr-on');
+};
+document.getElementById('pwr').onclick=function(){
+  power=!power; document.getElementById('dev').classList.toggle('fxr-off',!power);
+};
+document.getElementById('swap').onclick=function(){
+  document.getElementById('dev').classList.toggle('swapped');
+  this.classList.toggle('act');
+};
+document.getElementById('tsel').onchange=function(){
+  typeIx=this.selectedIndex;
+  document.getElementById('tlab').innerHTML=TYPES[typeIx]+' <span class="fxr-car">▾</span>';
+  applyType(); refresh();
+};
+document.getElementById('csel').onchange=function(){
+  charIx=this.selectedIndex;
+  document.getElementById('clab').innerHTML=CHARS[charIx]+' <span class="fxr-car">▾</span>'; refresh();
+};
+document.getElementById('ksel').onchange=function(){
+  keyIx=this.selectedIndex;
+  document.getElementById('klab').innerHTML=KEYS[keyIx]+' <span class="fxr-car">▾</span>'; refresh();
+};
+/* Types re-voice the knobs (law 5: night-and-day) */
+function applyType(){
+  var t=TYPES[typeIx];
+  if(t==='Cloud')    { P.grains=.42;P.size=.34;P.spray=.18;P.detune=.12;P.scan=.5; }
+  if(t==='Rise')     { P.grains=.55;P.size=.30;P.detune=.30;P.feedback=.55;P.pitch=.75; }
+  if(t==='Swarm')    { P.grains=.86;P.size=.18;P.detune=.42;P.width=.9;P.spray=.35; }
+  if(t==='Suspend')  { P.grains=.62;P.size=.72;P.scan=.5;freeze=true;P.freeze=1;P.window=.25; }
+  if(t==='Scatter')  { P.grains=.50;P.size=.22;P.spray=.92;P.width=1;P.detune=.2; }
+  if(t==='Rewind')   { P.grains=.48;P.size=.40;P.scan=.12;P.feedback=.35; }
+  if(t==='Stretch')  { P.grains=.70;P.size=.62;P.scan=.53;P.window=.30;P.detune=.05; }
+  if(t==='Pulverize'){ P.grains=.97;P.size=.04;P.spray=.75;P.detune=.85;P.width=1; }
+  document.querySelector('[data-pill=freeze]').classList.toggle('fxr-on',freeze);
+}
+
+/* ═══════════ AUDIO — real granular over a live capture ring ═══════════ */
+var ac=null,node=null,srcNode=null,running=false,srcMode=0;
+var SR=44100, RING=null, RN=0, wpos=0, active=0;
+var grains=[], countdown=0;
+var GMAX=64;
+for(var i=0;i<GMAX;i++) grains.push({on:false,pos:0,age:0,len:1,rate:1,pl:.7,pr:.7,birth:0});
+var viz={spark:[],head:0};
+
+function makeSource(){
+  // synthesized musical loop so the card is audible with zero files
+  var len=SR*8, b=ac.createBuffer(2,len,SR), ch=[b.getChannelData(0),b.getChannelData(1)];
+  var prog=[[55,65.4,82.4,98],[49,61.7,73.4,98],[43.7,55,65.4,87.3],[36.7,55,73.4,87.3]];
+  for(var n=0;n<len;n++){
+    var t=n/SR, bar=Math.floor(t/2)%4, ch4=prog[bar], s=0;
+    for(var v=0;v<4;v++){
+      var f=ch4[v]*(srcMode?2:1);
+      var env=.5+.5*Math.sin(2*Math.PI*(t/2-bar*0+.25));
+      s+=Math.sin(2*Math.PI*f*t)*.18*env;
+      s+=Math.sin(2*Math.PI*f*2*t)*.06*env;
+    }
+    if(srcMode){ // pluck sequence
+      var ph=(t*4)%1, note=ch4[Math.floor(t*4)%4]*4;
+      s+=Math.sin(2*Math.PI*note*t)*Math.exp(-ph*9)*.35;
+    }
+    s*=.55;
+    ch[0][n]=s; ch[1][n]=s*.96;
+  }
+  return b;
+}
+function start(){
+  if(running){ stop(); return; }
+  ac=ac||new (window.AudioContext||window.webkitAudioContext)();
+  SR=ac.sampleRate; RN=Math.floor(SR*16); RING=new Float32Array(RN); wpos=0;
+  srcNode=ac.createBufferSource(); srcNode.buffer=makeSource(); srcNode.loop=true;
+  node=ac.createScriptProcessor(512,2,2);
+  node.onaudioprocess=process;
+  srcNode.connect(node); node.connect(ac.destination); srcNode.start();
+  ac.resume(); running=true;
+  document.getElementById('go').textContent='■ Stop'; document.getElementById('go').classList.add('on');
+  document.getElementById('st').textContent='running @ '+SR+' Hz';
+}
+function stop(){
+  try{srcNode.stop();}catch(e){}
+  try{node.disconnect();srcNode.disconnect();}catch(e){}
+  running=false;
+  document.getElementById('go').textContent='▶ Start audio';
+  document.getElementById('go').classList.remove('on');
+  document.getElementById('st').textContent='stopped';
+}
+function readRing(p){
+  var i=Math.floor(p), f=p-i;
+  var a=RING[((i%RN)+RN)%RN], b=RING[(((i+1)%RN)+RN)%RN];
+  return a+(b-a)*f;
+}
+function win(x,shape){          // Flat-top → Hann → Bell (shape 0..1)
+  var h=.5-.5*Math.cos(2*Math.PI*x);
+  var flat=Math.min(1,Math.min(x,1-x)*8);
+  var bell=Math.pow(h,2.2);
+  return shape<.5 ? flat+(h-flat)*(shape*2) : h+(bell-h)*((shape-.5)*2);
+}
+function snapKey(st){
+  var set=KEYSETS[KEYS[keyIx]]; if(!set) return st;
+  var best=set[0],bd=1e9;
+  for(var i=0;i<set.length;i++){ var d=Math.abs(set[i]-st); if(d<bd){bd=d;best=set[i];} }
+  return best;
+}
+function process(e){
+  var inL=e.inputBuffer.getChannelData(0), inR=e.inputBuffer.getChannelData(1);
+  var oL=e.outputBuffer.getChannelData(0), oR=e.outputBuffer.getChannelData(1);
+  var N=oL.length;
+  if(!power){ for(var i=0;i<N;i++){oL[i]=inL[i];oR[i]=inR[i];} return; }
+  var dens=densHz(P.grains)*(TYPES[typeIx]==='Swarm'?2:1);
+  var slen=Math.max(64,sizeMs(P.size)*SR/1000);
+  var wlen=Math.min(RN-4,winMs(P.window)*SR/1000);
+  var basePit=pitchSt(P.pitch), sc=scanRate(P.scan), fb=P.feedback*1.1;
+  var mix=P.mix, wet=0, spark=viz.spark;
+  var fblend=freeze?1:P.freeze;
+  for(var n=0;n<N;n++){
+    var dry=(inL[n]+inR[n])*.5;
+    // ── capture ring: write blend = freeze (1 = hold, no new audio)
+    RING[wpos]=RING[wpos]*fblend + (dry+wet*fb)*(1-fblend);
+    wpos=(wpos+1)%RN;
+    // ── spawn
+    countdown-=1;
+    if(countdown<=0){
+      countdown=SR/dens*(0.5+Math.random());
+      for(var g=0;g<GMAX;g++) if(!grains[g].on){
+        var gr=grains[g];
+        var anchor=wpos-4 - wlen*(1-Math.max(0,Math.min(1,(sc+1)/2)));
+        var jitter=(Math.random()*2-1)*P.spray*wlen*.5;
+        var st=basePit+(Math.random()*2-1)*P.detune*24;
+        st=snapKey(st);
+        gr.on=true; gr.pos=anchor+jitter; gr.age=0; gr.len=slen;
+        gr.rate=Math.pow(2,st/12)*(TYPES[typeIx]==='Rewind'&&Math.random()<.5?-1:1);
+        var pan=(Math.random()*2-1)*P.width, a=(pan+1)*Math.PI/4;
+        gr.pl=Math.cos(a); gr.pr=Math.sin(a); gr.birth=st;
+        if(spark.length<80) spark.push({p:gr.pos,pan:pan,st:st,a:0,l:slen});
+        break;
+      }
+    }
+    // ── render grains
+    var acc=0,accL=0,accR=0,cnt=0;
+    for(var g2=0;g2<GMAX;g2++){
+      var q=grains[g2]; if(!q.on) continue;
+      var x=q.age/q.len;
+      if(x>=1){ q.on=false; continue; }
+      var s=readRing(q.pos+q.age*q.rate)*win(x,P.shape);
+      accL+=s*q.pl; accR+=s*q.pr; acc+=s; cnt++;
+      q.age++;
+    }
+    active=cnt;
+    var norm=cnt>1?1/Math.sqrt(cnt):1;
+    accL*=norm; accR*=norm; wet=acc*norm;
+    // ── scan head advance (0 = hold, ±1 = ride)
+    oL[n]=inL[n]*(1-mix)+accL*mix*1.4;
+    oR[n]=inR[n]*(1-mix)+accR*mix*1.4;
+  }
+  viz.head=wpos/RN;
+  for(var s2=spark.length-1;s2>=0;s2--){ spark[s2].a+=N; if(spark[s2].a>spark[s2].l) spark.splice(s2,1); }
+}
+
+/* ═══════════ VIZ — the capture ring + grain sparks (bible §7 concept A) ═══════════ */
+var cv=document.getElementById('cv'),cx=cv.getContext('2d');
+function draw(){
+  var w=cv.clientWidth,h=cv.clientHeight,dpr=window.devicePixelRatio||1;
+  if(cv.width!==w*dpr){cv.width=w*dpr;cv.height=h*dpr;}
+  cx.setTransform(dpr,0,0,dpr,0,0); cx.clearRect(0,0,w,h);
+  var lit=running&&power&&P.mix>.001;
+  // ── IDLE BASELINE: the card is never blank. Dim flat line + dim window brackets, so the
+  //    geometry reads before a note is played (law 9: idle = dim, playing = bright).
+  if(!RING||!running){
+    cx.beginPath(); cx.moveTo(0,h/2); cx.lineTo(w,h/2);
+    cx.strokeStyle='rgba(224,220,232,.14)'; cx.lineWidth=1; cx.stroke();
+  }
+  // waveform of the capture ring (oldest → newest, left → right)
+  if(RING&&running){
+    var wl=Math.min(RN-4,winMs(P.window)*SR/1000), st=(wpos-wl+RN)%RN;
+    cx.beginPath();
+    for(var x=0;x<w;x++){
+      var i0=Math.floor(st+wl*x/w), mx=0;
+      for(var k=0;k<64;k++){ var v=RING[((i0+k)%RN+RN)%RN]; if(Math.abs(v)>Math.abs(mx))mx=v; }
+      var y=h/2-mx*h*.42;
+      x?cx.lineTo(x,y):cx.moveTo(x,y);
+    }
+    cx.strokeStyle=lit?'rgba(224,220,232,.55)':'rgba(224,220,232,.16)';
+    cx.lineWidth=1; cx.stroke();
+  }
+  // ── WRITE HEAD — a short tick at the newest edge, not a full-height bar. Freeze dims it to
+  //    20 % (the obvious delta the bible asks for: you SEE the writer stop).
+  if(running){
+    var hh=h*0.30;
+    cx.beginPath(); cx.moveTo(w-1.5,h/2-hh); cx.lineTo(w-1.5,h/2+hh);
+    cx.strokeStyle=freeze?'rgba(224,220,232,.18)':'rgba(224,220,232,.80)';
+    cx.lineWidth=1.4; cx.stroke();
+  }
+  // grain sparks: y = pan, r = window value at age, colour = pitch
+  var wl2=Math.min(RN-4,winMs(P.window)*SR/1000);
+  for(var i=0;i<viz.spark.length;i++){
+    var s=viz.spark[i], age=s.a/s.l;
+    if(age>1)continue;
+    var rel=((s.p-(wpos-wl2))%RN+RN)%RN;
+    var x2=(rel/wl2)*w; if(x2<0||x2>w)continue;
+    var y2=h/2+s.pan*h*.36, r=1+win(age,P.shape)*3.2;
+    // Max 2026-08-14: grains are WHITE — no pitch colour-coding. Brightness still carries the
+    // window envelope (they swell and die), so the viz stays alive without the blue/amber scheme.
+    cx.beginPath(); cx.arc(x2,y2,r,0,6.284);
+    cx.fillStyle='rgba(236,232,242,'+(0.85*(1-age*.6))+')'; cx.fill();
+  }
+  requestAnimationFrame(draw);
+}
+draw();
+
+/* ═══════════ page chrome ═══════════ */
+document.getElementById('go').onclick=start;
+document.getElementById('src').onclick=function(){
+  srcMode=srcMode?0:1;
+  this.textContent='Source: '+(srcMode?'Pluck':'Chords');
+  if(running){ stop(); setTimeout(start,60); }
+};
+var z=1;
+document.getElementById('zm').onclick=function(){
+  z=z===1?2:1;
+  document.getElementById('zwrap').style.transform='scale('+z+')';
+  document.getElementById('zwrap').style.height=(152*z)+'px';
+  this.textContent='Zoom '+(z===1?'2×':'1×');
+};
+refresh();
+// verification hooks: #back opens the back panel, #freeze latches Freeze (headless screenshots)
+if(location.hash==='#back'){ document.getElementById('swap').click(); }
+if(location.hash==='#freeze'){ document.querySelector('[data-pill=freeze]').click(); }
+</script>
+</body>
+</html>
