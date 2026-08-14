@@ -327,6 +327,8 @@ namespace tw
             sendFilterSlot4_.prepare (sr);
             sendFilterSlot5_.prepare (sr);   // fb338 — post-filter DISTORTION send (independent state)
             sendFilterSlot6_.prepare (sr);
+            sendFilterSlot7_.prepare (sr);   // fb347 — shared exclusion-bus filter pair
+            sendFilterSlot8_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
             // frequency + shape are pushed per block via setModConfig).
@@ -503,6 +505,7 @@ namespace tw
             sendFilterSlot_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
             sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
+            sendFilterSlot7_.setType (static_cast<tw::filters::Type> (clamped));  // fb347 — exclusion mirror
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -518,6 +521,7 @@ namespace tw
             sendFilterSlot2_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
             sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
+            sendFilterSlot8_.setType (static_cast<tw::filters::Type> (clamped));   // fb347 — exclusion mirror
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
         void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
@@ -563,7 +567,8 @@ namespace tw
         { filterSlot_.setPoles (tap1); filterSlot2_.setPoles (tap2);      // tap 0..3 = 6/12/18/24 dB
           sendFilterSlot_.setPoles (tap1); sendFilterSlot2_.setPoles (tap2);     // fb287 — send mirror
           sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2);     // fb296 — delay-send mirror
-          sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2); }  // fb338 — distortion-send mirror
+          sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2);
+          sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2); }  // fb347 — exclusion mirror
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -1935,6 +1940,20 @@ namespace tw
             dstG_[0] = a; dstG_[1] = b; dstG_[2] = c; dstG_[3] = d; dstG_[4] = sub; dstG_[5] = noise;
             dstAny_ = (a + b + c + d + sub + noise) > 0.0f;
         }
+        // ════════ fb347 — THE SHARED "ROUTED DRY" EXCLUSION BUS ════════
+        // The main-send exclusion used to be computed as (reverbSend + delaySend + distortionSend),
+        // which DOUBLE-COUNTS any osc routed to more than one device: its dry is subtracted twice
+        // from a mix that contains it once, so it returns PHASE-INVERTED. This bus carries each
+        // routed osc EXACTLY ONCE — the union of every device's mask — so the exclusion becomes a
+        // single subtraction that is correct no matter how many devices share a source.
+        // It also retires the fb305/fb338 landmine: there is no longer a per-bus sum that a newly
+        // added device can forget to join.
+        void setExclusionSendTarget (float* L, float* R) noexcept { exSendL_ = L; exSendR_ = R; }
+        void setExclusionRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
+        {
+            exG_[0] = a; exG_[1] = b; exG_[2] = c; exG_[3] = d; exG_[4] = sub; exG_[5] = noise;
+            exAny_ = (a + b + c + d + sub + noise) > 0.0f;
+        }
 
         void renderNextBlock (juce::AudioBuffer<float>& out,
                               int startSample, int numSamples) override
@@ -2008,6 +2027,17 @@ namespace tw
             float* tF2R = dstSendActive ? dstSendF2_.getWritePointer (1) : nullptr;
             float* tDryL = dstSendActive ? dstSendDry_.getWritePointer (0) : nullptr;
             float* tDryR = dstSendActive ? dstSendDry_.getWritePointer (1) : nullptr;
+            // fb347 — the SHARED exclusion bus: same filter split, mask = the UNION of every device.
+            // Zero cost unless at least one osc is routed somewhere.
+            const bool exSendActive = (exSendL_ != nullptr) && exAny_;
+            if (exSendActive && (exSendF1_.getNumChannels() < 2 || exSendF1_.getNumSamples() < numSamples))
+            { exSendF1_.setSize (2, numSamples, false, true, true); exSendF2_.setSize (2, numSamples, false, true, true); exSendDry_.setSize (2, numSamples, false, true, true); }
+            float* xF1L = exSendActive ? exSendF1_.getWritePointer (0) : nullptr;
+            float* xF1R = exSendActive ? exSendF1_.getWritePointer (1) : nullptr;
+            float* xF2L = exSendActive ? exSendF2_.getWritePointer (0) : nullptr;
+            float* xF2R = exSendActive ? exSendF2_.getWritePointer (1) : nullptr;
+            float* xDryL = exSendActive ? exSendDry_.getWritePointer (0) : nullptr;
+            float* xDryR = exSendActive ? exSendDry_.getWritePointer (1) : nullptr;
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
             // → dry if in neither. Multiply-by-0/1 keeps the per-sample sum branchless.
@@ -4010,6 +4040,21 @@ namespace tw
                     tDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
                     tDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
                 }
+                // fb347 — THE SHARED EXCLUSION BUS: identical split, but the mask is the UNION of every
+                // device's routes, so an osc routed to three devices lands here exactly ONCE. This is the
+                // signal the main-send devices subtract; summing the per-device buses instead (as before)
+                // subtracted a shared osc N times and handed the next device that osc INVERTED.
+                if (exSendActive)
+                {
+                    const float rAL = exG_[0]*oAL, rBL = exG_[1]*oBL, rCL = exG_[2]*oCL, rDL = exG_[3]*oDL, rSL = exG_[4]*subBL, rNL = exG_[5]*noiseAddL;
+                    const float rAR = exG_[0]*oAR, rBR = exG_[1]*oBR, rCR = exG_[2]*oCR, rDR = exG_[3]*oDR, rSR = exG_[4]*subBR, rNR = exG_[5]*noiseAddR;
+                    xF1L[i]  = busCo1_[0]*rAL + busCo1_[1]*rBL + busCo1_[2]*rCL + busCo1_[3]*rDL + busCo1_[4]*rSL + rNL*noiseCo1_;
+                    xF1R[i]  = busCo1_[0]*rAR + busCo1_[1]*rBR + busCo1_[2]*rCR + busCo1_[3]*rDR + busCo1_[4]*rSR + rNR*noiseCo1_;
+                    xF2L[i]  = busCo2_[0]*rAL + busCo2_[1]*rBL + busCo2_[2]*rCL + busCo2_[3]*rDL + busCo2_[4]*rSL + rNL*noiseCo2_;
+                    xF2R[i]  = busCo2_[0]*rAR + busCo2_[1]*rBR + busCo2_[2]*rCR + busCo2_[3]*rDR + busCo2_[4]*rSR + rNR*noiseCo2_;
+                    xDryL[i] = busCoD_[0]*rAL + busCoD_[1]*rBL + busCoD_[2]*rCL + busCoD_[3]*rDL + busCoD_[4]*rSL + rNL*noiseCoD_;
+                    xDryR[i] = busCoD_[0]*rAR + busCoD_[1]*rBR + busCoD_[2]*rCR + busCoD_[3]*rDR + busCoD_[4]*rSR + rNR*noiseCoD_;
+                }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
                 modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
@@ -4027,6 +4072,7 @@ namespace tw
                     if (sendActive) { sF1L[i]*=robinAmpL_; sF1R[i]*=robinAmpR_; sF2L[i]*=robinAmpL_; sF2R[i]*=robinAmpR_; sDryL[i]*=robinAmpL_; sDryR[i]*=robinAmpR_; }   // fb287 — send matches
                     if (dlySendActive) { dF1L[i]*=robinAmpL_; dF1R[i]*=robinAmpR_; dF2L[i]*=robinAmpL_; dF2R[i]*=robinAmpR_; dDryL[i]*=robinAmpL_; dDryR[i]*=robinAmpR_; }   // fb296 — delay send matches
                     if (dstSendActive) { tF1L[i]*=robinAmpL_; tF1R[i]*=robinAmpR_; tF2L[i]*=robinAmpL_; tF2R[i]*=robinAmpR_; tDryL[i]*=robinAmpL_; tDryR[i]*=robinAmpR_; }   // fb338 — distortion send matches
+                    if (exSendActive)  { xF1L[i]*=robinAmpL_; xF1R[i]*=robinAmpR_; xF2L[i]*=robinAmpL_; xF2R[i]*=robinAmpR_; xDryL[i]*=robinAmpL_; xDryR[i]*=robinAmpR_; }   // fb347 — the exclusion MUST track the sends exactly, or the subtraction stops cancelling
                 }
 
             // Phase 8a polish — apply steal-fade and decide if voice should die
@@ -4041,6 +4087,7 @@ namespace tw
                     if (sendActive) { sF1L[i]*=sf; sF1R[i]*=sf; sF2L[i]*=sf; sF2R[i]*=sf; sDryL[i]*=sf; sDryR[i]*=sf; }   // fb287 — send fades too
                     if (dlySendActive) { dF1L[i]*=sf; dF1R[i]*=sf; dF2L[i]*=sf; dF2R[i]*=sf; dDryL[i]*=sf; dDryR[i]*=sf; }   // fb296 — delay send fades too
                     if (dstSendActive) { tF1L[i]*=sf; tF1R[i]*=sf; tF2L[i]*=sf; tF2R[i]*=sf; tDryL[i]*=sf; tDryR[i]*=sf; }   // fb338 — distortion send fades too
+                    if (exSendActive)  { xF1L[i]*=sf; xF1R[i]*=sf; xF2L[i]*=sf; xF2R[i]*=sf; xDryL[i]*=sf; xDryR[i]*=sf; }   // fb347 — exclusion fades identically
                     stealingFade_ *= stealingFadeStep_;
                 }
                 if (stealingFade_ < 0.001f)
@@ -4365,6 +4412,25 @@ namespace tw
                         {
                             dstSendL_[oi] += tF1L[i] + tF2L[i] + tDryL[i];
                             dstSendR_[oi] += tF1R[i] + tF2R[i] + tDryR[i];
+                        }
+                    }
+                    // fb347 — THE SHARED EXCLUSION BUS: same post-filter treatment, own filter pair
+                    // (its mask differs from every device's, so it needs its own filter state).
+                    if (exSendActive)
+                    {
+                        const int oi = startSample + i;
+                        if (a1 || a2)
+                        {
+                            sendFilterSlot7_.setParams (lastCutHz1_, res1, drvSm1_, sr);
+                            sendFilterSlot8_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            float soL, soR; filterBuses (xF1L[i], xF1R[i], xF2L[i], xF2R[i], soL, soR, sendFilterSlot7_, sendFilterSlot8_);
+                            exSendL_[oi] += soL + xDryL[i];
+                            exSendR_[oi] += soR + xDryR[i];
+                        }
+                        else
+                        {
+                            exSendL_[oi] += xF1L[i] + xF2L[i] + xDryL[i];
+                            exSendR_[oi] += xF1R[i] + xF2R[i] + xDryR[i];
                         }
                     }
                 }
@@ -4775,6 +4841,8 @@ namespace tw
         tw::filters::FilterSlot sendFilterSlot4_;
         tw::filters::FilterSlot sendFilterSlot5_;   // fb338 — distortion-send filter mirror
         tw::filters::FilterSlot sendFilterSlot6_;
+        tw::filters::FilterSlot sendFilterSlot7_;   // fb347 — the shared exclusion bus's own filter pair
+        tw::filters::FilterSlot sendFilterSlot8_;   //   (its union mask differs from every device's)
         float                   baseCutHz2_  = 20000.0f;
         float                   baseRes012_  = 0.0f;
         float                   drv012_      = 0.0f;
@@ -4825,6 +4893,12 @@ namespace tw
         float*                  dstSendR_ = nullptr;
         float                   dstG_[6] = { 0, 0, 0, 0, 0, 0 };
         bool                    dstAny_ = false;
+        // fb347 — the SHARED routed-dry exclusion bus (union of every device mask, each osc once).
+        juce::AudioBuffer<float> exSendF1_, exSendF2_, exSendDry_;
+        float*                  exSendL_ = nullptr;
+        float*                  exSendR_ = nullptr;
+        float                   exG_[6] = { 0, 0, 0, 0, 0, 0 };
+        bool                    exAny_ = false;
         float                   velAmt1_ = 0.0f, velAmt2_ = 0.0f;    // velocity → cutoff depth (back-panel Vel)
         float                   postDrv1_ = 0.0f, postDrv2_ = 0.0f;  // post-filter output drive (back-panel Drive)
         float                   drvNorm1_ = 1.0f, drvNorm2_ = 1.0f;  // fb123 — bus send level (drive normalization)

@@ -1617,6 +1617,14 @@ private:
     // distortion would get its bus AND the reverb main send). See bible §4.5.
     bool  dstPower_ = false;                         // SYN_DST_POWER (default OFF)
     juce::AudioBuffer<float> distortionSendBuf_;     // fb338 — routed-osc send bus (third, parallel to reverb/delay)
+    // ── fb347 — THE SHARED ROUTED-DRY EXCLUSION BUS. Carries each routed osc EXACTLY ONCE (the
+    //    union of every device's mask). Main-send devices subtract THIS instead of summing the
+    //    per-device buses, which double-counted any osc routed to 2+ devices and handed the next
+    //    device that osc phase-INVERTED. Also retires the fb305/fb338 landmine: there is no longer
+    //    a per-bus sum a newly added device can forget to join — one bus, one subtraction, forever.
+    juce::AudioBuffer<float> routedDryBuf_;
+    float exUnionG_[6] { 0, 0, 0, 0, 0, 0 };         // union route mask (A,B,C,D,Sub,Noise)
+    bool  exUnionAny_ = false;
     float dstG_[6] = { 0,0,0,0,0,0 };                // per-source distortion route gains (A,B,C,D,Sub,Noise)
     bool  dstRouteActive_ = false;                   // any distortion route enabled this block
     bool  dstMainSend_ = false;                      // power on + NO pills ⇒ MAIN SEND (whole mix, serial insert)

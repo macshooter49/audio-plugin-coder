@@ -6081,6 +6081,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     if (! dstPower_)          // power gates routing (same law as reverb/delay)
         for (int k = 0; k < 6; ++k) dstG_[k] = 0.0f;
     dstRouteActive_ = (dstG_[0] + dstG_[1] + dstG_[2] + dstG_[3] + dstG_[4] + dstG_[5]) > 0.0f;
+
+    // ════════ fb347 — THE UNION MASK for the shared routed-dry exclusion bus ════════
+    // An osc counts ONCE here no matter how many devices route it. Route gains are binary
+    // (:6036/:6054/:6075 all read `> 0.5f ? 1 : 0`), so OR-ing them is exact — there is no
+    // partial-fade case to average. This is the mask that fixes the double-subtract.
+    exUnionAny_ = false;
+    for (int s = 0; s < 6; ++s)
+    {
+        const bool routed = (hallRvbG_[s] > 0.0f) || (dlyG_[s] > 0.0f) || (dstG_[s] > 0.0f);
+        exUnionG_[s] = routed ? 1.0f : 0.0f;
+        exUnionAny_ = exUnionAny_ || routed;
+    }
+    if (routedDryBuf_.getNumSamples() < numSamples)
+        routedDryBuf_.setSize (2, numSamples, false, true, true);
+    routedDryBuf_.clear (0, numSamples);
     dstMainSend_ = dstPower_ && ! dstRouteActive_;   // fb303 grammar — power on + NO pills ⇒ MAIN SEND
     {
         float* rsL = hallRouteActive_ ? reverbSendBuf_.getWritePointer (0) : nullptr;
@@ -6097,6 +6112,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 sv->setDistortionRoutes (dstG_[0], dstG_[1], dstG_[2], dstG_[3], dstG_[4], dstG_[5]);
                 sv->setDistortionSendTarget (dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr,
                                              dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr);
+                // fb347 — the shared routed-dry bus (each routed osc exactly once)
+                sv->setExclusionRoutes (exUnionG_[0], exUnionG_[1], exUnionG_[2], exUnionG_[3], exUnionG_[4], exUnionG_[5]);
+                sv->setExclusionSendTarget (exUnionAny_ ? routedDryBuf_.getWritePointer (0) : nullptr,
+                                            exUnionAny_ ? routedDryBuf_.getWritePointer (1) : nullptr);
             }
     }
 
@@ -6659,6 +6678,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     auto* rightChannel = numChannels > 1 ? buffer.getWritePointer(1) : nullptr;
     const float* rvbSendL = reverbSendBuf_.getReadPointer (0);   // fb280 — routed-osc send (filled during synth render)
     const float* rvbSendR = reverbSendBuf_.getReadPointer (1);
+    // fb347 — the SHARED routed-dry bus. Every main-send device subtracts THIS one buffer; null
+    // when nothing is routed anywhere, in which case the subtraction is skipped entirely (and the
+    // output is bit-identical to fb346 — that is the null test this refactor had to pass).
+    const float* exDryL = exUnionAny_ ? routedDryBuf_.getReadPointer (0) : nullptr;
+    const float* exDryR = exUnionAny_ ? routedDryBuf_.getReadPointer (1) : nullptr;
     float hallBlockWetPk = 0.0f;                                 // fb280 — peak wet this block → bloom viz
     const float* dlySendL = delaySendBuf_.getReadPointer (0);    // fb296 — delay routed-osc send
     const float* dlySendR = delaySendBuf_.getReadPointer (1);
@@ -7364,9 +7388,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // reverbSendBuf_/delaySendBuf_) LEAVES the main send, so it is affected ONLY by the effect(s) it's
                 // routed to (Max: "osc C routed to delay should get delay, NOT the reverb main send"). Subtract that
                 // routed dry (send × outputGain × kVoiceToFxPad = exactly how it sits in leftChannel). No pills ⇒ 0.
-                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
+                const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
                 sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
                 else sgR = sgL;
             }
             else { const float rawL = (rvbSendL != nullptr) ? rvbSendL[i] : 0.0f;
@@ -7531,9 +7555,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 else
                 {
-                    const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
+                    const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
                     sgL = leftChannel[i] - rtdL;
-                    if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                    if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
                     else sgR = sgL;
                 }
                 float wl, wr; distortionEngine.processSample (sgL, sgR, wl, wr);
@@ -7563,9 +7587,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dlyMainSend_) {
                 // fb305 — MAIN SEND excludes per-osc-routed oscs (see reverb block above): subtract the routed
                 // dry so an osc routed to the reverb (or any effect) is NOT re-processed by the delay main send.
-                const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f) + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;   /* fb338 — the fb305 law: EVERY send bus joins EVERY main-send exclusion */
+                const float rtdL = (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — ONE shared routed-dry bus: each routed osc counted EXACTLY ONCE. Summing the per-device buses (fb305/fb338) double-counted an osc routed to 2+ devices and handed the next device that osc INVERTED. This also retires the landmine: no per-bus sum for a new device to forget. */
                 sgL = leftChannel[i] - rtdL;
-                if (rightChannel != nullptr) { const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f) + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad; sgR = rightChannel[i] - rtdR; }
+                if (rightChannel != nullptr) { const float rtdR = (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;   /* fb347 — see L */ sgR = rightChannel[i] - rtdR; }
                 else sgR = sgL;
             }
             else { const float rawL = (dlySendL != nullptr) ? dlySendL[i] : 0.0f;
@@ -7590,15 +7614,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // main-send path — so a duplicate hears exactly what the original would hear in that slot.
         auto excludeRouted = [&] (float& sgL, float& sgR)
         {
-            const float rtdL = ((rvbSendL ? rvbSendL[i] : 0.0f) + (dlySendL ? dlySendL[i] : 0.0f)
-                              + (dstSendL ? dstSendL[i] : 0.0f)) * outputGain * kVoiceToFxPad;
-            sgL = leftChannel[i] - rtdL;
+            // fb347 — the ONE shared routed-dry bus (each routed osc exactly once).
+            sgL = leftChannel[i] - (exDryL ? exDryL[i] : 0.0f) * outputGain * kVoiceToFxPad;
             if (rightChannel != nullptr)
-            {
-                const float rtdR = ((rvbSendR ? rvbSendR[i] : 0.0f) + (dlySendR ? dlySendR[i] : 0.0f)
-                                  + (dstSendR ? dstSendR[i] : 0.0f)) * outputGain * kVoiceToFxPad;
-                sgR = rightChannel[i] - rtdR;
-            }
+                sgR = rightChannel[i] - (exDryR ? exDryR[i] : 0.0f) * outputGain * kVoiceToFxPad;
             else sgR = sgL;
         };
 
