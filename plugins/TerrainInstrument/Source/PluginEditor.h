@@ -31,6 +31,7 @@ public:
     void fileDragExit           (const juce::StringArray& files) override;
 
 private:
+    int dstVizPushCtr_ = 0;   // fb354 — rate-limits the distortion-curve push to ~15 Hz
     void timerCallback() override;
     // fb214 — OSC-scope dead-feed guard: oscScopeSeq advances ONLY when the audio thread
     // publishes a frame; if it stalls (host stopped calling processBlock) the latched

@@ -5567,6 +5567,22 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             js << (q ? "," : "") << SF (audioProcessor.getReverbBloomPool (q), 3);
         js << "];";
 
+        // ── fb354 — THE DISTORTION CURVE RIDES THE PUSH TOO ─────────────────────────────────
+        // It was the last rack viz still on a native POLL, and it is by far the biggest payload
+        // (128 curve points + 48 occupancy). Max: the curve has NEVER drawn — only the dashed
+        // unity line. A poll can fail silently three ways, and all three end in a permanently
+        // empty <path>: the promise never settles (the documented house law in this plugin — it
+        // is why fb334 needed a watchdog and why fb342 moved the blooms here), the promise
+        // rejects with no .catch, or JSON.parse throws inside a silent catch. The push has no
+        // promise to lose: the object is evaluated straight into the page.
+        // Rate-limited to ~15 Hz (the poll's own cadence) so this stays ~16 KB/s, well under the
+        // 40-80 KB/s that fb342 identified as the frame-drop threshold.
+        if (++dstVizPushCtr_ >= 4)
+        {
+            dstVizPushCtr_ = 0;
+            js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
+        }
+
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.
         if (auto itL = audioProcessor.cardWindows_.find ("lfo");
