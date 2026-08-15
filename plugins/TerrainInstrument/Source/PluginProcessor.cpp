@@ -4247,6 +4247,246 @@ static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
     return true;
 }
 
+// ═════════ fb352 — ONE reverb parameter routine, shared by EVERY reverb instance ═════════
+// The 9-type parameter block used to be written inline against instance 1's engine members and
+// its rawParam() reads. Duplicating ~200 lines of that for the pooled instances is precisely how
+// fb350 happened (the pool silently missed DelayEngine::updateCoefficients() and every duplicate
+// delay ran at zero delay length). So there is now exactly ONE copy: instance 1 and instances
+// 2..6 both call this, and a per-type setter can never again exist for one and not the other.
+struct RvbSnapshot
+{
+    float size = 0, decay = 0, tone = 0, predelay = 0, diffuse = 0, moddepth = 0, modrate = 0,
+          hidamp = 0, lowdecay = 0, lowcut = 0, width = 0, mix = 0;
+    int   character = 0, modmode = 0;
+    bool  mod = false, freeze = false, duck = false;
+};
+struct RvbEngineSet   // pooled instances allocate ONLY the engine their type needs, so these are
+{                     // null for every other type — dispatch below touches exactly one of them.
+    HallReverb*        hall    = nullptr;  RoomReverb*    room    = nullptr;
+    PlateReverb*       plate   = nullptr;  SpringReverb*  spring  = nullptr;
+    DigitalReverb*     digital = nullptr;  VintageReverb* vintage = nullptr;
+    BasinReverb*       basin   = nullptr;  ShimmerReverb* shimmer = nullptr;
+    ConvolutionReverb* conv    = nullptr;
+    // is the engine this type needs actually built yet?
+    bool has (int type) const noexcept
+    {
+        switch (type) { case 8: return conv != nullptr;    case 7: return shimmer != nullptr;
+                        case 6: return basin != nullptr;   case 5: return vintage != nullptr;
+                        case 4: return digital != nullptr; case 3: return spring != nullptr;
+                        case 2: return plate != nullptr;   case 1: return room != nullptr; }
+        return hall != nullptr;
+    }
+};
+static void applyRvbTypeParams (int type, const RvbSnapshot& p, const RvbEngineSet& e)
+{
+    if (! e.has (type)) return;          // engine not built yet (pooled, first block) — caller stays silent
+                if (type == 8)
+                {
+                    // ── CONVOLUTION (true FFT convolution + synth/user IR) — the one non-synthetic reverb. Signature slots:
+                    //    DIFFUSE→Density (smear) · MODDEPTH/MODRATE→Motion (chorus) · HIDAMP→Attack (onset fade) ·
+                    //    LOWDECAY→Distance (ER↔tail) · MODMODE→Shape (ER pattern) · FREEZE→Reverse (backwards). ──
+                    e.conv->setSize        (p.size);
+                    e.conv->setDecay       (p.decay);
+                    e.conv->setTone        (p.tone);
+                    e.conv->setPreDelayMs  (p.predelay * 200.0f);
+                    e.conv->setDensity     (p.diffuse);
+                    e.conv->setMotionDepth (p.moddepth);
+                    e.conv->setMotionRate  (0.05f + p.modrate * 4.95f);
+                    e.conv->setAttack      (p.hidamp);     // HIDAMP slot → Attack
+                    e.conv->setDistance    (p.lowdecay);   // LOWDECAY slot → Distance
+                    e.conv->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.conv->setWidth       (p.width);
+                    e.conv->setCharacter   (p.character);
+                    e.conv->setShape        (p.modmode);
+                    e.conv->setModEnabled  (p.mod);
+                    e.conv->setReverse     (p.freeze);   // FREEZE slot → Reverse pill
+                    e.conv->updateCoefficients();
+                    e.conv->prepareBlock();   // rate-limited IR rebake (off the tight per-sample loop)
+                }
+                else if (type == 7)
+                {
+                    // ── SHIMMER (ethereal octave wash) — Hall FDN + pitch-shifter in the feedback loop. Signature slots:
+                    //    HIDAMP→Shimmer (pitch blend = shimmer amount) · LOWDECAY→Regen (feedback buildup) ·
+                    //    MODMODE→Shift (6 intervals; +12 default) · MODDEPTH+RATE = the chorus pair. ──
+                    e.shimmer->setSize        (p.size);
+                    e.shimmer->setDecay       (p.decay);
+                    e.shimmer->setTone        (p.tone);
+                    e.shimmer->setPreDelayMs  (p.predelay * 200.0f);
+                    e.shimmer->setDiffusion   (p.diffuse);
+                    e.shimmer->setModDepth    (p.moddepth);
+                    e.shimmer->setModRate     (0.05f + p.modrate * 4.95f);
+                    e.shimmer->setShimmer     (p.hidamp);     // HIDAMP slot → Shimmer (pitch blend)
+                    e.shimmer->setRegen       (p.lowdecay);   // LOWDECAY slot → Regen (feedback)
+                    e.shimmer->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.shimmer->setWidth       (p.width);
+                    e.shimmer->setCharacter   (p.character);
+                    e.shimmer->setShift        (p.modmode);
+                    e.shimmer->setModEnabled  (p.mod);
+                    e.shimmer->setFreeze      (p.freeze);
+                    e.shimmer->updateCoefficients();
+                }
+                else if (type == 6)
+                {
+                    // ── BASIN (huge dark ambient wash) — Hall FDN retuned. Signature slots: HIDAMP→Damping (dark) ·
+                    //    LOWDECAY→Bass Decay = the BASS-SAFE crossover (default <1 ⇒ lows decay FASTER than mids;
+                    //    the 0.22·9^v curve lands 0.5→0.66 safe, sweeps to bloom) · MODMODE→Motion · MODDEPTH+RATE pair. ──
+                    e.basin->setSize        (p.size);
+                    e.basin->setDecay       (p.decay);
+                    e.basin->setTone        (p.tone);
+                    e.basin->setPreDelayMs  (p.predelay * 250.0f);
+                    e.basin->setDiffusion   (p.diffuse);
+                    e.basin->setModDepth    (p.moddepth);
+                    e.basin->setModRate     (0.05f + p.modrate * 4.95f);
+                    e.basin->setDamping     (p.hidamp);
+                    e.basin->setBassDecay   (0.22f * std::pow (9.0f, p.lowdecay));   // bass-safe(<1) ↔ bloom(>1)
+                    e.basin->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.basin->setWidth       (p.width);
+                    e.basin->setCharacter   (p.character);
+                    e.basin->setMotion      (p.modmode);
+                    e.basin->setModEnabled  (p.mod);
+                    e.basin->setFreeze      (p.freeze);
+                    e.basin->updateCoefficients();
+                }
+                else if (type == 5)
+                {
+                    // ── VINTAGE (80s digital rack) — signature slots: HIDAMP→Age (reduced-SR alias+band-limit) ·
+                    //    LOWDECAY→Grit (bit-crush) · LOWCUT→Drive (input saturation) · MODMODE→Shape (Normal/Gate/
+                    //    Gate-Long/Reverse/Nonlin/Ambience) · DIFFUSE→Diffusion · MODDEPTH+MODRATE = the chorus pair. ──
+                    e.vintage->setSize        (p.size);
+                    e.vintage->setDecay       (p.decay);
+                    e.vintage->setTone        (p.tone);
+                    e.vintage->setPreDelayMs  (p.predelay * 200.0f);
+                    e.vintage->setDiffusion   (p.diffuse);
+                    e.vintage->setModDepth    (p.moddepth);
+                    e.vintage->setModRate     (0.05f + p.modrate * 4.95f);
+                    e.vintage->setAge         (p.hidamp);     // HIDAMP slot → Age
+                    e.vintage->setGrit        (p.lowdecay);   // LOWDECAY slot → Grit
+                    e.vintage->setDrive       (p.lowcut);     // LOWCUT slot → Drive
+                    e.vintage->setWidth       (p.width);
+                    e.vintage->setCharacter   (p.character);
+                    e.vintage->setShape        (p.modmode);
+                    e.vintage->setModEnabled  (p.mod);
+                    e.vintage->setFreeze      (p.freeze);
+                    e.vintage->updateCoefficients();
+                }
+                else if (type == 4)
+                {
+                    // ── DIGITAL (Lexicon 224) — shared slots: DIFFUSE→Diffusion · MODDEPTH→Mod Depth (the chorus) ·
+                    //    MODRATE→Mod Rate · HIDAMP→Treble Decay · LOWDECAY→Bass Decay · MODMODE→Chorus Voicing. ──
+                    e.digital->setSize        (p.size);
+                    e.digital->setDecay       (p.decay);
+                    e.digital->setTone        (p.tone);
+                    e.digital->setPreDelayMs  (p.predelay * 200.0f);
+                    e.digital->setDiffusion   (p.diffuse);
+                    e.digital->setModDepth    (p.moddepth);
+                    e.digital->setModRate     (0.02f + p.modrate * 5.98f);
+                    e.digital->setTrebleDecay (p.hidamp);
+                    e.digital->setBassDecay   (0.16f + p.lowdecay * 6.84f);   // fb286 — wider LF bloom
+                    e.digital->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.digital->setWidth       (p.width);
+                    e.digital->setCharacter   (p.character);
+                    e.digital->setVoicing     (p.modmode);
+                    e.digital->setModEnabled  (p.mod);
+                    e.digital->setFreeze      (p.freeze);
+                    e.digital->updateCoefficients();
+                }
+                else if (type == 3)
+                {
+                    // ── SPRING — shared slots: SIZE→Tension · DIFFUSE→Transition · MODDEPTH→Shake · MODRATE→Dispersion
+                    //    HIDAMP→Damping · LOWDECAY→Drive · MODMODE→Springs(count). The boing = dispersive allpass loop. ──
+                    e.spring->setTension    (p.size);
+                    e.spring->setDecay      (p.decay);
+                    e.spring->setTone       (p.tone);
+                    e.spring->setPreDelayMs  (p.predelay * 150.0f);
+                    e.spring->setTransition (p.diffuse);
+                    e.spring->setShake      (p.moddepth);
+                    e.spring->setDispersion (p.modrate);
+                    e.spring->setDamping    (p.hidamp);
+                    e.spring->setDrive      (p.lowdecay);
+                    e.spring->setLowCutHz   (20.0f * std::pow (50.0f, p.lowcut));
+                    e.spring->setWidth      (p.width);
+                    e.spring->setCharacter  (p.character);
+                    e.spring->setSprings    (p.modmode);
+                    e.spring->setModEnabled (true);   // fb287 — SYN_RVB_MOD is Duck for Spring; Shake stays gated by its own knob (0 = silent)
+                    e.spring->setFreeze     (p.freeze);
+                    e.spring->updateCoefficients();
+                }
+                else if (type == 2)
+                {
+                    // ── PLATE — fb287 MATCHED MOD PAIR: DIFFUSE slot → Mod Rate (relabeled; plate density is
+                    //    Character/Material, so the Diffusion knob retired) · MODDEPTH → Mod Depth · MODRATE → Dispersion
+                    //    · MODMODE → Material · HIDAMP → Damping · LOWDECAY → Bass Decay. ──
+                    e.plate->setSize        (p.size);
+                    e.plate->setDecay       (p.decay);
+                    e.plate->setTone        (p.tone);
+                    e.plate->setPreDelayMs  (p.predelay * 120.0f);
+                    e.plate->setModRate     (0.05f + p.diffuse * 4.95f);   // fb287 — matched pair w/ Mod Depth (was Diffusion)
+                    e.plate->setModDepth    (p.moddepth);
+                    e.plate->setDispersion  (p.modrate);
+                    e.plate->setDamping     (p.hidamp);
+                    e.plate->setBassDecay   (0.25f + p.lowdecay * 2.25f);
+                    e.plate->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.plate->setWidth       (p.width);
+                    e.plate->setCharacter   (p.character);
+                    e.plate->setMaterial    (p.modmode);
+                    e.plate->setModEnabled  (p.mod);
+                    e.plate->setFreeze      (p.freeze);
+                    e.plate->updateCoefficients();
+                }
+                else if (type == 1)
+                {
+                    // ── ROOM — fb287: NO user mod (its 2nd pill is Duck). MODDEPTH slot → Spread (ER stereo width);
+                    //    MODRATE→Reflections · MODMODE→Shape · HIDAMP→Damping · LOWDECAY→Bass Decay. Internal gentle
+                    //    de-metallizing mod stays ON (fixed default) — it's part of the room, not a user control. ──
+                    e.room->setSize        (p.size);
+                    e.room->setDecay       (p.decay);
+                    e.room->setTone        (p.tone);
+                    e.room->setPreDelayMs  (p.predelay * 120.0f);
+                    e.room->setDiffusion   (p.diffuse);
+                    e.room->setSpread      (p.moddepth);   // fb287 — ER stereo width (owns the MODDEPTH slot)
+                    e.room->setReflections (p.modrate);
+                    e.room->setDamping     (p.hidamp);
+                    e.room->setBassDecay   (0.25f + p.lowdecay * 2.25f);
+                    e.room->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.room->setWidth       (p.width);
+                    e.room->setCharacter   (p.character);
+                    e.room->setShape       (p.modmode);
+                    e.room->setModEnabled  (true);   // fb287 — SYN_RVB_MOD is Duck for Room; keep the gentle internal mod always on
+                    e.room->setFreeze      (p.freeze);
+                    e.room->updateCoefficients();
+                }
+                else
+                {
+                    // ── HALL ──
+                    e.hall->setSize        (p.size);
+                    e.hall->setDecay       (p.decay);
+                    e.hall->setTone        (p.tone);
+                    e.hall->setPreDelayMs  (p.predelay * 250.0f);
+                    e.hall->setDiffusion   (p.diffuse);
+                    e.hall->setModDepth    (p.moddepth);
+                    e.hall->setModRate     (0.05f + p.modrate * 4.95f);
+                    e.hall->setHighDamping (p.hidamp);
+                    e.hall->setLowDecay    (0.25f + p.lowdecay * 1.75f);
+                    e.hall->setLowCutHz    (20.0f * std::pow (50.0f, p.lowcut));
+                    e.hall->setWidth       (p.width);
+                    e.hall->setCharacter   (p.character);
+                    e.hall->setModMode     (p.modmode);
+                    e.hall->setModEnabled  (p.mod);
+                    e.hall->setFreeze      (p.freeze);
+                    e.hall->updateCoefficients();
+                }
+}
+
+RvbEngineSet TerrainInstrumentAudioProcessor::rvbEngineSet1() noexcept
+{
+    RvbEngineSet e;
+    e.hall = &hallReverb;   e.room    = &roomReverb;    e.plate   = &plateReverb;
+    e.spring = &springReverb; e.digital = &digitalReverb; e.vintage = &vintageReverb;
+    e.basin = &basinReverb; e.shimmer = &shimmerReverb; e.conv    = &convolutionReverb;
+    return e;                      // instance 1 keeps every engine resident (it always has)
+}
+
+
 void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
@@ -7248,201 +7488,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             hallEnvT_ = (hallPower_ && hallRouteActive_ && ! rvbSwapping_) ? 1.0f : 0.0f;
             if (hallPower_)
             {
-                if (activeRvbType_ == 8)
-                {
-                    // ── CONVOLUTION (true FFT convolution + synth/user IR) — the one non-synthetic reverb. Signature slots:
-                    //    DIFFUSE→Density (smear) · MODDEPTH/MODRATE→Motion (chorus) · HIDAMP→Attack (onset fade) ·
-                    //    LOWDECAY→Distance (ER↔tail) · MODMODE→Shape (ER pattern) · FREEZE→Reverse (backwards). ──
-                    convolutionReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    convolutionReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    convolutionReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    convolutionReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
-                    convolutionReverb.setDensity     (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    convolutionReverb.setMotionDepth (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    convolutionReverb.setMotionRate  (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                    convolutionReverb.setAttack      (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());     // HIDAMP slot → Attack
-                    convolutionReverb.setDistance    (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());   // LOWDECAY slot → Distance
-                    convolutionReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    convolutionReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    convolutionReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    convolutionReverb.setShape        ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    convolutionReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    convolutionReverb.setReverse     (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);   // FREEZE slot → Reverse pill
-                    convolutionReverb.updateCoefficients();
-                    convolutionReverb.prepareBlock();   // rate-limited IR rebake (off the tight per-sample loop)
-                }
-                else if (activeRvbType_ == 7)
-                {
-                    // ── SHIMMER (ethereal octave wash) — Hall FDN + pitch-shifter in the feedback loop. Signature slots:
-                    //    HIDAMP→Shimmer (pitch blend = shimmer amount) · LOWDECAY→Regen (feedback buildup) ·
-                    //    MODMODE→Shift (6 intervals; +12 default) · MODDEPTH+RATE = the chorus pair. ──
-                    shimmerReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    shimmerReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    shimmerReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    shimmerReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
-                    shimmerReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    shimmerReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    shimmerReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                    shimmerReverb.setShimmer     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());     // HIDAMP slot → Shimmer (pitch blend)
-                    shimmerReverb.setRegen       (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());   // LOWDECAY slot → Regen (feedback)
-                    shimmerReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    shimmerReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    shimmerReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    shimmerReverb.setShift        ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    shimmerReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    shimmerReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    shimmerReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 6)
-                {
-                    // ── BASIN (huge dark ambient wash) — Hall FDN retuned. Signature slots: HIDAMP→Damping (dark) ·
-                    //    LOWDECAY→Bass Decay = the BASS-SAFE crossover (default <1 ⇒ lows decay FASTER than mids;
-                    //    the 0.22·9^v curve lands 0.5→0.66 safe, sweeps to bloom) · MODMODE→Motion · MODDEPTH+RATE pair. ──
-                    basinReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    basinReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    basinReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    basinReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
-                    basinReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    basinReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    basinReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                    basinReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    basinReverb.setBassDecay   (0.22f * std::pow (9.0f, rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load()));   // bass-safe(<1) ↔ bloom(>1)
-                    basinReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    basinReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    basinReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    basinReverb.setMotion      ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    basinReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    basinReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    basinReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 5)
-                {
-                    // ── VINTAGE (80s digital rack) — signature slots: HIDAMP→Age (reduced-SR alias+band-limit) ·
-                    //    LOWDECAY→Grit (bit-crush) · LOWCUT→Drive (input saturation) · MODMODE→Shape (Normal/Gate/
-                    //    Gate-Long/Reverse/Nonlin/Ambience) · DIFFUSE→Diffusion · MODDEPTH+MODRATE = the chorus pair. ──
-                    vintageReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    vintageReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    vintageReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    vintageReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
-                    vintageReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    vintageReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    vintageReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                    vintageReverb.setAge         (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());     // HIDAMP slot → Age
-                    vintageReverb.setGrit        (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());   // LOWDECAY slot → Grit
-                    vintageReverb.setDrive       (rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load());     // LOWCUT slot → Drive
-                    vintageReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    vintageReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    vintageReverb.setShape        ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    vintageReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    vintageReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    vintageReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 4)
-                {
-                    // ── DIGITAL (Lexicon 224) — shared slots: DIFFUSE→Diffusion · MODDEPTH→Mod Depth (the chorus) ·
-                    //    MODRATE→Mod Rate · HIDAMP→Treble Decay · LOWDECAY→Bass Decay · MODMODE→Chorus Voicing. ──
-                    digitalReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    digitalReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    digitalReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    digitalReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 200.0f);
-                    digitalReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    digitalReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    digitalReverb.setModRate     (0.02f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 5.98f);
-                    digitalReverb.setTrebleDecay (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    digitalReverb.setBassDecay   (0.16f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 6.84f);   // fb286 — wider LF bloom
-                    digitalReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    digitalReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    digitalReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    digitalReverb.setVoicing     ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    digitalReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    digitalReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    digitalReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 3)
-                {
-                    // ── SPRING — shared slots: SIZE→Tension · DIFFUSE→Transition · MODDEPTH→Shake · MODRATE→Dispersion
-                    //    HIDAMP→Damping · LOWDECAY→Drive · MODMODE→Springs(count). The boing = dispersive allpass loop. ──
-                    springReverb.setTension    (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    springReverb.setDecay      (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    springReverb.setTone       (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    springReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 150.0f);
-                    springReverb.setTransition (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    springReverb.setShake      (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    springReverb.setDispersion (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
-                    springReverb.setDamping    (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    springReverb.setDrive      (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());
-                    springReverb.setLowCutHz   (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    springReverb.setWidth      (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    springReverb.setCharacter  ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    springReverb.setSprings    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    springReverb.setModEnabled (true);   // fb287 — SYN_RVB_MOD is Duck for Spring; Shake stays gated by its own knob (0 = silent)
-                    springReverb.setFreeze     (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    springReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 2)
-                {
-                    // ── PLATE — fb287 MATCHED MOD PAIR: DIFFUSE slot → Mod Rate (relabeled; plate density is
-                    //    Character/Material, so the Diffusion knob retired) · MODDEPTH → Mod Depth · MODRATE → Dispersion
-                    //    · MODMODE → Material · HIDAMP → Damping · LOWDECAY → Bass Decay. ──
-                    plateReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    plateReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    plateReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    plateReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 120.0f);
-                    plateReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load() * 4.95f);   // fb287 — matched pair w/ Mod Depth (was Diffusion)
-                    plateReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    plateReverb.setDispersion  (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
-                    plateReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    plateReverb.setBassDecay   (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 2.25f);
-                    plateReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    plateReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    plateReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    plateReverb.setMaterial    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    plateReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    plateReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    plateReverb.updateCoefficients();
-                }
-                else if (activeRvbType_ == 1)
-                {
-                    // ── ROOM — fb287: NO user mod (its 2nd pill is Duck). MODDEPTH slot → Spread (ER stereo width);
-                    //    MODRATE→Reflections · MODMODE→Shape · HIDAMP→Damping · LOWDECAY→Bass Decay. Internal gentle
-                    //    de-metallizing mod stays ON (fixed default) — it's part of the room, not a user control. ──
-                    roomReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    roomReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    roomReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    roomReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 120.0f);
-                    roomReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    roomReverb.setSpread      (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());   // fb287 — ER stereo width (owns the MODDEPTH slot)
-                    roomReverb.setReflections (rawParam (ParameterIDs::SYN_RVB_MODRATE)->load());
-                    roomReverb.setDamping     (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    roomReverb.setBassDecay   (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 2.25f);
-                    roomReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    roomReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    roomReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    roomReverb.setShape       ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    roomReverb.setModEnabled  (true);   // fb287 — SYN_RVB_MOD is Duck for Room; keep the gentle internal mod always on
-                    roomReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    roomReverb.updateCoefficients();
-                }
-                else
-                {
-                    // ── HALL ──
-                    hallReverb.setSize        (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                    hallReverb.setDecay       (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                    hallReverb.setTone        (rawParam (ParameterIDs::SYN_RVB_TONE)->load());
-                    hallReverb.setPreDelayMs  (rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load() * 250.0f);
-                    hallReverb.setDiffusion   (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                    hallReverb.setModDepth    (rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load());
-                    hallReverb.setModRate     (0.05f + rawParam (ParameterIDs::SYN_RVB_MODRATE)->load() * 4.95f);
-                    hallReverb.setHighDamping (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                    hallReverb.setLowDecay    (0.25f + rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load() * 1.75f);
-                    hallReverb.setLowCutHz    (20.0f * std::pow (50.0f, rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load()));
-                    hallReverb.setWidth       (rawParam (ParameterIDs::SYN_RVB_WIDTH)->load());
-                    hallReverb.setCharacter   ((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
-                    hallReverb.setModMode     ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
-                    hallReverb.setModEnabled  (rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f);
-                    hallReverb.setFreeze      (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
-                    hallReverb.updateCoefficients();
-                }
+                // fb352 — the ONE shared per-type routine (see applyRvbTypeParams).
+                RvbSnapshot rp;
+                rp.size      = rawParam (ParameterIDs::SYN_RVB_SIZE)->load();
+                rp.decay     = rawParam (ParameterIDs::SYN_RVB_DECAY)->load();
+                rp.tone      = rawParam (ParameterIDs::SYN_RVB_TONE)->load();
+                rp.predelay  = rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load();
+                rp.diffuse   = rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load();
+                rp.moddepth  = rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load();
+                rp.modrate   = rawParam (ParameterIDs::SYN_RVB_MODRATE)->load();
+                rp.hidamp    = rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load();
+                rp.lowdecay  = rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load();
+                rp.lowcut    = rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load();
+                rp.width     = rawParam (ParameterIDs::SYN_RVB_WIDTH)->load();
+                rp.mix       = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
+                rp.character = (int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER);
+                rp.modmode   = (int) *rawParam (ParameterIDs::SYN_RVB_MODMODE);
+                rp.mod       = rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f;
+                rp.freeze    = rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f;
+                rp.duck      = rawParam (ParameterIDs::SYN_RVB_DUCK)->load()   > 0.5f;
+                applyRvbTypeParams (activeRvbType_, rp, rvbEngineSet1());
                 const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
                 hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 hallRvbDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);

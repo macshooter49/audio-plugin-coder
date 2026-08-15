@@ -1510,6 +1510,9 @@ private:
     juce::SmoothedValue<float> smoothedChorusCharacter;
 
     // Space reverb (stereo — single instance handles both channels)
+    // fb352 — instance 1's engines as a set, so it shares applyRvbTypeParams with the pool.
+    // Defined out-of-line in the .cpp (RvbEngineSet is file-local there).
+    struct RvbEngineSet rvbEngineSet1() noexcept;
     SpaceReverb spaceReverb;
     HallReverb  hallReverb;                       // fb276/277 — synth FX-rack reverb (Hall). Gated additive send, click-free.
     RoomReverb  roomReverb;                       // fb281 — Room reverb (early reflections + short dense tail)
