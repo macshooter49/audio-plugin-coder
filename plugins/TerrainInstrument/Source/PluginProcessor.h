@@ -701,6 +701,9 @@ public:
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
     float             getDelayBloom()  const noexcept { return dlyBloomViz_.load  (std::memory_order_relaxed); }  // fb296 — delay wet level 0..1 for the delay core viz
+    // fb352 — the SAME reading for pooled REVERB instance e (0 = Reverb 2 … 4 = Reverb 6).
+    float             getReverbBloomPool (int e) const noexcept
+    { return ((unsigned) e < (unsigned) kFxExtra) ? poolRvbBloomViz_[(size_t) e].load (std::memory_order_relaxed) : 0.0f; }
     // fb350 — the SAME reading for pooled delay instance e (0 = Delay 2 … 4 = Delay 6).
     float             getDelayBloomPool (int e) const noexcept
     { return ((unsigned) e < (unsigned) kFxExtra) ? poolDlyBloomViz_[(size_t) e].load (std::memory_order_relaxed) : 0.0f; }
@@ -1590,7 +1593,7 @@ private:
     float hallEntryG_[6] { 0,0,0,0,0,0 };            // ENTRY masks — a source enters the rack exactly
     float dlyEntryG_ [6] { 0,0,0,0,0,0 };            // once, at the FIRST device routed to it. These
     float dstEntryG_ [6] { 0,0,0,0,0,0 };            // (not the full route masks) are what the voices
-    std::array<float, (size_t) (2 * (ParameterIDs::kFxInstances - 1)) * 6> poolEntryG_ {};   // tap.
+    std::array<float, (size_t) (3 * (ParameterIDs::kFxInstances - 1)) * 6> poolEntryG_ {};   // tap.
     void rebuildChainOrder() noexcept;                       // audio-thread safe (cached pointers only)
 
     // ── cached parameter pointers for the pooled instances (resolved once in prepareToPlay, where
@@ -1604,6 +1607,39 @@ private:
         std::atomic<float>* wow; std::atomic<float>* duck; std::atomic<float>* sync;
         std::atomic<float>* link; std::atomic<float>* ping; std::atomic<float>* hq;
         std::atomic<float>* src[6]; };   // fb348 — per-osc route pills (A,B,C,D,Sub,Noise)
+    // fb352 — POOLED REVERB (instances 2..6). Params are eager (they must be: the host caches the
+    //   list at load), ENGINES are lazy — an instance builds only the ONE engine its current type
+    //   needs, on the MESSAGE THREAD (timerCallback), never on the audio thread. That is what makes
+    //   6 reverbs affordable: eager would be 9 engines x 5 instances, with Convolution among them.
+    struct RvbRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* modmode;
+        std::atomic<float>* size; std::atomic<float>* decay; std::atomic<float>* tone;
+        std::atomic<float>* mix; std::atomic<float>* predelay; std::atomic<float>* diffuse;
+        std::atomic<float>* moddepth; std::atomic<float>* modrate; std::atomic<float>* hidamp;
+        std::atomic<float>* lowdecay; std::atomic<float>* lowcut; std::atomic<float>* width;
+        std::atomic<float>* mod; std::atomic<float>* freeze; std::atomic<float>* duck;
+        std::atomic<float>* src[6]; };
+    struct PoolRvbEngines
+    {
+        std::unique_ptr<HallReverb>        hall;     std::unique_ptr<RoomReverb>    room;
+        std::unique_ptr<PlateReverb>       plate;    std::unique_ptr<SpringReverb>  spring;
+        std::unique_ptr<DigitalReverb>     digital;  std::unique_ptr<VintageReverb> vintage;
+        std::unique_ptr<BasinReverb>       basin;    std::unique_ptr<ShimmerReverb> shimmer;
+        std::unique_ptr<ConvolutionReverb> conv;
+    };
+    std::array<RvbRefs, (size_t) kFxExtra>         rvbRefs_ {};
+    std::array<PoolRvbEngines, (size_t) kFxExtra>  rvbPool_;
+    std::array<int,   (size_t) kFxExtra> poolRvbType_ {};      // adopted type (-1 = not adopted yet)
+    std::array<bool,  (size_t) kFxExtra> poolRvbSwap_ {};      // type-swap fade in progress
+    std::array<float, (size_t) kFxExtra> poolRvbEnv_  {};      // on/off fade env
+    std::array<float, (size_t) kFxExtra> poolRvbDry_  {};      // ramped mix (equal-power)
+    std::array<float, (size_t) kFxExtra> poolRvbWet_  {};
+    std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
+    std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};
+    std::array<std::atomic<int>,   (size_t) kFxExtra> rvbWantType_ {};   // audio→message: build me this
+    double rvbPoolSr_ = 44100.0;
+    void   buildPendingReverbEngines();      // MESSAGE THREAD ONLY (timerCallback) — allocates
+    struct RvbEngineSet rvbEngineSetPool (int e) noexcept;
     struct DstRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* qual;
         std::atomic<float>* drive; std::atomic<float>* sig; std::atomic<float>* tone;
@@ -1651,7 +1687,7 @@ private:
     // ── fb348 — one send bus per POOLED instance (Delay 2..6 = 0..4, Distortion 2..6 = 5..9).
     //    NO GLOBAL SEND any more (Max): a device affects ONLY what it is routed to, so a delay on
     //    osc C can never touch osc A. An unrouted device is silent.
-    static constexpr int kPoolSendCount = 10;
+    static constexpr int kPoolSendCount = 15;   // fb352 — 5 delay + 5 distortion + 5 REVERB
     std::array<juce::AudioBuffer<float>, (size_t) kPoolSendCount> poolSendBuf_;
     std::array<bool,  (size_t) kPoolSendCount> poolRouteAny_ {};
     std::array<float, (size_t) kPoolSendCount * 6> poolRouteG_ {};

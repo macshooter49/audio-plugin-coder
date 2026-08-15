@@ -678,6 +678,9 @@ bool TerrainInstrumentAudioProcessor::physicalLeftButtonDown()
 
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
+    // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
+    // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
+    buildPendingReverbEngines();
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
     // the real mouse (Desktop) and detects the release itself. WebKit's event delivery
     // outside a window can never strand a cross-window drag, and screen coords are
@@ -3579,6 +3582,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // ── Instances 2..kFxInstances. Delay and Distortion pool first because each is ONE engine
         //    object; the Reverb device is SIX (Space/Hall/Digital/Basin/Shimmer/Convolution) and gets
         //    lazily-built instances in the next pass rather than 6x memory per slot up front.
+        // fb352 — the pooled REVERB choice lists, verbatim from instance 1 (a duplicate must be the
+        // same device; a differently-voiced clone is a bug, not a feature).
+        const juce::StringArray rvbTypes { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" };
+        const juce::StringArray rvbChars { "Smooth","Random","Vintage","Cathedral","Chamber","Dark","Bright","Ethereal" };
+        const juce::StringArray rvbModModes { "Off","Subtle","Lush","Chorale","Random","Chaos" };
         const juce::StringArray dlyTypes { "Digital","Tape","BBD","Diffuse" };
         const juce::StringArray dlyChars { "Clean","Warm","Vintage","Modern","Lo-Fi","Bright","Dark","Wide" };
         const juce::StringArray syncDiv  { "Free","4 bar","2 bar","1 bar","1/2","1/2D","1/2T","1/4","1/4D","1/4T",
@@ -3624,6 +3632,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 B (p + "PING", d + "Ping-Pong", false);
                 B (p + "POWER", d + "Power", false); B (p + "HQ",    d + "HQ",        true);
                 B (p + "ACTIVE", d + "In Chain", false);          // not in the chain until the + adds it
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+            // ── REVERB instance n (fb352). Defaults IDENTICAL to instance 1 — a duplicate must
+            //    sound like the original the moment you add it. The ENGINES are built lazily on
+            //    the message thread (only the one the active type needs), but the PARAMS must all
+            //    exist up front: JUCE/VST3/AU cache the parameter list at load, so nothing can be
+            //    born at runtime. That is the same law the delay/distortion pools follow.
+            {
+                const juce::String p = "SYN_RVB" + juce::String (n) + "_";
+                const juce::String d = "Reverb " + juce::String (n) + " ";
+                C (p + "TYPE",      d + "Type",      rvbTypes,    0);
+                C (p + "CHARACTER", d + "Character", rvbChars,    0);
+                C (p + "MODMODE",   d + "Mod Mode",  rvbModModes, 2);   // "Lush", same as instance 1
+                F (p + "SIZE",     d + "Size",      0.30f);  F (p + "DECAY",    d + "Decay",     0.55f);
+                F (p + "TONE",     d + "Tone",      0.50f);  F (p + "MIX",      d + "Mix",       0.35f);
+                F (p + "PREDELAY", d + "Pre-Delay", 0.10f);  F (p + "DIFFUSE",  d + "Diffusion", 0.70f);
+                F (p + "MODDEPTH", d + "Mod Depth", 0.25f);  F (p + "MODRATE",  d + "Mod Rate",  0.30f);
+                F (p + "HIDAMP",   d + "High Damp", 0.35f);  F (p + "LOWDECAY", d + "Low Decay", 0.50f);
+                F (p + "LOWCUT",   d + "Low Cut",   0.00f);  F (p + "WIDTH",    d + "Width",     0.80f);
+                for (auto& s : srcSuf) B (p + s, d + s, false);
+                B (p + "MOD",    d + "Mod",    false);  B (p + "FREEZE", d + "Freeze", false);
+                B (p + "DUCK",   d + "Duck",   false);
+                B (p + "POWER",  d + "Power",  false);
+                B (p + "ACTIVE", d + "In Chain", false);        // not in the chain until the + adds it
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
             }
             // ── DISTORTION instance n
@@ -3861,6 +3893,19 @@ void TerrainInstrumentAudioProcessor::cacheFxInstanceParams()
     dstActive_ = R (ParameterIDs::SYN_DST_ACTIVE); dstRank_ = R (ParameterIDs::SYN_DST_RANK);
     for (int e = 0; e < kFxExtra; ++e)
     {
+        // fb352 — pooled REVERB pointers
+        const juce::String r = "SYN_RVB" + juce::String (e + 2) + "_";
+        auto& v = rvbRefs_[(size_t) e];
+        v.active=R(r+"ACTIVE"); v.rank=R(r+"RANK"); v.power=R(r+"POWER");
+        v.type=R(r+"TYPE"); v.chr=R(r+"CHARACTER"); v.modmode=R(r+"MODMODE");
+        v.size=R(r+"SIZE"); v.decay=R(r+"DECAY"); v.tone=R(r+"TONE"); v.mix=R(r+"MIX");
+        v.predelay=R(r+"PREDELAY"); v.diffuse=R(r+"DIFFUSE"); v.moddepth=R(r+"MODDEPTH");
+        v.modrate=R(r+"MODRATE"); v.hidamp=R(r+"HIDAMP"); v.lowdecay=R(r+"LOWDECAY");
+        v.lowcut=R(r+"LOWCUT"); v.width=R(r+"WIDTH"); v.mod=R(r+"MOD");
+        v.freeze=R(r+"FREEZE"); v.duck=R(r+"DUCK");
+        { static const char* sfx[6] = {"SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE"};
+          for (int k = 0; k < 6; ++k) v.src[k] = R (r + sfx[k]); }
+
         const juce::String p = "SYN_DLY" + juce::String (e + 2) + "_";
         auto& d = dlyRefs_[(size_t) e];
         d.active=R(p+"ACTIVE"); d.rank=R(p+"RANK"); d.power=R(p+"POWER");
@@ -3927,6 +3972,7 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
     addFixed (2, dstActive_, r2);
     for (int e = 0; e < kFxExtra; ++e)
     {
+        add (0, e + 2, rvbRefs_[(size_t) e].active, rvbRefs_[(size_t) e].rank);   // fb352 — pooled reverb
         add (1, e + 2, dlyRefs_[(size_t) e].active, dlyRefs_[(size_t) e].rank);
         add (2, e + 2, dstRefs_[(size_t) e].active, dstRefs_[(size_t) e].rank);
     }
@@ -4010,6 +4056,18 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // skips it), which is the "an empty slot costs exactly zero" law.
     for (auto& d : delayPool_) d.prepare (sampleRate);
     for (auto& d : distPool_)  d.prepare (sampleRate);
+    // fb352 — pooled reverb: remember the rate for lazily-built engines, re-prepare any that
+    // already exist (a rate change must reach them too), and reset the adopted-type markers.
+    rvbPoolSr_ = sampleRate;
+    for (auto& g : rvbPool_)
+    {
+        if (g.hall)    g.hall->prepare (sampleRate);     if (g.room)    g.room->prepare (sampleRate);
+        if (g.plate)   g.plate->prepare (sampleRate);    if (g.spring)  g.spring->prepare (sampleRate);
+        if (g.digital) g.digital->prepare (sampleRate);  if (g.vintage) g.vintage->prepare (sampleRate);
+        if (g.basin)   g.basin->prepare (sampleRate);    if (g.shimmer) g.shimmer->prepare (sampleRate);
+        if (g.conv)    g.conv->prepare (sampleRate);
+    }
+    poolRvbType_.fill (-1);
     poolDlyType_.fill (-1);        // fb350 — -1 = "not adopted yet": the first block takes the param's
                                    // type WITHOUT a swap fade (0 would false-match Digital and, worse,
                                    // meant setType() was never called at all for a fresh slot).
@@ -4476,6 +4534,52 @@ static void applyRvbTypeParams (int type, const RvbSnapshot& p, const RvbEngineS
                     e.hall->updateCoefficients();
                 }
 }
+
+// fb352 — a POOLED instance exposes only what it has actually built. applyRvbTypeParams()
+// checks has(type) and returns early, and applyPoolRvb keeps the instance silent (passing the
+// chain through) until the message thread has built the engine its type needs.
+RvbEngineSet TerrainInstrumentAudioProcessor::rvbEngineSetPool (int e) noexcept
+{
+    RvbEngineSet s;
+    if ((unsigned) e >= (unsigned) kFxExtra) return s;
+    auto& g = rvbPool_[(size_t) e];
+    s.hall = g.hall.get();       s.room    = g.room.get();    s.plate   = g.plate.get();
+    s.spring = g.spring.get();   s.digital = g.digital.get(); s.vintage = g.vintage.get();
+    s.basin = g.basin.get();     s.shimmer = g.shimmer.get(); s.conv    = g.conv.get();
+    return s;
+}
+
+// ⚠️ MESSAGE THREAD ONLY (called from timerCallback). Builds the one engine each active pooled
+// reverb currently needs. The audio thread only ever publishes an int request (rvbWantType_) and
+// reads the resulting pointer — it never allocates, which is the whole point of doing it here.
+void TerrainInstrumentAudioProcessor::buildPendingReverbEngines()
+{
+    for (int e = 0; e < kFxExtra; ++e)
+    {
+        const int want = rvbWantType_[(size_t) e].load (std::memory_order_relaxed);
+        if (want < 0 || want > 8) continue;
+        auto& g = rvbPool_[(size_t) e];
+        const double sr = rvbPoolSr_;
+        auto make = [sr] (auto& ptr, auto* tag)
+        {
+            using T = std::remove_pointer_t<decltype (tag)>;
+            if (ptr == nullptr) { ptr = std::make_unique<T>(); ptr->prepare (sr); }
+        };
+        switch (want)
+        {
+            case 8: make (g.conv,    (ConvolutionReverb*) nullptr); break;
+            case 7: make (g.shimmer, (ShimmerReverb*)     nullptr); break;
+            case 6: make (g.basin,   (BasinReverb*)       nullptr); break;
+            case 5: make (g.vintage, (VintageReverb*)     nullptr); break;
+            case 4: make (g.digital, (DigitalReverb*)     nullptr); break;
+            case 3: make (g.spring,  (SpringReverb*)      nullptr); break;
+            case 2: make (g.plate,   (PlateReverb*)       nullptr); break;
+            case 1: make (g.room,    (RoomReverb*)        nullptr); break;
+            default:make (g.hall,    (HallReverb*)        nullptr); break;
+        }
+    }
+}
+
 
 RvbEngineSet TerrainInstrumentAudioProcessor::rvbEngineSet1() noexcept
 {
@@ -6341,16 +6445,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     {
         const auto& dR = dlyRefs_[(size_t) e];
         const auto& tR = dstRefs_[(size_t) e];
-        float ds = 0.0f, ts = 0.0f;
+        const auto& vR = rvbRefs_[(size_t) e];                 // fb352 — pooled reverb
+        float ds = 0.0f, ts = 0.0f, vs = 0.0f;
         for (int k = 0; k < 6; ++k)
         {
             const float dg = (dR.src[k] != nullptr && dR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
             const float tg = (tR.src[k] != nullptr && tR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            const float vg = (vR.src[k] != nullptr && vR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
             poolRouteG_[(size_t) (e * 6 + k)]                  = dg; ds += dg;
             poolRouteG_[(size_t) ((kFxExtra + e) * 6 + k)]     = tg; ts += tg;
+            poolRouteG_[(size_t) ((2 * kFxExtra + e) * 6 + k)] = vg; vs += vg;
         }
-        poolRouteAny_[(size_t) e]              = ds > 0.0f;
-        poolRouteAny_[(size_t) (kFxExtra + e)] = ts > 0.0f;
+        poolRouteAny_[(size_t) e]                  = ds > 0.0f;
+        poolRouteAny_[(size_t) (kFxExtra + e)]     = ts > 0.0f;
+        poolRouteAny_[(size_t) (2 * kFxExtra + e)] = vs > 0.0f;
     }
 
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
@@ -6362,7 +6470,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         auto maskOf = [this] (const ChainEntry& ce) -> uint8_t
         {
             const float* g = nullptr;
-            if      (ce.kind == 0) g = hallRvbG_;
+            if      (ce.kind == 0) g = (ce.inst == 1) ? hallRvbG_ : &poolRouteG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) g = (ce.inst == 1) ? dlyG_ : &poolRouteG_[(size_t) ((ce.inst - 2) * 6)];
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
@@ -6382,7 +6490,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             const auto& ce = chainOrder_[(size_t) c];
             float* dstArr = nullptr;
-            if      (ce.kind == 0) dstArr = hallEntryG_;
+            if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
@@ -7013,7 +7121,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     {
         const auto& ce = chainOrder_[(size_t) c];
         const juce::AudioBuffer<float>* b = nullptr;
-        if      (ce.kind == 0) { if (hallRouteActive_) b = &reverbSendBuf_; }
+        if      (ce.kind == 0) { b = (ce.inst == 1) ? (hallRouteActive_ ? &reverbSendBuf_ : nullptr)
+                                                    : (poolRouteAny_[(size_t) (2 * kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (2 * kFxExtra + ce.inst - 2)] : nullptr); }
         else if (ce.kind == 1) { b = (ce.inst == 1) ? (dlyRouteActive_ ? &delaySendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (ce.inst - 2)] ? &poolSendBuf_[(size_t) (ce.inst - 2)] : nullptr); }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
@@ -7029,6 +7138,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // sharing instance 1's scalar made delay 2's taps flash to delay 1's audio, which reads as
     // "they're linked" even when the DSP is fully independent.
     float poolDlyPk[(size_t) kFxExtra] = { 0.0f };
+    float poolRvbPk[(size_t) kFxExtra] = { 0.0f };   // fb352 — same, per pooled REVERB
     float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
@@ -7748,6 +7858,86 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // fb351 — the old excludeRouted() helper is GONE. Duplicates no longer reconstruct a
         // "whole mix minus the routed dry" input; like every other device they are handed their
         // input by the chain. That subtraction was the source of the fb347 phase-inversion class.
+        // fb352 — POOLED REVERB (instances 2..6). Same shape as instance 1, and deliberately built
+        // on the SAME applyRvbTypeParams routine so no per-type setter can exist for one and not
+        // the other (the fb350 pool law). The one difference is the engine: this instance has built
+        // only the one its type needs, and while that build is pending it passes the chain through.
+        auto applyPoolRvb = [&] (int e, float sgL, float sgR, float& outL, float& outR)
+        {
+            outL = sgL; outR = sgR;
+            auto& V = rvbRefs_[(size_t) e];
+            if (V.power == nullptr) return;
+            const bool powered = (V.power->load() > 0.5f) && poolRouteAny_[(size_t) (2 * kFxExtra + e)];
+            float& env = poolRvbEnv_[(size_t) e];
+            if (! powered && env <= 1.0e-4f) return;             // unrouted / off ⇒ zero cost
+            int ty = (int) V.type->load(); if (ty < 0 || ty > 8) ty = 0;
+            // ask the message thread for this engine (it builds it in timerCallback, never here)
+            rvbWantType_[(size_t) e].store (ty, std::memory_order_relaxed);
+            RvbEngineSet es = rvbEngineSetPool (e);
+            int&  cur      = poolRvbType_[(size_t) e];
+            bool& swapping = poolRvbSwap_[(size_t) e];
+            // Nothing adopted yet: stay silent (there is no tail to protect) until the message
+            // thread has built this type's engine — usually the very next timer tick.
+            if (cur < 0)
+            {
+                if (! es.has (ty)) { env = 0.0f; return; }
+                cur = ty;
+            }
+            if (i == 0)
+            {
+                if (ty != cur)
+                {
+                    swapping = true;                              // fade the CURRENT engine out first…
+                    // …and only commit once the incoming engine actually exists. Testing `ty` before
+                    // the fade would cut a live tail dead the instant you picked an unbuilt type.
+                    if (env < 1.0e-3f && es.has (ty))
+                    {
+                        cur = ty; swapping = false;
+                        switch (ty) { case 8: es.conv->reset(); break;    case 7: es.shimmer->reset(); break;
+                                      case 6: es.basin->reset(); break;   case 5: es.vintage->reset(); break;
+                                      case 4: es.digital->reset(); break; case 3: es.spring->reset(); break;
+                                      case 2: es.plate->reset(); break;   case 1: es.room->reset(); break;
+                                      default: es.hall->reset(); break; }
+                    }
+                }
+                else swapping = false;
+
+                RvbSnapshot rp;
+                rp.size      = V.size->load();      rp.decay    = V.decay->load();
+                rp.tone      = V.tone->load();      rp.predelay = V.predelay->load();
+                rp.diffuse   = V.diffuse->load();   rp.moddepth = V.moddepth->load();
+                rp.modrate   = V.modrate->load();   rp.hidamp   = V.hidamp->load();
+                rp.lowdecay  = V.lowdecay->load();  rp.lowcut   = V.lowcut->load();
+                rp.width     = V.width->load();     rp.mix      = V.mix->load();
+                rp.character = (int) V.chr->load(); rp.modmode  = (int) V.modmode->load();
+                rp.mod       = V.mod->load()    > 0.5f;
+                rp.freeze    = V.freeze->load() > 0.5f;
+                rp.duck      = V.duck->load()   > 0.5f;
+                applyRvbTypeParams (cur, rp, es);                 // 🔑 the ONE shared routine
+                const float mixv = rp.mix;
+                poolRvbWet_[(size_t) e] = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
+                poolRvbDry_[(size_t) e] = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
+            }
+            const bool on = powered && ! swapping;
+            env += ((on ? 1.0f : 0.0f) - env) * hallSm_;          // click-free power fade
+            float rl = 0.0f, rr = 0.0f;
+            switch (cur) { case 8: es.conv->processSample (sgL, sgR, rl, rr); break;
+                           case 7: es.shimmer->processSample (sgL, sgR, rl, rr); break;
+                           case 6: es.basin->processSample (sgL, sgR, rl, rr); break;
+                           case 5: es.vintage->processSample (sgL, sgR, rl, rr); break;
+                           case 4: es.digital->processSample (sgL, sgR, rl, rr); break;
+                           case 3: es.spring->processSample (sgL, sgR, rl, rr); break;
+                           case 2: es.plate->processSample (sgL, sgR, rl, rr); break;
+                           case 1: es.room->processSample (sgL, sgR, rl, rr); break;
+                           default: es.hall->processSample (sgL, sgR, rl, rr); break; }
+            const float duck = env * (1.0f - poolRvbDry_[(size_t) e]);
+            const float wet  = env * poolRvbWet_[(size_t) e];
+            outL = sgL + (wet * rl - duck * sgL);                 // fb351 — IN → OUT, Mix 100% ⇒ dry gone
+            outR = sgR + (wet * rr - duck * sgR);
+            const float wmagV = 0.5f * (std::abs (rl) + std::abs (rr)) * env;   // its OWN bloom
+            if (wmagV > poolRvbPk[(size_t) e]) poolRvbPk[(size_t) e] = wmagV;
+        };
+
         auto applyPoolDly = [&] (int e, float sgL, float sgR, float& outL, float& outR)
         {
             outL = sgL; outR = sgR;
@@ -7924,8 +8114,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     const int e = ce.inst - 2;                   // pool index
                     if (e >= 0 && e < kFxExtra)
                     {
-                        if      (ce.kind == 1) applyPoolDly (e, inL, inR, oL, oR);
-                        else if (ce.kind == 2) applyPoolDst (e, inL, inR, oL, oR);
+                        if      (ce.kind == 0) applyPoolRvb (e, inL, inR, oL, oR);   // fb352
+                        else if (ce.kind == 1) applyPoolDly (e, inL, inR, oL, oR);
+                        else                   applyPoolDst (e, inL, inR, oL, oR);
                     }
                 }
                 pendL[c] = oL; pendR[c] = oR;
@@ -7948,13 +8139,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (dlyBlockWetPk > dlyBloomEnv_)   dlyBloomEnv_ = dlyBlockWetPk;
             else                                dlyBloomEnv_ += (dlyBlockWetPk - dlyBloomEnv_) * 0.05f;
             dlyBloomViz_.store (juce::jlimit (0.0f, 1.5f, dlyBloomEnv_), std::memory_order_relaxed);
-            // fb350 — same instant-attack / smoothed-fall shape, once per POOLED instance.
+            // fb350/fb352 — same instant-attack / smoothed-fall shape, once per POOLED instance.
             for (int q = 0; q < kFxExtra; ++q)
             {
                 float& be = poolDlyBloomEnv_[(size_t) q];
                 if (poolDlyPk[(size_t) q] > be) be = poolDlyPk[(size_t) q];
                 else                            be += (poolDlyPk[(size_t) q] - be) * 0.05f;
                 poolDlyBloomViz_[(size_t) q].store (juce::jlimit (0.0f, 1.5f, be), std::memory_order_relaxed);
+                float& bv = poolRvbBloomEnv_[(size_t) q];
+                if (poolRvbPk[(size_t) q] > bv) bv = poolRvbPk[(size_t) q];
+                else                            bv += (poolRvbPk[(size_t) q] - bv) * 0.05f;
+                poolRvbBloomViz_[(size_t) q].store (juce::jlimit (0.0f, 1.5f, bv), std::memory_order_relaxed);
             }
             // fb315 — distortion core viz. Same fb312 instant-attack / smoothed-fall shape, so the
             // curve's excursion glow lands on the same block as the audio instead of lagging it.

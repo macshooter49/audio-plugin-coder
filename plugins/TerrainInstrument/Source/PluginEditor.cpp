@@ -5561,6 +5561,11 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         for (int q = 0; q < ParameterIDs::kFxInstances - 1; ++q)
             js << (q ? "," : "") << SF (audioProcessor.getDelayBloomPool (q), 3);
         js << "];";
+        // fb352 — and one per pooled REVERB, so a duplicate's scatter grid lights from ITS tail.
+        js << "window.__fxBloomRvbP=[";
+        for (int q = 0; q < ParameterIDs::kFxInstances - 1; ++q)
+            js << (q ? "," : "") << SF (audioProcessor.getReverbBloomPool (q), 3);
+        js << "];";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.
