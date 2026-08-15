@@ -1140,7 +1140,7 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
    ═══════════════════════════════════════════════════════════════════════════════ */
 
 /* One faceplate for all three — the rack signature is the ears and the screws. */
-function rackFace(ctx, w, h, t, label, litAmt) {
+function rackFace(ctx, w, h, t, label, litAmt) {   // `label` intentionally unused — see below
   var earW = Math.max(7, w * 0.052);
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
@@ -1174,12 +1174,9 @@ function rackFace(ctx, w, h, t, label, litAmt) {
     ctx.strokeStyle = vH(0.75); ctx.lineWidth = 0.7; ctx.stroke();
   }
 
-  // engraved nameplate, bottom-right of the working area
-  ctx.font = '600 ' + Math.max(4.5, h * 0.088).toFixed(1) + "px -apple-system,'SF Pro Display',sans-serif";
-  ctx.textAlign = 'right'; ctx.textBaseline = 'alphabetic';
-  ctx.fillStyle = vH(0.30 + 0.25 * litAmt);
-  ctx.fillText(label, w - earW - 3, h - 4);
-  ctx.textAlign = 'left';
+  // NO nameplate. The header Type pill already says Studio / Cassette / Wire, and printing it
+  // again on the faceplate is the no-doubles violation (never the same name twice on one surface
+  // set — same rule as a pane-box label repeating its tab name).
   return { earW: earW, x0: earW + 4, x1: w - earW - 4 };
 }
 
