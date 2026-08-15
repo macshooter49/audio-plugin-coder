@@ -5586,11 +5586,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         {
             dstVizPushCtr_ = 0;
             js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
-            // fb362 — the granular cards ride the same push, same ~15 Hz budget. One entry per
-            // instance (null when that instance is not in the chain), so a duplicate lights from
-            // ITS OWN ring — the fb350/fb352 per-instance viz law, applied from day one.
-            js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";
         }
+        // fb363 — THE GRANULAR CARD PUSHES EVERY FRAME, not at the distortion's 15 Hz.
+        // Max: "it is not 4K 60 frames per second, and them frames are very very low... that looks
+        // like a sample and hold." He was describing the rate limit exactly — a waveform refreshed
+        // 15x a second reads as a stepping ghost, because unlike a curve it is MOVING material.
+        // The payload is small enough to afford it: 64 waveform points + up to 28 grain positions,
+        // and ONLY for instances actually in the chain (null otherwise), so the common case of one
+        // granular is a few KB/s — far under the 40-80 KB/s fb342 flagged as the frame-drop line.
+        js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

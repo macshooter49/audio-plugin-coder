@@ -39,10 +39,13 @@ static constexpr double FS = 48000.0;
 //    transient behaviour are exercised (a pure sine hides splice artifacts).
 struct Probe
 {
-    double ph1 = 0, ph2 = 0, ph3 = 0; long n = 0; bool smooth = false;
+    double ph1 = 0, ph2 = 0, ph3 = 0; long n = 0; bool smooth = false; bool sweep = false;
     void next (float& l, float& r)
     {
-        ph1 += 2 * M_PI * 220.0 / FS; ph2 += 2 * M_PI * 277.18 / FS; ph3 += 2 * M_PI * 329.63 / FS;
+        // sweep = the input CLIMBS, which is the only way to prove a freeze is holding: a steady
+        // probe is already stationary, so "is the output static?" answers yes at every setting.
+        const double k = sweep ? (1.0 + 3.0 * (double) n / (FS * 5.0)) : 1.0;
+        ph1 += 2 * M_PI * 220.0 * k / FS; ph2 += 2 * M_PI * 277.18 * k / FS; ph3 += 2 * M_PI * 329.63 * k / FS;
         float s = (float) (0.25 * (std::sin (ph1) + std::sin (ph2) + std::sin (ph3)));
         // The transient is what makes this probe realistic, but it is a STEP — its own click
         // ratio is enormous, and a granular that faithfully re-reads it inherits that number.
@@ -122,7 +125,7 @@ static double stationarity (const std::vector<float>& x)
 struct RunOpts { int type = tw::GrnCloud; int chr = tw::GrnClean; int key = 0;
                  float density = .5f, size = .35f, pitch = 0, detune = 0, spray = .2f,
                        scan = 0, windowMs = 1200, width = .5f, feedback = 0, freeze = 0;
-                 bool latch = false; bool silentInput = false; bool smooth = false; };
+                 bool latch = false; bool silentInput = false; bool smooth = false; bool sweep = false; };
 
 // Runs the engine and reports everything the gates need. `safeOK` is checked EVERY block.
 static void run (tw::GranularFxEngine& e, const RunOpts& o, double seconds,
@@ -132,10 +135,10 @@ static void run (tw::GranularFxEngine& e, const RunOpts& o, double seconds,
     p.type = o.type; p.character = o.chr; p.key = o.key;
     p.density = o.density; p.size = o.size; p.pitch = o.pitch; p.detune = o.detune;
     p.spray = o.spray; p.scan = o.scan; p.windowMs = o.windowMs; p.width = o.width;
-    p.feedback = o.feedback; p.freeze = o.freeze; p.freezeLatch = o.latch;
+    p.decay = o.feedback; p.freeze = o.freeze; p.freezeLatch = o.latch;
     e.setParams (p);
 
-    Probe pr; pr.smooth = o.smooth; safeOK = true; finiteOK = true;
+    Probe pr; pr.smooth = o.smooth; pr.sweep = o.sweep; safeOK = true; finiteOK = true;
     const long N = (long) (seconds * FS);
     out.clear(); out.reserve ((size_t) N);
     for (long i = 0; i < N; ++i)
@@ -302,6 +305,86 @@ int main()
         check (pk <= 1.02 && f, "peak bounded at max feedback",
                "peak " + std::to_string (pk).substr (0, 5));
         check (s, "safe at max feedback", "");
+    }
+
+    // ── I: THE KNOBS MAX SAYS FEEL DEAD ──────────────────────────────────────
+    // Structural probes, not ear-metrics: a perceptual delta can be masked by the material, a
+    // census or a head-position readout cannot. This is what "night and day" has to mean.
+    std::printf ("\n[I] Scan / Spray / Detune / Freeze actually do something\n");
+    {
+        // ── SCAN. ⚠️ The head FOLDS inside the window (it loops, by design), so raw start-minus-end
+        //    is meaningless — the first draft of this probe read a wrap as "wrong direction". Sum
+        //    the per-step deltas and unwrap instead: that measures the true velocity.
+        auto headVel = [] (float scan) {
+            tw::GranularFxEngine e; e.prepare (FS);
+            RunOpts o; o.scan = scan; o.density = 0.5f; o.windowMs = 4000; o.spray = 0.f;
+            std::vector<float> y; bool s1, f1;
+            run (e, o, 0.30, y, s1, f1);                        // let the window glide settle
+            double prev = e.headAgeForTesting(), total = 0.0;
+            const double span = 4.0 * FS;
+            for (int k = 0; k < 40; ++k)
+            {
+                run (e, o, 0.01, y, s1, f1);
+                double now = e.headAgeForTesting(), d = now - prev;
+                if (d >  span * 0.5) d -= span;                  // unwrap a fold
+                if (d < -span * 0.5) d += span;
+                total += d; prev = now;
+            }
+            return total / 0.40; };                              // samples of drift per second
+        const double vBack = headVel (-1.f), vHold = headVel (0.f), vFwd = headVel (1.f);
+        check (vBack > 1.5 * FS, "Scan < 0 dives into the past (2x)",
+               std::to_string ((int) (vBack / FS)).substr (0, 4) + "x realtime");
+        check (std::fabs (vHold) < 0.05 * FS, "Scan centre holds a fixed age",
+               std::to_string (vHold / FS).substr (0, 5) + "x");
+        check (vFwd < -1.5 * FS, "Scan > 0 races toward the present (2x)",
+               std::to_string ((int) (vFwd / FS)).substr (0, 5) + "x realtime");
+
+        // ── SPRAY, by census. ⚠️ needs real OVERLAP or there are never 2 live grains to measure:
+        //    the first draft used size 0.2 (6.8 ms) at 79 g/s = 0.54 overlap and read 0.000 for both.
+        auto spread = [] (float spray) {
+            tw::GranularFxEngine e; e.prepare (FS);
+            RunOpts o; o.spray = spray; o.density = 0.8f; o.size = 0.6f; o.windowMs = 2000;
+            std::vector<float> y; bool s1, f1; run (e, o, 1.2, y, s1, f1);
+            return e.birthSpreadForTesting(); };
+        const double s0 = spread (0.f), s1v = spread (1.f);
+        check (s1v > s0 * 3.0 && s1v > 0.25, "Spray widens the grain scatter",
+               "spread " + std::to_string (s0).substr (0, 5) + " -> " + std::to_string (s1v).substr (0, 5));
+
+        // ── DETUNE is audible, and is a WOBBLE (nearby grains agree) rather than a scatter.
+        {
+            tw::GranularFxEngine e0, e1; e0.prepare (FS); e1.prepare (FS);
+            RunOpts a; a.detune = 0.f; a.density = 0.9f; a.size = 0.5f;
+            RunOpts b2 = a; b2.detune = 1.f;
+            std::vector<float> y0, y1; bool s1, f1;
+            run (e0, a,  1.5, y0, s1, f1);
+            run (e1, b2, 1.5, y1, s1, f1);
+            const double c0 = centroid (y0), c1 = centroid (y1);
+            check (std::fabs (c1 - c0) / std::max (1.0, c0) > 0.02, "Detune is audible",
+                   "centroid " + std::to_string ((int) c0) + " -> " + std::to_string ((int) c1));
+        }
+
+        // ── FREEZE, with the input STILL PLAYING. Max's complaint ("it's not freezing") is about
+        //    the knob's travel, so measure what the knob does to STATIONARITY while audio runs —
+        //    not the tail after silence, which the law-6 gate mutes on purpose and which made the
+        //    first draft of this probe read 0.0000 at every setting.
+        //    ⚠️ WARM UP FIRST. The real gesture is "play, then turn Freeze up" — starting at
+        //    freeze=1 means the ring never recorded anything, so the probe measured silence and
+        //    reported 0.000 for the most-frozen setting. (That trap is real for users too, which
+        //    is what the priming guard in the engine now prevents.)
+        auto stat = [] (float fz) {
+            tw::GranularFxEngine e; e.prepare (FS);
+            RunOpts o; o.density = 0.7f; o.size = 0.5f; o.windowMs = 600; o.sweep = true;
+            std::vector<float> warm; bool s1, f1; run (e, o, 2.0, warm, s1, f1);   // capture material
+            o.freeze = fz;
+            std::vector<float> y; run (e, o, 5.0, y, s1, f1);                       // input climbs away
+            std::vector<float> last (y.end() - (size_t) FS, y.end());
+            return centroid (last); };   // frozen ⇒ stays with the OLD material, so the centroid lags
+        const double f0 = stat (0.f), f50 = stat (0.5f), f100 = stat (1.0f);
+        check (f100 < f0 * 0.92, "Freeze at 100 % holds the OLD material as the input climbs",
+               "centroid free " + std::to_string ((int) f0) + " -> frozen " + std::to_string ((int) f100));
+        check (f50 < f0 && f50 > f100 * 0.95, "Freeze is progressive across the travel",
+               "0/50/100 = " + std::to_string ((int) f0) + " / " + std::to_string ((int) f50)
+                             + " / " + std::to_string ((int) f100));
     }
 
     std::printf ("\n%s — %d failure(s)\n\n", failures ? "FAILED" : "ALL GATES PASSED", failures);

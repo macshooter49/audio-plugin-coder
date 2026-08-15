@@ -3715,7 +3715,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 // back panel, 4×2
                 F (p + "SCAN",    d + "Scan",     0.50f);  F (p + "WINDOW", d + "Window",   0.45f);
                 F (p + "SPRAY",   d + "Spray",    0.18f);  F (p + "PITCH",  d + "Pitch",    0.50f);
-                F (p + "DETUNE",  d + "Detune",   0.12f);  F (p + "SHAPE",  d + "Shape",    0.50f);
+                // fb363 — Detune defaults to ZERO (Max: "whenever I open up the granular the
+                // detune should be at zero... everything should be perfectly regular, and then I
+                // should be able to have the user fuck some shit up if they want to").
+                F (p + "DETUNE",  d + "Detune",   0.00f);  F (p + "SHAPE",  d + "Shape",    0.50f);
                 F (p + "WIDTH",   d + "Width",    0.60f);  F (p + "FREEZE", d + "Freeze",   0.00f);
                 for (auto& s : srcSuf) B (p + s, d + s, false);   // fb362 — unrouted on arrival
                 // The Freeze PILL and the Freeze KNOB are deliberately the same word: one control
@@ -4160,6 +4163,16 @@ juce::String TerrainInstrumentAudioProcessor::getGranularVizJson()
             }
             out << juce::String (juce::jlimit (-1.0f, 1.0f, pk), 3);
         }
+        // fb363 — the REAL grain census, not a decorative scatter. Max: "I actually need to see the
+        // grains, like the white grains that we talked about, affecting whatever signal's coming
+        // through." So each live grain reports where it is in the window and how open its envelope
+        // is; the card draws exactly those, so a dot IS a grain and its brightness IS its envelope.
+        float gp[28], ga[28];
+        const int gn = e->grainViz (gp, ga, 28);
+        out << "],\"gp\":[";
+        for (int k = 0; k < gn; ++k) { if (k) out << ","; out << juce::String (gp[k], 3); }
+        out << "],\"ga\":[";
+        for (int k = 0; k < gn; ++k) { if (k) out << ","; out << juce::String (ga[k], 2); }
         out << "],\"h\":" << juce::String (juce::jlimit (0.0f, 1.0f, e->scanAge01()), 3)
             << ",\"g\":" << e->liveGrains()
             << ",\"b\":" << juce::String (juce::jlimit (0.0f, 1.5f,

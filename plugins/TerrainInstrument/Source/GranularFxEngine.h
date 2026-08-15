@@ -162,7 +162,7 @@ public:
     {
         if (! ringL_.empty()) { std::fill (ringL_.begin(), ringL_.end(), 0.f);
                                 std::fill (ringR_.begin(), ringR_.end(), 0.f); }
-        w_ = 0; ageHead_ = 0.0; countdown_ = 0.0; frozenOfs_ = 0.0; readOffset_ = 0.0;
+        w_ = 0; ageHead_ = 0.0; countdown_ = 0.0; frozenOfs_ = 0.0; readOffset_ = 0.0; primed_ = 0;
         fbL_ = fbR_ = 0.f; dcL_ = dcR_ = 0.f; tailGate_ = 0.f;
         wowPh_ = flutPh_ = crackPh_ = 0.f;
         bpZ1L_ = bpZ2L_ = bpZ1R_ = bpZ2R_ = 0.f;
@@ -191,6 +191,18 @@ public:
         normSm_   += normAlpha_ * (norm_ - normSm_);
         shapeSm_  += normAlpha_ * (p_.shape - shapeSm_);
 
+        // The detune wobble — a slow bounded random WALK (the Phase G Worn-walk law: a walk, not a
+        // per-sample noise smoother), ±1 semitone. Grains born close together get close values,
+        // which is what makes it read as a wobble instead of a scatter.
+        detWobPh_ += detWobInc_;
+        if (detWobPh_ >= 1.0f)
+        {
+            detWobPh_ -= 1.0f;
+            detWobTgt_ = (double) (nextRand01() * 2.f - 1.f);
+            detWobInc_ = (0.35f + nextRand01() * 1.4f) / (float) outRate_;   // 0.35..1.75 Hz
+        }
+        detWob_ += (detWobTgt_ - detWob_) * (double) slowAlpha_;
+
         // input envelope — law 6 ("nothing free-runs"): every regenerating path is gated by it.
         const float inAbs = 0.5f * (std::fabs (inL) + std::fabs (inR));
         inEnv_ += (inAbs > inEnv_ ? envAtk_ : envRel_) * (inAbs - inEnv_);
@@ -202,7 +214,15 @@ public:
         float wrR = inR + fbSm_ * fbR_;
         writeCharacter (wrL, wrR);                       // Tape/Cassette/Radio/Pulverize physics
         const size_t wi = (size_t) (w_ & mask_);
-        const float  f  = freezeSm_;
+        // 🪤 THE EMPTY-ARCHIVE TRAP. A full freeze is an identity write, so if Freeze is already up
+        // when the engine starts — a preset, a saved session, a fresh instance — the ring NEVER
+        // records and the device is silent forever with no way to tell why. So until the ring has
+        // actually seen one Window's worth of audio, freeze cannot fully latch: the material gets
+        // captured first, THEN it holds. Which is also what "freeze" should mean — it catches what
+        // you play into it. Costs one counter and one compare.
+        if (primed_ < (uint64_t) winSpan()) ++primed_;
+        float f = freezeSm_;
+        if (primed_ < (uint64_t) winSpan() && f > 0.5f) f = 0.5f;
         ringL_[wi] = wrL * (1.f - f) + ringL_[wi] * f;
         ringR_[wi] = wrR * (1.f - f) + ringR_[wi] * f;
         ++w_;
@@ -213,22 +233,33 @@ public:
         // the write head, which pins the effective head still. Live (freeze = 0) it does not move
         // and the behaviour is the ordinary "N seconds behind the present". Partial freeze
         // interpolates, which is the regenerative smear the write-blend is there for.
-        // ⚠️ The anchor engages only near a FULL freeze, and that nonlinearity is the whole point.
-        // Driving it linearly from f (the first version) made a PARTIAL freeze slide the read
-        // window into the past at (1 − f) per sample — a time machine, not a smear — and the
-        // harness caught it as a silent Suspend: within a couple of seconds the window had walked
-        // back past the beginning of recorded time and was grazing untouched ring.
-        // The physics: at f < 1 every ring position still takes new audio, so the material at a
-        // given AGE stays current (a blend of new and old — exactly the regenerative smear the
-        // write-blend exists for) and the window must NOT move. Only as f → 1 does content at a
-        // fixed age stop being refreshed, and only then does the anchor need to hold it.
-        const double anchorRate = (double) (f - 0.9f) * 10.0;   // 0 below f=0.9, ramps to 1 at f=1
-        frozenOfs_ += anchorRate < 0.0 ? 0.0 : (anchorRate > 1.0 ? 1.0 : anchorRate);
-        // A freeze held longer than the ring must LOOP the archive rather than walk into the seam.
-        // Grains already in flight are untouched (their bounds are absolute); only new births move,
-        // and every grain is windowed to zero at both ends, so the loop point cannot click.
+        // ── THE ANCHOR, AND WHY IT IS BOUNDED ────────────────────────────────
+        // Two failures shaped this, one after the other:
+        //  1. Driving it LINEARLY from f made a partial freeze slide into the past forever — a time
+        //     machine, not a smear — and the window walked off the recorded material entirely.
+        //  2. So the first fix only engaged it above f=0.9, which made Freeze effectively a SWITCH:
+        //     the whole lower travel did nothing (Max: "it's not freezing, it's just doing its
+        //     thing"), measured as an identical spectral centroid at 0 % and 50 %.
+        // The answer is to engage it early but CAP the lag. Below a full freeze the window may fall
+        // at most `anchorRate` windows behind the present and then SETTLES there — so mid-knob is a
+        // real, audible hold that still breathes, and it can never wander off the archive. Only a
+        // true full freeze is allowed to run to the ring's end and loop.
+        const double anchorRate = juceClamp ((double) (f - 0.12f) / 0.88, 0.0, 1.0);
+        frozenOfs_ += anchorRate;
         const double ofsMax = (double) (mask_ + 1) - 2.0 * kSafeMargin - winSpan() - kMaxGrainLen;
-        if (frozenOfs_ > ofsMax || frozenOfs_ < 0.0) frozenOfs_ = 0.0;
+        if (f >= 0.995f)
+        {
+            // full freeze: the held archive LOOPS rather than walking into the seam. Grains in
+            // flight hold absolute bounds so they are untouched; only new births move, and every
+            // grain is windowed to zero at both ends, so the loop point cannot click.
+            if (frozenOfs_ > ofsMax || frozenOfs_ < 0.0) frozenOfs_ = 0.0;
+        }
+        else
+        {
+            const double cap = juceClamp (winSpan() * anchorRate, 0.0, ofsMax);
+            if (frozenOfs_ > cap) frozenOfs_ = cap;      // settle at the lag, don't drift
+            if (frozenOfs_ < 0.0) frozenOfs_ = 0.0;
+        }
 
         // ── 2) the scan head, in AGE space ───────────────────────────────────
         // scan = 0 → age constant: the head keeps pace with the writer, i.e. a live granulizer
@@ -365,11 +396,47 @@ public:
         const size_t  i   = (size_t) ((uint64_t) idx & (uint64_t) mask_);
         return 0.5f * (ringL_[i] + ringR_[i]);
     }
+    // fb363 — the REAL grain census for the card: each live grain's position inside the window and
+    // its current window amplitude. Max wants to see the actual grains, so the card draws these,
+    // not a decorative scatter.
+    int grainViz (float* pos01, float* amp, int maxN) const noexcept
+    {
+        const double span = winHiSm_ - winLoSm_;
+        int n = 0;
+        for (int j = 0; j < numActive_ && n < maxN; ++j)
+        {
+            const Grain& g = pool_[(size_t) activeIdx_[j]];
+            const double a = (double) w_ - g.readPos - winLoSm_;
+            double t = (span > 1.0) ? a / span : 0.0;
+            if (t < 0.0) t = 0.0; if (t > 1.0) t = 1.0;
+            pos01[n] = (float) t;
+            amp[n]   = windowAt (shapeSm_, (float) g.age / (float) g.len);
+            ++n;
+        }
+        return n;
+    }
     double windowLoAge() const noexcept { return winLoSm_; }
     double windowHiAge() const noexcept { return winHiSm_; }
     double ringSamples() const noexcept { return (double) (mask_ + 1); }
 
     // ── offline harness accessors ────────────────────────────────────────────
+    // Spread of live grain READ positions, as a fraction of the window. This is what Spray does,
+    // measured directly — a perceptual metric can be masked by the material, a census cannot.
+    double birthSpreadForTesting() const noexcept
+    {
+        if (numActive_ < 2) return 0.0;
+        double lo = 1e18, hi = -1e18;
+        for (int j = 0; j < numActive_; ++j)
+        {
+            const double a = (double) w_ - pool_[(size_t) activeIdx_[j]].readPos;
+            if (a < lo) lo = a; if (a > hi) hi = a;
+        }
+        const double span = winHiSm_ - winLoSm_;
+        return span > 1.0 ? (hi - lo) / span : 0.0;
+    }
+    // Live grain positions for the card's viz — position in the window (0..1) + window amplitude.
+    int grainVizForTesting (float* pos01, float* amp, int maxN) const noexcept
+    { return grainViz (pos01, amp, maxN); }
     int    activeForTesting()  const noexcept { return numActive_; }
     double headAgeForTesting() const noexcept { return ageHead_; }
     double safeMarginForTesting() const noexcept { return kSafeMargin; }
@@ -523,7 +590,15 @@ private:
                 if (p_.key > 0) semis += randKeyOffset (p_.key);
                 break;
         }
-        semis += (double) p_.detune * (double) (nextRand01() * 2.f - 1.f) * 24.0;
+        // 🔑 DETUNE IS A TAPE WOBBLE, NOT A RANDOM PITCH JUMP (Max, 2026-08-15: "it needs to
+        // actually be like a tape wobble detune instead of like a random pitch jump. I'm not
+        // fucking with those random pitch jumps — those are inaudible messes and no one knows how
+        // to use those.") It used to draw ±24 st INDEPENDENTLY per grain, which is a shower of
+        // unrelated pitches. Now neighbouring grains share a slowly-walking centre (detWob_) and
+        // only jitter a little around it, so the cloud DRIFTS in pitch the way a slipping
+        // transport does. Range is ±100 cents — a musical detune. The big musical intervals are
+        // the Key dropdown's and the Rise/Swarm types' job, which is where they read as intended.
+        semis += (double) p_.detune * (detWob_ + 0.25 * (double) (nextRand01() * 2.f - 1.f));
         if (p_.key > 0 && p_.type != GrnSwarm) semis = snapToKey (semis, p_.key);
         semis = clampSemis (semis);                       // ← trap 2. Never remove.
         double ratio = std::pow (2.0, semis / 12.0);
@@ -539,7 +614,7 @@ private:
         double len = (double) grainLenSamp_;
         if (p_.type == GrnSwarm)   len = len < 96.0 ? 96.0 : (len > 0.060 * outRate_ ? 0.060 * outRate_ : len);
         if (p_.type == GrnRewind)  len = len < 0.100 * outRate_ ? 0.100 * outRate_ : len;
-        if (p_.type == GrnStretch) len *= 2.0;            // long Bell grains, high overlap
+        if (p_.type == GrnStretch) len *= 3.5;            // long Bell grains, high overlap
         if (len < 8.0) len = 8.0;
         if (len > kMaxGrainLen) len = kMaxGrainLen;   // the bound recomputeDerived reserves for
         // A grain must not outlive its own span: cap length so reflection has room to work.
@@ -668,7 +743,7 @@ private:
         const float d = clamp01 (p_.density);
         densHz_ = std::pow (220.f, d);
         if (p_.type == GrnSwarm) densHz_ *= 2.f;                   // up to 440 g/s
-        headDiv_ = 1.f + clamp01 (p_.size) * 3.f;                  // Stretch head divisor
+        headDiv_ = 1.f + clamp01 (p_.size) * 7.f;                  // Stretch head divisor
 
         const float s = clamp01 (p_.size);
         float glenSec = 0.002f * std::pow (450.f, s);              // 2..900 ms (engine truth)
@@ -688,7 +763,13 @@ private:
         winHiTgt_ = kSafeMargin + span;
 
         // Suspend forces the write-blend up: it IS the type's identity.
-        freezeTgt_ = clamp01 (p_.freeze);
+        // Max: "make the freeze more prominent — it's not freezing, it's just doing its thing."
+        // He was right, and the cause was the taper. The write-blend is a per-RING-PERIOD fill, and
+        // the frozen anchor only engages above 0.9, so a LINEAR knob spent almost its whole travel
+        // in the barely-smeared region and only became a freeze in the last few percent. This taper
+        // puts a real hold in the top quarter — 50 % ⇒ 0.77 (audible smear), 75 % ⇒ 0.90 (the anchor
+        // starts holding), 100 % ⇒ a true identity write. Dramatic at the top, per the law.
+        freezeTgt_ = std::pow (clamp01 (p_.freeze), 0.35f);
         if (p_.freezeLatch)          freezeTgt_ = 1.f;
         else if (p_.type == GrnSuspend) freezeTgt_ = freezeTgt_ < 0.60f ? 0.60f : freezeTgt_;
         // ⚠️ 0.60, not the 0.85 this started at. Each ring position is only rewritten ONCE per ring
@@ -769,6 +850,7 @@ private:
         return (float) ((rng_ & 0x00FFFFFFu) / (double) 0x01000000);
     }
     static inline float clamp01 (float x) noexcept { return x < 0.f ? 0.f : (x > 1.f ? 1.f : x); }
+    static inline double juceClamp (double v, double lo, double hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
 
     // ── key quantize (osc engine, verbatim) ──
     static double snapToKey (double semis, int key) noexcept
@@ -850,8 +932,11 @@ private:
     float inEnv_ = 0.f;
     float tailGate_ = 0.f, gateAtk_ = 0.006f, gateRel_ = 1.0e-5f;
     float wowPh_ = 0.f, flutPh_ = 0.f, crackPh_ = 0.f, crackle_ = 0.f;
+    double detWob_ = 0.0, detWobTgt_ = 0.0;   // the tape-wobble walk (±1 st, shared by nearby grains)
+    float  detWobPh_ = 0.f, detWobInc_ = 1.0e-5f;
     double readOffset_ = 0.0;    // Tape/Cassette wow+flutter, in samples (clamped in readRing)
     double frozenOfs_  = 0.0;    // the frozen anchor — see the note beside the ring write
+    uint64_t primed_   = 0;      // samples captured since reset — guards the empty-archive trap
     float bpZ1L_ = 0.f, bpZ2L_ = 0.f, bpZ1R_ = 0.f, bpZ2R_ = 0.f, bpA_ = 0.03f, bpB_ = 0.3f;
     float hbL_ = 0.f, hbR_ = 0.f, hbA_ = 0.01f;
     float srHoldL_ = 0.f, srHoldR_ = 0.f; int srPhase_ = 0;
