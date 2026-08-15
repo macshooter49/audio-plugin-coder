@@ -1289,7 +1289,12 @@ function drawStudioRack(ctx, w, h, t) {
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 2. CASSETTE — shell centred, matching even ladders either side. ── */
+/* ── 2. CASSETTE — a real shell, drawn big and centred ──────────────────────
+   The first pass was a small outline with two hubs and a pair of bar blocks; it
+   filled the face but it did not read as a cassette. This is the actual anatomy:
+   a large shell with corner screws, the label strip, the window, hubs with teeth,
+   tape packs that TRANSFER (left shrinks as right grows), and the five openings
+   along the bottom edge where the capstan and pinch roller come through.        */
 function drawCassetteRack(ctx, w, h, t) {
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
@@ -1298,43 +1303,91 @@ function drawCassetteRack(ctx, w, h, t) {
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
   var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.42;
+  var mx = w / 2, cy = h * 0.40;
 
-  // the shell, centred
-  var ww = (F.x1 - F.x0) * 0.44, wh2 = h * 0.50, wx = mx - ww / 2, wy = cy - wh2 / 2;
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(wx, wy, ww, wh2, 2); else ctx.rect(wx, wy, ww, wh2);
-  ctx.strokeStyle = vA(0.42); ctx.lineWidth = 0.7; ctx.stroke();
+  var sw = (F.x1 - F.x0) * 0.60, sh = h * 0.60;
+  var sx = mx - sw / 2, sy = cy - sh / 2;
 
-  var hr = wh2 * 0.27, spin = t * (1.5 + sat * 0.6), ho = ww * 0.20;
-  rackReel(ctx, mx - ho, cy, hr, spin, 6, lit);
-  rackReel(ctx, mx + ho, cy, hr, spin, 6, lit);
-  // the tape span sags symmetrically between the hubs
-  var sag = wh2 * 0.15 + Math.sin(t * 3.9) * wow * wh2 * 0.10;
+  // shell
   ctx.beginPath();
-  ctx.moveTo(mx - ho + hr * 0.9, cy + hr * 0.35);
-  ctx.quadraticCurveTo(mx, cy + hr * 0.35 + sag, mx + ho - hr * 0.9, cy + hr * 0.35);
+  if (ctx.roundRect) ctx.roundRect(sx, sy, sw, sh, 2.5); else ctx.rect(sx, sy, sw, sh);
+  ctx.strokeStyle = vA(0.48); ctx.lineWidth = 0.8; ctx.stroke();
+
+  // four corner screws — the cassette signature
+  var cs = Math.max(1.1, h * 0.022), ins = sw * 0.045;
+  for (var i = -1; i <= 1; i += 2) for (var j = -1; j <= 1; j += 2) {
+    ctx.beginPath();
+    ctx.arc(mx + i * (sw / 2 - ins), cy + j * (sh / 2 - ins * 0.85), cs, 0, 6.2832);
+    ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.5; ctx.stroke();
+  }
+
+  // label strip across the top
+  ctx.beginPath();
+  var lyH = sh * 0.24;
+  if (ctx.roundRect) ctx.roundRect(sx + sw * 0.10, sy + sh * 0.07, sw * 0.80, lyH, 1);
+  else ctx.rect(sx + sw * 0.10, sy + sh * 0.07, sw * 0.80, lyH);
+  ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.5; ctx.stroke();
+  ctx.strokeStyle = vA(0.16);
+  for (var l = 1; l <= 2; l++) {
+    var lyy = sy + sh * 0.07 + lyH * (l / 3);
+    ctx.beginPath(); ctx.moveTo(sx + sw * 0.14, lyy); ctx.lineTo(sx + sw * 0.86, lyy); ctx.stroke();
+  }
+
+  // the window
+  var wy = sy + sh * 0.40, wh2 = sh * 0.42, wxi = sx + sw * 0.09, wwi = sw * 0.82;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(wxi, wy, wwi, wh2, 1.5); else ctx.rect(wxi, wy, wwi, wh2);
+  ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.5; ctx.stroke();
+
+  // hubs, with teeth, and packs that TRANSFER left -> right
+  var hy = wy + wh2 * 0.52, hr = wh2 * 0.34, ho = wwi * 0.24;
+  var spin = t * (1.5 + sat * 0.6);
+  var xfer = 0.5 + 0.5 * Math.sin(t * 0.16);            // 1 = full left pack
+  var packL = hr * (1.25 + xfer * 0.95), packR = hr * (1.25 + (1 - xfer) * 0.95);
+  [[-1, packL], [1, packR]].forEach(function (o) {
+    var cx2 = mx + o[0] * ho;
+    ctx.beginPath(); ctx.arc(cx2, hy, o[1], 0, 6.2832);
+    ctx.strokeStyle = 'rgba(183,148,255,' + (0.20 + 0.20 * lit).toFixed(2) + ')';
+    ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.beginPath(); ctx.arc(cx2, hy, hr, 0, 6.2832);
+    ctx.strokeStyle = vH(0.46); ctx.lineWidth = 0.6; ctx.stroke();
+    for (var q = 0; q < 6; q++) {                        // the drive teeth
+      var ang = spin + q * 6.2832 / 6;
+      ctx.beginPath();
+      ctx.moveTo(cx2 + Math.cos(ang) * hr * 0.38, hy + Math.sin(ang) * hr * 0.38);
+      ctx.lineTo(cx2 + Math.cos(ang) * hr * 0.86, hy + Math.sin(ang) * hr * 0.86);
+      ctx.strokeStyle = vH(0.30 + 0.40 * lit); ctx.lineWidth = 0.55; ctx.stroke();
+    }
+  });
+  // the tape span, sagging and wobbling with wow
+  var sag = wh2 * 0.10 + Math.sin(t * 3.9) * wow * wh2 * 0.10;
+  ctx.beginPath();
+  ctx.moveTo(mx - ho + packL * 0.95, hy + hr * 0.30);
+  ctx.quadraticCurveTo(mx, hy + hr * 0.30 + sag, mx + ho - packR * 0.95, hy + hr * 0.30);
   ctx.strokeStyle = vH(0.45 + 0.35 * lit); ctx.lineWidth = 0.75; ctx.stroke();
 
-  // EVEN ladders — N equal bars, N-1 equal gaps, the block mirrored either side.
-  // The old version sized bars at 62% of a cell, so the gaps read wider than the bars.
-  // EVEN ladders — N equal bars with N-1 equal gaps, and the two blocks are TRUE
-  // MIRRORS: both index outward from the shell, so segment k sits the same distance
-  // from the centre on each side and lights at the same moment. (The first version
-  // indexed one block inward and the other outward, so the lit bars sat on opposite
-  // ends — even spacing, but anti-symmetric behaviour.)
-  var N = 6, pad = (F.x1 - F.x0) * 0.035;
-  var innerL = mx - ww / 2 - pad, innerR = mx + ww / 2 + pad;
-  var zone = innerL - F.x0;
-  var bw = zone / (N + (N - 1) * 0.55), gap = bw * 0.55;
-  var by = cy - h * 0.13, bh = h * 0.26;
-  for (var i = 0; i < N; i++) {
-    var on = (i / N) < (lit * (0.60 + Math.sin(t * 6.3 + i * 0.5) * 0.22));
-    var fill = (i > N - 3) ? 'rgba(234,120,90,0.80)' : 'rgba(183,148,255,0.62)';
-    var xs = [innerL - (i + 1) * bw - i * gap, innerR + i * (bw + gap)];
+  // the five openings along the bottom edge (capstan / pinch roller / guides)
+  var oN = 5, ow = sw * 0.055, og = sw * 0.055, tot = oN * ow + (oN - 1) * og;
+  for (var k = 0; k < oN; k++) {
+    var ox = mx - tot / 2 + k * (ow + og);
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(ox, sy + sh - sh * 0.115, ow, sh * 0.075, 0.6);
+    else ctx.rect(ox, sy + sh - sh * 0.115, ow, sh * 0.075);
+    ctx.strokeStyle = vA(0.26); ctx.lineWidth = 0.45; ctx.stroke();
+  }
+
+  // level ladders — true mirrors, indexed outward from the shell on both sides
+  var N = 5, pad = (F.x1 - F.x0) * 0.030;
+  var innerL = sx - pad, innerR = sx + sw + pad, zone = innerL - F.x0;
+  var bw = zone / (N + (N - 1) * 0.5), gap = bw * 0.5;
+  for (var i2 = 0; i2 < N; i2++) {
+    var on = (i2 / N) < (lit * (0.60 + Math.sin(t * 6.3 + i2 * 0.5) * 0.22));
+    var fill = (i2 > N - 3) ? 'rgba(234,120,90,0.80)' : 'rgba(183,148,255,0.62)';
+    var xs = [innerL - (i2 + 1) * bw - i2 * gap, innerR + i2 * (bw + gap)];
     for (var e = 0; e < 2; e++) {
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(xs[e], by, bw, bh, 0.8); else ctx.rect(xs[e], by, bw, bh);
+      if (ctx.roundRect) ctx.roundRect(xs[e], cy - h * 0.14, bw, h * 0.28, 0.8);
+      else ctx.rect(xs[e], cy - h * 0.14, bw, h * 0.28);
       if (on) { ctx.fillStyle = fill; ctx.fill(); }
       ctx.strokeStyle = vA(0.26); ctx.lineWidth = 0.5; ctx.stroke();
     }
@@ -1344,7 +1397,12 @@ function drawCassetteRack(ctx, w, h, t) {
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 3. WIRE — spools at both ends, the wire THROUGH THE MIDDLE. ── */
+/* ── 3. WIRE — the transport, not just a line ───────────────────────────────
+   The first pass was two spools and a bare strand, which left the middle empty.
+   A wire recorder's whole character is the PATH: wound spools, guide pulleys that
+   turn, tension, and the head stack the wire is dragged across. That is what the
+   Type models (SS1.2/1.3 — the RE-201's 12-position selector and the Echorec's
+   fixed multi-head array), so the middle is now the head assembly.             */
 function drawWireRack(ctx, w, h, t) {
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
@@ -1353,44 +1411,87 @@ function drawWireRack(ctx, w, h, t) {
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
   var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.42, sr2 = h * 0.24;
-
-  // spools, equidistant — same construction as Studio
-  var off = (F.x1 - F.x0) / 2 - sr2;
+  var mx = w / 2, cy = h * 0.46, sr = h * 0.25;
   var spin = t * (2.1 + sat * 0.7);
-  rackReel(ctx, mx - off, cy, sr2,  spin, 4, lit);
-  rackReel(ctx, mx + off, cy, sr2, -spin, 4, lit);
+  var off = (F.x1 - F.x0) / 2 - sr;
 
-  // THE WIRE — dead centre, spool hub to spool hub (it used to ride across the top)
-  var x0 = mx - off + sr2, x1 = mx + off - sr2, segs = 30;
+  // spools — wound with visible layers of wire, mirrored
+  [-1, 1].forEach(function (sgn) {
+    var cx2 = mx + sgn * off;
+    ctx.beginPath(); ctx.arc(cx2, cy, sr, 0, 6.2832);
+    ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.7; ctx.stroke();
+    for (var r2 = 0.42; r2 < 0.92; r2 += 0.17) {          // the winding layers
+      ctx.beginPath(); ctx.arc(cx2, cy, sr * r2, 0, 6.2832);
+      ctx.strokeStyle = 'rgba(183,148,255,' + (0.14 + 0.14 * lit).toFixed(2) + ')';
+      ctx.lineWidth = 0.5; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(cx2, cy, sr * 0.24, 0, 6.2832);
+    ctx.strokeStyle = vH(0.50); ctx.lineWidth = 0.6; ctx.stroke();
+    for (var q = 0; q < 4; q++) {                          // hub spokes = the motion cue
+      var ang = sgn * spin + q * 1.5708;
+      ctx.beginPath();
+      ctx.moveTo(cx2 + Math.cos(ang) * sr * 0.26, cy + Math.sin(ang) * sr * 0.26);
+      ctx.lineTo(cx2 + Math.cos(ang) * sr * 0.52, cy + Math.sin(ang) * sr * 0.52);
+      ctx.strokeStyle = vH(0.28 + 0.42 * lit); ctx.lineWidth = 0.55; ctx.stroke();
+    }
+  });
+
+  // guide pulleys, mirrored, that actually turn
+  var gpo = off * 0.52, gr = h * 0.075, gy = cy - sr * 0.32;
+  [-1, 1].forEach(function (sgn) {
+    var gx = mx + sgn * gpo;
+    ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 6.2832);
+    ctx.strokeStyle = vH(0.40); ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(gx - Math.cos(spin * 1.6) * gr * 0.7, gy - Math.sin(spin * 1.6) * gr * 0.7);
+    ctx.lineTo(gx + Math.cos(spin * 1.6) * gr * 0.7, gy + Math.sin(spin * 1.6) * gr * 0.7);
+    ctx.strokeStyle = vH(0.26 + 0.34 * lit); ctx.lineWidth = 0.5; ctx.stroke();
+  });
+
+  // the head stack the wire is dragged across — the centre of the machine
+  var bw2 = (F.x1 - F.x0) * 0.20, bh2 = h * 0.30, by2 = gy - bh2 * 0.42;
   ctx.beginPath();
-  for (var i = 0; i <= segs; i++) {
-    var u = i / segs, xx = x0 + (x1 - x0) * u, env = Math.sin(u * Math.PI);
-    var yy = cy + Math.sin(u * 9 + t * 7.5) * env * wow * h * 0.085
-                + Math.sin(u * 21 + t * 17) * env * wow * h * 0.030;
-    if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
-  }
-  ctx.strokeStyle = vH(0.50 + 0.40 * lit); ctx.lineWidth = 0.8; ctx.stroke();
+  if (ctx.roundRect) ctx.roundRect(mx - bw2 / 2, by2, bw2, bh2, 1.5);
+  else ctx.rect(mx - bw2 / 2, by2, bw2, bh2);
+  ctx.strokeStyle = vA(0.40); ctx.lineWidth = 0.65; ctx.stroke();
 
-  // four heads, evenly spaced and symmetric about mx, sitting ON the wire
-  for (var q = 0; q < 4; q++) {
-    var u2 = (q + 0.5) / 4, hx = x0 + (x1 - x0) * u2;
-    var wy2 = cy + Math.sin(u2 * 9 + t * 7.5) * Math.sin(u2 * Math.PI) * wow * h * 0.085;
-    var fl = Math.max(0, Math.sin(t * 3.1 - q * 0.8));
-    ctx.beginPath(); ctx.arc(hx, wy2, h * 0.028 + fl * h * 0.010, 0, 6.2832);
+  // THE WIRE — spool, up over the guide, straight across the heads, down again.
+  // Dead level through the middle of the block; it wobbles only between supports.
+  function wireY(x) {
+    var u = (x - (mx - gpo)) / (2 * gpo);
+    var env = Math.sin(Math.max(0, Math.min(1, u)) * Math.PI);
+    return gy + Math.sin(u * 11 + t * 7.5) * env * wow * h * 0.055
+              + Math.sin(u * 24 + t * 17) * env * wow * h * 0.020;
+  }
+  ctx.beginPath();
+  ctx.moveTo(mx - off + sr * 0.2, cy);
+  ctx.lineTo(mx - gpo, gy);
+  for (var xx = mx - gpo; xx <= mx + gpo; xx += 3) ctx.lineTo(xx, wireY(xx));
+  ctx.lineTo(mx + gpo, gy);
+  ctx.lineTo(mx + off - sr * 0.2, cy);
+  ctx.strokeStyle = vH(0.52 + 0.38 * lit); ctx.lineWidth = 0.8; ctx.stroke();
+
+  // four heads inside the block, evenly spaced and symmetric about mx
+  for (var q2 = 0; q2 < 4; q2++) {
+    var hx = mx - bw2 / 2 + bw2 * (q2 + 0.5) / 4;
+    var fl = Math.max(0, Math.sin(t * 3.1 - q2 * 0.8));
+    ctx.beginPath();
+    ctx.moveTo(hx, by2 + bh2 * 0.20); ctx.lineTo(hx, wireY(hx));
+    ctx.strokeStyle = vH(0.24 + fl * 0.34); ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx, wireY(hx), h * 0.026 + fl * h * 0.010, 0, 6.2832);
     ctx.fillStyle = 'rgba(183,148,255,' + (0.30 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
-    ctx.strokeStyle = vH(0.42 + fl * 0.32); ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.strokeStyle = vH(0.40 + fl * 0.30); ctx.lineWidth = 0.45; ctx.stroke();
   }
 
-  // the 12-position MODE selector, as an even centred tick row above the wire
-  // (SS1.2 — the RE-201's rotary. A dial off to one side broke the symmetry.)
-  var tn = 12, tw = (F.x1 - F.x0) * 0.42, tx0 = mx - tw / 2, ty = h * 0.135;
+  // the 12-position MODE selector, an even centred tick row (SS1.2)
+  var tn = 12, tw = (F.x1 - F.x0) * 0.40, tx0 = mx - tw / 2, ty = h * 0.115;
   var selI = 3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5);
   for (var d = 0; d < tn; d++) {
     var dx = tx0 + tw * d / (tn - 1), on2 = (d === selI);
-    ctx.beginPath(); ctx.moveTo(dx, ty - (on2 ? h * 0.055 : h * 0.032)); ctx.lineTo(dx, ty + h * 0.032);
-    ctx.strokeStyle = on2 ? 'rgba(183,148,255,0.92)' : vA(0.28);
-    ctx.lineWidth = on2 ? 1.1 : 0.55; ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(dx, ty - (on2 ? h * 0.048 : h * 0.026)); ctx.lineTo(dx, ty + h * 0.026);
+    ctx.strokeStyle = on2 ? 'rgba(183,148,255,0.92)' : vA(0.26);
+    ctx.lineWidth = on2 ? 1.1 : 0.5; ctx.stroke();
   }
 
   rackLeds(ctx, w, h, t, wow, sat, hiss);
