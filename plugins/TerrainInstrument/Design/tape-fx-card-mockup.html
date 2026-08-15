@@ -323,7 +323,7 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
       // Glowing rim
       ctx.shadowColor = vA(0.45); ctx.shadowBlur = 6;
       ctx.beginPath(); ctx.arc(rcx + jit(0.3), reelCY + jit(0.3), reelR, 0, Math.PI * 2);
-      ctx.strokeStyle = vA(0.7 * pulse); ctx.lineWidth = 1.3; ctx.stroke();
+      ctx.strokeStyle = vA(0.7 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
       ctx.shadowBlur = 0;
 
       // 3 spokes
@@ -332,14 +332,14 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
         ctx.beginPath();
         ctx.moveTo(rcx + Math.cos(a) * reelR * 0.25, reelCY + Math.sin(a) * reelR * 0.25);
         ctx.lineTo(rcx + Math.cos(a) * reelR * 0.88, reelCY + Math.sin(a) * reelR * 0.88);
-        ctx.strokeStyle = vH(0.4 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
+        ctx.strokeStyle = vH(0.4 * pulse); ctx.lineWidth = 0.6; ctx.stroke();
       }
 
       // Hub — filled
       ctx.shadowColor = vH(0.5); ctx.shadowBlur = 4;
       ctx.beginPath(); ctx.arc(rcx, reelCY, reelR * 0.22, 0, Math.PI * 2);
       ctx.fillStyle = _vizWf ? 'rgba(255,255,255,0.05)' : 'rgba(58, 32, 80, 0.6)'; ctx.fill();
-      ctx.strokeStyle = vH(0.65 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
+      ctx.strokeStyle = vH(0.65 * pulse); ctx.lineWidth = 0.6; ctx.stroke();
       ctx.shadowBlur = 0;
 
       // Center spindle
@@ -379,7 +379,7 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
     }
     ctx.lineTo(gRx, gY);
     ctx.lineTo(reelRx - takeupTR * 0.7, reelCY + takeupTR * 0.7);
-    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 0.75; ctx.stroke();
 
     // Guide rollers — filled
     var guidePoints = [{x:gLx,y:gY}, {x:gRx,y:gY}];
@@ -633,7 +633,7 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
         ctx.beginPath();
         ctx.moveTo(sx + Math.cos(a) * spoolR * 0.12, spoolCY + Math.sin(a) * spoolR * 0.12);
         ctx.lineTo(sx + Math.cos(a) * spoolR * 0.32, spoolCY + Math.sin(a) * spoolR * 0.32);
-        ctx.strokeStyle = vH(0.5 * pulse); ctx.lineWidth = 1.3; ctx.stroke();
+        ctx.strokeStyle = vH(0.5 * pulse); ctx.lineWidth = 0.9; ctx.stroke();
       }
 
       ctx.shadowColor = vH(0.5); ctx.shadowBlur = 3;
@@ -663,7 +663,7 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
       ctx.lineTo(wx + jit(0.2), tapeY + wb + jit(0.2));
     }
     ctx.lineTo(spoolRx + takeupR * 0.5, spoolCY + takeupR * 0.85);
-    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 1.1; ctx.stroke();
+    ctx.strokeStyle = vH(0.8 * pulse); ctx.lineWidth = 0.75; ctx.stroke();
 
     // Guide pins
     var pinY = cB - cH * 0.15;
@@ -1150,7 +1150,7 @@ function rackFace(ctx, w, h, t, label, litAmt) {
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(1, 1, w - 2, h - 2, 2.5);
   else ctx.rect(1, 1, w - 2, h - 2);
-  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
 
   // brushed-metal grain — cheap, deterministic, no gradient objects
   ctx.save();
@@ -1186,13 +1186,14 @@ function rackFace(ctx, w, h, t, label, litAmt) {
 /* A spinning reel — spokes integrate the transport speed, so it never free-runs. */
 function rackReel(ctx, cx, cy, r, ang, spokes, lit) {
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832);
-  ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.6; ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, r * 0.30, 0, 6.2832);
-  ctx.strokeStyle = vH(0.55 + 0.35 * lit); ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.strokeStyle = vH(0.55 + 0.35 * lit); ctx.lineWidth = 0.6; ctx.stroke();
   // the tape pack — a THIN ring, not a filled disc. The house aesthetic is white strokes
   // with purple as the accent (feedback-thin-white-no-glass); a fat vP fill read as a blob.
   ctx.beginPath(); ctx.arc(cx, cy, r * 0.70, 0, 6.2832);
-  ctx.strokeStyle = vP(0.30); ctx.lineWidth = Math.max(1.0, r * 0.17); ctx.stroke();
+  ctx.strokeStyle = 'rgba(183,148,255,' + (0.24 + 0.22 * lit).toFixed(2) + ')';
+  ctx.lineWidth = Math.max(0.9, r * 0.13); ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, 6.2832);
   ctx.strokeStyle = vH(0.30 + 0.25 * lit); ctx.lineWidth = 0.6; ctx.stroke();
   // spokes — THE motion cue
@@ -1218,11 +1219,16 @@ function rackVU(ctx, x, y, w2, h2, val, t, seed) {
   var a = Math.PI * 1.15 + (Math.PI * 0.7) * Math.max(0, Math.min(1, val * bal * 1.6));
   ctx.beginPath(); ctx.moveTo(px, py);
   ctx.lineTo(px + Math.cos(a) * rr, py + Math.sin(a) * rr);
-  ctx.strokeStyle = vH(0.85); ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.strokeStyle = vH(0.85); ctx.lineWidth = 0.6; ctx.stroke();
 }
 
 /* ── 1. STUDIO — the two-reel rack deck ─────────────────────────────────── */
 function drawStudioRack(ctx, w, h, t) {
+  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
+  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
+  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
+  // the comparison row still renders in its original palette.
+  _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
@@ -1245,7 +1251,7 @@ function drawStudioRack(ctx, w, h, t) {
   ctx.quadraticCurveTo(mx * 0.62 + lx * 0.38, cy + r * 0.62 + wob, mx - r * 0.9, cy + r * 0.70 + wob);
   ctx.lineTo(mx + r * 0.9, cy + r * 0.70 + wob);
   ctx.quadraticCurveTo(mx * 0.62 + rx * 0.38, cy + r * 0.62 + wob, rx - r, cy - r * 0.10);
-  ctx.strokeStyle = vH(0.42 + 0.35 * lit); ctx.lineWidth = 1.15; ctx.stroke();
+  ctx.strokeStyle = vH(0.42 + 0.35 * lit); ctx.lineWidth = 0.8; ctx.stroke();
 
   // three-head block (erase / record / play)
   var hy = cy + r * 0.70 + wob, hw = h * 0.085;
@@ -1255,7 +1261,7 @@ function drawStudioRack(ctx, w, h, t) {
     if (ctx.roundRect) ctx.roundRect(hx - hw * 0.5, hy - hw * 1.15, hw, hw * 1.15, 0.8);
     else ctx.rect(hx - hw * 0.5, hy - hw * 1.15, hw, hw * 1.15);
     var flash = 0.35 + 0.5 * Math.max(0, Math.sin(t * 2.6 - i * 1.1)) * lit;
-    ctx.fillStyle = vP(0.30 + flash * 0.4); ctx.fill();
+    ctx.fillStyle = 'rgba(183,148,255,' + (0.28 + flash * 0.45).toFixed(2) + ')'; ctx.fill();
     ctx.strokeStyle = vH(0.55); ctx.lineWidth = 0.6; ctx.stroke();
   }
 
@@ -1264,11 +1270,16 @@ function drawStudioRack(ctx, w, h, t) {
   rackVU(ctx, mx - vw * 1.15, h * 0.10, vw, vh, lit, t, 0);
   rackVU(ctx, mx + vw * 0.15, h * 0.10, vw, vh, lit * 0.9, t, 2.4);
   drawIndicatorLights(ctx, F.x0 + 3, h * 0.86, Math.max(0.5, h / 150), t, wow, sat, hiss);
-  ctx.restore();
+  ctx.restore(); _vizWf = false;
 }
 
 /* ── 2. CASSETTE — the rack cassette deck ───────────────────────────────── */
 function drawCassetteRack(ctx, w, h, t) {
+  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
+  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
+  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
+  // the comparison row still renders in its original palette.
+  _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
@@ -1280,7 +1291,7 @@ function drawCassetteRack(ctx, w, h, t) {
   var wx = F.x0 + 2, wy = h * 0.16, ww = (F.x1 - F.x0) * 0.40, wh2 = h * 0.60;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(wx, wy, ww, wh2, 2); else ctx.rect(wx, wy, ww, wh2);
-  ctx.strokeStyle = vA(0.46); ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.strokeStyle = vA(0.46); ctx.lineWidth = 0.6; ctx.stroke();
 
   var cy = wy + wh2 * 0.5, hr = wh2 * 0.26, spin = t * (1.5 + sat * 0.6);
   var hl = wx + ww * 0.30, hrx = wx + ww * 0.70;
@@ -1290,7 +1301,7 @@ function drawCassetteRack(ctx, w, h, t) {
   var sag = wh2 * 0.16 + Math.sin(t * 3.9) * wow * wh2 * 0.11;
   ctx.beginPath(); ctx.moveTo(hl + hr * 0.9, cy + hr * 0.35);
   ctx.quadraticCurveTo((hl + hrx) / 2, cy + hr * 0.35 + sag, hrx - hr * 0.9, cy + hr * 0.35);
-  ctx.strokeStyle = vH(0.45 + 0.35 * lit); ctx.lineWidth = 1.1; ctx.stroke();
+  ctx.strokeStyle = vH(0.45 + 0.35 * lit); ctx.lineWidth = 0.75; ctx.stroke();
 
   // mechanical counter
   var cw = (F.x1 - F.x0) * 0.155, cx0 = wx + ww + (F.x1 - F.x0) * 0.045;
@@ -1309,7 +1320,7 @@ function drawCassetteRack(ctx, w, h, t) {
     var bx = cx0 + b * (bw * 1.18);
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(bx, by, bw, h * 0.16, 1); else ctx.rect(bx, by, bw, h * 0.16);
-    if (b === 2) { ctx.fillStyle = vP(0.26 + 0.30 * lit); ctx.fill(); }   // only PLAY is lit
+    if (b === 2) { ctx.fillStyle = 'rgba(183,148,255,' + (0.26 + 0.30 * lit).toFixed(2) + ')'; ctx.fill(); }   // only PLAY is lit
     ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.55; ctx.stroke();
   }
 
@@ -1325,11 +1336,16 @@ function drawCassetteRack(ctx, w, h, t) {
     ctx.fill();
   }
   drawIndicatorLights(ctx, lx0 + 1, h * 0.66, Math.max(0.5, h / 150), t, wow, sat, hiss);
-  ctx.restore();
+  ctx.restore(); _vizWf = false;
 }
 
 /* ── 3. WIRE — the multi-head machine (RE-201 mode selector + Echorec heads) ── */
 function drawWireRack(ctx, w, h, t) {
+  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
+  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
+  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
+  // the comparison row still renders in its original palette.
+  _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
@@ -1340,7 +1356,7 @@ function drawWireRack(ctx, w, h, t) {
   // the big rotary MODE selector — the RE-201's signature control
   var kr = h * 0.28, kx = F.x0 + kr + 2, ky = h * 0.46;
   ctx.beginPath(); ctx.arc(kx, ky, kr, 0, 6.2832);
-  ctx.strokeStyle = vA(0.52); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = vA(0.52); ctx.lineWidth = 0.7; ctx.stroke();
   for (var d = 0; d < 12; d++) {                       // 12 positions, per SS1.2
     var da = -2.1 + d * (4.2 / 11);
     ctx.beginPath();
@@ -1351,7 +1367,7 @@ function drawWireRack(ctx, w, h, t) {
   var sel = -2.1 + (3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5)) * (4.2 / 11);
   ctx.beginPath(); ctx.moveTo(kx, ky);
   ctx.lineTo(kx + Math.cos(sel) * kr * 0.82, ky + Math.sin(sel) * kr * 0.82);
-  ctx.strokeStyle = vH(0.9); ctx.lineWidth = 1.3; ctx.stroke();
+  ctx.strokeStyle = vH(0.9); ctx.lineWidth = 0.9; ctx.stroke();
 
   // two wire spools at the right, the wire strung between them across the face
   var sr2 = h * 0.22, sx1 = kx + kr * 1.9 + h * 0.10, sx2 = F.x1 - sr2 - 2;
@@ -1370,18 +1386,18 @@ function drawWireRack(ctx, w, h, t) {
            + Math.sin(u * 21 + t * 17) * env * wow * h * 0.035;
     if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
   }
-  ctx.strokeStyle = vH(0.50 + 0.40 * lit); ctx.lineWidth = 0.9; ctx.stroke();
+  ctx.strokeStyle = vH(0.50 + 0.40 * lit); ctx.lineWidth = 0.6; ctx.stroke();
 
   // the fixed head array reading the wire — 4 heads, Echorec geometry (SS2.3)
   for (var q = 0; q < 4; q++) {
     var hx2 = sx1 + (sx2 - sx1) * (0.20 + q * 0.20);
     var fl = Math.max(0, Math.sin(t * 3.1 - q * 0.8));
     ctx.beginPath(); ctx.arc(hx2, ky - sr2 * 0.55, h * 0.030 + fl * h * 0.012, 0, 6.2832);
-    ctx.fillStyle = vP(0.35 + fl * 0.5 * lit); ctx.fill();
+    ctx.fillStyle = 'rgba(183,148,255,' + (0.32 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
     ctx.strokeStyle = vH(0.45 + fl * 0.35); ctx.lineWidth = 0.55; ctx.stroke();
   }
   drawIndicatorLights(ctx, F.x0 + 2, h * 0.87, Math.max(0.5, h / 150), t, wow, sat, hiss);
-  ctx.restore();
+  ctx.restore(); _vizWf = false;
 }
 
 
