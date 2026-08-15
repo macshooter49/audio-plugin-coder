@@ -1145,18 +1145,18 @@ function rackFace(ctx, w, h, t, label, litAmt) {
   ctx.lineJoin = 'round'; ctx.lineCap = 'round';
 
   // plate
+  // TRANSPARENT (Max) — the core sits on the card, it never paints its own panel.
+  // Every other rack core is strokes on nothing; the plate is drawn, not filled.
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(1, 1, w - 2, h - 2, 2.5);
   else ctx.rect(1, 1, w - 2, h - 2);
-  ctx.fillStyle = 'rgba(24,18,38,0.55)';
-  ctx.fill();
-  ctx.strokeStyle = vA(0.42); ctx.lineWidth = 1; ctx.stroke();
+  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 1; ctx.stroke();
 
   // brushed-metal grain — cheap, deterministic, no gradient objects
   ctx.save();
   ctx.beginPath(); ctx.rect(1, 1, w - 2, h - 2); ctx.clip();
-  ctx.strokeStyle = vA(0.045); ctx.lineWidth = 0.5;
-  for (var g = 3; g < h; g += 3.5) {
+  ctx.strokeStyle = vA(0.05); ctx.lineWidth = 0.5;
+  for (var g = 3; g < h; g += 5) {
     ctx.beginPath(); ctx.moveTo(2, g); ctx.lineTo(w - 2, g); ctx.stroke();
   }
   ctx.restore();
@@ -1168,7 +1168,6 @@ function rackFace(ctx, w, h, t, label, litAmt) {
   var sx = [earW * 0.5, w - earW * 0.5], sy = [h * 0.24, h * 0.76], sr = Math.max(1.5, h * 0.045);
   for (var i = 0; i < 2; i++) for (var j = 0; j < 2; j++) {
     ctx.beginPath(); ctx.arc(sx[i], sy[j], sr, 0, 6.2832);
-    ctx.fillStyle = 'rgba(12,8,22,0.75)'; ctx.fill();
     ctx.strokeStyle = vH(0.5); ctx.lineWidth = 0.8; ctx.stroke();
     ctx.beginPath();                                   // the slot
     ctx.moveTo(sx[i] - sr * 0.6, sy[j]); ctx.lineTo(sx[i] + sr * 0.6, sy[j]);
@@ -1189,7 +1188,6 @@ function rackReel(ctx, cx, cy, r, ang, spokes, lit) {
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832);
   ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.9; ctx.stroke();
   ctx.beginPath(); ctx.arc(cx, cy, r * 0.30, 0, 6.2832);
-  ctx.fillStyle = 'rgba(14,9,26,0.8)'; ctx.fill();
   ctx.strokeStyle = vH(0.55 + 0.35 * lit); ctx.lineWidth = 0.9; ctx.stroke();
   // the tape pack — a THIN ring, not a filled disc. The house aesthetic is white strokes
   // with purple as the accent (feedback-thin-white-no-glass); a fat vP fill read as a blob.
@@ -1212,7 +1210,6 @@ function rackReel(ctx, cx, cy, r, ang, spokes, lit) {
 function rackVU(ctx, x, y, w2, h2, val, t, seed) {
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(x, y, w2, h2, 1.5); else ctx.rect(x, y, w2, h2);
-  ctx.fillStyle = 'rgba(10,6,20,0.6)'; ctx.fill();
   ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
   var px = x + w2 * 0.5, py = y + h2 * 0.94, rr = Math.min(w2 * 0.42, h2 * 0.82);
   ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.6;
@@ -1283,7 +1280,6 @@ function drawCassetteRack(ctx, w, h, t) {
   var wx = F.x0 + 2, wy = h * 0.16, ww = (F.x1 - F.x0) * 0.40, wh2 = h * 0.60;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(wx, wy, ww, wh2, 2); else ctx.rect(wx, wy, ww, wh2);
-  ctx.fillStyle = 'rgba(9,5,18,0.72)'; ctx.fill();
   ctx.strokeStyle = vA(0.46); ctx.lineWidth = 0.9; ctx.stroke();
 
   var cy = wy + wh2 * 0.5, hr = wh2 * 0.26, spin = t * (1.5 + sat * 0.6);
@@ -1300,7 +1296,6 @@ function drawCassetteRack(ctx, w, h, t) {
   var cw = (F.x1 - F.x0) * 0.155, cx0 = wx + ww + (F.x1 - F.x0) * 0.045;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(cx0, wy, cw, h * 0.26, 1.5); else ctx.rect(cx0, wy, cw, h * 0.26);
-  ctx.fillStyle = 'rgba(9,5,18,0.8)'; ctx.fill();
   ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
   var n = Math.floor(t * 3.2) % 1000;
   ctx.font = '600 ' + Math.max(5, h * 0.15).toFixed(1) + "px ui-monospace,Menlo,monospace";
@@ -1314,8 +1309,8 @@ function drawCassetteRack(ctx, w, h, t) {
     var bx = cx0 + b * (bw * 1.18);
     ctx.beginPath();
     if (ctx.roundRect) ctx.roundRect(bx, by, bw, h * 0.16, 1); else ctx.rect(bx, by, bw, h * 0.16);
-    ctx.fillStyle = (b === 2) ? vP(0.30 + 0.35 * lit) : 'rgba(16,10,30,0.7)';
-    ctx.fill(); ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.55; ctx.stroke();
+    if (b === 2) { ctx.fillStyle = vP(0.26 + 0.30 * lit); ctx.fill(); }   // only PLAY is lit
+    ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.55; ctx.stroke();
   }
 
   // level ladder, right side
@@ -1345,7 +1340,6 @@ function drawWireRack(ctx, w, h, t) {
   // the big rotary MODE selector — the RE-201's signature control
   var kr = h * 0.28, kx = F.x0 + kr + 2, ky = h * 0.46;
   ctx.beginPath(); ctx.arc(kx, ky, kr, 0, 6.2832);
-  ctx.fillStyle = 'rgba(14,9,26,0.8)'; ctx.fill();
   ctx.strokeStyle = vA(0.52); ctx.lineWidth = 1; ctx.stroke();
   for (var d = 0; d < 12; d++) {                       // 12 positions, per SS1.2
     var da = -2.1 + d * (4.2 / 11);
