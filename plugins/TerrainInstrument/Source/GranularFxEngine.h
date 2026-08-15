@@ -87,7 +87,7 @@ struct GranularFxParams
     float detune   = 0.f;    // 0..1 → ±24 st per-grain scatter (key-snapped when Key on)
     float shape    = 0.5f;   // 0..1 Flat-top → Hann → Bell
     float width    = 0.5f;   // 0..1 per-grain equal-power pan spread
-    float feedback = 0.f;    // 0..1.10 wet re-entry into the ring
+    float decay    = 0.f;    // 0..1.10 wet re-entry into the ring = how long the cloud sustains
     float freeze   = 0.f;    // 0..1 write-blend
     // dropdowns / pills
     int   type      = GrnCloud;
@@ -99,7 +99,7 @@ struct GranularFxParams
     {
         return density == o.density && size == o.size && pitch == o.pitch && scan == o.scan
             && windowMs == o.windowMs && spray == o.spray && detune == o.detune && shape == o.shape
-            && width == o.width && feedback == o.feedback && freeze == o.freeze
+            && width == o.width && decay == o.decay && freeze == o.freeze
             && type == o.type && character == o.character && key == o.key
             && freezeLatch == o.freezeLatch;
     }
@@ -184,7 +184,7 @@ public:
         // ── 0) smoothed controls. Every one of these is a knob the user can yank, and a raw
         //      per-block step on any of them is audible on a sustained cloud (the fb204 lesson).
         freezeSm_ += fastAlpha_ * (freezeTgt_ - freezeSm_);
-        fbSm_     += fastAlpha_ * (p_.feedback - fbSm_);
+        fbSm_     += fastAlpha_ * (p_.decay - fbSm_);
         scanSm_   += slowAlpha_ * (p_.scan - scanSm_);
         winLoSm_  += slowAlpha_ * (winLoTgt_ - winLoSm_);
         winHiSm_  += slowAlpha_ * (winHiTgt_ - winHiSm_);
@@ -705,7 +705,7 @@ private:
     void snapSmoothing() noexcept
     {
         normSm_ = norm_; shapeSm_ = p_.shape; scanSm_ = p_.scan;
-        freezeSm_ = freezeTgt_; fbSm_ = p_.feedback;
+        freezeSm_ = freezeTgt_; fbSm_ = p_.decay;
         winLoSm_ = winLoTgt_; winHiSm_ = winHiTgt_;
         ageHead_ = winLoTgt_ + 0.5 * (winHiTgt_ - winLoTgt_);
     }

@@ -32,7 +32,7 @@ namespace tw {
 
 struct FxChainTopology
 {
-    static constexpr int kMaxSlots = 16;      // 1 reverb + 6 delay + 6 distortion + headroom
+    static constexpr int kMaxSlots = 32;      // fb362 — 6 each of reverb + delay + distortion + granular, + headroom
 
     int      count = 0;
     uint8_t  entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot

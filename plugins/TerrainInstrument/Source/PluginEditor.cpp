@@ -5586,6 +5586,10 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         {
             dstVizPushCtr_ = 0;
             js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
+            // fb362 — the granular cards ride the same push, same ~15 Hz budget. One entry per
+            // instance (null when that instance is not in the chain), so a duplicate lights from
+            // ITS OWN ring — the fb350/fb352 per-instance viz law, applied from day one.
+            js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";
         }
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):

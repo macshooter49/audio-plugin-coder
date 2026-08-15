@@ -25,6 +25,7 @@
 #include "ParametricEQ.h"
 #include "SpectrumAnalyzer.h"
 #include "RollingCaptureBuffer.h"
+#include "GranularFxEngine.h"   // fb362 — the FX-rack granular
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -683,6 +684,7 @@ public:
     void              setDistortionCurves (const juce::String& json);  // fb328 — curve-card blob (banks + bars)
     juce::String      getDistortionCurvesJson() const;                 // fb328 — card boot + cross-window pull
     juce::String      getDistortionCurveVizJson();                     // fb328 — live core feed (curve+occ+bloom)
+    juce::String      getGranularVizJson();                            // fb362 — granular cards, one entry per instance
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
@@ -1574,6 +1576,14 @@ private:
     //    (Space/Hall/Digital/Basin/Shimmer/Convolution) and would cost 6x per slot, so its extra
     //    instances get lazy construction in the next pass instead of eager allocation here.
     static constexpr int kFxExtra = ParameterIDs::kFxInstances - 1;
+    // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + ALL SIX granular.
+    // ⚠️ Granular puts all 6 instances in this pool, instance 1 included, where the other three
+    // devices keep instance 1 on dedicated members and pool only 2..6. That is deliberate: it is
+    // the fb350 POOL LAW applied structurally. One code path for every instance means a per-block
+    // engine call can never exist for instance 1 and not for a duplicate — the bug class simply
+    // cannot be written here. Granular is new, so there is no historical instance-1 ID to protect.
+    static constexpr int kGrnSendBase  = 15;
+    static constexpr int kPoolSendCount = kGrnSendBase + ParameterIDs::kFxInstances;   // 21
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;
     // per-extra-instance runtime state, mirroring the instance-1 members below
@@ -1589,8 +1599,8 @@ private:
     // ── the chain order. Rebuilt at the TOP of each processBlock from CACHED param pointers, so it
     //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
     //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).
-    struct ChainEntry { int kind; int inst; float rank; };   // kind: 0=Reverb 1=Delay 2=Distortion
-    static constexpr int kChainMax = 1 + 2 * ParameterIDs::kFxInstances;
+    struct ChainEntry { int kind; int inst; float rank; };   // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular
+    static constexpr int kChainMax = 4 * ParameterIDs::kFxInstances;   // fb362 — 6 of each of 4 devices
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
     int chainCount_ = 0;
     // fb351 — THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had
@@ -1602,7 +1612,7 @@ private:
     float hallEntryG_[6] { 0,0,0,0,0,0 };            // ENTRY masks — a source enters the rack exactly
     float dlyEntryG_ [6] { 0,0,0,0,0,0 };            // once, at the FIRST device routed to it. These
     float dstEntryG_ [6] { 0,0,0,0,0,0 };            // (not the full route masks) are what the voices
-    std::array<float, (size_t) (3 * (ParameterIDs::kFxInstances - 1)) * 6> poolEntryG_ {};   // tap.
+    std::array<float, (size_t) kPoolSendCount * 6> poolEntryG_ {};   // tap.
     void rebuildChainOrder() noexcept;                       // audio-thread safe (cached pointers only)
 
     // ── cached parameter pointers for the pooled instances (resolved once in prepareToPlay, where
@@ -1648,6 +1658,34 @@ private:
     // Room/Spring had a DEAD Duck pill. Same shape as the fb350 delay bug.
     std::array<bool,  (size_t) kFxExtra> poolRvbDuckOn_ {};
     std::array<float, (size_t) kFxExtra> poolRvbDuckEnv_ {};
+
+    // ══ fb362 — GRANULAR, all six instances uniform ═══════════════════════════════════════════
+    // Engines are LAZY and built on the MESSAGE THREAD (the fb352 reverb pattern): the ring is
+    // 8.4 MB per instance at 44.1/48 k (16.5 s rounds up to 2^20 samples, stereo float) and 16.8 MB
+    // at 96 k, so allocating six eagerly would cost 50 MB for a rack that usually holds one. The
+    // audio thread only ever publishes an int request and reads the resulting pointer; until the
+    // engine exists the slot passes its input through untouched.
+    struct GrnRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* key;
+        std::atomic<float>* syncdiv; std::atomic<float>* density; std::atomic<float>* size;
+        std::atomic<float>* decay; std::atomic<float>* mix; std::atomic<float>* scan;
+        std::atomic<float>* window; std::atomic<float>* spray; std::atomic<float>* pitch;
+        std::atomic<float>* detune; std::atomic<float>* shape; std::atomic<float>* width;
+        std::atomic<float>* freeze; std::atomic<float>* freezePill; std::atomic<float>* sync;
+        std::atomic<float>* src[6]; };
+    std::array<GrnRefs, (size_t) ParameterIDs::kFxInstances> grnRefs_ {};
+    std::array<std::unique_ptr<tw::GranularFxEngine>, (size_t) ParameterIDs::kFxInstances> grnPool_;
+    std::array<std::atomic<bool>,  (size_t) ParameterIDs::kFxInstances> grnWantBuild_ {};   // audio→message
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnEnv_ {};        // on/off fade (click-free)
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnDry_ {};        // ramped equal-power mix
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnWet_ {};
+    std::array<int,   (size_t) ParameterIDs::kFxInstances> grnType_ {};       // adopted type (-1 = none)
+    std::array<bool,  (size_t) ParameterIDs::kFxInstances> grnSwap_ {};       // type-swap fade running
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnBloomEnv_ {};
+    std::array<std::atomic<float>, (size_t) ParameterIDs::kFxInstances> grnBloomViz_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnBlockPk_ {};   // wet peak this block
+    void applyGrn (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void buildPendingGranularEngines();      // MESSAGE THREAD ONLY (timerCallback)
     std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
     std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};
     std::array<std::atomic<int>,   (size_t) kFxExtra> rvbWantType_ {};   // audio→message: build me this
@@ -1667,6 +1705,7 @@ private:
     std::atomic<float> *dlyActive_ = nullptr, *dlyRank_ = nullptr;
     std::atomic<float> *dstActive_ = nullptr, *dstRank_ = nullptr;
     void cacheFxInstanceParams();                            // message thread (builds ID strings)
+    void cacheGranularParams();                              // fb362 — same contract, all 6 instances
     std::array<int, (size_t) kFxExtra> poolDstType_ {};       // active distortion mode per extra instance
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)
@@ -1701,7 +1740,6 @@ private:
     // ── fb348 — one send bus per POOLED instance (Delay 2..6 = 0..4, Distortion 2..6 = 5..9).
     //    NO GLOBAL SEND any more (Max): a device affects ONLY what it is routed to, so a delay on
     //    osc C can never touch osc A. An unrouted device is silent.
-    static constexpr int kPoolSendCount = 15;   // fb352 — 5 delay + 5 distortion + 5 REVERB
     std::array<juce::AudioBuffer<float>, (size_t) kPoolSendCount> poolSendBuf_;
     std::array<bool,  (size_t) kPoolSendCount> poolRouteAny_ {};
     std::array<float, (size_t) kPoolSendCount * 6> poolRouteG_ {};

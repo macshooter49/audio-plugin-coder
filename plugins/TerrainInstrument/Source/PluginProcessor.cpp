@@ -681,6 +681,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
+    buildPendingGranularEngines();   // fb362 — same message-thread contract
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
     // the real mouse (Desktop) and detects the release itself. WebKit's event delivery
     // outside a window can never strand a cross-window drag, and screen coords are
@@ -3705,14 +3706,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 C (p + "CHARACTER", d + "Character", grnChars, 0);
                 C (p + "KEY",       d + "Key",       grnKeys,  0);
                 C (p + "SYNCDIV",   d + "Sync Division", syncDiv, 10);   // Window, when Sync is lit
-                // front heroes + Mix
+                // Front heroes + Mix. Max, 2026-08-15: "Why is our pitch in the front when there
+                // needs to be decay? Decay is a huge one." — so DECAY (how long the grain cloud
+                // sustains: wet re-entry into the ring) takes the third hero slot and Pitch moves
+                // to the back with the rest of the pitch controls, next to Detune where it belongs.
                 F (p + "DENSITY", d + "Grains",   0.42f);  F (p + "SIZE",  d + "Size",  0.42f);
-                F (p + "PITCH",   d + "Pitch",    0.50f);  F (p + "MIX",   d + "Mix",   0.35f);
+                F (p + "DECAY",   d + "Decay",    0.35f);  F (p + "MIX",   d + "Mix",   0.35f);
                 // back panel, 4×2
                 F (p + "SCAN",    d + "Scan",     0.50f);  F (p + "WINDOW", d + "Window",   0.45f);
-                F (p + "SPRAY",   d + "Spray",    0.18f);  F (p + "DETUNE", d + "Detune",   0.12f);
-                F (p + "SHAPE",   d + "Shape",    0.50f);  F (p + "WIDTH",  d + "Width",    0.60f);
-                F (p + "FEEDBACK",d + "Feedback", 0.00f);  F (p + "FREEZE", d + "Freeze",   0.00f);
+                F (p + "SPRAY",   d + "Spray",    0.18f);  F (p + "PITCH",  d + "Pitch",    0.50f);
+                F (p + "DETUNE",  d + "Detune",   0.12f);  F (p + "SHAPE",  d + "Shape",    0.50f);
+                F (p + "WIDTH",   d + "Width",    0.60f);  F (p + "FREEZE", d + "Freeze",   0.00f);
                 for (auto& s : srcSuf) B (p + s, d + s, false);   // fb362 — unrouted on arrival
                 // The Freeze PILL and the Freeze KNOB are deliberately the same word: one control
                 // on two surfaces (the knob is the amount, the pill latches it), which is the
@@ -3980,6 +3984,191 @@ void TerrainInstrumentAudioProcessor::cacheFxInstanceParams()
 // Audio-thread safe: fixed array, cached pointers, no allocation, no strings.
 // 🔑 Rank is a FLOAT precisely so this list has no fixed cardinality — the old 6-way SYN_FX_ORDER
 // choice param could never describe a 4th device (choice cardinality is frozen at birth, fb342).
+// fb362 — division index → multiplier of a QUARTER note. Identical table to the delay's local
+// divMult (PluginProcessor.cpp, applyDly) so a synced Granular Window and a synced Delay Time
+// always mean the same musical length. 4 bar → 1/256, the rack-wide time law.
+static float fxDivMult (int d) noexcept
+{
+    switch (d) {
+        case 1:  return 16.0f;            case 2:  return 8.0f;             // 4 bar · 2 bar
+        case 3:  return 4.0f;             case 4:  return 2.0f;             // 1 bar · 1/2
+        case 5:  return 3.0f;             case 6:  return 2.0f*2.0f/3.0f;   // 1/2. · 1/2T
+        case 7:  return 1.0f;             case 8:  return 1.5f;             // 1/4  · 1/4.
+        case 9:  return 1.0f*2.0f/3.0f;   case 10: return 0.5f;             // 1/4T · 1/8
+        case 11: return 0.75f;            case 12: return 0.5f*2.0f/3.0f;   // 1/8. · 1/8T
+        case 13: return 0.25f;            case 14: return 0.375f;           // 1/16 · 1/16.
+        case 15: return 0.25f*2.0f/3.0f;  case 16: return 0.125f;           // 1/16T· 1/32
+        case 17: return 0.0625f;          case 18: return 0.03125f;         // 1/64 · 1/128
+        case 19: return 0.015625f;                                          // 1/256
+    }
+    return 0.5f;
+}
+
+// fb362 — GRANULAR pointers. All SIX instances resolve through the SAME loop (instance 1 is not a
+// special case here) — that is the fb350 pool law made structural: there is no second code path in
+// which a setter could go missing for duplicates only.
+void TerrainInstrumentAudioProcessor::cacheGranularParams()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String g = (i == 0) ? juce::String ("SYN_GRN_")
+                                        : "SYN_GRN" + juce::String (i + 1) + "_";
+        auto& v = grnRefs_[(size_t) i];
+        v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+        v.type=R(g+"TYPE"); v.chr=R(g+"CHARACTER"); v.key=R(g+"KEY"); v.syncdiv=R(g+"SYNCDIV");
+        v.density=R(g+"DENSITY"); v.size=R(g+"SIZE"); v.decay=R(g+"DECAY"); v.mix=R(g+"MIX");
+        v.scan=R(g+"SCAN"); v.window=R(g+"WINDOW"); v.spray=R(g+"SPRAY"); v.pitch=R(g+"PITCH");
+        v.detune=R(g+"DETUNE"); v.shape=R(g+"SHAPE"); v.width=R(g+"WIDTH"); v.freeze=R(g+"FREEZE");
+        v.freezePill=R(g+"FREEZEPILL"); v.sync=R(g+"SYNC");
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        grnType_[(size_t) i] = -1;
+    }
+}
+
+// MESSAGE THREAD ONLY (timerCallback). The audio thread sets grnWantBuild_ and reads the pointer;
+// it never allocates. Same contract as the fb352 lazy reverb engines — and it matters more here,
+// because one granular ring is 8.4 MB at 48 k (16.5 s rounded up to 2^20 stereo floats).
+void TerrainInstrumentAudioProcessor::buildPendingGranularEngines()
+{
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        if (grnWantBuild_[(size_t) i].load (std::memory_order_relaxed)
+            && grnPool_[(size_t) i] == nullptr)
+        {
+            auto e = std::make_unique<tw::GranularFxEngine>();
+            e->prepare (getSampleRate() > 0.0 ? getSampleRate() : 48000.0);
+            e->setGrainBudget (&granGrainsLive_, kGranBudget);
+            grnPool_[(size_t) i] = std::move (e);        // publish LAST — the audio thread reads this
+        }
+}
+
+// One granular instance, one sample. `inst0` is 0-based. Every instance runs this exact routine.
+void TerrainInstrumentAudioProcessor::applyGrn (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = grnRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kGrnSendBase + inst0)];
+    float& env = grnEnv_[(size_t) inst0];
+
+    // Ask the message thread for the engine the moment this instance is wanted. Until it exists the
+    // slot PASSES THROUGH (fb351 law: a bypassed device must not break the chain behind it).
+    if (powered) grnWantBuild_[(size_t) inst0].store (true, std::memory_order_relaxed);
+    auto* eng = grnPool_[(size_t) inst0].get();
+    if (eng == nullptr) return;
+
+    // click-free power: fade, never a hard cut
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+
+    // ── params, gathered once per sample from the cached pointers (no strings, no allocation) ──
+    tw::GranularFxParams gp;
+    gp.density = V.density->load();
+    gp.size    = V.size->load();
+    gp.decay   = V.decay->load() * 1.10f;               // 0..1.10 — the drama is at the top
+    gp.scan    = V.scan->load() * 2.0f - 1.0f;          // 0..1 knob → −1..+1, centre detent
+    gp.spray   = V.spray->load();
+    gp.pitch   = (V.pitch->load() * 2.0f - 1.0f) * 24.0f;
+    gp.detune  = V.detune->load();
+    gp.shape   = V.shape->load();
+    gp.width   = V.width->load();
+    gp.freeze  = V.freeze->load();
+    gp.type    = (int) V.type->load();                  // choice params read as the INDEX
+    gp.character = (int) V.chr->load();
+    gp.key     = (int) V.key->load();
+    gp.freezeLatch = V.freezePill != nullptr && V.freezePill->load() > 0.5f;
+    // Window: synced to the host grid when the Sync pill is lit, otherwise free 50 ms..16 s log.
+    // The 16 s ceiling is the DelayEngine's, and it is also where the ring runs out.
+    float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+    const float qms = 60000.0f / bpmNow;
+    const int   sd  = (int) V.syncdiv->load();
+    if (V.sync != nullptr && V.sync->load() > 0.5f && sd > 0)
+        // ⚠️ 4 bars saturates below 60 BPM: 4 bars of 4/4 at 60 = 16 s, which is the ring's usable
+        // span. Slower than that and the Window clamps, so it stops equalling 4 bars. Same ceiling
+        // the Delay already lives with — the readout shows the CLAMPED time, not the division.
+        gp.windowMs = juce::jlimit (50.0f, 16000.0f, qms * fxDivMult (sd));
+    else
+        gp.windowMs = 50.0f * std::pow (320.0f, V.window->load());   // 50 ms → 16 s, log
+    eng->setParams (gp);
+    // Scatter's grid clock, in Hz — a 1/16 at the host tempo. Density picks the division from it.
+    eng->setSyncClockHz (4.0f * bpmNow / 60.0f);
+
+    // A type change fades the CURRENT engine out and re-seats, rather than swapping a live cloud
+    // (the Phase G deferred-fade law — an instant swap clicks and leaves the old texture ringing).
+    const int wantType = gp.type;
+    int& held = grnType_[(size_t) inst0];
+    if (held < 0) held = wantType;
+    else if (held != wantType)
+    {
+        grnSwap_[(size_t) inst0] = true;
+        env *= 0.90f;
+        if (env < 0.02f) { held = wantType; eng->reset(); grnSwap_[(size_t) inst0] = false; }
+    }
+
+    float wl = 0.0f, wr = 0.0f;
+    eng->processSample (inL, inR, wl, wr);
+
+    // Equal-power mix, ramped. 100 % = fully wet, zero dry (the house law).
+    const float m   = V.mix->load();
+    const float wetT = std::sin (m * 1.5707963f), dryT = std::cos (m * 1.5707963f);
+    float& dry = grnDry_[(size_t) inst0];  float& wet = grnWet_[(size_t) inst0];
+    dry += (dryT - dry) * 0.0015f;         wet += (wetT - wet) * 0.0015f;
+
+    outL = inL * (dry + (1.0f - dry) * (1.0f - env)) + wl * wet * env;
+    outR = inR * (dry + (1.0f - dry) * (1.0f - env)) + wr * wet * env;
+
+    const float pk = 0.5f * (std::fabs (wl) + std::fabs (wr)) * wet * env;
+    if (pk > grnBlockPk_[(size_t) inst0]) grnBlockPk_[(size_t) inst0] = pk;
+}
+
+// fb362 — the granular card feed. ONE object per instance: the capture-ring waveform, the scan
+// head, the Window span and the live grain scatter. It rides the 60 Hz C++ PUSH (fb354 law): a
+// native POLL dies silently three ways in this plugin — the promise never settles, it rejects, or
+// JSON.parse throws inside a silent catch — and all three end in a permanently blank core. That is
+// exactly how the distortion curve managed to never draw at all.
+juce::String TerrainInstrumentAudioProcessor::getGranularVizJson()
+{
+    juce::String out = "[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) out << ",";
+        auto* e = grnPool_[(size_t) i].get();
+        const bool live = (e != nullptr) && grnRefs_[(size_t) i].active != nullptr
+                       && grnRefs_[(size_t) i].active->load() > 0.5f;
+        if (! live) { out << "null"; continue; }
+        // 64 points across the playable Window — enough to read as a waveform at 213 units wide,
+        // small enough that six instances at 15 Hz stay far under the frame-drop threshold.
+        const double lo = e->windowLoAge(), hi = e->windowHiAge();
+        const double span = (hi > lo + 1.0) ? (hi - lo) : 1.0;
+        out << "{\"w\":[";
+        for (int k = 0; k < 64; ++k)
+        {
+            if (k) out << ",";
+            // peak of a small stride, so a sparse read still shows the shape instead of aliasing
+            const double a0 = lo + span * (double) k / 63.0;
+            float pk = 0.0f;
+            for (int q = 0; q < 8; ++q)
+            {
+                const float v = e->peekAge (a0 + (double) q * span / 504.0);
+                if (std::fabs (v) > std::fabs (pk)) pk = v;
+            }
+            out << juce::String (juce::jlimit (-1.0f, 1.0f, pk), 3);
+        }
+        out << "],\"h\":" << juce::String (juce::jlimit (0.0f, 1.0f, e->scanAge01()), 3)
+            << ",\"g\":" << e->liveGrains()
+            << ",\"b\":" << juce::String (juce::jlimit (0.0f, 1.5f,
+                   grnBloomViz_[(size_t) i].load (std::memory_order_relaxed)), 3) << "}";
+    }
+    out << "]";
+    return out;
+}
+
 void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
 {
     chainCount_ = 0;
@@ -4023,6 +4212,9 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
         add (1, e + 2, dlyRefs_[(size_t) e].active, dlyRefs_[(size_t) e].rank);
         add (2, e + 2, dstRefs_[(size_t) e].active, dstRefs_[(size_t) e].rank);
     }
+    // fb362 — GRANULAR, all six (instance 1 included; it has no legacy fixed rank to honour).
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (3, i + 1, grnRefs_[(size_t) i].active, grnRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -4123,6 +4315,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     poolDlyEnv_.fill (0.0f);
     poolDstEnv_.fill (0.0f);
     cacheFxInstanceParams();   // resolve every pooled instance's param pointers ONCE (strings legal here)
+    cacheGranularParams();     // fb362 — same, for all six granular instances
+    for (auto& g : grnPool_) if (g != nullptr) g->prepare (sampleRate);   // keeps the ring (same fs)
+    grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
     activeDlyType_ = -1; dlySwapping_ = false;
     activeRvbType_ = -1; rvbSwapping_ = false;
@@ -6507,6 +6702,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         poolRouteAny_[(size_t) (kFxExtra + e)]     = ts > 0.0f;
         poolRouteAny_[(size_t) (2 * kFxExtra + e)] = vs > 0.0f;
     }
+    // fb362 — GRANULAR route pills, all six instances through one loop.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const auto& gR = grnRefs_[(size_t) i];
+        const int   q  = kGrnSendBase + i;
+        float gs = 0.0f;
+        for (int k = 0; k < 6; ++k)
+        {
+            const float gg = (gR.src[k] != nullptr && gR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteG_[(size_t) (q * 6 + k)] = gg; gs += gg;
+        }
+        poolRouteAny_[(size_t) q] = gs > 0.0f;
+    }
 
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
@@ -6519,6 +6727,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float* g = nullptr;
             if      (ce.kind == 0) g = (ce.inst == 1) ? hallRvbG_ : &poolRouteG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) g = (ce.inst == 1) ? dlyG_ : &poolRouteG_[(size_t) ((ce.inst - 2) * 6)];
+            else if (ce.kind == 3) g = &poolRouteG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -6539,6 +6748,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             float* dstArr = nullptr;
             if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
+            else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -7172,6 +7382,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                                     : (poolRouteAny_[(size_t) (2 * kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (2 * kFxExtra + ce.inst - 2)] : nullptr); }
         else if (ce.kind == 1) { b = (ce.inst == 1) ? (dlyRouteActive_ ? &delaySendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (ce.inst - 2)] ? &poolSendBuf_[(size_t) (ce.inst - 2)] : nullptr); }
+        else if (ce.kind == 3) { const int q = kGrnSendBase + ce.inst - 1;      // fb362 — granular
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
         if (b != nullptr && b->getNumSamples() >= numSamples && b->getNumChannels() >= 2)
@@ -7186,6 +7398,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // "they're linked" even when the DSP is fully independent.
     float poolDlyPk[(size_t) kFxExtra] = { 0.0f };
     float poolRvbPk[(size_t) kFxExtra] = { 0.0f };   // fb352 — same, per pooled REVERB
+    grnBlockPk_.fill (0.0f);                         // fb362 — per-instance granular wet peak
     float dstBlockWetPk = 0.0f;                                  // fb315 — peak wet this block → distortion core viz
 
     // ── Per-chop FX-independence (option 1): aggregate active indy masks ─
@@ -8185,7 +8398,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         if (fm & (1u << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
 
                 float oL = inL, oR = inR;
-                if (ce.inst == 1)
+                if (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
+                else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);
                     else if (ce.kind == 1) applyDly (inL, inR, oL, oR);
@@ -8232,6 +8446,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (poolRvbPk[(size_t) q] > bv) bv = poolRvbPk[(size_t) q];
                 else                            bv += (poolRvbPk[(size_t) q] - bv) * 0.05f;
                 poolRvbBloomViz_[(size_t) q].store (juce::jlimit (0.0f, 1.5f, bv), std::memory_order_relaxed);
+            }
+            // fb362 — granular, all six. Same instant-attack / smoothed-fall shape so the card's
+            // waveform lights on the SAME block as the audio instead of lagging it.
+            for (int q = 0; q < ParameterIDs::kFxInstances; ++q)
+            {
+                float& gb = grnBloomEnv_[(size_t) q];
+                if (grnBlockPk_[(size_t) q] > gb) gb = grnBlockPk_[(size_t) q];
+                else                              gb += (grnBlockPk_[(size_t) q] - gb) * 0.05f;
+                grnBloomViz_[(size_t) q].store (juce::jlimit (0.0f, 1.5f, gb), std::memory_order_relaxed);
             }
             // fb315 — distortion core viz. Same fb312 instant-attack / smoothed-fall shape, so the
             // curve's excursion glow lands on the same block as the audio instead of lagging it.
