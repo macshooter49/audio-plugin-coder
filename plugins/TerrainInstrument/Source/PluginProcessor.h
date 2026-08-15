@@ -708,14 +708,15 @@ public:
     float             getDelayBloomPool (int e) const noexcept
     { return ((unsigned) e < (unsigned) kFxExtra) ? poolDlyBloomViz_[(size_t) e].load (std::memory_order_relaxed) : 0.0f; }
     // fb292 — Convolution USER IR loading: decode IN-MEMORY → SR-correct → trim leading silence → convolutionReverb.setUserIR.
-    bool          loadConvIRFromMemory (const void* data, size_t size, const juce::String& name);  // drag-drop (base64 → bytes) — no disk
-    bool          loadConvIRFromFile   (const juce::File& f);                                       // "Load IR…" file chooser
-    void          clearConvUserIR      ();                                                          // revert to the synthetic factory Space
-    int           getConvIREnvelope    (float* out, int n) const { return convolutionReverb.irEnvelope (out, n); }  // baked-IR viz envelope; returns baked len
-    juce::String  getConvIRName        () const { return convIRName_; }                             // "" ⇒ synthetic factory Space
-    bool          isConvIRUser         () const { return convIRUser_; }
-    juce::String  getConvIRRawJson     () const;                              // fb311 — {name,n,L,R} (base64 float) of the loaded user IR, for embedding in a preset
-    void          setConvIRRawFromJson (const juce::String& json);           // fb311 — restore a user IR from a preset's embedded base64 (recall the EXACT one-shot)
+    bool          loadConvIRFromMemory (const void* data, size_t size, const juce::String& name, int inst = 1);  // drag-drop (base64 → bytes) — no disk
+    bool          loadConvIRFromFile   (const juce::File& f, int inst = 1);                         // "Load IR…" file chooser
+    void          clearConvUserIR      (int inst = 1);                                              // revert to the synthetic factory Space
+    int           getConvIREnvelope    (float* out, int n, int inst = 1)                            // baked-IR viz envelope; returns baked len
+    { auto* e = convEngineFor (inst); return e != nullptr ? e->irEnvelope (out, n) : 0; }
+    juce::String  getConvIRName        (int inst = 1) const { return convIRName_[(size_t) convSlot (inst)]; }   // "" ⇒ synthetic Space
+    bool          isConvIRUser         (int inst = 1) const { return convIRUser_[(size_t) convSlot (inst)]; }
+    juce::String  getConvIRRawJson     (int inst = 1) const;                  // fb311 — {name,n,L,R} (base64 float) for embedding in a preset
+    void          setConvIRRawFromJson (const juce::String& json, int inst = 1);   // fb311 — restore the EXACT one-shot from a preset
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
@@ -1526,9 +1527,17 @@ private:
     BasinReverb  basinReverb;                      // fb289 — Basin reverb (huge dark ambient wash: Hall FDN retuned + bass-safe crossover + deep motion)
     ShimmerReverb shimmerReverb;                   // fb290 — Shimmer reverb (ethereal octave wash: Hall FDN + granular pitch-shifter in the feedback loop)
     ConvolutionReverb convolutionReverb;           // fb291 — Convolution reverb (true FFT partitioned convolution + synth/user IR + Reverse/Attack/Distance/Density)
-    juce::String       convIRName_;                // fb292 — current USER IR filename ("" ⇒ synthetic factory Space)
-    bool               convIRUser_ = false;        // fb292 — true when a user IR is loaded (vs a synthetic factory Space)
-    std::vector<float> convUserIrL_, convUserIrR_;  // fb311 — RETAINED raw user IR (post decode/trim, pre-bake) so a preset can serialize the exact one-shot
+    // fb359 — PER-INSTANCE user IR. Index 0 = Reverb 1, 1..5 = the pool. This was single-instance,
+    // so a duplicate reverb set to Convolution could never be given its own IR (it ran the synthetic
+    // Space) and dropping a file onto it silently retargeted instance 1. The last multi-instance gap.
+    static constexpr int kConvSlots = ParameterIDs::kFxInstances;
+    std::array<juce::String, (size_t) kConvSlots>       convIRName_ {};   // "" ⇒ synthetic factory Space
+    std::array<bool, (size_t) kConvSlots>               convIRUser_ {};   // true ⇒ a user IR is loaded
+    std::array<std::vector<float>, (size_t) kConvSlots> convUserIrL_ {}, convUserIrR_ {};   // fb311 — retained raw IR
+    ConvolutionReverb* convEngineFor (int inst) noexcept                  // 1 = the resident engine, 2..6 = pooled (may be null)
+    { return (inst <= 1) ? &convolutionReverb
+                         : (((unsigned) (inst - 2) < (unsigned) kFxExtra) ? rvbPool_[(size_t) (inst - 2)].conv.get() : nullptr); }
+    static int convSlot (int inst) noexcept { return juce::jlimit (0, kConvSlots - 1, inst - 1); }
     int   activeRvbType_ = -1;                    // 0=Hall 1=Room 2=Plate 3=Spring 4=Digital (live engine); -1 = uninitialised
     bool  rvbSwapping_ = false;                   // type change in progress → wet dips through 0 (click-free swap)
     bool  hallRouteActive_ = false;               // any A/B/C/D/S/N route enabled this block (PILLS ⇒ per-osc send)
@@ -1634,6 +1643,11 @@ private:
     std::array<float, (size_t) kFxExtra> poolRvbEnv_  {};      // on/off fade env
     std::array<float, (size_t) kFxExtra> poolRvbDry_  {};      // ramped mix (equal-power)
     std::array<float, (size_t) kFxExtra> poolRvbWet_  {};
+    // fb358 — per-instance DUCK (Room/Spring's 2nd pill). The pool-law diff caught this: instance 1
+    // resolves rvbDuckActive_ and runs a duckEnv_ follower, the pool did neither, so a duplicate
+    // Room/Spring had a DEAD Duck pill. Same shape as the fb350 delay bug.
+    std::array<bool,  (size_t) kFxExtra> poolRvbDuckOn_ {};
+    std::array<float, (size_t) kFxExtra> poolRvbDuckEnv_ {};
     std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
     std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};
     std::array<std::atomic<int>,   (size_t) kFxExtra> rvbWantType_ {};   // audio→message: build me this

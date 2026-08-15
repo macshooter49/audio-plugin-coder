@@ -783,28 +783,31 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // fb292 — Convolution baked-IR waveform envelope + name/dur for the FX-rack core viz.
                 // args = [ N ] (bucket count). Returns JSON {user, durMs, name, peaks:[...N]}.
+                // fb359 — args = [ N, inst ]. inst defaults to 1 so every existing call still works.
                 int N = 160; if (args.size() >= 1) { int n = (int) static_cast<double> (args[0]); if (n > 8 && n <= 512) N = n; }
+                const int inst = args.size() >= 2 ? (int) static_cast<double> (args[1]) : 1;
                 std::vector<float> buf ((size_t) N, 0.0f);
-                int len = audioProcessor.getConvIREnvelope (buf.data(), N);
+                int len = audioProcessor.getConvIREnvelope (buf.data(), N, inst);
                 double sr = audioProcessor.getSampleRate(); if (sr < 1.0) sr = 48000.0;
                 juce::String js;
-                js << "{\"user\":" << (audioProcessor.isConvIRUser() ? "true" : "false")
+                js << "{\"user\":" << (audioProcessor.isConvIRUser (inst) ? "true" : "false")
                    << ",\"durMs\":" << juce::String (len / sr * 1000.0, 1)
-                   << ",\"name\":" << juce::JSON::toString (juce::var (audioProcessor.getConvIRName()))
+                   << ",\"name\":" << juce::JSON::toString (juce::var (audioProcessor.getConvIRName (inst)))
                    << ",\"peaks\":[";
                 for (int i = 0; i < N; ++i) { if (i) js << ","; js << juce::String (buf[(size_t) i], 4); }
                 js << "]}";
                 complete (juce::var (js));
             })
-            .withNativeFunction("getConvIRRaw", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("getConvIRRaw", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                complete (juce::var (audioProcessor.getConvIRRawJson()));   // fb311 — {name,n,L,R base64} to embed the one-shot IN a preset
+                complete (juce::var (audioProcessor.getConvIRRawJson (args.size() >= 1 ? (int) static_cast<double> (args[0]) : 1)));   // fb311 — {name,n,L,R base64} to embed the one-shot IN a preset
             })
             .withNativeFunction("setConvIRRaw", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                if (args.size() >= 1) audioProcessor.setConvIRRawFromJson (args[0].toString());   // fb311 — restore the EXACT one-shot from a preset
+                if (args.size() >= 1) audioProcessor.setConvIRRawFromJson (args[0].toString(),
+                                            args.size() >= 2 ? (int) static_cast<double> (args[1]) : 1);   // fb311/fb359
                 complete (juce::var{});
             })
             .withNativeFunction("loadConvIRFromBase64", [this](const juce::Array<juce::var>& args,
@@ -817,34 +820,36 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     if (juce::Base64::convertFromBase64 (decoded, args[0].toString()))
                     {
                         juce::String nm = args.size() >= 2 ? args[1].toString() : juce::String ("User IR");
-                        bool ok = audioProcessor.loadConvIRFromMemory (decoded.getData(), decoded.getDataSize(), nm);
+                        const int inst = args.size() >= 3 ? (int) static_cast<double> (args[2]) : 1;   // fb359
+                        bool ok = audioProcessor.loadConvIRFromMemory (decoded.getData(), decoded.getDataSize(), nm, inst);
                         complete (juce::var (ok ? nm : juce::String()));
                         return;
                     }
                 }
                 complete (juce::var (juce::String()));
             })
-            .withNativeFunction("loadConvIRChooser", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("loadConvIRChooser", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
+                const int inst = args.size() >= 1 ? (int) static_cast<double> (args[0]) : 1;   // fb359
                 // fb292 — "Load IR…" menu item → native file chooser → processor decodes from file. Async.
                 auto safe = juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> (this);
                 auto chooser = std::make_shared<juce::FileChooser> ("Load impulse response",
                     juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3");
                 auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-                chooser->launchAsync (flags, [safe, chooser, complete] (const juce::FileChooser& fc)
+                chooser->launchAsync (flags, [safe, chooser, complete, inst] (const juce::FileChooser& fc)
                 {
                     juce::File f = fc.getResult();
                     juce::String nm;
                     if (safe != nullptr && f.existsAsFile())
-                        if (safe->audioProcessor.loadConvIRFromFile (f)) nm = f.getFileName();
+                        if (safe->audioProcessor.loadConvIRFromFile (f, inst)) nm = f.getFileName();
                     complete (juce::var (nm));
                 });
             })
-            .withNativeFunction("clearConvIR", [this](const juce::Array<juce::var>&,
+            .withNativeFunction("clearConvIR", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                audioProcessor.clearConvUserIR();
+                audioProcessor.clearConvUserIR (args.size() >= 1 ? (int) static_cast<double> (args[0]) : 1);
                 complete (juce::var{});
             })
             .withNativeFunction("grabKeys", [this](const juce::Array<juce::var>&,

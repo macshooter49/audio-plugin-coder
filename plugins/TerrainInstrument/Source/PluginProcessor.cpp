@@ -7869,6 +7869,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (V.power == nullptr) return;
             const bool powered = (V.power->load() > 0.5f) && poolRouteAny_[(size_t) (2 * kFxExtra + e)];
             float& env = poolRvbEnv_[(size_t) e];
+            // fb361 — CONVOLUTION IDLE BAKE, mirroring instance 1: keep the IR baked for the VIZ even
+            // while this instance is powered off or unrouted, so a dropped IR shows its REAL waveform
+            // straight away instead of the placeholder. Bake-affecting params only, once per block.
+            if (i == 0 && ! powered && (int) V.type->load() == 8)
+            {
+                rvbWantType_[(size_t) e].store (8, std::memory_order_relaxed);   // ask for the engine
+                if (auto* cv = rvbEngineSetPool (e).conv)
+                {
+                    cv->setSize      (V.size->load());
+                    cv->setDecay     (V.decay->load());
+                    cv->setDensity   (V.diffuse->load());
+                    cv->setAttack    (V.hidamp->load());
+                    cv->setDistance  (V.lowdecay->load());
+                    cv->setCharacter ((int) V.chr->load());
+                    cv->setShape     ((int) V.modmode->load());
+                    cv->setReverse   (V.freeze->load() > 0.5f);
+                    cv->updateCoefficients();
+                    cv->bakeIfDirtyIdle();
+                }
+            }
             if (! powered && env <= 1.0e-4f) return;             // unrouted / off ⇒ zero cost
             int ty = (int) V.type->load(); if (ty < 0 || ty > 8) ty = 0;
             // ask the message thread for this engine (it builds it in timerCallback, never here)
@@ -7914,6 +7934,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 rp.freeze    = V.freeze->load() > 0.5f;
                 rp.duck      = V.duck->load()   > 0.5f;
                 applyRvbTypeParams (cur, rp, es);                 // 🔑 the ONE shared routine
+                // fb358 — DUCK is Room/Spring's 2nd pill ONLY, resolved once per block so the
+                // per-sample follower stays branch-light (identical to instance 1).
+                poolRvbDuckOn_[(size_t) e] = (cur == 1 || cur == 3) && rp.duck;
                 const float mixv = rp.mix;
                 poolRvbWet_[(size_t) e] = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 poolRvbDry_[(size_t) e] = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
@@ -7932,9 +7955,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                            default: es.hall->processSample (sgL, sgR, rl, rr); break; }
             const float duck = env * (1.0f - poolRvbDry_[(size_t) e]);
             const float wet  = env * poolRvbWet_[(size_t) e];
-            outL = sgL + (wet * rl - duck * sgL);                 // fb351 — IN → OUT, Mix 100% ⇒ dry gone
-            outR = sgR + (wet * rr - duck * sgR);
-            const float wmagV = 0.5f * (std::abs (rl) + std::abs (rr)) * env;   // its OWN bloom
+            // fb358 — DUCK: env-follow this instance's OWN input and pull ITS wet down underneath,
+            // so the reverb recedes while you play and blooms in the gaps. Shares instance 1's
+            // attack/release coefficients (both computed in prepareToPlay); the ENV is per instance.
+            float duckG = 1.0f;
+            if (poolRvbDuckOn_[(size_t) e])
+            {
+                float& dEnv = poolRvbDuckEnv_[(size_t) e];
+                const float inLvl = 0.5f * (std::abs (sgL) + std::abs (sgR));
+                dEnv = inLvl + (inLvl > dEnv ? duckAtkCoef_ : duckRelCoef_) * (dEnv - inLvl);
+                duckG = 1.0f / (1.0f + 7.0f * dEnv);
+            }
+            const float wetG = wet * duckG;
+            outL = sgL + (wetG * rl - duck * sgL);                // fb351 — IN → OUT, Mix 100% ⇒ dry gone
+            outR = sgR + (wetG * rr - duck * sgR);
+            const float wmagV = 0.5f * (std::abs (rl) + std::abs (rr)) * env * duckG;   // its OWN bloom, follows the AUDIBLE wet
             if (wmagV > poolRvbPk[(size_t) e]) poolRvbPk[(size_t) e] = wmagV;
         };
 
@@ -10657,49 +10692,55 @@ static bool tw_decodeResampleTrimIR (juce::AudioFormatReader* reader, double hos
     return true;
 }
 
-bool TerrainInstrumentAudioProcessor::loadConvIRFromMemory (const void* data, size_t size, const juce::String& name)
+bool TerrainInstrumentAudioProcessor::loadConvIRFromMemory (const void* data, size_t size, const juce::String& name, int inst)
 {
+    auto* eng = convEngineFor (inst); if (eng == nullptr) return false;   // fb359 — pooled engine not built yet
+    const size_t sl = (size_t) convSlot (inst);
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (
         std::make_unique<juce::MemoryInputStream> (data, size, false)));
     std::vector<float> L, R;
     if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
-    convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
-    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);   // fb311 — retain raw IR for preset serialization
-    convIRName_ = name; convIRUser_ = true;
+    eng->setUserIR (L.data(), R.data(), (int) L.size());
+    convUserIrL_[sl] = std::move (L); convUserIrR_[sl] = std::move (R);   // fb311 — retain raw IR for preset serialization
+    convIRName_[sl] = name; convIRUser_[sl] = true;
     return true;
 }
 
-bool TerrainInstrumentAudioProcessor::loadConvIRFromFile (const juce::File& f)
+bool TerrainInstrumentAudioProcessor::loadConvIRFromFile (const juce::File& f, int inst)
 {
+    auto* eng = convEngineFor (inst); if (eng == nullptr) return false;
+    const size_t sl = (size_t) convSlot (inst);
     juce::AudioFormatManager fm; fm.registerBasicFormats();
     std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
     std::vector<float> L, R;
     if (! tw_decodeResampleTrimIR (reader.get(), getSampleRate(), L, R)) return false;
-    convolutionReverb.setUserIR (L.data(), R.data(), (int) L.size());
-    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);   // fb311 — retain raw IR for preset serialization
-    convIRName_ = f.getFileName(); convIRUser_ = true;
+    eng->setUserIR (L.data(), R.data(), (int) L.size());
+    convUserIrL_[sl] = std::move (L); convUserIrR_[sl] = std::move (R);   // fb311 — retain raw IR for preset serialization
+    convIRName_[sl] = f.getFileName(); convIRUser_[sl] = true;
     return true;
 }
 
-void TerrainInstrumentAudioProcessor::clearConvUserIR ()
+void TerrainInstrumentAudioProcessor::clearConvUserIR (int inst)
 {
-    convolutionReverb.clearUserIR();
-    convUserIrL_.clear(); convUserIrR_.clear();   // fb311
-    convIRName_ = juce::String(); convIRUser_ = false;
+    const size_t sl = (size_t) convSlot (inst);
+    if (auto* eng = convEngineFor (inst)) eng->clearUserIR();
+    convUserIrL_[sl].clear(); convUserIrR_[sl].clear();   // fb311
+    convIRName_[sl] = juce::String(); convIRUser_[sl] = false;
 }
 
 // fb311 — serialize the RETAINED raw user IR as base64 float (L+R) so a Convolution preset recalls the EXACT
 // one-shot. {} when no user IR. Cap ~6 s (matches the load cap) so a preset .json can't balloon unbounded.
-juce::String TerrainInstrumentAudioProcessor::getConvIRRawJson () const
+juce::String TerrainInstrumentAudioProcessor::getConvIRRawJson (int inst) const
 {
-    if (! convIRUser_ || convUserIrL_.empty()) return "{}";
-    const int   n   = (int) convUserIrL_.size();
-    const int   nR  = (int) convUserIrR_.size();
-    juce::MemoryBlock mbL (convUserIrL_.data(), (size_t) n  * sizeof (float));
-    juce::MemoryBlock mbR (convUserIrR_.data(), (size_t) nR * sizeof (float));
+    const size_t sl = (size_t) convSlot (inst);
+    if (! convIRUser_[sl] || convUserIrL_[sl].empty()) return "{}";
+    const int   n   = (int) convUserIrL_[sl].size();
+    const int   nR  = (int) convUserIrR_[sl].size();
+    juce::MemoryBlock mbL (convUserIrL_[sl].data(), (size_t) n  * sizeof (float));
+    juce::MemoryBlock mbR (convUserIrR_[sl].data(), (size_t) nR * sizeof (float));
     juce::String out;
-    out << "{\"name\":" << convIRName_.quoted()
+    out << "{\"name\":" << convIRName_[sl].quoted()
         << ",\"n\":"    << n
         << ",\"L\":\""  << mbL.toBase64Encoding() << "\""
         << ",\"R\":\""  << mbR.toBase64Encoding() << "\"}";
@@ -10708,8 +10749,10 @@ juce::String TerrainInstrumentAudioProcessor::getConvIRRawJson () const
 
 // fb311 — restore a user IR from a preset's embedded base64. Runs on the message thread (native), same as the
 // drag-drop load path; setUserIR is thread-safe (pre-reserved, no realloc). Non-destructive: bad/empty ⇒ no-op.
-void TerrainInstrumentAudioProcessor::setConvIRRawFromJson (const juce::String& json)
+void TerrainInstrumentAudioProcessor::setConvIRRawFromJson (const juce::String& json, int inst)
 {
+    const size_t sl = (size_t) convSlot (inst);
+    auto* eng = convEngineFor (inst); if (eng == nullptr) return;
     auto v = juce::JSON::parse (json);
     auto* o = v.getDynamicObject();
     if (o == nullptr) return;
@@ -10727,9 +10770,9 @@ void TerrainInstrumentAudioProcessor::setConvIRRawFromJson (const juce::String& 
     std::memcpy (L.data(), mbL.getData(), (size_t) nL * sizeof (float));
     if (nR > 0) std::memcpy (R.data(), mbR.getData(), (size_t) nR * sizeof (float));
     else        R = L;                                   // mono → duplicate to R
-    convolutionReverb.setUserIR (L.data(), R.data(), nL);
-    convUserIrL_ = std::move (L); convUserIrR_ = std::move (R);
-    convIRName_ = nm; convIRUser_ = true;
+    eng->setUserIR (L.data(), R.data(), nL);
+    convUserIrL_[sl] = std::move (L); convUserIrR_[sl] = std::move (R);
+    convIRName_[sl] = nm; convIRUser_[sl] = true;
 }
 
 //==============================================================================
