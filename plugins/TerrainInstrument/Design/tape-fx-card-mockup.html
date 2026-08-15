@@ -1219,184 +1219,183 @@ function rackVU(ctx, x, y, w2, h2, val, t, seed) {
   ctx.strokeStyle = vH(0.85); ctx.lineWidth = 0.6; ctx.stroke();
 }
 
-/* ── 1. STUDIO — the two-reel rack deck ─────────────────────────────────── */
+/* ═══ THE SYMMETRY PASS ═══════════════════════════════════════════════════════
+   Max: "make them even and symmetrical... the red, green and yellow power buttons
+   need to be moved to the bottom center."  Three real faults, all mine:
+     STUDIO   — the VU pair was placed at mx-vw*1.15 / mx+vw*0.15, which is not
+                centred on anything; and the tape path's control points used
+                lx*0.38 / rx*0.38, so the left and right sweeps were different shapes.
+     CASSETTE — the transport row spanned 5*1.18*bw = 1.13x its container (it
+                overflowed), and the ladder's bars were 62% of their cell so the
+                gaps read wider than the bars. Neither was an even grid.
+     WIRE     — the wire was strung at ky - sr2*0.55, i.e. across the TOP of the
+                spools instead of through their centres.
+   Everything below is laid out from ONE centre line (mx = w/2) with mirrored
+   offsets, so left and right are equal by construction rather than by eye.
+   ════════════════════════════════════════════════════════════════════════════ */
+
+/* The LED cluster, centred. drawIndicatorLights lays 3 lights from x at 6.5*sc
+   spacing, so the cluster is 2 gaps wide and centring means starting one gap left. */
+function rackLeds(ctx, w, h, t, wow, sat, hiss) {
+  var sc = Math.max(0.55, h / 110);
+  drawIndicatorLights(ctx, w / 2 - 6.5 * sc, h * 0.86, sc, t, wow, sat, hiss);
+}
+
+/* ── 1. STUDIO — two reels, three-head block, VU pair. Symmetric about mx. ── */
 function drawStudioRack(ctx, w, h, t) {
-  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
-  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
-  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
-  // the comparison row still renders in its original palette.
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, 'STUDIO', lit);
-
-  var cy = h * 0.46, r = h * 0.31;
+  var F = rackFace(ctx, w, h, t, '', lit);
+  var mx = w / 2, cy = h * 0.42, r = h * 0.26;
   var spin = t * (1.15 + sat * 0.5);
-  var wob = Math.sin(t * 4.3) * wow * h * 0.035 + Math.sin(t * 11.7) * wow * h * 0.014;
+  var wob = Math.sin(t * 4.3) * wow * h * 0.030 + Math.sin(t * 11.7) * wow * h * 0.012;
 
-  var lx = F.x0 + r + 2, rx = F.x1 - r - 2;
-  rackReel(ctx, lx, cy, r, -spin, 3, lit);
-  rackReel(ctx, rx, cy, r, -spin * 0.82, 3, lit);
+  // reels — equidistant from the centre line
+  var off = (F.x1 - F.x0) / 2 - r;
+  rackReel(ctx, mx - off, cy, r, -spin,        3, lit);
+  rackReel(ctx, mx + off, cy, r, -spin * 0.82, 3, lit);
 
-  // the tape path — dips over the head block, and the dip WOBBLES with wow
-  var mx = (lx + rx) / 2;
+  // tape path — one shape, mirrored. Control points are offsets from mx, not blends.
+  var hy = cy + r * 0.86 + wob, cxo = off * 0.52, hxo = off * 0.30;
   ctx.beginPath();
-  ctx.moveTo(lx + r, cy - r * 0.10);
-  ctx.quadraticCurveTo(mx * 0.62 + lx * 0.38, cy + r * 0.62 + wob, mx - r * 0.9, cy + r * 0.70 + wob);
-  ctx.lineTo(mx + r * 0.9, cy + r * 0.70 + wob);
-  ctx.quadraticCurveTo(mx * 0.62 + rx * 0.38, cy + r * 0.62 + wob, rx - r, cy - r * 0.10);
+  ctx.moveTo(mx - off + r, cy - r * 0.12);
+  ctx.quadraticCurveTo(mx - cxo, hy, mx - hxo, hy);
+  ctx.lineTo(mx + hxo, hy);
+  ctx.quadraticCurveTo(mx + cxo, hy, mx + off - r, cy - r * 0.12);
   ctx.strokeStyle = vH(0.42 + 0.35 * lit); ctx.lineWidth = 0.8; ctx.stroke();
 
-  // three-head block (erase / record / play)
-  var hy = cy + r * 0.70 + wob, hw = h * 0.085;
+  // three heads, evenly spaced on the centre
+  var hw = h * 0.075;
   for (var i = -1; i <= 1; i++) {
-    var hx = mx + i * hw * 2.1;
+    var hx = mx + i * hw * 2.3;
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(hx - hw * 0.5, hy - hw * 1.15, hw, hw * 1.15, 0.8);
-    else ctx.rect(hx - hw * 0.5, hy - hw * 1.15, hw, hw * 1.15);
+    if (ctx.roundRect) ctx.roundRect(hx - hw * 0.5, hy - hw * 1.2, hw, hw * 1.2, 0.8);
+    else ctx.rect(hx - hw * 0.5, hy - hw * 1.2, hw, hw * 1.2);
     var flash = 0.35 + 0.5 * Math.max(0, Math.sin(t * 2.6 - i * 1.1)) * lit;
-    ctx.fillStyle = 'rgba(183,148,255,' + (0.28 + flash * 0.45).toFixed(2) + ')'; ctx.fill();
-    ctx.strokeStyle = vH(0.55); ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.fillStyle = 'rgba(183,148,255,' + (0.26 + flash * 0.42).toFixed(2) + ')'; ctx.fill();
+    ctx.strokeStyle = vH(0.50); ctx.lineWidth = 0.55; ctx.stroke();
   }
 
-  // the VU pair + the LED cluster, right of centre — where a real deck puts them
-  var vw = (F.x1 - F.x0) * 0.115, vh = h * 0.30;
-  rackVU(ctx, mx - vw * 1.15, h * 0.10, vw, vh, lit, t, 0);
-  rackVU(ctx, mx + vw * 0.15, h * 0.10, vw, vh, lit * 0.9, t, 2.4);
-  drawIndicatorLights(ctx, F.x0 + 3, h * 0.86, Math.max(0.5, h / 150), t, wow, sat, hiss);
+  // VU pair — mirrored about mx with an equal gap between them
+  var vw = (F.x1 - F.x0) * 0.105, vh = h * 0.28, gp = h * 0.07;
+  rackVU(ctx, mx - gp / 2 - vw, h * 0.075, vw, vh, lit,       t, 0);
+  rackVU(ctx, mx + gp / 2,      h * 0.075, vw, vh, lit * 0.9, t, 2.4);
+
+  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 2. CASSETTE — the rack cassette deck ───────────────────────────────── */
+/* ── 2. CASSETTE — shell centred, matching even ladders either side. ── */
 function drawCassetteRack(ctx, w, h, t) {
-  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
-  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
-  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
-  // the comparison row still renders in its original palette.
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, 'CASSETTE', lit);
+  var F = rackFace(ctx, w, h, t, '', lit);
+  var mx = w / 2, cy = h * 0.42;
 
-  // the shell window, left half — a rack deck loads from the face
-  var wx = F.x0 + 2, wy = h * 0.16, ww = (F.x1 - F.x0) * 0.40, wh2 = h * 0.60;
+  // the shell, centred
+  var ww = (F.x1 - F.x0) * 0.44, wh2 = h * 0.50, wx = mx - ww / 2, wy = cy - wh2 / 2;
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(wx, wy, ww, wh2, 2); else ctx.rect(wx, wy, ww, wh2);
-  ctx.strokeStyle = vA(0.46); ctx.lineWidth = 0.6; ctx.stroke();
+  ctx.strokeStyle = vA(0.42); ctx.lineWidth = 0.7; ctx.stroke();
 
-  var cy = wy + wh2 * 0.5, hr = wh2 * 0.26, spin = t * (1.5 + sat * 0.6);
-  var hl = wx + ww * 0.30, hrx = wx + ww * 0.70;
-  rackReel(ctx, hl,  cy, hr, spin, 6, lit);
-  rackReel(ctx, hrx, cy, hr, spin, 6, lit);
-  // the tape span between the hubs sags and wobbles
-  var sag = wh2 * 0.16 + Math.sin(t * 3.9) * wow * wh2 * 0.11;
-  ctx.beginPath(); ctx.moveTo(hl + hr * 0.9, cy + hr * 0.35);
-  ctx.quadraticCurveTo((hl + hrx) / 2, cy + hr * 0.35 + sag, hrx - hr * 0.9, cy + hr * 0.35);
+  var hr = wh2 * 0.27, spin = t * (1.5 + sat * 0.6), ho = ww * 0.20;
+  rackReel(ctx, mx - ho, cy, hr, spin, 6, lit);
+  rackReel(ctx, mx + ho, cy, hr, spin, 6, lit);
+  // the tape span sags symmetrically between the hubs
+  var sag = wh2 * 0.15 + Math.sin(t * 3.9) * wow * wh2 * 0.10;
+  ctx.beginPath();
+  ctx.moveTo(mx - ho + hr * 0.9, cy + hr * 0.35);
+  ctx.quadraticCurveTo(mx, cy + hr * 0.35 + sag, mx + ho - hr * 0.9, cy + hr * 0.35);
   ctx.strokeStyle = vH(0.45 + 0.35 * lit); ctx.lineWidth = 0.75; ctx.stroke();
 
-  // mechanical counter
-  var cw = (F.x1 - F.x0) * 0.155, cx0 = wx + ww + (F.x1 - F.x0) * 0.045;
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(cx0, wy, cw, h * 0.26, 1.5); else ctx.rect(cx0, wy, cw, h * 0.26);
-  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
-  var n = Math.floor(t * 3.2) % 1000;
-  ctx.font = '600 ' + Math.max(5, h * 0.15).toFixed(1) + "px ui-monospace,Menlo,monospace";
-  ctx.fillStyle = vH(0.55 + 0.35 * lit); ctx.textBaseline = 'middle'; ctx.textAlign = 'center';
-  ctx.fillText(('00' + n).slice(-3), cx0 + cw * 0.5, wy + h * 0.13);
-  ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
-
-  // transport row
-  var bw = cw / 5.2, by = wy + h * 0.34;
-  for (var b = 0; b < 5; b++) {
-    var bx = cx0 + b * (bw * 1.18);
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(bx, by, bw, h * 0.16, 1); else ctx.rect(bx, by, bw, h * 0.16);
-    if (b === 2) { ctx.fillStyle = 'rgba(183,148,255,' + (0.26 + 0.30 * lit).toFixed(2) + ')'; ctx.fill(); }   // only PLAY is lit
-    ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.55; ctx.stroke();
+  // EVEN ladders — N equal bars, N-1 equal gaps, the block mirrored either side.
+  // The old version sized bars at 62% of a cell, so the gaps read wider than the bars.
+  // EVEN ladders — N equal bars with N-1 equal gaps, and the two blocks are TRUE
+  // MIRRORS: both index outward from the shell, so segment k sits the same distance
+  // from the centre on each side and lights at the same moment. (The first version
+  // indexed one block inward and the other outward, so the lit bars sat on opposite
+  // ends — even spacing, but anti-symmetric behaviour.)
+  var N = 6, pad = (F.x1 - F.x0) * 0.035;
+  var innerL = mx - ww / 2 - pad, innerR = mx + ww / 2 + pad;
+  var zone = innerL - F.x0;
+  var bw = zone / (N + (N - 1) * 0.55), gap = bw * 0.55;
+  var by = cy - h * 0.13, bh = h * 0.26;
+  for (var i = 0; i < N; i++) {
+    var on = (i / N) < (lit * (0.60 + Math.sin(t * 6.3 + i * 0.5) * 0.22));
+    var fill = (i > N - 3) ? 'rgba(234,120,90,0.80)' : 'rgba(183,148,255,0.62)';
+    var xs = [innerL - (i + 1) * bw - i * gap, innerR + i * (bw + gap)];
+    for (var e = 0; e < 2; e++) {
+      ctx.beginPath();
+      if (ctx.roundRect) ctx.roundRect(xs[e], by, bw, bh, 0.8); else ctx.rect(xs[e], by, bw, bh);
+      if (on) { ctx.fillStyle = fill; ctx.fill(); }
+      ctx.strokeStyle = vA(0.26); ctx.lineWidth = 0.5; ctx.stroke();
+    }
   }
 
-  // level ladder, right side
-  var lx0 = cx0 + cw + (F.x1 - F.x0) * 0.045, lw = F.x1 - lx0 - 1;
-  for (var s = 0; s < 9; s++) {
-    var on = (s / 9) < (lit * (0.62 + Math.sin(t * 6.3 + s * 0.4) * 0.2));
-    ctx.beginPath();
-    var sxx = lx0 + s * (lw / 9);
-    if (ctx.roundRect) ctx.roundRect(sxx, h * 0.30, lw / 9 * 0.62, h * 0.14, 0.8);
-    else ctx.rect(sxx, h * 0.30, lw / 9 * 0.62, h * 0.14);
-    ctx.fillStyle = on ? (s > 6 ? 'rgba(234,120,90,0.85)' : vH(0.75)) : vA(0.16);
-    ctx.fill();
-  }
-  drawIndicatorLights(ctx, lx0 + 1, h * 0.66, Math.max(0.5, h / 150), t, wow, sat, hiss);
+  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 3. WIRE — the multi-head machine (RE-201 mode selector + Echorec heads) ── */
+/* ── 3. WIRE — spools at both ends, the wire THROUGH THE MIDDLE. ── */
 function drawWireRack(ctx, w, h, t) {
-  // THIN WHITE (Max). _vizWf is the palette's existing wireframe flag — it flips
-  // vA/vH/vP/vD to rgba(255,255,255,a), so the whole machine draws in white strokes
-  // and PURPLE is reserved for the things that are actually lit. Cleared at the end so
-  // the comparison row still renders in its original palette.
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, 'WIRE', lit);
+  var F = rackFace(ctx, w, h, t, '', lit);
+  var mx = w / 2, cy = h * 0.42, sr2 = h * 0.24;
 
-  // the big rotary MODE selector — the RE-201's signature control
-  var kr = h * 0.28, kx = F.x0 + kr + 2, ky = h * 0.46;
-  ctx.beginPath(); ctx.arc(kx, ky, kr, 0, 6.2832);
-  ctx.strokeStyle = vA(0.52); ctx.lineWidth = 0.7; ctx.stroke();
-  for (var d = 0; d < 12; d++) {                       // 12 positions, per SS1.2
-    var da = -2.1 + d * (4.2 / 11);
-    ctx.beginPath();
-    ctx.moveTo(kx + Math.cos(da) * kr * 1.12, ky + Math.sin(da) * kr * 1.12);
-    ctx.lineTo(kx + Math.cos(da) * kr * 1.30, ky + Math.sin(da) * kr * 1.30);
-    ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.6; ctx.stroke();
-  }
-  var sel = -2.1 + (3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5)) * (4.2 / 11);
-  ctx.beginPath(); ctx.moveTo(kx, ky);
-  ctx.lineTo(kx + Math.cos(sel) * kr * 0.82, ky + Math.sin(sel) * kr * 0.82);
-  ctx.strokeStyle = vH(0.9); ctx.lineWidth = 0.9; ctx.stroke();
-
-  // two wire spools at the right, the wire strung between them across the face
-  var sr2 = h * 0.22, sx1 = kx + kr * 1.9 + h * 0.10, sx2 = F.x1 - sr2 - 2;
+  // spools, equidistant — same construction as Studio
+  var off = (F.x1 - F.x0) / 2 - sr2;
   var spin = t * (2.1 + sat * 0.7);
-  rackReel(ctx, sx1, ky, sr2, spin, 4, lit);
-  rackReel(ctx, sx2, ky, sr2, -spin, 4, lit);
+  rackReel(ctx, mx - off, cy, sr2,  spin, 4, lit);
+  rackReel(ctx, mx + off, cy, sr2, -spin, 4, lit);
 
-  // THE WIRE — a taut strand that visibly vibrates with wow/flutter
+  // THE WIRE — dead centre, spool hub to spool hub (it used to ride across the top)
+  var x0 = mx - off + sr2, x1 = mx + off - sr2, segs = 30;
   ctx.beginPath();
-  var segs = 26;
   for (var i = 0; i <= segs; i++) {
-    var u = i / segs, xx = sx1 + (sx2 - sx1) * u;
-    var env = Math.sin(u * Math.PI);
-    var yy = ky - sr2 * 0.55
-           + Math.sin(u * 9 + t * 7.5) * env * wow * h * 0.10
-           + Math.sin(u * 21 + t * 17) * env * wow * h * 0.035;
+    var u = i / segs, xx = x0 + (x1 - x0) * u, env = Math.sin(u * Math.PI);
+    var yy = cy + Math.sin(u * 9 + t * 7.5) * env * wow * h * 0.085
+                + Math.sin(u * 21 + t * 17) * env * wow * h * 0.030;
     if (i === 0) ctx.moveTo(xx, yy); else ctx.lineTo(xx, yy);
   }
-  ctx.strokeStyle = vH(0.50 + 0.40 * lit); ctx.lineWidth = 0.6; ctx.stroke();
+  ctx.strokeStyle = vH(0.50 + 0.40 * lit); ctx.lineWidth = 0.8; ctx.stroke();
 
-  // the fixed head array reading the wire — 4 heads, Echorec geometry (SS2.3)
+  // four heads, evenly spaced and symmetric about mx, sitting ON the wire
   for (var q = 0; q < 4; q++) {
-    var hx2 = sx1 + (sx2 - sx1) * (0.20 + q * 0.20);
+    var u2 = (q + 0.5) / 4, hx = x0 + (x1 - x0) * u2;
+    var wy2 = cy + Math.sin(u2 * 9 + t * 7.5) * Math.sin(u2 * Math.PI) * wow * h * 0.085;
     var fl = Math.max(0, Math.sin(t * 3.1 - q * 0.8));
-    ctx.beginPath(); ctx.arc(hx2, ky - sr2 * 0.55, h * 0.030 + fl * h * 0.012, 0, 6.2832);
-    ctx.fillStyle = 'rgba(183,148,255,' + (0.32 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
-    ctx.strokeStyle = vH(0.45 + fl * 0.35); ctx.lineWidth = 0.55; ctx.stroke();
+    ctx.beginPath(); ctx.arc(hx, wy2, h * 0.028 + fl * h * 0.010, 0, 6.2832);
+    ctx.fillStyle = 'rgba(183,148,255,' + (0.30 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
+    ctx.strokeStyle = vH(0.42 + fl * 0.32); ctx.lineWidth = 0.5; ctx.stroke();
   }
-  drawIndicatorLights(ctx, F.x0 + 2, h * 0.87, Math.max(0.5, h / 150), t, wow, sat, hiss);
+
+  // the 12-position MODE selector, as an even centred tick row above the wire
+  // (SS1.2 — the RE-201's rotary. A dial off to one side broke the symmetry.)
+  var tn = 12, tw = (F.x1 - F.x0) * 0.42, tx0 = mx - tw / 2, ty = h * 0.135;
+  var selI = 3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5);
+  for (var d = 0; d < tn; d++) {
+    var dx = tx0 + tw * d / (tn - 1), on2 = (d === selI);
+    ctx.beginPath(); ctx.moveTo(dx, ty - (on2 ? h * 0.055 : h * 0.032)); ctx.lineTo(dx, ty + h * 0.032);
+    ctx.strokeStyle = on2 ? 'rgba(183,148,255,0.92)' : vA(0.28);
+    ctx.lineWidth = on2 ? 1.1 : 0.55; ctx.stroke();
+  }
+
+  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
-
 
 /* ── the real card, built from the shipped markup grammar ── */
 var MACHINES = [
