@@ -7587,13 +7587,17 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             try{ window.__setSynParam(d.actP,1); }catch(e){}
             // an explicitly ADDED device powers ON — the user asked for it, so it must be audible.
             try{ if(d.pwrP) window.__setSynParam(d.pwrP,1); }catch(e){} d.on=true;
-            // fb348 — NO GLOBAL SEND: a device now only affects what it is ROUTED to, so a freshly
-            // added one with no pills lit would be silent ("I added a reverb and hear nothing").
-            // It therefore boots with ALL SIX sources lit — same audible result as the old global
-            // send — and the user narrows it down from there. That is the whole trade: explicit
-            // routing, but never a silent surprise.
+            // fb362 — A NEW DEVICE BOOTS UNROUTED (Max: "A B C D, S N is already turned on when all
+            // of them should be turned off by default… everything should be off and it's gonna be
+            // per routable"). fb348 lit ALL SIX on add so nobody could add a device and hear
+            // nothing; Max has now chosen the opposite trade deliberately — routing is an explicit
+            // act, so the card arrives silent and you point it at the sources you want. The device
+            // still powers ON, so the first pill you light is immediately audible.
+            // ⚠️ This is the ADD path only. setStateInformation's fb348 migration (powered device
+            // with no routes ⇒ all six) is untouched, so pre-fb348 projects still load sounding
+            // exactly as they did — an old session must never be re-read through the new default.
             if(d.rp) for(var ri=0;ri<d.rp.length;ri++){
-              d.route[ri]=1; try{ window.__setSynParam(d.rp[ri],1); }catch(e){} }
+              d.route[ri]=0; try{ window.__setSynParam(d.rp[ri],0); }catch(e){} }
             fxPushRanks(); render();
           }
           function fxRemove(idx){

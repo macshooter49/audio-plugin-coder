@@ -150,7 +150,9 @@ Click <b>+</b> in the header for the back panel.</p>
 
 <div class="stage">
   <div>
-    <p class="cap">Device card — actual size (272 px)</p>
+    <p class="cap">The rack — click ＋ to stack (up to 6)</p>
+    <div class="grn-rack" id="rack"></div>
+    <p class="cap" style="margin-top:18px">Device card — actual size (272 px)</p>
     <div class="zoom" id="zwrap">
       <div class="fxr-dev" id="dev">
 
@@ -224,6 +226,23 @@ Click <b>+</b> in the header for the back panel.</p>
   </div>
 </div>
 
+<style>
+.grn-rack{display:flex;gap:9px;align-items:stretch;flex-wrap:wrap;max-width:900px}
+.grn-mini{flex:0 0 200px;height:132px;border:1px solid rgba(255,255,255,.20);border-radius:8px;
+  display:flex;flex-direction:column;background:transparent;position:relative}
+.grn-mini .mh{display:flex;align-items:center;gap:6px;padding:7px 8px;font-size:11px;color:#ECE8F2}
+.grn-mini .mh .mx{margin-left:auto;opacity:.5;cursor:pointer;font-size:13px;line-height:1}
+.grn-mini .mh .mx:hover{opacity:1}
+.grn-mini .mc{flex:1;margin:0 8px;border-top:1px solid rgba(255,255,255,.10);position:relative;overflow:hidden}
+.grn-mini .mr{display:flex;gap:3px;padding:7px 8px}
+.grn-mini .mr i{flex:1;height:13px;border:1px solid rgba(255,255,255,.20);border-radius:3px;
+  font-style:normal;font-size:8px;line-height:12px;text-align:center;color:rgba(236,232,242,.45);cursor:pointer}
+.grn-mini .mr i.on{border-color:#8B5CF6;color:#ECE8F2;box-shadow:0 0 6px rgba(139,92,246,.5)}
+.grn-add{flex:0 0 200px;height:132px;border:1px dashed rgba(255,255,255,.22);border-radius:8px;
+  display:flex;align-items:center;justify-content:center;color:rgba(236,232,242,.45);
+  font-size:12px;cursor:pointer;gap:6px}
+.grn-add:hover{border-color:rgba(139,92,246,.7);color:#ECE8F2}
+</style>
 <script>
 'use strict';
 /* ═══════════ params ═══════════ */
@@ -237,7 +256,10 @@ var KEYS=['Off','Oct','5th','Chord','Maj','Min','Penta'];
 var KEYSETS={Off:null,Oct:[0,12,-12,24],'5th':[0,7,12,19,-12],Chord:[0,4,7,12],
              Maj:[0,2,4,5,7,9,11],Min:[0,2,3,5,7,8,10],Penta:[0,3,5,7,10]};
 var typeIx=0,charIx=0,keyIx=0,power=true,freeze=false,sync=false;
-var routes=[1,0,0,0,0,0], RL=['A','B','C','D','S','N'];
+/* fb362 — every route pill boots OFF (Max: "A B C D, S N is already turned on when all of them
+   should be turned off by default… everything should be off and it's gonna be per routable").
+   The card arrives powered but UNROUTED: the first pill you light is the first thing you hear. */
+var routes=[0,0,0,0,0,0], RL=['A','B','C','D','S','N'];
 
 /* ═══════════ maps (ENGINE constants — bible §2.1: the osc page's numbers are stale) ═══════════ */
 function densHz(v){ return Math.pow(220,v); }          // 1..220 g/s   GranularEngine.h:421
@@ -570,6 +592,69 @@ refresh();
 // verification hooks: #back opens the back panel, #freeze latches Freeze (headless screenshots)
 if(location.hash==='#back'){ document.getElementById('swap').click(); }
 if(location.hash==='#freeze'){ document.querySelector('[data-pill=freeze]').click(); }
+</script>
+<script>
+/* ═══════════ THE RACK — "I should be able to click the plus button and add as many grain
+   engines as I want to" (Max, 2026-08-15). The shipped cap is 6 per device type, because
+   params cannot be born at runtime: the pool is pre-allocated at load and ＋ CLAIMS an
+   instance. Each card holds its OWN routes — that is the whole point of per-osc routing.  */
+(function(){
+  var MAXI = 6, cards = [];
+  var rack = document.getElementById('rack');
+  function draw(cv, seed){
+    var g = cv.getContext('2d'), W = cv.width = cv.clientWidth * 2, H = cv.height = cv.clientHeight * 2;
+    g.clearRect(0,0,W,H); g.strokeStyle = 'rgba(139,92,246,.55)'; g.lineWidth = 2;
+    g.beginPath();
+    for (var x = 0; x < W; x += 2){
+      var t = x / W, v = Math.sin(t * 22 + seed) * Math.sin(t * 5.5 + seed * 2) * 0.42;
+      g.lineTo(x, H * 0.5 + v * H * 0.42);
+    }
+    g.stroke();
+    /* grain dots — the cloud grazing the capture ring */
+    g.fillStyle = 'rgba(236,232,242,.55)';
+    for (var i = 0; i < 14; i++){
+      var px = ((i * 97 + seed * 53) % 100) / 100 * W;
+      var py = H * 0.5 + Math.sin(px / W * 22 + seed) * Math.sin(px / W * 5.5 + seed * 2) * 0.42 * H * 0.42;
+      g.beginPath(); g.arc(px, py, 3, 0, 6.283); g.fill();
+    }
+  }
+  function render(){
+    rack.innerHTML = '';
+    cards.forEach(function(c, idx){
+      var d = document.createElement('div'); d.className = 'grn-mini';
+      d.innerHTML = '<div class="mh"><span>⠿</span><span>Granular</span>'
+                  + '<span style="opacity:.45;font-size:9px">' + c.type + '</span>'
+                  + '<span class="mx" data-rm="' + idx + '">✕</span></div>'
+                  + '<div class="mc"><canvas style="width:100%;height:100%"></canvas></div>'
+                  + '<div class="mr">' + ['A','B','C','D','S','N'].map(function(l, i){
+                        return '<i data-c="' + idx + '" data-i="' + i + '"'
+                             + (c.r[i] ? ' class="on"' : '') + '>' + l + '</i>'; }).join('') + '</div>';
+      rack.appendChild(d);
+      draw(d.querySelector('canvas'), c.seed);
+    });
+    if (cards.length < MAXI){
+      var a = document.createElement('div'); a.className = 'grn-add';
+      a.innerHTML = '＋ Add Granular';
+      a.onclick = function(){
+        /* fb362: a new device arrives UNROUTED — every pill off, exactly as Max asked. */
+        cards.push({ type: 'Cloud', r: [0,0,0,0,0,0], seed: cards.length * 1.7 + 0.6 });
+        render();
+      };
+      rack.appendChild(a);
+    }
+  }
+  rack.addEventListener('click', function(e){
+    var rm = e.target.getAttribute && e.target.getAttribute('data-rm');
+    if (rm !== null && rm !== undefined){ cards.splice(+rm, 1); render(); return; }
+    var ci = e.target.getAttribute && e.target.getAttribute('data-c');
+    if (ci !== null && ci !== undefined){
+      var i = +e.target.getAttribute('data-i');
+      cards[+ci].r[i] = cards[+ci].r[i] ? 0 : 1; render();
+    }
+  });
+  cards.push({ type: 'Cloud', r: [0,0,0,0,0,0], seed: 0.6 });
+  render();
+})();
 </script>
 </body>
 </html>

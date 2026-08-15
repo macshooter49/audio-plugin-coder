@@ -3678,6 +3678,53 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
             }
         }
+
+        // ══ GRANULAR (fb362) — the fourth flagship, multi-instance from day ONE ══════════════
+        // Max, 2026-08-15: "whenever I open up my terrain I should be able to click the plus
+        // button and add as many grain engines as I want to."  So all six instances declare their
+        // params here, eagerly. This is not a style choice: JUCE/VST3/AU cache the parameter list
+        // when the plugin loads, so a param can NEVER be born at runtime — the ＋ CLAIMS a
+        // pre-allocated instance, it does not create one. (The ENGINES are lazy; see the pool.)
+        // Instance 1 uses the bare SYN_GRN_ prefix and 2..6 take a digit, matching the reverb.
+        // 🔑 Choice cardinality is frozen at birth (fb342), so Type declares all EIGHT and
+        // Character all SIX now, even though the roster could grow — adding an entry later would
+        // change every saved patch's normalised value. Key gets a reserved 8th slot for the same
+        // reason. There is no "ship 6 now, add 2 in v1.1" option available.
+        {
+            const juce::StringArray grnTypes { "Cloud","Rise","Swarm","Suspend",
+                                               "Scatter","Rewind","Stretch","Pulverize" };
+            const juce::StringArray grnChars { "Clean","Tape","Cassette","Radio","Worn","Drift" };
+            const juce::StringArray grnKeys  { "Off","Oct","5th","Chord","Maj","Min","Penta","—" };
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String p = (n == 1) ? juce::String ("SYN_GRN_")
+                                                : "SYN_GRN" + juce::String (n) + "_";
+                const juce::String d = (n == 1) ? juce::String ("Granular ")
+                                                : "Granular " + juce::String (n) + " ";
+                C (p + "TYPE",      d + "Type",      grnTypes, 0);
+                C (p + "CHARACTER", d + "Character", grnChars, 0);
+                C (p + "KEY",       d + "Key",       grnKeys,  0);
+                C (p + "SYNCDIV",   d + "Sync Division", syncDiv, 10);   // Window, when Sync is lit
+                // front heroes + Mix
+                F (p + "DENSITY", d + "Grains",   0.42f);  F (p + "SIZE",  d + "Size",  0.42f);
+                F (p + "PITCH",   d + "Pitch",    0.50f);  F (p + "MIX",   d + "Mix",   0.35f);
+                // back panel, 4×2
+                F (p + "SCAN",    d + "Scan",     0.50f);  F (p + "WINDOW", d + "Window",   0.45f);
+                F (p + "SPRAY",   d + "Spray",    0.18f);  F (p + "DETUNE", d + "Detune",   0.12f);
+                F (p + "SHAPE",   d + "Shape",    0.50f);  F (p + "WIDTH",  d + "Width",    0.60f);
+                F (p + "FEEDBACK",d + "Feedback", 0.00f);  F (p + "FREEZE", d + "Freeze",   0.00f);
+                for (auto& s : srcSuf) B (p + s, d + s, false);   // fb362 — unrouted on arrival
+                // The Freeze PILL and the Freeze KNOB are deliberately the same word: one control
+                // on two surfaces (the knob is the amount, the pill latches it), which is the
+                // documented exception to no-doubles — and it keeps "Freeze" meaning exactly one
+                // thing rack-wide, the same as the Reverb's Freeze pill.
+                B (p + "FREEZEPILL", d + "Freeze Hold", false);
+                B (p + "SYNC",   d + "Sync",   false);
+                B (p + "POWER",  d + "Power",  false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
     }
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
@@ -9647,6 +9694,14 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
     // can distinguish V1 blobs (no "version" property) from V2 blobs.
     state.setProperty ("version",      2,                   nullptr);
+    // fb362 — ROUTES ARE EXPLICIT FROM HERE ON. An added device now boots with every route pill
+    // OFF (Max: "everything should be off and it's gonna be per routable"), which collides with the
+    // fb348 migration: that rule reads "powered + no routes" as a pre-fb348 main-send device and
+    // lights all six. Without a marker, saving a freshly-added device and reloading would re-light
+    // its pills — the new default would survive exactly one session. This property says "this blob
+    // was written by a build where no-routes MEANS no-routes", so the migration skips it. Kept
+    // separate from "version" so the V1/V2 branch below is untouched.
+    state.setProperty ("fxRoutesExplicit", 1,               nullptr);
     state.setProperty ("editingLayer", editingLayer.load(), nullptr);
     // Mix page Phase 2: global trigger-mode state at the root level.
     state.setProperty ("triggerMode",     triggerMode.load(),     nullptr);
@@ -9833,6 +9888,11 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // would silently mute every existing project whose effects relied on the main send, so
             // any powered-with-no-routes device is migrated to ALL SIX sources — the same audible
             // result it had before, now stated explicitly.
+            // fb362 — ONLY for blobs written before routes became explicit. See the note next to
+            // "fxRoutesExplicit" in getStateInformation: a fb362+ session may legitimately hold a
+            // powered device with no routes lit (that is now the default on add), and re-lighting
+            // it here would undo Max's new default on every reload.
+            if (! newState.hasProperty ("fxRoutesExplicit"))
             {
                 struct DevMig { const char* power; const char* src[6]; };
                 const DevMig migs[3] = {
