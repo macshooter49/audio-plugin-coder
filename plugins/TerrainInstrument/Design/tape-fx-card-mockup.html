@@ -1403,12 +1403,12 @@ function drawWireRack(ctx, w, h, t) {
 
 /* ── the real card, built from the shipped markup grammar ── */
 var MACHINES = [
-  { viz:'Studio',   drawer:drawStudioRack,   type:'Space',    note:'reel deck' },
+  { viz:'Studio',   drawer:drawStudioRack,   type:'Studio',   note:'reel deck' },
   { viz:'Cassette', drawer:drawCassetteRack, type:'Cassette', note:'shell' },
   { viz:'Wire',     drawer:drawWireRack,     type:'Wire',     note:'multi-head' }
 ];
 var MACHINES_OLD = [
-  { viz:'Studio',   drawer:drawStudioViz,   type:'Space' },
+  { viz:'Studio',   drawer:drawStudioViz,   type:'Studio' },
   { viz:'Cassette', drawer:drawCassetteViz, type:'Cassette' },
   { viz:'Wire',     drawer:drawWireViz,     type:'Wire' }
 ];
