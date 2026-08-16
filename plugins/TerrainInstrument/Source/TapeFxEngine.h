@@ -120,8 +120,8 @@ public:
         float bumpDb;   // its authority at Bump 100%
         float hissK;    // what the MACHINE's own hiss amount is driven to
         float hissTop;  // floor top-up (see noise() — only where the coupling forces it)
-        float flSlow;   // flutter band, low edge (Hz)
-        float flFast;   // flutter band, high edge (Hz)
+        float fl1, fl2, fl3;  // the flutter RATES (Hz) — rotating parts, see below
+        float flDrift;  // how much those rates wander (a wire deck wanders more)
         float flDepth;  // flutter authority
         float comp;     // transport-level compression (a shell pumps, a wire does not)
         int   lpN;      // playback-head pole count — gap loss is STEEP, 6 dB/oct is not
@@ -138,8 +138,9 @@ public:
         // ⚠️ hissK is DELIBERATELY LOW ON THE WIRE and the floor is made up by hissTop —
         // see noise(). Its ceiling is set by where its own dropouts stop being tape.
         //                 hf     hp    bHz    bQ    bDb  hissK hissTop flS  flF  flDep comp
-        static const Voice C { 13000.f, 32.f,  90.f, 1.70f, 12.f, 6.4f, 0.000f, 5.f, 17.f, 1.00f, 1.0f, 2, 2.2f };
-        static const Voice W {  2800.f, 130.f, 185.f, 1.30f, 12.f, 0.95f, 0.075f, 3.f, 13.f, 1.55f, 0.25f, 4, 5.0f };
+        //                 hf     hp    bHz    bQ    bDb  hissK hissTop  fl1   fl2   fl3  drift dep  comp lpN mgain
+        static const Voice C { 13000.f, 32.f,  90.f, 1.70f, 12.f, 6.4f, 0.000f, 9.6f, 13.7f, 6.3f, 0.08f, 1.00f, 1.0f, 2, 2.2f };
+        static const Voice W {  2800.f, 130.f, 185.f, 1.30f, 12.f, 0.95f, 0.075f, 5.9f,  8.4f, 3.7f, 0.26f, 1.55f, 0.25f, 4, 5.0f };
         return (mch == 1) ? C : W;
     }
 
@@ -247,7 +248,7 @@ public:
         std::fill (ringL_.begin(), ringL_.end(), 0.0f);
         std::fill (ringR_.begin(), ringR_.end(), 0.0f);
         std::fill (flL_.begin(), flL_.end(), 0.0f); std::fill (flR_.begin(), flR_.end(), 0.0f);
-        flW_ = 0; flLpF_ = flLpF2_ = flLpS_ = 0.0f;
+        flW_ = 0; flP1_ = flP2_ = flP3_ = 0.0f; flDr_ = 0.0f; wowInt_ = 0.0f;
         wr_ = 0;
         readPos_ = -(double) (sr_ * 0.38);
         speed_ = 1.0f; spinAcc_ = 0.0; packAcc_ = 0.0;
@@ -432,9 +433,7 @@ public:
             bpA1_ = 1.0f / (1.0f + g * (g + k));
             bpA2_ = g * bpA1_;
             bpA3_ = g * bpA2_;
-            kFlF_ = onePole (V.flFast);      // the flutter band edges, per machine
-            kFlS_ = onePole (V.flSlow);
-            kFlWan_ = onePole (0.55f);       // wander is SLOW — this is wow, not flutter
+            kFlWan_ = onePole (0.55f);       // wander/rate-drift is SLOW, well under wow
         }
         // dB -> linear on the bandpass, so 100% is a real +11 dB shove, not a nudge
         const float bg = (std::pow (10.0f, (V.bumpDb * pr_.bump) * 0.05f) - 1.0f) * V.bumpQ;
@@ -619,43 +618,85 @@ public:
         // 🔑 At Flutter = 0 the delay is EXACTLY 0 samples, so the path is bit-identical to not
         // having it — no static offset, no comb with the dry, nothing to regress.
         flL_[(size_t) flW_] = wetL; flR_[(size_t) flW_] = wetR;
-        if (pr_.flutter > 0.0005f)
+        // ═══ fb372 — WOW *AND* FLUTTER, ON THE DIRECT READ, PER MACHINE ══════════════
+        //  Max: "these have to sound differently character wise… they need to be different
+        //  wow. And could you do some research into what flutter is, because I don't think
+        //  you know what flutter is. This isn't flutter."
+        //
+        //  He is right on both counts, and they are two separate faults.
+        //
+        //  ── WHAT WOW AND FLUTTER ACTUALLY ARE (DIN 45507 / IEC 386 / AES6) ───────────
+        //  Speed error is split by RATE, and the split is perceptual:
+        //    · drift   below ~0.1 Hz — heard as slow tuning change, not motion
+        //    · WOW     ~0.1-6 Hz     — capstan/reel eccentricity, tape slip. A slow, deep
+        //                              warble. The ear is MOST sensitive near 4 Hz, which
+        //                              is exactly where the DIN weighting curve peaks.
+        //    · FLUTTER ~6-100 Hz     — pinch roller, bearings, guide friction, head drag.
+        //                              In the 6-20 Hz part it is heard as a fast QUAVER —
+        //                              the gargle. Above ~30 Hz it stops being pitch at
+        //                              all and becomes FM sidebands, i.e. roughness.
+        //    · scrape flutter ~1-5 kHz — the tape's longitudinal resonance between fixed
+        //                              guides. NOT a wobble: it is heard as grain/hair on
+        //                              sustained tones. It does not belong in a pitch path,
+        //                              which is exactly the mistake fb367 made at 61-78 Hz.
+        //  Real machines: studio reel 0.02-0.05% wrms · cassette 0.05-0.12% · a worn
+        //  portable 0.3-1%+. We run far past that on purpose (the dramaticism law).
+        //
+        //  ── FAULT 1: FLUTTER HAD NO RATE. fb368 answered the laser complaint by deleting
+        //  ALL periodicity and driving the delay from band-limited noise. Measured, that
+        //  gives 5.8% deviation but a mean-crossing rate of 34.8/sec against a 40.0/sec
+        //  NULL baseline — i.e. statistically indistinguishable from no modulation at all.
+        //  It reads as a loose transport, not as flutter, because flutter is something you
+        //  hear a RATE in. 🔑 The fb367 bug was the RATE (61-78 Hz), never the periodicity:
+        //  at 6-20 Hz the FM sidebands land within a few Hz of the carrier and fuse into
+        //  pitch modulation, which IS the sound. So flutter is quasi-periodic again — the
+        //  real rotating parts, three of them, with drifting rates so it never metronomes,
+        //  and nothing anywhere near the laser band.
+        //
+        //  ── FAULT 2: THE WOW SIGNATURE WAS DEAD. wowGen() has produced a genuinely
+        //  per-machine wow since fb365 — a 0.62/2.90/7.30 Hz triple for the shell, a random
+        //  walk with sudden SPEED JUMPS for the wire — but it only ever modulated readPos_,
+        //  which is the ECHO head, and the echo is OFF by default. So the one thing that
+        //  most distinguishes two transports has never been audible unless you switched the
+        //  delay on. (Third control in this device with that exact fault, after Heads and
+        //  the CharSpec fields. LAW, again: ask of every control whether it acts on the
+        //  DIRECT path.) A rate error integrates into a POSITION error, so it lands here.
         {
-            // 🔑🔑 fb368 — FLUTTER MUST NOT BE A SINE. Max: "the flutter sounds like Star Wars
-            // lasers. It's supposed to sound like flutter, like wow and flutter on a tape."
-            // Measured, and that is exactly what it was: fb367 modulated the delay with a
-            // 61-78 Hz "scrape" sinusoid, and FM of a 220 Hz tone at 61 Hz puts a sideband
-            // 29.7 dB under the carrier at 159 and 281 Hz — an inharmonic TONE beside every
-            // partial. That is a ring modulator wearing a tape badge.
-            //
-            //   LAW: periodic modulation at an audio-adjacent rate makes DISCRETE SIDEBANDS,
-            //   and discrete sidebands are a laser. Real flutter is irregular, so it has to
-            //   come from BAND-LIMITED NOISE — noise smears the sidebands into a haze, which
-            //   is precisely what a real transport does to a sustained note.
-            //
-            // The band is two one-poles (fast lowpass minus slow lowpass), voiced per machine:
-            // a shell flutters fast and tight (5-22 Hz), a wire deck slow and wide (3-13 Hz).
-            // TWO poles on the top edge, not one. A single 6 dB/oct lowpass at 22 Hz is
-            // still only 11 dB down at 78 Hz, and that skirt is audible as hair on the
-            // note — measured at −45 dB. Cascading it gives 12 dB/oct and puts the
-            // modulation where flutter actually lives.
-            const float w = (float) (uni() * 2.0 - 1.0);
-            flLpF_ += kFlF_ * (w - flLpF_);
-            flLpF2_ += kFlF_ * (flLpF_ - flLpF2_);
-            flLpS_ += kFlS_ * (flLpF2_ - flLpS_);
-            const float m = juceClampf ((flLpF2_ - flLpS_) * 11.5f, -1.0f, 1.0f);
-            // taper: real at 25%, dramatic at 100% (the no-plateaus law), and EXACTLY zero
-            // at 0 so the path stays bit-identical to not having it.
-            const float amt = pr_.flutter * (0.35f + 0.65f * pr_.flutter);
-            const float depth = amt * V.flDepth * (float) (sr_ * 0.00055);
-            // ⚠️ AND THE STOCK'S OWN WANDER RIDES HERE TOO. C.wander used to scale only
-            // wowGen(), which modulates readPos_ — i.e. the ECHO. With the echo off (the
-            // default) a Chewed tape wandered exactly as much as a Fresh one: not at all.
-            // A slow smoothed-noise term, so a worn stock genuinely will not hold pitch.
-            flWan_ += kFlWan_ * ((float) (uni() * 2.0 - 1.0) - flWan_);
-            const float wan = flWan_ * 7.0f * C.wander * (float) (sr_ * 0.00055);
-            const float d = juceClampf (depth * (1.0f + m) + wan * 0.5f + std::fabs (wan) * 0.5f,
-                                        0.0f, 900.0f);
+            const float dt = (float) (1.0 / sr_);
+            float dmod = 0.0f, centre = 0.0f;
+
+            // (a) the transport's own WOW — per machine, now audible without the echo
+            wowInt_ = wowInt_ * 0.99994f + wowDev * 12000.0f * dt * (float) sr_ * dt;
+            wowInt_ = juceClampf (wowInt_, -48.0f, 48.0f);
+            if (pr_.p1 > 0.0005f) { dmod += wowInt_; centre += 48.0f; }
+
+            // (b) FLUTTER — the rotating parts. Cassette 9.6/13.7/6.3 Hz (capstan, pinch
+            //     roller, idler); the wire deck slower and far more erratic at 5.9/8.4/3.7.
+            if (pr_.flutter > 0.0005f)
+            {
+                flDr_ += kFlWan_ * ((float) (uni() * 2.0 - 1.0) - flDr_);
+                const float dr = 1.0f + flDr_ * 9.0f * V.flDrift;      // the rates wander
+                flP1_ += V.fl1 * dr * dt; if (flP1_ >= 1.0f) flP1_ -= 1.0f;
+                flP2_ += V.fl2 * dr * dt; if (flP2_ >= 1.0f) flP2_ -= 1.0f;
+                flP3_ += V.fl3 * dr * dt; if (flP3_ >= 1.0f) flP3_ -= 1.0f;
+                const float m = std::sin (6.2831853f * flP1_) * 0.55f
+                              + std::sin (6.2831853f * flP2_) * 0.30f
+                              + std::sin (6.2831853f * flP3_) * 0.15f;
+                const float amt = pr_.flutter * (0.35f + 0.65f * pr_.flutter);
+                const float depth = amt * V.flDepth * (float) (sr_ * 0.00055);
+                dmod += depth * m; centre += depth;
+            }
+
+            // (c) the STOCK's own wander — C.wander scaled only wowGen() before, i.e. only
+            //     the echo, so a Chewed tape wandered exactly as much as a Fresh one: none.
+            if (C.wander > 0.001f)
+            {
+                flWan_ += kFlWan_ * ((float) (uni() * 2.0 - 1.0) - flWan_);
+                const float wan = flWan_ * 7.0f * C.wander * (float) (sr_ * 0.00055);
+                dmod += wan; centre += std::fabs (wan) + 4.0f;
+            }
+
+            const float d = juceClampf (centre + dmod, 0.0f, 900.0f);
             const float rd = (float) flW_ - d;
             const int i1 = (int) std::floor (rd); const float fr = rd - (float) i1;
             auto rdl = [&] (const std::vector<float>& b)
@@ -929,8 +970,9 @@ private:
 
     std::vector<float> ringL_, ringR_, flL_, flR_;
     int flW_ = 0;
-    float flLpF_ = 0.0f, flLpF2_ = 0.0f, flLpS_ = 0.0f;     // the flutter noise band (fast LP − slow LP)
-    float kFlF_ = 0.002f, kFlS_ = 0.0005f;
+    float flP1_ = 0.0f, flP2_ = 0.0f, flP3_ = 0.0f;   // the rotating parts' phases
+    float flDr_ = 0.0f;                               // and how far their rates have wandered
+    float wowInt_ = 0.0f;                             // rate error integrated into position
     int    mask_ = 0;
     long long wr_ = 0;
     double readPos_ = 0.0;
