@@ -3756,8 +3756,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             // renumbering a single saved patch. Max: "there's a tube tape that we have too
             // somewhere" — it is WireMachine's own valve saturator, which has been sitting
             // behind setTubeSatEnabled() unreferenced by anything.
-            const juce::StringArray tpeTypes { "Studio","Cassette","Wire","Tube",
-                                               "Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+            // fb367 — TWO tape machines. Max: "studio and wire and even the tube, these are
+            // literally just distortions. They're not tape... the only two tape modes that we
+            // need is wire and cassette" and then "replace the wire with studio, the name at
+            // least." So STUDIO now runs WireMachine (a real transport) and the Harmonic
+            // Sculptor — which bypasses wow AND hiss by design and is therefore a distortion —
+            // is out of this device entirely. The roster keeps its eight slots (born that way
+            // at fb365) so the two live entries never renumber a saved patch.
+            const juce::StringArray tpeTypes { "Studio","Cassette",
+                                               "Reserved 3","Reserved 4","Reserved 5",
+                                               "Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray tpeChars { "Fresh","Ferric","Chrome","Vintage","Worn","Chewed","Hot","Cold" };
             const juce::StringArray tpeHeads { "Single","Dual","Triple","Quad","Spread","Swell","Ping","Cascade" };
             for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
@@ -4301,7 +4309,7 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
 
     tw::TapeFxEngine::Params tp;
     const int ty = (int) V.type->load();              // choice params read as the INDEX
-    const int wantType = (ty >= 0 && ty <= 3) ? ty : 0;   // the 4 reserved slots clamp to Studio
+    const int wantType = (ty >= 0 && ty <= 1) ? ty : 0;   // the 6 reserved slots clamp to Studio
 
     // The type RE-SEAT lives in the engine (TapeFxEngine::process) so the offline harness can
     // measure it — see the note there. This just states the wish.
@@ -4311,9 +4319,10 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
     tp.type = wantType;
     tp.character = (int) V.chr->load();
     tp.heads     = (int) V.heads->load();
-    // Studio's surface is Sculpt/Weave/Tilt; Cassette's and Wire's is Wow/Saturate/Hiss.
-    if (wantType == 0) { tp.p1 = V.sculpt->load(); tp.p2 = V.weave->load(); tp.p3 = V.tilt->load(); }
-    else              { tp.p1 = V.p1->load();     tp.p2 = V.p2->load();    tp.p3 = V.p3->load(); }
+    // Both machines now share one surface — Wow / Saturate / Hiss — because both are real
+    // transports. The SCULPT/WEAVE/TILT params stay declared (a param can never be removed
+    // without renumbering the host's list) but nothing reads them any more.
+    tp.p1 = V.p1->load(); tp.p2 = V.p2->load(); tp.p3 = V.p3->load();
     tp.mix     = V.mix->load();
     tp.repeats = V.repeats->load();
     tp.drive   = V.drive->load();

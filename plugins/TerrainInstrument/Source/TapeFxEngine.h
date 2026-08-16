@@ -69,8 +69,18 @@ public:
     //  the tape's own level pumping.
     struct CharSpec { float hf, lf, sat, noise, drop, wander, azi, comp; };
 
-    // Type -> which of the three shipped machines. Tube rides the Wire.
-    static int machineFor (int t) noexcept { return (t == 3) ? 2 : ((unsigned) t < 3u ? t : 0); }
+    // fb367 — TWO tape machines, and neither of them is the Harmonic Sculptor.
+    // Max: "studio and wire and even the tube, these are literally just distortions.
+    // They're not tape. The only tape that we even have is cassette... the only two tape
+    // modes that we need is wire and cassette. I don't need studio anymore" — and then
+    // "replace the wire with studio, the name at least."  So the device now offers
+    // STUDIO (which IS WireMachine — real transport, real wow, real dropouts) and
+    // CASSETTE. StudioMachine bypasses wow AND hiss by design (see TapeMachines.h: both
+    // return the input untouched) and is purely the sculptor, i.e. a distortion. The rack
+    // already has a Distortion device; it does not need a second one wearing a tape badge.
+    //   type 0 = Studio  -> machine 2 (Wire)
+    //   type 1 = Cassette-> machine 1 (Cassette)
+    static int machineFor (int t) noexcept { return (t == 1) ? 1 : 2; }
 
     static const CharSpec& charSpec (int c) noexcept
     {
@@ -171,10 +181,11 @@ public:
         hpL_ = hpR_ = 0.0f;
         aziL_ = 0.0f;
         dropEnv_ = 1.0f; dropTimer_ = 0; compEnv_ = 0.0f;
+        walk_ = 0.0f; walkTgt_ = 0.0f; walkG_ = 1.0f; walkTimer_ = 0;
         inEnv_ = 0.0f; outEnv_ = 0.0f; duckEnv_ = 0.0f; gate_ = 0.0f; echoEnv_ = 0.0f;
         hissGlide_ = 0.0f;
         hissCoeff_ = (float) (1.0 - std::exp (-1.0 / (sr_ * 0.080)));
-        heldType_ = -1; holdCtr_ = 0; reseat_ = 1.0f; tubeOn_ = false;
+        heldType_ = -1; holdCtr_ = 0; reseat_ = 1.0f;
         for (auto& h : headEnv_) h = 0.0f;
         vizTick_ = 0;
         publish();
@@ -243,14 +254,8 @@ public:
         // for 20 ms give the SAME audible-region envelope step (19.6 dB either way, against
         // the machines' own 13-21 dB quiescent motion — Wire's micro-dropouts are larger than
         // anything the switch does). So the longer duck bought nothing but a 87 ms hole.
-        // fb366 — TUBE (type 3) is the WIRE machine with its tube saturator engaged. That
-        // saturator has always been in TapeMachines.h behind setTubeSatEnabled() and nothing
-        // ever called it. Max: "there's a tube tape that we have too somewhere."
-        {
-            const bool tube = (pr_.type == 3);
-            if (tube != tubeOn_)
-            { tubeOn_ = tube; tapeL_.setWireModes (false, tube); tapeR_.setWireModes (false, tube); }
-        }
+        // fb367 — the Tube type is retired. Max: "tube is saturation, we already have tube
+        // saturation." The rack's Distortion device owns valve character; this one owns tape.
         if (heldType_ < 0) { heldType_ = pr_.type; tapeL_.setMachine (machineFor (heldType_)); tapeR_.setMachine (machineFor (heldType_)); }
         else if (heldType_ != pr_.type)
         {
@@ -293,21 +298,21 @@ public:
         // state (4 heads + the direct read), and the compounding is automatic because
         // the feedback is taken from an already-played tap and re-recorded.
         agedropout (C);
+        // the oxide has thinned unevenly: a slow level walk, +-4.5 dB at full Age
+        if (--walkTimer_ <= 0)
+        { walkTimer_ = (int) (sr_ * (0.35 + 1.3 * uni())); walkTgt_ = (float) (uni() * 2.0 - 1.0); }
+        walk_ += 0.00004f * (walkTgt_ - walk_);
+        walkG_ = std::pow (10.0f, (walk_ * 4.5f * pr_.age) * 0.05f);
         const int   mch = machineFor (pr_.type);
-        const float hfBase = (mch == 0 ? 11000.0f : mch == 1 ? 5200.0f : 2600.0f)
-                           * (pr_.type == 3 ? 2.60f : 1.0f);   // a tube deck is a CLEAN machine
-        // ⚠️ The tube and the wire share a machine, so if this layer treats them alike they
-        // measure 3.2 dB apart — too close to be two Types. They are not alike: a wire
-        // recorder is a 2.6 kHz lo-fi transport, a tube deck is a full-bandwidth machine whose
-        // colour is the valve, not the loss. Brightness, bump and per-pass knee all part here.
-        const float aLP = onePole (juceClampf (hfBase * C.hf * (1.0f - 0.72f * pr_.age), 380.0f, 18000.0f));
+        const float hfBase = (mch == 1) ? 5200.0f : 4200.0f;   // shell vs reel
+        const float aLP = onePole (juceClampf (hfBase * C.hf * (1.0f - 0.88f * pr_.age), 260.0f, 18000.0f));
         const bool  doBump = pr_.bump > 0.0005f;
         // HEAD BUMP — the low resonance the head puts back. Its frequency is a real
         // property of the machine (a 15 ips reel bumps low and broad, a 1-7/8 ips
         // shell bumps higher and tighter) and it TRACKS THE TRANSPORT, so it sags
         // with the pitch during a Stop. At 1.15x it measured 0.99 dB against the
         // gate's 1.5 — inaudible, i.e. exactly the playing-safe the house rule bans.
-        const float bHz = (pr_.type == 3) ? 68.0f : (mch == 0 ? 46.0f : mch == 1 ? 92.0f : 128.0f);
+        const float bHz = (mch == 1) ? 92.0f : 52.0f;   // a shell bumps high and tight, a reel low
         const float aB = onePole (juceClampf (bHz * (0.25f + 0.75f * speed_), 18.0f, 240.0f));
         const float bg = 1.95f * pr_.bump;
 
@@ -349,9 +354,7 @@ public:
         fbL *= loop; fbR *= loop;
 
         // per-pass saturation — the repeats get dirtier, the direct signal does not
-        // the tube compresses rather than folds: softer per-pass knee, more of it
-        const float ps = (pr_.type == 3 ? 0.55f : 1.0f)
-                       * (1.0f + 2.4f * C.sat * (0.25f + 0.75f * pr_.drive));
+        const float ps = 1.0f + 2.4f * C.sat * (0.25f + 0.75f * pr_.drive);
         fbL = std::tanh (fbL * ps) / ps;
         fbR = std::tanh (fbR * ps) / ps;
 
@@ -412,12 +415,20 @@ public:
         if (pr_.flutter > 0.0005f)
         {
             const int mchF = machineFor (pr_.type);
-            const float f1 = (mchF == 0 ? 7.4f : mchF == 1 ? 9.7f : 13.1f);
-            const float f2 = (mchF == 0 ? 18.0f : mchF == 1 ? 34.0f : 47.0f);   // scrape
+            // 🔑 fb367 — THAT WAS WOW, NOT FLUTTER. Max: "flutter isn't doing what it's
+            // supposed to do. It's not flutter."  Right: 1.1 ms at 9.7 Hz is 6.7% of pitch
+            // deviation, which is a seasick warble, and against the dry it just reads as
+            // chorus. Flutter is FAST and SHALLOW — the 10-20 Hz band plus the scrape the tape
+            // makes against the guides well above it, and it is IRREGULAR, not a metronome.
+            const float f1 = (mchF == 1 ? 17.5f : 13.5f);
+            const float f2 = (mchF == 1 ? 78.0f : 61.0f);       // scrape flutter
             flPh_ += (float) (1.0 / sr_); if (flPh_ > 1.0e6f) flPh_ -= 1.0e6f;
-            const float m = std::sin (6.2831853f * f1 * flPh_) * 0.72f
-                          + std::sin (6.2831853f * f2 * flPh_ + 1.1f) * 0.28f;
-            const float depth = pr_.flutter * pr_.flutter * (float) (sr_ * 0.0011);  // → ±1.1 ms
+            if (--flJit_ <= 0) { flJit_ = (int) (sr_ * (0.07 + 0.22 * uni())); flJitV_ = (float) (uni() * 2.0 - 1.0); }
+            flJitS_ += 0.0006f * (flJitV_ - flJitS_);
+            const float m = std::sin (6.2831853f * f1 * (1.0f + flJitS_ * 0.35f) * flPh_) * 0.62f
+                          + std::sin (6.2831853f * f2 * flPh_ + 1.1f) * 0.24f
+                          + flJitS_ * 0.14f;
+            const float depth = pr_.flutter * pr_.flutter * (float) (sr_ * 0.00030);  // → ±0.30 ms
             const float d = depth * (1.0f + m) * 0.5f;
             const float rd = (float) flW_ - d;
             const int i1 = (int) std::floor (rd); const float fr = rd - (float) i1;
@@ -430,7 +441,9 @@ public:
 
         if (pr_.duck > 0.001f)
         {
-            const float d = 1.0f - juceClampf (duckEnv_ * 7.0f * pr_.duck, 0.0f, 0.94f);
+            // 7x an envelope that peaks around 0.1 on the -26 dBFS bus is a 3 dB nudge, not a
+            // duck. The bus level is the same reason Drive and Saturate needed calibrating.
+            const float d = 1.0f - juceClampf (duckEnv_ * 34.0f * pr_.duck, 0.0f, 0.96f);
             wetL *= d; wetR *= d;
         }
 
@@ -499,8 +512,7 @@ private:
         // means the number JUMPS the moment the type crosses Studio, right in the middle of
         // the 75 ms crossfade. Harness [H] caught it as a 19.9x jump. Glided over 80 ms (longer
         // than the fade), so at no instant does a machine see a discontinuity.
-        const float hissTgt = (machineFor (pr_.type) == 0 ? 0.12f : pr_.p3);
-        hissGlide_ += hissCoeff_ * (hissTgt - hissGlide_);
+        hissGlide_ += hissCoeff_ * (pr_.p3 - hissGlide_);
         // ⚠️ HISS WAS INAUDIBLE, and two things made it so. (1) The machine's own map is
         // pow(amount, 2.5) * 0.006 — at the default 18% that is 1.9e-5, i.e. −94 dBFS, and
         // the bottom HALF of the knob does nothing at all (the fb325 no-plateaus law).
@@ -513,17 +525,27 @@ private:
         // trim divides it, so for Fresh (0.55) to land at -45 dBFS against a -26 dBFS signal,
         // A must reach 2.3 at knob 100% => 2.3/0.55 = 4.2. Capped at 4.5 so Chewed is filthy
         // (-30 dBFS, 4 dB under the music) instead of louder than it.
-        const float noise = juceClampf (4.2f * C.noise * std::pow (juceClampf (hissGlide_, 0.0f, 1.0f), 0.6f) * gate
-                                        * (pr_.type == 3 ? 0.45f : 1.0f),   // a valve deck has a quiet floor
-                                        0.0f, 4.5f);
+        // 🔑🔑 ONE KNOB, TWO JOBS — fb367, and it is the whole of "wire is still messed up".
+        // In CassetteMachine the hiss amount buys noise and nothing else, so fb366's x4.2
+        // compensation simply made the noise floor audible (Max: "cassette sounds really,
+        // really, really fucking nice").  In WireMachine the SAME amount also sets the
+        // micro-dropout rate: dropoutProb = 0.0004 * amount^2 PER SAMPLE.  Measured, x4.2
+        // handed the wire 13 dropouts/sec at the 18% default and 102/sec at full, against
+        // the 0.6 and 19 its own design intends — 22x. That is a gargling, stuttering mess
+        // that the Saturate knob has no authority over, which is exactly what Max heard:
+        // "I turned the saturation down and I still hear that crazy loud distorted
+        // saturation."  LAW: a shared parameter can drive more than one thing, and
+        // compensating one of them over-drives the other. So the two machines are
+        // calibrated SEPARATELY — processSample takes both sets anyway.
+        const float hk = juceClampf (hissGlide_, 0.0f, 1.0f);
+        const float cassHiss = juceClampf (4.2f * C.noise * std::pow (hk, 0.60f) * gate, 0.0f, 4.5f);
+        const float wireHiss = juceClampf (1.1f * C.noise * std::pow (hk, 0.75f) * gate, 0.0f, 1.3f);
         const float sat   = juceClampf (pr_.p2 * C.sat, 0.0f, 1.0f);
-        // Wow into the MACHINE: the wire's transport wanders and jumps; the valve deck's is
-        // a proper capstan, so it gets a third of it. Same DSP, a machine in good order.
-        const float mWow  = pr_.p1 * (pr_.type == 3 ? 0.32f : 1.0f);
+        const float mWow  = pr_.p1;
         const float tilt  = juceClampf ((pr_.p3 * 2.0f - 1.0f) + (C.hf - 1.0f) * 0.5f, -1.0f, 1.0f);
-        lastHiss_ = noise;
-        oL = tapeL_.processSample (inL, mWow, sat, noise, mWow, sat, noise, pr_.p1, pr_.p2, tilt);
-        oR = tapeR_.processSample (inR, mWow, sat, noise, mWow, sat, noise, pr_.p1, pr_.p2, tilt);
+        lastHiss_ = (machineFor (pr_.type) == 1) ? cassHiss : wireHiss;
+        oL = tapeL_.processSample (inL, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.p1, pr_.p2, tilt);
+        oR = tapeR_.processSample (inR, mWow, sat, cassHiss, mWow, sat, wireHiss, pr_.p1, pr_.p2, tilt);
     }
 
     // ── wow + flutter, per machine, exactly the character each one is documented
@@ -561,17 +583,23 @@ private:
         const float w = std::sin (6.2831853f * 0.41f * wowA_) * 0.0055f
                       + std::sin (6.2831853f * 1.70f * wowA_) * 0.0022f
                       + wowB_ * 0.0085f;
-        return w * k * (pr_.type == 3 ? 0.30f : 1.0f);   // ditto, on my own transport
+        return w * k;
     }
 
+    // 🔑 AGE HAD NO FLOOR OF ITS OWN. Max: "the age knob is also not doing what it's
+    // supposed to do because whenever I turn it up to 100% it should sound really aged, it
+    // doesn't sound like anything."  It was `C.drop * age`, and the DEFAULT character Fresh
+    // has drop = 0.00 — so on a fresh tape the whole knob multiplied by ZERO. Age is the AGE
+    // MASTER: it now brings its own dropouts, its own level walk and its own extra HF loss,
+    // and the formulation only makes it worse. A fresh tape played a thousand times is worn.
     void agedropout (const CharSpec& C) noexcept
     {
-        const float rate = C.drop * pr_.age;
+        const float rate = (0.85f + C.drop) * pr_.age;   // Age 100% must DROP OUT, not dip
         if (rate <= 0.0005f) { dropEnv_ += 0.004f * (1.0f - dropEnv_); return; }
         if (--dropTimer_ <= 0)
         {
-            dropTimer_ = (int) (sr_ * (0.05 + 2.6 * (1.0 - rate) * (0.3 + uni())));
-            dropTgt_ = 1.0f - (float) uni() * 0.85f * rate;
+            dropTimer_ = (int) (sr_ * (0.04 + 1.9 * (1.0 - juceClampf (rate, 0.0f, 0.98f)) * (0.25 + uni())));
+            dropTgt_ = 1.0f - (float) uni() * 0.92f * juceClampf (rate, 0.0f, 1.0f);
         }
         // recover faster than it drops — a shed patch is a dip, not a gate
         dropEnv_ += (dropTgt_ < dropEnv_ ? 0.0025f : 0.0006f) * (dropTgt_ - dropEnv_);
@@ -587,7 +615,7 @@ private:
         float& lp = lossT_[slot][ch];
         lp += aLP * (x - lp); float y = lp;
         if (doBump) { float& bp = bumpT_[slot][ch]; bp += aB * (y - bp); y += bp * bg; }
-        return y * dropEnv_;
+        return y * dropEnv_ * walkG_;
     }
 
     float readCubic (const std::vector<float>& b, double delaySamples) const noexcept
@@ -637,6 +665,7 @@ private:
 
     std::vector<float> ringL_, ringR_, flL_, flR_;
     int flW_ = 0; float flPh_ = 0.0f;
+    int flJit_ = 0; float flJitV_ = 0.0f, flJitS_ = 0.0f;
     int    mask_ = 0;
     long long wr_ = 0;
     double readPos_ = 0.0;
@@ -652,14 +681,14 @@ private:
     float  lossT_[kHeads + 1][2] = {}, bumpT_[kHeads + 1][2] = {};
     float  hpL_ = 0.0f, hpR_ = 0.0f, aziL_ = 0.0f;
     float  dropEnv_ = 1.0f, dropTgt_ = 1.0f, compEnv_ = 0.0f;
-    int    dropTimer_ = 0;
+    int    dropTimer_ = 0, walkTimer_ = 0;
+    float  walk_ = 0.0f, walkTgt_ = 0.0f, walkG_ = 1.0f;
 
     float  inEnv_ = 0.0f, outEnv_ = 0.0f, duckEnv_ = 0.0f, gate_ = 0.0f, echoEnv_ = 0.0f;
     float  headEnv_[kHeads] = { 0.0f, 0.0f, 0.0f, 0.0f };
     float  lastWow_ = 0.0f, lastHiss_ = 0.0f;
     float  hissGlide_ = 0.0f, hissCoeff_ = 0.0003f;
     int    heldType_ = -1, holdCtr_ = 0;
-    bool   tubeOn_ = false;
     float  reseat_ = 1.0f;
 
     std::mt19937 rng_;
