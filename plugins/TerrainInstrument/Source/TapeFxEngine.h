@@ -256,7 +256,7 @@ public:
         { lossT_[k][0]=lossT_[k][1]=0.0f; lossT2_[k][0]=lossT2_[k][1]=0.0f;
           lossT3_[k][0]=lossT3_[k][1]=0.0f; hpT_[k][0]=hpT_[k][1]=0.0f;
           bp1_[k][0]=bp1_[k][1]=0.0f; bp2_[k][0]=bp2_[k][1]=0.0f; }
-        bumpCoefCtr_ = 0; tcEnv_ = 0.0f; crackle_ = 0.0f; crackleEnv_ = 0.0f; dropHold_ = 0;
+        bumpCoefCtr_ = 0; tcEnv_ = 0.0f; dropHold_ = 0;
         ntA_ = ntB_ = ntR_ = 0.0f;
         hpL_ = hpR_ = 0.0f;
         aziL_ = 0.0f; aziD_ = 0.0f; flWan_ = 0.0f;
@@ -394,7 +394,7 @@ public:
         // off the tape gets them, not just the repeats. One stage, five copies of its
         // state (4 heads + the direct read), and the compounding is automatic because
         // the feedback is taken from an already-played tap and re-recorded.
-        agedropout (C, gate_);
+        agedropout (C);
         // the oxide has thinned unevenly: a slow level walk, +-4.5 dB at full Age
         if (--walkTimer_ <= 0)
         { walkTimer_ = (int) (sr_ * (0.35 + 1.3 * uni())); walkTgt_ = (float) (uni() * 2.0 - 1.0); }
@@ -569,9 +569,6 @@ public:
             dwL = dwL + (aziD_ - dwL) * C.azi;
         }
         wetL += dwL; wetR += dwR;
-        // the shed oxide itself — slightly decorrelated so it sits in the room, not the middle
-        if (crackle_ != 0.0f) { wetL += crackle_; wetR += crackle_ * 0.82f; }
-
         // ── THE FLOOR TOP-UP (and why it has to exist) ───────────────────────────────
         // Max: "the hiss is supposed to be more prominent." On CASSETTE that was a pure
         // trim and it is done — hissK carries it, hissTop is 0, the approved voicing is
@@ -841,17 +838,14 @@ private:
     //   2. they are ABRUPT (1.5 ms in, 45 ms out) and DEEP (to −30 dB) and they take the
     //      TOP with them — that coupling lives on aLP in process(), and it is the thing
     //      that makes a dropout sound like the tape ducking under water
-    //   3. CRACKLE — shedding oxide is impulsive. A tone control cannot make that sound,
-    //      and it is most of what "a ruined tape" actually is.
-    void agedropout (const CharSpec& C, float gate) noexcept
+    //   3. ⚠️ NO CRACKLE. fb368 added impulsive oxide ticks here and Max heard them for
+    //      exactly what they measure as: "snare noises... I didn't mean breakup like that."
+    //      An 8 ms decay of broadband noise at the signal's own level IS a snare hit. Age
+    //      breaks up by DIPPING, never by striking — a dropout falls, it does not hit.
+    void agedropout (const CharSpec& C) noexcept
     {
         const float rate = juceClampf ((0.55f + C.drop) * std::pow (pr_.age, 0.75f), 0.0f, 1.6f);
-        if (rate <= 0.0005f)
-        {
-            dropEnv_ += 0.004f * (1.0f - dropEnv_);
-            crackle_ = 0.0f; crackleEnv_ = 0.0f;
-            return;
-        }
+        if (rate <= 0.0005f) { dropEnv_ += 0.004f * (1.0f - dropEnv_); return; }
 
         // ── the dropout events themselves
         if (dropHold_ > 0) { if (--dropHold_ == 0) dropTgt_ = 1.0f; }
@@ -866,15 +860,6 @@ private:
         // ABRUPT in (1.5 ms), lingering out (45 ms) — a shed patch, not a fader move
         dropEnv_ += (dropTgt_ < dropEnv_ ? 0.0139f : 0.00046f) * (dropTgt_ - dropEnv_);
 
-        // ── CRACKLE: sparse impulsive bursts. Gated by presence, so a silent tape is
-        //    silent (the fb325 nothing-free-runs law) — this is a defect, not a drone.
-        if (uni() < (double) (0.00022f * rate * rate) * (double) gate)
-            // scaled to the INPUT, not absolute: a fixed 0.05-0.21 tick is -26 dBFS, which
-            // is as loud as the music and reads as a POP. Oxide crackle rides the signal.
-            crackleEnv_ = (0.55f + 1.85f * (float) uni()) * juceClampf (inEnv_, 0.0f, 0.5f);
-        crackleEnv_ *= 0.9975f;                                  // ~8 ms tick
-        crackle_ = (crackleEnv_ > 1.0e-5f)
-                 ? crackleEnv_ * (float) (uni() * 2.0 - 1.0) * gate : 0.0f;
     }
 
     // ONE playback head, five copies of its state (4 heads + the direct read).
@@ -975,7 +960,6 @@ private:
     int    hdW_ = 0;
     float  flWan_ = 0.0f, kFlWan_ = 0.00008f;
     float  dropEnv_ = 1.0f, dropTgt_ = 1.0f, compEnv_ = 0.0f, tcEnv_ = 0.0f;
-    float  crackle_ = 0.0f, crackleEnv_ = 0.0f;
     float  ntA_ = 0.0f, ntB_ = 0.0f, ntR_ = 0.0f;   // the floor top-up's colour
     int    dropTimer_ = 0, walkTimer_ = 0, dropHold_ = 0;
     float  walk_ = 0.0f, walkTgt_ = 0.0f, walkG_ = 1.0f;
