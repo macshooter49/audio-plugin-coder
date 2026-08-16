@@ -82,17 +82,83 @@ public:
     //   type 1 = Cassette-> machine 1 (Cassette)
     static int machineFor (int t) noexcept { return (t == 1) ? 1 : 2; }
 
+    // ═══ fb368 — THE TRANSPORT IS PART OF THE MACHINE ════════════════════════════
+    //  Max: "studio is exactly the same as cassette and these need to be different
+    //  effects."  Measured, and he is right: the RAW machines differ by 12.18 dB of
+    //  spectral distance, but through the fb367 transport only 7.66 dB survives — and
+    //  what survives is a ripple, not a character. The transport was the leveller: ONE
+    //  playback-head lowpass at 4.2 vs 5.2 kHz (a third of an octave apart) sat after
+    //  both machines and threw away exactly the harmonics that tell them apart, then a
+    //  shared head bump, a shared dropout and a shared limiter put them back on the
+    //  same shape.
+    //
+    //  A tape machine is not a saturator with a delay after it — the SPEED, the TRACK
+    //  WIDTH and the HEAD are most of what you hear. So the transport is voiced per
+    //  machine, and the two are voiced three octaves apart on purpose:
+    //
+    //    CASSETTE — a 1-7/8 ips shell. Bandwidth to 12 kHz (bright, present), bass
+    //      down to 32 Hz, a TIGHT high head bump at 95 Hz, bright sibilant hiss, and
+    //      it PUMPS (a cassette's own compression is a big part of the sound).
+    //    STUDIO  — the vintage wire deck. A 2.8 kHz FOUR-POLE head and nothing above it,
+    //      no bass below 130 Hz, a boxy 185 Hz honk, pink rumbling noise, micro-dropouts
+    //      and a transport that wanders. Thin, telephone-ish, broken — the vintage one.
+    //
+    //  ⚠️ AND THE HEAD HAS TO BE STEEP TO WIN. Measured: the wire's own folder puts ~39 dB
+    //  back into 1.5-6 kHz, so a 6 dB/oct head loses the argument — at 4.2 kHz one-pole the
+    //  two machines came out within 3 dB there, and Studio actually measured BRIGHTER than
+    //  Cassette. Real gap loss is steep, so the head is a 4-pole cascade at 2.8 kHz. That
+    //  is the number where the machines separate without Studio turning to mud.
+    //
+    //  That is not a tweak, it is two different decades of machine, and it is what
+    //  makes the type switch night and day instead of an EQ ripple.
+    struct Voice
+    {
+        float hfHz;     // playback-head bandwidth — the single biggest tell
+        float hpHz;     // how much bass the head can actually read back
+        float bumpHz;   // head-bump centre
+        float bumpQ;    // and how tight it is
+        float bumpDb;   // its authority at Bump 100%
+        float hissK;    // what the MACHINE's own hiss amount is driven to
+        float hissTop;  // floor top-up (see noise() — only where the coupling forces it)
+        float flSlow;   // flutter band, low edge (Hz)
+        float flFast;   // flutter band, high edge (Hz)
+        float flDepth;  // flutter authority
+        float comp;     // transport-level compression (a shell pumps, a wire does not)
+        int   lpN;      // playback-head pole count — gap loss is STEEP, 6 dB/oct is not
+        float mgain;    // what level the MACHINE is driven at (see kMachineGain note)
+    };
+
+    static const Voice& voiceFor (int mch) noexcept
+    {
+        // ⚠️ THE BUMP MUST SIT ABOVE THE HEAD'S LOW LIMIT. First cut put Studio's bump at
+        // 52 Hz behind a 150 Hz high-pass, so the resonance had nothing left to resonate on
+        // and Bump measured +4.1 dB — Max's "Bump isn't doing anything", reproduced exactly.
+        // Physically the head bump IS the top of the low-frequency rolloff, not something
+        // under it: a wire deck honks BOXY at ~185 Hz, a shell thumps at ~90 Hz.
+        // ⚠️ hissK is DELIBERATELY LOW ON THE WIRE and the floor is made up by hissTop —
+        // see noise(). Its ceiling is set by where its own dropouts stop being tape.
+        //                 hf     hp    bHz    bQ    bDb  hissK hissTop flS  flF  flDep comp
+        static const Voice C { 13000.f, 32.f,  90.f, 1.70f, 12.f, 6.4f, 0.000f, 5.f, 17.f, 1.00f, 1.0f, 2, 2.2f };
+        static const Voice W {  2800.f, 130.f, 185.f, 1.30f, 12.f, 0.95f, 0.075f, 3.f, 13.f, 1.55f, 0.25f, 4, 5.0f };
+        return (mch == 1) ? C : W;
+    }
+
     static const CharSpec& charSpec (int c) noexcept
     {
         static const CharSpec T[8] = {
-            /* Fresh   */ { 1.00f, 1.00f, 1.00f, 0.55f, 0.00f, 0.85f, 0.00f, 0.10f },
-            /* Ferric  */ { 0.74f, 1.16f, 1.35f, 1.00f, 0.10f, 1.00f, 0.06f, 0.45f },
-            /* Chrome  */ { 1.28f, 0.86f, 0.78f, 0.70f, 0.04f, 0.90f, 0.03f, 0.20f },
-            /* Vintage */ { 0.82f, 1.08f, 1.20f, 1.15f, 0.22f, 1.20f, 0.14f, 0.55f },
-            /* Worn    */ { 0.58f, 0.94f, 1.10f, 1.45f, 0.60f, 1.55f, 0.26f, 0.70f },
-            /* Chewed  */ { 0.40f, 0.80f, 1.45f, 1.80f, 1.00f, 2.40f, 0.62f, 0.95f },
-            /* Hot     */ { 0.66f, 1.24f, 1.75f, 0.90f, 0.16f, 1.05f, 0.09f, 0.85f },
-            /* Cold    */ { 1.10f, 0.70f, 0.62f, 1.35f, 0.34f, 1.30f, 0.18f, 0.05f }
+            // fb368 — WIDENED. Max: "the character needs to also be amplified up to actually
+            // make them sound night and day just like our reverbs." Measured at fb367 the
+            // closest pair (Ferric vs Hot) was 3.29 dB apart, because the eight stocks only
+            // really differed on two axes. Every stock now has its own identity on FIVE:
+            // bandwidth, bass, saturation, noise and stability.
+            /* Fresh   */ { 1.00f, 1.00f, 1.00f, 0.55f, 0.00f, 0.55f, 0.00f, 0.05f },
+            /* Ferric  */ { 0.78f, 1.22f, 1.25f, 1.00f, 0.15f, 1.05f, 0.06f, 0.32f },
+            /* Chrome  */ { 2.05f, 0.52f, 0.72f, 0.62f, 0.03f, 0.72f, 0.02f, 0.14f },
+            /* Vintage */ { 0.66f, 1.38f, 1.45f, 1.25f, 0.30f, 1.50f, 0.18f, 0.66f },
+            /* Worn    */ { 0.44f, 0.95f, 1.15f, 1.60f, 0.72f, 1.95f, 0.35f, 0.80f },
+            /* Chewed  */ { 0.25f, 0.70f, 1.90f, 2.00f, 1.00f, 3.10f, 0.78f, 1.00f },
+            /* Hot     */ { 1.18f, 1.45f, 2.30f, 0.72f, 0.10f, 0.85f, 0.04f, 1.00f },
+            /* Cold    */ { 1.60f, 0.52f, 0.42f, 1.40f, 0.40f, 1.30f, 0.24f, 0.02f }
         };
         return T[(unsigned) c < 8u ? c : 0];
     }
@@ -101,19 +167,28 @@ public:
     //  Which of the four playback heads are down, how loud, and where they sit in
     //  the image. This is the RE-201's mode selector: the whole character of a
     //  multi-head echo is which heads you lower onto the tape.
-    struct HeadSpec { float g[kHeads]; float pan[kHeads]; int fbHead; };
+    // 🔑🔑 fb368 — A HEAD STACK IS PHYSICAL, AND IT DOES NOT NEED THE ECHO TO EXIST.
+    // Max: "the heads don't really sound anything different." Measured: with the echo OFF
+    // — which is the DEFAULT — all eight patterns were BIT-IDENTICAL, 0.00 dB apart. The
+    // pattern only ever gated the long echo taps, so with Delay off it gated nothing and
+    // the control had never done anything at all for anyone who had not switched the echo
+    // on. But a real deck's heads sit a CENTIMETRE apart on the tape path: the stack reads
+    // the same tape at slightly different points, which is a short comb and a stereo image,
+    // echo or no echo. spMs is that spacing, and it is what makes the eight patterns eight
+    // different machines instead of eight identical ones.
+    struct HeadSpec { float g[kHeads]; float pan[kHeads]; int fbHead; float spMs; };
 
     static const HeadSpec& headSpec (int h) noexcept
     {
         static const HeadSpec T[8] = {
-            /* Single  */ { {0.00f,0.00f,0.00f,1.00f}, { 0.0f, 0.0f, 0.0f, 0.0f}, 3 },
-            /* Dual    */ { {0.82f,0.00f,0.00f,1.00f}, {-0.30f,0.0f, 0.0f, 0.30f}, 3 },
-            /* Triple  */ { {0.74f,0.80f,0.00f,1.00f}, {-0.42f,0.0f, 0.0f, 0.42f}, 3 },
-            /* Quad    */ { {0.68f,0.74f,0.80f,1.00f}, {-0.46f,-0.16f,0.16f,0.46f}, 3 },
-            /* Spread  */ { {1.00f,0.00f,0.00f,0.88f}, {-0.85f,0.0f, 0.0f, 0.85f}, 3 },
-            /* Swell   */ { {0.30f,0.52f,0.78f,1.00f}, {-0.24f,-0.08f,0.08f,0.24f}, 3 },
-            /* Ping    */ { {0.95f,0.85f,0.90f,1.00f}, {-0.95f,0.95f,-0.95f,0.95f}, 3 },
-            /* Cascade */ { {1.00f,0.70f,0.48f,0.32f}, {-0.55f,0.30f,-0.20f,0.10f}, 0 }
+            /* Single  */ { {0.00f,0.00f,0.00f,1.00f}, { 0.0f, 0.0f, 0.0f, 0.0f}, 3, 0.00f },
+            /* Dual    */ { {0.82f,0.00f,0.00f,1.00f}, {-0.30f,0.0f, 0.0f, 0.30f}, 3, 2.20f },
+            /* Triple  */ { {0.74f,0.80f,0.00f,1.00f}, {-0.42f,0.0f, 0.0f, 0.42f}, 3, 3.60f },
+            /* Quad    */ { {0.68f,0.74f,0.80f,1.00f}, {-0.46f,-0.16f,0.16f,0.46f}, 3, 1.10f },
+            /* Spread  */ { {1.00f,0.00f,0.00f,0.88f}, {-0.85f,0.0f, 0.0f, 0.85f}, 3, 9.00f },
+            /* Swell   */ { {0.30f,0.52f,0.78f,1.00f}, {-0.24f,-0.08f,0.08f,0.24f}, 3, 5.00f },
+            /* Ping    */ { {0.95f,0.85f,0.90f,1.00f}, {-0.95f,0.95f,-0.95f,0.95f}, 3, 0.62f },
+            /* Cascade */ { {1.00f,0.70f,0.48f,0.32f}, {-0.55f,0.30f,-0.20f,0.10f}, 0, 7.50f }
         };
         return T[(unsigned) h < 8u ? h : 0];
     }
@@ -172,14 +247,21 @@ public:
         std::fill (ringL_.begin(), ringL_.end(), 0.0f);
         std::fill (ringR_.begin(), ringR_.end(), 0.0f);
         std::fill (flL_.begin(), flL_.end(), 0.0f); std::fill (flR_.begin(), flR_.end(), 0.0f);
-        flW_ = 0; flPh_ = 0.0f;
+        flW_ = 0; flLpF_ = flLpF2_ = flLpS_ = 0.0f;
         wr_ = 0;
         readPos_ = -(double) (sr_ * 0.38);
         speed_ = 1.0f; spinAcc_ = 0.0; packAcc_ = 0.0;
         wowA_ = wowB_ = wowC_ = 0.0f; wowWalk_ = 0.0f; jumpHold_ = 0;
-        for (int k = 0; k <= kHeads; ++k) { lossT_[k][0]=lossT_[k][1]=0.0f; bumpT_[k][0]=bumpT_[k][1]=0.0f; }
+        for (int k = 0; k <= kHeads; ++k)
+        { lossT_[k][0]=lossT_[k][1]=0.0f; lossT2_[k][0]=lossT2_[k][1]=0.0f;
+          lossT3_[k][0]=lossT3_[k][1]=0.0f; hpT_[k][0]=hpT_[k][1]=0.0f;
+          bp1_[k][0]=bp1_[k][1]=0.0f; bp2_[k][0]=bp2_[k][1]=0.0f; }
+        bumpCoefCtr_ = 0; tcEnv_ = 0.0f; crackle_ = 0.0f; crackleEnv_ = 0.0f; dropHold_ = 0;
+        ntA_ = ntB_ = ntR_ = 0.0f;
         hpL_ = hpR_ = 0.0f;
-        aziL_ = 0.0f;
+        aziL_ = 0.0f; aziD_ = 0.0f; flWan_ = 0.0f;
+        for (int i = 0; i < 512; ++i) { hdL_[i] = 0.0f; hdR_[i] = 0.0f; }
+        hdW_ = 0;
         dropEnv_ = 1.0f; dropTimer_ = 0; compEnv_ = 0.0f;
         walk_ = 0.0f; walkTgt_ = 0.0f; walkG_ = 1.0f; walkTimer_ = 0;
         inEnv_ = 0.0f; outEnv_ = 0.0f; duckEnv_ = 0.0f; gate_ = 0.0f; echoEnv_ = 0.0f;
@@ -229,12 +311,23 @@ public:
     //  x5, not x4: Cassette's knob moves preGain 1.5 -> 4.5, so for it to have any say the
     //  input must be quiet enough that 1.5x is clean and loud enough that 4.5x is not —
     //  a window around 0.28, i.e. x5.6 off the bus. Drive then pushes PAST it on purpose.
-    static constexpr float kMachineGain = 5.0f;
+    //  🔑🔑 fb368 — AND IT CANNOT BE ONE NUMBER FOR BOTH. Max: "I should be able to lower
+    //  the saturation... and it's at zero and I can't hear it anymore." Measured, Cassette at
+    //  Saturate 0 was ALREADY clipping: x5 plus the machine's own 1.58x mid bell plus its
+    //  1.5x floor pre-gain puts 0.92 into a cubic clip that breaks at 1.0, so THD was -32 dB
+    //  before the knob was touched and the whole travel only moved it 0.63 dB. The knob was
+    //  not weak, it had nowhere left to GO. Cassette therefore runs at x2.2 (clean at 0,
+    //  clipped at 100 — the whole window inside the knob) while the wire, whose folder needs
+    //  real level to fold, stays at x5. Output level is unaffected: the trim below divides by
+    //  whatever gain went in.
+    static constexpr float kMachineGain = 5.0f;   // (kept for reference; see Voice::mgain)
 
     void process (float inL, float inR, float& outL, float& outR) noexcept
     {
         const CharSpec& C = charSpec (pr_.character);
         const HeadSpec& H = headSpec (pr_.heads);
+        const int    mch = machineFor (pr_.type);
+        const Voice& V   = voiceFor (mch);
 
         // ── THE TYPE RE-SEAT (the fb345 deferred-fade law) ──────────────────────────────
         // Measured: the SHIPPED TapeProcessor, on its own with none of this file involved,
@@ -284,11 +377,15 @@ public:
         const float rate = speed_ * (1.0f + wowDev);
 
         // ── record: the machine colours what goes ON the tape, once
-        const float dl = inL * driveLin_ * kMachineGain, dr = inR * driveLin_ * kMachineGain;
+        // ⚠️ CENTRED ON FRESH = 1.0. First cut was 0.55+0.62*sat, which put Fresh at 0.89x
+        // and quietly detuned the x2.2/x5.0 machine levels everything else was calibrated
+        // against — Cassette Saturate fell from 17.0 to 10.8 dB as a side effect.
+        const float cDrv = 0.42f + 0.58f * C.sat;      // Cold 0.66x . FRESH 1.00x . Hot 1.75x
+        const float dl = inL * driveLin_ * V.mgain * cDrv, dr = inR * driveLin_ * V.mgain * cDrv;
         float cL, cR;
         machine (dl, dr, cL, cR, C, gate_);
-        cL *= trimLin_ * (1.0f / kMachineGain);
-        cR *= trimLin_ * (1.0f / kMachineGain);
+        cL *= trimLin_ * (1.0f / (V.mgain * cDrv));
+        cR *= trimLin_ * (1.0f / (V.mgain * cDrv));
 
         // ── THE PLAYBACK HEAD. fb365 harness [B]: Age and Bump used to live only in
         // the feedback path, so at Repeats 0 both knobs were DEAD — 1.79 dB, which was
@@ -297,24 +394,51 @@ public:
         // off the tape gets them, not just the repeats. One stage, five copies of its
         // state (4 heads + the direct read), and the compounding is automatic because
         // the feedback is taken from an already-played tap and re-recorded.
-        agedropout (C);
+        agedropout (C, gate_);
         // the oxide has thinned unevenly: a slow level walk, +-4.5 dB at full Age
         if (--walkTimer_ <= 0)
         { walkTimer_ = (int) (sr_ * (0.35 + 1.3 * uni())); walkTgt_ = (float) (uni() * 2.0 - 1.0); }
         walk_ += 0.00004f * (walkTgt_ - walk_);
         walkG_ = std::pow (10.0f, (walk_ * 4.5f * pr_.age) * 0.05f);
-        const int   mch = machineFor (pr_.type);
-        const float hfBase = (mch == 1) ? 5200.0f : 4200.0f;   // shell vs reel
-        const float aLP = onePole (juceClampf (hfBase * C.hf * (1.0f - 0.88f * pr_.age), 260.0f, 18000.0f));
+        // 🔑 THE BANDWIDTH IS THE MACHINE. 12 kHz vs 4.2 kHz — a shell you can hear the
+        // cymbals through, and a wire deck you cannot. fb367 had these a third of an
+        // octave apart and the two types measured as the same sound with a ripple.
+        // Age closes it further, but only to 45% — the rest of Age is EVENTS now, not EQ.
+        const float aLPbase = juceClampf (V.hfHz * C.hf * (1.0f - 0.55f * pr_.age), 700.0f, 19000.0f);
+        // ⚠️ AND THE HF GOES WITH THE DROPOUT. When oxide lifts off the head it loses the
+        // top FIRST and the level second — that is why a real dropout sounds like the tape
+        // ducking underwater rather than someone pulling a fader. Coupling them is the
+        // single thing that makes Age read as BROKEN instead of as a tone control.
+        const float aLP = onePole (aLPbase * (0.20f + 0.80f * dropEnv_));
+        lpN3_ = (V.lpN >= 3);
+        // the head cannot read back what the track is too narrow to hold: a wire deck is
+        // thin and boxy (150 Hz), a shell has real bass (32 Hz). The other half of the split.
+        const float aHPh = onePole (juceClampf (V.hpHz / C.lf, 16.0f, 400.0f));
         const bool  doBump = pr_.bump > 0.0005f;
-        // HEAD BUMP — the low resonance the head puts back. Its frequency is a real
-        // property of the machine (a 15 ips reel bumps low and broad, a 1-7/8 ips
-        // shell bumps higher and tighter) and it TRACKS THE TRANSPORT, so it sags
-        // with the pitch during a Stop. At 1.15x it measured 0.99 dB against the
-        // gate's 1.5 — inaudible, i.e. exactly the playing-safe the house rule bans.
-        const float bHz = (mch == 1) ? 92.0f : 52.0f;   // a shell bumps high and tight, a reel low
-        const float aB = onePole (juceClampf (bHz * (0.25f + 0.75f * speed_), 18.0f, 240.0f));
-        const float bg = 1.95f * pr_.bump;
+        // ── HEAD BUMP, and this time it is a RESONANCE ───────────────────────────────
+        // Max: "Bump also isn't doing anything." Measured: 0 -> 100% moved 110 Hz by
+        // 3.9 dB, because it was a one-pole lowpass added back — a gentle shelf, and a
+        // shelf on a bass-light rack bus is nothing. A real head bump is a RESONANT peak
+        // a few dB wide at the head/tape resonance, so it is now a TPT state-variable
+        // bandpass with Q, up to +11 dB, and it still TRACKS THE TRANSPORT so it sags
+        // with the pitch during a stop. Coefficients refresh every 32 samples — speed_
+        // is a smoothed ramp, so that is inaudible and it keeps one tan() off the
+        // per-sample path (the CPU hard rule).
+        if (--bumpCoefCtr_ <= 0)
+        {
+            bumpCoefCtr_ = 32;
+            const float fc = juceClampf (V.bumpHz * (0.25f + 0.75f * speed_), 18.0f, 260.0f);
+            const float g  = std::tan (3.14159265f * fc / (float) sr_);
+            const float k  = 1.0f / V.bumpQ;
+            bpA1_ = 1.0f / (1.0f + g * (g + k));
+            bpA2_ = g * bpA1_;
+            bpA3_ = g * bpA2_;
+            kFlF_ = onePole (V.flFast);      // the flutter band edges, per machine
+            kFlS_ = onePole (V.flSlow);
+            kFlWan_ = onePole (0.55f);       // wander is SLOW — this is wow, not flutter
+        }
+        // dB -> linear on the bandpass, so 100% is a real +11 dB shove, not a nudge
+        const float bg = (std::pow (10.0f, (V.bumpDb * pr_.bump) * 0.05f) - 1.0f) * V.bumpQ;
 
         // feedback read happens BEFORE the write, so a tap can never see the sample
         // it is about to help record (the one-clock law, fb345).
@@ -335,8 +459,8 @@ public:
             tapL[k] = tapR[k] = 0.0f;
             if (H.g[k] <= 0.0f || echoEnv_ < 1.0e-4f) { headEnv_[k] += 0.002f * (0.0f - headEnv_[k]); continue; }
             const double d = gap * (double) (k + 1) * 0.25;
-            tapL[k] = playHead (readCubic (ringL_, d), k, 0, aLP, doBump, aB, bg);
-            tapR[k] = playHead (readCubic (ringR_, d), k, 1, aLP, doBump, aB, bg);
+            tapL[k] = playHead (readCubic (ringL_, d), k, 0, aLP, aHPh, doBump, bg);
+            tapR[k] = playHead (readCubic (ringR_, d), k, 1, aLP, aHPh, doBump, bg);
             const float pan = H.pan[k] * pr_.width;
             const float gl = H.g[k] * std::sqrt (0.5f * (1.0f - pan));
             const float gr = H.g[k] * std::sqrt (0.5f * (1.0f + pan));
@@ -401,8 +525,95 @@ public:
         // the direct signal is read off the SAME head, so it gets the same gap loss,
         // the same head bump and the same dropouts. This is what makes Age and Bump
         // alive at Repeats 0 instead of dead knobs.
-        wetL += playHead (cL, kHeads, 0, aLP, doBump, aB, bg);
-        wetR += playHead (cR, kHeads, 1, aLP, doBump, aB, bg);
+        float dwL = playHead (cL, kHeads, 0, aLP, aHPh, doBump, bg);
+        float dwR = playHead (cR, kHeads, 1, aLP, aHPh, doBump, bg);
+
+        // ── THE HEAD STACK on the direct read (see HeadSpec). Single is one head, so it
+        //    takes this path unchanged and the default is bit-identical to before.
+        hdL_[(size_t) hdW_] = dwL; hdR_[(size_t) hdW_] = dwR;
+        if (H.spMs > 0.001f)
+        {
+            const float sp = H.spMs * 0.001f * (float) sr_;
+            float aL = 0.0f, aR = 0.0f, gs = 0.0f;
+            for (int k = 0; k < kHeads; ++k)
+            {
+                if (H.g[k] <= 0.0f) continue;
+                const float off = (float) (kHeads - 1 - k) * sp;
+                float vL = dwL, vR = dwR;
+                if (off >= 0.5f)
+                {
+                    const float rd = (float) hdW_ - off;
+                    const int i1 = (int) std::floor (rd); const float fr = rd - (float) i1;
+                    const float a0 = hdL_[(size_t) ((i1) & 511)], a1 = hdL_[(size_t) ((i1 + 1) & 511)];
+                    const float b0 = hdR_[(size_t) ((i1) & 511)], b1 = hdR_[(size_t) ((i1 + 1) & 511)];
+                    vL = a0 + (a1 - a0) * fr; vR = b0 + (b1 - b0) * fr;
+                }
+                const float pan = H.pan[k] * pr_.width;
+                aL += vL * H.g[k] * std::sqrt (0.5f * (1.0f - pan)) * 1.41421356f;
+                aR += vR * H.g[k] * std::sqrt (0.5f * (1.0f + pan)) * 1.41421356f;
+                gs += H.g[k] * H.g[k];
+            }
+            const float rms = std::sqrt (gs);
+            const float nrm = 1.0f / (rms > 1.0f ? rms : 1.0f);
+            dwL = aL * nrm; dwR = aR * nrm;
+        }
+        hdW_ = (hdW_ + 1) & 511;
+
+        // ── AZIMUTH is a property of the HEAD, so it belongs on everything the head reads,
+        //    not only on the repeats. It was loop-only, i.e. dead with the echo off — which
+        //    is one of the three CharSpec fields that made Character feel weak.
+        if (C.azi > 0.001f)
+        {
+            const float aA = onePole (juceClampf (16000.0f * (1.0f - 0.92f * C.azi), 700.0f, 18000.0f));
+            aziD_ += aA * (dwL - aziD_);
+            dwL = dwL + (aziD_ - dwL) * C.azi;
+        }
+        wetL += dwL; wetR += dwR;
+        // the shed oxide itself — slightly decorrelated so it sits in the room, not the middle
+        if (crackle_ != 0.0f) { wetL += crackle_; wetR += crackle_ * 0.82f; }
+
+        // ── THE FLOOR TOP-UP (and why it has to exist) ───────────────────────────────
+        // Max: "the hiss is supposed to be more prominent." On CASSETTE that was a pure
+        // trim and it is done — hissK carries it, hissTop is 0, the approved voicing is
+        // untouched. On STUDIO it is arithmetically impossible through the machine alone:
+        // WireMachine's hiss amount ALSO sets dropoutProb = 0.0004*amount^2 per sample, so
+        // the +24.5 dB of floor he is asking for costs x91 the dropouts — 1273/sec, which
+        // is not a noise floor, it is the fb367 gargle he already rejected, squared.
+        //   LAW (fb367, applied structurally): when one knob drives two things, you cannot
+        //   calibrate one of them by turning the knob. Split the jobs. The knob drives the
+        //   machine at a DROPOUT-SAFE amount and drives the floor separately here.
+        // This is a level trim voiced to the wire's own pink-plus-rumble colour — the
+        // CHARACTER (wow, saturation, the dropouts themselves) is still the shipped machine,
+        // untouched. Gated like everything else, so a silent tape is silent.
+        if (V.hissTop > 0.0f)
+        {
+            const float amp = V.hissTop * C.noise
+                            * std::pow (juceClampf (hissGlide_, 0.0f, 1.0f), 0.50f) * gate_;
+            if (amp > 1.0e-7f)
+            {
+                const float wn = (float) (uni() * 2.0 - 1.0);
+                ntA_ += 0.28f  * (wn   - ntA_);      // the top, ~2.3 kHz
+                ntB_ += 0.045f * (ntA_ - ntB_);      // the body
+                ntR_ += 0.004f * (wn   - ntR_);      // motor rumble
+                const float n = ntA_ * 0.10f + ntB_ * 1.05f + ntR_ * 2.90f;
+                wetL += n * amp;
+                wetR += (n * 0.72f + (float) (uni() * 2.0 - 1.0) * 0.06f) * amp;
+            }
+        }
+
+        // ── TRANSPORT COMPRESSION. A cassette PUMPS: its own level compression is a big
+        // part of why a dubbed tape sounds the way it does, and a wire deck barely does it
+        // at all. Voiced per machine, so it is one more thing telling the two apart.
+        // ⚠️ C.comp was ALSO loop-only, so the stock's own pumping did nothing with the
+        // echo off. It is the machine's compression AND the tape's, together, on everything.
+        const float compAmt = V.comp + C.comp * 1.35f;
+        if (compAmt > 0.01f)
+        {
+            const float mx = std::max (std::fabs (wetL), std::fabs (wetR));
+            tcEnv_ += (mx > tcEnv_ ? 0.004f : 0.00035f) * (mx - tcEnv_);
+            const float g = 1.0f / (1.0f + tcEnv_ * 9.0f * compAmt);
+            wetL *= g; wetR *= g;
+        }
 
         // ── FLUTTER: the fast half of tape speed instability, on its own control ─────
         // Max: "they have different flutters." Wow is the machine's own slow wander (0.6-2 Hz,
@@ -414,22 +625,41 @@ public:
         flL_[(size_t) flW_] = wetL; flR_[(size_t) flW_] = wetR;
         if (pr_.flutter > 0.0005f)
         {
-            const int mchF = machineFor (pr_.type);
-            // 🔑 fb367 — THAT WAS WOW, NOT FLUTTER. Max: "flutter isn't doing what it's
-            // supposed to do. It's not flutter."  Right: 1.1 ms at 9.7 Hz is 6.7% of pitch
-            // deviation, which is a seasick warble, and against the dry it just reads as
-            // chorus. Flutter is FAST and SHALLOW — the 10-20 Hz band plus the scrape the tape
-            // makes against the guides well above it, and it is IRREGULAR, not a metronome.
-            const float f1 = (mchF == 1 ? 17.5f : 13.5f);
-            const float f2 = (mchF == 1 ? 78.0f : 61.0f);       // scrape flutter
-            flPh_ += (float) (1.0 / sr_); if (flPh_ > 1.0e6f) flPh_ -= 1.0e6f;
-            if (--flJit_ <= 0) { flJit_ = (int) (sr_ * (0.07 + 0.22 * uni())); flJitV_ = (float) (uni() * 2.0 - 1.0); }
-            flJitS_ += 0.0006f * (flJitV_ - flJitS_);
-            const float m = std::sin (6.2831853f * f1 * (1.0f + flJitS_ * 0.35f) * flPh_) * 0.62f
-                          + std::sin (6.2831853f * f2 * flPh_ + 1.1f) * 0.24f
-                          + flJitS_ * 0.14f;
-            const float depth = pr_.flutter * pr_.flutter * (float) (sr_ * 0.00030);  // → ±0.30 ms
-            const float d = depth * (1.0f + m) * 0.5f;
+            // 🔑🔑 fb368 — FLUTTER MUST NOT BE A SINE. Max: "the flutter sounds like Star Wars
+            // lasers. It's supposed to sound like flutter, like wow and flutter on a tape."
+            // Measured, and that is exactly what it was: fb367 modulated the delay with a
+            // 61-78 Hz "scrape" sinusoid, and FM of a 220 Hz tone at 61 Hz puts a sideband
+            // 29.7 dB under the carrier at 159 and 281 Hz — an inharmonic TONE beside every
+            // partial. That is a ring modulator wearing a tape badge.
+            //
+            //   LAW: periodic modulation at an audio-adjacent rate makes DISCRETE SIDEBANDS,
+            //   and discrete sidebands are a laser. Real flutter is irregular, so it has to
+            //   come from BAND-LIMITED NOISE — noise smears the sidebands into a haze, which
+            //   is precisely what a real transport does to a sustained note.
+            //
+            // The band is two one-poles (fast lowpass minus slow lowpass), voiced per machine:
+            // a shell flutters fast and tight (5-22 Hz), a wire deck slow and wide (3-13 Hz).
+            // TWO poles on the top edge, not one. A single 6 dB/oct lowpass at 22 Hz is
+            // still only 11 dB down at 78 Hz, and that skirt is audible as hair on the
+            // note — measured at −45 dB. Cascading it gives 12 dB/oct and puts the
+            // modulation where flutter actually lives.
+            const float w = (float) (uni() * 2.0 - 1.0);
+            flLpF_ += kFlF_ * (w - flLpF_);
+            flLpF2_ += kFlF_ * (flLpF_ - flLpF2_);
+            flLpS_ += kFlS_ * (flLpF2_ - flLpS_);
+            const float m = juceClampf ((flLpF2_ - flLpS_) * 11.5f, -1.0f, 1.0f);
+            // taper: real at 25%, dramatic at 100% (the no-plateaus law), and EXACTLY zero
+            // at 0 so the path stays bit-identical to not having it.
+            const float amt = pr_.flutter * (0.35f + 0.65f * pr_.flutter);
+            const float depth = amt * V.flDepth * (float) (sr_ * 0.00055);
+            // ⚠️ AND THE STOCK'S OWN WANDER RIDES HERE TOO. C.wander used to scale only
+            // wowGen(), which modulates readPos_ — i.e. the ECHO. With the echo off (the
+            // default) a Chewed tape wandered exactly as much as a Fresh one: not at all.
+            // A slow smoothed-noise term, so a worn stock genuinely will not hold pitch.
+            flWan_ += kFlWan_ * ((float) (uni() * 2.0 - 1.0) - flWan_);
+            const float wan = flWan_ * 7.0f * C.wander * (float) (sr_ * 0.00055);
+            const float d = juceClampf (depth * (1.0f + m) + wan * 0.5f + std::fabs (wan) * 0.5f,
+                                        0.0f, 900.0f);
             const float rd = (float) flW_ - d;
             const int i1 = (int) std::floor (rd); const float fr = rd - (float) i1;
             auto rdl = [&] (const std::vector<float>& b)
@@ -537,9 +767,18 @@ private:
         // saturation."  LAW: a shared parameter can drive more than one thing, and
         // compensating one of them over-drives the other. So the two machines are
         // calibrated SEPARATELY — processSample takes both sets anyway.
+        // fb368 — "the hiss is supposed to be more prominent." Raised on both machines, and
+        // the knob taper pulled flatter so the bottom of the travel is a real noise floor
+        // rather than silence. The two numbers stay SEPARATE for the one-knob-two-jobs law
+        // above: the cassette's amount buys noise only, the wire's also buys dropouts, so
+        // they cannot share a trim. Wire's ceiling is set by where its dropout rate stops
+        // being tape and starts being a stutter — measured, not guessed.
         const float hk = juceClampf (hissGlide_, 0.0f, 1.0f);
-        const float cassHiss = juceClampf (4.2f * C.noise * std::pow (hk, 0.60f) * gate, 0.0f, 4.5f);
-        const float wireHiss = juceClampf (1.1f * C.noise * std::pow (hk, 0.75f) * gate, 0.0f, 1.3f);
+        const float cassHiss = juceClampf (6.4f * C.noise * std::pow (hk, 0.50f) * gate, 0.0f, 8.0f);
+        // ⚠️ CAPPED AT 0.75, and that cap is the DROPOUT budget, not a noise choice:
+        // Chewed's noise field alone would take the amount past 2.0, which is 55
+        // dropouts/sec. Level comes from hissTop; the cap keeps the gargle impossible.
+        const float wireHiss = juceClampf (0.95f * C.noise * std::pow (hk, 0.62f) * gate, 0.0f, 0.75f);
         const float sat   = juceClampf (pr_.p2 * C.sat, 0.0f, 1.0f);
         const float mWow  = pr_.p1;
         const float tilt  = juceClampf ((pr_.p3 * 2.0f - 1.0f) + (C.hf - 1.0f) * 0.5f, -1.0f, 1.0f);
@@ -592,29 +831,75 @@ private:
     // has drop = 0.00 — so on a fresh tape the whole knob multiplied by ZERO. Age is the AGE
     // MASTER: it now brings its own dropouts, its own level walk and its own extra HF loss,
     // and the formulation only makes it worse. A fresh tape played a thousand times is worn.
-    void agedropout (const CharSpec& C) noexcept
+    // 🔑🔑 fb368 — AGE HAS TO SOUND BROKEN, NOT FILTERED. Max, twice: "the age is supposed
+    // to sound more broken up. It doesn't sound broken up. The age just sounds like an EQ."
+    // Measured at fb367 and he is exactly right — Age 50% produced ZERO dropout events in
+    // seven seconds and 3.19 dB of spectral change, so the entire bottom half of the knob
+    // WAS a tone control and nothing else. Three changes, none of them EQ:
+    //   1. the events start EARLY and get dense (~1/s at the 15% default, ~5/s at 100%,
+    //      ~14/s on Chewed) instead of appearing only past 90%
+    //   2. they are ABRUPT (1.5 ms in, 45 ms out) and DEEP (to −30 dB) and they take the
+    //      TOP with them — that coupling lives on aLP in process(), and it is the thing
+    //      that makes a dropout sound like the tape ducking under water
+    //   3. CRACKLE — shedding oxide is impulsive. A tone control cannot make that sound,
+    //      and it is most of what "a ruined tape" actually is.
+    void agedropout (const CharSpec& C, float gate) noexcept
     {
-        const float rate = (0.85f + C.drop) * pr_.age;   // Age 100% must DROP OUT, not dip
-        if (rate <= 0.0005f) { dropEnv_ += 0.004f * (1.0f - dropEnv_); return; }
+        const float rate = juceClampf ((0.55f + C.drop) * std::pow (pr_.age, 0.75f), 0.0f, 1.6f);
+        if (rate <= 0.0005f)
+        {
+            dropEnv_ += 0.004f * (1.0f - dropEnv_);
+            crackle_ = 0.0f; crackleEnv_ = 0.0f;
+            return;
+        }
+
+        // ── the dropout events themselves
+        if (dropHold_ > 0) { if (--dropHold_ == 0) dropTgt_ = 1.0f; }
         if (--dropTimer_ <= 0)
         {
-            dropTimer_ = (int) (sr_ * (0.04 + 1.9 * (1.0 - juceClampf (rate, 0.0f, 0.98f)) * (0.25 + uni())));
-            dropTgt_ = 1.0f - (float) uni() * 0.92f * juceClampf (rate, 0.0f, 1.0f);
+            dropTimer_ = (int) (sr_ * (1.0 / (0.1 + 9.0 * (double) rate)) * (0.30 + 1.40 * uni()));
+            // sqrt-weighted so most events are shallow scuffs and a few are real holes
+            dropTgt_  = 1.0f - (float) std::sqrt (uni()) * 0.97f
+                             * juceClampf (0.35f + rate, 0.0f, 1.0f);
+            dropHold_ = (int) (sr_ * (0.004 + 0.060 * uni()));   // 4-64 ms of hole
         }
-        // recover faster than it drops — a shed patch is a dip, not a gate
-        dropEnv_ += (dropTgt_ < dropEnv_ ? 0.0025f : 0.0006f) * (dropTgt_ - dropEnv_);
+        // ABRUPT in (1.5 ms), lingering out (45 ms) — a shed patch, not a fader move
+        dropEnv_ += (dropTgt_ < dropEnv_ ? 0.0139f : 0.00046f) * (dropTgt_ - dropEnv_);
+
+        // ── CRACKLE: sparse impulsive bursts. Gated by presence, so a silent tape is
+        //    silent (the fb325 nothing-free-runs law) — this is a defect, not a drone.
+        if (uni() < (double) (0.00022f * rate * rate) * (double) gate)
+            // scaled to the INPUT, not absolute: a fixed 0.05-0.21 tick is -26 dBFS, which
+            // is as loud as the music and reads as a POP. Oxide crackle rides the signal.
+            crackleEnv_ = (0.55f + 1.85f * (float) uni()) * juceClampf (inEnv_, 0.0f, 0.5f);
+        crackleEnv_ *= 0.9975f;                                  // ~8 ms tick
+        crackle_ = (crackleEnv_ > 1.0e-5f)
+                 ? crackleEnv_ * (float) (uni() * 2.0 - 1.0) * gate : 0.0f;
     }
 
     // ONE playback head, five copies of its state (4 heads + the direct read).
     // Gap loss, head bump and the oxide dropout all live here — so they colour
     // everything read off the tape, and COMPOUND per repeat for free, because the
     // feedback is taken from an already-played tap and recorded again.
-    float playHead (float x, int slot, int ch, float aLP, bool doBump,
-                    float aB, float bg) noexcept
+    float playHead (float x, int slot, int ch, float aLP, float aHP,
+                    bool doBump, float bg) noexcept
     {
         float& lp = lossT_[slot][ch];
-        lp += aLP * (x - lp); float y = lp;
-        if (doBump) { float& bp = bumpT_[slot][ch]; bp += aB * (y - bp); y += bp * bg; }
+        lp += aLP * (x - lp); float y = lp;                 // gap loss / bandwidth
+        float& lp2 = lossT2_[slot][ch];
+        lp2 += aLP * (y - lp2); y = lp2;                    // ...and it is STEEP
+        if (lpN3_) { float& lp3 = lossT3_[slot][ch]; lp3 += aLP * (y - lp3); y = lp3; }
+        float& hp = hpT_[slot][ch];
+        hp += aHP * (y - hp); y -= hp;                      // the track's low limit
+        if (doBump)
+        {   // TPT state-variable bandpass, added back — a real resonance with Q
+            float& ic1 = bp1_[slot][ch]; float& ic2 = bp2_[slot][ch];
+            const float v3 = y - ic2;
+            const float v1 = bpA1_ * ic1 + bpA2_ * v3;
+            const float v2 = ic2 + bpA2_ * ic1 + bpA3_ * v3;
+            ic1 = 2.0f * v1 - ic1; ic2 = 2.0f * v2 - ic2;
+            y += v1 * bg;
+        }
         return y * dropEnv_ * walkG_;
     }
 
@@ -664,8 +949,9 @@ private:
     TapeProcessor tapeL_, tapeR_;
 
     std::vector<float> ringL_, ringR_, flL_, flR_;
-    int flW_ = 0; float flPh_ = 0.0f;
-    int flJit_ = 0; float flJitV_ = 0.0f, flJitS_ = 0.0f;
+    int flW_ = 0;
+    float flLpF_ = 0.0f, flLpF2_ = 0.0f, flLpS_ = 0.0f;     // the flutter noise band (fast LP − slow LP)
+    float kFlF_ = 0.002f, kFlS_ = 0.0005f;
     int    mask_ = 0;
     long long wr_ = 0;
     double readPos_ = 0.0;
@@ -678,10 +964,20 @@ private:
     float  wowA_ = 0.0f, wowB_ = 0.0f, wowC_ = 0.0f, wowWalk_ = 0.0f;
     int    jumpHold_ = 0;
 
-    float  lossT_[kHeads + 1][2] = {}, bumpT_[kHeads + 1][2] = {};
-    float  hpL_ = 0.0f, hpR_ = 0.0f, aziL_ = 0.0f;
-    float  dropEnv_ = 1.0f, dropTgt_ = 1.0f, compEnv_ = 0.0f;
-    int    dropTimer_ = 0, walkTimer_ = 0;
+    float  lossT_[kHeads + 1][2] = {}, lossT2_[kHeads + 1][2] = {}, lossT3_[kHeads + 1][2] = {};
+    float  hpT_[kHeads + 1][2] = {};
+    bool   lpN3_ = true;
+    float  bp1_[kHeads + 1][2] = {}, bp2_[kHeads + 1][2] = {};   // head-bump SVF state
+    float  bpA1_ = 0.0f, bpA2_ = 0.0f, bpA3_ = 0.0f;
+    int    bumpCoefCtr_ = 0;
+    float  hpL_ = 0.0f, hpR_ = 0.0f, aziL_ = 0.0f, aziD_ = 0.0f;
+    float  hdL_[512] = {}, hdR_[512] = {};   // the head STACK's own short line
+    int    hdW_ = 0;
+    float  flWan_ = 0.0f, kFlWan_ = 0.00008f;
+    float  dropEnv_ = 1.0f, dropTgt_ = 1.0f, compEnv_ = 0.0f, tcEnv_ = 0.0f;
+    float  crackle_ = 0.0f, crackleEnv_ = 0.0f;
+    float  ntA_ = 0.0f, ntB_ = 0.0f, ntR_ = 0.0f;   // the floor top-up's colour
+    int    dropTimer_ = 0, walkTimer_ = 0, dropHold_ = 0;
     float  walk_ = 0.0f, walkTgt_ = 0.0f, walkG_ = 1.0f;
 
     float  inEnv_ = 0.0f, outEnv_ = 0.0f, duckEnv_ = 0.0f, gate_ = 0.0f, echoEnv_ = 0.0f;
