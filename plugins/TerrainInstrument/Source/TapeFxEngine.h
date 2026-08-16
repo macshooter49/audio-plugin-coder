@@ -17,7 +17,7 @@
 //  So the CHARACTER is not reimplemented. This engine owns a TapeProcessor per
 //  channel — the identical StudioMachine / CassetteMachine / WireMachine that the
 //  front page has always used, driven by the identical three controls each machine
-//  exposes (Studio: Sculpt/Weave/Tilt · Cassette + Wire: Wow/Saturate/Hiss). Type
+//  exposes (Wow / Saturate / Hiss — both machines, since fb367 retired the Sculptor). Type
 //  switching rides TapeProcessor's own 75 ms crossfade, so the fb345 char-switch
 //  fade law is honoured by construction rather than re-derived.
 //
@@ -38,8 +38,8 @@
 //
 //  🔑 THE TRANSPORT IS A REAL TRANSPORT. readPos_ advances at `speed`, not at 1.
 //  That single fact buys three things honestly instead of faking them:
-//    · Stop is a real tape stop — the pitch falls as the capstan slows, because the
-//      read head genuinely decelerates. Motor sets how long the flywheel takes.
+//    · (fb366 retired Stop and Motor — the transport still advances at `speed`, which is
+//      what makes the two points below true, but there is no user-facing spin-down.)
 //    · Wow and flutter are a modulation of the read RATE, so they accumulate over
 //      repeats exactly as they do on tape (repeat 6 wobbles ~6× repeat 1).
 //    · The visualizer is not decorated with a sine — the reels are handed the real
@@ -125,7 +125,7 @@ public:
         float flDepth;  // flutter authority
         float comp;     // transport-level compression (a shell pumps, a wire does not)
         int   lpN;      // playback-head pole count — gap loss is STEEP, 6 dB/oct is not
-        float mgain;    // what level the MACHINE is driven at (see kMachineGain note)
+        float mgain;    // what level the MACHINE is driven at (see the note above)
     };
 
     static const Voice& voiceFor (int mch) noexcept
@@ -195,7 +195,7 @@ public:
 
     struct Params
     {
-        int   type      = 0;      // 0 Studio · 1 Cassette · 2 Wire · 3 Tube
+        int   type      = 0;      // 0 Studio (= WireMachine) · 1 Cassette
         int   character = 0;      // 0..7
         int   heads     = 0;      // 0..7
         float p1 = 0.0f, p2 = 0.0f, p3 = 0.0f;   // the machine's own three, 0..1
@@ -251,7 +251,7 @@ public:
         wr_ = 0;
         readPos_ = -(double) (sr_ * 0.38);
         speed_ = 1.0f; spinAcc_ = 0.0; packAcc_ = 0.0;
-        wowA_ = wowB_ = wowC_ = 0.0f; wowWalk_ = 0.0f; jumpHold_ = 0;
+        wowA_ = wowB_ = 0.0f; wowWalk_ = 0.0f; jumpHold_ = 0;
         for (int k = 0; k <= kHeads; ++k)
         { lossT_[k][0]=lossT_[k][1]=0.0f; lossT2_[k][0]=lossT2_[k][1]=0.0f;
           lossT3_[k][0]=lossT3_[k][1]=0.0f; hpT_[k][0]=hpT_[k][1]=0.0f;
@@ -320,7 +320,6 @@ public:
     //  clipped at 100 — the whole window inside the knob) while the wire, whose folder needs
     //  real level to fold, stays at x5. Output level is unaffected: the trim below divides by
     //  whatever gain went in.
-    static constexpr float kMachineGain = 5.0f;   // (kept for reference; see Voice::mgain)
 
     void process (float inL, float inR, float& outL, float& outR) noexcept
     {
@@ -721,8 +720,9 @@ public:
 
 private:
     // ── the machine: the SHIPPED character DSP, unchanged ────────────────────────
-    // Studio reads sculpt/weave/tilt; Cassette and Wire read wow/sat/hiss from their
-    // own slots. Hiss is scaled by the presence gate so a silent Tape is silent.
+    // Both machines read wow/sat/hiss from their OWN slots (TapeProcessor keeps two sets
+    // so they can be calibrated independently). Hiss is gated by input presence, so a
+    // powered, routed, silent Tape is silent.
     void machine (float inL, float inR, float& oL, float& oR,
                   const CharSpec& C, float gate) noexcept
     {
@@ -789,19 +789,14 @@ private:
     //    Wire chaotic with speed jumps. Returns a FRACTIONAL rate error.
     float wowGen (float wander) noexcept
     {
+        // fb370 sweep — machineFor() only ever returns 1 (Cassette) or 2 (Wire) since the
+        // Harmonic Sculptor stopped being a tape type in fb367, so the old mch==0 branch
+        // (Studio's Weave-driven wow) was unreachable. Removed rather than left to rot.
         const int   mch = machineFor (pr_.type);
-        const float amt = (mch == 0) ? (0.18f + 0.35f * pr_.p2)   // Studio: Weave
-                                          : pr_.p1;                    // Cassette/Wire: Wow
-        const float k = amt * wander;
+        const float k = pr_.p1 * wander;                 // both machines: the Wow knob
         const float dt = (float) (1.0 / sr_);
         wowA_ += dt; if (wowA_ > 1.0e6f) wowA_ -= 1.0e6f;
 
-        if (mch == 0)
-        {
-            const float w = std::sin (6.2831853f * 0.8f * wowA_) * 0.0011f
-                          + std::sin (6.2831853f * 5.5f * wowA_) * 0.00018f;
-            return w * k;
-        }
         if (mch == 1)
         {
             const float w = std::sin (6.2831853f * 0.62f * wowA_) * 0.0026f
@@ -929,7 +924,6 @@ private:
 
     double sr_ = 48000.0;
     Params pr_;
-    int lastType_ = -1;
 
     TapeProcessor tapeL_, tapeR_;
 
@@ -946,7 +940,7 @@ private:
     double spinAcc_ = 0.0, packAcc_ = 0.0;
     float  driveLin_ = 1.0f, trimLin_ = 1.0f;
 
-    float  wowA_ = 0.0f, wowB_ = 0.0f, wowC_ = 0.0f, wowWalk_ = 0.0f;
+    float  wowA_ = 0.0f, wowB_ = 0.0f, wowWalk_ = 0.0f;
     int    jumpHold_ = 0;
 
     float  lossT_[kHeads + 1][2] = {}, lossT2_[kHeads + 1][2] = {}, lossT3_[kHeads + 1][2] = {};
