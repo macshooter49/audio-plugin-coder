@@ -1234,13 +1234,9 @@ function rackVU(ctx, x, y, w2, h2, val, t, seed) {
    offsets, so left and right are equal by construction rather than by eye.
    ════════════════════════════════════════════════════════════════════════════ */
 
-/* The LED cluster, centred. drawIndicatorLights lays 3 lights from x at 6.5*sc
-   spacing, so the cluster is 2 gaps wide and centring means starting one gap left. */
-function rackLeds(ctx, w, h, t, wow, sat, hiss) {
-  var sc = Math.max(0.55, h / 110);
-  drawIndicatorLights(ctx, w / 2 - 6.5 * sc, h * 0.86, sc, t, wow, sat, hiss);
-}
-
+/* fb — the red/green/yellow cluster is GONE (Max). With it removed the whole
+   composition also moves to the vertical CENTRE of the core: it had been sitting
+   high to leave that strip free at the bottom. */
 /* ── 1. STUDIO — two reels, three-head block, VU pair. Symmetric about mx. ── */
 function drawStudioRack(ctx, w, h, t) {
   _vizWf = true;
@@ -1250,7 +1246,7 @@ function drawStudioRack(ctx, w, h, t) {
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
   var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.42, r = h * 0.26;
+  var mx = w / 2, cy = h * 0.50, r = h * 0.30;
   var spin = t * (1.15 + sat * 0.5);
   var wob = Math.sin(t * 4.3) * wow * h * 0.030 + Math.sin(t * 11.7) * wow * h * 0.012;
 
@@ -1260,7 +1256,7 @@ function drawStudioRack(ctx, w, h, t) {
   rackReel(ctx, mx + off, cy, r, -spin * 0.82, 3, lit);
 
   // tape path — one shape, mirrored. Control points are offsets from mx, not blends.
-  var hy = cy + r * 0.86 + wob, cxo = off * 0.52, hxo = off * 0.30;
+  var hy = cy + r * 0.74 + wob, cxo = off * 0.52, hxo = off * 0.30;
   ctx.beginPath();
   ctx.moveTo(mx - off + r, cy - r * 0.12);
   ctx.quadraticCurveTo(mx - cxo, hy, mx - hxo, hy);
@@ -1282,10 +1278,9 @@ function drawStudioRack(ctx, w, h, t) {
 
   // VU pair — mirrored about mx with an equal gap between them
   var vw = (F.x1 - F.x0) * 0.105, vh = h * 0.28, gp = h * 0.07;
-  rackVU(ctx, mx - gp / 2 - vw, h * 0.075, vw, vh, lit,       t, 0);
-  rackVU(ctx, mx + gp / 2,      h * 0.075, vw, vh, lit * 0.9, t, 2.4);
+  rackVU(ctx, mx - gp / 2 - vw, cy - vh - h * 0.10, vw, vh, lit,       t, 0);
+  rackVU(ctx, mx + gp / 2,      cy - vh - h * 0.10, vw, vh, lit * 0.9, t, 2.4);
 
-  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
 
@@ -1303,9 +1298,9 @@ function drawCassetteRack(ctx, w, h, t) {
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
   var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.40;
+  var mx = w / 2, cy = h * 0.50;
 
-  var sw = (F.x1 - F.x0) * 0.60, sh = h * 0.60;
+  var sw = (F.x1 - F.x0) * 0.60, sh = h * 0.70;
   var sx = mx - sw / 2, sy = cy - sh / 2;
 
   // shell
@@ -1393,7 +1388,6 @@ function drawCassetteRack(ctx, w, h, t) {
     }
   }
 
-  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
 
@@ -1411,7 +1405,7 @@ function drawWireRack(ctx, w, h, t) {
   var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
   var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.46, sr = h * 0.25;
+  var mx = w / 2, cy = h * 0.50, sr = h * 0.29;
   var spin = t * (2.1 + sat * 0.7);
   var off = (F.x1 - F.x0) / 2 - sr;
 
@@ -1437,7 +1431,10 @@ function drawWireRack(ctx, w, h, t) {
   });
 
   // guide pulleys, mirrored, that actually turn
-  var gpo = off * 0.52, gr = h * 0.075, gy = cy - sr * 0.32;
+  // THE WIRE RUNS ON THE CENTRE LINE (Max: "the wire needs to come down too").
+  // It used to sit at cy - sr*0.32, i.e. above the spool hubs; now the guides, the
+  // strand and the head block all share cy, so the path is dead level hub to hub.
+  var gpo = off * 0.52, gr = h * 0.075, gy = cy;
   [-1, 1].forEach(function (sgn) {
     var gx = mx + sgn * gpo;
     ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 6.2832);
@@ -1449,7 +1446,7 @@ function drawWireRack(ctx, w, h, t) {
   });
 
   // the head stack the wire is dragged across — the centre of the machine
-  var bw2 = (F.x1 - F.x0) * 0.20, bh2 = h * 0.30, by2 = gy - bh2 * 0.42;
+  var bw2 = (F.x1 - F.x0) * 0.20, bh2 = h * 0.34, by2 = gy - bh2;   // the block sits ON the wire
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(mx - bw2 / 2, by2, bw2, bh2, 1.5);
   else ctx.rect(mx - bw2 / 2, by2, bw2, bh2);
@@ -1476,7 +1473,7 @@ function drawWireRack(ctx, w, h, t) {
     var hx = mx - bw2 / 2 + bw2 * (q2 + 0.5) / 4;
     var fl = Math.max(0, Math.sin(t * 3.1 - q2 * 0.8));
     ctx.beginPath();
-    ctx.moveTo(hx, by2 + bh2 * 0.20); ctx.lineTo(hx, wireY(hx));
+    ctx.moveTo(hx, by2 + bh2 * 0.22); ctx.lineTo(hx, wireY(hx));
     ctx.strokeStyle = vH(0.24 + fl * 0.34); ctx.lineWidth = 0.5; ctx.stroke();
     ctx.beginPath(); ctx.arc(hx, wireY(hx), h * 0.026 + fl * h * 0.010, 0, 6.2832);
     ctx.fillStyle = 'rgba(183,148,255,' + (0.30 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
@@ -1484,7 +1481,7 @@ function drawWireRack(ctx, w, h, t) {
   }
 
   // the 12-position MODE selector, an even centred tick row (SS1.2)
-  var tn = 12, tw = (F.x1 - F.x0) * 0.40, tx0 = mx - tw / 2, ty = h * 0.115;
+  var tn = 12, tw = (F.x1 - F.x0) * 0.40, tx0 = mx - tw / 2, ty = h * 0.105;
   var selI = 3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5);
   for (var d = 0; d < tn; d++) {
     var dx = tx0 + tw * d / (tn - 1), on2 = (d === selI);
@@ -1494,7 +1491,6 @@ function drawWireRack(ctx, w, h, t) {
     ctx.lineWidth = on2 ? 1.1 : 0.5; ctx.stroke();
   }
 
-  rackLeds(ctx, w, h, t, wow, sat, hiss);
   ctx.restore(); _vizWf = false;
 }
 
