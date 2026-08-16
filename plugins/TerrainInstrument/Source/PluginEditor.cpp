@@ -5595,6 +5595,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         // and ONLY for instances actually in the chain (null otherwise), so the common case of one
         // granular is a few KB/s — far under the 40-80 KB/s fb342 flagged as the frame-drop line.
         js << "window.__grnVizPush=" << audioProcessor.getGranularVizJson() << ";";
+        // fb365 — THE TAPE CARDS RIDE THE SAME 60 Hz LANE. Max: "make sure the UI reacts of
+        // the audio… the audio has to come through the VU meter at the top." A tape card is a
+        // moving machine — reels turning, needles riding, heads firing — so a 15 Hz feed would
+        // read as the same sample-and-hold the granular waveform did at fb363. The payload is
+        // ~90 bytes per LIVE instance (null otherwise), far under the fb342 frame-drop line.
+        js << "window.__tpeVizPush=" << audioProcessor.getTapeVizJson() << ";";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

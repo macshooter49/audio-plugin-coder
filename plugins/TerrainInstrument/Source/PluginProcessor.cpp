@@ -682,6 +682,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
     buildPendingGranularEngines();   // fb362 — same message-thread contract
+    buildPendingTapeEngines();       // fb365 — ditto
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
     // the real mouse (Desktop) and detects the release itself. WebKit's event delivery
     // outside a window can never strand a cross-window drag, and screen coords are
@@ -3732,6 +3733,56 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
             }
         }
+
+        // ══ TAPE (fb365) — the fifth flagship, multi-instance from day ONE ══════════════════
+        // Max, 2026-08-15: "we already have DSP for cassette wire and studio so you can just do
+        // the same thing… they only have three buttons though, so there's only nine buttons in
+        // total for all of these. So you can put the three in the front… and then the rest of the
+        // stuff like time, repeats, and drive, you can put those in the back."
+        //
+        // Those nine are REAL and they already ship: Studio's Sculpt/Weave/Tilt drive the Harmonic
+        // Sculptor, Cassette's and Wire's Wow/Saturate/Hiss drive their own machines. They stay SIX
+        // separate params rather than three shared slots because that is how the shipped DSP is
+        // built — Studio's surface is genuinely a different surface, and Tilt is bipolar (0.5 =
+        // flat) where Hiss is not (0.18 = a floor). One shared slot would have to lie about one of
+        // them in the host's automation list and in its default.
+        //
+        // 🔑 Choice cardinality is frozen at birth (fb342/LAW C): Type declares EIGHT even though
+        // three machines exist today, because adding a ninth entry later would renumber every saved
+        // patch. The UI menu renders only the three that are real; the engine clamps.
+        {
+            const juce::StringArray tpeTypes { "Studio","Cassette","Wire",
+                                               "Reserved 4","Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+            const juce::StringArray tpeChars { "Fresh","Ferric","Chrome","Vintage","Worn","Chewed","Hot","Cold" };
+            const juce::StringArray tpeHeads { "Single","Dual","Triple","Quad","Spread","Swell","Ping","Cascade" };
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String p = (n == 1) ? juce::String ("SYN_TPE_")
+                                                : "SYN_TPE" + juce::String (n) + "_";
+                const juce::String d = (n == 1) ? juce::String ("Tape ")
+                                                : "Tape " + juce::String (n) + " ";
+                C (p + "TYPE",      d + "Type",      tpeTypes, 0);
+                C (p + "CHARACTER", d + "Character", tpeChars, 0);
+                C (p + "HEADS",     d + "Heads",     tpeHeads, 0);
+                C (p + "SYNCDIV",   d + "Sync Division", syncDiv, 10);   // Time, when Sync is lit
+                // FRONT — the machine's own three, per Type, plus Mix.
+                F (p + "WOW",    d + "Wow",    0.28f);   F (p + "SAT",   d + "Saturate", 0.40f);
+                F (p + "HISS",   d + "Hiss",   0.18f);   F (p + "SCULPT",d + "Sculpt",   0.35f);
+                F (p + "WEAVE",  d + "Weave",  0.30f);   F (p + "TILT",  d + "Tilt",     0.50f);
+                F (p + "MIX",    d + "Mix",    0.35f);
+                // BACK — 2 dropdowns (above) + 8 knobs, 4x2.
+                F (p + "TIME",   d + "Time",    0.45f);  F (p + "REPEATS", d + "Repeats", 0.30f);
+                F (p + "DRIVE",  d + "Drive",   0.25f);  F (p + "AGE",     d + "Age",     0.15f);
+                F (p + "MOTOR",  d + "Motor",   0.35f);  F (p + "BUMP",    d + "Bump",    0.30f);
+                F (p + "WIDTH",  d + "Width",   0.60f);  F (p + "DUCK",    d + "Duck",    0.00f);
+                for (auto& s : srcSuf) B (p + s, d + s, false);   // unrouted on arrival
+                B (p + "SYNC",   d + "Sync",   true);             // an echo wants to be in time
+                B (p + "STOP",   d + "Stop",   false);            // the tape-stop pill
+                B (p + "POWER",  d + "Power",  false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
     }
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
@@ -4182,6 +4233,139 @@ juce::String TerrainInstrumentAudioProcessor::getGranularVizJson()
     return out;
 }
 
+
+// ═══ fb365 — TAPE ═══════════════════════════════════════════════════════════════════════
+// Every one of the six instances resolves through the SAME loop and the SAME per-sample
+// routine — the fb350 pool law made structural, so a setter cannot go missing for duplicates
+// only the way the pooled delay's updateCoefficients() did.
+void TerrainInstrumentAudioProcessor::cacheTapeParams()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String g = (i == 0) ? juce::String ("SYN_TPE_")
+                                        : "SYN_TPE" + juce::String (i + 1) + "_";
+        auto& v = tpeRefs_[(size_t) i];
+        v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+        v.type=R(g+"TYPE"); v.chr=R(g+"CHARACTER"); v.heads=R(g+"HEADS"); v.syncdiv=R(g+"SYNCDIV");
+        v.mix=R(g+"MIX"); v.time=R(g+"TIME"); v.repeats=R(g+"REPEATS"); v.drive=R(g+"DRIVE");
+        v.age=R(g+"AGE"); v.motor=R(g+"MOTOR"); v.bump=R(g+"BUMP"); v.width=R(g+"WIDTH");
+        v.duck=R(g+"DUCK"); v.sync=R(g+"SYNC"); v.stop=R(g+"STOP");
+        // the six machine controls live in fixed slots; applyTpe picks the three the Type uses
+        v.p1=R(g+"WOW"); v.p2=R(g+"SAT"); v.p3=R(g+"HISS");
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        v.sculpt=R(g+"SCULPT"); v.weave=R(g+"WEAVE"); v.tilt=R(g+"TILT");
+    }
+}
+
+// MESSAGE THREAD ONLY (timerCallback). The audio thread sets tpeWantBuild_ and reads the
+// pointer; it never allocates. One instance is ~4 MB of loop plus three machines, so six
+// eager engines would be 25 MB for a rack that usually holds one.
+void TerrainInstrumentAudioProcessor::buildPendingTapeEngines()
+{
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        if (tpeWantBuild_[(size_t) i].load (std::memory_order_relaxed)
+            && tpePool_[(size_t) i] == nullptr)
+        {
+            auto e = std::make_unique<tw::TapeFxEngine>();
+            e->prepare (getSampleRate() > 0.0 ? getSampleRate() : 48000.0);
+            tpePool_[(size_t) i] = std::move (e);      // publish LAST — the audio thread reads this
+        }
+}
+
+// One tape instance, one sample. `inst0` is 0-based. Every instance runs this exact routine.
+void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = tpeRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kTpeSendBase + inst0)];
+    float& env = tpeEnv_[(size_t) inst0];
+
+    if (powered) tpeWantBuild_[(size_t) inst0].store (true, std::memory_order_relaxed);
+    auto* eng = tpePool_[(size_t) inst0].get();
+    if (eng == nullptr) return;                       // until it exists the slot PASSES THROUGH
+
+    tw::TapeFxEngine::Params tp;
+    const int ty = (int) V.type->load();              // choice params read as the INDEX
+    const int wantType = (ty >= 0 && ty <= 2) ? ty : 0;   // the 5 reserved slots clamp to Studio
+
+    // The type RE-SEAT lives in the engine (TapeFxEngine::process) so the offline harness can
+    // measure it — see the note there. This just states the wish.
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;                     // click-free power: fade, never a hard cut
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+    tp.type = wantType;
+    tp.character = (int) V.chr->load();
+    tp.heads     = (int) V.heads->load();
+    // Studio's surface is Sculpt/Weave/Tilt; Cassette's and Wire's is Wow/Saturate/Hiss.
+    if (tp.type == 0) { tp.p1 = V.sculpt->load(); tp.p2 = V.weave->load(); tp.p3 = V.tilt->load(); }
+    else              { tp.p1 = V.p1->load();     tp.p2 = V.p2->load();    tp.p3 = V.p3->load(); }
+    tp.mix     = V.mix->load();
+    tp.repeats = V.repeats->load();
+    tp.drive   = V.drive->load();
+    tp.age     = V.age->load();
+    tp.motor   = V.motor->load();
+    tp.bump    = V.bump->load();
+    tp.width   = V.width->load();
+    tp.duck    = V.duck->load();
+    tp.stop    = V.stop != nullptr && V.stop->load() > 0.5f;
+
+    // Time: synced to the host grid when the Sync pill is lit (4 bars → 1/256, the rack-wide
+    // time law), otherwise free 10 ms → 8 s log. 8 s is where the loop buffer ends, so the
+    // readout shows the CLAMPED time rather than a division it can no longer honour.
+    float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+    const int sd = (int) V.syncdiv->load();
+    if (V.sync != nullptr && V.sync->load() > 0.5f && sd > 0)
+        tp.timeSec = juce::jlimit (0.010f, 8.0f, (60.0f / bpmNow) * fxDivMult (sd));
+    else
+        tp.timeSec = 0.010f * std::pow (800.0f, V.time->load());
+    eng->setParams (tp);
+
+    float wl = inL, wr = inR;
+    eng->process (inL, inR, wl, wr);
+    // the engine already applied Mix, so the power env is a straight crossfade to the input
+    outL = inL * (1.0f - env) + wl * env;
+    outR = inR * (1.0f - env) + wr * env;
+}
+
+// fb365 — the tape card feed. Rides the 60 Hz C++ PUSH (the fb354 law: a viz that must always
+// be visible never uses a native poll — a poll dies silently three ways here). Every number is
+// one the DSP just used, which is the whole point: the reels turn at the real transport speed
+// and STOP when it stops, the wobble is the wow the read head just applied, the VU needles are
+// the real output level and a head lights on its own tap.
+juce::String TerrainInstrumentAudioProcessor::getTapeVizJson()
+{
+    juce::String out = "[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) out << ",";
+        auto* e = tpePool_[(size_t) i].get();
+        const bool live = (e != nullptr) && tpeRefs_[(size_t) i].active != nullptr
+                       && tpeRefs_[(size_t) i].active->load() > 0.5f;
+        if (! live) { out << "null"; continue; }
+        const auto v = e->viz();
+        out << "{\"sp\":" << juce::String (v.spin, 3)
+            << ",\"pk\":" << juce::String (v.pack, 3)
+            << ",\"sd\":" << juce::String (v.speed, 3)
+            << ",\"w\":"  << juce::String (v.wow,  3)
+            << ",\"l\":"  << juce::String (v.lvl,  3)
+            << ",\"i\":"  << juce::String (v.in,   3)
+            << ",\"hs\":" << juce::String (v.hiss, 3)
+            << ",\"h\":[";
+        for (int k = 0; k < tw::TapeFxEngine::kHeads; ++k)
+        { if (k) out << ","; out << juce::String (v.head[k], 2); }
+        out << "]}";
+    }
+    out << "]";
+    return out;
+}
+
 void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
 {
     chainCount_ = 0;
@@ -4228,6 +4412,9 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
     // fb362 — GRANULAR, all six (instance 1 included; it has no legacy fixed rank to honour).
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (3, i + 1, grnRefs_[(size_t) i].active, grnRefs_[(size_t) i].rank);
+    // fb365 — TAPE, all six, same story.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (4, i + 1, tpeRefs_[(size_t) i].active, tpeRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -4330,6 +4517,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheFxInstanceParams();   // resolve every pooled instance's param pointers ONCE (strings legal here)
     cacheGranularParams();     // fb362 — same, for all six granular instances
     for (auto& g : grnPool_) if (g != nullptr) g->prepare (sampleRate);   // keeps the ring (same fs)
+    cacheTapeParams();         // fb365 — and all six tape instances
+    for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
     activeDlyType_ = -1; dlySwapping_ = false;
@@ -6728,6 +6917,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
         poolRouteAny_[(size_t) q] = gs > 0.0f;
     }
+    // fb365 — TAPE route pills, all six, same single loop. Max: "make sure it's per routable."
+    // This read is the whole of that promise: without it the pills render and NOTHING consumes
+    // them, which is not a dead control but a silent one — poolRouteAny_ stays false, so the
+    // device never powers on at all. That is the fb348 bug exactly, caught before it shipped.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const auto& tpR = tpeRefs_[(size_t) i];
+        const int   q2  = kTpeSendBase + i;
+        float ps = 0.0f;
+        for (int k = 0; k < 6; ++k)
+        {
+            const float pg = (tpR.src[k] != nullptr && tpR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteG_[(size_t) (q2 * 6 + k)] = pg; ps += pg;
+        }
+        poolRouteAny_[(size_t) q2] = ps > 0.0f;
+    }
 
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
@@ -6741,6 +6946,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if      (ce.kind == 0) g = (ce.inst == 1) ? hallRvbG_ : &poolRouteG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) g = (ce.inst == 1) ? dlyG_ : &poolRouteG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) g = &poolRouteG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
+            else if (ce.kind == 4) g = &poolRouteG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -6762,6 +6968,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if      (ce.kind == 0) dstArr = (ce.inst == 1) ? hallEntryG_ : &poolEntryG_[(size_t) ((2 * kFxExtra + ce.inst - 2) * 6)];
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
+            else if (ce.kind == 4) dstArr = &poolEntryG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -7396,6 +7603,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 1) { b = (ce.inst == 1) ? (dlyRouteActive_ ? &delaySendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (ce.inst - 2)] ? &poolSendBuf_[(size_t) (ce.inst - 2)] : nullptr); }
         else if (ce.kind == 3) { const int q = kGrnSendBase + ce.inst - 1;      // fb362 — granular
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 4) { const int q = kTpeSendBase + ce.inst - 1;      // fb365 — tape
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
@@ -8411,7 +8620,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         if (fm & (1u << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
 
                 float oL = inL, oR = inR;
-                if (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
+                if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
+                else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);   // fb365 — ditto
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);

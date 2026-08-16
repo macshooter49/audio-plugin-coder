@@ -26,6 +26,7 @@
 #include "SpectrumAnalyzer.h"
 #include "RollingCaptureBuffer.h"
 #include "GranularFxEngine.h"   // fb362 — the FX-rack granular
+#include "TapeFxEngine.h"       // fb365 — the FX-rack tape (the three shipped machines + a transport)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -685,6 +686,7 @@ public:
     juce::String      getDistortionCurvesJson() const;                 // fb328 — card boot + cross-window pull
     juce::String      getDistortionCurveVizJson();                     // fb328 — live core feed (curve+occ+bloom)
     juce::String      getGranularVizJson();                            // fb362 — granular cards, one entry per instance
+    juce::String      getTapeVizJson();                                // fb365 — tape cards, one entry per instance
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
@@ -1583,7 +1585,8 @@ private:
     // engine call can never exist for instance 1 and not for a duplicate — the bug class simply
     // cannot be written here. Granular is new, so there is no historical instance-1 ID to protect.
     static constexpr int kGrnSendBase  = 15;
-    static constexpr int kPoolSendCount = kGrnSendBase + ParameterIDs::kFxInstances;   // 21
+    static constexpr int kTpeSendBase  = kGrnSendBase + ParameterIDs::kFxInstances;    // 21 — fb365 tape
+    static constexpr int kPoolSendCount = kTpeSendBase + ParameterIDs::kFxInstances;   // 27
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;
     // per-extra-instance runtime state, mirroring the instance-1 members below
@@ -1686,6 +1689,25 @@ private:
     std::array<float, (size_t) ParameterIDs::kFxInstances> grnBlockPk_ {};   // wet peak this block
     void applyGrn (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void buildPendingGranularEngines();      // MESSAGE THREAD ONLY (timerCallback)
+
+    // fb365 — TAPE. Same shape as the granular pool above, for the same reasons: the
+    // params are eager (a param can never be born at runtime), the ENGINES are lazy on
+    // the message thread (one 8 s stereo loop is ~3 MB, and a rack usually holds one).
+    struct TpeRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* heads;
+        std::atomic<float>* syncdiv; std::atomic<float>* p1; std::atomic<float>* p2;
+        std::atomic<float>* p3; std::atomic<float>* mix; std::atomic<float>* time;
+        std::atomic<float>* repeats; std::atomic<float>* drive; std::atomic<float>* age;
+        std::atomic<float>* motor; std::atomic<float>* bump; std::atomic<float>* width;
+        std::atomic<float>* duck; std::atomic<float>* sync; std::atomic<float>* stop;
+        std::atomic<float>* sculpt; std::atomic<float>* weave; std::atomic<float>* tilt;
+        std::atomic<float>* src[6]; };
+    std::array<TpeRefs, (size_t) ParameterIDs::kFxInstances> tpeRefs_ {};
+    std::array<std::unique_ptr<tw::TapeFxEngine>, (size_t) ParameterIDs::kFxInstances> tpePool_;
+    std::array<std::atomic<bool>, (size_t) ParameterIDs::kFxInstances> tpeWantBuild_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> tpeEnv_ {};    // power fade, click-free
+    void applyTpe (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void buildPendingTapeEngines();          // MESSAGE THREAD ONLY (timerCallback)
     std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
     std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};
     std::array<std::atomic<int>,   (size_t) kFxExtra> rvbWantType_ {};   // audio→message: build me this
@@ -1706,6 +1728,7 @@ private:
     std::atomic<float> *dstActive_ = nullptr, *dstRank_ = nullptr;
     void cacheFxInstanceParams();                            // message thread (builds ID strings)
     void cacheGranularParams();                              // fb362 — same contract, all 6 instances
+    void cacheTapeParams();                                  // fb365 — ditto
     std::array<int, (size_t) kFxExtra> poolDstType_ {};       // active distortion mode per extra instance
     int   activeDlyType_ = -1;                      // 0=Digital 1=Tape 2=BBD 3=Diffuse; -1 = uninitialised
     bool  dlySwapping_ = false;                     // type change → wet dips through 0 (click-free swap)

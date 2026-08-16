@@ -7228,6 +7228,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-x:hover{ color:#EF4444; }
         #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
         #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+        .fxr-core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }   /* fb365 — the tape machines are canvas: a stretched SVG makes stroke weight depend on slope (fb356) */
         /* fb330 — the core curve wears the EXACT LFO line grammar (Max: "use the exact LFO lines
            for the main distortion VIZ") — same white, same purple glow as the card/LFO shaper.
            fb343 — glow now = the graduated halo trio (the filter re-rastered 1.2ms/frame on every
@@ -7534,6 +7535,311 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
             requestAnimationFrame(tick);
           })();
 
+          /* ═══ fb365 — THE TAPE CARD DRIVER ═══════════════════════════════════════════════════
+             Max: "make sure that the UI reacts of the audio… the audio has to come through the VU
+             meter at the top." So NOTHING in here free-runs off a clock. Every number these three
+             machines are drawn with is a number the DSP just used, pushed at 60 Hz from C++
+             (window.__tpeVizPush — the fb354 law: a viz that must always be visible rides the PUSH,
+             never a native poll, because a poll dies silently three ways in this plugin):
+
+               sp  the integrated transport angle in TURNS  → the reels spin at the real tape speed
+                                                              and STOP dead when you hit Stop
+               pk  supply→take-up transfer                  → the packs really do change size
+               sd  transport speed                          → brake lights / motion
+               w   the instantaneous wow the read head just applied  → the tape and the wire wobble
+                                                              by the actual modulation, not a sine
+               l   wet output level, i   input level        → the two VU needles
+               h[] per-head tap level                       → a head lights when IT is reading
+               hs  the gated noise floor                    → the grain on the picture
+
+             The card is CANVAS, not SVG like the other four cores. A rack core's SVG is stretched
+             non-uniformly, which makes stroke weight depend on a line's own slope (the fb356 law) —
+             fine for a plot, unworkable for three rotating machines. Canvas draws in device pixels,
+             so the stroke law does not apply and the geometry stays honest.
+             House laws kept: thin white strokes with purple ONLY where something is lit, idle = dim
+             / playing = bright (fb311), no per-frame shadowBlur / filters / gradients (fb342).   */
+          (function(){
+            var TDPR = Math.min(2, window.devicePixelRatio||1);
+            var _wf = false;
+            function tA(a){ return 'rgba(255,255,255,'+a+')'; }
+            function tP(a){ return 'rgba(183,148,255,'+a+')'; }
+            var ZERO = { sp:0, pk:0.5, sd:0, w:0, l:0, i:0, hs:0, h:[0,0,0,0] };
+
+            function bounds(w,h){ var p=Math.max(4,w*0.018); return {x0:p,x1:w-p,span:w-p*2,mid:w/2,cy:h/2}; }
+
+            /* a reel: flange, a pack whose RADIUS is how much tape is on this side, three NAB
+               cut-outs that carry the rotation. Pack ring, never a filled disc. */
+            function reel(ctx,cx,cy,r,ang,packR,lit){
+              ctx.beginPath(); ctx.arc(cx,cy,r,0,6.2832);
+              ctx.strokeStyle=tA(0.40); ctx.lineWidth=0.7; ctx.stroke();
+              ctx.beginPath(); ctx.arc(cx,cy,packR,0,6.2832);
+              ctx.strokeStyle=tP((0.30+0.34*lit).toFixed(2)); ctx.lineWidth=Math.max(1,r*0.085); ctx.stroke();
+              ctx.beginPath(); ctx.arc(cx,cy,packR-r*0.10,0,6.2832);
+              ctx.strokeStyle=tA((0.18+0.18*lit).toFixed(2)); ctx.lineWidth=0.5; ctx.stroke();
+              ctx.beginPath(); ctx.arc(cx,cy,r*0.17,0,6.2832);
+              ctx.strokeStyle=tA(0.55); ctx.lineWidth=0.6; ctx.stroke();
+              ctx.strokeStyle=tA((0.24+0.40*lit).toFixed(2)); ctx.lineWidth=Math.max(1.1,r*0.12);
+              for(var s=0;s<3;s++){ var a=ang+s*2.0944;
+                ctx.beginPath(); ctx.arc(cx,cy,r*0.30,a-0.52,a+0.52); ctx.stroke(); }
+            }
+
+            /* a moving-coil VU. `val` IS the live level — the needle is the audio. */
+            function vu(ctx,x,y,w2,h2,val){
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(x,y,w2,h2,1.5); else ctx.rect(x,y,w2,h2);
+              ctx.strokeStyle=tA(0.30); ctx.lineWidth=0.6; ctx.stroke();
+              var px=x+w2*0.5, py=y+h2*0.90, rr=Math.min(w2*0.40,h2*0.72);
+              var A0=Math.PI*1.18, SW=Math.PI*0.64, HOT=0.72;
+              ctx.beginPath(); ctx.arc(px,py,rr,A0,A0+SW*HOT);
+              ctx.strokeStyle=tA(0.24); ctx.lineWidth=0.6; ctx.stroke();
+              var need=Math.max(0,Math.min(1,val));
+              ctx.beginPath(); ctx.arc(px,py,rr,A0+SW*HOT,A0+SW);
+              ctx.strokeStyle=(need>HOT)?'rgba(234,120,90,0.85)':tA(0.18);
+              ctx.lineWidth=(need>HOT)?0.9:0.6; ctx.stroke();
+              ctx.strokeStyle=tA(0.20); ctx.lineWidth=0.5;
+              for(var k=0;k<=4;k++){ var a=A0+SW*k/4;
+                ctx.beginPath();
+                ctx.moveTo(px+Math.cos(a)*rr*0.82,py+Math.sin(a)*rr*0.82);
+                ctx.lineTo(px+Math.cos(a)*rr,py+Math.sin(a)*rr); ctx.stroke(); }
+              var na=A0+SW*need;
+              ctx.beginPath(); ctx.moveTo(px,py);
+              ctx.lineTo(px+Math.cos(na)*rr*0.94,py+Math.sin(na)*rr*0.94);
+              ctx.strokeStyle=tA(0.88); ctx.lineWidth=0.7; ctx.stroke();
+              ctx.beginPath(); ctx.arc(px,py,0.9,0,6.2832); ctx.fillStyle=tA(0.70); ctx.fill();
+            }
+
+            function roller(ctx,cx,ty,rr,ang,lit){
+              ctx.beginPath(); ctx.arc(cx,ty+rr,rr,0,6.2832);
+              ctx.strokeStyle=tA(0.38); ctx.lineWidth=0.6; ctx.stroke();
+              ctx.beginPath();
+              ctx.moveTo(cx-Math.cos(ang)*rr*0.66,ty+rr-Math.sin(ang)*rr*0.66);
+              ctx.lineTo(cx+Math.cos(ang)*rr*0.66,ty+rr+Math.sin(ang)*rr*0.66);
+              ctx.strokeStyle=tA((0.22+0.34*lit).toFixed(2)); ctx.lineWidth=0.5; ctx.stroke();
+            }
+
+            /* ── 1. STUDIO — big reels, one head block, the VU pair ─────────────────────
+               The three heads are FACES rising out of one block, not three loose bodies: three
+               identical shapes in a row read as blocks however they are mounted. */
+            function drawStudio(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, cy=B.cy;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              var lit=0.18+0.82*V.l;                       /* idle DIM, playing BRIGHT (fb311) */
+              var r=h*0.38, off=B.span/2-r, ang=-V.sp*6.2832;
+              var pkL=r*(0.56+0.20*V.pk), pkR=r*(0.56+0.20*(1-V.pk));
+              reel(ctx,mx-off,cy,r,ang,pkL,lit);
+              reel(ctx,mx+off,cy,r,ang*0.88,pkR,lit);
+
+              var hy=cy+r*0.28;
+              var bw=B.span*0.265, bx=mx-bw/2, hgap=bw/3, hw=bw*0.175;
+              var bTop=hy+h*0.050, bBot=h-h*0.085, BUMP=h*0.030;
+              function lift(x){ var b=0;
+                for(var i=-1;i<=1;i++){ var d=Math.abs(x-(mx+i*hgap))/(hw*0.66); if(d<1) b=Math.max(b,(1-d)*BUMP); }
+                return b; }
+              var gr=h*0.062, gx=bw/2+gr+1.5;
+              /* the ripple TRAVELS at the real transport angle and freezes when the tape does */
+              function tapeY(x){ var u=(x-(mx-gx))/(2*gx);
+                var env=Math.sin(Math.max(0,Math.min(1,u))*Math.PI);
+                var held=(Math.abs(x-mx)<bw*0.52)?0.22:1;
+                return hy-lift(x)+Math.sin(u*9.5+V.sp*6.2832)*env*held*V.w*h*0.075; }
+
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(bx,bTop,bw,bBot-bTop,1.8); else ctx.rect(bx,bTop,bw,bBot-bTop);
+              ctx.strokeStyle=tA(0.40); ctx.lineWidth=0.7; ctx.stroke();
+              ctx.strokeStyle=tA(0.22); ctx.lineWidth=0.5;
+              for(var dv=-1;dv<=1;dv+=2){ ctx.beginPath();
+                ctx.moveTo(mx+dv*hgap/2,bTop+1.6); ctx.lineTo(mx+dv*hgap/2,bBot-1.6); ctx.stroke(); }
+              ctx.beginPath();
+              ctx.moveTo(bx+1.4,bBot-(bBot-bTop)*0.30); ctx.lineTo(bx+bw-1.4,bBot-(bBot-bTop)*0.30);
+              ctx.strokeStyle=tA(0.18); ctx.stroke();
+              for(var e0=-1;e0<=1;e0+=2){ ctx.beginPath();
+                ctx.arc(mx+e0*(bw/2-h*0.042),bBot-(bBot-bTop)*0.15,1,0,6.2832);
+                ctx.strokeStyle=tA(0.30); ctx.lineWidth=0.45; ctx.stroke(); }
+
+              var exLx=mx-off+pkL*0.89, exLy=cy+pkL*0.45;
+              var exRx=mx+off-pkR*0.89, exRy=cy+pkR*0.45;
+              ctx.beginPath(); ctx.moveTo(exLx,exLy);
+              ctx.quadraticCurveTo(exLx+off*0.20,hy,mx-gx,hy);
+              for(var xx=mx-gx;xx<=mx+gx;xx+=2) ctx.lineTo(xx,tapeY(xx));
+              ctx.lineTo(mx+gx,hy);
+              ctx.quadraticCurveTo(exRx-off*0.20,hy,exRx,exRy);
+              ctx.strokeStyle=tA((0.44+0.40*lit).toFixed(2)); ctx.lineWidth=0.8; ctx.stroke();
+              roller(ctx,mx-gx,hy,gr, ang*2.2,lit);
+              roller(ctx,mx+gx,hy,gr,-ang*2.2,lit);
+
+              for(var i=-1;i<=1;i++){
+                var hx=mx+i*hgap, top=hy-BUMP;
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(hx-hw/2,top,hw,bTop-top+1.2,1.6); else ctx.rect(hx-hw/2,top,hw,bTop-top+1.2);
+                ctx.strokeStyle=tA(0.52); ctx.lineWidth=0.6; ctx.stroke();
+                /* the GAP is the only lit part, and it lights on ITS OWN head's tap level */
+                var fl=V.h[i<0?0:(i===0?1:3)]||0;
+                ctx.beginPath(); ctx.moveTo(hx,top+0.9); ctx.lineTo(hx,bTop-0.4);
+                ctx.strokeStyle=tP((0.16+0.74*fl).toFixed(2)); ctx.lineWidth=1.2; ctx.stroke();
+              }
+              /* left needle = what went IN, right needle = what came OFF the tape */
+              var vw=B.span*0.14, vh=h*0.34, vg=B.span*0.042, vy=h*0.065;
+              vu(ctx,mx-vg/2-vw,vy,vw,vh,V.i);
+              vu(ctx,mx+vg/2,   vy,vw,vh,V.l);
+            }
+
+            /* ── 2. CASSETTE — the shell at its real 1.58:1, packs bounded by the window ── */
+            function drawCassette(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, cy=B.cy;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              var lit=0.18+0.82*V.l;
+              var sh=h*0.82, sw=sh*1.58, sx=mx-sw/2, sy=cy-sh/2;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(sx,sy,sw,sh,2.5); else ctx.rect(sx,sy,sw,sh);
+              ctx.strokeStyle=tA(0.46); ctx.lineWidth=0.8; ctx.stroke();
+              var cs=Math.max(1.1,sh*0.030), ins=sw*0.062;
+              for(var i=-1;i<=1;i+=2) for(var j=-1;j<=1;j+=2){
+                ctx.beginPath(); ctx.arc(mx+i*(sw/2-ins),cy+j*(sh/2-ins*0.78),cs,0,6.2832);
+                ctx.strokeStyle=tA(0.32); ctx.lineWidth=0.5; ctx.stroke(); }
+              var lx=sx+sw*0.095, lw=sw*0.81, ly=sy+sh*0.075, lh=sh*0.31;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(lx,ly,lw,lh,1); else ctx.rect(lx,ly,lw,lh);
+              ctx.strokeStyle=tA(0.22); ctx.lineWidth=0.5; ctx.stroke();
+              ctx.strokeStyle=tA(0.15);
+              for(var l=1;l<=2;l++){ var lyy=ly+lh*(l/3);
+                ctx.beginPath(); ctx.moveTo(lx+lw*0.05,lyy); ctx.lineTo(lx+lw*0.95,lyy); ctx.stroke(); }
+              var wx=sx+sw*0.10, ww=sw*0.80, wy=sy+sh*0.455, wh2=sh*0.335;
+              ctx.beginPath();
+              if(ctx.roundRect) ctx.roundRect(wx,wy,ww,wh2,1.5); else ctx.rect(wx,wy,ww,wh2);
+              ctx.strokeStyle=tA(0.30); ctx.lineWidth=0.5; ctx.stroke();
+
+              var hy=wy+wh2*0.50, hr=wh2*0.20, pMax=wh2*0.44, pMin=wh2*0.24, ho=ww*0.245;
+              var ang=V.sp*6.2832*1.35;
+              var pkL=pMin+(pMax-pMin)*V.pk, pkR=pMin+(pMax-pMin)*(1-V.pk);
+              [[-1,pkL],[1,pkR]].forEach(function(o){
+                var cx2=mx+o[0]*ho;
+                ctx.beginPath(); ctx.arc(cx2,hy,o[1],0,6.2832);
+                ctx.strokeStyle=tP((0.26+0.32*lit).toFixed(2)); ctx.lineWidth=Math.max(0.9,wh2*0.05); ctx.stroke();
+                ctx.beginPath(); ctx.arc(cx2,hy,hr,0,6.2832);
+                ctx.strokeStyle=tA(0.46); ctx.lineWidth=0.6; ctx.stroke();
+                for(var q=0;q<6;q++){ var a=ang+q*1.0472;
+                  ctx.beginPath();
+                  ctx.moveTo(cx2+Math.cos(a)*hr*0.42,hy+Math.sin(a)*hr*0.42);
+                  ctx.lineTo(cx2+Math.cos(a)*hr*0.94,hy+Math.sin(a)*hr*0.94);
+                  ctx.strokeStyle=tA((0.28+0.46*lit).toFixed(2)); ctx.lineWidth=0.5; ctx.stroke(); }
+              });
+              var aL=mx-ho+pkL, aR=mx+ho-pkR;
+              var sag=wh2*0.14+V.w*wh2*0.42;               /* the sag IS the wow */
+              ctx.beginPath(); ctx.moveTo(aL,hy);
+              ctx.quadraticCurveTo((aL+aR)/2,hy+sag,aR,hy);
+              ctx.strokeStyle=tA((0.44+0.40*lit).toFixed(2)); ctx.lineWidth=0.75; ctx.stroke();
+
+              var oN=5, ow=sw*0.052, og=sw*0.052, tot=oN*ow+(oN-1)*og;
+              var oy=sy+sh*0.885, oh=sh*0.070;
+              for(var k=0;k<oN;k++){ var ox=mx-tot/2+k*(ow+og);
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(ox,oy,ow,oh,0.6); else ctx.rect(ox,oy,ow,oh);
+                ctx.strokeStyle=tA(0.26); ctx.lineWidth=0.45; ctx.stroke(); }
+
+              /* the peak ladders are a REAL meter: left = in, right = out */
+              var N=6, pad=B.span*0.032, inL=sx-pad, inR=sx+sw+pad, zone=inL-B.x0;
+              var bw=zone/(N+(N-1)*0.55), gp=bw*0.55, by=cy-h*0.185, bh=h*0.37;
+              var lev=[V.i,V.l];
+              for(var i2=0;i2<N;i2++){
+                var fill=(i2>N-3)?'rgba(234,120,90,0.80)':'rgba(183,148,255,0.62)';
+                var xs=[inL-(i2+1)*bw-i2*gp, inR+i2*(bw+gp)];
+                for(var e=0;e<2;e++){
+                  ctx.beginPath();
+                  if(ctx.roundRect) ctx.roundRect(xs[e],by,bw,bh,0.8); else ctx.rect(xs[e],by,bw,bh);
+                  if((i2/N)<lev[e]){ ctx.fillStyle=fill; ctx.fill(); }
+                  ctx.strokeStyle=tA(0.26); ctx.lineWidth=0.5; ctx.stroke(); }
+              }
+              ctx.strokeStyle=tA(0.22); ctx.lineWidth=0.5;
+              var lend=inL-N*bw-(N-1)*gp, rend=inR+(N-1)*(bw+gp)+bw;
+              ctx.beginPath(); ctx.moveTo(lend,by+bh+2.5); ctx.lineTo(inL,by+bh+2.5); ctx.stroke();
+              ctx.beginPath(); ctx.moveTo(inR,by+bh+2.5);  ctx.lineTo(rend,by+bh+2.5); ctx.stroke();
+            }
+
+            /* ── 3. WIRE — spools, two eyelets, a gantry holding four heads ON the strand ── */
+            function drawWire(ctx,w,h,V){
+              var B=bounds(w,h), mx=B.mid, cy=B.cy;
+              ctx.lineJoin='round'; ctx.lineCap='round';
+              var lit=0.18+0.82*V.l;
+              var sr=h*0.34, off=B.span/2-sr, ang=-V.sp*6.2832*1.75;
+              var pkL=sr*(0.54+0.22*V.pk), pkR=sr*(0.54+0.22*(1-V.pk));
+              reel(ctx,mx-off,cy,sr,ang,pkL,lit);
+              reel(ctx,mx+off,cy,sr,ang*0.88,pkR,lit);
+
+              var gx=off*0.55, gr=h*0.082, fw=B.span*0.245, fh=h*0.42;
+              var fL=mx-fw/2, fR=mx+fw/2;
+              var SUP=[mx-off+pkL,mx-gx,fL,fR,mx+gx,mx+off-pkR], AMP=[0.30,1.0,0.16,1.0,0.30];
+              function wireY(x){
+                for(var i=0;i<5;i++) if(x>=SUP[i]&&x<=SUP[i+1]){
+                  var u=(x-SUP[i])/Math.max(0.001,SUP[i+1]-SUP[i]);
+                  return cy+Math.sin(u*Math.PI)*AMP[i]*Math.sin(u*4.4+V.sp*6.2832)*V.w*h*0.085; }
+                return cy; }
+              ctx.beginPath(); ctx.moveTo(SUP[0],cy);
+              for(var xx=SUP[0];xx<=SUP[5];xx+=2) ctx.lineTo(xx,wireY(xx));
+              ctx.lineTo(SUP[5],cy);
+              ctx.strokeStyle=tA((0.46+0.42*lit).toFixed(2)); ctx.lineWidth=0.8; ctx.stroke();
+              [-1,1].forEach(function(sgn){ var ex=mx+sgn*gx;
+                ctx.beginPath(); ctx.arc(ex,cy,gr,0,6.2832);
+                ctx.strokeStyle=tA(0.40); ctx.lineWidth=0.6; ctx.stroke();
+                ctx.beginPath(); ctx.arc(ex,cy,gr*0.46,0,6.2832);
+                ctx.strokeStyle=tA((0.22+0.32*lit).toFixed(2)); ctx.lineWidth=0.5; ctx.stroke(); });
+
+              var rT=cy-fh/2, rB=cy+fh/2, rh=Math.max(1.5,h*0.026);
+              [[rT,fw],[rB-rh,fw*0.78]].forEach(function(o){
+                var ry=o[0], rw2=o[1];
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(mx-rw2/2,ry,rw2,rh,0.8); else ctx.rect(mx-rw2/2,ry,rw2,rh);
+                ctx.strokeStyle=tA(0.36); ctx.lineWidth=0.6; ctx.stroke();
+                for(var e=-1;e<=1;e+=2){ ctx.beginPath();
+                  ctx.arc(mx+e*(rw2/2-rh*0.9),ry+rh/2,0.9,0,6.2832);
+                  ctx.strokeStyle=tA(0.30); ctx.lineWidth=0.45; ctx.stroke(); } });
+
+              var pw=Math.max(4.4,fw*0.108), ph=Math.max(4.8,h*0.088);
+              for(var q=0;q<4;q++){
+                var hx=fL+fw*(q+0.5)/4, hyw=wireY(hx), fl=V.h[q]||0;   /* head q lights on ITS tap */
+                ctx.strokeStyle=tA((0.30+0.30*lit).toFixed(2)); ctx.lineWidth=0.7;
+                ctx.beginPath(); ctx.moveTo(hx,rT+rh); ctx.lineTo(hx,hyw-ph/2); ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(hx,hyw+ph/2); ctx.lineTo(hx,rB-rh); ctx.stroke();
+                ctx.beginPath();
+                if(ctx.roundRect) ctx.roundRect(hx-pw/2,hyw-ph/2,pw,ph,0.8); else ctx.rect(hx-pw/2,hyw-ph/2,pw,ph);
+                ctx.strokeStyle=tA((0.40+0.34*fl).toFixed(2)); ctx.lineWidth=0.55; ctx.stroke();
+                ctx.beginPath(); ctx.moveTo(hx,hyw-ph/2+1.0); ctx.lineTo(hx,hyw+ph/2-1.0);
+                ctx.strokeStyle=tP((0.18+0.72*fl).toFixed(2)); ctx.lineWidth=1.2; ctx.stroke();
+              }
+            }
+
+            var TDRAW={ 'Studio':drawStudio, 'Cassette':drawCassette, 'Wire':drawWire };
+            window.__tpeDraw=TDRAW;
+
+            function tick(){
+              if(window.__cardOnly) return requestAnimationFrame(tick);   /* fb342/fb90 guard */
+              try{
+                var feed=window.__tpeVizPush, rack=document.getElementById('fxr-rack');
+                if(rack){
+                  var cards=rack.querySelectorAll('.fxr-dev');
+                  for(var ci=0;ci<cards.length;ci++){
+                    var card=cards[ci], di=+card.getAttribute('data-dev'), dd=DEVS[di];
+                    if(!dd||dd.core!=='tape') continue;
+                    var cv=card.querySelector('.fxr-core[data-core="tape"] canvas'); if(!cv) continue;
+                    var r=cv.getBoundingClientRect();
+                    var cw=Math.max(1,Math.round(r.width)), chh=Math.max(1,Math.round(r.height));
+                    if(!r.width||!r.height) continue;
+                    if(cv.width!==cw*TDPR||cv.height!==chh*TDPR){ cv.width=cw*TDPR; cv.height=chh*TDPR; }
+                    /* THIS card's own machine — never querySelector-the-first (the fb349/fb350 trap) */
+                    var V=(feed&&feed.length)?feed[(dd.inst||1)-1]:null;
+                    if(!V||!V.h) V=ZERO;
+                    var fn=TDRAW[dd.type]||drawStudio;
+                    var ctx=cv.getContext('2d');
+                    ctx.clearRect(0,0,cv.width,cv.height);
+                    ctx.save(); ctx.scale(TDPR,TDPR);
+                    fn(ctx,cw,chh,V);
+                    ctx.restore();
+                  }
+                }
+              }catch(e){}
+              requestAnimationFrame(tick);
+            }
+            requestAnimationFrame(tick);
+          })();
+
           var CORES={
             reverb:function(){
               // fb360 — the grid now spans the SAME plot bounds as the distortion core (x 6.5 → 219.5),
@@ -7593,6 +7899,12 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                +'<line class="grn-head" x1="6.5" y1="8" x2="6.5" y2="70" stroke="var(--purple-400)" stroke-width="1.2" opacity="0"/>'
                +'</svg>';
             },
+            tape:function(){
+              /* fb365 — the three shipped machines, drawn in CANVAS and driven ENTIRELY by the
+                 60 Hz push (see THE TAPE CARD DRIVER above). A shell only: if the feed dies the
+                 card draws its idle machine rather than a blank box. */
+              return '<canvas></canvas>';
+            },
             saturate:function(){
               /* fb328 — the LIVE transfer curve (§5.8): path + occupancy driven by the
                  getDistortionCurveViz rAF poll — EVERY mode's real curve at the current knobs.
@@ -7616,6 +7928,33 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // built from CLONES of these, so the rack can hold several of the same device. Instance 1
           // keeps the historical SYN_RVB_*/SYN_DLY_*/SYN_DST_* IDs untouched (every preset still
           // loads); instances 2..6 get their IDs rewritten to the SYN_DLY2_* / SYN_DST2_* pool.
+          /* fb365 — the Tape front row is TYPE-UNIQUE (the fb287 law: every type shares the
+             chassis, its params belong to its character). These are the SAME nine controls the
+             front page has always had, three per machine, on their own params — not three shared
+             slots, because Tilt is bipolar (50 = flat) and Hiss is not (18 = a floor), and one
+             slot would have to lie about one of them in the host's automation list. */
+          var TPE_SETS={
+            'Studio'  :[['Sculpt',35,'SYN_TPE_SCULPT'],['Weave',30,'SYN_TPE_WEAVE'],['Tilt',50,'SYN_TPE_TILT']],
+            'Cassette':[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']],
+            'Wire'    :[['Wow',28,'SYN_TPE_WOW'],['Saturate',40,'SYN_TPE_SAT'],['Hiss',18,'SYN_TPE_HISS']]
+          };
+          function TPE_FRONT(type){
+            var set=TPE_SETS[type]||TPE_SETS['Studio'];
+            var k=set.map(function(x){ return {l:x[0],v:x[1],p:x[2]}; });
+            k.push({l:'Mix',v:35,p:'SYN_TPE_MIX'});
+            return k;
+          }
+          /* Swapping Type rebuilds the front row, KEEPING any value the new set shares with the
+             old one (Cassette->Wire is the same three params, so it must not reset them). */
+          function tpeApplyType(d,type){
+            var keep={}; (d.knobs||[]).forEach(function(k){ if(k&&k.p) keep[fxParamTail(k.p)]=k.v; });
+            d.type=type; d.knobs=TPE_FRONT(type);
+            var base=FX_PREFIX['tape'], pre=instPrefix('tape',d.inst||1);
+            d.knobs.forEach(function(k){
+              if(k.p&&k.p.indexOf(base)===0) k.p=pre+k.p.slice(base.length);
+              var t=fxParamTail(k.p); if(keep[t]!=null) k.v=keep[t];
+            });
+          }
           var DEV_TEMPLATES=[
             {name:'Reverb',core:'reverb',type:'Hall',types:['Hall','Room','Plate','Spring','Digital','Vintage','Basin','Shimmer','Convolution'],preset:'Cave',code:'rt 2.4s',on:false,pwrP:'SYN_RVB_POWER',tp:'SYN_RVB_TYPE',rp:['SYN_RVB_SRC_A','SYN_RVB_SRC_B','SYN_RVB_SRC_C','SYN_RVB_SRC_D','SYN_RVB_SRC_SUB','SYN_RVB_SRC_NOISE'],
              pills:[{t:'Mod',on:true},{t:'Freeze',on:false}],pp:['SYN_RVB_MOD','SYN_RVB_FREEZE'],route:[0,0,0,0,0,0],knobs:[{l:'Size',v:30,p:'SYN_RVB_SIZE'},{l:'Decay',v:55,p:'SYN_RVB_DECAY'},{l:'Tone',v:50,p:'SYN_RVB_TONE'},{l:'Mix',v:35,p:'SYN_RVB_MIX'}],
@@ -7661,15 +8000,32 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
              back:{d1:{k:'Character',v:'Clean',opts:['Clean','Tape','Cassette','Radio','Worn','Drift'],p:'SYN_GRN_CHARACTER'},
                    d2:{k:'Key',v:'Off',opts:['Off','Oct','5th','Chord','Maj','Min','Penta','—'],p:'SYN_GRN_KEY'},
                    knobs:[['Scan',50,'SYN_GRN_SCAN'],['Window',45,'SYN_GRN_WINDOW'],['Spray',18,'SYN_GRN_SPRAY'],['Pitch',50,'SYN_GRN_PITCH'],
-                          ['Detune',0,'SYN_GRN_DETUNE'],['Shape',50,'SYN_GRN_SHAPE'],['Width',60,'SYN_GRN_WIDTH'],['Freeze',0,'SYN_GRN_FREEZE']]}}
+                          ['Detune',0,'SYN_GRN_DETUNE'],['Shape',50,'SYN_GRN_SHAPE'],['Width',60,'SYN_GRN_WIDTH'],['Freeze',0,'SYN_GRN_FREEZE']]}},
+            // fb365 — TAPE, the fifth flagship. Max: "the three DSP that's on everyone just bring
+            // those up to the front… and put all that other shit in the back."  The front three
+            // are therefore PER TYPE, because the three shipped machines genuinely have different
+            // surfaces: Studio is the Harmonic Sculptor (Sculpt/Weave/Tilt), Cassette and Wire are
+            // Wow/Saturate/Hiss. Same chassis as every other card otherwise — same header, same
+            // 3+Mix front, same 2 pills, same 6 route pills, same back 2 dropdowns + 8 knobs 4x2.
+            {name:'Tape',core:'tape',type:'Studio',
+             types:['Studio','Cassette','Wire'],
+             preset:'Init',code:'',on:false,pwrP:'SYN_TPE_POWER',tp:'SYN_TPE_TYPE',
+             rp:['SYN_TPE_SRC_A','SYN_TPE_SRC_B','SYN_TPE_SRC_C','SYN_TPE_SRC_D','SYN_TPE_SRC_SUB','SYN_TPE_SRC_NOISE'],
+             pills:[{t:'Sync',on:true},{t:'Stop',on:false}],pp:['SYN_TPE_SYNC','SYN_TPE_STOP'],
+             route:[0,0,0,0,0,0],
+             knobs:TPE_FRONT('Studio'),
+             back:{d1:{k:'Character',v:'Fresh',opts:['Fresh','Ferric','Chrome','Vintage','Worn','Chewed','Hot','Cold'],p:'SYN_TPE_CHARACTER'},
+                   d2:{k:'Heads',v:'Single',opts:['Single','Dual','Triple','Quad','Spread','Swell','Ping','Cascade'],p:'SYN_TPE_HEADS'},
+                   knobs:[['Time',45,'SYN_TPE_TIME'],['Repeats',30,'SYN_TPE_REPEATS'],['Drive',25,'SYN_TPE_DRIVE'],['Age',15,'SYN_TPE_AGE'],
+                          ['Motor',35,'SYN_TPE_MOTOR'],['Bump',30,'SYN_TPE_BUMP'],['Width',60,'SYN_TPE_WIDTH'],['Duck',0,'SYN_TPE_DUCK']]}}
           ];
           // ═══ fb346 — THE DYNAMIC CHAIN (UI side) ═══════════════════════════════════════════════
           // DEVS is now the LIVE chain, not a fixed list: built from the _ACTIVE/_RANK params on
           // load, and mutated by the + menu / × / drag. It starts EMPTY — a fresh instance shows the
           // "Add Effects" panel (Max's spec), and the C++ side skips any device that is not active.
           var DEVS=[];
-          var FX_PREFIX={reverb:'SYN_RVB_',delay:'SYN_DLY_',saturate:'SYN_DST_',granular:'SYN_GRN_'};
-          var FX_MAXINST={reverb:6,delay:6,saturate:6,granular:6};   // fb352 — reverb duplicates too: its engines
+          var FX_PREFIX={reverb:'SYN_RVB_',delay:'SYN_DLY_',saturate:'SYN_DST_',granular:'SYN_GRN_',tape:'SYN_TPE_'};
+          var FX_MAXINST={reverb:6,delay:6,saturate:6,granular:6,tape:6};   // fb352 — reverb duplicates too: its engines
                                                           // are built LAZILY on the message thread —
                                                           // only the ONE its current type needs.
           // Rewrites every param ID in a cloned descriptor from SYN_DLY_* to SYN_DLY<inst>_*.
@@ -7943,6 +8299,20 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               var ms=50*Math.pow(320,v/100); return ms>=1000?(ms/1000).toFixed(1)+'s':Math.round(ms)+'m'; },
             /* Pitch — real semitones, and the knob STEPS to them (see the switch law below) */
             'granular|PITCH':function(v){ var st=Math.round((v/100*2-1)*24); return (st>0?'+':'')+st; },
+            /* ── fb365 TAPE ── Time is the LONGEST head, and with Sync lit the knob becomes a
+               division selector that DETENTS onto the 20 divisions (same as the granular
+               Window). Free range is the engine's own 10 ms x 800^t = 10 ms .. 8 s. */
+            'tape|TIME':function(v,d){
+              if(d&&d.pills&&d.pills[0]&&d.pills[0].on) return GRN_DIVS[grnDivIdx(v)];
+              var ms=10*Math.pow(800,v/100); return ms>=1000?(ms/1000).toFixed(2)+'s':(ms<10?ms.toFixed(1)+'m':Math.round(ms)+'m'); },
+            /* Repeats — loop gain. Past ~92 the loop gain passes 1.0 and it SINGS; say so. */
+            'tape|REPEATS':function(v){ return v>=92?'sing':Math.round(v)+'%'; },
+            /* Drive — dB, from the engine's own 26 * t^0.8 (the fb315 timidity law) */
+            'tape|DRIVE':function(v){ var db=26*Math.pow(v/100,0.8); return (db<10?db.toFixed(1):''+Math.round(db))+'dB'; },
+            /* Motor — the flywheel's spin-down time: 30 ms + 1.47 s * t^2 */
+            'tape|MOTOR':function(v){ var t=v/100, sec=0.030+1.470*t*t; return sec>=1?sec.toFixed(2)+'s':Math.round(sec*1000)+'m'; },
+            /* Tilt — Studio's third control is BIPOLAR: 50 is flat, not 50% of something */
+            'tape|TILT':function(v){ var t=Math.round(v-50); return t===0?'flat':(t>0?'+':'')+t; },
             /* Detune — a tape wobble in cents, not a random-interval scatter */
             'granular|DETUNE':function(v){ return Math.round(v)+'c'; },
             /* Decay — the cloud's sustain; percent reads fine, but say so */
@@ -7981,6 +8351,12 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // fb298 — surgically redraw JUST the delay Time knob's label (Sync toggle / division change) — no re-render, no reflow.
                     // fb363 — the Sync pill flips Window between a division and free ms; redraw JUST that
           // knob, surgically (the fixed-position law: nothing else may move or re-render).
+          function refreshTpeTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='tape')return;
+            var dev=rack.querySelector('.fxr-dev[data-dev="'+di+'"]'); if(!dev)return;
+            var bk=dev.querySelector('.fxr-dial[data-bk="Time"]'); if(!bk)return;
+            var v=45; if(dd.back&&dd.back.knobs) for(var i=0;i<dd.back.knobs.length;i++) if(dd.back.knobs[i][0]==='Time'){ v=dd.back.knobs[i][1]; break; }
+            bk.innerHTML=knobSVG(v, fxFmt('tape',dd.pfx+'TIME',v,dd));
+          }catch(e){} }
           function refreshGrnWindowKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='granular')return;
             var dev=rack.querySelector('.fxr-dev[data-dev="'+di+'"]'); if(!dev)return;
             var bk=dev.querySelector('.fxr-dial[data-bk="Window"]'); if(!bk)return;
@@ -8056,6 +8432,20 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             Shimmer:[{name:'Angel',k:[55,70,60,32],d1:'Angel'},{name:'Ice Cascade',k:[62,80,58,34],d1:'Cascade'}],
             Convolution:[{name:'Cathedral',k:[50,60,55,30],d1:'Cathedral'},{name:'Tight Room',k:[30,45,55,28],d1:'Room'}] };
           /* fb296 — DELAY factory presets per character (front Time/Fdbk/Tone/Mix + optional Sync/Ping pills) */
+          /* fb365 — Tape factory presets. Two per machine, and each one is a DIFFERENT machine
+             voicing rather than the same numbers relabelled: k[] is the front row for THAT type
+             (Sculpt/Weave/Tilt or Wow/Saturate/Hiss, then Mix), pl[] is Sync / Stop. */
+          var TPE_PRESETS={
+            Studio:[{name:'Slapback',k:[30,22,52,30],pl:[1,0]},
+                    {name:'Warm Bus',k:[52,18,58,100],pl:[1,0]},
+                    {name:'Long Throw',k:[38,44,46,42],pl:[1,0]}],
+            Cassette:[{name:'Walkman',k:[34,46,26,38],pl:[1,0]},
+                      {name:'Chewed Loop',k:[72,64,44,55],pl:[1,0]},
+                      {name:'Dub Room',k:[26,38,18,46],pl:[1,0]}],
+            Wire:[{name:'Broken Radio',k:[58,62,40,48],pl:[1,0]},
+                  {name:'Space Echo',k:[30,44,22,44],pl:[1,0]},
+                  {name:'Runaway',k:[80,74,52,60],pl:[1,0]}]
+          };
           var DLY_PRESETS={
             Digital:[{name:'Slap',k:[30,20,50,34],pl:[0,0]},{name:'Quarter Note',k:[60,45,52,32],pl:[1,0]},{name:'Ping Bounce',k:[45,62,48,36],pl:[1,1]}],
             Tape:[{name:'Vintage Echo',k:[52,58,40,34],d1:'Vintage'},{name:'Dub Space',k:[62,76,34,40],d1:'Warm'}],
@@ -8176,7 +8566,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           function openRvbPreset(dev,idx,pillEl){ try{
             if(rvbMenu){ closeRvbMenu(); return; }
             var d=DEVS[idx]; if(!d)return; var type=d.type,
-                pfx=(d.core==='delay'?'dly_':d.core==='saturate'?'dst_':d.core==='granular'?'grn_':'rvb_'),   /* fb363 — granular gets its OWN preset folder */
+                pfx=(d.core==='delay'?'dly_':d.core==='saturate'?'dst_':d.core==='granular'?'grn_':d.core==='tape'?'tpe_':'rvb_'),   /* fb363 — granular gets its OWN preset folder */
                 // fb342 — C++ tiPresetDir keeps ONLY a-z from the id, so 'Diode 1'/'Diode 2'
                 // would both file under 'dstdiode' and cross-list each other's user presets.
                 slug=(d.core==='saturate'&&({'Diode 1':'diodeone','Diode 2':'diodetwo'})[type])||type.toLowerCase(),
@@ -8207,7 +8597,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 var dv=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'); if(dv){ var bkv=dv.querySelector('.fxr-bk-sel .fxr-bk-v'); if(bkv&&bkv.firstChild) bkv.firstChild.nodeValue=sp; var bnat=dv.querySelector('.fxr-bk-native'); if(bnat) bnat.value=sp; }
                 setPillName(idx,sp); closeRvbMenu(); }); });
             }
-            var fac=((d.core==='delay'?DLY_PRESETS:d.core==='saturate'?DST_PRESETS:d.core==='granular'?GRN_PRESETS:RVB_PRESETS)[type]||[]); if(fac.length){ sect('Factory'); fac.forEach(prow); }   /* fb342 — three-way · fb363 — four */
+            var fac=((d.core==='delay'?DLY_PRESETS:d.core==='saturate'?DST_PRESETS:d.core==='granular'?GRN_PRESETS:d.core==='tape'?TPE_PRESETS:RVB_PRESETS)[type]||[]); if(fac.length){ sect('Factory'); fac.forEach(prow); }   /* fb342 — three-way · fb363 — four */
             if(user.length){ sect('User'); user.forEach(prow); }
             document.body.appendChild(menu);
             var rc=pillEl.getBoundingClientRect(), vw=(window.__vw?window.__vw():window.innerWidth), vh=(window.__vh?window.__vh():window.innerHeight);
@@ -8328,6 +8718,41 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           // the DSP held the user's real values — the fb349/fb352 class — and, now that a drag
           // starts from the model, a stale model would also offset the very first gesture.
           // All six instances, each reading its OWN prefix.
+          /* fb365 — TAPE restore. Not optional and not cosmetic: without it a reopened card shows
+             TEMPLATE defaults while the DSP holds the user's real values, and since fb364 a drag
+             starts from the MODEL, so a stale model would offset the very first gesture too.
+             Same bug, different door — exactly what the granular needed at fb364. */
+          function fxrRestoreTape(){ for(var q=0;q<DEVS.length;q++) if(DEVS[q]&&DEVS[q].core==='tape') fxrRestoreTapeOne(q); }
+          function fxrRestoreTapeOne(idx){ try{
+            var g=NFX('getSynParam'); if(!g) return;
+            var d=DEVS[idx]; if(!d||d.core!=='tape') return;
+            function rd(pid){ if(!pid) return Promise.resolve(null); return Promise.resolve(g(pid)).then(function(v){ var f=+v; return isFinite(f)?f:null; }).catch(function(){ return null; }); }
+            Promise.all([ rd(d.tp), rd(d.pwrP),
+              rd(d.pfx+'SCULPT'),rd(d.pfx+'WEAVE'),rd(d.pfx+'TILT'),
+              rd(d.pfx+'WOW'),rd(d.pfx+'SAT'),rd(d.pfx+'HISS'),rd(d.pfx+'MIX'),
+              rd(d.pfx+'CHARACTER'),rd(d.pfx+'HEADS'),
+              rd(d.pfx+'SRC_A'),rd(d.pfx+'SRC_B'),rd(d.pfx+'SRC_C'),rd(d.pfx+'SRC_D'),rd(d.pfx+'SRC_SUB'),rd(d.pfx+'SRC_NOISE'),
+              rd(d.pfx+'SYNC'),rd(d.pfx+'STOP'),
+              rd(d.pfx+'TIME'),rd(d.pfx+'REPEATS'),rd(d.pfx+'DRIVE'),rd(d.pfx+'AGE'),
+              rd(d.pfx+'MOTOR'),rd(d.pfx+'BUMP'),rd(d.pfx+'WIDTH'),rd(d.pfx+'DUCK')
+            ]).then(function(v){ try{
+              var T=d.types||['Studio'];
+              /* the TYPE first — it decides which three params the front row is even bound to */
+              if(v[0]!=null){ var ti=Math.round(v[0]*(T.length-1)); if(ti>=0&&ti<T.length) tpeApplyType(d,T[ti]); }
+              if(v[1]!=null) d.on=v[1]>0.5;
+              var fk=(d.type==='Studio')?[2,3,4]:[5,6,7];
+              for(var i2=0;i2<3;i2++){ if(v[fk[i2]]!=null&&d.knobs[i2]) d.knobs[i2].v=Math.round(v[fk[i2]]*100); }
+              if(v[8]!=null&&d.knobs[3]) d.knobs[3].v=Math.round(v[8]*100);
+              if(v[9]!=null){ var o1=d.back.d1.opts, ci=Math.round(v[9]*(o1.length-1)); if(ci>=0&&ci<o1.length) d.back.d1.v=o1[ci]; }
+              if(v[10]!=null){ var o2=d.back.d2.opts, hi=Math.round(v[10]*(o2.length-1)); if(hi>=0&&hi<o2.length) d.back.d2.v=o2[hi]; }
+              for(var i3=0;i3<6;i3++){ if(v[11+i3]!=null&&d.route) d.route[i3]=v[11+i3]>0.5?1:0; }
+              if(d.pills){ if(v[17]!=null&&d.pills[0]) d.pills[0].on=v[17]>0.5;
+                           if(v[18]!=null&&d.pills[1]) d.pills[1].on=v[18]>0.5; }
+              var bk=[19,20,21,22,23,24,25,26];
+              for(var i5=0;i5<8&&i5<d.back.knobs.length;i5++){ if(v[bk[i5]]!=null) d.back.knobs[i5][1]=Math.round(v[bk[i5]]*100); }
+              reRenderKeepSwap();
+            }catch(e){} }).catch(function(){});
+          }catch(e){} }
           function fxrRestoreGranular(){ for(var q=0;q<DEVS.length;q++) if(DEVS[q]&&DEVS[q].core==='granular') fxrRestoreGranularOne(q); }
           function fxrRestoreGranularOne(idx){ try{
             var g=NFX('getSynParam'); if(!g) return;
@@ -8398,7 +8823,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               }
               out.sort(function(a,b){ return a.rank-b.rank; });
               DEVS=out; render();
-              fxrRestoreReverb(); fxrRestoreDelay(); fxrRestoreDistortion(); fxrRestoreGranular();   /* fb364 */
+              fxrRestoreReverb(); fxrRestoreDelay(); fxrRestoreDistortion(); fxrRestoreGranular(); fxrRestoreTape();   /* fb364 · fb365 */
             }catch(e){} }).catch(function(){ try{ render(); }catch(_){} });
           }catch(e){ try{ render(); }catch(_){} } }
           render();                 // paint immediately (empty panel) so the rack is never blank…
@@ -8720,10 +9145,10 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               if(a==='x'){ fxRemove(idx); return; }
               if(a==='swap'){ dev.classList.toggle('swapped'); act.classList.toggle('act'); return; }   /* fb274 — + flips the device to the back panel (header stays) */
               /* fb275 — type is now a native <select> dropdown (handled in the 'change' listener below); no more click-to-rotate */
-              if(a==='preset'){ if(DEVS[idx]&&(DEVS[idx].core==='reverb'||DEVS[idx].core==='delay'||DEVS[idx].core==='saturate'||DEVS[idx].core==='granular')) openRvbPreset(dev,idx,act); return; }   /* fb363 — granular joins; the gate is exactly where the distortion pill was dead by one boolean */   /* fb292/fb296/fb342 — reuse the .pmenu preset menu (reverb + delay + distortion — the gate was THE bug: the pill rendered but 'saturate' fell through) */
+              if(a==='preset'){ if(DEVS[idx]&&(DEVS[idx].core==='reverb'||DEVS[idx].core==='delay'||DEVS[idx].core==='saturate'||DEVS[idx].core==='granular'||DEVS[idx].core==='tape')) openRvbPreset(dev,idx,act); return; }   /* fb365 — tape joins */   /* fb363 — granular joins; the gate is exactly where the distortion pill was dead by one boolean */   /* fb292/fb296/fb342 — reuse the .pmenu preset menu (reverb + delay + distortion — the gate was THE bug: the pill rendered but 'saturate' fell through) */
             }
             var pill=e.target.closest('.fxr-pill');
-            if(pill&&dev){ var pi=[].indexOf.call(dev.querySelectorAll('.fxr-pill'),pill); pill.classList.toggle('fxr-on'); var pon=pill.classList.contains('fxr-on'); var ddp=+dev.getAttribute('data-dev'), dd=DEVS[ddp]; if(dd&&dd.pills[pi]) dd.pills[pi].on=pon; if(dd&&dd.pp&&dd.pp[pi]) window.__setSynParam(dd.pp[pi], pon?1:0); if(dd&&dd.core==='delay'&&pi===0) refreshDlyTimeKnob(ddp); if(dd&&dd.core==='granular'&&pi===1) refreshGrnWindowKnob(ddp); return; }   /* fb279 — front pills → real param; fb298 — Sync pill flips the Time knob to division/ms; fb363 — the granular Sync pill flips Window to a note division */
+            if(pill&&dev){ var pi=[].indexOf.call(dev.querySelectorAll('.fxr-pill'),pill); pill.classList.toggle('fxr-on'); var pon=pill.classList.contains('fxr-on'); var ddp=+dev.getAttribute('data-dev'), dd=DEVS[ddp]; if(dd&&dd.pills[pi]) dd.pills[pi].on=pon; if(dd&&dd.pp&&dd.pp[pi]) window.__setSynParam(dd.pp[pi], pon?1:0); if(dd&&dd.core==='delay'&&pi===0) refreshDlyTimeKnob(ddp); if(dd&&dd.core==='granular'&&pi===1) refreshGrnWindowKnob(ddp); if(dd&&dd.core==='tape'&&pi===0) refreshTpeTimeKnob(ddp); return; }   /* fb365 */   /* fb279 — front pills → real param; fb298 — Sync pill flips the Time knob to division/ms; fb363 — the granular Sync pill flips Window to a note division */
             var chn=e.target.closest('[data-chain]');   /* fb306 — DELAY Link chain (Time L ↔ Time R), thin white */
             if(chn&&dev){ var dci=+dev.getAttribute('data-dev'), dcd=DEVS[dci]; if(dcd&&dcd.core==='delay'){ dcd.link=!dcd.link;
                 if(dcd.link){ dcd.tR=dcd.knobs[0].v; dcd.divR=dcd.back.d2.v; window.__setSynParam(dcd.pfx+'TIME_R', dcd.tR/100); var oo=dcd.back.d2.opts, ii=oo.indexOf(dcd.divR); if(ii>=0) window.__setSynParam(dcd.pfx+'SYNCDIV_R', oo.length>1?ii/(oo.length-1):0); }   /* relink ⇒ mirror R to L */
@@ -8741,6 +9166,9 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 var pl=rvbPillsFor(DEVS[di],t.value); DEVS[di].pills=pl.pills; DEVS[di].pp=pl.pp;   /* fb287 — type-unique front pills (Mod vs Duck) */
                 var sw=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
                 var dv2=rack.querySelectorAll('.fxr-dev'); for(var s=0;s<dv2.length;s++){ if(sw[s]){ dv2[s].classList.add('swapped'); var ac=dv2[s].querySelector('[data-act="swap"]'); if(ac)ac.classList.add('act'); } } }
+              if(DEVS[di]&&DEVS[di].core==='tape'){ tpeApplyType(DEVS[di],t.value);   /* fb365 — per-type front row */
+                var swT=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
+                var dvT=rack.querySelectorAll('.fxr-dev'); for(var sT=0;sT<dvT.length;sT++){ if(swT[sT]){ dvT[sT].classList.add('swapped'); var acT=dvT[sT].querySelector('[data-act="swap"]'); if(acT)acT.classList.add('act'); } } }
               if(DEVS[di]&&DEVS[di].core==='saturate'){ dstApplyType(DEVS[di],t.value,true);   /* fb319 — per-family relabel + per-mode SIG default (the Soft≡Hard fix) */
                 var sw2=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
                 var dv3=rack.querySelectorAll('.fxr-dev'); for(var s2=0;s2<dv3.length;s2++){ if(sw2[s2]){ dv3[s2].classList.add('swapped'); var ac2=dv3[s2].querySelector('[data-act="swap"]'); if(ac2)ac2.classList.add('act'); } } }
@@ -8800,7 +9228,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var startY=e.clientY;
             var stepN=fxStep(dd&&dd.core,pid);   /* fb363 — SWITCH law: detented, not continuous */
             // A synced granular Window is a DIVISION selector, so it steps onto the 20 divisions.
-            var grnWinSync=(dd&&dd.core==='granular'&&/_WINDOW$/.test(pid||'')&&dd.pills&&dd.pills[1]&&dd.pills[1].on);
+            var grnWinSync=(dd&&dd.core==='granular'&&/_WINDOW$/.test(pid||'')&&dd.pills&&dd.pills[1]&&dd.pills[1].on)
+                        || (dd&&dd.core==='tape'&&/_TIME$/.test(pid||'')&&dd.pills&&dd.pills[0]&&dd.pills[0].on);   /* fb365 — same law, Sync is pill 0 here */
             if(grnWinSync) stepN=GRN_DIVS.length-1;
             function mv(ev){ var v=Math.max(0,Math.min(100,startV+(startY-ev.clientY)*0.6));
               if(stepN>1) v=Math.round(v/100*(stepN-1))/(stepN-1)*100;   /* snap to real detents */
@@ -30485,7 +30914,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // try/catch — a push handler exception must never propagate into the C++ eval chain.
   // VIZDBG — every push stamps this; the overlay below prints it if the flatline
   // anomaly ever recurs, so the next screenshot diagnoses itself.
-  var TERRAIN_BUILD = 'fb364';   // fb358-361 = THE REVERB IS DONE. fb358: per-instance DUCK — the pool-law diff caught that instance 1 resolves rvbDuckActive_ and runs a duckEnv_ follower while the pool did NEITHER, so a duplicate Room/Spring had a DEAD Duck pill (the same shape as the fb350 delay bug); the follower is per instance, the atk/rel coefficients are shared. fb359: the CONVOLUTION USER IR is per instance — state array-ified (name/user/retained L+R x6), a convEngineFor(inst) selector, every native takes an inst arg (default 1) and every JS call site passes its card's own; the IR waveform poll loops all conv cards instead of querySelector. That was the last multi-instance gap: a duplicate on Convolution ran the synthetic Space and a dropped file silently retargeted instance 1. fb360: every rack core now shares ONE plot bound (x 6.5 -> 219.5) — the reverb grid ran the full 0-226 viewBox (~16px left of its wordmark) and the delay timeline ran 14-212; all three are now symmetric about the card and sit under their device name. fb361: convolution IDLE BAKE mirrored into the pool so a dropped IR shows its real waveform even while that instance is powered off. // fb357 =    // fb357 = the distortion plot now spans the card SYMMETRICALLY (Max: "extended to the right so it can meet the X button or be equally the same width from the right edge like the left is"). fb353 put the y-axis under the wordmark but left the OLD right bound, so the plot sat 35.71px in on the left and 73.62px in on the right. X1 204.5 -> 219.5 makes both insets 35.71px (measured, exact) and lands the right edge on the X button — both of Max's phrasings at once. Quarter ticks re-spaced across the new 213-unit span; all three geometry sites moved together again (core markup, feed X0/X1, and the drawn-mode mirror, which carries the span in three more places). // fb356 =    // fb356 = THE DISTORTION CURVE IS THE LFO'S LINE, EXACTLY (Max: "the thickness of it needs to be as the LFO's thickness, the exact SAME"). Both were nominally stroke-width 1.7 — but this core's SVG stretches NON-UNIFORMLY (measured sx 2.527 / sy 2.176 against the LFO's near-uniform 1.793/1.808), so 1.7 rendered at 3.70-4.30px vs the LFO's 3.05-3.07: up to 41% fatter, and the thickness CHANGED with the curve's own slope. Now 1.3, which x the geometric-mean scale 2.345 = 3.05px — measured delta from the LFO: 0.00px — and both ride the same root zoom so they track together at every window size. The fb343 halo trio (a hard 7/4.4/2.6px purple band, nothing like a glow) is REMOVED from the rack core; the curve now reuses .mv-stroke's own drop-shadow pair + mvBreathe animation verbatim, with the blur radii divided by the same scale ratio (1.302) so the GLOW lands at the LFO's rendered size too. Recycled, not invented. // fb355 =    // fb355 = THE TYPE DROPDOWN WORKS AGAIN (Max: "it won't get off of soft clip"). fb354 made the distortion feed live for the first time, which switched ON a type-follower that had been dead since fb330 — and it was written LEVEL-triggered: every frame it asserted "the rack must equal the feed's mode", ~15x a second, against whichever distortion card was FIRST. The feed only ever describes instance 1, so any disagreement (a duplicate in the rack, a stale frame) re-selected the mode continuously and the type could never be changed. Now EDGE-triggered — it acts only when the mode actually MOVES (DAW automation, a curve-card Send), never by asserting equality — and it only ever drives the instance-1 card. LAW: a follower that mirrors a param into the UI must be edge-triggered, or it fights the user forever. // fb354 =    // fb354 = THE DISTORTION CURVE FINALLY DRAWS. Max: it has NEVER drawn — only the faint dashed unity line, <path d=""> forever. It was the last rack viz still on a native POLL and by far the biggest payload (128 curve points + 48 occupancy), and a poll dies SILENTLY three ways here: the promise never settles (the documented house law that forced the fb334 watchdog and moved the blooms onto the push in fb342), it rejects, or JSON.parse throws inside a silent catch — all three end in a permanently empty path. It now rides the SAME 60Hz C++ push as the blooms, rate-limited to ~15Hz (~16 KB/s, well under the 40-80 KB/s fb342 flagged as the frame-drop threshold); the push carries no promise to lose. The poll survives as a fallback. Verified headless: d="" before the push, 1473-char path + 48 lit occupancy segments after. // fb353 =    // fb353 = the distortion core's GRID now lines up under the device name. Its plot started at viewBox x=14, which put the y-axis ~8px right of the wordmark (Max: "the grid is off, it's not matched under the word distortion"). .fxr-dev is a FIXED 272px card, so that offset is a constant, not a guess: x 14 -> 6.5 lands the axis on the wordmark (measured residual 0.07px). Plot WIDTH is unchanged (198 units) - it moves left, it does not stretch. All three geometry sites moved together: the core markup, the live feed's X0/X1, and the drawn-mode mirror pass (which had 14+198 hardcoded in three places). // fb352 =    // fb352 = THE REVERB IS MULTI-INSTANCE (up to 6), the last device that could not be duplicated. Params for instances 2..6 are eager (the host caches the list at load - nothing can be born at runtime); the ENGINES are LAZY, built on the MESSAGE THREAD (timerCallback) and only the ONE the instance's current type needs - eager would have been 9 engines x 5 instances with Convolution among them, which is exactly why this was deferred since fb346. The audio thread only publishes an int request and reads the resulting pointer; until the engine exists the instance passes the chain through silently. 🔑 THE POOL LAW APPLIED STRUCTURALLY: the ~200-line 9-type parameter block was extracted into ONE routine (applyRvbTypeParams) that instance 1 and the pool both call, so a per-type setter can never again exist for one and not the other - that is what bit us in fb350. Per-instance type-swap fade + reset, per-instance Mix ramp, per-instance bloom (__fxBloomRvbP) so a duplicate's scatter grid lights from ITS OWN tail, per-instance restore-on-reopen, and the per-card viz driver (the old one was querySelector + DEVS' first reverb + one shared state, so a duplicate's grid never lit at all). ⚠️ KNOWN GAP: user-IR drag/drop for Convolution still targets instance 1 (the getConvIR/clearConvIR natives are not yet instance-aware); a duplicate on Convolution runs the synthetic IR. // fb351 =    // fb351 = THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had each ADD its result into the master mix, which quietly made the whole rack PARALLEL: dragging a card changed NOTHING audible, so a device read as 'not even in the chain' (Max: "if the distortion is at the beginning it should then hit that delay - it doesn't do any of that"). Now: a source ENTERS the rack once, at the FIRST device routed to it; that device's output FLOWS to the next device sharing any of its sources; only outputs nobody claims return to the mix. Devices sharing no source never see each other, so the per-osc independence from fb348-fb350 is intact. Topology in FxChainTopology.h (pure C++, 9 cases proven in scratchpad/fx_topology_test.cpp). Bypass now PASSES THROUGH instead of contributing zero, so a powered-off device no longer breaks the chain behind it. The MAIN-SEND path is deleted (unreachable since fb348) along with excludeRouted() - the routed dry is now removed from the mix exactly ONCE, retiring the whole fb305/fb338/fb347 exclusion-subtraction bug class. // fb350 =    // fb350 = DUPLICATE DELAYS ARE REALLY INDEPENDENT. (1) THE TIME BUG: pooled delays (2..6) never called DelayEngine::updateCoefficients(), the per-block resolve that turns timeMs_ into the actual delay-length target delTgtL/R — instance 1 calls it, the pool never did, so delTgtL sat at its 0.0f default and every duplicate ran at ZERO delay length: Time + Sync Division did nothing at all while Feedback/Mix still worked (those setters write their smoothed targets directly). Original fb346 code — duplicates had never been listened to. Type swaps now also fade out before switching + reset (mirrors instance 1; the old instant switch clicked and left the previous type's buffer ringing). (2) THE VIZ: the echo-timeline driver used querySelector + DEVS' FIRST delay with ONE shared geo/pulse/flash state, so a second card's timeline was NEVER built (it kept the 4-node static skeleton = the 'cut off' look) and what moved was delay 1's time + delay 1's audio. State is now keyed per instance and every card lights from its OWN wet via the new per-instance bloom push (__fxBloomDlyP). // fb349 = INSTANCE ISOLATION: the delay Time knob (and Time R, Sync Division, Link) plus the distortion type-change pushes were ALL hardcoded to instance 1's param IDs, so dragging Time on delay 2 moved delay 1 — Max: "the time controls both delays". Every write now uses the device's OWN prefix (dd.pfx). fxrRestoreDelay/Distortion also only ever found the FIRST instance and read hardcoded IDs, so duplicates never restored their own state on reopen; both now loop every instance and read per-instance. // fb348 = NO GLOBAL SEND + PER-OSC ROUTING ON EVERY INSTANCE (Max: "there is no global send"). THE BUG: pooled instances (Delay 2-6, Distortion 2-6) rendered their route pills but NOTHING READ THEM — a silent no-op — so they fell back to main-send and processed the WHOLE mix. Symptom Max hit: "my delay is on osc C but it's chewing on osc A". Now every instance reads its own SYN_DLY<n>_SRC_* / SYN_DST<n>_SRC_* pills, gets its OWN send bus and its OWN lazily-built send-filter pair, so a delay on C can never touch A and two delays can hold different Types/Times without overlapping. GLOBAL SEND REMOVED: power alone no longer makes a device audible — no pills lit = SILENT (that fallback was the bleed). A newly ADDED device therefore lights ALL SIX sources so it is never a silent surprise, and pre-fb348 sessions migrate powered-with-no-routes to all six (same sound, now explicit). Filters are heap-allocated only when an instance is actually routed — 10 extra FilterSlot PAIRS x 96 voices would be unacceptable eagerly. // fb346 = THE DYNAMIC CHAIN: the rack boots EMPTY (dashed "Add Effects" panel fills the row) and the + button is LIVE — the shared purple menu (clamped, so it flips up at the bottom of the plugin instead of being cut off) adds any device, MULTIPLE INSTANCES included (Delay ×6, Distortion ×6 from a pre-allocated pool; Reverb ×1 until its 6-engine stack gets lazy alloc). × removes the device from the chain AND powers it down (the old × only spliced the card, leaving a ghost effect running with no card to stop it). 🔑 CHAIN ORDER IS NOW A FLOAT _RANK per device, not the 6-way SYN_FX_ORDER choice — choice cardinality is frozen at birth (fb342), which is exactly why the old param could never describe a 4th device; ranks have no cardinality, so any number of devices reorder freely and the drag re-sorts a list instead of renumbering a stored index. Instance 1 keeps the historical SYN_RVB_*/SYN_DLY_*/SYN_DST_* IDs so all 66 factory presets load byte-identically; instances 2..6 are SYN_DLY2_*/SYN_DST2_* etc, pre-allocated at startup because JUCE/VST3/AU cache the param list at load and params can NEVER be born at runtime (the + CLAIMS an instance, it never creates one — Serum does the same trick with its LFOs 7-10). Extra instances are MAIN-SEND ONLY (no per-osc route pills), which is how they sidestep the fb305/fb338 landmine: every send bus must join EVERY main-send exclusion sum (PluginProcessor.cpp 7159/7161, 7326/7328, 7358/7360 — three blocks, SIX lines; only the L lines carry the comment). Pre-fb346 sessions are migrated in setStateInformation (absent _ACTIVE == the old fixed 3-device rack) so no existing project loses its effects. // fb345 = PHASE G CERTIFICATION (solo sweep, all 23 modes + 66 presets): char-switch deferred fade + state re-seat (Xfmr pk 50.4 explosion killed) · tape drive glide (yank blast +21.7 dBFS -> steady) · Worn oxide walk real (was mathematically dead) · sag masks additive (OD/Stomp knobs un-masked) · ADAA character-blind fix (chars survive High/Ultra) + F-cache param key (Knee-turn crackle 16.6x -> floor) · drive01_ glided · GRID-LEAK BIAS on CLIP/DIODE/FOLD (env-tracked — the DC-latch silence class killed; 5 dead presets revived) + SHAPER bias domain-side · ALL feedback loops AC-coupled (Fuzz Face cap; Snarl screams instead of latching) + squared release gate · Duty/Ring/Stereo/Mip re-voiced (were twins/no-ops) · SineFold Rebound phase-warp · DIGITAL one-clock law (Spread 0 = bit-identical restored) · P6 Bias=50 boot push on family SHAPER (ShAsym/Table quiet-boot trap). // fb344 = THE auval SIGBUS FIX (P1, shipped broken since fb122): FlowDrift::process writes a 2D lane-major buffer (numLanes*numSamples floats) but processBlock passed an 8-float stack array — silent stack corruption every Robin-active block, guard-page SIGBUS at 4096-frame renders (auval). Fix: nullptr outLanes + drift.value(i) per-lane finals (also fixes the silent data bug: driftLane_ was fed lane 0's early samples). // fb343 = CARD LIKE WATER + THE CLONE FIX: (1) graduated SVG halo trio replaces the double drop-shadow filter on the curve card + rack core (measured 5.55->0.81ms/frame at card size — the filter re-rastered on EVERY d mutation; same purple read, A/B-matched), (2) popped crv card rides the 60Hz C++ timer push (fb232 LFO grammar; was a 66ms/15Hz self-poll = the choppy Drive/Asym mirror; self-poll demoted to 500ms fallback), (3) fb236-pattern blob relay via dstPtVersion_ -> __crvXApply both surfaces (<=56ms ink mirror; 150ms crvXWin poll = idle reconcile only), (4) drag hygiene: heroPos rect cached per gesture (was one forced layout PER MOVE), rAF-coalesced mvP/mvT/bars/Morph-rail (>60Hz devices doubled work), write-gated occ/live attrs (idle = zero style-recalcs), (5) OSC CLONE FIXED: getOscLfoWave was MAIN-LIST-ONLY -> in the popped card the Wavetable->Curve seed was a never-settling silent no-op (fb90 class again) — now on both lists + law-⑤ watchdog toast + fb331 force (seed sets SIG=bank/3 so the seeded ink IS the sound; LFO clone toasts on undrawn shapes instead of silent no-op), (6) Table source pills: 'Gen'->'Stock', word-width .srcs slots (13px fixed slot made Gen bleed into A). // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
+  var TERRAIN_BUILD = 'fb365';   // fb365 = THE TAPE DEVICE. The three SHIPPED machines (StudioMachine/CassetteMachine/WireMachine, unchanged) become the fifth rack flagship, x6, per-osc routable, chainable, duplicatable. Front = the machine's OWN three per Type (Studio Sculpt/Weave/Tilt · Cassette+Wire Wow/Saturate/Hiss) + Mix; back = Character x8 + Heads x8 + Time/Repeats/Drive/Age/Motor/Bump/Width/Duck. NEW DSP is the TRANSPORT around them (TapeFxEngine.h): a read head that advances at `speed`, so Stop is a real tape stop, wow accumulates over repeats, and the card is handed the transport's own numbers. THE CARD IS THE AUDIO: reels turn at the real tape speed and stop dead with it, the packs transfer, the wobble is the wow the read head just applied, the two VU needles are input and output, and a head lights on ITS OWN tap level — all on the 60Hz push, never a poll. 36/36 perceptual gates. // fb364 = fb358-361 = THE REVERB IS DONE. fb358: per-instance DUCK — the pool-law diff caught that instance 1 resolves rvbDuckActive_ and runs a duckEnv_ follower while the pool did NEITHER, so a duplicate Room/Spring had a DEAD Duck pill (the same shape as the fb350 delay bug); the follower is per instance, the atk/rel coefficients are shared. fb359: the CONVOLUTION USER IR is per instance — state array-ified (name/user/retained L+R x6), a convEngineFor(inst) selector, every native takes an inst arg (default 1) and every JS call site passes its card's own; the IR waveform poll loops all conv cards instead of querySelector. That was the last multi-instance gap: a duplicate on Convolution ran the synthetic Space and a dropped file silently retargeted instance 1. fb360: every rack core now shares ONE plot bound (x 6.5 -> 219.5) — the reverb grid ran the full 0-226 viewBox (~16px left of its wordmark) and the delay timeline ran 14-212; all three are now symmetric about the card and sit under their device name. fb361: convolution IDLE BAKE mirrored into the pool so a dropped IR shows its real waveform even while that instance is powered off. // fb357 =    // fb357 = the distortion plot now spans the card SYMMETRICALLY (Max: "extended to the right so it can meet the X button or be equally the same width from the right edge like the left is"). fb353 put the y-axis under the wordmark but left the OLD right bound, so the plot sat 35.71px in on the left and 73.62px in on the right. X1 204.5 -> 219.5 makes both insets 35.71px (measured, exact) and lands the right edge on the X button — both of Max's phrasings at once. Quarter ticks re-spaced across the new 213-unit span; all three geometry sites moved together again (core markup, feed X0/X1, and the drawn-mode mirror, which carries the span in three more places). // fb356 =    // fb356 = THE DISTORTION CURVE IS THE LFO'S LINE, EXACTLY (Max: "the thickness of it needs to be as the LFO's thickness, the exact SAME"). Both were nominally stroke-width 1.7 — but this core's SVG stretches NON-UNIFORMLY (measured sx 2.527 / sy 2.176 against the LFO's near-uniform 1.793/1.808), so 1.7 rendered at 3.70-4.30px vs the LFO's 3.05-3.07: up to 41% fatter, and the thickness CHANGED with the curve's own slope. Now 1.3, which x the geometric-mean scale 2.345 = 3.05px — measured delta from the LFO: 0.00px — and both ride the same root zoom so they track together at every window size. The fb343 halo trio (a hard 7/4.4/2.6px purple band, nothing like a glow) is REMOVED from the rack core; the curve now reuses .mv-stroke's own drop-shadow pair + mvBreathe animation verbatim, with the blur radii divided by the same scale ratio (1.302) so the GLOW lands at the LFO's rendered size too. Recycled, not invented. // fb355 =    // fb355 = THE TYPE DROPDOWN WORKS AGAIN (Max: "it won't get off of soft clip"). fb354 made the distortion feed live for the first time, which switched ON a type-follower that had been dead since fb330 — and it was written LEVEL-triggered: every frame it asserted "the rack must equal the feed's mode", ~15x a second, against whichever distortion card was FIRST. The feed only ever describes instance 1, so any disagreement (a duplicate in the rack, a stale frame) re-selected the mode continuously and the type could never be changed. Now EDGE-triggered — it acts only when the mode actually MOVES (DAW automation, a curve-card Send), never by asserting equality — and it only ever drives the instance-1 card. LAW: a follower that mirrors a param into the UI must be edge-triggered, or it fights the user forever. // fb354 =    // fb354 = THE DISTORTION CURVE FINALLY DRAWS. Max: it has NEVER drawn — only the faint dashed unity line, <path d=""> forever. It was the last rack viz still on a native POLL and by far the biggest payload (128 curve points + 48 occupancy), and a poll dies SILENTLY three ways here: the promise never settles (the documented house law that forced the fb334 watchdog and moved the blooms onto the push in fb342), it rejects, or JSON.parse throws inside a silent catch — all three end in a permanently empty path. It now rides the SAME 60Hz C++ push as the blooms, rate-limited to ~15Hz (~16 KB/s, well under the 40-80 KB/s fb342 flagged as the frame-drop threshold); the push carries no promise to lose. The poll survives as a fallback. Verified headless: d="" before the push, 1473-char path + 48 lit occupancy segments after. // fb353 =    // fb353 = the distortion core's GRID now lines up under the device name. Its plot started at viewBox x=14, which put the y-axis ~8px right of the wordmark (Max: "the grid is off, it's not matched under the word distortion"). .fxr-dev is a FIXED 272px card, so that offset is a constant, not a guess: x 14 -> 6.5 lands the axis on the wordmark (measured residual 0.07px). Plot WIDTH is unchanged (198 units) - it moves left, it does not stretch. All three geometry sites moved together: the core markup, the live feed's X0/X1, and the drawn-mode mirror pass (which had 14+198 hardcoded in three places). // fb352 =    // fb352 = THE REVERB IS MULTI-INSTANCE (up to 6), the last device that could not be duplicated. Params for instances 2..6 are eager (the host caches the list at load - nothing can be born at runtime); the ENGINES are LAZY, built on the MESSAGE THREAD (timerCallback) and only the ONE the instance's current type needs - eager would have been 9 engines x 5 instances with Convolution among them, which is exactly why this was deferred since fb346. The audio thread only publishes an int request and reads the resulting pointer; until the engine exists the instance passes the chain through silently. 🔑 THE POOL LAW APPLIED STRUCTURALLY: the ~200-line 9-type parameter block was extracted into ONE routine (applyRvbTypeParams) that instance 1 and the pool both call, so a per-type setter can never again exist for one and not the other - that is what bit us in fb350. Per-instance type-swap fade + reset, per-instance Mix ramp, per-instance bloom (__fxBloomRvbP) so a duplicate's scatter grid lights from ITS OWN tail, per-instance restore-on-reopen, and the per-card viz driver (the old one was querySelector + DEVS' first reverb + one shared state, so a duplicate's grid never lit at all). ⚠️ KNOWN GAP: user-IR drag/drop for Convolution still targets instance 1 (the getConvIR/clearConvIR natives are not yet instance-aware); a duplicate on Convolution runs the synthetic IR. // fb351 =    // fb351 = THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had each ADD its result into the master mix, which quietly made the whole rack PARALLEL: dragging a card changed NOTHING audible, so a device read as 'not even in the chain' (Max: "if the distortion is at the beginning it should then hit that delay - it doesn't do any of that"). Now: a source ENTERS the rack once, at the FIRST device routed to it; that device's output FLOWS to the next device sharing any of its sources; only outputs nobody claims return to the mix. Devices sharing no source never see each other, so the per-osc independence from fb348-fb350 is intact. Topology in FxChainTopology.h (pure C++, 9 cases proven in scratchpad/fx_topology_test.cpp). Bypass now PASSES THROUGH instead of contributing zero, so a powered-off device no longer breaks the chain behind it. The MAIN-SEND path is deleted (unreachable since fb348) along with excludeRouted() - the routed dry is now removed from the mix exactly ONCE, retiring the whole fb305/fb338/fb347 exclusion-subtraction bug class. // fb350 =    // fb350 = DUPLICATE DELAYS ARE REALLY INDEPENDENT. (1) THE TIME BUG: pooled delays (2..6) never called DelayEngine::updateCoefficients(), the per-block resolve that turns timeMs_ into the actual delay-length target delTgtL/R — instance 1 calls it, the pool never did, so delTgtL sat at its 0.0f default and every duplicate ran at ZERO delay length: Time + Sync Division did nothing at all while Feedback/Mix still worked (those setters write their smoothed targets directly). Original fb346 code — duplicates had never been listened to. Type swaps now also fade out before switching + reset (mirrors instance 1; the old instant switch clicked and left the previous type's buffer ringing). (2) THE VIZ: the echo-timeline driver used querySelector + DEVS' FIRST delay with ONE shared geo/pulse/flash state, so a second card's timeline was NEVER built (it kept the 4-node static skeleton = the 'cut off' look) and what moved was delay 1's time + delay 1's audio. State is now keyed per instance and every card lights from its OWN wet via the new per-instance bloom push (__fxBloomDlyP). // fb349 = INSTANCE ISOLATION: the delay Time knob (and Time R, Sync Division, Link) plus the distortion type-change pushes were ALL hardcoded to instance 1's param IDs, so dragging Time on delay 2 moved delay 1 — Max: "the time controls both delays". Every write now uses the device's OWN prefix (dd.pfx). fxrRestoreDelay/Distortion also only ever found the FIRST instance and read hardcoded IDs, so duplicates never restored their own state on reopen; both now loop every instance and read per-instance. // fb348 = NO GLOBAL SEND + PER-OSC ROUTING ON EVERY INSTANCE (Max: "there is no global send"). THE BUG: pooled instances (Delay 2-6, Distortion 2-6) rendered their route pills but NOTHING READ THEM — a silent no-op — so they fell back to main-send and processed the WHOLE mix. Symptom Max hit: "my delay is on osc C but it's chewing on osc A". Now every instance reads its own SYN_DLY<n>_SRC_* / SYN_DST<n>_SRC_* pills, gets its OWN send bus and its OWN lazily-built send-filter pair, so a delay on C can never touch A and two delays can hold different Types/Times without overlapping. GLOBAL SEND REMOVED: power alone no longer makes a device audible — no pills lit = SILENT (that fallback was the bleed). A newly ADDED device therefore lights ALL SIX sources so it is never a silent surprise, and pre-fb348 sessions migrate powered-with-no-routes to all six (same sound, now explicit). Filters are heap-allocated only when an instance is actually routed — 10 extra FilterSlot PAIRS x 96 voices would be unacceptable eagerly. // fb346 = THE DYNAMIC CHAIN: the rack boots EMPTY (dashed "Add Effects" panel fills the row) and the + button is LIVE — the shared purple menu (clamped, so it flips up at the bottom of the plugin instead of being cut off) adds any device, MULTIPLE INSTANCES included (Delay ×6, Distortion ×6 from a pre-allocated pool; Reverb ×1 until its 6-engine stack gets lazy alloc). × removes the device from the chain AND powers it down (the old × only spliced the card, leaving a ghost effect running with no card to stop it). 🔑 CHAIN ORDER IS NOW A FLOAT _RANK per device, not the 6-way SYN_FX_ORDER choice — choice cardinality is frozen at birth (fb342), which is exactly why the old param could never describe a 4th device; ranks have no cardinality, so any number of devices reorder freely and the drag re-sorts a list instead of renumbering a stored index. Instance 1 keeps the historical SYN_RVB_*/SYN_DLY_*/SYN_DST_* IDs so all 66 factory presets load byte-identically; instances 2..6 are SYN_DLY2_*/SYN_DST2_* etc, pre-allocated at startup because JUCE/VST3/AU cache the param list at load and params can NEVER be born at runtime (the + CLAIMS an instance, it never creates one — Serum does the same trick with its LFOs 7-10). Extra instances are MAIN-SEND ONLY (no per-osc route pills), which is how they sidestep the fb305/fb338 landmine: every send bus must join EVERY main-send exclusion sum (PluginProcessor.cpp 7159/7161, 7326/7328, 7358/7360 — three blocks, SIX lines; only the L lines carry the comment). Pre-fb346 sessions are migrated in setStateInformation (absent _ACTIVE == the old fixed 3-device rack) so no existing project loses its effects. // fb345 = PHASE G CERTIFICATION (solo sweep, all 23 modes + 66 presets): char-switch deferred fade + state re-seat (Xfmr pk 50.4 explosion killed) · tape drive glide (yank blast +21.7 dBFS -> steady) · Worn oxide walk real (was mathematically dead) · sag masks additive (OD/Stomp knobs un-masked) · ADAA character-blind fix (chars survive High/Ultra) + F-cache param key (Knee-turn crackle 16.6x -> floor) · drive01_ glided · GRID-LEAK BIAS on CLIP/DIODE/FOLD (env-tracked — the DC-latch silence class killed; 5 dead presets revived) + SHAPER bias domain-side · ALL feedback loops AC-coupled (Fuzz Face cap; Snarl screams instead of latching) + squared release gate · Duty/Ring/Stereo/Mip re-voiced (were twins/no-ops) · SineFold Rebound phase-warp · DIGITAL one-clock law (Spread 0 = bit-identical restored) · P6 Bias=50 boot push on family SHAPER (ShAsym/Table quiet-boot trap). // fb344 = THE auval SIGBUS FIX (P1, shipped broken since fb122): FlowDrift::process writes a 2D lane-major buffer (numLanes*numSamples floats) but processBlock passed an 8-float stack array — silent stack corruption every Robin-active block, guard-page SIGBUS at 4096-frame renders (auval). Fix: nullptr outLanes + drift.value(i) per-lane finals (also fixes the silent data bug: driftLane_ was fed lane 0's early samples). // fb343 = CARD LIKE WATER + THE CLONE FIX: (1) graduated SVG halo trio replaces the double drop-shadow filter on the curve card + rack core (measured 5.55->0.81ms/frame at card size — the filter re-rastered on EVERY d mutation; same purple read, A/B-matched), (2) popped crv card rides the 60Hz C++ timer push (fb232 LFO grammar; was a 66ms/15Hz self-poll = the choppy Drive/Asym mirror; self-poll demoted to 500ms fallback), (3) fb236-pattern blob relay via dstPtVersion_ -> __crvXApply both surfaces (<=56ms ink mirror; 150ms crvXWin poll = idle reconcile only), (4) drag hygiene: heroPos rect cached per gesture (was one forced layout PER MOVE), rAF-coalesced mvP/mvT/bars/Morph-rail (>60Hz devices doubled work), write-gated occ/live attrs (idle = zero style-recalcs), (5) OSC CLONE FIXED: getOscLfoWave was MAIN-LIST-ONLY -> in the popped card the Wavetable->Curve seed was a never-settling silent no-op (fb90 class again) — now on both lists + law-⑤ watchdog toast + fb331 force (seed sets SIG=bank/3 so the seeded ink IS the sound; LFO clone toasts on undrawn shapes instead of silent no-op), (6) Table source pills: 'Gen'->'Stock', word-width .srcs slots (13px fixed slot made Gen bleed into A). // fb342 = THE TIGHTEN-UP: (1) DST PRESETS LIVE — the .fxr-preset gate finally admits core:'saturate' (the pill was dead by one boolean), pid dst_<slug> (diodeone/diodetwo — tiPresetDir strips digits), DST_PRESETS factory table all 23 types (bible-authored, drawn modes k[1]=null so presets never touch the ink), SHAPER-family user presets embed the curve blob + Table src (conv-IR precedent; apply-only-when-present — a knob preset NEVER clears curves), __crvPull refreshes a closed card on apply. (2) FRAME-DROP KILL: fb90 __cardOnly guards on the four rack rAF drivers (each popped card burned ~120 dead natives/s + a promise leak), blooms ride the 60Hz push (polls gone), EQ push gated on uiPage 1/2 + fresh-frame seq (it LATCHED ON at the first note forever, ~40-80KB@60Hz), graduated layered halos replace per-frame shadowBlur (2.6x stroke cost) on analyzer/LFO-scope/lights/WT-wave — same brightness math, fb311 intact, write-gated SVG attrs (delay taps, scatter 30Hz, emblem 1/32-bucket, gBCR TTL cache). (3) SPRING SIMD: 8-lane NEON dispersion chain, 6 springs 2353→544 ns/sample (12.5%→2.6% core), BIT-EXACT null at production flags, scalar fallback verbatim. (4) DST CPU bundle (fb342 in DistortionEngine.h): vectorized halfband FIR + keyed dcOff cache + pow hoists + silence sleep. // fb341 = FX ORDER 6-WAY (real permutation, legacy bool states anchor idx 0/5). fb340 = §6.7 MOD ENDGAME: Morph is mod-dest 693 (drag an LFO onto the SIG dial / card rail) + PER-POINT Y MOD (right-click a curve point → LFO 1-10 + center-fill amount slider; range bars show travel; block-rate engine rebake, 0.002-gated, 40ms crossfade). fb339 = TABLE OSC-FRAME SOURCES: Gen/A/B/C/D pills on the Table card view — an osc's REAL wavetable becomes 16 transfer frames (setDstTableSrc → setUserTable; Morph sweeps them, bake-time blend, probe corr 1.000 at both ends; source persists as a LIVE link, reload re-reads the osc). fb338 = PHASE E PER-OSC ROUTING LIVE: A/B/C/D/S/N pills feed a real third send bus (post-filter, own send-filter pair, no-bleed; dstSend joined ALL THREE fb305 main-send exclusions — the documented landmine, defused on schedule). fb337 = QUALITY LIVE: Off=1× raw / Standard=2× / High+Ultra=2×+ADAA (whitelist: SoftClip LUT-F, HardClip razor-half, ZeroSquare) + auto-promotion (never from Off) + DIGITAL quality = filter ORDER (Smooth 1/1/2/4, Clean 4/4/4/8 poles). Ladder measured 64.5/111.5/125.2 dB. fb336 = THE FOUR FAMILY PILLS LIVE (engine-side): CLIP Wrap (rail teleport, HF×200 pitched), DIODE Octave (pre-rect+blocker, f0→2f0; Rectify=4f0), FOLD Track ((110/f0)^0.7 key-tracked fold depth, A2 anchor exact), DIGITAL Clean (4-pole pre-BL @0.45fs_r, +16.8dB alias SNR) — all toggles glide, viz shows Wrap/Octave. fb335 = GRID TO GRID: snap state visible+clickable in the footer, 'Snap points to grid' menu action quantises the whole bank (the crooked-send killer; vertical steps survive). fb334 = ALWAYS EVOLVING: mini-viz geometry repaints from local CV every rAF frame (mirror pass, feed-independent) + 300ms busy watchdog — a lost JUCE promise can no longer freeze the mini/light/type-follow. fb333 = AUTHORITY FLIP: the drawn curve is the master — the card's line never moves under the feed, and the MINI VIZ mirrors the card exactly on drawn modes (feed only lights: occupancy+brightness). fb332 = ONE LINE (the mockup): the editor's curve IS the live display, .crv-live exists only in non-drawn views. fb331 = drawn modes boot on bank A (SIG 0) + Send To Shaper forces Morph/Beyond 0 — the ink IS the sound. fb328 = THE CURVE ERA: every mode's LIVE transfer curve on the core (getDistortionCurveViz — the engine's real stateless sample + 48-bin signal occupancy riding the curve, idle-dark), right-click the core → Extend = the 'crv' CURVE CARD (TIC shell, pops out via the fb82 path — 'crv' whitelisted in popOutCardWindow, the fb231 drag-delete guard): full fb206 editor grammar minus periodicity (§6.8) — fat hits, tension midpoints w/ zero detent, brushes (Line/Ramps/Square/Triangle/Sine stamping grid cells at the unity axis), grid Level/In sliders + Snap, centre anchor (f(0)=0; Unpin = the Bias gesture), 32-pt cap, A/B banks (Morph = the header knob), Harmonics bar-draw w/ the live Chebyshev-solved ghost, odd/free + beyond editable in the footer. Send To Shaper (§6.6): double-click ANY mode's live curve (or the core menu) → 128-pt engine sample → rdpSimplify ≤32 → exact c=0.25·ln(r/(1−r)) tension fit → Shaper Asym w/ '✦ Mode' chip. Seeds: Wavetable→Curve (getOscLfoWave, non-cyclic) + LFO→Curve (shared [x,y,c] model). Curves ride setDistortionCurves → dstBakePts (the one tension truth) → engine setUserCurves → the fb326 bake + 40 ms crossfade; blob persisted in state + cross-window (fb232 grammar).
   var scopeDbg = { pushT: 0, activeT: 0, nv: -1, lv: 0, tl: 0, orms: 0, tpk: 0, dpk: 0, heals: 0 };
   window.__scopeDbg = scopeDbg;
   window.__terrainBuild = TERRAIN_BUILD;
