@@ -129,16 +129,20 @@ kbd{font:inherit;color:var(--purple-400)}
 </style>
 
 <h1>Tape — the device card</h1>
-<p class="sub">Max: <i>"I think I want more length in these. Could you try making them look more like a rack?
-Like tape racks instead of like cassettes and wired… I just want some tape rack type mounts just so we can fill up that space."</i><br>
-The front-page machines are drawn for a ~220×160 portrait box, so in a 253×71 core they scale to fit the
-<b>height</b> and sit small with dead space either side (bottom row). These are <b>redrawn as rack-mount
-faceplates</b> — ears, mounting screws, edge to edge. Same chassis, same palette, same 272&nbsp;px card as every other device.</p>
+<p class="sub">Max: <i>"fix the wire. fix the studio where there's those 3 blocks on the string, looks weird.
+cassette has a size issue, and please remove the white lines in the viz, needs transparency."</i><br>
+<b>The faceplate is gone</b> — plate, brushed grain, ear rails and screws. The grain hatch was what kept the core
+reading as a solid panel however little was on it, and none of it was the machine. Everything is strokes on
+transparency now, like every other rack core, and the ~34&nbsp;px the ears ate went back to the machines.<br>
+<b>Nothing floats.</b> Three identical blocks in a row read as blocks however they are mounted, so Studio's heads
+are three <i>faces</i> rising out of one head block, and Wire's four are held in a gantry the wire threads.
+<b>Cassette was the wrong shape</b> — 2.8:1 is a car stereo; a real shell is 1.58:1, and its hub packs were
+allowed to outgrow the window that contains them.</p>
 
-<p class="cap">Rack mounts — actual size (272 px)</p>
+<p class="cap">The three machines — actual size (272 px card)</p>
 <div class="row" id="row1"></div>
 
-<p class="cap">Rack mounts — 2×</p>
+<p class="cap">The three machines — 2×</p>
 <div class="zwrap"><div class="zoom"><div class="row" id="row2"></div></div></div>
 
 <p class="cap">For comparison — the front-page machines, unchanged</p>
@@ -1116,379 +1120,426 @@ function vD(a) { return _vizWf ? 'rgba(255,255,255,'+a+')' : 'rgba(88,28,135,'+a
   }
 
 /* ═══════════════════════════════════════════════════════════════════════════════
-   TAPE — RACK-MOUNT VISUALIZERS  (proposed, for the 272 px card core)
+   TAPE — RACK VISUALIZERS  (the 253 x 71 card core)
 
-   Max: "I think I want more length in these. Could you try making them look more
-   like a rack? Like tape racks instead of like cassettes and wired... I just want
-   some tape rack type mounts just so we can fill up that space."
+   fb — Max, this pass:
+     "fix the wire.  fix the studio where there's those 3 blocks on the string,
+      looks weird.  cassette has a size issue, and please remove the white lines
+      in the viz, needs transparency."
 
-   The front-page machines are drawn for a ~220x160 portrait-ish box; the rack core
-   is 253x71 (3.6:1). That is almost exactly 19-inch rack-gear proportions, so the
-   answer is not to stretch them — it is to draw them as what they'd be in a rack:
-   a faceplate with ears and mounting screws, running edge to edge.
+   ① THE FACEPLATE IS GONE.  The plate rect, the brushed-grain hatch, the two ear
+      rails and the four screws were the only lines in the core that were NOT the
+      machine — and the hatch is what kept it reading as a solid panel however
+      little it was filled.  All of it is deleted.  What is left is the machine on
+      nothing, exactly like every other rack core (reverb / delay / distortion are
+      strokes on transparency).  The ~34 px the ears used to eat now belongs to
+      the machines, so all three grew into it.
 
-   Grounded in the machines the build bible already researched (TAPE-BUILD-BIBLE
-   SS1, audit-verified 2026-08-14):
-     STUDIO  — the studio deck (SS1.4): two reels, three-head block, VU pair.
-     CASSETTE— the 1-7/8 ips shell (SS1.5): window, hubs, transport row, counter.
-     WIRE    — the multi-head machine (SS1.2/1.3): the RE-201's rotary MODE
-               selector + the Echorec drum's fixed head array, on a wire path.
+   ② THE ASSEMBLY LAW — what "3 blocks on the string" was really saying.  A part
+      that floats unattached reads as debris, not as a machine.  Every head in
+      here is MOUNTED now: Studio's three stand on one head bridge with the tape
+      wrapping over their faces; Wire's four are held in a frame the wire threads
+      through.  Same fix, two deliberately different silhouettes.
 
-   House laws honoured: canvas-2D only, the shared vA/vH/vP/vD palette, NO
-   per-frame shadowBlur or filters (fb342 push-lane law), no per-frame gradient
-   creation, idle=dim / playing=bright (fb311).
+   ③ CASSETTE WAS THE WRONG SHAPE.  It was drawn 139 x 50 = 2.8:1, which is a car
+      stereo, not a cassette (a real shell is 100 x 64 mm ≈ 1.58:1).  And the hub
+      packs were allowed to grow to r = 0.31·shellH — bigger than the window that
+      contains them.  The shell is now the true aspect, as tall as the core allows,
+      and the packs are bounded by the window they live in.
+
+   House laws honoured: canvas-2D only, the shared vA/vH/vP palette, thin white
+   with purple ONLY where something is lit, no per-frame shadowBlur / filters /
+   gradient objects (fb342), idle = dim / playing = bright (fb311).
    ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* One faceplate for all three — the rack signature is the ears and the screws. */
-function rackFace(ctx, w, h, t, label, litAmt) {   // `label` intentionally unused — see below
-  var earW = Math.max(7, w * 0.052);
-  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
-
-  // plate
-  // TRANSPARENT (Max) — the core sits on the card, it never paints its own panel.
-  // Every other rack core is strokes on nothing; the plate is drawn, not filled.
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(1, 1, w - 2, h - 2, 2.5);
-  else ctx.rect(1, 1, w - 2, h - 2);
-  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
-
-  // brushed-metal grain — cheap, deterministic, no gradient objects
-  ctx.save();
-  ctx.beginPath(); ctx.rect(1, 1, w - 2, h - 2); ctx.clip();
-  ctx.strokeStyle = vA(0.05); ctx.lineWidth = 0.5;
-  for (var g = 3; g < h; g += 5) {
-    ctx.beginPath(); ctx.moveTo(2, g); ctx.lineTo(w - 2, g); ctx.stroke();
-  }
-  ctx.restore();
-
-  // rack ears + the four mounting screws
-  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.9;
-  ctx.beginPath(); ctx.moveTo(earW, 3); ctx.lineTo(earW, h - 3); ctx.stroke();
-  ctx.beginPath(); ctx.moveTo(w - earW, 3); ctx.lineTo(w - earW, h - 3); ctx.stroke();
-  var sx = [earW * 0.5, w - earW * 0.5], sy = [h * 0.24, h * 0.76], sr = Math.max(1.5, h * 0.045);
-  for (var i = 0; i < 2; i++) for (var j = 0; j < 2; j++) {
-    ctx.beginPath(); ctx.arc(sx[i], sy[j], sr, 0, 6.2832);
-    ctx.strokeStyle = vH(0.5); ctx.lineWidth = 0.8; ctx.stroke();
-    ctx.beginPath();                                   // the slot
-    ctx.moveTo(sx[i] - sr * 0.6, sy[j]); ctx.lineTo(sx[i] + sr * 0.6, sy[j]);
-    ctx.strokeStyle = vH(0.75); ctx.lineWidth = 0.7; ctx.stroke();
-  }
-
-  // NO nameplate. The header Type pill already says Studio / Cassette / Wire, and printing it
-  // again on the faceplate is the no-doubles violation (never the same name twice on one surface
-  // set — same rule as a pane-box label repeating its tab name).
-  return { earW: earW, x0: earW + 4, x1: w - earW - 4 };
+/* The drawing field. No plate — just the margins every machine shares. */
+function rackBounds(w, h) {
+  var pad = Math.max(4, w * 0.018);
+  return { x0: pad, x1: w - pad, span: w - pad * 2, mid: w / 2, cy: h / 2 };
 }
 
-/* A spinning reel — spokes integrate the transport speed, so it never free-runs. */
-function rackReel(ctx, cx, cy, r, ang, spokes, lit) {
+/* A reel: flange, a tape pack whose RADIUS is how much tape is on this side, and
+   three NAB cut-outs that carry the rotation. Pack ring, never a filled disc. */
+function rackReel(ctx, cx, cy, r, ang, packR, lit) {
   ctx.beginPath(); ctx.arc(cx, cy, r, 0, 6.2832);
-  ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.6; ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.30, 0, 6.2832);
-  ctx.strokeStyle = vH(0.55 + 0.35 * lit); ctx.lineWidth = 0.6; ctx.stroke();
-  // the tape pack — a THIN ring, not a filled disc. The house aesthetic is white strokes
-  // with purple as the accent (feedback-thin-white-no-glass); a fat vP fill read as a blob.
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.70, 0, 6.2832);
-  ctx.strokeStyle = 'rgba(183,148,255,' + (0.24 + 0.22 * lit).toFixed(2) + ')';
-  ctx.lineWidth = Math.max(0.9, r * 0.13); ctx.stroke();
-  ctx.beginPath(); ctx.arc(cx, cy, r * 0.62, 0, 6.2832);
-  ctx.strokeStyle = vH(0.30 + 0.25 * lit); ctx.lineWidth = 0.6; ctx.stroke();
-  // spokes — THE motion cue
-  ctx.strokeStyle = vH(0.35 + 0.45 * lit); ctx.lineWidth = 0.9;
-  for (var s = 0; s < spokes; s++) {
-    var a = ang + s * 6.2832 / spokes;
-    ctx.beginPath();
-    ctx.moveTo(cx + Math.cos(a) * r * 0.34, cy + Math.sin(a) * r * 0.34);
-    ctx.lineTo(cx + Math.cos(a) * r * 0.60, cy + Math.sin(a) * r * 0.60);
-    ctx.stroke();
+  ctx.strokeStyle = vH(0.40); ctx.lineWidth = 0.7; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(cx, cy, packR, 0, 6.2832);
+  ctx.strokeStyle = 'rgba(183,148,255,' + (0.30 + 0.26 * lit).toFixed(2) + ')';
+  ctx.lineWidth = Math.max(1, r * 0.085); ctx.stroke();
+  ctx.beginPath(); ctx.arc(cx, cy, packR - r * 0.10, 0, 6.2832);
+  ctx.strokeStyle = vH(0.20 + 0.16 * lit); ctx.lineWidth = 0.5; ctx.stroke();
+
+  ctx.beginPath(); ctx.arc(cx, cy, r * 0.17, 0, 6.2832);
+  ctx.strokeStyle = vH(0.55); ctx.lineWidth = 0.6; ctx.stroke();
+
+  ctx.strokeStyle = vH(0.24 + 0.36 * lit);
+  ctx.lineWidth = Math.max(1.1, r * 0.12);
+  for (var s = 0; s < 3; s++) {
+    var a = ang + s * 2.0944;
+    ctx.beginPath(); ctx.arc(cx, cy, r * 0.30, a - 0.52, a + 0.52); ctx.stroke();
   }
 }
 
-/* A moving-coil VU — the level meter every rack deck has. */
+/* A moving-coil VU. The over zone lights only when the needle is actually in it —
+   purple/amber means LIT, never decoration. */
 function rackVU(ctx, x, y, w2, h2, val, t, seed) {
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(x, y, w2, h2, 1.5); else ctx.rect(x, y, w2, h2);
-  ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.7; ctx.stroke();
-  var px = x + w2 * 0.5, py = y + h2 * 0.94, rr = Math.min(w2 * 0.42, h2 * 0.82);
-  ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.6;
-  ctx.beginPath(); ctx.arc(px, py, rr, Math.PI * 1.15, Math.PI * 1.85); ctx.stroke();
-  var bal = 0.5 + Math.sin(t * 5.1 + seed) * 0.06 + Math.sin(t * 11.3 + seed) * 0.03;
-  var a = Math.PI * 1.15 + (Math.PI * 0.7) * Math.max(0, Math.min(1, val * bal * 1.6));
+  ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.6; ctx.stroke();
+
+  var px = x + w2 * 0.5, py = y + h2 * 0.90, rr = Math.min(w2 * 0.40, h2 * 0.72);
+  var A0 = Math.PI * 1.18, SW = Math.PI * 0.64, HOT = 0.72;
+
+  ctx.beginPath(); ctx.arc(px, py, rr, A0, A0 + SW * HOT);
+  ctx.strokeStyle = vA(0.24); ctx.lineWidth = 0.6; ctx.stroke();
+
+  var need = Math.max(0, Math.min(1, val * (0.64 + 0.24 * Math.sin(t * 5.1 + seed)
+                                                 + 0.12 * Math.sin(t * 11.3 + seed)) * 1.32));
+  ctx.beginPath(); ctx.arc(px, py, rr, A0 + SW * HOT, A0 + SW);
+  ctx.strokeStyle = (need > HOT) ? 'rgba(234,120,90,0.85)' : vA(0.18);
+  ctx.lineWidth = (need > HOT) ? 0.9 : 0.6; ctx.stroke();
+
+  ctx.strokeStyle = vA(0.20); ctx.lineWidth = 0.5;
+  for (var k = 0; k <= 4; k++) {
+    var a = A0 + SW * k / 4;
+    ctx.beginPath();
+    ctx.moveTo(px + Math.cos(a) * rr * 0.82, py + Math.sin(a) * rr * 0.82);
+    ctx.lineTo(px + Math.cos(a) * rr, py + Math.sin(a) * rr);
+    ctx.stroke();
+  }
+
+  var na = A0 + SW * need;
   ctx.beginPath(); ctx.moveTo(px, py);
-  ctx.lineTo(px + Math.cos(a) * rr, py + Math.sin(a) * rr);
-  ctx.strokeStyle = vH(0.85); ctx.lineWidth = 0.6; ctx.stroke();
+  ctx.lineTo(px + Math.cos(na) * rr * 0.94, py + Math.sin(na) * rr * 0.94);
+  ctx.strokeStyle = vH(0.88); ctx.lineWidth = 0.7; ctx.stroke();
+  ctx.beginPath(); ctx.arc(px, py, 0.9, 0, 6.2832); ctx.fillStyle = vH(0.70); ctx.fill();
 }
 
-/* ═══ THE SYMMETRY PASS ═══════════════════════════════════════════════════════
-   Max: "make them even and symmetrical... the red, green and yellow power buttons
-   need to be moved to the bottom center."  Three real faults, all mine:
-     STUDIO   — the VU pair was placed at mx-vw*1.15 / mx+vw*0.15, which is not
-                centred on anything; and the tape path's control points used
-                lx*0.38 / rx*0.38, so the left and right sweeps were different shapes.
-     CASSETTE — the transport row spanned 5*1.18*bw = 1.13x its container (it
-                overflowed), and the ladder's bars were 62% of their cell so the
-                gaps read wider than the bars. Neither was an even grid.
-     WIRE     — the wire was strung at ky - sr2*0.55, i.e. across the TOP of the
-                spools instead of through their centres.
-   Everything below is laid out from ONE centre line (mx = w/2) with mirrored
-   offsets, so left and right are equal by construction rather than by eye.
-   ════════════════════════════════════════════════════════════════════════════ */
+/* A guide roller the tape rides OVER — its top is tangent to the tape line. */
+function rackRoller(ctx, cx, ty, rr, ang, lit) {
+  ctx.beginPath(); ctx.arc(cx, ty + rr, rr, 0, 6.2832);
+  ctx.strokeStyle = vH(0.38); ctx.lineWidth = 0.6; ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(cx - Math.cos(ang) * rr * 0.66, ty + rr - Math.sin(ang) * rr * 0.66);
+  ctx.lineTo(cx + Math.cos(ang) * rr * 0.66, ty + rr + Math.sin(ang) * rr * 0.66);
+  ctx.strokeStyle = vH(0.22 + 0.34 * lit); ctx.lineWidth = 0.5; ctx.stroke();
+}
 
-/* fb — the red/green/yellow cluster is GONE (Max). With it removed the whole
-   composition also moves to the vertical CENTRE of the core: it had been sitting
-   high to leave that strip free at the bottom. */
-/* ── 1. STUDIO — two reels, three-head block, VU pair. Symmetric about mx. ── */
+/* ── 1. STUDIO — big reels, ONE head bridge, a VU pair. ─────────────────────
+   The three heads used to be loose filled blocks sitting on the tape curve; they
+   now stand on a bridge, the tape wraps over their faces (each lifts it), and the
+   only lit thing is the head GAP. Two guide rollers carry the tape in and out. */
 function drawStudioRack(ctx, w, h, t) {
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
-  var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.50, r = h * 0.30;
-  var spin = t * (1.15 + sat * 0.5);
-  var wob = Math.sin(t * 4.3) * wow * h * 0.030 + Math.sin(t * 11.7) * wow * h * 0.012;
+  var B = rackBounds(w, h), mx = B.mid, cy = B.cy;
 
-  // reels — equidistant from the centre line
-  var off = (F.x1 - F.x0) / 2 - r;
-  rackReel(ctx, mx - off, cy, r, -spin,        3, lit);
-  rackReel(ctx, mx + off, cy, r, -spin * 0.82, 3, lit);
+  // ── the reels ARE the machine: they take the full height
+  var r = h * 0.38, off = B.span / 2 - r;
+  var spin = t * (1.15 + sat * 0.55);
+  // the pack transfers L -> R, but only a LITTLE: a big swing reads as a lopsided
+  // pair rather than as a transport, and Max already caught this card once on
+  // symmetry. 0.56 -> 0.76 r is visible over time without ever looking uneven.
+  var xfer = 0.5 + 0.5 * Math.sin(t * 0.17);
+  var pkL = r * (0.56 + 0.20 * xfer), pkR = r * (0.56 + 0.20 * (1 - xfer));
+  rackReel(ctx, mx - off, cy, r, -spin,        pkL, lit);
+  rackReel(ctx, mx + off, cy, r, -spin * 0.88, pkR, lit);
 
-  // tape path — one shape, mirrored. Control points are offsets from mx, not blends.
-  var hy = cy + r * 0.74 + wob, cxo = off * 0.52, hxo = off * 0.30;
-  ctx.beginPath();
-  ctx.moveTo(mx - off + r, cy - r * 0.12);
-  ctx.quadraticCurveTo(mx - cxo, hy, mx - hxo, hy);
-  ctx.lineTo(mx + hxo, hy);
-  ctx.quadraticCurveTo(mx + cxo, hy, mx + off - r, cy - r * 0.12);
-  ctx.strokeStyle = vH(0.42 + 0.35 * lit); ctx.lineWidth = 0.8; ctx.stroke();
+  // ── the head bridge, symmetric about mx. It sits HIGH — a deck's head nest is
+  // a tall housing, and hanging the tape low across the card is exactly what made
+  // the old heads read as three pegs on a clothesline.
+  var hy   = cy + r * 0.28;                            // the tape line
+  var bw   = B.span * 0.265, bx = mx - bw / 2;         // the head block
+  var hgap = bw / 3, hw = bw * 0.175;                  // three bays, a face on each
+  var bTop = hy + h * 0.050, bBot = h - h * 0.085;
+  var BUMP = h * 0.030;                                // how far a head lifts the tape
 
-  // three heads, evenly spaced on the centre
-  var hw = h * 0.075;
-  for (var i = -1; i <= 1; i++) {
-    var hx = mx + i * hw * 2.3;
-    ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(hx - hw * 0.5, hy - hw * 1.2, hw, hw * 1.2, 0.8);
-    else ctx.rect(hx - hw * 0.5, hy - hw * 1.2, hw, hw * 1.2);
-    var flash = 0.35 + 0.5 * Math.max(0, Math.sin(t * 2.6 - i * 1.1)) * lit;
-    ctx.fillStyle = 'rgba(183,148,255,' + (0.26 + flash * 0.42).toFixed(2) + ')'; ctx.fill();
-    ctx.strokeStyle = vH(0.50); ctx.lineWidth = 0.55; ctx.stroke();
+  function headLift(x) {
+    var b = 0;
+    for (var i = -1; i <= 1; i++) {
+      var d = Math.abs(x - (mx + i * hgap)) / (hw * 0.66);
+      if (d < 1) b = Math.max(b, (1 - d) * BUMP);
+    }
+    return b;
+  }
+  // the guide rollers sit at the BRIDGE's outer corners, so the transport reads as
+  // one dense assembly instead of a wide sag with something small in the middle.
+  var gr = h * 0.062, gx = bw / 2 + gr + 1.5;
+  function tapeY(x) {
+    var u = (x - (mx - gx)) / (2 * gx);
+    var env = Math.sin(Math.max(0, Math.min(1, u)) * Math.PI);
+    var held = (Math.abs(x - mx) < bw * 0.52) ? 0.22 : 1;   // the bridge steadies it
+    return hy - headLift(x)
+         + (Math.sin(u * 9.5 + t * 6.2) * 0.72 + Math.sin(u * 21 + t * 13.5) * 0.28)
+           * env * held * wow * h * 0.045;
   }
 
-  // VU pair — mirrored about mx with an equal gap between them
-  var vw = (F.x1 - F.x0) * 0.105, vh = h * 0.28, gp = h * 0.07;
-  rackVU(ctx, mx - gp / 2 - vw, cy - vh - h * 0.10, vw, vh, lit,       t, 0);
-  rackVU(ctx, mx + gp / 2,      cy - vh - h * 0.10, vw, vh, lit * 0.9, t, 2.4);
+  // ── THE HEAD BLOCK. Three separate bodies standing in a row is still three
+  // repeated boxes however they are mounted — the eye counts blocks. So the mass
+  // is ONE housing with three bays, and all that rises into the tape is the three
+  // head FACES: small, and obviously part of the thing underneath them.
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(bx, bTop, bw, bBot - bTop, 1.8);
+  else ctx.rect(bx, bTop, bw, bBot - bTop);
+  ctx.strokeStyle = vA(0.40); ctx.lineWidth = 0.7; ctx.stroke();
+  ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.5;
+  for (var dv = -1; dv <= 1; dv += 2) {                // the bay dividers
+    ctx.beginPath();
+    ctx.moveTo(mx + dv * hgap / 2, bTop + 1.6); ctx.lineTo(mx + dv * hgap / 2, bBot - 1.6);
+    ctx.stroke();
+  }
+  ctx.beginPath();                                     // the cover seam
+  ctx.moveTo(bx + 1.4, bBot - (bBot - bTop) * 0.30);
+  ctx.lineTo(bx + bw - 1.4, bBot - (bBot - bTop) * 0.30);
+  ctx.strokeStyle = vA(0.18); ctx.stroke();
+  for (var e0 = -1; e0 <= 1; e0 += 2) {                // mounting bolts
+    ctx.beginPath(); ctx.arc(mx + e0 * (bw / 2 - h * 0.042), bBot - (bBot - bTop) * 0.15, 1, 0, 6.2832);
+    ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.45; ctx.stroke();
+  }
+
+  // the tape: off the left pack, over the left roller, across the heads, mirrored
+  var exLx = mx - off + pkL * 0.89, exLy = cy + pkL * 0.45;
+  var exRx = mx + off - pkR * 0.89, exRy = cy + pkR * 0.45;
+  ctx.beginPath();
+  ctx.moveTo(exLx, exLy);
+  ctx.quadraticCurveTo(exLx + off * 0.20, hy, mx - gx, hy);
+  for (var xx = mx - gx; xx <= mx + gx; xx += 2) ctx.lineTo(xx, tapeY(xx));
+  ctx.lineTo(mx + gx, hy);
+  ctx.quadraticCurveTo(exRx - off * 0.20, hy, exRx, exRy);
+  ctx.strokeStyle = vH(0.44 + 0.34 * lit); ctx.lineWidth = 0.8; ctx.stroke();
+
+  rackRoller(ctx, mx - gx, hy, gr,  spin * 2.2, lit);
+  rackRoller(ctx, mx + gx, hy, gr, -spin * 2.2, lit);
+
+  // the three head FACES — erase / record / play — rising out of their bays into
+  // the tape. Only the head GAP is ever lit.
+  for (var i = -1; i <= 1; i++) {
+    var hx = mx + i * hgap, top = hy - BUMP;
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(hx - hw / 2, top, hw, bTop - top + 1.2, 1.6);
+    else ctx.rect(hx - hw / 2, top, hw, bTop - top + 1.2);
+    ctx.strokeStyle = vH(0.52); ctx.lineWidth = 0.6; ctx.stroke();
+    var fl = 0.28 + 0.56 * Math.max(0, Math.sin(t * 2.6 - i * 1.15)) * lit;
+    ctx.beginPath(); ctx.moveTo(hx, top + 0.9); ctx.lineTo(hx, bTop - 0.4);
+    ctx.strokeStyle = 'rgba(183,148,255,' + fl.toFixed(2) + ')';
+    ctx.lineWidth = 1.2; ctx.stroke();
+  }
+
+  // the VU pair — mirrored about mx with an equal gap, and sized so the pair's
+  // footprint matches the transport assembly directly below it.
+  var vw = B.span * 0.14, vh = h * 0.34, vg = B.span * 0.042, vy = h * 0.065;
+  rackVU(ctx, mx - vg / 2 - vw, vy, vw, vh, lit,        t, 0);
+  rackVU(ctx, mx + vg / 2,      vy, vw, vh, lit * 0.92, t, 2.4);
 
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 2. CASSETTE — a real shell, drawn big and centred ──────────────────────
-   The first pass was a small outline with two hubs and a pair of bar blocks; it
-   filled the face but it did not read as a cassette. This is the actual anatomy:
-   a large shell with corner screws, the label strip, the window, hubs with teeth,
-   tape packs that TRANSFER (left shrinks as right grows), and the five openings
-   along the bottom edge where the capstan and pinch roller come through.        */
+/* ── 2. CASSETTE — the shell at its REAL aspect, big and centred ────────────
+   1.58:1 (a 100 x 64 mm shell), as tall as the core allows, with the hub packs
+   bounded by the window that holds them. Peak ladders either side, each sitting
+   on its own baseline so they read as one meter instead of loose bars.        */
 function drawCassetteRack(ctx, w, h, t) {
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
-  var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.50;
+  var B = rackBounds(w, h), mx = B.mid, cy = B.cy;
 
-  var sw = (F.x1 - F.x0) * 0.60, sh = h * 0.70;
+  var sh = h * 0.82, sw = sh * 1.58;                   // THE real cassette aspect
   var sx = mx - sw / 2, sy = cy - sh / 2;
 
   // shell
   ctx.beginPath();
   if (ctx.roundRect) ctx.roundRect(sx, sy, sw, sh, 2.5); else ctx.rect(sx, sy, sw, sh);
-  ctx.strokeStyle = vA(0.48); ctx.lineWidth = 0.8; ctx.stroke();
+  ctx.strokeStyle = vA(0.46); ctx.lineWidth = 0.8; ctx.stroke();
 
-  // four corner screws — the cassette signature
-  var cs = Math.max(1.1, h * 0.022), ins = sw * 0.045;
+  // four corner screws
+  var cs = Math.max(1.1, sh * 0.030), ins = sw * 0.062;
   for (var i = -1; i <= 1; i += 2) for (var j = -1; j <= 1; j += 2) {
     ctx.beginPath();
-    ctx.arc(mx + i * (sw / 2 - ins), cy + j * (sh / 2 - ins * 0.85), cs, 0, 6.2832);
-    ctx.strokeStyle = vA(0.34); ctx.lineWidth = 0.5; ctx.stroke();
+    ctx.arc(mx + i * (sw / 2 - ins), cy + j * (sh / 2 - ins * 0.78), cs, 0, 6.2832);
+    ctx.strokeStyle = vA(0.32); ctx.lineWidth = 0.5; ctx.stroke();
   }
 
-  // label strip across the top
+  // label strip
+  var lx = sx + sw * 0.095, lw = sw * 0.81, ly = sy + sh * 0.075, lh = sh * 0.31;
   ctx.beginPath();
-  var lyH = sh * 0.24;
-  if (ctx.roundRect) ctx.roundRect(sx + sw * 0.10, sy + sh * 0.07, sw * 0.80, lyH, 1);
-  else ctx.rect(sx + sw * 0.10, sy + sh * 0.07, sw * 0.80, lyH);
+  if (ctx.roundRect) ctx.roundRect(lx, ly, lw, lh, 1); else ctx.rect(lx, ly, lw, lh);
   ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.5; ctx.stroke();
-  ctx.strokeStyle = vA(0.16);
+  ctx.strokeStyle = vA(0.15);
   for (var l = 1; l <= 2; l++) {
-    var lyy = sy + sh * 0.07 + lyH * (l / 3);
-    ctx.beginPath(); ctx.moveTo(sx + sw * 0.14, lyy); ctx.lineTo(sx + sw * 0.86, lyy); ctx.stroke();
+    var lyy = ly + lh * (l / 3);
+    ctx.beginPath(); ctx.moveTo(lx + lw * 0.05, lyy); ctx.lineTo(lx + lw * 0.95, lyy); ctx.stroke();
   }
 
   // the window
-  var wy = sy + sh * 0.40, wh2 = sh * 0.42, wxi = sx + sw * 0.09, wwi = sw * 0.82;
+  var wx = sx + sw * 0.10, ww = sw * 0.80, wy = sy + sh * 0.455, wh2 = sh * 0.335;
   ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(wxi, wy, wwi, wh2, 1.5); else ctx.rect(wxi, wy, wwi, wh2);
+  if (ctx.roundRect) ctx.roundRect(wx, wy, ww, wh2, 1.5); else ctx.rect(wx, wy, ww, wh2);
   ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.5; ctx.stroke();
 
-  // hubs, with teeth, and packs that TRANSFER left -> right
-  var hy = wy + wh2 * 0.52, hr = wh2 * 0.34, ho = wwi * 0.24;
+  // hubs + packs that TRANSFER — bounded so the pack can never leave the window
+  var hy   = wy + wh2 * 0.50;
+  var hr   = wh2 * 0.20;
+  var pMax = wh2 * 0.44, pMin = wh2 * 0.24;
+  var ho   = ww * 0.245;
   var spin = t * (1.5 + sat * 0.6);
-  var xfer = 0.5 + 0.5 * Math.sin(t * 0.16);            // 1 = full left pack
-  var packL = hr * (1.25 + xfer * 0.95), packR = hr * (1.25 + (1 - xfer) * 0.95);
-  [[-1, packL], [1, packR]].forEach(function (o) {
+  var xfer = 0.5 + 0.5 * Math.sin(t * 0.16);
+  var pkL  = pMin + (pMax - pMin) * xfer, pkR = pMin + (pMax - pMin) * (1 - xfer);
+  [[-1, pkL], [1, pkR]].forEach(function (o) {
     var cx2 = mx + o[0] * ho;
     ctx.beginPath(); ctx.arc(cx2, hy, o[1], 0, 6.2832);
-    ctx.strokeStyle = 'rgba(183,148,255,' + (0.20 + 0.20 * lit).toFixed(2) + ')';
-    ctx.lineWidth = 0.9; ctx.stroke();
+    ctx.strokeStyle = 'rgba(183,148,255,' + (0.26 + 0.24 * lit).toFixed(2) + ')';
+    ctx.lineWidth = Math.max(0.9, wh2 * 0.05); ctx.stroke();
     ctx.beginPath(); ctx.arc(cx2, hy, hr, 0, 6.2832);
     ctx.strokeStyle = vH(0.46); ctx.lineWidth = 0.6; ctx.stroke();
-    for (var q = 0; q < 6; q++) {                        // the drive teeth
-      var ang = spin + q * 6.2832 / 6;
+    for (var q = 0; q < 6; q++) {                      // the drive teeth
+      var ang = spin + q * 1.0472;
       ctx.beginPath();
-      ctx.moveTo(cx2 + Math.cos(ang) * hr * 0.38, hy + Math.sin(ang) * hr * 0.38);
-      ctx.lineTo(cx2 + Math.cos(ang) * hr * 0.86, hy + Math.sin(ang) * hr * 0.86);
-      ctx.strokeStyle = vH(0.30 + 0.40 * lit); ctx.lineWidth = 0.55; ctx.stroke();
+      ctx.moveTo(cx2 + Math.cos(ang) * hr * 0.42, hy + Math.sin(ang) * hr * 0.42);
+      ctx.lineTo(cx2 + Math.cos(ang) * hr * 0.94, hy + Math.sin(ang) * hr * 0.94);
+      ctx.strokeStyle = vH(0.28 + 0.42 * lit); ctx.lineWidth = 0.5; ctx.stroke();
     }
   });
-  // the tape span, sagging and wobbling with wow
-  var sag = wh2 * 0.10 + Math.sin(t * 3.9) * wow * wh2 * 0.10;
+
+  // the exposed tape span, sagging and fluttering with Wow
+  var aL = mx - ho + pkL, aR = mx + ho - pkR;
+  var sag = wh2 * 0.14 + Math.sin(t * 3.9) * wow * wh2 * 0.12;
   ctx.beginPath();
-  ctx.moveTo(mx - ho + packL * 0.95, hy + hr * 0.30);
-  ctx.quadraticCurveTo(mx, hy + hr * 0.30 + sag, mx + ho - packR * 0.95, hy + hr * 0.30);
-  ctx.strokeStyle = vH(0.45 + 0.35 * lit); ctx.lineWidth = 0.75; ctx.stroke();
+  ctx.moveTo(aL, hy);
+  ctx.quadraticCurveTo((aL + aR) / 2, hy + sag, aR, hy);
+  ctx.strokeStyle = vH(0.44 + 0.34 * lit); ctx.lineWidth = 0.75; ctx.stroke();
 
   // the five openings along the bottom edge (capstan / pinch roller / guides)
-  var oN = 5, ow = sw * 0.055, og = sw * 0.055, tot = oN * ow + (oN - 1) * og;
+  var oN = 5, ow = sw * 0.052, og = sw * 0.052, tot = oN * ow + (oN - 1) * og;
+  var oy = sy + sh * 0.885, oh = sh * 0.070;
   for (var k = 0; k < oN; k++) {
     var ox = mx - tot / 2 + k * (ow + og);
     ctx.beginPath();
-    if (ctx.roundRect) ctx.roundRect(ox, sy + sh - sh * 0.115, ow, sh * 0.075, 0.6);
-    else ctx.rect(ox, sy + sh - sh * 0.115, ow, sh * 0.075);
+    if (ctx.roundRect) ctx.roundRect(ox, oy, ow, oh, 0.6); else ctx.rect(ox, oy, ow, oh);
     ctx.strokeStyle = vA(0.26); ctx.lineWidth = 0.45; ctx.stroke();
   }
 
-  // level ladders — true mirrors, indexed outward from the shell on both sides
-  var N = 5, pad = (F.x1 - F.x0) * 0.030;
-  var innerL = sx - pad, innerR = sx + sw + pad, zone = innerL - F.x0;
-  var bw = zone / (N + (N - 1) * 0.5), gap = bw * 0.5;
+  // peak ladders — true mirrors, indexed OUTWARD from the shell, on a baseline
+  var N = 6, pad = B.span * 0.032;
+  var inL = sx - pad, inR = sx + sw + pad, zone = inL - B.x0;
+  var bw = zone / (N + (N - 1) * 0.55), gp = bw * 0.55;
+  var by = cy - h * 0.185, bh = h * 0.37;
   for (var i2 = 0; i2 < N; i2++) {
-    var on = (i2 / N) < (lit * (0.60 + Math.sin(t * 6.3 + i2 * 0.5) * 0.22));
+    var on = (i2 / N) < (lit * (0.62 + Math.sin(t * 6.3 + i2 * 0.5) * 0.22));
     var fill = (i2 > N - 3) ? 'rgba(234,120,90,0.80)' : 'rgba(183,148,255,0.62)';
-    var xs = [innerL - (i2 + 1) * bw - i2 * gap, innerR + i2 * (bw + gap)];
+    var xs = [inL - (i2 + 1) * bw - i2 * gp, inR + i2 * (bw + gp)];
     for (var e = 0; e < 2; e++) {
       ctx.beginPath();
-      if (ctx.roundRect) ctx.roundRect(xs[e], cy - h * 0.14, bw, h * 0.28, 0.8);
-      else ctx.rect(xs[e], cy - h * 0.14, bw, h * 0.28);
+      if (ctx.roundRect) ctx.roundRect(xs[e], by, bw, bh, 0.8); else ctx.rect(xs[e], by, bw, bh);
       if (on) { ctx.fillStyle = fill; ctx.fill(); }
       ctx.strokeStyle = vA(0.26); ctx.lineWidth = 0.5; ctx.stroke();
     }
   }
+  ctx.strokeStyle = vA(0.22); ctx.lineWidth = 0.5;
+  var lend = inL - N * bw - (N - 1) * gp, rend = inR + (N - 1) * (bw + gp) + bw;
+  ctx.beginPath(); ctx.moveTo(lend, by + bh + 2.5); ctx.lineTo(inL,  by + bh + 2.5); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(inR,  by + bh + 2.5); ctx.lineTo(rend, by + bh + 2.5); ctx.stroke();
 
   ctx.restore(); _vizWf = false;
 }
 
-/* ── 3. WIRE — the transport, not just a line ───────────────────────────────
-   The first pass was two spools and a bare strand, which left the middle empty.
-   A wire recorder's whole character is the PATH: wound spools, guide pulleys that
-   turn, tension, and the head stack the wire is dragged across. That is what the
-   Type models (SS1.2/1.3 — the RE-201's 12-position selector and the Echorec's
-   fixed multi-head array), so the middle is now the head assembly.             */
+/* ── 3. WIRE — the wire, threaded ───────────────────────────────────────────
+   Gone: the empty box the wire ran through the bottom edge of, the comb of stems
+   hanging off nothing, and the 12-tick MODE row floating unattached near the top.
+   What is left is the path: wound spools, two eyelets the wire threads, and a
+   head frame — two rails and four stems — that HOLDS the four heads on the wire.
+   The wire flutters only where it is unsupported, which is what makes the frame
+   and the eyelets mean something.                                             */
 function drawWireRack(ctx, w, h, t) {
   _vizWf = true;
   ctx.clearRect(0, 0, w * DPR, h * DPR); ctx.save(); ctx.scale(DPR, DPR);
+  ctx.lineJoin = 'round'; ctx.lineCap = 'round';
   var wow = normalize('wowFlutter', state.params.wowFlutter);
   var sat = normalize('saturation', state.params.saturation);
-  var hiss = normalize('hiss', state.params.hiss);
   var lit = 0.35 + sat * 0.65;
-  var F = rackFace(ctx, w, h, t, '', lit);
-  var mx = w / 2, cy = h * 0.50, sr = h * 0.29;
-  var spin = t * (2.1 + sat * 0.7);
-  var off = (F.x1 - F.x0) / 2 - sr;
+  var B = rackBounds(w, h), mx = B.mid, cy = B.cy;
 
-  // spools — wound with visible layers of wire, mirrored
-  [-1, 1].forEach(function (sgn) {
-    var cx2 = mx + sgn * off;
-    ctx.beginPath(); ctx.arc(cx2, cy, sr, 0, 6.2832);
-    ctx.strokeStyle = vH(0.42); ctx.lineWidth = 0.7; ctx.stroke();
-    for (var r2 = 0.42; r2 < 0.92; r2 += 0.17) {          // the winding layers
-      ctx.beginPath(); ctx.arc(cx2, cy, sr * r2, 0, 6.2832);
-      ctx.strokeStyle = 'rgba(183,148,255,' + (0.14 + 0.14 * lit).toFixed(2) + ')';
-      ctx.lineWidth = 0.5; ctx.stroke();
-    }
-    ctx.beginPath(); ctx.arc(cx2, cy, sr * 0.24, 0, 6.2832);
-    ctx.strokeStyle = vH(0.50); ctx.lineWidth = 0.6; ctx.stroke();
-    for (var q = 0; q < 4; q++) {                          // hub spokes = the motion cue
-      var ang = sgn * spin + q * 1.5708;
-      ctx.beginPath();
-      ctx.moveTo(cx2 + Math.cos(ang) * sr * 0.26, cy + Math.sin(ang) * sr * 0.26);
-      ctx.lineTo(cx2 + Math.cos(ang) * sr * 0.52, cy + Math.sin(ang) * sr * 0.52);
-      ctx.strokeStyle = vH(0.28 + 0.42 * lit); ctx.lineWidth = 0.55; ctx.stroke();
-    }
-  });
+  var sr = h * 0.34, off = B.span / 2 - sr;
+  var spin = t * (2.0 + sat * 0.7);
+  var xfer = 0.5 + 0.5 * Math.sin(t * 0.19);
+  var pkL = sr * (0.54 + 0.22 * xfer), pkR = sr * (0.54 + 0.22 * (1 - xfer));
+  // BOTH spools turn the SAME way — one is paying out what the other takes up.
+  // (They used to counter-rotate, which is a transport that eats its own wire.)
+  rackReel(ctx, mx - off, cy, sr, -spin,        pkL, lit);
+  rackReel(ctx, mx + off, cy, sr, -spin * 0.88, pkR, lit);
 
-  // guide pulleys, mirrored, that actually turn
-  // THE WIRE RUNS ON THE CENTRE LINE (Max: "the wire needs to come down too").
-  // It used to sit at cy - sr*0.32, i.e. above the spool hubs; now the guides, the
-  // strand and the head block all share cy, so the path is dead level hub to hub.
-  var gpo = off * 0.52, gr = h * 0.075, gy = cy;
-  [-1, 1].forEach(function (sgn) {
-    var gx = mx + sgn * gpo;
-    ctx.beginPath(); ctx.arc(gx, gy, gr, 0, 6.2832);
-    ctx.strokeStyle = vH(0.40); ctx.lineWidth = 0.6; ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(gx - Math.cos(spin * 1.6) * gr * 0.7, gy - Math.sin(spin * 1.6) * gr * 0.7);
-    ctx.lineTo(gx + Math.cos(spin * 1.6) * gr * 0.7, gy + Math.sin(spin * 1.6) * gr * 0.7);
-    ctx.strokeStyle = vH(0.26 + 0.34 * lit); ctx.lineWidth = 0.5; ctx.stroke();
-  });
+  var gx = off * 0.55, gr = h * 0.082;                 // the two guide eyelets
+  var fw = B.span * 0.245, fh = h * 0.42;              // the head frame
+  var fL = mx - fw / 2, fR = mx + fw / 2;
 
-  // the head stack the wire is dragged across — the centre of the machine
-  var bw2 = (F.x1 - F.x0) * 0.20, bh2 = h * 0.34, by2 = gy - bh2;   // the block sits ON the wire
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(mx - bw2 / 2, by2, bw2, bh2, 1.5);
-  else ctx.rect(mx - bw2 / 2, by2, bw2, bh2);
-  ctx.strokeStyle = vA(0.40); ctx.lineWidth = 0.65; ctx.stroke();
-
-  // THE WIRE — spool, up over the guide, straight across the heads, down again.
-  // Dead level through the middle of the block; it wobbles only between supports.
+  // the wire flutters only BETWEEN supports; the frame and the eyelets hold it
+  var SUP = [mx - off + pkL, mx - gx, fL, fR, mx + gx, mx + off - pkR];
+  var AMP = [0.30, 1.0, 0.16, 1.0, 0.30];
   function wireY(x) {
-    var u = (x - (mx - gpo)) / (2 * gpo);
-    var env = Math.sin(Math.max(0, Math.min(1, u)) * Math.PI);
-    return gy + Math.sin(u * 11 + t * 7.5) * env * wow * h * 0.055
-              + Math.sin(u * 24 + t * 17) * env * wow * h * 0.020;
-  }
-  ctx.beginPath();
-  ctx.moveTo(mx - off + sr * 0.2, cy);
-  ctx.lineTo(mx - gpo, gy);
-  for (var xx = mx - gpo; xx <= mx + gpo; xx += 3) ctx.lineTo(xx, wireY(xx));
-  ctx.lineTo(mx + gpo, gy);
-  ctx.lineTo(mx + off - sr * 0.2, cy);
-  ctx.strokeStyle = vH(0.52 + 0.38 * lit); ctx.lineWidth = 0.8; ctx.stroke();
-
-  // four heads inside the block, evenly spaced and symmetric about mx
-  for (var q2 = 0; q2 < 4; q2++) {
-    var hx = mx - bw2 / 2 + bw2 * (q2 + 0.5) / 4;
-    var fl = Math.max(0, Math.sin(t * 3.1 - q2 * 0.8));
-    ctx.beginPath();
-    ctx.moveTo(hx, by2 + bh2 * 0.22); ctx.lineTo(hx, wireY(hx));
-    ctx.strokeStyle = vH(0.24 + fl * 0.34); ctx.lineWidth = 0.5; ctx.stroke();
-    ctx.beginPath(); ctx.arc(hx, wireY(hx), h * 0.026 + fl * h * 0.010, 0, 6.2832);
-    ctx.fillStyle = 'rgba(183,148,255,' + (0.30 + fl * 0.5 * lit).toFixed(2) + ')'; ctx.fill();
-    ctx.strokeStyle = vH(0.40 + fl * 0.30); ctx.lineWidth = 0.45; ctx.stroke();
+    for (var i = 0; i < 5; i++) {
+      if (x >= SUP[i] && x <= SUP[i + 1]) {
+        var u = (x - SUP[i]) / Math.max(0.001, SUP[i + 1] - SUP[i]);
+        var env = Math.sin(u * Math.PI) * AMP[i];
+        return cy + (Math.sin(x * 0.30 + t * 8.4) * 0.72 + Math.sin(x * 0.62 + t * 15.1) * 0.28)
+                    * env * wow * h * 0.040;
+      }
+    }
+    return cy;
   }
 
-  // the 12-position MODE selector, an even centred tick row (SS1.2)
-  var tn = 12, tw = (F.x1 - F.x0) * 0.40, tx0 = mx - tw / 2, ty = h * 0.105;
-  var selI = 3 + Math.floor((Math.sin(t * 0.23) * 0.5 + 0.5) * 5);
-  for (var d = 0; d < tn; d++) {
-    var dx = tx0 + tw * d / (tn - 1), on2 = (d === selI);
+  // THE WIRE — dead level hub to hub, on the centre line
+  ctx.beginPath(); ctx.moveTo(SUP[0], cy);
+  for (var xx = SUP[0]; xx <= SUP[5]; xx += 2) ctx.lineTo(xx, wireY(xx));
+  ctx.lineTo(SUP[5], cy);
+  ctx.strokeStyle = vH(0.50 + 0.36 * lit); ctx.lineWidth = 0.8; ctx.stroke();
+
+  // eyelets — the wire threads THROUGH them, so they sit on the centre line
+  [-1, 1].forEach(function (sgn) {
+    var ex = mx + sgn * gx;
+    ctx.beginPath(); ctx.arc(ex, cy, gr, 0, 6.2832);
+    ctx.strokeStyle = vH(0.40); ctx.lineWidth = 0.6; ctx.stroke();
+    ctx.beginPath(); ctx.arc(ex, cy, gr * 0.46, 0, 6.2832);
+    ctx.strokeStyle = vH(0.22 + 0.28 * lit); ctx.lineWidth = 0.5; ctx.stroke();
+  });
+
+  // the head frame: two rails + four stems. No side posts — the wire is threaded
+  // through the frame, never crossing a drawn edge.
+  var rT = cy - fh / 2, rB = cy + fh / 2, rh = Math.max(1.5, h * 0.026);
+  [[rT, fw], [rB - rh, fw * 0.78]].forEach(function (o) {
+    var ry = o[0], rw2 = o[1];
     ctx.beginPath();
-    ctx.moveTo(dx, ty - (on2 ? h * 0.048 : h * 0.026)); ctx.lineTo(dx, ty + h * 0.026);
-    ctx.strokeStyle = on2 ? 'rgba(183,148,255,0.92)' : vA(0.26);
-    ctx.lineWidth = on2 ? 1.1 : 0.5; ctx.stroke();
+    if (ctx.roundRect) ctx.roundRect(mx - rw2 / 2, ry, rw2, rh, 0.8);
+    else ctx.rect(mx - rw2 / 2, ry, rw2, rh);
+    ctx.strokeStyle = vA(0.36); ctx.lineWidth = 0.6; ctx.stroke();
+    for (var e = -1; e <= 1; e += 2) {                 // the mounting bolts
+      ctx.beginPath(); ctx.arc(mx + e * (rw2 / 2 - rh * 0.9), ry + rh / 2, 0.9, 0, 6.2832);
+      ctx.strokeStyle = vA(0.30); ctx.lineWidth = 0.45; ctx.stroke();
+    }
+  });
+
+  var pw = Math.max(4.4, fw * 0.108), ph = Math.max(4.8, h * 0.088);
+  for (var q = 0; q < 4; q++) {
+    var hx = fL + fw * (q + 0.5) / 4, hyw = wireY(hx);
+    var fl = Math.max(0, Math.sin(t * 3.1 - q * 0.85));
+    ctx.strokeStyle = vH(0.34 + 0.28 * lit); ctx.lineWidth = 0.7;
+    ctx.beginPath(); ctx.moveTo(hx, rT + rh); ctx.lineTo(hx, hyw - ph / 2); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(hx, hyw + ph / 2); ctx.lineTo(hx, rB - rh); ctx.stroke();
+    ctx.beginPath();
+    if (ctx.roundRect) ctx.roundRect(hx - pw / 2, hyw - ph / 2, pw, ph, 0.8);
+    else ctx.rect(hx - pw / 2, hyw - ph / 2, pw, ph);
+    ctx.strokeStyle = vH(0.44 + fl * 0.32); ctx.lineWidth = 0.55; ctx.stroke();
+    ctx.beginPath();                                   // its gap — the lit part
+    ctx.moveTo(hx, hyw - ph / 2 + 1.0); ctx.lineTo(hx, hyw + ph / 2 - 1.0);
+    ctx.strokeStyle = 'rgba(183,148,255,' + (0.26 + fl * 0.58 * lit).toFixed(2) + ')';
+    ctx.lineWidth = 1.2; ctx.stroke();
   }
 
   ctx.restore(); _vizWf = false;
@@ -1551,16 +1602,17 @@ var canvases=[];
   MACHINES_OLD.forEach(function(m){ var c=card(m); row.appendChild(c);
     canvases.push({cv:c.querySelector('canvas'), drawer:m.drawer}); }); })();
 document.getElementById('note').innerHTML =
-  '<b>What changed:</b> the front-page machines are drawn for a ~220\u00D7160 portrait box, so in a '
- +'253\u00D771 core they scale to fit the HEIGHT and sit small with dead space either side. '
- +'These are redrawn as what they would be in a rack \u2014 a faceplate with ears and mounting '
- +'screws, running edge to edge. Grounded in the machines the build bible already researched: '
- +'<b>Studio</b> = the studio deck (two reels, three-head block, VU pair) \u00B7 '
- +'<b>Cassette</b> = the 1\u215E ips shell (window, hubs, counter, transport row, level ladder) \u00B7 '
- +'<b>Wire</b> = the multi-head machine (the RE-201\'s 12-position MODE selector + the Echorec\'s '
- +'4 fixed heads, reading a wire that visibly vibrates with Wow). '
- +'Everything animates off the transport: reels spin with Saturation, the tape path and the wire '
- +'wobble with Wow, heads flash as they read, VU needles ride the level. '
+  '<b>What each one is:</b> '
+ +'<b>Studio</b> \u2014 two reels at full core height, the tape off the pack, over a guide roller, across a '
+ +'three-bay head block whose faces each lift it, and a VU pair sized to the transport below it \u00B7 '
+ +'<b>Cassette</b> \u2014 the shell at its true 1.58:1, corner screws, label, window, toothed hubs whose packs '
+ +'TRANSFER inside the window that bounds them, the five capstan openings, peak ladders on a baseline either side \u00B7 '
+ +'<b>Wire</b> \u2014 wound spools, two eyelets the wire threads, and a head gantry (mount bar + shorter pressure bar) '
+ +'holding four heads ON the strand. '
+ +'<b>Everything moves off the transport:</b> reels and hubs turn with Saturation and their packs transfer, the tape '
+ +'and the wire flutter with Wow \u2014 and only where they are UNSUPPORTED, which is what makes the rollers, the '
+ +'eyelets and the gantry mean something; heads flash as they read; VU needles ride the level and the over-zone '
+ +'lights only when the needle is actually in it. Purple means lit, never decoration. '
  +'No shadowBlur, no per-frame gradients \u2014 the fb342 push-lane law.';
 
 function frame(ts){
