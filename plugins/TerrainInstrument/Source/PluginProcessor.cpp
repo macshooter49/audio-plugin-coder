@@ -3751,8 +3751,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // three machines exist today, because adding a ninth entry later would renumber every saved
         // patch. The UI menu renders only the three that are real; the engine clamps.
         {
-            const juce::StringArray tpeTypes { "Studio","Cassette","Wire",
-                                               "Reserved 4","Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+            // fb366 — TUBE claims reserved slot 3. This is precisely why Type was born at
+            // choice(8) with three real entries: a fourth machine could be added without
+            // renumbering a single saved patch. Max: "there's a tube tape that we have too
+            // somewhere" — it is WireMachine's own valve saturator, which has been sitting
+            // behind setTubeSatEnabled() unreferenced by anything.
+            const juce::StringArray tpeTypes { "Studio","Cassette","Wire","Tube",
+                                               "Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray tpeChars { "Fresh","Ferric","Chrome","Vintage","Worn","Chewed","Hot","Cold" };
             const juce::StringArray tpeHeads { "Single","Dual","Triple","Quad","Spread","Swell","Ping","Cascade" };
             for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
@@ -3772,12 +3777,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "MIX",    d + "Mix",    0.35f);
                 // BACK — 2 dropdowns (above) + 8 knobs, 4x2.
                 F (p + "TIME",   d + "Time",    0.45f);  F (p + "REPEATS", d + "Repeats", 0.30f);
-                F (p + "DRIVE",  d + "Drive",   0.25f);  F (p + "AGE",     d + "Age",     0.15f);
-                F (p + "MOTOR",  d + "Motor",   0.35f);  F (p + "BUMP",    d + "Bump",    0.30f);
+                F (p + "DRIVE",  d + "Drive",   0.08f);  F (p + "AGE",     d + "Age",     0.15f);
+                F (p + "FLUTTER",d + "Flutter", 0.25f);  F (p + "BUMP",    d + "Bump",    0.30f);
                 F (p + "WIDTH",  d + "Width",   0.60f);  F (p + "DUCK",    d + "Duck",    0.00f);
                 for (auto& s : srcSuf) B (p + s, d + s, false);   // unrouted on arrival
                 B (p + "SYNC",   d + "Sync",   true);             // an echo wants to be in time
-                B (p + "STOP",   d + "Stop",   false);            // the tape-stop pill
+                // fb366 — THE ECHO IS OFF BY DEFAULT. Max: "we already have a delay and it
+                // could just come before the tape in order to get processed through the tape."
+                // Exactly right, so Tape is a tape machine first and the echo is opt-in.
+                B (p + "DELAY",  d + "Delay",  false);
                 B (p + "POWER",  d + "Power",  false);
                 B (p + "ACTIVE", d + "In Chain", false);
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
@@ -4250,8 +4258,8 @@ void TerrainInstrumentAudioProcessor::cacheTapeParams()
         v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
         v.type=R(g+"TYPE"); v.chr=R(g+"CHARACTER"); v.heads=R(g+"HEADS"); v.syncdiv=R(g+"SYNCDIV");
         v.mix=R(g+"MIX"); v.time=R(g+"TIME"); v.repeats=R(g+"REPEATS"); v.drive=R(g+"DRIVE");
-        v.age=R(g+"AGE"); v.motor=R(g+"MOTOR"); v.bump=R(g+"BUMP"); v.width=R(g+"WIDTH");
-        v.duck=R(g+"DUCK"); v.sync=R(g+"SYNC"); v.stop=R(g+"STOP");
+        v.age=R(g+"AGE"); v.flutter=R(g+"FLUTTER"); v.bump=R(g+"BUMP"); v.width=R(g+"WIDTH");
+        v.duck=R(g+"DUCK"); v.sync=R(g+"SYNC"); v.delay=R(g+"DELAY");
         // the six machine controls live in fixed slots; applyTpe picks the three the Type uses
         v.p1=R(g+"WOW"); v.p2=R(g+"SAT"); v.p3=R(g+"HISS");
         for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
@@ -4293,7 +4301,7 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
 
     tw::TapeFxEngine::Params tp;
     const int ty = (int) V.type->load();              // choice params read as the INDEX
-    const int wantType = (ty >= 0 && ty <= 2) ? ty : 0;   // the 5 reserved slots clamp to Studio
+    const int wantType = (ty >= 0 && ty <= 3) ? ty : 0;   // the 4 reserved slots clamp to Studio
 
     // The type RE-SEAT lives in the engine (TapeFxEngine::process) so the offline harness can
     // measure it — see the note there. This just states the wish.
@@ -4304,17 +4312,17 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
     tp.character = (int) V.chr->load();
     tp.heads     = (int) V.heads->load();
     // Studio's surface is Sculpt/Weave/Tilt; Cassette's and Wire's is Wow/Saturate/Hiss.
-    if (tp.type == 0) { tp.p1 = V.sculpt->load(); tp.p2 = V.weave->load(); tp.p3 = V.tilt->load(); }
+    if (wantType == 0) { tp.p1 = V.sculpt->load(); tp.p2 = V.weave->load(); tp.p3 = V.tilt->load(); }
     else              { tp.p1 = V.p1->load();     tp.p2 = V.p2->load();    tp.p3 = V.p3->load(); }
     tp.mix     = V.mix->load();
     tp.repeats = V.repeats->load();
     tp.drive   = V.drive->load();
     tp.age     = V.age->load();
-    tp.motor   = V.motor->load();
+    tp.flutter = V.flutter->load();
     tp.bump    = V.bump->load();
     tp.width   = V.width->load();
     tp.duck    = V.duck->load();
-    tp.stop    = V.stop != nullptr && V.stop->load() > 0.5f;
+    tp.delayOn = V.delay != nullptr && V.delay->load() > 0.5f;
 
     // Time: synced to the host grid when the Sync pill is lit (4 bars → 1/256, the rack-wide
     // time law), otherwise free 10 ms → 8 s log. 8 s is where the loop buffer ends, so the

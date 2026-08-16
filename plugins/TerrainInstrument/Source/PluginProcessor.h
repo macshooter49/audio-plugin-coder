@@ -1698,8 +1698,8 @@ private:
         std::atomic<float>* syncdiv; std::atomic<float>* p1; std::atomic<float>* p2;
         std::atomic<float>* p3; std::atomic<float>* mix; std::atomic<float>* time;
         std::atomic<float>* repeats; std::atomic<float>* drive; std::atomic<float>* age;
-        std::atomic<float>* motor; std::atomic<float>* bump; std::atomic<float>* width;
-        std::atomic<float>* duck; std::atomic<float>* sync; std::atomic<float>* stop;
+        std::atomic<float>* flutter; std::atomic<float>* bump; std::atomic<float>* width;
+        std::atomic<float>* duck; std::atomic<float>* sync; std::atomic<float>* delay;
         std::atomic<float>* sculpt; std::atomic<float>* weave; std::atomic<float>* tilt;
         std::atomic<float>* src[6]; };
     std::array<TpeRefs, (size_t) ParameterIDs::kFxInstances> tpeRefs_ {};
