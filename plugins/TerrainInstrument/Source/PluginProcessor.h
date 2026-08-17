@@ -686,6 +686,7 @@ public:
     void              setDistortionCurves (const juce::String& json);  // fb328 — curve-card blob (banks + bars)
     juce::String      getDistortionCurvesJson() const;                 // fb328 — card boot + cross-window pull
     juce::String      getDistortionCurveVizJson();                     // fb328 — live core feed (curve+occ+bloom)
+    juce::String      getFilterVizJson();                               // fb382 — the 60 Hz filter card feed
     juce::String      getGranularVizJson();                            // fb362 — granular cards, one entry per instance
     juce::String      getTapeVizJson();                                // fb365 — tape cards, one entry per instance
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D

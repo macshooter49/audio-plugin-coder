@@ -4415,6 +4415,32 @@ void TerrainInstrumentAudioProcessor::applyFlt (int inst0, float inL, float inR,
     outR = inR * (1.0f - env) + wr * env;
 }
 
+// fb382 — THE FILTER CARD FEED. Rides the 60 Hz C++ PUSH, never a native poll: a poll dies
+// silently three ways here (the promise never settles — the house law — it rejects, or JSON.parse
+// throws inside a silent catch), which is why the distortion curve had NEVER drawn for Max until
+// fb354. Every number here is one the DSP just used on the audio thread.
+juce::String TerrainInstrumentAudioProcessor::getFilterVizJson()
+{
+    juce::String j = "[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const auto& e = fltPool_[(size_t) i];
+        const auto& V = fltRefs_[(size_t) i];
+        const bool live = V.active != nullptr && V.active->load() > 0.5f;
+        if (i) j << ",";
+        j << "{\"on\":" << (live ? 1 : 0)
+          << ",\"cut\":" << juce::String (e.liveCutHz(), 1)
+          << ",\"res\":" << juce::String (e.liveRes(), 3)
+          << ",\"lvl\":" << juce::String (e.liveLevel(), 4)
+          << ",\"env\":" << juce::String (fltEnv_[(size_t) i], 3)
+          << ",\"b\":[";
+        for (int b = 0; b < tw::FilterFxEngine::kBands; ++b)
+        { if (b) j << ","; j << juce::String (e.bandDb (b), 1); }
+        j << "]}";
+    }
+    return j + "]";
+}
+
 // MESSAGE THREAD ONLY (timerCallback). The audio thread sets tpeWantBuild_ and reads the
 // pointer; it never allocates. One instance is ~4 MB of loop plus three machines, so six
 // eager engines would be 25 MB for a rack that usually holds one.

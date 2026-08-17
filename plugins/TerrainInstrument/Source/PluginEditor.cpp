@@ -5586,6 +5586,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         {
             dstVizPushCtr_ = 0;
             js << "window.__dstVizPush=" << audioProcessor.getDistortionCurveVizJson() << ";";
+            js << "window.__fltVizPush=" << audioProcessor.getFilterVizJson() << ";";   // fb382
         }
         // fb363 — THE GRANULAR CARD PUSHES EVERY FRAME, not at the distortion's 15 Hz.
         // Max: "it is not 4K 60 frames per second, and them frames are very very low... that looks

@@ -54,9 +54,35 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
       out.engineRoundTrip = bad.length? ('MISMATCH '+bad.slice(0,4)) : ('OK '+N+'/'+N);
       out.firstEngine = eng.options[0].text; out.lastEngine = eng.options[N-1].text;
     }
+    // fb382 — the LIVE feed, the THIN stroke, DRAG on the curve, and the presets.
+    out.strokeWidth = (c.querySelector('.flt-curve')||{getAttribute(){return null}}).getAttribute('stroke-width');
+    out.hasGlowLayer = !!c.querySelector('.flt-glow');          // must be GONE (thin, not glowy)
+    out.hasSpectrum  = !!c.querySelector('.flt-spec');
+    out.tickFn = typeof window.__fltTick;
+    // simulate one push frame and confirm the curve REDRAWS from it
+    const before = c.querySelector('.flt-curve').getAttribute('d');
+    window.__fltVizPush = [];
+    for(let i=0;i<6;i++) window.__fltVizPush.push({on:1,cut:7000,res:0.9,lvl:0.09,env:1,
+      b:[-8,-10,-14,-18,-22,-26,-30,-36,-42,-48,-54,-60]});
+    try{ (window.__fltTick||window.fltTick)(); }catch(e){ out.tickErr=String(e).slice(0,70); }
+    const after = c.querySelector('.flt-curve').getAttribute('d');
+    out.curveRedrew = (before!==after);
+    out.specDrew = ((c.querySelector('.flt-spec')||{getAttribute(){return ''}}).getAttribute('d')||'').length>20;
+    // drag: pointerdown on the core must move Cutoff
+    const core=c.querySelector('.fxr-core[data-core="flt"]');
+    const r=core.getBoundingClientRect();
+    const idx=[].indexOf.call(c.parentNode.children,c);
+    const D=(window.__fxDevs?window.__fxDevs():null);
+    const cutBefore=(D&&D[idx])?D[idx].knobs[0].v:null;
+    core.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:r.left+r.width*0.85,clientY:r.top+4}));
+    document.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:r.left+r.width*0.85,clientY:r.top+4}));
+    document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true}));
+    const cutAfter=(D&&D[idx])?D[idx].knobs[0].v:null;
+    out.dragMovedCutoff = (cutBefore!=null && cutAfter!=null) ? (cutBefore+' -> '+cutAfter+(cutAfter!==cutBefore?'  MOVED':'  NO CHANGE')) : 'DEVS not exposed';
+
     // CHAINABLE: every filter must own a distinct rank + distinct param prefix
     const ranks=new Set(), pfx=new Set();
-    (window.DEVS||[]).forEach(d=>{ if(d.core==='flt'){ ranks.add(d.rank); pfx.add(d.pfx); } });
+    ((window.__fxDevs?window.__fxDevs():[])||[]).forEach(d=>{ if(d.core==='flt'){ ranks.add(d.rank); pfx.add(d.pfx); } });
     out.distinctRanks=ranks.size; out.distinctPrefixes=pfx.size;
     return out;
   });
