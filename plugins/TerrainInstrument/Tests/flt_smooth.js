@@ -8,9 +8,11 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
   const pg=await b.newPage(); await pg.setViewport({width:1200,height:900,deviceScaleFactor:2});
   await pg.evaluateOnNewDocument(()=>{
     // a REAL slider stub: it stores what is written and hands it back, like the plugin's does.
-    const store={};
-    const mk=(id)=>({ getScaledValue:()=>store[id]??0.5, setScaledValue(v){store[id]=v;},
-      getNormalisedValue:()=>store[id]??0.5, setNormalisedValue(v){store[id]=v;},
+    // ⚠️ DELIBERATELY INERT, like the real backend for a param with no WebSliderRelay.
+    // fb392's stub DID store values, so the gate measured the stub and passed while the plugin
+    // sat frozen. A harness that is kinder than reality is worse than no harness.
+    const mk=(id)=>({ getScaledValue:()=>0.5, setScaledValue(){},
+      getNormalisedValue:()=>0.5, setNormalisedValue(){},
       sliderDragStarted(){}, sliderDragEnded(){},
       getChoiceIndex:()=>0,setChoiceIndex(){},getValue:()=>false,setValue(){},
       valueChangedEvent:{addListener(){return{remove(){}}},removeListener(){}},
@@ -34,11 +36,14 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
     const r=core.getBoundingClientRect();
     // the push stays STALE on purpose: if the curve still moves, it is not reading the push.
     window.__fltVizPush=[{on:1,cut:1000,res:0.3,lvl:0.05,env:1}];
-    core.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:r.left+r.width*0.12,clientY:r.top+r.height*0.5}));
+    // ═══ THE KNOB, not the curve. Max: "the cutoff and resonance does not move the visualizer
+    // whenever we drag it as a parameter." Dragging the DIAL is the gesture that was broken.
+    const dial=document.querySelector('.fxr-dev .fxr-knob .fxr-dial[data-k="0"]');
+    const dr=dial.getBoundingClientRect();
+    dial.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:dr.left+8,clientY:dr.top+40}));
     const ds=[];
     for(let i=0;i<40;i++){
-      const x=r.left+r.width*(0.12+0.76*i/39);
-      document.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:x,clientY:r.top+r.height*0.5}));
+      document.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:dr.left+8,clientY:dr.top+40-i*1.6}));
       await new Promise(rq=>requestAnimationFrame(rq));
       ds.push(curve.getAttribute('d')||'');
     }
