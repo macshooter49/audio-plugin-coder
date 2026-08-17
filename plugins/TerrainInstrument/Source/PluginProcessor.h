@@ -1602,8 +1602,16 @@ private:
     // ── the chain order. Rebuilt at the TOP of each processBlock from CACHED param pointers, so it
     //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
     //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).
-    struct ChainEntry { int kind; int inst; float rank; };   // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular
-    static constexpr int kChainMax = 4 * ParameterIDs::kFxInstances;   // fb362 — 6 of each of 4 devices
+    // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular 4=Tape 5=Filter
+    struct ChainEntry { int kind; int inst; float rank; };
+    // fb375 — one slot per addable device, so the rack can never silently drop one. This had been
+    // stale since fb365: it read `4 * kFxInstances` (=24) with a "6 of each of 4 devices" comment
+    // while FIVE kinds shipped, so the 25th..30th device a user added hit the `>= kChainMax` guard
+    // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
+    // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
+    // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
+    static constexpr int kFxKinds  = 6;
+    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
     int chainCount_ = 0;
     // fb351 — THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had
