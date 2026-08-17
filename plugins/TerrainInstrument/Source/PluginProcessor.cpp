@@ -3855,7 +3855,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "DRIVE",  d + "Drive",   0.00f);
                 F (p + "MIX",    d + "Mix",     1.00f);   // an insert is fully wet by default
                 // BACK — 2 dropdowns (above) + 8 knobs, 4x2.
-                F (p + "ENV",    d + "Env",     0.70f);   // BIPOLAR at 0.5; the follower amount
+                // fb384 — NEUTRAL by default. Max: "I want the most basic filter… we don't need
+                // the envelope, I don't want it to key track." The follower, the LFO and key track
+                // all still EXIST (params cannot be born at runtime, and the Terrain Patcher will
+                // want them), they simply sit at zero so the shipped device is a plain filter.
+                F (p + "ENV",    d + "Env",     0.50f);   // BIPOLAR centre = follower OFF
                 F (p + "TRACK",  d + "Track",   0.00f);
                 F (p + "POLES",  d + "Poles",   1.00f);   // detents 6/12/18/24 dB
                 F (p + "SENSE",  d + "Sense",   0.50f);

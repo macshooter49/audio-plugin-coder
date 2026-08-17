@@ -80,6 +80,32 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
     const cutAfter=(D&&D[idx])?D[idx].knobs[0].v:null;
     out.dragMovedCutoff = (cutBefore!=null && cutAfter!=null) ? (cutBefore+' -> '+cutAfter+(cutAfter!==cutBefore?'  MOVED':'  NO CHANGE')) : 'DEVS not exposed';
 
+    // fb385 — the picker: categorised + searchable + clamped
+    out.pickerFn = typeof window.__fltEnginePicker;
+    const pill=c.querySelector('.fxr-type');
+    if(pill){ pill.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})); }
+    const menu=document.getElementById('flt-eng-menu');
+    out.menuOpened = !!menu;
+    if(menu){
+      const sb=menu.querySelector('input');
+      out.hasSearch = !!sb;
+      out.itemsAll = menu.querySelectorAll('[data-i]').length;
+      const heads=[...menu.querySelectorAll('div')].filter(e=>!e.dataset.i && /^[A-Z][A-Za-z &-]+$/.test(e.textContent.trim()));
+      out.categories = heads.length;
+      if(sb){ sb.value='acid'; sb.dispatchEvent(new Event('input',{bubbles:true}));
+              out.searchAcid=[...menu.querySelectorAll('[data-i]')].map(e=>e.textContent).join(','); }
+      const r=menu.getBoundingClientRect();
+      out.rect = [Math.round(r.left),Math.round(r.top),Math.round(r.right),Math.round(r.bottom)];
+      out.viewport = [window.innerWidth, window.innerHeight];
+      out.clamped = (r.bottom<=window.innerHeight+1 && r.right<=window.innerWidth+1 && r.top>=0 && r.left>=0);
+      menu.remove();
+    }
+    // no back panel, no plus
+    out.hasBackPanel = !!c.querySelector('.fxr-back');
+    out.hasPlusBtn   = !!c.querySelector('.fxr-swap');
+    out.hasNodeDot   = !!c.querySelector('.flt-node');
+    out.pillLabel    = (c.querySelector('.fxr-type .fxr-tl')||c.querySelector('.fxr-type')||{}).textContent;
+
     // CHAINABLE: every filter must own a distinct rank + distinct param prefix
     const ranks=new Set(), pfx=new Set();
     ((window.__fxDevs?window.__fxDevs():[])||[]).forEach(d=>{ if(d.core==='flt'){ ranks.add(d.rank); pfx.add(d.pfx); } });
