@@ -347,6 +347,69 @@ int main()
               fmt ("L-R %.1f dB -> ", off) + fmt ("%.1f dB", on));
     }
 
+    {   // PUNCH — the follower becomes a TRANSIENT detector, so it must blip on attacks and
+        // then fall back, where the plain follower sits on the sustain. Measured as the RANGE of
+        // the cutoff excursion over the loop: a transient detector swings more and rests lower.
+        auto in = chord (N, 0.05f, true);                      // stabs: real attacks to detect
+        auto p = base(); p.engine = 0; p.cut = 0.42f; p.res = 0.3f; p.env = 0.95f; p.sense = 0.6f;
+        auto swing = [&] (bool punch) {
+            p.punch = punch; auto o = run (p, in);
+            double mn = 1e9, mx = 0;
+            for (int f = 0; f < 24; ++f)
+            { const size_t off = SETTLE + (size_t) (f * FS * 0.05f);
+              if (off + 2048 >= o.l.size()) break;
+              std::vector<float> w (o.l.begin() + (long) off, o.l.begin() + (long) off + 2048);
+              const double c = centroid (w, 0); mn = std::min (mn, c); mx = std::max (mx, c); }
+            return std::make_pair (mn, mx); };
+        const auto off = swing (false); const auto on = swing (true);
+        const double rOff = off.second / std::max (1.0, off.first);
+        const double rOn  = on.second  / std::max (1.0, on.first);
+        gate ("Punch changes the follower's behaviour", std::fabs (rOn - rOff) > 0.15,
+              fmt ("centroid range x%.2f -> ", rOff) + fmt ("x%.2f", rOn));
+        // and it must not be a no-op: the rendered audio has to differ
+        p.punch = false; auto a = spectrum (run (p, in).l, SETTLE);
+        p.punch = true;  auto b = spectrum (run (p, in).l, SETTLE);
+        gate ("Punch is audible (not a dead pill)", specDist (a, b) > 2.0,
+              fmt ("%.1f dB max band distance (gate 2)", specDist (a, b)));
+    }
+    {   // WIDE — setSpread splits L/R cutoff, so the two channels must DECORRELATE. With Wide off
+        // the engine is mono-identical; a mono sum must also survive (law 6: every widener gates
+        // on mono-compatibility).
+        auto in = chord (N); auto p = base(); p.engine = 0; p.cut = 0.5f; p.res = 0.65f;
+        auto lr = [&] (bool w) { p.wide = w; auto o = run (p, in);
+            std::vector<float> d (o.l.size()), m (o.l.size());
+            for (size_t i = 0; i < d.size(); ++i) { d[i] = o.l[i] - o.r[i]; m[i] = 0.5f * (o.l[i] + o.r[i]); }
+            return std::make_pair (db (rmsOf (d, SETTLE) / std::max (1e-9, rmsOf (o.l, SETTLE))),
+                                   db (rmsOf (m, SETTLE) / std::max (1e-9, rmsOf (o.l, SETTLE)))); };
+        const auto o0 = lr (false); const auto o1 = lr (true);
+        gate ("Wide OFF is mono-identical", o0.first < -100.0,
+              fmt ("L-R %.1f dB", o0.first));
+        gate ("Wide ON decorrelates L/R", o1.first > -20.0,
+              fmt ("L-R %.1f dB (gate -20)", o1.first));
+        gate ("Wide survives a mono sum (no cancellation)", o1.second > -6.0,
+              fmt ("mono sum %.1f dB vs L (gate -6)", o1.second));
+    }
+    {   // KARPLUS PLUCK — all three voices must respond to excite(). KARPLUS_BRIGHT/_MUTE were
+        // silent no-ops until the guard widened; this is the row that proves it and keeps it fixed.
+        const int karplus[3] = { 13 /*KARPLUS*/, 66 /*KARPLUS_BRIGHT*/, 67 /*KARPLUS_MUTE*/ };
+        const char* nm[3] = { "Karplus-Strong", "Karplus Bright", "Karplus Mute" };
+        std::vector<float> silence ((size_t) (FS / 2), 0.0f);
+        for (int k = 0; k < 3; ++k)
+        {
+            auto p = base(); p.engine = karplus[k]; p.cut = 0.45f; p.res = 0.7f;
+            // excite into SILENCE: anything that rings came from the pluck, nothing else.
+            tw::FilterFxEngine e; e.prepare (FS, 512);
+            float a0 = 0.0f, b0 = 0.0f;
+            for (int i = 0; i < 400; ++i) { a0 = 0.0f; b0 = 0.0f; e.processSample (a0, b0, p); }
+            e.noteOn (60, 1.0f);
+            double pk = 0;
+            for (size_t i = 0; i < silence.size(); ++i)
+            { float a = 0.0f, b = 0.0f; e.processSample (a, b, p); pk = std::max (pk, (double) std::fabs (a)); }
+            gate ((std::string ("pluck rings on ") + nm[k]).c_str(), pk > 1.0e-4,
+                  fmt ("peak %.5f after excite into silence", pk));
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     section ("D. Nothing free-runs, nothing clicks, nothing latches");
 

@@ -2107,7 +2107,14 @@ public:
      *  whatever the oscillators feed in (exciter mode). No-op for other types. */
     void excite (float level = 1.0f) noexcept
     {
-        if (type_ == Type::KARPLUS) { combL_.excite (level); combR_.excite (level); }
+        // fb390 — ALL THREE Karplus voices pluck, not just the first. The guard read
+        // `type_ == Type::KARPLUS` alone, so KARPLUS_BRIGHT and KARPLUS_MUTE were silent no-ops:
+        // a character literally named "Pluck" that could not pluck. All three run the same
+        // CombCore behind the same façade, so the exciter was always correct for them — only the
+        // guard was too narrow. (Flagged twice before it was fixed; it touches the synth filter
+        // too, which is why it waited for a deliberate call rather than being slipped in.)
+        if (type_ == Type::KARPLUS || type_ == Type::KARPLUS_BRIGHT || type_ == Type::KARPLUS_MUTE)
+        { combL_.excite (level); combR_.excite (level); }
     }
 
 private:

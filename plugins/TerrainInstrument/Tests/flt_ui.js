@@ -100,6 +100,14 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
     out.curveClass = (c.querySelector('.flt-curve')||{}).getAttribute ? c.querySelector('.flt-curve').getAttribute('class') : null;
     try{ if(window.__tpbClose) window.__tpbClose(); }catch(e){}
 
+    // fb390 — THE PRESET PILL MUST ACTUALLY DROP DOWN
+    const pp=c.querySelector('.fxr-preset');
+    out.presetPill = !!pp;
+    if(pp){ pp.dispatchEvent(new MouseEvent('click',{bubbles:true})); }
+    const pm=document.querySelector('.pmenu');
+    out.presetMenuOpened = !!pm;
+    if(pm){ out.presetNames=[...pm.querySelectorAll('.pi .nm')].map(e=>e.textContent.trim()).filter(Boolean).slice(0,14).join(','); }
+
     // no back panel, no plus
     out.hasBackPanel = !!c.querySelector('.fxr-back');
     out.hasPlusBtn   = !!c.querySelector('.fxr-swap');

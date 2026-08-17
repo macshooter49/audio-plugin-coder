@@ -98,7 +98,6 @@ public:
         cutSm_ = -1.0f; resSm_ = -1.0f; drvSm_ = -1.0f; keySm_ = 0.0f;
         lfoPh_ = 0.0f; dip_ = 1.0f; pendingType_ = -1;
         dcL_ = dcR_ = dcXL_ = dcXR_ = 0.0f;
-        for (int b = 0; b < kBands; ++b) { band_[b] = bpL_[b] = bpH_[b] = 0.0f; }
         lvlSm_ = 0.0f;
         curType_ = -1;
     }
@@ -142,22 +141,8 @@ public:
         //    transient detector (fast minus slow), so the filter blips on attacks only.
         const float rect = std::max (std::fabs (inL), std::fabs (inR));
 
-        // 12-band input spectrum: a one-pole BANDPASS per band, then a rectified one-pole
-        // follower on its magnitude. This is what the card draws underneath the curve.
-        {
-            const float mono = 0.5f * (inL + inR);
-            for (int b = 0; b < kBands; ++b)
-            {
-                const float f  = 40.0f * std::pow (300.0f, (float) b / (float) (kBands - 1));
-                const float w  = 6.2831853f * std::min (f, 0.45f * fs_) / fs_;
-                const float g  = std::min (0.9f, w);
-                bpL_[b] += g * (mono - bpL_[b]);              // one-pole low
-                bpH_[b] += g * 2.4f * (bpL_[b] - bpH_[b]);    // and a wider one to subtract
-                const float bpv = std::fabs (bpL_[b] - bpH_[b]) * 2.6f;
-                band_[b] += (bpv > band_[b] ? 0.02f : 0.0015f) * (bpv - band_[b]);
-            }
-            lvlSm_ += (rect > lvlSm_ ? 0.02f : 0.0015f) * (rect - lvlSm_);
-        }
+        // input level, for the card's brightness
+        lvlSm_ += (rect > lvlSm_ ? 0.02f : 0.0015f) * (rect - lvlSm_);
         const float tA = 0.0002f * std::pow (1500.0f, p.attack);
         const float tR = 0.020f  * std::pow (100.0f,  p.release);
         const float aA = 1.0f - std::exp (-1.0f / (fs_ * tA));
@@ -255,17 +240,12 @@ public:
         r = inR * (1.0f - m) + oR * dip_ * m;
     }
 
-    // ── the card feed. Max: "make sure we can actually visually see whatever is cutting out to
-    //    the chain… not just the sound itself, but the sound that's coming through the effects."
-    //    So the card gets the INPUT spectrum (what arrived) under the response curve (what is
-    //    being taken out of it) — 12 log-spaced band followers, ~36 mults a sample, which is
-    //    cheap enough to run always rather than gating it on a visible card.
-    static constexpr int kBands = 12;
-    float bandDb (int i) const noexcept
-    {
-        const float m = band_[i < 0 ? 0 : (i >= kBands ? kBands - 1 : i)];
-        return 20.0f * std::log10 (m > 1.0e-5f ? m : 1.0e-5f);
-    }
+    // ── the card feed. The card draws its SPECTRUM from the shared analyser FFT (the same one
+    //    the synth page's filter uses), so this engine publishes only what the card cannot get
+    //    anywhere else: the post-motion cutoff, the resonance, and an input level for brightness.
+    //    fb389 added a 12-band follower bank here and fb390 removed it again — once the spectrum
+    //    moved to the real FFT nothing read those bands, and ~36 mults a sample x 6 instances of
+    //    unread arithmetic is not "spare capacity", it is waste with a comment on it.
     float liveLevel() const noexcept { return lvlSm_; }
     float liveCutHz() const noexcept { return cutSm_ > 0.0f ? cutSm_ : 20.0f; }
     float liveRes()   const noexcept { return resSm_ > 0.0f ? resSm_ : 0.0f; }
@@ -298,7 +278,7 @@ private:
     float cutSm_ = -1.0f, resSm_ = -1.0f, drvSm_ = -1.0f, keySm_ = 0.0f;
     float lfoPh_ = 0.0f, dip_ = 1.0f;
     float dcL_ = 0.0f, dcR_ = 0.0f, dcXL_ = 0.0f, dcXR_ = 0.0f;
-    float band_[kBands] = {}, bpL_[kBands] = {}, bpH_[kBands] = {}, lvlSm_ = 0.0f;
+    float lvlSm_ = 0.0f;
     int   curType_ = -1, pendingType_ = -1, lastNote_ = 60;
     float bpm_ = 120.0f; double ppq_ = 0.0; bool playing_ = false;
 

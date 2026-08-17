@@ -4437,10 +4437,7 @@ juce::String TerrainInstrumentAudioProcessor::getFilterVizJson()
           << ",\"res\":" << juce::String (e.liveRes(), 3)
           << ",\"lvl\":" << juce::String (e.liveLevel(), 4)
           << ",\"env\":" << juce::String (fltEnv_[(size_t) i], 3)
-          << ",\"b\":[";
-        for (int b = 0; b < tw::FilterFxEngine::kBands; ++b)
-        { if (b) j << ","; j << juce::String (e.bandDb (b), 1); }
-        j << "]}";
+          << "}";
     }
     return j + "]";
 }
