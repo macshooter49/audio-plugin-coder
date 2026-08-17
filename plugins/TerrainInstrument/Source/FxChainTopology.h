@@ -23,29 +23,35 @@
 // are summed through a non-linear device they cannot be separated again — the
 // alternative would be a private device instance per source.
 //
-// ── fb375 — THE SECOND DEVICE CLASS: PURE-FX (whole-mix) devices ─────────────
-// Max, 2026-08-16, holding a Serum 2 screenshot: "stuff like the fx filter,
-// splitter, and the utility need to fall back on the whole FX MIX. it's all
-// about the chains for these 3, not the per osc routing... filter is first but
-// it still takes the sound and puts it thru to the delay, simple as that."
+// ── fb376 — ONE DEVICE CLASS. THE DECISION RECORD, so it is not re-litigated ──
+// fb375 briefly added a second class: "pure-FX" devices (filter/splitter/utility)
+// with no route pills, which fell back on the whole mix. It was built, tested and
+// then REVERTED the same night. Keeping the reasoning here because the idea is
+// seductive and will occur to somebody again.
 //
-// So the rack has TWO device classes, and the analogy is Serum's own racks:
-//   • PER-OSC devices (reverb/delay/distortion/granular/tape) = Serum's BUS 1/2.
-//     They carry route pills and everything above still applies to them.
-//   • PURE-FX devices (filter/splitter/utility) = Serum's MAIN. They have NO
-//     route pills at all. At their chain position they are an insert on the
-//     WHOLE mix: they tap every source that has not yet entered the rack (the
-//     never-routed dry) AND eat every upstream output still looking for a home.
-//     Their output carries all six sources, so by the ordinary feed rule below
-//     every device beneath them is fed from them — which is exactly "filter
-//     first, then the delay".
+// It came from a Serum 2 screenshot — their rack is flat and post-sum, so a MAIN
+// filter is the only filter they can have. Ours is not flat. Max: "we did all this
+// work with the per-oscillator routing just for us to have our signal collapse into
+// one thing and then never split up again... I don't ever want anything to collapse
+// into one signal."
 //
-// 🔑 THE CONSEQUENCE, stated once so nobody files it as a bug: a whole-mix
-// device MERGES the rack. Below one, the sources are summed and cannot be
-// separated again (the same physics as the per-osc merge above, applied to all
-// six at once), so a per-osc device placed under a Filter taps nothing new —
-// its `entry` is 0 and its pills are inert. The UI greys them from this same
-// model rather than inventing a second rule.
+// 🔑 THE LAW THAT REPLACED IT: MERGING IS SOMETHING YOU CHOOSE, NEVER SOMETHING
+// THAT HAPPENS TO YOU. A whole-mix device merges all six sources by default,
+// without being asked — that is what made it wrong, not the merge itself (which
+// this file has always done for any device spanning two sources, see above).
+// So EVERY device that processes audio carries the same six route pills. No
+// exceptions, no second class, one grammar for the whole rack — which is also the
+// grammar the Terrain Patcher inherits, and it is per-oscillator by definition.
+//
+// The corollary that answers "I never want anything to collapse": route ONE device
+// across many sources and you have asked them to fuse; use ONE DEVICE INSTANCE PER
+// SOURCE (the rack holds 6 of each kind) and they never touch. Collapse is opt-in.
+//
+// And the reason it costs less than it sounds: a clean filter is LINEAR, so
+// H(A+C) = H(A) + H(C) — merging two sources through it is mathematically identical
+// to filtering them apart and summing. At low drive the merge costs no sound at all,
+// only downstream separability. It only becomes audible once drive/resonance make
+// the device nonlinear, which is also when you would want the intermodulation.
 //
 // PURE C++ (no JUCE) so it offline-validates standalone, same contract as
 // DelayEngine.h. Bit s of a mask = source s (0=A 1=B 2=C 3=D 4=Sub 5=Noise).
@@ -57,7 +63,7 @@ namespace tw {
 
 struct FxChainTopology
 {
-    static constexpr int kMaxSlots    = 44;   // fb375 — + 6 filter (fb365 had 38: reverb+delay+distortion+granular+tape)
+    static constexpr int kMaxSlots    = 44;   // fb376 — 6 kinds x 6 instances = 36, + headroom
     static constexpr uint8_t kAllSrc  = 0x3F; // all six sources: A B C D Sub Noise
 
     int      count = 0;
@@ -66,11 +72,9 @@ struct FxChainTopology
     bool     consumed [kMaxSlots] = {};       // this slot's output is eaten downstream ⇒ NOT summed to the main mix
     uint8_t  eff      [kMaxSlots] = {};       // sources this slot's output actually carries (its own + everything it ate)
 
-    // masks[] must be in CHAIN ORDER (already sorted by _RANK).
-    // wholeMix[] (fb375, optional) flags the PURE-FX devices — filter/splitter/utility. They have no
-    // route pills, so their masks[] entry is always 0 and this array is the only thing that marks
-    // them. Passing nullptr reproduces the fb351 behaviour bit-for-bit (that is a test row).
-    void build (const uint8_t* masks, int n, const bool* wholeMix = nullptr) noexcept
+    // masks[] must be in CHAIN ORDER (already sorted by _RANK). Every device kind goes through
+    // here — filter included (fb376). There is no second signature and no device class flag.
+    void build (const uint8_t* masks, int n) noexcept
     {
         count = n < kMaxSlots ? (n < 0 ? 0 : n) : kMaxSlots;
         for (int c = 0; c < count; ++c) { entry[c] = 0; feed[c] = 0; consumed[c] = false; eff[c] = 0; }
@@ -78,20 +82,6 @@ struct FxChainTopology
         uint8_t claimed = 0;                  // sources that have already entered the rack
         for (int c = 0; c < count; ++c)
         {
-            if (wholeMix != nullptr && wholeMix[c])
-            {
-                // fb375 — a PURE-FX insert on the whole mix. It takes the never-routed dry (every
-                // source not yet in the rack) AND eats every upstream output still unclaimed, so
-                // everything above it merges here. Its output carries all six sources, which is what
-                // makes the ordinary feed rule below hand it straight to the next device.
-                entry[c] = (uint8_t) (kAllSrc & ~claimed);
-                claimed  = kAllSrc;
-                for (int j = 0; j < c; ++j)
-                    if (! consumed[j]) { feed[c] |= (1u << (unsigned) j); consumed[j] = true; }
-                eff[c] = kAllSrc;
-                continue;
-            }
-
             entry[c]  = (uint8_t) (masks[c] & ~claimed);   // first device routed to a source taps it
             claimed  |= masks[c];
             eff[c]    = masks[c];

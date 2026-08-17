@@ -148,109 +148,136 @@ int main()
     { uint8_t m[] = { 0, 0, 0 }; t.build (m, 3);
       for (int c = 0; c < 3; ++c) check (! t.hasInput (c), "slot should be dead"); }
 
-    std::printf ("\n[fb375 — PURE-FX (whole-mix) devices: filter / splitter / utility]\n");
+    std::printf ("\n[fb376 — the FILTER is an ordinary per-osc device. No second class.]\n");
 
-    // ── 10. MAX'S CASE, verbatim: "filter is first but it still takes the sound
-    //       and puts it thru to the delay, simple as that."
-    head ("10. Filter first takes the whole mix and hands it to the Delay");
-    { uint8_t m[] = { 0, A }; bool w[] = { true, false }; t.build (m, 2, w);
-      expect (t, 0, { ALL, 0,       true,  ALL });   // taps every source; its output goes downstream
-      expect (t, 1, { 0,   FROM(0), false, ALL });   // the delay eats the filtered whole mix
-      check (t.hasInput (0), "filter must be live with no routes at all"); }
+    // ── 10. Filter (chain kind 5) needs no special handling whatsoever. Routed to
+    //       A it taps A, exactly like a reverb would. That is the whole point:
+    //       fb375's "pure-FX" class was reverted, so there is nothing to special-case.
+    head ("10. a Filter routed to A behaves like any other device");
+    { uint8_t m[] = { A }; t.build (m, 1);
+      expect (t, 0, { A, 0, false, A }); }
 
-    // ── 11. a Filter on its own is never silent — the whole point of the class.
-    head ("11. a lone Filter with no routes takes the whole mix");
-    { uint8_t m[] = { 0 }; bool w[] = { true }; t.build (m, 1, w);
-      expect (t, 0, { ALL, 0, false, ALL });
-      check (t.hasInput (0), "a lone pure-FX device must be live"); }
+    // ── 11. MAX'S CASE, now per-osc: "filter is first but it still takes the sound
+    //       and puts it thru to the delay". Both routed to A ⇒ filter feeds delay.
+    head ("11. Filter first on A hands its output to a Delay on A");
+    { uint8_t m[] = { A, A }; t.build (m, 2);
+      expect (t, 0, { A, 0,       true,  A });
+      expect (t, 1, { 0, FROM(0), false, A }); }
 
-    // ── 12. below a per-osc device it eats that output AND the never-routed dry.
-    head ("12. Filter after a Delay eats the delay plus all remaining dry");
-    { uint8_t m[] = { A, 0 }; bool w[] = { false, true }; t.build (m, 2, w);
-      expect (t, 0, { A,                  0,       true,  A });
-      expect (t, 1, { (uint8_t) (ALL & ~A), FROM(0), false, ALL }); }
+    // ── 12. THE OPT-IN MERGE. One Filter across A+C fuses them for everything
+    //       downstream. This is allowed because the user ASKED by lighting both
+    //       pills — "merging is something you choose, never something that happens
+    //       to you" (the law that replaced fb375).
+    head ("12. one Filter across A+C fuses them — because you asked");
+    { uint8_t m[] = { (uint8_t) (A | C), C }; t.build (m, 2);
+      expect (t, 0, { (uint8_t) (A | C), 0,       true,  (uint8_t) (A | C) });
+      check (t.eff[1] == (uint8_t) (A | C), "downstream C device receives the fused A+C"); }
 
-    // ── 13. two pure-FX devices in a row run serially, not in parallel.
-    head ("13. Filter into Utility is serial");
-    { uint8_t m[] = { 0, 0 }; bool w[] = { true, true }; t.build (m, 2, w);
-      expect (t, 0, { ALL, 0,       true,  ALL });
-      expect (t, 1, { 0,   FROM(0), false, ALL }); }
+    // ── 13. THE ESCAPE HATCH, and the direct answer to "I don't ever want anything
+    //       to collapse into one signal": use ONE INSTANCE PER SOURCE. Two Filters,
+    //       one on A and one on C, never touch each other — no merge, ever.
+    head ("13. two Filter instances (A, C) never collapse into one signal");
+    { uint8_t m[] = { A, C }; t.build (m, 2);
+      expect (t, 0, { A, 0, false, A });      // neither is consumed: both reach the mix
+      expect (t, 1, { C, 0, false, C });      // separately, still distinct sources
+      check (t.eff[0] != t.eff[1], "the two branches must carry different sources"); }
 
-    // ── 14. independent per-osc branches above a Filter both merge into it.
-    head ("14. a Filter merges every independent branch above it");
-    { uint8_t m[] = { A, C, 0 }; bool w[] = { false, false, true }; t.build (m, 3, w);
-      expect (t, 0, { A, 0, true, A });
-      expect (t, 1, { C, 0, true, C });
-      expect (t, 2, { (uint8_t) (ALL & ~(A | C)), FROM(0) | FROM(1), false, ALL }); }
+    // ── 14. and the same holds all the way down a long chain: A's devices and C's
+    //       devices form two independent lines that never see each other.
+    head ("14. two independent 3-device lines stay independent end to end");
+    { uint8_t m[] = { A, C, A, C, A, C }; t.build (m, 6);
+      check (t.entry[0] == A && t.entry[1] == C, "each source enters once, at its first device");
+      for (int c = 2; c < 6; ++c) check (t.entry[c] == 0, "later devices re-tap nothing");
+      check (t.eff[4] == A && t.eff[5] == C, "the two lines carry different sources at the end");
+      check (! t.consumed[4] && ! t.consumed[5], "both lines reach the mix separately"); }
 
-    // ── 15. THE CONSEQUENCE, asserted rather than left as prose: a per-osc device
-    //       below a Filter taps nothing new. entry == 0 is what the UI greys on.
-    head ("15. per-osc pills go inert below a whole-mix device");
-    { uint8_t m[] = { 0, (uint8_t) (A | C) }; bool w[] = { true, false }; t.build (m, 2, w);
-      check (t.entry[1] == 0, "slot 1 must tap nothing new — its pills are inert");
-      check (t.feed[1] == FROM(0), "slot 1 must still be fed by the filter");
-      check (t.hasInput (1), "slot 1 is live via the feed, not via its pills"); }
+    // ── 15. the UI's inherit-on-add default: a device added carrying the same mask
+    //       as the one above it simply extends that line (zero clicks, reads as an
+    //       insert). Asserted so the default and the model can't drift apart.
+    head ("15. inherit-on-add extends the line above it");
+    { uint8_t m[] = { (uint8_t) (A | B) }; t.build (m, 1);
+      const uint8_t inherited = t.eff[0];                 // what the UI would copy
+      uint8_t m2[] = { (uint8_t) (A | B), inherited }; t.build (m2, 2);
+      expect (t, 0, { (uint8_t) (A | B), 0,       true,  (uint8_t) (A | B) });
+      expect (t, 1, { 0,                 FROM(0), false, (uint8_t) (A | B) });
+      check (t.entry[1] == 0, "the added device re-taps nothing — it inserts"); }
 
-    // ── 16. a routeless per-osc device below a Filter stays dead (no regression:
-    //       the filter's output only reaches devices that ask for a source).
-    head ("16. a routeless per-osc device below a Filter is still dead");
-    { uint8_t m[] = { 0, 0 }; bool w[] = { true, false }; t.build (m, 2, w);
-      check (t.hasInput (0), "the filter is live");
-      check (! t.hasInput (1), "the routeless per-osc device stays dead"); }
+    // ── 16. Sub and Noise are sources like any other; nothing about the far end of
+    //       the mask is special.
+    head ("16. Sub/Noise route and merge exactly like A..D");
+    { uint8_t m[] = { (uint8_t) (SUB | NOISE), D, SUB }; t.build (m, 3);
+      expect (t, 0, { (uint8_t) (SUB | NOISE), 0, true,  (uint8_t) (SUB | NOISE) });
+      expect (t, 1, { D,                       0, false, D });
+      expect (t, 2, { 0, FROM(0), false, (uint8_t) (SUB | NOISE) });
+      check (t.eff[1] == D, "the D branch never sees the Sub/Noise branch"); }
 
-    // ── 16b. the far end of the mask — Sub and Noise are sources like any other,
-    //        and a Filter must pick up the ones nobody routed.
-    head ("16b. Filter picks up Sub/Noise that no per-osc device claimed");
-    { uint8_t m[] = { (uint8_t) (SUB | NOISE), 0, D }; bool w[] = { false, true, false };
-      t.build (m, 3, w);
-      expect (t, 0, { (uint8_t) (SUB | NOISE), 0,       true,  (uint8_t) (SUB | NOISE) });
-      expect (t, 1, { (uint8_t) (ALL & ~(SUB | NOISE)), FROM(0), true,  ALL });
-      expect (t, 2, { 0,                       FROM(1), false, ALL });
-      check (t.entry[2] == 0, "the D pills below the filter are inert"); }
+    std::printf ("\n[INVARIANTS — swept exhaustively over every 3-slot mask combination]\n");
 
-    std::printf ("\n[THE NULL — fb375 must not have moved fb351 by one bit]\n");
-
-    // ── 17. For every mask combination up to 3 slots, passing nullptr and passing
-    //       an all-false wholeMix[] must agree, and both must equal fb351.
-    head ("17. wholeMix=nullptr is bit-identical to all-false, exhaustively");
+    // ── 17. The properties that must hold for EVERY chain, not just the hand-picked
+    //       ones above. This is what would catch a change nobody thought to test.
+    head ("17. model invariants hold for all mask combinations");
     {
-        int compared = 0;
+        int swept = 0, tapBad = 0, feedBad = 0, liveBad = 0, effBad = 0, selfBad = 0;
         const uint8_t alphabet[] = { 0, A, C, (uint8_t) (A | C), (uint8_t) (A | B | C), ALL };
         const int NA = (int) (sizeof alphabet / sizeof alphabet[0]);
-        tw::FxChainTopology t2;
-        bool allFalse[3] = { false, false, false };
 
         for (int i = 0; i < NA; ++i)
         for (int j = 0; j < NA; ++j)
         for (int k = 0; k < NA; ++k)
         {
             uint8_t m[3] = { alphabet[i], alphabet[j], alphabet[k] };
-            t .build (m, 3);              // no wholeMix argument at all
-            t2.build (m, 3, allFalse);    // explicit all-false
+            t.build (m, 3);
+
+            // (a) NO DOUBLE-TAP: a source may enter the rack at most once, or it
+            //     would be summed twice and read as +6 dB on that oscillator.
+            uint8_t seen = 0;
+            for (int c = 0; c < 3; ++c) { if (t.entry[c] & seen) ++tapBad; seen = (uint8_t) (seen | t.entry[c]); }
+
+            // (b) EVERY source that is routed anywhere must enter exactly once.
+            uint8_t routed = (uint8_t) (m[0] | m[1] | m[2]);
+            if (seen != routed) ++tapBad;
 
             for (int c = 0; c < 3; ++c)
             {
-                if (t.entry[c]    != t2.entry[c]
-                 || t.feed[c]     != t2.feed[c]
-                 || t.consumed[c] != t2.consumed[c]
-                 || t.eff[c]      != t2.eff[c])
+                // (c) `consumed` must agree with reality in BOTH directions, or the
+                //     check passes vacuously — a self-check caught exactly that: an
+                //     engine that never sets `consumed` sailed through the one-way
+                //     version. A slot is eaten by at most one downstream slot (twice
+                //     would duplicate the signal), and `consumed` is true iff it was
+                //     eaten at all (a consumed slot also skips the main mix, so a
+                //     disagreement here is a dropped or double-counted device).
                 {
-                    char buf[160];
-                    std::snprintf (buf, sizeof buf, "divergence at masks {%s,%s,%s} slot %d",
-                                   srcStr (m[0]).c_str(), srcStr (m[1]).c_str(),
-                                   srcStr (m[2]).c_str(), c);
-                    check (false, buf);
-                    goto done;
+                    int eaters = 0;
+                    for (int d = c + 1; d < 3; ++d)
+                        if (t.feed[d] & FROM(c)) ++eaters;
+
+                    if (eaters > 1) ++feedBad;
+                    if (t.consumed[c] != (eaters == 1)) ++feedBad;
                 }
+                // (d) feed points STRICTLY upstream: it may only name slots above c,
+                //     never itself and never anything below (that would be a cycle).
+                for (int d = c; d < 3; ++d)
+                    if (t.feed[c] & FROM(d)) ++selfBad;
+
+                // (e) a slot's eff must contain everything it taps.
+                if ((uint8_t) (t.eff[c] & t.entry[c]) != t.entry[c]) ++effBad;
+
+                // (f) hasInput agrees with the fields it is derived from.
+                if (t.hasInput (c) != (t.entry[c] != 0 || t.feed[c] != 0)) ++liveBad;
             }
-            ++compared;
+            ++swept;
         }
-    done:
-        check (compared == NA * NA * NA, "every mask combination compared");
-        std::printf ("  %d mask combinations compared, no divergence\n", compared);
+
+        check (tapBad  == 0, "a source must enter the rack exactly once");
+        check (feedBad == 0, "a consumed output must be eaten by exactly one slot");
+        check (selfBad == 0, "feed must only ever point upstream");
+        check (effBad  == 0, "eff must contain everything the slot taps");
+        check (liveBad == 0, "hasInput must agree with entry/feed");
+        check (swept == NA * NA * NA, "every mask combination swept");
+        std::printf ("  %d chains swept, all invariants hold\n", swept);
     }
 
-    // ── 18. capacity: the filter pool has to fit.
+    // ── 18. capacity: the filter pool has to fit alongside the other five kinds.
     head ("18. kMaxSlots holds 6 instances of all 6 device kinds");
     check (tw::FxChainTopology::kMaxSlots >= 36, "kMaxSlots must hold 6 kinds x 6 instances");
 
