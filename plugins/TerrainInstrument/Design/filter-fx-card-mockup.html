@@ -1,0 +1,652 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Terrain — Filter FX device card (mockup)</title>
+<style>
+  /* ── tokens: lifted from the shipped rack, nothing invented ────────────── */
+  :root{
+    --bg-main:#1A1A2E; --bg-hero:#12121F;
+    --trk:rgba(255,255,255,0.13);
+    --purple:#B794FF; --red:#EF4444;
+    --wfaint:rgba(255,255,255,0.16);
+    --border:rgba(58,58,88,0.55);
+    --w:#FFFFFF; --w9:rgba(255,255,255,0.9); --w7:rgba(255,255,255,0.72);
+    --w5:rgba(255,255,255,0.5); --w3:rgba(255,255,255,0.30);
+    --font:-apple-system,'SF Pro Display','Inter','Segoe UI',system-ui,sans-serif;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  body{background:radial-gradient(120% 140% at 50% -10%,#191830 0%,var(--bg-hero) 70%);
+       color:var(--w9); font-family:var(--font); -webkit-font-smoothing:antialiased;
+       min-height:100vh; display:flex; flex-direction:column; align-items:center;
+       gap:20px; padding:28px 24px 56px;}
+
+  .cap{color:var(--w5); font-size:12px; letter-spacing:.13em; text-align:center; line-height:1.7;}
+  .cap b{color:var(--w7); font-weight:600;}
+
+  /* ── the transport: mockups must be AUDIBLE (fb296) ────────────────────── */
+  .transport{display:flex; align-items:center; gap:10px; flex-wrap:wrap; justify-content:center;}
+  .tbtn{background:transparent; border:1px solid var(--wfaint); border-radius:7px; color:var(--w7);
+        font-family:var(--font); font-size:11px; letter-spacing:.04em; padding:7px 15px; cursor:pointer;
+        font-weight:400; transition:.14s;}
+  .tbtn:hover{border-color:var(--purple); color:var(--w);}
+  .tbtn.on{border-color:var(--purple); color:var(--w); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .tbtn:focus-visible{outline:2px solid var(--purple); outline-offset:2px;}
+
+  /* ── the card — 272px, the shipped fixed width (fb356) ─────────────────── */
+  .cards{display:flex; gap:22px; align-items:flex-start; flex-wrap:wrap; justify-content:center;}
+  .stage{display:flex; flex-direction:column; align-items:center; gap:9px;}
+  .stage .tag{font-size:10px; letter-spacing:.14em; color:var(--w5); text-transform:uppercase;}
+  .zoom{transform-origin:top center;}
+
+  .dev{width:272px; height:198px; background:rgba(255,255,255,0.022); border:1px solid var(--border);
+       border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, background .15s;}
+  .dev.sel{border-color:var(--purple); box-shadow:0 0 0 1px rgba(183,148,255,.35);}
+  .dev.off{opacity:.5;}
+
+  /* header — the CENTERLINE law: equal-height boxes, align-items:center, no per-element nudges */
+  .dev-head{display:flex; align-items:center; gap:6px; padding:9px 10px 6px;}
+  .grip{color:var(--w3); font-size:12px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none;
+        display:flex; align-items:center;}
+  .dev-name{font-size:12px; color:var(--w); font-weight:500; white-space:nowrap; line-height:1;}
+  .type{font-size:9px; color:var(--w7); border:1px solid var(--wfaint); border-radius:9px; padding:2px 7px;
+        display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:300; line-height:1.55; margin-left:2px;}
+  .type .car{color:var(--w5); font-size:8px;}
+  .preset{display:flex; align-items:center; gap:5px; max-width:62px; border:1px solid var(--wfaint);
+          border-radius:9px; padding:2px 7px; cursor:pointer; line-height:1.55; overflow:hidden;}
+  .preset .star{color:var(--purple); font-size:8px; line-height:1;}
+  .preset .pname{font-size:9px; color:var(--w7); font-weight:300; white-space:nowrap; overflow:hidden;
+                 text-overflow:ellipsis;}
+  .preset .car{color:var(--w5); font-size:8px; margin-left:auto;}
+  .spacer{flex:1;}
+  .head-r{display:flex; align-items:center; gap:9px;}
+  .code{font-weight:300; font-size:9px; color:var(--w5); line-height:1; white-space:nowrap;
+        font-variant-numeric:tabular-nums;}
+  /* +, ← and ✕ are IDENTICAL fixed SVG boxes — swapping + <-> ← moves nothing (centerline law) */
+  .ico{width:14px; height:14px; display:block; cursor:pointer; color:var(--w5);}
+  .ico:hover{color:var(--w);}
+  .ico.x:hover{color:var(--red);}
+  .pwr{width:9px; height:9px; border-radius:50%; border:1px solid var(--purple); background:var(--purple);
+       box-shadow:0 0 7px rgba(183,148,255,.6); cursor:pointer; flex:0 0 auto;}
+  .dev.off .pwr{background:transparent; border-color:var(--w5); box-shadow:none;}
+
+  .core{flex:1; margin:2px 10px 0; position:relative; overflow:hidden;}
+  .core svg{width:100%; height:100%; display:block;}
+
+  .ctrls{display:flex; align-items:flex-end; gap:10px; padding:6px 10px 13px;}
+  .knobs{flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end;}
+  .knob{display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0;}
+  .knob .dial{width:30px; height:30px; cursor:ns-resize;} .knob .dial svg{width:100%; height:100%; display:block;}
+  .knob .lab{font-size:7px; letter-spacing:.01em; color:var(--w7); white-space:nowrap; text-align:center;
+             font-weight:400; line-height:1.55;}
+  .divider{flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-1.5px;
+           background:var(--wfaint);}
+  .rightcol{flex:0 0 96px; display:flex; flex-direction:column; align-items:stretch; justify-content:center; gap:7px;}
+  .pills{display:flex; gap:5px; width:100%;}
+  .pill{flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent;
+        border:1px solid var(--wfaint); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--w5);
+        font-weight:300; cursor:pointer;}
+  .pill .t{line-height:1.55;}
+  .pill.on{border-color:var(--purple); color:var(--w); text-shadow:0 0 4px rgba(255,255,255,.5);}
+  .route{display:flex; gap:3px; width:100%;}
+  .route .r{flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px;
+            font-weight:400; color:var(--w5); border:1px solid var(--wfaint); border-radius:3px; cursor:pointer;}
+  .route .r .t{line-height:1.55;}
+  .route .r.on{color:var(--w); border-color:var(--purple); text-shadow:0 0 4px rgba(255,255,255,.5);}
+
+  /* ── BACK panel: 2 dropdowns + 8 knobs 4x2 + 3 column separators ───────── */
+  .back{flex:1; display:flex; flex-direction:column; padding:4px 10px 11px; gap:7px;}
+  .drops{display:flex; gap:6px;}
+  .drop{flex:1; min-width:0; height:19px; border:1px solid var(--wfaint); border-radius:5px; background:transparent;
+        color:var(--w7); font-family:var(--font); font-size:9px; font-weight:300; padding:0 6px;
+        display:flex; align-items:center; justify-content:space-between; cursor:pointer; overflow:hidden;}
+  .drop .dl{color:var(--w5); font-size:7.5px; letter-spacing:.06em; text-transform:uppercase; flex:0 0 auto;}
+  .drop .dv{color:var(--w9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-left:6px;
+            line-height:1.55;}
+  .drop .car{color:var(--w5); font-size:8px; margin-left:5px; flex:0 0 auto;}
+  .bgrid{flex:1; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr);
+         position:relative; align-items:center;}
+  .bgrid .sep{position:absolute; top:4%; height:92%; width:1px; background:var(--wfaint);}
+
+  .legend{display:flex; gap:26px; flex-wrap:wrap; justify-content:center; color:var(--w5); font-size:11px;
+          max-width:940px; font-weight:300; line-height:1.7;}
+  .legend b{color:var(--w7); font-weight:500;}
+  .note{max-width:760px; color:var(--w5); font-size:11.5px; line-height:1.85; font-weight:300;}
+  .note b{color:var(--w7); font-weight:500;} .note code{color:var(--purple); font-size:10.5px;}
+
+  @media (prefers-reduced-motion:reduce){*{animation:none !important; transition:none !important;}}
+</style>
+</head>
+<body>
+
+  <div class="cap">Terrain · <b>Filter</b> — FX device card &nbsp;·&nbsp; front + back &nbsp;·&nbsp; live audio<br>
+    the response curve is computed from the <b>same filter node that is processing the sound</b></div>
+
+  <div class="transport">
+    <button class="tbtn" id="play">▶ Play chord loop</button>
+    <button class="tbtn" id="src">Source: Chord stabs</button>
+    <button class="tbtn" id="zoomb">Zoom 1×</button>
+    <button class="tbtn" id="pwrb">Power: On</button>
+  </div>
+
+  <div class="cards">
+    <div class="stage">
+      <span class="tag">Front — what you perform</span>
+      <div class="zoom" id="zf">
+        <div class="dev sel" id="cardFront">
+          <div class="dev-head">
+            <span class="grip">⋮⋮</span><span class="dev-name">Filter</span>
+            <span class="type" id="typePill">Ladder<span class="car">▾</span></span>
+            <span class="preset"><span class="star">✦</span><span class="pname">Wah</span><span class="car">▾</span></span>
+            <span class="spacer"></span>
+            <span class="head-r">
+              <svg class="ico" id="toBack" viewBox="0 0 14 14" aria-label="back panel"><path d="M7 2.5v9M2.5 7h9" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+              <span class="pwr" id="pwrDot"></span>
+              <svg class="ico x" viewBox="0 0 14 14" aria-label="remove"><path d="M3.4 3.4l7.2 7.2M10.6 3.4l-7.2 7.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+          <div class="core" id="core"></div>
+          <div class="ctrls">
+            <div class="knobs">
+              <div class="knob"><div class="dial" data-k="cut"></div><span class="lab">Cutoff</span></div>
+              <div class="knob"><div class="dial" data-k="res"></div><span class="lab">Res</span></div>
+              <div class="knob"><div class="dial" data-k="follow"></div><span class="lab">Follow</span></div>
+              <div class="knob"><div class="dial" data-k="mix"></div><span class="lab">Mix</span></div>
+            </div>
+            <div class="divider"></div>
+            <div class="rightcol">
+              <div class="pills">
+                <span class="pill" data-p="wide"><span class="t">Wide</span></span>
+                <span class="pill" data-p="punch"><span class="t">Punch</span></span>
+              </div>
+              <div class="route" id="routes">
+                <span class="r on" data-s="A"><span class="t">A</span></span><span class="r on" data-s="B"><span class="t">B</span></span>
+                <span class="r" data-s="C"><span class="t">C</span></span><span class="r" data-s="D"><span class="t">D</span></span>
+                <span class="r" data-s="S"><span class="t">S</span></span><span class="r" data-s="N"><span class="t">N</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="stage">
+      <span class="tag">Back — what you set up</span>
+      <div class="zoom" id="zb">
+        <div class="dev sel">
+          <div class="dev-head">
+            <span class="grip">⋮⋮</span><span class="dev-name">Filter</span>
+            <span class="type" id="typePill2">Ladder<span class="car">▾</span></span>
+            <span class="preset"><span class="star">✦</span><span class="pname">Wah</span><span class="car">▾</span></span>
+            <span class="spacer"></span>
+            <span class="head-r">
+              <svg class="ico" id="toFront" viewBox="0 0 14 14" aria-label="front"><path d="M8.6 3.2L4.8 7l3.8 3.8" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" stroke-linejoin="round"/></svg>
+              <span class="pwr"></span>
+              <svg class="ico x" viewBox="0 0 14 14" aria-label="remove"><path d="M3.4 3.4l7.2 7.2M10.6 3.4l-7.2 7.2" stroke="currentColor" stroke-width="1.1" stroke-linecap="round"/></svg>
+            </span>
+          </div>
+          <div class="back">
+            <div class="drops">
+              <div class="drop" id="charDrop"><span class="dl">Char</span><span class="dv" id="charVal">Classic 24</span><span class="car">▾</span></div>
+              <div class="drop" id="shapeDrop"><span class="dl">Shape</span><span class="dv" id="shapeVal">Sine</span><span class="car">▾</span></div>
+            </div>
+            <div class="bgrid" id="bgrid">
+              <div class="knob"><div class="dial" data-k="drive"></div><span class="lab">Drive</span></div>
+              <div class="knob"><div class="dial" data-k="var"></div><span class="lab" id="varLab">Slope</span></div>
+              <div class="knob"><div class="dial" data-k="track"></div><span class="lab">Track</span></div>
+              <div class="knob"><div class="dial" data-k="sense"></div><span class="lab">Sense</span></div>
+              <div class="knob"><div class="dial" data-k="atk"></div><span class="lab">Attack</span></div>
+              <div class="knob"><div class="dial" data-k="rel"></div><span class="lab">Release</span></div>
+              <div class="knob"><div class="dial" data-k="rate"></div><span class="lab">Rate</span></div>
+              <div class="knob"><div class="dial" data-k="sweep"></div><span class="lab">Sweep</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="legend">
+    <div><b>Drag a knob</b> up / down — it changes the sound and the curve together</div>
+    <div><b>Click the type pill</b> to cycle · <b>+ / ←</b> flips the card</div>
+    <div><b>Trail</b> = the frequency range the cutoff has covered in the last ½ second</div>
+  </div>
+
+  <div class="note">
+    <b>What the trail is for.</b> The identity of this device is that the filter <i>moves</i>, and three things
+    move it — the envelope follower, the synced LFO, and key track. The comet behind the cutoff node marks the
+    last half second, so you can see the <i>frequency range</i> the cutoff is actually covering and how fast it
+    is travelling: a slow LFO spreads the dots evenly across the sweep, a percussive follower bunches them and
+    then flings a gap. It answers "is this thing moving, and how far" from across the room.
+    <br><br>
+    <b>What it does not do,</b> since I claimed otherwise for a draft and it was not true: the dots ride the
+    curve, so they all sit at the same height and the trail cannot show you <i>which</i> driver is moving the
+    filter. Only spacing distinguishes them. If telling env from LFO at a glance matters to you, say so and
+    I will make age the vertical axis — that version reads as a real time-series, at the cost of putting a
+    time axis inside a frequency plot.
+    <br><br>
+    <b>Honest about the audio.</b> This is Web Audio, not our engine — Ladder, Multi, Vowel, Comb, Notches and
+    DJ behave correctly; Acid, Scream and Ring are stand-ins for layout only. The curve is drawn with
+    <code>getFrequencyResponse()</code> on the very node that filters the sound, so what you see is what you
+    hear — the same law the tape card follows.
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  // ─── the shipped knob: white round-cap arc + thin centered value ──────────
+  function knobSVG(pct, bipolar, text){
+    const cx=15, cy=15, r=11.5;
+    const pt = d => { const a=d*Math.PI/180; return [cx+r*Math.cos(a), cy+r*Math.sin(a)]; };
+    const t0=pt(135), t1=pt(405);
+    const end = 135 + 270*pct/100;
+    const startDeg = bipolar ? 270 : 135;                 // bipolar knobs grow from noon
+    const v0=pt(startDeg), v1=pt(end);
+    const sweep = end - startDeg;
+    const large = Math.abs(sweep) > 180 ? 1 : 0;
+    const dir   = sweep >= 0 ? 1 : 0;
+    return `<svg viewBox="0 0 30 30">
+      <path d="M${t0[0].toFixed(1)} ${t0[1].toFixed(1)} A ${r} ${r} 0 1 1 ${t1[0].toFixed(1)} ${t1[1].toFixed(1)}"
+            fill="none" stroke="rgba(255,255,255,0.13)" stroke-width="2" stroke-linecap="round"/>
+      <path d="M${v0[0].toFixed(1)} ${v0[1].toFixed(1)} A ${r} ${r} 0 ${large} ${dir} ${v1[0].toFixed(1)} ${v1[1].toFixed(1)}"
+            fill="none" stroke="rgba(255,255,255,0.92)" stroke-width="2" stroke-linecap="round"/>
+      <text x="15" y="15.4" text-anchor="middle" dominant-baseline="central"
+            font-family="-apple-system,'SF Pro Display','Inter',sans-serif"
+            font-size="${text && text.length > 3 ? 6 : text ? 7 : 8}" font-weight="300"
+            fill="rgba(255,255,255,0.62)">${text != null ? text : Math.round(pct)}</text></svg>`;
+  }
+
+  // ─── params ──────────────────────────────────────────────────────────────
+  // defaults per the build bible. Rate is stored 0..100 but INDEXES the 20-entry sync list,
+  // so the default 1/4 is index 7 of 19 = 36.8, not the literal 7 (which lands on "4 bar").
+  const P = { cut:62, res:35, follow:70, mix:100, drive:0, var:0, track:0,
+              sense:50, atk:41, rel:48, rate:100*7/19, sweep:0 };
+  const BIPOLAR = { follow:1, var:0 };
+
+  const TYPES = ['Ladder','Acid','Multi','Scream','Vowel','Comb','Notches','Ring','DJ'];
+  const VARLAB = { Ladder:'Slope', Acid:'Accent', Multi:'Morph', Scream:'Bite', Vowel:'Shift',
+                   Comb:'Damp', Notches:'Spin', Ring:'Blend', DJ:'Curve' };
+  const CHARS = {
+    Ladder:['Classic 24','Wide 18','Twelve','Six','German','Hi 24'],
+    Acid:['Squelch','Scream','Diode','Germanium','French'],
+    Multi:['Low 12','Low 24','High 12','High 24','Band','Notch','Peak','Morph'],
+    Scream:['MS-20','Wasp','Polivoks','Scream Low','Scream Band'],
+    Vowel:['Ah','Eh','Ee','Oh','Oo','Morph','Wide','Growl'],
+    Comb:['Plus','Minus','Shimmer','Octave','Fifth','Damp','Karplus','Pluck'],
+    Notches:['4','6','8','12','16','Diffuse'],
+    Ring:['Ring','Dual','Shift','Radio'],
+    DJ:['Clean','Color','Dub','Slam']
+  };
+  const SHAPES = ['Sine','Triangle','Ramp','Saw','Square','S&H','Random'];
+  const DIVS = ['Free','4 bar','2 bar','1 bar','1/2','1/2D','1/2T','1/4','1/4D','1/4T','1/8','1/8D','1/8T',
+                '1/16','1/16D','1/16T','1/32','1/64','1/128','1/256'];
+  const DIVBEATS = [0,16,8,4,2,3,1.333,1,1.5,0.667,0.5,0.75,0.333,0.25,0.375,0.167,0.125,0.0625,0.031,0.016];
+
+  let typeIdx = 0, charIdx = 0, shapeIdx = 0, powered = true, zoom = 1;
+  const pills = { wide:false, punch:false };
+  const routed = { A:true, B:true, C:false, D:false, S:false, N:false };
+
+  const cutHz  = t => 20 * Math.pow(1000, t);            // the shipped cutKnobToHz
+  const clampHz = h => Math.max(20, Math.min(20000, h));
+  const BPM = 112;
+
+  // ─── audio ───────────────────────────────────────────────────────────────
+  let ac=null, master=null, filt=null, filt2=null, dryG=null, wetG=null, shaper=null,
+      ana=null, anaBuf=null, srcGain=null, started=false, mode='stabs', nodes=[];
+
+  function makeShaper(amount){
+    const n = 1024, c = new Float32Array(n), k = amount * 24;
+    for (let i=0;i<n;i++){ const x = i*2/n - 1; c[i] = Math.tanh(x * (1 + k)); }
+    return c;
+  }
+
+  function buildGraph(){
+    ac = new (window.AudioContext || window.webkitAudioContext)();
+    master = ac.createGain(); master.gain.value = 0.22; master.connect(ac.destination);
+
+    srcGain = ac.createGain(); srcGain.gain.value = 1;
+    shaper  = ac.createWaveShaper(); shaper.curve = makeShaper(0); shaper.oversample = '2x';
+    filt    = ac.createBiquadFilter();  filt.type = 'lowpass';
+    filt2   = ac.createBiquadFilter(); filt2.type = 'lowpass'; filt2.Q.value = 0.7;
+    wetG    = ac.createGain(); dryG = ac.createGain();
+    ana     = ac.createAnalyser(); ana.fftSize = 1024; anaBuf = new Float32Array(ana.fftSize);
+
+    srcGain.connect(ana);
+    srcGain.connect(shaper); shaper.connect(filt); filt.connect(filt2);
+    filt2.connect(wetG); wetG.connect(master);
+    srcGain.connect(dryG); dryG.connect(master);
+  }
+
+  function noteOn(freq, t, dur, kind){
+    if (kind === 'noise'){
+      const len = Math.floor(ac.sampleRate * dur), b = ac.createBuffer(1, len, ac.sampleRate);
+      const d = b.getChannelData(0);
+      for (let i=0;i<len;i++) d[i] = (Math.random()*2-1) * Math.pow(1 - i/len, 2);
+      const s = ac.createBufferSource(); s.buffer = b;
+      const g = ac.createGain(); g.gain.value = 0.25;
+      s.connect(g); g.connect(srcGain); s.start(t); s.stop(t+dur);
+      return;
+    }
+    [0, 0.5, -0.5].forEach((det, i) => {
+      const o = ac.createOscillator(); o.type = 'sawtooth';
+      o.frequency.value = freq * Math.pow(2, det/1200 * 14);
+      const g = ac.createGain();
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(0.30 / (i+1.6), t + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(srcGain);
+      o.start(t); o.stop(t + dur + 0.05);
+      nodes.push(o);
+    });
+  }
+
+  let schedT = 0, step = 0, seqTimer = null;
+  const CHORD = [110, 130.81, 164.81, 220];      // Am — low enough that a sweep is obvious
+  function scheduler(){
+    const beat = 60 / BPM, ahead = 0.25;
+    while (schedT < ac.currentTime + ahead){
+      const s = step % 8;
+      if (mode === 'stabs'){
+        if (s % 2 === 0) CHORD.forEach(f => noteOn(f, schedT, 0.34));
+        if (s === 3 || s === 7) noteOn(0, schedT, 0.16, 'noise');
+      } else {
+        if (s === 0) CHORD.forEach(f => noteOn(f, schedT, beat*8*0.98));
+      }
+      schedT += beat/2; step++;
+    }
+    seqTimer = setTimeout(scheduler, 60);
+  }
+
+  // ─── the motion block: ONE number, used by the audio AND drawn ────────────
+  let env = 0, lfoPh = 0, lastT = 0;
+  const trail = [];                                   // {x01, y01, age}
+  let liveHz = cutHz(P.cut/100), liveQ = 1;
+
+  function motion(dt){
+    // env follower — peak rectify, asymmetric one-pole, both constants on knobs
+    let peak = 0;
+    if (ana){
+      ana.getFloatTimeDomainData(anaBuf);
+      for (let i=0;i<anaBuf.length;i++){ const a = Math.abs(anaBuf[i]); if (a > peak) peak = a; }
+    }
+    // test hook: lets the headless shot verify the idle-vs-playing delta (law 9) without audio.
+    if (window.__demoLevel != null){ peak = window.__demoLevel; lfoPh = (lfoPh + dt*0.9) % 1; }
+    const tA = 0.0002 * Math.pow(1500, P.atk/100);
+    const tR = 0.020  * Math.pow(100,  P.rel/100);
+    const a  = 1 - Math.exp(-dt / (peak > env ? tA : tR));
+    env += a * (peak - env);
+
+    // sensitivity: +6..+48 dB, soft knee so it never plateaus
+    const gS  = Math.pow(10, (6 + 42*(P.sense/100)) / 20);
+    const lvl = env * gS;
+    const sweep01 = lvl / (1 + lvl);
+
+    // LFO — synced division, sine by default
+    const beats = DIVBEATS[Math.round(P.rate/100*(DIVS.length-1))] || 1;
+    const hz = beats > 0 ? (BPM/60) / beats : 0.7;
+    lfoPh = (lfoPh + dt*hz) % 1;
+    let lfo;
+    const ph = lfoPh * 2*Math.PI;
+    switch (SHAPES[shapeIdx]){
+      case 'Triangle': lfo = 2*Math.abs(2*lfoPh-1)-1; break;
+      case 'Ramp':     lfo = 2*lfoPh-1; break;
+      case 'Saw':      lfo = 1-2*lfoPh; break;
+      case 'Square':   lfo = lfoPh < 0.5 ? 1 : -1; break;
+      case 'S&H':      lfo = Math.sin(Math.floor(lfoPh*8)*12.9898)*2%2-1; break;
+      case 'Random':   lfo = Math.sin(ph)*0.6 + Math.sin(ph*2.7)*0.4; break;
+      default:         lfo = Math.sin(ph);
+    }
+
+    // sum in SEMITONES, exactly like the voice does, then convert once
+    const baseSemis   = 12 * Math.log2(cutHz(P.cut/100) / 20);
+    const followSemis = ((P.follow-50)/50) * 84 * sweep01;
+    const lfoSemis    = (P.sweep/100) * 60 * lfo;
+    const keySemis    = (P.track/100) * 2 * 0;          // no keyboard in the mockup
+    liveHz = clampHz(20 * Math.pow(2, (baseSemis + followSemis + lfoSemis + keySemis) / 12));
+    liveQ  = 0.7 + Math.pow(P.res/100, 2) * 17;
+
+    if (filt){
+      if (started){
+        // running: ramp, so a fast sweep does not zipper
+        const now = ac.currentTime;
+        filt.frequency.setTargetAtTime(liveHz, now, 0.008);
+        filt2.frequency.setTargetAtTime(liveHz, now, 0.008);
+        filt.Q.setTargetAtTime(liveQ, now, 0.02);
+        wetG.gain.setTargetAtTime(powered ? P.mix/100 : 0, now, 0.02);
+        dryG.gain.setTargetAtTime(powered ? 1 - P.mix/100 : 1, now, 0.02);
+      } else {
+        // ⚠️ SUSPENDED: currentTime does not advance, so setTargetAtTime never converges and
+        // the node keeps its DEFAULT 350 Hz. The curve is read off this node, so it would draw
+        // a filter nobody asked for while the cutoff dot sat at the real frequency — the viz
+        // and the DSP disagreeing, caught by eye. Assign directly when the clock is stopped.
+        filt.frequency.value = filt2.frequency.value = liveHz;
+        filt.Q.value = liveQ;
+        wetG.gain.value = powered ? P.mix/100 : 0;
+        dryG.gain.value = powered ? 1 - P.mix/100 : 1;
+      }
+    }
+
+    // age the trail here; the POINT is appended in drawCore, where the curve's own height
+    // at this frequency is known — the trail has to sit on the curve, not beside it.
+    for (let i=trail.length-1;i>=0;i--){ trail[i].t += dt; if (trail[i].t > 0.5) trail.splice(i,1); }
+    return { sweep01, lvl: peak };
+  }
+
+  // ─── the curve: drawn from the SAME node that filters the sound ──────────
+  const NPT = 96, fRes = new Float32Array(NPT), mRes = new Float32Array(NPT), pRes = new Float32Array(NPT);
+  for (let i=0;i<NPT;i++) fRes[i] = 20 * Math.pow(1000, i/(NPT-1));
+  const X0 = 6.5, X1 = 219.5, VW = 226, VH = 78;       // the ONE rack plot bound (fb361)
+
+  function drawCore(m){
+    const bright = powered ? Math.min(1, 0.12 + m.lvl*6.5) : 0.10;
+    let grid = '';
+    for (const f of [100,1000,10000]){
+      const x = X0 + (X1-X0) * Math.log(f/20)/Math.log(1000);
+      grid += `<line x1="${x.toFixed(1)}" y1="4" x2="${x.toFixed(1)}" y2="${VH-4}" stroke="var(--trk)" stroke-width="1"/>`;
+    }
+    grid += `<line x1="${X0}" y1="${(VH*0.62).toFixed(1)}" x2="${X1}" y2="${(VH*0.62).toFixed(1)}" stroke="var(--trk)" stroke-width="1"/>`;
+
+    let d = '';
+    const ys = new Float32Array(NPT);
+    if (filt && powered){
+      filt.getFrequencyResponse(fRes, mRes, pRes);
+      const stages = (CHARS[TYPES[typeIdx]][charIdx]||'').includes('24') ? 2 : 1;
+      for (let i=0;i<NPT;i++){
+        const mag = Math.pow(Math.max(mRes[i], 1e-4), stages);
+        const db  = 20*Math.log10(mag);
+        const x = X0 + (X1-X0)*i/(NPT-1);
+        const y = Math.max(2, Math.min(VH-2, VH*0.62 - Math.max(-46, Math.min(20, db)) * (VH*0.55/40)));
+        ys[i] = y;
+        d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+      }
+    } else {
+      for (let i=0;i<NPT;i++) ys[i] = VH*0.62;
+      d = `M${X0} ${(VH*0.62).toFixed(1)}L${X1} ${(VH*0.62).toFixed(1)}`;
+    }
+
+    // the node RIDES the curve — read its height off the response we just drew, never
+    // from a parallel guess, or the dot drifts off the line it is supposed to be on.
+    const u  = Math.log(liveHz/20)/Math.log(1000);
+    const fi = Math.max(0, Math.min(NPT-1.001, u*(NPT-1)));
+    const i0 = Math.floor(fi), fr = fi - i0;
+    const curveY = ys[i0]*(1-fr) + ys[Math.min(NPT-1,i0+1)]*fr;
+
+    if (powered) trail.push({ x:u, y:curveY, t:0 });
+
+    // The trail rides the curve, so every point shares the peak's height — it is a comet, not
+    // a graph. Age tapers the radius as well as the opacity so it reads as a tail with a
+    // direction rather than a dotted rule. What it tells you is the FREQUENCY RANGE the cutoff
+    // has covered in the last half second, and how fast: a slow LFO spreads the dots evenly,
+    // a percussive follower bunches them and then flings a gap.
+    let tr = '';
+    for (const p of trail){
+      const age = p.t / 0.5;
+      const x = X0 + (X1-X0)*p.x;
+      const o = (1 - age) * 0.55 * bright;
+      const r = 1.3 - age * 0.75;
+      if (o > 0.02) tr += `<circle cx="${x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="${r.toFixed(2)}" fill="var(--purple)" opacity="${o.toFixed(3)}"/>`;
+    }
+    const nx = X0 + (X1-X0) * u;
+    const ny = curveY;
+
+    // the readout lives ON the plot, not in the header: it is a fact about the curve,
+    // and the header has no room to spare without eating the preset name (fb370 class).
+    const hz = liveHz >= 1000 ? (liveHz/1000).toFixed(liveHz>=10000?0:2)+'k' : Math.round(liveHz)+'';
+
+    document.getElementById('core').innerHTML =
+      `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none">${grid}
+        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="2.4" opacity="${(bright*0.30).toFixed(3)}"/>
+        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="1.3" opacity="${bright.toFixed(3)}"/>
+        ${tr}
+        <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="2" fill="#fff" opacity="${bright.toFixed(3)}"/>
+        <text x="${X1}" y="9" text-anchor="end" font-family="-apple-system,'SF Pro Display',sans-serif"
+              font-size="7" font-weight="300" fill="rgba(255,255,255,${(0.34+bright*0.34).toFixed(2)})">${hz} Hz</text>
+       </svg>`;
+  }
+
+  // ─── render controls ─────────────────────────────────────────────────────
+  // A knob that means something SAYS it (the readout law). Rate is a STEPPED param, so a
+  // 0..100 number in its face is noise — it shows the division it is actually on. Attack and
+  // Release are times, so they show milliseconds, computed from the same map the audio uses.
+  const KTEXT = {
+    rate:  () => DIVS[Math.round(P.rate/100*(DIVS.length-1))],
+    atk:   () => { const ms = 0.2*Math.pow(1500, P.atk/100);
+                   return ms < 10 ? ms.toFixed(1) : Math.round(ms)+''; },
+    rel:   () => { const ms = 20*Math.pow(100, P.rel/100);
+                   return ms >= 1000 ? (ms/1000).toFixed(1)+'s' : Math.round(ms)+''; }
+  };
+
+  function paintKnobs(){
+    document.querySelectorAll('.dial').forEach(d => {
+      const k = d.dataset.k;
+      d.innerHTML = knobSVG(P[k], BIPOLAR[k], KTEXT[k] ? KTEXT[k]() : null);
+    });
+    document.getElementById('varLab').textContent = VARLAB[TYPES[typeIdx]];
+    document.getElementById('charVal').textContent = CHARS[TYPES[typeIdx]][charIdx] || '—';
+    document.getElementById('shapeVal').textContent = SHAPES[shapeIdx];
+    document.querySelectorAll('.pill').forEach(p => p.classList.toggle('on', !!pills[p.dataset.p]));
+    document.querySelectorAll('.route .r').forEach(r => r.classList.toggle('on', !!routed[r.dataset.s]));
+    // 3 column separators, placed on the 4-column grid (official back-panel spec)
+    const g = document.getElementById('bgrid');
+    g.querySelectorAll('.sep').forEach(s => s.remove());
+    for (let i=1;i<4;i++){
+      const s = document.createElement('div');
+      s.className = 'sep'; s.style.left = (i*25) + '%';
+      g.appendChild(s);
+    }
+  }
+
+  function applyType(){
+    const t = TYPES[typeIdx], ch = CHARS[t][charIdx] || '';
+    document.getElementById('typePill').firstChild.nodeValue = t;
+    document.getElementById('typePill2').firstChild.nodeValue = t;
+    if (!filt) return;
+    let bq = 'lowpass';
+    if (t === 'Multi'){
+      if (ch.startsWith('High')) bq = 'highpass';
+      else if (ch === 'Band') bq = 'bandpass';
+      else if (ch === 'Notch') bq = 'notch';
+      else if (ch === 'Peak') bq = 'peaking';
+    } else if (t === 'Notches') bq = 'allpass';
+    else if (t === 'Vowel')     bq = 'peaking';
+    else if (t === 'DJ')        bq = P.cut > 50 ? 'highpass' : 'lowpass';
+    filt.type = bq; filt2.type = bq;
+    shaper.curve = makeShaper(P.drive/100 * (t === 'Acid' || t === 'Scream' ? 1.6 : 1));
+  }
+
+  // ─── interaction ─────────────────────────────────────────────────────────
+  document.querySelectorAll('.dial').forEach(d => {
+    let dragging = false, y0 = 0, v0 = 0;
+    const down = e => { dragging = true; y0 = (e.touches?e.touches[0]:e).clientY; v0 = P[d.dataset.k];
+                        e.preventDefault(); };
+    const move = e => { if (!dragging) return;
+      const y = (e.touches?e.touches[0]:e).clientY;
+      P[d.dataset.k] = Math.max(0, Math.min(100, v0 + (y0 - y) * 0.6));
+      paintKnobs(); applyType(); };
+    const up = () => { dragging = false; };
+    d.addEventListener('mousedown', down); d.addEventListener('touchstart', down, {passive:false});
+    window.addEventListener('mousemove', move); window.addEventListener('touchmove', move, {passive:false});
+    window.addEventListener('mouseup', up);     window.addEventListener('touchend', up);
+    d.addEventListener('dblclick', () => { P[d.dataset.k] = d.dataset.k === 'mix' ? 100 : 50;
+                                           paintKnobs(); applyType(); });
+  });
+
+  const cycleType = () => { typeIdx = (typeIdx+1) % TYPES.length; charIdx = 0; applyType(); paintKnobs(); };
+  document.getElementById('typePill').onclick  = cycleType;
+  document.getElementById('typePill2').onclick = cycleType;
+  document.getElementById('charDrop').onclick  = () => {
+    charIdx = (charIdx+1) % CHARS[TYPES[typeIdx]].length; applyType(); paintKnobs(); };
+  document.getElementById('shapeDrop').onclick = () => {
+    shapeIdx = (shapeIdx+1) % SHAPES.length; paintKnobs(); };
+  document.querySelectorAll('.pill').forEach(p => p.onclick = () => {
+    pills[p.dataset.p] = !pills[p.dataset.p]; paintKnobs(); });
+  document.querySelectorAll('.route .r').forEach(r => r.onclick = () => {
+    routed[r.dataset.s] = !routed[r.dataset.s]; paintKnobs(); });
+
+  const flip = () => {
+    const cards = document.querySelectorAll('.stage');
+    cards[0].scrollIntoView({behavior:'smooth', block:'nearest'});
+  };
+  document.getElementById('toBack').onclick  = flip;
+  document.getElementById('toFront').onclick = flip;
+
+  document.getElementById('pwrb').onclick = e => {
+    powered = !powered;
+    e.target.textContent = 'Power: ' + (powered ? 'On' : 'Off');
+    e.target.classList.toggle('on', powered);
+    document.getElementById('cardFront').classList.toggle('off', !powered);
+  };
+  document.getElementById('zoomb').onclick = e => {
+    zoom = zoom === 1 ? 2 : 1;
+    e.target.textContent = 'Zoom ' + zoom + '×';
+    e.target.classList.toggle('on', zoom === 2);
+    document.getElementById('zf').style.transform = 'scale('+zoom+')';
+    document.getElementById('zb').style.transform = 'scale('+zoom+')';
+    document.querySelectorAll('.stage').forEach(s => s.style.marginBottom = (zoom-1)*210 + 'px');
+  };
+  document.getElementById('src').onclick = e => {
+    mode = mode === 'stabs' ? 'pad' : 'stabs';
+    e.target.textContent = 'Source: ' + (mode === 'stabs' ? 'Chord stabs' : 'Sustained pad');
+  };
+  document.getElementById('play').onclick = async e => {
+    if (!ac) { buildGraph(); applyType(); }        // Safari: first gesture may be the only chance
+    if (!started){
+      await ac.resume();
+      schedT = ac.currentTime + 0.06; scheduler();
+      started = true;
+      e.target.textContent = '■ Stop'; e.target.classList.add('on');
+    } else {
+      clearTimeout(seqTimer); seqTimer = null;
+      nodes.forEach(n => { try{ n.stop(); }catch(_){} }); nodes = [];
+      await ac.suspend();                          // SUSPEND, never close — the curve stays live
+      started = false;
+      e.target.textContent = '▶ Play chord loop'; e.target.classList.remove('on');
+    }
+  };
+
+  // ─── frame loop ──────────────────────────────────────────────────────────
+  function frame(ts){
+    const dt = Math.min(0.05, lastT ? (ts - lastT)/1000 : 0.016); lastT = ts;
+    // motion runs whether or not the transport does: on a suspended context the analyser
+    // reads silence, so env decays to 0 and the curve simply rests at the Cutoff knob —
+    // which is exactly the idle state, and it means dragging a knob moves the curve
+    // before you ever press play.
+    const m = filt ? motion(dt) : { sweep01:0, lvl:0 };
+    drawCore(m);
+    requestAnimationFrame(frame);
+  }
+
+  // Build the graph immediately, SUSPENDED. Two reasons: the curve is drawn from the live
+  // filter node, so without it the card boots as a flat line and the hero element is invisible
+  // until you press play; and the real device draws its curve the moment it exists. A suspended
+  // context makes no sound and still answers getFrequencyResponse().
+  try { buildGraph(); applyType(); if (ac.state === 'running') ac.suspend(); } catch(_){}
+
+  paintKnobs();
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
