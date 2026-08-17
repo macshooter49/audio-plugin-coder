@@ -3857,12 +3857,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 // BACK — 2 dropdowns (above) + 8 knobs, 4x2.
                 F (p + "ENV",    d + "Env",     0.70f);   // BIPOLAR at 0.5; the follower amount
                 F (p + "TRACK",  d + "Track",   0.00f);
-                F (p + "SPREAD", d + "Spread",  0.00f);
                 F (p + "POLES",  d + "Poles",   1.00f);   // detents 6/12/18/24 dB
-                F (p + "POST",   d + "Post",    0.00f);
                 F (p + "SENSE",  d + "Sense",   0.50f);
                 F (p + "ATTACK", d + "Attack",  0.41f);   // = 4 ms on the log map
                 F (p + "RELEASE",d + "Release", 0.48f);   // = 182 ms
+                // fb377 — the SYNCED LFO, restored. Mirroring the synth filter had squeezed it out
+                // of eight knobs; the two that made room were doubles, not casualties. POST was a
+                // second drive stage next to the front Drive, and a SPREAD knob duplicated the Wide
+                // pill's whole job. A filter effect that cannot sweep in time with the track is
+                // half a filter effect, so the LFO wins both slots.
+                F (p + "RATE",   d + "Rate",    0.368f);  // stepped over the 20-entry sync list -> 1/4
+                F (p + "SWEEP",  d + "Sweep",   0.00f);   // depth, 0..+-60 semis
                 for (auto& sfx : srcSuf) B (p + sfx, d + sfx, false);   // unrouted on arrival
                 B (p + "WIDE",   d + "Wide",   false);
                 B (p + "PUNCH",  d + "Punch",  false);
