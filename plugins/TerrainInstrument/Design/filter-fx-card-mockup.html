@@ -50,15 +50,25 @@
   .grip{color:var(--w3); font-size:12px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none;
         display:flex; align-items:center;}
   .dev-name{font-size:12px; color:var(--w); font-weight:500; white-space:nowrap; line-height:1;}
-  .type{font-size:9px; color:var(--w7); border:1px solid var(--wfaint); border-radius:9px; padding:2px 7px;
-        display:flex; align-items:center; gap:5px; cursor:pointer; font-weight:300; line-height:1.55; margin-left:2px;}
-  .type .car{color:var(--w5); font-size:8px;}
-  .preset{display:flex; align-items:center; gap:5px; max-width:62px; border:1px solid var(--wfaint);
-          border-radius:9px; padding:2px 7px; cursor:pointer; line-height:1.55; overflow:hidden;}
-  .preset .star{color:var(--purple); font-size:8px; line-height:1;}
-  .preset .pname{font-size:9px; color:var(--w7); font-weight:300; white-space:nowrap; overflow:hidden;
-                 text-overflow:ellipsis;}
-  .preset .car{color:var(--w5); font-size:8px; margin-left:auto;}
+
+  /* 🔒 FIXED-POSITIONS LAW. Both header pills are FIXED SIZE, never max-width, never auto.
+     A wrapping type name ("Dirty & Weird") grew the header two lines tall and shoved the whole
+     card down; a long preset name did the same sideways. Content changes, geometry does not:
+     nowrap + ellipsis inside a box whose width does not depend on what is in it. */
+  .type{width:84px; height:15px; flex:0 0 84px; font-size:9px; color:var(--w7);
+        border:1px solid var(--wfaint); border-radius:9px; padding:0 6px;
+        display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300;
+        margin-left:2px; overflow:hidden;}
+  .type .tname{flex:1 1 0; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+               line-height:1.55;}
+  .type .car{color:var(--w5); font-size:8px; flex:0 0 auto;}
+  .preset{width:54px; height:15px; flex:0 0 54px; display:flex; align-items:center; gap:4px;
+          border:1px solid var(--wfaint); border-radius:9px; padding:0 6px; cursor:pointer;
+          overflow:hidden;}
+  .preset .star{color:var(--purple); font-size:8px; line-height:1; flex:0 0 auto;}
+  .preset .pname{flex:1 1 0; min-width:0; font-size:9px; color:var(--w7); font-weight:300;
+                 white-space:nowrap; overflow:hidden; text-overflow:ellipsis; line-height:1.55;}
+  .preset .car{color:var(--w5); font-size:8px; flex:0 0 auto;}
   .spacer{flex:1;}
   .head-r{display:flex; align-items:center; gap:9px;}
   .code{font-weight:300; font-size:9px; color:var(--w5); line-height:1; white-space:nowrap;
@@ -143,7 +153,7 @@
         <div class="dev sel" id="cardFront">
           <div class="dev-head">
             <span class="grip">⋮⋮</span><span class="dev-name">Filter</span>
-            <span class="type" id="typePill">Ladder<span class="car">▾</span></span>
+            <span class="type" id="typePill"><span class="tname">Ladder</span><span class="car">▾</span></span>
             <span class="preset"><span class="star">✦</span><span class="pname">Wah</span><span class="car">▾</span></span>
             <span class="spacer"></span>
             <span class="head-r">
@@ -183,7 +193,7 @@
         <div class="dev sel">
           <div class="dev-head">
             <span class="grip">⋮⋮</span><span class="dev-name">Filter</span>
-            <span class="type" id="typePill2">Ladder<span class="car">▾</span></span>
+            <span class="type" id="typePill2"><span class="tname">Ladder</span><span class="car">▾</span></span>
             <span class="preset"><span class="star">✦</span><span class="pname">Wah</span><span class="car">▾</span></span>
             <span class="spacer"></span>
             <span class="head-r">
@@ -280,27 +290,29 @@
   // ─── THE REAL ENGINES. Read out of the shipped filter menu, not invented: 94 engines in
   //     the 10 groups the synth already groups them by. The header pill picks the GROUP, the
   //     back Engine dropdown picks the engine inside it.
-  const GROUPS = ['Ladder','Xpander','State-Variable','Multi','Comb & Reso','Formant',
-                  'Phase & Diffuse','EQ & Tone','Reverb','Dirty & Weird'];
+  // Pill labels are sized for the FIXED 84px pill so nothing can ever wrap. The long form
+  // ("State-Variable", "Phase & Diffuse") still reads in full on the Engine dropdown below.
+  const GROUPS = ['Ladder','Xpander','State-Var','Multi','Comb','Formant',
+                  'Phase','EQ & Tone','Reverb','Dirty'];
   const ENGINES = {
     'Ladder':['Ladder LP · 24','Ladder LP · 12','Ladder LP · 6','Ladder LP · 18','Ladder HP · 24',
               'Diode LP','Acid 303','Acid Scream','German LP','Germanium LP','French LP','Polivoks'],
     'Xpander':['XPD 1-Pole','XPD HP · 6','XPD HP · 12','XPD HP · 18','XPD BP · 6','XPD BP · 12',
                'XPD BP · 24','XPD Notch','XPD Phase'],
-    'State-Variable':['SVF LP','SVF LP · 24','SVF HP','SVF HP · 24','SVF BP','SVF BP · 24','SVF Notch',
+    'State-Var':['SVF LP','SVF LP · 24','SVF HP','SVF HP · 24','SVF BP','SVF BP · 24','SVF Notch',
                       'SVF Notch · 24','SVF Peak','OB-X SVF','SEM LP','SEM Notch','SEM HP','SEM BP',
                       'Wasp','MS-20 LP'],
     'Multi':['Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP',
              'Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP'],
-    'Comb & Reso':['Comb +','Comb -','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Comb Shimmer',
+    'Comb':['Comb +','Comb -','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Comb Shimmer',
                    'Karplus-Strong','Karplus Bright','Karplus Mute'],
     'Formant':['Formant · A','Formant · E','Formant · I','Formant · O','Formant · U','Formant Morph',
                'Formant Wide','Formant Growl'],
-    'Phase & Diffuse':['Phaser 4P','Phaser 6P','Phaser 8P','Phaser 12P','Phaser 16P','Diffusor',
+    'Phase':['Phaser 4P','Phaser 6P','Phaser 8P','Phaser 12P','Phaser 16P','Diffusor',
                        'Bode Shifter','Bode Down'],
     'EQ & Tone':['Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass'],
     'Reverb':['Reverb Filter','Reverb Filter 2','Reverb Dark','Reverb Metal'],
-    'Dirty & Weird':['Ring Mod','Ring Mod X2','Bit-Crush','Waveshaper','Grain Mask','Samp-Hold',
+    'Dirty':['Ring Mod','Ring Mod X2','Bit-Crush','Waveshaper','Grain Mask','Samp-Hold',
                      'Samp-Hold −','Scream LP','Scream BP','Radio']
   };
   // the shipped drive-type list, verbatim (PluginProcessor.cpp: "Tube","Diode","Fold","Hard","Crush","Fuzz")
@@ -455,7 +467,13 @@
   const MID = VH * 0.5;                     // the 0 dB line sits on the vertical MIDDLE
 
   function drawCore(m){
-    const bright = powered ? Math.min(1, 0.12 + m.lvl*6.5) : 0.10;
+    // 🟣 THE CURVE IS ALWAYS PURPLE. It reads as the filter's identity, exactly like the synth
+    // filter's own curve, so it never dims into grey — idle floor is 0.55, not 0.12. The
+    // audio-reactive delta (law 9) moved to the GLOW, which goes 0 -> wide, plus the node and
+    // the comet. Dimming the identity to invisibility was the wrong place to spend the delta.
+    const lit    = powered ? Math.min(1, m.lvl*6.5) : 0;      // 0 at rest, 1 when playing
+    const bright = powered ? 0.55 + 0.45*lit : 0.22;
+    const halo   = lit;
     // one horizontal rule, no vertical decade lines — they were clutter behind the curve.
     const grid = `<line x1="${X0}" y1="${MID}" x2="${X1}" y2="${MID}" stroke="var(--trk)" stroke-width="1"/>`;
 
@@ -546,10 +564,12 @@
 
     document.getElementById('core').innerHTML =
       `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none">${spec}${grid}
-        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="2.4" opacity="${(bright*0.30).toFixed(3)}"/>
-        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="1.3" opacity="${bright.toFixed(3)}"/>
+        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="${(3.2+2.6*halo).toFixed(2)}"
+              opacity="${(0.10 + 0.26*halo).toFixed(3)}"/>
+        <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="1.5" opacity="${bright.toFixed(3)}"/>
         ${tr}
-        <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="2" fill="#fff" opacity="${bright.toFixed(3)}"/>
+        <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="${(1.8+0.9*halo).toFixed(2)}" fill="#fff"
+                opacity="${(0.7+0.3*halo).toFixed(3)}"/>
         ${read}
        </svg>`;
   }
@@ -589,8 +609,8 @@
   // NAME decides the response, not the group — "SVF HP · 24" is a highpass wherever it lives.
   function applyType(){
     const g = GROUPS[typeIdx], e = ENGINES[g][engIdx] || '';
-    document.getElementById('typePill').firstChild.nodeValue = g;
-    document.getElementById('typePill2').firstChild.nodeValue = g;
+    document.getElementById('typePill').querySelector('.tname').textContent = g;
+    document.getElementById('typePill2').querySelector('.tname').textContent = g;
     if (!filt) return;
     let bq = 'lowpass';
     if      (/HP|High|Air/.test(e))            bq = 'highpass';
