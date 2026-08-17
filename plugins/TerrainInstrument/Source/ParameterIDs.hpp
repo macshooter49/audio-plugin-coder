@@ -1158,6 +1158,18 @@ namespace ParameterIDs
     //   _RANK    float — chain position. Sorting by a float rank is what makes drag-reorder legal:
     //                    a choice param's cardinality is fixed at birth (the fb342 law), so the old
     //                    6-way SYN_FX_ORDER could never grow past 3 devices. Rank has no cardinality.
+    // ── fb377 — FILTER, chain kind 5. Instance 1 is "SYN_FLT_", 2..6 are "SYN_FLT2_".."SYN_FLT6_",
+    //    exactly the pooling grammar every other device uses. Declared in PluginProcessor.cpp's
+    //    FX block; listed here so the prefix is greppable and so nobody invents a second one.
+    //    🔑 ENGINE is choice(94) over terrainFilterEngineNames() and is the ONLY engine selector
+    //    the DSP reads; TYPE is the header pill's GROUP and is a UI display mirror, never read
+    //    by C++. SYN_FLT_* does not collide with the synth panel's SYN_FILTER1_/SYN_FILTER2_.
+    constexpr char SYN_FLT_ENGINE[] = "SYN_FLT_ENGINE";
+    constexpr char SYN_FLT_TYPE[]   = "SYN_FLT_TYPE";
+    constexpr char SYN_FLT_POWER[]  = "SYN_FLT_POWER";
+    constexpr char SYN_FLT_ACTIVE[] = "SYN_FLT_ACTIVE";
+    constexpr char SYN_FLT_RANK[]   = "SYN_FLT_RANK";
+
     constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
     constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
     constexpr char SYN_FX_ACTIVE_SUFFIX[] = "_ACTIVE";

@@ -53,10 +53,122 @@ static inline float masterSoftClip (float x) noexcept
     return std::copysign (kSoftClipKnee + span * std::tanh ((a - kSoftClipKnee) / span), x);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// fb377 — THE ONE ENGINE LIST. TerrainFilters.h ships 94 filter types behind one enum,
+// and TWO surfaces now choose from it: the synth FILTER panel (SYN_FILTER1/2_TYPE) and the
+// FX rack FILTER device (SYN_FLT_ENGINE). They were about to hold two hand-maintained copies
+// of the same 94 strings, which is the recycle law broken and a drift waiting to happen —
+// rename one engine on one side and the two menus disagree forever. One source, both callers.
+//
+// ⚠️ ORDER IS THE ENUM ORDER and index N here MUST be Type(N). The choice param stores the
+// index raw, so reordering this list silently repoints every saved patch (the fb165 law in
+// the enum header says the same thing about the enum itself).
+static juce::StringArray terrainFilterEngineNames()
+{
+    juce::StringArray filterTypeChoices;
+        filterTypeChoices.add ("Ladder LP 24");
+        filterTypeChoices.add ("Ladder LP 12");
+        filterTypeChoices.add ("Ladder HP 24");
+        filterTypeChoices.add ("Diode LP");
+        filterTypeChoices.add ("Acid 303");
+        filterTypeChoices.add ("SVF LP");
+        filterTypeChoices.add ("SVF HP");
+        filterTypeChoices.add ("SVF BP");
+        filterTypeChoices.add ("SVF Notch");
+        filterTypeChoices.add ("OB-X SVF");
+        filterTypeChoices.add ("Comb +");
+        filterTypeChoices.add ("Comb -");
+        filterTypeChoices.add ("Comb Shimmer");
+        filterTypeChoices.add ("Karplus-Strong");
+        filterTypeChoices.add ("Formant A");
+        filterTypeChoices.add ("Formant E");
+        filterTypeChoices.add ("Formant I");
+        filterTypeChoices.add ("Formant Morph");
+        filterTypeChoices.add ("Reverb Filter");
+        filterTypeChoices.add ("Phaser 4P");
+        filterTypeChoices.add ("Phaser 8P");
+        filterTypeChoices.add ("Ring Mod");
+        filterTypeChoices.add ("Bode Shifter");
+        filterTypeChoices.add ("Bit-Crush");
+        filterTypeChoices.add ("Waveshaper");
+        filterTypeChoices.add ("Grain Mask");
+        filterTypeChoices.add ("Reverb Filter 2");
+        filterTypeChoices.add ("None");
+        filterTypeChoices.add ("Ladder LP 6");
+        filterTypeChoices.add ("Ladder LP 18");
+        filterTypeChoices.add ("German LP");
+        filterTypeChoices.add ("Germanium LP");
+        filterTypeChoices.add ("French LP");
+        filterTypeChoices.add ("Acid Scream");
+        filterTypeChoices.add ("Xpd HP 6");
+        filterTypeChoices.add ("Xpd HP 12");
+        filterTypeChoices.add ("Xpd HP 18");
+        filterTypeChoices.add ("Xpd BP 12");
+        filterTypeChoices.add ("Xpd BP 24");
+        filterTypeChoices.add ("Xpd BP 6");
+        filterTypeChoices.add ("Xpd Notch");
+        filterTypeChoices.add ("Xpd Phase");
+        filterTypeChoices.add ("Xpd 1-Pole");
+        filterTypeChoices.add ("SVF LP 24");
+        filterTypeChoices.add ("SVF HP 24");
+        filterTypeChoices.add ("SVF BP 24");
+        filterTypeChoices.add ("SVF Notch 24");
+        filterTypeChoices.add ("SVF Peak");
+        filterTypeChoices.add ("SEM LP");
+        filterTypeChoices.add ("SEM Notch");
+        filterTypeChoices.add ("SEM HP");
+        filterTypeChoices.add ("SEM BP");
+        filterTypeChoices.add ("Multi LP+HP");
+        filterTypeChoices.add ("Multi LP+BP");
+        filterTypeChoices.add ("Multi LP+Notch");
+        filterTypeChoices.add ("Multi HP+BP");
+        filterTypeChoices.add ("Multi HP+Notch");
+        filterTypeChoices.add ("Multi BP+BP");
+        filterTypeChoices.add ("Multi BP+Notch");
+        filterTypeChoices.add ("Multi Peak+Peak");
+        filterTypeChoices.add ("Multi Notch+Notch");
+        filterTypeChoices.add ("Multi Peak+HP");
+        filterTypeChoices.add ("Comb Wide");
+        filterTypeChoices.add ("Comb Octave");
+        filterTypeChoices.add ("Comb Fifth");
+        filterTypeChoices.add ("Comb Damp");
+        filterTypeChoices.add ("Karplus Bright");
+        filterTypeChoices.add ("Karplus Mute");
+        filterTypeChoices.add ("Formant O");
+        filterTypeChoices.add ("Formant U");
+        filterTypeChoices.add ("Formant Wide");
+        filterTypeChoices.add ("Formant Growl");
+        filterTypeChoices.add ("Phaser 6P");
+        filterTypeChoices.add ("Phaser 12P");
+        filterTypeChoices.add ("Phaser 16P");
+        filterTypeChoices.add ("Diffusor");
+        filterTypeChoices.add ("Bode Down");
+        filterTypeChoices.add ("Tilt");
+        filterTypeChoices.add ("Low EQ");
+        filterTypeChoices.add ("High EQ");
+        filterTypeChoices.add ("Band EQ");
+        filterTypeChoices.add ("Air");
+        filterTypeChoices.add ("Add Bass");
+        filterTypeChoices.add ("Samp-Hold");
+        filterTypeChoices.add ("Samp-Hold -");
+        filterTypeChoices.add ("Scream LP");
+        filterTypeChoices.add ("Scream BP");
+        filterTypeChoices.add ("Wasp");
+        filterTypeChoices.add ("MS-20 LP");
+        filterTypeChoices.add ("Polivoks");
+        filterTypeChoices.add ("Ring Mod X2");
+        filterTypeChoices.add ("Radio");
+        filterTypeChoices.add ("Reverb Dark");
+        filterTypeChoices.add ("Reverb Metal");
+    static_assert (tw::filters::kNumTypes == 94, "engine list and Type enum must stay the same size");
+    return filterTypeChoices;
+}
+
 //==============================================================================
 TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     : AudioProcessor (BusesProperties()
                        .withOutput ("Output", juce::AudioChannelSet::stereo(), true)),
+
       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
     initializePresets();
@@ -1647,103 +1759,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // ── Batch 1 Filter — TYPE (27 choices, NONE last in enum but first in UI),
     //                     DRV (0..1 → 0..+24 dB drive), ENV (bipolar -1..+1).
     {
-        juce::StringArray filterTypeChoices;
-        // Display names: proper case, mandatory acronyms kept (LP/HP/BP/SVF/OB-X/4P/vowels).
-        filterTypeChoices.add ("Ladder LP 24");
-        filterTypeChoices.add ("Ladder LP 12");
-        filterTypeChoices.add ("Ladder HP 24");
-        filterTypeChoices.add ("Diode LP");
-        filterTypeChoices.add ("Acid 303");
-        filterTypeChoices.add ("SVF LP");
-        filterTypeChoices.add ("SVF HP");
-        filterTypeChoices.add ("SVF BP");
-        filterTypeChoices.add ("SVF Notch");
-        filterTypeChoices.add ("OB-X SVF");
-        filterTypeChoices.add ("Comb +");
-        filterTypeChoices.add ("Comb -");
-        filterTypeChoices.add ("Comb Shimmer");
-        filterTypeChoices.add ("Karplus-Strong");
-        filterTypeChoices.add ("Formant A");
-        filterTypeChoices.add ("Formant E");
-        filterTypeChoices.add ("Formant I");
-        filterTypeChoices.add ("Formant Morph");
-        filterTypeChoices.add ("Reverb Filter");
-        filterTypeChoices.add ("Phaser 4P");
-        filterTypeChoices.add ("Phaser 8P");
-        filterTypeChoices.add ("Ring Mod");
-        filterTypeChoices.add ("Bode Shifter");
-        filterTypeChoices.add ("Bit-Crush");
-        filterTypeChoices.add ("Waveshaper");
-        filterTypeChoices.add ("Grain Mask");
-        filterTypeChoices.add ("Reverb Filter 2");
-        filterTypeChoices.add ("None");
-        // fb165 — THE FILTER EXPANSION (append-only; None stays index 27)
-        filterTypeChoices.add ("Ladder LP 6");
-        filterTypeChoices.add ("Ladder LP 18");
-        filterTypeChoices.add ("German LP");
-        filterTypeChoices.add ("Germanium LP");
-        filterTypeChoices.add ("French LP");
-        filterTypeChoices.add ("Acid Scream");
-        filterTypeChoices.add ("Xpd HP 6");
-        filterTypeChoices.add ("Xpd HP 12");
-        filterTypeChoices.add ("Xpd HP 18");
-        filterTypeChoices.add ("Xpd BP 12");
-        filterTypeChoices.add ("Xpd BP 24");
-        filterTypeChoices.add ("Xpd BP 6");
-        filterTypeChoices.add ("Xpd Notch");
-        filterTypeChoices.add ("Xpd Phase");
-        filterTypeChoices.add ("Xpd 1-Pole");
-        filterTypeChoices.add ("SVF LP 24");
-        filterTypeChoices.add ("SVF HP 24");
-        filterTypeChoices.add ("SVF BP 24");
-        filterTypeChoices.add ("SVF Notch 24");
-        filterTypeChoices.add ("SVF Peak");
-        filterTypeChoices.add ("SEM LP");
-        filterTypeChoices.add ("SEM Notch");
-        filterTypeChoices.add ("SEM HP");
-        filterTypeChoices.add ("SEM BP");
-        filterTypeChoices.add ("Multi LP+HP");
-        filterTypeChoices.add ("Multi LP+BP");
-        filterTypeChoices.add ("Multi LP+Notch");
-        filterTypeChoices.add ("Multi HP+BP");
-        filterTypeChoices.add ("Multi HP+Notch");
-        filterTypeChoices.add ("Multi BP+BP");
-        filterTypeChoices.add ("Multi BP+Notch");
-        filterTypeChoices.add ("Multi Peak+Peak");
-        filterTypeChoices.add ("Multi Notch+Notch");
-        filterTypeChoices.add ("Multi Peak+HP");
-        filterTypeChoices.add ("Comb Wide");
-        filterTypeChoices.add ("Comb Octave");
-        filterTypeChoices.add ("Comb Fifth");
-        filterTypeChoices.add ("Comb Damp");
-        filterTypeChoices.add ("Karplus Bright");
-        filterTypeChoices.add ("Karplus Mute");
-        filterTypeChoices.add ("Formant O");
-        filterTypeChoices.add ("Formant U");
-        filterTypeChoices.add ("Formant Wide");
-        filterTypeChoices.add ("Formant Growl");
-        filterTypeChoices.add ("Phaser 6P");
-        filterTypeChoices.add ("Phaser 12P");
-        filterTypeChoices.add ("Phaser 16P");
-        filterTypeChoices.add ("Diffusor");
-        filterTypeChoices.add ("Bode Down");
-        filterTypeChoices.add ("Tilt");
-        filterTypeChoices.add ("Low EQ");
-        filterTypeChoices.add ("High EQ");
-        filterTypeChoices.add ("Band EQ");
-        filterTypeChoices.add ("Air");
-        filterTypeChoices.add ("Add Bass");
-        filterTypeChoices.add ("Samp-Hold");
-        filterTypeChoices.add ("Samp-Hold -");
-        filterTypeChoices.add ("Scream LP");
-        filterTypeChoices.add ("Scream BP");
-        filterTypeChoices.add ("Wasp");
-        filterTypeChoices.add ("MS-20 LP");
-        filterTypeChoices.add ("Polivoks");
-        filterTypeChoices.add ("Ring Mod X2");
-        filterTypeChoices.add ("Radio");
-        filterTypeChoices.add ("Reverb Dark");
-        filterTypeChoices.add ("Reverb Metal");
+        const juce::StringArray filterTypeChoices = terrainFilterEngineNames();
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { ParameterIDs::SYN_FILTER1_TYPE, 1 },
             "Synth Filter 1 Type", filterTypeChoices, 27));  // default = NONE (filters start OFF; wire on the back panel — Max 2026-07-13)
@@ -3798,6 +3814,63 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 B (p + "ACTIVE", d + "In Chain", false);
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
             }
+
+        // ═══════════ fb377 — FILTER, the sixth flagship. chain kind 5 ═══════════════════════
+        // Max: "this needs to be JUST like our main 2 filters we have for the synth engine…
+        // back panel, needs to mirror the exact engines we already have, NO boxes of course."
+        // So the front is the synth filter's own front verbatim (Cutoff · Res · Drive · Mix) and
+        // the back carries the synth filter's own engine controls (Env · Track · Spread · Poles ·
+        // Post) plus the three an envelope FOLLOWER needs to exist at all (Sense · Attack ·
+        // Release). No new filter DSP is written: this device HOSTS one FilterSlot, which is the
+        // same 2,195-line, 94-engine core the synth panel already drives.
+        //
+        // 🔑 ENGINE is the ONLY thing the DSP reads. It is choice(94) over terrainFilterEngineNames(),
+        // index == Type(index), read raw with (int)*rawParam — the AudioParameterChoice law. TYPE is
+        // the header pill's GROUP and is a DISPLAY MIRROR ONLY, derived from ENGINE by the UI and
+        // never read by C++, so the two can never disagree in a way you can hear. That is the fb373
+        // lesson applied at design time rather than after four rounds of measurement.
+        {
+            const juce::StringArray fltEngines = terrainFilterEngineNames();       // 94, enum order
+            // the header pill's group roster: 10 live + 6 reserved so adding a group later can
+            // never renumber a saved patch (RACK LAW C — cardinality is fixed at birth).
+            const juce::StringArray fltGroups { "Ladder","Xpander","State-Var","Multi","Comb",
+                                                "Formant","Phase","EQ & Tone","Reverb","Dirty",
+                                                "Reserved 11","Reserved 12","Reserved 13",
+                                                "Reserved 14","Reserved 15","Reserved 16" };
+            // the shipped drive-type list, VERBATIM (see SYN_FILTER1_DRIVETYPE above)
+            const juce::StringArray fltChars { "Tube","Diode","Fold","Hard","Crush","Fuzz" };
+
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String p = (n == 1) ? juce::String ("SYN_FLT_")
+                                                : "SYN_FLT" + juce::String (n) + "_";
+                const juce::String d = (n == 1) ? juce::String ("Filter ")
+                                                : "Filter " + juce::String (n) + " ";
+                C (p + "ENGINE", d + "Engine", fltEngines, 0);      // 0 = Ladder LP 24
+                C (p + "TYPE",   d + "Type",   fltGroups,  0);      // display mirror of ENGINE
+                C (p + "CHAR",   d + "Char",   fltChars,   0);      // post-filter drive flavour
+                // FRONT — the synth filter's own four.
+                F (p + "CUT",    d + "Cutoff",  0.62f);   // ~1.1 kHz through cutKnobToHz
+                F (p + "RES",    d + "Res",     0.35f);
+                F (p + "DRIVE",  d + "Drive",   0.00f);
+                F (p + "MIX",    d + "Mix",     1.00f);   // an insert is fully wet by default
+                // BACK — 2 dropdowns (above) + 8 knobs, 4x2.
+                F (p + "ENV",    d + "Env",     0.70f);   // BIPOLAR at 0.5; the follower amount
+                F (p + "TRACK",  d + "Track",   0.00f);
+                F (p + "SPREAD", d + "Spread",  0.00f);
+                F (p + "POLES",  d + "Poles",   1.00f);   // detents 6/12/18/24 dB
+                F (p + "POST",   d + "Post",    0.00f);
+                F (p + "SENSE",  d + "Sense",   0.50f);
+                F (p + "ATTACK", d + "Attack",  0.41f);   // = 4 ms on the log map
+                F (p + "RELEASE",d + "Release", 0.48f);   // = 182 ms
+                for (auto& sfx : srcSuf) B (p + sfx, d + sfx, false);   // unrouted on arrival
+                B (p + "WIDE",   d + "Wide",   false);
+                B (p + "PUNCH",  d + "Punch",  false);
+                B (p + "POWER",  d + "Power",  false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
         }
     }
 
