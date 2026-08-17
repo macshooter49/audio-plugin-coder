@@ -80,26 +80,26 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
     const cutAfter=(D&&D[idx])?D[idx].knobs[0].v:null;
     out.dragMovedCutoff = (cutBefore!=null && cutAfter!=null) ? (cutBefore+' -> '+cutAfter+(cutAfter!==cutBefore?'  MOVED':'  NO CHANGE')) : 'DEVS not exposed';
 
-    // fb385 — the picker: categorised + searchable + clamped
-    out.pickerFn = typeof window.__fltEnginePicker;
+    // fb389 — the pill opens the HOUSE two-pane browser, with search
+    out.browserFn = typeof window.__fltOpenBrowser;
     const pill=c.querySelector('.fxr-type');
-    if(pill){ pill.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true})); }
-    const menu=document.getElementById('flt-eng-menu');
-    out.menuOpened = !!menu;
-    if(menu){
-      const sb=menu.querySelector('input');
-      out.hasSearch = !!sb;
-      out.itemsAll = menu.querySelectorAll('[data-i]').length;
-      const heads=[...menu.querySelectorAll('div')].filter(e=>!e.dataset.i && /^[A-Z][A-Za-z &-]+$/.test(e.textContent.trim()));
-      out.categories = heads.length;
-      if(sb){ sb.value='acid'; sb.dispatchEvent(new Event('input',{bubbles:true}));
-              out.searchAcid=[...menu.querySelectorAll('[data-i]')].map(e=>e.textContent).join(','); }
-      const r=menu.getBoundingClientRect();
-      out.rect = [Math.round(r.left),Math.round(r.top),Math.round(r.right),Math.round(r.bottom)];
-      out.viewport = [window.innerWidth, window.innerHeight];
-      out.clamped = (r.bottom<=window.innerHeight+1 && r.right<=window.innerWidth+1 && r.top>=0 && r.left>=0);
-      menu.remove();
+    if(pill) pill.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true,clientX:200,clientY:300}));
+    const panes=[...document.querySelectorAll('.tpb-pane')];
+    out.twoPaneOpened = panes.length>=2;
+    const inp=[...document.querySelectorAll('input')].filter(i=>/Search 94/.test(i.placeholder||''));
+    out.hasSearch = inp.length>0;
+    if(inp.length){
+      const items0=panes[1]?panes[1].children.length:0;
+      inp[0].value='acid'; inp[0].dispatchEvent(new Event('input',{bubbles:true}));
+      out.searchAcid=[...(panes[1]?panes[1].children:[])].map(e=>e.textContent.trim()).join(',');
+      out.catsBefore=panes[0]?panes[0].children.length:0;
+      out.itemsBefore=items0;
     }
+    out.customMenuGone = !document.getElementById('flt-eng-menu');
+    // the curve wears the distortion's own class
+    out.curveClass = (c.querySelector('.flt-curve')||{}).getAttribute ? c.querySelector('.flt-curve').getAttribute('class') : null;
+    try{ if(window.__tpbClose) window.__tpbClose(); }catch(e){}
+
     // no back panel, no plus
     out.hasBackPanel = !!c.querySelector('.fxr-back');
     out.hasPlusBtn   = !!c.querySelector('.fxr-swap');
