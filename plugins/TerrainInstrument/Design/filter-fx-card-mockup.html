@@ -98,12 +98,18 @@
   /* ── BACK panel: 2 dropdowns + 8 knobs 4x2 + 3 column separators ───────── */
   .back{flex:1; display:flex; flex-direction:column; padding:4px 10px 11px; gap:7px;}
   .drops{display:flex; gap:6px;}
-  .drop{flex:1; min-width:0; height:19px; border:1px solid var(--wfaint); border-radius:5px; background:transparent;
-        color:var(--w7); font-family:var(--font); font-size:9px; font-weight:300; padding:0 6px;
-        display:flex; align-items:center; justify-content:space-between; cursor:pointer; overflow:hidden;}
-  .drop .dl{color:var(--w5); font-size:7.5px; letter-spacing:.06em; text-transform:uppercase; flex:0 0 auto;}
-  .drop .dv{color:var(--w9); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; margin-left:6px;
-            line-height:1.55;}
+  /* the shipped dropdowns show the VALUE only — no inline caption (verified against the tape
+     card). Engine names are long ("Ladder LP · 24") and Char values are short ("Tube"), so the
+     two pills are deliberately uneven rather than a 50/50 split that clips the left one. */
+  .drop{flex:1 1 0; min-width:0; height:19px; border:1px solid var(--wfaint); border-radius:5px;
+        background:transparent; color:var(--w7); font-family:var(--font); font-size:9px; font-weight:300;
+        padding:0 7px; display:flex; align-items:center; justify-content:space-between; cursor:pointer;
+        overflow:hidden;}
+  .drop.wide{flex:1.75 1 0;}
+  /* flex:1 1 0 + min-width:0 so the NAME shrinks and ellipsises instead of shoving the caret
+     out of the clipped pill — a content-sized value silently loses the ▾ instead of the text. */
+  .drop .dv{flex:1 1 0; min-width:0; color:var(--w9); white-space:nowrap; overflow:hidden;
+            text-overflow:ellipsis; line-height:1.55;}
   .drop .car{color:var(--w5); font-size:8px; margin-left:5px; flex:0 0 auto;}
   .bgrid{flex:1; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr);
          position:relative; align-items:center;}
@@ -151,7 +157,7 @@
             <div class="knobs">
               <div class="knob"><div class="dial" data-k="cut"></div><span class="lab">Cutoff</span></div>
               <div class="knob"><div class="dial" data-k="res"></div><span class="lab">Res</span></div>
-              <div class="knob"><div class="dial" data-k="follow"></div><span class="lab">Follow</span></div>
+              <div class="knob"><div class="dial" data-k="drive"></div><span class="lab">Drive</span></div>
               <div class="knob"><div class="dial" data-k="mix"></div><span class="lab">Mix</span></div>
             </div>
             <div class="divider"></div>
@@ -188,18 +194,18 @@
           </div>
           <div class="back">
             <div class="drops">
-              <div class="drop" id="charDrop"><span class="dl">Char</span><span class="dv" id="charVal">Classic 24</span><span class="car">▾</span></div>
-              <div class="drop" id="shapeDrop"><span class="dl">Shape</span><span class="dv" id="shapeVal">Sine</span><span class="car">▾</span></div>
+              <div class="drop wide" id="engDrop"><span class="dv" id="engVal">Ladder LP · 24</span><span class="car">▾</span></div>
+              <div class="drop" id="charDrop"><span class="dv" id="charVal">Tube</span><span class="car">▾</span></div>
             </div>
             <div class="bgrid" id="bgrid">
-              <div class="knob"><div class="dial" data-k="drive"></div><span class="lab">Drive</span></div>
-              <div class="knob"><div class="dial" data-k="var"></div><span class="lab" id="varLab">Slope</span></div>
+              <div class="knob"><div class="dial" data-k="env"></div><span class="lab">Env</span></div>
               <div class="knob"><div class="dial" data-k="track"></div><span class="lab">Track</span></div>
+              <div class="knob"><div class="dial" data-k="spread"></div><span class="lab">Spread</span></div>
+              <div class="knob"><div class="dial" data-k="poles"></div><span class="lab">Poles</span></div>
+              <div class="knob"><div class="dial" data-k="post"></div><span class="lab">Post</span></div>
               <div class="knob"><div class="dial" data-k="sense"></div><span class="lab">Sense</span></div>
               <div class="knob"><div class="dial" data-k="atk"></div><span class="lab">Attack</span></div>
               <div class="knob"><div class="dial" data-k="rel"></div><span class="lab">Release</span></div>
-              <div class="knob"><div class="dial" data-k="rate"></div><span class="lab">Rate</span></div>
-              <div class="knob"><div class="dial" data-k="sweep"></div><span class="lab">Sweep</span></div>
             </div>
           </div>
         </div>
@@ -208,28 +214,33 @@
   </div>
 
   <div class="legend">
-    <div><b>Drag a knob</b> up / down — it changes the sound and the curve together</div>
-    <div><b>Click the type pill</b> to cycle · <b>+ / ←</b> flips the card</div>
-    <div><b>Trail</b> = the frequency range the cutoff has covered in the last ½ second</div>
+    <div><b>Drag a knob</b> — sound and curve move together</div>
+    <div><b>Type pill</b> = the engine group · <b>Engine</b> = the 94 we already have</div>
+    <div><b>Hz / Q</b> appears only while you move Cutoff or Res</div>
   </div>
 
   <div class="note">
-    <b>What the trail is for.</b> The identity of this device is that the filter <i>moves</i>, and three things
-    move it — the envelope follower, the synced LFO, and key track. The comet behind the cutoff node marks the
-    last half second, so you can see the <i>frequency range</i> the cutoff is actually covering and how fast it
-    is travelling: a slow LFO spreads the dots evenly across the sweep, a percussive follower bunches them and
-    then flings a gap. It answers "is this thing moving, and how far" from across the room.
+    <b>These are the real engines.</b> The header pill picks one of the ten groups the synth filter menu
+    already groups by — Ladder · Xpander · State-Variable · Multi · Comb&nbsp;&amp;&nbsp;Reso · Formant ·
+    Phase&nbsp;&amp;&nbsp;Diffuse · EQ&nbsp;&amp;&nbsp;Tone · Reverb · Dirty&nbsp;&amp;&nbsp;Weird — and the
+    Engine dropdown picks the engine inside it. All 94 names are read out of the shipped menu, and every one
+    of them fits the pill without truncating (measured, not eyeballed). Char is the shipped drive-type list
+    verbatim: Tube · Diode · Fold · Hard · Crush · Fuzz.
     <br><br>
-    <b>What it does not do,</b> since I claimed otherwise for a draft and it was not true: the dots ride the
-    curve, so they all sit at the same height and the trail cannot show you <i>which</i> driver is moving the
-    filter. Only spacing distinguishes them. If telling env from LFO at a glance matters to you, say so and
-    I will make age the vertical axis — that version reads as a real time-series, at the cost of putting a
-    time axis inside a frequency plot.
+    <b>Front mirrors the synth filter exactly</b> — Cutoff · Res · Drive · Mix. The back carries the same
+    engine controls the synth filter has (Env · Track · Spread · Poles · Post) plus the three the envelope
+    follower needs to exist at all (Sense · Attack · Release). Every knob sweeps 0–100; Poles detents to
+    6/12/18/24&nbsp;dB and says which, Attack and Release read milliseconds off the same map the audio uses.
     <br><br>
-    <b>Honest about the audio.</b> This is Web Audio, not our engine — Ladder, Multi, Vowel, Comb, Notches and
-    DJ behave correctly; Acid, Scream and Ring are stand-ins for layout only. The curve is drawn with
-    <code>getFrequencyResponse()</code> on the very node that filters the sound, so what you see is what you
-    hear — the same law the tape card follows.
+    <b>One thing I dropped, and you should know:</b> mirroring the synth filter cost the synced LFO
+    (Rate + Sweep). There is no room for it in eight back knobs alongside the engine's own controls, so right
+    now the only thing that moves the cutoff is the envelope follower. If you want the filter to sweep on its
+    own in time with the track, something here has to give — say the word and I will swap a pair out.
+    <br><br>
+    <b>Honest about the audio.</b> This is Web Audio, not our engine: lowpass / highpass / bandpass / notch /
+    peaking engines behave correctly, and the comb, ring, bode and bit-crush ones are stand-ins for layout
+    only. The curve is drawn with <code>getFrequencyResponse()</code> on the very node that filters the sound,
+    and the spectrum underneath is the audio actually arriving at it.
   </div>
 
 <script>
@@ -259,32 +270,45 @@
   }
 
   // ─── params ──────────────────────────────────────────────────────────────
-  // defaults per the build bible. Rate is stored 0..100 but INDEXES the 20-entry sync list,
-  // so the default 1/4 is index 7 of 19 = 36.8, not the literal 7 (which lands on "4 bar").
-  const P = { cut:62, res:35, follow:70, mix:100, drive:0, var:0, track:0,
-              sense:50, atk:41, rel:48, rate:100*7/19, sweep:0 };
-  const BIPOLAR = { follow:1, var:0 };
+  // Front mirrors the synth filter exactly: Cutoff · Res · Drive · Mix.
+  // Back carries the same engine controls the synth filter has (Env · Track · Spread · Poles ·
+  // Post) plus the three the envelope FOLLOWER needs to exist at all (Sense · Attack · Release).
+  const P = { cut:62, res:35, drive:0, mix:100,
+              env:70, track:0, spread:0, poles:100, post:0, sense:50, atk:41, rel:48 };
+  const BIPOLAR = { env:1 };
 
-  const TYPES = ['Ladder','Acid','Multi','Scream','Vowel','Comb','Notches','Ring','DJ'];
-  const VARLAB = { Ladder:'Slope', Acid:'Accent', Multi:'Morph', Scream:'Bite', Vowel:'Shift',
-                   Comb:'Damp', Notches:'Spin', Ring:'Blend', DJ:'Curve' };
-  const CHARS = {
-    Ladder:['Classic 24','Wide 18','Twelve','Six','German','Hi 24'],
-    Acid:['Squelch','Scream','Diode','Germanium','French'],
-    Multi:['Low 12','Low 24','High 12','High 24','Band','Notch','Peak','Morph'],
-    Scream:['MS-20','Wasp','Polivoks','Scream Low','Scream Band'],
-    Vowel:['Ah','Eh','Ee','Oh','Oo','Morph','Wide','Growl'],
-    Comb:['Plus','Minus','Shimmer','Octave','Fifth','Damp','Karplus','Pluck'],
-    Notches:['4','6','8','12','16','Diffuse'],
-    Ring:['Ring','Dual','Shift','Radio'],
-    DJ:['Clean','Color','Dub','Slam']
+  // ─── THE REAL ENGINES. Read out of the shipped filter menu, not invented: 94 engines in
+  //     the 10 groups the synth already groups them by. The header pill picks the GROUP, the
+  //     back Engine dropdown picks the engine inside it.
+  const GROUPS = ['Ladder','Xpander','State-Variable','Multi','Comb & Reso','Formant',
+                  'Phase & Diffuse','EQ & Tone','Reverb','Dirty & Weird'];
+  const ENGINES = {
+    'Ladder':['Ladder LP · 24','Ladder LP · 12','Ladder LP · 6','Ladder LP · 18','Ladder HP · 24',
+              'Diode LP','Acid 303','Acid Scream','German LP','Germanium LP','French LP','Polivoks'],
+    'Xpander':['XPD 1-Pole','XPD HP · 6','XPD HP · 12','XPD HP · 18','XPD BP · 6','XPD BP · 12',
+               'XPD BP · 24','XPD Notch','XPD Phase'],
+    'State-Variable':['SVF LP','SVF LP · 24','SVF HP','SVF HP · 24','SVF BP','SVF BP · 24','SVF Notch',
+                      'SVF Notch · 24','SVF Peak','OB-X SVF','SEM LP','SEM Notch','SEM HP','SEM BP',
+                      'Wasp','MS-20 LP'],
+    'Multi':['Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP',
+             'Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP'],
+    'Comb & Reso':['Comb +','Comb -','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Comb Shimmer',
+                   'Karplus-Strong','Karplus Bright','Karplus Mute'],
+    'Formant':['Formant · A','Formant · E','Formant · I','Formant · O','Formant · U','Formant Morph',
+               'Formant Wide','Formant Growl'],
+    'Phase & Diffuse':['Phaser 4P','Phaser 6P','Phaser 8P','Phaser 12P','Phaser 16P','Diffusor',
+                       'Bode Shifter','Bode Down'],
+    'EQ & Tone':['Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass'],
+    'Reverb':['Reverb Filter','Reverb Filter 2','Reverb Dark','Reverb Metal'],
+    'Dirty & Weird':['Ring Mod','Ring Mod X2','Bit-Crush','Waveshaper','Grain Mask','Samp-Hold',
+                     'Samp-Hold −','Scream LP','Scream BP','Radio']
   };
-  const SHAPES = ['Sine','Triangle','Ramp','Saw','Square','S&H','Random'];
-  const DIVS = ['Free','4 bar','2 bar','1 bar','1/2','1/2D','1/2T','1/4','1/4D','1/4T','1/8','1/8D','1/8T',
-                '1/16','1/16D','1/16T','1/32','1/64','1/128','1/256'];
-  const DIVBEATS = [0,16,8,4,2,3,1.333,1,1.5,0.667,0.5,0.75,0.333,0.25,0.375,0.167,0.125,0.0625,0.031,0.016];
+  // the shipped drive-type list, verbatim (PluginProcessor.cpp: "Tube","Diode","Fold","Hard","Crush","Fuzz")
+  const CHARS = ['Tube','Diode','Fold','Hard','Crush','Fuzz'];
+  const POLESDB = ['6 dB','12 dB','18 dB','24 dB'];
 
-  let typeIdx = 0, charIdx = 0, shapeIdx = 0, powered = true, zoom = 1;
+  window.__ENGNAMES = Object.values(ENGINES).flat();
+  let typeIdx = 0, engIdx = 0, charIdx = 0, powered = true, zoom = 1;
   const pills = { wide:false, punch:false };
   const routed = { A:true, B:true, C:false, D:false, S:false, N:false };
 
@@ -311,7 +335,9 @@
     filt    = ac.createBiquadFilter();  filt.type = 'lowpass';
     filt2   = ac.createBiquadFilter(); filt2.type = 'lowpass'; filt2.Q.value = 0.7;
     wetG    = ac.createGain(); dryG = ac.createGain();
-    ana     = ac.createAnalyser(); ana.fftSize = 1024; anaBuf = new Float32Array(ana.fftSize);
+    ana     = ac.createAnalyser(); ana.fftSize = 1024; ana.smoothingTimeConstant = 0.72;
+    anaBuf  = new Float32Array(ana.fftSize);
+    specBuf = new Uint8Array(ana.frequencyBinCount);
 
     srcGain.connect(ana);
     srcGain.connect(shaper); shaper.connect(filt); filt.connect(filt2);
@@ -360,7 +386,7 @@
   }
 
   // ─── the motion block: ONE number, used by the audio AND drawn ────────────
-  let env = 0, lfoPh = 0, lastT = 0;
+  let env = 0, lastT = 0;
   const trail = [];                                   // {x01, y01, age}
   let liveHz = cutHz(P.cut/100), liveQ = 1;
 
@@ -372,7 +398,7 @@
       for (let i=0;i<anaBuf.length;i++){ const a = Math.abs(anaBuf[i]); if (a > peak) peak = a; }
     }
     // test hook: lets the headless shot verify the idle-vs-playing delta (law 9) without audio.
-    if (window.__demoLevel != null){ peak = window.__demoLevel; lfoPh = (lfoPh + dt*0.9) % 1; }
+    if (window.__demoLevel != null) peak = window.__demoLevel;
     const tA = 0.0002 * Math.pow(1500, P.atk/100);
     const tR = 0.020  * Math.pow(100,  P.rel/100);
     const a  = 1 - Math.exp(-dt / (peak > env ? tA : tR));
@@ -383,28 +409,11 @@
     const lvl = env * gS;
     const sweep01 = lvl / (1 + lvl);
 
-    // LFO — synced division, sine by default
-    const beats = DIVBEATS[Math.round(P.rate/100*(DIVS.length-1))] || 1;
-    const hz = beats > 0 ? (BPM/60) / beats : 0.7;
-    lfoPh = (lfoPh + dt*hz) % 1;
-    let lfo;
-    const ph = lfoPh * 2*Math.PI;
-    switch (SHAPES[shapeIdx]){
-      case 'Triangle': lfo = 2*Math.abs(2*lfoPh-1)-1; break;
-      case 'Ramp':     lfo = 2*lfoPh-1; break;
-      case 'Saw':      lfo = 1-2*lfoPh; break;
-      case 'Square':   lfo = lfoPh < 0.5 ? 1 : -1; break;
-      case 'S&H':      lfo = Math.sin(Math.floor(lfoPh*8)*12.9898)*2%2-1; break;
-      case 'Random':   lfo = Math.sin(ph)*0.6 + Math.sin(ph*2.7)*0.4; break;
-      default:         lfo = Math.sin(ph);
-    }
-
-    // sum in SEMITONES, exactly like the voice does, then convert once
-    const baseSemis   = 12 * Math.log2(cutHz(P.cut/100) / 20);
-    const followSemis = ((P.follow-50)/50) * 84 * sweep01;
-    const lfoSemis    = (P.sweep/100) * 60 * lfo;
-    const keySemis    = (P.track/100) * 2 * 0;          // no keyboard in the mockup
-    liveHz = clampHz(20 * Math.pow(2, (baseSemis + followSemis + lfoSemis + keySemis) / 12));
+    // sum in SEMITONES, exactly like the voice does (SynthVoice.h:4195), then convert once
+    const baseSemis = 12 * Math.log2(cutHz(P.cut/100) / 20);
+    const envSemis  = ((P.env-50)/50) * 84 * sweep01;   // bipolar Env = the follower amount
+    const keySemis  = (P.track/100) * 2 * 0;            // no keyboard in the mockup
+    liveHz = clampHz(20 * Math.pow(2, (baseSemis + envSemis + keySemis) / 12));
     liveQ  = 0.7 + Math.pow(P.res/100, 2) * 17;
 
     if (filt){
@@ -438,32 +447,62 @@
   const NPT = 96, fRes = new Float32Array(NPT), mRes = new Float32Array(NPT), pRes = new Float32Array(NPT);
   for (let i=0;i<NPT;i++) fRes[i] = 20 * Math.pow(1000, i/(NPT-1));
   const X0 = 6.5, X1 = 219.5, VW = 226, VH = 78;       // the ONE rack plot bound (fb361)
+  const SPEC_PTS = 72;
+  let specBuf = new Uint8Array(512);
+  let readT = 0, readWhat = 'cut';                     // transient Cutoff/Res readout
+  const poke = what => { readWhat = what; readT = 1.15; };
+
+  const MID = VH * 0.5;                     // the 0 dB line sits on the vertical MIDDLE
 
   function drawCore(m){
     const bright = powered ? Math.min(1, 0.12 + m.lvl*6.5) : 0.10;
-    let grid = '';
-    for (const f of [100,1000,10000]){
-      const x = X0 + (X1-X0) * Math.log(f/20)/Math.log(1000);
-      grid += `<line x1="${x.toFixed(1)}" y1="4" x2="${x.toFixed(1)}" y2="${VH-4}" stroke="var(--trk)" stroke-width="1"/>`;
+    // one horizontal rule, no vertical decade lines — they were clutter behind the curve.
+    const grid = `<line x1="${X0}" y1="${MID}" x2="${X1}" y2="${MID}" stroke="var(--trk)" stroke-width="1"/>`;
+
+    // ── the live spectrum, UNDER the curve: what is actually arriving at the filter.
+    let spec = '';
+    if (ana && powered){
+      if (window.__demoLevel != null){
+        // test hook: a plausible harmonic spectrum so the headless shot can verify this draws
+        for (let i=0;i<specBuf.length;i++){
+          const f = i / specBuf.length * (ac.sampleRate/2);
+          let v = 210 * Math.exp(-f/2600);
+          if (f > 40) v += 60 * Math.abs(Math.sin(f/55)) * Math.exp(-f/1400);
+          specBuf[i] = Math.max(0, Math.min(255, v * (window.__demoLevel*6)));
+        }
+      } else ana.getByteFrequencyData(specBuf);
+      const N = specBuf.length, nyq = ac.sampleRate/2;
+      let pts = '';
+      for (let i=0;i<SPEC_PTS;i++){
+        const f  = 20 * Math.pow(1000, i/(SPEC_PTS-1));          // log-f, same axis as the curve
+        const bin = Math.min(N-1, Math.round(f/nyq*N));
+        const v  = specBuf[bin]/255;
+        const x  = X0 + (X1-X0)*i/(SPEC_PTS-1);
+        // capped at 62% of the plot so it stays context behind the curve and never reaches the
+        // top edge — the response curve is the hero and has to stay the brightest thing here.
+        const y  = VH - 2 - Math.pow(v, 1.4) * (VH * 0.62);
+        pts += (i?'L':'M') + x.toFixed(1) + ' ' + y.toFixed(1);
+      }
+      spec = `<path d="${pts}L${X1} ${VH-2}L${X0} ${VH-2}Z" fill="rgba(183,148,255,0.10)"
+                    stroke="rgba(183,148,255,0.30)" stroke-width="0.6"/>`;
     }
-    grid += `<line x1="${X0}" y1="${(VH*0.62).toFixed(1)}" x2="${X1}" y2="${(VH*0.62).toFixed(1)}" stroke="var(--trk)" stroke-width="1"/>`;
 
     let d = '';
     const ys = new Float32Array(NPT);
     if (filt && powered){
       filt.getFrequencyResponse(fRes, mRes, pRes);
-      const stages = (CHARS[TYPES[typeIdx]][charIdx]||'').includes('24') ? 2 : 1;
+      const stages = isCascaded() ? 2 : 1;
       for (let i=0;i<NPT;i++){
         const mag = Math.pow(Math.max(mRes[i], 1e-4), stages);
         const db  = 20*Math.log10(mag);
         const x = X0 + (X1-X0)*i/(NPT-1);
-        const y = Math.max(2, Math.min(VH-2, VH*0.62 - Math.max(-46, Math.min(20, db)) * (VH*0.55/40)));
+        const y = Math.max(2, Math.min(VH-2, MID - Math.max(-40, Math.min(18, db)) * (VH*0.44/24)));
         ys[i] = y;
         d += (i ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1);
       }
     } else {
-      for (let i=0;i<NPT;i++) ys[i] = VH*0.62;
-      d = `M${X0} ${(VH*0.62).toFixed(1)}L${X1} ${(VH*0.62).toFixed(1)}`;
+      for (let i=0;i<NPT;i++) ys[i] = MID;
+      d = `M${X0} ${MID}L${X1} ${MID}`;
     }
 
     // the node RIDES the curve — read its height off the response we just drew, never
@@ -491,18 +530,27 @@
     const nx = X0 + (X1-X0) * u;
     const ny = curveY;
 
-    // the readout lives ON the plot, not in the header: it is a fact about the curve,
-    // and the header has no room to spare without eating the preset name (fb370 class).
-    const hz = liveHz >= 1000 ? (liveHz/1000).toFixed(liveHz>=10000?0:2)+'k' : Math.round(liveHz)+'';
+    // The readout rides ABOVE the dot, and only while you are actually moving Cutoff or Res —
+    // it answers "what did I just set it to", so it has no business being on screen the rest
+    // of the time. Fades out ~0.9 s after the last touch.
+    let read = '';
+    if (readT > 0){
+      const o = Math.min(1, readT/0.25) * bright;
+      const hz = liveHz >= 1000 ? (liveHz/1000).toFixed(liveHz>=10000?0:2)+'k' : Math.round(liveHz)+'';
+      const label = readWhat === 'res' ? 'Q ' + liveQ.toFixed(1) : hz + ' Hz';
+      const tx = Math.max(X0+15, Math.min(X1-15, nx));
+      read = `<text x="${tx.toFixed(1)}" y="${Math.max(8, ny-5).toFixed(1)}" text-anchor="middle"
+               font-family="-apple-system,'SF Pro Display',sans-serif" font-size="7.5" font-weight="300"
+               fill="rgba(255,255,255,${(0.55+o*0.45).toFixed(2)})">${label}</text>`;
+    }
 
     document.getElementById('core').innerHTML =
-      `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none">${grid}
+      `<svg viewBox="0 0 ${VW} ${VH}" preserveAspectRatio="none">${spec}${grid}
         <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="2.4" opacity="${(bright*0.30).toFixed(3)}"/>
         <path d="${d}" fill="none" stroke="var(--purple)" stroke-width="1.3" opacity="${bright.toFixed(3)}"/>
         ${tr}
         <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="2" fill="#fff" opacity="${bright.toFixed(3)}"/>
-        <text x="${X1}" y="9" text-anchor="end" font-family="-apple-system,'SF Pro Display',sans-serif"
-              font-size="7" font-weight="300" fill="rgba(255,255,255,${(0.34+bright*0.34).toFixed(2)})">${hz} Hz</text>
+        ${read}
        </svg>`;
   }
 
@@ -511,7 +559,7 @@
   // 0..100 number in its face is noise — it shows the division it is actually on. Attack and
   // Release are times, so they show milliseconds, computed from the same map the audio uses.
   const KTEXT = {
-    rate:  () => DIVS[Math.round(P.rate/100*(DIVS.length-1))],
+    poles: () => POLESDB[Math.min(3, Math.round(P.poles/100*3))],
     atk:   () => { const ms = 0.2*Math.pow(1500, P.atk/100);
                    return ms < 10 ? ms.toFixed(1) : Math.round(ms)+''; },
     rel:   () => { const ms = 20*Math.pow(100, P.rel/100);
@@ -523,9 +571,8 @@
       const k = d.dataset.k;
       d.innerHTML = knobSVG(P[k], BIPOLAR[k], KTEXT[k] ? KTEXT[k]() : null);
     });
-    document.getElementById('varLab').textContent = VARLAB[TYPES[typeIdx]];
-    document.getElementById('charVal').textContent = CHARS[TYPES[typeIdx]][charIdx] || '—';
-    document.getElementById('shapeVal').textContent = SHAPES[shapeIdx];
+    document.getElementById('engVal').textContent  = ENGINES[GROUPS[typeIdx]][engIdx] || '—';
+    document.getElementById('charVal').textContent = CHARS[charIdx];
     document.querySelectorAll('.pill').forEach(p => p.classList.toggle('on', !!pills[p.dataset.p]));
     document.querySelectorAll('.route .r').forEach(r => r.classList.toggle('on', !!routed[r.dataset.s]));
     // 3 column separators, placed on the 4-column grid (official back-panel spec)
@@ -538,23 +585,26 @@
     }
   }
 
+  // Map the REAL engine name onto whatever Web Audio can honestly stand in for it. The engine
+  // NAME decides the response, not the group — "SVF HP · 24" is a highpass wherever it lives.
   function applyType(){
-    const t = TYPES[typeIdx], ch = CHARS[t][charIdx] || '';
-    document.getElementById('typePill').firstChild.nodeValue = t;
-    document.getElementById('typePill2').firstChild.nodeValue = t;
+    const g = GROUPS[typeIdx], e = ENGINES[g][engIdx] || '';
+    document.getElementById('typePill').firstChild.nodeValue = g;
+    document.getElementById('typePill2').firstChild.nodeValue = g;
     if (!filt) return;
     let bq = 'lowpass';
-    if (t === 'Multi'){
-      if (ch.startsWith('High')) bq = 'highpass';
-      else if (ch === 'Band') bq = 'bandpass';
-      else if (ch === 'Notch') bq = 'notch';
-      else if (ch === 'Peak') bq = 'peaking';
-    } else if (t === 'Notches') bq = 'allpass';
-    else if (t === 'Vowel')     bq = 'peaking';
-    else if (t === 'DJ')        bq = P.cut > 50 ? 'highpass' : 'lowpass';
+    if      (/HP|High|Air/.test(e))            bq = 'highpass';
+    else if (/BP|Band/.test(e))                bq = 'bandpass';
+    else if (/Notch/.test(e))                  bq = 'notch';
+    else if (/Peak|Formant|Low EQ|High EQ/.test(e)) bq = 'peaking';
+    else if (/Phaser|Phase|Diffusor|Bode/.test(e))  bq = 'allpass';
+    else if (/Tilt/.test(e))                   bq = 'lowshelf';
     filt.type = bq; filt2.type = bq;
-    shaper.curve = makeShaper(P.drive/100 * (t === 'Acid' || t === 'Scream' ? 1.6 : 1));
+    // 24 dB / 2-pole engines cascade; the drawn curve squares the response to match (drawCore)
+    const dirty = /Acid|Scream|Polivoks|Wasp|MS-20|Crush|Waveshaper|Ring|Radio/.test(e) ? 1.6 : 1;
+    shaper.curve = makeShaper((P.drive/100) * dirty);
   }
+  const isCascaded = () => /·\s*24|·\s*18|Karplus|\+/.test(ENGINES[GROUPS[typeIdx]][engIdx] || '');
 
   // ─── interaction ─────────────────────────────────────────────────────────
   document.querySelectorAll('.dial').forEach(d => {
@@ -563,7 +613,9 @@
                         e.preventDefault(); };
     const move = e => { if (!dragging) return;
       const y = (e.touches?e.touches[0]:e).clientY;
-      P[d.dataset.k] = Math.max(0, Math.min(100, v0 + (y0 - y) * 0.6));
+      const k = d.dataset.k;
+      P[k] = Math.max(0, Math.min(100, v0 + (y0 - y) * 0.6));
+      if (k === 'cut' || k === 'res') poke(k);     // only these two summon the readout
       paintKnobs(); applyType(); };
     const up = () => { dragging = false; };
     d.addEventListener('mousedown', down); d.addEventListener('touchstart', down, {passive:false});
@@ -573,13 +625,13 @@
                                            paintKnobs(); applyType(); });
   });
 
-  const cycleType = () => { typeIdx = (typeIdx+1) % TYPES.length; charIdx = 0; applyType(); paintKnobs(); };
+  const cycleType = () => { typeIdx = (typeIdx+1) % GROUPS.length; engIdx = 0; applyType(); paintKnobs(); };
   document.getElementById('typePill').onclick  = cycleType;
   document.getElementById('typePill2').onclick = cycleType;
+  document.getElementById('engDrop').onclick   = () => {
+    engIdx = (engIdx+1) % ENGINES[GROUPS[typeIdx]].length; applyType(); paintKnobs(); };
   document.getElementById('charDrop').onclick  = () => {
-    charIdx = (charIdx+1) % CHARS[TYPES[typeIdx]].length; applyType(); paintKnobs(); };
-  document.getElementById('shapeDrop').onclick = () => {
-    shapeIdx = (shapeIdx+1) % SHAPES.length; paintKnobs(); };
+    charIdx = (charIdx+1) % CHARS.length; applyType(); paintKnobs(); };
   document.querySelectorAll('.pill').forEach(p => p.onclick = () => {
     pills[p.dataset.p] = !pills[p.dataset.p]; paintKnobs(); });
   document.querySelectorAll('.route .r').forEach(r => r.onclick = () => {
@@ -634,6 +686,7 @@
     // which is exactly the idle state, and it means dragging a knob moves the curve
     // before you ever press play.
     const m = filt ? motion(dt) : { sweep01:0, lvl:0 };
+    if (readT > 0) readT = Math.max(0, readT - dt);
     drawCore(m);
     requestAnimationFrame(frame);
   }
