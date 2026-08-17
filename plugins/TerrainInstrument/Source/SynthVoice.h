@@ -1960,7 +1960,7 @@ namespace tw
         // The filter pair is heap-allocated ON DEMAND (message thread) the first time that
         // instance is routed, so an unrouted instance costs nothing: eager members would be
         // 10 extra FilterSlot PAIRS x 96 voices.
-        static constexpr int kPoolSends = 27;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape
+        static constexpr int kPoolSends = 33;              // fb352 — 5 delay + 5 distortion + 5 reverb · fb362 — + 6 granular · fb365 — + 6 tape
                                                            // ⚠️ must equal PluginProcessor::kPoolSendCount
         void setPoolSendTarget (int s, float* L, float* R) noexcept
         { if ((unsigned) s < kPoolSends) { poolSend_[s].L = L; poolSend_[s].R = R; } }

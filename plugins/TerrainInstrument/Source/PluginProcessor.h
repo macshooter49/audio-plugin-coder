@@ -26,7 +26,8 @@
 #include "SpectrumAnalyzer.h"
 #include "RollingCaptureBuffer.h"
 #include "GranularFxEngine.h"   // fb362 — the FX-rack granular
-#include "TapeFxEngine.h"       // fb365 — the FX-rack tape (the three shipped machines + a transport)
+#include "TapeFxEngine.h"   // fb365 — the FX-rack tape (the three shipped machines + a transport)
+#include "FilterFxEngine.h"   // fb377 — the FX-rack filter (hosts one FilterSlot, 94 engines)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -1586,7 +1587,20 @@ private:
     // cannot be written here. Granular is new, so there is no historical instance-1 ID to protect.
     static constexpr int kGrnSendBase  = 15;
     static constexpr int kTpeSendBase  = kGrnSendBase + ParameterIDs::kFxInstances;    // 21 — fb365 tape
-    static constexpr int kPoolSendCount = kTpeSendBase + ParameterIDs::kFxInstances;   // 27
+    static constexpr int kFltSendBase  = kTpeSendBase + ParameterIDs::kFxInstances;    // 27 — fb377 filter
+    static_assert (kFltSendBase + ParameterIDs::kFxInstances
+                   <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
+    // 🔑 fb377 — THE FOURTH CONSTANT. This sizes poolSendBuf_ / poolRouteAny_ / poolRouteG_ /
+    // poolEntryG_, so it must cover the LAST send base, not the second-to-last. Adding the filter
+    // moved kPoolSends (SynthVoice) and introduced kFltSendBase, and this one was missed: it still
+    // read kTpeSendBase + 6 = 27 while the filter wrote 27..32 — six slots past the end of four
+    // arrays. auval came back 139 (SIGSEGV) and pluginval segfaulted 2 of 3. The memory note says
+    // these constants "move TOGETHER"; that is only enforceable if it is asserted, so it is now.
+    static constexpr int kPoolSendCount = kFltSendBase + ParameterIDs::kFxInstances;   // 33
+    static_assert (kPoolSendCount >= kFltSendBase + ParameterIDs::kFxInstances,
+                   "kPoolSendCount must cover the LAST send base + its instances");
+    static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
+                   "the voice's kPoolSends must cover every pool send the processor writes");
     std::array<DelayEngine, (size_t) kFxExtra>          delayPool_;
     std::array<tw::DistortionEngine, (size_t) kFxExtra> distPool_;
     // per-extra-instance runtime state, mirroring the instance-1 members below
@@ -1715,6 +1729,24 @@ private:
     std::array<std::atomic<bool>, (size_t) ParameterIDs::kFxInstances> tpeWantBuild_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> tpeEnv_ {};    // power fade, click-free
     void applyTpe (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+
+    // fb377 — FILTER, chain kind 5. Unlike granular/tape these engines are EAGER: a FilterSlot
+    // holds coefficient state, not buffers (no 8 MB ring, no 4 MB loop), so six of them cost
+    // almost nothing and the whole lazy-build + wantBuild handshake disappears with them.
+    struct FltRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* engine; std::atomic<float>* chr;
+        std::atomic<float>* cut; std::atomic<float>* res; std::atomic<float>* drive;
+        std::atomic<float>* mix; std::atomic<float>* env; std::atomic<float>* track;
+        std::atomic<float>* poles; std::atomic<float>* sense; std::atomic<float>* attack;
+        std::atomic<float>* release; std::atomic<float>* rate; std::atomic<float>* sweep;
+        std::atomic<float>* wide; std::atomic<float>* punch;
+        std::atomic<float>* src[6]; };
+    std::array<FltRefs, (size_t) ParameterIDs::kFxInstances> fltRefs_ {};
+    std::array<tw::FilterFxEngine, (size_t) ParameterIDs::kFxInstances> fltPool_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> fltEnv_ {};   // power fade, click-free
+    void cacheFilterRefs();
+    double fltPrepSr_ = 0.0;
+    void applyFlt (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void buildPendingTapeEngines();          // MESSAGE THREAD ONLY (timerCallback)
     std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
     std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};

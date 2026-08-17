@@ -4353,6 +4353,68 @@ void TerrainInstrumentAudioProcessor::cacheTapeParams()
     }
 }
 
+// fb377 — FILTER refs. Same shape as every other device: cached param pointers, no strings
+// and no lookups on the audio thread.
+void TerrainInstrumentAudioProcessor::cacheFilterRefs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String g = (i == 0) ? juce::String ("SYN_FLT_")
+                                        : "SYN_FLT" + juce::String (i + 1) + "_";
+        auto& v = fltRefs_[(size_t) i];
+        v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+        v.engine=R(g+"ENGINE"); v.chr=R(g+"CHAR");
+        v.cut=R(g+"CUT"); v.res=R(g+"RES"); v.drive=R(g+"DRIVE"); v.mix=R(g+"MIX");
+        v.env=R(g+"ENV"); v.track=R(g+"TRACK"); v.poles=R(g+"POLES");
+        v.sense=R(g+"SENSE"); v.attack=R(g+"ATTACK"); v.release=R(g+"RELEASE");
+        v.rate=R(g+"RATE"); v.sweep=R(g+"SWEEP");
+        v.wide=R(g+"WIDE"); v.punch=R(g+"PUNCH");
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+    }
+}
+
+// One filter instance, one sample. `inst0` is 0-based. 🔑 THE POOL LAW: every instance runs
+// THIS EXACT ROUTINE — there is no separate instance-1 path to drift out of step with the pool
+// (fb350 cost a week when pooled delays skipped one per-block call and sat at zero delay).
+void TerrainInstrumentAudioProcessor::applyFlt (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = fltRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kFltSendBase + inst0)];
+    float& env = fltEnv_[(size_t) inst0];
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;                 // click-free power: fade, never a hard cut
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+
+    auto& eng = fltPool_[(size_t) inst0];
+    tw::FilterFxEngine::Params fp;
+    // 🔑 the AudioParameterChoice law: raw IS the index. Never lround(raw * N) — that is the
+    // fb50 noise-type bug and the fb373 tape-type bug, one denominator apart.
+    fp.engine  = juce::jlimit (0, tw::filters::kNumTypes - 1, (int) V.engine->load());
+    fp.charIdx = juce::jlimit (0, 5, (int) V.chr->load());
+    fp.cut     = V.cut->load();      fp.res     = V.res->load();
+    fp.drive   = V.drive->load();    fp.mix     = V.mix->load();
+    fp.env     = V.env->load();      fp.track   = V.track->load();
+    fp.poles   = V.poles->load();    fp.sense   = V.sense->load();
+    fp.attack  = V.attack->load();   fp.release = V.release->load();
+    fp.rate    = V.rate->load();     fp.sweep   = V.sweep->load();
+    fp.wide    = V.wide  != nullptr && V.wide->load()  > 0.5f;
+    fp.punch   = V.punch != nullptr && V.punch->load() > 0.5f;
+
+    float wl = inL, wr = inR;
+    eng.processSample (wl, wr, fp);
+    // the engine already applied Mix, so the power env is a straight crossfade to the input
+    outL = inL * (1.0f - env) + wl * env;
+    outR = inR * (1.0f - env) + wr * env;
+}
+
 // MESSAGE THREAD ONLY (timerCallback). The audio thread sets tpeWantBuild_ and reads the
 // pointer; it never allocates. One instance is ~4 MB of loop plus three machines, so six
 // eager engines would be 25 MB for a rack that usually holds one.
@@ -4507,6 +4569,9 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
     // fb362 — GRANULAR, all six (instance 1 included; it has no legacy fixed rank to honour).
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (3, i + 1, grnRefs_[(size_t) i].active, grnRefs_[(size_t) i].rank);
+    // fb377 — FILTER, all six, same story.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (5, i + 1, fltRefs_[(size_t) i].active, fltRefs_[(size_t) i].rank);
     // fb365 — TAPE, all six, same story.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (4, i + 1, tpeRefs_[(size_t) i].active, tpeRefs_[(size_t) i].rank);
@@ -4612,7 +4677,8 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheFxInstanceParams();   // resolve every pooled instance's param pointers ONCE (strings legal here)
     cacheGranularParams();     // fb362 — same, for all six granular instances
     for (auto& g : grnPool_) if (g != nullptr) g->prepare (sampleRate);   // keeps the ring (same fs)
-    cacheTapeParams();         // fb365 — and all six tape instances
+    cacheTapeParams();
+    cacheFilterRefs();   // fb377         // fb365 — and all six tape instances
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
@@ -7029,6 +7095,40 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         poolRouteAny_[(size_t) q2] = ps > 0.0f;
     }
 
+    // fb377 — FILTER: engines are EAGER (no buffers to allocate), so they are prepared once on
+    // the first block at this rate and simply told the transport every block. The one-clock law
+    // needs ppq, not a free-running accumulator.
+    if (fltPrepSr_ != getSampleRate())
+    {
+        fltPrepSr_ = getSampleRate();
+        for (auto& e : fltPool_) e.prepare (fltPrepSr_ > 0.0 ? fltPrepSr_ : 48000.0, 0);
+    }
+    {
+        double ppqNow = 0.0; bool playingNow = false;
+        if (auto* ph = getPlayHead())
+            if (auto pos = ph->getPosition())
+            {
+                if (auto q = pos->getPpqPosition()) ppqNow = *q;
+                playingNow = pos->getIsPlaying();
+            }
+        float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+        for (auto& e : fltPool_) e.setTempo (bpmNow, ppqNow, playingNow);
+    }
+
+    // fb377 — FILTER route gates, the same per-instance shape as every other device.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const auto& fR = fltRefs_[(size_t) i];
+        const int   q3 = kFltSendBase + i;
+        float ps = 0.0f;
+        for (int k = 0; k < 6; ++k)
+        {
+            const float pg = (fR.src[k] != nullptr && fR.src[k]->load() > 0.5f) ? 1.0f : 0.0f;
+            poolRouteG_[(size_t) (q3 * 6 + k)] = pg; ps += pg;
+        }
+        poolRouteAny_[(size_t) q3] = ps > 0.0f;
+    }
+
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
     // device TAPS — a source enters the rack exactly once, at the first device routed to it — and
@@ -7042,6 +7142,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 1) g = (ce.inst == 1) ? dlyG_ : &poolRouteG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) g = &poolRouteG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else if (ce.kind == 4) g = &poolRouteG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
+            else if (ce.kind == 5) g = &poolRouteG_[(size_t) ((kFltSendBase + ce.inst - 1) * 6)];   // fb377
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -7064,6 +7165,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 1) dstArr = (ce.inst == 1) ? dlyEntryG_ : &poolEntryG_[(size_t) ((ce.inst - 2) * 6)];
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else if (ce.kind == 4) dstArr = &poolEntryG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
+            else if (ce.kind == 5) dstArr = &poolEntryG_[(size_t) ((kFltSendBase + ce.inst - 1) * 6)];   // fb377
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -7239,6 +7341,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if      (m.isNoteOn())
             {
                 flowArp.noteOn (m.getNoteNumber(), m.getVelocity());
+                // fb377 — the rack KNOWS THE NOTE. Key track and the Karplus pluck both need it,
+                // and an external filter plugin cannot have it without a MIDI routing safari.
+                for (auto& fe : fltPool_)
+                    fe.noteOn (m.getNoteNumber(), (float) m.getVelocity() / 127.0f);
                 const int dv = (int) std::lround (m.getVelocity() * dryGain);   // dry held chord (un-arped)
                 if (dv >= 1) flowMidi.addEvent (juce::MidiMessage::noteOn (1, m.getNoteNumber(), (juce::uint8) juce::jlimit (1, 127, dv)), meta.samplePosition);
             }
@@ -7698,6 +7804,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 1) { b = (ce.inst == 1) ? (dlyRouteActive_ ? &delaySendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (ce.inst - 2)] ? &poolSendBuf_[(size_t) (ce.inst - 2)] : nullptr); }
         else if (ce.kind == 3) { const int q = kGrnSendBase + ce.inst - 1;      // fb362 — granular
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 5) { const int q = kFltSendBase + ce.inst - 1;      // fb377 — filter
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 4) { const int q = kTpeSendBase + ce.inst - 1;      // fb365 — tape
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
@@ -8717,6 +8825,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 float oL = inL, oR = inR;
                 if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
                 else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);   // fb365 — ditto
+                else if (ce.kind == 5) applyFlt (ce.inst - 1, inL, inR, oL, oR);   // fb377 — ditto
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);
