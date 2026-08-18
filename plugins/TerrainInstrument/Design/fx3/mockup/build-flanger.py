@@ -64,10 +64,10 @@ body{background:radial-gradient(900px 520px at 30%% -10%%,#241d3a 0,transparent 
 <div class="bar">
   <h1>Flanger</h1>
   <div class="seg" id="src">
-    <button data-s="sine" aria-pressed="true">Sine</button>
+    <button data-s="sine">Sine</button>
     <button data-s="pad">Pad</button>
     <button data-s="pluck">Pluck</button>
-    <button data-s="noise">Noise</button>
+    <button data-s="noise" aria-pressed="true">Noise</button>
   </div>
   <button class="play" id="play">Play</button>
 </div>
@@ -106,7 +106,7 @@ function devHTML(d){
         +'<span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
     +'</div>'
     +'<div class="fxr-core" data-core="flanger"><svg id="wf" preserveAspectRatio="none">'
-      +[0,1,2,3,4,5,6,7].map(function(i){return '<path class="dst-curve fl-t" id="t'+i+'"/>';}).join('')
+      +'<path class="dst-curve fl-t" id="up"/><path class="dst-curve fl-t" id="dn"/>'
       +'</svg></div>'
     +'<div class="fxr-ctrls">'
       +'<div class="fxr-knobs">'+knobs+'</div><div class="fxr-divider"></div>'
@@ -136,7 +136,7 @@ document.querySelectorAll('.fxr-pill').forEach(function(e,i){e.addEventListener(
          push('feedback', on ? D.knobs[2].v/100 : 1-(D.knobs[2].v/100)); }
 });});
 
-var ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,playing=false,kind='sine',viz={lfo:0,lvl:0,notch:[]};
+var ANA=null,BINS=null,SM=null,ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,playing=false,kind='noise',viz={lfo:0,lvl:0,notch:[]};
 function fail(m){document.getElementById('err').textContent=m;document.getElementById('status').textContent='Failed to start.';}
 async function addWorklet(){
   var code=document.getElementById('wk').textContent;
@@ -150,6 +150,8 @@ async function boot(){
   node=new AudioWorkletNode(ac,'terrain-flanger',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
   wetG=ac.createGain(); dryG=ac.createGain(); outG=ac.createGain(); dryG.gain.value=0; outG.gain.value=0.6;
   node.connect(wetG); wetG.connect(outG); dryG.connect(outG); outG.connect(ac.destination);
+  ANA=ac.createAnalyser(); ANA.fftSize=4096; ANA.smoothingTimeConstant=0.72;   // the engine's real spectrum
+  outG.connect(ANA); BINS=new Float32Array(ANA.frequencyBinCount);
   node.port.onmessage=function(e){ var d=e.data||{};
     if(d.types){ CH=(d.chars&&d.chars[0])||[]; fillChars(); return; }
     if(d.lfo!==undefined||d.notch) viz=d; };
@@ -198,46 +200,51 @@ document.querySelectorAll('#src button').forEach(function(b){b.addEventListener(
   document.querySelectorAll('#src button').forEach(function(x){x.setAttribute('aria-pressed','false');});
   b.setAttribute('aria-pressed','true');kind=b.dataset.s;if(playing)makeSrc();});});
 
-/* ══ THE NULL TRAJECTORIES ══════════════════════════════════════════════════════════════
-   A flanger's comb is teeth at odd multiples of 1/(2D). As D sweeps, every tooth slides, and
-   the higher ones slide FURTHER — so the family fans out and back like a jet. Drawing them as
-   eight thin white lines over ~2 s of history gives that motion as strokes rather than as a
-   grey field: same information, in the plugin's own language, and crisp at any zoom because it
-   is vector. When the comb leaves the audio band (D -> 0) the lines run off the top together
-   and the window flashes — the through-zero null, measured -61.2 dB. ═════════════════════ */
+/* ══ THE RIBBON ═══════════════════════════════════════════════════════════════════════════
+   Every earlier version derived the whole picture from ONE control-rate scalar (viz.notch[0]),
+   so any hitch in that number moved the entire image, and near-parallel lines can only
+   translate vertically — which always reads as being dragged up and down. This is built the
+   other way round: it is the flanger's OWN OUTPUT SPECTRUM, and it is MIRRORED about the
+   horizontal centre.
+
+   Two consequences, both structural rather than tuned:
+     * it cannot drift off centre, because it is symmetric about the centre by construction;
+     * it moves like water, because a spectrum evolves continuously — there is no discontinuous
+       scalar anywhere in the path. Smoothed twice: the analyser's own 0.72, then a per-bin
+       one-pole, so a transient swells the ribbon instead of snapping it.
+   The comb reads as PINCHES travelling along the ribbon: where a null sits, the ribbon closes
+   to nothing; where the sweep carries it, the pinch slides. That IS the flanger, drawn from
+   the audio rather than from a model of the audio. ════════════════════════════════════════ */
 var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
-var HIST=[], NT=8, yOff=0, fSm=0;
 function frame(){
   var svg=document.getElementById('wf');
   if(svg){
-    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height);
+    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height), mid=H*0.5;
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
-    var band=(viz.notch||[]).filter(function(f){return f>20&&f<FMAX;}).sort(function(a,b){return a-b;});
-    var target=band.length?band[0]:600;                 // the LOWEST tooth, stably identified
-    if(!fSm) fSm=target;
-    // one-pole in log space, ~90 ms: continuous between engine frames instead of stair-stepped
-    fSm=Math.exp(Math.log(fSm)+(Math.log(target)-Math.log(fSm))*0.10);
-    var first=fSm;
-    var lvl=Math.max(0,Math.min(1,(viz.lvl||0)*2.2)), wake=0.28+0.72*lvl;
-    HIST.push(first); if(HIST.length>120) HIST.shift();
-    // where does the family sit right now? centre it, smoothly.
-    var sy=0, sn=0;
-    for(var q=0;q<NT;q++){ var fq=first*(2*q+1); if(fq<=FMAX){
-      sy+=H*(1-(Math.log(Math.max(FMIN,fq))-LMIN)/LSPAN); sn++; } }
-    if(sn){ var want=H*0.5-(sy/sn); yOff += (want-yOff)*0.02; }   // slower than the sweep, so it never fights it
-    for(var t=0;t<NT;t++){
-      var d='', mult=2*t+1;
-      for(var i=0;i<HIST.length;i++){
-        var f=HIST[i]*mult; if(f>FMAX) { d=''; continue; }
-        var x=(i/(HIST.length-1||1))*W;
-        var y=H*(1-(Math.log(Math.max(FMIN,f))-LMIN)/LSPAN)+yOff;
-        d+=(d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+    var N=Math.max(2,Math.round(W/2)), up='', dn='';
+    if(ANA&&BINS){
+      ANA.getFloatFrequencyData(BINS);
+      if(!SM||SM.length!==N) SM=new Float32Array(N).fill(-100);
+      var nyq=ac.sampleRate*0.5, nb=BINS.length;
+      for(var i2=0;i2<N;i2++){
+        var f=Math.exp(LMIN+(i2/(N-1))*LSPAN);
+        var b=Math.min(nb-1,Math.max(0,Math.round(f/nyq*nb)));
+        var db=BINS[b]; if(!isFinite(db)) db=-100;
+        SM[i2]+= (db-SM[i2])*0.22;                       // second smoothing pass: no snapping
       }
-      var el=document.getElementById('t'+t);
-      el.setAttribute('d',d);
-      el.style.opacity=((0.34+0.60*wake)*Math.pow(0.87,t)).toFixed(3);
+      for(var i3=0;i3<N;i3++){
+        var x=(i3/(N-1))*W;
+        var a=Math.max(0,Math.min(1,(SM[i3]+96)/66));    // -96..-30 dB -> 0..1
+        var h=(0.035+Math.pow(a,1.25)*0.93)*(H*0.46);   // a floor, so the ribbon is never a dead line
+        up+=(i3?'L':'M')+x.toFixed(1)+' '+(mid-h).toFixed(1);
+        dn+=(i3?'L':'M')+x.toFixed(1)+' '+(mid+h).toFixed(1);
+      }
+    } else {
+      up='M0 '+mid.toFixed(1)+'L'+W.toFixed(1)+' '+mid.toFixed(1);
+      dn=up;
     }
-    // (fb402 — the white flash is GONE. See the commit: it strobed because its trigger jumped.)
+    document.getElementById('up').setAttribute('d',up);
+    document.getElementById('dn').setAttribute('d',dn);
   }
   requestAnimationFrame(frame);
 }

@@ -11,13 +11,13 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
   await pg.click('#play'); await new Promise(r=>setTimeout(r,2500));
   const r=await pg.evaluate(async()=>{
     const out={ flashEl: !!document.getElementById('flash') };
-    const path=document.getElementById('t0');
+    const path=document.getElementById('up');
     const ys=[];
     for(let i=0;i<150;i++){
       await new Promise(rq=>requestAnimationFrame(rq));
       const d=path.getAttribute('d')||'';
-      const m=d.match(/([\d.]+) ([\d.]+)$/);          // the HEAD of the trail = right edge
-      ys.push(m?parseFloat(m[2]):NaN);
+      const pts=d.split('L'); const m=(pts[Math.floor(pts.length*0.22)]||'').trim().split(' ');
+      ys.push(m&&m.length>1?parseFloat(m[1]):NaN);
     }
     const good=ys.filter(v=>isFinite(v));
     let same=0, jumps=[];
