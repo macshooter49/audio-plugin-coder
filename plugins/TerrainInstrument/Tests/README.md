@@ -26,7 +26,7 @@ bibles next to them:
 for d in chorus flanger phaser; do
   clang++ -O2 -std=c++17 -I Tests/shim -I Source -I Design/fx3/$d \
           Design/fx3/$d/${d}_cert.cpp -o /tmp/${d}_cert && /tmp/${d}_cert
-done            # chorus 87 · flanger 83 · phaser 67
+done            # chorus 87 · flanger 85 · phaser 67
 ```
 
 ⚠️ **Run those three ONE AT A TIME.** In parallel the flanger's BBD CPU gate reads 25.20 µs
