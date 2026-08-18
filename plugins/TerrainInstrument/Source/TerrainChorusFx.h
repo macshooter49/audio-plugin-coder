@@ -146,6 +146,12 @@ public:
         // a real physics change on the wet only - the dry is never side-boosted (that is the
         // classic mono-collapse bug) - so Wide can widen without ever deleting the centre.
         bool  wide = false;
+        // fb418 — MOTION. Same slot, same reason as the phaser: the back panel's second
+        // dropdown was a duplicate of the header pill. The chorus had NO shape control of any
+        // kind — the LFO wave was a fixed property of the Type — so this is a gap being filled,
+        // not a knob being moved. 0 = follow the Type; 1 = Triangle, 2 = Sine, 3 = Soft (the
+        // lp-triangle the vintage Types use).
+        int   motion = 0;
     };
 
     struct Viz
@@ -666,7 +672,8 @@ public:
                 lvlSm_ += lvlK_ * (0.5f * (std::fabs (wL) + std::fabs (wR)) - lvlSm_);
                 viz_.lvl = std::min (1.0f, lvlSm_ * 14.0f);
                 viz_.lfo = (T.phaseMode == 4) ? (2.0f * q_[0] - 1.0f)
-                                              : (T.wave == 1 ? sinW (mph_) : triW (mph_));
+                                              : (((p_.motion > 0 ? p_.motion - 1 : T.wave) == 1)
+                                                     ? sinW (mph_) : triW (mph_));   // fb418 — the card follows Motion too
                 viz_.depthNow = depthSm_ * excMs_;
             }
         }
@@ -1136,6 +1143,8 @@ private:
     // detuned voices" instead of a wobble.
     inline float shape (int wave, float p, int idx, bool forceLp) noexcept
     {
+        // fb418 — Motion overrides the Type's wave. 0 leaves every shipped voicing bit-identical.
+        if (p_.motion > 0) wave = clampi (p_.motion - 1, 0, 2);
         if (wave == 1 && ! forceLp) return sinW (p);
         const float raw = (wave == 1) ? sinW (p) : triW (p);
         const float k   = (wave == 2 || forceLp) ? 3.0f : 12.0f;

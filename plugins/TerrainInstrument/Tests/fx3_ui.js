@@ -130,16 +130,22 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
           .find(c=>new RegExp('^'+name).test(((c.querySelector('.fxr-name')||{}).textContent||'').trim()));
         if(!card) continue;
         const sels=[...card.querySelectorAll('select.fxr-bk-native')];
-        const typeSel=sels.find(x=>/TYPE$/.test(x.getAttribute('data-p')||''));
-        if(!typeSel){ out.typeWrite[core]='no TYPE select'; continue; }
+        // 🔑 fb418 — NO DOUBLES. The back panel must NOT carry a second Type selector: the
+        //  header pill owns Type, and a duplicate is both dead space and the same name twice on
+        //  one card. The cardinality check moves to whatever d2 actually is now (Motion/Route),
+        //  which is where the fb373 trap can still bite — those params are choice(8) showing 4.
+        out.typeWrite[core+'_dupe'] = sels.filter(x=>/_TYPE$/.test(x.getAttribute('data-p')||'')).length;
+        const typeSel=sels.find(x=>!/CHAR$/.test(x.getAttribute('data-p')||''));
+        if(!typeSel){ out.typeWrite[core]='no d2 select'; continue; }
         spy.length=0;
         typeSel.selectedIndex=1;
         typeSel.dispatchEvent(new Event('change',{bubbles:true}));
-        const w=spy.find(e=>/TYPE$/.test(e[0]));
+        const w=spy.find(e=>e[0]===typeSel.getAttribute('data-p'));
         if(!w){ out.typeWrite[core]='nothing written'; continue; }
         const pn=+(typeSel.getAttribute('data-pn')||typeSel.options.length);
         const decoded=Math.round(w[1]*(pn-1));
-        out.typeWrite[core]={norm:+w[1].toFixed(4), pn:pn, opts:typeSel.options.length, decoded:decoded};
+        out.typeWrite[core]={norm:+w[1].toFixed(4), pn:pn, opts:typeSel.options.length, decoded:decoded,
+                             id:(typeSel.getAttribute('data-p')||'').replace(/^SYN_[A-Z]+\d*_/,'')};
       }
       window.__setSynParam=real;
     }
@@ -222,9 +228,12 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   console.log('');
   for(const [core,name] of [['cho','Chorus'],['fla','Flanger'],['pha','Phaser']]){
     const t=r.typeWrite&&r.typeWrite[core];
-    chk(t && t.decoded===1 && t.pn===16,
-        name+': fb373 GATE — Type writes the PARAM\'s scale, not the list\'s',
-        t ? ('picked entry 1 of '+t.opts+' on a choice('+t.pn+') param -> wrote '+t.norm+' -> decodes to index '+t.decoded)
+    chk((r.typeWrite||{})[core+'_dupe']===0,
+        name+': fb418 NO DOUBLES — the back panel carries no second Type selector',
+        'duplicate Type selects: '+((r.typeWrite||{})[core+'_dupe']));
+    chk(t && t.decoded===1 && t.pn===8,
+        name+': fb373 GATE — d2 writes the PARAM\'s scale, not the list\'s',
+        t ? (t.id+': picked entry 1 of '+t.opts+' on a choice('+t.pn+') param -> wrote '+t.norm+' -> decodes to index '+t.decoded)
           : 'no measurement');
   }
   const S=r.send||{};

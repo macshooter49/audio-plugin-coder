@@ -3991,6 +3991,36 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         }
         }
 
+        // ═══════════ fb418 — the back panel's SECOND dropdown stops being a duplicate ══════════
+        // Max: "we have a Type on the back panel, and we also have our Type at the top left
+        // pill... I don't know what the back panel type is supposed to be used for. That's just
+        // dead space." He was right, and it also broke his own no-doubles rule — the same name
+        // twice on one card. Each device gets the control only IT can offer:
+        //   CHORUS / PHASER → Motion, the LFO's shape. The chorus had NO shape control at all
+        //     and the phaser's was locked to whichever Character you picked.
+        //   FLANGER → Route. It could not take Motion: the Shape KNOB already owns the waveform
+        //     here, and two controls on one axis is the "params play their roles" violation.
+        //     What a flanger has and the others do not is a regeneration LOOP, so the slot
+        //     becomes where that loop is wired.
+        // Entry 0 is "follow the Type/Character" everywhere, so every existing patch and every
+        // measured voicing is bit-identical until the user touches it.
+        {
+            const juce::StringArray choMotion { "Type","Triangle","Sine","Soft",
+                                                "Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+            const juce::StringArray phaMotion { "Character","Triangle","Sine","Soft Tri",
+                                                "Lamp Skew","Ramp","Sample-Hold","Reserved 8" };
+            const juce::StringArray flaRoute  { "Normal","Cross","Mono Sum","Wide",
+                                                "Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String sfxN = (n == 1) ? juce::String() : juce::String (n);
+                const juce::String sfxD = (n == 1) ? juce::String() : (" " + juce::String (n));
+                C ("SYN_CHO" + sfxN + "_MOTION", "Chorus"  + sfxD + " Motion", choMotion, 0);
+                C ("SYN_PHA" + sfxN + "_MOTION", "Phaser"  + sfxD + " Motion", phaMotion, 0);
+                C ("SYN_FLA" + sfxN + "_ROUTE",  "Flanger" + sfxD + " Route",  flaRoute,  0);
+            }
+        }
+
         // ═══════════ fb414 — SEND MODE. The rack stops being insert-only. ═══════════════════════
         // Max: "there gotta be a way to have it to where it doesn't distort the sound in which the
         // granulizer is also granulizing... it's coming AFTER the source."
@@ -4677,7 +4707,7 @@ void TerrainInstrumentAudioProcessor::cacheFx3Refs()
             v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
             v.time=R(g+"TIME"); v.detune=R(g+"DETUNE"); v.width=R(g+"WIDTH"); v.flutter=R(g+"FLUTTER");
             v.drift=R(g+"DRIFT"); v.colour=R(g+"COLOUR"); v.lowkeep=R(g+"LOWKEEP"); v.phase=R(g+"PHASE");
-            v.sync=R(g+"SYNC"); v.wide=R(g+"WIDE");
+            v.sync=R(g+"SYNC"); v.wide=R(g+"WIDE"); v.motion=R(g+"MOTION");
             for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
         }
         {
@@ -4688,7 +4718,7 @@ void TerrainInstrumentAudioProcessor::cacheFx3Refs()
             v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
             v.manual=R(g+"MANUAL"); v.spread=R(g+"SPREAD"); v.width=R(g+"WIDTH"); v.damping=R(g+"DAMPING");
             v.shape=R(g+"SHAPE"); v.bounce=R(g+"BOUNCE"); v.tail=R(g+"TAIL"); v.lowcut=R(g+"LOWCUT");
-            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT");
+            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT"); v.route=R(g+"ROUTE");
             for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
         }
         {
@@ -4699,7 +4729,7 @@ void TerrainInstrumentAudioProcessor::cacheFx3Refs()
             v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
             v.center=R(g+"CENTER"); v.stages=R(g+"STAGES"); v.spread=R(g+"SPREAD"); v.stereo=R(g+"STEREO");
             v.touch=R(g+"TOUCH"); v.lag=R(g+"LAG"); v.floorK=R(g+"FLOOR"); v.color=R(g+"COLOR");
-            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT");
+            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT"); v.motion=R(g+"MOTION");
             for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
         }
     }
@@ -4735,6 +4765,7 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 cp.b4 = V.flutter->load(); cp.b5 = V.drift->load();    cp.b6 = V.colour->load();
                 cp.b7 = V.lowkeep->load(); cp.b8 = V.phase->load();
                 cp.wide      = V.wide != nullptr && V.wide->load() > 0.5f;
+                cp.motion    = (V.motion != nullptr) ? juce::jlimit (0, 3, (int) V.motion->load()) : 0;
                 cp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
                 cp.bpm = bpm;
                 choPool_[(size_t) i].setParams (cp);
@@ -4761,6 +4792,7 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 fp.b1 = V.manual->load();  fp.b2 = V.spread->load();   fp.b3 = V.width->load();
                 fp.b4 = V.damping->load(); fp.b5 = V.shape->load();    fp.b6 = V.bounce->load();
                 fp.b7 = V.tail->load();    fp.b8 = V.lowcut->load();
+                fp.route     = (V.route != nullptr) ? juce::jlimit (0, 3, (int) V.route->load()) : 0;
                 fp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
                 fp.bpm = bpm;
                 flaPool_[(size_t) i].setParams (fp);
@@ -4782,6 +4814,7 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 // fb412 — the Invert pill XORs the Character's loop sign (a magnitude knob
                 // cannot carry a sign, and its 0 default must not mean "full negative").
                 pp.invert    = V.invert != nullptr && V.invert->load() > 0.5f;
+                pp.motion    = (V.motion != nullptr) ? juce::jlimit (0, 6, (int) V.motion->load()) : 0;
                 pp.tempoSync = V.sync   != nullptr && V.sync->load()   > 0.5f;
                 pp.bpm = bpm;
                 phaPool_[(size_t) i].setParams (pp);

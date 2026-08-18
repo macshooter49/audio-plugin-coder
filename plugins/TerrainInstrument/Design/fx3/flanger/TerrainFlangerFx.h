@@ -154,6 +154,19 @@ public:
         float b7 = 0.35f;   // Tail     feedback gate release 60 ms – 3 s (Env: follower rel)
         float b8 = 0.12f;   // Low Cut  20 Hz – 1 kHz, in-loop AND wet
 
+        // fb418 — ROUTE. The flanger's second back-panel dropdown was a duplicate of the header
+        // Type pill, like the other two. It could NOT take the chorus/phaser's `Motion`, because
+        // the Shape KNOB already owns the LFO waveform here and a second control on one axis is
+        // the fb-era "params play their roles" violation. What a flanger has and the others do
+        // not is a REGENERATION LOOP, so the slot becomes the one thing only this device can
+        // offer: where that loop is wired.
+        //   0 Normal   — L feeds L, R feeds R (the shipped path; every old patch is identical)
+        //   1 Cross    — L feeds R and R feeds L: the sweep ping-pongs across the image
+        //   2 Mono Sum — one shared loop, so the regeneration is dead-centre and mono-safe
+        //   3 Wide     — the loop is fed the SIDE, so only what differs between the channels
+        //                regenerates: the centre stays dry however hard you push it
+        int    route = 0;
+
         bool   tempoSync = false;
         double bpm       = 120.0;
     };
@@ -311,8 +324,19 @@ public:
             const float fbR = loop (1, gR, c);
             const float gFb = fbS_ * gate_;
 
-            float nl = inL + gFb * fbL;
-            float nr = inR + gFb * fbR;
+            // fb418 — ROUTE decides WHAT the loop is fed. The coefficient is untouched, so
+            // Feedback keeps its whole calibrated travel (and its bipolar centre) in every mode.
+            float rl = fbL, rr = fbR;
+            switch (p_.route)
+            {
+                case 1: rl = fbR; rr = fbL; break;                       // Cross
+                case 2: { const float m = 0.5f * (fbL + fbR); rl = rr = m; } break;   // Mono Sum
+                case 3: { const float m = 0.5f * (fbL + fbR);            // Wide — side only
+                          rl = fbL - m; rr = fbR - m; } break;
+                default: break;                                          // Normal
+            }
+            float nl = inL + gFb * rl;
+            float nr = inR + gFb * rr;
             nl = softClip (nl, c.clipK);
             nr = softClip (nr, c.clipK);
             if (c.flags & F_BBD) { nl = ch_[0].compressIn (nl, c.pumpMul, cpAtk_, cpRel_);

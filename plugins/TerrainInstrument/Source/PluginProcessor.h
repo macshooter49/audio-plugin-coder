@@ -1775,6 +1775,7 @@ private:
         std::atomic<float>* width; std::atomic<float>* flutter; std::atomic<float>* drift;
         std::atomic<float>* colour; std::atomic<float>* lowkeep; std::atomic<float>* phase;
         std::atomic<float>* sync; std::atomic<float>* wide;
+        std::atomic<float>* motion;                       // fb418 — the back panel's 2nd dropdown
         std::atomic<float>* src[6]; };
     struct FlaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
@@ -1783,6 +1784,7 @@ private:
         std::atomic<float>* width; std::atomic<float>* damping; std::atomic<float>* shape;
         std::atomic<float>* bounce; std::atomic<float>* tail; std::atomic<float>* lowcut;
         std::atomic<float>* sync; std::atomic<float>* invert;
+        std::atomic<float>* route;                        // fb418 — where the loop is wired
         std::atomic<float>* src[6]; };
     struct PhaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
@@ -1791,6 +1793,7 @@ private:
         std::atomic<float>* spread; std::atomic<float>* stereo; std::atomic<float>* touch;
         std::atomic<float>* lag; std::atomic<float>* floorK; std::atomic<float>* color;
         std::atomic<float>* sync; std::atomic<float>* invert;
+        std::atomic<float>* motion;                       // fb418 — LFO shape override
         std::atomic<float>* src[6]; };
     std::array<ChoRefs, (size_t) ParameterIDs::kFxInstances> choRefs_ {};
     std::array<FlaRefs, (size_t) ParameterIDs::kFxInstances> flaRefs_ {};

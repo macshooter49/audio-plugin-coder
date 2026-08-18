@@ -138,6 +138,12 @@ public:
         // Character gives you exactly the negative geography of its inverted sibling: the
         // resonant peaks move from BETWEEN the notches to ON them (mid-hump vowel -> hollow honk).
         bool  invert = false;
+        // fb418 — MOTION. The back panel's second dropdown used to be a second Type selector,
+        // duplicating the header pill (Max: "I don't know what the back panel type is supposed
+        // to be used for... that's just dead space"). The LFO's SHAPE was locked to whatever
+        // Character you picked, so the one axis every phaser owns — how the sweep MOVES — had
+        // no control at all. 0 = follow the Character; 1..6 override it.
+        int   motion = 0;
     };
 
     struct Viz
@@ -200,7 +206,10 @@ public:
         // ── STAGED (topology class) — committed only at the bottom of the swap dip
         tStages_  = st;
         tTopo_    = cs.topo;
-        tLfo_     = cs.lfo;
+        // fb418 — Motion 0 keeps the Character's own shape (so every existing voicing is
+        // untouched); 1..6 override it. Declared as an override rather than a replacement
+        // because a Character IS partly its motion — Kraut's lamp skew, Steps' sample-hold.
+        tLfo_     = (p.motion > 0) ? clampi (p.motion - 1, 0, 5) : cs.lfo;
         tAlt_     = cs.alt;
         tApBlend_ = cs.apBlend;
         tSkew_    = cs.skew;
