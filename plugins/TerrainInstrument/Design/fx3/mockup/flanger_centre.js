@@ -18,5 +18,7 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
  });
  o.offsetFromCard=+(o.ribbonCentre-o.cardCentre).toFixed(1);
  console.log(JSON.stringify(o,null,1));
- console.log(Math.abs(o.offsetFromCard)<2 ? '══ ribbon sits on the card centre: PASS' : '══ off by '+o.offsetFromCard+'px');
+ const dev=o.offsetFromCard/2;
+ console.log(' offset in DEVICE px: '+dev.toFixed(2));
+ console.log(Math.abs(dev+1.5)<0.35 ? '══ sits 1.5 device px above card centre: PASS' : '══ WRONG: '+dev.toFixed(2)+' device px');
  await b.close();})();

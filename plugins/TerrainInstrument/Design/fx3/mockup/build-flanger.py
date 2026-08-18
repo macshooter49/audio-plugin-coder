@@ -225,7 +225,12 @@ function frame(){
     // Derive the offset from the live boxes so it stays correct if the chassis ever changes.
     var card=svg.closest('.fxr-dev'), mid=H*0.5;
     if(card){ var cr=card.getBoundingClientRect();
-      mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top)); }
+      // fb405 — Max: "up by a pixel and a half". The card's geometric centre sits a touch low
+      // optically, because the footer's mass (knob arcs + two label rows) pulls the eye down.
+      // NUDGE is in DEVICE pixels, converted through the live zoom, so it reads the same 1.5px
+      // whatever the card is scaled to — a raw SVG-unit offset would double at 2x.
+      var NUDGE=1.5, zoom=cr.width/272;
+      mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top - NUDGE*zoom)); }
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
     var N=Math.max(2,Math.round(W/2)), up='', dn='';
     if(ANA&&BINS){
