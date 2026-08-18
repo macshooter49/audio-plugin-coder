@@ -154,11 +154,14 @@ int main()
         std::printf ("  BOUNCE     0 -> 100    %6.2f dB   <- Max: \"isn't doing anything audible\"\n", specDistDb (a, b));
         auto q0 = flaBase(); q0.b7 = 0.0f; runFla (q0, sus, a, c);
         auto q1 = flaBase(); q1.b7 = 1.0f; runFla (q1, sus, b, d);
-        std::printf ("  TAIL       0 -> 100    %6.2f dB   <- while a note is HELD\n", specDistDb (a, b));
+        std::printf ("  DRIVE      0 -> 100    %6.2f dB   <- fb419: was TAIL, and read 0.00 dB here\n", specDistDb (a, b));
     }
 
     // ── Tail, in the only state where it was ever designed to act
-    std::printf ("\n[TAIL — after the note stops, which is the only place it acts]\n");
+    // fb419 — kept as a REGRESSION guard, not as a Tail measurement: the gate release is now
+    // fixed at 400 ms, so these three rows must be FLAT and non-zero. A runaway at maximum
+    // feedback still has to die.
+    std::printf ("\n[the feedback gate still kills a runaway — flat by design now]\n");
     {
         const auto gat = probe ((int) (FSR * 8.0f), true, 3.0);
         for (float t : { 0.0f, 0.5f, 1.0f })
@@ -167,7 +170,7 @@ int main()
             auto p = flaBase(); p.b7 = t; runFla (p, gat, L, R);
             const double after1 = rmsOf (L, (size_t) (FSR * 3.5f), (size_t) (FSR * 4.0f));
             const double after4 = rmsOf (L, (size_t) (FSR * 7.0f), (size_t) (FSR * 7.5f));
-            std::printf ("  Tail %3.0f    0.5 s after note-off %8.6f   4 s after %10.8f\n",
+            std::printf ("  b7 %3.0f      0.5 s after note-off %8.6f   4 s after %10.8f\n",
                          t * 100.f, after1, after4);
         }
     }

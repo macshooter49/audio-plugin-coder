@@ -151,7 +151,8 @@ public:
         float b4 = 0.35f;   // Damping  in-loop LP 20 kHz → 700 Hz (0 = undamped)
         float b5 = 0.5f;    // Shape    LFO sine→tri→ramp · Step: 2–24 steps · Env: curve
         float b6 = 0.20f;   // Bounce   servo hunt + tape drift (the analog instability)
-        float b7 = 0.35f;   // Tail     feedback gate release 60 ms – 3 s (Env: follower rel)
+        float b7 = 0.20f;   // Drive    in-loop saturation, 0 = clean → the regeneration GROWLS
+                            //          (fb419 — was Tail, a gate release; see cookBlock)
         float b8 = 0.12f;   // Low Cut  20 Hz – 1 kHz, in-loop AND wet
 
         // fb418 — ROUTE. The flanger's second back-panel dropdown was a duplicate of the header
@@ -334,6 +335,16 @@ public:
                 case 3: { const float m = 0.5f * (fbL + fbR);            // Wide — side only
                           rl = fbL - m; rr = fbR - m; } break;
                 default: break;                                          // Normal
+            }
+            // fb419 — IN-LOOP DRIVE. Unit slope at zero (see cookBlock), so the loop gain is
+            // still exactly what Feedback asked for; what changes is what the loop does to a
+            // LOUD signal, which is the whole point at the top of the feedback travel.
+            drvS_ += kSm_ * (drvT_ - drvS_);
+            if (drvS_ > 1.001f)
+            {
+                const float ig = 1.0f / drvS_;
+                rl = std::tanh (rl * drvS_) * ig;
+                rr = std::tanh (rr * drvS_) * ig;
             }
             float nl = inL + gFb * rl;
             float nr = inR + gFb * rr;
@@ -782,8 +793,32 @@ private:
             const float hzL = 20.0f * std::pow (50.0f, clampf (p_.b8, 0.0f, 1.0f));
             lowT_ = onePole (clampf (hzL, 5.0f, 4000.0f));
         }
-        // Tail: 60 ms → 3 s, the gate release (Envelope Type: also the follower release)
-        tailSec_ = 0.060f * std::pow (50.0f, clampf (p_.b7, 0.0f, 1.0f));
+        // ═══ fb419 — TAIL BECOMES DRIVE ════════════════════════════════════════════════════
+        // Max: "the Bounce and the Tail isn't doing anything audible." Measured, and the truth
+        // is narrower than "dead": Tail was the RELEASE OF THE FEEDBACK GATE, so
+        //   · while a note is HELD the gate is wide open — 0.00 dB from 0 to 100;
+        //   · after note-off it only has something to release if the loop is still ringing, and
+        //     a flanger loop is NOT a reverb: 2 ms at 0.6 loop gain is 30 dB down in ~30 ms.
+        //     Measured 0.000000 RMS half a second after note-off at Tail 0, 50 AND 100.
+        // Its whole useful range was one corner — near-maximum feedback, after you stop playing
+        // — which the cert exercises at feedback 1.0 and which is exactly the corner Max never
+        // plays in. A knob that only acts there fails law 1.
+        //
+        // So b7 becomes DRIVE: saturation INSIDE the regeneration loop, which is the one place
+        // a nonlinearity belongs on this device. It is what makes the fb410 squeal GROWL instead
+        // of merely ringing, and it is live at every feedback setting, held note or not.
+        //
+        // 🔑 THE MAKEUP IS INSIDE THE LOOP (the phaser's Color pattern): tanh(x·g)/g has unit
+        // slope at zero, so sat'(0)·makeup == 1 and cranking Drive can NEVER push the loop gain
+        // past the Feedback knob's own calibrated k. Without that, Drive would be a second,
+        // secret feedback control and the 60 s stability gate would be measuring a lie.
+        drvT_ = 1.0f + 7.0f * clampf (p_.b7, 0.0f, 1.0f) * clampf (p_.b7, 0.0f, 1.0f);
+
+        // ...and the two jobs Tail really did are re-homed rather than dropped.
+        //  (a) the gate release is now FIXED at 400 ms — long enough to keep a natural bloom,
+        //      short enough that maximum feedback cannot howl for ever (law 6: silent 18 s
+        //      after the input stops, which is still gated).
+        tailSec_ = 0.400f;
         gateRel_ = 1.0f - std::exp (-1.0f / (tailSec_ * fs_));
 
         // Envelope-Type follower attack: 60 ms → 1 ms as Rate rises ("how fast the
@@ -791,6 +826,12 @@ private:
         {
             const float atk = 0.060f * std::pow (1.0f / 60.0f, clampf (p_.rate, 0.0f, 1.0f)) * c.atkMul;
             envAtk_ = 1.0f - std::exp (-1.0f / (clampf (atk, 0.0002f, 0.5f) * fs_));
+            //  (b) fb419 — the Envelope Type's follower RELEASE was Tail's second job. It moves
+            //      to Rate, which already owned the ATTACK on this Type ("how fast the comb
+            //      chases the playing"), so one knob now sets both ends of the chase and Rate
+            //      is still never a dead knob here. 600 ms → 12 ms across the travel.
+            const float rel = 0.600f * std::pow (0.02f, clampf (p_.rate, 0.0f, 1.0f)) * c.atkMul;
+            envRelSec_ = clampf (rel, 0.002f, 2.0f);
         }
 
         // comb mix depth: 1 everywhere except Endless, where Depth IS the notch depth
@@ -828,6 +869,7 @@ private:
     {
         manS_ = manT_; biaS_ = biaT_; depS_ = depT_; fbS_ = fbT_; sprS_ = sprT_; widS_ = widT_;
         dmpS_ = dmpT_; dLagS_ = dLagT_; lowS_ = lowT_; bncS_ = bncT_; shpS_ = shpT_; mixS_ = mixT_;
+        drvS_ = drvT_;
         dryS_ = dryT_; wetS_ = wetT_; nrmS_ = nrmT_;
         combS_ = combT_;
     }
@@ -849,7 +891,7 @@ private:
     {
         if (type_ == Envelope)
         {
-            const float relC = 1.0f - std::exp (-1.0f / (tailSec_ * fs_));
+            const float relC = 1.0f - std::exp (-1.0f / (envRelSec_ * fs_));   // fb419 — Rate owns it now
             const float rl = std::fabs (inL), rr = std::fabs (inR);
             const float aL = (c.flags & F_SPLIT_ENV) ? envAtk_ : envAtk_;
             const float aR = (c.flags & F_SPLIT_ENV) ? envAtk_ * 0.22f : envAtk_;
@@ -1156,6 +1198,7 @@ private:
     float reconC_ = 0.5f;
     float lowT_ = 0.01f, lowS_ = 0.01f;
     float bncT_ = 0.2f,  bncS_ = 0.2f;
+    float drvT_ = 1.0f,  drvS_ = 1.0f;      // fb419 — in-loop drive (1 = clean)
     float shpT_ = 0.25f, shpS_ = 0.25f;
     float mixT_ = 0.5f,  mixS_ = 0.5f;
     float dryT_ = 0.707f, dryS_ = 0.707f, wetT_ = 0.707f, wetS_ = 0.707f;
@@ -1170,6 +1213,7 @@ private:
     float envF_[2] { 0.0f, 0.0f };
     float holdPk_ = 0.0f;
     float envAtk_ = 0.01f, gateRel_ = 0.001f, tailSec_ = 0.3f;
+    float envRelSec_ = 0.3f;                // fb419 — the Envelope follower's release, from Rate
     float maxD_ = 1024.0f;
 
     int   stepN_ = 8, stepIdx_ = 0, stepK_ = 0, stepDir_ = 1;

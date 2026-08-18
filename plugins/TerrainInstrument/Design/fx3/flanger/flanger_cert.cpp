@@ -973,8 +973,53 @@ int main()
           for (size_t i = 1; i < s.size(); ++i)
             if (s[i] < ref * 0.01) { t40 = (double) i * 0.025; break; }
           v.push_back (t40); }
-        gate ("Tail 0->100 lengthens the ring, monotonically",
-              monotoneUp (v, 0.02) && v.back() > v.front() * 8.0, traj (v, "s to -40 dB"));
+        // ═══ fb419 — TAIL BECAME DRIVE, and this gate had to be rebuilt, not retuned ═══════
+        // What it used to assert was TRUE and USELESS: Tail lengthened the ring, but ONLY at
+        // maximum feedback and ONLY after the input stopped — which is the corner nobody
+        // plays in. Held-note travel was 0.00 dB from 0 to 100 (fb417, Tests/fx3_audibility).
+        // The ring is now a fixed 400 ms release, so this trajectory is deliberately FLAT:
+        //   1.1 > 1.1 > 1.1 > 1.1 > 1.1 s to -40 dB
+        // and the knob spends its travel on something audible while you play instead.
+        gate ("the feedback gate still kills a runaway (fixed 400 ms release)",
+              v.back() > 0.3 && v.back() < 6.0, traj (v, "s to -40 dB (flat BY DESIGN)"));
+    }
+    {   // ── DRIVE: in-loop saturation. TWO claims, and the second is the load-bearing one.
+        std::vector<double> hr, dec;
+        for (float t : { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f })
+        {
+            // (1) does it dirty the regeneration? Feed a tone, look at what comes back.
+            // ⚠️ THE PROBE PITCH IS PART OF THE MEASUREMENT. hfRatio counts energy above 2 kHz,
+            // and a saturator's harmonics of a 220 Hz tone land at 660 / 1100 / 1540 Hz — ALL
+            // BELOW THE BAND. The first run of this gate read −85.9 → −86.4 dB and looked like
+            // a dead knob when it was a blind detector. 1 kHz puts the 3rd at 3 kHz.
+            {   auto in = tone ((int) (FS * 3.0f), 1000.0f);
+                auto p = base(); p.type = Flg::Jet; p.rate = rateFor (0.02f); p.depth = 0.0f;
+                p.b1 = 0.5f; p.feedback = 0.97f; p.b4 = 0.0f; p.b6 = 0.0f; p.b7 = t; p.mix = 1.0f;
+                hr.push_back (hfRatio (run (p, in).l, SETTLE)); }
+            // (2) 🔑 does the LOOP GAIN move? The in-loop makeup is tanh(x·g)/g, which has unit
+            //     slope at zero, so the decay time MUST be the same at every Drive setting. If
+            //     it lengthened, Drive would be a second, secret feedback control — and the
+            //     60 s stability gate would be measuring a lie.
+            {   auto p = base(); p.type = Flg::Jet; p.rate = rateFor (0.02f); p.depth = 0.0f;
+                p.b1 = 0.75f; p.feedback = 1.0f; p.b4 = 0.05f; p.b6 = 0.0f; p.b7 = t; p.mix = 1.0f;
+                const int n = (int) (FS * 20.0f);
+                std::vector<float> in ((size_t) n, 0.0f);
+                auto src = noise ((int) (FS * 2.0f));
+                for (size_t i = 0; i < src.size(); ++i) in[i] = src[i];
+                auto o = run (p, in);
+                auto st = stRms (o.l, src.size() - (size_t) (FS * 0.06f), 50.0, 25.0);
+                const double ref = st.empty() ? 0 : st[0];
+                double t40 = 18.0;
+                for (size_t i = 1; i < st.size(); ++i)
+                  if (st[i] < ref * 0.01) { t40 = (double) i * 0.025; break; }
+                dec.push_back (t40); }
+        }
+        gate ("Drive 0->100 dirties the regeneration, monotonically",
+              monotoneUp (hr, 0.4) && hr.back() - hr.front() > 3.0, traj (hr, "dB HF in the loop"));
+        double lo = dec[0], hi = dec[0];
+        for (double d : dec) { lo = std::min (lo, d); hi = std::max (hi, d); }
+        gate ("   ... and the LOOP GAIN is untouched — the makeup is inside the loop",
+              hi - lo < 0.35, traj (dec, "s to -40 dB (must not move)"));
     }
     {   auto in = noise ((int) (FS * 3.0f));
         std::vector<double> v;
@@ -1027,7 +1072,7 @@ int main()
             { "Damping",  [] (P& p, float t) { p.b4 = t; } },
             { "Shape",    [] (P& p, float t) { p.b5 = t; } },
             { "Bounce",   [] (P& p, float t) { p.b6 = t; } },
-            { "Tail",     [] (P& p, float t) { p.b7 = t; } },
+            { "Drive",    [] (P& p, float t) { p.b7 = t; } },   // fb419 — was Tail
             { "Low Cut",  [] (P& p, float t) { p.b8 = t; } },
         };
         auto in = tone ((int) (FS * 4.0f), 330.0f);

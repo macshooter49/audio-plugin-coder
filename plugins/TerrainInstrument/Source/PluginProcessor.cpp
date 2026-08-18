@@ -3955,7 +3955,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                     F (p + "MANUAL",   d + "Manual",   0.50f);   F (p + "SPREAD",  d + "Spread",   0.35f);
                     F (p + "WIDTH",    d + "Width",    0.625f);  F (p + "DAMPING", d + "Damping",  0.35f);
                     F (p + "SHAPE",    d + "Shape",    0.50f);   F (p + "BOUNCE",  d + "Bounce",   0.20f);
-                    F (p + "TAIL",     d + "Tail",     0.35f);   F (p + "LOWCUT",  d + "Low Cut",  0.12f);
+                    // fb419 — TAIL BECAME DRIVE. The param ID stays SYN_FLA_TAIL on purpose:
+                    // an ID is a saved patch's only handle, and renaming it would orphan every
+                    // project that already stores one. The display name and the card label are
+                    // what the user reads, and those tell the truth.
+                    F (p + "TAIL",     d + "Drive",    0.20f);   F (p + "LOWCUT",  d + "Low Cut",  0.12f);
                     for (auto& sx : srcSuf) B (p + sx, d + sx, false);
                     B (p + "SYNC",   d + "Sync",   false);
                     B (p + "INVERT", d + "Invert", false);       // mirrors Feedback about its centre
