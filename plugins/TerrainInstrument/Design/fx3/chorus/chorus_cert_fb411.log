@@ -75,6 +75,8 @@
   ok       ... and the split is symmetric (L up, R down)         L +24.65 c, R -24.67 c
   ok    Width 0->100 opens the stereo field, monotonic           side/mid dB: -260.0 -7.9 -1.9 1.6 4.1 
   ok       ... and Width 0 is MONO, never SILENT (the pure-side trap) mid RMS 0.0334 vs dry 0.0499
+  ok    Wide pill reaches PAST the Width knob's ceiling (>= 2 dB) side/mid 4.12 dB -> 8.33 dB
+  ok       ... and the centre survives it (never a pure-side wet) mid RMS 0.0334 vs dry 0.0499
   ok    Flutter 0->100 adds the fast bank, monotonic             d(t) peak-to-peak ms (LFO off): 0.000 0.330 0.660 1.000 
   ok       ... and it is HIGH-rate energy, not more of the same  d(t) energy above 3 Hz 0.019 -> 0.206
   ok    Drift 0->100 wanders further, monotonic                  d(t) peak-to-peak ms (LFO off): 0.00 1.18 2.30 3.02 
@@ -150,15 +152,15 @@
 
 [M. CPU — us per 128-sample block at 48 kHz, per Type]
         Type        Detune 0    Detune 60      % of one core (worst)
-        Vintage      17.86 us     26.73 us      1.00 %
-        June         17.59 us     26.52 us      0.99 %
-        Pedal        21.16 us     30.41 us      1.14 %
-        Trio         19.39 us     34.07 us      1.28 %
-        Ensemble     23.18 us     37.33 us      1.40 %
-        Micro        20.26 us     24.82 us      0.93 %
-        Wow          23.45 us     32.93 us      1.24 %
-        Dark         19.43 us     27.98 us      1.05 %
-  ok    worst Type under 45 us/block (6 instances stay under 10 % of a core) worst 37.33 us (Ensemble), 6 instances = 8.4 % of a core
+        Vintage      18.26 us     27.65 us      1.04 %
+        June         18.20 us     27.58 us      1.03 %
+        Pedal        21.94 us     32.01 us      1.20 %
+        Trio         20.03 us     35.21 us      1.32 %
+        Ensemble     23.83 us     38.96 us      1.46 %
+        Micro        21.19 us     25.58 us      0.96 %
+        Wow          24.22 us     33.78 us      1.27 %
+        Dark         20.04 us     28.91 us      1.08 %
+  ok    worst Type under 45 us/block (6 instances stay under 10 % of a core) worst 38.96 us (Ensemble), 6 instances = 8.8 % of a core
 
 [N. Self-check — can these gates actually fail?]
   ok    (self-check) specDist sees an injected 9 dB              9.0 dB
@@ -168,5 +170,5 @@
   ok    (self-check) a Type is NOT distinguishable from itself   0.0000
   ok    (self-check) the periodicity probe separates a sine from a walk sine 1.000, random walk 0.148
 
-  85 passed, 0 FAILED
+  87 passed, 0 FAILED
 

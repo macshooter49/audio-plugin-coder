@@ -897,6 +897,21 @@ int main()
               rmsOf (mid (o), S) > 0.2 * rmsOf (sh, S),
               fmt2 ("mid RMS %.4f vs dry %.4f", rmsOf (mid (o), S), rmsOf (sh, S)));
     }
+    {   // fb412 — THE WIDE PILL. Two claims, both measured: it goes PAST the Width knob's own
+        //  ceiling (otherwise it is a duplicate control), and it never deletes the centre (a wet
+        //  pair that is pure SIDE is silent at Width 0 and nulls in mono — the pre-audit trap).
+        auto sh = chord ((int) (FS * 6.0f));
+        auto pk = base (1); pk.b3 = 1.0f;                       // knob at its top
+        auto pw = pk;      pw.wide = true;                      // ... and the pill on top of that
+        auto ok = run (pk, sh), ow = run (pw, sh);
+        const double sk = db (rmsOf (sideOf (ok), S) / std::max (1e-12, rmsOf (mid (ok), S)));
+        const double sw = db (rmsOf (sideOf (ow), S) / std::max (1e-12, rmsOf (mid (ow), S)));
+        gate ("Wide pill reaches PAST the Width knob's ceiling (>= 2 dB)", sw - sk > 2.0,
+              fmt2 ("side/mid %.2f dB -> %.2f dB", sk, sw));
+        gate ("   ... and the centre survives it (never a pure-side wet)",
+              rmsOf (mid (ow), S) > 0.2 * rmsOf (sh, S),
+              fmt2 ("mid RMS %.4f vs dry %.4f", rmsOf (mid (ow), S), rmsOf (sh, S)));
+    }
     {   // FLUTTER — the fast bank. Depth 0 so only Flutter moves d(t).
         std::string tr; bool mono = true; double prev = -1;
         for (float f : { 0.0f, 0.33f, 0.66f, 1.0f })

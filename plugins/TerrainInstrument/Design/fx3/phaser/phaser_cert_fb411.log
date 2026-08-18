@@ -51,6 +51,8 @@
   ok    Rate: monotonic and spans decades                      [0.09 0.64 2.66 28.38] Hz
   ok    Depth: monotonic, 0 -> multi-octave excursion          [0.17 2.67 4.73 5.90 7.04] octaves
   ok    Feedback: monotonic resonance lift                     [3.0 4.3 6.5 10.9 43.6] dB inter-notch peak
+  ok    Invert pill moves the resonant peak ONTO the notch (the k<0 geography) peak sits 1.08 oct from a notch -> 0.23 oct after Invert
+  ok       ... and it is a SIGN XOR — the negative Character travels the OTHER way `Negative` peak 0.00 oct from a notch -> 1.06 oct after Invert
   ok    Mix: notch depth is MONOTONIC 0 -> full                [-0.3 -1.8 -4.0 -8.0 -133.9] dB null
   ok    Center: monotonic, spans the audio band                [28 93 324 1133 4099] Hz lowest notch
   ok    Stages: notch count climbs monotonically               [3 4 5 6] notches
@@ -93,23 +95,23 @@
   ok    stable at max feedback at 96.0 kHz                     peak 0.1120
 
 [I. CPU — us per 128-sample block at 48 kHz, per Type]
-        Ninety     6.18 us/block  (0.23 % of one core)
-        Stone      6.44 us/block  (0.24 % of one core)
-        Duo       11.05 us/block  (0.41 % of one core)
-        Twelve     9.84 us/block  (0.37 % of one core)
-        Kraut     12.33 us/block  (0.46 % of one core)
-        Vibe       8.10 us/block  (0.30 % of one core)
-        Barber    10.69 us/block  (0.40 % of one core)
-        Envy       6.58 us/block  (0.25 % of one core)
-        Steps      6.61 us/block  (0.25 % of one core)
-        WORST     77.42 us/block  (2.90 % of one core)  <- 16 stages x 6 INSTANCES
-  ok    worst case (16 stages x 6 instances) under 12 % of a core 2.90 %
-  ok    no single Type exceeds 2 % of a core                   worst 12.33 us on Kraut
+        Ninety     6.69 us/block  (0.25 % of one core)
+        Stone      7.57 us/block  (0.28 % of one core)
+        Duo       12.26 us/block  (0.46 % of one core)
+        Twelve    10.62 us/block  (0.40 % of one core)
+        Kraut     13.47 us/block  (0.51 % of one core)
+        Vibe       9.39 us/block  (0.35 % of one core)
+        Barber    12.24 us/block  (0.46 % of one core)
+        Envy       7.40 us/block  (0.28 % of one core)
+        Steps      7.18 us/block  (0.27 % of one core)
+        WORST     83.98 us/block  (3.15 % of one core)  <- 16 stages x 6 INSTANCES
+  ok    worst case (16 stages x 6 instances) under 12 % of a core 3.15 %
+  ok    no single Type exceeds 2 % of a core                   worst 13.47 us on Kraut
 
 [J. Self-check — can these gates actually fail?]
   ok    (self-check) the notch detector sees an injected notch 2 -> 3
   ok    (self-check) the HF click detector sees an injected click -30.7 dBFS
   ok    (self-check) it does NOT fire on the clean tone        -121.3 dBFS
 
-  65 passed, 0 FAILED
+  67 passed, 0 FAILED
 

@@ -886,6 +886,54 @@ int main()
         gate ("Feedback: monotonic resonance lift", monoUp (pk, 0.4) && pk.back() - pk.front() > 10.0,
               vec (pk, "%.1f") + " dB inter-notch peak");
     }
+    {   // fb412 — THE INVERT PILL. A pill that does nothing is against the house rule, so this
+        //  measures that it does the ONE thing it claims: XOR the loop sign. Ninety/`Script 74`
+        //  is positive geography and Ninety/`Negative` (Character 7) is its negative sibling, so
+        //  Invert on the first must land on the second's geometry, and Invert on the second must
+        //  come back. That is a stronger gate than "something changed".
+        //  The definitive test is WHERE THE RESONANT PEAK SITS, not how tall it is. At k > 0 the
+        //  loop phase reaches 0 midway BETWEEN the k = 0 notches (the block-Phase-90 mid-hump);
+        //  at k < 0 the extra pi puts the peak exactly ON a k = 0 notch (the hollow honk). So:
+        //  freeze the sweep, find the k = 0 notches, then measure how far the resonant peak lands
+        //  from the nearest of them. No dB threshold to tune - it is a geometry question.
+        auto peakHz = [] (P q) {
+            auto t = tfOf (impulse (q, 65536).l);
+            double bv = -1e9, bf = 0;
+            for (size_t i = 0; i < t.f.size(); ++i)
+                if (t.f[i] > 60.0 && t.f[i] < 14000.0 && t.g[i] > bv) { bv = t.g[i]; bf = t.f[i]; }
+            return bf; };
+        auto pos = base(); pos.type = 0; pos.character = 0; pos.feedback = 0.75f; pos.mix = 1.0f;
+        pos.rate = 0.0f; pos.depth = 0.0f;                  // freeze it: a moving comb has no geometry
+        auto neg = pos; neg.character = 7;                  // `Negative` — the sign flipped by hand
+        auto posI = pos; posI.invert = true;                // the pill, on the positive Character
+        auto negI = neg; negI.invert = true;                // and on the negative one
+        auto zero = pos; zero.feedback = 0.0f;              // the k = 0 notch frequencies
+        auto n0 = combOf (tfOf (impulse (zero, 65536).l), 2.0).notchHz;
+        auto distOct = [&] (double hz) {
+            double d = 9.0; for (double n : n0) d = std::min (d, std::fabs (std::log2 (hz / n)));
+            return d; };
+        const double dp = distOct (peakHz (pos)),  dpi = distOct (peakHz (posI));
+        const double dn = distOct (peakHz (neg)),  dni = distOct (peakHz (negI));
+        gate ("Invert pill moves the resonant peak ONTO the notch (the k<0 geography)",
+              n0.size() >= 1 && dpi < dp * 0.5,
+              fmt2 ("peak sits %.2f oct from a notch -> %.2f oct after Invert", dp, dpi));
+        // ⚠️ the first draft of this gate asserted Invert LANDS ON `Negative`'s number, and it
+        //  failed at 6.7 vs 12.7 — correctly. A Character re-wires more than the loop sign
+        //  (stage count, LFO shape, depth), so two Characters never share a number just because
+        //  they share a polarity. What a sign XOR actually predicts is DIRECTION: inverting a
+        //  positive-geography Character must move the inter-notch peak the OPPOSITE way from
+        //  inverting a negative one. That is the falsifiable claim, so that is the gate.
+        // ⚠️ two weaker drafts of this gate were thrown away, and why matters. The first asserted
+        //  Invert LANDS ON `Negative`'s inter-notch peak dB and failed at 6.7 vs 12.7 — correctly:
+        //  a Character re-wires more than the loop sign, so two Characters never share a number
+        //  just because they share a polarity. The second asserted a 3 dB move in opposite
+        //  directions and read 2.5 dB — a gate I would have had to loosen to pass, which is worth
+        //  nothing. Geometry answers it outright: XOR means the ALREADY-negative Character must
+        //  travel the other way, off the notch and back into the gap.
+        gate ("   ... and it is a SIGN XOR — the negative Character travels the OTHER way",
+              dni > dn * 2.0,
+              fmt2 ("`Negative` peak %.2f oct from a notch -> %.2f oct after Invert", dn, dni));
+    }
     {   // MIX — notch depth (this is the reason the internal sum is not the Mix knob)
         std::vector<double> dp, resid;
         for (float m : { 0.05f, 0.25f, 0.5f, 0.75f, 1.0f })

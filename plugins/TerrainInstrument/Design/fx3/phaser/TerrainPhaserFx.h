@@ -131,6 +131,13 @@ public:
         float mix  = 0.5f;
         float b1=0.5f,b2=0.5f,b3=0.5f,b4=0.5f,b5=0.5f,b6=0.5f,b7=0.5f,b8=0.5f;
         bool  tempoSync = false; double bpm = 120.0;
+        // fb412 - the INVERT pill. The Feedback KNOB is a magnitude and the SIGN is a Character
+        // bit (ROSTER 5), which is right for a knob whose 0 default must not mean "full negative"
+        // - but it left the header pill with nothing real to do, and a decorative pill is against
+        // the house rule. This XORs the Character's sign, so Invert on a positive-geography
+        // Character gives you exactly the negative geography of its inverted sibling: the
+        // resonant peaks move from BETWEEN the notches to ON them (mid-hump vowel -> hollow honk).
+        bool  invert = false;
     };
 
     struct Viz
@@ -225,7 +232,7 @@ public:
 
         // ── Feedback: magnitude from the knob, SIGN from the Character.
         const float mag = std::fabs (cs.fbBias);
-        const float sgn = (cs.fbBias < 0.0f ? -1.0f : 1.0f);
+        const float sgn = ((cs.fbBias < 0.0f) != p.invert) ? -1.0f : 1.0f;   // fb412 - the pill XORs it
         fbK_ = clampf (sgn * (mag + clamp01 (p.feedback) * (0.998f - mag)), -0.998f, 0.998f);
         envToFb_ = (p.type == T_ENVY) ? cs.skew : 0.0f;   // Envy reuses `skew` as env→feedback
 

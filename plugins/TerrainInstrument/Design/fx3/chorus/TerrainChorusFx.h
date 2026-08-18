@@ -141,6 +141,11 @@ public:
         float mix  = 0.5f;
         float b1=0.5f,b2=0.0f,b3=0.7f,b4=0.25f,b5=0.0f,b6=0.5f,b7=0.0f,b8=1.0f;
         bool  tempoSync = false; double bpm = 120.0;
+        // fb412 - the WIDE pill. The Width knob spans 0..160 % of the wet M/S side gain; this
+        // takes the SAME side gain to 260 %, which is past what any knob position reaches. It is
+        // a real physics change on the wet only - the dry is never side-boosted (that is the
+        // classic mono-collapse bug) - so Wide can widen without ever deleting the centre.
+        bool  wide = false;
     };
 
     struct Viz
@@ -230,7 +235,7 @@ public:
         if (! seeded_)
         {   // snap the smoothers so the first block is correct, not a ramp from zero
             rateSm_ = rateTg_; rkSm_ = rkTg_; baseSm_ = baseTg_; depthSm_ = depthTg_;
-            widthSm_ = widthTg_; flutSm_ = flutTg_; colorSm_ = colorTg_; phaseSm_ = phaseTg_;
+            widthSm_ = widthTg_; wideK_ = wideTg_; flutSm_ = flutTg_; colorSm_ = colorTg_; phaseSm_ = phaseTg_;
             detSm_ = detTg_; driftSm_ = driftTg_; fbSm_ = fbTg_; lkSm_ = lkTg_; mixSm_ = mixTg_;
             compSm_ = compK_; cohMk_ = 1.0f;
             seeded_ = true;
@@ -264,7 +269,7 @@ public:
                         // on Pedal->Trio. This is DistortionEngine.h:226's "a flush is silent,
                         // not a ramp" applied to a Type swap.
                         rateSm_ = rateTg_; rkSm_ = rkTg_; baseSm_ = baseTg_; depthSm_ = depthTg_;
-                        widthSm_ = widthTg_; flutSm_ = flutTg_; colorSm_ = colorTg_;
+                        widthSm_ = widthTg_; wideK_ = wideTg_; flutSm_ = flutTg_; colorSm_ = colorTg_;
                         phaseSm_ = phaseTg_; detSm_ = detTg_; driftSm_ = driftTg_;
                         fbSm_ = fbTg_; lkSm_ = lkTg_; compSm_ = compK_;
                         break;                               // re-bind T / C, keep going
@@ -279,6 +284,7 @@ public:
                 baseSm_  += smK_ * (baseTg_  - baseSm_);
                 depthSm_ += smK_ * (depthTg_ - depthSm_);
                 widthSm_ += smK_ * (widthTg_ - widthSm_);
+                wideK_   += smK_ * (wideTg_  - wideK_);      // fb412 - a pill must not step the image
                 flutSm_  += smK_ * (flutTg_  - flutSm_);
                 colorSm_ += smK_ * (colorTg_ - colorSm_);
                 phaseSm_ += smK_ * (phaseTg_ - phaseSm_);
@@ -618,7 +624,7 @@ public:
                 if (C.flags & kWetFlipR) wet[1] = -wet[1];      // Pedal / Wet Flip ⚠ mono-hostile
                 {
                     const float M = 0.5f * (wet[0] + wet[1]);
-                    const float S = 0.5f * (wet[0] - wet[1]) * (widthSm_ * 1.6f);
+                    const float S = 0.5f * (wet[0] - wet[1]) * (widthSm_ * wideK_);
                     wet[0] = M + S; wet[1] = M - S;
                 }
 
@@ -871,6 +877,7 @@ private:
         { const float x = clamp01 (p.depth);
           depthTg_ = (x <= 0.60f) ? x : (0.60f + (x - 0.60f) / 0.40f * (5.0f - 0.60f)); }
         widthTg_ = clamp01 (p.b3);
+        wideTg_  = p.wide ? 2.60f : 1.60f;                 // fb412 - the Wide pill's side ceiling
         flutTg_  = clamp01 (p.b4);
         colorTg_ = clamp01 (p.b6);
         phaseTg_ = clamp01 (p.b8);
@@ -1196,6 +1203,7 @@ private:
     float baseTg_ = 8.5f,  baseSm_ = 8.5f;
     float depthTg_= 0.5f,  depthSm_= 0.5f;
     float widthTg_= 0.7f,  widthSm_= 0.7f;
+    float wideTg_ = 1.6f,  wideK_   = 1.6f;      // fb412 - the Wide pill's side ceiling
     float flutTg_ = 0.25f, flutSm_ = 0.25f;
     float colorTg_= 0.5f,  colorSm_= 0.5f;
     float phaseTg_= 1.0f,  phaseSm_= 1.0f;
