@@ -1,0 +1,178 @@
+
+══ TERRAIN CHORUS FX — certification ══   bus program -26 dBFS, fs 48000 Hz
+   8 Types x 8 Characters, 12 params (Rate Depth Feedback Mix + 8 back)
+
+[A. Unity, the Mix law, and zero latency]
+  ok    Mix 0 is bit-transparent                                 worst sample delta 0.000e+00
+  ok    Mix 0 stays transparent with Low Keep engaged            worst sample delta 0.000e+00
+  ok    Mix 100% leaks no dry: Vintage                           -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: June                              -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Pedal                             -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Trio                              -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Ensemble                          -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Micro                             -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Wow                               -142.4 dB in the pre-wet window
+  ok    Mix 100% leaks no dry: Dark                              -142.4 dB in the pre-wet window
+  ok    unity-through at Mix 100% on every Type (+-1.0 dB)       worst -0.80 dB (Ensemble)
+  ok    default Mix 35% sits within +-1.0 dB of bypass           -0.50 dB
+
+[B. R7 — the legacy antiphase claim, verified rather than quoted]
+  ok    legacy pi offset washes out at 0.40 Hz                   in phase after 18.27 s (predicted 17.86 s)
+  ok    legacy pi offset washes out at 1.13 Hz                   in phase after 6.17 s (predicted 6.32 s)
+  ok    legacy pi offset washes out at 1.50 Hz                   in phase after 4.69 s (predicted 4.76 s)
+  ok    Vintage's stereo image ROTATES (the legacy 1.07 skew)    corr mean -0.05, drift sigma 0.198
+  ok    Vintage/Locked holds still (the honest antiphase)        corr mean -0.15, drift sigma 0.006
+
+[C. Every Type's own discriminator (law 2)]
+  ok    Vintage: the stereo image ROTATES (no other Type's does) corr drift sigma 0.221 vs next best 0.128
+  ok    June: antiphase pair (audio L/R correlation collapses)   audio corr -0.136, d(t) topology -1.000
+  ok    Pedal: CO-PHASE — the two reads move TOGETHER          d(t) L/R correlation +1.000 (gate > +0.90)
+  ok       ... where June's move in OPPOSITION                   June d(t) L/R correlation -1.000 (gate < -0.90)
+  ok    Trio: centre-anchored — best mono survival of the LFO Types mono sum -3.03 dB vs June -3.65 dB
+  ok    Ensemble: TWO simultaneous modulation rates in d(t)      lines at 0.54 Hz and 6.30 Hz, 2nd/1st = 0.152
+  ok       ... strongest second rate of every periodic Type      next best periodic Type 0.082
+  ok    Micro: a CONSTANT steady-state pitch offset              L shifted +5.62 cents
+  ok       ... and every other Type stays on pitch (< 3 c)       worst other 1.41 cents — Dark's tracked LP couples brightness to the sweep
+  FAIL  Wow: d(t) is the LEAST periodic of the roster            d(t) periodicity 0.853 vs best LFO Type 1.000
+  FAIL     ... and its glide is ASYMMETRIC (sag fast, recover slow) d(t) skew -0.016 vs worst symmetric Type 0.155
+  ok    Dark: the STEEPEST reconstruction chain in the roster (3-pole BBD) 11.7 dB/oct vs next steepest 9.2 (Micro)
+        note: the bible's Dark discriminator (cutoff tracks d(t) so brightness breathes)
+              measured RED — June 7.48 dB vs Dark 7.33 dB at matched geometry. See FINDINGS.
+
+[D. CROSS-TYPE DISTINCTNESS MATRIX  (1.00 = one JND unit; gate 1.00)]
+         Vintage    June   Pedal    TrioEnsemble   Micro     Wow    Dark
+  Vintag       .    5.13    6.29    6.16    4.92    6.29    4.29    5.98
+  June      5.13       .   10.00   10.00    5.12    6.01    3.11    3.86
+  Pedal     6.29   10.00       .    6.17   10.00    6.15    9.37   10.00
+  Trio      6.16   10.00    6.17       .   10.00    6.30    9.37   10.00
+  Ensemb    4.92    5.12   10.00   10.00       .    5.54    4.27    5.30
+  Micro     6.29    6.01    6.15    6.30    5.54       .    4.42    6.15
+  Wow       4.29    3.11    9.37    9.37    4.27    4.42       .    3.78
+  Dark      5.98    3.86   10.00   10.00    5.30    6.15    3.78       .
+  ok    every Type pair is distinguishable (worst pair >= 1.00)  closest pair 3.11 = June/Wow (separated by mono spec)
+        axes: mono spec /3 dB · side spec /4 dB · L/R corr /0.15 · corr drift /0.07
+              centroid mod /0.10 · spec flux /0.60 dB · d(t) period /0.15 · d(t) 2-rate /0.15
+              pitch offset /2 cents · d(t) L/R topology /0.20
+
+        Type       corr   drift  centMod  flux  dPeriod  d2rate  dSkew  d(t)L/R   cents  mono/L
+        Vintage    -0.04  0.221   x1.53  4.66    1.000   0.039  -0.03   -0.017   +0.09   -3.26 dB
+        June       -0.14  0.042   x1.36  3.68    0.996   0.082  -0.03   -1.000   +1.03   -3.65 dB
+        Pedal      -0.07  0.003   x1.38  3.52    0.994   0.061  +0.07   +1.000   +0.02   -3.31 dB
+        Trio       -0.01  0.028   x1.85  4.63    0.999   0.038  -0.15   +1.000   -1.10   -3.03 dB
+        Ensemble   +0.63  0.009   x1.60  4.88    0.999   0.152  -0.00   -1.000   -1.41   -0.89 dB
+        Micro      -0.12  0.030   x1.41  4.41    0.936   0.983  -0.17   +0.010   +5.62   -3.58 dB
+        Wow        -0.01  0.128   x1.42  3.92    0.853   0.527  -0.02   -0.875   +0.26   -3.10 dB
+        Dark       -0.09  0.007   x1.40  3.36    0.997   0.062  -0.01   -1.000   +1.18   -3.44 dB
+
+[E. Every param evolves 0 -> 100, monotonic and dramatic (law 1)]
+  ok    Rate 0->100 sweeps the modulation rate, monotonic        d(t) line Hz: 0.044 0.195 0.904 4.099 18.578 
+  ok    Depth 0->100 opens the excursion, monotonic              d(t) peak-to-peak ms: 0.00 1.42 2.84 12.79 28.41 
+  ok       ... and the comb MOVES with it (HF-ratio excursion)   HF-ratio excursion 1.71 -> 4.82 dB
+  ok    Feedback 0->100 deepens the comb, monotonic              wet comb peak-to-valley dB: 28.1 29.1 31.8 38.7 41.0 
+  ok    Mix 0->100 brings the wet in, monotonic                  side/L dB: -260.0 -10.6 -5.3 -3.0 -2.5 
+  ok    Time 0->100 lengthens the delay, monotonic (1 -> 12 ms on June) measured delay ms: 1.00 1.85 3.46 6.46 12.00 
+  ok    Detune 0->100 splits the pitch, monotonic to ~50 cents   L offset cents: -0.0 12.3 24.6 38.5 51.0 
+  ok       ... and the split is symmetric (L up, R down)         L +24.65 c, R -24.67 c
+  ok    Width 0->100 opens the stereo field, monotonic           side/mid dB: -260.0 -7.9 -1.9 1.6 4.1 
+  ok       ... and Width 0 is MONO, never SILENT (the pure-side trap) mid RMS 0.0334 vs dry 0.0499
+  ok    Flutter 0->100 adds the fast bank, monotonic             d(t) peak-to-peak ms (LFO off): 0.000 0.330 0.660 1.000 
+  ok       ... and it is HIGH-rate energy, not more of the same  d(t) energy above 3 Hz 0.019 -> 0.206
+  ok    Drift 0->100 wanders further, monotonic                  d(t) peak-to-peak ms (LFO off): 0.00 1.57 2.91 4.53 
+  ok    Colour 0->100 opens the top, monotonic                   HF ratio dB: -32.7 -29.3 -26.8 -25.3 -24.5 
+  ok       ... and it is PHYSICS not EQ (the BBD poly comes off too) THD dB: -29 -31 -34 -39 -46 
+  ok    Low Keep 0->100 pulls the bass out of the WET, monotonic wet side @90 Hz dB: -64.2 -67.3 -76.4 -87.6 
+  ok       ... and at Mix 100% the bass SURVIVES, dry and centred mono @90 Hz: -55.7 dB (Keep off) -> -54.2 dB (Keep max), dry -55.0 dB
+  ok    Phase 0->180 rotates mono-thick to antiphase-wide, monotonic L/R correlation: +0.84 +0.13 -0.11 -0.13 
+
+[F. Per-Type knob liveness — the 8 x 12 cell sweep (law 1, no dead knobs)]
+        cell = max(mono-spec dB, side-spec dB, 40*|dCorr|, 25*|dCentMod|, 6*|dFlux|); gate 1.5
+                     Rate   Depth  Feedbk     Mix    Time  Detune   Width Flutter   Drift  Colour LowKeep   Phase
+        Vintage     10.79   25.68   12.52  207.83    8.10   28.22  210.93    9.97    7.32   16.83   31.74   19.78
+        June        12.71   28.23   19.41  200.43    7.39   24.00  203.53    7.86    8.64   16.10   32.19   22.98
+        Pedal        8.04   14.60   13.16  200.62    6.57   24.78  203.72   10.83   24.22   15.65   29.11   74.26
+        Trio         7.17   16.34   12.49  204.41    9.47   23.85  207.51    8.04    9.27   15.93   33.74   22.41
+        Ensemble     7.81   25.26    9.91  196.56   15.31   23.53  199.66    8.83   18.22   16.54   25.36   66.52
+        Micro       11.71    8.60    9.70  207.05    7.68   23.36  210.15   11.65    8.18   12.00   32.70    9.08
+        Wow         11.79   27.25   19.42  199.72    7.70   25.44  202.81    8.99    9.53   16.84   29.84   16.89
+        Dark        14.50   20.07   18.79  203.13   11.40   24.39  206.23    8.57    8.88   37.54   31.35   20.87
+  ok    no dead (Type x knob) cell in the 96-cell matrix         weakest Pedal/Time = 6.57
+
+[G. Characters change PHYSICS, not EQ (R4 / the fb345 law)]
+  ok    all 8 Characters differ: Vintage                         closest pair 3.40 = Classic/Hiss
+  ok    all 8 Characters differ: June                            closest pair 5.44 = I/Manual
+  ok    all 8 Characters differ: Pedal                           closest pair 3.24 = Chorus/Warm
+  ok    all 8 Characters differ: Trio                            closest pair 5.13 = Sides/Rack 86
+  ok    all 8 Characters differ: Ensemble                        closest pair 5.38 = Solina/Dark Wine
+  ok    all 8 Characters differ: Micro                           closest pair 6.64 = Studio I/Studio II
+  ok    all 8 Characters differ: Wow                             closest pair 7.86 = Cassette/Vinyl 45
+  ok    all 8 Characters differ: Dark                            closest pair 2.10 = Standard/Hissy
+        closest Character pair in the whole 64-row roster: Dark Standard/Hissy (2.10)
+  ok    no Character is a secret volume knob (spread < 1.5 dB)   worst spread 1.28 dB (Dark)
+
+[H. MONO-SUM behaviour — per Type and per Character (law 5)]
+        Type       mono/L dB   ripple vs dry dB   (Mix 50, Depth 60, Width 70)
+        Vintage      -0.73         8.79
+        June         -0.65        10.38
+        Pedal        -0.53         8.64
+        Trio         -0.61        12.74
+        Ensemble     -0.28        12.89
+        Micro        -0.88         4.94
+        Wow          -0.67        14.18
+        Dark         -0.78        12.65
+  ok    no Type cancels on a mono fold-down (> -6 dB)            worst -0.88 dB (Micro)
+  ok    no UNFLAGGED Character cancels in mono (all 64 rows)     worst unflagged Pedal/Vibrato = -2.54 dB
+  ok    Pedal/Wet Flip IS mono-hostile, and the badge says so    mono/L: -4.8 dB at Phase 180, -64.1 dB at Phase 0
+  ok       ... and it is the ONLY badged row                     1 badged row of 64
+
+[I. No clicks — every param swept under a sustained tone (law 4)]
+  ok    no param sweep zippers on any Type (worst step < 6x program RMS) worst 0.25x (Vintage/Feedback)
+  ok    Type swap mid-note never bangs (< +3 dB)                 worst +2.88 dB (Pedal->Trio)
+  ok    Character swap mid-note never bangs (< +3 dB)            worst +2.36 dB (Pedal Grit->Slow Amp)
+
+[J. Nothing free-runs, nothing blows up]
+  ok    60 s at max Feedback stays finite on every Type          worst peak 0.177
+  ok       ... and bounded (peak < 4.0)                          0.177
+  ok    the feedback tail dies within 2 s of silence (< -60 dBFS) worst tail -200.0 dBFS ()
+  ok    the hissiest Characters are SILENT on silence            worst idle -200.0 dBFS ()
+  ok    no DC offset at grit 100% + Feedback 90%                 worst 0.1626% of program (Trio)
+
+[K. Sample rates — 44.1 and 96 kHz]
+  FAIL  44100 Hz: every Type finite and near unity               worst -5.25 dB (Ensemble), 0 unstable
+  ok    44100 Hz: the LFO runs at the right rate                 d(t) line at 1.923 Hz (expect 1.923)
+  ok    44100 Hz: the delay is in ms, not samples                Time knob 0.5 = 3.469 ms (expect 3.464)
+  FAIL  96000 Hz: every Type finite and near unity               worst -5.26 dB (Ensemble), 0 unstable
+  ok    96000 Hz: the LFO runs at the right rate                 d(t) line at 1.923 Hz (expect 1.923)
+  ok    96000 Hz: the delay is in ms, not samples                Time knob 0.5 = 3.469 ms (expect 3.464)
+
+[L. Tempo sync — identical divisions and labels in all three fx3 devices]
+  ok    sync list resolves correctly (Free at index 0, 4 bar -> 1/256) 1/8=4.000 1/256=128.000 4 bar=0.125 Hz at 120 BPM
+  ok       ... and the engine actually runs at the synced rate   1/8 at 120 BPM measured 4.008 Hz
+
+[M. CPU — us per 128-sample block at 48 kHz, per Type]
+        Type        Detune 0    Detune 60      % of one core (worst)
+        Vintage      17.87 us     33.16 us      1.24 %
+        June         17.95 us     26.87 us      1.01 %
+        Pedal        21.51 us     30.71 us      1.15 %
+        Trio         19.65 us     35.20 us      1.32 %
+        Ensemble     23.45 us     38.21 us      1.43 %
+        Micro        20.83 us     25.27 us      0.95 %
+        Wow          22.47 us     31.85 us      1.19 %
+        Dark         19.45 us     28.60 us      1.07 %
+  ok    worst Type under 45 us/block (6 instances stay under 10 % of a core) worst 38.21 us (Ensemble), 6 instances = 8.6 % of a core
+
+[N. Self-check — can these gates actually fail?]
+  ok    (self-check) specDist sees an injected 9 dB              9.0 dB
+  ok    (self-check) the click metric sees an injected click     20.0x program
+  ok    (self-check) the pitch probe reads an injected +9.00 cents +8.98 cents
+  ok    (self-check) the delay-lag probe reads an injected 5.00 ms 5.000 ms
+  ok    (self-check) a Type is NOT distinguishable from itself   0.0000
+  ok    (self-check) the periodicity probe separates a sine from a walk sine 1.000, random walk 0.148
+
+  81 passed, 4 FAILED
+
+  RED:
+    - Wow: d(t) is the LEAST periodic of the roster  [d(t) periodicity 0.853 vs best LFO Type 1.000]
+    -    ... and its glide is ASYMMETRIC (sag fast, recover slow)  [d(t) skew -0.016 vs worst symmetric Type 0.155]
+    - 44100 Hz: every Type finite and near unity  [worst -5.25 dB (Ensemble), 0 unstable]
+    - 96000 Hz: every Type finite and near unity  [worst -5.26 dB (Ensemble), 0 unstable]
+

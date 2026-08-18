@@ -47,14 +47,14 @@ const DIV_BEATS = [0, 16, 8, 4, 2, 3, 1.3333, 1, 1.5, 0.6667, 0.5, 0.75, 0.3333,
 // phaseMode: 0 Vintage · 1 June · 2 Pedal · 3 Trio · 4 Micro · 5 Ensemble · 6 Wow · 7 Dark
 const SPEC = [
   //         taps mono baseLo baseHi wave depthMs stag fastHz fInt fKnob trk pol detC drift fbMax trim pm pre grit comp
-  { taps: 1, mono: 0, lo: 3.0,  hi: 24.0, wave: 1, depth: 5.10, stag: 0.05, fastHz: 5.50, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.97, trim: 0.90, pm: 0, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 1, mono: 0, lo: 1.0,  hi: 12.0, wave: 0, depth: 2.95, stag: 0.06, fastHz: 6.00, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.97, trim: 0.91, pm: 1, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 1, mono: 1, lo: 1.7,  hi: 14.7, wave: 2, depth: 3.50, stag: 0.00, fastHz: 6.50, fInt: 0.00, fKnob: 0.40, trk: 0.15, pol: 1, detC: 0, drift: 0.00, fbMax: 0.97, trim: 0.97, pm: 2, pre: 1, grit: 1.0, comp: 1.0 },
-  { taps: 3, mono: 1, lo: 3.0,  hi: 21.3, wave: 1, depth: 4.00, stag: 0.08, fastHz: 4.50, fInt: 0.10, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.97, trim: 1.45, pm: 3, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 3, mono: 1, lo: 2.5,  hi: 14.4, wave: 0, depth: 1.80, stag: 0.07, fastHz: 6.25, fInt: 0.25, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.97, trim: 1.46, pm: 5, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 1, mono: 0, lo: 4.0,  hi: 20.0, wave: 1, depth: 1.50, stag: 0.00, fastHz: 6.00, fInt: 0.00, fKnob: 0.30, trk: 0.0, pol: 1, detC: 6,  drift: 0.00, fbMax: 0.90, trim: 1.09, pm: 4, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 1, mono: 0, lo: 2.5,  hi: 19.6, wave: 0, depth: 3.20, stag: 0.06, fastHz: 7.00, fInt: 0.00, fKnob: 0.50, trk: 0.2, pol: 1, detC: 0,  drift: 0.35, fbMax: 0.97, trim: 0.91, pm: 6, pre: 0, grit: 1.0, comp: 1.0 },
-  { taps: 1, mono: 0, lo: 6.0,  hi: 40.0, wave: 0, depth: 6.00, stag: 0.31, fastHz: 5.00, fInt: 0.00, fKnob: 0.50, trk: 2.2, pol: 3, detC: 0,  drift: 0.00, fbMax: 0.97, trim: 0.84, pm: 7, pre: 0, grit: 1.0, comp: 1.5 }
+  { taps: 1, mono: 0, lo: 3.0,  hi: 24.0, wave: 1, depth: 5.10, stag: 0.05, fastHz: 5.50, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.992, trim: 0.90, pm: 0, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 1.0,  hi: 12.0, wave: 0, depth: 2.95, stag: 0.06, fastHz: 6.00, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.992, trim: 0.91, pm: 1, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 1, lo: 1.7,  hi: 14.7, wave: 2, depth: 3.50, stag: 0.00, fastHz: 6.50, fInt: 0.00, fKnob: 0.40, trk: 0.15, pol: 1, detC: 0, drift: 0.00, fbMax: 0.992, trim: 0.97, pm: 2, pre: 1, grit: 1.0, comp: 1.0 },
+  { taps: 3, mono: 1, lo: 3.0,  hi: 21.3, wave: 1, depth: 4.00, stag: 0.08, fastHz: 4.50, fInt: 0.10, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.992, trim: 1.45, pm: 3, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 3, mono: 1, lo: 2.5,  hi: 14.4, wave: 0, depth: 1.80, stag: 0.07, fastHz: 6.25, fInt: 0.25, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.992, trim: 1.46, pm: 5, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 4.0,  hi: 20.0, wave: 1, depth: 1.50, stag: 0.00, fastHz: 6.00, fInt: 0.00, fKnob: 0.30, trk: 0.0, pol: 1, detC: 6,  drift: 0.00, fbMax: 0.96, trim: 1.09, pm: 4, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 2.5,  hi: 19.6, wave: 0, depth: 3.20, stag: 0.06, fastHz: 7.00, fInt: 0.00, fKnob: 0.50, trk: 0.2, pol: 1, detC: 0,  drift: 0.35, fbMax: 0.992, trim: 0.91, pm: 6, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 6.0,  hi: 40.0, wave: 0, depth: 6.00, stag: 0.31, fastHz: 5.00, fInt: 0.00, fKnob: 0.50, trk: 2.2, pol: 3, detC: 0,  drift: 0.00, fbMax: 0.992, trim: 0.84, pm: 7, pre: 0, grit: 1.0, comp: 1.5 }
 ];
 
 const WET_ONLY = 1, WET_FLIP_R = 2, EXTRA_TAP = 4, STACK_OFF = 8,

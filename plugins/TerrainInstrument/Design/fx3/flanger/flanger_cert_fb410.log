@@ -1,0 +1,129 @@
+
+══ TERRAIN FLANGER — certification ══  (bus program -26 dBFS, fs 48000, blocks of 128)
+   6 Types x 8 Characters = 48 voicings
+
+[A. Unity, the Mix law, and the zero-dry proof (law 3)]
+  ok    Mix 0 is bit-transparent on all 6 Types                worst sample delta 0.000e+00
+  ok    Mix 1.0 dry residual < -60 dB (impulse y[0..1], exact) worst -142.4 dB (Tape Zero)
+  ok    Tape Zero parked null is analytically silent at Mix 1.0 -142.4 dB residual
+  ok    unity-through at defaults, all Types within +-3.5 dB   worst +3.08 dB (Step) | -0.1 > 2.1 > 1.4 > 2.6 > 0.9 > 3.1 dB
+
+[B. Type discriminators (law 2 — a mechanism, not a flavour)]
+  ok    Tape Zero/Sub: broadband null > 30 dB at the crossing  -61.2 dB below the surrounding program (3 ms window)
+  ok    Tape Zero/Add does NOT null (the polarity is real)     Add -10.5 dB vs Sub -61.2 dB
+  ok    ...and it is >= 20 dB deeper than any single-deck comb through-zero -61.2 dB vs best single deck -21.1 dB
+  ok    the null survives every tone control at its EXTREME (> 25 dB) worst -47.1 dB (everything at max)  |  defaults -61  Damping 100 -63  Low Cut 100 -53  Width 160 -61  Spread 180 -61  Bounce 100 -48  everything at max -47  dB
+  ok    regeneration fills the null gracefully; it never stops being an event Feedback 0 -61 dB | 50 -17 dB | 100 -18 dB  (documented trade, not a defect)
+  ok    Feedback is alive on Tape Zero too (not just on Jet)   peak/median 3.9 -> 27.6 dB
+  ok    Jet: regeneration sings (peak over median >= 20 dB)    fb 0 -> 3.2 dB, fb +100 -> 34.3 dB
+  ok    Feedback polarity INVERTS the comb geography           +100%: k/D series +38.7 dB | -100%: -24.2 dB | swing 62.9 dB
+  ok    at zero feedback the Character polarity owns the geography Silver (add) +32.3 dB | Hollow (sub) -32.1 dB
+  ok    BBD: the band-limit TRACKS the delay (>= 8 dB)         BBD 11.4 dB vs Jet -2.2 dB across the same Manual travel
+  ok    ...and that slope is BBD-specific                      margin 13.6 dB
+  ok    BBD compands (gain falls with level); Jet is linear    BBD -46 -> -14 dBFS: -2.2 dB gain change | Jet -0.0 dB
+  ok    Endless: the comb NEVER reverses (>= 0.80 one-signed)  0.96 | Tape Zero 0.03 Jet 0.03 BBD 0.40 Endless 0.96 Envelope 0.06 Step 0.10 
+  ok    Step: the comb JUMPS, it does not sweep                jump ratio 51.6 vs next 0.0 20.6 | Tape Zero 6.0 Jet 1.5 BBD 0.0 Endless 3.6 Envelope 20.6 Step 51.6 
+  ok    Envelope: the comb position tracks the input envelope (r >= 0.80) r = 0.99 | Tape Zero 0.01 Jet 0.00 BBD 0.10 Endless 0.02 Envelope 0.99 Step 0.01 
+
+[C. CROSS-TYPE DISTINCTNESS MATRIX (every pair, phase-independent)]
+                   Tape Zero  Jet        BBD        Endless    Envelope   Step       
+        Tape Zero     -       7.9        21.3       20.3       28.7       20.3       
+        Jet        7.9           -       22.1       19.6       26.0       19.5       
+        BBD        21.3       22.1          -       33.0       39.0       41.6       
+        Endless    20.3       19.6       33.0          -       18.3       20.4       
+        Envelope   28.7       26.0       39.0       18.3          -       15.2       
+        Step       20.3       19.5       41.6       20.4       15.2          -       
+  ok    every Type pair is distinguishable (gate 4.0 dB)       closest pair 7.9 dB (Tape Zero / Jet)
+
+[D. Every parameter evolves 0 -> 100, monotonic and dramatic (law 1)]
+  ok    Rate 0->100 speeds the sweep, monotonically            0.0 > 0.0 > 14.0 > 42.0 > 51.0 sweep reversals
+  ok    Depth 0->100 widens the sweep, monotonically           1.1 > 1424.6 > 5337.9 > 7629.4 > 8700.2 cents of comb travel
+  ok    Feedback 0->+100 deepens the comb monotonically        3.2 > 4.0 > 6.4 > 11.3 > 34.3 dB peak/median
+  ok    Feedback 0->-100 deepens the comb monotonically        3.2 > 2.5 > 1.7 > 1.4 > 27.7 dB peak/median
+  ok    Mix 0->100 moves the spectrum monotonically            0.0 > 3.6 > 10.3 > 13.2 > 14.4 dB from dry
+  ok    Manual 0->100 walks the comb from 0.1 ms to 20 ms      0.1 > 0.4 > 1.4 > 5.3 > 20.0 ms comb delay
+  ok    Spread 0->180 deg decorrelates L/R monotonically       -280.0 > -2.1 > 0.2 > 0.8 > 0.7 dB L-R
+  ok    Width 0->160 % widens the wet monotonically            -280.0 > -6.9 > -1.4 > 1.2 > 2.8 dB L-R
+  ok    Damping 0->100 kills the comb's HIGH teeth, monotonically 20.8 > 18.8 > 13.6 > 8.3 > 5.6 dB P-V 4-15 kHz
+  ..      ...while the low comb survives (physics, not EQ)     27.9 > 27.5 > 26.6 > 27.3 > 24.4 dB P-V 0.2-0.9 kHz
+  ..      ...and the wet darkens overall                       -6.4 > -7.2 > -8.0 > -8.3 > -8.2 dB HF ratio
+  ok    Shape 0->100 morphs the LFO waveform monotonically     1.9 > 1.8 > 1.7 > 5.4 > 11.0 crest of the sweep speed
+  ok    Bounce 0->100 reshapes the sweep trajectory, monotonically 0.0 > 13.9 > 25.4 > 36.4 > 57.8 % of the sweep's own excursion
+  ..      ...of which the aperiodic (tape drift) share is      0.1 > 0.9 > 3.3 > 7.0 > 8.5 % non-repeating
+  ok    Tail 0->100 lengthens the ring, monotonically          0.2 > 0.5 > 1.2 > 2.9 > 3.1 s to -40 dB
+  ok    Low Cut 0->100 removes the bass, monotonically         -13.6 > -16.4 > -20.7 > -26.2 > -32.1 dB LF ratio
+
+[E. Characters change PHYSICS, not EQ (R4 / law 4)]
+  ok    all 8 Tape Zero Characters differ from each other      closest pair 2.3 dB (Servo / Drifting Zero)
+  ok    all 8 Jet Characters differ from each other            closest pair 1.7 dB (Silver / Screamer)
+  ok    all 8 BBD Characters differ from each other            closest pair 3.1 dB (Mistress / Squash)
+  ok    all 8 Endless Characters differ from each other        closest pair 3.1 dB (Rise Deep / Fall Deep)
+  ok    all 8 Envelope Characters differ from each other       closest pair 3.8 dB (Up / Slow Swell)
+  ok    all 8 Step Characters differ from each other           closest pair 5.4 dB (Stair Up / Pendulum)
+  ..    worst Character pair across all 48 voicings            1.7 dB  Jet: Silver / Screamer
+
+[F. No clicks — every param swept under a sustained tone (law 4)]
+  ok    sweeping Rate 0->100 does not click                    worst step / program RMS = 0.8 (gate 12, Tape Zero)
+  ok    sweeping Depth 0->100 does not click                   worst step / program RMS = 0.4 (gate 12, Tape Zero)
+  ok    sweeping Feedback 0->100 does not click                worst step / program RMS = 0.6 (gate 12, Tape Zero)
+  ok    sweeping Mix 0->100 does not click                     worst step / program RMS = 0.5 (gate 12, Tape Zero)
+  ok    sweeping Manual 0->100 does not click                  worst step / program RMS = 1.0 (gate 12, Tape Zero)
+  ok    sweeping Spread 0->100 does not click                  worst step / program RMS = 0.5 (gate 12, Tape Zero)
+  ok    sweeping Width 0->100 does not click                   worst step / program RMS = 0.6 (gate 12, Tape Zero)
+  ok    sweeping Damping 0->100 does not click                 worst step / program RMS = 0.6 (gate 12, Tape Zero)
+  ok    sweeping Shape 0->100 does not click                   worst step / program RMS = 0.5 (gate 12, Tape Zero)
+  ok    sweeping Bounce 0->100 does not click                  worst step / program RMS = 0.9 (gate 12, Tape Zero)
+  ok    sweeping Tail 0->100 does not click                    worst step / program RMS = 0.5 (gate 12, Tape Zero)
+  ok    sweeping Low Cut 0->100 does not click                 worst step / program RMS = 0.6 (gate 12, Tape Zero)
+  ok    Type swap mid-note never bangs (< +3 dB)               worst +0.67 dB
+  ok    Character swap mid-note never bangs (< +3 dB)          worst -0.94 dB
+
+[G. Mono-safe (law 5) — per Type and per Character]
+  ok    mono sum survives on Tape Zero (default Spread)        worst -3.1 dB vs L (Deep Zero)
+  ok    mono sum survives on Jet (default Spread)              worst -1.1 dB vs L (Hollow)
+  ok    mono sum survives on BBD (default Spread)              worst -0.9 dB vs L (Deluxe)
+  ok    mono sum survives on Endless (default Spread)          worst -0.3 dB vs L (Rise Deep)
+  ok    mono sum survives on Envelope (default Spread)         worst -0.1 dB vs L (Deep Touch)
+  ok    mono sum survives on Step (default Spread)             worst -1.8 dB vs L (Wide Steps)
+  ok    Spread 180 deg + Width 160 thins but never CANCELS (> -12 dB) worst -4.9 dB vs L  Tape Zero/Counter Reel
+  ok    counter-running Characters really do split L/R at Spread 0 3 of 3  [Wide Zero L-R +1(vs -280) mono -1.4  Double Helix L-R -12(vs -280) mono -0.0  Wide Steps L-R -3(vs -280) mono -1.8  dB]
+  ok    ...and every one of them still survives a mono sum     3 of 3 above -6 dB
+  ..    voicings carrying the mono-hostile tag                 0 of 48  (the tag is set from MEASUREMENT; nothing in this device cancels on a mono sum, so nothing carries it)
+
+[H. Stability — 60 s of full-feedback white noise, every Type (law 6)]
+  ok    60 s at max feedback stays bounded: Tape Zero          peak 0.435 = -7.2 dBFS
+  ok    60 s at max feedback stays bounded: Jet                peak 0.140 = -17.1 dBFS
+  ok    60 s at max feedback stays bounded: BBD                peak 0.040 = -28.0 dBFS
+  ok    60 s at max feedback stays bounded: Endless            peak 0.277 = -11.1 dBFS
+  ok    60 s at max feedback stays bounded: Envelope           peak 0.291 = -10.7 dBFS
+  ok    60 s at max feedback stays bounded: Step               peak 0.260 = -11.7 dBFS
+  ok    self-oscillation dies in silence: Tape Zero            -280.0 dBFS 18 s after the input stops
+  ok    self-oscillation dies in silence: Jet                  -280.0 dBFS 18 s after the input stops
+  ok    self-oscillation dies in silence: BBD                  -280.0 dBFS 18 s after the input stops
+  ok    self-oscillation dies in silence: Endless              -280.0 dBFS 18 s after the input stops
+  ok    self-oscillation dies in silence: Envelope             -280.0 dBFS 18 s after the input stops
+  ok    self-oscillation dies in silence: Step                 -280.0 dBFS 18 s after the input stops
+
+[I. Sample rates — the engine is not 48 k-shaped]
+  ok    through-zero null holds at 44100 Hz                    -60.2 dB
+  ok    through-zero null holds at 96000 Hz                    -62.4 dB
+
+[J. CPU — us per 128-sample block at 48 kHz, per Type (law 7)]
+  ..      Tape Zero / Sub                                      14.12 us/block  = 0.529 % of one core
+  ..      Jet / Twin Jet                                       12.36 us/block  = 0.463 % of one core
+  ..      BBD / Mistress                                       23.62 us/block  = 0.886 % of one core
+  ..      Endless / Stacked Rise                               12.33 us/block  = 0.462 % of one core
+  ..      Envelope / Up                                        13.81 us/block  = 0.518 % of one core
+  ..      Step / Random                                        11.63 us/block  = 0.436 % of one core
+  ok    worst Type under 1 % of one core (< 25 us/block)       23.62 us/block = 0.89 % core (BBD)
+
+[K. Self-check — can these gates actually fail?]
+  ok    (self-check) specDist sees an injected 9 dB            9.0 dB
+  ok    (self-check) the click metric sees an injected click   injected step / RMS = 33
+  ok    (self-check) the comb tracker recovers a planted 2.854 ms delay read 2.854 ms
+  ok    (self-check) fingerprint distance to itself is 0       0.00e+00 dB
+  ok    (self-check) the null detector FIRES on a planted 60 dB hole planted reads -64.3 dB
+  ok    (self-check) ...and does NOT fire on clean program     clean reads -7.1 dB
+
+  83 passed, 0 FAILED
+
