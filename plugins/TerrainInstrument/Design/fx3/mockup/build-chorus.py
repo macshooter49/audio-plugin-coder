@@ -183,8 +183,8 @@ function devHTML(d){
     +'</div>'
     +'<div class="fxr-core" data-core="chorus">'
       +'<svg id="cs" preserveAspectRatio="none"><path class="dst-curve" id="cline"/>'
-      +'<path id="cv0" fill="none" stroke="var(--purple-400)" stroke-width="1" opacity=".5"/>'
-      +'<path id="cv1" fill="none" stroke="var(--purple-400)" stroke-width="1" opacity=".35"/></svg>'
+      +'<path class="dst-curve" id="cv0"/>'
+      +'<path class="dst-curve" id="cv1"/></svg>'
     +'</div>'
     +'<div class="fxr-ctrls">'
       +'<div class="fxr-knobs">'+knobs+'</div>'
@@ -314,7 +314,7 @@ function frame(){
       hist.forEach(function(row,i){ var f=row[v]; if(!f)return;
         var x=(i/(hist.length-1||1))*W, y=H*0.60+H*0.34*(1-Math.log(f/lo)/Math.log(hi/lo));
         p+=(p?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); });
-      var el=document.getElementById('cv'+v); if(el){ el.setAttribute('d',p); el.setAttribute('opacity',(0.34+0.60*wake)*(v?0.78:1)); el.setAttribute('stroke-width',(v?1.1:1.35)); }
+      var el=document.getElementById('cv'+v); if(el){ el.setAttribute('d',p); el.setAttribute('opacity',(0.55+0.45*wake)*(v?0.82:1)); }
     });
   }
   requestAnimationFrame(frame);

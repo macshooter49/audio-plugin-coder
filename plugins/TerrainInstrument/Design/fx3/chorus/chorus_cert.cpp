@@ -1323,11 +1323,12 @@ int main()
             gate ((fmt ("%.0f Hz: every Type finite and near unity", sr)).c_str(),
                   bad == 0 && std::fabs (worstUnity) < 2.5,
                   fmt ("worst %+.2f dB", worstUnity) + " (" + wn + "), " + std::to_string (bad) + " unstable");
-            // Rate knob 0.60 on the free taper = 0.02 * 1000^0.6 = 1.262 Hz, at EVERY fs
+            // fb397 — the free taper opened to 0.02 * 2000^r01 (top 20 -> 40 Hz), so knob 0.60
+            // is now 0.02 * 2000^0.6 = 1.923 Hz. Expectation tracks the ENGINE, at EVERY fs.
             auto p = base (1, 3); p.rate = 0.6f;
             double f1 = 0, f2 = 0; auto tr = dTrace (p, 20.0); dLines (tr, f1, f2, 0.1, 20.0);
             gate ((fmt ("%.0f Hz: the LFO runs at the right rate", sr)).c_str(),
-                  std::fabs (f1 - 1.262) < 0.10, fmt ("d(t) line at %.3f Hz (expect 1.262)", f1));
+                  std::fabs (f1 - 1.923) < 0.12, fmt ("d(t) line at %.3f Hz (expect 1.923)", f1));
             // and the base delay must be in MILLISECONDS, not samples
             auto pd = base (1); pd.b1 = 0.5f; pd.depth = 0.0f; pd.b4 = 0.0f; pd.mix = 0.5f;
             const double ms = delayLagMs (pd);

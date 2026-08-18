@@ -332,7 +332,10 @@ public:
                 const float excSamp   = depthSm_ * excMs_   * 0.001f * fs_;
                 const float fastSamp  = (T.fastIntrinsicMs + flutSm_ * T.fastKnobMs) * C.fastMul * 0.001f * fs_;
                 const float driftSamp = driftSm_ * 2.5f * 0.001f * fs_;
-                const float baseSamp  = baseSm_ * 0.001f * fs_;
+                // fb397 — recentre rather than cross: with the opened-out excursion the window
+                // can exceed the base, and a read at ~0 ms is indistinguishable from dry.
+                const float baseSamp  = std::max (baseSm_ * 0.001f * fs_,
+                                                  excSamp + 0.30f * 0.001f * fs_);
 
                 float wet[2] = { 0.0f, 0.0f };
 
@@ -602,7 +605,9 @@ public:
                     wet[0] = M + S; wet[1] = M - S;
                 }
 
-                const float trim = T.wetTrim * C.lvl * dip_;
+                // fb397 — feedback near 1.0 adds up to +30 dB of comb resonance; without this
+                // "wild" would just read as "louder", which is the loudness trap, not drama.
+                const float trim = T.wetTrim * C.lvl * dip_ * (1.0f - 0.35f * fbSm_);
                 const float wL = wet[0] * trim, wR = wet[1] * trim;
 
                 // ── 10. Mix — equal power. At mix 1.0 the dry gain is cos(pi/2) = 0 EXACTLY.
@@ -685,14 +690,14 @@ private:
     static constexpr TypeSpec SPEC[kNumTypes] =
     {
         // taps mono  baseLo baseHi  wave depth  stag   fastHz fInt   fKnob  trk   pol detC  drift  fbMax  trim  pm pe grit comp
-        {  1,   0,     3.0f,  24.0f,  1,  5.10f, 0.05f,  5.5f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.82f, 0.90f, 0, 0, 1.0f, 1.0f },  // Vintage
-        {  1,   0,     1.0f,  12.0f,  0,  2.95f, 0.06f,  6.0f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.82f, 0.91f, 1, 0, 1.0f, 1.0f },  // June
-        {  1,   1,     1.7f,  14.7f,  2,  3.50f, 0.00f,  6.5f, 0.00f, 0.40f, 0.15f, 1, 0.0f, 0.00f, 0.82f, 0.97f, 2, 1, 1.0f, 1.0f },  // Pedal
-        {  3,   1,     3.0f,  21.3f,  1,  4.00f, 0.08f,  4.5f, 0.10f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.82f, 1.45f, 3, 0, 1.0f, 1.0f },  // Trio
-        {  3,   1,     2.5f,  14.4f,  0,  1.80f, 0.07f,  6.25f,0.25f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.82f, 1.46f, 5, 0, 1.0f, 1.0f },  // Ensemble
-        {  1,   0,     4.0f,  20.0f,  1,  1.50f, 0.00f,  6.0f, 0.00f, 0.30f, 0.00f, 1, 6.0f, 0.00f, 0.65f, 1.09f, 4, 0, 1.0f, 1.0f },  // Micro
-        {  1,   0,     2.5f,  19.6f,  0,  3.20f, 0.06f,  7.0f, 0.00f, 0.50f, 0.20f, 1, 0.0f, 0.35f, 0.82f, 0.91f, 6, 0, 1.0f, 1.0f },  // Wow
-        {  1,   0,     6.0f,  40.0f,  0,  6.00f, 0.31f,  5.0f, 0.00f, 0.50f, 2.20f, 3, 0.0f, 0.00f, 0.82f, 0.84f, 7, 0, 1.0f, 1.5f }   // Dark
+        {  1,   0,     3.0f,  24.0f,  1,  5.10f, 0.05f,  5.5f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.97f, 0.90f, 0, 0, 1.0f, 1.0f },  // Vintage
+        {  1,   0,     1.0f,  12.0f,  0,  2.95f, 0.06f,  6.0f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.97f, 0.91f, 1, 0, 1.0f, 1.0f },  // June
+        {  1,   1,     1.7f,  14.7f,  2,  3.50f, 0.00f,  6.5f, 0.00f, 0.40f, 0.15f, 1, 0.0f, 0.00f, 0.97f, 0.97f, 2, 1, 1.0f, 1.0f },  // Pedal
+        {  3,   1,     3.0f,  21.3f,  1,  4.00f, 0.08f,  4.5f, 0.10f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.97f, 1.45f, 3, 0, 1.0f, 1.0f },  // Trio
+        {  3,   1,     2.5f,  14.4f,  0,  1.80f, 0.07f,  6.25f,0.25f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.97f, 1.46f, 5, 0, 1.0f, 1.0f },  // Ensemble
+        {  1,   0,     4.0f,  20.0f,  1,  1.50f, 0.00f,  6.0f, 0.00f, 0.30f, 0.00f, 1, 6.0f, 0.00f, 0.90f, 1.09f, 4, 0, 1.0f, 1.0f },  // Micro
+        {  1,   0,     2.5f,  19.6f,  0,  3.20f, 0.06f,  7.0f, 0.00f, 0.50f, 0.20f, 1, 0.0f, 0.35f, 0.97f, 0.91f, 6, 0, 1.0f, 1.0f },  // Wow
+        {  1,   0,     6.0f,  40.0f,  0,  6.00f, 0.31f,  5.0f, 0.00f, 0.50f, 2.20f, 3, 0.0f, 0.00f, 0.97f, 0.84f, 7, 0, 1.0f, 1.5f }   // Dark
     };
 
     // Coefficients only — no code branches, no parameter writes (the VintageReverb.h
@@ -813,9 +818,9 @@ private:
             const int   idx   = clampi ((int) std::lround (r01 * (kNumDivs - 1)), 0, kNumDivs - 1);
             const float beats = divBeats (idx);
             const float bpm   = (float) (p.bpm > 1.0 ? p.bpm : 120.0);
-            hz = (beats > 0.0f) ? (bpm / (60.0f * beats)) : (0.02f * std::pow (1000.0f, r01));
+            hz = (beats > 0.0f) ? (bpm / (60.0f * beats)) : (0.02f * std::pow (2000.0f, r01));
         }
-        else hz = 0.02f * std::pow (1000.0f, r01);
+        else hz = 0.02f * std::pow (2000.0f, r01);
         rateTg_ = clampf ((C.rateHz > 0.0f) ? (C.rateHz * std::exp2 ((r01 - 0.5f) * 2.0f)) : hz,
                           0.01f, 140.0f);
 
@@ -824,7 +829,13 @@ private:
         //    the user's edits, break undo and fight automation).
         baseTg_ = T.baseLoMs * std::pow (T.baseHiMs / T.baseLoMs, clamp01 (p.b1)) * C.baseMul;
 
-        depthTg_ = clamp01 (p.depth);
+        // fb397 — NO PLAYING SAFE, but shaped. A flat 5x ceiling made the DEFAULT sound 5x deeper
+        //   too, which swamped exactly the geometry that tells the Types apart (Vintage's stereo
+        //   rotation 0.221 -> 0.107, Ensemble's second rate 0.152 -> 0.046). So the classic range
+        //   is preserved to 60%% of the travel and the monstrous part lives above it: 0..0.6 is
+        //   exactly what it always was, 0.6..1.0 opens out to 5x = ~30 ms of excursion.
+        { const float x = clamp01 (p.depth);
+          depthTg_ = (x <= 0.60f) ? x : (0.60f + (x - 0.60f) / 0.40f * (5.0f - 0.60f)); }
         widthTg_ = clamp01 (p.b3);
         flutTg_  = clamp01 (p.b4);
         colorTg_ = clamp01 (p.b6);
@@ -1129,6 +1140,10 @@ private:
     float mixTg_  = 0.5f,  mixSm_  = 0.5f;
 
     // per-block resolved
+    // fb397 — Max: "we should be able to MAX OUT our amplifications... feedback at 100%% sounds
+    //   crazy, like detuned... a tornado siren." The hard rule sets a knob's top at where the
+    //   sound stops being USEFUL to somebody, not where the DSP stops being clean. 6 ms of
+    //   excursion was clean and safe; Serum's chorus reaches ~30 ms and Max wants that travel.
     float excMs_ = 2.95f, gritSpan_ = 7.0f, colBase_ = 1800.0f;
     float compK_ = 1.0f, compSm_ = 1.0f, noiseAmp_ = 0.0f, fastHz_ = 6.0f, skew_ = 1.0f;
     float cmpGlide_ = 0.0006f;
