@@ -513,10 +513,17 @@ private:
     // Reflect in AGE space at the grain's own latched bounds — GranularEngine::reflectAtBounds
     // with `age` substituted for `readPos`. Value-continuous: the slope flips (a corner, inaudible
     // at a random phase inside a window) where a position JUMP would be a click.
-    static inline void reflectPos (Grain& g) noexcept
+    // fb416 — a test-only census. The click audit needs to ATTRIBUTE ticks to bounces rather
+    // than infer the link from a correlation, so the engine counts its own reflections.
+    mutable long bounces_ = 0;
+public:
+    long bouncesForTesting() const noexcept { return bounces_; }
+private:
+    inline void reflectPos (Grain& g) noexcept
     {
         if (g.readPos > g.hi)
         {
+            ++bounces_;
             g.readPos = g.hi - (g.readPos - g.hi);
             g.posInc  = -g.posInc;
             g.drift   = -g.drift;
@@ -524,6 +531,7 @@ private:
         }
         else if (g.readPos < g.lo)
         {
+            ++bounces_;
             g.readPos = g.lo + (g.lo - g.readPos);
             g.posInc  = -g.posInc;
             g.drift   = -g.drift;
@@ -740,16 +748,67 @@ private:
 
     void recomputeDerived() noexcept
     {
+        // ═══ fb416 — 🔑 DENSITY IS AN OVERLAP, NOT A RATE. ══════════════════════════════════
+        // THE BUG MAX HEARD, and it was sitting in the two lines below this comment's old self:
+        // the engine computed `ov = rate x length`, saw it could be less than 1, and then only
+        // used it to CLAMP A NORMALISER. It never closed the gap it had just measured.
+        //
+        // Measured at the card's own shipped defaults (Grains 42, Size 42): 9.4 grains/s of
+        // 26 ms each = overlap 0.25, **DUTY 25 %**. At Mix 100 — no dry to hide behind — the
+        // output was SILENT three-quarters of the time, punctuated by a 26 ms burst nine times
+        // a second. That is not a cloud, it is a stutter, and a stutter is what a micro-click
+        // train IS. Max: "I want a clean granular... I don't want those high end harsh weird
+        // static clicks."
+        //
+        // It also explains the complaint I could not otherwise account for — "it should actually
+        // pay attention to the shape or else what's the point of the shape". At 25 % duty the
+        // window shape is inaudible BY CONSTRUCTION: what you hear is the GAP between grains,
+        // and no envelope can smooth a gap. Shape only becomes a timbre control once the grains
+        // actually touch each other. Measured: Shape moved HF by 4 dB before, and it could not
+        // have done more.
+        //
+        // So Density now sets the OVERLAP — how many grains sound AT ONCE — and the spawn rate
+        // is derived from it and the grain length. Consequences, all of them wanted:
+        //   · Size becomes a TIMBRE control instead of a gap control. Shorten a grain and the
+        //     rate rises to keep the texture continuous, which is how every granular that
+        //     sounds good behaves.
+        //   · The sparse stutter is still reachable, deliberately, at the BOTTOM of Density
+        //     (overlap 0.5) — it is a real effect and law 1 wants the knob to travel.
+        //   · CPU tracks the overlap, not the rate: cost is the number of ACTIVE grains, and
+        //     that IS the overlap. 12 at Density 100 against a 64-grain pool.
         const float d = clamp01 (p_.density);
-        densHz_ = std::pow (220.f, d);
-        if (p_.type == GrnSwarm) densHz_ *= 2.f;                   // up to 440 g/s
-        headDiv_ = 1.f + clamp01 (p_.size) * 7.f;                  // Stretch head divisor
-
         const float s = clamp01 (p_.size);
         float glenSec = 0.002f * std::pow (450.f, s);              // 2..900 ms (engine truth)
         grainLenSamp_ = glenSec * (float) outRate_;
+        headDiv_ = 1.f + s * 7.f;                                  // Stretch head divisor
 
-        const float ov = densHz_ * glenSec;
+        float ovTgt = 0.5f + 11.5f * std::pow (d, 1.7f);           // 0.5 (stutter) → 12 (wall)
+        // ⚠️ PER-TYPE OVERLAP, and it is a FIX not a flourish. Under the old rate-based density a
+        // Type that forced longer grains (Rewind's 100 ms floor, Stretch's ×3.5) got a higher
+        // overlap for free, and that denser texture was part of how it read as different. Making
+        // the overlap uniform took that away and the harness caught it immediately: Rise/Rewind
+        // fell to 0.045 against a 0.06 distinctness gate. So the difference is DECLARED here
+        // instead of arriving as a side effect of the rate map — which is what the fb345 law
+        // asks for anyway: a Type is a mechanism you chose, not an accident you inherited.
+        {
+            static const float ovMul[8] = { 1.00f,  // Cloud
+                                            1.00f,  // Rise
+                                            2.00f,  // Swarm     — a swarm is dense by nature
+                                            1.00f,  // Suspend
+                                            0.60f,  // Scatter   — the grid breathes; gaps are its identity
+                                            2.20f,  // Rewind    — long reversed grains that pile up
+                                            1.60f,  // Stretch   — long Bell grains, high overlap
+                                            1.00f };// Pulverize
+            ovTgt *= ovMul[(p_.type >= 0 && p_.type < 8) ? p_.type : 0];
+        }
+        densHz_ = ovTgt / (glenSec > 1.0e-6f ? glenSec : 1.0e-6f);
+        // The rate ceiling is a POOL bound, not a taste one: past it the overlap simply stops
+        // rising, which is honest — 2 ms grains cannot be made continuous without thousands a
+        // second. The floor keeps the sparsest setting from stalling entirely.
+        if (densHz_ > 400.f) densHz_ = 400.f;
+        if (densHz_ < 0.5f)  densHz_ = 0.5f;
+
+        const float ov = densHz_ * glenSec;                        // what was actually achieved
         norm_ = 1.f / std::sqrt (ov < 1.f ? 1.f : ov);
 
         // Window → a SAFE age band. Clamped so no grain can ever read across the write head:
