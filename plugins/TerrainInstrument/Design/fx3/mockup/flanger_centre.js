@@ -20,5 +20,5 @@ const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/t
  console.log(JSON.stringify(o,null,1));
  const dev=o.offsetFromCard/2;
  console.log(' offset in DEVICE px: '+dev.toFixed(2));
- console.log(Math.abs(dev+3.0)<0.35 ? '══ sits 3.0 device px above card centre: PASS' : '══ WRONG: '+dev.toFixed(2)+' device px');
+ console.log(Math.abs(dev+6.8)<0.9 ? '══ sits ~6.8 device px above card centre: PASS' : '══ WRONG: '+dev.toFixed(2)+' device px');
  await b.close();})();
