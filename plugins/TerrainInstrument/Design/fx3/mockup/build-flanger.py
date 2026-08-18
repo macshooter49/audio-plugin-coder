@@ -229,7 +229,7 @@ function frame(){
       // optically, because the footer's mass (knob arcs + two label rows) pulls the eye down.
       // NUDGE is in DEVICE pixels, converted through the live zoom, so it reads the same 1.5px
       // whatever the card is scaled to — a raw SVG-unit offset would double at 2x.
-      var NUDGE=1.5, zoom=cr.width/272;
+      var NUDGE=3.0, zoom=cr.width/272;   // fb406 — +1.5 again, by eye
       mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top - NUDGE*zoom)); }
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
     var N=Math.max(2,Math.round(W/2)), up='', dn='';
