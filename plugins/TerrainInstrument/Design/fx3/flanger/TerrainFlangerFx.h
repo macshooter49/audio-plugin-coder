@@ -699,7 +699,24 @@ private:
             const double bpm = (p_.bpm > 1.0) ? p_.bpm : 120.0;
             hz = (float) (bpm / 60.0) / std::max (1.0e-4f, beats);
         }
-        else hz = 0.02f * std::pow (1000.0f, clampf (p_.rate, 0.0f, 1.0f));   // 0.02 → 20 Hz
+        else
+        {
+            // fb411 - NO PLAYING SAFE, SHAPED (the fb397 law). 20 Hz was a clean, safe ceiling
+            // and the hard rule puts a knob's top where the sound stops being USEFUL, not where
+            // the DSP stops being clean. Above 60 % of the travel the sweep enters audio rate:
+            // modulating a 1-5 ms delay at 90 Hz is no longer a sweep, it is FM, and the comb
+            // grows sidebands. That is what "crazy at 100" means on a flanger.
+            // The shape, not a flat multiplier: a flat one moves the DEFAULT too and swamps the
+            // geometry that tells the Types apart (fb397 measured 12 gates red doing exactly
+            // that). 0..0.6 is EXACTLY the shipped taper, sample for sample.
+            const float t = clampf (p_.rate, 0.0f, 1.0f);
+            if (t <= 0.60f) hz = 0.02f * std::pow (1000.0f, t);              // 0.02 → 1.262 Hz
+            else
+            {
+                const float h60 = 0.02f * std::pow (1000.0f, 0.60f);         // 1.2619 Hz
+                hz = h60 * std::pow (90.0f / h60, (t - 0.60f) * 2.5f);       // → 90 Hz
+            }
+        }
 
         if (c.flags & F_MATRIX) hz *= 0.10f;                 // the Filter Matrix freeze
         rateHz_ = hz;

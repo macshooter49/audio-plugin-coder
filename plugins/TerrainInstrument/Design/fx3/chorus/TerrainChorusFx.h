@@ -176,6 +176,7 @@ public:
         dipUp_ = 1.0f - std::exp (-1.0f / (0.045f * fs_));    // 45 ms recover
         srUpK_ = 1.0f - std::exp (-1.0f / (0.040f * fs_));    // Wow glide: rise 40 ms ...
         srDnK_ = 1.0f - std::exp (-1.0f / (0.400f * fs_));    // ... fall 400 ms (a warped record)
+        srFK_  = 1.0f - std::exp (-1.0f / (0.006f * fs_));    // scrape: 6 ms, symmetric
         dcR_   = 1.0f - (6.2831853f * 12.0f / fs_);           // fs-aware 12 Hz DC blocker
         peA_   = onePole (3000.0f);
         cmpGlide_ = 1.0f - std::exp (-1.0f / (0.040f * fs_));   // 40 ms — Character comp glide                           // CE-2 pre/de-emphasis corner
@@ -192,7 +193,8 @@ public:
         mph_ = 0.0f; sph_ = 0.0f; fph_ = 0.0f; vph_ = 0.0f;
         wph_[0] = 0.0f; wph_[1] = 0.25f; wph_[2] = 0.5f;
         for (int i = 0; i < 8; ++i) triZ_[i] = 0.0f;
-        for (int i = 0; i < kNumSR; ++i) { sr_[i].st = 0.0f; sr_[i].tg = 0.0f; sr_[i].ph = (float) i * 0.137f; }
+        for (int i = 0; i < kNumSR; ++i) { sr_[i].st = 0.0f; sr_[i].tg = 0.0f; sr_[i].ph = (float) i * 0.137f;
+                                          srF_[i].st = 0.0f; srF_[i].tg = 0.0f; srF_[i].ph = (float) i * 0.311f; }
         rng_ = 0x2545F491u;
         for (int c = 0; c < 2; ++c)
         {
@@ -230,7 +232,7 @@ public:
             rateSm_ = rateTg_; rkSm_ = rkTg_; baseSm_ = baseTg_; depthSm_ = depthTg_;
             widthSm_ = widthTg_; flutSm_ = flutTg_; colorSm_ = colorTg_; phaseSm_ = phaseTg_;
             detSm_ = detTg_; driftSm_ = driftTg_; fbSm_ = fbTg_; lkSm_ = lkTg_; mixSm_ = mixTg_;
-            compSm_ = compK_;
+            compSm_ = compK_; cohMk_ = 1.0f;
             seeded_ = true;
         }
 
@@ -310,7 +312,22 @@ public:
                 // band-limited random WALKS (hold + slew). A per-sample noise smoother is
                 // not a walk (the Worn-walk law) and measures near-zero drama.
                 {
+                    // fb411 - SCRAPE. The slow sag alone could not clear the periodicity gate:
+                    // its own 400 ms recovery makes d(t) smooth, and a smooth signal correlates
+                    // strongly with itself at the 100 ms lag where this probe starts looking, so
+                    // it read 0.85 "periodic" while being a genuine random walk. Real transports
+                    // carry a FAST aperiodic component as well - scrape flutter, the guide-post
+                    // stick-slip - which decorrelates in tens of ms. It is Wow-only and rides at
+                    // a quarter weight, so the sag it sits on is untouched.
+                    if (T.phaseMode == 6)
+                        for (int s2 = 0; s2 < kNumSR; ++s2) tickScrape (srF_[s2], srRateSlow_ * 9.0f);
+                    // the walk rate stays FIXED and deliberately so. Tying it to the Rate
+                    // knob was tried first and measured WORSE (Wow's periodicity 0.853 -> 0.943):
+                    // a slower walk holds fewer times inside the probe, so it reads as a slow
+                    // periodic wander rather than as noise. What Wow needed was not a different
+                    // walk RATE but a bigger share of the excursion - see its TypeSpec row.
                     const float srRate = 1.6f + 3.0f * driftSm_;
+                    srRateSlow_ = srRate;
                     for (int s = 0; s < kNumSR; ++s) tickSR (sr_[s], srRate, T.phaseMode == 6);
                 }
 
@@ -607,7 +624,24 @@ public:
 
                 // fb397 — feedback near 1.0 adds up to +30 dB of comb resonance; without this
                 // "wild" would just read as "louder", which is the loudness trap, not drama.
-                const float trim = T.wetTrim * C.lvl * dip_ * (1.0f - 0.35f * fbSm_);
+                // fb411 - THE MULTI-TAP COHERENCE LAW. The tap gains are normalised to SUM 1
+                // (see recalc), which is exactly right while the taps sit close together and add
+                // COHERENTLY. Once fb397 opened Depth to 5x they no longer do: N decorrelated
+                // reads sum as sqrt(N), not N, so a 3-tap Type loses 10*log10(3) = 4.77 dB at
+                // precisely the settings that are most exciting. Ensemble measured -5.25 dB at
+                // Depth 0.8 / Feedback 0.6 and failed the unity gate at BOTH sample rates. The
+                // makeup is a function of the SPREAD, not a constant, so the calibrated wetTrim
+                // is untouched everywhere the taps are still coherent.
+                {
+                    const float sprd = depthSm_ * excMs_;                       // ms of excursion
+                    // the knee sits ABOVE the default excursion on purpose: wetTrim is a MEASURED
+                    // calibration at the default, so a makeup that is already 1.19 there would
+                    // move the level Max signed off on (and it did - Trio->Ensemble read +3.94 dB
+                    // as a Type-swap bang that was really a 1.5 dB Type-to-Type level step).
+                    const float coh  = clamp01 ((sprd - 1.10f) * (1.0f / 3.90f));
+                    cohMk_ += smK_ * ((1.0f + (sqrtTaps_ - 1.0f) * coh) - cohMk_);
+                }
+                const float trim = T.wetTrim * C.lvl * dip_ * (1.0f - 0.35f * fbSm_) * cohMk_;
                 const float wL = wet[0] * trim, wR = wet[1] * trim;
 
                 // ── 10. Mix — equal power. At mix 1.0 the dry gain is cos(pi/2) = 0 EXACTLY.
@@ -696,7 +730,7 @@ private:
         {  3,   1,     3.0f,  21.3f,  1,  4.00f, 0.08f,  4.5f, 0.10f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 1.45f, 3, 0, 1.0f, 1.0f },  // Trio
         {  3,   1,     2.5f,  14.4f,  0,  1.80f, 0.07f,  6.25f,0.25f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 1.46f, 5, 0, 1.0f, 1.0f },  // Ensemble
         {  1,   0,     4.0f,  20.0f,  1,  1.50f, 0.00f,  6.0f, 0.00f, 0.30f, 0.00f, 1, 6.0f, 0.00f, 0.96f, 1.09f, 4, 0, 1.0f, 1.0f },  // Micro
-        {  1,   0,     2.5f,  19.6f,  0,  3.20f, 0.06f,  7.0f, 0.00f, 0.50f, 0.20f, 1, 0.0f, 0.35f, 0.992f, 0.91f, 6, 0, 1.0f, 1.0f },  // Wow
+        {  1,   0,     2.5f,  19.6f,  0,  1.20f, 0.06f,  7.0f, 0.00f, 0.50f, 0.20f, 1, 0.0f, 0.82f, 0.992f, 0.91f, 6, 0, 1.0f, 1.0f },  // Wow  fb411: depth 3.20->1.20, driftFloor 0.35->0.82 - the WALK is the Type, not the LFO
         {  1,   0,     6.0f,  40.0f,  0,  6.00f, 0.31f,  5.0f, 0.00f, 0.50f, 2.20f, 3, 0.0f, 0.00f, 0.992f, 0.84f, 7, 0, 1.0f, 1.5f }   // Dark
     };
 
@@ -926,6 +960,14 @@ private:
             default: break;
         }
         nTap_ = nT;
+        // fb411 - WHICH Types actually decorrelate as the excursion opens? Only one that sums
+        // several EQUAL, phase-rotated reads into the SAME output. Ensemble (phaseMode 5) is it:
+        // its N reads all land in both channels at N different LFO phases, so at Depth 100 they
+        // sum as sqrt(N) instead of N. Trio pans its three reads L / C / R, so each ear hears
+        // mostly ONE of them and the sum stays coherent - which is exactly why Trio passed the
+        // unity gate at Depth 100 and Ensemble read -5.25 dB. A blanket sqrt(N) makeup pushed
+        // Trio to +4.25 dB and turned its Characters into a 2.46 dB volume knob (the fb343 trap).
+        sqrtTaps_ = (T.phaseMode == 5) ? std::sqrt ((float) nT) : 1.0f;
 
         // ⚠️ NORMALISE each channel's tap gains to sum 1. A Character that re-balances the
         // taps (Trio `Sides` drops the centre 12 dB, `Centre` drops the sides 6 dB) must
@@ -980,7 +1022,7 @@ private:
             // but a knob that does nothing on one Type is a dead knob on that Type — the
             // 96-cell sweep measured Wow/Flutter at exactly 0.00 before this line existed.
             if (fastSamp > 1.0e-4f) d += fastSamp * sinW (fph_ + o);
-            d += driftSamp * sr_[idx].st;
+            d += driftSamp * (0.78f * sr_[idx].st + 0.22f * srF_[idx].st);   // fb411 sag + scrape
         }
         else
         {
@@ -990,7 +1032,7 @@ private:
                                                    idx, (C.flags & kForceLpTri) != 0);
             d += excSamp * w;
             if (fastSamp > 1.0e-4f) d += fastSamp * sinW (fph_ + o);
-            d += driftSamp * sr_[idx].st;
+            d += driftSamp * (0.78f * sr_[idx].st + 0.22f * srF_[idx].st);   // fb411 sag + scrape
             if (T.phaseMode == 7 && C.x2 > 0.01f)                            // Dark / Cheap jitter
                 d += C.x2 * 0.001f * fs_ * (0.5f * rand11());
         }
@@ -1107,9 +1149,33 @@ private:
     inline void tickSR (SR& s, float rateHz, bool asym) noexcept
     {
         s.ph += rateHz / fs_;
-        if (s.ph >= 1.0f) { s.ph -= 1.0f; s.tg = rand11(); }
+        // fb411 - A SLIP IS ONE-SIDED, AND IT DOES NOT ARRIVE ON A GRID. Two corrections, both
+        // only on the asymmetric (Wow) path, so every other Type's drift is bit-identical.
+        //  (a) the TARGET is skewed, not just the slew. `0.5 - |rand|` was tried first and is
+        //      still uniform, hence still symmetric - it measured +0.041 against a 0.201 gate.
+        //      u^3 is mostly-small with a long tail: the transport mostly holds and occasionally
+        //      DRAGS, which is the actual physics, and it measures +0.63.
+        //      (Jittering the hold INTERVAL was tried for the periodicity half and measured
+        //      WORSE, 0.847 -> 0.881: a jittered hold is sometimes a LONGER hold, and a longer
+        //      hold is a SMOOTHER trace, which is most of what this autocorrelation sees.)
+        if (s.ph >= 1.0f)
+        {
+            s.ph -= 1.0f;
+            const float u = std::fabs (rand11());
+            s.tg = asym ? (1.60f * (u * u * u - 0.25f)) : rand11();
+        }
         if (asym) s.st += (s.tg > s.st ? srUpK_ : srDnK_) * (s.tg - s.st);
         else      s.st += srUpK_ * 0.35f * (s.tg - s.st);
+        s.st = flush (s.st);
+    }
+
+    // fb411 - the scrape bank: same hold-and-slew shape, one order of magnitude faster and
+    // symmetric (scrape has no preferred direction; only the SAG does).
+    inline void tickScrape (SR& s, float rateHz) noexcept
+    {
+        s.ph += rateHz / fs_;
+        if (s.ph >= 1.0f) { s.ph -= 1.0f; s.tg = rand11(); }
+        s.st += srFK_ * (s.tg - s.st);
         s.st = flush (s.st);
     }
 
@@ -1156,9 +1222,12 @@ private:
     float mph_ = 0.0f, sph_ = 0.0f, fph_ = 0.0f, vph_ = 0.0f, wph_[3] = { 0.0f, 0.25f, 0.5f };
     float triZ_[8] = { 0,0,0,0,0,0,0,0 };
     SR    sr_[kNumSR] {};
+    SR    srF_[kNumSR] {};                       // fb411 - the scrape bank (Wow only)
+    float srRateSlow_ = 1.6f, srFK_ = 0.05f;
 
     TapCfg tap_[2][kMaxTaps] {};
     int    nTap_ = 1;
+    float  sqrtTaps_ = 1.0f, cohMk_ = 1.0f;     // fb411 - multi-tap coherence makeup
 
     float reconZ_[2] {}, recon2_[2] {}, recon3_[2] {}, nzZ_[2] {}, lkZ_[2] {}, lkW_[2] {}, deZ_[2] {}, peZ_[2] {};
     float cmpEnv_[2] {}, expEnv_[2] {}, fbTap_[2] {}, dcX_[2] {}, dcY_[2] {}, dcXo_[2] {}, dcYo_[2] {}, q_[2] {};

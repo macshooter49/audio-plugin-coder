@@ -36,7 +36,7 @@
   ok    every Type pair is distinguishable (gate 4.0 dB)       closest pair 7.9 dB (Tape Zero / Jet)
 
 [D. Every parameter evolves 0 -> 100, monotonic and dramatic (law 1)]
-  ok    Rate 0->100 speeds the sweep, monotonically            0.0 > 0.0 > 14.0 > 42.0 > 51.0 sweep reversals
+  ok    Rate 0->100 speeds the sweep, monotonically            0.0 > 0.0 > 14.0 > 48.0 > 63.0 sweep reversals
   ok    Depth 0->100 widens the sweep, monotonically           1.1 > 1424.6 > 5337.9 > 7629.4 > 8700.2 cents of comb travel
   ok    Feedback 0->+100 deepens the comb monotonically        3.2 > 4.0 > 6.4 > 11.3 > 34.3 dB peak/median
   ok    Feedback 0->-100 deepens the comb monotonically        3.2 > 2.5 > 1.7 > 1.4 > 27.7 dB peak/median
@@ -59,11 +59,11 @@
   ok    all 8 BBD Characters differ from each other            closest pair 3.1 dB (Mistress / Squash)
   ok    all 8 Endless Characters differ from each other        closest pair 3.1 dB (Rise Deep / Fall Deep)
   ok    all 8 Envelope Characters differ from each other       closest pair 3.8 dB (Up / Slow Swell)
-  ok    all 8 Step Characters differ from each other           closest pair 5.4 dB (Stair Up / Pendulum)
+  ok    all 8 Step Characters differ from each other           closest pair 6.4 dB (Stair Up / Pendulum)
   ..    worst Character pair across all 48 voicings            1.7 dB  Jet: Silver / Screamer
 
 [F. No clicks — every param swept under a sustained tone (law 4)]
-  ok    sweeping Rate 0->100 does not click                    worst step / program RMS = 0.8 (gate 12, Tape Zero)
+  ok    sweeping Rate 0->100 does not click                    worst step / program RMS = 1.0 (gate 12, Tape Zero)
   ok    sweeping Depth 0->100 does not click                   worst step / program RMS = 0.4 (gate 12, Tape Zero)
   ok    sweeping Feedback 0->100 does not click                worst step / program RMS = 0.6 (gate 12, Tape Zero)
   ok    sweeping Mix 0->100 does not click                     worst step / program RMS = 0.5 (gate 12, Tape Zero)
@@ -91,12 +91,12 @@
   ..    voicings carrying the mono-hostile tag                 0 of 48  (the tag is set from MEASUREMENT; nothing in this device cancels on a mono sum, so nothing carries it)
 
 [H. Stability — 60 s of full-feedback white noise, every Type (law 6)]
-  ok    60 s at max feedback stays bounded: Tape Zero          peak 0.435 = -7.2 dBFS
-  ok    60 s at max feedback stays bounded: Jet                peak 0.140 = -17.1 dBFS
+  ok    60 s at max feedback stays bounded: Tape Zero          peak 0.345 = -9.2 dBFS
+  ok    60 s at max feedback stays bounded: Jet                peak 0.143 = -16.9 dBFS
   ok    60 s at max feedback stays bounded: BBD                peak 0.040 = -28.0 dBFS
-  ok    60 s at max feedback stays bounded: Endless            peak 0.277 = -11.1 dBFS
+  ok    60 s at max feedback stays bounded: Endless            peak 0.256 = -11.8 dBFS
   ok    60 s at max feedback stays bounded: Envelope           peak 0.291 = -10.7 dBFS
-  ok    60 s at max feedback stays bounded: Step               peak 0.260 = -11.7 dBFS
+  ok    60 s at max feedback stays bounded: Step               peak 0.288 = -10.8 dBFS
   ok    self-oscillation dies in silence: Tape Zero            -280.0 dBFS 18 s after the input stops
   ok    self-oscillation dies in silence: Jet                  -280.0 dBFS 18 s after the input stops
   ok    self-oscillation dies in silence: BBD                  -280.0 dBFS 18 s after the input stops
@@ -109,13 +109,13 @@
   ok    through-zero null holds at 96000 Hz                    -62.4 dB
 
 [J. CPU — us per 128-sample block at 48 kHz, per Type (law 7)]
-  ..      Tape Zero / Sub                                      14.12 us/block  = 0.529 % of one core
-  ..      Jet / Twin Jet                                       12.36 us/block  = 0.463 % of one core
-  ..      BBD / Mistress                                       23.62 us/block  = 0.886 % of one core
-  ..      Endless / Stacked Rise                               12.33 us/block  = 0.462 % of one core
-  ..      Envelope / Up                                        13.81 us/block  = 0.518 % of one core
-  ..      Step / Random                                        11.63 us/block  = 0.436 % of one core
-  ok    worst Type under 1 % of one core (< 25 us/block)       23.62 us/block = 0.89 % core (BBD)
+  ..      Tape Zero / Sub                                      13.21 us/block  = 0.495 % of one core
+  ..      Jet / Twin Jet                                       11.71 us/block  = 0.439 % of one core
+  ..      BBD / Mistress                                       21.73 us/block  = 0.815 % of one core
+  ..      Endless / Stacked Rise                               11.61 us/block  = 0.435 % of one core
+  ..      Envelope / Up                                        13.07 us/block  = 0.490 % of one core
+  ..      Step / Random                                        11.03 us/block  = 0.414 % of one core
+  ok    worst Type under 1 % of one core (< 25 us/block)       21.73 us/block = 0.81 % core (BBD)
 
 [K. Self-check — can these gates actually fail?]
   ok    (self-check) specDist sees an injected 9 dB            9.0 dB

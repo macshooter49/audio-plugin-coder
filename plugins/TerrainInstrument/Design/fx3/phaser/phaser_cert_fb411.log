@@ -16,18 +16,18 @@
   ok    Stone: inter-notch peaks lift >= +6 dB                 36.6 dB peak
   ok    Stone: OTA loop is nonlinear (THD in 0.05..8 %)        -54.7 dB (= 0.184 %)
   ok    Stone's comb is not Ninety-with-feedback               lowest notch 0.46 octaves apart
-  ok    Duo: the comb does NOT translate rigidly (two clocks)  Duo 0.850 vs Ninety 0.978 / Twelve 0.966
+  ok    Duo: the comb does NOT translate rigidly (two clocks)  Duo 0.844 vs Ninety 0.976 / Twelve 0.960
   ok    Twelve: 6 notches from 12 poles                        6 notches
   ok    Twelve/Hi Range: audio-rate FM sidebands >= -30 dBc    -13.6 dBc
-  ok    no other Type can produce them (Ninety @ Rate 100)     -84.1 dBc
+  ok    no other Type can produce them (Ninety @ Rate 100)     -96.1 dBc
   ok    Kraut: sweep rise/fall asymmetry >= 1.8:1              2.30 : 1
   ok    Ninety's triangle is symmetric (control)               1.11 : 1
   ok    Vibe: notch ratio is inharmonic vs the identical-stage law Vibe 57.25:1 vs Ninety 5.82:1
-  ok    Vibe/Vibrato at Mix 100 wobbles pitch >= 8 cents       30.3 cents
+  ok    Vibe/Vibrato at Mix 100 wobbles pitch >= 8 cents       34.6 cents
   ok    Barber/Rise: comb drifts one way >= 90 % of frames     100 % monotone, mean shift +0.056 oct/frame
   ok    Barber/Fall reverses it                                100 % monotone, mean shift -0.056 oct/frame
   ok    an LFO Type turns around (control)                     53 % monotone
-  ok    Barber cycle-wrap click <= -60 dBFS                    -110.9 dBFS above 6 kHz
+  ok    Barber cycle-wrap click <= -60 dBFS                    -107.4 dBFS above 6 kHz
   ok    Envy: notch trajectory tracks the program envelope     rank r = 0.852
   ok    Envy PARKS on silence (nothing free-runs)              0.000 octaves of drift
   ok    Steps: trajectory is piecewise-constant                99 % of frames held
@@ -36,19 +36,19 @@
 [C. CROSS-TYPE DISTINCTNESS MATRIX (every pair, phase-independent)]
    distance = max over 19 features of |delta| / JND. A pair is distinct at > 1.00.
          Ninety  Stone    Duo Twelve  Kraut   Vibe Barber   Envy  Steps
-  Ninety      .  52.09  52.89  35.16  31.79  45.40  46.95  62.27  27.56
-  Stone   52.09      .  14.90  16.93  20.30   6.69  54.42  10.18  24.53
-  Duo     52.89  14.90      .  17.73  23.58  10.82  55.23   9.38  25.33
-  Twelve  35.16  16.93  17.73      .  17.54  12.68  37.49  27.11  24.92
-  Kraut   31.79  20.30  23.58  17.54      .  13.61  34.12  30.48  23.83
-  Vibe    45.40   6.69  10.82  12.68  13.61      .  47.74  16.87  17.84
-  Barber  46.95  54.42  55.23  37.49  34.12  47.74      .  64.61  50.37
-  Envy    62.27  10.18   9.38  27.11  30.48  16.87  64.61      .  34.71
-  Steps   27.56  24.53  25.33  24.92  23.83  17.84  50.37  34.71      .
-  ok    every Type pair is distinguishable (> 1.00 JND)        closest pair 6.69 = Stone/Vibe (carried by LFO shape (deriv crest))
+  Ninety      .  13.91  26.27  37.67  28.83  18.57  64.45  15.08  38.98
+  Stone   13.91      .  12.57  23.76  14.93  16.81  50.55   9.04  25.07
+  Duo     26.27  12.57      .  16.31  21.72  11.20  43.18  11.20  15.02
+  Twelve  37.67  23.76  16.31      .   8.84  22.02  33.40  22.59  22.68
+  Kraut   28.83  14.93  21.72   8.84      .  25.95  35.62  18.19  22.95
+  Vibe    18.57  16.81  11.20  22.02  25.95      .  48.80  10.35  26.22
+  Barber  64.45  50.55  43.18  33.40  35.62  48.80      .  49.38  56.08
+  Envy    15.08   9.04  11.20  22.59  18.19  10.35  49.38      .  23.91
+  Steps   38.98  25.07  15.02  22.68  22.95  26.22  56.08  23.91      .
+  ok    every Type pair is distinguishable (> 1.00 JND)        closest pair 8.84 = Twelve/Kraut (carried by LFO shape (deriv crest))
 
 [D. Every param evolves 0 -> 100, monotonically and dramatically (law 1)]
-  ok    Rate: monotonic and spans decades                      [0.09 0.64 2.66 11.99] Hz
+  ok    Rate: monotonic and spans decades                      [0.09 0.64 2.66 28.38] Hz
   ok    Depth: monotonic, 0 -> multi-octave excursion          [0.17 2.67 4.73 5.90 7.04] octaves
   ok    Feedback: monotonic resonance lift                     [3.0 4.3 6.5 10.9 43.6] dB inter-notch peak
   ok    Mix: notch depth is MONOTONIC 0 -> full                [-0.3 -1.8 -4.0 -8.0 -133.9] dB null
@@ -57,27 +57,27 @@
   ok    Spread: notch spacing widens monotonically             [1.14 1.16 2.24 4.28] octaves between notches
   ok    Stereo: monotonic L/R decorrelation                    [-140.0 -5.4 -3.1 -4.7] dB L-R
   ok    Touch: bipolar and monotonic, multi-octave             6.61 octaves of travel [-3.14 -1.56 0.00 1.61 3.48] oct vs centre
-  ok    Lag: monotonically slugs the motion                    [6.63 4.99 3.79 2.76] octaves of excursion
+  ok    Lag: monotonically slugs the motion                    [11.82 6.87 5.62 2.17] octaves of excursion
   ok    Floor: IS the lowest notch (a clamp, never a filter)   [29 95 309 1007] Hz lowest notch vs Floor knob 10/40/70/100
   ok    Color: monotonically dirties the resonance             [-60.1 -33.3 -28.4 -28.1] dB THD
   ok    Color: monotonically darkens the resonance (in-loop LP) [1712 1431 1032 689] Hz centroid of the resonant excess
 
 [E. Every Character re-wires PHYSICS, not tone (law R4 / fb345)]
-  ok    Ninety: all 8 Characters differ physically             closest pair 6.56 JND (Eight Stage / Sine Sweep, separated by LFO shape)
-  ok    Stone: all 8 Characters differ physically              closest pair 2.32 JND (Deep Sweep / Hot OTA, separated by loop THD)
-  ok    Duo: all 8 Characters differ physically                closest pair 8.54 JND (Parallel 1:1.33 / Parallel Golden, separated by sweep range)
-  ok    Twelve: all 8 Characters differ physically             closest pair 1.96 JND (Hi Range / Aux Out, separated by LFO shape)
-  ok    Kraut: all 8 Characters differ physically              closest pair 5.23 JND (Fast Bulbs / Four Bulb, separated by depth)
-  ok    Vibe: all 8 Characters differ physically               closest pair 2.54 JND (Chorus Lamp / Eight Cap, separated by sweep range)
-  ok    Barber: all 8 Characters differ physically             closest pair 4.13 JND (Rise 8 / Deep Rise, separated by L/R)
-  ok    Envy: all 8 Characters differ physically               closest pair 5.67 JND (Fast Grab / Transient, separated by LFO shape)
-  ok    Steps: all 8 Characters differ physically              closest pair 2.02 JND (Ladder Up / Pendulum, separated by LFO shape)
-        weakest Character pair overall: 1.96 JND - Twelve Hi Range / Aux Out
+  ok    Ninety: all 8 Characters differ physically             closest pair 4.08 JND (Block 78 / Sine Sweep, separated by sweep range)
+  ok    Stone: all 8 Characters differ physically              closest pair 3.90 JND (Deep Sweep / Cold OTA, separated by sweep range)
+  ok    Duo: all 8 Characters differ physically                closest pair 4.89 JND (Series 1:1.33 / Series 3:4, separated by LFO shape)
+  ok    Twelve: all 8 Characters differ physically             closest pair 2.73 JND (Full Range / Resonant, separated by peak)
+  ok    Kraut: all 8 Characters differ physically              closest pair 7.62 JND (Slow Bulbs / Fast Bulbs, separated by sweep range)
+  ok    Vibe: all 8 Characters differ physically               closest pair 1.36 JND (Vibrato Lamp / Vibrato Deep, separated by sweep range)
+  ok    Barber: all 8 Characters differ physically             closest pair 13.73 JND (Rise 8 / Deep Rise, separated by sweep range)
+  ok    Envy: all 8 Characters differ physically               closest pair 3.97 JND (Slow Swell / Sink, separated by depth)
+  ok    Steps: all 8 Characters differ physically              closest pair 2.68 JND (Random Wide / Drunk, separated by rise/fall)
+        weakest Character pair overall: 1.36 JND - Vibe Vibrato Lamp / Vibrato Deep
 
 [F. NO CLICKS — every param swept under a sustained tone (law 4)]
   ok    full sweep of all 12 params: no click above -55 dBFS   worst -74.4 dBFS on Stages
-  ok    Type swap mid-note never overshoots either steady state (< +3 dB) worst +-0.35 dB Duo->Twelve
-  ok    Type swap emits no click (HF residual <= -55 dBFS)     worst -67.3 dBFS Barber->Envy
+  ok    Type swap mid-note never overshoots either steady state (< +3 dB) worst +0.00 dB Vibe->Barber
+  ok    Type swap emits no click (HF residual <= -55 dBFS)     worst -67.9 dBFS Barber->Envy
 
 [G. MONO-SAFE — the effect must survive a fold-down (law 5)]
   ok    mono sum keeps a real comb at Stereo 25 (>= 6 dB)      weakest 6.3 dB on Barber  [17.2 29.2 29.7 26.2 40.8 20.2 6.3 17.4 18.8]
@@ -85,7 +85,7 @@
   ok    Duo: every Character survives mono                     weakest 17.7 dB Parallel Golden
 
 [H. Stability — 60 s of white noise at maximum everything, all 9 Types]
-  ok    60 s at max feedback: finite and bounded, all Types    0 unstable, worst peak 0.526
+  ok    60 s at max feedback: finite and bounded, all Types    0 unstable, worst peak 0.524
   ok    in-loop AC coupling: feedback never amplifies DC       worst DC gain x1.000 vs Feedback 0, on Vibe
   ok    notch geometry identical at 44.1 kHz                   2 notches, worst 0.00 % off 48 k
   ok    notch geometry identical at 96.0 kHz                   2 notches, worst 0.00 % off 48 k
@@ -93,18 +93,18 @@
   ok    stable at max feedback at 96.0 kHz                     peak 0.1120
 
 [I. CPU — us per 128-sample block at 48 kHz, per Type]
-        Ninety     6.64 us/block  (0.25 % of one core)
-        Stone      6.97 us/block  (0.26 % of one core)
-        Duo       11.93 us/block  (0.45 % of one core)
-        Twelve    10.62 us/block  (0.40 % of one core)
-        Kraut     13.29 us/block  (0.50 % of one core)
-        Vibe       8.84 us/block  (0.33 % of one core)
-        Barber    11.56 us/block  (0.43 % of one core)
-        Envy       7.07 us/block  (0.27 % of one core)
-        Steps      7.16 us/block  (0.27 % of one core)
-        WORST     82.96 us/block  (3.11 % of one core)  <- 16 stages x 6 INSTANCES
-  ok    worst case (16 stages x 6 instances) under 12 % of a core 3.11 %
-  ok    no single Type exceeds 2 % of a core                   worst 13.29 us on Kraut
+        Ninety     6.18 us/block  (0.23 % of one core)
+        Stone      6.44 us/block  (0.24 % of one core)
+        Duo       11.05 us/block  (0.41 % of one core)
+        Twelve     9.84 us/block  (0.37 % of one core)
+        Kraut     12.33 us/block  (0.46 % of one core)
+        Vibe       8.10 us/block  (0.30 % of one core)
+        Barber    10.69 us/block  (0.40 % of one core)
+        Envy       6.58 us/block  (0.25 % of one core)
+        Steps      6.61 us/block  (0.25 % of one core)
+        WORST     77.42 us/block  (2.90 % of one core)  <- 16 stages x 6 INSTANCES
+  ok    worst case (16 stages x 6 instances) under 12 % of a core 2.90 %
+  ok    no single Type exceeds 2 % of a core                   worst 12.33 us on Kraut
 
 [J. Self-check — can these gates actually fail?]
   ok    (self-check) the notch detector sees an injected notch 2 -> 3

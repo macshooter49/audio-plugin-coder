@@ -254,6 +254,12 @@ public:
         stSplit_ = stw * 0.42f;                                       // ±0.42 octave at 100
 
         // ── Rate. One accumulator; the increment glides, the phase never jumps.
+        // fb411 - the Character rate ratio (Twelve/`Hi Range`, x12.5) is resolved FIRST, because
+        // the shaped taper below has to land BOTH on a top that is measured stable. Stacking the
+        // multiplier on top of the opened taper put Hi Range at 200 x 12.5 = 2.5 kHz, where its
+        // own sideband gate reads -62.6 dBc: the sidebands had marched clean out of the analysis
+        // band. Faster is not always more - past a point the ear stops hearing modulation at all.
+        const float rmul = (p.type == T_TWELVE) ? cs.ratioB : 1.0f;
         float hz;
         if (p.tempoSync)
         {
@@ -261,9 +267,21 @@ public:
             const float beats = divBeats (idx);
             const float bpm   = (float) (pr_.bpm > 1.0 ? pr_.bpm : 120.0);
             hz = (beats > 0.0f) ? (bpm / 60.0f) / beats : 0.7f;
+            hz *= rmul;                                               // synced Hi Range, unchanged
         }
-        else hz = 0.01f * std::pow (2000.0f, clamp01 (p.rate));       // 0.01 → 20 Hz, log
-        if (p.type == T_TWELVE) hz *= cs.ratioB;                      // Hi Range → 250 Hz
+        else
+        {
+            // fb411 - NO PLAYING SAFE, SHAPED. 0..0.6 is EXACTLY the shipped taper; above it the
+            // sweep opens to 200 Hz, where the cascade's coefficients move at audio rate and the
+            // notches smear into sidebands. Not a leap into the unknown: this Type's own
+            // `Hi Range` Character already re-maps the top to 250 Hz and is measured stable
+            // (-13.6 dBc of audio-rate FM sidebands, harness section B).
+            const float t   = clamp01 (p.rate);
+            const float h60 = 0.01f * std::pow (2000.0f, 0.60f) * rmul;      // 1.923 Hz (x12.5 = 24)
+            const float top = (rmul > 1.0f) ? 250.0f : 200.0f;               // Hi Range keeps ITS top
+            if (t <= 0.60f) hz = 0.01f * std::pow (2000.0f, t) * rmul;       // the shipped taper, exactly
+            else            hz = h60 * std::pow (top / h60, (t - 0.60f) * 2.5f);
+        }
         incTgt_ = hz / fs_;
 
         // ── Barber bank constants
