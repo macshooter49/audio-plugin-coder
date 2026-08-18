@@ -219,7 +219,13 @@ var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
 function frame(){
   var svg=document.getElementById('wf');
   if(svg){
-    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height), mid=H*0.5;
+    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height);
+    // fb404 — centre on the CARD, not on the core. The header is 26px and the footer is taller,
+    // so the core's own middle sits ABOVE the device's optical centre and the ribbon read high.
+    // Derive the offset from the live boxes so it stays correct if the chassis ever changes.
+    var card=svg.closest('.fxr-dev'), mid=H*0.5;
+    if(card){ var cr=card.getBoundingClientRect();
+      mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top)); }
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
     var N=Math.max(2,Math.round(W/2)), up='', dn='';
     if(ANA&&BINS){
