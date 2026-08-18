@@ -63,12 +63,17 @@ namespace tw {
 
 struct FxChainTopology
 {
-    static constexpr int kMaxSlots    = 44;   // fb376 — 6 kinds x 6 instances = 36, + headroom
+    // fb413 — 9 kinds x 6 instances = 54 (chorus/flanger/phaser joined at kinds 6/7/8), + headroom.
+    // ⚠️ kMaxSlots MUST stay <= 64: `feed` is a per-slot bitmask over upstream SLOTS, so the mask
+    // width is the slot ceiling. It was a uint32_t against kMaxSlots 44 — already, today, a chain
+    // of 33+ devices would have shifted past bit 31, which is undefined behaviour, not a wrong
+    // answer. 36 slots were reachable at fb377 and nobody had built a 33-device chain yet.
+    static constexpr int kMaxSlots    = 56;
     static constexpr uint8_t kAllSrc  = 0x3F; // all six sources: A B C D Sub Noise
 
     int      count = 0;
     uint8_t  entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot
-    uint32_t feed     [kMaxSlots] = {};       // bitmask of upstream slots whose output this slot eats
+    uint64_t feed     [kMaxSlots] = {};       // bitmask of upstream slots whose output this slot eats
     bool     consumed [kMaxSlots] = {};       // this slot's output is eaten downstream ⇒ NOT summed to the main mix
     uint8_t  eff      [kMaxSlots] = {};       // sources this slot's output actually carries (its own + everything it ate)
 
@@ -92,7 +97,7 @@ struct FxChainTopology
             for (int j = 0; j < c; ++j)
                 if (! consumed[j] && (uint8_t) (eff[j] & masks[c]) != 0)
                 {
-                    feed[c] |= (1u << (unsigned) j);
+                    feed[c] |= (1ull << (unsigned) j);   // fb413 — 64-bit: j can now reach 53
                     consumed[j] = true;
                     eff[c] = (uint8_t) (eff[c] | eff[j]);
                 }

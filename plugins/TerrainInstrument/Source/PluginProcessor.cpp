@@ -3880,6 +3880,115 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "RANK",   d + "Chain Rank", 0.5f);
             }
         }
+
+        // ═══════════ fb413 — CHORUS / FLANGER / PHASER: chain kinds 6, 7, 8 ═══════════════════
+        // Three separate devices, not one (CONTRACT.md R1 — Max was explicit). Same pooling
+        // grammar as every other device: instance 1 is SYN_CHO_, 2..6 are SYN_CHO2_..SYN_CHO6_.
+        //
+        // 🔑 RACK LAW C — CHOICE CARDINALITY IS FROZEN AT BIRTH. Each TYPE is declared with its
+        // live entries PLUS reserved slots, because adding an entry later renumbers every saved
+        // patch. That is the fb342 law, and the fb373 bug is its other half: the UI must normalise
+        // a selection by the PARAM's count, never by the dropdown's option count, or Cassette
+        // silently plays Studio. Every one of these carries a tpN on the UI side for that reason.
+        //
+        // 🔑 RATE IS ALSO THE SYNC DIVISION. All three engines fold the division into the Rate
+        // knob (idx = round(rate * (kNumDivs-1)) over the house 20-entry list), exactly as the
+        // filter device does, so there is no separate SYNCDIV param to disagree with it. The card
+        // reads Hz when Sync is dark and a TIME SIGNATURE when it is lit — the sync law.
+        {
+            const juce::StringArray choTypes { "Vintage","June","Pedal","Trio","Ensemble","Micro","Wow","Dark",
+                                               "Reserved 9","Reserved 10","Reserved 11","Reserved 12",
+                                               "Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            const juce::StringArray flaTypes { "Tape Zero","Jet","BBD","Endless","Envelope","Step",
+                                               "Reserved 7","Reserved 8","Reserved 9","Reserved 10",
+                                               "Reserved 11","Reserved 12","Reserved 13","Reserved 14",
+                                               "Reserved 15","Reserved 16" };
+            const juce::StringArray phaTypes { "Ninety","Stone","Duo","Twelve","Kraut","Vibe","Barber","Envy","Steps",
+                                               "Reserved 10","Reserved 11","Reserved 12",
+                                               "Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            // CHARACTER is choice(8) on all three and always will be: the engines' kNumChars is 8
+            // and carries a static_assert tying the roster to the table. No reserved slots needed.
+            const juce::StringArray choChars { "Classic","Slow","Fast","Deep","Wide 106","Locked","Thick","Hiss" };
+            const juce::StringArray flaChars { "Sub","Add","Worn Deck","Servo","Wide Zero","Deep Zero","Drifting Zero","Counter Reel" };
+            const juce::StringArray phaChars { "Script 74","Block 78","Two Stage","Eight Stage","Slow Lamp","Sine Sweep","Wide Stagger","Negative" };
+
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String sfxN = (n == 1) ? juce::String() : juce::String (n);
+                const juce::String sfxD = (n == 1) ? juce::String() : (" " + juce::String (n));
+
+                // ── CHORUS, kind 6. Front: Rate · Depth · Feedback · Mix.
+                //    Back 8 (ROSTER 3): Time · Detune · Width · Flutter · Drift · Colour · Low Keep · Phase.
+                {
+                    const juce::String p = "SYN_CHO" + sfxN + "_";
+                    const juce::String d = "Chorus" + sfxD + " ";
+                    C (p + "TYPE", d + "Type", choTypes, 0);            // Vintage
+                    C (p + "CHAR", d + "Char", choChars, 0);
+                    F (p + "RATE",     d + "Rate",     0.35f);
+                    F (p + "DEPTH",    d + "Depth",    0.60f);
+                    F (p + "FEEDBACK", d + "Feedback", 0.00f);
+                    F (p + "MIX",      d + "Mix",      0.50f);
+                    F (p + "TIME",     d + "Time",     0.50f);   F (p + "DETUNE",  d + "Detune",   0.00f);
+                    F (p + "WIDTH",    d + "Width",    0.70f);   F (p + "FLUTTER", d + "Flutter",  0.25f);
+                    F (p + "DRIFT",    d + "Drift",    0.00f);   F (p + "COLOUR",  d + "Colour",   0.50f);
+                    F (p + "LOWKEEP",  d + "Low Keep", 0.00f);   F (p + "PHASE",   d + "Phase",    1.00f);
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);   // unrouted on arrival
+                    B (p + "SYNC", d + "Sync", false);
+                    B (p + "WIDE", d + "Wide", false);           // fb412 — wet M/S side gain to 260 %
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+                // ── FLANGER, kind 7. Front: Rate · Depth · Feedback · Mix.
+                //    ⚠️ FEEDBACK IS BIPOLAR WITH 0.5 AS CENTRE (flanger ROSTER 3, in bold). A
+                //    0.0 default here would be −99 % regeneration on arrival, not none.
+                //    Back 8: Manual · Spread · Width · Damping · Shape · Bounce · Tail · Low Cut.
+                {
+                    const juce::String p = "SYN_FLA" + sfxN + "_";
+                    const juce::String d = "Flanger" + sfxD + " ";
+                    C (p + "TYPE", d + "Type", flaTypes, 0);            // Tape Zero, the flagship
+                    C (p + "CHAR", d + "Char", flaChars, 0);
+                    F (p + "RATE",     d + "Rate",     0.30f);
+                    F (p + "DEPTH",    d + "Depth",    0.55f);
+                    F (p + "FEEDBACK", d + "Feedback", 0.50f);   // 0.5 = CENTRE = no regeneration
+                    F (p + "MIX",      d + "Mix",      0.50f);
+                    F (p + "MANUAL",   d + "Manual",   0.50f);   F (p + "SPREAD",  d + "Spread",   0.35f);
+                    F (p + "WIDTH",    d + "Width",    0.625f);  F (p + "DAMPING", d + "Damping",  0.35f);
+                    F (p + "SHAPE",    d + "Shape",    0.50f);   F (p + "BOUNCE",  d + "Bounce",   0.20f);
+                    F (p + "TAIL",     d + "Tail",     0.35f);   F (p + "LOWCUT",  d + "Low Cut",  0.12f);
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "SYNC",   d + "Sync",   false);
+                    B (p + "INVERT", d + "Invert", false);       // mirrors Feedback about its centre
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+                // ── PHASER, kind 8. Front: Rate · Depth · Feedback · Mix.
+                //    Back 8 (phaser ROSTER 4): Center · Stages · Spread · Stereo · Touch · Lag ·
+                //    Floor · Color.  Feedback is a MAGNITUDE; the loop sign is a Character bit and
+                //    the Invert pill XORs it (fb412).
+                {
+                    const juce::String p = "SYN_PHA" + sfxN + "_";
+                    const juce::String d = "Phaser" + sfxD + " ";
+                    C (p + "TYPE", d + "Type", phaTypes, 0);            // Ninety
+                    C (p + "CHAR", d + "Char", phaChars, 0);
+                    F (p + "RATE",     d + "Rate",     0.35f);
+                    F (p + "DEPTH",    d + "Depth",    0.55f);
+                    F (p + "FEEDBACK", d + "Feedback", 0.00f);
+                    F (p + "MIX",      d + "Mix",      0.50f);
+                    F (p + "CENTER",   d + "Center",   0.50f);   F (p + "STAGES",  d + "Stages",   0.35f);
+                    F (p + "SPREAD",   d + "Spread",   0.20f);   F (p + "STEREO",  d + "Stereo",   0.30f);
+                    F (p + "TOUCH",    d + "Touch",    0.50f);   F (p + "LAG",     d + "Lag",      0.30f);
+                    F (p + "FLOOR",    d + "Floor",    0.20f);   F (p + "COLOR",   d + "Color",    0.00f);
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "SYNC",   d + "Sync",   false);
+                    B (p + "INVERT", d + "Invert", false);       // fb412 — XORs the loop sign
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+            }
+        }
         }
     }
 
@@ -4442,6 +4551,260 @@ juce::String TerrainInstrumentAudioProcessor::getFilterVizJson()
     return j + "]";
 }
 
+// ═══ fb413 — the CHORUS / FLANGER / PHASER card feed. One payload for all three, on the 60 Hz
+// C++ PUSH — never a native poll, which dies silently three ways here and is exactly why the
+// distortion curve had never drawn for Max until fb354. Every number below is one the DSP just
+// used on the audio thread: `lfo` is the instantaneous sweep, `lvl` the wet level, `dep` the
+// effective excursion, `n` the comb/notch centres in Hz. The cards draw those, so what you see
+// is what you hear — and when the audio stops, the picture stops.
+//
+// Only LIVE instances carry a body; the rest are `null`. Eighteen full slots every frame would
+// pass the 40-80 KB/s that fb342 identified as the frame-drop threshold, whereas the ordinary
+// case of one or two devices is a couple of KB/s.
+juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
+{
+    auto emit = [] (juce::String& out, bool live, float lfo, float lvl, float dep,
+                    const float* nt, float env)
+    {
+        if (! live) { out << "null"; return; }
+        out << "{\"lfo\":" << juce::String (lfo, 4)
+            << ",\"lvl\":" << juce::String (lvl, 4)
+            << ",\"dep\":" << juce::String (dep, 4)
+            << ",\"env\":" << juce::String (env, 3)
+            << ",\"n\":[";
+        for (int k = 0; k < 8; ++k)
+        { if (k) out << ","; out << juce::String (nt != nullptr ? nt[k] : 0.0f, 1); }
+        out << "]}";
+    };
+
+    juce::String j = "{\"cho\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = choRefs_[(size_t) i];  const auto& z = choPool_[(size_t) i].viz();
+        emit (j, V.active != nullptr && V.active->load() > 0.5f,
+              z.lfo, z.lvl, z.depthNow, z.notch, choEnv_[(size_t) i]);
+    }
+    j << "],\"fla\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = flaRefs_[(size_t) i];  const auto& z = flaPool_[(size_t) i].viz();
+        emit (j, V.active != nullptr && V.active->load() > 0.5f,
+              z.lfo, z.lvl, z.depthNow, z.notch, flaEnv_[(size_t) i]);
+    }
+    j << "],\"pha\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = phaRefs_[(size_t) i];  const auto& z = phaPool_[(size_t) i].viz();
+        emit (j, V.active != nullptr && V.active->load() > 0.5f,
+              z.lfo, z.lvl, z.depthNow, z.notch, phaEnv_[(size_t) i]);
+    }
+    return j + "]}";
+}
+
+// ═══ fb413 — CHORUS · FLANGER · PHASER refs. One cache, three devices: they share a chassis,
+// so they share a shape, and a single routine is one place to get the grammar right.
+void TerrainInstrumentAudioProcessor::cacheFx3Refs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String n = (i == 0) ? juce::String() : juce::String (i + 1);
+        {
+            const juce::String g = "SYN_CHO" + n + "_";
+            auto& v = choRefs_[(size_t) i];
+            v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+            v.type=R(g+"TYPE"); v.chr=R(g+"CHAR");
+            v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
+            v.time=R(g+"TIME"); v.detune=R(g+"DETUNE"); v.width=R(g+"WIDTH"); v.flutter=R(g+"FLUTTER");
+            v.drift=R(g+"DRIFT"); v.colour=R(g+"COLOUR"); v.lowkeep=R(g+"LOWKEEP"); v.phase=R(g+"PHASE");
+            v.sync=R(g+"SYNC"); v.wide=R(g+"WIDE");
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        }
+        {
+            const juce::String g = "SYN_FLA" + n + "_";
+            auto& v = flaRefs_[(size_t) i];
+            v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+            v.type=R(g+"TYPE"); v.chr=R(g+"CHAR");
+            v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
+            v.manual=R(g+"MANUAL"); v.spread=R(g+"SPREAD"); v.width=R(g+"WIDTH"); v.damping=R(g+"DAMPING");
+            v.shape=R(g+"SHAPE"); v.bounce=R(g+"BOUNCE"); v.tail=R(g+"TAIL"); v.lowcut=R(g+"LOWCUT");
+            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT");
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        }
+        {
+            const juce::String g = "SYN_PHA" + n + "_";
+            auto& v = phaRefs_[(size_t) i];
+            v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+            v.type=R(g+"TYPE"); v.chr=R(g+"CHAR");
+            v.rate=R(g+"RATE"); v.depth=R(g+"DEPTH"); v.feedback=R(g+"FEEDBACK"); v.mix=R(g+"MIX");
+            v.center=R(g+"CENTER"); v.stages=R(g+"STAGES"); v.spread=R(g+"SPREAD"); v.stereo=R(g+"STEREO");
+            v.touch=R(g+"TOUCH"); v.lag=R(g+"LAG"); v.floorK=R(g+"FLOOR"); v.color=R(g+"COLOR");
+            v.sync=R(g+"SYNC"); v.invert=R(g+"INVERT");
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        }
+    }
+}
+
+// ═══ ONCE PER BLOCK. The serial chain runs a sample at a time, so the obvious wiring — read
+// the params inside apply*, like applyFlt and applyTpe do — calls setParams 48 000 times a
+// second per instance. `setParams` is documented in CONTRACT.md 2 as a per-BLOCK call, and it
+// is: it runs the whole coefficient recalc, which is a page of pow/exp per invocation.
+// Measured, 128-sample block, one instance:
+//        chorus  30.50 -> 24.58 us      flanger 23.59 -> 23.03      phaser 25.17 -> 14.93
+// Across all eighteen instances that is 17.8 % of one core down to 14.1 %, and it is free:
+// nothing inside these engines can respond faster than a block anyway, because the parameter
+// SMOOTHERS are what carry a knob move, not the raw value.
+void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
+{
+    float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+    const double bpm = (double) bpmNow;
+
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        // ── CHORUS
+        {
+            const auto& V = choRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || choEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainChorusFx::Params cp;
+                cp.type      = juce::jlimit (0, tw::TerrainChorusFx::kNumTypes - 1, (int) V.type->load());
+                cp.character = juce::jlimit (0, tw::TerrainChorusFx::kNumChars - 1, (int) V.chr->load());
+                cp.rate = V.rate->load();  cp.depth = V.depth->load();  cp.feedback = V.feedback->load();
+                cp.mix  = V.mix->load();
+                cp.b1 = V.time->load();    cp.b2 = V.detune->load();   cp.b3 = V.width->load();
+                cp.b4 = V.flutter->load(); cp.b5 = V.drift->load();    cp.b6 = V.colour->load();
+                cp.b7 = V.lowkeep->load(); cp.b8 = V.phase->load();
+                cp.wide      = V.wide != nullptr && V.wide->load() > 0.5f;
+                cp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
+                cp.bpm = bpm;
+                choPool_[(size_t) i].setParams (cp);
+            }
+        }
+        // ── FLANGER
+        {
+            const auto& V = flaRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || flaEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainFlangerFx::Params fp;
+                fp.type      = juce::jlimit (0, tw::TerrainFlangerFx::kNumTypes - 1, (int) V.type->load());
+                fp.character = juce::jlimit (0, tw::TerrainFlangerFx::kNumChars - 1, (int) V.chr->load());
+                fp.rate = V.rate->load();  fp.depth = V.depth->load();  fp.mix = V.mix->load();
+                // ⚠️ FEEDBACK IS BIPOLAR WITH 0.5 AS CENTRE (flanger ROSTER 3, flagged there in
+                // bold as an integration hazard — a unipolar 0 wired here is -99 %, not none).
+                // The INVERT pill mirrors it about that centre: a genuine polarity flip of the
+                // comb, where the resonant peaks land on what were the notches.
+                {
+                    const float fb = juce::jlimit (0.0f, 1.0f, V.feedback->load());
+                    const bool  iv = V.invert != nullptr && V.invert->load() > 0.5f;
+                    fp.feedback = iv ? (1.0f - fb) : fb;
+                }
+                fp.b1 = V.manual->load();  fp.b2 = V.spread->load();   fp.b3 = V.width->load();
+                fp.b4 = V.damping->load(); fp.b5 = V.shape->load();    fp.b6 = V.bounce->load();
+                fp.b7 = V.tail->load();    fp.b8 = V.lowcut->load();
+                fp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
+                fp.bpm = bpm;
+                flaPool_[(size_t) i].setParams (fp);
+            }
+        }
+        // ── PHASER
+        {
+            const auto& V = phaRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || phaEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainPhaserFx::Params pp;
+                pp.type      = juce::jlimit (0, tw::TerrainPhaserFx::kNumTypes - 1, (int) V.type->load());
+                pp.character = juce::jlimit (0, tw::TerrainPhaserFx::kNumChars - 1, (int) V.chr->load());
+                pp.rate = V.rate->load();  pp.depth = V.depth->load();  pp.feedback = V.feedback->load();
+                pp.mix  = V.mix->load();
+                pp.b1 = V.center->load();  pp.b2 = V.stages->load();   pp.b3 = V.spread->load();
+                pp.b4 = V.stereo->load();  pp.b5 = V.touch->load();    pp.b6 = V.lag->load();
+                pp.b7 = V.floorK->load();  pp.b8 = V.color->load();
+                // fb412 — the Invert pill XORs the Character's loop sign (a magnitude knob
+                // cannot carry a sign, and its 0 default must not mean "full negative").
+                pp.invert    = V.invert != nullptr && V.invert->load() > 0.5f;
+                pp.tempoSync = V.sync   != nullptr && V.sync->load()   > 0.5f;
+                pp.bpm = bpm;
+                phaPool_[(size_t) i].setParams (pp);
+            }
+        }
+    }
+}
+
+// The three run one sample at a time through the serial chain, but their engines are BLOCK
+// routines (processStereo over n samples), so each per-sample call is a 1-sample block. That is
+// the same shape TapeFxEngine::process already has.
+//
+// 🔑 THE POOL LAW (fb350): every instance runs THIS EXACT ROUTINE. There is no separate
+// instance-1 path that could drift out of step with the pool.
+// 🔑 THE CHOICE LAW (fb50/fb373): a choice param's raw value IS the index. Never lround(raw*N)
+// — that is the bug that made Cassette silently play Studio for eight builds.
+void TerrainInstrumentAudioProcessor::applyCho (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = choRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kChoSendBase + inst0)];
+    float& env = choEnv_[(size_t) inst0];
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;                 // click-free power: fade, never a hard cut
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+
+    float wl = inL, wr = inR;
+    choPool_[(size_t) inst0].processStereo (&wl, &wr, 1);
+    outL = inL * (1.0f - env) + wl * env;         // the engine already applied Mix
+    outR = inR * (1.0f - env) + wr * env;
+}
+
+void TerrainInstrumentAudioProcessor::applyFla (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = flaRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kFlaSendBase + inst0)];
+    float& env = flaEnv_[(size_t) inst0];
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;                 // click-free power: fade, never a hard cut
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+
+    float wl = inL, wr = inR;
+    flaPool_[(size_t) inst0].processStereo (&wl, &wr, 1);
+    outL = inL * (1.0f - env) + wl * env;         // the engine already applied Mix
+    outR = inR * (1.0f - env) + wr * env;
+}
+
+void TerrainInstrumentAudioProcessor::applyPha (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = phaRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kPhaSendBase + inst0)];
+    float& env = phaEnv_[(size_t) inst0];
+    const float tgt = powered ? 1.0f : 0.0f;
+    env += (tgt - env) * 0.0015f;                 // click-free power: fade, never a hard cut
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+
+    float wl = inL, wr = inR;
+    phaPool_[(size_t) inst0].processStereo (&wl, &wr, 1);
+    outL = inL * (1.0f - env) + wl * env;         // the engine already applied Mix
+    outR = inR * (1.0f - env) + wr * env;
+}
+
 // MESSAGE THREAD ONLY (timerCallback). The audio thread sets tpeWantBuild_ and reads the
 // pointer; it never allocates. One instance is ~4 MB of loop plus three machines, so six
 // eager engines would be 25 MB for a rack that usually holds one.
@@ -4602,6 +4965,13 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
     // fb365 — TAPE, all six, same story.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (4, i + 1, tpeRefs_[(size_t) i].active, tpeRefs_[(size_t) i].rank);
+    // fb413 — CHORUS / FLANGER / PHASER, all six of each, same story.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (6, i + 1, choRefs_[(size_t) i].active, choRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (7, i + 1, flaRefs_[(size_t) i].active, flaRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (8, i + 1, phaRefs_[(size_t) i].active, phaRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -4706,6 +5076,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     for (auto& g : grnPool_) if (g != nullptr) g->prepare (sampleRate);   // keeps the ring (same fs)
     cacheTapeParams();
     cacheFilterRefs();   // fb377         // fb365 — and all six tape instances
+    cacheFx3Refs();      // fb413 — chorus / flanger / phaser, six each
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
@@ -7156,6 +7527,37 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         poolRouteAny_[(size_t) q3] = ps > 0.0f;
     }
 
+    // fb413 — CHORUS / FLANGER / PHASER: eager engines, prepared once per sample rate. `prepare`
+    // may allocate, so it is guarded by the rate check and never runs on a steady-state block.
+    if (fx3PrepSr_ != getSampleRate())
+    {
+        fx3PrepSr_ = getSampleRate();
+        const double sr = fx3PrepSr_ > 0.0 ? fx3PrepSr_ : 48000.0;
+        for (auto& e : choPool_) e.prepare (sr, 1);
+        for (auto& e : flaPool_) e.prepare (sr, 1);
+        for (auto& e : phaPool_) e.prepare (sr, 1);
+    }
+    // ... and their route gates, the same per-instance shape every other device uses.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const int bases[3] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i };
+        std::atomic<float>* const* srcs[3] = { choRefs_[(size_t) i].src,
+                                               flaRefs_[(size_t) i].src,
+                                               phaRefs_[(size_t) i].src };
+        for (int dv = 0; dv < 3; ++dv)
+        {
+            float ps = 0.0f;
+            for (int k = 0; k < 6; ++k)
+            {
+                const float pg = (srcs[dv][k] != nullptr && srcs[dv][k]->load() > 0.5f) ? 1.0f : 0.0f;
+                poolRouteG_[(size_t) (bases[dv] * 6 + k)] = pg; ps += pg;
+            }
+            poolRouteAny_[(size_t) bases[dv]] = ps > 0.0f;
+        }
+    }
+
+    pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
+
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
     // device TAPS — a source enters the rack exactly once, at the first device routed to it — and
@@ -7170,6 +7572,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 3) g = &poolRouteG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else if (ce.kind == 4) g = &poolRouteG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
             else if (ce.kind == 5) g = &poolRouteG_[(size_t) ((kFltSendBase + ce.inst - 1) * 6)];   // fb377
+            else if (ce.kind == 6) g = &poolRouteG_[(size_t) ((kChoSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind == 7) g = &poolRouteG_[(size_t) ((kFlaSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind == 8) g = &poolRouteG_[(size_t) ((kPhaSendBase + ce.inst - 1) * 6)];   // fb413
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -7193,6 +7598,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 3) dstArr = &poolEntryG_[(size_t) ((kGrnSendBase + ce.inst - 1) * 6)];
             else if (ce.kind == 4) dstArr = &poolEntryG_[(size_t) ((kTpeSendBase + ce.inst - 1) * 6)];   // fb365
             else if (ce.kind == 5) dstArr = &poolEntryG_[(size_t) ((kFltSendBase + ce.inst - 1) * 6)];   // fb377
+            else if (ce.kind == 6) dstArr = &poolEntryG_[(size_t) ((kChoSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind == 7) dstArr = &poolEntryG_[(size_t) ((kFlaSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind == 8) dstArr = &poolEntryG_[(size_t) ((kPhaSendBase + ce.inst - 1) * 6)];   // fb413
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -7833,6 +8241,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 3) { const int q = kGrnSendBase + ce.inst - 1;      // fb362 — granular
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 5) { const int q = kFltSendBase + ce.inst - 1;      // fb377 — filter
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 6) { const int q = kChoSendBase + ce.inst - 1;      // fb413 — chorus
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 7) { const int q = kFlaSendBase + ce.inst - 1;      // fb413 — flanger
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 8) { const int q = kPhaSendBase + ce.inst - 1;      // fb413 — phaser
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 4) { const int q = kTpeSendBase + ce.inst - 1;      // fb365 — tape
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
@@ -8844,15 +9258,18 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // input = this slot's oscillator tap (ENTRY sources only) + every upstream output it eats
                 float inL = (chSendL[c] != nullptr) ? chSendL[c][i] * sc : 0.0f;
                 float inR = (chSendR[c] != nullptr) ? chSendR[c][i] * sc : inL;
-                const uint32_t fm = fxTopo_.feed[c];
+                const uint64_t fm = fxTopo_.feed[c];       // fb413 — 64-bit, see FxChainTopology.h
                 if (fm != 0)
                     for (int j = 0; j < c; ++j)
-                        if (fm & (1u << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
+                        if (fm & (1ull << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
 
                 float oL = inL, oR = inR;
                 if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
                 else if (ce.kind == 4) applyTpe (ce.inst - 1, inL, inR, oL, oR);   // fb365 — ditto
                 else if (ce.kind == 5) applyFlt (ce.inst - 1, inL, inR, oL, oR);   // fb377 — ditto
+                else if (ce.kind == 6) applyCho (ce.inst - 1, inL, inR, oL, oR);   // fb413 — chorus
+                else if (ce.kind == 7) applyFla (ce.inst - 1, inL, inR, oL, oR);   // fb413 — flanger
+                else if (ce.kind == 8) applyPha (ce.inst - 1, inL, inR, oL, oR);   // fb413 — phaser
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);

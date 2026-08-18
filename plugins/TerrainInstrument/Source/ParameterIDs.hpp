@@ -1170,6 +1170,24 @@ namespace ParameterIDs
     constexpr char SYN_FLT_ACTIVE[] = "SYN_FLT_ACTIVE";
     constexpr char SYN_FLT_RANK[]   = "SYN_FLT_RANK";
 
+    // ── fb413 — CHORUS (kind 6), FLANGER (kind 7), PHASER (kind 8). Three separate devices
+    //    (CONTRACT.md R1), each with the standard pooling grammar: instance 1 is "SYN_CHO_",
+    //    2..6 are "SYN_CHO2_".."SYN_CHO6_". Declared in PluginProcessor.cpp's FX block; listed
+    //    here so the prefixes are greppable and nobody invents a second set.
+    //    ⚠️ SYN_CHO_* does NOT collide with the front page's own chorus (CHORUS_AMOUNT /
+    //    CHORUS_WIDTH / CHORUS_CHARACTER above), which stays exactly where it is — its voicing
+    //    is reused as the rack chorus's `Vintage` Type (R7), not moved.
+    //    ⚠️ SYN_FLA_FEEDBACK IS BIPOLAR WITH 0.5 AS CENTRE. A unipolar 0 default wired to it is
+    //    −99 % regeneration, not none (flanger ROSTER §3, and the reason it defaults to 0.5f).
+    //    🔑 There is no SYNCDIV on any of the three: all three engines fold the sync division
+    //    into the RATE knob over the house 20-entry list, so two selectors can never disagree.
+    constexpr char SYN_CHO_TYPE[]   = "SYN_CHO_TYPE";    constexpr char SYN_CHO_POWER[]  = "SYN_CHO_POWER";
+    constexpr char SYN_CHO_ACTIVE[] = "SYN_CHO_ACTIVE";  constexpr char SYN_CHO_RANK[]   = "SYN_CHO_RANK";
+    constexpr char SYN_FLA_TYPE[]   = "SYN_FLA_TYPE";    constexpr char SYN_FLA_POWER[]  = "SYN_FLA_POWER";
+    constexpr char SYN_FLA_ACTIVE[] = "SYN_FLA_ACTIVE";  constexpr char SYN_FLA_RANK[]   = "SYN_FLA_RANK";
+    constexpr char SYN_PHA_TYPE[]   = "SYN_PHA_TYPE";    constexpr char SYN_PHA_POWER[]  = "SYN_PHA_POWER";
+    constexpr char SYN_PHA_ACTIVE[] = "SYN_PHA_ACTIVE";  constexpr char SYN_PHA_RANK[]   = "SYN_PHA_RANK";
+
     constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
     constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
     constexpr char SYN_FX_ACTIVE_SUFFIX[] = "_ACTIVE";

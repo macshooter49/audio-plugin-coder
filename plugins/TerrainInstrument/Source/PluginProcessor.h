@@ -28,6 +28,9 @@
 #include "GranularFxEngine.h"   // fb362 — the FX-rack granular
 #include "TapeFxEngine.h"   // fb365 — the FX-rack tape (the three shipped machines + a transport)
 #include "FilterFxEngine.h"   // fb377 — the FX-rack filter (hosts one FilterSlot, 94 engines)
+#include "TerrainChorusFx.h"    // fb413 — the FX-rack chorus  (kind 6, 8 Types)
+#include "TerrainFlangerFx.h"   // fb413 — the FX-rack flanger (kind 7, 6 Types)
+#include "TerrainPhaserFx.h"    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -689,6 +692,7 @@ public:
     juce::String      getFilterVizJson();                               // fb382 — the 60 Hz filter card feed
     juce::String      getGranularVizJson();                            // fb362 — granular cards, one entry per instance
     juce::String      getTapeVizJson();                                // fb365 — tape cards, one entry per instance
+    juce::String      getFx3VizJson();                                 // fb413 — chorus + flanger + phaser, one payload
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
@@ -1597,8 +1601,16 @@ private:
     // read kTpeSendBase + 6 = 27 while the filter wrote 27..32 — six slots past the end of four
     // arrays. auval came back 139 (SIGSEGV) and pluginval segfaulted 2 of 3. The memory note says
     // these constants "move TOGETHER"; that is only enforceable if it is asserted, so it is now.
-    static constexpr int kPoolSendCount = kFltSendBase + ParameterIDs::kFxInstances;   // 33
-    static_assert (kPoolSendCount >= kFltSendBase + ParameterIDs::kFxInstances,
+    // fb413 — three more device kinds. THE FOUR CONSTANTS MOVE TOGETHER: these bases,
+    // kPoolSendCount below, tw::SynthVoice::kPoolSends, and kFxKinds. The static_asserts are
+    // what make "together" enforceable rather than a note somebody has to remember.
+    static constexpr int kChoSendBase  = kFltSendBase + ParameterIDs::kFxInstances;    // 33 — chorus
+    static constexpr int kFlaSendBase  = kChoSendBase + ParameterIDs::kFxInstances;    // 39 — flanger
+    static constexpr int kPhaSendBase  = kFlaSendBase + ParameterIDs::kFxInstances;    // 45 — phaser
+    static_assert (kPhaSendBase + ParameterIDs::kFxInstances
+                   <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
+    static constexpr int kPoolSendCount = kPhaSendBase + ParameterIDs::kFxInstances;   // 51
+    static_assert (kPoolSendCount >= kPhaSendBase + ParameterIDs::kFxInstances,
                    "kPoolSendCount must cover the LAST send base + its instances");
     static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
                    "the voice's kPoolSends must cover every pool send the processor writes");
@@ -1625,8 +1637,10 @@ private:
     // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
-    static constexpr int kFxKinds  = 6;
-    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;
+    static constexpr int kFxKinds  = 9;      // fb413 — + chorus 6, flanger 7, phaser 8
+    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 54
+    static_assert (kChainMax <= tw::FxChainTopology::kMaxSlots,
+                   "every activatable device must fit in the topology's slot table");
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
     int chainCount_ = 0;
     // fb351 — THE RACK IS SERIAL AGAIN. fb348 gave every device its own per-osc send bus and had
@@ -1748,6 +1762,50 @@ private:
     void cacheFilterRefs();
     double fltPrepSr_ = 0.0;
     void applyFlt (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+
+    // ═══ fb413 — CHORUS (6) · FLANGER (7) · PHASER (8) ═══════════════════════════════════════
+    // All three are EAGER, like the filter and unlike granular/tape: the biggest of them holds a
+    // few hundred ms of delay line, not an 8 MB grain ring or a 4 MB tape loop, so six instances
+    // each cost far less than the lazy-build handshake would cost in complexity. One `apply`
+    // routine per device, run by EVERY instance — the pool law made structural (fb350).
+    struct ChoRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr;
+        std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
+        std::atomic<float>* mix; std::atomic<float>* time; std::atomic<float>* detune;
+        std::atomic<float>* width; std::atomic<float>* flutter; std::atomic<float>* drift;
+        std::atomic<float>* colour; std::atomic<float>* lowkeep; std::atomic<float>* phase;
+        std::atomic<float>* sync; std::atomic<float>* wide;
+        std::atomic<float>* src[6]; };
+    struct FlaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr;
+        std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
+        std::atomic<float>* mix; std::atomic<float>* manual; std::atomic<float>* spread;
+        std::atomic<float>* width; std::atomic<float>* damping; std::atomic<float>* shape;
+        std::atomic<float>* bounce; std::atomic<float>* tail; std::atomic<float>* lowcut;
+        std::atomic<float>* sync; std::atomic<float>* invert;
+        std::atomic<float>* src[6]; };
+    struct PhaRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr;
+        std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
+        std::atomic<float>* mix; std::atomic<float>* center; std::atomic<float>* stages;
+        std::atomic<float>* spread; std::atomic<float>* stereo; std::atomic<float>* touch;
+        std::atomic<float>* lag; std::atomic<float>* floorK; std::atomic<float>* color;
+        std::atomic<float>* sync; std::atomic<float>* invert;
+        std::atomic<float>* src[6]; };
+    std::array<ChoRefs, (size_t) ParameterIDs::kFxInstances> choRefs_ {};
+    std::array<FlaRefs, (size_t) ParameterIDs::kFxInstances> flaRefs_ {};
+    std::array<PhaRefs, (size_t) ParameterIDs::kFxInstances> phaRefs_ {};
+    std::array<tw::TerrainChorusFx,  (size_t) ParameterIDs::kFxInstances> choPool_ {};
+    std::array<tw::TerrainFlangerFx, (size_t) ParameterIDs::kFxInstances> flaPool_ {};
+    std::array<tw::TerrainPhaserFx,  (size_t) ParameterIDs::kFxInstances> phaPool_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> choEnv_ {}, flaEnv_ {}, phaEnv_ {};
+    double fx3PrepSr_ = 0.0;
+    void cacheFx3Refs();
+    void pushFx3Params() noexcept;      // ONCE PER BLOCK — see the note in the .cpp
+    void applyCho (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyFla (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyPha (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+
     void buildPendingTapeEngines();          // MESSAGE THREAD ONLY (timerCallback)
     std::array<float, (size_t) kFxExtra> poolRvbBloomEnv_ {};
     std::array<std::atomic<float>, (size_t) kFxExtra> poolRvbBloomViz_ {};

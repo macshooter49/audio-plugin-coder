@@ -5602,6 +5602,10 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         // read as the same sample-and-hold the granular waveform did at fb363. The payload is
         // ~90 bytes per LIVE instance (null otherwise), far under the fb342 frame-drop line.
         js << "window.__tpeVizPush=" << audioProcessor.getTapeVizJson() << ";";
+        // fb413 — the three new cards ride the SAME 60 Hz lane, for the reason the tape does:
+        // they are MOVING pictures (a sweeping comb, a breathing ribbon), and fb363 measured
+        // that a 15 Hz feed on moving material reads as a sample-and-hold.
+        js << "window.__fx3VizPush=" << audioProcessor.getFx3VizJson() << ";";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

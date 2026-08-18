@@ -45,7 +45,7 @@ std::string srcStr (uint8_t m)
 }
 
 // One slot's expected outcome.
-struct Want { uint8_t entry; uint32_t feed; bool consumed; uint8_t eff; };
+struct Want { uint8_t entry; uint64_t feed; bool consumed; uint8_t eff; };   // fb413 — 64-bit, 54 slots
 
 void expect (tw::FxChainTopology& t, int slot, Want w)
 {
@@ -59,8 +59,8 @@ void expect (tw::FxChainTopology& t, int slot, Want w)
 
     if (t.feed[slot] != w.feed)
     {
-        std::snprintf (buf, sizeof buf, "slot %d feed = 0x%x, wanted 0x%x",
-                       slot, t.feed[slot], w.feed);
+        std::snprintf (buf, sizeof buf, "slot %d feed = 0x%llx, wanted 0x%llx",
+                       slot, (unsigned long long) t.feed[slot], (unsigned long long) w.feed);
         check (false, buf);
     } else ++gPass;
 
@@ -277,9 +277,34 @@ int main()
         std::printf ("  %d chains swept, all invariants hold\n", swept);
     }
 
-    // ── 18. capacity: the filter pool has to fit alongside the other five kinds.
-    head ("18. kMaxSlots holds 6 instances of all 6 device kinds");
-    check (tw::FxChainTopology::kMaxSlots >= 36, "kMaxSlots must hold 6 kinds x 6 instances");
+    // ── 18. capacity: every kind's full pool has to fit, and the FEED MASK has to reach it.
+    head ("18. kMaxSlots holds 6 instances of all 9 device kinds");
+    check (tw::FxChainTopology::kMaxSlots >= 54, "kMaxSlots must hold 9 kinds x 6 instances");
+    check (tw::FxChainTopology::kMaxSlots <= 64, "kMaxSlots must fit inside the 64-bit feed mask");
+
+    // ── 19. 🚨 THE DEEP CHAIN. `feed` is a bitmask over upstream SLOT INDICES, so its width is
+    //    the real slot ceiling. It was a uint32_t against kMaxSlots 44: slot 33 eating slot 32
+    //    shifts 1u by 32, which is UNDEFINED BEHAVIOUR in C++, not merely a wrong answer. 36
+    //    slots were already reachable at fb377 (6 kinds x 6) and nobody had built a chain that
+    //    long. 9 kinds x 6 makes 54, so this is now ordinary usage, not a corner.
+    //    The chain below is 50 devices ALL routed to source A: each one eats its predecessor,
+    //    so slot 49 must name slot 48 — bit 48, seventeen bits past where a uint32 ends.
+    head ("19. a 50-device chain: the feed mask reaches past bit 31");
+    {
+        uint8_t masks[50]; for (int i = 0; i < 50; ++i) masks[i] = A;
+        tw::FxChainTopology t; t.build (masks, 50);
+        check (t.count == 50, "all 50 slots survive the build");
+        check (t.entry[0] == A, "the FIRST device taps A");
+        int tapped = 0; for (int i = 1; i < 50; ++i) if (t.entry[i] != 0) ++tapped;
+        check (tapped == 0, "and no later device taps it a second time");
+        int chained = 0;
+        for (int i = 1; i < 50; ++i) if (t.feed[i] == (1ull << (unsigned) (i - 1))) ++chained;
+        check (chained == 49, "every slot eats exactly its predecessor, all the way to bit 48");
+        check (t.feed[49] == (1ull << 48), "slot 49's feed mask IS bit 48");
+        int eaten = 0; for (int i = 0; i < 49; ++i) if (t.consumed[i]) ++eaten;
+        check (eaten == 49, "every slot but the last is consumed downstream");
+        check (! t.consumed[49], "and the last one reaches the mix");
+    }
 
     std::printf ("\n  %d passed, %d FAILED\n\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;
