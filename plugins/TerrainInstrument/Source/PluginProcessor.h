@@ -1800,6 +1800,9 @@ private:
     std::array<tw::TerrainPhaserFx,  (size_t) ParameterIDs::kFxInstances> phaPool_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> choEnv_ {}, flaEnv_ {}, phaEnv_ {};
     double fx3PrepSr_ = 0.0;
+    // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.
+    std::atomic<float>* sendRef_[9][(size_t) ParameterIDs::kFxInstances] {};
+    void cacheSendRefs();
     void cacheFx3Refs();
     void pushFx3Params() noexcept;      // ONCE PER BLOCK — see the note in the .cpp
     void applyCho (int inst0, float inL, float inR, float& outL, float& outR) noexcept;

@@ -143,6 +143,34 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       }
       window.__setSynParam=real;
     }
+    // ═══ fb414 — THE SEND PILL. It must exist on EVERY device (it is a rack-wide routing mode,
+    //  not an fx3 feature), it must write its own param, and it must not reflow the six route
+    //  letters beside it (the fixed-positions law: nothing moves when content changes).
+    out.send={};
+    {
+      const spy=[]; const real=window.__setSynParam;
+      window.__setSynParam=function(id,v){ spy.push([id,v]); try{ return real.apply(this,arguments); }catch(e){} };
+      const cards=[...document.querySelectorAll('.fxr-dev')];
+      out.send.onEveryCard = cards.length>0 && cards.every(c=>!!c.querySelector('.fxr-snd'));
+      const c0=cards[0];
+      if(c0){
+        const letters=[...c0.querySelectorAll('.fxr-r')];
+        const before=letters.map(e=>Math.round(e.getBoundingClientRect().left));
+        const pill=c0.querySelector('.fxr-snd');
+        out.send.litBefore = pill.classList.contains('fxr-on');
+        spy.length=0;
+        pill.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        out.send.litAfter = pill.classList.contains('fxr-on');
+        const w=spy.find(e=>/_SEND$/.test(e[0]));
+        out.send.wrote = w ? (w[0]+'='+w[1]) : 'nothing';
+        const after=letters.map(e=>Math.round(e.getBoundingClientRect().left));
+        out.send.moved = before.filter((x,i)=>x!==after[i]).length;
+        // and it must be a real toggle, not a one-way latch
+        pill.dispatchEvent(new MouseEvent('click',{bubbles:true}));
+        out.send.litAgain = pill.classList.contains('fxr-on');
+      }
+      window.__setSynParam=real;
+    }
     // nothing may resolve to pure black (the fb398 trap: an undefined CSS var falls back to
     // `initial`, which is black, and every currentColor consumer inherits it)
     // ⚠️ only PAINTING elements, and only the paint each one actually uses: an <svg> element's
@@ -190,6 +218,14 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
         t ? ('picked entry 1 of '+t.opts+' on a choice('+t.pn+') param -> wrote '+t.norm+' -> decodes to index '+t.decoded)
           : 'no measurement');
   }
+  const S=r.send||{};
+  chk(S.onEveryCard===true, 'fb414 — every card in the rack carries the Send tap');
+  chk(S.litBefore===false && S.litAfter===true && S.litAgain===false,
+      'fb414 — Send toggles both ways (off is the default, so old projects load identical)',
+      S.litBefore+' -> '+S.litAfter+' -> '+S.litAgain);
+  chk(/_SEND=1$/.test(S.wrote||''), 'fb414 — and it writes its own param', S.wrote);
+  chk(S.moved===0, 'fb414 — adding it moved NONE of the six route letters (fixed-positions law)',
+      S.moved+' moved');
   chk(r.blackNodes===0, 'nothing in any core resolves to black (the undefined-var trap)',
       r.blackNodes ? r.blackList.join(', ') : '0 black nodes');
   chk(r.cardsTotal===18, 'eighteen cards live at once (6 x 3) and the rack survives it',

@@ -3990,6 +3990,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             }
         }
         }
+
+        // ═══════════ fb414 — SEND MODE. The rack stops being insert-only. ═══════════════════════
+        // Max: "there gotta be a way to have it to where it doesn't distort the sound in which the
+        // granulizer is also granulizing... it's coming AFTER the source."
+        //
+        // The chain already does the hard half: the FIRST device routed to a source taps it, and
+        // any later device sharing that source EATS the upstream output instead of tapping the
+        // oscillator again (FxChainTopology::build). So a distortion routed to A behind a granular
+        // already never touches raw osc A — its entry mask is 0 and it feeds off the granular.
+        //
+        // What was missing is that fb351 made the rack an INSERT: routing a source to any device
+        // SUBTRACTS that oscillator from the main mix (exUnionG_), so the only dry you could get
+        // back was whatever the first device's own Mix passed through — and that dry then travels
+        // down the branch and gets processed by everything after it. Grains and note, inseparable.
+        //
+        // SEND flips the TAP, not the chain: the device still receives the oscillator, but the
+        // oscillator ALSO keeps playing into the main mix. One bool, nine kinds, six instances.
+        // Default OFF everywhere, so every existing project loads sounding bit-identical.
+        {
+            static const char* const kPfx[9] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
+                                                 "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_" };
+            static const char* const kNm [9] = { "Reverb","Delay","Distortion","Granular",
+                                                 "Tape","Filter","Chorus","Flanger","Phaser" };
+            for (int k = 0; k < 9; ++k)
+                for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+                {
+                    juce::String p (kPfx[k]);
+                    if (n > 1) p = p.dropLastCharacters (1) + juce::String (n) + "_";
+                    const juce::String d = juce::String (kNm[k]) + (n > 1 ? (" " + juce::String (n)) : juce::String())
+                                         + " Send";
+                    B (p + "SEND", d, false);
+                }
+        }
     }
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
@@ -4604,6 +4637,21 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
     return j + "]}";
 }
 
+// fb414 — the SEND refs, for every device kind and instance in one table. Built from the same
+// prefix list the params were, so the two cannot drift; a nullptr simply reads as insert.
+void TerrainInstrumentAudioProcessor::cacheSendRefs()
+{
+    static const char* const kPfx[9] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
+                                         "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_" };
+    for (int k = 0; k < 9; ++k)
+        for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+        {
+            juce::String p (kPfx[k]);
+            if (n > 1) p = p.dropLastCharacters (1) + juce::String (n) + "_";
+            sendRef_[(size_t) k][(size_t) (n - 1)] = apvts.getRawParameterValue (p + "SEND");
+        }
+}
+
 // ═══ fb413 — CHORUS · FLANGER · PHASER refs. One cache, three devices: they share a chassis,
 // so they share a shape, and a single routine is one place to get the grammar right.
 void TerrainInstrumentAudioProcessor::cacheFx3Refs()
@@ -5077,6 +5125,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheTapeParams();
     cacheFilterRefs();   // fb377         // fb365 — and all six tape instances
     cacheFx3Refs();      // fb413 — chorus / flanger / phaser, six each
+    cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
@@ -7607,14 +7656,41 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         }
     }
 
+    // ═══ fb414 — WHICH OSCILLATORS ACTUALLY LEAVE THE MAIN MIX ═════════════════════════════
+    // This used to be "any device is routed to source s" and it read the raw ROUTE masks. Two
+    // things change, and the first is a correctness fix that stands on its own:
+    //
+    //  (a) it now reads the ENTRY masks. A source enters the rack exactly ONCE, at the first
+    //      device routed to it; every later device sharing that source eats the upstream output
+    //      instead. So the device that TAPS is the only one whose mode can matter, and the route
+    //      masks were naming devices that never touch the oscillator at all.
+    //  (b) a tap in SEND mode does not subtract. The oscillator feeds the rack AND keeps playing
+    //      into the mix, which is the parallel branch: osc A stays clean while a copy travels
+    //      granular -> distortion and comes back as distorted grains only.
+    //
+    // The tap and the subtraction were already separate mechanisms — the voice feeds the rack
+    // through poolSendBuf_ and is subtracted through routedDryBuf_ — so this is genuinely just
+    // "don't add it to the union", not a signal-path rewrite.
     exUnionAny_ = false;
-    for (int s = 0; s < 6; ++s)
-    {
-        bool routed = (hallRvbG_[s] > 0.0f) || (dlyG_[s] > 0.0f) || (dstG_[s] > 0.0f);
-        for (int q = 0; q < kPoolSendCount && ! routed; ++q)         // fb348 — pooled masks join the union
-            if (poolRouteAny_[(size_t) q] && poolRouteG_[(size_t) (q * 6 + s)] > 0.0f) routed = true;
-        exUnionG_[s] = routed ? 1.0f : 0.0f;
-        exUnionAny_ = exUnionAny_ || routed;
+    { uint8_t insertMask = 0;
+      const int nT = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+      for (int c = 0; c < nT; ++c)
+      {
+          const uint8_t e = fxTopo_.entry[c];
+          if (e == 0) continue;                                   // this slot taps nothing
+          const auto& ce = chainOrder_[(size_t) c];
+          const int ki = ce.kind, ii = ce.inst - 1;
+          const bool sendMode = ki >= 0 && ki < 9 && ii >= 0 && ii < ParameterIDs::kFxInstances
+                             && sendRef_[(size_t) ki][(size_t) ii] != nullptr
+                             && sendRef_[(size_t) ki][(size_t) ii]->load() > 0.5f;
+          if (! sendMode) insertMask = (uint8_t) (insertMask | e);
+      }
+      for (int s = 0; s < 6; ++s)
+      {
+          const bool pulled = (insertMask & (1u << (unsigned) s)) != 0;
+          exUnionG_[s] = pulled ? 1.0f : 0.0f;
+          exUnionAny_ = exUnionAny_ || pulled;
+      }
     }
     for (int q = 0; q < kPoolSendCount; ++q)                          // per-instance send buses
     {
