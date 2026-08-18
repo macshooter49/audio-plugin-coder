@@ -732,7 +732,7 @@ private:
         // taps mono  baseLo baseHi  wave depth  stag   fastHz fInt   fKnob  trk   pol detC  drift  fbMax  trim  pm pe grit comp
         {  1,   0,     3.0f,  24.0f,  1,  5.10f, 0.05f,  5.5f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 0.96f, 0, 0, 1.0f, 1.0f },  // Vintage
         {  1,   0,     1.0f,  12.0f,  0,  2.95f, 0.06f,  6.0f, 0.00f, 0.50f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 0.91f, 1, 0, 1.0f, 1.0f },  // June
-        {  1,   1,     1.7f,  14.7f,  2,  3.50f, 0.00f,  6.5f, 0.00f, 0.40f, 0.15f, 1, 0.0f, 0.00f, 0.992f, 0.97f, 2, 1, 1.0f, 1.0f },  // Pedal
+        {  1,   1,     1.7f,  14.7f,  2,  3.50f, 0.00f,  6.5f, 0.00f, 0.40f, 0.15f, 1, 0.0f, 0.00f, 0.992f, 1.01f, 2, 1, 1.0f, 1.0f },  // Pedal  fb417: trim 0.97->1.01 — the wider image sums lower in mono, and the Type-swap gate reads the LEVEL STEP between neighbours
         {  3,   1,     3.0f,  21.3f,  1,  4.00f, 0.08f,  4.5f, 0.10f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 1.45f, 3, 0, 1.0f, 1.0f },  // Trio
         {  3,   1,     2.5f,  14.4f,  0,  1.80f, 0.07f,  6.25f,0.25f, 0.60f, 0.00f, 1, 0.0f, 0.00f, 0.992f, 1.46f, 5, 0, 1.0f, 1.0f },  // Ensemble
         {  1,   0,     4.0f,  20.0f,  1,  1.50f, 0.00f,  6.0f, 0.00f, 0.30f, 0.00f, 1, 6.0f, 0.00f, 0.96f, 1.09f, 4, 0, 1.0f, 1.0f },  // Micro
@@ -943,10 +943,23 @@ private:
                 tap_[1][0] = { 0.0f, 0.5f, 1.0f,
                                (T.phaseMode == 7 ? C.x1 : 1.0f + T.stagger), 0.0f, 0.0f, 0 };
                 break;
-            case 2:   // Pedal — ONE line read TWICE, CO-PHASE. Phase = the read offset.
+            case 2:   // Pedal — ONE line read TWICE. Phase = the read offset AND, since fb417,
+                      // a real L/R sweep offset.
+                // 🔑 fb417 — MAX OVERRODE THE CO-PHASE DESIGN, and he was right to. Pedal was
+                // built as a faithful mono stomp box: both reads moved TOGETHER and the only
+                // stereo was a fixed 1.2 ms offset between them. A fixed offset is a COMB, not
+                // a width — which is exactly why he described it as "in mono... and if it's
+                // already in stereo then it's very weird". Measured: side/mid −3.57 dB, and
+                // what side energy there was came from comb filtering rather than motion.
+                // The R read now takes up to 90° of LFO offset from the Phase knob, which is
+                // what Phase means on every other Type in this device, so Pedal finally has
+                // width you can widen. The 1.2 ms read offset stays — that IS the pedal.
+                // ⚠️ This deliberately breaks the roster's "Pedal: CO-PHASE" discriminator.
+                // The gate encoded a design choice, and the design choice is the thing Max
+                // rejected; the gate now measures what the Type is FOR instead.
                 nT = 1;
-                tap_[0][0] = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 0.0f, 0 };
-                tap_[1][0] = { 0.0f, 0.0f, 1.0f, 1.0f, 0.0f, 1.2f, 0 };
+                tap_[0][0] = { 0.0f, 0.0f,  1.0f, 1.0f, 0.0f, 0.0f, 0 };
+                tap_[1][0] = { 0.0f, 0.30f, 1.0f, 1.0f, 0.0f, 1.2f, 0 };
                 break;
             case 3:   // Trio — 3 (or 4) taps PANNED L/C/R; Phase = the tap spread
             {

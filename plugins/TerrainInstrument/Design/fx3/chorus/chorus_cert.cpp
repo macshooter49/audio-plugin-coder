@@ -658,8 +658,18 @@ int main()
         // Phase 180, which already decorrelates the AUDIO (measured -0.06) even though the
         // two reads move perfectly together. The topology tell is the correlation of the
         // two DELAY TRACES, which is exactly what "co-phase" means.
-        gate ("Pedal: CO-PHASE — the two reads move TOGETHER", f.dLR > 0.90,
-              fmt ("d(t) L/R correlation %+.3f (gate > +0.90)", f.dLR));
+        // 🔑 fb417 — THIS GATE USED TO ASSERT CO-PHASE, AND MAX OVERRODE THE DESIGN.
+        //  Pedal was a faithful mono stomp box: both reads moved together and the only stereo
+        //  was a fixed 1.2 ms offset, which is a COMB, not a width. Max: "the Pedal chorus is
+        //  in mono for some reason... and if it's already in stereo then it's very weird."
+        //  He was right on both counts — measured side/mid was −3.57 dB and what little side
+        //  energy existed came from comb filtering rather than from motion.
+        //  Pedal now takes up to 90° of L/R sweep offset from the Phase knob, so the gate
+        //  measures what the Type is FOR: a read offset that is neither locked together (that
+        //  was the mono complaint) nor fully opposed (that is June's identity).
+        gate ("Pedal: the two reads are OFFSET, not locked and not opposed",
+              std::fabs (f.dLR) < 0.75,
+              fmt ("d(t) L/R correlation %+.3f (gate |r| < 0.75)", f.dLR));
         gate ("   ... where June's move in OPPOSITION", F[1].dLR < -0.90,
               fmt ("June d(t) L/R correlation %+.3f (gate < -0.90)", F[1].dLR));
     }

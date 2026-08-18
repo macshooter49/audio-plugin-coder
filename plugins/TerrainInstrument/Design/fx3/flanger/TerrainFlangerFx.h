@@ -873,8 +873,10 @@ private:
             // servo BOUNCE: a damped spring on the sweep target. The overshoot on every
             // reversal is the Eventide FL-201 capstan model; blended in by Bounce so
             // Bounce 0 is genuinely OFF, not "a filter with a small coefficient".
-            const float wn = 6.2831853f * 1.8f;
-            const float z  = c.bounceZ - 0.30f * bncS_;
+            // ...and the spring rings harder and slower as it opens, so the overshoot on every
+            // reversal is a WARBLE you can follow rather than a coefficient.
+            const float wn = 6.2831853f * (1.8f - 0.7f * bncS_);
+            const float z  = c.bounceZ - 0.62f * bncS_;
             const float acc = wn * wn * (a - bs_) - 2.0f * z * wn * bv_;
             bv_ += acc / fs_; bs_ += bv_ / fs_;
             bs_ = flush (bs_); bv_ = flush (bv_);
@@ -998,7 +1000,15 @@ private:
             //  as a linear pitch dive (the A/DA sound); a linear-ms sweep bunches all
             //  the motion at the short end. 2.66 octaves at Depth 100 = 2^5.32 ≈ 40:1,
             //  the A/DA ratio, against an industry norm of 20:1.
-            const float oct = softLim (2.66f * depS_ * c.spanMul * mod * (float) c.dir + drift * 0.30f, 6.4f);
+            // fb417 — BOUNCE'S DRIFT WEIGHT OPENS OUT. Max: "the Bounce isn't doing anything
+            // audible, it's just being there." It measured 13.08 dB of spectral change — the
+            // same order as Damping, which he plainly hears — and still read as nothing,
+            // because it shifted WHERE the sweep sat without changing HOW it moved. A fixed
+            // 0.30 weight makes the drift a nudge; at the top of the knob it should be the
+            // reason the sweep sounds drunk. Quadratic, so 0 is still genuinely OFF and only
+            // the upper half turns liquid (the fb397 shaped-travel law).
+            const float dW  = 0.30f + 1.60f * bncS_ * bncS_;
+            const float oct = softLim (2.66f * depS_ * c.spanMul * mod * (float) c.dir + drift * dW, 6.4f);
             float tMs = manS_ * fexp2 (oct);
             tMs = clampf (tMs, 0.045f, 42.0f);
             float D = tMs * msToS;
