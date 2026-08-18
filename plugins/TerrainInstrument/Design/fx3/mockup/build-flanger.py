@@ -39,7 +39,9 @@ body{background:radial-gradient(900px 520px at 30%% -10%%,#241d3a 0,transparent 
 /* ══ LIFTED VERBATIM FROM index.html — do not hand-edit ══ */
 %(css)s
 /* ══ end lifted ══ */
-#wf .fl-t{animation:none}   /* one shared line grammar, but no per-path breathe drift */
+#syn-panel .fxr-core .fl-t{animation:none !important}   /* we drive opacity per frame; the
+   inherited mvBreathe fought it and strobed purple (fb401) */
+#syn-panel .fxr-core{margin:0}                          /* edge to edge (Max, fb401) */
 .bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;padding:10px 15px;
   border:1px solid var(--border-strong);border-radius:11px;background:rgba(255,255,255,.02)}
 .bar h1{font-size:11px;font-weight:500;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-secondary);margin:0 4px 0 0}
@@ -126,7 +128,14 @@ document.querySelectorAll('.fxr-dial').forEach(function(dial){
 document.querySelector('.fxr-pwr').addEventListener('click',function(){
   D.on=!D.on; document.querySelector('.fxr-dev').classList.toggle('fxr-off',!D.on);
   if(wetG){var t=ac.currentTime; wetG.gain.setTargetAtTime(D.on?1:0,t,0.02); dryG.gain.setTargetAtTime(D.on?0:1,t,0.02);} });
-document.querySelectorAll('.fxr-r,.fxr-pill').forEach(function(e){e.addEventListener('click',function(){e.classList.toggle('fxr-on');});});
+document.querySelectorAll('.fxr-r').forEach(function(e){e.addEventListener('click',function(){e.classList.toggle('fxr-on');});});
+document.querySelectorAll('.fxr-pill').forEach(function(e,i){e.addEventListener('click',function(){
+  var on=!e.classList.contains('fxr-on'); e.classList.toggle('fxr-on',on);
+  if(!node) return;
+  if(i===0) node.port.postMessage({tempoSync:on, bpm:120});          // Sync — real, not decorative
+  else { D.pills[1].on=on;                                          // Invert — flip comb polarity
+         push('feedback', on ? D.knobs[2].v/100 : 1-(D.knobs[2].v/100)); }
+});});
 
 var ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,playing=false,kind='sine',viz={lfo:0,lvl:0,notch:[]};
 function fail(m){document.getElementById('err').textContent=m;document.getElementById('status').textContent='Failed to start.';}
@@ -198,7 +207,7 @@ document.querySelectorAll('#src button').forEach(function(b){b.addEventListener(
    is vector. When the comb leaves the audio band (D -> 0) the lines run off the top together
    and the window flashes — the through-zero null, measured -61.2 dB. ═════════════════════ */
 var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
-var HIST=[], NT=8;
+var HIST=[], NT=8, yOff=0, flEnv=0;
 function frame(){
   var svg=document.getElementById('wf');
   if(svg){
@@ -209,21 +218,30 @@ function frame(){
     var lvl=Math.max(0,Math.min(1,(viz.lvl||0)*2.2)), wake=0.28+0.72*lvl;
     HIST.push(first); if(HIST.length>120) HIST.shift();
     var nullness=Math.max(0,Math.min(1,(first-4200)/7000));
+    // where does the family sit right now? centre it, smoothly.
+    var sy=0, sn=0;
+    for(var q=0;q<NT;q++){ var fq=first*(2*q+1); if(fq<=FMAX){
+      sy+=H*(1-(Math.log(Math.max(FMIN,fq))-LMIN)/LSPAN); sn++; } }
+    if(sn){ var want=H*0.5-(sy/sn); yOff += (want-yOff)*0.06; }
     for(var t=0;t<NT;t++){
       var d='', mult=2*t+1;
       for(var i=0;i<HIST.length;i++){
         var f=HIST[i]*mult; if(f>FMAX) { d=''; continue; }
         var x=(i/(HIST.length-1||1))*W;
-        var y=H*(1-(Math.log(Math.max(FMIN,f))-LMIN)/LSPAN);
+        var y=H*(1-(Math.log(Math.max(FMIN,f))-LMIN)/LSPAN)+yOff;
         d+=(d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
       }
       var el=document.getElementById('t'+t);
       el.setAttribute('d',d);
-      el.setAttribute('opacity',((0.30+0.62*wake)*Math.pow(0.86,t)).toFixed(3));
+      el.style.opacity=((0.34+0.60*wake)*Math.pow(0.87,t)).toFixed(3);
     }
     var fl=document.getElementById('flash');
     fl.setAttribute('width',W); fl.setAttribute('height',H);
-    fl.setAttribute('opacity',(Math.pow(nullness,1.6)*0.5*(0.3+0.7*wake)).toFixed(3));
+    // the flash is ENVELOPED, never per-frame: a raw threshold on a sweeping value
+    // snaps on and off every frame and reads as a strobe, not as an event.
+    var tgt=Math.pow(nullness,1.6)*0.42*(0.3+0.7*wake);
+    flEnv = tgt>flEnv ? (flEnv+(tgt-flEnv)*0.35) : (flEnv*0.90);
+    fl.style.opacity=flEnv.toFixed(3);
   }
   requestAnimationFrame(frame);
 }
