@@ -40,7 +40,7 @@ for m in re.finditer(r'#syn-panel\s*\{[^}]*\}', src):
 assert theme_src, 'could not find the #syn-panel theme-variable block'
 vars_only = re.findall(r'(--[A-Za-z0-9\-]+\s*:\s*[^;]+;)', theme_src)
 assert len(vars_only) > 8, 'theme block yielded too few variables'
-theme = '#syn-panel{\n  ' + '\n  '.join(v.strip() for v in vars_only) + '\n}'
+theme = ':root,#syn-panel{\n  color:var(--text-primary);\n  ' + '\n  '.join(v.strip() for v in vars_only) + '\n}'
 
 # ── 2. every rule that dresses a rack device — taken whole, never retyped.
 #      Tokenise by MATCHING BRACES, not by regex. A regex over raw CSS matches ".fxr-core"
@@ -160,7 +160,7 @@ var RLBL=['A','B','C','D','S','N'];
 %(knob)s
 
 /* ── the device model, shaped exactly like the rack's own `d` object ── */
-var D={ name:'Chorus', core:'chorus', type:TYPES[0], types:TYPES, preset:'Init', on:true, noBack:true,
+var D={ name:'Chorus', core:'chorus', type:TYPES[0], types:TYPES, preset:'Init', on:true, noBack:false,
         pills:[{t:'Sync',on:false},{t:'Wide',on:true}],
         route:[true,true,false,false,false,false],
         knobs:[{l:'Rate',v:35},{l:'Depth',v:60},{l:'Feedback',v:15},{l:'Mix',v:50}] };
@@ -171,7 +171,7 @@ function devHTML(d){
   var pills=d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
   var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
   var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'">'+knobSVG(k.v,null,null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
-  return '<div class="fxr-dev fxr-sel'+(d.on?'':' fxr-off')+' noback" data-dev="0">'
+  return '<div class="fxr-dev fxr-sel'+(d.on?'':' fxr-off')+'" data-dev="0">'
     +'<div class="fxr-head">'
       +'<span class="fxr-grip">\\u22ee\\u22ee</span><span class="fxr-name">'+d.name+'</span>'
       +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+d.type+'<span class="fxr-car">\\u25be</span></span>'
@@ -179,7 +179,7 @@ function devHTML(d){
         +'</span><select class="fxr-type-native" id="tsel">'+d.types.map(function(t){return '<option'+(t===d.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></span>'
       +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">\\u2726</span><span class="fxr-pname" id="chname">'+(CH[0]||'Init')+'</span><span class="fxr-car">\\u25be</span><select class="fxr-type-native" id="csel"></select></span>'
       +'<span class="fxr-spacer"></span>'
-      +'<span class="fxr-headr"><span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap" data-act="swap" title="More parameters">'+IC_PLUS+IC_ARROW+'</span><span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
     +'</div>'
     +'<div class="fxr-core" data-core="chorus">'
       +'<svg id="cs" preserveAspectRatio="none"><path class="dst-curve" id="cline"/>'
