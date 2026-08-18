@@ -854,7 +854,6 @@ function devHTML(d){
         +'<span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
     +'</div>'
     +'<div class="fxr-core" data-core="flanger"><svg id="wf" preserveAspectRatio="none">'
-      +'<rect id="flash" x="0" y="0" width="0" height="0" fill="#FFFFFF" opacity="0"/>'
       +[0,1,2,3,4,5,6,7].map(function(i){return '<path class="dst-curve fl-t" id="t'+i+'"/>';}).join('')
       +'</svg></div>'
     +'<div class="fxr-ctrls">'
@@ -955,22 +954,25 @@ document.querySelectorAll('#src button').forEach(function(b){b.addEventListener(
    is vector. When the comb leaves the audio band (D -> 0) the lines run off the top together
    and the window flashes — the through-zero null, measured -61.2 dB. ═════════════════════ */
 var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
-var HIST=[], NT=8, yOff=0, flEnv=0;
+var HIST=[], NT=8, yOff=0, fSm=0;
 function frame(){
   var svg=document.getElementById('wf');
   if(svg){
     var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height);
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
-    var band=(viz.notch||[]).filter(function(f){return f>20&&f<FMAX;});
-    var first=band.length?band[0]:600;
+    var band=(viz.notch||[]).filter(function(f){return f>20&&f<FMAX;}).sort(function(a,b){return a-b;});
+    var target=band.length?band[0]:600;                 // the LOWEST tooth, stably identified
+    if(!fSm) fSm=target;
+    // one-pole in log space, ~90 ms: continuous between engine frames instead of stair-stepped
+    fSm=Math.exp(Math.log(fSm)+(Math.log(target)-Math.log(fSm))*0.10);
+    var first=fSm;
     var lvl=Math.max(0,Math.min(1,(viz.lvl||0)*2.2)), wake=0.28+0.72*lvl;
     HIST.push(first); if(HIST.length>120) HIST.shift();
-    var nullness=Math.max(0,Math.min(1,(first-4200)/7000));
     // where does the family sit right now? centre it, smoothly.
     var sy=0, sn=0;
     for(var q=0;q<NT;q++){ var fq=first*(2*q+1); if(fq<=FMAX){
       sy+=H*(1-(Math.log(Math.max(FMIN,fq))-LMIN)/LSPAN); sn++; } }
-    if(sn){ var want=H*0.5-(sy/sn); yOff += (want-yOff)*0.06; }
+    if(sn){ var want=H*0.5-(sy/sn); yOff += (want-yOff)*0.02; }   // slower than the sweep, so it never fights it
     for(var t=0;t<NT;t++){
       var d='', mult=2*t+1;
       for(var i=0;i<HIST.length;i++){
@@ -983,13 +985,7 @@ function frame(){
       el.setAttribute('d',d);
       el.style.opacity=((0.34+0.60*wake)*Math.pow(0.87,t)).toFixed(3);
     }
-    var fl=document.getElementById('flash');
-    fl.setAttribute('width',W); fl.setAttribute('height',H);
-    // the flash is ENVELOPED, never per-frame: a raw threshold on a sweeping value
-    // snaps on and off every frame and reads as a strobe, not as an event.
-    var tgt=Math.pow(nullness,1.6)*0.42*(0.3+0.7*wake);
-    flEnv = tgt>flEnv ? (flEnv+(tgt-flEnv)*0.35) : (flEnv*0.90);
-    fl.style.opacity=flEnv.toFixed(3);
+    // (fb402 — the white flash is GONE. See the commit: it strobed because its trigger jumped.)
   }
   requestAnimationFrame(frame);
 }
