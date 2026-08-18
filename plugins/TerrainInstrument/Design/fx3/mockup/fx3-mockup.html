@@ -1,0 +1,2421 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chorus · Flanger · Phaser — mockup</title>
+<style>
+  /* ── house tokens, lifted verbatim from index.html (fb395 — match, never invent) ───────── */
+  :root{
+    --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+    --line:#ECE8F2;                                  /* the .dst-curve white */
+    --text-primary:rgba(255,255,255,.92); --text-secondary:rgba(255,255,255,.62);
+    --text-muted:rgba(255,255,255,.38); --text-dim:rgba(255,255,255,.30);
+    --border-strong:rgba(255,255,255,.22);
+    --bg:#141220; --bg2:#1B1728;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background:
+      radial-gradient(1100px 620px at 22% -8%, #241d3a 0%, transparent 62%),
+      radial-gradient(900px 520px at 88% 108%, #1d1830 0%, transparent 60%),
+      var(--bg);
+    color:var(--text-primary);
+    font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column; align-items:center; gap:22px; padding:26px 20px 40px;
+  }
+
+  /* ── the bar you drive it from ─────────────────────────────────────────────────────────── */
+  .bar{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;
+        padding:11px 16px; border:1px solid var(--border-strong); border-radius:11px;
+        background:rgba(255,255,255,.02); }
+  .bar h1{ font-size:11px; font-weight:500; letter-spacing:2.4px; text-transform:uppercase;
+           color:var(--text-secondary); margin:0 6px 0 0; }
+  .seg{ display:flex; gap:0; border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; }
+  .seg button{ background:transparent; border:0; color:var(--text-secondary); font:inherit; font-size:10px;
+               letter-spacing:.6px; padding:6px 12px; cursor:pointer; transition:.12s;
+               border-right:1px solid rgba(255,255,255,.12); }
+  .seg button:last-child{ border-right:0; }
+  .seg button:hover{ color:var(--text-primary); background:rgba(255,255,255,.05); }
+  .seg button[aria-pressed="true"]{ color:#fff; background:rgba(155,109,255,.26); }
+  .play{ display:flex; align-items:center; gap:8px; background:transparent; border:1px solid var(--purple-400);
+         color:var(--purple-400); border-radius:8px; padding:6px 15px; font:inherit; font-size:10px;
+         letter-spacing:1.2px; text-transform:uppercase; cursor:pointer; transition:.14s; }
+  .play:hover{ background:rgba(155,109,255,.16); }
+  .play.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff;
+            box-shadow:0 0 14px rgba(139,92,246,.5); }
+  .lvl{ display:flex; align-items:center; gap:8px; font-size:9px; letter-spacing:1px;
+        color:var(--text-muted); text-transform:uppercase; }
+  .lvl input{ width:96px; accent-color:var(--purple-500); }
+  .hint{ font-size:10px; color:var(--text-muted); letter-spacing:.3px; max-width:940px;
+         text-align:center; line-height:1.65; }
+  .hint b{ color:var(--text-secondary); font-weight:500; }
+
+  /* ── the rack, at the plugin's own geometry (272px cards) then zoomed to read ──────────── */
+  /* the rack renders at the plugin's real 272px card width, then scales up to read on a
+     desktop. The wrapper reserves the SCALED height so nothing below it gets overlapped. */
+  .rackwrap{ height:378px; display:flex; justify-content:center; }
+  .rackzoom{ transform:scale(1.7); transform-origin:top center; }
+  .rack{ display:flex; gap:9px; align-items:stretch; }
+
+  /* ── the device card — .fxr-dev, verbatim grammar: transparent, 1px border, 8px radius ─── */
+  .dev{ flex:0 0 272px; height:214px; background:transparent; border:1px solid var(--border-strong);
+        border-radius:8px; display:flex; flex-direction:column; transition:opacity .18s, border-color .14s; }
+  .dev:hover{ border-color:rgba(255,255,255,.34); }
+  .dev.off{ opacity:.45; }
+  .dev.off canvas{ filter:saturate(.25); }
+
+  .head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }  /* ONE centerline */
+  .grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab;
+         user-select:none; display:flex; align-items:center; }
+  .nm{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap;
+       line-height:1; display:flex; align-items:center; }
+  .pill{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong);
+         border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px;
+         cursor:pointer; white-space:nowrap; overflow:hidden; max-width:118px; }
+  .pill:hover{ border-color:rgba(255,255,255,.4); color:var(--text-primary); }
+  .pill .lab{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pill .car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; margin-left:auto; }
+  .pill select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+  .spacer{ flex:1; }
+  .pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400);
+        background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:none; }
+  .dev.off .pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+
+  .core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; }
+  .core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  /* the one readout that earns its place: what the picture is showing you */
+  .tellrow{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between;
+            font-size:7.5px; letter-spacing:.8px; color:var(--text-muted); pointer-events:none;
+            text-transform:uppercase; }
+
+  .feet{ display:flex; gap:0; padding:4px 8px 7px; }
+  .kn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .kn canvas{ width:34px; height:34px; cursor:ns-resize; display:block; }
+  .kn .kl{ font-size:7.5px; letter-spacing:.9px; color:var(--text-muted); text-transform:uppercase; }
+  .kn .kv{ font-size:8px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>Chorus · Flanger · Phaser</h1>
+  <div class="seg" id="src">
+    <button data-s="sine" aria-pressed="true">Sine</button>
+    <button data-s="pad">Pad</button>
+    <button data-s="pluck">Pluck</button>
+    <button data-s="noise">Noise</button>
+  </div>
+  <button class="play" id="play">Play</button>
+  <label class="lvl">Out <input id="vol" type="range" min="0" max="100" value="55"></label>
+</div>
+
+<p class="hint">
+  Signal runs <b>source → Chorus → Flanger → Phaser → out</b>, the rack's own order. Click a power dot to
+  bypass a device; drag a knob vertically; the two pills are Type and Character.
+  Every window draws the <b>notch geometry its engine publishes live</b> — so the picture is the DSP, not a decoration.
+  Start on <b>Sine</b> to hear what each one does to a single tone.
+</p>
+
+<div class="rackwrap"><div class="rackzoom"><div class="rack" id="rack"></div></div></div>
+
+<p class="hint" id="status">Press Play — the three engines load on first click.</p>
+
+<!-- the three engines, injected verbatim by build.py so this file stays self-contained -->
+<script id="wk-chorus"  type="text/worklet">// ═══════════════════════════════════════════════════════════════════════════════
+//  chorus-worklet.js — the FX-rack CHORUS device as an AudioWorkletProcessor, so Max can
+//  HEAR the roster in a Safari mockup before a line of it reaches the plugin (the fb296
+//  law: mockups are interactive AND audible, never a static picture).
+//
+//  This is a PORT of Design/fx3/chorus/TerrainChorusFx.h, not a second design. Same Type
+//  names, same Character names, same parameter names, same ranges, same tables, same
+//  topology. It is not sample-identical to the C++ (float64 here, no denormal flushes, the
+//  one-pole coefficients use the exact exp) — it is recognisably the same effect, and every
+//  measured behaviour in chorus_cert.cpp is reproduced by construction.
+//
+//  ── USE ──────────────────────────────────────────────────────────────────────
+//    await ctx.audioWorklet.addModule('chorus-worklet.js');
+//    const n = new AudioWorkletNode(ctx, 'terrain-chorus', { outputChannelCount: [2] });
+//    n.port.postMessage({ type: 1, character: 0, rate: 0.35, depth: 0.6, feedback: 0,
+//                         mix: 0.5, b1: 0.5, b2: 0, b3: 0.7, b4: 0.25,
+//                         b5: 0, b6: 0.5, b7: 0, b8: 1, tempoSync: false, bpm: 120 });
+//  Post any subset of the fields; anything omitted keeps its current value. The processor
+//  posts {lfo, lvl, notch[], depthNow} back at ~60 Hz for the card's Voice Orbits.
+//
+//  ⚠️ THE ONE THING TO KNOW IF YOU READ THE BIBLE FIRST: its §3.5 micro-shift recipe (a
+//  fixed 40 ms crossfade period with a tiny r*T excursion) SHIFTS NOTHING — a sawtooth-reset
+//  delay can only put energy on the lines f +- k/T, so a 2.5 Hz wanted shift against 25 Hz
+//  line spacing rounds to k = 0. The free parameter is the ramp SPAN; the period follows as
+//  span/r. Measured after the fix: 6 c -> +5.97, 50 c -> +50.03 cents.
+// ═══════════════════════════════════════════════════════════════════════════════
+
+const TYPE_NAMES = ['Vintage', 'June', 'Pedal', 'Trio', 'Ensemble', 'Micro', 'Wow', 'Dark'];
+
+const CHAR_NAMES = [
+  ['Classic', 'Slow', 'Fast', 'Deep', 'Wide 106', 'Locked', 'Thick', 'Hiss'],
+  ['I', 'II', 'I Plus II', 'Manual', 'Aged', 'Clean', 'Wide 106', 'Deep'],
+  ['Chorus', 'Vibrato', 'Grit', 'Slow Amp', 'Fast Amp', 'Wet Flip', 'Warm', 'Thin'],
+  ['Preset', 'Manual', 'Enhance', 'Sides', 'Centre', 'Syrup', 'Rack 86', 'Glassy'],
+  ['Solina', 'RS 202', 'Choir', 'Random', 'Dark Wine', 'Brass', 'Slow Tide', 'Phase Wide'],
+  ['Studio I', 'Studio II', 'Wander', 'Dual Mono', 'Layers', 'Tape Head', 'Chorale', 'Subtle'],
+  ['Cassette', 'Vinyl 33', 'Vinyl 45', 'Dictaphone', 'Pro Reel', 'Dying Deck', 'Underwater', 'Breeze'],
+  ['Standard', 'Double', 'Murk', 'Pumped', 'Hissy', 'Cheap', 'Slap Wide', 'Regen Box']
+];
+
+// the 20-entry sync list, identical in all three fx3 devices
+const DIV_NAMES = ['Free', '4 bar', '2 bar', '1 bar', '1/2', '1/2D', '1/2T', '1/4', '1/4D', '1/4T',
+                   '1/8', '1/8D', '1/8T', '1/16', '1/16D', '1/16T', '1/32', '1/64', '1/128', '1/256'];
+const DIV_BEATS = [0, 16, 8, 4, 2, 3, 1.3333, 1, 1.5, 0.6667, 0.5, 0.75, 0.3333, 0.25, 0.375,
+                   0.1667, 0.125, 0.0625, 0.03125, 0.015625];
+
+// phaseMode: 0 Vintage · 1 June · 2 Pedal · 3 Trio · 4 Micro · 5 Ensemble · 6 Wow · 7 Dark
+const SPEC = [
+  //         taps mono baseLo baseHi wave depthMs stag fastHz fInt fKnob trk pol detC drift fbMax trim pm pre grit comp
+  { taps: 1, mono: 0, lo: 3.0,  hi: 24.0, wave: 1, depth: 5.10, stag: 0.05, fastHz: 5.50, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.82, trim: 0.90, pm: 0, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 1.0,  hi: 12.0, wave: 0, depth: 2.95, stag: 0.06, fastHz: 6.00, fInt: 0.00, fKnob: 0.50, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.82, trim: 0.91, pm: 1, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 1, lo: 1.7,  hi: 14.7, wave: 2, depth: 3.50, stag: 0.00, fastHz: 6.50, fInt: 0.00, fKnob: 0.40, trk: 0.15, pol: 1, detC: 0, drift: 0.00, fbMax: 0.82, trim: 0.97, pm: 2, pre: 1, grit: 1.0, comp: 1.0 },
+  { taps: 3, mono: 1, lo: 3.0,  hi: 21.3, wave: 1, depth: 4.00, stag: 0.08, fastHz: 4.50, fInt: 0.10, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.82, trim: 1.45, pm: 3, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 3, mono: 1, lo: 2.5,  hi: 14.4, wave: 0, depth: 1.80, stag: 0.07, fastHz: 6.25, fInt: 0.25, fKnob: 0.60, trk: 0.0, pol: 1, detC: 0,  drift: 0.00, fbMax: 0.82, trim: 1.46, pm: 5, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 4.0,  hi: 20.0, wave: 1, depth: 1.50, stag: 0.00, fastHz: 6.00, fInt: 0.00, fKnob: 0.30, trk: 0.0, pol: 1, detC: 6,  drift: 0.00, fbMax: 0.65, trim: 1.09, pm: 4, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 2.5,  hi: 19.6, wave: 0, depth: 3.20, stag: 0.06, fastHz: 7.00, fInt: 0.00, fKnob: 0.50, trk: 0.2, pol: 1, detC: 0,  drift: 0.35, fbMax: 0.82, trim: 0.91, pm: 6, pre: 0, grit: 1.0, comp: 1.0 },
+  { taps: 1, mono: 0, lo: 6.0,  hi: 40.0, wave: 0, depth: 6.00, stag: 0.31, fastHz: 5.00, fInt: 0.00, fKnob: 0.50, trk: 2.2, pol: 3, detC: 0,  drift: 0.00, fbMax: 0.82, trim: 0.84, pm: 7, pre: 0, grit: 1.0, comp: 1.5 }
+];
+
+const WET_ONLY = 1, WET_FLIP_R = 2, EXTRA_TAP = 4, STACK_OFF = 8,
+      FORCE_LPTRI = 16, RANDOM_PHASE = 32, DUAL_MONO = 64, EXTRA_LAYER = 128;
+
+// [rateHz, depthMul, baseMul, hf, comp, noiseDb, gritMul, fastMul, driftMul, x1, x2, x3, lvl, flags]
+// lvl is MEASURED level makeup (10^(-dB/20) on a bus-level chord): a Character changes the
+// TONE, never the LEVEL. Without it the roster spanned 7.5 dB on Dark alone.
+const CHAR = [
+  [ // Vintage — x1 = R clock ratio (the legacy 1.07 that defeats the pi offset)
+    [1.13, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.070, 0.0, 1.00, 0.996, 0],
+    [0.40, 1.15, 1.00, 0.42, 1.20, -58, 1.20, 0.80, 1.00, 1.070, 0.0, 1.00, 0.998, 0],
+    [1.50, 0.85, 1.00, 1.90, 0.80, -62, 0.85, 1.20, 1.00, 1.070, 0.0, 1.00, 1.012, 0],
+    [0.75, 1.80, 1.25, 0.90, 1.00, -60, 1.00, 1.00, 1.00, 1.070, 0.0, 1.00, 1.003, 0],
+    [1.13, 1.00, 1.00, 1.10, 1.00, -60, 1.00, 1.00, 1.00, 1.140, 0.0, 1.00, 1.006, 0],
+    [1.13, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 0.999, 0],
+    [0.90, 1.30, 1.15, 0.75, 1.30, -58, 1.15, 1.00, 1.00, 1.020, 0.0, 1.00, 0.965, 0],
+    [1.13, 1.00, 1.00, 0.80, 1.60, -44, 1.10, 1.00, 1.00, 1.070, 0.0, 1.00, 0.912, 0]
+  ],
+  [ // June — x1 = R clock ratio (1.000 = the true one-clock antiphase)
+    [0.513, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 0.997, 0],
+    [0.863, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 0.996, 0],
+    [9.750, 0.11, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 1.039, FORCE_LPTRI],
+    [0.000, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 1.002, 0],
+    [0.600, 1.00, 1.00, 0.45, 2.00, -54, 1.30, 1.00, 1.00, 1.000, 0.0, 1.00, 0.854, 0],
+    [0.600, 1.00, 1.00, 2.60, 0.00, -200, 0.00, 1.00, 1.00, 1.000, 0.0, 1.00, 1.045, 0],
+    [0.600, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.020, 0.0, 1.00, 0.998, 0],
+    [0.450, 1.80, 2.00, 0.90, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.0, 1.00, 0.991, 0]
+  ],
+  [ // Pedal — x1 = wet HP floor Hz (Thin)
+    [0.40, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.0, 0.0, 1.00, 0.947, 0],
+    [0.90, 1.30, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.0, 0.0, 1.00, 0.947, WET_ONLY],
+    [0.40, 1.00, 1.00, 0.90, 1.20, -58, 4.00, 1.00, 1.00, 0.0, 0.0, 1.00, 1.064, 0],
+    [0.80, 1.10, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.0, 0.0, 1.00, 0.947, 0],
+    [6.50, 0.22, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.0, 0.0, 1.00, 0.947, 0],
+    [0.40, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.0, 0.0, 1.00, 0.942, WET_FLIP_R],
+    [0.40, 1.00, 1.00, 0.35, 1.30, -58, 1.10, 1.00, 1.00, 0.0, 0.0, 1.00, 0.945, 0],
+    [0.40, 1.00, 1.00, 1.60, 0.80, -62, 0.90, 1.00, 1.00, 300.0, 0.0, 1.00, 1.014, 0]
+  ],
+  [ // Trio — x1 = centre-tap gain, x2 = side-tap gain
+    [0.35, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.707, 1.00, 1.0, 0.998, 0],
+    [0.00, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 0.50, 1.00, 0.707, 1.00, 1.0, 0.980, 0],
+    [0.35, 1.10, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.707, 1.00, 1.0, 1.316, EXTRA_TAP],
+    [0.35, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.250, 1.00, 1.0, 0.787, 0],
+    [0.35, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.000, 0.50, 1.0, 1.088, 0],
+    [0.28, 1.50, 1.00, 0.42, 1.40, -58, 1.20, 1.00, 1.00, 0.707, 1.00, 1.0, 0.996, 0],
+    [0.35, 1.00, 1.00, 0.85, 1.50, -48, 1.10, 1.00, 1.00, 0.707, 1.00, 1.0, 0.990, 0],
+    [0.50, 0.70, 1.00, 2.60, 0.00, -200, 0.00, 1.00, 1.00, 0.707, 1.00, 1.0, 0.875, 0]
+  ],
+  [ // Ensemble — x1 = fast-bank rate multiplier, x2 = tap spread (1 = 120 deg)
+    [0.66, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.00, 1.00, 1.0, 0.983, 0],
+    [0.66, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.60, 1.00, 1.00, 1.00, 1.0, 1.044, 0],
+    [0.60, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.00, 1.00, 1.0, 1.066, EXTRA_TAP],
+    [0.66, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.00, 1.00, 1.0, 0.925, RANDOM_PHASE],
+    [0.66, 1.00, 1.00, 0.30, 1.30, -54, 1.20, 1.00, 1.00, 1.00, 1.00, 1.0, 1.005, 0],
+    [0.66, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 2.00, 1.00, 1.0, 0.984, 0],
+    [0.33, 1.30, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.00, 1.00, 1.0, 1.069, 0],
+    [0.66, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.00, 0.75, 1.0, 0.942, 0]
+  ],
+  [ // Micro — x1 = forced head count (>=3.5 -> 4), x2 = crossfade hardness, x3 = detune mul
+    [0.0, 1.00, 1.00, 1.60, 0.60, -60, 0.30, 1.00, 1.00, 0.0, 0.00, 1.00, 0.999, 0],
+    [0.0, 1.40, 1.35, 0.70, 0.80, -58, 0.60, 1.00, 1.00, 0.0, 0.00, 1.00, 1.001, 0],
+    [0.0, 3.00, 1.00, 1.00, 0.60, -58, 0.40, 1.00, 1.50, 0.0, 1.00, 1.00, 0.903, 0],
+    [0.0, 1.00, 1.00, 1.60, 0.60, -60, 0.30, 1.00, 1.00, 0.0, 0.00, 1.00, 1.009, DUAL_MONO],
+    [0.0, 1.00, 1.00, 1.60, 0.60, -60, 0.30, 1.00, 1.00, 4.0, 0.00, 1.30, 1.504, EXTRA_LAYER],
+    [0.0, 1.20, 1.00, 0.45, 1.40, -56, 1.20, 1.00, 1.50, 0.0, 0.30, 1.00, 0.959, 0],
+    [0.0, 1.60, 1.20, 1.20, 0.60, -60, 0.30, 1.00, 1.00, 4.0, 0.00, 1.00, 1.645, 0],
+    [0.0, 0.60, 0.60, 1.60, 0.40, -62, 0.20, 1.00, 1.00, 0.0, 0.00, 0.40, 1.043, 0]
+  ],
+  [ // Wow — x1 = locked revolution warp Hz (0 = none), x2 = its depth (ms)
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.00, 0.0, 1.0, 1.004, 0],
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.55, 1.4, 1.0, 1.002, 0],
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 0.75, 1.4, 1.0, 0.997, 0],
+    [0.0, 1.00, 1.00, 0.30, 1.20, -50, 1.30, 1.00, 3.00, 0.00, 0.0, 1.0, 1.018, 0],
+    [0.0, 0.70, 1.00, 1.30, 0.90, -62, 0.90, 2.00, 0.30, 0.00, 0.0, 1.0, 1.016, 0],
+    [0.0, 1.00, 1.00, 0.80, 2.00, -52, 1.20, 1.00, 4.00, 0.00, 0.0, 1.0, 0.842, 0],
+    [0.0, 1.50, 1.00, 0.18, 1.20, -58, 1.20, 1.00, 1.00, 0.00, 0.0, 1.0, 1.067, 0],
+    [0.0, 1.00, 1.00, 1.10, 1.00, -60, 1.00, 1.00, 1.20, 0.00, 0.0, 1.0, 1.022, STACK_OFF]
+  ],
+  [ // Dark — x1 = R stagger, x2 = clock jitter (ms), x3 = feedback floor
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.31, 0.0, 0.00, 0.999, 0],
+    [0.0, 0.40, 1.80, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.31, 0.0, 0.00, 1.004, 0],
+    [0.0, 1.00, 1.00, 0.35, 1.00, -60, 1.20, 1.00, 1.00, 1.31, 0.0, 0.00, 1.037, 0],
+    [0.0, 1.00, 1.00, 1.00, 2.50, -58, 1.00, 1.00, 1.00, 1.31, 0.0, 0.00, 0.443, 0],
+    [0.0, 1.00, 1.00, 1.00, 1.00, -44, 1.00, 1.00, 1.00, 1.31, 0.0, 0.00, 0.999, 0],
+    [0.0, 1.00, 1.00, 0.90, 1.00, -58, 1.10, 1.00, 1.00, 1.31, 0.4, 0.00, 1.053, 0],
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.60, 0.0, 0.00, 0.999, 0],
+    [0.0, 1.00, 1.00, 1.00, 1.00, -60, 1.00, 1.00, 1.00, 1.31, 0.0, 0.45, 0.819, 0]
+  ]
+];
+
+const clamp = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+const clamp01 = v => clamp(v, 0, 1);
+
+class TerrainChorus extends AudioWorkletProcessor {
+  constructor() {
+    super();
+    this.fs = sampleRate;
+
+    // one stereo buffer, sized from the WORST READ (base 64 ms on Dark + span + excursion)
+    let need = Math.ceil(0.140 * this.fs) + 8, sz = 1024;
+    while (sz < need) sz <<= 1;
+    this.N = sz; this.mask = sz - 1;
+    this.bufL = new Float64Array(sz); this.bufR = new Float64Array(sz); this.wr = 0;
+
+    this.smK = 1 - Math.exp(-1 / (0.015 * this.fs));
+    this.envK = 1 - Math.exp(-1 / (0.020 * this.fs));
+    this.cmpK = 1 - Math.exp(-1 / (0.005 * this.fs));
+    this.lvlK = 1 - Math.exp(-1 / (0.060 * this.fs));
+    this.dipDn = 1 - Math.exp(-1 / (0.008 * this.fs));
+    this.dipUp = 1 - Math.exp(-1 / (0.045 * this.fs));
+    this.srUp = 1 - Math.exp(-1 / (0.040 * this.fs));
+    this.srDn = 1 - Math.exp(-1 / (0.400 * this.fs));
+    this.cmpGlide = 1 - Math.exp(-1 / (0.040 * this.fs));
+    this.dcR = 1 - (2 * Math.PI * 12 / this.fs);
+    this.peA = this.onePole(3000);
+
+    this.p = { type: 1, character: 0, rate: 0.35, depth: 0.6, feedback: 0, mix: 0.5,
+               b1: 0.5, b2: 0, b3: 0.7, b4: 0.25, b5: 0, b6: 0.5, b7: 0, b8: 1,
+               tempoSync: false, bpm: 120 };
+    this.type = 1; this.char = 0; this.pendT = -1; this.pendC = -1; this.seeded = false;
+
+    this.mph = 0; this.sph = 0; this.fph = 0; this.vph = 0; this.wph = [0, 0.25, 0.5];
+    this.triZ = new Float64Array(8);
+    this.sr = []; for (let i = 0; i < 8; ++i) this.sr.push({ st: 0, tg: 0, ph: i * 0.137 });
+    this.rng = 0x2545F491;
+
+    this.reconZ = [0, 0]; this.recon2 = [0, 0]; this.recon3 = [0, 0];
+    this.nzZ = [0, 0]; this.lkZ = [0, 0]; this.lkW = [0, 0];
+    this.deZ = [0, 0]; this.peZ = [0, 0];
+    this.cmpEnv = [0, 0]; this.expEnv = [0, 0]; this.fbTap = [0, 0];
+    this.dcX = [0, 0]; this.dcY = [0, 0]; this.dcXo = [0, 0]; this.dcYo = [0, 0];
+    this.q = [0, 0];
+    this.envIn = 0; this.lvlSm = 0; this.dip = 1;
+
+    this.tap = [[], []];
+    for (let c = 0; c < 2; ++c)
+      for (let t = 0; t < 4; ++t)
+        this.tap[c].push({ phOff: 0, phCoef: 0, gain: 0, baseMul: 1, baseCoef: 0, addCoefMs: 0, skew: 0 });
+    this.nTap = 1; this.sameGeom = false;
+
+    this.viz = { lfo: 0, lvl: 0, notch: [0, 0, 0, 0, 0, 0, 0, 0], depthNow: 0 };
+    this.vizCount = 0;
+
+    this.port.onmessage = e => {
+      const d = e.data || {};
+      if (d.query === 'roster') { this.port.postMessage({ roster: { TYPE_NAMES, CHAR_NAMES, DIV_NAMES } }); return; }
+      for (const k in d) if (k in this.p) this.p[k] = d[k];
+      const t = clamp(this.p.type | 0, 0, 7), c = clamp(this.p.character | 0, 0, 7);
+      if (t !== this.type || c !== this.char) {
+        if (!this.seeded) { this.type = t; this.char = c; } else { this.pendT = t; this.pendC = c; }
+      }
+      this.recalc();
+    };
+    this.recalc();
+  }
+
+  onePole(hz) {
+    if (hz <= 0) return 0;
+    if (hz >= this.fs * 0.49) return 1;
+    return 1 - Math.exp(-2 * Math.PI * hz / this.fs);
+  }
+  rand11() { this.rng = (Math.imul(this.rng, 1664525) + 1013904223) | 0; return this.rng / 2147483648; }
+
+  // TerrainChorus.h:129-143 — the house 4-point Hermite kernel
+  readH(b, d) {
+    let rp = this.wr - d; if (rp < 0) rp += this.N;
+    const i0 = rp | 0, f = rp - i0, m = this.mask;
+    const ym1 = b[(i0 - 1 + this.N) & m], y0 = b[i0 & m], y1 = b[(i0 + 1) & m], y2 = b[(i0 + 2) & m];
+    const c1 = 0.5 * (y1 - ym1);
+    const c2 = ym1 - 2.5 * y0 + 2 * y1 - 0.5 * y2;
+    const c3 = 0.5 * (y2 - ym1) + 1.5 * (y0 - y1);
+    return ((c3 * f + c2) * f + c1) * f + y0;
+  }
+
+  recalc() {
+    const T = SPEC[this.type], C = CHAR[this.type][this.char], p = this.p;
+
+    const r01 = clamp01(p.rate);
+    this.rkTg = r01;
+    let hz;
+    if (p.tempoSync) {
+      const idx = clamp(Math.round(r01 * 19), 0, 19), beats = DIV_BEATS[idx];
+      const bpm = p.bpm > 1 ? p.bpm : 120;
+      hz = beats > 0 ? bpm / (60 * beats) : 0.02 * Math.pow(1000, r01);
+    } else hz = 0.02 * Math.pow(1000, r01);
+    this.rateTg = clamp(C[0] > 0 ? C[0] * Math.pow(2, (r01 - 0.5) * 2) : hz, 0.01, 140);
+
+    // the Type reshapes the knob's MAPPING; it never writes a parameter
+    this.baseTg = T.lo * Math.pow(T.hi / T.lo, clamp01(p.b1)) * C[2];
+    this.depthTg = clamp01(p.depth);
+    this.widthTg = clamp01(p.b3);
+    this.flutTg = clamp01(p.b4);
+    this.colorTg = clamp01(p.b6);
+    this.phaseTg = clamp01(p.b8);
+    this.mixTg = clamp01(p.mix);
+    this.excMs = T.depth * C[1];
+
+    // FLOOR reshaping: a Type whose engine IS one of these knobs stays alive at the default
+    this.detTg = (T.detC + clamp01(p.b2) * (50 - T.detC)) * (T.pm === 4 ? C[11] : 1);
+    this.driftTg = (T.drift + clamp01(p.b5) * (1 - T.drift)) * C[8];
+    const fbFloor = T.pm === 7 ? C[11] : 0;
+    this.fbTg = clamp(fbFloor + clamp01(p.feedback) * (T.fbMax - fbFloor), 0, T.fbMax);
+    this.lkTg = Math.max(20 * Math.pow(50, clamp01(p.b7)), T.pm === 2 ? C[9] : 0);
+
+    this.gritSpan = 7 * T.grit * C[6];
+    this.colBase = 1800 * C[3];
+    this.compK = T.comp * C[4];
+    this.noiseAmp = C[5] > -150 ? 0.05 * Math.pow(10, C[5] / 20) : 0;
+    this.fastHz = T.fastHz * (T.pm === 5 ? C[9] : 1);
+    this.skew = (T.pm === 0 || T.pm === 1) ? C[9] : 1;
+    this.skewOn = Math.abs(this.skew - 1) > 1e-6;
+
+    let nT = clamp(T.taps + ((C[13] & EXTRA_TAP) ? 1 : 0), 1, 4);
+    for (let c = 0; c < 2; ++c)
+      for (let t = 0; t < 4; ++t)
+        this.tap[c][t] = { phOff: 0, phCoef: 0, gain: 0, baseMul: 1, baseCoef: 0, addCoefMs: 0, skew: 0 };
+
+    const set = (c, t, o) => { this.tap[c][t] = Object.assign(this.tap[c][t], o); };
+    switch (T.pm) {
+      case 0:  // Vintage — R rides the SKEWED clock
+        nT = 1;
+        set(0, 0, { phOff: 0, phCoef: 0,   gain: 1, baseMul: 1 });
+        set(1, 0, { phOff: 0, phCoef: 0.5, gain: 1, baseMul: 1 + T.stag, skew: 1 });
+        break;
+      case 1: case 6: case 7:  // June / Wow / Dark — one clock, R offset by Phase
+        nT = 1;
+        set(0, 0, { gain: 1, baseMul: 1 });
+        set(1, 0, { phCoef: 0.5, gain: 1, baseMul: T.pm === 7 ? C[9] : 1 + T.stag });
+        break;
+      case 2:  // Pedal — ONE line read TWICE, co-phase. Phase = the read offset.
+        nT = 1;
+        set(0, 0, { gain: 1, baseMul: 1 });
+        set(1, 0, { gain: 1, baseMul: 1, addCoefMs: 1.2 });
+        break;
+      case 3: {  // Trio — 3 (or 4) taps PANNED. Phase = the tap spread.
+        const pan = [[1, 0], [0.7071, 0.7071], [0, 1], [0.7071, 0.7071]];
+        for (let t = 0; t < nT; ++t) {
+          const midTap = (t === 1 || t === 3), g = (midTap ? C[9] : C[10]) / nT, pc = t / nT;
+          set(0, t, { phCoef: pc, gain: g * pan[t][0], baseMul: 1 + T.stag * t });
+          set(1, t, { phCoef: pc, gain: g * pan[t][1], baseMul: 1 + T.stag * t });
+        }
+        break;
+      }
+      case 5:  // Ensemble — the SAME taps SUMMED to both, R rotated by Phase
+        for (let t = 0; t < nT; ++t) {
+          const o = C[10] * t / nT, g = 1 / nT;
+          set(0, t, { phOff: o, gain: g, baseMul: 1 + T.stag * t });
+          set(1, t, { phOff: o, phCoef: 0.5, gain: g, baseMul: 1 + T.stag * t });
+        }
+        break;
+      case 4:  // Micro — no LFO. Phase = the L/R stagger ratio.
+        nT = (C[13] & EXTRA_LAYER) ? 2 : 1;
+        set(0, 0, { gain: 1, baseMul: 1 });
+        set(1, 0, { gain: 1, baseMul: 1, baseCoef: 0.5 });
+        if (nT === 2) {
+          set(0, 1, { gain: 0.25, baseMul: 1.18 });
+          set(1, 1, { gain: 0.25, baseMul: 1.18, baseCoef: 0.5 });
+        }
+        break;
+    }
+    this.nTap = nT;
+
+    // a Character re-balances the taps, it never changes the LEVEL
+    for (let c = 0; c < 2; ++c) {
+      let s = 0; for (let t = 0; t < nT; ++t) s += Math.abs(this.tap[c][t].gain);
+      if (s > 1e-6) for (let t = 0; t < nT; ++t) this.tap[c][t].gain /= s;
+    }
+    // read-sharing is legal only when the two channels' tap GEOMETRY matches
+    this.sameGeom = true;
+    for (let t = 0; t < nT && this.sameGeom; ++t) {
+      const a = this.tap[0][t], b = this.tap[1][t];
+      if (a.phOff !== b.phOff || a.phCoef !== b.phCoef || a.baseMul !== b.baseMul ||
+          a.baseCoef !== b.baseCoef || a.addCoefMs !== b.addCoefMs || a.skew !== b.skew)
+        this.sameGeom = false;
+    }
+  }
+
+  tri(p) { p -= Math.floor(p); return p < 0.5 ? (4 * p - 1) : (3 - 4 * p); }
+  sin1(p) { return Math.sin(2 * Math.PI * p); }
+  shape(wave, p, idx, forceLp) {
+    if (wave === 1 && !forceLp) return this.sin1(p);
+    const raw = wave === 1 ? this.sin1(p) : this.tri(p);
+    const k = (wave === 2 || forceLp) ? 3 : 12;
+    const a = this.onePole(Math.max(0.05, k * this.rateSm));
+    this.triZ[idx] += a * (raw - this.triZ[idx]);
+    return this.triZ[idx];
+  }
+  // the Raffel/Smith BBD poly with its +1/8 DC constant removed analytically
+  poly(x) { x = clamp(x, -1.6, 1.6); return x - x * x * 0.125 - x * x * x / 18; }
+  companderGain(env, e) { return clamp(Math.pow(Math.max(env, 1e-5) * 20, e), 0.25, 4); }
+  softClip(x) { return (x > 1.4 || x < -1.4) ? Math.tanh(x) : x; }
+  tickSR(s, rateHz, asym) {
+    s.ph += rateHz / this.fs;
+    if (s.ph >= 1) { s.ph -= 1; s.tg = this.rand11(); }
+    if (asym) s.st += (s.tg > s.st ? this.srUp : this.srDn) * (s.tg - s.st);
+    else s.st += this.srUp * 0.35 * (s.tg - s.st);
+  }
+
+  tapDelay(c, t, baseSamp, excSamp, fastSamp, driftSamp, T, C, limHi) {
+    const tc = this.tap[c][t];
+    let d = baseSamp * (tc.baseMul + tc.baseCoef * this.phaseSm) + tc.addCoefMs * this.phaseSm * 0.001 * this.fs;
+    const o = tc.phOff + tc.phCoef * this.phaseSm;
+    const idx = (c * 4 + t) & 7;
+
+    if (T.pm === 4) {
+      d += excSamp * this.sr[idx].st;                       // Micro: Depth = a slow wander
+    } else if (T.pm === 6) {
+      let stack = 0;
+      if (!(C[13] & STACK_OFF))
+        stack = (2 * this.tri(this.wph[0] + o) + 0.8 * this.sin1(this.wph[1] + o)
+                 + 0.4 * this.sin1(this.wph[2] + o)) / 3.2;
+      if (C[9] > 0.01) stack += (C[10] / 3.2) * this.sin1(this.vph + o);
+      d += excSamp * stack;
+      if (fastSamp > 1e-4) d += fastSamp * this.sin1(this.fph + o);
+      d += driftSamp * this.sr[idx].st;
+    } else {
+      const w = (C[13] & RANDOM_PHASE) ? this.sr[idx].st
+                                       : this.shape(T.wave, (tc.skew ? this.sph : this.mph) + o, idx,
+                                                    (C[13] & FORCE_LPTRI) !== 0);
+      d += excSamp * w;
+      if (fastSamp > 1e-4) d += fastSamp * this.sin1(this.fph + o);
+      d += driftSamp * this.sr[idx].st;
+      if (T.pm === 7 && C[10] > 0.01) d += C[10] * 0.001 * this.fs * (0.5 * this.rand11());
+    }
+    return clamp(d, 2, limHi);
+  }
+
+  process(inputs, outputs) {
+    const out = outputs[0];
+    const inp = inputs[0];
+    const n = out[0].length;
+    const inL = (inp && inp[0]) ? inp[0] : new Float32Array(n);
+    const inR = (inp && inp[1]) ? inp[1] : inL;
+
+    if (!this.seeded) {
+      this.rateSm = this.rateTg; this.rkSm = this.rkTg; this.baseSm = this.baseTg;
+      this.depthSm = this.depthTg; this.widthSm = this.widthTg; this.flutSm = this.flutTg;
+      this.colorSm = this.colorTg; this.phaseSm = this.phaseTg; this.detSm = this.detTg;
+      this.driftSm = this.driftTg; this.fbSm = this.fbTg; this.lkSm = this.lkTg;
+      this.mixSm = this.mixTg; this.compSm = this.compK;
+      this.seeded = true;
+    }
+
+    let T = SPEC[this.type], C = CHAR[this.type][this.char];
+    const limHi = this.N - 6;
+
+    for (let i = 0; i < n; ++i) {
+      // fade-swap-recover
+      if (this.pendT >= 0) {
+        this.dip += this.dipDn * (0.02 - this.dip);
+        if (this.dip < 0.05) {
+          this.type = this.pendT; this.char = this.pendC; this.pendT = -1; this.pendC = -1;
+          this.recalc();
+          // snap at the dip floor: at -34 dB a delay jump is inaudible, and gliding while
+          // the wet fades back in makes the recovery ride a moving comb
+          this.rateSm = this.rateTg; this.rkSm = this.rkTg; this.baseSm = this.baseTg;
+          this.depthSm = this.depthTg; this.widthSm = this.widthTg; this.flutSm = this.flutTg;
+          this.colorSm = this.colorTg; this.phaseSm = this.phaseTg; this.detSm = this.detTg;
+          this.driftSm = this.driftTg; this.fbSm = this.fbTg; this.lkSm = this.lkTg;
+          this.compSm = this.compK;
+          T = SPEC[this.type]; C = CHAR[this.type][this.char];
+        }
+      } else this.dip += this.dipUp * (1 - this.dip);
+
+      const k = this.smK;
+      this.rateSm += k * (this.rateTg - this.rateSm);
+      this.rkSm += k * (this.rkTg - this.rkSm);
+      this.baseSm += k * (this.baseTg - this.baseSm);
+      this.depthSm += k * (this.depthTg - this.depthSm);
+      this.widthSm += k * (this.widthTg - this.widthSm);
+      this.flutSm += k * (this.flutTg - this.flutSm);
+      this.colorSm += k * (this.colorTg - this.colorSm);
+      this.phaseSm += k * (this.phaseTg - this.phaseSm);
+      this.detSm += k * (this.detTg - this.detSm);
+      this.driftSm += k * (this.driftTg - this.driftSm);
+      this.fbSm += k * (this.fbTg - this.fbSm);
+      this.lkSm += k * (this.lkTg - this.lkSm);
+      this.mixSm += k * (this.mixTg - this.mixSm);
+
+      const xL = inL[i], xR = inR[i];
+
+      // nothing free-runs
+      const rect = 0.5 * (Math.abs(xL) + Math.abs(xR));
+      this.envIn += this.envK * (rect - this.envIn);
+      const gate = this.envIn / (this.envIn + 0.003);
+
+      const rHz = this.rateSm;
+      this.mph += rHz / this.fs; if (this.mph >= 1) this.mph -= 1;
+      if (this.skewOn) { this.sph += (rHz * this.skew) / this.fs; if (this.sph >= 1) this.sph -= 1; }
+      else this.sph = this.mph;
+      this.fph += this.fastHz / this.fs; if (this.fph >= 1) this.fph -= 1;
+      if (T.pm === 6) {
+        const kk = rHz / 0.5;
+        this.wph[0] += 0.6 * kk / this.fs; if (this.wph[0] >= 1) this.wph[0] -= 1;
+        this.wph[1] += 2.2 * kk / this.fs; if (this.wph[1] >= 1) this.wph[1] -= 1;
+        this.wph[2] += 7.0 * kk / this.fs; if (this.wph[2] >= 1) this.wph[2] -= 1;
+        this.vph += C[9] / this.fs; if (this.vph >= 1) this.vph -= 1;
+      }
+      const srRate = 1.6 + 3 * this.driftSm;
+      for (let s = 0; s < 8; ++s) this.tickSR(this.sr[s], srRate, T.pm === 6);
+
+      // the line input — compander COMPRESS
+      let lineL = T.mono ? 0.5 * (xL + xR) : xL;
+      let lineR = T.mono ? lineL : xR;
+      if (T.pre) {
+        this.peZ[0] += this.peA * (lineL - this.peZ[0]); lineL = 2 * lineL - this.peZ[0];
+        if (T.mono) lineR = lineL;
+        else { this.peZ[1] += this.peA * (lineR - this.peZ[1]); lineR = 2 * lineR - this.peZ[1]; }
+      }
+      this.compSm += this.cmpGlide * (this.compK - this.compSm);
+      if (this.compSm > 0.001) {
+        this.cmpEnv[0] += this.cmpK * (Math.abs(lineL) - this.cmpEnv[0]);
+        lineL *= this.companderGain(this.cmpEnv[0], -0.5 * this.compSm);
+        if (T.mono) lineR = lineL;
+        else { this.cmpEnv[1] += this.cmpK * (Math.abs(lineR) - this.cmpEnv[1]);
+               lineR *= this.companderGain(this.cmpEnv[1], -0.5 * this.compSm); }
+      }
+
+      const excSamp = this.depthSm * this.excMs * 0.001 * this.fs;
+      const fastSamp = (T.fInt + this.flutSm * T.fKnob) * C[7] * 0.001 * this.fs;
+      const driftSamp = this.driftSm * 2.5 * 0.001 * this.fs;
+      const baseSamp = this.baseSm * 0.001 * this.fs;
+
+      // ── the micro-shift reader. The free parameter is the ramp SPAN; the crossfade
+      //    period FOLLOWS as span/r. (The bible's fixed 40 ms period shifts nothing.)
+      const cents = this.detSm;
+      let heads = 1, spanSamp = 0, hard = 0;
+      const rc = [0, 0], dirc = [1, -1];
+      if (cents > 0.02) {
+        let spanMs = (T.pm === 4) ? (45 - 25 * this.rkSm) : 32;
+        if (T.pm === 4) spanMs *= (1 + 0.12 * this.flutSm * this.tri(this.fph));
+        spanMs *= Math.min(1, cents * 0.125);
+        spanSamp = spanMs * 0.001 * this.fs;
+        heads = (C[9] >= 3.5 || cents > 25) ? 4 : 2;
+        hard = (T.pm === 4) ? C[10] : 0;
+        const dual = (T.pm === 4 && (C[13] & DUAL_MONO)) !== 0;
+        rc[0] = Math.pow(2, cents / 1200) - 1;
+        rc[1] = dual ? rc[0] : (1 - Math.pow(2, -cents / 1200));
+        dirc[0] = 1; dirc[1] = dual ? 1 : -1;
+        for (let c = 0; c < 2; ++c) { this.q[c] += rc[c] / Math.max(1, spanSamp); if (this.q[c] >= 1) this.q[c] -= 1; }
+      }
+
+      const nT = this.nTap;
+      const dT = [[0, 0, 0, 0], [0, 0, 0, 0]];
+      const nGeom = this.sameGeom ? 1 : 2;
+      for (let c = 0; c < nGeom; ++c)
+        for (let t = 0; t < nT; ++t)
+          dT[c][t] = this.tapDelay(c, t, baseSamp, excSamp, fastSamp, driftSamp, T, C, limHi);
+      if (this.sameGeom) for (let t = 0; t < nT; ++t) dT[1][t] = dT[0][t];
+      const dFirst = [dT[0][0], dT[1][0]];
+
+      const g = [[1, 0, 0, 0], [1, 0, 0, 0]], ginv = [1, 1];
+      if (heads > 1)
+        for (let c = 0; c < 2; ++c) {
+          let gs = 0;
+          for (let h = 0; h < heads; ++h) {
+            let qh = this.q[c] + h / heads; if (qh >= 1) qh -= 1;
+            let w = 0.5 - 0.5 * Math.cos(2 * Math.PI * qh);
+            if (hard > 0.001) w = w * (1 - hard) + hard * (w * w * w);
+            g[c][h] = w; gs += w;
+          }
+          ginv[c] = 1 / Math.max(1e-6, gs);
+        }
+
+      const wet = [0, 0];
+      const shareReads = this.sameGeom && T.mono && heads === 1;
+      if (shareReads) {
+        const v = [0, 0, 0, 0];
+        for (let t = 0; t < nT; ++t) v[t] = this.readH(this.bufL, dT[0][t]);
+        for (let c = 0; c < 2; ++c) { let a = 0; for (let t = 0; t < nT; ++t) a += this.tap[c][t].gain * v[t]; wet[c] = a; }
+      } else {
+        for (let c = 0; c < 2; ++c) {
+          const buf = (T.mono || c === 0) ? this.bufL : this.bufR;
+          let acc = 0;
+          if (heads === 1) {
+            for (let t = 0; t < nT; ++t) acc += this.tap[c][t].gain * this.readH(buf, dT[c][t]);
+          } else {
+            for (let h = 0; h < heads; ++h) {
+              let qh = this.q[c] + h / heads; if (qh >= 1) qh -= 1;
+              const off = dirc[c] > 0 ? spanSamp * (1 - qh) : spanSamp * qh;
+              let s = 0;
+              for (let t = 0; t < nT; ++t) s += this.tap[c][t].gain * this.readH(buf, clamp(dT[c][t] + off, 2, limHi));
+              acc += g[c][h] * ginv[c] * s;
+            }
+          }
+          wet[c] = acc;
+        }
+      }
+
+      // ── the colour chain, then THE FEEDBACK TAP (before the expander and the de-emph)
+      const gritK = 1 + (1 - this.colorSm) * this.gritSpan, gritI = 1 / gritK;
+      const colHz = clamp(this.colBase * Math.pow(2, this.colorSm * 3.1521), 700, 18000);
+      const lkA = this.lkSm > 22 ? this.onePole(this.lkSm) : 0;
+
+      for (let c = 0; c < 2; ++c) {
+        let w = wet[c];
+        if (gritK > 1.02) w = this.poly(w * gritK) * gritI;
+
+        let hz = colHz;
+        if (T.trk > 0.001) hz = clamp(hz * Math.pow(baseSamp / Math.max(2, dFirst[c]), T.trk), 700, 18000);
+        const a = this.onePole(T.pol === 3 ? hz * 1.9616 : hz);
+        this.reconZ[c] += a * (w - this.reconZ[c]); w = this.reconZ[c];
+        if (T.pol === 3) {
+          this.recon2[c] += a * (w - this.recon2[c]); w = this.recon2[c];
+          this.recon3[c] += a * (w - this.recon3[c]); w = this.recon3[c];
+        }
+        const y = w - this.dcX[c] + this.dcR * this.dcY[c];
+        this.dcX[c] = w; this.dcY[c] = y; w = y;
+
+        this.fbTap[c] = w;                                  // ← THE TAP POINT
+
+        if (T.pre) {
+          const u = (w + this.deZ[c] * (1 - this.peA)) / (2 - this.peA);
+          this.deZ[c] += this.peA * (u - this.deZ[c]); w = u;
+        }
+        if (this.compSm > 0.001) {
+          this.expEnv[c] += this.cmpK * (Math.abs(w) - this.expEnv[c]);
+          w *= this.companderGain(this.expEnv[c], 0.5 * this.compSm);
+        }
+        if (this.noiseAmp > 0) {
+          this.nzZ[c] += a * (this.rand11() - this.nzZ[c]);
+          w += this.nzZ[c] * this.noiseAmp * gate * 2;
+        }
+        const y2 = w - this.dcXo[c] + this.dcR * this.dcYo[c];
+        this.dcXo[c] = w; this.dcYo[c] = y2;
+        wet[c] = y2;
+      }
+
+      // write (feedback env-gated)
+      {
+        const f = this.fbSm * gate;
+        if (T.mono) {
+          const m = 0.5 * (this.fbTap[0] + this.fbTap[1]);
+          const nw = this.softClip(lineL + f * m);
+          this.bufL[this.wr] = nw; this.bufR[this.wr] = nw;
+        } else {
+          this.bufL[this.wr] = this.softClip(lineL + f * this.fbTap[0]);
+          this.bufR[this.wr] = this.softClip(lineR + f * this.fbTap[1]);
+        }
+        this.wr = (this.wr + 1) & this.mask;
+      }
+
+      // Low Keep — a REAL band split: the low band bypasses the effect and only its WIDTH
+      // follows Mix. At Mix 100 the bass is still there, dry and centred.
+      let loL = 0, loR = 0;
+      if (lkA > 0) {
+        this.lkZ[0] += lkA * (xL - this.lkZ[0]); loL = this.lkZ[0];
+        this.lkZ[1] += lkA * (xR - this.lkZ[1]); loR = this.lkZ[1];
+        this.lkW[0] += lkA * (wet[0] - this.lkW[0]); wet[0] -= this.lkW[0];
+        this.lkW[1] += lkA * (wet[1] - this.lkW[1]); wet[1] -= this.lkW[1];
+      }
+
+      if (C[13] & WET_FLIP_R) wet[1] = -wet[1];              // Pedal / Wet Flip ⚠ mono-hostile
+      {
+        const M = 0.5 * (wet[0] + wet[1]);
+        const Sd = 0.5 * (wet[0] - wet[1]) * (this.widthSm * 1.6);
+        wet[0] = M + Sd; wet[1] = M - Sd;
+      }
+
+      const trim = T.trim * C[12] * this.dip;
+      const wL = wet[0] * trim, wR = wet[1] * trim;
+
+      const m = (C[13] & WET_ONLY) ? 1 : this.mixSm;
+      const dg = Math.cos(m * Math.PI / 2), wg = Math.sin(m * Math.PI / 2);
+      const loM = 0.5 * (loL + loR);
+      out[0][i] = xL * dg + wL * wg + loL * (1 - dg) + (loM - loL) * m;
+      out[1][i] = xR * dg + wR * wg + loR * (1 - dg) + (loM - loR) * m;
+
+      this.lvlSm += this.lvlK * (0.5 * (Math.abs(wL) + Math.abs(wR)) - this.lvlSm);
+      this.viz.lvl = Math.min(1, this.lvlSm * 14);
+      this.viz.lfo = (T.pm === 4) ? (2 * this.q[0] - 1) : (T.wave === 1 ? this.sin1(this.mph) : this.tri(this.mph));
+      this.viz.depthNow = this.depthSm * this.excMs;
+      let nz = 0;
+      for (let c = 0; c < 2 && nz < 8; ++c)
+        for (let t = 0; t < nT && nz < 8; ++t) this.viz.notch[nz++] = 0.5 * this.fs / Math.max(2, dT[c][t]);
+      for (let z = nz; z < 8; ++z) this.viz.notch[z] = 0;
+    }
+
+    // ~60 Hz telemetry for the card (Voice Orbits)
+    this.vizCount += n;
+    if (this.vizCount >= this.fs / 60) {
+      this.vizCount = 0;
+      this.port.postMessage({ viz: { lfo: this.viz.lfo, lvl: this.viz.lvl,
+                                     notch: this.viz.notch.slice(), depthNow: this.viz.depthNow,
+                                     type: TYPE_NAMES[this.type], character: CHAR_NAMES[this.type][this.char] } });
+    }
+    return true;
+  }
+}
+
+registerProcessor('terrain-chorus', TerrainChorus);
+</script>
+<script id="wk-flanger" type="text/worklet">// ─────────────────────────────────────────────────────────────────────────────
+//  flanger-worklet.js — the Terrain FLANGER as an AudioWorkletProcessor, so the
+//  device can be HEARD in a Safari mockup before any C++ is integrated.
+//
+//  Same algorithm, same Type / Character / parameter names, same laws as
+//  TerrainFlangerFx.h. It is NOT sample-identical to the C++ (the drift RNG differs
+//  and the transcendentals are the JS library ones) — it is recognisably the same
+//  effect, which is what the mockup is for.
+//
+//  USE:
+//     await ctx.audioWorklet.addModule('flanger-worklet.js');
+//     const flg = new AudioWorkletNode(ctx, 'terrain-flanger', {numberOfInputs:1,
+//                    numberOfOutputs:1, outputChannelCount:[2]});
+//     flg.port.postMessage({ type: 0, character: 0, tempoSync: false, bpm: 120 });
+//     flg.parameters.get('depth').value = 0.8;      // etc.
+//
+//  Types      : Tape Zero · Jet · BBD · Endless · Envelope · Step
+//  Front      : Rate · Depth · Feedback (BIPOLAR, 0.5 = centre) · Mix
+//  Back (b1-8): Manual · Spread · Width · Damping · Shape · Bounce · Tail · Low Cut
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TYPE_NAMES = ['Tape Zero', 'Jet', 'BBD', 'Endless', 'Envelope', 'Step'];
+
+const CHAR_NAMES = [
+  ['Sub', 'Add', 'Worn Deck', 'Servo', 'Wide Zero', 'Deep Zero', 'Drifting Zero', 'Counter Reel'],
+  ['Silver', 'Compact', 'Deep Sweep', 'Hollow', 'Screamer', 'Drop', 'Thin Air', 'Twin Jet'],
+  ['Mistress', 'Deluxe', 'Dark Bucket', 'Squash', 'Matrix', 'Short Bucket', 'Long Bucket', 'Grind'],
+  ['Rise', 'Fall', 'Rise Deep', 'Fall Deep', 'Double Helix', 'Stacked Rise', 'Soft Rise', 'Tight Rise'],
+  ['Up', 'Down', 'Snap', 'Slow Swell', 'Duck Zero', 'Hold', 'Wide Touch', 'Deep Touch'],
+  ['Random', 'Stair Up', 'Stair Down', 'Pendulum', 'Ratchet', 'Drunk', 'Wide Steps', 'Glide']
+];
+
+// the house 20-entry sync list — identical in all three fx3 devices
+const DIV_NAMES = ['Free', '4 bar', '2 bar', '1 bar', '1/2', '1/2.', '1/2T', '1/4', '1/4.', '1/4T',
+                   '1/8', '1/8.', '1/8T', '1/16', '1/16.', '1/16T', '1/32', '1/64', '1/128', '1/256'];
+const DIV_BEATS = [0, 16, 8, 4, 2, 3, 1.3333, 1, 1.5, 0.6667, 0.5, 0.75, 0.3333, 0.25, 0.375,
+                   0.1667, 0.125, 0.0625, 0.03125, 0.015625];
+
+// flags
+const F_BBD = 1, F_COUNTER_LR = 2, F_MATRIX = 4, F_DUCK_ZERO = 8,
+      F_HOLD = 16, F_SPLIT_ENV = 32, F_COUNTER = 64, F_BIASDRIFT = 128, F_TWINTAP = 256;
+
+// The Character table. Every field is a MECHANISM constant, never an EQ curve.
+// pol spanMul dampMul shapeAdd dwell driftMul bounceZ clipK reconMul pumpMul atkMul
+// baseMul tapRatio fbCap dir flags pat
+const S = (pol, span, damp, sh, dw, dr, bz, ck, rc, pu, ak, bs, tr, fc, di, fl, pat) =>
+  ({ pol, span, damp, sh, dw, dr, bz, ck, rc, pu, ak, bs, tr, fc, di, fl, pat });
+
+const SPEC = [
+  [ // Tape Zero
+    S(-1, 1.00, 1.00, 0.00, 1.35, 1.0, 0.50, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, 0, 0),
+    S(+1, 1.00, 1.00, 0.00, 1.35, 1.0, 0.50, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, 0, 0),
+    S(-1, 1.00, 0.72, 0.15, 1.15, 2.4, 0.45, 0.60, 1, 1, 1, 1.00, 0, 0.90, +1, 0, 0),
+    S(-1, 1.00, 1.00, 0.00, 1.50, 1.2, 0.18, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, 0, 0),
+    S(-1, 1.00, 1.00, 0.00, 1.35, 1.0, 0.50, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, F_COUNTER_LR, 0),
+    S(-1, 1.18, 1.00, 0.00, 2.00, 1.0, 0.55, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, 0, 0),
+    S(-1, 1.00, 0.90, 0.05, 1.35, 1.8, 0.50, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, F_BIASDRIFT, 0),
+    S(-1, 1.00, 1.00, 0.00, 1.35, 1.0, 0.50, 0.70, 1, 1, 1, 1.00, 0, 0.92, +1, F_COUNTER, 0)],
+  [ // Jet
+    S(+1, 1.00, 1.00, 0.00, 1, 0.6, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.995, +1, 0, 0),
+    S(+1, 0.86, 0.62, -0.50, 1, 0.6, 0.5, 0.62, 1, 1, 1, 0.85, 0, 0.995, +1, 0, 0),
+    S(+1, 1.50, 0.80, 0.10, 1, 0.7, 0.5, 0.70, 1, 1, 1, 1.20, 0, 0.995, +1, 0, 0),
+    S(-1, 1.00, 0.90, 0.00, 1, 0.6, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.995, +1, 0, 0),
+    S(+1, 1.00, 0.75, 0.00, 1, 0.6, 0.5, 0.22, 1, 1, 1, 1.00, 0, 0.995, +1, 0, 0),
+    S(+1, 1.15, 0.90, 0.50, 1, 0.8, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.995, +1, 0, 0),
+    S(+1, 1.00, 1.35, 0.00, 1, 0.6, 0.5, 0.70, 1, 1, 1, 0.55, 0, 0.995, +1, 0, 0),
+    S(+1, 1.00, 0.95, 0.15, 1, 0.6, 0.5, 0.70, 1, 1, 1, 1.00, 1.53, 0.985, +1, F_TWINTAP, 0)],
+  [ // BBD
+    S(+1, 1.00, 0.70, 0, 1, 0.9, 0.5, 0.66, 1.00, 1.00, 1.00, 1.00, 0, 0.97, +1, F_BBD, 0),
+    S(+1, 1.00, 0.90, 0, 1, 0.8, 0.5, 0.70, 1.60, 0.45, 1.60, 1.00, 0, 0.97, +1, F_BBD, 0),
+    S(+1, 1.00, 0.40, 0, 1, 1.0, 0.5, 0.62, 0.40, 1.10, 1.00, 1.10, 0, 0.97, +1, F_BBD, 0),
+    S(+1, 1.00, 0.70, 0, 1, 1.0, 0.5, 0.60, 0.95, 2.10, 0.25, 1.00, 0, 0.97, +1, F_BBD, 0),
+    S(+1, 1.00, 0.70, 0, 1, 0.6, 0.5, 0.66, 1.00, 1.00, 1.00, 1.00, 0, 0.97, +1, F_BBD | F_MATRIX, 0),
+    S(+1, 0.80, 1.10, 0, 1, 0.9, 0.5, 0.66, 1.75, 0.85, 1.20, 0.45, 0, 0.97, +1, F_BBD, 0),
+    S(+1, 1.10, 0.55, 0, 1, 1.1, 0.5, 0.66, 0.62, 1.20, 0.90, 2.00, 0, 0.97, +1, F_BBD, 0),
+    S(-1, 1.00, 0.60, 0, 1, 1.0, 0.5, 0.40, 0.85, 1.55, 0.50, 1.00, 0, 0.97, +1, F_BBD, 0)],
+  [ // Endless
+    S(+1, 1.00, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.95, +1, 0, 0),
+    S(+1, 1.00, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.95, -1, 0, 0),
+    S(+1, 1.55, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.55, 0, 0.95, +1, 0, 0),
+    S(+1, 1.55, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.55, 0, 0.95, -1, 0, 0),
+    S(+1, 1.00, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.95, +1, F_COUNTER_LR, 0),
+    S(+1, 1.00, 0.95, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.00, 2.00, 0.90, +1, F_TWINTAP, 0),
+    S(-1, 1.00, 1.00, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.95, +1, 0, 0),
+    S(+1, 0.75, 1.15, 0, 1, 0.4, 0.5, 0.70, 1, 1, 1, 0.60, 0, 0.95, +1, 0, 0)],
+  [ // Envelope
+    S(+1, 1.00, 0.95, 0, 1.00, 0.4, 0.5, 0.70, 1, 1, 1.00, 1.00, 0, 0.95, +1, 0, 0),
+    S(+1, 1.00, 0.95, 0, 1.00, 0.4, 0.5, 0.70, 1, 1, 1.00, 1.00, 0, 0.95, -1, 0, 0),
+    S(+1, 1.10, 0.95, 0, 2.20, 0.4, 0.5, 0.70, 1, 1, 0.12, 1.00, 0, 0.95, +1, 0, 0),
+    S(+1, 1.00, 0.95, 0, 0.55, 0.4, 0.5, 0.70, 1, 1, 6.00, 1.00, 0, 0.95, +1, 0, 0),
+    S(-1, 1.00, 0.95, 0, 1.00, 0.5, 0.5, 0.70, 1, 1, 1.00, 1.00, 0, 0.85, +1, F_DUCK_ZERO, 0),
+    S(+1, 1.00, 0.95, 0, 1.00, 0.4, 0.5, 0.70, 1, 1, 0.50, 1.00, 0, 0.95, +1, F_HOLD, 0),
+    S(+1, 1.00, 0.95, 0, 1.00, 0.4, 0.5, 0.70, 1, 1, 1.00, 1.00, 0, 0.95, +1, F_SPLIT_ENV, 0),
+    S(+1, 1.70, 0.95, 0, 1.00, 0.4, 0.5, 0.70, 1, 1, 1.00, 1.20, 0, 0.95, +1, 0, 0)],
+  [ // Step
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 0),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 1),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 2),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 3),
+    S(+1, 1.15, 0.85, 0, 1, 0.3, 0.5, 0.66, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 4),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 5),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, F_COUNTER_LR, 6),
+    S(+1, 1.00, 0.95, 0, 1, 0.3, 0.5, 0.70, 1, 1, 1, 1.00, 0, 0.98, +1, 0, 7)]
+];
+
+const clamp = (v, a, b) => (v < a ? a : (v > b ? b : v));
+
+// ── the tape drift stack: the SmoothRandom triple at 0.6 / 2.2 / 7 Hz ────────
+class Drift {
+  constructor (fs, seed) {
+    this.r = [0.6, 2.2, 7.0]; this.sc = [2.5, 8.0, 24.0];
+    this.st = [0, 0, 0]; this.tg = [0, 0, 0]; this.ph = [0, 0, 0];
+    this.inc = this.r.map(x => x / fs);
+    this.sm = this.sc.map(x => Math.min(0.12, 1 - Math.exp(-2 * Math.PI * x / fs)));
+    this.rng = seed >>> 0 || 1; this.held = 0; this.out = 0; this.dec = 0;
+  }
+  reset () { this.st = [0, 0, 0]; this.tg = [0, 0, 0]; this.ph = [0, 0, 0]; this.held = 0; this.out = 0; this.dec = 0; }
+  next () {
+    if (--this.dec <= 0) {
+      this.dec = 8;
+      const w = [0.62, 0.26, 0.12]; let o = 0;
+      for (let i = 0; i < 3; ++i) {
+        this.ph[i] += this.inc[i] * 8;
+        if (this.ph[i] >= 1) {
+          this.ph[i] -= 1;
+          this.rng = (Math.imul(this.rng, 1664525) + 1013904223) >>> 0;
+          this.tg[i] = ((this.rng | 0) / 2147483648);
+        }
+        this.st[i] += this.sm[i] * 8 * (this.tg[i] - this.st[i]);
+        o += w[i] * this.st[i];
+      }
+      this.held = o;
+    }
+    this.out += 0.06 * (this.held - this.out);
+    return this.out;
+  }
+}
+
+class Chan {
+  constructor (size) {
+    this.buf = new Float32Array(size);   // recirculating
+    this.dry = new Float32Array(size);   // the CLEAN reference line
+    this.clear();
+  }
+  clear () {
+    this.buf.fill(0); this.dry.fill(0);
+    this.dampZ = 0; this.lowZ = 0; this.dcX = 0; this.dcY = 0; this.wLowZ = 0;
+    this.rec = [0, 0, 0, 0]; this.rc2 = [0, 0];
+    this.envC = 0; this.envE = 0; this.dLagZ = 0; this.dRefZ = 0;
+  }
+}
+
+class TerrainFlanger extends AudioWorkletProcessor {
+  static get parameterDescriptors () {
+    return [
+      // FRONT
+      { name: 'rate',     defaultValue: 0.35,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'depth',    defaultValue: 0.55,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      // ⚠️ BIPOLAR. 0.5 is the CENTRE (no feedback). 0 = -97 % (hollow), 1 = +97 % (jet).
+      { name: 'feedback', defaultValue: 0.5,   minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'mix',      defaultValue: 0.5,   minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      // BACK 8
+      { name: 'manual',   defaultValue: 0.5,   minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'spread',   defaultValue: 0.35,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'width',    defaultValue: 0.625, minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'damping',  defaultValue: 0.35,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'shape',    defaultValue: 0.5,   minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'bounce',   defaultValue: 0.20,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'tail',     defaultValue: 0.35,  minValue: 0, maxValue: 1, automationRate: 'k-rate' },
+      { name: 'lowcut',   defaultValue: 0.12,  minValue: 0, maxValue: 1, automationRate: 'k-rate' }
+    ];
+  }
+
+  constructor () {
+    super();
+    this.fs = sampleRate;
+    let need = Math.ceil(0.062 * this.fs) + 64, sz = 64;
+    while (sz < need) sz <<= 1;
+    this.mask = sz - 1; this.wr = 0;
+    this.ch = [new Chan(sz), new Chan(sz)];
+    this.driftL = new Drift(this.fs, 0x9E3779B9);
+    this.driftR = new Drift(this.fs, 0x85EBCA6B);
+    this.biasDrift = new Drift(this.fs, 0xC2B2AE35);
+
+    this.kSm = 1 - Math.exp(-1 / (0.015 * this.fs));
+    this.kFast = 1 - Math.exp(-1 / (0.003 * this.fs));
+    this.dipDn = 1 - Math.exp(-1 / (0.003 * this.fs));
+    this.dipUp = 1 - Math.exp(-1 / (0.040 * this.fs));
+
+    this.type = 0; this.chr = 0; this.pendT = -1; this.pendC = -1;
+    this.tempoSync = false; this.bpm = 120; this.dip = 1; this.primed = false;
+
+    // smoothed / target pairs
+    this.man = 1.4; this.manT = 1.4; this.bia = 0; this.biaT = 0;
+    this.dep = 0.55; this.depT = 0.55; this.fb = 0; this.fbT = 0;
+    this.spr = 0.17; this.sprT = 0.17; this.wid = 1; this.widT = 1;
+    this.dmp = 0.5; this.dmpT = 0.5; this.dLag = 0.8; this.dLagT = 0.8;
+    this.low = 0.01; this.lowT = 0.01; this.bnc = 0.2; this.bncT = 0.2;
+    this.shp = 0.5; this.shpT = 0.5; this.comb = 1; this.combT = 1;
+    this.dryG = 0.707; this.dryGT = 0.707; this.wetG = 0.707; this.wetGT = 0.707;
+    this.nrm = 0.707; this.nrmT = 0.707;
+
+    this.ph = 0; this.sawPh = 0; this.inc = 0; this.bs = 0; this.bv = 0;
+    this.envIn = 0; this.gate = 0; this.envF = [0, 0]; this.holdPk = 0;
+    this.envAtk = 0.01; this.gateRel = 0.001; this.tailSec = 0.3;
+    this.stepPh = 0; this.stepCur = 0; this.stepTgt = 0; this.stepCurR = 0; this.stepTgtR = 0;
+    this.stepIdx = 0; this.stepK = 0; this.stepDir = 1; this.stepN = 8;
+    this.stepGl = 0.01; this.stepRateMul = 1; this.stepRng = 0x2545F491;
+    this.reconC = 0.5; this.cpAtk = 0.05; this.cpRel = 0.002; this.exAtk = 0.01; this.exRel = 0.001;
+    this.vizLfo = 0; this.vizLvl = 0; this.vizComb = 0;
+
+    this.port.onmessage = e => {
+      const d = e.data || {};
+      if (d.type !== undefined) this.type = clamp(d.type | 0, 0, 5);
+      if (d.character !== undefined) this.chr = clamp(d.character | 0, 0, 7);
+      if (d.tempoSync !== undefined) this.tempoSync = !!d.tempoSync;
+      if (d.bpm !== undefined) this.bpm = d.bpm > 1 ? d.bpm : 120;
+      if (d.query === 'names') this.port.postMessage({ types: TYPE_NAMES, chars: CHAR_NAMES, divs: DIV_NAMES });
+    };
+  }
+
+  // ── LFO shape: TRIANGLE -> SINE -> soft RAMP. That order matters: a triangle's
+  //    sweep speed is CONSTANT and a sine's is not, so sine->tri->ramp folds back on
+  //    itself and puts a plateau in the middle of the knob.
+  shapeMorph (p, s) {
+    const sn = Math.sin(2 * Math.PI * p);
+    const tr = p < 0.25 ? 4 * p : (p < 0.75 ? 2 - 4 * p : 4 * p - 4);
+    // the "ramp" returns over 8 % of the cycle: a hard saw reset on a delay READ
+    // POSITION is a click; an 8 % return is a tape drop.
+    const rp = p < 0.92 ? (2 * p / 0.92 - 1) : (1 - 2 * (p - 0.92) / 0.08);
+    return s < 0.5 ? tr + (s * 2) * (sn - tr) : sn + ((s - 0.5) * 2) * (rp - sn);
+  }
+
+  // C1-continuous bounded soft clip
+  softClip (x, k) {
+    const C = 1.30, a = Math.abs(x);
+    if (a <= k) return x;
+    return Math.sign(x) * (k + (C - k) * Math.tanh((a - k) / (C - k)));
+  }
+  softLim (x, L) {
+    const h = 0.5 * L, a = Math.abs(x);
+    if (a <= h) return x;
+    return Math.sign(x) * (h + h * Math.tanh((a - h) / h));
+  }
+
+  // 4-point cubic Hermite (Catmull-Rom). d >= 2 enforced.
+  readAt (b, d) {
+    const lim = this.mask - 3;
+    if (d < 2) d = 2; else if (d > lim) d = lim;
+    const di = d | 0, fr = d - di, m = this.mask, w = this.wr;
+    const ym1 = b[(w - di + 1) & m], y0 = b[(w - di) & m],
+          y1 = b[(w - di - 1) & m], y2 = b[(w - di - 2) & m];
+    const c1 = 0.5 * (y1 - ym1);
+    const c2 = ym1 - 2.5 * y0 + 2 * y1 - 0.5 * y2;
+    const c3 = 0.5 * (y2 - ym1) + 1.5 * (y0 - y1);
+    return ((c3 * fr + c2) * fr + c1) * fr + y0;
+  }
+
+  onePole (hz) {
+    if (hz <= 0) return 0;
+    if (hz >= this.fs * 0.49) return 1;
+    return 1 - Math.exp(-2 * Math.PI * hz / this.fs);
+  }
+
+  cook (c, p) {
+    let hz;
+    if (this.tempoSync) {
+      const idx = 1 + Math.round(clamp(p.rate, 0, 1) * 18);
+      hz = (this.bpm / 60) / Math.max(1e-4, DIV_BEATS[idx]);
+    } else hz = 0.02 * Math.pow(1000, clamp(p.rate, 0, 1));      // 0.02 -> 20 Hz, log
+    if (c.fl & F_MATRIX) hz *= 0.10;                              // the Filter Matrix freeze
+    this.rateHz = hz; this.inc = hz / this.fs; this.sawInc = hz / this.fs;
+
+    this.manT = 0.1 * Math.pow(200, clamp(p.manual, 0, 1)) * c.bs;   // ms
+    this.biaT = (clamp(p.manual, 0, 1) - 0.5) * 15;                  // Tape Zero: Zero Bias, ms
+    this.depT = clamp(p.depth, 0, 1);
+    { const t = (clamp(p.feedback, 0, 1) - 0.5) * 2;                 // bipolar, t^1.5 per side
+      const a = Math.pow(Math.abs(t), 1.5) * c.fc;
+      this.fbT = t < 0 ? -a : a; }
+    this.sprT = clamp(p.spread, 0, 1) * 0.5;                          // 0..180 deg as turns
+    this.widT = clamp(p.width, 0, 1) * 1.6;
+    this.shpT = clamp(clamp(p.shape, 0, 1) + c.sh, 0, 1);
+    this.bncT = clamp(p.bounce, 0, 1);
+    // Damping: TWO corners off one knob (the delay path AND the recirculation)
+    { const t = clamp(p.damping, 0, 1);
+      this.dmpT = this.onePole(clamp(20000 * Math.pow(0.025, t) * c.damp, 200, 0.45 * this.fs));
+      this.dLagT = this.onePole(clamp(20000 * Math.pow(0.060, t) * c.damp, 250, 0.45 * this.fs)); }
+    this.lowT = this.onePole(clamp(20 * Math.pow(50, clamp(p.lowcut, 0, 1)), 5, 4000));
+    this.tailSec = 0.060 * Math.pow(50, clamp(p.tail, 0, 1));
+    this.gateRel = 1 - Math.exp(-1 / (this.tailSec * this.fs));
+    { const atk = 0.060 * Math.pow(1 / 60, clamp(p.rate, 0, 1)) * c.ak;
+      this.envAtk = 1 - Math.exp(-1 / (clamp(atk, 0.0002, 0.5) * this.fs)); }
+
+    this.combT = this.type === 3 ? (0.05 + 0.95 * this.depT) : 1;     // Endless: Depth IS notch depth
+    this.nrmT = 1 / Math.sqrt(1 + this.combT * this.combT);
+    this.dryGT = Math.cos(clamp(p.mix, 0, 1) * Math.PI / 2);
+    this.wetGT = Math.sin(clamp(p.mix, 0, 1) * Math.PI / 2);
+
+    this.stepN = 2 + Math.round(clamp(p.shape, 0, 1) * 22);
+    { const period = 1 / Math.max(0.02, hz);
+      const gl = Math.max(0.005, (c.pat === 7 ? 0.60 : 0.15) * period);
+      this.stepGl = 1 - Math.exp(-1 / (gl * this.fs)); }
+
+    const tc = Math.max(0.05, c.ak);
+    this.cpAtk = 1 - Math.exp(-1 / (0.004 * tc * this.fs));
+    this.cpRel = 1 - Math.exp(-1 / (0.120 * tc * this.fs));
+    this.exAtk = 1 - Math.exp(-1 / (0.025 * tc * this.fs));
+    this.exRel = 1 - Math.exp(-1 / (0.400 * tc * this.fs));
+    this.maxD = this.mask - 8;
+  }
+
+  snap () {
+    this.man = this.manT; this.bia = this.biaT; this.dep = this.depT; this.fb = this.fbT;
+    this.spr = this.sprT; this.wid = this.widT; this.dmp = this.dmpT; this.dLag = this.dLagT;
+    this.low = this.lowT; this.bnc = this.bncT; this.shp = this.shpT; this.comb = this.combT;
+    this.dryG = this.dryGT; this.wetG = this.wetGT; this.nrm = this.nrmT;
+  }
+
+  advanceStep (c) {
+    const N = Math.max(2, this.stepN);
+    this.stepRateMul = 1;
+    const rnd = () => { this.stepRng = (Math.imul(this.stepRng, 1664525) + 1013904223) >>> 0;
+                        return (this.stepRng >>> 9) % N; };
+    switch (c.pat) {
+      case 1: this.stepIdx = (this.stepIdx + 1) % N; break;
+      case 2: this.stepIdx = (this.stepIdx + N - 1) % N; break;
+      case 3: this.stepIdx += this.stepDir;
+              if (this.stepIdx >= N - 1) { this.stepIdx = N - 1; this.stepDir = -1; }
+              if (this.stepIdx <= 0) { this.stepIdx = 0; this.stepDir = 1; } break;
+      case 4: { this.stepIdx = rnd();
+                const mul = [0.5, 0.5, 1.0, 2.0];
+                this.stepK = (this.stepK + 1) & 3; this.stepRateMul = 1 / mul[this.stepK]; } break;
+      case 5: { this.stepRng = (Math.imul(this.stepRng, 1664525) + 1013904223) >>> 0;
+                this.stepIdx += ((this.stepRng >>> 13) & 1) ? 1 : -1;
+                this.stepIdx = clamp(this.stepIdx, 0, N - 1); } break;
+      default: this.stepIdx = rnd(); break;
+    }
+    const u = N > 1 ? this.stepIdx / (N - 1) : 0.5;
+    this.stepTgt = u * 2 - 1;
+    const ir = (this.stepIdx + (N >> 1)) % N;
+    this.stepTgtR = (N > 1 ? ir / (N - 1) : 0.5) * 2 - 1;
+  }
+
+  envMap (e, c) {
+    // knee AT the measured bus: -38 dBFS floor, -14 dBFS full sweep
+    const lo = 0.0126, hi = 0.20;
+    const v = clamp(Math.log(Math.max(e, 1e-7) / lo) / Math.log(hi / lo), 0, 1);
+    const shaped = Math.pow(v, 0.35 + 2.6 * this.shp * c.dw);
+    return (c.fl & F_DUCK_ZERO) ? 1 - shaped : shaped;   // direction is applied ONCE, in geometry
+  }
+
+  geometry (c, mod, chan, g) {
+    const msToS = 0.001 * this.fs;
+    const dr = (chan === 0 ? this.driftL : this.driftR).next() * this.bnc * c.dr;
+    g.m = this.comb;
+
+    if (this.type === 0 || (c.fl & F_DUCK_ZERO)) {
+      // the two-deck through-zero machine. Delta sweeps LINEARLY around 0 (an
+      // exponential sweep can never REACH it), with a "zero dwell" exponent that
+      // decelerates the crossing - what a thumb on a reel physically does.
+      const span = 7.5 * this.dep * c.span;
+      let bias = this.type === 0 ? this.bia : 0;
+      if (c.fl & F_BIASDRIFT) bias += this.biasDrift.next() * 4.5 * this.bnc;
+      const am = Math.abs(mod);
+      const shaped = am > 1e-6 ? Math.sign(mod) * Math.pow(am, c.dw) : 0;
+      const dMs = this.softLim(bias + span * shaped + dr * 1.20, 15.6);
+      let refMs = 8;
+      if (c.fl & F_COUNTER) refMs = 8 - 0.35 * span * shaped;
+      g.ref = Math.max(2, refMs * msToS);
+      g.d1 = Math.max(2, (refMs + dMs) * msToS);
+      g.w1 = 1; g.d2 = g.d1; g.w2 = 0;
+      g.comb = g.d1 - g.ref;
+    } else if (this.type === 3) {
+      // DAFx-15 synchronized dual comb: two sawtooth-swept combs 180 deg apart, each
+      // windowed by a raised cosine that is ZERO at its own reset, so the crossfade
+      // hides every wrap. Dmin = 0.55*Dmax is the paper's load-bearing rule.
+      const Dmax = this.man * (1 + 0.6 * this.dep) * c.span * msToS;
+      const Dmin = 0.55 * Dmax;
+      // notch frequency = k/D, so the notches RISE when the delay FALLS
+      let p1 = c.di > 0 ? (1 - this.sawPh) : this.sawPh;
+      let p2 = p1 + 0.5; if (p2 >= 1) p2 -= 1;
+      if (chan === 1) {
+        if (c.fl & F_COUNTER_LR) { p1 = 1 - p1; p2 = 1 - p2; }
+        p1 += this.spr; if (p1 >= 1) p1 -= 1;
+        p2 += this.spr; if (p2 >= 1) p2 -= 1;
+      }
+      const D1 = (Dmin + (Dmax - Dmin) * p1) * (1 + 0.02 * dr);
+      const D2 = (Dmin + (Dmax - Dmin) * p2) * (1 + 0.02 * dr);
+      g.w1 = 0.5 - 0.5 * Math.cos(2 * Math.PI * p1);
+      g.w2 = 1 - g.w1;
+      g.ref = 2; g.d1 = Math.max(2, 2 + D1); g.d2 = Math.max(2, 2 + D2);
+      if (c.fl & F_TWINTAP) { g.d2 = Math.max(2, 2 + D1 * c.tr); g.w1 = 0.6; g.w2 = 0.4; }
+      g.comb = g.w1 * D1 + g.w2 * (g.d2 - 2);
+    } else {
+      // the single-deck exponential comb. Delay is swept in OCTAVES, not ms: an
+      // exponential sweep reads as a linear pitch dive (the A/DA sound). 2.66 octaves
+      // at Depth 100 = 40:1, against an industry norm of 20:1.
+      const oct = this.softLim(2.66 * this.dep * c.span * mod * c.di + dr * 0.30, 6.4);
+      const tMs = clamp(this.man * Math.pow(2, oct), 0.045, 42);
+      const D = tMs * msToS;
+      g.ref = 2; g.d1 = Math.max(2, 2 + D); g.w1 = 1;
+      if (c.fl & F_TWINTAP) { g.d2 = Math.max(2, 2 + D * c.tr); g.w1 = 0.62; g.w2 = 0.38; }
+      else { g.d2 = g.d1; g.w2 = 0; }
+      g.comb = D;
+    }
+    // the feedback tap is the comb SPACING itself, so the resonant peaks land exactly
+    // on the feedforward series (k/D) instead of drifting off it.
+    g.fb = clamp(Math.abs(g.comb), 0.30 * msToS, Math.min(42 * msToS, this.maxD));
+    g.ref = clamp(g.ref, 2, this.maxD);
+    g.d1 = clamp(g.d1, 2, this.maxD);
+    g.d2 = clamp(g.d2, 2, this.maxD);
+  }
+
+  deck (chan, g, c) {
+    const s = this.ch[chan];
+    // ⚠️ THE REFERENCE DECK READS THE CLEAN LINE, NOT THE LOOP. If both decks read the
+    //    recirculating buffer, the zero and the pole coincide at negative feedback and
+    //    cancel - the +/- Feedback flip then flattens the comb instead of MOVING it.
+    let ref = this.readAt(s.dry, g.ref);
+    let lag = this.readAt(s.buf, g.d1) * g.w1;
+    if (g.w2 > 0) lag += this.readAt(s.buf, g.d2) * g.w2;
+
+    if (c.fl & F_BBD) {
+      // the bucket brigade's reconstruction filter, corner TRACKING the delay: the BBD
+      // clock rate goes as 1/delay, so a long delay is a slow clock is a dark output.
+      const ms = Math.abs(g.comb) * 1000 / this.fs;
+      const t01 = clamp(Math.log2(clamp(ms, 0.5, 20) * 2) * 0.187936, 0, 1);
+      const hz = 11000 * Math.pow(2, t01 * -2.874) * c.rc;
+      const x = 2 * Math.PI * clamp(hz, 300, 0.45 * this.fs) / this.fs;
+      this.reconC = x / (1 + x);
+      for (let i = 0; i < 4; ++i) { s.rec[i] += this.reconC * (lag - s.rec[i]); lag = s.rec[i]; }
+      lag = this.expandOut(s, lag, c.pu);
+    }
+    // DAMPING on the DELAY PATH. Tape Zero is TWO MATCHED DECKS: filtering only one of
+    // them leaves a high-passed residue at Delta = 0 and destroys the null.
+    const matched = this.type === 0 || (c.fl & F_DUCK_ZERO);
+    s.dLagZ += this.dLag * (lag - s.dLagZ); lag = s.dLagZ;
+    if (matched) { s.dRefZ += this.dLag * (ref - s.dRefZ); ref = s.dRefZ; }
+
+    let w = (ref + c.pol * g.m * lag) * this.nrm;
+    if (c.fl & F_BBD) { for (let i = 0; i < 2; ++i) { s.rc2[i] += this.reconC * 0.55 * (w - s.rc2[i]); w = s.rc2[i]; } }
+    s.wLowZ += this.low * (w - s.wLowZ);
+    return w - s.wLowZ;
+  }
+
+  compressIn (s, x, pump) {
+    const a = Math.abs(x);
+    s.envC += (a > s.envC ? this.cpAtk : this.cpRel) * (a - s.envC);
+    const gc = 1 / (1 + 13 * pump * s.envC), k = 2.2;
+    return Math.tanh(k * x * gc) / k;
+  }
+  expandOut (s, y, pump) {
+    const a = Math.abs(y);
+    s.envE += (a > s.envE ? this.exAtk : this.exRel) * (a - s.envE);
+    const ge = Math.min(4, 1 + 13 * pump * s.envE), k = 2.2;
+    return Math.sinh(clamp(k * y, -3, 3)) / k * ge;
+  }
+
+  loop (chan, g, c) {
+    const s = this.ch[chan];
+    let v = this.readAt(s.buf, g.fb);
+    if (c.fl & F_BBD) v = this.expandOut(s, v, c.pu * 0.5);
+    s.dampZ += this.dmp * (v - s.dampZ); v = s.dampZ;              // in-loop LP
+    s.lowZ += this.low * (v - s.lowZ); v -= s.lowZ;                // in-loop HP
+    // in-loop DC blocker: asymmetric program + regeneration integrates a DC pedestal
+    // and the soft clip then rectifies it.
+    const r = 1 - (2 * Math.PI * 5 / this.fs);
+    const y = v - s.dcX + r * s.dcY;
+    s.dcX = v; s.dcY = y;
+    // a Character whose only difference is a lower clip knee is a NO-OP at a -26 dBFS
+    // bus (the loop never reaches the knee). Driving INTO the knee is what makes
+    // "it distorts before it runs away" audible at real program level.
+    const k = 0.70 / c.ck, drv = k * k;
+    return this.softClip(y * drv, c.ck) / drv;
+  }
+
+  process (inputs, outputs, params) {
+    const out = outputs[0];
+    const inp = inputs[0];
+    const n = out[0].length;
+    const inL = (inp && inp[0]) ? inp[0] : new Float32Array(n);
+    const inR = (inp && inp[1]) ? inp[1] : inL;
+    const outL = out[0], outR = out[1] || out[0];
+
+    const p = {
+      rate: params.rate[0], depth: params.depth[0], feedback: params.feedback[0], mix: params.mix[0],
+      manual: params.manual[0], spread: params.spread[0], width: params.width[0],
+      damping: params.damping[0], shape: params.shape[0], bounce: params.bounce[0],
+      tail: params.tail[0], lowcut: params.lowcut[0]
+    };
+
+    // type / character swap: dip to 2 %, swap at the floor, recover. The ring is NOT
+    // cleared (that would guillotine the tail); the STATE is re-seated.
+    if ((this.type !== this.curT || this.chr !== this.curC) && this.curT !== undefined) {
+      this.pendT = this.type; this.pendC = this.chr;
+    }
+    if (this.curT === undefined) { this.curT = this.type; this.curC = this.chr; }
+    let c = SPEC[this.curT][this.curC];
+    const savedType = this.type; this.type = this.curT;
+    this.cook(c, p);
+    if (!this.primed) { this.snap(); this.primed = true; }
+
+    const gL = {}, gR = {};
+    let peak = 0, lastComb = 0, lastMod = 0;
+
+    for (let i = 0; i < n; ++i) {
+      if (this.pendT >= 0) {
+        this.dip += (0.02 - this.dip) * this.dipDn;
+        if (this.dip < 0.05) {
+          this.curT = this.pendT; this.curC = this.pendC; this.pendT = -1; this.pendC = -1;
+          for (const s of this.ch) { s.dampZ = s.lowZ = s.dcX = s.dcY = s.wLowZ = 0;
+                                     s.rec = [0,0,0,0]; s.rc2 = [0,0]; s.envC = s.envE = 0;
+                                     s.dLagZ = s.dRefZ = 0; }
+          this.bs = 0; this.bv = 0; this.envF = [0, 0]; this.holdPk = 0;
+          c = SPEC[this.curT][this.curC];
+          this.type = this.curT; this.cook(c, p);
+          this.man = this.manT; this.bia = this.biaT; this.dep = this.depT; this.comb = this.combT;
+        }
+      } else this.dip += (1 - this.dip) * this.dipUp;
+
+      // per-sample smoothers (the no-clicks law)
+      this.man += this.kSm * (this.manT - this.man);
+      this.bia += this.kSm * (this.biaT - this.bia);
+      this.dep += this.kSm * (this.depT - this.dep);
+      this.fb  += this.kSm * (this.fbT - this.fb);
+      this.spr += this.kSm * (this.sprT - this.spr);
+      this.wid += this.kSm * (this.widT - this.wid);
+      this.dmp += this.kSm * (this.dmpT - this.dmp);
+      this.dLag += this.kSm * (this.dLagT - this.dLag);
+      this.low += this.kSm * (this.lowT - this.low);
+      this.bnc += this.kSm * (this.bncT - this.bnc);
+      this.shp += this.kSm * (this.shpT - this.shp);
+      this.comb += this.kSm * (this.combT - this.comb);
+      this.dryG += this.kSm * (this.dryGT - this.dryG);
+      this.wetG += this.kSm * (this.wetGT - this.wetG);
+      this.nrm += this.kSm * (this.nrmT - this.nrm);
+
+      const xl = inL[i], xr = inR[i];
+
+      // input presence: the feedback gate, applied SQUARED (a linear release latches)
+      const rect = Math.max(Math.abs(xl), Math.abs(xr));
+      this.envIn += (rect > this.envIn ? this.kFast : this.gateRel) * (rect - this.envIn);
+      const g1 = Math.min(1, this.envIn * 150);
+      this.gate = g1 * g1;
+
+      // ── the modulator. ONE master clock; L/R offsets are DERIVED at read time.
+      this.ph += this.inc; if (this.ph >= 1) this.ph -= 1;
+      this.sawPh += this.sawInc; if (this.sawPh >= 1) this.sawPh -= 1;
+      let mL, mR;
+      if (this.curT === 4) {                       // Envelope
+        const relC = 1 - Math.exp(-1 / (this.tailSec * this.fs));
+        const aR = (c.fl & F_SPLIT_ENV) ? this.envAtk * 0.22 : this.envAtk;
+        this.envF[0] += ((Math.abs(xl) > this.envF[0]) ? this.envAtk : relC) * (Math.abs(xl) - this.envF[0]);
+        this.envF[1] += ((Math.abs(xr) > this.envF[1]) ? aR : relC) * (Math.abs(xr) - this.envF[1]);
+        let e0 = this.envF[0], e1 = this.envF[1];
+        if (c.fl & F_HOLD) { const pk = Math.max(e0, e1);
+                             this.holdPk = Math.max(pk, this.holdPk - this.holdPk * relC * 0.25);
+                             e0 = e1 = this.holdPk; }
+        mL = this.envMap(e0, c);
+        mR = (c.fl & F_SPLIT_ENV) ? this.envMap(e1, c) : mL;
+      } else if (this.curT === 5) {                // Step
+        this.stepPh += this.inc * this.stepRateMul;
+        if (this.stepPh >= 1) { this.stepPh -= 1; this.advanceStep(c); }
+        this.stepCur += this.stepGl * (this.stepTgt - this.stepCur);
+        this.stepCurR += this.stepGl * (this.stepTgtR - this.stepCurR);
+        mL = this.stepCur; mR = (c.fl & F_COUNTER_LR) ? this.stepCurR : this.stepCur;
+      } else {
+        let pR = this.ph + this.spr; if (pR >= 1) pR -= 1;
+        let a = this.shapeMorph(this.ph, this.shp);
+        const b = this.shapeMorph(pR, this.shp);
+        if (this.curT === 0) {
+          // servo BOUNCE: a damped spring on the sweep target. The overshoot on every
+          // reversal is the Eventide FL-201 capstan model, blended in by Bounce so
+          // Bounce 0 is genuinely OFF.
+          const wn = 2 * Math.PI * 1.8, z = c.bz - 0.30 * this.bnc;
+          const acc = wn * wn * (a - this.bs) - 2 * z * wn * this.bv;
+          this.bv += acc / this.fs; this.bs += this.bv / this.fs;
+          a = a + this.bnc * (this.bs - a);
+        }
+        mL = a; mR = (c.fl & F_COUNTER_LR) ? -b : b;
+      }
+
+      this.geometry(c, mL, 0, gL);
+      this.geometry(c, mR, 1, gR);
+      const wL = this.deck(0, gL, c), wR = this.deck(1, gR, c);
+      const fL = this.loop(0, gL, c), fR = this.loop(1, gR, c);
+      const gFb = this.fb * this.gate;                 // the COEFFICIENT is gated, not the output
+
+      let nl = this.softClip(xl + gFb * fL, c.ck);
+      let nr = this.softClip(xr + gFb * fR, c.ck);
+      if (c.fl & F_BBD) { nl = this.compressIn(this.ch[0], nl, c.pu);
+                          nr = this.compressIn(this.ch[1], nr, c.pu); }
+      this.ch[0].buf[this.wr] = nl; this.ch[1].buf[this.wr] = nr;
+      this.ch[0].dry[this.wr] = xl; this.ch[1].dry[this.wr] = xr;   // the CLEAN reference line
+      this.wr = (this.wr + 1) & this.mask;
+
+      // M/S width on the WET only, never in the loop
+      const M = 0.5 * (wL + wR), Sd = 0.5 * (wL - wR) * this.wid;
+      const wl = (M + Sd) * this.dip, wr2 = (M - Sd) * this.dip;
+      peak = Math.max(peak, Math.abs(wl));
+      lastComb = gL.comb; lastMod = mL;
+
+      outL[i] = this.dryG * xl + this.wetG * wl;
+      outR[i] = this.dryG * xr + this.wetG * wr2;
+    }
+
+    this.type = savedType;
+    this.vizLfo = clamp(lastMod, -1, 1);
+    this.vizLvl = Math.min(1, peak);
+    this.vizComb = Math.abs(lastComb) * 1000 / this.fs;
+    if ((this.frame = (this.frame | 0) + 1) % 6 === 0) {
+      // 60 Hz-ish push: the needle, the level, the comb position, and the notch series
+      const sub = SPEC[this.curT][this.curC].pol < 0;
+      const notch = [];
+      for (let k = 0; k < 8; ++k) {
+        const f = this.vizComb > 1e-4
+          ? (sub ? (k + 1) * 1000 / this.vizComb : (2 * k + 1) * 500 / this.vizComb) : 0;
+        notch.push(f > 20 && f < 20000 ? f : 0);
+      }
+      this.port.postMessage({ lfo: this.vizLfo, lvl: this.vizLvl, depthNow: this.vizComb, notch });
+    }
+    return true;
+  }
+}
+
+registerProcessor('terrain-flanger', TerrainFlanger);
+</script>
+<script id="wk-phaser"  type="text/worklet">// ─────────────────────────────────────────────────────────────────────────────
+// phaser-worklet.js — the SAME algorithm as TerrainPhaserFx.h, as an AudioWorkletProcessor,
+// so Max can HEAR the device in Safari before a line of it is integrated (the house
+// mockup-is-audible law, fb296).
+//
+// Same Type names, same Character names, same parameter names, same ranges. It is not
+// sample-identical to the C++ (no tan LUT — JS Math.tan is cheap enough at these rates,
+// and the Barber bank updates every 16 samples exactly as the C++ does) but it is the same
+// machine: the cascade, the loop, the stagger laws, the motion sources and the mix trim
+// are ported line for line.
+//
+//   USAGE
+//     await ctx.audioWorklet.addModule('phaser-worklet.js');
+//     const node = new AudioWorkletNode(ctx, 'terrain-phaser', {outputChannelCount:[2]});
+//     node.port.postMessage({ type:3, character:1, rate:0.9, depth:0.6, feedback:0.5,
+//                             mix:0.6, b1:0.5, b2:0.5, b3:0.5, b4:0.3, b5:0.5,
+//                             b6:0.1, b7:0.0, b8:0.2, tempoSync:false, bpm:120 });
+//     node.port.onmessage = e => drawCard(e.data);   // {lfo, lvl, notch[8], depthNow}
+//
+//   PARAMETER MAP (identical to the C++ Params)
+//     FRONT : rate · depth · feedback        BACK : b1 Center · b2 Stages · b3 Spread ·
+//     mix   : 0 = dry, 1 = fully wet                b4 Stereo · b5 Touch · b6 Lag ·
+//                                                   b7 Floor  · b8 Color
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TYPE_NAMES = ['Ninety', 'Stone', 'Duo', 'Twelve', 'Kraut', 'Vibe', 'Barber', 'Envy', 'Steps'];
+
+const CHAR_NAMES = [
+  ['Script 74', 'Block 78', 'Two Stage', 'Eight Stage', 'Slow Lamp', 'Sine Sweep', 'Wide Stagger', 'Negative'],
+  ['Color Off', 'Color On', 'Deep Sweep', 'Two Loop Stages', 'Hot OTA', 'Cold OTA', 'Six Stage', 'Inverted'],
+  ['Series 1:1.33', 'Series 3:4', 'Parallel 1:1.33', 'Parallel Golden', 'Counter', 'Wide Duo', 'Slow B', 'Cross Feed'],
+  ['Full Range', 'Hi Range', 'Six Pole', 'Sixteen Pole', 'Resonant', 'Hollow', 'Aux Out', 'Fast Hollow'],
+  ['Slow Bulbs', 'Fast Bulbs', 'Hard Skew', 'Reverse Skew', 'Twelve Bulb', 'Four Bulb', 'Hot Loop', 'Cold Loop'],
+  ['Chorus Lamp', 'Vibrato Lamp', 'Cold Bulb', 'Hot Bulb', 'Eight Cap', 'Even Caps', 'Wide Caps', 'Vibrato Deep'],
+  ['Rise 8', 'Rise 12', 'Fall 8', 'Fall 12', 'Rise Wide', 'Fall Narrow', 'Sharp Notch', 'Deep Rise'],
+  ['Fast Grab', 'Slow Swell', 'Transient', 'Smooth Follow', 'Four Stage', 'Ten Stage', 'Quack', 'Sink'],
+  ['Random 8', 'Random Wide', 'Ladder Up', 'Ladder Down', 'Pendulum', 'Register', 'Drunk', 'Trance Gate']
+];
+
+// loSt, hiSt, envBase(octaves)
+const TYPE_SPEC = [
+  [2, 10, 0], [2, 10, 0], [4, 16, 0], [6, 16, 0], [4, 16, 0],
+  [4, 16, 0], [4, 12, 0], [2, 12, 2.6], [2, 12, 0]
+];
+
+// stageBias, lfo, topo, alt, fbBias, scatter, staggerMul, lagMul, ratioB, apBlend,
+// depthMul, loopDrv, skew, qMul, stPhase
+const C = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) =>
+  ({ sb: a, lfo: b, topo: c, alt: d, fb: e, sc: f, stg: g, lag: h, rb: i, ap: j, dm: k, ld: l, sk: m, qm: n, sp: o });
+
+const CHAR_SPEC = [
+  [ // Ninety — 4 identical JFET stages, triangle. Spread 0 = identical breaks = the 5.83:1 law.
+    C( 0,0,0,0,  0.00,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.40,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C(-2,0,0,0,  0.00,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 4,0,0,0,  0.25,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.10,0.06,1.00,8.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,1,0,0,  0.15,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.15,0.06,2.40,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0, -0.45,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0)],
+  [ // Stone — OTA cascade + a dedicated EXTRA all-pass in the FEEDBACK path
+    C( 0,2,1,0,  0.00,0.05,1.00,1.00, 1.0,0.5,1.00,2.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.55,0.05,1.00,1.00, 1.0,0.5,1.40,2.5, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.90,1.0, 0.0,1.0,0.0),
+    C( 0,2,2,0,  0.45,0.05,1.00,1.00, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.40,0.05,1.00,1.00, 1.0,0.5,1.00,4.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.75,0.05,1.00,2.50, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 2,2,1,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,2,1,0, -0.60,0.05,1.00,1.00, 1.0,0.5,1.00,1.5, 0.0,1.0,0.0)],
+  [ // Duo — TWO cascades, TWO sweep generators, ONE accumulator
+    C( 0,1,4,0,  0.00,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.30,0.05,1.00,1.00, 0.7500,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,5,0,  0.25,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,5,0,  0.25,0.05,1.00,1.00, 1.6180,0.5,1.4,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.35,0.05,1.00,1.00,-1.0000,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,6,0,  0.25,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.30,0.05,1.00,1.00, 0.2500,0.5,1.6,1.0, 0.0,1.0,0.0),
+    C( 0,1,7,0,  0.55,0.05,1.00,1.00, 1.5000,0.5,1.0,1.0, 0.0,1.0,0.0)],
+  [ // Twelve — 12 poles = 6 notches; the only Type whose Rate reaches AUDIO RATE
+    C( 0,1,0,0,  0.00,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.35,0.03,1.00,1.00, 12.5,0.5,0.55,1.0, 0.0,1.0,0.0),
+    C(-6,1,0,0,  0.20,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 6,1,0,0,  0.30,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.80,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0, -0.65,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.30,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.5),
+    C( 0,1,0,0, -0.50,0.03,1.00,1.00, 12.5,0.5,0.55,1.0, 0.0,1.0,0.0)],
+  [ // Kraut — LDR duty-warped sweep, lamp lag, NONLINEAR filter in the loop
+    C( 0,3,3,0,  0.00,0.06,1.00,3.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C( 0,3,3,0,  0.45,0.06,1.00,0.30, 1.0,0.5,1.0,1.5,  0.30,1.0,0.0),
+    C( 0,3,3,0,  0.35,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  2.00,1.0,0.0),
+    C( 0,3,3,0,  0.35,0.06,1.00,1.00, 1.0,0.5,1.0,1.5, -2.00,1.0,0.0),
+    C( 4,3,3,0,  0.30,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C(-4,3,3,0,  0.30,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C( 0,3,3,0,  0.60,0.06,1.00,1.00, 1.0,0.5,1.0,4.5,  0.90,1.0,0.0),
+    C( 0,3,0,0, -0.55,0.06,1.00,1.80, 1.0,0.5,1.0,1.0,  0.50,1.0,0.0)],
+  [ // Vibe — the four measured Uni-Vibe capacitors (breaks proportional to 1/C)
+    C( 0,0,0,0,  0.00,0.03,1.00, 3.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.00,0.03,1.00, 3.00, 1.0,1.0,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.20,0.03,1.00,12.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.20,0.03,1.00, 0.12, 1.0,0.5,1.4,1.0, 0.0,1.0,0.0),
+    C( 4,0,0,0,  0.20,0.03,1.00, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.25,0.03,0.30, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.25,0.03,1.75, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.00,0.03,1.00, 0.50, 1.0,1.0,1.7,1.0, 0.0,1.0,0.0)],
+  [ // Barber — DAFx-15 Method 1 notch bank. apBlend 1.0: the bank IS the wet.
+    C( 0,4,8,0, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 4,4,8,0, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,1, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 4,4,8,1, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,0, 0,0,1.60,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,1, 0,0,0.55,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,0, 0,0,0.80,1.0,1.0,1.0,1.0,1.0, 0.0,3.00,0.0),
+    C(-2,4,8,0, 0,0,1.20,1.0,1.0,1.0,1.0,1.0, 0.0,0.45,0.0)],
+  [ // Envy — the motion source IS the circuit. `sk` carries env->feedback for Quack.
+    C( 0,0,0,0,  0.00,0.05,1.00,0.20, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,0,  0.30,0.05,1.00,3.50, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,2,  0.40,0.05,1.00,0.50, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,1,  0.30,0.05,2.20,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C(-4,0,0,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 4,0,0,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,0,  0.55,0.05,1.00,0.25, 1.0,0.5,1.0,1.0, 0.35,1.0,0.0),
+    C( 0,0,0,0, -0.60,0.05,1.00,1.20, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0)],
+  [ // Steps — sample & hold clocked by Rate; Lag is the glide between holds
+    C( 0,5,0,0,  0.00,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,1,  0.30,0.05,1.00,1.0,1.0,0.5,1.5,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,2,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,3,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,4,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,5,  0.40,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,6,  0.35,0.05,1.00,1.0,1.0,0.5,0.8,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,7,  0.50,0.05,1.00,1.0,1.0,0.5,1.4,1.0, 0.0,1.0,0.0)]
+];
+
+// the 20-entry sync list, cloned WHOLE including "Free" at index 0
+const DIV_BEATS = [0, 16, 8, 4, 2, 3, 1.3333, 1, 1.5, 0.6667, 0.5, 0.75,
+                   0.3333, 0.25, 0.375, 0.1667, 0.125, 0.0625, 0.03125, 0.015625];
+const DIV_NAMES = ['Free', '4 bar', '2 bar', '1 bar', '1/2', '1/2D', '1/2T', '1/4', '1/4D', '1/4T',
+                   '1/8', '1/8D', '1/8T', '1/16', '1/16D', '1/16T', '1/32', '1/64', '1/128', '1/256'];
+
+const MAX_ST = 16, MAX_BANK = 12;
+const clamp = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+const c01 = v => clamp(v, 0, 1);
+const wrap1 = v => v - Math.floor(v);
+const fastTanh = x => {
+  if (x > 5) return 1; if (x < -5) return -1;
+  const x2 = x * x; return x * (27 + x2) / (27 + 9 * x2);
+};
+
+// one first-order all-pass:  y = g*(x - y1) + x1   (TerrainFilters.h:878, verbatim)
+class Unit {
+  constructor() {
+    this.g = new Float64Array(MAX_ST); this.x1 = new Float64Array(MAX_ST); this.y1 = new Float64Array(MAX_ST);
+    this.lg = new Float64Array(2); this.lx1 = new Float64Array(2); this.ly1 = new Float64Array(2);
+    this.s1 = 0; this.s2 = 0;                       // Kraut's nonlinear loop filter
+    this.fbS = 0; this.hpS = 0; this.lpS = 0;
+  }
+  reset() {
+    this.x1.fill(0); this.y1.fill(0); this.lx1.fill(0); this.ly1.fill(0);
+    this.s1 = this.s2 = this.fbS = this.hpS = this.lpS = 0;
+  }
+}
+
+class TerrainPhaser extends AudioWorkletProcessor {
+  static get parameterDescriptors() { return []; }
+
+  constructor() {
+    super();
+    this.fs = sampleRate;
+    this.p = { type: 0, character: 0, rate: 0.35, depth: 0.5, feedback: 0.0, mix: 0.5,
+               b1: 0.5, b2: 0.5, b3: 0.5, b4: 0.5, b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5,
+               tempoSync: false, bpm: 120 };
+    this.uA = [new Unit(), new Unit()];
+    this.uB = [new Unit(), new Unit()];
+    this.bank = [this.newBank(), this.newBank()];
+    this.stageOct = new Float64Array(MAX_ST);
+    this.notchNu = new Float64Array(8);
+    this.nNotch = 0; this.notchAdj = 0;
+    this.stages = 4; this.topo = 0; this.lfoShape = 0; this.alt = 0;
+    this.apBlend = 0.5; this.skew = 0; this.ratioB = 1;
+    this.phase = 0; this.inc = 0; this.incTgt = 0;
+    this.lagL = 0; this.lagR = 0; this.lagA = 0.01;
+    this.shL = 0; this.shR = 0; this.shPrevL = 0; this.shPrevR = 0;
+    this.stepIdx = [0, 0]; this.stepDir = [1, 1]; this.reg = [0xA3, 0x5C]; this.rngS = 0x1234567;
+    this.env = 0; this.envFast = 0; this.envSlow = 0; this.envAtk = 0.01; this.envRel = 0.001;
+    this.lvlSm = 0; this.lvlA = 1 - Math.exp(-1 / (this.fs * 0.030));
+    this.hpA = 1 - Math.exp(-6.2831853 * 10 / this.fs);
+    this.dipDn = 1 - Math.exp(-1 / (this.fs * 0.004));
+    this.dipUp = 1 - Math.exp(-1 / (this.fs * 0.100));
+    this.dip = 1; this.pending = true;
+    this.bankCtr = 0; this.vizCtr = 0; this.vizEvery = Math.max(32, (this.fs / 60) | 0);
+    this.viz = { lfo: 0, lvl: 0, notch: new Array(8).fill(0), depthNow: 0,
+                 typeName: TYPE_NAMES[0], charName: CHAR_NAMES[0][0], rateHz: 0.7, stages: 4 };
+    this.apply();
+    // fb395 — answer the roster query the way the flanger does, so one host can populate all
+    // three Type/Character menus with one message. Without this the phaser's pills stay empty.
+    this.port.onmessage = e => { const d = e.data || {};
+      if (d.query) { this.port.postMessage({ types: TYPE_NAMES, chars: CHAR_NAMES }); return; }
+      Object.assign(this.p, d); this.apply(); };
+  }
+
+  newBank() {
+    return { b0: new Float64Array(MAX_BANK).fill(1), b1: new Float64Array(MAX_BANK),
+             b2: new Float64Array(MAX_BANK), a1: new Float64Array(MAX_BANK), a2: new Float64Array(MAX_BANK),
+             x1: new Float64Array(MAX_BANK), x2: new Float64Array(MAX_BANK),
+             y1: new Float64Array(MAX_BANK), y2: new Float64Array(MAX_BANK),
+             pos: new Float64Array(MAX_BANK),
+             reset() { this.x1.fill(0); this.x2.fill(0); this.y1.fill(0); this.y2.fill(0); this.pos.fill(0); } };
+  }
+
+  // ── per block: everything transcendental that is not per sample
+  apply() {
+    const p = this.p;
+    p.type = clamp(p.type | 0, 0, 8); p.character = clamp(p.character | 0, 0, 7);
+    const cs = CHAR_SPEC[p.type][p.character];
+    const ts = TYPE_SPEC[p.type];
+
+    const lo = clamp(ts[0] + cs.sb, 2, MAX_ST), hi = clamp(ts[1] + cs.sb, 2, MAX_ST);
+    let st = Math.round(lo + c01(p.b2) * (hi - lo));
+    st = clamp(st, 2, MAX_ST);
+    if (p.type === 6) st = clamp(st, 4, MAX_BANK);
+
+    // topology class is STAGED and committed at the dip floor
+    this.tStages = st; this.tTopo = cs.topo; this.tLfo = cs.lfo; this.tAlt = cs.alt;
+    this.tApBlend = cs.ap; this.tSkew = cs.sk; this.tRatioB = cs.rb;
+    const key = (p.type * 97 + p.character) * 32 + st;
+    if (key !== this.planKey) { this.pendingKey = key; this.pending = true; }
+
+    const sp = c01(p.b3);
+    this.spreadOct = Math.log2(1 + 3 * sp * sp) * cs.stg;
+    this.vibeScale = (0.35 + 1.30 * sp) * cs.stg;
+    this.barberIv = (0.35 + 1.35 * sp) * cs.stg;
+    this.scatter = cs.sc;
+    if (!this.pending) this.buildStagger();
+
+    this.floorHz = 20 * Math.pow(50, c01(p.b7));
+    const centerHz = 40 * Math.pow(225, c01(p.b1));
+    this.floorOct = Math.log2(this.floorHz);
+    this.octMax = Math.log2(0.45 * this.fs);
+    this.centerOct = Math.log2(centerHz);
+
+    this.depthOct = 4.5 * Math.pow(c01(p.depth), 0.8) * cs.dm;
+    if (p.type === 6) this.depthOct = 0;              // Barber: Depth is NOTCH DEPTH
+    this.touchOct = ((c01(p.b5) - 0.5) * 2) * 8;
+    this.envBaseOct = ts[2];
+
+    const mag = Math.abs(cs.fb), sgn = cs.fb < 0 ? -1 : 1;
+    this.fbK = clamp(sgn * (mag + c01(p.feedback) * (0.95 - mag)), -0.95, 0.95);
+    this.envToFb = (p.type === 7) ? cs.sk : 0;
+
+    const col = c01(p.b8);
+    let colHz = 18000 * Math.pow(800 / 18000, col);
+    if (p.type === 1) colHz *= 0.35;                  // the OTA's own bandwidth
+    this.colorA = 1 - Math.exp(-6.2831853 * colHz / this.fs);
+    this.loopDrv = Math.max(1, cs.ld * (1 + col * 15));
+    this.invLoopDrv = 1 / this.loopDrv;
+    this.loopG = this.gAt(clamp(centerHz * 0.7, 20, 0.45 * this.fs));
+
+    const lagS = (0.004 + 0.196 * c01(p.b6)) * cs.lag;
+    this.lagA = 1 - Math.exp(-1 / (this.fs * Math.max(5e-4, lagS)));
+    const atkS = (0.001 + 0.059 * c01(p.b6)) * cs.lag;
+    const relS = (0.030 + 0.570 * c01(p.b6)) * cs.lag;
+    this.envAtk = 1 - Math.exp(-1 / (this.fs * Math.max(2e-4, atkS)));
+    this.envRel = 1 - Math.exp(-1 / (this.fs * Math.max(5e-3, relS)));
+
+    const stw = c01(p.b4);
+    this.stPhase = wrap1(stw * 0.44 + cs.sp);
+    this.stSplit = stw * 0.42;
+
+    let hz;
+    if (p.tempoSync) {
+      const idx = clamp(Math.round(c01(p.rate) * 19), 0, 19);
+      const beats = DIV_BEATS[idx];
+      hz = beats > 0 ? (p.bpm / 60) / beats : 0.7;
+    } else hz = 0.01 * Math.pow(2000, c01(p.rate));
+    if (p.type === 3) hz *= cs.rb;                    // Hi Range -> 250 Hz
+    this.rateHz = hz; this.incTgt = hz / this.fs;
+
+    this.barberDir = (cs.alt === 1) ? -1 : 1;
+    this.barberQ = (2 + 22 * c01(p.feedback)) * cs.qm;
+    this.barberLmax = -(4 + 66 * c01(p.depth) * cs.dm);
+
+    this.mixDry = Math.cos(c01(p.mix) * 1.5707963);
+    this.mixWet = Math.sin(c01(p.mix) * 1.5707963);
+    this.updateComp();
+  }
+
+  // correlation-aware trim on the equal-power crossfade: a phaser's wet is (1-apBlend) dry by
+  // construction, so a naive equal-power blend rings +1 dB at mid-mix and -3 dB at Mix 100.
+  updateComp() {
+    const a = this.mixDry + this.mixWet * (1 - this.apBlend), b = this.mixWet * this.apBlend;
+    this.mixComp = 1 / Math.sqrt(Math.max(1e-6, a * a + b * b));
+  }
+
+  gAt(hz) {
+    const t = Math.tan(Math.PI * clamp(hz, 10, 0.4995 * this.fs) / this.fs);
+    return (t - 1) / (t + 1);
+  }
+  gAtOct(oct) { return this.gAt(Math.pow(2, oct)); }
+
+  commit() {
+    this.planKey = this.pendingKey; this.pending = false;
+    this.stages = this.tStages; this.topo = this.tTopo; this.lfoShape = this.tLfo;
+    this.alt = this.tAlt; this.apBlend = this.tApBlend; this.skew = this.tSkew; this.ratioB = this.tRatioB;
+    this.buildStagger();
+    this.updateComp();
+    for (let c = 0; c < 2; ++c) { this.uA[c].reset(); this.uB[c].reset(); this.bank[c].reset(); }
+  }
+
+  buildStagger() {
+    const duo = this.topo >= 4 && this.topo <= 7;
+    const n = duo ? Math.max(2, this.stages >> 1) : this.stages;
+    let s = (0x9E3779B9 ^ (this.p.type * 131 + this.p.character * 17)) >>> 0;
+    const nx = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return (s >>> 8) / 8388608 - 1; };
+    if (this.p.type === 5) {
+      // log2 of 0.616 / 0.042 / 19.66 / 1.966 — the measured Uni-Vibe cap ratios (breaks ∝ 1/C)
+      const capOct = [-0.6989, -4.5735, 4.2973, 0.9752];
+      for (let k = 0; k < n; ++k)
+        this.stageOct[k] = capOct[k & 3] * this.vibeScale + 0.5 * (k >> 2) + this.scatter * nx();
+    } else {
+      for (let k = 0; k < n; ++k)
+        this.stageOct[k] = (k - (n - 1) * 0.5) * this.spreadOct + this.scatter * nx();
+    }
+    for (let k = n; k < MAX_ST; ++k) this.stageOct[k] = 0;
+    this.solveNotches(n);
+    this.notchAdj = (this.topo === 8 || this.nNotch === 0) ? 0 : -Math.log2(this.notchNu[0]);
+  }
+
+  // Phi(f) = sum -2*atan(f/f_k); a notch sits where Phi = -(2m+1)*pi. Scaling every f_k by a
+  // common factor scales the notches identically, so nu_m = f_notch/fc are constants of the plan.
+  solveNotches(n) {
+    this.nNotch = Math.min(8, n >> 1);
+    for (let m = 0; m < this.nNotch; ++m) {
+      const target = -(2 * m + 1) * Math.PI;
+      let lo = -18, hi = 18;
+      for (let it = 0; it < 44; ++it) {
+        const mid = 0.5 * (lo + hi), nu = Math.pow(2, mid);
+        let phi = 0;
+        for (let k = 0; k < n; ++k) phi += -2 * Math.atan(nu / Math.pow(2, this.stageOct[k]));
+        if (phi > target) lo = mid; else hi = mid;
+      }
+      this.notchNu[m] = Math.pow(2, 0.5 * (lo + hi));
+    }
+    for (let m = this.nNotch; m < 8; ++m) this.notchNu[m] = 0;
+  }
+
+  // ── motion ────────────────────────────────────────────────────────────────
+  tri(ph) { return ph < 0.5 ? (-1 + 4 * ph) : (3 - 4 * ph); }
+  // the LDR/lamp warp moves the PEAK (the duty cycle), it does not reshape each half:
+  // at skew +1 the rise takes 80 % of the cycle and the fall 20 %.
+  warp(u, s) { const q = Math.pow(2, 2 * s); return u / (u + q * (1 - u) + 1e-9); }
+  rnd() { this.rngS = (Math.imul(this.rngS, 1664525) + 1013904223) >>> 0; return (this.rngS >>> 8) / 8388608 - 1; }
+  quant(v, n) { return -1 + 2 * Math.floor(clamp(v * 0.5 + 0.5, 0, 0.9999) * n) / (n - 1); }
+
+  sampleHold(ph, right) {
+    const i = right ? 1 : 0;
+    const prev = right ? this.shPrevR : this.shPrevL;
+    let hold = right ? this.shR : this.shL;
+    if (ph < prev) {
+      switch (this.alt) {
+        case 0: hold = this.quant(this.rnd(), 8); break;
+        case 1: hold = this.quant(this.rnd(), 16); break;
+        case 2: this.stepIdx[i] = (this.stepIdx[i] + 1) & 7; hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 3: this.stepIdx[i] = (this.stepIdx[i] + 7) & 7; hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 4: this.stepIdx[i] += this.stepDir[i];
+                if (this.stepIdx[i] >= 7) { this.stepIdx[i] = 7; this.stepDir[i] = -1; }
+                if (this.stepIdx[i] <= 0) { this.stepIdx[i] = 0; this.stepDir[i] = 1; }
+                hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 5: { const bit = ((this.reg[i] >> 7) ^ (this.rnd() > 0.875 ? 1 : 0)) & 1;
+                  this.reg[i] = ((this.reg[i] << 1) | bit) & 0xFF;
+                  hold = -1 + 2 * this.reg[i] / 255; } break;
+        case 6: hold = clamp(hold + (this.rnd() > 0 ? 0.2857 : -0.2857), -1, 1); break;
+        default: hold = hold > 0 ? -1 : 1; break;
+      }
+    }
+    if (right) { this.shR = hold; this.shPrevR = ph; } else { this.shL = hold; this.shPrevL = ph; }
+    return hold;
+  }
+
+  lfoValue(ph, right) {
+    switch (this.lfoShape) {
+      case 1: return Math.sin(6.2831853 * ph);
+      case 2: { const t = this.tri(ph); return (t - 0.15 * t * t * t) * 1.176; }
+      case 3: return this.tri(this.warp(ph, this.skew));
+      case 4: return 2 * ph - 1;
+      case 5: return this.sampleHold(ph, right);
+      default: return this.tri(ph);
+    }
+  }
+
+  // ── one cascade + its loop. Returns the cascade output; updates the loop state.
+  unit(u, x, n, oct, k, fbTap, loopExtra, nlLoop) {
+    let v = x + k * fbTap;
+    for (let i = 0; i < n; ++i) {
+      u.g[i] = this.gAtOct(oct + this.stageOct[i]);
+      const y = u.g[i] * (v - u.y1[i]) + u.x1[i];
+      u.x1[i] = v; u.y1[i] = y; v = y;
+    }
+    let t = v;
+    for (let i = 0; i < loopExtra; ++i) {
+      u.lg[i] = this.loopG;
+      const y = u.lg[i] * (t - u.ly1[i]) + u.lx1[i];
+      u.lx1[i] = t; u.ly1[i] = y; t = y;
+    }
+    if (nlLoop) {                                        // Kraut's nonlinear loop filter
+      const g = 0.10, R = 0.55;
+      const hp = (t - (2 * R + g) * u.s1 - u.s2) / (1 + 2 * R * g + g * g);
+      const bp = g * hp + u.s1; u.s1 = g * hp + bp;
+      const lp = g * bp + u.s2; u.s2 = g * bp + lp;
+      t = fastTanh(lp * 1.6) * 0.625;
+    }
+    u.lpS += this.colorA * (t - u.lpS); t = u.lpS;                          // in-loop LP
+    if (this.loopDrv > 1.0001) t = fastTanh(t * this.loopDrv) * this.invLoopDrv;  // makeup INSIDE
+    u.hpS += this.hpA * (t - u.hpS);
+    u.fbS = t - u.hpS;                                                      // 10 Hz AC couple
+    return v;
+  }
+
+  // returns the PHASER OUTPUT (the summed signal). Series and cross-feed must sum phasor B
+  // against phasor A's OUTPUT, not against the device input, or their nulls are not nulls.
+  runTopology(ch, x, oct, nA, k, lag) {
+    const a = this.uA[ch], b = this.uB[ch];
+    const extra = this.topo === 1 ? 1 : (this.topo === 2 ? 2 : 0);
+    const nl = this.topo === 3;
+    const ap = this.apBlend;
+
+    if (this.topo < 4) {
+      const v = this.unit(a, x, nA, oct, k, a.fbS, extra, nl);
+      return x + ap * (v - x);
+    }
+    let lagB;
+    if (this.ratioB < 0) lagB = -lag;
+    else lagB = this.lfoValue(wrap1(this.phase * this.ratioB + (ch ? this.stPhase : 0)), ch !== 0);
+    const octMin = Math.min(this.floorOct + this.notchAdj, this.octMax - 0.5);
+    const octB = clamp(this.centerOct + this.depthOct * lagB + (ch ? -this.stSplit : this.stSplit),
+                       octMin, this.octMax);
+
+    if (this.topo === 5) {                                   // parallel — the combs ADD
+      const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);
+      const vB = this.unit(b, x, nA, octB, k, b.fbS, 0, false);
+      return x + ap * (0.5 * (vA + vB) - x);
+    }
+    if (this.topo === 6) {                                   // wide — phasor B on the RIGHT only
+      const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);
+      const yA = x + ap * (vA - x);
+      if (ch === 0) return yA;
+      const vB = this.unit(b, yA, nA, octB, k, b.fbS, 0, false);
+      return yA + ap * (vB - yA);
+    }
+    if (this.topo === 7) {                                   // cross-feed; clamp the PRODUCT
+      const kx = clamp(k, -0.92, 0.92);
+      const vA = this.unit(a, x, nA, oct, kx, b.fbS, 0, false);
+      const yA = x + ap * (vA - x);
+      const vB = this.unit(b, yA, nA, octB, kx, a.fbS, 0, false);
+      return yA + ap * (vB - yA);
+    }
+    const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);  // series — the combs MULTIPLY
+    const yA = x + ap * (vA - x);
+    const vB = this.unit(b, yA, nA, octB, k, b.fbS, 0, false);
+    return yA + ap * (vB - yA);
+  }
+
+  // ── the Barber notch bank (DAFx-15 Method 1)
+  updateBank(octL, octR) {
+    const M = clamp(this.stages, 4, MAX_BANK);
+    const f0 = [Math.pow(2, octL), Math.pow(2, octR)];
+    const u = [(this.barberDir > 0 ? this.phase : 1 - this.phase) * M,
+               (this.barberDir > 0 ? wrap1(this.phase + this.stPhase)
+                                   : 1 - wrap1(this.phase + this.stPhase)) * M];
+    for (let ch = 0; ch < 2; ++ch) {
+      const bk = this.bank[ch];
+      for (let m = 0; m < M; ++m) {
+        let pos = (m + u[ch]) % M; if (pos < 0) pos += M;
+        // THE WRAP: the window is exactly 0 dB at the edges, so the section is an identity there,
+        // and a biquad with b == a outputs its input exactly when y1 == x1 and y2 == x2. Handing
+        // the wrapping section its own input history makes the jump click-free by construction.
+        // (Direction-aware: `pos < prev` is only a wrap when the ladder ascends.)
+        if (Math.abs(pos - bk.pos[m]) > 0.5 * M) { bk.y1[m] = bk.x1[m]; bk.y2[m] = bk.x2[m]; }
+        bk.pos[m] = pos;
+        const fc = clamp(f0[ch] * Math.pow(2, pos * this.barberIv), 20, 0.45 * this.fs);
+        const gDb = this.barberLmax * 0.5 * (1 - Math.cos(6.2831853 * pos / M));
+        const G = Math.pow(10, gDb / 20);
+        const w0 = 6.2831853 * fc / this.fs;
+        const beta = Math.tan(Math.min(1.50, (w0 / Math.max(0.5, this.barberQ)) * 0.5));
+        const d = 1 + beta;
+        bk.b0[m] = (1 + G * beta) / d;
+        bk.b1[m] = -2 * Math.cos(w0) / d;
+        bk.b2[m] = (1 - G * beta) / d;
+        bk.a1[m] = bk.b1[m];
+        bk.a2[m] = (1 - beta) / d;
+      }
+      for (let m = M; m < MAX_BANK; ++m) { bk.b0[m] = 1; bk.b1[m] = bk.b2[m] = bk.a1[m] = bk.a2[m] = 0; }
+    }
+  }
+  bankProcess(ch, x) {
+    const bk = this.bank[ch];
+    for (let m = 0; m < MAX_BANK; ++m) {
+      const y = bk.b0[m] * x + bk.b1[m] * bk.x1[m] + bk.b2[m] * bk.x2[m]
+              - bk.a1[m] * bk.y1[m] - bk.a2[m] * bk.y2[m];
+      bk.x2[m] = bk.x1[m]; bk.x1[m] = x; bk.y2[m] = bk.y1[m]; bk.y1[m] = y; x = y;
+    }
+    return x;
+  }
+
+  process(inputs, outputs) {
+    const inp = inputs[0], out = outputs[0];
+    if (!out || out.length === 0) return true;
+    const n = out[0].length;
+    const inL = (inp && inp[0]) ? inp[0] : new Float32Array(n);
+    const inR = (inp && inp[1]) ? inp[1] : inL;
+    const oL = out[0], oR = out[1] || out[0];
+
+    if (this.pending && this.planKey === undefined) this.commit();
+
+    for (let i = 0; i < n; ++i) {
+      const xL = inL[i], xR = inR[i];
+
+      const nA = (this.topo >= 4 && this.topo <= 7) ? Math.max(2, this.stages >> 1) : this.stages;
+      const octMin = Math.min(this.floorOct + this.notchAdj, this.octMax - 0.5);
+
+      if (this.pending) { this.dip += (0.006 - this.dip) * this.dipDn; if (this.dip < 0.05) this.commit(); }
+      else this.dip += (1 - this.dip) * this.dipUp;
+
+      this.inc += (this.incTgt - this.inc) * 0.0015;
+      this.phase += this.inc; if (this.phase >= 1) this.phase -= 1;
+
+      const rect = Math.max(Math.abs(xL), Math.abs(xR));
+      this.env += (rect > this.env ? this.envAtk : this.envRel) * (rect - this.env);
+      let det = this.env;
+      if (this.p.type === 7 && this.alt === 1) { this.envSlow += 0.0006 * (rect - this.envSlow); det = this.envSlow; }
+      else if (this.p.type === 7 && this.alt === 2) {
+        this.envFast += 0.02 * (rect - this.envFast);
+        this.envSlow += 0.0012 * (rect - this.envSlow);
+        det = Math.max(0, this.envFast - this.envSlow) * 2.5;
+      }
+      const gE = det * 10, env01 = gE / (1 + gE);   // soft knee: it always moves, never plateaus
+
+      const rawL = this.lfoValue(this.phase, false);
+      const rawR = this.lfoValue(wrap1(this.phase + this.stPhase), true);
+      this.lagL += (rawL - this.lagL) * this.lagA;
+      this.lagR += (rawR - this.lagR) * this.lagA;
+
+      const envOct = (this.envBaseOct + this.touchOct) * env01;
+      const octL = clamp(this.centerOct + this.depthOct * this.lagL + envOct + this.stSplit, octMin, this.octMax);
+      const octR = clamp(this.centerOct + this.depthOct * this.lagR + envOct - this.stSplit, octMin, this.octMax);
+      const kNow = clamp(this.fbK + this.envToFb * env01 * (this.fbK < 0 ? -1 : 1), -0.95, 0.95);
+
+      let pL, pR;
+      if (this.topo === 8) {
+        if (--this.bankCtr <= 0) { this.bankCtr = 16; this.updateBank(octL, octR); }
+        pL = xL + this.apBlend * (this.bankProcess(0, xL) - xL);
+        pR = xR + this.apBlend * (this.bankProcess(1, xR) - xR);
+      } else {
+        pL = this.runTopology(0, xL, octL, nA, kNow, this.lagL);
+        pR = this.runTopology(1, xR, octR, nA, kNow, this.lagR);
+      }
+      pL = 4 * fastTanh(0.25 * pL);
+      pR = 4 * fastTanh(0.25 * pR);
+      pL = xL + (pL - xL) * this.dip;
+      pR = xR + (pR - xR) * this.dip;
+
+      oL[i] = this.mixComp * (this.mixDry * xL + this.mixWet * pL);
+      oR[i] = this.mixComp * (this.mixDry * xR + this.mixWet * pR);
+
+      this.lvlSm += this.lvlA * (Math.max(Math.abs(pL - xL), Math.abs(pR - xR)) - this.lvlSm);
+
+      if (++this.vizCtr >= this.vizEvery) {
+        this.vizCtr = 0;
+        const fc = Math.pow(2, octL);
+        const v = this.viz;
+        v.lfo = clamp(this.lagL, -1, 1);
+        v.lvl = clamp(this.lvlSm * 8, 0, 1);
+        v.depthNow = this.depthOct;
+        v.rateHz = this.rateHz; v.stages = this.stages;
+        v.typeName = TYPE_NAMES[this.p.type]; v.charName = CHAR_NAMES[this.p.type][this.p.character];
+        if (this.topo === 8) {
+          const M = clamp(this.stages, 4, MAX_BANK);
+          for (let m = 0; m < 8; ++m)
+            v.notch[m] = m < M ? clamp(fc * Math.pow(2, this.bank[0].pos[m] * this.barberIv), 20, 0.45 * this.fs) : 0;
+        } else {
+          for (let m = 0; m < 8; ++m)
+            v.notch[m] = m < this.nNotch ? clamp(fc * this.notchNu[m], 20, 0.45 * this.fs) : 0;
+        }
+        this.port.postMessage({ lfo: v.lfo, lvl: v.lvl, notch: v.notch.slice(), depthNow: v.depthNow,
+                                rateHz: v.rateHz, stages: v.stages,
+                                typeName: v.typeName, charName: v.charName });
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('terrain-phaser', TerrainPhaser);
+</script>
+
+<script>
+"use strict";
+const LINE='#ECE8F2', P400='#B794FF', P500='#8B5CF6';
+const FMIN=30, FMAX=18000, LMIN=Math.log(FMIN), LSPAN=Math.log(FMAX)-LMIN;
+const fx=f=>(Math.log(Math.max(f,FMIN))-LMIN)/LSPAN;          // log-f → 0..1
+
+/* ── the three devices. Front row is Rate/Depth/Feedback/Mix on all three (the family
+      shares one vocabulary); the WINDOW is what tells them apart. ───────────────────── */
+const DEVS=[
+  { id:'chorus',  name:'Chorus',  proc:'terrain-chorus',  wk:'wk-chorus',
+    tell:'voices', knobs:[['Rate','rate',.35],['Depth','depth',.6],['Feedback','feedback',.15],['Mix','mix',.5]] },
+  { id:'flanger', name:'Flanger', proc:'terrain-flanger', wk:'wk-flanger',
+    tell:'comb',   knobs:[['Rate','rate',.30],['Depth','depth',.55],['Feedback','feedback',.5],['Mix','mix',.5]] },
+  { id:'phaser',  name:'Phaser',  proc:'terrain-phaser',  wk:'wk-phaser',
+    tell:'notches',knobs:[['Rate','rate',.35],['Depth','depth',.6],['Feedback','feedback',.45],['Mix','mix',.5]] },
+];
+
+let ctx=null, master=null, playing=false, srcKind='sine', srcNode=null, started=false;
+const state={};   // per device: {node,inG,wetG,dryG,on,params,viz,types,chars,type,char}
+
+/* ══ CARD CHASSIS ═════════════════════════════════════════════════════════════════════ */
+function buildCard(d){
+  const el=document.createElement('div'); el.className='dev'; el.id='dev-'+d.id;
+  el.innerHTML =
+    '<div class="head">'
+    + '<span class="grip">|||</span>'
+    + '<span class="nm">'+d.name+'</span>'
+    + '<span class="pill" id="tp-'+d.id+'"><span class="lab">—</span><span class="car">▾</span><select></select></span>'
+    + '<span class="pill" id="ch-'+d.id+'"><span class="lab">—</span><span class="car">▾</span><select></select></span>'
+    + '<span class="spacer"></span>'
+    + '<span class="pwr" id="pw-'+d.id+'" title="Bypass"></span>'
+    + '</div>'
+    + '<div class="core"><canvas id="cv-'+d.id+'"></canvas>'
+    +   '<div class="tellrow"><span id="tl-'+d.id+'">—</span><span id="tr-'+d.id+'">—</span></div></div>'
+    + '<div class="feet" id="ft-'+d.id+'"></div>';
+  document.getElementById('rack').appendChild(el);
+
+  const feet=el.querySelector('#ft-'+d.id);
+  d.knobs.forEach(([label,key,def])=>{
+    const k=document.createElement('div'); k.className='kn';
+    k.innerHTML='<canvas width="68" height="68"></canvas><div class="kl">'+label+'</div><div class="kv">'+Math.round(def*100)+'</div>';
+    feet.appendChild(k);
+    const cv=k.querySelector('canvas'), val=k.querySelector('.kv');
+    state[d.id].params[key]=def;
+    drawKnob(cv,def);
+    let dragging=false, y0=0, v0=0;
+    cv.addEventListener('pointerdown',e=>{ dragging=true; y0=e.clientY; v0=state[d.id].params[key];
+      cv.setPointerCapture(e.pointerId); e.preventDefault(); });
+    cv.addEventListener('pointermove',e=>{ if(!dragging)return;
+      const v=Math.max(0,Math.min(1, v0 + (y0-e.clientY)/170));
+      state[d.id].params[key]=v; drawKnob(cv,v); val.textContent=Math.round(v*100); pushParam(d,key,v); });
+    const end=()=>{ dragging=false; };
+    cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end);
+    cv.addEventListener('dblclick',()=>{ state[d.id].params[key]=def; drawKnob(cv,def);
+      val.textContent=Math.round(def*100); pushParam(d,key,def); });
+  });
+
+  document.getElementById('pw-'+d.id).addEventListener('click',()=>togglePower(d));
+}
+
+/* house knob: thin white ring, purple value arc, white pointer — no glass, no gradient */
+function drawKnob(cv,v){
+  const g=cv.getContext('2d'), S=cv.width, R=S*0.36, cx=S/2, cy=S/2;
+  g.clearRect(0,0,S,S);
+  const a0=Math.PI*0.75, a1=Math.PI*2.25, a=a0+(a1-a0)*v;
+  g.lineCap='round';
+  g.strokeStyle='rgba(255,255,255,.18)'; g.lineWidth=S*0.055;
+  g.beginPath(); g.arc(cx,cy,R,a0,a1); g.stroke();
+  g.strokeStyle=P500; g.lineWidth=S*0.055;
+  g.beginPath(); g.arc(cx,cy,R,a0,a); g.stroke();
+  g.strokeStyle=LINE; g.lineWidth=S*0.05;
+  g.beginPath(); g.moveTo(cx+Math.cos(a)*R*0.30, cy+Math.sin(a)*R*0.30);
+  g.lineTo(cx+Math.cos(a)*R*0.74, cy+Math.sin(a)*R*0.74); g.stroke();
+}
+
+/* ══ THE THREE WINDOWS ════════════════════════════════════════════════════════════════
+   Shared: one log-f axis (30 Hz – 18 kHz), the house white line (#ECE8F2, purple glow),
+   brightness riding the live level so idle is dim and playing is bright.
+   Different: what the engine's own notch[] does on that axis. That difference is the
+   whole point — 2 notches vs 6 vs a drifting cloud is DATA, not styling.            */
+function drawCore(d,cv,vz,t){
+  const g=cv.getContext('2d');
+  const W=cv.width, H=cv.height, dpr=cv._dpr||1;
+  g.clearRect(0,0,W,H);
+  const lvl=Math.max(0, Math.min(1, (vz.lvl||0)*2.2));
+  const wake=0.24+0.76*lvl;                       // idle dim → playing bright (the fb311 law)
+  const notches=(vz.notch||[]).filter(f=>f>20&&f<FMAX);
+
+  /* faint octave rails — structure that encodes the axis, nothing decorative */
+  g.strokeStyle='rgba(255,255,255,.05)'; g.lineWidth=1*dpr;
+  for(let f=62.5; f<FMAX; f*=2){ const x=fx(f)*W; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H); g.stroke(); }
+
+  if(d.id==='phaser')      drawPhaser (g,W,H,dpr,notches,vz,wake,t);
+  else if(d.id==='flanger')drawFlanger(g,W,H,dpr,notches,vz,wake,t);
+  else                     drawChorus (g,W,H,dpr,notches,vz,wake,t);
+}
+
+function clearShadow(g){ g.shadowBlur=0; g.globalAlpha=1; }
+
+/* THE SHARED LINE — the effect's own response, drawn edge to edge, dipping wherever the
+   engine says its notches are. All three devices draw it, so the family reads as a family;
+   what each one does ON that line is what tells them apart. Same white, same purple glow
+   and same 1.3px weight as the distortion curve (.dst-curve), so nothing is invented. */
+function responseLine(g,W,H,dpr,notches,wake,yBase,amp,q){
+  g.strokeStyle=LINE; g.lineWidth=1.3*dpr; g.globalAlpha=0.34+0.60*wake;
+  g.shadowColor='rgba(183,148,255,0.85)'; g.shadowBlur=2.4*dpr*(0.28+0.72*wake);
+  g.beginPath();
+  const step=Math.max(1,2*dpr);
+  for(let px=0;px<=W;px+=step){
+    const f=Math.exp(LMIN+(px/W)*LSPAN);
+    let dip=0;
+    for(let i=0;i<notches.length;i++){ const o=Math.log(f/notches[i])/q; if(o>-4&&o<4) dip+=Math.exp(-o*o); }
+    const y=yBase+Math.min(1.4,dip)*amp;
+    px?g.lineTo(px,y):g.moveTo(px,y);
+  }
+  g.stroke(); clearShadow(g);
+}
+/* THE REAL COMB — |1 - g·e^(-jwD)| = sqrt(1 + g^2 - 2g·cos(wD)). A delay-based effect's
+   response IS this; summing Gaussian bumps at the null positions (the first cut of this)
+   saturates the moment nulls overlap and pins the line flat against the floor, which looks
+   like a clipped curve and is simply wrong. This oscillates between real peaks and real
+   nulls, for free, and never saturates.
+   Where the comb gets finer than the screen can resolve, fall back to its RMS average
+   (sqrt(1+g^2)) — you cannot draw detail below a pixel, and pretending otherwise is moire. */
+function combDb(f, delta, gg){
+  const th=2*Math.PI*f*delta;
+  return 20*Math.log10(Math.max(1e-4, Math.sqrt(1+gg*gg-2*gg*Math.cos(th))));
+}
+function drawMagLine(g,W,H,dpr,wake,yTop,yBot,dbAt){
+  const DBT=7, DBB=-20;
+  g.strokeStyle=LINE; g.lineWidth=1.3*dpr; g.globalAlpha=0.34+0.60*wake;
+  g.shadowColor='rgba(183,148,255,0.85)'; g.shadowBlur=2.4*dpr*(0.28+0.72*wake);
+  g.beginPath();
+  const step=Math.max(1,1*dpr);
+  for(let px=0;px<=W;px+=step){
+    const f=Math.exp(LMIN+(px/W)*LSPAN);
+    const fr=Math.max(0,Math.min(1,(dbAt(f,px,W)-DBB)/(DBT-DBB)));
+    const y=yBot-(yBot-yTop)*fr;
+    px?g.lineTo(px,y):g.moveTo(px,y);
+  }
+  g.stroke(); clearShadow(g);
+}
+/* rolling history of where the notches have been — motion made legible on a still frame */
+function pushHist(vz,vals){
+  const h=vz.hist||(vz.hist=[]);
+  h.push(vals.slice(0,4)); if(h.length>110) h.shift();
+  return h;
+}
+
+/* PHASER — a FINITE, countable set of notches at NON-harmonic spacing.
+   Ninety draws 2. Twelve draws 6. Vibe's are visibly uneven. You read the type off it. */
+function drawPhaser(g,W,H,dpr,notches,vz,wake,t){
+  const yTop=H*0.20, amp=H*0.34;
+  /* No history trail here, deliberately. The flanger and chorus need one because their motion
+     is the whole story; the phaser's notch columns already sweep hard enough to read, and two
+     faint diagonals under them looked like stray lines rather than a walk. One accessory off. */
+  /* the notch column: a purple body you can count, capped by the white line's own dip */
+  notches.forEach((f,i)=>{
+    const x=fx(f)*W;
+    g.strokeStyle=P400; g.globalAlpha=0.13+0.26*wake; g.lineWidth=5.5*dpr;
+    g.beginPath(); g.moveTo(x,yTop+amp*0.30); g.lineTo(x,yTop+amp*1.30); g.stroke();
+    g.globalAlpha=0.55+0.45*wake; g.fillStyle=P400;
+    g.fillRect(x-1*dpr,H*0.955,2*dpr,3.5*dpr);       /* the foot tick — its position, now */
+    g.globalAlpha=1;
+  });
+  responseLine(g,W,H,dpr,notches,wake,yTop,amp,0.30);
+}
+
+/* FLANGER — an INFINITE harmonic series at n/Δ. The teeth fan as Δ sweeps, and as Δ→0
+   they sweep outward and the whole field flashes: the through-zero null, measured −61.2 dB. */
+function drawFlanger(g,W,H,dpr,notches,vz,wake,t){
+  const first=notches.length?notches[0]:600;
+  const yTop=H*0.16, amp=H*0.40;
+  /* an INFINITE odd-harmonic series at n/D — extend the engine's first null out to Nyquist,
+     which is what a comb actually is. As D shrinks the teeth race apart; as D->0 they leave
+     the window entirely and the response goes flat: that IS the through-zero crossing. */
+  /* stop adding teeth once they are closer together than they can be drawn — past that they
+     merge into a grey smear that says nothing. Truth you cannot resolve is not truth. */
+  const teeth=[];
+  for(let n=1;n<400;n++){
+    const f=first*(2*n-1); if(f>FMAX) break;
+    if(n>1 && (fx(f)-fx(first*(2*n-3)))*W < 2.4*dpr) break;
+    teeth.push(f);
+  }
+  /* THE null is a property of the DELAY, not of the harmonic ratio: as D -> 0 the first null
+     1/(2D) races toward Nyquist and the comb leaves the audio band entirely. (First cut of this
+     read the tooth RATIO, which for an odd-harmonic series is the constant 3 — so it flashed
+     permanently and painted a grey box over the window.) */
+  const nullness=Math.max(0,Math.min(1,(first-4200)/7000));
+  /* the fan itself, thinning with harmonic number the way a real comb's nulls soften */
+  teeth.forEach((f,n)=>{
+    const x=fx(f)*W;
+    g.strokeStyle=LINE; g.globalAlpha=(0.07+0.32*wake)*Math.pow(0.955,n); g.lineWidth=1.05*dpr;
+    g.beginPath(); g.moveTo(x,yTop+amp*0.16); g.lineTo(x,yTop+amp*1.24); g.stroke();
+  });
+  g.globalAlpha=1;
+  /* one deep comb from the delay the engine is actually running: D = 1/(2·f1) */
+  const delta=1/(2*Math.max(40,first)), gg=0.86;
+  const resolvable=(px,Wd)=>{ const f=Math.exp(LMIN+(px/Wd)*LSPAN);
+    return (fx(f*(1+1/(f*delta*2)))-fx(f))*Wd > 2.4*dpr; };
+  drawMagLine(g,W,H,dpr,wake,yTop,yTop+amp*1.30,
+    (f,px,Wd)=> resolvable(px,Wd) ? combDb(f,delta,gg)
+                                  : 20*Math.log10(Math.sqrt(1+gg*gg))-1.0);
+  /* THE NULL — the one full-band event nothing else in the rack does. Measured -61.2 dB. */
+  if(nullness>0.03){
+    const a=Math.pow(nullness,1.7)*(0.22+0.55*wake);
+    g.fillStyle='#FFFFFF'; g.globalAlpha=a*0.5; g.fillRect(0,H*0.08,W,H*0.84);
+    g.strokeStyle='#FFFFFF'; g.globalAlpha=Math.min(1,a*1.9); g.lineWidth=1.6*dpr;
+    g.shadowColor=P400; g.shadowBlur=7*dpr;
+    g.beginPath(); g.moveTo(0,yTop+amp*0.70); g.lineTo(W,yTop+amp*0.70); g.stroke();
+    clearShadow(g);
+  }
+  /* the sweep's own history — the comb's first tooth over the last ~2 s */
+  const hist=pushHist(vz,[first]);
+  g.strokeStyle=P400; g.globalAlpha=0.22+0.34*wake; g.lineWidth=1.1*dpr;
+  g.beginPath();
+  hist.forEach((row,i)=>{ const x=fx(row[0])*W, y=H*0.965-(i/hist.length)*H*0.13;
+    i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.stroke(); g.globalAlpha=1;
+}
+
+/* CHORUS — not one comb: several shallow ones at wandering delays. June's two voices move
+   in exact opposition, Pedal's move together, Trio's sit at 120°. The picture is VOICES. */
+function drawChorus(g,W,H,dpr,notches,vz,wake,t){
+  const voices=notches.length?notches:[520,900];
+  const yTop=H*0.10, amp=H*0.30;
+  /* A chorus is NOT one deep comb — it is several SHALLOW ones at wandering delays, which is
+     exactly why it reads as width instead of as a comb. The engine publishes each voice's
+     FIRST null (~45-90 Hz for a 6-11 ms tap), so each voice must be expanded into its own odd
+     -harmonic series or the whole response sits jammed against the left edge and the window
+     reads flat. Two interleaved shallow combs beating against each other IS the picture. */
+  const deltas=voices.map(v0=>1/(2*Math.max(30,v0))), gg=0.42;   // shallow — that is the point
+  const dres=Math.min.apply(null,deltas);
+  const resolvable=(px,Wd)=>{ const f=Math.exp(LMIN+(px/Wd)*LSPAN);
+    return (fx(f*(1+1/(f*dres*2)))-fx(f))*Wd > 2.6*dpr; };
+  drawMagLine(g,W,H,dpr,wake,yTop,yTop+amp*1.05,(f,px,Wd)=>{
+    if(!resolvable(px,Wd)) return 20*Math.log10(Math.sqrt(1+gg*gg))-0.4;
+    let s=0; for(let i=0;i<deltas.length;i++) s+=combDb(f,deltas[i],gg);
+    return s/deltas.length;                       /* several shallow combs, beating together */
+  });
+
+  /* THE VOICES — the portrait. Each voice's delay position over the last ~2 s, one trail
+     each. This is the family tell made visible: June's two trails MIRROR (one clock, right
+     inverted), Pedal's run PARALLEL (one line read twice), Trio's sit at 120 degrees, Wow
+     wanders. You identify the Type by looking at it. */
+  const hist=pushHist(vz,voices);
+  const fieldTop=H*0.56, fieldH=H*0.40;
+  g.strokeStyle='rgba(255,255,255,.06)'; g.lineWidth=1*dpr;
+  g.beginPath(); g.moveTo(0,fieldTop+fieldH*0.5); g.lineTo(W,fieldTop+fieldH*0.5); g.stroke();
+  const nv=Math.min(4,voices.length);
+  for(let v=0; v<nv; v++){
+    let lo=1e9, hi=-1e9;
+    hist.forEach(r=>{ const f=r[v]; if(f){ lo=Math.min(lo,f); hi=Math.max(hi,f); } });
+    if(hi<=lo){ lo=voices[v]*0.8; hi=voices[v]*1.25; }
+    g.strokeStyle=v===0?LINE:P400; g.lineWidth=(v===0?1.3:1.1)*dpr;
+    g.globalAlpha=(v===0?0.62:0.44)*(0.30+0.70*wake);
+    g.shadowColor='rgba(183,148,255,0.8)'; g.shadowBlur=2.2*dpr*wake;
+    g.beginPath(); let started=false;
+    hist.forEach((r,i)=>{ const f=r[v]; if(!f) return;
+      const x=(i/(hist.length-1||1))*W;
+      const y=fieldTop+fieldH*(1-(Math.log(f/lo)/Math.log(hi/lo)));
+      started?g.lineTo(x,y):(g.moveTo(x,y),started=true); });
+    g.stroke(); clearShadow(g);
+    /* the head of each trail — where that voice is, this instant */
+    const f=voices[v]; if(f){
+      const y=fieldTop+fieldH*(1-(Math.log(f/lo)/Math.log(hi/lo)));
+      g.fillStyle=v===0?LINE:P400; g.globalAlpha=0.6+0.4*wake;
+      g.beginPath(); g.arc(W-1.5*dpr,y,2.2*dpr,0,7); g.fill(); g.globalAlpha=1;
+    }
+  }
+}
+
+/* ══ AUDIO ════════════════════════════════════════════════════════════════════════════ */
+function blobURL(id){
+  return URL.createObjectURL(new Blob([document.getElementById(id).textContent],{type:'application/javascript'}));
+}
+async function boot(){
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  master=ctx.createGain(); master.gain.value=0.55; master.connect(ctx.destination);
+  for(const d of DEVS) await ctx.audioWorklet.addModule(blobURL(d.wk));
+
+  let prev=null;
+  for(const d of DEVS){
+    const s=state[d.id];
+    const node=new AudioWorkletNode(ctx,d.proc,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+    s.node=node;
+    s.inG=ctx.createGain(); s.wetG=ctx.createGain(); s.dryG=ctx.createGain();
+    s.wetG.gain.value=1; s.dryG.gain.value=0;
+    s.inG.connect(node); node.connect(s.wetG);
+    s.inG.connect(s.dryG);
+    s.out=ctx.createGain(); s.wetG.connect(s.out); s.dryG.connect(s.out);
+    if(prev) prev.connect(s.inG); s.chainIn=s.inG; prev=s.out;
+
+    node.port.onmessage=e=>{
+      const dd=e.data||{};
+      /* three engines, three roster shapes — accept all of them rather than make one lie */
+      if(dd.roster){ fillRoster(d,dd.roster.TYPE_NAMES,dd.roster.CHAR_NAMES); return; }
+      if(dd.types){ fillRoster(d,dd.types,dd.chars); return; }
+      const v=dd.viz||dd;
+      if(v && (v.notch||v.lfo!==undefined)){ const keep=s.viz.hist; s.viz=v; s.viz.hist=keep; }
+    };
+    node.port.postMessage({query:'roster'}); node.port.postMessage({query:'names'});
+    Object.entries(s.params).forEach(([k,v])=>pushParam(d,k,v));
+    node.port.postMessage({type:0,character:0});
+  }
+  prev.connect(master);
+  started=true;
+}
+function pushParam(d,key,v){
+  const s=state[d.id]; if(!s.node) return;
+  const ap=s.node.parameters&&s.node.parameters.get&&s.node.parameters.get(key);
+  if(ap) ap.setTargetAtTime(v, ctx.currentTime, 0.012);         // 12 ms — no clicks (house law)
+  else   s.node.port.postMessage({[key]:v});
+}
+function togglePower(d){
+  const s=state[d.id]; s.on=!s.on;
+  document.getElementById('dev-'+d.id).classList.toggle('off',!s.on);
+  if(!ctx) return;
+  const t=ctx.currentTime;
+  s.wetG.gain.setTargetAtTime(s.on?1:0,t,0.02);                  // 20 ms fade, never a hard cut
+  s.dryG.gain.setTargetAtTime(s.on?0:1,t,0.02);
+}
+function fillRoster(d,types,chars){
+  const s=state[d.id];
+  s.types=types||[]; s.chars=chars||[];
+  const tp=document.querySelector('#tp-'+d.id+' select');
+  tp.innerHTML=s.types.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('');
+  tp.onchange=()=>{ s.type=+tp.value; s.char=0; s.node.port.postMessage({type:s.type,character:0});
+                    paintPills(d); fillChars(d); };
+  paintPills(d); fillChars(d);
+}
+function fillChars(d){
+  const s=state[d.id], list=(s.chars&&s.chars[s.type])||[];
+  const ch=document.querySelector('#ch-'+d.id+' select');
+  ch.innerHTML=list.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('');
+  ch.onchange=()=>{ s.char=+ch.value; s.node.port.postMessage({character:s.char}); paintPills(d); };
+}
+function paintPills(d){
+  const s=state[d.id];
+  const tn=(s.types&&s.types[s.type])||'—', cn=(s.chars&&s.chars[s.type]&&s.chars[s.type][s.char])||'—';
+  document.querySelector('#tp-'+d.id+' .lab').textContent=tn;
+  document.querySelector('#ch-'+d.id+' .lab').textContent=cn;
+}
+function makeSource(){
+  if(srcNode){ try{srcNode.stop&&srcNode.stop();}catch(e){} try{srcNode.disconnect();}catch(e){} srcNode=null; }
+  const g=ctx.createGain(); g.gain.value=0.30;
+  if(srcKind==='sine'){ const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=220; o.connect(g); o.start(); srcNode=o; }
+  else if(srcKind==='noise'){
+    const n=ctx.createBufferSource(), b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate), dt=b.getChannelData(0);
+    let last=0; for(let i=0;i<dt.length;i++){ const w=Math.random()*2-1; last=0.98*last+0.02*w; dt[i]=(w*0.35+last*2.2)*0.4; }
+    n.buffer=b; n.loop=true; n.connect(g); n.start(); srcNode=n; g.gain.value=0.18;
+  } else if(srcKind==='pad'){
+    const mix=ctx.createGain(); mix.gain.value=0.16;
+    [110,110.6,164.8,220.4].forEach(f=>{ const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=f; o.connect(mix); o.start(); });
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500; mix.connect(lp); lp.connect(g); srcNode=mix;
+  } else {  /* pluck — a repeating short note, the honest test for a modulation effect */
+    const mix=ctx.createGain(); mix.gain.value=0; mix.connect(g); srcNode=mix;
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.value=330; o.connect(mix); o.start();
+    const tick=()=>{ if(!playing||srcKind!=='pluck')return; const t=ctx.currentTime;
+      mix.gain.cancelScheduledValues(t); mix.gain.setValueAtTime(0.36,t);
+      mix.gain.exponentialRampToValueAtTime(0.001,t+0.55); setTimeout(tick,760); };
+    tick();
+  }
+  g.connect(state[DEVS[0].id].chainIn);
+  return g;
+}
+async function toggle(){
+  const btn=document.getElementById('play');
+  if(!started){ document.getElementById('status').textContent='Loading the three engines…'; await boot(); }
+  if(ctx.state==='suspended') await ctx.resume();
+  playing=!playing;
+  btn.classList.toggle('on',playing); btn.textContent=playing?'Stop':'Play';
+  if(playing){ makeSource(); document.getElementById('status').textContent='Running — drag a knob, change a Type, watch the window.'; }
+  else if(srcNode){ try{srcNode.stop&&srcNode.stop();}catch(e){} try{srcNode.disconnect();}catch(e){} srcNode=null;
+    document.getElementById('status').textContent='Stopped.'; }
+}
+
+/* ══ FRAME LOOP — rAF, never setInterval (fb389: a 33 ms timer free-runs against the
+      compositor, lands twice in one frame and skips the next) ════════════════════════ */
+function fit(cv){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,3);
+  const w=Math.max(2,Math.round(r.width*dpr)), h=Math.max(2,Math.round(r.height*dpr));
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
+  cv._dpr=dpr;
+}
+function frame(t){
+  DEVS.forEach(d=>{
+    const cv=document.getElementById('cv-'+d.id); if(!cv) return;
+    fit(cv);
+    const s=state[d.id];
+    drawCore(d,cv,s.viz,t*0.001);
+    /* count what the ENGINE publishes, not what happens to be inside the drawn window — a
+       12-stage phaser owns 6 notches even when the sweep has carried two of them off-screen,
+       and a readout that says "4" because of the axis is a bug report waiting to happen. */
+    const all=(s.viz.notch||[]).filter(f=>f>0);
+    const n=(s.viz.notch||[]).filter(f=>f>20&&f<FMAX);
+    document.getElementById('tl-'+d.id).textContent =
+      d.id==='phaser' ? (all.length+' notches')
+      : d.id==='flanger' ? (n.length?Math.round(n[0])+' Hz':'—')
+      : (all.length+' voices');
+    document.getElementById('tr-'+d.id).textContent =
+      (s.viz.depthNow!=null&&isFinite(s.viz.depthNow)) ? (Math.round(s.viz.depthNow*100)/100+'') : '';
+  });
+  requestAnimationFrame(frame);
+}
+
+/* inert inspection hooks — the headless gate reads these to prove the ENGINES are alive.
+   A pretty picture drawn from an array of zeros is a lie, and this is how we catch it. */
+window.__peek     = id => state[id] ? state[id].viz : {};
+window.__ctxState = () => ctx ? ctx.state : 'none';
+window.__roster   = id => ({ types:(state[id]||{}).types||[], chars:((state[id]||{}).chars||[]).length });
+
+DEVS.forEach(d=>{ state[d.id]={params:{},viz:{lfo:0,lvl:0,notch:[]},on:true,type:0,char:0,types:[],chars:[]}; buildCard(d); });
+document.getElementById('play').addEventListener('click',toggle);
+document.getElementById('vol').addEventListener('input',e=>{ if(master) master.gain.value=e.target.value/100; });
+document.querySelectorAll('#src button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#src button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true'); srcKind=b.dataset.s;
+  if(playing){ makeSource(); }
+}));
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

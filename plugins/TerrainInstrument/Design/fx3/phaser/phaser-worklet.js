@@ -192,7 +192,11 @@ class TerrainPhaser extends AudioWorkletProcessor {
     this.viz = { lfo: 0, lvl: 0, notch: new Array(8).fill(0), depthNow: 0,
                  typeName: TYPE_NAMES[0], charName: CHAR_NAMES[0][0], rateHz: 0.7, stages: 4 };
     this.apply();
-    this.port.onmessage = e => { Object.assign(this.p, e.data || {}); this.apply(); };
+    // fb395 — answer the roster query the way the flanger does, so one host can populate all
+    // three Type/Character menus with one message. Without this the phaser's pills stay empty.
+    this.port.onmessage = e => { const d = e.data || {};
+      if (d.query) { this.port.postMessage({ types: TYPE_NAMES, chars: CHAR_NAMES }); return; }
+      Object.assign(this.p, d); this.apply(); };
   }
 
   newBank() {

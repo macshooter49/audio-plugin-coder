@@ -1,0 +1,553 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Chorus · Flanger · Phaser — mockup</title>
+<style>
+  /* ── house tokens, lifted verbatim from index.html (fb395 — match, never invent) ───────── */
+  :root{
+    --purple-600:#9B6DFF; --purple-500:#8B5CF6; --purple-400:#B794FF;
+    --line:#ECE8F2;                                  /* the .dst-curve white */
+    --text-primary:rgba(255,255,255,.92); --text-secondary:rgba(255,255,255,.62);
+    --text-muted:rgba(255,255,255,.38); --text-dim:rgba(255,255,255,.30);
+    --border-strong:rgba(255,255,255,.22);
+    --bg:#141220; --bg2:#1B1728;
+  }
+  *{ box-sizing:border-box; }
+  html,body{ margin:0; height:100%; }
+  body{
+    background:
+      radial-gradient(1100px 620px at 22% -8%, #241d3a 0%, transparent 62%),
+      radial-gradient(900px 520px at 88% 108%, #1d1830 0%, transparent 60%),
+      var(--bg);
+    color:var(--text-primary);
+    font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+    -webkit-font-smoothing:antialiased;
+    display:flex; flex-direction:column; align-items:center; gap:22px; padding:26px 20px 40px;
+  }
+
+  /* ── the bar you drive it from ─────────────────────────────────────────────────────────── */
+  .bar{ display:flex; align-items:center; gap:18px; flex-wrap:wrap; justify-content:center;
+        padding:11px 16px; border:1px solid var(--border-strong); border-radius:11px;
+        background:rgba(255,255,255,.02); }
+  .bar h1{ font-size:11px; font-weight:500; letter-spacing:2.4px; text-transform:uppercase;
+           color:var(--text-secondary); margin:0 6px 0 0; }
+  .seg{ display:flex; gap:0; border:1px solid var(--border-strong); border-radius:8px; overflow:hidden; }
+  .seg button{ background:transparent; border:0; color:var(--text-secondary); font:inherit; font-size:10px;
+               letter-spacing:.6px; padding:6px 12px; cursor:pointer; transition:.12s;
+               border-right:1px solid rgba(255,255,255,.12); }
+  .seg button:last-child{ border-right:0; }
+  .seg button:hover{ color:var(--text-primary); background:rgba(255,255,255,.05); }
+  .seg button[aria-pressed="true"]{ color:#fff; background:rgba(155,109,255,.26); }
+  .play{ display:flex; align-items:center; gap:8px; background:transparent; border:1px solid var(--purple-400);
+         color:var(--purple-400); border-radius:8px; padding:6px 15px; font:inherit; font-size:10px;
+         letter-spacing:1.2px; text-transform:uppercase; cursor:pointer; transition:.14s; }
+  .play:hover{ background:rgba(155,109,255,.16); }
+  .play.on{ background:var(--purple-500); border-color:var(--purple-500); color:#fff;
+            box-shadow:0 0 14px rgba(139,92,246,.5); }
+  .lvl{ display:flex; align-items:center; gap:8px; font-size:9px; letter-spacing:1px;
+        color:var(--text-muted); text-transform:uppercase; }
+  .lvl input{ width:96px; accent-color:var(--purple-500); }
+  .hint{ font-size:10px; color:var(--text-muted); letter-spacing:.3px; max-width:940px;
+         text-align:center; line-height:1.65; }
+  .hint b{ color:var(--text-secondary); font-weight:500; }
+
+  /* ── the rack, at the plugin's own geometry (272px cards) then zoomed to read ──────────── */
+  /* the rack renders at the plugin's real 272px card width, then scales up to read on a
+     desktop. The wrapper reserves the SCALED height so nothing below it gets overlapped. */
+  .rackwrap{ height:378px; display:flex; justify-content:center; }
+  .rackzoom{ transform:scale(1.7); transform-origin:top center; }
+  .rack{ display:flex; gap:9px; align-items:stretch; }
+
+  /* ── the device card — .fxr-dev, verbatim grammar: transparent, 1px border, 8px radius ─── */
+  .dev{ flex:0 0 272px; height:214px; background:transparent; border:1px solid var(--border-strong);
+        border-radius:8px; display:flex; flex-direction:column; transition:opacity .18s, border-color .14s; }
+  .dev:hover{ border-color:rgba(255,255,255,.34); }
+  .dev.off{ opacity:.45; }
+  .dev.off canvas{ filter:saturate(.25); }
+
+  .head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }  /* ONE centerline */
+  .grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab;
+         user-select:none; display:flex; align-items:center; }
+  .nm{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap;
+       line-height:1; display:flex; align-items:center; }
+  .pill{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong);
+         border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px;
+         cursor:pointer; white-space:nowrap; overflow:hidden; max-width:118px; }
+  .pill:hover{ border-color:rgba(255,255,255,.4); color:var(--text-primary); }
+  .pill .lab{ overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .pill .car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; margin-left:auto; }
+  .pill select{ position:absolute; inset:0; width:100%; height:100%; opacity:0; cursor:pointer; }
+  .spacer{ flex:1; }
+  .pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400);
+        background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:none; }
+  .dev.off .pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+
+  .core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; }
+  .core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  /* the one readout that earns its place: what the picture is showing you */
+  .tellrow{ position:absolute; left:0; right:0; bottom:0; display:flex; justify-content:space-between;
+            font-size:7.5px; letter-spacing:.8px; color:var(--text-muted); pointer-events:none;
+            text-transform:uppercase; }
+
+  .feet{ display:flex; gap:0; padding:4px 8px 7px; }
+  .kn{ flex:1; display:flex; flex-direction:column; align-items:center; gap:2px; }
+  .kn canvas{ width:34px; height:34px; cursor:ns-resize; display:block; }
+  .kn .kl{ font-size:7.5px; letter-spacing:.9px; color:var(--text-muted); text-transform:uppercase; }
+  .kn .kv{ font-size:8px; color:var(--text-secondary); font-variant-numeric:tabular-nums; }
+</style>
+</head>
+<body>
+
+<div class="bar">
+  <h1>Chorus · Flanger · Phaser</h1>
+  <div class="seg" id="src">
+    <button data-s="sine" aria-pressed="true">Sine</button>
+    <button data-s="pad">Pad</button>
+    <button data-s="pluck">Pluck</button>
+    <button data-s="noise">Noise</button>
+  </div>
+  <button class="play" id="play">Play</button>
+  <label class="lvl">Out <input id="vol" type="range" min="0" max="100" value="55"></label>
+</div>
+
+<p class="hint">
+  Signal runs <b>source → Chorus → Flanger → Phaser → out</b>, the rack's own order. Click a power dot to
+  bypass a device; drag a knob vertically; the two pills are Type and Character.
+  Every window draws the <b>notch geometry its engine publishes live</b> — so the picture is the DSP, not a decoration.
+  Start on <b>Sine</b> to hear what each one does to a single tone.
+</p>
+
+<div class="rackwrap"><div class="rackzoom"><div class="rack" id="rack"></div></div></div>
+
+<p class="hint" id="status">Press Play — the three engines load on first click.</p>
+
+<!-- the three engines, injected verbatim by build.py so this file stays self-contained -->
+<script id="wk-chorus"  type="text/worklet">/*CHORUS*/</script>
+<script id="wk-flanger" type="text/worklet">/*FLANGER*/</script>
+<script id="wk-phaser"  type="text/worklet">/*PHASER*/</script>
+
+<script>
+"use strict";
+const LINE='#ECE8F2', P400='#B794FF', P500='#8B5CF6';
+const FMIN=30, FMAX=18000, LMIN=Math.log(FMIN), LSPAN=Math.log(FMAX)-LMIN;
+const fx=f=>(Math.log(Math.max(f,FMIN))-LMIN)/LSPAN;          // log-f → 0..1
+
+/* ── the three devices. Front row is Rate/Depth/Feedback/Mix on all three (the family
+      shares one vocabulary); the WINDOW is what tells them apart. ───────────────────── */
+const DEVS=[
+  { id:'chorus',  name:'Chorus',  proc:'terrain-chorus',  wk:'wk-chorus',
+    tell:'voices', knobs:[['Rate','rate',.35],['Depth','depth',.6],['Feedback','feedback',.15],['Mix','mix',.5]] },
+  { id:'flanger', name:'Flanger', proc:'terrain-flanger', wk:'wk-flanger',
+    tell:'comb',   knobs:[['Rate','rate',.30],['Depth','depth',.55],['Feedback','feedback',.5],['Mix','mix',.5]] },
+  { id:'phaser',  name:'Phaser',  proc:'terrain-phaser',  wk:'wk-phaser',
+    tell:'notches',knobs:[['Rate','rate',.35],['Depth','depth',.6],['Feedback','feedback',.45],['Mix','mix',.5]] },
+];
+
+let ctx=null, master=null, playing=false, srcKind='sine', srcNode=null, started=false;
+const state={};   // per device: {node,inG,wetG,dryG,on,params,viz,types,chars,type,char}
+
+/* ══ CARD CHASSIS ═════════════════════════════════════════════════════════════════════ */
+function buildCard(d){
+  const el=document.createElement('div'); el.className='dev'; el.id='dev-'+d.id;
+  el.innerHTML =
+    '<div class="head">'
+    + '<span class="grip">|||</span>'
+    + '<span class="nm">'+d.name+'</span>'
+    + '<span class="pill" id="tp-'+d.id+'"><span class="lab">—</span><span class="car">▾</span><select></select></span>'
+    + '<span class="pill" id="ch-'+d.id+'"><span class="lab">—</span><span class="car">▾</span><select></select></span>'
+    + '<span class="spacer"></span>'
+    + '<span class="pwr" id="pw-'+d.id+'" title="Bypass"></span>'
+    + '</div>'
+    + '<div class="core"><canvas id="cv-'+d.id+'"></canvas>'
+    +   '<div class="tellrow"><span id="tl-'+d.id+'">—</span><span id="tr-'+d.id+'">—</span></div></div>'
+    + '<div class="feet" id="ft-'+d.id+'"></div>';
+  document.getElementById('rack').appendChild(el);
+
+  const feet=el.querySelector('#ft-'+d.id);
+  d.knobs.forEach(([label,key,def])=>{
+    const k=document.createElement('div'); k.className='kn';
+    k.innerHTML='<canvas width="68" height="68"></canvas><div class="kl">'+label+'</div><div class="kv">'+Math.round(def*100)+'</div>';
+    feet.appendChild(k);
+    const cv=k.querySelector('canvas'), val=k.querySelector('.kv');
+    state[d.id].params[key]=def;
+    drawKnob(cv,def);
+    let dragging=false, y0=0, v0=0;
+    cv.addEventListener('pointerdown',e=>{ dragging=true; y0=e.clientY; v0=state[d.id].params[key];
+      cv.setPointerCapture(e.pointerId); e.preventDefault(); });
+    cv.addEventListener('pointermove',e=>{ if(!dragging)return;
+      const v=Math.max(0,Math.min(1, v0 + (y0-e.clientY)/170));
+      state[d.id].params[key]=v; drawKnob(cv,v); val.textContent=Math.round(v*100); pushParam(d,key,v); });
+    const end=()=>{ dragging=false; };
+    cv.addEventListener('pointerup',end); cv.addEventListener('pointercancel',end);
+    cv.addEventListener('dblclick',()=>{ state[d.id].params[key]=def; drawKnob(cv,def);
+      val.textContent=Math.round(def*100); pushParam(d,key,def); });
+  });
+
+  document.getElementById('pw-'+d.id).addEventListener('click',()=>togglePower(d));
+}
+
+/* house knob: thin white ring, purple value arc, white pointer — no glass, no gradient */
+function drawKnob(cv,v){
+  const g=cv.getContext('2d'), S=cv.width, R=S*0.36, cx=S/2, cy=S/2;
+  g.clearRect(0,0,S,S);
+  const a0=Math.PI*0.75, a1=Math.PI*2.25, a=a0+(a1-a0)*v;
+  g.lineCap='round';
+  g.strokeStyle='rgba(255,255,255,.18)'; g.lineWidth=S*0.055;
+  g.beginPath(); g.arc(cx,cy,R,a0,a1); g.stroke();
+  g.strokeStyle=P500; g.lineWidth=S*0.055;
+  g.beginPath(); g.arc(cx,cy,R,a0,a); g.stroke();
+  g.strokeStyle=LINE; g.lineWidth=S*0.05;
+  g.beginPath(); g.moveTo(cx+Math.cos(a)*R*0.30, cy+Math.sin(a)*R*0.30);
+  g.lineTo(cx+Math.cos(a)*R*0.74, cy+Math.sin(a)*R*0.74); g.stroke();
+}
+
+/* ══ THE THREE WINDOWS ════════════════════════════════════════════════════════════════
+   Shared: one log-f axis (30 Hz – 18 kHz), the house white line (#ECE8F2, purple glow),
+   brightness riding the live level so idle is dim and playing is bright.
+   Different: what the engine's own notch[] does on that axis. That difference is the
+   whole point — 2 notches vs 6 vs a drifting cloud is DATA, not styling.            */
+function drawCore(d,cv,vz,t){
+  const g=cv.getContext('2d');
+  const W=cv.width, H=cv.height, dpr=cv._dpr||1;
+  g.clearRect(0,0,W,H);
+  const lvl=Math.max(0, Math.min(1, (vz.lvl||0)*2.2));
+  const wake=0.24+0.76*lvl;                       // idle dim → playing bright (the fb311 law)
+  const notches=(vz.notch||[]).filter(f=>f>20&&f<FMAX);
+
+  /* faint octave rails — structure that encodes the axis, nothing decorative */
+  g.strokeStyle='rgba(255,255,255,.05)'; g.lineWidth=1*dpr;
+  for(let f=62.5; f<FMAX; f*=2){ const x=fx(f)*W; g.beginPath(); g.moveTo(x,0); g.lineTo(x,H); g.stroke(); }
+
+  if(d.id==='phaser')      drawPhaser (g,W,H,dpr,notches,vz,wake,t);
+  else if(d.id==='flanger')drawFlanger(g,W,H,dpr,notches,vz,wake,t);
+  else                     drawChorus (g,W,H,dpr,notches,vz,wake,t);
+}
+
+function clearShadow(g){ g.shadowBlur=0; g.globalAlpha=1; }
+
+/* THE SHARED LINE — the effect's own response, drawn edge to edge, dipping wherever the
+   engine says its notches are. All three devices draw it, so the family reads as a family;
+   what each one does ON that line is what tells them apart. Same white, same purple glow
+   and same 1.3px weight as the distortion curve (.dst-curve), so nothing is invented. */
+function responseLine(g,W,H,dpr,notches,wake,yBase,amp,q){
+  g.strokeStyle=LINE; g.lineWidth=1.3*dpr; g.globalAlpha=0.34+0.60*wake;
+  g.shadowColor='rgba(183,148,255,0.85)'; g.shadowBlur=2.4*dpr*(0.28+0.72*wake);
+  g.beginPath();
+  const step=Math.max(1,2*dpr);
+  for(let px=0;px<=W;px+=step){
+    const f=Math.exp(LMIN+(px/W)*LSPAN);
+    let dip=0;
+    for(let i=0;i<notches.length;i++){ const o=Math.log(f/notches[i])/q; if(o>-4&&o<4) dip+=Math.exp(-o*o); }
+    const y=yBase+Math.min(1.4,dip)*amp;
+    px?g.lineTo(px,y):g.moveTo(px,y);
+  }
+  g.stroke(); clearShadow(g);
+}
+/* THE REAL COMB — |1 - g·e^(-jwD)| = sqrt(1 + g^2 - 2g·cos(wD)). A delay-based effect's
+   response IS this; summing Gaussian bumps at the null positions (the first cut of this)
+   saturates the moment nulls overlap and pins the line flat against the floor, which looks
+   like a clipped curve and is simply wrong. This oscillates between real peaks and real
+   nulls, for free, and never saturates.
+   Where the comb gets finer than the screen can resolve, fall back to its RMS average
+   (sqrt(1+g^2)) — you cannot draw detail below a pixel, and pretending otherwise is moire. */
+function combDb(f, delta, gg){
+  const th=2*Math.PI*f*delta;
+  return 20*Math.log10(Math.max(1e-4, Math.sqrt(1+gg*gg-2*gg*Math.cos(th))));
+}
+function drawMagLine(g,W,H,dpr,wake,yTop,yBot,dbAt){
+  const DBT=7, DBB=-20;
+  g.strokeStyle=LINE; g.lineWidth=1.3*dpr; g.globalAlpha=0.34+0.60*wake;
+  g.shadowColor='rgba(183,148,255,0.85)'; g.shadowBlur=2.4*dpr*(0.28+0.72*wake);
+  g.beginPath();
+  const step=Math.max(1,1*dpr);
+  for(let px=0;px<=W;px+=step){
+    const f=Math.exp(LMIN+(px/W)*LSPAN);
+    const fr=Math.max(0,Math.min(1,(dbAt(f,px,W)-DBB)/(DBT-DBB)));
+    const y=yBot-(yBot-yTop)*fr;
+    px?g.lineTo(px,y):g.moveTo(px,y);
+  }
+  g.stroke(); clearShadow(g);
+}
+/* rolling history of where the notches have been — motion made legible on a still frame */
+function pushHist(vz,vals){
+  const h=vz.hist||(vz.hist=[]);
+  h.push(vals.slice(0,4)); if(h.length>110) h.shift();
+  return h;
+}
+
+/* PHASER — a FINITE, countable set of notches at NON-harmonic spacing.
+   Ninety draws 2. Twelve draws 6. Vibe's are visibly uneven. You read the type off it. */
+function drawPhaser(g,W,H,dpr,notches,vz,wake,t){
+  const yTop=H*0.20, amp=H*0.34;
+  /* No history trail here, deliberately. The flanger and chorus need one because their motion
+     is the whole story; the phaser's notch columns already sweep hard enough to read, and two
+     faint diagonals under them looked like stray lines rather than a walk. One accessory off. */
+  /* the notch column: a purple body you can count, capped by the white line's own dip */
+  notches.forEach((f,i)=>{
+    const x=fx(f)*W;
+    g.strokeStyle=P400; g.globalAlpha=0.13+0.26*wake; g.lineWidth=5.5*dpr;
+    g.beginPath(); g.moveTo(x,yTop+amp*0.30); g.lineTo(x,yTop+amp*1.30); g.stroke();
+    g.globalAlpha=0.55+0.45*wake; g.fillStyle=P400;
+    g.fillRect(x-1*dpr,H*0.955,2*dpr,3.5*dpr);       /* the foot tick — its position, now */
+    g.globalAlpha=1;
+  });
+  responseLine(g,W,H,dpr,notches,wake,yTop,amp,0.30);
+}
+
+/* FLANGER — an INFINITE harmonic series at n/Δ. The teeth fan as Δ sweeps, and as Δ→0
+   they sweep outward and the whole field flashes: the through-zero null, measured −61.2 dB. */
+function drawFlanger(g,W,H,dpr,notches,vz,wake,t){
+  const first=notches.length?notches[0]:600;
+  const yTop=H*0.16, amp=H*0.40;
+  /* an INFINITE odd-harmonic series at n/D — extend the engine's first null out to Nyquist,
+     which is what a comb actually is. As D shrinks the teeth race apart; as D->0 they leave
+     the window entirely and the response goes flat: that IS the through-zero crossing. */
+  /* stop adding teeth once they are closer together than they can be drawn — past that they
+     merge into a grey smear that says nothing. Truth you cannot resolve is not truth. */
+  const teeth=[];
+  for(let n=1;n<400;n++){
+    const f=first*(2*n-1); if(f>FMAX) break;
+    if(n>1 && (fx(f)-fx(first*(2*n-3)))*W < 2.4*dpr) break;
+    teeth.push(f);
+  }
+  /* THE null is a property of the DELAY, not of the harmonic ratio: as D -> 0 the first null
+     1/(2D) races toward Nyquist and the comb leaves the audio band entirely. (First cut of this
+     read the tooth RATIO, which for an odd-harmonic series is the constant 3 — so it flashed
+     permanently and painted a grey box over the window.) */
+  const nullness=Math.max(0,Math.min(1,(first-4200)/7000));
+  /* the fan itself, thinning with harmonic number the way a real comb's nulls soften */
+  teeth.forEach((f,n)=>{
+    const x=fx(f)*W;
+    g.strokeStyle=LINE; g.globalAlpha=(0.07+0.32*wake)*Math.pow(0.955,n); g.lineWidth=1.05*dpr;
+    g.beginPath(); g.moveTo(x,yTop+amp*0.16); g.lineTo(x,yTop+amp*1.24); g.stroke();
+  });
+  g.globalAlpha=1;
+  /* one deep comb from the delay the engine is actually running: D = 1/(2·f1) */
+  const delta=1/(2*Math.max(40,first)), gg=0.86;
+  const resolvable=(px,Wd)=>{ const f=Math.exp(LMIN+(px/Wd)*LSPAN);
+    return (fx(f*(1+1/(f*delta*2)))-fx(f))*Wd > 2.4*dpr; };
+  drawMagLine(g,W,H,dpr,wake,yTop,yTop+amp*1.30,
+    (f,px,Wd)=> resolvable(px,Wd) ? combDb(f,delta,gg)
+                                  : 20*Math.log10(Math.sqrt(1+gg*gg))-1.0);
+  /* THE NULL — the one full-band event nothing else in the rack does. Measured -61.2 dB. */
+  if(nullness>0.03){
+    const a=Math.pow(nullness,1.7)*(0.22+0.55*wake);
+    g.fillStyle='#FFFFFF'; g.globalAlpha=a*0.5; g.fillRect(0,H*0.08,W,H*0.84);
+    g.strokeStyle='#FFFFFF'; g.globalAlpha=Math.min(1,a*1.9); g.lineWidth=1.6*dpr;
+    g.shadowColor=P400; g.shadowBlur=7*dpr;
+    g.beginPath(); g.moveTo(0,yTop+amp*0.70); g.lineTo(W,yTop+amp*0.70); g.stroke();
+    clearShadow(g);
+  }
+  /* the sweep's own history — the comb's first tooth over the last ~2 s */
+  const hist=pushHist(vz,[first]);
+  g.strokeStyle=P400; g.globalAlpha=0.22+0.34*wake; g.lineWidth=1.1*dpr;
+  g.beginPath();
+  hist.forEach((row,i)=>{ const x=fx(row[0])*W, y=H*0.965-(i/hist.length)*H*0.13;
+    i?g.lineTo(x,y):g.moveTo(x,y); });
+  g.stroke(); g.globalAlpha=1;
+}
+
+/* CHORUS — not one comb: several shallow ones at wandering delays. June's two voices move
+   in exact opposition, Pedal's move together, Trio's sit at 120°. The picture is VOICES. */
+function drawChorus(g,W,H,dpr,notches,vz,wake,t){
+  const voices=notches.length?notches:[520,900];
+  const yTop=H*0.10, amp=H*0.30;
+  /* A chorus is NOT one deep comb — it is several SHALLOW ones at wandering delays, which is
+     exactly why it reads as width instead of as a comb. The engine publishes each voice's
+     FIRST null (~45-90 Hz for a 6-11 ms tap), so each voice must be expanded into its own odd
+     -harmonic series or the whole response sits jammed against the left edge and the window
+     reads flat. Two interleaved shallow combs beating against each other IS the picture. */
+  const deltas=voices.map(v0=>1/(2*Math.max(30,v0))), gg=0.42;   // shallow — that is the point
+  const dres=Math.min.apply(null,deltas);
+  const resolvable=(px,Wd)=>{ const f=Math.exp(LMIN+(px/Wd)*LSPAN);
+    return (fx(f*(1+1/(f*dres*2)))-fx(f))*Wd > 2.6*dpr; };
+  drawMagLine(g,W,H,dpr,wake,yTop,yTop+amp*1.05,(f,px,Wd)=>{
+    if(!resolvable(px,Wd)) return 20*Math.log10(Math.sqrt(1+gg*gg))-0.4;
+    let s=0; for(let i=0;i<deltas.length;i++) s+=combDb(f,deltas[i],gg);
+    return s/deltas.length;                       /* several shallow combs, beating together */
+  });
+
+  /* THE VOICES — the portrait. Each voice's delay position over the last ~2 s, one trail
+     each. This is the family tell made visible: June's two trails MIRROR (one clock, right
+     inverted), Pedal's run PARALLEL (one line read twice), Trio's sit at 120 degrees, Wow
+     wanders. You identify the Type by looking at it. */
+  const hist=pushHist(vz,voices);
+  const fieldTop=H*0.56, fieldH=H*0.40;
+  g.strokeStyle='rgba(255,255,255,.06)'; g.lineWidth=1*dpr;
+  g.beginPath(); g.moveTo(0,fieldTop+fieldH*0.5); g.lineTo(W,fieldTop+fieldH*0.5); g.stroke();
+  const nv=Math.min(4,voices.length);
+  for(let v=0; v<nv; v++){
+    let lo=1e9, hi=-1e9;
+    hist.forEach(r=>{ const f=r[v]; if(f){ lo=Math.min(lo,f); hi=Math.max(hi,f); } });
+    if(hi<=lo){ lo=voices[v]*0.8; hi=voices[v]*1.25; }
+    g.strokeStyle=v===0?LINE:P400; g.lineWidth=(v===0?1.3:1.1)*dpr;
+    g.globalAlpha=(v===0?0.62:0.44)*(0.30+0.70*wake);
+    g.shadowColor='rgba(183,148,255,0.8)'; g.shadowBlur=2.2*dpr*wake;
+    g.beginPath(); let started=false;
+    hist.forEach((r,i)=>{ const f=r[v]; if(!f) return;
+      const x=(i/(hist.length-1||1))*W;
+      const y=fieldTop+fieldH*(1-(Math.log(f/lo)/Math.log(hi/lo)));
+      started?g.lineTo(x,y):(g.moveTo(x,y),started=true); });
+    g.stroke(); clearShadow(g);
+    /* the head of each trail — where that voice is, this instant */
+    const f=voices[v]; if(f){
+      const y=fieldTop+fieldH*(1-(Math.log(f/lo)/Math.log(hi/lo)));
+      g.fillStyle=v===0?LINE:P400; g.globalAlpha=0.6+0.4*wake;
+      g.beginPath(); g.arc(W-1.5*dpr,y,2.2*dpr,0,7); g.fill(); g.globalAlpha=1;
+    }
+  }
+}
+
+/* ══ AUDIO ════════════════════════════════════════════════════════════════════════════ */
+function blobURL(id){
+  return URL.createObjectURL(new Blob([document.getElementById(id).textContent],{type:'application/javascript'}));
+}
+async function boot(){
+  ctx=new (window.AudioContext||window.webkitAudioContext)();
+  master=ctx.createGain(); master.gain.value=0.55; master.connect(ctx.destination);
+  for(const d of DEVS) await ctx.audioWorklet.addModule(blobURL(d.wk));
+
+  let prev=null;
+  for(const d of DEVS){
+    const s=state[d.id];
+    const node=new AudioWorkletNode(ctx,d.proc,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+    s.node=node;
+    s.inG=ctx.createGain(); s.wetG=ctx.createGain(); s.dryG=ctx.createGain();
+    s.wetG.gain.value=1; s.dryG.gain.value=0;
+    s.inG.connect(node); node.connect(s.wetG);
+    s.inG.connect(s.dryG);
+    s.out=ctx.createGain(); s.wetG.connect(s.out); s.dryG.connect(s.out);
+    if(prev) prev.connect(s.inG); s.chainIn=s.inG; prev=s.out;
+
+    node.port.onmessage=e=>{
+      const dd=e.data||{};
+      /* three engines, three roster shapes — accept all of them rather than make one lie */
+      if(dd.roster){ fillRoster(d,dd.roster.TYPE_NAMES,dd.roster.CHAR_NAMES); return; }
+      if(dd.types){ fillRoster(d,dd.types,dd.chars); return; }
+      const v=dd.viz||dd;
+      if(v && (v.notch||v.lfo!==undefined)){ const keep=s.viz.hist; s.viz=v; s.viz.hist=keep; }
+    };
+    node.port.postMessage({query:'roster'}); node.port.postMessage({query:'names'});
+    Object.entries(s.params).forEach(([k,v])=>pushParam(d,k,v));
+    node.port.postMessage({type:0,character:0});
+  }
+  prev.connect(master);
+  started=true;
+}
+function pushParam(d,key,v){
+  const s=state[d.id]; if(!s.node) return;
+  const ap=s.node.parameters&&s.node.parameters.get&&s.node.parameters.get(key);
+  if(ap) ap.setTargetAtTime(v, ctx.currentTime, 0.012);         // 12 ms — no clicks (house law)
+  else   s.node.port.postMessage({[key]:v});
+}
+function togglePower(d){
+  const s=state[d.id]; s.on=!s.on;
+  document.getElementById('dev-'+d.id).classList.toggle('off',!s.on);
+  if(!ctx) return;
+  const t=ctx.currentTime;
+  s.wetG.gain.setTargetAtTime(s.on?1:0,t,0.02);                  // 20 ms fade, never a hard cut
+  s.dryG.gain.setTargetAtTime(s.on?0:1,t,0.02);
+}
+function fillRoster(d,types,chars){
+  const s=state[d.id];
+  s.types=types||[]; s.chars=chars||[];
+  const tp=document.querySelector('#tp-'+d.id+' select');
+  tp.innerHTML=s.types.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('');
+  tp.onchange=()=>{ s.type=+tp.value; s.char=0; s.node.port.postMessage({type:s.type,character:0});
+                    paintPills(d); fillChars(d); };
+  paintPills(d); fillChars(d);
+}
+function fillChars(d){
+  const s=state[d.id], list=(s.chars&&s.chars[s.type])||[];
+  const ch=document.querySelector('#ch-'+d.id+' select');
+  ch.innerHTML=list.map((n,i)=>'<option value="'+i+'">'+n+'</option>').join('');
+  ch.onchange=()=>{ s.char=+ch.value; s.node.port.postMessage({character:s.char}); paintPills(d); };
+}
+function paintPills(d){
+  const s=state[d.id];
+  const tn=(s.types&&s.types[s.type])||'—', cn=(s.chars&&s.chars[s.type]&&s.chars[s.type][s.char])||'—';
+  document.querySelector('#tp-'+d.id+' .lab').textContent=tn;
+  document.querySelector('#ch-'+d.id+' .lab').textContent=cn;
+}
+function makeSource(){
+  if(srcNode){ try{srcNode.stop&&srcNode.stop();}catch(e){} try{srcNode.disconnect();}catch(e){} srcNode=null; }
+  const g=ctx.createGain(); g.gain.value=0.30;
+  if(srcKind==='sine'){ const o=ctx.createOscillator(); o.type='sine'; o.frequency.value=220; o.connect(g); o.start(); srcNode=o; }
+  else if(srcKind==='noise'){
+    const n=ctx.createBufferSource(), b=ctx.createBuffer(1,ctx.sampleRate*2,ctx.sampleRate), dt=b.getChannelData(0);
+    let last=0; for(let i=0;i<dt.length;i++){ const w=Math.random()*2-1; last=0.98*last+0.02*w; dt[i]=(w*0.35+last*2.2)*0.4; }
+    n.buffer=b; n.loop=true; n.connect(g); n.start(); srcNode=n; g.gain.value=0.18;
+  } else if(srcKind==='pad'){
+    const mix=ctx.createGain(); mix.gain.value=0.16;
+    [110,110.6,164.8,220.4].forEach(f=>{ const o=ctx.createOscillator(); o.type='sawtooth'; o.frequency.value=f; o.connect(mix); o.start(); });
+    const lp=ctx.createBiquadFilter(); lp.type='lowpass'; lp.frequency.value=1500; mix.connect(lp); lp.connect(g); srcNode=mix;
+  } else {  /* pluck — a repeating short note, the honest test for a modulation effect */
+    const mix=ctx.createGain(); mix.gain.value=0; mix.connect(g); srcNode=mix;
+    const o=ctx.createOscillator(); o.type='triangle'; o.frequency.value=330; o.connect(mix); o.start();
+    const tick=()=>{ if(!playing||srcKind!=='pluck')return; const t=ctx.currentTime;
+      mix.gain.cancelScheduledValues(t); mix.gain.setValueAtTime(0.36,t);
+      mix.gain.exponentialRampToValueAtTime(0.001,t+0.55); setTimeout(tick,760); };
+    tick();
+  }
+  g.connect(state[DEVS[0].id].chainIn);
+  return g;
+}
+async function toggle(){
+  const btn=document.getElementById('play');
+  if(!started){ document.getElementById('status').textContent='Loading the three engines…'; await boot(); }
+  if(ctx.state==='suspended') await ctx.resume();
+  playing=!playing;
+  btn.classList.toggle('on',playing); btn.textContent=playing?'Stop':'Play';
+  if(playing){ makeSource(); document.getElementById('status').textContent='Running — drag a knob, change a Type, watch the window.'; }
+  else if(srcNode){ try{srcNode.stop&&srcNode.stop();}catch(e){} try{srcNode.disconnect();}catch(e){} srcNode=null;
+    document.getElementById('status').textContent='Stopped.'; }
+}
+
+/* ══ FRAME LOOP — rAF, never setInterval (fb389: a 33 ms timer free-runs against the
+      compositor, lands twice in one frame and skips the next) ════════════════════════ */
+function fit(cv){
+  const r=cv.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,3);
+  const w=Math.max(2,Math.round(r.width*dpr)), h=Math.max(2,Math.round(r.height*dpr));
+  if(cv.width!==w||cv.height!==h){ cv.width=w; cv.height=h; }
+  cv._dpr=dpr;
+}
+function frame(t){
+  DEVS.forEach(d=>{
+    const cv=document.getElementById('cv-'+d.id); if(!cv) return;
+    fit(cv);
+    const s=state[d.id];
+    drawCore(d,cv,s.viz,t*0.001);
+    /* count what the ENGINE publishes, not what happens to be inside the drawn window — a
+       12-stage phaser owns 6 notches even when the sweep has carried two of them off-screen,
+       and a readout that says "4" because of the axis is a bug report waiting to happen. */
+    const all=(s.viz.notch||[]).filter(f=>f>0);
+    const n=(s.viz.notch||[]).filter(f=>f>20&&f<FMAX);
+    document.getElementById('tl-'+d.id).textContent =
+      d.id==='phaser' ? (all.length+' notches')
+      : d.id==='flanger' ? (n.length?Math.round(n[0])+' Hz':'—')
+      : (all.length+' voices');
+    document.getElementById('tr-'+d.id).textContent =
+      (s.viz.depthNow!=null&&isFinite(s.viz.depthNow)) ? (Math.round(s.viz.depthNow*100)/100+'') : '';
+  });
+  requestAnimationFrame(frame);
+}
+
+/* inert inspection hooks — the headless gate reads these to prove the ENGINES are alive.
+   A pretty picture drawn from an array of zeros is a lie, and this is how we catch it. */
+window.__peek     = id => state[id] ? state[id].viz : {};
+window.__ctxState = () => ctx ? ctx.state : 'none';
+window.__roster   = id => ({ types:(state[id]||{}).types||[], chars:((state[id]||{}).chars||[]).length });
+
+DEVS.forEach(d=>{ state[d.id]={params:{},viz:{lfo:0,lvl:0,notch:[]},on:true,type:0,char:0,types:[],chars:[]}; buildCard(d); });
+document.getElementById('play').addEventListener('click',toggle);
+document.getElementById('vol').addEventListener('input',e=>{ if(master) master.gain.value=e.target.value/100; });
+document.querySelectorAll('#src button').forEach(b=>b.addEventListener('click',()=>{
+  document.querySelectorAll('#src button').forEach(x=>x.setAttribute('aria-pressed','false'));
+  b.setAttribute('aria-pressed','true'); srcKind=b.dataset.s;
+  if(playing){ makeSource(); }
+}));
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
