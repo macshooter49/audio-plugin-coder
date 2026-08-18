@@ -515,7 +515,7 @@ private:
     // at a random phase inside a window) where a position JUMP would be a click.
     // fb416 — a test-only census. The click audit needs to ATTRIBUTE ticks to bounces rather
     // than infer the link from a correlation, so the engine counts its own reflections.
-    mutable long bounces_ = 0;
+    long bounces_ = 0;
 public:
     long bouncesForTesting() const noexcept { return bounces_; }
 private:
