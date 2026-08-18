@@ -39,6 +39,7 @@ body{background:radial-gradient(900px 520px at 30%% -10%%,#241d3a 0,transparent 
 /* ══ LIFTED VERBATIM FROM index.html — do not hand-edit ══ */
 %(css)s
 /* ══ end lifted ══ */
+#wf .fl-t{animation:none}   /* one shared line grammar, but no per-path breathe drift */
 .bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;padding:10px 15px;
   border:1px solid var(--border-strong);border-radius:11px;background:rgba(255,255,255,.02)}
 .bar h1{font-size:11px;font-weight:500;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-secondary);margin:0 4px 0 0}
@@ -102,7 +103,10 @@ function devHTML(d){
       +'<span class="fxr-headr"><span class="fxr-swap" data-act="swap" title="More parameters">'+IC_PLUS+IC_ARROW+'</span>'
         +'<span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
     +'</div>'
-    +'<div class="fxr-core" data-core="flanger"><canvas id="wf"></canvas></div>'
+    +'<div class="fxr-core" data-core="flanger"><svg id="wf" preserveAspectRatio="none">'
+      +'<rect id="flash" x="0" y="0" width="0" height="0" fill="#FFFFFF" opacity="0"/>'
+      +[0,1,2,3,4,5,6,7].map(function(i){return '<path class="dst-curve fl-t" id="t'+i+'"/>';}).join('')
+      +'</svg></div>'
     +'<div class="fxr-ctrls">'
       +'<div class="fxr-knobs">'+knobs+'</div><div class="fxr-divider"></div>'
       +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
@@ -186,42 +190,40 @@ document.querySelectorAll('#src button').forEach(function(b){b.addEventListener(
   document.querySelectorAll('#src button').forEach(function(x){x.setAttribute('aria-pressed','false');});
   b.setAttribute('aria-pressed','true');kind=b.dataset.s;if(playing)makeSrc();});});
 
-/* ══ THE WATERFALL ═══════════════════════════════════════════════════════════════════════
-   Time scrolls LEFT, frequency runs bottom-to-top on the same log axis the rest of the plugin
-   uses. Each new column is the comb's magnitude right now: bright white where energy passes,
-   dark where a null carves. The nulls therefore draw themselves as stripes that BEND as the
-   sweep moves -- the jet. At the through-zero crossing the comb leaves the audio band and the
-   column goes solid white; it then scrolls away as a scar you can still see. ══════════════ */
+/* ══ THE NULL TRAJECTORIES ══════════════════════════════════════════════════════════════
+   A flanger's comb is teeth at odd multiples of 1/(2D). As D sweeps, every tooth slides, and
+   the higher ones slide FURTHER — so the family fans out and back like a jet. Drawing them as
+   eight thin white lines over ~2 s of history gives that motion as strokes rather than as a
+   grey field: same information, in the plugin's own language, and crisp at any zoom because it
+   is vector. When the comb leaves the audio band (D -> 0) the lines run off the top together
+   and the window flashes — the through-zero null, measured -61.2 dB. ═════════════════════ */
 var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
-function combMag(f,delta,g){ return Math.sqrt(1+g*g-2*g*Math.cos(2*Math.PI*f*delta)); }
+var HIST=[], NT=8;
 function frame(){
-  var cv=document.getElementById('wf');
-  if(cv){
-    var r=cv.getBoundingClientRect(), dpr=Math.min(window.devicePixelRatio||1,3);
-    var W=Math.max(2,Math.round(r.width*dpr)), H=Math.max(2,Math.round(r.height*dpr));
-    var fresh=(cv.width!==W||cv.height!==H);
-    if(fresh){ cv.width=W; cv.height=H; }
-    var g=cv.getContext('2d');
-    g.globalCompositeOperation='copy'; g.drawImage(cv,-1*dpr,0); g.globalCompositeOperation='source-over';
+  var svg=document.getElementById('wf');
+  if(svg){
+    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height);
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
     var band=(viz.notch||[]).filter(function(f){return f>20&&f<FMAX;});
     var first=band.length?band[0]:600;
-    var lvl=Math.max(0,Math.min(1,(viz.lvl||0)*2.2)), wake=0.20+0.80*lvl;
-    var delta=1/(2*Math.max(40,first)), gg=0.86;
+    var lvl=Math.max(0,Math.min(1,(viz.lvl||0)*2.2)), wake=0.28+0.72*lvl;
+    HIST.push(first); if(HIST.length>120) HIST.shift();
     var nullness=Math.max(0,Math.min(1,(first-4200)/7000));
-    var x=W-1*dpr, colW=Math.max(1,1*dpr);
-    for(var y=0;y<H;y++){
-      var f=Math.exp(LMIN+(1-y/H)*LSPAN);
-      var m=combMag(f,delta,gg)/(1+gg);              // 0..1, 0 at a null
-      // gamma it hard: a comb's PEAKS are most of the field, so a linear map reads as a
-      // white blob. 2.4 keeps the picture as stripes on dark, which is what the nulls are.
-      var a=Math.pow(m,2.4)*wake*0.78;
-      a=a*(1-nullness)+nullness*0.92;                 // the crossing whites the whole column
-      g.fillStyle='rgba(236,232,242,'+a.toFixed(3)+')';
-      g.fillRect(fresh?0:x, y, fresh?W:colW, 1);      // first sizing paints the WHOLE field, so
-    }                                                 // it never opens as a half-empty window
-    /* a purple tick riding the sweep, so the current notch is findable in the scroll */
-    var yt=H*(1-(Math.log(Math.max(FMIN,first))-LMIN)/LSPAN);
-    g.fillStyle='rgba(183,148,255,'+(0.5+0.5*wake).toFixed(2)+')'; g.fillRect(x-colW,yt-1*dpr,colW*2,2*dpr);
+    for(var t=0;t<NT;t++){
+      var d='', mult=2*t+1;
+      for(var i=0;i<HIST.length;i++){
+        var f=HIST[i]*mult; if(f>FMAX) { d=''; continue; }
+        var x=(i/(HIST.length-1||1))*W;
+        var y=H*(1-(Math.log(Math.max(FMIN,f))-LMIN)/LSPAN);
+        d+=(d?'L':'M')+x.toFixed(1)+' '+y.toFixed(1);
+      }
+      var el=document.getElementById('t'+t);
+      el.setAttribute('d',d);
+      el.setAttribute('opacity',((0.30+0.62*wake)*Math.pow(0.86,t)).toFixed(3));
+    }
+    var fl=document.getElementById('flash');
+    fl.setAttribute('width',W); fl.setAttribute('height',H);
+    fl.setAttribute('opacity',(Math.pow(nullness,1.6)*0.5*(0.3+0.7*wake)).toFixed(3));
   }
   requestAnimationFrame(frame);
 }
