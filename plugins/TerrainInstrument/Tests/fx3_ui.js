@@ -151,7 +151,16 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       const spy=[]; const real=window.__setSynParam;
       window.__setSynParam=function(id,v){ spy.push([id,v]); try{ return real.apply(this,arguments); }catch(e){} };
       const cards=[...document.querySelectorAll('.fxr-dev')];
-      out.send.onEveryCard = cards.length>0 && cards.every(c=>!!c.querySelector('.fxr-snd'));
+      // 🔑 fb415 THE FIRST-SLOT LAW: the Send glyph is on the LEFTMOST card and nowhere else.
+      out.send.onFirst = cards.length>0 && !!cards[0].querySelector('.fxr-snd');
+      out.send.onOthers = cards.slice(1).filter(c=>!!c.querySelector('.fxr-snd')).length;
+      // ...and every other card gets its plain six-letter route row back at FULL width. The
+      // crowding was the complaint, so measure it: a later card's letters must be WIDER than
+      // the first card's, and all six must be equal to each other.
+      const wOf=c=>[...c.querySelectorAll('.fxr-r')].map(e=>Math.round(e.getBoundingClientRect().width));
+      const w0=wOf(cards[0]), w1=cards.length>1?wOf(cards[1]):[];
+      out.send.firstW=w0[0]; out.send.otherW=w1[0];
+      out.send.othersEven = w1.length===6 && w1.every(x=>Math.abs(x-w1[0])<=1);
       const c0=cards[0];
       if(c0){
         const letters=[...c0.querySelectorAll('.fxr-r')];
@@ -219,7 +228,12 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
           : 'no measurement');
   }
   const S=r.send||{};
-  chk(S.onEveryCard===true, 'fb414 — every card in the rack carries the Send tap');
+  chk(S.onFirst===true && S.onOthers===0,
+      'fb415 — the FIRST-SLOT LAW: Send is on the leftmost card and nowhere else',
+      'first='+S.onFirst+', others carrying it='+S.onOthers);
+  chk(S.otherW>S.firstW && S.othersEven===true,
+      'fb415 — every later card gets its full-width, evenly-spaced route row back',
+      'route letter width: first card '+S.firstW+'px, the rest '+S.otherW+'px, all six even');
   chk(S.litBefore===false && S.litAfter===true && S.litAgain===false,
       'fb414 — Send toggles both ways (off is the default, so old projects load identical)',
       S.litBefore+' -> '+S.litAfter+' -> '+S.litAgain);

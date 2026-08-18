@@ -41,8 +41,12 @@ static std::string srcStr (uint8_t m)
 }
 
 // ── THE MODEL UNDER TEST — PluginProcessor.cpp's exUnion loop, verbatim in shape.
-//    `send[c]` is slot c's tap mode. A slot with entry == 0 taps nothing and cannot pull
-//    anything out no matter what its mode says, which is why the mode lives on the TAP.
+//    `send[c]` is slot c's tap mode. Two conditions gate it, and both matter:
+//      · a slot with entry == 0 taps nothing and cannot pull anything out whatever its mode
+//        says — which is why the mode lives on the TAP;
+//      · 🔑 fb415 THE FIRST-SLOT LAW (Max, HARD RULE): only c == 0 may send. Everything after
+//        the first device is an insert, always. The card shows the Send glyph under exactly
+//        this condition too, so the button and the DSP cannot disagree.
 static uint8_t pulledFromMix (const uint8_t* masks, const bool* send, int n)
 {
     tw::FxChainTopology t; t.build (masks, n);
@@ -51,7 +55,8 @@ static uint8_t pulledFromMix (const uint8_t* masks, const bool* send, int n)
     {
         const uint8_t e = t.entry[c];
         if (e == 0) continue;
-        if (! send[c]) insertMask = (uint8_t) (insertMask | e);
+        const bool sendMode = (c == 0) && send[c];
+        if (! sendMode) insertMask = (uint8_t) (insertMask | e);
     }
     return insertMask;
 }
@@ -104,21 +109,41 @@ int main()
              "flipping the DOWNSTREAM device's mode changes nothing");
         bool sd_c[2] = { false, true };
         chk (pulledFromMix (m, sd_c, 2) == A,
-             "and a SEND on the downstream device cannot rescue an insert tap",
-             "pulled = " + srcStr (pulledFromMix (m, sd_c, 2)));
+             "and a SEND on the downstream device cannot rescue an insert tap — it neither "
+             "taps nor sits first", "pulled = " + srcStr (pulledFromMix (m, sd_c, 2)));
     }
 
-    // ── 4. mixed: one branch parallel, another still an insert
-    head ("4. per-device, not global — two branches can disagree");
+    // ── 4. 🔑 THE FIRST-SLOT LAW
+    head ("4. fb415 — ONLY the first slot may send; everything after it is an insert");
     {
-        uint8_t m[3] = { A, B, A };            // A-branch (send), B-branch (insert), A-eater
-        bool    sd[3] = { true, false, false };
-        const uint8_t pulled = pulledFromMix (m, sd, 3);
-        chk (pulled == B, "A stays in the mix, B leaves it", "pulled = " + srcStr (pulled));
+        uint8_t m[3] = { A, B, C };
+        bool first[3] = { true,  false, false };   // the leftmost card sends
+        bool second[3]= { false, true,  false };   // a later card claims to — it must be ignored
+        bool third[3] = { false, false, true  };
+        chk (pulledFromMix (m, first, 3) == (uint8_t) (B | C),
+             "first slot sends: A stays in the mix, B and C leave",
+             "pulled = " + srcStr (pulledFromMix (m, first, 3)));
+        chk (pulledFromMix (m, second, 3) == (uint8_t) (A | B | C),
+             "the SECOND slot's send flag is inert — all three still leave",
+             "pulled = " + srcStr (pulledFromMix (m, second, 3)));
+        chk (pulledFromMix (m, third, 3) == (uint8_t) (A | B | C),
+             "and so is the third's", "pulled = " + srcStr (pulledFromMix (m, third, 3)));
+    }
+
+    // ── 4b. the reorder case: the law is POSITIONAL, so dragging changes who may send
+    head ("4b. drag the sender out of first place and its send goes inert");
+    {
+        uint8_t before[2] = { A, B };  bool sBefore[2] = { true, false };   // granular first
+        uint8_t after [2] = { B, A };  bool sAfter [2] = { false, true  };  // dragged to 2nd
+        chk (pulledFromMix (before, sBefore, 2) == B,
+             "granular first + send: A keeps playing", "pulled = " + srcStr (pulledFromMix (before, sBefore, 2)));
+        chk (pulledFromMix (after, sAfter, 2) == (uint8_t) (A | B),
+             "same device, now second: its stored send does nothing and A leaves again",
+             "pulled = " + srcStr (pulledFromMix (after, sAfter, 2)));
     }
 
     // ── 5. the failure mode Max will actually hit: deleting the front of a branch
-    head ("5. delete the granular and the distortion becomes the tap");
+    head ("5. delete the granular and the distortion becomes the FIRST slot AND the tap");
     {
         uint8_t m[1] = { A };
         bool insert[1] = { false }, send[1] = { true };

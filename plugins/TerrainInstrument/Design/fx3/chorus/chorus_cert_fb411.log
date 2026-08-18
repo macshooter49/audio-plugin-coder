@@ -152,15 +152,15 @@
 
 [M. CPU — us per 128-sample block at 48 kHz, per Type]
         Type        Detune 0    Detune 60      % of one core (worst)
-        Vintage      18.26 us     27.65 us      1.04 %
-        June         18.20 us     27.58 us      1.03 %
-        Pedal        21.94 us     32.01 us      1.20 %
-        Trio         20.03 us     35.21 us      1.32 %
-        Ensemble     23.83 us     38.96 us      1.46 %
-        Micro        21.19 us     25.58 us      0.96 %
-        Wow          24.22 us     33.78 us      1.27 %
-        Dark         20.04 us     28.91 us      1.08 %
-  ok    worst Type under 45 us/block (6 instances stay under 10 % of a core) worst 38.96 us (Ensemble), 6 instances = 8.8 % of a core
+        Vintage      17.94 us     27.05 us      1.01 %
+        June         17.85 us     26.82 us      1.01 %
+        Pedal        21.68 us     30.93 us      1.16 %
+        Trio         19.40 us     34.27 us      1.28 %
+        Ensemble     23.39 us     37.78 us      1.42 %
+        Micro        20.69 us     25.04 us      0.94 %
+        Wow          23.59 us     33.35 us      1.25 %
+        Dark         19.33 us     28.52 us      1.07 %
+  ok    worst Type under 45 us/block (6 instances stay under 10 % of a core) worst 37.78 us (Ensemble), 6 instances = 8.5 % of a core
 
 [N. Self-check — can these gates actually fail?]
   ok    (self-check) specDist sees an injected 9 dB              9.0 dB

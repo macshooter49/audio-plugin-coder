@@ -95,18 +95,18 @@
   ok    stable at max feedback at 96.0 kHz                     peak 0.1120
 
 [I. CPU — us per 128-sample block at 48 kHz, per Type]
-        Ninety     6.69 us/block  (0.25 % of one core)
-        Stone      7.57 us/block  (0.28 % of one core)
-        Duo       12.26 us/block  (0.46 % of one core)
-        Twelve    10.62 us/block  (0.40 % of one core)
-        Kraut     13.47 us/block  (0.51 % of one core)
-        Vibe       9.39 us/block  (0.35 % of one core)
-        Barber    12.24 us/block  (0.46 % of one core)
-        Envy       7.40 us/block  (0.28 % of one core)
-        Steps      7.18 us/block  (0.27 % of one core)
-        WORST     83.98 us/block  (3.15 % of one core)  <- 16 stages x 6 INSTANCES
-  ok    worst case (16 stages x 6 instances) under 12 % of a core 3.15 %
-  ok    no single Type exceeds 2 % of a core                   worst 13.47 us on Kraut
+        Ninety     7.76 us/block  (0.29 % of one core)
+        Stone      7.73 us/block  (0.29 % of one core)
+        Duo       13.54 us/block  (0.51 % of one core)
+        Twelve    12.27 us/block  (0.46 % of one core)
+        Kraut     16.52 us/block  (0.62 % of one core)
+        Vibe      10.50 us/block  (0.39 % of one core)
+        Barber    12.73 us/block  (0.48 % of one core)
+        Envy       7.53 us/block  (0.28 % of one core)
+        Steps      7.82 us/block  (0.29 % of one core)
+        WORST     90.27 us/block  (3.39 % of one core)  <- 16 stages x 6 INSTANCES
+  ok    worst case (16 stages x 6 instances) under 12 % of a core 3.39 %
+  ok    no single Type exceeds 2 % of a core                   worst 16.52 us on Kraut
 
 [J. Self-check — can these gates actually fail?]
   ok    (self-check) the notch detector sees an injected notch 2 -> 3

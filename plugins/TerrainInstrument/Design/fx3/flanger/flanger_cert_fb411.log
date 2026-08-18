@@ -109,13 +109,13 @@
   ok    through-zero null holds at 96000 Hz                    -62.4 dB
 
 [J. CPU — us per 128-sample block at 48 kHz, per Type (law 7)]
-  ..      Tape Zero / Sub                                      13.21 us/block  = 0.495 % of one core
-  ..      Jet / Twin Jet                                       11.71 us/block  = 0.439 % of one core
-  ..      BBD / Mistress                                       21.73 us/block  = 0.815 % of one core
-  ..      Endless / Stacked Rise                               11.61 us/block  = 0.435 % of one core
-  ..      Envelope / Up                                        13.07 us/block  = 0.490 % of one core
-  ..      Step / Random                                        11.03 us/block  = 0.414 % of one core
-  ok    worst Type under 1 % of one core (< 25 us/block)       21.73 us/block = 0.81 % core (BBD)
+  ..      Tape Zero / Sub                                      13.89 us/block  = 0.521 % of one core
+  ..      Jet / Twin Jet                                       12.12 us/block  = 0.455 % of one core
+  ..      BBD / Mistress                                       23.07 us/block  = 0.865 % of one core
+  ..      Endless / Stacked Rise                               12.15 us/block  = 0.456 % of one core
+  ..      Envelope / Up                                        13.53 us/block  = 0.508 % of one core
+  ..      Step / Random                                        11.45 us/block  = 0.429 % of one core
+  ok    worst Type under 1 % of one core (< 25 us/block)       23.07 us/block = 0.87 % core (BBD)
 
 [K. Self-check — can these gates actually fail?]
   ok    (self-check) specDist sees an injected 9 dB            9.0 dB

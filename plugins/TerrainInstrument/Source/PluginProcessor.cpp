@@ -4596,18 +4596,26 @@ juce::String TerrainInstrumentAudioProcessor::getFilterVizJson()
 // case of one or two devices is a couple of KB/s.
 juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
 {
+    // fb415 — TRIMMED. `env` was in the payload and no card ever read it, and `n` is 8 zeros on
+    // every chorus (a chorus has no notches) — 6 instances x 8 numbers x 60 Hz of nothing. This
+    // feed rides the same lane fb342 measured a 40-80 KB/s frame-drop threshold on, so dead
+    // payload is not free. Inactive instances were already `null`.
     auto emit = [] (juce::String& out, bool live, float lfo, float lvl, float dep,
-                    const float* nt, float env)
+                    const float* nt)
     {
         if (! live) { out << "null"; return; }
         out << "{\"lfo\":" << juce::String (lfo, 4)
             << ",\"lvl\":" << juce::String (lvl, 4)
-            << ",\"dep\":" << juce::String (dep, 4)
-            << ",\"env\":" << juce::String (env, 3)
-            << ",\"n\":[";
-        for (int k = 0; k < 8; ++k)
-        { if (k) out << ","; out << juce::String (nt != nullptr ? nt[k] : 0.0f, 1); }
-        out << "]}";
+            << ",\"dep\":" << juce::String (dep, 4);
+        bool anyNotch = false;
+        if (nt != nullptr) for (int k = 0; k < 8; ++k) if (nt[k] > 1.0f) { anyNotch = true; break; }
+        if (anyNotch)
+        {
+            out << ",\"n\":[";
+            for (int k = 0; k < 8; ++k) { if (k) out << ","; out << juce::String (nt[k], 1); }
+            out << "]";
+        }
+        out << "}";
     };
 
     juce::String j = "{\"cho\":[";
@@ -4616,7 +4624,7 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
         if (i) j << ",";
         const auto& V = choRefs_[(size_t) i];  const auto& z = choPool_[(size_t) i].viz();
         emit (j, V.active != nullptr && V.active->load() > 0.5f,
-              z.lfo, z.lvl, z.depthNow, z.notch, choEnv_[(size_t) i]);
+              z.lfo, z.lvl, z.depthNow, z.notch);
     }
     j << "],\"fla\":[";
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
@@ -4624,7 +4632,7 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
         if (i) j << ",";
         const auto& V = flaRefs_[(size_t) i];  const auto& z = flaPool_[(size_t) i].viz();
         emit (j, V.active != nullptr && V.active->load() > 0.5f,
-              z.lfo, z.lvl, z.depthNow, z.notch, flaEnv_[(size_t) i]);
+              z.lfo, z.lvl, z.depthNow, z.notch);
     }
     j << "],\"pha\":[";
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
@@ -4632,7 +4640,7 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
         if (i) j << ",";
         const auto& V = phaRefs_[(size_t) i];  const auto& z = phaPool_[(size_t) i].viz();
         emit (j, V.active != nullptr && V.active->load() > 0.5f,
-              z.lfo, z.lvl, z.depthNow, z.notch, phaEnv_[(size_t) i]);
+              z.lfo, z.lvl, z.depthNow, z.notch);
     }
     return j + "]}";
 }
@@ -5125,6 +5133,16 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheTapeParams();
     cacheFilterRefs();   // fb377         // fb365 — and all six tape instances
     cacheFx3Refs();      // fb413 — chorus / flanger / phaser, six each
+    // fb415 — and PREPARE them here, on the message thread, because chorus/flanger prepare()
+    // allocates its delay lines. maxBlock is 1: the serial chain hands them one sample at a
+    // time, which is the same shape TapeFxEngine::process already has.
+    {
+        const double sr = sampleRate > 0.0 ? sampleRate : 48000.0;
+        fx3PrepSr_ = sr;
+        for (auto& e : choPool_) e.prepare (sr, 1);
+        for (auto& e : flaPool_) e.prepare (sr, 1);
+        for (auto& e : phaPool_) e.prepare (sr, 1);
+    }
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
@@ -7576,17 +7594,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         poolRouteAny_[(size_t) q3] = ps > 0.0f;
     }
 
-    // fb413 — CHORUS / FLANGER / PHASER: eager engines, prepared once per sample rate. `prepare`
-    // may allocate, so it is guarded by the rate check and never runs on a steady-state block.
-    if (fx3PrepSr_ != getSampleRate())
-    {
-        fx3PrepSr_ = getSampleRate();
-        const double sr = fx3PrepSr_ > 0.0 ? fx3PrepSr_ : 48000.0;
-        for (auto& e : choPool_) e.prepare (sr, 1);
-        for (auto& e : flaPool_) e.prepare (sr, 1);
-        for (auto& e : phaPool_) e.prepare (sr, 1);
-    }
-    // ... and their route gates, the same per-instance shape every other device uses.
+    // fb415 — 🚨 the fx3 engines are prepared in prepareToPlay, NOT here. fb413 copied the
+    // filter's shape (a rate-change guard inside processBlock), and that is safe for the FILTER
+    // because FilterFxEngine::prepare touches coefficient state only — it never allocates. The
+    // chorus and the flanger DO: `bufL_.assign(...)` on the delay lines. A rate-change guard
+    // still fires on the FIRST block at a new rate, which is the audio thread, so that was a
+    // malloc under the real-time lock. CONTRACT.md 2 says it plainly: "prepare may allocate —
+    // message thread only." Caught by the fb415 clean-up sweep, not by any harness.
+    //
+    // Their route gates, on the other hand, belong right here: the same per-instance shape
+    // every other device uses, recomputed every block from the live route pills.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
         const int bases[3] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i };
@@ -7678,9 +7695,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
       {
           const uint8_t e = fxTopo_.entry[c];
           if (e == 0) continue;                                   // this slot taps nothing
+          // 🔑 fb415 — THE FIRST-SLOT LAW (Max, HARD RULE). Only the FIRST device in the chain
+          // can be a send tap; every device after it is an insert, always. `c == 0` is the
+          // whole rule, and the card shows the Send glyph under the identical condition
+          // (index 0 in devHTML) — so the button can never be showing one thing while the DSP
+          // does another. A device dragged out of the first slot keeps its stored SEND value
+          // (drag it back and the setting returns, the state-persists law) but that value is
+          // INERT while it is not first, which is exactly what the missing button says.
           const auto& ce = chainOrder_[(size_t) c];
           const int ki = ce.kind, ii = ce.inst - 1;
-          const bool sendMode = ki >= 0 && ki < 9 && ii >= 0 && ii < ParameterIDs::kFxInstances
+          const bool sendMode = c == 0
+                             && ki >= 0 && ki < 9 && ii >= 0 && ii < ParameterIDs::kFxInstances
                              && sendRef_[(size_t) ki][(size_t) ii] != nullptr
                              && sendRef_[(size_t) ki][(size_t) ii]->load() > 0.5f;
           if (! sendMode) insertMask = (uint8_t) (insertMask | e);
