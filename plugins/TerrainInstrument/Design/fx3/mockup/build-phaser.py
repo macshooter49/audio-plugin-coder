@@ -115,10 +115,8 @@ function devHTML(d){
         +'<span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
     +'</div>'
     +'<div class="fxr-core" data-core="phaser"><svg id="pv" preserveAspectRatio="none">'
-      +'<path id="notches" fill="none" stroke="var(--purple-400)" stroke-width="1" opacity="0.42"/>'
       +'<path class="dst-curve ph-t" id="spec"/>'
-      +'</svg><div id="cnt" style="position:absolute;left:0;bottom:0;font-size:7.5px;letter-spacing:.8px;'
-      +'color:var(--text-muted);text-transform:uppercase;pointer-events:none">—</div></div>'
+      +'</svg></div>'
     +'<div class="fxr-ctrls">'
       +'<div class="fxr-knobs">'+knobs+'</div><div class="fxr-divider"></div>'
       +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
@@ -221,9 +219,9 @@ function frame(){
     svg.setAttribute('viewBox','0 0 '+W+' '+H);
     // centre on the CARD, with the same optical nudge the flanger settled on (fb404-407)
     var card=svg.closest('.fxr-dev'), mid=H*0.5;
-    if(card){ var cr=card.getBoundingClientRect(), NUDGE=6.0, zoom=cr.width/272;
+    if(card){ var cr=card.getBoundingClientRect(), NUDGE=9.0, zoom=cr.width/272;
       mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top - NUDGE*zoom)); }
-    var N=Math.max(2,Math.round(W/2)), d='', dips='', count=0;
+    var N=Math.max(2,Math.round(W/2)), d='';
     if(ANA&&BINS){
       ANA.getFloatFrequencyData(BINS);
       if(!SM||SM.length!==N) SM=new Float32Array(N).fill(-100);
@@ -244,19 +242,8 @@ function frame(){
         var dev=Math.max(-14,Math.min(6,SM[j]-mean));
         d+=(j?'L':'M')+x.toFixed(1)+' '+(mid-(dev/20)*(H*0.62)).toFixed(1);
       }
-      // count what the CURVE shows: 5 dB below BOTH shoulders and well spaced, so noise ripple
-      // cannot masquerade as a notch (it reported "6" on Ninety, which has 2).
-      for(var k=6;k<N-6;k++){
-        if(SM[k]<SM[k-6]-5 && SM[k]<SM[k+6]-5 && SM[k]<=SM[k-1] && SM[k]<=SM[k+1]){
-          var xk=(k/(N-1))*W;
-          dips+='M'+xk.toFixed(1)+' '+(mid+H*0.30).toFixed(1)+'L'+xk.toFixed(1)+' '+(mid+H*0.38).toFixed(1);
-          count++; k+=Math.round(N*0.05);
-        }
-      }
     } else { d='M0 '+mid.toFixed(1)+'L'+W.toFixed(1)+' '+mid.toFixed(1); }
     document.getElementById('spec').setAttribute('d',d);
-    document.getElementById('notches').setAttribute('d',dips);
-    document.getElementById('cnt').textContent=count?(count+' notches'):'—';
   }
   requestAnimationFrame(frame);
 }

@@ -226,7 +226,7 @@ public:
         // ── Feedback: magnitude from the knob, SIGN from the Character.
         const float mag = std::fabs (cs.fbBias);
         const float sgn = (cs.fbBias < 0.0f ? -1.0f : 1.0f);
-        fbK_ = clampf (sgn * (mag + clamp01 (p.feedback) * (0.95f - mag)), -0.95f, 0.95f);
+        fbK_ = clampf (sgn * (mag + clamp01 (p.feedback) * (0.985f - mag)), -0.985f, 0.985f);
         envToFb_ = (p.type == T_ENVY) ? cs.skew : 0.0f;   // Envy reuses `skew` as env→feedback
 
         // ── Color: in-loop LP + in-loop drive, makeup INSIDE the loop
@@ -336,7 +336,7 @@ public:
             float octR = clampf (centerOct_ + depthOct_ * lagR_ + envOct - stSplit_, octMin, octMax_);
 
             // Envy `Quack`: the envelope also opens the resonance.
-            const float kNow = clampf (fbK_ + envToFb_ * env01 * (fbK_ < 0.0f ? -1.0f : 1.0f), -0.95f, 0.95f);
+            const float kNow = clampf (fbK_ + envToFb_ * env01 * (fbK_ < 0.0f ? -1.0f : 1.0f), -0.985f, 0.985f);
 
             float pL, pR;
             if (topo_ == 8)

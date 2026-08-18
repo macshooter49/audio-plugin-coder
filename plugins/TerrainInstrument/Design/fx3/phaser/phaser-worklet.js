@@ -245,7 +245,7 @@ class TerrainPhaser extends AudioWorkletProcessor {
     this.envBaseOct = ts[2];
 
     const mag = Math.abs(cs.fb), sgn = cs.fb < 0 ? -1 : 1;
-    this.fbK = clamp(sgn * (mag + c01(p.feedback) * (0.95 - mag)), -0.95, 0.95);
+    this.fbK = clamp(sgn * (mag + c01(p.feedback) * (0.985 - mag)), -0.985, 0.985);
     this.envToFb = (p.type === 7) ? cs.sk : 0;
 
     const col = c01(p.b8);
@@ -543,7 +543,7 @@ class TerrainPhaser extends AudioWorkletProcessor {
       const envOct = (this.envBaseOct + this.touchOct) * env01;
       const octL = clamp(this.centerOct + this.depthOct * this.lagL + envOct + this.stSplit, octMin, this.octMax);
       const octR = clamp(this.centerOct + this.depthOct * this.lagR + envOct - this.stSplit, octMin, this.octMax);
-      const kNow = clamp(this.fbK + this.envToFb * env01 * (this.fbK < 0 ? -1 : 1), -0.95, 0.95);
+      const kNow = clamp(this.fbK + this.envToFb * env01 * (this.fbK < 0 ? -1 : 1), -0.985, 0.985);
 
       let pL, pR;
       if (this.topo === 8) {
