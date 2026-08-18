@@ -1,0 +1,969 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Phaser — mockup</title>
+<style>
+:root,#syn-panel{
+  color:var(--text-primary);
+  --bg-main:       #1A1A2E;
+  --bg-hero:       #12121F;
+  --bg-surface:    #232340;
+  --bg-card:       #2A2A48;
+  --bg-card-2:     #252340;
+  --knob-track:    rgba(120,118,160,0.35);
+  --purple-600:    #9B6DFF;
+  --purple-500:    #8B5CF6;
+  --purple-400:    #B794FF;
+  --border:        rgba(58,58,88,0.55);
+  --border-strong: rgba(140,130,180,0.45);
+  --text-primary:  #ECE8F2;
+  --text-secondary: #C5BFD2;
+  --text-muted:    #908599;
+  --text-dim:      #6E6580;
+  --line-bright:   #ECE8F2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(900px 520px at 30% -10%,#241d3a 0,transparent 60%),#141220;
+  font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;-webkit-font-smoothing:antialiased;
+  display:flex;flex-direction:column;align-items:center;gap:20px;padding:24px 18px 40px}
+/* ══ LIFTED VERBATIM FROM index.html — do not hand-edit ══ */
+@keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
+#syn-panel .fxr-switch{ position:absolute; top:-18px; left:0; z-index:3; display:flex; align-items:center; gap:0; }
+#syn-panel .fxr-seg{ display:flex; border:1px solid var(--border-strong); border-radius:7px; overflow:hidden; }
+#syn-panel .fxr-tab{ background:transparent; border:0; color:var(--text-muted); font-family:inherit; font-size:9px; letter-spacing:.03em; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:5px; font-weight:400; line-height:1; }
+#syn-panel .fxr-tab .fxr-k{ font-weight:700; }
+#syn-panel .fxr-tab + .fxr-tab{ border-left:1px solid var(--border-strong); }
+#syn-panel .fxr-tab.on{ color:var(--purple-400); }
+#syn-panel .fxr-tabhint{ margin-left:auto; font-size:9px; color:var(--text-dim); letter-spacing:1px; font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
+#syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
+#syn-panel .fxr-clip{ flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }
+#syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }
+#syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }
+#syn-panel .fxr-dev{ flex:0 0 272px; height:100%; min-height:0; background:transparent; border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, opacity .15s; position:relative; }
+#syn-panel .fxr-dev:hover{ border-color:rgba(255,255,255,.34); }
+#syn-panel .fxr-dev.fxr-off{ opacity:.45; }
+#syn-panel .fxr-dev.fxr-off *{ animation-play-state:paused !important; }
+#syn-panel .fxr-head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }
+#syn-panel .fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+#syn-panel .fxr-grip:active{ cursor:grabbing; }
+#syn-panel .fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; display:flex; align-items:center; }
+#syn-panel .fxr-type{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300; line-height:1; margin-left:3px; white-space:nowrap; }
+#syn-panel .fxr-dev.noback .fxr-type{ max-width:132px; }
+#syn-panel .fxr-dev.noback .fxr-preset{ max-width:104px; }
+#syn-panel .fxr-dev.noback .fxr-headr{ margin-left:6px; }
+#syn-panel .fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; }
+#syn-panel .fxr-tw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-tw > span{ grid-area:1/1; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+#syn-panel .fxr-tg{ visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-type-native, #syn-panel .fxr-bk-native{ position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:none; background:transparent; color:transparent; opacity:0; cursor:pointer; -webkit-appearance:none; appearance:none; font-size:9px; }
+#syn-panel .fxr-type-native:focus, #syn-panel .fxr-bk-native:focus{ outline:none; }
+#syn-panel .fxr-preset{ position:relative; display:flex; align-items:center; gap:5px; width:88px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; cursor:pointer; line-height:1; overflow:hidden; box-sizing:border-box; }
+#syn-panel .fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+#syn-panel .fxr-preset .fxr-pname{ flex:1; min-width:0; text-align:center; font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; position:relative; top:.5px; }
+#syn-panel .fxr-spacer{ flex:1; }
+#syn-panel .fxr-headr{ display:flex; align-items:center; gap:9px; }
+#syn-panel .fxr-code{ font-weight:300; font-size:9px; color:var(--text-muted); line-height:1; white-space:nowrap; }
+#syn-panel .fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:0 0 auto; }
+#syn-panel .fxr-dev.fxr-off .fxr-pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+#syn-panel .fxr-swap, #syn-panel .fxr-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; padding:0; background:transparent; border:none; }
+#syn-panel .fxr-swap svg, #syn-panel .fxr-x svg{ grid-area:1/1; width:14px; height:14px; display:block; }
+#syn-panel .fxr-x{ color:var(--text-muted); }
+#syn-panel .fxr-x:hover{ color:#EF4444; }
+#syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+#syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.fxr-core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-core .grn-wave{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+#syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+#syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+#syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
+#syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
+#syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+#syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
+#syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+#syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
+#syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+#syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
+#syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+#syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-add{ flex:0 0 110px; align-self:stretch; border:1px dashed var(--border-strong); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-add:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-plus{ font-size:24px; font-weight:200; line-height:.7; }
+#syn-panel .fxr-rack.fxr-blank{ flex:1 1 auto; min-width:0; }
+#syn-panel .fxr-empty{ flex:1 1 auto; align-self:stretch; min-width:0; border:1px dashed var(--border-strong);
+          border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:9px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-empty:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-empty .fxr-eplus{ width:30px; height:30px; display:grid; place-items:center; }
+#syn-panel .fxr-empty .fxr-eplus svg{ width:30px; height:30px; display:block; }
+#syn-panel .fxr-empty .fxr-t{ font-size:10px; letter-spacing:.06em; font-weight:300; }
+#syn-panel .fxr-add .fxr-t{ font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.4; font-weight:300; }
+#syn-panel .fxr-dev.fxr-drag{ opacity:.85; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:5; }
+#syn-panel .fxr-swap{ color:var(--text-muted); transition:color .12s, filter .12s; }
+#syn-panel .fxr-swap .ic-arrow{ display:none; }
+#syn-panel .fxr-swap.act .ic-plus{ display:none; }
+#syn-panel .fxr-swap.act .ic-arrow{ display:block; }
+#syn-panel .fxr-swap:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
+#syn-panel .fxr-swap.act{ color:#fff; }
+#syn-panel .fxr-back{ display:none; flex:1 1 0; min-height:0; flex-direction:column; padding:7px 12px 9px; }
+#syn-panel .fxr-dev.swapped .fxr-core, #syn-panel .fxr-dev.swapped .fxr-ctrls{ display:none; }
+#syn-panel .fxr-dev.swapped .fxr-back{ display:flex; }
+#syn-panel .fxr-bk-row{ display:flex; justify-content:space-between; align-items:center; flex:0 0 auto; padding:0 2px 2px; }
+#syn-panel .fxr-bk-sel{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; line-height:1.55; }
+#syn-panel .fxr-bk-sel .fxr-bk-k{ font-size:8.5px; color:var(--text-muted); font-weight:300; letter-spacing:.02em; }
+#syn-panel .fxr-bk-vwrap{ position:relative; display:inline-flex; align-items:center; }
+#syn-panel .fxr-bk-sel .fxr-bk-v{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; color:var(--text-primary); font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-bk-sel .fxr-bk-v .fxr-car{ color:var(--text-muted); font-size:8px; }
+#syn-panel .fxr-bk-sel:hover .fxr-bk-v{ color:#fff; }
+#syn-panel .fxr-bk-vw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-vw > span{ grid-area:1/1; }
+#syn-panel .fxr-bk-sel .fxr-bk-g{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-bk-sel .fxr-bk-g .fxr-car{ font-size:8px; }
+#syn-panel .fxr-bk-grid{ flex:1 1 0; min-height:0; display:grid; grid-template-columns:1fr 11px 1fr 11px 1fr 11px 1fr; grid-template-rows:1fr 1fr; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-sep{ grid-row:1 / 3; width:1px; align-self:stretch; justify-self:center; background:var(--border-strong); margin:5px 0; }
+#syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+#syn-panel .fxr-bk-knob .fxr-dial{ width:32px; height:32px; cursor:ns-resize; }
+#syn-panel .fxr-bk-knob .fxr-lab{ font-size:7.5px; }
+#syn-panel .fxr-core[data-conv="1"] .conv-drop{ position:absolute; inset:0; z-index:5; display:none; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px dashed var(--purple-400); border-radius:6px; background:rgba(18,16,30,.66); color:var(--purple-400); font-size:10px; letter-spacing:.04em; pointer-events:none; }
+#syn-panel .fxr-core[data-conv="1"].conv-drag .conv-drop{ display:flex; }
+#syn-panel .fxr-core[data-conv="1"] .cd-big{ font-size:18px; font-weight:200; line-height:.8; }
+#syn-panel .fxr-core[data-conv="1"] .conv-dur{ position:absolute; right:2px; bottom:1px; z-index:3; font-size:8px; color:var(--text-dim); font-variant-numeric:tabular-nums; pointer-events:none; }
+/* ══ end lifted ══ */
+#syn-panel .fxr-core{margin:0}                        /* edge to edge (fb401) */
+#syn-panel .fxr-core .ph-t{animation:none !important} /* we never write opacity, but never rely on that */
+.bar{display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:center;padding:10px 15px;
+  border:1px solid var(--border-strong);border-radius:11px;background:rgba(255,255,255,.02)}
+.bar h1{font-size:11px;font-weight:500;letter-spacing:2.4px;text-transform:uppercase;color:var(--text-secondary);margin:0 4px 0 0}
+.seg{display:flex;border:1px solid var(--border-strong);border-radius:8px;overflow:hidden}
+.seg button{background:transparent;border:0;color:var(--text-secondary);font:inherit;font-size:10px;
+  padding:6px 12px;cursor:pointer;border-right:1px solid rgba(255,255,255,.12)}
+.seg button:last-child{border-right:0}
+.seg button[aria-pressed="true"]{color:#fff;background:rgba(155,109,255,.26)}
+.play{background:transparent;border:1px solid var(--purple-400);color:var(--purple-400);border-radius:8px;
+  padding:6px 15px;font:inherit;font-size:10px;letter-spacing:1.2px;text-transform:uppercase;cursor:pointer}
+.play.on{background:var(--purple-500);border-color:var(--purple-500);color:#fff;box-shadow:0 0 14px rgba(139,92,246,.5)}
+.note{font-size:10px;color:var(--text-muted);max-width:800px;text-align:center;line-height:1.7}
+.err{color:#FF8B8B;font-size:11px;max-width:800px;text-align:center;white-space:pre-wrap}
+.rackwrap{height:376px;display:flex;justify-content:center;width:100%}
+.zoom{transform:scale(2.0);transform-origin:top center;width:272px;flex:0 0 272px}
+#syn-panel{display:block;width:272px}
+.rackstrip{display:flex;gap:9px;height:170px;width:272px}
+</style></head><body>
+
+<div class="bar">
+  <h1>Phaser</h1>
+  <div class="seg" id="src">
+    <button data-s="sine">Sine</button>
+    <button data-s="pad">Pad</button>
+    <button data-s="pluck">Pluck</button>
+    <button data-s="noise" aria-pressed="true">Noise</button>
+  </div>
+  <button class="play" id="play">Play</button>
+</div>
+
+<div class="rackwrap"><div class="zoom"><div id="syn-panel"><div class="rackstrip" id="rack"></div></div></div></div>
+<p class="note" id="status">Press Play. Switch Type and <b>count the notches</b> — Ninety has 2, Twelve has 6, Vibe's are visibly uneven.</p>
+<p class="err" id="err"></p>
+
+<script id="wk" type="text/worklet">// ─────────────────────────────────────────────────────────────────────────────
+// phaser-worklet.js — the SAME algorithm as TerrainPhaserFx.h, as an AudioWorkletProcessor,
+// so Max can HEAR the device in Safari before a line of it is integrated (the house
+// mockup-is-audible law, fb296).
+//
+// Same Type names, same Character names, same parameter names, same ranges. It is not
+// sample-identical to the C++ (no tan LUT — JS Math.tan is cheap enough at these rates,
+// and the Barber bank updates every 16 samples exactly as the C++ does) but it is the same
+// machine: the cascade, the loop, the stagger laws, the motion sources and the mix trim
+// are ported line for line.
+//
+//   USAGE
+//     await ctx.audioWorklet.addModule('phaser-worklet.js');
+//     const node = new AudioWorkletNode(ctx, 'terrain-phaser', {outputChannelCount:[2]});
+//     node.port.postMessage({ type:3, character:1, rate:0.9, depth:0.6, feedback:0.5,
+//                             mix:0.6, b1:0.5, b2:0.5, b3:0.5, b4:0.3, b5:0.5,
+//                             b6:0.1, b7:0.0, b8:0.2, tempoSync:false, bpm:120 });
+//     node.port.onmessage = e => drawCard(e.data);   // {lfo, lvl, notch[8], depthNow}
+//
+//   PARAMETER MAP (identical to the C++ Params)
+//     FRONT : rate · depth · feedback        BACK : b1 Center · b2 Stages · b3 Spread ·
+//     mix   : 0 = dry, 1 = fully wet                b4 Stereo · b5 Touch · b6 Lag ·
+//                                                   b7 Floor  · b8 Color
+// ─────────────────────────────────────────────────────────────────────────────
+
+const TYPE_NAMES = ['Ninety', 'Stone', 'Duo', 'Twelve', 'Kraut', 'Vibe', 'Barber', 'Envy', 'Steps'];
+
+const CHAR_NAMES = [
+  ['Script 74', 'Block 78', 'Two Stage', 'Eight Stage', 'Slow Lamp', 'Sine Sweep', 'Wide Stagger', 'Negative'],
+  ['Color Off', 'Color On', 'Deep Sweep', 'Two Loop Stages', 'Hot OTA', 'Cold OTA', 'Six Stage', 'Inverted'],
+  ['Series 1:1.33', 'Series 3:4', 'Parallel 1:1.33', 'Parallel Golden', 'Counter', 'Wide Duo', 'Slow B', 'Cross Feed'],
+  ['Full Range', 'Hi Range', 'Six Pole', 'Sixteen Pole', 'Resonant', 'Hollow', 'Aux Out', 'Fast Hollow'],
+  ['Slow Bulbs', 'Fast Bulbs', 'Hard Skew', 'Reverse Skew', 'Twelve Bulb', 'Four Bulb', 'Hot Loop', 'Cold Loop'],
+  ['Chorus Lamp', 'Vibrato Lamp', 'Cold Bulb', 'Hot Bulb', 'Eight Cap', 'Even Caps', 'Wide Caps', 'Vibrato Deep'],
+  ['Rise 8', 'Rise 12', 'Fall 8', 'Fall 12', 'Rise Wide', 'Fall Narrow', 'Sharp Notch', 'Deep Rise'],
+  ['Fast Grab', 'Slow Swell', 'Transient', 'Smooth Follow', 'Four Stage', 'Ten Stage', 'Quack', 'Sink'],
+  ['Random 8', 'Random Wide', 'Ladder Up', 'Ladder Down', 'Pendulum', 'Register', 'Drunk', 'Trance Gate']
+];
+
+// loSt, hiSt, envBase(octaves)
+const TYPE_SPEC = [
+  [2, 10, 0], [2, 10, 0], [4, 16, 0], [6, 16, 0], [4, 16, 0],
+  [4, 16, 0], [4, 12, 0], [2, 12, 2.6], [2, 12, 0]
+];
+
+// stageBias, lfo, topo, alt, fbBias, scatter, staggerMul, lagMul, ratioB, apBlend,
+// depthMul, loopDrv, skew, qMul, stPhase
+const C = (a, b, c, d, e, f, g, h, i, j, k, l, m, n, o) =>
+  ({ sb: a, lfo: b, topo: c, alt: d, fb: e, sc: f, stg: g, lag: h, rb: i, ap: j, dm: k, ld: l, sk: m, qm: n, sp: o });
+
+const CHAR_SPEC = [
+  [ // Ninety — 4 identical JFET stages, triangle. Spread 0 = identical breaks = the 5.83:1 law.
+    C( 0,0,0,0,  0.00,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.40,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C(-2,0,0,0,  0.00,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 4,0,0,0,  0.25,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.10,0.06,1.00,8.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,1,0,0,  0.15,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0,  0.15,0.06,2.40,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0),
+    C( 0,0,0,0, -0.45,0.06,1.00,1.00, 1.0,0.5,1.0,1.0,  0.0,1.0,0.0)],
+  [ // Stone — OTA cascade + a dedicated EXTRA all-pass in the FEEDBACK path
+    C( 0,2,1,0,  0.00,0.05,1.00,1.00, 1.0,0.5,1.00,2.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.55,0.05,1.00,1.00, 1.0,0.5,1.40,2.5, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.90,1.0, 0.0,1.0,0.0),
+    C( 0,2,2,0,  0.45,0.05,1.00,1.00, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.40,0.05,1.00,1.00, 1.0,0.5,1.00,4.0, 0.0,1.0,0.0),
+    C( 0,2,1,0,  0.75,0.05,1.00,2.50, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 2,2,1,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,2,1,0, -0.60,0.05,1.00,1.00, 1.0,0.5,1.00,1.5, 0.0,1.0,0.0)],
+  [ // Duo — TWO cascades, TWO sweep generators, ONE accumulator
+    C( 0,1,4,0,  0.00,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.30,0.05,1.00,1.00, 0.7500,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,5,0,  0.25,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,5,0,  0.25,0.05,1.00,1.00, 1.6180,0.5,1.4,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.35,0.05,1.00,1.00,-1.0000,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,6,0,  0.25,0.05,1.00,1.00, 1.3333,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,1,4,0,  0.30,0.05,1.00,1.00, 0.2500,0.5,1.6,1.0, 0.0,1.0,0.0),
+    C( 0,1,7,0,  0.55,0.05,1.00,1.00, 1.5000,0.5,1.0,1.0, 0.0,1.0,0.0)],
+  [ // Twelve — 12 poles = 6 notches; the only Type whose Rate reaches AUDIO RATE
+    C( 0,1,0,0,  0.00,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.35,0.03,1.00,1.00, 12.5,0.5,0.55,1.0, 0.0,1.0,0.0),
+    C(-6,1,0,0,  0.20,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 6,1,0,0,  0.30,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.80,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0, -0.65,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.0),
+    C( 0,1,0,0,  0.30,0.03,1.00,1.00,  1.0,0.5,1.00,1.0, 0.0,1.0,0.5),
+    C( 0,1,0,0, -0.50,0.03,1.00,1.00, 12.5,0.5,0.55,1.0, 0.0,1.0,0.0)],
+  [ // Kraut — LDR duty-warped sweep, lamp lag, NONLINEAR filter in the loop
+    C( 0,3,3,0,  0.00,0.06,1.00,3.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C( 0,3,3,0,  0.45,0.06,1.00,0.30, 1.0,0.5,1.0,1.5,  0.30,1.0,0.0),
+    C( 0,3,3,0,  0.35,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  2.00,1.0,0.0),
+    C( 0,3,3,0,  0.35,0.06,1.00,1.00, 1.0,0.5,1.0,1.5, -2.00,1.0,0.0),
+    C( 4,3,3,0,  0.30,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C(-4,3,3,0,  0.30,0.06,1.00,1.00, 1.0,0.5,1.0,1.5,  0.50,1.0,0.0),
+    C( 0,3,3,0,  0.60,0.06,1.00,1.00, 1.0,0.5,1.0,4.5,  0.90,1.0,0.0),
+    C( 0,3,0,0, -0.55,0.06,1.00,1.80, 1.0,0.5,1.0,1.0,  0.50,1.0,0.0)],
+  [ // Vibe — the four measured Uni-Vibe capacitors (breaks proportional to 1/C)
+    C( 0,0,0,0,  0.00,0.03,1.00, 3.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.00,0.03,1.00, 3.00, 1.0,1.0,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.20,0.03,1.00,12.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.20,0.03,1.00, 0.12, 1.0,0.5,1.4,1.0, 0.0,1.0,0.0),
+    C( 4,0,0,0,  0.20,0.03,1.00, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.25,0.03,0.30, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.25,0.03,1.75, 2.00, 1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,0,0,0,  0.00,0.03,1.00, 0.50, 1.0,1.0,1.7,1.0, 0.0,1.0,0.0)],
+  [ // Barber — DAFx-15 Method 1 notch bank. apBlend 1.0: the bank IS the wet.
+    C( 0,4,8,0, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 4,4,8,0, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,1, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 4,4,8,1, 0,0,1.00,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,0, 0,0,1.60,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,1, 0,0,0.55,1.0,1.0,1.0,1.0,1.0, 0.0,1.00,0.0),
+    C( 0,4,8,0, 0,0,0.80,1.0,1.0,1.0,1.0,1.0, 0.0,3.00,0.0),
+    C(-2,4,8,0, 0,0,1.20,1.0,1.0,1.0,1.0,1.0, 0.0,0.45,0.0)],
+  [ // Envy — the motion source IS the circuit. `sk` carries env->feedback for Quack.
+    C( 0,0,0,0,  0.00,0.05,1.00,0.20, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,0,  0.30,0.05,1.00,3.50, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,2,  0.40,0.05,1.00,0.50, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,1,  0.30,0.05,2.20,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C(-4,0,0,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 4,0,0,0,  0.30,0.05,1.00,1.00, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0),
+    C( 0,0,0,0,  0.55,0.05,1.00,0.25, 1.0,0.5,1.0,1.0, 0.35,1.0,0.0),
+    C( 0,0,0,0, -0.60,0.05,1.00,1.20, 1.0,0.5,1.0,1.0, 0.00,1.0,0.0)],
+  [ // Steps — sample & hold clocked by Rate; Lag is the glide between holds
+    C( 0,5,0,0,  0.00,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,1,  0.30,0.05,1.00,1.0,1.0,0.5,1.5,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,2,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,3,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,4,  0.35,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,5,  0.40,0.05,1.00,1.0,1.0,0.5,1.0,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,6,  0.35,0.05,1.00,1.0,1.0,0.5,0.8,1.0, 0.0,1.0,0.0),
+    C( 0,5,0,7,  0.50,0.05,1.00,1.0,1.0,0.5,1.4,1.0, 0.0,1.0,0.0)]
+];
+
+// the 20-entry sync list, cloned WHOLE including "Free" at index 0
+const DIV_BEATS = [0, 16, 8, 4, 2, 3, 1.3333, 1, 1.5, 0.6667, 0.5, 0.75,
+                   0.3333, 0.25, 0.375, 0.1667, 0.125, 0.0625, 0.03125, 0.015625];
+const DIV_NAMES = ['Free', '4 bar', '2 bar', '1 bar', '1/2', '1/2D', '1/2T', '1/4', '1/4D', '1/4T',
+                   '1/8', '1/8D', '1/8T', '1/16', '1/16D', '1/16T', '1/32', '1/64', '1/128', '1/256'];
+
+const MAX_ST = 16, MAX_BANK = 12;
+const clamp = (v, lo, hi) => (v < lo ? lo : (v > hi ? hi : v));
+const c01 = v => clamp(v, 0, 1);
+const wrap1 = v => v - Math.floor(v);
+const fastTanh = x => {
+  if (x > 5) return 1; if (x < -5) return -1;
+  const x2 = x * x; return x * (27 + x2) / (27 + 9 * x2);
+};
+
+// one first-order all-pass:  y = g*(x - y1) + x1   (TerrainFilters.h:878, verbatim)
+class Unit {
+  constructor() {
+    this.g = new Float64Array(MAX_ST); this.x1 = new Float64Array(MAX_ST); this.y1 = new Float64Array(MAX_ST);
+    this.lg = new Float64Array(2); this.lx1 = new Float64Array(2); this.ly1 = new Float64Array(2);
+    this.s1 = 0; this.s2 = 0;                       // Kraut's nonlinear loop filter
+    this.fbS = 0; this.hpS = 0; this.lpS = 0;
+  }
+  reset() {
+    this.x1.fill(0); this.y1.fill(0); this.lx1.fill(0); this.ly1.fill(0);
+    this.s1 = this.s2 = this.fbS = this.hpS = this.lpS = 0;
+  }
+}
+
+class TerrainPhaser extends AudioWorkletProcessor {
+  static get parameterDescriptors() { return []; }
+
+  constructor() {
+    super();
+    this.fs = sampleRate;
+    this.p = { type: 0, character: 0, rate: 0.35, depth: 0.5, feedback: 0.0, mix: 0.5,
+               b1: 0.5, b2: 0.5, b3: 0.5, b4: 0.5, b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5,
+               tempoSync: false, bpm: 120 };
+    this.uA = [new Unit(), new Unit()];
+    this.uB = [new Unit(), new Unit()];
+    this.bank = [this.newBank(), this.newBank()];
+    this.stageOct = new Float64Array(MAX_ST);
+    this.notchNu = new Float64Array(8);
+    this.nNotch = 0; this.notchAdj = 0;
+    this.stages = 4; this.topo = 0; this.lfoShape = 0; this.alt = 0;
+    this.apBlend = 0.5; this.skew = 0; this.ratioB = 1;
+    this.phase = 0; this.inc = 0; this.incTgt = 0;
+    this.lagL = 0; this.lagR = 0; this.lagA = 0.01;
+    this.shL = 0; this.shR = 0; this.shPrevL = 0; this.shPrevR = 0;
+    this.stepIdx = [0, 0]; this.stepDir = [1, 1]; this.reg = [0xA3, 0x5C]; this.rngS = 0x1234567;
+    this.env = 0; this.envFast = 0; this.envSlow = 0; this.envAtk = 0.01; this.envRel = 0.001;
+    this.lvlSm = 0; this.lvlA = 1 - Math.exp(-1 / (this.fs * 0.030));
+    this.hpA = 1 - Math.exp(-6.2831853 * 10 / this.fs);
+    this.dipDn = 1 - Math.exp(-1 / (this.fs * 0.004));
+    this.dipUp = 1 - Math.exp(-1 / (this.fs * 0.100));
+    this.dip = 1; this.pending = true;
+    this.bankCtr = 0; this.vizCtr = 0; this.vizEvery = Math.max(32, (this.fs / 60) | 0);
+    this.viz = { lfo: 0, lvl: 0, notch: new Array(8).fill(0), depthNow: 0,
+                 typeName: TYPE_NAMES[0], charName: CHAR_NAMES[0][0], rateHz: 0.7, stages: 4 };
+    this.apply();
+    // fb395 — answer the roster query the way the flanger does, so one host can populate all
+    // three Type/Character menus with one message. Without this the phaser's pills stay empty.
+    this.port.onmessage = e => { const d = e.data || {};
+      if (d.query) { this.port.postMessage({ types: TYPE_NAMES, chars: CHAR_NAMES }); return; }
+      Object.assign(this.p, d); this.apply(); };
+  }
+
+  newBank() {
+    return { b0: new Float64Array(MAX_BANK).fill(1), b1: new Float64Array(MAX_BANK),
+             b2: new Float64Array(MAX_BANK), a1: new Float64Array(MAX_BANK), a2: new Float64Array(MAX_BANK),
+             x1: new Float64Array(MAX_BANK), x2: new Float64Array(MAX_BANK),
+             y1: new Float64Array(MAX_BANK), y2: new Float64Array(MAX_BANK),
+             pos: new Float64Array(MAX_BANK),
+             reset() { this.x1.fill(0); this.x2.fill(0); this.y1.fill(0); this.y2.fill(0); this.pos.fill(0); } };
+  }
+
+  // ── per block: everything transcendental that is not per sample
+  apply() {
+    const p = this.p;
+    p.type = clamp(p.type | 0, 0, 8); p.character = clamp(p.character | 0, 0, 7);
+    const cs = CHAR_SPEC[p.type][p.character];
+    const ts = TYPE_SPEC[p.type];
+
+    const lo = clamp(ts[0] + cs.sb, 2, MAX_ST), hi = clamp(ts[1] + cs.sb, 2, MAX_ST);
+    let st = Math.round(lo + c01(p.b2) * (hi - lo));
+    st = clamp(st, 2, MAX_ST);
+    if (p.type === 6) st = clamp(st, 4, MAX_BANK);
+
+    // topology class is STAGED and committed at the dip floor
+    this.tStages = st; this.tTopo = cs.topo; this.tLfo = cs.lfo; this.tAlt = cs.alt;
+    this.tApBlend = cs.ap; this.tSkew = cs.sk; this.tRatioB = cs.rb;
+    const key = (p.type * 97 + p.character) * 32 + st;
+    if (key !== this.planKey) { this.pendingKey = key; this.pending = true; }
+
+    const sp = c01(p.b3);
+    this.spreadOct = Math.log2(1 + 3 * sp * sp) * cs.stg;
+    this.vibeScale = (0.35 + 1.30 * sp) * cs.stg;
+    this.barberIv = (0.35 + 1.35 * sp) * cs.stg;
+    this.scatter = cs.sc;
+    if (!this.pending) this.buildStagger();
+
+    this.floorHz = 20 * Math.pow(50, c01(p.b7));
+    const centerHz = 40 * Math.pow(225, c01(p.b1));
+    this.floorOct = Math.log2(this.floorHz);
+    this.octMax = Math.log2(0.45 * this.fs);
+    this.centerOct = Math.log2(centerHz);
+
+    this.depthOct = 4.5 * Math.pow(c01(p.depth), 0.8) * cs.dm;
+    if (p.type === 6) this.depthOct = 0;              // Barber: Depth is NOTCH DEPTH
+    this.touchOct = ((c01(p.b5) - 0.5) * 2) * 8;
+    this.envBaseOct = ts[2];
+
+    const mag = Math.abs(cs.fb), sgn = cs.fb < 0 ? -1 : 1;
+    this.fbK = clamp(sgn * (mag + c01(p.feedback) * (0.95 - mag)), -0.95, 0.95);
+    this.envToFb = (p.type === 7) ? cs.sk : 0;
+
+    const col = c01(p.b8);
+    let colHz = 18000 * Math.pow(800 / 18000, col);
+    if (p.type === 1) colHz *= 0.35;                  // the OTA's own bandwidth
+    this.colorA = 1 - Math.exp(-6.2831853 * colHz / this.fs);
+    this.loopDrv = Math.max(1, cs.ld * (1 + col * 15));
+    this.invLoopDrv = 1 / this.loopDrv;
+    this.loopG = this.gAt(clamp(centerHz * 0.7, 20, 0.45 * this.fs));
+
+    const lagS = (0.004 + 0.196 * c01(p.b6)) * cs.lag;
+    this.lagA = 1 - Math.exp(-1 / (this.fs * Math.max(5e-4, lagS)));
+    const atkS = (0.001 + 0.059 * c01(p.b6)) * cs.lag;
+    const relS = (0.030 + 0.570 * c01(p.b6)) * cs.lag;
+    this.envAtk = 1 - Math.exp(-1 / (this.fs * Math.max(2e-4, atkS)));
+    this.envRel = 1 - Math.exp(-1 / (this.fs * Math.max(5e-3, relS)));
+
+    const stw = c01(p.b4);
+    this.stPhase = wrap1(stw * 0.44 + cs.sp);
+    this.stSplit = stw * 0.42;
+
+    let hz;
+    if (p.tempoSync) {
+      const idx = clamp(Math.round(c01(p.rate) * 19), 0, 19);
+      const beats = DIV_BEATS[idx];
+      hz = beats > 0 ? (p.bpm / 60) / beats : 0.7;
+    } else hz = 0.01 * Math.pow(2000, c01(p.rate));
+    if (p.type === 3) hz *= cs.rb;                    // Hi Range -> 250 Hz
+    this.rateHz = hz; this.incTgt = hz / this.fs;
+
+    this.barberDir = (cs.alt === 1) ? -1 : 1;
+    this.barberQ = (2 + 22 * c01(p.feedback)) * cs.qm;
+    this.barberLmax = -(4 + 66 * c01(p.depth) * cs.dm);
+
+    this.mixDry = Math.cos(c01(p.mix) * 1.5707963);
+    this.mixWet = Math.sin(c01(p.mix) * 1.5707963);
+    this.updateComp();
+  }
+
+  // correlation-aware trim on the equal-power crossfade: a phaser's wet is (1-apBlend) dry by
+  // construction, so a naive equal-power blend rings +1 dB at mid-mix and -3 dB at Mix 100.
+  updateComp() {
+    const a = this.mixDry + this.mixWet * (1 - this.apBlend), b = this.mixWet * this.apBlend;
+    this.mixComp = 1 / Math.sqrt(Math.max(1e-6, a * a + b * b));
+  }
+
+  gAt(hz) {
+    const t = Math.tan(Math.PI * clamp(hz, 10, 0.4995 * this.fs) / this.fs);
+    return (t - 1) / (t + 1);
+  }
+  gAtOct(oct) { return this.gAt(Math.pow(2, oct)); }
+
+  commit() {
+    this.planKey = this.pendingKey; this.pending = false;
+    this.stages = this.tStages; this.topo = this.tTopo; this.lfoShape = this.tLfo;
+    this.alt = this.tAlt; this.apBlend = this.tApBlend; this.skew = this.tSkew; this.ratioB = this.tRatioB;
+    this.buildStagger();
+    this.updateComp();
+    for (let c = 0; c < 2; ++c) { this.uA[c].reset(); this.uB[c].reset(); this.bank[c].reset(); }
+  }
+
+  buildStagger() {
+    const duo = this.topo >= 4 && this.topo <= 7;
+    const n = duo ? Math.max(2, this.stages >> 1) : this.stages;
+    let s = (0x9E3779B9 ^ (this.p.type * 131 + this.p.character * 17)) >>> 0;
+    const nx = () => { s = (Math.imul(s, 1664525) + 1013904223) >>> 0; return (s >>> 8) / 8388608 - 1; };
+    if (this.p.type === 5) {
+      // log2 of 0.616 / 0.042 / 19.66 / 1.966 — the measured Uni-Vibe cap ratios (breaks ∝ 1/C)
+      const capOct = [-0.6989, -4.5735, 4.2973, 0.9752];
+      for (let k = 0; k < n; ++k)
+        this.stageOct[k] = capOct[k & 3] * this.vibeScale + 0.5 * (k >> 2) + this.scatter * nx();
+    } else {
+      for (let k = 0; k < n; ++k)
+        this.stageOct[k] = (k - (n - 1) * 0.5) * this.spreadOct + this.scatter * nx();
+    }
+    for (let k = n; k < MAX_ST; ++k) this.stageOct[k] = 0;
+    this.solveNotches(n);
+    this.notchAdj = (this.topo === 8 || this.nNotch === 0) ? 0 : -Math.log2(this.notchNu[0]);
+  }
+
+  // Phi(f) = sum -2*atan(f/f_k); a notch sits where Phi = -(2m+1)*pi. Scaling every f_k by a
+  // common factor scales the notches identically, so nu_m = f_notch/fc are constants of the plan.
+  solveNotches(n) {
+    this.nNotch = Math.min(8, n >> 1);
+    for (let m = 0; m < this.nNotch; ++m) {
+      const target = -(2 * m + 1) * Math.PI;
+      let lo = -18, hi = 18;
+      for (let it = 0; it < 44; ++it) {
+        const mid = 0.5 * (lo + hi), nu = Math.pow(2, mid);
+        let phi = 0;
+        for (let k = 0; k < n; ++k) phi += -2 * Math.atan(nu / Math.pow(2, this.stageOct[k]));
+        if (phi > target) lo = mid; else hi = mid;
+      }
+      this.notchNu[m] = Math.pow(2, 0.5 * (lo + hi));
+    }
+    for (let m = this.nNotch; m < 8; ++m) this.notchNu[m] = 0;
+  }
+
+  // ── motion ────────────────────────────────────────────────────────────────
+  tri(ph) { return ph < 0.5 ? (-1 + 4 * ph) : (3 - 4 * ph); }
+  // the LDR/lamp warp moves the PEAK (the duty cycle), it does not reshape each half:
+  // at skew +1 the rise takes 80 % of the cycle and the fall 20 %.
+  warp(u, s) { const q = Math.pow(2, 2 * s); return u / (u + q * (1 - u) + 1e-9); }
+  rnd() { this.rngS = (Math.imul(this.rngS, 1664525) + 1013904223) >>> 0; return (this.rngS >>> 8) / 8388608 - 1; }
+  quant(v, n) { return -1 + 2 * Math.floor(clamp(v * 0.5 + 0.5, 0, 0.9999) * n) / (n - 1); }
+
+  sampleHold(ph, right) {
+    const i = right ? 1 : 0;
+    const prev = right ? this.shPrevR : this.shPrevL;
+    let hold = right ? this.shR : this.shL;
+    if (ph < prev) {
+      switch (this.alt) {
+        case 0: hold = this.quant(this.rnd(), 8); break;
+        case 1: hold = this.quant(this.rnd(), 16); break;
+        case 2: this.stepIdx[i] = (this.stepIdx[i] + 1) & 7; hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 3: this.stepIdx[i] = (this.stepIdx[i] + 7) & 7; hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 4: this.stepIdx[i] += this.stepDir[i];
+                if (this.stepIdx[i] >= 7) { this.stepIdx[i] = 7; this.stepDir[i] = -1; }
+                if (this.stepIdx[i] <= 0) { this.stepIdx[i] = 0; this.stepDir[i] = 1; }
+                hold = -1 + 2 * this.stepIdx[i] / 7; break;
+        case 5: { const bit = ((this.reg[i] >> 7) ^ (this.rnd() > 0.875 ? 1 : 0)) & 1;
+                  this.reg[i] = ((this.reg[i] << 1) | bit) & 0xFF;
+                  hold = -1 + 2 * this.reg[i] / 255; } break;
+        case 6: hold = clamp(hold + (this.rnd() > 0 ? 0.2857 : -0.2857), -1, 1); break;
+        default: hold = hold > 0 ? -1 : 1; break;
+      }
+    }
+    if (right) { this.shR = hold; this.shPrevR = ph; } else { this.shL = hold; this.shPrevL = ph; }
+    return hold;
+  }
+
+  lfoValue(ph, right) {
+    switch (this.lfoShape) {
+      case 1: return Math.sin(6.2831853 * ph);
+      case 2: { const t = this.tri(ph); return (t - 0.15 * t * t * t) * 1.176; }
+      case 3: return this.tri(this.warp(ph, this.skew));
+      case 4: return 2 * ph - 1;
+      case 5: return this.sampleHold(ph, right);
+      default: return this.tri(ph);
+    }
+  }
+
+  // ── one cascade + its loop. Returns the cascade output; updates the loop state.
+  unit(u, x, n, oct, k, fbTap, loopExtra, nlLoop) {
+    let v = x + k * fbTap;
+    for (let i = 0; i < n; ++i) {
+      u.g[i] = this.gAtOct(oct + this.stageOct[i]);
+      const y = u.g[i] * (v - u.y1[i]) + u.x1[i];
+      u.x1[i] = v; u.y1[i] = y; v = y;
+    }
+    let t = v;
+    for (let i = 0; i < loopExtra; ++i) {
+      u.lg[i] = this.loopG;
+      const y = u.lg[i] * (t - u.ly1[i]) + u.lx1[i];
+      u.lx1[i] = t; u.ly1[i] = y; t = y;
+    }
+    if (nlLoop) {                                        // Kraut's nonlinear loop filter
+      const g = 0.10, R = 0.55;
+      const hp = (t - (2 * R + g) * u.s1 - u.s2) / (1 + 2 * R * g + g * g);
+      const bp = g * hp + u.s1; u.s1 = g * hp + bp;
+      const lp = g * bp + u.s2; u.s2 = g * bp + lp;
+      t = fastTanh(lp * 1.6) * 0.625;
+    }
+    u.lpS += this.colorA * (t - u.lpS); t = u.lpS;                          // in-loop LP
+    if (this.loopDrv > 1.0001) t = fastTanh(t * this.loopDrv) * this.invLoopDrv;  // makeup INSIDE
+    u.hpS += this.hpA * (t - u.hpS);
+    u.fbS = t - u.hpS;                                                      // 10 Hz AC couple
+    return v;
+  }
+
+  // returns the PHASER OUTPUT (the summed signal). Series and cross-feed must sum phasor B
+  // against phasor A's OUTPUT, not against the device input, or their nulls are not nulls.
+  runTopology(ch, x, oct, nA, k, lag) {
+    const a = this.uA[ch], b = this.uB[ch];
+    const extra = this.topo === 1 ? 1 : (this.topo === 2 ? 2 : 0);
+    const nl = this.topo === 3;
+    const ap = this.apBlend;
+
+    if (this.topo < 4) {
+      const v = this.unit(a, x, nA, oct, k, a.fbS, extra, nl);
+      return x + ap * (v - x);
+    }
+    let lagB;
+    if (this.ratioB < 0) lagB = -lag;
+    else lagB = this.lfoValue(wrap1(this.phase * this.ratioB + (ch ? this.stPhase : 0)), ch !== 0);
+    const octMin = Math.min(this.floorOct + this.notchAdj, this.octMax - 0.5);
+    const octB = clamp(this.centerOct + this.depthOct * lagB + (ch ? -this.stSplit : this.stSplit),
+                       octMin, this.octMax);
+
+    if (this.topo === 5) {                                   // parallel — the combs ADD
+      const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);
+      const vB = this.unit(b, x, nA, octB, k, b.fbS, 0, false);
+      return x + ap * (0.5 * (vA + vB) - x);
+    }
+    if (this.topo === 6) {                                   // wide — phasor B on the RIGHT only
+      const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);
+      const yA = x + ap * (vA - x);
+      if (ch === 0) return yA;
+      const vB = this.unit(b, yA, nA, octB, k, b.fbS, 0, false);
+      return yA + ap * (vB - yA);
+    }
+    if (this.topo === 7) {                                   // cross-feed; clamp the PRODUCT
+      const kx = clamp(k, -0.92, 0.92);
+      const vA = this.unit(a, x, nA, oct, kx, b.fbS, 0, false);
+      const yA = x + ap * (vA - x);
+      const vB = this.unit(b, yA, nA, octB, kx, a.fbS, 0, false);
+      return yA + ap * (vB - yA);
+    }
+    const vA = this.unit(a, x, nA, oct, k, a.fbS, 0, false);  // series — the combs MULTIPLY
+    const yA = x + ap * (vA - x);
+    const vB = this.unit(b, yA, nA, octB, k, b.fbS, 0, false);
+    return yA + ap * (vB - yA);
+  }
+
+  // ── the Barber notch bank (DAFx-15 Method 1)
+  updateBank(octL, octR) {
+    const M = clamp(this.stages, 4, MAX_BANK);
+    const f0 = [Math.pow(2, octL), Math.pow(2, octR)];
+    const u = [(this.barberDir > 0 ? this.phase : 1 - this.phase) * M,
+               (this.barberDir > 0 ? wrap1(this.phase + this.stPhase)
+                                   : 1 - wrap1(this.phase + this.stPhase)) * M];
+    for (let ch = 0; ch < 2; ++ch) {
+      const bk = this.bank[ch];
+      for (let m = 0; m < M; ++m) {
+        let pos = (m + u[ch]) % M; if (pos < 0) pos += M;
+        // THE WRAP: the window is exactly 0 dB at the edges, so the section is an identity there,
+        // and a biquad with b == a outputs its input exactly when y1 == x1 and y2 == x2. Handing
+        // the wrapping section its own input history makes the jump click-free by construction.
+        // (Direction-aware: `pos < prev` is only a wrap when the ladder ascends.)
+        if (Math.abs(pos - bk.pos[m]) > 0.5 * M) { bk.y1[m] = bk.x1[m]; bk.y2[m] = bk.x2[m]; }
+        bk.pos[m] = pos;
+        const fc = clamp(f0[ch] * Math.pow(2, pos * this.barberIv), 20, 0.45 * this.fs);
+        const gDb = this.barberLmax * 0.5 * (1 - Math.cos(6.2831853 * pos / M));
+        const G = Math.pow(10, gDb / 20);
+        const w0 = 6.2831853 * fc / this.fs;
+        const beta = Math.tan(Math.min(1.50, (w0 / Math.max(0.5, this.barberQ)) * 0.5));
+        const d = 1 + beta;
+        bk.b0[m] = (1 + G * beta) / d;
+        bk.b1[m] = -2 * Math.cos(w0) / d;
+        bk.b2[m] = (1 - G * beta) / d;
+        bk.a1[m] = bk.b1[m];
+        bk.a2[m] = (1 - beta) / d;
+      }
+      for (let m = M; m < MAX_BANK; ++m) { bk.b0[m] = 1; bk.b1[m] = bk.b2[m] = bk.a1[m] = bk.a2[m] = 0; }
+    }
+  }
+  bankProcess(ch, x) {
+    const bk = this.bank[ch];
+    for (let m = 0; m < MAX_BANK; ++m) {
+      const y = bk.b0[m] * x + bk.b1[m] * bk.x1[m] + bk.b2[m] * bk.x2[m]
+              - bk.a1[m] * bk.y1[m] - bk.a2[m] * bk.y2[m];
+      bk.x2[m] = bk.x1[m]; bk.x1[m] = x; bk.y2[m] = bk.y1[m]; bk.y1[m] = y; x = y;
+    }
+    return x;
+  }
+
+  process(inputs, outputs) {
+    const inp = inputs[0], out = outputs[0];
+    if (!out || out.length === 0) return true;
+    const n = out[0].length;
+    const inL = (inp && inp[0]) ? inp[0] : new Float32Array(n);
+    const inR = (inp && inp[1]) ? inp[1] : inL;
+    const oL = out[0], oR = out[1] || out[0];
+
+    if (this.pending && this.planKey === undefined) this.commit();
+
+    for (let i = 0; i < n; ++i) {
+      const xL = inL[i], xR = inR[i];
+
+      const nA = (this.topo >= 4 && this.topo <= 7) ? Math.max(2, this.stages >> 1) : this.stages;
+      const octMin = Math.min(this.floorOct + this.notchAdj, this.octMax - 0.5);
+
+      if (this.pending) { this.dip += (0.006 - this.dip) * this.dipDn; if (this.dip < 0.05) this.commit(); }
+      else this.dip += (1 - this.dip) * this.dipUp;
+
+      this.inc += (this.incTgt - this.inc) * 0.0015;
+      this.phase += this.inc; if (this.phase >= 1) this.phase -= 1;
+
+      const rect = Math.max(Math.abs(xL), Math.abs(xR));
+      this.env += (rect > this.env ? this.envAtk : this.envRel) * (rect - this.env);
+      let det = this.env;
+      if (this.p.type === 7 && this.alt === 1) { this.envSlow += 0.0006 * (rect - this.envSlow); det = this.envSlow; }
+      else if (this.p.type === 7 && this.alt === 2) {
+        this.envFast += 0.02 * (rect - this.envFast);
+        this.envSlow += 0.0012 * (rect - this.envSlow);
+        det = Math.max(0, this.envFast - this.envSlow) * 2.5;
+      }
+      const gE = det * 10, env01 = gE / (1 + gE);   // soft knee: it always moves, never plateaus
+
+      const rawL = this.lfoValue(this.phase, false);
+      const rawR = this.lfoValue(wrap1(this.phase + this.stPhase), true);
+      this.lagL += (rawL - this.lagL) * this.lagA;
+      this.lagR += (rawR - this.lagR) * this.lagA;
+
+      const envOct = (this.envBaseOct + this.touchOct) * env01;
+      const octL = clamp(this.centerOct + this.depthOct * this.lagL + envOct + this.stSplit, octMin, this.octMax);
+      const octR = clamp(this.centerOct + this.depthOct * this.lagR + envOct - this.stSplit, octMin, this.octMax);
+      const kNow = clamp(this.fbK + this.envToFb * env01 * (this.fbK < 0 ? -1 : 1), -0.95, 0.95);
+
+      let pL, pR;
+      if (this.topo === 8) {
+        if (--this.bankCtr <= 0) { this.bankCtr = 16; this.updateBank(octL, octR); }
+        pL = xL + this.apBlend * (this.bankProcess(0, xL) - xL);
+        pR = xR + this.apBlend * (this.bankProcess(1, xR) - xR);
+      } else {
+        pL = this.runTopology(0, xL, octL, nA, kNow, this.lagL);
+        pR = this.runTopology(1, xR, octR, nA, kNow, this.lagR);
+      }
+      pL = 4 * fastTanh(0.25 * pL);
+      pR = 4 * fastTanh(0.25 * pR);
+      pL = xL + (pL - xL) * this.dip;
+      pR = xR + (pR - xR) * this.dip;
+
+      oL[i] = this.mixComp * (this.mixDry * xL + this.mixWet * pL);
+      oR[i] = this.mixComp * (this.mixDry * xR + this.mixWet * pR);
+
+      this.lvlSm += this.lvlA * (Math.max(Math.abs(pL - xL), Math.abs(pR - xR)) - this.lvlSm);
+
+      if (++this.vizCtr >= this.vizEvery) {
+        this.vizCtr = 0;
+        const fc = Math.pow(2, octL);
+        const v = this.viz;
+        v.lfo = clamp(this.lagL, -1, 1);
+        v.lvl = clamp(this.lvlSm * 8, 0, 1);
+        v.depthNow = this.depthOct;
+        v.rateHz = this.rateHz; v.stages = this.stages;
+        v.typeName = TYPE_NAMES[this.p.type]; v.charName = CHAR_NAMES[this.p.type][this.p.character];
+        if (this.topo === 8) {
+          const M = clamp(this.stages, 4, MAX_BANK);
+          for (let m = 0; m < 8; ++m)
+            v.notch[m] = m < M ? clamp(fc * Math.pow(2, this.bank[0].pos[m] * this.barberIv), 20, 0.45 * this.fs) : 0;
+        } else {
+          for (let m = 0; m < 8; ++m)
+            v.notch[m] = m < this.nNotch ? clamp(fc * this.notchNu[m], 20, 0.45 * this.fs) : 0;
+        }
+        this.port.postMessage({ lfo: v.lfo, lvl: v.lvl, notch: v.notch.slice(), depthNow: v.depthNow,
+                                rateHz: v.rateHz, stages: v.stages,
+                                typeName: v.typeName, charName: v.charName });
+      }
+    }
+    return true;
+  }
+}
+
+registerProcessor('terrain-phaser', TerrainPhaser);
+</script>
+<script>
+"use strict";
+var TYPES=["Ninety", "Stone", "Duo", "Twelve", "Kraut", "Vibe", "Barber", "Envy", "Steps"];
+var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+var RLBL=['A','B','C','D','S','N'];
+function knobSVG(pct,label,glyph){
+            pct=Math.max(0,Math.min(100,Math.round(pct)));
+            var cx=15,cy=15,r=11.5;
+            function pt(deg){var a=deg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+            var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+            // fb298 — optional LABEL (sync division "1/8" / ms) replaces the number; arc still tracks pct.
+            // Font shrinks for longer strings so a "1/16T" / "1.2s" fits the FIXED knob (nothing grows/moves).
+            var txt=(label!=null&&label!==undefined)?(''+label):(''+pct);
+            var fs=(label==null)?8:(txt.length>=5?5.5:(txt.length>=4?6.5:7.5));
+            // fb363 — GLYPH mode: some parameters can't be said in a number at all. Shape is the
+            // case that forced it (Max: "I don't know what shape is 37, my nigga") — so the knob
+            // draws the ACTUAL window curve in its middle instead of a percentage. The glyph
+            // replaces the text; the arc still tracks the value, and the knob never changes size.
+            if(glyph){
+              return '<svg viewBox="0 0 30 30">'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="'+glyph+'" fill="none" stroke="var(--text-secondary)" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+            }
+            return '<svg viewBox="0 0 30 30">'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
+          }
+
+var D={ name:'Phaser', type:TYPES[0], types:TYPES, on:true,
+        pills:[{t:'Sync',on:false},{t:'Invert',on:false}],
+        route:[true,true,false,false,false,false],
+        knobs:[{l:'Rate',v:35},{l:'Depth',v:60},{l:'Feedback',v:45},{l:'Mix',v:50}] };
+var CH=[], chIdx=0;
+
+function devHTML(d){
+  var pills=d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+  var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+  var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'">'+knobSVG(k.v,null,null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+  return '<div class="fxr-dev fxr-sel" data-dev="0">'
+    +'<div class="fxr-head">'
+      +'<span class="fxr-grip">\u22ee\u22ee</span><span class="fxr-name">'+d.name+'</span>'
+      +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+d.type+'<span class="fxr-car">\u25be</span></span>'
+        +d.types.map(function(t){return '<span class="fxr-tg">'+t+'<span class="fxr-car">\u25be</span></span>';}).join('')
+        +'</span><select class="fxr-type-native" id="tsel">'+d.types.map(function(t){return '<option'+(t===d.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></span>'
+      +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">\u2726</span><span class="fxr-pname" id="chname">Init</span><span class="fxr-car">\u25be</span><select class="fxr-type-native" id="csel"></select></span>'
+      +'<span class="fxr-spacer"></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap" data-act="swap" title="More parameters">'+IC_PLUS+IC_ARROW+'</span>'
+        +'<span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
+    +'</div>'
+    +'<div class="fxr-core" data-core="phaser"><svg id="pv" preserveAspectRatio="none">'
+      +'<path id="notches" fill="none" stroke="var(--purple-400)" stroke-width="1" opacity="0.42"/>'
+      +'<path class="dst-curve ph-t" id="spec"/>'
+      +'</svg><div id="cnt" style="position:absolute;left:0;bottom:0;font-size:7.5px;letter-spacing:.8px;'
+      +'color:var(--text-muted);text-transform:uppercase;pointer-events:none">—</div></div>'
+    +'<div class="fxr-ctrls">'
+      +'<div class="fxr-knobs">'+knobs+'</div><div class="fxr-divider"></div>'
+      +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
+    +'</div></div>';
+}
+document.getElementById('rack').innerHTML=devHTML(D);
+
+var PKEY=['rate','depth','feedback','mix'];
+document.querySelectorAll('.fxr-dial').forEach(function(dial){
+  var i=+dial.getAttribute('data-k'), drag=false, y0=0, v0=0;
+  dial.addEventListener('pointerdown',function(e){drag=true;y0=e.clientY;v0=D.knobs[i].v;dial.setPointerCapture(e.pointerId);e.preventDefault();});
+  dial.addEventListener('pointermove',function(e){ if(!drag)return;
+    var v=Math.max(0,Math.min(100,v0+(y0-e.clientY)*0.6));
+    D.knobs[i].v=v; dial.innerHTML=knobSVG(v,null,null); push(PKEY[i],v/100); });
+  dial.addEventListener('pointerup',function(){drag=false;});
+});
+document.querySelector('.fxr-pwr').addEventListener('click',function(){
+  D.on=!D.on; document.querySelector('.fxr-dev').classList.toggle('fxr-off',!D.on);
+  if(wetG){var t=ac.currentTime; wetG.gain.setTargetAtTime(D.on?1:0,t,0.02); dryG.gain.setTargetAtTime(D.on?0:1,t,0.02);} });
+document.querySelectorAll('.fxr-r').forEach(function(e){e.addEventListener('click',function(){e.classList.toggle('fxr-on');});});
+document.querySelectorAll('.fxr-pill').forEach(function(e,i){e.addEventListener('click',function(){
+  var on=!e.classList.contains('fxr-on'); e.classList.toggle('fxr-on',on);
+  if(!node) return;
+  if(i===0) node.port.postMessage({tempoSync:on, bpm:120});        // Sync — real
+  else push('feedback', on ? 1-(D.knobs[2].v/100) : D.knobs[2].v/100);   // Invert — flips notch geography
+});});
+
+var ANA=null,BINS=null,SM=null,ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,
+    playing=false,kind='noise';
+function fail(m){document.getElementById('err').textContent=m;document.getElementById('status').textContent='Failed to start.';}
+async function addWorklet(){
+  var code=document.getElementById('wk').textContent;
+  try{ await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([code],{type:'text/javascript'}))); return 'blob'; }
+  catch(e1){ try{ await ac.audioWorklet.addModule('data:text/javascript;base64,'+btoa(unescape(encodeURIComponent(code)))); return 'data'; }
+    catch(e2){ throw new Error('addModule failed.\nblob: '+e1.message+'\ndata: '+e2.message); } }
+}
+async function boot(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  var how=await addWorklet();
+  node=new AudioWorkletNode(ac,'terrain-phaser',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+  wetG=ac.createGain(); dryG=ac.createGain(); outG=ac.createGain(); dryG.gain.value=0; outG.gain.value=0.6;
+  node.connect(wetG); wetG.connect(outG); dryG.connect(outG); outG.connect(ac.destination);
+  // ON THE OUTPUT, after the engine's internal mix — an all-pass leg alone would draw a flat line
+  ANA=ac.createAnalyser(); ANA.fftSize=4096; ANA.smoothingTimeConstant=0.86;
+  outG.connect(ANA); BINS=new Float32Array(ANA.frequencyBinCount);
+  node.port.onmessage=function(e){ var d=e.data||{}; if(d.types){ CH=(d.chars&&d.chars[0])||[]; fillChars(); } };
+  node.port.postMessage({query:'names'});
+  PKEY.forEach(function(k,i){ push(k, D.knobs[i].v/100); });
+  node.port.postMessage({type:0,character:0});
+  document.getElementById('status').textContent='Running (worklet via '+how+'). Switch Type and count the notches.';
+}
+function push(k,v){ if(node) node.port.postMessage(Object.fromEntries([[k,v]])); }
+function fillChars(){ var s=document.getElementById('csel');
+  s.innerHTML=CH.map(function(n,i){return '<option value="'+i+'">'+n+'</option>';}).join('');
+  document.getElementById('chname').textContent=CH[chIdx]||'Init';
+  s.onchange=function(){ chIdx=+s.value; node.port.postMessage({character:chIdx});
+    document.getElementById('chname').textContent=CH[chIdx]; }; }
+document.getElementById('tsel').onchange=function(e){
+  var i=TYPES.indexOf(e.target.value); D.type=TYPES[i]; chIdx=0;
+  document.querySelector('.fxr-tl').firstChild.nodeValue=D.type;
+  node.port.postMessage({type:i,character:0}); node.port.postMessage({query:'names'}); };
+function makeSrc(){
+  if(srcN){ try{srcN.stop&&srcN.stop();}catch(e){} try{srcN.disconnect();}catch(e){} }
+  var g=ac.createGain(); g.gain.value=0.3;
+  if(kind==='sine'){var o=ac.createOscillator();o.type='sine';o.frequency.value=220;o.connect(g);o.start();srcN=o;}
+  else if(kind==='noise'){var n=ac.createBufferSource(),b=ac.createBuffer(1,ac.sampleRate*2,ac.sampleRate),dt=b.getChannelData(0);
+    for(var i=0;i<dt.length;i++)dt[i]=(Math.random()*2-1)*0.25; n.buffer=b;n.loop=true;n.connect(g);n.start();srcN=n;}
+  else if(kind==='pad'){var m=ac.createGain();m.gain.value=0.15;
+    [110,110.6,164.8,220.4].forEach(function(f){var o=ac.createOscillator();o.type='sawtooth';o.frequency.value=f;o.connect(m);o.start();});
+    var lp=ac.createBiquadFilter();lp.type='lowpass';lp.frequency.value=1600;m.connect(lp);lp.connect(g);srcN=m;}
+  else {var m2=ac.createGain();m2.gain.value=0;m2.connect(g);srcN=m2;
+    var o2=ac.createOscillator();o2.type='triangle';o2.frequency.value=330;o2.connect(m2);o2.start();
+    (function tick(){ if(!playing||kind!=='pluck')return; var t=ac.currentTime;
+      m2.gain.cancelScheduledValues(t);m2.gain.setValueAtTime(0.36,t);
+      m2.gain.exponentialRampToValueAtTime(0.001,t+0.55);setTimeout(tick,760);})();}
+  g.connect(node); g.connect(dryG);
+}
+document.getElementById('play').addEventListener('click',async function(){
+  var b=this;
+  try{ if(!ac){document.getElementById('status').textContent='Starting\u2026'; await boot();}
+    if(ac.state==='suspended') await ac.resume();
+    playing=!playing; b.classList.toggle('on',playing); b.textContent=playing?'Stop':'Play';
+    if(playing) makeSrc(); else if(srcN){try{srcN.stop&&srcN.stop();}catch(e){}try{srcN.disconnect();}catch(e){}srcN=null;}
+  }catch(err){ fail(String(err&&err.stack||err)); } });
+document.querySelectorAll('#src button').forEach(function(b){b.addEventListener('click',function(){
+  document.querySelectorAll('#src button').forEach(function(x){x.setAttribute('aria-pressed','false');});
+  b.setAttribute('aria-pressed','true');kind=b.dataset.s;if(playing)makeSrc();});});
+
+/* ══ THE CURVE ═══════════════════════════════════════════════════════════════════════════════
+   One thin white house line: the phaser's OUTPUT spectrum on the log-f axis. Its notches are
+   the dips, and they slide. Under them, the notches the curve ITSELF shows — found as local
+   minima of the smoothed spectrum, never read from a control-rate array, so they can neither
+   jump nor disappear between engine frames. The count is the phaser's tell: finite, countable,
+   and unevenly spaced in a way no other device in the rack produces. ════════════════════════ */
+var FMIN=30,FMAX=18000,LMIN=Math.log(FMIN),LSPAN=Math.log(FMAX)-LMIN;
+function frame(){
+  var svg=document.getElementById('pv');
+  if(svg){
+    var r=svg.getBoundingClientRect(), W=Math.max(2,r.width), H=Math.max(2,r.height);
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    // centre on the CARD, with the same optical nudge the flanger settled on (fb404-407)
+    var card=svg.closest('.fxr-dev'), mid=H*0.5;
+    if(card){ var cr=card.getBoundingClientRect(), NUDGE=6.0, zoom=cr.width/272;
+      mid=Math.max(H*0.20, Math.min(H*0.80, (cr.top+cr.height*0.5)-r.top - NUDGE*zoom)); }
+    var N=Math.max(2,Math.round(W/2)), d='', dips='', count=0;
+    if(ANA&&BINS){
+      ANA.getFloatFrequencyData(BINS);
+      if(!SM||SM.length!==N) SM=new Float32Array(N).fill(-100);
+      var nyq=ac.sampleRate*0.5, nb=BINS.length;
+      for(var i=0;i<N;i++){
+        var f=Math.exp(LMIN+(i/(N-1))*LSPAN);
+        var b2=Math.min(nb-1,Math.max(0,Math.round(f/nyq*nb)));
+        var db=BINS[b2]; if(!isFinite(db)) db=-100;
+        SM[i]+=(db-SM[i])*0.07;   // heavy: hunting a 6 dB dip under a noisy floor
+      }
+      // DEVIATION from the running mean, not absolute level. A phaser's notch is only ~6 dB
+      // deep; against a 66 dB scale that is three pixels, and the source's own spectral tilt
+      // dominates. Subtracting the mean removes the source and expands the comb — which is the
+      // only thing this device actually does to the sound.
+      var mean=0; for(var mi=0;mi<N;mi++) mean+=SM[mi]; mean/=N;
+      for(var j=0;j<N;j++){
+        var x=(j/(N-1))*W;
+        var dev=Math.max(-14,Math.min(6,SM[j]-mean));
+        d+=(j?'L':'M')+x.toFixed(1)+' '+(mid-(dev/20)*(H*0.62)).toFixed(1);
+      }
+      // count what the CURVE shows: 5 dB below BOTH shoulders and well spaced, so noise ripple
+      // cannot masquerade as a notch (it reported "6" on Ninety, which has 2).
+      for(var k=6;k<N-6;k++){
+        if(SM[k]<SM[k-6]-5 && SM[k]<SM[k+6]-5 && SM[k]<=SM[k-1] && SM[k]<=SM[k+1]){
+          var xk=(k/(N-1))*W;
+          dips+='M'+xk.toFixed(1)+' '+(mid+H*0.30).toFixed(1)+'L'+xk.toFixed(1)+' '+(mid+H*0.38).toFixed(1);
+          count++; k+=Math.round(N*0.05);
+        }
+      }
+    } else { d='M0 '+mid.toFixed(1)+'L'+W.toFixed(1)+' '+mid.toFixed(1); }
+    document.getElementById('spec').setAttribute('d',d);
+    document.getElementById('notches').setAttribute('d',dips);
+    document.getElementById('cnt').textContent=count?(count+' notches'):'—';
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script></body></html>
