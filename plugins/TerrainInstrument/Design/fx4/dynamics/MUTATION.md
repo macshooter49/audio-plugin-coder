@@ -3,8 +3,13 @@
 **FIXES.md §0.** Every law-1, law-4 and R11 gate on these two devices has been run against a
 deliberately broken copy of the engine, and the failing output is pasted below.
 
+**fb423 adds the two things §0 said were still missing anywhere in the family: an R11 mutant per
+device, and a DEAD-KNOB mutant per device. It also adds a mutant for the names gate itself.**
+
 Produced by `python3 mutate.py`. It copies `DynamicsCore.h`, `TerrainCompressFx.h`,
-`TerrainOttFx.h`, `dynamics_cert.cpp` and `shipped_labels.inc` into a scratch directory, deletes
+`TerrainOttFx.h`, `dynamics_cert.cpp`, `shipped_labels.inc`, **both worklets and `ROSTER.md`**
+(cert §1 now gates that downstream still says what the headers say, and reads them off disk) into
+a scratch directory, deletes
 **one mechanism** with an exact string replacement — and **aborts if the text it expects is not
 there**, so a mutation can never silently fail to apply — rebuilds the cert against the mutant,
 runs only the sections that matter, and requires the named gate to turn `FAIL`.
@@ -21,7 +26,7 @@ runs only the sections that matter, and requires the named gate to turn `FAIL`.
 | `compress-smoother-seed` | `seedShape()` — the new smoother is not handed the live `gr_` | §4c3 GR continuity, 64 Type changes | **0.86 dB** | **17.44 dB** |
 | `compress-smoother-seed+noslew` | ↑ *and* the transition slew limiter | §4d all 64 Type transitions | **1.23 dB/ms** | **10.34 dB/ms** |
 | `compress-transition-slew` (alone) | the 1.5 dB/ms transition slew limit | — | 1.23 / 1.00 dB/ms | 1.94 / 1.25 dB/ms — **SURVIVED** |
-| `compress-heat-kind-fade+noslew` | the waveshaper-kind crossfade snaps instead | — | 1.23 dB/ms | 1.94 dB/ms — **SURVIVED** |
+| `compress-heat-kind-fade` (alone) | the waveshaper-kind crossfade snaps instead | **§4c4 gain-element CURVATURE, 56 Type changes** | **2.02 dB** | **23.89 dB** |
 | `compress-colour-drive-smoothing` | the gain element's drive follows the RAW ballistic state | §4d all 64 Type transitions | **1.23 dB/ms** | **2.11 dB/ms** |
 | `compress-clip-ceiling-tracking` | the soft-clip ceiling comes off the TARGETS again (fb421) | §4d all 448 Character transitions | **1.00 dB/ms** | **5.47 dB/ms** |
 | `compress-discrete-fades+noslew` | all ten discrete-rewiring fades set to tau 0 | §4d all 448 Character transitions | **1.00 dB/ms** | **2.82 dB/ms** |
@@ -33,8 +38,22 @@ runs only the sections that matter, and requires the named gate to turn `FAIL`.
 | `ott-band-clip-fade` | Heavy's per-band clipper inserts in one sample | §6c all 64 Type transitions | **0.88 dB/ms** | **5.20 dB/ms** |
 | `core-floor-gate` | `floorGate()` deleted — returns 1.0 always | §6b(d) a real −96 dBFS floor | **−76.4 dBFS** | **−44.4 dBFS** |
 | `cert-fft-normalisation` | the Parseval normalisation dropped (what fb421 shipped) | §2 spectrum is CALIBRATED | **−26.022 dBFS** | **+38.956 dBFS** |
+| **fb423 — R11, the last outstanding piece of FIXES.md §0 in the family** | | | | |
+| `compress-no-ceiling` | the slope cap becomes a polite **2:1** | §4b(a) 48 dB staircase at Push/Ratio 100 | **DRR 0.0188** | **DRR 0.5069** |
+| `ott-no-ceiling` | Amount's top half stops closing T_up onto T_dn | §6b(a) Amount 100 vs Amount 50 | **5.38 dB (55 % of the preset)** | **9.70 dB (100 % of it)** |
+| **fb423 — law 1, a DEAD KNOB** | | | | |
+| `compress-dead-knob (Burn, P8)` | `p.b8` never reaches `heatTgt_` | §4 the P8 0→100 sweep | **span 32.37** | **span 0.00** |
+| `ott-dead-knob (Treble, P8)` | `p.b8` never reaches `trim[2]` | §6 the P8 0→100 sweep | **span 23.93** | **span 0.00** |
+| **fb423 — the new mechanisms and the new gates** | | | | |
+| `ott-sheen-upward-lane` | Sheen's high band gets Over Top's thresholds back | §5 BOTH Sheen gates (and §5c) | **−4.00 dB lift · 15 dB of knee** | **+8.53 dB clamp · −3 dB of knee** |
+| `names-downstream-drift` | one string in `ott-worklet.js` drifts off the header | §1 ott-worklet CHARS == charNames() | 64 strings, exact | **[46] downstream `Long Ears` vs header `Mean Ears`** |
 
-**15 mutants · 13 gates fired · 2 survivors.**
+**21 mutants · 20 gates fired · 1 survivor.**
+
+> A row was REMOVED this round, and removing a mutant needs a reason as much as adding one:
+> `compress-heat-kind-fade+noslew` deleted TWO mechanisms and still only reached a LEVEL gate,
+> where it survived. `compress-heat-kind-fade` (alone) now fires on §4c4. The two-mechanism
+> version proves strictly less than the one-mechanism version, so it is gone.
 
 ---
 
@@ -48,7 +67,6 @@ compress-smoother-seed             GR is continuous across all 64 Type changes R
 compress-smoother-seed+noslew      Type transitions                       RED (good)
         FAIL  all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms worst 10.34 dB/ms  (Exact → Opto)   [fb421 engine: 17.36]
 compress-transition-slew (alone)   transitions                            *** SURVIVED ***
-compress-heat-kind-fade+noslew     transitions                            *** SURVIVED ***
 compress-colour-drive-smoothing    transitions                            RED (good)
         FAIL  all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms worst 2.11 dB/ms  (Vari-Mu → Limit)   [fb421 engine: 17.36]
 compress-clip-ceiling-tracking     transitions                            RED (good)
@@ -69,19 +87,63 @@ ott-band-clip-fade                 Type transitions                       RED (g
         FAIL  all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms worst 5.20 dB/ms  (Surge → Heavy)   [fb421 engine: 5.97]
 core-floor-gate                    -96 dBFS floor comes OUT at            RED (good)
         FAIL  (d) a REAL dithered -96 dBFS floor comes OUT at      -44.4 dBFS (+51.64 dB of lift)  ← must stay inaudible
+compress-heat-kind-fade (alone)    CURVATURE is continuous                RED (good)
+        FAIL  the gain element's CURVATURE is continuous across all 56 Type changes worst 23.89 dB of curvature in 2 ms  (FET 76 → OverEasy)
+compress-no-ceiling                48 dB staircase                        RED (good)
+        FAIL  (a) 48 dB staircase → ≤ 5 % survives at Push/Ratio 100 DRR 0.5069  (bypassed control 1.0000)
+ott-no-ceiling                     Amount 100 leaves                      RED (good)
+        FAIL  (a) Amount 100 leaves ≤ 65 % of what Amount 50 leaves probe 22.78 dB → 9.70 dB at Amount 50 (= the Ableton preset) → 9.70 dB at 100 (100 % of it)
+compress-dead-knob (Burn, P8)      (P8)                                   RED (good)
+        FAIL    Burn (P8) — via added THD                        span 0.00 · monotone ↑
+ott-dead-knob (Treble, P8)         (P8)                                   RED (good)
+        FAIL    Treble (P8) — 8-12 kHz                           1.22 → 1.22 (span 0.00) · monotone
+ott-sheen-upward-lane              Sheen                                  RED (good)
+        FAIL  Sheen: 6 dB into a decay its high band LIFTS while Over Top's still CLAMPS signed high-band GR: Sheen +8.53 dB (lift), Over Top +6.68 dB (clamp)
+        FAIL  Sheen: its high-band UPWARD knee sits at the PROGRAMME, Over Top's far below it net lift begins at -21 dB of input for Sheen, -18 dB for Over Top (-3 dB apart, bar 9)
+        FAIL  every Character ≥ 2× JND from its Type's default  weakest 1.11× JND  (Sheen · Fast Shimmer), 1 below bar
+names-downstream-drift             ott-worklet CHARS                      RED (good)
+        FAIL  ott-worklet CHARS == charNames()                     [46] downstream 'Long Ears' vs header 'Mean Ears'
 cert-fft-normalisation             CALIBRATED                             RED (good)
         FAIL  spectrum is CALIBRATED: a −26.02 dBFS sine reads its own level reads 38.956 dBFS (true -26.021)
 ------------------------------------------------------------------------------------------------------------
-15 mutants, 13 gates fired, 2 SURVIVORS  → compress-transition-slew (alone), compress-heat-kind-fade+noslew
+21 mutants, 20 gates fired, 1 SURVIVORS  → compress-transition-slew (alone)
 ```
 
 ---
 
-## The two survivors — stated plainly, not buried
+## fb423 — ONE OF THE TWO SURVIVORS IS CLOSED, and how
 
-Neither is a hole in the *device*. Both are mechanisms that turned out to be **redundant**: some
-other mechanism already holds the gate green without them, so deleting them changes nothing a
-gate can see. That is still a survivor by §0's definition and it is reported as one.
+`compress-heat-kind-fade` survived because **every gate it faced was a LEVEL gate**. §4d measures
+dB of gain per millisecond. The mechanism it protects is the SHAPE of the gain element's transfer
+curve, and a waveshaper whose curve changes in one sample at constant gain is invisible to every
+level metric there is — that is not a subtle point, it is the definition of a waveform artifact.
+
+Cert **§4c4** measures the **curvature**:
+
+    S = H3_dB - 3 * H1_dB       for y = x + c*x^3:  H1 ~ A, H3 ~ (c/4)A^3  =>  S = 20*log10(c/4)
+
+independent of drive to cubic order. Sampled in the 2 ms either side of the switch on a 2 kHz tone
+with `Burn` at 100. **Real engine 2.02 dB (Types) / 4.36 dB (Characters), bar 6. Mutant 23.89 dB.
+Control (same config both sides) 0.00 dB.**
+
+🔬 Two earlier drafts of that gate were level gates in disguise, and both are recorded in the cert
+source so nobody rebuilds them: absolute 3rd-harmonic level (goes as A^3) read **12.08 dB** on
+`Ride: Only Up -> Slow Iron`, and H3/H1 (goes as A^2) read **10.69 dB** on the same pair — a
+transition whose GR legitimately travels 0 -> 15.6 dB over 60 ms at 0.35 dB/ms, comfortably inside
+§4d's bar. Section K plants a pure +6.02 dB gain step and a x4 curvature change: the invariant
+reads **0.204 dB** and **11.84 dB** (theory 12.04). It also prints the honest limit of the
+blindness — at engine-like drive a pure gain step still leaks **2.12 dB** into S, which is why the
+bar is 6 dB and not 1.
+
+**`compress-transition-slew` is STILL a survivor**, and §4c4 cannot close it *by construction*:
+it is a LEVEL mechanism and the shape invariant cancels level on purpose. See below.
+
+## The remaining survivor — stated plainly, not buried
+
+One of the two is closed (above). The one that is left is not a hole in the *device*: it is a
+mechanism that turned out to be **redundant** — another mechanism already holds the gate green
+without it, so deleting it changes nothing a gate can see. That is still a survivor by §0's
+definition and it is reported as one.
 
 **1. `compress-transition-slew` — the 1.5 dB/ms transition slew limit, alone.**
 Removing it takes the worst Type transition from **1.23 → 1.94 dB/ms** and the worst Character
@@ -94,19 +156,17 @@ mechanism the gates depend on.
 under the bar, which is not a margin I would ship. The right fix if this is unacceptable is to
 delete it and re-voice, not to invent a gate that only it can pass.
 
-**2. `compress-heat-kind-fade` — the waveshaper-kind crossfade, with the slew limit also off.**
-Same shape: **1.23 → 1.94 dB/ms**, no gate fires. When it was written it took the worst Type
-transition from 5.53 to 1.66; the colour-drive smoothing added afterwards covers the same fault
-by a different route (the depth `k` no longer jumps, so the two curves are evaluated at nearly
-the same operating point and the difference between them is small).
-**Disposition: KEPT.** A waveshaper whose curve changes shape in one sample is wrong on its own
-terms even where the current probe cannot see it — but I will not claim a gate proves it, because
-none does.
+**2. `compress-heat-kind-fade` — CLOSED at fb423.** See the section above. What it took was the
+gate described here last round: the gain element's own continuity rather than the applied gain's.
+Forty lines was about right; the part that was not obvious in advance is that it had to measure
+CURVATURE, because the first two drafts of it measured harmonic LEVEL and were §4d with a 3x
+multiplier bolted on.
 
-**What it would take to close both properly:** a gate on the *gain element's output continuity*
-specifically — the same shape as §4c3's GR-continuity gate but on the post-`colour` sample, with
-the ballistics held. That is about forty lines and one more measurement pass; it is not written
-tonight and I am not going to describe it as done.
+**What it would take to close the one that is left:** nothing honest. Its only observable is
+dB/ms, §4d is the dB/ms gate, and it holds 0.71 dB of margin there. A gate that could fail without
+it would need a bar between 1.23 and 1.94 dB/ms — a gate only this mechanism can pass, which is
+exactly what §3.2 forbids. The right move if 1.94 is unacceptable is to delete the limiter and
+re-voice the transitions, not to invent the gate.
 
 ---
 

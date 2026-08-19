@@ -22,8 +22,11 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 TI   = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 SHIM = os.path.join(TI, "Tests", "shim")
 SRC  = os.path.join(TI, "Source")
+# The worklets and the roster are copied too: section 1 now GATES that they still say what the
+# headers say (fb423 §Gate), and it reads them off disk. A mutant run that could not find them
+# would report a red gate for the wrong reason.
 FILES = ["DynamicsCore.h", "TerrainCompressFx.h", "TerrainOttFx.h", "dynamics_cert.cpp",
-         "shipped_labels.inc"]
+         "shipped_labels.inc", "compress-worklet.js", "ott-worklet.js", "ROSTER.md"]
 
 # A mutant is (id, [(file, find, replace), ...], cert sections, substring of the gate that must FAIL).
 #
@@ -53,12 +56,10 @@ MUTANTS = [
 
  ("compress-transition-slew (alone)", [SLEW_OFF], ["4"], "transitions"),
 
- ("compress-heat-kind-fade+noslew", [
-   ("TerrainCompressFx.h",
-    "if (primed_ && ts.heatKind != heatKind_) { heatKindOld_ = heatKind_; gKind_.snap (0.0f); }",
-    "if (primed_ && ts.heatKind != heatKind_) { heatKindOld_ = ts.heatKind; gKind_.snap (1.0f); }  // MUTANT"),
-   SLEW_OFF],
-  ["4"], "transitions"),
+ # (`compress-heat-kind-fade+noslew` used to live here. It was a WEAKER form of the row below --
+ # it deleted TWO mechanisms and still only reached the level gate, where it survived. Cert 4c4
+ # measures the CURVATURE instead and the single-mechanism mutant fires on its own, so the
+ # two-mechanism version proves strictly less and is gone.)
 
  ("compress-colour-drive-smoothing", [
    ("TerrainCompressFx.h",
@@ -129,6 +130,62 @@ MUTANTS = [
     "    return 1.0f; float t = (xdb - F) / ramp;   // MUTANT: the floor gate is deleted")],
   ["6"], "-96 dBFS floor comes OUT at"),
 
+ # ── fb423 round 3 ────────────────────────────────────────────────────────────────────────
+ # The heat-kind crossfade was a SURVIVOR: it is a WAVEFORM mechanism and every gate it faced
+ # was a LEVEL gate. Cert 4c4 measures the gain element's CURVATURE (H3 - 3*H1, which cancels
+ # gain exactly to cubic order), and the mutation now fires on its own -- no slew-limiter
+ # removal needed to make it visible.
+ ("compress-heat-kind-fade (alone)", [
+   ("TerrainCompressFx.h",
+    "if (primed_ && ts.heatKind != heatKind_) { heatKindOld_ = heatKind_; gKind_.snap (0.0f); }",
+    "if (primed_ && ts.heatKind != heatKind_) { heatKindOld_ = ts.heatKind; gKind_.snap (1.0f); }  // MUTANT")],
+  ["4"], "CURVATURE is continuous"),
+
+ # R11. FIXES.md 0 named these as the last outstanding piece anywhere in the family: the
+ # ceilings were ASSERTED. A ceiling nobody has tried to break is fb421's epistemic position.
+ ("compress-no-ceiling", [
+   ("TerrainCompressFx.h",
+    "        sTgt_ = dyn::clampf (s, 0.0f, sCap);",
+    "        sTgt_ = dyn::clampf (s, 0.0f, std::min (sCap, 0.5f));  // MUTANT: a POLITE 2:1 maximum")],
+  ["4"], "48 dB staircase"),
+
+ ("ott-no-ceiling", [
+   ("TerrainOttFx.h",
+    "        const float u    = (amt >  0.5f) ? (amt - 0.5f) * 2.0f : 0.0f;",
+    "        const float u    = 0.0f;   // MUTANT: the top half of Amount stops closing the thresholds")],
+  ["6"], "Amount 100 leaves"),
+
+ # LAW 1 -- a dead knob. One knob per device is stubbed to a no-op and the 0->100 sweep must
+ # go red. Without this, "every knob is night and day" rests on the sweep having been pointed
+ # at the right member, which nothing checked.
+ ("compress-dead-knob (Burn, P8)", [
+   ("TerrainCompressFx.h",
+    "        heatTgt_ = dyn::clampf (std::max (dyn::clampf (p.b8, 0.0f, 1.0f), cs.heatFloor), 0.0f, 1.0f);",
+    "        heatTgt_ = dyn::clampf (std::max (0.0f, cs.heatFloor), 0.0f, 1.0f);  // MUTANT: Burn is a dead knob")],
+  ["4"], "(P8)"),
+
+ ("ott-dead-knob (Treble, P8)", [
+   ("TerrainOttFx.h",
+    "                                (dyn::clampf (p.b8, 0.0f, 1.0f) - 0.5f) * 24.0f };",
+    "                                0.0f };   // MUTANT: Treble is a dead knob")],
+  ["6"], "(P8)"),
+
+ # SHEEN's new mechanism (fb423). Put Over Top's high-band thresholds back and both of the
+ # gates that replaced the old "more air" gate must fall over.
+ ("ott-sheen-upward-lane", [
+   ("TerrainOttFx.h",
+    "        { 1.0f, 0.55f, 3, {-40,-31,-26}, {-45,-37,-28}, {0.90f,0.907f,1.0f}, {0.8f,0.8f,0.9f},\n"
+    "          {12,14,2}, {2.8f,1.4f,0.35f}, {40,28,8}, 2.0f, 0, 999.0f, 0, 0 },",
+    "        { 1.0f, 0.55f, 3, {-40,-31,-40}, {-45,-37,-46}, {0.90f,0.907f,1.0f}, {0.8f,0.8f,0.9f},\n"
+    "          {12,14,13}, {2.8f,1.4f,0.35f}, {40,28,8}, 2.0f, 0, 999.0f, 0, 0 },  // MUTANT: Over Top's high band")],
+  ["5"], "Sheen"),
+
+ # And the NAMES gate itself, which is new and has therefore never failed. Drift one downstream
+ # string -- exactly the class of rot that left 22 of them alive across this family.
+ ("names-downstream-drift", [
+   ("ott-worklet.js", "'Mean Ears'", "'Long Ears'   /* MUTANT: downstream drifts off the header */")],
+  ["1"], "ott-worklet CHARS"),
+
  ("cert-fft-normalisation", [
    ("dynamics_cert.cpp",
     "    e *= 2.0 / ((double) N * (double) N * U);",
@@ -158,7 +215,8 @@ def main():
                 sys.exit(2)
             open(path, "w").write(txt.replace(find, repl))
         exe = os.path.join(d, "cert")
-        c = run(["clang++", "-O2", "-std=c++17", "-I", SHIM, "-I", SRC, "-I", d,
+        c = run(["clang++", "-O2", "-std=c++17", "-DDYN_DIR=\"%s\"" % d,
+                 "-I", SHIM, "-I", SRC, "-I", d,
                  os.path.join(d, "dynamics_cert.cpp"), "-o", exe])
         if c.returncode != 0:
             print("%-34s BUILD FAILED\n%s" % (mid, c.stderr[:900])); sys.exit(2)

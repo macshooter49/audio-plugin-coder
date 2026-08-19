@@ -13,7 +13,7 @@
 //
 //  ── THE TWO LINEAGES MAX ASKED FOR (HYPER-BUILD-BIBLE §1.2-1.3) ──────────────
 //  HYPER  = Roland JP-8000 Super Saw (1996) as an AUDIO effect: detuned voices
-//           oscillating sharp/flat in pitch, uneven fan, measured mix law.  -> `Stack`
+//           oscillating sharp/flat in pitch, uneven fan, measured mix law.  -> `Throng`
 //  DIMENSION = Roland SDD-320 Dimension D (1979): a BBD chorus wired so it does NOT
 //           sound like one — TRIANGLE LFO in ANTIPHASE across the channels, and the
 //           delayed signal cross-mixed to the OTHER channel with OPPOSITE POLARITY.
@@ -27,7 +27,7 @@
 //     would periodically DROP OUT — a tri-modal pitch histogram with a big zero spike
 //     instead of the bimodal +-c signature. The ONLY legitimate slew work here is the
 //     ~1.5 ms apex smoothing below (a slope STEP is a tick). §D of the cert proves the
-//     histogram is bimodal, and the `Wobble` Character (triangle -> sine) is the A/B that
+//     histogram is bimodal, and the `Tremble` Character (triangle -> sine) is the A/B that
 //     shows what a zero-slope apex costs.
 //
 //  🔑 THE CONSTANT-CENTS LAW (bible §3.1 — "the single most important equation").
@@ -113,28 +113,48 @@ public:
 
     static const char* const* typeNames() noexcept
     {
+        // MUTATION (fb423). The region below puts back ONE retired Type name (a shipped
+        // FM algo + spectral mode) and, further down, one retired Character (a shipped Tape
+        // preset). MEASURED: §S goes red FOUR ways — the shipped-corpus gate, the
+        // RENAMES-was-applied gate, and BOTH drift gates, because the worklet and the
+        // roster still carry the correct names and the header no longer matches them.
+        // The two BEGIN/END markers are the ONLY text §S's retired-label scan skips, and it
+        // asserts there are exactly two of them so the exclusion cannot grow.
+        // ── MUT-STALENAME-BEGIN
+       #ifdef WIDEN_MUT_STALENAME
         static const char* const n[kNumTypes] =
         { "Stack", "Twin", "Steady", "Twofold", "Blur", "Bands" };
+       #else
+        // ── MUT-STALENAME-END
+        static const char* const n[kNumTypes] =
+        { "Throng", "Twin", "Steady", "Twofold", "Blur", "Bands" };
+       #endif
         return n;
     }
 
     static const char* const* charNames (int type) noexcept
     {
         static const char* const n[kNumTypes][kNumChars] =
-        {   // Stack — the JP-8000 crowd
+        {   // Throng — the JP-8000 crowd
             { "JP Classic", "Even Fan", "Analog Drift", "Tight Fan", "Wide Fan",
               "Octave Bloom", "Sub Anchor", "Three Phase" },
             // Twin — the SDD-320 antiphase pair
             { "Two Line", "Four Line", "Mode Two", "Mode Three", "No Compander",
+             // ── MUT-STALENAME-BEGIN
+             #ifdef WIDEN_MUT_STALENAME
               "Dark BBD", "Wobble", "Hex" },
+             #else
+             // ── MUT-STALENAME-END
+              "Dark BBD", "Tremble", "Hex" },
+             #endif
             // Steady — the static cents fan
-            { "Satin", "Jab", "Warble", "Fifth Up", "Octave Down",
+            { "Satin", "Jab", "Quaver", "Fifth Up", "Octave Down",
               "Wide Slap", "Gritty", "Octave Pair" },
             // Twofold — discrete voices, aperiodic walk
-            { "Vocal", "Wide Room", "Tape ADT", "Tight Inst", "Loose Crowd",
+            { "Lilt", "Wide Room", "Tape ADT", "Tight Inst", "Loose Crowd",
               "Static Pair", "Slapback", "Seasick" },
             // Blur — dual allpass cascades, magnitude-flat by construction
-            { "Smooth Six", "Deep Twelve", "Velvet", "Low Anchor", "Top Only",
+            { "Smooth Six", "Deep Twelve", "Plush", "Low Anchor", "Top Only",
               "Seed B", "Seed C", "Opposed" },
             // Bands — complementary band alternation
             { "Coarse", "Fine", "Tilted", "Rotor Slow", "Rotor Fast",
@@ -150,7 +170,7 @@ public:
     static const char* const* fieldNames() noexcept
     {
         static const char* const f[kNumFields] =
-        { "Direct", "Alternate", "Orbit", "Swap", "Side Only", "Collapse" };
+        { "Straight", "Alternate", "Orbit", "Swap", "Side Only", "Gather" };
         return f;
     }
 
@@ -169,12 +189,12 @@ public:
     static const char* const* frontNames (int type) noexcept
     {
         static const char* const f[kNumTypes][4] =
-        { { "Detune", "Width", "Rate", "Mix" },       // Stack   — the JP-8000 fan
+        { { "Detune", "Width", "Rate", "Mix" },       // Throng   — the JP-8000 fan
           { "Depth",  "Width", "Rate", "Mix" },       // Twin    — the SDD-320 excursion
           { "Cents",  "Width", "Rate", "Mix" },       // Steady  — static shift, reads out in cents
           { "Sway",   "Width", "Rate", "Mix" },       // Twofold — the aperiodic walk
           { "Wash",   "Width", "Rate", "Mix" },       // Blur    — allpass divergence
-          { "Split",  "Width", "Rate", "Mix" } };     // Bands   — band contrast
+          { "Cleave",  "Width", "Rate", "Mix" } };     // Bands   — band contrast
         return f[type < 0 ? 0 : (type >= kNumTypes ? kNumTypes - 1 : type)];
     }
     static const char* const* backNames() noexcept
@@ -183,6 +203,12 @@ public:
         return b; }
     static const char* const* pillNames() noexcept
     {   static const char* const q[2] = { "Retrig", "Hear Mono" }; return q; }
+    // the two BACK-PANEL DROPDOWN labels, published from here for the same reason as
+    // everything else on this card: a label that lives only in markdown is fb373.
+    // dropdownNames()[1] is this device's word for the CONTRACT §2 `axis` slot.
+    static const char* const* dropdownNames() noexcept
+    {   static const char* const d[2] = { "Character", "Field" }; return d; }
+    static const char* axisLabel() noexcept { return dropdownNames()[1]; }
     // what P1 actually counts on this Type — the card prints it beside the readout, and
     // §O of the cert measures the COUNT rather than trusting the word.
     static const char* voicesUnit (int type) noexcept
@@ -227,7 +253,7 @@ public:
     //               ripple at "1 to 2 dB" with mild settings; ours runs up to 18 stages at
     //               0.42 octaves of divergence because R11 asks for the extreme, and the
     //               ripple grows with it.
-    //    The other three are mono-safe and it is worth knowing WHY: Stack's combs MOVE and
+    //    The other three are mono-safe and it is worth knowing WHY: Throng's combs MOVE and
     //    average out, Steady's copies are static but tiny, and Bands reconstructs EXACTLY.
     static bool typeIsMonoLossy (int type) noexcept
     { return type == 1 || type == 3 || type == 4; }
@@ -263,7 +289,14 @@ public:
     struct Params
     {
         int   type = 0, character = 0;
-        int   field = 0;                    // == the locked `axis` slot
+        // 🔴 fb423 — THIS MEMBER IS NAMED BY CONTRACT §2 AND IT IS `axis`, NOT `field`.
+        //    R9 says "implement it exactly or integration breaks", and integration is
+        //    written against `p.axis`; at fb422 this said `field` and would have failed to
+        //    compile against the rack. The engine's own accessors stay named after what the
+        //    CARD prints (`Field`, published by axisLabel()) — the contract locks the SLOT's
+        //    member name, not each device's word for it (its own comment: "Focus/Stereo/
+        //    Route/...").  Slot member: `axis`.  Card label: `Field`.
+        int   axis = 0;
         float amount = 0.35f;               // f1 — relabelled per Type in the UI
         float width  = 0.50f;               // f2 — 0.5 is EXACTLY neutral (theta = 45 deg)
         float rate   = 0.35f;               // f3
@@ -275,6 +308,15 @@ public:
         // FRONT PILL. Integration wires the rising edge to note-on. The read POSITION is
         // slew-capped (bible §2.1 correction) so the zap sounds identical at every Detune.
         bool  retrig = false;
+        // FRONT PILL 2. 🔴 fb423 — AT fb422 THIS PILL HAD NO PARAMETER AT ALL. ROSTER §3
+        // described it as a "UI-side audition… costs the engine nothing", which is the
+        // definition of a control that cannot be automated, cannot be saved in a preset and
+        // cannot be recalled — i.e. not a control. It is a real engine parameter now: the
+        // finished OUTPUT is folded to (L+R)/2 on both channels, faded over 15 ms both ways
+        // so the audition itself never clicks (the no-clicks law applies to a monitor
+        // button too), and the Viz correlation is measured AFTER the fold so the card shows
+        // what you are hearing (`everything audible interacts visually`).
+        bool  hearMono = false;
     };
 
     // CONTRACT §2 — the exact per-device Viz, no more, no less.
@@ -322,6 +364,14 @@ public:
         envK_  = 1.0f - std::exp (-1.0f / (0.020f * fs_));   // input presence
         lvlK_  = 1.0f - std::exp (-1.0f / (0.060f * fs_));
         corrK_ = 1.0f - std::exp (-1.0f / (0.050f * fs_));
+        // `Hear Mono` fade. 15 ms both ways: a monitor button that CLICKS is still a click
+        // (the no-clicks law does not exempt monitoring), and a hard swap between a wide
+        // wet and its mono sum is a step of the full side energy.
+       #ifdef WIDEN_MUT_MONOSNAP
+        monoK_ = 1.0f;                                       // MUTATION: hard-cut the fold
+       #else
+        monoK_ = 1.0f - std::exp (-1.0f / (0.015f * fs_));
+       #endif
         vfK_   = 1.0f - std::exp (-1.0f / (0.030f * fs_));   // voice fade in/out
         dipDn_ = 1.0f - std::exp (-1.0f / (0.005f * fs_));   // 5 ms down to -46 dB (~26 ms)
         dipUp_ = 1.0f - std::exp (-1.0f / (0.040f * fs_));   // 40 ms recover
@@ -371,6 +421,7 @@ public:
         cLL_ = cRR_ = 1.0e-9f; cLR_ = 0.0f;
         pendType_ = -1; pendChar_ = -1; pendField_ = -1;
         rng_ = 0x9E3779B9u; lastRetrig_ = false; seeded_ = false;
+        monoSm_ = monoTg_ = 0.0f;
         viz_ = Viz{};
     }
 
@@ -378,7 +429,7 @@ public:
     {
         const int t = clampi (p.type,      0, kNumTypes  - 1);
         const int c = clampi (p.character, 0, kNumChars  - 1);
-        const int f = clampi (p.field,     0, kNumFields - 1);
+        const int f = clampi (p.axis,      0, kNumFields - 1);
 
         if (t != type_ || c != char_ || f != field_)
         {
@@ -426,7 +477,7 @@ public:
                     dip_ = 0.0f;          // MUTATION: swap RAW, no dip, no recover
                    #endif
                     // -46 dB, not -26. A Field change can swap `Side Only` (pure side, tiny
-                    // on a near-mono wet) for `Collapse` (pure mid, large) — an 11x level
+                    // on a near-mono wet) for `Gather` (pure mid, large) — an 11x level
                     // change, measured — and a 0.05 floor leaves 5 % of that as a step.
                     dip_ += dipDn_ * (0.0f - dip_);
                     if (dip_ < 0.005f)
@@ -550,7 +601,7 @@ public:
                #else
                 switch (T.family)
                 {
-                    case 0: procVoices (limHi, wetL, wetR); break;  // Stack/Steady/Twofold
+                    case 0: procVoices (limHi, wetL, wetR); break;  // Throng/Steady/Twofold
                     case 1: procTwin   (lineL, lineR, limHi, wetL, wetR); break;  // the SDD-320 pair
                     case 2: procBlur   (lineL, lineR,        wetL, wetR); break;  // allpass decorrelation
                     default:procBands  (lineL, lineR,        wetL, wetR); break;  // band alternation
@@ -591,7 +642,7 @@ public:
                 //    happened inside the machine, so the anchor sat inside the regeneration
                 //    loop as a ZERO-SAMPLE path. That is not a delay bloom, it is a
                 //    one-sample resonator, and it ate the Feedback knob: measured span was
-                //    0.61 dB on Twin against Stack's 16.32. The anchor now rides on top of
+                //    0.61 dB on Twin against Throng's 16.32. The anchor now rides on top of
                 //    the tap, which is also what it means physically — it is the part that
                 //    was never processed.
                 fbSt_[0] = wetL; fbSt_[1] = wetR;
@@ -631,8 +682,38 @@ public:
                 // ── 9. Mix — equal power. At mix 1.0 the dry gain is cos(pi/2) = 0.
                 const float dg = std::cos (mixSm_ * 1.5707963f);
                 const float wg = std::sin (mixSm_ * 1.5707963f);
-                const float oL = inL * dg + wL * wg;
-                const float oR = inR * dg + wR * wg;
+                float oL = inL * dg + wL * wg;
+                float oR = inR * dg + wR * wg;
+
+                // ── 9b. `Hear Mono` — the audition fold, a REAL parameter (fb423).
+                //    y = (1-a)*y + a*(L+R)/2 with a glided over 15 ms. At a = 1 the two
+                //    channels are bit-identical, which is the only thing a mono-check is
+                //    allowed to mean, and it is measured that way in the cert. The Viz
+                //    correlation below is computed on the FOLDED output, so the card reads
+                //    +1.000 while you audition — audible change, visible change.
+               #ifndef WIDEN_MUT_NOMONO
+                monoSm_ += monoK_ * (monoTg_ - monoSm_);
+                // SNAP THE LAST 1e-3, AND THE THRESHOLD IS A MEASUREMENT, NOT A GUESS.
+                // A one-pole approaches 1.0 and never arrives — worse, in FLOAT it STALLS:
+                // near 1.0 the representable spacing is 5.96e-8, and once k*(1-x) drops
+                // below half of that the increment rounds away entirely. Measured stall for
+                // this ramp: monoSm_ = 0.999978542 forever, i.e. 1.48e-6 of L-R left in a
+                // signal that is supposed to BE mono. 1e-3 is reached at t = tau*ln(1000) =
+                // 104 ms, so the audible part of the fade is still the 15 ms shape, and the
+                // snap itself is a step 60 dB below the side energy it removes (§Q's click
+                // gate measures it). The threshold is 46x above the measured stall at 48 k
+                // and 23x above it at 96 k, so the snap can never fail to fire.
+                if (std::fabs (monoTg_ - monoSm_) < 1.0e-3f) monoSm_ = monoTg_;
+                if (monoSm_ >= 1.0f)
+                {   // FULLY folded: ASSIGN the mid. `a + (mid - a)` is not bit-exactly
+                    //   `mid` in float, and a mono-check that leaves 5e-6 of side behind is
+                    //   a word, not a measurement. The cert asserts max |L-R| == 0.0.
+                    const float mm = 0.5f * (oL + oR); oL = mm; oR = mm; }
+                else if (monoSm_ > 1.0e-6f)
+                {   const float mm = 0.5f * (oL + oR);
+                    oL += monoSm_ * (mm - oL);
+                    oR += monoSm_ * (mm - oR); }
+               #endif
                 L[i] = oL; R[i] = oR;
 
                 // ── 10. telemetry for the card (CONTRACT §2 Viz) ────────────
@@ -669,6 +750,7 @@ public:
     float liveGrainMs()  const noexcept { return spanSm_; }
     float liveCrossK()   const noexcept { return xkG_; }
     float dbgDip()       const noexcept { return dip_; }
+    float dbgMono()      const noexcept { return monoSm_; }
     int   dbgType()      const noexcept { return type_; }
     int   liveStages()   const noexcept { return nAP_; }
     int   liveBands()    const noexcept { return nB_; }
@@ -676,12 +758,12 @@ public:
 private:
     // ═════════ tables ════════════════════════════════════════════════════════
     //  family — WHICH MACHINE runs. This is the mechanism axis CONTRACT law 2 grades:
-    //    0 voice crowd   (ring buffer, N reads)      Stack · Steady · Twofold
+    //    0 voice crowd   (ring buffer, N reads)      Throng · Steady · Twofold
     //    1 antiphase pair(ring buffer, 2..8 lines, inverted cross-mix)   Twin
     //    2 allpass       (no ring; magnitude EXACTLY flat per channel)   Blur
     //    3 band tree     (no ring; perfect reconstruction, mono EXACT)   Bands
     //  mod — what moves the copies:
-    //    0 sine LFO per voice (periodic, scattered rates)      Stack
+    //    0 sine LFO per voice (periodic, scattered rates)      Throng
     //    1 triangle, antiphase (constant |slope| = constant detune)   Twin
     //    2 NONE — static granular pitch readers                Steady
     //    3 band-limited random walk (APERIODIC)                Twofold
@@ -704,18 +786,18 @@ private:
         //    exponents rise WITH the ceilings so the DEFAULT (Amount 0.35) barely moves
         //    and only the top of the knob gets violent:
         //      Type      fb421 max  fb422 max   default @0.35  100 %
-        //      Stack       130        190        23.6 -> 30.6   130 -> 190 cents
+        //      Throng       130        190        23.6 -> 30.6   130 -> 190 cents
         //      Twin         28        120         6.7 -> 19.9    28 -> 120 cents
         //      Steady      110        190        24.7 -> 31.6   110 -> 190 cents
         //      Twofold      62        120        15.5 -> 22.2    62 -> 120 cents
         //    Blur's rateMul goes 0.30 -> 1.00: `Rate` was capped at 4.2 Hz on a Type
         //    where it did nothing at all (see procBlur).
         // fam mod  baseLo baseHi maxC  curve  rateMul fbMax trim
-        //    fbMax also rises. fb421's Feedback was a WALL only on `Stack` (+16.3 dB) and a
+        //    fbMax also rises. fb421's Feedback was a WALL only on `Throng` (+16.3 dB) and a
         //    trim everywhere else (Twin +0.61, Steady +1.80, Twofold +1.97, Blur +2.55,
         //    Bands +3.23 dB) — five Types where a back knob did nothing you would call
         //    feedback. §K proves 60 s of full-drive white noise stays finite at the new caps.
-        {  0,  0,   1.5f,  24.1f, 190.f, 1.75f, 1.00f, 0.985f,1.00f },  // Stack
+        {  0,  0,   1.5f,  24.1f, 190.f, 1.75f, 1.00f, 0.985f,1.00f },  // Throng
         {  1,  1,   5.0f,  15.5f, 120.f, 1.70f, 1.00f, 0.985f,1.39f },  // Twin   (trim MEASURED at defaults)
         {  0,  2,   2.0f,  26.0f, 190.f, 1.70f, 1.00f, 0.985f,0.98f },  // Steady
         {  0,  3,  17.0f,  61.0f, 120.f, 1.60f, 0.55f, 0.985f,0.96f },  // Twofold
@@ -745,7 +827,7 @@ private:
 
     static constexpr CharSpec CHAR[kNumTypes][kNumChars] =
     {
-        // ── Stack.  x1 = per-voice rate jitter · x2 = octave-voice level · x3 = fan power
+        // ── Throng.  x1 = per-voice rate jitter · x2 = octave-voice level · x3 = fan power
         { { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 0.00f, 0.00f, 1.00f, 1.000f, 0 },                       // JP Classic
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 0.00f, 0.00f, 1.00f, 1.000f, kEvenFan },                // Even Fan
           { 1.00f, 1.00f, 1.00f, 0.35f, 1.0f, 0.15f, 0.00f, 1.00f, 1.000f, 0 },                       // Analog Drift
@@ -755,8 +837,8 @@ private:
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 0.00f, 0.35f, 1.00f, 0.940f, kSubAnchor },              // Sub Anchor
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 0.00f, 0.00f, 1.00f, 0.975f, kThreePhase } },           // Three Phase
         // ── Twin.  x1 = line PAIRS (1..4) · x2 = cross-mix scale · x3 = BBD LP kHz (0 = off)
-        // 🔴 fb422: x1 IS THE LABEL. At fb421 `Duo` (x1 = 1) ran 4 lines at the bottom of
-        //    Voices and `Quad` (x1 = 2) ran 6 — both names were false, and `Hex` (x1 = 3)
+        // 🔴 fb422: x1 IS THE LABEL. At fb421 `Two Line` (x1 = 1) ran 4 lines at the bottom of
+        //    Voices and `Four Line` (x1 = 2) ran 6 — both names were false, and `Hex` (x1 = 3)
         //    was pinned at 4 pairs so Voices was DEAD on it. nPair = (nV+1)/2 + x1 - 1, so
         //    at the Voices floor (nV = 3): x1 = 0 -> 1 pair = TWO LINE · x1 = 1 -> 2 pairs
         //    = FOUR LINE · x1 = 2 -> 3 pairs = HEX. Every label is now the count.
@@ -769,23 +851,23 @@ private:
           { 1.00f, 2.00f, 1.00f, 0.00f, 1.0f, 1.0f, 1.00f, 0.0f, 1.000f, 0 },                         // Mode Three Arturia: 'modulation intensity twice that of 1 and 2'
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 1.0f, 1.00f, 0.0f, 0.871f, kCompOff },                  // No Compander
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 1.0f, 1.00f, 4.0f, 1.040f, kDarkBBD },                  // Dark BBD
-          { 1.00f, 2.50f, 1.00f, 0.00f, 1.0f, 1.0f, 1.00f, 0.0f, 1.000f, kSineMod },                  // Wobble
+          { 1.00f, 2.50f, 1.00f, 0.00f, 1.0f, 1.0f, 1.00f, 0.0f, 1.000f, kSineMod },                  // Tremble
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 2.0f, 1.55f, 0.0f, 1.330f, 0 } },                       // Hex  (mono-hostile, TAGGED)
         // ── Steady.  x1 = extra-voice cents · x2 = extra-voice level · x3 = slap scale
         { { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f,    0.0f, 0.00f, 1.00f, 1.000f, 0 },                    // Satin
           { 1.00f, 1.00f, 1.00f, 0.00f, 0.40f,    0.0f, 0.00f, 1.00f, 1.000f, 0 },                    // Jab
-          { 1.00f, 1.00f, 1.00f, 0.55f, 1.00f,    0.0f, 0.00f, 1.00f, 1.000f, 0 },                    // Warble
+          { 1.00f, 1.00f, 1.00f, 0.55f, 1.00f,    0.0f, 0.00f, 1.00f, 1.000f, 0 },                    // Quaver
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f,  700.0f, 0.18f, 1.00f, 0.975f, 0 },                    // Fifth Up
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f,    0.0f, 0.00f, 1.00f, 1.000f, kAllNeg },              // Octave Down
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f,    0.0f, 0.00f, 2.30f, 0.985f, 0 },                    // Wide Slap
           { 1.00f, 1.00f, 1.00f, 0.00f, 0.27f,    0.0f, 0.00f, 1.00f, 1.000f, kLinInterp },           // Gritty
           { 1.00f, 1.00f, 1.00f, 0.00f, 1.00f, 1200.0f, 0.25f, 1.00f, 0.965f, 0 } },                  // Octave Pair
         // ── Twofold.  x1 = walk bandwidth mul · x2 = voice-1 extra delay ms · x3 = static cents
-        { { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 1.00f,  0.0f, 0.0f, 1.000f, 0 },                        // Vocal Two
-          { 1.35f, 1.00f, 0.70f, 0.00f, 1.0f, 0.50f,  0.0f, 0.0f, 0.985f, 0 },                        // Wide Room  (was `Vocal Four`, whose coefficient row was
-                                                                                                          //             IDENTICAL to Vocal Two — measured 0.00 change)
+        { { 1.00f, 1.00f, 1.00f, 0.00f, 1.0f, 1.00f,  0.0f, 0.0f, 1.000f, 0 },                        // Lilt
+          { 1.35f, 1.00f, 0.70f, 0.00f, 1.0f, 0.50f,  0.0f, 0.0f, 0.985f, 0 },                        // Wide Room  (was a SECOND voice-count variant whose row was
+                                                                                                          //             IDENTICAL to char 0 — measured 0.00 change)
           { 1.00f, 2.00f, 0.60f, 0.00f, 1.0f, 0.55f,  0.0f, 0.0f, 0.985f, 0 },                        // Tape ADT
-          // 🔴 fb422 — `Tight Inst` differed from `Vocal` ONLY by baseMul, and once the R11
+          // 🔴 fb422 — `Tight Inst` differed from `Lilt` ONLY by baseMul, and once the R11
           //    re-voicing grew the depth-driven base floor past the whole nominal 17..61 ms
           //    range the floor swallowed it and the two Characters measured 0.00 apart —
           //    bit-identical. It is now tight in the two ways the word means on a walk Type:
@@ -798,7 +880,7 @@ private:
         // ── Blur.  x1 = stages/Voice · x2 = fc lo Hz · x3 = fc hi Hz
         { { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 3.0f,  180.f, 5600.f, 1.000f, 0 },                        // Smooth Six
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 6.0f,  180.f, 5600.f, 1.000f, 0 },                        // Deep Twelve
-          { 1.0f, 1.0f, 1.00f, 0.40f, 1.0f, 4.0f,   90.f, 9000.f, 1.000f, 0 },                        // Velvet
+          { 1.0f, 1.0f, 1.00f, 0.40f, 1.0f, 4.0f,   90.f, 9000.f, 1.000f, 0 },                        // Plush
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 3.0f,  500.f, 6500.f, 1.000f, 0 },                        // Low Anchor
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 3.0f, 2000.f,10000.f, 1.000f, 0 },                        // Top Only
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 3.0f,  240.f, 7000.f, 1.000f, 0 },                        // Seed B
@@ -822,6 +904,7 @@ private:
     {
         const TypeSpec& T = SPEC[type_];
         const CharSpec& C = CHAR[type_][char_];
+        monoTg_ = p_.hearMono ? 1.0f : 0.0f;         // `Hear Mono`, glided in processStereo
 
         // ── Rate. 0.03..14 Hz log. tempoSync is honoured and CLAMPED into that range so
         //    a division that lands at 128 Hz can never turn a widener into an FM operator.
@@ -937,7 +1020,7 @@ private:
         const float rHz = std::max (0.02f, rateTg_ * T.rateMul * C.rateMul);
         float amtC = std::pow (amtTg_, T.centsCurve) * T.maxCents * C.centsMul;
        #ifdef WIDEN_MUT_POLITE
-        {   // MUTATION: the fb421 ceilings restored — Stack 130 / Twin 28 / Steady 110 /
+        {   // MUTATION: the fb421 ceilings restored — Throng 130 / Twin 28 / Steady 110 /
             // Twofold 62 cents. R11 must go RED on Twin above all.
             static const float kPolite[kNumTypes] =
             { 130.f/190.f, 28.f/120.f, 110.f/190.f, 62.f/120.f, 1.0f, 1.0f };
@@ -990,7 +1073,7 @@ private:
 
             // ── target cents ────────────────────────────────────────────────
             float c = 0.0f;
-            if (T.mod == 0)            c = amtC * w;                    // Stack: modulated fan
+            if (T.mod == 0)            c = amtC * w;                    // Throng: modulated fan
             else if (T.mod == 1)       c = amtC;                        // Twin: one depth, both lines
             else if (T.mod == 2)       c = amtC * ((v == 0) ? 0.0f : (0.45f + 0.55f * w));
             else                       c = amtC * ((v == 0) ? 0.35f : (0.45f + 0.55f * w));
@@ -1012,7 +1095,7 @@ private:
                 // 🔧 a band-limited random WALK does not traverse its full range each half
                 //    cycle the way a triangle does — MEASURED, its RMS traversal is ~0.35 of
                 //    full scale, so the same cents number on the knob delivered 23 cents of
-                //    measured spread against `Stack`'s 106. The 0.35 is the measured
+                //    measured spread against `Throng`'s 106. The 0.35 is the measured
                 //    traversal, put back where it belongs, so `Sway` reads in the same units
                 //    as every other Amount on this device.
                 A = (std::exp2 (c / 1200.0f) - 1.0f) / (4.0f * 0.35f * rEff_[v]);
@@ -1035,7 +1118,7 @@ private:
             //    fixed 30 ms grain window, but `Rate` now moves that window between 6 and
             //    90 ms, so a fixed subtraction is wrong at both ends — and it crushed every
             //    `Steady` base to the 2 ms floor, which is why P3 Offset had nothing left to
-            //    scale there (measured ln-centroid span 0.46 against Stack's 2.35).
+            //    scale there (measured ln-centroid span 0.46 against Throng's 2.35).
             if (T.mod == 2) baseMs = std::max (2.0f, baseMs * C.x3);
             // 🔑 THE BASE GROWS TO THE CENTS — and then OFFSET SCALES THE RESULT.
             // First version applied Offset only to the nominal base, so at any real Amount
@@ -1301,7 +1384,7 @@ private:
     }
 
     // ═════════ the four machines ═════════════════════════════════════════════
-    // 0 — the VOICE CROWD: Stack (sine LFO), Steady (static granular), Twofold (walk).
+    // 0 — the VOICE CROWD: Throng (sine LFO), Steady (static granular), Twofold (walk).
     void procVoices (float limHi, float& wetL, float& wetR) noexcept
     {
         const TypeSpec& T = SPEC[type_];
@@ -1320,7 +1403,7 @@ private:
             float d = baseG_[v];
             float liveCents = 0.0f;
 
-            if (T.mod == 0)                                    // ── Stack: sine LFO
+            if (T.mod == 0)                                    // ── Throng: sine LFO
             {
                 float r = rHz * rho_[v];
                 if (C.flags & kThreePhase)
@@ -1554,7 +1637,7 @@ private:
         //    what killed `Feedback` on this Type. A 2:1 downward compressor placed inside a
         //    feedback path is a limiter on the loop by definition: every pass is squashed
         //    harder than the last, so the bloom cannot happen. MEASURED at fbMax 0.97 with
-        //    the compander in-loop: +0.31 dB from Feedback 0 to 100, against Stack's +9.9.
+        //    the compander in-loop: +0.31 dB from Feedback 0 to 100, against Throng's +9.9.
         //    It is applied downstream now (processStereo, right after the feedback tap),
         //    which is also where it belongs physically: the ring is Type-independent, so the
         //    compander was already outside the DELAY — this puts it outside the LOOP too.
@@ -1731,7 +1814,7 @@ private:
     {
         switch (field_)
         {
-            case 0: default: break;                                       // Direct
+            case 0: default: break;                                       // Straight
             case 1:                                                       // Alternate
             {   // swap the channels ABOVE a crossover: frequency-dependent placement.
                 // A swap does not change L+R, so this option is mono-EXACT.
@@ -1754,7 +1837,7 @@ private:
             }
             case 3: { const float t = wl; wl = wr; wr = t; break; }       // Swap
             case 4: { const float s = 0.5f * (wl - wr); wl = s; wr = -s; break; }   // Side Only
-            case 5: { const float m = 0.5f * (wl + wr); wl = m; wr = m;  break; }   // Collapse
+            case 5: { const float m = 0.5f * (wl + wr); wl = m; wr = m;  break; }   // Gather
         }
     }
 
@@ -1932,6 +2015,7 @@ private:
           offTg_=1.0f, wanTg_=0.0f, lkTg_=0.0f, tonTg_=0.0f, fbTg_=0.0f, balTg_=0.4f;
     float amtSm_=0.35f, widSm_=0.5f, rateSm_=0.3f, mixSm_=0.5f, sprSm_=0.6f,
           offSm_=1.0f, wanSm_=0.0f, lkSm_=0.0f, tonSm_=0.0f, fbSm_=0.0f, balSm_=0.4f;
+    float monoTg_=0.0f, monoSm_=0.0f, monoK_=0.0f;
     float smK_=0, envK_=0, lvlK_=0, corrK_=0, vfK_=0, dipDn_=0, dipUp_=0,
           apexK_=0, cmpK_=0, expK_=0, dcR_=0;
     float lkA_=0, toneA_=0, fbDampA_=0, darkA_=0;

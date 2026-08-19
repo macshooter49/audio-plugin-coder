@@ -2,9 +2,14 @@
 // dynamics_cert — the perceptual certification harness for BOTH fx4 dynamics devices:
 //     COMPRESS (chain kind 11)  ·  OTT (chain kind 12)  ·  their shared DynamicsCore.h
 //
-//   clang++ -O2 -std=c++17 \
+//   clang++ -O2 -std=c++17 -DDYN_DIR='"<TI>/Design/fx4/dynamics"' \
 //     -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/dynamics \
 //     <TI>/Design/fx4/dynamics/dynamics_cert.cpp -o /tmp/dynamics_cert && /tmp/dynamics_cert
+//
+// `DYN_DIR` is where section 1 goes looking for ROSTER.md and the two worklets so it can prove
+// they still SAY what the headers say. It defaults to "." — and if the files are not there the
+// gate FAILS with the path printed. It never skips. A downstream gate that quietly finds nothing
+// to check is the fb392 stub wearing a different hat.
 //
 // ⚠️ WHAT A COMPRESSOR HARNESS MUST NOT DO
 // A compressor's wet path is `dry × a slowly-varying gain`. Consequences that decide every gate
@@ -56,6 +61,16 @@ using OP = tw::TerrainOttFx::Params;
 using OX = tw::TerrainOttFx;
 
 int gPass = 0, gFail = 0;
+
+// 🔑 FIXES.md §3 / fb423 §Gate — THE HARNESS OWNS NO LABELS. Every knob name printed below is
+// read from the engine header at the moment of printing. Before this, section 4 printed
+// `Latch (P6)` and `Heat (P8)` and section 6 printed `Speed (front 2)` while the headers said
+// `Cling`, `Burn` and `Chase` — three stale strings in the harness that is supposed to POLICE
+// stale strings. A table that cannot exist cannot drift.
+std::string CF (int i) { return CX::frontNames()[i]; }
+std::string CB (int i) { return CX::backNames()[i]; }
+std::string OF (int i) { return OX::frontNames()[i]; }
+std::string OB (int i) { return OX::backNames()[i]; }
 void section (const char* s) { std::printf ("\n[%s]\n", s); }
 void gate (const char* what, bool ok, const std::string& detail)
 {
@@ -643,13 +658,88 @@ static void section0()
 // ═════════════════════════════════════════════════════════════════════════════
 // 1. NAMES — the no-doubles law, enforced against the SHIPPED tree, not from memory
 // ═════════════════════════════════════════════════════════════════════════════
+#ifndef DYN_DIR
+ #define DYN_DIR "."
+#endif
+
+/** Slurp a file in this device's directory. Returns false — and the gate goes RED — if it is
+ *  not there. A downstream gate that quietly finds nothing to check is worthless. */
+static bool slurp (const char* name, std::string& out)
+{
+    const std::string path = std::string (DYN_DIR) + "/" + name;
+    FILE* f = std::fopen (path.c_str(), "rb");
+    if (!f) return false;
+    char buf[65536]; size_t n;
+    out.clear();
+    while ((n = std::fread (buf, 1, sizeof buf, f)) > 0) out.append (buf, n);
+    std::fclose (f);
+    return !out.empty();
+}
+
+/** Pull the single-quoted strings out of a JS array literal: `const NAME = [ ... ];`
+ *  Nested arrays are flattened, which is exactly what is wanted for CHARS[8][8]. */
+static std::vector<std::string> jsArray (const std::string& src, const std::string& name)
+{
+    std::vector<std::string> out;
+    // whitespace-tolerant: the worklets column-align their declarations (`const FRONT  = [`),
+    // and the first draft of this parser matched a single space and silently returned NOTHING
+    // for four of the six tables — a gate reading zero strings and calling it a mismatch is
+    // luck, not design. Find the identifier, then the next '='.
+    const std::string key = "const " + name;
+    size_t k = std::string::npos;
+    for (size_t s = 0; (s = src.find (key, s)) != std::string::npos; s += key.size())
+    {
+        const size_t e = s + key.size();
+        if (e < src.size() && (std::isalnum ((unsigned char) src[e]) || src[e] == '_')) continue;
+        k = e; break;
+    }
+    if (k == std::string::npos) return out;
+    size_t i = src.find ('[', k);
+    if (i == std::string::npos) return out;
+    int depth = 0;
+    for (; i < src.size(); ++i)
+    {
+        if (src[i] == '[') ++depth;
+        else if (src[i] == ']') { if (--depth == 0) break; }
+        else if (src[i] == '\'')
+        {
+            const size_t j = src.find ('\'', i + 1);
+            if (j == std::string::npos) break;
+            out.push_back (src.substr (i + 1, j - i - 1));
+            i = j;
+        }
+    }
+    return out;
+}
+
+/** Pull a `const NAME = 'value';` scalar. */
+static std::string jsScalar (const std::string& src, const std::string& name)
+{
+    const std::string key = "const " + name;
+    const size_t k = src.find (key);
+    if (k == std::string::npos) return "<missing>";
+    const size_t q = src.find ('\'', k);
+    const size_t nl = src.find ('\n', k);
+    if (q == std::string::npos || (nl != std::string::npos && q > nl)) return "<missing>";
+    const size_t b = src.find ('\'', q + 1);
+    return (b == std::string::npos) ? "<missing>" : src.substr (q + 1, b - q - 1);
+}
+
 static void section1()
 {
     section ("1. Names — rack-wide no-doubles, exact-string, vs a snapshot of Source/");
     // Deliberately EXEMPT: the shared-vocabulary words CONTRACT §4 tells us to reuse when the
     // concept is genuinely the same, plus the chassis words every device's back panel shows.
-    static const char* kShared[] = { "Mix", "Attack", "Release", "Character", "Auto", "Type",
+    static const char* kShared[] = { "Mix", "Attack", "Release", "Character", "Type",
                                      "Power", "Stereo", "Amount", "Ratio", "Peak", "Bass", "Treble" };
+    // ⚠️ `Auto` USED TO BE IN THE LIST ABOVE, granted by this gate to itself. fb423 §SANCTIONED
+    // ruled on it instead: Compress's `Auto` pill is the SAME LAW as the shipped Distortion
+    // `Auto` pill (auto gain compensation), which is exactly what CONTRACT §4 sanctions. It is
+    // now a RULING, cited, in its own list — because a gate that can exempt itself is not a gate.
+    // The list is asserted to be exactly one entry below.
+    static const char* kRuled[] = { "Auto" };
+    auto ruled = [] (const std::string& s)
+    { for (auto k : kRuled) if (s == k) return true; return false; };
     // ⚠️ THE ONLY TWO EXEMPTIONS, and both are RENAMES.md decisions where the SIBLING yields:
     //   `Gentle`   — OTT Type 1. RENAMES.md: "EQ yields" (its American char 2 becomes `Mellow`).
     //   `Low Split`— OTT Two Band char 1. RENAMES.md: "OTT's Low Split/High Split are a matched
@@ -694,7 +784,7 @@ static void section1()
 
     int col = 0; std::string first;
     for (auto& s : mine)
-        if (!shared (s) && !yielded (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
+        if (!shared (s) && !yielded (s) && !ruled (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
     gate ("no name collides with a shipped label", col == 0,
           col == 0 ? F2 ("%.0f names vs %.0f corpus strings (Source/ + BOTH sibling fx4 dirs)",
                          (double) mine.size(), (double) kNumShippedLabels)
@@ -711,6 +801,9 @@ static void section1()
     gate ("the sibling-yield exemption list is exactly 2 entries",
           (int) (sizeof kSiblingYields / sizeof kSiblingYields[0]) == 2,
           "Gentle, Low Split — both RENAMES.md rows where the sibling gives way");
+    gate ("the RULED exemption list is exactly 1 entry, and it is a ruling not a self-grant",
+          (int) (sizeof kRuled / sizeof kRuled[0]) == 1 && std::string (kRuled[0]) == "Auto",
+          "Auto — RENAMES.md fb423 §SANCTIONED: same law as the shipped Distortion Auto pill");
 
     int dup = 0; std::string dupName;
     for (size_t i = 0; i < mine.size(); ++i)
@@ -727,6 +820,118 @@ static void section1()
         if (OX::charNames (t)[c] == nullptr || OX::charNames (t)[c][0] == 0) tblOk = false;
     gate ("kNumTypes × kNumChars tables are fully populated", tblOk,
           F2 ("Compress %.0f×8, OTT %.0f×8", (double) CX::kNumTypes, (double) OX::kNumTypes));
+    // ═════════════════════════════════════════════════════════════════════════════════════
+    // 🔴 fb423 §Gate — DOWNSTREAM MUST EQUAL THE HEADER, AND IT IS GATED, NOT KEPT IN SYNC BY
+    //    HAND. 22 stale strings survived downstream across this family the last time it was
+    //    checked; `eq-worklet.js` was carrying twelve old Character names as a second table,
+    //    which is literally the two-table geometry the EQ engine deleted. The card is built
+    //    from these files. This is fb373's geometry and it is still standing.
+    //    Preference order applied here, in the order fb423 asks for:
+    //      1. DELETE the duplicate where one CAN be deleted — the harness's own knob-label
+    //         strings are gone; every label §4/§6 prints is read from the header at print time.
+    //      2. GATE the duplicates that CANNOT be deleted — a worklet is a separate runtime and
+    //         a roster is a design document, so neither can include a C++ header. Both are read
+    //         off disk HERE and compared, string for string.
+    // ═════════════════════════════════════════════════════════════════════════════════════
+    {
+        auto cmp = [&] (const char* what, const std::vector<std::string>& js,
+                        const std::vector<std::string>& hdr)
+        {
+            std::string detail;
+            bool ok = (js.size() == hdr.size());
+            if (!ok) detail = F2 ("%.0f entries downstream vs %.0f in the header",
+                                  (double) js.size(), (double) hdr.size());
+            for (size_t i = 0; ok && i < js.size(); ++i)
+                if (js[i] != hdr[i]) { ok = false; detail = "[" + std::to_string (i) + "] downstream '"
+                                                 + js[i] + "' vs header '" + hdr[i] + "'"; }
+            gate (what, ok, ok ? F1 ("%.0f strings, exact", (double) hdr.size()) : detail);
+        };
+        auto vec = [] (const char* const* a, int n)
+        { std::vector<std::string> v; for (int i = 0; i < n; ++i) v.push_back (a[i]); return v; };
+
+        std::string cw, ow, ros;
+        const bool haveC = slurp ("compress-worklet.js", cw);
+        const bool haveO = slurp ("ott-worklet.js", ow);
+        const bool haveR = slurp ("ROSTER.md", ros);
+        gate ("the downstream files are ON DISK where this gate looked", haveC && haveO && haveR,
+              std::string (haveC && haveO && haveR ? "found in " : "MISSING from ") + DYN_DIR
+              + " (compress-worklet.js, ott-worklet.js, ROSTER.md)");
+        if (haveC)
+        {
+            std::vector<std::string> ch;
+            for (int ty = 0; ty < CX::kNumTypes; ++ty)
+                for (int c = 0; c < CX::kNumChars; ++c) ch.push_back (CX::charNames (ty)[c]);
+            cmp ("compress-worklet TYPES == typeNames()",     jsArray (cw, "TYPES"),  vec (CX::typeNames(), CX::kNumTypes));
+            cmp ("compress-worklet CHARS == charNames()",     jsArray (cw, "CHARS"),  ch);
+            cmp ("compress-worklet DETECT == detectNames()",  jsArray (cw, "DETECT"), vec (CX::detectNames(), CX::kNumDetect));
+            cmp ("compress-worklet FRONT == frontNames()",    jsArray (cw, "FRONT"),  vec (CX::frontNames(), CX::kNumFront));
+            cmp ("compress-worklet BACK == backNames()",      jsArray (cw, "BACK"),   vec (CX::backNames(),  CX::kNumBack));
+            cmp ("compress-worklet DROPS == dropdownNames()", jsArray (cw, "DROPS"),  vec (CX::dropdownNames(), 2));
+            gate ("compress-worklet PILL and DEVICE == the header",
+                  jsScalar (cw, "PILL") == CX::pillName() && jsScalar (cw, "DEVICE") == CX::deviceName(),
+                  jsScalar (cw, "DEVICE") + " / " + jsScalar (cw, "PILL"));
+        }
+        if (haveO)
+        {
+            std::vector<std::string> ch;
+            for (int ty = 0; ty < OX::kNumTypes; ++ty)
+                for (int c = 0; c < OX::kNumChars; ++c) ch.push_back (OX::charNames (ty)[c]);
+            cmp ("ott-worklet TYPES == typeNames()",     jsArray (ow, "TYPES"),  vec (OX::typeNames(), OX::kNumTypes));
+            cmp ("ott-worklet CHARS == charNames()",     jsArray (ow, "CHARS"),  ch);
+            cmp ("ott-worklet STEREO == stereoNames()",  jsArray (ow, "STEREO"), vec (OX::stereoNames(), OX::kNumStereo));
+            cmp ("ott-worklet FRONT == frontNames()",    jsArray (ow, "FRONT"),  vec (OX::frontNames(), OX::kNumFront));
+            cmp ("ott-worklet BACK == backNames()",      jsArray (ow, "BACK"),   vec (OX::backNames(),  OX::kNumBack));
+            cmp ("ott-worklet DROPS == dropdownNames()", jsArray (ow, "DROPS"),  vec (OX::dropdownNames(), 2));
+            gate ("ott-worklet PILL and DEVICE == the header",
+                  jsScalar (ow, "PILL") == OX::pillName() && jsScalar (ow, "DEVICE") == OX::deviceName(),
+                  jsScalar (ow, "DEVICE") + " / " + jsScalar (ow, "PILL"));
+        }
+        if (haveR)
+        {
+            int miss = 0; std::string firstMiss;
+            for (auto& s : mine)
+                if (ros.find (s) == std::string::npos)
+                { ++miss; firstMiss += (firstMiss.empty() ? "" : ", ") + s; }
+            gate ("every published label appears VERBATIM in ROSTER.md", miss == 0,
+                  miss == 0 ? F1 ("all %.0f of them", (double) mine.size())
+                            : F1 ("%.0f absent: ", (double) miss) + firstMiss);
+        }
+        // ── and the other direction, which is the one that actually rots: a RETIRED label must
+        //    not survive anywhere downstream. Every string below is a RENAMES.md row for THIS
+        //    directory (or a Character cut at fb423). They are authored in the engine headers —
+        //    where the history belongs — and nowhere else. This is the gate that would have
+        //    caught all five stale ROSTER rows, the two stale harness labels and the stale
+        //    `Bite`/`Twin` pill rows without anyone grepping for them.
+        {
+            static const char* kRetired[] = { "Latch", "Heat", "Silky", "Wobble", "RMS Ears",
+                                              "Spike Ears", "Full Bite", "Bite", "Slow Twin",
+                                              "Fast Twin", "Twin", "Slow Riser", "Low Riser" };
+            struct DF { const char* nm; const std::string* txt; };
+            const DF files[] = { { "ROSTER.md", &ros }, { "compress-worklet.js", &cw },
+                                 { "ott-worklet.js", &ow } };
+            int hits = 0; std::string firstHit;
+            for (auto& f : files)
+                for (auto r : kRetired)
+                {
+                    const std::string R = r;
+                    size_t k = 0;
+                    while ((k = f.txt->find (R, k)) != std::string::npos)
+                    {
+                        const bool lb = (k == 0) || !(std::isalnum ((unsigned char) (*f.txt)[k-1]));
+                        const size_t e = k + R.size();
+                        const bool rb = (e >= f.txt->size()) || !(std::isalnum ((unsigned char) (*f.txt)[e]));
+                        if (lb && rb)
+                        { ++hits; if (firstHit.empty()) firstHit = std::string (f.nm) + " : " + R; }
+                        k = e;
+                    }
+                }
+            gate ("no RETIRED label survives downstream (ROSTER.md + both worklets)", hits == 0,
+                  hits == 0 ? F2 ("%.0f retired strings x %.0f files, 0 hits",
+                                  (double) (sizeof kRetired / sizeof kRetired[0]), 3.0)
+                            : F1 ("%.0f hits, first: ", (double) hits) + firstHit);
+        }
+    }
+
     // out-of-range indices must CLAMP, not read past the table (the fb373 class of bug)
     gate ("out-of-range Type/Character clamps, never reads past",
           std::string (CX::charNames (99)[0]) == std::string (CX::charNames (CX::kNumTypes - 1)[0])
@@ -1088,13 +1293,13 @@ static void section4()
     auto pluck = pluckSig ((int) (FS * 1.6f));
     auto stair = staircase (-40.0f, 8.0f, 24, 120.0f);
 
-    struct KnobRes { const char* name; double span; bool mono; int dir; };
+    struct KnobRes { std::string name; double span; bool mono; int dir; };
     std::vector<KnobRes> res;
 
     // Monotonicity is checked in WHICHEVER DIRECTION the control actually runs. A slower attack
     // removes LESS crest and a longer release adds LESS grind; demanding "increasing" was the
     // first draft's own bug, and it failed four knobs that are perfectly well behaved.
-    auto sweep = [&] (const char* name, float CP::* fld, CP base, int type,
+    auto sweep = [&] (const std::string& name, float CP::* fld, CP base, int type,
                       double (*metric) (const std::vector<float>&, const std::vector<float>&),
                       const std::vector<float>& probe, double tol = 0.6)
     {
@@ -1118,9 +1323,9 @@ static void section4()
     auto mTHD  = [] (const std::vector<float>&, const std::vector<float>& o) { return thdPct (o, 80.0); };
     auto mSpec = [] (const std::vector<float>& i, const std::vector<float>& o) { return specDist (i, o); };
 
-    { CP b; b.ratio = 0.85f; b.lift = 0.0f; sweep ("Push (front 1)", &CP::push, b, 0, mGR, chord); }
-    { CP b; b.push = 0.65f;  b.lift = 0.0f; sweep ("Ratio (front 2)", &CP::ratio, b, 0, mGR, chord); }
-    { CP b; b.push = 0.55f;  b.ratio = 0.7f; sweep ("Lift (front 3)", &CP::lift, b, 0, mLvl, chord); }
+    { CP b; b.ratio = 0.85f; b.lift = 0.0f; sweep (CF(0) + " (front 1)", &CP::push, b, 0, mGR, chord); }
+    { CP b; b.push = 0.65f;  b.lift = 0.0f; sweep (CF(1) + " (front 2)", &CP::ratio, b, 0, mGR, chord); }
+    { CP b; b.push = 0.55f;  b.ratio = 0.7f; sweep (CF(2) + " (front 3)", &CP::lift, b, 0, mLvl, chord); }
     { // Attack means "how much of the transient escapes before the clamp lands". Measured as
       // the first 25 ms peak over the 150-350 ms settled RMS. Crest-recovery (the first draft's
       // metric) is NOT monotone in attack, because a 300 ms attack stops engaging at all.
@@ -1133,13 +1338,13 @@ static void section4()
           m[k] = db (peakOf (o.l, 0, (size_t) (FS * 0.030f)));   // absolute: how much escaped
           if (k && m[k] < m[k-1] - 0.6) mono = false;
       }
-      gate ("  Attack (P1) — how much of the transient escapes",
+      gate (("  " + CB(0) + " (P1) — how much of the transient escapes").c_str(),
             (m[8] - m[0]) > 4.0 && mono,
             F3 ("first-30 ms peak %.1f dBFS at 0.05 ms → %.1f dBFS at 300 ms (span %.1f)",
                 m[0], m[8], m[8] - m[0]));
     }
     { CP b; b.push = 0.6f; b.ratio = 0.9f; b.b1 = 0.0f;
-      sweep ("Release (P2) — via added THD on 80 Hz", &CP::b2, b, 0, mTHD, toneSig ((int) (FS * 1.0f), 80.0f, 0.05f)); }
+      sweep (CB(1) + " (P2) — via added THD on 80 Hz", &CP::b2, b, 0, mTHD, toneSig ((int) (FS * 1.0f), 80.0f, 0.05f)); }
     { // A knee only exists NEAR the threshold. Measured in the knee's OWN unit — the width, in
       // dB, over which the transfer curve bends — read straight off a staircase. (On a 48 dB
       // staircase the knee is one tread in 24, so a GR metric reads 0.02 dB: true, and useless.)
@@ -1166,13 +1371,13 @@ static void section4()
           au[k] = db (rmsOf (pr, (size_t) (FS * 0.4f))) - db (rmsOf (o.l, (size_t) (FS * 0.4f)));
           if (k && au[k] < au[k-1] - 0.4) mono = false;
       }
-      gate ("  Round (P3) — GR on a probe sitting ON the threshold",
+      gate (("  " + CB(2) + " (P3) — GR on a probe sitting ON the threshold").c_str(),
             (au[8] - au[0]) > 2.0 && mono,
             F4 ("%.2f → %.2f dB of GR (span %.2f) · published curve bends over %.0f dB",
                 au[0], au[8], au[8] - au[0], gHi) + F1 (" vs %.0f", gLo));
     }
     { CP b; b.push = 0.62f; b.ratio = 0.9f;
-      sweep ("Hear Cut (P4) — via GR on a bass chord", &CP::b4, b, 0, mGR, chord); }
+      sweep (CB(3) + " (P4) — via GR on a bass chord", &CP::b4, b, 0, mGR, chord); }
     { // Edge is the TRANSIENT lane, so measure the transient: how much of a pluck's first 30 ms
       // survives relative to its own sustain. Crest over a whole buffer is NOT monotone in Edge,
       // because a smashed attack and an escaped attack can share a crest figure.
@@ -1185,17 +1390,17 @@ static void section4()
           m[k] = db (peakOf (o.l, 0, (size_t) (FS * 0.030f)));
           if (k && m[k] < m[k-1] - 0.6) mono = false;
       }
-      gate ("  Edge (P5) — how much of the attack survives, −100 → +100",
+      gate (("  " + CB(4) + " (P5) — how much of the attack survives, −100 → +100").c_str(),
             (m[8] - m[0]) > 3.0 && mono,
             F3 ("first-30 ms peak %.2f → %.2f dBFS (span %.2f)", m[0], m[8], m[8] - m[0]));
     }
     { CP b; b.push = 0.6f; b.ratio = 0.9f; b.b2 = 0.15f;
-      sweep ("Latch (P6) — via GR on a pluck", &CP::b6, b, 0, mGR, pluck); }
+      sweep (CB(5) + " (P6) — via GR on a pluck", &CP::b6, b, 0, mGR, pluck); }
     { CP b; b.push = 0.6f; b.ratio = 0.9f; b.b8 = 0.0f;
-      sweep ("Heat (P8) — via added THD", &CP::b8, b, 2, mTHD, toneSig ((int) (FS * 1.0f), 80.0f, 0.05f)); }
+      sweep (CB(7) + " (P8) — via added THD", &CP::b8, b, 2, mTHD, toneSig ((int) (FS * 1.0f), 80.0f, 0.05f)); }
     { // Ride's upward lane: sweep RATIO (which drives both slopes) and watch a quiet probe rise
       CP b; b.push = 0.5f; b.lift = 0.0f;
-      sweep ("Ride: Ratio lifts a quiet probe", &CP::ratio, b, 6, mLvl,
+      sweep ("Ride: " + CF(1) + " lifts a quiet probe", &CP::ratio, b, 6, mLvl,
              sawSig ((int) (FS * 1.2f), 220.0f, 0.0015f)); }
 
     for (auto& r : res)
@@ -1212,7 +1417,7 @@ static void section4()
         p.b7 = 0.0f; auto o0 = runCStereo (p, l, r);
         const double bal1 = db (rmsOf (o1.l)) - db (rmsOf (o1.r));
         const double bal0 = db (rmsOf (o0.l)) - db (rmsOf (o0.r));
-        gate ("  Tie (P7) — measured on an UNBALANCED stereo probe", std::fabs (bal1 - bal0) > 3.0,
+        gate (("  " + CB(6) + " (P7) — measured on an UNBALANCED stereo probe").c_str(), std::fabs (bal1 - bal0) > 3.0,
               F3 ("L−R balance: Tie 100 %% = %+.2f dB, Tie 0 = %+.2f dB (Δ %.2f)", bal1, bal0, std::fabs (bal1 - bal0)));
     }
 
@@ -1398,6 +1603,80 @@ static void section4()
               F1 ("worst %.2f dB", wC) + "  (" + nC + ")");
     }
 
+    // ═════════════════════════════════════════════════════════════════════════
+    section ("4c4. COMPRESS — the GAIN ELEMENT's CURVE is continuous, not just its LEVEL");
+    // 🔑 THIS GATE EXISTS TO CLOSE MUTATION.md's TWO SURVIVORS, and it is written in the shape
+    // that failed them. `compress-transition-slew` and `compress-heat-kind-fade` both survived
+    // because §4d measures **dB of gain per ms** — a LEVEL metric — and the mechanism they
+    // protect is the SHAPE of the gain element's transfer curve. A waveshaper whose curve
+    // changes in one sample at constant gain is invisible to every level metric there is.
+    //
+    // 🔬 CHECK YOUR OWN DETECTOR (§3.1). Two earlier drafts of this gate were LEVEL gates in
+    // disguise and are recorded here so nobody rebuilds them:
+    //   · absolute 3rd-harmonic level — a cubic term goes as A³, so it is 3× as sensitive to
+    //     gain as gain is. Read 12.08 dB on `Ride: Only Up → Slow Iron`, a pair whose GR
+    //     legitimately travels 0 → 15.6 dB over 60 ms at 0.35 dB/ms (well inside §4d's bar).
+    //   · H3/H1 — better, still goes as A². Read 10.69 dB on the same pair, same reason.
+    // The measurement below is the SHAPE INVARIANT. For a memoryless odd nonlinearity
+    // y = x + c·x³ driven at amplitude A: H1 ≈ A and H3 ≈ (c/4)·A³, so
+    //        S ≡ H3_dB − 3·H1_dB = 20·log10(c/4)
+    // depends ONLY on the curvature, and a pure gain change cancels out of it exactly to cubic
+    // order. Section K plants a 6 dB gain step and a curve swap and shows S ignores the first
+    // and reports the second.
+    // Probe: 2 kHz (so a 2 ms hop is four whole cycles), 250 ms of settling under config A, then
+    // the switch, then S measured in the 2 ms immediately either side. Two milliseconds is the
+    // §4c3 logic — a discarded state shows up at once or not at all — and it is short enough
+    // that the 20 ms drive smoother cannot legitimately move the curvature inside it.
+    {
+        const int HOP = (int) (FS * 0.002f);                        // 2 ms = 4 cycles at 2 kHz
+        auto bin = [&] (const std::vector<float>& y, int i0, double hz) {
+            double re = 0.0, im = 0.0;
+            for (int i = 0; i < HOP; ++i)
+            { const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * i / (HOP - 1));
+              const double a = 2.0 * M_PI * hz * i / (double) FS;
+              re += w * y[(size_t) (i0 + i)] * std::cos (a);
+              im -= w * y[(size_t) (i0 + i)] * std::sin (a); }
+            return db (std::sqrt (re * re + im * im) * 2.0 / HOP);
+        };
+        auto shape = [&] (const std::vector<float>& y, int i0)
+        { return bin (y, i0, 6000.0) - 3.0 * bin (y, i0, 2000.0); };
+        auto tone = toneSig ((int) (FS * 0.4f), 2000.0f, 0.09f);
+        auto swap = [&] (CP a, CP b) {
+            CX e; e.prepare (FS, 8); e.setParams (a);
+            std::vector<float> l = tone, r = tone;
+            const int at = 12000;                                   // 250 ms in, block- and hop-aligned
+            for (int i = 0; i + 8 <= (int) tone.size(); i += 8)
+            { e.setParams ((i >= at) ? b : a); e.processStereo (&l[(size_t) i], &r[(size_t) i], 8); }
+            return std::fabs (shape (l, at) - shape (l, at - HOP));
+        };
+        CP base; base.push = 0.55f; base.ratio = 0.85f; base.b8 = 1.0f;   // Burn 100, real GR
+        double ctrl = 0.0;
+        { CP a = base; ctrl = swap (a, a); }
+        note ("  control: the SAME config either side of the switch", F1 ("%.2f dB of curvature", ctrl));
+        double wT = 0.0, wC = 0.0; std::string nT, nC;
+        for (int ta = 0; ta < CX::kNumTypes; ++ta)
+            for (int tb = 0; tb < CX::kNumTypes; ++tb)
+            { if (ta == tb) continue;
+              CP a = base; a.type = ta; CP b = base; b.type = tb;
+              const double m = swap (a, b);
+              if (m > wT) { wT = m; nT = std::string (CX::typeNames()[ta]) + " → " + CX::typeNames()[tb]; } }
+        for (int ty = 0; ty < CX::kNumTypes; ++ty)
+            for (int ca = 0; ca < CX::kNumChars; ++ca)
+                for (int cb = 0; cb < CX::kNumChars; ++cb)
+                { if (ca == cb) continue;
+                  CP a = base; a.type = ty; a.character = ca; CP b = a; b.character = cb;
+                  const double m = swap (a, b);
+                  if (m > wC) { wC = m; nC = std::string (CX::typeNames()[ty]) + ": "
+                                           + CX::charNames (ty)[ca] + " → " + CX::charNames (ty)[cb]; } }
+        // The bar is 6 dB of curvature in 2 ms — a DOUBLING of the gain element's cubic
+        // coefficient, i.e. the smallest step anyone would call a change of TIMBRE rather than
+        // of loudness. It is printed beside the control so the scale is legible.
+        gate ("the gain element's CURVATURE is continuous across all 56 Type changes", wT <= 6.0,
+              F1 ("worst %.2f dB of curvature in 2 ms", wT) + "  (" + nT + ")");
+        gate ("... and across all 448 Character changes", wC <= 6.0,
+              F1 ("worst %.2f dB", wC) + "  (" + nC + ")");
+    }
+
     // ═════ CLICKS ══════════════════════════════════════════════════════════
     section ("4d. COMPRESS — no clicks (law 4): ALL 8x8 Type and ALL 8x8 Character transitions");
     // 🚨 WHAT THIS REPLACES (FIXES.md §1 COMPRESS 1 + 2). The old gate tested ONE Type
@@ -1439,22 +1718,24 @@ static void section4()
         gate ("all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms", wC <= 2.0,
               F1 ("worst %.2f dB/ms", wC) + "  (" + nC + ")   [fb421 engine: 16.26]");
         // the front/back knobs, on the same metric and the same five phases
-        struct KJ { const char* what; CP b; };
+        struct KJ { std::string what; CP b; };
         CP k1 = base; k1.push = 0.9f;   CP k2 = base; k2.ratio = 1.0f;
         CP k3 = base; k3.lift = 1.0f;   CP k4 = base; k4.b3 = 1.0f;
         CP k5 = base; k5.b4 = 1.0f;     CP k6 = base; k6.b7 = 0.0f;
         CP k7 = base; k7.b8 = 1.0f;     CP k8 = base; k8.b5 = 1.0f;
         CP k9 = base; k9.b6 = 1.0f;     CP k10 = base; k10.axis = 3;
-        const KJ kj[] = { { "  Push 0.3 → 0.9", k1 }, { "  Ratio 0.6 → 1.0 (∞:1)", k2 },
-                          { "  Lift 0 → +24 dB", k3 }, { "  Round 0.25 → 1.0", k4 },
-                          { "  Hear Cut off → 500 Hz", k5 }, { "  Tie 100 → 0", k6 },
-                          { "  Burn 0 → 100", k7 }, { "  Edge 0.5 → 1.0", k8 },
-                          { "  Cling 0 → 250 ms", k9 }, { "  Detect Native → Patient", k10 } };
+        const KJ kj[] = { { "  " + CF(0) + " 0.3 → 0.9", k1 }, { "  " + CF(1) + " 0.6 → 1.0 (∞:1)", k2 },
+                          { "  " + CF(2) + " 0 → +24 dB", k3 }, { "  " + CB(2) + " 0.25 → 1.0", k4 },
+                          { "  " + CB(3) + " off → 500 Hz", k5 }, { "  " + CB(6) + " 100 → 0", k6 },
+                          { "  " + CB(7) + " 0 → 100", k7 }, { "  " + CB(4) + " 0.5 → 1.0", k8 },
+                          { "  " + CB(5) + " 0 → 250 ms", k9 },
+                          { "  " + std::string (CX::dropdownNames()[1]) + " "
+                                 + CX::detectNames()[0] + " → " + CX::detectNames()[3], k10 } };
         for (auto& j : kj)
         {
             double m = 0.0;
             for (int k = 0; k < 5; ++k) m = std::max (m, cJump (base, j.b, kAts[k], prog));
-            gate (j.what, m <= 2.0, F1 ("%.2f dB/ms", m));
+            gate (j.what.c_str(), m <= 2.0, F1 ("%.2f dB/ms", m));
         }
     }
     // the CONTINUOUS fault an outlier detector is blind to (fb416): a slow sweep must not
@@ -1864,8 +2145,64 @@ static void section5()
           F2 ("%.2f %% vs %.2f %%", G[1].thd, G[0].thd));
     gate ("Heavy: removes more dynamic range than Over Top", G[2].crest > G[0].crest + 1.5,
           F2 ("%.2f dB vs %.2f dB of envelope spread removed", G[2].crest, G[0].crest));
-    gate ("Sheen: ≥ 6 dB more 8–12 kHz than Over Top on a dark pad", G[3].air > G[0].air + 6.0,
-          F2 ("%+.2f dB vs %+.2f dB", G[3].air, G[0].air));
+    {   // ── SHEEN'S DISCRIMINATOR IS A MECHANISM, NOT A MAGNITUDE (fb423) ───────────────────
+        //  fb421 claimed +47.63 dB of "air". That number was an unnormalised FFT aimed at
+        //  content 114 dB under the programme. Normalised and re-aimed at a pad whose air band
+        //  is only 58 dB down, the honest figure was +20.77 vs Over Top's +15.53 — 5.24 dB
+        //  against a 6 dB bar, i.e. MORE OF THE SAME LIFT. Law 2 asks for a different MACHINE.
+        //  Sheen's high band is now one: the split moves DOWN (0.55× vs Over Top's 1.0×) and
+        //  BOTH high-band thresholds move UP to the programme, so at programme level Sheen's
+        //  high band is in its UPWARD lane while Over Top's is in its DOWNWARD lane. The lift
+        //  is therefore PROGRAM-DEPENDENT — it is what the band is doing right now, not a
+        //  constant added on top.
+        //  Neither gate below can be bought with makeup: makeup shifts the whole curve, it can
+        //  neither invert the sign of the gain nor move the knee. Mutant `ott-sheen-upward-lane`
+        //  (MUTATION.md) restores Over Top's high-band thresholds and turns both of them RED.
+        note ("  the honest air numbers (they are NOT the discriminator any more)",
+              F2 ("Sheen %+.2f dB vs Over Top %+.2f dB on a dark pad", G[3].air, G[0].air));
+        //  Measured 6 dB under the reference chord — i.e. inside the first 6 dB of an ordinary
+        //  note's decay, not at some contrived floor. AT the reference level itself Sheen sits
+        //  ON its own threshold and reads ≈ 0 by construction; that knife edge IS the design and
+        //  gating it would be gating a coin toss.
+        auto hiGrAt = [&] (int type, double dbs) {
+            const float sc = (float) std::pow (10.0, dbs / 20.0);
+            auto ch = chordSig ((int) (FS * 1.5f));
+            for (auto& v : ch) v *= sc;
+            OX e; e.prepare (FS, 128); OP q; q.type = type; e.setParams (q);
+            std::vector<float> l = ch, r = ch;
+            for (int i = 0; i + 128 <= (int) ch.size(); i += 128)
+            { e.setParams (q); e.processStereo (&l[(size_t) i], &r[(size_t) i], 128); }
+            return (double) e.viz().grDb[2];
+        };
+        const double hS = hiGrAt (3, -6.0), hO = hiGrAt (0, -6.0);
+        //  The bar is the house unit: ±3 dB, the same "a band is doing something" threshold the
+        //  ENGAGE gate above uses. Opposite SIGN with 3 dB of margin on each side.
+        gate ("Sheen: 6 dB into a decay its high band LIFTS while Over Top's still CLAMPS",
+              hS <= -3.0 && hO >= 3.0,
+              F2 ("signed high-band GR: Sheen %+.2f dB (lift), Over Top %+.2f dB (clamp)", hS, hO));
+        //  ... and WHERE the sign flips. Sweep the input level and find the loudest level at
+        //  which the high band is still in net lift. That level IS the upward threshold, read
+        //  off the audio, and it is the whole mechanism in one number.
+        auto knee = [&] (int type) {
+            for (double dbs = 0.0; dbs >= -36.0; dbs -= 3.0)
+            {
+                const float sc = (float) std::pow (10.0, dbs / 20.0);
+                auto ch = chordSig ((int) (FS * 1.5f));
+                for (auto& v : ch) v *= sc;
+                OX e; e.prepare (FS, 128); OP q; q.type = type; e.setParams (q);
+                std::vector<float> l = ch, r = ch;
+                for (int i = 0; i + 128 <= (int) ch.size(); i += 128)
+                { e.setParams (q); e.processStereo (&l[(size_t) i], &r[(size_t) i], 128); }
+                if (e.viz().grDb[2] <= 0.0) return dbs;
+            }
+            return -39.0;
+        };
+        const double kS = knee (3), kO = knee (0);
+        gate ("Sheen: its high-band UPWARD knee sits at the PROGRAMME, Over Top's far below it",
+              (kS - kO) >= 9.0,
+              F3 ("net lift begins at %.0f dB of input for Sheen, %.0f dB for Over Top (%.0f dB apart, bar 9)",
+                  kS, kO, kS - kO));
+    }
     gate ("Bass Safe: manufactures far less bass grit", G[4].lowImd < 0.6 * G[0].lowImd,
           F2 ("%.2f %% THD on a settled 50 Hz tone, vs Over Top's %.2f %%",
               G[4].lowImd, G[0].lowImd));
@@ -1952,9 +2289,9 @@ static void section6()
     auto dark  = darkPad ((int) (FS * 1.6f));
     auto pluck = pluckSig ((int) (FS * 2.0f));
 
-    struct KR { const char* name; double lo, hi; bool mono; };
+    struct KR { std::string name; double lo, hi; bool mono; };
     std::vector<KR> res;
-    auto sweep = [&] (const char* name, float OP::* fld, OP base,
+    auto sweep = [&] (const std::string& name, float OP::* fld, OP base,
                       double (*metric) (const std::vector<float>&, const std::vector<float>&),
                       const std::vector<float>& probe, double tol = 0.6)
     {
@@ -1981,13 +2318,13 @@ static void section6()
     auto mLow   = [] (const std::vector<float>& i, const std::vector<float>& o)
                   { return bandDbOf (o, 40.0, 85.0) - bandDbOf (i, 40.0, 85.0); };
 
-    { OP b; sweep ("Amount (front 1) — dynamic range removed", &OP::amount, b, mCrest, amChord ((int) (FS * 2.5f))); }
-    { OP b; b.amount = 0.85f; sweep ("Speed (front 2) — THD on 100 Hz", &OP::speed, b, mTHD, toneSig ((int) (FS * 1.0f), 100.0f, 0.05f)); }
-    { OP b; sweep ("Top Lift (front 3) — 8-12 kHz on a dark pad", &OP::topLift, b, mAir, dark, 3.0); }
+    { OP b; sweep (OF(0) + " (front 1) — dynamic range removed", &OP::amount, b, mCrest, amChord ((int) (FS * 2.5f))); }
+    { OP b; b.amount = 0.85f; sweep (OF(1) + " (front 2) — THD on 100 Hz", &OP::speed, b, mTHD, toneSig ((int) (FS * 1.0f), 100.0f, 0.05f)); }
+    { OP b; sweep (OF(2) + " (front 3) — 8-12 kHz on a dark pad", &OP::topLift, b, mAir, dark, 3.0); }
     {   // A crossover does not move the level — it moves WHICH BAND OWNS WHAT. Measured as the
         // spectral distance from the sweep's own knob-0 output, which is the only reference that
         // isolates the control. (Distance-from-input just reads the compression, not the split.)
-        auto run9 = [&] (const char* name, float OP::* fld, OP base)
+        auto run9 = [&] (const std::string& name, float OP::* fld, OP base)
         {
             std::vector<std::vector<float>> outs;
             for (int k = 0; k <= 8; ++k)
@@ -1999,8 +2336,8 @@ static void section6()
                   F1 ("%.2f dB of spectrum moved end-to-end", m[8]) + (mono ? " · monotone" : " · NOT MONOTONE"));
         };
         OP b; b.amount = 0.85f;
-        run9 ("Low Cross (P1) — spectrum vs knob 0", &OP::b1, b);
-        run9 ("High Cross (P2) — spectrum vs knob 0", &OP::b2, b);
+        run9 (OB(0) + " (P1) — spectrum vs knob 0", &OP::b1, b);
+        run9 (OB(1) + " (P2) — spectrum vs knob 0", &OP::b2, b);
     }
     {   // Raise moves the UPWARD computer, which only exists on quiet material — so measure the
         // LATE TAIL of a pluck, not the whole buffer (whose RMS is all attack).
@@ -2015,10 +2352,10 @@ static void section6()
                  - db (rmsOf (pl,  (size_t) (FS * 1.3f), (size_t) (FS * 2.2f)));
             if (k && m[k] < m[k-1] - 0.4) mono = false;
         }
-        gate ("  Raise (P3) — the LATE TAIL of a decaying pluck", (m[8] - m[0]) > 2.0 && mono,
+        gate (("  " + OB(2) + " (P3) — the LATE TAIL of a decaying pluck").c_str(), (m[8] - m[0]) > 2.0 && mono,
               F3 ("%+.2f → %+.2f dB of tail lift (span %.2f)", m[0], m[8], m[8] - m[0]));
     }
-    { OP b; b.amount = 0.6f; b.b3 = 0.0f; sweep ("Press (P4) — dynamic range removed", &OP::b4, b, mCrest, amChord ((int) (FS * 2.5f))); }
+    { OP b; b.amount = 0.6f; b.b3 = 0.0f; sweep (OB(3) + " (P4) — dynamic range removed", &OP::b4, b, mCrest, amChord ((int) (FS * 2.5f))); }
         { // Grip is BIPOLAR — at −18 dB the UPWARD computer does all the work and at +18 the
       // DOWNWARD one does, so "dynamic range removed" is a V and a monotonicity gate on it is
       // simply the wrong question. Its monotone axis is how deep the jaws sit: the output level.
@@ -2034,11 +2371,11 @@ static void section6()
           if (k && m[k] > m[k-1] + 1.5) mono = false;      // Grip DROPS the level, monotonically
           trace += F1 ("%+.1f ", m[k]);
       }
-      gate ("  Grip (P5) — how deep the jaws sit (output level)",
+      gate (("  " + OB(4) + " (P5) — how deep the jaws sit (output level)").c_str(),
             (m[0] - m[8]) > 6.0 && mono, trace + (mono ? "· monotone ↓" : "· NOT MONOTONE"));
     }
-    { OP b; sweep ("Bass (P6) — 40-85 Hz", &OP::b6, b, mLow, chord); }
-    { OP b; sweep ("Treble (P8) — 8-12 kHz", &OP::b8, b, mAir, chord); }
+    { OP b; sweep (OB(5) + " (P6) — 40-85 Hz", &OP::b6, b, mLow, chord); }
+    { OP b; sweep (OB(7) + " (P8) — 8-12 kHz", &OP::b8, b, mAir, chord); }
 
     for (auto& r : res)
         gate ((std::string ("  ") + r.name).c_str(), std::fabs (r.hi - r.lo) > 2.0 && r.mono,
@@ -2050,7 +2387,7 @@ static void section6()
         p.b7 = 0.0f; auto a = runO (p, probe);
         p.b7 = 1.0f; auto b = runO (p, probe);
         const double d = bandDbOf (b.l, 300.0, 1500.0) - bandDbOf (a.l, 300.0, 1500.0);
-        gate ("  Mids (P7) — 300 Hz-1.5 kHz across the full sweep", d > 12.0,
+        gate (("  " + OB(6) + " (P7) — 300 Hz-1.5 kHz across the full sweep").c_str(), d > 12.0,
               F1 ("%+.2f dB (±12 dB nominal)", d));
     }
 
@@ -2200,20 +2537,22 @@ static void section6()
         gate ("all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms", wC <= 2.0,
               F1 ("worst %.2f dB/ms", wC) + "  (" + nC + ")   [fb421 engine: 3.02]");
         OP z;
-        struct OJ { const char* what; OP b; };
+        struct OJ { std::string what; OP b; };
         OP j1; j1.amount = 1.0f;  OP j2; j2.speed = 1.0f;   OP j3; j3.topLift = 1.0f;
         OP j4; j4.b1 = 1.0f;      OP j5; j5.b5 = 1.0f;      OP j6; j6.b8 = 1.0f;
         OP j7; j7.axis = 2;       OP j8; j8.axis = 1;       OP j9; j9.crest = true;
-        const OJ oj[] = { { "  Amount 0.5 → 1.0", j1 }, { "  Chase 0.5 → 1.0", j2 },
-                          { "  Top Lift 0.25 → 1.0", j3 }, { "  Low Cross 88 → 300 Hz", j4 },
-                          { "  Grip 0 → +18 dB", j5 }, { "  Treble 0 → +12 dB", j6 },
-                          { "  Stereo Linked → Mid-Side", j7 }, { "  Stereo Linked → Free Pair", j8 },
-                          { "  Crest pill off → on", j9 } };
+        const std::string sDrop = OX::dropdownNames()[1];
+        const OJ oj[] = { { "  " + OF(0) + " 0.5 → 1.0", j1 }, { "  " + OF(1) + " 0.5 → 1.0", j2 },
+                          { "  " + OF(2) + " 0.25 → 1.0", j3 }, { "  " + OB(0) + " 88 → 300 Hz", j4 },
+                          { "  " + OB(4) + " 0 → +18 dB", j5 }, { "  " + OB(7) + " 0 → +12 dB", j6 },
+                          { "  " + sDrop + " " + OX::stereoNames()[0] + " → " + OX::stereoNames()[2], j7 },
+                          { "  " + sDrop + " " + OX::stereoNames()[0] + " → " + OX::stereoNames()[1], j8 },
+                          { "  " + std::string (OX::pillName()) + " pill off → on", j9 } };
         for (auto& j : oj)
         {
             double m = 0.0;
             for (int k = 0; k < 5; ++k) m = std::max (m, oJump (z, j.b, kAts[k], prog));
-            gate (j.what, m <= 2.0, F1 ("%.2f dB/ms", m));
+            gate (j.what.c_str(), m <= 2.0, F1 ("%.2f dB/ms", m));
         }
     }
 
@@ -2384,6 +2723,49 @@ static void sectionK()
         const double a = bandRmsDbFS (dark, 8000.0, 12000.0), p2 = db (rmsOf (dark));
         gate ("(self-check) the air probe has air in it", p2 - a < 60.0,
               F2 ("8-12 kHz %.1f dBFS = %.1f dB under the programme", a, p2 - a));
+    }
+    {   // §4c4's SHAPE INVARIANT, checked against a planted gain step and a planted curve swap.
+        //    S = H3_dB − 3·H1_dB must IGNORE the first and REPORT the second, or §4c4 is just
+        //    §4d's level gate wearing a wig — which two earlier drafts of it were.
+        const int HOP = (int) (FS * 0.002f);
+        auto bin = [&] (const std::vector<float>& y, int i0, double hz) {
+            double re = 0.0, im = 0.0;
+            for (int i = 0; i < HOP; ++i)
+            { const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * i / (HOP - 1));
+              const double a = 2.0 * M_PI * hz * i / (double) FS;
+              re += w * y[(size_t) (i0 + i)] * std::cos (a); im -= w * y[(size_t) (i0 + i)] * std::sin (a); }
+            return db (std::sqrt (re * re + im * im) * 2.0 / HOP); };
+        auto shape = [&] (const std::vector<float>& y, int i0)
+        { return bin (y, i0, 6000.0) - 3.0 * bin (y, i0, 2000.0); };
+        auto tone = toneSig ((int) (FS * 0.1f), 2000.0f, 0.09f);
+        const int at = 2400;
+        auto build = [&] (double c0, double c1, double g0, double g1) {
+            std::vector<float> y (tone.size());
+            for (size_t i = 0; i < tone.size(); ++i)
+            { const bool aft = ((int) i >= at); const double g = aft ? g1 : g0, c = aft ? c1 : c0;
+              const double x = (double) tone[i] * g; y[i] = (float) (x + c * x * x * x); }
+            return y; };
+        // c keeps the cubic a PERTURBATION (H3 ~ -40 dBc). At c = 400 the cubic dominates the
+        // fundamental itself, the H3 = (c/4)A^3 algebra the metric rests on stops holding, and
+        // this self-check read 32.55 dB for a PURE GAIN STEP -- the metric telling the truth
+        // about a probe that had left its own small-signal regime. Check the checker (3.1).
+        const auto gainOnly = build (0.6, 0.6, 1.0, 2.0);          // +6.02 dB, SAME curve
+        const auto curveOnly = build (0.6, 2.4, 1.0, 1.0);        // ×4 curvature, SAME gain
+        const double dg = std::fabs (shape (gainOnly, at) - shape (gainOnly, at - HOP));
+        const double dc = std::fabs (shape (curveOnly, at) - shape (curveOnly, at - HOP));
+        gate ("(self-check) the curvature metric IGNORES a planted +6.02 dB pure gain step", dg < 1.0,
+              F1 ("reads %.3f dB", dg));
+        // ...and the HONEST limit of that blindness. The invariant is exact only while the cubic
+        // is a perturbation. At the drive the gain element actually runs (H3 ~ -20 dBc, THD in
+        // the percent), the fundamental carries its own 3cA^3/4 term and a pure gain step leaks
+        // a couple of dB into S. That leak is why 4c4's bar is 6 dB and not 1, and it is printed
+        // rather than hidden.
+        { const auto loud = build (2.5, 2.5, 1.0, 2.0);
+          note ("  ... the leak at ENGINE-LIKE drive (H3 ~ -20 dBc), for the same pure gain step",
+                F1 ("%.2f dB — the systematic 4c4's 6 dB bar has to clear",
+                    std::fabs (shape (loud, at) - shape (loud, at - HOP)))); }
+        gate ("(self-check) ... and REPORTS a planted x4 curvature change at constant gain", dc > 9.0 && dc < 15.0,
+              F1 ("reads %.2f dB (x4 = 12.04 dB exactly)", dc));
     }
     std::printf ("\n  Engine mutation (FIXES.md §0) is a separate binary — see MUTATION.md,\n"
                  "  produced by `python3 mutate.py`. It deletes one mechanism from a COPY of the\n"

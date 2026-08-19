@@ -12,6 +12,24 @@
 #       stripped form is what gets recorded.
 #    2. it read Source/ only, so five cross-sibling fx4 collisions survived.
 #       Fixed here: the two sibling fx4 directories are sources too.
+#
+#  🚨 fb423 — THE CIRCULAR CORPUS. Reading the siblings' directories means reading their
+#  GATE ARTEFACTS, and the moment a sibling builds an extractor of its own, its
+#  `*_labels.inc` dump contains MY 87 labels (it extracts from Design/fx4/eq/). Feeding
+#  that back in makes every label I publish collide with ITSELF: the first refresh after
+#  widen shipped its own extractor took the gate to `87 collisions ... UNRESOLVED:
+#  Surgical (Type pill), British (Type pill), ...` — 87 false positives, and worse, it
+#  took the SANCTION meter from 10 spent to 14, i.e. the noise was starting to consume
+#  real exemptions. A gate that reads other gates measures the gates, not the product.
+#  Inside the SIBLING fx4 directories the corpus is therefore narrowed to what those
+#  devices PUBLISH — their engine headers and their worklets — and their gate artefacts
+#  (`*_labels.inc` dumps, `*_cert.cpp` probe strings and rename tables) are excluded.
+#  Two reasons, both concrete: widen's `shipped_labels.inc` re-exports my 87 labels, and
+#  both siblings' certs quote `"Slant"` / `"Chisel"` as literals in their own
+#  corpus-self-checks. Their certs also carry OLD->NEW rename tables, so reading them
+#  would make me collide with names the family has RETIRED.
+#  `Source/` and `Design/fx3/` are still read WHOLE — index.html option arrays and
+#  `*_test.cpp` name tables are exactly where fb423's 23 unruled collisions were hiding.
 # ─────────────────────────────────────────────────────────────────────────────
 import os, re, sys
 
@@ -41,6 +59,11 @@ def main():
             if os.path.abspath (dp).startswith (ME): continue      # never eat our own
             for f in fn:
                 if not f.endswith (EXT): continue
+                if kind == 'sibling fx4' and (f.endswith ('_labels.inc')
+                                              or f.endswith ('_cert.cpp')):
+                    continue                              # 🚨 gate artefact, not a published
+                                                          #    label — see the header comment.
+                if f.endswith ('_labels.inc'): continue   # never ingest a generated dump
                 p = os.path.join (dp, f)
                 try: txt = open (p, encoding='utf-8', errors='ignore').read()
                 except Exception: continue
@@ -61,7 +84,10 @@ def main():
             fh.write ('    "%s",\n' % k.replace ('\\', '\\\\').replace ('"', '\\"'))
         fh.write ('};\n')
     print ('wrote %s : %d labels' % (out, len (found)))
-    for probe in (' Motion', ' Route', 'Motion', 'Route', 'Tilt', 'Sculpt', 'Slant', 'Chisel'):
-        print ('   %-10r %s' % (probe, 'present' if probe.strip() in found else 'ABSENT'))
+    for probe in (' Motion', ' Route', 'Motion', 'Route', 'Tilt', 'Sculpt'):
+        print ('   %-10r %s   (must be PRESENT — the gate must see yesterday)' % (probe, 'present' if probe.strip() in found else 'ABSENT'))
+    # self-ingestion check: my own published names must NEVER come back as "shipped".
+    for probe in ('Slant', 'Chisel', 'Surgical', 'Ahead', 'Baseline', 'Tin'):
+        print ('   %-10r %s   (must be ABSENT — circular corpus check)' % (probe, 'present' if probe in found else 'ABSENT'))
 
 main()

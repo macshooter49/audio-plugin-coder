@@ -122,7 +122,7 @@ public:
     //    the phaser renamed f1..f3 to rate/depth/feedback):
     //        push = Push · ratio = Ratio · lift = Lift
     //    Back eight:  b1 Attack · b2 Release · b3 Round · b4 Hear Cut
-    //                 b5 Edge   · b6 Latch   · b7 Tie   · b8 Heat
+    //                 b5 Edge   · b6 Cling  · b7 Tie   · b8 Burn
     //    axis        = the SECOND back dropdown, `Detect` (0..4, see detectNames()).
     struct Params
     {
@@ -639,12 +639,12 @@ public:
             if (isFb_) { fbZ_[0] = yl; fbZ_[1] = yr; }
 
             // ── HEAT — the gain element's nonlinearity, SCALED BY CURRENT GR. No GR ⇒ bit-clean
-            //    at any Heat setting, so it cannot sound on silence and it BREATHES with the
+            //    at any Burn setting, so it cannot sound on silence and it BREATHES with the
             //    compression (the measured signature of driven hardware).
             // ── THE GAIN ELEMENT, AND THE SWAP THAT USED TO STEP ────────────────────────
             // `heatKind_` and `asym_` are discrete: switching Type or Character changed the
             // waveshaper's CURVE and engaged/disengaged the DC blocker in one sample, at
-            // whatever Heat depth the outgoing Character was holding. Disabling colour()
+            // whatever Burn depth the outgoing Character was holding. Disabling colour()
             // entirely dropped the worst Type transition from 5.53 to 1.53 dB/ms, which is how
             // this was found. Both are now crossfaded over 20 ms: the old kind and the new kind
             // are both evaluated while `kindF` travels 0→1 (a handful of flops, and ONLY during
@@ -878,13 +878,13 @@ private:
     //
     // 🔑 THE TRAP THIS SOLVES, and it cost the first draft: the obvious implementation
     // saturates the OUTPUT, which is the signal AFTER the reduction — so the deeper the
-    // compression, the QUIETER the drive into the saturator, and Heat gets *weaker* exactly
+    // compression, the QUIETER the drive into the saturator, and Burn gets *weaker* exactly
     // where hardware gets dirtier. Backwards. In a real FET/tube gain element the distortion
     // comes from the control voltage pushing the device into its nonlinear region, not from
     // signal level.
     // So the saturator sees a level-restored signal (`comp` undoes 70 % of the current GR) and
     // the same factor is undone after it — the fb419 law: the makeup is INSIDE, so the stage's
-    // slope at zero is EXACTLY 1 and Heat can never move the overall gain, only the curvature.
+    // slope at zero is EXACTLY 1 and Burn can never move the overall gain, only the curvature.
     inline float colourK (float y, float k, float grDb, int kind) const noexcept
     {
         if (k <= 1.0e-5f) return y;

@@ -7,17 +7,20 @@
 //
 //   Load:   await ctx.audioWorklet.addModule('widen-worklet.js');
 //           const n = new AudioWorkletNode(ctx, 'terrain-widen', {outputChannelCount:[2]});
-//   Drive:  n.port.postMessage({ type:0, character:0, field:0,
+//   Drive:  n.port.postMessage({ type:0, character:0, axis:0,
 //                               amount:0.35, width:0.5, rate:0.35, mix:0.5,
 //                               p1:0.5, p2:0.85, p3:0.5, p4:0, p5:0, p6:0.5, p7:0, p8:0.5,
-//                               retrig:false });
+//                               retrig:false, hearMono:false });
+//   🔴 fb423 — the second-dropdown member is `axis`, NOT `field`: CONTRACT §2 locks that
+//   name (`Field` is only what THIS device's card prints). `hearMono` is a real parameter
+//   now; at fb422 the pill existed with nothing behind it.
 //   Read:   n.port.onmessage = e => { /* e.data = {corr, voicePan[8], voiceCents[8],
 //                                                  widthNow, lvl} — the same Viz */ };
 //
 // THE TWO THINGS THAT MUST SURVIVE THE PORT, because they are the device:
 //   1. `Twin` uses a TRIANGLE in antiphase, cross-mixed with OPPOSITE POLARITY. A triangle
 //      has constant |slope|, so the detune HOLDS at ±c and only flips sign at the apexes.
-//      Swap it for a sine (Character `Wobble`) and you can hear the detune start breathing —
+//      Swap it for a sine (Character `Tremble`) and you can hear the detune start breathing —
 //      that A/B is the whole point of the Type.
 //   2. The CONSTANT-CENTS LAW. The knob is cents; the depth is solved for the rate:
 //         A = (2^(c/1200) − 1) / (2π f)   [sine]      / (4 f)   [triangle]
@@ -28,21 +31,21 @@
 // backNames() / voicesUnit() in the header are authoritative; if this file and the header
 // ever disagree, the header wins and this file is the bug. Names applied verbatim from
 // Design/fx4/RENAMES.md.
-const TYPES  = ['Stack', 'Twin', 'Steady', 'Twofold', 'Blur', 'Bands'];
+const TYPES  = ['Throng', 'Twin', 'Steady', 'Twofold', 'Blur', 'Bands'];
 // front hero 1 is relabelled per Type; heroes 2/3 and Mix never are (frontNames()).
 const FRONT  = [['Detune','Width','Rate','Mix'], ['Depth','Width','Rate','Mix'],
                 ['Cents','Width','Rate','Mix'],  ['Sway','Width','Rate','Mix'],
-                ['Wash','Width','Rate','Mix'],   ['Split','Width','Rate','Mix']];
+                ['Wash','Width','Rate','Mix'],   ['Cleave','Width','Rate','Mix']];
 const BACK   = ['Voices','Spread','Offset','Roam','Low Keep','Tone','Feedback','Balance'];
 const PILLS  = ['Retrig','Hear Mono'];
 const VUNIT  = ['copies','lines','copies','copies','stages','bands'];
-const FIELDS = ['Direct', 'Alternate', 'Orbit', 'Swap', 'Side Only', 'Collapse'];
+const FIELDS = ['Straight', 'Alternate', 'Orbit', 'Swap', 'Side Only', 'Gather'];
 const CHARS  = [
   ['JP Classic','Even Fan','Analog Drift','Tight Fan','Wide Fan','Octave Bloom','Sub Anchor','Three Phase'],
-  ['Two Line','Four Line','Mode Two','Mode Three','No Compander','Dark BBD','Wobble','Hex'],
-  ['Satin','Jab','Warble','Fifth Up','Octave Down','Wide Slap','Gritty','Octave Pair'],
-  ['Vocal','Wide Room','Tape ADT','Tight Inst','Loose Crowd','Static Pair','Slapback','Seasick'],
-  ['Smooth Six','Deep Twelve','Velvet','Low Anchor','Top Only','Seed B','Seed C','Opposed'],
+  ['Two Line','Four Line','Mode Two','Mode Three','No Compander','Dark BBD','Tremble','Hex'],
+  ['Satin','Jab','Quaver','Fifth Up','Octave Down','Wide Slap','Gritty','Octave Pair'],
+  ['Lilt','Wide Room','Tape ADT','Tight Inst','Loose Crowd','Static Pair','Slapback','Seasick'],
+  ['Smooth Six','Deep Twelve','Plush','Low Anchor','Top Only','Seed B','Seed C','Opposed'],
   ['Coarse','Fine','Tilted','Rotor Slow','Rotor Fast','Guard','Deep Grid','Hard Split']
 ];
 
@@ -51,7 +54,7 @@ const CHARS  = [
 //    mod    0 = sine LFO    · 1 = triangle       · 2 = static  · 3 = random walk
 const SPEC = [
   // 🔴 fb422 R11 RE-VOICING — mirrored from TerrainWidenFx.h
-  { family:0, mod:0, maxCents:190, curve:1.75, rateMul:1.00, fbMax:0.985, trim:1.00 }, // Stack
+  { family:0, mod:0, maxCents:190, curve:1.75, rateMul:1.00, fbMax:0.985, trim:1.00 }, // Throng
   { family:1, mod:1, maxCents:120, curve:1.70, rateMul:1.00, fbMax:0.985, trim:1.39 }, // Twin
   { family:0, mod:2, maxCents:190, curve:1.70, rateMul:1.00, fbMax:0.985, trim:0.98 }, // Steady
   { family:0, mod:3, maxCents:120, curve:1.60, rateMul:0.55, fbMax:0.985, trim:0.96 }, // Twofold
@@ -134,14 +137,16 @@ class TerrainWiden extends AudioWorkletProcessor {
     this.bR = new Float32Array(this.n);
     this.wr = 0;
 
-    this.p = { type:0, character:0, field:0, amount:0.35, width:0.5, rate:0.35, mix:0.5,
-               p1:0.5, p2:0.85, p3:0.5, p4:0, p5:0, p6:0.5, p7:0, p8:0.5, retrig:false };
+    this.p = { type:0, character:0, axis:0, amount:0.35, width:0.5, rate:0.35, mix:0.5,
+               p1:0.5, p2:0.85, p3:0.5, p4:0, p5:0, p6:0.5, p7:0, p8:0.5,
+               retrig:false, hearMono:false };
+    this.monoSm = 0; this.monoTg = 0;
     this.lastRetrig = false;
 
     const K = ms => 1 - Math.exp(-1 / (ms * 0.001 * this.fs));
     this.smK = K(18); this.envK = K(20); this.lvlK = K(60); this.corrK = K(50);
     this.vfK = K(30); this.dipDn = K(5); this.dipUp = K(40); this.apexK = K(1.5);
-    this.cmpK = K(5);
+    this.cmpK = K(5); this.monoK = K(15);        // `Hear Mono` fade, both ways
     this.dcR = 1 - (2 * Math.PI * 10 / this.fs);
 
     // smoothed scalars
@@ -184,7 +189,7 @@ class TerrainWiden extends AudioWorkletProcessor {
     this.port.onmessage = e => {
       const d = e.data || {};
       if (d.type !== undefined && (d.type !== this.p.type || d.character !== this.p.character ||
-          d.field !== this.p.field) && this.seeded) this.pend = 1;
+          d.axis !== this.p.axis) && this.seeded) this.pend = 1;
       Object.assign(this.p, d);
       if (this.p.retrig && !this.lastRetrig) this.fireRetrig();
       this.lastRetrig = !!this.p.retrig;
@@ -210,8 +215,9 @@ class TerrainWiden extends AudioWorkletProcessor {
   recalc () {
     const p = this.p, t = clampf(p.type|0, 0, 5), c = clampf(p.character|0, 0, 7);
     const T = SPEC[t], C = CHAR[t][c];
-    this.T = T; this.C = C; this.typ = t; this.chr = c; this.fld = clampf(p.field|0, 0, 5);
+    this.T = T; this.C = C; this.typ = t; this.chr = c; this.fld = clampf(p.axis|0, 0, 5);
 
+    this.monoTg = p.hearMono ? 1 : 0;                  // `Hear Mono`, glided below
     this.tg.rate = clampf(0.08 * Math.pow(14 / 0.08, clamp01(p.rate)), 0.06, 14);   // fb422: the
                                           // 0.03 Hz bottom was a 33-second cycle, i.e. a dead zone
     this.tg.amt = clamp01(p.amount); this.tg.wid = clamp01(p.width); this.tg.mix = clamp01(p.mix);
@@ -365,7 +371,7 @@ class TerrainWiden extends AudioWorkletProcessor {
     }
 
     for (let i = 0; i < N; ++i) {
-      // fade-swap-recover — a Field change can swap `Side Only` for `Collapse`, an 11x
+      // fade-swap-recover — a Field change can swap `Side Only` for `Gather`, an 11x
       // level change, so the dip floor is -46 dB and not -26.
       if (this.pend > 0) { this.dip += this.dipDn * (0 - this.dip);
                            if (this.dip < 0.005) { this.pend = -1; this.recalc();
@@ -455,7 +461,15 @@ class TerrainWiden extends AudioWorkletProcessor {
       const trim = T.trim * this.cTrim * this.dip;
       const wL = wetL * trim, wR = wetR * trim;
       const dg = Math.cos(sm.mix * Math.PI / 2), wg = Math.sin(sm.mix * Math.PI / 2);
-      const yL = inL * dg + wL * wg, yR = inR * dg + wR * wg;
+      let yL = inL * dg + wL * wg, yR = inR * dg + wR * wg;
+      // `Hear Mono` — the audition fold, faded over 15 ms. Mirrors TerrainWidenFx.h step 9b,
+      // INCLUDING the snap: a one-pole approaches 1 and never arrives, and a mono button
+      // that leaves side energy behind is a word rather than a measurement.
+      this.monoSm += this.monoK * (this.monoTg - this.monoSm);
+      if (Math.abs(this.monoTg - this.monoSm) < 1e-3) this.monoSm = this.monoTg;
+      if (this.monoSm >= 1) { const mm = 0.5 * (yL + yR); yL = mm; yR = mm; }
+      else if (this.monoSm > 1e-6) { const mm = 0.5 * (yL + yR);
+        yL += this.monoSm * (mm - yL); yR += this.monoSm * (mm - yR); }
       oL[i] = yL; oR[i] = yR;
 
       this.cLL += this.corrK * (yL * yL - this.cLL);
@@ -473,7 +487,7 @@ class TerrainWiden extends AudioWorkletProcessor {
     return true;
   }
 
-  // ── the voice crowd: Stack (sine) · Shift (static granular) · Double (walk) ──
+  // ── the voice crowd: Throng (sine) · Shift (static granular) · Double (walk) ──
   voices (limHi) {
     const T = this.T, C = this.C, sm = this.sm;
     const rHz = Math.max(0.02, sm.rate * T.rateMul * C[2]);

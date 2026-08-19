@@ -1,4 +1,4 @@
-# WIDEN — MUTATION.md (fb422)
+# WIDEN — MUTATION.md (fb423)
 
 **FIXES.md §0.** Every law-1 (night-and-day), law-4 (no clicks) and R11 (ceiling) gate in
 `widen_cert.cpp` is proven here to go **RED** against a deliberately broken copy of the engine.
@@ -15,9 +15,15 @@ clang++ -O2 -std=c++17 -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/wide
 clang++ -O2 -std=c++17 -DWIDEN_MUT_HAAS  ...same...  && /tmp/widen_cert_haas
 ```
 
-**Shipping baseline: `PASS 206  FAIL 5`.** Every log in this table is on disk beside this file
-as `widen_mut_<MACRO>.log`, produced by the same `widen_cert.cpp` as `widen_cert_fb422.log`. The five are named and explained in FINDINGS §0 —
-they are real, understood, and not bought.
+**Shipping baseline: `PASS 230  FAIL 5`.** Every log in this table is on disk beside this file
+as `widen_mut_<MACRO>.log`, produced by the same `widen_cert.cpp` as `widen_cert_fb423.log`. The
+five are named and explained in FINDINGS §0 — they are real, understood, and not bought.
+
+🔴 **fb423 adds three mutations, and two of them protect things that are not DSP.** A name gate and
+a monitor pill are exactly the kind of thing that gets asserted rather than measured, so they are
+mutated like everything else. **No pre-existing mutation regressed**: HAAS 78, DEADKNOBS 14,
+POLITE 14, NOSMOOTH 13, NOGLIDE 11, NODIP 9, NOFLOOR 21, APCLAMP 9 — identical fail counts to
+fb422, on 24 more gates.
 
 ---
 
@@ -25,14 +31,17 @@ they are real, understood, and not bought.
 
 | # | mechanism deleted | macro | result | the gates that fired |
 |---|---|---|---|---|
-| 1 | the ENTIRE widening machine → a fixed 12 ms Haas delay | `WIDEN_MUT_HAAS` | **133 / 78** | 78 gates, incl. all 6 R11 Amount, all 6 Type discriminators, 40 of the 72 matrix cells, the Dimension tell, the cross-type matrix, the bloom-by-Type clause |
-| 2 | fb421's dead knobs restored | `WIDEN_MUT_DEADKNOBS` | **197 / 14** | 9 matrix cells at **exactly 0.000** change per quarter |
-| 3 | fb421's ceilings restored | `WIDEN_MUT_POLITE` | **197 / 14** | R11 Twin + Twofold, 5 matrix cells, the chorus boundary on Twin |
-| 4 | every smoother → tau 0 | `WIDEN_MUT_NOSMOOTH` | **198 / 13** | 7 click gates, up to **×488** of the static floor |
-| 5 | delay/gain/pan glide removed | `WIDEN_MUT_NOGLIDE` | **200 / 11** | 5 click gates, up to **×488** |
-| 6 | the fade-swap-recover dip removed | `WIDEN_MUT_NODIP` | **202 / 9** | all 3 discrete-switch gates, **+38 dB** worse than the bar |
-| 7 | the Voices floor of 3 removed | `WIDEN_MUT_NOFLOOR` | **190 / 21** | the label-vs-count gates and 3 of the 6 output-side chorus gates |
-| 8 | the fb421 ±0.97 allpass clamp restored | `WIDEN_MUT_APCLAMP` | **201 / 9** | the sample-rate invariance gate at 96 kHz |
+| 1 | the ENTIRE widening machine → a fixed 12 ms Haas delay | `WIDEN_MUT_HAAS` | **157 / 78** | 78 gates, incl. all 6 R11 Amount, all 6 Type discriminators, 40 of the 72 matrix cells, the Dimension tell, the cross-type matrix, the bloom-by-Type clause |
+| 2 | fb421's dead knobs restored | `WIDEN_MUT_DEADKNOBS` | **221 / 14** | 9 matrix cells at **exactly 0.000** change per quarter |
+| 3 | fb421's ceilings restored | `WIDEN_MUT_POLITE` | **221 / 14** | R11 Twin + Twofold, 5 matrix cells, the chorus boundary on Twin |
+| 4 | every smoother → tau 0 | `WIDEN_MUT_NOSMOOTH` | **222 / 13** | 7 click gates, up to **×488** of the static floor |
+| 5 | delay/gain/pan glide removed | `WIDEN_MUT_NOGLIDE` | **224 / 11** | 5 click gates, up to **×488** |
+| 6 | the fade-swap-recover dip removed | `WIDEN_MUT_NODIP` | **226 / 9** | all 3 discrete-switch gates, **+38 dB** worse than the bar |
+| 7 | the Voices floor of 3 removed | `WIDEN_MUT_NOFLOOR` | **214 / 21** | the label-vs-count gates and 3 of the 6 output-side chorus gates |
+| 8 | the fb421 ±0.97 allpass clamp restored | `WIDEN_MUT_APCLAMP` | **226 / 9** | the sample-rate invariance gate at 96 kHz |
+| 9 | one fb423 rename reverted **in the header only** | `WIDEN_MUT_STALENAME` | **226 / 9** | 4 gates in §S: the shipped-corpus gate, the RENAMES-was-applied gate, and **both** drift gates |
+| 10 | the `Hear Mono` fold deleted | `WIDEN_MUT_NOMONO` | **227 / 8** | all 3 §Q measurement gates |
+| 11 | the `Hear Mono` 15 ms fade → a hard cut | `WIDEN_MUT_MONOSNAP` | **229 / 6** | the §Q click gate, at **×147** the static floor |
 
 ---
 
@@ -45,7 +54,7 @@ per-Type mechanism — replaced by `wetR = readH(bufR_, 0.012*fs)`, identical on
 
 | gate | shipping | Haas | verdict |
 |---|---|---|---|
-| Stack — Amount 100 % is past useful (R11) | **106.55** cents (control 1.69) | **1.69** cents | RED |
+| Throng — Amount 100 % is past useful (R11) | **106.55** cents (control 1.69) | **1.69** cents | RED |
 | Twin — Amount 100 % is past useful (R11) | **163.91** cents | **1.69** cents | RED |
 | Steady — Amount 100 % is past useful (R11) | **144.29** cents | **1.69** cents | RED |
 | Twofold — Amount 100 % is past useful (R11) | **55.84** cents | **1.69** cents | RED |
@@ -53,22 +62,22 @@ per-Type mechanism — replaced by `wetR = readH(bufR_, 0.012*fs)`, identical on
 | Bands — Amount 100 % is past useful (R11) | corr **−0.55** | corr **+1.00** | RED |
 | R11 can tell the six Types apart | spread **69.1 %** | spread **0.0 %** | RED |
 | every Type pair ≥ 1.0 audible step | closest pair **2.59** | closest pair **0.00** | RED |
-| Stack — the detune IS the motion | spread 106 c, motion 0.42 of it | spread **2 c**, motion **0.00** | RED |
+| Throng — the detune IS the motion | spread 106 c, motion 0.42 of it | spread **2 c**, motion **0.00** | RED |
 | Twin — a wide field with a constant detune | carrier mass **0.012** | carrier mass **1.000** | RED |
 | triangle detune is BIMODAL | 0.99 of samples at ±peak | **0.000** | RED |
-| Amount on Stack — alive and monotonic | 1.69 → **106.5** cents | 1.69 → **1.69** | RED |
+| Amount on Throng — alive and monotonic | 1.69 → **106.5** cents | 1.69 → **1.69** | RED |
 | the bloom differs BY TYPE | **0** Type pairs tied | **7** Type pairs tied (+6.71 dB on four Types, to 2 dp) | RED |
 
 Pasted, from `/tmp/MUT_HAAS.log`:
 
 ```
-        Stack    detune spread, cents       1.691   control     1.691   bar   60.00    <<< FAILS
+        Throng    detune spread, cents       1.691   control     1.691   bar   60.00    <<< FAILS
         Twin     detune spread, cents       1.691   control     1.691   bar   60.00    <<< FAILS
         Steady   detune spread, cents       1.691   control     1.691   bar   60.00    <<< FAILS
         Twofold  detune spread, cents       1.691   control     1.691   bar   45.00    <<< FAILS
         Blur     stereo correlation         1.000   control     1.000   bar   -0.25    <<< FAILS
         Bands    stereo correlation         1.000   control     1.000   bar   -0.15    <<< FAILS
-          measured: Stack 1.7 · Twin 1.7 · Steady 1.7 · Twofold 1.7 cents  ->  spread 0.0 %
+          measured: Throng 1.7 · Twin 1.7 · Steady 1.7 · Twofold 1.7 cents  ->  spread 0.0 %
   FAIL  R11 can tell the six Types apart (it is not reading an identity) pitch-Type spread 0.0 % of the largest
   FAIL  the bloom differs BY TYPE (a shared machine would bloom identically) 7 Type pairs within 0.25 dB
 ```
@@ -108,21 +117,21 @@ Twin + Bands · `Balance` ignored on Twin.
 ```
 
 > These are **exact zeros**, not small numbers. That is what "bit-identically dead" looks like
-> when a gate can finally see it — and fb421's §F, which swept P1–P8 on `Stack` only, printed
+> when a gate can finally see it — and fb421's §F, which swept P1–P8 on `Throng` only, printed
 > green for every one of them.
 
 ---
 
 ## 3 · `WIDEN_MUT_POLITE` — fb421's ceilings restored
 
-Stack 130 / Twin **28** / Steady 110 / Twofold 62 cents; `Spread` reach 1.0× instead of 1.60×;
+Throng 130 / Twin **28** / Steady 110 / Twofold 62 cents; `Spread` reach 1.0× instead of 1.60×;
 cross-mix `0.25 + 0.40·amt` instead of `0.25 + 0.70·amt`.
 
 | gate | shipping | fb421 | verdict |
 |---|---|---|---|
 | **Twin** — Amount 100 % is past useful (R11) | **163.91** cents | **37.60** cents (bar 60) | RED |
 | **Twofold** — Amount 100 % is past useful (R11) | **55.84** cents | **28.51** cents (bar 45) | RED |
-| Amount on Stack — alive | 1.69 → 106.5, min quarter 7.6 | min quarter **5.08** (bar 6.0) | RED |
+| Amount on Throng — alive | 1.69 → 106.5, min quarter 7.6 | min quarter **5.08** (bar 6.0) | RED |
 | Amount on Twin — alive | 1.69 → 147.3, min quarter 12.7 | min quarter **4.22** | RED |
 | Twin — a wide field with a constant detune | spread 147 c, carrier 0.012 | spread **36** c, carrier 0.142 | RED |
 | Twin — not a chorus | 2 copies, carrier **0.012** | 2 copies, carrier **0.993** | RED |
@@ -170,13 +179,13 @@ smoothers**, and the two are now separately proven.
 
 | gate | shipping | no floor |
 |---|---|---|
-| Stack/JP Classic — count matches the LABEL | **3** copies | **1** copy | RED |
-| Stack — not a chorus (OUTPUT) | 3 copies, carrier 0.216 | **1 copy, carrier 1.000** | RED |
+| Throng/JP Classic — count matches the LABEL | **3** copies | **1** copy | RED |
+| Throng — not a chorus (OUTPUT) | 3 copies, carrier 0.216 | **1 copy, carrier 1.000** | RED |
 | Steady — not a chorus (OUTPUT) | 3 copies, carrier 0.046 | **1 copy, carrier 1.000** | RED |
 | Twofold — not a chorus (OUTPUT) | 3 copies, carrier 0.852 | **1 copy, carrier 0.882** | RED |
 | P1 Voices on Twin — alive | 12.8 / 9.7 / 6.7 | **0.000** (one pair at every setting) | RED |
 
-> 🔑 fb421's §O measured `nV_` on `Stack` and `Twofold` only. Both of the Types the blocker named
+> 🔑 fb421's §O measured `nV_` on `Throng` and `Twofold` only. Both of the Types the blocker named
 > — `Twin` and `Steady` — are now in the table, the count is `liveCopies()` (the REAL count for
 > the machine that is running: `2·nPair_` on Twin, `nAP_` on Blur, `nB_` on Bands), and it is
 > cross-checked against the OUTPUT.
@@ -201,6 +210,52 @@ This is the fix for FINDINGS §6.4, and the mutation is the proof that the fix i
 
 ---
 
+## 9 · `WIDEN_MUT_STALENAME` — the no-doubles gate, mutated
+
+The header's `typeNames()` gets `Stack` back (a shipped FM algo + spectral mode) and `charNames()`
+gets `Wobble` back (a shipped Tape preset). **The worklet and the roster are left correct**, which
+is the point: this is what *drift* looks like, not what a typo looks like.
+
+| gate | shipping | one rename reverted |
+|---|---|---|
+| no published label collides with a shipped or sibling label | 103 labels vs 3067 corpus strings, **0 hits** | **2 collisions, first `Stack` (Type pill)** |
+| every NEW name in RENAMES.md is PUBLISHED by the engine | all 23 present | **2 missing, first `Throng`** |
+| `widen-worklet.js` tables EQUAL the header arrays | 7 tables, 100 entries identical | **`TYPES[0]` worklet `Throng` vs header `Stack`** |
+| ROSTER.md carries every published card label | 96 labels, all present | **2 missing, first `` `Stack` ``** |
+
+The two mutated strings live between `MUT-STALENAME-BEGIN/END` markers so the *retired-label* scan
+does not trip over the mutation itself; cert §S asserts there are **exactly two** such regions, so
+the exclusion cannot grow into a hiding place.
+
+---
+
+## 10 · `WIDEN_MUT_NOMONO` — the `Hear Mono` fold deleted
+
+| gate | shipping | fold deleted |
+|---|---|---|
+| ON: L and R are BIT-IDENTICAL | **0.000000e+00** | **2.202e-01** |
+| ON: the output IS (L+R)/2 of the OFF run | 2.4e-06 | **1.10e-01** |
+| ON: `viz().corr` follows to +1.000 | **+1.00000** | **+0.43521** |
+
+The third row is the one that matters for the house law *everything audible interacts visually*:
+with the fold gone the card still reads the true correlation of a wide signal, so a user pressing
+`Hear Mono` would see nothing change either.
+
+---
+
+## 11 · `WIDEN_MUT_MONOSNAP` — the 15 ms fade replaced by a hard cut
+
+| gate | shipping | hard cut |
+|---|---|---|
+| toggling `Hear Mono` under a held tone is click-free | **0.0026 → 0.0026** (no change) | **0.0026 → 0.3838**, ×147 |
+
+The toggle is deliberately placed at `FS·0.5 + 37` samples — off a zero crossing *and* off a
+block boundary. fb423's own ruling on the Compress device is why: its click probe jumped at
+`FS·0.5` with a 220 Hz tone, which is 110 whole cycles **and** a 64-sample boundary, and a gain
+step at a zero crossing produces no sample-to-sample jump at all.
+
+---
+
 ## Gates that SURVIVE a mutation — declared, not hidden
 
 | gate | survives | why that is acceptable |
@@ -209,5 +264,7 @@ This is the fix for FINDINGS §6.4, and the mutation is the proof that the fix i
 | §K stability (60 s white noise) | all | It asserts finiteness. A Haas delay is finite; that is correct, not a false green. |
 | §M CPU | all | Same. |
 | §H Mix 1.0 dry residual | `HAAS` | Structural: the probe forces `wetL = +s, wetR = −s`, so it measures the MIX law, not the machine. |
+| §S the whole names section | every DSP mutation | Correct, and worth saying: labels are not the machine. §S goes red only under `STALENAME`, which is the mutation built for it. |
+| §Q `Hear Mono` | `HAAS` and every other DSP mutation | The fold is downstream of the widening machine, so it still folds a Haas delay to mono correctly. Its own mutations are `NOMONO` and `MONOSNAP`. |
 
 No law-1, law-4 or R11 gate survives its own mutation.

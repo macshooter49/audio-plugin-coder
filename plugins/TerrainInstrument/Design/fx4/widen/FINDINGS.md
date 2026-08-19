@@ -1,8 +1,17 @@
 # WIDEN — FINDINGS
 
-**fb422 — THE FIX ROUND.** Harness: `widen_cert.cpp` -> **206 PASS / 5 FAIL**
-(`widen_cert_fb422.log`). Mutation proofs: **`MUTATION.md`**. fb420's log is kept beside this
-file as `widen_cert_fb420.log` for the diff.
+**fb423 — THE NAMES ROUND.** Harness: `widen_cert.cpp` -> **230 PASS / 5 FAIL**
+(`widen_cert_fb423.log`). Mutation proofs: **`MUTATION.md`**, now 11 mutations. The fb420 and
+fb422 logs are kept beside this file for the diff.
+
+🔴 **THE ONE THING I DID NOT DO LAST ROUND: I BUILT NO NO-DOUBLES GATE.** FIXES §2 said "rebuild
+the no-doubles gate"; what §9 below actually was is a one-off markdown grep over the **15 strings
+RENAMES.md had just changed**. My other **80 published labels had never been checked against
+anything**, and the family audit found **12 collisions in this device that I did not**. That is
+round one's failure repeating verbatim — *checking what I changed instead of the whole card.* §10
+is the gate, §S of the cert is where it lives, and it covers **all 103** labels the engine
+publishes. The old §9 is left in place, unedited, as the record of what a check that only looks at
+its own diff is worth.
 
 ```
 clang++ -O2 -std=c++17 \
@@ -50,7 +59,7 @@ threshold I said so in the cert source, at the line, with the measurement that m
 |---|---|---|
 | **The Detune knob reads TRUE CENTS, independent of Rate** — the gap the bible identified in Serum | peak cents **140.5 … 140.8** across a **12x** rate span (0.139 -> 5.569 Hz): **0.17 % spread** | §E |
 | **The Dimension triangle holds its detune** | **99.2 %** of samples at \|c\| > 0.8·peak; **0.08 %** in the ±10 % dead zone | §D |
-| **…and the A/B proves the detector can see the alternative** | the sine (`Wobble`) reads **0.435** lobe mass and **0.0627** zero dwell against closed-form arcsine predictions of **0.410** and **0.064** | §D |
+| **…and the A/B proves the detector can see the alternative** | the sine (`Tremble`) reads **0.435** lobe mass and **0.0627** zero dwell against closed-form arcsine predictions of **0.410** and **0.064** | §D |
 | **Width goes past mono-destruction, with substance** | every Type: corr **-1.000**, mono fold **-128 to -144 dB**, output still within **-8.4 … +2.7 dB** of the Width-50 % level | §R |
 | **`Bands` mono fold is spectrally EXACT** | mean deviation **0.000 dB at every Amount**, including past g = 1 where the quiet channel's band gain goes negative | §J |
 | **Mix 1.0 = fully wet, zero dry** | dry residual **-142.1 to -142.4 dB**, with a **-3.01 dB** control at Mix 0.5 proving the probe can see dry at all | §H |
@@ -85,7 +94,7 @@ negative of where it was, i.e. a **2x jump in the delay excursion**. Measured: p
 ### 2.3 The Type-swap dip was 20 dB too shallow — and the real bug was 13 ms downstream
 Two separate faults in one symptom.
 1. The dip floor was 0.02 with a 0.05 trigger (-26 dB). A `Field` change can swap `Side Only`
-   (pure side — tiny on a near-mono wet) for `Collapse` (pure mid — large): an **11x level change**,
+   (pure side — tiny on a near-mono wet) for `Gather` (pure mid — large): an **11x level change**,
    measured. 5 % of an 11x change is still a step. Floor moved to **0.005 (-46 dB)**.
 2. The residue was worse and stranger: a Type swap produced a **3.17e-02** transient (250x the
    floor) *five blocks after* the swap, when the dip had already recovered to 0.28. Bisecting by
@@ -96,13 +105,13 @@ Two separate faults in one symptom.
    **Fix, structural:** the compander moved to the wet OUTPUT stage; the ring is now
    Type-independent, always. See §4.1 for why nothing was lost.
 
-### 2.4 `Octave Bloom`, `Half Time` and `Vocal Four` were dead Characters
+### 2.4 `Octave Bloom`, `Half Time` and a second Twofold variant were dead Characters
 - `Octave Bloom` addressed voices `v >= 6`. The **default voice count is 6**, so it addressed
   nothing. Distance measured **exactly 0.00**. Now it addresses the top two **live** voices.
 - `Half Time` set `baseMul = 0.5`, but the base is depth-driven (§3.1) so the growth floor swallowed
   it entirely — **0.00**. Re-voiced as `Mode Two` = a 2.2x clock, which under the constant-cents law
   *is* the shorter-delay mode Arturia measured.
-- `Vocal Four`'s coefficient row was **character-for-character identical** to `Vocal Two`'s — a
+- The second Twofold variant's coefficient row was **character-for-character identical** to char 0's — a
   copy-paste that no amount of listening would have located. Replaced with `Wide Room`.
 
 ### 2.5 The `Offset` law put unity at 0.79, not at the knob centre
@@ -141,7 +150,7 @@ deep settings sit further back in time — which is what a doubler does anyway. 
 — my first replacement — is already a `Route` option on the shipped flanger. `Twin` is free across
 the whole rack and says what the mechanism is: two lines moving oppositely.
 `Ensemble` collides with a shipped **Chorus Type name**, and its mechanism is a configuration of
-`Stack` rather than a different machine. Cut; it survives as `Stack`/`Three Phase`, which measures
+`Throng` rather than a different machine. Cut; it survives as `Throng`/`Three Phase`, which measures
 the **largest** Character distance in the roster (673.06).
 
 ### 3.3 `PV Glass` cut, as the bible's own audit recommended
@@ -224,7 +233,7 @@ happen silently again: **every metric is printed through a bypassed engine befor
 | per-channel magnitude ripple | **39.6 dB** | it was measuring the chord's own harmonic shape, not the device | measure the **deviation from dry**, level-normalised -> control now reads **0.0 dB** |
 | cepstral echo count | **39–49 "echoes"** | on a harmonic probe the cepstrum shows the source's own pitch period | count on **noise** |
 | `voiceCents` for the triangle test | perfectly bimodal for **both** the triangle and the sine | the viz published `achievedCents * sign(triangleSlope)` — a hard ±1 whatever the modulator shape. **A harness kinder than reality (fb393).** The sine A/B could never have failed | publish the **true read-position derivative**, `1200*log2(1 - d')` |
-| `Stack` modulation periodicity | **0.869** — "one clean line", i.e. a chorus | at 0.26 Hz the six scattered voice rates are 0.018 Hz apart and a 1024-point modulation FFT has 0.37 Hz bins. **Resolution, not physics** | run the test at rate 0.90 with a 4096-point FFT -> **0.290** |
+| `Throng` modulation periodicity | **0.869** — "one clean line", i.e. a chorus | at 0.26 Hz the six scattered voice rates are 0.018 Hz apart and a 1024-point modulation FFT has 0.37 Hz bins. **Resolution, not physics** | run the test at rate 0.90 with a 4096-point FFT -> **0.290** |
 | `Bands` "rotation" | correlation **+0.88** where the model predicted +0.17 | `s_k = cos(2pi(k/2 + phi))` looks like a rotating alternation and is not one: for integer k, `cos(pi*k + phi) = (-1)^k cos(phi)`, so the phase scales *every* band's contrast by the same `cos(phi)` and at phi = 90 deg the split **vanishes**. It was a tremolo on the width | slide the crossover **grid** by ±0.5 of a band instead |
 | mono fold-down level | `Bands` read **+3.14 dB** and "failed" | measured at Mix 0.5, where an equal-power crossfade of two **correlated** signals is +3 dB by arithmetic | measure at **Mix 1.0**, where there is no dry to sum with |
 | Offset delay length | autocorrelation peak hopped between a delay and its multiples (2.25 / 2.92 / 11.33 / 4.67 / 20.67 ms across a *monotone* sweep); a lag-weighted ACF centroid read 59.4 ms at every setting | peak-picking and centre-of-mass are both wrong on a broadband ACF | the wet's **impulse-response time centroid** through a settled engine -> 2.79 -> 35.09 ms |
@@ -307,7 +316,7 @@ happen silently again: **every metric is printed through a bypassed engine befor
   a user who runs `Twin` fully wet into a mono club system will lose most of it.
 - **`Blur`'s worst mono notch is -16.6 dB** at Amount 0.7. DAFx-24 measures dual-allpass mono ripple
   at "1 to 2 dB" for mild settings; ours runs up to 24 stages because R11 asks for the extreme.
-- **Correlation at the shipped defaults is +0.87** (`Stack`, Mix 1.0, Amount 0.35, Width 0.5). The
+- **Correlation at the shipped defaults is +0.87** (`Throng`, Mix 1.0, Amount 0.35, Width 0.5). The
   bible's §8 suggests 0.2–0.8 at defaults. Width 0.5 is *exactly neutral* by construction, so the
   default patch is deliberately conservative and the width lives on the hero knob. If Max wants the
   card to sound wide out of the box, raise the default `Width` to ~0.7 — the knob is proven monotone
@@ -371,3 +380,92 @@ MIRRORS these and that the header wins on any disagreement.
 `Twin` counts **lines**, `Blur` counts **stages**, `Bands` counts **bands**. `liveVoices()` returns
 `nV_` and is therefore the wrong number on three Types; `liveCopies()` returns the real one and §O
 cross-checks it against the OUTPUT.
+
+---
+
+## 10. 🔴 fb423 — THE GATE I SHOULD HAVE BUILT IN ROUND TWO
+
+**Cert §S. 103 published labels, every one of them, on every run.** Not the ones I changed.
+
+### What it checks, and what each check caught
+
+| gate | result |
+|---|---|
+| the card label set is 6 Types + 48 Characters + 6 Fields + 6×4 front + 8 back + 2 pills + 1 device | **95** card labels; **103** gated in total (+2 back-dropdown labels, +6 `Voices` units) |
+| no published label collides with a shipped or sibling label | **0** unruled hits against a **3069-string** corpus (re-extracted after the siblings' latest renames landed) |
+| corpus sees the fb418 LEADING-SPACE labels | `Motion` PRESENT · `Route` PRESENT |
+| corpus sees SINGLE-quoted `index.html` options | `Leaky` · `Metal` — both single-quoted, both invisible to a C++-literal grep |
+| corpus sees the shipped Tape front knobs the first EQ table missed | `Tilt` · `Sculpt` |
+| corpus sees BOTH sibling fx4 directories | `Slant` · `Chisel` (eq) · `Free Pair` · `Crest` (dynamics) |
+| no word names two DIFFERENT controls inside this card | **86** distinct control labels, all unique |
+| RENAMES.md parses to 23 WIDEN rename rows | 15 first table + 8 fb423 |
+| every NEW name in RENAMES.md is PUBLISHED by the engine | **all 23 present** — the table was applied, and the gate proves it rather than my saying so |
+| `widen-worklet.js` name tables EQUAL the header arrays | **7 tables, 100 entries, identical** |
+| ROSTER.md carries every published card label as a backticked literal | **96 labels, all present** |
+| no RETIRED label survives as a label token in header/worklet/roster | 23 retired names × 3 artefacts, **0 hits** |
+| ...nor in this harness's own printed output | **0** |
+
+**The corpus.** `extract_labels.py` → `shipped_labels.inc`: **3069 strings from 166 files** across
+`Source/` (including `ui/public/index.html`'s option arrays and every `*_test.cpp` name table),
+`Tests/`, `Design/fx3/` and **both** sibling fx4 directories. Three blindnesses fixed, each of
+which had hidden a real collision from somebody:
+
+1. **leading spaces** — `"Chorus" + sfxD + " Motion"` means the literal is `" Motion"`, and a
+   "quote followed by a capital" pattern skips both strings R6 is named after. Literals are
+   stripped *before* the capitalisation test.
+2. **single quotes** — `index.html` is JS. The shipped Distortion character `'Leaky'` hid there.
+3. **the corpus itself** — a C++-literal grep over `Source/` reaches neither of the above, nor the
+   `*_test.cpp` tables, nor the siblings.
+
+### What it found in MY device that the previous pass could not see
+
+Run against the fb422 engine, §S reports **36 collision hits over 101 labels**. Eight of them are
+the fb423 rows, now applied: `Stack`→`Throng` (my **header pill**), `Split`→`Cleave` (the **Bands
+front hero**), `Vocal`→`Lilt`, `Warble`→`Quaver`, `Velvet`→`Plush`, `Direct`→`Straight`,
+`Collapse`→`Gather`, `Wobble`→`Tremble`.
+
+### The 22 stale strings, in my own files
+
+The drift gates found retired names still being **printed by my own harness** — a `Knob` table in
+§F and a second `nm[12]` table in §I, one of which still said `P4 Wander` (retired by the first
+RENAMES table) while the engine said `Roam`. *That is literally the two-table geometry the EQ
+engine deleted, living in my cert.* **Both tables are deleted**, not gated: `knobLabel()` builds
+every printed knob name from `frontNames()`/`backNames()` at run time. A table that cannot exist
+cannot drift. The remaining stale tokens (`Duo`, `Quad`, `Opposed`'s predecessor) are gone from the
+header, the worklet, the roster and the harness, and the gate keeps them gone.
+
+### 🔴 THE FIVE EXEMPTIONS I GRANTED MYSELF, NAMED SO THEY CANNOT HIDE
+
+The exemption lists are asserted to be **exactly** 10 / 2 / 5 entries, the dynamics §1 shape, so
+none of them can quietly grow. Two carry an authority:
+
+- **A (10)** `Width` `Rate` `Mix` `Amount` — CONTRACT §4 names these; `Character` `Type` `Power` —
+  chassis; `Tone` `Retrig` — fb423 SANCTIONED verbatim; `Low Keep` — RENAMES.md "keep".
+- **B (2)** `Blur` `Coarse` — fb423 SANCTIONED verbatim: *"mockup-only / synth-side strings, not
+  live rack labels. No action."*
+
+The third has none, and I am flagging it rather than burying it:
+
+- **C (5) — UNRULED.** `Detune` `Depth` `Voices` `Spread` `Feedback` all hit the corpus. **No
+  ruling covers them**: neither RENAMES table names them and CONTRACT §4's enumerated list does not
+  include them. I believe every one is the §4 class — same concept, same behaviour, different
+  device (`Detune` = unison detune, `Depth` = modulation excursion, `Voices` = how many copies,
+  `Spread` = fanning copies across the field, `Feedback` = regeneration). **But a gate that can
+  exempt itself is not a gate** — fb423 said exactly that about the dynamics `Auto`. They are
+  printed by name on every cert run and they need a ruling. If it goes the other way, five renames
+  land here and none of them is hard.
+
+### 🔴 And `Hear Mono` was a pill with no parameter
+
+ROSTER §3 described it as a "UI-side audition… costs the engine nothing" — i.e. a control that
+cannot be automated, cannot be saved and cannot be recalled. It is `Params::hearMono` now (cert
+§Q): ON gives max |L−R| = **0.000000e+00**, the output IS the mid of the OFF run to **2.4e-06**,
+`viz().corr` reads **+1.00000** (the fold is measured *before* the telemetry, so the card shows
+what you hear), and toggling it under a held tone leaves the click metric at **0.0026 → 0.0026**.
+
+One real bug fell out of building it, and it is worth stating because it will recur: **a one-pole
+fade does not reach its target in float — it STALLS.** Near 1.0 the representable spacing is
+5.96e-8, so once `k·(1−x)` drops below half of that the increment rounds away entirely. Measured:
+`monoSm_` parked at **0.999978542** forever, leaving **1.48e-06** of L−R in a signal that is
+supposed to *be* mono. The gate that asserts `max |L−R| == 0.0` is what caught it; a "< 1e-4" gate
+would have passed and shipped a mono button that does not produce mono.

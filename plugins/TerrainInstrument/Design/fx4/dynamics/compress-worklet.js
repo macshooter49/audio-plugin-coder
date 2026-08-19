@@ -58,8 +58,10 @@ const TSPEC = [
 const D = {};   // the neutral Character
 const CSPEC = [
   // R6/fb418: NO Character sets `det` any more — `Detect` owns detection outright. The two
-  // rows that used to (`RMS Ears`, `Spike Ears`) are now `Loose Grip` (the slope is capped at
-  // 2.5:1 with 8 dB of extra knee) and `Blunt` (the curve applied twice at half slope).
+  // Exact rows that used to are now `Loose Grip` (the slope is capped at 2.5:1 with 8 dB of
+  // extra knee) and `Blunt` (the curve applied twice at half slope). The names they retired
+  // are recorded in TerrainCompressFx.h and nowhere else: a retired label is still a label,
+  // and this file is downstream of the header, not a second place to author one.
   [D, { kneeAuto: 1 }, { kn: 8, sMul: 0.6, sCap: 0.6 }, { twoPass: 1 }, { deepRel: 1 }, { lineAtk: 1 },
       { rel: 'damped', zeta: 1.0 }, { rel: 'damped', zeta: 0.42 }],
   [{ rel: 'dual', kn: 4, link: 1 }, { rel: 'exp', kn: 4, link: 1, rW: [2, 0.667] },
@@ -225,7 +227,7 @@ class TerrainCompress extends AudioWorkletProcessor {
     if (k <= 1e-5) return y;
     // the makeup is INSIDE: `comp` restores 70 % of the current reduction so the gain element
     // distorts MORE as it works harder (as hardware does), and the stage's slope at zero is
-    // exactly 1, so Heat can never move the overall gain — only the curvature.
+    // exactly 1, so Burn can never move the overall gain — only the curvature.
     const comp = db2lin(grDb * 0.7), inv = BUS_NOM / comp, u = (y * comp) / BUS_NOM;
     let sv;
     switch (this.heatKind) {

@@ -13,13 +13,13 @@ The mutations are `#ifdef` hooks inside the engine header (`EQ::mutationTag()` l
 cert prints a red banner when one is active). With no `-D` flag not one branch of the file changes.
 
 ```
-baseline           exit=1  RESULT: 121 pass,  1 FAIL   <- the 1 is §O, see the bottom of this file
-EQ_MUT_NO_PIVOT    exit=1  RESULT: 112 pass, 10 FAIL
-EQ_MUT_NO_RINGCAP  exit=1  RESULT: 120 pass,  2 FAIL
-EQ_MUT_NO_SMOOTH   exit=1  RESULT: 119 pass,  3 FAIL
-EQ_MUT_NO_DIP      exit=1  RESULT: 120 pass,  2 FAIL
-EQ_MUT_NO_CEILING  exit=1  RESULT:  68 pass, 54 FAIL
-EQ_MUT_NO_DENORM   exit=1  RESULT: 120 pass,  2 FAIL
+baseline           exit=0  RESULT: 131 pass,  0 FAIL   <- fb423: §O ruled, §P added (8 gates)
+EQ_MUT_NO_PIVOT    exit=1  RESULT: 122 pass,  9 FAIL
+EQ_MUT_NO_RINGCAP  exit=1  RESULT: 130 pass,  1 FAIL
+EQ_MUT_NO_SMOOTH   exit=1  RESULT: 129 pass,  2 FAIL
+EQ_MUT_NO_DIP      exit=1  RESULT: 130 pass,  1 FAIL
+EQ_MUT_NO_CEILING  exit=1  RESULT:  78 pass, 53 FAIL
+EQ_MUT_NO_DENORM   exit=1  RESULT: 130 pass,  1 FAIL
 ```
 
 (every mutant carries the baseline's 1 pre-existing §O failure as well, so its own count is
@@ -238,18 +238,83 @@ mutated   FAIL  a Q 90 Chisel ring decays to TRUE zero (denormal flush)   tail 1
 
 ---
 
-## The one baseline FAIL, and why it is not fixed here
+## fb423 — the one baseline FAIL is RULED, and §P is mutated the same way
+
+The fb422 baseline ended **121 pass / 1 FAIL**. The FAIL was §O refusing to pass ten labels
+`RENAMES.md` had not ruled on, and refusing to invent replacements (FIXES.md §2: *"Do not
+substitute your own"*). The fb423 second ruling settled all ten:
 
 ```
-FAIL  no collision with a shipped label outside RENAMES.md's sanctioned list
-      18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option), Mid (Focus
-      option), Forward (Character), Runaway (Character), Program (Character), Stacked
-      (Character), Peak Hold (Character), Razor (Character), Telephone (Character),
-      Metal (Character)
+fb422   FAIL  no collision with a shipped label outside RENAMES.md's sanctioned list
+              18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option),
+              Mid (Focus option), Forward, Runaway, Program, Stacked, Peak Hold, Razor,
+              Telephone, Metal (Characters)
+
+fb423   ok    no collision with a shipped label outside RENAMES.md's sanctioned list
+              10 collisions, 10 sanctioned by name; UNRESOLVED: none
+        ok    every EQUALIZER row of RENAMES.md is applied VERBATIM      29 of 29 rows
 ```
 
-Every EQUALIZER row of `RENAMES.md` is applied verbatim (`21 of 21 rows`) and the card has **zero**
-internal doubles. These ten are labels the rename table's own grep did not reach, all of them
-inside `Source/ui/public/index.html` option arrays and `Source/*_test.cpp` name tables. FIXES.md §2
-says *"Do not substitute your own"* names, so they are **reported, not renamed** — the ruling
-belongs to the table owner. Proposals are in `FINDINGS.md`.
+8 renamed (`Forward`→`Ahead` · `Runaway`→`Bolt` · `Program`→`Baseline` · `Stacked`→`Twin Shelf` ·
+`Peak Hold`→`Peak Keep` · `Razor`→`Scalpel` · `Telephone`→`Handset` · `Metal`→`Tin`), 2 sanctioned
+(`Stereo`, `Mid` — M/S routing vocabulary, ruled as a group with `Side`/`Left`/`Right`).
+
+---
+
+## §P — the DOWNSTREAM gates, and their four negative controls
+
+§P is new at fb423 and gates the two files the card is actually built from — `ROSTER.md` and
+`eq-worklet.js` — against the engine header. It is mutated by **breaking the subject files**, not
+the engine, because that is where its faults live. All four controls are reproducible: copy the
+directory to `/tmp`, break one thing, rebuild the cert against that copy.
+
+| # | control | gates that go RED |
+|---|---|---|
+| 1 | restore the **fb422 downstream files** (stale worklet + stale roster, header correct — the exact state the fb423 audit found) | **6 of 8**: EQUAL 79/87 · authored-once 43/87 · CSPEC-zero-strings 112 · retired-strings **47 live** · Trait table 2/7 · all-87-present 79/87 |
+| 2 | hide **one** retired name inside a LATER blockquote (Max's own §0 quote) | retired-strings: `Metal ROSTER.md x1` — proves the changelog exemption really is banner-only |
+| 3 | **delete `ROSTER.md`** | readable: `ROSTER.md NO` — a gate that cannot find its subject goes RED, it does not skip (fb393) |
+| 4 | retitle the banner so the exemption is no longer a changelog | exemption: `NOT a changelog heading` |
+| 5 | §O: add a **sanction for a name that was never ruled** (`Plain`) and let it collide | the primary collision gate goes **green** (`11 collisions, 11 sanctioned`) — and the meta-gate goes **RED**: `11 of 16 sanctions are actually spent`. This is the control that matters: it proves the exemption list cannot buy itself a pass. |
+
+```
+control 1   ══ RESULT: 125 pass, 6 FAIL ══
+control 2   ══ RESULT: 130 pass, 1 FAIL ══     FAILED: not one of the 29 RETIRED strings
+                                                       survives downstream (prose included)
+                                                       [1 retired strings still live:
+                                                        Metal ROSTER.md x1
+                                                        [> — and the Metal character stays as it is.]]
+control 3   ══ RESULT: 123 pass, 1 FAIL ══     <- 123 = every gate through §O, i.e. the
+                                                  fb422 baseline's 121/1 resolved to 122/0
+control 4   ══ RESULT: 130 pass, 1 FAIL ══
+control 5   ══ RESULT: 130 pass, 1 FAIL ══     ok    no collision with a shipped label outside
+                                                     RENAMES.md's sanctioned list
+                                                     11 collisions, 11 sanctioned; UNRESOLVED: none
+                                               FAIL  the sanctioned list SPENDS exactly 10
+                                                     exemptions — it cannot quietly grow
+                                                     11 of 16 sanctions are actually spent
+```
+
+The meter is pinned at **8**, not 10. It was 10 at fb422; refreshing the corpus against the
+siblings' current state returned two exemptions UNSPENT (`Bite`, because OTT renamed its pill
+`Bite`→`Crest`; `Silk`, because Widen renamed its Character `Silk`→`Satin`). The same refresh
+exposed a **circular corpus** — the siblings' own gate dumps re-export my 87 labels, which briefly
+produced `87 collisions ... 14 of 15 sanctions spent` — see `FINDINGS.md` §4. That is a family-wide
+defect and only my own extractor is fixed here.
+
+fb423's own words: *"a gate that can exempt itself is not a gate."* Control 5 is that sentence made
+executable — the sanctioned list is pinned to the number of collisions it actually **spends** (10),
+so a sanction can never be written ahead of a ruling. The five carried-but-unspent entries
+(`Reach`, `Focus`, `Side`, `Left`, `Right`) are printed every run: `Side`/`Left`/`Right` exist only
+because the M/S vocabulary was ruled **as a group**, and the gate says so out loud rather than
+letting them sit silently.
+
+🪤 **The exemption gate earned its place by catching me.** Its first version dropped *every*
+markdown blockquote line from the retired-name scan — and immediately failed, because §0 quotes
+**Max** in a blockquote. An exemption wide enough to cover Max's own words is a blind spot in the
+one section a reader trusts most. It is now exactly one region: the contiguous blockquote that
+opens the file, asserted contiguous, asserted to end before the first `##` heading, and asserted
+to *begin with a changelog heading* — so it cannot quietly become "exempt prose". Its size is
+printed every run (currently 46 lines).
+
+The six engine mutants leave §P **green in all six** (0 of 8 P gates fire), which is correct and
+worth stating: §P measures files, not DSP. It is falsified by controls 1–4 above, not by `-D`.

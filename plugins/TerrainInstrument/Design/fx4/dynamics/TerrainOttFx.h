@@ -91,8 +91,8 @@ public:
                          "Slow Shimmer","Fast Shimmer","Dark Source", "Sheen Wall" },
         /* Bass Safe*/ { "Anchor Low",  "Mono Low",    "Slower Low",  "Low Ceiling",
                          "Reese Guard", "Free Low",    "Wide Corner Low","Tight Low" },
-        /* Surge    */ { "Tail Riser",  "Deep Riser",  "Slow Riser",  "Fast Riser",
-                         "Capped Riser","Top Riser",   "Low Riser",   "Riser Wall" },
+        /* Surge    */ { "Tail Riser",  "Deep Riser",  "Tied Rise",   "Fast Riser",
+                         "Capped Riser","Top Riser",   "Mean Ears",   "Riser Wall" },
         /* Two Band */ { "Body Sparkle","Low Split",   "High Split",  "Hard Body",
                          "Soft Body",   "Sparkle Wall","Slow Pair",   "Fast Pair" },
         /* Stagger  */ { "Time Spread", "Wider Spread","Narrow Spread","Reverse Spread",
@@ -616,8 +616,8 @@ private:
           {21,24,20}, {2.0f,1.0f,0.5f}, {30,20,11}, 0.0f, 0, 3.0f, 0, 0 },
         /* Sheen — X-High down to 1.8 k, the high band's floor moved toward the programme,      */
         /* 0.35/8 ms ballistics so the shimmer reads as texture rather than pumping.            */
-        { 1.0f, 0.72f, 3, {-40,-31,-40}, {-45,-37,-42}, {0.90f,0.907f,1.0f}, {0.8f,0.8f,0.9f},
-          {12,14,15}, {2.8f,1.4f,0.35f}, {40,28,8}, 2.0f, 0, 999.0f, 0, 0 },
+        { 1.0f, 0.55f, 3, {-40,-31,-26}, {-45,-37,-28}, {0.90f,0.907f,1.0f}, {0.8f,0.8f,0.9f},
+          {12,14,2}, {2.8f,1.4f,0.35f}, {40,28,8}, 2.0f, 0, 999.0f, 0, 0 },
         /* Bass Safe — low band: upward OFF, gentler slope, 10/120 ms, mono-summed detection,   */
         /* threshold 4 dB up. Every mix engineer's OTT complaint, fixed.                        */
         { 1.0f, 1.0f, 3, {-36,-31,-40}, {-45,-37,-46}, {0.75f,0.857f,1.0f}, {0.0f,0.8f,0.8f},
@@ -686,7 +686,7 @@ private:
           OC(1,1,1,1,   1.2f,1.2f,-4,4, 0,30,0,   1,1,   -1,0,0,0, 2.0f) },// Total Squeeze
         /* ── Sheen ────────────────────────────────────────────────────────────────────────── */
         { OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1,   -1,0,0,0, -1),   // Top Sheet
-          OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1.6f,-1,0,0,0, -1),   // Higher Split
+          OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,2.6f,-1,0,0,0, -1),   // Higher Split
           OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,0.6f,-1,0,0,0, -1),   // Lower Split
           OC(1,1,1,1,      1,1,0,-10,   0,10,0,   1,1,   -1,0,0,0, 4.0f),  // Glass Ceiling
           OC(1,1,1,4.0f,   1,1,0,0,    -1,24,0,   1,1,   -1,0,0,0, -1),   // Slow Shimmer
@@ -705,11 +705,11 @@ private:
         /* ── Surge ────────────────────────────────────────────────────────────────────────── */
         { OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1,   -1,0,0,0, -1),   // Tail Riser
           OC(1,1,1,1,      1,1.15f,0,6,-1,36,0,   1,1,   -1,0,0,0, -1),   // Deep Riser
-          OC(1,3.0f,1,1,   1,1,0,0,    -1,24,0,   1,1,   -1,0,0,0, -1),   // Slow Riser
+          OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1,   -1,1,0,0, -1),   // Tied Rise
           OC(0.25f,0.25f,1,1, 1,1,0,0, -1,24,0,   1,1,   -1,0,0,0, -1),   // Fast Riser
           OC(1,1,1,1,      1,1,0,0,    -1,5,0,    1,1,   -1,0,0,0, -1),   // Capped Riser
           OC(1,1,1,0.3f,   1,1.2f,0,4, -1,30,0,   1,0.7f,-1,0,0,0, -1),   // Top Riser
-          OD(1,1,2.6f,1,   1,1,0,0,    -1,24,0,   1,1,   -1,0,0,1, -1, 1,0), // Low Riser
+          OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1,    2,0,0,0, -1),   // Mean Ears
           OC(1,1,1,1,   1,1.12f,0,10,  -1,36,0,   1,1,   -1,0,0,0, -1) }, // Riser Wall
         /* ── Two Band ─────────────────────────────────────────────────────────────────────── */
         { OC(1,1,1,1,      1,1,0,0,    -1,24,0,   1,1,   -1,0,0,0, -1),   // Body Sparkle

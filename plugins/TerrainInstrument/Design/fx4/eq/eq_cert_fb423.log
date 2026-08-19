@@ -82,8 +82,8 @@
   ok    British: 8 Characters, closest pair > 1.5 dB               closest 4.32 dB = Desk/Full Swing · weakest vs default 4.32 dB (Full Swing)
   ok    American: 8 Characters, closest pair > 1.5 dB              closest 2.49 dB = Proportional/Mellow · weakest vs default 2.49 dB (Mellow)
   ok    Passive: 8 Characters, closest pair > 1.5 dB               closest 4.14 dB = Bell Top/Slow Top · weakest vs default 4.49 dB (Close Cut)
-  ok    Open: 8 Characters, closest pair > 1.5 dB                  closest 2.73 dB = Stacked/Deep Reach · weakest vs default 4.62 dB (Very Wide)
-  ok    Chisel: 8 Characters, closest pair > 1.5 dB                closest 2.38 dB = Gain Peak/Metal · weakest vs default 4.38 dB (Gain Peak)
+  ok    Open: 8 Characters, closest pair > 1.5 dB                  closest 2.73 dB = Twin Shelf/Deep Reach · weakest vs default 4.62 dB (Very Wide)
+  ok    Chisel: 8 Characters, closest pair > 1.5 dB                closest 2.38 dB = Gain Peak/Tin · weakest vs default 4.38 dB (Gain Peak)
   ok    Dynamic: 8 Characters separate on the RIDE TRAJECTORY (gate 1.00) closest 1.91 = Program Ride/Soft Window
         Character        atk ms   rel ms   hot dB    quiet   -26 dB   -29 dB   -23 dB
         Program Ride       2.00     61.3   -24.00    -0.00   -13.98    -6.71   -20.57
@@ -93,7 +93,7 @@
         Upward             2.00     61.3    -0.00   -24.00    -9.14   -16.62    -2.75
         Hard Window        1.33     57.3   -24.00    -0.00   -15.75    -0.16   -23.67
         Soft Window        2.00     68.0   -23.96    -0.00   -12.87    -9.76   -15.92
-        Peak Hold          2.00      0.0   -24.00    -0.00   -21.57   -15.46   -23.67
+        Peak Keep          2.00      0.0   -24.00    -0.00   -21.57   -15.46   -23.67
 
 [F. Every param 0->100 %: monotonic, night-and-day, measured span (law 1)]
   ok    Slant  LOW  end (80 Hz alone — must FALL)                span 35.3 (need 30) · worst reversal 0.00
@@ -269,10 +269,10 @@
            the fb420 ruler was 1500 ms against a 3100 ms bar and returned 1500.0 silently.
 
 [M. CPU — us per 128-sample block at 48 kHz (one block is 2666.7 us of audio)]
-  ok    worst Type, settled knobs, < 0.5 % of one core             4.35 us/block = 0.163 % of a core (Surgical)
-           per Type (us/block, roster order): 4.35 3.45 3.47 4.30 3.94 2.90 3.49 
-  ok    worst case — TWO knobs moving every block — < 1.5 % of one core 6.51 us/block = 0.244 % of a core
-           6 instances, all with knobs moving: 1.46 % of one core
+  ok    worst Type, settled knobs, < 0.5 % of one core             4.35 us/block = 0.163 % of a core (Passive)
+           per Type (us/block, roster order): 4.32 3.46 3.44 4.35 3.94 2.86 3.46 
+  ok    worst case — TWO knobs moving every block — < 1.5 % of one core 6.35 us/block = 0.238 % of a core
+           6 instances, all with knobs moving: 1.43 % of one core
 
 [N. 44.1 kHz and 96 kHz — the device must be the SAME device]
   ok    44.1 kHz: defaults still null bit-exactly                  worst delta 0.000e+00
@@ -282,13 +282,14 @@
   ok    96.0 kHz: the reference patch matches 48 kHz within 2.0 dB worst |delta| 1.55 dB at 17293 Hz
   ok    96.0 kHz: the R11 ceiling still reaches 55 dB              MSD 56.7 dB
 
-[O. NAMES — no doubles, inside the card and against 3064 shipped strings]
-        shipped_labels.inc holds 3064 strings from Source/ · Design/fx3/ · the two sibling fx4 dirs; this device publishes 87.
+[O. NAMES — no doubles, inside the card and against 3050 shipped strings]
+        shipped_labels.inc holds 3050 strings from Source/ · Design/fx3/ · the two sibling fx4 dirs; this device publishes 87.
   ok    (self-check) the extractor SEES the fb418 leading-space labels Motion / Route Motion yes · Route yes  (the old pattern found neither)
   ok    (self-check) ... and the two shipped Tape knobs fb420 collided with Tilt yes · Sculpt yes  — this is what the gate is FOR
-  ok    every EQUALIZER row of RENAMES.md is applied VERBATIM      21 of 21 rows
+  ok    every EQUALIZER row of RENAMES.md is applied VERBATIM      29 of 29 rows
   ok    no label appears twice INSIDE this card                    0 doubles across 87 published strings
-  FAIL  no collision with a shipped label outside RENAMES.md's sanctioned list 18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option), Mid (Focus option), Forward (Character), Runaway (Character), Program (Character), Stacked (Character), Peak Hold (Character), Razor (Character), Telephone (Character), Metal (Character)
+  ok    no collision with a shipped label outside RENAMES.md's sanctioned list 8 collisions, 8 sanctioned by name; UNRESOLVED: none
+  ok    the sanctioned list SPENDS exactly 8 exemptions — it cannot quietly grow 8 of 15 sanctions are actually spent on a live collision; carried but unspent (ruled as a GROUP): Bite, Reach, Focus, Silk, Side, Left, Right
            sanctioned  Low — RENAMES.md: band grammar, keep
            sanctioned  Body — RENAMES.md: band grammar, keep
            sanctioned  Bite — RENAMES.md: band grammar, keep
@@ -299,6 +300,11 @@
            sanctioned  Focus — RENAMES.md: sanctioned shared vocabulary, keep
            sanctioned  Tight — RENAMES.md EQUALIZER row: 'keep - Widen yields this one' (-> Tight Fan)
            sanctioned  Silk — RENAMES.md WIDEN row: Steady char 0 Silk -> Satin, 'EQ knob label outranks a Character'
+           sanctioned  Stereo — RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group
+           sanctioned  Mid — RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group
+           sanctioned  Side — RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group
+           sanctioned  Left — RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group
+           sanctioned  Right — RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group
 
         PUBLISHED FROM THE ENGINE HEADER (EQ::label / EQ::labelSlot):
         Types : Surgical · British · American · Passive · Open · Dynamic · Chisel
@@ -307,12 +313,22 @@
         Trait : Surgical=Pinch · British=Slope · American=Taper · Passive=Dip · Open=Silk · Dynamic=Pivot · Chisel=Sting
         Focus : Stereo · Mid · Side · Left · Right
         Surgical  Plain         Tight         Broad         Steep         Scoop         Deep Pivot    Bright Pivot  Four Bells   
-        British   Desk          Big Knob      Forward       Iron Top      Sub Iron      Steep Iron    Full Swing    Mid Rise     
-        American  Proportional  Lasers        Mellow        Floor Lift    Boost Only    Cut Only      Shelf Ride    Runaway      
-        Passive   Program       Close Cut     Far Cut       Both Ends     Bell Top      Slow Top      Deep Atten    Revival      
-        Open      Gloss         Very Wide     Two Shelves   Stacked       Deep Reach    Soft Knee     Hard Knee     Bell Air     
-        Dynamic   Program Ride  Quick         Lazy          Wideband      Upward        Hard Window   Soft Window   Peak Hold    
-        Chisel    Resonator     Razor         Triple Notch  Gain Peak     Shallow       Telephone     Sub Kill      Metal        
+        British   Desk          Big Knob      Ahead         Iron Top      Sub Iron      Steep Iron    Full Swing    Mid Rise     
+        American  Proportional  Lasers        Mellow        Floor Lift    Boost Only    Cut Only      Shelf Ride    Bolt         
+        Passive   Baseline      Close Cut     Far Cut       Both Ends     Bell Top      Slow Top      Deep Atten    Revival      
+        Open      Gloss         Very Wide     Two Shelves   Twin Shelf    Deep Reach    Soft Knee     Hard Knee     Bell Air     
+        Dynamic   Program Ride  Quick         Lazy          Wideband      Upward        Hard Window   Soft Window   Peak Keep    
+        Chisel    Resonator     Scalpel       Triple Notch  Gain Peak     Shallow       Handset       Sub Kill      Tin          
 
-══ RESULT: 121 pass, 1 FAIL ══
-   FAILED: no collision with a shipped label outside RENAMES.md's sanctioned list  [18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option), Mid (Focus option), Forward (Character), Runaway (Character), Program (Character), Stacked (Character), Peak Hold (Character), Razor (Character), Telephone (Character), Metal (Character)]
+[P. DOWNSTREAM — ROSTER.md and eq-worklet.js EQUAL the header (fb423)]
+  ok    both downstream files are READABLE (a missing file FAILS, it does not skip) ROSTER.md yes · eq-worklet.js yes  at ./
+  ok    eq-worklet.js's name tables EQUAL the header, string for string 87 of 87 labels identical
+  ok    every name is authored EXACTLY ONCE in eq-worklet.js (no second table) 87 of 87 appear exactly once
+  ok    the CSPEC physics table carries ZERO strings — `nm` is DELETED, not gated 0 quote characters inside the CSPEC block
+  ok    the changelog exemption is ONE contiguous banner at the top — Max's own §0 quote is SCANNED banner = lines 7-62 (56 lines, contiguous), first '## ' at line 66, opens '> ## fb...'; 2 LATER blockquote lines are scanned like any other prose
+  ok    not one of the 29 RETIRED strings survives downstream (prose included) 0 retired strings still live  (29 checked, 0 hits)
+           exempt: 56 ROSTER.md changelog blockquote lines and 59 eq-worklet.js comment lines — both NARRATE the old names.
+  ok    ROSTER §4's Trait table prints the header's SEVEN P8 relabels 7 of 7 rows
+  ok    ROSTER.md names all 87 published labels (no label lives only in the header) 87 of 87 present
+
+══ RESULT: 131 pass, 0 FAIL ══

@@ -2,8 +2,41 @@
 
 **7 Types × 8 Characters × 5 Focus · 12 params (3 heroes + Mix + 8 back) · ±30 dB per band
 × Amount 200 % = ±60 dB.** Engine: `TerrainEqualizerFx.h`. Certified by `eq_cert.cpp`
-(**121 pass / 1 FAIL**, full output in `eq_cert_fb422.log`; mutation evidence in `MUTATION.md`).
+(**131 pass / 0 FAIL**, full output in `eq_cert_fb423.log`; mutation evidence in `MUTATION.md`).
 
+> ## 🔴 fb423 — WHAT CHANGED SINCE fb422
+>
+> **The 8 open names are ruled and applied.** `Design/fx4/RENAMES.md`'s second ruling closed the
+> collisions this device's own gate found and refused to self-rename (FIXES.md §2 forbids
+> substituting your own): `Forward`→**`Ahead`** · `Runaway`→**`Bolt`** · `Program`→**`Baseline`**
+> (note `Program Ride` is a DIFFERENT Character and is untouched) · `Stacked`→**`Twin Shelf`** ·
+> `Peak Hold`→**`Peak Keep`** · `Razor`→**`Scalpel`** · `Telephone`→**`Handset`** ·
+> `Metal`→**`Tin`**. `Stereo` and `Mid` are **SANCTIONED** — M/S routing vocabulary, ruled as a
+> group with `Side`/`Left`/`Right`, no rename. §O is green: **10 collisions, 10 sanctioned by
+> name, 0 unresolved.**
+>
+> **The card's OWN files are now gated against the header (new §P).** Three sites of downstream
+> drift are fixed and cannot recur silently:
+> `eq-worklet.js` carried **`CSPEC[].nm`, a second 56-name table 12 renames stale** and never
+> read by anything — *the exact geometry this header deleted at fb422* — so it is **DELETED**,
+> not gated (the physics rows stay, the names live only in `CHARS`). This §4 Trait table still
+> printed the OLD P8 relabels (`Width`/`Bump`/`Grip`/`Sense`/`Ring`) while the banner announced
+> the new ones. And the body prose still named eight retired Characters.
+> **The corpus was refreshed and it had gone CIRCULAR.** Re-extracting against the siblings'
+> current state briefly produced **87 collisions — every one of them my own label colliding with
+> itself**, because `widen/shipped_labels.inc` re-exports the EQ's 87 names and both siblings'
+> certs quote `"Slant"`/`"Chisel"` as self-check literals. The sanction meter had begun absorbing
+> the noise (10 spent → 14). My extractor now excludes sibling **gate artefacts** and prints a
+> self-ingestion check; `Source/` and `Design/fx3/` are still read whole. **The other two devices
+> almost certainly have the same defect and I cannot fix it for them** — see `FINDINGS.md` §4.
+> Post-fix: 3050 strings, **8 collisions, 8 sanctioned, 0 unresolved**, and two exemptions came
+> back unspent because sibling renames landed (`Bite`→`Crest` on OTT, `Silk`→`Satin` on Widen).
+>
+> §P now asserts, every run: the worklet's six name arrays **EQUAL** the header string-for-string
+> (87/87); each name is authored **exactly once** in the worklet; the CSPEC block holds **zero**
+> strings; **none of the 29 retired strings survives** in either file, prose included; this table
+> matches `shapeName()`; and the roster names all 87 labels. A missing file **FAILS**.
+>
 > ## 🔴 fb422 — WHAT CHANGED SINCE fb420
 >
 > **Names.** Every EQUALIZER row of `Design/fx4/RENAMES.md` is applied verbatim, and the engine
@@ -19,7 +52,7 @@
 > `pivot / 10^(g/20)`, so the pivot slid 700 Hz → 2.8 Hz as the knob opened and the bass came back
 > UP by 13.2 dB (48 dB at Amount 200 %). The corner is now placed by arithmetic so the pivot is
 > exact at every gain and every sample rate. **Every `Slant` number below this box was measured on the
-> BROKEN engine** (the prose was renamed, the measurements were not re-run) — the corrected ones are in `FINDINGS.md` §A/§B and `eq_cert_fb422.log` §F3/§K.
+> BROKEN engine** (the prose was renamed, the measurements were not re-run) — the corrected ones are in `FINDINGS.md` §A/§B and `eq_cert_fb423.log` §F3/§K.
 >
 > **`Amount`'s smoother went 10 ms → 20 ms** (an instant Amount write measured 1.63 dB of wet-gain
 > change in one sample; it scales as 1/tau, so it was a smoothing fault, not physics).
@@ -68,7 +101,7 @@ the grid; the heroes go on the front; and the single remaining degree of freedom
 
 Serum 2's Equalizer is six parameters (two bands × Freq/Gain/Q, a small static curve, no
 analyzer, no M/S, no dynamics). This is twelve, plus seven Q laws, plus a fully interactive
-Pro-Q-grammar curve. Width matched, depth beaten.
+Pro-Q-grammar curve. Breadth matched, depth beaten.
 
 ---
 
@@ -86,7 +119,7 @@ grow later — declare 12, light 7, clamp the rest).
 | 3 | **Passive** | Pultec EQP-1A | Boosting the Low shelf ALSO engages an attenuation shelf at 2.2×fc. One knob, hump *and* scoop — the interaction an ideal parametric cannot make. Cuts run 1.15× deeper (the EQP's 17.5 vs 13.5 dB). BITE is a fixed wide peak that ignores every Q law. | **−2.61 dB** trough at 150–700 Hz from a +18 dB @ 60 Hz boost, where Surgical shows **−0.56 dB** |
 | 4 | **Open** | Maag EQ4 / Siemens W295b | Everything widens (bell Q 0.40–0.45) and gains pass a `tanh` knee, so "boost it forever" never gets shrill. **AIR is 6 dB/oct**, so a corner beyond Nyquist still lifts in band. | bells are **3.04 octaves** wide (Surgical: 1.57); at Reach 40 kHz it still delivers **+3.08 dB at 18 kHz** where every 2-pole Type delivers **+0.01 dB** |
 | 5 | **Dynamic** | TDR Nova / Pro-Q 3 | The ONE level-dependent Type (contract §4 allows exactly one). Per-band SVF detector → envelope → smoothstep around a **program-anchored** threshold. Cuts fade IN with level, boosts fade OUT. | **17.84 dB** of response change from a −40 to a −12 dBFS program; every other Type measures **0.000 dB** |
-| 6 | **Chisel** | digital-only, no ancestor | Q is coupled to gain (`Ring × (1 + |g|/12)`, to Q 90) and the bottom of the downward travel MORPHS the bell into a true notch: −30 dB on the knob becomes **−90 dB** of hole. | notch floor **−90.0 dB** (Surgical at the same knob: −30.0 dB) and T60 **338 ms** where Surgical rings **8.7 ms** |
+| 6 | **Chisel** | digital-only, no ancestor | Q is coupled to gain (`Sting × (1 + |g|/12)`, to Q 90) and the bottom of the downward travel MORPHS the bell into a true notch: −30 dB on the knob becomes **−90 dB** of hole. | notch floor **−90.0 dB** (Surgical at the same knob: −30.0 dB) and T60 **338 ms** where Surgical rings **8.7 ms** |
 
 ### Cross-type distinctness (measured, phase-independent, gate 1.00 JND)
 
@@ -121,7 +154,7 @@ shelf undershoot, Pultec scoop, level dependence, notch floor, 18 kHz top-octave
 Back dropdown 1. **Every one changes physics and every one is measured**: within each Type,
 all 28 pairs are compared on the 96-bin output spectrum at the reference patch, and the
 closest pair must exceed 1.5 dB. Worst case across the whole roster: **2.38 dB**
-(Chisel: Gain Peak / Metal). Dynamic is measured differently and separately — see below.
+(Chisel: Gain Peak / Tin). Dynamic is measured differently and separately — see below.
 
 **Surgical** — re-voices the Q law and the band shapes.
 `Plain` reference · `Tight` Q ×2.6 · `Broad` Q ×0.35 · `Steep` LOW+AIR become 24 dB/oct
@@ -132,10 +165,10 @@ left alone entirely — the single biggest topology change in the device).
 *Closest pair 3.90 dB.*
 
 **British** — moves the iron.
-`Desk` reference · `Big Knob` mid bells Q ×0.5 · `Forward` mids Q ×2.2/2.4 and pushed up ·
-`Iron Top` AIR Q ×1.9 at 0.78× the corner with a stronger Bump (the 1073's fixed 12 kHz) ·
+`Desk` reference · `Big Knob` mid bells Q ×0.5 · `Ahead` mids Q ×2.2/2.4 and pushed up ·
+`Iron Top` AIR Q ×1.9 at 0.78× the corner with a stronger Slope (the 1073's fixed 12 kHz) ·
 `Sub Iron` LOW down to 0.42× with Q ×1.6 · `Steep Iron` 24 dB/oct shelves ·
-`Full Swing` the gain softener is switched OFF (±30 dB exact instead of ±27) and Bump is
+`Full Swing` the gain softener is switched OFF (±30 dB exact instead of ±27) and Slope is
 de-rated — the "modern" British · `Mid Rise` BODY up an octave, wider, ×1.25 gain.
 *Closest pair 4.32 dB (Desk / Full Swing).*
 
@@ -143,12 +176,12 @@ de-rated — the "modern" British · `Mid Rise` BODY up an octave, wider, ×1.25
 `Proportional` reference · `Lasers` exponent +1.2, Q ×1.6 · `Mellow` exponent −0.55, Q ×0.7 ·
 `Floor Lift` raises the Q FLOOR ×2.2 so even tiny moves are tight · `Boost Only` the law
 applies to boosts only, cuts stay wide · `Cut Only` the reverse · `Shelf Ride` the shelves go
-proportional too (S rides gain) · `Runaway` exponent +2.0 with Q ×2.2 — at ±30 dB the bells
+proportional too (S rides gain) · `Bolt` exponent +2.0 with Q ×2.2 — at ±30 dB the bells
 reach Q 30.
 *Closest pair 2.49 dB.*
 
 **Passive** — moves where the ride-along cut lands.
-`Program` cut shelf at 2.2×fc · `Close Cut` 1.4× · `Far Cut` 4.4× · `Both Ends` the AIR band
+`Baseline` cut shelf at 2.2×fc · `Close Cut` 1.4× · `Far Cut` 4.4× · `Both Ends` the AIR band
 gets a ride-along attenuator too (the EQP's high boost + high atten engaged together) ·
 `Bell Top` AIR becomes the EQP high **peak** · `Slow Top` AIR becomes a 6 dB/oct shelf — the
 slowest curve in the device · `Deep Atten` cuts ×1.45 · `Revival` the ride-along is a BELL
@@ -157,7 +190,7 @@ instead of a shelf, so the scoop is local rather than a whole region.
 
 **Open** — moves how far the top reaches and how wide it opens.
 `Gloss` Silk shelf one octave above Reach · `Very Wide` Q ×0.55 (bells past 5 octaves) ·
-`Two Shelves` BODY becomes a second low shelf · `Stacked` Silk one octave BELOW Reach, so the
+`Two Shelves` BODY becomes a second low shelf · `Twin Shelf` Silk one octave BELOW Reach, so the
 two shelves compound into a steeper top · `Deep Reach` Silk two octaves below with AIR Q ×1.5 ·
 `Soft Knee` tanh knee 12 dB (heavy compression of extremes) · `Hard Knee` knee 90 dB (the
 softener effectively off — exact gains) · `Bell Air` AIR becomes a very wide peak, the Sie-Q
@@ -165,11 +198,11 @@ softener effectively off — exact gains) · `Bell Air` AIR becomes a very wide 
 *Closest pair 2.73 dB.*
 
 **Chisel** — moves the notch morph and the ring.
-`Resonator` morph knee −18 dB · `Razor` Q ×2.5, knee −12 · `Triple Notch` BODY and BITE pulled
+`Resonator` morph knee −18 dB · `Scalpel` Q ×2.5, knee −12 · `Triple Notch` BODY and BITE pulled
 onto 2× and 4× spacing (a harmonic comb) · `Gain Peak` Q/gain coupling ×2.6 · `Shallow` knee
-−90 dB, i.e. the morph never engages — pure resonator, no notches · `Telephone` LOW and AIR
+−90 dB, i.e. the morph never engages — pure resonator, no notches · `Handset` LOW and AIR
 become bells pulled to 2.5× and 0.35× (band-pass carving) · `Sub Kill` LOW at 0.35× with Q ×3
-and a −10 dB knee · `Metal` Q ×4 with coupling ×1.8 — Q 90 on every band.
+and a −10 dB knee · `Tin` Q ×4 with coupling ×1.8 — Q 90 on every band.
 *Closest pair 2.38 dB.*
 
 **Dynamic** — the DETECTOR is the physics, so a static spectrum cannot grade it. Measured on
@@ -186,7 +219,7 @@ endpoints — both a 2.5 dB and a 34 dB window are fully on at −10 dBFS).
 | `Upward` | 2.00 ms | 61.3 ms | 0.0 | −24.0 | −9.14 | −16.62 | −2.75 |
 | `Hard Window` | 1.33 ms | 57 ms | −24.0 | 0.0 | −15.75 | −0.16 | −23.67 |
 | `Soft Window` | 2.00 ms | 68 ms | −24.0 | 0.0 | −12.87 | −9.76 | −15.92 |
-| `Peak Hold` | 2.00 ms | — | −24.0 | 0.0 | −21.57 | −15.46 | −23.67 |
+| `Peak Keep` | 2.00 ms | — | −24.0 | 0.0 | −21.57 | −15.46 | −23.67 |
 
 *Closest pair 1.22 — above the 1.00 gate, and the pair (`Program Ride` / `Hard Window`) is
 separated almost entirely by the −29 dBFS column, which is exactly the axis a window width
@@ -253,13 +286,13 @@ provably flat and its output is **bit-identical** to its input (measured: worst 
 
 | Type | `Trait` reads | Range | Measured span 0→100 % |
 |---|---|---|---|
-| Surgical | **Width** | global Q ×0.25 → ×40, centre detent at ×1.0 | **6.76** in log2 bandwidth (4.3 octaves → 0.038 octaves) |
-| British | **Bump** | shelf Q 0.5 → 4.5 | **12.76 dB** of shelf undershoot |
-| American | **Grip** | proportional exponent 0.4 → 3.0 | **2.50** in log2 bandwidth *at a small +8 dB move* |
+| Surgical | **Pinch** | global Q ×0.25 → ×40, centre detent at ×1.0 | **6.76** in log2 bandwidth (4.3 octaves → 0.038 octaves) |
+| British | **Slope** | shelf Q 0.5 → 4.5 | **12.76 dB** of shelf undershoot |
+| American | **Taper** | proportional exponent 0.4 → 3.0 | **2.50** in log2 bandwidth *at a small +8 dB move* |
 | Passive | **Dip** | ride-along cut 0 → 120 % | **4.86 dB** of Pultec scoop |
 | Open | **Silk** | second shelf 0 → 100 % of 0.8×Air | **14.43 dB** at 19 kHz |
-| Dynamic | **Sense** | threshold **−20…+20 dB around −26 dBFS**, centre detent | **23.67 dB** of applied ride |
-| Chisel | **Ring** | Q 2 → 64, then ×(1+|g|/12) to the Q 90 cap | **4.17** in log2 bandwidth |
+| Dynamic | **Pivot** | threshold **−20…+20 dB around −26 dBFS**, centre detent | **23.67 dB** of applied ride |
+| Chisel | **Sting** | Q 2 → 64, then ×(1+|g|/12) to the Q 90 cap | **4.17** in log2 bandwidth |
 
 ---
 

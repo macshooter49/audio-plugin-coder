@@ -1,13 +1,17 @@
 # DYNAMICS — what was measured, what was cut, what could NOT be proved
 
 Devices: **COMPRESS** (chain kind 11) and **OTT** (chain kind 12), over one shared `DynamicsCore.h`.
-Harness: `dynamics_cert.cpp` — **114 gates, 0 fail**. Full run saved as `dynamics_cert.log`.
+Harness: `dynamics_cert.cpp` — at **fb423, 165 gates, 0 fail, exit 0** (fb422: 139 pass / 3 fail;
+first draft: 114 / 0). Full run saved as `dynamics_cert.log`. Mutation: `python3 mutate.py` —
+**21 mutants, 20 gates fired, 1 survivor** (`MUTATION.md`).
 
 ```
-clang++ -O2 -std=c++17 \
+clang++ -O2 -std=c++17 -DDYN_DIR='"<TI>/Design/fx4/dynamics"' \
   -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/dynamics \
   <TI>/Design/fx4/dynamics/dynamics_cert.cpp -o /tmp/dynamics_cert && /tmp/dynamics_cert
 ```
+`DYN_DIR` is where cert §1 goes looking for `ROSTER.md` and the two worklets so it can prove they
+still say what the headers say. It defaults to `"."` and FAILS — never skips — if they are absent.
 Runtime ~4 min (the 60-second stability sweeps and 128 Character feature extractions dominate).
 
 ---
@@ -38,11 +42,11 @@ Runtime ~4 min (the 60-second stability sweeps and 128 Character feature extract
 | `LP4 + HP4 = AP2(fc)` exactly (the identity the Mix law rests on) | **-134.8 dB** below the allpass |
 | Worst comb notch at Mix 50 % | **0.24 dB** at 59 Hz (bar 1.0) |
 | Engage on the reference chord at defaults | low **+11.7**, mid **+13.7**, high **+10.8 dB** — 3 of 3 bands |
-| Unity through, all 8 Types at their defaults | worst **-1.24 dB** (Sheen) |
+| Unity through, all 8 Types at their defaults | worst **-1.02 dB** (Stagger) at fb423 (was -1.24, Sheen) |
 | At Amount 100, a **46 dB staircase** survives as | **0.0742** of its span (Amount 0 control 0.9988) |
 | A **-65 dBFS bed** lifted into a wall | **+33.1 dB** (Amount 0 control +0.9 dB) |
 | ... and 3 s after the note at Amount/Top Lift/Raise 100 | **-280 dBFS**. Two OTTs in series: also -280 |
-| `Sheen`'s air on a genuinely dark pad | **+47.6 dB** at 8-12 kHz (Over Top: +35.1) |
+| `Sheen`'s air on a genuinely dark pad | ⚠️ **this row was WRONG** — the FFT was unnormalised and aimed 114 dB under the programme. Honest: **+18.70 dB** vs Over Top's **+15.53**, and at fb423 air is no longer Sheen's discriminator at all (§R3.1) |
 | `Two Band`'s cross-band ducking | a loud 500 Hz costs a quiet 5 kHz **17.75 dB** (Over Top: 0.67) |
 | Closest Type pair | **6.03x JND** (Over Top / Bass Safe) |
 | Weakest Character | **2.06x JND** (Bass Safe - Free Low) |
@@ -361,6 +365,10 @@ worklets carry a `LABELS` block that says in a comment that the header wins.
 
 ## 4. 🔴 STILL RED — three OTT gates, and I am not going to buy them
 
+> ⚠️ **SUPERSEDED at fb423 — all three are now green.** Kept verbatim because the diagnosis in
+> it turned out to be right and was what Max approved. See §R3.1 below for what was built and
+> what it measures.
+
 All three appeared **because** the air metric was fixed. They were green on the fb421 engine only
 because the metric was ~40 dB high and measured on content 114 dB under the programme.
 
@@ -391,6 +399,9 @@ the correct answer is probably to cut that Character, not to re-tune it.
 
 ## 5. 🔴 Two mutation survivors — see MUTATION.md §"The two survivors"
 
+> ⚠️ **ONE OF THE TWO IS NOW CLOSED at fb423** (`compress-heat-kind-fade`, by cert §4c4). The
+> other is still a survivor and still labelled. See §R3.3.
+
 `compress-transition-slew` and `compress-heat-kind-fade` are both **redundant**: some other
 mechanism holds the gate green without them (1.23 → 1.94 dB/ms, still under the 2.0 bar). Neither
 is a hole in the device; both are mechanisms no gate depends on. Kept, labelled, and the forty
@@ -401,3 +412,192 @@ lines it would take to gate them properly are described rather than claimed.
 `Opto` 9.93 → **12.56 µs**/128 at 48 k (0.47 % of a core); `Heavy` 29.11 → **31.04 µs** (1.16 %).
 The extra is the discrete-rewiring fades and, on OTT, the second dry allpass that now runs in both
 trees so a band-count change cannot step the dry path's phase at Mix < 1.
+
+---
+
+# ROUND 3 (fb423) — SHEEN GETS A MECHANISM · THE CEILINGS GET MUTATED · THE LABELS GET GATED
+
+Everything below is measured with `dynamics_cert.cpp` at fb423 and `python3 mutate.py`. Both
+outputs are pasted in full — the cert log in `dynamics_cert.log`, the mutation table in
+`MUTATION.md`.
+
+## R3.1 🔴 `Sheen` — the three red gates are green, and NOT by moving a constant to a bar
+
+§4 above diagnosed this correctly and Max approved the fix: *Sheen's discriminator has to come
+from a mechanism `Over Top` does not have, not from more of the same lift.* What shipped:
+
+| | fb421/fb422 `Sheen` | fb423 `Sheen` | `Over Top` |
+|---|---|---|---|
+| X-High multiplier | ×0.72 (≈ 1.69 kHz) | **×0.55 (≈ 1.29 kHz at defaults)** | ×1.0 (≈ 2.34 kHz) |
+| high-band T_dn | −40 dBFS | **−26 dBFS** | −40 dBFS |
+| high-band T_up | −42 dBFS | **−28 dBFS** | −46 dBFS |
+| high-band makeup | +15 dB | **+2 dB** | +13 dB |
+
+The high band's measured level on the reference chord is **−26 dBFS**. Moving both thresholds up
+to sit *on* that level means the high band is now **below** its own upward threshold at programme
+level, so the lift is what the band is doing right now rather than a constant added on top. The
+makeup drops 13 dB because there is no longer 10 dB of downward GR to make up — that is calibration
+forced by the mechanism, not a knob turned toward a bar, and unity moved −1.24 → **−0.98 dB**.
+
+**The gate changed with the claim, and it is a harder gate, not a softer one.** The old gate was a
+MAGNITUDE (`≥ 6 dB more air than Over Top`) and magnitudes can be bought with makeup. The two that
+replaced it cannot be:
+
+```
+·       the honest air numbers (they are NOT the discriminator any more) Sheen +18.70 dB vs Over Top +15.53 dB on a dark pad
+ok    Sheen: 6 dB into a decay its high band LIFTS while Over Top's still CLAMPS signed high-band GR: Sheen -4.00 dB (lift), Over Top +6.68 dB (clamp)
+ok    Sheen: its high-band UPWARD knee sits at the PROGRAMME, Over Top's far below it net lift begins at -3 dB of input for Sheen, -18 dB for Over Top (15 dB apart, bar 9)
+```
+
+Makeup shifts the whole curve; it cannot invert the sign of the gain and it cannot move the knee.
+Mutant `ott-sheen-upward-lane` puts Over Top's high-band thresholds back and turns both red.
+
+⚠️ **Two honest caveats, because they are the weak points of this section.**
+1. `Sheen`'s air advantage over `Over Top` on a dark pad is now **+3.17 dB**, *less* than the
+   +5.24 dB it had before. The device does not put more top on quiet material than the generic
+   Type — it puts top on at a *different place in the programme's own dynamic range*. If Max wants
+   "more air" as well as "different air", that is a second change and I have not made it.
+2. The sign gate is measured **6 dB below** the reference chord, not at it. At the reference level
+   itself Sheen sits ON its own threshold and reads ≈ 0 by construction — that knife edge IS the
+   design, and gating it would be gating a coin toss. The bar (±3 dB) is the same "a band is doing
+   something" unit the ENGAGE gate uses. The margin on Sheen's side is **1.0 dB**. The robust
+   number in this section is the 15 dB knee separation, not the 4.00.
+
+**Cross-type distinctness: 2.62× → 6.03× JND.** Closest pair is now `Over Top / Bass Safe`;
+`Over Top / Sheen` is 8.06×.
+
+## R3.2 ✂️ THREE CHARACTERS CUT (CONTRACT §3.2), and what replaced two of them
+
+| Type · Character | was | JND | disposition |
+|---|---|---|---|
+| `Surge · Slow Riser` | release ×3 | 1.43× | **CUT.** `Surge` has NO downward computer, so a Character that only re-times its bands moves almost nothing in the feature vector. Re-timing an upward-only device changes *when* the lift arrives, and every ballistic feature the matrix has (`stepTau`, `tauLo`, `tauHi`) is measured on a level STEP, which an upward computer settles on almost instantly regardless. Replaced by **`Tied Rise`** — `bandLink = 1`, ONE detector driving all three bands, so a loud low note stops the top from rising. That is cross-band coupling, a topology, not a time constant. **16.67× JND.** |
+| `Surge · Low Riser` | spread 2.6 + mono low + memory-slowed release | 0.85× | **CUT**, same reason plus one more: its `lowUp`/`lowMono` parts act on the LOW band, whose GR on the reference chord is `−0.00` for every `Surge` Character (the chord is loud, the upward lane is off), so the feature vector could not see them either. Replaced by **`Mean Ears`** — `det = 2`, a 60 ms RMS pre-average: the riser stops hearing the waveform and rides the mean. **11.85× JND**, and it moves `air` 3.91 → 13.03, `tauLo` 8 → 280 ms and `tilt` 1.76 → 11.03. |
+| `Sheen · Higher Split` | X-High ×1.6 | 1.52× | **NOT cut — it could be made distinct by a real mechanism**, which §3.2 asks you to try first. At ×1.6 it was a crossover nudge; at **×2.6** the sheen band shrinks to the top two octaves and the Type's whole upward lane applies to a genuinely different slice of spectrum. **4.54× JND.** |
+
+I am stating the uncomfortable part plainly: **the roster is locked at 8×8, so a cut Character
+leaves a hole that has to be filled.** "Cut" here means the *concept* is cut and the slot is
+re-cast on a mechanism the engine actually has. That is not the same as deleting a row, and it
+would be dishonest to describe it as if it were. `Mean Ears` re-uses the same physics axis as
+`Over Top · Long Ears` (a 60 ms RMS pre-average) on a different Type; on an upward-only device it
+does something quite different, but it is a re-used axis and not a new one.
+
+**Character distinctness: weakest 0.85× → 2.06× JND** (`Bass Safe · Free Low`). 0 below the bar.
+
+## R3.3 🧪 MUTATION — the ceilings and the dead knobs, which nothing had ever tried to break
+
+FIXES.md §0 named this as the last outstanding piece anywhere in the family. Seven mutants added:
+
+- **`compress-no-ceiling`** — the slope cap becomes a polite **2:1**. §4b's staircase gate must fire.
+- **`ott-no-ceiling`** — Amount's top half stops closing the two thresholds on each other. §6b(a).
+- **`compress-dead-knob (Burn, P8)`** and **`ott-dead-knob (Treble, P8)`** — one knob per device
+  stubbed to a no-op, and the law-1 0→100 sweep must go red. Without these, "every knob is night
+  and day" rested on the sweep having been pointed at the right member, which nothing checked.
+- **`ott-sheen-upward-lane`** — R3.1's mechanism, deleted.
+- **`names-downstream-drift`** — one string in `ott-worklet.js` drifted off the header. The
+  downstream-equality gate is new and had therefore never failed; a gate that has never failed has
+  never been tested.
+- **`compress-heat-kind-fade (alone)`** — the survivor, now firing on its own (see below).
+
+## R3.4 ✅ ONE OF THE TWO SURVIVORS IS CLOSED — cert §4c4
+
+`compress-heat-kind-fade` survived because **every gate it faced was a LEVEL gate**. §4d measures
+dB of gain per millisecond; a waveshaper whose curve changes shape in one sample at constant gain
+is invisible to every level metric there is. §4c4 measures the gain element's **CURVATURE**:
+
+    S ≡ H3_dB − 3·H1_dB          (for y = x + c·x³:  H1 ≈ A, H3 ≈ (c/4)A³  ⇒  S = 20·log₁₀(c/4))
+
+which is independent of drive to cubic order, sampled in the 2 ms either side of the switch on a
+2 kHz tone with `Burn` at 100. Real engine **2.02 dB** (Types) / **4.36 dB** (Characters) against a
+6 dB bar; mutant **23.89 dB**. Control (same config both sides) **0.00 dB**.
+
+🔬 **Two earlier drafts of this gate were level gates in disguise and are recorded in the source so
+nobody rebuilds them.** Absolute 3rd-harmonic level goes as A³ and read **12.08 dB** on
+`Ride: Only Up → Slow Iron` — a pair whose GR legitimately travels 0 → 15.6 dB over 60 ms at
+0.35 dB/ms, well inside §4d's bar. H3/H1 goes as A² and read **10.69 dB** on the same pair for the
+same reason. Section K now plants a pure +6.02 dB gain step and a ×4 curvature change and shows
+the invariant reads **0.204 dB** for the first and **11.84 dB** for the second (theory: 12.04).
+It also prints the honest limit of that blindness: at the drive the gain element actually runs
+(H3 ≈ −20 dBc), a pure gain step still leaks **2.12 dB** into S. That leak is why the bar is 6 dB
+and not 1, and it is printed rather than hidden.
+
+**`compress-transition-slew` is still a survivor and is still labelled.** It is a LEVEL mechanism,
+§4d is the level gate, and removing it moves the worst transition 1.23 → 1.94 dB/ms — under the
+2.0 bar, so no gate fires. §4c4 cannot close it *by construction*: the shape invariant cancels gain
+on purpose. Closing it would require a gate whose bar sits between 1.23 and 1.94 dB/ms, i.e. a gate
+only this mechanism can pass, which is the thing MUTATION.md already refuses to do. **1 survivor,
+down from 2.**
+
+## R3.5 🏷️ THE LABEL GATE NOW COVERS EVERY LABEL, AND DOWNSTREAM IS GATED EQUAL
+
+Two changes, in the order fb423 §Gate asks for — **delete first, gate second.**
+
+**Deleted.** The harness carried its own copy of the knob names. Section 4 printed `Latch (P6)`
+and `Heat (P8)` and section 6 printed `Speed (front 2)` while the headers said `Cling`, `Burn` and
+`Chase` — *three stale strings in the harness whose job is to police stale strings.* Every label
+§1/§4/§6 prints is now read from `frontNames()` / `backNames()` / `dropdownNames()` /
+`detectNames()` / `stereoNames()` / `pillName()` at the moment of printing. There is no label table
+in `dynamics_cert.cpp` any more. A table that cannot exist cannot drift.
+
+**Gated.** A worklet is a separate runtime and a roster is a design document; neither can include
+a C++ header, so both are read off disk by the cert and compared string for string:
+
+```
+ok    the downstream files are ON DISK where this gate looked found in .../Design/fx4/dynamics (compress-worklet.js, ott-worklet.js, ROSTER.md)
+ok    compress-worklet TYPES/CHARS/DETECT/FRONT/BACK/DROPS == the header   8 / 64 / 5 / 4 / 8 / 2 strings, exact
+ok    ott-worklet TYPES/CHARS/STEREO/FRONT/BACK/DROPS == the header        8 / 64 / 3 / 4 / 8 / 2 strings, exact
+ok    every published label appears VERBATIM in ROSTER.md                  all 184 of them
+ok    no RETIRED label survives downstream (ROSTER.md + both worklets)     13 retired strings x 3 files, 0 hits
+```
+
+**It found real rot the moment it ran.** Nine gates went red on the first build: seven stale
+`Heat`/`Latch`/`Bite`/`Twin` rows in `ROSTER.md`, the Detect option row still reading
+`Auto · Peak · Average · Long · Spike`, and the retired-name history note carrying `RMS Ears` and
+`Spike Ears` in a file that is not allowed to author a name. All fixed; the history moved into
+`TerrainCompressFx.h`, which is the only place a name — including a retired one — is authored.
+
+🔬 **And the gate's own first draft was wrong in the fb392 way.** Its JS parser matched
+`const FRONT = [`, but the worklets column-align their declarations (`const FRONT  = [`), so it
+read **zero strings** for four of the six tables and reported a mismatch. It went red for the
+right reason by luck. The parser is whitespace-tolerant now, and `the downstream files are ON DISK
+where this gate looked` is its own gate — a downstream gate that quietly finds nothing to check is
+the fb392 stub wearing a different hat.
+
+**Compress's `Auto` pill left `kShared`.** It is now a one-entry `kRuled[]` citing RENAMES.md
+fb423 §SANCTIONED (same law as the shipped Distortion `Auto` pill), asserted to be exactly one
+entry, next to the sibling-yield list asserted to be exactly two. A gate that can exempt itself is
+not a gate. Single-quoted literals stay in the corpus permanently — that is how `Leaky` hid.
+
+## R3.6 Where this leaves the two devices
+
+```
+════════════════════════════════════════════════════════════════════════
+  PASS 165   FAIL 0
+════════════════════════════════════════════════════════════════════════
+CERT_EXIT=0
+```
+
+| | first draft | fb422 (the fix round) | **fb423** |
+|---|---|---|---|
+| cert | 114 pass / 0 fail | 139 / **3** | **165 / 0**, exit 0 |
+| mutants | — | 15, 13 fired, **2 survivors** | **21, 20 fired, 1 survivor** |
+| closest Type pair (OTT) | — | **2.62× JND** | **6.03× JND** |
+| weakest Character (OTT) | — | **0.85× JND**, 3 below bar | **2.06× JND**, 0 below bar |
+| labels gated | 177, vs `Source/` only | 184, vs `Source/` + siblings | **184, vs 3319 strings, + downstream EQUALITY** |
+| CPU, worst Type | — | Opto 12.56 / Heavy 31.04 µs per 128 @ 48 k | **Opto 11.89 (0.45 %) / Heavy 31.33 µs (1.18 %)** |
+
+**What is still not proved, honestly.**
+
+1. **`compress-transition-slew` is still a mutation survivor.** It is redundant against §4d by
+   0.71 dB and there is no honest gate that only it can pass. Labelled, not claimed.
+2. **`Sheen`'s sign gate has a 1.0 dB margin** (−4.00 dB against a −3.0 bar). The 15 dB knee
+   separation is the robust number in that section; the sign is the vivid one.
+3. **`Sheen` now puts LESS extra air on a dark pad than it used to** (+3.17 dB over `Over Top`,
+   was +5.24). Its claim changed from "more air" to "air that tracks the programme". If Max wants
+   both, that is a further change and I have not made it.
+4. **`Mean Ears` re-uses a physics axis** (`det = 2`, the 60 ms RMS pre-average) that `Over Top ·
+   Long Ears` and `Gentle · Long Window` also use. On an upward-only Type it behaves very
+   differently — 11.85× JND — but it is a re-used axis, not a new one, and calling it new would be
+   a claim I cannot measure.
+5. **Everything here is still ENGINE-side.** A green harness proves the engine works; it never
+   proves the plugin reaches it (fb373). The UI → param → DSP round trip is the integration
+   owner's, and nothing in this directory can gate it.

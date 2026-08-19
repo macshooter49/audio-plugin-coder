@@ -1802,6 +1802,16 @@ static const Sanction kSanctioned[] = {
     { "Focus",  "RENAMES.md: sanctioned shared vocabulary, keep" },
     { "Tight",  "RENAMES.md EQUALIZER row: 'keep - Widen yields this one' (-> Tight Fan)" },
     { "Silk",   "RENAMES.md WIDEN row: Steady char 0 Silk -> Satin, 'EQ knob label outranks a Character'" },
+    // fb423 SECOND RULING, §SANCTIONED. Ruled AS A GROUP, not one name at a time: "M/S routing
+    // vocabulary, sanctioned wherever it appears (EQ Focus, OTT Stereo, any future device).
+    // There is no synonym for these and inventing one would be worse than the duplication."
+    // This is the ruling that resolves fb422's 121/1 - the gate was right to refuse to
+    // self-rename them (FIXES.md §2) and right to fail loudly until one head ruled.
+    { "Stereo", "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
+    { "Mid",    "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
+    { "Side",   "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
+    { "Left",   "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
+    { "Right",  "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
 };
 // every EQUALIZER row of RENAMES.md, as data: the old string must be GONE, the new one PRESENT.
 struct Rename { const char* oldNm; const char* newNm; const char* slot; };
@@ -1817,14 +1827,21 @@ static const Rename kRenames[] = {
     { "Silky",     "Gloss",      "Open char 0"     }, { "Fast",     "Quick",     "Dynamic char 1"  },
     { "Slow",      "Lazy",       "Dynamic char 2"  }, { "Inverted", "Upward",    "Dynamic char 4"  },
     { "Gain Ring", "Gain Peak",  "Chisel char 3"   },
+    // fb423 SECOND RULING - the 8 this device's own gate found and REFUSED to self-rename.
+    { "Forward",   "Ahead",      "British char 2"  }, { "Runaway",  "Bolt",      "American char 7" },
+    { "Program",   "Baseline",   "Passive char 0"  }, { "Stacked",  "Twin Shelf","Open char 3"     },
+    { "Peak Hold", "Peak Keep",  "Dynamic char 7"  }, { "Razor",    "Scalpel",   "Chisel char 1"   },
+    { "Telephone", "Handset",    "Chisel char 5"   }, { "Metal",    "Tin",       "Chisel char 7"   },
 };
 bool hasLabel (const char* w)
 { for (int i = 0; i < EQ::kNumLabels; ++i) if (! std::strcmp (EQ::label (i), w)) return true; return false; }
 
 void sectionO()
 {
-    section ("O. NAMES — no doubles, inside the card and against 3064 shipped strings");
     const int nShipped = (int) (sizeof (kShippedLabels) / sizeof (kShippedLabels[0]));
+    { char t[160]; std::snprintf (t, sizeof t,
+        "O. NAMES — no doubles, inside the card and against %d shipped strings", nShipped);
+      section (t); }
     note (fmt ("shipped_labels.inc holds %.0f strings from Source/ · Design/fx3/ · the two sibling", (double) nShipped)
           + fmt (" fx4 dirs; this device publishes %.0f.", (double) EQ::kNumLabels));
 
@@ -1862,7 +1879,7 @@ void sectionO()
           { ++n; dup += std::string (dup.empty() ? "" : ", ") + EQ::label (i)
                       + " (" + EQ::labelSlot (i) + " / " + EQ::labelSlot (j) + ")"; }
       gate ("no label appears twice INSIDE this card", n == 0,
-            n ? dup : std::string ("0 doubles across 87 published strings")); }
+            n ? dup : fmt ("0 doubles across %.0f published strings", (double) EQ::kNumLabels)); }
 
     // 3. no collision with anything shipped, except what RENAMES.md sanctions BY NAME.
     { std::string unresolved; int nColl = 0, nSanc = 0;
@@ -1882,6 +1899,33 @@ void sectionO()
             unresolved.empty(),
             fmt2 ("%.0f collisions, %.0f sanctioned by name; UNRESOLVED: ",
                   (double) nColl, (double) nSanc) + (unresolved.empty() ? "none" : unresolved));
+
+      // 🔑 fb423: "a gate that can exempt itself is not a gate." The exemption list is pinned
+      //  to the number it actually SPENDS, so a sanction can never be added ahead of a
+      //  collision and quietly pre-authorise it. Any change to this number is a deliberate edit.
+      //
+      //  It is 8, and the 8 are: Low · Body · Air · Amount · Mix · Tight · Stereo · Mid.
+      //  It was 10 until the corpus was re-extracted at fb423 and TWO exemptions came back
+      //  UNSPENT — `Bite`, because OTT renamed its pill `Bite`->`Crest`, and `Silk`, because
+      //  Widen renamed its Character `Silk`->`Satin`. Both are RENAMES.md rows landing in a
+      //  sibling's engine, so the yield they bought is no longer needed. They stay listed
+      //  (the rulings still stand and could be spent again) but the meter no longer counts
+      //  them, which is the only way an exemption list can shrink honestly.
+      const int nSanctions = (int) (sizeof (kSanctioned) / sizeof (kSanctioned[0]));
+      std::string unused;
+      for (const Sanction& q : kSanctioned)
+      { bool used = false;
+        for (int i = 0; i < EQ::kNumLabels && ! used; ++i)
+          if (! std::strcmp (EQ::label (i), q.name))
+            for (int k = 0; k < nShipped && ! used; ++k)
+              if (! std::strcmp (kShippedLabels[k], q.name)) used = true;
+        if (! used) unused += std::string (unused.empty() ? "" : ", ") + q.name; }
+      gate ("the sanctioned list SPENDS exactly 8 exemptions — it cannot quietly grow",
+            nSanc == 8,
+            fmt2 ("%.0f of %.0f sanctions are actually spent on a live collision", (double) nSanc,
+                  (double) nSanctions)
+            + (unused.empty() ? "" : "; carried but unspent (ruled as a GROUP): " + unused));
+
       for (const Sanction& q : kSanctioned) note (std::string ("   sanctioned  ") + q.name + " — " + q.why); }
 
     // 4. the published table itself, printed, because a label that lives only in markdown is
@@ -1902,6 +1946,308 @@ void sectionO()
     { std::printf ("        %-9s", EQ::typeNames()[t]);
       for (int c = 0; c < EQ::kNumChars; ++c) std::printf (" %-13s", EQ::charNames (t)[c]);
       std::printf ("\n"); }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  P. DOWNSTREAM — ROSTER.md and eq-worklet.js CANNOT DRIFT FROM THE HEADER.
+//
+//  fb422 made the header the single source of truth and deleted the duplicate
+//  `charNames()` table. That fixed ONE of three name tables. The card is built from the
+//  ROSTER and the worklet, so those two files publish labels too — and at fb423 the family
+//  audit found 22 stale strings still alive downstream while every header was correct:
+//  this device's worklet was carrying `CSPEC[].nm`, a SECOND 56-name table 12 renames
+//  behind `CHARS` and never read by anything (line 535 publishes CHARS), and the ROSTER's
+//  live §4 Trait table still printed the OLD P8 relabels while its own banner announced
+//  the new ones.
+//
+//  🔑 THE SHAPE OF THIS GATE, and why it is not "keep the tables in sync":
+//     P1 EQUALS, it does not spot-check — every one of the 87 strings, element by element.
+//     P2 proves the DELETION held: each name is authored EXACTLY ONCE in the worklet and
+//        the CSPEC physics block contains ZERO string literals. A table that cannot exist
+//        cannot drift; gating a second table would only have made the drift noisy.
+//     P3 hunts the 29 RETIRED strings across both files, so PROSE drift is caught too —
+//        that is the class the audit actually found, and no equality check can see it.
+//     P4/P5 pin the two places the ROSTER re-states a name in its own words.
+//  A missing file FAILS. A gate that silently passes when it cannot find its subject is
+//  the fb393 harness-kinder-than-reality trap.
+// ═════════════════════════════════════════════════════════════════════════════
+bool isWordCh (char c)
+{ return (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9'); }
+
+std::string certDir()
+{
+    std::string f = __FILE__;
+    const size_t p = f.find_last_of ('/');
+    return p == std::string::npos ? std::string ("") : f.substr (0, p + 1);
+}
+bool slurp (const std::string& path, std::string& out)
+{
+    std::FILE* h = std::fopen (path.c_str(), "rb");
+    if (h == nullptr) return false;
+    out.clear(); char buf[65536]; size_t n;
+    while ((n = std::fread (buf, 1, sizeof buf, h)) > 0) out.append (buf, n);
+    std::fclose (h); return true;
+}
+std::string lineAt (const std::string& hay, size_t at)
+{
+    const size_t a = hay.rfind ('\n', at), b = hay.find ('\n', at);
+    std::string s = hay.substr (a == std::string::npos ? 0 : a + 1,
+                                (b == std::string::npos ? hay.size() : b) - (a == std::string::npos ? 0 : a + 1));
+    if (s.size() > 96) s = s.substr (0, 96) + "...";
+    return s;
+}
+// drop every line whose first non-blank characters are `pfx` (JS comment)
+std::string dropLines (const std::string& src, const char* pfx, int& nDropped, size_t& lastAt)
+{
+    std::string out; nDropped = 0; lastAt = 0;
+    size_t i = 0, ln = 0;
+    while (i <= src.size())
+    {
+        size_t e = src.find ('\n', i); if (e == std::string::npos) e = src.size();
+        const std::string line = src.substr (i, e - i);
+        size_t k = 0; while (k < line.size() && (line[k] == ' ' || line[k] == '\t')) ++k;
+        if (line.compare (k, std::strlen (pfx), pfx) == 0) { ++nDropped; lastAt = ln; }
+        else out += line;
+        out += '\n'; ++ln;
+        if (e == src.size()) break;
+        i = e + 1;
+    }
+    return out;
+}
+// 🪤 The FIRST version of this exemption dropped EVERY markdown blockquote line, and the
+//  gate below immediately caught it doing so: §0 quotes MAX in a blockquote, and an
+//  exemption wide enough to cover Max's own words is an exemption that would hide real
+//  drift in the one section a reader trusts most. The exemption is now exactly ONE region:
+//  the CONTIGUOUS blockquote that OPENS the file - the fb422/fb423 changelog banner, whose
+//  whole job is to narrate the old names. Every other blockquote in the file is SCANNED.
+std::string dropTopBanner (const std::string& src, int& nDropped, size_t& firstLn, size_t& lastLn,
+                           int& nOtherQuoteLines)
+{
+    std::string out; nDropped = 0; firstLn = 0; lastLn = 0; nOtherQuoteLines = 0;
+    bool started = false, ended = false;
+    size_t i = 0, ln = 0;
+    while (i <= src.size())
+    {
+        size_t e = src.find ('\n', i); if (e == std::string::npos) e = src.size();
+        const std::string line = src.substr (i, e - i);
+        const bool quote = ! line.empty() && line[0] == '>';
+        if (quote && ! ended)
+        {
+            if (! started) { started = true; firstLn = ln; }
+            ++nDropped; lastLn = ln;                       // dropped: the changelog banner
+        }
+        else
+        {
+            if (started && ! quote) ended = true;          // the banner closes at its first non-`>` line
+            if (quote) ++nOtherQuoteLines;                 // every LATER blockquote is scanned
+            out += line;
+        }
+        out += '\n'; ++ln;
+        if (e == src.size()) break;
+        i = e + 1;
+    }
+    return out;
+}
+// a RETIRED name occurs as a whole token AND is not the head of a LONGER LIVE label
+// (`Program` must never fire on `Program Ride`; `Slow` must never fire on `Slow Top`).
+int countRetired (const std::string& hay, const std::string& needle, std::string& ctx)
+{
+    int n = 0; size_t at = 0;
+    while ((at = hay.find (needle, at)) != std::string::npos)
+    {
+        const size_t end = at + needle.size();
+        const bool lb = at == 0 || ! isWordCh (hay[at - 1]);
+        const bool rb = end >= hay.size() || ! isWordCh (hay[end]);
+        bool shadowed = false;
+        if (lb && rb)
+            for (int i = 0; i < EQ::kNumLabels && ! shadowed; ++i)
+            { const std::string L = EQ::label (i);
+              if (L.size() > needle.size() && hay.compare (at, L.size(), L) == 0) shadowed = true; }
+        if (lb && rb && ! shadowed) { ++n; if (ctx.empty()) ctx = lineAt (hay, at); }
+        at = end;
+    }
+    return n;
+}
+// every single-quoted string inside `const <name> = [ ... ];`, in source order
+bool jsArray (const std::string& src, const char* name, std::vector<std::string>& out, std::string& err)
+{
+    const std::string key = std::string ("const ") + name;
+    size_t a = src.find (key);
+    if (a == std::string::npos) { err = "no `" + key + "`"; return false; }
+    a = src.find ('[', a);
+    if (a == std::string::npos) { err = std::string (name) + ": no `[`"; return false; }
+    int depth = 0; size_t b = a;
+    for (; b < src.size(); ++b)
+    { if (src[b] == '[') ++depth; else if (src[b] == ']') { if (--depth == 0) break; } }
+    if (b >= src.size()) { err = std::string (name) + ": unterminated"; return false; }
+    out.clear();
+    for (size_t i = a; i < b; ++i)
+        if (src[i] == '\'')
+        { const size_t e = src.find ('\'', i + 1); if (e == std::string::npos || e > b) break;
+          out.push_back (src.substr (i + 1, e - i - 1)); i = e; }
+    return true;
+}
+int countQuoted (const std::string& hay, const std::string& lab)
+{ const std::string q = "'" + lab + "'"; int n = 0; size_t at = 0;
+  while ((at = hay.find (q, at)) != std::string::npos) { ++n; at += q.size(); } return n; }
+
+// the 29 strings this device has RETIRED across both rulings. Nothing downstream may say them.
+static const char* kRetired[] = {
+    "Tilt", "Sculpt", "Shape", "Width", "Bump", "Grip", "Ring", "Sense", "Clean", "Carve",
+    "Console", "Fixed Top", "Gentle", "Modern", "Close Dip", "Far Dip", "Silky", "Fast",
+    "Slow", "Inverted", "Gain Ring",
+    "Forward", "Runaway", "Program", "Stacked", "Peak Hold", "Razor", "Telephone", "Metal"
+};
+
+void sectionP()
+{
+    section ("P. DOWNSTREAM — ROSTER.md and eq-worklet.js EQUAL the header (fb423)");
+
+    std::string roster, worklet;
+    const std::string dir = certDir();
+    const bool haveR = slurp (dir + "ROSTER.md",     roster);
+    const bool haveW = slurp (dir + "eq-worklet.js", worklet);
+    gate ("both downstream files are READABLE (a missing file FAILS, it does not skip)",
+          haveR && haveW, std::string ("ROSTER.md ") + (haveR ? "yes" : "NO") + " · eq-worklet.js "
+          + (haveW ? "yes" : "NO") + "  at " + (dir.empty() ? std::string ("./") : dir));
+    if (! haveR || ! haveW) return;
+
+    // ── P1. the worklet's six name tables EQUAL the header's, element by element ──
+    {
+        struct A { const char* js; int n; };
+        const A arrays[] = { { "TYPES", EQ::kNumTypes }, { "FOCUS", EQ::kNumFocus },
+                             { "TRAIT", EQ::kNumTypes }, { "BACK", 8 }, { "FRONT", 4 },
+                             { "CHARS", EQ::kNumTypes * EQ::kNumChars } };
+        int checked = 0; std::string bad, err;
+        for (const A& a : arrays)
+        {
+            std::vector<std::string> got;
+            if (! jsArray (worklet, a.js, got, err))
+            { bad += std::string (bad.empty() ? "" : ", ") + err; continue; }
+            if ((int) got.size() != a.n)
+            { bad += std::string (bad.empty() ? "" : ", ") + a.js + " has "
+                   + std::to_string (got.size()) + ", header has " + std::to_string (a.n); continue; }
+            for (int i = 0; i < a.n; ++i)
+            {
+                const char* want = ! std::strcmp (a.js, "TYPES") ? EQ::typeNames()[i]
+                                 : ! std::strcmp (a.js, "FOCUS") ? EQ::focusNames()[i]
+                                 : ! std::strcmp (a.js, "TRAIT") ? EQ::shapeName (i)
+                                 : ! std::strcmp (a.js, "BACK")  ? EQ::backNames()[i]
+                                 : ! std::strcmp (a.js, "FRONT") ? EQ::frontNames()[i]
+                                 : EQ::charNames (i / EQ::kNumChars)[i % EQ::kNumChars];
+                if (got[(size_t) i] != want)
+                    bad += std::string (bad.empty() ? "" : ", ") + a.js + "[" + std::to_string (i)
+                         + "] worklet '" + got[(size_t) i] + "' vs header '" + want + "'";
+                else ++checked;
+            }
+        }
+        gate ("eq-worklet.js's name tables EQUAL the header, string for string",
+              bad.empty() && checked == EQ::kNumLabels,
+              fmt2 ("%.0f of %.0f labels identical", (double) checked, (double) EQ::kNumLabels)
+              + (bad.empty() ? "" : "  DRIFT: " + bad));
+    }
+
+    // ── P2. the DELETION held: one authorship site per name, zero names in the physics table ──
+    {
+        std::string many; int once = 0;
+        for (int i = 0; i < EQ::kNumLabels; ++i)
+        { const int n = countQuoted (worklet, EQ::label (i));
+          if (n == 1) ++once;
+          else many += std::string (many.empty() ? "" : ", ") + EQ::label (i) + " x" + std::to_string (n); }
+        gate ("every name is authored EXACTLY ONCE in eq-worklet.js (no second table)",
+              once == EQ::kNumLabels,
+              fmt2 ("%.0f of %.0f appear exactly once", (double) once, (double) EQ::kNumLabels)
+              + (many.empty() ? "" : "  NOT ONCE: " + many));
+
+        size_t a = worklet.find ("const CSPEC");
+        int nq = -1;
+        if (a != std::string::npos)
+        { a = worklet.find ('[', a); int depth = 0; size_t b = a; nq = 0;
+          for (; b < worklet.size(); ++b)
+          { if (worklet[b] == '[') ++depth; else if (worklet[b] == ']') { if (--depth == 0) break; }
+            else if (worklet[b] == '\'') ++nq; } }
+        gate ("the CSPEC physics table carries ZERO strings — `nm` is DELETED, not gated",
+              nq == 0, nq < 0 ? std::string ("no `const CSPEC` found")
+                              : fmt ("%.0f quote characters inside the CSPEC block", (double) nq));
+    }
+
+    // ── P3. no RETIRED string survives anywhere downstream, PROSE INCLUDED ──
+    {
+        // the two exemptions, both structural, both asserted so they cannot quietly grow:
+        //   ROSTER.md   — the `>` changelog blockquote NARRATES the old names on purpose.
+        //   worklet     — `//` comments do the same.
+        int nQuote = 0, nComment = 0, nLaterQuote = 0; size_t firstQ = 0, lastQ = 0, lastComment = 0;
+        const std::string rBody = dropTopBanner (roster, nQuote, firstQ, lastQ, nLaterQuote);
+        const std::string wBody = dropLines (worklet, "//", nComment, lastComment);
+
+        // the exemption must be ONE contiguous region, opening the file, ending before §0.
+        size_t firstH = 0, ln = 0, i = 0; bool found = false;
+        while (i <= roster.size() && ! found)
+        { size_t e = roster.find ('\n', i); if (e == std::string::npos) e = roster.size();
+          if (roster.compare (i, 3, "## ") == 0) { firstH = ln; found = true; }
+          ++ln; if (e == roster.size()) break; i = e + 1; }
+        const bool contiguous = nQuote > 0 && (lastQ - firstQ + 1) == (size_t) nQuote;
+        // ...and it must OPEN with a changelog heading, so the exemption stays what it claims to
+        // be. A banner that may grow without saying what it is, is a blind spot that may grow.
+        size_t bq = std::string::npos;
+        for (size_t q = 0; q < roster.size(); )
+        { if (roster[q] == '>') { bq = q; break; }
+          const size_t e = roster.find ('\n', q); if (e == std::string::npos) break; q = e + 1; }
+        const std::string kBannerHead = "> ## \xf0\x9f\x94\xb4 fb";     // "> ## <red circle> fb..."
+        const bool isChangelog = bq != std::string::npos
+                              && roster.compare (bq, kBannerHead.size(), kBannerHead) == 0;
+        gate ("the changelog exemption is ONE contiguous banner at the top — Max's own §0 quote is SCANNED",
+              contiguous && isChangelog && found && lastQ < firstH,
+              fmt3 ("banner = lines %.0f-%.0f (%.0f lines, contiguous)",
+                    (double) (firstQ + 1), (double) (lastQ + 1), (double) nQuote)
+              + fmt (", first '## ' at line %.0f", (double) (firstH + 1))
+              + std::string (isChangelog ? ", opens '> ## fb...'" : ", NOT a changelog heading")
+              + fmt ("; %.0f LATER blockquote lines are scanned like any other prose", (double) nLaterQuote));
+
+        std::string live; int nHits = 0;
+        for (const char* r : kRetired)
+        {
+            std::string cR, cW;
+            const int hR = countRetired (rBody, r, cR), hW = countRetired (wBody, r, cW);
+            if (hR + hW == 0) continue;
+            nHits += hR + hW;
+            live += std::string (live.empty() ? "" : "; ") + r
+                  + (hR ? " ROSTER.md x" + std::to_string (hR) + " [" + cR + "]" : "")
+                  + (hW ? " worklet x"   + std::to_string (hW) + " [" + cW + "]" : "");
+        }
+        gate ("not one of the 29 RETIRED strings survives downstream (prose included)",
+              nHits == 0,
+              fmt ("%.0f retired strings still live", (double) nHits)
+              + (live.empty() ? "  (29 checked, 0 hits)" : ":  " + live));
+        note (fmt ("   exempt: %.0f ROSTER.md changelog blockquote lines", (double) nQuote)
+              + fmt (" and %.0f eq-worklet.js comment lines — both NARRATE the old names.", (double) nComment));
+    }
+
+    // ── P4. the ROSTER's §4 Trait table re-states the P8 relabels in its own words ──
+    {
+        std::string bad; int ok = 0;
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+        { const std::string row = std::string ("| ") + EQ::typeNames()[t] + " | **" + EQ::shapeName (t) + "** |";
+          if (roster.find (row) != std::string::npos) ++ok;
+          else bad += std::string (bad.empty() ? "" : ", ") + EQ::typeNames()[t] + "->" + EQ::shapeName (t); }
+        gate ("ROSTER §4's Trait table prints the header's SEVEN P8 relabels",
+              ok == EQ::kNumTypes,
+              fmt2 ("%.0f of %.0f rows", (double) ok, (double) EQ::kNumTypes)
+              + (bad.empty() ? "" : "  MISSING: " + bad));
+    }
+
+    // ── P5. and the ROSTER names every label the engine publishes ──
+    {
+        std::string miss; int ok = 0;
+        for (int i = 0; i < EQ::kNumLabels; ++i)
+        { if (roster.find (EQ::label (i)) != std::string::npos) ++ok;
+          else miss += std::string (miss.empty() ? "" : ", ") + EQ::label (i)
+                     + " (" + EQ::labelSlot (i) + ")"; }
+        gate ("ROSTER.md names all 87 published labels (no label lives only in the header)",
+              ok == EQ::kNumLabels,
+              fmt2 ("%.0f of %.0f present", (double) ok, (double) EQ::kNumLabels)
+              + (miss.empty() ? "" : "  ABSENT: " + miss));
+    }
 }
 
 } // namespace
@@ -1933,6 +2279,7 @@ int main()
     sectionM();
     sectionN (F);
     sectionO();
+    sectionP();
 
     std::printf ("\n══ RESULT: %d pass, %d FAIL ══\n", gPass, gFail);
     for (auto& s : gFails) std::printf ("   FAILED: %s\n", s.c_str());

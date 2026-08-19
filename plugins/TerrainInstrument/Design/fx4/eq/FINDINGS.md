@@ -1,8 +1,174 @@
 # EQUALIZER — FINDINGS (fx4, chain kind 9)
 
+## fb423 — NAMES RULED · DOWNSTREAM DRIFT CLOSED. READ THIS FIRST.
+
+`eq_cert.cpp` → **131 pass, 0 FAIL**, exit 0. Full output: `eq_cert_fb423.log`.
+Mutation + negative-control evidence: **`MUTATION.md`**.
+
+```
+clang++ -O2 -std=c++17 \
+  -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/eq \
+  eq_cert.cpp -o /tmp/eq_cert && /tmp/eq_cert          # 131 pass, 0 FAIL
+Design/fx4/eq/run_mutations.sh /tmp/eqmut              # 1 baseline + 6 mutants, all 6 still RED
+```
+
+### 1. The 8 open names — RULED, applied verbatim
+
+fb422 ended 121/1 because §O found ten shipped collisions and **refused to invent replacements**
+(FIXES.md §2). `RENAMES.md`'s fb423 block rules all ten. Applied in the header, which is the only
+place a name is authored:
+
+`Forward`→**`Ahead`** · `Runaway`→**`Bolt`** · `Program`→**`Baseline`** · `Stacked`→**`Twin Shelf`**
+· `Peak Hold`→**`Peak Keep`** · `Razor`→**`Scalpel`** · `Telephone`→**`Handset`** · `Metal`→**`Tin`**.
+
+`Stereo` and `Mid` are **SANCTIONED** and were not renamed — M/S routing vocabulary, ruled as a
+group with `Side`/`Left`/`Right`, all five now carried as named sanctions in the gate.
+
+Two of my fb422 proposals were **overruled and I applied the ruling, not my pick**: `Program` →
+`Preset A` became **`Baseline`**, and `Peak Hold` → `Latch Top` became **`Peak Keep`**. The ruling
+also records that `Metal` was *worse* than I assessed: it is a shipped **Vintage-reverb Character**
+(`index.html:8614`), the same slot class as `Modern`→`Revival`, not merely a wave-shape string.
+
+Two renames needed care and got it: `Program` → `Baseline` must **not** touch `Program Ride`
+(Dynamic char 0, a different Character that survives), and `Ring` → `Sting` must not touch
+`Gain Ring` → `Gain Peak`. Both are gated — see §3's longest-live-label rule.
+
+```
+  ok    every EQUALIZER row of RENAMES.md is applied VERBATIM      29 of 29 rows
+  ok    no label appears twice INSIDE this card                    0 doubles across 87 published strings
+  ok    no collision with a shipped label outside RENAMES.md's sanctioned list
+        10 collisions, 10 sanctioned by name; UNRESOLVED: none
+```
+
+### 2. Downstream drift — three sites, all closed, and the first one is my own deleted geometry
+
+| site | what was wrong | fix |
+|---|---|---|
+| `eq-worklet.js` 57-108 | `CSPEC[].nm` was a **SECOND 56-name table**, 12 renames stale (`Clean`, `Carve`, `Console`, `Gentle`, `Modern`, `Close Dip`, `Far Dip`, `Silky`, `Fast`, `Slow`, `Inverted`, `Gain Ring`) and **never read by anything** — line 535 publishes `CHARS`. This is *exactly* the shape I deleted from the header at fb422. | **DELETED**, not gated. The `C(...)` factory no longer takes a name; all 56 rows lost their first argument; the physics is byte-for-byte unchanged (verified in node: `CSPEC[6][7].qm = [4,4,4,4]`, `e2 = 1.8`, matching the header's `Tin` row). A table that cannot exist cannot drift. |
+| `ROSTER.md` §4 | the **live** Trait table still printed the OLD P8 relabels — `Width`/`Bump`/`Grip`/`Sense`/`Ring` — while the banner 240 lines above announced `Pinch`/`Slope`/`Taper`/`Pivot`/`Sting`. A reader who scrolled past the banner got the wrong five words. | rewritten from `shapeName()`, and gated row-by-row. |
+| `ROSTER.md` body prose | eight Characters and three P8 relabels named in the §3 walkthroughs (`` `Forward` mids ``, "a stronger `Bump`", `` `Ring × (1 + |g|/12)` ``…). Prose is what a reader actually reads. | all rewritten; the retired-string gate below hunts prose, which is the only kind of check that can see this class. |
+
+### 3. The new gate (§P) — EQUALS, not "kept in sync"
+
+Eight gates over the two files the card is built from. They are not spot checks:
+
+```
+[P. DOWNSTREAM — ROSTER.md and eq-worklet.js EQUAL the header (fb423)]
+  ok    both downstream files are READABLE (a missing file FAILS, it does not skip)
+  ok    eq-worklet.js's name tables EQUAL the header, string for string   87 of 87 labels identical
+  ok    every name is authored EXACTLY ONCE in eq-worklet.js (no second table)  87 of 87
+  ok    the CSPEC physics table carries ZERO strings — `nm` is DELETED, not gated  0 quote chars
+  ok    the changelog exemption is ONE contiguous banner at the top — Max's own §0 quote is SCANNED
+  ok    not one of the 29 RETIRED strings survives downstream (prose included)  0 live (29 checked)
+  ok    ROSTER §4's Trait table prints the header's SEVEN P8 relabels     7 of 7 rows
+  ok    ROSTER.md names all 87 published labels                          87 of 87 present
+```
+
+and one more in §O, because RENAMES.md's own closing note is that *"a gate that can exempt itself
+is not a gate"*:
+
+```
+  ok    the sanctioned list SPENDS exactly 10 exemptions — it cannot quietly grow
+        10 of 15 sanctions are actually spent on a live collision;
+        carried but unspent (ruled as a GROUP): Reach, Focus, Side, Left, Right
+```
+
+Three things in it are load-bearing and were not obvious:
+
+* **The retired-string hunt uses a longest-live-label rule.** A whole-token match on `Program`
+  would fire on the surviving `Program Ride`, and on `Slow` would fire on `Slow Top`. Before
+  reporting a hit, the scanner asks whether any **longer live label** matches at that same offset
+  and, if so, the occurrence belongs to the live label. That is what lets the gate hunt PROSE at
+  all, which is the class the audit actually found.
+* **A missing file FAILS.** Deleting `ROSTER.md` takes the run to `123 pass, 1 FAIL`, not to a
+  green skip (fb393 — a harness kinder than reality is worse than no harness).
+* **The one exemption caught me writing it.** Its first version dropped every markdown blockquote
+  from the scan — and went red, because §0 quotes **Max** in a blockquote. It is now exactly one
+  region: the contiguous blockquote that opens the file, asserted contiguous, asserted to end
+  before the first `##` heading, and asserted to begin with a changelog heading. Its size prints
+  every run. Everything else, including Max's quote, is scanned.
+
+Five negative controls, all pasted in `MUTATION.md`: restoring the fb422 downstream files turns
+**6 of the 8** red at once (`47 retired strings still live`), hiding one retired name in a later
+blockquote turns the prose gate red, deleting `ROSTER.md` turns the readable gate red, retitling
+the banner turns the exemption gate red — and adding a sanction for a name nobody ruled (`Plain`)
+turns the collision gate **green** while the meta-gate goes **RED** (`11 of 16 sanctions are
+actually spent`), which is the whole point of pinning the exemption count.
+
+**Scope, stated rather than glossed:** §P gates `ROSTER.md` and `eq-worklet.js`. It does **not**
+gate `FINDINGS.md` or `MUTATION.md` — those are history documents whose job is to say the old
+names, and this very sentence would fail such a gate. It also gates the worklet's **names**, not
+its physics; the JS is a mockup port and is documented as not sample-identical.
+
+### 4. 🚨 A NEW DEFECT, found by refreshing the corpus: **the gates had gone circular**
+
+The mandate says gate ALL your labels, so I re-ran `extract_labels.py` against the siblings'
+current state rather than trusting the fb422 snapshot. The refresh took the cert from green to:
+
+```
+FAIL  no collision with a shipped label outside RENAMES.md's sanctioned list
+      87 collisions, 14 sanctioned by name; UNRESOLVED: Surgical (Type pill),
+      British (Type pill), American (Type pill), Passive (Type pill), Open (Type pill),
+      Dynamic (Type pill), Chisel (Type pill), Slant (front knob), Low Hz ...
+FAIL  the sanctioned list SPENDS exactly 10 exemptions — it cannot quietly grow
+      14 of 15 sanctions are actually spent on a live collision
+```
+
+**Every one of the 87 was my own label colliding with itself.** The corpus reads the two sibling
+fx4 directories (RENAMES.md's own instruction, and correct). Since fb422, Widen built an extractor
+of its own — and `widen/shipped_labels.inc` extracts from `Design/fx4/eq/`, so it re-exports all 87
+of my names. Reading it fed them back to me as "shipped". Both siblings' certs additionally quote
+`"Slant"` and `"Chisel"` as literals in their own corpus-self-checks, which leaked the same way.
+
+This is not cosmetic. Note the second line: the sanction meter went from **10 spent to 14**. The
+noise was starting to be absorbed by real exemptions — a few more rounds of this and the
+no-doubles gate degrades into a gate that exempts everything it sees.
+
+**Fix, in my extractor only:** inside the sibling fx4 roots the corpus is narrowed to what those
+devices *publish* — engine headers and worklets — and their gate artefacts (`*_labels.inc` dumps,
+`*_cert.cpp` probe strings and OLD→NEW rename tables) are excluded. `Source/` and `Design/fx3/`
+are still read WHOLE, because `index.html` option arrays and `*_test.cpp` name tables are exactly
+where fb423's 23 unruled collisions were hiding. The extractor now prints a self-ingestion check
+every run:
+
+```
+   'Tilt'     present   (must be PRESENT — the gate must see yesterday)
+   'Sculpt'   present   (must be PRESENT — the gate must see yesterday)
+   'Slant'    ABSENT   (must be ABSENT — circular corpus check)
+   'Chisel'   ABSENT   (must be ABSENT — circular corpus check)
+   'Surgical' ABSENT   (must be ABSENT — circular corpus check)
+   'Ahead'    ABSENT   (must be ABSENT — circular corpus check)
+```
+
+**⚠️ This affects the other two devices, and I cannot fix it for them.** Widen's and Dynamics'
+extractors read `Design/fx4/eq/`, which contains **my** `shipped_labels.inc` — 3050 strings, most
+of them theirs. Their corpora are almost certainly ingesting their own labels the same way right
+now. The integration owner should apply the same exclusion to all three before reading any
+cross-sibling collision count as real.
+
+**What the refreshed corpus actually says** (3064 → 3050 strings): zero new collisions, and **two
+old exemptions came back UNSPENT** — `Bite`, because OTT renamed its pill `Bite`→`Crest`, and
+`Silk`, because Widen renamed its Character `Silk`→`Satin`. Those are RENAMES.md rows landing in a
+sibling's engine, so the yield they bought is no longer needed. The meter is re-pinned 10 → **8**
+and both stay listed, because the rulings still stand and could be spent again. An exemption list
+that can shrink is the only kind that is honestly measured.
+
+### 5. Still open — unchanged, and deliberately not gated around
+
+Both are stated in the fb422 report below and neither moved:
+
+* **`Slant`'s slope ceiling is arithmetic, not a bug.** 6 dB/oct about a FIXED pivot cannot lift
+  44 dB at 8 kHz. The old "+44 dB" was only ever reachable because the sliding pivot dragged the
+  whole curve upward — that number was **measuring the bug**. The honest ceiling is printed.
+* **`Trait` reads 7.20 dB/sample on retune.** Proven NOT a smoothing fault: tau 20/60/150 ms all
+  read ≈7.5. It is a Q-40 resonator releasing stored energy when its bandwidth collapses. Max has
+  been told; the number stays printed, not hidden.
+
+---
+
 ## fb422 — THE FIX ROUND. READ THIS FIRST; §1 ONWARD IS THE fb420 REPORT IT CORRECTS.
 
-`eq_cert.cpp` → **121 pass, 1 FAIL**, exit 1. Full output: `eq_cert_fb422.log`.
+`eq_cert.cpp` → **121 pass, 1 FAIL**, exit 1. Full output: `eq_cert_fb423.log` (fb422's log was superseded and removed).
 Mutation evidence: **`MUTATION.md`** (6 broken engines, every protected gate proven to go red).
 
 ```
@@ -166,7 +332,7 @@ structurally impossible, not gated.
 - **0** doubles inside the card ✅
 - **18** collisions with shipped strings; 8 sanctioned by name in RENAMES.md, plus `Tight` and
   `Silk` which the table resolves in the EQ's favour ✅
-- **10 UNRESOLVED** ❌ — the one FAIL:
+- **10 UNRESOLVED** ❌ — the one FAIL. **(fb423: all ten are now RULED — see the fb423 section at the top of this file. The table below is kept as the report that produced the ruling.)**
 
 | label | slot | collides with |
 |---|---|---|
