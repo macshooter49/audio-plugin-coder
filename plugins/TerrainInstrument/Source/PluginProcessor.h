@@ -30,7 +30,11 @@
 #include "FilterFxEngine.h"   // fb377 — the FX-rack filter (hosts one FilterSlot, 94 engines)
 #include "TerrainChorusFx.h"    // fb413 — the FX-rack chorus  (kind 6, 8 Types)
 #include "TerrainFlangerFx.h"   // fb413 — the FX-rack flanger (kind 7, 6 Types)
-#include "TerrainPhaserFx.h"    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
+#include "TerrainPhaserFx.h"
+#include "TerrainEqualizerFx.h"   // fb426 — chain kind 9
+#include "TerrainWidenFx.h"       // fb426 — chain kind 10
+#include "TerrainCompressFx.h"    // fb426 — chain kind 11
+#include "TerrainOttFx.h"         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -1609,8 +1613,18 @@ private:
     static constexpr int kPhaSendBase  = kFlaSendBase + ParameterIDs::kFxInstances;    // 45 — phaser
     static_assert (kPhaSendBase + ParameterIDs::kFxInstances
                    <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
-    static constexpr int kPoolSendCount = kPhaSendBase + ParameterIDs::kFxInstances;   // 51
-    static_assert (kPoolSendCount >= kPhaSendBase + ParameterIDs::kFxInstances,
+    // fb426 — the fx4 four. THE FOUR CONSTANTS STILL MOVE TOGETHER: these bases, kPoolSendCount
+    // below, tw::SynthVoice::kPoolSends, and kFxKinds. The static_asserts are what make "together"
+    // enforceable rather than a note somebody has to remember — fb391 missed one and auval came
+    // back 139 (SIGSEGV), six slots past the end of four pool arrays.
+    static constexpr int kEqzSendBase  = kPhaSendBase + ParameterIDs::kFxInstances;    // 51 — equalizer
+    static constexpr int kWidSendBase  = kEqzSendBase + ParameterIDs::kFxInstances;    // 57 — widen
+    static constexpr int kCmpSendBase  = kWidSendBase + ParameterIDs::kFxInstances;    // 63 — compress
+    static constexpr int kOttSendBase  = kCmpSendBase + ParameterIDs::kFxInstances;    // 69 — ott
+    static_assert (kOttSendBase + ParameterIDs::kFxInstances
+                   <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
+    static constexpr int kPoolSendCount = kOttSendBase + ParameterIDs::kFxInstances;   // 75
+    static_assert (kPoolSendCount >= kOttSendBase + ParameterIDs::kFxInstances,
                    "kPoolSendCount must cover the LAST send base + its instances");
     static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
                    "the voice's kPoolSends must cover every pool send the processor writes");
@@ -1629,7 +1643,8 @@ private:
     // ── the chain order. Rebuilt at the TOP of each processBlock from CACHED param pointers, so it
     //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
     //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).
-    // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular 4=Tape 5=Filter
+    // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular 4=Tape 5=Filter 6=Chorus 7=Flanger
+    //       8=Phaser 9=Equalizer 10=Widen 11=Compress 12=OTT
     struct ChainEntry { int kind; int inst; float rank; };
     // fb375 — one slot per addable device, so the rack can never silently drop one. This had been
     // stale since fb365: it read `4 * kFxInstances` (=24) with a "6 of each of 4 devices" comment
@@ -1637,7 +1652,7 @@ private:
     // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
-    static constexpr int kFxKinds  = 9;      // fb413 — + chorus 6, flanger 7, phaser 8
+    static constexpr int kFxKinds  = 13;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12
     static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 54
     static_assert (kChainMax <= tw::FxChainTopology::kMaxSlots,
                    "every activatable device must fit in the topology's slot table");
@@ -1768,6 +1783,22 @@ private:
     // few hundred ms of delay line, not an 8 MB grain ring or a 4 MB tape loop, so six instances
     // each cost far less than the lazy-build handshake would cost in complexity. One `apply`
     // routine per device, run by EVERY instance — the pool law made structural (fb350).
+    // fb426 — ONE refs struct for all four fx4 devices. They share the CONTRACT §2 Params
+    // shape (type · character · axis · 3 front + mix · b1..b8), so four near-identical structs
+    // would be four places to get the same thing wrong. `pill1/pill2/sync` are per-device and
+    // are NULL where the device has none — every read below is guarded.
+    //   EQ       f1 Slant   f2 Air    f3 Amount    axis Focus    pills —
+    //   Widen    f1 Amount  f2 Width  f3 Rate      axis Field    pills Retrig · Hear Mono · sync
+    //   Compress f1 Push    f2 Ratio  f3 Lift      axis Detect   pill  Auto
+    //   OTT      f1 Amount  f2 Chase  f3 Top Lift  axis Stereo   pill  Crest
+    struct Fx4Refs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* axis;
+        std::atomic<float>* f1; std::atomic<float>* f2; std::atomic<float>* f3;
+        std::atomic<float>* mix; std::atomic<float>* b[8];
+        std::atomic<float>* pill1 = nullptr; std::atomic<float>* pill2 = nullptr;
+        std::atomic<float>* sync  = nullptr;
+        std::atomic<float>* src[6]; };
+
     struct ChoRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
         std::atomic<float>* type; std::atomic<float>* chr;
         std::atomic<float>* rate; std::atomic<float>* depth; std::atomic<float>* feedback;
@@ -1799,14 +1830,26 @@ private:
     std::array<FlaRefs, (size_t) ParameterIDs::kFxInstances> flaRefs_ {};
     std::array<PhaRefs, (size_t) ParameterIDs::kFxInstances> phaRefs_ {};
     std::array<tw::TerrainChorusFx,  (size_t) ParameterIDs::kFxInstances> choPool_ {};
+    // fb426 — the fx4 four. Six instances each, routable · chainable · duplicatable.
+    std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances> eqzRefs_ {}, widRefs_ {}, cmpRefs_ {}, ottRefs_ {};
+    std::array<tw::TerrainEqualizerFx, (size_t) ParameterIDs::kFxInstances> eqzPool_ {};
+    std::array<tw::TerrainWidenFx,     (size_t) ParameterIDs::kFxInstances> widPool_ {};
+    std::array<tw::TerrainCompressFx,  (size_t) ParameterIDs::kFxInstances> cmpPool_ {};
+    std::array<tw::TerrainOttFx,       (size_t) ParameterIDs::kFxInstances> ottPool_ {};
+    void applyEqz (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyWid (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyCmp (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyOtt (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     std::array<tw::TerrainFlangerFx, (size_t) ParameterIDs::kFxInstances> flaPool_ {};
     std::array<tw::TerrainPhaserFx,  (size_t) ParameterIDs::kFxInstances> phaPool_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> choEnv_ {}, flaEnv_ {}, phaEnv_ {};
+    std::array<float, (size_t) ParameterIDs::kFxInstances> eqzEnv_ {}, widEnv_ {}, cmpEnv_ {}, ottEnv_ {};  // fb426
     double fx3PrepSr_ = 0.0;
     // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.
     std::atomic<float>* sendRef_[9][(size_t) ParameterIDs::kFxInstances] {};
     void cacheSendRefs();
     void cacheFx3Refs();
+    void cacheFx4Refs();     // fb426 — equalizer / widen / compress / ott
     void pushFx3Params() noexcept;      // ONCE PER BLOCK — see the note in the .cpp
     void applyCho (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyFla (int inst0, float inL, float inR, float& outL, float& outR) noexcept;

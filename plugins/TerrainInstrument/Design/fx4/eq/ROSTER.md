@@ -2,8 +2,48 @@
 
 **7 Types × 8 Characters × 5 Focus · 12 params (3 heroes + Mix + 8 back) · ±30 dB per band
 × Amount 200 % = ±60 dB.** Engine: `TerrainEqualizerFx.h`. Certified by `eq_cert.cpp`
-(**131 pass / 0 FAIL**, full output in `eq_cert_fb423.log`; mutation evidence in `MUTATION.md`).
+(**147 pass / 0 FAIL**, full output in `eq_cert_fb425.log`; mutation evidence in `MUTATION.md`).
 
+> ## 🔴 fb425 — WHAT CHANGED SINCE fb423
+>
+> **Every law-1, law-3 and R11 gate now runs the FULL Type × Character matrix** (new `§Q`):
+> 12 knobs × 7 Types × 8 Characters = **672 knob-cells**, plus 56 cells each for Mix and for
+> the ceiling. Nothing is sampled any more. Result: **0 dead cells, 0 cells under the 3 dB
+> audibility bar**, worst cell `Trait` @ American × `Cut Only` at **3.87 dB**.
+>
+> **`Focus` is gated as a dropdown, not just as a router** (new `§Q4`): all 10 option pairs on
+> all 7 Types, on a DECORRELATED stereo probe. Closest pair in the device: **8.55 dB**
+> (`Dynamic`, `Side`/`Right`), against the 1.5 dB bar §E holds two Characters to. Until fb425
+> every Focus gate was structural — they proved it did the right thing, never that the five
+> options differ from each other.
+>
+> **Two roster facts are now DECLARED rather than discovered** (both asserted-size tables in
+> `eq_cert.cpp`, both checked in *both* directions so neither can hide a fault or keep a stale
+> entry):
+> · **11 ride-closed knob-cells** — on `Dynamic`, and only there, a BOOST band whose ride is
+> fully shut at the −26 dBFS bus program leaves its frequency knob with nothing to move
+> (`Reach` on six Characters, `Bite Hz` on three, `Low Hz` on one). Every one wakes at a
+> −46 dBFS program, measured. This is the Type's advertised mechanism (the ride table below),
+> not a dead knob — but it is stated instead of assumed.
+> · **3 ceiling-capped cells** — `Open` × `Soft Knee` (47.5 dB), `Chisel` × `Handset` (40.5),
+> `Chisel` × `Sub Kill` (45.9). Each caps the device's ±60 dB ceiling by a mechanism it
+> publishes in §3, and each must still clear 32 dB. The other **53 cells clear §K's own
+> 55 dB bar**.
+>
+> **The device publishes its two dropdown HEADINGS** (`Character`, `Focus`) — `kNumLabels`
+> 87 → 89. They were printed on the card from fb420 and sat outside every naming, drift and
+> coverage gate; this device was the only one of the four with no `dropdownNames()`.
+>
+> **The ROSTER half of the drift gate is now ORDERED AND POSITIONAL** (`§P6`). §3 is the one
+> file that ASSIGNS Characters to Types, and it was covered only by a substring-presence test:
+> two Characters moved under the WRONG Types and the gate stayed green. It now reads each
+> Type's paragraph and requires its first eight backticked names to EQUAL `charNames(t)`
+> element for element, and rejects any Character that belongs to another Type.
+>
+> **`eq_cert.cpp` is scanned for retired names like any other published file.** It was printing
+> three of them in its own gate labels — `Chisel/Metal`, `Inverted` and Surgical `Width`, while
+> the engine said `Tin`, `Upward` and `Pinch`. Fixed, and gated.
+>
 > ## 🔴 fb423 — WHAT CHANGED SINCE fb422
 >
 > **The 8 open names are ruled and applied.** `Design/fx4/RENAMES.md`'s second ruling closed the
@@ -225,6 +265,17 @@ endpoints — both a 2.5 dB and a 34 dB window are fully on at −10 dBFS).
 separated almost entirely by the −29 dBFS column, which is exactly the axis a window width
 lives on.*
 
+**A ROSTER FACT, declared at fb425 rather than discovered later.** Read the `hot` column above
+literally: a BOOST band on this Type is ridden all the way to zero gain at a hot program. A band
+at zero gain has no curve, so on **eleven** of this Type's knob-cells the band's FREQUENCY knob
+is bit-identical at 0 % and 100 % *at the −26 dBFS bus program* — `Reach` on `Program Ride`,
+`Quick`, `Lazy`, `Wideband`, `Hard Window`, `Soft Window` and `Peak Keep`; `Bite Hz` on
+`Wideband`, `Hard Window` and `Peak Keep`; `Low Hz` on `Wideband`. Every one of them moves
+16–19 dB at a −46 dBFS program, measured cell by cell in `eq_cert.cpp §Q1`, which holds the list
+as an asserted-size table and fails if a twelfth appears **or** if one of the eleven stops being
+true. This is the only Type where it can happen, because it is the only Type CONTRACT §4 allows
+to be level-dependent.
+
 ---
 
 ## 4. THE PARAMETERS
@@ -338,6 +389,11 @@ f(0)  = 20 Hz exactly        f(95) = 20000 Hz exactly
   integration owner's. Both are cheap and both are recommended — deferred, not forgotten.
 * **fb305:** `eqzSend*` must join **every** `rtd` exclusion sum in the same commit that creates
   it, and the Equalizer's own main-send branch needs the symmetric N-way subtraction.
+* **The card's two dropdown HEADINGS come from the engine too** (fb425): `EQ::dropdownNames()`
+  returns `{ "Character", "Focus" }`, and `EQ::kNumLabels` is **89**, not 87. Print them from
+  there rather than typing them into the panel markup — a string typed into the card is a string
+  no gate can see, which is exactly how these two survived five build rounds outside the
+  no-doubles gate. The siblings do the same (`TerrainCompressFx.h:113`, `TerrainOttFx.h:114`).
 * **Choice cardinality is forever:** declare `SYN_EQZ_TYPE` at **12** slots (7 live),
   `SYN_EQZ_CHARACTER` at 8, `SYN_EQZ_FOCUS` at 5. Read all three with `(int)*rawParam(id)` —
   the index, never `round(v·(N−1))` (the fb50 law, and the fb373 law right behind it).

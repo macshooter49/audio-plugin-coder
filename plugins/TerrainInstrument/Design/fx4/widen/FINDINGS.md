@@ -1,8 +1,17 @@
 # WIDEN — FINDINGS
 
-**fb423 — THE NAMES ROUND.** Harness: `widen_cert.cpp` -> **230 PASS / 5 FAIL**
-(`widen_cert_fb423.log`). Mutation proofs: **`MUTATION.md`**, now 11 mutations. The fb420 and
-fb422 logs are kept beside this file for the diff.
+**fb425 — THE FULL-MATRIX ROUND. Read §11 first.** Harness: `widen_cert.cpp` ->
+**1511 PASS / 88 FAIL** over **1599 gates** (`widen_cert_fb425.log`); fb423 ran 235. Mutation proofs: **`MUTATION.md`**, now 13 mutations. The fb420,
+fb422 and fb423 logs are kept beside this file for the diff.
+
+🔴 **THE GATE COUNT WENT FROM 235 TO ~1600, AND THAT IS THE WHOLE STORY.** fb424's law-1, law-3
+and R11 gates all ran on **Character 0** — one column of eight — so seven eighths of this device
+had never been measured once. They run on all 48 Type × Character cells now, both front pills are
+gated on every cell, and the `Field` dropdown finally has a physics gate. What that found is in
+§11, and it is not small.
+
+*(§0 below is the fb423 record and is left unedited. Its five reds are all still red and are
+carried forward in §11.5.)*
 
 🔴 **THE ONE THING I DID NOT DO LAST ROUND: I BUILT NO NO-DOUBLES GATE.** FIXES §2 said "rebuild
 the no-doubles gate"; what §9 below actually was is a one-off markdown grep over the **15 strings
@@ -469,3 +478,251 @@ fade does not reach its target in float — it STALLS.** Near 1.0 the representa
 `monoSm_` parked at **0.999978542** forever, leaving **1.48e-06** of L−R in a signal that is
 supposed to *be* mono. The gate that asserts `max |L−R| == 0.0` is what caught it; a "< 1e-4" gate
 would have passed and shipped a mono button that does not produce mono.
+
+---
+
+## 11. 🔴 fb425 — THE FULL-MATRIX ROUND
+
+**The law.** Every law-1, law-3 and R11 gate runs the **full Type × Character matrix**, and every
+front pill and every dropdown option gets its own audibility gate. The matrix is finite —
+6 Types × 8 Characters = **48 cells**, × 12 knobs = **576 sweeps** — so sampling it was always a
+choice, never a constraint.
+
+| round | the gates… | how it was found |
+|---|---|---|
+| fb421 | could not fail **at all** | delete the mechanism, cert stays green |
+| fb423 | ran on **one Type** | sweep the other five |
+| fb424 | ran on **one Type × Character cell** | sweep the other 47 |
+| **fb425** | run on **all 48**, plus both pills and all six `Field` options | — |
+
+### 11.1 `Retrig` — a front pill that was bit-identically dead on HALF the device
+
+`fireRetrig()` reset `ph_[]`, `res_[]` and `q_[]` — **the per-voice LFO phase, which is read by
+`procVoices`' mod-0 branch and by `procTwin` and by nothing else.** `Twofold` runs a band-limited
+random walk (`wk_`), `Blur` a rotator plus its own walk (`blurRot_`/`wkb_`), `Bands` the crossover
+grid rotator plus `wkg_`. Firing the pill on any of those three produced **output identical to the
+bit**. The old §I click test toggled the pill — on Type 0 only — and a click test structurally
+**cannot** see a control that does nothing, because doing nothing is the quietest thing a control
+can do.
+
+**Fixed in the engine, not gated around.** `fireRetrig()` now reseeds every modulator this device
+has, and every one of those resets is a discontinuity, so every one carries a residual:
+
+* the **walk** residual (`resW_[]`) is in walk units and multiplies the same delay depth the LFO
+  residual does, so it is bled out under the **same 0.5-samples-per-sample read-position cap** —
+  the divisor is `depG_[v] + wanSm_*0.016*fs`, i.e. whichever walk path is live, the read head
+  still cannot move faster than half a sample per sample;
+* the **rotator** residuals (`Blur`'s `resBs_/resBc_/resBw_`, `Bands`' `resGs_/resGw_`) live in the
+  **coefficient and frequency** domains, not the read-position domain, so they bleed on a **linear
+  30 ms ramp**. Linear, never a one-pole — that is the fb424 `Hear Mono` finding: *a one-pole fade
+  in float does not reach its target, it parks.*
+
+**The gate (§P) is a controlled experiment, on all 48 cells.** Two engines, same probe, same
+params; one gets a single rising edge at t = 1.0 s. **Before** the edge the two outputs must be
+bit-identical — that is what makes it an experiment rather than an anecdote (0 contaminated cells)
+— and **after** it they must not be.
+
+```
+  ok    `Retrig` is BIT-ALIVE on every cell not on the known-inert roster   0 bit-identical cells
+  ok    every experiment was CONTROLLED (bit-identical before the edge)     0 contaminated cells
+```
+
+**On the anchor, and on not buying green.** The first draft measured the post-edge change against a
+quarter-turn of `Mix`. That is the wrong unit — 0.25 → 0.50 wet doubles the whole effect, a
+different class of event from a phase re-alignment. The anchor is now a quarter-turn of **`Rate`**:
+the other control on this device that moves the modulator and only the modulator, at the same
+**fifth** §F already defends for `Rate` and `Roam`. **This made the gate HARDER, not easier** — on
+`Blur` the Rate quarter-turn measures 62–92 against a Mix quarter-turn of 46–64 — and the same
+cells still fail. Both numbers are printed on every line.
+
+### 11.2 `Field` — the dropdown with no physics gate
+
+CONTRACT R6 requires **both** back dropdowns to change physics. `Character` had §G (48 measured
+cells). `Field` had a naming assertion, a per-option mono tag check and a click test, and **nothing
+that measured the six options against each other**. Two of the six could be deleted without moving
+a line of this cert.
+
+**§V measures all 15 pairs on all 48 cells — 720 comparisons.** The metric had to be
+**channel-ordered** or `Swap` and `Straight` are identical *by construction*: a mono-summed,
+correlation-only or side/mid metric cannot tell a channel exchange from no exchange at all. So the
+fingerprint is 30 log bands of **L** and 30 of **R**, level-normalised (a magnitude-spectrum
+distance — law 6 holds), plus correlation, side/mid, and the stereo field's own **trajectory**
+(rms + zero-crossing rate), because `Orbit` is a rotation in *time* and is magnitude-flat.
+
+⚠️ **And it does not use the dropdown as a tool.** §H and §F's Mix rows use `Side Only` as a
+*probe* (its wet mono-sums to exactly zero), so those go red if that one option is gutted — but
+only that one, and only because it is load-bearing scaffolding. Nothing in §V uses a `Field` for
+anything except as the thing under test.
+
+```
+  ok    NO two `Field` options are IDENTICAL anywhere in the 48-cell matrix
+        0 identical pairs over 15 pairs x 48 cells = 720 comparisons
+  FAIL  every `Field` pair clears a FIFTH of a Width quarter-turn, on every cell
+        1 weak cells; closest anywhere Twin/Hex Straight vs Swap at 3.86
+```
+
+The one red is **`Blur`/`Top Only`, `Straight` vs `Swap` at 24.25 against a bar of 27.48** (0.176 of
+a `Width` quarter-turn instead of 0.20). It is understood: `Top Only` scatters the two allpass paths
+only above 2 kHz, so below that the two channels are near-interchangeable and exchanging them is a
+genuinely small spectral change. It is a real red on a real weakness, not a metric artefact — the
+image still mirrors, which is why I am not tempted to widen the bar to cover it.
+
+### 11.3 What the full matrix FOUND — two structural bugs, both fixed
+
+**(a) THE COUNT LAW. `Voices` plateaued on 11 cells, and every one of them was off Character 0.**
+`nAP_ = round(x1 · nV)` and `nB_ = round(x1 · 1.6 · (nV−1))` multiply the **Character's** depth
+*into* the knob, so a deep Character hits the ceiling a quarter of the way up:
+
+```
+  Blur / Deep Twelve   stages   18 / 24 / 24 / 24 / 24     three quarters of the knob = nothing
+  Blur / Plush         stages   12 / 16 / 24 / 24 / 24
+  Bands / Tilted       bands     2 /  4 /  4 /  6 /  6     the even-ing collapses 3->4 and 5->6
+                       measured  0 / 47.8 / 0 / 43.9       a perfect comb of dead steps
+```
+
+The Character now sets **where the knob starts** and the knob adds a **fixed step per click**
+(`Blur` +3 stages, `Bands` +2 bands, built even from the start), so it travels its whole length on
+every Character *by construction*. `kMaxAP` 24 → 36 and `kMaxBands` 16 → 20 for the headroom the
+deep Characters need. Measured after: `Deep Twelve` 18/21/27/30/33, `Tilted` 2/4/8/10/12.
+
+**(b) `Twofold`/`Static Pair`'s ±8 cents WERE NEVER IN THE AUDIO.** ROSTER claimed "the walk is
+replaced by a fixed ±8-cent split". `statC_` was computed for that Character and then read by
+**nothing but `viz_.voiceCents`** — the constant-ratio granular reader that turns `statC_` into
+pitch was guarded by `T.mod == 2`, i.e. `Steady` only. **The card drew a pitch offset the DSP never
+produced**, which is fb373's geometry in miniature, and the measurable consequence is that
+`Sway` — the Type's **own hero knob** — ran **1.691 → 1.691 cents across its entire travel**, the
+detector's floor at both ends. The reader now runs wherever a static offset exists, and the offset
+is the cents the walk would have reached at that Amount (static means it does not *move*, never
+that it has no width). Measured after: **1.691 → 116.058 cents, smallest quarter 11.78**.
+
+### 11.4 THE KNOWN-INERT ROSTER IS EMPTY, AND THE REVERSE CHECK IS WHY
+
+The roster is an exemption from the **audibility** law and never from the bit-identity one — that
+gate has **no exemption list at all** (0 bit-identical cells out of 576). Every roster entry is
+checked **in reverse**: a declared-inert cell that *clears* the bar is a **stale declaration** and
+fails. I drafted exactly one entry — `Rate` on `Twofold`/`Static Pair`, on the reasoning that a held
+walk has no rate to set — wrote the reason out in full, and **the reverse check called it stale**:
+once `Static Pair` got the reader it was always supposed to have, `Rate` drives that reader's
+crossfade clock and the cell measures **20.0 / 35.4 / 39.0 / 23.5** per quarter against a bar of
+2.49. The exemption I was about to grant myself was wrong and the gate is what said so. The array
+now holds one **NONE sentinel** with its size asserted, so nothing is exempt and nothing can be
+added silently.
+
+### 11.5 THE REDS THIS ROUND EXPOSED — all of them, with the coordinates
+
+**53 of 576 law-1 cells** are alive but do not clear their audible-step floor. None is
+bit-identical. By class:
+
+| class | cells | what it is |
+|---|---|---|
+| `Rate` + `Roam` on **`Blur`** (8 + 7) | 15 | **the two accepted reds of fb423, now measured on all eight Characters instead of one.** Same cause: `Rate` is logarithmic and its bottom quarters are small against `Blur`'s own huge dry→wet distance. Anchor unchanged, as instructed. |
+| `P3 Offset` on `Twofold` (4), `Blur` (4), `Twin` (2) | 10 | the depth-driven base floor swallows the bottom of the knob — the same mechanism the fb422 `Tight Inst` note diagnosed, still live on other Characters |
+| `Detune`/`Sway`/`Wash` on `Twofold` (4), `Blur` (3), `Throng` (2), `Steady` (1) | 10 | Characters with `centsMul` far from 1.0 compress the curve into one quarter. `Steady`/`Fifth Up` is the interesting one — it runs **718 → 104 cents**, i.e. NOT MONOTONIC, because its fixed +700-cent voices dominate the detune estimator at low Amount |
+| `Rate` on `Bands` (4) | 4 | grid sweep rate; bottom quarter 1.6–2.0 against bars of 1.6–2.5, i.e. all four are within 25 % of their bar |
+| `P7 Feedback` (6), `P2 Spread` (5), `P1 Voices` (2), `P8 Balance` (1) | 14 | scattered near-misses; the two `Voices` cells left are `Twin`/`Tremble` (the pair count structurally has only 4 values for 6 knob positions) and `Twofold`/`Tape ADT` |
+
+**8 of 48 R11 `Amount` ceiling cells** are below the bar, and this is the first time R11 has been
+measured off Character 0 at all:
+
+```
+  Throng/Octave Bloom    38.45 cents   (bar 60)   the octave voices take level from the fan
+  Twofold/Wide Room      14.43 cents   (bar 45)
+  Twofold/Tape ADT       10.95 cents   (bar 45)   centsMul 2.0 but baseMul 1.0 and a 0.60 rate mul
+  Blur/Deep Twelve       corr +0.44    (bar -0.25)  more stages, LESS divergence at Amount 1.0
+  Blur/Top Only          corr +0.29    (bar -0.25)  scatter above 2 kHz only
+  Blur/Opposed           corr +0.20    (bar -0.25)
+  Bands/Guard            corr +0.26    (bar -0.15)  <- `Guard` is a Character whose IDENTITY is a
+  Bands/Deep Grid        corr +0.27    (bar -0.15)     capped contrast, which contradicts R11 head-on
+```
+
+🔴 **`Bands`/`Guard` is a contract contradiction, reported as asked.** Its stated identity is
+"contrast capped" — a safety rail — and R11 says *"if your 100 % is polite, you have failed the
+brief."* One of the two has to give: either `Guard` is cut, or R11 is ruled not to apply to a
+Character that exists to be the safe one. **I did not decide this on my own**; it is red until it
+is ruled.
+
+**11 of 48 R11 `Feedback`-wall cells** are under +3 dB. At fb423 this gate ran on 6 cells and 2
+were red (`Steady`, `Twofold`); on all 48 it is `Twin`/`Mode Two`·`Mode Three`·`Tremble` (+2.05 /
++2.15 / +2.28), all three `Steady` cells that were already understood, and 5 of 8 `Twofold`
+Characters, weakest `Static Pair` at **+1.50 dB**. Same diagnosis as fb423's #4 and #5, now with
+its true extent: **the loop decorrelates each pass from the last, so the returns add in POWER, not
+amplitude** — and the Characters that decorrelate hardest are exactly the ones furthest under.
+
+**10 of 48 `Retrig` cells** clear bit-aliveness but not a fifth of a `Rate` quarter-turn (7 of them
+on `Blur`, whose Rate quarter-turn is the largest on the device). **1 of 720 `Field` pairs** is
+below its bar. Full coordinates are in `widen_cert_fb425.log`.
+
+### 11.6 THE HEADLINE, AND THE HONEST SHAPE OF IT
+
+```
+  PASS 1511   FAIL 88          (fb423: PASS 230  FAIL 5, on 235 gates)
+```
+
+| block | red | of |
+|---|---|---|
+| law-1, knob × Type × Character | **53** | 576 |
+| law-1, BIT-IDENTITY (no exemptions, no roster) | **0** | 576 |
+| law-3, Mix 1.0 dry residual, Type × Character | **0** | 48 |
+| R11 `Amount` ceiling, Type × Character | **8** | 48 |
+| R11 `Feedback`+`Voices` wall, Type × Character | **11** | 48 |
+| `Field` options pairwise distinct | **1** | 48 cells / 720 comparisons |
+| `Retrig` pill audibility | **10** | 48 |
+| `Hear Mono` pill fold | **0** | 48 |
+| Character physics (§G), no-doubles (§S), mono (§J), clicks (§I), CPU, 44.1/96 kHz | **0** | — |
+
+**88 reds is not a worse device than fb423's 5. It is the same device, measured 6.8× harder.**
+Of the 88, **15 are fb423's two accepted reds replayed across their eight Characters**, and
+**every single one of the other 73 is a cell that had never been measured before tonight.**
+
+
+### 11.7 THE MUTATION PROOFS — 13 now, and every one of them got louder
+
+All thirteen were **re-run from scratch** against this cert; none of fb423's counts is carried
+forward. Shipping is `1511 / 88`; every mutant is worse.
+
+| macro | fb425 | Δ | fb423 |
+|---|---|---|---|
+| `HAAS` — the whole machine → a 12 ms Haas delay | 750 / **513** | **+425** | 157 / 78 |
+| `DEADKNOBS` | 1377 / **150** | **+62** | 221 / 14 |
+| `NOMONO` | 1461 / **138** | **+50** | 227 / 8 |
+| **`FLATFIELD`** — `Swap` + `Gather` → `Straight` | 1462 / **137** | **+49** | *(did not exist; would have been 0)* |
+| `NOFLOOR` | 1473 / **118** | **+30** | 214 / 21 |
+| `POLITE` | 1492 / **107** | **+19** | 221 / 14 |
+| **`RETRIGLFO`** — fb424's LFO-only `fireRetrig()` | 1495 / **104** | **+16** | *(did not exist; would have been 0)* |
+| `NOSMOOTH` | 1503 / **96** | **+8** | 222 / 13 |
+| `APCLAMP` | 1504 / **95** | **+7** | 226 / 9 |
+| `NOGLIDE` | 1505 / **94** | **+6** | 224 / 11 |
+| `NODIP` | 1507 / **92** | **+4** | 226 / 9 |
+| `STALENAME` | 1507 / **92** | **+4** | 226 / 9 |
+| `MONOSNAP` | 1510 / **89** | **+1** | 229 / 6 |
+
+🔑 **The single best number in this round is `HAAS`'s 336.** The new bit-identity probe — knob 0 %
+vs knob 100 %, same engine, same noise, sample vectors compared exactly, **no exemption list of any
+kind** — reports **336 of 576 cells BIT-IDENTICALLY DEAD** when the widening machine is replaced by
+a fixed Haas delay. At fb421 that same substitution passed every R11 gate *with better numbers*.
+
+🔑 **`MONOSNAP` costing exactly +1 is also a result.** A precisely-targeted mutation that breaks one
+thing should break one gate; a mutation that breaks 40 gates is either enormous or the gates are
+correlated. Both ends of that range are on this table and both are what they should be.
+
+### 11.8 What I did NOT do, and would not do at this hour
+
+* **I did not re-voice 53 Characters to make law-1 green.** Re-tuning `centsMul` and `baseMul` on a
+  Character until its quarters clear a bar is exactly the constant-fitting CONTRACT §3.2 forbids,
+  and it would move the failure to §G (Character distinctness) where the same numbers are the
+  discriminator. Two *structural* laws were fixed instead — the count law and the static reader —
+  and they took 11 + 2 cells with them.
+* **I did not move any anchor to buy a green.** The one anchor I changed (§P, Mix → Rate) made the
+  gate stricter and its cells still fail.
+* **The worklet is updated for the count law, the static reader and the walk half of the
+  retrigger**, but it has never had `Blur`'s coefficient rotator or `Bands`' grid rotator, so it
+  cannot carry those two residuals. It is a mockup, not a port; that gap is stated here rather than
+  discovered later.
+* 🔴 **THE ONE HOLE I KNOW ABOUT AND DID NOT CLOSE: §I's four discrete-switch CLICK tests still run
+  on Type 0 only.** The pill *audibility* law is now full-matrix (§P, 48 cells); the pill *click*
+  law is not. This matters concretely and I can name where: `procTwin` reads `ph_[p]` through a
+  1.5 ms one-pole (`triZ_`), and `fireRetrig()` forces `ph_` to 0 — whose triangle value is −1 —
+  so a retrigger on `Twin` glides the modulator by up to 2 units in 1.5 ms with **no residual of
+  its own**, and the only click gate that would see it runs on `Throng`. It is written down here
+  rather than left to be found, because a hole you have named is a task and a hole you have not is
+  the next round's blocker.

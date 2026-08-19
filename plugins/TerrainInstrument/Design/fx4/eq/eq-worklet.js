@@ -26,6 +26,10 @@ const FOCUS = ['Stereo', 'Mid', 'Side', 'Left', 'Right'];
 const TRAIT = ['Pinch', 'Slope', 'Taper', 'Dip', 'Silk', 'Pivot', 'Sting'];
 const BACK  = ['Low Hz', 'Low', 'Body Hz', 'Body', 'Bite Hz', 'Bite', 'Reach', 'Trait'];
 const FRONT = ['Slant', 'Air', 'Amount', 'Mix'];
+// fb425 — the two words the card prints ABOVE the back dropdowns. They are published
+// labels like any other, so they live in a table the drift gate can read, not in the mockup's
+// markup where nothing checks them. Order matches the panel: dropdown 1, then dropdown 2.
+const DROPDOWN = ['Character', 'Focus'];
 
 const CHARS = [
   ['Plain','Tight','Broad','Steep','Scoop','Deep Pivot','Bright Pivot','Four Bells'],
@@ -538,7 +542,8 @@ class TerrainEq extends AudioWorkletProcessor {
                             nodeDb: this.nodeDb.slice(), lvl: clamp(this.lvl * 6, 0, 1),
                             type: TYPES[this.p.type|0], trait: TRAIT[this.p.type|0],
                             character: CHARS[this.p.type|0][this.p.character|0],
-                            focus: FOCUS[this.p.axis|0] });
+                            focus: FOCUS[this.p.axis|0],
+                            dropdownHeads: DROPDOWN.slice() });
   }
 
   process(inputs, outputs) {

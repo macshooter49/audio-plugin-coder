@@ -122,7 +122,9 @@ At the defaults the card **does something without changing the level**: 6.8 dB o
 `Detect` = `Native` · `Peak` · `Average` · `Patient` · `Spike` — five different **rectifiers /
 averagers**, i.e. five different things the compressor physically hears. `Native` gives the Type its
 own ears. (RENAMES.md: option 0 was `Auto`, which doubled the front `Auto` pill INSIDE one card —
-the `Air`-class violation — and option 3 was `Long`, a shipped Reverb Shape option.) This is the one device in the rack where swapping the usual `Quality` dropdown for a
+the `Air`-class violation — and option 3 carried the name of a shipped Reverb Shape option;
+RENAMES.md COMPRESS holds both old strings, and cert §1 derives its retired-label blacklist from
+that table rather than from prose, so neither name can be re-introduced here.) This is the one device in the rack where swapping the usual `Quality` dropdown for a
 detector selector is honest, because there is no oversampling to tier.
 
 | Pos | Name | Range | Does |

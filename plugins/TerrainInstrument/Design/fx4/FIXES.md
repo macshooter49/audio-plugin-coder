@@ -262,3 +262,64 @@ positional, like the worklet half already is.
 Widen's five reds (`Rate`/`Roam` on Blur against a self-imposed anchor; `Steady` +2.89 /
 `Twofold` +2.03 against a +3.0 bloom bar, physical and diagnosed) stay red with the reasoning at the
 line. Compress's `compress-transition-slew` survivor stays labelled as redundant, not claimed.
+
+---
+
+# fb426 — RULINGS ON THE THINGS ROUND 4 CORRECTLY REFUSED TO DECIDE
+
+## 1. `Bands / Guard` vs R11 — the contradiction Widen reported instead of resolving
+
+Widen flagged a genuine conflict rather than picking a side, which was right:
+`Guard` is a Character whose **declared identity is a capped contrast — a safety rail** — while R11
+says *"if your 100 % is polite, you have failed the brief."* One of them has to give.
+
+**RULING: R11 binds the DEVICE, not every cell. `Guard` stays, and R11 does not apply to it.**
+
+The purpose of R11 is that the user can *reach* destructive extremes — not that every path to the
+top is destructive. Widen ships 47 other Characters that go past mono-destruction; one that
+deliberately does not cannot make the device polite. Refusing to let a roster contain a safe option
+would mean the device has no usable setting at the top of its own knob, which is a worse product,
+not a braver one.
+
+**Conditions, so this cannot become a loophole:**
+- The cap must be a **real mechanism difference** — it is what makes `Guard` distinct under law 2 —
+  and not merely a smaller number on the same mechanism.
+- It goes in the **asserted-size** capped-Character table with a stated reason, exactly like the
+  known-inert cell rosters. Same discipline: declared, reasoned, size-locked, checked in both
+  directions, so "our Characters are all safe now" fails the build rather than passing quietly.
+- **One per Type is the ceiling.** A second capped Character on the same Type is a roster smell and
+  needs its own ruling.
+
+This is the same shape as the `kInert` and `kRatioLocked` tables: the answer to "a law that cannot
+hold everywhere" is a **named, bounded exemption**, never a quietly relaxed bar.
+
+## 2. `OverEasy / Anti`, `Exact / Loose Grip`, `FET 76 / Twenty Lock` — locked-ratio identities
+
+Same ruling, same shape. These three Characters **are a ratio** — `Anti` is the dbx Infinity+
+negative zone (`out = 2T − in`, where louder in gives quieter out), `Loose Grip` is a 2.5:1 cap,
+`Twenty Lock` is 20:1. Asking them to reach ∞:1 asks them to stop being themselves. They are exempt
+from the ∞:1 wall, matched **by name** so a reordered roster cannot silently re-point an exemption,
+and the list is asserted to exactly 3.
+
+Note `Anti` is exempt from the *span* metric but **not from R11** — it is gated on the **sign** of
+the transfer curve instead, because an inverted 25 dB span reads identically to an upright one and
+a negative slope is the *more* extreme behaviour, not the politer. That is the right way to exempt
+something: change what you measure, never whether you measure.
+
+## 3. `OTT / Two Band` under an R2 that says "3-band" — RATIFIED
+
+R2 says OTT owns 3-band up+down; `Two Band` is two. It is still multi-band, still up+down per band,
+and its discriminator is genuinely its own (15.98 dB of cross-band ducking). The boundary R2 exists
+to defend is **against Compress**, which owns single-band — and a 2-band device is not single-band.
+Ratified as a Type, no change.
+
+## 4. Still Max's, not mine — flagged, not decided
+
+- **EQ `Trait`, 7.20 dB/sample on retune.** Proven not a smoothing fault (τ 20/60/150 ms all read
+  ~7.5): a Q-40 resonator releasing stored energy when its bandwidth collapses, and no smoother
+  makes stored energy leave slowly. It exists *only because* the Q ceiling is genuinely extreme,
+  which is what he asked for. Keep the ceiling and the artifact, or tame the top of the Q law.
+- **OTT `Crest` is thin at the shipped defaults** — 0.001–0.45 dB p90 on 52 of 64 cells. The
+  agent's ≥0.61 dB is real but needs Chase 0.10 + Raise 100 + a programme 26 dB down. Both numbers
+  are true and the mechanism argument is sound; the pill is simply subtle where most people will
+  meet it. Re-voice it, or accept it as a specialist control.

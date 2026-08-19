@@ -12,7 +12,8 @@ build () { clang++ -O2 -std=c++17 ${2:-} -I "$TI/Tests/shim" -I "$TI/Source" -I 
 run   () { "$OUT/$1" > "$OUT/$1.log" 2>&1; echo "$1  exit=$? $(grep -o 'RESULT: .*' "$OUT/$1.log")"; }
 build baseline ""
 run   baseline
-for M in EQ_MUT_NO_PIVOT EQ_MUT_NO_RINGCAP EQ_MUT_NO_SMOOTH EQ_MUT_NO_DIP EQ_MUT_NO_CEILING EQ_MUT_NO_DENORM; do
+for M in EQ_MUT_NO_PIVOT EQ_MUT_NO_RINGCAP EQ_MUT_NO_SMOOTH EQ_MUT_NO_DIP EQ_MUT_NO_CEILING EQ_MUT_NO_DENORM \
+         EQ_MUT_DEAD_CELL EQ_MUT_POLITE_CELL EQ_MUT_MIX_WET EQ_MUT_FLAT_FOCUS; do
     build "$M" "-D$M"
     run   "$M"
 done

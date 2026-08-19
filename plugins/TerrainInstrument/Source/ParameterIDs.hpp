@@ -1188,6 +1188,28 @@ namespace ParameterIDs
     constexpr char SYN_PHA_TYPE[]   = "SYN_PHA_TYPE";    constexpr char SYN_PHA_POWER[]  = "SYN_PHA_POWER";
     constexpr char SYN_PHA_ACTIVE[] = "SYN_PHA_ACTIVE";  constexpr char SYN_PHA_RANK[]   = "SYN_PHA_RANK";
 
+    // ── fb426 — THE fx4 FAMILY: Equalizer 9 · Widen 10 · Compress 11 · OTT 12.
+    //    Same pooling grammar: instance 1 is "SYN_EQZ_", 2..6 are "SYN_EQZ2_".."SYN_EQZ6_".
+    //    ⚠️ SYN_EQZ_* is deliberately NOT the synth panel's EQ_B* family. The two surfaces stay
+    //    independently automatable and preset-able — no-doubles applies to param IDs too, and the
+    //    panel EQ keeps its own engine (ParametricEQ.h) untouched.
+    //    🔑 CARDINALITY IS FROZEN AT BIRTH (rack law C). All four *_TYPE are declared choice(16)
+    //    with reserved padding and all four axis params choice(8), matching the fb413/fb418 house
+    //    precedent (Chorus 16/8 live · Flanger 16/6 · Phaser 16/9 · Filter 16/10). Live counts
+    //    today are EQ 7 · Widen 6 · Compress 8 · OTT 8 Types, and every engine clamps its own
+    //    index, so the reserve costs nothing and is the only moment it can be bought.
+    //    🔑 Read every choice as (int)*rawParam(id) — NEVER round(v*(N-1)). Normalising on a
+    //    dropdown's option count instead of the PARAM's cardinality is fb373, which shipped
+    //    `Cassette` playing `Studio` through four rounds of green measurement.
+    constexpr char SYN_EQZ_TYPE[]   = "SYN_EQZ_TYPE";    constexpr char SYN_EQZ_POWER[]  = "SYN_EQZ_POWER";
+    constexpr char SYN_EQZ_ACTIVE[] = "SYN_EQZ_ACTIVE";  constexpr char SYN_EQZ_RANK[]   = "SYN_EQZ_RANK";
+    constexpr char SYN_WID_TYPE[]   = "SYN_WID_TYPE";    constexpr char SYN_WID_POWER[]  = "SYN_WID_POWER";
+    constexpr char SYN_WID_ACTIVE[] = "SYN_WID_ACTIVE";  constexpr char SYN_WID_RANK[]   = "SYN_WID_RANK";
+    constexpr char SYN_CMP_TYPE[]   = "SYN_CMP_TYPE";    constexpr char SYN_CMP_POWER[]  = "SYN_CMP_POWER";
+    constexpr char SYN_CMP_ACTIVE[] = "SYN_CMP_ACTIVE";  constexpr char SYN_CMP_RANK[]   = "SYN_CMP_RANK";
+    constexpr char SYN_OTT_TYPE[]   = "SYN_OTT_TYPE";    constexpr char SYN_OTT_POWER[]  = "SYN_OTT_POWER";
+    constexpr char SYN_OTT_ACTIVE[] = "SYN_OTT_ACTIVE";  constexpr char SYN_OTT_RANK[]   = "SYN_OTT_RANK";
+
     constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
     constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
     constexpr char SYN_FX_ACTIVE_SUFFIX[] = "_ACTIVE";

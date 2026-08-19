@@ -4,7 +4,7 @@
 // five cross-sibling collisions survived to the family audit because of it.
 // Quoted strings are STRIPPED before the capitalisation test, so the fb418
 // labels `Motion` and `Route` (built as "Chorus" + sfxD + " Motion") are in.
-// 3319 strings from 134 files.
+// 3320 strings from 134 files.
 static const char* const kShippedLabels[] = {
     "A",
     "A + macron + extras",
@@ -908,6 +908,7 @@ static const char* const kShippedLabels[] = {
     "FM Feedback",
     "FM Ratio 1",
     "FM Ratio 2",
+    "Focus",
     "Focus option",
     "Fog",
     "FOLD",

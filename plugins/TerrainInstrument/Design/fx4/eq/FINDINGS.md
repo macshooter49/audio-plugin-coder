@@ -1,6 +1,199 @@
 # EQUALIZER — FINDINGS (fx4, chain kind 9)
 
-## fb423 — NAMES RULED · DOWNSTREAM DRIFT CLOSED. READ THIS FIRST.
+## fb425 — THE FULL MATRIX. READ THIS FIRST.
+
+`eq_cert.cpp` → **147 pass, 0 FAIL**, exit 0. Full output: `eq_cert_fb425.log`.
+Mutation + negative-control evidence: **`MUTATION.md`** (1 baseline + **10** mutants + 2
+file-level controls; all 10 RED, both controls RED).
+
+```
+clang++ -O2 -std=c++17 \
+  -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/eq \
+  eq_cert.cpp -o /tmp/eq_cert && /tmp/eq_cert          # 147 pass, 0 FAIL
+Design/fx4/eq/run_mutations.sh /tmp/eqmut              # 1 baseline + 10 mutants, all 10 RED
+```
+
+### Q1 — LAW 1 ON EVERY CELL: 672 knob-cells, 0 dead, 0 under the bar
+
+12 knobs × 7 Types × 8 Characters. The whole sweep costs about a second of the cert's 5.4 s, which
+is the entire point: **sampling this matrix was always a choice, never a constraint.**
+
+```
+  ok    (control) the matrix detector reads 0.000 dB and BIT-IDENTICAL on an unchanged patch
+        0.000000 dB spectral delta, bit-identical yes
+  ok    no knob is BIT-IDENTICAL at 0 % and 100 % in ANY of the 672 knob-cells   0 dead knob-cells
+  ok    every one of the 672 knob-cells moves the output spectrum by >= 3.0 dB   0 cells under the bar
+
+           per knob, the WORST of its 56 cells (this is the number a sampled gate never sees):
+        Slant    worst   47.67 dB at Chisel    x Triple Notch  (mean  47.69 dB)
+        Air      worst   27.50 dB at Dynamic   x Upward        (mean  63.22 dB)
+        Amount   worst   21.69 dB at Dynamic   x Quick         (mean  56.48 dB)
+        Mix      worst   14.71 dB at Dynamic   x Lazy          (mean  33.44 dB)
+        Low Hz   worst    8.19 dB at Dynamic   x Peak Keep     (mean  21.73 dB)
+        Low      worst   22.29 dB at Open      x Soft Knee     (mean  61.24 dB)
+        Body Hz  worst    6.15 dB at Chisel    x Shallow       (mean  20.74 dB)
+        Body     worst   23.67 dB at Open      x Soft Knee     (mean  46.51 dB)
+        Bite Hz  worst    5.61 dB at Dynamic   x Program Ride  (mean  15.16 dB)
+        Bite     worst   23.68 dB at Open      x Soft Knee     (mean  48.44 dB)
+        Reach    worst   11.46 dB at Chisel    x Handset       (mean  23.72 dB)
+        Trait    worst    3.87 dB at American  x Cut Only      (mean  19.62 dB)
+```
+
+**The thinnest margin in the device is `Trait` on American × `Cut Only`: 3.87 dB against a 3.0 dB
+bar.** Stated rather than buried: `Cut Only` applies the proportional-Q law to cuts alone, so the
+`Taper` exponent has one band of the reference patch to act on instead of four. It passes, with
+0.87 dB in hand, and it is the cell to watch if that Character is ever re-voiced.
+
+### 🔬 The matrix found TWO faults in its own probe before it found anything about the device
+
+Both are §3.1 "check your own detector" failures, and both would have produced a *false* dead-knob
+report — which is exactly as damaging as a missed one.
+
+**(1) Probe placement.** The first build read `Trait` on the whole `Open` Type at 1.83 dB — nearly
+dead. `Silk` is a SECOND shelf one octave **above** `Reach`; with the reference patch's `Reach` at
+16 kHz that shelf sits at 32 kHz, past Nyquist. What was being measured was the probe's choice of
+corner. The matrix patch now parks `Reach` at 9 kHz — which §F2's Open row already knew to do.
+With the mechanism in band, Open's `Trait` measures 8–17 dB.
+
+**(2) Operating point, and this one is a real property of the device.** At the −26 dBFS bus
+program, **eleven knob-cells on `Dynamic` are bit-identical at 0 % and 100 %**. They are not dead
+knobs: `Dynamic` is the one Type CONTRACT §4 allows to be level-dependent, and its ride closes a
+BOOST band completely when the program is loud — `Program Ride` is published at *hot −24.0 dB /
+quiet 0.0 dB* in ROSTER §3. A band held at zero gain has no curve, so its FREQUENCY knob has
+nothing to move. All eleven wake up at −46 dBFS:
+
+```
+        Low Hz   @ Dynamic  x Wideband        0.000 dB at -26 dBFS ->  17.16 dB at -46 dBFS
+        Bite Hz  @ Dynamic  x Wideband        0.000 dB              ->  16.11 dB
+        Bite Hz  @ Dynamic  x Hard Window     0.044 dB              ->  17.90 dB
+        Bite Hz  @ Dynamic  x Peak Keep       0.700 dB              ->  17.89 dB
+        Reach    @ Dynamic  x Program Ride    0.000 dB              ->  18.65 dB
+        Reach    @ Dynamic  x Quick           0.000 dB              ->  18.65 dB
+        Reach    @ Dynamic  x Lazy            0.000 dB              ->  18.65 dB
+        Reach    @ Dynamic  x Wideband        0.000 dB              ->  16.79 dB
+        Reach    @ Dynamic  x Hard Window     0.000 dB              ->  18.65 dB
+        Reach    @ Dynamic  x Soft Window     2.703 dB              ->  17.18 dB
+        Reach    @ Dynamic  x Peak Keep       0.000 dB              ->  18.65 dB
+```
+
+They are held in an **asserted-size table of 11**, cited one by one, and checked in BOTH
+directions: a twelfth cell fails as undeclared, and an entry that stops being true fails as stale.
+`kKnownInert` — cells where the mechanism genuinely does not exist — is **asserted at size 0**,
+because there are none: all 12 knobs are wired into all 7 Types, and the sweep proves it.
+
+### Q2 — LAW 3 ON EVERY CELL: three questions, because no one of them is enough
+
+```
+  ok    Mix 0 % is the DRY signal BIT-EXACTLY, in all 56 cells           56 of 56 cells bit-exact
+  ok    Mix 50 % is the exact LINEAR midpoint (null <= -60 dB), 56 cells worst -130.1 dB at Open x `Soft Knee`
+  ok    at Mix 100 % the measured floor REACHES the engine's own prediction, all 56 cells
+        56 of 56 cells within 3 dB; worst 1.77 dB at Chisel x `Shallow`
+  ok       ... and every Type has a cell deep enough to SEE a -60 dB leak (law 3's bar)
+        deepest leak-detection floors: -78 / -79 / -89 / -95 / -62 / -68 / -102 dB
+```
+
+Why three: a **consistency** test between Mix 0, 0.5 and 1 is algebraically blind to a leak that
+scales with the knob (`y(m) = (1−0.9m)·dry + 0.9m·wet` satisfies every consistency check there is),
+so an **absolute reference** is required — the engine's own drawn curve, which is computed from the
+live ramped coefficients and contains no Mix term at all. And the last line is the one that keeps
+that gate honest: it states, per Type, how loud a dry leak would have to be for the deepest cell in
+that Type to notice, so "within 3 dB" cannot be decoration in a Type whose floors are shallow.
+
+Two probe-craft notes, both of which cost a wrong number first:
+* the comparison bin is the deepest **locally flat** bin (a ±1-bin plateau), because a narrow
+  notch's centring error reads exactly like a dry leak — the same 33 dB error §K documents;
+* the prediction is averaged over the **same sine run** that measures it. A viz snapshot taken
+  under noise disagrees with a sine measurement by up to **40 dB** on `Dynamic`, purely because a
+  tone in the band drives the detector differently from noise. Predict and measure in one breath.
+
+### Q3 — R11 ON EVERY CELL: the ceiling is not a property of Character 0
+
+§K's own "all four bands at 100 %, Amount 200 %" probe and §K's own 55 dB bar, replayed on all 56
+cells. **53 clear it.** Three cap the ceiling by a mechanism they publish, are exempt by an
+asserted-size table of 3, and are held to 32 dB instead — twice, in decibels, the loudest hardware
+EQ ever built:
+
+```
+        capped: Open   x Soft Knee   47.5 dB — a 12 dB tanh knee IS the Character
+        capped: Chisel x Handset     40.5 dB — LOW and AIR become BELLS at 2.5x/0.35x
+        capped: Chisel x Sub Kill    45.9 dB — LOW at 0.35x, Q x3, -10 dB knee
+           per Type, the WEAKEST and STRONGEST of its 8 Characters:
+        Surgical    69.7 dB at Tight   ...   82.8 dB at Broad
+        British     64.8 dB at Ahead   ...   83.2 dB at Mid Rise
+        American    55.2 dB at Mellow  ...   85.8 dB at Cut Only
+        Passive     77.6 dB at Both Ends ... 120.5 dB at Slow Top
+        Open        47.5 dB at Soft Knee ... 137.6 dB at Hard Knee
+        Dynamic     57.4 dB at Peak Keep ...  79.1 dB at Wideband
+        Chisel      40.5 dB at Handset ...   76.7 dB at Resonator
+```
+
+**An earlier version of this gate was wrong and is worth recording.** It replayed §K's *one-band*
+probe (a +30 dB LOW shelf at 90 Hz) and reported **23 of 56 cells under the bar** — which would
+have meant declaring 23 exemptions, i.e. writing off 41 % of the device as capped. The fault was
+the probe, not the roster: Characters legitimately re-voice the LOW band (move it, narrow it, turn
+it into a bell, hang a ride-along attenuator on it), so a single-band ceiling probe grades the
+Character's choice of LOW band rather than the device's ceiling. The four-band probe gives every
+cell four chances and leaves exactly three real caps. **A 23-entry exemption list would have been a
+hiding place; three cited ones are a ruling.**
+
+### Q4 — the SECOND dropdown, on every Type (the gate this device did not have)
+
+fb425's law says every dropdown OPTION gets an audibility gate on every Type. Dropdown 1
+(`Character`) already had one — §E measures all 28 pairs inside all 7 Types. Dropdown 2
+(`Focus`) had only **structural** gates: the untouched channel is bit-exact, the M/S round trip
+is −149.4 dB, `Side` is mono-hostile and `Mid` is mono-safe. Every one of those proves Focus does
+the right thing; **not one of them proves the five options differ from each other.** That is the
+Widen `Field` finding sitting in my own back panel, so it is now measured — 5 options, all 10
+pairs, all 7 Types, 70 comparisons:
+
+```
+        Surgical  closest pair  13.93 dB = Mid / Side        Open      closest pair  13.61 dB = Mid / Side
+        British   closest pair  11.27 dB = Mid / Side        Dynamic   closest pair   8.55 dB = Side / Right
+        American  closest pair  11.27 dB = Mid / Side        Chisel    closest pair  10.49 dB = Mid / Side
+        Passive   closest pair  10.55 dB = Mid / Side
+  ok    every Focus pair separates by >= 1.5 dB on every Type (70 comparisons)
+        7 of 7 Types; worst pair 8.55 dB = Dynamic Side/Right
+```
+
+The probe is **decorrelated** stereo noise, and that matters: with `L == R` the side signal is
+identically zero, `Side` measures as `Stereo`, and the probe has answered the question. Mutant
+`EQ_MUT_FLAT_FOCUS` — `Side` silently plays `Stereo`, the label still on the card — is caught by
+this gate on all 7 Types at 0.00 dB.
+
+### What fb425 changed in the naming and drift gates
+
+* **`dropdownNames()` exists** (`Character`, `Focus`) and `kNumLabels` is **87 → 89**. This was the
+  only device of the four without it — the two words the card prints above the back dropdowns sat
+  outside the no-doubles gate, outside the worklet equality gate and outside ROSTER coverage. The
+  worklet publishes them too (`const DROPDOWN`), so P1 still equals 89 of 89 element for element.
+  `Character` is a live shipped collision and is **ruled by citation** (FIXES.md fb425: chassis
+  vocabulary, back dropdown 1 on all four fx4 devices); the sanction meter moves **8 → 9**, which
+  is a deliberate, stated edit — the meter's whole job is to make that edit impossible to make
+  quietly.
+* **The ROSTER half of the drift gate is ordered and positional (§P6).** P5's
+  `roster.find(label) != npos` had no position, no Type association and no word boundary; two
+  Characters moved under the WRONG Types and it stayed green. Proven: with `Tight` and `Big Knob`
+  swapped across Surgical/British, **P5 still reports 89 of 89 present** and P6 names both halves
+  of the swap. §3 is the one downstream file that ASSIGNS Characters to Types, so presence was
+  never the question.
+* **This cert is scanned for retired names like any other published file.** It was printing three:
+  `Chisel/Metal`, `Inverted` and Surgical `Width`, while the engine says `Tin`, `Upward` and
+  `Pinch` — plus four more in code comments. A reader's only view of this device is the gate
+  labels. Three regions may still spell the old names because the old names ARE their subject (the
+  RENAMES table, the extractor self-check, the blacklist); each is bracketed by an `@RETIRED-OK`
+  sentinel with a reason, the count is **asserted at 3**, and every reason is printed on every run.
+
+### Still red, still accepted, and untouched by this round
+
+* **The `Slant` slope ceiling.** A 6 dB/oct seesaw about a fixed 700 Hz pivot cannot lift 44 dB at
+  8 kHz; 21 dB is the slope's arithmetic ceiling there. Stated in §K, not gated away.
+* **`Trait`'s 7.20 dB/sample on retune.** Proven *not* a smoothing fault — it is a Q-40 resonator
+  releasing stored energy when its bandwidth collapses, and no smoother can make stored energy
+  leave slowly. Max has been told and will rule separately.
+
+---
+
+## fb423 — NAMES RULED · DOWNSTREAM DRIFT CLOSED.
 
 `eq_cert.cpp` → **131 pass, 0 FAIL**, exit 0. Full output: `eq_cert_fb423.log`.
 Mutation + negative-control evidence: **`MUTATION.md`**.

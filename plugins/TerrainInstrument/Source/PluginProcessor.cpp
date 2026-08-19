@@ -4025,6 +4025,150 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             }
         }
 
+        // ═══════════ fb426 — EQUALIZER / WIDEN / COMPRESS / OTT: chain kinds 9, 10, 11, 12 ══════
+        // Four separate devices. Compress and OTT are NOT one device with a mode: the rack is
+        // duplicatable and chainable, so a combined device would still make you instantiate two
+        // cards to get both jobs with half the knobs dead in each. Boundary, locked: Compress owns
+        // everything single-band (incl. its `Ride` up+down leveller); OTT owns 3-band up+down.
+        //
+        // 🔑 RACK LAW C — CARDINALITY IS FROZEN AT BIRTH, and this is the only moment it can be
+        // bought. Every TYPE is choice(16) and every AXIS choice(8), matching the fb413/fb418
+        // house precedent, even though the live counts are 7/6/8/8 Types and 5/6/5/3 axis options.
+        // No fx4 dropdown shipped with a reserved slot until this block. Each engine clamps its
+        // own index (jlimit below AND inside setParams), so the reserve costs nothing at runtime.
+        //
+        // 🔑 EVERY ONE OF THESE IS READ AS (int)*rawParam(id) BELOW — never round(v*(N-1)).
+        // Normalising on a dropdown's option count instead of the PARAM's cardinality is fb373.
+        {
+            const juce::StringArray eqzTypes { "Surgical","British","American","Passive","Open","Dynamic","Chisel",
+                                               "Reserved 8","Reserved 9","Reserved 10","Reserved 11","Reserved 12",
+                                               "Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            const juce::StringArray widTypes { "Throng","Twin","Steady","Twofold","Blur","Bands",
+                                               "Reserved 7","Reserved 8","Reserved 9","Reserved 10","Reserved 11",
+                                               "Reserved 12","Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            const juce::StringArray cmpTypes { "Exact","Bus","FET 76","Opto","Vari-Mu","OverEasy","Ride","Limit",
+                                               "Reserved 9","Reserved 10","Reserved 11","Reserved 12",
+                                               "Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            const juce::StringArray ottTypes { "Over Top","Gentle","Heavy","Sheen","Bass Safe","Surge","Two Band","Stagger",
+                                               "Reserved 9","Reserved 10","Reserved 11","Reserved 12",
+                                               "Reserved 13","Reserved 14","Reserved 15","Reserved 16" };
+            // CHARACTER is choice(8) everywhere and always will be — kNumChars == 8 carries a
+            // static_assert on all four engines. The list below is Type 0's; the CARD relabels per
+            // Type from charNames(), which is derived from charSpec() so a name cannot drift.
+            const juce::StringArray eqzChars { "Plain","Tight","Broad","Steep","Scoop","Deep Pivot","Bright Pivot","Four Bells" };
+            const juce::StringArray widChars { "JP Classic","Even Fan","Analog Drift","Tight Fan","Wide Fan","Octave Bloom","Sub Anchor","Three Phase" };
+            const juce::StringArray cmpChars { "Precise","Soft Touch","Loose Grip","Blunt","Deep Release","Line Attack","Poise","Judder" };
+            const juce::StringArray ottChars { "Straight Up","Sharp Ears","Long Ears","Wide Corner","One Detector","Slow Low","Twice Deep","Full Crest" };
+            // The four SECOND dropdowns. R6: never `Type` — that is the header pill, and fb418
+            // removed exactly this duplicate from three devices. Each changes PHYSICS.
+            const juce::StringArray eqzFocus  { "Stereo","Mid","Side","Left","Right",
+                                                "Reserved 6","Reserved 7","Reserved 8" };
+            const juce::StringArray widField  { "Straight","Alternate","Orbit","Swap","Side Only","Gather",
+                                                "Reserved 7","Reserved 8" };
+            const juce::StringArray cmpDetect { "Native","Peak","Average","Patient","Spike",
+                                                "Reserved 6","Reserved 7","Reserved 8" };
+            const juce::StringArray ottStereo { "Linked","Free Pair","Mid-Side",
+                                                "Reserved 4","Reserved 5","Reserved 6","Reserved 7","Reserved 8" };
+
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String sfxN = (n == 1) ? juce::String() : juce::String (n);
+                const juce::String sfxD = (n == 1) ? juce::String() : (" " + juce::String (n));
+
+                // ── EQUALIZER, kind 9. Front: Slant · Air · Amount · Mix.
+                //    Back 8 = the four bands' freq+gain, which are THE SAME PARAMS the curve nodes
+                //    edit — drag a node, a back knob moves. Nothing is back-only, so nothing is
+                //    hidden, which was Max's actual objection to giving an EQ a back panel.
+                //    P8 `Trait` relabels per Type (Pinch/Slope/Taper/Dip/Silk/Pivot/Sting).
+                {
+                    const juce::String p = "SYN_EQZ" + sfxN + "_";
+                    const juce::String d = "Equalizer" + sfxD + " ";
+                    C (p + "TYPE",  d + "Type",  eqzTypes, 0);          // Surgical
+                    C (p + "CHAR",  d + "Char",  eqzChars, 0);
+                    C (p + "FOCUS", d + "Focus", eqzFocus, 0);          // Stereo
+                    F (p + "SLANT",  d + "Slant",  0.50f);   F (p + "AIR",    d + "Air",    0.50f);
+                    F (p + "AMOUNT", d + "Amount", 0.50f);   F (p + "MIX",    d + "Mix",    1.00f);
+                    F (p + "LOWHZ",  d + "Low Hz", 0.50f);   F (p + "LOW",    d + "Low",    0.50f);
+                    F (p + "BODYHZ", d + "Body Hz",0.50f);   F (p + "BODY",   d + "Body",   0.50f);
+                    F (p + "BITEHZ", d + "Bite Hz",0.50f);   F (p + "BITE",   d + "Bite",   0.50f);
+                    F (p + "REACH",  d + "Reach",  0.50f);   F (p + "TRAIT",  d + "Trait",  0.50f);
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+                // ── WIDEN, kind 10. Front: Amount · Width · Rate · Mix.
+                //    ⚠️ WIDTH 0.5 IS EXACTLY NEUTRAL (theta = 45 deg), not 0. A unipolar 0 default
+                //    wired here is full mono, not "no widening" — the same shape as the flanger's
+                //    bipolar Feedback trap at fb413.
+                //    Amount RELABELS per Type (Detune/Depth/Cents/Sway/Wash/Cleave) — the card
+                //    reads frontNames(type)[0] from the engine, never a table of its own.
+                {
+                    const juce::String p = "SYN_WID" + sfxN + "_";
+                    const juce::String d = "Widen" + sfxD + " ";
+                    C (p + "TYPE",  d + "Type",  widTypes, 0);          // Throng
+                    C (p + "CHAR",  d + "Char",  widChars, 0);
+                    C (p + "FIELD", d + "Field", widField, 0);          // Straight
+                    F (p + "AMOUNT", d + "Amount", 0.35f);   F (p + "WIDTH",   d + "Width",   0.50f);
+                    F (p + "RATE",   d + "Rate",   0.35f);   F (p + "MIX",     d + "Mix",     0.50f);
+                    F (p + "VOICES", d + "Voices", 0.50f);   F (p + "SPREAD",  d + "Spread",  0.85f);
+                    F (p + "OFFSET", d + "Offset", 0.50f);   F (p + "ROAM",    d + "Roam",    0.00f);
+                    F (p + "LOWKEEP",d + "Low Keep",0.00f);  F (p + "TONE",    d + "Tone",    0.50f);
+                    F (p + "FEEDBACK",d + "Feedback",0.00f); F (p + "BALANCE", d + "Balance", 0.50f);
+                    B (p + "SYNC",   d + "Sync",     false);
+                    B (p + "RETRIG", d + "Retrig",   false);   // pill 1 — rising edge on note-on
+                    B (p + "MONO",   d + "Hear Mono",false);   // pill 2 — fb423 gave it a real param
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+                // ── COMPRESS, kind 11. Front: Push · Ratio · Lift · Mix.
+                //    Back 8: Attack · Release · Round · Hear Cut · Edge · Cling · Tie · Burn.
+                //    ZERO LATENCY, no lookahead anywhere — the fb305 exclusion math subtracts the
+                //    routed dry SAMPLE-ALIGNED, so a delayed wet path leaks phase-smeared dry.
+                {
+                    const juce::String p = "SYN_CMP" + sfxN + "_";
+                    const juce::String d = "Compress" + sfxD + " ";
+                    C (p + "TYPE",   d + "Type",   cmpTypes, 0);        // Exact
+                    C (p + "CHAR",   d + "Char",   cmpChars, 0);
+                    C (p + "DETECT", d + "Detect", cmpDetect, 0);       // Native
+                    F (p + "PUSH",   d + "Push",   0.20f);   F (p + "RATIO",   d + "Ratio",   0.50f);
+                    F (p + "LIFT",   d + "Lift",   0.25f);   F (p + "MIX",     d + "Mix",     1.00f);
+                    F (p + "ATTACK", d + "Attack", 0.61f);   F (p + "RELEASE", d + "Release", 0.63f);
+                    F (p + "ROUND",  d + "Round",  0.25f);   F (p + "HEARCUT", d + "Hear Cut",0.00f);
+                    F (p + "EDGE",   d + "Edge",   0.50f);   F (p + "CLING",   d + "Cling",   0.00f);
+                    F (p + "TIE",    d + "Tie",    1.00f);   F (p + "BURN",    d + "Burn",    0.00f);
+                    B (p + "AUTO",   d + "Auto",   false);   // auto makeup, chord-calibrated, default OFF
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+                // ── OTT, kind 12. Front: Amount · Chase · Top Lift · Mix.
+                //    Three bands, each running an upward AND a downward gain computer at once.
+                //    Back 8: Low Cross · High Cross · Raise · Press · Grip · Bass · Mids · Treble.
+                {
+                    const juce::String p = "SYN_OTT" + sfxN + "_";
+                    const juce::String d = "OTT" + sfxD + " ";
+                    C (p + "TYPE",   d + "Type",   ottTypes, 0);        // Over Top
+                    C (p + "CHAR",   d + "Char",   ottChars, 0);
+                    C (p + "STEREO", d + "Stereo", ottStereo, 0);       // Linked
+                    F (p + "AMOUNT", d + "Amount", 0.50f);   F (p + "CHASE",   d + "Chase",   0.50f);
+                    F (p + "TOPLIFT",d + "Top Lift",0.25f);  F (p + "MIX",     d + "Mix",     1.00f);
+                    F (p + "LOWCROSS", d + "Low Cross", 0.4689f); F (p + "HIGHCROSS", d + "High Cross", 0.4406f);
+                    F (p + "RAISE",  d + "Raise",  0.667f);  F (p + "PRESS",   d + "Press",   0.667f);
+                    F (p + "GRIP",   d + "Grip",   0.50f);   F (p + "BASS",    d + "Bass",    0.50f);
+                    F (p + "MIDS",   d + "Mids",   0.50f);   F (p + "TREBLE",  d + "Treble",  0.50f);
+                    B (p + "CREST",  d + "Crest",  false);   // the one front pill
+                    for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                    B (p + "POWER",  d + "Power", false);
+                    B (p + "ACTIVE", d + "In Chain", false);
+                    F (p + "RANK",   d + "Chain Rank", 0.5f);
+                }
+            }
+        }
+
         // ═══════════ fb414 — SEND MODE. The rack stops being insert-only. ═══════════════════════
         // Max: "there gotta be a way to have it to where it doesn't distort the sound in which the
         // granulizer is also granulizing... it's coming AFTER the source."
@@ -4043,11 +4187,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // oscillator ALSO keeps playing into the main mix. One bool, nine kinds, six instances.
         // Default OFF everywhere, so every existing project loads sounding bit-identical.
         {
-            static const char* const kPfx[9] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
-                                                 "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_" };
-            static const char* const kNm [9] = { "Reverb","Delay","Distortion","Granular",
-                                                 "Tape","Filter","Chorus","Flanger","Phaser" };
-            for (int k = 0; k < 9; ++k)
+            static const char* const kPfx[13] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
+                                                  "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_",
+                                                  "SYN_EQZ_","SYN_WID_","SYN_CMP_","SYN_OTT_" };   // fb426
+            static const char* const kNm [13] = { "Reverb","Delay","Distortion","Granular",
+                                                  "Tape","Filter","Chorus","Flanger","Phaser",
+                                                  "Equalizer","Widen","Compress","OTT" };
+            for (int k = 0; k < 13; ++k)
                 for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
                 {
                     juce::String p (kPfx[k]);
@@ -4824,6 +4970,81 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 phaPool_[(size_t) i].setParams (pp);
             }
         }
+
+        // ═══ fb426 — the fx4 four. setParams is PER BLOCK, never per sample: hoisting it took
+        //     the fx3 devices from 17.8 % to 14.1 % of a core, and every one of these engines
+        //     does all its derived-value work (coefficient design, table lookups, crossovers)
+        //     inside setParams for exactly that reason.
+        //     🔑 THE CHOICE LAW (fb373): the raw value IS the index. jlimit CLAMPS it to the
+        //     engine's live count — never lround(raw * (N-1)), which is what made `Cassette`
+        //     play `Studio` for eight builds. Each TYPE param is choice(16) and each axis
+        //     choice(8), so the reserved slots clamp down onto the last live entry.
+        // ── EQUALIZER
+        {
+            const auto& V = eqzRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || eqzEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainEqualizerFx::Params q;
+                q.type      = juce::jlimit (0, tw::TerrainEqualizerFx::kNumTypes - 1, (int) V.type->load());
+                q.character = juce::jlimit (0, tw::TerrainEqualizerFx::kNumChars - 1, (int) V.chr->load());
+                q.axis      = juce::jlimit (0, tw::TerrainEqualizerFx::kNumFocus - 1, (int) V.axis->load());
+                q.f1 = V.f1->load(); q.f2 = V.f2->load(); q.f3 = V.f3->load(); q.mix = V.mix->load();
+                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
+                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                eqzPool_[(size_t) i].setParams (q);
+            }
+        }
+        // ── WIDEN.  ⚠️ Width 0.5 is EXACTLY neutral, not 0 — see the param declaration.
+        {
+            const auto& V = widRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || widEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainWidenFx::Params q;
+                q.type      = juce::jlimit (0, tw::TerrainWidenFx::kNumTypes  - 1, (int) V.type->load());
+                q.character = juce::jlimit (0, tw::TerrainWidenFx::kNumChars  - 1, (int) V.chr->load());
+                q.axis      = juce::jlimit (0, tw::TerrainWidenFx::kNumFields - 1, (int) V.axis->load());
+                q.amount = V.f1->load(); q.width = V.f2->load(); q.rate = V.f3->load(); q.mix = V.mix->load();
+                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
+                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.retrig    = V.pill1 != nullptr && V.pill1->load() > 0.5f;
+                q.hearMono  = V.pill2 != nullptr && V.pill2->load() > 0.5f;
+                q.tempoSync = V.sync  != nullptr && V.sync->load()  > 0.5f;
+                q.bpm = bpm;
+                widPool_[(size_t) i].setParams (q);
+            }
+        }
+        // ── COMPRESS
+        {
+            const auto& V = cmpRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || cmpEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainCompressFx::Params q;
+                q.type      = juce::jlimit (0, tw::TerrainCompressFx::kNumTypes  - 1, (int) V.type->load());
+                q.character = juce::jlimit (0, tw::TerrainCompressFx::kNumChars  - 1, (int) V.chr->load());
+                q.axis      = juce::jlimit (0, tw::TerrainCompressFx::kNumDetect - 1, (int) V.axis->load());
+                q.push = V.f1->load(); q.ratio = V.f2->load(); q.lift = V.f3->load(); q.mix = V.mix->load();
+                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
+                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.autoMakeup = V.pill1 != nullptr && V.pill1->load() > 0.5f;
+                cmpPool_[(size_t) i].setParams (q);
+            }
+        }
+        // ── OTT
+        {
+            const auto& V = ottRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || ottEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainOttFx::Params q;
+                q.type      = juce::jlimit (0, tw::TerrainOttFx::kNumTypes  - 1, (int) V.type->load());
+                q.character = juce::jlimit (0, tw::TerrainOttFx::kNumChars  - 1, (int) V.chr->load());
+                q.axis      = juce::jlimit (0, tw::TerrainOttFx::kNumStereo - 1, (int) V.axis->load());
+                q.amount = V.f1->load(); q.speed = V.f2->load(); q.topLift = V.f3->load(); q.mix = V.mix->load();
+                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
+                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.crest = V.pill1 != nullptr && V.pill1->load() > 0.5f;
+                ottPool_[(size_t) i].setParams (q);
+            }
+        }
     }
 }
 
@@ -4835,6 +5056,47 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
 // instance-1 path that could drift out of step with the pool.
 // 🔑 THE CHOICE LAW (fb50/fb373): a choice param's raw value IS the index. Never lround(raw*N)
 // — that is the bug that made Cassette silently play Studio for eight builds.
+// ═══ fb426 — EQUALIZER · WIDEN · COMPRESS · OTT refs. One cache, four devices: they share the
+// CONTRACT §2 Params shape, so a single routine is one place to get the grammar right — and the
+// back-8 are bound POSITIONALLY (b[0..7] = P1..P8) exactly as each engine's backNames() orders
+// them, so a knob can never be wired to the slot next door.
+void TerrainInstrumentAudioProcessor::cacheFx4Refs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+
+    struct Spec { const char* pfx; const char* axis; const char* f1; const char* f2; const char* f3;
+                  const char* b[8]; const char* pill1; const char* pill2; const char* sync; };
+    static const Spec kSpec[4] = {
+        { "SYN_EQZ", "FOCUS",  "SLANT",  "AIR",   "AMOUNT",
+          { "LOWHZ","LOW","BODYHZ","BODY","BITEHZ","BITE","REACH","TRAIT" }, nullptr, nullptr, nullptr },
+        { "SYN_WID", "FIELD",  "AMOUNT", "WIDTH", "RATE",
+          { "VOICES","SPREAD","OFFSET","ROAM","LOWKEEP","TONE","FEEDBACK","BALANCE" }, "RETRIG", "MONO", "SYNC" },
+        { "SYN_CMP", "DETECT", "PUSH",   "RATIO", "LIFT",
+          { "ATTACK","RELEASE","ROUND","HEARCUT","EDGE","CLING","TIE","BURN" }, "AUTO", nullptr, nullptr },
+        { "SYN_OTT", "STEREO", "AMOUNT", "CHASE", "TOPLIFT",
+          { "LOWCROSS","HIGHCROSS","RAISE","PRESS","GRIP","BASS","MIDS","TREBLE" }, "CREST", nullptr, nullptr },
+    };
+    std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances>* kArr[4] =
+        { &eqzRefs_, &widRefs_, &cmpRefs_, &ottRefs_ };
+
+    for (int d = 0; d < 4; ++d)
+        for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        {
+            const juce::String n = (i == 0) ? juce::String() : juce::String (i + 1);
+            const juce::String g = juce::String (kSpec[d].pfx) + n + "_";
+            auto& v = (*kArr[d])[(size_t) i];
+            v.active=R(g+"ACTIVE"); v.rank=R(g+"RANK"); v.power=R(g+"POWER");
+            v.type=R(g+"TYPE"); v.chr=R(g+"CHAR"); v.axis=R(g+kSpec[d].axis);
+            v.f1=R(g+kSpec[d].f1); v.f2=R(g+kSpec[d].f2); v.f3=R(g+kSpec[d].f3); v.mix=R(g+"MIX");
+            for (int k = 0; k < 8; ++k) v.b[k] = R (g + kSpec[d].b[k]);
+            v.pill1 = (kSpec[d].pill1 != nullptr) ? R (g + kSpec[d].pill1) : nullptr;
+            v.pill2 = (kSpec[d].pill2 != nullptr) ? R (g + kSpec[d].pill2) : nullptr;
+            v.sync  = (kSpec[d].sync  != nullptr) ? R (g + kSpec[d].sync)  : nullptr;
+            for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+        }
+}
+
 void TerrainInstrumentAudioProcessor::applyCho (int inst0, float inL, float inR,
                                                 float& outL, float& outR) noexcept
 {
@@ -4855,6 +5117,34 @@ void TerrainInstrumentAudioProcessor::applyCho (int inst0, float inL, float inR,
     outL = inL * (1.0f - env) + wl * env;         // the engine already applied Mix
     outR = inR * (1.0f - env) + wr * env;
 }
+
+// ═══ fb426 — the fx4 apply routines. 🔑 THE POOL LAW (fb350): every instance runs THIS EXACT
+// routine, so a per-block engine call can never exist for instance 1 and not for a duplicate.
+// The power fade is the same 0.0015 one-pole every other device uses — click-free, never a cut.
+#define TW_FX4_APPLY(NAME, POOL, REFS, ENV, BASE)                                              \
+void TerrainInstrumentAudioProcessor::NAME (int inst0, float inL, float inR,                   \
+                                            float& outL, float& outR) noexcept                 \
+{                                                                                              \
+    outL = inL; outR = inR;                                                                    \
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;                              \
+    const auto& V = REFS[(size_t) inst0];                                                      \
+    if (V.power == nullptr) return;                                                            \
+    const bool powered = V.power->load() > 0.5f                                                \
+                      && poolRouteAny_[(size_t) (BASE + inst0)];                               \
+    float& env = ENV[(size_t) inst0];                                                          \
+    const float tgt = powered ? 1.0f : 0.0f;                                                   \
+    env += (tgt - env) * 0.0015f;                                                              \
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }                                   \
+    float wl = inL, wr = inR;                                                                  \
+    POOL[(size_t) inst0].processStereo (&wl, &wr, 1);                                          \
+    outL = inL * (1.0f - env) + wl * env;         /* the engine already applied Mix */         \
+    outR = inR * (1.0f - env) + wr * env;                                                      \
+}
+TW_FX4_APPLY (applyEqz, eqzPool_, eqzRefs_, eqzEnv_, kEqzSendBase)
+TW_FX4_APPLY (applyWid, widPool_, widRefs_, widEnv_, kWidSendBase)
+TW_FX4_APPLY (applyCmp, cmpPool_, cmpRefs_, cmpEnv_, kCmpSendBase)
+TW_FX4_APPLY (applyOtt, ottPool_, ottRefs_, ottEnv_, kOttSendBase)
+#undef TW_FX4_APPLY
 
 void TerrainInstrumentAudioProcessor::applyFla (int inst0, float inL, float inR,
                                                 float& outL, float& outR) noexcept
@@ -5170,6 +5460,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheTapeParams();
     cacheFilterRefs();   // fb377         // fb365 — and all six tape instances
     cacheFx3Refs();      // fb413 — chorus / flanger / phaser, six each
+    cacheFx4Refs();      // fb426 — equalizer / widen / compress / ott, six each
     // fb415 — and PREPARE them here, on the message thread, because chorus/flanger prepare()
     // allocates its delay lines. maxBlock is 1: the serial chain hands them one sample at a
     // time, which is the same shape TapeFxEngine::process already has.
@@ -5177,6 +5468,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         const double sr = sampleRate > 0.0 ? sampleRate : 48000.0;
         fx3PrepSr_ = sr;
         for (auto& e : choPool_) e.prepare (sr, 1);
+        for (auto& e : eqzPool_) e.prepare (sr, 1);   // fb426 — prepare may allocate;
+        for (auto& e : widPool_) e.prepare (sr, 1);   //   message thread only, never in
+        for (auto& e : cmpPool_) e.prepare (sr, 1);   //   processBlock (the fb415 malloc)
+        for (auto& e : ottPool_) e.prepare (sr, 1);
         for (auto& e : flaPool_) e.prepare (sr, 1);
         for (auto& e : phaPool_) e.prepare (sr, 1);
     }
@@ -9408,6 +9703,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 else if (ce.kind == 6) applyCho (ce.inst - 1, inL, inR, oL, oR);   // fb413 — chorus
                 else if (ce.kind == 7) applyFla (ce.inst - 1, inL, inR, oL, oR);   // fb413 — flanger
                 else if (ce.kind == 8) applyPha (ce.inst - 1, inL, inR, oL, oR);   // fb413 — phaser
+                else if (ce.kind ==  9) applyEqz (ce.inst - 1, inL, inR, oL, oR);   // fb426 — equalizer
+                else if (ce.kind == 10) applyWid (ce.inst - 1, inL, inR, oL, oR);   // fb426 — widen
+                else if (ce.kind == 11) applyCmp (ce.inst - 1, inL, inR, oL, oR);   // fb426 — compress
+                else if (ce.kind == 12) applyOtt (ce.inst - 1, inL, inR, oL, oR);   // fb426 — ott
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);

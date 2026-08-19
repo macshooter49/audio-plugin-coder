@@ -186,3 +186,101 @@ Running the mutants **changed two gates**, both of which had been written wrong:
    now measures the seed and nothing else — `gr_` is the same physical quantity in all five
    smoother shapes, so it must be continuous across a shape change — and reads **0.86 dB** on the
    real engine against **17.44 dB** on the mutant.
+
+---
+
+# fb425 — nine new mutants for the full-matrix round
+
+None of these could have fired before this round: sections 7/8/9 did not exist, and the three
+section-1 gates three of them aim at were a substring search, a hand-typed blacklist, and a list
+with no cardinality.
+
+| # | mutant | mechanism deleted | gate that must fire |
+|---|---|---|---|
+| 1 | `ott-clip-ceiling-backwards` | the fb424 per-band ceiling: `db2lin (Tdn + clipHd_ + mkDb_[b])`, and the clip blend not scaled by the slope | §8d `Amount` 0 is neutral and the knob runs forwards, all 64 cells |
+| 2 | `compress-ratio-wall` | the feedback→feedforward crossover over the last 10 % of `Ratio` | §7b every Type walls at Push/Ratio 100 (R11) |
+| 3 | `ott-mix-forced-wet` | `mixTgt_ = 1.0f` — **the exact mutation that left all 53 fb424 OTT gates green** | §8b Mix 0 is the DRY path on every Type |
+| 4 | `ott-crest-pill-noop` | `upHold_ = (cs.upHold != 0)` — the front pill becomes a no-op | §8 no control is BIT-IDENTICAL at 0 and 100 |
+| 5 | `ott-sample-rate` | `fs_` dropped from the band followers (`nA`/`nR`) | §8e the REALISED ballistics match 48 kHz |
+| 6 | `compress-dead-cell (Release, Vari-Mu only)` | the Release knob killed on **ONE TYPE** — §4's sweep runs on Type 0 and stays green. This is the fb424 level, deleted. | §7 the matrix |
+| 7 | `roster-grid-scramble` | two Characters moved under the **wrong Types** in ROSTER.md — the fb424 substring search stayed green | §1 ROSTER.md: no Character appears under the WRONG Type |
+| 8 | `retired-label-drift` | a retired label (`Full Bite`) put back downstream as a live label | §1 no RETIRED label survives as a LABEL downstream |
+| 9 | `exemption-not-load-bearing` | an exemption entry that exempts nothing — the shape `Auto` had before fb423 and `Peak`/`Bass`/`Treble`/`Ratio` had until this round | §1 every exemption is LOAD-BEARING |
+
+Run with `python3 mutate.py` (now accepts a substring filter: `python3 mutate.py band-clip`).
+
+## The fb425 run — 30 mutants, 27 fired, 3 survivors
+
+```
+compress-smoother-seed             GR is continuous across all 64 Type changes RED (good)
+        FAIL  GR is continuous across all 64 Type changes (<= 2 dB in the first 0.17 ms) worst 17.44 dB  (Limit -> Opto)
+compress-smoother-seed+noslew      Type transitions                       RED (good)
+        FAIL  all 64 Type transitions <= 2.0 dB of gain moved in 1 ms worst 10.37 dB/ms  (Exact -> Opto)
+compress-transition-slew (alone)   transitions                            *** SURVIVED *** (known, labelled redundant)
+compress-colour-drive-smoothing    448 Character changes                  RED (good)
+        FAIL  ... and across all 448 Character changes             worst 28.35 dB  (Ride: Only Up -> Fast Clamp)
+compress-clip-ceiling-tracking     transitions                            RED (good)
+compress-discrete-fades+noslew     transitions                            RED (good)
+compress-sample-rate               REALISED t63                           RED (good)
+compress-detect-ownership          no Character changes the rectifier     RED (good)
+ott-tree-swap-fade                 TREE SWAP                              RED (good)
+ott-transition-slew                Character transitions                  RED (good)
+ott-mid-side-fade                  Mid-Side                               RED (good)
+ott-band-clip-fade (alone)         Type transitions                       *** SURVIVED ***  <- fb425 REGRESSION, diagnosed below
+ott-band-clip-fade + slope-scaled blend Type transitions                  *** SURVIVED ***  <- and both together
+core-floor-gate                    -96 dBFS floor comes OUT at            RED (good)
+compress-heat-kind-fade (alone)    CURVATURE is continuous                RED (good)
+compress-no-ceiling                48 dB staircase                        RED (good)
+ott-no-ceiling                     Amount 100 leaves                      RED (good)
+ott-no-ceiling (per-Type, §8c)     walls at Amount 100                    RED (good)
+        FAIL  every Type walls at Amount 100 (R11): static AND dynamic 8 of 8 red, first: Over Top
+compress-dead-knob (Burn, P8)      (P8)                                   RED (good)
+ott-dead-knob (Treble, P8)         (P8)                                   RED (good)
+ott-sheen-upward-lane              Sheen                                  RED (good)
+names-downstream-drift             ott-worklet CHARS                      RED (good)
+ott-clip-ceiling-backwards         runs forwards                          RED (good)
+        FAIL  Amount 0 is neutral and the knob runs forwards, all 64 cells 10 cells backwards,
+              first: Heavy / Welded Shut: THD 34.23 % at 0 vs 2.34 % at 100
+compress-ratio-wall                walls at Push/Ratio 100                RED (good)
+        FAIL  every Type walls at Push/Ratio 100 (R11)             3 of 8 red, first: FET 76
+ott-mix-forced-wet                 Mix 0 is the DRY path                  RED (good)
+        FAIL  Mix 0 is the DRY path on every Type ... worst 9.446 dB from the input (bar 0.35)  (Surge)
+ott-crest-pill-noop                BIT-IDENTICAL                          RED (good)
+        FAIL  no control is BIT-IDENTICAL at 0 and 100 in any unruled cell 63 DEAD cells,
+              first: Crest @ Over Top / Straight Up
+ott-sample-rate                    REALISED ballistics                    RED (good)
+        FAIL  96.0 kHz: the REALISED ballistics match 48 kHz  attack area 416 dB.ms (-11.5 %),
+              release area 12857 dB.ms (+53.2 %)  (bar 12 %)
+compress-dead-cell (Release, Vari-Mu only) under the bar                  RED (good)
+        FAIL  every unruled cell moves >= 0.5 dB end to end  2 under the bar,
+              first: Release @ Vari-Mu/Time Four - the ruling is stale
+        (and section 4's OWN Release sweep, which runs on Type 0, stayed GREEN: "span 11.39,
+         monotone" - which is precisely the fb424 blindness this round exists to close)
+roster-grid-scramble               WRONG Type                             RED (good)
+        FAIL  ROSTER.md: no Character appears under the WRONG Type 2 misplaced:
+              FET 76: `Blackface` is not in its grid row, in order
+retired-label-drift                RETIRED label survives                 RED (good)
+        FAIL  no RETIRED label survives as a LABEL downstream 1 hits, first: Full Bite
+exemption-not-load-bearing         LOAD-BEARING                           RED (good)
+        FAIL  every exemption is LOAD-BEARING 1 exempt nothing, first: Grip
+cert-fft-normalisation             CALIBRATED                             RED (good)
+```
+
+## The one fb425 REGRESSION in this table, reported not hidden
+
+`ott-band-clip-fade` **fired last round and survives now, alone and paired.** The diagnosis, and it
+is a consequence of the ceiling fix rather than a defect:
+
+the fb425 ceiling rides the **realised** band output (`Ldn + gdb + clipHd_`), so switching the
+clipper in or out only changes peaks that sit a few dB above the envelope — a bounded change, not a
+step. Deleting the 20 ms `gClip_` fade AND the slope-scaled blend still measures under the click
+bar. A gate was added for this specifically (`Heavy → Sheen` and `Band Clip → No Clip` **at Amount
+100**, where the clipper is doing 2.34 % THD, rather than at the default Amount 50 where the
+fb425 ceiling leaves it nearly idle) and both read 0.40 / 0.69 dB/ms on the real engine and stay
+under the bar on the mutant too.
+
+So: **the fade in front of the OTT band clipper is no longer load-bearing.** It is kept — it costs
+one multiply and it protects the case where a future Character sets `clipHead` very low — but it is
+recorded here as REDUNDANT, not as proven, exactly like `compress-transition-slew`. The clipper
+itself is still proven audible by §5's `Heavy` discriminator, by the `Band Clip` / `No Clip`
+Character distinctness, and by §8d's THD table (2.34 % at Amount 100 against 0.00 % at Amount 0).

@@ -26,7 +26,8 @@ SRC  = os.path.join(TI, "Source")
 # headers say (fb423 §Gate), and it reads them off disk. A mutant run that could not find them
 # would report a red gate for the wrong reason.
 FILES = ["DynamicsCore.h", "TerrainCompressFx.h", "TerrainOttFx.h", "dynamics_cert.cpp",
-         "shipped_labels.inc", "compress-worklet.js", "ott-worklet.js", "ROSTER.md"]
+         "shipped_labels.inc", "retired_labels.inc", "compress-worklet.js", "ott-worklet.js",
+         "ROSTER.md"]
 
 # A mutant is (id, [(file, find, replace), ...], cert sections, substring of the gate that must FAIL).
 #
@@ -66,7 +67,11 @@ MUTANTS = [
     "                const float grSm = gColG_.proc (0.5f * (gr_[0] + gr_[1]));",
     "                const float grSm = 0.5f * (gr_[0] + gr_[1]);   // MUTANT: the drive follows the RAW ballistic state"),
    SLEW_OFF],
-  ["4"], "transitions"),
+  # fb425: this used to fire on the CLICK gate at 2.11 dB/ms. The fb425 upward-lane ballistics
+  # changed which cell is worst, and it now fires on the stronger of the two — §4c3's GR
+  # CONTINUITY gate, at 28.35 dB across the Character changes. Needle moved to the gate that
+  # actually catches it rather than left pointing at one that no longer does.
+  ["4"], "448 Character changes"),
 
  ("compress-clip-ceiling-tracking", [
    ("TerrainCompressFx.h",
@@ -118,10 +123,24 @@ MUTANTS = [
     "            const float msF = (stereo_ == 2) ? 1.0f : 0.0f;   // MUTANT: the M/S basis rotates in one sample")],
   ["6"], "Mid-Side"),
 
- ("ott-band-clip-fade", [
+ # 🚨 fb425 REGRESSION, reported not hidden: this row used to fire and now SURVIVES, because the
+ # fb425 clip blend is `clipF * sdn_[b]` and `sdn_` is itself per-sample glided — so deleting the
+ # 20 ms fade still leaves a glide in front of the clipper. Defence in depth is good engineering
+ # and terrible evidence (the same lesson the slew limiter taught this file). The row stays,
+ # honestly labelled, and the row BELOW deletes both and shows the pair is load-bearing.
+ ("ott-band-clip-fade (alone)", [
    ("TerrainOttFx.h",
     "            const float clipF = gClip_.proc ((clipHd_ < 900.0f) ? 1.0f : 0.0f);",
     "            const float clipF = (clipHd_ < 900.0f) ? 1.0f : 0.0f;   // MUTANT: the band clipper inserts in one sample")],
+  ["6"], "Type transitions"),
+
+ ("ott-band-clip-fade + slope-scaled blend", [
+   ("TerrainOttFx.h",
+    "            const float clipF = gClip_.proc ((clipHd_ < 900.0f) ? 1.0f : 0.0f);",
+    "            const float clipF = (clipHd_ < 900.0f) ? 1.0f : 0.0f;   // MUTANT: inserts in one sample"),
+   ("TerrainOttFx.h",
+    "                    const float cf = clipF * sdn_[b];",
+    "                    const float cf = clipF;   // MUTANT: ...and the slope no longer scales it")],
   ["6"], "Type transitions"),
 
  ("core-floor-gate", [
@@ -153,7 +172,15 @@ MUTANTS = [
    ("TerrainOttFx.h",
     "        const float u    = (amt >  0.5f) ? (amt - 0.5f) * 2.0f : 0.0f;",
     "        const float u    = 0.0f;   // MUTANT: the top half of Amount stops closing the thresholds")],
-  ["6"], "Amount 100 leaves"),
+  ["6", "8"], "Amount 100 leaves"),
+
+ # ... and the SAME deletion against the fb425 per-Type ceiling gate, which is a different gate
+ # with a different metric (surviving dB off a 36 dB staircase) on all 8 Types instead of one.
+ ("ott-no-ceiling (per-Type, §8c)", [
+   ("TerrainOttFx.h",
+    "        const float u    = (amt >  0.5f) ? (amt - 0.5f) * 2.0f : 0.0f;",
+    "        const float u    = 0.0f;   // MUTANT: the top half of Amount stops closing the thresholds")],
+  ["8"], "walls at Amount 100"),
 
  # LAW 1 -- a dead knob. One knob per device is stubbed to a no-op and the 0->100 sweep must
  # go red. Without this, "every knob is night and day" rests on the sweep having been pointed
@@ -186,6 +213,88 @@ MUTANTS = [
    ("ott-worklet.js", "'Mean Ears'", "'Long Ears'   /* MUTANT: downstream drifts off the header */")],
   ["1"], "ott-worklet CHARS"),
 
+ # ══ fb425 — THE FULL-MATRIX ROUND ═══════════════════════════════════════════════════════════
+ # Nine new rows. Every one of them is a mechanism this round ADDED or a hole this round CLOSED,
+ # and none of them could have fired before: sections 7/8/9 did not exist, and the three gates in
+ # section 1 they aim at were a substring search, a hand-typed blacklist and a list with no size.
+
+ # 1. THE BUG. Put the fb424 clip ceiling back — the one that tracks a makeup `Amount` drives to
+ #    zero — and 8d must see the knob running backwards again (THD 35.75 % at Amount 0 on Heavy).
+ ("ott-clip-ceiling-backwards", [
+   ("TerrainOttFx.h",
+    "                    const float cf = clipF * sdn_[b];",
+    "                    const float cf = clipF;   // MUTANT: the fb424 blend, not scaled by the slope"),
+   ("TerrainOttFx.h",
+    "                        const float lim = dyn::db2lin (pinDb + clipHd_ + slack);",
+    "                        const float lim = dyn::db2lin (pinDb + clipHd_);   // MUTANT: the fb424 ceiling")],
+  ["8"], "runs forwards"),
+
+ # 2. R11 on the feedback Types. Remove the crossover and FET 76 / Opto / Vari-Mu go back to the
+ #    authentic — and polite — 0.5 closed-loop slope at Ratio 100.
+ ("compress-ratio-wall", [
+   ("TerrainCompressFx.h",
+    "        const float wall  = dyn::clampf ((rk - 0.90f) * 10.0f, 0.0f, 1.0f);",
+    "        const float wall  = 0.0f;   // MUTANT: no wall — the feedback tap stays feedback at 100 %")],
+  ["7"], "walls at Push/Ratio 100"),
+
+ # 3. LAW 3 on OTT. This is the mutation FIXES.md §fb425 names: it left ALL 53 fb424 gates green,
+ #    because the only gate that touched Mix required out(mix=1) ~ out(mix=0) and forcing wet made
+ #    it pass HARDER.
+ ("ott-mix-forced-wet", [
+   ("TerrainOttFx.h",
+    "        mixTgt_  = dyn::clampf (p.mix, 0.0f, 1.0f);",
+    "        mixTgt_  = 1.0f;   // MUTANT: the Mix knob is dead, always fully wet")],
+  ["8"], "Mix 0 is the DRY path"),
+
+ # 4. THE FRONT PILL. `p.crest` appeared ONCE in the fb424 cert, inside a click list that gets
+ #    BETTER when the pill is deleted.
+ ("ott-crest-pill-noop", [
+   ("TerrainOttFx.h",
+    "        upHold_   = (cs.upHold != 0) || p.crest;",
+    "        upHold_   = (cs.upHold != 0);   // MUTANT: the Crest pill is a no-op")],
+  ["8"], "BIT-IDENTICAL"),
+
+ # 5. OTT's sample-rate gate. `attackMs_[b] = nA*1000/fs_` with `nA = max (5, aMs*0.001*fs_)`
+ #    cancels `fs_` algebraically, so the fb424 gate compared a constant to itself and would have
+ #    passed on exactly this engine.
+ ("ott-sample-rate", [
+   ("TerrainOttFx.h",
+    "            const float nA = std::max (5.0f, aMs * 0.001f * fs_);\n"
+    "            const float nR = std::max (5.0f, rMs * 0.001f * fs_);",
+    "            const float nA = std::max (5.0f, aMs * 0.001f * 48000.0f);   // MUTANT: fs dropped\n"
+    "            const float nR = std::max (5.0f, rMs * 0.001f * 48000.0f);")],
+  ["8"], "REALISED ballistics"),
+
+ # 6. THE WHOLE POINT OF fb425. A knob killed on ONE TYPE ONLY. Section 4's sweep runs on Type 0
+ #    and stays green; the matrix must catch it on Vari-Mu. This is the fb424 level, deleted.
+ ("compress-dead-cell (Release, Vari-Mu only)", [
+   ("TerrainCompressFx.h",
+    "        relMs_ = std::max (relMs, 1000.0f / fs_);",
+    "        relMs_ = (p.type == 4) ? 250.0f : std::max (relMs, 1000.0f / fs_);  // MUTANT: dead on ONE Type")],
+  ["7"], "under the bar"),
+
+ # 7. THE ROSTER DRIFT GATE, positional half. A skeptic moved two Characters under the WRONG
+ #    TYPES and the fb424 substring search stayed green.
+ ("roster-grid-scramble", [
+   ("ROSTER.md", "`Blackface` Burn 0.20", "`Cell Classic` Burn 0.20"),
+   ("ROSTER.md", "`Cell Classic` +0.35 detector tilt", "`Blackface` +0.35 detector tilt")],
+  ["1"], "WRONG Type"),
+
+ # 8. THE RETIRED-LABEL BLACKLIST, now derived from RENAMES.md instead of typed. Put a retired
+ #    name back downstream as a LABEL and it must be found.
+ ("retired-label-drift", [
+   ("ott-worklet.js", "'Full Crest'", "'Full Bite'   /* MUTANT: a retired label, back downstream */")],
+  ["1"], "RETIRED label survives"),
+
+ # 9. THE EXEMPTION LIST. Add an entry that exempts nothing — the shape `Auto` had before fb423
+ #    and `Peak`/`Bass`/`Treble`/`Ratio` had until this round.
+ ("exemption-not-load-bearing", [
+   ("dynamics_cert.cpp",
+    '        { "Power",     "the fb266 frozen rack chassis',
+    '        { "Grip",      "MUTANT: an exemption that exempts nothing" },\n'
+    '        { "Power",     "the fb266 frozen rack chassis')],
+  ["1"], "LOAD-BEARING"),
+
  ("cert-fft-normalisation", [
    ("dynamics_cert.cpp",
     "    e *= 2.0 / ((double) N * (double) N * U);",
@@ -201,7 +310,10 @@ def main():
     rows, survivors = [], []
     print("%-34s %-38s %s" % ("mutant", "gate that must fire", "result"))
     print("-" * 108)
+    only = [a for a in sys.argv[1:]]
     for mid, edits, secs, needle in MUTANTS:
+        if only and not any (o in mid for o in only):
+            continue
         d = os.path.join(base, mid.replace(" ", "_").replace("(", "").replace(")", ""))
         os.makedirs(d, exist_ok=True)
         for f in FILES:

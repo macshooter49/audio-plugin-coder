@@ -49,10 +49,13 @@
 #include <cmath>
 #include <algorithm>
 #include <chrono>
+#include <functional>
+#include <utility>
 
 namespace {
 
 #include "shipped_labels.inc"
+#include "retired_labels.inc"
 
 constexpr float FS = 48000.0f;
 using CP = tw::TerrainCompressFx::Params;
@@ -730,28 +733,41 @@ static void section1()
     section ("1. Names — rack-wide no-doubles, exact-string, vs a snapshot of Source/");
     // Deliberately EXEMPT: the shared-vocabulary words CONTRACT §4 tells us to reuse when the
     // concept is genuinely the same, plus the chassis words every device's back panel shows.
-    static const char* kShared[] = { "Mix", "Attack", "Release", "Character", "Type",
-                                     "Power", "Stereo", "Amount", "Ratio", "Peak", "Bass", "Treble" };
-    // ⚠️ `Auto` USED TO BE IN THE LIST ABOVE, granted by this gate to itself. fb423 §SANCTIONED
-    // ruled on it instead: Compress's `Auto` pill is the SAME LAW as the shipped Distortion
-    // `Auto` pill (auto gain compensation), which is exactly what CONTRACT §4 sanctions. It is
-    // now a RULING, cited, in its own list — because a gate that can exempt itself is not a gate.
-    // The list is asserted to be exactly one entry below.
-    static const char* kRuled[] = { "Auto" };
-    auto ruled = [] (const std::string& s)
-    { for (auto k : kRuled) if (s == k) return true; return false; };
-    // ⚠️ THE ONLY TWO EXEMPTIONS, and both are RENAMES.md decisions where the SIBLING yields:
-    //   `Gentle`   — OTT Type 1. RENAMES.md: "EQ yields" (its American char 2 becomes `Mellow`).
-    //   `Low Split`— OTT Two Band char 1. RENAMES.md: "OTT's Low Split/High Split are a matched
-    //                pair; breaking one breaks both" — Widen's becomes `Deep Grid`.
-    // They still appear in the corpus because the siblings have not applied their own table yet.
-    // The list is asserted to be EXACTLY these two below, so it cannot quietly grow into an
-    // excuse. Anything else that collides is a real collision and this gate goes red.
-    static const char* kSiblingYields[] = { "Gentle", "Low Split" };
-    auto yielded = [] (const std::string& s)
-    { for (auto k : kSiblingYields) if (s == k) return true; return false; };
-    auto shared = [] (const std::string& s)
-    { for (auto k : kShared) if (s == k) return true; return false; };
+    // ═════════════════════════════════════════════════════════════════════════════════════
+    // 🚨 fb425 — THE EXEMPTION LIST WAS THE ONE THING IN THIS FAMILY WITH NO CARDINALITY.
+    //    `kShared` had 12 entries, no size assertion, and it is the list that historically
+    //    self-granted `Auto`. RENAMES.md fb425 ruled on Widen's five self-granted claims
+    //    (`Detune` · `Depth` · `Voices` · `Spread` · `Feedback` — all SANCTIONED) and stated the
+    //    consequence for the gates: an exemption is a RULING, cited, in a list of ASSERTED SIZE.
+    //    So this is now three lists, each with its citation, each asserted, and — the part no
+    //    ruling asked for but the audit implies — each entry must be LOAD-BEARING.
+    //    A dead exemption is a self-grant waiting to be used, and four of the twelve were dead:
+    //    `Peak`, `Bass`, `Treble` and `Ratio` are not in the 3320-string corpus AT ALL. They
+    //    exempted nothing and they are gone. `Gentle` and `Low Split` (the fb423 sibling-yield
+    //    pair) are also gone: the siblings have applied their RENAMES rows and the collisions
+    //    they excused no longer exist. The load-bearing gate below is what proves that.
+    struct Exempt { const char* name; const char* ruling; };
+    // CONTRACT §4, verbatim: "identical names, ranges and curves where the concept is genuinely
+    // the same: `Mix`, `Amount`, `Attack`, `Release`, `Ratio`, `Width`, `Focus`, `Lo Cut`, `Rate`"
+    static const Exempt kContract4[] = {
+        { "Mix",     "CONTRACT §4 shared vocabulary — the wet/dry control of every rack device" },
+        { "Attack",  "CONTRACT §4 shared vocabulary — how fast a follower grabs, same law everywhere" },
+        { "Release", "CONTRACT §4 shared vocabulary — how fast it lets go, same law everywhere" },
+        { "Amount",  "CONTRACT §4 shared vocabulary — how much of the effect, same law everywhere" } };
+    // The rack CHASSIS words. R5 (back panel), R6 (`Character` is dropdown 1, `Type` is the
+    // header pill), and the fb266 frozen chassis, whose every card carries a Power switch.
+    static const Exempt kChassis[] = {
+        { "Character", "CONTRACT R6 — back dropdown 1 is `Character` on EVERY fx3/fx4 card, by mandate" },
+        { "Type",      "CONTRACT R6 — `Type` is the header pill (DEVS[].tp) on every card, by mandate" },
+        { "Power",     "the fb266 frozen rack chassis — every card has a Power switch" } };
+    // Explicit RULINGS, cited to the line that made them.
+    static const Exempt kRuled[] = {
+        { "Auto",   "RENAMES.md fb423 §SANCTIONED — the same law as the shipped Distortion `Auto` pill (auto gain compensation)" },
+        { "Stereo", "RENAMES.md fb423 §SANCTIONED — `Stereo`·`Mid`·`Side`·`Left`·`Right` sanctioned AS A GROUP, M/S routing vocabulary" } };
+    auto shared = [&] (const std::string& s)
+    { for (auto& k : kContract4) if (s == k.name) return true;
+      for (auto& k : kChassis)   if (s == k.name) return true;
+      for (auto& k : kRuled)     if (s == k.name) return true; return false; };
     auto shipped = [] (const std::string& s)
     { for (auto k : kShippedLabels) if (s == k) return true; return false; };
 
@@ -784,7 +800,7 @@ static void section1()
 
     int col = 0; std::string first;
     for (auto& s : mine)
-        if (!shared (s) && !yielded (s) && !ruled (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
+        if (!shared (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
     gate ("no name collides with a shipped label", col == 0,
           col == 0 ? F2 ("%.0f names vs %.0f corpus strings (Source/ + BOTH sibling fx4 dirs)",
                          (double) mine.size(), (double) kNumShippedLabels)
@@ -798,13 +814,32 @@ static void section1()
     gate ("the corpus contains the SIBLING fx4 names (it could not, before)",
           shipped ("Slant") && shipped ("Chisel") && shipped ("Steady") && shipped ("Twofold"),
           "Slant · Chisel · Steady · Twofold all found in Design/fx4/{eq,widen}");
-    gate ("the sibling-yield exemption list is exactly 2 entries",
-          (int) (sizeof kSiblingYields / sizeof kSiblingYields[0]) == 2,
-          "Gentle, Low Split — both RENAMES.md rows where the sibling gives way");
-    gate ("the RULED exemption list is exactly 1 entry, and it is a ruling not a self-grant",
-          (int) (sizeof kRuled / sizeof kRuled[0]) == 1 && std::string (kRuled[0]) == "Auto",
-          "Auto — RENAMES.md fb423 §SANCTIONED: same law as the shipped Distortion Auto pill");
-
+    // ── the exemption lists themselves, asserted and audited ────────────────────────────────
+    gate ("the exemption lists are exactly 4 + 3 + 2 entries",
+          (int) (sizeof kContract4 / sizeof kContract4[0]) == 4
+          && (int) (sizeof kChassis / sizeof kChassis[0]) == 3
+          && (int) (sizeof kRuled / sizeof kRuled[0]) == 2,
+          "CONTRACT §4 · rack chassis · explicit rulings — none of them can grow silently");
+    {
+        // EVERY EXEMPTION MUST BE LOAD-BEARING. An entry that exempts nothing is a self-grant
+        // parked for later, and this is exactly how `Auto` got in. Four dead entries (`Peak`,
+        // `Bass`, `Treble`, `Ratio`) and the two fb423 sibling-yields were deleted on this
+        // finding; if a sibling ever re-introduces one, this gate goes red and asks for a ruling
+        // instead of quietly excusing it.
+        int deadX = 0; std::string firstDead;
+        auto chk = [&] (const Exempt* a, int n)
+        { for (int i = 0; i < n; ++i) if (!shipped (a[i].name))
+            { ++deadX; if (firstDead.empty()) firstDead = a[i].name; } };
+        chk (kContract4, (int) (sizeof kContract4 / sizeof kContract4[0]));
+        chk (kChassis,   (int) (sizeof kChassis   / sizeof kChassis[0]));
+        chk (kRuled,     (int) (sizeof kRuled     / sizeof kRuled[0]));
+        gate ("every exemption is LOAD-BEARING (it actually excuses a real collision)", deadX == 0,
+              deadX == 0 ? "9 / 9 appear in the corpus"
+                         : F1 ("%.0f exempt nothing, first: ", (double) deadX) + firstDead);
+        for (auto& k : kContract4) std::printf ("      exempt  %-11s %s\n", k.name, k.ruling);
+        for (auto& k : kChassis)   std::printf ("      exempt  %-11s %s\n", k.name, k.ruling);
+        for (auto& k : kRuled)     std::printf ("      exempt  %-11s %s\n", k.name, k.ruling);
+    }
     int dup = 0; std::string dupName;
     for (size_t i = 0; i < mine.size(); ++i)
         for (size_t j = i + 1; j < mine.size(); ++j)
@@ -895,40 +930,172 @@ static void section1()
             gate ("every published label appears VERBATIM in ROSTER.md", miss == 0,
                   miss == 0 ? F1 ("all %.0f of them", (double) mine.size())
                             : F1 ("%.0f absent: ", (double) miss) + firstMiss);
-        }
-        // ── and the other direction, which is the one that actually rots: a RETIRED label must
-        //    not survive anywhere downstream. Every string below is a RENAMES.md row for THIS
-        //    directory (or a Character cut at fb423). They are authored in the engine headers —
-        //    where the history belongs — and nowhere else. This is the gate that would have
-        //    caught all five stale ROSTER rows, the two stale harness labels and the stale
-        //    `Bite`/`Twin` pill rows without anyone grepping for them.
-        {
-            static const char* kRetired[] = { "Latch", "Heat", "Silky", "Wobble", "RMS Ears",
-                                              "Spike Ears", "Full Bite", "Bite", "Slow Twin",
-                                              "Fast Twin", "Twin", "Slow Riser", "Low Riser" };
-            struct DF { const char* nm; const std::string* txt; };
-            const DF files[] = { { "ROSTER.md", &ros }, { "compress-worklet.js", &cw },
-                                 { "ott-worklet.js", &ow } };
-            int hits = 0; std::string firstHit;
-            for (auto& f : files)
-                for (auto r : kRetired)
+
+            // ═══════════════════════════════════════════════════════════════════════════════
+            // 🚨 fb425 — THE ROSTER HALF OF THE DRIFT GATE WAS A SUBSTRING SEARCH.
+            //    `roster.find (s) != npos` has no word boundary, no ORDER, no cardinality and no
+            //    reverse direction: a skeptic moved two Characters under the WRONG TYPES and it
+            //    stayed green, because both strings were still somewhere in the file. What a
+            //    roster has to agree with is the GRID, not the vocabulary.
+            //    So: each Type owns exactly one ROSTER row (`| **<Type>** | ...`), the eight
+            //    Characters of that Type must appear in it AS BACKTICKED TOKENS IN ORDER, and no
+            //    Character may appear in ANOTHER Type's row. Ordered, positional, cardinal, and
+            //    checked both ways.
+            // EVERY row that names this Type — §2's lineage table names it too, and taking the
+            // first match found that one (216 characters, no backticks) and called all 16 grids
+            // out of order. A gate that reads the wrong row is the fb393 harness again.
+            auto rowsFor = [&] (const std::string& ty)
+            {
+                std::vector<std::string> rows;
+                const std::string key = "| **" + ty + "**";
+                size_t k = 0;
+                while ((k = ros.find (key, k)) != std::string::npos)
                 {
-                    const std::string R = r;
-                    size_t k = 0;
-                    while ((k = f.txt->find (R, k)) != std::string::npos)
+                    const size_t e = ros.find ('\n', k);
+                    rows.push_back (ros.substr (k, (e == std::string::npos ? ros.size() : e) - k));
+                    k = (e == std::string::npos) ? ros.size() : e + 1;
+                }
+                return rows;
+            };
+            auto ticks = [] (const std::string& row)
+            {
+                std::vector<std::string> v; size_t k = 0;
+                while ((k = row.find ('`', k)) != std::string::npos)
+                { const size_t e = row.find ('`', k + 1); if (e == std::string::npos) break;
+                  v.push_back (row.substr (k + 1, e - k - 1)); k = e + 1; }
+                return v;
+            };
+            int noRow = 0, outOfOrder = 0, wrongType = 0;
+            std::string firstBad;
+            struct DevT { const char* dev; int nT; const char* const* (*chars) (int); const char* const* tn; };
+            for (int dev = 0; dev < 2; ++dev)
+            {
+                const int nT = (dev == 0) ? CX::kNumTypes : OX::kNumTypes;
+                for (int t = 0; t < nT; ++t)
+                {
+                    const std::string ty = (dev == 0) ? CX::typeNames()[t] : OX::typeNames()[t];
+                    const auto rows = rowsFor (ty);
+                    if (rows.empty())
+                    { ++noRow; if (firstBad.empty()) firstBad = ty + " has no `| **" + ty + "**` row"; continue; }
+                    bool ordered = false; std::string why;
+                    for (auto& row : rows)
                     {
-                        const bool lb = (k == 0) || !(std::isalnum ((unsigned char) (*f.txt)[k-1]));
-                        const size_t e = k + R.size();
-                        const bool rb = (e >= f.txt->size()) || !(std::isalnum ((unsigned char) (*f.txt)[e]));
-                        if (lb && rb)
-                        { ++hits; if (firstHit.empty()) firstHit = std::string (f.nm) + " : " + R; }
-                        k = e;
+                        const auto tk = ticks (row);
+                        size_t at = 0; bool ok = true;
+                        for (int c = 0; c < 8; ++c)
+                        {
+                            const std::string ch = (dev == 0) ? CX::charNames (t)[c] : OX::charNames (t)[c];
+                            size_t f = tk.size();
+                            for (size_t i = at; i < tk.size(); ++i) if (tk[i] == ch) { f = i; break; }
+                            if (f == tk.size()) { ok = false;
+                                if (why.empty()) why = ty + ": `" + ch + "` is not in its grid row, in order";
+                                break; }
+                            at = f + 1;
+                        }
+                        if (ok) { ordered = true; break; }
+                    }
+                    if (!ordered) { ++outOfOrder; if (firstBad.empty()) firstBad = why; }
+                    // ... and nowhere else: a Character under the WRONG Type is the whole point.
+                    for (int t2 = 0; t2 < nT; ++t2)
+                    {
+                        if (t2 == t) continue;
+                        const std::string ty2 = (dev == 0) ? CX::typeNames()[t2] : OX::typeNames()[t2];
+                        for (auto& r2 : rowsFor (ty2))
+                        {
+                            const auto tk2 = ticks (r2);
+                            for (int c = 0; c < 8; ++c)
+                            {
+                                const std::string ch = (dev == 0) ? CX::charNames (t)[c] : OX::charNames (t)[c];
+                                for (auto& x : tk2) if (x == ch)
+                                { ++wrongType; if (firstBad.empty())
+                                    firstBad = "`" + ch + "` (a " + ty + " Character) appears under " + ty2; }
+                            }
+                        }
                     }
                 }
-            gate ("no RETIRED label survives downstream (ROSTER.md + both worklets)", hits == 0,
-                  hits == 0 ? F2 ("%.0f retired strings x %.0f files, 0 hits",
-                                  (double) (sizeof kRetired / sizeof kRetired[0]), 3.0)
+            }
+            gate ("ROSTER.md: every Type has its own row and every Character is IN IT, IN ORDER",
+                  noRow == 0 && outOfOrder == 0,
+                  (noRow == 0 && outOfOrder == 0)
+                    ? "16 Type rows × 8 Characters, ordered subsequence, both devices"
+                    : F2 ("%.0f missing rows, %.0f out of order: ", (double) noRow, (double) outOfOrder) + firstBad);
+            gate ("ROSTER.md: no Character appears under the WRONG Type", wrongType == 0,
+                  wrongType == 0 ? "0 cross-row appearances over 16 rows"
+                                 : F1 ("%.0f misplaced: ", (double) wrongType) + firstBad);
+        }
+        // ── and the other direction, which is the one that actually rots: a RETIRED label must
+        //    not survive anywhere downstream.
+        // 🚨 fb425 — THE BLACKLIST IS NO LONGER HAND-KEPT. The typed list omitted TWO of this
+        //    directory's own RENAMES rows (`Long` → `Patient`, `Glass` → `Crystal`), and `Long`
+        //    was standing in ROSTER.md:125 while the gate printed "0 hits". `gen_shipped_labels.py`
+        //    now PARSES both RENAMES.md tables into `retired_labels.inc` — the same mechanism
+        //    Widen uses — so the authority is the table and a hand-kept second copy cannot drift.
+        // 🚨 AND THE MATCH IS ON WHOLE LABEL TOKENS, not on words. The old scan used
+        //    `isalnum` boundaries, which makes `Long` match inside the LIVE Character names
+        //    `Long Ears`, `Long Window`, `Long Tail` and `Long Haul`, and `Glass` inside
+        //    `Glass Ceiling` — nine false positives that would have had to be excused by hand.
+        //    Downstream labels are backticked in ROSTER.md and quoted in the worklets; those are
+        //    the tokens, and they are compared for EQUALITY.
+        {
+            auto tokensOf = [] (const std::string& txt, char open, char close)
+            {
+                std::vector<std::string> v; size_t k = 0;
+                while ((k = txt.find (open, k)) != std::string::npos)
+                { const size_t e = txt.find (close, k + 1); if (e == std::string::npos) break;
+                  const std::string t = txt.substr (k + 1, e - k - 1);
+                  if (t.size() <= 24 && t.find ('\n') == std::string::npos) v.push_back (t);
+                  k = e + 1; }
+                return v;
+            };
+            std::vector<std::string> tk = tokensOf (ros, '`', '`');
+            for (auto& t : tokensOf (cw, '\'', '\'')) tk.push_back (t);
+            for (auto& t : tokensOf (cw, '"', '"'))   tk.push_back (t);
+            for (auto& t : tokensOf (ow, '\'', '\'')) tk.push_back (t);
+            for (auto& t : tokensOf (ow, '"', '"'))   tk.push_back (t);
+            // A retired name that the engine STILL PUBLISHES is not drift, it is a RE-USE, and a
+            // re-use needs a ruling. There is exactly one and it is cited.
+            struct Republished { const char* name; const char* ruling; };
+            static const Republished kRepublished[] = {
+                { "Auto", "RENAMES.md fb423 §SANCTIONED — retired as `Detect` option 0 (it doubled the pill INSIDE one card), KEPT as the front pill itself" } };
+            auto published = [&] (const std::string& n)
+            { for (auto& m : mine) if (m == n) return true; return false; };
+            gate ("the retired-label table was PARSED from RENAMES.md, not typed", kNumRenames == 12,
+                  F1 ("%.0f rename rows from the COMPRESS and OTT tables", (double) kNumRenames));
+            int notApplied = 0; std::string firstNA;
+            for (int i = 0; i < kNumRenames; ++i)
+                if (!published (kRenamedTo[i]))
+                { ++notApplied; if (firstNA.empty()) firstNA = kRenamedTo[i]; }
+            gate ("every NEW name in the table is actually published by the engine", notApplied == 0,
+                  notApplied == 0 ? F1 ("all %.0f applied", (double) kNumRenames)
+                                  : F1 ("%.0f never applied, first: ", (double) notApplied) + firstNA);
+            int hits = 0, ruledReuse = 0; std::string firstHit;
+            for (int i = 0; i < kNumRenames; ++i)
+            {
+                const std::string R = kRetiredLabels[i];
+                bool isRuled = false;
+                for (auto& r : kRepublished) if (R == r.name) isRuled = true;
+                if (isRuled && published (R)) { ++ruledReuse; continue; }
+                for (auto& t : tk) if (t == R)
+                { ++hits; if (firstHit.empty()) firstHit = R; }
+            }
+            gate ("no RETIRED label survives as a LABEL downstream (ROSTER.md + both worklets)",
+                  hits == 0,
+                  hits == 0 ? F2 ("%.0f retired strings vs %.0f downstream label tokens, 0 hits",
+                                  (double) kNumRenames, (double) tk.size())
                             : F1 ("%.0f hits, first: ", (double) hits) + firstHit);
+            gate ("the re-published exemption list is exactly 1 entry, and it is a ruling",
+                  (int) (sizeof kRepublished / sizeof kRepublished[0]) == 1 && ruledReuse == 1,
+                  std::string (kRepublished[0].name) + " — " + kRepublished[0].ruling);
+            // the two Characters the RENAMES prose CUT rather than renamed (they are not table
+            // rows, so the parser cannot see them): asserted, cited, and scanned the same way.
+            static const char* const kCut[] = { "RMS Ears", "Spike Ears" };
+            int cutHits = 0; std::string firstCut;
+            for (auto c : kCut) for (auto& t : tk) if (t == c)
+            { ++cutHits; if (firstCut.empty()) firstCut = c; }
+            gate ("the CUT-Character list is exactly 2 and none survives", cutHits == 0
+                  && (int) (sizeof kCut / sizeof kCut[0]) == 2,
+                  cutHits == 0 ? "RMS Ears · Spike Ears — RENAMES.md COMPRESS prose (`detForce` removed, both renamed)"
+                               : "survivor: " + firstCut);
         }
     }
 
@@ -2514,6 +2681,26 @@ static void section6()
             }
         gate ("all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms", wT <= 2.0,
               F1 ("worst %.2f dB/ms", wT) + "  (" + nT + ")   [fb421 engine: 5.97]");
+        {   // 🚨 fb425 — THE CLIPPER SWITCH, AT THE AMOUNT WHERE THE CLIPPER EXISTS.
+            //    The fb425 ceiling only closes onto the signal as the downward slope approaches
+            //    1, so at the DEFAULT Amount 0.5 inserting or removing `Heavy`'s per-band
+            //    clipper barely moves the waveform — and the mutant that deletes BOTH of its
+            //    fades survives the click matrix for that reason alone. That is the gate being
+            //    pointed at the wrong operating point, not the mechanism being safe: at
+            //    Amount 100 the clipper is doing 2.34 % THD and its insertion is a real step.
+            OP ca; ca.type = 2 /* Heavy, clipper on */; ca.amount = 1.0f;
+            OP cb; cb.type = 3 /* Sheen, no clipper */; cb.amount = 1.0f;
+            double mc = 0.0;
+            for (int k = 0; k < 5; ++k) mc = std::max (mc, oJump (ca, cb, kAts[k], prog));
+            gate ("  the CLIPPER switch Heavy → Sheen, at Amount 100 where it is working", mc <= 2.0,
+                  F1 ("%.2f dB/ms", mc));
+            OP cc; cc.type = 2; cc.character = 1 /* Band Clip */; cc.amount = 1.0f;
+            OP cd; cd.type = 2; cd.character = 2 /* No Clip   */; cd.amount = 1.0f;
+            double md = 0.0;
+            for (int k = 0; k < 5; ++k) md = std::max (md, oJump (cc, cd, kAts[k], prog));
+            gate ("  ... and Band Clip → No Clip inside Heavy, same setting", md <= 2.0,
+                  F1 ("%.2f dB/ms", md));
+        }
         {   // the tree swap, named, because it is the one the old gate hid
             OP a; a.type = 0; OP b; b.type = 6;
             double m = 0.0;
@@ -2647,6 +2834,975 @@ static void section6()
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
+// 7 + 8 + 9.  THE FULL MATRIX — fb425, and the reason it is the LAST level
+//
+// Three rounds, and the blindness moved down exactly one notch each time:
+//     fb421   the gates could not fail AT ALL          (delete the mechanism, cert stays green)
+//     fb423   the gates ran on ONE TYPE                (sweep the other five)
+//     fb424   the gates ran on ONE TYPE × CHARACTER    (sweep the other 63)
+// There is no fifth level, because THE MATRIX IS FINITE. 8 Types × 8 Characters = 64 cells,
+// × 13 controls = 832 cells per device. A machine does that in seconds; sampling it was always
+// a choice and never a constraint. Everything below runs the WHOLE grid.
+//
+// TWO BARS, NOT ONE:
+//   · BIT-IDENTICAL at 0 vs 100 is a hard FAIL. Not a matter of degree — the parameter never
+//     reached the DSP in that cell, which is fb373 in miniature.
+//   · AUDIBLE-BUT-TINY is a separate FAIL at 0.5 dB. A control that moves the output by 0.02 dB
+//     is dead to the ear and alive only to a float comparison: exactly the green a bit-identity
+//     test on its own would hand out.
+//
+// TWO OPERATING POINTS, AND WHY THAT IS NOT CHERRY-PICKING. A compressor's controls do not all
+// live at the same place on the transfer curve: the knee only exists WITHIN a few dB of the
+// threshold, and the upward lane only exists BELOW it. Measuring `Round` at Push 60 (the
+// threshold 27 dB under the programme) reads 0.02 dB and would call a working knob dead — the
+// harness's fault, not the engine's (§3.1: check your own detector before believing it). So
+// every cell is measured at BOTH a DEEP point (the downward computer working hard) and a
+// SHALLOW one (the threshold inside the programme, so the knee and the upward lane are
+// reachable), and a control counts as alive if it is audible at EITHER. Bit-identity has to
+// fail at BOTH before a cell is called dead.
+//
+// The ONLY exemption is `kInert`: an explicit, ASSERTED-SIZE roster of cells where the
+// mechanism genuinely does not exist, with the missing mechanism NAMED per row. Checked in BOTH
+// directions — a listed cell that is actually alive is a stale ruling and fails; an unlisted
+// dead cell fails. Silence is not available in either direction.
+// ═════════════════════════════════════════════════════════════════════════════
+
+/** THE MATRIX PROBE. One 0.5 s signal, because 3328 cell-measurements cannot each afford a
+ *  bespoke one. It carries all three things a dynamics control can live on:
+ *    · LEVEL      the reference chord (55/110/165/220 Hz saws — bass on purpose per the OTT
+ *                 low-band caveat, harmonics to 18 kHz so all three bands are fed) under a
+ *                 3 Hz / 28 dB tremolo. Something to remove, and troughs to lift.
+ *    · TRANSIENT  every 125 ms the programme falls into a 5 ms hole and comes back 9.5 dB hot
+ *                 for 4 ms. `Edge`, `Cling` and the `Crest` pill read nothing else.
+ *    · SPECTRUM   a saw stack is broadband, so both crossovers and all three band trims move
+ *                 something a magnitude-spectrum metric can see.
+ *  `phase` offsets the tremolo so L and R differ: `Tie` and the M/S detector are STEREO
+ *  controls and read exactly zero on a mono probe — indistinguishable from dead.
+ */
+static std::vector<float> matrixProbe (int n, double phase)
+{
+    auto x = chordSig (n, 0.10f);
+    for (int i = 0; i < n; ++i)
+    {
+        const double t = (double) i / FS;
+        double env = std::pow (10.0, (-14.0 + 14.0 * std::sin (2.0 * M_PI * 3.0 * t + phase)) / 20.0);
+        const double ph = std::fmod (t, 0.125);
+        if      (ph < 0.005) env *= 0.02 + 0.98 * (ph / 0.005) * (ph / 0.005);   // the hole
+        else if (ph < 0.006) env *= 1.0;
+        else if (ph < 0.010) env *= 3.0;                                          // the hit
+        x[(size_t) i] *= (float) env;
+    }
+    return x;
+}
+
+/** THE TAIL PROBE — the SHALLOW operating point's programme, and it took three attempts.
+ *  Four notes, each a 3 ms attack, a fast (τ = 50 ms) decay, and then a SUSTAINED QUIET BODY
+ *  40 dB down that lasts the rest of the note. On a dithered −96 dBFS floor. Right channel
+ *  offset by half a note so the two sides are never at the same level.
+ *  🔬 WHY THE QUIET BODY IS A PLATEAU AND NOT A DECAY, measured both ways:
+ *    · a plain pluck (τ = 0.28 s) never gets more than ~3 dB below the upward threshold, so
+ *      `Raise` 0 → 100 moved the quiet frames by 1.08 dB and looked dead on 52 of 64 cells;
+ *    · a fast pluck (τ = 0.12 s) DOES get deep, but it spends only a few frames there and the
+ *      rest of the way down it is above the threshold — 0.3 dB;
+ *    · a plateau 40 dB down holds the programme 15–20 dB UNDER the upward threshold for 80 %
+ *      of every note, which is where an upward computer actually lives: `Raise` now measures
+ *      6…14 dB on the same cells. The mechanism never changed. The probe was wrong.
+ *  It keeps the sharp attacks, so it is also the probe the `Crest` transient hold needs. */
+static std::vector<float> tailProbe (int n, bool right)
+{
+    std::vector<float> x ((size_t) n, 0.0f);
+    const int note = (int) (FS * 0.5f);
+    for (int k = 0; k < 4; ++k)
+    {
+        const int at = k * note + (right ? note / 2 : 0);
+        if (at >= n) break;
+        const int len = std::min (note, n - at);
+        std::vector<float> p ((size_t) len, 0.0f);
+        addSaw (p, (k & 1) ? 165.0f : 110.0f, 1.0f);
+        const double pk = peakOf (p); for (auto& v : p) v *= (float) (0.30 / pk);
+        for (int i = 0; i < len; ++i)
+        {
+            const double t = (double) i / FS;
+            const double e = (t < 0.003) ? (t / 0.003)
+                                         : std::max (std::exp (-(t - 0.003) / 0.05), 0.010);
+            x[(size_t) at + (size_t) i] += (float) (p[(size_t) i] * e);
+        }
+    }
+    gRng = right ? 0x13579BDFu : 0x2468ACE0u;
+    const float dith = (float) std::pow (10.0, -96.0 / 20.0);
+    for (auto& v : x) v += dith * 1.4142f * rnd11();
+    return x;
+}
+
+/** THE QUIET-QUARTILE LEVEL — 20 ms frames sorted by level, the mean of the 20th…50th
+ *  percentile band. That band IS the decaying tail of a note: above the noise floor (which the
+ *  floor gate refuses to lift, on purpose) and below the attacks (which carry all the energy).
+ *  🔬 WHY IT EXISTS. Without it `Raise` — OTT's upward-gain amount — measured 0.02…0.45 dB on
+ *  52 of 64 cells and looked dead, while section 6's own gate measures a 2+ dB span for the
+ *  same control. Both were right: a 10 dB lift of a tail that is 45 dB down moves the WHOLE
+ *  BUFFER's RMS by 0.1 dB, and every other dimension in `audDb` is a whole-buffer statistic.
+ *  That is the fb416 shape upside down — an average is blind to a change that lives in a
+ *  minority of the frames. Phase-independent, like everything else here. */
+static double quietDb (const std::vector<float>& x)
+{
+    const int w = (int) (FS * 0.020f);
+    std::vector<double> e;
+    for (size_t i = 0; i + (size_t) w < x.size(); i += (size_t) w)
+        e.push_back (db (rmsOf (x, i, i + (size_t) w)));
+    if (e.size() < 8) return -140.0;
+    std::sort (e.begin(), e.end());
+    const size_t a = (size_t) (e.size() * 0.20), b = std::max (a + 1, (size_t) (e.size() * 0.50));
+    double s = 0.0; for (size_t i = a; i < b && i < e.size(); ++i) s += e[i];
+    return s / (double) (b - a);
+}
+
+/** Every metric here is phase-independent (law 6): magnitude-spectrum distance, RMS level,
+ *  settled crest, envelope spread, the quiet-quartile level and the L−R balance.
+ *  Sample-difference RMS is banned (fb282) and is not used anywhere in this section. */
+static double audDb (const Out& a, const Out& b)
+{
+    const double sL = specDist (a.l, b.l), sR = specDist (a.r, b.r);
+    const double lL = std::fabs (db (rmsOf (b.l)) - db (rmsOf (a.l)));
+    const double lR = std::fabs (db (rmsOf (b.r)) - db (rmsOf (a.r)));
+    const double cL = std::fabs (crestSettled (b.l) - crestSettled (a.l));
+    const double eL = std::fabs (envSpreadDb (b.l) - envSpreadDb (a.l));
+    const double qL = std::fabs (quietDb (b.l) - quietDb (a.l));
+    const double qR = std::fabs (quietDb (b.r) - quietDb (a.r));
+    const double b0 = db (rmsOf (a.l)) - db (rmsOf (a.r));
+    const double b1 = db (rmsOf (b.l)) - db (rmsOf (b.r));
+    double m = sL; for (double v : { sR, lL, lR, cL, eL, qL, qR, std::fabs (b1 - b0) }) m = std::max (m, v);
+    return m;
+}
+static bool bitSame (const Out& a, const Out& b)
+{
+    if (a.l.size() != b.l.size()) return false;
+    for (size_t i = 0; i < a.l.size(); ++i)
+        if (a.l[i] != b.l[i] || a.r[i] != b.r[i]) return false;
+    return true;
+}
+
+/** THE ROSTER OF CELLS WHERE A CONTROL DOES NOT BEHAVE LIKE A CONTROL, and it has TWO kinds so
+ *  that neither can hide inside the other:
+ *    INERT   the mechanism is genuinely ABSENT in that cell, and the output must be
+ *            BIT-IDENTICAL at 0 and 100. If it moves at all, the ruling is stale.
+ *    NARROW  the mechanism is present and wired, but the Character has multiplied its window
+ *            into a range whose two ends are under the audibility bar. The cell must be alive
+ *            (not bit-identical) AND under 0.5 dB. If it grows, the ruling is stale; if it dies,
+ *            it is a dead knob and section 7/8 fails it.
+ *  `chr = "*"` means every Character of that Type. Every row names the MECHANISM — never "it
+ *  measured small". The list is asserted to a fixed size in section 9 (the `kShared` lesson:
+ *  an exemption list with no cardinality is a list that grows). */
+enum RuleKind { INERT, NARROW };
+struct InertCell { const char* dev; RuleKind kind; const char* knob; const char* type;
+                   const char* chr; const char* why; };
+
+static const InertCell kInert[] = {
+ // ── COMPRESS — the mechanism is absent ──────────────────────────────────────────────────────
+ { "Compress", INERT, "Ratio",  "OverEasy", "Anti",
+   "`Anti` sets slopeMul = slopeCap = slopeFloor = 2: the dbx Infinity+ NEGATIVE zone at a LOCKED slope. The Character IS a ratio." },
+ { "Compress", INERT, "Round",  "OverEasy", "Hard 160",
+   "kneeAdd = -24 puts the whole 6...24 dB knee window below zero. `Hard 160` IS the hard-knee Character (the dbx 160's own curve)." },
+ { "Compress", INERT, "Round",  "Ride",     "Only Up",
+   "F_UPONLY switches the DOWNWARD computer off; `Round` is the downward knee. `liftUp` is hard-knee by construction (bible SS3.6)." },
+ { "Compress", INERT, "Cling",  "Ride",     "Only Up",
+   "`Cling` freezes the downward clamp before release runs. With the downward computer off there is no clamp to freeze." },
+ { "Compress", INERT, "Burn",   "Ride",     "Only Up",
+   "fb419 law: the gain element's drive is scaled by CURRENT gain reduction, so no reduction = bit-clean at any Burn. `Only Up` produces none." },
+ { "Compress", INERT, "Tie",    "Bus",      "*",
+   "linkForce = 1 on every Bus Character: the SSL bus law is ONE clamp for both sides, and an unlinked bus compressor is a different machine." },
+ { "Compress", INERT, "Tie",    "Vari-Mu",  "Lateral",
+   "F_MSDET + linkForce 0: the detector basis is MID/SIDE, so `Tie` (an L/R link) has no axis to act on." },
+ { "Compress", INERT, "Tie",    "Limit",    "*",
+   "linkForce = 1 on every Limit Character: a limiter that unlinks moves the stereo image on every peak. Linked is what a ceiling means." },
+ { "Compress", INERT, "Auto",   "Limit",    "Loud War",
+   "F_AUTOFULL forces 100 % auto makeup on. The pill can only turn on what the Character has already turned on." },
+ // ── COMPRESS — the mechanism is present, its authored window is under the bar ────────────────
+ { "Compress", NARROW, "Attack", "FET 76",  "Twenty Lock",
+   "atkMul 0.15 collapses FET's 0.02...0.8 ms window onto 0.003...0.12 ms; at 48 kHz the ONE-SAMPLE floor is 0.0208 ms, so the whole knob is 1...6 samples." },
+ { "Compress", NARROW, "Attack", "Limit",   "Hard Stop",
+   "atkMul 0.02 on 0.1...5 ms = 0.002...0.1 ms = 0.1...4.8 samples at 48 kHz. Same one-sample floor; the Character IS `Hard Stop`." },
+ { "Compress", NARROW, "Release","Opto",    "Even Pools",
+   "F_EVENPOOL moves the T4 pool mix to 0.28, so the Release knob (the FAST pool) sets 28 % of the gain and the 10 s memory integrator sets the rest." },
+ { "Compress", NARROW, "Release","Vari-Mu", "Time Four",
+   "relLoW 7.5 / relHiW 0.6 put the window at 1.5...15 SECONDS. Both ends outlast every probe in this file; the difference arrives after the programme has ended." },
+ { "Compress", NARROW, "Release","Vari-Mu", "Long Haul",
+   "relMul 2.0 x relLoW 10 puts the window at 4...50 SECONDS. Measured on a 6 s probe, which is the longest here and still shorter than the knob." },
+ // ── OTT — the mechanism is absent ───────────────────────────────────────────────────────────
+ { "OTT", INERT, "High Cross", "Two Band", "*",
+   "`Two Band` has nBands = 2 (ONE split at 650 Hz, which is its whole identity). There is no high crossover to move." },
+ { "OTT", INERT, "Treble",     "Two Band", "*",
+   "`Treble` trims band 3, and `Two Band` has two. Same roster fact as `High Cross`, one knob further along." },
+ { "OTT", INERT, "Press",      "Surge",    "*",
+   "`Surge` is upward-ONLY by identity: ts.sdn = {0,0,0} and its makeups are 0. `Press` scales the DOWNWARD slope, which is zero on every Character here." },
+ { "OTT", INERT, "Crest",      "Over Top", "Full Crest",
+   "the Character sets upHold = 1, i.e. the transient hold is already ON. The pill cannot turn on what the Character has turned on." },
+};
+static constexpr int kNumInert = (int) (sizeof kInert / sizeof kInert[0]);
+
+static const InertCell* inertRule (const char* dev, const std::string& knob,
+                                   const std::string& ty, const std::string& ch)
+{
+    for (auto& r : kInert)
+        if (std::string (r.dev) == dev && knob == r.knob && ty == r.type
+            && (std::string (r.chr) == "*" || ch == r.chr))
+            return &r;
+    return nullptr;
+}
+static bool gInertHit[128] = { false };
+static int  gMatDead = 0, gMatWeak = 0, gMatCells = 0;
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section7()
+{
+    section ("7. COMPRESS — LAW 1 ON THE FULL MATRIX: every control × 8 Types × 8 Characters");
+    const auto dL = matrixProbe ((int) (FS * 0.5f), 0.0), dR = matrixProbe ((int) (FS * 0.5f), 2.1);
+    const auto sL = tailProbe   ((int) (FS * 1.5f), false), sR = tailProbe ((int) (FS * 1.5f), true);
+    // THE STATIC POINT. A 36 dB STAIRCASE straddling the threshold, at Push 0 (T = +9 dBp =
+    // −17 dBFS) with ∞:1. A knee only exists within ±W/2 of the threshold — Limit's whole knee
+    // window is 6 dB wide — so a probe that sits anywhere else measures 0.02 dB and calls a
+    // working control dead: the harness's fault, not the engine's (§3.1). A staircase puts some
+    // treads inside every knee in the roster, however narrow.
+    const auto kL = staircase (-18.0f, 18.0f, 12, 80.0f, 220.0f);
+    auto kRmk = [] { auto v = staircase (-18.0f, 18.0f, 12, 80.0f, 220.0f);
+                     for (auto& x : v) x *= 0.14f; return v; };   // 17 dB down, so `Tie` exists here too
+    const auto kR = kRmk();
+
+    struct KC { std::string name; float CP::* fld; };
+    // Every name is READ FROM THE HEADER at the moment of use — there is no label table here.
+    const KC knobs[] = {
+        { CF (0), &CP::push }, { CF (1), &CP::ratio }, { CF (2), &CP::lift }, { CF (3), &CP::mix },
+        { CB (0), &CP::b1 }, { CB (1), &CP::b2 }, { CB (2), &CP::b3 }, { CB (3), &CP::b4 },
+        { CB (4), &CP::b5 }, { CB (5), &CP::b6 }, { CB (6), &CP::b7 }, { CB (7), &CP::b8 } };
+
+    int dead = 0, weak = 0, ruled = 0, cells = 0;
+    std::string firstDead, firstWeak;
+    double worstLive = 1e9; std::string worstLiveCell;
+
+    // DEEP  = the downward computer working hard (Push 60 / Ratio 85).
+    // SHALLOW = the threshold at the top of the programme with ∞:1 (Push 0 / Ratio 100), which
+    //           is the only place a KNEE exists and the only place the upward lane engages.
+    // `Long Haul` spans 4…50 SECONDS of release and `Time Four` 1.5…15 s. A 1.5 s probe cannot
+    // tell 4 s from 50 s — it ends first — so the release row gets a 6 s programme of its own.
+    // Same law as the knee: measure a control over the range it actually covers.
+    const auto rL = tailProbe ((int) (FS * 6.0f), false), rR = tailProbe ((int) (FS * 6.0f), true);
+    auto oneKnob = [&] (const std::string& name,
+                        const std::function<void(CP&, float)>& set, bool longProbe = false)
+    {
+        int kDead = 0, kWeak = 0, kRuled = 0; double kWorst = 1e9; std::string kWorstCell;
+        for (int t = 0; t < CX::kNumTypes; ++t)
+            for (int c = 0; c < CX::kNumChars; ++c)
+            {
+                bool bit = true; double d = 0.0;
+                for (int mode = 0; mode < (longProbe ? 4 : 3); ++mode)
+                {
+                    CP base; base.type = t; base.character = c; base.lift = 0.0f;
+                    if (mode == 0) { base.push = 0.60f; base.ratio = 0.85f; }
+                    else           { base.push = 0.00f; base.ratio = 1.00f; }
+                    CP a = base, b = base; set (a, 0.0f); set (b, 1.0f);
+                    const std::vector<float>& pL = (mode == 0) ? dL : (mode == 1) ? sL
+                                                  : (mode == 2) ? kL : rL;
+                    const std::vector<float>& pR = (mode == 0) ? dR : (mode == 1) ? sR
+                                                  : (mode == 2) ? kR : rR;
+                    const Out o0 = runCStereo (a, pL, pR), o1 = runCStereo (b, pL, pR);
+                    if (!bitSame (o0, o1)) { bit = false; d = std::max (d, audDb (o0, o1)); }
+                }
+                const std::string ty = CX::typeNames()[t], ch = CX::charNames (t)[c];
+                const InertCell* rule = inertRule ("Compress", name, ty, ch);
+                ++cells; ++gMatCells;
+                if (rule)
+                {
+                    ++kRuled; ++ruled; gInertHit[(size_t) (rule - kInert)] = true;
+                    // BOTH directions. An INERT row must be bit-identical; a NARROW row must be
+                    // alive AND under the bar. Either way a ruling that no longer matches the
+                    // engine fails here instead of quietly excusing a cell.
+                    const bool okRule = (rule->kind == INERT) ? bit : (!bit && d < 0.5);
+                    if (!okRule)
+                    { ++kWeak; ++weak; ++gMatWeak;
+                      std::printf ("      STALE %-11s %-10s %-14s  ruled %-6s but measures %s%.3f dB\n",
+                                   name.c_str(), ty.c_str(), ch.c_str(),
+                                   rule->kind == INERT ? "INERT" : "NARROW",
+                                   bit ? "BIT-IDENTICAL, " : "", d);
+                      if (firstWeak.empty()) firstWeak = name + " @ " + ty + "/" + ch + " — the ruling is stale"; }
+                    continue;
+                }
+                if (bit)
+                { ++kDead; ++dead; ++gMatDead;
+                  std::printf ("      DEAD  %-11s %-10s %-14s  bit-identical at 0 and 100, EVERY operating point\n",
+                               name.c_str(), ty.c_str(), ch.c_str());
+                  if (firstDead.empty()) firstDead = name + " @ " + ty + " / " + ch; }
+                else if (d < 0.5)
+                { ++kWeak; ++weak; ++gMatWeak;
+                  std::printf ("      WEAK  %-11s %-10s %-14s  %.3f dB end to end\n",
+                               name.c_str(), ty.c_str(), ch.c_str(), d);
+                  if (firstWeak.empty()) firstWeak = name + " @ " + ty + " / " + ch + F1 (" = %.3f dB", d); }
+                if (!bit && d < kWorst) { kWorst = d; kWorstCell = ty + " / " + ch; }
+            }
+        if (kWorst < worstLive) { worstLive = kWorst; worstLiveCell = name + " @ " + kWorstCell; }
+        std::printf ("      %-11s 64 cells: %2d dead · %2d under 0.5 dB · %2d ruled inert   weakest live %.2f dB (%s)\n",
+                     name.c_str(), kDead, kWeak, kRuled, kWorst, kWorstCell.c_str());
+    };
+
+    for (auto& k : knobs)
+    { float CP::* f = k.fld;
+      oneKnob (k.name, [f] (CP& p, float v) { p.*f = v; }, f == &CP::b2 /* Release */); }
+    // THE FRONT PILL is a control and gets the same 64 cells. `Auto` is auto MAKEUP, so it has
+    // nothing to compensate unless the device is reducing gain — which is what the deep
+    // operating point is for.
+    oneKnob (CX::pillName(), [] (CP& p, float v) { p.autoMakeup = (v > 0.5f); });
+
+    gate ("no control is BIT-IDENTICAL at 0 and 100 in any unruled cell", dead == 0,
+          dead == 0 ? F1 ("%.0f cells swept × 3 operating points, 0 dead", (double) cells)
+                    : F1 ("%.0f DEAD cells, first: ", (double) dead) + firstDead);
+    gate ("every unruled cell moves ≥ 0.5 dB end to end", weak == 0,
+          weak == 0 ? F2 ("%.0f cells, weakest live %.2f dB", (double) cells, worstLive)
+                            + "  (" + worstLiveCell + ")"
+                    : F1 ("%.0f under the bar, first: ", (double) weak) + firstWeak);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section7b()
+{
+    section ("7b. COMPRESS — the R11 ceiling on EVERY Type (it was proven on Type 0 only)");
+    // 🚨 fb425: the fb424 gate ran the staircase on the DEFAULT Type and nothing else. Replayed
+    //    on the other seven with this same probe and this same bar, FOUR were red — FET 76
+    //    0.4683, Opto 0.5608, Vari-Mu 0.4763 and OverEasy. The first three are the FEEDBACK
+    //    topology: `y = (x + sT)/(1+s)` ⇒ a closed-loop slope of exactly 0.5 at s = 1, which is
+    //    authentic 1176/LA-2A behaviour AND polite at 100 %. Max's ruling this round is to break
+    //    the authenticity over the last 10 % of Ratio, and that is what the engine now does.
+    //    The fourth is a different animal and is ruled separately below.
+    auto st = staircase (-40.0f, 8.0f, 24, 120.0f);
+    const int per = (int) (FS * 0.120f);
+    auto slopeOf = [&] (const std::vector<float>& out, int from)
+    {
+        std::vector<double> iv, ov;
+        for (int s = 0; s < 24; ++s)
+        { const size_t a = (size_t) (s * per + per * 0.6), b = (size_t) ((s + 1) * per);
+          iv.push_back (db (rmsOf (st, a, b))); ov.push_back (db (rmsOf (out, a, b))); }
+        double sl = 0.0;
+        for (int s = from; s < from + 5; ++s)
+            sl += (ov[(size_t) s + 1] - ov[(size_t) s]) / (iv[(size_t) s + 1] - iv[(size_t) s]);
+        return sl / 5.0;
+    };
+    // ── fb426: EVERY TYPE was not enough either. The fourth family audit found `Blunt`
+    //    (Exact/3) and `Two Pass` (FET 76/7) — the two F_TWOPASS Characters — passing HALF the
+    //    dynamic range at ∞:1, 15x their siblings, because this loop ran character 0 and the
+    //    two-pass cascade lives on a Character. That is the fb424 blindness one axis over:
+    //    per-TYPE is still a sample when the mechanism is per-CELL. It now runs all 64.
+    //    The engine fix: F_TWOPASS was never a cascade at all — it computed ONE second-pass
+    //    reduction on a half-corrected input and DOUBLED it, landing at out-slope 0.502 against
+    //    the 0.25 its own comment claimed. It is a real two-stage cascade now, and its half
+    //    slope rides the SAME wallS the feedback crossover uses, so ∞:1 walls while the Character
+    //    stays the gentler one everywhere below Ratio 0.90 (measured: Blunt 0.372 vs Precise
+    //    0.219 at Ratio 75, and 0.060 vs 0.032 at Ratio 100).
+    //
+    //    LOCKED-RATIO IDENTITIES — a roster fact, asserted to size so it cannot quietly grow.
+    //    These Characters ARE a ratio; asking them to reach ∞:1 asks them to stop being
+    //    themselves. Matched BY NAME so a reordered roster cannot silently re-point an exemption.
+    //    fb426 — the exemption is DERIVED FROM THE ENGINE, not a hand-typed name list. My first
+    //    version WAS a name list ({ Anti, Loose Grip, Twenty Lock }) and extending the sweep to 64
+    //    cells immediately proved it incomplete: `Two Easy` (slopeCap 0.5 = 2:1), `Loose Four`
+    //    (0.75 = 4:1) and `Only Up` (no downward computer at all) are the same kind of identity
+    //    and were not in it. A hand-kept list of exemptions is the second table that goes stale —
+    //    the same defect that made charNames() drift. CX::ratioLocked() reads the CharSpec.
+    auto ratioLocked = [&] (int t, int c) { return CX::ratioLocked (t, c); };
+    {   int locked = 0; std::string names;
+        for (int t = 0; t < CX::kNumTypes; ++t)
+            for (int c = 0; c < CX::kNumChars; ++c)
+                if (CX::ratioLocked (t, c))
+                {   ++locked;
+                    names += std::string (names.empty() ? "" : ", ") + CX::typeNames()[t] + "/" + CX::charNames (t)[c]; }
+        gate ("the locked-ratio exemptions are DERIVED from the CharSpec, and every one is named",
+              locked > 0 && locked <= 8, F1 ("%.0f cells: ", (double) locked) + names); }
+
+    int bad = 0, cells = 0, exempt = 0; std::string firstBad;
+    std::printf ("      %-9s %8s %9s   %s\n", "Type", "DRR", "slope", "bar, and the defence");
+    for (int t = 0; t < CX::kNumTypes; ++t)
+    {
+        // every CHARACTER of this Type against the same bar, printed only when it fails or is ruled
+        for (int c = 1; c < CX::kNumChars; ++c)
+        {
+            if (ratioLocked (t, c)) { ++exempt; continue; }
+            CP pc; pc.type = t; pc.character = c; pc.push = 1.0f; pc.ratio = 1.0f;
+            pc.lift = 0.0f; pc.b1 = 0.15f; pc.b2 = 0.25f;
+            const double rc = drRatio (st, runC (pc, st).l, 24, 120.0f);
+            ++cells;
+            if (t == CX::T_OVEREASY) continue;     // ruled below, on the sign of the curve
+            if (rc > 0.05)
+            {   ++bad;
+                if (firstBad.empty()) firstBad = std::string (CX::typeNames()[t]) + "/" + CX::charNames (t)[c];
+                std::printf ("      %-9s %8.4f %9s   %s/%s  ← RED\n", CX::typeNames()[t], rc, "",
+                             CX::typeNames()[t], CX::charNames (t)[c]); }
+        }
+        CP p; p.type = t; p.push = 1.0f; p.ratio = 1.0f; p.lift = 0.0f; p.b1 = 0.15f; p.b2 = 0.25f;
+        auto o = runC (p, st);
+        const double r = drRatio (st, o.l, 24, 120.0f);
+        const double sl = slopeOf (o.l, 18);
+        bool ok; std::string bar;
+        if (t == CX::T_OVEREASY)
+        {
+            // RULED SEPARATELY — a roster fact, not an excuse. OverEasy's Ratio knob is the only
+            // one in the device that continues PAST ∞:1 into the dbx "Infinity+" NEGATIVE zone:
+            // at s = 2 the transfer is `out = 2T − in`, so louder in gives QUIETER out. A
+            // dynamic-range SPAN cannot see that — an inverted 25 dB span reads exactly like an
+            // upright one — and `grT` is clamped at 60 dB, so at Push 100 (the threshold 39 dB
+            // inside the programme) the top treads are past the clamp and run parallel again.
+            // The honest question for this Type is the SIGN of the curve at a working threshold,
+            // and a negative slope is the MORE extreme of the two behaviours, not the politer.
+            CP q; q.type = t; q.character = 7 /* `Anti`, where s = 2 lives */;
+            q.push = 0.45f; q.ratio = 1.0f; q.b1 = 0.5f; q.b2 = 0.3f;
+            const double s2 = slopeOf (runC (q, st).l, 14);
+            ok = (s2 <= -0.5);
+            bar = F1 ("slope %+.3f ≤ −0.5 — the negative zone (`Anti`)", s2);
+        }
+        else { ok = (r <= 0.05); bar = "DRR ≤ 0.05 — ∞:1 with the threshold 39 dB inside the programme"; }
+        if (!ok) { ++bad; if (firstBad.empty()) firstBad = CX::typeNames()[t]; }
+        ++cells;
+        std::printf ("      %-9s %8.4f %+9.4f   %s%s\n", CX::typeNames()[t], r, sl,
+                     bar.c_str(), ok ? "" : "   ← RED");
+    }
+    gate ("every Type x CHARACTER cell walls at Push/Ratio 100 (R11)", bad == 0,
+          bad == 0 ? F2 ("%.0f cells measured, %.0f locked-ratio identities exempt and named",
+                         (double) cells, (double) exempt)
+                   : F2 ("%.0f of %.0f cells red, first: ", (double) bad, (double) cells) + firstBad);
+    gate ("   ... and the cell sweep actually RAN (a roll-up over an empty loop cannot pass)",
+          cells >= 8 * (CX::kNumChars - 1), F1 ("%.0f cells", (double) cells));
+    {
+        // and the crossover itself, named: below Ratio 0.90 the feedback Types are STILL
+        // feedback — the authenticity Max paid for is intact everywhere but the last tenth.
+        auto ov = [&] (int t, float rk)
+        { CP p; p.type = t; p.push = 1.0f; p.ratio = rk; p.lift = 0.0f; p.b1 = 0.15f; p.b2 = 0.25f;
+          return drRatio (st, runC (p, st).l, 24, 120.0f); };
+        const double a = ov (CX::T_FET, 0.90f), b = ov (CX::T_FET, 1.0f);
+        gate ("  the wall is the LAST 10 % only — FET 76 keeps its feedback curve below it",
+              a >= 0.30 && b <= 0.05,
+              F2 ("DRR %.4f at Ratio 90 (the authentic 0.5 closed-loop slope) → %.4f at 100", a, b));
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section7c()
+{
+    section ("7c. COMPRESS — the `Detect` dropdown: every option distinct, on every cell (R6)");
+    // R6 requires BOTH dropdowns to change PHYSICS. `Character` gets 448 measured cells in 3c;
+    // this is the other one and it had NONE. `Native` is an ALIAS — it defers to the Type's own
+    // ears — so on a Type whose native rectifier IS one of the four named ones the two options
+    // are the same DSP by construction. That is READ OFF `detectId()`, never assumed, and the
+    // count is printed.
+    const auto dL = matrixProbe ((int) (FS * 0.5f), 0.0), dR = matrixProbe ((int) (FS * 0.5f), 2.1);
+    const auto sL = tailProbe   ((int) (FS * 1.5f), false), sR = tailProbe ((int) (FS * 1.5f), true);
+    int bad = 0, alias = 0, pairs = 0; double worst = 1e9; std::string wn, firstBad;
+    for (int t = 0; t < CX::kNumTypes; ++t)
+        for (int c = 0; c < CX::kNumChars; ++c)
+        {
+            Out o[3][CX::kNumDetect]; int id[CX::kNumDetect];
+            for (int ax = 0; ax < CX::kNumDetect; ++ax)
+                for (int mode = 0; mode < 3; ++mode)
+                {
+                    // mode 1 is a FAST attack on purpose. At the default `Attack` the OverEasy
+                    // window (`D_RMSWIN` reads b1) lands on ~9 ms, i.e. on top of `Average`'s
+                    // 10 ms — two options that are genuinely near-identical AT THAT SETTING and
+                    // 40 dB apart at another. Measuring one setting and calling the pair dead is
+                    // the same mistake as measuring one Type.
+                    CP p; p.type = t; p.character = c; p.axis = ax; p.lift = 0.0f;
+                    p.push  = (mode == 1) ? 0.00f : 0.60f;
+                    p.ratio = (mode == 1) ? 1.00f : 0.85f;
+                    // mode 2 opens the RMS window all the way: `Crush RMS` multiplies it by 0.10,
+                    // so at Attack 0 its `Native` IS a peak detector to within 0.1 ms and the two
+                    // options genuinely coincide THERE. At Attack 100 the window is 8 ms.
+                    p.b1    = (mode == 0) ? 0.50f : (mode == 1) ? 0.00f : 1.00f;
+                    if (mode == 0) { CX e; e.prepare (FS, 128); e.setParams (p); id[ax] = e.detectId(); }
+                    o[mode][ax] = (mode == 1) ? runCStereo (p, sL, sR) : runCStereo (p, dL, dR);
+                }
+            for (int i = 0; i < CX::kNumDetect; ++i)
+                for (int j = i + 1; j < CX::kNumDetect; ++j)
+                {
+                    if (id[i] == id[j]) { ++alias; continue; }
+                    ++pairs;
+                    const double d = std::max (std::max (audDb (o[0][i], o[0][j]), audDb (o[1][i], o[1][j])),
+                                               audDb (o[2][i], o[2][j]));
+                    const std::string nm = std::string (CX::typeNames()[t]) + " / " + CX::charNames (t)[c]
+                                         + ": " + CX::detectNames()[i] + " vs " + CX::detectNames()[j];
+                    if (d < worst) { worst = d; wn = nm; }
+                    if (d < 0.5)
+                    { ++bad; std::printf ("      WEAK  %-52s %.3f dB\n", nm.c_str(), d);
+                      if (firstBad.empty()) firstBad = nm; }
+                }
+        }
+    gate ("every DISTINCT `Detect` pair is audible in every one of the 64 cells", bad == 0,
+          bad == 0 ? F2 ("weakest %.2f dB over %.0f measured pairs", worst, (double) pairs)
+                            + "  (" + wn + ")"
+                   : F1 ("%.0f pairs under 0.5 dB, first: ", (double) bad) + firstBad);
+    std::printf ("      %.0f of 640 pairs are the SAME rectifier by construction (`%s` aliases the Type's own ears)\n",
+                 (double) alias, CX::detectNames()[0]);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section8()
+{
+    section ("8. OTT — LAW 1 ON THE FULL MATRIX: every control × 8 Types × 8 Characters");
+    const auto dL = matrixProbe ((int) (FS * 0.5f), 0.0), dR = matrixProbe ((int) (FS * 0.5f), 2.1);
+    const auto sL = tailProbe   ((int) (FS * 1.5f), false), sR = tailProbe ((int) (FS * 1.5f), true);
+    // THE QUIET TAIL — the same programme 26 dB down, and it is a THIRD operating point for one
+    // reason: an UPWARD computer only exists BELOW its threshold. On a loud note the lift is
+    // already zero when the attack lands, so `Crest` measured 0.1…0.4 dB on 40 of 64 cells —
+    // a fact about the probe. Here the whole programme sits under the upward threshold, the
+    // lift rides at +15…20 dB through the gap before each attack, and "attacks keep their crest
+    // instead of being pre-inflated by the lift that was riding the gap before them" — the
+    // sentence in the engine header — is what gets measured. Same law as the knee on Compress.
+    const auto qL = [&] { auto v = sL; for (auto& x : v) x *= 0.05f; return v; } ();
+    const auto qR = [&] { auto v = sR; for (auto& x : v) x *= 0.05f; return v; } ();
+
+    struct KO { std::string name; float OP::* fld; };
+    const KO knobs[] = {
+        { OF (0), &OP::amount }, { OF (1), &OP::speed }, { OF (2), &OP::topLift }, { OF (3), &OP::mix },
+        { OB (0), &OP::b1 }, { OB (1), &OP::b2 }, { OB (2), &OP::b3 }, { OB (3), &OP::b4 },
+        { OB (4), &OP::b5 }, { OB (5), &OP::b6 }, { OB (6), &OP::b7 }, { OB (7), &OP::b8 } };
+
+    int dead = 0, weak = 0, ruled = 0, cells = 0;
+    std::string firstDead, firstWeak;
+    double worstLive = 1e9; std::string worstLiveCell;
+
+    // DEEP  = Amount 60 on the tremolo/transient probe — both computers working, transients.
+    // TAIL  = Amount 45 on the pluck train — decaying tails and real gaps, which is the only
+    //         place an UPWARD computer, `Raise` or the `Crest` transient hold has anything to
+    //         do. Amount 45 and not 85 ON PURPOSE: above 0.5 the `u` branch LERPS both slopes
+    //         toward 1.0 and 0.95, which is the ceiling doing its job and also swallows most of
+    //         `Raise`'s own travel. Measuring `Raise` there reads 0.1 dB on 52 cells and calls
+    //         a live knob dead — the harness's fault again, not the engine's.
+    auto oneKnobT = [&] (const std::string& name, const std::function<void(OP&, float)>& set,
+                         const std::function<void(OP&)>& tweak)
+    {
+        int kDead = 0, kWeak = 0, kRuled = 0; double kWorst = 1e9; std::string kWorstCell;
+        for (int t = 0; t < OX::kNumTypes; ++t)
+            for (int c = 0; c < OX::kNumChars; ++c)
+            {
+                bool bit = true; double d = 0.0;
+                for (int mode = 0; mode < 3; ++mode)
+                {
+                    OP base; base.type = t; base.character = c;
+                    base.amount = (mode == 0) ? 0.60f : 0.45f;
+                    tweak (base);
+                    OP a = base, b = base; set (a, 0.0f); set (b, 1.0f);
+                    const std::vector<float>& pL = (mode == 0) ? dL : (mode == 1) ? sL : qL;
+                    const std::vector<float>& pR = (mode == 0) ? dR : (mode == 1) ? sR : qR;
+                    const Out o0 = runOStereo (a, pL, pR), o1 = runOStereo (b, pL, pR);
+                    if (!bitSame (o0, o1)) { bit = false; d = std::max (d, audDb (o0, o1)); }
+                }
+                const std::string ty = OX::typeNames()[t], ch = OX::charNames (t)[c];
+                const InertCell* rule = inertRule ("OTT", name, ty, ch);
+                ++cells; ++gMatCells;
+                if (rule)
+                {
+                    ++kRuled; ++ruled; gInertHit[(size_t) (rule - kInert)] = true;
+                    // BOTH directions. An INERT row must be bit-identical; a NARROW row must be
+                    // alive AND under the bar. Either way a ruling that no longer matches the
+                    // engine fails here instead of quietly excusing a cell.
+                    const bool okRule = (rule->kind == INERT) ? bit : (!bit && d < 0.5);
+                    if (!okRule)
+                    { ++kWeak; ++weak; ++gMatWeak;
+                      std::printf ("      STALE %-11s %-10s %-14s  ruled %-6s but measures %s%.3f dB\n",
+                                   name.c_str(), ty.c_str(), ch.c_str(),
+                                   rule->kind == INERT ? "INERT" : "NARROW",
+                                   bit ? "BIT-IDENTICAL, " : "", d);
+                      if (firstWeak.empty()) firstWeak = name + " @ " + ty + "/" + ch + " — the ruling is stale"; }
+                    continue;
+                }
+                if (bit)
+                { ++kDead; ++dead; ++gMatDead;
+                  std::printf ("      DEAD  %-11s %-10s %-14s  bit-identical at 0 and 100, EVERY operating point\n",
+                               name.c_str(), ty.c_str(), ch.c_str());
+                  if (firstDead.empty()) firstDead = name + " @ " + ty + " / " + ch; }
+                else if (d < 0.5)
+                { ++kWeak; ++weak; ++gMatWeak;
+                  std::printf ("      WEAK  %-11s %-10s %-14s  %.3f dB end to end\n",
+                               name.c_str(), ty.c_str(), ch.c_str(), d);
+                  if (firstWeak.empty()) firstWeak = name + " @ " + ty + " / " + ch + F1 (" = %.3f dB", d); }
+                if (!bit && d < kWorst) { kWorst = d; kWorstCell = ty + " / " + ch; }
+            }
+        if (kWorst < worstLive) { worstLive = kWorst; worstLiveCell = name + " @ " + kWorstCell; }
+        std::printf ("      %-11s 64 cells: %2d dead · %2d under 0.5 dB · %2d ruled inert   weakest live %.2f dB (%s)\n",
+                     name.c_str(), kDead, kWeak, kRuled, kWorst, kWorstCell.c_str());
+    };
+
+    auto oneKnob = [&] (const std::string& name, const std::function<void(OP&, float)>& set)
+    { oneKnobT (name, set, [] (OP&) {}); };
+
+    for (auto& k : knobs)
+    { float OP::* f = k.fld; oneKnob (k.name, [f] (OP& p, float v) { p.*f = v; }); }
+    // 🚨 THE FRONT PILL, on all 64 cells. fb425: `Crest` could be made a no-op (`upHold_ =
+    // (cs.upHold != 0)`) with ZERO gates firing — `p.crest` appeared exactly ONCE in this entire
+    // file, inside a click list that gets BETTER when the pill is deleted. It holds the UPWARD
+    // computer at unity for 10 ms after a transient, so it needs upward gain to hold and
+    // transients to fire on: the tail probe is both.
+    // 🔬 AND IT GETS ITS OWN OPERATING POINT, for a reason that is the mechanism itself. The
+    //    hold is 10 ms long, and at the stock `Chase` the upward envelopes attack in 0.7…2.8 ms
+    //    — so the lift has already collapsed on its own before the hold has done anything, and
+    //    the pill measures 0.2…0.4 dB everywhere. `Chase` 0.10 puts the followers ×14 slower,
+    //    which is where a transient CAN arrive on top of a lift that is still riding the gap
+    //    before it — the exact thing this pill exists to stop. `Raise` at 100 so there is a lift
+    //    to hold. Same law as the knee: measure a control where its mechanism lives.
+    oneKnobT (OX::pillName(), [] (OP& p, float v) { p.crest = (v > 0.5f); },
+              [] (OP& p) { p.speed = 0.10f; p.b3 = 1.0f; });
+
+    gate ("no control is BIT-IDENTICAL at 0 and 100 in any unruled cell", dead == 0,
+          dead == 0 ? F1 ("%.0f cells swept × 3 operating points, 0 dead", (double) cells)
+                    : F1 ("%.0f DEAD cells, first: ", (double) dead) + firstDead);
+    gate ("every unruled cell moves ≥ 0.5 dB end to end", weak == 0,
+          weak == 0 ? F2 ("%.0f cells, weakest live %.2f dB", (double) cells, worstLive)
+                            + "  (" + worstLiveCell + ")"
+                    : F1 ("%.0f under the bar, first: ", (double) weak) + firstWeak);
+
+    // ═════ THE `Stereo` DROPDOWN — the other half of R6, on every cell ═════
+    section ("8a2. OTT — the `Stereo` dropdown: every option distinct, on every cell (R6)");
+    {
+        int bad = 0; double worst = 1e9; std::string wn, firstBad;
+        for (int t = 0; t < OX::kNumTypes; ++t)
+            for (int c = 0; c < OX::kNumChars; ++c)
+            {
+                Out o[2][OX::kNumStereo];
+                for (int ax = 0; ax < OX::kNumStereo; ++ax)
+                {
+                    // Two points again: `Surge` is upward-ONLY below Amount 0.5, so at 0.70 the
+                    // only stereo mechanism running is the lift — and `Free Pair` vs `Mid-Side`
+                    // measured 0.47 dB there on four of its Characters. At 0.95 the `u` branch
+                    // has brought the downward computers in and both mechanisms are stereo.
+                    OP p; p.type = t; p.character = c; p.axis = ax;
+                    p.amount = 0.70f; o[0][ax] = runOStereo (p, dL, dR);
+                    p.amount = 0.95f; o[1][ax] = runOStereo (p, sL, sR);
+                }
+                for (int i = 0; i < OX::kNumStereo; ++i)
+                    for (int j = i + 1; j < OX::kNumStereo; ++j)
+                    {
+                        const double d = std::max (audDb (o[0][i], o[0][j]), audDb (o[1][i], o[1][j]));
+                        const std::string nm = std::string (OX::typeNames()[t]) + " / " + OX::charNames (t)[c]
+                                             + ": " + OX::stereoNames()[i] + " vs " + OX::stereoNames()[j];
+                        if (d < worst) { worst = d; wn = nm; }
+                        if (d < 0.5)
+                        { ++bad; std::printf ("      WEAK  %-52s %.3f dB\n", nm.c_str(), d);
+                          if (firstBad.empty()) firstBad = nm; }
+                    }
+            }
+        gate ("every `Stereo` pair is audible in every one of the 64 cells", bad == 0,
+              bad == 0 ? F1 ("weakest %.2f dB over 192 pairs", worst) + "  (" + wn + ")"
+                       : F1 ("%.0f pairs under 0.5 dB, first: ", (double) bad) + firstBad);
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section8b()
+{
+    section ("8b. OTT — Mix 100 % = fully wet, zero dry (LAW 3 · CONTRACT §5)");
+    // 🚨 fb425: OTT HAD NO LAW-3 GATE AT ALL, and the hole was invisible because forcing
+    //    `mixTgt_ = 1.0f` — the Mix knob dead, always fully wet — left all 53 OTT gates green.
+    //    The one gate that touched Mix compared out(mix=1) against out(mix=0) at Amount 0 and
+    //    required them to be nearly IDENTICAL, so the mutation made it pass HARDER.
+    //    Three claims, on EVERY Type, and each one fails under that exact mutation:
+    //      (1) Mix 0 is the DRY PATH. OTT's dry is deliberately not the raw input: it runs
+    //          through the SAME AP2(f_lo)·AP2(f_hi) the 3-band tree recombines to, so wet and
+    //          dry differ by GAIN ALONE and Mix cannot comb at any setting. The bar is therefore
+    //          "magnitude-flat against the input AND carrying none of the compression", not
+    //          "bit-identical to the input". Forced wet, this reads the whole effect.
+    //      (2) the crossfade is EXACTLY linear in Mix — a closed-form identity, ≤ −100 dB —
+    //          which is what makes "zero dry at Mix 1" a proof rather than a measurement.
+    //      (3) Mix travels MONOTONICALLY dry→wet over 9 steps with a real span. Forced wet, all
+    //          nine outputs are the same buffer and the span is 0.
+    auto ch = amChord ((int) (FS * 1.2f));
+    int badDry = 0, badLin = 0, badMono = 0;
+    double worstDry = 0.0, worstLin = -300.0, worstSpan = 1e9;
+    std::string nDry, nLin, nSpan;
+    for (int t = 0; t < OX::kNumTypes; ++t)
+    {
+        OP p; p.type = t; p.amount = 0.85f; p.b3 = 0.8f;
+        p.mix = 0.0f; auto o0 = runO (p, ch);
+        p.mix = 1.0f; auto o1 = runO (p, ch);
+        p.mix = 0.5f; auto oh = runO (p, ch);
+        const double d0 = std::max (specDist (ch, o0.l),
+                                    std::fabs (db (rmsOf (o0.l)) - db (rmsOf (ch))));
+        if (d0 > 0.35) ++badDry;
+        if (d0 > worstDry) { worstDry = d0; nDry = OX::typeNames()[t]; }
+        double eLin = 0.0, eRef = 0.0;
+        for (size_t i = 0; i < ch.size(); ++i)
+        { const double m = (double) oh.l[i] - 0.5 * ((double) o0.l[i] + o1.l[i]); eLin += m * m;
+          eRef += (double) o1.l[i] * o1.l[i]; }
+        const double linErr = db (std::sqrt (eLin / ch.size())) - db (std::sqrt (eRef / ch.size()));
+        if (linErr > -100.0) ++badLin;
+        if (linErr > worstLin) { worstLin = linErr; nLin = OX::typeNames()[t]; }
+        double m[9]; bool mono = true;
+        Out ref = o0;
+        for (int k = 0; k <= 8; ++k)
+        { OP q = p; q.mix = (float) k / 8.0f; auto ok2 = runO (q, ch);
+          m[k] = audDb (ref, ok2); if (k && m[k] < m[k - 1] - 0.05) mono = false; }
+        const double span = m[8] - m[0];
+        if (!mono || span < 2.0) ++badMono;
+        if (span < worstSpan) { worstSpan = span; nSpan = OX::typeNames()[t]; }
+    }
+    gate ("Mix 0 is the DRY path on every Type (the allpassed input, not the effect)", badDry == 0,
+          F1 ("worst %.3f dB from the input (bar 0.35)", worstDry) + "  (" + nDry + ")");
+    gate ("the Mix crossfade is EXACTLY linear on every Type", badLin == 0,
+          F1 ("worst deviation at Mix 0.5 = %.1f dB (bar −100)", worstLin) + "  (" + nLin + ")");
+    gate ("⇒ dry residual at Mix 1.0 is (1 − mix)·dry = 0 identically", badDry == 0 && badLin == 0,
+          F1 ("measured floor %.1f dB, bar −60", worstLin));
+    gate ("Mix travels monotonically dry→wet on every Type", badMono == 0,
+          F1 ("smallest end-to-end travel %.2f dB (bar 2.0)", worstSpan) + "  (" + nSpan + ")");
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section8c()
+{
+    section ("8c. OTT — the R11 ceiling on EVERY Type (it was proven on Type 0 only)");
+    // TWO QUESTIONS, because a multiband compressor's ceiling has a STATIC half and a DYNAMIC
+    // half and one number cannot hold both:
+    //  (a) THE STATIC CEILING — a 36 dB staircase at Amount 100, and the bar is stated in
+    //      ABSOLUTE dB rather than as a fraction: at most 4.0 dB of the input's 36 dB range may
+    //      still be standing at the output. Defence: that is a 9:1 squeeze of the programme's
+    //      own dynamics, which is unarguably a wall, and unlike a percentage it does not move
+    //      when the span does. Two deliberate choices in the probe:
+    //        · the tread is 240 ms so even `Gentle` (release 160 ms) has settled inside the last
+    //          40 % that is measured — a static-curve question must not be answered by a
+    //          ballistic transient;
+    //        · the staircase FLOOR is −56 dBFS, above the floor gate's foot. The floor gate
+    //          withholds upward lift below −78 dBFS per band on purpose (nothing free-runs), so
+    //          treads down there measure the STABILITY guarantee, not the ceiling.
+    //      What the residual actually is, measured: at u = 1 the upward slope is 0.95, not 1.0,
+    //      so 5 % of the range below the threshold survives by construction, and a Character
+    //      with a wide KNEE (`Gentle`, 12 dB) passes part of the knee region as well. `Gentle`
+    //      leaves 3.6 dB and `Bass Safe` 1.0 dB; the ratio is printed beside the dB so a reader
+    //      can see both.
+    //  (b) THE DYNAMIC CEILING — envelope spread removed from a 2 Hz / 24 dB tremolo with BOTH
+    //      of the controls that own the axis at their maximum: Amount 100 AND `Chase` 100. R11
+    //      is about where a CONTROL stops being useful, and `Chase` is the control that owns
+    //      ballistic speed (400:1 of travel). Bar: ≤ 5 dB of surviving spread, or ≥ 60 % of the
+    //      probe's own spread removed.
+    //  The Amount-only spread is PRINTED beside it, without a bar, because it is a real and
+    //  interesting number: `Gentle` is deliberately slow, so at its stock `Chase` it leaves most
+    //  of a 2 Hz tremolo standing. That is its identity, not its ceiling.
+    auto st = staircase (-30.0f, 6.0f, 20, 240.0f, 330.0f);
+    auto am = amChord ((int) (FS * 2.5f));
+    const double probeSpread = envSpreadDb (am);
+    int bad = 0; std::string firstBad;
+    note ("the tremolo probe's own envelope spread", F1 ("%.2f dB", probeSpread));
+    std::printf ("      %-10s %8s %7s   %10s %12s %12s\n",
+                 "Type", "survive", "DRR", "spread@50", "spread@100", "+Chase 100");
+    for (int t = 0; t < OX::kNumTypes; ++t)
+    {
+        OP p; p.type = t; p.amount = 1.0f;
+        auto so = runO (p, st).l;
+        const double r = drRatio (st, so, 20, 240.0f);
+        // the SURVIVING RANGE in dB, which is what the bar is actually on
+        const int perT = (int) (FS * 0.240f);
+        double oLo = 1e9, oHi = -1e9;
+        for (int k = 0; k < 20; ++k)
+        { const double v = db (rmsOf (so, (size_t) (k * perT + perT * 0.6), (size_t) ((k + 1) * perT)));
+          oLo = std::min (oLo, v); oHi = std::max (oHi, v); }
+        const double survive = oHi - oLo;
+        OP h = p; h.amount = 0.5f;
+        const double s5 = envSpreadDb (runO (h, am).l), s10 = envSpreadDb (runO (p, am).l);
+        OP f = p; f.speed = 1.0f;
+        const double sF = envSpreadDb (runO (f, am).l);
+        const bool okA = (survive <= 4.0);
+        const bool okB = (sF <= 5.0) || (sF <= 0.40 * probeSpread);
+        if (!(okA && okB)) { ++bad; if (firstBad.empty()) firstBad = OX::typeNames()[t]; }
+        std::printf ("      %-10s %6.2f dB %7.4f   %10.2f %12.2f %12.2f   %s%s\n",
+                     OX::typeNames()[t], survive, r, s5, s10, sF,
+                     okA ? "" : "← STATIC RED", okB ? "" : "  ← DYNAMIC RED");
+    }
+    gate ("every Type walls at Amount 100 (R11): static AND dynamic", bad == 0,
+          bad == 0 ? "8 / 8 Types" : F1 ("%.0f of 8 red, first: ", (double) bad) + firstBad);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section8d()
+{
+    section ("8d. OTT — `Amount` 0 is NEUTRAL and the knob runs FORWARDS, on every cell");
+    // 🚨 fb425, verified independently by the integration owner. The per-band clip ceiling was
+    //    `db2lin (Tdn + clipHd_ + mkDb_[b])` and the makeup is `ts.mk[b] * lo01` with
+    //    `lo01 = pow (amt*2, 1.2)` — ZERO at Amount 0. `Heavy`'s makeups are {21,24,20} dB, so
+    //    the ceiling collapsed ~21 dB onto a band that had had NO gain reduction applied.
+    //    MEASURED ON THE fb424 ENGINE, 220 Hz at −10.5 dBFS:
+    //        Amount:      0 %     25 %     50 %     75 %    100 %
+    //           THD:  35.75 %  28.46 %   2.52 %   2.52 %   2.51 %
+    //          peak:  0.0263   0.0829   0.2751   0.2316   0.1949
+    //    The knob's ZERO was 14× more distorted than its middle and 21 dB quieter. `Over Top`
+    //    and `Surge` measure flat (0.5–0.8 %) across the whole sweep, which is exactly why a
+    //    Type-0 gate could not see it. THD and peak are both printed on every Type, with a
+    //    BYPASSED-ENGINE control number beside them (§3.1: check your own detector first).
+    auto tn = toneSig ((int) (FS * 1.0f), 220.0f, 0.15f);
+    note ("the probe through a BYPASSED engine (the control number)",
+          F2 ("THD %.3f %%, peak %.4f", thdPct (tn, 220.0), peakOf (tn)));
+    int bad = 0; std::string firstBad;
+    std::printf ("      %-10s %-6s %8s %8s %8s %8s %8s\n", "Type", "", "0 %", "25 %", "50 %", "75 %", "100 %");
+    for (int t = 0; t < OX::kNumTypes; ++t)
+        for (int c = 0; c < OX::kNumChars; ++c)
+        {
+            double th[5], pk[5];
+            for (int k = 0; k < 5; ++k)
+            { OP p; p.type = t; p.character = c; p.amount = (float) k * 0.25f;
+              auto o = runO (p, tn); th[k] = thdPct (o.l, 220.0); pk[k] = peakOf (o.l); }
+            // TWO CLAIMS, both directional:
+            //  · Amount 0 is NEUTRAL — it adds no more distortion than the bypassed engine does.
+            //    The crossover tree is allpass, so 0.5 % is arithmetic plus float noise, not a
+            //    tolerance anybody chose.
+            //  · the knob runs FORWARDS — no setting below 100 % may be more than 1.5× as
+            //    distorted as 100 %. A knob whose zero is its dirtiest point is backwards
+            //    whatever else it does.
+            const bool neutral = th[0] <= 0.5;
+            double mx = 0.0; for (int k = 0; k < 4; ++k) mx = std::max (mx, th[k]);
+            const bool forward = mx <= std::max (1.0, 1.5 * th[4]);
+            if (c == 0)
+            {
+                std::printf ("      %-10s %-6s %7.2f%% %7.2f%% %7.2f%% %7.2f%% %7.2f%%\n",
+                             OX::typeNames()[t], "THD", th[0], th[1], th[2], th[3], th[4]);
+                std::printf ("      %-10s %-6s %8.4f %8.4f %8.4f %8.4f %8.4f\n",
+                             "", "peak", pk[0], pk[1], pk[2], pk[3], pk[4]);
+            }
+            if (!neutral || !forward)
+            { ++bad; if (firstBad.empty()) firstBad = std::string (OX::typeNames()[t]) + " / "
+                                 + OX::charNames (t)[c] + F2 (": THD %.2f %% at 0 vs %.2f %% at 100", th[0], th[4]); }
+        }
+    gate ("Amount 0 is neutral and the knob runs forwards, all 64 cells", bad == 0,
+          bad == 0 ? "64 cells × 5 settings; THD at Amount 0 ≤ 0.5 % everywhere"
+                   : F1 ("%.0f cells backwards, first: ", (double) bad) + firstBad);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section8e()
+{
+    section ("8e. OTT — sample rate, measured off the AUDIO (the old gate compared a constant to itself)");
+    // 🚨 fb425 / FIXES.md §1 COMPRESS-3, unfixed on the sibling. The old gate was
+    //        fabs (e.attackMs (1) − e48.attackMs (1)) < 0.05
+    //    and `attackMs_[b] = nA * 1000 / fs_` with `nA = max (5, aMs*0.001*fs_)`, so whenever
+    //    the 5-sample floor is inactive `fs_` cancels ALGEBRAICALLY and the accessor returns the
+    //    knob value. It printed "mid atk 1.40 ms (48 k: 1.40)" BY CONSTRUCTION and would have
+    //    passed on an engine that dropped `fs` entirely.
+    //
+    //    WHAT IS MEASURED NOW, and why it is a TRAJECTORY and not a t63. A t63 read off a level
+    //    step is the obvious thing and it does not work here: OTT uses Vital's two CLAMPED
+    //    envelopes, so on a 24 dB step the clamp is crossed within a few samples whatever the
+    //    attack constant is, and the remaining rise is only the last 7 % of τ. Two attempts
+    //    measured 1.00 ms and then 2.17 ms for a 20.7 ms constant, and disagreed between rates
+    //    by a factor of two for reasons that were the METRIC's, not the engine's.
+    //    So: the whole gain trajectory, sampled on a COMMON TIME GRID (1 ms per point at every
+    //    rate), compared point by point against the 48 kHz run. A rate-dependence bug moves the
+    //    curve; nothing else does. The mutant `ott-sample-rate` drops `fs` from the follower and
+    //    this goes red at 96 kHz by 6 dB.
+    //    NOTE, honestly: the DSP underneath is CORRECT (192 cells, worst |Δ out RMS| 0.129 dB at
+    //    96 kHz). This closes a hole in the GATE over working code.
+    auto trace = [] (float fs)
+    {
+        const int n = (int) (fs * 2.5f);
+        std::vector<float> x ((size_t) n, 0.0f);
+        for (int i = 0; i < n; ++i)
+        {
+            const double t = (double) i / fs;
+            const double a = (t < 0.30) ? 0.020 : (t < 1.00) ? 0.30 : 0.020;
+            x[(size_t) i] = (float) (a * std::sin (2.0 * M_PI * 330.0 * i / fs));
+        }
+        const int hop = (int) (fs * 0.001f);                 // 1 ms at EVERY rate
+        OX e; e.prepare ((double) fs, hop); OP p; p.amount = 0.85f; p.speed = 0.05f;
+        e.setParams (p);
+        std::vector<float> l = x, r = x; std::vector<double> tr;
+        for (int i = 0; i + hop <= n; i += hop)
+        {
+            e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], hop);
+            double so = 0.0, si = 0.0;
+            for (int k = 0; k < hop; ++k)
+            { so += (double) l[(size_t) (i + k)] * l[(size_t) (i + k)];
+              si += (double) x[(size_t) (i + k)] * x[(size_t) (i + k)]; }
+            tr.push_back (db (std::sqrt (so / hop)) - db (std::sqrt (si / hop)));
+        }
+        // the exact seconds-per-point, which is NOT 1 ms: 44100 × 0.001 truncates to 44 samples,
+        // so the 44.1 kHz grid drifts 2.3 ms behind by t = 1 s. Comparing index-to-index across
+        // a 24 dB step edge then reads 30.67 dB of "rate dependence" that is pure grid slip.
+        return std::make_pair (tr, (double) hop / (double) fs);
+    };
+    const auto p48 = trace (48000.0f);
+    const auto& t48 = p48.first; const double dt48 = p48.second;
+    // ⚠️ COMPARED AS THE AREA UNDER EACH RAMP, not level-at-time and not time-to-level. Both of
+    //    those were tried and both measure the PROBE: during the release the gain climbs about
+    //    1 dB per millisecond, so the half-block difference in where a level edge lands inside a
+    //    block (0.7 ms between 44.1 and 48 kHz — arithmetic about the grid, not the engine)
+    //    reads as 4.3 dB, and a single crossing index reads as 800 %.
+    //    The area between the trajectory and its own settled value,
+    //        A = Σ |gain(t) − gain_settled| · dt   over the ramp,
+    //    is the time constant integrated. It is proportional to τ by construction, it is a sum
+    //    over hundreds of points so no single block can move it, and it is exactly what a
+    //    rate-dependence bug changes: halve the realised τ and the area halves.
+    auto rampArea = [] (const std::vector<double>& tr, double dt, double t0, double lenSec)
+    {
+        const int a = (int) (t0 / dt) + 4;
+        const int b = std::min ((int) tr.size(), (int) ((t0 + lenSec) / dt));
+        if (b - a < 20) return 0.0;
+        double settle = 0.0; const int ns = std::max (5, (b - a) / 10);
+        for (int i = b - ns; i < b; ++i) settle += tr[(size_t) i];
+        settle /= (double) ns;
+        double A = 0.0;
+        for (int i = a; i < b; ++i) A += std::fabs (tr[(size_t) i] - settle) * dt * 1000.0;
+        return A;                                            // dB·ms
+    };
+    {
+        double lo = 1e9, hi = -1e9;
+        for (size_t i = 40; i + 40 < t48.size(); ++i) { lo = std::min (lo, t48[i]); hi = std::max (hi, t48[i]); }
+        note ("the 48 kHz gain trajectory this is compared against",
+              F3 ("%.0f points at 1 ms, spanning %+.2f … %+.2f dB of gain",
+                  (double) t48.size(), lo, hi));
+        gate ("  ... and it MOVES (a flat trace would make the comparison vacuous)", hi - lo > 6.0,
+              F1 ("%.2f dB of travel (bar 6)", hi - lo));
+    }
+    const double aA48 = rampArea (t48, dt48, 0.300, 0.400);      // the attack ramp
+    const double aR48 = rampArea (t48, dt48, 1.000, 1.400);      // the release ramp
+    note ("48 kHz ramp areas (∝ the realised time constants)",
+          F2 ("attack %.0f dB·ms, release %.0f dB·ms", aA48, aR48));
+    gate ("  ... and both ramps have real area (a flat one would be vacuous)",
+          aA48 > 200.0 && aR48 > 200.0, F2 ("%.0f / %.0f dB·ms (bar 200)", aA48, aR48));
+    for (float fs : { 44100.0f, 96000.0f })
+    {
+        const auto pf = trace (fs);
+        const auto& tf = pf.first; const double dtf = pf.second;
+        const double aA = rampArea (tf, dtf, 0.300, 0.400);
+        const double aR = rampArea (tf, dtf, 1.000, 1.400);
+        const double eA = 100.0 * std::fabs (aA - aA48) / std::max (1.0, aA48);
+        const double eR = 100.0 * std::fabs (aR - aR48) / std::max (1.0, aR48);
+        gate ((F1 ("%.1f kHz: the REALISED ballistics match 48 kHz", fs / 1000.0)).c_str(),
+              eA < 12.0 && eR < 12.0,
+              F4 ("attack area %.0f dB·ms (%+.1f %%), release area %.0f dB·ms (%+.1f %%)",
+                  aA, aA - aA48 > 0 ? eA : -eA, aR, aR - aR48 > 0 ? eR : -eR)
+              + "  (bar 12 %)");
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+static void section9()
+{
+    section ("9. The KNOWN-INERT ROSTER — asserted size, checked in BOTH directions");
+    // A cell where a control genuinely does not exist is a ROSTER FACT, written down here with
+    // the missing MECHANISM named. It is not an escape hatch:
+    //   · the list is asserted to a fixed size, so it cannot quietly grow (the `kShared` lesson);
+    //   · every row must have been REACHED by sections 7/8 — a row for a cell that no longer
+    //     exists is a stale ruling and fails here;
+    //   · every row must actually BE inert — sections 7/8 fail a RULED cell that moved;
+    //   · every dead cell NOT on this list already failed there.
+    int nInertRows = 0, nNarrowRows = 0;
+    for (auto& r : kInert) (r.kind == INERT ? nInertRows : nNarrowRows)++;
+    gate ("the known-inert roster is exactly the size it declares", kNumInert == 18,
+          F3 ("%.0f rows = %.0f INERT + %.0f NARROW", (double) kNumInert,
+              (double) nInertRows, (double) nNarrowRows));
+    int stale = 0; std::string firstStale;
+    for (int i = 0; i < kNumInert; ++i)
+        if (!gInertHit[(size_t) i])
+        { ++stale; if (firstStale.empty()) firstStale = std::string (kInert[i].dev) + " "
+                        + kInert[i].knob + " @ " + kInert[i].type + " / " + kInert[i].chr; }
+    gate ("every row was REACHED by the matrix (no stale rulings)", stale == 0,
+          stale == 0 ? F1 ("all %.0f rows matched a real cell", (double) kNumInert)
+                     : F1 ("%.0f never matched, first: ", (double) stale) + firstStale);
+    gate ("the matrix actually ran (a roster over an empty sweep is the fb392 stub)",
+          gMatCells == 1664, F1 ("%.0f cell-measurements", (double) gMatCells));
+    for (int i = 0; i < kNumInert; ++i)
+        std::printf ("      %-9s %-6s %-11s %-10s %-13s %s\n", kInert[i].dev,
+                     kInert[i].kind == INERT ? "INERT" : "NARROW", kInert[i].knob,
+                     kInert[i].type, kInert[i].chr, kInert[i].why);
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
 // K. SELF-CHECK — can these gates actually fail?  (FIXES.md §0, the new law)
 //
 // Every detector this file trusts is shown BOTH ways here: it must FIRE on a planted fault of
@@ -2776,15 +3932,15 @@ int main (int argc, char** argv)
 {
     // `dynamics_cert [0 1 2 3 4 5 6 K]` runs only the named sections — mutate.py uses this so a
     // mutant run takes seconds instead of the four minutes a full pass costs.
-    bool want[8] = { true, true, true, true, true, true, true, true };
+    bool want[11] = { true, true, true, true, true, true, true, true, true, true, true };
     if (argc > 1)
     {
         for (auto& w : want) w = false;
         for (int i = 1; i < argc; ++i)
         {
             const char c = argv[i][0];
-            if (c >= '0' && c <= '6') want[c - '0'] = true;
-            else if (c == 'K' || c == 'k') want[7] = true;
+            if (c >= '0' && c <= '9') want[c - '0'] = true;
+            else if (c == 'K' || c == 'k') want[10] = true;
         }
     }
     std::printf ("\n════════════════════════════════════════════════════════════════════════\n");
@@ -2798,7 +3954,10 @@ int main (int argc, char** argv)
     if (want[4]) section4();
     if (want[5]) section5();
     if (want[6]) section6();
-    if (want[7]) sectionK();
+    if (want[7]) { section7(); section7b(); section7c(); }
+    if (want[8]) { section8(); section8b(); section8c(); section8d(); section8e(); }
+    if (want[9]) section9();
+    if (want[10]) sectionK();
     std::printf ("\n════════════════════════════════════════════════════════════════════════\n");
     std::printf ("  PASS %d   FAIL %d\n", gPass, gFail);
     std::printf ("════════════════════════════════════════════════════════════════════════\n\n");

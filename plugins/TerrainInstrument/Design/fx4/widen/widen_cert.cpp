@@ -71,6 +71,10 @@ const char* kMutName = "WIDEN_MUT_NODIP";
 const char* kMutName = "WIDEN_MUT_NOFLOOR";
 #elif defined(WIDEN_MUT_APCLAMP)
 const char* kMutName = "WIDEN_MUT_APCLAMP";
+#elif defined(WIDEN_MUT_RETRIGLFO)
+const char* kMutName = "WIDEN_MUT_RETRIGLFO";
+#elif defined(WIDEN_MUT_FLATFIELD)
+const char* kMutName = "WIDEN_MUT_FLATFIELD";
 #else
 const char* kMutName = "NONE (shipping build)";
 #endif
@@ -1294,14 +1298,20 @@ int main()
     // ═══════════════════════════════════════════════════════════════════════
     section ("F — THE WHOLE MATRIX: EVERY KNOB SWEPT 0->100 ON EVERY TYPE");
     {
-        std::printf ("      🔴 fb422. fb421 swept P1-P8 on ONE Type (Throng) and called Law 1 proved. It was\n"
-                     "      not: `Rate` was BIT-IDENTICALLY dead on `Steady` and on `Blur`, `Spread` was dead\n"
-                     "      on Twin/Blur/Bands (sprSm0_() appeared ONLY inside a viz_.voicePan assignment),\n"
-                     "      `Roam` was dead on Twin/Bands and `Balance` was dead on Twin. Twelve controls x six\n"
-                     "      Types = 72 cells, and all 72 are gated here. Every metric is read off the OUTPUT.\n"
+        std::printf ("      🔴 fb425 — THE FULL-MATRIX LAW. fb422 swept 12 knobs x 6 Types = 72 cells and\n"
+                     "      called Law 1 proved. It was not: `sweep()` never took a CHARACTER, so all 72\n"
+                     "      cells ran on Character 0 and the other 7/8 of the matrix had never been\n"
+                     "      measured once. 12 knobs x 6 Types x 8 Characters = 576 cells, and all 576 are\n"
+                     "      gated here, each on its own line. Every metric is read off the OUTPUT.\n"
                      "      Each knob carries its own ABSOLUTE audible-step floor — 'no plateau' cannot be a\n"
                      "      fraction of the span, because one huge step at the bottom would then excuse every\n"
-                     "      dead quarter after it.\n\n");
+                     "      dead quarter after it.\n"
+                     "      🔑 EVERY CELL ALSO GETS A BIT-IDENTITY PROBE, and that one is not a judgement\n"
+                     "      call: knob 0 %% and knob 100 %% are run through the same engine on the same noise\n"
+                     "      and the sample vectors are compared EXACTLY. Bit-identical is a FAILURE unless\n"
+                     "      the cell is named in the KNOWN-INERT ROSTER below with a reason — and that table\n"
+                     "      is asserted to a fixed size AND checked in reverse, so a cell cannot be declared\n"
+                     "      inert and then quietly come alive (or be used to hide a live-but-deaf knob).\n\n");
         // 🔴 fb423 — THERE IS NO NAME TABLE HERE ANY MORE. `kn.name` is BUILT from
         //    W::frontNames()/W::backNames() at run time. fb422 kept its own copy and was
         //    still printing `P4 Wander` in §I — a string RENAMES.md had already retired —
@@ -1336,58 +1346,118 @@ int main()
 
         // 🔬 fb417 — PRINT THE NUMBER BESIDE A CONTROL MAX ALREADY AGREES IS OBVIOUS.
         //    `Rate` and `Roam` are gated on "did the output change", and the unit of that
-        //    change is set per Type by ONE QUARTER-TURN OF MIX through the same engine and
+        //    change is set per CELL by ONE QUARTER-TURN OF MIX through the same engine and
         //    the same probe. A quarter of Rate must move the output at least a fifth as
         //    much as a quarter of Mix does. That is a perceptual anchor, not a number I
-        //    chose, and it is printed for every Type below.
-        double mixRef[W::kNumTypes];
-        std::printf ("      the change unit, per Type — ONE QUARTER-TURN OF MIX (0.25 -> 0.50):\n        ");
+        //    chose. 🔴 fb425 — the anchor is now per Type x CHARACTER, not per Type: a
+        //    Character re-wires the machine, so the Type's Character-0 anchor is the wrong
+        //    unit for its other seven cells.
+        double mixRef[W::kNumTypes][W::kNumChars];
+        std::printf ("      the change unit, per Type x Character — ONE QUARTER-TURN OF MIX (0.25 -> 0.50):\n");
         for (int t = 0; t < W::kNumTypes; ++t)
-        {   W::Params pa = defaults(); pa.type = t; pa.amount = 0.80f; pa.b8 = 0.85f; pa.mix = 0.25f;
-            W::Params pb = pa; pb.mix = 0.50f;
-            mixRef[t] = changeDist (run (pa, nz16), run (pb, nz16), (size_t) (FS * 1.5f));
-            std::printf ("%s %.1f   ", W::typeNames()[t], mixRef[t]); }
-        std::printf ("\n\n");
+        {   std::printf ("        %-8s", W::typeNames()[t]);
+            for (int c = 0; c < W::kNumChars; ++c)
+            {   W::Params pa = defaults(); pa.type = t; pa.character = c;
+                pa.amount = 0.80f; pa.b8 = 0.85f; pa.mix = 0.25f;
+                W::Params pb = pa; pb.mix = 0.50f;
+                mixRef[t][c] = changeDist (run (pa, nz16), run (pb, nz16), (size_t) (FS * 1.5f));
+                std::printf (" %6.1f", mixRef[t][c]); }
+            std::printf ("\n"); }
+        std::printf ("\n");
 
-        int deadCells = 0; std::string worstCell; double worstStep = 1e18;
+        // ═══ THE KNOWN-INERT ROSTER ═════════════════════════════════════════
+        //  🔴 fb425. A knob that is bit-identically dead in a cell is a FAILURE. If the
+        //  mechanism it drives GENUINELY DOES NOT EXIST in that cell, that is a roster
+        //  fact and it is declared here, by name, with a reason — never silently. The
+        //  list is asserted to a fixed size, and every entry is checked IN REVERSE (the
+        //  cell must really be bit-identical), so this table can neither grow into an
+        //  excuse nor go stale.
+        struct Inert { int knob, type, chr; const char* why; };
+        //  🔑 AND IT IS EMPTY. The one cell I drafted into it — `Rate` on `Twofold`/`Static
+        //  Pair`, on the reasoning that a held walk has no rate to set — was written up,
+        //  measured, and the REVERSE CHECK CALLED IT STALE: once `Static Pair` got the
+        //  constant-ratio reader it was always supposed to have (see the header's fb425
+        //  note), Rate drives that reader's crossfade clock and the cell measures
+        //  20.0 / 35.4 / 39.0 / 23.5 per quarter against a bar of 2.49. The exemption I
+        //  was about to grant myself was wrong, and the gate is what said so. Nothing is
+        //  exempt from the audibility law on this device.
+        static const Inert kKnownInert[] = {
+            { -1, -1, -1, "THE NONE SENTINEL — no cell in the 576 is exempt (see the note above)" }
+        };
+        const int kNumInert = (int) (sizeof kKnownInert / sizeof kKnownInert[0]);
+        auto inertWhy = [&] (int k, int t, int c) -> const char*
+        {   for (int i = 0; i < kNumInert; ++i)
+                if (kKnownInert[i].knob == k && kKnownInert[i].type == t && kKnownInert[i].chr == c)
+                    return kKnownInert[i].why;
+            return nullptr; };
+
+        // the measurement rig, hoisted so the BIT-IDENTITY probe and the audible-step
+        // sweep are provably the same setting — two rigs is the two-table geometry again.
+        auto rig = [&] (int idx, int t, int c, float val)
+        {
+            W::Params p = defaults(); p.type = t; p.character = c; p.mix = 1.0f;
+            if (idx != 0) p.amount = 0.80f;
+            // 🔬 THE ANCHOR IS ITSELF A CONTROL, so every OTHER control is measured with
+            //    it out of the way (Balance 0.85). P8's own sweep runs the full 0 -> 1.
+            if (idx != 11) p.b8 = 0.85f;
+            // Roam is an APERIODIC walk: measured where it is the only thing moving.
+            if (idx == 7) p.rate = 0.0f;
+            if (idx == 3) { p.axis = 4; p.b5 = 0.0f; }
+            float* tgt = nullptr;
+            switch (idx)
+            { case 0: tgt = &p.amount; break; case 1: tgt = &p.width; break;
+              case 2: tgt = &p.rate;   break; case 3: tgt = &p.mix;   break;
+              case 4: tgt = &p.b1; break; case 5: tgt = &p.b2; break; case 6: tgt = &p.b3; break;
+              case 7: tgt = &p.b4; break; case 8: tgt = &p.b5; break; case 9: tgt = &p.b6; break;
+              case 10: tgt = &p.b7; break; default: tgt = &p.b8; break; }
+            *tgt = val;
+            return p;
+        };
+        auto nzBit = noise ((int) (FS * 2), 0.05f, 31337u);
+
+        int deadCells = 0, bitDead = 0, staleInert = 0, inertUsed = 0;
+        std::string worstCell; double worstStep = 1e18;
+        std::string firstBitDead, firstStale;
         for (const auto& kn : kb)
         {
-            std::printf ("      ── %-11s  %-22s\n", kn.name.c_str(), kn.metric);
+            std::printf ("      -- %-11s  %-22s\n", kn.name.c_str(), kn.metric);
             for (int t = 0; t < W::kNumTypes; ++t)
+            for (int cc2 = 0; cc2 < W::kNumChars; ++cc2)
             {
+                const char* why = inertWhy (kn.idx, t, cc2);
+                if (why != nullptr) ++inertUsed;
+                const std::string cellNm = kn.name + " on " + W::typeNames()[t]
+                                         + "/" + W::charNames (t)[cc2];
+
+                // ── THE BIT-IDENTITY PROBE, AND IT HAS NO EXEMPTION LIST AT ALL. Not a
+                //    judgement call and not a threshold: knob 0 % and knob 100 % through the
+                //    same engine on the same noise, sample vectors compared exactly.
+                bool bitId = false;
+                {
+                    const auto rl = run (rig (kn.idx, t, cc2, 0.0f), nzBit);
+                    const auto rh = run (rig (kn.idx, t, cc2, 1.0f), nzBit);
+                    bitId = (rl.l == rh.l && rl.r == rh.r);
+                    if (bitId)
+                    { ++bitDead; if (firstBitDead.empty()) firstBitDead = cellNm; }
+                    gate ((cellNm + " — not bit-identical 0 % vs 100 %").c_str(), ! bitId,
+                          bitId ? std::string ("BIT-IDENTICAL — a dead cell, reported with its coordinates")
+                                : std::string ("output differs"));
+                    if (bitId) continue;               // the step gate below would be noise
+                }
+
                 double v[5]; const float pts[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
                 // the pitch Types read Amount in CENTS, the two phase Types in correlation:
                 // different mechanisms, so a shared metric would be a lie in one direction.
                 double minStep = kn.minStep;
                 if (kn.idx == 0) minStep = (t <= 3) ? 6.0 : 0.035;
-                if (kn.idx == 2 || kn.idx == 7) minStep = 0.20 * mixRef[t];
-                if (kn.idx == 6 && t == 5)      minStep = 0.20 * mixRef[t];
+                if (kn.idx == 2 || kn.idx == 7) minStep = 0.20 * mixRef[t][cc2];
+                if (kn.idx == 6 && t == 5)      minStep = 0.20 * mixRef[t][cc2];
                 // Rate spans 0.08 -> 14 Hz, i.e. 175x, so its floor is RATIO-shaped: every
                 // quarter of the knob must at least double the measured motion rate.
 
                 for (int i = 0; i < 5; ++i)
                 {
-                    W::Params p = defaults(); p.type = t; p.mix = 1.0f;
-                    if (kn.idx != 0) p.amount = 0.80f;
-                    // 🔬 THE ANCHOR IS ITSELF A CONTROL, so every OTHER control is measured
-                    //    with it out of the way. At the default Balance 0.5 the un-detuned
-                    //    centre carries about half the energy and every metric below reads
-                    //    the anchor instead of the knob: `Amount` on Throng measured a 35-cent
-                    //    span at Balance 0.5 and a 190-cent span at 0.85, on the same engine.
-                    //    P8's own sweep obviously still runs the full 0 -> 1.
-                    if (kn.idx != 11) p.b8 = 0.85f;
-                    // Roam is an APERIODIC walk. Measured on top of a running LFO its energy
-                    // can FALL (it decoheres the periodic line), so it is measured where it
-                    // is the only thing moving: Rate at the floor.
-                    if (kn.idx == 7) p.rate = 0.0f;
-                    float* tgt = nullptr;
-                    switch (kn.idx)
-                    { case 0: tgt = &p.amount; break; case 1: tgt = &p.width; break;
-                      case 2: tgt = &p.rate;   break; case 3: tgt = &p.mix;   break;
-                      case 4: tgt = &p.b1; break; case 5: tgt = &p.b2; break; case 6: tgt = &p.b3; break;
-                      case 7: tgt = &p.b4; break; case 8: tgt = &p.b5; break; case 9: tgt = &p.b6; break;
-                      case 10: tgt = &p.b7; break; default: tgt = &p.b8; break; }
-                    *tgt = pts[i];
+                    W::Params p = rig (kn.idx, t, cc2, pts[i]);
                     const size_t f0 = (size_t) FS;
 
                     switch (kn.idx)
@@ -1400,24 +1470,12 @@ int main()
                                    //    same distance between two runs of the SAME setting on two
                                    //    different noise seeds. That makes the threshold a ratio to
                                    //    a control number instead of a number I picked.
-                                   W::Params qp = p; qp.rate = (i == 0) ? 0.0f : pts[i - 1];
-                                   const auto a2 = run (p, nz16), b2 = run (qp, nz16), c2 = run (p, nz16b);
-                                   const size_t ff = (size_t) (FS * 1.5f);
-                                   (void) c2;
-                                   v[i] = (i == 0) ? 0.0 : changeDist (a2, b2, ff); }
+                                   if (i == 0) { v[i] = 0.0; break; }
+                                   W::Params qp = rig (kn.idx, t, cc2, pts[i - 1]);
+                                   v[i] = changeDist (run (p, nz16), run (qp, nz16), (size_t) (FS * 1.5f)); }
                                  break;
-                        case 12: { // 🔬 a 6 Hz-wide analysis band, not 120: at 120 Hz every copy of a
-                                   //    +-190-cent crowd is inside the band at once and their mutual
-                                   //    beats (up to 120 Hz) alias into the trace, which pinned the
-                                   //    half-decay at its ceiling on four of six Types. At 6 Hz only
-                                   //    one copy is in the band at a time and the trace pulses at the
-                                   //    modulator's own rate.
-                                   const Env ev = demodulate (run (p, t16).l, (size_t) (FS * 2.0f), 1000.0, 256, 6.0);
-                                   v[i] = traceZcrHz (ev.mag, ev.fsD); }                             break;
-                        case 13: break;
-                        case 3:  { W::Params q = p; q.axis = 4; q.b5 = 0.0f;
-                                   v[i] = -db (rmsOf (monoOf (run (q, x)), f0) / rmsOf (x, f0)); }      break;
-                        case 4:  { W::Params qp = p; qp.b1 = (i == 0) ? 0.0f : pts[i - 1];
+                        case 3:  { v[i] = -db (rmsOf (monoOf (run (p, x)), f0) / rmsOf (x, f0)); }      break;
+                        case 4:  { W::Params qp = rig (kn.idx, t, cc2, (i == 0) ? 0.0f : pts[i - 1]);
                                    auto oa = run (qp, x), ob = run (p, x);
                                    auto a3 = logBands (magSpec (oa.l, f0));
                                    auto an = logBands (magSpec (ob.l, f0));
@@ -1427,29 +1485,18 @@ int main()
                         case 5:  v[i] = 1.0 - corrOf (run (p, x), f0);                                  break;
                         case 6:  if (t == 5)
                                  {   // `Bands` has NO delay, so a time centroid is structurally
-                                     // zero there. What Offset moves is the crossover GRID.
-                                     // 🔬 AND NO SCALAR POSITION METRIC WORKS HERE, which is
-                                     //    itself the finding. Offset scales the crossover grid
-                                     //    16x, but the SIDE energy's own spectrum is the
-                                     //    programme's spectrum times the contrast, and the
-                                     //    programme does not move: a side centroid ran
-                                     //    5.12/4.75/4.82/4.93/5.01 across the whole knob, and a
-                                     //    side-energy median sat in band 0 at every setting.
-                                     //    What Offset does on this Type is RE-SHUFFLE which
-                                     //    frequencies go to which channel — a large change with
-                                     //    no direction — so it is gated the same way `Rate` and
-                                     //    `Roam` are: the output must move, measured against one
-                                     //    quarter-turn of Mix.
-                                     W::Params qo = p; qo.b3 = (i == 0) ? 0.0f : pts[i - 1];
-                                     const double got = (i == 0) ? 0.0
-                                         : changeDist (run (p, x), run (qo, x), f0);
-                                     v[i] = got; }
+                                     // zero there. What Offset moves is the crossover GRID, and
+                                     // no scalar POSITION metric works on it (that is itself the
+                                     // finding — see the fb422 note): it RE-SHUFFLES which
+                                     // frequencies go to which channel, a large change with no
+                                     // direction. Gated the way `Rate` and `Roam` are.
+                                     if (i == 0) { v[i] = 0.0; break; }
+                                     W::Params qo = rig (kn.idx, t, cc2, pts[i - 1]);
+                                     v[i] = changeDist (run (p, x), run (qo, x), f0); }
                                  else v[i] = std::log (std::max (0.02, wetTimeCentroidMs (p)));            break;
-                        case 7:  { W::Params qp = p; qp.b4 = (i == 0) ? 0.0f : pts[i - 1];
-                                   const auto a2 = run (p, nz16), b2 = run (qp, nz16), c2 = run (p, nz16b);
-                                   const size_t ff = (size_t) (FS * 1.5f);
-                                   (void) c2;
-                                   v[i] = (i == 0) ? 0.0 : changeDist (a2, b2, ff); }
+                        case 7:  { if (i == 0) { v[i] = 0.0; break; }
+                                   W::Params qp = rig (kn.idx, t, cc2, pts[i - 1]);
+                                   v[i] = changeDist (run (p, nz16), run (qp, nz16), (size_t) (FS * 1.5f)); }
                                  break;
                         case 8:  { auto o = run (p, x);
                                    std::vector<float> sd (o.l.size());
@@ -1476,8 +1523,6 @@ int main()
                 {   // v[] already holds the per-step CHANGE; every step must register.
                     for (int i = 1; i < 5; ++i)
                     { small = std::min (small, v[i]); if (v[i] < minStep) plateau = true; } }
-                else if (false)
-                { for (int i = 1; i < 5; ++i) { small = std::min (small, v[i]); if (v[i] < minStep) plateau = true; } }
                 else
                 {   const int dir = (v[4] >= v[0]) ? 1 : -1;
                     for (int i = 1; i < 5; ++i)
@@ -1486,16 +1531,35 @@ int main()
                         if (step < -0.25 * minStep) mono = false;
                         if (std::fabs (v[i] - v[i - 1]) < minStep) plateau = true; } }
                 const bool ok = mono && ! plateau;
+                if (small < worstStep && why == nullptr) { worstStep = small; worstCell = cellNm; }
+                if (! ok || why != nullptr)
+                    std::printf ("         %-6s/%-13s %8.3f %8.3f %8.3f %8.3f %8.3f   span %8.3f  min step %7.3f (>= %.3f)%s%s\n",
+                                 W::typeNames()[t], W::charNames (t)[cc2], v[0], v[1], v[2], v[3], v[4], span, small, minStep,
+                                 mono ? "" : "  [NOT MONOTONIC]", plateau ? "  [PLATEAU]" : "");
+                if (why != nullptr)
+                {   // 🔑 THE ROSTER IS AN EXEMPTION FROM THE *AUDIBILITY* LAW, NEVER FROM THE
+                    //    BIT-IDENTITY ONE ABOVE, and it is checked IN REVERSE: a declared-inert
+                    //    cell that CLEARS the audible-step bar is a STALE declaration and fails.
+                    //    So the table can neither grow into an excuse nor hide a live knob.
+                    if (ok) { ++staleInert; if (firstStale.empty()) firstStale = cellNm; }
+                    gate ((cellNm + " — DECLARED INERT (roster fact), and it really is").c_str(), ! ok,
+                          std::string (ok ? "NOT inert — the declaration is STALE: " : "") + why);
+                    continue; }
                 if (! ok) ++deadCells;
-                if (small < worstStep) { worstStep = small; worstCell = kn.name + " on " + W::typeNames()[t]; }
-                std::printf ("         %-8s %9.3f %9.3f %9.3f %9.3f %9.3f   span %8.3f  min step %7.3f (>= %.3f)%s%s\n",
-                             W::typeNames()[t], v[0], v[1], v[2], v[3], v[4], span, small, minStep,
-                             mono ? "" : "  [NOT MONOTONIC]", plateau ? "  [PLATEAU]" : "");
-                gate ((kn.name + " on " + W::typeNames()[t] + " — alive and monotonic").c_str(),
+                gate ((cellNm + " — alive and monotonic").c_str(),
                       ok, fmt4 ("%.3f -> %.3f, smallest quarter %.3f (>= %.3f)", v[0], v[4], small, minStep));
             }
         }
-        gate ("ALL 72 KNOB x TYPE CELLS ARE ALIVE (fb421 had 8 dead ones)",
+        gate ("NO CELL IS BIT-IDENTICALLY DEAD (576 knob x Type x Character cells, NO exemptions)",
+              bitDead == 0, bitDead == 0 ? "0 bit-identical cells out of 576 — and this gate has no roster to hide in"
+                                         : (fmt ("%.0f bit-dead, first: ", (double) bitDead) + firstBitDead));
+        gate ("the KNOWN-INERT roster is the NONE sentinel — exactly 1 entry, 0 real cells",
+              kNumInert == 1 && inertUsed == 0,
+              fmt2 ("%.0f entry (the sentinel), %.0f of 576 cells exempted", (double) kNumInert, (double) inertUsed));
+        gate ("...and every declared-inert cell REALLY IS inert (no stale declaration)",
+              staleInert == 0, staleInert == 0 ? "0 stale declarations"
+                                               : (fmt ("%.0f stale, first: ", (double) staleInert) + firstStale));
+        gate ("ALL 576 KNOB x TYPE x CHARACTER CELLS ARE ALIVE (fb424 measured 72 of them)",
               deadCells == 0, fmt ("%.0f dead cells", (double) deadCells) + "; tightest " + worstCell
                               + fmt (" at %.3f per quarter", worstStep));
     }
@@ -1529,33 +1593,46 @@ int main()
             { 3, "detune spread, cents", 45.0, "a WALK spends most of its life near zero; 45 is the same knob's worth" },
             { 4, "stereo correlation",  -0.25, "a phase-only decorrelator bottoms out AT zero; below it needs real divergence" },
             { 5, "stereo correlation",  -0.15, "complementary bands can only anti-correlate by over-driving past g = 1" } };
+        std::printf ("      🔴 fb425 — ON EVERY CHARACTER TOO, not just Character 0. A Character re-wires\n"
+                     "          the mechanism (centsMul, stage count, band count, cross-mix), so a ceiling\n"
+                     "          proved on one column of eight says nothing about the other seven. 48 cells.\n");
         double r11[W::kNumTypes];
-        int r11fail = 0;
+        int r11fail = 0; std::string worstR11; double worstMargin = 1e18;
         for (const auto& e2 : ex)
         {
-            W::Params hi = defaults();
-            // Balance at 100 % too: R11 asks what the device does when the control is at
-            // the TOP, and this device's anchor is itself a control. At Balance 0.85 the
-            // remaining mono anchor holds `Bands` at corr +0.30 — the anchor's number, not
-            // the mechanism's.
-            hi.type = e2.t; hi.mix = 1.0f; hi.width = 0.5f; hi.amount = 1.0f; hi.b8 = 1.0f;
-            W::Params lo = hi; lo.amount = 0.0f;
-            double vh, vl;
-            if (e2.t <= 3)
-            { vh = detuneSpreadCents (run (hi, t1k).l, ft, 1000.0);
-              vl = detuneSpreadCents (run (lo, t1k).l, ft, 1000.0); }
-            else
-            { vh = corrOf (run (hi, x), f0); vl = corrOf (run (lo, x), f0); }
-            r11[e2.t] = vh;
-            const bool ok = (e2.t <= 3) ? (vh >= e2.bar && vh > 4.0 * std::max (1.0, vl))
-                                        : (vh <= e2.bar && vh < vl - 0.30);
-            if (! ok) ++r11fail;
-            std::printf ("        %-8s %-22s %9.3f   control %9.3f   bar %7.2f  %s\n",
-                         W::typeNames()[e2.t], e2.what, vh, vl, e2.bar, ok ? "" : "  <<< FAILS");
-            std::printf ("                 why this bar: %s\n", e2.why);
-            gate ((std::string (W::typeNames()[e2.t]) + " — Amount 100 % is past useful (R11)").c_str(), ok,
-                  fmt3 ("%.2f vs control %.2f (bar %.2f)", vh, vl, e2.bar));
+            std::printf ("        %-8s %-22s  bar %7.2f — %s\n", W::typeNames()[e2.t], e2.what, e2.bar, e2.why);
+            for (int c = 0; c < W::kNumChars; ++c)
+            {
+                W::Params hi = defaults();
+                // Balance at 100 % too: R11 asks what the device does when the control is at
+                // the TOP, and this device's anchor is itself a control. At Balance 0.85 the
+                // remaining mono anchor holds `Bands` at corr +0.30 — the anchor's number, not
+                // the mechanism's.
+                hi.type = e2.t; hi.character = c; hi.mix = 1.0f; hi.width = 0.5f; hi.amount = 1.0f; hi.b8 = 1.0f;
+                W::Params lo = hi; lo.amount = 0.0f;
+                double vh, vl;
+                if (e2.t <= 3)
+                { vh = detuneSpreadCents (run (hi, t1k).l, ft, 1000.0);
+                  vl = detuneSpreadCents (run (lo, t1k).l, ft, 1000.0); }
+                else
+                { vh = corrOf (run (hi, x), f0); vl = corrOf (run (lo, x), f0); }
+                if (c == 0) r11[e2.t] = vh;
+                const bool ok = (e2.t <= 3) ? (vh >= e2.bar && vh > 4.0 * std::max (1.0, vl))
+                                            : (vh <= e2.bar && vh < vl - 0.30);
+                const double margin = (e2.t <= 3) ? (vh - e2.bar) : (e2.bar - vh);
+                if (! ok) ++r11fail;
+                if (margin < worstMargin) { worstMargin = margin;
+                    worstR11 = std::string (W::typeNames()[e2.t]) + "/" + W::charNames (e2.t)[c]; }
+                std::printf ("          %-14s %9.3f   control %9.3f%s\n",
+                             W::charNames (e2.t)[c], vh, vl, ok ? "" : "   <<< FAILS");
+                gate ((std::string (W::typeNames()[e2.t]) + "/" + W::charNames (e2.t)[c]
+                       + " — Amount 100 % is past useful (R11)").c_str(), ok,
+                      fmt3 ("%.2f vs control %.2f (bar %.2f)", vh, vl, e2.bar));
+            }
         }
+        gate ("THE R11 CEILING HOLDS ON ALL 48 TYPE x CHARACTER CELLS (fb424 proved 6)",
+              r11fail == 0, fmt ("%.0f cells below the bar", (double) r11fail) + "; tightest margin "
+                            + worstR11 + fmt (" at %+.2f", worstMargin));
 
         // ── THE ANTI-HAAS CLAUSE. This is the gate fb421 did not have. ──────
         {
@@ -1581,18 +1658,27 @@ int main()
                      "          over the last 2 s of a 6 s probe so the loop has converged. The floor is\n"
                      "          +3.0 dB of sustained density over Feedback 0 — three times the level JND\n"
                      "          for a sustained texture, i.e. not arguable.\n");
+        std::printf ("          🔴 fb425 — 48 cells, not 6.\n");
         double bloom[W::kNumTypes];
+        int bloomFail = 0; std::string worstBloom; double worstB = 1e18;
         for (int t = 0; t < W::kNumTypes; ++t)
+        for (int c = 0; c < W::kNumChars; ++c)
         {
             W::Params p = defaults();
-            p.type = t; p.mix = 1.0f; p.width = 0.5f; p.amount = 0.80f; p.b1 = 1.0f; p.b8 = 0.85f;
+            p.type = t; p.character = c; p.mix = 1.0f; p.width = 0.5f; p.amount = 0.80f; p.b1 = 1.0f; p.b8 = 0.85f;
             p.b7 = 0.0f; const double d0 = db (rmsOf (run (p, nz6).l, (size_t) (FS * 4.0f)));
             p.b7 = 1.0f; const double d1 = db (rmsOf (run (p, nz6).l, (size_t) (FS * 4.0f)));
-            bloom[t] = d1 - d0;
-            std::printf ("        %-8s %+7.2f -> %+7.2f dB   (+%.2f)\n", W::typeNames()[t], d0, d1, d1 - d0);
-            gate ((std::string (W::typeNames()[t]) + " — Feedback+Voices 100 % is a wall (>= +3 dB)").c_str(),
+            if (c == 0) bloom[t] = d1 - d0;
+            if (d1 - d0 < 3.0) ++bloomFail;
+            if (d1 - d0 < worstB) { worstB = d1 - d0; worstBloom = std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c]; }
+            if (c == 0) std::printf ("        %-8s %+7.2f -> %+7.2f dB   (+%.2f)\n", W::typeNames()[t], d0, d1, d1 - d0);
+            gate ((std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c]
+                   + " — Feedback+Voices 100 % is a wall (>= +3 dB)").c_str(),
                   d1 - d0 >= 3.0, fmt3 ("%.2f -> %.2f dB (+%.2f)", d0, d1, d1 - d0));
         }
+        gate ("the Feedback WALL holds on all 48 cells", bloomFail == 0,
+              fmt ("%.0f cells under +3 dB", (double) bloomFail) + "; weakest " + worstBloom
+              + fmt (" at %+.2f dB", worstB));
         {   // 🔴 THE ANTI-HAAS CLAUSE AGAIN, AND THE MUTATION RUN IS WHAT ASKED FOR IT.
             //    Under WIDEN_MUT_HAAS this whole block stayed GREEN and printed +6.71 dB on
             //    FOUR Types to two decimals — the feedback loop survives the gutting and,
@@ -1656,21 +1742,121 @@ int main()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    section ("V — THE `Field` DROPDOWN IS PHYSICS: 15 pairs x 48 cells, all distinct");
+    {
+        std::printf ("      🔴 fb425. CONTRACT R6 requires BOTH back dropdowns to change PHYSICS.\n"
+                     "      `Character` had §G — 48 measured cells. `Field` had a naming assertion, a\n"
+                     "      per-option mono tag check and a click test, and NOTHING that measured the six\n"
+                     "      options against EACH OTHER. A skeptic deleted two of the six and this cert did\n"
+                     "      not move a single line.\n"
+                     "      ⚠️ AND THIS GATE DOES NOT USE THE DROPDOWN AS A TOOL. §H and §F's Mix rows use\n"
+                     "      `Side Only` as a PROBE (its wet mono-sums to exactly zero by construction), so\n"
+                     "      those DO go red if that one option is gutted — but only that one, and only\n"
+                     "      because it is load-bearing scaffolding. Nothing below uses a Field for anything\n"
+                     "      except as the thing under test.\n\n"
+                     "      THE METRIC. A Field is a 2x2 MATRIX on the finished wet, so the fingerprint has\n"
+                     "      to be CHANNEL-ORDERED or `Swap` and `Straight` are identical BY CONSTRUCTION:\n"
+                     "      a mono-summed, correlation-only or side/mid metric cannot tell a channel\n"
+                     "      exchange from no exchange at all. 30 log bands of L AND 30 of R, level-\n"
+                     "      normalised (so this is a magnitude-spectrum distance and law 6 holds), plus\n"
+                     "      correlation, side/mid, and the stereo field's own TRAJECTORY (rms + zero-\n"
+                     "      crossing rate) because `Orbit` is a rotation in TIME and is magnitude-flat.\n"
+                     "      THE BAR IS AN ANCHOR, NOT A NUMBER I CHOSE (fb417): every pair must differ by\n"
+                     "      at least a FIFTH of what ONE QUARTER-TURN OF `Width` does through the same\n"
+                     "      metric on the same cell — `Width` being the one stereo control nobody argues\n"
+                     "      about. The same fifth §F holds `Rate` and `Roam` to.\n\n");
+        auto xf = chord ((int) (FS * 4));
+        const size_t f0 = (size_t) FS;
+        struct FF { std::vector<double> bl, br; double corr, sm, trms, tzcr; };
+        auto printField = [&] (int t, int c, int f, float wid)
+        {
+            W::Params p = defaults();
+            p.type = t; p.character = c; p.axis = f; p.mix = 1.0f;
+            p.amount = 0.80f; p.b8 = 0.85f; p.width = wid; p.rate = 0.60f;
+            auto o = run (p, xf);
+            FF q; q.bl = logBands (magSpec (o.l, f0)); q.br = logBands (magSpec (o.r, f0));
+            normaliseBands (q.bl); normaliseBands (q.br);
+            q.corr = corrOf (o, f0); q.sm = sideMidDb (o, f0);
+            const auto tr = fieldTrace (o, f0);
+            q.trms = traceRms (tr); q.tzcr = traceZcrHz (tr, (double) FS / 256.0);
+            return q;
+        };
+        auto dist = [] (const FF& a, const FF& b)
+        {   double d = 0;
+            for (size_t k = 4; k < 26; ++k) d += std::fabs (a.bl[k] - b.bl[k]) + std::fabs (a.br[k] - b.br[k]);
+            d += 40.0 * std::fabs (a.corr - b.corr);
+            d +=  0.5 * std::fabs (a.sm   - b.sm);
+            d += 200.0 * std::fabs (a.trms - b.trms);
+            d +=   2.0 * std::fabs (a.tzcr - b.tzcr);
+            return d; };
+
+        int weakPairs = 0, identicalPairs = 0; double worst = 1e18; std::string worstNm, firstIdent;
+        for (int t = 0; t < W::kNumTypes; ++t)
+        {
+            for (int c = 0; c < W::kNumChars; ++c)
+            {
+                FF ff[W::kNumFields];
+                for (int f = 0; f < W::kNumFields; ++f) ff[f] = printField (t, c, f, 0.50f);
+                // the ANCHOR: one quarter-turn of `Width` on this very cell, same metric.
+                const double anchor = dist (ff[0], printField (t, c, 0, 0.75f));
+                const double bar = 0.20 * anchor;
+                double mn = 1e18; std::string mnNm; int ident = 0;
+                for (int a = 0; a < W::kNumFields; ++a)
+                    for (int b = a + 1; b < W::kNumFields; ++b)
+                    {   const double d = dist (ff[a], ff[b]);
+                        if (d <= 1e-12) { ++ident; if (firstIdent.empty())
+                            firstIdent = std::string (W::fieldNames()[a]) + " == " + W::fieldNames()[b]
+                                       + " on " + W::typeNames()[t] + "/" + W::charNames (t)[c]; }
+                        if (d < mn) { mn = d; mnNm = std::string (W::fieldNames()[a]) + " vs " + W::fieldNames()[b]; } }
+                identicalPairs += ident;
+                if (c == 0)
+                {   std::printf ("      %-8s Width-quarter anchor %7.2f · bar %6.2f · closest pair %-24s %7.2f\n",
+                                 W::typeNames()[t], anchor, bar, mnNm.c_str(), mn); }
+                if (mn < bar) ++weakPairs;
+                if (mn < worst) { worst = mn; worstNm = std::string (W::typeNames()[t]) + "/"
+                                              + W::charNames (t)[c] + " " + mnNm; }
+                gate ((std::string ("Field: all 15 pairs distinct on ") + W::typeNames()[t]
+                       + "/" + W::charNames (t)[c]).c_str(), mn >= bar,
+                      fmt3 ("closest %.2f (bar %.2f = 0.20 x Width-quarter %.2f) — ", mn, bar, anchor) + mnNm);
+            }
+        }
+        gate ("NO two `Field` options are IDENTICAL anywhere in the 48-cell matrix",
+              identicalPairs == 0, identicalPairs == 0
+                  ? fmt ("%.0f identical pairs over 15 pairs x 48 cells = 720 comparisons", 0.0)
+                  : (fmt ("%.0f identical, first: ", (double) identicalPairs) + firstIdent));
+        gate ("every `Field` pair clears a FIFTH of a Width quarter-turn, on every cell",
+              weakPairs == 0, fmt ("%.0f weak cells", (double) weakPairs) + "; closest anywhere " + worstNm
+                              + fmt (" at %.2f", worst));
+        gate ("the Field roster is the 6 options the engine publishes (no silent shrink)",
+              W::kNumFields == 6, std::string (W::fieldNames()[0]) + " " + W::fieldNames()[1] + " "
+              + W::fieldNames()[2] + " " + W::fieldNames()[3] + " " + W::fieldNames()[4] + " " + W::fieldNames()[5]);
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     section ("H — MIX 1.0 = FULLY WET, ZERO DRY (dry residual < -60 dB)");
     {
         std::printf ("      probe: Field `Side Only` forces wetL = +s, wetR = -s, so the WET's mono sum is\n"
                      "      EXACTLY zero. Whatever survives in (L+R)/2 is dry. Works for every Type,\n"
                      "      including the zero-delay ones where no pre-wet window exists.\n");
+        std::printf ("      🔴 fb425 — 48 CELLS, NOT 6. Law 3 is a full-matrix gate now: at fb424 this\n"
+                     "      ran on Character 0 of each Type and 42 of the 48 cells had never been measured.\n");
         auto x = chord ((int) (FS * 4));
+        int wet = 0; std::string worstNm; double worstDb = -1e9;
         for (int t = 0; t < W::kNumTypes; ++t)
+        for (int c = 0; c < W::kNumChars; ++c)
         {
             W::Params p = defaults();
-            p.type = t; p.axis = 4; p.b5 = 0.0f; p.amount = 0.7f;
+            p.type = t; p.character = c; p.axis = 4; p.b5 = 0.0f; p.amount = 0.7f;
             p.mix = 0.5f; const double half = db (rmsOf (monoOf (run (p, x)), (size_t) FS) / rmsOf (x, (size_t) FS));
             p.mix = 1.0f; const double full = db (rmsOf (monoOf (run (p, x)), (size_t) FS) / rmsOf (x, (size_t) FS));
-            gate ((std::string (W::typeNames()[t]) + " — dry residual at Mix 1.0").c_str(),
+            if (full >= -60.0) ++wet;
+            if (full > worstDb) { worstDb = full; worstNm = std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c]; }
+            gate ((std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c] + " — dry residual at Mix 1.0").c_str(),
                   full < -60.0, fmt2 ("Mix 0.5 control %+0.2f dB -> Mix 1.0 %+0.2f dB", half, full));
         }
+        gate ("ALL 48 TYPE x CHARACTER CELLS ARE FULLY WET AT MIX 1.0",
+              wet == 0, fmt ("%.0f leaking cells; loudest residual ", (double) wet) + worstNm
+                        + fmt (" at %+0.2f dB", worstDb));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -2095,27 +2281,41 @@ int main()
                      "      automated, cannot be saved in a preset and cannot be recalled. That is not a\n"
                      "      control. It is `Params::hearMono` now, and these four gates are what the word\n"
                      "      MONO is allowed to mean.\n");
+        std::printf ("      🔴 fb425 — A PILL IS A CONTROL AND IT IS GATED ON EVERY CELL. At fb424 all\n"
+                     "      four gates below ran on Throng/`JP Classic` alone.\n");
         auto x = chord ((int) (FS * 3));
-        W::Params off = defaults(); off.type = 0; off.mix = 1.0f; off.amount = 0.8f; off.b2 = 1.0f;
-        W::Params on  = off; on.hearMono = true;
-        auto oOff = run (off, x);
-        auto oOn  = run (on,  x);
         const size_t f0 = (size_t) (FS / 2);
-        double maxLR = 0.0, maxErr = 0.0, maxOffLR = 0.0;
-        for (size_t i = f0; i < oOn.l.size(); ++i)
+        int badFold = 0, noWork = 0; std::string worstFold; double worstErr = 0.0;
+        for (int t = 0; t < W::kNumTypes; ++t)
+        for (int c = 0; c < W::kNumChars; ++c)
         {
-            maxLR    = std::max (maxLR,    (double) std::fabs (oOn.l[i]  - oOn.r[i]));
-            maxOffLR = std::max (maxOffLR, (double) std::fabs (oOff.l[i] - oOff.r[i]));
-            const double mid = 0.5 * ((double) oOff.l[i] + (double) oOff.r[i]);
-            maxErr = std::max (maxErr, std::fabs ((double) oOn.l[i] - mid));
+            W::Params off = defaults(); off.type = t; off.character = c;
+            off.mix = 1.0f; off.amount = 0.8f; off.b2 = 1.0f;
+            W::Params on = off; on.hearMono = true;
+            auto oOff = run (off, x);
+            auto oOn  = run (on,  x);
+            double maxLR = 0.0, maxErr = 0.0, maxOffLR = 0.0;
+            for (size_t i = f0; i < oOn.l.size(); ++i)
+            {
+                maxLR    = std::max (maxLR,    (double) std::fabs (oOn.l[i]  - oOn.r[i]));
+                maxOffLR = std::max (maxOffLR, (double) std::fabs (oOff.l[i] - oOff.r[i]));
+                const double mid = 0.5 * ((double) oOff.l[i] + (double) oOff.r[i]);
+                maxErr = std::max (maxErr, std::fabs ((double) oOn.l[i] - mid));
+            }
+            const bool ok = (maxLR == 0.0) && maxErr < 2.0e-6 && maxOffLR > 1.0e-3;
+            if (! ok) ++badFold;
+            if (maxOffLR <= 1.0e-3) ++noWork;
+            if (maxErr > worstErr) { worstErr = maxErr; worstFold = std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c]; }
+            gate ((std::string ("`Hear Mono` IS the (L+R)/2 fold on ") + W::typeNames()[t]
+                   + "/" + W::charNames (t)[c]).c_str(), ok,
+                  fmt3 ("|L-R| on = %.1e · max |on - mid(off)| = %.1e · OFF |L-R| = %.4f", maxLR, maxErr, maxOffLR));
         }
-        gate ("`Hear Mono` ON: L and R are BIT-IDENTICAL", maxLR == 0.0,
-              fmt ("max |L-R| = %.3e", maxLR));
-        gate ("`Hear Mono` ON: the output IS (L+R)/2 of the OFF run — a FOLD, not a mute",
-              maxErr < 2.0e-6 && maxOffLR > 1.0e-3,
-              fmt2 ("max |on - mid(off)| = %.2e  ·  OFF |L-R| = %.4f (the fold has work to do)",
-                    maxErr, maxOffLR));
+        gate ("ALL 48 CELLS FOLD, and on all 48 the fold had WORK TO DO",
+              badFold == 0 && noWork == 0,
+              fmt2 ("%.0f bad folds, %.0f cells already mono before the fold", (double) badFold, (double) noWork)
+              + "; worst error " + worstFold + fmt (" at %.1e", worstErr));
         {   // the card must SHOW it: corr is measured AFTER the fold (audible ⇒ visible)
+            W::Params on = defaults(); on.mix = 1.0f; on.amount = 0.8f; on.b2 = 1.0f; on.hearMono = true;
             W e; e.prepare ((double) FS, 128);
             auto o2 = runKeep (e, on, x);
             const double vcorr = (double) e.viz().corr;
@@ -2152,6 +2352,129 @@ int main()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
+    section ("P — THE `Retrig` PILL IS A CONTROL ON EVERY TYPE x CHARACTER");
+    {
+        std::printf ("      🔴 fb425. `Retrig` IS A FRONT PILL AND IT WAS BIT-IDENTICALLY DEAD ON 3 OF 6\n"
+                     "      TYPES. fireRetrig() reset ph_/res_/q_ — the per-voice LFO phase, which is read\n"
+                     "      by procVoices' mod-0 branch and by procTwin AND BY NOTHING ELSE. `Twofold` runs\n"
+                     "      a band-limited random walk (wk_), `Blur` a rotator plus its own walk\n"
+                     "      (blurRot_/wkb_), `Bands` the crossover-grid rotator plus wkg_. Firing the pill\n"
+                     "      on any of the three produced OUTPUT IDENTICAL TO THE BIT. The old §I click test\n"
+                     "      toggled the pill — on Type 0 only — and a click test cannot see a control that\n"
+                     "      does nothing, because doing nothing is the quietest thing a control can do.\n\n"
+                     "      THE GATE. Two engines, same probe, same params. At t = 1.0 s one of them gets a\n"
+                     "      single rising edge on `Retrig`. Then:\n"
+                     "        1. BEFORE the edge the two outputs must be BIT-IDENTICAL — that proves the\n"
+                     "           edge is the only difference, i.e. this is a controlled experiment.\n"
+                     "        2. AFTER it they must not be, and the difference is measured on the OUTPUT\n"
+                     "           with changeDist (log-band magnitude + correlation + field trajectory).\n"
+                     "      THE ANCHOR IS A CONTROL OF THE SAME CLASS (fb417). A retrigger re-aligns the\n"
+                     "      MODULATOR and nothing else, so the unit it is measured in is one quarter-turn\n"
+                     "      of `Rate` — the other control on this device that moves the modulator and only\n"
+                     "      the modulator — at the same FIFTH §F already defends for `Rate` and `Roam`. A\n"
+                     "      quarter-turn of Mix is printed beside it for scale, and it is deliberately NOT\n"
+                     "      the bar: 0.25 -> 0.50 wet is a doubling of the whole effect, a different class\n"
+                     "      of event, and holding a phase re-alignment to a fifth of THAT would be a\n"
+                     "      constant chosen to fail rather than a unit chosen to fit.\n"
+                     "      A cell where the mechanism genuinely has no trajectory to restart is declared\n"
+                     "      in the KNOWN-INERT ROSTER below — asserted size, reason per entry, and checked\n"
+                     "      in reverse so a declaration cannot go stale.\n\n");
+
+        struct PInert { int type, chr; const char* why; };
+        static const PInert kRetrigInert[] = {
+            //  Type 3 = Twofold, Character 5 = `Static Pair`. FILLED ONLY IF MEASURED INERT —
+            //  the reverse check below fires the moment it stops being true.
+            { -1, -1, "(the sentinel: NO cell is exempt from the `Retrig` audibility law)" }
+        };
+        const int kNumRetrigInert = (int) (sizeof kRetrigInert / sizeof kRetrigInert[0]);
+        auto retrigWhy = [&] (int t, int c) -> const char*
+        {   for (int i = 0; i < kNumRetrigInert; ++i)
+                if (kRetrigInert[i].type == t && kRetrigInert[i].chr == c) return kRetrigInert[i].why;
+            return nullptr; };
+
+        auto xr = chord ((int) (FS * 3));
+        const size_t evt = (size_t) (FS * 1.0f);
+        // fire the edge on a block boundary, the way the rack does (setParams is PER BLOCK)
+        auto runRetrig = [&] (W::Params p, bool fire)
+        {
+            W e; e.prepare ((double) FS, 512);
+            Run o; o.l = xr; o.r = xr;
+            for (size_t i = 0; i < xr.size(); i += 128)
+            {
+                const int n = (int) std::min ((size_t) 128, xr.size() - i);
+                W::Params q = p;
+                q.retrig = fire && (i >= evt && i < evt + 128);
+                e.setParams (q);
+                e.processStereo (&o.l[i], &o.r[i], n);
+            }
+            return o;
+        };
+        auto slice = [&] (const Run& o, size_t from, size_t to)
+        {   Run q; q.l.assign (o.l.begin() + (long) from, o.l.begin() + (long) to);
+            q.r.assign (o.r.begin() + (long) from, o.r.begin() + (long) to); return q; };
+
+        int dead = 0, staleP = 0, weak = 0, contaminated = 0;
+        std::string firstDead, firstStale, worstNm; double worstRatio = 1e18;
+        for (int t = 0; t < W::kNumTypes; ++t)
+        for (int c = 0; c < W::kNumChars; ++c)
+        {
+            W::Params p = defaults();
+            p.type = t; p.character = c; p.mix = 1.0f; p.amount = 0.80f; p.b8 = 0.85f;
+            const auto a = runRetrig (p, false), b = runRetrig (p, true);
+            // 1. the controlled-experiment check
+            bool preId = true;
+            for (size_t i = 0; i < evt; ++i)
+                if (a.l[i] != b.l[i] || a.r[i] != b.r[i]) { preId = false; break; }
+            if (! preId) ++contaminated;
+            // 2. bit-identity AFTER the edge
+            bool postId = true;
+            for (size_t i = evt; i < a.l.size(); ++i)
+                if (a.l[i] != b.l[i] || a.r[i] != b.r[i]) { postId = false; break; }
+            const std::string nm = std::string (W::typeNames()[t]) + "/" + W::charNames (t)[c];
+            const char* why = retrigWhy (t, c);
+            if (why != nullptr)
+            {
+                if (! postId) { ++staleP; if (firstStale.empty()) firstStale = nm; }
+                gate ((std::string ("`Retrig` on ") + nm + " — DECLARED INERT, and it really is").c_str(),
+                      postId, std::string (postId ? "bit-identical after the edge — " : "NOT inert, the declaration is STALE — ") + why);
+                continue;
+            }
+            if (postId) { ++dead; if (firstDead.empty()) firstDead = nm; }
+            // 3. the audible size of it, against a SAME-CLASS control on this very cell
+            const size_t w0 = evt + (size_t) (FS * 0.10f), w1 = a.l.size();
+            const double got = changeDist (slice (a, w0, w1), slice (b, w0, w1), 0);
+            W::Params r1 = p; r1.rate = 0.50f; W::Params r2 = p; r2.rate = 0.75f;
+            const double anch = changeDist (slice (runRetrig (r1, false), w0, w1),
+                                            slice (runRetrig (r2, false), w0, w1), 0);
+            W::Params m1 = p; m1.mix = 0.25f; W::Params m2 = p; m2.mix = 0.50f;
+            const double mixA = changeDist (slice (runRetrig (m1, false), w0, w1),
+                                            slice (runRetrig (m2, false), w0, w1), 0);
+            const double bar = 0.20 * anch;
+            const bool ok = preId && ! postId && got >= bar;
+            if (! ok && ! postId && preId) ++weak;
+            if (got / std::max (1e-9, anch) < worstRatio) { worstRatio = got / std::max (1e-9, anch); worstNm = nm; }
+            gate ((std::string ("`Retrig` restarts the mechanism on ") + nm).c_str(), ok,
+                  fmt4 ("post-edge %.2f vs bar %.2f (0.20 x Rate-quarter %.2f) · Mix-quarter %.2f for scale",
+                        got, bar, anch, mixA)
+                  + (preId ? "" : "  [PRE-EDGE NOT IDENTICAL — uncontrolled]")
+                  + (postId ? "  [BIT-IDENTICAL — the pill does NOTHING here]" : ""));
+        }
+        gate ("`Retrig` is BIT-ALIVE on every cell not on the known-inert roster",
+              dead == 0, dead == 0 ? "0 bit-identical cells"
+                                   : (fmt ("%.0f dead cells, first: ", (double) dead) + firstDead));
+        gate ("the `Retrig` known-inert roster is exactly 1 entries (asserted, reasons at the line)",
+              kNumRetrigInert == 1, fmt ("%.0f declared", (double) kNumRetrigInert));
+        gate ("...and every declared-inert `Retrig` cell REALLY IS inert",
+              staleP == 0, staleP == 0 ? "0 stale declarations"
+                                       : (fmt ("%.0f stale, first: ", (double) staleP) + firstStale));
+        gate ("every experiment was CONTROLLED (bit-identical before the edge)",
+              contaminated == 0, fmt ("%.0f contaminated cells", (double) contaminated));
+        gate ("`Retrig` clears a fifth of a Rate quarter-turn on every live cell",
+              weak == 0, fmt ("%.0f weak cells", (double) weak) + "; smallest ratio " + worstNm
+                         + fmt (" at %.2f x the anchor", worstRatio));
+    }
+
+    // ═══════════════════════════════════════════════════════════════════════
     section ("S — NO DOUBLES, over EVERY label this device publishes (not the ones I changed)");
     {
         std::printf ("      🔴 fb422 HAD NO GATE AT ALL. FINDINGS §9 was a one-off markdown grep over the\n"
@@ -2185,23 +2508,32 @@ int main()
         //    this ruling the gate would be red on two names the integration owner has
         //    already decided. Exactly two, asserted below.
         static const char* const kRuledMockupOnly[] = { "Blur", "Coarse" };
-        // D) 🔴 MY OWN CLAIMS, AND THEY ARE FLAGGED AS SUCH. These five hit the corpus and
-        //    NO ruling covers them — neither RENAMES table names them, and CONTRACT §4's
-        //    enumerated list does not include them. I believe each is the §4 class (same
-        //    concept, same behaviour, different device: `Detune` = unison detune, `Depth` =
-        //    modulation excursion, `Voices` = how many copies, `Spread` = fanning copies
-        //    across the field, `Feedback` = regeneration). But a gate that can exempt
-        //    itself is not a gate (fb423 on the dynamics `Auto`), so they are printed by
-        //    name on every run and written up in FINDINGS §10 for a ruling. If the ruling
-        //    goes the other way, five renames land here.
-        static const char* const kUnruledClaims[] = {
+        // D) ✅ RULED — fb425, RENAMES.md "THE THIRD RULING". At fb423 this harness exempted
+        //    these five ITSELF and, because a gate that can exempt itself is not a gate, it
+        //    printed them by name on every run and asked for a ruling instead of burying
+        //    them. The ruling came back SANCTIONED, all five, no renames — each verified
+        //    against its shipped use rather than pattern-matched on the word:
+        //      `Detune`   Granular + Chorus knob `Detune`  (PluginProcessor.cpp:3738, :3931)
+        //                 — same law, a pitch offset amount.
+        //      `Depth`    modulation-depth knob            (:3093, :3928)
+        //                 — same law, how far a modulator travels.
+        //      `Voices`   the unison COUNT label           (index.html:27315, :16181)
+        //                 — same law, how many copies exist.
+        //      `Spread`   LFO phase-mode option Retrig/Free/Random/`Spread` (:2116, :2288)
+        //                 — same law, fan things apart; different control class, same concept.
+        //      `Feedback` Delay + Distortion knob          (:3642, :3691)
+        //                 — same law, regeneration amount.
+        //    They are a RULED exemption now, not a self-granted one, and the list is
+        //    asserted to exactly five so it can never grow again the way `kShared` grew an
+        //    `Auto` on the sibling.
+        static const char* const kRuledSharedFb425[] = {
             "Detune", "Depth", "Voices", "Spread", "Feedback" };
 
         auto inList = [] (const std::string& s, const char* const* L, int n)
         { for (int i = 0; i < n; ++i) if (s == L[i]) return true; return false; };
         auto shared   = [&] (const std::string& s) { return inList (s, kShared, 10); };
         auto ruled    = [&] (const std::string& s) { return inList (s, kRuledMockupOnly, 2); };
-        auto unruled  = [&] (const std::string& s) { return inList (s, kUnruledClaims, 5); };
+        auto unruled  = [&] (const std::string& s) { return inList (s, kRuledSharedFb425, 5); };
         auto shipped  = [ ] (const std::string& s)
         { for (int i = 0; i < kNumShippedLabels; ++i) if (s == kShippedLabels[i]) return true; return false; };
 
@@ -2259,9 +2591,17 @@ int main()
         gate ("exemption list B (fb423 SANCTIONED mockup-only) is exactly 2 entries",
               (int) (sizeof kRuledMockupOnly / sizeof kRuledMockupOnly[0]) == 2, "Blur · Coarse");
         {   std::string u;
-            for (int i = 0; i < 5; ++i) { u += kUnruledClaims[i]; u += " "; }
-            gate ("🔴 UNRULED shared-vocabulary claims: exactly 5, named, awaiting a ruling",
-                  (int) (sizeof kUnruledClaims / sizeof kUnruledClaims[0]) == 5, u + " — FINDINGS §10"); }
+            for (int i = 0; i < 5; ++i) { u += kRuledSharedFb425[i]; u += " "; }
+            gate ("exemption list D (fb425 THIRD RULING, sanctioned) is exactly 5 entries",
+                  (int) (sizeof kRuledSharedFb425 / sizeof kRuledSharedFb425[0]) == 5,
+                  u + "— RENAMES.md fb425 'THE THIRD RULING', verified against each shipped use");
+            // and the ruling is only worth citing if the names it ruled on are still the
+            // names this device publishes. If a rename lands here later, this goes red.
+            int pub = 0;
+            for (int i = 0; i < 5; ++i)
+                for (auto& m : all) if (m.s == kRuledSharedFb425[i]) { ++pub; break; }
+            gate ("...and all 5 ruled names are still names this card actually publishes",
+                  pub == 5, fmt ("%.0f of 5 found on the card", (double) pub)); }
 
         // ── within the card: no two DIFFERENT controls share a word.
         //    Front slots 2/3/4 are the SAME control on all six Types, so they are deduped
@@ -2381,6 +2721,84 @@ int main()
             gate ("ROSTER.md's H1 is the device name published by the engine",
                   ro.find (std::string ("# WIDEN")) == 0, "# WIDEN — the locked roster"); }
 
+        // ── fb426 — THE ROSTER CHECK IS ORDERED AND POSITIONAL, not presence.
+        //    The gate above answers "does this character sequence occur anywhere in the file",
+        //    which is not the question. fb425 §DRIFT GATES ordered this made positional and said
+        //    "Widen's is correct" — true of the WORKLET half, false of this one, so the
+        //    instruction never reached the defect. The fourth family audit proved it: it moved
+        //    `Tremble` (a Twin Character) and `Seasick` (a Twofold Character) into each other's
+        //    Type grids and this file came back BIT-IDENTICAL to the unmutated baseline, while
+        //    both sibling gates fired on the same move. ROSTER §2 is the one downstream artefact
+        //    that ASSIGNS Characters to Types; presence cannot see a swap. Ported from
+        //    eq_cert.cpp §P (already written twice in this family).
+        {
+            const size_t s2 = ro.find ("## 2. ");
+            size_t e2 = (s2 == std::string::npos) ? std::string::npos : ro.find ("\n## ", s2 + 4);
+            if (e2 == std::string::npos) e2 = ro.size();
+            gate ("ROSTER §2 (the Character-to-Type assignment) is FOUND and bounded",
+                  s2 != std::string::npos && e2 > s2,
+                  s2 == std::string::npos ? std::string ("no `## 2. ` heading")
+                                          : fmt ("§2 spans %.0f bytes", (double) (e2 - s2)));
+            if (s2 != std::string::npos && e2 > s2)
+            {
+                const std::string sec = ro.substr (s2, e2 - s2);
+                struct Mark { size_t at; int t; };
+                std::vector<Mark> marks; std::string noMark;
+                for (int t = 0; t < W::kNumTypes; ++t)
+                {   const std::string m = std::string ("### ") + W::typeNames()[t];
+                    const size_t at = sec.find (m);
+                    if (at == std::string::npos)
+                        noMark += std::string (noMark.empty() ? "" : ", ") + W::typeNames()[t];
+                    else marks.push_back ({ at, t }); }
+                std::sort (marks.begin(), marks.end(),
+                           [] (const Mark& a, const Mark& b) { return a.at < b.at; });
+                gate ("   ... and every Type owns a section in it, exactly once",
+                      (int) marks.size() == W::kNumTypes,
+                      fmt2 ("%.0f of %.0f Type markers found", (double) marks.size(), (double) W::kNumTypes)
+                      + (noMark.empty() ? "" : "  MISSING: " + noMark));
+
+                std::string order, stray; int okT = 0;
+                for (size_t m = 0; m < marks.size(); ++m)
+                {
+                    const int t = marks[m].t;
+                    const size_t a = marks[m].at;
+                    const size_t b = (m + 1 < marks.size()) ? marks[m + 1].at : sec.size();
+                    std::vector<std::string> tok;
+                    for (size_t i = a; i < b; ++i)
+                        if (sec[i] == '`')
+                        {   const size_t e = sec.find ('`', i + 1);
+                            if (e == std::string::npos || e > b) break;
+                            tok.push_back (sec.substr (i + 1, e - i - 1)); i = e; }
+
+                    // the Character names for this Type, in slot order, must appear in slot order
+                    int slot = 0; bool good = true;
+                    for (const std::string& w : tok)
+                    {   if (slot >= W::kNumChars) break;
+                        if (w == W::charNames (t)[slot]) { ++slot; continue; }
+                        // a token that belongs to ANOTHER Type inside this region is a swap
+                        for (int u = 0; u < W::kNumTypes; ++u)
+                            for (int c = 0; c < W::kNumChars; ++c)
+                                if (u != t && w == W::charNames (u)[c])
+                                {   good = false;
+                                    stray += std::string (stray.empty() ? "" : ", ") + "`" + w + "` ("
+                                           + W::typeNames()[u] + "'s) inside the "
+                                           + W::typeNames()[t] + " section"; } }
+                    if (slot < W::kNumChars)
+                    {   good = false;
+                        order += std::string (order.empty() ? "" : ", ") + W::typeNames()[t]
+                               + " stops at slot " + std::to_string (slot) + " (wanted `"
+                               + W::charNames (t)[slot] + "`)"; }
+                    if (good) ++okT;
+                }
+                gate ("ROSTER §2 assigns the 48 Characters to the RIGHT Types, IN ORDER",
+                      okT == W::kNumTypes && order.empty() && stray.empty(),
+                      fmt2 ("%.0f of %.0f Type sections match charNames() element for element",
+                            (double) okT, (double) W::kNumTypes)
+                      + (order.empty() ? "" : "  ORDER: " + order)
+                      + (stray.empty() ? "" : "  CROSS-TYPE: " + stray));
+            }
+        }
+
         // ── and NOTHING downstream may still carry a RETIRED label. This is the 22-stale-
         //    strings problem, gated: header, worklet, roster AND this harness.
         {   struct Art { const char* nm; const std::string* txt; };
@@ -2446,10 +2864,13 @@ int main()
                      "        -DWIDEN_MUT_NOMONO     the `Hear Mono` fold deleted (§Q)\n"
                      "        -DWIDEN_MUT_MONOSNAP   the `Hear Mono` 15 ms fade -> a hard cut (§Q)\n"
                      "        -DWIDEN_MUT_NOFLOOR    the Voices floor of 3 removed, Twin pinned to one pair\n"
-                     "        -DWIDEN_MUT_APCLAMP    the fb421 +-0.97 allpass coefficient clamp restored\n\n");
+                     "        -DWIDEN_MUT_APCLAMP    the fb421 +-0.97 allpass coefficient clamp restored\n"
+                     "        -DWIDEN_MUT_RETRIGLFO  fb424's fireRetrig(), which only knew about the LFO (§P)\n"
+                     "        -DWIDEN_MUT_FLATFIELD  two of the six `Field` options collapsed to `Straight` (§V)\n\n");
        #if defined(WIDEN_MUT_HAAS) || defined(WIDEN_MUT_DEADKNOBS) || defined(WIDEN_MUT_POLITE) \
         || defined(WIDEN_MUT_NOSMOOTH) || defined(WIDEN_MUT_NOGLIDE) || defined(WIDEN_MUT_NODIP) \
-        || defined(WIDEN_MUT_NOFLOOR) || defined(WIDEN_MUT_APCLAMP)
+        || defined(WIDEN_MUT_NOFLOOR) || defined(WIDEN_MUT_APCLAMP) || defined(WIDEN_MUT_RETRIGLFO) \
+        || defined(WIDEN_MUT_FLATFIELD)
         gate ("this is a MUTATION build — the fail list above IS the deliverable", false,
               std::string ("mutation active: ") + kMutName);
        #else

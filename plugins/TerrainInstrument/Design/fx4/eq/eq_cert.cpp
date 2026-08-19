@@ -401,12 +401,12 @@ void sectionA()
     }
     // Amount 0 % nulls at ANY knob state — the A/B gesture, provable.
     {
-        EQ::Params p = refPatch (6, 7); p.f3 = 0.0f;      // Chisel / Metal, everything lit
+        EQ::Params p = refPatch (6, 7); p.f3 = 0.0f;      // Chisel / `Tin`, everything lit
         auto x = chordN (8192); std::vector<float> L (x), R (x);
         EQ e; e.prepare ((double) FS, 128);
         for (int i = 0; i < 8192; i += 128) { e.setParams (p); e.processStereo (&L[(size_t)i], &R[(size_t)i], 128); }
         double w = 0; for (int i = 0; i < 8192; ++i) w = std::max (w, (double) std::fabs (L[(size_t)i] - x[(size_t)i]));
-        gate ("Amount 0 % nulls BIT-EXACTLY at a full Chisel/Metal patch", w == 0.0, fmt ("worst delta %.3e", w));
+        gate ("Amount 0 % nulls BIT-EXACTLY at a full Chisel/`Tin` patch", w == 0.0, fmt ("worst delta %.3e", w));
     }
     // Mix 0 % is the dry, exactly.
     {
@@ -656,6 +656,35 @@ double sineDb (const EQ::Params& p, double hz, float rms = 0.05f, int nf = 16384
     return 20.0 * std::log10 (std::max (1e-30, amp / (rms * 1.41421356)));
 }
 
+// fb425 — the same coherent probe, PLUS the engine's own drawn curve averaged over the SAME
+//  run at one bin. §Q2c compares a measured floor with the engine's prediction; on the one
+//  level-dependent Type a prediction captured under a DIFFERENT excitation is not a
+//  prediction at all (measured: a viz snapshot taken under noise disagrees with a sine
+//  measurement by up to 40 dB on `Dynamic`, purely because a tone in the band drives the
+//  detector differently from noise). Predict and measure in the same breath, or not at all.
+double sineDbViz (const EQ::Params& p, double hz, float rms, int nf, int bin, double& vizAvg)
+{
+    const int NF = nf, settle = nf * 3 / 4, N = settle + NF;
+    const int kbin = std::max (1, (int) std::llround (hz * (double) NF / (double) FS));
+    const double f = kbin * (double) FS / NF;
+    std::vector<float> L ((size_t) N), R ((size_t) N);
+    for (int i = 0; i < N; ++i)
+    { const float v = (float) (rms * 1.41421356 * std::sin (6.283185307179586 * f * i / FS));
+      L[(size_t) i] = v; R[(size_t) i] = v; }
+    EQ e; e.prepare ((double) FS, 128);
+    double acc = 0; int nv = 0;
+    for (int i = 0; i < N; i += 128)
+    { e.setParams (p); e.processStereo (&L[(size_t) i], &R[(size_t) i], 128);
+      if (i >= settle && bin >= 0 && bin < NB) { acc += e.viz().curve[bin]; ++nv; } }
+    if (nv > 0) vizAvg = acc / nv;
+    double sr = 0, si = 0;
+    for (int i = 0; i < NF; ++i)
+    { const double a = 6.283185307179586 * kbin * i / NF;
+      sr += L[(size_t) (settle + i)] * std::cos (a); si -= L[(size_t) (settle + i)] * std::sin (a); }
+    const double amp = 2.0 * std::sqrt (sr * sr + si * si) / NF;
+    return 20.0 * std::log10 (std::max (1e-30, amp / (rms * 1.41421356)));
+}
+
 // -3 dB (half-height in dB) bandwidth in OCTAVES, bisected with sine probes so the answer
 // is resolution-free even at Q 90.
 double bwSine (const EQ::Params& p, double fc, float rms = 0.05f)
@@ -697,9 +726,9 @@ Feat featureOf (int t)
       const Spec b = transferOf (single (t, 0, 1, 30.0f, 550.0f));
       f.propRatio = bwOct (a) / std::max (0.02, bwOct (b)); }
     { const Spec s = transferOf (single (t, 0, 0, 24.0f, 90.0f)); f.undershoot = minInRange (s, 110.0, 720.0); }
-    // measured at each Type's DEFAULT Shape (0.5). At Shape 1.0 Surgical's `Width` is 40x
+    // measured at each Type's DEFAULT `Trait` (0.5). At `Trait` 1.0 Surgical's `Pinch` is 40x
     // and its low SHELF resonates too, which muddied the Passive discriminator to within
-    // 0.07 dB. At the default, Width is exactly 1.0 and Surgical has no resonance at all,
+    // 0.07 dB. At the default, `Pinch` is exactly 1.0 and Surgical has no resonance at all,
     // so the scoop belongs to Passive alone - which is the claim being tested.
     { const Spec s = transferOf (single (t, 0, 0, 18.0f, 60.0f, 0.5f)); f.scoop = minInRange (s, 150.0, 700.0); }
     { const Spec a = transferOf (single (t, 0, 1, -18.0f, 550.0f), 0.01f);     // -40 dBFS
@@ -976,7 +1005,7 @@ void sectionF()
         note ("   0->100 %: " + sweepRow (r.s));
     }
 
-    // Shape (P8) is a different knob in every Type: seven sweeps, seven metrics.
+    // `Trait` (P8) is a different knob in every Type: seven sweeps, seven metrics.
     section ("F2. `Trait` — the P8 relabel, swept per Type on ITS OWN physics");
     struct SRow { int t; const char* nm; Sweep s; double need; };
     std::vector<SRow> sr;
@@ -1137,14 +1166,14 @@ void sectionG()
         gate ("   ... and at the knob's maximum the swing is >= 24 dB", d >= 24.0,
               fmt ("%.2f dB between a whisper and a wall", d));
     }
-    {   // Inverted really is inverted, measured
+    {   // `Upward` really does ride the other way, measured
         const Spec a = transferOf (single (5, 4, 1, -24.0f, 550.0f), 0.0056f);
         const Spec b = transferOf (single (5, 4, 1, -24.0f, 550.0f), 0.25f);
         const Spec c = transferOf (single (5, 0, 1, -24.0f, 550.0f), 0.0056f);
         const Spec d = transferOf (single (5, 0, 1, -24.0f, 550.0f), 0.25f);
         const double si = atHz (b, 550.0) - atHz (a, 550.0);
         const double sn = atHz (d, 550.0) - atHz (c, 550.0);
-        gate ("Character `Inverted` reverses the sign of the ride", si * sn < 0.0,
+        gate ("Character `Upward` reverses the sign of the ride", si * sn < 0.0,
               fmt2 ("normal %+.2f dB/level · inverted %+.2f dB/level", sn, si));
     }
 }
@@ -1593,9 +1622,9 @@ void sectionK()
             fmt2 ("peak %+.1f dB, deepest hole %+.1f dB", specMax (s), hole));
       gate ("   ... total dynamic range of ONE curve >= 120 dB", specMax (s) - hole >= 120.0,
             fmt ("%.0f dB from the top of the curve to the bottom", specMax (s) - hole)); }
-    { EQ::Params p = single (0, 0, 1, 24.0f, 550.0f, 1.0f);   // Width at maximum
+    { EQ::Params p = single (0, 0, 1, 24.0f, 550.0f, 1.0f);   // `Pinch` at maximum
       const double bw = bwSine (p, 550.0);
-      gate ("Surgical `Width` at 100 % is a resonator, not an EQ curve", bw < 0.10,
+      gate ("Surgical `Pinch` at 100 % is a resonator, not an EQ curve", bw < 0.10,
             fmt2 ("half-height width %.4f octaves (%.0f Hz wide at 550 Hz)", bw,
                   550.0 * (std::pow (2.0, bw * 0.5) - std::pow (2.0, -bw * 0.5)))); }
     { const double t = t60ms (single (6, 1, 1, 28.0f, 550.0f, 1.0f));
@@ -1732,7 +1761,7 @@ void sectionM()
         auto t0 = std::chrono::high_resolution_clock::now();
         for (int i = 0; i < NBLK; ++i)
         { p.b3 = 0.3f + 0.4f * (float) std::sin (i * 0.01);       // Body Hz under the finger
-          p.b8 = 0.4f + 0.3f * (float) std::cos (i * 0.013);      // Ring too
+          p.b8 = 0.4f + 0.3f * (float) std::cos (i * 0.013);      // `Trait` too
           for (int k = 0; k < 128; ++k) { L[(size_t)k] = 0.01f * std::sin (0.03f * (k + i)); R[(size_t)k] = L[(size_t)k]; }
           e.setParams (p); e.processStereo (L.data(), R.data(), 128); }
         auto t1 = std::chrono::high_resolution_clock::now();
@@ -1812,8 +1841,21 @@ static const Sanction kSanctioned[] = {
     { "Side",   "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
     { "Left",   "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
     { "Right",  "RENAMES.md fb423 SANCTIONED: M/S routing vocabulary, ruled as a group" },
+    // fb425. `Character` is the CHASSIS word: back dropdown 1 is `Character` on all four fx4
+    // devices and on all three fx3 devices before them (TerrainCompressFx.h:113 and
+    // TerrainOttFx.h:114 publish it in their own dropdownNames()). It arrives in this gate
+    // only because fb425 made this device publish its dropdown HEADINGS at all — it has been
+    // printed on the card since fb420 and simply sat outside every gate. FIXES.md fb425, EQ
+    // block: "Both words are already ruled (Focus is in CONTRACT §4 and in fb423 SANCTIONED;
+    // Character is chassis), so this closes a coverage hole rather than opening a naming
+    // question." Renaming it would give this one device a different word for the control
+    // every other device calls `Character`, which is the opposite of the no-doubles law's aim.
+    { "Character", "FIXES.md fb425 EQ block: chassis vocabulary, shared by all four fx4 devices" },
 };
 // every EQUALIZER row of RENAMES.md, as data: the old string must be GONE, the new one PRESENT.
+//@RETIRED-OK-BEGIN kRenames: the RENAMES.md rows themselves — a rename table that may not
+//  name the OLD string cannot state a rename. This is the one place in the file where a
+//  retired name is the SUBJECT rather than a leak, and §P3 blanks exactly these lines.
 struct Rename { const char* oldNm; const char* newNm; const char* slot; };
 static const Rename kRenames[] = {
     { "Tilt",      "Slant",      "front hero 1"    }, { "Sculpt",   "Chisel",    "Type 6 pill"     },
@@ -1833,6 +1875,7 @@ static const Rename kRenames[] = {
     { "Peak Hold", "Peak Keep",  "Dynamic char 7"  }, { "Razor",    "Scalpel",   "Chisel char 1"   },
     { "Telephone", "Handset",    "Chisel char 5"   }, { "Metal",    "Tin",       "Chisel char 7"   },
 };
+//@RETIRED-OK-END
 bool hasLabel (const char* w)
 { for (int i = 0; i < EQ::kNumLabels; ++i) if (! std::strcmp (EQ::label (i), w)) return true; return false; }
 
@@ -1846,6 +1889,8 @@ void sectionO()
           + fmt (" fx4 dirs; this device publishes %.0f.", (double) EQ::kNumLabels));
 
     // 0. the extractor must be able to see yesterday's labels, or it cannot protect tomorrow's.
+    //@RETIRED-OK-BEGIN the extractor self-check: it PROVES the shipped-label list still contains
+    //  the two Tape knobs fb420 collided with. Naming them is the whole assertion.
     { bool motion = false, route = false, tilt = false, sculpt = false;
       for (int k = 0; k < nShipped; ++k)
       { if (! std::strcmp (kShippedLabels[k], "Motion")) motion = true;
@@ -1858,6 +1903,7 @@ void sectionO()
       gate ("(self-check) ... and the two shipped Tape knobs fb420 collided with",
             tilt && sculpt, std::string ("Tilt ") + (tilt ? "yes" : "NO")
             + " · Sculpt " + (sculpt ? "yes" : "NO") + "  — this is what the gate is FOR"); }
+    //@RETIRED-OK-END
 
     // 1. every EQUALIZER row of RENAMES.md applied, verbatim.
     { int applied = 0; std::string bad;
@@ -1904,7 +1950,12 @@ void sectionO()
       //  to the number it actually SPENDS, so a sanction can never be added ahead of a
       //  collision and quietly pre-authorise it. Any change to this number is a deliberate edit.
       //
-      //  It is 8, and the 8 are: Low · Body · Air · Amount · Mix · Tight · Stereo · Mid.
+      //  It is 9, and the 9 are: Low · Body · Air · Amount · Mix · Tight · Stereo · Mid ·
+      //  Character. fb425 spent exactly ONE more, and only because this device started
+      //  PUBLISHING its two dropdown headings: `Character` has been printed on the card since
+      //  fb420 and was simply outside every gate until `dropdownNames()` existed. It is the
+      //  chassis word — back dropdown 1 is `Character` on all four fx4 devices — so the
+      //  ruling is a citation (FIXES.md fb425), not a new decision. Deliberate edit, stated.
       //  It was 10 until the corpus was re-extracted at fb423 and TWO exemptions came back
       //  UNSPENT — `Bite`, because OTT renamed its pill `Bite`->`Crest`, and `Silk`, because
       //  Widen renamed its Character `Silk`->`Satin`. Both are RENAMES.md rows landing in a
@@ -1920,8 +1971,8 @@ void sectionO()
             for (int k = 0; k < nShipped && ! used; ++k)
               if (! std::strcmp (kShippedLabels[k], q.name)) used = true;
         if (! used) unused += std::string (unused.empty() ? "" : ", ") + q.name; }
-      gate ("the sanctioned list SPENDS exactly 8 exemptions — it cannot quietly grow",
-            nSanc == 8,
+      gate ("the sanctioned list SPENDS exactly 9 exemptions — it cannot quietly grow",
+            nSanc == 9,
             fmt2 ("%.0f of %.0f sanctions are actually spent on a live collision", (double) nSanc,
                   (double) nSanctions)
             + (unused.empty() ? "" : "; carried but unspent (ruled as a GROUP): " + unused));
@@ -2048,6 +2099,46 @@ std::string dropTopBanner (const std::string& src, int& nDropped, size_t& firstL
     }
     return out;
 }
+// 🔑 fb425 — THE CERT SCANS ITSELF. §P3 used to read ROSTER.md and the worklet and stop
+//  there, and the file doing the scanning was printing THREE retired names in its own gate
+//  labels: `Chisel/Metal`, `Inverted` and Surgical `Width`, while the engine said `Tin`,
+//  `Upward` and `Pinch`. A reader's only view of this device is the gate labels; a cert that
+//  narrates the old roster is the same drift as a ROSTER that does, one file closer to the
+//  reader. Three regions of this file must be allowed to spell the old names because the old
+//  names ARE their subject — the RENAMES table, the extractor self-check and the blacklist —
+//  and each is bracketed by an @RETIRED-OK sentinel with its reason. The count is ASSERTED,
+//  so the exemption cannot quietly grow, and every sentinel's reason is printed on every run.
+struct OkRegion { size_t first, last; std::string why; };
+std::string dropOkRegions (const std::string& src, std::vector<OkRegion>& regs, int& unbalanced)
+{
+    std::string out; regs.clear(); unbalanced = 0;
+    size_t i = 0, ln = 0; bool inside = false; OkRegion cur {};
+    while (i <= src.size())
+    {
+        size_t e = src.find ('\n', i); if (e == std::string::npos) e = src.size();
+        const std::string line = src.substr (i, e - i);
+        size_t k = 0; while (k < line.size() && (line[k] == ' ' || line[k] == '\t')) ++k;
+        const std::string t = line.substr (k);
+        if (t.compare (0, 19, "//@RETIRED-OK-BEGIN") == 0)
+        {
+            if (inside) ++unbalanced;
+            inside = true; cur = OkRegion { ln, ln, t.substr (19) };
+        }
+        else if (t.compare (0, 17, "//@RETIRED-OK-END") == 0)
+        {
+            if (! inside) ++unbalanced;
+            else { cur.last = ln; regs.push_back (cur); }
+            inside = false;
+        }
+        if (! inside && t.compare (0, 17, "//@RETIRED-OK-END") != 0) out += line;
+        out += '\n'; ++ln;
+        if (e == src.size()) break;
+        i = e + 1;
+    }
+    if (inside) ++unbalanced;
+    return out;
+}
+
 // a RETIRED name occurs as a whole token AND is not the head of a LONGER LIVE label
 // (`Program` must never fire on `Program Ride`; `Slow` must never fire on `Slow Top`).
 int countRetired (const std::string& hay, const std::string& needle, std::string& ctx)
@@ -2092,31 +2183,38 @@ int countQuoted (const std::string& hay, const std::string& lab)
   while ((at = hay.find (q, at)) != std::string::npos) { ++n; at += q.size(); } return n; }
 
 // the 29 strings this device has RETIRED across both rulings. Nothing downstream may say them.
+//@RETIRED-OK-BEGIN kRetired: the hunted list itself. A blacklist that may not spell its own
+//  entries cannot exist.
 static const char* kRetired[] = {
     "Tilt", "Sculpt", "Shape", "Width", "Bump", "Grip", "Ring", "Sense", "Clean", "Carve",
     "Console", "Fixed Top", "Gentle", "Modern", "Close Dip", "Far Dip", "Silky", "Fast",
     "Slow", "Inverted", "Gain Ring",
     "Forward", "Runaway", "Program", "Stacked", "Peak Hold", "Razor", "Telephone", "Metal"
 };
+//@RETIRED-OK-END
 
 void sectionP()
 {
-    section ("P. DOWNSTREAM — ROSTER.md and eq-worklet.js EQUAL the header (fb423)");
+    section ("P. DOWNSTREAM — ROSTER.md, eq-worklet.js AND THIS CERT agree with the header");
 
-    std::string roster, worklet;
+    std::string roster, worklet, self;
     const std::string dir = certDir();
     const bool haveR = slurp (dir + "ROSTER.md",     roster);
     const bool haveW = slurp (dir + "eq-worklet.js", worklet);
-    gate ("both downstream files are READABLE (a missing file FAILS, it does not skip)",
-          haveR && haveW, std::string ("ROSTER.md ") + (haveR ? "yes" : "NO") + " · eq-worklet.js "
-          + (haveW ? "yes" : "NO") + "  at " + (dir.empty() ? std::string ("./") : dir));
-    if (! haveR || ! haveW) return;
+    const bool haveS = slurp (dir + "eq_cert.cpp",   self);          // fb425: the cert scans itself
+    gate ("all THREE published files are READABLE (a missing file FAILS, it does not skip)",
+          haveR && haveW && haveS, std::string ("ROSTER.md ") + (haveR ? "yes" : "NO")
+          + " · eq-worklet.js " + (haveW ? "yes" : "NO")
+          + " · eq_cert.cpp " + (haveS ? "yes" : "NO")
+          + "  at " + (dir.empty() ? std::string ("./") : dir));
+    if (! haveR || ! haveW || ! haveS) return;
 
     // ── P1. the worklet's six name tables EQUAL the header's, element by element ──
     {
         struct A { const char* js; int n; };
         const A arrays[] = { { "TYPES", EQ::kNumTypes }, { "FOCUS", EQ::kNumFocus },
                              { "TRAIT", EQ::kNumTypes }, { "BACK", 8 }, { "FRONT", 4 },
+                             { "DROPDOWN", EQ::kNumDropdowns },
                              { "CHARS", EQ::kNumTypes * EQ::kNumChars } };
         int checked = 0; std::string bad, err;
         for (const A& a : arrays)
@@ -2134,6 +2232,7 @@ void sectionP()
                                  : ! std::strcmp (a.js, "TRAIT") ? EQ::shapeName (i)
                                  : ! std::strcmp (a.js, "BACK")  ? EQ::backNames()[i]
                                  : ! std::strcmp (a.js, "FRONT") ? EQ::frontNames()[i]
+                                 : ! std::strcmp (a.js, "DROPDOWN") ? EQ::dropdownNames()[i]
                                  : EQ::charNames (i / EQ::kNumChars)[i % EQ::kNumChars];
                 if (got[(size_t) i] != want)
                     bad += std::string (bad.empty() ? "" : ", ") + a.js + "[" + std::to_string (i)
@@ -2176,9 +2275,22 @@ void sectionP()
         // the two exemptions, both structural, both asserted so they cannot quietly grow:
         //   ROSTER.md   — the `>` changelog blockquote NARRATES the old names on purpose.
         //   worklet     — `//` comments do the same.
-        int nQuote = 0, nComment = 0, nLaterQuote = 0; size_t firstQ = 0, lastQ = 0, lastComment = 0;
+        int nQuote = 0, nComment = 0, nLaterQuote = 0, nSelfCmt = 0; size_t firstQ = 0, lastQ = 0, lastComment = 0;
         const std::string rBody = dropTopBanner (roster, nQuote, firstQ, lastQ, nLaterQuote);
         const std::string wBody = dropLines (worklet, "//", nComment, lastComment);
+        // fb425 — eq_cert.cpp joins the scan. Its `//` prose NARRATES the history exactly as
+        // the worklet's does (same exemption, same reason); what is scanned is every line of
+        // CODE, which is where the gate LABELS live — the three strings this round found.
+        std::vector<OkRegion> okRegs; int unbalanced = 0;
+        size_t lastSelfCmt = 0;
+        const std::string sBody = dropLines (dropOkRegions (self, okRegs, unbalanced),
+                                             "//", nSelfCmt, lastSelfCmt);
+        gate ("the cert's own retired-name exemption is EXACTLY 3 bracketed regions, balanced",
+              okRegs.size() == 3 && unbalanced == 0,
+              fmt2 ("%.0f regions, %.0f unbalanced sentinels", (double) okRegs.size(), (double) unbalanced));
+        for (const OkRegion& r : okRegs)
+            note (fmt2 ("   exempt lines %.0f-%.0f:", (double) (r.first + 1), (double) (r.last + 1))
+                  + r.why);
 
         // the exemption must be ONE contiguous region, opening the file, ending before §0.
         size_t firstH = 0, ln = 0, i = 0; bool found = false;
@@ -2207,20 +2319,23 @@ void sectionP()
         std::string live; int nHits = 0;
         for (const char* r : kRetired)
         {
-            std::string cR, cW;
-            const int hR = countRetired (rBody, r, cR), hW = countRetired (wBody, r, cW);
-            if (hR + hW == 0) continue;
-            nHits += hR + hW;
+            std::string cR, cW, cS;
+            const int hR = countRetired (rBody, r, cR), hW = countRetired (wBody, r, cW),
+                      hS = countRetired (sBody, r, cS);
+            if (hR + hW + hS == 0) continue;
+            nHits += hR + hW + hS;
             live += std::string (live.empty() ? "" : "; ") + r
                   + (hR ? " ROSTER.md x" + std::to_string (hR) + " [" + cR + "]" : "")
-                  + (hW ? " worklet x"   + std::to_string (hW) + " [" + cW + "]" : "");
+                  + (hW ? " worklet x"   + std::to_string (hW) + " [" + cW + "]" : "")
+                  + (hS ? " eq_cert.cpp x" + std::to_string (hS) + " [" + cS + "]" : "");
         }
-        gate ("not one of the 29 RETIRED strings survives downstream (prose included)",
+        gate ("not one of the 29 RETIRED strings survives in ROSTER, worklet OR THE CERT",
               nHits == 0,
               fmt ("%.0f retired strings still live", (double) nHits)
-              + (live.empty() ? "  (29 checked, 0 hits)" : ":  " + live));
-        note (fmt ("   exempt: %.0f ROSTER.md changelog blockquote lines", (double) nQuote)
-              + fmt (" and %.0f eq-worklet.js comment lines — both NARRATE the old names.", (double) nComment));
+              + (live.empty() ? "  (29 x 3 files checked, 0 hits)" : ":  " + live));
+        note (fmt ("   exempt: %.0f ROSTER.md changelog blockquote lines, ", (double) nQuote)
+              + fmt ("%.0f eq-worklet.js and ", (double) nComment)
+              + fmt ("%.0f eq_cert.cpp comment lines — all NARRATE the old names.", (double) nSelfCmt));
     }
 
     // ── P4. the ROSTER's §4 Trait table re-states the P8 relabels in its own words ──
@@ -2243,10 +2358,657 @@ void sectionP()
         { if (roster.find (EQ::label (i)) != std::string::npos) ++ok;
           else miss += std::string (miss.empty() ? "" : ", ") + EQ::label (i)
                      + " (" + EQ::labelSlot (i) + ")"; }
-        gate ("ROSTER.md names all 87 published labels (no label lives only in the header)",
+        gate ("ROSTER.md names all 89 published labels (no label lives only in the header)",
               ok == EQ::kNumLabels,
               fmt2 ("%.0f of %.0f present", (double) ok, (double) EQ::kNumLabels)
               + (miss.empty() ? "" : "  ABSENT: " + miss));
+        note ("   presence is COVERAGE and nothing more — P6 below is the gate that reads the");
+        note ("   ROSTER positionally, because §3 is the one file that ASSIGNS Characters to Types.");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  🔑 fb425 — P6. THE ROSTER HALF OF THE DRIFT GATE, MADE ORDERED AND POSITIONAL.
+    //
+    //  P1 diffs the worklet element by element. The ROSTER was covered only by P5's
+    //  `roster.find (label) != npos` — a bare substring presence test with no position, no
+    //  Type association, no ordering and no word boundary. A skeptic moved two Characters
+    //  under the WRONG TYPES in `ROSTER.md §3` and P5 stayed green, because both strings
+    //  were still SOMEWHERE in the file. §3 is the one downstream document that ASSIGNS
+    //  Characters to Types; presence in it proves nothing about the assignment.
+    //
+    //  This gate reads §3 the way the card does:
+    //    · the section is bounded by its own headings (`## 3.` .. the next `## `),
+    //    · each Type owns the region from its own `**Name**` marker to the next one,
+    //    · the FIRST 8 backticked tokens in that region must EQUAL `charNames(t)` IN ORDER,
+    //    · and EVERY backticked token in the region must belong to that Type — the reverse
+    //      direction, which is what catches a Character that has wandered in from elsewhere.
+    //  A missing marker or a short region FAILS; it does not skip.
+    // ═════════════════════════════════════════════════════════════════════════
+    {
+        const size_t s3 = roster.find ("## 3. ");
+        size_t e3 = (s3 == std::string::npos) ? std::string::npos : roster.find ("\n## ", s3 + 4);
+        if (e3 == std::string::npos) e3 = roster.size();
+        gate ("ROSTER §3 (the Character-to-Type assignment) is FOUND and bounded",
+              s3 != std::string::npos && e3 > s3,
+              s3 == std::string::npos ? std::string ("no `## 3. ` heading")
+                                      : fmt2 ("§3 spans %.0f bytes, ends at the next `## ` (offset %.0f)",
+                                              (double) (e3 - s3), (double) e3));
+        if (s3 != std::string::npos && e3 > s3)
+        {
+            const std::string sec = roster.substr (s3, e3 - s3);
+
+            // where each Type's paragraph starts, in FILE order (which is not roster index order)
+            struct Mark { size_t at; int t; };
+            std::vector<Mark> marks; std::string noMark;
+            for (int t = 0; t < EQ::kNumTypes; ++t)
+            { const std::string m = std::string ("**") + EQ::typeNames()[t] + "**";
+              const size_t at = sec.find (m);
+              if (at == std::string::npos) noMark += std::string (noMark.empty() ? "" : ", ") + EQ::typeNames()[t];
+              else marks.push_back ({ at, t }); }
+            std::sort (marks.begin(), marks.end(), [] (const Mark& a, const Mark& b) { return a.at < b.at; });
+            gate ("   ... and every Type owns a paragraph in it, exactly once",
+                  (int) marks.size() == EQ::kNumTypes,
+                  fmt2 ("%.0f of %.0f Type markers found", (double) marks.size(), (double) EQ::kNumTypes)
+                  + (noMark.empty() ? "" : "  MISSING: " + noMark));
+
+            std::string order, stray; int okT = 0;
+            for (size_t m = 0; m < marks.size(); ++m)
+            {
+                const int t = marks[m].t;
+                const size_t a = marks[m].at;
+                const size_t b = (m + 1 < marks.size()) ? marks[m + 1].at : sec.size();
+                // every `backticked` token in this Type's region, in source order
+                std::vector<std::string> tok;
+                for (size_t i = a; i < b; ++i)
+                    if (sec[i] == '`')
+                    { const size_t e = sec.find ('`', i + 1); if (e == std::string::npos || e > b) break;
+                      tok.push_back (sec.substr (i + 1, e - i - 1)); i = e; }
+
+                bool good = ((int) tok.size() >= EQ::kNumChars);
+                for (int c = 0; good && c < EQ::kNumChars; ++c)
+                    if (tok[(size_t) c] != EQ::charNames (t)[c])
+                    { good = false;
+                      order += std::string (order.empty() ? "" : ", ") + EQ::typeNames()[t]
+                             + " slot " + std::to_string (c) + ": ROSTER '" + tok[(size_t) c]
+                             + "' vs header '" + EQ::charNames (t)[c] + "'"; }
+                // the reverse direction: nothing from ANOTHER Type may appear in this region
+                for (const std::string& w : tok)
+                {
+                    bool mine = false;
+                    for (int c = 0; c < EQ::kNumChars && ! mine; ++c) mine = (w == EQ::charNames (t)[c]);
+                    if (mine) continue;
+                    for (int u = 0; u < EQ::kNumTypes; ++u)
+                        for (int c = 0; c < EQ::kNumChars; ++c)
+                            if (w == EQ::charNames (u)[c])
+                            { good = false;
+                              stray += std::string (stray.empty() ? "" : ", ") + "`" + w + "` ("
+                                     + EQ::typeNames()[u] + "'s) inside the " + EQ::typeNames()[t]
+                                     + " paragraph"; }
+                }
+                if (good) ++okT;
+            }
+            gate ("ROSTER §3 assigns the 56 Characters to the RIGHT Types, IN ORDER",
+                  okT == EQ::kNumTypes && order.empty() && stray.empty(),
+                  fmt2 ("%.0f of %.0f Type paragraphs match charNames() element for element",
+                        (double) okT, (double) EQ::kNumTypes)
+                  + (order.empty() ? "" : "  ORDER: " + order)
+                  + (stray.empty() ? "" : "  CROSS-TYPE: " + stray));
+        }
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  🔴 Q — THE FULL Type x Character MATRIX  (fb425, THE LAST LEVEL)
+//
+//  Three rounds, and the blindness moved down exactly one notch each time:
+//      fb421  the gates could not fail AT ALL      (delete the mechanism, cert stays green)
+//      fb423  the gates ran on ONE TYPE            (sweep the other six)
+//      fb424  the gates ran on ONE TYPE x CHARACTER CELL   (sweep the other 55)
+//  There is no deeper level, because THE MATRIX IS FINITE. 7 Types x 8 Characters = 56
+//  cells; x 12 knobs = 672 knob-cells. The whole sweep below costs about a second. Sampling
+//  it was always a choice, not a constraint — so this section takes the choice away:
+//  §F/§F2/§F3 keep their hand-built, per-knob metrics (they are the ones that can tell a
+//  bandwidth from a shelf undershoot), and §Q re-asks the ONE question that admits no
+//  per-knob craft — "does this knob DO anything here?" — in every cell there is.
+//
+//  🔬 CHECK YOUR OWN DETECTOR, and this section needed it twice:
+//
+//  (1) PROBE PLACEMENT. The first build of §Q1 read the Open Type's `Trait` as 1.83 dB —
+//      nearly dead — with `Reach` at the reference patch's 16 kHz. `Silk` is a SECOND shelf
+//      one octave ABOVE Reach; at Reach 16 kHz that shelf sits at 32 kHz, past Nyquist, and
+//      what was being measured was the PROBE's choice of corner, not the knob. The matrix
+//      patch therefore parks `Reach` at 9 kHz, where every Type's top-band mechanism is in
+//      band. §F2 already knew this — its Open row says "Reach 9 kHz" — and the matrix has to
+//      know it too or it grades the probe.
+//
+//  (2) OPERATING POINT. At the -26 dBFS bus program, ELEVEN knob-cells on the `Dynamic`
+//      Type are BIT-IDENTICAL at 0 % and 100 %. They are not dead knobs: `Dynamic` is the
+//      one Type CONTRACT §4 allows to be level-dependent, and its ride has closed those
+//      BOOST bands completely because the program is loud — which is the Type's whole
+//      advertised mechanism (ROSTER §3 publishes the table: `Program Ride` hot -24.0 dB,
+//      quiet 0.0 dB). A band the ride has switched off has no frequency to move. Every one
+//      of those eleven wakes up at a -46 dBFS program, measured below. So the gate probes
+//      each cell at the bus program and, only where that reads inert, RE-PROBES at -46 and
+//      -6 dBFS — and the eleven are DECLARED in `kRideClosed` with the level that revealed
+//      them, checked in BOTH directions so the list can neither hide a dead knob nor keep a
+//      stale entry.
+//
+//  A cell that is bit-identical at ALL THREE program levels is a dead knob and fails with
+//  its coordinates. There are none.
+// ═════════════════════════════════════════════════════════════════════════════
+
+static const char* const kKnobName[12] =
+{ "Slant", "Air", "Amount", "Mix", "Low Hz", "Low", "Body Hz", "Body", "Bite Hz", "Bite",
+  "Reach", "Trait" };
+
+float* knobPtr (EQ::Params& p, int k)
+{
+    switch (k)
+    { case 0: return &p.f1; case 1: return &p.f2; case 2: return &p.f3; case 3: return &p.mix;
+      case 4: return &p.b1; case 5: return &p.b2; case 6: return &p.b3; case 7: return &p.b4;
+      case 8: return &p.b5; case 9: return &p.b6; case 10: return &p.b7; default: return &p.b8; }
+}
+
+// the matrix cell patch: the reference four-band move, with `Reach` parked at 9 kHz so the
+// top-band mechanism of EVERY Type is inside the audio band (see (1) above).
+EQ::Params matPatch (int t, int c)
+{ EQ::Params p = refPatch (t, c); p.b7 = fN (3, 9000.0f); return p; }
+
+// one run of the matrix probe: the analysed tail AND its 96-bin log spectrum. The input is
+// identical for both ends of a sweep, so the difference of the two OUTPUT spectra IS the
+// transfer difference — a magnitude metric, never a sample difference (law 6).
+struct MRun { std::vector<float> y; double db[NB]; };
+MRun matRun (const EQ::Params& p, float rms)
+{
+    const int NF = 8192, settle = 4096, N = settle + NF;
+    const std::vector<float> x = whiteN (N, rms, 12345u);
+    std::vector<float> L (x), R (x);
+    EQ e; e.prepare ((double) FS, 128);
+    for (int i = 0; i < N; i += 128) { e.setParams (p); e.processStereo (&L[(size_t) i], &R[(size_t) i], 128); }
+    MRun r; r.y.assign (L.begin() + settle, L.end());
+    std::vector<std::complex<double>> A ((size_t) NF);
+    for (int i = 0; i < NF; ++i)
+    { const double w = 0.5 - 0.5 * std::cos (6.283185307179586 * i / (NF - 1));
+      A[(size_t) i] = r.y[(size_t) i] * w; }
+    fft (A);
+    std::vector<double> s ((size_t) NF / 2 + 1);
+    for (int k = 0; k <= NF / 2; ++k) s[(size_t) k] = std::norm (A[(size_t) k]);
+    for (int i = 0; i < NB; ++i)
+    { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, 1.5 / 95.0);
+      int klo = std::max (1, (int) std::floor (fc / rr * NF / FS));
+      int khi = std::min (NF / 2, std::max ((int) std::ceil (fc * rr * NF / FS), klo));
+      double n = 0; for (int k = klo; k <= khi; ++k) n += s[(size_t) k];
+      r.db[i] = 10.0 * std::log10 (std::max (1e-300, n)); }
+    return r;
+}
+
+// the three program levels, in the order the gate tries them.
+static const float       kLvlRms[3]  = { 0.05f, 0.005f, 0.5f };
+static const char* const kLvlName[3] = { "-26 dBFS (the bus program)", "-46 dBFS (quiet)",
+                                         "-6 dBFS (hot)" };
+
+// ── THE DECLARED ROSTER FACTS. Both tables are ASSERTED-SIZE, and both are checked in BOTH
+//    directions: an undeclared cell FAILS, and a declared cell that is NOT what it claims
+//    also FAILS. A gate that can exempt itself is not a gate (RENAMES.md fb425).
+struct MCell { int t, c, k; const char* why; };
+
+//  (a) LEGITIMATELY INERT — the mechanism genuinely does not exist on that Type. There are
+//      NONE in this device: every one of the 12 knobs is wired into every one of the 7 Types
+//      (the Q law, the gain law and the four bands are re-voiced per Type, never removed),
+//      and the 672-cell sweep below confirms it. The table exists at size 0 so that "no cell
+//      is inert" is an ASSERTION with a size, not an absence nobody looked for.
+[[maybe_unused]] static const MCell kKnownInert[] = {};
+static constexpr int kNumKnownInert = (int) (sizeof (kKnownInert) / sizeof (MCell));
+static_assert (kNumKnownInert == 0,
+               "fb425: any legitimately-inert cell must be declared HERE, with a reason");
+
+//  (b) RIDE-CLOSED AT THE BUS PROGRAM — alive, but only once the program leaves the level
+//      that closes the band. Every entry is on `Dynamic`, the one Type allowed to be
+//      level-dependent, and every one is a BOOST band whose ride is fully down at -26 dBFS.
+static const MCell kRideClosed[] = {
+    { 5, 3, 4,  "Dynamic x `Wideband`: ONE wideband envelope drives all four bands, so at a hot "
+                "program every BOOST band is fully closed and `Low Hz` has no live band to move" },
+    { 5, 3, 8,  "Dynamic x `Wideband`: same wideband envelope, the BITE boost is closed too" },
+    { 5, 5, 8,  "Dynamic x `Hard Window`: a 2.5 dB window is fully ON at -26 dBFS, so the BITE "
+                "boost is held at zero gain and its frequency knob has nothing to move" },
+    { 5, 7, 8,  "Dynamic x `Peak Keep`: peak-hold release keeps the BITE boost closed for the "
+                "whole analysis window at a hot program" },
+    { 5, 0, 10, "Dynamic x `Program Ride`: the AIR boost is fully ridden down at -26 dBFS, so "
+                "`Reach` (its corner) has no live shelf to move" },
+    { 5, 1, 10, "Dynamic x `Quick`: same closed AIR boost, 0.67 ms attack" },
+    { 5, 2, 10, "Dynamic x `Lazy`: same closed AIR boost, 307 ms release" },
+    { 5, 3, 10, "Dynamic x `Wideband`: same closed AIR boost, wideband detector" },
+    { 5, 5, 10, "Dynamic x `Hard Window`: same closed AIR boost, 2.5 dB window" },
+    { 5, 6, 10, "Dynamic x `Soft Window`: same closed AIR boost, 34 dB window" },
+    { 5, 7, 10, "Dynamic x `Peak Keep`: same closed AIR boost, peak-hold release" },
+};
+static constexpr int kNumRideClosed = (int) (sizeof (kRideClosed) / sizeof (MCell));
+static_assert (kNumRideClosed == 11, "fb425: the ride-closed roster fact is exactly 11 cells");
+
+//  (c) CEILING-CAPPED CELLS — R11 replayed on all 56 cells (§Q8). Three Characters cap the
+//      device's own ceiling by a mechanism they publish in ROSTER §3. They are exempt from
+//      the 55 dB bar and are held to a floor of 32 dB instead — twice, in decibels, the
+//      loudest hardware EQ ever built (a Pultec/console tops out at 16 dB, which is the same
+//      reference frame §K's thresholds are defended against).
+struct RCell { int t, c; const char* why; };
+static const RCell kCapped[] = {
+    { 4, 5, "Open x `Soft Knee`: a 12 dB tanh knee IS the Character — `g = knee*tanh(g/knee)` "
+            "caps a +60 dB request at ~24 dB by design (ROSTER §3: 'heavy compression of extremes')" },
+    { 6, 5, "Chisel x `Handset`: LOW and AIR are pulled to 2.5x/0.35x and become BELLS, so the "
+            "two SHELVES that carry the biggest boost are not in this Character at all" },
+    { 6, 6, "Chisel x `Sub Kill`: LOW sits at 0.35x with Q x3 and a -10 dB knee — a deliberately "
+            "narrow sub-band, not a full-range shelf" },
+};
+static constexpr int kNumCapped = (int) (sizeof (kCapped) / sizeof (RCell));
+static_assert (kNumCapped == 3, "fb425: the R11 cap exemption is exactly 3 cells, each cited");
+
+// a failure list that stays READABLE: the first six offenders by name, then a count. A gate
+// whose evidence is 56 lines long is evidence nobody reads.
+void addCapped (std::string& dst, int n, const std::string& item)
+{
+    if (n < 6)       dst += std::string (dst.empty() ? "" : "; ") + item;
+    else if (n == 6) dst += "; ...";
+}
+std::string plusMore (int n)
+{ return n > 6 ? fmt ("  (+%.0f more)", (double) (n - 6)) : std::string(); }
+
+bool inList (const MCell* L, int n, int t, int c, int k)
+{ for (int i = 0; i < n; ++i) if (L[i].t == t && L[i].c == c && L[i].k == k) return true; return false; }
+
+// a DECORRELATED stereo run: both channel spectra from ONE pass. Focus routes which signal
+// the filters see, so a correlated probe (L == R) has an identically-zero SIDE signal and
+// would measure `Side` and `Stereo` as the same thing — the probe deciding the answer again.
+struct StRun { double l[NB], r[NB]; };
+StRun matRunStereo (const EQ::Params& p)
+{
+    const int NF = 8192, settle = 4096, N = settle + NF;
+    const std::vector<float> xl = whiteN (N, 0.05f, 12345u), xr = whiteN (N, 0.05f, 777u);
+    std::vector<float> L (xl), R (xr);
+    EQ e; e.prepare ((double) FS, 128);
+    for (int i = 0; i < N; i += 128) { e.setParams (p); e.processStereo (&L[(size_t) i], &R[(size_t) i], 128); }
+    StRun o;
+    for (int ch = 0; ch < 2; ++ch)
+    {
+        const std::vector<float>& Y = (ch == 0 ? L : R);
+        std::vector<std::complex<double>> A ((size_t) NF);
+        for (int i = 0; i < NF; ++i)
+        { const double w = 0.5 - 0.5 * std::cos (6.283185307179586 * i / (NF - 1));
+          A[(size_t) i] = Y[(size_t) (settle + i)] * w; }
+        fft (A);
+        std::vector<double> sp ((size_t) NF / 2 + 1);
+        for (int k = 0; k <= NF / 2; ++k) sp[(size_t) k] = std::norm (A[(size_t) k]);
+        for (int i = 0; i < NB; ++i)
+        { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, 1.5 / 95.0);
+          int klo = std::max (1, (int) std::floor (fc / rr * NF / FS));
+          int khi = std::min (NF / 2, std::max ((int) std::ceil (fc * rr * NF / FS), klo));
+          double n = 0; for (int k = klo; k <= khi; ++k) n += sp[(size_t) k];
+          (ch == 0 ? o.l : o.r)[i] = 10.0 * std::log10 (std::max (1e-300, n)); }
+    }
+    return o;
+}
+
+void sectionQ()
+{
+    section ("Q1. LAW 1 ON EVERY CELL — 12 knobs x 7 Types x 8 Characters = 672 knob-cells");
+    note ("BAR: knob 0 vs knob 100 must (a) never be BIT-IDENTICAL and (b) move the 96-bin");
+    note ("     output spectrum by >= 3.0 dB. 3 dB is a doubling of power in a band: twice the");
+    note ("     1.5 dB the roster demands between two DIFFERENT Characters, so a knob that");
+    note ("     cannot clear it is doing less than the difference between its neighbours.");
+
+    // 🪤 THE NEGATIVE CONTROL, first: the detector must read EXACTLY zero when nothing moved.
+    { const MRun a = matRun (matPatch (0, 0), 0.05f), b = matRun (matPatch (0, 0), 0.05f);
+      double m = 0; for (int i = 0; i < NB; ++i) m = std::max (m, std::fabs (a.db[i] - b.db[i]));
+      const bool same = a.y.size() == b.y.size()
+                     && std::memcmp (a.y.data(), b.y.data(), a.y.size() * sizeof (float)) == 0;
+      gate ("(control) the matrix detector reads 0.000 dB and BIT-IDENTICAL on an unchanged patch",
+            m < 1e-9 && same, fmt ("%.6f dB spectral delta, bit-identical ", m)
+            + (same ? "yes" : "NO")); }
+
+    struct Res { double best; int lvl; bool bitAll; bool bitBus; double busDelta; };
+    static Res R[12][EQ::kNumTypes][EQ::kNumChars];
+    int nBitAll = 0, nUnder = 0;
+    std::string bitList, underList;
+
+    for (int k = 0; k < 12; ++k)
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+            for (int c = 0; c < EQ::kNumChars; ++c)
+            {
+                Res r { -1.0, 0, true, false, 0.0 };
+                for (int L = 0; L < 3; ++L)
+                {
+                    EQ::Params p0 = matPatch (t, c), p1 = matPatch (t, c);
+                    *knobPtr (p0, k) = 0.0f; *knobPtr (p1, k) = 1.0f;
+                    const MRun a = matRun (p0, kLvlRms[L]), b = matRun (p1, kLvlRms[L]);
+                    const bool bit = std::memcmp (a.y.data(), b.y.data(), a.y.size() * sizeof (float)) == 0;
+                    double m = 0; for (int i = 0; i < NB; ++i) m = std::max (m, std::fabs (a.db[i] - b.db[i]));
+                    if (! bit) r.bitAll = false;
+                    if (L == 0) { r.bitBus = bit; r.busDelta = m; }
+                    if (m > r.best) { r.best = m; r.lvl = L; }
+                    if (L == 0 && ! bit && m >= 3.0) break;          // alive at the bus program: done
+                }
+                R[k][t][c] = r;
+                const std::string coord = std::string (kKnobName[k]) + " @ " + EQ::typeNames()[t]
+                                        + " x `" + EQ::charNames (t)[c] + "`";
+                if (r.bitAll)     { addCapped (bitList,   nBitAll, coord); ++nBitAll; }
+                if (r.best < 3.0) { addCapped (underList, nUnder, coord + fmt (" %.3f dB", r.best)); ++nUnder; }
+            }
+
+    gate ("no knob is BIT-IDENTICAL at 0 % and 100 % in ANY of the 672 knob-cells",
+          nBitAll == 0, fmt ("%.0f dead knob-cells", (double) nBitAll)
+          + (bitList.empty() ? "  (672 cells x 3 program levels)" : ":  " + bitList + plusMore (nBitAll)));
+    gate ("every one of the 672 knob-cells moves the output spectrum by >= 3.0 dB",
+          nUnder == 0, fmt ("%.0f cells under the bar", (double) nUnder)
+          + (underList.empty() ? "" : ":  " + underList + plusMore (nUnder)));
+
+    // the per-knob table: every knob's WORST cell, named. 12 rows, 672 cells behind them.
+    note ("   per knob, the WORST of its 56 cells (this is the number a sampled gate never sees):");
+    for (int k = 0; k < 12; ++k)
+    {
+        double w = 1e9; int wt = 0, wc = 0, wl = 0; double med = 0;
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+            for (int c = 0; c < EQ::kNumChars; ++c)
+            { med += R[k][t][c].best;
+              if (R[k][t][c].best < w) { w = R[k][t][c].best; wt = t; wc = c; wl = R[k][t][c].lvl; } }
+        std::printf ("        %-8s worst %7.2f dB at %-9s x %-13s (mean %6.2f dB%s)\n",
+                     kKnobName[k], w, EQ::typeNames()[wt], EQ::charNames (wt)[wc],
+                     med / (EQ::kNumTypes * EQ::kNumChars),
+                     wl == 0 ? "" : ", at the quiet program");
+    }
+
+    // ── the DECLARED roster fact, checked in BOTH directions ──
+    {
+        std::string undeclared, stale;
+        int nDecl = 0;
+        for (int k = 0; k < 12; ++k)
+            for (int t = 0; t < EQ::kNumTypes; ++t)
+                for (int c = 0; c < EQ::kNumChars; ++c)
+                    if (R[k][t][c].lvl != 0)
+                    {
+                        ++nDecl;
+                        if (! inList (kRideClosed, kNumRideClosed, t, c, k))
+                            undeclared += std::string (undeclared.empty() ? "" : "; ")
+                                        + kKnobName[k] + " @ " + EQ::typeNames()[t]
+                                        + " x `" + EQ::charNames (t)[c] + "`";
+                    }
+        for (int i = 0; i < kNumRideClosed; ++i)
+        { const MCell& m = kRideClosed[i];
+          if (R[m.k][m.t][m.c].lvl == 0)
+              stale += std::string (stale.empty() ? "" : "; ") + kKnobName[m.k] + " @ "
+                     + EQ::typeNames()[m.t] + " x `" + EQ::charNames (m.t)[m.c]
+                     + "` is ALIVE at the bus program — the declaration is stale"; }
+        gate ("the cells that need a quieter program are EXACTLY the 11 declared ride-closed cells",
+              undeclared.empty() && stale.empty() && nDecl == kNumRideClosed,
+              fmt2 ("%.0f measured, %.0f declared", (double) nDecl, (double) kNumRideClosed)
+              + (undeclared.empty() ? "" : "  UNDECLARED: " + undeclared)
+              + (stale.empty() ? "" : "  STALE: " + stale));
+        for (int i = 0; i < kNumRideClosed; ++i)
+        { const MCell& m = kRideClosed[i];
+          std::printf ("        %-8s @ %-8s x %-13s  %6.3f dB at %-26s -> %6.2f dB at %s\n",
+                       kKnobName[m.k], EQ::typeNames()[m.t], EQ::charNames (m.t)[m.c],
+                       R[m.k][m.t][m.c].busDelta, kLvlName[0], R[m.k][m.t][m.c].best,
+                       kLvlName[R[m.k][m.t][m.c].lvl]); }
+        note ("   every one of the eleven is a BOOST band on the ONE level-dependent Type, closed");
+        note ("   by its own ride at a hot program — the mechanism ROSTER §3's Dynamic table");
+        note ("   publishes (`hot -24.0 dB / quiet 0.0 dB`). Not a dead knob: a working one.");
+        gate ("the legitimately-INERT table is asserted at size 0 (no cell in this device is inert)",
+              kNumKnownInert == 0, fmt ("kKnownInert holds %.0f cells", (double) kNumKnownInert));
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    section ("Q2. LAW 3 ON EVERY CELL — Mix, in all 56 Type x Character cells");
+    note ("Three questions, because no ONE of them is sufficient:");
+    note ("  (a) Mix 0 must be the DRY signal, BIT-EXACTLY. This is what `mixTgt_ = 1.0f`");
+    note ("      breaks, and it breaks it in every cell at once.");
+    note ("  (b) Mix 0.5 must be the exact LINEAR midpoint of Mix 0 and Mix 1 — a null whose");
+    note ("      correct answer is zero, so it needs no audibility bar. Catches equal-power");
+    note ("      crossfades and any partial-wet clamp.");
+    note ("  (c) at Mix 1.0 the measured floor must REACH the engine's own viz prediction: a");
+    note ("      dry leak fills a hole and cannot fill it silently. (a)+(b) alone are blind to");
+    note ("      a leak that scales with the knob; only an absolute reference sees that.");
+
+    {
+        int nDry = 0, nLin = 0, nFill = 0, nDryBad = 0, nLinBad = 0, nFillBad = 0;
+        double worstLin = -300.0, worstFill = 0.0, deepestPerType[EQ::kNumTypes];
+        std::string dryBad, linBad, fillBad;
+        int wlT = 0, wlC = 0, wfT = 0, wfC = 0;
+        for (int t = 0; t < EQ::kNumTypes; ++t) deepestPerType[t] = 0.0;
+
+        const int NF = 16384, settle = 8192, N = settle + NF;
+        int nHotPick = 0; std::string picked;
+
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+            for (int c = 0; c < EQ::kNumChars; ++c)
+            {
+                // a DEEP, BROAD attenuation: a -30 dB low shelf at 200 Hz with Amount 200 %.
+                EQ::Params p = single (t, c, 0, -30.0f, 200.0f); p.f3 = 1.0f;
+                const std::string coord = std::string (EQ::typeNames()[t]) + " x `" + EQ::charNames (t)[c] + "`";
+
+                // 🔬 THE OPERATING POINT AGAIN, and this one is not optional: a crossfade null
+                //  divides by the difference between dry and wet, so a cell where the patch is
+                //  doing NOTHING divides by zero and reports a meaningless 0.0 dB. That is not
+                //  hypothetical — `Dynamic` x `Hard Window` has a 2.5 dB threshold window that
+                //  is entirely SHUT for a -30 dB cut at the bus program, so the wet IS the dry
+                //  there. Pick, per cell, the program level at which the patch is most active,
+                //  and say which one was used. Every level-independent Type picks the bus.
+                //  The pick is DELIBERATELY sticky on the bus program: a level-independent
+                //  Type measures the same activity at every level, and a bare argmax would
+                //  then choose between identical numbers on floating-point noise and print a
+                //  level change that means nothing. Another level is chosen only when it is
+                //  at least 20 % more active — which only a level-dependent cell can be.
+                int PL = 0; double act0 = -1.0, bestAct = -1.0;
+                std::vector<float> x, L1, R1;
+                std::vector<double> viz ((size_t) NB, 0.0);
+                for (int L = 0; L < 3; ++L)
+                {
+                    const std::vector<float> xx = whiteN (N, kLvlRms[L], 12345u);
+                    std::vector<float> a (xx), b (xx); std::vector<double> vz ((size_t) NB, 0.0);
+                    EQ e; e.prepare ((double) FS, 128); int nv = 0;
+                    for (int i = 0; i < N; i += 128)
+                    { e.setParams (p); e.processStereo (&a[(size_t) i], &b[(size_t) i], 128);
+                      if (i >= settle) { for (int q = 0; q < NB; ++q) vz[(size_t) q] += e.viz().curve[q]; ++nv; } }
+                    for (int q = 0; q < NB; ++q) vz[(size_t) q] /= std::max (1, nv);
+                    // "active" = how far the wet has moved from the dry, RELATIVE to the probe
+                    double sd = 0, sx = 0;
+                    for (int i = settle; i < N; ++i)
+                    { const double d = (double) xx[(size_t) i] - (double) a[(size_t) i]; sd += d * d;
+                      sx += (double) xx[(size_t) i] * (double) xx[(size_t) i]; }
+                    const double act = std::sqrt (sd / std::max (1e-30, sx));
+                    if (L == 0) { act0 = act; bestAct = act; PL = 0; x = xx; L1 = a; R1 = b; viz = vz; }
+                    else if (act > bestAct && act > 1.2 * act0)
+                    { bestAct = act; PL = L; x = xx; L1 = a; R1 = b; viz = vz; }
+                    if (L == 0 && act > 0.25) break;             // plainly active at the bus: done
+                }
+                if (PL != 0) { ++nHotPick; picked += std::string (picked.empty() ? "" : "; ") + coord
+                                                   + " at " + kLvlName[PL]; }
+
+                // (a) Mix 0 == dry, bit-exact
+                std::vector<float> L0 (x), R0 (x);
+                { EQ e; e.prepare ((double) FS, 128); EQ::Params q = p; q.mix = 0.0f;
+                  for (int i = 0; i < N; i += 128) { e.setParams (q); e.processStereo (&L0[(size_t) i], &R0[(size_t) i], 128); } }
+                const bool dryOk = std::memcmp (L0.data() + settle, x.data() + settle,
+                                                (size_t) NF * sizeof (float)) == 0;
+                if (dryOk) ++nDry; else { addCapped (dryBad, nDryBad, coord); ++nDryBad; }
+
+                std::vector<float> Lh (x), Rh (x);
+                { EQ e; e.prepare ((double) FS, 128); EQ::Params q = p; q.mix = 0.5f;
+                  for (int i = 0; i < N; i += 128) { e.setParams (q); e.processStereo (&Lh[(size_t) i], &Rh[(size_t) i], 128); } }
+
+                // (b) the linear-mix null, in dB below the thing being crossfaded
+                double se = 0, sd = 0;
+                for (int i = settle; i < N; ++i)
+                { const double want = 0.5 * ((double) x[(size_t) i] + (double) L1[(size_t) i]);
+                  const double e2 = (double) Lh[(size_t) i] - want; se += e2 * e2;
+                  const double d = 0.5 * ((double) x[(size_t) i] - (double) L1[(size_t) i]); sd += d * d; }
+                const double linDb = 20.0 * std::log10 (std::max (1e-30, std::sqrt (se))
+                                                      / std::max (1e-30, std::sqrt (sd)));
+                if (linDb <= -60.0) ++nLin;
+                else { addCapped (linBad, nLinBad, coord + fmt (" %.1f dB", linDb)); ++nLinBad; }
+                if (linDb > worstLin) { worstLin = linDb; wlT = t; wlC = c; }
+
+                // (c) the dry-fill test at the deepest LOCALLY FLAT bin (a +-1-bin plateau, so a
+                //     narrow notch's centring cannot be mistaken for a leak), sine-probed —
+                //     resolution-free — with the viz averaged over THAT SAME sine run, which is
+                //     what makes the comparison honest on the level-dependent Type.
+                int bi = 1; double bv = 1e9;
+                for (int i = 1; i < NB - 1; ++i)
+                { const double m = std::max (viz[(size_t) (i - 1)], std::max (viz[(size_t) i], viz[(size_t) (i + 1)]));
+                  if (m < bv) { bv = m; bi = i; } }
+                double vizAt = viz[(size_t) bi];
+                const double meas = sineDbViz (p, EQ::curveBinHz (bi), kLvlRms[PL], 65536, bi, vizAt);
+                const double d = meas - vizAt;
+                const double leakFloor = vizAt - 7.69;      // a leak this loud lifts the floor 3 dB
+                if (std::fabs (d) <= 3.0) ++nFill;
+                else { addCapped (fillBad, nFillBad, coord + fmt2 (" viz %.1f vs measured %.1f dB", vizAt, meas));
+                       ++nFillBad; }
+                if (std::fabs (d) > worstFill) { worstFill = std::fabs (d); wfT = t; wfC = c; }
+                deepestPerType[t] = std::min (deepestPerType[t], leakFloor);
+            }
+
+        note (fmt ("   %.0f of the 56 cells needed a program level other than the bus to be ACTIVE",
+                   (double) nHotPick) + (picked.empty() ? "." : ":"));
+        if (! picked.empty()) note ("   " + picked);
+        gate ("Mix 0 % is the DRY signal BIT-EXACTLY, in all 56 cells",
+              nDry == EQ::kNumTypes * EQ::kNumChars,
+              fmt2 ("%.0f of %.0f cells bit-exact", (double) nDry, (double) (EQ::kNumTypes * EQ::kNumChars))
+              + (dryBad.empty() ? "" : "  NOT DRY: " + dryBad + plusMore (nDryBad)));
+        gate ("Mix 50 % is the exact LINEAR midpoint (null <= -60 dB), in all 56 cells",
+              nLin == EQ::kNumTypes * EQ::kNumChars,
+              fmt3 ("%.0f of %.0f cells; worst %.1f dB at ", (double) nLin,
+                    (double) (EQ::kNumTypes * EQ::kNumChars), worstLin)
+              + EQ::typeNames()[wlT] + " x `" + EQ::charNames (wlT)[wlC] + "`"
+              + (linBad.empty() ? "" : "  FAILED: " + linBad + plusMore (nLinBad)));
+        gate ("at Mix 100 % the measured floor REACHES the engine's own prediction, all 56 cells",
+              nFill == EQ::kNumTypes * EQ::kNumChars,
+              fmt3 ("%.0f of %.0f cells within 3 dB; worst %.2f dB at ", (double) nFill,
+                    (double) (EQ::kNumTypes * EQ::kNumChars), worstFill)
+              + EQ::typeNames()[wfT] + " x `" + EQ::charNames (wfT)[wfC] + "`"
+              + (fillBad.empty() ? "" : "  FAILED: " + fillBad + plusMore (nFillBad)));
+
+        // and the SENSITIVITY of (c), stated per Type rather than assumed: the contract's bar
+        // is a dry residual under -60 dB, so at least one cell in every Type must be deep
+        // enough to SEE a -60 dB leak, or the gate is decoration in that Type.
+        std::string weak; int strong = 0;
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+        { if (deepestPerType[t] <= -60.0) ++strong;
+          else weak += std::string (weak.empty() ? "" : ", ") + EQ::typeNames()[t]
+                     + fmt (" (best %.1f dB)", deepestPerType[t]); }
+        gate ("   ... and every Type has a cell deep enough to SEE a -60 dB leak (law 3's bar)",
+              strong == EQ::kNumTypes,
+              fmt2 ("%.0f of %.0f Types; deepest leak-detection floors: ", (double) strong,
+                    (double) EQ::kNumTypes)
+              + fmt ("%.0f dB", deepestPerType[0]) + fmt (" / %.0f", deepestPerType[1])
+              + fmt (" / %.0f", deepestPerType[2]) + fmt (" / %.0f", deepestPerType[3])
+              + fmt (" / %.0f", deepestPerType[4]) + fmt (" / %.0f", deepestPerType[5])
+              + fmt (" / %.0f", deepestPerType[6])
+              + (weak.empty() ? "" : "  TOO SHALLOW: " + weak));
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    section ("Q3. R11 ON EVERY CELL — the ceiling is not a property of Character 0");
+    note ("PROBE: §K's own 'all four bands at 100 % with Amount 200 %' patch, replayed on all");
+    note ("       56 cells. BAR: §K's own, MSD >= 55 dB. Where a Character caps the ceiling by");
+    note ("       a mechanism it publishes, it is exempt by the asserted table above and must");
+    note ("       still clear 32 dB — twice, in decibels, the loudest hardware EQ ever built.");
+    {
+        double v[EQ::kNumTypes][EQ::kNumChars]; int lv[EQ::kNumTypes][EQ::kNumChars];
+        int nOk = 0, nCap = 0, nBad = 0; std::string bad, capBad, undeclCap;
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+            for (int c = 0; c < EQ::kNumChars; ++c)
+            {
+                EQ::Params p = base(); p.type = t; p.character = c; p.f3 = 1.0f;
+                p.b1 = fN (0,   90.0f);  p.b2 = 1.0f;
+                p.b3 = fN (1,  550.0f);  p.b4 = 1.0f;
+                p.b5 = fN (2, 3200.0f);  p.b6 = 1.0f;
+                p.b7 = fN (3,12000.0f);  p.f2 = 1.0f; p.b8 = 0.6f;
+                double best = -1e9; int bl = 0;
+                for (int L = 0; L < 2; ++L)
+                { const double m = specMax (transferOf (p, kLvlRms[L]));
+                  if (m > best) { best = m; bl = L; }
+                  if (L == 0 && best >= 55.0) break; }
+                v[t][c] = best; lv[t][c] = bl;
+                bool capped = false;
+                for (int i = 0; i < kNumCapped; ++i) if (kCapped[i].t == t && kCapped[i].c == c) capped = true;
+                const std::string coord = std::string (EQ::typeNames()[t]) + " x `" + EQ::charNames (t)[c] + "`";
+                if (capped)
+                { ++nCap;
+                  if (best >= 55.0) undeclCap += std::string (undeclCap.empty() ? "" : ", ") + coord
+                                              + fmt (" reaches %.1f dB — the cap claim is stale", best);
+                  if (best < 32.0) capBad += std::string (capBad.empty() ? "" : ", ") + coord
+                                          + fmt (" only %.1f dB", best); }
+                else if (best >= 55.0) ++nOk;
+                else { addCapped (bad, nBad, coord + fmt (" %.1f dB", best)); ++nBad; }
+            }
+        gate ("every UNCAPPED cell reaches §K's own ceiling bar (MSD >= 55 dB)",
+              bad.empty(),
+              fmt2 ("%.0f of %.0f uncapped cells", (double) nOk,
+                    (double) (EQ::kNumTypes * EQ::kNumChars - kNumCapped))
+              + (bad.empty() ? "" : "  UNDER: " + bad + plusMore (nBad)));
+        gate ("the 3 capped cells are still DESTRUCTIVE (>= 32 dB) and their caps are not stale",
+              capBad.empty() && undeclCap.empty() && nCap == kNumCapped,
+              fmt ("%.0f capped cells", (double) nCap)
+              + (capBad.empty() ? "" : "  TOO POLITE: " + capBad)
+              + (undeclCap.empty() ? "" : "  STALE: " + undeclCap));
+        for (int i = 0; i < kNumCapped; ++i)
+            std::printf ("        capped: %-8s x %-13s %6.1f dB — %s\n",
+                         EQ::typeNames()[kCapped[i].t], EQ::charNames (kCapped[i].t)[kCapped[i].c],
+                         v[kCapped[i].t][kCapped[i].c], kCapped[i].why);
+        note ("   per Type, the WEAKEST and STRONGEST of its 8 Characters:");
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+        {
+            int lo = 0, hi = 0;
+            for (int c = 0; c < EQ::kNumChars; ++c)
+            { if (v[t][c] < v[t][lo]) lo = c; if (v[t][c] > v[t][hi]) hi = c; }
+            std::printf ("        %-9s %6.1f dB at %-13s ... %6.1f dB at %-13s%s\n",
+                         EQ::typeNames()[t], v[t][lo], EQ::charNames (t)[lo], v[t][hi],
+                         EQ::charNames (t)[hi], lv[t][lo] ? "  (weakest read at the quiet program)" : "");
+        }
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  Q4 — THE SECOND DROPDOWN, ON EVERY TYPE. R6 requires BOTH dropdowns to change
+    //  PHYSICS, and fb425's law requires every dropdown OPTION to have its own audibility
+    //  gate on every Type. Dropdown 1 (`Character`) already had one — §E measures all 28
+    //  pairs inside every Type. Dropdown 2 (`Focus`) had only STRUCTURAL gates (§A's
+    //  bit-exact pass-through of the untouched channel, the M/S round-trip residual, §H's
+    //  mono behaviour): every one of them proves Focus does the RIGHT thing, and not one of
+    //  them proves the five options are DIFFERENT from each other on a given Type. That is
+    //  the Widen `Field` finding in this device's own back panel, so it is gated here:
+    //  5 options, all 10 pairs, on all 7 Types = 70 measured comparisons.
+    // ═════════════════════════════════════════════════════════════════════════
+    section ("Q4. `Focus` — all 5 options measurably different from each other, on EVERY Type");
+    note ("PROBE: DECORRELATED stereo noise (L and R from different seeds). With L == R the SIDE");
+    note ("       signal is identically zero and `Side` would measure as `Stereo` — the probe");
+    note ("       answering the question. METRIC: max |dB| between two options over BOTH channels'");
+    note ("       96 bins. BAR: 1.5 dB, the same bar §E holds two Characters to.");
+    {
+        int nOk = 0; std::string bad; double worst = 1e9; int wt = 0, wa = 0, wb = 0;
+        for (int t = 0; t < EQ::kNumTypes; ++t)
+        {
+            StRun S[EQ::kNumFocus];
+            for (int f = 0; f < EQ::kNumFocus; ++f)
+            { EQ::Params p = matPatch (t, 0); p.axis = f; S[f] = matRunStereo (p); }
+            double closest = 1e9; int ca = 0, cb = 1;
+            for (int a = 0; a < EQ::kNumFocus; ++a)
+                for (int b = a + 1; b < EQ::kNumFocus; ++b)
+                {
+                    double m = 0;
+                    for (int i = 0; i < NB; ++i)
+                    { m = std::max (m, std::fabs (S[a].l[i] - S[b].l[i]));
+                      m = std::max (m, std::fabs (S[a].r[i] - S[b].r[i])); }
+                    if (m < closest) { closest = m; ca = a; cb = b; }
+                }
+            if (closest >= 1.5) ++nOk;
+            else bad += std::string (bad.empty() ? "" : ", ") + EQ::typeNames()[t]
+                      + fmt (" %.2f dB", closest);
+            if (closest < worst) { worst = closest; wt = t; wa = ca; wb = cb; }
+            std::printf ("        %-9s closest pair %6.2f dB = %s / %s\n", EQ::typeNames()[t],
+                         closest, EQ::focusNames()[ca], EQ::focusNames()[cb]);
+        }
+        gate ("every Focus pair separates by >= 1.5 dB on every Type (70 comparisons)",
+              nOk == EQ::kNumTypes,
+              fmt3 ("%.0f of %.0f Types; worst pair %.2f dB", (double) nOk, (double) EQ::kNumTypes, worst)
+              + " = " + EQ::typeNames()[wt] + " " + EQ::focusNames()[wa] + "/" + EQ::focusNames()[wb]
+              + (bad.empty() ? "" : "  UNDER: " + bad));
     }
 }
 
@@ -2280,6 +3042,7 @@ int main()
     sectionN (F);
     sectionO();
     sectionP();
+    sectionQ();
 
     std::printf ("\n══ RESULT: %d pass, %d FAIL ══\n", gPass, gFail);
     for (auto& s : gFails) std::printf ("   FAILED: %s\n", s.c_str());

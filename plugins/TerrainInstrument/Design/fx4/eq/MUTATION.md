@@ -6,24 +6,116 @@
 Reproduce:
 
 ```
-Design/fx4/eq/run_mutations.sh /tmp/eqmut      # builds 1 baseline + 6 mutants, runs all 7
+Design/fx4/eq/run_mutations.sh /tmp/eqmut      # builds 1 baseline + 10 mutants, runs all 11
 ```
 
 The mutations are `#ifdef` hooks inside the engine header (`EQ::mutationTag()` lists them and the
 cert prints a red banner when one is active). With no `-D` flag not one branch of the file changes.
 
 ```
-baseline           exit=0  RESULT: 131 pass,  0 FAIL   <- fb423: §O ruled, §P added (8 gates)
-EQ_MUT_NO_PIVOT    exit=1  RESULT: 122 pass,  9 FAIL
-EQ_MUT_NO_RINGCAP  exit=1  RESULT: 130 pass,  1 FAIL
-EQ_MUT_NO_SMOOTH   exit=1  RESULT: 129 pass,  2 FAIL
-EQ_MUT_NO_DIP      exit=1  RESULT: 130 pass,  1 FAIL
-EQ_MUT_NO_CEILING  exit=1  RESULT:  78 pass, 53 FAIL
-EQ_MUT_NO_DENORM   exit=1  RESULT: 130 pass,  1 FAIL
+baseline           exit=0  RESULT: 147 pass,  0 FAIL   <- fb425: §Q added (12 gates), §P widened
+EQ_MUT_NO_PIVOT    exit=1  RESULT: 138 pass,  9 FAIL
+EQ_MUT_NO_RINGCAP  exit=1  RESULT: 146 pass,  1 FAIL
+EQ_MUT_NO_SMOOTH   exit=1  RESULT: 145 pass,  2 FAIL
+EQ_MUT_NO_DIP      exit=1  RESULT: 146 pass,  1 FAIL
+EQ_MUT_NO_CEILING  exit=1  RESULT:  89 pass, 58 FAIL
+EQ_MUT_NO_DENORM   exit=1  RESULT: 146 pass,  1 FAIL
+EQ_MUT_DEAD_CELL   exit=1  RESULT: 145 pass,  2 FAIL   <- fb425, and ONLY §Q sees it
+EQ_MUT_POLITE_CELL exit=1  RESULT: 146 pass,  1 FAIL   <- fb425, and ONLY §Q sees it
+EQ_MUT_MIX_WET     exit=1  RESULT: 139 pass,  8 FAIL   <- fb425
+EQ_MUT_FLAT_FOCUS  exit=1  RESULT: 144 pass,  3 FAIL   <- fb425, one dropdown OPTION deleted
 ```
 
-(every mutant carries the baseline's 1 pre-existing §O failure as well, so its own count is
-`FAIL − 1`.)
+**The baseline is 147 pass / 0 FAIL.** (fb422 left one pre-existing §O failure — two unruled
+names — and fb423's second ruling closed it; every count above is the mutant's own damage, with
+nothing carried. The line that used to say "every mutant carries the baseline's 1 pre-existing
+§O failure" was stale prose from fb422 and is deleted.)
+
+---
+
+## fb425 — THE FOUR NEW MUTANTS, and why they exist
+
+`M1`–`M6` each delete a whole MECHANISM, so a gate that samples one cell still sees them.
+`M7`–`M10` are the mutants a *sampled* gate cannot see: two of them break exactly **one cell of
+the 7 × 8 matrix** and leave the other 55 bit-perfect, and one deletes a single dropdown OPTION
+while leaving its label on the card. They are the fb424 blindness, reproduced deliberately so §Q
+can be shown to close it.
+
+| # | mutation | cells broken | gates that fire | gates that STAY GREEN |
+|---|---|---|---|---|
+| M7 | `EQ_MUT_DEAD_CELL` — `Trait` is ignored on **Open × `Soft Knee` only** | 1 of 672 | **§Q1** ×2 | §F, **§F2's own Open row** (it probes `Gloss`), §K, everything else |
+| M8 | `EQ_MUT_POLITE_CELL` — band gains clamped to ±10 dB on **Passive × `Deep Atten` only** | 1 of 56 | **§Q3** ×1 | **all seven §K ceiling gates** (they probe Surgical/Chisel) |
+| M9 | `EQ_MUT_MIX_WET` — `mixTg_` forced to 1.0, the Mix knob ignored | every cell | §A, §F, §I ×2, **§Q1, §Q2 ×2** | — |
+| M10 | `EQ_MUT_FLAT_FOCUS` — the Focus option **`Side` silently plays `Stereo`**, label unchanged | 1 of 5 options, every Type | §H, §J3, **§Q4** | §A's four Focus gates: bit-exact pass-through, M/S round trip — all still green |
+
+```
+M7  FAILED: no knob is BIT-IDENTICAL at 0 % and 100 % in ANY of the 672 knob-cells
+            [1 dead knob-cells:  Trait @ Open x `Soft Knee`]
+M7  FAILED: every one of the 672 knob-cells moves the output spectrum by >= 3.0 dB
+            [1 cells under the bar:  Trait @ Open x `Soft Knee` 0.000 dB]
+
+M8  FAILED: every UNCAPPED cell reaches §K's own ceiling bar (MSD >= 55 dB)
+            [52 of 53 uncapped cells  UNDER: Passive x `Deep Atten` 10.8 dB]
+
+M9  FAILED: Mix 0 % is the DRY signal BIT-EXACTLY, in all 56 cells   [0 of 56 cells bit-exact]
+M9  FAILED: Mix 50 % is the exact LINEAR midpoint (null <= -60 dB), in all 56 cells
+            [0 of 56 cells; worst 0.0 dB at Surgical x `Plain`]
+M9  FAILED: no knob is BIT-IDENTICAL ... [56 dead knob-cells: Mix @ every Type x Character]
+```
+
+```
+M10 FAILED: every Focus pair separates by >= 1.5 dB on every Type (70 comparisons)
+            [0 of 7 Types; worst pair 0.00 dB = Surgical Stereo/Side
+             UNDER: Surgical 0.00 dB, British 0.00 dB, American 0.00 dB, Passive 0.00 dB,
+                    Open 0.00 dB, Dynamic 0.00 dB, Chisel 0.00 dB]
+```
+
+**M10 is the `Field` finding in my own back panel.** Every Focus gate this cert had before fb425
+was STRUCTURAL — the untouched channel is bit-exact, the M/S round trip is −149.4 dB — and every
+one of them stays green while an option is silently gone, because none of them ever compared the
+options TO EACH OTHER.
+
+**M7 and M8 are the whole argument for §Q.** Each is a one-cell bug of exactly the kind three
+rounds of sampled gates could not see, and in both cases *every gate this cert had before fb425
+stays green* — including §F2's own Open row, which probes Open × `Gloss` and therefore walks
+straight past a `Trait` knob that is dead one Character away.
+
+---
+
+## fb425 — TWO CONTROLS THAT ARE NOT `#ifdef`s (the downstream gates need mutating too)
+
+A gate over a MARKDOWN file cannot be mutated with a compiler flag, so both new §P gates were
+run against a deliberately corrupted copy of their own subject and required to fail.
+
+**C1 — the skeptic's move on `ROSTER.md §3`.** Two Characters swapped *between two Types*, both
+strings still present in the file:
+
+```
+   swapped `Tight` (Surgical) <-> `Big Knob` (British)
+
+   ok    ROSTER.md names all 89 published labels ...            89 of 89 present   <- P5, BLIND
+   FAIL  ROSTER §3 assigns the 56 Characters to the RIGHT Types, IN ORDER
+         5 of 7 Type paragraphs match charNames() element for element
+         ORDER: Surgical slot 1: ROSTER 'Big Knob' vs header 'Tight',
+                British  slot 1: ROSTER 'Tight' vs header 'Big Knob'
+         CROSS-TYPE: `Big Knob` (British's) inside the Surgical paragraph,
+                     `Tight` (Surgical's) inside the British paragraph
+```
+
+P5's substring-presence test passes the corrupted file at 89 of 89 — which is precisely the
+finding: presence was never the question. P6 names both halves of the swap.
+
+**C2 — the cert's own retired names.** The two fb424 strings put back into the gate labels they
+were actually shipped in:
+
+```
+   FAIL  not one of the 29 RETIRED strings survives in ROSTER, worklet OR THE CERT
+         2 retired strings still live:
+           Width eq_cert.cpp x1 [gate ("Surgical `Width` at 100 % is a resonator, ...]
+           Metal eq_cert.cpp x1 [gate ("Amount 0 % nulls BIT-EXACTLY at a full Chisel/Metal patch"...]
+```
+
+Both files were restored immediately afterwards and the baseline re-run at 146/0.
 
 ---
 
@@ -261,7 +353,12 @@ fb423   ok    no collision with a shipped label outside RENAMES.md's sanctioned 
 
 ---
 
-## §P — the DOWNSTREAM gates, and their four negative controls
+## §P — the DOWNSTREAM gates, and their negative controls
+
+> fb425 added **two more**, C1 and C2, documented at the top of this file: the ROSTER's §3
+> assignment gate mutated by swapping two Characters between two Types, and the retired-name
+> scan mutated by putting the cert's own two fb424 strings back. Both go RED; P5's presence test
+> stays green on the same corrupted file, which is the finding.
 
 §P is new at fb423 and gates the two files the card is actually built from — `ROSTER.md` and
 `eq-worklet.js` — against the engine header. It is mutated by **breaking the subject files**, not
@@ -294,7 +391,8 @@ control 5   ══ RESULT: 130 pass, 1 FAIL ══     ok    no collision with a
                                                      11 of 16 sanctions are actually spent
 ```
 
-The meter is pinned at **8**, not 10. It was 10 at fb422; refreshing the corpus against the
+The meter is pinned at **9** as of fb425 (**8** at fb423, before this device published its two
+dropdown headings — `Character` is a live collision and is ruled, cited, in `kSanctioned`). It was 10 at fb422; refreshing the corpus against the
 siblings' current state returned two exemptions UNSPENT (`Bite`, because OTT renamed its pill
 `Bite`→`Crest`; `Silk`, because Widen renamed its Character `Silk`→`Satin`). The same refresh
 exposed a **circular corpus** — the siblings' own gate dumps re-export my 87 labels, which briefly
@@ -302,9 +400,9 @@ produced `87 collisions ... 14 of 15 sanctions spent` — see `FINDINGS.md` §4.
 defect and only my own extractor is fixed here.
 
 fb423's own words: *"a gate that can exempt itself is not a gate."* Control 5 is that sentence made
-executable — the sanctioned list is pinned to the number of collisions it actually **spends** (10),
-so a sanction can never be written ahead of a ruling. The five carried-but-unspent entries
-(`Reach`, `Focus`, `Side`, `Left`, `Right`) are printed every run: `Side`/`Left`/`Right` exist only
+executable — the sanctioned list is pinned to the number of collisions it actually **spends** (9
+at fb425), so a sanction can never be written ahead of a ruling. The carried-but-unspent entries
+(`Bite`, `Reach`, `Focus`, `Silk`, `Side`, `Left`, `Right`) are printed every run: `Side`/`Left`/`Right` exist only
 because the M/S vocabulary was ruled **as a group**, and the gate says so out loud rather than
 letting them sit silently.
 
@@ -314,7 +412,7 @@ markdown blockquote line from the retired-name scan — and immediately failed, 
 one section a reader trusts most. It is now exactly one region: the contiguous blockquote that
 opens the file, asserted contiguous, asserted to end before the first `##` heading, and asserted
 to *begin with a changelog heading* — so it cannot quietly become "exempt prose". Its size is
-printed every run (currently 46 lines).
+printed every run (currently 96 lines).
 
 The six engine mutants leave §P **green in all six** (0 of 8 P gates fire), which is correct and
 worth stating: §P measures files, not DSP. It is falsified by controls 1–4 above, not by `-D`.

@@ -70,8 +70,8 @@ clamped per Type — the `fxrRestoreDistortion` idiom, never the dropdown's opti
 | 1 | **Twin** | Roland SDD-320 Dimension D, 1979 · BOSS DC-2 · Xfer Dimension Expander | 1–4 line **pairs**, each pair modulated by a **TRIANGLE in antiphase** (`dL = d0+m`, `dR = d0−m`), then the delayed signal **cross-mixed to the other channel with inverted polarity** | **motionless**: flux at or below the crowd Types, yet side/mid **positive**; pitch histogram **bimodal** | flux **43.70** (Throng 44.06), side/mid **+11.7 dB**, lobe mass **0.992** |
 | 2 | **Steady** | Eventide H3000 / AMS DMX 15-80s / Soundtoys MicroShift | 3–8 **granular constant-ratio** readers at **static** cents offsets, ±c fanned across the field, on unequal slap delays | **static**: essentially zero modulation energy, sidebands do not move | modEng **0.000 cents** |
 | 3 | **Twofold** | ADT / Waves Doubler (its user guide's own ranges) | 3–8 discrete voices on **long static delays 17–61 ms**, pitch moved by a **band-limited random WALK** | **aperiodic** motion — no line in the modulation spectrum | periodicity **0.176** vs Throng **0.869** |
-| 4 | **Blur** | Polyverse Wider · Ozone Stereoize · DAFx-24 StereoWidener | **two first-order allpass cascades** (up to 24 stages) whose break frequencies diverge with Amount. Phase only — no delay line at all | per-channel magnitude is **FLAT by construction** (allpass: \|H\| = 1 for any \|c\| < 1) | chan ripple **2.6 dB** (bypass control **0.0 dB**) |
-| 5 | **Bands** | Orban 245E Stereo Synthesizer, 1975 · Schroeder 1958 | a **one-pole crossover TREE** splits the mid into 3–16 bands; alternate bands are pushed to opposite channels. `lp + (x−lp) = x` exactly, so the mono sum is the input **bit for bit** | per-channel magnitude is **TORN** — the anti-Blur | chan ripple **8.1 dB**, 3.1× Blur; mono deviation **0.000 dB** |
+| 4 | **Blur** | Polyverse Wider · Ozone Stereoize · DAFx-24 StereoWidener | **two first-order allpass cascades** (up to 33 stages, fb425 count law) whose break frequencies diverge with Amount. Phase only — no delay line at all | per-channel magnitude is **FLAT by construction** (allpass: \|H\| = 1 for any \|c\| < 1) | chan ripple **2.6 dB** (bypass control **0.0 dB**) |
+| 5 | **Bands** | Orban 245E Stereo Synthesizer, 1975 · Schroeder 1958 | a **one-pole crossover TREE** splits the mid into 2–16 bands; alternate bands are pushed to opposite channels. `lp + (x−lp) = x` exactly, so the mono sum is the input **bit for bit** | per-channel magnitude is **TORN** — the anti-Blur | chan ripple **8.1 dB**, 3.1× Blur; mono deviation **0.000 dB** |
 | 6 | *— reserved —* | | disabled in the UI; exists only so cardinality never has to change | | |
 | 7 | *— reserved —* | | " | | |
 
@@ -146,15 +146,15 @@ Cert §G measures every one of the 48 against its Type's default on the same 8-f
 | `Tape ADT` | walk depth ×2 with a 0.6 Hz wow component | 242.28 |
 | `Tight Inst` | delays ×0.5 | 0.85 |
 | `Loose Crowd` | delays ×1.8, walk ×1.6 | 179.95 |
-| `Static Pair` | the walk is **replaced** by a fixed ±8-cent split — deliberately crosses into Steady territory, but with echoes | 297.42 |
+| `Static Pair` | the walk is **replaced** by a HELD split at the cents the walk would have reached at this Amount (fb425: it was a fixed ±8 cents, which made the Type's own hero knob measure 1.69 → 1.69 cents across its whole travel — a dead hero on one Character) — deliberately crosses into Steady territory, but with echoes | 297.42 |
 | `Slapback` | voice 1 pushed to 48 ms — the Sun Records edge | 4.51 |
 | `Seasick` | walk ×2.5 → **±155 cents** at Amount 100 %. Past useful, on purpose | 686.95 |
 
 ### Blur — phase decorrelation
 | Character | What it re-wires | [dist] |
 |---|---|---|
-| `Smooth Six` | 3 stages per voice (9–24 total), 180 Hz–5.6 kHz | default |
-| `Deep Twelve` | 6 stages per voice | 2.94 |
+| `Smooth Six` | starts at 9 stages, +3 per `Voices` click (9–24 total), 180 Hz–5.6 kHz | default |
+| `Deep Twelve` | starts at 18 stages, +3 per click (18–33). fb425: it used to MULTIPLY the knob (18/24/24/24/24) and three quarters of `Voices` were bit-for-bit nothing | 2.94 |
 | `Plush` | 4/voice, 90 Hz–9 kHz, +0.4 intrinsic Roam — the DAFx-17 sparse flavour | 2.97 |
 | `Low Anchor` | cascade starts at 500 Hz — bass stays dead centre | 3.08 |
 | `Top Only` | 2–10 kHz only | 3.30 |
@@ -165,8 +165,8 @@ Cert §G measures every one of the 48 against its Type's default on the same 8-f
 ### Bands — spectral alternation
 | Character | What it re-wires | [dist] |
 |---|---|---|
-| `Coarse` | one band per voice (3–8 bands), grid 140 Hz–11 kHz | default |
-| `Fine` | two bands per voice (6–16) | 1.68 |
+| `Coarse` | starts at 4 bands, +2 per `Voices` click (4–14), grid 140 Hz–11 kHz | default |
+| `Fine` | starts at 6 bands, +2 per click (6–16) | 1.68 |
 | `Tilted` | ±18 % gain tilt between the odd and even band sets | 1.42 |
 | `Rotor Slow` | grid sweep ×0.3 | 1.22 |
 | `Rotor Fast` | grid sweep ×4 | 0.60 |
@@ -184,7 +184,7 @@ Cert §G measures every one of the 48 against its Type's default on the same 8-f
 | Hero 2 | **`Width`** | — | equal-power M/S rotation, `θ = Width · π/2`. **0 = mono · 0.5 = EXACTLY neutral · 1.0 = SIDE ONLY** | side fraction **0.000 → 1.000** |
 | Hero 3 | **`Rate`** | — | 🔴 **fb422: 0.08–14 Hz log** (0.03 Hz is a 33-second cycle — a dead zone no ear and no probe can resolve). And it now has a JOB ON EVERY TYPE: Throng/Twin the LFO · **Steady the GRAIN CLOCK** (the crossfade span 90 → 6 ms, ~0.7 → 11 Hz) · Twofold the walk bandwidth (0.12 → 6 Hz) · **Blur the allpass-field breath** (±0.5 octaves, 0.2 → 35 Hz) · Bands the crossover-grid sweep, **per sample** | at fb421 it was **BIT-IDENTICALLY DEAD** on `Steady` and on `Blur` |
 | 4th | **`Mix`** | — | equal power; dry gain is `cos(π/2)` = **exactly 0** at 1.0 | dry rejection **0.0 → 142.4 dB** |
-| Pill 1 | **`Retrig`** | — | note-on resets every voice phase; the READ POSITION is slew-capped at 0.5 samples/sample so the zap is identical at every Detune | click **−41.2 dB of programme peak** |
+| Pill 1 | **`Retrig`** | — | note-on restarts **every** modulator: the per-voice LFO phase (Throng/Twin/Steady), the band-limited random walks (`Twofold`, and the Roam walk everywhere), and the two rotators (`Blur`'s coefficient field, `Bands`' crossover grid). fb425: it reset the LFO phase ALONE and was therefore **bit-identically dead on Twofold, Blur and Bands**. The READ POSITION stays slew-capped at 0.5 samples/sample; the coefficient- and gain-domain residuals bleed out on a **linear** 30 ms ramp (a one-pole parks). **Inert on `Twofold`/`Static Pair` only** — that Character holds the walk at zero, so there is no trajectory to restart; declared in §F/§P's known-inert rosters | click **−41.2 dB of programme peak** |
 | Pill 2 | **`Hear Mono`** | — | 🔴 **fb423: THIS PILL HAD NO ENGINE PARAMETER.** It was described here as a "UI-side audition… costs the engine nothing" — which is the definition of a control that cannot be automated, cannot be saved in a preset and cannot be recalled. It is **`Params::hearMono`** now: the finished OUTPUT is folded to `(L+R)/2` on both channels, 15 ms fade both ways, and `viz().corr` is measured **after** the fold so the card shows what you are hearing | ON: max \|L−R\| = **0.000000e+00** (bit-identical), output = mid of the OFF run to **2.4e-06**, `viz().corr` **+1.00000**, toggle click **0.0026 → 0.0026** (unchanged) |
 
 > 🏷️ **`Steady`-the-Type's hero knob is `Cents`, not `Steady`.** A Type and its own hero knob sharing
@@ -199,7 +199,7 @@ Cert §G measures every one of the 48 against its Type's default on the same 8-f
 
 | P | Name | Range · curve | What it does | Why it beats the alternative | Measured 0→100 |
 |---|---|---|---|---|---|
-| **P1** | **`Voices`** | 3–8 copies, stepped | how many copies exist. **Twin → LINES** (`2·nPair_`, and the Character names are now the count: Two Line 2 / Four Line 4 / Hex 6) · Blur → allpass stages · Bands → bands (`1.6·(nV−1)`, so all five knob positions differ — fb421 gave 4/4/6/8/8, two dead steps). The engine publishes `liveCopies()` and `voicesUnit(type)` | The single most defining control of a *crowd*. **Floors at 3** because 2 copies is a chorus (CONTRACT §4) | every step moves the mono spectrum **10.0 / 14.3 / 13.5 / 14.9 dB** |
+| **P1** | **`Voices`** | 3–8 copies, stepped | how many copies exist. **Twin → LINES** (`2·nPair_`, and the Character names are now the count: Two Line 2 / Four Line 4 / Hex 6) · Blur → allpass stages · Bands → bands. **fb425 THE COUNT LAW**: the Character sets where the knob STARTS and the knob adds a fixed step per click (Blur +3 stages, Bands +2 bands), so it travels its whole length on every Character. Multiplying the Character's depth INTO the knob drove `Deep Twelve` to 18/24/24/24/24 and the six coarse `Bands` Characters to 2/4/4/6/6 — plateaus that only appear off Character 0, which is the only column fb424 swept. The engine publishes `liveCopies()` and `voicesUnit(type)` | The single most defining control of a *crowd*. **Floors at 3** because 2 copies is a chorus (CONTRACT §4) | every step moves the mono spectrum **10.0 / 14.3 / 13.5 / 14.9 dB** |
 | **P2** | **`Spread`** | 0–1, `t^0.65` | fans the copies across the field. A **ladder**: each successive voice sits further out, and at fb422 it goes **PAST hard pan** (reach 1.60×, clamped at ±1.40) into ANTIPHASE placement. On `Twin` it is the pair's placement, on `Blur` the separation of the two decorrelated paths, on `Bands` the **spectral extent** of the split (opening from the middle outward) | Distinct from `Width`, which is a matrix on the finished wet. Spread is *geometry*; Width is *rotation* | 🔴 1−corr **0.000 → 0.947** (Throng) · **0.000 → 1.891** (Twin) · **0.000 → 1.823** (Blur) · **0.000 → 1.120** (Bands). fb421: **0.000 → 0.125**, and it was **dead on Twin, Blur and Bands** — `sprSm0_()` appeared only inside a `viz_.voicePan` assignment |
 | **P3** | **`Offset`** | 0.25×–**4.0×**, log, unity at the centre | how far behind the copies sit — the delay length itself | Named `Offset`, not `Delay`: a back knob may not carry another rack device's name | wet time-centroid **2.79 → 35.09 ms** |
 | **P4** | **`Roam`** | 0–1, `t^0.7` | a slow random walk on every copy's **time (±16 ms) and placement (±0.85 pan)**. fb422 gives it a home on the three Types that had none: `Twin` walks each LINE independently (breaking the antiphase symmetry the cross-mix lives on), `Blur` walks the allpass field, `Bands` walks the crossover grid | Time jitter alone measured on the trace and barely on the output; a crowd that does not move in *space* is not a crowd | 🔴 gated as OUTPUT CHANGE per quarter against one quarter-turn of `Mix`. fb421: **dead on Twin and Bands**, and on `Blur` it was a static re-dice, not a walk — its measured motion ran **backwards** (0.061 → 0.043) |

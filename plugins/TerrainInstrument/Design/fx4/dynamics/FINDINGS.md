@@ -601,3 +601,140 @@ CERT_EXIT=0
 5. **Everything here is still ENGINE-side.** A green harness proves the engine works; it never
    proves the plugin reaches it (fb373). The UI → param → DSP round trip is the integration
    owner's, and nothing in this directory can gate it.
+
+---
+
+# fb425 — ROUND 4: THE FULL-MATRIX LAW
+
+Every law-1, law-3 and R11 gate now runs the **whole 8 × 8 grid**, both devices. 1664
+cell-measurements per pass, three operating points each. What that found, what it cost, and the
+four things in the engines that were genuinely wrong.
+
+## 1. The two DSP bugs Max/the integration owner named
+
+### OTT — `Amount` ran backwards (`TerrainOttFx.h`, the per-band clipper)
+
+The ceiling was `db2lin (Tdn + clipHd_ + mkDb_[b])` — a fixed headroom above **where a slope of 1
+would pin the band**. That reference is only true while the downward computer is actually pinning:
+`mkDb_` is `ts.mk[b] * lo01` and `sdn_` is `… * lo01`, so at Amount 0 **both are zero** and the
+ceiling collapsed by the whole makeup (21/24/20 dB on `Heavy`) onto a signal that had had no gain
+reduction applied at all.
+
+```
+Type Heavy, 220 Hz @ -10.5 dBFS   Amount:     0 %     25 %     50 %     75 %    100 %
+  fb424                              THD:  35.75 %  28.46 %   2.52 %   2.52 %   2.51 %
+                                    peak:  0.0263   0.0829   0.2751   0.2316   0.1949
+  fb425                              THD:   0.00 %   0.99 %   2.31 %   2.34 %   2.34 %
+                                    peak:  0.2607   0.2884   0.4266   0.6242   0.6779
+```
+
+Two corrections, both needed, and **both are exactly zero at Amount 100** so `Heavy`'s shipped
+sound at the top of the knob is unchanged:
+
+1. the ceiling rides the **realised** output (`Ldn + gdb`) instead of the pinned reference. The
+   `slack` term is identically 0 when s = 1 (then `Ldn − gDn = Tdn` by construction) and opens by
+   exactly the dynamic range the slope has not removed everywhere else;
+2. the clip blend scales with `sdn_[b]`. The clipper is the welding; with no gain reduction there
+   is nothing to weld. `sdn_` is per-sample glided, so it cannot click.
+
+Amount 0 is now neutral **by construction, not by calibration**, on all 64 cells: THD ≤ 0.5 % (the
+bypassed-engine control number is 0.004 %) and the peak equals the allpass tree's own.
+
+### COMPRESS — ∞:1 did not wall on the feedback Types (Max's ruling: break authenticity)
+
+A feedback detector solves `y = (x + s·T)/(1 + s)`, so at s = 1 the closed-loop slope is exactly
+**0.5** — half the dynamic range survives at any Ratio. Authentic (it is why an 1176 is called
+self-limiting) and **polite at 100 %**, which R11 forbids. Measured DRR on a 48 dB staircase at
+Push/Ratio 100, fb424: FET 76 **0.4683**, Opto **0.5608**, Vari-Mu **0.4763** against a 0.05 bar.
+
+Over the last 10 % of Ratio the detector now **crosses over from the output tap to the input tap**
+(`fbMixTgt_ = 1 − smoothstep(rk; 0.90, 1.00)`, glided 20 ms), and a Type whose own cap is under 1
+(Opto's 0.833 = 6:1, an authentic T4 maximum) has that cap lifted to 1 over the same 10 %. Caps a
+**Character** authored stay put — `Twenty Lock`, `Anti`, `Loose Grip` are locked-ratio identities.
+
+```
+fb425, DRR at Push/Ratio 100:  Exact 0.0188 · Bus 0.0093 · FET 76 0.0239 · Opto 0.0298
+                               Vari-Mu 0.0218 · Ride 0.0206 · Limit 0.0061      (bar 0.05)
+and the cost is bounded:       FET 76 DRR 0.4917 at Ratio 90 → 0.0239 at Ratio 100
+```
+
+`OverEasy` is ruled separately and it is a roster fact, not an excuse: its Ratio knob is the only
+one that continues **past** ∞:1 into the dbx "Infinity+" negative zone, where `out = 2T − in`. A
+dynamic-range *span* cannot see an inversion (an upside-down 25 dB span reads like an upright one)
+and `grT` is clamped at 60 dB, so at Push 100 the top treads are past the clamp and parallel again.
+Its bar is the **sign** of the curve at a working threshold: measured **−0.908**, bar ≤ −0.5.
+
+## 2. Four more dead knobs the matrix found — all of them real, none of them cosmetic
+
+| where | what was wrong | fix |
+|---|---|---|
+| `RS_DUAL` (Bus ×3, Vari-Mu ×2) | the dual pool used three FIXED constants (0.150/0.150/2.500 s). `Release` was **bit-identically dead on the Bus Type's DEFAULT Character**. | both pools ride the knob, keeping the 16.7:1 spacing the fixed pair had |
+| `RS_DAMPED` (`Poise`, `Judder`, `All Buttons`) | the 2nd-order smoother read only the release knob ⇒ `Attack` dead | ω is asymmetric (ω_atk rising, ω_rel recovering); ζ untouched. ⚠️ the first version of this fix floored ω_atk at 1 ms, which clamps BOTH ends of FET's 0.02…0.8 ms window to the same number — still dead. The floor is one sample. |
+| `F_LEAKY` (`Porous`) | the over-limit leak used an ABSOLUTE 0.833 slope and Limit's Ratio spans 0.90…1.00, so `min()` picked the leak every time ⇒ `Ratio` dead | the leak is now relative to the slope that is set (`over · 0.833 · s`) |
+| the upward lane (all of `Ride`) | `liftUp` ran straight off the rectifier with **no ballistics at all**, so on `Only Up` (downward computer off) `Attack`, `Release` and `Cling` were dead and everywhere else the lift snapped | the lift rides the same two constants, attack when it falls, release when it returns |
+
+And one R11 range fix: `Round`'s window topped out at 12 dB on `Bus`, 12 on `FET 76` and **6** on
+`Limit`, and the full 0→100 travel measured 0.05…0.49 dB on 12 of their 24 cells. A knee only bends
+the curve within ±W/2 of the threshold, so a 6 dB window is a control you cannot hear at either end
+— the polite-maximum failure R11 names. All three go to 24 dB. `Exact` (48 dB) is unchanged.
+
+## 3. What the harness had to learn: a control must be measured where its mechanism lives
+
+This is the honest half of the round. **Most of the "dead" cells the first matrix pass reported
+were the harness's fault, and finding that out cost more than the engine work.** Each of these was
+diagnosed by measuring the mechanism directly, never by moving a bar:
+
+- **the knee** reads 0.02 dB at Push 60 (the threshold 27 dB under the programme) — a knee only
+  exists near the threshold. Compress now sweeps every cell at **three** operating points: deep
+  (Push 60 / Ratio 85), shallow (Push 0 / Ratio 100 on a decaying programme) and static (a 36 dB
+  staircase straddling the threshold). A cell counts as alive if it is audible at any of them; it
+  counts as DEAD only if it is bit-identical at **all** of them.
+- **`Raise`** (OTT's upward amount) measured 0.02…0.45 dB on **52 of 64 cells** and looked dead.
+  The tail probe never got more than ~3 dB below the upward threshold. Rebuilt as a note with a
+  **sustained quiet body 40 dB down**, it measures 6…14 dB. The mechanism never changed.
+- **`Crest`** measured 0.1…0.4 dB on 40 cells. On a LOUD note the lift is already zero when the
+  attack lands, so the transient hold has nothing to suppress. On a programme 26 dB quieter — where
+  the lift really is riding the gap before each attack, which is the sentence in the engine header
+  — it measures 0.61…several dB on all 63 unruled cells.
+- **`Release` on `Long Haul`** spans **4…50 seconds**. A 1.5 s probe cannot tell 4 s from 50 s; it
+  ends first. That row gets a 6 s programme and is still ruled NARROW, honestly.
+- **the OTT sample-rate gate** took four attempts. t63 off a level step does not work here (the
+  clamped envelopes cross the clamp within a few samples whatever the constant is); level-at-time
+  reads a half-block edge offset as 4.3 dB; time-to-level reads it as 800 %. What works is the
+  **area under each ramp**, `Σ|gain(t) − gain_settled|·dt`, which is τ integrated and immune to any
+  single block: 44.1 kHz +2.7 % / +0.1 %, 96 kHz −0.4 % / −0.1 %, bar 12 %.
+
+## 4. The known-inert roster — 18 rows, asserted, checked both ways
+
+13 INERT (the mechanism is absent; the output must be **bit-identical**) and 5 NARROW (the
+mechanism is wired but the Character has multiplied its window under the audibility bar; the cell
+must be **alive and under 0.5 dB**). A row that no longer matches fails — a stale ruling is a
+finding, not an excuse. Section 9 prints all 18 with the missing mechanism named, asserts the size,
+asserts every row was reached, and asserts the matrix actually ran (1664 measurements) so a roster
+over an empty sweep cannot pass.
+
+## 5. Gate hygiene — the exemption list was the only one in the family with no cardinality
+
+`kShared` had 12 entries and no size assertion; it is the list that historically self-granted
+`Auto`. It is now three lists — CONTRACT §4 (4), rack chassis (3), explicit rulings (2) — each
+entry printed with its citation, each asserted, and each required to be **LOAD-BEARING**.
+That last gate found four entries that exempted nothing: **`Peak`, `Bass`, `Treble` and `Ratio` are
+not in the 3320-string corpus at all.** They are deleted. So are `Gentle` and `Low Split`: the
+siblings have applied their RENAMES rows and the collisions they excused no longer exist. A dead
+exemption is a self-grant parked for later.
+
+The retired-label blacklist is **parsed from RENAMES.md** by `gen_shipped_labels.py` (12 rows,
+`retired_labels.inc`) exactly the way Widen does it — the typed list had omitted `Long` and `Glass`,
+two of this directory's own rows, and `Long` was standing in ROSTER.md:125 while the gate printed
+"0 hits". **And the match is on whole LABEL TOKENS now**: the old `isalnum` word-boundary scan makes
+`Long` match inside the live names `Long Ears` / `Long Window` / `Long Tail` / `Long Haul` and
+`Glass` inside `Glass Ceiling` — nine false positives that would have had to be excused by hand.
+`Auto` is the one retired name the engine still publishes (as the pill); it is carved out in a
+one-entry, asserted, cited `kRepublished` list.
+
+The ROSTER half of the drift gate was `roster.find(s) != npos` — no order, no cardinality, no
+reverse direction. It is now **ordered and positional**: each Type owns its grid row, its eight
+Characters must appear in that row as backticked tokens **in order**, and no Character may appear
+under another Type. ⚠️ the first version of this gate read the WRONG ROW — §2's lineage table names
+every Type too, and taking the first match found a 216-character row with no backticks and called
+all 16 grids out of order. A gate that reads the wrong row is fb393 wearing a different hat.

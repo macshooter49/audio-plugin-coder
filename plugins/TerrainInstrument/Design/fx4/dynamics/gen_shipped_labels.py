@@ -76,5 +76,53 @@ def main():
     print("%d labels from %d files" % (len(ordered), files))
     for probe in ("Motion", "Route", "Slant", "Chisel", "Steady", "Twofold", "Roam"):
         print("   %-8s %s" % (probe, "PRESENT" if probe in labels else "absent"))
+    retired()
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+#  retired_labels.inc — PARSED FROM RENAMES.md, never typed.
+#
+#  fb425.  The hand-kept blacklist in dynamics_cert.cpp omitted TWO of this
+#  directory's own RENAMES rows — `Long` (Detect option 3 → `Patient`) and
+#  `Glass` (Opto char 5 → `Crystal`) — and `Long` was still standing in
+#  ROSTER.md:125 while the gate printed "0 hits". A green kinder than reality,
+#  which is the one thing FIXES.md §1 says a harness must never be.
+#  Widen already derives its list this way (widen/extract_labels.py); this is
+#  the same mechanism on this directory's tables. RENAMES.md is the authority
+#  for both columns, so the cert can assert two things a typed list cannot:
+#    · every NEW name is actually published by the engine  (the table WAS applied)
+#    · no OLD name survives as a token anywhere downstream (nothing drifted)
+# ─────────────────────────────────────────────────────────────────────────────
+def retired():
+    rn = os.path.join(os.path.dirname(HERE), "RENAMES.md")
+    rows, mine = [], False
+    for line in open(rn, encoding="utf-8"):
+        if line.startswith("## ") or line.startswith("# "):
+            mine = line.startswith("## COMPRESS") or line.startswith("## OTT")
+            continue
+        if not mine or not line.startswith("|"):
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        if len(cells) < 3:
+            continue
+        old = re.findall(r"`([^`]+)`", cells[1])
+        new = re.findall(r"`([^`]+)`", cells[2])
+        if not old or not new or "**" not in cells[2]:
+            continue                                   # header row / prose row
+        for o, n in zip(old, new):
+            rows.append((o, n))
+    out = os.path.join(HERE, "retired_labels.inc")
+    with open(out, "w", encoding="utf-8") as fh:
+        fh.write("// AUTO-PARSED from Design/fx4/RENAMES.md (the COMPRESS and OTT tables) by\n"
+                 "// gen_shipped_labels.py — DO NOT HAND-EDIT. RENAMES.md is the authority.\n"
+                 "// kRetiredLabels[i] was renamed to kRenamedTo[i]. %d rows.\n"
+                 "static const char* const kRetiredLabels[] = {\n" % len(rows))
+        for o, _ in rows: fh.write('    "%s",\n' % o)
+        fh.write("};\nstatic const char* const kRenamedTo[] = {\n")
+        for _, n in rows: fh.write('    "%s",\n' % n)
+        fh.write("};\nstatic constexpr int kNumRenames ="
+                 " (int) (sizeof kRetiredLabels / sizeof kRetiredLabels[0]);\n")
+    print("wrote retired_labels.inc : %d COMPRESS/OTT rename rows" % len(rows))
+    for o, n in rows: print("   %-14s -> %s" % (o, n))
 
 main()

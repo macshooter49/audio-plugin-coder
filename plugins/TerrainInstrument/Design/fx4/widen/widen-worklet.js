@@ -95,7 +95,7 @@ const CHAR = [
   [1.00,2.00,0.60,0.00,1.0, 0.55, 0.0,0.0, 0.985, 0],
   [0.50,1.00,1.00,0.00,1.0, 1.00, 0.0,0.0, 1.000, 0],
   [1.80,1.60,1.00,0.00,1.0, 1.00, 0.0,0.0, 0.975, 0],
-  [1.00,1.00,1.00,0.00,1.0, 1.00, 0.0,8.0, 1.000, F_STATIC],
+  [1.00,1.00,1.00,0.00,1.0, 1.00, 0.0,1.0, 1.000, F_STATIC],   // fb425: x3 is now a FRACTION of amtC
   [1.00,1.00,1.00,0.00,1.0, 1.00,31.0,0.0, 0.990, 0],
   [1.00,2.50,1.30,0.00,1.0, 1.00, 0.0,0.0, 0.960, 0]],
  [[1,1,1.00,0.00,1, 3.0, 180, 5600, 1.000, 0],
@@ -122,7 +122,7 @@ const BASE  = [1.5, 9.7, 13.1, 17.3, 21.9, 11.3, 15.7, 24.1];     // ms
 const SLAP  = [2.0, 8.0, 12.5, 17.0, 22.0, 6.0, 15.0, 26.0];
 const DBL   = [17, 29, 41, 53, 23, 35, 47, 61];
 const RHO   = [1.00, 1.07, 0.93, 1.13, 0.89, 1.19, 0.83, 1.23];
-const MAXV = 8, MAXAP = 24, MAXB = 16;
+const MAXV = 8, MAXAP = 36, MAXB = 20;      // fb425: headroom for the count law below
 
 const clamp01 = v => v < 0 ? 0 : (v > 1 ? 1 : v);
 const clampf  = (v, a, b) => v < a ? a : (v > b ? b : v);
@@ -162,6 +162,7 @@ class TerrainWiden extends AudioWorkletProcessor {
     this.achC=A(); this.statC=A(); this.ratio=A(); this.rho=A(); this.rEff=A();
     this.ph=A(); this.triZ=A(); this.q=A(); this.res=A(); this.vfd=A(); this.prevD=A().fill(-1);
     this.wk = []; this.wkp = [];
+    this.resW = A(); this.resP = A(); this.retR = 0;    // fb425 retrig residuals
     for (let v = 0; v < MAXV; ++v) {
       this.ph[v] = (v / MAXV + 0.037 * ((v * 7) % 5)) % 1;
       this.vfd[v] = v === 0 ? 1 : 0;
@@ -207,8 +208,24 @@ class TerrainWiden extends AudioWorkletProcessor {
                     s ^= s >>> 15; s = Math.imul(s, 2246822519) >>> 0; s ^= s >>> 13;
                     return (s >>> 0) / 4294967296; }
 
+  // fb425 — the retrigger used to reset ONLY the per-voice LFO phase, which `Twofold`,
+  // `Blur` and `Bands` do not read: the pill was bit-identically dead on three of six
+  // Types. The random WALKS are reseeded too, and their offset is owed back as a residual
+  // under the same read-position slew cap the LFO residual uses.
   fireRetrig () {
-    for (let v = 0; v < MAXV; ++v) { this.res[v] = Math.sin(2 * Math.PI * this.ph[v]); this.ph[v] = 0; this.q[v] = 0; }
+    for (let v = 0; v < MAXV; ++v) {
+      this.res[v] = Math.sin(2 * Math.PI * this.ph[v]); this.ph[v] = 0; this.q[v] = 0;
+      this.resW[v] += this.wk[v].st;  this.wk[v].st = 0;  this.wk[v].tg = 0;  this.wk[v].ph = 0;
+      this.resP[v] += this.wkp[v].st; this.wkp[v].st = 0; this.wkp[v].tg = 0; this.wkp[v].ph = 0;
+    }
+    this.retR = 1;
+  }
+  bleedWalkRes (v) {
+    if (this.resW[v] === 0) return 0;
+    const st = 0.5 / Math.max(1, this.depG[v] + this.sm.wan * 0.012 * this.fs);
+    const r = this.resW[v];
+    this.resW[v] -= r > 0 ? Math.min(r, st) : Math.max(r, -st);
+    return r;
   }
 
   // ── everything derived, PER BLOCK — never per sample ────────────────────
@@ -285,7 +302,9 @@ class TerrainWiden extends AudioWorkletProcessor {
         if (C[9] & F_ALLNEG) sc = -Math.abs(cc) * (0.6 + 0.4 * (v & 1));
         if (C[5] > 1 && v >= this.nV - 2) sc = C[5];
       }
-      if ((C[9] & F_STATIC) && v > 0) sc = C[7] * ((v & 1) ? 1 : -1);
+      // fb425: static means the pair does not MOVE, never that it has no width — so the
+      // held offset is the cents the walk would have reached at this Amount.
+      if ((C[9] & F_STATIC) && v > 0) sc = amtC * C[7] * ((v & 1) ? 1 : -1);
       if ((C[9] & F_OCTTOP) && v >= this.nV - 2 && v > 0) sc = 1200;
       if ((C[9] & F_SUB) && v === 1) sc = -1200;
       this.statC[v] = sc; this.ratio[v] = Math.pow(2, sc / 1200);
@@ -311,7 +330,11 @@ class TerrainWiden extends AudioWorkletProcessor {
     this.nPair = clampf(((this.nV + 1) >> 1) + (C[5] | 0) - 1, 1, 4);
     this.xkT = clampf((0.25 + 0.40 * this.tg.amt) * C[6], 0, 1.05);
 
-    this.nAP = clampf(Math.round(C[5] * this.nV), 2, MAXAP);
+    // fb425 THE COUNT LAW — the Character sets where `Voices` STARTS, the knob adds a
+    // fixed step per click, so it travels its whole length on every Character. Multiplying
+    // the Character's depth INTO the knob drove the deep Characters into the ceiling at a
+    // quarter turn and the top three quarters moved nothing at all.
+    this.nAP = clampf(Math.round(clampf(Math.round(C[5] * 3), 3, MAXAP - 15) + 3 * (this.nV - 3)), 2, MAXAP);
     if (t === 4) {
       const lo = C[6] * (1 - 0.75 * this.tg.amt), hi = C[7];
       for (let k = 0; k < this.nAP; ++k) {
@@ -325,7 +348,9 @@ class TerrainWiden extends AudioWorkletProcessor {
         this.apCbT[k] = this.apCoef(clampf(fb * this.tg.off, 20, 0.45 * this.fs)) * ((C[9] & F_NEGB) ? -1 : 1);
       }
     }
-    this.nB = clampf(Math.round(C[5] * this.nV), 2, MAXB);
+    // fb425 THE SAME COUNT LAW, built EVEN from the start: the even-ing used to collapse
+    // 3->4 and 5->6 and left two quarters of the knob changing nothing.
+    this.nB = clampf(2 * (clampf(Math.round(C[5] * 2), 1, MAXB / 2 - 5) + (this.nV - 3)), 2, MAXB);
     if (t === 5) {
       this.nB = clampf(this.nB + (this.nB & 1), 2, MAXB);         // an odd count is not complementary
       const lo = C[6] * this.tg.off, hi = 11000 * this.tg.off;
@@ -371,6 +396,8 @@ class TerrainWiden extends AudioWorkletProcessor {
     }
 
     for (let i = 0; i < N; ++i) {
+      // fb425 the retrig residual ramp: LINEAR to exactly zero (a one-pole PARKS in float)
+      if (this.retR > 0) { this.retR -= 1 / (0.030 * this.fs); if (this.retR < 0) this.retR = 0; }
       // fade-swap-recover — a Field change can swap `Side Only` for `Gather`, an 11x
       // level change, so the dip floor is -46 dB and not -26.
       if (this.pend > 0) { this.dip += this.dipDn * (0 - this.dip);
@@ -510,10 +537,10 @@ class TerrainWiden extends AudioWorkletProcessor {
         d += this.depG[v] * s;
       } else if (T.mod === 3) {
         this.tickWalk(this.wk[v], this.walkHz);
-        d += this.depG[v] * ((C[9] & F_STATIC) ? 0 : this.wk[v].st);
+        d += this.depG[v] * ((C[9] & F_STATIC) ? 0 : (this.wk[v].st + this.bleedWalkRes(v)));
       }
       if (sm.wan > 1e-3 && T.mod !== 3) { this.tickWalk(this.wk[v], 0.35 + 1.2 * sm.wan);
-                                          d += sm.wan * 0.012 * this.fs * this.wk[v].st; }
+                                          d += sm.wan * 0.012 * this.fs * (this.wk[v].st + this.bleedWalkRes(v)); }
       d = clampf(d, 2, limHi);
       if (this.prevD[v] < 0) this.prevD[v] = d;
       if (this.vizTick === 0) {
@@ -537,7 +564,7 @@ class TerrainWiden extends AudioWorkletProcessor {
       const g = this.gainG[v] * this.vfd[v] * this.vNormG;
       let gl = this.plG[v], gr = this.prG[v];
       if (sm.wan > 1e-3) { this.tickWalk(this.wkp[v], 0.22 + 0.75 * sm.wan);
-        const pwd = sm.wan * 0.55 * this.wkp[v].st;
+        const pwd = sm.wan * 0.55 * (this.wkp[v].st + this.retR * this.resP[v]);
         gl = clampf(gl - pwd, 0, 1.35); gr = clampf(gr + pwd, 0, 1.35); }
       aL += g * gl * y; aR += g * gr * y;
     }

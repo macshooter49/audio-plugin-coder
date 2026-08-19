@@ -1,4 +1,4 @@
-# WIDEN — MUTATION.md (fb423)
+# WIDEN — MUTATION.md (fb425)
 
 **FIXES.md §0.** Every law-1 (night-and-day), law-4 (no clicks) and R11 (ceiling) gate in
 `widen_cert.cpp` is proven here to go **RED** against a deliberately broken copy of the engine.
@@ -15,33 +15,50 @@ clang++ -O2 -std=c++17 -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/wide
 clang++ -O2 -std=c++17 -DWIDEN_MUT_HAAS  ...same...  && /tmp/widen_cert_haas
 ```
 
-**Shipping baseline: `PASS 230  FAIL 5`.** Every log in this table is on disk beside this file
-as `widen_mut_<MACRO>.log`, produced by the same `widen_cert.cpp` as `widen_cert_fb423.log`. The
-five are named and explained in FINDINGS §0 — they are real, understood, and not bought.
+**Shipping baseline (fb425): `PASS 1511  FAIL 88` over 1599 gates.** Every log in this table is on
+disk beside this file as `widen_mut_<MACRO>.log`, produced by the same `widen_cert.cpp` as
+`widen_cert_fb425.log`, and **every one was re-run from scratch at fb425** — the counts below are
+not fb423's carried forward.
 
-🔴 **fb423 adds three mutations, and two of them protect things that are not DSP.** A name gate and
-a monitor pill are exactly the kind of thing that gets asserted rather than measured, so they are
-mutated like everything else. **No pre-existing mutation regressed**: HAAS 78, DEADKNOBS 14,
-POLITE 14, NOSMOOTH 13, NOGLIDE 11, NODIP 9, NOFLOOR 21, APCLAMP 9 — identical fail counts to
-fb422, on 24 more gates.
+🔴 **fb425 — THE FULL-MATRIX ROUND, AND EVERY OLD MUTANT GOT LOUDER.** Law-1, law-3 and R11 now run
+the whole 6 × 8 Type × Character matrix (576 knob cells, 48 ceiling cells, 48 Mix cells), both front
+pills are gated on all 48 cells, and the `Field` dropdown has a physics gate for the first time.
+`WIDEN_MUT_HAAS` went from **78** fired gates to **513**. Two mutations are new, and each protects
+one of the two things fb424 could not see at all:
+
+| new macro | what it restores | what it proves |
+|---|---|---|
+| `WIDEN_MUT_RETRIGLFO` | fb424's `fireRetrig()`, which only reset the per-voice LFO phase | **23 cells go BIT-IDENTICAL** — 7 of 8 `Twofold`, 8 of 8 `Blur`, 8 of 8 `Bands`: exactly the three families that do not read `ph_[]` |
+| `WIDEN_MUT_FLATFIELD` | `Swap` and `Gather` collapsed into `Straight` | **144 identical `Field` pairs** across all 48 cells. Under fb424's cert this mutation moved **zero** lines |
+
+*(fb423's note, kept for the record: "fb423 adds three mutations, and two of them protect things
+that are not DSP. A name gate and a monitor pill are exactly the kind of thing that gets asserted
+rather than measured, so they are mutated like everything else. No pre-existing mutation regressed:
+HAAS 78, DEADKNOBS 14, POLITE 14, NOSMOOTH 13, NOGLIDE 11, NODIP 9, NOFLOOR 21, APCLAMP 9 —
+identical fail counts to fb422, on 24 more gates.")*
 
 ---
 
 ## The table
 
-| # | mechanism deleted | macro | result | the gates that fired |
-|---|---|---|---|---|
-| 1 | the ENTIRE widening machine → a fixed 12 ms Haas delay | `WIDEN_MUT_HAAS` | **157 / 78** | 78 gates, incl. all 6 R11 Amount, all 6 Type discriminators, 40 of the 72 matrix cells, the Dimension tell, the cross-type matrix, the bloom-by-Type clause |
-| 2 | fb421's dead knobs restored | `WIDEN_MUT_DEADKNOBS` | **221 / 14** | 9 matrix cells at **exactly 0.000** change per quarter |
-| 3 | fb421's ceilings restored | `WIDEN_MUT_POLITE` | **221 / 14** | R11 Twin + Twofold, 5 matrix cells, the chorus boundary on Twin |
-| 4 | every smoother → tau 0 | `WIDEN_MUT_NOSMOOTH` | **222 / 13** | 7 click gates, up to **×488** of the static floor |
-| 5 | delay/gain/pan glide removed | `WIDEN_MUT_NOGLIDE` | **224 / 11** | 5 click gates, up to **×488** |
-| 6 | the fade-swap-recover dip removed | `WIDEN_MUT_NODIP` | **226 / 9** | all 3 discrete-switch gates, **+38 dB** worse than the bar |
-| 7 | the Voices floor of 3 removed | `WIDEN_MUT_NOFLOOR` | **214 / 21** | the label-vs-count gates and 3 of the 6 output-side chorus gates |
-| 8 | the fb421 ±0.97 allpass clamp restored | `WIDEN_MUT_APCLAMP` | **226 / 9** | the sample-rate invariance gate at 96 kHz |
-| 9 | one fb423 rename reverted **in the header only** | `WIDEN_MUT_STALENAME` | **226 / 9** | 4 gates in §S: the shipped-corpus gate, the RENAMES-was-applied gate, and **both** drift gates |
-| 10 | the `Hear Mono` fold deleted | `WIDEN_MUT_NOMONO` | **227 / 8** | all 3 §Q measurement gates |
-| 11 | the `Hear Mono` 15 ms fade → a hard cut | `WIDEN_MUT_MONOSNAP` | **229 / 6** | the §Q click gate, at **×147** the static floor |
+**Shipping: `1511 / 88`.** Every row below is worse than that, and the Δ column is what the
+mutation cost — i.e. how many gates could see it.
+
+| # | mechanism deleted | macro | fb425 result | Δ vs shipping | the gates that fired |
+|---|---|---|---|---|---|
+| 1 | the ENTIRE widening machine → a fixed 12 ms Haas delay | `WIDEN_MUT_HAAS` | **750 / 513** | **+425** | **336 of the 576 matrix cells go BIT-IDENTICAL** (the Haas delay has no knobs to be alive on), all 48 R11 `Amount` cells, all 6 Type discriminators, all 48 `Field` cells, the Dimension tell, the cross-type matrix, the bloom-by-Type clause |
+| 2 | fb421's dead knobs restored | `WIDEN_MUT_DEADKNOBS` | **1377 / 150** | **+62** | matrix cells at **exactly 0.000** change per quarter, now on all eight Characters of each affected Type |
+| 3 | fb421's ceilings restored | `WIDEN_MUT_POLITE` | **1492 / 107** | **+19** | R11 `Amount` on Twin + Twofold across their Characters, matrix cells, the chorus boundary on Twin |
+| 4 | every smoother → tau 0 | `WIDEN_MUT_NOSMOOTH` | **1503 / 96** | **+8** | 7 click gates, up to **×488** of the static floor |
+| 5 | delay/gain/pan glide removed | `WIDEN_MUT_NOGLIDE` | **1505 / 94** | **+6** | 5 click gates, up to **×488** |
+| 6 | the fade-swap-recover dip removed | `WIDEN_MUT_NODIP` | **1507 / 92** | **+4** | all 4 discrete-switch gates, **+38 dB** worse than the bar |
+| 7 | the Voices floor of 3 removed | `WIDEN_MUT_NOFLOOR` | **1473 / 118** | **+30** | the label-vs-count gates, the output-side chorus gates, and the `Voices` matrix rows on every Character |
+| 8 | the fb421 ±0.97 allpass clamp restored | `WIDEN_MUT_APCLAMP` | **1504 / 95** | **+7** | the sample-rate invariance gate at 96 kHz |
+| 9 | one fb423 rename reverted **in the header only** | `WIDEN_MUT_STALENAME` | **1507 / 92** | **+4** | 4 gates in §S: the shipped-corpus gate, the RENAMES-was-applied gate, and **both** drift gates |
+| 10 | the `Hear Mono` fold deleted | `WIDEN_MUT_NOMONO` | **1461 / 138** | **+50** | the §Q fold gate on **all 48 cells** (it ran on one at fb424) plus the viz gate — 149 FAIL lines in that log |
+| 11 | the `Hear Mono` 15 ms fade → a hard cut | `WIDEN_MUT_MONOSNAP` | **1510 / 89** | **+1** | the §Q click gate, at **×147** the static floor — a single, precisely-targeted gate, which is what a targeted mutation should cost |
+| **12** | **fb424's LFO-only `fireRetrig()`** | `WIDEN_MUT_RETRIGLFO` | **1495 / 104** | **+16** | **23 `Retrig` cells go BIT-IDENTICAL** — 7 `Twofold`, 8 `Blur`, 8 `Bands`. Under fb424's cert: **0 gates** |
+| **13** | **`Swap` + `Gather` collapsed into `Straight`** | `WIDEN_MUT_FLATFIELD` | **1462 / 137** | **+49** | **144 identical `Field` pairs**, all 48 §V cells. Under fb424's cert: **0 gates** |
 
 ---
 
@@ -253,6 +270,84 @@ The toggle is deliberately placed at `FS·0.5 + 37` samples — off a zero cross
 block boundary. fb423's own ruling on the Compress device is why: its click probe jumped at
 `FS·0.5` with a 220 Hz tone, which is 110 whole cycles **and** a 64-sample boundary, and a gain
 step at a zero crossing produces no sample-to-sample jump at all.
+
+---
+
+## 12 · `WIDEN_MUT_RETRIGLFO` — fb424's retrigger, which only knew about the LFO
+
+`fireRetrig()` restored to `res_[v] = sin(2π·ph_[v]); ph_[v] = 0; q_[v] = 0;` and nothing else —
+i.e. exactly the shipping code of fb424. The walks (`wk_`, `wkp_`, `wkb_`, `wkg_`) and the two
+rotators (`blurRot_`, `gridRot_`) are left alone.
+
+**This is the defect the FIXES brief named, reproduced on demand.** `ph_[]` is read by
+`procVoices`' mod-0 branch and by `procTwin`, and by nothing else. `Twofold` (mod 3) runs a walk,
+`Blur` runs an allpass field driven by a rotator, `Bands` runs a crossover grid driven by a
+rotator. Firing the pill on any of them is a no-op **to the bit**.
+
+| gate | shipping | RETRIGLFO | verdict |
+|---|---|---|---|
+| `Retrig` is BIT-ALIVE on every cell | **0** dead cells | **23** dead cells | RED |
+| ...on `Twofold` | 8 of 8 alive | **7 of 8 BIT-IDENTICAL** | RED |
+| ...on `Blur` | 8 of 8 alive | **8 of 8 BIT-IDENTICAL** | RED |
+| ...on `Bands` | 8 of 8 alive | **8 of 8 BIT-IDENTICAL** | RED |
+| ...on `Throng` / `Twin` / `Steady` | alive | **still alive** — they read `ph_[]`, so the LFO-only retrigger is enough | correct |
+| every experiment was CONTROLLED | 0 contaminated | **0 contaminated** | the experiment is still an experiment |
+
+Pasted, from `widen_mut_RETRIGLFO.log`:
+
+```
+  FAIL  `Retrig` restarts the mechanism on Twofold/Lilt      post-edge 0.00 vs bar 18.37 (0.20 x Rate-quarter 91.87) · Mix-quarter 43.71 for scale  [BIT-IDENTICAL — the pill does NOTHING here]
+  FAIL  `Retrig` restarts the mechanism on Blur/Smooth Six   post-edge 0.00 vs bar 17.33 (0.20 x Rate-quarter 86.66) · Mix-quarter 52.72 for scale  [BIT-IDENTICAL — the pill does NOTHING here]
+  FAIL  `Retrig` restarts the mechanism on Bands/Coarse      post-edge 0.00 vs bar 1.21 (0.20 x Rate-quarter 6.06) · Mix-quarter 13.90 for scale  [BIT-IDENTICAL — the pill does NOTHING here]
+  FAIL  `Retrig` is BIT-ALIVE on every cell not on the known-inert roster  23 dead cells, first: Twofold/Lilt
+  ok    every experiment was CONTROLLED (bit-identical before the edge)     0 contaminated cells
+```
+
+> 🔑 **`Twofold`/`Static Pair` is the 8th cell, and it stays ALIVE under this mutation** — because
+> fb425 also gave that Character the constant-ratio reader it always claimed to have, and
+> `fireRetrig()` resets `q_[]`, the reader's own phase, in *both* versions. That is the honest
+> reading: this mutant proves the WALK/ROTATOR half of the fix, and nothing more.
+>
+> 🔑 **`post-edge 0.00` is an exact zero, not a small number.** The pre-edge control is bit-identical
+> by construction, so a 0.00 after the edge means the pill produced no sample of difference at all.
+> Under fb424's cert this mutation moves **no gate whatsoever**: the only thing that touched the
+> pill was a click test, on Type 0, and a click test cannot see silence.
+
+---
+
+## 13 · `WIDEN_MUT_FLATFIELD` — two of the six `Field` options collapsed to `Straight`
+
+`applyField()`'s `case 3` (`Swap`) and `case 5` (`Gather`) become `break;`. The dropdown still
+**publishes six names**; two of them are now the same physics as the first.
+
+**This is the skeptic's deletion, made reproducible.** Under fb424's cert it moved **zero lines** —
+`Field` had a naming assertion, a mono tag check and a click test, and nothing that compared the
+options to each other.
+
+| gate | shipping | FLATFIELD | verdict |
+|---|---|---|---|
+| NO two `Field` options are IDENTICAL anywhere | **0** identical pairs / 720 | **144** identical pairs | RED |
+| every `Field` pair clears a fifth of a `Width` quarter-turn | **1** weak cell / 48 | **48** weak cells | RED |
+| the Field roster is the 6 options the engine publishes | ok | **ok** — and that is the point: the *names* are intact, only the physics is gone | correct |
+
+Pasted, from `widen_mut_FLATFIELD.log`:
+
+```
+  FAIL  Field: all 15 pairs distinct on Throng/JP Classic    closest 0.00 (bar 13.96 = 0.20 x Width-quarter 69.82) — Straight vs Swap
+  FAIL  Field: all 15 pairs distinct on Throng/Even Fan      closest 0.00 (bar 13.01 = 0.20 x Width-quarter 65.05) — Straight vs Swap
+  FAIL  NO two `Field` options are IDENTICAL anywhere in the 48-cell matrix  144 identical, first: Straight == Swap on Throng/JP Classic
+  FAIL  every `Field` pair clears a FIFTH of a Width quarter-turn, on every cell  48 weak cells; closest anywhere Throng/JP Classic Straight vs Swap at 0.00
+```
+
+> 🔑 **144 = 48 cells × 3 pairs** (`Straight`≡`Swap`, `Straight`≡`Gather`, `Swap`≡`Gather`).
+> The count is exactly what the arithmetic predicts, which is itself a check that the gate is
+> counting pairs and not artefacts.
+>
+> 🔑 **The metric had to be CHANNEL-ORDERED to catch this.** `Swap` exchanges L and R: correlation
+> is unchanged, side/mid is unchanged, the mono sum is unchanged, and any metric built on those
+> three reads `Straight` and `Swap` as the same option **by construction**. §V compares 30 log
+> bands of L *and* 30 of R as an ordered vector, which is why `Straight == Swap` shows up as an
+> exact 0.00 rather than not showing up at all.
 
 ---
 
