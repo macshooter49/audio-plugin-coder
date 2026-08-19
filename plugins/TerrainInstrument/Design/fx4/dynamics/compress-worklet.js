@@ -18,17 +18,25 @@
 //   n.port.onmessage = e => draw(e.data);   // { grDb, inDb, outDb, knee[32], lvl }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ═════ LABELS — MIRRORED FROM TerrainCompressFx.h, WHICH IS THE SOURCE OF TRUTH ═════
+// (frontNames / backNames / dropdownNames / pillName / typeNames / charNames / detectNames).
+// If these ever disagree with the header, the header wins and this file is the bug.
+const DEVICE = 'Compress';
+const FRONT  = ['Push', 'Ratio', 'Lift', 'Mix'];
+const BACK   = ['Attack', 'Release', 'Round', 'Hear Cut', 'Edge', 'Cling', 'Tie', 'Burn'];
+const DROPS  = ['Character', 'Detect'];
+const PILL   = 'Auto';
 const TYPES = ['Exact', 'Bus', 'FET 76', 'Opto', 'Vari-Mu', 'OverEasy', 'Ride', 'Limit'];
-const DETECT = ['Auto', 'Peak', 'Average', 'Long', 'Spike'];
+const DETECT = ['Native', 'Peak', 'Average', 'Patient', 'Spike'];
 const CHARS = [
-  ['Precise', 'Soft Touch', 'RMS Ears', 'Spike Ears', 'Deep Release', 'Line Attack', 'Silky', 'Wobble'],
+  ['Precise', 'Soft Touch', 'Loose Grip', 'Blunt', 'Deep Release', 'Line Attack', 'Poise', 'Judder'],
   ['Quad Bus', 'Hand Set', 'Two Easy', 'Ten Punchy', 'Fast City', 'Big Desk', 'Pump Bus', 'No Diode'],
   ['Blackface', 'Blue Stripe', 'All Buttons', 'Twenty Lock', 'Loose Four', 'Broken Bias', 'Waiting Fet', 'Two Pass'],
-  ['Cell Classic', 'Fresh Cell', 'Tired Cell', 'Quick Cell', 'Even Pools', 'Glass', 'Tube Stage', 'Bright Ears'],
+  ['Cell Classic', 'Fresh Cell', 'Tired Cell', 'Quick Cell', 'Even Pools', 'Crystal', 'Tube Stage', 'Bright Ears'],
   ['Studio 670', 'Time One', 'Time Four', 'Auto Peaks', 'Long Haul', 'Push Pull', 'Lateral', 'Triode Soft'],
   ['Over Easy', 'Hard 160', 'Infinity', 'Infinity Plus', 'Slow Window', 'Crush RMS', 'Decilinear', 'Anti'],
   ['Level Rider', 'Deep Floor', 'Only Up', 'Only Down', 'Fast Clamp', 'Slow Iron', 'Bright Bias', 'Vocal Sit'],
-  ['Clean Wall', 'Soft Ceiling', 'Hard Stop', 'Pump Limit', 'Loud War', 'Clip Guard', 'Springy', 'Leaky'],
+  ['Clean Wall', 'Soft Ceiling', 'Hard Stop', 'Pump Limit', 'Loud War', 'Clip Guard', 'Springy', 'Porous'],
 ];
 
 // ── the bus law: 0 dBp = −26.02 dBFS = a single note on the Terrain FX bus ──
@@ -49,7 +57,10 @@ const TSPEC = [
 // Character rows: only the fields that differ from the default are listed.
 const D = {};   // the neutral Character
 const CSPEC = [
-  [D, { kneeAuto: 1 }, { det: 'rms10' }, { det: 'spike' }, { deepRel: 1 }, { lineAtk: 1 },
+  // R6/fb418: NO Character sets `det` any more — `Detect` owns detection outright. The two
+  // rows that used to (`RMS Ears`, `Spike Ears`) are now `Loose Grip` (the slope is capped at
+  // 2.5:1 with 8 dB of extra knee) and `Blunt` (the curve applied twice at half slope).
+  [D, { kneeAuto: 1 }, { kn: 8, sMul: 0.6, sCap: 0.6 }, { twoPass: 1 }, { deepRel: 1 }, { lineAtk: 1 },
       { rel: 'damped', zeta: 1.0 }, { rel: 'damped', zeta: 0.42 }],
   [{ rel: 'dual', kn: 4, link: 1 }, { rel: 'exp', kn: 4, link: 1, rW: [2, 0.667] },
    { rel: 'dual', kn: 6, sMul: 0.5, sCap: 0.5, thr: 2, link: 1 },

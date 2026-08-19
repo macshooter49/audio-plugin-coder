@@ -6,7 +6,7 @@
 //  TerrainEqualizerFx.h. NOT sample-identical to the C++ (JS has no fade-swap dip and
 //  the design runs every 64 samples instead of 32) but recognisably the same device:
 //  the same matched-biquad design math, the same Q laws, the same +-30 dB x Amount 200 %
-//  ceiling, the same Sculpt notch morph and the same Dynamic ride.
+//  ceiling, the same Chisel notch morph and the same Dynamic ride.
 //
 //  USE:
 //    await ctx.audioWorklet.addModule('eq-worklet.js');
@@ -21,24 +21,24 @@
 //  EVERY DEFAULT IS 0.5 AND 0.5 IS NEUTRAL, so the device boots flat and transparent.
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const TYPES = ['Surgical', 'British', 'American', 'Passive', 'Open', 'Dynamic', 'Sculpt'];
+const TYPES = ['Surgical', 'British', 'American', 'Passive', 'Open', 'Dynamic', 'Chisel'];
 const FOCUS = ['Stereo', 'Mid', 'Side', 'Left', 'Right'];
-const SHAPE = ['Width', 'Bump', 'Grip', 'Dip', 'Silk', 'Sense', 'Ring'];
-const BACK  = ['Low Hz', 'Low', 'Body Hz', 'Body', 'Bite Hz', 'Bite', 'Reach', 'Shape'];
-const FRONT = ['Tilt', 'Air', 'Amount', 'Mix'];
+const TRAIT = ['Pinch', 'Slope', 'Taper', 'Dip', 'Silk', 'Pivot', 'Sting'];
+const BACK  = ['Low Hz', 'Low', 'Body Hz', 'Body', 'Bite Hz', 'Bite', 'Reach', 'Trait'];
+const FRONT = ['Slant', 'Air', 'Amount', 'Mix'];
 
 const CHARS = [
-  ['Clean','Tight','Broad','Steep','Carve','Deep Pivot','Bright Pivot','Four Bells'],
-  ['Console','Big Knob','Forward','Iron Top','Sub Iron','Steep Iron','Full Swing','Mid Rise'],
-  ['Proportional','Lasers','Gentle','Floor Lift','Boost Only','Cut Only','Shelf Ride','Runaway'],
-  ['Program','Close Dip','Far Dip','Both Ends','Bell Top','Slow Top','Deep Atten','Modern'],
-  ['Silky','Very Wide','Two Shelves','Stacked','Deep Reach','Soft Knee','Hard Knee','Bell Air'],
-  ['Program Ride','Fast','Slow','Wideband','Inverted','Hard Window','Soft Window','Peak Hold'],
-  ['Resonator','Razor','Triple Notch','Gain Ring','Shallow','Telephone','Sub Kill','Metal']
+  ['Plain','Tight','Broad','Steep','Scoop','Deep Pivot','Bright Pivot','Four Bells'],
+  ['Desk','Big Knob','Forward','Iron Top','Sub Iron','Steep Iron','Full Swing','Mid Rise'],
+  ['Proportional','Lasers','Mellow','Floor Lift','Boost Only','Cut Only','Shelf Ride','Runaway'],
+  ['Program','Close Cut','Far Cut','Both Ends','Bell Top','Slow Top','Deep Atten','Revival'],
+  ['Gloss','Very Wide','Two Shelves','Stacked','Deep Reach','Soft Knee','Hard Knee','Bell Air'],
+  ['Program Ride','Quick','Lazy','Wideband','Upward','Hard Window','Soft Window','Peak Hold'],
+  ['Resonator','Razor','Triple Notch','Gain Peak','Shallow','Telephone','Sub Kill','Metal']
 ];
 
 // LOW · BODY · BITE · AIR   —   kind: 0 bell · 1 low shelf · 2 high shelf
-//                                      3 low shelf 1-pole · 4 high shelf 1-pole · 5 tilt
+//                                      3 low shelf 1-pole · 4 high shelf 1-pole · 5 SLANT (fixed pivot)
 const TSPEC = [
   { q: [0.90,1.00,1.00,0.90], k: [1,0,0,2], law: 0, soften: 0.00 },  // Surgical
   { q: [0.80,1.00,1.00,0.80], k: [1,0,0,2], law: 1, soften: 0.10 },  // British
@@ -46,12 +46,12 @@ const TSPEC = [
   { q: [0.90,0.80,0.70,0.80], k: [1,0,0,2], law: 3, soften: 0.00 },  // Passive
   { q: [0.45,0.40,0.40,0.50], k: [1,0,0,4], law: 4, soften: 0.00 },  // Open  (AIR is 6 dB/oct)
   { q: [0.90,1.00,1.00,0.90], k: [1,0,0,2], law: 5, soften: 0.00 },  // Dynamic
-  { q: [1.00,1.00,1.00,1.00], k: [1,0,0,2], law: 6, soften: 0.00 }   // Sculpt
+  { q: [1.00,1.00,1.00,1.00], k: [1,0,0,2], law: 6, soften: 0.00 }   // Chisel
 ];
 
-// qm, fm, gm per band · kd (-1 = type default, 5 = steep) · tiltHz · cutQ · cutG · e1,e2,e3
-const C = (nm, qm, fm, gm, kd, tilt, cutQ, cutG, e1, e2, e3) =>
-  ({ nm, qm, fm, gm, kd, tilt, cutQ, cutG, e1, e2, e3 });
+// qm, fm, gm per band · kd (-1 = type default, 5 = steep) · pivotHz · cutQ · cutG · e1,e2,e3
+const C = (nm, qm, fm, gm, kd, pivot, cutQ, cutG, e1, e2, e3) =>
+  ({ nm, qm, fm, gm, kd, pivot, cutQ, cutG, e1, e2, e3 });
 const O = [1,1,1,1], N4 = [-1,-1,-1,-1];
 const CSPEC = [
  [ C('Clean',       O,O,O, N4, 700, 1,1, 0,0,0),
@@ -113,7 +113,7 @@ const CSPEC = [
 ];
 
 const BAND_LO = [20, 100, 700, 6000], BAND_HI = [500, 3000, 14000, 40000];
-const DB_SPAN = 30, TILT_SPAN = 24, AMOUNT_MAX = 2;
+const DB_SPAN = 30, SLANT_SPAN = 24, AMOUNT_MAX = 2;
 const Q_MIN = 0.05, Q_MAX = 90, G_CEIL = 72, G_FLOOR = -90;
 const DESIGN_BLK = 64, DET_CAL = 14, MAX_RING_SEC = 3;
 const CURVE_BINS = 96;
@@ -259,15 +259,32 @@ function designMatched(kind, f0, Q, gDb, fs) {
 }
 
 // 1-pole shelves as gLo*LP + gHi*HP. The m^2(1+K/m)/(1+Km) form is algebraically the same
-// and numerically lethal: a 96 dB tilt loses its whole low end to cancellation.
-function designShelf1(f0, gLoDb, gHiDb, fs) {
-  const G = Math.tan(Math.PI * clamp(f0, 1, 0.49 * fs) / fs);
+// and numerically lethal: a 96 dB slant loses its whole low end to cancellation.
+// 🚨 fb422 — the prewarped corner G is the primitive, because the SLANT places its corner
+// by arithmetic and an atan/tan round trip would smear the pivot.
+// The one-pole pole cap: a1 = (G-1)/(G+1), so |a1| -> 1 as G leaves the window in which the
+// decay is under MAX_RING_SEC. Same rMax as the biquad ring cap.
+function onePoleGmax(fs) { const r = Math.exp(-6.907755 / (MAX_RING_SEC * fs)); return (1 + r) / (1 - r); }
+function designShelf1G(G, gLoDb, gHiDb, fs) {
+  const gMax = onePoleGmax(fs);
+  G = clamp(G, 1 / gMax, gMax);
   const gL = Math.pow(10, gLoDb / 20), gH = Math.pow(10, gHiDb / 20), d = 1 + G;
   if (gLoDb === 0 && gHiDb === 0) return [1, (G - 1) / d, 0, (G - 1) / d, 0];
   return [(gL * G + gH) / d, (gL * G - gH) / d, 0, (G - 1) / d, 0];
 }
+function designShelf1(f0, gLoDb, gHiDb, fs) {
+  return designShelf1G(Math.tan(Math.PI * clamp(f0, 1, 0.49 * fs) / fs), gLoDb, gHiDb, fs);
+}
+// 🚨 fb422 — THE SLANT. It was designShelf1(pivot, -g, +g), whose 0 dB crossing sits at
+// pivot/10^(g/20): the pivot SLID 700 Hz -> 2.8 Hz as the knob opened and 120 Hz travelled
+// -4.4 dB and then back UP to +8.8 dB. Put the CORNER where the crossing has to land:
+// G_corner = G_pivot * 10^(g/20), in the prewarped domain, so the pivot is exact digitally.
+function designSlant(fPivot, gDb, fs) {
+  const Gp = Math.tan(Math.PI * clamp(fPivot, 1, 0.49 * fs) / fs);
+  return designShelf1G(Gp * Math.pow(10, gDb / 20), -gDb, gDb, fs);
+}
 function designOnePole(kind, f0, gDb, fs) {
-  if (kind === 5) return designShelf1(f0, -gDb, gDb, fs);
+  if (kind === 5) return designSlant(f0, gDb, fs);
   if (kind === 4) return designShelf1(f0, 0, gDb, fs);
   return designShelf1(f0, gDb, 0, fs);
 }
@@ -301,11 +318,15 @@ class TerrainEq extends AudioWorkletProcessor {
                b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5 };
     this.tg = new Float64Array(11).fill(0.5);
     this.sm = new Float64Array(11).fill(0.5);
-    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.010];
+    // fb422: Amount .010 -> .020. It multiplies all four band gains (+-60 dB of authority) and
+    // had the SHORTEST tau in the table; an instant Amount write measured 1.63 dB of wet-gain
+    // change in ONE sample. The number scales as 1/tau, which is what proves it is a smoothing
+    // fault; `Trait` does not move with tau at all, because that one is stored resonator energy.
+    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020];
     this.k = tau.map(t => 1 - Math.exp(-(DESIGN_BLK / this.fs) / t));
     this.mixSm = 1; this.mixTg = 1;
     this.mixK = 1 - Math.exp(-1 / (0.010 * this.fs));
-    // 9 stages: 4 bands x 2 + tilt. cur/tgt/inc coefficients + 2 channels of state.
+    // 9 stages: 4 bands x 2 + slant. cur/tgt/inc coefficients + 2 channels of state.
     this.st = [];
     for (let i = 0; i < 9; ++i)
       this.st.push({ on: false, kind: 0, f: 1000, q: 1, g: 0, lf: -1, lq: -1, lg: 1e9,
@@ -317,7 +338,7 @@ class TerrainEq extends AudioWorkletProcessor {
                  atk: [.01,.01,.01,.01], rel: [.001,.001,.001,.001] };
     this.ride = [1,1,1,1];
     this.nodeHz = [100,550,3100,15500]; this.nodeDb = [0,0,0,0];
-    this.tiltDb = 0; this.lvl = 0;
+    this.slantDb = 0; this.lvl = 0;
     this.lvlK = 1 - Math.exp(-1 / (0.060 * this.fs));
     this.phi = new Float64Array(CURVE_BINS);
     for (let i = 0; i < CURVE_BINS; ++i) {
@@ -448,10 +469,10 @@ class TerrainEq extends AudioWorkletProcessor {
       if (Math.abs(s1.g) < 1e-4) s1.on = false;
       this.nodeHz[b] = f[b]; this.nodeDb[b] = g[b];
     }
-    this.tiltDb = (sm[8] * 2 - 1) * TILT_SPAN * amount;
+    this.slantDb = (sm[8] * 2 - 1) * SLANT_SPAN * amount;
     const ts = this.st[8];
-    ts.on = Math.abs(this.tiltDb) > 1e-4;
-    ts.kind = 5; ts.f = CH.tilt; ts.q = 0.707; ts.g = this.tiltDb;
+    ts.on = Math.abs(this.slantDb) > 1e-4;
+    ts.kind = 5; ts.f = CH.pivot; ts.q = 0.707; ts.g = this.slantDb;
   }
 
   designAll(snap) {
@@ -478,7 +499,7 @@ class TerrainEq extends AudioWorkletProcessor {
       if (!S.on && idle) continue;
       this.act.push(i);
     }
-    const ti = this.act.indexOf(8);            // the tilt is the baseline: it runs FIRST
+    const ti = this.act.indexOf(8);            // the slant is the baseline: it runs FIRST
     if (ti > 0) { this.act.splice(ti, 1); this.act.unshift(8); }
   }
 
@@ -510,7 +531,7 @@ class TerrainEq extends AudioWorkletProcessor {
     }
     this.port.postMessage({ curve: Array.from(this.curve), nodeHz: this.nodeHz.slice(),
                             nodeDb: this.nodeDb.slice(), lvl: clamp(this.lvl * 6, 0, 1),
-                            type: TYPES[this.p.type|0], shape: SHAPE[this.p.type|0],
+                            type: TYPES[this.p.type|0], trait: TRAIT[this.p.type|0],
                             character: CHARS[this.p.type|0][this.p.character|0],
                             focus: FOCUS[this.p.axis|0] });
   }

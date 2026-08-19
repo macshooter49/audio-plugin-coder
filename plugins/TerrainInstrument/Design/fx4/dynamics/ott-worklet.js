@@ -15,20 +15,26 @@
 //                                                        outputChannelCount: [2] });
 //   n.port.postMessage({ type: 0, character: 0, axis: 0, amount: 0.5, speed: 0.5,
 //                        topLift: 0.25, mix: 1, b1: 0.4689, b2: 0.4406, b3: 0.667,
-//                        b4: 0.667, b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5, bite: false });
+//                        b4: 0.667, b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5, crest: false });
 //   n.port.onmessage = e => drawJaws(e.data);   // { grDb[3] SIGNED, xoverHz[2], bandDb[3], lvl }
 // ─────────────────────────────────────────────────────────────────────────────
 
+// ═════ LABELS — MIRRORED FROM TerrainOttFx.h, WHICH IS THE SOURCE OF TRUTH ═════
+const DEVICE = 'OTT';
+const FRONT  = ['Amount', 'Chase', 'Top Lift', 'Mix'];
+const BACK   = ['Low Cross', 'High Cross', 'Raise', 'Press', 'Grip', 'Bass', 'Mids', 'Treble'];
+const DROPS  = ['Character', 'Stereo'];
+const PILL   = 'Crest';
 const TYPES = ['Over Top', 'Gentle', 'Heavy', 'Sheen', 'Bass Safe', 'Surge', 'Two Band', 'Stagger'];
-const STEREO = ['Linked', 'Twin', 'Mid-Side'];
+const STEREO = ['Linked', 'Free Pair', 'Mid-Side'];
 const CHARS = [
-  ['Straight Up', 'Sharp Ears', 'Long Ears', 'Wide Corner', 'One Detector', 'Slow Low', 'Twice Deep', 'Full Bite'],
+  ['Straight Up', 'Sharp Ears', 'Long Ears', 'Wide Corner', 'One Detector', 'Slow Low', 'Twice Deep', 'Full Crest'],
   ['Round Corner', 'Slow Hands', 'Long Window', 'Half Slopes', 'Long Tail', 'Soft Top', 'Even Bands', 'Barely There'],
   ['Welded Shut', 'Band Clip', 'No Clip', 'Deeper Jaws', 'Fast Grind', 'Peak Grab', 'Wall Ears', 'Total Squeeze'],
   ['Top Sheet', 'Higher Split', 'Lower Split', 'Glass Ceiling', 'Slow Shimmer', 'Fast Shimmer', 'Dark Source', 'Sheen Wall'],
   ['Anchor Low', 'Mono Low', 'Slower Low', 'Low Ceiling', 'Reese Guard', 'Free Low', 'Wide Corner Low', 'Tight Low'],
   ['Tail Riser', 'Deep Riser', 'Slow Riser', 'Fast Riser', 'Capped Riser', 'Top Riser', 'Low Riser', 'Riser Wall'],
-  ['Body Sparkle', 'Low Split', 'High Split', 'Hard Body', 'Soft Body', 'Sparkle Wall', 'Slow Twin', 'Fast Twin'],
+  ['Body Sparkle', 'Low Split', 'High Split', 'Hard Body', 'Soft Body', 'Sparkle Wall', 'Slow Pair', 'Fast Pair'],
   ['Time Spread', 'Wider Spread', 'Narrow Spread', 'Reverse Spread', 'Slow Anchor', 'Fast Top', 'Deep Spread', 'Spread Wall'],
 ];
 
@@ -124,13 +130,13 @@ class TerrainOtt extends AudioWorkletProcessor {
     this.fs = sampleRate;
     this.p = { type: 0, character: 0, axis: 0, amount: 0.5, speed: 0.5, topLift: 0.25, mix: 1,
                b1: 0.4689, b2: 0.4406, b3: 0.667, b4: 0.667, b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5,
-               bite: false };
+               crest: false };
     this.splitLo = [new LR4(), new LR4()]; this.splitHi = [new LR4(), new LR4()];
     this.alignLow = [new Svf(), new Svf()];
     this.dryLo = [new Svf(), new Svf()]; this.dryHi = [new Svf(), new Svf()];
     this.envDn = [[0, 0, 0], [0, 0, 0]]; this.envUp = [[0, 0, 0], [0, 0, 0]];
     this.pre = [[0, 0, 0], [0, 0, 0]]; this.gDnPrev = [[0, 0, 0], [0, 0, 0]];
-    this.bf = [0, 0]; this.bs = [0, 0]; this.biteG = [1, 1]; this.biteN = [0, 0];
+    this.bf = [0, 0]; this.bs = [0, 0]; this.crestG = [1, 1]; this.crestN = [0, 0];
     this.tdn = [0, 0, 0]; this.tup = [0, 0, 0]; this.sdn = [0, 0, 0]; this.sup = [0, 0, 0]; this.mkDb = [0, 0, 0];
     this.gl = null; this.dip = 1; this.lvl = 0; this.vizN = 0; this.prevBands = 3;
     this.grAcc = [0, 0, 0]; this.lvAcc = [0, 0, 0]; this.accN = 0;
@@ -150,7 +156,7 @@ class TerrainOtt extends AudioWorkletProcessor {
     this.bandLink = !!cs.bandLink;
     this.lowMono = cs.lowMono ? cs.lowMono > 0 : ts.lowMono === 1;
     this.lowUpOff = cs.lowUp ? cs.lowUp < 0 : ts.lowUpOff === 1;
-    this.upHold = !!cs.upHold || !!p.bite;
+    this.upHold = !!cs.upHold || !!p.crest;
     this.deepRel = !!cs.deepRel;
     this.knee = cs.knee !== undefined ? cs.knee : ts.knee;
     this.clipHd = cs.clip !== undefined ? cs.clip : ts.clip;
@@ -207,7 +213,7 @@ class TerrainOtt extends AudioWorkletProcessor {
     this.sOff = this.stereo === 2 ? -6 : 0;
     this.aGl = coefTau(0.015, fs); this.dipUp = coefTau(0.03, fs); this.lvlA = coefTau(0.03, fs);
     this.bAtk = coefTau(0.003, fs); this.bRel = coefTau(0.12, fs);
-    this.biteHold = (fs * 0.01) | 0; this.biteRel = coefTau(0.005, fs);
+    this.crestHold = (fs * 0.01) | 0; this.crestRel = coefTau(0.005, fs);
     if (this.gl && this.n !== this.prevBands) this.dip = 0;   // the tree changed: 4 ms dip
     this.prevBands = this.n;
   }
@@ -256,9 +262,9 @@ class TerrainOtt extends AudioWorkletProcessor {
           const m = Math.abs(c === 0 ? inL : inR);
           this.bf[c] += (m - this.bf[c]) * (m > this.bf[c] ? this.bAtk : this.bRel);
           this.bs[c] += (m - this.bs[c]) * this.bRel * 0.25;
-          if (this.bf[c] > 4 * this.bs[c] + 1e-6) { this.biteN[c] = this.biteHold; this.biteG[c] = 0; }
-          else if (this.biteN[c] > 0) --this.biteN[c];
-          else this.biteG[c] += (1 - this.biteG[c]) * this.biteRel;
+          if (this.bf[c] > 4 * this.bs[c] + 1e-6) { this.crestN[c] = this.crestHold; this.crestG[c] = 0; }
+          else if (this.crestN[c] > 0) --this.crestN[c];
+          else this.crestG[c] += (1 - this.crestG[c]) * this.crestRel;
         }
       }
 
@@ -307,7 +313,7 @@ class TerrainOtt extends AudioWorkletProcessor {
           let gUp = 0;
           if (!(b === 0 && this.lowUpOff)) {
             gUp = liftUp(Lup, Tup, gl.sup[b], this.cap[b]) * floorGate(Lup);
-            if (this.upHold) gUp *= this.biteG[c];
+            if (this.upHold) gUp *= this.crestG[c];
           }
           let g = db2lin(-gDn + gUp + gl.mk[b]);
           if (g > MAX_MULT) g = MAX_MULT;

@@ -10,7 +10,7 @@
 //  owned by the Type. That is the whole chassis solve: a 4-band parametric wants 12 knobs
 //  (4 x freq/gain/Q) and the fb275 back panel gives 8. Freq+gain per band = 8 = exactly
 //  the grid; the Q law rides the Type; the ONE remaining degree of freedom per Type is the
-//  P8 `Shape` slot, which relabels (Width / Bump / Grip / Dip / Silk / Sense / Ring).
+//  P8 `Trait` slot, which relabels (Pinch / Slope / Taper / Dip / Silk / Pivot / Sting).
 //
 //  ── NOTHING IS BACK-ONLY ─────────────────────────────────────────────────────
 //  Max's worry, verbatim: "I don't know what an EQ could possibly offer on the back...
@@ -21,8 +21,8 @@
 //  knob that does not move when you drag. The back panel is the numeric face of the curve.
 //
 //  ── THE CEILING (CONTRACT R11) ───────────────────────────────────────────────
-//  +-30 dB per band, x Amount 200 % = +-60 dB of curve. Surgical `Width` takes Q to 40,
-//  Sculpt `Ring` to 64 and morphs deep cuts into TRUE notches (< -60 dB). At 100 % this is
+//  +-30 dB per band, x Amount 200 % = +-60 dB of curve. Surgical `Pinch` takes Q to 40,
+//  Chisel `Sting` to 64 and morphs deep cuts into TRUE notches (< -60 dB). At 100 % this is
 //  not a mixing tool: one band can delete a region of the spectrum or lift it by a factor
 //  of 1000. The harness gates this (eq_cert §K) on max spectral deviation, measured on the
 //  OUTPUT SPECTRUM of pink noise, not on coefficient geometry.
@@ -57,7 +57,7 @@
 //    cost. The Dynamic type's gain ride is control-rate (<= 1.5 kHz update, envelope
 //    bandwidth <= 60 Hz) so its sidebands are decades below anything oversampling helps.
 //  * NULL IS BIT-EXACT. All gains 0 => every stage takes the exact identity coefficient set
-//    (b = {1,0,0}, a = {0,0}) and the tilt takes b1 == a1, so the output is the input, bit
+//    (b = {1,0,0}, a = {0,0}) and the slant takes b1 == a1, so the output is the input, bit
 //    for bit, with states pinned at 0. Amount 0 % nulls at ANY knob state. This is what
 //    makes the device safe to leave in a chain (fb303 default-sound guarantee).
 //  * MIX 1.0 = FULLY WET, ZERO DRY, and the mix law is LINEAR, not equal-power: dry and wet
@@ -70,7 +70,7 @@
 //    gain to budget - stated, not hand-waved. Resonances are passive biquad decays: zero
 //    input => exponential decay, never sustain. Dynamic envelopes idle at silence.
 //  * DENORMALS. Recirculating states are flushed at every design boundary; assume
-//    ScopedNoDenormals is NOT set. Sculpt Q 64 rings into denormal range for ~200 ms after
+//    ScopedNoDenormals is NOT set. Chisel Q 64 rings into denormal range for ~200 ms after
 //    every note without this.
 // ═══════════════════════════════════════════════════════════════════════════════
 
@@ -94,10 +94,35 @@ public:
     static constexpr int kNumBands  = 4;
     static constexpr int kCurveBins = 96;
 
+    // ═════════════════════════════════════════════════════════════════════════
+    //  🔴 MUTATION HOOKS (FIXES.md §0). Compiling with one of these -D flags DELETES a
+    //  mechanism a gate claims to protect. The cert then has to go RED. A gate that stays
+    //  green under its own mutation is a BLOCKER, not a footnote — see MUTATION.md.
+    //  These are compile-time only: with no -D, not one branch of this file changes.
+    // ═════════════════════════════════════════════════════════════════════════
+    static const char* mutationTag() noexcept
+    {
+#if   defined (EQ_MUT_NO_PIVOT)
+        return "NO_PIVOT   — designSlant() reverts to the fb420 sliding-pivot shelf";
+#elif defined (EQ_MUT_NO_RINGCAP)
+        return "NO_RINGCAP — limitRing() body deleted, one-pole G clamp removed";
+#elif defined (EQ_MUT_NO_SMOOTH)
+        return "NO_SMOOTH  — all 11 smoothers tau->0, coefficient glide + Mix smoother deleted";
+#elif defined (EQ_MUT_NO_DIP)
+        return "NO_DIP     — the Type/Character/Focus fade-swap dip deleted";
+#elif defined (EQ_MUT_NO_CEILING)
+        return "NO_CEILING — ranges cut to a polite console: +-10 dB, +-8 Slant, Amount 100 %";
+#elif defined (EQ_MUT_NO_DENORM)
+        return "NO_DENORM  — the 1e-18 true-zero state flush deleted";
+#else
+        return nullptr;                                  // the real engine
+#endif
+    }
+
     static const char* const* typeNames() noexcept
     {
         static const char* const n[kNumTypes] =
-        { "Surgical", "British", "American", "Passive", "Open", "Dynamic", "Sculpt" };
+        { "Surgical", "British", "American", "Passive", "Open", "Dynamic", "Chisel" };
         return n;
     }
 
@@ -113,7 +138,7 @@ public:
     static const char* shapeName (int type) noexcept
     {
         static const char* const s[kNumTypes] =
-        { "Width", "Bump", "Grip", "Dip", "Silk", "Sense", "Ring" };
+        { "Pinch", "Slope", "Taper", "Dip", "Silk", "Pivot", "Sting" };
         return s[clampi (type, 0, kNumTypes - 1)];
     }
 
@@ -122,50 +147,80 @@ public:
     static const char* const* backNames() noexcept
     {
         static const char* const n[8] =
-        { "Low Hz", "Low", "Body Hz", "Body", "Bite Hz", "Bite", "Reach", "Shape" };
+        { "Low Hz", "Low", "Body Hz", "Body", "Bite Hz", "Bite", "Reach", "Trait" };
         return n;
     }
     static const char* const* frontNames() noexcept
     {
-        static const char* const n[4] = { "Tilt", "Air", "Amount", "Mix" };
+        static const char* const n[4] = { "Slant", "Air", "Amount", "Mix" };
         return n;
     }
 
+    // 🔑 fb422 — THE SINGLE SOURCE OF TRUTH, MADE STRUCTURAL.
+    //  This used to be a SECOND hand-typed table of the same 56 strings that `charSpec`
+    //  already carries, and it had ALREADY DRIFTED: `charNames()[1][3]` said "Fixed Top"
+    //  while `charSpec(1,3).nm` said "Iron Top" — the card would have printed one word and
+    //  the DSP row that actually re-wires the filter carried another. That is the fb373
+    //  geometry exactly (`Cassette` playing `Studio`), one file earlier in the pipeline.
+    //  The table is GONE. There is now exactly one place a Character's name can live: the
+    //  `nm` field of the CharSpec row that defines its physics. They cannot disagree.
     static const char* const* charNames (int type) noexcept
     {
-        static const char* const n[kNumTypes][kNumChars] =
-        {   // Surgical — the reference type. Characters re-voice the Q law and the band shapes.
-            { "Clean", "Tight", "Broad", "Steep", "Carve", "Deep Pivot", "Bright Pivot", "Four Bells" },
-            // British — inductor console. Characters move the shelf resonance and the iron.
-            { "Console", "Big Knob", "Forward", "Fixed Top", "Sub Iron", "Steep Iron", "Full Swing", "Mid Rise" },
-            // American — proportional Q. Characters move the law itself, not its numbers.
-            { "Proportional", "Lasers", "Gentle", "Floor Lift", "Boost Only", "Cut Only", "Shelf Ride", "Runaway" },
-            // Passive — the Pultec machine. Characters move where the ride-along cut lands.
-            { "Program", "Close Dip", "Far Dip", "Both Ends", "Bell Top", "Slow Top", "Deep Atten", "Modern" },
-            // Open — Maag / Sie-Q. Characters move how far the top reaches and how wide it opens.
-            { "Silky", "Very Wide", "Two Shelves", "Stacked", "Deep Reach", "Soft Knee", "Hard Knee", "Bell Air" },
-            // Dynamic — level-aware. Characters move the DETECTOR, which is the actual physics.
-            { "Program Ride", "Fast", "Slow", "Wideband", "Inverted", "Hard Window", "Soft Window", "Peak Hold" },
-            // Sculpt — the destructive type. Characters move the notch morph and the ring.
-            { "Resonator", "Razor", "Triple Notch", "Gain Ring", "Shallow", "Telephone", "Sub Kill", "Metal" }
-        };
-        return n[clampi (type, 0, kNumTypes - 1)];
+        static const char* tbl[kNumTypes][kNumChars] = {};
+        static const bool init = []
+        {
+            for (int t = 0; t < kNumTypes; ++t)
+                for (int c = 0; c < kNumChars; ++c) tbl[t][c] = charSpec (t, c).nm;
+            return true;
+        }();
+        (void) init;
+        return tbl[clampi (type, 0, kNumTypes - 1)];
+    }
+
+    // ── EVERY user-visible string this device publishes, in ONE enumerable list. ──
+    //  The card, the roster, the worklet and the NO-DOUBLES gate all read THIS. A label
+    //  that is not in here is a label the doubles gate cannot see, which is how `Tilt`
+    //  and `Sculpt` — both shipped TAPE FRONT KNOBS — survived a whole build round.
+    //  Order: 7 Types · 4 front · 8 back · 7 `Trait` relabels · 5 Focus · 56 Characters.
+    static constexpr int kNumLabels = kNumTypes + 4 + 8 + kNumTypes + kNumFocus
+                                    + kNumTypes * kNumChars;                 // = 87
+    static const char* label (int i) noexcept
+    {
+        int k = clampi (i, 0, kNumLabels - 1);
+        if (k < kNumTypes)              return typeNames()[k];               k -= kNumTypes;
+        if (k < 4)                      return frontNames()[k];              k -= 4;
+        if (k < 8)                      return backNames()[k];               k -= 8;
+        if (k < kNumTypes)              return shapeName (k);                k -= kNumTypes;
+        if (k < kNumFocus)              return focusNames()[k];              k -= kNumFocus;
+        return charNames (k / kNumChars)[k % kNumChars];
+    }
+    // what SLOT a label occupies, for the doubles gate's precedence rule
+    // (RENAMES.md: header pill > knob label > dropdown option > Character).
+    static const char* labelSlot (int i) noexcept
+    {
+        int k = clampi (i, 0, kNumLabels - 1);
+        if (k < kNumTypes)              return "Type pill";                  k -= kNumTypes;
+        if (k < 4)                      return "front knob";                 k -= 4;
+        if (k < 8)                      return "back knob";                  k -= 8;
+        if (k < kNumTypes)              return "Trait relabel";              k -= kNumTypes;
+        if (k < kNumFocus)              return "Focus option";
+        return "Character";
     }
 
     static_assert (kNumTypes > 0 && kNumChars == 8, "roster/table must move together");
 
     // ── the locked Params block (CONTRACT §2) ────────────────────────────────
-    //  FRONT 3 + Mix:  f1 = Tilt · f2 = Air · f3 = Amount · mix = Mix
+    //  FRONT 3 + Mix:  f1 = Slant · f2 = Air · f3 = Amount · mix = Mix
     //  BACK 8 (column-major, band pairs adjacent):
     //      b1 Low Hz · b2 Low · b3 Body Hz · b4 Body · b5 Bite Hz · b6 Bite
-    //      b7 Reach  · b8 Shape
+    //      b7 Reach  · b8 Trait
     //  EVERY default is 0.5 and 0.5 is the NEUTRAL point of every one of them, so the
     //  device boots provably flat and bit-exact. (mix defaults 1.0 by contract law.)
     struct Params
     {
         int   type = 0, character = 0;
         int   axis = 0;                                   // Focus: 0 Stereo 1 Mid 2 Side 3 L 4 R
-        float f1 = 0.5f, f2 = 0.5f, f3 = 0.5f;            // Tilt · Air · Amount
+        float f1 = 0.5f, f2 = 0.5f, f3 = 0.5f;            // Slant · Air · Amount
         float mix = 1.0f;
         float b1=0.5f,b2=0.5f,b3=0.5f,b4=0.5f,b5=0.5f,b6=0.5f,b7=0.5f,b8=0.5f;
         // An EQ has NO tempo-relevant time constant. The 4-bar..1/256 rule is satisfied by
@@ -238,9 +293,20 @@ public:
                 const double n = W2 + A * A, d = W2 + 1.0 / (A * A);
                 return A * A * n / (d > 1e-300 ? d : 1e-300);
             }
-            case 5: {                                   // tilt: -g below, +g above
-                const double g = std::pow (10.0, gDb / 20.0);
-                return (W2 * g * g + 1.0 / (g * g)) / (W2 + 1.0);
+            case 5: {
+                // 🚨 fb422 — THE SLANT PROTOTYPE, CORRECTED. f0 here is the PIVOT, and the
+                //  pivot is where the response is 0 dB. The old form
+                //      (W2 g^2 + 1/g^2) / (W2 + 1)
+                //  is a one-pole shelf whose CORNER is at f0, and such a shelf crosses
+                //  unity at f0/g — so its pivot slid from 700 Hz down to 2.8 Hz as the knob
+                //  opened, and 120 Hz travelled -4.75 dB then back UP to +8.55 dB. The
+                //  fixed-pivot seesaw is
+                //      |H|^2 = (1 + s^2 W^2) / (s^2 + W^2),   s = 10^(gDb/20), W = f/f0.
+                //  At W = 1 it is exactly 1 for EVERY s. d|H|^2/ds has the sign of (W^4 - 1),
+                //  so it is STRICTLY monotone in the gain at every frequency except the
+                //  pivot itself — the property the old form did not have.
+                const double s2 = std::pow (10.0, gDb / 10.0);
+                return (1.0 + s2 * W2) / (s2 + W2);
             }
             default: {                                  // high shelf, 1-pole
                 const double n = W2 + 1.0 / (A * A), d = W2 + A * A;
@@ -480,8 +546,8 @@ public:
     //  instead (clamping the pole frequency while keeping Q was exactly that bug: measured
     //  17.2 dB of error, a +4.4 dB bump where the analog prototype wanted a -12.8 dB
     //  undershoot notch). The honest answer is to TAPER the shelf Q toward 0.7 as its pole
-    //  pair leaves the band. Consequence, stated in ROSTER.md: British `Bump` and Surgical
-    //  `Width` progressively stop resonating the AIR band as Reach climbs past ~0.35 fs.
+    //  pair leaves the band. Consequence, stated in ROSTER.md: British `Slope` and Surgical
+    //  `Pinch` progressively stop resonating the AIR band as Reach climbs past ~0.35 fs.
     //  They still act on LOW, where the pole is always in band. eq_cert §B measures where.
     static double usableQ (int kind, double f0, double Q, double gDb, double fs) noexcept
     {
@@ -510,10 +576,14 @@ public:
     static constexpr double kMaxRingSec = 3.0;
     static void limitRing (Coeffs& c, double fs) noexcept
     {
+#ifdef EQ_MUT_NO_RINGCAP
+        (void) c; (void) fs; return;                 // MUTATION: the pole-radius cap is gone
+#else
         const double rMax = std::exp (-6.907755 / (kMaxRingSec * fs));   // -60 dB in kMaxRingSec
         const double r2Max = rMax * rMax;
         if (c.a2 > r2Max)
         { const double sc = std::sqrt (r2Max / c.a2); c.a1 *= sc; c.a2 = r2Max; }
+#endif
     }
 
     static Coeffs designBand (int kind, double f0, double Q, double gDb, double fs) noexcept
@@ -534,14 +604,33 @@ public:
         return c;
     }
 
-    // ── the 1-pole (6 dB/oct) shelf. Baxandall's slope: the tilt and every "gentle"
-    //    Character live here. Bilinear with prewarp at the pivot; at 6 dB/oct the warp is
-    //    structurally irrelevant. gDb == 0 gives b1 == a1 BITWISE, which is what makes the
-    //    tilt null exactly rather than approximately.
-    static Coeffs designShelf1 (double f0, double gLoDb, double gHiDb, double fs) noexcept
+    // ── the 1-pole (6 dB/oct) shelf. Baxandall's slope: the Slant and every "gentle"
+    //    Character live here. Bilinear, prewarped; the primitive takes the prewarped corner
+    //    G = tan(pi f_corner / fs) DIRECTLY, because the Slant needs to place its corner by
+    //    ARITHMETIC (see designSlant) and going back through an atan/tan round trip would
+    //    put a rounding error exactly where the pivot has to be exact.
+    //    gLoDb == gHiDb == 0 gives b1 == a1 BITWISE, which is what makes the Slant null
+    //    exactly rather than approximately.
+    //
+    //  🔑 THE ONE-POLE POLE CAP. a1 = (G-1)/(G+1), so the pole radius is |a1| and it goes to
+    //    1 as G leaves [G_min, G_max]. A real pole at r = 0.99999 is not a resonance, but it
+    //    IS a 15-second decay, and "nothing free-runs" is a promise about the DEVICE, not
+    //    about resonances only. G is therefore clamped to exactly the window in which
+    //    |a1| <= rMax, the SAME rMax the biquad ring cap uses.
+    static double onePoleGmax (double fs) noexcept
     {
+#ifdef EQ_MUT_NO_RINGCAP
+        (void) fs; return 1e18;                       // MUTATION: the cap is gone
+#else
+        const double r = std::exp (-6.907755 / (kMaxRingSec * fs));
+        return (1.0 + r) / (1.0 - r);
+#endif
+    }
+    static Coeffs designShelf1G (double G, double gLoDb, double gHiDb, double fs) noexcept
+    {
+        const double gMax = onePoleGmax (fs);
         Coeffs c;
-        const double G  = std::tan (3.141592653589793 * clampd (f0, 1.0, 0.49 * fs) / fs);
+        G = clampd (G, 1.0 / gMax, gMax);
         const double gL = std::pow (10.0, gLoDb / 20.0), gH = std::pow (10.0, gHiDb / 20.0);
         const double d  = 1.0 + G;
         c.b0 = (gL * G + gH) / d;
@@ -551,12 +640,56 @@ public:
         if (gLoDb == 0.0 && gHiDb == 0.0) { c.b0 = 1.0; c.b1 = c.a1; }      // exact identity
         return c;
     }
-    // kind 3 = low shelf (6 dB/oct) · kind 4 = high shelf (6 dB/oct) · kind 5 = TILT
-    // (Baxandall's seesaw: one pivot, gain -t below and +t above, which is why the whole
-    //  spectrum leans instead of one end stepping).
+    static Coeffs designShelf1 (double f0, double gLoDb, double gHiDb, double fs) noexcept
+    {
+        return designShelf1G (std::tan (3.141592653589793 * clampd (f0, 1.0, 0.49 * fs) / fs),
+                              gLoDb, gHiDb, fs);
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════
+    //  🚨 fb422 — THE SLANT (front hero 1, was `Tilt`). THE BUG AND THE FIX.
+    //
+    //  WAS:  designShelf1 (pivot, -g, +g).  A one-pole shelf with corner w0 and shoulder
+    //        gains gL = 1/s, gH = s has |H| = 1 where
+    //             gL^2 w0^2 + gH^2 w^2 = w0^2 + w^2  =>  w = w0 / s.
+    //        So the 0 dB crossing was NOT the corner: it slid DOWN by the gain itself.
+    //        At the shipped 700 Hz pivot the crossing walked 700 Hz -> 2.8 Hz as the knob
+    //        opened, and everything the crossing swept past REVERSED DIRECTION. Measured by
+    //        the integration owner at Amount default: 120 Hz fell to -4.75 dB at 65 % and
+    //        then rose to +8.55 dB at 100 % — 13.31 dB of wrong-way travel; 37.3 dB at
+    //        Amount 200 %. Turn it toward the treble and the bass comes back up.
+    //        The old cert could not see it: it gated 8 kHz MINUS 80 Hz, a DIFFERENCE, and a
+    //        difference stays monotone while both ends reverse in common mode.
+    //
+    //  IS:   put the CORNER where the crossing has to land: G_corner = s * G_pivot, in the
+    //        PREWARPED (tangent) domain, so the pivot is exact in the DIGITAL filter and not
+    //        merely in its analog prototype. Then
+    //             |H(w)|^2 = (Gp^2 + s^2 t^2) / (s^2 Gp^2 + t^2),  t = tan(pi f / fs)
+    //        which is exactly 1 at t = Gp for EVERY s, at EVERY sample rate, and whose
+    //        derivative in s has the sign of (t^4 - Gp^4): strictly DOWN below the pivot,
+    //        strictly UP above it, no reversal anywhere. Gated end-by-end in eq_cert §F1.
+    //
+    //  The price, stated: a 6 dB/oct seesaw is SLOPE-limited, so the in-band travel of an
+    //  end is bounded by its distance from the pivot, not by the knob. That bound is what
+    //  §K now measures per end, and it is why `Deep Pivot` / `Bright Pivot` exist.
+    // ═════════════════════════════════════════════════════════════════════════
+    static Coeffs designSlant (double fPivot, double gDb, double fs) noexcept
+    {
+        const double Gp = std::tan (3.141592653589793 * clampd (fPivot, 1.0, 0.49 * fs) / fs);
+        const double s  = std::pow (10.0, gDb / 20.0);
+#ifdef EQ_MUT_NO_PIVOT
+        return designShelf1G (Gp, -gDb, gDb, fs);       // MUTATION: the fb420 sliding pivot
+#else
+        return designShelf1G (Gp * s, -gDb, gDb, fs);
+#endif
+    }
+
+    // kind 3 = low shelf (6 dB/oct) · kind 4 = high shelf (6 dB/oct) · kind 5 = SLANT
+    // (Baxandall's seesaw about a FIXED pivot: gain -t below and +t above, which is why the
+    //  whole spectrum leans instead of one end stepping).
     static Coeffs designOnePole (int kind, double f0, double gDb, double fs) noexcept
     {
-        if (kind == 5) return designShelf1 (f0, -gDb, gDb, fs);
+        if (kind == 5) return designSlant  (f0, gDb, fs);
         if (kind == 4) return designShelf1 (f0, 0.0,  gDb, fs);
         return             designShelf1 (f0, gDb,  0.0, fs);
     }
@@ -574,7 +707,7 @@ public:
     //  Band order everywhere: 0 LOW · 1 BODY · 2 BITE · 3 AIR.
     //  kind codes: 0 bell · 1 low shelf 2-pole · 2 high shelf 2-pole
     //              3 low shelf 1-pole · 4 high shelf 1-pole · 5 = "type default, but 24 dB/oct"
-    enum Law { LawConstant = 0, LawBritish, LawProportional, LawPassive, LawOpen, LawDynamic, LawSculpt };
+    enum Law { LawConstant = 0, LawBritish, LawProportional, LawPassive, LawOpen, LawDynamic, LawChisel };
 
     struct TypeSpec
     {
@@ -591,7 +724,7 @@ public:
         float fm[4];       // per-band frequency multiplier
         float gm[4];       // per-band gain multiplier
         int   kd[4];       // -1 = type default, else force kind (5 = steep)
-        float tiltHz;      // tilt pivot, Hz
+        float pivotHz;      // Slant pivot, Hz
         float cutQ;        // extra Q multiplier applied to CUTS only (boost wide / cut narrow)
         float cutG;        // extra gain multiplier applied to CUTS only
         float e1, e2, e3;  // per-Type meanings, documented in ROSTER.md §Characters
@@ -607,7 +740,7 @@ public:
             { {0.90f,0.80f,0.70f,0.80f}, {1,0,0,2}, LawPassive,      0.00f },  // Passive
             { {0.45f,0.40f,0.40f,0.50f}, {1,0,0,4}, LawOpen,         0.00f },  // Open
             { {0.90f,1.00f,1.00f,0.90f}, {1,0,0,2}, LawDynamic,      0.00f },  // Dynamic
-            { {1.00f,1.00f,1.00f,1.00f}, {1,0,0,2}, LawSculpt,       0.00f }   // Sculpt
+            { {1.00f,1.00f,1.00f,1.00f}, {1,0,0,2}, LawChisel,       0.00f }   // Chisel
         };
         return T[clampi (t, 0, kNumTypes - 1)];
     }
@@ -617,17 +750,17 @@ public:
         static const CharSpec C[kNumTypes][kNumChars] =
         {
         // ── 1 SURGICAL — e1/e2/e3 unused. The reference type: exact dB, constant Q.
-        { { "Clean",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0,0,0 },
+        { { "Plain",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0,0,0 },
           { "Tight",        {2.6f,2.6f,2.6f,2.6f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0,0,0 },
           { "Broad",        {0.35f,0.35f,0.35f,0.35f},{1,1,1,1},    {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0,0,0 },
           { "Steep",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   { 5,-1,-1, 5}, 700.0f, 1.0f,1.0f, 0,0,0 },
-          { "Carve",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 3.5f,1.0f, 0,0,0 },
+          { "Scoop",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 3.5f,1.0f, 0,0,0 },
           { "Deep Pivot",   {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 150.0f, 1.0f,1.0f, 0,0,0 },
           { "Bright Pivot", {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1},3000.0f, 1.0f,1.0f, 0,0,0 },
           { "Four Bells",   {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   { 0,-1,-1, 0}, 700.0f, 1.0f,1.0f, 0,0,0 } },
 
-        // ── 2 BRITISH — e1 = Bump strength · e2 = gain softener on(1)/off(0) · e3 unused.
-        { { "Console",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,0 },
+        // ── 2 BRITISH — e1 = Slope strength · e2 = gain softener on(1)/off(0) · e3 unused.
+        { { "Desk",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,0 },
           { "Big Knob",     {1.0f,0.50f,0.50f,1.0f},{1,1,1,1},      {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,0 },
           { "Forward",      {1.0f,2.2f,2.4f,1.0f},{1,1.5f,1.2f,1},  {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,0 },
           { "Iron Top",     {1.0f,1.0f,1.0f,1.9f},{1,1,1,0.78f},    {1,1,1,1.1f},{-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.6f,1,0 },
@@ -640,7 +773,7 @@ public:
         //    e3 = shelves ride the law too (1) or stay constant-S (0).
         { { "Proportional", {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0.0f,0,0 },
           { "Lasers",       {1.6f,1.6f,1.6f,1.6f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.2f,0,0 },
-          { "Gentle",       {0.7f,0.7f,0.7f,0.7f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-0.55f,0,0 },
+          { "Mellow",       {0.7f,0.7f,0.7f,0.7f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-0.55f,0,0 },
           { "Floor Lift",   {2.2f,2.2f,2.2f,2.2f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-0.30f,0,0 },
           { "Boost Only",   {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0.0f,1,0 },
           { "Cut Only",     {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0.0f,2,0 },
@@ -650,16 +783,16 @@ public:
         // ── 4 PASSIVE — e1 = ride-along frequency ratio · e2 = 0 LOW only / 1 LOW+AIR /
         //    2 ride-along is a BELL instead of a shelf · e3 unused.
         { { "Program",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 2.2f,0,0 },
-          { "Close Dip",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.4f,0,0 },
-          { "Far Dip",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 4.4f,0,0 },
+          { "Close Cut",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.4f,0,0 },
+          { "Far Cut",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 4.4f,0,0 },
           { "Both Ends",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 2.2f,1,0 },
           { "Bell Top",     {1.0f,1.0f,1.0f,0.70f},{1,1,1,1},       {1,1,1,1},   {-1,-1,-1, 0}, 700.0f, 1.0f,1.0f, 2.2f,0,0 },
           { "Slow Top",     {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1, 4}, 700.0f, 1.0f,1.0f, 2.2f,0,0 },
           { "Deep Atten",   {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.45f,2.2f,0,0 },
-          { "Modern",       {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 2.2f,2,0 } },
+          { "Revival",       {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 2.2f,2,0 } },
 
         // ── 5 OPEN — e1 = Silk octave offset · e2 = tanh knee (dB) · e3 unused.
-        { { "Silky",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,22.0f,0 },
+        { { "Gloss",        {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,22.0f,0 },
           { "Very Wide",    {0.55f,0.55f,0.55f,0.55f},{1,1,1,1},    {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,22.0f,0 },
           { "Two Shelves",  {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1, 1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,22.0f,0 },
           { "Stacked",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-1.0f,22.0f,0 },
@@ -671,10 +804,10 @@ public:
         // ── 6 DYNAMIC — e1 = ballistics scale · e2 = 0 normal / 1 inverted / 2 wideband
         //    detector / 3 peak hold · e3 = threshold window width in dB.
         { { "Program Ride", {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,0,14.0f },
-          { "Fast",         {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0.22f,0,14.0f },
-          { "Slow",         {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 5.0f,0,14.0f },
+          { "Quick",         {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 0.22f,0,14.0f },
+          { "Lazy",         {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 5.0f,0,14.0f },
           { "Wideband",     {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,2,14.0f },
-          { "Inverted",     {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,14.0f },
+          { "Upward",     {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,1,14.0f },
           { "Hard Window",  {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,0, 2.5f },
           { "Soft Window",  {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,0,34.0f },
           { "Peak Hold",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f, 1.0f,3,14.0f } },
@@ -683,7 +816,7 @@ public:
         { { "Resonator",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-18.0f,1.0f,0 },
           { "Razor",        {2.5f,2.5f,2.5f,2.5f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-12.0f,1.0f,0 },
           { "Triple Notch", {1.0f,1.0f,1.0f,1.0f},{1,2.0f,4.0f,1},  {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-14.0f,1.0f,0 },
-          { "Gain Ring",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-18.0f,2.6f,0 },
+          { "Gain Peak",    {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-18.0f,2.6f,0 },
           { "Shallow",      {1.0f,1.0f,1.0f,1.0f},{1,1,1,1},        {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-90.0f,1.0f,0 },
           { "Telephone",    {1.0f,1.0f,1.0f,1.0f},{2.5f,1,1,0.35f}, {1,1,1,1},   { 0,-1,-1, 0}, 700.0f, 1.0f,1.0f,-18.0f,1.0f,0 },
           { "Sub Kill",     {3.0f,1.0f,1.0f,1.0f},{0.35f,1,1,1},    {1,1,1,1},   {-1,-1,-1,-1}, 700.0f, 1.0f,1.0f,-10.0f,1.0f,0 },
@@ -700,9 +833,17 @@ public:
         const int i = clampi (b, 0, 3);
         return lo[i] * std::pow (hi[i] / lo[i], clampf (t, 0.0f, 1.0f));
     }
+#ifdef EQ_MUT_NO_CEILING
+    // MUTATION: the ranges of a polite mixing EQ — +-10 dB a band, +-8 dB of Slant,
+    // Amount that stops at 100 %. Every number a console gives you, and no more.
+    static constexpr float kBandDbSpan = 10.0f;
+    static constexpr float kSlantDbSpan = 8.0f;
+    static constexpr float kAmountMax  = 1.0f;
+#else
     static constexpr float kBandDbSpan = 30.0f;    // +-30 dB per band  (R11)
-    static constexpr float kTiltDbSpan = 24.0f;    // +-24 dB seesaw    (R11)
+    static constexpr float kSlantDbSpan = 24.0f;   // +-24 dB seesaw    (R11)
     static constexpr float kAmountMax  = 2.0f;     // 200 %             (R11)
+#endif
     static constexpr float kQMin       = 0.05f;
     static constexpr float kQMax       = 90.0f;
     static constexpr float kGainCeil   =  72.0f;   // hard design clamp, dB
@@ -729,6 +870,10 @@ public:
         for (int i = 0; i < 8;  ++i) kSm_[i] = 1.0f - std::exp (-step / kTau[i]);
         for (int i = 8; i < 11; ++i) kSm_[i] = 1.0f - std::exp (-step / kTau[i]);
         mixK_  = 1.0f - std::exp (-1.0f / (0.010f * fs_));
+#ifdef EQ_MUT_NO_SMOOTH
+        for (int i = 0; i < 11; ++i) kSm_[i] = 1.0f;      // MUTATION: all 11 smoothers, tau -> 0
+        mixK_ = 1.0f;                                     // MUTATION: the Mix smoother, gone
+#endif
         dipDn_ = 1.0f - std::exp (-1.0f / (0.008f * fs_));
         dipUp_ = 1.0f - std::exp (-1.0f / (0.030f * fs_));
         lvlK_  = 1.0f - std::exp (-1.0f / (0.060f * fs_));
@@ -772,9 +917,16 @@ public:
 
         if (t != type_ || c != char_ || f != focus_)
         {
+#ifdef EQ_MUT_NO_DIP
+            // MUTATION: no fade-swap. Adopt the new filter bank inside the block.
+            type_ = t; char_ = c; focus_ = f; flushFocusStates();
+            for (int i = 0; i < 11; ++i) sm_[i] = tg_[i];
+            resolve(); designAll (true);
+#else
             if (! seeded_ || isFlat())        // a flat device has nothing to crossfade:
             { type_ = t; char_ = c; focus_ = f; flushFocusStates(); }   // snap, stay bit-exact
             else { pendType_ = t; pendChar_ = c; pendFocus_ = f; }      // else fade-swap-recover
+#endif
         }
         p_ = p;
         tg_[0] = clampf (p.b1, 0.0f, 1.0f);  tg_[1] = clampf (p.b2, 0.0f, 1.0f);
@@ -850,9 +1002,11 @@ public:
 
                 // 3. the Type/Character/Focus fade-swap dip rides the WET only — the dry is
                 //    never touched by a switch, which is why Mix < 100 % stays anchored.
+#ifndef EQ_MUT_NO_DIP
                 if (pendType_ >= 0) dip_ += dipDn_ * (0.02f - dip_);
                 else                dip_ += dipUp_ * (1.0f - dip_);
                 wl *= dip_; wr *= dip_;
+#endif
 
                 // 4. LINEAR mix. Dry and wet are 100 % correlated here (same signal, minimum
                 //    phase); an equal-power sin/cos law would bump +3 dB at 50 %.
@@ -881,8 +1035,8 @@ public:
 
 private:
     // ═════════════════════════════════════════════════════════════════════════
-    static constexpr int kNumStages = 9;                     // 4 bands x 2 + tilt
-    static constexpr int kTilt = 8;
+    static constexpr int kNumStages = 9;                     // 4 bands x 2 + slant
+    static constexpr int kSlant = 8;
 
     struct Stage
     {
@@ -896,9 +1050,19 @@ private:
         double z1[2] {}, z2[2] {};
     };
 
+    // 🔑 fb422 — the taus are ordered by GAIN AUTHORITY, and `Amount` was the exception that
+    //  proved it wrong: it multiplies ALL FOUR band gains (+-60 dB of authority, 4x any
+    //  single gain knob) and it had the SHORTEST tau in the table, 10 ms. An instantaneous
+    //  Amount write (host automation, preset recall) measured 1.63 dB of wet-gain change in
+    //  ONE sample — the only real click in the device. The number scales as 1/tau
+    //  (10 ms 1.63 · 20 ms 0.85 · 30 ms 0.57), which is what proves it IS a smoothing fault
+    //  and not physics — `Trait`, tested the same way, does NOT move with tau (20/60/150 ms
+    //  read 7.20/7.97/7.50) because that one is a Q 40 resonator dumping stored energy.
+    //  Amount now sits at 20 ms, the same as the widest-span controls, still inside the
+    //  house 10-30 ms rule. eq_cert §J2 gates it.
     static constexpr float kTau[11] =
     { 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.020f,   // b1..b8
-      0.015f, 0.012f, 0.010f };                                          // Tilt, Air, Amount
+      0.015f, 0.012f, 0.020f };                                          // Slant, Air, Amount
 
     static int   clampi (int v, int lo, int hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
     static float clampf (float v, float lo, float hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
@@ -921,7 +1085,7 @@ private:
 
     bool isFlat() const noexcept
     {
-        float m = std::fabs (tiltDb_);
+        float m = std::fabs (slantDb_);
         for (int b = 0; b < kNumBands; ++b) m = std::max (m, std::fabs (viz_.nodeDb[b]));
         return m < 0.5f;
     }
@@ -966,7 +1130,7 @@ private:
     }
 
     static float widthMul (float s) noexcept
-    {   // Surgical `Width`: a global Q multiplier with a CENTRE DETENT at 1.0x and a
+    {   // Surgical `Pinch`: a global Q multiplier with a CENTRE DETENT at 1.0x and a
         // destructive top (x40 => Q 40 on the 1.0 base). Asymmetric log so 0.5 is exactly 1.
         return s <= 0.5f ? 0.25f * std::pow (4.0f,  s * 2.0f)
                          :          std::pow (40.0f, (s - 0.5f) * 2.0f);
@@ -1015,7 +1179,7 @@ private:
             for (int b = 0; b < 4; ++b) g[b] = knee * std::tanh (g[b] / knee);
             g[3] *= 1.33f;                                    // Open's AIR reaches further
         }
-        else if (T.law == LawSculpt)
+        else if (T.law == LawChisel)
         {   // the last quarter of the DOWNWARD travel morphs the bell into a true notch
             for (int b = 0; b < 4; ++b)
                 if (g[b] < C.e1)
@@ -1086,7 +1250,7 @@ private:
                 }
             } break;
             case LawPassive:  q[2] = 0.70f * C.qm[2]; break;        // the EQP bandwidth knob, wide
-            case LawSculpt:
+            case LawChisel:
             {   const float ring = 2.0f * std::pow (32.0f, shape);  // 2 .. 64
                 for (int b = 0; b < 4; ++b)
                     q[b] = ring * (1.0f + C.e2 * std::min (std::fabs (g[b]), 60.0f) / 12.0f) * C.qm[b];
@@ -1146,10 +1310,10 @@ private:
 
         // ── Tilt: Baxandall's seesaw, one 1-pole high shelf of 2t dB plus a -t dB trim.
         //    6 dB/oct, so the whole spectrum leans instead of stepping.
-        tiltDb_ = (sm_[8] * 2.0f - 1.0f) * kTiltDbSpan * amount;
-        Stage& ts = st_[kTilt];
-        ts.on = std::fabs (tiltDb_) > 1e-4f;
-        ts.kind = 5; ts.f = C.tiltHz; ts.q = 0.707f; ts.g = tiltDb_;
+        slantDb_ = (sm_[8] * 2.0f - 1.0f) * kSlantDbSpan * amount;
+        Stage& ts = st_[kSlant];
+        ts.on = std::fabs (slantDb_) > 1e-4f;
+        ts.kind = 5; ts.f = C.pivotHz; ts.q = 0.707f; ts.g = slantDb_;
     }
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -1186,8 +1350,12 @@ private:
             // zero in finite time. It is far below anything downstream can express,
             // and it turns
             // "asymptotically approaching silence" into "silent". 1e-18 is -360 dBFS.
+#ifndef EQ_MUT_NO_DENORM
             { if (S.z1[c] < 1e-18 && S.z1[c] > -1e-18) S.z1[c] = 0.0;
               if (S.z2[c] < 1e-18 && S.z2[c] > -1e-18) S.z2[c] = 0.0; }
+#else
+            { (void) c; }                                  // MUTATION: the flush is gone
+#endif
             if (! std::isfinite (S.z1[0]) || ! std::isfinite (S.z2[0])
              || ! std::isfinite (S.z1[1]) || ! std::isfinite (S.z2[1]))
             { S.z1[0] = S.z2[0] = S.z1[1] = S.z2[1] = 0.0; }   // NaN in => NaN contained
@@ -1197,11 +1365,11 @@ private:
                             && S.z1[0] == 0.0 && S.z2[0] == 0.0
                             && S.z1[1] == 0.0 && S.z2[1] == 0.0);
             if (! S.on && idle) continue;                // provably a no-op: skip it entirely
-            act_[nAct_++] = (s == kTilt && nAct_ == 0) ? s : s;
+            act_[nAct_++] = (s == kSlant && nAct_ == 0) ? s : s;
         }
-        // the tilt must run FIRST (it is the baseline the bands sit on) — reorder in place
-        for (int i = 1; i < nAct_; ++i) if (act_[i] == kTilt)
-        { for (int j = i; j > 0; --j) act_[j] = act_[j - 1]; act_[0] = kTilt; break; }
+        // the slant must run FIRST (it is the baseline the bands sit on) — reorder in place
+        for (int i = 1; i < nAct_; ++i) if (act_[i] == kSlant)
+        { for (int j = i; j > 0; --j) act_[j] = act_[j - 1]; act_[0] = kSlant; break; }
 
     }
 
@@ -1220,7 +1388,11 @@ private:
         }
         for (int i = 0; i < 11; ++i) sm_[i] += kSm_[i] * (tg_[i] - sm_[i]);
         resolve();
+#ifdef EQ_MUT_NO_SMOOTH
+        designAll (true);            // MUTATION: coefficients SNAP; no per-sample glide
+#else
         designAll (false);
+#endif
 
         curveCtr_ -= kDesignBlk;
         if (curveCtr_ <= 0) { curveCtr_ = curveEvery_; pushCurve(); }
@@ -1261,7 +1433,7 @@ private:
 
     float  sm_[11] {}, tg_[11] {}, kSm_[11] {};
     float  mixSm_ = 1.0f, mixTg_ = 1.0f, mixK_ = 0.01f;
-    float  tiltDb_ = 0.0f;
+    float  slantDb_ = 0.0f;
     float  dip_ = 1.0f, dipDn_ = 0.1f, dipUp_ = 0.03f;
     float  lvlSm_ = 0.0f, lvlK_ = 0.01f;
     int    ctr_ = 0, curveCtr_ = 0, curveEvery_ = 800;

@@ -23,27 +23,40 @@
 //         A = (2^(c/1200) − 1) / (2π f)   [sine]      / (4 f)   [triangle]
 //      Sweep `Rate` with `Amount` held and the detune does not change. Serum's does.
 
-const TYPES  = ['Stack', 'Twin', 'Shift', 'Double', 'Blur', 'Bands'];
+// 🔴 fb422 — THESE ARE MIRRORED FROM TerrainWidenFx.h, WHICH IS THE SINGLE SOURCE OF
+// TRUTH (FIXES.md §3). typeNames() / charNames() / fieldNames() / frontNames() /
+// backNames() / voicesUnit() in the header are authoritative; if this file and the header
+// ever disagree, the header wins and this file is the bug. Names applied verbatim from
+// Design/fx4/RENAMES.md.
+const TYPES  = ['Stack', 'Twin', 'Steady', 'Twofold', 'Blur', 'Bands'];
+// front hero 1 is relabelled per Type; heroes 2/3 and Mix never are (frontNames()).
+const FRONT  = [['Detune','Width','Rate','Mix'], ['Depth','Width','Rate','Mix'],
+                ['Cents','Width','Rate','Mix'],  ['Sway','Width','Rate','Mix'],
+                ['Wash','Width','Rate','Mix'],   ['Split','Width','Rate','Mix']];
+const BACK   = ['Voices','Spread','Offset','Roam','Low Keep','Tone','Feedback','Balance'];
+const PILLS  = ['Retrig','Hear Mono'];
+const VUNIT  = ['copies','lines','copies','copies','stages','bands'];
 const FIELDS = ['Direct', 'Alternate', 'Orbit', 'Swap', 'Side Only', 'Collapse'];
 const CHARS  = [
-  ['JP Classic','Even Fan','Analog Drift','Tight','Wide Fan','Octave Bloom','Sub Anchor','Three Phase'],
-  ['Duo','Quad','Mode Two','Mode Three','No Compander','Dark BBD','Wobble','Hex'],
-  ['Silk','Punch','Warble','Fifth Up','Down Double','Wide Slap','Gritty','Octave Pair'],
-  ['Vocal','Wide Room','Tape ADT','Tight Inst','Loose Crowd','Static Twins','Slapback','Seasick'],
-  ['Smooth Six','Deep Twelve','Velvet','Low Anchor','Air Only','Seed B','Seed C','Counter'],
-  ['Coarse','Fine','Tilted','Rotor Slow','Rotor Fast','Guard','Low Split','Hard Split']
+  ['JP Classic','Even Fan','Analog Drift','Tight Fan','Wide Fan','Octave Bloom','Sub Anchor','Three Phase'],
+  ['Two Line','Four Line','Mode Two','Mode Three','No Compander','Dark BBD','Wobble','Hex'],
+  ['Satin','Jab','Warble','Fifth Up','Octave Down','Wide Slap','Gritty','Octave Pair'],
+  ['Vocal','Wide Room','Tape ADT','Tight Inst','Loose Crowd','Static Pair','Slapback','Seasick'],
+  ['Smooth Six','Deep Twelve','Velvet','Low Anchor','Top Only','Seed B','Seed C','Opposed'],
+  ['Coarse','Fine','Tilted','Rotor Slow','Rotor Fast','Guard','Deep Grid','Hard Split']
 ];
 
 // ── the Type table, mirroring SPEC[] in the header ───────────────────────────
 //    family 0 = voice crowd · 1 = antiphase pair · 2 = allpass · 3 = band tree
 //    mod    0 = sine LFO    · 1 = triangle       · 2 = static  · 3 = random walk
 const SPEC = [
-  { family:0, mod:0, maxCents:130, curve:1.60, rateMul:1.00, fbMax:0.90, trim:1.00 }, // Stack
-  { family:1, mod:1, maxCents: 28, curve:1.35, rateMul:1.00, fbMax:0.85, trim:1.39 }, // Twin
-  { family:0, mod:2, maxCents:110, curve:1.40, rateMul:1.00, fbMax:0.85, trim:0.98 }, // Shift
-  { family:0, mod:3, maxCents: 62, curve:1.30, rateMul:0.55, fbMax:0.88, trim:0.96 }, // Double
-  { family:2, mod:0, maxCents:  0, curve:1.00, rateMul:0.30, fbMax:0.72, trim:1.00 }, // Blur
-  { family:3, mod:0, maxCents:  0, curve:1.00, rateMul:0.60, fbMax:0.80, trim:0.72 }  // Bands
+  // 🔴 fb422 R11 RE-VOICING — mirrored from TerrainWidenFx.h
+  { family:0, mod:0, maxCents:190, curve:1.75, rateMul:1.00, fbMax:0.985, trim:1.00 }, // Stack
+  { family:1, mod:1, maxCents:120, curve:1.70, rateMul:1.00, fbMax:0.985, trim:1.39 }, // Twin
+  { family:0, mod:2, maxCents:190, curve:1.70, rateMul:1.00, fbMax:0.985, trim:0.98 }, // Steady
+  { family:0, mod:3, maxCents:120, curve:1.60, rateMul:0.55, fbMax:0.985, trim:0.96 }, // Twofold
+  { family:2, mod:0, maxCents:  0, curve:1.00, rateMul:2.50, fbMax:0.980, trim:1.00 }, // Blur
+  { family:3, mod:0, maxCents:  0, curve:1.00, rateMul:0.60, fbMax:0.980, trim:0.88 }  // Bands
 ];
 
 // CharSpec: [baseMul, centsMul, rateMul, wanderAdd, spanMul, x1, x2, x3, lvl, flags]
@@ -199,14 +212,16 @@ class TerrainWiden extends AudioWorkletProcessor {
     const T = SPEC[t], C = CHAR[t][c];
     this.T = T; this.C = C; this.typ = t; this.chr = c; this.fld = clampf(p.field|0, 0, 5);
 
-    this.tg.rate = clampf(0.03 * Math.pow(14 / 0.03, clamp01(p.rate)), 0.02, 14);
+    this.tg.rate = clampf(0.08 * Math.pow(14 / 0.08, clamp01(p.rate)), 0.06, 14);   // fb422: the
+                                          // 0.03 Hz bottom was a 33-second cycle, i.e. a dead zone
     this.tg.amt = clamp01(p.amount); this.tg.wid = clamp01(p.width); this.tg.mix = clamp01(p.mix);
     this.tg.spr = Math.pow(clamp01(p.p2), 0.65);
     this.tg.off = 0.25 * Math.pow(16, clamp01(p.p3));          // unity at the knob centre
     this.tg.wan = Math.pow(clamp01(p.p4), 0.70) + C[3];
     this.tg.lk  = clamp01(p.p5);
     this.tg.ton = 2 * clamp01(p.p6) - 1;
-    this.tg.fb  = T.fbMax * Math.pow(clamp01(p.p7), 0.35);     // taper in dB of BUILD-UP
+    // fb422: the taper is linear in ln(TAIL), which is what a feedback control is for
+    this.tg.fb  = clamp01(p.p7) <= 0 ? 0 : 1 - Math.pow(1 - T.fbMax, clamp01(p.p7));
     this.tg.bal = clamp01(p.p8);
     this.cTrim = C[8];
     this.tonLT = Math.pow(2, this.tg.ton *  2);                // ±12 dB tilt
@@ -533,7 +548,12 @@ class TerrainWiden extends AudioWorkletProcessor {
       const inv = (p & 1) ? -1 : 1;
       const dL = clampf(this.baseG[p * 2] + this.depG[p * 2] * m * inv, 2, limHi);
       const dR = clampf(this.baseG[p * 2] - this.depG[p * 2] * m * inv, 2, limHi);
-      wl += gn * this.readH(this.bL, dL); wr += gn * this.readH(this.bR, dR);
+      // fb422: SPREAD is the PLACEMENT of the pair, and it is the audio path now. At 0 the
+      // two lines land on top of each other, the cross-mix has nothing to subtract and the
+      // wet is mono; at 1 it is the full-width antiphase Dimension pair.
+      const spT = this.sm.spr, gA = Math.sqrt(0.5 * (1 + spT)), gB = Math.sqrt(0.5 * (1 - spT));
+      const yL = this.readH(this.bL, dL), yR = this.readH(this.bR, dR);
+      wl += gn * (yL * gA + yR * gB); wr += gn * (yL * gB + yR * gA);
       if (p === 0) {
         if (this.prevD[0] < 0) { this.prevD[0] = dL; this.prevD[1] = dR; }
         if (this.vizTick === 0) {
@@ -559,8 +579,12 @@ class TerrainWiden extends AudioWorkletProcessor {
     let mm = 0.5 * (cl + cr); const ss = 0.5 * (cl - cr);
     this.bassZ[0] += this.bassA * (mm - this.bassZ[0]);
     mm += 0.26 * this.bassZ[0];                        // the documented dry-bass compensation
-    this.viz.voicePan[0] = -0.85; this.viz.voicePan[1] = 0.85;
-    return [mm + ss, mm - ss];
+    // fb422: BALANCE on this Type — the un-delayed line is the centre anchor. At fb421
+    // balSm reached the voice crowd and the Blur/Bands blend and NOTHING here.
+    const thB = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
+    const gaB = Math.sin(thB), gmB = Math.cos(thB), anc = 0.5 * (lineL + lineR) * gmB;
+    this.viz.voicePan[0] = -0.85 * this.sm.spr; this.viz.voicePan[1] = 0.85 * this.sm.spr;
+    return [(mm + ss) * gaB + anc, (mm - ss) * gaB + anc];
   }
 
   // ── BLUR: two allpass cascades. |H| = 1 for any |c| < 1, so per-channel magnitude is
@@ -578,6 +602,11 @@ class TerrainWiden extends AudioWorkletProcessor {
     }
     const th = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
     const ga = Math.sin(th), gm = Math.cos(th);
+    // fb422: SPREAD is how far apart the two decorrelated paths are PLACED. Power-
+    // normalised, because the paths are mutually decorrelated and a plain blend loses 3 dB.
+    const spA = this.sm.spr, mAB = 0.5 * (a + b), dAB = 0.5 * (a - b);
+    const nrmA = 1 / Math.sqrt(0.5 * (1 + spA * spA));
+    a = (mAB + dAB * spA) * nrmA; b = (mAB - dAB * spA) * nrmA;
     a = a * ga + m * gm; b = b * ga + m * gm;
     for (let v = 0; v < 8; ++v) { this.viz.voicePan[v] = v < this.nV ? ((v & 1) ? 0.9 : -0.9) * this.sm.spr : 0;
                                   this.viz.voiceCents[v] = 0; }
@@ -590,7 +619,12 @@ class TerrainWiden extends AudioWorkletProcessor {
   bands (lineL, lineR) {
     const C = this.C, m = 0.5 * (lineL + lineR), s0 = 0.5 * (lineL - lineR);
     this.rotPh += (this.sm.rate * 0.25 * C[2]) / this.fs; if (this.rotPh >= 1) this.rotPh -= 1;
-    const con = clampf((this.bandHard ? Math.sqrt(this.sm.amt) : this.sm.amt) * 1.8 * this.bandCap, 0, 1.8);
+    // fb422: 3.2, not 1.8 — a one-pole tree's gentle crossovers OVERLAP, so the
+    // antisymmetric energy is always less than g^2 and 1.8 only reached corr -0.035.
+    const con = clampf((this.bandHard ? Math.sqrt(this.sm.amt) : this.sm.amt) * 3.2 * this.bandCap, 0, 3.2);
+    // fb422: SPREAD is the spectral EXTENT of the split, opening from the MIDDLE outward.
+    // At fb421 this.sm.spr appeared on this Type only inside the viz assignment below.
+    const spB = this.sm.spr;
     const nrm = 1 / Math.sqrt(1 + con * con);
     let rest = m, al = 0, ar = 0;
     for (let k = 0; k < this.nB; ++k) {
@@ -599,12 +633,14 @@ class TerrainWiden extends AudioWorkletProcessor {
       else band = rest;
       let sk = (k & 1) ? -1 : 1;
       if (C[9] & F_TILT) sk *= 1 + 0.18 * ((k & 1) ? 1 : -1);
-      al += band * (1 + con * sk); ar += band * (1 - con * sk);
+      const u  = this.nB > 1 ? k / (this.nB - 1) : 1;
+      const pk = clamp01((1.55 * spB - 2 * Math.abs(u - 0.5)) * 2) * (1 + 0.45 * spB);
+      al += band * (1 + con * sk * pk); ar += band * (1 - con * sk * pk);
     }
     al *= nrm; ar *= nrm;
     const th = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
     const ga = Math.sin(th), gm = Math.cos(th);
-    for (let v = 0; v < 8; ++v) { this.viz.voicePan[v] = v < this.nB ? ((v & 1) ? -1 : 1) * clamp01(con / 1.8) * this.sm.spr : 0;
+    for (let v = 0; v < 8; ++v) { this.viz.voicePan[v] = v < this.nB ? ((v & 1) ? -1 : 1) * clamp01(con / 3.2) * this.sm.spr : 0;
                                   this.viz.voiceCents[v] = 0; }
     return [al * ga + m * gm + s0, ar * ga + m * gm - s0];
   }

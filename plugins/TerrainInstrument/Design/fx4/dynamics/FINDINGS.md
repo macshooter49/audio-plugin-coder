@@ -304,3 +304,100 @@ slope at zero is exactly 1 and Heat can never move the overall gain, only the cu
 | `shipped_labels.inc` | 1762 capitalised strings extracted from `Source/` — the no-doubles gate's evidence |
 | `compress-worklet.js` / `ott-worklet.js` | the same algorithms as AudioWorkletProcessors, same Type/Character/knob names, for an audible Safari mockup |
 | `ROSTER.md` | the locked grids, the chassis, the R11 defences, the naming resolutions |
+
+---
+---
+
+# THE FIX ROUND (FIXES.md / RENAMES.md) — what changed, what it measured, what is still red
+
+Everything below is a **re-measurement after the adversarial pass**. The fb421 numbers are the
+committed baseline; the "now" numbers come from `dynamics_cert.log` and `MUTATION.md` in this
+directory. Two probes were written for this round and are committed with the engines:
+`probe_switch.cpp` (COMPRESS switch matrix) and `probe_ott_switch.cpp` (OTT).
+
+## 0. The blockers, and the measurement each one now has
+
+| FIXES.md | fb421 | now |
+|---|---|---|
+| **COMPRESS 1** — the unseeded smoother, a real audible click | worst Type transition **17.36 dB/ms**, worst Character **16.26** | **1.23** and **1.00**, bar 2.0, over **all 64 Type and all 448 Character transitions**, five switch phases each |
+| **COMPRESS 2** — the phase-blind click probe | jumped at a zero crossing on a block boundary with one 220 Hz tone; tested ONE Type pair | five phases, broadband programme, every ordered pair; detector self-checked to read **8.00** on a planted +8.00 dB step and **0.0000** on no change |
+| **COMPRESS 3** — the sample-rate gate compared a constant to itself | `atk 0.68 ms (48 k: 0.68)` by construction | **realised** t63 off the audio: attack 5.500 ms at 48 k, **+2.2 %** at 44.1 k, **−0.0 %** at 96 k; release 111.5 ms, +0.1 % / −0.0 % |
+| **COMPRESS 4 / R6** — `detForce` silently overrode `Detect` | 2 Characters re-pointed the detector | `detForce` **deleted from the struct**; `detectId()` published; **256 Type×Character×Detect combinations** assert the dropdown owns it |
+| **OTT 1** — clickRatio divided by the t=0 start-up burst | bar sat 1.9× above the probe's own full scale; a 19.8× tree swap passed | no denominator from the engine at all; tree swap **5.95 → 0.82 dB/ms**, worst Type **5.97 → 0.88** |
+| **OTT 2** — the floor gate proved on digital zeros | `−280.0 dBFS`, arithmetic | a **real dithered −96 dBFS bed**: comes out at **−76.4 dBFS**; delete `floorGate` and it comes out at **−44.4** |
+| **OTT 3** — "air" measured 114 dB under the programme | `bandDbOf` was an unnormalised FFT magnitude, ~40 dB high | Parseval-normalised; **gated against a −26.02 dBFS sine (reads −26.022) and a −26.02 dBFS noise bed (reads −26.032)**; the dark pad's 8–12 kHz band is now **58.1 dB** under the programme instead of 114 |
+
+## 1. Three things the fixes found that nobody had flagged
+
+- **The soft-clip ceiling was built from the parameter TARGETS, not the applied gain.** `Loud War`
+  switches auto-makeup on, which moves the target 12 dB while the applied makeup crawls to it over
+  300 ms — so the ceiling ran 12 dB ahead of the gain it exists to catch. Measured at the switch:
+  **5.47 dB of level inside one millisecond**. It is computed per sample from the glided
+  threshold/lift/makeup now.
+- **The gain element's DRIVE followed the raw ballistic state.** Leaving a 2nd-order smoother,
+  `gr_` closes a 3 dB gap in 0.5 ms and the waveshaper's depth stepped with it — a waveform change
+  no gain slew limit can catch (**2.11 dB/ms**). It follows a 20 ms-smoothed GR now. Hardware heats
+  up; it does not teleport.
+- **`Leaky` is a shipped label.** `index.html:8680` — the Distortion Diode-1 character list, in
+  single quotes, which the old extractor never saw. `RENAMES.md` did not catch it either; the
+  **widened corpus** did. Compress `Limit` char 7 is **`Porous`**.
+
+## 2. The no-doubles gate, rebuilt
+
+`gen_shipped_labels.py` is committed. Corpus **1762 → 3310 strings**, from Source/ **plus both
+sibling fx4 directories**. Quoted strings are `.strip()`ed *before* the capitalisation test, so
+`" Motion"` and `" Route"` — the two fb418 labels R6 is named after, built as
+`"Chorus" + sfxD + " Motion"` — are in. The cert asserts their presence, asserts the siblings'
+new names (`Slant`, `Chisel`, `Steady`, `Twofold`) are visible, and asserts the sibling-yield
+exemption list is **exactly two entries** (`Gentle`, `Low Split` — both RENAMES.md rows where the
+sibling gives way) so it cannot quietly grow into an excuse.
+
+## 3. Labels are published from the header
+
+`frontNames()` · `backNames()` · `dropdownNames()` · `pillName()` · `deviceName()` on both
+engines, beside the existing `typeNames()` / `charNames()` / `detectNames()` / `stereoNames()`.
+**There is no list of knob names left in the harness** — §1 reads them from the header. Both
+worklets carry a `LABELS` block that says in a comment that the header wins.
+
+## 4. 🔴 STILL RED — three OTT gates, and I am not going to buy them
+
+All three appeared **because** the air metric was fixed. They were green on the fb421 engine only
+because the metric was ~40 dB high and measured on content 114 dB under the programme.
+
+```
+FAIL  Sheen: ≥ 6 dB more 8–12 kHz than Over Top on a dark pad  +20.77 dB vs +15.53 dB
+FAIL  closest Type pair still ≥ 3× JND                        2.62× JND  (Over Top / Sheen)
+FAIL  every Character ≥ 2× JND from its Type's default        weakest 0.85× JND (Surge · Low Riser), 3 below bar
+      weak: Sheen · Higher Split 1.52×   Surge · Slow Riser 1.43×   Surge · Low Riser 0.85×
+```
+
+**What this means.** `Sheen` really does put **+20.77 dB** of 8–12 kHz onto a dark pad — that is a
+large, audible move, and its ratio against the fb421 metric was **+47.63 dB**, which was never
+audible because the band it was lifting sat at −134.5 dBFS. The problem is not that Sheen is weak;
+it is that **`Over Top` already gives +15.53 dB**, so Sheen is only **5.24 dB** more than the
+generic Type. On the honest metric Sheen is not sufficiently *distinct*, and `Over Top / Sheen`
+falls to 2.62× JND with it.
+
+**What it would take.** Sheen's discriminator has to come from a mechanism `Over Top` does not
+have, not from more of the same lift. The obvious candidate is already in the Type table and
+under-used: Sheen's high band is the only one whose crossover moves (`xhiMul` 0.72) and whose
+ballistics are 0.35/8 ms. Widening that gap — pushing X-High down further and taking the high
+band's upward threshold up toward the programme so the lift is *program-dependent* rather than
+just larger — is a roster change with its own re-measurement, and R11 says the ceiling should be
+where it stops being useful. **I did not do it tonight, and I did not move a constant to make the
+gate go green.** Same for `Surge · Low Riser` at 0.85× JND: `Surge` has no downward computer at
+all, so a Character that only re-times its bands has very little in the feature vector to move —
+the correct answer is probably to cut that Character, not to re-tune it.
+
+## 5. 🔴 Two mutation survivors — see MUTATION.md §"The two survivors"
+
+`compress-transition-slew` and `compress-heat-kind-fade` are both **redundant**: some other
+mechanism holds the gate green without them (1.23 → 1.94 dB/ms, still under the 2.0 bar). Neither
+is a hole in the device; both are mechanisms no gate depends on. Kept, labelled, and the forty
+lines it would take to gate them properly are described rather than claimed.
+
+## 6. CPU, after all of it
+
+`Opto` 9.93 → **12.56 µs**/128 at 48 k (0.47 % of a core); `Heavy` 29.11 → **31.04 µs** (1.16 %).
+The extra is the discrete-rewiring fades and, on OTT, the second dry allpass that now runs in both
+trees so a band-count change cannot step the dry path's phase at Mix < 1.

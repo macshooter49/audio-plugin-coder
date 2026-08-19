@@ -125,3 +125,74 @@ Widen's per-Type `Amount` relabel and every Compress/OTT knob label exist **only
 which is precisely the geometry that let `Cassette` play `Studio` for four rounds of green
 measurement. **Every device must expose its labels from the header** so the card cannot print a
 word the DSP disagrees with.
+
+---
+
+# fb423 — THE SECOND RULING (the 23 the first table did not reach)
+
+The second family audit built an independent inventory of **366 published labels** straight from the
+engine headers and found **23 unruled collisions** the first table missed. The reason it missed them
+is worth stating: my grep covered `Source/` C++ and the fx3/fx4 design dirs, but most of these live
+in **`index.html` option arrays** and **`Source/*_test.cpp` name tables** — places a C++-literal
+grep does not reach. The agents' rebuilt extractors (3064 and 3310 strings) do reach them.
+
+**That is the same failure one level down: I checked what I could see.** Same as the agents. The
+durable fix is not a better ruling, it is that every device now carries a gate over **all** its
+published labels — see §Gate below.
+
+Four of my own candidates collided again — `Stock`, `Swarm`, `Choir`, `Chorale` — and were replaced.
+Every name below greps to **zero hits** across `Source/`, `Design/fx3/` and `Design/fx4/`.
+
+## EQUALIZER — 8 renames (its own gate found these and failed loudly at 121/1; correct behaviour)
+
+| Slot | OLD | **NEW** | Collides with |
+|---|---|---|---|
+| British char 2 | `Forward` | **`Ahead`** | shipped |
+| American char 7 | `Runaway` | **`Bolt`** | shipped |
+| Passive char 0 | `Program` | **`Baseline`** | shipped |
+| Open char 3 | `Stacked` | **`Twin Shelf`** | shipped |
+| Dynamic char 7 | `Peak Hold` | **`Peak Keep`** | shipped |
+| Chisel char 1 | `Razor` | **`Scalpel`** | shipped |
+| Chisel char 5 | `Telephone` | **`Handset`** | shipped |
+| Chisel char 7 | `Metal` | **`Tin`** | shipped **Vintage-reverb Character** (`index.html:8614`) — worse than the agent thought, same slot class as `Modern`→`Revival` |
+
+## WIDEN — 8 renames (Widen detected none of these; it built no gate)
+
+| Slot | OLD | **NEW** | Collides with |
+|---|---|---|---|
+| **Type 0 (header pill)** | `Stack` | **`Throng`** | shipped FM algo + spectral mode. `Throng` is also the better word — this device's stated identity is *a crowd* |
+| **front hero relabel @ Bands** | `Split` | **`Cleave`** | shipped FM algo — the same three-entry list RENAMES already ruled `Ring` off |
+| Twofold char 0 | `Vocal` | **`Lilt`** | shipped **Plate-reverb Character** — identical class to `Modern`→`Revival` |
+| char | `Warble` | **`Quaver`** | shipped Downsample-distortion Character |
+| char | `Velvet` | **`Plush`** | shipped Shaper-Asym preset |
+| Field option | `Direct` | **`Straight`** | shipped Distortion Character |
+| Field option | `Collapse` | **`Gather`** | shipped Distortion Character |
+| Twin char 6 | `Wobble` | **`Tremble`** | the first table KEPT this; the wider corpus shows it is also a shipped **Tape preset**. Reversing my own row |
+
+## SANCTIONED — no rename, ruled explicitly so nobody re-opens them
+
+- **`Stereo` · `Mid` · `Side` · `Left` · `Right`** — M/S routing vocabulary, sanctioned **as a group**
+  wherever it appears (EQ `Focus`, OTT `Stereo`, any future device). There is no synonym for these
+  and inventing one would be worse than the duplication. This also settles the one cross-fx4 hit.
+- **`Tone` · `Retrig`** — shared vocabulary, CONTRACT §4 class. Same concept, same behaviour.
+- **`Blur` · `Coarse`** — mockup-only / synth-side strings, not live rack labels. No action.
+- **Compress's `Auto` pill** — sanctioned. It is the *same law* as the shipped Distortion `Auto`
+  pill (auto gain compensation), which is exactly what CONTRACT §4 sanctions. Recording it as a
+  **ruling** rather than leaving it as the dynamics gate's self-granted `kShared` entry, because a
+  gate that can exempt itself is not a gate.
+
+## §Gate — the durable fix, and it is not another table
+
+Two of three audits found collisions the previous pass could not see, because each pass grepped a
+different corpus. **Every device must gate ALL of its published labels — not the ones it changed.**
+
+- Widen has **no `shipped_labels.inc` and no `§names` section**; its `widen_cert.cpp` runs
+  A,B,C,D,E,F,R,G,H,I,J,K,L,M,N,O,Z and nothing checks names. Its `FINDINGS §9` grep covered only
+  the 15 new RENAMES strings — **its other 80 published labels have never been checked against
+  anything.** That is the first audit's failure repeating verbatim: *checking what you changed
+  instead of the whole card.* Build the gate. Model it on `dynamics_cert.cpp:645-725`, which is well
+  built: exactly 2 sibling-yield exemptions, asserted to be exactly 2 so it cannot quietly grow.
+- Every cert additionally gates that **ROSTER.md and the worklet name tables EQUAL the header
+  arrays.** 22 stale strings currently survive downstream — `eq-worklet.js` still carries 12 old
+  Character names as a second `CSPEC[].nm` table, which is *literally the two-table geometry the EQ
+  engine deleted*. The card is built from those files. This is fb373's geometry, still standing.

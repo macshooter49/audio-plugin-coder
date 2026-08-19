@@ -1,0 +1,318 @@
+
+== TERRAIN EQUALIZER FX - certification ==   bus program -26 dBFS, fs 48000 Hz
+   7 Types x 8 Characters x 5 Focus, 12 params (Slant Air Amount Mix + 8 back)
+   ceiling: +-30 dB per band x Amount 200 % = +-60 dB   ·   Q law owned by the Type
+
+[A. The NaN trap, the null law, Focus transparency, and the roster mapping]
+  ok    prepare() with NO setParams: finite AND bit-transparent    worst sample delta 0.000e+00
+  ok    every knob at 0 %, all 7 Types: finite                     peak 0.16 linear
+  ok    every knob at 100 %, all 7 Types: finite                   peak 97066.88 linear
+  ok    defaults null BIT-EXACTLY (fb303 default-sound guarantee)  worst delta 0.000e+00
+  ok    Amount 0 % nulls BIT-EXACTLY at a full Chisel/Metal patch  worst delta 0.000e+00
+  ok    Mix 0 % is the dry signal, bit for bit                     worst delta 0.000e+00
+  ok    Focus Left: the RIGHT channel is bit-exact                 worst delta 0.000e+00
+  ok    Focus Right: the LEFT channel is bit-exact                 worst delta 0.000e+00
+  ok    Focus Mid at zero gain: residual < -120 dB                 M/S round-trip residual -149.4 dB
+  ok    Focus Side at zero gain: residual < -120 dB                M/S round-trip residual -149.4 dB
+  ok    roster: 7 Types x 8 Characters x 5 Focus, all named, indices clamped kNumTypes 7 live of 12 declared slots
+
+[B. DECRAMPING — the math gate (this section reads coefficients, and says so)]
+  ok    16 kHz Q2 +10 dB @ 44.1 k: matched error <= 1.0 dB         max |err| vs analog prototype 0.828 dB
+  ok       ... and the SAME gate FAILS on RBJ (the negative control) RBJ max |err| 5.645 dB  <- this is the cramp, in dB
+  ok    16 kHz Q2 +10 dB @ 96 k: the cramp is an fs story — it mostly goes away matched 0.138 dB · RBJ 1.114 dB (was 3.9 dB at 44.1 k)
+        worst error for corners below 0.25 fs: 3.39 dB (the cramp is a top-octave story)
+  ok    all 224 reachable BELL settings, 44.1 + 96 k: worst <= 5 dB worst 4.79 dB at f0 14000 Q 1.00 g -30 dB @ 44.1 k · mean 0.341 dB
+  ok       ... where RBJ is 2.5x worse ON AVERAGE over the same grid (control) RBJ mean 1.011 dB vs matched mean 0.341 dB · worst 12.2 vs 4.79
+  ok    all 224 reachable SHELF settings: worst <= 4 dB            worst 3.83 dB at kind 2 f0 28000 Q 0.70 g 30 dB · mean 0.492 dB
+  ok       ... where RBJ is 3x worse ON AVERAGE over the same grid (control) RBJ mean 1.491 dB vs matched mean 0.492 dB · worst 21.9 vs 3.83
+        the residual lives ONLY above 19 kHz on shelves whose corner is past 0.35 fs:
+        a minimum-phase biquad cannot carry a pole pair that sits beyond Nyquist, and
+        that is a fact about digital filters, not a tuning choice. Documented, not hidden.
+  ok    the RBJ->matched blend has NO seam as f0 sweeps 300 Hz - 14 kHz worst step between adjacent designs 0.3023 dB (0.4 % of an octave apart)
+  ok    control number: the same metric on a 0 dB (bypassed) band  max |err| 0.000e+00 dB — this is what 'no error' looks like
+  ok    Reach 8k->40k stays a LIVE knob at 44.1 k (monotonic, wide) response at 15 kHz moves 18.6 dB across the knob
+        15 kHz response vs Reach: 8k:18.6  12k:13.1  16k:8.1  22k:3.4  30k:0.6  40k:0.0  
+  ok       ... where RBJ's top half is a DEAD knob (negative control) RBJ 22 kHz -> 40 kHz moves 15 kHz by 0.0000 dB
+
+[C. The display cannot lie, and every Type's own discriminator (law 2)]
+  ok    the engine's 96-bin viz curve == the MEASURED output spectrum worst |drawn - measured| 0.43 dB over 90 bins, 25 Hz - 18 kHz
+           bins the drawn curve puts below -30 dB are excluded: a 96-band noise
+           spectrum cannot measure a hole narrower than its own analysis band, and
+           grading the device with a ruler that bottoms out first proves nothing.
+  ok    Surgical: EXACT dB — a +18 dB knob measures +18 dB       measured peak 17.84 dB
+           the gain-law spread: the Type furthest from the knob is Dynamic at 7.24 dB
+  ok    British: the inductor shelf UNDERSHOOTS before it rises    dip -7.58 dB just above fc (Surgical: -0.61 dB)
+  ok       ... and no other Type digs that dip                     British is 6.97 dB deeper than the reference type
+  ok    American: PROPORTIONAL Q — a small move is wide, a big move is a laser bw(+6 dB)/bw(+30 dB) = 3.67x  (Surgical: 1.00x)
+  ok       ... where Surgical's Q is CONSTANT with gain            Surgical ratio 1.00x
+  ok    Passive: one knob makes the Pultec HUMP AND the SCOOP      trough -2.61 dB at 150-700 Hz (Surgical: -0.56 dB)
+  ok    Open: the bells are more than 3 octaves wide               -3 dB width 3.04 octaves (Surgical: 1.57)
+  ok       ... and its AIR still LIFTS at Reach 40 kHz — gentle, not dead 18 kHz sits at +3.08 dB with Reach at 40 kHz
+           the 2-pole Types deliver only +0.01 dB there — that is why Open's AIR is 6 dB/oct
+  ok    Dynamic: the response MOVES with the program level (the family tell) 17.84 dB of response change from -40 to -12 dBFS
+  ok       ... and every other Type is level-INDEPENDENT by construction worst non-Dynamic level dependence 0.000 dB
+  ok    Chisel: a deep cut becomes a TRUE NOTCH, not a dip (sine probe) notch floor -90.0 dB (Surgical at the same knob: -30.0 dB)
+  ok       ... and it RINGS: T60 > 60 ms where Surgical does not   Chisel/Sting T60 356.7 ms · Surgical T60 8.7 ms
+
+[D. CROSS-TYPE DISTINCTNESS MATRIX  (1.00 = one JND unit; gate 1.00)]
+       Surgical BritishAmerican Passive    Open Dynamic  Chisel
+  Surgic       .    4.87    8.23    5.48    7.03    9.95   10.00
+  Britis    4.87       .    8.95    6.99    9.26   10.00   10.00
+  Americ    8.23    8.95       .   10.00   10.00   10.00   10.00
+  Passiv    5.48    6.99   10.00       .    7.51   10.00   10.00
+  Open      7.03    9.26   10.00    7.51       .   10.00   10.00
+  Dynami    9.95   10.00   10.00   10.00   10.00       .   10.00
+  Chisel   10.00   10.00   10.00   10.00   10.00   10.00       .
+  ok    every Type pair is distinguishable (worst pair >= 1.00)    closest pair 4.87 = Surgical/British
+        axes: ref max /3 dB · ref rms /1.5 dB · +18 peak /3 dB · bandwidth /0.5 oct
+              prop ratio /0.6 · undershoot /2 dB · scoop /2.5 dB · level-dep /3 dB
+              notch floor /8 dB · 18 kHz top /3 dB
+
+        Type          pk+18   bwOct    prop   undsht   scoop    notch  top18k
+        Surgical      17.84    1.57    1.00    -0.61   -0.56    -30.0    0.01
+        British       17.21    1.57    1.00    -7.58   -3.36    -27.0    0.00
+        American      15.80    0.42    3.67    -1.12   -0.99    -30.0    0.01
+        Passive       17.90    1.78    1.00    -5.43   -2.61    -34.5    0.01
+        Open          14.81    3.04    1.00     0.47    0.20    -19.3    3.08
+        Dynamic        7.24    1.57    1.00    -0.61   -0.56    -30.0    0.00
+        Chisel        12.64    0.31    1.00   -23.10   -4.29    -90.0    0.01
+
+[E. Every Character re-wires PHYSICS (R6) — within-Type distinctness]
+  ok    Surgical: 8 Characters, closest pair > 1.5 dB              closest 3.90 dB = Plain/Steep · weakest vs default 3.90 dB (Steep)
+  ok    British: 8 Characters, closest pair > 1.5 dB               closest 4.32 dB = Desk/Full Swing · weakest vs default 4.32 dB (Full Swing)
+  ok    American: 8 Characters, closest pair > 1.5 dB              closest 2.49 dB = Proportional/Mellow · weakest vs default 2.49 dB (Mellow)
+  ok    Passive: 8 Characters, closest pair > 1.5 dB               closest 4.14 dB = Bell Top/Slow Top · weakest vs default 4.49 dB (Close Cut)
+  ok    Open: 8 Characters, closest pair > 1.5 dB                  closest 2.73 dB = Stacked/Deep Reach · weakest vs default 4.62 dB (Very Wide)
+  ok    Chisel: 8 Characters, closest pair > 1.5 dB                closest 2.38 dB = Gain Peak/Metal · weakest vs default 4.38 dB (Gain Peak)
+  ok    Dynamic: 8 Characters separate on the RIDE TRAJECTORY (gate 1.00) closest 1.91 = Program Ride/Soft Window
+        Character        atk ms   rel ms   hot dB    quiet   -26 dB   -29 dB   -23 dB
+        Program Ride       2.00     61.3   -24.00    -0.00   -13.98    -6.71   -20.57
+        Quick              0.67     14.7   -24.00    -0.00   -12.43    -5.79   -19.21
+        Lazy               5.33    307.3   -24.00    -0.00   -14.47    -7.03   -20.94
+        Wideband           0.67      0.0   -24.00    -5.06   -23.67   -23.67   -23.67
+        Upward             2.00     61.3    -0.00   -24.00    -9.14   -16.62    -2.75
+        Hard Window        1.33     57.3   -24.00    -0.00   -15.75    -0.16   -23.67
+        Soft Window        2.00     68.0   -23.96    -0.00   -12.87    -9.76   -15.92
+        Peak Hold          2.00      0.0   -24.00    -0.00   -21.57   -15.46   -23.67
+
+[F. Every param 0->100 %: monotonic, night-and-day, measured span (law 1)]
+  ok    Slant  LOW  end (80 Hz alone — must FALL)                span 35.3 (need 30) · worst reversal 0.00
+           0->100 %: 17.6 15.4 11.2 5.8 0.0 -5.8 -11.2 -15.4 -17.6 
+  ok    Slant  TOP  end (8 kHz alone — must RISE)                span 39.4 (need 30) · worst reversal 0.00
+           0->100 %: -19.7 -16.5 -11.6 -5.9 0.0 5.9 11.6 16.5 19.7 
+  ok    Air    (level at 19 kHz, Reach 9 kHz)                      span 54.2 (need 45) · worst reversal 0.00
+           0->100 %: -27.4 -22.1 -15.4 -7.8 0.0 7.8 15.4 22.1 26.8 
+  ok    Amount (max spectral deviation)                            span 45.1 (need 25) · worst reversal 0.00
+           0->100 %: 0.0 6.6 13.1 19.4 25.5 31.2 36.4 41.1 45.1 
+  ok    Mix    (depth of a Chisel notch)                           span 28.7 (need 25) · worst reversal 0.00
+           0->100 %: -0.0 1.2 2.5 4.1 6.0 8.5 12.0 17.7 28.7 
+  ok    Low Hz (log2 of the shelf's half-gain corner)              span 4.6 (need 4) · worst reversal 0.00
+           0->100 %: 4.3 4.8 5.5 6.0 6.5 7.2 7.7 8.3 8.9 
+  ok    Low    (level at 30 Hz)                                    span 61.1 (need 45) · worst reversal 0.00
+           0->100 %: -30.5 -23.2 -15.5 -7.7 0.0 7.7 15.5 23.1 30.5 
+  ok    Body Hz(log of the peak frequency)                         span 4.9 (need 4) · worst reversal 0.00
+           0->100 %: 6.6 7.3 7.9 8.5 9.1 9.7 10.3 10.9 11.6 
+  ok    Body   (level at 550 Hz)                                   span 58.8 (need 45) · worst reversal 0.00
+           0->100 %: -29.3 -22.2 -14.9 -7.5 0.0 7.5 14.9 22.2 29.4 
+  ok    Bite Hz(log of the peak frequency)                         span 4.3 (need 3) · worst reversal 0.00
+           0->100 %: 9.5 10.0 10.5 11.0 11.6 12.2 12.7 13.2 13.8 
+  ok    Bite   (level at 3.13 kHz)                                 span 58.4 (need 45) · worst reversal 0.00
+           0->100 %: -29.1 -22.6 -14.9 -7.5 0.0 7.4 14.8 22.1 29.2 
+  ok    Reach  (mean lift over 10-20 kHz, Air +30)                 span 27.7 (need 14) · worst reversal 0.00
+           0->100 %: 28.7 26.1 21.6 16.6 12.6 8.8 5.5 2.8 1.0 
+
+[F2. `Trait` — the P8 relabel, swept per Type on ITS OWN physics]
+  ok    Surgical `Pinch`  (log2 bandwidth, sine-probed)            span 6.76 (need 5.00) · worst reversal 0.00
+           0->100 %: 2.1 1.7 1.3 0.9 0.5 -0.8 -2.1 -3.4 -4.7 
+  ok    British  `Slope`  (shelf undershoot, dB)                   span 12.76 (need 4.00) · worst reversal 0.00
+           0->100 %: 0.5 -1.1 -3.6 -5.8 -7.6 -9.1 -10.3 -11.4 -12.3 
+  ok    American `Taper`  (log2 bandwidth at a SMALL +8 dB move)   span 2.50 (need 2.00) · worst reversal 0.00
+           0->100 %: -1.7 -1.3 -0.9 -0.4 -0.1 0.2 0.4 0.7 0.8 
+  ok    Passive  `Dip`    (Pultec scoop depth, dB)                 span 4.86 (need 4.00) · worst reversal 0.00
+           0->100 %: -0.6 -1.0 -1.5 -2.0 -2.6 -3.2 -3.9 -4.6 -5.4 
+  ok    Open     `Silk`   (level at 19 kHz, Air +20 @ Reach 9 kHz) span 14.43 (need 3.00) · worst reversal 0.00
+           0->100 %: 20.8 22.1 23.7 25.4 27.2 29.2 31.2 33.2 35.3 
+  ok    Dynamic  `Pivot`  (applied cut at a -26 dBFS program, dB)  span 23.67 (need 12.00) · worst reversal 0.00
+           0->100 %: -23.7 -23.7 -23.7 -23.1 -13.9 -2.7 0.0 0.0 0.0 
+  ok    Chisel   `Sting`  (log2 bandwidth, sine-probed)            span 4.17 (need 2.50) · worst reversal 0.00
+           0->100 %: -1.9 -2.5 -3.1 -3.7 -4.4 -5.0 -5.4 -6.0 -6.0 
+
+[F3. `Slant` — EACH END SEPARATELY (a difference cannot see a common-mode reversal)]
+
+        Amount 100 % — Slant 0 -> 100 % (9 steps), dB at each probe
+        probe          0%     12%     25%     37%     50%     62%     75%     87%    100% |   travel wrong-way
+            80 Hz   17.63   15.37   11.19    5.80    0.00   -5.80  -11.19  -15.37  -17.62 |   -35.25      0.00
+           120 Hz   14.53   13.28   10.27    5.53    0.00   -5.53  -10.27  -13.27  -14.52 |   -29.05      0.00
+           300 Hz    7.40    7.14    6.23    3.86    0.00   -3.86   -6.22   -7.13   -7.39 |   -14.79      0.00
+          2000 Hz   -8.83   -8.46   -7.24   -4.36    0.00    4.36    7.25    8.46    8.83 |    17.66      0.00
+          8000 Hz  -19.69  -16.46  -11.56   -5.89    0.00    5.89   11.56   16.46   19.70 |    39.39      0.00
+         16000 Hz  -23.31  -17.82  -11.95   -5.99    0.00    5.99   11.95   17.82   23.31 |    46.63      0.00
+        the fb420 metric (8 kHz MINUS 80 Hz): span 74.6 dB, worst reversal 0.00 dB  <- this is what stayed green
+
+        Amount 200 % — Slant 0 -> 100 % (9 steps), dB at each probe
+        probe          0%     12%     25%     37%     50%     62%     75%     87%    100% |   travel wrong-way
+            80 Hz   18.74   18.67   17.63   11.19    0.00  -11.19  -17.62  -18.65  -18.72 |   -37.46      0.00
+           120 Hz   15.04   15.01   14.53   10.27    0.00  -10.27  -14.52  -14.99  -15.03 |   -30.07      0.00
+           300 Hz    7.50    7.49    7.40    6.23    0.00   -6.22   -7.39   -7.48   -7.48 |   -14.98      0.00
+          2000 Hz   -8.96   -8.95   -8.83   -7.24    0.00    7.25    8.83    8.96    8.97 |    17.92      0.00
+          8000 Hz  -21.70  -21.55  -19.69  -11.56    0.00   11.56   19.70   21.56   21.71 |    43.40      0.00
+         16000 Hz  -31.57  -30.30  -23.31  -11.95    0.00   11.95   23.31   30.33   31.61 |    63.18      0.00
+        the fb420 metric (8 kHz MINUS 80 Hz): span 80.9 dB, worst reversal 0.00 dB  <- this is what stayed green
+  ok    every Slant probe moves ONE WAY ONLY (wrong-way travel <= 0.30 dB) worst wrong-way travel 0.00 dB at 80 Hz @ Amount 100 %
+  ok    the 700 Hz PIVOT does not move across the whole Slant sweep, both Amounts worst |response at the pivot| 0.080 dB
+           the fixed-pivot seesaw is |H|^2 = (Gp^2 + s^2 t^2)/(s^2 Gp^2 + t^2), t = tan(pi f/fs):
+           exactly 1 at t = Gp for every gain s and every sample rate, and d|H|^2/ds has the
+           sign of (t^4 - Gp^4) — strictly down below the pivot, strictly up above it.
+  ok    Character `Deep Pivot` pivots at 150 Hz, and pivots CLEANLY |H| at the pivot <= 0.291 dB · wrong-way below it 0.00 dB
+  ok    Character `Bright Pivot` pivots at 3000 Hz, and pivots CLEANLY |H| at the pivot <= 0.056 dB · wrong-way below it 0.00 dB
+
+[G. The Dynamic detector — calibration first, THEN the claim (probe-craft law)]
+        program  -45.0 dBFS -> applied Body cut    0.00 dB
+        program  -26.0 dBFS -> applied Body cut  -13.94 dB
+        program  -12.0 dBFS -> applied Body cut  -23.67 dB
+  ok    Dynamic rides at least 12 dB across a -45 -> -12 dBFS program 23.67 dB of ride
+  ok       ... and at the knob's maximum the swing is >= 24 dB     29.35 dB between a whisper and a wall
+  ok    Character `Inverted` reverses the sign of the ride         normal -23.67 dB/level · inverted +23.67 dB/level
+
+[H. MONO-SAFE (law 5) — folded, not assumed]
+  ok    Focus Stereo: the effect SURVIVES a mono fold on every Type worst median |stereo - mono| 0.0417 dB (Surgical)
+  ok       ... and on a Character sample across all 7 Types        worst median 0.0558 dB (British/Iron Top)
+  ok    Focus Side is mono-HOSTILE and is TAGGED (the wet vanishes on a fold) folded Side-focus leaves 0.000 dB of EQ where Stereo focus leaves 25.4 dB
+  ok       ... while Focus Mid is fully mono-SAFE                  Mid-focus mono fold matches Stereo focus within 0.0000 dB median
+
+[I. MIX 100 % = FULLY WET, ZERO DRY (law 3) — sine probes, not band averages]
+  ok    dry residual at Mix 100 %: a -90 dB notch stays a hole     measured -90.0 dB in the notch => dry residual < -90 dB
+  ok    Mix 100 % leaks no dry: Surgical                           deepest cut reaches -30.0 dB
+  ok    Mix 100 % leaks no dry: British                            deepest cut reaches -27.0 dB
+  ok    Mix 100 % leaks no dry: American                           deepest cut reaches -30.0 dB
+  ok    Mix 100 % leaks no dry: Passive                            deepest cut reaches -34.5 dB
+  ok    Mix 100 % leaks no dry: Open                               deepest cut reaches -19.3 dB
+  ok    Mix 100 % leaks no dry: Dynamic                            deepest cut reaches -30.0 dB
+  ok    Mix 100 % leaks no dry: Chisel                             deepest cut reaches -90.0 dB
+        Open's floor is its own tanh knee (22 dB), not a dry leak: a -30 dB knob becomes
+        -19.3 dB BY DESIGN in that Type. Chisel's -90 dB hole above is the real dry gate.
+  ok    at Mix 50 % the dry sits at exactly -6 dB (LINEAR law, not equal-power) measured -6.02 dB (linear crossfade predicts -6.02)
+  ok       ... and a +24 dB boost at Mix 50 % lands where linear says it must measured 18.51 dB, linear predicts 18.51 dB
+
+[J. NO CLICKS (law 4) — sample-level, absolute-bar, and it fails under mutation]
+  ok    J1 frame-level: sweeping adds <= 3 dB over holding (all 12 continuous) worst excess +0.00 dB (held control 2.55) on Low Hz
+        param           swept     JUMPED       held   jump-swp   (dB of wet-gain change in ONE sample)
+        Low Hz         0.0023     0.0108     0.0018    +0.0086
+        Low            0.0040     0.0431     0.0040    +0.0391
+        Body Hz        0.0141     0.0634     0.0051    +0.0494
+        Body           0.0035     0.3207     0.0016    +0.3172
+        Bite Hz        0.0064     0.1075     0.0048    +0.1011
+        Bite           0.7259     0.6382     0.0016    -0.0878
+        Reach          0.5070     0.6648     0.0037    +0.1579
+        Trait          7.1975     7.9461     0.0837    +0.7487
+        Slant          0.3689     0.3593     0.0175    -0.0096
+        Air            0.1584     0.1829     0.0024    +0.0245
+        Amount         0.1813     0.8484     0.0256    +0.6670
+        Mix            0.0058     0.5223     0.0013    +0.5165
+  ok    J2 control: a HELD param changes the wet gain by ~0 per sample worst held slew 0.0837 dB/sample on Trait
+  ok    J2 the 11 non-Q params: <= 1.0 dB of wet-gain change in ONE sample, swept OR jumped worst 0.8484 dB/sample on Amount
+  ok    J2 the SMOOTHERS' job: an INSTANT jump costs <= 3 dB more than a deliberate sweep worst jump-minus-sweep +0.7487 dB/sample on Trait
+           `Trait` (the Q law) swept 7.20 dB/sample — a Q 40 resonator releasing its stored energy; jumped 7.95 dB/sample, i.e. the jump is free.
+        switch               pre dB  post dB   dip dB  rise dB
+        Type switch           -8.90    10.63   -23.32     0.91
+        Character switch      -8.90    -8.54   -23.32     0.62
+        Focus switch          -8.90   -26.00   -13.69     0.75
+  ok    J3 every switch DIPS — the fade-swap actually ran: dip <= -8 dB shallowest dip -13.69 dB on Focus switch
+  ok    J3 and no switch BLASTS: rise <= +2 dB over the settled level on EITHER side worst rise +0.91 dB on Type switch
+           deepest dip -23.3 dB — that is the 8 ms fade, doing its job.
+  ok    a Type switch on a FLAT device stays bit-exact (no pointless dip) worst delta 0.000e+00
+
+[K. THE R11 CEILING GATE — 'if it sounds usable at 100 %, that is not what we want']
+        METRIC (boosts): MSD = max |transfer| in dB over the 96 log bins, measured on the
+               OUTPUT spectrum of white noise through the real 128-sample block path.
+        METRIC (cuts): a coherent SINE at the notch centre — a band-averaged spectrum
+               physically cannot see a hole narrower than its own analysis band.
+        THRESHOLDS, defended: a mixing EQ tops out at 12-18 dB, and every console ever
+               built tops out at 16. 28 dB from ONE knob at Amount 100 % is already past
+               all of them; 55 dB at Amount 200 % is a factor of 560 on one band. A cut
+               must reach -60 dB: at that depth the band is GONE, not 'reduced'.
+        CONTROL (a plain, obvious +12 dB Low shelf): MSD = 12.4 dB
+  ok    the ceiling metric reads ~0 on a FLAT device (control)     MSD 0.000 dB
+  ok    ONE band at 100 %, Amount 100 %: MSD >= 28 dB              MSD 30.7 dB
+  ok    ONE band at 100 %, Amount 200 %: MSD >= 55 dB              MSD 57.3 dB = a factor of 729 on one band
+  ok    a cut at 100 % is a HOLE: <= -70 dB                        floor -90.0 dB (sine probe)
+  ok       ... and Amount 200 % drives it past -85 dB              floor -96.0 dB
+  ok    Slant 100 %: the TOP end ALONE beats a whole console (>= +15 dB at 8 kHz) +19.70 dB at 8 kHz, +23.31 dB at 16 kHz
+  ok    Slant 100 %: the LOW end ALONE beats a whole console (<= -15 dB at 80 Hz) -17.62 dB at 80 Hz, -22.24 dB at 30 Hz
+  ok       ... and Amount 200 % keeps BOTH ends past a console, top and bottom +21.71 dB at 8 kHz · -18.72 dB at 80 Hz
+  ok    Slant 100 % / Amount 200 %: 20 Hz - 20 kHz spread >= 55 dB spread 68.7 dB (+37.9 top, -30.8 bottom)
+           HONEST LIMIT, stated rather than gated away: a 6 dB/oct seesaw is SLOPE-limited,
+           so Amount 200 % buys the ENDS very little (80 Hz: -17.6 -> -18.7 dB) and buys the
+           EXTREMES a lot (16 kHz: +23.3 -> +31.6 dB). Amount is not a plateau on this knob
+           because the pivot is what sets the ends — which is why `Deep Pivot` (150 Hz) and
+           `Bright Pivot` (3 kHz) exist and are gated in §F3.
+  ok    Air at 100 % with Amount 200 % (Reach 8 kHz): >= 42 dB in band +42.5 dB at 20 kHz; the shelf's asymptote is +60 dB, which a 8 kHz corner
+           reaches only above the audio band — 46.4 dB at 20 kHz is what the ANALOG
+           prototype itself delivers there, so this is the ceiling, not a shortfall.
+  ok    all four bands at 100 % with Amount 200 %: boost >= 55 dB  peak +76.6 dB, deepest hole -62.4 dB
+  ok       ... total dynamic range of ONE curve >= 120 dB          139 dB from the top of the curve to the bottom
+  ok    Surgical `Width` at 100 % is a resonator, not an EQ curve  half-height width 0.0384 octaves (15 Hz wide at 550 Hz)
+  ok    Chisel `Sting` at 100 % SINGS: T60 > 250 ms                T60 724 ms — a struck resonator, not an equaliser
+
+[L. Stability — 60 s of full-drive white noise, every Type]
+  ok    60 s x 7 Types at -6 dBFS drive, Amount 200 %: finite, bounded worst peak 4251.3 linear (Open)
+           a +60 dB band on a -6 dBFS drive IS supposed to reach ~500 linear. That is the
+           ceiling doing its job inside a float chain; downstream headroom is the mix's
+           problem and the manual's, not the EQ's (bible §7, no-playing-safe).
+  ok    a Q 90 Chisel ring decays to TRUE zero (denormal flush)    tail after 12 s of silence 0.000e+00
+  ok    NOTHING in the device rings longer than 3 s (the pole-radius cap) longest T60 2405 ms — Surgical/Four Bells @ 1000 Hz, Trait 1.00, Amount 200 % · 0 settings hit the window
+           252 settings: 7 Types x 2 Characters x 2 Amounts x 3 Trait x 3 corner frequencies.
+           without the cap a +72 dB 20 Hz band at Q 90 has Q_pole = 5670 and a TEN MINUTE
+           T60: passive, terminating, and still a drone. 'Nothing free-runs' is a number.
+  ok    the SLANT's one-pole obeys the same ring law (its corner is now placed by gain) longest T60 1841 ms — Deep Pivot, Slant 0 %, Amount 200 %
+  ok    (self-check) t60ms REPORTS saturation instead of a number it cannot measure a 20 ms window on a 700 ms ring returns 20 ms, saturated=1
+           the fb420 ruler was 1500 ms against a 3100 ms bar and returned 1500.0 silently.
+
+[M. CPU — us per 128-sample block at 48 kHz (one block is 2666.7 us of audio)]
+  ok    worst Type, settled knobs, < 0.5 % of one core             4.35 us/block = 0.163 % of a core (Surgical)
+           per Type (us/block, roster order): 4.35 3.45 3.47 4.30 3.94 2.90 3.49 
+  ok    worst case — TWO knobs moving every block — < 1.5 % of one core 6.51 us/block = 0.244 % of a core
+           6 instances, all with knobs moving: 1.46 % of one core
+
+[N. 44.1 kHz and 96 kHz — the device must be the SAME device]
+  ok    44.1 kHz: defaults still null bit-exactly                  worst delta 0.000e+00
+  ok    44.1 kHz: the reference patch matches 48 kHz within 2.0 dB worst |delta| 0.80 dB at 17293 Hz
+  ok    44.1 kHz: the R11 ceiling still reaches 55 dB              MSD 56.7 dB
+  ok    96.0 kHz: defaults still null bit-exactly                  worst delta 0.000e+00
+  ok    96.0 kHz: the reference patch matches 48 kHz within 2.0 dB worst |delta| 1.55 dB at 17293 Hz
+  ok    96.0 kHz: the R11 ceiling still reaches 55 dB              MSD 56.7 dB
+
+[O. NAMES — no doubles, inside the card and against 3064 shipped strings]
+        shipped_labels.inc holds 3064 strings from Source/ · Design/fx3/ · the two sibling fx4 dirs; this device publishes 87.
+  ok    (self-check) the extractor SEES the fb418 leading-space labels Motion / Route Motion yes · Route yes  (the old pattern found neither)
+  ok    (self-check) ... and the two shipped Tape knobs fb420 collided with Tilt yes · Sculpt yes  — this is what the gate is FOR
+  ok    every EQUALIZER row of RENAMES.md is applied VERBATIM      21 of 21 rows
+  ok    no label appears twice INSIDE this card                    0 doubles across 87 published strings
+  FAIL  no collision with a shipped label outside RENAMES.md's sanctioned list 18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option), Mid (Focus option), Forward (Character), Runaway (Character), Program (Character), Stacked (Character), Peak Hold (Character), Razor (Character), Telephone (Character), Metal (Character)
+           sanctioned  Low — RENAMES.md: band grammar, keep
+           sanctioned  Body — RENAMES.md: band grammar, keep
+           sanctioned  Bite — RENAMES.md: band grammar, keep
+           sanctioned  Air — RENAMES.md: Max's mandate word, keep (precedence rule 3)
+           sanctioned  Reach — RENAMES.md: sanctioned shared vocabulary, keep
+           sanctioned  Amount — RENAMES.md: sanctioned shared vocabulary, keep
+           sanctioned  Mix — RENAMES.md: sanctioned shared vocabulary, keep
+           sanctioned  Focus — RENAMES.md: sanctioned shared vocabulary, keep
+           sanctioned  Tight — RENAMES.md EQUALIZER row: 'keep - Widen yields this one' (-> Tight Fan)
+           sanctioned  Silk — RENAMES.md WIDEN row: Steady char 0 Silk -> Satin, 'EQ knob label outranks a Character'
+
+        PUBLISHED FROM THE ENGINE HEADER (EQ::label / EQ::labelSlot):
+        Types : Surgical · British · American · Passive · Open · Dynamic · Chisel
+        Front : Slant · Air · Amount · Mix
+        Back  : Low Hz · Low · Body Hz · Body · Bite Hz · Bite · Reach · Trait
+        Trait : Surgical=Pinch · British=Slope · American=Taper · Passive=Dip · Open=Silk · Dynamic=Pivot · Chisel=Sting
+        Focus : Stereo · Mid · Side · Left · Right
+        Surgical  Plain         Tight         Broad         Steep         Scoop         Deep Pivot    Bright Pivot  Four Bells   
+        British   Desk          Big Knob      Forward       Iron Top      Sub Iron      Steep Iron    Full Swing    Mid Rise     
+        American  Proportional  Lasers        Mellow        Floor Lift    Boost Only    Cut Only      Shelf Ride    Runaway      
+        Passive   Program       Close Cut     Far Cut       Both Ends     Bell Top      Slow Top      Deep Atten    Revival      
+        Open      Gloss         Very Wide     Two Shelves   Stacked       Deep Reach    Soft Knee     Hard Knee     Bell Air     
+        Dynamic   Program Ride  Quick         Lazy          Wideband      Upward        Hard Window   Soft Window   Peak Hold    
+        Chisel    Resonator     Razor         Triple Notch  Gain Peak     Shallow       Telephone     Sub Kill      Metal        
+
+══ RESULT: 121 pass, 1 FAIL ══
+   FAILED: no collision with a shipped label outside RENAMES.md's sanctioned list  [18 collisions, 8 sanctioned by name; UNRESOLVED: Stereo (Focus option), Mid (Focus option), Forward (Character), Runaway (Character), Program (Character), Stacked (Character), Peak Hold (Character), Razor (Character), Telephone (Character), Metal (Character)]

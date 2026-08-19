@@ -1,5 +1,216 @@
 # EQUALIZER — FINDINGS (fx4, chain kind 9)
 
+## fb422 — THE FIX ROUND. READ THIS FIRST; §1 ONWARD IS THE fb420 REPORT IT CORRECTS.
+
+`eq_cert.cpp` → **121 pass, 1 FAIL**, exit 1. Full output: `eq_cert_fb422.log`.
+Mutation evidence: **`MUTATION.md`** (6 broken engines, every protected gate proven to go red).
+
+```
+clang++ -O2 -std=c++17 \
+  -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/eq \
+  eq_cert.cpp -o /tmp/eq_cert && /tmp/eq_cert          # 121 pass, 1 FAIL
+Design/fx4/eq/run_mutations.sh /tmp/eqmut              # 1 baseline + 6 mutants
+```
+
+The one FAIL is real, understood, and **not mine to fix** — see §F below.
+
+### A. `Slant` (was `Tilt`) — the DSP blocker, fixed
+
+`designOnePole(kind 5)` called `designShelf1(f0, −g, +g)`. A one-pole shelf with shoulder gains
+`1/s` and `s` and corner `w0` crosses 0 dB at `w0/s`, **not at `w0`** — so the seesaw's pivot slid
+from 700 Hz down to 2.8 Hz as the knob opened, and everything the crossing swept past reversed
+direction. Reproduced exactly (`EQ_MUT_NO_PIVOT`): 120 Hz falls to **−4.39 dB** at 62.5 % and rises
+to **+8.84 dB** at 100 % — **13.23 dB of wrong-way travel**, matching the integration owner's
+independent probe (−4.75 → +8.55, 13.31 dB) to the grid resolution. At Amount 200 %: **+29.23 dB**
+at 80 Hz.
+
+**Fix:** place the corner by arithmetic in the prewarped domain, `G_corner = G_pivot · 10^(g/20)`,
+so the digital response is `|H|² = (Gp² + s²t²)/(s²Gp² + t²)` with `t = tan(pi f/fs)`. That is
+exactly 1 at `t = Gp` for every gain **and every sample rate**, and `d|H|²/ds` has the sign of
+`t⁴ − Gp⁴`: strictly down below the pivot, strictly up above it, no reversal anywhere.
+
+| | fb420 | fb422 |
+|---|---|---|
+| 80 Hz, Slant 0→100 %, Amount 100 % | +23.95 → **+5.23** (reverses at 62 %) | +17.63 → **−17.62**, monotone |
+| 80 Hz, Amount 200 % | +47.95 → **+29.23** | +18.74 → **−18.72** |
+| worst wrong-way travel | **12.00 dB** | **0.00 dB** |
+| response at the 700 Hz pivot, across the sweep | **45.03 dB** | **0.080 dB** |
+
+**And the gate was rewritten, not just the DSP.** The old row measured `atHz(8 kHz) − atHz(80 Hz)`
+— a **difference**, which is blind to a **common-mode** reversal. It printed
+`span 40.4, worst reversal 0.00` while the bass travelled backwards 13 dB, and it prints exactly
+that again under the mutation. §F3 now sweeps six probe frequencies **each alone**, at two Amounts,
+plus a pivot-stability gate and the two pivot-moving Characters. §F carries the two headline ends
+as separate rows. §K asks R11 **per end** in absolute dB.
+
+### B. R11 for `Slant`, re-derived
+
+The old ceiling gate asked for *"spread ≥ 28 dB AND +44 dB of lift"*. Both halves were wrong:
+`spread` is a difference, and **+44 dB of lift was only reachable because the sliding pivot dragged
+the whole curve upward — the gate was measuring the bug.** A 6 dB/oct seesaw about a fixed pivot
+cannot lift 44 dB at 8 kHz and should never have been asked to: 8 kHz is 3.5 octaves above 700 Hz,
+so ~21 dB is the slope's arithmetic ceiling there.
+
+The R11 question for a tone-tilt is now asked **per end, in absolute dB, against the loudest thing
+the reference world offers** — a Baxandall console tone control tops out at ±12 dB, a Pultec shelf
+at ±16. Each end alone must beat a whole console:
+
+| new R11 metric | Amount 100 % | Amount 200 % |
+|---|---|---|
+| TOP end, at 8 kHz | **+19.70 dB** (bar +15) | **+21.71 dB** |
+| TOP end, at 16 kHz | +23.31 dB | **+31.61 dB** |
+| LOW end, at 80 Hz | **−17.62 dB** (bar −15) | **−18.72 dB** |
+| LOW end, at 30 Hz | −22.24 dB | −30.8 dB |
+| 20 Hz – 20 kHz spread | 46.6 dB | **68.7 dB** (bar 55) |
+
+**Honest limit, stated rather than gated away:** a 6 dB/oct seesaw is slope-limited, so Amount
+200 % buys the *ends* very little (80 Hz: −17.6 → −18.7) and buys the *extremes* a lot
+(16 kHz: +23.3 → +31.6). The pivot is what sets the ends, which is why `Deep Pivot` (150 Hz) and
+`Bright Pivot` (3 kHz) exist — both now gated for a clean pivot in §F3.
+
+### C. The ring gate could not fail. Three faults, all fixed.
+
+1. **the ruler saturated below the bar.** `t60ms()` ran a 1.5 s window and returned `1500.0` when
+   the tail never crossed −60 dB. The bar was `3100`. `1500 < 3100` always.
+2. **the coverage never left Amount's default** — and a boost's pole radius is set by `A·Q`,
+   i.e. by the gain, so the ceiling is exactly where it must be swept.
+3. **the Slant stage was never swept at all**, and the pivot fix pushes its real pole toward `z = 1`
+   at extreme gain (a 0.6 Hz corner is a 1.7 s decay).
+
+Now an 8 s window (2.6× the bar), saturation reported *as* saturation, 252 band settings + 32 Slant
+settings, and a self-check that the ruler can express a failure. Real: longest T60 **2405 ms**
+(fb420's sweep reported 539 ms because it never opened Amount) and **1841 ms** on the Slant's own
+pole. With `limitRing` deleted: **8000 ms, 26 settings never decayed.**
+
+The one-pole family also gained a pole cap (`onePoleGmax`) — `a1 = (G−1)/(G+1)` goes to ±1 as G
+leaves its window, and a real pole at r = 0.99999 is a 15 s decay. Same `rMax` as the biquad cap.
+
+### D. The click gates: what was actually wrong, and one real click found
+
+The old gate could not fail, and the reason is worth writing down because it is not "the bar was
+too loose":
+
+- `setParams` is **per block**, so with *no smoother at all* a 0.8 s sweep still walks the param in
+  128-sample steps of 1/300 of its range;
+- the metric was the second difference of a **256-sample (5.3 ms) frame-level** curve, which cannot
+  see a 128-sample staircase;
+- it was scored as *sweeping minus holding* — an **upper bound** that deleting the smoothing makes
+  SMALLER, because the coefficient glide is what smears each block's step across the frame;
+- and the switch bar was `<= 20 dB` while the gutted build read **18.62 dB**. It graded the
+  MAGNITUDE of an excursion and never asked which way it went.
+
+**The replacement (§J2)** uses the identity that a single sinusoid satisfies
+`y[n] − 2cos(w)y[n−1] + y[n−2] = 0` exactly, and an LTI filter of a sinusoid is still a sinusoid —
+so a settled engine reads zero whatever filter it is running. Normalised by `2 sin(w) · envelope`,
+the residual **is the per-sample fractional change of the wet gain**. Three probe frequencies
+(137 / 953 / 5231 Hz), incommensurate with the 128-sample block so the event lands at a different
+phase of each. **The polarity was also backwards:** fb420 used an instantaneous param jump as a
+*negative control required to FAIL*. An instant jump is host automation and preset recall; absorbing
+it is what the smoothers are FOR, and it is now a gate the engine must PASS.
+
+**§J3** gates the fade-swap's own signature — a switch must DIP (≤ −8 dB) and must not BLAST
+(rise ≤ +2 dB over the settled level on *either* side). Real −23.32 dB; with the dip deleted,
+**−0.07 dB**.
+
+**🚨 This found a real click, the only one in the device.** An instantaneous `Amount` write measured
+**1.63 dB of wet-gain change in ONE sample**. `Amount` multiplies all four band gains — ±60 dB of
+authority, 4× any single gain knob — and it had the **shortest** tau in the table, 10 ms. Fixed to
+20 ms (→ **0.85 dB**), inside the house 10–30 ms rule and now consistent with the span-ordering of
+the rest of the table.
+
+**The diagnosis is the interesting part, and it is why this is a fix and not a fudge:**
+
+| knob | tau 10 ms | 20 ms | 30 ms | reading |
+|---|---|---|---|---|
+| `Amount` (jumped) | **1.63** | **0.85** | **0.57** | scales as 1/tau ⇒ a **smoothing fault** |
+
+| knob | tau 20 ms | 60 ms | 150 ms | reading |
+|---|---|---|---|---|
+| `Trait` (swept) | **7.20** | **7.97** | **7.50** | does not move ⇒ **physics** |
+
+`Trait` is the Q law, 0.25× → 40×. Retuning a Q 40 resonator releases its **stored energy**, and the
+energy is the same however slowly you glide. Lengthening its smoother would be exactly the
+constant-tuning FIXES.md §4 forbids — it buys nothing, and the measurement says so. `Trait` is
+therefore gated on the smoothers' actual job (*a jump must cost no more than a sweep*: **+0.75 dB**)
+and its absolute number is printed, not hidden.
+
+### E. 🔬 The probe was broken twice, and both are now in the file
+
+1. **`toneN` lost 9 bits of phase.** It built the tone as
+   `sin(6.2831853f * hz * (float)i / FS)`. At hz = 5231 and i = 191 000 the product is 6.3e9 where a
+   float ULP is **512** — a phase quantisation of 0.0107 rad, i.e. a **broadband jitter floor around
+   −49 dB that GROWS with i**. A Q 36 16 kHz shelf amplifies that to **half the signal**. The first
+   build of §J2 read **24.6 dB/sample on a HELD knob** and I nearly filed it as an engine
+   instability; a 30 s run with a double-precision tone settles at a constant 0.6425 and decays to
+   TRUE zero in silence. The phase now accumulates in double and wraps. **This affected every
+   tone-based probe in the file.**
+2. **the settle was too short.** The §J probe now fades the tone in over 0.4 s (so resonances are
+   never impulsed) and settles 2.4 s before the first sample is read. The **held control** column is
+   printed on every run and gated at ≤ 0.20 dB/sample (real: 0.084) — that is the proof the ruler is
+   zeroed, and it is identical in every mutated build.
+
+### F. Names — the gate that did not exist, and the red it found
+
+`extract_labels.py` rebuilds `shipped_labels.inc` per RENAMES.md's own post-mortem: the
+capitalisation test now runs on the **stripped** literal (so it sees the fb418 strings `" Motion"`
+and `" Route"`, which the old pattern skipped) and it reads **the two sibling fx4 directories** as
+well as `Source/` and `Design/fx3/`. **3064 strings**, against the dynamics agent's 1762. Both facts
+are self-checked in §O.
+
+The EQ's own 87 labels come from exactly one place, `EQ::label(i)`. **`charNames()` is no longer a
+second hand-typed table** — it is derived from `charSpec().nm`, the row that defines the physics.
+fb420's copy said `Fixed Top` where the physics row said `Iron Top`; that whole failure class is now
+structurally impossible, not gated.
+
+- **21 of 21** EQUALIZER rows of RENAMES.md applied verbatim ✅
+- **0** doubles inside the card ✅
+- **18** collisions with shipped strings; 8 sanctioned by name in RENAMES.md, plus `Tight` and
+  `Silk` which the table resolves in the EQ's favour ✅
+- **10 UNRESOLVED** ❌ — the one FAIL:
+
+| label | slot | collides with |
+|---|---|---|
+| `Stereo` | Focus option | `PluginProcessor.cpp:1570` `{"Mono","Stereo","Ping"}`, phaser knob `Stereo` |
+| `Mid` | Focus option | `PluginProcessor.cpp:4104` `{"Off","Low","Mid","High"}` |
+| `Forward` | British char 2 | `ModalEngine_test.cpp` / `FlowChop_test.cpp` playback direction |
+| `Runaway` | American char 7 | index.html `Linear Fold` character |
+| `Program` | Passive char 0 | index.html reverb `Digital` dropdown label |
+| `Stacked` | Open char 3 | index.html `Diode 1` character |
+| `Peak Hold` | Dynamic char 7 | index.html `Downsample` character |
+| `Razor` | Chisel char 1 | index.html `Hard Clip` + `Shaper` characters |
+| `Telephone` | Chisel char 5 | index.html `Downsample` + `Bitcrush` characters |
+| `Metal` | Chisel char 7 | `PluginProcessor.cpp:3189` wave shape, `ResonatorNode_test.cpp` |
+
+**FIXES.md §2 says "Do not substitute your own" names, so I have not renamed these.** They are the
+same class RENAMES.md already ruled on (`Carve` → `Scoop` is a shipped *Harmonic engine character*),
+so I read them as rows the table's grep did not reach — the ten are all inside `index.html` option
+arrays and `*_test.cpp` name tables. Proposed, for the table owner to ratify or replace (all four
+grepped free against the 3064-string set, `Standard` rejected by it):
+
+`Stereo` → *keep* (M/S routing has no synonym; propose sanctioning the whole
+`Stereo/Mid/Side/Left/Right` group as routing vocabulary) · `Mid` → *keep, same group* ·
+`Forward` → **`Ahead`** · `Runaway` → **`Bolt`** · `Program` → **`Preset A`**  *(`Standard` was my first pick and it is already shipped —
+the extractor caught it, which is the gate doing its job)* · `Stacked` → **`Twin Shelf`** · `Peak Hold` → **`Latch Top`** · `Razor` →
+**`Scalpel`** · `Telephone` → **`Handset`** · `Metal` → **`Tin`**.
+
+### G. What did NOT regress
+
+| | fb420 | fb422 |
+|---|---|---|
+| decramping, 16 kHz Q2 +10 dB @ 44.1 k | 0.828 dB (RBJ 5.645) | **0.828 dB (RBJ 5.645)** |
+| 224 bell settings, mean error | 0.341 dB (RBJ 1.011) | **0.341 dB (RBJ 1.011)** |
+| 224 shelf settings, mean error | 0.492 dB (RBJ 1.491) | **0.492 dB (RBJ 1.491)** |
+| `Reach` alive at 44.1 kHz | 18.6 dB at 15 kHz (RBJ: 0.0000) | **18.6 dB (RBJ: 0.0000)** |
+| viz curve vs measured output | 0.35 dB | **0.35 dB** |
+| cross-type distinctness, worst pair | 4.87 | **4.87** |
+| CPU, worst Type | see §M | unchanged (design math untouched) |
+| null / Amount 0 % / Mix 0 % bit-exactness | exact | **exact** |
+
+---
+---
+
+# (below: the fb420 report, kept for the diff. Its `Tilt` numbers are the ones §A corrects.)
+
 `eq_cert.cpp` → **104 pass, 0 FAIL**, exit 0. Full output: `eq_cert_fb420.log`.
 
 ```
@@ -63,12 +274,12 @@ against an **independently measured white-noise output spectrum** (§C of the ha
 now reads **0.35 dB**. A viz that is computed from the coefficients is not automatically
 trustworthy just because it is computed from the coefficients.
 
-### 2.2 The ±48 dB tilt generated its own noise floor, and the click gate blamed the sweep
+### 2.2 The ±48 dB slant generated its own noise floor, and the click gate blamed the sweep
 
 The 1-pole shelf was designed as `m²(1+K/m)/(1+Km)`. Algebraically correct; numerically lethal.
-A ±48 dB tilt needs a 96 dB shelf, whose `b0` and `b1` then both sit near 5000 and differ by
+A ±48 dB slant needs a 96 dB shelf, whose `b0` and `b1` then both sit near 5000 and differ by
 one part in 20 000 — a `float` direct form loses the entire low end to cancellation. The click
-gate reported a **27.5 dB frame jump on Tilt**, which was not a click at all: it was arithmetic
+gate reported a **27.5 dB frame jump on Slant**, which was not a click at all: it was arithmetic
 noise. Two changes: the shelves are now `gLo·LP + gHi·HP` (both terms bounded by the shelf
 gain, no cancellation), and every biquad state and coefficient is `double`. The same change
 killed a Q 90 limit cycle that was reading as a denormal failure.
@@ -97,8 +308,8 @@ where the analog prototype had one at 37.9 kHz. Result: a **+4.4 dB bump** where
 wanted a **−12.8 dB undershoot notch** — 17.2 dB of error, and with the sign wrong. The honest
 answer is `usableQ()`: taper the shelf Q toward 0.7 as its pole pair leaves the band.
 
-**Consequence, and it is a real behavioural change worth telling Max about:** British `Bump` and
-Surgical `Width` progressively **stop resonating the AIR band** as `Reach` climbs past ~0.35·fs.
+**Consequence, and it is a real behavioural change worth telling Max about:** British `Slope` and
+Surgical `Pinch` progressively **stop resonating the AIR band** as `Reach` climbs past ~0.35·fs.
 They still resonate LOW, whose pole is always in band. This is not a limitation of the
 implementation; a minimum-phase digital filter cannot carry a pole above Nyquist. It is
 documented in the header, in ROSTER.md, and the harness measures against the tapered prototype
@@ -115,8 +326,8 @@ so the gate cannot congratulate itself.
 | §3.3 "hybrid law: SVF below 5 kHz, matched biquad above, fade-swap between realizations" | Two realizations means a crossfade, two state sets and a class of bugs at the boundary | **One realization everywhere** (TDF2 biquad, double), with RBJ→matched *coefficient* blending across fs/48…fs/24. Measured seam as f0 sweeps 300 Hz–14 kHz: **0.302 dB** between designs 0.4 % of an octave apart |
 | §3.5 "poles stay inside r ≤ 0.9995" | A peaking **boost**'s pole Q is **A·Q**, not Q. At +28 dB and Q 90 that is Q_p = 451 and a **1.80 s** ring; at the +72 dB ceiling on a 20 Hz band it is Q_p = 5670 and a **ten minute** T60 | A `kMaxRingSec = 3.0` **pole-radius cap**, sample-rate aware. "Nothing free-runs" became a number. Longest ring measured anywhere: **539 ms** |
 | §2.2·6 "release is squared on the way down" | Not implemented | Plain asymmetric one-pole (attack `max(2 ms, 2/fc)`, release 8×). Honest omission; the eight Dynamic Characters already separate on the trajectory (closest pair 1.22) and a squared release would be a refinement, not a fix |
-| §5.1 "Tilt ±12 dB" | Too polite for R11 | **±24 dB**, ×Amount = ±48 |
-| §2.1 "seven Types, ±18 dB, Sculpt ×1.67" | — | **±30 dB on every band**, per contract R11. The Type-specific gain scaling became a *law* (British softener, Open tanh knee, Passive deeper atten, Sculpt notch morph) rather than a multiplier |
+| §5.1 "Slant ±12 dB" | Too polite for R11 | **±24 dB**, ×Amount = ±48 |
+| §2.1 "seven Types, ±18 dB, Chisel ×1.67" | — | **±30 dB on every band**, per contract R11. The Type-specific gain scaling became a *law* (British softener, Open tanh knee, Passive deeper atten, Chisel notch morph) rather than a multiplier |
 
 ---
 
@@ -149,7 +360,7 @@ so the gate cannot congratulate itself.
 
 ## 5. THE ONE MEASURED PLATEAU, STATED PLAINLY
 
-`Dynamic` → `Sense` sweeps a **threshold**, and against a fixed-level probe a threshold
+`Dynamic` → `Pivot` sweeps a **threshold**, and against a fixed-level probe a threshold
 necessarily saturates at both ends:
 
 ```
@@ -173,7 +384,7 @@ to what a threshold is, and I am flagging it rather than dressing it up.
    −90 dB hole. Both are snapped now: **−90.0 dB**.
 3. **A single global click control is the wrong experiment.** With the Low shelf at +18 dB the
    output is LF-dominated, a 256-sample frame holds half a cycle of 90 Hz, and the frame level
-   bounces ±4 dB with *nothing moving*. The gate reported an 11.03 dB "click" on Tilt at
+   bounces ±4 dB with *nothing moving*. The gate reported an 11.03 dB "click" on Slant at
    t = 0.251 s — a quarter second **before the sweep started**. Every param is now compared
    against **itself held at the same extreme**. Worst excess across all 12 continuous params:
    **−0.00 dB**. Moving costs nothing over holding.

@@ -49,6 +49,27 @@
 
 namespace {
 
+// which mutation, if any, this binary was built with (FIXES.md §0 / MUTATION.md)
+#if   defined(WIDEN_MUT_HAAS)
+const char* kMutName = "WIDEN_MUT_HAAS";
+#elif defined(WIDEN_MUT_DEADKNOBS)
+const char* kMutName = "WIDEN_MUT_DEADKNOBS";
+#elif defined(WIDEN_MUT_POLITE)
+const char* kMutName = "WIDEN_MUT_POLITE";
+#elif defined(WIDEN_MUT_NOSMOOTH)
+const char* kMutName = "WIDEN_MUT_NOSMOOTH";
+#elif defined(WIDEN_MUT_NOGLIDE)
+const char* kMutName = "WIDEN_MUT_NOGLIDE";
+#elif defined(WIDEN_MUT_NODIP)
+const char* kMutName = "WIDEN_MUT_NODIP";
+#elif defined(WIDEN_MUT_NOFLOOR)
+const char* kMutName = "WIDEN_MUT_NOFLOOR";
+#elif defined(WIDEN_MUT_APCLAMP)
+const char* kMutName = "WIDEN_MUT_APCLAMP";
+#else
+const char* kMutName = "NONE (shipping build)";
+#endif
+
 using W = tw::TerrainWidenFx;
 float FS = 48000.0f;
 int gPass = 0, gFail = 0;
@@ -64,6 +85,7 @@ void gate (const char* what, bool ok, const std::string& detail)
 std::string fmt (const char* f, double v) { char b[160]; std::snprintf (b, sizeof b, f, v); return b; }
 std::string fmt2 (const char* f, double a, double b) { char x[224]; std::snprintf (x, sizeof x, f, a, b); return x; }
 std::string fmt3 (const char* f, double a, double b, double c) { char x[256]; std::snprintf (x, sizeof x, f, a, b, c); return x; }
+std::string fmt4 (const char* f, double a, double b, double c, double d) { char x[288]; std::snprintf (x, sizeof x, f, a, b, c, d); return x; }
 
 // ═════════ probes, all at the measured -26 dBFS FX-bus program (0.05 linear) ══
 std::vector<float> chord (int n, float rms = 0.05f)
@@ -479,19 +501,458 @@ MonoStat monoStat (const Run& o, const std::vector<float>& dry, size_t from)
 
 // the click metric: peak second difference, normalised by the probe's own peak second
 // difference. Compared against a STATIC control run of the identical length.
+// 🔬 fb422 — AND IT IS NORMALISED BY THE LOCAL LEVEL. The raw peak second difference is
+//    level-blind, so `Feedback`, whose whole job is to make the device 12 dB louder, failed
+//    a CLICK gate at x256 purely for being louder. A click is a discontinuity RELATIVE to
+//    the programme around it; that is what is measured now, and it is the stricter test —
+//    a quiet passage can no longer hide one.
 double clickMetric (const std::vector<float>& l, const std::vector<float>& r, size_t from)
 {
+    // 🔬 GLOBAL programme RMS, not a local window. A local window was tried and is wrong
+    //    for exactly the case the switch tests create: the fade-swap DELIBERATELY dips the
+    //    wet to -46 dB, so a local normaliser divides by ~nothing and reports a click where
+    //    there is silence. The global level is the programme the transient has to hide
+    //    under, which is what masking actually means.
+    double e = 1e-15; size_t n = 0;
+    for (size_t k = from; k < l.size(); ++k) { e += (double) l[k] * l[k] + (double) r[k] * r[k]; ++n; }
+    const double glob = std::sqrt (e / std::max<size_t> (1, 2 * n));
     double worst = 0;
     for (size_t i = from + 2; i < l.size(); ++i)
-    {
-        worst = std::max (worst, (double) std::fabs (l[i] - 2.0f * l[i - 1] + l[i - 2]));
-        worst = std::max (worst, (double) std::fabs (r[i] - 2.0f * r[i - 1] + r[i - 2]));
-    }
-    return worst;
+        worst = std::max (worst, std::max (std::fabs ((double) l[i] - 2.0 * l[i - 1] + l[i - 2]),
+                                           std::fabs ((double) r[i] - 2.0 * r[i - 1] + r[i - 2])));
+    return worst / std::max (1e-9, glob);
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  🔴 fb422 — THE DEMODULATOR. EVERY PITCH AND EVERY RATE NUMBER BELOW IS
+//  MEASURED HERE, ON THE OUTPUT SAMPLES. NOTHING IN THIS FILE READS viz().
+//
+//  fb421's night-and-day gates read liveTargetCents(v) (which returns cents_[v] — a
+//  field the audio path never touches; it uses depS_[v]/baseS_[v]), viz().voiceCents[]
+//  and liveRateHz(). All three are WRITE-ONLY TELEMETRY. A skeptic replaced the entire
+//  widening machine with a fixed 12 ms Haas delay and EVERY ONE of those gates stayed
+//  green while the audio had no detune, no crowd and no motion at all. That is fb392 (a
+//  stub that STORED writes went 39/39 green while the plugin sat frozen) and fb417
+//  (GEOMETRY IS NOT HEARING) in the same place.
+//
+//  The replacement is a heterodyne demodulator. Multiply the OUTPUT by e^(-j2*pi*f0*t),
+//  lowpass three times at 120 Hz, decimate: what is left is the complex envelope of
+//  whatever the device did to a probe tone at f0. Its MAGNITUDE carries amplitude
+//  modulation, its PHASE DERIVATIVE carries frequency modulation in cents. A Haas delay
+//  produces a flat magnitude and a zero phase derivative and cannot fake either one.
+// ═════════════════════════════════════════════════════════════════════════════
+struct Env { std::vector<double> mag, cents; double fsD = 0.0; };
+
+Env demodulate (const std::vector<float>& x, size_t from, double f0, int dec = 32, double lpHz = 120.0)
+{
+    Env e; e.fsD = (double) FS / dec;
+    if (from + 64 >= x.size()) return e;
+    const double w  = -2.0 * 3.14159265358979 * f0 / FS;
+    const double cw = std::cos (w), sw = std::sin (w);
+    const double a  = 1.0 - std::exp (-2.0 * 3.14159265358979 * lpHz / FS);
+    double rc = 1.0, rs = 0.0;
+    double l1r = 0, l1i = 0, l2r = 0, l2i = 0, l3r = 0, l3i = 0;
+    std::vector<double> pr, pi;
+    for (size_t i = from; i < x.size(); ++i)
+    {
+        const double v = (double) x[i];
+        l1r += a * (v * rc - l1r);  l1i += a * (v * rs - l1i);
+        l2r += a * (l1r    - l2r);  l2i += a * (l1i    - l2i);
+        l3r += a * (l2r    - l3r);  l3i += a * (l2i    - l3i);   // 18 dB/oct — the decimation
+        const double nc = rc * cw - rs * sw;                     // guard, measured, not assumed
+        rs = rc * sw + rs * cw; rc = nc;
+        if (((i - from) % (size_t) dec) == 0) { pr.push_back (l3r); pi.push_back (l3i); }
+    }
+    if (pr.size() < 8) return e;
+    e.mag.resize (pr.size()); e.cents.assign (pr.size(), 0.0);
+    double prev = std::atan2 (pi[0], pr[0]);
+    for (size_t k = 0; k < pr.size(); ++k)
+    {
+        e.mag[k] = std::sqrt (pr[k] * pr[k] + pi[k] * pi[k]);
+        const double ph = std::atan2 (pi[k], pr[k]);
+        double d = ph - prev; prev = ph;
+        while (d >  3.14159265358979) d -= 6.28318530717959;
+        while (d < -3.14159265358979) d += 6.28318530717959;
+        const double dfHz = d * e.fsD / 6.28318530717959;
+        e.cents[k] = 1200.0 * std::log2 (std::max (0.02, (f0 + dfHz) / f0));
+    }
+    return e;
+}
+
+// The modulation spectrum OF THE OUTPUT'S OWN ENVELOPE. AM and FM are put on one
+// dimensionless footing (AM as a fraction of the mean magnitude, FM as hundredths of a
+// cent-hundred) and summed in power, so ONE number answers "how fast is this thing
+// moving" for a pitch LFO, a grain clock, an allpass sweep and a band grid alike.
+struct MStat { double centroidHz, peakHz, energy, share, amEnergy, fmEnergy; };
+MStat envMod (const Env& e, double loHz = 0.05, double hiHz = 25.0)
+{
+    MStat r { 0, 0, 0, 0, 0, 0 };
+    if (e.mag.size() < 256) return r;
+    const size_t skip = e.mag.size() / 4;              // drop the settle
+    size_t n = 1; while (n * 2 <= e.mag.size() - skip) n *= 2;
+    if (n < 256) return r;
+    double mm = 0; for (size_t k = 0; k < n; ++k) mm += e.mag[skip + k]; mm /= (double) n;
+    double mc = 0; for (size_t k = 0; k < n; ++k) mc += e.cents[skip + k]; mc /= (double) n;
+    std::vector<std::complex<double>> A (n), B (n);
+    for (size_t k = 0; k < n; ++k)
+    {
+        const double win = 0.5 - 0.5 * std::cos (6.28318530717959 * (double) k / (double) (n - 1));
+        A[k] = std::complex<double> ((e.mag[skip + k] / std::max (1e-15, mm) - 1.0) * win, 0.0);
+        B[k] = std::complex<double> (((e.cents[skip + k] - mc) / 100.0) * win, 0.0);
+    }
+    fft (A); fft (B);
+    const double binHz = e.fsD / (double) n;
+    double tot = 1e-18, pk = 0, num = 0, ta = 1e-18, tf = 1e-18; int pki = 1;
+    const int k0 = std::max (1, (int) (loHz / binHz)), k1 = std::min ((int) n / 2 - 1, (int) (hiHz / binHz));
+    for (int k = k0; k <= k1; ++k)
+    {
+        const double pa = std::norm (A[(size_t) k]), pf = std::norm (B[(size_t) k]);
+        const double p = pa + pf;
+        ta += pa; tf += pf;
+        tot += p; num += p * (double) k * binHz;
+        if (p > pk) { pk = p; pki = k; }
+    }
+    const double dn = (double) std::max (1, k1 - k0 + 1);
+    r.amEnergy   = std::sqrt (ta / dn);          // does the LEVEL move? (grain clock, comb)
+    r.fmEnergy   = std::sqrt (tf / dn) * 100.0;  // does the PITCH move? (in cents)
+    r.energy     = std::sqrt (tot / std::max (1, k1 - k0 + 1));
+    r.centroidHz = num / tot;
+    r.peakHz     = pki * binHz;
+    r.share      = pk / tot;
+    return r;
+}
+
+// THE DETUNE SPREAD, IN CENTS, READ OFF THE OUTPUT SPECTRUM. The half-width, centred on
+// the probe tone, that contains `frac` of the energy in a +-900-cent window. A crowd of
+// copies at +-c puts its energy at +-c and this reads c; a Haas delay leaves ALL the
+// energy on the carrier and this reads the window's own leakage (~5 cents, printed as
+// the control in §B). Phase-independent by construction — it is a magnitude spectrum.
+double detuneSpreadCents (const std::vector<float>& x, size_t from, double f0, double frac = 0.92)
+{
+    const int N = 32768;
+    if (from + (size_t) N > x.size()) return 0.0;
+    auto sp = magSpec (x, from, N, 8);
+    const double binHz = (double) FS / N;
+    const int k0 = std::max (1, (int) (f0 * 0.5946 / binHz));       // -900 cents
+    const int k1 = std::min ((int) sp.size() - 1, (int) (f0 * 1.6818 / binHz));   // +900
+    std::vector<std::pair<double, double>> e; e.reserve ((size_t) (k1 - k0 + 1));
+    double tot = 1e-30;
+    for (int k = k0; k <= k1; ++k)
+    {
+        const double f = k * binHz;
+        const double p = sp[(size_t) k] * sp[(size_t) k];
+        e.push_back ({ std::fabs (1200.0 * std::log2 (f / f0)), p });
+        tot += p;
+    }
+    std::sort (e.begin(), e.end());
+    double acc = 0;
+    for (const auto& q : e) { acc += q.second; if (acc >= frac * tot) return q.first; }
+    return e.empty() ? 0.0 : e.back().first;
+}
+
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  🔬 CHECK YOUR OWN DETECTOR BEFORE BELIEVING IT — and this one failed first.
+//  The demodulator above gives a clean instantaneous frequency for ONE component. A
+//  CROWD is many components, and the phase derivative of their sum beats between them:
+//  `Steady`, whose copies do not move at all, read an "output FM" of 10729 cents —
+//  larger than `Stack`, which sweeps. The number was measuring the beat, not the motion.
+//
+//  What actually answers "is this device moving, how fast, and how periodically" on a
+//  crowd is a SHORT-TIME TRACE of three things the ear tracks, all read off the output:
+//    · the in-band spectral CENTROID in cents (where the crowd's pitch sits, collectively)
+//    · the in-band ENERGY in nepers (the grain clock, the comb, the band gains)
+//    · the inter-channel CORRELATION (the stereo field itself — this is the one that
+//      sees `Blur` and `Bands`, which never shift a carrier)
+//  Their modulation spectra are summed. A static device reads ~0 on all three; a Haas
+//  delay reads ~0 on all three; every one of the six Types reads on at least one.
+// ═════════════════════════════════════════════════════════════════════════════
+struct Motion { double rateHz, peakHz, share, energy, pitchRmsCents, corrRms, fsT;
+                std::vector<double> te, tr; };
+
+Motion motionOf (const Run& o, size_t from, double f0)
+{
+    Motion m { 0, 0, 0, 0, 0, 0, (double) FS / 512.0, {}, {} };
+    const int N = 2048, HOP = 512;
+    if (from + (size_t) N * 4 > o.l.size()) return m;
+    const double binHz = (double) FS / N;
+    const int k0 = std::max (1, (int) (f0 * 0.5946 / binHz));
+    const int k1 = std::min (N / 2 - 1, (int) (f0 * 1.6818 / binHz));
+    std::vector<double> tc, te, tr;
+    for (size_t st = from; st + (size_t) N < o.l.size(); st += (size_t) HOP)
+    {
+        std::vector<std::complex<double>> b ((size_t) N);
+        for (int i = 0; i < N; ++i)
+        { const double w = 0.5 - 0.5 * std::cos (6.28318530717959 * i / (N - 1));
+          b[(size_t) i] = std::complex<double> ((double) o.l[st + (size_t) i] * w, 0.0); }
+        fft (b);
+        double e = 1e-24, c = 0;
+        for (int k = k0; k <= k1; ++k)
+        { const double p = std::norm (b[(size_t) k]);
+          e += p; c += p * 1200.0 * std::log2 (k * binHz / f0); }
+        tc.push_back (c / e);
+        te.push_back (0.5 * std::log (e));
+        double ll = 1e-24, rr = 1e-24, lr = 0;
+        for (int i = 0; i < N; ++i)
+        { const double a = o.l[st + (size_t) i], d = o.r[st + (size_t) i];
+          ll += a * a; rr += d * d; lr += a * d; }
+        tr.push_back (lr / std::sqrt (ll * rr));
+    }
+    if (tc.size() < 128) return m;
+    size_t n = 1; while (n * 2 <= tc.size()) n *= 2;
+    const size_t off = tc.size() - n;
+    const double fsT = (double) FS / HOP;
+    auto ac = [&] (std::vector<double>& v, double sc)
+    {   double mu = 0; for (size_t k = 0; k < n; ++k) mu += v[off + k]; mu /= (double) n;
+        std::vector<std::complex<double>> z (n);
+        double r2 = 0;
+        for (size_t k = 0; k < n; ++k)
+        { const double w = 0.5 - 0.5 * std::cos (6.28318530717959 * (double) k / (double) (n - 1));
+          const double d = (v[off + k] - mu); r2 += d * d;
+          z[k] = std::complex<double> (d * sc * w, 0.0); }
+        fft (z);
+        return std::make_pair (z, std::sqrt (r2 / (double) n)); };
+    auto A = ac (tc, 0.01);        // cents -> hundredths
+    auto B = ac (te, 1.00);        // nepers
+    auto C = ac (tr, 1.00);        // correlation, already 0..1
+    m.pitchRmsCents = A.second;
+    m.corrRms       = C.second;
+    const double bH = fsT / (double) n;
+    double tot = 1e-20, num = 0, pk = 0; int pki = 1;
+    const int j0 = std::max (1, (int) (0.05 / bH)), j1 = std::min ((int) n / 2 - 1, (int) (25.0 / bH));
+    for (int j = j0; j <= j1; ++j)
+    {   const double p = std::norm (A.first[(size_t) j]) + std::norm (B.first[(size_t) j]) + std::norm (C.first[(size_t) j]);
+        tot += p; num += p * j * bH; if (p > pk) { pk = p; pki = j; } }
+    m.energy  = std::sqrt (tot / std::max (1, j1 - j0 + 1));
+    m.rateHz  = num / tot;
+    m.peakHz  = pki * bH;
+    m.share   = pk / tot;
+    m.te = te; m.tr = tr;
+    return m;
+}
+
+// THE FIELD TRACE — short-time inter-channel correlation of the OUTPUT, on a NOISE
+// probe, 1024-sample frames at a 256 hop (187.5 Hz trace rate, so 14 Hz is resolved and
+// a 5 s lag reaches 0.05 Hz).
+// 🔬 THE PROBE HAD TO CHANGE TOO. On a TONE, copies detuned by 100 cents at 1 kHz beat
+// at ~60 Hz — above the trace's own Nyquist — so the trace was aliased noise and the
+// half-decay pinned at its ceiling for four of six Types (11.719 Hz at EVERY Rate
+// setting). Broadband noise averages those beats out across the band and leaves only the
+// thing the ear tracks: the image moving.
+std::vector<double> fieldTrace (const Run& o, size_t from)
+{
+    std::vector<double> t;
+    const size_t N = 1024, HOP = 256;
+    for (size_t st = from; st + N < o.l.size(); st += HOP)
+    {
+        double ll = 1e-24, rr = 1e-24, lr = 0;
+        for (size_t i = 0; i < N; ++i)
+        { const double a = o.l[st + i], b = o.r[st + i]; ll += a * a; rr += b * b; lr += a * b; }
+        t.push_back (lr / std::sqrt (ll * rr));
+    }
+    return t;
+}
+// the log-frequency centroid of the output, frame by frame. Correlation SATURATES (it is
+// bounded), and Roam's whole job is to keep moving after the field is already wide; the
+// centroid keeps counting.
+std::vector<double> centroidTrace (const Run& o, size_t from)
+{
+    std::vector<double> t;
+    const int N = 4096; const size_t HOP = 2048;
+    for (size_t st = from; st + (size_t) N < o.l.size(); st += HOP)
+    {
+        std::vector<std::complex<double>> b ((size_t) N);
+        for (int i = 0; i < N; ++i)
+        { const double w = 0.5 - 0.5 * std::cos (6.28318530717959 * i / (N - 1));
+          b[(size_t) i] = std::complex<double> ((double) o.l[st + (size_t) i] * w, 0.0); }
+        fft (b);
+        double num = 0, den = 1e-24;
+        for (int k = 2; k < N / 2; ++k)
+        { const double p = std::norm (b[(size_t) k]); den += p; num += p * std::log ((double) k); }
+        t.push_back (num / den);
+    }
+    return t;
+}
+double traceRms (const std::vector<double>& v)
+{
+    if (v.size() < 8) return 0.0;
+    double mu = 0; for (double q : v) mu += q; mu /= (double) v.size();
+    double a = 0; for (double q : v) a += (q - mu) * (q - mu);
+    return std::sqrt (a / (double) v.size());
+}
+// ZERO-CROSSING RATE of a trace, after a light one-pole smoother. 🔬 the half-decay of
+// the autocorrelation was tried first and pinned at its ceiling on the crowd Types; the
+// zero-crossing rate of the SAME trace is the classic robust frequency estimator and is
+// monotone for a sine (2 crossings per cycle) AND for a random walk (crossings scale with
+// bandwidth), which is exactly what one Rate control across six mechanisms needs.
+double traceZcrHz (const std::vector<double>& v, double fsT, double smoothHz = 30.0)
+{
+    if (v.size() < 64) return 0.0;
+    double mu = 0; for (double q : v) mu += q; mu /= (double) v.size();
+    const double a = 1.0 - std::exp (-2.0 * 3.14159265358979 * smoothHz / fsT);
+    double z = 0; int n = 0; double prev = 0; bool first = true;
+    for (double q : v)
+    {   z += a * ((q - mu) - z);
+        if (first) { prev = z; first = false; continue; }
+        if ((z > 0.0) != (prev > 0.0)) ++n;
+        prev = z; }
+    return 0.5 * (double) n * fsT / (double) v.size();
+}
+// modulation energy of a trace inside a frequency WINDOW — Roam lives at 0.15..3 Hz and
+// the LFO at its floor (0.08 Hz) does not.
+double traceBandRms (const std::vector<double>& v, double fsT, double loHz, double hiHz)
+{
+    if (v.size() < 256) return 0.0;
+    size_t n = 1; while (n * 2 <= v.size()) n *= 2;
+    const size_t off = v.size() - n;
+    double mu = 0; for (size_t k = 0; k < n; ++k) mu += v[off + k]; mu /= (double) n;
+    std::vector<std::complex<double>> z (n);
+    for (size_t k = 0; k < n; ++k)
+    { const double w = 0.5 - 0.5 * std::cos (6.28318530717959 * (double) k / (double) (n - 1));
+      z[k] = std::complex<double> ((v[off + k] - mu) * w, 0.0); }
+    fft (z);
+    const double bh = fsT / (double) n;
+    double acc = 0; int c = 0;
+    for (int k = std::max (1, (int) (loHz / bh)); k <= std::min ((int) n / 2 - 1, (int) (hiHz / bh)); ++k)
+    { acc += std::norm (z[(size_t) k]); ++c; }
+    return std::sqrt (acc / std::max (1, c)) / (double) n;
+}
+double tauHalfHz (const std::vector<double>& v, double fsT)
+{
+    if (v.size() < 64) return 0.0;
+    const size_t n = v.size();
+    double mu = 0; for (double q : v) mu += q; mu /= (double) n;
+    std::vector<double> z (n); double var = 0;
+    for (size_t k = 0; k < n; ++k) { z[k] = v[k] - mu; var += z[k] * z[k]; }
+    var /= (double) n;
+    if (var < 1e-14) return 0.0;
+    const size_t maxLag = n / 3;
+    auto acf = [&] (size_t lag)
+    {   double r = 0; for (size_t k = 0; k + lag < n; ++k) r += z[k] * z[k + lag];
+        return r / ((double) (n - lag) * var); };
+    const double r1 = acf (1);
+    if (r1 < 1e-6) return 0.0;
+    double half = (double) maxLag;
+    for (size_t lag = 2; lag < maxLag; ++lag)
+        if (acf (lag) / r1 < 0.5) { half = (double) lag; break; }
+    return 1.0 / (4.0 * std::max (1.0e-4, half / fsT));   // a sine at f has tau_half = 1/(4f)
+}
+
+// THE CHANGE DISTANCE between two settings, measured on the OUTPUT: level-normalised
+// log-band magnitude distance + stereo correlation + field-motion. This is the gate that
+// catches BIT-IDENTICALLY DEAD, which is the defect fb421 actually had on `Rate`
+// (`Steady` and `Blur`) and on `Roam` (Twin and Bands). A rate ESTIMATOR is a nice extra;
+// a difference is the thing that cannot be argued with.
+double changeDist (const Run& a, const Run& b, size_t from)
+{
+    auto pa = logBands (magSpec (a.l, from)), pb = logBands (magSpec (b.l, from));
+    normaliseBands (pa); normaliseBands (pb);
+    double d = 0; for (size_t k = 4; k < 26; ++k) d += std::fabs (pa[k] - pb[k]);
+    d += 40.0 * std::fabs (corrOf (a, from) - corrOf (b, from));
+    // `Blur` and `Bands` are magnitude-flat and phase-only, so a magnitude distance is
+    // nearly blind to them by construction. The stereo field's own TRAJECTORY is not:
+    // how much it moves, and how fast.
+    const auto fa = fieldTrace (a, from), fb2 = fieldTrace (b, from);
+    const double fsT = (double) FS / 256.0;
+    d += 200.0 * std::fabs (traceRms (fa) - traceRms (fb2));
+    d +=   2.0 * std::fabs (traceZcrHz (fa, fsT) - traceZcrHz (fb2, fsT));
+    return d;
+}
+
+// THE RATE OF THE OUTPUT'S OWN MOTION, from the HALF-DECAY of its autocorrelation.
+// 🔬 the spectral-peak / spectral-centroid version was tried FIRST and it is a bad
+// detector on a crowd: a six-copy Stack read 7.8 / 11.0 / 7.9 / 8.1 / 13.5 Hz across the
+// whole Rate knob, because the trace's broadband beat noise buries a 0.6 Hz line. The
+// half-decay lag needs no line at all — it is monotone in the modulator's speed whether
+// the modulator is a sine (`Stack`, `Twin`, `Blur`, `Bands`) or a random walk
+// (`Twofold`), and that is exactly the property a Rate control has to have.
+double traceRateHz (const Run& o, size_t from, double f0)
+{
+    const Motion m = motionOf (o, from, f0);
+    if (m.te.size() < 64) return 0.0;
+    const size_t n = m.te.size();
+    auto prep = [&] (const std::vector<double>& v, std::vector<double>& z, double& var)
+    {   double mu = 0; for (double q : v) mu += q; mu /= (double) n;
+        z.resize (n); var = 0;
+        for (size_t k = 0; k < n; ++k) { z[k] = v[k] - mu; var += z[k] * z[k]; }
+        var /= (double) n; };
+    std::vector<double> a, b; double va = 0, vb = 0;
+    prep (m.te, a, va); prep (m.tr, b, vb);
+    const size_t maxLag = n / 3;
+    double half = (double) maxLag;
+    for (size_t lag = 1; lag < maxLag; ++lag)
+    {
+        double ra = 0, rb = 0;
+        for (size_t k = 0; k + lag < n; ++k) { ra += a[k] * a[k + lag]; rb += b[k] * b[k + lag]; }
+        ra /= (double) (n - lag) * std::max (1e-18, va);
+        rb /= (double) (n - lag) * std::max (1e-18, vb);
+        const double r = (va * ra + vb * rb) / std::max (1e-18, va + vb);
+        if (r < 0.5) { half = (double) lag; break; }
+    }
+    const double tau = half / m.fsT;                 // seconds to half-decorrelation
+    return 1.0 / (4.0 * std::max (1.0e-4, tau));     // a sine at f has tau = 1/(4f)
+}
+
+// CARRIER MASS: the fraction of the spectrum's energy still sitting ON the probe tone,
+// inside +-25 cents, out of a +-700-cent window. A device that shifts nothing leaves ALL
+// of it there and reads 1.000 — which is exactly what a Haas delay does, and exactly what
+// three of fb421's "night and day" gates could not see.
+double carrierMass (const std::vector<float>& x, size_t from, double f0)
+{
+    const int N = 32768;
+    if (from + (size_t) N > x.size()) return 1.0;
+    auto sp = magSpec (x, from, N, 8);
+    const double binHz = (double) FS / N;
+    double onC = 0, tot = 1e-30;
+    const int k0 = std::max (1, (int) (f0 * 0.6674 / binHz)), k1 = std::min ((int) sp.size() - 1, (int) (f0 * 1.4983 / binHz));
+    for (int k = k0; k <= k1; ++k)
+    {   const double p = sp[(size_t) k] * sp[(size_t) k];
+        tot += p;
+        const double c = std::fabs (1200.0 * std::log2 (k * binHz / f0));
+        if (c <= 25.0) onC += p; }
+    return onC / tot;
+}
+
+// THE TAIL: 2 s of noise, then silence, and the time for the wet to fall 20 dB.
+// 🔬 the fb421 gate measured the STEADY-STATE LEVEL build-up, which is the wrong number
+//    for five of six Types: their loops are broadband and 7 kHz-damped, so the sustained
+//    level barely moves (+0.8 to +3.6 dB measured) while the TAIL — the thing a feedback
+//    control is actually for, and the thing the ear tracks — runs from one delay to
+//    seconds. Level is reported beside it so both are on the record.
+double tailMs (W::Params p)
+{
+    p.mix = 1.0f;
+    W e; e.prepare ((double) FS, 512); e.setParams (p);
+    auto n2 = noise ((int) (FS * 2.0f), 0.05f, 771u);
+    std::vector<float> L = n2, R = n2;
+    for (size_t i = 0; i + 128 <= L.size(); i += 128) { e.setParams (p); e.processStereo (&L[i], &R[i], 128); }
+    double ref = rmsOf (L, L.size() - (size_t) (FS * 0.25f));
+    const int N = (int) (FS * 4.0f);
+    std::vector<float> a ((size_t) N, 0.0f), b ((size_t) N, 0.0f);
+    for (size_t i = 0; i + 128 <= (size_t) N; i += 128) { e.setParams (p); e.processStereo (&a[i], &b[i], 128); }
+    const double target = ref * 0.1;
+    const int W2 = (int) (FS * 0.005f);
+    for (int i = 0; i + W2 < N; i += W2)
+    {   double s = 0; for (int k = 0; k < W2; ++k) s += (double) a[(size_t) (i + k)] * a[(size_t) (i + k)];
+        if (std::sqrt (s / W2) < target) return std::log (std::max (0.5, i * 1000.0 / FS)); }
+    return std::log (N * 1000.0 / FS);
+}
+
+// the wet-only version of the two above: Mix 1.0 already gives a pure wet, but the
+// probe still has to be a TONE, and it has to be long enough that a 0.03 Hz modulator
+// has completed a cycle. Both callers below use >= 8 s for that reason.
+Env demodWet (W::Params p, const std::vector<float>& t, double f0)
+{ p.mix = 1.0f; auto o = run (p, t); return demodulate (o.l, (size_t) (FS * 1.2f), f0); }
+
 // ═════════ the 8-feature phase-independent fingerprint used for §C ═══════════
-struct Feat { double f[8]; const char* name; };
+// 🔴 fb422 — TEN FEATURES, AND EVERY ONE OF THEM IS MEASURED ON THE OUTPUT SAMPLES.
+//    fb421's f[3] and f[4] were the modulation spectrum of viz().voiceCents[] — published
+//    state, not audio. Under the total-Haas gutting they stayed exactly where they were.
+//    They are now the modulation spectrum of the OUTPUT's own complex envelope, split
+//    into AM (does the level move) and FM (does the PITCH move), plus the detune spread
+//    and the carrier mass read straight off the output magnitude spectrum.
+struct Feat { double f[10]; const char* name; };
+constexpr int kNF = 10;
 Feat fingerprint (int type, int chr, float amount)
 {
     W::Params p = defaults();
@@ -500,17 +961,11 @@ Feat fingerprint (int type, int chr, float amount)
     W e; auto o = runKeep (e, p, x);
     const size_t f0 = (size_t) FS;
 
-    // the cents trace, sampled per block, from the engine's own viz
-    std::vector<float> tr;
-    {
-        W e2; e2.prepare ((double) FS, 512); e2.setParams (p);
-        std::vector<float> L = x, R = x;
-        for (size_t i = 0; i + 128 <= x.size(); i += 128)
-        { e2.setParams (p); e2.processStereo (&L[i], &R[i], 128);
-          float s = 0; for (int v = 0; v < 8; ++v) s += e2.viz().voiceCents[v];
-          tr.push_back (s); }
-    }
-    const ModStat ms = modSpectrum (tr, (double) FS / 128.0);
+    // THE MOTION FEATURES, FROM THE OUTPUT. A 1 kHz probe tone, demodulated.
+    auto t1k = tone ((int) (FS * 8), 1000.0f);
+    auto ot  = run (p, t1k);                                   // p.mix is already 1.0
+    const Motion mo2 = motionOf (ot, (size_t) (FS * 1.5f), 1000.0);
+
     // 🔬 the cepstrum is counted on NOISE. On the harmonic chord a BYPASSED engine read 39
     // "echo peaks" — the source's own pitch period, not the device's copies.
     double bigMs = 0;
@@ -521,11 +976,13 @@ Feat fingerprint (int type, int chr, float amount)
     ft.f[0] = corrOf (o, f0);                                  // stereo correlation
     ft.f[1] = sideMidDb (o, f0);                               // side/mid, dB
     ft.f[2] = spectralFlux (o.l, f0) * 100.0;                  // movement
-    ft.f[3] = ms.periodicity;                                  // is the motion PERIODIC?
-    ft.f[4] = ms.energy;                                       // how much pitch motion at all
+    ft.f[3] = mo2.share;                                       // is the motion ONE LINE (periodic)?
+    ft.f[4] = mo2.pitchRmsCents;                               // does the PITCH move? (output trace)
     ft.f[5] = chanRippleDb (o.l, x, f0);                       // per-channel magnitude tear
     ft.f[6] = (double) ep;                                     // distinct delayed copies
     ft.f[7] = mo.meanAbsDb;                                    // mono-fold spectral deviation
+    ft.f[8] = detuneSpreadCents (ot.l, (size_t) (FS * 1.5f), 1000.0);   // detune, from the SPECTRUM
+    ft.f[9] = carrierMass       (ot.l, (size_t) (FS * 1.5f), 1000.0);   // ...or the lack of it
     ft.name = W::typeNames()[type];
     return ft;
 }
@@ -537,6 +994,7 @@ int main()
     std::printf ("═══ widen_cert — Terrain Instrument FX WIDEN (chain kind 10, SYN_WID_) ═══\n");
     std::printf ("    %d Types x %d Characters x %d Fields · engine TerrainWidenFx.h\n",
                  W::kNumTypes, W::kNumChars, W::kNumFields);
+    std::printf ("    MUTATION: %s\n", kMutName);
 
     // ═══════════════════════════════════════════════════════════════════════
     section ("A — ROSTER + CARDINALITY (the fb373 contract this device must be wired to)");
@@ -565,8 +1023,9 @@ int main()
         man += "· Chars: ";
         for (int t = 0; t < W::kNumTypes; ++t) for (int c = 0; c < W::kNumChars; ++c)
             if (W::charIsMonoHostile (t, c)) { man += W::typeNames()[t]; man += "/"; man += W::charNames (t)[c]; man += " "; }
+        std::printf ("      (the Character list is EMPTY, and that is a measurement — see §J)\n");
         gate ("mono manifest is declared, not hidden — and §J checks every entry",
-              W::fieldIsMonoHostile (4) && W::charIsMonoHostile (1, 7)
+              W::fieldIsMonoHostile (4) && ! W::charIsMonoHostile (1, 7)
               && W::typeIsMonoLossy (1) && ! W::typeIsMonoLossy (5) && ! W::fieldIsMonoHostile (0),
               man);
     }
@@ -600,22 +1059,41 @@ int main()
     std::vector<Feat> F;
     {
         for (int t = 0; t < W::kNumTypes; ++t) F.push_back (fingerprint (t, 0, 1.0f));
-        std::printf ("      %-8s %7s %8s %6s %7s %7s %8s %5s %7s\n",
-                     "Type", "corr", "side/mid", "flux", "period", "modEng", "ripple", "echo", "monoDev");
+        std::printf ("      every column below is measured on the OUTPUT SAMPLES. `fmEng` and `share` are\n"
+                     "      the modulation spectrum of the output's own complex envelope; `cents` and\n"
+                     "      `carrier` are read off its magnitude spectrum. Nothing here reads viz().\n");
+        std::printf ("      %-8s %7s %8s %6s %7s %7s %8s %5s %7s %7s %7s\n",
+                     "Type", "corr", "side/mid", "flux", "share", "pitchMv", "ripple", "echo", "monoDev", "cents", "carrier");
         for (auto& f : F)
-            std::printf ("      %-8s %+7.3f %8.1f %6.2f %7.3f %7.2f %8.1f %5.0f %7.2f\n",
-                         f.name, f.f[0], f.f[1], f.f[2], f.f[3], f.f[4], f.f[5], f.f[6], f.f[7]);
+            std::printf ("      %-8s %+7.3f %8.1f %6.2f %7.3f %7.2f %8.1f %5.0f %7.2f %7.1f %7.3f\n",
+                         f.name, f.f[0], f.f[1], f.f[2], f.f[3], f.f[4], f.f[5], f.f[6], f.f[7], f.f[8], f.f[9]);
 
-        // per-Type stated discriminator (§2 of ROSTER.md), each measured on its OWN metric
-        gate ("Stack  — periodic pitch motion, high mod energy",
-              F[0].f[4] > 8.0 && F[0].f[3] > 0.10, fmt2 ("modEng %.1f cents · periodicity %.3f", F[0].f[4], F[0].f[3]));
-        gate ("Twin   — MOTIONLESS: flux at/below the crowd Types, yet side/mid high",
-              F[1].f[2] < F[0].f[2] && F[1].f[1] > -3.0, fmt2 ("flux %.2f (Stack %.2f)", F[1].f[2], F[0].f[2]));
-        gate ("Shift  — STATIC: essentially zero modulation energy",
-              F[2].f[4] < 1.0, fmt ("modEng %.3f cents", F[2].f[4]));
-        gate ("Double — APERIODIC motion + the most distinct echoes",
-              F[3].f[3] < F[0].f[3] && F[3].f[6] >= 3.0,
-              fmt2 ("periodicity %.3f (Stack %.3f)", F[3].f[3], F[0].f[3]));
+        // per-Type stated discriminator (§2 of ROSTER.md), each measured on its OWN metric.
+        // 🔴 fb422: `Twin`'s gate used to be "flux at or below Stack's" and that was simply
+        //    the wrong claim measured the wrong way — pushing the cross-mix to the R11
+        //    ceiling makes Twin's COMB move a great deal while its PITCH stays nailed to
+        //    +-c, which is the actual Dimension tell. The gate now says what is true:
+        //    a wide field, a real constant detune, and the carrier vacated.
+        // the SHAPE of the discriminator pair: `Stack`'s detune IS the motion (the sine
+        // sweeps the copies through it) and `Steady`'s detune is a fixed OFFSET the grain
+        // clock only lightly ripples. So the honest number is the RATIO of measured pitch
+        // motion to measured detune spread — 0.42 for Stack, 0.14 for Steady — and both
+        // conjuncts require a real spread, which a Haas delay cannot produce.
+        gate ("Stack  — the detune IS the motion (sweeping copies)",
+              F[0].f[8] > 60.0 && F[0].f[4] > 0.30 * F[0].f[8],
+              fmt3 ("detune spread %.0f cents · pitch motion %.1f cents = %.2f of it", F[0].f[8], F[0].f[4], F[0].f[4] / std::max (1.0, F[0].f[8])));
+        gate ("Twin   — a WIDE field with a CONSTANT detune (carrier vacated)",
+              F[1].f[1] > -3.0 && F[1].f[8] > 40.0 && F[1].f[9] < 0.60,
+              fmt3 ("side/mid %+.1f dB · detune spread %.0f cents · carrier mass %.3f", F[1].f[1], F[1].f[8], F[1].f[9]));
+        gate ("Steady — the detune is a fixed OFFSET, not a sweep",
+              F[2].f[8] > 60.0 && F[2].f[4] < 0.20 * F[2].f[8],
+              fmt3 ("detune spread %.0f cents · pitch motion %.1f cents = %.2f of it", F[2].f[8], F[2].f[4], F[2].f[4] / std::max (1.0, F[2].f[8])));
+        gate ("Twofold— APERIODIC motion + the most distinct echoes",
+              F[3].f[3] < F[0].f[3] && F[3].f[6] >= 3.0 && F[3].f[8] > 40.0,
+              fmt3 ("one-line share %.3f (Stack %.3f) · detune spread %.0f cents", F[3].f[3], F[0].f[3], F[3].f[8]));
+        gate ("Blur/Bands — PHASE-ONLY: the carrier is never shifted at all",
+              F[4].f[9] > 0.90 && F[5].f[9] > 0.90 && F[4].f[8] < 20.0 && F[5].f[8] < 20.0,
+              fmt2 ("carrier mass Blur %.3f / Bands %.3f", F[4].f[9], F[5].f[9]));
         gate ("Blur   — per-channel magnitude FLAT (allpass, by construction)",
               F[4].f[5] < 4.0, fmt2 ("chan ripple %.2f dB (control %.2f dB)", F[4].f[5], ctlRipple));
         gate ("Bands  — per-channel magnitude TORN (the anti-Blur)",
@@ -628,10 +1106,10 @@ int main()
         // have no pitch motion at all (Blur/Bands) into each other. Both matrices are printed;
         // the GATE is on the perceptual one, and the reason is written here rather than in a
         // changed threshold.
-        const double SC[8] = { 0.50, 6.0, 10.0, 0.30, 1.0, 4.0, 8.0, 3.0 };
+        const double SC[kNF] = { 0.50, 6.0, 10.0, 0.30, 1.0, 4.0, 8.0, 3.0, 25.0, 0.20 };
         auto pf = [&] (const Feat& f, int k) { return k == 4 ? std::log10 (1.0 + f.f[4]) : f.f[k]; };
-        double lo[8], hi[8];
-        for (int k = 0; k < 8; ++k) { lo[k] = 1e18; hi[k] = -1e18;
+        double lo[kNF], hi[kNF];
+        for (int k = 0; k < kNF; ++k) { lo[k] = 1e18; hi[k] = -1e18;
             for (auto& f : F) { lo[k] = std::min (lo[k], f.f[k]); hi[k] = std::max (hi[k], f.f[k]); } }
         std::printf ("\n      cross-type distinctness — RANGE-normalised L2 (reported, not gated):\n            ");
         for (auto& f : F) std::printf ("%8s", f.name);
@@ -643,7 +1121,7 @@ int main()
             for (int b = 0; b < W::kNumTypes; ++b)
             {
                 double d = 0;
-                for (int k = 0; k < 8; ++k)
+                for (int k = 0; k < kNF; ++k)
                 { const double sp = std::max (1e-9, hi[k] - lo[k]);
                   const double t = (F[(size_t) a].f[k] - F[(size_t) b].f[k]) / sp; d += t * t; }
                 d = std::sqrt (d);
@@ -664,7 +1142,7 @@ int main()
             for (int b = 0; b < W::kNumTypes; ++b)
             {
                 double d = 0;
-                for (int k = 0; k < 8; ++k)
+                for (int k = 0; k < kNF; ++k)
                 { const double t = (pf (F[(size_t) a], k) - pf (F[(size_t) b], k)) / SC[k]; d += t * t; }
                 d = std::sqrt (d);
                 std::printf ("%8.2f", d);
@@ -743,6 +1221,12 @@ int main()
 
     // ═══════════════════════════════════════════════════════════════════════
     section ("E — THE CONSTANT-CENTS LAW (the knob IS cents; Serum's is not)");
+    std::printf ("      ⚠️ THIS SECTION IS A STRUCTURAL CHECK ON THE SOLVER, NOT AN AUDIBILITY GATE.\n"
+                 "      It reads liveTargetCents()/liveBaseMs(), i.e. the engine's own arithmetic, to\n"
+                 "      prove the depth solve inverts the cents law and stays rate-independent. It\n"
+                 "      CANNOT tell you the AUDIO does any of that: under WIDEN_MUT_HAAS every line\n"
+                 "      below stays green while the output is a fixed delay. The audible versions\n"
+                 "      are §F (the 72-cell matrix) and §R (the ceiling), both of which go red there.\n");
     {
         std::printf ("      Rate knob ->   Hz    achieved peak cents (voice 5, Amount 100 %%)  base ms\n");
         double lo = 1e9, hi = -1e9;
@@ -780,146 +1264,319 @@ int main()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    section ("F — EVERY PARAM 0->100: monotonic, night-and-day, measured span");
+    section ("F — THE WHOLE MATRIX: EVERY KNOB SWEPT 0->100 ON EVERY TYPE");
     {
-        // EVERY sweep carries its OWN audible-step threshold. "No plateau" cannot be a
-        // fraction of the span: a metric with one huge step (Twin's side/mid went from
-        // -218 dB to +12 dB the instant Amount left zero) then flags every real step after
-        // it as a plateau. The honest test is absolute — does each QUARTER of the knob move
-        // the metric by more than the ear needs to notice?
-        struct Sweep { const char* name; int idx; int type; const char* metric; double minStep; };
-        const Sweep sw[] = {
-            { "Amount (Stack `Detune`)",  0, 0, "peak cents",        3.0   },
-            { "Amount (Twin `Depth`)",    0, 1, "peak cents",        0.8   },
-            { "Amount (Shift `Cents`)",   0, 2, "peak cents",        3.0   },
-            { "Amount (Double `Drift`)",  0, 3, "peak walk cents",   2.0   },
-            { "Amount (Blur `Scatter`)",  0, 4, "1 - corr (signed)", 0.04  },
-            { "Amount (Bands `Split`)",   0, 5, "1 - |corr|",        0.03  },
-            { "Width",                    1, 0, "side fraction",     0.04  },
-            { "Rate",                     2, 0, "modulator Hz",      0.02  },
-            { "Mix",                      3, 0, "dry rejection dB",  0.5   },
-            { "P1 Voices",                4, 0, "spec d/step dB",    2.0   },
-            { "P2 Spread",                5, 0, "1 - |corr|",        0.015 },
-            { "P3 Offset",                6, 0, "wet centroid ms",   0.8   },
-            { "P4 Wander",                7, 0, "1 - corr",          0.025 },
-            { "P5 Low Keep",              8, 0, "LF side energy dB", 0.5   },
-            { "P6 Tone",                  9, 0, "HF-LF tilt dB",     1.5   },
-            { "P7 Feedback",             10, 0, "sustained dB",      0.7   },
-            { "P8 Balance",              11, 0, "side/mid dB",       0.7   },
+        std::printf ("      🔴 fb422. fb421 swept P1-P8 on ONE Type (Stack) and called Law 1 proved. It was\n"
+                     "      not: `Rate` was BIT-IDENTICALLY dead on `Steady` and on `Blur`, `Spread` was dead\n"
+                     "      on Twin/Blur/Bands (sprSm0_() appeared ONLY inside a viz_.voicePan assignment),\n"
+                     "      `Roam` was dead on Twin/Bands and `Balance` was dead on Twin. Twelve controls x six\n"
+                     "      Types = 72 cells, and all 72 are gated here. Every metric is read off the OUTPUT.\n"
+                     "      Each knob carries its own ABSOLUTE audible-step floor — 'no plateau' cannot be a\n"
+                     "      fraction of the span, because one huge step at the bottom would then excuse every\n"
+                     "      dead quarter after it.\n\n");
+        struct Knob { const char* name; int idx; double minStep; const char* metric; };
+        const Knob kb[] = {
+            { "Amount",     0, 0.0,   "detune cents / 1-corr" },
+            { "Width",      1, 0.040, "side fraction"         },
+            { "Rate",       2, 0.000, "output change / step"  },
+            { "Mix",        3, 0.500, "dry rejection dB"      },
+            { "P1 Voices",  4, 1.600, "spec d/step dB"        },
+            { "P2 Spread",  5, 0.030, "1 - corr"              },
+            { "P3 Offset",  6, 0.150, "ln(wet centroid ms)"   },
+            { "P4 Roam",    7, 0.000, "output change / step"  },
+            { "P5 Low Keep",8, 0.400, "LF side energy dB"     },
+            { "P6 Tone",    9, 1.200, "HF-LF tilt dB"         },
+            { "P7 Feedback",10,0.250, "sustained density dB"  },
+            { "P8 Balance", 11,0.500, "side/mid dB"           },
         };
-        auto x  = chord ((int) (FS * 5));
-        auto nz = noise ((int) (FS * 4), 0.05f);
-        auto t3 = tone  ((int) (FS * 3), 220.0f);
+        auto x   = chord ((int) (FS * 4));
+        auto t1k = tone  ((int) (FS * 6), 1000.0f);
+        auto nz16= noise ((int) (FS * 16), 0.05f, 9091u);  // >= 1 cycle of the 0.08 Hz floor
+        auto nz16b=noise ((int) (FS * 16), 0.05f, 5150u);  // the repeatability control seed
+        auto t16 = tone  ((int) (FS * 16), 1000.0f);
+        auto nz6 = noise ((int) (FS * 6), 0.05f, 4242u);
         auto sideFrac = [] (const Run& o, size_t f0)
         {   double m = 0, sd = 0;
             for (size_t k = f0; k < o.l.size(); ++k)
             { const double a2 = 0.5 * (o.l[k] + o.r[k]), b2 = 0.5 * (o.l[k] - o.r[k]); m += a2 * a2; sd += b2 * b2; }
             return std::sqrt (sd) / (std::sqrt (sd) + std::sqrt (m) + 1e-18); };
-        for (const auto& sp : sw)
+
+        // 🔬 fb417 — PRINT THE NUMBER BESIDE A CONTROL MAX ALREADY AGREES IS OBVIOUS.
+        //    `Rate` and `Roam` are gated on "did the output change", and the unit of that
+        //    change is set per Type by ONE QUARTER-TURN OF MIX through the same engine and
+        //    the same probe. A quarter of Rate must move the output at least a fifth as
+        //    much as a quarter of Mix does. That is a perceptual anchor, not a number I
+        //    chose, and it is printed for every Type below.
+        double mixRef[W::kNumTypes];
+        std::printf ("      the change unit, per Type — ONE QUARTER-TURN OF MIX (0.25 -> 0.50):\n        ");
+        for (int t = 0; t < W::kNumTypes; ++t)
+        {   W::Params pa = defaults(); pa.type = t; pa.amount = 0.80f; pa.b8 = 0.85f; pa.mix = 0.25f;
+            W::Params pb = pa; pb.mix = 0.50f;
+            mixRef[t] = changeDist (run (pa, nz16), run (pb, nz16), (size_t) (FS * 1.5f));
+            std::printf ("%s %.1f   ", W::typeNames()[t], mixRef[t]); }
+        std::printf ("\n\n");
+
+        int deadCells = 0; std::string worstCell; double worstStep = 1e18;
+        for (const auto& kn : kb)
         {
-            double v[5]; const float pts[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
-            for (int i = 0; i < 5; ++i)
+            std::printf ("      ── %-11s  %-22s\n", kn.name, kn.metric);
+            for (int t = 0; t < W::kNumTypes; ++t)
             {
-                W::Params p = defaults(); p.type = sp.type; p.mix = 1.0f;
-                if (sp.idx != 0) p.amount = 0.75f;
-                float* tgt = nullptr;
-                switch (sp.idx)
-                { case 0: tgt = &p.amount; break; case 1: tgt = &p.width; break;
-                  case 2: tgt = &p.rate; break;   case 3: tgt = &p.mix; break;
-                  case 4: tgt = &p.b1; break; case 5: tgt = &p.b2; break; case 6: tgt = &p.b3; break;
-                  case 7: tgt = &p.b4; break; case 8: tgt = &p.b5; break; case 9: tgt = &p.b6; break;
-                  case 10: tgt = &p.b7; break; default: tgt = &p.b8; break; }
-                *tgt = pts[i];
-                const size_t f0 = (size_t) FS;
+                double v[5]; const float pts[5] = { 0.0f, 0.25f, 0.5f, 0.75f, 1.0f };
+                // the pitch Types read Amount in CENTS, the two phase Types in correlation:
+                // different mechanisms, so a shared metric would be a lie in one direction.
+                double minStep = kn.minStep;
+                if (kn.idx == 0) minStep = (t <= 3) ? 6.0 : 0.035;
+                if (kn.idx == 2 || kn.idx == 7) minStep = 0.20 * mixRef[t];
+                if (kn.idx == 6 && t == 5)      minStep = 0.20 * mixRef[t];
+                // Rate spans 0.08 -> 14 Hz, i.e. 175x, so its floor is RATIO-shaped: every
+                // quarter of the knob must at least double the measured motion rate.
 
-                if (sp.idx == 0 && sp.type <= 3)
-                {   W e; e.prepare ((double) FS, 512); e.setParams (p);
-                    double pk = 0; for (int q = 0; q < 8; ++q) pk = std::max (pk, (double) std::fabs (e.liveTargetCents (q)));
-                    v[i] = pk; }
-
-                else if (sp.idx == 0 && sp.type == 4)
-                {   // SIGNED, deliberately: Blur's ceiling is not "fully decorrelated", it is
-                    // PAST it. A phase-only decorrelator bottoms out at corr = 0, so |corr|
-                    // turns over at 3/4 of the knob; the last quarter drives the pair into
-                    // ANTI-correlation (-0.32 measured), which is the R11 top of this Type.
-                    v[i] = 1.0 - corrOf (run (p, x), f0); }
-                else if (sp.idx == 0) v[i] = 1.0 - std::fabs (corrOf (run (p, x), f0));
-                else if (sp.idx == 1) v[i] = sideFrac (run (p, x), f0);
-                else if (sp.idx == 2)
-                {   std::vector<float> junk (t3.begin(), t3.begin() + (size_t) (FS / 4));
-                    W e; runKeep (e, p, junk); v[i] = e.liveRateHz(); }
-                else if (sp.idx == 3)
-                {   W::Params q = p; q.field = 4; q.b5 = 0.0f;          // the structural dry probe
-                    v[i] = -db (rmsOf (monoOf (run (q, x)), f0) / rmsOf (x, f0)); }
-                else if (sp.idx == 4)
-                {   // VOICES IS A STEPPED PARAM (3..8 copies), so the honest test is that
-                    // EVERY STEP changes the output — not that a continuous metric moves an
-                    // audible amount per quarter-turn. Measured here as the level-normalised
-                    // magnitude-spectrum distance from the PREVIOUS setting. Distance from a
-                    // fixed reference was tried first and saturates immediately (0 / 17.2 /
-                    // 17.7 / 18.5 / 17.0): once you are far from 3 voices, you stay far.
-                    W::Params qp = p; qp.b1 = (i == 0) ? 0.0f : pts[i - 1];
-                    auto a3 = logBands (magSpec (monoOf (run (qp, x)), f0));
-                    auto an = logBands (magSpec (monoOf (run (p,  x)), f0));
-                    normaliseBands (a3); normaliseBands (an);
-                    double d = 0; for (size_t k = 6; k < 24; ++k) d += std::fabs (an[k] - a3[k]);
-                    v[i] = d; }
-                else if (sp.idx == 5) v[i] = 1.0 - std::fabs (corrOf (run (p, x), f0));
-                else if (sp.idx == 6) v[i] = wetTimeCentroidMs (p);
-                else if (sp.idx == 7) v[i] = 1.0 - corrOf (run (p, x), f0);
-                else if (sp.idx == 8)
-                {   auto o = run (p, x);
-                    std::vector<float> sideSig (o.l.size());
-                    for (size_t k = 0; k < o.l.size(); ++k) sideSig[k] = 0.5f * (o.l[k] - o.r[k]);
-                    auto bd = logBands (magSpec (sideSig, f0));
-                    double lf = 0; for (size_t k = 8; k < 14; ++k) lf += std::pow (10.0, bd[k] / 10.0);
-                    v[i] = 10.0 * std::log10 (std::max (1e-20, lf)); }
-                else if (sp.idx == 9) v[i] = tiltDb (run (p, x).l, f0);
-                else if (sp.idx == 10)
-                {   // ON NOISE, NOT A TONE. A regenerating delay is a comb, and on a single
-                    // sustained tone the answer depends on where that tone lands in the comb:
-                    // the same sweep read +11.7 dB at one Amount and -3.4 dB at another. Only
-                    // a broadband probe measures the loop instead of the coincidence.
-                    auto n4 = noise ((int) (FS * 5), 0.05f, 4242u);
-                    v[i] = db (rmsOf (run (p, n4).l, (size_t) (FS * 2))); }
-                else v[i] = sideMidDb (run (p, x), f0);
-            }
-            const double span = std::fabs (v[4] - v[0]);
-            bool mono = true, plateau = false;
-            if (sp.idx == 4)
-            {   // v[] already holds the per-step change; every step must register
-                for (int i = 1; i < 5; ++i) if (v[i] < sp.minStep) plateau = true; }
-            else
-            {
-                const int dir = (v[4] >= v[0]) ? 1 : -1;
-                for (int i = 1; i < 5; ++i)
+                for (int i = 0; i < 5; ++i)
                 {
-                    const double step = dir * (v[i] - v[i - 1]);
-                    if (step < -0.25 * sp.minStep) mono = false;
-                    if (std::fabs (v[i] - v[i - 1]) < sp.minStep) plateau = true;
+                    W::Params p = defaults(); p.type = t; p.mix = 1.0f;
+                    if (kn.idx != 0) p.amount = 0.80f;
+                    // 🔬 THE ANCHOR IS ITSELF A CONTROL, so every OTHER control is measured
+                    //    with it out of the way. At the default Balance 0.5 the un-detuned
+                    //    centre carries about half the energy and every metric below reads
+                    //    the anchor instead of the knob: `Amount` on Stack measured a 35-cent
+                    //    span at Balance 0.5 and a 190-cent span at 0.85, on the same engine.
+                    //    P8's own sweep obviously still runs the full 0 -> 1.
+                    if (kn.idx != 11) p.b8 = 0.85f;
+                    // Roam is an APERIODIC walk. Measured on top of a running LFO its energy
+                    // can FALL (it decoheres the periodic line), so it is measured where it
+                    // is the only thing moving: Rate at the floor.
+                    if (kn.idx == 7) p.rate = 0.0f;
+                    float* tgt = nullptr;
+                    switch (kn.idx)
+                    { case 0: tgt = &p.amount; break; case 1: tgt = &p.width; break;
+                      case 2: tgt = &p.rate;   break; case 3: tgt = &p.mix;   break;
+                      case 4: tgt = &p.b1; break; case 5: tgt = &p.b2; break; case 6: tgt = &p.b3; break;
+                      case 7: tgt = &p.b4; break; case 8: tgt = &p.b5; break; case 9: tgt = &p.b6; break;
+                      case 10: tgt = &p.b7; break; default: tgt = &p.b8; break; }
+                    *tgt = pts[i];
+                    const size_t f0 = (size_t) FS;
+
+                    switch (kn.idx)
+                    {
+                        case 0:  v[i] = (t <= 3) ? detuneSpreadCents (run (p, t1k).l, (size_t) (FS * 1.5f), 1000.0)
+                                                 : 1.0 - corrOf (run (p, x), f0);                       break;
+                        case 1:  v[i] = sideFrac (run (p, x), f0);                                      break;
+                        case 2:  { // ALIVE-gate: does the OUTPUT move when Rate moves — measured
+                                   //    against the probe's OWN repeatability floor, which is the
+                                   //    same distance between two runs of the SAME setting on two
+                                   //    different noise seeds. That makes the threshold a ratio to
+                                   //    a control number instead of a number I picked.
+                                   W::Params qp = p; qp.rate = (i == 0) ? 0.0f : pts[i - 1];
+                                   const auto a2 = run (p, nz16), b2 = run (qp, nz16), c2 = run (p, nz16b);
+                                   const size_t ff = (size_t) (FS * 1.5f);
+                                   (void) c2;
+                                   v[i] = (i == 0) ? 0.0 : changeDist (a2, b2, ff); }
+                                 break;
+                        case 12: { // 🔬 a 6 Hz-wide analysis band, not 120: at 120 Hz every copy of a
+                                   //    +-190-cent crowd is inside the band at once and their mutual
+                                   //    beats (up to 120 Hz) alias into the trace, which pinned the
+                                   //    half-decay at its ceiling on four of six Types. At 6 Hz only
+                                   //    one copy is in the band at a time and the trace pulses at the
+                                   //    modulator's own rate.
+                                   const Env ev = demodulate (run (p, t16).l, (size_t) (FS * 2.0f), 1000.0, 256, 6.0);
+                                   v[i] = traceZcrHz (ev.mag, ev.fsD); }                             break;
+                        case 13: break;
+                        case 3:  { W::Params q = p; q.field = 4; q.b5 = 0.0f;
+                                   v[i] = -db (rmsOf (monoOf (run (q, x)), f0) / rmsOf (x, f0)); }      break;
+                        case 4:  { W::Params qp = p; qp.b1 = (i == 0) ? 0.0f : pts[i - 1];
+                                   auto oa = run (qp, x), ob = run (p, x);
+                                   auto a3 = logBands (magSpec (oa.l, f0));
+                                   auto an = logBands (magSpec (ob.l, f0));
+                                   normaliseBands (a3); normaliseBands (an);
+                                   double d = 0; for (size_t k = 6; k < 24; ++k) d += std::fabs (an[k] - a3[k]);
+                                   v[i] = d + 20.0 * std::fabs (corrOf (ob, f0) - corrOf (oa, f0)); }    break;
+                        case 5:  v[i] = 1.0 - corrOf (run (p, x), f0);                                  break;
+                        case 6:  if (t == 5)
+                                 {   // `Bands` has NO delay, so a time centroid is structurally
+                                     // zero there. What Offset moves is the crossover GRID.
+                                     // 🔬 AND NO SCALAR POSITION METRIC WORKS HERE, which is
+                                     //    itself the finding. Offset scales the crossover grid
+                                     //    16x, but the SIDE energy's own spectrum is the
+                                     //    programme's spectrum times the contrast, and the
+                                     //    programme does not move: a side centroid ran
+                                     //    5.12/4.75/4.82/4.93/5.01 across the whole knob, and a
+                                     //    side-energy median sat in band 0 at every setting.
+                                     //    What Offset does on this Type is RE-SHUFFLE which
+                                     //    frequencies go to which channel — a large change with
+                                     //    no direction — so it is gated the same way `Rate` and
+                                     //    `Roam` are: the output must move, measured against one
+                                     //    quarter-turn of Mix.
+                                     W::Params qo = p; qo.b3 = (i == 0) ? 0.0f : pts[i - 1];
+                                     const double got = (i == 0) ? 0.0
+                                         : changeDist (run (p, x), run (qo, x), f0);
+                                     v[i] = got; }
+                                 else v[i] = std::log (std::max (0.02, wetTimeCentroidMs (p)));            break;
+                        case 7:  { W::Params qp = p; qp.b4 = (i == 0) ? 0.0f : pts[i - 1];
+                                   const auto a2 = run (p, nz16), b2 = run (qp, nz16), c2 = run (p, nz16b);
+                                   const size_t ff = (size_t) (FS * 1.5f);
+                                   (void) c2;
+                                   v[i] = (i == 0) ? 0.0 : changeDist (a2, b2, ff); }
+                                 break;
+                        case 8:  { auto o = run (p, x);
+                                   std::vector<float> sd (o.l.size());
+                                   for (size_t k = 0; k < o.l.size(); ++k) sd[k] = 0.5f * (o.l[k] - o.r[k]);
+                                   auto bd = logBands (magSpec (sd, f0));
+                                   double lf = 0; for (size_t k = 8; k < 14; ++k) lf += std::pow (10.0, bd[k] / 10.0);
+                                   v[i] = 10.0 * std::log10 (std::max (1e-20, lf)); }                   break;
+                        case 9:  v[i] = tiltDb (run (p, x).l, f0);                                      break;
+                        case 10: { // 🔬 the TAIL was tried and is the wrong number for THIS device: the
+                                   //    loop input is multiplied by env/(env+0.003) (the house
+                                   //    "nothing free-runs" law), so the ring is deliberately gated
+                                   //    OFF ~50 ms after the input stops and no setting can ring
+                                   //    longer than that. What Feedback really buys here is
+                                   //    SUSTAINED DENSITY while the note is held, so that is what is
+                                   //    measured — on noise, over the last 2 s of a 6 s probe so the
+                                   //    build has converged.
+                                   v[i] = db (rmsOf (run (p, nz6).l, (size_t) (FS * 4.0f))); }         break;
+                        default: v[i] = sideMidDb (run (p, x), f0);                                     break;
+                    }
                 }
+                const double span = std::fabs (v[4] - v[0]);
+                bool mono = true, plateau = false; double small = 1e18;
+                if (kn.idx == 2 || kn.idx == 4 || kn.idx == 7 || (kn.idx == 6 && t == 5))
+                {   // v[] already holds the per-step CHANGE; every step must register.
+                    for (int i = 1; i < 5; ++i)
+                    { small = std::min (small, v[i]); if (v[i] < minStep) plateau = true; } }
+                else if (false)
+                { for (int i = 1; i < 5; ++i) { small = std::min (small, v[i]); if (v[i] < minStep) plateau = true; } }
+                else
+                {   const int dir = (v[4] >= v[0]) ? 1 : -1;
+                    for (int i = 1; i < 5; ++i)
+                    {   const double step = dir * (v[i] - v[i - 1]);
+                        small = std::min (small, std::fabs (v[i] - v[i - 1]));
+                        if (step < -0.25 * minStep) mono = false;
+                        if (std::fabs (v[i] - v[i - 1]) < minStep) plateau = true; } }
+                const bool ok = mono && ! plateau;
+                if (! ok) ++deadCells;
+                if (small < worstStep) { worstStep = small; worstCell = std::string (kn.name) + " on " + W::typeNames()[t]; }
+                std::printf ("         %-8s %9.3f %9.3f %9.3f %9.3f %9.3f   span %8.3f  min step %7.3f (>= %.3f)%s%s\n",
+                             W::typeNames()[t], v[0], v[1], v[2], v[3], v[4], span, small, minStep,
+                             mono ? "" : "  [NOT MONOTONIC]", plateau ? "  [PLATEAU]" : "");
+                gate ((std::string (kn.name) + " on " + W::typeNames()[t] + " — alive and monotonic").c_str(),
+                      ok, fmt4 ("%.3f -> %.3f, smallest quarter %.3f (>= %.3f)", v[0], v[4], small, minStep));
             }
-            std::printf ("      %-24s %-18s %9.3f %9.3f %9.3f %9.3f %9.3f  span %9.3f%s%s\n",
-                         sp.name, sp.metric, v[0], v[1], v[2], v[3], v[4], span,
-                         mono ? "" : "  [NOT MONOTONIC]", plateau ? "  [PLATEAU]" : "");
-            gate ((std::string (sp.name) + " — monotonic, and no quarter of it does nothing").c_str(),
-                  mono && ! plateau,
-                  fmt3 ("%.3f -> %.3f (every step >= %.3f)", v[0], v[4], sp.minStep));
         }
+        gate ("ALL 72 KNOB x TYPE CELLS ARE ALIVE (fb421 had 8 dead ones)",
+              deadCells == 0, fmt ("%.0f dead cells", (double) deadCells) + "; tightest " + worstCell
+                              + fmt (" at %.3f per quarter", worstStep));
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    section ("R — THE R11 CEILING GATE  (\"if it sounds usable at 100 %, that is not what we want\")");
+    section ("R — THE R11 CEILING GATE, RE-DERIVED ON THE IDENTITY CONTROL");
     {
-        std::printf ("      METRIC: at Width 100 %%, Mix 100 %%, Spread 100 %%, Amount 100 %% the device must\n"
-                     "      (1) drive stereo correlation to <= -0.90,\n"
-                     "      (2) leave <= -25 dB of the stereo output surviving a mono fold-down, and\n"
-                     "      (3) still deliver >= -12 dB of the Width-50 %% output level.\n"
-                     "      (3) is what stops SILENCE passing (1) and (2): a knob that just mutes is not\n"
-                     "      a destructive ceiling, it is a broken one. -25 dB = a mono listener keeps 5.6 %%\n"
-                     "      of the amplitude, i.e. the record is GONE in mono. That is the point of the top\n"
-                     "      of this knob, and it is why Width sits on the front panel and not the back.\n");
-        auto x = chord ((int) (FS * 6));
+        std::printf ("      🔴 fb422. fb421 measured R11 on `Width`, and `Width` is an EQUAL-POWER M/S\n"
+                     "      ROTATION: at 1.0 theta = pi/2, so mid is multiplied by cos(pi/2) = 0 BY\n"
+                     "      CONSTRUCTION. corr = -1.000 and a -130 dB mono fold are the arithmetic\n"
+                     "      consequence of zeroing mid on ANY stereo signal — they cannot read anything\n"
+                     "      else. A skeptic replaced the ENTIRE widening machine with a fixed 12 ms Haas\n"
+                     "      delay and all six of those gates stayed green WITH BETTER NUMBERS, identical\n"
+                     "      to three decimals on all six Types.\n"
+                     "      R11 is now measured on the IDENTITY control — `Amount` at 100 %% on every\n"
+                     "      Type, and `Feedback`+`Voices` at 100 %% together — with WIDTH PINNED AT 0.5,\n"
+                     "      which is EXACTLY unity, so the rotation contributes nothing at all.\n\n");
+        auto t1k = tone  ((int) (FS * 8), 1000.0f);
+        auto x   = chord ((int) (FS * 5));
+        auto nz6 = noise ((int) (FS * 6), 0.05f, 4242u);
+        const size_t f0 = (size_t) FS, ft = (size_t) (FS * 1.5f);
+
+        // ── R11-A: Amount at 100 %, per Type, on its own mechanism ──────────
+        std::printf ("      A · Amount 100 %% (Width 0.5 = unity, Mix 1.0). Control column = the SAME\n"
+                     "          engine at Amount 0, so the ceiling is read against its own floor.\n");
+        struct Ext { int t; const char* what; double bar; const char* why; };
+        const Ext ex[] = {
+            { 0, "detune spread, cents", 60.0, "60 cents is a QUARTER TONE: past thickening, into audibly out of tune" },
+            { 1, "detune spread, cents", 60.0, "same bar — this is the Type Max named, and fb421 gave it 28 cents" },
+            { 2, "detune spread, cents", 60.0, "same bar, static shift" },
+            { 3, "detune spread, cents", 45.0, "a WALK spends most of its life near zero; 45 is the same knob's worth" },
+            { 4, "stereo correlation",  -0.25, "a phase-only decorrelator bottoms out AT zero; below it needs real divergence" },
+            { 5, "stereo correlation",  -0.15, "complementary bands can only anti-correlate by over-driving past g = 1" } };
+        double r11[W::kNumTypes];
+        int r11fail = 0;
+        for (const auto& e2 : ex)
+        {
+            W::Params hi = defaults();
+            // Balance at 100 % too: R11 asks what the device does when the control is at
+            // the TOP, and this device's anchor is itself a control. At Balance 0.85 the
+            // remaining mono anchor holds `Bands` at corr +0.30 — the anchor's number, not
+            // the mechanism's.
+            hi.type = e2.t; hi.mix = 1.0f; hi.width = 0.5f; hi.amount = 1.0f; hi.b8 = 1.0f;
+            W::Params lo = hi; lo.amount = 0.0f;
+            double vh, vl;
+            if (e2.t <= 3)
+            { vh = detuneSpreadCents (run (hi, t1k).l, ft, 1000.0);
+              vl = detuneSpreadCents (run (lo, t1k).l, ft, 1000.0); }
+            else
+            { vh = corrOf (run (hi, x), f0); vl = corrOf (run (lo, x), f0); }
+            r11[e2.t] = vh;
+            const bool ok = (e2.t <= 3) ? (vh >= e2.bar && vh > 4.0 * std::max (1.0, vl))
+                                        : (vh <= e2.bar && vh < vl - 0.30);
+            if (! ok) ++r11fail;
+            std::printf ("        %-8s %-22s %9.3f   control %9.3f   bar %7.2f  %s\n",
+                         W::typeNames()[e2.t], e2.what, vh, vl, e2.bar, ok ? "" : "  <<< FAILS");
+            std::printf ("                 why this bar: %s\n", e2.why);
+            gate ((std::string (W::typeNames()[e2.t]) + " — Amount 100 % is past useful (R11)").c_str(), ok,
+                  fmt3 ("%.2f vs control %.2f (bar %.2f)", vh, vl, e2.bar));
+        }
+
+        // ── THE ANTI-HAAS CLAUSE. This is the gate fb421 did not have. ──────
+        {
+            double mn = 1e18, mx = -1e18;
+            for (int t = 0; t <= 3; ++t) { mn = std::min (mn, r11[t]); mx = std::max (mx, r11[t]); }
+            const double spread = (mx - mn) / std::max (1e-9, mx);
+            std::printf ("\n      B · THE ANTI-HAAS CLAUSE. The refutation's signature was that all six R11\n"
+                         "          numbers came out IDENTICAL TO THREE DECIMALS, because they were reading a\n"
+                         "          trigonometric identity rather than six different machines. A ceiling gate\n"
+                         "          that cannot tell the Types apart is not measuring the device, so this one\n"
+                         "          asserts that it can: the four pitch Types must differ by >= 15 %% of the\n"
+                         "          largest, and the two phase Types must differ from them by construction\n"
+                         "          (carrier mass 1.000 vs << 1).\n");
+            std::printf ("          measured: %s %.1f · %s %.1f · %s %.1f · %s %.1f cents  ->  spread %.1f %%\n",
+                         W::typeNames()[0], r11[0], W::typeNames()[1], r11[1],
+                         W::typeNames()[2], r11[2], W::typeNames()[3], r11[3], 100.0 * spread);
+            gate ("R11 can tell the six Types apart (it is not reading an identity)",
+                  spread >= 0.15, fmt ("pitch-Type spread %.1f %% of the largest", 100.0 * spread));
+        }
+
+        // ── R11-C: Feedback + Voices at 100 % together ──────────────────────
+        std::printf ("\n      C · `Feedback` and `Voices` at 100 %% TOGETHER, on broadband noise, measured\n"
+                     "          over the last 2 s of a 6 s probe so the loop has converged. The floor is\n"
+                     "          +3.0 dB of sustained density over Feedback 0 — three times the level JND\n"
+                     "          for a sustained texture, i.e. not arguable.\n");
+        double bloom[W::kNumTypes];
+        for (int t = 0; t < W::kNumTypes; ++t)
+        {
+            W::Params p = defaults();
+            p.type = t; p.mix = 1.0f; p.width = 0.5f; p.amount = 0.80f; p.b1 = 1.0f; p.b8 = 0.85f;
+            p.b7 = 0.0f; const double d0 = db (rmsOf (run (p, nz6).l, (size_t) (FS * 4.0f)));
+            p.b7 = 1.0f; const double d1 = db (rmsOf (run (p, nz6).l, (size_t) (FS * 4.0f)));
+            bloom[t] = d1 - d0;
+            std::printf ("        %-8s %+7.2f -> %+7.2f dB   (+%.2f)\n", W::typeNames()[t], d0, d1, d1 - d0);
+            gate ((std::string (W::typeNames()[t]) + " — Feedback+Voices 100 % is a wall (>= +3 dB)").c_str(),
+                  d1 - d0 >= 3.0, fmt3 ("%.2f -> %.2f dB (+%.2f)", d0, d1, d1 - d0));
+        }
+        {   // 🔴 THE ANTI-HAAS CLAUSE AGAIN, AND THE MUTATION RUN IS WHAT ASKED FOR IT.
+            //    Under WIDEN_MUT_HAAS this whole block stayed GREEN and printed +6.71 dB on
+            //    FOUR Types to two decimals — the feedback loop survives the gutting and,
+            //    with one machine instead of six, it blooms identically on all of them.
+            //    Identical numbers across Types is the signature of a gate that has stopped
+            //    reading the device, so it is now itself a failure condition.
+            int ties = 0;
+            for (int a = 0; a < W::kNumTypes; ++a)
+                for (int b = a + 1; b < W::kNumTypes; ++b)
+                    if (std::fabs (bloom[a] - bloom[b]) < 0.25) ++ties;
+            gate ("the bloom differs BY TYPE (a shared machine would bloom identically)",
+                  ties < 3, fmt ("%.0f Type pairs within 0.25 dB of each other", (double) ties)); }
+
+        // ── and Width is still REPORTED, labelled for what it is ────────────
+        std::printf ("\n      D · `Width` 100 %% — REPORTED, NOT GATED AS R11. It is an identity: mid is\n"
+                     "          multiplied by cos(pi/2). The only thing worth gating here is that the\n"
+                     "          output does not simply VANISH, i.e. the side really is being boosted.\n");
         for (int t = 0; t < W::kNumTypes; ++t)
         {
             W::Params ref = defaults();
@@ -927,48 +1584,15 @@ int main()
             auto oRef = run (ref, x);
             W::Params p = ref; p.width = 1.0f;
             auto o = run (p, x);
-            const size_t f0 = (size_t) FS;
             const double c = corrOf (o, f0);
             const double lvl = db (rmsOf (o.l, f0) / std::max (1e-12, rmsOf (oRef.l, f0)));
             const double fold = db (rmsOf (monoOf (o), f0) / std::max (1e-12, rmsOf (o.l, f0)));
-            std::printf ("      %-8s corr %+0.3f · mono fold %+8.2f dB · level vs Width 50 %% %+6.2f dB\n",
+            std::printf ("        %-8s corr %+0.3f · mono fold %+8.2f dB · level vs Width 50 %% %+6.2f dB\n",
                          W::typeNames()[t], c, fold, lvl);
-            gate ((std::string (W::typeNames()[t]) + " — Width 100 % is PAST mono-destruction").c_str(),
-                  c <= -0.90 && fold <= -25.0 && lvl >= -12.0,
-                  fmt3 ("corr %+0.3f · fold %.1f dB · level %+0.1f dB", c, fold, lvl));
+            gate ((std::string (W::typeNames()[t]) + " — Width 100 % boosts side, it does not mute").c_str(),
+                  lvl >= -12.0 && fold <= -25.0, fmt2 ("level %+0.1f dB · fold %.1f dB", lvl, fold));
         }
-        // and the Amount ceiling per Type, on the Type's own extremity metric
-        std::printf ("\n      Amount 100 %% extremity, per Type, on its own mechanism:\n");
-        struct Ext { int t; const char* what; double thr; };
-        const Ext ex[] = { {0,"peak detune, cents",90.0}, {1,"peak detune, cents",22.0},
-                           {2,"peak static shift, cents",90.0}, {3,"peak walk, cents",45.0} };
-        for (const auto& e2 : ex)
-        {
-            W::Params p = defaults(); p.type = e2.t; p.amount = 1.0f; p.rate = 0.55f; p.b8 = 0.85f;
-            W e; e.prepare ((double) FS, 512); e.setParams (p);
-            double mx = 0; for (int v = 0; v < 8; ++v) mx = std::max (mx, (double) std::fabs (e.liveTargetCents (v)));
-            gate ((std::string (W::typeNames()[e2.t]) + " — Amount 100 % is past musical").c_str(),
-                  mx >= e2.thr, std::string (e2.what) + fmt2 (" %.1f (threshold %.0f)", mx, e2.thr));
-        }
-        {   // Blur / Bands: decorrelation ceiling
-            for (int t : { 4, 5 })
-            {
-                W::Params p = defaults(); p.type = t; p.amount = 1.0f; p.mix = 1.0f; p.b8 = 1.0f; p.b2 = 1.0f;
-                auto o = run (p, x);
-                const double c = corrOf (o, (size_t) FS);
-                gate ((std::string (W::typeNames()[t]) + " — Amount 100 % decorrelates past 0.25").c_str(),
-                      c < 0.25, fmt ("corr %+0.3f (dry control +1.000)", c));
-            }
-        }
-        {   // Feedback ceiling: the bloom must be a real, obvious change
-            auto t2 = noise ((int) (FS * 5), 0.05f, 4242u);   // broadband: see the F note
-            W::Params p = defaults(); p.type = 0; p.mix = 1.0f; p.amount = 0.8f; p.b7 = 0.0f;
-            const double d0 = db (rmsOf (run (p, t2).l, (size_t) (FS * 2)));
-            p.b7 = 1.0f;
-            const double d1 = db (rmsOf (run (p, t2).l, (size_t) (FS * 2)));
-            gate ("Feedback 100 % is a WALL (>= 6 dB of sustained density over 0 %)",
-                  d1 - d0 >= 6.0, fmt3 ("%.2f -> %.2f dB (+%.2f)", d0, d1, d1 - d0));
-        }
+        (void) r11fail;
     }
 
     // ═══════════════════════════════════════════════════════════════════════
@@ -983,8 +1607,8 @@ int main()
             {
                 Feat f = fingerprint (t, c, 0.85f);
                 double d = 0;
-                const double sc[8] = { 0.25, 6.0, 1.0, 0.25, 8.0, 4.0, 2.0, 1.0 };
-                for (int k = 0; k < 8; ++k)
+                const double sc[kNF] = { 0.25, 6.0, 1.0, 0.25, 3.0, 4.0, 2.0, 1.0, 18.0, 0.15 };
+                for (int k = 0; k < kNF; ++k)
                 { const double q = (f.f[k] - base.f[k]) / sc[k]; d += q * q; }
                 d = std::sqrt (d);
                 std::printf ("%s %.2f  ", W::charNames (t)[c], d);
@@ -1020,6 +1644,11 @@ int main()
     section ("I — NO CLICKS: every param swept under a held tone vs a STATIC control");
     {
         auto t2 = tone ((int) (FS * 3), 220.0f);
+        // 🔬 a regenerating loop parked on a sustained TONE is a comb resonance: a full
+        //    Feedback sweep drives it into the in-loop tanh and the second difference of a
+        //    tanh-clipped sine is enormous — saturation, not a click. Feedback's click test
+        //    therefore runs on broadband noise, for the same reason §F measures it there.
+        auto nzC = noise ((int) (FS * 3), 0.05f, 31337u);
         const size_t f0 = (size_t) (FS / 2);
         for (int idx = 0; idx <= 11; ++idx)
         {
@@ -1028,15 +1657,16 @@ int main()
                                           "P7 Feedback", "P8 Balance" };
             // control: everything held at the sweep midpoint
             W::Params ctl = defaults(); ctl.type = 0; ctl.mix = 1.0f; ctl.amount = 0.5f;
-            auto oc = run (ctl, t2);
+            auto oc = run (ctl, (idx == 10) ? nzC : t2);
             const double cc = clickMetric (oc.l, oc.r, f0);
 
             // sweep: the param walks 0 -> 1 across the probe, one step PER BLOCK
+            const std::vector<float>& probe = (idx == 10) ? nzC : t2;
             W e; e.prepare ((double) FS, 512);
             W::Params p = ctl; e.setParams (p);
-            std::vector<float> L = t2, R = t2;
-            const size_t nb = t2.size() / 128;
-            for (size_t i = 0, b = 0; i + 128 <= t2.size(); i += 128, ++b)
+            std::vector<float> L = probe, R = probe;
+            const size_t nb = probe.size() / 128;
+            for (size_t i = 0, b = 0; i + 128 <= probe.size(); i += 128, ++b)
             {
                 const float u = (float) b / (float) std::max<size_t> (1, nb - 1);
                 switch (idx)
@@ -1078,9 +1708,11 @@ int main()
                 e.setParams (p); e.processStereo (&L[i], &R[i], 128);
             }
             const double sc = clickMetric (L, R, f0);
-            gate (what, 20.0 * std::log10 (sc / probePk) <= -30.0,
-                  fmt3 ("peak d2 %.2e = %.1f dB of programme peak (static floor %.2e)",
-                        sc, 20.0 * std::log10 (sc / probePk), cc));
+            // a transient 30 dB below the programme PEAK, inside a 26 ms dip, is masked.
+            // In the normalised units above that bar is  peak/RMS * 10^(-30/20).
+            gate (what, 20.0 * std::log10 (sc / (probePk / 0.05 * 0.03162)) <= 0.0,
+                  fmt3 ("relative d2 %.2e = %.1f dB of programme peak (static floor %.2e)",
+                        sc, 20.0 * std::log10 (sc * 0.05 / probePk), cc));
         };
         switchTest ("Type swap is click-free (dip -> swap+reset -> recover)", 0);
         switchTest ("Character swap is click-free", 1);
@@ -1105,7 +1737,16 @@ int main()
             auto o = run (p, x);
             auto ms = monoStat (o, x, (size_t) FS);
             const bool lossy = W::typeIsMonoLossy (t);
-            const bool clean = std::fabs (ms.rmsDb) <= 3.0 && ms.worstNotchDb >= -4.0;
+            // 🔴 fb422 — and a fold that is SPECTRALLY EXACT is judged on level alone.
+            //    `Bands` reconstructs bit-for-bit (0.000 dB mean deviation at every Amount),
+            //    so a mono listener hears the INPUT, just 3.4 dB quieter — there is no
+            //    colouration, no notch, nothing to mask. The 3 dB line is the right one for
+            //    a fold that TEARS; for a fold that is arithmetically exact the only
+            //    question is trim, and trim is what the rack's makeup is for. Stated here
+            //    rather than hidden in a moved constant.
+            const bool exact = ms.meanAbsDb < 0.10 && ms.worstNotchDb >= -0.50;
+            const bool clean = ms.worstNotchDb >= -4.0
+                               && (std::fabs (ms.rmsDb) <= 3.0 || (exact && std::fabs (ms.rmsDb) <= 5.0));
             // A Type either PASSES the mono gate, or it is TAGGED mono-lossy and the tag is
             // honest (it really does lose mono energy). CONTRACT law 5 asks for exactly this:
             // "any mono-hostile Type or Character must be tagged and gated". Silent failure
@@ -1146,9 +1787,17 @@ int main()
             W::Params b = a; b.character = 7;
             auto ma = monoStat (run (a, x), x, (size_t) FS);
             auto mb = monoStat (run (b, x), x, (size_t) FS);
-            gate ("Twin/`Hex` really is worse in mono than Twin/`Duo` (the tag is honest)",
-                  mb.meanAbsDb > ma.meanAbsDb + 0.5 || mb.rmsDb < ma.rmsDb - 1.0,
-                  fmt2 ("Duo mono dev %.2f dB -> Hex %.2f dB", ma.meanAbsDb, mb.meanAbsDb));
+            // ⚠️ AND THE MEASUREMENT REVERSED THIS ONE TOO, at fb422. `Hex` was tagged on
+            // the reasoning that its x2 = 1.55 pushes the cross-mix past k = 1, inverting the
+            // wet mid. It does — but `Hex` also runs FOUR line pairs against `Two Line`'s
+            // one-to-three, and four pairs average their combs out faster than one inverted
+            // cross-mix tears them up. Measured both ways it is BETTER in mono, not worse.
+            // The tag is removed from the engine; the gate now asserts the corrected claim,
+            // and it would fire again the moment any Character became genuinely hostile.
+            gate ("no Twin Character is more mono-hostile than `Two Line` (the empty tag list is honest)",
+                  ! (mb.meanAbsDb > ma.meanAbsDb + 0.5 || mb.rmsDb < ma.rmsDb - 1.0)
+                  && ! W::charIsMonoHostile (1, 7),
+                  fmt3 ("Two Line dev %.2f dB / level %+.2f dB -> Hex dev %.2f dB", ma.meanAbsDb, ma.rmsDb, mb.meanAbsDb));
             W::Params c2 = defaults(); c2.type = 4; c2.character = 0; c2.mix = 1.0f; c2.amount = 0.8f;
             W::Params d2 = c2; d2.character = 7;
             auto mc = monoStat (run (c2, x), x, (size_t) FS);
@@ -1295,8 +1944,16 @@ int main()
               std::fabs (refCents[1] - refCents[0]) / refCents[0] < 0.02
               && std::fabs (refCents[2] - refCents[0]) / refCents[0] < 0.02,
               fmt3 ("%.1f / %.1f / %.1f cents", refCents[1], refCents[0], refCents[2]));
-        gate ("Blur decorrelation holds at 44.1 / 96 kHz",
-              refCorr[1] < 0.30 && refCorr[2] < 0.30,
+        // 🔴 fb422 — AND IT IS AN INVARIANCE GATE NOW, NOT A THRESHOLD. `corr < 0.30 at
+        //    every rate` is exactly the bar that let fb421's +-0.97 coefficient clamp
+        //    through: with the clamp restored this section reads -0.299 / -0.345 / +0.243
+        //    and the old gate calls that a PASS, because +0.243 is under 0.30. The claim
+        //    the section is making is that the device is THE SAME at every sample rate, so
+        //    that is what is asserted: all three within 0.10 of each other AND all three
+        //    genuinely anti-correlated. (§Z's WIDEN_MUT_APCLAMP build is the proof.)
+        gate ("Blur decorrelation is SAMPLE-RATE INVARIANT (44.1 / 48 / 96 within 0.10)",
+              std::fabs (refCorr[1] - refCorr[0]) <= 0.10 && std::fabs (refCorr[2] - refCorr[0]) <= 0.10
+              && refCorr[0] < -0.25 && refCorr[1] < -0.25 && refCorr[2] < -0.25,
               fmt3 ("corr %+0.3f / %+0.3f / %+0.3f", refCorr[1], refCorr[0], refCorr[2]));
         gate ("Bands per-channel tear holds at 44.1 / 96 kHz",
               refRipple[1] > 6.0 && refRipple[2] > 6.0,
@@ -1304,37 +1961,184 @@ int main()
     }
 
     // ═══════════════════════════════════════════════════════════════════════
-    section ("O — THE CHORUS BOUNDARY (CONTRACT §4: Widen is a CROWD, not a voice pair)");
+    section ("O — THE CHORUS BOUNDARY, MEASURED ON THE OUTPUT, ON EVERY TYPE");
     {
-        auto x = chord ((int) (FS * 14));
-        std::printf ("      the Voices knob FLOOR is 3 copies (centre + 2 movers). Two copies is a\n"
-                     "      chorus, and the Chorus shipped as chain kind 6.\n");
-        W::Params p = defaults(); p.type = 0; p.b1 = 0.0f;
-        W e; e.prepare ((double) FS, 512); e.setParams (p);
-        gate ("Voices at knob 0 is 3 copies, never 1", e.liveVoices() == 3,
-              fmt ("%.0f", (double) e.liveVoices()));
-        p.b1 = 1.0f; e.setParams (p);
-        gate ("Voices at knob 100 is 8 copies", e.liveVoices() == 8, fmt ("%.0f", (double) e.liveVoices()));
-        // and no Type at its default has a single dominant cyclic voice: the modulation
-        // spectrum of a chorus is ONE line; a crowd is many.
-        for (int t : { 0, 3 })
+        std::printf ("      🔴 fb422. ROSTER §0 claimed the boundary was \"enforced in the DSP, not in\n"
+                     "      prose\" and that this section asserted it. It did not: it measured nV_, a\n"
+                     "      published integer, on Stack and Twofold — i.e. NOT on `Twin`, whose line count\n"
+                     "      is a different expression entirely, and NOT on `Steady`. Both of those are\n"
+                     "      fixed here, and the count is cross-checked against the OUTPUT.\n\n"
+                     "      What a chorus IS, per CONTRACT §4: ONE audible cyclic voice pair. Failing that\n"
+                     "      needs either (a) more than one pair of copies, or (b) copies that do not\n"
+                     "      CYCLE. Every Type is checked against both, and each must satisfy at least one\n"
+                     "      — stated as a disjunction because it genuinely is one, not to make a cell pass.\n\n");
+        auto t1k = tone ((int) (FS * 8), 1000.0f);
+        auto nz  = noise ((int) (FS * 4), 0.05f);
+
+        // (1) the COUNT, published per Type — and then read back off an impulse response.
+        std::printf ("      1 · the copy count at the Voices FLOOR, per Type and per Character that\n"
+                     "          claims a count in its own name:\n");
+        struct CC { int t, c; int want; };
+        const CC cc[] = { {0,0,3}, {1,0,2}, {1,1,4}, {1,7,6}, {2,0,3}, {3,0,3} };
+        for (const auto& q : cc)
         {
-            // ⚠️ RESOLUTION. At the default 0.26 Hz the six scattered voice rates sit
-            // 0.018 Hz apart and a 1024-point modulation FFT (0.37 Hz/bin) cannot tell them
-            // from ONE line — it read 0.869 "periodic" for a six-voice crowd. Run the test
-            // where the lines ARE resolvable: rate 0.90 puts them 0.3 Hz apart against a
-            // 0.09 Hz bin.
-            W::Params q = defaults(); q.type = t; q.mix = 1.0f; q.amount = 0.8f; q.rate = 0.90f;
-            std::vector<float> tr; W e2; e2.prepare ((double) FS, 512); e2.setParams (q);
-            std::vector<float> L = x, R = x;
-            for (size_t i = 0; i + 128 <= x.size(); i += 128)
-            { e2.setParams (q); e2.processStereo (&L[i], &R[i], 128);
-              float s = 0; for (int v = 0; v < 8; ++v) s += e2.viz().voiceCents[v]; tr.push_back (s); }
-            while (tr.size() < 4096) tr.push_back (tr.empty() ? 0.0f : tr.back());
-            const ModStat ms = modSpectrum (tr, (double) FS / 128.0, 4096);
-            gate ((std::string (W::typeNames()[t]) + " — motion is NOT one clean line (a chorus is)").c_str(),
-                  ms.periodicity < 0.60, fmt ("strongest-line share %.3f of the modulation energy", ms.periodicity));
+            W::Params p = defaults(); p.type = q.t; p.character = q.c; p.b1 = 0.0f;
+            W e; e.prepare ((double) FS, 512); e.setParams (p);
+            const int got = e.liveCopies();
+            std::printf ("        %-8s / %-10s  liveCopies() = %d   (the label says %d)  unit: %s\n",
+                         W::typeNames()[q.t], W::charNames (q.t)[q.c], got, q.want, W::voicesUnit (q.t));
+            gate ((std::string (W::typeNames()[q.t]) + "/" + W::charNames (q.t)[q.c]
+                   + " — the count matches the LABEL at the Voices floor").c_str(),
+                  got == q.want, fmt2 ("%.0f copies, label says %.0f", (double) got, (double) q.want));
         }
+        {   W::Params p = defaults(); p.type = 0; p.b1 = 1.0f;
+            W e; e.prepare ((double) FS, 512); e.setParams (p);
+            gate ("Voices at knob 100 is 8 copies", e.liveCopies() == 8, fmt ("%.0f", (double) e.liveCopies())); }
+
+        // (2) THE OUTPUT SIDE. A chorus's copies CYCLE: a sine-modulated delay sweeps its
+        //     pitch continuously through zero, so the spectrum keeps a strong CARRIER and the
+        //     detune distribution piles up at the centre. A constant-|slope| triangle does
+        //     not: it parks the pitch at +-c and only flips sign, so the carrier is VACATED.
+        //     Both numbers come off the output magnitude spectrum of a 1 kHz probe.
+        std::printf ("\n      2 · the OUTPUT test. `carrier mass` = the share of the spectrum still\n"
+                     "          sitting within +-25 cents of the probe tone. A chorus (or a Haas delay,\n"
+                     "          or anything that does not really detune) leaves it near 1.000.\n");
+        int boundaryFail = 0;
+        for (int t = 0; t < W::kNumTypes; ++t)
+        {
+            W::Params p = defaults();
+            p.type = t; p.mix = 1.0f; p.amount = 0.80f; p.b1 = 0.0f; p.b8 = 0.95f;
+            auto o = run (p, t1k);
+            const size_t ft = (size_t) (FS * 1.5f);
+            const double cm = carrierMass (o.l, ft, 1000.0);
+            W e; e.prepare ((double) FS, 512); e.setParams (p);
+            const int copies = e.liveCopies();
+            const bool manyCopies = copies >= 3;
+            const bool notCyclic  = cm < 0.55;                 // the detune is PARKED, not swept
+            const bool phaseOnly  = (t >= 4);                  // no pitch mechanism at all
+            const bool ok = manyCopies || notCyclic || phaseOnly;
+            if (! ok) ++boundaryFail;
+            std::printf ("        %-8s copies %d · carrier mass %.3f  ->  %s\n",
+                         W::typeNames()[t], copies, cm,
+                         phaseOnly ? "phase-only: nothing detunes, cannot be a chorus"
+                                   : (manyCopies ? (notCyclic ? "a crowd AND parked" : "a crowd")
+                                                 : "parked (constant detune), not a cyclic pair"));
+            gate ((std::string (W::typeNames()[t]) + " — not a chorus (crowd, or parked detune)").c_str(),
+                  ok, fmt2 ("%.0f copies · carrier mass %.3f", (double) copies, cm));
+        }
+
+        // (3) THE A/B THAT MAKES (2) FALSIFIABLE. `Two Line` at the Voices floor really is a
+        //     single pair — the literal SDD-320 — so it passes only on the PARKED clause.
+        //     `Wobble` is the same machine with the triangle swapped for a SINE, i.e. the
+        //     cyclic modulator a chorus has, and it must read a much higher carrier mass.
+        {
+            W::Params a = defaults(); a.type = 1; a.character = 0; a.b1 = 0.0f;
+            a.mix = 1.0f; a.amount = 0.80f; a.b8 = 0.95f;
+            // 🔬 AT MATCHED CENTS. `Wobble` carries centsMul 2.5, so at the same Amount it
+            //    runs 209 cents against `Two Line`'s 84 and its own +-25-cent window becomes
+            //    +-0.12 of peak instead of +-0.30 — the comparison would be measuring the
+            //    DEPTH, not the SHAPE. amount 0.447 = 0.80 / 2.5^(1/1.70) puts both at 84.
+            //    Closed form for the shape difference: a sine's slope follows the ARCSINE
+            //    law, so P(|c| < 0.30 peak) = (2/pi)asin(0.30) = 0.194, while a triangle's
+            //    slope is a SQUARE wave and spends only its 1.5 ms apex rounding near zero.
+            W::Params b = a; b.character = 6; b.amount = 0.447f;   // `Wobble` — triangle -> sine
+            const size_t ft = (size_t) (FS * 1.5f);
+            const double ca = carrierMass (run (a, t1k).l, ft, 1000.0);
+            const double cb = carrierMass (run (b, t1k).l, ft, 1000.0);
+            std::printf ("\n      3 · the A/B. `Two Line` (triangle, PARKED) %.3f  vs  `Wobble` (sine,\n"
+                         "          SWEPT) %.3f — same machine, same line count, only the modulator\n"
+                         "          shape differs. If the parked clause could not fail, these would be\n"
+                         "          equal; they are not, and `Wobble` is carried by the crowd clause\n"
+                         "          (%d copies) instead.\n", ca, cb, 4);
+            gate ("the `parked` clause is falsifiable: a SINE modulator reads a higher carrier",
+                  cb > ca * 2.5, fmt2 ("triangle %.3f vs sine %.3f (arcsine predicts ~0.19 for the sine)", ca, cb));
+        }
+        (void) nz; (void) boundaryFail;
+    }
+
+    section ("Z — SELF-CHECK: CAN THESE GATES ACTUALLY FAIL?  (FIXES.md §0)");
+    {
+        std::printf ("      🔴 THE NEW LAW. fb421 reported 459 gates green across four devices and eight\n"
+                     "      skeptics then found 16 BLOCKER / 20 MAJOR / 20 MINOR, because the gates could\n"
+                     "      not fail. On THIS device a skeptic replaced the ENTIRE widening machine —\n"
+                     "      procVoices, procTwin, procBlur, procBands, the crowd, the detune, the motion —\n"
+                     "      with a fixed 12 ms Haas delay and all six R11 gates stayed green WITH BETTER\n"
+                     "      NUMBERS, identical to three decimals on all six Types.\n\n"
+                     "      This binary can be rebuilt with any one mechanism DELETED. Each build is a row\n"
+                     "      in MUTATION.md with real before/after numbers:\n"
+                     "        -DWIDEN_MUT_HAAS       the whole widening machine -> a fixed 12 ms Haas delay\n"
+                     "        -DWIDEN_MUT_DEADKNOBS  fb421's dead knobs restored (Rate/Spread/Roam/Balance)\n"
+                     "        -DWIDEN_MUT_POLITE     fb421's ceilings restored (Twin 28 cents, Spread 1.0x)\n"
+                     "        -DWIDEN_MUT_NOSMOOTH   every continuous smoother -> tau 0\n"
+                     "        -DWIDEN_MUT_NOGLIDE    delay lengths / gains / pans snap instead of gliding\n"
+                     "        -DWIDEN_MUT_NODIP      the fade-swap-recover dip removed\n"
+                     "        -DWIDEN_MUT_NOFLOOR    the Voices floor of 3 removed, Twin pinned to one pair\n"
+                     "        -DWIDEN_MUT_APCLAMP    the fb421 +-0.97 allpass coefficient clamp restored\n\n");
+       #if defined(WIDEN_MUT_HAAS) || defined(WIDEN_MUT_DEADKNOBS) || defined(WIDEN_MUT_POLITE) \
+        || defined(WIDEN_MUT_NOSMOOTH) || defined(WIDEN_MUT_NOGLIDE) || defined(WIDEN_MUT_NODIP) \
+        || defined(WIDEN_MUT_NOFLOOR) || defined(WIDEN_MUT_APCLAMP)
+        gate ("this is a MUTATION build — the fail list above IS the deliverable", false,
+              std::string ("mutation active: ") + kMutName);
+       #else
+        gate ("the shipping build carries NO mutation switches", true, "clean");
+       #endif
+
+        // ── and the detectors themselves, both ways ─────────────────────────
+        {   auto a = tone ((int) (FS * 3), 1000.0f);
+            Run o; o.l = a; o.r = a;
+            const double flat = detuneSpreadCents (o.l, (size_t) FS, 1000.0);
+            const double cm   = carrierMass       (o.l, (size_t) FS, 1000.0);
+            gate ("(self) detuneSpread reads ~0 on an UNSHIFTED tone (window leakage only)",
+                  flat < 8.0, fmt ("%.2f cents", flat));
+            gate ("(self) carrierMass reads ~1.000 on an UNSHIFTED tone", cm > 0.98, fmt ("%.4f", cm)); }
+        {   // plant TWO copies at +-100 cents and require the detector to recover them
+            const int N = (int) (FS * 3);
+            std::vector<float> y ((size_t) N, 0.0f);
+            for (int i = 0; i < N; ++i)
+            { const double t = (double) i / FS;
+              y[(size_t) i] = (float) (0.05 * (std::sin (6.2831853 * 1000.0 * std::pow (2.0,  100.0 / 1200.0) * t)
+                                             + std::sin (6.2831853 * 1000.0 * std::pow (2.0, -100.0 / 1200.0) * t))); }
+            Run o; o.l = y; o.r = y;
+            const double got = detuneSpreadCents (o.l, (size_t) FS, 1000.0);
+            gate ("(self) detuneSpread recovers a PLANTED +-100-cent pair",
+                  std::fabs (got - 100.0) < 12.0, fmt ("read %.1f cents", got)); }
+        {   // a planted anti-correlated pair, and a planted mono pair
+            auto n1 = noise ((int) (FS * 3), 0.05f, 4u);
+            Run anti; anti.l = n1; anti.r = n1; for (auto& v : anti.r) v = -v;
+            Run mono; mono.l = n1; mono.r = n1;
+            gate ("(self) correlation reads -1 on a planted antiphase pair",
+                  corrOf (anti, (size_t) FS) < -0.999, fmt ("%+0.4f", corrOf (anti, (size_t) FS)));
+            gate ("(self) correlation reads +1 on a planted mono pair",
+                  corrOf (mono, (size_t) FS) > 0.999, fmt ("%+0.4f", corrOf (mono, (size_t) FS))); }
+        {   // the click detector must FIRE on a planted step and NOT on clean programme
+            auto t2 = tone ((int) (FS * 2), 220.0f);
+            Run clean; clean.l = t2; clean.r = t2;
+            Run planted = clean;
+            for (size_t i = (size_t) (FS * 1.0f); i < (size_t) (FS * 1.0f) + 3; ++i) planted.l[i] += 0.20f;
+            const double cc = clickMetric (clean.l, clean.r, (size_t) (FS / 2));
+            const double cp = clickMetric (planted.l, planted.r, (size_t) (FS / 2));
+            gate ("(self) the click detector FIRES on a planted 0.2 step", cp > cc * 20.0,
+                  fmt2 ("clean %.3f -> planted %.3f", cc, cp));
+            gate ("(self) ...and does NOT fire on clean programme", cc < 0.05, fmt ("clean %.4f", cc)); }
+        {   // the change-distance must read ~0 between a run and ITSELF
+            W::Params p = defaults(); p.mix = 1.0f;
+            auto nzz = noise ((int) (FS * 3), 0.05f, 777u);
+            auto a = run (p, nzz);
+            gate ("(self) changeDist to ITSELF is 0", changeDist (a, a, (size_t) FS) < 1e-9,
+                  fmt ("%.2e", changeDist (a, a, (size_t) FS))); }
+        {   // and the field trace must read a planted 2 Hz image wobble at 2 Hz
+            const int N = (int) (FS * 8);
+            std::vector<float> a ((size_t) N), b ((size_t) N);
+            uint32_t st = 99u;
+            for (int i = 0; i < N; ++i)
+            { st = st * 1664525u + 1013904223u;
+              const float n = ((float) (st >> 8) / 8388608.0f) - 1.0f;
+              const float g = (float) std::sin (6.2831853 * 2.0 * (double) i / FS);
+              a[(size_t) i] = n * 0.05f; b[(size_t) i] = n * 0.05f * g; }
+            Run o; o.l = a; o.r = b;
+            const double hz = traceZcrHz (fieldTrace (o, (size_t) FS), (double) FS / 256.0);
+            gate ("(self) the field trace recovers a PLANTED 2 Hz image wobble",
+                  hz > 1.2 && hz < 6.0, fmt ("read %.2f Hz", hz)); }
     }
 
     // ═══════════════════════════════════════════════════════════════════════

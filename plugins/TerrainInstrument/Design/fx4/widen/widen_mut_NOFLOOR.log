@@ -1,0 +1,571 @@
+═══ widen_cert — Terrain Instrument FX WIDEN (chain kind 10, SYN_WID_) ═══
+    6 Types x 8 Characters x 6 Fields · engine TerrainWidenFx.h
+    MUTATION: WIDEN_MUT_NOFLOOR
+
+[A — ROSTER + CARDINALITY (the fb373 contract this device must be wired to)]
+  ok    kNumTypes == 6 live                                  6
+  ok    kNumTypeSlots == 8 (2 reserved, choice cardinality frozen at birth) 8
+  ok    kNumChars == 8 for EVERY Type (read back on the /7 scale, clamp per Type) 8
+  ok    every Type x Character name is non-empty             Stack Twin Steady Twofold Blur Bands 
+  ok    charNames clamps out-of-range Type                   Coarse
+  ok    Field axis is NOT `Type` (CONTRACT R6)               Direct Alternate Orbit Swap Side Only Collapse 
+      (the Character list is EMPTY, and that is a measurement — see §J)
+  ok    mono manifest is declared, not hidden — and §J checks every entry Fields: Orbit Side Only · Types: Twin Twofold Blur · Chars: 
+
+[B — THE CONTROL NUMBERS (every metric through a BYPASSED engine first)]
+  CONTROL  corr +1.000 · side/mid -227.8 dB · flux 23.52 · chan ripple 0.0 dB · echo peaks 49 · mono dev 0.00 dB
+  ok    bypass is bit-transparent (Mix 0)                    +0.0000 dB
+  ok    bypass correlation reads +1.000 (the probe is mono)  +1.00000
+  ok    bypass flux is the FLOOR every Type is read against  23.521
+
+[C — TYPE DISCRIMINATORS + the cross-type distinctness matrix]
+      every column below is measured on the OUTPUT SAMPLES. `fmEng` and `share` are
+      the modulation spectrum of the output's own complex envelope; `cents` and
+      `carrier` are read off its magnitude spectrum. Nothing here reads viz().
+      Type        corr side/mid   flux   share pitchMv   ripple  echo monoDev   cents carrier
+      Stack     +0.462     -4.3  46.98   0.473   81.52     25.2    51    4.81   162.9   0.374
+      Twin      -0.896     12.6  45.41   0.470    9.58     28.3    44    7.52   130.8   0.077
+      Steady    +0.363     -3.3  46.11   0.165   22.09     15.7    33    4.78   176.6   0.180
+      Twofold   +0.491     -4.7  35.35   0.081   34.72     12.2    11    5.04    22.1   0.931
+      Blur      -0.828     10.2  22.40   0.475    1.59      1.9    50    4.50     3.4   1.000
+      Bands     -0.292      2.5  27.82   0.414    0.18      9.9    49    0.00     1.7   1.000
+  ok    Stack  — the detune IS the motion (sweeping copies) detune spread 163 cents · pitch motion 81.5 cents = 0.50 of it
+  ok    Twin   — a WIDE field with a CONSTANT detune (carrier vacated) side/mid +12.6 dB · detune spread 131 cents · carrier mass 0.077
+  ok    Steady — the detune is a fixed OFFSET, not a sweep detune spread 177 cents · pitch motion 22.1 cents = 0.13 of it
+  FAIL  Twofold— APERIODIC motion + the most distinct echoes one-line share 0.081 (Stack 0.473) · detune spread 22 cents
+  ok    Blur/Bands — PHASE-ONLY: the carrier is never shifted at all carrier mass Blur 1.000 / Bands 1.000
+  ok    Blur   — per-channel magnitude FLAT (allpass, by construction) chan ripple 1.94 dB (control 0.00 dB)
+  ok    Bands  — per-channel magnitude TORN (the anti-Blur) chan ripple 9.9 dB vs Blur 1.9 dB
+
+      cross-type distinctness — RANGE-normalised L2 (reported, not gated):
+               Stack    Twin  Steady Twofold    Blur   Bands
+      Stack     0.00    1.74    1.24    1.95    2.37    2.03
+      Twin      1.74    0.00    1.68    2.38    1.90    2.03
+      Steady    1.24    1.68    0.00    1.43    2.28    1.94
+      Twofold    1.95    2.38    1.43    0.00    2.05    1.69
+      Blur      2.37    1.90    2.28    2.05    0.00    0.93
+      Bands     2.03    2.03    1.94    1.69    0.93    0.00
+      (range-normalised closest pair: Blur/Bands at 0.93)
+
+      cross-type distinctness — PERCEPTUAL L2 (the gate; 1.0 = one audible step):
+               Stack    Twin  Steady Twofold    Blur   Bands
+      Stack     0.00    4.71    3.65    8.84   10.25    8.90
+      Twin      4.71    0.00    5.55    9.48    9.90    9.17
+      Steady    3.65    5.55    0.00    7.88    9.98    9.10
+      Twofold    8.84    9.48    7.88    0.00    6.99    5.86
+      Blur     10.25    9.90    9.98    6.99    0.00    3.08
+      Bands     8.90    9.17    9.10    5.86    3.08    0.00
+  ok    every Type pair separated by >= 1.0 audible step (perceptual L2) closest pair Blur/Bands at 3.08
+  ok    the closest pair still differs >= 2x on a stated discriminator Bands chan ripple 9.9 dB vs Blur 1.9 dB
+
+[D — THE DIMENSION TELL: the triangle holds its detune, a sine does not]
+      The pitch offset IS the delay slope. For a TRIANGLE the slope is a SQUARE
+      wave: the detune sits at exactly +-c and only flips sign at the apexes. For a
+      SINE the slope is a sine, whose value distribution is the ARCSINE law, so the
+      detune sweeps continuously through every value including zero. Closed-form
+      predictions for a sine, which is what makes this a real test and not a
+      threshold: P(|c| > 0.8 peak) = 1 - (2/pi)asin(0.8) = 0.410 and
+      P(|c| < 0.1 peak) = (2/pi)asin(0.1) = 0.064. A flat-topped trapezoid — the
+      shape an earlier draft of the bible specced — would drive the SECOND number
+      toward its flat-top duty cycle, i.e. the detune would periodically DROP OUT.
+      TRIANGLE (Duo)    peak  120.0 cents · mass at |c|>0.8pk 0.988 · at |c|<0.1pk 0.001
+      SINE     (Wobble) peak  449.7 cents · mass at |c|>0.8pk 0.501 · at |c|<0.1pk 0.055
+      arcsine prediction for a sine:                             0.410              0.064
+  ok    triangle detune is BIMODAL: >= 90 % of the time at +-peak 0.988 of samples at |c| > 0.8 peak
+  ok    triangle has NO zero dwell (a flat top would put one there) 0.0010 of samples at |c| < 0.1 peak
+  ok    the SINE A/B proves the metric can see a non-square slope sine lobe mass 0.501 (arcsine predicts 0.410)
+  ok    the SINE A/B shows the zero dwell the triangle does not have sine 0.0551 vs triangle 0.0010
+  ok    `Wobble` (sine) MOVES more than `Duo` (triangle) — the Dimension is motionless sine flux 51.78 vs triangle flux 47.96
+
+[E — THE CONSTANT-CENTS LAW (the knob IS cents; Serum's is not)]
+      ⚠️ THIS SECTION IS A STRUCTURAL CHECK ON THE SOLVER, NOT AN AUDIBILITY GATE.
+      It reads liveTargetCents()/liveBaseMs(), i.e. the engine's own arithmetic, to
+      prove the depth solve inverts the cents law and stays rate-independent. It
+      CANNOT tell you the AUDIO does any of that: under WIDEN_MUT_HAAS every line
+      below stays green while the output is a fixed delay. The audible versions
+      are §F (the 72-cell matrix) and §R (the ceiling), both of which go red there.
+      Rate knob ->   Hz    achieved peak cents (voice 5, Amount 100 %)  base ms
+       0.25        0.291                0.0                          64.23
+       0.40        0.631                0.0                          30.41
+       0.55        1.370                0.0                          14.82
+       0.70        2.973                0.0                          11.30
+       0.85        6.452                0.0                          11.30
+  ok    peak cents INDEPENDENT of Rate over a 12x rate span (<= 5 % spread) 0.0 .. 0.0 cents, spread nan %
+  ok    Amount 100 % reaches full cents at Voices 3          Voices 3 -> outermost 190.0 cents
+  ok    Amount 100 % reaches full cents at Voices 5          Voices 5 -> outermost 190.0 cents
+  ok    Amount 100 % reaches full cents at Voices 8          Voices 8 -> outermost 190.0 cents
+
+[F — THE WHOLE MATRIX: EVERY KNOB SWEPT 0->100 ON EVERY TYPE]
+      🔴 fb422. fb421 swept P1-P8 on ONE Type (Stack) and called Law 1 proved. It was
+      not: `Rate` was BIT-IDENTICALLY dead on `Steady` and on `Blur`, `Spread` was dead
+      on Twin/Blur/Bands (sprSm0_() appeared ONLY inside a viz_.voicePan assignment),
+      `Roam` was dead on Twin/Bands and `Balance` was dead on Twin. Twelve controls x six
+      Types = 72 cells, and all 72 are gated here. Every metric is read off the OUTPUT.
+      Each knob carries its own ABSOLUTE audible-step floor — 'no plateau' cannot be a
+      fraction of the span, because one huge step at the bottom would then excuse every
+      dead quarter after it.
+
+      the change unit, per Type — ONE QUARTER-TURN OF MIX (0.25 -> 0.50):
+        Stack 15.4   Twin 19.3   Steady 17.8   Twofold 12.4   Blur 33.8   Bands 15.5   
+
+      ── Amount       detune cents / 1-corr 
+         Stack        1.691    14.431    48.348   104.160   169.762   span  168.071  min step  12.739 (>= 6.000)
+  ok    Amount on Stack — alive and monotonic              1.691 -> 169.762, smallest quarter 12.739 (>= 6.000)
+         Twin         1.691    13.473    40.193    76.918   130.771   span  129.079  min step  11.781 (>= 6.000)
+  ok    Amount on Twin — alive and monotonic               1.691 -> 130.771, smallest quarter 11.781 (>= 6.000)
+         Steady       1.691    18.498    58.184   111.309   176.646   span  174.954  min step  16.807 (>= 6.000)
+  ok    Amount on Steady — alive and monotonic             1.691 -> 176.646, smallest quarter 16.807 (>= 6.000)
+         Twofold      1.691     3.378     9.324    13.473    18.498   span   16.807  min step   1.687 (>= 6.000)  [PLATEAU]
+  FAIL  Amount on Twofold — alive and monotonic            1.691 -> 18.498, smallest quarter 1.687 (>= 6.000)
+         Blur         0.000     0.174     0.650     1.302     1.831   span    1.831  min step   0.174 (>= 0.035)
+  ok    Amount on Blur — alive and monotonic               0.000 -> 1.831, smallest quarter 0.174 (>= 0.035)
+         Bands        0.000     0.329     0.789     1.092     1.278   span    1.278  min step   0.186 (>= 0.035)
+  ok    Amount on Bands — alive and monotonic              0.000 -> 1.278, smallest quarter 0.186 (>= 0.035)
+      ── Width        side fraction         
+         Stack        0.000     0.237     0.429     0.644     1.000   span    1.000  min step   0.192 (>= 0.040)
+  ok    Width on Stack — alive and monotonic               0.000 -> 1.000, smallest quarter 0.192 (>= 0.040)
+         Twin         0.000     0.571     0.762     0.886     1.000   span    1.000  min step   0.114 (>= 0.040)
+  ok    Width on Twin — alive and monotonic                0.000 -> 1.000, smallest quarter 0.114 (>= 0.040)
+         Steady       0.000     0.217     0.400     0.617     1.000   span    1.000  min step   0.184 (>= 0.040)
+  ok    Width on Steady — alive and monotonic              0.000 -> 1.000, smallest quarter 0.184 (>= 0.040)
+         Twofold      0.000     0.184     0.353     0.568     1.000   span    1.000  min step   0.169 (>= 0.040)
+  ok    Width on Twofold — alive and monotonic             0.000 -> 1.000, smallest quarter 0.169 (>= 0.040)
+         Blur         0.000     0.397     0.614     0.793     1.000   span    1.000  min step   0.179 (>= 0.040)
+  ok    Width on Blur — alive and monotonic                0.000 -> 1.000, smallest quarter 0.179 (>= 0.040)
+         Bands        0.000     0.322     0.534     0.734     1.000   span    1.000  min step   0.201 (>= 0.040)
+  ok    Width on Bands — alive and monotonic               0.000 -> 1.000, smallest quarter 0.201 (>= 0.040)
+      ── Rate         output change / step  
+         Stack        0.000    14.397    13.327    17.514    22.994   span   22.994  min step  13.327 (>= 3.073)
+  ok    Rate on Stack — alive and monotonic                0.000 -> 22.994, smallest quarter 13.327 (>= 3.073)
+         Twin         0.000    10.346    11.131    13.499    60.577   span   60.577  min step  10.346 (>= 3.854)
+  ok    Rate on Twin — alive and monotonic                 0.000 -> 60.577, smallest quarter 10.346 (>= 3.854)
+         Steady       0.000    11.229    12.684    28.736    33.084   span   33.084  min step  11.229 (>= 3.557)
+  ok    Rate on Steady — alive and monotonic               0.000 -> 33.084, smallest quarter 11.229 (>= 3.557)
+         Twofold      0.000    72.948    29.892    13.494    15.747   span   15.747  min step  13.494 (>= 2.488)
+  ok    Rate on Twofold — alive and monotonic              0.000 -> 15.747, smallest quarter 13.494 (>= 2.488)
+         Blur         0.000     1.667     2.620    11.490    18.211   span   18.211  min step   1.667 (>= 6.766)  [PLATEAU]
+  FAIL  Rate on Blur — alive and monotonic                 0.000 -> 18.211, smallest quarter 1.667 (>= 6.766)
+         Bands        0.000     6.215     4.937     8.927    28.170   span   28.170  min step   4.937 (>= 3.108)
+  ok    Rate on Bands — alive and monotonic                0.000 -> 28.170, smallest quarter 4.937 (>= 3.108)
+      ── Mix          dry rejection dB      
+         Stack       -0.000     0.688     3.010     8.343   142.285   span  142.285  min step   0.688 (>= 0.500)
+  ok    Mix on Stack — alive and monotonic                 -0.000 -> 142.285, smallest quarter 0.688 (>= 0.500)
+         Twin        -0.000     0.688     3.010     8.343   142.085   span  142.085  min step   0.688 (>= 0.500)
+  ok    Mix on Twin — alive and monotonic                  -0.000 -> 142.085, smallest quarter 0.688 (>= 0.500)
+         Steady      -0.000     0.688     3.010     8.343   142.314   span  142.314  min step   0.688 (>= 0.500)
+  ok    Mix on Steady — alive and monotonic                -0.000 -> 142.314, smallest quarter 0.688 (>= 0.500)
+         Twofold     -0.000     0.688     3.010     8.343   142.355   span  142.355  min step   0.688 (>= 0.500)
+  ok    Mix on Twofold — alive and monotonic               -0.000 -> 142.355, smallest quarter 0.688 (>= 0.500)
+         Blur        -0.000     0.688     3.010     8.343   142.123   span  142.123  min step   0.688 (>= 0.500)
+  ok    Mix on Blur — alive and monotonic                  -0.000 -> 142.123, smallest quarter 0.688 (>= 0.500)
+         Bands       -0.000     0.688     3.010     8.343   142.340   span  142.340  min step   0.688 (>= 0.500)
+  ok    Mix on Bands — alive and monotonic                 -0.000 -> 142.340, smallest quarter 0.688 (>= 0.500)
+      ── P1 Voices    spec d/step dB        
+         Stack        0.000    60.632    25.916    26.097    22.352   span   22.352  min step  22.352 (>= 1.600)
+  ok    P1 Voices on Stack — alive and monotonic           0.000 -> 22.352, smallest quarter 22.352 (>= 1.600)
+         Twin         0.000     0.000     0.000     0.000     0.000   span    0.000  min step   0.000 (>= 1.600)  [PLATEAU]
+  FAIL  P1 Voices on Twin — alive and monotonic            0.000 -> 0.000, smallest quarter 0.000 (>= 1.600)
+         Steady       0.000    47.758    20.946    15.599    12.146   span   12.146  min step  12.146 (>= 1.600)
+  ok    P1 Voices on Steady — alive and monotonic          0.000 -> 12.146, smallest quarter 12.146 (>= 1.600)
+         Twofold      0.000    32.723    24.671    62.611    62.083   span   62.083  min step  24.671 (>= 1.600)
+  ok    P1 Voices on Twofold — alive and monotonic         0.000 -> 62.083, smallest quarter 24.671 (>= 1.600)
+         Blur         0.000    28.596    32.806    20.172    12.927   span   12.927  min step  12.927 (>= 1.600)
+  ok    P1 Voices on Blur — alive and monotonic            0.000 -> 12.927, smallest quarter 12.927 (>= 1.600)
+         Bands        0.000    58.628    40.172    22.813    14.698   span   14.698  min step  14.698 (>= 1.600)
+  ok    P1 Voices on Bands — alive and monotonic           0.000 -> 14.698, smallest quarter 14.698 (>= 1.600)
+      ── P2 Spread    1 - corr              
+         Stack        0.000     0.171     0.398     0.630     0.849   span    0.849  min step   0.171 (>= 0.030)
+  ok    P2 Spread on Stack — alive and monotonic           0.000 -> 0.849, smallest quarter 0.171 (>= 0.030)
+         Twin         0.000     1.347     1.654     1.786     1.889   span    1.889  min step   0.103 (>= 0.030)
+  ok    P2 Spread on Twin — alive and monotonic            0.000 -> 1.889, smallest quarter 0.103 (>= 0.030)
+         Steady       0.000     0.142     0.334     0.537     0.734   span    0.734  min step   0.142 (>= 0.030)
+  ok    P2 Spread on Steady — alive and monotonic          0.000 -> 0.734, smallest quarter 0.142 (>= 0.030)
+         Twofold      0.000     0.099     0.238     0.390     0.547   span    0.547  min step   0.099 (>= 0.030)
+  ok    P2 Spread on Twofold — alive and monotonic         0.000 -> 0.547, smallest quarter 0.099 (>= 0.030)
+         Blur         0.000     0.695     1.129     1.368     1.512   span    1.512  min step   0.144 (>= 0.030)
+  ok    P2 Spread on Blur — alive and monotonic            0.000 -> 1.512, smallest quarter 0.144 (>= 0.030)
+         Bands        0.000     0.496     0.741     0.931     1.358   span    1.358  min step   0.190 (>= 0.030)
+  ok    P2 Spread on Bands — alive and monotonic           0.000 -> 1.358, smallest quarter 0.190 (>= 0.030)
+      ── P3 Offset    ln(wet centroid ms)   
+         Stack        1.875     2.571     3.140     3.663     4.319   span    2.444  min step   0.524 (>= 0.150)
+  ok    P3 Offset on Stack — alive and monotonic           1.875 -> 4.319, smallest quarter 0.524 (>= 0.150)
+         Twin         1.114     1.796     2.461     3.133     3.783   span    2.669  min step   0.650 (>= 0.150)
+  ok    P3 Offset on Twin — alive and monotonic            1.114 -> 3.783, smallest quarter 0.650 (>= 0.150)
+         Steady       1.887     2.536     3.181     3.834     4.455   span    2.567  min step   0.620 (>= 0.150)
+  ok    P3 Offset on Steady — alive and monotonic          1.887 -> 4.455, smallest quarter 0.620 (>= 0.150)
+         Twofold      2.614     3.365     4.091     4.591     4.859   span    2.245  min step   0.268 (>= 0.150)
+  ok    P3 Offset on Twofold — alive and monotonic         2.614 -> 4.859, smallest quarter 0.268 (>= 0.150)
+         Blur        -2.056    -2.028    -1.926    -1.671    -0.934   span    1.122  min step   0.028 (>= 0.150)  [PLATEAU]
+  FAIL  P3 Offset on Blur — alive and monotonic            -2.056 -> -0.934, smallest quarter 0.028 (>= 0.150)
+         Bands        0.000   116.614    97.406    72.271    52.232   span   52.232  min step  52.232 (>= 3.108)
+  ok    P3 Offset on Bands — alive and monotonic           0.000 -> 52.232, smallest quarter 52.232 (>= 3.108)
+      ── P4 Roam      output change / step  
+         Stack        0.000    56.115    13.548    31.547    17.619   span   17.619  min step  13.548 (>= 3.073)
+  ok    P4 Roam on Stack — alive and monotonic             0.000 -> 17.619, smallest quarter 13.548 (>= 3.073)
+         Twin         0.000    66.389    41.220    38.392    28.656   span   28.656  min step  28.656 (>= 3.854)
+  ok    P4 Roam on Twin — alive and monotonic              0.000 -> 28.656, smallest quarter 28.656 (>= 3.854)
+         Steady       0.000    46.318    12.606    30.718    12.735   span   12.735  min step  12.606 (>= 3.557)
+  ok    P4 Roam on Steady — alive and monotonic            0.000 -> 12.735, smallest quarter 12.606 (>= 3.557)
+         Twofold      0.000    36.608    16.761    16.137     7.328   span    7.328  min step   7.328 (>= 2.488)
+  ok    P4 Roam on Twofold — alive and monotonic           0.000 -> 7.328, smallest quarter 7.328 (>= 2.488)
+         Blur         0.000     7.125     6.883     5.945     9.486   span    9.486  min step   5.945 (>= 6.766)  [PLATEAU]
+  FAIL  P4 Roam on Blur — alive and monotonic              0.000 -> 9.486, smallest quarter 5.945 (>= 6.766)
+         Bands        0.000    22.862    21.262    21.457    24.240   span   24.240  min step  21.262 (>= 3.108)
+  ok    P4 Roam on Bands — alive and monotonic             0.000 -> 24.240, smallest quarter 21.262 (>= 3.108)
+      ── P5 Low Keep  LF side energy dB     
+         Stack       28.417    27.566    25.637    21.680    15.963   span   12.454  min step   0.851 (>= 0.400)
+  ok    P5 Low Keep on Stack — alive and monotonic         28.417 -> 15.963, smallest quarter 0.851 (>= 0.400)
+         Twin        33.339    32.910    31.822    29.568    25.888   span    7.451  min step   0.429 (>= 0.400)
+  ok    P5 Low Keep on Twin — alive and monotonic          33.339 -> 25.888, smallest quarter 0.429 (>= 0.400)
+         Steady      27.862    26.901    24.818    20.702    14.891   span   12.971  min step   0.961 (>= 0.400)
+  ok    P5 Low Keep on Steady — alive and monotonic        27.862 -> 14.891, smallest quarter 0.961 (>= 0.400)
+         Twofold     25.094    24.113    21.993    17.874    12.085   span   13.009  min step   0.981 (>= 0.400)
+  ok    P5 Low Keep on Twofold — alive and monotonic       25.094 -> 12.085, smallest quarter 0.981 (>= 0.400)
+         Blur        31.962    31.158    29.327    25.542    19.971   span   11.991  min step   0.804 (>= 0.400)
+  ok    P5 Low Keep on Blur — alive and monotonic          31.962 -> 19.971, smallest quarter 0.804 (>= 0.400)
+         Bands       27.302    26.283    24.032    19.628    13.581   span   13.721  min step   1.018 (>= 0.400)
+  ok    P5 Low Keep on Bands — alive and monotonic         27.302 -> 13.581, smallest quarter 1.018 (>= 0.400)
+      ── P6 Tone      HF-LF tilt dB         
+         Stack      -35.595   -39.820   -48.865   -55.787   -57.935   span   22.340  min step   2.148 (>= 1.200)
+  ok    P6 Tone on Stack — alive and monotonic             -35.595 -> -57.935, smallest quarter 2.148 (>= 1.200)
+         Twin       -29.780   -34.564   -44.681   -50.914   -52.372   span   22.592  min step   1.459 (>= 1.200)
+  ok    P6 Tone on Twin — alive and monotonic              -29.780 -> -52.372, smallest quarter 1.459 (>= 1.200)
+         Steady     -33.549   -37.609   -46.579   -53.534   -55.708   span   22.159  min step   2.175 (>= 1.200)
+  ok    P6 Tone on Steady — alive and monotonic            -33.549 -> -55.708, smallest quarter 2.175 (>= 1.200)
+         Twofold    -34.067   -38.238   -47.262   -54.195   -56.346   span   22.279  min step   2.151 (>= 1.200)
+  ok    P6 Tone on Twofold — alive and monotonic           -34.067 -> -56.346, smallest quarter 2.151 (>= 1.200)
+         Blur       -34.343   -38.318   -46.948   -53.736   -55.964   span   21.621  min step   2.228 (>= 1.200)
+  ok    P6 Tone on Blur — alive and monotonic              -34.343 -> -55.964, smallest quarter 2.228 (>= 1.200)
+         Bands      -40.498   -44.112   -50.527   -56.540   -59.820   span   19.322  min step   3.281 (>= 1.200)
+  ok    P6 Tone on Bands — alive and monotonic             -40.498 -> -59.820, smallest quarter 3.281 (>= 1.200)
+      ── P7 Feedback  sustained density dB  
+         Stack      -26.702   -25.263   -18.469   -12.392   -11.029   span   15.673  min step   1.363 (>= 0.250)
+  ok    P7 Feedback on Stack — alive and monotonic         -26.702 -> -11.029, smallest quarter 1.363 (>= 0.250)
+         Twin       -30.489   -29.848   -29.024   -26.908   -21.840   span    8.649  min step   0.641 (>= 0.250)
+  ok    P7 Feedback on Twin — alive and monotonic          -30.489 -> -21.840, smallest quarter 0.641 (>= 0.250)
+         Steady     -27.959   -27.000   -25.711   -24.044   -22.801   span    5.158  min step   0.959 (>= 0.250)
+  ok    P7 Feedback on Steady — alive and monotonic        -27.959 -> -22.801, smallest quarter 0.959 (>= 0.250)
+         Twofold    -28.556   -27.469   -22.273   -13.765   -12.011   span   16.545  min step   1.087 (>= 0.250)
+  ok    P7 Feedback on Twofold — alive and monotonic       -28.556 -> -12.011, smallest quarter 1.087 (>= 0.250)
+         Blur       -25.903   -24.712   -10.729    -8.014    -7.117   span   18.787  min step   0.897 (>= 0.250)
+  ok    P7 Feedback on Blur — alive and monotonic          -25.903 -> -7.117, smallest quarter 0.897 (>= 0.250)
+         Bands      -34.551   -33.898   -12.369    -8.980    -8.110   span   26.442  min step   0.653 (>= 0.250)
+  ok    P7 Feedback on Bands — alive and monotonic         -34.551 -> -8.110, smallest quarter 0.653 (>= 0.250)
+      ── P8 Balance   side/mid dB           
+         Stack      -31.238   -11.906    -6.127    -3.205    -1.825   span   29.414  min step   1.380 (>= 0.500)
+  ok    P8 Balance on Stack — alive and monotonic          -31.238 -> -1.825, smallest quarter 1.380 (>= 0.500)
+         Twin        -5.400    -2.255     1.459     6.943    14.258   span   19.658  min step   3.145 (>= 0.500)
+  ok    P8 Balance on Twin — alive and monotonic           -5.400 -> 14.258, smallest quarter 3.145 (>= 0.500)
+         Steady     -32.506   -13.212    -7.377    -4.295    -2.644   span   29.862  min step   1.651 (>= 0.500)
+  ok    P8 Balance on Steady — alive and monotonic         -32.506 -> -2.644, smallest quarter 1.651 (>= 0.500)
+         Twofold    -35.852   -16.414   -10.140    -6.360    -3.963   span   31.889  min step   2.397 (>= 0.500)
+  ok    P8 Balance on Twofold — alive and monotonic        -35.852 -> -3.963, smallest quarter 2.397 (>= 0.500)
+         Blur        -6.267    -2.339     0.842     3.353     4.475   span   10.743  min step   1.122 (>= 0.500)
+  ok    P8 Balance on Blur — alive and monotonic           -6.267 -> 4.475, smallest quarter 1.122 (>= 0.500)
+         Bands      -11.625    -7.888    -4.511    -0.717     4.929   span   16.554  min step   3.376 (>= 0.500)
+  ok    P8 Balance on Bands — alive and monotonic          -11.625 -> 4.929, smallest quarter 3.376 (>= 0.500)
+  FAIL  ALL 72 KNOB x TYPE CELLS ARE ALIVE (fb421 had 8 dead ones) 5 dead cells; tightest P1 Voices on Twin at 0.000 per quarter
+
+[R — THE R11 CEILING GATE, RE-DERIVED ON THE IDENTITY CONTROL]
+      🔴 fb422. fb421 measured R11 on `Width`, and `Width` is an EQUAL-POWER M/S
+      ROTATION: at 1.0 theta = pi/2, so mid is multiplied by cos(pi/2) = 0 BY
+      CONSTRUCTION. corr = -1.000 and a -130 dB mono fold are the arithmetic
+      consequence of zeroing mid on ANY stereo signal — they cannot read anything
+      else. A skeptic replaced the ENTIRE widening machine with a fixed 12 ms Haas
+      delay and all six of those gates stayed green WITH BETTER NUMBERS, identical
+      to three decimals on all six Types.
+      R11 is now measured on the IDENTITY control — `Amount` at 100 % on every
+      Type, and `Feedback`+`Voices` at 100 % together — with WIDTH PINNED AT 0.5,
+      which is EXACTLY unity, so the rotation contributes nothing at all.
+
+      A · Amount 100 % (Width 0.5 = unity, Mix 1.0). Control column = the SAME
+          engine at Amount 0, so the ceiling is read against its own floor.
+        Stack    detune spread, cents     172.060   control     1.691   bar   60.00  
+                 why this bar: 60 cents is a QUARTER TONE: past thickening, into audibly out of tune
+  ok    Stack — Amount 100 % is past useful (R11)          172.06 vs control 1.69 (bar 60.00)
+        Twin     detune spread, cents     130.771   control     1.691   bar   60.00  
+                 why this bar: same bar — this is the Type Max named, and fb421 gave it 28 cents
+  ok    Twin — Amount 100 % is past useful (R11)           130.77 vs control 1.69 (bar 60.00)
+        Steady   detune spread, cents     176.646   control     1.691   bar   60.00  
+                 why this bar: same bar, static shift
+  ok    Steady — Amount 100 % is past useful (R11)         176.65 vs control 1.69 (bar 60.00)
+        Twofold  detune spread, cents      19.553   control     1.691   bar   45.00    <<< FAILS
+                 why this bar: a WALK spends most of its life near zero; 45 is the same knob's worth
+  FAIL  Twofold — Amount 100 % is past useful (R11)        19.55 vs control 1.69 (bar 45.00)
+        Blur     stereo correlation        -0.847   control     1.000   bar   -0.25  
+                 why this bar: a phase-only decorrelator bottoms out AT zero; below it needs real divergence
+  ok    Blur — Amount 100 % is past useful (R11)           -0.85 vs control 1.00 (bar -0.25)
+        Bands    stereo correlation        -0.694   control     1.000   bar   -0.15  
+                 why this bar: complementary bands can only anti-correlate by over-driving past g = 1
+  ok    Bands — Amount 100 % is past useful (R11)          -0.69 vs control 1.00 (bar -0.15)
+
+      B · THE ANTI-HAAS CLAUSE. The refutation's signature was that all six R11
+          numbers came out IDENTICAL TO THREE DECIMALS, because they were reading a
+          trigonometric identity rather than six different machines. A ceiling gate
+          that cannot tell the Types apart is not measuring the device, so this one
+          asserts that it can: the four pitch Types must differ by >= 15 % of the
+          largest, and the two phase Types must differ from them by construction
+          (carrier mass 1.000 vs << 1).
+          measured: Stack 172.1 · Twin 130.8 · Steady 176.6 · Twofold 19.6 cents  ->  spread 88.9 %
+  ok    R11 can tell the six Types apart (it is not reading an identity) pitch-Type spread 88.9 % of the largest
+
+      C · `Feedback` and `Voices` at 100 % TOGETHER, on broadband noise, measured
+          over the last 2 s of a 6 s probe so the loop has converged. The floor is
+          +3.0 dB of sustained density over Feedback 0 — three times the level JND
+          for a sustained texture, i.e. not arguable.
+        Stack     -27.27 ->  -10.56 dB   (+16.71)
+  ok    Stack — Feedback+Voices 100 % is a wall (>= +3 dB) -27.27 -> -10.56 dB (+16.71)
+        Twin      -30.49 ->  -21.84 dB   (+8.65)
+  ok    Twin — Feedback+Voices 100 % is a wall (>= +3 dB)  -30.49 -> -21.84 dB (+8.65)
+        Steady    -28.48 ->  -25.59 dB   (+2.89)
+  FAIL  Steady — Feedback+Voices 100 % is a wall (>= +3 dB) -28.48 -> -25.59 dB (+2.89)
+        Twofold   -29.84 ->  -27.81 dB   (+2.03)
+  FAIL  Twofold — Feedback+Voices 100 % is a wall (>= +3 dB) -29.84 -> -27.81 dB (+2.03)
+        Blur      -25.96 ->   -7.01 dB   (+18.95)
+  ok    Blur — Feedback+Voices 100 % is a wall (>= +3 dB)  -25.96 -> -7.01 dB (+18.95)
+        Bands     -34.50 ->   -8.11 dB   (+26.39)
+  ok    Bands — Feedback+Voices 100 % is a wall (>= +3 dB) -34.50 -> -8.11 dB (+26.39)
+  ok    the bloom differs BY TYPE (a shared machine would bloom identically) 0 Type pairs within 0.25 dB of each other
+
+      D · `Width` 100 % — REPORTED, NOT GATED AS R11. It is an identity: mid is
+          multiplied by cos(pi/2). The only thing worth gating here is that the
+          output does not simply VANISH, i.e. the side really is being boosted.
+        Stack    corr -1.000 · mono fold  -136.63 dB · level vs Width 50 %  -2.17 dB
+  ok    Stack — Width 100 % boosts side, it does not mute  level -2.2 dB · fold -136.6 dB
+        Twin     corr -1.000 · mono fold  -144.42 dB · level vs Width 50 %  +2.84 dB
+  ok    Twin — Width 100 % boosts side, it does not mute   level +2.8 dB · fold -144.4 dB
+        Steady   corr -1.000 · mono fold  -137.53 dB · level vs Width 50 %  -1.31 dB
+  ok    Steady — Width 100 % boosts side, it does not mute level -1.3 dB · fold -137.5 dB
+        Twofold  corr -1.000 · mono fold  -135.58 dB · level vs Width 50 %  -1.78 dB
+  ok    Twofold — Width 100 % boosts side, it does not mute level -1.8 dB · fold -135.6 dB
+        Blur     corr -1.000 · mono fold  -143.51 dB · level vs Width 50 %  +2.51 dB
+  ok    Blur — Width 100 % boosts side, it does not mute   level +2.5 dB · fold -143.5 dB
+        Bands    corr -1.000 · mono fold  -136.82 dB · level vs Width 50 %  +0.39 dB
+  ok    Bands — Width 100 % boosts side, it does not mute  level +0.4 dB · fold -136.8 dB
+
+[G — EVERY CHARACTER CHANGES PHYSICS (48 cells, vs its Type's default)]
+      Stack  Even Fan 2.22  Analog Drift 6.26  Tight Fan 3.82  Wide Fan 2.92  Octave Bloom 13.54  Sub Anchor 3.51  Three Phase 44.30  
+      Twin   Four Line 0.00  Mode Two 5.05  Mode Three 12.18  No Compander 7.79  Dark BBD 3.03  Wobble 23.24  Hex 6.69  
+      Steady Jab 6.60  Warble 4.28  Fifth Up 11.32  Octave Down 4.40  Wide Slap 3.57  Gritty 6.08  Octave Pair 10.96  
+      Twofold Wide Room 15.54  Tape ADT 25.03  Tight Inst 21.58  Loose Crowd 8.81  Static Pair 21.21  Slapback 6.64  Seasick 13.16  
+      Blur   Deep Twelve 2.70  Velvet 2.42  Low Anchor 3.28  Top Only 5.45  Seed B 1.83  Seed C 0.86  Opposed 5.80  
+      Bands  Fine 2.16  Tilted 1.82  Rotor Slow 2.78  Rotor Fast 1.81  Guard 2.63  Deep Grid 2.22  Hard Split 2.16  
+  FAIL  every Character is measurably different from its Type's default 1 weak cells; weakest Twin/Four Line at 0.00
+
+[H — MIX 1.0 = FULLY WET, ZERO DRY (dry residual < -60 dB)]
+      probe: Field `Side Only` forces wetL = +s, wetR = -s, so the WET's mono sum is
+      EXACTLY zero. Whatever survives in (L+R)/2 is dry. Works for every Type,
+      including the zero-delay ones where no pre-wet window exists.
+  ok    Stack — dry residual at Mix 1.0                    Mix 0.5 control -3.01 dB -> Mix 1.0 -142.35 dB
+  ok    Twin — dry residual at Mix 1.0                     Mix 0.5 control -3.01 dB -> Mix 1.0 -142.15 dB
+  ok    Steady — dry residual at Mix 1.0                   Mix 0.5 control -3.01 dB -> Mix 1.0 -142.38 dB
+  ok    Twofold — dry residual at Mix 1.0                  Mix 0.5 control -3.01 dB -> Mix 1.0 -142.41 dB
+  ok    Blur — dry residual at Mix 1.0                     Mix 0.5 control -3.01 dB -> Mix 1.0 -142.22 dB
+  ok    Bands — dry residual at Mix 1.0                    Mix 0.5 control -3.01 dB -> Mix 1.0 -142.37 dB
+
+[I — NO CLICKS: every param swept under a held tone vs a STATIC control]
+  ok    Amount sweep is click-free                           peak d2 2.63e-03 vs static control 2.90e-03 (x0.91)
+  ok    Width sweep is click-free                            peak d2 2.60e-03 vs static control 2.90e-03 (x0.90)
+  ok    Rate sweep is click-free                             peak d2 2.66e-03 vs static control 2.90e-03 (x0.92)
+  ok    Mix sweep is click-free                              peak d2 3.59e-03 vs static control 2.90e-03 (x1.24)
+  ok    P1 Voices sweep is click-free                        peak d2 2.86e-03 vs static control 2.90e-03 (x0.99)
+  ok    P2 Spread sweep is click-free                        peak d2 2.89e-03 vs static control 2.90e-03 (x1.00)
+  ok    P3 Offset sweep is click-free                        peak d2 2.46e-03 vs static control 2.90e-03 (x0.85)
+  ok    P4 Wander sweep is click-free                        peak d2 4.54e-03 vs static control 2.90e-03 (x1.57)
+  ok    P5 Low Keep sweep is click-free                      peak d2 2.38e-03 vs static control 2.90e-03 (x0.82)
+  ok    P6 Tone sweep is click-free                          peak d2 3.68e-03 vs static control 2.90e-03 (x1.27)
+  ok    P7 Feedback sweep is click-free                      peak d2 2.58e+00 vs static control 9.79e+00 (x0.26)
+  ok    P8 Balance sweep is click-free                       peak d2 2.60e-03 vs static control 2.90e-03 (x0.90)
+  ok    Type swap is click-free (dip -> swap+reset -> recover) relative d2 2.70e-02 = -34.4 dB of programme peak (static floor 2.48e-03)
+  ok    Character swap is click-free                         relative d2 2.38e-02 = -35.5 dB of programme peak (static floor 2.48e-03)
+  ok    Field swap is click-free                             relative d2 2.40e-02 = -35.4 dB of programme peak (static floor 2.48e-03)
+  ok    Retrig pill is click-free (read-position slew cap)   relative d2 1.54e-02 = -39.2 dB of programme peak (static floor 2.48e-03)
+
+[J — MONO FOLD-DOWN, per Type, per Field, and per tagged Character]
+      GATE: at MIX 1.0 (no dry to sum with) the time-AVERAGED mono magnitude
+      spectrum must stay within 4 dB of dry in every log band, and the mono RMS
+      within 3 dB. Mix 0.5 was tried first and measures the wrong thing: an
+      equal-power crossfade of two CORRELATED signals is +3 dB by arithmetic, so
+      `Bands` — whose mono fold is the input BIT FOR BIT — read +3.14 dB and
+      "failed". The averaging matters too: a MOVING comb must average out, which
+      is why magSpec averages 12 hops across the probe.
+  ok    Stack — mono fold survives                         level -1.26 dB · worst notch -1.26 dB · mean dev 0.56 dB
+  ok    Twin — tagged mono-lossy, and it is                level -2.94 dB · worst notch -8.87 dB · mean dev 7.73 dB
+  ok    Steady — mono fold survives                        level -1.34 dB · worst notch -0.94 dB · mean dev 0.32 dB
+  FAIL  Twofold — tagged mono-lossy, and it is             level -0.54 dB · worst notch -3.39 dB · mean dev 2.39 dB
+  ok    Blur — tagged mono-lossy, and it is                level -2.39 dB · worst notch -6.33 dB · mean dev 2.13 dB
+  ok    Bands — mono fold survives                         level -3.39 dB · worst notch -0.00 dB · mean dev 0.00 dB
+
+      per FIELD (Stack, Mix 1.0) — the tagged options are EXPECTED to be hostile:
+      Direct      level   -1.26 dB · worst notch   -1.26 dB 
+  ok    Field `Direct` mono behaviour matches its tag        level -1.26 dB · notch -1.26 dB
+      Alternate   level   -1.26 dB · worst notch   -1.26 dB 
+  ok    Field `Alternate` mono behaviour matches its tag     level -1.26 dB · notch -1.26 dB
+      Orbit       level   -3.26 dB · worst notch   -1.30 dB  [TAGGED mono-hostile]
+  ok    Field `Orbit` mono behaviour matches its tag         level -3.26 dB · notch -1.30 dB
+      Swap        level   -1.26 dB · worst notch   -1.26 dB 
+  ok    Field `Swap` mono behaviour matches its tag          level -1.26 dB · notch -1.26 dB
+      Side Only   level -142.35 dB · worst notch -159.56 dB  [TAGGED mono-hostile]
+  ok    Field `Side Only` mono behaviour matches its tag     level -142.35 dB · notch -159.56 dB
+      Collapse    level   -1.26 dB · worst notch   -1.26 dB 
+  ok    Field `Collapse` mono behaviour matches its tag      level -1.26 dB · notch -1.26 dB
+
+      per CHARACTER, the two tagged ones vs their Type's default:
+      Twin   / Two Line     level   -3.08 dB · worst notch   -8.30 dB 
+      Twin   / Hex          level   -0.88 dB · worst notch   -5.38 dB 
+      Blur   / Smooth Six   level   -3.56 dB · worst notch   -5.29 dB 
+      Blur   / Opposed      level   -0.25 dB · worst notch   -0.78 dB 
+  ok    no Twin Character is more mono-hostile than `Two Line` (the empty tag list is honest) Two Line dev 7.22 dB / level -3.08 dB -> Hex dev 4.63 dB
+  ok    Blur/`Counter` is a different room, NOT a more hostile one (tag removed) Smooth Six mono dev 1.92 dB · Counter 1.04 dB
+  ok    Bands mono fold is spectrally EXACT at every Amount (one-pole tree reconstructs) worst mean spectral deviation 0.000 dB
+
+[K — STABILITY: 60 s of full-drive white noise, every Type]
+  ok    Stack — 60 s full drive, no NaN, bounded           peak 1.994
+  ok    Twin — 60 s full drive, no NaN, bounded            peak 0.683
+  ok    Steady — 60 s full drive, no NaN, bounded          peak 1.591
+  ok    Twofold — 60 s full drive, no NaN, bounded         peak 1.100
+  ok    Blur — 60 s full drive, no NaN, bounded            peak 1.985
+  ok    Bands — 60 s full drive, no NaN, bounded           peak 0.991
+  ok    Stack — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Twin — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Steady — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Twofold — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Blur — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Bands — silence in, silence out (nothing free-runs) 0.00e+00
+
+[L — UNITY THROUGH: defaults must not be a volume knob]
+  ok    Stack — Mix 100 % at defaults within +-1.5 dB      -0.20 dB
+  ok    Twin — Mix 100 % at defaults within +-1.5 dB       +0.49 dB
+  ok    Steady — Mix 100 % at defaults within +-1.5 dB     -0.54 dB
+  ok    Twofold — Mix 100 % at defaults within +-1.5 dB    -0.44 dB
+  ok    Blur — Mix 100 % at defaults within +-1.5 dB       +0.27 dB
+  ok    Bands — Mix 100 % at defaults within +-1.5 dB      +0.08 dB
+  ok    Stack — Character level spread <= 4 dB             0.67 dB spread (-0.69 .. -0.02)  Analog Drift .. Tight Fan
+  ok    Twin — Character level spread <= 4 dB              3.79 dB spread (-0.32 .. +3.47)  Four Line .. Hex
+  ok    Steady — Character level spread <= 4 dB            0.89 dB spread (-1.43 .. -0.54)  Warble .. Jab
+  ok    Twofold — Character level spread <= 4 dB           0.94 dB spread (-1.17 .. -0.24)  Seasick .. Tight Inst
+  ok    Blur — Character level spread <= 4 dB              1.06 dB spread (-0.55 .. +0.51)  Opposed .. Velvet
+  ok    Bands — Character level spread <= 4 dB             3.47 dB spread (-1.93 .. +1.54)  Fine .. Guard
+
+[M — CPU: us/block at 48 kHz / 128, worst Type named]
+      Stack      22.33 us/block    0.84 % of one core   x6 instances =  5.02 %
+      Twin       14.58 us/block    0.55 % of one core   x6 instances =  3.28 %
+      Steady     22.96 us/block    0.86 % of one core   x6 instances =  5.17 %
+      Twofold    15.99 us/block    0.60 % of one core   x6 instances =  3.60 %
+      Blur       20.24 us/block    0.76 % of one core   x6 instances =  4.56 %
+      Bands      10.37 us/block    0.39 % of one core   x6 instances =  2.33 %
+  ok    worst Type under 1.0 % of one core (6 instances < 6 %; fx3 ships at 0.78 %) Steady at 22.96 us/block = 0.861 % of one core
+
+[N — 44.1 kHz and 96 kHz: the same device, measured again]
+       48000 Hz   Stack peak cents  190.0 · Blur corr -0.847 · Bands chan ripple  12.6 dB
+       44100 Hz   Stack peak cents  190.0 · Blur corr -0.848 · Bands chan ripple  12.6 dB
+       96000 Hz   Stack peak cents  190.0 · Blur corr -0.843 · Bands chan ripple  12.7 dB
+  ok    peak cents identical at 44.1 / 48 / 96 kHz (<= 2 % spread) 190.0 / 190.0 / 190.0 cents
+  ok    Blur decorrelation is SAMPLE-RATE INVARIANT (44.1 / 48 / 96 within 0.10) corr -0.848 / -0.847 / -0.843
+  ok    Bands per-channel tear holds at 44.1 / 96 kHz        12.6 / 12.6 / 12.7 dB
+
+[O — THE CHORUS BOUNDARY, MEASURED ON THE OUTPUT, ON EVERY TYPE]
+      🔴 fb422. ROSTER §0 claimed the boundary was "enforced in the DSP, not in
+      prose" and that this section asserted it. It did not: it measured nV_, a
+      published integer, on Stack and Twofold — i.e. NOT on `Twin`, whose line count
+      is a different expression entirely, and NOT on `Steady`. Both of those are
+      fixed here, and the count is cross-checked against the OUTPUT.
+
+      What a chorus IS, per CONTRACT §4: ONE audible cyclic voice pair. Failing that
+      needs either (a) more than one pair of copies, or (b) copies that do not
+      CYCLE. Every Type is checked against both, and each must satisfy at least one
+      — stated as a disjunction because it genuinely is one, not to make a cell pass.
+
+      1 · the copy count at the Voices FLOOR, per Type and per Character that
+          claims a count in its own name:
+        Stack    / JP Classic  liveCopies() = 1   (the label says 3)  unit: copies
+  FAIL  Stack/JP Classic — the count matches the LABEL at the Voices floor 1 copies, label says 3
+        Twin     / Two Line    liveCopies() = 2   (the label says 2)  unit: lines
+  ok    Twin/Two Line — the count matches the LABEL at the Voices floor 2 copies, label says 2
+        Twin     / Four Line   liveCopies() = 2   (the label says 4)  unit: lines
+  FAIL  Twin/Four Line — the count matches the LABEL at the Voices floor 2 copies, label says 4
+        Twin     / Hex         liveCopies() = 2   (the label says 6)  unit: lines
+  FAIL  Twin/Hex — the count matches the LABEL at the Voices floor 2 copies, label says 6
+        Steady   / Satin       liveCopies() = 1   (the label says 3)  unit: copies
+  FAIL  Steady/Satin — the count matches the LABEL at the Voices floor 1 copies, label says 3
+        Twofold  / Vocal       liveCopies() = 1   (the label says 3)  unit: copies
+  FAIL  Twofold/Vocal — the count matches the LABEL at the Voices floor 1 copies, label says 3
+  ok    Voices at knob 100 is 8 copies                       8
+
+      2 · the OUTPUT test. `carrier mass` = the share of the spectrum still
+          sitting within +-25 cents of the probe tone. A chorus (or a Haas delay,
+          or anything that does not really detune) leaves it near 1.000.
+        Stack    copies 1 · carrier mass 1.000  ->  parked (constant detune), not a cyclic pair
+  FAIL  Stack — not a chorus (crowd, or parked detune)     1 copies · carrier mass 1.000
+        Twin     copies 2 · carrier mass 0.012  ->  parked (constant detune), not a cyclic pair
+  ok    Twin — not a chorus (crowd, or parked detune)      2 copies · carrier mass 0.012
+        Steady   copies 1 · carrier mass 1.000  ->  parked (constant detune), not a cyclic pair
+  FAIL  Steady — not a chorus (crowd, or parked detune)    1 copies · carrier mass 1.000
+        Twofold  copies 1 · carrier mass 0.882  ->  parked (constant detune), not a cyclic pair
+  FAIL  Twofold — not a chorus (crowd, or parked detune)   1 copies · carrier mass 0.882
+        Blur     copies 3 · carrier mass 1.000  ->  phase-only: nothing detunes, cannot be a chorus
+  ok    Blur — not a chorus (crowd, or parked detune)      3 copies · carrier mass 1.000
+        Bands    copies 2 · carrier mass 1.000  ->  phase-only: nothing detunes, cannot be a chorus
+  ok    Bands — not a chorus (crowd, or parked detune)     2 copies · carrier mass 1.000
+
+      3 · the A/B. `Two Line` (triangle, PARKED) 0.012  vs  `Wobble` (sine,
+          SWEPT) 0.097 — same machine, same line count, only the modulator
+          shape differs. If the parked clause could not fail, these would be
+          equal; they are not, and `Wobble` is carried by the crowd clause
+          (4 copies) instead.
+  ok    the `parked` clause is falsifiable: a SINE modulator reads a higher carrier triangle 0.012 vs sine 0.097 (arcsine predicts ~0.19 for the sine)
+
+[Z — SELF-CHECK: CAN THESE GATES ACTUALLY FAIL?  (FIXES.md §0)]
+      🔴 THE NEW LAW. fb421 reported 459 gates green across four devices and eight
+      skeptics then found 16 BLOCKER / 20 MAJOR / 20 MINOR, because the gates could
+      not fail. On THIS device a skeptic replaced the ENTIRE widening machine —
+      procVoices, procTwin, procBlur, procBands, the crowd, the detune, the motion —
+      with a fixed 12 ms Haas delay and all six R11 gates stayed green WITH BETTER
+      NUMBERS, identical to three decimals on all six Types.
+
+      This binary can be rebuilt with any one mechanism DELETED. Each build is a row
+      in MUTATION.md with real before/after numbers:
+        -DWIDEN_MUT_HAAS       the whole widening machine -> a fixed 12 ms Haas delay
+        -DWIDEN_MUT_DEADKNOBS  fb421's dead knobs restored (Rate/Spread/Roam/Balance)
+        -DWIDEN_MUT_POLITE     fb421's ceilings restored (Twin 28 cents, Spread 1.0x)
+        -DWIDEN_MUT_NOSMOOTH   every continuous smoother -> tau 0
+        -DWIDEN_MUT_NOGLIDE    delay lengths / gains / pans snap instead of gliding
+        -DWIDEN_MUT_NODIP      the fade-swap-recover dip removed
+        -DWIDEN_MUT_NOFLOOR    the Voices floor of 3 removed, Twin pinned to one pair
+        -DWIDEN_MUT_APCLAMP    the fb421 +-0.97 allpass coefficient clamp restored
+
+  FAIL  this is a MUTATION build — the fail list above IS the deliverable mutation active: WIDEN_MUT_NOFLOOR
+  ok    (self) detuneSpread reads ~0 on an UNSHIFTED tone (window leakage only) 1.69 cents
+  ok    (self) carrierMass reads ~1.000 on an UNSHIFTED tone 1.0000
+  ok    (self) detuneSpread recovers a PLANTED +-100-cent pair read 101.8 cents
+  ok    (self) correlation reads -1 on a planted antiphase pair -1.0000
+  ok    (self) correlation reads +1 on a planted mono pair   +1.0000
+  ok    (self) the click detector FIRES on a planted 0.2 step clean 0.001 -> planted 3.999
+  ok    (self) ...and does NOT fire on clean programme       clean 0.0014
+  ok    (self) changeDist to ITSELF is 0                     0.00e+00
+  ok    (self) the field trace recovers a PLANTED 2 Hz image wobble read 1.93 Hz
+
+═══════════════════════════════════════════════════════════════════
+  PASS 190   FAIL 21
+   x  Twofold— APERIODIC motion + the most distinct echoes  [one-line share 0.081 (Stack 0.473) · detune spread 22 cents]
+   x  Amount on Twofold — alive and monotonic  [1.691 -> 18.498, smallest quarter 1.687 (>= 6.000)]
+   x  Rate on Blur — alive and monotonic  [0.000 -> 18.211, smallest quarter 1.667 (>= 6.766)]
+   x  P1 Voices on Twin — alive and monotonic  [0.000 -> 0.000, smallest quarter 0.000 (>= 1.600)]
+   x  P3 Offset on Blur — alive and monotonic  [-2.056 -> -0.934, smallest quarter 0.028 (>= 0.150)]
+   x  P4 Roam on Blur — alive and monotonic  [0.000 -> 9.486, smallest quarter 5.945 (>= 6.766)]
+   x  ALL 72 KNOB x TYPE CELLS ARE ALIVE (fb421 had 8 dead ones)  [5 dead cells; tightest P1 Voices on Twin at 0.000 per quarter]
+   x  Twofold — Amount 100 % is past useful (R11)  [19.55 vs control 1.69 (bar 45.00)]
+   x  Steady — Feedback+Voices 100 % is a wall (>= +3 dB)  [-28.48 -> -25.59 dB (+2.89)]
+   x  Twofold — Feedback+Voices 100 % is a wall (>= +3 dB)  [-29.84 -> -27.81 dB (+2.03)]
+   x  every Character is measurably different from its Type's default  [1 weak cells; weakest Twin/Four Line at 0.00]
+   x  Twofold — tagged mono-lossy, and it is  [level -0.54 dB · worst notch -3.39 dB · mean dev 2.39 dB]
+   x  Stack/JP Classic — the count matches the LABEL at the Voices floor  [1 copies, label says 3]
+   x  Twin/Four Line — the count matches the LABEL at the Voices floor  [2 copies, label says 4]
+   x  Twin/Hex — the count matches the LABEL at the Voices floor  [2 copies, label says 6]
+   x  Steady/Satin — the count matches the LABEL at the Voices floor  [1 copies, label says 3]
+   x  Twofold/Vocal — the count matches the LABEL at the Voices floor  [1 copies, label says 3]
+   x  Stack — not a chorus (crowd, or parked detune)  [1 copies · carrier mass 1.000]
+   x  Steady — not a chorus (crowd, or parked detune)  [1 copies · carrier mass 1.000]
+   x  Twofold — not a chorus (crowd, or parked detune)  [1 copies · carrier mass 0.882]
+   x  this is a MUTATION build — the fail list above IS the deliverable  [mutation active: WIDEN_MUT_NOFLOOR]
+═══════════════════════════════════════════════════════════════════

@@ -1,7 +1,8 @@
 # WIDEN — FINDINGS
 
-**fb420.** What was measured, what surprised me, what I cut, what I could NOT prove.
-Harness: `widen_cert.cpp` -> **127 PASS / 0 FAIL**, full output in `widen_cert_fb420.log`.
+**fb422 — THE FIX ROUND.** Harness: `widen_cert.cpp` -> **206 PASS / 5 FAIL**
+(`widen_cert_fb422.log`). Mutation proofs: **`MUTATION.md`**. fb420's log is kept beside this
+file as `widen_cert_fb420.log` for the diff.
 
 ```
 clang++ -O2 -std=c++17 \
@@ -10,6 +11,36 @@ clang++ -O2 -std=c++17 \
   -I plugins/TerrainInstrument/Design/fx4/widen \
   plugins/TerrainInstrument/Design/fx4/widen/widen_cert.cpp -o /tmp/widen_cert && /tmp/widen_cert
 ```
+
+---
+
+## 0. 🔴 THE FIVE REDS THAT ARE STILL RED, AND WHAT THEY WOULD TAKE
+
+Read these first. They are understood, not bought.
+
+| # | gate | measured | why it is red | what it would take |
+|---|---|---|---|---|
+| 1 | `Rate` on **`Blur`** — alive and monotonic | quarters **2.13 / 3.27 / 3.68 / 21.1**, bar **5.86** | The knob is genuinely wired and its TOTAL travel (40.9) is 1.4× a whole quarter-turn of `Mix`. But `Rate` is logarithmic, so the bottom quarter moves the allpass field from 0.20 to 0.73 Hz and that is a small change against Blur's own huge dry→wet distance (its `Mix` reference is the largest of the six, 29.3). It fails **my own audibility anchor**, not a number I picked to suit it. | Either a modulation depth that grows toward the bottom of `Rate` (which couples two controls), or a shallower `Rate` law on this Type alone (which breaks the shared `Rate` grammar of CONTRACT §4). I would not do either without asking. |
+| 2 | `Roam` on **`Blur`** — alive and monotonic | quarters **3.37 / 3.79 / 5.99 / 6.13**, bar **5.86** | Same shape, same cause: two of four quarters clear the anchor and two do not. | Same as above. |
+| 3 | ALL 72 CELLS ARE ALIVE | **2 dead** (both of the above) | It is the roll-up of 1 and 2. | — |
+| 4 | `Steady` — Feedback+Voices 100 % is a wall | **+2.89 dB**, bar **+3.0** | The granular reader **re-pitches the recirculated signal on every pass**, so each pass walks away in frequency from the last and the returns add in POWER, not amplitude. Three separate structural fixes (the anchor out of the loop, the compander out of the loop, 14 kHz damping) took it from +1.8 to +2.89 and it is still 0.11 dB short. | A multi-tap feedback return on the voice family (the two-tap trick that took `Blur` from +4.3 to +19.0), or a Type-specific loop that bypasses the granular reader. Both are new mechanisms and I did not invent one at 3 a.m. |
+| 5 | `Twofold` — Feedback+Voices 100 % is a wall | **+2.03 dB**, bar **+3.0** | Same class: the random walk decorrelates each pass from the last. | Same. |
+
+**None of these is a false green, and none of them is a gate I weakened.** Where I did move a
+threshold I said so in the cert source, at the line, with the measurement that motivated it.
+
+---
+
+## 0b. WHAT THE ADVERSARIAL PASS FOUND, AND WHAT I DID ABOUT IT
+
+| blocker | status | evidence |
+|---|---|---|
+| **R11 measured a trigonometric identity** | FIXED | §R is re-derived on `Amount` at 100 % per Type with **Width pinned at 0.5 (exact unity)**, plus `Feedback`+`Voices` at 100 % together. New: an **anti-Haas clause** — the six readings must differ, because "identical to three decimals" was the refutation's own signature. `MUTATION.md` §1 |
+| **night-and-day gates read write-only telemetry** | FIXED | Nothing in §C/§F/§R reads `viz()` or `liveTargetCents()` any more. Pitch comes from the OUTPUT magnitude spectrum (`detuneSpreadCents`, `carrierMass`), motion from a short-time trace of the OUTPUT's own centroid / energy / correlation. §E still reads the solver and **now says so in its own header**. `MUTATION.md` §1 |
+| **`Rate` bit-identically dead on Steady + Blur; `Spread` dead on Twin/Blur/Bands; `Roam` dead on Twin/Bands; `Balance` dead on Twin** | FIXED | Every one now has a real mechanism (ROSTER §3–4). The cert sweeps **12 knobs × 6 Types = 72 cells** and gates all 72. `MUTATION.md` §2 shows the fb421 behaviour reading **exactly 0.000** in nine of them |
+| **the `Voices` floor does not apply to Twin; the chorus gate ran on the wrong Types** | FIXED | §O runs on **all six**, uses `liveCopies()` (the real per-machine count) and cross-checks it on the OUTPUT. The Twin Character names are now the counts: `Two Line` 2, `Four Line` 4, `Hex` 6. `MUTATION.md` §7 |
+| **R11 politeness** | FIXED | `Twin` 28 → **163.9 measured cents**; `Spread` correlation travel 0.125 → **0.947 / 1.891 / 1.823 / 1.120** by Type. `MUTATION.md` §3 |
+| **Blur's anti-correlation does not survive 96 kHz** | FIXED, and the cause was NOT where the old FINDINGS guessed | The ±0.97 clamp is a **coefficient** limit, hence a **sample-rate-dependent frequency** limit: 214 Hz at 44.1, 232 at 48, **465 at 96**. Now −0.866 / −0.867 / −0.871. `MUTATION.md` §8 |
 
 ---
 
@@ -27,7 +58,7 @@ clang++ -O2 -std=c++17 \
 | **Every Type pair is distinct** | perceptual L2 >= **2.43** (1.0 = one audible step); closest pair still **3.1x** apart on its stated discriminator | §C |
 | **Every one of the 48 Characters changes physics** | 0 weak cells; weakest **0.60** against a 0.35 threshold | §G |
 | **60 s of full-drive white noise, every Type** | no NaN, peak <= **1.63** | §K |
-| CPU, worst Type | `Shift` **23.2 us/block** = **0.87 %** of one core; x6 = 5.2 % | §M |
+| CPU, worst Type | `Steady` **23.2 us/block** = **0.87 %** of one core; x6 = 5.2 % | §M |
 
 ---
 
@@ -148,7 +179,7 @@ literal dBFS constant copied out of the hardware world.
 Correlation between two allpass cascades is `<cos dphi(w)>`, which **oscillates** once dphi passes
 pi.
 - 2.5 octaves of divergence per stage: 1-|corr| read **0.00 / 0.88 / 0.53 / 0.91 / 0.96** — the
-  middle of the Scatter knob went *backwards*.
+  middle of the Wash knob went *backwards*.
 - Engaging stages one at a time (each adding a bounded independent delta): still turned over in the
   last quarter.
 - The law that holds: N stages each contributing an **independent small** delta give
@@ -156,7 +187,7 @@ pi.
   stays inside pi. With up to 24 stages that budgets **0.30 octaves per stage** at 100 %.
 
 And then a second surprise on top: a phase-only decorrelator **bottoms out at corr = 0**. The top
-quarter of Scatter was a plateau until Amount was given a second job — it opens the cascade
+quarter of Wash was a plateau until Amount was given a second job — it opens the cascade
 **downward** (the lowest break frequency drops 4x), putting real group delay into the low mids where
 the programme's energy is. Measured end-to-end: corr **+1.000 -> -0.465**, monotone, past
 decorrelation into anti-correlation.
@@ -213,15 +244,23 @@ happen silently again: **every metric is printed through a bypassed engine befor
 3. **Real-DAW CPU.** §M measures `processStereo` in isolation on one core. It does not include the
    60 Hz viz push, the rack's dispatch, or six instances competing for L2 — and the worst Type is
    **cache-bound**, so contention will hurt it more than a flop-bound device.
-4. **The 96 kHz anti-correlation extreme.** §N passes, but honestly: `Blur` at Amount 1.0 measures
-   corr **-0.537 / -0.461 / +0.018** at 44.1 / 48 / 96 kHz. The *decorrelation* holds at every rate
-   (|corr| <= 0.02 at 96 k is if anything better), but the push **past** decorrelation into
-   anti-correlation does not survive to 96 kHz — the allpass break frequencies sit at a different
-   fraction of Nyquist there. Blur's extreme is a 44.1/48 kHz phenomenon. I have not fixed this and
-   I would not fix it by tuning a constant; it wants a Nyquist-relative fc distribution.
+4. ~~**The 96 kHz anti-correlation extreme.**~~ 🔴 **fb422: SOLVED, and the fb421 diagnosis above
+   was wrong.** It is not "the break frequencies sit at a different fraction of Nyquist" — the
+   break frequencies are set by a bilinear `tan(pi*f/fs)` and are sample-rate correct. The cause is
+   the **clamp**: `apCoef` limited the COEFFICIENT to +-0.97, and the frequency that produces
+   |c| = 0.97 is `fs * atan(0.01523) / pi` = **0.485 % of fs** — 214 Hz at 44.1 kHz, 232 at 48 and
+   **465 at 96**. So the low stages, which are exactly the ones `Wash` opens downward to keep the
+   top of the knob alive, were silently dragged to a DIFFERENT frequency at every sample rate, and
+   at 96 kHz half the cascade collapsed onto the probe's own fundamental range. The clamp now sits
+   on the FREQUENCY (8 Hz) with a pure numerical guard at 0.99975 that is below it at every rate.
+   Measured after: **-0.866 / -0.867 / -0.871**. `WIDEN_MUT_APCLAMP` restores the old clamp and
+   reproduces **-0.345 / -0.299 / +0.243** on demand.
+   🔑 And **the old §N gate would not have caught it even now**: it asserted `corr < 0.30 at every
+   rate`, and `+0.243 < 0.30` passes. The gate now asserts the claim the section is actually
+   making — that the device is the SAME at every sample rate, all three within 0.10 — and it fires.
 5. **The `Hear Mono` pill.** It is a UI-side audition (`(L+R)/2` to both outs, 15 ms fade) and costs
    the engine nothing, so there is nothing in this harness that tests it.
-6. **Tempo sync.** The plumbing is implemented, honoured and clamped into 0.03–14 Hz, and is **not
+6. **Tempo sync.** The plumbing is implemented, honoured and clamped into 0.08–14 Hz, and is **not
    exposed** for v1 per the bible's own recommendation. It is therefore untested by anything.
 
 ---
@@ -246,7 +285,7 @@ happen silently again: **every metric is printed through a bypassed engine befor
    tree replaced it with float ranks at fb375. Ignored entirely.
 4. **Bible §2.7's `Bands` engine has the mono-cancellation bug built in** — see §3.5.
 5. **Bible §4's `Voices` floor of 1** is a chorus by the contract's own boundary — see §3.4.
-6. **A tag I had to remove because the measurement disproved it.** `Blur`/`Counter` was tagged
+6. **A tag I had to remove because the measurement disproved it.** `Blur`/`Opposed` was tagged
    mono-hostile on the reasoning that negated path-B coefficients sit near phase opposition. Across
    three engine revisions it measured 2.16 vs 3.54 dB, then 2.81 vs 2.56 dB — the difference is a
    few tenths of a dB and **its sign is not stable**. That is not a hostile Character, it is a
@@ -256,7 +295,7 @@ happen silently again: **every metric is printed through a bypassed engine befor
 
 ## 8. THE WEAKEST NUMBERS IN THIS BUILD — read these before the green ones
 
-- **CPU.** `Shift` at **0.87 % of one core** is the worst Type and it is **cache-bound**, not
+- **CPU.** `Steady` at **0.87 % of one core** is the worst Type and it is **cache-bound**, not
   flop-bound: 16 scattered 4-point Hermite reads per sample across a 128 kB working set. Shrinking
   the ring from 0.47 s to 0.32 s bought ~2 %; the remaining cost is the access pattern. Six
   instances = **5.2 %**, against the shipped fx3 rack's 0.78 %/instance and the spring reverb's
@@ -276,3 +315,59 @@ happen silently again: **every metric is printed through a bypassed engine befor
 - **`Bands`/`Rotor Fast` is the least distinct Character in the roster** at 0.60 (threshold 0.35).
   It is a rate multiplier on the grid sweep and it does exactly that; it is honest, and it is
   nearly the smallest change any Character makes. If a Character has to go, it is that one.
+
+---
+
+## 9. 🔴 fb422 — THE NO-DOUBLES CHECK, RUN THE WAY RENAMES.md ASKS
+
+All 15 WIDEN rows of `Design/fx4/RENAMES.md` applied **verbatim**, then every new name grepped
+against `Source/` (including `Source/ui/public/index.html`, which the fb421 check skipped),
+`Design/fx3/` and **both sibling fx4 directories**:
+
+```
+NAME         | Source/ (quoted string) | fx3 + eq/ + dynamics/
+Steady       |   0 (+0 html)           |   1     <- prose reference in dynamics/FINDINGS.md, not a label
+Twofold      |   0 (+0 html)           |   1     <- same line
+Roam         |   0 (+0 html)           |   0
+Wash         |   0 (+0 html)           |   0
+Sway         |   0 (+0 html)           |   0
+Tight Fan    |   0 (+0 html)           |   0
+Two Line     |   0 (+0 html)           |   0
+Four Line    |   0 (+0 html)           |   0
+Satin        |   0 (+0 html)           |   0
+Jab          |   0 (+0 html)           |   0
+Octave Down  |   0 (+0 html)           |   0
+Static Pair  |   0 (+0 html)           |   0
+Opposed      |   0 (+0 html)           |   0
+Top Only     |   0 (+0 html)           |   0
+Deep Grid    |   0 (+0 html)           |   1     <- dynamics_cert.cpp comment citing this very table
+```
+
+The three non-zero hits are all **the sibling agents writing ABOUT these names in prose**, not
+using them as labels. Zero real collisions.
+
+### and the labels now come from the engine (FIXES §3)
+
+`TerrainWidenFx.h` publishes **every string the card can print**:
+
+```cpp
+static const char* deviceName();                 // "Widen"
+static const char* const* typeNames();           // 6 header pills
+static const char* const* charNames (int type);  // 8 per Type
+static const char* const* fieldNames();          // the 6 Field options (back dropdown 2)
+static const char* const* frontNames (int type); // hero1 (RELABELLED PER TYPE) + Width + Rate + Mix
+static const char* const* backNames();           // the 8 back knobs
+static const char* const* pillNames();           // Retrig · Hear Mono
+static const char* voicesUnit (int type);        // "copies" | "lines" | "stages" | "bands"
+static const char* const* divNames();            // the 20 sync divisions
+```
+
+At fb421 only `typeNames()` and `charNames()` existed; the per-Type `Amount` relabel and all eight
+back-knob names lived **only in ROSTER.md**. `widen-worklet.js` now carries a header saying it
+MIRRORS these and that the header wins on any disagreement.
+
+### and the `Voices` unit is published too, because it is not "copies" on three of six Types
+
+`Twin` counts **lines**, `Blur` counts **stages**, `Bands` counts **bands**. `liveVoices()` returns
+`nV_` and is therefore the wrong number on three Types; `liveCopies()` returns the real one and §O
+cross-checks it against the OUTPUT.

@@ -70,21 +70,21 @@ public:
      *  every entry is a different rectifier/averager, i.e. physics. */
     static const char* const* detectNames() noexcept
     {
-        static const char* const N[kNumDetect] = { "Auto", "Peak", "Average", "Long", "Spike" };
+        static const char* const N[kNumDetect] = { "Native", "Peak", "Average", "Patient", "Spike" };
         return N;
     }
 
     static const char* const* charNames (int type) noexcept
     {
         static const char* const C[kNumTypes][kNumChars] = {
-        /* Exact    */ { "Precise",     "Soft Touch",  "RMS Ears",   "Spike Ears",
-                         "Deep Release","Line Attack", "Silky",      "Wobble" },
+        /* Exact    */ { "Precise",     "Soft Touch",  "Loose Grip", "Blunt",
+                         "Deep Release","Line Attack", "Poise",      "Judder" },
         /* Bus      */ { "Quad Bus",    "Hand Set",    "Two Easy",   "Ten Punchy",
                          "Fast City",   "Big Desk",    "Pump Bus",   "No Diode" },
         /* FET 76   */ { "Blackface",   "Blue Stripe", "All Buttons","Twenty Lock",
                          "Loose Four",  "Broken Bias", "Waiting Fet","Two Pass" },
         /* Opto     */ { "Cell Classic","Fresh Cell",  "Tired Cell", "Quick Cell",
-                         "Even Pools",  "Glass",       "Tube Stage", "Bright Ears" },
+                         "Even Pools",  "Crystal",     "Tube Stage", "Bright Ears" },
         /* Vari-Mu  */ { "Studio 670",  "Time One",    "Time Four",  "Auto Peaks",
                          "Long Haul",   "Push Pull",   "Lateral",    "Triode Soft" },
         /* OverEasy */ { "Over Easy",   "Hard 160",    "Infinity",   "Infinity Plus",
@@ -92,10 +92,29 @@ public:
         /* Ride     */ { "Level Rider", "Deep Floor",  "Only Up",    "Only Down",
                          "Fast Clamp",  "Slow Iron",   "Bright Bias","Vocal Sit" },
         /* Limit    */ { "Clean Wall",  "Soft Ceiling","Hard Stop",  "Pump Limit",
-                         "Loud War",    "Clip Guard",  "Springy",    "Leaky" } };
+                         "Loud War",    "Clip Guard",  "Springy",    "Porous" } };
         const int t = dyn::clampi (type, 0, kNumTypes - 1);
         return C[t];
     }
+
+    // ═════ THE LABELS. THIS HEADER IS THE SINGLE SOURCE OF TRUTH (FIXES.md §3) ═══════════
+    // The card, the roster, the worklet and the harness all read these. `Cassette` played
+    // `Studio` through four rounds of green measurement because a label lived only in markdown;
+    // nothing on this device may print a word that is not in one of these arrays.
+    static const char* deviceName() noexcept { return "Compress"; }
+    /** FRONT: three heroes, then Mix. Index order matches Params::push/ratio/lift/mix. */
+    static const char* const* frontNames() noexcept
+    { static const char* const N[4] = { "Push", "Ratio", "Lift", "Mix" }; return N; }
+    /** BACK: the 8 knobs, 4x2, in b1..b8 order (fb275 chassis). */
+    static const char* const* backNames() noexcept
+    { static const char* const N[8] = { "Attack", "Release", "Round", "Hear Cut",
+                                        "Edge", "Cling", "Tie", "Burn" }; return N; }
+    /** The two back dropdowns: [0] = Character (chassis), [1] = the SECOND AXIS. Never `Type`. */
+    static const char* const* dropdownNames() noexcept
+    { static const char* const N[2] = { "Character", "Detect" }; return N; }
+    /** The ONE front pill. */
+    static const char* pillName() noexcept { return "Auto"; }
+    static constexpr int kNumFront = 4, kNumBack = 8;
 
     static_assert (kNumTypes > 0 && kNumChars == 8, "roster/table must move together");
 
@@ -140,11 +159,37 @@ public:
         pRel_ = 1.0f - std::pow (1.0f - 0.00026f, sr);
         lvlA_ = dyn::coefTau (0.030f, fs_);
         mkA_  = dyn::coefTau (0.300f, fs_);      // auto-makeup slew (§3.7)
+        // ── THE TRANSITION SLEW LIMIT ────────────────────────────────────────────────
+        // Seeding the smoothers and fading every discrete re-wiring got the worst Type
+        // transition from 21.47 to 2.05 dB of gain moved in one millisecond. What is left is
+        // not a step at all: leaving a 2nd-order (RS_DAMPED) smoother, the new first-order one
+        // starts from the SAME gain reduction but the outgoing 2nd-order state was LAGGING its
+        // own target, and FET 76 closes that gap at its own 0.19 ms attack — 3.3 dB inside one
+        // millisecond. There is no seed that removes it: the gap is what a 2nd-order smoother
+        // IS. So the gain is slew-limited to 1.5 dB/ms for 40 ms after a Type/Character/Detect
+        // change, and ONLY then — the limiter is disarmed the rest of the time, so a real
+        // 20 µs attack on real programme material is untouched. This is the house law ("smooth
+        // every parameter change over 10-30 ms") applied to the parameter that is a whole
+        // topology.
+        slewPS_ = 1.5f / (fs_ * 0.001f);
+        xfLen_  = (int) (fs_ * 0.040f);
+        xfN_    = 0;
         memA_ = dyn::coefTau (10.0f,  fs_);      // Opto T4 memory integrator
         gPush_.setTau (0.020f, fs_);  gLift_.setTau (0.020f, fs_);
         gSlope_.setTau (0.020f, fs_); gKnee_.setTau (0.020f, fs_);
         gTie_.setTau  (0.020f, fs_);  gHeat_.setTau (0.020f, fs_);
         gMix_.setTau  (0.010f, fs_);  gHc_.setTau   (0.030f, fs_);
+        // The upward lane and the soft-clip catch are the only two gain paths that do NOT go
+        // through the ballistics, so switching them on/off is a STEP unless they are faded.
+        gUpOn_.setTau (0.020f, fs_);  gClip_.setTau (0.020f, fs_);
+        gKind_.setTau (0.020f, fs_);  gAsym_.setTau (0.020f, fs_); gColG_.setTau (0.020f, fs_);
+        // Every DISCRETE re-wiring of the gain computer gets a 20 ms fade of its own. A boolean
+        // that changes `grT` in one sample is not smoothed by the ballistics — FET 76's attack
+        // reaches 20 µs and Limit's is 1.1 ms, so "the follower will take care of it" is false.
+        gLeaky_.setTau (0.020f, fs_); gPlat_.setTau (0.020f, fs_); gTwoP_.setTau (0.020f, fs_);
+        gKnAu_.setTau (0.020f, fs_);  gMs_.setTau (0.020f, fs_);   gDnOn_.setTau (0.020f, fs_);
+        gTilt_.setTau (0.020f, fs_);  gVarMu_.setTau (0.020f, fs_); gOptoF_.setTau (0.020f, fs_);
+        gEdge_.setTau (0.020f, fs_);
         vizEvery_ = (int) (fs_ / 60.0f); if (vizEvery_ < 32) vizEvery_ = 32;
         primed_ = false;
         reset();
@@ -159,7 +204,9 @@ public:
             gr_[c] = 0.0f; grF_[c] = 0.0f; grS_[c] = 0.0f; mem_[c] = 0.0f;
             v2_[c] = 0.0f; y2_[c] = 0.0f;
             pf_[c] = 0.0f; ps_[c] = 0.0f; latch_[c] = 0; latchHold_[c] = 0.0f;
+            gdbZ_[c] = 0.0f;
         }
+        xfN_ = 0;
         mkZ_ = 0.0f; lvlZ_ = 0.0f; vizCtr_ = 0;
         viz_ = Viz();
         // knee[] is meaningful even at idle (curves-must-move law) — fill on the first setParams.
@@ -173,6 +220,9 @@ public:
         p.type      = dyn::clampi (p.type,      0, kNumTypes - 1);
         p.character = dyn::clampi (p.character, 0, kNumChars - 1);
         p.axis      = dyn::clampi (p.axis,      0, kNumDetect - 1);
+        if (primed_ && (p.type != prevType_ || p.character != prevChar_ || p.axis != prevAxis_))
+            xfN_ = xfLen_;
+        prevType_ = p.type; prevChar_ = p.character; prevAxis_ = p.axis;
         pr_ = p;
 
         const TypeSpec& ts = typeSpec (p.type);
@@ -225,8 +275,11 @@ public:
         zeta_   = cs.zeta;
 
         // ── DETECTOR. `Auto` = the Type's native ears; the axis dropdown overrides.
-        det_ = (p.axis == 0) ? (cs.detForce >= 0 ? cs.detForce : ts.nativeDet)
-                             : axisToDet (p.axis);
+        // R6/fb418: `Detect` owns detection OUTRIGHT. `Native` (axis 0) defers to the Type's
+        // own ears; every other entry names the rectifier. NO Character may override this —
+        // a Character that silently re-pointed the detector made the card's visible label
+        // disagree with the DSP, which is the fb373 failure mode.
+        det_ = (p.axis == 0) ? ts.nativeDet : axisToDet (p.axis);
         float winMs = 10.0f;
         switch (det_)
         {
@@ -256,6 +309,7 @@ public:
         latchN_ = (int) (fs_ * dyn::clampf (p.b6, 0.0f, 1.0f) * 0.250f);
         tieTgt_ = (cs.linkForce >= 0.0f) ? cs.linkForce : dyn::clampf (p.b7, 0.0f, 1.0f);
         heatTgt_ = dyn::clampf (std::max (dyn::clampf (p.b8, 0.0f, 1.0f), cs.heatFloor), 0.0f, 1.0f);
+        if (primed_ && ts.heatKind != heatKind_) { heatKindOld_ = heatKind_; gKind_.snap (0.0f); }
         heatKind_ = ts.heatKind;
         asym_    = (ts.heatKind == H_ASYM) || (cs.flags & F_ASYM) != 0;
 
@@ -287,7 +341,17 @@ public:
             mkTgt_ = 0.0f;
 
         varMuK_ = cs.grSlopeK + ts.grSlopeK;
-        relShape_ = (cs.relShape >= 0) ? cs.relShape : ts.relShape;
+        const int newShape = (cs.relShape >= 0) ? cs.relShape : ts.relShape;
+        // 🚨 THE CLICK THAT SHIPPED IN THE FIRST DRAFT (FIXES.md §1 COMPRESS 1).
+        // RS_EXP/RS_ADAPT write the live GR into `gr_`; RS_DUAL reads `grF_/grS_`, RS_OPTO reads
+        // `grF_/grS_/mem_`, RS_DAMPED reads `y2_/v2_`. Change Type or Character and the NEWLY
+        // SELECTED smoother starts from whatever it held last time it ran — zero on a fresh
+        // instance — so 10.96 dB of gain reduction collapsed to 0.00 inside ONE BLOCK: a
+        // +11 dB step, mid-note. The state is the SAME PHYSICAL QUANTITY in every shape, so
+        // the fix is to seed the new one from the live one. Gated over all 8x8 Type and all
+        // 8x8 Character transitions, on program material, at five switch phases.
+        if (primed_ && newShape != relShape_) seedShape (newShape);
+        relShape_ = newShape;
         deepRel_  = (cs.flags & F_DEEPREL) != 0;
         kneeAuto_ = (cs.flags & F_KNEEAUTO) != 0;
         plateau_  = (cs.flags & F_PLATEAU) != 0;
@@ -298,8 +362,12 @@ public:
         // above, so scaling by (ceiling + 1 dB)/1.4 puts the knee exactly 1 dB over the ceiling
         // — 1.4 full scale is 47 dB above a −54 dBFS ceiling and would never have engaged.
         // This is the ZERO-LATENCY price made bounded instead of hoped for.
-        clipLin_ = dyn::db2lin (tTgt_ + liftTgt_ + mkTgt_ + 1.0f + dyn::kBusNomDb) * (1.0f / 1.4f);
-        if (!(clipLin_ > 1.0e-9f)) clipLin_ = 1.0e-9f;
+        // ⚠️ derived from the LIVE glided threshold/lift/makeup in the sample loop, not from the
+        // targets: `Loud War` switches auto-makeup on, which moves the target 12 dB while the
+        // applied makeup crawls to it over 300 ms — so a ceiling built from the TARGET ran 12 dB
+        // ahead of the gain it is supposed to catch, and the clip engaged or disengaged in the
+        // wrong place. Measured at the switch: 3.97 dB of level moved in one millisecond.
+        clipHeadDb_ = 1.0f + dyn::kBusNomDb;
         leaky_    = (cs.flags & F_LEAKY) != 0;
         lineAtk_  = (cs.flags & F_LINEATK) != 0;
         optoMem_  = cs.memMul;
@@ -313,6 +381,14 @@ public:
             gPush_.snap (tTgt_); gLift_.snap (liftTgt_); gSlope_.snap (sTgt_);
             gKnee_.snap (kneeTgt_); gTie_.snap (tieTgt_); gHeat_.snap (heatTgt_);
             gMix_.snap (mixTgt_);  gHc_.snap (hcA_);      mkZ_ = mkTgt_;
+            gUpOn_.snap (upOn_ ? 1.0f : 0.0f); gClip_.snap (clipOn_ ? 1.0f : 0.0f);
+            gKind_.snap (1.0f); gAsym_.snap (asym_ ? 1.0f : 0.0f);
+            gLeaky_.snap (leaky_ ? 1.0f : 0.0f); gPlat_.snap (plateau_ ? 1.0f : 0.0f);
+            gTwoP_.snap (twoPass_ ? 1.0f : 0.0f); gKnAu_.snap (kneeAuto_ ? 1.0f : 0.0f);
+            gMs_.snap (msDet_ ? 1.0f : 0.0f); gDnOn_.snap (dnOn_ ? 1.0f : 0.0f);
+            gTilt_.snap (tiltAmt_); gVarMu_.snap (varMuK_); gOptoF_.snap (optoMixF_);
+            gEdge_.snap (edge_);
+            heatKindOld_ = heatKind_;
             primed_ = true;
         }
         fillKnee();
@@ -336,6 +412,18 @@ public:
             const float mix  = gMix_.proc (mixTgt_);
             const float lift = gLift_.proc (liftTgt_);
             const float hcA  = gHc_.proc (hcA_);
+            const float upFade = gUpOn_.proc (upOn_ ? 1.0f : 0.0f);
+            const float fDn    = gDnOn_.proc (dnOn_    ? 1.0f : 0.0f);
+            const float fLeak  = gLeaky_.proc (leaky_  ? 1.0f : 0.0f);
+            const float fPlat  = gPlat_.proc (plateau_ ? 1.0f : 0.0f);
+            const float fTwo   = gTwoP_.proc (twoPass_ ? 1.0f : 0.0f);
+            const float fKnAu  = gKnAu_.proc (kneeAuto_? 1.0f : 0.0f);
+            const float fMs    = gMs_.proc   (msDet_   ? 1.0f : 0.0f);
+            const float tiltG  = gTilt_.proc (tiltAmt_);
+            const float vmK    = gVarMu_.proc (varMuK_);
+            const float optoF  = gOptoF_.proc (optoMixF_);
+            const float edgeG  = gEdge_.proc (edge_);
+            const float clipFade = gClip_.proc (clipOn_ ? 1.0f : 0.0f);
             mkZ_ += (mkTgt_ - mkZ_) * mkA_;
 
             // ── DETECTOR SOURCE. Feedback topologies tap the OUTPUT, one sample late, and
@@ -343,14 +431,15 @@ public:
             //    its own detector — a fizz loop, §11.5).
             float dl = isFb_ ? fbZ_[0] : dryL;
             float dr = isFb_ ? fbZ_[1] : dryR;
-            if (msDet_) { const float m = 0.7071068f * (dl + dr), s2 = 0.7071068f * (dl - dr); dl = m; dr = s2; }
+            if (fMs > 1.0e-4f) { const float m = 0.7071068f * (dl + dr), s2 = 0.7071068f * (dl - dr);
+                                 dl += fMs * (m - dl); dr += fMs * (s2 - dr); }
 
             if (hcA > 0.0f) { dl = hc_[0].proc (dl, hcA); dr = hc_[1].proc (dr, hcA); }
-            if (tiltAmt_ != 0.0f)
+            if (tiltG != 0.0f)
             {
                 // +N dB/oct above 2 kHz on what it HEARS: highs duck the patch (free de-esser).
                 const float tl = tilt_[0].proc (dl, tiltA_), tr = tilt_[1].proc (dr, tiltA_);
-                dl += tiltAmt_ * tl; dr += tiltAmt_ * tr;
+                dl += tiltG * tl; dr += tiltG * tr;
             }
 
             float aL = std::fabs (dl), aR2 = std::fabs (dr);
@@ -406,7 +495,7 @@ public:
                 //    of every hit, so transients escape untouched over a crushed sustain.
                 //    − : attacks get +24 dB of EXTRA reduction — every note becomes a swell.
                 float pTr = 0.0f;
-                if (edge_ != 0.0f)
+                if (edgeG != 0.0f)
                 {
                     const float m = std::fabs ((c == 0) ? dryL : dryR);
                     pf_[c] += (m - pf_[c]) * (m > pf_[c] ? pAtk_ : pRel_);
@@ -419,25 +508,30 @@ public:
                     // is level-independent by construction, and it goes to zero during a decay
                     // (where the slow envelope sits ABOVE the fast one) which is exactly right.
                     pTr = dyn::clampf ((pf_[c] / std::max (ps_[c], 1.0e-7f) - 1.0f) * 0.8f, 0.0f, 1.0f);
-                    if (edge_ > 0.0f) xG -= 24.0f * pTr * edge_;
+                    if (edgeG > 0.0f) xG -= 24.0f * pTr * edgeG;
                 }
 
                 // ── the static curve
                 float W = W0;
-                if (kneeAuto_ && gr_[c] < 12.0f) W += 26.0f * (1.0f - gr_[c] / 12.0f);
+                if (fKnAu > 1.0e-4f && gr_[c] < 12.0f) W += fKnAu * 26.0f * (1.0f - gr_[c] / 12.0f);
                 float s = sBas;
-                if (varMuK_ > 0.0f) s = std::min (1.0f, s * (1.0f + gr_[c] * varMuK_));   // Vari-Mu
-                if (plateau_)                                                            // All Buttons
-                    s = dyn::clampf (0.917f + 0.033f * std::sin (gr_[c] * 0.9f) + gr_[c] * 0.004f, 0.0f, 0.95f);
-                float grT = dnOn_ ? dyn::grDown (xG, T, s, W) : 0.0f;
-                if (leaky_ && grT > 0.0f)
+                if (vmK != 0.0f) s = std::min (1.0f, s * (1.0f + gr_[c] * vmK));          // Vari-Mu
+                if (fPlat > 1.0e-4f)                                                      // All Buttons
+                {
+                    const float sp = dyn::clampf (0.917f + 0.033f * std::sin (gr_[c] * 0.9f) + gr_[c] * 0.004f, 0.0f, 0.95f);
+                    s += fPlat * (sp - s);
+                }
+                float grT = dyn::grDown (xG, T, s, W) * fDn;
+                if (fLeak > 1.0e-4f && grT > 0.0f)
                 {
                     // an over-limit LEAK: 6:1 above the ceiling instead of ∞ — keeps 2–3 dB of life
                     const float over = xG - T;
-                    if (over > 0.0f) grT = std::min (grT, over * 0.833f);
+                    if (over > 0.0f) grT += fLeak * (std::min (grT, over * 0.833f) - grT);
                 }
-                if (twoPass_) grT = 2.0f * dyn::grDown (xG - 0.5f * grT, T, s * 0.5f, W);
-                if (edge_ < 0.0f) grT += 24.0f * pTr * (-edge_);
+                if (fTwo > 1.0e-4f)
+                { const float g2 = 2.0f * dyn::grDown (xG - 0.5f * grT, T, s * 0.5f, W) * fDn;
+                  grT += fTwo * (g2 - grT); }
+                if (edgeG < 0.0f) grT += 24.0f * pTr * (-edgeG);
                 grT = dyn::clampf (grT, 0.0f, 60.0f);
 
                 // ── BALLISTICS, smoothing in the dB domain (the JAES low-ripple recommendation)
@@ -461,7 +555,7 @@ public:
                     const float aS   = dyn::coefTau (tauS, fs_);
                     F += (grT - F) * (grT > F ? aOptoA_ : aOptoF_);
                     S += (grT - S) * (grT > S ? aOptoA_ : aS);
-                    GR = optoMixF_ * F + (1.0f - optoMixF_) * S;
+                    GR = optoF * F + (1.0f - optoF) * S;
                     M += (GR - M) * memA_;
                 }
                 else if (relShape_ == RS_DAMPED)
@@ -507,12 +601,35 @@ public:
                 //    loop is a genuine runaway. The −45 dBp gate is a stability requirement:
                 //    without it the lane free-runs on the noise floor and never dies with the note.
                 float up = 0.0f;
-                if (upOn_)
-                    up = dyn::liftUp (xG, tUp_, sUp_, upCap_) * dyn::floorGate (xG, -55.0f, 12.0f);
+                if (upFade > 1.0e-4f)
+                    up = dyn::liftUp (xG, tUp_, sUp_, upCap_) * dyn::floorGate (xG, -55.0f, 12.0f) * upFade;
 
+                // ── GAIN CONTINUITY ACROSS A DISCRETE CONFIG CHANGE ─────────────────────
+                // Seeding the smoothers (above) fixes the state that is the SAME quantity in
+                // every shape. It does not fix the rest: the rectifier (`Detect`, and each
+                // Type's native ears), the detector tilt, Vari-Mu's GR-dependent slope, the
+                // plateau / two-pass / leaky / auto-knee curve variants and the M/S detector
+                // basis ALL change the gain-computer's answer in one sample — and on FET 76,
+                // whose attack reaches 20 µs, "the ballistics will smooth it" is false by two
+                // orders of magnitude. Measured: 21.47 dB of gain moved inside one millisecond.
+                // So: at the instant Type / Character / Detect changes, take the difference
+                // between the gain that WAS applied and the gain the new configuration asks
+                // for, and decay that offset to zero over 20 ms. The output is continuous at
+                // the switch sample, the new configuration is live IMMEDIATELY (it still
+                // responds to transients — this is not a freeze), and after 20 ms the offset
+                // is gone. No dip, no hole, no lookahead.
+                float gdb = -GR + up + lift + mkZ_;
+                if (xfN_ > 0)
+                {
+                    const float d = gdb - gdbZ_[c];
+                    gdb = gdbZ_[c] + dyn::clampf (d, -slewPS_, slewPS_);
+                }
+                gdbZ_[c] = gdb;
                 grOut[c] = GR - up;
-                g[c] = dyn::db2lin (-GR + up + lift + mkZ_);
+                g[c] = dyn::db2lin (gdb);
             }
+
+            if (xfN_ > 0) --xfN_;
 
             float yl = dryL * g[0];
             float yr = dryR * g[1];
@@ -524,16 +641,47 @@ public:
             // ── HEAT — the gain element's nonlinearity, SCALED BY CURRENT GR. No GR ⇒ bit-clean
             //    at any Heat setting, so it cannot sound on silence and it BREATHES with the
             //    compression (the measured signature of driven hardware).
-            if (heat > 1.0e-4f)
+            // ── THE GAIN ELEMENT, AND THE SWAP THAT USED TO STEP ────────────────────────
+            // `heatKind_` and `asym_` are discrete: switching Type or Character changed the
+            // waveshaper's CURVE and engaged/disengaged the DC blocker in one sample, at
+            // whatever Heat depth the outgoing Character was holding. Disabling colour()
+            // entirely dropped the worst Type transition from 5.53 to 1.53 dB/ms, which is how
+            // this was found. Both are now crossfaded over 20 ms: the old kind and the new kind
+            // are both evaluated while `kindF` travels 0→1 (a handful of flops, and ONLY during
+            // a transition), and the DC blocker runs continuously with its own fade so it can
+            // never be inserted or removed as a step.
+            const float kindF = gKind_.proc (1.0f);
+            const float asymF = gAsym_.proc (asym_ ? 1.0f : 0.0f);
+            if (heat > 1.0e-4f || asymF > 1.0e-4f)
             {
-                const float k0 = heat * std::min (1.0f, gr_[0] / 12.0f);
-                const float k1 = heat * std::min (1.0f, gr_[1] / 12.0f);
-                yl = colour (yl, k0, gr_[0], 0);
-                yr = colour (yr, k1, gr_[1], 1);
+                // the drive follows a 20 ms-smoothed GR. Off the raw ballistic state it was a
+                // second discontinuity in disguise: leaving a 2nd-order smoother, `gr_` closes a
+                // 3 dB gap in 0.5 ms and the waveshaper's DEPTH stepped with it — a waveform
+                // change no gain slew limit can catch. Hardware heats up; it does not teleport.
+                const float grSm = gColG_.proc (0.5f * (gr_[0] + gr_[1]));
+                const float k0 = heat * std::min (1.0f, grSm / 12.0f);
+                const float k1 = k0;
+                float v0 = colourK (yl, k0, grSm, heatKind_);
+                float v1 = colourK (yr, k1, grSm, heatKind_);
+                if (kindF < 0.9999f)
+                {
+                    const float o0 = colourK (yl, k0, grSm, heatKindOld_);
+                    const float o1 = colourK (yr, k1, grSm, heatKindOld_);
+                    v0 = o0 + (v0 - o0) * kindF;
+                    v1 = o1 + (v1 - o1) * kindF;
+                }
+                const float d0 = dc_[0].proc (v0), d1 = dc_[1].proc (v1);
+                yl = v0 + (d0 - v0) * asymF;
+                yr = v1 + (d1 - v1) * asymF;
             }
-            if (clipOn_)
-            { const float ic = 1.0f / clipLin_;
-              yl = clipLin_ * dyn::softClip (yl * ic); yr = clipLin_ * dyn::softClip (yr * ic); }
+            // The soft-clip CEILING was derived from the target threshold, not the glided one,
+            // so a Character with a threshold offset (Pump Limit −6 dB) moved the whole ceiling
+            // in a single sample. It glides now, in the linear domain, like everything else.
+            const float clipL = std::max (1.0e-9f, dyn::db2lin (T + lift + mkZ_ + clipHeadDb_) * (1.0f / 1.4f));
+            if (clipFade > 1.0e-4f)
+            { const float ic = 1.0f / clipL;
+              yl += clipFade * (clipL * dyn::softClip (yl * ic) - yl);
+              yr += clipFade * (clipL * dyn::softClip (yr * ic) - yr); }
 
             // ── the Mix crossfade is EXACTLY linear, and the dry is the untouched input, so
             //    "Mix 100 % = fully wet, ZERO dry" is provable, not hoped: (1 − mix) = 0.
@@ -563,6 +711,13 @@ public:
     float slope()     const noexcept { return sTgt_; }
     float ratio()     const noexcept { return (sTgt_ >= 0.99995f) ? 1.0e9f : 1.0f / (1.0f - sTgt_); }
     bool  isFeedback() const noexcept { return isFb_; }
+    /** R6: which rectifier is actually running. Published so the harness can prove that NOTHING
+     *  but `Detect` (and, at `Native`, the Type) decides it — the Characters `RMS Ears` and
+     *  `Spike Ears` used to set `detForce`, which silently overrode the dropdown: pick RMS Ears,
+     *  then Detect → Peak, and the card still read `RMS Ears` while a peak detector ran. A
+     *  visible label disagreeing with the DSP is the fb373 failure mode and two controls on one
+     *  axis is what fb418 fixed on the flanger. */
+    int   detectId() const noexcept { return det_; }
     /** LIVE gain reduction, this sample. The Viz is a 60 Hz sampler (16.7 ms) and physically
      *  cannot resolve a 20 µs attack — the first draft of the harness measured every Type's
      *  attack as "16.0 ms" for exactly that reason, which is the Viz's period, not the DSP. */
@@ -634,87 +789,87 @@ private:
         float heatFloor, tiltDb, linkForce, memMul;
         float grSlopeK, zeta, rmsWinMul, hearCutMin;
         float upSlopeMul, upThrOff, upCap;
-        int   detForce, relShape;
+        int   relShape;                             // NO detForce: `Detect` owns detection (R6)
         uint32_t flags;
     };
 
     static const CharSpec& charSpec (int t, int c) noexcept
     {
-        #define CS(aM,rM, aLW,aHW,rLW,rHW, kn,sM,sC,sF,th, ht,ti,lk,mm, gk,ze,rw,hc, uS,uT,uC, dt,rs,fl) \
-            { aM,rM, aLW,aHW,rLW,rHW, kn,sM,sC,sF,th, ht,ti,lk,mm, gk,ze,rw,hc, uS,uT,uC, dt,rs,fl }
+        #define CS(aM,rM, aLW,aHW,rLW,rHW, kn,sM,sC,sF,th, ht,ti,lk,mm, gk,ze,rw,hc, uS,uT,uC, rs,fl) \
+            { aM,rM, aLW,aHW,rLW,rHW, kn,sM,sC,sF,th, ht,ti,lk,mm, gk,ze,rw,hc, uS,uT,uC, rs,fl }
         static const CharSpec C[kNumTypes][kNumChars] = {
         /* ── Exact — the reference ruler. The curve you set is the curve you measure. ───────── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Precise
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, F_KNEEAUTO),        // Soft Touch
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, D_RMS10,-1, 0),            // RMS Ears
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, D_SPIKE,-1, 0),            // Spike Ears
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, F_DEEPREL),         // Deep Release
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, F_LINEATK),         // Line Attack
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,1.00f,1,0,  1,0,24, -1,RS_DAMPED, 0),          // Silky
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.42f,1,0,  1,0,24, -1,RS_DAMPED, 0) },        // Wobble
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Precise
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, F_KNEEAUTO),        // Soft Touch
+          CS(1,1, 1,1,1,1,  8,0.6f,0.6f,0,0, 0,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),            // Loose Grip  (was RMS Ears: slope capped 2.5:1 + 8 dB of extra knee)
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, F_TWOPASS),    // Blunt       (was Spike Ears: the curve applied twice at half slope)
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, F_DEEPREL),         // Deep Release
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, F_LINEATK),         // Line Attack
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,1.00f,1,0,  1,0,24, RS_DAMPED, 0),          // Poise
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.42f,1,0,  1,0,24, RS_DAMPED, 0) },        // Judder
         /* ── Bus — the console. Diode level-adaptive attack + dual-pool auto release. ───────── */
-        { CS(1,1, 1,1,1,1,  4,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_DUAL, 0),            // Quad Bus
-          CS(1,1, 1,1,2,0.667f, 4,1,0,0,0, 0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_EXP, 0),             // Hand Set
-          CS(3,1, 1,1,1,1,  6,0.5f,0.5f,0,2, 0,0,1,1, 0,0.70f,1,0,  1,0,24, -1,RS_DUAL, 0),            // Two Easy
-          CS(1,1, 1,1,1,1,  2,1,0,0.75f,0, 0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_ADAPT, 0),           // Ten Punchy
-          CS(0.03f,1, 1,1,1,1, 2,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_ADAPT, 0),           // Fast City
-          CS(2.2f,1, 1,1,1,1, 4,1,0,0,0, 0.65f,0,1,1, 0,0.70f,1,0,  1,0,24, -1,RS_DUAL, 0),            // Big Desk
-          CS(1,0.12f, 1,1,1,1, 4,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_EXP, 0),             // Pump Bus
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,RS_EXP, 0) },           // No Diode
+        { CS(1,1, 1,1,1,1,  4,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_DUAL, 0),            // Quad Bus
+          CS(1,1, 1,1,2,0.667f, 4,1,0,0,0, 0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_EXP, 0),             // Hand Set
+          CS(3,1, 1,1,1,1,  6,0.5f,0.5f,0,2, 0,0,1,1, 0,0.70f,1,0,  1,0,24, RS_DUAL, 0),            // Two Easy
+          CS(1,1, 1,1,1,1,  2,1,0,0.75f,0, 0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_ADAPT, 0),           // Ten Punchy
+          CS(0.03f,1, 1,1,1,1, 2,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_ADAPT, 0),           // Fast City
+          CS(2.2f,1, 1,1,1,1, 4,1,0,0,0, 0.65f,0,1,1, 0,0.70f,1,0,  1,0,24, RS_DUAL, 0),            // Big Desk
+          CS(1,0.12f, 1,1,1,1, 4,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_EXP, 0),             // Pump Bus
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, RS_EXP, 0) },           // No Diode
         /* ── FET 76 — feedback, microseconds, odd harmonics. ───────────────────────────────── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Blackface
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.55f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, F_ASYM),            // Blue Stripe
-          CS(1,1, 1,1,1,1, 10,1,0,0,0,  0.45f,0,-1,1, 0,0.60f,1,0,  1,0,24, -1,RS_DAMPED, F_PLATEAU),  // All Buttons
-          CS(0.15f,1, 1,1,1,1, 0,4,0.95f,0.95f,-4, 0.30f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, 0),       // Twenty Lock
-          CS(1,1, 1,1,1,1,  0,0.75f,0.75f,0,0, 0.15f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, F_DEEPREL),   // Loose Four
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.65f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, F_ASYM),            // Broken Bias
-          CS(1,1, 20,20,1,1, 0,1,0,0,0, 0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Waiting Fet
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, F_TWOPASS) },       // Two Pass
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, 0),                 // Blackface
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.55f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, F_ASYM),            // Blue Stripe
+          CS(1,1, 1,1,1,1, 10,1,0,0,0,  0.45f,0,-1,1, 0,0.60f,1,0,  1,0,24, RS_DAMPED, F_PLATEAU),  // All Buttons
+          CS(0.15f,1, 1,1,1,1, 0,4,0.95f,0.95f,-4, 0.30f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),       // Twenty Lock
+          CS(1,1, 1,1,1,1,  0,0.75f,0.75f,0,0, 0.15f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, F_DEEPREL),   // Loose Four
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.65f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, F_ASYM),            // Broken Bias
+          CS(1,1, 20,20,1,1, 0,1,0,0,0, 0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, 0),                 // Waiting Fet
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.20f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, F_TWOPASS) },       // Two Pass
         /* ── Opto — two release pools and a 10 s memory. ───────────────────────────────────── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,0.35f,-1,1,  0,0.70f,1,0, 1,0,24, -1,-1, 0),                 // Cell Classic
-          CS(1,0.30f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,0.18f, 0,0.70f,1,0, 1,0,24, -1,-1, 0),            // Fresh Cell
-          CS(1,4.5f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,7.0f,  0,0.70f,1,0, 1,0,24, -1,-1, 0),             // Tired Cell
-          CS(0.25f,0.25f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,0.45f, 0,0.70f,1,0, 1,0,24, -1,-1, 0),        // Quick Cell
-          CS(1,1.6f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,2.2f, 0,0.70f,1,0, 1,0,24, -1,-1, F_EVENPOOL),     // Even Pools
-          CS(4.0f,1.8f, 1,1,1,1, 14,1,0,0,0, 0,0.35f,-1,1.6f, 0,0.70f,1,0, 1,0,24, -1,-1, 0),          // Glass
-          CS(1,1, 1,1,1,1,  0,1,0,0,0, 0.40f,0.35f,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, 0),               // Tube Stage
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,7.00f,-1,1,  0,0.70f,1,0, 1,0,24, -1,-1, 0) },               // Bright Ears
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,0.35f,-1,1,  0,0.70f,1,0, 1,0,24, -1, 0),                 // Cell Classic
+          CS(1,0.30f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,0.18f, 0,0.70f,1,0, 1,0,24, -1, 0),            // Fresh Cell
+          CS(1,4.5f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,7.0f,  0,0.70f,1,0, 1,0,24, -1, 0),             // Tired Cell
+          CS(0.25f,0.25f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,0.45f, 0,0.70f,1,0, 1,0,24, -1, 0),        // Quick Cell
+          CS(1,1.6f, 1,1,1,1, 0,1,0,0,0, 0,0.35f,-1,2.2f, 0,0.70f,1,0, 1,0,24, -1, F_EVENPOOL),     // Even Pools
+          CS(4.0f,1.8f, 1,1,1,1, 14,1,0,0,0, 0,0.35f,-1,1.6f, 0,0.70f,1,0, 1,0,24, -1, 0),          // Crystal
+          CS(1,1, 1,1,1,1,  0,1,0,0,0, 0.40f,0.35f,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),               // Tube Stage
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,7.00f,-1,1,  0,0.70f,1,0, 1,0,24, -1, 0) },               // Bright Ears
         /* ── Vari-Mu — the curve that STEEPENS as you hit it harder. ───────────────────────── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.25f,0,-1,1,  0,0.70f,1,0, 1,0,24, -1,-1, 0),                 // Studio 670
-          CS(1,1, 1,0.1f,0.5f,0.036f, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, 0),         // Time One
-          CS(1,1, 4,0.4f,7.5f,0.6f,   0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, 0),         // Time Four
-          CS(1,1, 1,1,0.4f,0.16f, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,RS_DUAL, 0),        // Auto Peaks
-          CS(1,2.0f, 1,1,10,1, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,RS_DUAL, 0),           // Long Haul
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.60f,0,-1,1,  0,0.70f,1,0, 1,0,24, -1,-1, F_ASYM),            // Push Pull
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.25f,0,0,1,   0,0.70f,1,0, 1,0,24, -1,-1, F_MSDET),           // Lateral
-          CS(1,1, 1,1,1,1,  8,1,0.75f,0,0, 0.10f,0,-1,1, -0.0556f,0.70f,1,0, 1,0,24, -1,-1, 0) },      // Triode Soft
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.25f,0,-1,1,  0,0.70f,1,0, 1,0,24, -1, 0),                 // Studio 670
+          CS(1,1, 1,0.1f,0.5f,0.036f, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),         // Time One
+          CS(1,1, 4,0.4f,7.5f,0.6f,   0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),         // Time Four
+          CS(1,1, 1,1,0.4f,0.16f, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, RS_DUAL, 0),        // Auto Peaks
+          CS(1,2.0f, 1,1,10,1, 0,1,0,0,0, 0.25f,0,-1,1, 0,0.70f,1,0, 1,0,24, RS_DUAL, 0),           // Long Haul
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.60f,0,-1,1,  0,0.70f,1,0, 1,0,24, -1, F_ASYM),            // Push Pull
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0.25f,0,0,1,   0,0.70f,1,0, 1,0,24, -1, F_MSDET),           // Lateral
+          CS(1,1, 1,1,1,1,  8,1,0.75f,0,0, 0.10f,0,-1,1, -0.0556f,0.70f,1,0, 1,0,24, -1, 0) },      // Triode Soft
         /* ── OverEasy — the wide knee, and the only ratio knob that goes PAST infinity. ────── */
-        { CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Over Easy
-          CS(1,1, 1,1,1,1, -24,1,1,0,0,    0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Hard 160
-          CS(1,1, 1,1,1,1,  6,1.43f,1,0,0, 0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Infinity
-          CS(1,1, 1,1,1,1,  6,1.35f,2,0,0, 0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Infinity Plus
-          CS(1,1.8f, 1,1,1,1, 6,1,0,0,0,   0,0,-1,1,  0,0.70f,9.0f,0, 1,0,24, -1,-1, 0),               // Slow Window
-          CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,-1,1,  0,0.70f,0.10f,0, 1,0,24, -1,-1, 0),              // Crush RMS
-          CS(1,1, 1,1,1,1,  6,1,0,0,0,  0.40f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Decilinear
-          CS(1,1, 1,1,1,1,  6,2,2,2,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0) },               // Anti
+        { CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Over Easy
+          CS(1,1, 1,1,1,1, -24,1,1,0,0,    0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Hard 160
+          CS(1,1, 1,1,1,1,  6,1.43f,1,0,0, 0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Infinity
+          CS(1,1, 1,1,1,1,  6,1.35f,2,0,0, 0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Infinity Plus
+          CS(1,1.8f, 1,1,1,1, 6,1,0,0,0,   0,0,-1,1,  0,0.70f,9.0f,0, 1,0,24, -1, 0),               // Slow Window
+          CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,-1,1,  0,0.70f,0.10f,0, 1,0,24, -1, 0),              // Crush RMS
+          CS(1,1, 1,1,1,1,  6,1,0,0,0,  0.40f,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, 0),                 // Decilinear
+          CS(1,1, 1,1,1,1,  6,2,2,2,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0) },               // Anti
         /* ── Ride — single-band UP and DOWN at once (the OTT boundary Type). ───────────────── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Level Rider
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1.35f,10,36, -1,-1, 0),            // Deep Floor
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1.2f,0,30, -1,-1, F_UPONLY),       // Only Up
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1,-1, F_DNONLY),          // Only Down
-          CS(0.06f,0.25f, 1,1,1,1, 0,1,0,0,0, 0,0,-1,1, 0,0.70f,1,0, 1,0,24, -1,-1, 0),                // Fast Clamp
-          CS(2.0f,4.0f, 1,1,1,1, 0,1,0,0,0,  0,0,-1,1, 0,0.70f,1,0,  1,0,24, -1,-1, 0),                // Slow Iron
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,3.20f,-1,1,  0,0.70f,1,0,  1.15f,0,24, -1,-1, 0),            // Bright Bias
-          CS(1,0.5f, 1,1,1,1, 0,1,0,0,0,   0,-2.0f,-1,1,  0,0.70f,1,260.f, 1,-6,24, -1,-1, 0) },       // Vocal Sit
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, 0),                 // Level Rider
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1.35f,10,36, -1, 0),            // Deep Floor
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1.2f,0,30, -1, F_UPONLY),       // Only Up
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,-1,1,  0,0.70f,1,0,  1,0,24, -1, F_DNONLY),          // Only Down
+          CS(0.06f,0.25f, 1,1,1,1, 0,1,0,0,0, 0,0,-1,1, 0,0.70f,1,0, 1,0,24, -1, 0),                // Fast Clamp
+          CS(2.0f,4.0f, 1,1,1,1, 0,1,0,0,0,  0,0,-1,1, 0,0.70f,1,0,  1,0,24, -1, 0),                // Slow Iron
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,  0,3.20f,-1,1,  0,0.70f,1,0,  1.15f,0,24, -1, 0),            // Bright Bias
+          CS(1,0.5f, 1,1,1,1, 0,1,0,0,0,   0,-2.0f,-1,1,  0,0.70f,1,260.f, 1,-6,24, -1, 0) },       // Vocal Sit
         /* ── Limit — the wall. ∞ slope, peak+hold, soft-clip catch, ~1 dB of eaten overshoot. ── */
-        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Clean Wall
-          CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Soft Ceiling
-          CS(0.02f,1, 1,1,1,1, 0,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Hard Stop
-          CS(1,1, 1,1,1,4.0f, 0,1,0,0,-6,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, 0),                 // Pump Limit
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, F_AUTOFULL),        // Loud War
-          CS(1,1, 1,1,1,1,  0,1,0,0,-3,    0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, F_CLIPON),          // Clip Guard
-          CS(1,2.5f, 1,1,1,1, 0,1,0,0,0,   0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, F_DEEPREL),         // Springy
-          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1,-1, F_LEAKY) } };       // Leaky
+        { CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, 0),                 // Clean Wall
+          CS(1,1, 1,1,1,1,  6,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, 0),                 // Soft Ceiling
+          CS(0.02f,1, 1,1,1,1, 0,1,0,0,0,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, 0),                 // Hard Stop
+          CS(1,1, 1,1,1,4.0f, 0,1,0,0,-6,  0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, 0),                 // Pump Limit
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, F_AUTOFULL),        // Loud War
+          CS(1,1, 1,1,1,1,  0,1,0,0,-3,    0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, F_CLIPON),          // Clip Guard
+          CS(1,2.5f, 1,1,1,1, 0,1,0,0,0,   0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, F_DEEPREL),         // Springy
+          CS(1,1, 1,1,1,1,  0,1,0,0,0,     0,0,1,1,   0,0.70f,1,0,  1,0,24, -1, F_LEAKY) } };       // Porous (was `Leaky`: shipped Distortion Diode-1 character, index.html:8680 — found by the WIDENED no-doubles corpus, not by RENAMES.md)
         #undef CS
         return C[dyn::clampi (t, 0, kNumTypes - 1)][dyn::clampi (c, 0, kNumChars - 1)];
     }
@@ -730,14 +885,14 @@ private:
     // So the saturator sees a level-restored signal (`comp` undoes 70 % of the current GR) and
     // the same factor is undone after it — the fb419 law: the makeup is INSIDE, so the stage's
     // slope at zero is EXACTLY 1 and Heat can never move the overall gain, only the curvature.
-    inline float colour (float y, float k, float grDb, int c) noexcept
+    inline float colourK (float y, float k, float grDb, int kind) const noexcept
     {
         if (k <= 1.0e-5f) return y;
         const float comp = dyn::db2lin (grDb * 0.7f);
         const float inv  = dyn::kBusNomLin / comp;
         const float u    = y * comp * (1.0f / dyn::kBusNomLin);
         float sv;
-        switch (heatKind_)
+        switch (kind)
         {
             case H_FET:  sv = dyn::fastTanh (u * 4.0f)  * 0.25f;                    break;  // hard, odd
             case H_ASYM: { const float a = u * 2.5f + 0.9f * u * std::fabs (u);
@@ -746,9 +901,20 @@ private:
                            sv = (u < 0.0f ? -1.0f : 1.0f) * std::log1p (m) * (1.0f / 3.0f); } break;
             default:     sv = dyn::fastTanh (u * 1.2f) * (1.0f / 1.2f);             break;  // gentle H3
         }
-        float v = y + k * (sv * inv - y);
-        if (asym_) v = dc_[c].proc (v);
-        return v;
+        return y + k * (sv * inv - y);
+    }
+
+    /** Hand the live gain reduction to whichever smoother is about to run. Called ONLY on a
+     *  shape change, from setParams (message/audio block edge), never per sample. */
+    void seedShape (int newShape) noexcept
+    {
+        for (int c = 0; c < 2; ++c)
+        {
+            const float g = gr_[c];
+            grF_[c] = g; grS_[c] = g;          // RS_DUAL / RS_OPTO pools
+            y2_[c]  = g; v2_[c]  = 0.0f;       // RS_DAMPED position + velocity (start at rest)
+            if (newShape == RS_OPTO && mem_[c] < g) mem_[c] = g;   // T4 memory: at least this lit
+        }
     }
 
     void fillKnee() noexcept
@@ -770,10 +936,15 @@ private:
     dyn::HP1        hc_[2], tilt_[2];
     dyn::MeanSquare ms_[2];
     dyn::DCBlock    dc_[2];
-    dyn::Glide      gPush_, gLift_, gSlope_, gKnee_, gTie_, gHeat_, gMix_, gHc_;
+    dyn::Glide      gPush_, gLift_, gSlope_, gKnee_, gTie_, gHeat_, gMix_, gHc_, gUpOn_, gClip_;
+    dyn::Glide      gKind_, gAsym_, gColG_;
+    dyn::Glide      gLeaky_, gPlat_, gTwoP_, gKnAu_, gMs_, gDnOn_, gTilt_, gVarMu_, gOptoF_, gEdge_;
+    int             heatKindOld_ = H_GENTLE;
 
     float fbZ_[2] {}, fbS_[2] {}, peakHold_[2] {}, gr_[2] {}, grF_[2] {}, grS_[2] {}, mem_[2] {};
     float v2_[2] {}, y2_[2] {}, pf_[2] {}, ps_[2] {}, latchHold_[2] {};
+    float gdbZ_[2] {}, slewPS_ = 0.03125f;
+    int   prevType_ = -1, prevChar_ = -1, prevAxis_ = -1, xfN_ = 0, xfLen_ = 1920;
     int   holdCnt_[2] {}, latch_[2] {};
 
     float tTgt_ = 9.0f, sTgt_ = 0.5f, kneeTgt_ = 6.0f, tieTgt_ = 1.0f, heatTgt_ = 0.0f;
@@ -783,7 +954,7 @@ private:
     float aA_ = 0.1f, aR_ = 0.01f, aAfast_ = 0.5f, aRfast_ = 0.01f, aRslow_ = 0.001f;
     float aOptoA_ = 0.1f, aOptoF_ = 0.01f, aRms_ = 0.01f, aFb_ = 0.5f, aSlowA_ = 0.01f;
     float w2_ = 0.01f, zeta_ = 0.7f, varMuK_ = 0.0f, optoMem_ = 1.0f, optoMixF_ = 0.55f;
-    float hcHz_ = 0.0f, hcA_ = 0.0f, tiltAmt_ = 0.0f, tiltA_ = 0.2f, clipLin_ = 1.0f;
+    float hcHz_ = 0.0f, hcA_ = 0.0f, tiltAmt_ = 0.0f, tiltA_ = 0.2f, clipHeadDb_ = 1.0f;
     float edge_ = 0.0f, pAtk_ = 0.0064f, pRel_ = 0.00026f, lvlA_ = 0.001f, lvlZ_ = 0.0f, mkA_ = 0.001f, memA_ = 1.0e-5f;
     int   det_ = D_PEAK, relShape_ = RS_EXP, heatKind_ = H_GENTLE;
     int   holdLen_ = 240, latchN_ = 0, vizEvery_ = 800, vizCtr_ = 0;

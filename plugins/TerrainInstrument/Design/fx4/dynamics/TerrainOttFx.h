@@ -74,7 +74,7 @@ public:
      *  one shared clamp, two independent clamps, or two clamps on a rotated basis. Physics. */
     static const char* const* stereoNames() noexcept
     {
-        static const char* const N[kNumStereo] = { "Linked", "Twin", "Mid-Side" };
+        static const char* const N[kNumStereo] = { "Linked", "Free Pair", "Mid-Side" };
         return N;
     }
 
@@ -82,7 +82,7 @@ public:
     {
         static const char* const C[kNumTypes][kNumChars] = {
         /* Over Top */ { "Straight Up", "Sharp Ears",  "Long Ears",   "Wide Corner",
-                         "One Detector","Slow Low",    "Twice Deep",  "Full Bite" },
+                         "One Detector","Slow Low",    "Twice Deep",  "Full Crest" },
         /* Gentle   */ { "Round Corner","Slow Hands",  "Long Window", "Half Slopes",
                          "Long Tail",   "Soft Top",    "Even Bands",  "Barely There" },
         /* Heavy    */ { "Welded Shut", "Band Clip",   "No Clip",     "Deeper Jaws",
@@ -94,12 +94,28 @@ public:
         /* Surge    */ { "Tail Riser",  "Deep Riser",  "Slow Riser",  "Fast Riser",
                          "Capped Riser","Top Riser",   "Low Riser",   "Riser Wall" },
         /* Two Band */ { "Body Sparkle","Low Split",   "High Split",  "Hard Body",
-                         "Soft Body",   "Sparkle Wall","Slow Twin",   "Fast Twin" },
+                         "Soft Body",   "Sparkle Wall","Slow Pair",   "Fast Pair" },
         /* Stagger  */ { "Time Spread", "Wider Spread","Narrow Spread","Reverse Spread",
                          "Slow Anchor", "Fast Top",    "Deep Spread", "Spread Wall" } };
         const int t = dyn::clampi (type, 0, kNumTypes - 1);
         return C[t];
     }
+
+    // ═════ THE LABELS. THIS HEADER IS THE SINGLE SOURCE OF TRUTH (FIXES.md §3) ═══════════
+    static const char* deviceName() noexcept { return "OTT"; }
+    /** FRONT: three heroes, then Mix. Order matches Params::amount/speed/topLift/mix. */
+    static const char* const* frontNames() noexcept
+    { static const char* const N[4] = { "Amount", "Chase", "Top Lift", "Mix" }; return N; }
+    /** BACK: the 8 knobs, 4x2, in b1..b8 order. */
+    static const char* const* backNames() noexcept
+    { static const char* const N[8] = { "Low Cross", "High Cross", "Raise", "Press",
+                                        "Grip", "Bass", "Mids", "Treble" }; return N; }
+    /** The two back dropdowns: [0] = Character (chassis), [1] = the SECOND AXIS. Never `Type`. */
+    static const char* const* dropdownNames() noexcept
+    { static const char* const N[2] = { "Character", "Stereo" }; return N; }
+    /** The ONE front pill. */
+    static const char* pillName() noexcept { return "Crest"; }
+    static constexpr int kNumFront = 4, kNumBack = 8;
 
     static_assert (kNumTypes > 0 && kNumChars == 8, "roster/table must move together");
 
@@ -117,10 +133,11 @@ public:
         float b1 = 0.4689f, b2 = 0.4406f, b3 = 0.667f, b4 = 0.667f,
               b5 = 0.5f,    b6 = 0.5f,    b7 = 0.5f,   b8 = 0.5f;
         bool  tempoSync = false; double bpm = 120.0;   // unused: ballistics are not musical time
-        // The ONE front pill (fx3 precedent). When a transient arrives, hold the UPWARD computer
-        // at unity for 10 ms so attacks keep their bite instead of being pre-inflated by the
-        // lift that was riding the gap before them. Default OFF, additive, safe if never wired.
-        bool  bite = false;
+        // The ONE front pill, `Crest` (RENAMES.md: the EQ's `Bite`/`Bite Hz` band grammar owns
+        // that word). When a transient arrives, hold the UPWARD computer at unity for 10 ms so
+        // attacks keep their crest instead of being pre-inflated by the lift that was riding the
+        // gap before them. Default OFF, additive, safe if never wired.
+        bool  crest = false;
     };
 
     struct Viz
@@ -136,10 +153,23 @@ public:
     {
         fs_ = (sampleRate > 8000.0) ? (float) sampleRate : 48000.0f;
         lvlA_ = dyn::coefTau (0.030f, fs_);
-        gXlo_.setTau (0.030f, fs_); gXhi_.setTau (0.030f, fs_);
+        gXlo_.setTau (0.030f, fs_); gXhi_.setTau (0.030f, fs_); gClip_.setTau (0.020f, fs_);
+        gMs_.setTau (0.020f, fs_);
         gMix_.setTau (0.010f, fs_);
         aGl_   = dyn::coefTau (0.015f, fs_);      // every threshold/slope/makeup glide
-        dipUp_ = dyn::coefTau (0.030f, fs_);      // tree-swap recovery
+        // 10 ms LINEAR down / 40 ms back. 4 ms was the bible's number and it is too fast: a
+        // linear fade to zero in 4 ms IS 25 % of the wet removed inside the first millisecond,
+        // which this harness reads as 1.94 dB/ms all on its own. The dry rides the same ramp.
+        dipDn_  = 1.0f / (fs_ * 0.010f);
+        dipUpS_ = 1.0f / (fs_ * 0.040f);
+        // The same transition slew limit COMPRESS uses: for 40 ms after a Type / Character /
+        // Stereo change the per-band gain may move no faster than 1.5 dB/ms, and at no other
+        // time. `Stagger`'s `Wider Spread` puts the low band's release at 24 SECONDS; leaving it
+        // for a normal spread let a crawling envelope snap to target — 8.01 dB inside one
+        // millisecond, measured. A follower coefficient is not a smoother.
+        slewPS_ = 1.5f / (fs_ * 0.001f);
+        xfLen_  = (int) (fs_ * 0.040f);
+        xfN_    = 0;
         bAtk_ = dyn::coefTau (0.003f, fs_);      // Bite transient detector, MoogDelay ducker grammar
         bRel_ = dyn::coefTau (0.120f, fs_);
         biteHoldN_ = (int) (fs_ * 0.010f);
@@ -155,15 +185,36 @@ public:
         {
             splitLo_[c].reset(); splitHi_[c].reset();
             alignLow_[c].reset(); dryLo_[c].reset(); dryHi_[c].reset();
-            for (int b = 0; b < kBands; ++b) { envDn_[c][b] = 0.0f; envUp_[c][b] = 0.0f; pre_[c][b].reset(); gDnPrev_[c][b] = 0.0f; grMem_[c][b] = 0.0f; }
+            for (int b = 0; b < kBands; ++b) { envDn_[c][b] = 0.0f; envUp_[c][b] = 0.0f; pre_[c][b].reset(); gDnPrev_[c][b] = 0.0f; grMem_[c][b] = 0.0f; gdbZ_[c][b] = 0.0f; }
             bf_[c] = 0.0f; bs_[c] = 0.0f; biteCnt_[c] = 0; biteG_[c] = 1.0f;
         }
-        lvlZ_ = 0.0f; vizCtr_ = 0; dip_ = 1.0f;
+        lvlZ_ = 0.0f; vizCtr_ = 0; dip_ = 1.0f; dipDir_ = 0; pendOn_ = false; xfN_ = 0;
+        dryX_ = (nBands_ == 3) ? 1.0f : 0.0f;
         viz_ = Viz();
     }
 
     // ═════ per BLOCK ═════════════════════════════════════════════════════════
+    /** 🚨 THE TREE SWAP (FIXES.md §1 OTT 1). A 3-band tree and a 2-band tree are different
+     *  filter graphs with different states. The first draft set `dip_ = 0.0f` — an INSTANT
+     *  mute of the wet path, i.e. the exact discontinuity the dip was written to prevent; the
+     *  comment above it said "4 ms down / 30 ms back" and the code did neither. It was invisible
+     *  because the click gate divided by the engine's own t=0 start-up burst.
+     *  Now: a band-count change is DEFERRED. The wet path ramps LINEARLY to zero over 4 ms, the
+     *  new configuration is applied at the bottom (arithmetic only — no allocation, ~50 flops,
+     *  once per user action), and the wet ramps back over 30 ms. The DRY path's allpass cascade
+     *  crossfades over the same 30 ms, so Mix < 1 does not step either. */
     void setParams (const Params& pin) noexcept
+    {
+        const int reqBands = typeSpec (dyn::clampi (pin.type, 0, kNumTypes - 1)).nBands;
+        if (primed_ && (pin.type != prevType_ || pin.character != prevChar_ || pin.axis != prevAxis_))
+            xfN_ = xfLen_;
+        prevType_ = pin.type; prevChar_ = pin.character; prevAxis_ = pin.axis;
+        if (primed_ && reqBands != nBands_)
+        { pend_ = pin; pendOn_ = true; dipDir_ = -1; return; }
+        applyParams (pin);
+    }
+
+    void applyParams (const Params& pin) noexcept
     {
         Params p = pin;
         p.type      = dyn::clampi (p.type,      0, kNumTypes - 1);
@@ -179,7 +230,7 @@ public:
         det_     = (cs.det >= 0) ? cs.det : ts.det;
         bandLink_ = cs.bandLink != 0;
         lowMono_  = (cs.lowMono != 0) ? (cs.lowMono > 0) : (ts.lowMono != 0);
-        upHold_   = (cs.upHold != 0) || p.bite;
+        upHold_   = (cs.upHold != 0) || p.crest;
 
         // ── CROSSOVERS. Clamped, and f_hi ≥ 4·f_lo enforced: below two octaves of separation the
         //    mid band thins to a phase sliver and the band trims stop meaning anything.
@@ -277,11 +328,6 @@ public:
         mixTgt_  = dyn::clampf (p.mix, 0.0f, 1.0f);
         sOff_    = (stereo_ == 2) ? -6.0f : 0.0f;
 
-        // ── the TREE-CHANGE dip (fb345 swap-dip idiom, FilterFxEngine.h:120-136). A 3-band
-        //    tree and a 2-band tree are different filter graphs with different states; swapping
-        //    them live is a step. 4 ms down / 30 ms back, and ONLY when the band count actually
-        //    changes — a dip on every Type change would itself be the artifact.
-        if (primed_ && nBands_ != nBandsPrev_) dip_ = 0.0f;
         nBandsPrev_ = nBands_;
 
         if (!primed_)
@@ -290,7 +336,9 @@ public:
             for (int b = 0; b < kBands; ++b)
             { tdn_[b] = tdnT_[b]; tup_[b] = tupT_[b]; sdn_[b] = sdnT_[b];
               sup_[b] = supT_[b]; mkDb_[b] = mkT_[b]; }
-            nBandsPrev_ = nBands_; dip_ = 1.0f;
+            nBandsPrev_ = nBands_; dip_ = 1.0f; dipDir_ = 0; dryX_ = (nBands_ == 3) ? 1.0f : 0.0f;
+            gClip_.snap ((clipHd_ < 900.0f) ? 1.0f : 0.0f); gMs_.snap ((stereo_ == 2) ? 1.0f : 0.0f);
+            prevType_ = p.type; prevChar_ = p.character; prevAxis_ = p.axis;
             primed_ = true;
             applyXover (xloTgt_, xhiTgt_);
         }
@@ -302,7 +350,6 @@ public:
     void processStereo (float* L, float* R, int n) noexcept
     {
         if (n <= 0) return;
-        const int NB = nBands_;
 
         // Crossover coefficients are recomputed at the BLOCK edge with per-sample state
         // continuity (the shipped filter law — no re-anchor needed at Q = 1/√2).
@@ -314,20 +361,47 @@ public:
 
         for (int i = 0; i < n; ++i)
         {
+            // ── the deferred tree swap, resolved per sample ──────────────────────────────
+            if (dipDir_ < 0)
+            {
+                dip_ -= dipDn_;
+                if (dip_ <= 0.0f)
+                {
+                    dip_ = 0.0f; dipDir_ = 1;
+                    if (pendOn_) { pendOn_ = false; applyParams (pend_); applyXover (gXlo_.value(), gXhi_.value()); }
+                }
+            }
+            else if (dip_ < 1.0f) { dip_ += dipUpS_; if (dip_ > 1.0f) { dip_ = 1.0f; dipDir_ = 0; } }
+            const float dxT = (nBands_ == 3) ? 1.0f : 0.0f;
+            if (dryX_ != dxT) { dryX_ += (dxT > dryX_) ? dipUpS_ : -dipUpS_;
+                                dryX_ = dyn::clampf (dryX_, 0.0f, 1.0f); }
+            const int NB = nBands_;
+            if (xfN_ > 0) --xfN_;
+            const float clipF = gClip_.proc ((clipHd_ < 900.0f) ? 1.0f : 0.0f);
+
             const float inL = L[i], inR = R[i];
             const float mix = gMix_.proc (mixTgt_);
 
             // ── the PHASE-MATCHED dry (bible §4.3). Same two allpasses the band tree imposes,
             //    so wet and dry differ by GAIN ALONE and Mix cannot comb at any setting.
-            float dL = dryLo_[0].ap (inL), dR = dryLo_[1].ap (inR);
-            if (NB == 3) { dL = dryHi_[0].ap (dL); dR = dryHi_[1].ap (dR); }
+            // the second allpass runs ALWAYS and is crossfaded, so a band-count change cannot
+            // step the dry path's phase either (it would, at any Mix below 1.0).
+            const float dL0 = dryLo_[0].ap (inL), dR0 = dryLo_[1].ap (inR);
+            const float dL1 = dryHi_[0].ap (dL0), dR1 = dryHi_[1].ap (dR0);
+            const float dL = dL0 + (dL1 - dL0) * dryX_;
+            const float dR = dR0 + (dR1 - dR0) * dryX_;
 
             // ── stereo basis. Mid-Side is a genuine topology swap: two trees on a rotated
             //    basis, with the S thresholds 6 dB deeper (side energy is that much lower on
             //    this bus — the offset makes M and S see the SAME `over` and `under`, so the
             //    processing is spectral rather than an accidental widener).
+            // The M/S basis is a SIGNAL PATH, not a gain, so it crossfades — rotating it in one
+            // sample is a waveform step and no gain limiter can see it (measured 5.25 dB/ms).
+            const float msF = gMs_.proc ((stereo_ == 2) ? 1.0f : 0.0f);
             float c0 = inL, c1 = inR;
-            if (stereo_ == 2) { const float m = 0.7071068f * (inL + inR), s = 0.7071068f * (inL - inR); c0 = m; c1 = s; }
+            if (msF > 1.0e-4f)
+            { const float m = 0.7071068f * (inL + inR), sd = 0.7071068f * (inL - inR);
+              c0 += msF * (m - c0); c1 += msF * (sd - c1); }
 
             float band[2][kBands];
             for (int c = 0; c < 2; ++c)
@@ -346,7 +420,7 @@ public:
                 else { band[c][0] = lo; band[c][1] = rest; band[c][2] = 0.0f; }
             }
 
-            // ── the Bite transient detector (broadband — a transient IS broadband, and one
+            // ── the Crest transient detector (broadband — a transient IS broadband, and one
             //    detector per channel is ⅓ the cost of one per band for the same behaviour).
             if (upHold_)
                 for (int c = 0; c < 2; ++c)
@@ -398,7 +472,7 @@ public:
                     float e = x2[c] + 1.0e-20f;                 // denormal floor AT THE SOURCE
                     if (det_ == 1 || det_ == 2) e = pre_[c][b].proc (e, aPre_);   // RMS pre-average
 
-                    const float off = (c == 1 ? sOff_ : 0.0f);
+                    const float off = (c == 1 ? sOff_ * msF : 0.0f);
                     const float Tdn = tdn_[b] + off, Tup = tup_[b] + off;
                     const float tdn2 = dyn::db2lin (2.0f * Tdn);    // threshold² in the MS domain
                     const float tup2 = dyn::db2lin (2.0f * Tup);
@@ -438,6 +512,9 @@ public:
                     }
 
                     float gdb = -gDn + gUp + mkDb_[b];
+                    if (xfN_ > 0)
+                        gdb = gdbZ_[c][b] + dyn::clampf (gdb - gdbZ_[c][b], -slewPS_, slewPS_);
+                    gdbZ_[c][b] = gdb;
                     float g = dyn::db2lin (gdb);
                     if (g > 400.0f) g = 400.0f;                 // Vital's kMaxExpandMult idiom
                     float y = band[c][b] * g;
@@ -445,12 +522,16 @@ public:
                     // Heavy's per-band ceiling: a cubic soft clip a few dB above the downward
                     // threshold. Bounded H3, and it is what makes "welded shut" audible as a
                     // TEXTURE rather than just a flat meter.
-                    if (clipHd_ < 900.0f)
+                    // Heavy's per-band ceiling FADES in and out over 20 ms. Inserting a clipper
+                    // in one sample is a waveform step no gain limit can catch: Surge (no clip,
+                    // slopes 0) → Heavy (clip at T+3 dB, slopes 1.0) measured 4.54 dB/ms.
+                    if (clipF > 1.0e-4f)
                     {
                         const float lim = dyn::db2lin (Tdn + clipHd_ + mkDb_[b]);
                         const float t = y / lim;
-                        if (t > -1.5f && t < 1.5f) y = lim * (t - t * t * t * (1.0f / 6.75f));
-                        else y = lim * (t > 0.0f ? 1.0f : -1.0f);
+                        const float yc = (t > -1.5f && t < 1.5f) ? lim * (t - t * t * t * (1.0f / 6.75f))
+                                                                 : lim * (t > 0.0f ? 1.0f : -1.0f);
+                        y += clipF * (yc - y);
                     }
                     wet[c] += y;
 
@@ -463,9 +544,10 @@ public:
             }
 
             float wL = wet[0], wR = wet[1];
-            if (stereo_ == 2) { const float l = 0.7071068f * (wL + wR), r = 0.7071068f * (wL - wR); wL = l; wR = r; }
-            if (dip_ < 0.99999f)
-            { dip_ += (1.0f - dip_) * dipUp_; wL *= dip_; wR *= dip_; }
+            if (msF > 1.0e-4f)
+            { const float l = 0.7071068f * (wL + wR), r = 0.7071068f * (wL - wR);
+              wL += msF * (l - wL); wR += msF * (r - wR); }
+            if (dip_ < 0.99999f) { wL *= dip_; wR *= dip_; }
 
             L[i] = dL + (wL - dL) * mix;     // linear crossfade — wet and dry are CORRELATED here,
             R[i] = dR + (wR - dR) * mix;     // so equal-power would bump +3 dB at Mix 50.
@@ -658,12 +740,9 @@ private:
         {
             splitLo_[c].set (xl, fs_);
             dryLo_[c].setLR (xl, fs_);
-            if (nBands_ == 3)
-            {
-                splitHi_[c].set (xh, fs_);
-                alignLow_[c].setLR (xh, fs_);
-                dryHi_[c].setLR (xh, fs_);
-            }
+            splitHi_[c].set (xh, fs_);          // set unconditionally: `dryHi_` runs in both
+            alignLow_[c].setLR (xh, fs_);       // trees so the crossfade above has a live tap
+            dryHi_[c].setLR (xh, fs_);
         }
     }
 
@@ -675,7 +754,7 @@ private:
     dyn::LR4  splitLo_[2], splitHi_[2];
     dyn::Svf1 alignLow_[2], dryLo_[2], dryHi_[2];
     dyn::MeanSquare pre_[2][kBands];
-    dyn::Glide gXlo_, gXhi_, gMix_;
+    dyn::Glide gXlo_, gXhi_, gMix_, gClip_, gMs_;
 
     float envDn_[2][kBands] {}, envUp_[2][kBands] {};
     float tdn_[kBands] {}, tup_[kBands] {}, sdn_[kBands] {}, sup_[kBands] {};
@@ -687,7 +766,11 @@ private:
 
     float xloTgt_ = 88.3f, xhiTgt_ = 2500.0f, mixTgt_ = 1.0f, knee_ = 2.0f, clipHd_ = 999.0f;
     float aPre_ = 0.01f, hiTiltDb_ = 0.0f, sOff_ = 0.0f, lvlA_ = 0.001f, lvlZ_ = 0.0f;
-    float bAtk_ = 0.05f, bRel_ = 0.002f, biteRelA_ = 0.05f, aGl_ = 0.01f, dip_ = 1.0f, dipUp_ = 0.01f, aMem_ = 1.0e-4f, capDbTop_ = 24.0f;
+    float bAtk_ = 0.05f, bRel_ = 0.002f, biteRelA_ = 0.05f, aGl_ = 0.01f, dip_ = 1.0f, aMem_ = 1.0e-4f, capDbTop_ = 24.0f;
+    float dipDn_ = 0.005f, dipUpS_ = 0.0007f, dryX_ = 1.0f;
+    Params pend_; int dipDir_ = 0; bool pendOn_ = false;
+    float gdbZ_[2][kBands] {}, slewPS_ = 0.03125f;
+    int   xfN_ = 0, xfLen_ = 1920, prevType_ = -1, prevChar_ = -1, prevAxis_ = -1;
     int   nBands_ = 3, nBandsPrev_ = 3, stereo_ = 0, det_ = 0, vizEvery_ = 800, vizCtr_ = 0, biteHoldN_ = 480;
     bool  bandLink_ = false, lowMono_ = false, lowUpOff_ = false, upHold_ = false, primed_ = false, deepRel_ = false;
 };

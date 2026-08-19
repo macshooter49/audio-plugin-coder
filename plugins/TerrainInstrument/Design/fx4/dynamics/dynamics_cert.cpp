@@ -143,15 +143,54 @@ double specDist (const std::vector<float>& a, const std::vector<float>& b)
     return nb ? sum / nb : 0.0;
 }
 
-double bandDbOf (const std::vector<float>& x, double lo, double hi)
+/** Welch-averaged POWER spectrum: mean |X[k]|² per frame, Hann, 4096. */
+std::vector<double> powSpec (const std::vector<float>& x)
 {
-    auto A = magSpec (x);
-    const double binHz = FS / 4096.0;
-    double e = 0.0; int n = 0;
-    for (int k = std::max (1, (int) (lo / binHz)); k <= (int) (hi / binHz) && k < 2048; ++k)
-    { e += A[(size_t) k] * A[(size_t) k]; ++n; }
-    return n ? db (std::sqrt (e / n)) : -140.0;
+    const int N = 4096;
+    std::vector<double> acc ((size_t) N / 2, 0.0);
+    int frames = 0;
+    for (size_t off = 0; off + (size_t) N <= x.size(); off += (size_t) N / 2)
+    {
+        std::vector<std::complex<double>> a ((size_t) N);
+        for (int i = 0; i < N; ++i)
+        {
+            const double w = 0.5 - 0.5 * std::cos (2.0 * M_PI * i / (N - 1));
+            a[(size_t) i] = std::complex<double> (x[off + (size_t) i] * w, 0.0);
+        }
+        fft (a);
+        for (int k = 0; k < N / 2; ++k) { const double m = std::abs (a[(size_t) k]); acc[(size_t) k] += m * m; }
+        ++frames;
+    }
+    if (frames) for (auto& v : acc) v /= frames;
+    return acc;
 }
+
+/** 🚨 THE BLOCKER THIS REPLACES (FIXES.md §1 OTT 3).
+ *  `bandDbOf` returned `db(rms of the raw 4096-point FFT magnitude over the band's bins)`. That
+ *  number is NOT dBFS: it carries a +N·CG factor from the transform and it averages PER BIN, so
+ *  a wide band reads lower the wider you make it. The printed "dark pad 8–12 kHz content
+ *  −94.9 dBFS" was ~40 dB HIGH; sine-injection calibration puts the true content at −134.5 dBFS,
+ *  114 dB below the programme. `Sheen`'s headline "+47.63 dB of air" therefore lifted an
+ *  inaudible band to another inaudible band. fb417 exactly: the ratio moves, the ear cannot.
+ *
+ *  This is Parseval, done properly: for a Hann window, U = (1/N)Σw² = 3/8, and
+ *      σ²_band = (2 / (N²·U)) · Σ_{k∈band} |X[k]|²
+ *  returns the TRUE RMS of the signal's content in that band, in dBFS. Gated in section 2
+ *  against a sine of known level and against white noise of known level — both exact by
+ *  construction, and they disagree by 0.1 dB if the normalisation is wrong. */
+double bandRmsDbFS (const std::vector<float>& x, double lo, double hi)
+{
+    auto P = powSpec (x);
+    const int N = 4096;
+    const double U = 0.375;                       // (1/N)·Σ hann²
+    const double binHz = FS / (double) N;
+    double e = 0.0;
+    for (int k = std::max (1, (int) std::ceil (lo / binHz)); k <= (int) (hi / binHz) && k < N / 2; ++k)
+        e += P[(size_t) k];
+    e *= 2.0 / ((double) N * (double) N * U);
+    return 10.0 * std::log10 (std::max (e, 1e-30));
+}
+double bandDbOf (const std::vector<float>& x, double lo, double hi) { return bandRmsDbFS (x, lo, hi); }
 
 double centroidHz (const std::vector<float>& x)
 {
@@ -259,16 +298,48 @@ std::vector<float> chordSig (int n, float rms = 0.10f)
     const double a = rmsOf (x); for (auto& v : x) v *= (float) (rms / a);
     return x;
 }
-/** A genuinely DARK pad: the chord through a 4-pole 600 Hz lowpass. The `air` gate must be
- *  written on this, not on a filtered saw that still has top (bible §2.4). */
+/** A DARK pad — but one whose top end EXISTS. fb417: the first version was the chord through a
+ *  4-pole 600 Hz lowpass, whose true 8-12 kHz content calibrates to −134.5 dBFS against a
+ *  −20 dBFS programme. 114 dB down is not dark, it is absent, and a control measured on absent
+ *  content is a ratio nobody can hear. This is a 2-pole 1.2 kHz lowpass PLUS a dithered
+ *  −96 dBFS floor (a real 16-bit noise floor, the level a synth's own output actually sits on).
+ *  Section 2 PRINTS the calibrated 8-12 kHz level of this probe next to the programme level so
+ *  the reader can see for himself how far down the thing being lifted is. */
 std::vector<float> darkPad (int n, float rms = 0.10f)
 {
     auto x = chordSig (n, rms);
-    float z[4] = { 0, 0, 0, 0 };
-    const float a = 1.0f - std::exp (-2.0f * 3.14159265f * 600.0f / FS);
-    for (auto& v : x)
-    { z[0] += (v - z[0]) * a; z[1] += (z[0] - z[1]) * a; z[2] += (z[1] - z[2]) * a; z[3] += (z[2] - z[3]) * a; v = z[3]; }
+    float z[2] = { 0, 0 };
+    const float a = 1.0f - std::exp (-2.0f * 3.14159265f * 1200.0f / FS);
+    for (auto& v : x) { z[0] += (v - z[0]) * a; z[1] += (z[0] - z[1]) * a; v = z[1]; }
     const double r = rmsOf (x); for (auto& v : x) v *= (float) (rms / r);
+    const float dith = (float) std::pow (10.0, -96.0 / 20.0);
+    gRng = 0x51ED270Bu;
+    for (auto& v : x) v += dith * 1.4142f * rnd11();
+    return x;
+}
+
+/** A STEADY-ENVELOPE programme, and the reason every click gate below uses it.
+ *  The 55/110/165/220 Hz saw chord has an 18.2 ms period with deep envelope nulls, so adjacent
+ *  1 ms frames legitimately differ by 25-35 dB — measured: every OTT Type x Character reads
+ *  ~29 dB of "level step in one millisecond" on a STATIONARY chord with no parameter ever
+ *  changed. That is the chord, not the device. Band-limited noise at the same level has a
+ *  steady 1 ms envelope (+/-0.9 dB), drives every band of a multiband device, and is the
+ *  standard dynamics probe. */
+std::vector<float> clickProg (int n) { return noiseSig (n, 0.10f, 0x2468ACE0u); }
+
+/** A REAL, DITHERED NOISE FLOOR at a stated level — never digital zero.
+ *  FIXES.md §1 OTT 2: both floor-gate probes appended EXACT ZEROS after the note, and the device
+ *  is feed-forward (y = band·g), so zero in gives zero out for any finite gain. The reported
+ *  −280 dBFS was arithmetic, not evidence, on a gate whose own title said "the floor gate
+ *  holds". This is the fb416 shape: the fault it aims at — a device that lifts a real noise
+ *  floor into audibility — lives in the BULK, and the probe had no bulk. */
+std::vector<float> floorBed (int n, double dbfs, uint32_t seed = 0x9E3779B9u)
+{
+    std::vector<float> x ((size_t) n); gRng = seed;
+    for (int i = 0; i < n; ++i) x[(size_t) i] = rnd11();
+    const double a = rmsOf (x), want = std::pow (10.0, dbfs / 20.0);
+    const float g = (a > 0.0) ? (float) (want / a) : 1.0f;
+    for (auto& v : x) v *= g;
     return x;
 }
 /** The reference chord under a 2 Hz / 24 dB tremolo — a probe that HAS dynamics, so a
@@ -410,6 +481,83 @@ double clickRatio (const std::vector<float>& y, int at, int winMs, double& basel
     return (outWin > 0.0) ? inWin / outWin : 1.0;
 }
 
+/** ═════ THE CLICK METRIC, and the three versions it took ═══════════════════════════════
+ *  REPLACES `clickRatio`, which FIXES.md §1 OTT 1 refuted: it divided the in-window max |Δy| by
+ *  the max |Δy| ANYWHERE ELSE in the same take, and the largest jump in an OTT take is the
+ *  engine's own t=0 start-up burst — 0.14163, twenty-six times the steady-state max jump and
+ *  sixty-nine times the input tone's own max step. With the bar at 2.5x a click had to exceed
+ *  |Δy| = 0.354 on a signal whose peak is 0.19: 1.9x the full scale of its own probe. Nothing
+ *  could trip it, and it was hiding a 19.8x tree swap.
+ *
+ *  There is no denominator taken from the engine here at all. Two takes of the SAME engine on
+ *  the SAME programme — one holding params A, one switching A→B at `at` — and
+ *        k[f] = RMS(y_switch − y_hold) / RMS(y_hold)      over 1 ms frames aligned to the switch
+ *  which is IDENTICALLY ZERO before the switch (same code, same state, deterministic). The
+ *  number reported is 20·log10(1 + max|k[f] − k[f−1]|) over the switch frame and the one after:
+ *  **how many dB of gain the switch moved inside one millisecond.**
+ *    · a planted instantaneous +8.00 dB step reads 8.00      (gated, §K)
+ *    · no switch at all reads 0.0000                          (gated, §K)
+ *    · the engine's own 20 ms glides moving their whole 24 dB range read 1.17
+ *  Bar 2.0 dB/ms: above the fastest legitimate parameter move this engine can make, ten times
+ *  below an unseeded smoother collapse. Frames where the hold take is more than 12 dB under its
+ *  own average are held flat — a dB ratio of two near-zero windows is noise, not evidence. */
+template <typename Run>
+double clickDbPerMs (Run run, int at, const std::vector<float>& prog, double winMs = 1.0)
+{
+    const std::vector<float> ySw = run (true), yHold = run (false);
+    const int W = (int) (FS * 0.001f), off = at % W;
+    const double ref = rmsOf (yHold, (size_t) (FS * 0.15f));
+    const int nF = (int) ((ySw.size() - (size_t) off) / (size_t) W);
+    std::vector<double> k ((size_t) nF, 0.0);
+    for (int f = 0; f < nF; ++f)
+    {
+        double dd = 0.0, pp = 0.0;
+        for (int i = off + f * W; i < off + (f + 1) * W; ++i)
+        { const double d = (double) ySw[(size_t) i] - yHold[(size_t) i];
+          dd += d * d; pp += (double) yHold[(size_t) i] * yHold[(size_t) i]; }
+        const double rh = std::sqrt (pp / (double) W);
+        k[(size_t) f] = (rh > 0.25 * ref) ? std::sqrt (dd / (double) W) / rh
+                                          : (f > 0 ? k[(size_t) f - 1] : 0.0);
+    }
+    const int f0 = (at - off) / W, f1 = f0 + (int) winMs;
+    double inW = 0.0;
+    for (int f = 1; f < nF; ++f)
+        if (f >= f0 && f <= f1) inW = std::max (inW, std::fabs (k[(size_t) f] - k[(size_t) f - 1]));
+    (void) prog;
+    return 20.0 * std::log10 (1.0 + inW);
+}
+
+double cJump (CP a, CP b, int at, const std::vector<float>& prog, double winMs = 1.0)
+{
+    auto run = [&] (bool doSwitch)
+    {
+        CX e; e.prepare (FS, 64); e.setParams (a);
+        std::vector<float> l = prog, r = prog;
+        for (int i = 0; i + 64 <= (int) prog.size(); i += 64)
+        { e.setParams ((doSwitch && i >= at) ? b : a); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64); }
+        return l;
+    };
+    return clickDbPerMs (run, at, prog, winMs);
+}
+double oJump (OP a, OP b, int at, const std::vector<float>& prog, double winMs = 1.0)
+{
+    auto run = [&] (bool doSwitch)
+    {
+        OX e; e.prepare (FS, 64); e.setParams (a);
+        std::vector<float> l = prog, r = prog;
+        for (int i = 0; i + 64 <= (int) prog.size(); i += 64)
+        { e.setParams ((doSwitch && i >= at) ? b : a); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64); }
+        return l;
+    };
+    return clickDbPerMs (run, at, prog, winMs);
+}
+/** FIVE switch phases. The old probe jumped at i = FS·0.5 = 24000 with a 220 Hz tone: exactly
+ *  110 whole cycles, so sin(phase) = 0.000000 at the switch instant — AND exactly a 64-sample
+ *  block boundary (24000/64 = 375). A compressor's every artifact is a gain step, and a gain
+ *  step at a zero crossing produces no sample-to-sample jump at all. These five are spread
+ *  across the take and land on unrelated phases of a broadband programme. */
+constexpr int kAts[5] = { 14912, 19968, 25088, 30016, 35072 };
+
 std::string nm (const char* const* a, int i) { return std::string (a[i]); }
 
 } // namespace
@@ -501,7 +649,17 @@ static void section1()
     // Deliberately EXEMPT: the shared-vocabulary words CONTRACT §4 tells us to reuse when the
     // concept is genuinely the same, plus the chassis words every device's back panel shows.
     static const char* kShared[] = { "Mix", "Attack", "Release", "Character", "Auto", "Type",
-                                     "Power", "Stereo", "Amount", "Ratio", "Peak" };
+                                     "Power", "Stereo", "Amount", "Ratio", "Peak", "Bass", "Treble" };
+    // ⚠️ THE ONLY TWO EXEMPTIONS, and both are RENAMES.md decisions where the SIBLING yields:
+    //   `Gentle`   — OTT Type 1. RENAMES.md: "EQ yields" (its American char 2 becomes `Mellow`).
+    //   `Low Split`— OTT Two Band char 1. RENAMES.md: "OTT's Low Split/High Split are a matched
+    //                pair; breaking one breaks both" — Widen's becomes `Deep Grid`.
+    // They still appear in the corpus because the siblings have not applied their own table yet.
+    // The list is asserted to be EXACTLY these two below, so it cannot quietly grow into an
+    // excuse. Anything else that collides is a real collision and this gate goes red.
+    static const char* kSiblingYields[] = { "Gentle", "Low Split" };
+    auto yielded = [] (const std::string& s)
+    { for (auto k : kSiblingYields) if (s == k) return true; return false; };
     auto shared = [] (const std::string& s)
     { for (auto k : kShared) if (s == k) return true; return false; };
     auto shipped = [] (const std::string& s)
@@ -520,18 +678,39 @@ static void section1()
         for (int c = 0; c < OX::kNumChars; ++c) mine.push_back (nm (OX::charNames (t), c));
     }
     for (int d = 0; d < OX::kNumStereo; ++d) mine.push_back (nm (OX::stereoNames(), d));
-    static const char* kKnobs[] = { "Push", "Ratio", "Lift", "Mix", "Attack", "Release", "Round",
-        "Hear Cut", "Edge", "Latch", "Tie", "Heat", "Detect",
-        "Amount", "Chase", "Top Lift", "Low Cross", "High Cross", "Raise", "Press", "Grip",
-        "Bass", "Mids", "Treble", "Bite" };
-    for (auto k : kKnobs) mine.push_back (k);
+    // 🔑 FIXES.md §3 — every label below is READ FROM THE ENGINE HEADER. There is no list of
+    // knob names in this file any more, and none in the roster or the worklet that is not a
+    // copy of these arrays. A hand-written list in the harness is the same geometry that let
+    // `Cassette` play `Studio`: the gate agreed with the markdown while the DSP did something
+    // else. If a name changes in the header, this gate sees it on the next run.
+    for (int i = 0; i < CX::kNumFront; ++i) mine.push_back (nm (CX::frontNames(), i));
+    for (int i = 0; i < CX::kNumBack;  ++i) mine.push_back (nm (CX::backNames(),  i));
+    for (int i = 0; i < 2; ++i)             mine.push_back (nm (CX::dropdownNames(), i));
+    mine.push_back (CX::pillName());        mine.push_back (CX::deviceName());
+    for (int i = 0; i < OX::kNumFront; ++i) mine.push_back (nm (OX::frontNames(), i));
+    for (int i = 0; i < OX::kNumBack;  ++i) mine.push_back (nm (OX::backNames(),  i));
+    for (int i = 0; i < 2; ++i)             mine.push_back (nm (OX::dropdownNames(), i));
+    mine.push_back (OX::pillName());        mine.push_back (OX::deviceName());
 
     int col = 0; std::string first;
     for (auto& s : mine)
-        if (!shared (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
+        if (!shared (s) && !yielded (s) && shipped (s)) { ++col; if (first.empty()) first = s; }
     gate ("no name collides with a shipped label", col == 0,
-          col == 0 ? F1 ("%.0f names checked vs 1762 shipped strings", (double) mine.size())
+          col == 0 ? F2 ("%.0f names vs %.0f corpus strings (Source/ + BOTH sibling fx4 dirs)",
+                         (double) mine.size(), (double) kNumShippedLabels)
                    : (F1 ("%.0f collisions, first: ", (double) col) + first));
+    // the corpus must be able to SEE the two labels R6 is named after, or it cannot protect
+    // tomorrow's. `Motion` and `Route` are built as "Chorus" + sfxD + " Motion" — a LEADING
+    // SPACE, which the old capitalised-quoted-string extractor skipped outright.
+    gate ("the corpus contains the fb418 leading-space labels", shipped ("Motion") && shipped ("Route"),
+          std::string ("Motion ") + (shipped ("Motion") ? "PRESENT" : "MISSING")
+          + " · Route " + (shipped ("Route") ? "PRESENT" : "MISSING"));
+    gate ("the corpus contains the SIBLING fx4 names (it could not, before)",
+          shipped ("Slant") && shipped ("Chisel") && shipped ("Steady") && shipped ("Twofold"),
+          "Slant · Chisel · Steady · Twofold all found in Design/fx4/{eq,widen}");
+    gate ("the sibling-yield exemption list is exactly 2 entries",
+          (int) (sizeof kSiblingYields / sizeof kSiblingYields[0]) == 2,
+          "Gentle, Low Split — both RENAMES.md rows where the sibling gives way");
 
     int dup = 0; std::string dupName;
     for (size_t i = 0; i < mine.size(); ++i)
@@ -593,6 +772,21 @@ static void section2()
         gate ("air metric is calibrated (broadband +8.000 dB)",
               std::fabs ((bandDbOf (g8, 8000.0, 12000.0) - a0) - 8.0) < 0.02,
               F1 ("reads %+.4f dB", bandDbOf (g8, 8000.0, 12000.0) - a0));
+        // 🔬 ABSOLUTE CALIBRATION, twice, with answers that are exact by construction.
+        {
+            auto sn = toneSig ((int) (FS * 2.0f), 3000.0f, 0.05f);          // −26.02 dBFS RMS
+            const double got = bandRmsDbFS (sn, 2500.0, 3500.0);
+            gate ("spectrum is CALIBRATED: a −26.02 dBFS sine reads its own level",
+                  std::fabs (got + 26.0206) < 0.30, F2 ("reads %.3f dBFS (true %.3f)", got, -26.0206));
+            auto nz = noiseSig ((int) (FS * 2.0f), 0.05f);
+            // to NYQUIST, not to 20 kHz: white noise has 16.7 % of its power between 20 and
+            // 24 kHz, which reads as exactly −0.79 dB of "error" if you leave it out. The first
+            // run of this gate did leave it out and read −26.822. The metric was right and the
+            // TEST was wrong — the same shape as the +8 dB shelf note above.
+            const double gn = bandRmsDbFS (nz, 20.0, 24000.0);
+            gate ("... and a −26.02 dBFS white noise bed reads its own level too",
+                  std::fabs (gn + 26.0206) < 0.20, F2 ("reads %.3f dBFS (true %.3f)", gn, -26.0206));
+        }
         std::vector<float> withTone = dark;
         {   // add a 10 kHz tone at exactly the dark pad's own 8–12 k level ⇒ ~+3 dB in that band
             auto t = toneSig ((int) withTone.size(), 10000.0f, (float) std::pow (10.0, a0 / 20.0));
@@ -601,7 +795,14 @@ static void section2()
         const double a2 = bandDbOf (withTone, 8000.0, 12000.0);
         gate ("air metric is band-selective (a 10 kHz tone moves it)", a2 - a0 > 2.0,
               F3 ("dark %.1f dBFS → +10 kHz tone %.1f dBFS (Δ %+.2f)", a0, a2, a2 - a0));
-        note ("    dark pad 8-12 kHz content", F1 ("%.1f dBFS — this is what OTT has to lift", a0));
+        // 📐🚫👂 fb417 — PRINT HOW FAR DOWN IT IS, BESIDE THE PROGRAMME, IN CALIBRATED dBFS.
+        const double prog = db (rmsOf (dark));
+        note ("    dark pad: programme level", F1 ("%.1f dBFS RMS", prog));
+        note ("    dark pad: 8-12 kHz content", F2 ("%.1f dBFS = %.1f dB under the programme", a0, prog - a0));
+        gate ("the air band is AUDIBLE CONTENT before anything lifts it", prog - a0 < 60.0,
+              F1 ("%.1f dB under the programme (bar 60). The first draft's 4-pole/600 Hz pad put it",
+                  prog - a0)
+              + " 114 dB down — a ratio nobody can hear (fb417).");
     }
 }
 
@@ -1098,67 +1299,197 @@ static void section4()
               F1 ("(1 − mix)·dry = 0 identically; measured floor %.1f dB (bar −60)", std::max (dryErr, linErr)));
     }
 
+    // ═════ R6 — ONE CONTROL PER AXIS ═══════════════════════════════════════
+    section ("4c2. COMPRESS — `Detect` owns detection outright (R6 / fb418 / fb373)");
+    {
+        int bad = 0; std::string first;
+        for (int ax = 1; ax < CX::kNumDetect; ++ax)
+            for (int t = 0; t < CX::kNumTypes; ++t)
+            {
+                int ref = -1;
+                for (int c = 0; c < CX::kNumChars; ++c)
+                {
+                    CP p; p.type = t; p.character = c; p.axis = ax;
+                    CX e; e.prepare (FS, 128); e.setParams (p);
+                    if (c == 0) ref = e.detectId();
+                    else if (e.detectId() != ref && ++bad == 1)
+                        first = std::string (CX::typeNames()[t]) + " · " + CX::charNames (t)[c]
+                              + " overrides Detect=" + CX::detectNames()[ax];
+                }
+            }
+        gate ("no Character changes the rectifier at any Detect setting", bad == 0,
+              bad == 0 ? "8 Types × 8 Characters × 4 explicit Detect settings = 256 checks"
+                       : (F1 ("%.0f overrides, first: ", (double) bad) + first));
+        int nat = 0;
+        for (int t = 0; t < CX::kNumTypes; ++t)
+        {
+            int ref = -1;
+            for (int c = 0; c < CX::kNumChars; ++c)
+            { CP p; p.type = t; p.character = c; p.axis = 0;
+              CX e; e.prepare (FS, 128); e.setParams (p);
+              if (c == 0) ref = e.detectId(); else if (e.detectId() != ref) ++nat; }
+        }
+        gate ("  ... and at `Native` the TYPE decides it, still not the Character", nat == 0,
+              F1 ("%.0f Characters disagreed with their Type's native ears", (double) nat));
+        // and it is AUDIBLE, not just an integer: Peak and Average must measurably differ
+        auto pk = pluckSig ((int) (FS * 1.5f), 110.0f, 0.25f);
+        CP a1; a1.push = 0.5f; a1.ratio = 0.9f; a1.axis = 1;   // Peak
+        CP a2 = a1; a2.axis = 2;                                // Average
+        const double d = std::fabs (envSpreadDb (runC (a1, pk).l) - envSpreadDb (runC (a2, pk).l));
+        gate ("  ... and the axis it owns is audible (Peak vs Average on a pluck)", d > 0.5,
+              F1 ("%.2f dB of envelope-spread difference", d));
+    }
+
+    // ═════ THE SMOOTHER-SEED GATE, ON ITS OWN ══════════════════════════════
+    section ("4c3. COMPRESS — the ballistic state survives a smoother-shape change");
+    // 🚨 This gate exists because the CLICK gate could not prove the seeding on its own: with the
+    // transition slew limiter also present, deleting the seed left the click matrix at 2.04 dB/ms
+    // — over the bar, but barely, and only on one cell. Defence in depth is good engineering and
+    // TERRIBLE evidence. So the mechanism gets a gate that measures IT and nothing else:
+    // `gr_` is the gain reduction in dB and it is the same physical quantity in all five smoother
+    // shapes, so across a shape change it must be CONTINUOUS. Sampled one 8-sample block either
+    // side of the switch, over every Type pair and every Character pair that actually changes
+    // shape. On the fb421 engine this reads 10.96 dB — a complete collapse to zero inside one
+    // block, i.e. an ~+11 dB gain step, mid-note.
+    {
+        auto prog = clickProg ((int) (FS * 0.6f));
+        auto step = [&] (CP a, CP b)
+        {
+            CX e; e.prepare (FS, 8); e.setParams (a);
+            std::vector<float> l = prog, r = prog;
+            const int at = 20000 - 20000 % 8;
+            double before = 0.0, worst = 0.0;
+            for (int i = 0; i + 8 <= (int) prog.size(); i += 8)
+            {
+                const bool sw = (i >= at);
+                if (i == at) before = e.grNow();
+                e.setParams (sw ? b : a);
+                e.processStereo (&l[(size_t) i], &r[(size_t) i], 8);
+                // ONE 8-sample block (0.17 ms). Longer than that and the NEW smoother's
+                // attack legitimately runs — Limit closes a 5 dB gap in 1.09 ms — and the gate
+                // starts measuring the ballistics instead of the seed. A discarded state shows
+                // up in the FIRST block or not at all.
+                if (i == at) worst = std::fabs (e.grNow() - before);
+            }
+            return worst;
+        };
+        CP base; base.push = 0.3f; base.ratio = 0.6f;
+        double wT = 0.0, wC = 0.0; std::string nT, nC;
+        for (int ta = 0; ta < CX::kNumTypes; ++ta)
+            for (int tb = 0; tb < CX::kNumTypes; ++tb)
+            {
+                CP a = base; a.type = ta; CP b = base; b.type = tb;
+                const double m = step (a, b);
+                if (m > wT) { wT = m; nT = std::string (CX::typeNames()[ta]) + " → " + CX::typeNames()[tb]; }
+            }
+        for (int t = 0; t < CX::kNumTypes; ++t)
+            for (int ca = 0; ca < CX::kNumChars; ++ca)
+                for (int cb = 0; cb < CX::kNumChars; ++cb)
+                {
+                    if (ca == cb) continue;
+                    CP a = base; a.type = t; a.character = ca; CP b = base; b.type = t; b.character = cb;
+                    const double m = step (a, b);
+                    if (m > wC) { wC = m; nC = std::string (CX::typeNames()[t]) + ": "
+                                             + CX::charNames (t)[ca] + " → " + CX::charNames (t)[cb]; }
+                }
+        gate ("GR is continuous across all 64 Type changes (≤ 2 dB in the first 0.17 ms)", wT <= 2.0,
+              F1 ("worst %.2f dB", wT) + "  (" + nT + ")");
+        gate ("GR is continuous across all 448 Character changes", wC <= 2.0,
+              F1 ("worst %.2f dB", wC) + "  (" + nC + ")");
+    }
+
     // ═════ CLICKS ══════════════════════════════════════════════════════════
-    section ("4d. COMPRESS — no clicks (law 4), every param jumped under a sustained tone");
+    section ("4d. COMPRESS — no clicks (law 4): ALL 8x8 Type and ALL 8x8 Character transitions");
+    // 🚨 WHAT THIS REPLACES (FIXES.md §1 COMPRESS 1 + 2). The old gate tested ONE Type
+    // transition — Exact → Vari-Mu — which is the RS_EXP→RS_EXP case, the only clean one; and
+    // it jumped at a zero crossing on a block boundary with a single 220 Hz tone. `Exact → Ride`
+    // read 7.30x at that harness's own alignment. Measured here on the fb421 engine, every
+    // ordered pair, five phases, broadband programme: the worst Type transition moved
+    // **17.36 dB of gain inside one millisecond** and the worst Character transition 16.26 dB.
+    {
+        auto prog = clickProg ((int) (FS * 1.2f));
+        CP base; base.push = 0.3f; base.ratio = 0.6f;
+        double wT = 0.0, wC = 0.0; std::string nT, nC;
+        for (int ta = 0; ta < CX::kNumTypes; ++ta)
+            for (int tb = 0; tb < CX::kNumTypes; ++tb)
+            {
+                CP a = base; a.type = ta; CP b = base; b.type = tb;
+                for (int k = 0; k < 5; ++k)
+                {
+                    const double m = cJump (a, b, kAts[k], prog);
+                    if (m > wT) { wT = m; nT = std::string (CX::typeNames()[ta]) + " → " + CX::typeNames()[tb]; }
+                }
+            }
+        gate ("all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms", wT <= 2.0,
+              F1 ("worst %.2f dB/ms", wT) + "  (" + nT + ")   [fb421 engine: 17.36]");
+        for (int t = 0; t < CX::kNumTypes; ++t)
+            for (int ca = 0; ca < CX::kNumChars; ++ca)
+                for (int cb = 0; cb < CX::kNumChars; ++cb)
+                {
+                    if (ca == cb) continue;
+                    CP a = base; a.type = t; a.character = ca;
+                    CP b = base; b.type = t; b.character = cb;
+                    for (int k = 0; k < 3; ++k)
+                    {
+                        const double m = cJump (a, b, kAts[k], prog);
+                        if (m > wC) { wC = m; nC = std::string (CX::typeNames()[t]) + ": "
+                                                 + CX::charNames (t)[ca] + " → " + CX::charNames (t)[cb]; }
+                    }
+                }
+        gate ("all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms", wC <= 2.0,
+              F1 ("worst %.2f dB/ms", wC) + "  (" + nC + ")   [fb421 engine: 16.26]");
+        // the front/back knobs, on the same metric and the same five phases
+        struct KJ { const char* what; CP b; };
+        CP k1 = base; k1.push = 0.9f;   CP k2 = base; k2.ratio = 1.0f;
+        CP k3 = base; k3.lift = 1.0f;   CP k4 = base; k4.b3 = 1.0f;
+        CP k5 = base; k5.b4 = 1.0f;     CP k6 = base; k6.b7 = 0.0f;
+        CP k7 = base; k7.b8 = 1.0f;     CP k8 = base; k8.b5 = 1.0f;
+        CP k9 = base; k9.b6 = 1.0f;     CP k10 = base; k10.axis = 3;
+        const KJ kj[] = { { "  Push 0.3 → 0.9", k1 }, { "  Ratio 0.6 → 1.0 (∞:1)", k2 },
+                          { "  Lift 0 → +24 dB", k3 }, { "  Round 0.25 → 1.0", k4 },
+                          { "  Hear Cut off → 500 Hz", k5 }, { "  Tie 100 → 0", k6 },
+                          { "  Burn 0 → 100", k7 }, { "  Edge 0.5 → 1.0", k8 },
+                          { "  Cling 0 → 250 ms", k9 }, { "  Detect Native → Patient", k10 } };
+        for (auto& j : kj)
+        {
+            double m = 0.0;
+            for (int k = 0; k < 5; ++k) m = std::max (m, cJump (base, j.b, kAts[k], prog));
+            gate (j.what, m <= 2.0, F1 ("%.2f dB/ms", m));
+        }
+    }
+    // the CONTINUOUS fault an outlier detector is blind to (fb416): a slow sweep must not
+    // zipper. Measured as inter-harmonic hash RELATIVE TO THE FUNDAMENTAL BIN, against the
+    // SAME measurement with the knob held still.
     {
         auto tone = toneSig ((int) (FS * 1.0f), 220.0f, 0.05f);
-        const int at = (int) (FS * 0.5f);
-        auto jump = [&] (const char* what, CP a, CP b)
+        auto hash = [&] (bool moving)
         {
-            CX e; e.prepare (FS, 64); e.setParams (a);
+            CX e; e.prepare (FS, 64); CP p; p.push = 0.55f; p.ratio = 0.9f; p.lift = 0.0f;
             std::vector<float> l = tone, r = tone;
             for (int i = 0; i + 64 <= (int) tone.size(); i += 64)
-            { e.setParams (i < at ? a : b); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64); }
-            double base = 0.0;
-            const double ratio = clickRatio (l, at, 40, base);
-            gate (what, ratio < 2.5, F2 ("%.2f× the steady-state max jump (baseline %.5f)", ratio, base));
-        };
-        CP a; a.push = 0.3f; a.ratio = 0.6f;
-        { CP b = a; b.push = 0.9f;  jump ("  Push 0.3 → 0.9", a, b); }
-        { CP b = a; b.ratio = 1.0f; jump ("  Ratio 0.6 → 1.0 (∞:1)", a, b); }
-        { CP b = a; b.lift = 1.0f;  jump ("  Lift 0 → +24 dB", a, b); }
-        { CP b = a; b.b3 = 1.0f;    jump ("  Round 0.25 → 1.0", a, b); }
-        { CP b = a; b.b4 = 1.0f;    jump ("  Hear Cut off → 500 Hz", a, b); }
-        { CP b = a; b.b7 = 0.0f;    jump ("  Tie 100 → 0", a, b); }
-        { CP b = a; b.b8 = 1.0f;    jump ("  Heat 0 → 100", a, b); }
-        { CP b = a; b.type = 4;     jump ("  Type Exact → Vari-Mu (GR carries over)", a, b); }
-        { CP b = a; b.character = 6; jump ("  Character 0 → 6", a, b); }
-        { CP b = a; b.axis = 3;     jump ("  Detect Auto → Long", a, b); }
-        // the CONTINUOUS fault an outlier detector is blind to (fb416): a slow sweep must not
-        // zipper. Measured as inter-harmonic hash RELATIVE TO THE FUNDAMENTAL BIN, against the
-        // SAME measurement with the knob held still. (The first draft normalised an FFT
-        // magnitude by a time-domain peak — two different units — and reported −33 dBc on a
-        // pure sine through a bypassed engine. Check your own detector.)
-        {
-            auto hash = [&] (bool moving)
             {
-                CX e; e.prepare (FS, 64); CP p; p.push = 0.55f; p.ratio = 0.9f; p.lift = 0.0f;
-                std::vector<float> l = tone, r = tone;
-                for (int i = 0; i + 64 <= (int) tone.size(); i += 64)
-                {
-                    if (moving) p.push = 0.2f + 0.7f * (float) i / (float) tone.size();
-                    e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64);
-                }
-                auto A = magSpec (l);
-                const double binHz = FS / 4096.0;
-                const int kf = (int) std::round (220.0 / binHz);
-                double fund = 0.0;
-                for (int k = kf - 3; k <= kf + 3; ++k) fund = std::max (fund, A[(size_t) k]);
-                double h = 0.0; int n = 0;
-                for (int k = 6; k < 2000; ++k)
-                {
-                    const double hz = k * binHz;
-                    bool nearH = false;
-                    for (int m = 1; m <= 9; ++m) if (std::fabs (hz - 220.0 * m) < 45.0) nearH = true;
-                    if (nearH) continue;
-                    h += A[(size_t) k] * A[(size_t) k]; ++n;
-                }
-                return db (std::sqrt (h / std::max (1, n))) - db (fund);
-            };
-            const double moving = hash (true), still = hash (false);
-            gate ("  slow Push sweep adds no zipper hash", moving - still < 6.0,
-                  F3 ("moving %.1f dBc vs held %.1f dBc (excess %+.2f dB, bar 6)", moving, still, moving - still));
-        }
+                if (moving) p.push = 0.2f + 0.7f * (float) i / (float) tone.size();
+                e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64);
+            }
+            auto A = magSpec (l);
+            const double binHz = FS / 4096.0;
+            const int kf = (int) std::round (220.0 / binHz);
+            double fund = 0.0;
+            for (int k = kf - 3; k <= kf + 3; ++k) fund = std::max (fund, A[(size_t) k]);
+            double h = 0.0; int n = 0;
+            for (int k = 6; k < 2000; ++k)
+            {
+                const double hz = k * binHz;
+                bool nearH = false;
+                for (int m = 1; m <= 9; ++m) if (std::fabs (hz - 220.0 * m) < 45.0) nearH = true;
+                if (nearH) continue;
+                h += A[(size_t) k] * A[(size_t) k]; ++n;
+            }
+            return db (std::sqrt (h / std::max (1, n))) - db (fund);
+        };
+        const double moving = hash (true), still = hash (false);
+        gate ("  slow Push sweep adds no zipper hash", moving - still < 6.0,
+              F3 ("moving %.1f dBc vs held %.1f dBc (excess %+.2f dB, bar 6)", moving, still, moving - still));
     }
 
     // ═════ MONO ════════════════════════════════════════════════════════════
@@ -1237,19 +1568,72 @@ static void section4()
               F1 ("%.2f µs", worstUs) + " (" + CX::typeNames()[wt]
               + F1 (") = %.2f %% of one core", 100.0 * worstUs / 2666.0));
     }
-    for (float fs : { 44100.0f, 96000.0f })
+    // 🚨 WHAT THIS REPLACES (FIXES.md §1 COMPRESS 3). The old gate was
+    //        fabs (e.attackMs() - e48.attackMs()) < 0.02
+    //    and `attackMs()` returns `atkMs_`, computed from the knob and the Type table with NO
+    //    sample-rate term except a one-sample floor. It printed "atk 0.68 ms (48 k: 0.68)" BY
+    //    CONSTRUCTION — a constant compared to itself. It would have passed on an engine that
+    //    forgot `fs` in `coefTau` entirely.
+    //    What is measured now: the REALISED time constant, off the audio. A sustained tone is
+    //    switched on at t = 0.3 s; the GR trajectory is sampled at that rate's own resolution and
+    //    the time to 63.2 % of the settled reduction is read off it. Same for the release when
+    //    the tone stops. A rate-dependence bug shows up as a ratio, immediately.
     {
-        auto ch = chordSig ((int) (fs * 1.0f));
-        CP p; p.push = 0.6f; p.ratio = 0.9f; p.b1 = 0.3f; p.b2 = 0.4f;
-        CX e; e.prepare ((double) fs, 128); e.setParams (p);
-        std::vector<float> l = ch, r = ch;
-        for (int i = 0; i + 128 <= (int) ch.size(); i += 128) { e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 128); }
-        const double gr = e.viz().grDb;
-        bool fin = true; for (float v : l) if (!std::isfinite (v)) fin = false;
-        CX e48; e48.prepare (48000.0, 128); e48.setParams (p);
-        gate ((F1 ("%.0f kHz: same ballistics, same GR", fs / 1000.0)).c_str(),
-              fin && std::fabs (e.attackMs() - e48.attackMs()) < 0.02 && gr > 3.0,
-              F3 ("atk %.2f ms (48 k: %.2f), GR %.2f dB", e.attackMs(), e48.attackMs(), gr));
+        auto realised = [] (float fs, bool wantRelease, double& settledGr)
+        {
+            const int n = (int) (fs * 1.2f);
+            std::vector<float> x ((size_t) n, 0.0f);
+            for (int i = (int) (fs * 0.3f); i < (int) (fs * 0.9f); ++i)
+                x[(size_t) i] = (float) (0.28 * std::sin (2.0 * M_PI * 220.0 * i / fs));
+            CP p; p.push = 0.35f; p.ratio = 0.9f; p.b1 = 0.5f; p.b2 = 0.5f;   // Exact, peak ears
+            CX e; e.prepare ((double) fs, 8); e.setParams (p);
+            std::vector<float> l = x, r = x, tr;
+            for (int i = 0; i + 8 <= n; i += 8)
+            { e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 8); tr.push_back (e.grNow()); }
+            const double hopMs = 8.0 * 1000.0 / fs;
+            const int on = (int) (fs * 0.3f / 8.0), off = (int) (fs * 0.9f / 8.0);
+            double top = 0.0;
+            for (int i = off - 40; i < off; ++i) top = std::max (top, (double) tr[(size_t) i]);
+            settledGr = top;
+            if (!wantRelease)
+            {
+                for (int i = on; i < off; ++i)
+                    if (tr[(size_t) i] >= 0.632 * top) return (i - on) * hopMs;
+                return 1e9;
+            }
+            for (int i = off; i < (int) tr.size(); ++i)
+                if (tr[(size_t) i] <= top * (1.0 - 0.632)) return (i - off) * hopMs;
+            return 1e9;
+        };
+        double g48a = 0.0, g48r = 0.0;
+        const double a48 = realised (48000.0f, false, g48a);
+        const double r48 = realised (48000.0f, true,  g48r);
+        note ("realised attack / release at 48 kHz",
+              F3 ("t63 attack %.3f ms, t63 release %.1f ms, settled GR %.2f dB", a48, r48, g48a));
+        for (float fs : { 44100.0f, 96000.0f })
+        {
+            double ga = 0.0, gr2 = 0.0;
+            const double aM = realised (fs, false, ga);
+            const double rM = realised (fs, true,  gr2);
+            const double ea = 100.0 * std::fabs (aM - a48) / std::max (1e-9, a48);
+            const double er = 100.0 * std::fabs (rM - r48) / std::max (1e-9, r48);
+            gate ((F1 ("%.1f kHz: REALISED t63 within 12 %% of 48 kHz", fs / 1000.0)).c_str(),
+                  ea < 12.0 && er < 12.0 && std::fabs (ga - g48a) < 1.0,
+                  F4 ("attack %.3f ms (%+.1f %%), release %.1f ms (%+.1f %%)",
+                      aM, aM - a48 > 0 ? ea : -ea, rM, rM - r48 > 0 ? er : -er)
+                  + F2 (", settled GR %.2f dB vs %.2f", ga, g48a));
+        }
+        auto ch = chordSig ((int) (48000.0f * 1.0f));
+        for (float fs : { 44100.0f, 96000.0f })
+        {
+            CP p; p.push = 0.6f; p.ratio = 0.9f;
+            CX e; e.prepare ((double) fs, 128); e.setParams (p);
+            std::vector<float> l = ch, r = ch;
+            for (int i = 0; i + 128 <= (int) ch.size(); i += 128) { e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 128); }
+            bool fin = true; for (float v : l) if (!std::isfinite (v)) fin = false;
+            gate ((F1 ("  %.1f kHz: finite and still engaging", fs / 1000.0)).c_str(),
+                  fin && e.viz().grDb > 3.0, F1 ("GR %.2f dB", e.viz().grDb));
+        }
     }
 }
 
@@ -1552,9 +1936,9 @@ static void section5()
             auto o = runOStereo (p, l, r);
             corr[a] = db (rmsOf (o.l)) - db (rmsOf (o.r));
         }
-        gate ("Linked / Twin / Mid-Side give three different balances",
+        gate ("Linked / Free Pair / Mid-Side give three different balances",
               std::fabs (corr[0] - corr[1]) > 1.0 && std::fabs (corr[1] - corr[2]) > 0.5,
-              F3 ("L−R balance: Linked %+.2f · Twin %+.2f · Mid-Side %+.2f dB", corr[0], corr[1], corr[2]));
+              F3 ("L−R balance: Linked %+.2f · Free Pair %+.2f · Mid-Side %+.2f dB", corr[0], corr[1], corr[2]));
     }
 }
 
@@ -1710,42 +2094,127 @@ static void section6()
               F2 ("%+.1f dB  (Amount 0 control %+.1f dB)", lift, ctrl));
     }
     {
-        std::vector<float> sil ((size_t) (int) (FS * 3.0f), 0.0f);
+        // 🚨 WHAT THIS REPLACES (FIXES.md §1 OTT 2). The old probe appended EXACT DIGITAL ZEROS
+        // after the note and reported −280.0 dBFS. The device is feed-forward — y = band·g — so
+        // zero in gives zero out for ANY finite gain, including a gain of 400. That is
+        // arithmetic, not evidence, on a gate titled "the floor gate holds". fb416: the fault
+        // this aims at lives in the BULK and the probe had no bulk.
+        // A REAL bed now, at three real levels, with the device at its ceiling.
+        // ⚠️ AND THE FIRST VERSION OF THIS REPLACEMENT WAS ALSO WRONG, in the other direction.
+        // It required the TOTAL lift of a −96 dBFS bed to be ≤ 1 dB and measured +19.55. That is
+        // not the upward computer: it is the MAKEUP, a static +12…+17 dB that every compressor
+        // applies to everything including its own noise floor. Demanding otherwise would be
+        // demanding a device that is not a compressor. What the floor gate actually protects is
+        // the UPWARD CONTRIBUTION, so that is what is measured: lift(bed) minus the lift of a
+        // −110 dBFS bed, where the upward lane is unarguably off and only makeup remains.
+        // (It is also why the fb421 numbers looked fine: −96 and −84 both read +19.55 dB —
+        // IDENTICAL, i.e. level-independent, i.e. the upward lane contributing exactly nothing.)
         auto pl = pluckSig ((int) (FS * 2.0f), 110.0f, 0.35f);
-        std::vector<float> x; x.insert (x.end(), pl.begin(), pl.end()); x.insert (x.end(), sil.begin(), sil.end());
-        OP p; p.amount = 1.0f; p.topLift = 1.0f; p.b3 = 1.0f;
-        auto o = runO (p, x);
-        const double tail = db (rmsOf (o.l, (size_t) (FS * 4.0f)));
-        gate ("(d) ... and 3 s after the note there is still SILENCE", tail < -90.0,
-              F1 ("%.1f dBFS in the gap (bar −90) — the floor gate holds at the ceiling", tail));
+        auto liftOf = [&] (double bedDb)
+        {
+            auto bed = floorBed ((int) (FS * 3.0f), bedDb);
+            std::vector<float> x; x.insert (x.end(), pl.begin(), pl.end());
+            for (size_t i = 0; i < bed.size(); ++i) x.push_back (bed[i]);
+            // the note itself rides on the same floor, as it would in the plugin
+            for (size_t i = 0; i < pl.size(); ++i) x[i] += bed[i % bed.size()];
+            OP p; p.amount = 1.0f; p.topLift = 1.0f; p.b3 = 1.0f;
+            auto o = runO (p, x);
+            return db (rmsOf (o.l, (size_t) (FS * 3.5f)));    // ABSOLUTE output level of the bed
+        };
+        // ⚠️ AND THE SECOND VERSION WAS WRONG TOO, and its mutant caught it: subtracting the
+        // lift of a −110 dBFS bed to isolate "makeup only" works ONLY while the floor gate
+        // exists. Delete `floorGate` and the −110 dBFS reference ALSO gets the full upward lift,
+        // the two numbers move together, and the difference reads −2.11 dB — the gate survived
+        // its own mutation. A reference computed through the mechanism under test is not a
+        // reference. So the bar is ABSOLUTE now: how loud does a real noise floor come OUT.
+        // Defence: −70 dBFS at the FX bus is roughly 44 dB under a single note and inaudible
+        // under any programme; the fb421 engine puts a −96 dBFS bed at −76.4, and with the floor
+        // gate deleted it lands at −44.4, which is a wall of hiss between the notes.
+        note ("(d) makeup-only reference (a −110 dBFS bed)",
+              F1 ("comes out at %.1f dBFS — the static makeup alone", liftOf (-110.0)));
+        for (double bedDb : { -96.0, -84.0, -72.0 })
+        {
+            const double outAbs = liftOf (bedDb);
+            const double lift = outAbs - bedDb;
+            // Defence of the bars: the floor gate ramps over 12 dB above −78 dBFS PER BAND, and
+            // a broadband bed splits a few dB into each band. −96 is well below the gate's foot
+            // and must get NOTHING; −84 sits near it and may get a little; −72 is above it and
+            // SHOULD be lifted hard — that is the R11 wall, and a device that did not lift it
+            // would be failing the other half of the brief. The gate is directional.
+            const bool ok = (bedDb <= -96.0) ? (outAbs <= -70.0)
+                          : (bedDb <= -84.0) ? (outAbs <= -58.0)
+                                             : (lift  >=  35.0);
+            gate ((F1 ("(d) a REAL dithered %.0f dBFS floor comes OUT at", bedDb)).c_str(), ok,
+                  F2 ("%.1f dBFS (%+.2f dB of lift)", outAbs, lift)
+                  + (bedDb <= -84.0 ? "  ← must stay inaudible" : "  ← must be lifted (R11)"));
+        }
+        {   // and digital silence is still digitally silent — kept, but labelled for what it is
+            std::vector<float> sil ((size_t) (int) (FS * 2.0f), 0.0f);
+            OP p; p.amount = 1.0f; p.topLift = 1.0f; p.b3 = 1.0f;
+            auto o = runO (p, sil);
+            note ("(d) exact digital zeros in", F1 ("%.1f dBFS out — ARITHMETIC, not evidence: the",
+                  db (rmsOf (o.l))) + " device is feed-forward, so this can never fail");
+        }
     }
 
     // ═════ CLICKS ══════════════════════════════════════════════════════════
-    section ("6c. OTT — no clicks (law 4)");
+    section ("6c. OTT — no clicks (law 4): ALL 8x8 Type and ALL 8x8 Character transitions");
+    // 🚨 The old gate's denominator was the engine's own t=0 start-up burst, so the bar sat
+    // 1.9x above the full scale of its own probe and a 19.8x tree swap passed. fb421 engine,
+    // on this metric: worst Type transition 5.97 dB/ms, the Two Band TREE SWAP 5.95 dB/ms.
     {
-        auto tone = toneSig ((int) (FS * 1.0f), 220.0f, 0.05f);
-        const int at = (int) (FS * 0.5f);
-        auto jump = [&] (const char* what, OP a, OP b)
+        auto prog = clickProg ((int) (FS * 1.2f));
+        double wT = 0.0, wC = 0.0; std::string nT, nC;
+        for (int ta = 0; ta < OX::kNumTypes; ++ta)
+            for (int tb = 0; tb < OX::kNumTypes; ++tb)
+            {
+                OP a; a.type = ta; OP b; b.type = tb;
+                for (int k = 0; k < 5; ++k)
+                {
+                    const double m = oJump (a, b, kAts[k], prog);
+                    if (m > wT) { wT = m; nT = std::string (OX::typeNames()[ta]) + " → " + OX::typeNames()[tb]; }
+                }
+            }
+        gate ("all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms", wT <= 2.0,
+              F1 ("worst %.2f dB/ms", wT) + "  (" + nT + ")   [fb421 engine: 5.97]");
+        {   // the tree swap, named, because it is the one the old gate hid
+            OP a; a.type = 0; OP b; b.type = 6;
+            double m = 0.0;
+            for (int k = 0; k < 5; ++k) m = std::max (m, oJump (a, b, kAts[k], prog));
+            gate ("  the TREE SWAP Over Top → Two Band (3 bands → 2)", m <= 2.0,
+                  F1 ("%.2f dB/ms", m) + "   [fb421 engine: 5.95 — an instant dip_ = 0.0f]");
+        }
+        for (int t = 0; t < OX::kNumTypes; ++t)
+            for (int ca = 0; ca < OX::kNumChars; ++ca)
+                for (int cb = 0; cb < OX::kNumChars; ++cb)
+                {
+                    if (ca == cb) continue;
+                    OP a; a.type = t; a.character = ca; OP b; b.type = t; b.character = cb;
+                    for (int k = 0; k < 3; ++k)
+                    {
+                        const double m = oJump (a, b, kAts[k], prog);
+                        if (m > wC) { wC = m; nC = std::string (OX::typeNames()[t]) + ": "
+                                                 + OX::charNames (t)[ca] + " → " + OX::charNames (t)[cb]; }
+                    }
+                }
+        gate ("all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms", wC <= 2.0,
+              F1 ("worst %.2f dB/ms", wC) + "  (" + nC + ")   [fb421 engine: 3.02]");
+        OP z;
+        struct OJ { const char* what; OP b; };
+        OP j1; j1.amount = 1.0f;  OP j2; j2.speed = 1.0f;   OP j3; j3.topLift = 1.0f;
+        OP j4; j4.b1 = 1.0f;      OP j5; j5.b5 = 1.0f;      OP j6; j6.b8 = 1.0f;
+        OP j7; j7.axis = 2;       OP j8; j8.axis = 1;       OP j9; j9.crest = true;
+        const OJ oj[] = { { "  Amount 0.5 → 1.0", j1 }, { "  Chase 0.5 → 1.0", j2 },
+                          { "  Top Lift 0.25 → 1.0", j3 }, { "  Low Cross 88 → 300 Hz", j4 },
+                          { "  Grip 0 → +18 dB", j5 }, { "  Treble 0 → +12 dB", j6 },
+                          { "  Stereo Linked → Mid-Side", j7 }, { "  Stereo Linked → Free Pair", j8 },
+                          { "  Crest pill off → on", j9 } };
+        for (auto& j : oj)
         {
-            OX e; e.prepare (FS, 64); e.setParams (a);
-            std::vector<float> l = tone, r = tone;
-            for (int i = 0; i + 64 <= (int) tone.size(); i += 64)
-            { e.setParams (i < at ? a : b); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64); }
-            double base = 0.0;
-            const double ratio = clickRatio (l, at, 60, base);
-            gate (what, ratio < 2.5, F2 ("%.2f× steady-state max jump (baseline %.5f)", ratio, base));
-        };
-        OP a;
-        { OP b = a; b.amount = 1.0f;  jump ("  Amount 0.5 → 1.0", a, b); }
-        { OP b = a; b.speed = 1.0f;   jump ("  Speed 0.5 → 1.0", a, b); }
-        { OP b = a; b.topLift = 1.0f; jump ("  Top Lift 0.25 → 1.0", a, b); }
-        { OP b = a; b.b1 = 1.0f;      jump ("  Low Cross 88 → 300 Hz", a, b); }
-        { OP b = a; b.b5 = 1.0f;      jump ("  Grip 0 → +18 dB", a, b); }
-        { OP b = a; b.b8 = 1.0f;      jump ("  Treble 0 → +12 dB", a, b); }
-        { OP b = a; b.type = 2;       jump ("  Type Over Top → Heavy", a, b); }
-        { OP b = a; b.type = 6;       jump ("  Type Over Top → Two Band (TREE SWAP)", a, b); }
-        { OP b = a; b.axis = 2;       jump ("  Stereo Linked → Mid-Side", a, b); }
-        { OP b = a; b.character = 4;  jump ("  Character 0 → 4", a, b); }
+            double m = 0.0;
+            for (int k = 0; k < 5; ++k) m = std::max (m, oJump (z, j.b, kAts[k], prog));
+            gate (j.what, m <= 2.0, F1 ("%.2f dB/ms", m));
+        }
     }
 
     // ═════ MONO ════════════════════════════════════════════════════════════
@@ -1838,19 +2307,116 @@ static void section6()
     }
 }
 
-int main()
+// ═════════════════════════════════════════════════════════════════════════════
+// K. SELF-CHECK — can these gates actually fail?  (FIXES.md §0, the new law)
+//
+// Every detector this file trusts is shown BOTH ways here: it must FIRE on a planted fault of
+// a known size, and it must NOT fire on clean material. That is half of §0. The other half —
+// deleting a mechanism from the ENGINE, recompiling, and requiring the gate to go red — cannot
+// live inside this binary, because it needs a different binary. It lives in `mutate.py`, which
+// copies the three headers, deletes one mechanism with a VERIFIED string replacement (it aborts
+// if the text it expects is not there), rebuilds this cert against the mutant, and asserts the
+// named gate turns FAIL. Its results are pasted in MUTATION.md.
+// ═════════════════════════════════════════════════════════════════════════════
+static void sectionK()
 {
+    section ("K. Self-check — can these gates actually fail?");
+    auto prog = clickProg ((int) (FS * 1.2f));
+    {   // THE CLICK METRIC, both ways, on both devices
+        auto runC1 = [&] (bool planted)
+        {
+            CX e; e.prepare (FS, 64); CP p; p.push = 0.3f; p.ratio = 0.6f; e.setParams (p);
+            std::vector<float> l = prog, r = prog;
+            for (int i = 0; i + 64 <= (int) prog.size(); i += 64) { e.setParams (p); e.processStereo (&l[(size_t) i], &r[(size_t) i], 64); }
+            if (planted) for (size_t i = (size_t) kAts[2]; i < l.size(); ++i) l[i] *= 2.5119f;   // +8.000 dB, instantly
+            return l;
+        };
+        const double fired = clickDbPerMs (runC1, kAts[2], prog);
+        gate ("(self-check) the click metric reads a PLANTED +8.000 dB step as 8.00",
+              std::fabs (fired - 8.0) < 0.05, F1 ("reads %.4f dB/ms", fired));
+        auto same = [&] (bool) { return runC1 (false); };
+        const double none = clickDbPerMs (same, kAts[2], prog);
+        gate ("(self-check) ... and reads 0.0000 when nothing changed", none < 1e-6,
+              F1 ("reads %.6f dB/ms", none));
+        CP a; a.push = 0.3f; a.ratio = 0.6f;
+        gate ("(self-check) ... and its pre-switch region is EXACTLY zero, not merely small",
+              cJump (a, a, kAts[2], prog) == 0.0, "A→A over 1.2 s of programme: 0.000000");
+    }
+    {   // specDist
+        auto x = chordSig ((int) (FS * 1.0f));
+        auto y = x; for (size_t i = 0; i < y.size(); ++i) y[i] *= 2.8184f;   // +9.000 dB broadband
+        const double d = specDist (x, y);
+        gate ("(self-check) specDist reads a planted broadband +9.000 dB", std::fabs (d - 9.0) < 0.1,
+              F1 ("%.3f dB", d));
+        gate ("(self-check) ... and reads 0 against itself", specDist (x, x) < 1e-9,
+              F1 ("%.2e dB", specDist (x, x)));
+    }
+    {   // envSpreadDb — the dynamics metric
+        auto flat = chordSig ((int) (FS * 3.0f));
+        auto am   = amChord ((int) (FS * 3.0f));
+        gate ("(self-check) envSpread sees a planted 24 dB tremolo and not a flat tone",
+              envSpreadDb (am) > 15.0 && envSpreadDb (flat) < 3.0,
+              F2 ("tremolo %.2f dB, flat %.2f dB", envSpreadDb (am), envSpreadDb (flat)));
+    }
+    {   // drRatio — the R11 ceiling metric
+        auto st = staircase (-40.0f, 8.0f, 24, 120.0f);
+        std::vector<float> pinned = st;
+        {   // a planted PERFECT limiter: every tread normalised to the same RMS
+            const int per = (int) (FS * 0.120f);
+            for (int t = 0; t * per < (int) pinned.size(); ++t)
+            { const double r = rmsOf (pinned, (size_t) (t * per), (size_t) ((t + 1) * per));
+              if (r > 1e-9) for (int i = t * per; i < (t + 1) * per && i < (int) pinned.size(); ++i)
+                  pinned[(size_t) i] *= (float) (0.05 / r); }
+        }
+        gate ("(self-check) drRatio reads 1 for a bypass and ~0 for a planted perfect limiter",
+              std::fabs (drRatio (st, st, 24, 120.0f) - 1.0) < 0.01 && drRatio (st, pinned, 24, 120.0f) < 0.02,
+              F2 ("bypass %.4f, pinned %.4f", drRatio (st, st, 24, 120.0f), drRatio (st, pinned, 24, 120.0f)));
+    }
+    {   // the floor-gate probe must HAVE BULK — the fb416 law, asserted on the probe itself
+        auto bed = floorBed ((int) (FS * 1.0f), -96.0);
+        int zeros = 0; for (float v : bed) if (v == 0.0f) ++zeros;
+        gate ("(self-check) the floor-gate bed is REAL noise, not digital zeros",
+              zeros == 0 && std::fabs (db (rmsOf (bed)) + 96.0) < 0.5,
+              F2 ("%.0f exact zeros in 48000 samples, level %.2f dBFS", (double) zeros, db (rmsOf (bed))));
+    }
+    {   // and the air band the Sheen gate is written on must be audible content
+        auto dark = darkPad ((int) (FS * 2.0f));
+        const double a = bandRmsDbFS (dark, 8000.0, 12000.0), p2 = db (rmsOf (dark));
+        gate ("(self-check) the air probe has air in it", p2 - a < 60.0,
+              F2 ("8-12 kHz %.1f dBFS = %.1f dB under the programme", a, p2 - a));
+    }
+    std::printf ("\n  Engine mutation (FIXES.md §0) is a separate binary — see MUTATION.md,\n"
+                 "  produced by `python3 mutate.py`. It deletes one mechanism from a COPY of the\n"
+                 "  engine, rebuilds this cert against it, and requires the named gate to go RED.\n");
+}
+
+int main (int argc, char** argv)
+{
+    // `dynamics_cert [0 1 2 3 4 5 6 K]` runs only the named sections — mutate.py uses this so a
+    // mutant run takes seconds instead of the four minutes a full pass costs.
+    bool want[8] = { true, true, true, true, true, true, true, true };
+    if (argc > 1)
+    {
+        for (auto& w : want) w = false;
+        for (int i = 1; i < argc; ++i)
+        {
+            const char c = argv[i][0];
+            if (c >= '0' && c <= '6') want[c - '0'] = true;
+            else if (c == 'K' || c == 'k') want[7] = true;
+        }
+    }
     std::printf ("\n════════════════════════════════════════════════════════════════════════\n");
     std::printf ("  dynamics_cert — COMPRESS (kind 11) + OTT (kind 12), one shared core\n");
     std::printf ("  fx4 · every number below is measured, not asserted\n");
     std::printf ("════════════════════════════════════════════════════════════════════════\n");
-    section0();
-    section1();
-    section2();
-    section3();
-    section4();
-    section5();
-    section6();
+    if (want[0]) section0();
+    if (want[1]) section1();
+    if (want[2]) section2();
+    if (want[3]) section3();
+    if (want[4]) section4();
+    if (want[5]) section5();
+    if (want[6]) section6();
+    if (want[7]) sectionK();
     std::printf ("\n════════════════════════════════════════════════════════════════════════\n");
     std::printf ("  PASS %d   FAIL %d\n", gPass, gFail);
     std::printf ("════════════════════════════════════════════════════════════════════════\n\n");

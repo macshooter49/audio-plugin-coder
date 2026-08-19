@@ -15,7 +15,10 @@
   ok    AP2 is magnitude-flat (|H| = 1)                      0.0002 dB of level change  (bar 0.05)
 
 [1. Names — rack-wide no-doubles, exact-string, vs a snapshot of Source/]
-  ok    no name collides with a shipped label                177 names checked vs 1762 shipped strings
+  ok    no name collides with a shipped label                184 names vs 3310 corpus strings (Source/ + BOTH sibling fx4 dirs)
+  ok    the corpus contains the fb418 leading-space labels   Motion PRESENT · Route PRESENT
+  ok    the corpus contains the SIBLING fx4 names (it could not, before) Slant · Chisel · Steady · Twofold all found in Design/fx4/{eq,widen}
+  ok    the sibling-yield exemption list is exactly 2 entries Gentle, Low Split — both RENAMES.md rows where the sibling gives way
   ok    no name repeats across the two devices               all unique
   ok    kNumTypes × kNumChars tables are fully populated    Compress 8×8, OTT 8×8
   ok    out-of-range Type/Character clamps, never reads past index 99 → last row, index −5 → first row
@@ -27,9 +30,13 @@
   ·     OTT at Amount 0: level Δ (makeup is still on)       -0.017 dB
   ·     OTT at Amount 0: spectrum vs raw dry                 0.003 dB
   ·     click detector baseline on a clean chord             max |Δx| = 0.34202
-  ok    air metric is calibrated (broadband +8.000 dB)       reads +7.9979 dB
-  ok    air metric is band-selective (a 10 kHz tone moves it) dark -94.9 dBFS → +10 kHz tone -55.3 dBFS (Δ +39.62)
-  ·         dark pad 8-12 kHz content                        -94.9 dBFS — this is what OTT has to lift
+  ok    air metric is calibrated (broadband +8.000 dB)       reads +8.0000 dB
+  ok    spectrum is CALIBRATED: a −26.02 dBFS sine reads its own level reads -26.022 dBFS (true -26.021)
+  ok    ... and a −26.02 dBFS white noise bed reads its own level too reads -26.032 dBFS (true -26.021)
+  ok    air metric is band-selective (a 10 kHz tone moves it) dark -78.1 dBFS → +10 kHz tone -75.0 dBFS (Δ +3.02)
+  ·         dark pad: programme level                        -20.0 dBFS RMS
+  ·         dark pad: 8-12 kHz content                       -78.1 dBFS = 58.1 dB under the programme
+  ok    the air band is AUDIBLE CONTENT before anything lifts it 58.1 dB under the programme (bar 60). The first draft's 4-pole/600 Hz pad put it 114 dB down — a ratio nobody can hear (fb417).
 
 [3. COMPRESS — roster, defaults, and the per-Type discriminator]
   ok    defaults: level within ±2 dB of bypass              -0.85 dB
@@ -38,9 +45,9 @@
       Type       GR dB  atk ms   rel ms  crest   THD%  slope   knee     DRR   up40   adapt
       Exact      21.01     5.2       34   0.00   8.68  0.003   14.8   0.510   0.00    1.00
       Bus        22.67     0.6     1251   0.17   0.73 -0.013    8.5   0.447   0.00   12.19
-      FET 76     15.25     0.1       76   0.32   2.71  0.411    4.2   0.689   0.00    1.00
-      Opto       11.23     7.8      123  -0.04   0.14  0.537   10.4   0.782   0.00    1.02
-      Vari-Mu    16.93     2.4      611  -2.94   3.07  0.366    8.6   0.719   0.00    0.89
+      FET 76     15.25     0.1       76   0.32   2.53  0.411    4.2   0.689   0.00    1.00
+      Opto       11.54     7.8      123  -2.57   0.14  0.542   10.4   0.782   0.06    1.02
+      Vari-Mu    16.93     2.4      611  -2.94   3.04  0.367    8.6   0.721   0.06    0.89
       OverEasy   22.11    12.0      181  -0.04   1.07 -1.034   12.7   0.444   0.00    1.00
       Ride       19.40    10.2      109  -0.03   0.28 -0.017    0.0   0.146 -10.50    1.00
       Limit      32.76     0.8       62   0.59   0.18 -0.018    2.2   0.410  -0.00    1.00
@@ -56,7 +63,7 @@
   ok    OverEasy `Anti`: +6 dB IN gives LESS OUT             -6.02 dB out for +6 dB in — the swallow
 
 [3b. COMPRESS — cross-type distinctness (every pair, phase-independent)]
-  ok    closest Type pair still ≥ 3× JND                  5.86× JND  (Opto / Vari-Mu)
+  ok    closest Type pair still ≥ 3× JND                  5.80× JND  (Opto / Vari-Mu)
 
 [3c. COMPRESS — every Character re-wires physics (R6)]
   ok    every Character ≥ 2× JND from its Type's default  weakest 2.09× JND  (Opto · Fresh Cell)
@@ -71,7 +78,7 @@
   ok      Release (P2) — via added THD on 80 Hz            span 11.39 · monotone ↓
   ok      Hear Cut (P4) — via GR on a bass chord           span 7.24 · monotone ↓
   ok      Latch (P6) — via GR on a pluck                   span 9.05 · monotone ↑
-  ok      Heat (P8) — via added THD                        span 32.98 · monotone ↑
+  ok      Heat (P8) — via added THD                        span 32.37 · monotone ↑
   ok      Ride: Ratio lifts a quiet probe                    span 7.46 · monotone ↑
   ok      Tie (P7) — measured on an UNBALANCED stereo probe L−R balance: Tie 100 % = +16.90 dB, Tie 0 = +8.17 dB (Δ 8.73)
 
@@ -87,21 +94,32 @@
   ok    the crossfade is EXACTLY linear in Mix               -144.2 dB deviation at Mix 0.5
   ok    ⇒ dry residual at Mix 1.0                          (1 − mix)·dry = 0 identically; measured floor -144.2 dB (bar −60)
 
-[4d. COMPRESS — no clicks (law 4), every param jumped under a sustained tone]
-  ok      Push 0.3 → 0.9                                   0.49× the steady-state max jump (baseline 0.00406)
-  ok      Ratio 0.6 → 1.0 (∞:1)                          0.49× the steady-state max jump (baseline 0.00406)
-  ok      Lift 0 → +24 dB                                  0.74× the steady-state max jump (baseline 0.01593)
-  ok      Round 0.25 → 1.0                                 0.49× the steady-state max jump (baseline 0.00406)
-  ok      Hear Cut off → 500 Hz                            0.52× the steady-state max jump (baseline 0.00406)
-  ok      Tie 100 → 0                                      0.49× the steady-state max jump (baseline 0.00406)
-  ok      Heat 0 → 100                                     0.49× the steady-state max jump (baseline 0.00406)
-  ok      Type Exact → Vari-Mu (GR carries over)           0.49× the steady-state max jump (baseline 0.00406)
-  ok      Character 0 → 6                                  1.00× the steady-state max jump (baseline 0.00406)
-  ok      Detect Auto → Long                               0.53× the steady-state max jump (baseline 0.00406)
+[4c2. COMPRESS — `Detect` owns detection outright (R6 / fb418 / fb373)]
+  ok    no Character changes the rectifier at any Detect setting 8 Types × 8 Characters × 4 explicit Detect settings = 256 checks
+  ok      ... and at `Native` the TYPE decides it, still not the Character 0 Characters disagreed with their Type's native ears
+  ok      ... and the axis it owns is audible (Peak vs Average on a pluck) 1.21 dB of envelope-spread difference
+
+[4c3. COMPRESS — the ballistic state survives a smoother-shape change]
+  ok    GR is continuous across all 64 Type changes (≤ 2 dB in the first 0.17 ms) worst 0.86 dB  (Vari-Mu → Limit)
+  ok    GR is continuous across all 448 Character changes    worst 1.73 dB  (FET 76: All Buttons → Twenty Lock)
+
+[4d. COMPRESS — no clicks (law 4): ALL 8x8 Type and ALL 8x8 Character transitions]
+  ok    all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms worst 1.23 dB/ms  (Opto → Limit)   [fb421 engine: 17.36]
+  ok    all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms worst 1.00 dB/ms  (Limit: Porous → Pump Limit)   [fb421 engine: 16.26]
+  ok      Push 0.3 → 0.9                                   0.03 dB/ms
+  ok      Ratio 0.6 → 1.0 (∞:1)                          0.01 dB/ms
+  ok      Lift 0 → +24 dB                                  0.87 dB/ms
+  ok      Round 0.25 → 1.0                                 0.00 dB/ms
+  ok      Hear Cut off → 500 Hz                            0.00 dB/ms
+  ok      Tie 100 → 0                                      0.00 dB/ms
+  ok      Burn 0 → 100                                     0.02 dB/ms
+  ok      Edge 0.5 → 1.0                                   0.01 dB/ms
+  ok      Cling 0 → 250 ms                                 1.10 dB/ms
+  ok      Detect Native → Patient                          0.04 dB/ms
   ok      slow Push sweep adds no zipper hash                moving -79.5 dBc vs held -78.9 dBc (excess -0.59 dB, bar 6)
 
 [4e. COMPRESS — mono-safe (law 5): folding to mono must not kill it]
-  ok    every Type × Character survives a mono fold         weakest 18.04 dB of surviving change  (Exact · Silky)
+  ok    every Type × Character survives a mono fold         weakest 17.13 dB of surviving change  (Exact · Blunt)
 
 [4f. COMPRESS — 60 s of full-drive noise, every Type (no NaN, no blow-up)]
   ok    60 s × 8 Types at every extreme: no NaN, no growth  worst peak 9.61, worst 60 s growth +0.000 dB
@@ -110,9 +128,12 @@
   ok      Vari-Mu (feedback) on 2 s of silence               peak 0.00e+00
 
 [4g. COMPRESS — CPU and sample rates]
-  ok    µs / 128-sample block @ 48 k, worst Type            9.93 µs (Opto) = 0.37 % of one core
-  ok    44 kHz: same ballistics, same GR                     atk 0.68 ms (48 k: 0.68), GR 28.57 dB
-  ok    96 kHz: same ballistics, same GR                     atk 0.68 ms (48 k: 0.68), GR 30.17 dB
+  ok    µs / 128-sample block @ 48 k, worst Type            12.23 µs (Opto) = 0.46 % of one core
+  ·     realised attack / release at 48 kHz                  t63 attack 5.500 ms, t63 release 111.5 ms, settled GR 21.74 dB
+  ok    44.1 kHz: REALISED t63 within 12 % of 48 kHz         attack 5.624 ms (+2.2 %), release 111.6 ms (+0.1 %), settled GR 21.74 dB vs 21.74
+  ok    96.0 kHz: REALISED t63 within 12 % of 48 kHz         attack 5.500 ms (-0.0 %), release 111.5 ms (-0.0 %), settled GR 21.74 dB vs 21.74
+  ok      44.1 kHz: finite and still engaging                GR 27.81 dB
+  ok      96.0 kHz: finite and still engaging                GR 28.08 dB
 
 [5. OTT — roster, unity, engage, and the per-Type discriminator]
   ·       unity, Over Top                                    -0.83 dB
@@ -130,33 +151,36 @@
   ok    wet path − phase-matched dry NULLS at Amount 0     -132.7 dB  (the whole Mix law in one number; bar −55)
   ok    no comb notch at either crossover at Mix 50 %        worst 0.24 dB at 59 Hz (bar 1.0)
       Type         grLo  grMid   grHi    air   step   THD%  dynΔ   tail  cross   tilt tauLo/Hi
-      Over Top    12.22  14.56  12.68  35.05   8.92   1.26  13.08  18.59   0.67   0.96  140.0
-      Gentle      10.27   9.58   6.16   7.99  13.38   0.15   1.57  10.04   0.38   0.71    6.0
-      Heavy       19.64  22.82  18.55  39.35   2.49   3.02  19.88  23.73   1.29   0.23    4.0
-      Sheen       12.22  15.19  13.60  47.63   7.41   1.26  14.37  19.77   0.90   3.83  140.0
-      Bass Safe    7.00  14.56  12.68  35.05   8.18   1.14  12.57  16.62   0.67   2.06  150.0
-      Surge       -0.00   0.00  -0.00  20.82  18.81   0.64   0.18   5.64   0.37   1.97    8.0
-      Two Band    13.67  12.53   0.00  16.16   7.53   1.08  14.27  19.35  17.75   1.07    1.0
-      Stagger     12.23  14.56  11.48  49.36   8.62   1.08  12.29  15.86   1.11   3.43    5.0
+      Over Top    12.22  14.56  12.68  15.53   8.92   1.26  13.08  18.59   0.67   0.96  140.0
+      Gentle      10.27   9.58   6.16  10.96  13.38   0.15   1.57  10.04   0.38   0.88    6.0
+      Heavy       19.64  22.82  18.55  18.31   2.49   3.02  19.88  23.73   1.29   0.24    4.0
+      Sheen       12.22  15.19  13.60  20.77   7.41   1.26  14.37  19.77   0.90   3.63  140.0
+      Bass Safe    7.00  14.56  12.68  15.53   8.18   1.14  12.57  16.62   0.67   1.81  150.0
+      Surge       -0.00   0.00  -0.00   3.91  18.81   0.64   0.18   5.64   0.37   1.76    8.0
+      Two Band    13.67  12.53   0.00   9.24   7.53   1.08  14.27  19.35  17.75   1.06    1.0
+      Stagger     12.23  14.56  11.48  12.90   8.62   1.08  12.29  15.86   1.11   3.32    5.0
   ok    Over Top: a 20 dB level step comes out ≤ 10 dB     8.92 dB out for a 20 dB step in
   ok      ... and a 30 dB step (which crosses BOTH thresholds) ≤ 12 dB 10.79 dB out for 30 dB in  (Amount 0 control: 30.01 dB)
   ok    Gentle: ripple THD far below Over Top's              0.15 % vs 1.26 %
   ok    Heavy: removes more dynamic range than Over Top      19.88 dB vs 13.08 dB of envelope spread removed
-  ok    Sheen: ≥ 6 dB more 8–12 kHz than Over Top on a dark pad +47.63 dB vs +35.05 dB
+  FAIL  Sheen: ≥ 6 dB more 8–12 kHz than Over Top on a dark pad +20.77 dB vs +15.53 dB
   ok    Bass Safe: manufactures far less bass grit           1.94 % THD on a settled 50 Hz tone, vs Over Top's 5.29 %
   ok    Surge: gain is NEVER negative (no downward at all)   signed GR -0.00 +0.00 -0.00 (all ≤ 0 = pure lift)
   ok    Surge: the pluck TAIL rises relative to its attack   +5.64 dB of tail-vs-attack lift (Over Top +18.59)
   ok    Two Band: cross-band ducking, which 3 bands cannot do a loud 500 Hz costs a quiet 5 kHz 17.75 dB (Over Top 0.67)
-  ok    Stagger: the spectrum MORPHS through the note        +3.43 dB of EXTRA HF-vs-LF swing across the note (Over Top +0.96)
+  ok    Stagger: the spectrum MORPHS through the note        +3.32 dB of EXTRA HF-vs-LF swing across the note (Over Top +0.96)
 
 [5b. OTT — cross-type distinctness (every pair)]
-  ok    closest Type pair still ≥ 3× JND                  6.03× JND  (Over Top / Bass Safe)
+  FAIL  closest Type pair still ≥ 3× JND                  2.62× JND  (Over Top / Sheen)
 
 [5c. OTT — every Character re-wires physics (R6)]
-  ok    every Character ≥ 2× JND from its Type's default  weakest 2.06× JND  (Bass Safe · Free Low)
+      weak: Sheen      · Higher Split     1.52× JND
+      weak: Surge      · Slow Riser       1.43× JND
+      weak: Surge      · Low Riser        0.85× JND
+  FAIL  every Character ≥ 2× JND from its Type's default  weakest 0.85× JND  (Surge · Low Riser), 3 below bar
 
 [5d. OTT — the Stereo axis is a real topology swap, not a voicing]
-  ok    Linked / Twin / Mid-Side give three different balances L−R balance: Linked +12.04 · Twin +0.77 · Mid-Side +9.70 dB
+  ok    Linked / Free Pair / Mid-Side give three different balances L−R balance: Linked +12.04 · Free Pair +0.77 · Mid-Side +9.70 dB
 
 [6. OTT — every knob 0→100 (law 1)]
   ok      Low Cross (P1) — spectrum vs knob 0              4.64 dB of spectrum moved end-to-end · monotone
@@ -165,9 +189,9 @@
   ok      Grip (P5) — how deep the jaws sit (output level) +15.1 +12.9 +9.9 +6.4 +3.0 -0.5 -4.3 -8.2 -12.1 · monotone ↓
   ok      Amount (front 1) — dynamic range removed         0.00 → 17.41 (span 17.41) · monotone
   ok      Speed (front 2) — THD on 100 Hz                  0.21 → 14.98 (span 14.77) · monotone
-  ok      Top Lift (front 3) — 8-12 kHz on a dark pad      25.31 → 53.06 (span 27.75) · monotone
+  ok      Top Lift (front 3) — 8-12 kHz on a dark pad      12.63 → 26.43 (span 13.80) · monotone
   ok      Press (P4) — dynamic range removed               3.53 → 15.54 (span 12.01) · monotone
-  ok      Bass (P6) — 40-85 Hz                             -10.50 → 10.91 (span 21.40) · monotone
+  ok      Bass (P6) — 40-85 Hz                             -10.49 → 10.91 (span 21.40) · monotone
   ok      Treble (P8) — 8-12 kHz                           -10.72 → 13.21 (span 23.93) · monotone
   ok      Mids (P7) — 300 Hz-1.5 kHz across the full sweep +23.57 dB (±12 dB nominal)
 
@@ -175,19 +199,25 @@
   ok    (a) Amount 100 leaves ≤ 65 % of what Amount 50 leaves probe 22.78 dB → 9.70 dB at Amount 50 (= the Ableton preset) → 5.38 dB at 100 (55 % of it)
   ok    (b) 46 dB staircase → ≤ 10 % survives at Amount 100 DRR 0.0742  (Amount 0 control 0.9988)
   ok    (c) a −65 dBFS bed is lifted into a WALL           +33.1 dB  (Amount 0 control +0.9 dB)
-  ok    (d) ... and 3 s after the note there is still SILENCE -280.0 dBFS in the gap (bar −90) — the floor gate holds at the ceiling
+  ·     (d) makeup-only reference (a −110 dBFS bed)        comes out at -90.4 dBFS — the static makeup alone
+  ok    (d) a REAL dithered -96 dBFS floor comes OUT at      -76.4 dBFS (+19.56 dB of lift)  ← must stay inaudible
+  ok    (d) a REAL dithered -84 dBFS floor comes OUT at      -64.4 dBFS (+19.56 dB of lift)  ← must stay inaudible
+  ok    (d) a REAL dithered -72 dBFS floor comes OUT at      -24.3 dBFS (+47.70 dB of lift)  ← must be lifted (R11)
+  ·     (d) exact digital zeros in                           -280.0 dBFS out — ARITHMETIC, not evidence: the device is feed-forward, so this can never fail
 
-[6c. OTT — no clicks (law 4)]
-  ok      Amount 0.5 → 1.0                                 0.04× steady-state max jump (baseline 0.14163)
-  ok      Speed 0.5 → 1.0                                  0.05× steady-state max jump (baseline 0.14163)
-  ok      Top Lift 0.25 → 1.0                              0.04× steady-state max jump (baseline 0.14163)
-  ok      Low Cross 88 → 300 Hz                            0.04× steady-state max jump (baseline 0.14163)
-  ok      Grip 0 → +18 dB                                  0.03× steady-state max jump (baseline 0.14163)
-  ok      Treble 0 → +12 dB                                0.04× steady-state max jump (baseline 0.14163)
-  ok      Type Over Top → Heavy                            0.06× steady-state max jump (baseline 0.14163)
-  ok      Type Over Top → Two Band (TREE SWAP)             1.05× steady-state max jump (baseline 0.14163)
-  ok      Stereo Linked → Mid-Side                         0.13× steady-state max jump (baseline 0.14163)
-  ok      Character 0 → 4                                  0.04× steady-state max jump (baseline 0.14163)
+[6c. OTT — no clicks (law 4): ALL 8x8 Type and ALL 8x8 Character transitions]
+  ok    all 64 Type transitions ≤ 2.0 dB of gain moved in 1 ms worst 0.88 dB/ms  (Sheen → Two Band)   [fb421 engine: 5.97]
+  ok      the TREE SWAP Over Top → Two Band (3 bands → 2) 0.82 dB/ms   [fb421 engine: 5.95 — an instant dip_ = 0.0f]
+  ok    all 448 Character transitions ≤ 2.0 dB of gain moved in 1 ms worst 1.39 dB/ms  (Over Top: Wide Corner → Long Ears)   [fb421 engine: 3.02]
+  ok      Amount 0.5 → 1.0                                 0.17 dB/ms
+  ok      Chase 0.5 → 1.0                                  1.58 dB/ms
+  ok      Top Lift 0.25 → 1.0                              0.27 dB/ms
+  ok      Low Cross 88 → 300 Hz                            0.01 dB/ms
+  ok      Grip 0 → +18 dB                                  0.79 dB/ms
+  ok      Treble 0 → +12 dB                                0.31 dB/ms
+  ok      Stereo Linked → Mid-Side                         0.25 dB/ms
+  ok      Stereo Linked → Free Pair                        0.02 dB/ms
+  ok      Crest pill off → on                              0.00 dB/ms
 
 [6d. OTT — mono-safe (law 5)]
   ok    every Type × Stereo mode survives a mono fold       weakest 4.39 dB of surviving change  (Heavy · Linked)
@@ -197,12 +227,27 @@
   ok    two OTTs in series still go silent (stacked floor gates) one device -280.0 dBFS, two -280.0 dBFS in the gap
 
 [6f. OTT — CPU and sample rates]
-  ok    µs / 128-sample block @ 48 k, worst Type            29.11 µs (Heavy) = 1.09 % of one core
+  ok    µs / 128-sample block @ 48 k, worst Type            32.17 µs (Heavy) = 1.21 % of one core
   ok    44 kHz: same ballistics, still engaging              mid atk 1.40 ms (48 k: 1.40), 3 bands engaged
   ok    96 kHz: same ballistics, still engaging              mid atk 1.40 ms (48 k: 1.40), 2 bands engaged
 
+[K. Self-check — can these gates actually fail?]
+  ok    (self-check) the click metric reads a PLANTED +8.000 dB step as 8.00 reads 8.0000 dB/ms
+  ok    (self-check) ... and reads 0.0000 when nothing changed reads 0.000000 dB/ms
+  ok    (self-check) ... and its pre-switch region is EXACTLY zero, not merely small A→A over 1.2 s of programme: 0.000000
+  ok    (self-check) specDist reads a planted broadband +9.000 dB 9.000 dB
+  ok    (self-check) ... and reads 0 against itself          0.00e+00 dB
+  ok    (self-check) envSpread sees a planted 24 dB tremolo and not a flat tone tremolo 22.78 dB, flat 1.32 dB
+  ok    (self-check) drRatio reads 1 for a bypass and ~0 for a planted perfect limiter bypass 1.0000, pinned 0.0044
+  ok    (self-check) the floor-gate bed is REAL noise, not digital zeros 0 exact zeros in 48000 samples, level -96.00 dBFS
+  ok    (self-check) the air probe has air in it             8-12 kHz -78.1 dBFS = 58.1 dB under the programme
+
+  Engine mutation (FIXES.md §0) is a separate binary — see MUTATION.md,
+  produced by `python3 mutate.py`. It deletes one mechanism from a COPY of the
+  engine, rebuilds this cert against it, and requires the named gate to go RED.
+
 ════════════════════════════════════════════════════════════════════════
-  PASS 114   FAIL 0
+  PASS 139   FAIL 3
 ════════════════════════════════════════════════════════════════════════
 
-exit=0
+CERT_EXIT=1

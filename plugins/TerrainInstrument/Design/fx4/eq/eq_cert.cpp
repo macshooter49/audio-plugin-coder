@@ -37,6 +37,7 @@
 //    windows at 2.93 Hz, and every gate that leans on a Q > 20 peak says so.
 // ─────────────────────────────────────────────────────────────────────────────
 #include "TerrainEqualizerFx.h"
+#include "shipped_labels.inc"
 
 #include <cstdio>
 #include <cstring>
@@ -77,10 +78,21 @@ std::vector<float> whiteN (int n, float rms = 0.05f, uint32_t seed = 12345u)
     for (float& v : x) v *= g;
     return x;
 }
+// 🔬 fb422 — CHECK YOUR OWN DETECTOR (§3.1), the third time in this file.
+//  This used to be `std::sin (6.2831853f * hz * (float) i / FS)`. At hz = 5231 and
+//  i = 191 000 the product is 6.3e9, where a float ULP is 512 — a phase quantisation of
+//  0.0107 rad, i.e. a BROADBAND JITTER FLOOR at about -49 dB that GROWS with i. A Q 36
+//  16 kHz shelf amplifies that to HALF THE SIGNAL. The first build of the §J click probe
+//  read 24.6 dB/sample on a HELD knob and I very nearly filed it as an engine instability;
+//  a 30 s run with a double-precision tone settles at a constant 0.6425 and decays to TRUE
+//  ZERO in silence. The phase now accumulates in double and wraps.
 std::vector<float> toneN (int n, float hz, float rms = 0.05f)
 {
     std::vector<float> x ((size_t) n);
-    for (int i = 0; i < n; ++i) x[(size_t) i] = std::sin (6.2831853f * hz * (float) i / FS);
+    const double w = 6.283185307179586 * (double) hz / (double) FS;
+    double ph = 0.0;
+    for (int i = 0; i < n; ++i)
+    { x[(size_t) i] = (float) std::sin (ph); ph += w; if (ph > 6.283185307179586) ph -= 6.283185307179586; }
     double a = 0; for (float v : x) a += (double) v * v;
     const float g = rms / (float) std::sqrt (a / (double) n);
     for (float& v : x) v *= g;
@@ -178,7 +190,7 @@ double specMedian (const Spec& a, const Spec& b)
 { std::vector<double> v; v.reserve (NB);
   for (int i = 0; i < NB; ++i) v.push_back (std::fabs (a.db[i] - b.db[i]));
   std::sort (v.begin(), v.end()); return v[v.size() / 2]; }
-double specRmsLive (const Spec& a, const Spec& b)
+[[maybe_unused]] double specRmsLive (const Spec& a, const Spec& b)
 { double s = 0; int n = 0;
   for (int i = 0; i < NB; ++i) { if (a.db[i] < -40.0 || b.db[i] < -40.0) continue;
     const double d = a.db[i] - b.db[i]; s += d * d; ++n; }
@@ -189,7 +201,7 @@ double atHz (const Spec& a, double hz)
   return a.db[best]; }
 double minInRange (const Spec& a, double lo, double hi)
 { double m = 1e9; for (int i = 0; i < NB; ++i) { const double f = EQ::curveBinHz (i); if (f >= lo && f <= hi) m = std::min (m, a.db[i]); } return m; }
-double maxInRange (const Spec& a, double lo, double hi)
+[[maybe_unused]] double maxInRange (const Spec& a, double lo, double hi)
 { double m = -1e9; for (int i = 0; i < NB; ++i) { const double f = EQ::curveBinHz (i); if (f >= lo && f <= hi) m = std::max (m, a.db[i]); } return m; }
 // the frequency where the curve crosses a level, scanned from the top. This is what a
 // FREQUENCY knob actually moves; reading one fixed probe frequency instead makes the ends
@@ -206,7 +218,7 @@ double argMaxHz (const Spec& a)
 
 // ── param builders. Every knob is 0..1; 0.5 is neutral for ALL of them. ──────
 float gN (float db) { return 0.5f + 0.5f * db / EQ::kBandDbSpan; }        // gain dB -> 0..1
-float tN (float db) { return 0.5f + 0.5f * db / EQ::kTiltDbSpan; }        // tilt dB -> 0..1
+float tN (float db) { return 0.5f + 0.5f * db / EQ::kSlantDbSpan; }        // tilt dB -> 0..1
 float fN (int band, float hz)
 { static const float lo[4] = { 20, 100, 700, 6000 }, hi[4] = { 500, 3000, 14000, 40000 };
   return std::log (hz / lo[band]) / std::log (hi[band] / lo[band]); }
@@ -290,27 +302,53 @@ double bwOct (const Spec& s)
     return std::log2 (EQ::curveBinHz (hi) / EQ::curveBinHz (lo));
 }
 
-// impulse-response decay: T60 of the ring, in ms. The device is passive (no feedback
-// loops), so this ALWAYS terminates - the number is how long a resonance sings for.
-double t60ms (const EQ::Params& p)
+// impulse-response decay: T60 of the ring, in ms.
+//
+// 🚨 fb422 — THE RULER MUST BE LONGER THAN THE BAR, AND IT MUST SAY WHEN IT SATURATES.
+//  The fb420 version ran a FIXED 1.5 s window and, when the tail never crossed -60 dB,
+//  returned `N*1000/FS` = exactly 1500.0. The ring gate's bar is 3100 ms. 1500 < 3100 for
+//  every possible input, so THE GATE COULD NOT FAIL: with limitRing()'s body deleted the
+//  cert still printed 1500 ms — the saturation value of its own ruler — while the engine
+//  actually rang for 11.8 seconds.
+//  Now: the window is a parameter, defaults to 8 s (2.6x the bar), the saturation value is
+//  RETURNED (so a non-terminating tail reads 8000 ms and fails loudly), and a saturation
+//  flag is exposed so §L can print "did not decay within the window" instead of a number
+//  that looks like a measurement. Early-exit keeps it cheap: only a genuinely long ring
+//  pays for the long window.
+double t60ms (const EQ::Params& p, double maxSec = 8.0, bool* saturated = nullptr)
 {
-    const int settle = 8192, N = (int) (FS * 1.5f);
-    std::vector<float> L ((size_t)(settle + N), 0.0f), R ((size_t)(settle + N), 0.0f);
-    L[(size_t) settle] = 0.25f; R[(size_t) settle] = 0.25f;
+    const int settle = 8192, N = (int) (FS * (float) maxSec);
     EQ e; e.prepare ((double) FS, 128);
-    for (int i = 0; i < settle + N; i += 128)
-    { const int nn = std::min (128, settle + N - i); e.setParams (p); e.processStereo (&L[(size_t)i], &R[(size_t)i], nn); }
-    double pk = 0; int pki = settle;
-    std::vector<double> env; env.reserve ((size_t) N / 32);
-    for (int i = settle; i + 32 < settle + N; i += 32)
-    { double s = 0; for (int k = 0; k < 32; ++k) s += (double) L[(size_t)(i+k)] * L[(size_t)(i+k)];
-      const double v = std::sqrt (s / 32.0); env.push_back (v);
-      if (v > pk) { pk = v; pki = (int) env.size() - 1; } }
-    if (pk <= 0) return 0.0;
-    const double thr = pk * 0.001;
-    for (size_t i = (size_t) pki; i < env.size(); ++i)
-        if (env[i] < thr) return (double) (i - (size_t) pki) * 32.0 * 1000.0 / FS;
-    return (double) N * 1000.0 / FS;
+    std::vector<float> L (128, 0.0f), R (128, 0.0f);
+    // settle with silence, then one impulse
+    for (int i = 0; i < settle; i += 128)
+    { std::fill (L.begin(), L.end(), 0.0f); std::fill (R.begin(), R.end(), 0.0f);
+      e.setParams (p); e.processStereo (L.data(), R.data(), 128); }
+    double pk = 0; int frame = 0, pki = 0; bool first = true;
+    // the early exit must not out-run the envelope's own rise: a high-Q resonator peaks a
+    // few frames AFTER the impulse. Require 8 frames past the running peak and THREE
+    // consecutive frames under -60 dB before calling it, and report the first of the three
+    // (which is what the fixed-window version reported).
+    int belowRun = 0, belowAt = 0;
+    for (int i = 0; i < N; i += 128)
+    {
+        std::fill (L.begin(), L.end(), 0.0f); std::fill (R.begin(), R.end(), 0.0f);
+        if (first) { L[0] = 0.25f; R[0] = 0.25f; first = false; }
+        e.setParams (p); e.processStereo (L.data(), R.data(), 128);
+        for (int k = 0; k + 32 <= 128; k += 32, ++frame)
+        {
+            double s2 = 0; for (int q = 0; q < 32; ++q) s2 += (double) L[(size_t)(k+q)] * L[(size_t)(k+q)];
+            const double v = std::sqrt (s2 / 32.0);
+            if (v > pk) { pk = v; pki = frame; belowRun = 0; }
+            const bool below = (pk > 0.0 && frame > pki + 8 && v < pk * 0.001);
+            if (below) { if (belowRun == 0) belowAt = frame; ++belowRun; } else belowRun = 0;
+            if (belowRun >= 3)
+            { if (saturated) *saturated = false;
+              return (double) (belowAt - pki) * 32.0 * 1000.0 / FS; }
+        }
+    }
+    if (saturated) *saturated = true;
+    return maxSec * 1000.0;                                  // THE SATURATION VALUE
 }
 
 // ═════════════════════════════════════════════════════════════════════════════
@@ -363,12 +401,12 @@ void sectionA()
     }
     // Amount 0 % nulls at ANY knob state — the A/B gesture, provable.
     {
-        EQ::Params p = refPatch (6, 7); p.f3 = 0.0f;      // Sculpt / Metal, everything lit
+        EQ::Params p = refPatch (6, 7); p.f3 = 0.0f;      // Chisel / Metal, everything lit
         auto x = chordN (8192); std::vector<float> L (x), R (x);
         EQ e; e.prepare ((double) FS, 128);
         for (int i = 0; i < 8192; i += 128) { e.setParams (p); e.processStereo (&L[(size_t)i], &R[(size_t)i], 128); }
         double w = 0; for (int i = 0; i < 8192; ++i) w = std::max (w, (double) std::fabs (L[(size_t)i] - x[(size_t)i]));
-        gate ("Amount 0 % nulls BIT-EXACTLY at a full Sculpt/Metal patch", w == 0.0, fmt ("worst delta %.3e", w));
+        gate ("Amount 0 % nulls BIT-EXACTLY at a full Chisel/Metal patch", w == 0.0, fmt ("worst delta %.3e", w));
     }
     // Mix 0 % is the dry, exactly.
     {
@@ -725,12 +763,12 @@ void sectionC (const Feat* F)
       gate ("   ... and every other Type is level-INDEPENDENT by construction", worst < 1.0,
             fmt ("worst non-Dynamic level dependence %.3f dB", worst)); }
 
-    gate ("Sculpt: a deep cut becomes a TRUE NOTCH, not a dip (sine probe)", F[6].notch <= -45.0,
+    gate ("Chisel: a deep cut becomes a TRUE NOTCH, not a dip (sine probe)", F[6].notch <= -45.0,
           fmt2 ("notch floor %.1f dB (Surgical at the same knob: %.1f dB)", F[6].notch, F[0].notch));
     { const double a = t60ms (single (6, 0, 1, 24.0f, 1000.0f, 0.92f));
       const double b = t60ms (single (0, 0, 1, 24.0f, 1000.0f, 0.50f));
       gate ("   ... and it RINGS: T60 > 60 ms where Surgical does not", a > 60.0 && b < 25.0,
-            fmt2 ("Sculpt/Ring T60 %.1f ms · Surgical T60 %.1f ms", a, b)); }
+            fmt2 ("Chisel/Sting T60 %.1f ms · Surgical T60 %.1f ms", a, b)); }
 }
 
 void sectionD (const Feat* F)
@@ -888,16 +926,23 @@ void sectionF()
     std::vector<Row> rows;
 
     // FRONT
-    rows.push_back ({ "Tilt   (spread 8 kHz - 80 Hz)",
+    // 🚨 fb422 — TWO ROWS, NEVER THEIR DIFFERENCE. The fb420 row measured
+    //  atHz(8 kHz) - atHz(80 Hz), and a DIFFERENCE stays monotone while BOTH ends reverse
+    //  in common mode — which is exactly what the sliding pivot did. §F3 gates six probe
+    //  frequencies end-by-end; these two rows put the headline ends in the main table.
+    rows.push_back ({ "Slant  LOW  end (80 Hz alone — must FALL)",
         sweepParam ([] (float t) { EQ::Params p = base(); p.f1 = t; return p; },
-                    [] (const Spec& s) { return atHz (s, 8000.0) - atHz (s, 80.0); }), 35.0 });
+                    [] (const Spec& s) { return atHz (s, 80.0); }), 30.0 });
+    rows.push_back ({ "Slant  TOP  end (8 kHz alone — must RISE)",
+        sweepParam ([] (float t) { EQ::Params p = base(); p.f1 = t; return p; },
+                    [] (const Spec& s) { return atHz (s, 8000.0); }), 30.0 });
     rows.push_back ({ "Air    (level at 19 kHz, Reach 9 kHz)",
         sweepParam ([] (float t) { EQ::Params p = base(); p.b7 = fN (3, 9000.0f); p.f2 = t; return p; },
                     [] (const Spec& s) { return atHz (s, 19000.0); }), 45.0 });
     rows.push_back ({ "Amount (max spectral deviation)",
         sweepParam ([] (float t) { EQ::Params p = refPatch (0); p.f3 = t; return p; },
                     [] (const Spec& s) { return specMsd (s); }), 25.0 });
-    rows.push_back ({ "Mix    (depth of a Sculpt notch)",
+    rows.push_back ({ "Mix    (depth of a Chisel notch)",
         sweepParam ([] (float t) { EQ::Params p = single (6, 0, 1, -30.0f, 550.0f, 0.75f); p.mix = t; return p; },
                     [] (const Spec& s) { return -specMin (s); }), 25.0 });
     // BACK
@@ -932,7 +977,7 @@ void sectionF()
     }
 
     // Shape (P8) is a different knob in every Type: seven sweeps, seven metrics.
-    section ("F2. `Shape` — the P8 relabel, swept per Type on ITS OWN physics");
+    section ("F2. `Trait` — the P8 relabel, swept per Type on ITS OWN physics");
     struct SRow { int t; const char* nm; Sweep s; double need; };
     std::vector<SRow> sr;
     { Sweep sw; double lo = 1e9, hi = -1e9;
@@ -941,11 +986,11 @@ void sectionF()
         lo = std::min (lo, sw.v[i]); hi = std::max (hi, sw.v[i]); }
       sw.span = hi - lo; sw.worstRev = 0;
       for (int i = 1; i < 9; ++i) sw.worstRev = std::max (sw.worstRev, sw.v[i] - sw.v[i-1]);
-      sr.push_back ({ 0, "Surgical `Width`  (log2 bandwidth, sine-probed)", sw, 5.0 }); }
-    sr.push_back ({ 1, "British  `Bump`   (shelf undershoot, dB)",
+      sr.push_back ({ 0, "Surgical `Pinch`  (log2 bandwidth, sine-probed)", sw, 5.0 }); }
+    sr.push_back ({ 1, "British  `Slope`  (shelf undershoot, dB)",
         sweepParam ([] (float t) { EQ::Params p = single (1, 0, 0, 24.0f, 90.0f, t); return p; },
                     [] (const Spec& s) { return minInRange (s, 110.0, 720.0); }), 4.0 });
-    sr.push_back ({ 2, "American `Grip`   (log2 bandwidth at a SMALL +8 dB move)",
+    sr.push_back ({ 2, "American `Taper`  (log2 bandwidth at a SMALL +8 dB move)",
         sweepParam ([] (float t) { EQ::Params p = single (2, 0, 1, 8.0f, 550.0f, t); return p; },
                     [] (const Spec& s) { return std::log2 (std::max (0.05, bwOct (s))); }), 2.0 });
     sr.push_back ({ 3, "Passive  `Dip`    (Pultec scoop depth, dB)",
@@ -954,7 +999,7 @@ void sectionF()
     sr.push_back ({ 4, "Open     `Silk`   (level at 19 kHz, Air +20 @ Reach 9 kHz)",
         sweepParam ([] (float t) { EQ::Params p = single (4, 0, 3, 20.0f, 9000.0f, t); return p; },
                     [] (const Spec& s) { return atHz (s, 19000.0); }), 3.0 });
-    sr.push_back ({ 5, "Dynamic  `Sense`  (applied cut at a -26 dBFS program, dB)",
+    sr.push_back ({ 5, "Dynamic  `Pivot`  (applied cut at a -26 dBFS program, dB)",
         sweepParam ([] (float t) { EQ::Params p = single (5, 0, 1, -24.0f, 550.0f, t); return p; },
                     [] (const Spec& s) { return atHz (s, 550.0); }), 12.0 });
     { Sweep sw; double lo = 1e9, hi = -1e9;
@@ -963,12 +1008,102 @@ void sectionF()
         lo = std::min (lo, sw.v[i]); hi = std::max (hi, sw.v[i]); }
       sw.span = hi - lo; sw.worstRev = 0;
       for (int i = 1; i < 9; ++i) sw.worstRev = std::max (sw.worstRev, sw.v[i] - sw.v[i-1]);
-      sr.push_back ({ 6, "Sculpt   `Ring`   (log2 bandwidth, sine-probed)", sw, 2.5 }); }
+      sr.push_back ({ 6, "Chisel   `Sting`  (log2 bandwidth, sine-probed)", sw, 2.5 }); }
     for (auto& r : sr)
     {
         const bool ok = r.s.span >= r.need && r.s.worstRev <= 0.10 * r.s.span + 0.35;
         gate (r.nm, ok, fmt2 ("span %.2f (need %.2f)", r.s.span, r.need) + fmt (" · worst reversal %.2f", r.s.worstRev));
         note ("   0->100 %: " + sweepRow (r.s));
+    }
+}
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  🚨 F3 — `Slant` (front hero 1), GATED END BY END. THE fb421 BLOCKER.
+//
+//  What was wrong with the DEVICE: designOnePole(kind 5) called designShelf1(f0,-g,+g),
+//  a one-pole shelf whose 0 dB crossing sits at f0 / 10^(gDb/20). The pivot therefore
+//  SLID from 700 Hz down to 2.8 Hz as the knob opened, and everything the crossing swept
+//  past reversed direction: 120 Hz fell to -4.75 dB at 65 % and then rose to +8.55 dB at
+//  100 % — 13.31 dB of WRONG-WAY travel at Amount default, 37.3 dB at Amount 200 %.
+//
+//  What was wrong with the GATE: it measured atHz(8 kHz) - atHz(80 Hz). A DIFFERENCE is
+//  blind to a COMMON-MODE reversal — both ends can walk back up together and the
+//  difference keeps climbing. The old row read "span 40.4, worst reversal 0.00" while the
+//  bass was travelling backwards by 13 dB. That number was true and useless.
+//
+//  This section therefore measures SIX probe frequencies, each ALONE, at two Amounts, and
+//  prints the old difference metric beside them so the blindness is visible rather than
+//  argued. Every probe below the 700 Hz pivot must fall monotonically; every probe above
+//  it must rise monotonically; and the pivot itself must not move.
+// ═════════════════════════════════════════════════════════════════════════════
+void sectionF1()
+{
+    section ("F3. `Slant` — EACH END SEPARATELY (a difference cannot see a common-mode reversal)");
+    static const double HZ[6] = { 80.0, 120.0, 300.0, 2000.0, 8000.0, 16000.0 };
+    const double PIVOT = 700.0;                       // Character `Plain`'s pivot
+    double worstWrongAll = -1.0; std::string worstWhere;
+    double worstPivotAll = 0;
+
+    for (int a = 0; a < 2; ++a)
+    {
+        const float amt = (a == 0 ? 0.5f : 1.0f);
+        Spec sp[9];
+        for (int i = 0; i < 9; ++i)
+        { EQ::Params p = base(); p.f1 = (float) i / 8.0f; p.f3 = amt; sp[i] = transferOf (p); }
+
+        std::printf ("\n        Amount %s — Slant 0 -> 100 %% (9 steps), dB at each probe\n",
+                     a == 0 ? "100 %" : "200 %");
+        std::printf ("        %-9s %7s %7s %7s %7s %7s %7s %7s %7s %7s | %8s %9s\n", "probe",
+                     "0%","12%","25%","37%","50%","62%","75%","87%","100%","travel","wrong-way");
+        for (int k = 0; k < 6; ++k)
+        {
+            double v[9]; for (int i = 0; i < 9; ++i) v[i] = atHz (sp[i], HZ[k]);
+            const bool up = (HZ[k] > PIVOT);
+            double wrong = 0;
+            for (int i = 1; i < 9; ++i)
+            { const double d = up ? (v[i-1] - v[i]) : (v[i] - v[i-1]);
+              wrong = std::max (wrong, d); }
+            std::printf ("        %6.0f Hz", HZ[k]);
+            for (int i = 0; i < 9; ++i) std::printf (" %7.2f", v[i]);
+            std::printf (" | %8.2f %9.2f\n", v[8] - v[0], wrong);
+            if (wrong > worstWrongAll)
+            { worstWrongAll = wrong;
+              worstWhere = fmt ("%.0f Hz", HZ[k]) + (a == 0 ? " @ Amount 100 %" : " @ Amount 200 %"); }
+        }
+        // the pivot must not move: 700 Hz stays 0 dB for every Slant setting.
+        double wp = 0; for (int i = 0; i < 9; ++i) wp = std::max (wp, std::fabs (atHz (sp[i], PIVOT)));
+        worstPivotAll = std::max (worstPivotAll, wp);
+        // the OLD metric, printed so its blindness is legible rather than asserted.
+        double dmin = 1e9, dmax = -1e9, drev = 0, prev = 0;
+        for (int i = 0; i < 9; ++i)
+        { const double d = atHz (sp[i], 8000.0) - atHz (sp[i], 80.0);
+          dmin = std::min (dmin, d); dmax = std::max (dmax, d);
+          if (i) drev = std::max (drev, prev - d); prev = d; }
+        note (fmt ("the fb420 metric (8 kHz MINUS 80 Hz): span %.1f dB", dmax - dmin)
+              + fmt (", worst reversal %.2f dB  <- this is what stayed green", drev));
+    }
+
+    gate ("every Slant probe moves ONE WAY ONLY (wrong-way travel <= 0.30 dB)",
+          worstWrongAll <= 0.30, fmt ("worst wrong-way travel %.2f dB at ", worstWrongAll) + worstWhere);
+    gate ("the 700 Hz PIVOT does not move across the whole Slant sweep, both Amounts",
+          worstPivotAll <= 0.50, fmt ("worst |response at the pivot| %.3f dB", worstPivotAll));
+    note ("   the fixed-pivot seesaw is |H|^2 = (Gp^2 + s^2 t^2)/(s^2 Gp^2 + t^2), t = tan(pi f/fs):");
+    note ("   exactly 1 at t = Gp for every gain s and every sample rate, and d|H|^2/ds has the");
+    note ("   sign of (t^4 - Gp^4) — strictly down below the pivot, strictly up above it.");
+    // the two Characters that MOVE the pivot must move it, and must still pivot cleanly.
+    for (int c : { 5, 6 })
+    {
+        const double want = (c == 5 ? 150.0 : 3000.0);
+        Spec sp[5]; double wp = 0, wrong = 0, prevLo = 0;
+        for (int i = 0; i < 5; ++i)
+        { EQ::Params p = base(); p.character = c; p.f1 = 0.5f + 0.125f * (float) i; sp[i] = transferOf (p);
+          wp = std::max (wp, std::fabs (atHz (sp[i], want)));
+          const double lo = atHz (sp[i], want / 4.0);
+          if (i) wrong = std::max (wrong, lo - prevLo); prevLo = lo; }
+        gate ((std::string ("Character `") + EQ::charNames (0)[c] + "` pivots at "
+               + fmt ("%.0f Hz", want) + ", and pivots CLEANLY").c_str(),
+              wp <= 0.6 && wrong <= 0.30,
+              fmt2 ("|H| at the pivot <= %.3f dB · wrong-way below it %.2f dB", wp, wrong));
     }
 }
 
@@ -1059,7 +1194,7 @@ void sectionI()
 {
     section ("I. MIX 100 % = FULLY WET, ZERO DRY (law 3) — sine probes, not band averages");
     // The honest probe for a FILTER whose wet CONTAINS the dry: put a hole where the dry
-    // has full energy and look in the hole. Sculpt's notch is designed to -90 dB, so a dry
+    // has full energy and look in the hole. Chisel's notch is designed to -90 dB, so a dry
     // leak anywhere above -70 dB would fill it and be unmissable.
     { const double fn = snapHz (550.0);
       const double d = sineDb (single (6, 0, 1, -30.0f, (float) fn, 0.75f), fn, 0.05f, 65536);
@@ -1072,7 +1207,7 @@ void sectionI()
       gate ((std::string ("Mix 100 % leaks no dry: ") + EQ::typeNames()[t]).c_str(), d < -18.0,
             fmt ("deepest cut reaches %.1f dB", d)); }
     note ("Open's floor is its own tanh knee (22 dB), not a dry leak: a -30 dB knob becomes");
-    note ("-19.3 dB BY DESIGN in that Type. Sculpt's -90 dB hole above is the real dry gate.");
+    note ("-19.3 dB BY DESIGN in that Type. Chisel's -90 dB hole above is the real dry gate.");
     { const double fn = snapHz (550.0);
       EQ::Params p = single (6, 0, 1, -30.0f, (float) fn, 0.75f); p.mix = 0.5f;
       const double d = sineDb (p, fn, 0.05f, 65536);
@@ -1100,7 +1235,7 @@ void sectionI()
 //  (3) 🔬 AND THE CONTROL HAD TO BECOME PER-PARAM. A single global control number was
 //      wrong: with the Low shelf at +18 dB the output is LF-dominated, a 256-sample frame
 //      holds half a cycle of 90 Hz, and the frame level bounces +-4 dB with NOTHING moving.
-//      The first version of this gate reported an 11.03 dB "click" on Tilt at t = 0.251 s -
+//      The first version of this gate reported an 11.03 dB "click" on Slant at t = 0.251 s -
 //      a quarter of a second BEFORE the sweep started. Every param is therefore compared
 //      against itself HELD at the same extreme, so the question asked is the right one:
 //      does MOVING this control add anything that HOLDING it does not.
@@ -1141,38 +1276,230 @@ double clickJump (int which, int mode, int type = 0)
     return worst;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  🚨 fb422 — THE SAMPLE-LEVEL CLICK METRIC. WHY THE fb420 ONE COULD NOT FAIL.
+//
+//  The old gate measured the SECOND DIFFERENCE of a 256-sample frame-level curve, and
+//  compared MOVING against HOLDING. Both choices made it an UPPER bound on a quantity that
+//  a broken engine makes SMALLER, not larger:
+//    * a 256-sample frame is 5.3 ms. Deleting all 11 smoothers does not make the sweep
+//      jump — `setParams` is per block, so the param still walks in 128-sample steps of
+//      1/562 of its range. That staircase is invisible to a 5.3 ms frame average.
+//    * with the smoothers gone the frame curve gets FLATTER, not rougher, because the
+//      coefficient glide is what smears each block's step across the frame boundary.
+//    * and the SWITCH bar was 20 dB, while the gutted build's switch artefact was 18.6 dB.
+//  Result: 104 pass / 0 FAIL on an engine with every smoother, the coefficient glide, the
+//  Mix smoother and the whole fade-swap deleted.
+//
+//  THE REPLACEMENT measures the artefact itself, per sample, with a phase-independent
+//  identity. A single sinusoid satisfies  y[n] - 2cos(w) y[n-1] + y[n-2] = 0  EXACTLY, and
+//  an LTI filter's output of a sinusoid is still a sinusoid, so a SETTLED engine has a
+//  residual of zero to float rounding no matter what the filter is doing. Writing
+//  y[n] = g[n]·A·sin(wn+phi) and expanding gives
+//        r[n] = A·( 2 g'[n] sin(w) cos(theta) + g''[n] sin(theta) ),
+//  so  |r| / (2 sin(w) · envelope)  IS the per-sample fractional change of the wet gain.
+//  Reported in dB as 20 log10(1 + that).
+//
+//  THE LAW, stated as a number: NO SINGLE SAMPLE MAY CHANGE THE WET GAIN BY MORE THAN
+//  0.5 dB. A 0.5 dB/sample slew sustained is a 10 ms fade; a step bigger than that is the
+//  textbook audible gain discontinuity. It is an ABSOLUTE bar, not a relative one, so
+//  deleting a smoothing mechanism can only make it worse.
+//
+//  AND THE POLARITY IS FIXED. The fb420 file used an INSTANTANEOUS param jump as a
+//  "negative control required to FAIL". That is backwards: an instantaneous param jump is
+//  what a host automation write and a preset recall actually do, and absorbing it is
+//  precisely what the 11 smoothers are FOR. It is now a gate the engine must PASS.
+//
+//  Three probe frequencies, deliberately incommensurate with the 128-sample block, so the
+//  jump instant lands at a different phase of each (the fb421 Compress blocker: a gain step
+//  at a zero crossing produces no sample-to-sample jump at all).
+// ═════════════════════════════════════════════════════════════════════════════
+// mode: 0 sweep 0.6 -> 1.4 s · 1 INSTANT jump at 0.6 s · 2 hold 0 % · 3 hold 100 %
+//  🔬 CHECK YOUR OWN DETECTOR (§3.1). The first build of this probe read 15.58 dB/sample
+//  on a HELD knob — the control that must read zero. It was not measuring the knob: at
+//  `Trait` 100 % the Surgical Q law is x40, and a +18 dB band at Q 36 has a POLE Q of 101,
+//  which rings for 2.5 s. The probe was measuring its own start-up transient. Fixed the
+//  way the fault actually was: a 0.4 s raised-cosine fade-in on the tone (so the resonances
+//  are never impulsed) and a 2.4 s settle before the first sample is read. The held control
+//  is printed on every run and is the proof that this is fixed and stays fixed.
+double slewDb (int which, int mode, double hz, int type = 0)
+{
+    const int N = (int) (FS * 4.0f);
+    const int t0 = (int) (FS * 2.6f), t1 = (int) (FS * 3.4f);
+    auto x = toneN (N, (float) hz, 0.25f);
+    { const int fi = (int) (FS * 0.4f);
+      for (int i = 0; i < fi; ++i) x[(size_t)i] *= (float) (0.5 - 0.5 * std::cos (3.14159265358979 * i / fi)); }
+    std::vector<float> L (x), R (x);
+    EQ e; e.prepare ((double) FS, 128);
+    EQ::Params p = refPatch (type);
+    for (int i = 0; i < N; i += 128)
+    {
+        const int nn = std::min (128, N - i);
+        float u = (float) (i - t0) / (float) (t1 - t0); u = std::max (0.0f, std::min (1.0f, u));
+        if (mode == 1) u = (i >= t0 ? 1.0f : 0.0f);
+        if (mode == 2) u = 0.0f;
+        if (mode == 3) u = 1.0f;
+        switch (which)
+        { case 0: p.b1 = u; break; case 1: p.b2 = u; break; case 2: p.b3 = u; break;
+          case 3: p.b4 = u; break; case 4: p.b5 = u; break; case 5: p.b6 = u; break;
+          case 6: p.b7 = u; break; case 7: p.b8 = u; break; case 8: p.f1 = u; break;
+          case 9: p.f2 = u; break; case 10: p.f3 = u; break; case 11: p.mix = u; break;
+          case 12: p.type      = (u > 0.5f ? 6 : 0); break;
+          case 13: p.character = (u > 0.5f ? 5 : 0); break;
+          case 14: p.axis      = (u > 0.5f ? 2 : 0); break; default: break; }
+        e.setParams (p); e.processStereo (&L[(size_t)i], &R[(size_t)i], nn);
+    }
+    const double w = 6.283185307179586 * hz / (double) FS;
+    const double c = std::cos (w), sw = std::sin (w);
+    const int per = std::max (8, (int) std::lround ((double) FS / hz));
+    const int nb = N / per + 2;
+    std::vector<double> amp ((size_t) nb, 0.0);
+    for (int b = 0; b * per < N; ++b)
+    { double s2 = 0; int n = 0;
+      for (int k = b * per; k < std::min (N, (b + 1) * per); ++k) { s2 += (double) L[(size_t)k] * L[(size_t)k]; ++n; }
+      amp[(size_t) b] = n ? std::sqrt (2.0 * s2 / n) : 0.0; }
+    const double A = 0.25 * 1.4142135623730951;
+    const double floorA = A * 0.02;               // -34 dB: a step down there is masked anyway
+    double worst = 0;
+    for (int i = (int) (FS * 2.4f); i < N; ++i)
+    {
+        const double r = (double) L[(size_t)i] - 2.0 * c * (double) L[(size_t)(i-1)] + (double) L[(size_t)(i-2)];
+        const int b = i / per;
+        double env = amp[(size_t) b];
+        if (b > 0)      env = std::max (env, amp[(size_t)(b-1)]);
+        if (b + 1 < nb) env = std::max (env, amp[(size_t)(b+1)]);
+        env = std::max (env, floorA);
+        worst = std::max (worst, std::fabs (r) / (2.0 * sw * env));
+    }
+    return 20.0 * std::log10 (1.0 + worst);
+}
+double slewWorst (int which, int mode)
+{
+    double m = 0;
+    for (double hz : { 137.0, 953.0, 5231.0 }) m = std::max (m, slewDb (which, mode, hz));
+    return m;
+}
+
+// ── the fade-swap's own SIGNATURE. A switch must produce a DIP and never a BLAST. ──
+//  The gutted build reads +18.62 dB where the real one reads a dip; a bar of "<= 20 dB"
+//  could not tell those apart because it graded the MAGNITUDE of an excursion and not its
+//  SIGN. This measures both signs against the settled levels on BOTH sides of the switch,
+//  so a Type whose new curve is simply louder does not read as a blast.
+struct SwProf { double pre, post, dip, rise; };
+SwProf switchProfile (int which)
+{
+    const int N = (int) (FS * 2.6f), t0 = (int) (FS * 1.6f);
+    auto x = whiteN (N, 0.05f, 31337u);
+    std::vector<float> L (x), R (x);
+    EQ e; e.prepare ((double) FS, 128);
+    EQ::Params p = refPatch (0);
+    for (int i = 0; i < N; i += 128)
+    {
+        const int nn = std::min (128, N - i); const bool on = (i >= t0);
+        if (which == 12) p.type      = on ? 6 : 0;
+        if (which == 13) p.character = on ? 5 : 0;
+        if (which == 14) p.axis      = on ? 2 : 0;
+        e.setParams (p); e.processStereo (&L[(size_t)i], &R[(size_t)i], nn);
+    }
+    std::vector<double> db; std::vector<int> at;
+    for (int i = 0; i + 256 < N; i += 256)
+    { double s2 = 0; for (int k = 0; k < 256; ++k) s2 += (double) L[(size_t)(i+k)] * L[(size_t)(i+k)];
+      db.push_back (10.0 * std::log10 (std::max (1e-20, s2 / 256.0))); at.push_back (i); }
+    auto med = [&] (double a, double b)
+    { std::vector<double> v;
+      for (size_t k = 0; k < db.size(); ++k) if (at[k] >= a * FS && at[k] < b * FS) v.push_back (db[k]);
+      std::sort (v.begin(), v.end()); return v.empty() ? 0.0 : v[v.size()/2]; };
+    SwProf s2p;
+    s2p.pre  = med (1.00, 1.55);
+    s2p.post = med (1.90, 2.55);
+    double lo = 1e9, hi = -1e9;
+    for (size_t k = 0; k < db.size(); ++k)
+        if (at[k] >= 1.58 * FS && at[k] < 1.86 * FS) { lo = std::min (lo, db[k]); hi = std::max (hi, db[k]); }
+    s2p.dip  = lo - std::min (s2p.pre, s2p.post);
+    s2p.rise = hi - std::max (s2p.pre, s2p.post);
+    return s2p;
+}
+
 void sectionJ()
 {
-    section ("J. NO CLICKS (law 4) — every param swept under sustained white noise");
+    section ("J. NO CLICKS (law 4) — sample-level, absolute-bar, and it fails under mutation");
     static const char* nm[15] = { "Low Hz", "Low", "Body Hz", "Body", "Bite Hz", "Bite", "Reach",
-                                  "Shape", "Tilt", "Air", "Amount", "Mix", "Type switch",
+                                  "Trait", "Slant", "Air", "Amount", "Mix", "Type switch",
                                   "Character switch", "Focus switch" };
-    double worst = -1e9; int wi = 0, ws = 12; double worstSw = -1e9, ctrlAt = 0, ctrlSw = 0;
-    for (int i = 0; i < 15; ++i)
-    { const double sweep = clickJump (i, 0);
-      const double ctrl  = std::max (clickJump (i, 2), clickJump (i, 3));
-      const double excess = sweep - ctrl;
-      note (std::string ("   ") + nm[i] + fmt (" swept %.2f dB", sweep) + fmt (" · held %.2f dB", ctrl)
-            + fmt (" · excess %+.2f dB", excess));
-      if (i < 12) { if (excess > worst) { worst = excess; wi = i; ctrlAt = ctrl; } }
-      else        { if (excess > worstSw) { worstSw = excess; ws = i; ctrlSw = ctrl; } } }
-    gate ("all 12 CONTINUOUS params: MOVING adds <= 3 dB over HOLDING", worst <= 3.0,
-          fmt2 ("worst excess %+.2f dB (held control %.2f) on ", worst, ctrlAt) + nm[wi]);
-    // The three SWITCHES are not glides and must not be graded as if they were: a Type,
-    // Character or Focus change snaps the whole filter bank, and the house grammar hides
-    // that behind an 8 ms dip and a 30 ms recovery (fb345 fade-swap-recover). What is
-    // gated here is that the dip is the ONLY event - smooth, bounded, and never a
-    // sample-level discontinuity.
-    gate ("the 3 SWITCHES ride the designed fade-swap and nothing else", worstSw <= 20.0,
-          fmt2 ("worst excess %+.1f dB over held (control %.2f) — this IS the 8 ms dip, on ",
-                worstSw, ctrlSw) + nm[ws]);
-    // 🪤 NEGATIVE CONTROL, REQUIRED TO FAIL: the same gate on an INSTANTANEOUS param jump.
-    { double w = -1e9; int k = 0;
-      for (int i : { 1, 3, 5, 9, 10 })
-      { const double e = clickJump (i, 1) - std::max (clickJump (i, 2), clickJump (i, 3));
-        if (e > w) { w = e; k = i; } }
-      gate ("   ... and the SAME gate FAILS on an instantaneous jump (control)", w > 3.0,
-            fmt ("an instant jump adds %+.1f dB over holding, on ", w) + nm[k]); }
+
+    // ── J1. the frame-level sweep metric, KEPT. It is a real (if weak) zipper detector and
+    //    it is the one number that is comparable to the fb420 log. It is no longer the
+    //    only thing standing between this device and a click.
+    {
+        double worst = -1e9; int wi = 0; double ctrlAt = 0;
+        for (int i = 0; i < 12; ++i)
+        { const double sweep = clickJump (i, 0);
+          const double ctrl  = std::max (clickJump (i, 2), clickJump (i, 3));
+          if (sweep - ctrl > worst) { worst = sweep - ctrl; wi = i; ctrlAt = ctrl; } }
+        gate ("J1 frame-level: sweeping adds <= 3 dB over holding (all 12 continuous)",
+              worst <= 3.0, fmt2 ("worst excess %+.2f dB (held control %.2f) on ", worst, ctrlAt) + nm[wi]);
+    }
+
+    // ── J2. THE REAL LAW-4 GATE: the per-sample wet-gain slew.
+    //    Run four ways per param: a 0.8 s SWEEP, an INSTANT jump (host automation / preset
+    //    recall — the case the 11 smoothers exist for), and both HELD extremes as control.
+    {
+        double sw[12], jp[12], hd[12];
+        std::printf ("        %-10s %10s %10s %10s %10s   (dB of wet-gain change in ONE sample)\n",
+                     "param", "swept", "JUMPED", "held", "jump-swp");
+        for (int i = 0; i < 12; ++i)
+        {
+            sw[i] = slewWorst (i, 0); jp[i] = slewWorst (i, 1);
+            hd[i] = std::max (slewWorst (i, 2), slewWorst (i, 3));
+            std::printf ("        %-10s %10.4f %10.4f %10.4f %+10.4f\n", nm[i], sw[i], jp[i], hd[i], jp[i] - sw[i]);
+        }
+        { double w = 0; int k = 0; for (int i = 0; i < 12; ++i) if (hd[i] > w) { w = hd[i]; k = i; }
+          gate ("J2 control: a HELD param changes the wet gain by ~0 per sample", w <= 0.20,
+                fmt ("worst held slew %.4f dB/sample on ", w) + nm[k]); }
+        // the 11 params that do not touch the Q law get an ABSOLUTE bar. 1 dB in one sample
+        // is 12 % of amplitude; on the -26 dBFS bus that is a -44 dBFS impulse, ~26 dB under
+        // the programme that carries it and inside its own masking skirt.
+        { double w = 0; int k = 0; for (int i = 0; i < 12; ++i) if (i != 7)
+          { const double v = std::max (sw[i], jp[i]); if (v > w) { w = v; k = i; } }
+          gate ("J2 the 11 non-Q params: <= 1.0 dB of wet-gain change in ONE sample, swept OR jumped",
+                w <= 1.0, fmt ("worst %.4f dB/sample on ", w) + nm[k]); }
+        // 🔑 `Trait` is the Q LAW: 0.25x -> 40x. Retuning a Q 40 resonator releases its
+        //   STORED ENERGY, and the energy is the same however slowly you glide — measured:
+        //   at tau = 20 / 60 / 150 ms the number reads 7.20 / 7.97 / 7.50 dB. It is physics,
+        //   not a missing smoother, and lengthening the smoother is exactly the constant-
+        //   tuning FIXES.md §4 forbids. What the smoothers ARE responsible for is that an
+        //   instantaneous jump costs no more than a deliberate sweep — which is the gate.
+        { double w = -1e9; int k = 0; for (int i = 0; i < 12; ++i) if (jp[i] - sw[i] > w) { w = jp[i] - sw[i]; k = i; }
+          gate ("J2 the SMOOTHERS' job: an INSTANT jump costs <= 3 dB more than a deliberate sweep",
+                w <= 3.0, fmt ("worst jump-minus-sweep %+.4f dB/sample on ", w) + nm[k]); }
+        note (fmt ("   `Trait` (the Q law) swept %.2f dB/sample — a Q 40 resonator releasing its", sw[7])
+              + fmt (" stored energy; jumped %.2f dB/sample, i.e. the jump is free.", jp[7]));
+    }
+
+    // ── J3. the three SWITCHES: the fade-swap must leave its own signature.
+    //    🚨 the fb420 bar was `|excursion| <= 20 dB` and the gutted build read 18.62 dB, so
+    //    it passed. The bar graded the MAGNITUDE of an excursion and not its SIGN. A
+    //    fade-swap DIPS. Deleting it makes the switch BLAST. Both signs are gated now,
+    //    against the settled level on BOTH sides, so a Type whose new curve is simply louder
+    //    (Chisel is +19.5 dB louder here) does not read as a blast.
+    {
+        double wRise = -1e9, shallow = -1e9, deepest = 1e9; int iR = 12, iSh = 12;
+        std::printf ("        %-18s %8s %8s %8s %8s\n", "switch", "pre dB", "post dB", "dip dB", "rise dB");
+        for (int i = 12; i < 15; ++i)
+        {
+            const SwProf q = switchProfile (i);
+            std::printf ("        %-18s %8.2f %8.2f %8.2f %8.2f\n", nm[i], q.pre, q.post, q.dip, q.rise);
+            if (q.rise > wRise)  { wRise = q.rise; iR = i; }
+            if (q.dip  > shallow) { shallow = q.dip; iSh = i; }
+            deepest = std::min (deepest, q.dip);
+        }
+        gate ("J3 every switch DIPS — the fade-swap actually ran: dip <= -8 dB",
+              shallow <= -8.0, fmt ("shallowest dip %.2f dB on ", shallow) + nm[iSh]);
+        gate ("J3 and no switch BLASTS: rise <= +2 dB over the settled level on EITHER side",
+              wRise <= 2.0, fmt ("worst rise %+.2f dB on ", wRise) + nm[iR]);
+        note (fmt ("   deepest dip %.1f dB — that is the 8 ms fade, doing its job.", deepest));
+    }
+
     { EQ e; e.prepare ((double) FS, 128);
       auto x = chordN (8192); std::vector<float> L (x), R (x);
       EQ::Params p = base(); double w = 0;
@@ -1215,17 +1542,38 @@ void sectionK()
       EQ::Params p = single (6, 0, 1, -30.0f, (float) fn, 0.75f); p.f3 = 1.0f;
       const double d2 = sineDb (p, fn, 0.05f, 65536);
       gate ("   ... and Amount 200 % drives it past -85 dB", d2 <= -85.0, fmt ("floor %.1f dB", d2)); }
-    { EQ::Params p = base(); p.f1 = 1.0f; p.f3 = 1.0f;
-      const Spec s = transferOf (p);
-      const double spread = specMax (s) - specMin (s);
-      gate ("Tilt at 100 % with Amount 200 %: spectrum spread >= 28 dB AND +44 dB of lift",
-            spread >= 28.0 && specMax (s) >= 44.0,
-            fmt2 ("spread %.1f dB (%+.1f at the top", spread, specMax (s)) + fmt (", %+.1f at the bottom)", specMin (s)));
-      note ("   a 6 dB/oct Baxandall seesaw's IN-BAND spread is capped by the PIVOT, not by");
-      note ("   the gain: with a 700 Hz pivot the low side has 5.1 octaves to fall through, so");
-      note ("   30.6 dB is the arithmetic maximum and the measurement lands on it. The knob's");
-      note ("   ceiling is therefore expressed in absolute lift - +48 dB at 8 kHz - and the");
-      note ("   `Deep Pivot` / `Bright Pivot` Characters move the pivot to buy more spread."); }
+    // 🚨 fb422 — R11 FOR `Slant`, RE-DERIVED. The fb420 gate asked for "spread >= 28 dB AND
+    //  +44 dB of lift" on the WHOLE curve. Both halves of that were wrong. `spread` is a
+    //  DIFFERENCE (§F1); and `+44 dB of lift` was only ever reachable because the sliding
+    //  pivot dragged the entire curve upward — it was measuring the BUG. A 6 dB/oct seesaw
+    //  about a fixed pivot cannot lift 44 dB at 8 kHz and should never have been asked to:
+    //  8 kHz is 3.5 octaves above 700 Hz, so 21 dB is the slope's arithmetic ceiling there.
+    //  The R11 question for a tone-tilt is therefore asked PER END, in absolute dB, against
+    //  the loudest thing the reference world offers: a Baxandall console tone control tops
+    //  out at +-12 dB and a Pultec shelf at +-16. Each end alone must beat a whole console.
+    {
+        EQ::Params p1 = base(); p1.f1 = 1.0f;                       // Slant 100 %, Amount 100 %
+        EQ::Params p2 = base(); p2.f1 = 1.0f; p2.f3 = 1.0f;         // Slant 100 %, Amount 200 %
+        const Spec s1 = transferOf (p1), s2 = transferOf (p2);
+        gate ("Slant 100 %: the TOP end ALONE beats a whole console (>= +15 dB at 8 kHz)",
+              atHz (s1, 8000.0) >= 15.0,
+              fmt2 ("%+.2f dB at 8 kHz, %+.2f dB at 16 kHz", atHz (s1, 8000.0), atHz (s1, 16000.0)));
+        gate ("Slant 100 %: the LOW end ALONE beats a whole console (<= -15 dB at 80 Hz)",
+              atHz (s1, 80.0) <= -15.0,
+              fmt2 ("%+.2f dB at 80 Hz, %+.2f dB at 30 Hz", atHz (s1, 80.0), atHz (s1, 30.0)));
+        gate ("   ... and Amount 200 % keeps BOTH ends past a console, top and bottom",
+              atHz (s2, 8000.0) >= 15.0 && atHz (s2, 80.0) <= -15.0,
+              fmt2 ("%+.2f dB at 8 kHz · %+.2f dB at 80 Hz", atHz (s2, 8000.0), atHz (s2, 80.0)));
+        gate ("Slant 100 % / Amount 200 %: 20 Hz - 20 kHz spread >= 55 dB",
+              specMax (s2) - specMin (s2) >= 55.0,
+              fmt3 ("spread %.1f dB (%+.1f top, %+.1f bottom)",
+                    specMax (s2) - specMin (s2), specMax (s2), specMin (s2)));
+        note ("   HONEST LIMIT, stated rather than gated away: a 6 dB/oct seesaw is SLOPE-limited,");
+        note ("   so Amount 200 % buys the ENDS very little (80 Hz: -17.6 -> -18.7 dB) and buys the");
+        note ("   EXTREMES a lot (16 kHz: +23.3 -> +31.6 dB). Amount is not a plateau on this knob");
+        note ("   because the pivot is what sets the ends — which is why `Deep Pivot` (150 Hz) and");
+        note ("   `Bright Pivot` (3 kHz) exist and are gated in §F3.");
+    }
     { EQ::Params p = base(); p.b7 = fN (3, 8000.0f); p.f2 = 1.0f; p.f3 = 1.0f;
       const Spec s = transferOf (p);
       gate ("Air at 100 % with Amount 200 % (Reach 8 kHz): >= 42 dB in band", specMax (s) >= 42.0,
@@ -1251,7 +1599,7 @@ void sectionK()
             fmt2 ("half-height width %.4f octaves (%.0f Hz wide at 550 Hz)", bw,
                   550.0 * (std::pow (2.0, bw * 0.5) - std::pow (2.0, -bw * 0.5)))); }
     { const double t = t60ms (single (6, 1, 1, 28.0f, 550.0f, 1.0f));
-      gate ("Sculpt `Ring` at 100 % SINGS: T60 > 250 ms", t > 250.0,
+      gate ("Chisel `Sting` at 100 % SINGS: T60 > 250 ms", t > 250.0,
             fmt ("T60 %.0f ms — a struck resonator, not an equaliser", t)); }
 }
 
@@ -1297,20 +1645,56 @@ void sectionL()
       { std::fill (L.begin(), L.end(), 0.0f); std::fill (R.begin(), R.end(), 0.0f);
         e.setParams (p); e.processStereo (L.data(), R.data(), 128);
         if (b > blocks * 3 / 4) for (int k = 0; k < 128; ++k) tail = std::max (tail, (double) std::fabs (L[(size_t)k])); }
-      gate ("a Q 90 Sculpt ring decays to TRUE zero (denormal flush)", tail == 0.0,
+      gate ("a Q 90 Chisel ring decays to TRUE zero (denormal flush)", tail == 0.0,
             fmt ("tail after 12 s of silence %.3e", tail)); }
-    // 🔑 THE RING LAW, measured: no setting anywhere in the device may ring longer than 3 s.
-    { double worst = 0; std::string wn;
+    // 🔑 THE RING LAW, measured — and this is the gate that could not fail at fb420.
+    //  Three things were wrong and all three are fixed here:
+    //   1. the RULER. t60ms ran a 1.5 s window and saturated at 1500 ms against a 3100 ms
+    //      bar, so 1500 < 3100 for every possible engine. Window is now 8 s and saturation
+    //      is reported as a saturation.
+    //   2. the COVERAGE. It only ever visited Amount's DEFAULT. The ring law is a statement
+    //      about the pole radius, and the pole radius of a boost is set by A*Q — i.e. by the
+    //      GAIN — so the ceiling is exactly where it has to be swept. Amount 200 % now runs.
+    //   3. the STAGES. It only swept the four bands. The Slant is a one-pole whose corner is
+    //      now placed by ARITHMETIC (f_corner = f_pivot * 10^(g/20)), which pushes its real
+    //      pole toward z = 1 at extreme gain — a 0.6 Hz corner is a 1.7 s decay. That stage
+    //      is in the sweep, and the one-pole G clamp (onePoleGmax) is what bounds it.
+    { double worst = 0; std::string wn; int nSat = 0;
       for (int t = 0; t < EQ::kNumTypes; ++t)
-        for (float sh : { 0.5f, 0.95f, 1.0f })
-          for (float hz : { 25.0f, 120.0f, 1000.0f })
-          { const double v = t60ms (single (t, 1, hz < 100.0f ? 0 : 1, 30.0f, hz, sh));
-            if (v > worst) { worst = v; wn = std::string (EQ::typeNames()[t]) + fmt (" @ %.0f Hz", hz)
-                                            + fmt (", Shape %.2f", sh); } }
-      gate ("NOTHING in the device rings longer than 3 s (the pole-radius cap)", worst <= 3100.0,
-            fmt ("longest T60 %.0f ms — ", worst) + wn);
+        for (int ch : { 1, 7 })
+          for (float amt : { 0.5f, 1.0f })
+            for (float sh : { 0.5f, 0.95f, 1.0f })
+              for (float hz : { 25.0f, 120.0f, 1000.0f })
+              { EQ::Params p = single (t, ch, hz < 100.0f ? 0 : 1, 30.0f, hz, sh); p.f3 = amt;
+                bool sat = false; const double v = t60ms (p, 8.0, &sat);
+                if (sat) ++nSat;
+                if (v > worst) { worst = v; wn = std::string (EQ::typeNames()[t]) + "/" + EQ::charNames (t)[ch]
+                                                + fmt (" @ %.0f Hz", hz) + fmt (", Trait %.2f", sh)
+                                                + (amt > 0.75f ? ", Amount 200 %" : ", Amount 100 %"); } }
+      gate ("NOTHING in the device rings longer than 3 s (the pole-radius cap)", worst <= 3100.0 && nSat == 0,
+            fmt ("longest T60 %.0f ms — ", worst) + wn + fmt (" · %.0f settings hit the window", (double) nSat));
+      note ("   252 settings: 7 Types x 2 Characters x 2 Amounts x 3 Trait x 3 corner frequencies.");
       note ("   without the cap a +72 dB 20 Hz band at Q 90 has Q_pole = 5670 and a TEN MINUTE");
       note ("   T60: passive, terminating, and still a drone. 'Nothing free-runs' is a number."); }
+    // and the SLANT's own pole, which the fb420 sweep never touched at all.
+    { double worst = 0; std::string wn; bool anySat = false;
+      for (int c = 0; c < EQ::kNumChars; ++c)
+        for (float f1 : { 0.0f, 1.0f })
+          for (float amt : { 0.5f, 1.0f })
+          { EQ::Params p = base(); p.character = c; p.f1 = f1; p.f3 = amt;
+            bool sat = false; const double v = t60ms (p, 8.0, &sat); anySat = anySat || sat;
+            if (v > worst) { worst = v; wn = std::string (EQ::charNames (0)[c])
+                                            + fmt (", Slant %.0f %%", f1 * 100.0)
+                                            + (amt > 0.75f ? ", Amount 200 %" : ", Amount 100 %"); } }
+      gate ("the SLANT's one-pole obeys the same ring law (its corner is now placed by gain)",
+            worst <= 3100.0 && ! anySat, fmt ("longest T60 %.0f ms — ", worst) + wn); }
+    // 🪤 THE RULER ITSELF, shown to be able to express a failure. This is the fb420 defect
+    //    in one line: a saturating ruler shorter than the bar is a gate that cannot fail.
+    { bool sat = false;
+      const double v = t60ms (single (6, 1, 1, 30.0f, 550.0f, 1.0f), 0.020, &sat);
+      gate ("(self-check) t60ms REPORTS saturation instead of a number it cannot measure",
+            sat && v == 20.0, fmt2 ("a 20 ms window on a 700 ms ring returns %.0f ms, saturated=%.0f", v, (double) sat));
+      note ("   the fb420 ruler was 1500 ms against a 3100 ms bar and returned 1500.0 silently."); }
 }
 
 void sectionM()
@@ -1391,12 +1775,144 @@ void sectionN (const Feat* F48)
     FS = 48000.0f;
 }
 
+// ═════════════════════════════════════════════════════════════════════════════
+//  O. NAMES — the NO-DOUBLES gate the fb420 EQ never had.
+//
+//  fb420 shipped 23 collisions including `Tilt` and `Sculpt`, which are shipped TAPE FRONT
+//  KNOBS. The dynamics agent had a gate; the EQ had none. This one is rebuilt per
+//  RENAMES.md's own post-mortem: the extractor (eq/extract_labels.py) strips leading space
+//  before its capitalisation test — so it sees the fb418 strings `" Motion"` / `" Route"`,
+//  which the old pattern skipped — and it reads the two SIBLING fx4 directories as well as
+//  Source/ and Design/fx3/. 3064 strings, against the dynamics agent's 1762.
+//
+//  The EQ's own labels come from EXACTLY ONE place: EQ::label(i), which walks
+//  typeNames / frontNames / backNames / shapeName / focusNames / charNames, and charNames
+//  is now DERIVED from charSpec().nm — the physics row itself. There is no second table to
+//  drift from (fb420's charNames said `Fixed Top` while charSpec said `Iron Top`).
+// ═════════════════════════════════════════════════════════════════════════════
+struct Sanction { const char* name; const char* why; };
+static const Sanction kSanctioned[] = {
+    { "Low",    "RENAMES.md: band grammar, keep" },
+    { "Body",   "RENAMES.md: band grammar, keep" },
+    { "Bite",   "RENAMES.md: band grammar, keep" },
+    { "Air",    "RENAMES.md: Max's mandate word, keep (precedence rule 3)" },
+    { "Reach",  "RENAMES.md: sanctioned shared vocabulary, keep" },
+    { "Amount", "RENAMES.md: sanctioned shared vocabulary, keep" },
+    { "Mix",    "RENAMES.md: sanctioned shared vocabulary, keep" },
+    { "Focus",  "RENAMES.md: sanctioned shared vocabulary, keep" },
+    { "Tight",  "RENAMES.md EQUALIZER row: 'keep - Widen yields this one' (-> Tight Fan)" },
+    { "Silk",   "RENAMES.md WIDEN row: Steady char 0 Silk -> Satin, 'EQ knob label outranks a Character'" },
+};
+// every EQUALIZER row of RENAMES.md, as data: the old string must be GONE, the new one PRESENT.
+struct Rename { const char* oldNm; const char* newNm; const char* slot; };
+static const Rename kRenames[] = {
+    { "Tilt",      "Slant",      "front hero 1"    }, { "Sculpt",   "Chisel",    "Type 6 pill"     },
+    { "Shape",     "Trait",      "P8 slot name"    }, { "Width",    "Pinch",     "P8 @ Surgical"   },
+    { "Bump",      "Slope",      "P8 @ British"    }, { "Grip",     "Taper",     "P8 @ American"   },
+    { "Ring",      "Sting",      "P8 @ Chisel"     }, { "Sense",    "Pivot",     "P8 @ Dynamic"    },
+    { "Clean",     "Plain",      "Surgical char 0" }, { "Carve",    "Scoop",     "Surgical char 4" },
+    { "Console",   "Desk",       "British char 0"  }, { "Fixed Top","Iron Top",  "British char 3"  },
+    { "Gentle",    "Mellow",     "American char 2" }, { "Modern",   "Revival",   "Passive char 7"  },
+    { "Close Dip", "Close Cut",  "Passive char 1"  }, { "Far Dip",  "Far Cut",   "Passive char 2"  },
+    { "Silky",     "Gloss",      "Open char 0"     }, { "Fast",     "Quick",     "Dynamic char 1"  },
+    { "Slow",      "Lazy",       "Dynamic char 2"  }, { "Inverted", "Upward",    "Dynamic char 4"  },
+    { "Gain Ring", "Gain Peak",  "Chisel char 3"   },
+};
+bool hasLabel (const char* w)
+{ for (int i = 0; i < EQ::kNumLabels; ++i) if (! std::strcmp (EQ::label (i), w)) return true; return false; }
+
+void sectionO()
+{
+    section ("O. NAMES — no doubles, inside the card and against 3064 shipped strings");
+    const int nShipped = (int) (sizeof (kShippedLabels) / sizeof (kShippedLabels[0]));
+    note (fmt ("shipped_labels.inc holds %.0f strings from Source/ · Design/fx3/ · the two sibling", (double) nShipped)
+          + fmt (" fx4 dirs; this device publishes %.0f.", (double) EQ::kNumLabels));
+
+    // 0. the extractor must be able to see yesterday's labels, or it cannot protect tomorrow's.
+    { bool motion = false, route = false, tilt = false, sculpt = false;
+      for (int k = 0; k < nShipped; ++k)
+      { if (! std::strcmp (kShippedLabels[k], "Motion")) motion = true;
+        if (! std::strcmp (kShippedLabels[k], "Route"))  route  = true;
+        if (! std::strcmp (kShippedLabels[k], "Tilt"))   tilt   = true;
+        if (! std::strcmp (kShippedLabels[k], "Sculpt")) sculpt = true; }
+      gate ("(self-check) the extractor SEES the fb418 leading-space labels Motion / Route",
+            motion && route, std::string ("Motion ") + (motion ? "yes" : "NO")
+            + " · Route " + (route ? "yes" : "NO") + "  (the old pattern found neither)");
+      gate ("(self-check) ... and the two shipped Tape knobs fb420 collided with",
+            tilt && sculpt, std::string ("Tilt ") + (tilt ? "yes" : "NO")
+            + " · Sculpt " + (sculpt ? "yes" : "NO") + "  — this is what the gate is FOR"); }
+
+    // 1. every EQUALIZER row of RENAMES.md applied, verbatim.
+    { int applied = 0; std::string bad;
+      for (const Rename& r : kRenames)
+      { const bool oldGone = ! hasLabel (r.oldNm), newHere = hasLabel (r.newNm);
+        if (oldGone && newHere) ++applied;
+        else bad += std::string (bad.empty() ? "" : ", ") + r.oldNm + "->" + r.newNm
+                  + (oldGone ? "(new missing)" : "(old still present)"); }
+      gate ("every EQUALIZER row of RENAMES.md is applied VERBATIM",
+            applied == (int) (sizeof (kRenames) / sizeof (kRenames[0])),
+            fmt2 ("%.0f of %.0f rows", (double) applied, (double) (sizeof (kRenames) / sizeof (kRenames[0])))
+            + (bad.empty() ? "" : "  MISSING: " + bad)); }
+
+    // 2. no doubles INSIDE the card.
+    { std::string dup; int n = 0;
+      for (int i = 0; i < EQ::kNumLabels; ++i)
+        for (int j = i + 1; j < EQ::kNumLabels; ++j)
+          if (! std::strcmp (EQ::label (i), EQ::label (j)))
+          { ++n; dup += std::string (dup.empty() ? "" : ", ") + EQ::label (i)
+                      + " (" + EQ::labelSlot (i) + " / " + EQ::labelSlot (j) + ")"; }
+      gate ("no label appears twice INSIDE this card", n == 0,
+            n ? dup : std::string ("0 doubles across 87 published strings")); }
+
+    // 3. no collision with anything shipped, except what RENAMES.md sanctions BY NAME.
+    { std::string unresolved; int nColl = 0, nSanc = 0;
+      for (int i = 0; i < EQ::kNumLabels; ++i)
+      {
+          bool coll = false;
+          for (int k = 0; k < nShipped && ! coll; ++k) if (! std::strcmp (EQ::label (i), kShippedLabels[k])) coll = true;
+          if (! coll) continue;
+          ++nColl;
+          bool ok = false;
+          for (const Sanction& q : kSanctioned) if (! std::strcmp (q.name, EQ::label (i))) { ok = true; break; }
+          if (ok) { ++nSanc; continue; }
+          unresolved += std::string (unresolved.empty() ? "" : ", ") + EQ::label (i)
+                      + " (" + EQ::labelSlot (i) + ")";
+      }
+      gate ("no collision with a shipped label outside RENAMES.md's sanctioned list",
+            unresolved.empty(),
+            fmt2 ("%.0f collisions, %.0f sanctioned by name; UNRESOLVED: ",
+                  (double) nColl, (double) nSanc) + (unresolved.empty() ? "none" : unresolved));
+      for (const Sanction& q : kSanctioned) note (std::string ("   sanctioned  ") + q.name + " — " + q.why); }
+
+    // 4. the published table itself, printed, because a label that lives only in markdown is
+    //    the exact geometry that let `Cassette` play `Studio` (FIXES.md §3).
+    std::printf ("\n        PUBLISHED FROM THE ENGINE HEADER (EQ::label / EQ::labelSlot):\n");
+    std::printf ("        Types : ");
+    for (int t = 0; t < EQ::kNumTypes; ++t) std::printf ("%s%s", EQ::typeNames()[t], t + 1 < EQ::kNumTypes ? " · " : "\n");
+    std::printf ("        Front : ");
+    for (int i = 0; i < 4; ++i) std::printf ("%s%s", EQ::frontNames()[i], i < 3 ? " · " : "\n");
+    std::printf ("        Back  : ");
+    for (int i = 0; i < 8; ++i) std::printf ("%s%s", EQ::backNames()[i], i < 7 ? " · " : "\n");
+    std::printf ("        Trait : ");
+    for (int t = 0; t < EQ::kNumTypes; ++t) std::printf ("%s=%s%s", EQ::typeNames()[t], EQ::shapeName (t),
+                                                          t + 1 < EQ::kNumTypes ? " · " : "\n");
+    std::printf ("        Focus : ");
+    for (int i = 0; i < EQ::kNumFocus; ++i) std::printf ("%s%s", EQ::focusNames()[i], i + 1 < EQ::kNumFocus ? " · " : "\n");
+    for (int t = 0; t < EQ::kNumTypes; ++t)
+    { std::printf ("        %-9s", EQ::typeNames()[t]);
+      for (int c = 0; c < EQ::kNumChars; ++c) std::printf (" %-13s", EQ::charNames (t)[c]);
+      std::printf ("\n"); }
+}
+
 } // namespace
 
 int main()
 {
     std::printf ("\n== TERRAIN EQUALIZER FX - certification ==   bus program -26 dBFS, fs %.0f Hz\n", (double) FS);
-    std::printf ("   7 Types x 8 Characters x 5 Focus, 12 params (Tilt Air Amount Mix + 8 back)\n");
+    if (EQ::mutationTag() != nullptr)
+        std::printf ("\n🔴🔴🔴 MUTATED BUILD — %s\n"
+                     "        The gates below are EXPECTED TO FAIL. See MUTATION.md.\n\n", EQ::mutationTag());
+    std::printf ("   7 Types x 8 Characters x 5 Focus, 12 params (Slant Air Amount Mix + 8 back)\n");
     std::printf ("   ceiling: +-30 dB per band x Amount 200 %% = +-60 dB   ·   Q law owned by the Type\n");
 
     sectionA();
@@ -1407,6 +1923,7 @@ int main()
     sectionD (F);
     sectionE();
     sectionF();
+    sectionF1();
     sectionG();
     sectionH();
     sectionI();
@@ -1415,6 +1932,7 @@ int main()
     sectionL();
     sectionM();
     sectionN (F);
+    sectionO();
 
     std::printf ("\n══ RESULT: %d pass, %d FAIL ══\n", gPass, gFail);
     for (auto& s : gFails) std::printf ("   FAILED: %s\n", s.c_str());
