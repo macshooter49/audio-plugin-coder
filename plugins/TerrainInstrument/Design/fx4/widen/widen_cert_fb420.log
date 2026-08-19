@@ -1,0 +1,284 @@
+═══ widen_cert — Terrain Instrument FX WIDEN (chain kind 10, SYN_WID_) ═══
+    6 Types x 8 Characters x 6 Fields · engine TerrainWidenFx.h
+
+[A — ROSTER + CARDINALITY (the fb373 contract this device must be wired to)]
+  ok    kNumTypes == 6 live                                  6
+  ok    kNumTypeSlots == 8 (2 reserved, choice cardinality frozen at birth) 8
+  ok    kNumChars == 8 for EVERY Type (read back on the /7 scale, clamp per Type) 8
+  ok    every Type x Character name is non-empty             Stack Twin Shift Double Blur Bands 
+  ok    charNames clamps out-of-range Type                   Coarse
+  ok    Field axis is NOT `Type` (CONTRACT R6)               Direct Alternate Orbit Swap Side Only Collapse 
+  ok    mono manifest is declared, not hidden — and §J checks every entry Fields: Orbit Side Only · Types: Twin Double Blur · Chars: Twin/Hex 
+
+[B — THE CONTROL NUMBERS (every metric through a BYPASSED engine first)]
+  CONTROL  corr +1.000 · side/mid -227.8 dB · flux 23.52 · chan ripple 0.0 dB · echo peaks 49 · mono dev 0.00 dB
+  ok    bypass is bit-transparent (Mix 0)                    +0.0000 dB
+  ok    bypass correlation reads +1.000 (the probe is mono)  +1.00000
+  ok    bypass flux is the FLOOR every Type is read against  23.521
+
+[C — TYPE DISCRIMINATORS + the cross-type distinctness matrix]
+      Type        corr side/mid   flux  period  modEng   ripple  echo monoDev
+      Stack     +0.866    -11.3  44.06   0.869 1335.30     10.3    46    1.53
+      Twin      -0.873     11.7  43.70   0.007    0.18     17.8    36   11.85
+      Shift     +0.856    -11.0  45.09   0.000    0.00      8.2    46    1.31
+      Double    +0.897    -12.6  42.84   0.176 2929.47     21.0    37    9.28
+      Blur      -0.514      4.9  22.18   0.000    0.00      2.6    48    4.26
+      Bands     +0.018     -0.1  26.12   0.000    0.00      8.1    49    0.00
+  ok    Stack  — periodic pitch motion, high mod energy    modEng 1335.3 cents · periodicity 0.869
+  ok    Twin   — MOTIONLESS: flux at/below the crowd Types, yet side/mid high flux 43.70 (Stack 44.06)
+  ok    Shift  — STATIC: essentially zero modulation energy modEng 0.000 cents
+  ok    Double — APERIODIC motion + the most distinct echoes periodicity 0.176 (Stack 0.869)
+  ok    Blur   — per-channel magnitude FLAT (allpass, by construction) chan ripple 2.59 dB (control 0.00 dB)
+  ok    Bands  — per-channel magnitude TORN (the anti-Blur) chan ripple 8.1 dB vs Blur 2.6 dB
+
+      cross-type distinctness — RANGE-normalised L2 (reported, not gated):
+               Stack    Twin   Shift  Double    Blur   Bands
+      Stack     0.00    2.14    1.11    1.48    1.85    1.53
+      Twin      2.14    0.00    1.87    1.77    1.72    1.83
+      Shift     1.11    1.87    0.00    1.57    1.49    1.08
+      Double    1.48    1.77    1.57    0.00    2.22    2.01
+      Blur      1.85    1.72    1.49    2.22    0.00    0.62
+      Bands     1.53    1.83    1.08    2.01    0.62    0.00
+      (range-normalised closest pair: Blur/Bands at 0.62)
+
+      cross-type distinctness — PERCEPTUAL L2 (the gate; 1.0 = one audible step):
+               Stack    Twin   Shift  Double    Blur   Bands
+      Stack     0.00    7.83    4.30    4.54    6.52    5.33
+      Twin      7.83    0.00    6.77    6.49    5.43    5.85
+      Shift     4.30    6.77    0.00    5.57    4.77    3.16
+      Double    4.54    6.49    5.57    0.00    7.68    6.69
+      Blur      6.52    5.43    4.77    7.68    0.00    2.43
+      Bands     5.33    5.85    3.16    6.69    2.43    0.00
+  ok    every Type pair separated by >= 1.0 audible step (perceptual L2) closest pair Blur/Bands at 2.43
+  ok    the closest pair still differs >= 2x on a stated discriminator Bands chan ripple 8.1 dB vs Blur 2.6 dB
+
+[D — THE DIMENSION TELL: the triangle holds its detune, a sine does not]
+      The pitch offset IS the delay slope. For a TRIANGLE the slope is a SQUARE
+      wave: the detune sits at exactly +-c and only flips sign at the apexes. For a
+      SINE the slope is a sine, whose value distribution is the ARCSINE law, so the
+      detune sweeps continuously through every value including zero. Closed-form
+      predictions for a sine, which is what makes this a real test and not a
+      threshold: P(|c| > 0.8 peak) = 1 - (2/pi)asin(0.8) = 0.410 and
+      P(|c| < 0.1 peak) = (2/pi)asin(0.1) = 0.064. A flat-topped trapezoid — the
+      shape an earlier draft of the bible specced — would drive the SECOND number
+      toward its flat-top duty cycle, i.e. the detune would periodically DROP OUT.
+      TRIANGLE (Duo)    peak   28.0 cents · mass at |c|>0.8pk 0.992 · at |c|<0.1pk 0.001
+      SINE     (Wobble) peak  108.6 cents · mass at |c|>0.8pk 0.435 · at |c|<0.1pk 0.063
+      arcsine prediction for a sine:                             0.410              0.064
+  ok    triangle detune is BIMODAL: >= 90 % of the time at +-peak 0.992 of samples at |c| > 0.8 peak
+  ok    triangle has NO zero dwell (a flat top would put one there) 0.0008 of samples at |c| < 0.1 peak
+  ok    the SINE A/B proves the metric can see a non-square slope sine lobe mass 0.435 (arcsine predicts 0.410)
+  ok    the SINE A/B shows the zero dwell the triangle does not have sine 0.0627 vs triangle 0.0008
+  ok    `Wobble` (sine) MOVES more than `Duo` (triangle) — the Dimension is motionless sine flux 54.53 vs triangle flux 42.94
+
+[E — THE CONSTANT-CENTS LAW (the knob IS cents; Serum's is not)]
+      Rate knob ->   Hz    achieved peak cents (voice 5, Amount 100 %)  base ms
+       0.25        0.139              140.6                          89.50
+       0.40        0.351              140.8                          36.50
+       0.55        0.881              140.8                          15.42
+       0.70        2.215              140.5                          11.30
+       0.85        5.569              140.5                          11.30
+  ok    peak cents INDEPENDENT of Rate over a 12x rate span (<= 5 % spread) 140.5 .. 140.8 cents, spread 0.17 %
+  ok    Amount 100 % reaches full cents at Voices 3          Voices 3 -> outermost 130.0 cents
+  ok    Amount 100 % reaches full cents at Voices 5          Voices 5 -> outermost 130.0 cents
+  ok    Amount 100 % reaches full cents at Voices 8          Voices 8 -> outermost 130.0 cents
+
+[F — EVERY PARAM 0->100: monotonic, night-and-day, measured span]
+      Amount (Stack `Detune`)  peak cents             0.000    14.146    42.884    82.043   130.000  span   130.000
+  ok    Amount (Stack `Detune`) — monotonic, and no quarter of it does nothing 0.000 -> 130.000 (every step >= 3.000)
+      Amount (Twin `Depth`)    peak cents             0.000     4.309    10.984    18.989    28.000  span    28.000
+  ok    Amount (Twin `Depth`) — monotonic, and no quarter of it does nothing 0.000 -> 28.000 (every step >= 0.800)
+      Amount (Shift `Cents`)   peak cents             0.000    15.795    41.682    73.532   110.000  span   110.000
+  ok    Amount (Shift `Cents`) — monotonic, and no quarter of it does nothing 0.000 -> 110.000 (every step >= 3.000)
+      Amount (Double `Drift`)  peak walk cents        0.000    10.226    25.180    42.655    62.000  span    62.000
+  ok    Amount (Double `Drift`) — monotonic, and no quarter of it does nothing 0.000 -> 62.000 (every step >= 2.000)
+      Amount (Blur `Scatter`)  1 - corr (signed)      0.000     0.185     0.613     1.064     1.319  span     1.319
+  ok    Amount (Blur `Scatter`) — monotonic, and no quarter of it does nothing 0.000 -> 1.319 (every step >= 0.040)
+      Amount (Bands `Split`)   1 - |corr|             0.000     0.057     0.189     0.337     0.470  span     0.470
+  ok    Amount (Bands `Split`) — monotonic, and no quarter of it does nothing 0.000 -> 0.470 (every step >= 0.030)
+      Width                    side fraction          0.000     0.086     0.185     0.354     1.000  span     1.000
+  ok    Width — monotonic, and no quarter of it does nothing 0.000 -> 1.000 (every step >= 0.040)
+      Rate                     modulator Hz           0.030     0.139     0.648     3.012    14.000  span    13.970
+  ok    Rate — monotonic, and no quarter of it does nothing 0.030 -> 14.000 (every step >= 0.020)
+      Mix                      dry rejection dB      -0.000     0.688     3.010     8.343   142.416  span   142.416
+  ok    Mix — monotonic, and no quarter of it does nothing -0.000 -> 142.416 (every step >= 0.500)
+      P1 Voices                spec d/step dB         0.000    10.040    14.328    13.513    14.921  span    14.921
+  ok    P1 Voices — monotonic, and no quarter of it does nothing 0.000 -> 14.921 (every step >= 2.000)
+      P2 Spread                1 - |corr|             0.000     0.018     0.046     0.081     0.125  span     0.125
+  ok    P2 Spread — monotonic, and no quarter of it does nothing 0.000 -> 0.125 (every step >= 0.015)
+      P3 Offset                wet centroid ms        2.793     4.261     8.817    16.706    35.092  span    32.299
+  ok    P3 Offset — monotonic, and no quarter of it does nothing 2.793 -> 35.092 (every step >= 0.800)
+      P4 Wander                1 - corr               0.097     0.181     0.271     0.314     0.484  span     0.387
+  ok    P4 Wander — monotonic, and no quarter of it does nothing 0.097 -> 0.484 (every step >= 0.025)
+      P5 Low Keep              LF side energy dB     19.563    18.837    17.504    14.800    10.670  span     8.893
+  ok    P5 Low Keep — monotonic, and no quarter of it does nothing 19.563 -> 10.670 (every step >= 0.500)
+      P6 Tone                  HF-LF tilt dB        -32.968   -37.132   -46.160   -53.101   -55.258  span    22.289
+  ok    P6 Tone — monotonic, and no quarter of it does nothing -32.968 -> -55.258 (every step >= 1.500)
+      P7 Feedback              sustained dB         -26.636   -25.834   -24.604   -17.514   -11.738  span    14.898
+  ok    P7 Feedback — monotonic, and no quarter of it does nothing -26.636 -> -11.738 (every step >= 0.700)
+      P8 Balance               side/mid dB          -37.286   -18.172   -12.880   -10.487    -9.422  span    27.864
+  ok    P8 Balance — monotonic, and no quarter of it does nothing -37.286 -> -9.422 (every step >= 0.700)
+
+[R — THE R11 CEILING GATE  ("if it sounds usable at 100 %, that is not what we want")]
+      METRIC: at Width 100 %, Mix 100 %, Spread 100 %, Amount 100 % the device must
+      (1) drive stereo correlation to <= -0.90,
+      (2) leave <= -25 dB of the stereo output surviving a mono fold-down, and
+      (3) still deliver >= -12 dB of the Width-50 % output level.
+      (3) is what stops SILENCE passing (1) and (2): a knob that just mutes is not
+      a destructive ceiling, it is a broken one. -25 dB = a mono listener keeps 5.6 %
+      of the amplitude, i.e. the record is GONE in mono. That is the point of the top
+      of this knob, and it is why Width sits on the front panel and not the back.
+      Stack    corr -1.000 · mono fold  -130.75 dB · level vs Width 50 %  -7.03 dB
+  ok    Stack — Width 100 % is PAST mono-destruction       corr -1.000 · fold -130.7 dB · level -7.0 dB
+      Twin     corr -1.000 · mono fold  -144.16 dB · level vs Width 50 %  +2.70 dB
+  ok    Twin — Width 100 % is PAST mono-destruction        corr -1.000 · fold -144.2 dB · level +2.7 dB
+      Shift    corr -1.000 · mono fold  -130.68 dB · level vs Width 50 %  -6.70 dB
+  ok    Shift — Width 100 % is PAST mono-destruction       corr -1.000 · fold -130.7 dB · level -6.7 dB
+      Double   corr -1.000 · mono fold  -128.47 dB · level vs Width 50 %  -8.43 dB
+  ok    Double — Width 100 % is PAST mono-destruction      corr -1.000 · fold -128.5 dB · level -8.4 dB
+      Blur     corr -1.000 · mono fold  -141.99 dB · level vs Width 50 %  +1.85 dB
+  ok    Blur — Width 100 % is PAST mono-destruction        corr -1.000 · fold -142.0 dB · level +1.8 dB
+      Bands    corr -1.000 · mono fold  -133.90 dB · level vs Width 50 %  -1.95 dB
+  ok    Bands — Width 100 % is PAST mono-destruction       corr -1.000 · fold -133.9 dB · level -1.9 dB
+
+      Amount 100 % extremity, per Type, on its own mechanism:
+  ok    Stack — Amount 100 % is past musical               peak detune, cents 130.0 (threshold 90)
+  ok    Twin — Amount 100 % is past musical                peak detune, cents 28.0 (threshold 22)
+  ok    Shift — Amount 100 % is past musical               peak static shift, cents 110.0 (threshold 90)
+  ok    Double — Amount 100 % is past musical              peak walk, cents 62.0 (threshold 45)
+  ok    Blur — Amount 100 % decorrelates past 0.25         corr -0.465 (dry control +1.000)
+  ok    Bands — Amount 100 % decorrelates past 0.25        corr -0.300 (dry control +1.000)
+  ok    Feedback 100 % is a WALL (>= 6 dB of sustained density over 0 %) -26.64 -> -11.73 dB (+14.92)
+
+[G — EVERY CHARACTER CHANGES PHYSICS (48 cells, vs its Type's default)]
+      Stack  Even Fan 27.03  Analog Drift 105.87  Tight 74.68  Wide Fan 30.56  Octave Bloom 10.02  Sub Anchor 4.50  Three Phase 673.06  
+      Twin   Quad 1.86  Mode Two 7.05  Mode Three 4.97  No Compander 10.88  Dark BBD 1.37  Wobble 13.20  Hex 4.47  
+      Shift  Punch 2.52  Warble 4.18  Fifth Up 6.26  Down Double 4.03  Wide Slap 2.65  Gritty 2.47  Octave Pair 8.55  
+      Double Wide Room 118.52  Tape ADT 242.28  Tight Inst 0.85  Loose Crowd 179.95  Static Twins 297.42  Slapback 4.51  Seasick 686.95  
+      Blur   Deep Twelve 2.94  Velvet 2.97  Low Anchor 3.08  Air Only 3.30  Seed B 1.16  Seed C 2.12  Counter 4.50  
+      Bands  Fine 1.68  Tilted 1.42  Rotor Slow 1.22  Rotor Fast 0.60  Guard 2.80  Low Split 1.45  Hard Split 1.77  
+  ok    every Character is measurably different from its Type's default 0 weak cells; weakest Bands/Rotor Fast at 0.60
+
+[H — MIX 1.0 = FULLY WET, ZERO DRY (dry residual < -60 dB)]
+      probe: Field `Side Only` forces wetL = +s, wetR = -s, so the WET's mono sum is
+      EXACTLY zero. Whatever survives in (L+R)/2 is dry. Works for every Type,
+      including the zero-delay ones where no pre-wet window exists.
+  ok    Stack — dry residual at Mix 1.0                    Mix 0.5 control -3.01 dB -> Mix 1.0 -142.42 dB
+  ok    Twin — dry residual at Mix 1.0                     Mix 0.5 control -3.01 dB -> Mix 1.0 -142.12 dB
+  ok    Shift — dry residual at Mix 1.0                    Mix 0.5 control -3.01 dB -> Mix 1.0 -142.43 dB
+  ok    Double — dry residual at Mix 1.0                   Mix 0.5 control -3.01 dB -> Mix 1.0 -142.43 dB
+  ok    Blur — dry residual at Mix 1.0                     Mix 0.5 control -3.01 dB -> Mix 1.0 -142.22 dB
+  ok    Bands — dry residual at Mix 1.0                    Mix 0.5 control -3.01 dB -> Mix 1.0 -142.41 dB
+
+[I — NO CLICKS: every param swept under a held tone vs a STATIC control]
+  ok    Amount sweep is click-free                           peak d2 1.46e-04 vs static control 1.44e-04 (x1.01)
+  ok    Width sweep is click-free                            peak d2 1.66e-04 vs static control 1.44e-04 (x1.16)
+  ok    Rate sweep is click-free                             peak d2 1.27e-04 vs static control 1.44e-04 (x0.89)
+  ok    Mix sweep is click-free                              peak d2 1.34e-04 vs static control 1.44e-04 (x0.93)
+  ok    P1 Voices sweep is click-free                        peak d2 1.22e-04 vs static control 1.44e-04 (x0.85)
+  ok    P2 Spread sweep is click-free                        peak d2 1.44e-04 vs static control 1.44e-04 (x1.00)
+  ok    P3 Offset sweep is click-free                        peak d2 1.25e-04 vs static control 1.44e-04 (x0.87)
+  ok    P4 Wander sweep is click-free                        peak d2 3.16e-04 vs static control 1.44e-04 (x2.20)
+  ok    P5 Low Keep sweep is click-free                      peak d2 1.50e-04 vs static control 1.44e-04 (x1.04)
+  ok    P6 Tone sweep is click-free                          peak d2 3.72e-04 vs static control 1.44e-04 (x2.59)
+  ok    P7 Feedback sweep is click-free                      peak d2 1.75e-04 vs static control 1.44e-04 (x1.22)
+  ok    P8 Balance sweep is click-free                       peak d2 1.52e-04 vs static control 1.44e-04 (x1.06)
+  ok    Type swap is click-free (dip -> swap+reset -> recover) peak d2 6.88e-04 = -40.2 dB of programme peak (static floor 1.45e-04)
+  ok    Character swap is click-free                         peak d2 5.81e-04 = -41.7 dB of programme peak (static floor 1.45e-04)
+  ok    Field swap is click-free                             peak d2 6.18e-04 = -41.2 dB of programme peak (static floor 1.45e-04)
+  ok    Retrig pill is click-free (read-position slew cap)   peak d2 6.15e-04 = -41.2 dB of programme peak (static floor 1.45e-04)
+
+[J — MONO FOLD-DOWN, per Type, per Field, and per tagged Character]
+      GATE: at MIX 1.0 (no dry to sum with) the time-AVERAGED mono magnitude
+      spectrum must stay within 4 dB of dry in every log band, and the mono RMS
+      within 3 dB. Mix 0.5 was tried first and measures the wrong thing: an
+      equal-power crossfade of two CORRELATED signals is +3 dB by arithmetic, so
+      `Bands` — whose mono fold is the input BIT FOR BIT — read +3.14 dB and
+      "failed". The averaging matters too: a MOVING comb must average out, which
+      is why magSpec averages 12 hops across the probe.
+  ok    Stack — mono fold survives                         level -0.72 dB · worst notch -2.04 dB · mean dev 0.54 dB
+  ok    Twin — tagged mono-lossy, and it is                level -8.84 dB · worst notch -14.86 dB · mean dev 11.37 dB
+  ok    Shift — mono fold survives                         level -1.07 dB · worst notch -1.17 dB · mean dev 0.59 dB
+  ok    Double — tagged mono-lossy, and it is              level -0.51 dB · worst notch -6.36 dB · mean dev 6.80 dB
+  ok    Blur — tagged mono-lossy, and it is                level -2.92 dB · worst notch -16.60 dB · mean dev 3.20 dB
+  ok    Bands — mono fold survives                         level -2.59 dB · worst notch -0.00 dB · mean dev 0.00 dB
+
+      per FIELD (Stack, Mix 1.0) — the tagged options are EXPECTED to be hostile:
+      Direct      level   -0.72 dB · worst notch   -2.04 dB 
+  ok    Field `Direct` mono behaviour matches its tag        level -0.72 dB · notch -2.04 dB
+      Alternate   level   -0.72 dB · worst notch   -2.04 dB 
+  ok    Field `Alternate` mono behaviour matches its tag     level -0.72 dB · notch -2.04 dB
+      Orbit       level   -5.40 dB · worst notch   -0.92 dB  [TAGGED mono-hostile]
+  ok    Field `Orbit` mono behaviour matches its tag         level -5.40 dB · notch -0.92 dB
+      Swap        level   -0.72 dB · worst notch   -2.04 dB 
+  ok    Field `Swap` mono behaviour matches its tag          level -0.72 dB · notch -2.04 dB
+      Side Only   level -142.42 dB · worst notch -159.52 dB  [TAGGED mono-hostile]
+  ok    Field `Side Only` mono behaviour matches its tag     level -142.42 dB · notch -159.52 dB
+      Collapse    level   -0.72 dB · worst notch   -2.04 dB 
+  ok    Field `Collapse` mono behaviour matches its tag      level -0.72 dB · notch -2.04 dB
+
+      per CHARACTER, the two tagged ones vs their Type's default:
+      Twin   / Duo          level  -10.29 dB · worst notch  -14.25 dB 
+      Twin   / Hex          level  -19.63 dB · worst notch  -14.95 dB  [TAGGED]
+      Blur   / Smooth Six   level   -3.97 dB · worst notch   -9.10 dB 
+      Blur   / Counter      level   +0.11 dB · worst notch   -2.80 dB 
+  ok    Twin/`Hex` really is worse in mono than Twin/`Duo` (the tag is honest) Duo mono dev 11.39 dB -> Hex 11.86 dB
+  ok    Blur/`Counter` is a different room, NOT a more hostile one (tag removed) Smooth Six mono dev 2.56 dB · Counter 2.81 dB
+  ok    Bands mono fold is spectrally EXACT at every Amount (one-pole tree reconstructs) worst mean spectral deviation 0.000 dB
+
+[K — STABILITY: 60 s of full-drive white noise, every Type]
+  ok    Stack — 60 s full drive, no NaN, bounded           peak 1.629
+  ok    Twin — 60 s full drive, no NaN, bounded            peak 0.453
+  ok    Shift — 60 s full drive, no NaN, bounded           peak 1.089
+  ok    Double — 60 s full drive, no NaN, bounded          peak 0.622
+  ok    Blur — 60 s full drive, no NaN, bounded            peak 1.195
+  ok    Bands — 60 s full drive, no NaN, bounded           peak 0.670
+  ok    Stack — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Twin — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Shift — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Double — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Blur — silence in, silence out (nothing free-runs) 0.00e+00
+  ok    Bands — silence in, silence out (nothing free-runs) 0.00e+00
+
+[L — UNITY THROUGH: defaults must not be a volume knob]
+  ok    Stack — Mix 100 % at defaults within +-1.5 dB      -0.76 dB
+  ok    Twin — Mix 100 % at defaults within +-1.5 dB       +0.08 dB
+  ok    Shift — Mix 100 % at defaults within +-1.5 dB      -0.47 dB
+  ok    Double — Mix 100 % at defaults within +-1.5 dB     -0.73 dB
+  ok    Blur — Mix 100 % at defaults within +-1.5 dB       +0.96 dB
+  ok    Bands — Mix 100 % at defaults within +-1.5 dB      +0.31 dB
+  ok    Stack — Character level spread <= 4 dB             0.98 dB spread (-1.13 .. -0.15)  Wide Fan .. Even Fan
+  ok    Twin — Character level spread <= 4 dB              3.68 dB spread (-1.33 .. +2.35)  Quad .. Hex
+  ok    Shift — Character level spread <= 4 dB             0.80 dB spread (-1.62 .. -0.82)  Wide Slap .. Warble
+  ok    Double — Character level spread <= 4 dB            1.46 dB spread (-1.01 .. +0.45)  Seasick .. Static Twins
+  ok    Blur — Character level spread <= 4 dB              2.02 dB spread (-1.07 .. +0.94)  Air Only .. Smooth Six
+  ok    Bands — Character level spread <= 4 dB             1.73 dB spread (-0.94 .. +0.79)  Fine .. Guard
+
+[M — CPU: us/block at 48 kHz / 128, worst Type named]
+      Stack      21.34 us/block    0.80 % of one core   x6 instances =  4.80 %
+      Twin       14.60 us/block    0.55 % of one core   x6 instances =  3.28 %
+      Shift      23.12 us/block    0.87 % of one core   x6 instances =  5.20 %
+      Double     14.58 us/block    0.55 % of one core   x6 instances =  3.28 %
+      Blur       13.84 us/block    0.52 % of one core   x6 instances =  3.11 %
+      Bands       8.67 us/block    0.32 % of one core   x6 instances =  1.95 %
+  ok    worst Type under 1.0 % of one core (6 instances < 6 %; fx3 ships at 0.78 %) Shift at 23.12 us/block = 0.867 % of one core
+
+[N — 44.1 kHz and 96 kHz: the same device, measured again]
+       48000 Hz   Stack peak cents  130.0 · Blur corr -0.461 · Bands chan ripple   9.9 dB
+       44100 Hz   Stack peak cents  130.0 · Blur corr -0.537 · Bands chan ripple   9.8 dB
+       96000 Hz   Stack peak cents  130.0 · Blur corr +0.018 · Bands chan ripple  10.3 dB
+  ok    peak cents identical at 44.1 / 48 / 96 kHz (<= 2 % spread) 130.0 / 130.0 / 130.0 cents
+  ok    Blur decorrelation holds at 44.1 / 96 kHz            corr -0.537 / -0.461 / +0.018
+  ok    Bands per-channel tear holds at 44.1 / 96 kHz        9.8 / 9.9 / 10.3 dB
+
+[O — THE CHORUS BOUNDARY (CONTRACT §4: Widen is a CROWD, not a voice pair)]
+      the Voices knob FLOOR is 3 copies (centre + 2 movers). Two copies is a
+      chorus, and the Chorus shipped as chain kind 6.
+  ok    Voices at knob 0 is 3 copies, never 1                3
+  ok    Voices at knob 100 is 8 copies                       8
+  ok    Stack — motion is NOT one clean line (a chorus is) strongest-line share 0.290 of the modulation energy
+  ok    Double — motion is NOT one clean line (a chorus is) strongest-line share 0.082 of the modulation energy
+
+═══════════════════════════════════════════════════════════════════
+  PASS 127   FAIL 0
+═══════════════════════════════════════════════════════════════════
