@@ -61,19 +61,66 @@
 
 namespace tw {
 
+// ─────────────────────────────────────────────────────────────────────────────
+// fb420 — THE MASK OUTGREW 64 BITS, and this is the THIRD size of the same bug.
+//   fb377: `feed` was a uint32_t over kMaxSlots 44. Slot 33 eating slot 32 shifts
+//          1u by 32 — UNDEFINED BEHAVIOUR, not a wrong answer. Reachable since
+//          6 kinds x 6 instances = 36, and nobody had built a chain that long.
+//   fb413: widened to uint64_t for 9 kinds x 6 = 54.
+//   fb420: 13 kinds x 6 = 78 addressable slots (EQ 9 / Widen 10 / Compress 11 /
+//          OTT 12 join). `1ull << 77` is UB again. Raising kMaxSlots ALONE does
+//          not fix it — the mask width IS the slot ceiling, so the type had to go.
+// Two words, POD, trivially copyable, no allocation: audio-thread safe by
+// construction. 128 bits holds 16 kinds x 6 = 96, which is the next ceiling and
+// is asserted below so the FOURTH occurrence fails the build instead of shipping.
+// ─────────────────────────────────────────────────────────────────────────────
+struct SlotMask
+{
+    uint64_t w[2] {};
+
+    constexpr SlotMask() noexcept = default;
+    constexpr SlotMask (uint64_t lo, uint64_t hi = 0) noexcept : w { lo, hi } {}
+
+    // `bit(j)` is the ONLY way to name a slot — never open-code a shift, that is
+    // precisely how this defect recurred twice.
+    static constexpr SlotMask bit (int j) noexcept
+    {
+        return (j < 0 || j >= 128) ? SlotMask {}
+             : (j < 64)            ? SlotMask { 1ull << (unsigned) j, 0ull }
+                                   : SlotMask { 0ull, 1ull << (unsigned) (j - 64) };
+    }
+
+    constexpr bool test (int j) const noexcept
+    {
+        return (j < 0 || j >= 128) ? false
+             : (j < 64)            ? ((w[0] >> (unsigned) j)        & 1ull) != 0
+                                   : ((w[1] >> (unsigned) (j - 64)) & 1ull) != 0;
+    }
+
+    constexpr bool any() const noexcept { return (w[0] | w[1]) != 0ull; }
+
+    constexpr SlotMask operator&  (const SlotMask& o) const noexcept { return { w[0] & o.w[0], w[1] & o.w[1] }; }
+    constexpr SlotMask operator|  (const SlotMask& o) const noexcept { return { w[0] | o.w[0], w[1] | o.w[1] }; }
+    SlotMask&          operator|= (const SlotMask& o)       noexcept { w[0] |= o.w[0]; w[1] |= o.w[1]; return *this; }
+    constexpr bool     operator== (const SlotMask& o) const noexcept { return w[0] == o.w[0] && w[1] == o.w[1]; }
+    constexpr bool     operator!= (const SlotMask& o) const noexcept { return ! (*this == o); }
+    constexpr explicit operator bool()               const noexcept { return any(); }
+};
+
 struct FxChainTopology
 {
-    // fb413 — 9 kinds x 6 instances = 54 (chorus/flanger/phaser joined at kinds 6/7/8), + headroom.
-    // ⚠️ kMaxSlots MUST stay <= 64: `feed` is a per-slot bitmask over upstream SLOTS, so the mask
-    // width is the slot ceiling. It was a uint32_t against kMaxSlots 44 — already, today, a chain
-    // of 33+ devices would have shifted past bit 31, which is undefined behaviour, not a wrong
-    // answer. 36 slots were reachable at fb377 and nobody had built a 33-device chain yet.
-    static constexpr int kMaxSlots    = 56;
+    // fb420 — 13 kinds x 6 instances = 78 (Equalizer 9 / Widen 10 / Compress 11 / OTT 12 joined),
+    // + headroom to 16 kinds. ⚠️ kMaxSlots MUST stay <= 128: `feed` is a per-slot bitmask over
+    // upstream SLOTS, so THE MASK WIDTH IS THE SLOT CEILING. See the SlotMask comment above for
+    // why this is the third size of one bug — and note that raising this number without widening
+    // SlotMask is exactly the mistake, because the build stays green and the UB is silent.
+    static constexpr int kMaxSlots    = 96;
+    static_assert (kMaxSlots <= 128, "kMaxSlots cannot exceed the SlotMask bit width");
     static constexpr uint8_t kAllSrc  = 0x3F; // all six sources: A B C D Sub Noise
 
     int      count = 0;
     uint8_t  entry    [kMaxSlots] = {};       // sources that TAP the oscillators at this slot
-    uint64_t feed     [kMaxSlots] = {};       // bitmask of upstream slots whose output this slot eats
+    SlotMask feed     [kMaxSlots] = {};       // bitmask of upstream slots whose output this slot eats
     bool     consumed [kMaxSlots] = {};       // this slot's output is eaten downstream ⇒ NOT summed to the main mix
     uint8_t  eff      [kMaxSlots] = {};       // sources this slot's output actually carries (its own + everything it ate)
 
@@ -82,7 +129,7 @@ struct FxChainTopology
     void build (const uint8_t* masks, int n) noexcept
     {
         count = n < kMaxSlots ? (n < 0 ? 0 : n) : kMaxSlots;
-        for (int c = 0; c < count; ++c) { entry[c] = 0; feed[c] = 0; consumed[c] = false; eff[c] = 0; }
+        for (int c = 0; c < count; ++c) { entry[c] = 0; feed[c] = {}; consumed[c] = false; eff[c] = 0; }
 
         uint8_t claimed = 0;                  // sources that have already entered the rack
         for (int c = 0; c < count; ++c)
@@ -97,7 +144,7 @@ struct FxChainTopology
             for (int j = 0; j < c; ++j)
                 if (! consumed[j] && (uint8_t) (eff[j] & masks[c]) != 0)
                 {
-                    feed[c] |= (1ull << (unsigned) j);   // fb413 — 64-bit: j can now reach 53
+                    feed[c] |= SlotMask::bit (j);        // fb420 — 128-bit: j can now reach 95
                     consumed[j] = true;
                     eff[c] = (uint8_t) (eff[c] | eff[j]);
                 }
@@ -106,7 +153,7 @@ struct FxChainTopology
 
     // A slot is live if it taps oscillators or is fed by something upstream.
     bool hasInput (int c) const noexcept
-    { return c >= 0 && c < count && (entry[c] != 0 || feed[c] != 0); }
+    { return c >= 0 && c < count && (entry[c] != 0 || feed[c].any()); }
 };
 
 } // namespace tw

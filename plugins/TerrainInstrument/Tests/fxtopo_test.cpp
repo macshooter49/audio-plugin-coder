@@ -45,7 +45,7 @@ std::string srcStr (uint8_t m)
 }
 
 // One slot's expected outcome.
-struct Want { uint8_t entry; uint64_t feed; bool consumed; uint8_t eff; };   // fb413 — 64-bit, 54 slots
+struct Want { uint8_t entry; tw::SlotMask feed; bool consumed; uint8_t eff; };   // fb420 — 128-bit, 78 slots
 
 void expect (tw::FxChainTopology& t, int slot, Want w)
 {
@@ -59,8 +59,9 @@ void expect (tw::FxChainTopology& t, int slot, Want w)
 
     if (t.feed[slot] != w.feed)
     {
-        std::snprintf (buf, sizeof buf, "slot %d feed = 0x%llx, wanted 0x%llx",
-                       slot, (unsigned long long) t.feed[slot], (unsigned long long) w.feed);
+        std::snprintf (buf, sizeof buf, "slot %d feed = 0x%llx:%llx, wanted 0x%llx:%llx",
+                       slot, (unsigned long long) t.feed[slot].w[1], (unsigned long long) t.feed[slot].w[0],
+                             (unsigned long long) w.feed.w[1],       (unsigned long long) w.feed.w[0]);
         check (false, buf);
     } else ++gPass;
 
@@ -79,7 +80,7 @@ void expect (tw::FxChainTopology& t, int slot, Want w)
     } else ++gPass;
 }
 
-constexpr uint32_t FROM (int slot) { return 1u << (unsigned) slot; }
+constexpr tw::SlotMask FROM (int slot) { return tw::SlotMask::bit (slot); }   // fb420 — never open-code a shift
 
 } // namespace
 
@@ -263,7 +264,7 @@ int main()
                 if ((uint8_t) (t.eff[c] & t.entry[c]) != t.entry[c]) ++effBad;
 
                 // (f) hasInput agrees with the fields it is derived from.
-                if (t.hasInput (c) != (t.entry[c] != 0 || t.feed[c] != 0)) ++liveBad;
+                if (t.hasInput (c) != (t.entry[c] != 0 || t.feed[c].any())) ++liveBad;
             }
             ++swept;
         }
@@ -278,9 +279,9 @@ int main()
     }
 
     // ── 18. capacity: every kind's full pool has to fit, and the FEED MASK has to reach it.
-    head ("18. kMaxSlots holds 6 instances of all 9 device kinds");
-    check (tw::FxChainTopology::kMaxSlots >= 54, "kMaxSlots must hold 9 kinds x 6 instances");
-    check (tw::FxChainTopology::kMaxSlots <= 64, "kMaxSlots must fit inside the 64-bit feed mask");
+    head ("18. kMaxSlots holds 6 instances of all 13 device kinds");
+    check (tw::FxChainTopology::kMaxSlots >= 78, "kMaxSlots must hold 13 kinds x 6 instances");
+    check (tw::FxChainTopology::kMaxSlots <= 128, "kMaxSlots must fit inside the 128-bit feed mask");
 
     // ── 19. 🚨 THE DEEP CHAIN. `feed` is a bitmask over upstream SLOT INDICES, so its width is
     //    the real slot ceiling. It was a uint32_t against kMaxSlots 44: slot 33 eating slot 32
@@ -298,12 +299,59 @@ int main()
         int tapped = 0; for (int i = 1; i < 50; ++i) if (t.entry[i] != 0) ++tapped;
         check (tapped == 0, "and no later device taps it a second time");
         int chained = 0;
-        for (int i = 1; i < 50; ++i) if (t.feed[i] == (1ull << (unsigned) (i - 1))) ++chained;
+        for (int i = 1; i < 50; ++i) if (t.feed[i] == tw::SlotMask::bit (i - 1)) ++chained;
         check (chained == 49, "every slot eats exactly its predecessor, all the way to bit 48");
-        check (t.feed[49] == (1ull << 48), "slot 49's feed mask IS bit 48");
+        check (t.feed[49] == tw::SlotMask::bit (48), "slot 49's feed mask IS bit 48");
         int eaten = 0; for (int i = 0; i < 49; ++i) if (t.consumed[i]) ++eaten;
         check (eaten == 49, "every slot but the last is consumed downstream");
         check (! t.consumed[49], "and the last one reaches the mix");
+    }
+
+
+    // ── 20. 🚨 fb420 — THE CHAIN THAT REACHES PAST BIT 63.
+    //    This gate exists because the SAME defect has now shipped twice: a uint32 mask over 44
+    //    slots (fb377) and a uint64 mask over 54 (fb413, fixed only as far as 64). Adding the
+    //    Equalizer/Widen/Compress/OTT kinds makes 13 x 6 = 78 addressable slots, so slot 77
+    //    naming slot 76 needs BIT 76 — seventeen bits past where a uint64 ends.
+    //    ⚠️ VERIFIED TO FAIL ON THE OLD CODE: against uint64 `feed` + kMaxSlots 56 this test
+    //    reports `count == 56` (the build clamps) and the chained count collapses, so the gate
+    //    goes red rather than passing vacuously. A gate that has never failed has never been
+    //    tested (fb393).
+    head ("20. a 78-device chain: the feed mask reaches past bit 63");
+    {
+        constexpr int N = 78;
+        uint8_t masks[N]; for (int i = 0; i < N; ++i) masks[i] = A;
+        tw::FxChainTopology t; t.build (masks, N);
+        check (t.count == N, "all 78 slots survive the build (13 kinds x 6 instances)");
+
+        int chained = 0;
+        for (int i = 1; i < N; ++i) if (t.feed[i] == tw::SlotMask::bit (i - 1)) ++chained;
+        check (chained == N - 1, "every slot eats exactly its predecessor, all the way to bit 76");
+
+        // the specific bits a uint64 could not name
+        check (t.feed[64].test (63), "slot 64 names bit 63 — the last bit the old mask had");
+        check (t.feed[65].test (64), "slot 65 names bit 64 — the FIRST bit the old mask could not");
+        check (t.feed[77].test (76), "slot 77 names bit 76 — the deepest reachable chain today");
+        check (! t.feed[77].test (75), "and it names ONLY its predecessor");
+
+        int eaten = 0; for (int i = 0; i < N - 1; ++i) if (t.consumed[i]) ++eaten;
+        check (eaten == N - 1, "every slot but the last is consumed downstream");
+        check (! t.consumed[N - 1], "and the last one reaches the mix");
+        check (t.hasInput (77), "the deepest slot is live");
+    }
+
+    // ── 21. the two words are independent — a mask spanning the 64-bit seam.
+    head ("21. SlotMask spans the word seam correctly");
+    {
+        auto lo = tw::SlotMask::bit (5), hi = tw::SlotMask::bit (70);
+        auto both = lo | hi;
+        check (both.test (5) && both.test (70), "a mask can hold bits in BOTH words");
+        check (! both.test (69) && ! both.test (6), "and nothing either side of them");
+        check ((both & lo) == lo, "AND isolates the low word");
+        check ((both & hi) == hi, "AND isolates the high word");
+        check (tw::SlotMask::bit (-1) == tw::SlotMask{}, "an out-of-range bit is empty, not UB");
+        check (tw::SlotMask::bit (128) == tw::SlotMask{}, "and so is one past the top");
+        check (! tw::SlotMask{}.any(), "a default mask is empty");
     }
 
     std::printf ("\n  %d passed, %d FAILED\n\n", gPass, gFail);

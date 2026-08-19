@@ -9396,10 +9396,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // input = this slot's oscillator tap (ENTRY sources only) + every upstream output it eats
                 float inL = (chSendL[c] != nullptr) ? chSendL[c][i] * sc : 0.0f;
                 float inR = (chSendR[c] != nullptr) ? chSendR[c][i] * sc : inL;
-                const uint64_t fm = fxTopo_.feed[c];       // fb413 — 64-bit, see FxChainTopology.h
-                if (fm != 0)
+                const auto& fm = fxTopo_.feed[c];          // fb420 — 128-bit, see FxChainTopology.h
+                if (fm.any())
                     for (int j = 0; j < c; ++j)
-                        if (fm & (1ull << (unsigned) j)) { inL += pendL[j]; inR += pendR[j]; }
+                        if (fm.test (j)) { inL += pendL[j]; inR += pendR[j]; }
 
                 float oL = inL, oR = inR;
                 if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
