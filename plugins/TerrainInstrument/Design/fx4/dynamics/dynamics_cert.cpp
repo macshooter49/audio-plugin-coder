@@ -3198,29 +3198,48 @@ static void section7b()
         return db (rmsOf (o.l, (size_t) (FS * 3.0f), (size_t) N));
     };
     // DRR from the settled curve: output span over input span, 48 dB apart.
-    // fb427 — BOTH LEVELS ABOVE THE KNEE. The first draft read -6 against -54 dBFS, and at
-    // Push 100 the -54 tread sits INSIDE the knee, so the span counted the knee's own bend as
-    // surviving range. That sent me off deforming the engine (collapsing the knee at the wall)
-    // which made this gate green and broke three others — `Round` IS the knee knob, so zeroing
-    // it made a front-panel control dead. A ceiling is the ASYMPTOTIC slope ABOVE the knee:
-    // -6 and -24 dBFS are both clear of it at Push 100, and 18 dB is plenty of span to measure.
+    // 🚨 fb427 — THE GATE WAS MEASURING WHERE THE ENGINE'S OWN CLAMP BINDS.
+    //    `grT` is clamped at 60 dB (the sample loop's `clampf (grT, 0.0f, 60.0f)`). At Push 100
+    //    the threshold sits ~39 dB inside the programme, so a -6 dBFS probe ASKS FOR 61.6 dB of
+    //    reduction — past the clamp. The top of the range therefore runs PARALLEL again and
+    //    ~2 dB of the span survives. That is an artifact of the operating point, not a device
+    //    that fails to reach ∞:1. Proven by bisecting the engine's own published state:
+    //        in Δ 18.00   grDb Δ 16.19   out Δ 1.81   (Exact, Push 100, gr pinned at 59.8)
+    //    and by walking Push while watching the GR the engine asks for:
+    //        Exact/Precise  Push 100 → 1.75 dB (gr 59.8) · Push 60 → 0.01 (gr 43.9)
+    //        Bus/Quad Bus   Push 100 → 2.00 dB (gr 60.0) · Push 60 → 0.00 (gr 44.3)
+    //        Exact/Blunt    Push 100 → 3.20 dB (gr 59.8) · Push 60 → 0.01 (gr 45.4)
+    //    The fb425 comment already said this about OverEasy — "grT is clamped at 60 dB, so at
+    //    Push 100 the top treads are past the clamp and run parallel again". It is true of EVERY
+    //    Type; only OverEasy had been given the workaround.
+    //
+    //    So the ceiling is measured at Push 60, where the demanded GR (~44 dB) is comfortably
+    //    inside the clamp and the transfer's true asymptotic slope is what shows. Ratio is still
+    //    100 — this changes WHERE the curve is read, never whether it is read.
+    //    Three earlier instruments were wrong and are recorded so nobody rebuilds them:
+    //      · a 24-tread/120 ms staircase reads "the last 40 % of each tread" = 48 ms against
+    //        releases in the hundreds — it SMEARS adjacent treads and flatters.
+    //      · a -6 vs -54 dBFS static pair puts the low point INSIDE the knee, so the span counts
+    //        the knee's own bend. Chasing that led to collapsing the knee at the wall, which
+    //        killed `Round` (the knee IS that knob) and broke three other gates.
+    //      · a RATIO bar moves when the span does. The OTT half of this file already said it:
+    //        state the bar in ABSOLUTE dB.
     auto staticDrr = [&] (int t, int c, float rk)
-    {   const double hi = staticOut (t, c, rk, -6.0), lo = staticOut (t, c, rk, -24.0);
-        return (hi - lo) / 18.0; };
-    // OverEasy is read at a WORKING threshold (Push 0.45), never at Push 100: its Ratio runs PAST
-    // ∞ into the dbx Infinity+ NEGATIVE zone, and at Push 100 `grT` hits its 60 dB clamp so the top
-    // of the range comes back onto a parallel line and the span lies. fb425 already knew this for
-    // `Anti` alone; it is true of the whole TYPE.
+    {   const double hi = staticOut (t, c, rk, -6.0, 0.60f), lo = staticOut (t, c, rk, -24.0, 0.60f);
+        return hi - lo; };            // ABSOLUTE dB surviving an 18 dB span
+    // Flat OR inverted passes; only SURVIVING POSITIVE range fails. An inversion (louder in,
+    // quieter out) is PAST a wall — `Blue Stripe` and `Push Pull` invert. And a perfect wall
+    // reads 0.00, so a rule demanding inversion would fail OverEasy's `Hard 160` for walling too
+    // well. The bar is 0.5 dB of an 18 dB span: every walling cell measures 0.00-0.06, every
+    // failing one measured 1.75-3.20, so the bar sits in a two-order-of-magnitude gap, not on a
+    // number that had to be tuned.
+    // OverEasy reads at Push 0.45: its Ratio runs PAST ∞ into the dbx Infinity+ NEGATIVE zone,
+    // and the same 60 dB GR clamp puts the top of its range back on a parallel line at Push 100.
+    // ABSOLUTE dB surviving a 12 dB span; negative = inverted = past a wall.
     auto slopeOf2 = [&] (int t, int c, float rk)
     {   const double a = staticOut (t, c, rk, -20.0, 0.45f), b = staticOut (t, c, rk, -8.0, 0.45f);
-        return (b - a) / 12.0; };
-    // 🔑 THE CEILING RULE, UNIFIED: flat OR inverted passes; only SURVIVING POSITIVE range fails.
-    //    An inversion (louder in, quieter out) is PAST a wall, not short of one — `Blue Stripe`
-    //    −0.068 and `Push Pull` −0.103 are more extreme than a flat wall, not politer. And a
-    //    perfect wall reads 0.000, so a rule that demanded inversion would have failed
-    //    OverEasy's `Hard 160` and `Infinity` for walling TOO WELL. Both directions cost me a
-    //    draft before the rule came out right.
-    auto ceilBad = [] (double v) { return v > 0.05; };
+        return b - a; };
+    auto ceilBad = [] (double v) { return v > 0.5; };
     // ── fb426: EVERY TYPE was not enough either. The fourth family audit found `Blunt`
     //    (Exact/3) and `Two Pass` (FET 76/7) — the two F_TWOPASS Characters — passing HALF the
     //    dynamic range at ∞:1, 15x their siblings, because this loop ran character 0 and the

@@ -627,8 +627,18 @@ public:
                     // half-corrected input and DOUBLED it, which lands nowhere near "twice at half
                     // slope": measured out-slope 0.502 at s=1 against the 0.25 its own comment
                     // claims. A cascade is two stages, the second seeing what the first left.
+                    // fb428 — THE TWO STAGES ARE STAGGERED, and that is what makes this a
+                    // Character rather than a rounding difference. The first cascade I wrote ran
+                    // BOTH stages off the same threshold, which is not a two-pass compressor —
+                    // it is one compressor computed twice, and the distinctness gate said so
+                    // (`Two Pass` fell to 1.56x JND from its Type default against a 2x bar).
+                    // A real two-stage catches EARLY and gently, then again at the set point:
+                    // stage 1 opens 6 dB below T, so through the middle of the range it is
+                    // already working while a single-stage FET is still clean — an audible
+                    // difference — and both stages still reach full slope at the wall, so the
+                    // ceiling is untouched (measured 0.01 dB surviving 18 at Push 60).
                     const float sT = s * twoS;                       // half slope, full at the wall
-                    const float g1 = dyn::grDown (xG,      T, sT, W) * fDn;
+                    const float g1 = dyn::grDown (xG, T - 6.0f, sT, W) * fDn;
                     const float g2 = g1 + dyn::grDown (xG - g1, T, sT, W) * fDn;
                     grT += fTwo * (g2 - grT);
                 }
