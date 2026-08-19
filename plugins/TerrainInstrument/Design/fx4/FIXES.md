@@ -153,3 +153,112 @@ roster and the worklet. Fix any drift you find (EQ's `Fixed Top` vs `Iron Top` i
 - **Do not touch anything outside your directory.** `Source/`, `Tests/`, `index.html`, git, builds
   are still forbidden — integration is serial and it is mine.
 - **Do not report done without pasted output** from both the cert and the mutation run.
+
+---
+
+# fb425 — ROUND 4: THE FULL-MATRIX LAW
+
+## 🔴 THE LAW
+
+**Every law-1, law-3 and R11 gate runs the FULL Type × Character matrix. Not a sample. Not the
+default. Every cell.** Every front pill and every dropdown option gets its own audibility gate on
+every Type.
+
+**Why this is the last level.** Three rounds, and the blindness moved down one notch each time:
+
+| round | the gates… | found by |
+|---|---|---|
+| fb421 | could not fail **at all** | delete the mechanism, cert stays green |
+| fb423 | ran on **one Type** | sweep the other five |
+| fb424 | run on **one Type × Character cell** | sweep the other 63 |
+
+Each fix genuinely closed the level above it and exposed the next. There is no deeper level than
+this one, because **the matrix is finite**: 8 Types × 8 Characters = 64 cells, × 12 knobs = 768
+sweeps. A machine can do all of them in seconds. Sampling it was always a choice, not a constraint.
+
+## What "full matrix" means concretely
+
+1. **LAW 1 — every knob × every Type × every Character.** Bit-identical output at knob 0 vs knob 100
+   is a FAILURE, reported with the cell. Compress currently has **34 of 704 cells dead**, including
+   the front hero `Ratio` on three of them and `Release` on the Bus Type's DEFAULT Character,
+   because `sweep()` takes a Type and never a Character and every call passes type 0.
+2. **R11 — the ceiling on EVERY Type.** Compress proves its ceiling on Type 0 only; replayed on the
+   other seven with the cert's own probe and bar, **4 of 8 are red**.
+3. **LAW 3 — the Mix gate must EXIST and must fail when Mix is forced fully wet.** OTT has no
+   law-3 gate at all; `mixTgt_ = 1.0f` leaves all 53 gates green. CONTRACT §5 requires it.
+4. **Every front pill is a control and needs an audibility gate on every Type.** OTT's `Crest` can
+   be made a no-op with zero gates firing. Widen's `Retrig` is bit-identically dead on 3 of 6 Types
+   (`fireRetrig()` only resets the per-voice LFO phase, which `Twofold`/`Blur`/`Bands` do not use).
+5. **Every dropdown option must be measurably different from the others.** R6 requires BOTH
+   dropdowns change physics. Widen's `Field` has no physics gate — two of its six options can be
+   deleted without moving a line. `Character` gets 48 measured cells; `Field` gets none.
+
+## The concrete defects to fix
+
+### OTT — `Amount` RUNS BACKWARDS (verified independently by the integration owner)
+The per-band clip ceiling is `db2lin(Tdn + clipHd_ + mkDb_[b])`, and the makeup is
+`mk = ts.mk[b] * lo01` with `lo01 = pow(amt*2, 1.2)` → **0 at Amount 0**. `Heavy`'s makeups are
+{21,24,20} dB, so the clipper's ceiling collapses ~21 dB onto a band that has had **no gain
+reduction applied** (`sdn = ts.sdn[b] * … * lo01` is also 0). Measured, 220 Hz at −10.5 dBFS:
+
+```
+Type Heavy   Amount:    0%      25%      50%      75%     100%
+                THD: 35.75%   28.46%    2.52%    2.52%    2.51%
+               peak: 0.0263   0.0829   0.2751   0.2316   0.1949
+```
+
+The knob's **zero is 14× more distorted than its middle and 21 dB quieter**. `Over Top` and `Surge`
+measure flat (~0.5–0.8 %) across the whole sweep — which is exactly why a Type-0 gate cannot see it.
+**The clip ceiling must not track a makeup that Amount drives to zero.** Amount 0 must be neutral,
+or as close to neutral as the Type's identity allows, on **every** Type. Gate it on every Type.
+
+### OTT — the sample-rate gate compares a constant to itself
+`§6f` gates `fabs(attackMs(1) − e48.attackMs(1))`, and `attackMs_[b] = nA*1000/fs_` with
+`nA = max(5, aMs*0.001*fs_)` — whenever the 5-sample floor is inactive `fs_` cancels algebraically
+and it returns the knob value. This is FIXES.md §1 COMPRESS-3 unfixed on the sibling; Compress got a
+realised-t63 gate, OTT did not. Copy it. **The DSP underneath measures correct** (192 cells, worst
+|Δ out RMS| 0.129 dB at 96 kHz) — this is a gate hole over working code, so fix the gate, not the
+engine, and add the `ott-sample-rate` mutant.
+
+### COMPRESS — ∞:1 must WALL. Max's ruling this round: break authenticity.
+With a feedback detector `y_db = (x_db + s·T)/(1+s)`, so at s = 1 the closed-loop slope is exactly
+**0.5** — half the dynamic range survives at any Ratio. That is what a real 1176/LA-2A does, and it
+is authentic. It is also **polite at 100 %**, which is the one thing Max has told us repeatedly not
+to ship. **His decision: at the top of Ratio, cross the feedback Types over toward feedforward (or
+add an in-loop clipper) so ∞:1 actually walls.** Costs the last ~10 % of Ratio's authenticity on
+3 of 8 Types; he has accepted that trade explicitly. Keep the authentic curve over the rest of the
+travel — this is a ceiling change, not a topology change.
+
+### WIDEN — `Retrig` and `Field`
+`fireRetrig()` resets only `ph_[]`/`res_[]`/`q_[]`, the per-voice LFO phase read by `procVoices`
+and `procTwin`. `Twofold` (random walk `wk_`), `Blur` (`wkb_` + allpass) and `Bands`
+(`gridRot_`/`wkg_`) are untouched, so the pill does nothing on half the device. Either give those
+families a retrigger that means something, or gate the pill as unavailable on them — but a pill that
+silently does nothing on 3 of 6 Types is the dead-knob law.
+`Field` needs a physics gate: the six options measurably different from each other, on every Type.
+
+### EQ — small, and it is the only device with real headroom left
+Add `dropdownNames()` (`Character`, `Focus`) and take `kNumLabels` 87 → 89; all three siblings
+publish these and EQ is the only one whose captions sit outside every gate. Add `eq_cert.cpp` to
+the retired-string scan — it prints `Chisel/Metal`, `Inverted` and `Width` in its own gate labels
+while the engine says `Tin`, `Upward`, `Pinch`.
+
+### EXEMPTION LISTS — the one that can still grow
+`kShared` (dynamics, 12 entries) is the **only** exemption list with no size assertion, and it is
+the list that historically self-granted `Auto`. Assert its size, and cite a ruling per entry.
+Compress's retired-label blacklist omits two of its own RENAMES rows (`Long`, `Glass`) and `Long`
+still survives in `dynamics/ROSTER.md:125` while the gate reports "0 hits" — a green kinder than
+reality. Derive the retired list from RENAMES.md the way Widen does (`extract_labels.py` parses both
+tables into `retired_labels.inc`); a hand-kept list of retired names is the second table that drifts.
+
+### DRIFT GATES — the ROSTER half is a substring search, not an equality check
+Widen's is correct. Dynamics' and EQ's ROSTER halves do `roster.find(s) != npos` — no word
+boundary, no ordering, no cardinality, no reverse direction. A skeptic moved two Characters under
+the **wrong Types** in ROSTER.md and the gate stayed green. Make the ROSTER check ordered and
+positional, like the worklet half already is.
+
+## Still accepted, do not touch
+
+Widen's five reds (`Rate`/`Roam` on Blur against a self-imposed anchor; `Steady` +2.89 /
+`Twofold` +2.03 against a +3.0 bloom bar, physical and diagnosed) stay red with the reasoning at the
+line. Compress's `compress-transition-slew` survivor stays labelled as redundant, not claimed.

@@ -196,3 +196,32 @@ different corpus. **Every device must gate ALL of its published labels — not t
   arrays.** 22 stale strings currently survive downstream — `eq-worklet.js` still carries 12 old
   Character names as a second `CSPEC[].nm` table, which is *literally the two-table geometry the EQ
   engine deleted*. The card is built from those files. This is fb373's geometry, still standing.
+
+---
+
+# fb425 — THE THIRD RULING (Widen's five self-granted claims)
+
+Widen's names gate exempted five labels **itself** — `Detune` · `Depth` · `Voices` · `Spread` ·
+`Feedback` — and, to its credit, **printed them by name on every run and asked for a ruling**
+instead of burying them. A gate that can exempt itself is not a gate; the exemption has to be a
+ruling. Here it is.
+
+**All five: SANCTIONED. No renames.** Verified by reading each shipped use, not by pattern-matching
+the word:
+
+| name | shipped as | verdict |
+|---|---|---|
+| `Detune` | Granular + Chorus knob `Detune` (`PluginProcessor.cpp:3738, :3931`) | **same law** — a pitch offset amount. Sanction. |
+| `Depth` | modulation-depth knob (`:3093, :3928`) | **same law** — how far a modulator travels. Sanction. |
+| `Voices` | the unison **count** label (`index.html:27315` `UNISON:'Voices'`, `:16181`) | **same law** — how many copies exist. Sanction, and it would be perverse to invent a synonym for a count. |
+| `Spread` | the LFO phase-mode option `Retrig/Free/Random/Spread` (`:2116, :2288`) | **same law** — fan things apart. Different control class (option vs knob) in a different device family, same concept. Sanction. |
+| `Feedback` | Delay + Distortion knob `Feedback` (`:3642, :3691`) | **same law** — regeneration amount. Sanction. |
+
+This also ratifies the first family audit's §1D list, which already named `Detune`, `Depth`,
+`Spread` and `Feedback` as accepted shared vocabulary. `Voices` joins them.
+
+**Consequence for the gates:** these five move out of every `kUnruledClaims` / self-granted list and
+into the ruled-exemption list, cited to this block — and that list must be **asserted to a fixed
+size** so it cannot grow again. `kShared` in `dynamics_cert.cpp` is currently the only exemption
+list in the family with no size assertion, and it is the one that historically self-granted `Auto`.
+Fix that in the same pass.
