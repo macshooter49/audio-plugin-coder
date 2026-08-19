@@ -3170,19 +3170,57 @@ static void section7b()
     //    authentic 1176/LA-2A behaviour AND polite at 100 %. Max's ruling this round is to break
     //    the authenticity over the last 10 % of Ratio, and that is what the engine now does.
     //    The fourth is a different animal and is ruled separately below.
-    auto st = staircase (-40.0f, 8.0f, 24, 120.0f);
-    const int per = (int) (FS * 0.120f);
-    auto slopeOf = [&] (const std::vector<float>& out, int from)
+    // 🚨 fb427 — THE INSTRUMENT WAS THE BUG. §7b measured the ceiling off a 24-tread / 120 ms
+    //    STAIRCASE, and drRatio reads "the LAST 40 % of each tread — the ballistics have settled
+    //    by then". On a 120 ms tread that is 48 ms, and a compressor's release runs into hundreds
+    //    of ms, so adjacent treads SMEAR into each other and surviving range is hidden. The round-4
+    //    family audit had already proved this and I did not carry it through: it measured Bus at
+    //    DRR 0.44 with 300 ms treads and 0.047 with 3000 ms treads, THE SAME ENGINE.
+    //    Caught by disagreement between two of my own probes: FET 76/`Blue Stripe` reads 0.0650 on
+    //    the staircase and 0.2240 on a settled static curve. The gate was FLATTERING the engine —
+    //    so the cells it called red were only the ones bad enough to show through a lenient
+    //    instrument, and the ones it called green were never actually vouched for.
+    //
+    //    A CEILING IS A PROPERTY OF THE TRANSFER CURVE, NOT OF THE RELEASE. Each level now gets
+    //    its OWN render, fully settled before a single sample is measured. (I also tested and
+    //    DISPROVED the obvious alternative explanation — that the residual was the Character's
+    //    authored drive being counted as signal: broadband and fundamental spans are identical to
+    //    two decimals, 10.75 vs 10.75, so it is real surviving dynamic range.)
+    auto staticOut = [&] (int t, int c, float rk, double inDb, float push = 1.0f)
     {
-        std::vector<double> iv, ov;
-        for (int s = 0; s < 24; ++s)
-        { const size_t a = (size_t) (s * per + per * 0.6), b = (size_t) ((s + 1) * per);
-          iv.push_back (db (rmsOf (st, a, b))); ov.push_back (db (rmsOf (out, a, b))); }
-        double sl = 0.0;
-        for (int s = from; s < from + 5; ++s)
-            sl += (ov[(size_t) s + 1] - ov[(size_t) s]) / (iv[(size_t) s + 1] - iv[(size_t) s]);
-        return sl / 5.0;
+        CP p; p.type = t; p.character = c; p.push = push; p.ratio = rk;
+        p.lift = 0.0f; p.b1 = (push < 0.9f) ? 0.5f : 0.15f; p.b2 = (push < 0.9f) ? 0.3f : 0.25f;
+        const int N = (int) (FS * 4.0f);
+        auto x = toneSig (N, 220.0f, (float) std::pow (10.0, inDb / 20.0));
+        auto o = runC (p, x);
+        // the LAST second only: 3 s of settling covers every release in the device except the
+        // Vari-Mu 4-50 s window, which is ruled inert on Release and irrelevant to a ceiling.
+        return db (rmsOf (o.l, (size_t) (FS * 3.0f), (size_t) N));
     };
+    // DRR from the settled curve: output span over input span, 48 dB apart.
+    // fb427 — BOTH LEVELS ABOVE THE KNEE. The first draft read -6 against -54 dBFS, and at
+    // Push 100 the -54 tread sits INSIDE the knee, so the span counted the knee's own bend as
+    // surviving range. That sent me off deforming the engine (collapsing the knee at the wall)
+    // which made this gate green and broke three others — `Round` IS the knee knob, so zeroing
+    // it made a front-panel control dead. A ceiling is the ASYMPTOTIC slope ABOVE the knee:
+    // -6 and -24 dBFS are both clear of it at Push 100, and 18 dB is plenty of span to measure.
+    auto staticDrr = [&] (int t, int c, float rk)
+    {   const double hi = staticOut (t, c, rk, -6.0), lo = staticOut (t, c, rk, -24.0);
+        return (hi - lo) / 18.0; };
+    // OverEasy is read at a WORKING threshold (Push 0.45), never at Push 100: its Ratio runs PAST
+    // ∞ into the dbx Infinity+ NEGATIVE zone, and at Push 100 `grT` hits its 60 dB clamp so the top
+    // of the range comes back onto a parallel line and the span lies. fb425 already knew this for
+    // `Anti` alone; it is true of the whole TYPE.
+    auto slopeOf2 = [&] (int t, int c, float rk)
+    {   const double a = staticOut (t, c, rk, -20.0, 0.45f), b = staticOut (t, c, rk, -8.0, 0.45f);
+        return (b - a) / 12.0; };
+    // 🔑 THE CEILING RULE, UNIFIED: flat OR inverted passes; only SURVIVING POSITIVE range fails.
+    //    An inversion (louder in, quieter out) is PAST a wall, not short of one — `Blue Stripe`
+    //    −0.068 and `Push Pull` −0.103 are more extreme than a flat wall, not politer. And a
+    //    perfect wall reads 0.000, so a rule that demanded inversion would have failed
+    //    OverEasy's `Hard 160` and `Infinity` for walling TOO WELL. Both directions cost me a
+    //    draft before the rule came out right.
+    auto ceilBad = [] (double v) { return v > 0.05; };
     // ── fb426: EVERY TYPE was not enough either. The fourth family audit found `Blunt`
     //    (Exact/3) and `Two Pass` (FET 76/7) — the two F_TWOPASS Characters — passing HALF the
     //    dynamic range at ∞:1, 15x their siblings, because this loop ran character 0 and the
@@ -3222,21 +3260,16 @@ static void section7b()
         for (int c = 1; c < CX::kNumChars; ++c)
         {
             if (ratioLocked (t, c)) { ++exempt; continue; }
-            CP pc; pc.type = t; pc.character = c; pc.push = 1.0f; pc.ratio = 1.0f;
-            pc.lift = 0.0f; pc.b1 = 0.15f; pc.b2 = 0.25f;
-            const double rc = drRatio (st, runC (pc, st).l, 24, 120.0f);
+            const double rc = (t == CX::T_OVEREASY) ? slopeOf2 (t, c, 1.0f) : staticDrr (t, c, 1.0f);
             ++cells;
-            if (t == CX::T_OVEREASY) continue;     // ruled below, on the sign of the curve
-            if (rc > 0.05)
+            if (ceilBad (rc))
             {   ++bad;
                 if (firstBad.empty()) firstBad = std::string (CX::typeNames()[t]) + "/" + CX::charNames (t)[c];
                 std::printf ("      %-9s %8.4f %9s   %s/%s  ← RED\n", CX::typeNames()[t], rc, "",
                              CX::typeNames()[t], CX::charNames (t)[c]); }
         }
-        CP p; p.type = t; p.push = 1.0f; p.ratio = 1.0f; p.lift = 0.0f; p.b1 = 0.15f; p.b2 = 0.25f;
-        auto o = runC (p, st);
-        const double r = drRatio (st, o.l, 24, 120.0f);
-        const double sl = slopeOf (o.l, 18);
+        const double r  = staticDrr (t, 0, 1.0f);
+        const double sl = slopeOf2  (t, 0, 1.0f);
         bool ok; std::string bar;
         if (t == CX::T_OVEREASY)
         {
@@ -3248,13 +3281,11 @@ static void section7b()
             // inside the programme) the top treads are past the clamp and run parallel again.
             // The honest question for this Type is the SIGN of the curve at a working threshold,
             // and a negative slope is the MORE extreme of the two behaviours, not the politer.
-            CP q; q.type = t; q.character = 7 /* `Anti`, where s = 2 lives */;
-            q.push = 0.45f; q.ratio = 1.0f; q.b1 = 0.5f; q.b2 = 0.3f;
-            const double s2 = slopeOf (runC (q, st).l, 14);
-            ok = (s2 <= -0.5);
-            bar = F1 ("slope %+.3f ≤ −0.5 — the negative zone (`Anti`)", s2);
+            const double s2 = slopeOf2 (t, 0, 1.0f);
+            ok = ! ceilBad (s2);
+            bar = F1 ("slope %+.3f ≤ 0.05 at a WORKING threshold — flat or negative zone", s2);
         }
-        else { ok = (r <= 0.05); bar = "DRR ≤ 0.05 — ∞:1 with the threshold 39 dB inside the programme"; }
+        else { ok = ! ceilBad (r); bar = "DRR ≤ 0.05 on the SETTLED curve — flat or inverted both pass"; }
         if (!ok) { ++bad; if (firstBad.empty()) firstBad = CX::typeNames()[t]; }
         ++cells;
         std::printf ("      %-9s %8.4f %+9.4f   %s%s\n", CX::typeNames()[t], r, sl,
@@ -3269,9 +3300,7 @@ static void section7b()
     {
         // and the crossover itself, named: below Ratio 0.90 the feedback Types are STILL
         // feedback — the authenticity Max paid for is intact everywhere but the last tenth.
-        auto ov = [&] (int t, float rk)
-        { CP p; p.type = t; p.push = 1.0f; p.ratio = rk; p.lift = 0.0f; p.b1 = 0.15f; p.b2 = 0.25f;
-          return drRatio (st, runC (p, st).l, 24, 120.0f); };
+        auto ov = [&] (int t, float rk) { return staticDrr (t, 0, rk); };
         const double a = ov (CX::T_FET, 0.90f), b = ov (CX::T_FET, 1.0f);
         gate ("  the wall is the LAST 10 % only — FET 76 keeps its feedback curve below it",
               a >= 0.30 && b <= 0.05,

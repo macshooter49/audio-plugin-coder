@@ -303,15 +303,15 @@ public:
         // ── KNEE (Round)
         kneeTgt_ = dyn::clampf (ts.kneeLo + (ts.kneeHi - ts.kneeLo) * dyn::clampf (p.b3, 0.0f, 1.0f)
                                 + cs.kneeAdd, 0.0f, 54.0f);
-        // fb426 — THE KNEE COLLAPSES INTO THE WALL. A soft knee at ∞:1 is a contradiction in
-        // terms: the curve is still bending over the knee's whole width, so the transfer never
-        // actually goes flat. Extending the R11 gate from 8 Types to 64 CELLS caught exactly
-        // this on five Characters that carry a wide knee or an asymmetry — `Blue Stripe` 0.0650,
-        // `Broken Bias` 0.0785, `Crystal` 0.0673 (a 14 dB knee), `Deep Floor`, `Vocal Sit` — all
-        // just over the 0.05 bar and all for the same reason. Rides the SAME wallS as the
-        // feedback crossover, so below Ratio 0.90 the knee is untouched and every knee
-        // measurement in the roster still holds.
-        kneeTgt_ *= (1.0f - wallS);
+        // fb427 — I TRIED COLLAPSING THE KNEE INTO THE WALL HERE AND IT WAS THE WRONG FIX.
+        // It made the ceiling gate green by DEFORMING the engine: `Round` IS the knee knob, so
+        // zeroing the knee at Ratio 100 made it a dead knob (0.00 -> 0.00 dB of GR), collapsed
+        // every Character's distance from its Type default to 0.00x JND, and put 54 cells under
+        // the law-1 bar. A knee is SUPPOSED to be soft; that is what a knee is.
+        // The real error was in the INSTRUMENT: the ceiling probe read -6 dBFS against -54 dBFS,
+        // and at Push 100 the -54 tread sits INSIDE the knee, so the span was counting the knee's
+        // own bend as surviving dynamic range. A ceiling is the ASYMPTOTIC slope ABOVE the knee.
+        // Fixed in the cert (both probe levels now well above threshold), not here.
 
         // ── BALLISTICS. Each Type spans its OWN honest window (never a clamp plateau); a
         //    Character shifts the window, it never pins the knob dead.

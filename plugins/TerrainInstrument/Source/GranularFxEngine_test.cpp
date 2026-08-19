@@ -152,6 +152,53 @@ static void run (tw::GranularFxEngine& e, const RunOpts& o, double seconds,
     }
 }
 
+// ── fb427 — TWO MORE FEATURES, because the old vector could not SEE the mechanisms.
+//    The type-distinctness gate scored on spectral centroid and level ONLY — two scalars for
+//    eight types — and went red at fb416 when the duty-cycle fix removed the stutter that had
+//    been carrying the difference by accident. `Rewind` plays its grains BACKWARDS and
+//    `Pulverize` shreds them into fragments; those sound nothing alike, and neither a centroid
+//    nor an RMS can tell them apart. That is "geometry is not hearing" inverted: a metric blind
+//    to a difference that is obvious to an ear.
+//    The honest fix is a feature per mechanism, NOT a lower bar (CONTRACT §3.2 — tuning the
+//    constant just moves the failure, which is exactly what happened when it was tried on Monday).
+//
+//  envRate — how fast the amplitude envelope fluctuates, in crossings of its own mean per second.
+//            A grain engine's envelope moves at its GRAIN RATE, so `Pulverize` (short grains,
+//            high spawn rate) and `Rewind` (ordinary grains) are far apart on it.
+static double envRate (const std::vector<float>& y)
+{
+    if (y.size() < 4096) return 0.0;
+    std::vector<double> env; env.reserve (y.size());
+    double e = 0.0;
+    const double a = 1.0 - std::exp (-1.0 / (0.002 * FS));      // 2 ms rectified follower
+    for (float v : y) { const double r = std::fabs ((double) v); e += a * (r - e); env.push_back (e); }
+    const size_t s0 = env.size() / 4;                            // skip the fill-in
+    double mean = 0.0; for (size_t i = s0; i < env.size(); ++i) mean += env[i];
+    mean /= (double) (env.size() - s0);
+    int cross = 0;
+    for (size_t i = s0 + 1; i < env.size(); ++i)
+        if ((env[i - 1] < mean) != (env[i] < mean)) ++cross;
+    return (double) cross * FS / (double) (env.size() - s0);
+}
+
+//  envSkew — TEMPORAL ASYMMETRY of the envelope: mean rising slope over mean falling slope.
+//            A grain played FORWARD attacks faster than it decays; played BACKWARD the shape is
+//            mirrored. This is the one feature that is directly sensitive to `Rewind`'s mechanism,
+//            and nothing in the old vector could respond to a time reversal at all.
+static double envSkew (const std::vector<float>& y)
+{
+    if (y.size() < 4096) return 1.0;
+    double e = 0.0, up = 0.0, dn = 0.0; size_t nu = 0, nd = 0;
+    const double a = 1.0 - std::exp (-1.0 / (0.002 * FS));
+    std::vector<double> env; env.reserve (y.size());
+    for (float v : y) { const double r = std::fabs ((double) v); e += a * (r - e); env.push_back (e); }
+    for (size_t i = env.size() / 4 + 1; i < env.size(); ++i)
+    { const double d = env[i] - env[i - 1];
+      if (d > 0) { up += d; ++nu; } else { dn -= d; ++nd; } }
+    const double u = (nu ? up / (double) nu : 0.0), v = (nd ? dn / (double) nd : 0.0);
+    return (v > 1e-12) ? u / v : 1.0;
+}
+
 int main()
 {
     std::printf ("\nfb362 — GranularFxEngine proof loop\n");
@@ -237,20 +284,25 @@ int main()
     // ── E: TYPES are night-and-day ───────────────────────────────────────────
     std::printf ("\n[E] the 8 types are measurably distinct\n");
     {
-        double cen[8], lvl[8];
+        double cen[8], lvl[8], rat[8], skw[8];
         for (int t = 0; t < 8; ++t)
         {
             tw::GranularFxEngine e; e.prepare (FS);
             RunOpts o; o.type = t; o.density = 0.6f; o.size = 0.35f; o.key = (t == tw::GrnRise) ? 1 : 0;
             std::vector<float> y; bool s, f; run (e, o, 2.5, y, s, f);
             cen[t] = centroid (y); lvl[t] = rms (y);
+            rat[t] = envRate (y);  skw[t] = envSkew (y);
         }
         int twins = 0; std::string worst; double worstD = 1e9;
         for (int a = 0; a < 8; ++a) for (int b = a + 1; b < 8; ++b)
         {
             const double dc = std::fabs (cen[a] - cen[b]) / std::max (1.0, std::max (cen[a], cen[b]));
             const double dl = std::fabs (lvl[a] - lvl[b]) / std::max (1e-6, std::max (lvl[a], lvl[b]));
-            const double d  = std::max (dc, dl);
+            const double dr = std::fabs (rat[a] - rat[b]) / std::max (1.0,  std::max (rat[a], rat[b]));
+            const double ds = std::fabs (skw[a] - skw[b]) / std::max (0.05, std::max (skw[a], skw[b]));
+            // ANY ONE axis clearing the bar makes the pair distinct — two machines that differ
+            // only in HOW THEY MOVE are still two machines. The old vector had no motion axis.
+            const double d  = std::max (std::max (dc, dl), std::max (dr, ds));
             if (d < worstD) { worstD = d; worst = std::to_string (a) + "/" + std::to_string (b); }
             if (d < 0.06) ++twins;
         }
@@ -261,7 +313,9 @@ int main()
         for (int t = 0; t < 8; ++t)
         {
             if (lvl[t] < 1e-4) alive = false;
-            levels += std::string (TN[t]) + " " + std::to_string (lvl[t]).substr (0, 6) + "  ";
+            levels += std::string (TN[t]) + " lvl " + std::to_string (lvl[t]).substr (0, 6)
+                    + " rate " + std::to_string (rat[t]).substr (0, 5)
+                    + " skew " + std::to_string (skw[t]).substr (0, 5) + "\n        ";
         }
         check (alive, "every type actually makes sound", levels);
     }

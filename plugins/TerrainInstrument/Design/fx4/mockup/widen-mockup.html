@@ -1,0 +1,1060 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Widen — mockup</title>
+<style>
+:root,#syn-panel{
+  color:var(--text-primary);
+  --bg-main:       #1A1A2E;
+  --bg-hero:       #12121F;
+  --bg-surface:    #232340;
+  --bg-card:       #2A2A48;
+  --bg-card-2:     #252340;
+  --knob-track:    rgba(120,118,160,0.35);
+  --purple-600:    #9B6DFF;
+  --purple-500:    #8B5CF6;
+  --purple-400:    #B794FF;
+  --border:        rgba(58,58,88,0.55);
+  --border-strong: rgba(140,130,180,0.45);
+  --text-primary:  #ECE8F2;
+  --text-secondary: #C5BFD2;
+  --text-muted:    #908599;
+  --text-dim:      #6E6580;
+  --line-bright:   #ECE8F2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%}
+body{background:radial-gradient(900px 520px at 30% -10%,#241d3a 0,transparent 60%),#141220;
+  color:var(--text-primary);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;
+  gap:14px;padding:26px 18px 40px}
+h1{font:600 15px/1.2 -apple-system,system-ui;letter-spacing:.02em;margin:0;color:#e8e4f5}
+.sub{font:400 11.5px/1.5 -apple-system,system-ui;color:#9a92b8;max-width:660px;text-align:center;margin:0}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+button{background:#241f38;color:#e8e4f5;border:1px solid #3a3356;border-radius:7px;
+  padding:7px 13px;font:500 11.5px -apple-system,system-ui;cursor:pointer}
+button:hover{background:#2e2846}
+#status{font:400 11px -apple-system,system-ui;color:#8f88ab;min-height:15px}
+#err{font:400 11px/1.45 ui-monospace,Menlo,monospace;color:#ff9a9a;white-space:pre-wrap;max-width:680px}
+/* THE REAL CARD IS 272 x 170. Lifting the CSS is not enough: `.fxr-dev` is
+   `flex:0 0 272px; height:100%`, so with no sized parent the core collapses to nothing and the
+   knob row stretches — which is exactly what the first render showed. These two rules are the
+   fx3 mockup's own `.rackwrap`/`.rackstrip`, reused. */
+#wrap{display:flex;flex-direction:column;align-items:center;gap:16px}
+#rack{display:flex;gap:9px;height:170px;width:272px}
+#backpanel{width:272px}
+@keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
+#syn-panel .fxr-switch{ position:absolute; top:-18px; left:0; z-index:3; display:flex; align-items:center; gap:0; }
+#syn-panel .fxr-seg{ display:flex; border:1px solid var(--border-strong); border-radius:7px; overflow:hidden; }
+#syn-panel .fxr-tab{ background:transparent; border:0; color:var(--text-muted); font-family:inherit; font-size:9px; letter-spacing:.03em; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:5px; font-weight:400; line-height:1; }
+#syn-panel .fxr-tab .fxr-k{ font-weight:700; }
+#syn-panel .fxr-tab + .fxr-tab{ border-left:1px solid var(--border-strong); }
+#syn-panel .fxr-tab.on{ color:var(--purple-400); }
+#syn-panel .fxr-tabhint{ margin-left:auto; font-size:9px; color:var(--text-dim); letter-spacing:1px; font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
+#syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
+#syn-panel .fxr-clip{ flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }
+#syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }
+#syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }
+#syn-panel .fxr-dev{ flex:0 0 272px; height:100%; min-height:0; background:transparent; border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, opacity .15s; position:relative; }
+#syn-panel .fxr-dev:hover{ border-color:rgba(255,255,255,.34); }
+#syn-panel .fxr-dev.fxr-off{ opacity:.45; }
+#syn-panel .fxr-dev.fxr-off *{ animation-play-state:paused !important; }
+#syn-panel .fxr-head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }
+#syn-panel .fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+#syn-panel .fxr-grip:active{ cursor:grabbing; }
+#syn-panel .fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; display:flex; align-items:center; }
+#syn-panel .fxr-type{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300; line-height:1; margin-left:3px; white-space:nowrap; }
+#syn-panel .fxr-dev.noback .fxr-type{ max-width:132px; }
+#syn-panel .fxr-dev.noback .fxr-preset{ max-width:104px; }
+#syn-panel .fxr-dev.noback .fxr-headr{ margin-left:6px; }
+#syn-panel .fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; }
+#syn-panel .fxr-tw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-tw > span{ grid-area:1/1; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+#syn-panel .fxr-tg{ visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-type-native, #syn-panel .fxr-bk-native{ position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:none; background:transparent; color:transparent; opacity:0; cursor:pointer; -webkit-appearance:none; appearance:none; font-size:9px; }
+#syn-panel .fxr-type-native:focus, #syn-panel .fxr-bk-native:focus{ outline:none; }
+#syn-panel .fxr-preset{ position:relative; display:flex; align-items:center; gap:5px; width:88px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; cursor:pointer; line-height:1; overflow:hidden; box-sizing:border-box; }
+#syn-panel .fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+#syn-panel .fxr-preset .fxr-pname{ flex:1; min-width:0; text-align:center; font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; position:relative; top:.5px; }
+#syn-panel .fxr-spacer{ flex:1; }
+#syn-panel .fxr-headr{ display:flex; align-items:center; gap:9px; }
+#syn-panel .fxr-code{ font-weight:300; font-size:9px; color:var(--text-muted); line-height:1; white-space:nowrap; }
+#syn-panel .fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:0 0 auto; }
+#syn-panel .fxr-dev.fxr-off .fxr-pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+#syn-panel .fxr-swap, #syn-panel .fxr-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; padding:0; background:transparent; border:none; }
+#syn-panel .fxr-swap svg, #syn-panel .fxr-x svg{ grid-area:1/1; width:14px; height:14px; display:block; }
+#syn-panel .fxr-x{ color:var(--text-muted); }
+#syn-panel .fxr-x:hover{ color:#EF4444; }
+#syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+#syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.fxr-core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-core .grn-wave{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+#syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+#syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+#syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
+#syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
+#syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+#syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
+#syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+#syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
+#syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+#syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
+#syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+#syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-snd{ flex:0 0 15px; height:14px; display:flex; align-items:center; justify-content:center;
+          border:1px solid var(--border); border-radius:3px; cursor:pointer; box-sizing:border-box;
+          color:var(--text-muted); transition:color .12s, border-color .12s; }
+#syn-panel .fxr-snd svg{ display:block; }
+#syn-panel .fxr-snd:hover{ color:var(--text-secondary); }
+#syn-panel .fxr-snd.fxr-on{ color:var(--purple-400); border-color:var(--purple-400);
+          filter:drop-shadow(0 0 3px rgba(183,148,255,.55)); }
+#syn-panel .fxr-add{ flex:0 0 110px; align-self:stretch; border:1px dashed var(--border-strong); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-add:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-plus{ font-size:24px; font-weight:200; line-height:.7; }
+#syn-panel .fxr-rack.fxr-blank{ flex:1 1 auto; min-width:0; }
+#syn-panel .fxr-empty{ flex:1 1 auto; align-self:stretch; min-width:0; border:1px dashed var(--border-strong);
+          border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:9px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-empty:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-empty .fxr-eplus{ width:30px; height:30px; display:grid; place-items:center; }
+#syn-panel .fxr-empty .fxr-eplus svg{ width:30px; height:30px; display:block; }
+#syn-panel .fxr-empty .fxr-t{ font-size:10px; letter-spacing:.06em; font-weight:300; }
+#syn-panel .fxr-add .fxr-t{ font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.4; font-weight:300; }
+#syn-panel .fxr-dev.fxr-drag{ opacity:.85; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:5; }
+#syn-panel .fxr-swap{ color:var(--text-muted); transition:color .12s, filter .12s; }
+#syn-panel .fxr-swap .ic-arrow{ display:none; }
+#syn-panel .fxr-swap.act .ic-plus{ display:none; }
+#syn-panel .fxr-swap.act .ic-arrow{ display:block; }
+#syn-panel .fxr-swap:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
+#syn-panel .fxr-swap.act{ color:#fff; }
+#syn-panel .fxr-back{ display:none; flex:1 1 0; min-height:0; flex-direction:column; padding:7px 12px 9px; }
+#syn-panel .fxr-dev.swapped .fxr-core, #syn-panel .fxr-dev.swapped .fxr-ctrls{ display:none; }
+#syn-panel .fxr-dev.swapped .fxr-back{ display:flex; }
+#syn-panel .fxr-bk-row{ display:flex; justify-content:space-between; align-items:center; flex:0 0 auto; padding:0 2px 2px; }
+#syn-panel .fxr-bk-sel{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; line-height:1.55; }
+#syn-panel .fxr-bk-sel .fxr-bk-k{ font-size:8.5px; color:var(--text-muted); font-weight:300; letter-spacing:.02em; }
+#syn-panel .fxr-bk-vwrap{ position:relative; display:inline-flex; align-items:center; }
+#syn-panel .fxr-bk-sel .fxr-bk-v{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; color:var(--text-primary); font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-bk-sel .fxr-bk-v .fxr-car{ color:var(--text-muted); font-size:8px; }
+#syn-panel .fxr-bk-sel:hover .fxr-bk-v{ color:#fff; }
+#syn-panel .fxr-bk-vw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-vw > span{ grid-area:1/1; }
+#syn-panel .fxr-bk-sel .fxr-bk-g{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-bk-sel .fxr-bk-g .fxr-car{ font-size:8px; }
+#syn-panel .fxr-bk-grid{ flex:1 1 0; min-height:0; display:grid; grid-template-columns:1fr 11px 1fr 11px 1fr 11px 1fr; grid-template-rows:1fr 1fr; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-sep{ grid-row:1 / 3; width:1px; align-self:stretch; justify-self:center; background:var(--border-strong); margin:5px 0; }
+#syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+#syn-panel .fxr-bk-knob .fxr-dial{ width:32px; height:32px; cursor:ns-resize; }
+#syn-panel .fxr-bk-knob .fxr-lab{ font-size:7.5px; }
+#syn-panel .fxr-core[data-conv="1"] .conv-drop{ position:absolute; inset:0; z-index:5; display:none; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px dashed var(--purple-400); border-radius:6px; background:rgba(18,16,30,.66); color:var(--purple-400); font-size:10px; letter-spacing:.04em; pointer-events:none; }
+#syn-panel .fxr-core[data-conv="1"].conv-drag .conv-drop{ display:flex; }
+#syn-panel .fxr-core[data-conv="1"] .cd-big{ font-size:18px; font-weight:200; line-height:.8; }
+#syn-panel .fxr-core[data-conv="1"] .conv-dur{ position:absolute; right:2px; bottom:1px; z-index:3; font-size:8px; color:var(--text-dim); font-variant-numeric:tabular-nums; pointer-events:none; }
+/* the mockup's own scaffolding — NOT part of the lifted rack sheet */
+.fxr-dev{position:relative}
+#backpanel{display:none;border:1px solid var(--border-strong,#3a3356);border-radius:10px;
+  background:rgba(24,20,38,.72);padding:12px 14px}
+#backpanel.on{display:block}
+.bp-row{display:flex;gap:14px;align-items:flex-end;margin-bottom:12px}
+.bp-sel{display:flex;flex-direction:column;gap:4px}
+.bp-sel label{font:500 9.5px -apple-system,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8f88ab}
+.bp-sel select{background:#1c1830;color:#e8e4f5;border:1px solid #3a3356;border-radius:6px;
+  padding:4px 6px;font:400 10.5px -apple-system,system-ui;width:118px}
+.bp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px 0;position:relative}
+.bp-k{display:flex;flex-direction:column;align-items:center;gap:5px}
+.bp-k .fxr-lab{font:500 9.5px -apple-system,system-ui;color:#9a92b8}
+.bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
+</style></head><body>
+<h1>Widen</h1>
+<p class="sub">Width 50 is EXACTLY neutral. Amount relabels per Type.<br>Real card, real engine — the worklet is the same algorithm the C++ runs.
+Press <b>Start</b>, then <b>Play</b>. Drag knobs vertically. <b>+</b> opens the back panel.</p>
+<div class="bar">
+  <button id="go">Start audio</button>
+  <button id="play">Play</button>
+  <button id="src">Source: Saw chord</button>
+</div>
+<div id="status">Idle.</div><div id="err"></div>
+<div id="wrap"><div id="syn-panel"><div id="rack"></div><div id="backpanel" class="on"></div></div></div>
+
+<script id="wk" type="text/plain">// widen-worklet.js — fb420. An AudioWorklet port of TerrainWidenFx.h so Max can HEAR the
+// WIDEN device in a Safari mockup before any of it is wired into the plugin.
+//
+//   Not sample-identical to the C++ (no fade-swap-recover, no compander, single-precision
+//   maths in a different order) — recognisably the SAME effect, with the SAME Type,
+//   Character, Field and parameter names, the SAME laws, and the SAME ceilings.
+//
+//   Load:   await ctx.audioWorklet.addModule('widen-worklet.js');
+//           const n = new AudioWorkletNode(ctx, 'terrain-widen', {outputChannelCount:[2]});
+//   Drive:  n.port.postMessage({ type:0, character:0, axis:0,
+//                               amount:0.35, width:0.5, rate:0.35, mix:0.5,
+//                               p1:0.5, p2:0.85, p3:0.5, p4:0, p5:0, p6:0.5, p7:0, p8:0.5,
+//                               retrig:false, hearMono:false });
+//   🔴 fb423 — the second-dropdown member is `axis`, NOT `field`: CONTRACT §2 locks that
+//   name (`Field` is only what THIS device's card prints). `hearMono` is a real parameter
+//   now; at fb422 the pill existed with nothing behind it.
+//   Read:   n.port.onmessage = e => { /* e.data = {corr, voicePan[8], voiceCents[8],
+//                                                  widthNow, lvl} — the same Viz */ };
+//
+// THE TWO THINGS THAT MUST SURVIVE THE PORT, because they are the device:
+//   1. `Twin` uses a TRIANGLE in antiphase, cross-mixed with OPPOSITE POLARITY. A triangle
+//      has constant |slope|, so the detune HOLDS at ±c and only flips sign at the apexes.
+//      Swap it for a sine (Character `Tremble`) and you can hear the detune start breathing —
+//      that A/B is the whole point of the Type.
+//   2. The CONSTANT-CENTS LAW. The knob is cents; the depth is solved for the rate:
+//         A = (2^(c/1200) − 1) / (2π f)   [sine]      / (4 f)   [triangle]
+//      Sweep `Rate` with `Amount` held and the detune does not change. Serum's does.
+
+// 🔴 fb422 — THESE ARE MIRRORED FROM TerrainWidenFx.h, WHICH IS THE SINGLE SOURCE OF
+// TRUTH (FIXES.md §3). typeNames() / charNames() / fieldNames() / frontNames() /
+// backNames() / voicesUnit() in the header are authoritative; if this file and the header
+// ever disagree, the header wins and this file is the bug. Names applied verbatim from
+// Design/fx4/RENAMES.md.
+const TYPES  = ['Throng', 'Twin', 'Steady', 'Twofold', 'Blur', 'Bands'];
+// front hero 1 is relabelled per Type; heroes 2/3 and Mix never are (frontNames()).
+const FRONT  = [['Detune','Width','Rate','Mix'], ['Depth','Width','Rate','Mix'],
+                ['Cents','Width','Rate','Mix'],  ['Sway','Width','Rate','Mix'],
+                ['Wash','Width','Rate','Mix'],   ['Cleave','Width','Rate','Mix']];
+const BACK   = ['Voices','Spread','Offset','Roam','Low Keep','Tone','Feedback','Balance'];
+const PILLS  = ['Retrig','Hear Mono'];
+const VUNIT  = ['copies','lines','copies','copies','stages','bands'];
+const FIELDS = ['Straight', 'Alternate', 'Orbit', 'Swap', 'Side Only', 'Gather'];
+const CHARS  = [
+  ['JP Classic','Even Fan','Analog Drift','Tight Fan','Wide Fan','Octave Bloom','Sub Anchor','Three Phase'],
+  ['Two Line','Four Line','Mode Two','Mode Three','No Compander','Dark BBD','Tremble','Hex'],
+  ['Satin','Jab','Quaver','Fifth Up','Octave Down','Wide Slap','Gritty','Octave Pair'],
+  ['Lilt','Wide Room','Tape ADT','Tight Inst','Loose Crowd','Static Pair','Slapback','Seasick'],
+  ['Smooth Six','Deep Twelve','Plush','Low Anchor','Top Only','Seed B','Seed C','Opposed'],
+  ['Coarse','Fine','Tilted','Rotor Slow','Rotor Fast','Guard','Deep Grid','Hard Split']
+];
+
+// ── the Type table, mirroring SPEC[] in the header ───────────────────────────
+//    family 0 = voice crowd · 1 = antiphase pair · 2 = allpass · 3 = band tree
+//    mod    0 = sine LFO    · 1 = triangle       · 2 = static  · 3 = random walk
+const SPEC = [
+  // 🔴 fb422 R11 RE-VOICING — mirrored from TerrainWidenFx.h
+  { family:0, mod:0, maxCents:190, curve:1.75, rateMul:1.00, fbMax:0.985, trim:1.00 }, // Throng
+  { family:1, mod:1, maxCents:120, curve:1.70, rateMul:1.00, fbMax:0.985, trim:1.39 }, // Twin
+  { family:0, mod:2, maxCents:190, curve:1.70, rateMul:1.00, fbMax:0.985, trim:0.98 }, // Steady
+  { family:0, mod:3, maxCents:120, curve:1.60, rateMul:0.55, fbMax:0.985, trim:0.96 }, // Twofold
+  { family:2, mod:0, maxCents:  0, curve:1.00, rateMul:2.50, fbMax:0.980, trim:1.00 }, // Blur
+  { family:3, mod:0, maxCents:  0, curve:1.00, rateMul:0.60, fbMax:0.980, trim:0.88 }  // Bands
+];
+
+// CharSpec: [baseMul, centsMul, rateMul, wanderAdd, spanMul, x1, x2, x3, lvl, flags]
+const F_EVENFAN=1, F_OCTTOP=2, F_SUB=4, F_3PH=8, F_SINE=16, F_COMPOFF=32,
+      F_DARK=64, F_ALLNEG=128, F_STATIC=256, F_NEGB=512, F_TILT=1024, F_LIN=2048;
+const CHAR = [
+ [[1.00,1.00,1.00,0.00,1.0, 0.00,0.00,1.00, 1.000, 0],
+  [1.00,1.00,1.00,0.00,1.0, 0.00,0.00,1.00, 1.000, F_EVENFAN],
+  [1.00,1.00,1.00,0.35,1.0, 0.15,0.00,1.00, 1.000, 0],
+  [0.45,1.00,1.35,0.00,1.0, 0.00,0.00,1.00, 1.000, 0],
+  [2.20,1.00,0.70,0.00,1.0, 0.00,0.00,1.00, 0.955, 0],
+  [1.00,1.00,1.00,0.00,1.0, 0.00,0.25,1.00, 0.955, F_OCTTOP],
+  [1.00,1.00,1.00,0.00,1.0, 0.00,0.35,1.00, 0.940, F_SUB],
+  [1.00,1.00,1.00,0.00,1.0, 0.00,0.00,1.00, 0.975, F_3PH]],
+ [[1.00,1.00,1.00,0.00,1.0, 1.0,1.00,0.0, 1.000, 0],
+  [1.00,1.00,1.00,0.00,1.0, 2.0,1.00,0.0, 0.900, 0],
+  [0.50,1.00,2.20,0.00,1.0, 1.0,1.00,0.0, 1.000, 0],
+  [1.00,2.00,1.00,0.00,1.0, 1.0,1.00,0.0, 1.000, 0],
+  [1.00,1.00,1.00,0.00,1.0, 1.0,1.00,0.0, 0.871, F_COMPOFF],
+  [1.00,1.00,1.00,0.00,1.0, 1.0,1.00,4.0, 1.040, F_DARK],
+  [1.00,2.50,1.00,0.00,1.0, 1.0,1.00,0.0, 1.000, F_SINE],
+  [1.00,1.00,1.00,0.00,1.0, 3.0,1.55,0.0, 1.330, 0]],
+ [[1.00,1.00,1.00,0.00,1.00,    0,0.00,1.00, 1.000, 0],
+  [1.00,1.00,1.00,0.00,0.40,    0,0.00,1.00, 1.000, 0],
+  [1.00,1.00,1.00,0.55,1.00,    0,0.00,1.00, 1.000, 0],
+  [1.00,1.00,1.00,0.00,1.00,  700,0.18,1.00, 0.975, 0],
+  [1.00,1.00,1.00,0.00,1.00,    0,0.00,1.00, 1.000, F_ALLNEG],
+  [1.00,1.00,1.00,0.00,1.00,    0,0.00,2.30, 0.985, 0],
+  [1.00,1.00,1.00,0.00,0.27,    0,0.00,1.00, 1.000, F_LIN],
+  [1.00,1.00,1.00,0.00,1.00, 1200,0.25,1.00, 0.965, 0]],
+ [[1.00,1.00,1.00,0.00,1.0, 1.00, 0.0,0.0, 1.000, 0],
+  [1.35,1.00,0.70,0.00,1.0, 0.50, 0.0,0.0, 0.985, 0],
+  [1.00,2.00,0.60,0.00,1.0, 0.55, 0.0,0.0, 0.985, 0],
+  [0.50,1.00,1.00,0.00,1.0, 1.00, 0.0,0.0, 1.000, 0],
+  [1.80,1.60,1.00,0.00,1.0, 1.00, 0.0,0.0, 0.975, 0],
+  [1.00,1.00,1.00,0.00,1.0, 1.00, 0.0,1.0, 1.000, F_STATIC],   // fb425: x3 is now a FRACTION of amtC
+  [1.00,1.00,1.00,0.00,1.0, 1.00,31.0,0.0, 0.990, 0],
+  [1.00,2.50,1.30,0.00,1.0, 1.00, 0.0,0.0, 0.960, 0]],
+ [[1,1,1.00,0.00,1, 3.0, 180, 5600, 1.000, 0],
+  [1,1,1.00,0.00,1, 6.0, 180, 5600, 1.000, 0],
+  [1,1,1.00,0.40,1, 4.0,  90, 9000, 1.000, 0],
+  [1,1,1.00,0.00,1, 3.0, 500, 6500, 1.000, 0],
+  [1,1,1.00,0.00,1, 3.0,2000,10000, 1.000, 0],
+  [1,1,1.00,0.00,1, 3.0, 240, 7000, 1.000, 0],
+  [1,1,1.00,0.00,1, 3.0, 140, 4200, 1.000, 0],
+  [1,1,1.00,0.00,1, 4.0, 180, 5600, 1.000, F_NEGB]],
+ [[1,1,1.00,0.00,1, 1.00,140,1.00, 1.000, 0],
+  [1,1,1.00,0.00,1, 2.00,140,1.00, 1.000, 0],
+  [1,1,1.00,0.00,1, 1.00,140,1.00, 1.000, F_TILT],
+  [1,1,0.30,0.00,1, 1.00,140,1.00, 1.000, 0],
+  [1,1,4.00,0.00,1, 1.00,140,1.00, 1.000, 0],
+  [1,1,1.00,0.00,1, 1.00,140,1.00, 1.000, 0],
+  [1,1,1.00,0.00,1, 1.00, 50,1.00, 1.000, 0],
+  [1,1,1.00,0.00,1, 1.00,140,0.50, 0.960, 0]]
+];
+
+const JP    = [0, 0.34, -0.34, 1.04, -1.12, 1.77, -2.02, 2.40];   // measured JP-8000 fan, cents/100
+const EVEN  = [0, 0.40, -0.40, 0.80, -0.80, 1.60, -1.60, 2.40];
+const BASE  = [1.5, 9.7, 13.1, 17.3, 21.9, 11.3, 15.7, 24.1];     // ms
+const SLAP  = [2.0, 8.0, 12.5, 17.0, 22.0, 6.0, 15.0, 26.0];
+const DBL   = [17, 29, 41, 53, 23, 35, 47, 61];
+const RHO   = [1.00, 1.07, 0.93, 1.13, 0.89, 1.19, 0.83, 1.23];
+const MAXV = 8, MAXAP = 36, MAXB = 20;      // fb425: headroom for the count law below
+
+const clamp01 = v => v < 0 ? 0 : (v > 1 ? 1 : v);
+const clampf  = (v, a, b) => v < a ? a : (v > b ? b : v);
+
+class TerrainWiden extends AudioWorkletProcessor {
+  constructor () {
+    super();
+    this.fs = sampleRate;
+    this.n  = 1; while (this.n < Math.ceil(0.32 * this.fs) + 8) this.n <<= 1;
+    this.mask = this.n - 1;
+    this.bL = new Float32Array(this.n);
+    this.bR = new Float32Array(this.n);
+    this.wr = 0;
+
+    this.p = { type:0, character:0, axis:0, amount:0.35, width:0.5, rate:0.35, mix:0.5,
+               p1:0.5, p2:0.85, p3:0.5, p4:0, p5:0, p6:0.5, p7:0, p8:0.5,
+               retrig:false, hearMono:false };
+    this.monoSm = 0; this.monoTg = 0;
+    this.lastRetrig = false;
+
+    const K = ms => 1 - Math.exp(-1 / (ms * 0.001 * this.fs));
+    this.smK = K(18); this.envK = K(20); this.lvlK = K(60); this.corrK = K(50);
+    this.vfK = K(30); this.dipDn = K(5); this.dipUp = K(40); this.apexK = K(1.5);
+    this.cmpK = K(5); this.monoK = K(15);        // `Hear Mono` fade, both ways
+    this.dcR = 1 - (2 * Math.PI * 10 / this.fs);
+
+    // smoothed scalars
+    this.sm = { amt:0.35, wid:0.5, rate:0.3, mix:0.5, spr:0.85, off:1, wan:0, lk:0, ton:0, fb:0, bal:0.5 };
+    this.tg = Object.assign({}, this.sm);
+    this.tonL = 1; this.tonH = 1; this.tonLT = 1; this.tonHT = 1;
+    this.dip = 1; this.pend = -1; this.seeded = false;
+
+    // per-voice
+    const A = () => new Float32Array(MAXV);
+    this.baseS=A(); this.depS=A(); this.gain=A(); this.pan=A(); this.pl=A(); this.pr=A();
+    this.baseG=A(); this.depG=A(); this.gainG=A(); this.panG=A(); this.plG=A(); this.prG=A();
+    this.achC=A(); this.statC=A(); this.ratio=A(); this.rho=A(); this.rEff=A();
+    this.ph=A(); this.triZ=A(); this.q=A(); this.res=A(); this.vfd=A(); this.prevD=A().fill(-1);
+    this.wk = []; this.wkp = [];
+    this.resW = A(); this.resP = A(); this.retR = 0;    // fb425 retrig residuals
+    for (let v = 0; v < MAXV; ++v) {
+      this.ph[v] = (v / MAXV + 0.037 * ((v * 7) % 5)) % 1;
+      this.vfd[v] = v === 0 ? 1 : 0;
+      this.wk.push({ st:0, tg:0, ph:0.113 * (v + 1) });
+      this.wkp.push({ st:0, tg:0, ph:0.071 * (v + 3) });
+    }
+    this.apA = []; this.apB = [];
+    for (let k = 0; k < MAXAP; ++k) { this.apA.push({x:0,y:0}); this.apB.push({x:0,y:0}); }
+    this.apCa = new Float32Array(MAXAP); this.apCb = new Float32Array(MAXAP);
+    this.apCaT = new Float32Array(MAXAP); this.apCbT = new Float32Array(MAXAP);
+    this.bA = new Float32Array(MAXB); this.bz = new Float32Array(MAXB);
+    this.lkZ=[0,0]; this.toneZ=[0,0]; this.fbZ=[0,0]; this.fbSt=[0,0]; this.dcX=[0,0]; this.dcY=[0,0];
+    this.peZ=[0,0]; this.darkZ=[0,0]; this.cmpE=[0,0]; this.altZ=[0,0]; this.bassZ=[0,0];
+    this.envIn=0; this.lvlSm=0; this.cLL=1e-9; this.cRR=1e-9; this.cLR=0;
+    this.orbit=0; this.rotPh=0; this.ph2=0; this.rng=0x9E3779B9>>>0; this.vizTick=0;
+    this.nV=6; this.nPair=1; this.nAP=18; this.nB=6;
+    this.xkT=0.5; this.xkG=0.5; this.vNorm=1; this.vNormG=1; this.cTrim=1; this.walkHz=1;
+    this.bandHard=false; this.bandCap=1;
+    this.peA0 = this.oneP(700); this.bassA = this.oneP(150); this.altA = this.oneP(700);
+    this.toneA = this.oneP(900); this.fbDampA = this.oneP(7000); this.lkA = 0; this.darkA = 0;
+
+    this.viz = { corr:1, voicePan:new Array(8).fill(0), voiceCents:new Array(8).fill(0),
+                 widthNow:0, lvl:0 };
+    this.frame = 0;
+    this.port.onmessage = e => {
+      const d = e.data || {};
+      if (d.type !== undefined && (d.type !== this.p.type || d.character !== this.p.character ||
+          d.axis !== this.p.axis) && this.seeded) this.pend = 1;
+      Object.assign(this.p, d);
+      if (this.p.retrig && !this.lastRetrig) this.fireRetrig();
+      this.lastRetrig = !!this.p.retrig;
+      this.recalc();
+    };
+    this.recalc();
+  }
+  static get parameterDescriptors () { return []; }
+
+  oneP (hz) { return 1 - Math.exp(-2 * Math.PI * clampf(hz, 1, 0.45 * this.fs) / this.fs); }
+  apCoef (hz) { const t = Math.tan(Math.PI * clampf(hz, 20, 0.45 * this.fs) / this.fs);
+                return clampf((t - 1) / (t + 1), -0.97, 0.97); }
+  rnd () { this.rng = (Math.imul(this.rng, 1664525) + 1013904223) >>> 0; return this.rng / 4294967296; }
+  static hash (k) { let s = (Math.imul(k, 2654435761) ^ 0x85EBCA6B) >>> 0;
+                    s ^= s >>> 15; s = Math.imul(s, 2246822519) >>> 0; s ^= s >>> 13;
+                    return (s >>> 0) / 4294967296; }
+
+  // fb425 — the retrigger used to reset ONLY the per-voice LFO phase, which `Twofold`,
+  // `Blur` and `Bands` do not read: the pill was bit-identically dead on three of six
+  // Types. The random WALKS are reseeded too, and their offset is owed back as a residual
+  // under the same read-position slew cap the LFO residual uses.
+  fireRetrig () {
+    for (let v = 0; v < MAXV; ++v) {
+      this.res[v] = Math.sin(2 * Math.PI * this.ph[v]); this.ph[v] = 0; this.q[v] = 0;
+      this.resW[v] += this.wk[v].st;  this.wk[v].st = 0;  this.wk[v].tg = 0;  this.wk[v].ph = 0;
+      this.resP[v] += this.wkp[v].st; this.wkp[v].st = 0; this.wkp[v].tg = 0; this.wkp[v].ph = 0;
+    }
+    this.retR = 1;
+  }
+  bleedWalkRes (v) {
+    if (this.resW[v] === 0) return 0;
+    const st = 0.5 / Math.max(1, this.depG[v] + this.sm.wan * 0.012 * this.fs);
+    const r = this.resW[v];
+    this.resW[v] -= r > 0 ? Math.min(r, st) : Math.max(r, -st);
+    return r;
+  }
+
+  // ── everything derived, PER BLOCK — never per sample ────────────────────
+  recalc () {
+    const p = this.p, t = clampf(p.type|0, 0, 5), c = clampf(p.character|0, 0, 7);
+    const T = SPEC[t], C = CHAR[t][c];
+    this.T = T; this.C = C; this.typ = t; this.chr = c; this.fld = clampf(p.axis|0, 0, 5);
+
+    this.monoTg = p.hearMono ? 1 : 0;                  // `Hear Mono`, glided below
+    this.tg.rate = clampf(0.08 * Math.pow(14 / 0.08, clamp01(p.rate)), 0.06, 14);   // fb422: the
+                                          // 0.03 Hz bottom was a 33-second cycle, i.e. a dead zone
+    this.tg.amt = clamp01(p.amount); this.tg.wid = clamp01(p.width); this.tg.mix = clamp01(p.mix);
+    this.tg.spr = Math.pow(clamp01(p.p2), 0.65);
+    this.tg.off = 0.25 * Math.pow(16, clamp01(p.p3));          // unity at the knob centre
+    this.tg.wan = Math.pow(clamp01(p.p4), 0.70) + C[3];
+    this.tg.lk  = clamp01(p.p5);
+    this.tg.ton = 2 * clamp01(p.p6) - 1;
+    // fb422: the taper is linear in ln(TAIL), which is what a feedback control is for
+    this.tg.fb  = clamp01(p.p7) <= 0 ? 0 : 1 - Math.pow(1 - T.fbMax, clamp01(p.p7));
+    this.tg.bal = clamp01(p.p8);
+    this.cTrim = C[8];
+    this.tonLT = Math.pow(2, this.tg.ton *  2);                // ±12 dB tilt
+    this.tonHT = Math.pow(2, this.tg.ton * -2);
+    this.lkA = this.tg.lk < 0.02 ? 0 : this.oneP(40 * Math.pow(500 / 40, (this.tg.lk - 0.02) / 0.98));
+    this.darkA = (C[7] > 0.5 && t === 1) ? this.oneP(C[7] * 1000) : 0;
+    this.walkHz = (0.4 + 2.4 * clamp01(p.rate)) * C[2] * C[5];
+
+    // VOICES = 3..8 copies. The floor is 3 because centre + ONE mover is a chorus.
+    this.nV = clampf(3 + Math.round(clamp01(p.p1) * 5), 3, 8);
+
+    const rHz = Math.max(0.02, this.tg.rate * T.rateMul * C[2]);
+    const amtC = Math.pow(this.tg.amt, T.curve) * T.maxCents * C[1];
+    const fan = (C[9] & F_EVENFAN) ? EVEN : JP;
+    let fanMax = 1e-6; for (let v = 0; v < this.nV; ++v) fanMax = Math.max(fanMax, Math.abs(fan[v]));
+
+    const b = this.tg.bal;
+    const gC = clampf((-0.55366 * b + 0.99785) * Math.sqrt(Math.max(0, 1 - b)), 0, 1.2);
+    const gS = clampf((-0.73764 * b * b + 1.2841 * b + 0.044372), 0, 1.4) / Math.sqrt(Math.max(1, this.nV - 1));
+
+    let pw = 0;
+    for (let v = 0; v < MAXV; ++v) {
+      const fn = clampf(fan[v] / fanMax, -1, 1), w = Math.abs(fn);
+      let cc = 0;
+      if (T.mod === 0)      cc = amtC * w;
+      else if (T.mod === 1) cc = amtC;
+      else                  cc = amtC * (v === 0 ? (T.mod === 3 ? 0.35 : 0) : (0.45 + 0.55 * w));
+
+      // 🔑 THE CONSTANT-CENTS LAW — the knob IS cents, the depth is solved for the rate
+      this.rEff[v] = rHz * (T.mod === 3 ? C[2] : RHO[v]);
+      let A = 0;
+      if (T.mod === 0 || T.mod === 3) A = (Math.pow(2, cc / 1200) - 1) / (2 * Math.PI * this.rEff[v]);
+      else if (T.mod === 1) { this.rEff[v] = rHz; A = (Math.pow(2, cc / 1200) - 1) / (4 * rHz); }
+      else this.rEff[v] = rHz;
+      A = Math.min(A, 0.110);
+      this.depS[v] = A * this.fs;
+
+      let baseMs = T.mod === 2 ? SLAP[v] : (T.mod === 3 ? DBL[v] : BASE[v]);
+      if (T.mod === 1) baseMs = 5 * (1 + 0.6 * (v >> 1));
+      baseMs *= C[0];
+      if (T.mod === 3 && v === 0) baseMs += C[6];
+      if (T.mod === 2) baseMs = Math.max(2, baseMs * C[7] - 0.5 * 30 * C[4]);
+      // the base GROWS to fit the cents, then Offset scales the result
+      let bs = Math.max(baseMs * 0.001 * this.fs, this.depS[v] / 0.85 + 0.0015 * this.fs);
+      bs *= this.tg.off;
+      this.baseS[v] = clampf(bs, 0.0015 * this.fs, 0.130 * this.fs);
+      const Aeff = Math.min(this.depS[v] / this.fs, 0.85 * this.baseS[v] / this.fs);
+      this.achC[v] = (T.mod === 1) ? 1200 * Math.log2(1 + 4 * this.rEff[v] * Aeff)
+                                   : 1200 * Math.log2(1 + 2 * Math.PI * this.rEff[v] * Aeff);
+      this.depS[v] = Aeff * this.fs;
+
+      let sc = 0;
+      if (T.mod === 2 && v > 0) {
+        sc = cc * (fn >= 0 ? 1 : -1);
+        if (C[9] & F_ALLNEG) sc = -Math.abs(cc) * (0.6 + 0.4 * (v & 1));
+        if (C[5] > 1 && v >= this.nV - 2) sc = C[5];
+      }
+      // fb425: static means the pair does not MOVE, never that it has no width — so the
+      // held offset is the cents the walk would have reached at this Amount.
+      if ((C[9] & F_STATIC) && v > 0) sc = amtC * C[7] * ((v & 1) ? 1 : -1);
+      if ((C[9] & F_OCTTOP) && v >= this.nV - 2 && v > 0) sc = 1200;
+      if ((C[9] & F_SUB) && v === 1) sc = -1200;
+      this.statC[v] = sc; this.ratio[v] = Math.pow(2, sc / 1200);
+
+      // the CENTS fan normalises to the live voices; the PAN LADDER does not
+      const lad = 0.42 + 0.58 * (v - 1) / 6;
+      let pan = v === 0 ? 0 : (fn >= 0 ? 1 : -1) * lad * this.tg.spr;
+      if ((C[9] & F_SUB) && v === 1) pan = 0;
+      this.pan[v] = pan;
+      this.pl[v] = Math.sqrt(0.5 * (1 - pan)); this.pr[v] = Math.sqrt(0.5 * (1 + pan));
+
+      let g = v === 0 ? gC : gS;
+      if (T.mod === 3) g *= Math.pow(10, -1.5 * v / 20);
+      if (((C[9] & F_OCTTOP) && v >= this.nV - 2 && v > 0) || ((C[9] & F_SUB) && v === 1) ||
+          (C[5] > 1 && T.mod === 2 && v >= this.nV - 2 && v > 0)) g *= (C[6] > 0 ? C[6] : 0.25);
+      this.gain[v] = v < this.nV ? g : 0;
+      if (v < this.nV) pw += g * g;
+      this.rho[v] = RHO[v] * (1 + (T.mod === 0 ? C[5] * (TerrainWiden.hash(v) - 0.5) * 2 : 0));
+      if (C[9] & F_3PH) this.rho[v] = 1;
+    }
+    this.vNorm = Math.SQRT2 / Math.sqrt(Math.max(0.25, pw));
+
+    this.nPair = clampf(((this.nV + 1) >> 1) + (C[5] | 0) - 1, 1, 4);
+    this.xkT = clampf((0.25 + 0.40 * this.tg.amt) * C[6], 0, 1.05);
+
+    // fb425 THE COUNT LAW — the Character sets where `Voices` STARTS, the knob adds a
+    // fixed step per click, so it travels its whole length on every Character. Multiplying
+    // the Character's depth INTO the knob drove the deep Characters into the ceiling at a
+    // quarter turn and the top three quarters moved nothing at all.
+    this.nAP = clampf(Math.round(clampf(Math.round(C[5] * 3), 3, MAXAP - 15) + 3 * (this.nV - 3)), 2, MAXAP);
+    if (t === 4) {
+      const lo = C[6] * (1 - 0.75 * this.tg.amt), hi = C[7];
+      for (let k = 0; k < this.nAP; ++k) {
+        const u = this.nAP > 1 ? k / (this.nAP - 1) : 0.5;
+        const f0 = lo * Math.pow(hi / lo, u), sg = 0.5 + TerrainWiden.hash(k * 3 + 1);
+        const div = 0.30 * this.tg.amt;
+        let fa = f0 * Math.pow(2,  div * sg), fb = f0 * Math.pow(2, -div * sg);
+        fa *= 1 + 0.25 * this.tg.wan * (TerrainWiden.hash(k * 5 + 2) - 0.5);
+        fb *= 1 + 0.25 * this.tg.wan * (TerrainWiden.hash(k * 5 + 3) - 0.5);
+        this.apCaT[k] = this.apCoef(clampf(fa * this.tg.off, 20, 0.45 * this.fs));
+        this.apCbT[k] = this.apCoef(clampf(fb * this.tg.off, 20, 0.45 * this.fs)) * ((C[9] & F_NEGB) ? -1 : 1);
+      }
+    }
+    // fb425 THE SAME COUNT LAW, built EVEN from the start: the even-ing used to collapse
+    // 3->4 and 5->6 and left two quarters of the knob changing nothing.
+    this.nB = clampf(2 * (clampf(Math.round(C[5] * 2), 1, MAXB / 2 - 5) + (this.nV - 3)), 2, MAXB);
+    if (t === 5) {
+      this.nB = clampf(this.nB + (this.nB & 1), 2, MAXB);         // an odd count is not complementary
+      const lo = C[6] * this.tg.off, hi = 11000 * this.tg.off;
+      const gsh = 0.5 * Math.sin(2 * Math.PI * this.rotPh) / this.nB;
+      for (let k = 0; k < this.nB - 1; ++k)
+        this.bA[k] = this.oneP(clampf(lo * Math.pow(hi / lo, (k + 1) / this.nB + gsh), 20, 0.45 * this.fs));
+      this.bandHard = C[7] < 0.99;
+      this.bandCap = (this.chr === 5) ? 0.42 : 1;
+    }
+  }
+
+  readH (buf, d) {
+    d = clampf(d, 1, this.n - 6);
+    const i = d | 0, f = d - i, p = this.wr - i, m = this.mask;
+    const ym1 = buf[(p + 1) & m], y0 = buf[p & m], y1 = buf[(p - 1) & m], y2 = buf[(p - 2) & m];
+    const c1 = 0.5 * (y1 - ym1);
+    const c2 = ym1 - 2.5 * y0 + 2 * y1 - 0.5 * y2;
+    const c3 = 0.5 * (y2 - ym1) + 1.5 * (y0 - y1);
+    return ((c3 * f + c2) * f + c1) * f + y0;
+  }
+  readL (buf, d) { d = clampf(d, 1, this.n - 6); const i = d | 0, f = d - i, p = this.wr - i, m = this.mask;
+                   const y0 = buf[p & m], y1 = buf[(p - 1) & m]; return y0 + f * (y1 - y0); }
+  tickWalk (w, hz) { w.ph += hz / this.fs;
+                     if (w.ph >= 1) { w.ph -= 1; w.tg = 2 * this.rnd() - 1; }
+                     w.st += (w.tg - w.st) * clampf(hz * 6 / this.fs, 1e-5, 0.5); }
+  static compG (env, e) { const r = Math.max(env, 1e-6) / 0.0125; return r <= 1 ? 1 : Math.pow(r, e); }
+
+  process (inputs, outputs) {
+    const inp = inputs[0], out = outputs[0];
+    if (!out || out.length < 2) return true;
+    const oL = out[0], oR = out[1];
+    const iL = (inp && inp[0]) ? inp[0] : new Float32Array(oL.length);
+    const iR = (inp && inp[1]) ? inp[1] : iL;
+    const N = oL.length, sm = this.sm, tg = this.tg, T = this.T, C = this.C;
+
+    if (!this.seeded) {
+      Object.assign(sm, tg);
+      for (let v = 0; v < MAXV; ++v) { this.vfd[v] = v < this.nV ? 1 : 0;
+        this.baseG[v]=this.baseS[v]; this.depG[v]=this.depS[v]; this.panG[v]=this.pan[v];
+        this.gainG[v]=this.gain[v]; this.plG[v]=this.pl[v]; this.prG[v]=this.pr[v]; }
+      this.vNormG = this.vNorm; this.xkG = this.xkT; this.tonL = this.tonLT; this.tonH = this.tonHT;
+      this.seeded = true;
+    }
+
+    for (let i = 0; i < N; ++i) {
+      // fb425 the retrig residual ramp: LINEAR to exactly zero (a one-pole PARKS in float)
+      if (this.retR > 0) { this.retR -= 1 / (0.030 * this.fs); if (this.retR < 0) this.retR = 0; }
+      // fade-swap-recover — a Field change can swap `Side Only` for `Gather`, an 11x
+      // level change, so the dip floor is -46 dB and not -26.
+      if (this.pend > 0) { this.dip += this.dipDn * (0 - this.dip);
+                           if (this.dip < 0.005) { this.pend = -1; this.recalc();
+                             for (let v = 0; v < MAXV; ++v) { this.vfd[v] = v < this.nV ? 1 : 0;
+                               this.baseG[v]=this.baseS[v]; this.depG[v]=this.depS[v];
+                               this.panG[v]=this.pan[v]; this.gainG[v]=this.gain[v];
+                               this.plG[v]=this.pl[v]; this.prG[v]=this.pr[v]; }
+                             this.vNormG=this.vNorm; this.xkG=this.xkT;
+                             for (let k=0;k<MAXAP;++k){this.apA[k].x=this.apA[k].y=0;this.apB[k].x=this.apB[k].y=0;}
+                             for (let k=0;k<MAXB;++k) this.bz[k]=0; } }
+      else this.dip += this.dipUp * (1 - this.dip);
+
+      for (const k in sm) sm[k] += this.smK * (tg[k] - sm[k]);
+      this.tonL += this.smK * (this.tonLT - this.tonL);
+      this.tonH += this.smK * (this.tonHT - this.tonH);
+      for (let v = 0; v < MAXV; ++v) {
+        this.baseG[v] += this.smK * (this.baseS[v] - this.baseG[v]);
+        this.depG[v]  += this.smK * (this.depS[v]  - this.depG[v]);
+        this.panG[v]  += this.smK * (this.pan[v]   - this.panG[v]);
+        this.gainG[v] += this.smK * (this.gain[v]  - this.gainG[v]);
+        this.plG[v]   += this.smK * (this.pl[v]    - this.plG[v]);
+        this.prG[v]   += this.smK * (this.pr[v]    - this.prG[v]);
+      }
+      this.vNormG += this.smK * (this.vNorm - this.vNormG);
+      this.xkG    += this.smK * (this.xkT   - this.xkG);
+      this.vizTick = (this.vizTick + 1) & 63;
+
+      const inL = iL[i], inR = iR[i];
+      const rect = 0.5 * (Math.abs(inL) + Math.abs(inR));
+      this.envIn += this.envK * (rect - this.envIn);
+      const gate = this.envIn / (this.envIn + 0.003);
+
+      // LOW KEEP: split first, re-join last, immune to Width AND to Field
+      let hiL = inL, hiR = inR, loM = 0;
+      if (this.lkA > 0) { this.lkZ[0] += this.lkA * (inL - this.lkZ[0]);
+                          this.lkZ[1] += this.lkA * (inR - this.lkZ[1]);
+                          hiL = inL - this.lkZ[0]; hiR = inR - this.lkZ[1];
+                          loM = 0.5 * (this.lkZ[0] + this.lkZ[1]); }
+
+      let fbL = 0, fbR = 0;
+      if (sm.fb > 1e-4) for (let c = 0; c < 2; ++c) {
+        let s = Math.tanh(this.fbSt[c] * 1.4) * 0.714286;
+        this.fbZ[c] += this.fbDampA * (s - this.fbZ[c]); s = this.fbZ[c];
+        const y = s - this.dcX[c] + this.dcR * this.dcY[c];
+        this.dcX[c] = s; this.dcY[c] = y;
+        if (c === 0) fbL = y * sm.fb * gate; else fbR = y * sm.fb * gate;
+      }
+      const lineL = hiL + fbL, lineR = hiR + fbR;
+      this.bL[this.wr] = lineL; this.bR[this.wr] = lineR;
+
+      let wetL = 0, wetR = 0;
+      const limHi = this.n - 8;
+      if (T.family === 0)      [wetL, wetR] = this.voices(limHi);
+      else if (T.family === 1) [wetL, wetR] = this.twin(limHi);
+      else if (T.family === 2) [wetL, wetR] = this.blur(lineL, lineR);
+      else                     [wetL, wetR] = this.bands(lineL, lineR);
+      this.wr = (this.wr + 1) & this.mask;
+
+      if (Math.abs(this.tonL - 1) > 0.002) {
+        this.toneZ[0] += this.toneA * (wetL - this.toneZ[0]);
+        this.toneZ[1] += this.toneA * (wetR - this.toneZ[1]);
+        wetL = this.toneZ[0] * this.tonL + (wetL - this.toneZ[0]) * this.tonH;
+        wetR = this.toneZ[1] * this.tonL + (wetR - this.toneZ[1]) * this.tonH;
+      }
+      this.fbSt[0] = wetL; this.fbSt[1] = wetR;      // the tap is OUTSIDE Field and Width
+
+      // FIELD — the placement matrix
+      switch (this.fld) {
+        case 1: { this.altZ[0] += this.altA * (wetL - this.altZ[0]);
+                  this.altZ[1] += this.altA * (wetR - this.altZ[1]);
+                  const l0 = this.altZ[0], l1 = this.altZ[1];
+                  const h0 = wetL - l0, h1 = wetR - l1; wetL = l0 + h1; wetR = l1 + h0; break; }
+        case 2: { this.orbit += (sm.rate * 0.20) / this.fs; if (this.orbit >= 1) this.orbit -= 1;
+                  const th = 2 * Math.PI * this.orbit, cs = Math.cos(th), sn = Math.sin(th);
+                  const a = wetL * cs - wetR * sn, b2 = wetL * sn + wetR * cs; wetL = a; wetR = b2; break; }
+        case 3: { const t2 = wetL; wetL = wetR; wetR = t2; break; }
+        case 4: { const s = 0.5 * (wetL - wetR); wetL = s; wetR = -s; break; }
+        case 5: { const m = 0.5 * (wetL + wetR); wetL = m; wetR = m; break; }
+      }
+
+      // WIDTH — equal-power M/S rotation. 0 = mono · 0.5 = EXACTLY neutral · 1.0 = SIDE ONLY
+      { const m = 0.5 * (wetL + wetR), s = 0.5 * (wetL - wetR), th = sm.wid * Math.PI / 2;
+        const mm = m * Math.SQRT2 * Math.cos(th), ss = s * Math.SQRT2 * Math.sin(th);
+        wetL = mm + ss; wetR = mm - ss; }
+      wetL += loM; wetR += loM;
+
+      const trim = T.trim * this.cTrim * this.dip;
+      const wL = wetL * trim, wR = wetR * trim;
+      const dg = Math.cos(sm.mix * Math.PI / 2), wg = Math.sin(sm.mix * Math.PI / 2);
+      let yL = inL * dg + wL * wg, yR = inR * dg + wR * wg;
+      // `Hear Mono` — the audition fold, faded over 15 ms. Mirrors TerrainWidenFx.h step 9b,
+      // INCLUDING the snap: a one-pole approaches 1 and never arrives, and a mono button
+      // that leaves side energy behind is a word rather than a measurement.
+      this.monoSm += this.monoK * (this.monoTg - this.monoSm);
+      if (Math.abs(this.monoTg - this.monoSm) < 1e-3) this.monoSm = this.monoTg;
+      if (this.monoSm >= 1) { const mm = 0.5 * (yL + yR); yL = mm; yR = mm; }
+      else if (this.monoSm > 1e-6) { const mm = 0.5 * (yL + yR);
+        yL += this.monoSm * (mm - yL); yR += this.monoSm * (mm - yR); }
+      oL[i] = yL; oR[i] = yR;
+
+      this.cLL += this.corrK * (yL * yL - this.cLL);
+      this.cRR += this.corrK * (yR * yR - this.cRR);
+      this.cLR += this.corrK * (yL * yR - this.cLR);
+      this.lvlSm += this.lvlK * (0.5 * (Math.abs(wL) + Math.abs(wR)) - this.lvlSm);
+      { const mm = Math.abs(0.5 * (wL + wR)), ss = Math.abs(0.5 * (wL - wR));
+        this.viz.widthNow = ss / Math.max(1e-9, mm + ss); }
+    }
+
+    this.viz.corr = this.cLR / Math.sqrt(Math.max(1e-12, this.cLL * this.cRR));
+    this.viz.lvl  = Math.min(1, this.lvlSm * 14);
+    for (let v = 0; v < 8; ++v) this.viz.voicePan[v] = this.panG[v];
+    if ((++this.frame % 4) === 0) this.port.postMessage(this.viz);   // ~60 Hz push
+    return true;
+  }
+
+  // ── the voice crowd: Throng (sine) · Shift (static granular) · Double (walk) ──
+  voices (limHi) {
+    const T = this.T, C = this.C, sm = this.sm;
+    const rHz = Math.max(0.02, sm.rate * T.rateMul * C[2]);
+    let aL = 0, aR = 0;
+    for (let v = 0; v < MAXV; ++v) {
+      const tgt = v < this.nV ? 1 : 0;
+      this.vfd[v] += this.vfK * (tgt - this.vfd[v]);
+      if (this.vfd[v] < 1e-4 && !tgt) { this.viz.voiceCents[v] = 0; continue; }
+      let d = this.baseG[v];
+      if (T.mod === 0) {
+        const r = (C[9] & F_3PH) ? rHz * 0.75 : rHz * this.rho[v];
+        this.ph[v] += r / this.fs; if (this.ph[v] >= 1) this.ph[v] -= 1;
+        let s = Math.sin(2 * Math.PI * (this.ph[v] + ((C[9] & F_3PH) ? (v % 3) / 3 : 0)));
+        if (C[9] & F_3PH) { this.ph2 += (6.1 * Math.sqrt(Math.max(0.05, rHz))) / this.fs;
+                            if (this.ph2 >= 1) this.ph2 -= 1;
+                            s = s * 0.88 + 0.12 * Math.sin(2 * Math.PI * (this.ph2 + (v % 3) / 3)); }
+        if (this.res[v] !== 0) { const st = 0.5 / Math.max(1, this.depG[v]);
+          this.res[v] -= this.res[v] > 0 ? Math.min(this.res[v], st) : Math.max(this.res[v], -st); }
+        s += this.res[v];                       // ADD: it cancels the old offset, not doubles it
+        d += this.depG[v] * s;
+      } else if (T.mod === 3) {
+        this.tickWalk(this.wk[v], this.walkHz);
+        d += this.depG[v] * ((C[9] & F_STATIC) ? 0 : (this.wk[v].st + this.bleedWalkRes(v)));
+      }
+      if (sm.wan > 1e-3 && T.mod !== 3) { this.tickWalk(this.wk[v], 0.35 + 1.2 * sm.wan);
+                                          d += sm.wan * 0.012 * this.fs * (this.wk[v].st + this.bleedWalkRes(v)); }
+      d = clampf(d, 2, limHi);
+      if (this.prevD[v] < 0) this.prevD[v] = d;
+      if (this.vizTick === 0) {
+        this.viz.voiceCents[v] = (T.mod === 2) ? this.statC[v]
+          : 1200 * Math.log2(clampf(1 - (d - this.prevD[v]) / 64, 0.25, 4)) + this.statC[v];
+        this.prevD[v] = d;
+      }
+      const buf = (v & 1) === 0 ? this.bL : this.bR;
+      let y;
+      if (T.mod === 2 && v > 0 && Math.abs(this.statC[v]) > 0.02) {
+        const span = 30 * C[4] * 0.001 * this.fs, r = this.ratio[v] - 1;
+        this.q[v] += r / Math.max(1, span);
+        if (this.q[v] >= 1) this.q[v] -= 1; else if (this.q[v] < 0) this.q[v] += 1;
+        const w0 = 0.5 - 0.5 * Math.cos(2 * Math.PI * this.q[v]);
+        let q1 = this.q[v] + 0.5; if (q1 >= 1) q1 -= 1;
+        const o0 = r > 0 ? span * (1 - this.q[v]) : span * this.q[v];
+        const o1 = r > 0 ? span * (1 - q1) : span * q1;
+        const rd = (C[9] & F_LIN) ? this.readL.bind(this) : this.readH.bind(this);
+        y = w0 * rd(buf, clampf(d + o0, 2, limHi)) + (1 - w0) * rd(buf, clampf(d + o1, 2, limHi));
+      } else y = this.readH(buf, d);
+      const g = this.gainG[v] * this.vfd[v] * this.vNormG;
+      let gl = this.plG[v], gr = this.prG[v];
+      if (sm.wan > 1e-3) { this.tickWalk(this.wkp[v], 0.22 + 0.75 * sm.wan);
+        const pwd = sm.wan * 0.55 * (this.wkp[v].st + this.retR * this.resP[v]);
+        gl = clampf(gl - pwd, 0, 1.35); gr = clampf(gr + pwd, 0, 1.35); }
+      aL += g * gl * y; aR += g * gr * y;
+    }
+    return [aL, aR];
+  }
+
+  // ── TWIN: the SDD-320. TRIANGLE in antiphase + INVERTED cross-mix.
+  //    The compander is AFTER the delay on purpose — see the header comment in the C++:
+  //    writing companded audio into the shared ring makes a Type swap a STEP in the stored
+  //    signal, which comes out one delay-time later, long after any dip has recovered.
+  twin (limHi) {
+    const T = this.T, C = this.C, sm = this.sm;
+    const rHz = Math.max(0.02, sm.rate * T.rateMul * C[2]);
+    let wl = 0, wr = 0;
+    const np = clampf(this.nPair, 1, 4), gn = 1 / Math.sqrt(np);
+    for (let p = 0; p < np; ++p) {
+      this.ph[p] += (rHz * (1 + 0.13 * p)) / this.fs; if (this.ph[p] >= 1) this.ph[p] -= 1;
+      const x = this.ph[p];
+      let m = (C[9] & F_SINE) ? Math.sin(2 * Math.PI * x)
+                              : (x < 0.5 ? 4 * x - 1 : 3 - 4 * x);       // ← THE TRIANGLE
+      this.triZ[p] += this.apexK * (m - this.triZ[p]); m = this.triZ[p]; // 1.5 ms apex round ONLY
+      const inv = (p & 1) ? -1 : 1;
+      const dL = clampf(this.baseG[p * 2] + this.depG[p * 2] * m * inv, 2, limHi);
+      const dR = clampf(this.baseG[p * 2] - this.depG[p * 2] * m * inv, 2, limHi);
+      // fb422: SPREAD is the PLACEMENT of the pair, and it is the audio path now. At 0 the
+      // two lines land on top of each other, the cross-mix has nothing to subtract and the
+      // wet is mono; at 1 it is the full-width antiphase Dimension pair.
+      const spT = this.sm.spr, gA = Math.sqrt(0.5 * (1 + spT)), gB = Math.sqrt(0.5 * (1 - spT));
+      const yL = this.readH(this.bL, dL), yR = this.readH(this.bR, dR);
+      wl += gn * (yL * gA + yR * gB); wr += gn * (yL * gB + yR * gA);
+      if (p === 0) {
+        if (this.prevD[0] < 0) { this.prevD[0] = dL; this.prevD[1] = dR; }
+        if (this.vizTick === 0) {
+          this.viz.voiceCents[0] = 1200 * Math.log2(clampf(1 - (dL - this.prevD[0]) / 64, 0.25, 4));
+          this.viz.voiceCents[1] = 1200 * Math.log2(clampf(1 - (dR - this.prevD[1]) / 64, 0.25, 4));
+          this.prevD[0] = dL; this.prevD[1] = dR;
+        }
+        for (let z = 2; z < 8; ++z) this.viz.voiceCents[z] = 0;
+      }
+    }
+    const k = this.xkG;
+    let cl = wl - k * wr, cr = wr - k * wl;            // ← INVERTED CROSS-MIX
+    if (this.darkA > 0) { this.darkZ[0] += this.darkA * (cl - this.darkZ[0]);
+                          this.darkZ[1] += this.darkA * (cr - this.darkZ[1]);
+                          cl = this.darkZ[0]; cr = this.darkZ[1]; }
+    if (!(C[9] & F_COMPOFF)) {
+      this.cmpE[0] += this.cmpK * (Math.abs(cl) - this.cmpE[0]);
+      this.cmpE[1] += this.cmpK * (Math.abs(cr) - this.cmpE[1]);
+      cl *= TerrainWiden.compG(this.cmpE[0], -0.5); cr *= TerrainWiden.compG(this.cmpE[1], -0.5);
+      this.peZ[0] += this.peA0 * (cl - this.peZ[0]); this.peZ[1] += this.peA0 * (cr - this.peZ[1]);
+      cl = cl * 0.72 + this.peZ[0] * 0.56; cr = cr * 0.72 + this.peZ[1] * 0.56;
+    }
+    let mm = 0.5 * (cl + cr); const ss = 0.5 * (cl - cr);
+    this.bassZ[0] += this.bassA * (mm - this.bassZ[0]);
+    mm += 0.26 * this.bassZ[0];                        // the documented dry-bass compensation
+    // fb422: BALANCE on this Type — the un-delayed line is the centre anchor. At fb421
+    // balSm reached the voice crowd and the Blur/Bands blend and NOTHING here.
+    const thB = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
+    const gaB = Math.sin(thB), gmB = Math.cos(thB), anc = 0.5 * (lineL + lineR) * gmB;
+    this.viz.voicePan[0] = -0.85 * this.sm.spr; this.viz.voicePan[1] = 0.85 * this.sm.spr;
+    return [(mm + ss) * gaB + anc, (mm - ss) * gaB + anc];
+  }
+
+  // ── BLUR: two allpass cascades. |H| = 1 for any |c| < 1, so per-channel magnitude is
+  //    EXACTLY flat at every setting — only the phase differs.
+  blur (lineL, lineR) {
+    const m = 0.5 * (lineL + lineR), s0 = 0.5 * (lineL - lineR);
+    let a = m, b = m;
+    for (let k = 0; k < this.nAP; ++k) {
+      this.apCa[k] += this.smK * (this.apCaT[k] - this.apCa[k]);
+      this.apCb[k] += this.smK * (this.apCbT[k] - this.apCb[k]);
+      let st = this.apA[k], c = this.apCa[k];
+      let y = c * a + st.x - c * st.y; st.x = a; st.y = y; a = y;
+      st = this.apB[k]; c = this.apCb[k];
+      y = c * b + st.x - c * st.y; st.x = b; st.y = y; b = y;
+    }
+    const th = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
+    const ga = Math.sin(th), gm = Math.cos(th);
+    // fb422: SPREAD is how far apart the two decorrelated paths are PLACED. Power-
+    // normalised, because the paths are mutually decorrelated and a plain blend loses 3 dB.
+    const spA = this.sm.spr, mAB = 0.5 * (a + b), dAB = 0.5 * (a - b);
+    const nrmA = 1 / Math.sqrt(0.5 * (1 + spA * spA));
+    a = (mAB + dAB * spA) * nrmA; b = (mAB - dAB * spA) * nrmA;
+    a = a * ga + m * gm; b = b * ga + m * gm;
+    for (let v = 0; v < 8; ++v) { this.viz.voicePan[v] = v < this.nV ? ((v & 1) ? 0.9 : -0.9) * this.sm.spr : 0;
+                                  this.viz.voiceCents[v] = 0; }
+    return [a + s0, b - s0];
+  }
+
+  // ── BANDS: a one-pole crossover TREE. lp + (x − lp) = x exactly, and the band gains
+  //    (1 + g) and (1 − g) sum to 2 for ANY g — so the mono fold is the input, bit for bit,
+  //    even past g = 1 where the quiet channel's gain goes NEGATIVE.
+  bands (lineL, lineR) {
+    const C = this.C, m = 0.5 * (lineL + lineR), s0 = 0.5 * (lineL - lineR);
+    this.rotPh += (this.sm.rate * 0.25 * C[2]) / this.fs; if (this.rotPh >= 1) this.rotPh -= 1;
+    // fb422: 3.2, not 1.8 — a one-pole tree's gentle crossovers OVERLAP, so the
+    // antisymmetric energy is always less than g^2 and 1.8 only reached corr -0.035.
+    const con = clampf((this.bandHard ? Math.sqrt(this.sm.amt) : this.sm.amt) * 3.2 * this.bandCap, 0, 3.2);
+    // fb422: SPREAD is the spectral EXTENT of the split, opening from the MIDDLE outward.
+    // At fb421 this.sm.spr appeared on this Type only inside the viz assignment below.
+    const spB = this.sm.spr;
+    const nrm = 1 / Math.sqrt(1 + con * con);
+    let rest = m, al = 0, ar = 0;
+    for (let k = 0; k < this.nB; ++k) {
+      let band;
+      if (k < this.nB - 1) { this.bz[k] += this.bA[k] * (rest - this.bz[k]); band = this.bz[k]; rest -= band; }
+      else band = rest;
+      let sk = (k & 1) ? -1 : 1;
+      if (C[9] & F_TILT) sk *= 1 + 0.18 * ((k & 1) ? 1 : -1);
+      const u  = this.nB > 1 ? k / (this.nB - 1) : 1;
+      const pk = clamp01((1.55 * spB - 2 * Math.abs(u - 0.5)) * 2) * (1 + 0.45 * spB);
+      al += band * (1 + con * sk * pk); ar += band * (1 - con * sk * pk);
+    }
+    al *= nrm; ar *= nrm;
+    const th = (0.35 + 0.65 * this.sm.bal) * Math.PI / 2;
+    const ga = Math.sin(th), gm = Math.cos(th);
+    for (let v = 0; v < 8; ++v) { this.viz.voicePan[v] = v < this.nB ? ((v & 1) ? -1 : 1) * clamp01(con / 3.2) * this.sm.spr : 0;
+                                  this.viz.voiceCents[v] = 0; }
+    return [al * ga + m * gm + s0, ar * ga + m * gm - s0];
+  }
+}
+
+registerProcessor('terrain-widen', TerrainWiden);
+</script>
+<script>
+"use strict";
+var TYPES=["Throng", "Twin", "Steady", "Twofold", "Blur", "Bands"], CHARS=["JP Classic", "Even Fan", "Analog Drift", "Tight Fan", "Wide Fan", "Octave Bloom", "Sub Anchor", "Three Phase"], D2=["Straight", "Alternate", "Orbit", "Swap", "Side Only", "Gather"], D2K="Field";
+var BACK=[["Voices", 50], ["Spread", 85], ["Offset", 50], ["Roam", 0], ["Low Keep", 0], ["Tone", 50], ["Feedback", 0], ["Balance", 50]], KEYS=["amount", "width", "rate", "mix"];
+var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+var RLBL=['A','B','C','D','S','N'];
+function knobSVG(pct,label,glyph){
+            pct=Math.max(0,Math.min(100,Math.round(pct)));
+            var cx=15,cy=15,r=11.5;
+            function pt(deg){var a=deg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+            var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+            // fb298 — optional LABEL (sync division "1/8" / ms) replaces the number; arc still tracks pct.
+            // Font shrinks for longer strings so a "1/16T" / "1.2s" fits the FIXED knob (nothing grows/moves).
+            var txt=(label!=null&&label!==undefined)?(''+label):(''+pct);
+            var fs=(label==null)?8:(txt.length>=5?5.5:(txt.length>=4?6.5:7.5));
+            // fb363 — GLYPH mode: some parameters can't be said in a number at all. Shape is the
+            // case that forced it (Max: "I don't know what shape is 37, my nigga") — so the knob
+            // draws the ACTUAL window curve in its middle instead of a percentage. The glyph
+            // replaces the text; the arc still tracks the value, and the knob never changes size.
+            if(glyph){
+              return '<svg viewBox="0 0 30 30">'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="'+glyph+'" fill="none" stroke="var(--text-secondary)" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+            }
+            return '<svg viewBox="0 0 30 30">'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
+          }
+
+var D={ name:'Widen', core:'wid', type:TYPES[0], types:TYPES, preset:'Init', on:true,
+        pills:[{"t": "Retrig", "on": false}, {"t": "Mono", "on": false}], route:[true,false,false,false,false,false],
+        knobs:[{"l": "Amount", "v": 35}, {"l": "Width", "v": 50}, {"l": "Rate", "v": 35}, {"l": "Mix", "v": 50}] };
+var BV=BACK.map(function(b){return b[1];});
+
+/* devHTML() — structure-for-structure as the plugin emits it (lifted markup, not retyped) */
+function devHTML(d){
+  var pills=d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+  var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+  var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'">'+knobSVG(k.v,null,null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+  return '<div class="fxr-dev fxr-sel'+(d.on?'':' fxr-off')+'" data-dev="0">'
+    +'<div class="fxr-head">'
+      +'<span class="fxr-grip">\u22ee\u22ee</span><span class="fxr-name">'+d.name+'</span>'
+      +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+d.type+'<span class="fxr-car">\u25be</span></span>'
+        +d.types.map(function(t){return '<span class="fxr-tg">'+t+'<span class="fxr-car">\u25be</span></span>';}).join('')
+        +'</span><select class="fxr-type-native" id="tsel">'+d.types.map(function(t){return '<option'+(t===d.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></span>'
+      +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">\u2726</span><span class="fxr-pname">Init</span><span class="fxr-car">\u25be</span></span>'
+      +'<span class="fxr-spacer"></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap" data-act="swap" title="More parameters">'+IC_PLUS+IC_ARROW+'</span><span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
+    +'</div>'
+    +'<div class="fxr-core" data-core="'+d.core+'">'
+      +'<svg id="cs" preserveAspectRatio="none">'
+      +'<path class="dst-curve" id="cline"/><path class="dst-curve" id="cv0"/><path class="dst-curve" id="cv1"/></svg>'
+    +'</div>'
+    +'<div class="fxr-ctrls">'
+      +'<div class="fxr-knobs">'+knobs+'</div>'
+      +'<div class="fxr-divider"></div>'
+      +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
+    +'</div></div>';
+}
+document.getElementById('rack').innerHTML=devHTML(D);
+
+/* the OFFICIAL back panel (fb275): 2 dropdowns + 8 knobs 4x2 + 3 column separators */
+function backHTML(){
+  var ks=BACK.map(function(b,i){return '<div class="bp-k"><div class="fxr-dial" data-b="'+i+'">'+knobSVG(b[1],null,null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
+  var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
+  return '<div class="bp-row">'
+    +'<div class="bp-sel"><label>Character</label><select id="csel">'+CHARS.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'
+    +'<div class="bp-sel"><label>'+D2K+'</label><select id="dsel">'+D2.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'
+    +'</div><div class="bp-grid">'+seps+ks+'</div>';
+}
+document.getElementById('backpanel').innerHTML=backHTML();
+document.querySelector('.fxr-swap').addEventListener('click',function(){
+  document.getElementById('backpanel').classList.toggle('on'); });
+
+/* ── knob drag: the rack's own ns-resize gesture ── */
+function bindDial(dial,get,set){
+  var drag=false,y0=0,v0=0;
+  dial.addEventListener('pointerdown',function(e){drag=true;y0=e.clientY;v0=get();dial.setPointerCapture(e.pointerId);e.preventDefault();});
+  dial.addEventListener('pointermove',function(e){ if(!drag)return;
+    var v=Math.max(0,Math.min(100,v0+(y0-e.clientY)*0.6)); set(v); dial.innerHTML=knobSVG(v,null,null); });
+  dial.addEventListener('pointerup',function(){drag=false;});
+}
+document.querySelectorAll('.fxr-dial[data-k]').forEach(function(d){ var i=+d.getAttribute('data-k');
+  bindDial(d,function(){return D.knobs[i].v;},function(v){D.knobs[i].v=v; push(KEYS[i],v/100);}); });
+document.querySelectorAll('.fxr-dial[data-b]').forEach(function(d){ var i=+d.getAttribute('data-b');
+  bindDial(d,function(){return BV[i];},function(v){BV[i]=v; push('b'+(i+1),v/100);}); });
+document.getElementById('tsel').addEventListener('change',function(e){
+  var i=e.target.selectedIndex; D.type=TYPES[i];
+  document.querySelector('.fxr-tl').firstChild.nodeValue=D.type; push('type',i,true); });
+document.getElementById('csel').addEventListener('change',function(e){ push('character',e.target.selectedIndex,true); });
+document.getElementById('dsel').addEventListener('change',function(e){ push('axis',e.target.selectedIndex,true); });
+document.querySelector('.fxr-pwr').addEventListener('click',function(){
+  D.on=!D.on; document.querySelector('.fxr-dev').classList.toggle('fxr-off',!D.on);
+  if(wetG){var t=ac.currentTime; wetG.gain.setTargetAtTime(D.on?1:0,t,0.02); dryG.gain.setTargetAtTime(D.on?0:1,t,0.02);} });
+document.querySelectorAll('.fxr-r').forEach(function(r){ r.addEventListener('click',function(){ r.classList.toggle('fxr-on'); }); });
+document.querySelectorAll('.fxr-pill').forEach(function(p,i){ p.addEventListener('click',function(){
+  p.classList.toggle('fxr-on'); push(['pill1','pill2'][i], p.classList.contains('fxr-on')?1:0, true); }); });
+
+/* ── audio ── */
+var ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,playing=false,viz={},kind=0;
+var KINDS=['Saw chord','Sine 220','Noise','Pluck'];
+function fail(m){document.getElementById('err').textContent=m;document.getElementById('status').textContent='Failed to start.';}
+function push(k,v,raw){ if(!node)return; var m={}; m[k]=raw?v:v; node.port.postMessage(m); }
+async function addWorklet(){
+  var code=document.getElementById('wk').textContent;
+  /* Safari refuses blob: worklets on file:// in some builds (fb396) — blob, then data:, then report */
+  try{ await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([code],{type:'text/javascript'}))); return 'blob'; }
+  catch(e1){ try{ await ac.audioWorklet.addModule('data:text/javascript;base64,'+btoa(unescape(encodeURIComponent(code)))); return 'data'; }
+    catch(e2){ throw new Error('addModule failed.\nblob: '+e1.message+'\ndata: '+e2.message); } }
+}
+async function boot(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  var how=await addWorklet();
+  node=new AudioWorkletNode(ac,'terrain-widen',{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+  wetG=ac.createGain(); dryG=ac.createGain(); outG=ac.createGain();
+  dryG.gain.value=0; outG.gain.value=0.55;
+  node.connect(wetG); wetG.connect(outG); dryG.connect(outG); outG.connect(ac.destination);
+  node.port.onmessage=function(e){ viz=e.data||{}; };
+  KEYS.forEach(function(k,i){ push(k,D.knobs[i].v/100); });
+  BACK.forEach(function(b,i){ push('b'+(i+1), b[1]/100); });
+  push('type',0,true); push('character',0,true); push('axis',0,true);
+  document.getElementById('status').textContent='Running (worklet via '+how+'). Drag a knob; switch Type.';
+}
+document.getElementById('go').addEventListener('click',function(){ boot().catch(function(e){fail(String(e&&e.message||e));}); });
+document.getElementById('src').addEventListener('click',function(){ kind=(kind+1)%KINDS.length;
+  document.getElementById('src').textContent='Source: '+KINDS[kind]; if(playing){stop();start();} });
+function makeSrc(){
+  var sr=ac.sampleRate, n=Math.floor(sr*2), b=ac.createBuffer(2,n,sr);
+  for(var c=0;c<2;c++){ var d=b.getChannelData(c);
+    for(var i=0;i<n;i++){ var t=i/sr, v=0;
+      if(kind===0){ [110,138.6,164.8,220].forEach(function(f){ var ph=(t*f)%1; v+=(2*ph-1)*0.16; }); }
+      else if(kind===1){ v=Math.sin(2*Math.PI*220*t)*0.5; }
+      else if(kind===2){ v=(Math.random()*2-1)*0.28; }
+      else { var env=Math.exp(-((t%0.5))*7); [220,330,440].forEach(function(f){ v+=Math.sin(2*Math.PI*f*t)*0.2*env; }); }
+      d[i]=v; } }
+  var s=ac.createBufferSource(); s.buffer=b; s.loop=true; return s;
+}
+function start(){ srcN=makeSrc(); srcN.connect(node); srcN.connect(dryG); srcN.start(); playing=true;
+  document.getElementById('play').textContent='Stop'; }
+function stop(){ if(srcN){try{srcN.stop();}catch(e){} srcN.disconnect(); srcN=null;} playing=false;
+  document.getElementById('play').textContent='Play'; }
+document.getElementById('play').addEventListener('click',function(){ if(!node){fail('Press Start audio first.');return;}
+  if(ac.state==='suspended')ac.resume(); playing?stop():start(); });
+
+/* ── the core visual. Driven by whatever the engine actually publishes — no invented data. ── */
+function frame(){
+  var svg=document.getElementById('cs'); if(svg){
+    var W=svg.clientWidth||600,H=svg.clientHeight||120;
+    svg.setAttribute('viewBox','0 0 '+W+' '+H);
+    var d='', c=viz.curve||viz.mag||null;
+    if(c&&c.length){                                     /* EQ: 96 log bins, dB */
+      for(var i=0;i<c.length;i++){ var x=i/(c.length-1)*W;
+        var y=H*0.5-Math.max(-30,Math.min(30,c[i]))*(H*0.5/30);
+        d+=(i?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
+    } else {
+      var g=viz.grDb, gb=viz.grDbBands||viz.grBands||null, lv=viz.lvl||0;
+      if(gb&&gb.length){                                 /* OTT: per-band GR */
+        for(var b2=0;b2<gb.length;b2++){ var x0=W*(b2+0.12)/gb.length, x1=W*(b2+0.88)/gb.length;
+          var yy=H*0.5-Math.max(-24,Math.min(24,gb[b2]))*(H*0.42/24);
+          d+='M'+x0.toFixed(1)+' '+yy.toFixed(1)+'L'+x1.toFixed(1)+' '+yy.toFixed(1); }
+      } else if(g!==undefined){                          /* Compress: GR trace */
+        HIST.push(g); if(HIST.length>140)HIST.shift();
+        for(var k=0;k<HIST.length;k++){ var x=k/(HIST.length-1||1)*W;
+          var y=H*0.12+Math.max(0,Math.min(24,HIST[k]))*(H*0.76/24);
+          d+=(k?'L':'M')+x.toFixed(1)+' '+y.toFixed(1); }
+      } else {                                           /* Widen: correlation */
+        var cr=(viz.corr!==undefined)?viz.corr:0;
+        HIST.push(cr); if(HIST.length>140)HIST.shift();
+        for(var k2=0;k2<HIST.length;k2++){ var x2=k2/(HIST.length-1||1)*W;
+          var y2=H*0.5-HIST[k2]*(H*0.40);
+          d+=(k2?'L':'M')+x2.toFixed(1)+' '+y2.toFixed(1); }
+      }
+    }
+    var el=document.getElementById('cline'); if(el)el.setAttribute('d',d||('M0 '+(H*0.5)+'L'+W+' '+(H*0.5)));
+  }
+  requestAnimationFrame(frame);
+}
+var HIST=[];
+requestAnimationFrame(frame);
+</script></body></html>
