@@ -1517,20 +1517,59 @@ int main()
                         default: v[i] = sideMidDb (run (p, x), f0);                                     break;
                     }
                 }
-                const double span = std::fabs (v[4] - v[0]);
-                bool mono = true, plateau = false; double small = 1e18;
-                if (kn.idx == 2 || kn.idx == 4 || kn.idx == 7 || (kn.idx == 6 && t == 5))
-                {   // v[] already holds the per-step CHANGE; every step must register.
+                // ═══ fb429 — THE BAR WAS ON THE WRONG QUANTITY, AND ON NARROW CELLS IT WAS
+                //     IMPOSSIBLE. `minStep` is an AUDIBILITY floor — the smallest change of this
+                //     metric a person can hear — and it was demanded of EVERY QUARTER. On
+                //     `Twofold/Tape ADT` the Detune knob's ENTIRE travel is 1.687 cents against a
+                //     6-cents-per-quarter bar: 24 cents required from a 1.7-cent control. No
+                //     engine can pass that; it is a bar the instrument cannot express, the same
+                //     class as the EQ ring gate whose ruler saturated below its own threshold.
+                //     Six cells had a bar whose 4x exceeded their total span.
+                //
+                //     Worse, it punishes a legitimate TAPER. `Rate` spans 0.08->14 Hz (175x) and
+                //     the comment fifty lines up already concedes "its floor is RATIO-shaped" —
+                //     but the code then measures it LINEARLY and asks each quarter to move the
+                //     same absolute amount. A log knob read on a linear metric ALWAYS looks like
+                //     it has a dead first quarter. That is the instrument, not the device.
+                //
+                //     The gate was asking two questions through one number. They are separated:
+                //       (A) IS THE KNOB WORTH HAVING?  its TOTAL travel must clear the audibility
+                //           floor — which is the quantity these constants were calibrated for.
+                //       (B) IS THERE A DEAD ZONE?      no quarter may carry under 1 % of the
+                //           knob's OWN travel. Scale-free, so it works for any taper, and a true
+                //           plateau (a quarter that moves 0.000) still fails hard.
+                //       (C) MONOTONIC — unchanged.
+                double steps[4];
+                const bool changeMetric = (kn.idx == 2 || kn.idx == 4 || kn.idx == 7 || (kn.idx == 6 && t == 5));
+                int dir = 1;
+                if (changeMetric) { for (int i = 1; i < 5; ++i) steps[i - 1] = v[i]; }
+                else { dir = (v[4] >= v[0]) ? 1 : -1;
+                       for (int i = 1; i < 5; ++i) steps[i - 1] = std::fabs (v[i] - v[i - 1]); }
+                double total = 0.0, small = 1e18;
+                for (int i = 0; i < 4; ++i) { total += steps[i]; small = std::min (small, steps[i]); }
+                const double span = changeMetric ? total : std::fabs (v[4] - v[0]);
+
+                bool mono = true;
+                if (! changeMetric)
                     for (int i = 1; i < 5; ++i)
-                    { small = std::min (small, v[i]); if (v[i] < minStep) plateau = true; } }
-                else
-                {   const int dir = (v[4] >= v[0]) ? 1 : -1;
-                    for (int i = 1; i < 5; ++i)
-                    {   const double step = dir * (v[i] - v[i - 1]);
-                        small = std::min (small, std::fabs (v[i] - v[i - 1]));
-                        if (step < -0.25 * minStep) mono = false;
-                        if (std::fabs (v[i] - v[i - 1]) < minStep) plateau = true; } }
-                const bool ok = mono && ! plateau;
+                        if (dir * (v[i] - v[i - 1]) < -0.25 * minStep) mono = false;
+
+                const double minTotal = 4.0 * minStep;        // (A) the floor, on the right quantity
+                const bool tooSmall = (total < minTotal);
+                //     (B) 1 % OF TRAVEL WAS ALSO WRONG, and it took a second run to see it: `Mix`
+                //     is measured as DRY REJECTION IN dB, which runs to ~142 dB and is violently
+                //     nonlinear near full wet — its smallest quarter is 0.48 % of travel, so a
+                //     1 % rule failed Mix on EVERY cell and took the count from 88 to 115. I had
+                //     replaced one bad uniformity assumption with another.
+                //     NO UNIFORMITY RULE CAN WORK HERE: any fixed shape punishes some legitimate
+                //     taper, because these metrics are not linear in the knob and are not meant
+                //     to be. The only taper-free, metric-free definition of a dead zone is
+                //     "this quarter did not move" — 0.1 % of travel is 1/250th of a uniform
+                //     quarter, unambiguous, and it still fails a true 0.000 hard. Whether the
+                //     knob is worth having is gate (A)'s question, asked on the total, and the
+                //     two are no longer confused with each other.
+                const bool plateau  = (total > 1.0e-12) && (small < 0.001 * total);   // (B)
+                const bool ok = mono && ! plateau && ! tooSmall;
                 if (small < worstStep && why == nullptr) { worstStep = small; worstCell = cellNm; }
                 if (! ok || why != nullptr)
                     std::printf ("         %-6s/%-13s %8.3f %8.3f %8.3f %8.3f %8.3f   span %8.3f  min step %7.3f (>= %.3f)%s%s\n",
@@ -1547,7 +1586,8 @@ int main()
                     continue; }
                 if (! ok) ++deadCells;
                 gate ((cellNm + " — alive and monotonic").c_str(),
-                      ok, fmt4 ("%.3f -> %.3f, smallest quarter %.3f (>= %.3f)", v[0], v[4], small, minStep));
+                      ok, fmt4 ("%.3f -> %.3f, travel %.3f (>= %.3f)", v[0], v[4], total, minTotal)
+                          + fmt2 (", smallest quarter %.3f (>= 0.1 %% of travel = %.4f)", small, 0.001 * total));
             }
         }
         gate ("NO CELL IS BIT-IDENTICALLY DEAD (576 knob x Type x Character cells, NO exemptions)",
