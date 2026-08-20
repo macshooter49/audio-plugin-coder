@@ -138,6 +138,7 @@ class TerrainOtt extends AudioWorkletProcessor {
     this.pre = [[0, 0, 0], [0, 0, 0]]; this.gDnPrev = [[0, 0, 0], [0, 0, 0]];
     this.bf = [0, 0]; this.bs = [0, 0]; this.crestG = [1, 1]; this.crestN = [0, 0];
     this.tdn = [0, 0, 0]; this.tup = [0, 0, 0]; this.sdn = [0, 0, 0]; this.sup = [0, 0, 0]; this.mkDb = [0, 0, 0];
+    this.mkTopT = [0, 0, 0];                               // fb431
     this.gl = null; this.dip = 1; this.lvl = 0; this.vizN = 0; this.prevBands = 3;
     this.grAcc = [0, 0, 0]; this.lvAcc = [0, 0, 0]; this.accN = 0;
     this.port.onmessage = e => { Object.assign(this.p, e.data); this.resolve(); };
@@ -186,6 +187,7 @@ class TerrainOtt extends AudioWorkletProcessor {
       let sdn = ts.sdn[b] * (cs.dnMul || 1) * press * lo01;
       let sup = ts.sup[b] * (cs.upMul || 1) * raise * lo01;
       let mk = ts.mk[b] * lo01;                       // makeup follows the amount, or Amount 0
+      let mkTop = 0;                                  // fb431 — the top half's EXTRA, gated apart
       if (b === this.n - 1) {                          // is a +13 dB gain stage and Mix combs
         tup += 12 * topA; sup *= 1 + 1.2 * topA; mk += 4 * topA;
       }
@@ -194,11 +196,11 @@ class TerrainOtt extends AudioWorkletProcessor {
         sup = sup + (0.95 - sup) * u;
         tdn -= 6 * u;
         tup = tup + (tdn - tup) * u;                   // the floor RISES to MEET the ceiling
-        mk += 3 * u;
+        mkTop = 8 * u;                                    // fb431 — see TerrainOttFx.h
       }
       this.tdnT[b] = tdn; this.tupT[b] = Math.min(tup, tdn);
       this.sdnT[b] = clamp(sdn, 0, 1); this.supT[b] = clamp(sup, 0, 0.95);
-      this.mkT[b] = mk + trim[b]; this.cap[b] = cs.upCap || 24;
+      this.mkT[b] = mk + trim[b]; this.mkTopT[b] = mkTop; this.cap[b] = cs.upCap || 24;
       const sp = cs.spread !== undefined ? cs.spread : 1;
       let aMs = ts.atk[1] * Math.pow(ts.atk[b] / ts.atk[1], sp) * (cs.aMul || 1) * tMul;
       let rMs = ts.rel[1] * Math.pow(ts.rel[b] / ts.rel[1], sp) * (cs.rMul || 1) * tMul;
@@ -315,7 +317,10 @@ class TerrainOtt extends AudioWorkletProcessor {
             gUp = liftUp(Lup, Tup, gl.sup[b], this.cap[b]) * floorGate(Lup);
             if (this.upHold) gUp *= this.crestG[c];
           }
-          let g = db2lin(-gDn + gUp + gl.mk[b]);
+          // fb431 — the top half's extra makeup rides the SAME floor gate as the lift, so it
+          //         cannot amplify silence. Only the extra: gating the whole makeup costs the
+          //         stereo modes their mono survival (see TerrainOttFx.h).
+          let g = db2lin(-gDn + gUp + gl.mk[b] + this.mkTopT[b] * floorGate(Lup));
           if (g > MAX_MULT) g = MAX_MULT;
           let y = band[c][b] * g;
           if (this.clipHd < 900) {

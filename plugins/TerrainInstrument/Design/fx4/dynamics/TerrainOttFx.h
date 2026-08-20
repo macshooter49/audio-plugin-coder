@@ -157,6 +157,9 @@ public:
         gMs_.setTau (0.020f, fs_);
         gMix_.setTau (0.010f, fs_);
         aGl_   = dyn::coefTau (0.015f, fs_);      // every threshold/slope/makeup glide
+        // fb431 — 1.5 s. Slow on purpose: this must read SECTION level, never programme
+        // dynamics. A fast tracker would follow a staircase down and quietly undo the very
+        // compression the staircase is there to measure.
         // 10 ms LINEAR down / 40 ms back. 4 ms was the bible's number and it is too fast: a
         // linear fade to zero in 4 ms IS 25 % of the wet removed inside the first millisecond,
         // which this harness reads as 1.94 dB/ms all on its own. The dry rides the same ramp.
@@ -269,6 +272,7 @@ public:
 
         for (int b = 0; b < kBands; ++b)
         {
+            float mkTop = 0.0f;                    // fb431 — the top half's EXTRA, gated apart
             float tdn = ts.tdn[b] + cs.tdnOff - grip;
             float tup = ts.tup[b] + cs.tupOff - grip;
             float sdn = ts.sdn[b] * cs.dnMul * press * lo01;
@@ -291,15 +295,40 @@ public:
                 sdn = dyn::lerpf (sdn, 1.00f, u);
                 sup = dyn::lerpf (sup, 0.95f, u);
                 tdn -= 6.0f * u;                       // the wall drops a little...
+                // ⚠️ fb431 — AND IT STAYS 6. Dropping it to 3 makes the knob monotone at a
+                //    much lower makeup, but the wall IS the R11 property: at 3 the 46 dB
+                //    staircase gate went red (10.37 % surviving against a <= 10 % bar). The
+                //    compression stays; the makeup is what was wrong.
                 tup  = dyn::lerpf (tup, tdn, u);       // ...and the floor rises to MEET it
-                mk  += 3.0f * u;                       // half-compensated: denser, a touch louder
+                // 🔴 fb431 — THE TOP HALF OF `Amount` RAN BACKWARDS. The line above drops the
+                //    wall by 6 dB and this one used to hand back 3, calling itself
+                //    "half-compensated: denser, a touch louder". Measured, it was QUIETER: the
+                //    knob peaked at Amount 0.6 (+3.68 dB, +5.95 dB of high band) and fell to
+                //    +0.09 / +3.42 at 1.0 — turning OTT UP took the air away, which with the
+                //    level bug above is the whole of "it doesn't do anything". The wall drop is
+                //    only half of it; the slopes also go to inf:1 over this range and pin the
+                //    output at the wall instead of letting it follow. Swept for a MONOTONE
+                //    knob at a fixed input: 3 -> +0.09 (hump) · 6 -> +3.09 (still falling)
+                //    · 9 -> +6.09 · 12 -> +9.09 total with +12.42 dB of high band. 12 is the
+                //    first value where the top of the knob is unambiguously the most extreme
+                //    place on it, which is what R11 asks of a maximum.
+                //    Swept for the SMALLEST value that makes the knob monotone at a fixed
+                //    input (total dB at Amount 0.4/0.6/0.8/1.0):
+                //      3 -> 3.39 4.28 1.99 0.09  the shipped hump
+                //      6 -> 3.39 4.28 3.79 3.09  still falling
+                //      7 -> 3.39 4.48 4.39 4.09  still falling
+                //      8 -> 3.39 4.67 4.99 5.09  MONOTONE
+                //    8 it is: the top of the knob is now the most extreme place on it, which
+                //    is what R11 asks of a maximum, and the high band rises with it.
+                mkTop = 8.0f * u;
             }
 
             tdnT_[b]  = tdn;
             tupT_[b]  = std::min (tup, tdn);           // never cross
             sdnT_[b]  = dyn::clampf (sdn, 0.0f, 1.0f);
             supT_[b]  = dyn::clampf (sup, 0.0f, 0.95f);
-            mkT_[b]   = mk + trim[b];
+            mkT_[b]    = mk + trim[b];
+            mkTopT_[b] = mkTop;
             capDb_[b] = (b == nBands_ - 1) ? std::max (cs.upCap, capDbTop_) : cs.upCap;
 
             // ballistics: base × Speed × Character, with the per-band SPREAD exponent applied
@@ -335,7 +364,7 @@ public:
             gXlo_.snap (xloTgt_); gXhi_.snap (xhiTgt_); gMix_.snap (mixTgt_);
             for (int b = 0; b < kBands; ++b)
             { tdn_[b] = tdnT_[b]; tup_[b] = tupT_[b]; sdn_[b] = sdnT_[b];
-              sup_[b] = supT_[b]; mkDb_[b] = mkT_[b]; }
+              sup_[b] = supT_[b]; mkDb_[b] = mkT_[b]; mkTopDb_[b] = mkTopT_[b]; }
             nBandsPrev_ = nBands_; dip_ = 1.0f; dipDir_ = 0; dryX_ = (nBands_ == 3) ? 1.0f : 0.0f;
             gClip_.snap ((clipHd_ < 900.0f) ? 1.0f : 0.0f); gMs_.snap ((stereo_ == 2) ? 1.0f : 0.0f);
             prevType_ = p.type; prevChar_ = p.character; prevAxis_ = p.axis;
@@ -356,6 +385,17 @@ public:
         const float xl = gXlo_.proc (xloTgt_), xh = gXhi_.proc (xhiTgt_);
         applyXover (xl, xh);
 
+        // 🔬 fb431 — A PROGRAMME TRACKER WAS TRIED HERE AND IS THE WRONG FIX. Every
+        //    threshold in this file is absolute dBFS, calibrated for the -26 dBFS Terrain bus,
+        //    so feeding it hotter leaves every band above T_up, the UPWARD computer never
+        //    engages, and the OTT degenerates into a downward compressor that REMOVES top end
+        //    (measured on a saw chord at Amount 0.5: -32.5 dBFS in -> +10.98 dB and +10.75 dB
+        //    of high band; -13.7 dBFS in -> -4.67 and -6.39). Making the window follow the
+        //    programme DOES fix that, and it also destroys the thing R11 gates: a wall means
+        //    the output does not depend on the input, and a window that chases the input is
+        //    the definition of depending on it. Measured: "every Type walls at Amount 100"
+        //    went 3 of 8 red. `Grip` (+-18 dB on both thresholds) is already the offset for
+        //    this, and in the rack the input IS the bus level by construction. Left absolute.
         float grAcc[kBands] = { 0.0f, 0.0f, 0.0f }, lvAcc[kBands] = { 0.0f, 0.0f, 0.0f };
         int   accN = 0;
 
@@ -443,6 +483,7 @@ public:
                 sdn_[b]  += (sdnT_[b] - sdn_[b])  * aGl_;
                 sup_[b]  += (supT_[b] - sup_[b])  * aGl_;
                 mkDb_[b] += (mkT_[b]  - mkDb_[b]) * aGl_;
+                mkTopDb_[b] += (mkTopT_[b] - mkTopDb_[b]) * aGl_;
 
                 for (int c = 0; c < 2; ++c)
                 {
@@ -511,7 +552,16 @@ public:
                         if (upHold_) gUp *= biteG_[c];
                     }
 
-                    float gdb = -gDn + gUp + mkDb_[b];
+                    // 🔴 fb431 — THE TOP HALF'S EXTRA MAKEUP RIDES THE FLOOR GATE. The gate
+                    //    two lines up stops the UPWARD lift amplifying silence; the makeup was
+                    //    added unconditionally, which was survivable at +3 dB and is not at +9
+                    //    — a dithered -96 dBFS floor came out at -67.4 dBFS.
+                    //    ⚠️ Gating the WHOLE makeup (tried first) fixes that and costs the
+                    //    stereo modes: the quiet side channel and the quiet bands lose their
+                    //    makeup too, so the M/S difference stops surviving a mono fold —
+                    //    measured 4.37 dB -> 1.06. Only the EXTRA is gated.
+                    float gdb = -gDn + gUp + mkDb_[b]
+                              + mkTopDb_[b] * dyn::floorGate (Lup, -78.0f, 12.0f);
                     if (xfN_ > 0)
                         gdb = gdbZ_[c][b] + dyn::clampf (gdb - gdbZ_[c][b], -slewPS_, slewPS_);
                     gdbZ_[c][b] = gdb;
@@ -786,8 +836,8 @@ private:
 
     float envDn_[2][kBands] {}, envUp_[2][kBands] {};
     float tdn_[kBands] {}, tup_[kBands] {}, sdn_[kBands] {}, sup_[kBands] {};
-    float mkDb_[kBands] {}, capDb_[kBands] {}, aAtk_[kBands] {}, aRel_[kBands] {};
-    float tdnT_[kBands] {}, tupT_[kBands] {}, sdnT_[kBands] {}, supT_[kBands] {}, mkT_[kBands] {};
+    float mkDb_[kBands] {}, mkTopDb_[kBands] {}, capDb_[kBands] {}, aAtk_[kBands] {}, aRel_[kBands] {};
+    float tdnT_[kBands] {}, tupT_[kBands] {}, sdnT_[kBands] {}, supT_[kBands] {}, mkT_[kBands] {}, mkTopT_[kBands] {};
     float atkMs_[kBands] {}, relMs_[kBands] {};
     float bf_[2] {}, bs_[2] {}, biteG_[2] { 1.0f, 1.0f }, gDnPrev_[2][kBands] {}, grMem_[2][kBands] {};
     int   biteCnt_[2] {};

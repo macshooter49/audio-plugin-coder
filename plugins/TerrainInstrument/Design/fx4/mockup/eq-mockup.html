@@ -932,6 +932,18 @@ function makeSrc(){
       else if(kind===2){ v=(Math.random()*2-1)*0.28; }
       else { var env=Math.exp(-((t%0.5))*7); [220,330,440].forEach(function(f){ v+=Math.sin(2*Math.PI*f*t)*0.2*env; }); }
       d[i]=v; } }
+  /* fb431 — NORMALISE TO THE BUS. Every threshold in Compress and OTT is an ABSOLUTE dBFS
+     number calibrated for the -26 dBFS Terrain bus. These sources ran at -9..-16 dBFS, i.e.
+     up to 19 dB hot, which puts every band above OTT's UPWARD thresholds so the upward
+     computer — the entire point of an OTT — never engages, and what is left is a downward
+     compressor REMOVING top end. Measured on this very saw chord at Amount 0.5: -32.5 dBFS
+     in gave +10.98 dB and +10.75 dB of high band; -13.7 dBFS in gave -4.67 and -6.39. The
+     mockup was auditioning a level the rack never produces. */
+  var acc=0,d0=b.getChannelData(0); for(var j=0;j<n;j++) acc+=d0[j]*d0[j];
+  var cur=Math.sqrt(acc/n), want=Math.pow(10,-26/20), k=cur>1e-9?want/cur:1;
+  for(var c2=0;c2<2;c2++){ var dd=b.getChannelData(c2); for(var j2=0;j2<n;j2++) dd[j2]*=k; }
+  var el=document.getElementById('src');
+  if(el) el.textContent='Source: '+KINDS[kind]+'  (-26 dBFS, bus level)';
   var s=ac.createBufferSource(); s.buffer=b; s.loop=true; return s;
 }
 function start(){ srcN=makeSrc(); srcN.connect(node); srcN.connect(dryG); srcN.start(); playing=true;
