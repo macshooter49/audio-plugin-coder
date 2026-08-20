@@ -177,6 +177,7 @@ var DEVS=DEVICES.map(function(t){ return {
   pills:t.pills.map(function(p){return {t:p[0],on:!!p[1]};}), pp:t.pillKeys.map(function(k){return t.pfx+k.toUpperCase();}),
   route:[true,false,false,false,false,false],
   knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
+  xp:(t.core==='eqz')?[1,2,3,4].map(function(k){return [t.pfx+'X'+k+'HZ',t.pfx+'X'+k,t.pfx+'X'+k+'ON'];}):null, xb:(t.core==='eqz')?[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]:null,   /* fb438 — the free bells */
   back:{d1:{k:'Character',v:t.chars[0],opts:t.chars,p:t.pfx+'CHAR'}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
         knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
   typeIdx:0, charIdx:0, axisIdx:0, __t:t }; });
@@ -256,6 +257,7 @@ window.__setSynParam=function(id,norm){ try{
     for(var k=0;k<t.knobs.length;k++) if(t.knobs[k][2]===tail){ push(d,t.keys[k],norm); return; }
     for(var b=0;b<t.back.length;b++) if(t.back[b][2]===tail){ push(d,'b'+(b+1),norm); return; }
     for(var p=0;p<t.pillKeys.length;p++) if(t.pillKeys[p].toUpperCase()===tail){ push(d,t.pillKeys[p],norm>0.5?1:0,true); return; }
+    var mx; if((mx=/^X([1-4])HZ$/.exec(tail))){ push(d,'x'+(2*(+mx[1])-1),norm); return; } if((mx=/^X([1-4])ON$/.exec(tail))){ push(d,'xon'+mx[1],norm>0.5?1:0,true); return; } if((mx=/^X([1-4])$/.exec(tail))){ push(d,'x'+(2*(+mx[1])),norm); return; }   /* fb438 */
     if(tail==='TYPE'){ push(d,'type',Math.round(norm*(d.tpN-1)),true); return; }
     if(tail==='CHAR'){ push(d,'character',Math.round(norm*7),true); return; }
     if(tail===t.d2p){ push(d,'axis',Math.round(norm*7),true); return; }
@@ -324,7 +326,7 @@ function setPower(d){ if(!d.__wet) return; var t=ac.currentTime; d.__wet.gain.se
 function setHear(){ if(!ac) return; var t=ac.currentTime; DEVS.forEach(function(d,i){ if(d.__hear) d.__hear.gain.setTargetAtTime(hear===i?1:0,t,0.03); }); if(dryG) dryG.gain.setTargetAtTime(hear===-1?1:0,t,0.03); }
 /* the worklet posts → the plugin's push field names, so the LIFTED drawers read them unchanged */
 function adapt(core,z){
-  if(core==='eqz') return {lvl:z.lvl,hz:z.nodeHz,db:z.nodeDb,curve:z.curve};
+  if(core==='eqz') return {lvl:z.lvl,hz:z.nodeHz,db:z.nodeDb,on:z.nodeOn,curve:z.curve};
   if(core==='wid') return {corr:z.corr,nV:z.nV||6,pan:z.voicePan,cents:z.voiceCents,width:z.widthNow,lvl:z.lvl};
   if(core==='cmp') return {gr:z.grDb,'in':z.inDb,out:z.outDb,thr:z.thrDb,ratio:(z.ratio===Infinity||z.ratio>1e6)?-1:z.ratio,atk:z.attackMs,rel:z.releaseMs,kneeDb:z.kneeDb,knee:z.knee,lvl:z.lvl};
   if(core==='ott') return {gr:z.grDb,lv:z.bandDb,x:z.xoverHz,tdn:z.tdn,tup:z.tup,nb:z.bands||3,lvl:z.lvl};

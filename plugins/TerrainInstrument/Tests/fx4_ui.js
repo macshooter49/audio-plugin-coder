@@ -77,7 +77,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(!r1.addErr, 'adding the four devices throws nothing', r1.addErr||'');
   chk(r1.cards===24, 'eight of each ADD, capped at six each (24 cards)', 'cards='+r1.cards+' '+JSON.stringify(r1.counts));
   for(const core of ['eqz','wid','cmp','ott']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
-  chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===24, 'Equalizer core = the house line + 4 nodes per card', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
+  chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===48, 'Equalizer core = the house line + 8 nodes per card (4 roles + 4 free bells, fb438)', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
   chk(r1.mark.cmpKnee===6 && r1.mark.widV===48, 'Compress knee (house line) + Widen 8 voice beams per card', JSON.stringify({knee:r1.mark.cmpKnee,beams:r1.mark.widV}));
   chk(r1.mark.eqzPill==='Delta', 'the Equalizer has its Delta pill', r1.mark.eqzPill);
@@ -203,6 +203,85 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     chk(r6.delta===true&&r6.routeB===1, 'RESTORE reads pills and routes', 'delta='+r6.delta+' B='+r6.routeB);
     chk(r6.focus==='Side', 'RESTORE decodes the 2nd dropdown by pN (2/7 → Side)', r6.focus);
   }
+
+  // ── fb438: the Character names are PER TYPE (mirrored from the engines) and the preset menu is per core
+  let dumpJson=null;
+  try{
+    const cp=require('child_process'), fs=require('fs'), os=require('os');
+    const bin=os.tmpdir()+'/fx_chars_dump_gate';
+    const root='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument';
+    cp.execSync('clang++ -O2 -std=c++17 -I '+root+'/Tests/shim -I '+root+'/Source '+root+'/Tests/fx_chars_dump.cpp -o '+bin,{stdio:'pipe'});
+    dumpJson=JSON.parse(cp.execSync(bin).toString());
+  }catch(e){ console.log('  (could not build/run Tests/fx_chars_dump.cpp: '+String(e).slice(0,120)+')'); }
+  const r7 = await pg.evaluate((dump)=>{
+    const out={};
+    out.hasChars=typeof window.__fxApplyType==='function';
+    // the page's FX_CHARS literal vs the engines' own tables — read it off the page source, the var is module-scoped
+    const src=[...document.scripts].map(s=>s.textContent).join('\n'); const m=src.match(/\/\* FX-CHARS-BEGIN \*\/\s*var FX_CHARS=(\{[\s\S]*?\});\s*\/\* FX-CHARS-END \*\//);
+    out.literalFound=!!m; let lit=null; try{ lit=m?JSON.parse(m[1]):null; }catch(e){ out.parseErr=String(e).slice(0,80); }
+    out.matchesDump = (dump&&lit) ? (JSON.stringify(dump)===JSON.stringify(lit)) : null;
+    out.cores = lit?Object.keys(lit).join(','):'';
+    // Type change on the EQ → the Character dropdown wears British's names, index kept
+    const ecard=document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev'), esel=ecard.querySelector('select.fxr-type-native');
+    const D=window.__fxDevs(); const d=D.find(z=>z.core==='eqz');
+    esel.value='British'; esel.dispatchEvent(new Event('change',{bubbles:true}));
+    out.britishChars=d.back.d1.opts.slice(0,3).join(','); out.charV=d.back.d1.v;
+    const card2=document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev');
+    const bksel=card2.querySelector('.fxr-bk-native'); out.domFirstOpt=bksel?bksel.options[0].textContent:'(no back select)';
+    // the preset pill on the EQ card → a Factory section with rows; clicking one writes params
+    window.__W.length=0;
+    const pill=card2.querySelector('.fxr-preset'); pill.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+    const menu=document.querySelector('.pmenu'); out.menu=!!menu;
+    const secs=menu?[...menu.querySelectorAll('.ps')].map(e=>e.textContent):[]; out.secs=secs.join('|');
+    const rows=menu?[...menu.querySelectorAll('.pi')].filter(r=>!r.classList.contains('psave')):[]; out.rows=rows.map(r=>r.querySelector('.nm')?r.querySelector('.nm').textContent:'').slice(0,4).join('|');
+    const row=rows.find(r=>/Presence Push/.test(r.textContent)); if(row){ row.dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true})); }
+    out.applied=row?[...new Set(window.__W.map(w=>w[0]))].filter(x=>/SYN_EQZ_/.test(x)).length:0;
+    out.pillName=(document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev').querySelector('.fxr-pname')||{}).textContent;
+    // the Chorus card's factory list is the CHORUS's, never the reverb's
+    const ccard=document.querySelector('.fxr-core[data-core="cho"]');
+    if(!ccard){ window.__fxAdd('cho'); }
+    const cc=document.querySelector('.fxr-core[data-core="cho"]').closest('.fxr-dev'); const m2=document.querySelector('.pmenu'); if(m2) m2.remove();
+    cc.querySelector('.fxr-preset').dispatchEvent(new MouseEvent('click',{bubbles:true,cancelable:true}));
+    const menu2=document.querySelector('.pmenu'); out.choRows=menu2?[...menu2.querySelectorAll('.pi')].filter(r=>!r.classList.contains('psave')).map(r=>r.textContent.replace('✕','').trim()).slice(0,3).join('|'):'(no menu)';
+    if(menu2) menu2.remove();
+    return out; }, dumpJson);
+  chk(r7.literalFound && r7.cores==='cho,fla,pha,eqz,wid,cmp,ott', 'FX_CHARS literal present for the seven relabelling cores', r7.cores);
+  if(dumpJson) chk(r7.matchesDump===true, 'FX_CHARS equals the engines\' own charNames() tables (Tests/fx_chars_dump.cpp)', r7.matchesDump===true?'identical':'DIFFERS — re-run the dump and re-mirror');
+  chk(r7.britishChars==='Desk,Big Knob,Ahead' && r7.charV==='Desk', 'Type British → the Character dropdown wears British\'s names (index kept)', r7.britishChars+' v='+r7.charV);
+  chk(r7.domFirstOpt==='Desk', 'the back-panel Character <select> re-rendered with the Type\'s names', r7.domFirstOpt);
+  chk(r7.menu && /Factory/.test(r7.secs), 'the preset pill opens the house menu with a Factory section', r7.secs);
+  chk(/Presence Push/.test(r7.rows), 'the EQ (British) lists ITS factory presets', r7.rows);
+  chk(r7.applied>=4 && r7.pillName==='Presence Push', 'applying a factory preset writes the params and renames the pill', 'writes='+r7.applied+' pill='+r7.pillName);
+  chk(/Init Vintage/.test(r7.choRows), 'the Chorus lists the CHORUS factory presets, not the reverb\'s', r7.choRows);
+
+  // ── fb438: the FREE BELLS — double-click empty curve adds a band, drag moves it, right-click removes it
+  const r8 = await pg.evaluate(()=>{
+    const core=document.querySelector('.fxr-core[data-core="eqz"]'), svg=core.querySelector('svg'), rct=svg.getBoundingClientRect();
+    const D=window.__fxDevs(); const d=D.find(z=>z.core==='eqz'); const out={};
+    out.nodes=core.querySelectorAll('.eqz-n').length; out.freeHidden=[...core.querySelectorAll('.eqz-n.eqz-free')].filter(n=>n.getAttribute('opacity')==='0').length;
+    // an EMPTY spot on the plot: x for 5 kHz, y near the top (no node there)
+    const px=rct.left+(6.5+213*Math.log(5000/20)/Math.log(1000))/226*rct.width, py=rct.top+8/78*rct.height;
+    window.__W.length=0;
+    core.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,clientX:px,clientY:py}));
+    out.addWrites=[...new Set(window.__W.map(w=>w[0]))].filter(x=>/_X1/.test(x)).sort().join(',');
+    out.modelOn=d.xb?d.xb[0][2]:null; out.modelHz=d.xb?Math.round(20*Math.pow(1000,d.xb[0][0]/100)):null;
+    for(let i=0;i<3;i++) window.__fx4Tick();
+    const n5=core.querySelector('.eqz-n[data-b="4"]'); out.n5op=n5.getAttribute('opacity'); out.n5cx=+n5.getAttribute('cx');
+    // drag the new node: its X param must move
+    const ev=(t,x,y)=>new PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:3,pointerType:'mouse',buttons:1});
+    const nx=rct.left+(+n5.getAttribute('cx'))/226*rct.width, ny=rct.top+(+n5.getAttribute('cy'))/78*rct.height;
+    window.__W.length=0; core.dispatchEvent(ev('pointerdown',nx,ny)); core.dispatchEvent(ev('pointermove',nx-30,ny+10)); document.dispatchEvent(ev('pointerup',nx-30,ny+10));
+    out.dragWrites=[...new Set(window.__W.map(w=>w[0]))].filter(x=>/_X1/.test(x)).sort().join(','); out.hzAfter=d.xb?Math.round(20*Math.pow(1000,d.xb[0][0]/100)):null;
+    // right-click it: removed
+    window.__W.length=0; core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:nx,clientY:ny}));
+    out.delWrites=window.__W.filter(w=>/_X1ON$/.test(w[0])).map(w=>w[1]).join(','); out.modelOnAfter=d.xb?d.xb[0][2]:null;
+    for(let i=0;i<3;i++) window.__fx4Tick(); out.n5opAfter=core.querySelector('.eqz-n[data-b="4"]').getAttribute('opacity');
+    return out; });
+  chk(r8.nodes===8 && r8.freeHidden===4, 'Equalizer core carries 8 nodes, the 4 free ones hidden by default', 'nodes='+r8.nodes+' hidden='+r8.freeHidden);
+  chk(/X1HZ/.test(r8.addWrites)&&/X1ON/.test(r8.addWrites)&&r8.modelOn===1, 'double-click an empty spot ADDS a free bell (writes X1HZ/X1/X1ON, model on)', r8.addWrites+' hz≈'+r8.modelHz);
+  chk(r8.n5op!=='0' && r8.n5cx>6.5, 'the new node appears on the curve at the click\'s frequency', 'opacity='+r8.n5op+' cx='+r8.n5cx);
+  chk(/X1HZ/.test(r8.dragWrites) && r8.hzAfter<r8.modelHz, 'dragging the free bell writes its Hz (moved left = lower)', r8.modelHz+' → '+r8.hzAfter);
+  chk(r8.delWrites==='0' && r8.modelOnAfter===0 && r8.n5opAfter==='0', 'right-click REMOVES it (X1ON 0, node hidden)', 'writes='+r8.delWrites);
 
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();

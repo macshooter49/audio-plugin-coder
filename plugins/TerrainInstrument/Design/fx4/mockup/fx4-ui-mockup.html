@@ -521,20 +521,22 @@ class TerrainEq extends AudioWorkletProcessor {
     super();
     this.fs = sampleRate;
     this.p = { type: 0, character: 0, axis: 0, f1: .5, f2: .5, f3: .5, mix: 1,
-               b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5 };
-    this.tg = new Float64Array(11).fill(0.5);
-    this.sm = new Float64Array(11).fill(0.5);
+               b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5,
+               x1: .5, x2: .5, x3: .5, x4: .5, x5: .5, x6: .5, x7: .5, x8: .5, xon1: 0, xon2: 0, xon3: 0, xon4: 0 };   // fb438 — free bells
+    this.tg = new Float64Array(19).fill(0.5);
+    this.sm = new Float64Array(19).fill(0.5);
+    this.xOn = [false,false,false,false];
     // fb422: Amount .010 -> .020. It multiplies all four band gains (+-60 dB of authority) and
     // had the SHORTEST tau in the table; an instant Amount write measured 1.63 dB of wet-gain
     // change in ONE sample. The number scales as 1/tau, which is what proves it is a smoothing
     // fault; `Trait` does not move with tau at all, because that one is stored resonator energy.
-    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020];
+    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020, .020,.012,.020,.012,.020,.012,.020,.012];   // + the free bells (fb438)
     this.k = tau.map(t => 1 - Math.exp(-(DESIGN_BLK / this.fs) / t));
     this.mixSm = 1; this.mixTg = 1;
     this.mixK = 1 - Math.exp(-1 / (0.010 * this.fs));
-    // 9 stages: 4 bands x 2 + slant. cur/tgt/inc coefficients + 2 channels of state.
+    // 13 stages: 4 bands x 2 + slant + 4 free bells (fb438). cur/tgt/inc coefficients + 2 channels of state.
     this.st = [];
-    for (let i = 0; i < 9; ++i)
+    for (let i = 0; i < 13; ++i)
       this.st.push({ on: false, kind: 0, f: 1000, q: 1, g: 0, lf: -1, lq: -1, lg: 1e9,
                      cur: [1,0,0,0,0], tgt: [1,0,0,0,0], inc: [0,0,0,0,0],
                      z1: [0,0], z2: [0,0] });
@@ -543,7 +545,7 @@ class TerrainEq extends AudioWorkletProcessor {
                  a1: [.5,.5,.5,.5], a2: [0,0,0,0], a3: [0,0,0,0],
                  atk: [.01,.01,.01,.01], rel: [.001,.001,.001,.001] };
     this.ride = [1,1,1,1];
-    this.nodeHz = [100,550,3100,15500]; this.nodeDb = [0,0,0,0];
+    this.nodeHz = [100,550,3100,15500,632,632,632,632]; this.nodeDb = [0,0,0,0,0,0,0,0]; this.nodeOn = [1,1,1,1,0,0,0,0];   // fb438 — 4 roles + 4 free
     this.slantDb = 0; this.lvl = 0;
     this.lvlK = 1 - Math.exp(-1 / (0.060 * this.fs));
     this.phi = new Float64Array(CURVE_BINS);
@@ -565,6 +567,8 @@ class TerrainEq extends AudioWorkletProcessor {
     this.tg[4] = clamp(p.b5,0,1); this.tg[5] = clamp(p.b6,0,1);
     this.tg[6] = clamp(p.b7,0,1); this.tg[7] = clamp(p.b8,0,1);
     this.tg[8] = clamp(p.f1,0,1); this.tg[9] = clamp(p.f2,0,1); this.tg[10] = clamp(p.f3,0,1);
+    for (let k = 0; k < 8; ++k) this.tg[11 + k] = clamp(p['x' + (k + 1)], 0, 1);     // fb438 — free bells
+    for (let k = 0; k < 4; ++k) this.xOn[k] = !!p['xon' + (k + 1)];
     this.mixTg = clamp(p.mix,0,1);
   }
 
@@ -675,6 +679,17 @@ class TerrainEq extends AudioWorkletProcessor {
       if (Math.abs(s1.g) < 1e-4) s1.on = false;
       this.nodeHz[b] = f[b]; this.nodeDb[b] = g[b];
     }
+    // fb438 — THE FREE BELLS (stages 9..12): full-range constant-Q bells, surgical by design
+    for (let k = 0; k < 4; ++k) {
+      const S = this.st[9 + k], tF = sm[11 + 2 * k], tG = sm[12 + 2 * k];
+      const fHz = clamp(20 * Math.pow(1000, tF), 20, 0.45 * this.fs);
+      const gDb = clamp((tG * 2 - 1) * DB_SPAN * amount, -96, G_CEIL);
+      const live = this.xOn[k] && Math.abs(gDb) > 1e-4;
+      let qf = clamp(T.law === 0 ? widthMul(shape) : 1.0, Q_MIN, Q_MAX);
+      qf = usableQ(0, fHz, qf, gDb, this.fs);
+      S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
+      this.nodeHz[4 + k] = fHz; this.nodeDb[4 + k] = this.xOn[k] ? gDb : 0; this.nodeOn[4 + k] = this.xOn[k] ? 1 : 0;
+    }
     this.slantDb = (sm[8] * 2 - 1) * SLANT_SPAN * amount;
     const ts = this.st[8];
     ts.on = Math.abs(this.slantDb) > 1e-4;
@@ -684,7 +699,7 @@ class TerrainEq extends AudioWorkletProcessor {
   designAll(snap) {
     const inv = 1 / DESIGN_BLK;
     this.act.length = 0;
-    for (let i = 0; i < 9; ++i) {
+    for (let i = 0; i < 13; ++i) {
       const S = this.st[i];
       if (!S.on) {
         if (S.lg !== 1e9) { S.tgt = [1,0,0,0,0]; S.lf = -1; S.lq = -1; S.lg = 1e9; }
@@ -736,7 +751,7 @@ class TerrainEq extends AudioWorkletProcessor {
       this.curve[i] = clamp(acc, -120, 80);
     }
     this.port.postMessage({ curve: Array.from(this.curve), nodeHz: this.nodeHz.slice(),
-                            nodeDb: this.nodeDb.slice(), lvl: clamp(this.lvl * 6, 0, 1),
+                            nodeDb: this.nodeDb.slice(), nodeOn: this.nodeOn.slice(), lvl: clamp(this.lvl * 6, 0, 1),
                             type: TYPES[this.p.type|0], trait: TRAIT[this.p.type|0],
                             character: CHARS[this.p.type|0][this.p.character|0],
                             focus: FOCUS[this.p.axis|0],
@@ -757,7 +772,7 @@ class TerrainEq extends AudioWorkletProcessor {
     let i = 0;
     while (i < n) {
       if (this.ctr <= 0) {
-        for (let k = 0; k < 11; ++k) this.sm[k] += this.k[k] * (this.tg[k] - this.sm[k]);
+        for (let k = 0; k < 19; ++k) this.sm[k] += this.k[k] * (this.tg[k] - this.sm[k]);
         this.resolve(); this.designAll(false);
         this.ctr = DESIGN_BLK;
       }
@@ -2300,6 +2315,7 @@ var DEVS=DEVICES.map(function(t){ return {
   pills:t.pills.map(function(p){return {t:p[0],on:!!p[1]};}), pp:t.pillKeys.map(function(k){return t.pfx+k.toUpperCase();}),
   route:[true,false,false,false,false,false],
   knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
+  xp:(t.core==='eqz')?[1,2,3,4].map(function(k){return [t.pfx+'X'+k+'HZ',t.pfx+'X'+k,t.pfx+'X'+k+'ON'];}):null, xb:(t.core==='eqz')?[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]:null,   /* fb438 — the free bells */
   back:{d1:{k:'Character',v:t.chars[0],opts:t.chars,p:t.pfx+'CHAR'}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
         knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
   typeIdx:0, charIdx:0, axisIdx:0, __t:t }; });
@@ -2379,7 +2395,7 @@ var CORES={
                wheel = Trait, double-click = reset the band. The held node turns purple. */
             eqz:function(){
               var g=''; [100,1000,10000].forEach(function(hz){ var x=fx4HzX(hz).toFixed(1); g+='<line x1="'+x+'" y1="4" x2="'+x+'" y2="74"/>'; });
-              var n=''; for(var b=0;b<4;b++) n+='<circle class="eqz-n" data-b="'+b+'" cx="'+fx4HzX([100,550,3100,15500][b]).toFixed(1)+'" cy="39" r="2.4" fill="currentColor" stroke="none"/>';
+              var n=''; for(var b=0;b<8;b++) n+='<circle class="eqz-n'+(b>=4?' eqz-free':'')+'" data-b="'+b+'" cx="'+fx4HzX([100,550,3100,15500,632,632,632,632][b]).toFixed(1)+'" cy="39" r="2.4" fill="currentColor" stroke="none"'+(b>=4?' opacity="0"':'')+'/>';   /* fb438 — 4 role + 4 free bells */
               return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
                 +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'+g+'</g>'
                 +'<line x1="6.5" y1="39" x2="219.5" y2="39" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
@@ -2510,6 +2526,7 @@ window.__setSynParam=function(id,norm){ try{
     for(var k=0;k<t.knobs.length;k++) if(t.knobs[k][2]===tail){ push(d,t.keys[k],norm); return; }
     for(var b=0;b<t.back.length;b++) if(t.back[b][2]===tail){ push(d,'b'+(b+1),norm); return; }
     for(var p=0;p<t.pillKeys.length;p++) if(t.pillKeys[p].toUpperCase()===tail){ push(d,t.pillKeys[p],norm>0.5?1:0,true); return; }
+    var mx; if((mx=/^X([1-4])HZ$/.exec(tail))){ push(d,'x'+(2*(+mx[1])-1),norm); return; } if((mx=/^X([1-4])ON$/.exec(tail))){ push(d,'xon'+mx[1],norm>0.5?1:0,true); return; } if((mx=/^X([1-4])$/.exec(tail))){ push(d,'x'+(2*(+mx[1])),norm); return; }   /* fb438 */
     if(tail==='TYPE'){ push(d,'type',Math.round(norm*(d.tpN-1)),true); return; }
     if(tail==='CHAR'){ push(d,'character',Math.round(norm*7),true); return; }
     if(tail===t.d2p){ push(d,'axis',Math.round(norm*7),true); return; }
@@ -2590,7 +2607,12 @@ render();
             if(curve&&curve.getAttribute('d')!==d){ curve.setAttribute('d',d); fx4SetA(core.querySelector('.eqz-glow'),'d',d); fx4SetA(core.querySelector('.eqz-fill'),'d',d+'L'+FX4_X1+' '+FX4_CY+'L'+FX4_X0+' '+FX4_CY+'Z'); }
             // the nodes: at the band's LIVE centre, ON the drawn line (interpolated from the same bins)
             var nodes=core.querySelectorAll('.eqz-n');
-            for(var b=0;b<4;b++){ var hz=fx4GlLog(st,'hz'+b,(f&&f.hz)?f.hz[b]:[100,550,3100,15500][b],0.5);
+            for(var b=0;b<nodes.length;b++){
+              // fb438 — a free bell (b>=4) exists only while ON: the feed's flag, or the model's before the first push
+              var on=(b<4)||((f&&f.on)?!!f.on[b]:!!(dev.xb&&dev.xb[b-4]&&dev.xb[b-4][2]));
+              if(!on){ fx4SetA(nodes[b],'opacity','0'); nodes[b].__off=true; continue; } if(nodes[b].__off){ fx4SetA(nodes[b],'opacity','1'); nodes[b].__off=false; }
+              var dflt=[100,550,3100,15500,632,632,632,632][b]; if(b>=4&&dev.xb&&dev.xb[b-4]) dflt=20*Math.pow(1000,dev.xb[b-4][0]/100);
+              var hz=fx4GlLog(st,'hz'+b,(f&&f.hz&&f.hz.length>b)?f.hz[b]:dflt,0.5);
               var x=Math.max(FX4_X0,Math.min(FX4_X1,fx4HzX(hz))), u=(x-FX4_X0)/FX4_PW*(N-1), i0=Math.floor(u), i1=Math.min(N-1,i0+1), fr=u-i0;
               var cdb=st.c[i0]*(1-fr)+st.c[i1]*fr;
               fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4EffDb(cdb,mix)).toFixed(1)); }
@@ -2700,13 +2722,18 @@ render();
             var EQZ_LO=[20,100,700,6000], EQZ_HI=[500,3000,14000,40000], drag=null;
             function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
             function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='eqz')?d:null; }
-            function gainRef(d,b){ return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; try{window.__setSynParam(d.back.knobs[2*b+1][2],v/100);}catch(e){}}}
+            // fb438 — bands 4..7 are the FREE BELLS: full-range log Hz, no back knob, model d.xb[k]=[hz,gain,on]
+            function gainRef(d,b){ if(b>=4){ var k=b-4; return {get:function(){return d.xb[k][1];},set:function(v){d.xb[k][1]=v; try{window.__setSynParam(d.xp[k][1],v/100);}catch(e){}}}; }
+                                   return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; try{window.__setSynParam(d.back.knobs[2*b+1][2],v/100);}catch(e){}}}
                                       :{get:function(){return d.knobs[1].v;},set:function(v){d.knobs[1].v=v; try{window.__setSynParam(d.knobs[1].p,v/100);}catch(e){}}}; }
-            function hzSet(d,b,v){ d.back.knobs[2*b][1]=v; try{window.__setSynParam(d.back.knobs[2*b][2],v/100);}catch(e){} }
-            function pick(core,u){
+            function hzSet(d,b,v){ if(b>=4){ var k=b-4; d.xb[k][0]=v; try{window.__setSynParam(d.xp[k][0],v/100);}catch(e){} return; } d.back.knobs[2*b][1]=v; try{window.__setSynParam(d.back.knobs[2*b][2],v/100);}catch(e){} }
+            function freeLo(b){ return b>=4?20:EQZ_LO[b]; } function freeHi(b){ return b>=4?20000:EQZ_HI[b]; }
+            function setOn(d,k,on){ d.xb[k][2]=on?1:0; try{window.__setSynParam(d.xp[k][2],on?1:0);}catch(e){} }
+            function pick(core,u,strict){
               var nodes=core.querySelectorAll('.eqz-n'), best=-1, bd=1e9;
-              for(var i=0;i<nodes.length;i++){ var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){bd=dd;best=+nodes[i].getAttribute('data-b');} }
-              if(bd<=12) return best;
+              for(var i=0;i<nodes.length;i++){ if(nodes[i].getAttribute('opacity')==='0') continue;   /* fb438 — an absent free bell is not a target */
+                var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){bd=dd;best=+nodes[i].getAttribute('data-b');} }
+              if(bd<=12) return best; if(strict) return -1;
               var hz=fx4XHz(u.x); if(hz<170) return 0; if(hz<1500) return 1; if(hz<7000) return 2; return 3;
             }
             function readout(core,d,txt){ var t=core.querySelector('.eqz-ro'); if(!t) return; t.textContent=txt; t.setAttribute('opacity','.8');
@@ -2721,12 +2748,12 @@ render();
               e.preventDefault(); move(e);
             }catch(err){} });
             function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, b=drag.b;
-              var hz=fx4XHz(u.x), t=Math.log(hz/EQZ_LO[b])/Math.log(EQZ_HI[b]/EQZ_LO[b]);
+              var hz=fx4XHz(u.x), t=Math.log(hz/freeLo(b))/Math.log(freeHi(b)/freeLo(b));
               hzSet(d,b,Math.max(0,Math.min(100,t*100)));
               var dDb=-(u.y-drag.y0)/1.1;                         // 1.1 units per dB on the plot
               gainRef(d,b).set(Math.max(0,Math.min(100,drag.g0+dDb/30*50)));
               window.__fxRedrawKnobs(d);
-              var z=d.__vz; readout(drag.core,d,['Low','Body','Bite','Air'][b]+'  '+fx4Hz(z&&z.hz?z.hz[b]:hz)+'  '+fx4Db(z&&z.db?z.db[b]:0));
+              var z=d.__vz; readout(drag.core,d,(['Low','Body','Bite','Air'][b]||('Band '+(b+1)))+'  '+fx4Hz(z&&z.hz&&z.hz.length>b?z.hz[b]:hz)+'  '+fx4Db(z&&z.db&&z.db.length>b?z.db[b]:0));
             }
             document.addEventListener('pointermove',function(e){ try{ move(e); }catch(err){} });
             document.addEventListener('pointerup',function(){ try{ if(drag) hot(drag.core,-1); }catch(err){} drag=null; });
@@ -2741,10 +2768,25 @@ render();
             }catch(err){} },{passive:false,capture:true});
             document.addEventListener('dblclick',function(e){ try{
               var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
-              var d=devFor(core); if(!d) return; var b=pick(core,unit(core.querySelector('svg'),e));
-              var t=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core==='eqz'){ t=DEV_TEMPLATES[i]; break; } if(!t) return;
-              hzSet(d,b,t.back.knobs[2*b][1]); gainRef(d,b).set(b<3?t.back.knobs[2*b+1][1]:t.knobs[1].v); window.__fxRedrawKnobs(d);
+              var d=devFor(core); if(!d) return; var u=unit(core.querySelector('svg'),e), b=pick(core,u,true);
+              // fb438 — double-click a node: reset it. Double-click EMPTY curve: ADD a free bell there (Max: "like
+              // the LFO — double-click to add dots, right-click to delete"). Four free bells, first free slot.
+              if(b<0){ if(!d.xb||!d.xp) return; var k=-1; for(var q=0;q<4;q++) if(!d.xb[q][2]){ k=q; break; }
+                if(k<0){ readout(core,d,'4 free bands — right-click one to remove'); return; }
+                var hz=fx4XHz(u.x), t=Math.log(hz/20)/Math.log(1000); d.xb[k][0]=Math.max(0,Math.min(100,t*100)); d.xb[k][1]=50;
+                try{ window.__setSynParam(d.xp[k][0],d.xb[k][0]/100); window.__setSynParam(d.xp[k][1],0.5); }catch(err){} setOn(d,k,true);
+                var st=d.__st; if(st){ st['hz'+(4+k)]=hz; } readout(core,d,'Band '+(5+k)+'  '+fx4Hz(hz)+'  added'); return; }
+              if(b>=4){ gainRef(d,b).set(50); window.__fxRedrawKnobs(d); return; }
+              var t2=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core==='eqz'){ t2=DEV_TEMPLATES[i]; break; } if(!t2) return;
+              hzSet(d,b,t2.back.knobs[2*b][1]); gainRef(d,b).set(b<3?t2.back.knobs[2*b+1][1]:t2.knobs[1].v); window.__fxRedrawKnobs(d);
             }catch(err){} });
+            // right-click a FREE bell = delete it (the four role bands cannot be deleted — they are the device)
+            document.addEventListener('contextmenu',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; e.preventDefault(); e.stopPropagation();
+              var b=pick(core,unit(core.querySelector('svg'),e),true); if(b<4) return;
+              setOn(d,b-4,false); readout(core,d,'Band '+(b+1)+'  removed');
+            }catch(err){} },true);
           })();
           /* ═══ THE MULTIBAND'S CROSSOVERS — drag a lane boundary, the Low/High Cross knob moves ═══ */
           (function(){
@@ -2785,7 +2827,7 @@ function setPower(d){ if(!d.__wet) return; var t=ac.currentTime; d.__wet.gain.se
 function setHear(){ if(!ac) return; var t=ac.currentTime; DEVS.forEach(function(d,i){ if(d.__hear) d.__hear.gain.setTargetAtTime(hear===i?1:0,t,0.03); }); if(dryG) dryG.gain.setTargetAtTime(hear===-1?1:0,t,0.03); }
 /* the worklet posts → the plugin's push field names, so the LIFTED drawers read them unchanged */
 function adapt(core,z){
-  if(core==='eqz') return {lvl:z.lvl,hz:z.nodeHz,db:z.nodeDb,curve:z.curve};
+  if(core==='eqz') return {lvl:z.lvl,hz:z.nodeHz,db:z.nodeDb,on:z.nodeOn,curve:z.curve};
   if(core==='wid') return {corr:z.corr,nV:z.nV||6,pan:z.voicePan,cents:z.voiceCents,width:z.widthNow,lvl:z.lvl};
   if(core==='cmp') return {gr:z.grDb,'in':z.inDb,out:z.outDb,thr:z.thrDb,ratio:(z.ratio===Infinity||z.ratio>1e6)?-1:z.ratio,atk:z.attackMs,rel:z.releaseMs,kneeDb:z.kneeDb,knee:z.knee,lvl:z.lvl};
   if(core==='ott') return {gr:z.grDb,lv:z.bandDb,x:z.xoverHz,tdn:z.tdn,tup:z.tup,nb:z.bands||3,lvl:z.lvl};

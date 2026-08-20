@@ -121,7 +121,29 @@ Relabels on Type change: Widen `knobs[0].l = frontNames(type)[0]`
    run it against the pre-change tree first (a gate that cannot fail is worth nothing).
 5. Build both formats, embed gate, pluginval ×3 both, `auval -v aumu Tern Wvcr` **exit code**.
 
-## 8. Open for Max (one decision, one option)
+## 7b. What shipped beyond the list (fb437 → fb438)
+
+* **fb437** — everything in §7 built and installed; `Tests/fx4_ui.js` 39/39 (fails on the old tree
+  with `cards=0`); route pill lit = white; EQ `Delta` pill; the generic restore (cho/fla/pha + the
+  four re-rendered from the TEMPLATE on reopen); `window.__fxRedrawKnobs` (the filter card had called
+  it undefined since fb384).
+* **fb438** — Max's review changes: EQ nodes white, small, **pinned on the drawn line**; Compress no
+  number + transparent; Widen blooms; the cassette card redrawn (big white line-art shell, thin white
+  meters). **Character names per Type** on all seven relabelling devices (`FX_CHARS`, mirrored from
+  the engines by `Tests/fx_chars_dump.cpp`, diffed by the gate). **Presets**: a per-core namespace
+  + factory table (the old chain filed cho/fla/pha + the four under the reverb's folder and listed
+  ITS factory set); 94 factory presets authored from the bibles for the seven. **The free bells**:
+  4 extra EQ bands added by double-click / removed by right-click (engine stages 9–12, constant-Q
+  bells, surgical by design; `SYN_EQZ_X1..4 HZ / X1..4 / X1..4 ON`; worklet mirrored; eq_cert
+  147/147 unchanged; a free bell OFF is bit-exact). Gate 52/52.
+
+## 8. Decided (was: open)
+
+* **Band count → 4 role bands + up to 4 free bells** (Max: "double-click to add dots, right-click to
+  delete, like the LFO"). The back-8 stay the four roles; free bells are nodes only.
+* Pop-out editor: still later (`TerrainCardWindow`).
+
+## 8-old. Open for Max (one decision, one option)
 
 * **Band count.** This pass keeps the engine's **4 fixed-role bands** (Low/Body/Bite/Air — the
   SSL/console solve; every band draggable on the live spectrum, which is the Ableton/Pro-Q feel).

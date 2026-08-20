@@ -324,20 +324,22 @@ class TerrainEq extends AudioWorkletProcessor {
     super();
     this.fs = sampleRate;
     this.p = { type: 0, character: 0, axis: 0, f1: .5, f2: .5, f3: .5, mix: 1,
-               b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5 };
-    this.tg = new Float64Array(11).fill(0.5);
-    this.sm = new Float64Array(11).fill(0.5);
+               b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5,
+               x1: .5, x2: .5, x3: .5, x4: .5, x5: .5, x6: .5, x7: .5, x8: .5, xon1: 0, xon2: 0, xon3: 0, xon4: 0 };   // fb438 — free bells
+    this.tg = new Float64Array(19).fill(0.5);
+    this.sm = new Float64Array(19).fill(0.5);
+    this.xOn = [false,false,false,false];
     // fb422: Amount .010 -> .020. It multiplies all four band gains (+-60 dB of authority) and
     // had the SHORTEST tau in the table; an instant Amount write measured 1.63 dB of wet-gain
     // change in ONE sample. The number scales as 1/tau, which is what proves it is a smoothing
     // fault; `Trait` does not move with tau at all, because that one is stored resonator energy.
-    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020];
+    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020, .020,.012,.020,.012,.020,.012,.020,.012];   // + the free bells (fb438)
     this.k = tau.map(t => 1 - Math.exp(-(DESIGN_BLK / this.fs) / t));
     this.mixSm = 1; this.mixTg = 1;
     this.mixK = 1 - Math.exp(-1 / (0.010 * this.fs));
-    // 9 stages: 4 bands x 2 + slant. cur/tgt/inc coefficients + 2 channels of state.
+    // 13 stages: 4 bands x 2 + slant + 4 free bells (fb438). cur/tgt/inc coefficients + 2 channels of state.
     this.st = [];
-    for (let i = 0; i < 9; ++i)
+    for (let i = 0; i < 13; ++i)
       this.st.push({ on: false, kind: 0, f: 1000, q: 1, g: 0, lf: -1, lq: -1, lg: 1e9,
                      cur: [1,0,0,0,0], tgt: [1,0,0,0,0], inc: [0,0,0,0,0],
                      z1: [0,0], z2: [0,0] });
@@ -346,7 +348,7 @@ class TerrainEq extends AudioWorkletProcessor {
                  a1: [.5,.5,.5,.5], a2: [0,0,0,0], a3: [0,0,0,0],
                  atk: [.01,.01,.01,.01], rel: [.001,.001,.001,.001] };
     this.ride = [1,1,1,1];
-    this.nodeHz = [100,550,3100,15500]; this.nodeDb = [0,0,0,0];
+    this.nodeHz = [100,550,3100,15500,632,632,632,632]; this.nodeDb = [0,0,0,0,0,0,0,0]; this.nodeOn = [1,1,1,1,0,0,0,0];   // fb438 — 4 roles + 4 free
     this.slantDb = 0; this.lvl = 0;
     this.lvlK = 1 - Math.exp(-1 / (0.060 * this.fs));
     this.phi = new Float64Array(CURVE_BINS);
@@ -368,6 +370,8 @@ class TerrainEq extends AudioWorkletProcessor {
     this.tg[4] = clamp(p.b5,0,1); this.tg[5] = clamp(p.b6,0,1);
     this.tg[6] = clamp(p.b7,0,1); this.tg[7] = clamp(p.b8,0,1);
     this.tg[8] = clamp(p.f1,0,1); this.tg[9] = clamp(p.f2,0,1); this.tg[10] = clamp(p.f3,0,1);
+    for (let k = 0; k < 8; ++k) this.tg[11 + k] = clamp(p['x' + (k + 1)], 0, 1);     // fb438 — free bells
+    for (let k = 0; k < 4; ++k) this.xOn[k] = !!p['xon' + (k + 1)];
     this.mixTg = clamp(p.mix,0,1);
   }
 
@@ -478,6 +482,17 @@ class TerrainEq extends AudioWorkletProcessor {
       if (Math.abs(s1.g) < 1e-4) s1.on = false;
       this.nodeHz[b] = f[b]; this.nodeDb[b] = g[b];
     }
+    // fb438 — THE FREE BELLS (stages 9..12): full-range constant-Q bells, surgical by design
+    for (let k = 0; k < 4; ++k) {
+      const S = this.st[9 + k], tF = sm[11 + 2 * k], tG = sm[12 + 2 * k];
+      const fHz = clamp(20 * Math.pow(1000, tF), 20, 0.45 * this.fs);
+      const gDb = clamp((tG * 2 - 1) * DB_SPAN * amount, -96, G_CEIL);
+      const live = this.xOn[k] && Math.abs(gDb) > 1e-4;
+      let qf = clamp(T.law === 0 ? widthMul(shape) : 1.0, Q_MIN, Q_MAX);
+      qf = usableQ(0, fHz, qf, gDb, this.fs);
+      S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
+      this.nodeHz[4 + k] = fHz; this.nodeDb[4 + k] = this.xOn[k] ? gDb : 0; this.nodeOn[4 + k] = this.xOn[k] ? 1 : 0;
+    }
     this.slantDb = (sm[8] * 2 - 1) * SLANT_SPAN * amount;
     const ts = this.st[8];
     ts.on = Math.abs(this.slantDb) > 1e-4;
@@ -487,7 +502,7 @@ class TerrainEq extends AudioWorkletProcessor {
   designAll(snap) {
     const inv = 1 / DESIGN_BLK;
     this.act.length = 0;
-    for (let i = 0; i < 9; ++i) {
+    for (let i = 0; i < 13; ++i) {
       const S = this.st[i];
       if (!S.on) {
         if (S.lg !== 1e9) { S.tgt = [1,0,0,0,0]; S.lf = -1; S.lq = -1; S.lg = 1e9; }
@@ -539,7 +554,7 @@ class TerrainEq extends AudioWorkletProcessor {
       this.curve[i] = clamp(acc, -120, 80);
     }
     this.port.postMessage({ curve: Array.from(this.curve), nodeHz: this.nodeHz.slice(),
-                            nodeDb: this.nodeDb.slice(), lvl: clamp(this.lvl * 6, 0, 1),
+                            nodeDb: this.nodeDb.slice(), nodeOn: this.nodeOn.slice(), lvl: clamp(this.lvl * 6, 0, 1),
                             type: TYPES[this.p.type|0], trait: TRAIT[this.p.type|0],
                             character: CHARS[this.p.type|0][this.p.character|0],
                             focus: FOCUS[this.p.axis|0],
@@ -560,7 +575,7 @@ class TerrainEq extends AudioWorkletProcessor {
     let i = 0;
     while (i < n) {
       if (this.ctr <= 0) {
-        for (let k = 0; k < 11; ++k) this.sm[k] += this.k[k] * (this.tg[k] - this.sm[k]);
+        for (let k = 0; k < 19; ++k) this.sm[k] += this.k[k] * (this.tg[k] - this.sm[k]);
         this.resolve(); this.designAll(false);
         this.ctr = DESIGN_BLK;
       }

@@ -4114,6 +4114,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                     F (p + "BITEHZ", d + "Bite Hz",0.50f);   F (p + "BITE",   d + "Bite",   0.50f);
                     F (p + "REACH",  d + "Reach",  0.50f);   F (p + "TRAIT",  d + "Trait",  0.50f);
                     B (p + "DELTA",  d + "Delta",  false);   // fb437 — pill 1: monitor wet − dry (hear what the EQ adds/removes)
+                    // fb438 — THE FREE BELLS: four extra bands the user adds on the card (nodes only, no back
+                    //   knob). (freq, gain) + ON each; defaults centre / 0 dB / OFF = bit-exact through.
+                    for (int k = 1; k <= 4; ++k)
+                    {
+                        F (p + "X" + juce::String (k) + "HZ", d + "Band " + juce::String (k + 4) + " Hz", 0.50f);
+                        F (p + "X" + juce::String (k),        d + "Band " + juce::String (k + 4),         0.50f);
+                        B (p + "X" + juce::String (k) + "ON", d + "Band " + juce::String (k + 4) + " On", false);
+                    }
                     for (auto& sx : srcSuf) B (p + sx, d + sx, false);
                     B (p + "POWER",  d + "Power", false);
                     B (p + "ACTIVE", d + "In Chain", false);
@@ -4868,9 +4876,11 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; eqzCurveSent_[(size_t) i] = -1.0e9f; continue; }
         const auto& z = eqzPool_[(size_t) i].viz();
         j << "{\"lvl\":" << N (z.lvl, 3) << ",\"hz\":[";
-        for (int b = 0; b < 4; ++b) { if (b) j << ","; j << N (z.nodeHz[b], 1); }
+        for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << N (z.nodeHz[b], 1); }
         j << "],\"db\":[";
-        for (int b = 0; b < 4; ++b) { if (b) j << ","; j << N (z.nodeDb[b], 2); }
+        for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << N (z.nodeDb[b], 2); }
+        j << "],\"on\":[";   // fb438 — the free bells' ON flags (4 roles are always on)
+        for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << (z.nodeOn[b] ? "1" : "0"); }
         j << "]";
         float sum = 0.0f;
         for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) sum += z.curve[k] * (1.0f + 0.01f * (float) k);
@@ -5110,6 +5120,13 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.f1 = V.f1->load(); q.f2 = V.f2->load(); q.f3 = V.f3->load(); q.mix = V.mix->load();
                 q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
                 q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                if (V.x[0] != nullptr)   // fb438 — the free bells
+                {
+                    q.x1 = V.x[0]->load(); q.x2 = V.x[1]->load(); q.x3 = V.x[2]->load(); q.x4 = V.x[3]->load();
+                    q.x5 = V.x[4]->load(); q.x6 = V.x[5]->load(); q.x7 = V.x[6]->load(); q.x8 = V.x[7]->load();
+                    q.xOn1 = V.xon[0] != nullptr && V.xon[0]->load() > 0.5f;  q.xOn2 = V.xon[1] != nullptr && V.xon[1]->load() > 0.5f;
+                    q.xOn3 = V.xon[2] != nullptr && V.xon[2]->load() > 0.5f;  q.xOn4 = V.xon[3] != nullptr && V.xon[3]->load() > 0.5f;
+                }
                 eqzPool_[(size_t) i].setParams (q);
             }
         }
@@ -5213,6 +5230,13 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
             v.pill2 = (kSpec[d].pill2 != nullptr) ? R (g + kSpec[d].pill2) : nullptr;
             v.sync  = (kSpec[d].sync  != nullptr) ? R (g + kSpec[d].sync)  : nullptr;
             for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
+            if (d == 0)   // fb438 — the Equalizer's free bells
+                for (int k = 0; k < 4; ++k)
+                {
+                    v.x[2 * k]     = R (g + "X" + juce::String (k + 1) + "HZ");
+                    v.x[2 * k + 1] = R (g + "X" + juce::String (k + 1));
+                    v.xon[k]       = R (g + "X" + juce::String (k + 1) + "ON");
+                }
         }
 }
 

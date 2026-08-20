@@ -93,6 +93,12 @@ public:
     static constexpr int kNumFocus  = 5;
     static constexpr int kNumDropdowns = 2;          // the two back-panel dropdown HEADINGS
     static constexpr int kNumBands  = 4;
+    // fb438 — THE FREE BELLS. Up to four extra bands the user ADDS on the card (double-click the curve)
+    // and removes (right-click). Nodes only — the back-8 stay the four ROLE bands. Full-range,
+    // constant-Q bells, surgical by design: the Type's character lives in Low/Body/Bite/Air, a free
+    // band is a scalpel. OFF = stage off = bit-exact pass-through, so every unity gate stands.
+    static constexpr int kNumFree   = 4;
+    static constexpr int kNumNodes  = kNumBands + kNumFree;        // what the card draws
     static constexpr int kCurveBins = 96;
 
     // ═════════════════════════════════════════════════════════════════════════
@@ -255,6 +261,10 @@ public:
         float f1 = 0.5f, f2 = 0.5f, f3 = 0.5f;            // Slant · Air · Amount
         float mix = 1.0f;
         float b1=0.5f,b2=0.5f,b3=0.5f,b4=0.5f,b5=0.5f,b6=0.5f,b7=0.5f,b8=0.5f;
+        // fb438 — the free bells: (freq, gain) x 4 as 0..1 (freq 20 Hz * 1000^t, gain +-kBandDbSpan), and
+        // an ON per band. Defaults: centre, 0 dB, OFF — a default device is the four role bands only.
+        float x1=0.5f,x2=0.5f,x3=0.5f,x4=0.5f,x5=0.5f,x6=0.5f,x7=0.5f,x8=0.5f;
+        bool  xOn1=false, xOn2=false, xOn3=false, xOn4=false;
         // An EQ has NO tempo-relevant time constant. The 4-bar..1/256 rule is satisfied by
         // ABSENCE, not by skipping it: the Dynamic type's ballistics are program-relative
         // milliseconds derived from each band's own centre frequency, which is a property of
@@ -279,8 +289,9 @@ public:
     struct Viz
     {
         float curve[kCurveBins] {};
-        float nodeHz[kNumBands] { 100.0f, 550.0f, 3100.0f, 15500.0f };
-        float nodeDb[kNumBands] {};
+        float nodeHz[kNumNodes] { 100.0f, 550.0f, 3100.0f, 15500.0f, 632.0f, 632.0f, 632.0f, 632.0f };
+        float nodeDb[kNumNodes] {};
+        bool  nodeOn[kNumNodes] { true, true, true, true, false, false, false, false };   // fb438 — the free bells
         float lvl = 0.0f;
     };
 
@@ -900,10 +911,10 @@ public:
         // measures a different device than the one at 44.1 k).
         const float step = (float) kDesignBlk / fs_;
         for (int i = 0; i < 8;  ++i) kSm_[i] = 1.0f - std::exp (-step / kTau[i]);
-        for (int i = 8; i < 11; ++i) kSm_[i] = 1.0f - std::exp (-step / kTau[i]);
+        for (int i = 8; i < kNumSm; ++i) kSm_[i] = 1.0f - std::exp (-step / kTau[i]);
         mixK_  = 1.0f - std::exp (-1.0f / (0.010f * fs_));
 #ifdef EQ_MUT_NO_SMOOTH
-        for (int i = 0; i < 11; ++i) kSm_[i] = 1.0f;      // MUTATION: all 11 smoothers, tau -> 0
+        for (int i = 0; i < kNumSm; ++i) kSm_[i] = 1.0f;  // MUTATION: all smoothers, tau -> 0
         mixK_ = 1.0f;                                     // MUTATION: the Mix smoother, gone
 #endif
         dipDn_ = 1.0f - std::exp (-1.0f / (0.008f * fs_));
@@ -960,7 +971,7 @@ public:
 #ifdef EQ_MUT_NO_DIP
             // MUTATION: no fade-swap. Adopt the new filter bank inside the block.
             type_ = t; char_ = c; focus_ = f; flushFocusStates();
-            for (int i = 0; i < 11; ++i) sm_[i] = tg_[i];
+            for (int i = 0; i < kNumSm; ++i) sm_[i] = tg_[i];
             resolve(); designAll (true);
 #else
             if (! seeded_ || isFlat())        // a flat device has nothing to crossfade:
@@ -975,6 +986,11 @@ public:
         tg_[6] = clampf (p.b7, 0.0f, 1.0f);  tg_[7] = clampf (p.b8, 0.0f, 1.0f);
         tg_[8] = clampf (p.f1, 0.0f, 1.0f);  tg_[9] = clampf (p.f2, 0.0f, 1.0f);
         tg_[10]= clampf (p.f3, 0.0f, 1.0f);
+        tg_[11]= clampf (p.x1, 0.0f, 1.0f);  tg_[12]= clampf (p.x2, 0.0f, 1.0f);   // fb438 — free bells
+        tg_[13]= clampf (p.x3, 0.0f, 1.0f);  tg_[14]= clampf (p.x4, 0.0f, 1.0f);
+        tg_[15]= clampf (p.x5, 0.0f, 1.0f);  tg_[16]= clampf (p.x6, 0.0f, 1.0f);
+        tg_[17]= clampf (p.x7, 0.0f, 1.0f);  tg_[18]= clampf (p.x8, 0.0f, 1.0f);
+        xOn_[0] = p.xOn1; xOn_[1] = p.xOn2; xOn_[2] = p.xOn3; xOn_[3] = p.xOn4;
 #ifdef EQ_MUT_MIX_WET
         mixTg_ = 1.0f;                                     // MUTATION: the Mix knob is ignored
 #else
@@ -988,7 +1004,7 @@ public:
         if (L == nullptr || R == nullptr || n <= 0) return;
         if (! seeded_)
         {
-            for (int i = 0; i < 11; ++i) sm_[i] = tg_[i];
+            for (int i = 0; i < kNumSm; ++i) sm_[i] = tg_[i];
             mixSm_ = mixTg_; seeded_ = true;
             controlStep(); snapCoeffs();
         }
@@ -1079,8 +1095,10 @@ public:
 
 private:
     // ═════════════════════════════════════════════════════════════════════════
-    static constexpr int kNumStages = 9;                     // 4 bands x 2 + slant
+    static constexpr int kNumStages = 13;                    // 4 bands x 2 + slant + 4 free bells (fb438)
     static constexpr int kSlant = 8;
+    static constexpr int kFree0 = 9;                         // fb438 — stages 9..12 are the free bells
+    static constexpr int kNumSm = 19;                        // 11 + the free bells' 8 (fb438)
 
     struct Stage
     {
@@ -1104,9 +1122,10 @@ private:
     //  read 7.20/7.97/7.50) because that one is a Q 40 resonator dumping stored energy.
     //  Amount now sits at 20 ms, the same as the widest-span controls, still inside the
     //  house 10-30 ms rule. eq_cert §J2 gates it.
-    static constexpr float kTau[11] =
+    static constexpr float kTau[kNumSm] =
     { 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.020f,   // b1..b8
-      0.015f, 0.012f, 0.020f };                                          // Slant, Air, Amount
+      0.015f, 0.012f, 0.020f,                                            // Slant, Air, Amount
+      0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f }; // fb438 — free bells (freq, gain) x 4
 
     static int   clampi (int v, int lo, int hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
     static float clampf (float v, float lo, float hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1117,7 +1136,7 @@ private:
 
     void seedSmoothers() noexcept
     {
-        for (int i = 0; i < 11; ++i) { sm_[i] = 0.5f; tg_[i] = 0.5f; }
+        for (int i = 0; i < kNumSm; ++i) { sm_[i] = 0.5f; tg_[i] = 0.5f; }
         mixSm_ = mixTg_ = 1.0f;
         seeded_ = false;
     }
@@ -1130,7 +1149,7 @@ private:
     bool isFlat() const noexcept
     {
         float m = std::fabs (slantDb_);
-        for (int b = 0; b < kNumBands; ++b) m = std::max (m, std::fabs (viz_.nodeDb[b]));
+        for (int b = 0; b < kNumNodes; ++b) m = std::max (m, std::fabs (viz_.nodeDb[b]));   // fb438 — free bells count too
         return m < 0.5f;
     }
 
@@ -1364,6 +1383,25 @@ private:
 
         // ── Tilt: Baxandall's seesaw, one 1-pole high shelf of 2t dB plus a -t dB trim.
         //    6 dB/oct, so the whole spectrum leans instead of stepping.
+        // ── fb438 — THE FREE BELLS (stages kFree0..+3). Full-range constant-Q bells: surgical by
+        //    design (the Type's character lives in the four role bands; a free band is a scalpel).
+        //    Surgical's Trait (width) still applies so the one knob that IS Q keeps its meaning; Amount
+        //    scales them like every other gain; an OFF or 0 dB band is an OFF stage = bit-exact through.
+        for (int k = 0; k < kNumFree; ++k)
+        {
+            Stage& S = st_[kFree0 + k];
+            const float tF = sm_[11 + 2 * k], tG = sm_[12 + 2 * k];
+            const float fHz = clampf (20.0f * std::pow (1000.0f, tF), 20.0f, 0.45f * fs_);
+            const float gDb = clampf ((tG * 2.0f - 1.0f) * kBandDbSpan * amount, -96.0f, kGainCeil);
+            const bool  live = xOn_[k] && std::fabs (gDb) > 1e-4f;
+            float qf = clampf ((T.law == LawConstant ? widthMul (shape) : 1.0f), kQMin, kQMax);
+            qf = (float) usableQ (0, (double) fHz, (double) qf, (double) gDb, (double) fs_);
+            S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
+            viz_.nodeHz[kNumBands + k] = fHz;
+            viz_.nodeDb[kNumBands + k] = xOn_[k] ? gDb : 0.0f;
+            viz_.nodeOn[kNumBands + k] = xOn_[k];
+        }
+
         slantDb_ = (sm_[8] * 2.0f - 1.0f) * kSlantDbSpan * amount;
         Stage& ts = st_[kSlant];
         ts.on = std::fabs (slantDb_) > 1e-4f;
@@ -1436,7 +1474,7 @@ private:
             type_ = pendType_; char_ = pendChar_; focus_ = pendFocus_;
             pendType_ = pendChar_ = pendFocus_ = -1;
             flushFocusStates();
-            for (int i = 0; i < 11; ++i) sm_[i] = tg_[i];
+            for (int i = 0; i < kNumSm; ++i) sm_[i] = tg_[i];
             resolve(); designAll (true);
             return;
         }
@@ -1485,7 +1523,8 @@ private:
     int    pendType_ = -1, pendChar_ = -1, pendFocus_ = -1;
     bool   seeded_ = false;
 
-    float  sm_[11] {}, tg_[11] {}, kSm_[11] {};
+    float  sm_[kNumSm] {}, tg_[kNumSm] {}, kSm_[kNumSm] {};
+    bool   xOn_[kNumFree] {};                                // fb438 — the free bells' ON flags
     float  mixSm_ = 1.0f, mixTg_ = 1.0f, mixK_ = 0.01f;
     float  slantDb_ = 0.0f;
     float  dip_ = 1.0f, dipDn_ = 0.1f, dipUp_ = 0.03f;
