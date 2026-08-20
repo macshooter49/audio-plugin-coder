@@ -1846,7 +1846,8 @@ private:
     std::array<float, (size_t) ParameterIDs::kFxInstances> eqzEnv_ {}, widEnv_ {}, cmpEnv_ {}, ottEnv_ {};  // fb426
     double fx3PrepSr_ = 0.0;
     // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.
-    std::atomic<float>* sendRef_[9][(size_t) ParameterIDs::kFxInstances] {};
+    // fb435 — sized off kFxKinds, not a literal. At 9 it silently excluded the fx4 four.
+    std::atomic<float>* sendRef_[kFxKinds][(size_t) ParameterIDs::kFxInstances] {};
     void cacheSendRefs();
     void cacheFx3Refs();
     void cacheFx4Refs();     // fb426 — equalizer / widen / compress / ott

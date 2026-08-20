@@ -41,6 +41,27 @@ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window
 // threshold so nothing distorts below it; the clip is now only a transient safety catch. Validated
 // offline: buzz 23%→<3% at 11 notes, single notes 0% THD at every level, peak still 0.966 (no
 // loudness lost). See clip_final.py in the session scratchpad for the measurement.
+// 🔑 fb435 — THE DEVICE KIND TABLE, AUTHORED ONCE. Three sites listed these prefixes
+// independently and one of them was still at 9 kinds while the other two had moved to 13:
+// cacheSendRefs() built its cache over the first NINE only, so `Equalizer`, `Widen`,
+// `Compress` and `Multiband` had a SEND parameter, and a Send pill rendered on the card at
+// chain index 0, and the DSP could never read it — the exact fb415 failure the first-slot
+// law exists to prevent ("the button can never be showing one thing while the DSP does
+// another"). CONTRACT.md warns about this class in its own words: at fb391 one of four pool
+// constants was missed and auval came back 139. A list that has to be copied is a list that
+// will drift, so it is written here and nowhere else.
+namespace tw_fx {
+    static const char* const kKindPfx[] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
+                                            "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_",
+                                            "SYN_EQZ_","SYN_WID_","SYN_CMP_","SYN_OTT_" };
+    static const char* const kKindNm [] = { "Reverb","Delay","Distortion","Granular",
+                                            "Tape","Filter","Chorus","Flanger","Phaser",
+                                            "Equalizer","Widen","Compress","Multiband" };
+    static constexpr int kKindCount = (int) (sizeof (kKindPfx) / sizeof (kKindPfx[0]));
+    static_assert (kKindCount == (int) (sizeof (kKindNm) / sizeof (kKindNm[0])),
+                   "prefix and display-name tables must move together");
+}
+
 static constexpr float kMasterCeiling    = 0.96605f;  // -0.3 dBFS — output ceiling (unchanged)
 static constexpr float kSoftClipKnee     = 0.90f;     // fb264 — knee raised 0.75→0.90 (-0.9 dBFS): the limiter holds peaks here, so the clip is a rare safety catch. Transparent (unity) below this.
 static constexpr float kInstrumentMakeup = 2.0f;      // fb299 — +6.02 dB (×2), MEASURED Serum match. A/B of IDENTICAL MIDI (bass triangle ~49 Hz, same settings) showed Serum exactly +6.02 dB louder on PEAK, RMS *and* LUFS SIMULTANEOUSLY, with IDENTICAL crest factor (4.72 vs 4.72 dB) and identical low-end shape (±0.02 dB level-matched) → a pure flat gain gap, NOT compression/EQ (measure_ab.py). +6.02 dB == our own kVoiceToFxPad (the −6 dB pre-FX pad on the dry buffer that fb265 left un-made-up); ×2 exactly cancels it so a single note goes −20→−14 dBFS = Serum's −14.01. VERIFIED SAFE (verify_makeup.py, exact port of this output stage): single-note added-THD = 0 (harmonics identical at makeup 1.0 vs 2.0 = the triangle itself), chords ≤4 notes fully transparent, extreme 6–11-note clusters ride the fb264 limiter bounded at −0.3 dBFS (gentle soft-knee, no hard-clip/square — Serum-equivalent). fb265's buzz was at +9 dB (2.8184); +6 dB keeps 3 dB MORE headroom than that AND matches Serum's actual per-note level. NOTE fb265's "single voice ~-15 dBFS" estimate was ~5 dB optimistic — the real bounce measured -20 dBFS (osc not full-scale). Loudness now lives at the source, like Serum; lifts the WHOLE engine +6 dB uniformly.
@@ -4187,13 +4208,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // oscillator ALSO keeps playing into the main mix. One bool, nine kinds, six instances.
         // Default OFF everywhere, so every existing project loads sounding bit-identical.
         {
-            static const char* const kPfx[13] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
-                                                  "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_",
-                                                  "SYN_EQZ_","SYN_WID_","SYN_CMP_","SYN_OTT_" };   // fb426
-            static const char* const kNm [13] = { "Reverb","Delay","Distortion","Granular",
-                                                  "Tape","Filter","Chorus","Flanger","Phaser",
-                                                  "Equalizer","Widen","Compress","OTT" };
-            for (int k = 0; k < 13; ++k)
+            const char* const* kPfx = tw_fx::kKindPfx;     // fb435 — one table, see the top of this file
+            const char* const* kNm  = tw_fx::kKindNm;
+            for (int k = 0; k < tw_fx::kKindCount; ++k)
                 for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
                 {
                     juce::String p (kPfx[k]);
@@ -4829,12 +4846,12 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
 // prefix list the params were, so the two cannot drift; a nullptr simply reads as insert.
 void TerrainInstrumentAudioProcessor::cacheSendRefs()
 {
-    static const char* const kPfx[9] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
-                                         "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_" };
-    for (int k = 0; k < 9; ++k)
+    // fb435 — was a SECOND hand-copied list, still nine kinds long: the fx4 four had SEND
+    //         params and a Send pill and no way for the DSP to read either.
+    for (int k = 0; k < tw_fx::kKindCount; ++k)
         for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
         {
-            juce::String p (kPfx[k]);
+            juce::String p (tw_fx::kKindPfx[k]);
             if (n > 1) p = p.dropLastCharacters (1) + juce::String (n) + "_";
             sendRef_[(size_t) k][(size_t) (n - 1)] = apvts.getRawParameterValue (p + "SEND");
         }
@@ -7938,11 +7955,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // every other device uses, recomputed every block from the live route pills.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
-        const int bases[3] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i };
-        std::atomic<float>* const* srcs[3] = { choRefs_[(size_t) i].src,
+        // 🚨 fb435 — THE FX4 FOUR WERE NOT IN THIS LOOP, AND THAT MADE THEM SILENT. Their route
+        //    pills were registered, cached into Fx4Refs::src[] and rendered on the card, and
+        //    NOTHING consumed them — so poolRouteAny_ stayed false at their bases, and the power
+        //    check in TW_FX4_APPLY (`powered = power && poolRouteAny_[BASE + inst0]`) could never
+        //    be true. Four fully-built devices that returned their input unchanged, forever. This
+        //    is verbatim the failure the fb365 comment forty lines up warns about: "without it the
+        //    pills render and NOTHING consumes them, which is not a dead control but a silent one".
+        const int bases[7] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i,
+                               kEqzSendBase + i, kWidSendBase + i, kCmpSendBase + i, kOttSendBase + i };
+        std::atomic<float>* const* srcs[7] = { choRefs_[(size_t) i].src,
                                                flaRefs_[(size_t) i].src,
-                                               phaRefs_[(size_t) i].src };
-        for (int dv = 0; dv < 3; ++dv)
+                                               phaRefs_[(size_t) i].src,
+                                               eqzRefs_[(size_t) i].src,
+                                               widRefs_[(size_t) i].src,
+                                               cmpRefs_[(size_t) i].src,
+                                               ottRefs_[(size_t) i].src };
+        for (int dv = 0; dv < 7; ++dv)
         {
             float ps = 0.0f;
             for (int k = 0; k < 6; ++k)
@@ -7973,6 +8002,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 6) g = &poolRouteG_[(size_t) ((kChoSendBase + ce.inst - 1) * 6)];   // fb413
             else if (ce.kind == 7) g = &poolRouteG_[(size_t) ((kFlaSendBase + ce.inst - 1) * 6)];   // fb413
             else if (ce.kind == 8) g = &poolRouteG_[(size_t) ((kPhaSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind ==  9) g = &poolRouteG_[(size_t) ((kEqzSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 10) g = &poolRouteG_[(size_t) ((kWidSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 11) g = &poolRouteG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 12) g = &poolRouteG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -7999,6 +8032,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 6) dstArr = &poolEntryG_[(size_t) ((kChoSendBase + ce.inst - 1) * 6)];   // fb413
             else if (ce.kind == 7) dstArr = &poolEntryG_[(size_t) ((kFlaSendBase + ce.inst - 1) * 6)];   // fb413
             else if (ce.kind == 8) dstArr = &poolEntryG_[(size_t) ((kPhaSendBase + ce.inst - 1) * 6)];   // fb413
+            else if (ce.kind ==  9) dstArr = &poolEntryG_[(size_t) ((kEqzSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 10) dstArr = &poolEntryG_[(size_t) ((kWidSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 11) dstArr = &poolEntryG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 12) dstArr = &poolEntryG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -8037,7 +8074,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
           const auto& ce = chainOrder_[(size_t) c];
           const int ki = ce.kind, ii = ce.inst - 1;
           const bool sendMode = c == 0
-                             && ki >= 0 && ki < 9 && ii >= 0 && ii < ParameterIDs::kFxInstances
+                             && ki >= 0 && ki < kFxKinds && ii >= 0 && ii < ParameterIDs::kFxInstances
                              && sendRef_[(size_t) ki][(size_t) ii] != nullptr
                              && sendRef_[(size_t) ki][(size_t) ii]->load() > 0.5f;
           if (! sendMode) insertMask = (uint8_t) (insertMask | e);
@@ -8682,6 +8719,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 8) { const int q = kPhaSendBase + ce.inst - 1;      // fb413 — phaser
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 4) { const int q = kTpeSendBase + ce.inst - 1;      // fb365 — tape
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind ==  9) { const int q = kEqzSendBase + ce.inst - 1;     // fb435 — equalizer
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 10) { const int q = kWidSendBase + ce.inst - 1;     // fb435 — widen
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 11) { const int q = kCmpSendBase + ce.inst - 1;     // fb435 — compress
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 12) { const int q = kOttSendBase + ce.inst - 1;     // fb435 — multiband
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
