@@ -374,7 +374,7 @@ class TerrainCompress extends AudioWorkletProcessor {
           lvl: clamp((this.lvl / BUS_NOM) * 0.5, 0, 1),
           typeName: TYPES[this.p.type | 0], charName: CHARS[this.p.type | 0][this.p.character | 0],
           detectName: DETECT[this.p.axis | 0],
-          ratio: this.s >= 0.99995 ? Infinity : 1 / (1 - this.s),
+          ratio: this.s >= 0.99995 ? Infinity : 1 / (1 - this.s), thrDb: this.T, kneeDb: this.W,
           attackMs: this.atkMs, releaseMs: this.relMs,
         });
       }

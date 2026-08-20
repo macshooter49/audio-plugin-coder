@@ -510,6 +510,7 @@ class TerrainWiden extends AudioWorkletProcessor {
     this.viz.corr = this.cLR / Math.sqrt(Math.max(1e-12, this.cLL * this.cRR));
     this.viz.lvl  = Math.min(1, this.lvlSm * 14);
     for (let v = 0; v < 8; ++v) this.viz.voicePan[v] = this.panG[v];
+    this.viz.nV = this.nV;
     if ((++this.frame % 4) === 0) this.port.postMessage(this.viz);   // ~60 Hz push
     return true;
   }

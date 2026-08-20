@@ -361,6 +361,7 @@ class TerrainOtt extends AudioWorkletProcessor {
         this.accN = 0; this.vizN = 0;
         this.port.postMessage({
           grDb: gr, xoverHz: [gl.xlo, NB === 3 ? gl.xhi : 0], bandDb: bd,
+          tdn: gl.tdn.slice(), tup: gl.tup.slice(),
           lvl: clamp((this.lvl / BUS_NOM) * 0.5, 0, 1), bands: NB,
           typeName: TYPES[this.p.type | 0], charName: CHARS[this.p.type | 0][this.p.character | 0],
           stereoName: STEREO[this.stereo],
