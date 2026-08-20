@@ -898,7 +898,13 @@ private:
           { 1.0f, 1.0f, 0.30f, 0.00f, 1.0f, 0.55f, 140.f, 1.00f, 1.000f, 0 },                         // Rotor Slow
           { 1.0f, 1.0f, 4.00f, 0.00f, 1.0f, 0.55f, 140.f, 1.00f, 1.000f, 0 },                         // Rotor Fast
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f, 140.f, 1.00f, 1.000f, 0 },                         // Guard  (contrast capped)
-          { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f,  50.f, 1.00f, 1.000f, 0 },                         // Deep Grid
+          // 🔴 fb430 — `Deep Grid` DROPPED THE GRID FLOOR TO 50 Hz AND KEPT THE ROTORS'
+          //    BAND COUNT, so the same four bands covered 7.8 octaves instead of 6.3: a
+          //    coarser grid wearing the word "grid". It measured corr +0.27 against
+          //    `Coarse`'s -0.44 — the deepest Character alternating the LEAST. x1 1.45
+          //    gives it eight bands for its deeper span, finer per octave than `Coarse`,
+          //    which is what the name sells. Distinct from `Fine` (same x1) by the floor.
+          { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f,   90.f, 1.00f, 1.000f, 0 },                         // Deep Grid
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f, 140.f, 0.50f, 0.960f, 0 } }                        // Hard Split
     };
 
@@ -1300,11 +1306,41 @@ private:
             for (int k = 0; k < nAP_; ++k)
             {
                 const float u = (nAP_ > 1) ? (float) k / (float) (nAP_ - 1) : 0.5f;
-                const float div = 0.24f * amtTg_;
+                // 🔴 fb430 — WHAT `Opposed` MEANS. It used to negate path B's COEFFICIENT,
+                //    which does not oppose anything: it makes path B a different allpass
+                //    whose dispersion happens to sit CLOSER to path A's, so the Character
+                //    measured corr +0.20 where its siblings reach -0.63 and -0.91. Twelve
+                //    stages arranged to fight each other are the opposite of the name.
+                //    Path B now walks the cascade the OTHER WAY — where path A delays the
+                //    bottom, path B delays the top — which is phase-only (no M/S rotation,
+                //    which fb422 proved measures nothing) and maximally divergent. Ramped on
+                //    the knob so Amount 0 is still exactly neutral.
+                const float ub = ((C.flags & kNegPathB) ? (u + amtTg_ * (1.0f - 2.0f * u)) : u);
+                // 🔴 fb430 — THE PHASE BUDGET IS PER CASCADE, NOT PER STAGE. The law two
+                //    comments up is explicit: N independent stages give dphi_rms =
+                //    delta*sqrt(N) and corr ~= exp(-dphi_rms^2/2), "monotone in the knob for
+                //    as long as dphi_rms stays inside pi". delta was a CONSTANT, so a deep
+                //    cascade blew straight through pi and the correlation WRAPPED BACK UP:
+                //    `Deep Twelve` (18 stages) measured corr +0.44 broadband / +0.60 in band
+                //    against `Smooth Six`'s (9 stages) -0.87 / -0.83. Twice the stages
+                //    decorrelated LESS, which is the opposite of what the name sells.
+                //    delta now falls as 1/sqrt(N) against the 9-stage reference, so every
+                //    Character spends the same phase budget and none of them wrap.
+                //    Normalised against the CHARACTER's own base stage count, not the LIVE
+                //    one: at the 9-stage reference (`Smooth Six`) this is exactly 1.0, so the
+                //    Character that already worked is bit-unchanged and only the deep
+                //    cascades get pulled back. Against nAP_ instead, `Smooth Six` lost a
+                //    sixth of its spread and Blur's mono fold came back inside the clean
+                //    window (-2.95 dB) — which made its mono-lossy TAG dishonest and took §J
+                //    red. `Voices` deepens the cascade too and is deliberately left
+                //    unnormalised: there the knob is doing its job, not a Character mis-scaled.
+                const float apRef = (float) clampi ((int) std::lround (C.x1 * 3.0f), 3, kMaxAP - 15);
+                const float div = 0.24f * amtTg_ * std::sqrt (9.0f / apRef);
                 const float f0 = lo * std::pow (hi / lo, u);
+                const float f0b = lo * std::pow (hi / lo, ub);
                 const float sg = 0.5f + rnd01 (k * 3 + 1);               // 0.5..1.5
                 float fa = f0 * std::exp2 (+div * sg);
-                float fb = f0 * std::exp2 (-div * sg);
+                float fb = f0b * std::exp2 (-div * sg);
                 // 🔴 fb422 — the fb421 "Roam" on this Type was THIS: a static re-dicing of the
                 //    break frequencies once per block. The field was scattered but it never
                 //    MOVED, and the measured field motion ran BACKWARDS across the knob
@@ -1312,9 +1348,15 @@ private:
                 //    supposed to ride. Removed; Roam is the walk in procBlur and nothing else.
                 fa = clampf (fa * offSm0_ (), 8.0f, 0.45f * fs_);
                 fb = clampf (fb * offSm0_ (), 8.0f, 0.45f * fs_);
-                const float neg = ((C.flags & kNegPathB) ? -1.0f : 1.0f);
+                // 🔴 fb430 — THE OPPOSITION IS WHAT `Amount` BUYS, so it cannot be baked in.
+                //    This sign used to be a constant -1, which makes path B a DIFFERENT
+                //    allpass from path A at every knob position including zero: `Opposed`
+                //    measured corr +0.105 at Amount 0 while all seven sibling Characters
+                //    read exactly +1.000. A knob whose floor is already engaged has no
+                //    floor. Ramped, +1 -> -1 across the knob, so the floor is neutral and
+                //    the top is fully opposed.
                 apCaT_[k] = apCoef (fa);
-                apCbT_[k] = apCoef (fb) * neg;
+                apCbT_[k] = apCoef (fb);
                 // 🔴 fb422 — `Rate` WAS BIT-IDENTICALLY DEAD ON `Blur` TOO. procBlur read
                 //    no clock at all: the cascade was frozen at whatever recalc last set.
                 //    A frozen allpass field is a static room; a MOVING one is the whole
@@ -1329,8 +1371,15 @@ private:
                 // a deeply modulated allpass stops being magnitude-flat on average and
                 // Blur's own per-channel-ripple discriminator went 2.3 -> 3.7 dB against a
                 // 4.0 dB bar. 0.50 is where both hold; the trade is stated, not hidden.
+                // 🔬 fb430 — AND NOT ON THE MOVING PHASE. The same 1/sqrt(N) normalisation
+                //    was tried here too, on the reasoning that `Rate` and `Roam` pile phase
+                //    onto the same cascade. MEASURED: it made things WORSE — 52 red -> 55,
+                //    because it scales the modulation DOWN on exactly the deep Characters
+                //    whose steps were already the smallest, and `Roam` went red on
+                //    `Deep Twelve` and `Plush`. The static spread wraps; the moving phase is
+                //    a small dither on top of it and does not. Left unscaled, deliberately.
                 apCaM_[k] = 0.5f * (apCoef (fa * 1.4142f) - apCoef (fa * 0.7071f));
-                apCbM_[k] = 0.5f * (apCoef (fb * 1.4142f) - apCoef (fb * 0.7071f)) * neg;
+                apCbM_[k] = 0.5f * (apCoef (fb * 1.4142f) - apCoef (fb * 0.7071f));
                 const float o = rnd01 (k * 11 + 7);
                 apWa_[k] = std::cos (6.2831853f * o);
                 apWb_[k] = std::sin (6.2831853f * o);

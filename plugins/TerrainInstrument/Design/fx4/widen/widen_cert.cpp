@@ -3,7 +3,13 @@
 //
 //   clang++ -O2 -std=c++17 \
 //     -I <TI>/Tests/shim -I <TI>/Source -I <TI>/Design/fx4/widen \
-//     widen_cert.cpp -o /tmp/widen_cert && /tmp/widen_cert
+//     $PWD/Design/fx4/widen/widen_cert.cpp -o /tmp/widen_cert && /tmp/widen_cert
+//
+// 🚨 fb430 — PASS THE SOURCE BY ABSOLUTE PATH. §S's drift gate resolves its three
+// artefacts from `__FILE__`; compiled with a bare filename that is "./", i.e. the
+// CALLER'S CWD, so the same binary passed from one directory and read 0 bytes from
+// another. A harness whose verdict depends on where you stand is fb393's harness
+// that lied. The byte-count assert below is what caught it — keep it.
 //
 // ⚠️ THE LAW THIS HARNESS CANNOT ENFORCE (fb373). A green DSP harness proves the ENGINE
 // works. It NEVER proves the plugin REACHES it. Selecting `Cassette` silently gave you
