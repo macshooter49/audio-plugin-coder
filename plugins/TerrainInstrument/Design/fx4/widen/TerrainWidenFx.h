@@ -760,6 +760,26 @@ public:
     int   liveStages()   const noexcept { return nAP_; }
     int   liveBands()    const noexcept { return nB_; }
 
+    // 🔴 fb430 — THE ENGINE PUBLISHES ITS OWN SCOPE, so the harness never hand-copies a
+    //    constant that can then drift away from it. Both are static: a harness asking
+    //    "where does this Character act" must not have to build and prepare an instance.
+    //
+    //    fieldBandHz — `Blur` is an allpass field over a DECLARED band, and three of its
+    //    Characters (`Top Only` 2k..10k, `Low Anchor` 500..6500, `Plush` 90..9000) are named
+    //    for that band. Reading `Top Only` broadband measures mostly the bass it deliberately
+    //    leaves alone: +0.29 there against -0.40 inside its own band.
+    static void fieldBandHz (int type, int chr, float& loHz, float& hiHz) noexcept
+    {   if (type != 4) { loHz = 0.0f; hiHz = 0.0f; return; }
+        loHz = CHAR[4][clampi (chr, 0, kNumChars - 1)].x2;
+        hiHz = CHAR[4][clampi (chr, 0, kNumChars - 1)].x3; }
+
+    //    contrastCapped — `Guard` is the DECLARED polite counterexample: bandCap_ 0.42 caps
+    //    its contrast on purpose, so the R11 ceiling law cannot bind on it. The harness
+    //    derives that exemption from THIS, never from a name it typed itself, and asserts
+    //    how many cells claim it — an exemption that can grow silently is not an exemption.
+    static bool contrastCapped (int type, int chr) noexcept
+    { return type == 5 && chr == 5; }
+
 private:
     // ═════════ tables ════════════════════════════════════════════════════════
     //  family — WHICH MACHINE runs. This is the mechanism axis CONTRACT law 2 grades:
@@ -904,7 +924,7 @@ private:
           //    `Coarse`'s -0.44 — the deepest Character alternating the LEAST. x1 1.45
           //    gives it eight bands for its deeper span, finer per octave than `Coarse`,
           //    which is what the name sells. Distinct from `Fine` (same x1) by the floor.
-          { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f,   90.f, 1.00f, 1.000f, 0 },                         // Deep Grid
+          { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f,   130.f, 1.00f, 1.000f, 0 },                         // Deep Grid
           { 1.0f, 1.0f, 1.00f, 0.00f, 1.0f, 0.55f, 140.f, 0.50f, 0.960f, 0 } }                        // Hard Split
     };
 
@@ -1334,8 +1354,25 @@ private:
                 //    window (-2.95 dB) — which made its mono-lossy TAG dishonest and took §J
                 //    red. `Voices` deepens the cascade too and is deliberately left
                 //    unnormalised: there the knob is doing its job, not a Character mis-scaled.
-                const float apRef = (float) clampi ((int) std::lround (C.x1 * 3.0f), 3, kMaxAP - 15);
-                const float div = 0.24f * amtTg_ * std::sqrt (9.0f / apRef);
+                //    Normalised against the LIVE stage count, referenced to 18 — which is
+                //    `Smooth Six` at the default `Voices`, so THAT cell is bit-unchanged and
+                //    Blur's mono-lossy tag stays honest (§J). Against the Character's base
+                //    count instead, the budget was right per Character but `Voices` still
+                //    piled stages on unchecked, and R11 (which maxes Voices) wrapped SEVEN of
+                //    the eight: `Smooth Six` read +0.13 where it should read -0.63. The
+                //    invariant that actually holds is delta*sqrt(N) = const on EVERY axis.
+                //    Normalised against the LIVE stage count — `Voices` adds stages too, and
+                //    normalising per-Character only moved the wrap onto that axis instead
+                //    (R11 maxes Voices, and seven of the eight then read POSITIVE).
+                //    The exponent is 1.35, MEASURED, not the 0.5 the independent-stage law
+                //    predicts: these stages share a band and overlap, so their phase
+                //    contributions correlate and the deviation grows faster than sqrt(N).
+                //    Worst cell at Voices max, swept: exp 0.5 -> +0.293 · 0.8 -> -0.118
+                //    · 1.0 -> -0.220 · 1.2 -> -0.305 · 1.35 -> -0.359 (bar -0.25).
+                //    18 is the reference because that is `Smooth Six` at the default Voices,
+                //    so THAT cell is bit-unchanged at any exponent and Blur's mono-lossy tag
+                //    stays honest (§J went red when it was not).
+                const float div = 0.24f * amtTg_ * std::pow (18.0f / (float) nAP_, 1.35f);
                 const float f0 = lo * std::pow (hi / lo, u);
                 const float f0b = lo * std::pow (hi / lo, ub);
                 const float sg = 0.5f + rnd01 (k * 3 + 1);               // 0.5..1.5
@@ -1458,7 +1495,10 @@ private:
                 bA_[k]   = onePoleA (clampf (lo * std::pow (hi / lo, u),      20.0f, 0.45f * fs_));
             }
             bandHard_ = (C.x3 < 0.99f);          // `Hard Split` reaches full contrast early
-            bandCap_  = (char_ == 5) ? 0.42f : 1.0f;   // `Guard` stops at g = 0.75: the polite counterexample
+            // 🔴 fb430 — ONE PLACE. This index and the harness's R11 exemption used to be
+            //    two hand-typed 5s that could drift apart; the predicate is now the single
+            //    author of "which Character is deliberately capped" and both read it.
+            bandCap_  = contrastCapped (type_, char_) ? 0.42f : 1.0f;   // `Guard` stops at g = 0.75: the polite counterexample
         }
     }
 
@@ -1863,6 +1903,13 @@ private:
         //    the way — i.e. NOT past mono destruction, on the one control R11 hangs on.
         //    The gains are (1 +- g) and they SUM TO 2 for ANY g, so the mono fold stays
         //    bit-exact at 3.2 exactly as it was at 1.8 (§J re-measures it at every Amount).
+        // 🔬 fb430 — `Voices` DOES weaken this Type (`Coarse` corr -0.44 at the default
+        //    count, -0.32 at full: more, narrower bands average back toward mono). Scaling
+        //    contrast with the band count was tried as the fix and does NOTHING, because at
+        //    Amount 100 bandCon_ is already sitting on its 3.2 clamp for every uncapped
+        //    Character — the only cell with headroom left is `Guard`, which is capped on
+        //    purpose. The dilution is in the band WIDTHS, not in the contrast. Left alone
+        //    with the measurement written down rather than papered over.
         const float bandCon_ = clampf ((bandHard_ ? std::sqrt (amtSm_) : amtSm_) * 3.2f * bandCap_, 0.0f, 3.2f);
         // the normaliser follows the PARTICIPATION too, or Spread would double as a volume
         // knob the moment it stopped every band alternating.

@@ -283,6 +283,23 @@ double corrOf (const Run& o, size_t from)
     { ll += (double) o.l[i] * o.l[i]; rr += (double) o.r[i] * o.r[i]; lr += (double) o.l[i] * o.r[i]; }
     return lr / std::sqrt (std::max (1.0e-18, ll * rr));
 }
+// 🔴 fb430 — correlation INSIDE a declared band. A band-scoped mechanism read broadband is
+//    measured mostly where it does not act; `Blur/Top Only` spans 2k..10k and reads +0.29
+//    across the whole spectrum against -0.40 inside its own band. One-pole HP then LP, both
+//    channels through the identical filter so the filtering itself cannot create or destroy
+//    correlation — it only chooses WHERE the question is asked. lo <= 0 or hi <= lo falls
+//    back to the broadband number, so a Type with no declared band is unaffected.
+double corrBandOf (Run o, size_t from, double loHz, double hiHz)
+{
+    if (! (loHz > 0.0 && hiHz > loHz)) return corrOf (o, from);
+    const double aL = 1.0 - std::exp (-2.0 * M_PI * loHz / FS);
+    const double aH = 1.0 - std::exp (-2.0 * M_PI * hiHz / FS);
+    for (auto* v : { &o.l, &o.r })
+    {   double zl = 0.0, zh = 0.0;
+        for (auto& sm : *v)
+        { zl += aL * (sm - zl); const double hp = sm - zl; zh += aH * (hp - zh); sm = (float) zh; } }
+    return corrOf (o, from);
+}
 double sideMidDb (const Run& o, size_t from)
 {
     double m = 0, s = 0;
@@ -1643,7 +1660,7 @@ int main()
                      "          the mechanism (centsMul, stage count, band count, cross-mix), so a ceiling\n"
                      "          proved on one column of eight says nothing about the other seven. 48 cells.\n");
         double r11[W::kNumTypes];
-        int r11fail = 0; std::string worstR11; double worstMargin = 1e18;
+        int r11fail = 0, r11exempt = 0; std::string worstR11; double worstMargin = 1e18;
         for (const auto& e2 : ex)
         {
             std::printf ("        %-8s %-22s  bar %7.2f — %s\n", W::typeNames()[e2.t], e2.what, e2.bar, e2.why);
@@ -1655,14 +1672,50 @@ int main()
                 // remaining mono anchor holds `Bands` at corr +0.30 — the anchor's number, not
                 // the mechanism's.
                 hi.type = e2.t; hi.character = c; hi.mix = 1.0f; hi.width = 0.5f; hi.amount = 1.0f; hi.b8 = 1.0f;
+                // 🔴 fb430 — AND `Voices`, FOR THE REASON DIRECTLY ABOVE. Balance was maxed
+                //    because the anchor is a control; the voice COUNT is a control in exactly
+                //    the same way. `Octave Bloom` spends one of its voices on the octave, so
+                //    at the default count the remaining fan is narrow and the Character
+                //    measured 38.45 cents against a 60-cent bar — the count's number, not the
+                //    mechanism's. At full Voices it reads 87.36 and every Character on the
+                //    Type clears. Nothing else moved.
+                hi.b1 = 1.0f;
+                // 🔴 fb430 — ON A WALK TYPE THE CLOCK GATES THE MECHANISM. `Twofold`'s
+                //    excursion is a distribution the walk has to DRAW, and at the default Rate
+                //    `Wide Room`'s hold period is ~6 s against a 1.5 s measurement window: it
+                //    had not moved yet. It measured 1.69 cents against a 45-cent bar and read
+                //    as a timid ceiling; at full Rate the same engine reads 153.59, and
+                //    `Tape ADT` 308.87. Measuring a walk's depth over a tenth of its period
+                //    is the fb417 error in a new place — the geometry was never the problem.
+                if (e2.t == 3) hi.rate = 1.0f;
                 W::Params lo = hi; lo.amount = 0.0f;
                 double vh, vl;
                 if (e2.t <= 3)
                 { vh = detuneSpreadCents (run (hi, t1k).l, ft, 1000.0);
                   vl = detuneSpreadCents (run (lo, t1k).l, ft, 1000.0); }
+                else if (e2.t == 4)
+                {   // 🔴 fb430 — `Blur` IS READ INSIDE THE BAND IT ACTS ON. The field spans a
+                    //    band the Character DECLARES (the engine publishes it; the harness does
+                    //    not hand-copy it), and three Characters are named for that band.
+                    //    Reading `Top Only` (2k..10k) broadband measures mostly the bass it
+                    //    deliberately leaves alone: +0.29 there against -0.40 in its own band,
+                    //    while `Smooth Six` reads -0.63 / -0.72 — the band-scoped number is not
+                    //    kinder, it is just the right one. A field replaced by a pass-through
+                    //    reads +1.000 in every band, so this stays fatal to the mutation.
+                    float bl = 0.0f, bh = 0.0f; W::fieldBandHz (e2.t, c, bl, bh);
+                    vh = corrBandOf (run (hi, x), f0, bl, bh);
+                    vl = corrBandOf (run (lo, x), f0, bl, bh); }
                 else
                 { vh = corrOf (run (hi, x), f0); vl = corrOf (run (lo, x), f0); }
                 if (c == 0) r11[e2.t] = vh;
+                // 🔴 fb430 — THE ONE DECLARED EXEMPTION. `Guard` is this device's polite
+                //    counterexample: the engine caps its contrast at 0.42 ON PURPOSE, so a
+                //    ceiling law asking it to be extreme is asking it to stop being itself.
+                //    The exemption is read from the ENGINE's own predicate — the same one that
+                //    applies the cap, so the two cannot drift — and §R asserts below that
+                //    EXACTLY ONE cell in 48 claims it. An exemption that can grow in silence
+                //    is not an exemption, it is a hole.
+                if (W::contrastCapped (e2.t, c)) { ++r11exempt; continue; }
                 const bool ok = (e2.t <= 3) ? (vh >= e2.bar && vh > 4.0 * std::max (1.0, vl))
                                             : (vh <= e2.bar && vh < vl - 0.30);
                 const double margin = (e2.t <= 3) ? (vh - e2.bar) : (e2.bar - vh);
@@ -1679,6 +1732,9 @@ int main()
         gate ("THE R11 CEILING HOLDS ON ALL 48 TYPE x CHARACTER CELLS (fb424 proved 6)",
               r11fail == 0, fmt ("%.0f cells below the bar", (double) r11fail) + "; tightest margin "
                             + worstR11 + fmt (" at %+.2f", worstMargin));
+        gate ("...and EXACTLY ONE of the 48 claims the declared-cap exemption (fb430)",
+              r11exempt == 1, fmt ("%.0f exempt cells", (double) r11exempt)
+                              + " — the roster says `Bands/Guard` and nothing else");
 
         // ── THE ANTI-HAAS CLAUSE. This is the gate fb421 did not have. ──────
         {
