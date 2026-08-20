@@ -166,7 +166,13 @@ Plus, said the way a listener would: at Push/Ratio 100 the reference chord's cre
 
 ---
 
-# OTT — chain kind 12
+# MULTIBAND — chain kind 12
+
+The device publishes `Multiband`. fb434: renamed from `OTT`, which is Xfer Records' product
+name — their freeware page lists "OTT (VST AU AAX)" under "© 2026 Xfer Records", and the
+name reached them from Ableton's Multiband Dynamics preset of the same name. Only the
+published LABEL moved; the `SYN_OTT_*` parameter IDs are saved-state keys and renaming them
+would break every preset and automation lane already written.
 
 ## 6. The device name — recommendation
 

@@ -102,7 +102,13 @@ public:
     }
 
     // ═════ THE LABELS. THIS HEADER IS THE SINGLE SOURCE OF TRUTH (FIXES.md §3) ═══════════
-    static const char* deviceName() noexcept { return "OTT"; }
+    // 🔴 fb434 — RENAMED FROM "OTT". That is Xfer Records' product name (their freeware
+    //    page lists "OTT (VST AU AAX)" under "(c) 2026 Xfer Records"), and it came to them
+    //    from Ableton's Multiband Dynamics preset of the same name. The EFFECT is
+    //    semi-genericised in producer slang; shipping a device CALLED that is not. Only
+    //    the published label moves — the SYN_OTT_* parameter IDs are saved-state keys and
+    //    renaming them would break every preset and automation lane already written.
+    static const char* deviceName() noexcept { return "Multiband"; }
     /** FRONT: three heroes, then Mix. Order matches Params::amount/speed/topLift/mix. */
     static const char* const* frontNames() noexcept
     { static const char* const N[4] = { "Amount", "Chase", "Top Lift", "Mix" }; return N; }

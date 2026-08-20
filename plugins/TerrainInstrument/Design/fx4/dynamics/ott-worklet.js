@@ -20,7 +20,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 // ═════ LABELS — MIRRORED FROM TerrainOttFx.h, WHICH IS THE SOURCE OF TRUTH ═════
-const DEVICE = 'OTT';
+const DEVICE = 'Multiband';   // fb434 — was 'OTT' (Xfer Records' product name)
 const FRONT  = ['Amount', 'Chase', 'Top Lift', 'Mix'];
 const BACK   = ['Low Cross', 'High Cross', 'Raise', 'Press', 'Grip', 'Bass', 'Mids', 'Treble'];
 const DROPS  = ['Character', 'Stereo'];
