@@ -36,8 +36,6 @@ button:hover{background:#2e2846}
 button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #status{font:400 11px -apple-system,system-ui;color:#8f88ab;min-height:15px}
 #err{font:400 11px/1.45 ui-monospace,Menlo,monospace;color:#ff9a9a;white-space:pre-wrap;max-width:760px}
-/* THE REAL CARD IS 272 x 170. `.fxr-dev` is `flex:0 0 272px; height:100%`, so the strip gives it
-   a height; the wrapper scales the WHOLE strip with a transform so nothing inside is resized. */
 #rackwrap{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:6px 0 2px;scrollbar-width:none}
 #rackwrap::-webkit-scrollbar{display:none}
 #scale{transform-origin:top left;transform:scale(1.2)}
@@ -91,6 +89,11 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
 #syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
 .fxr-core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#syn-panel .fxr-core .eqz-n{ cursor:grab; }
+#syn-panel .fxr-core .eqz-n.hot{ fill:var(--purple-400); }
+#syn-panel .fxr-core .ott-xl{ cursor:ew-resize; }
+#syn-panel .fxr-core .ott-xl.hot{ stroke:var(--purple-400); opacity:1; }
+#syn-panel .fxr-core text{ font-family:-apple-system,'SF Pro Display',system-ui,sans-serif; font-weight:300; pointer-events:none; user-select:none; }
 #syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
           filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
           animation:mvBreathe 3.2s ease-in-out infinite; }
@@ -112,7 +115,7 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
 #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
 #syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
-#syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
 #syn-panel .fxr-snd{ flex:0 0 15px; height:14px; display:flex; align-items:center; justify-content:center;
           border:1px solid var(--border); border-radius:3px; cursor:pointer; box-sizing:border-box;
           color:var(--text-muted); transition:color .12s, border-color .12s; }
@@ -164,37 +167,28 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-core[data-conv="1"] .conv-dur{ position:absolute; right:2px; bottom:1px; z-index:3; font-size:8px; color:var(--text-dim); font-variant-numeric:tabular-nums; pointer-events:none; }
 /* the mockup's own scaffolding — NOT part of the lifted rack sheet */
 .fxr-dev{position:relative}
-.bp{display:none;border:1px solid var(--border-strong,#3a3356);border-radius:10px;
-  background:rgba(24,20,38,.72);padding:10px 12px}
+.bp{display:none;border:1px solid var(--border-strong,#3a3356);border-radius:10px;background:rgba(24,20,38,.72);padding:10px 12px}
 .bp.on{display:block}
 .bp-row{display:flex;gap:10px;align-items:flex-end;margin-bottom:10px}
 .bp-sel{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
 .bp-sel label{font:500 9px -apple-system,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8f88ab}
-.bp-sel select{background:#1c1830;color:#e8e4f5;border:1px solid #3a3356;border-radius:6px;
-  padding:3px 5px;font:400 10.5px -apple-system,system-ui;width:100%}
+.bp-sel select{background:#1c1830;color:#e8e4f5;border:1px solid #3a3356;border-radius:6px;padding:3px 5px;font:400 10.5px -apple-system,system-ui;width:100%}
 .bp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 0;position:relative}
 .bp-k{display:flex;flex-direction:column;align-items:center;gap:4px}
 .bp-k .fxr-lab{font:500 9px -apple-system,system-ui;color:#9a92b8}
 .bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
-/* ── the four cores: every mark has a job. white = structure/controls, purple = live signal ── */
-#syn-panel .fxr-core[data-core="eqz"], #syn-panel .fxr-core[data-core="ott"]{ cursor:default; }
-#syn-panel .eqz-n{ cursor:grab; transition:r .12s; }
-#syn-panel .eqz-n.hot{ stroke:var(--purple-400); }
-#syn-panel .ott-xl{ cursor:ew-resize; }
-#syn-panel .ott-xl.hot{ stroke:var(--purple-400); opacity:1; }
-#syn-panel .fxr-core text{ font-family:-apple-system,'SF Pro Display',system-ui,sans-serif; font-weight:300; pointer-events:none; user-select:none; }
 </style></head><body>
 <h1>FX4 — Equalizer · Widen · Compress · Multiband</h1>
-<p class="sub">The four cards with their cores designed and live. Real chassis, real engines — each card runs the same algorithm the C++ does.
-Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> picks which card reaches the speakers; all four always process, so all four move.
-On the Equalizer drag a <b>band node</b> (X = Hz, Y = gain), scroll on it for <b>Trait</b>, double-click to reset. On Multiband drag a <b>crossover line</b>. Knobs: drag up/down, double-click resets.</p>
+<p class="sub">The four cards, their cores LIFTED from the plugin (one copy of the code), live on the real engines.
+Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch (or pick it); all four always process.
+Equalizer: drag a <b>node</b> (X = Hz, Y = gain), scroll on the curve for <b>Trait</b>, double-click resets. Multiband: drag a <b>crossover line</b>. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
   <button id="play">Play</button>
   <button id="src">Source: Saw chord</button>
   <span class="lbl">Hear</span>
-  <button class="hear" data-h="0">Equalizer</button><button class="hear" data-h="1">Widen</button>
-  <button class="hear" data-h="2">Compress</button><button class="hear on" data-h="3">Multiband</button><button class="hear" data-h="-1">Dry</button>
+  <button class="hear on" data-h="0">Equalizer</button><button class="hear" data-h="1">Widen</button>
+  <button class="hear" data-h="2">Compress</button><button class="hear" data-h="3">Multiband</button><button class="hear" data-h="-1">Dry</button>
   <span class="lbl">Zoom</span>
   <button class="zoom" data-z="1">1×</button><button class="zoom on" data-z="1.2">1.2×</button><button class="zoom" data-z="1.6">1.6×</button><button class="zoom" data-z="2">2×</button>
 </div>
@@ -2269,7 +2263,7 @@ registerProcessor('terrain-ott', TerrainOtt);
 </script>
 <script>
 "use strict";
-var DEVICES=[{"dev": "Equalizer", "core": "eqz", "proc": "terrain-eq", "pfx": "eqz", "types": ["Surgical", "British", "American", "Passive", "Open", "Dynamic", "Chisel"], "chars": ["Plain", "Tight", "Broad", "Steep", "Scoop", "Deep Pivot", "Bright Pivot", "Four Bells"], "d2k": "Focus", "d2": ["Stereo", "Mid", "Side", "Left", "Right"], "knobs": [["Slant", 50, "SLANT"], ["Air", 50, "AIR"], ["Amount", 50, "AMOUNT"], ["Mix", 100, "MIX"]], "keys": ["f1", "f2", "f3", "mix"], "back": [["Low Hz", 50, "LOWHZ"], ["Low", 50, "LOW"], ["Body Hz", 50, "BODYHZ"], ["Body", 50, "BODY"], ["Bite Hz", 50, "BITEHZ"], ["Bite", 50, "BITE"], ["Reach", 50, "REACH"], ["Trait", 50, "TRAIT"]], "pills": [], "pillKeys": [], "trait": ["Pinch", "Slope", "Taper", "Dip", "Silk", "Pivot", "Sting"]}, {"dev": "Widen", "core": "wid", "proc": "terrain-widen", "pfx": "wid", "types": ["Throng", "Twin", "Steady", "Twofold", "Blur", "Bands"], "chars": ["JP Classic", "Even Fan", "Analog Drift", "Tight Fan", "Wide Fan", "Octave Bloom", "Sub Anchor", "Three Phase"], "d2k": "Field", "d2": ["Straight", "Alternate", "Orbit", "Swap", "Side Only", "Gather"], "knobs": [["Detune", 35, "AMOUNT"], ["Width", 50, "WIDTH"], ["Rate", 35, "RATE"], ["Mix", 50, "MIX"]], "keys": ["amount", "width", "rate", "mix"], "back": [["Voices", 50, "VOICES"], ["Spread", 85, "SPREAD"], ["Offset", 50, "OFFSET"], ["Roam", 0, "ROAM"], ["Low Keep", 0, "LOWKEEP"], ["Tone", 50, "TONE"], ["Feedback", 0, "FEEDBACK"], ["Balance", 50, "BALANCE"]], "pills": [["Retrig", 0], ["Mono", 0]], "pillKeys": ["retrig", "hearMono"], "hero": ["Detune", "Depth", "Cents", "Sway", "Wash", "Cleave"]}, {"dev": "Compress", "core": "cmp", "proc": "terrain-compress", "pfx": "cmp", "types": ["Exact", "Bus", "FET 76", "Opto", "Vari-Mu", "OverEasy", "Ride", "Limit"], "chars": ["Precise", "Soft Touch", "Loose Grip", "Blunt", "Deep Release", "Line Attack", "Poise", "Judder"], "d2k": "Detect", "d2": ["Native", "Peak", "Average", "Patient", "Spike"], "knobs": [["Push", 20, "PUSH"], ["Ratio", 50, "RATIO"], ["Lift", 25, "LIFT"], ["Mix", 100, "MIX"]], "keys": ["push", "ratio", "lift", "mix"], "back": [["Attack", 61, "ATTACK"], ["Release", 63, "RELEASE"], ["Round", 25, "ROUND"], ["Hear Cut", 0, "HEARCUT"], ["Edge", 50, "EDGE"], ["Cling", 0, "CLING"], ["Tie", 100, "TIE"], ["Burn", 0, "BURN"]], "pills": [["Auto", 0]], "pillKeys": ["autoMakeup"]}, {"dev": "Multiband", "core": "ott", "proc": "terrain-ott", "pfx": "ott", "types": ["Over Top", "Gentle", "Heavy", "Sheen", "Bass Safe", "Surge", "Two Band", "Stagger"], "chars": ["Straight Up", "Sharp Ears", "Long Ears", "Wide Corner", "One Detector", "Slow Low", "Twice Deep", "Full Crest"], "d2k": "Stereo", "d2": ["Linked", "Free Pair", "Mid-Side"], "knobs": [["Amount", 50, "AMOUNT"], ["Chase", 50, "CHASE"], ["Top Lift", 25, "TOPLIFT"], ["Mix", 100, "MIX"]], "keys": ["amount", "speed", "topLift", "mix"], "back": [["Low Cross", 47, "LOWCROSS"], ["High Cross", 44, "HIGHCROSS"], ["Raise", 67, "RAISE"], ["Press", 67, "PRESS"], ["Grip", 50, "GRIP"], ["Bass", 50, "BASS"], ["Mids", 50, "MIDS"], ["Treble", 50, "TREBLE"]], "pills": [["Crest", 0]], "pillKeys": ["crest"]}];
+var DEVICES=[{"dev": "Equalizer", "core": "eqz", "proc": "terrain-eq", "pfx": "SYN_EQZ_", "types": ["Surgical", "British", "American", "Passive", "Open", "Dynamic", "Chisel"], "tpN": 16, "chars": ["Plain", "Tight", "Broad", "Steep", "Scoop", "Deep Pivot", "Bright Pivot", "Four Bells"], "d2k": "Focus", "d2": ["Stereo", "Mid", "Side", "Left", "Right"], "d2p": "FOCUS", "knobs": [["Slant", 50, "SLANT"], ["Air", 50, "AIR"], ["Amount", 50, "AMOUNT"], ["Mix", 100, "MIX"]], "keys": ["f1", "f2", "f3", "mix"], "back": [["Low Hz", 50, "LOWHZ"], ["Low", 50, "LOW"], ["Body Hz", 50, "BODYHZ"], ["Body", 50, "BODY"], ["Bite Hz", 50, "BITEHZ"], ["Bite", 50, "BITE"], ["Reach", 50, "REACH"], ["Trait", 50, "TRAIT"]], "pills": [["Delta", 0]], "pillKeys": ["delta"]}, {"dev": "Widen", "core": "wid", "proc": "terrain-widen", "pfx": "SYN_WID_", "types": ["Throng", "Twin", "Steady", "Twofold", "Blur", "Bands"], "tpN": 16, "chars": ["JP Classic", "Even Fan", "Analog Drift", "Tight Fan", "Wide Fan", "Octave Bloom", "Sub Anchor", "Three Phase"], "d2k": "Field", "d2": ["Straight", "Alternate", "Orbit", "Swap", "Side Only", "Gather"], "d2p": "FIELD", "knobs": [["Detune", 35, "AMOUNT"], ["Width", 50, "WIDTH"], ["Rate", 35, "RATE"], ["Mix", 50, "MIX"]], "keys": ["amount", "width", "rate", "mix"], "back": [["Voices", 50, "VOICES"], ["Spread", 85, "SPREAD"], ["Offset", 50, "OFFSET"], ["Roam", 0, "ROAM"], ["Low Keep", 0, "LOWKEEP"], ["Tone", 50, "TONE"], ["Feedback", 0, "FEEDBACK"], ["Balance", 50, "BALANCE"]], "pills": [["Retrig", 0], ["Mono", 0]], "pillKeys": ["retrig", "hearMono"]}, {"dev": "Compress", "core": "cmp", "proc": "terrain-compress", "pfx": "SYN_CMP_", "types": ["Exact", "Bus", "FET 76", "Opto", "Vari-Mu", "OverEasy", "Ride", "Limit"], "tpN": 16, "chars": ["Precise", "Soft Touch", "Loose Grip", "Blunt", "Deep Release", "Line Attack", "Poise", "Judder"], "d2k": "Detect", "d2": ["Native", "Peak", "Average", "Patient", "Spike"], "d2p": "DETECT", "knobs": [["Push", 20, "PUSH"], ["Ratio", 50, "RATIO"], ["Lift", 25, "LIFT"], ["Mix", 100, "MIX"]], "keys": ["push", "ratio", "lift", "mix"], "back": [["Attack", 61, "ATTACK"], ["Release", 63, "RELEASE"], ["Round", 25, "ROUND"], ["Hear Cut", 0, "HEARCUT"], ["Edge", 50, "EDGE"], ["Cling", 0, "CLING"], ["Tie", 100, "TIE"], ["Burn", 0, "BURN"]], "pills": [["Auto", 0]], "pillKeys": ["autoMakeup"]}, {"dev": "Multiband", "core": "ott", "proc": "terrain-ott", "pfx": "SYN_OTT_", "types": ["Over Top", "Gentle", "Heavy", "Sheen", "Bass Safe", "Surge", "Two Band", "Stagger"], "tpN": 16, "chars": ["Straight Up", "Sharp Ears", "Long Ears", "Wide Corner", "One Detector", "Slow Low", "Twice Deep", "Full Crest"], "d2k": "Stereo", "d2": ["Linked", "Free Pair", "Mid-Side"], "d2p": "STEREO", "knobs": [["Amount", 50, "AMOUNT"], ["Chase", 50, "CHASE"], ["Top Lift", 25, "TOPLIFT"], ["Mix", 100, "MIX"]], "keys": ["amount", "speed", "topLift", "mix"], "back": [["Low Cross", 47, "LOWCROSS"], ["High Cross", 44, "HIGHCROSS"], ["Raise", 67, "RAISE"], ["Press", 67, "PRESS"], ["Grip", 50, "GRIP"], ["Bass", 50, "BASS"], ["Mids", 50, "MIDS"], ["Treble", 50, "TREBLE"]], "pills": [["Crest", 0]], "pillKeys": ["crest"]}];
 var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
 var RLBL=['A','B','C','D','S','N'];
 function knobSVG(pct,label,glyph){
@@ -2297,167 +2291,176 @@ function knobSVG(pct,label,glyph){
              +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
           }
 
-/* ═══════════════════════════════════════════════════════════════════════════════════
-   THE DEVICE MODELS — shaped exactly like the rack's DEVS entries (fb346), one per card.
-   ═══════════════════════════════════════════════════════════════════════════════════ */
+/* ── what the plugin provides around the lifted code ── */
+var rack=document.getElementById('rack');
+var DEV_TEMPLATES=DEVICES.map(function(t){ return { core:t.core, knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2]};}),
+  back:{ knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2]];}) } }; });
 var DEVS=DEVICES.map(function(t){ return {
-  name:t.dev, core:t.core, inst:1, type:t.types[0], types:t.types, preset:'Init', on:true,
-  pills:t.pills.map(function(p){return {t:p[0],on:!!p[1]};}),
+  name:t.dev, core:t.core, inst:1, pfx:t.pfx, type:t.types[0], types:t.types, tpN:t.tpN, preset:'Init', on:true,
+  pills:t.pills.map(function(p){return {t:p[0],on:!!p[1]};}), pp:t.pillKeys.map(function(k){return t.pfx+k.toUpperCase();}),
   route:[true,false,false,false,false,false],
-  knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:'SYN_'+t.pfx.toUpperCase()+'_'+k[2],d:k[1]};}),
-  back:{d1:{k:'Character',v:t.chars[0],opts:t.chars}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2},
-        knobs:t.back.map(function(b){return [b[0],b[1],'SYN_'+t.pfx.toUpperCase()+'_'+b[2],b[1]];})},
+  knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
+  back:{d1:{k:'Character',v:t.chars[0],opts:t.chars,p:t.pfx+'CHAR'}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
+        knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
   typeIdx:0, charIdx:0, axisIdx:0, __t:t }; });
+function fxParamTail(pid){ return (pid||'').slice((pid||'').lastIndexOf('_')+1); }
+var FX_FMT={
 
-/* ═══════════════════════════════════════════════════════════════════════════════════
-   READOUT LAW (fb363) — a knob whose value MEANS something prints the meaning, never a
-   percent. Every map below is the ENGINE'S OWN (read from the worklet/C++), so a number on
-   the card is a number in the DSP. Type-dependent numbers (Attack/Release/Ratio, the live
-   crossover) are read from the device's viz push (d.__vz), because only the engine knows
-   them. Keyed `core|SUFFIX`, exactly like the shipped FX_FMT, so this block ports verbatim.
-   ═══════════════════════════════════════════════════════════════════════════════════ */
-function fmtHz(hz){ return hz>=10000?Math.round(hz/1000)+'k':(hz>=1000?(hz/1000).toFixed(1)+'k':Math.round(hz)+''); }
-function fmtDb(db){ var r=Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0'; return (r>0?'+':'')+(Math.abs(r)<10?r.toFixed(1):Math.round(r)); }
-function fmtDbS(db){ var r=Math.abs(db)>=3?Math.round(db):Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0dB'; return (r>0?'+':'')+r+'dB'; }
-function fmtMs(ms){ return ms>=1000?(ms/1000).toFixed(1)+'s':(ms<10?ms.toFixed(1):Math.round(ms))+'m'; }
-function expMap(t,lo,hi){ return lo*Math.pow(hi/lo,Math.max(0,Math.min(1,t))); }
-var FX4_FMT={
-  /* EQUALIZER — bandHz() lo/hi per band, +-30 dB per band, +-24 dB Slant, Amount 0..200 % */
-  'eqz|LOWHZ':function(v){ return fmtHz(expMap(v/100,20,500)); },
-  'eqz|BODYHZ':function(v){ return fmtHz(expMap(v/100,100,3000)); },
-  'eqz|BITEHZ':function(v){ return fmtHz(expMap(v/100,700,14000)); },
-  'eqz|REACH':function(v){ return fmtHz(expMap(v/100,6000,40000)); },
-  'eqz|LOW':function(v){ return fmtDb((v/100*2-1)*30); },
-  'eqz|BODY':function(v){ return fmtDb((v/100*2-1)*30); },
-  'eqz|BITE':function(v){ return fmtDb((v/100*2-1)*30); },
-  'eqz|AIR':function(v){ return fmtDb((v/100*2-1)*30); },
-  'eqz|SLANT':function(v){ var d=(v/100*2-1)*24; return Math.abs(d)<0.3?'flat':fmtDb(d); },
-  'eqz|AMOUNT':function(v){ return Math.round(v*2)+'%'; },
-  /* WIDEN — Width 50 is exactly neutral; Rate is the engine's 0.08 * 175^t Hz; Voices 3..8 */
-  'wid|WIDTH':function(v){ var w=Math.round((v-50)*2); return w<=-99?'mono':(w===0?'0':(w>0?'+':'')+w); },
-  'wid|RATE':function(v){ var hz=expMap(v/100,0.08,14); return (hz<10?hz.toFixed(2):Math.round(hz))+'hz'; },
-  'wid|VOICES':function(v){ return (3+Math.round(v/100*5))+'v'; },
-  /* COMPRESS — Push IS the threshold (9 - 48 t^0.9 dBp); the rest is Type-dependent: read the engine */
-  'cmp|PUSH':function(v){ return fmtDbS(9-48*Math.pow(v/100,0.9)); },
-  'cmp|RATIO':function(v,d){ var z=d&&d.__vz; var r=(z&&z.ratio!==undefined)?z.ratio:1/(1-Math.min(0.9999,Math.pow(v/100,0.85)));
-    return (r>99||!isFinite(r))?'\u221e:1':(r<10?r.toFixed(1):Math.round(r))+':1'; },
-  'cmp|LIFT':function(v){ return fmtDbS(v/100*24); },
-  'cmp|ATTACK':function(v,d){ var z=d&&d.__vz; return (z&&z.attackMs!==undefined)?fmtMs(z.attackMs):''+Math.round(v); },
-  'cmp|RELEASE':function(v,d){ var z=d&&d.__vz; return (z&&z.releaseMs!==undefined)?fmtMs(z.releaseMs):''+Math.round(v); },
-  'cmp|ROUND':function(v,d){ var z=d&&d.__vz; return (z&&z.kneeDb!==undefined)?Math.round(z.kneeDb)+'dB':''+Math.round(v); },
-  /* MULTIBAND — the crossovers print the LIVE Hz (Type multipliers and Top Lift move them); trims +-12 dB; Grip +-18 */
-  'ott|LOWCROSS':function(v,d){ var z=d&&d.__vz; return fmtHz(z&&z.xoverHz?z.xoverHz[0]:expMap(v/100,30,300)); },
-  'ott|HIGHCROSS':function(v,d){ var z=d&&d.__vz; var x=z&&z.xoverHz?z.xoverHz[1]:0; return x>0?fmtHz(x):(z?'\u2014':fmtHz(expMap(v/100,1000,8000))); },
-  'ott|RAISE':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
-  'ott|PRESS':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
-  'ott|GRIP':function(v){ return fmtDbS((v/100-0.5)*36); },
-  'ott|BASS':function(v){ return fmtDbS((v/100-0.5)*24); },
-  'ott|MIDS':function(v){ return fmtDbS((v/100-0.5)*24); },
-  'ott|TREBLE':function(v){ return fmtDbS((v/100-0.5)*24); }
+            'eqz|LOWHZ':function(v){ return fx4Hz(20*Math.pow(25,v/100)); },
+            'eqz|BODYHZ':function(v){ return fx4Hz(100*Math.pow(30,v/100)); },
+            'eqz|BITEHZ':function(v){ return fx4Hz(700*Math.pow(20,v/100)); },
+            'eqz|REACH':function(v){ return fx4Hz(6000*Math.pow(40000/6000,v/100)); },
+            'eqz|LOW':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|BODY':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|BITE':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|AIR':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|SLANT':function(v){ var d=(v/100*2-1)*24; return Math.abs(d)<0.3?'flat':fx4Db(d); },
+            'eqz|AMOUNT':function(v){ return Math.round(v*2)+'%'; },
+            'wid|WIDTH':function(v){ var w=Math.round((v-50)*2); return w<=-99?'mono':(w===0?'0':(w>0?'+':'')+w); },
+            'wid|RATE':function(v){ var hz=0.08*Math.pow(14/0.08,v/100); return (hz<10?hz.toFixed(2):Math.round(hz))+'hz'; },
+            'wid|VOICES':function(v){ return (3+Math.round(v/100*5))+'v'; },
+            'cmp|PUSH':function(v){ return fx4DbS(9-48*Math.pow(v/100,0.9)); },
+            'cmp|RATIO':function(v,d){ var z=d&&d.__vz; var r=(z&&z.ratio!==undefined&&z.ratio!==null)?z.ratio:1/(1-Math.min(0.9999,Math.pow(v/100,0.85)));
+              return (r<0||r>99||!isFinite(r))?'∞:1':(r<10?r.toFixed(1):Math.round(r))+':1'; },
+            'cmp|LIFT':function(v){ return fx4DbS(v/100*24); },
+            'cmp|ATTACK':function(v,d){ var z=d&&d.__vz; return (z&&z.atk!==undefined)?fx4Ms(z.atk):undefined; },
+            'cmp|RELEASE':function(v,d){ var z=d&&d.__vz; return (z&&z.rel!==undefined)?fx4Ms(z.rel):undefined; },
+            'cmp|ROUND':function(v,d){ var z=d&&d.__vz; return (z&&z.kneeDb!==undefined)?Math.round(z.kneeDb)+'dB':undefined; },
+            'ott|LOWCROSS':function(v,d){ var z=d&&d.__vz; return fx4Hz(z&&z.x?z.x[0]:30*Math.pow(10,v/100)); },
+            'ott|HIGHCROSS':function(v,d){ var z=d&&d.__vz; var x=z&&z.x?z.x[1]:0; return x>0?fx4Hz(x):(z?'—':fx4Hz(1000*Math.pow(8,v/100))); },
+            'ott|RAISE':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
+            'ott|PRESS':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
+            'ott|GRIP':function(v){ return fx4DbS((v/100-0.5)*36); },
+            'ott|BASS':function(v){ return fx4DbS((v/100-0.5)*24); },
+            'ott|MIDS':function(v){ return fx4DbS((v/100-0.5)*24); },
+            'ott|TREBLE':function(v){ return fx4DbS((v/100-0.5)*24); }
+            
 };
-/* SWITCH LAW — discrete things detent */
-var FX4_STEP={ 'wid|VOICES':6 };
-function fmtKey(d,p){ return d.core+'|'+p.slice(p.lastIndexOf('_')+1); }
-function knobLabel(d,p,v){ var f=FX4_FMT[fmtKey(d,p)]; return f?f(v,d):null; }
-function detent(d,p,v){ var n=FX4_STEP[fmtKey(d,p)]; if(!n) return v; var s=100/(n-1); return Math.round(v/s)*s; }
+          function fx4Hz(hz){ return hz>=10000?Math.round(hz/1000)+'k':(hz>=1000?(hz/1000).toFixed(1)+'k':Math.round(hz)+''); }
+          function fx4Db(db){ var r=Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0'; return (r>0?'+':'')+(Math.abs(r)<10?r.toFixed(1):Math.round(r)); }
+          function fx4DbS(db){ var r=Math.abs(db)>=3?Math.round(db):Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0dB'; return (r>0?'+':'')+r+'dB'; }
+          function fx4Ms(ms){ return ms>=1000?(ms/1000).toFixed(1)+'s':(ms<10?ms.toFixed(1):Math.round(ms))+'m'; }
+var FX_STEP={ 'wid|VOICES':6 };
+function fxFmt(core,pid,v,d){ try{ var f=FX_FMT[core+'|'+fxParamTail(pid)]; return f?f(v,d):undefined; }catch(e){ return undefined; } }
+function fxGlyph(){ return null; }
+function fxStep(core,pid){ return FX_STEP[core+'|'+fxParamTail(pid)]||0; }
+function detent(core,pid,v){ var n=fxStep(core,pid); if(n>1) v=Math.round(v/100*(n-1))/(n-1)*100; return v; }
+/* the per-Type relabels — the engines' own tables, same as the plugin */
+var FX4_WID_HERO=['Detune','Depth','Cents','Sway','Wash','Cleave'];
+var FX4_EQZ_TRAIT=['Pinch','Slope','Taper','Dip','Silk','Pivot','Sting'];
+function fx4ApplyType(d,typeName){ var ti=d.types.indexOf(typeName); if(ti<0) return; d.type=typeName; d.typeIdx=ti;
+  if(d.core==='wid') d.knobs[0].l=FX4_WID_HERO[ti]||'Amount'; if(d.core==='eqz') d.back.knobs[7][0]=FX4_EQZ_TRAIT[ti]||'Trait'; }
+DEVS.forEach(function(d){ fx4ApplyType(d,d.type); });
 
-/* ═══════════════════════════════════════════════════════════════════════════════════
-   THE FOUR CORES — SVG in the shared 226x78 viewBox, plot X 6.5..219.5, centre line y=39.
-   The log-f axis (20 Hz..20 kHz over the plot) is SHARED by the Equalizer and the Multiband,
-   so a crossover line and an EQ node at the same x mean the same frequency.
-   ═══════════════════════════════════════════════════════════════════════════════════ */
-var X0=6.5, X1=219.5, PW=X1-X0, CY=39, VH=78;
-function hzX(hz){ return X0+PW*Math.log(Math.max(20,Math.min(20000,hz))/20)/Math.log(1000); }
-function xHz(x){ return 20*Math.pow(1000,Math.max(0,Math.min(1,(x-X0)/PW))); }
-function flatD(n){ var d=''; for(var i=0;i<=n;i++){ var x=X0+PW*i/n; d+=(i?'L':'M')+x.toFixed(1)+' '+CY; } return d; }
+/* ═══ fb437 — THE FX4 CORES (Equalizer · Widen · Compress · Multiband) ══════════════════
+             Shared geometry: the 226x78 viewBox, plot X 6.5..219.5 (fb360), centre y 39, and ONE
+             log-f axis 20 Hz..20 kHz across the plot — the SAME axis on the Equalizer and the
+             Multiband, so a crossover line and an EQ node at the same x mean the same frequency.
+             Every mark has a job: white (currentColor) = structure and controls, purple = the live
+             signal. No grey fills, no blur. Audio brightness lives on separate elements — never a
+             per-frame opacity on a .dst-curve (the fb401 strobe law). The mockup at
+             Design/fx4/mockup/ LIFTS these entries (markers below) — this is the only copy. */
+          var FX4_X0=6.5, FX4_X1=219.5, FX4_PW=213, FX4_CY=39, FX4_VH=78;
+          function fx4HzX(hz){ return FX4_X0+FX4_PW*Math.log(Math.max(20,Math.min(20000,hz))/20)/Math.log(1000); }
+          function fx4XHz(x){ return 20*Math.pow(1000,Math.max(0,Math.min(1,(x-FX4_X0)/FX4_PW))); }
+          function fx4FlatD(n){ var d=''; for(var i=0;i<=n;i++){ var x=FX4_X0+FX4_PW*i/n; d+=(i?'L':'M')+x.toFixed(1)+' '+FX4_CY; } return d; }
+
 var CORES={
-  /* ═══ EQUALIZER — THE LIVING CURVE. The filter card's spectrum grammar underneath (the same
-     white 7 % fill), the house white line as the summed response, a purple glow under it that
-     breathes with the audio (fx3's .*-glow precedent — never opacity on a .dst-curve, the
-     strobe law), and FOUR NODES that sit ON the curve at the engine's own nodeHz/nodeDb. The
-     nodes are controls, so they are white; the one you hold turns purple. ═══ */
-  eqz:function(){
-    var g=''; [100,1000,10000].forEach(function(hz){ var x=hzX(hz).toFixed(1); g+='<line x1="'+x+'" y1="4" x2="'+x+'" y2="74"/>'; });
-    var n=''; for(var b=0;b<4;b++) n+='<circle class="eqz-n" data-b="'+b+'" cx="'+hzX([100,550,3100,15500][b]).toFixed(1)+'" cy="39" r="3.2" fill="rgba(18,16,30,0.88)" stroke="currentColor" stroke-width="1.1"/>';
-    return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
-      +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'+g+'</g>'
-      +'<line x1="6.5" y1="39" x2="219.5" y2="39" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
-      +'<path class="eqz-spec" d="" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.34)" stroke-width="0.7"/>'
-      +'<path class="eqz-fill" d="" fill="#B794FF" opacity="0.05"/>'
-      +'<path class="eqz-glow" d="'+flatD(95)+'" fill="none" stroke="#B794FF" stroke-width="3.4" opacity="0"/>'
-      +'<path class="eqz-curve dst-curve" d="'+flatD(95)+'"/>'
-      +'<g class="eqz-nodes">'+n+'</g>'
-      +'<text class="eqz-ro" x="10" y="11" font-size="7" fill="currentColor" opacity="0"></text>'
-      +'</svg>';
-  },
-  /* ═══ WIDEN — THE VOICE FAN + THE CORRELATION RAIL. The dry centre is a white beam; every
-     wet copy is a purple beam fanned by its LIVE pan and leaning by its LIVE cents (it sways
-     with the engine's own LFO/walk). The rail below is the stereo correlation: needle at r,
-     the dashed half is the mono-danger zone (r < 0). Mono pill: the fan closes. ═══ */
-  wid:function(){
-    var v=''; for(var i=0;i<8;i++) v+='<line class="wid-v" data-v="'+i+'" x1="113" y1="70" x2="113" y2="70" stroke="#B794FF" stroke-width="1.1" stroke-linecap="round" opacity="0"/>';
-    return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
-      +'<line x1="113" y1="70" x2="113" y2="12" stroke="currentColor" stroke-width="1" opacity=".22"/>'
-      +v
-      +'<line class="wid-dry" x1="113" y1="70" x2="113" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>'
-      +'<line x1="40" y1="75" x2="113" y2="75" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="1.5 2.5"/>'
-      +'<line x1="113" y1="75" x2="186" y2="75" stroke="currentColor" stroke-width="1" opacity=".22"/>'
-      +'<line x1="113" y1="73" x2="113" y2="77" stroke="currentColor" stroke-width="1" opacity=".35"/>'
-      +'<line class="wid-r" x1="186" y1="72" x2="186" y2="78" stroke="#B794FF" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>'
-      +'</svg>';
-  },
-  /* ═══ COMPRESS — THE PRESS RIVER + THE KNEE. Left: the last ~2.5 s of input (dim outline)
-     and output (white body) scrolling; the gap between them is the crushed dB, tinted purple;
-     a ceiling bar at the threshold presses down by the current gain reduction. Right: the
-     transfer curve the engine publishes (white), the 1:1 diagonal dashed, a purple ball
-     riding the curve at the live input level. One number: the gain reduction. ═══ */
-  cmp:function(){
-    return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
-      +'<line x1="6.5" y1="75" x2="138" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
-      +'<path class="cmp-gap" d="" fill="#B794FF" opacity=".22"/>'
-      +'<path class="cmp-out" d="" fill="rgba(255,255,255,0.06)" stroke="none"/>'
-      +'<path class="cmp-in" d="" fill="none" stroke="currentColor" stroke-width=".8" opacity=".42"/>'
-      +'<path class="cmp-outl dst-curve" d="M6.5 75L138 75"/>'
-      +'<rect class="cmp-press" x="6.5" y="20" width="131.5" height="0" fill="#B794FF" opacity=".35"/>'
-      +'<line class="cmp-thr" x1="6.5" y1="20" x2="138" y2="20" stroke="currentColor" stroke-width="1" opacity=".5"/>'
-      +'<text class="cmp-gr" x="136" y="11" font-size="7.5" text-anchor="end" fill="currentColor" opacity=".75">0.0</text>'
-      +'<line x1="146" y1="75" x2="219.5" y2="4" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
-      +'<line x1="146" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
-      +'<line x1="146" y1="75" x2="146" y2="4" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
-      +'<path class="cmp-knee dst-curve" d="M146 75L219.5 4"/>'
-      +'<circle class="cmp-ball" cx="146" cy="75" r="2.6" fill="#B794FF" opacity=".9"/>'
-      +'</svg>';
-  },
-  /* ═══ MULTIBAND — THE JAWS, on the log-f axis. Three lanes split at the LIVE crossovers (two
-     lanes on Two Band); per lane a purple level column rides the band's level, a ceiling slab
-     rests at the downward threshold and PRESSES DOWN by the reduction, a floor slab rests at the
-     upward threshold and RISES by the lift — the purple parts of each slab are the dB being
-     eaten or poured, right now. The crossover lines are draggable. ═══ */
-  ott:function(){
-    var lanes=''; for(var b=0;b<3;b++){
-      lanes+='<g class="ott-lane" data-b="'+b+'">'
-        +'<rect class="ott-bite-dn" x="0" y="4" width="0" height="0" fill="#B794FF" opacity=".34"/>'
-        +'<rect class="ott-bite-up" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".34"/>'
-        +'<rect class="ott-col" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".3"/>'
-        +'<line class="ott-rest-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity=".16" stroke-dasharray="1.5 2.5"/>'
-        +'<line class="ott-rest-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity=".16" stroke-dasharray="1.5 2.5"/>'
-        +'<line class="ott-edge-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
-        +'<line class="ott-edge-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
-        +'</g>'; }
-    var xl=''; for(var i=0;i<2;i++) xl+='<line class="ott-xl" data-x="'+i+'" x1="60" y1="3" x2="60" y2="76" stroke="currentColor" stroke-width="1" opacity=".45"/>';
-    return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
-      +'<line x1="6.5" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
-      +lanes+xl
-      +'<text class="ott-ro" x="10" y="11" font-size="7" fill="currentColor" opacity="0"></text>'
-      +'</svg>';
-  }
+
+            /* EQUALIZER — THE LIVING CURVE. The filter card's spectrum underneath (the SAME white
+               7 % fill, the SAME FFT via __fltBinMag), the house white line as the summed response
+               drawn from the engine's own 96-bin curve (evaluated from its LIVE ramped
+               coefficients, so it can never disagree with the audio), a purple fill+glow that
+               breathe with the level, and FOUR NODES: white, filled, small (Max: "fill the dots,
+               make them white, slightly smaller") and pinned ON THE DRAWN LINE at each band's
+               frequency — never at the band's own gain, which is what made them hover off the
+               curve whenever bands overlapped or Slant leaned (the panel EQ's own rule, fb437).
+               Drag a node: X = that band's Hz knob, Y = its gain knob (delta from the grab),
+               wheel = Trait, double-click = reset the band. The held node turns purple. */
+            eqz:function(){
+              var g=''; [100,1000,10000].forEach(function(hz){ var x=fx4HzX(hz).toFixed(1); g+='<line x1="'+x+'" y1="4" x2="'+x+'" y2="74"/>'; });
+              var n=''; for(var b=0;b<4;b++) n+='<circle class="eqz-n" data-b="'+b+'" cx="'+fx4HzX([100,550,3100,15500][b]).toFixed(1)+'" cy="39" r="2.4" fill="currentColor" stroke="none"/>';
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'+g+'</g>'
+                +'<line x1="6.5" y1="39" x2="219.5" y2="39" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="eqz-spec" d="" fill="rgba(255,255,255,0.07)" stroke="rgba(255,255,255,0.34)" stroke-width="0.7"/>'
+                +'<path class="eqz-fill" d="" fill="#B794FF" opacity="0.05"/>'
+                +'<path class="eqz-glow" d="'+fx4FlatD(95)+'" fill="none" stroke="#B794FF" stroke-width="3.4" opacity="0"/>'
+                +'<path class="eqz-curve dst-curve" d="'+fx4FlatD(95)+'"/>'
+                +'<g class="eqz-nodes">'+n+'</g>'
+                +'<text class="eqz-ro" x="10" y="11" font-size="7" fill="currentColor" opacity="0"></text>'
+                +'</svg>';
+            },
+            /* WIDEN — THE VOICE FAN + THE CORRELATION RAIL. The dry centre is a white beam; every
+               wet copy is a purple beam fanned by its LIVE pan and leaning by its LIVE cents (it
+               sways with the engine's own LFO/walk). The fan BLOOMS with level — wider strokes, a
+               purple wedge between the outer voices, like the reverb's bloom (Max, fb437). The
+               rail is the stereo correlation: needle at r; the dashed half is mono danger. */
+            wid:function(){
+              var v=''; for(var i=0;i<8;i++) v+='<line class="wid-v" data-v="'+i+'" x1="113" y1="70" x2="113" y2="70" stroke="#B794FF" stroke-width="1.1" stroke-linecap="round" opacity="0"/>';
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<path class="wid-bloom" d="" fill="#B794FF" opacity="0"/>'
+                +'<line x1="113" y1="70" x2="113" y2="12" stroke="currentColor" stroke-width="1" opacity=".22"/>'
+                +v
+                +'<line class="wid-dry" x1="113" y1="70" x2="113" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>'
+                +'<line x1="40" y1="75" x2="113" y2="75" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="1.5 2.5"/>'
+                +'<line x1="113" y1="75" x2="186" y2="75" stroke="currentColor" stroke-width="1" opacity=".22"/>'
+                +'<line x1="113" y1="73" x2="113" y2="77" stroke="currentColor" stroke-width="1" opacity=".35"/>'
+                +'<line class="wid-r" x1="186" y1="72" x2="186" y2="78" stroke="#B794FF" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>'
+                +'</svg>';
+            },
+            /* COMPRESS — THE PRESS RIVER + THE KNEE. Left: the last ~2.5 s of input (dim outline)
+               and output (the house white line) scrolling; the gap between them is the crushed
+               dB, purple; a white ceiling bar at the threshold presses down by the live gain
+               reduction (purple). Everything behind it is TRANSPARENT (Max, fb437) and there is
+               no number on the card — the press bar IS the number. Right: the transfer curve the
+               engine publishes, the 1:1 diagonal dashed, a purple ball at the live input. */
+            cmp:function(){
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<line x1="6.5" y1="75" x2="138" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="cmp-gap" d="" fill="#B794FF" opacity=".22"/>'
+                +'<path class="cmp-in" d="" fill="none" stroke="currentColor" stroke-width=".8" opacity=".42"/>'
+                +'<path class="cmp-outl dst-curve" d="M6.5 75L138 75"/>'
+                +'<rect class="cmp-press" x="6.5" y="20" width="131.5" height="0" fill="#B794FF" opacity=".35"/>'
+                +'<line class="cmp-thr" x1="6.5" y1="20" x2="138" y2="20" stroke="currentColor" stroke-width="1" opacity=".5"/>'
+                +'<line x1="146" y1="75" x2="219.5" y2="4" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
+                +'<line x1="146" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<line x1="146" y1="75" x2="146" y2="4" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="cmp-knee dst-curve" d="M146 75L219.5 4"/>'
+                +'<circle class="cmp-ball" cx="146" cy="75" r="2.6" fill="#B794FF" opacity=".9"/>'
+                +'</svg>';
+            },
+            /* MULTIBAND — THE JAWS, on the log-f axis. Lanes split at the LIVE crossovers (two on
+               Two Band); per lane a purple level column rides the band's level, two WHITE jaw
+               lines rest at the downward/upward thresholds and MOVE by the reduction/lift, and a
+               purple bite fills where a jaw has moved — the dB being eaten or poured, right now.
+               The crossover lines are draggable (Low Cross / High Cross). */
+            ott:function(){
+              var lanes=''; for(var b=0;b<3;b++){
+                lanes+='<g class="ott-lane" data-b="'+b+'">'
+                  +'<rect class="ott-bite-dn" x="0" y="4" width="0" height="0" fill="#B794FF" opacity=".34"/>'
+                  +'<rect class="ott-bite-up" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".34"/>'
+                  +'<rect class="ott-col" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".3"/>'
+                  +'<line class="ott-rest-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity="0" stroke-dasharray="1.5 2.5"/>'
+                  +'<line class="ott-rest-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity="0" stroke-dasharray="1.5 2.5"/>'
+                  +'<line class="ott-edge-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
+                  +'<line class="ott-edge-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
+                  +'</g>'; }
+              var xl=''; for(var i=0;i<2;i++) xl+='<line class="ott-xl" data-x="'+i+'" x1="60" y1="3" x2="60" y2="76" stroke="currentColor" stroke-width="1" opacity=".45"/>';
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<line x1="6.5" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +lanes+xl
+                +'<text class="ott-ro" x="10" y="11" font-size="7" fill="currentColor" opacity="0"></text>'
+                +'</svg>';
+            },
+            
 };
 
 /* devHTML() — structure-for-structure as the plugin emits it */
 function devHTML(d,idx){
   var pills=d.pills.map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'" data-pi="'+i+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
   var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
-  var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'">'+knobSVG(k.v,knobLabel(d,k.p,k.v),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+  var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+k.p+'">'+knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
   return '<div class="fxr-dev'+(d.on?'':' fxr-off')+'" data-dev="'+idx+'">'
     +'<div class="fxr-head">'
       +'<span class="fxr-grip">\u22ee\u22ee</span><span class="fxr-name">'+d.name+'</span>'
@@ -2475,288 +2478,301 @@ function devHTML(d,idx){
       +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
     +'</div></div>';
 }
-/* the OFFICIAL back panel (fb275): 2 dropdowns + 8 knobs 4x2 + 3 column separators */
+/* the OFFICIAL back panel (fb275): 2 dropdowns + 8 knobs 4x2 + 3 column separators. Back dials carry
+   data-bk = LABEL (the rack's convention) so __fxRedrawKnobs finds them. */
 function backHTML(d,idx){
-  var ks=d.back.knobs.map(function(b,i){return '<div class="bp-k"><div class="fxr-dial" data-b="'+i+'">'+knobSVG(b[1],knobLabel(d,b[2],b[1]),null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
+  var ks=d.back.knobs.map(function(b,i){return '<div class="bp-k fxr-bk-knob"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],fxFmt(d.core,b[2],b[1],d),null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
   var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
-  return '<div class="bp" data-bp="'+idx+'"><div class="bp-row">'
-    +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'
-    +'<div class="bp-sel"><label>'+d.back.d2.k+'</label><select data-dsel="'+idx+'">'+d.back.d2.opts.map(function(c){return '<option>'+c+'</option>';}).join('')+'</select></div>'
+  return '<div class="bp'+(d.__bpOpen?' on':'')+'" data-bp="'+idx+'"><div class="bp-row">'
+    +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option'+(c===d.back.d1.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
+    +'<div class="bp-sel"><label>'+d.back.d2.k+'</label><select data-dsel="'+idx+'">'+d.back.d2.opts.map(function(c){return '<option'+(c===d.back.d2.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
     +'</div><div class="bp-grid">'+seps+ks+'</div></div>';
 }
 function render(){
-  document.getElementById('rack').innerHTML=DEVS.map(devHTML).join('');
+  rack.innerHTML=DEVS.map(devHTML).join('');
   document.getElementById('panels').innerHTML=DEVS.map(function(d,i){ return '<div class="bpslot">'+backHTML(d,i)+'</div>'; }).join('');
+  fitZoom();
 }
+function reRenderKeepSwap(){ render(); }
+/* redraw one device's knobs from the MODEL — the plugin's __fxRedrawKnobs, here over the mockup's markup */
+window.__fxRedrawKnobs=function(d){ try{
+  var idx=DEVS.indexOf(d), card=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]');
+  if(card){ card.querySelectorAll('.fxr-dial[data-k]').forEach(function(el){ var k=d.knobs[+el.getAttribute('data-k')];
+    el.innerHTML=knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null); var la=el.parentNode.querySelector('.fxr-lab'); if(la&&la.textContent!==k.l) la.textContent=k.l; }); }
+  var bp=document.querySelector('.bp[data-bp="'+idx+'"]');
+  if(bp){ bp.querySelectorAll('.fxr-dial[data-bk]').forEach(function(el){ var lbl=el.getAttribute('data-bk'), row=null;
+    for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; break; } if(!row) return;
+    el.innerHTML=knobSVG(row[1],fxFmt(d.core,row[2],row[1],d),null); var la2=el.parentNode.querySelector('.fxr-lab'); if(la2&&la2.textContent!==row[0]) la2.textContent=row[0]; }); }
+}catch(e){} };
+/* __setSynParam — the plugin's ONE write path. Here: find the param's device + slot, push the worklet key. */
+window.__setSynParam=function(id,norm){ try{
+  for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(id.indexOf(d.pfx)!==0) continue; var tail=id.slice(d.pfx.length), t=d.__t;
+    for(var k=0;k<t.knobs.length;k++) if(t.knobs[k][2]===tail){ push(d,t.keys[k],norm); return; }
+    for(var b=0;b<t.back.length;b++) if(t.back[b][2]===tail){ push(d,'b'+(b+1),norm); return; }
+    for(var p=0;p<t.pillKeys.length;p++) if(t.pillKeys[p].toUpperCase()===tail){ push(d,t.pillKeys[p],norm>0.5?1:0,true); return; }
+    if(tail==='TYPE'){ push(d,'type',Math.round(norm*(d.tpN-1)),true); return; }
+    if(tail==='CHAR'){ push(d,'character',Math.round(norm*7),true); return; }
+    if(tail===t.d2p){ push(d,'axis',Math.round(norm*7),true); return; }
+  } }catch(e){} };
+
 render();
 
-/* redraw one device's knobs from the MODEL (drag-from-model law, fb364) */
-function redrawKnobs(d){
-  var idx=DEVS.indexOf(d), card=document.querySelector('.fxr-dev[data-dev="'+idx+'"]');
-  if(card){ card.querySelectorAll('.fxr-dial[data-k]').forEach(function(el){ var i=+el.getAttribute('data-k'); var k=d.knobs[i];
-    el.innerHTML=knobSVG(k.v,knobLabel(d,k.p,k.v),null); var lab=el.parentNode.querySelector('.fxr-lab'); if(lab&&lab.textContent!==k.l) lab.textContent=k.l; }); }
-  var bp=document.querySelector('.bp[data-bp="'+idx+'"]');
-  if(bp){ bp.querySelectorAll('.fxr-dial[data-b]').forEach(function(el){ var i=+el.getAttribute('data-b'); var b=d.back.knobs[i];
-    el.innerHTML=knobSVG(b[1],knobLabel(d,b[2],b[1]),null); var lab=el.parentNode.querySelector('.fxr-lab'); if(lab&&lab.textContent!==b[0]) lab.textContent=b[0]; }); }
-}
-/* per-Type relabels — the engine's own tables (frontNames / shapeName), never a card-side guess */
-function applyType(d,ti){
-  d.typeIdx=ti; d.type=d.types[ti];
-  if(d.core==='wid'&&d.__t.hero) d.knobs[0].l=d.__t.hero[ti];
-  if(d.core==='eqz'&&d.__t.trait) d.back.knobs[7][0]=d.__t.trait[ti];
-  var idx=DEVS.indexOf(d), card=document.querySelector('.fxr-dev[data-dev="'+idx+'"]');
-  if(card){ var tl=card.querySelector('.fxr-tl'); if(tl) tl.firstChild.nodeValue=d.type; }
-  redrawKnobs(d);
-}
-
-/* ── event delegation: knobs (front+back), type/char/axis, pills, power, swap ── */
+/* ── event delegation: knobs (front+back), type/char/axis, pills, power, swap; Hear follows the touched card ── */
 (function(){
   var drag=null;
   function devOf(el){ var card=el.closest('.fxr-dev'); if(card) return DEVS[+card.getAttribute('data-dev')]; var bp=el.closest('.bp'); return bp?DEVS[+bp.getAttribute('data-bp')]:null; }
   document.addEventListener('pointerdown',function(e){
+    var d0=e.target.closest&&(e.target.closest('.fxr-dev')||e.target.closest('.bp')); if(d0){ var dd=devOf(d0); if(dd){ var hi=DEVS.indexOf(dd); if(hi!==hear){ hear=hi; document.querySelectorAll('.hear').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-h')===hi);}); setHear(); } } }
     var dial=e.target.closest&&e.target.closest('.fxr-dial'); if(!dial) return;
     var d=devOf(dial); if(!d) return;
-    var k=dial.getAttribute('data-k'), b=dial.getAttribute('data-b');
-    var get=(k!=null)?function(){return d.knobs[+k].v;}:function(){return d.back.knobs[+b][1];};
-    drag={d:d,dial:dial,k:k,b:b,y0:e.clientY,v0:get()}; dial.setPointerCapture(e.pointerId); e.preventDefault();
-  });
+    var k=dial.getAttribute('data-k'), bk=dial.getAttribute('data-bk'), row=null;
+    if(bk!=null) for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===bk){ row=d.back.knobs[q]; break; }
+    var v0=(k!=null)?d.knobs[+k].v:(row?row[1]:0);
+    drag={d:d,dial:dial,k:k,row:row,y0:e.clientY,v0:v0}; dial.setPointerCapture(e.pointerId); e.preventDefault();
+  },true);
   document.addEventListener('pointermove',function(e){ if(!drag) return;
     var v=Math.max(0,Math.min(100,drag.v0+(drag.y0-e.clientY)*0.6)), d=drag.d;
-    if(drag.k!=null){ var kk=d.knobs[+drag.k]; v=detent(d,kk.p,v); kk.v=v; push(d,d.__t.keys[+drag.k],v/100); }
-    else { var bb=d.back.knobs[+drag.b]; v=detent(d,bb[2],v); bb[1]=v; push(d,'b'+(+drag.b+1),v/100); }
-    redrawKnobs(d);
+    if(drag.k!=null){ var kk=d.knobs[+drag.k]; v=detent(d.core,kk.p,v); kk.v=v; window.__setSynParam(kk.p,v/100); }
+    else if(drag.row){ v=detent(d.core,drag.row[2],v); drag.row[1]=v; window.__setSynParam(drag.row[2],v/100); }
+    window.__fxRedrawKnobs(d);
   });
   document.addEventListener('pointerup',function(){ drag=null; });
-  /* double-click -> the template default (fb363 rule 3) */
   document.addEventListener('dblclick',function(e){
     var dial=e.target.closest&&e.target.closest('.fxr-dial'); if(!dial) return; var d=devOf(dial); if(!d) return;
-    var k=dial.getAttribute('data-k'), b=dial.getAttribute('data-b');
-    if(k!=null){ d.knobs[+k].v=d.knobs[+k].d; push(d,d.__t.keys[+k],d.knobs[+k].v/100); }
-    else { d.back.knobs[+b][1]=d.back.knobs[+b][3]; push(d,'b'+(+b+1),d.back.knobs[+b][1]/100); }
-    redrawKnobs(d);
+    var k=dial.getAttribute('data-k'), bk=dial.getAttribute('data-bk');
+    if(k!=null){ d.knobs[+k].v=d.knobs[+k].d; window.__setSynParam(d.knobs[+k].p,d.knobs[+k].v/100); }
+    else if(bk!=null){ for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===bk){ d.back.knobs[q][1]=d.back.knobs[q][3]; window.__setSynParam(d.back.knobs[q][2],d.back.knobs[q][1]/100); } }
+    window.__fxRedrawKnobs(d);
   });
   document.addEventListener('change',function(e){
     var t=e.target;
-    if(t.hasAttribute('data-tsel')){ var d=DEVS[+t.getAttribute('data-tsel')]; applyType(d,t.selectedIndex); d.charIdx=0; push(d,'type',t.selectedIndex,true); push(d,'character',0,true); var cs=document.querySelector('select[data-csel="'+DEVS.indexOf(d)+'"]'); if(cs) cs.selectedIndex=0; }
+    if(t.hasAttribute('data-tsel')){ var d=DEVS[+t.getAttribute('data-tsel')]; fx4ApplyType(d,d.types[t.selectedIndex]); push(d,'type',t.selectedIndex,true); render(); }
     if(t.hasAttribute('data-csel')){ var d2=DEVS[+t.getAttribute('data-csel')]; d2.charIdx=t.selectedIndex; d2.back.d1.v=d2.back.d1.opts[t.selectedIndex]; push(d2,'character',t.selectedIndex,true); }
     if(t.hasAttribute('data-dsel')){ var d3=DEVS[+t.getAttribute('data-dsel')]; d3.axisIdx=t.selectedIndex; d3.back.d2.v=d3.back.d2.opts[t.selectedIndex]; push(d3,'axis',t.selectedIndex,true); }
   });
   document.addEventListener('click',function(e){
     var card=e.target.closest&&e.target.closest('.fxr-dev'); if(!card) return; var d=DEVS[+card.getAttribute('data-dev')];
-    var pill=e.target.closest('.fxr-pill'); if(pill){ var pi=+pill.getAttribute('data-pi'); d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true); return; }
+    var pill=e.target.closest('.fxr-pill'); if(pill){ var pi=+pill.getAttribute('data-pi'); d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
+      /* the EQ's Delta is processor-level in the plugin (wet − dry); here the graph does it: the dry leg goes to −1 */
+      if(d.core==='eqz'&&pi===0&&d.__dry&&ac){ d.__dry.gain.setTargetAtTime(d.pills[0].on?-1:0,ac.currentTime,0.02); } return; }
     var r=e.target.closest('.fxr-r'); if(r){ r.classList.toggle('fxr-on'); return; }
     if(e.target.closest('.fxr-pwr')){ d.on=!d.on; card.classList.toggle('fxr-off',!d.on); setPower(d); return; }
-    if(e.target.closest('.fxr-swap')){ var bp=document.querySelector('.bp[data-bp="'+DEVS.indexOf(d)+'"]'); if(bp) bp.classList.toggle('on'); return; }
+    if(e.target.closest('.fxr-swap')){ d.__bpOpen=!d.__bpOpen; var bp=document.querySelector('.bp[data-bp="'+DEVS.indexOf(d)+'"]'); if(bp) bp.classList.toggle('on',d.__bpOpen); fitZoom(); return; }
   });
 })();
 
-/* ═══════════════════════════════════════════════════════════════════════════════════
-   THE EQUALIZER'S NODES — the Pro-Q grammar (R12), recycled in spirit from the panel EQ:
-   drag X = that band's Hz knob, drag Y = its gain knob (DELTA from the grab, so the node never
-   jumps), wheel = Trait (the Type's shape slot), double-click = reset the band. A press that
-   misses every node grabs the band that OWNS that part of the axis (Low / Body / Bite / Air are
-   ordered), so dragging anywhere on the curve always does something sensible.
-   ═══════════════════════════════════════════════════════════════════════════════════ */
-var EQZ_LO=[20,100,700,6000], EQZ_HI=[500,3000,14000,40000];
-(function(){
-  var drag=null;
-  function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*226, y:(e.clientY-r.top)/r.height*78}; }
-  function gainRef(d,b){ return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; push(d,'b'+(2*b+2),v/100);}}
-                                 :{get:function(){return d.knobs[1].v;},set:function(v){d.knobs[1].v=v; push(d,'f2',v/100);}}; }
-  function hzRef(d,b){ return {set:function(v){ d.back.knobs[2*b][1]=v; push(d,'b'+(2*b+1),v/100); }}; }
-  function pick(core,u){
-    var nodes=core.querySelectorAll('.eqz-n'), best=-1, bd=1e9;
-    nodes.forEach(function(n){ var dx=u.x-(+n.getAttribute('cx')), dy=u.y-(+n.getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){bd=dd;best=+n.getAttribute('data-b');} });
-    if(bd<=12) return best;
-    var hz=xHz(u.x); if(hz<170) return 0; if(hz<1500) return 1; if(hz<7000) return 2; return 3;   // the owner of that part of the axis
-  }
-  function readout(core,d,b){
-    var t=core.querySelector('.eqz-ro'); if(!t) return;
-    var z=d.__vz, hz=z&&z.nodeHz?z.nodeHz[b]:0, db=z&&z.nodeDb?z.nodeDb[b]:0;
-    t.textContent=['Low','Body','Bite','Air'][b]+'  '+fmtHz(hz)+'  '+fmtDb(db); t.setAttribute('opacity','.8');
-    clearTimeout(d.__roT); d.__roT=setTimeout(function(){ t.setAttribute('opacity','0'); },900);
-  }
-  document.addEventListener('pointerdown',function(e){
-    var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
-    var card=core.closest('.fxr-dev'), d=DEVS[+card.getAttribute('data-dev')], svg=core.querySelector('svg');
-    var u=unit(svg,e), b=pick(core,u);
-    drag={core:core,d:d,b:b,svg:svg,y0:u.y,g0:gainRef(d,b).get()};
-    core.querySelectorAll('.eqz-n').forEach(function(n){ n.classList.toggle('hot',+n.getAttribute('data-b')===b); });
-    try{ core.setPointerCapture(e.pointerId); }catch(err){}
-    e.preventDefault(); move(e);
-  });
-  function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, b=drag.b;
-    var hz=xHz(u.x), t=Math.log(hz/EQZ_LO[b])/Math.log(EQZ_HI[b]/EQZ_LO[b]);
-    hzRef(d,b).set(Math.max(0,Math.min(100,t*100)));
-    var dDb=-(u.y-drag.y0)/1.1;                          // 1.1 units per dB on the plot
-    gainRef(d,b).set(Math.max(0,Math.min(100,drag.g0+dDb/30*50)));
-    redrawKnobs(d); readout(drag.core,d,b);
-  }
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',function(){ if(drag){ drag.core.querySelectorAll('.eqz-n').forEach(function(n){n.classList.remove('hot');}); } drag=null; });
-  document.addEventListener('wheel',function(e){
-    var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
-    var d=DEVS[+core.closest('.fxr-dev').getAttribute('data-dev')]; e.preventDefault();
-    var v=Math.max(0,Math.min(100,d.back.knobs[7][1]-e.deltaY*0.15)); d.back.knobs[7][1]=v; push(d,'b8',v/100); redrawKnobs(d);
-    var t=core.querySelector('.eqz-ro'); if(t){ t.textContent=d.back.knobs[7][0]+'  '+Math.round(v); t.setAttribute('opacity','.8'); clearTimeout(d.__roT); d.__roT=setTimeout(function(){t.setAttribute('opacity','0');},900); }
-  },{passive:false});
-  document.addEventListener('dblclick',function(e){
-    var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
-    var d=DEVS[+core.closest('.fxr-dev').getAttribute('data-dev')], b=pick(core,unit(core.querySelector('svg'),e));
-    hzRef(d,b).set(d.back.knobs[2*b][3]); gainRef(d,b).set(b<3?d.back.knobs[2*b+1][3]:d.knobs[1].d); redrawKnobs(d);
-  });
-})();
+/* ═══ the plugin's own tick, drawers and handlers — LIFTED from index.html (markers) ═══ */
+/* ═══ FX4-TICK-BEGIN (fb437) — THE FOUR CARDS, LIVE ═══════════════════════════════════
+             One rAF loop for all four (the fx3 precedent: never a setInterval that free-runs
+             against the compositor). Every number comes off window.__fx4VizPush, the 60 Hz C++
+             PUSH (fb354: push, never poll) — { eqz:[6], wid:[6], cmp:[6], ott:[6] }, an entry per
+             instance, null when not in the chain. Everything drawn GLIDES toward the feed — dB
+             linearly, Hz in log space (the fb163 constant) — so it moves like water and nothing
+             sample-and-holds. Idle = dim, playing = bright from lvl (fb311). The EQ curve arrives
+             only when it CHANGED (and once a second), so the drawer keeps the last one. */
+          function fx4Gl(o,k,t,a){ if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]+=a*(t-o[k]); return o[k]; }
+          function fx4GlLog(o,k,t,a){ t=Math.max(1e-6,t); if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]=Math.exp(Math.log(o[k])+a*(Math.log(t)-Math.log(o[k]))); return o[k]; }
+          function fx4C01(v){ return Math.max(0,Math.min(1,v||0)); }
+          function fx4SetA(el,k,v){ if(el) el.setAttribute(k,v); }
+          /* the EQ's dB axis (+-30 over the plot) and the Mix-aware drawn response */
+          function fx4DbY(db){ return Math.max(3,Math.min(75,FX4_CY-db*1.1)); }
+          function fx4EffDb(c,m){ if(m>=0.999) return c; var lin=(1-m)+m*Math.pow(10,c/20); return 20*Math.log10(Math.max(1e-6,Math.abs(lin))); }
+          function fx4DrawEqz(core,dev,f){
+            var st=dev.__st||(dev.__st={}); var N=96; if(!st.c){ st.c=new Float32Array(N); }
+            if(f&&f.curve&&f.curve.length===N) st.src=f.curve;                 // the C++ sends it only on change
+            st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            fx4SetA(core.querySelector('.eqz-glow'),'opacity',(0.05+0.30*st.g).toFixed(3));
+            fx4SetA(core.querySelector('.eqz-fill'),'opacity',(0.04+0.12*st.g).toFixed(3));
+            var mix=fx4C01(((dev.knobs&&dev.knobs[3])?dev.knobs[3].v:100)/100), src=st.src||null, d='';
+            for(var i=0;i<N;i++){ var tv=src?src[i]:0; if(!isFinite(tv)) tv=0; st.c[i]+=0.45*(tv-st.c[i]);
+              d+=(i?'L':'M')+(FX4_X0+FX4_PW*i/(N-1)).toFixed(1)+' '+fx4DbY(fx4EffDb(st.c[i],mix)).toFixed(1); }
+            var curve=core.querySelector('.eqz-curve');
+            if(curve&&curve.getAttribute('d')!==d){ curve.setAttribute('d',d); fx4SetA(core.querySelector('.eqz-glow'),'d',d); fx4SetA(core.querySelector('.eqz-fill'),'d',d+'L'+FX4_X1+' '+FX4_CY+'L'+FX4_X0+' '+FX4_CY+'Z'); }
+            // the nodes: at the band's LIVE centre, ON the drawn line (interpolated from the same bins)
+            var nodes=core.querySelectorAll('.eqz-n');
+            for(var b=0;b<4;b++){ var hz=fx4GlLog(st,'hz'+b,(f&&f.hz)?f.hz[b]:[100,550,3100,15500][b],0.5);
+              var x=Math.max(FX4_X0,Math.min(FX4_X1,fx4HzX(hz))), u=(x-FX4_X0)/FX4_PW*(N-1), i0=Math.floor(u), i1=Math.min(N-1,i0+1), fr=u-i0;
+              var cdb=st.c[i0]*(1-fr)+st.c[i1]*fr;
+              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4EffDb(cdb,mix)).toFixed(1)); }
+            // the audio — the SAME FFT the filter card draws, per pixel column on the same log axis
+            var spec=core.querySelector('.eqz-spec');
+            if(spec&&window.__fltHasBins&&window.__fltHasBins()){ var BM=window.__fltBinMag, SY=window.__fltSpecY, sd='', M=96, H=FX4_VH-4;
+              for(var j=0;j<=M;j++){ var u2=j/M, hz2=20*Math.pow(1000,u2), y=2+SY(BM(hz2),H);
+                sd+=(j?'L':'M')+(FX4_X0+FX4_PW*u2).toFixed(1)+' '+Math.max(2,Math.min(FX4_VH-2,y)).toFixed(1); }
+              sd+='L'+FX4_X1+' '+(FX4_VH-2)+'L'+FX4_X0+' '+(FX4_VH-2)+'Z'; spec.setAttribute('d',sd); }
+          }
+          function fx4DbpY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/72))); }
+          function fx4DrawOtt(core,dev,f){
+            var st=dev.__st||(dev.__st={}); st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var nb=(f&&f.nb)?f.nb:3;
+            var xlo=fx4GlLog(st,'xlo',(f&&f.x)?f.x[0]:120,0.3), xhi=fx4GlLog(st,'xhi',(f&&f.x&&f.x[1]>0)?f.x[1]:2500,0.3);
+            var bounds=[FX4_X0,fx4HzX(xlo),nb===3?fx4HzX(xhi):FX4_X1,FX4_X1];
+            var lanes=core.querySelectorAll('.ott-lane');
+            for(var b=0;b<3;b++){ var L=lanes[b]; if(!L) continue; if(b>=nb){ L.setAttribute('opacity','0'); continue; } L.setAttribute('opacity','1');
+              var lx0=bounds[b], lx1=bounds[b+1], lw=lx1-lx0, cx=(lx0+lx1)/2;
+              var lev=fx4Gl(st,'lv'+b,(f&&f.lv)?Math.max(-66,f.lv[b]):-66,0.35);
+              var gr=fx4Gl(st,'gr'+b,(f&&f.gr)?f.gr[b]:0,0.3);
+              var tdn=fx4Gl(st,'td'+b,(f&&f.tdn)?f.tdn[b]:-20,0.2), tup=fx4Gl(st,'tu'+b,(f&&f.tup)?Math.min(f.tup[b],f.tdn?f.tdn[b]:0):-40,0.2);
+              var yLev=fx4DbpY(lev), yTdn=fx4DbpY(tdn), yTup=fx4DbpY(tup), dn=Math.max(0,gr), up=Math.max(0,-gr);
+              var yDn=fx4DbpY(tdn-dn), yUp=fx4DbpY(tup+up);
+              var col=L.querySelector('.ott-col'); fx4SetA(col,'x',(cx-lw*0.2).toFixed(1)); fx4SetA(col,'width',Math.max(2,lw*0.4).toFixed(1)); fx4SetA(col,'y',yLev.toFixed(1)); fx4SetA(col,'height',Math.max(0,75-yLev).toFixed(1)); fx4SetA(col,'opacity',(0.18+0.62*st.g).toFixed(3));
+              var sx=(cx-lw*0.36).toFixed(1), sw=Math.max(2,lw*0.72).toFixed(1), ex=(+sx+ +sw).toFixed(1);
+              var bdn=L.querySelector('.ott-bite-dn'); fx4SetA(bdn,'x',sx); fx4SetA(bdn,'width',sw); fx4SetA(bdn,'y',yTdn.toFixed(1)); fx4SetA(bdn,'height',Math.max(0,yDn-yTdn).toFixed(1));
+              var bup=L.querySelector('.ott-bite-up'); fx4SetA(bup,'x',sx); fx4SetA(bup,'width',sw); fx4SetA(bup,'y',yUp.toFixed(1)); fx4SetA(bup,'height',Math.max(0,yTup-yUp).toFixed(1));
+              var rdn=L.querySelector('.ott-rest-dn'); fx4SetA(rdn,'x1',sx); fx4SetA(rdn,'x2',ex); fx4SetA(rdn,'y1',yTdn.toFixed(1)); fx4SetA(rdn,'y2',yTdn.toFixed(1)); fx4SetA(rdn,'opacity',dn>0.3?'.22':'0');
+              var rup=L.querySelector('.ott-rest-up'); fx4SetA(rup,'x1',sx); fx4SetA(rup,'x2',ex); fx4SetA(rup,'y1',yTup.toFixed(1)); fx4SetA(rup,'y2',yTup.toFixed(1)); fx4SetA(rup,'opacity',up>0.3?'.22':'0');
+              var edn=L.querySelector('.ott-edge-dn'); fx4SetA(edn,'x1',sx); fx4SetA(edn,'x2',ex); fx4SetA(edn,'y1',yDn.toFixed(1)); fx4SetA(edn,'y2',yDn.toFixed(1));
+              var eup=L.querySelector('.ott-edge-up'); fx4SetA(eup,'x1',sx); fx4SetA(eup,'x2',ex); fx4SetA(eup,'y1',yUp.toFixed(1)); fx4SetA(eup,'y2',yUp.toFixed(1));
+            }
+            var xl=core.querySelectorAll('.ott-xl'); if(xl.length<2) return;
+            fx4SetA(xl[0],'x1',bounds[1].toFixed(1)); fx4SetA(xl[0],'x2',bounds[1].toFixed(1));
+            if(nb===3){ fx4SetA(xl[1],'x1',bounds[2].toFixed(1)); fx4SetA(xl[1],'x2',bounds[2].toFixed(1)); if(!xl[1].classList.contains('hot')) fx4SetA(xl[1],'opacity','.45'); }
+            else fx4SetA(xl[1],'opacity','0');
+          }
+          function fx4RivY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/66))); }
+          function fx4DrawCmp(core,dev,f){
+            var st=dev.__st||(dev.__st={h:[]}); if(!st.h) st.h=[]; st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var inDb=f?Math.max(-60,Math.min(6,f['in'])):-60, outDb=f?Math.max(-60,Math.min(6,f.out)):-60, gr=f?Math.max(0,f.gr||0):0;
+            st.h.push([inDb,outDb]); if(st.h.length>150) st.h.shift();
+            var RW=131.5, n=st.h.length, pin='', pout='', gap='';
+            for(var i=0;i<n;i++){ var x=FX4_X0+RW*i/149, yi=fx4RivY(st.h[i][0]), yo=fx4RivY(st.h[i][1]);
+              pin+=(i?'L':'M')+x.toFixed(1)+' '+yi.toFixed(1); pout+=(i?'L':'M')+x.toFixed(1)+' '+yo.toFixed(1); }
+            for(var j=n-1;j>=0;j--){ gap+='L'+(FX4_X0+RW*j/149).toFixed(1)+' '+fx4RivY(st.h[j][1]).toFixed(1); }
+            fx4SetA(core.querySelector('.cmp-in'),'d',pin);
+            var ol=core.querySelector('.cmp-outl'); if(ol&&ol.getAttribute('d')!==pout) ol.setAttribute('d',pout);
+            var gp=core.querySelector('.cmp-gap'); fx4SetA(gp,'d',pin+gap+'Z'); fx4SetA(gp,'opacity',(0.12+0.30*st.g).toFixed(3));
+            var thr=fx4Gl(st,'thr',(f&&f.thr!==undefined)?f.thr:-3,0.3), yT=fx4RivY(thr), grs=fx4Gl(st,'gr',gr,0.35);
+            var tl=core.querySelector('.cmp-thr'); fx4SetA(tl,'y1',yT.toFixed(1)); fx4SetA(tl,'y2',yT.toFixed(1));
+            var pr=core.querySelector('.cmp-press'); fx4SetA(pr,'y',yT.toFixed(1)); fx4SetA(pr,'height',Math.max(0,Math.min(75-yT,grs*(71/66))).toFixed(1));
+            // the knee: input -60..+12 dBp across x 146..219.5, output -60..+12 up y 75..4 (sent on change)
+            var KW=73.5, kd=''; if(!st.k){ st.k=new Float32Array(32); for(var q0=0;q0<32;q0++) st.k[q0]=-60+72*q0/31; }
+            if(f&&f.knee&&f.knee.length===32) st.ksrc=f.knee;
+            for(var q=0;q<32;q++){ var tv=st.ksrc?st.ksrc[q]:(-60+72*q/31); if(!isFinite(tv)) tv=-60+72*q/31; st.k[q]+=0.4*(tv-st.k[q]);
+              kd+=(q?'L':'M')+(146+KW*q/31).toFixed(1)+' '+(4+71*(1-(Math.max(-60,Math.min(12,st.k[q]))+60)/72)).toFixed(1); }
+            var kp=core.querySelector('.cmp-knee'); if(kp&&kp.getAttribute('d')!==kd) kp.setAttribute('d',kd);
+            var bi=fx4Gl(st,'bi',inDb,0.5), qq=(Math.max(-60,Math.min(12,bi))+60)/72*31, qa=Math.floor(qq), qb=Math.min(31,qa+1), fr=qq-qa;
+            var bo=st.k[qa]*(1-fr)+st.k[qb]*fr, ball=core.querySelector('.cmp-ball');
+            fx4SetA(ball,'cx',(146+KW*qq/31).toFixed(1)); fx4SetA(ball,'cy',(4+71*(1-(Math.max(-60,Math.min(12,bo))+60)/72)).toFixed(1)); fx4SetA(ball,'opacity',(0.25+0.65*st.g).toFixed(2));
+          }
+          function fx4DrawWid(core,dev,f){
+            var st=dev.__st||(dev.__st={}); st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var nV=(f&&f.nV)?f.nV:6, beams=core.querySelectorAll('.wid-v'), len=54*(0.70+0.30*st.g), sw=(1.1+1.3*st.g).toFixed(2);
+            var minA=9,maxA=-9,tips=[];
+            for(var v=0;v<8;v++){ var el=beams[v]; if(!el) continue; if(v>=nV){ fx4SetA(el,'opacity','0'); continue; }
+              var pan=fx4Gl(st,'p'+v,(f&&f.pan)?f.pan[v]:0,0.25), cents=fx4Gl(st,'c'+v,(f&&f.cents)?f.cents[v]:0,0.25);
+              var a=pan*0.78, tx=113+Math.sin(a)*len+cents/100*5, ty=70-Math.cos(a)*len;
+              fx4SetA(el,'x2',tx.toFixed(1)); fx4SetA(el,'y2',ty.toFixed(1)); fx4SetA(el,'stroke-width',sw); fx4SetA(el,'opacity',(0.20+0.75*st.g).toFixed(3));
+              if(a<minA){minA=a;} if(a>maxA){maxA=a;} tips.push([a,tx,ty]); }
+            // the bloom — a purple wedge between the outermost voices that breathes with the level
+            var bl=core.querySelector('.wid-bloom');
+            if(bl){ if(tips.length>=2){ tips.sort(function(p,q){return p[0]-q[0];}); var pd='M113 70';
+                for(var t=0;t<tips.length;t++) pd+='L'+tips[t][1].toFixed(1)+' '+tips[t][2].toFixed(1); pd+='Z';
+                bl.setAttribute('d',pd); bl.setAttribute('opacity',(0.03+0.22*st.g).toFixed(3)); } else bl.setAttribute('opacity','0'); }
+            fx4SetA(core.querySelector('.wid-dry'),'opacity',(0.30+0.40*st.g).toFixed(3));
+            var r=fx4Gl(st,'r',(f&&f.corr!==undefined)?f.corr:1,0.2), rx=(113+73*Math.max(-1,Math.min(1,r))).toFixed(1);
+            var nd=core.querySelector('.wid-r'); fx4SetA(nd,'x1',rx); fx4SetA(nd,'x2',rx);
+          }
+          var FX4_DRAW={eqz:fx4DrawEqz,wid:fx4DrawWid,cmp:fx4DrawCmp,ott:fx4DrawOtt};
+          function fx4Tick(){
+            var feed=window.__fx4VizPush||null;
+            var cards=document.querySelectorAll('.fxr-dev');
+            for(var c=0;c<cards.length;c++){
+              var dev=DEVS[c]; if(!dev||!FX4_DRAW[dev.core]) continue;
+              var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]'); if(!core) continue;
+              var bank=feed?feed[dev.core]:null, f=(bank&&bank.length)?bank[(dev.inst||1)-1]:null;
+              if(f) dev.__vz=f;                                  // the readouts read it (Attack/Release/Ratio/crossovers)
+              FX4_DRAW[dev.core](core,dev,f);
+            }
+          }
+          (function(){ function l4(){ try{ if(!window.__cardOnly) fx4Tick(); }catch(e){}
+            requestAnimationFrame(l4); } requestAnimationFrame(l4); })();
+          window.__fx4Tick=fx4Tick;   // headless gate hook
+          /* the engine-fed readouts (Attack/Release/Ratio/knee/crossovers) refresh at a gentle rate */
+          setInterval(function(){ try{ for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);
 
-/* ═══ THE MULTIBAND'S CROSSOVERS — drag a lane boundary, the Low/High Cross knob moves ═══ */
-(function(){
-  var drag=null;
-  function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/r.width*226, y:(e.clientY-r.top)/r.height*78}; }
-  document.addEventListener('pointerdown',function(e){
-    var core=e.target.closest&&e.target.closest('.fxr-core[data-core="ott"]'); if(!core) return;
-    var d=DEVS[+core.closest('.fxr-dev').getAttribute('data-dev')], svg=core.querySelector('svg'), u=unit(svg,e);
-    var best=-1,bd=1e9; core.querySelectorAll('.ott-xl').forEach(function(l){ if(l.getAttribute('opacity')==='0') return; var dx=Math.abs(u.x-(+l.getAttribute('x1'))); if(dx<bd){bd=dx;best=+l.getAttribute('data-x');} });
-    if(best<0||bd>9) return;
-    drag={core:core,d:d,i:best,svg:svg}; core.querySelectorAll('.ott-xl').forEach(function(l){ l.classList.toggle('hot',+l.getAttribute('data-x')===best); });
-    try{ core.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); move(e);
-  });
-  function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, hz=xHz(u.x);
-    var two=d.type==='Two Band', lo=drag.i===0?(two?150:30):1000, hi=drag.i===0?(two?2000:300):8000;
-    var t=Math.max(0,Math.min(1,Math.log(hz/lo)/Math.log(hi/lo)));
-    d.back.knobs[drag.i][1]=t*100; push(d,'b'+(drag.i+1),t); redrawKnobs(d);
-    var ro=drag.core.querySelector('.ott-ro'); if(ro){ ro.textContent=(drag.i?'High Cross  ':'Low Cross  ')+fmtHz(hz); ro.setAttribute('opacity','.8'); clearTimeout(d.__roT); d.__roT=setTimeout(function(){ro.setAttribute('opacity','0');},900); }
-  }
-  document.addEventListener('pointermove',move);
-  document.addEventListener('pointerup',function(){ if(drag) drag.core.querySelectorAll('.ott-xl').forEach(function(l){l.classList.remove('hot');}); drag=null; });
-})();
-
-/* ═══════════════════════════════════════════════════════════════════════════════════
-   THE FEED + THE TICK. FEED is shaped exactly like the plugin's window.__fx4VizPush will be:
-   { eqz:[6], wid:[6], cmp:[6], ott:[6] } — an entry per instance, null when not in the chain.
-   Here each worklet's onmessage fills FEED[core][0]. fx4Tick() is ONE rAF loop for all four
-   cards (fb413: never a setInterval that free-runs against the compositor). Everything drawn
-   glides toward the feed — dB linearly, Hz in LOG space (the fb163 constant) — so the picture
-   moves like water and nothing sample-and-holds. Idle = dim, playing = bright (fb311).
-   ═══════════════════════════════════════════════════════════════════════════════════ */
-var FEED={eqz:[null],wid:[null],cmp:[null],ott:[null]};
-function gl(o,k,t,a){ if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]+=a*(t-o[k]); return o[k]; }
-function glLog(o,k,t,a){ t=Math.max(1e-6,t); if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]=Math.exp(Math.log(o[k])+a*(Math.log(t)-Math.log(o[k]))); return o[k]; }
-function c01(v){ return Math.max(0,Math.min(1,v||0)); }
-function setA(el,k,v){ if(el) el.setAttribute(k,v); }
-
-/* EQUALIZER */
-function dbY(db){ return Math.max(3,Math.min(75,CY-db*1.1)); }
-function effDb(c,m){ if(m>=0.999) return c; var lin=(1-m)+m*Math.pow(10,c/20); return 20*Math.log10(Math.max(1e-6,Math.abs(lin))); }
-var specBuf=null;
-function drawEqz(core,dev,f){
-  var st=dev.__st||(dev.__st={}); var N=96; if(!st.c){ st.c=new Float32Array(N); }
-  st.g=gl(st,'g',f?c01(f.lvl):0,0.18);
-  setA(core.querySelector('.eqz-glow'),'opacity',(0.05+0.30*st.g).toFixed(3));
-  setA(core.querySelector('.eqz-fill'),'opacity',(0.04+0.12*st.g).toFixed(3));
-  var mix=c01((dev.knobs[3].v||0)/100), src=(f&&f.curve&&f.curve.length===N)?f.curve:null, d='';
-  for(var i=0;i<N;i++){ var tv=src?src[i]:0; if(!isFinite(tv)) tv=0; st.c[i]+=0.45*(tv-st.c[i]);
-    d+=(i?'L':'M')+(X0+PW*i/(N-1)).toFixed(1)+' '+dbY(effDb(st.c[i],mix)).toFixed(1); }
-  var curve=core.querySelector('.eqz-curve'); if(curve&&curve.getAttribute('d')!==d){ curve.setAttribute('d',d); setA(core.querySelector('.eqz-glow'),'d',d); setA(core.querySelector('.eqz-fill'),'d',d+'L'+X1+' '+CY+'L'+X0+' '+CY+'Z'); }
-  var nodes=core.querySelectorAll('.eqz-n');
-  for(var b=0;b<4;b++){ var hz=glLog(st,'hz'+b,f&&f.nodeHz?f.nodeHz[b]:[100,550,3100,15500][b],0.5), db=gl(st,'db'+b,f&&f.nodeDb?f.nodeDb[b]:0,0.5);
-    setA(nodes[b],'cx',Math.max(X0,Math.min(X1,hzX(hz))).toFixed(1)); setA(nodes[b],'cy',dbY(effDb(db,mix)).toFixed(1)); }
-  /* the audio — the post-device spectrum, per pixel column on the same log axis (the filter card's grammar) */
-  var spec=core.querySelector('.eqz-spec');
-  if(spec&&dev.__an){ var an=dev.__an; if(!specBuf||specBuf.length!==an.frequencyBinCount) specBuf=new Float32Array(an.frequencyBinCount);
-    an.getFloatFrequencyData(specBuf); var sr=ac?ac.sampleRate:48000, sd='', M=96, top=-14, bot=-96, H=VH-4;
-    for(var j=0;j<=M;j++){ var u=j/M, hz2=20*Math.pow(1000,u), bb=hz2/(sr/2)*specBuf.length, i0=Math.floor(bb), fr=bb-i0;
-      var v0=specBuf[Math.min(specBuf.length-1,i0)], v1=specBuf[Math.min(specBuf.length-1,i0+1)]; var db2=(isFinite(v0)?v0:-200)*(1-fr)+(isFinite(v1)?v1:-200)*fr;
-      var y=2+H*(1-(db2-bot)/(top-bot)); sd+=(j?'L':'M')+(X0+PW*u).toFixed(1)+' '+Math.max(2,Math.min(VH-2,y)).toFixed(1); }
-    sd+='L'+X1+' '+(VH-2)+'L'+X0+' '+(VH-2)+'Z'; spec.setAttribute('d',sd); }
-}
-
-/* MULTIBAND */
-function dbpY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/72))); }
-function drawOtt(core,dev,f){
-  var st=dev.__st||(dev.__st={}); st.g=gl(st,'g',f?c01(f.lvl):0,0.18);
-  var nb=f&&f.bands?f.bands:3;
-  var xlo=glLog(st,'xlo',f&&f.xoverHz?f.xoverHz[0]:120,0.3), xhi=glLog(st,'xhi',(f&&f.xoverHz&&f.xoverHz[1]>0)?f.xoverHz[1]:2500,0.3);
-  var bounds=[X0,hzX(xlo),nb===3?hzX(xhi):X1,X1];
-  var lanes=core.querySelectorAll('.ott-lane');
-  for(var b=0;b<3;b++){ var L=lanes[b]; if(b>=nb){ L.setAttribute('opacity','0'); continue; } L.setAttribute('opacity','1');
-    var lx0=bounds[b], lx1=bounds[b+1], lw=lx1-lx0, cx=(lx0+lx1)/2;
-    var lev=gl(st,'lv'+b,f&&f.bandDb?Math.max(-66,f.bandDb[b]):-66,0.35);
-    var gr=gl(st,'gr'+b,f&&f.grDb?f.grDb[b]:0,0.3);
-    var tdn=gl(st,'td'+b,f&&f.tdn?f.tdn[b]:-20,0.2), tup=gl(st,'tu'+b,f&&f.tup?Math.min(f.tup[b],f.tdn?f.tdn[b]:0):-40,0.2);
-    var yLev=dbpY(lev), yTdn=dbpY(tdn), yTup=dbpY(tup), dn=Math.max(0,gr), up=Math.max(0,-gr);
-    var yDn=dbpY(tdn-dn), yUp=dbpY(tup+up);
-    var col=L.querySelector('.ott-col'); setA(col,'x',(cx-lw*0.2).toFixed(1)); setA(col,'width',Math.max(2,lw*0.4).toFixed(1)); setA(col,'y',yLev.toFixed(1)); setA(col,'height',Math.max(0,75-yLev).toFixed(1)); setA(col,'opacity',(0.18+0.62*st.g).toFixed(3));
-    var sx=(cx-lw*0.36).toFixed(1), sw=Math.max(2,lw*0.72).toFixed(1);
-    var bdn=L.querySelector('.ott-bite-dn'); setA(bdn,'x',sx); setA(bdn,'width',sw); setA(bdn,'y',yTdn.toFixed(1)); setA(bdn,'height',Math.max(0,yDn-yTdn).toFixed(1));
-    var bup=L.querySelector('.ott-bite-up'); setA(bup,'x',sx); setA(bup,'width',sw); setA(bup,'y',yUp.toFixed(1)); setA(bup,'height',Math.max(0,yTup-yUp).toFixed(1));
-    var rdn=L.querySelector('.ott-rest-dn'); setA(rdn,'x1',sx); setA(rdn,'x2',(+sx+ +sw).toFixed(1)); setA(rdn,'y1',yTdn.toFixed(1)); setA(rdn,'y2',yTdn.toFixed(1)); setA(rdn,'opacity',dn>0.3?'.22':'0');
-    var rup=L.querySelector('.ott-rest-up'); setA(rup,'x1',sx); setA(rup,'x2',(+sx+ +sw).toFixed(1)); setA(rup,'y1',yTup.toFixed(1)); setA(rup,'y2',yTup.toFixed(1)); setA(rup,'opacity',up>0.3?'.22':'0');
-    var edn=L.querySelector('.ott-edge-dn'); setA(edn,'x1',sx); setA(edn,'x2',(+sx+ +sw).toFixed(1)); setA(edn,'y1',yDn.toFixed(1)); setA(edn,'y2',yDn.toFixed(1));
-    var eup=L.querySelector('.ott-edge-up'); setA(eup,'x1',sx); setA(eup,'x2',(+sx+ +sw).toFixed(1)); setA(eup,'y1',yUp.toFixed(1)); setA(eup,'y2',yUp.toFixed(1));
-  }
-  var xl=core.querySelectorAll('.ott-xl');
-  setA(xl[0],'x1',bounds[1].toFixed(1)); setA(xl[0],'x2',bounds[1].toFixed(1));
-  if(nb===3){ setA(xl[1],'x1',bounds[2].toFixed(1)); setA(xl[1],'x2',bounds[2].toFixed(1)); if(!xl[1].classList.contains('hot')) setA(xl[1],'opacity','.45'); }
-  else setA(xl[1],'opacity','0');
-}
-
-/* COMPRESS */
-function rivY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/66))); }
-function drawCmp(core,dev,f){
-  var st=dev.__st||(dev.__st={h:[]}); st.g=gl(st,'g',f?c01(f.lvl):0,0.18);
-  var inDb=f?Math.max(-60,Math.min(6,f.inDb)):-60, outDb=f?Math.max(-60,Math.min(6,f.outDb)):-60, gr=f?Math.max(0,f.grDb):0;
-  st.h.push([inDb,outDb]); if(st.h.length>150) st.h.shift();
-  var RW=131.5, n=st.h.length, pin='', pout='', gap='';
-  for(var i=0;i<n;i++){ var x=X0+RW*i/149; var yi=rivY(st.h[i][0]), yo=rivY(st.h[i][1]);
-    pin+=(i?'L':'M')+x.toFixed(1)+' '+yi.toFixed(1); pout+=(i?'L':'M')+x.toFixed(1)+' '+yo.toFixed(1); }
-  for(var j=n-1;j>=0;j--){ var x2=X0+RW*j/149; gap+='L'+x2.toFixed(1)+' '+rivY(st.h[j][1]).toFixed(1); }
-  var xe=(X0+RW*(n-1)/149).toFixed(1);
-  setA(core.querySelector('.cmp-in'),'d',pin);
-  setA(core.querySelector('.cmp-outl'),'d',pout);
-  setA(core.querySelector('.cmp-out'),'d',pout+'L'+xe+' 75L'+X0+' 75Z');
-  setA(core.querySelector('.cmp-gap'),'d',pin+gap+'Z'); setA(core.querySelector('.cmp-gap'),'opacity',(0.12+0.30*st.g).toFixed(3));
-  var thr=gl(st,'thr',f&&f.thrDb!==undefined?f.thrDb:-3,0.3), yT=rivY(thr), grs=gl(st,'gr',gr,0.35);
-  var tl=core.querySelector('.cmp-thr'); setA(tl,'y1',yT.toFixed(1)); setA(tl,'y2',yT.toFixed(1));
-  var pr=core.querySelector('.cmp-press'); setA(pr,'y',yT.toFixed(1)); setA(pr,'height',Math.min(75-yT,grs*(71/66)).toFixed(1));
-  var t=core.querySelector('.cmp-gr'); if(t){ var s=(grs>0.05?'\u2212'+grs.toFixed(1):'0.0'); if(t.textContent!==s) t.textContent=s; t.setAttribute('opacity',(0.35+0.45*st.g).toFixed(2)); }
-  /* the knee: input -60..+12 dBp across x 146..219.5, output -60..+12 up y 75..4 */
-  var KW=73.5, kd='', kn=(f&&f.knee&&f.knee.length===32)?f.knee:null;
-  if(!st.k) st.k=new Float32Array(32);
-  for(var q=0;q<32;q++){ var tin=-60+72*q/31, tv=kn?kn[q]:tin; if(!isFinite(tv)) tv=tin; st.k[q]+=0.4*(tv-st.k[q]);
-    kd+=(q?'L':'M')+(146+KW*q/31).toFixed(1)+' '+(4+71*(1-(Math.max(-60,Math.min(12,st.k[q]))+60)/72)).toFixed(1); }
-  var kp=core.querySelector('.cmp-knee'); if(kp&&kp.getAttribute('d')!==kd) kp.setAttribute('d',kd);
-  var bi=gl(st,'bi',inDb,0.5), qq=(Math.max(-60,Math.min(12,bi))+60)/72*31, q0=Math.floor(qq), q1=Math.min(31,q0+1), fr=qq-q0;
-  var bo=st.k[q0]*(1-fr)+st.k[q1]*fr;
-  var ball=core.querySelector('.cmp-ball'); setA(ball,'cx',(146+KW*qq/31).toFixed(1)); setA(ball,'cy',(4+71*(1-(Math.max(-60,Math.min(12,bo))+60)/72)).toFixed(1)); setA(ball,'opacity',(0.25+0.65*st.g).toFixed(2));
-}
-
-/* WIDEN */
-function drawWid(core,dev,f){
-  var st=dev.__st||(dev.__st={}); st.g=gl(st,'g',f?c01(f.lvl):0,0.18);
-  var nV=f&&f.nV?f.nV:6, beams=core.querySelectorAll('.wid-v'), len=54*(0.70+0.30*st.g);
-  for(var v=0;v<8;v++){ var el=beams[v]; if(v>=nV){ setA(el,'opacity','0'); continue; }
-    var pan=gl(st,'p'+v,f&&f.voicePan?f.voicePan[v]:0,0.25), cents=gl(st,'c'+v,f&&f.voiceCents?f.voiceCents[v]:0,0.25);
-    var a=pan*0.78, tx=113+Math.sin(a)*len+cents/100*5, ty=70-Math.cos(a)*len;
-    setA(el,'x2',tx.toFixed(1)); setA(el,'y2',ty.toFixed(1)); setA(el,'opacity',(0.16+0.64*st.g).toFixed(3)); }
-  setA(core.querySelector('.wid-dry'),'opacity',(0.30+0.40*st.g).toFixed(3));
-  var r=gl(st,'r',f&&f.corr!==undefined?f.corr:1,0.2), rx=(113+73*Math.max(-1,Math.min(1,r))).toFixed(1);
-  var nd=core.querySelector('.wid-r'); setA(nd,'x1',rx); setA(nd,'x2',rx);
-}
-
-function fx4Tick(){
-  var cards=document.querySelectorAll('.fxr-dev');
-  for(var c=0;c<cards.length;c++){ var dev=DEVS[+cards[c].getAttribute('data-dev')]; if(!dev) continue;
-    var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]'); if(!core) continue;
-    var bank=FEED[dev.core], f=bank?bank[(dev.inst||1)-1]:null;
-    if(dev.core==='eqz') drawEqz(core,dev,f); else if(dev.core==='ott') drawOtt(core,dev,f);
-    else if(dev.core==='cmp') drawCmp(core,dev,f); else if(dev.core==='wid') drawWid(core,dev,f); }
-  requestAnimationFrame(fx4Tick);
-}
-requestAnimationFrame(fx4Tick);
-/* refresh the engine-fed readouts (Attack/Release/Ratio/crossovers) at a gentle rate */
-setInterval(function(){ DEVS.forEach(function(d){ if(d.__vz&&(d.core==='cmp'||d.core==='ott')) redrawKnobs(d); }); },400);
+          /* ═══ THE EQUALIZER'S NODES — the Pro-Q grammar (CONTRACT R12), as SVG in the card.
+             Drag X = that band's Hz knob (the engine's own lo/hi per band), drag Y = its gain knob
+             as a DELTA from the grab (the node never jumps), wheel = Trait, double-click = reset.
+             A press that misses every node grabs the band that OWNS that part of the axis. The
+             nodes and the back-8 + front Air are ONE state: the model + __setSynParam, then
+             __fxRedrawKnobs — the fb363/364 discipline. ═══ */
+          (function(){
+            var EQZ_LO=[20,100,700,6000], EQZ_HI=[500,3000,14000,40000], drag=null;
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='eqz')?d:null; }
+            function gainRef(d,b){ return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; try{window.__setSynParam(d.back.knobs[2*b+1][2],v/100);}catch(e){}}}
+                                      :{get:function(){return d.knobs[1].v;},set:function(v){d.knobs[1].v=v; try{window.__setSynParam(d.knobs[1].p,v/100);}catch(e){}}}; }
+            function hzSet(d,b,v){ d.back.knobs[2*b][1]=v; try{window.__setSynParam(d.back.knobs[2*b][2],v/100);}catch(e){} }
+            function pick(core,u){
+              var nodes=core.querySelectorAll('.eqz-n'), best=-1, bd=1e9;
+              for(var i=0;i<nodes.length;i++){ var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){bd=dd;best=+nodes[i].getAttribute('data-b');} }
+              if(bd<=12) return best;
+              var hz=fx4XHz(u.x); if(hz<170) return 0; if(hz<1500) return 1; if(hz<7000) return 2; return 3;
+            }
+            function readout(core,d,txt){ var t=core.querySelector('.eqz-ro'); if(!t) return; t.textContent=txt; t.setAttribute('opacity','.8');
+              clearTimeout(d.__roT); d.__roT=setTimeout(function(){ try{ t.setAttribute('opacity','0'); }catch(e){} },900); }
+            function hot(core,b){ var ns=core.querySelectorAll('.eqz-n'); for(var i=0;i<ns.length;i++) ns[i].classList.toggle('hot',+ns[i].getAttribute('data-b')===b); }
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'); if(!svg) return;
+              var u=unit(svg,e), b=pick(core,u);
+              drag={core:core,d:d,b:b,svg:svg,y0:u.y,g0:gainRef(d,b).get()};
+              hot(core,b); try{ core.setPointerCapture(e.pointerId); }catch(err){}
+              e.preventDefault(); move(e);
+            }catch(err){} });
+            function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, b=drag.b;
+              var hz=fx4XHz(u.x), t=Math.log(hz/EQZ_LO[b])/Math.log(EQZ_HI[b]/EQZ_LO[b]);
+              hzSet(d,b,Math.max(0,Math.min(100,t*100)));
+              var dDb=-(u.y-drag.y0)/1.1;                         // 1.1 units per dB on the plot
+              gainRef(d,b).set(Math.max(0,Math.min(100,drag.g0+dDb/30*50)));
+              window.__fxRedrawKnobs(d);
+              var z=d.__vz; readout(drag.core,d,['Low','Body','Bite','Air'][b]+'  '+fx4Hz(z&&z.hz?z.hz[b]:hz)+'  '+fx4Db(z&&z.db?z.db[b]:0));
+            }
+            document.addEventListener('pointermove',function(e){ try{ move(e); }catch(err){} });
+            document.addEventListener('pointerup',function(){ try{ if(drag) hot(drag.core,-1); }catch(err){} drag=null; });
+            // wheel = Trait. Captured at the document so the rack's own wheel-to-scrollLeft pan
+            // (the .fxr-clip handler) never steals a scroll made over an EQ core.
+            document.addEventListener('wheel',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; e.preventDefault(); e.stopPropagation();
+              var row=d.back.knobs[7], v=Math.max(0,Math.min(100,row[1]-e.deltaY*0.15)); row[1]=v;
+              try{ window.__setSynParam(row[2],v/100); }catch(err){}
+              window.__fxRedrawKnobs(d); readout(core,d,row[0]+'  '+Math.round(v));
+            }catch(err){} },{passive:false,capture:true});
+            document.addEventListener('dblclick',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var b=pick(core,unit(core.querySelector('svg'),e));
+              var t=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core==='eqz'){ t=DEV_TEMPLATES[i]; break; } if(!t) return;
+              hzSet(d,b,t.back.knobs[2*b][1]); gainRef(d,b).set(b<3?t.back.knobs[2*b+1][1]:t.knobs[1].v); window.__fxRedrawKnobs(d);
+            }catch(err){} });
+          })();
+          /* ═══ THE MULTIBAND'S CROSSOVERS — drag a lane boundary, the Low/High Cross knob moves ═══ */
+          (function(){
+            var drag=null;
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='ott')?d:null; }
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="ott"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'), u=unit(svg,e);
+              var best=-1,bd=1e9, xl=core.querySelectorAll('.ott-xl');
+              for(var i=0;i<xl.length;i++){ if(xl[i].getAttribute('opacity')==='0') continue; var dx=Math.abs(u.x-(+xl[i].getAttribute('x1'))); if(dx<bd){bd=dx;best=+xl[i].getAttribute('data-x');} }
+              if(best<0||bd>9) return;
+              drag={core:core,d:d,i:best,svg:svg}; for(var k=0;k<xl.length;k++) xl[k].classList.toggle('hot',+xl[k].getAttribute('data-x')===best);
+              try{ core.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); move(e);
+            }catch(err){} });
+            function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, hz=fx4XHz(u.x);
+              var two=(d.type==='Two Band'), lo=drag.i===0?(two?150:30):1000, hi=drag.i===0?(two?2000:300):8000;
+              var t=Math.max(0,Math.min(1,Math.log(hz/lo)/Math.log(hi/lo))), row=d.back.knobs[drag.i];
+              row[1]=t*100; try{ window.__setSynParam(row[2],t); }catch(err){} window.__fxRedrawKnobs(d);
+              var ro=drag.core.querySelector('.ott-ro'); if(ro){ ro.textContent=row[0]+'  '+fx4Hz(hz); ro.setAttribute('opacity','.8'); clearTimeout(d.__roT); d.__roT=setTimeout(function(){ try{ ro.setAttribute('opacity','0'); }catch(e2){} },900); }
+            }
+            document.addEventListener('pointermove',function(e){ try{ move(e); }catch(err){} });
+            document.addEventListener('pointerup',function(){ try{ if(drag){ var xl=drag.core.querySelectorAll('.ott-xl'); for(var k=0;k<xl.length;k++) xl[k].classList.remove('hot'); } }catch(err){} drag=null; });
+          })();
+          
 
 /* ═══ AUDIO — one context, one -26 dBFS source, four engines in PARALLEL, Hear picks the ear ═══ */
-var ac=null,srcN=null,playing=false,kind=0,hear=3,dryG=null,master=null;
+var ac=null,srcN=null,playing=false,kind=0,hear=0,dryG=null,master=null;
 var KINDS=['Saw chord','Sine 220','Noise','Pluck','Drums','Pad','Bell','Sweep'];
 function fail(m){ document.getElementById('err').textContent=m; document.getElementById('status').textContent='Failed to start.'; }
 async function addWorklet(code){
@@ -2765,8 +2781,27 @@ async function addWorklet(code){
     catch(e2){ throw new Error('addModule failed.\nblob: '+e1.message+'\ndata: '+e2.message); } }
 }
 function push(d,k,v,raw){ if(!d.__node||k==null) return; var m={}; m[k]=v; d.__node.port.postMessage(m); }
-function setPower(d){ if(!d.__wet) return; var t=ac.currentTime; d.__wet.gain.setTargetAtTime(d.on?1:0,t,0.02); d.__dry.gain.setTargetAtTime(d.on?0:1,t,0.02); }
+function setPower(d){ if(!d.__wet) return; var t=ac.currentTime; d.__wet.gain.setTargetAtTime(d.on?1:0,t,0.02); var dl=(d.core==='eqz'&&d.pills[0]&&d.pills[0].on)?-1:0; d.__dry.gain.setTargetAtTime(d.on?dl:1,t,0.02); }
 function setHear(){ if(!ac) return; var t=ac.currentTime; DEVS.forEach(function(d,i){ if(d.__hear) d.__hear.gain.setTargetAtTime(hear===i?1:0,t,0.03); }); if(dryG) dryG.gain.setTargetAtTime(hear===-1?1:0,t,0.03); }
+/* the worklet posts → the plugin's push field names, so the LIFTED drawers read them unchanged */
+function adapt(core,z){
+  if(core==='eqz') return {lvl:z.lvl,hz:z.nodeHz,db:z.nodeDb,curve:z.curve};
+  if(core==='wid') return {corr:z.corr,nV:z.nV||6,pan:z.voicePan,cents:z.voiceCents,width:z.widthNow,lvl:z.lvl};
+  if(core==='cmp') return {gr:z.grDb,'in':z.inDb,out:z.outDb,thr:z.thrDb,ratio:(z.ratio===Infinity||z.ratio>1e6)?-1:z.ratio,atk:z.attackMs,rel:z.releaseMs,kneeDb:z.kneeDb,knee:z.knee,lvl:z.lvl};
+  if(core==='ott') return {gr:z.grDb,lv:z.bandDb,x:z.xoverHz,tdn:z.tdn,tup:z.tup,nb:z.bands||3,lvl:z.lvl};
+  return z;
+}
+window.__fx4VizPush={eqz:[null],wid:[null],cmp:[null],ott:[null]};
+/* the filter card's spectrum hooks, backed by an AnalyserNode on the Equalizer's wet output */
+var specAn=null, specBuf=null;
+window.__fltHasBins=function(){ return !!specAn; };
+window.__fltBinMag=function(hz){ if(!specAn) return 0; if(!specBuf||specBuf.length!==specAn.frequencyBinCount) specBuf=new Float32Array(specAn.frequencyBinCount);
+  if(!window.__specFrame||window.__specFrame!==window.__fx4Frame){ specAn.getFloatFrequencyData(specBuf); window.__specFrame=window.__fx4Frame; }
+  var sr=ac?ac.sampleRate:48000, bb=hz/(sr/2)*specBuf.length, i0=Math.floor(bb), fr=bb-i0;
+  var v0=specBuf[Math.min(specBuf.length-1,i0)], v1=specBuf[Math.min(specBuf.length-1,i0+1)]; var db=(isFinite(v0)?v0:-200)*(1-fr)+(isFinite(v1)?v1:-200)*fr;
+  return Math.pow(10,(db+10)/20)/7.5; };      /* inverse of the plugin's specY input (m*7.5 -> dB), +10 dB visual gain */
+window.__fltSpecY=function(m,h){ var db=20*Math.log10(Math.max(m*7.5,1e-7)), top=6, bot=-92; var y=h*(1-(db-bot)/(top-bot)); return Math.max(-h*0.1,Math.min(h,y)); };
+(function(){ function fr(){ window.__fx4Frame=(window.__fx4Frame||0)+1; requestAnimationFrame(fr); } requestAnimationFrame(fr); })();
 async function boot(){
   ac=new (window.AudioContext||window.webkitAudioContext)();
   master=ac.createGain(); master.gain.value=0.55; master.connect(ac.destination);
@@ -2777,8 +2812,8 @@ async function boot(){
     d.__node=new AudioWorkletNode(ac,d.__t.proc,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
     d.__wet=ac.createGain(); d.__dry=ac.createGain(); d.__dry.gain.value=0; d.__hear=ac.createGain(); d.__hear.gain.value=(hear===i)?1:0;
     d.__node.connect(d.__wet); d.__wet.connect(d.__hear); d.__dry.connect(d.__hear); d.__hear.connect(master);
-    if(d.core==='eqz'){ d.__an=ac.createAnalyser(); d.__an.fftSize=2048; d.__an.smoothingTimeConstant=0.55; d.__wet.connect(d.__an); }
-    (function(dd){ dd.__node.port.onmessage=function(e){ var z=e.data||{}; dd.__vz=z; FEED[dd.core][0]=z; }; })(d);
+    if(d.core==='eqz'){ specAn=ac.createAnalyser(); specAn.fftSize=2048; specAn.smoothingTimeConstant=0.55; d.__wet.connect(specAn); }
+    (function(dd){ dd.__node.port.onmessage=function(e){ var z=e.data||{}; window.__fx4VizPush[dd.core][0]=adapt(dd.core,z); }; })(d);
     d.__t.keys.forEach(function(k,j){ push(d,k,d.knobs[j].v/100); });
     d.back.knobs.forEach(function(b,j){ push(d,'b'+(j+1),b[1]/100); });
     push(d,'type',d.typeIdx,true); push(d,'character',d.charIdx,true); push(d,'axis',d.axisIdx,true);
@@ -2805,7 +2840,6 @@ function makeSrc(){
       else if(kind===6){ var bt=t%2.0, be=Math.exp(-bt*2.6), mi=6.5*Math.exp(-bt*4.5); v=Math.sin(2*Math.PI*440*t+mi*Math.sin(2*Math.PI*622.3*t))*0.5*be; }
       else { var r=80, T=4, ph2=100*T/Math.log(r)*(Math.pow(r,t/T)-1); v=Math.sin(2*Math.PI*ph2)*0.45; }
       d[i]=v; } }
-  /* fb431 — normalise to the -26 dBFS bus every threshold is calibrated for */
   var acc=0,d0=b.getChannelData(0); for(var j=0;j<n;j++) acc+=d0[j]*d0[j];
   var cur=Math.sqrt(acc/n), want=Math.pow(10,-26/20), k=cur>1e-9?want/cur:1;
   for(var c2=0;c2<2;c2++){ var dd=b.getChannelData(c2); for(var j2=0;j2<n;j2++) dd[j2]*=k; }
@@ -2818,13 +2852,11 @@ document.getElementById('go').addEventListener('click',function(){ if(ac) return
 document.getElementById('play').addEventListener('click',function(){ if(!ac){ fail('Press Start audio first.'); return; } if(ac.state==='suspended') ac.resume(); playing?stop():start(); });
 document.getElementById('src').addEventListener('click',function(){ kind=(kind+1)%KINDS.length; document.getElementById('src').textContent='Source: '+KINDS[kind]; if(playing){ stop(); start(); } });
 document.querySelectorAll('.hear').forEach(function(b){ b.addEventListener('click',function(){ document.querySelectorAll('.hear').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); hear=+b.getAttribute('data-h'); setHear(); }); });
-document.querySelectorAll('.zoom').forEach(function(b){ b.addEventListener('click',function(){ document.querySelectorAll('.zoom').forEach(function(x){x.classList.remove('on');}); b.classList.add('on');
-  var z=+b.getAttribute('data-z'); var sc=document.getElementById('scale'), rw=document.getElementById('rackwrap'), rk=document.getElementById('rack');
+function fitZoom(){ var zb=document.querySelector('.zoom.on'); if(!zb) return; var z=+zb.getAttribute('data-z'); var sc=document.getElementById('scale'), rw=document.getElementById('rackwrap'), rk=document.getElementById('rack');
   sc.style.transform='scale('+z+')'; var W=rk.scrollWidth||1115; sc.style.width=W+'px';
-  /* each back-panel slot sits under ITS card: same width as the card above it */
   var cards=rk.querySelectorAll('.fxr-dev'); document.querySelectorAll('.bpslot').forEach(function(sl,i){ if(cards[i]) sl.style.width=cards[i].getBoundingClientRect().width/z+'px'; });
-  rw.style.width=Math.min(window.innerWidth-44,Math.ceil(W*z)+2)+'px'; rw.style.height=((170+10+(document.querySelector('.bp.on')?236:0))*z+10)+'px'; }); });
+  rw.style.width=Math.min(window.innerWidth-44,Math.ceil(W*z)+2)+'px'; rw.style.height=((170+10+(document.querySelector('.bp.on')?236:0))*z+10)+'px'; }
+document.querySelectorAll('.zoom').forEach(function(b){ b.addEventListener('click',function(){ document.querySelectorAll('.zoom').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); fitZoom(); }); });
 (function(){ var fit=Math.max(1,Math.min(2,(window.innerWidth-44)/(document.getElementById('rack').scrollWidth||1115))); var best=null,bd=9; document.querySelectorAll('.zoom').forEach(function(b){ var z=+b.getAttribute('data-z'); if(z<=fit+0.01&&fit-z<bd){bd=fit-z;best=b;} }); (best||document.querySelector('.zoom')).click(); })();
-new MutationObserver(function(){ document.querySelector('.zoom.on').click(); }).observe(document.getElementById('panels'),{attributes:true,subtree:true,attributeFilter:['class']});
-window.addEventListener('resize',function(){ document.querySelector('.zoom.on').click(); });
+window.addEventListener('resize',fitZoom);
 </script></body></html>

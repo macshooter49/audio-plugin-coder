@@ -697,6 +697,7 @@ public:
     juce::String      getGranularVizJson();                            // fb362 — granular cards, one entry per instance
     juce::String      getTapeVizJson();                                // fb365 — tape cards, one entry per instance
     juce::String      getFx3VizJson();                                 // fb413 — chorus + flanger + phaser, one payload
+    juce::String      getFx4VizJson();                                 // fb437 — equalizer + widen + compress + multiband, one payload
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
@@ -1844,6 +1845,9 @@ private:
     std::array<tw::TerrainPhaserFx,  (size_t) ParameterIDs::kFxInstances> phaPool_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> choEnv_ {}, flaEnv_ {}, phaEnv_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> eqzEnv_ {}, widEnv_ {}, cmpEnv_ {}, ottEnv_ {};  // fb426
+    // fb437 — change-gating for the two big fx4 viz arrays (EQ curve, compressor knee) + the keepalive tick
+    std::array<float, (size_t) ParameterIDs::kFxInstances> eqzCurveSent_ {}, cmpKneeSent_ {};
+    uint32_t fx4VizTick_ = 0;
     double fx3PrepSr_ = 0.0;
     // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.
     // fb435 — sized off kFxKinds, not a literal. At 9 it silently excluded the fx4 four.

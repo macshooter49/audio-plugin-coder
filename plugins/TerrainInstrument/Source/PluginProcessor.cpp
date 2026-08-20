@@ -4113,6 +4113,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                     F (p + "BODYHZ", d + "Body Hz",0.50f);   F (p + "BODY",   d + "Body",   0.50f);
                     F (p + "BITEHZ", d + "Bite Hz",0.50f);   F (p + "BITE",   d + "Bite",   0.50f);
                     F (p + "REACH",  d + "Reach",  0.50f);   F (p + "TRAIT",  d + "Trait",  0.50f);
+                    B (p + "DELTA",  d + "Delta",  false);   // fb437 — pill 1: monitor wet − dry (hear what the EQ adds/removes)
                     for (auto& sx : srcSuf) B (p + sx, d + sx, false);
                     B (p + "POWER",  d + "Power", false);
                     B (p + "ACTIVE", d + "In Chain", false);
@@ -4842,6 +4843,107 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
     return j + "]}";
 }
 
+// ═══ fb437 — THE FX4 VIZ PUSH (Equalizer · Widen · Compress · Multiband) ═══════════════════════
+// Rides the same 60 Hz editor lane as fx3 (fb354: push, never poll). One entry per instance,
+// `null` when it is not in the chain. Payload discipline (fb342: 40–80 KB/s is the frame-drop
+// line): the EQ's 96-bin curve is sent ONLY when it changed (a position-weighted checksum — a
+// pure shape change registers) and once a second as a keepalive so a reopened editor is never
+// stuck on a flat line; the compressor's 32-point knee the same way. Everything else is a
+// handful of numbers per frame. Every number is the engine's OWN meter (viz()) or resolved
+// value (thresholdDbp / ratio / attackMs …) — the card prints what the DSP is doing, never a
+// card-side guess (fb432: read the engine's own meters).
+juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
+{
+    ++fx4VizTick_;
+    const bool keepalive = (fx4VizTick_ % 60) == 0;
+    juce::String j; j.preallocateBytes (6144);
+    auto N = [] (float v, int dp) { return juce::String (v, dp); };
+
+    // ── EQUALIZER: { lvl, hz[4], db[4], curve[96]? }
+    j << "{\"eqz\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = eqzRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; eqzCurveSent_[(size_t) i] = -1.0e9f; continue; }
+        const auto& z = eqzPool_[(size_t) i].viz();
+        j << "{\"lvl\":" << N (z.lvl, 3) << ",\"hz\":[";
+        for (int b = 0; b < 4; ++b) { if (b) j << ","; j << N (z.nodeHz[b], 1); }
+        j << "],\"db\":[";
+        for (int b = 0; b < 4; ++b) { if (b) j << ","; j << N (z.nodeDb[b], 2); }
+        j << "]";
+        float sum = 0.0f;
+        for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) sum += z.curve[k] * (1.0f + 0.01f * (float) k);
+        if (keepalive || std::fabs (sum - eqzCurveSent_[(size_t) i]) > 0.02f)
+        {
+            eqzCurveSent_[(size_t) i] = sum;
+            j << ",\"curve\":[";
+            for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) { if (k) j << ","; j << N (z.curve[k], 1); }
+            j << "]";
+        }
+        j << "}";
+    }
+    // ── WIDEN: { corr, nV, pan[nV], cents[nV], width, lvl }
+    j << "],\"wid\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = widRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
+        const auto& E = widPool_[(size_t) i]; const auto& z = E.viz();
+        const int nV = juce::jlimit (0, tw::TerrainWidenFx::kMaxVoices, E.liveVoices());
+        j << "{\"corr\":" << N (z.corr, 3) << ",\"nV\":" << nV << ",\"width\":" << N (z.widthNow, 3)
+          << ",\"lvl\":" << N (z.lvl, 3) << ",\"pan\":[";
+        for (int v = 0; v < nV; ++v) { if (v) j << ","; j << N (z.voicePan[v], 3); }
+        j << "],\"cents\":[";
+        for (int v = 0; v < nV; ++v) { if (v) j << ","; j << N (z.voiceCents[v], 1); }
+        j << "]}";
+    }
+    // ── COMPRESS: { gr, in, out, thr, ratio, atk, rel, kneeDb, lvl, knee[32]? }
+    j << "],\"cmp\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = cmpRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; cmpKneeSent_[(size_t) i] = -1.0e9f; continue; }
+        const auto& E = cmpPool_[(size_t) i]; const auto& z = E.viz();
+        const float ratio = E.ratio();
+        j << "{\"gr\":" << N (z.grDb, 2) << ",\"in\":" << N (z.inDb, 1) << ",\"out\":" << N (z.outDb, 1)
+          << ",\"thr\":" << N (E.thresholdDbp(), 2) << ",\"ratio\":" << (ratio > 1.0e6f ? juce::String ("-1") : N (ratio, 2))
+          << ",\"atk\":" << N (E.attackMs(), 2) << ",\"rel\":" << N (E.releaseMs(), 1)
+          << ",\"kneeDb\":" << N (E.kneeDb(), 1) << ",\"lvl\":" << N (z.lvl, 3);
+        float ks = 0.0f;
+        for (int k = 0; k < tw::TerrainCompressFx::kKnee; ++k) ks += z.knee[k] * (1.0f + 0.01f * (float) k);
+        if (keepalive || std::fabs (ks - cmpKneeSent_[(size_t) i]) > 0.02f)
+        {
+            cmpKneeSent_[(size_t) i] = ks;
+            j << ",\"knee\":[";
+            for (int k = 0; k < tw::TerrainCompressFx::kKnee; ++k) { if (k) j << ","; j << N (z.knee[k], 1); }
+            j << "]";
+        }
+        j << "}";
+    }
+    // ── MULTIBAND: { gr[3] signed, lv[3], x[2], tdn[3], tup[3], nb, lvl }
+    j << "],\"ott\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = ottRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
+        const auto& E = ottPool_[(size_t) i]; const auto& z = E.viz();
+        j << "{\"nb\":" << E.bands() << ",\"lvl\":" << N (z.lvl, 3) << ",\"x\":[" << N (z.xoverHz[0], 1) << "," << N (z.xoverHz[1], 1) << "],\"gr\":[";
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (z.grDb[b], 2); }
+        j << "],\"lv\":[";
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (z.bandDb[b], 1); }
+        j << "],\"tdn\":[";
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdDn (b), 1); }
+        j << "],\"tup\":[";
+        for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdUp (b), 1); }
+        j << "]}";
+    }
+    return j + "]}";
+}
+
 // fb414 — the SEND refs, for every device kind and instance in one table. Built from the same
 // prefix list the params were, so the two cannot drift; a nullptr simply reads as insert.
 void TerrainInstrumentAudioProcessor::cacheSendRefs()
@@ -5086,7 +5188,7 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
                   const char* b[8]; const char* pill1; const char* pill2; const char* sync; };
     static const Spec kSpec[4] = {
         { "SYN_EQZ", "FOCUS",  "SLANT",  "AIR",   "AMOUNT",
-          { "LOWHZ","LOW","BODYHZ","BODY","BITEHZ","BITE","REACH","TRAIT" }, nullptr, nullptr, nullptr },
+          { "LOWHZ","LOW","BODYHZ","BODY","BITEHZ","BITE","REACH","TRAIT" }, "DELTA", nullptr, nullptr },   // fb437 — Delta pill
         { "SYN_WID", "FIELD",  "AMOUNT", "WIDTH", "RATE",
           { "VOICES","SPREAD","OFFSET","ROAM","LOWKEEP","TONE","FEEDBACK","BALANCE" }, "RETRIG", "MONO", "SYNC" },
         { "SYN_CMP", "DETECT", "PUSH",   "RATIO", "LIFT",
@@ -5138,7 +5240,10 @@ void TerrainInstrumentAudioProcessor::applyCho (int inst0, float inL, float inR,
 // ═══ fb426 — the fx4 apply routines. 🔑 THE POOL LAW (fb350): every instance runs THIS EXACT
 // routine, so a per-block engine call can never exist for instance 1 and not for a duplicate.
 // The power fade is the same 0.0015 one-pole every other device uses — click-free, never a cut.
-#define TW_FX4_APPLY(NAME, POOL, REFS, ENV, BASE)                                              \
+// fb437 — DELTA: the Equalizer's pill monitors wet − dry (the other three pass `false`).
+//   wet = mix·H(x) + (1−mix)·x, so wet − dry = mix·(H(x) − x): exactly what the EQ adds and
+//   removes, at the Mix you set. It rides the same power fade, so toggling never clicks.
+#define TW_FX4_APPLY(NAME, POOL, REFS, ENV, BASE, DELTA)                                       \
 void TerrainInstrumentAudioProcessor::NAME (int inst0, float inL, float inR,                   \
                                             float& outL, float& outR) noexcept                 \
 {                                                                                              \
@@ -5154,13 +5259,15 @@ void TerrainInstrumentAudioProcessor::NAME (int inst0, float inL, float inR,    
     if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }                                   \
     float wl = inL, wr = inR;                                                                  \
     POOL[(size_t) inst0].processStereo (&wl, &wr, 1);                                          \
+    const bool dl = (DELTA);                                                                   \
+    if (dl) { wl -= inL; wr -= inR; }             /* fb437 — Delta: hear wet − dry */          \
     outL = inL * (1.0f - env) + wl * env;         /* the engine already applied Mix */         \
     outR = inR * (1.0f - env) + wr * env;                                                      \
 }
-TW_FX4_APPLY (applyEqz, eqzPool_, eqzRefs_, eqzEnv_, kEqzSendBase)
-TW_FX4_APPLY (applyWid, widPool_, widRefs_, widEnv_, kWidSendBase)
-TW_FX4_APPLY (applyCmp, cmpPool_, cmpRefs_, cmpEnv_, kCmpSendBase)
-TW_FX4_APPLY (applyOtt, ottPool_, ottRefs_, ottEnv_, kOttSendBase)
+TW_FX4_APPLY (applyEqz, eqzPool_, eqzRefs_, eqzEnv_, kEqzSendBase, (V.pill1 != nullptr && V.pill1->load() > 0.5f))
+TW_FX4_APPLY (applyWid, widPool_, widRefs_, widEnv_, kWidSendBase, false)
+TW_FX4_APPLY (applyCmp, cmpPool_, cmpRefs_, cmpEnv_, kCmpSendBase, false)
+TW_FX4_APPLY (applyOtt, ottPool_, ottRefs_, ottEnv_, kOttSendBase, false)
 #undef TW_FX4_APPLY
 
 void TerrainInstrumentAudioProcessor::applyFla (int inst0, float inL, float inR,

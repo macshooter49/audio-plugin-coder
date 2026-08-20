@@ -5606,6 +5606,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         // they are MOVING pictures (a sweeping comb, a breathing ribbon), and fb363 measured
         // that a 15 Hz feed on moving material reads as a sample-and-hold.
         js << "window.__fx3VizPush=" << audioProcessor.getFx3VizJson() << ";";
+        // fb437 — the fx4 four ride the SAME lane: the EQ's curve is change-gated (+1 Hz keepalive),
+        // the rest is a handful of numbers per live instance. See getFx4VizJson.
+        js << "window.__fx4VizPush=" << audioProcessor.getFx4VizJson() << ";";
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

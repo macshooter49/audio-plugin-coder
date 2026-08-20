@@ -831,6 +831,7 @@ public:
     float attackMs()  const noexcept { return atkMs_; }
     float releaseMs() const noexcept { return relMs_; }
     float thresholdDbp() const noexcept { return tTgt_; }
+    float kneeDb()       const noexcept { return kneeTgt_; }   // fb437 — the card's Round readout
     float slope()     const noexcept { return sTgt_; }
     float ratio()     const noexcept { return (sTgt_ >= 0.99995f) ? 1.0e9f : 1.0f / (1.0f - sTgt_); }
     bool  isFeedback() const noexcept { return isFb_; }
