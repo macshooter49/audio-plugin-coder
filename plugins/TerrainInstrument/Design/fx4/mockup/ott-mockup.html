@@ -649,7 +649,7 @@ document.querySelectorAll('.fxr-pill').forEach(function(p,i){ p.addEventListener
 
 /* ── audio ── */
 var ac=null,node=null,wetG=null,dryG=null,outG=null,srcN=null,playing=false,viz={},kind=0;
-var KINDS=['Saw chord','Sine 220','Noise','Pluck'];
+var KINDS=['Saw chord','Sine 220','Noise','Pluck','Drums','Pad','Bell','Sweep'];
 function fail(m){document.getElementById('err').textContent=m;document.getElementById('status').textContent='Failed to start.';}
 function push(k,v,raw){ if(!node)return; var m={}; m[k]=raw?v:v; node.port.postMessage(m); }
 async function addWorklet(){
@@ -676,13 +676,34 @@ document.getElementById('go').addEventListener('click',function(){ boot().catch(
 document.getElementById('src').addEventListener('click',function(){ kind=(kind+1)%KINDS.length;
   document.getElementById('src').textContent='Source: '+KINDS[kind]; if(playing){stop();start();} });
 function makeSrc(){
-  var sr=ac.sampleRate, n=Math.floor(sr*2), b=ac.createBuffer(2,n,sr);
-  for(var c=0;c<2;c++){ var d=b.getChannelData(c);
+  var sr=ac.sampleRate, n=Math.floor(sr*4), b=ac.createBuffer(2,n,sr);
+  /* fb433 — SEEDED noise, reset per channel, so every source is MONO. A widener has
+     nothing to show on already-decorrelated material; Math.random() per channel was
+     handing it a wide source to widen. */
+  var sd=0; function rnd(){ sd=(sd*1103515245+12345)&0x7fffffff; return (sd/0x40000000)-1; }
+  for(var c=0;c<2;c++){ var d=b.getChannelData(c); sd=22222;
     for(var i=0;i<n;i++){ var t=i/sr, v=0;
       if(kind===0){ [110,138.6,164.8,220].forEach(function(f){ var ph=(t*f)%1; v+=(2*ph-1)*0.16; }); }
       else if(kind===1){ v=Math.sin(2*Math.PI*220*t)*0.5; }
-      else if(kind===2){ v=(Math.random()*2-1)*0.28; }
-      else { var env=Math.exp(-((t%0.5))*7); [220,330,440].forEach(function(f){ v+=Math.sin(2*Math.PI*f*t)*0.2*env; }); }
+      else if(kind===2){ v=rnd()*0.28; }
+      else if(kind===3){ var env=Math.exp(-((t%0.5))*7); [220,330,440].forEach(function(f){ v+=Math.sin(2*Math.PI*f*t)*0.2*env; }); }
+      else if(kind===4){ /* Drums — the one with real GAPS, which is where OTT lives */
+        var tb=t%1.0, kt=tb%0.5;
+        var ke=Math.exp(-kt*20), kf=52*(1+3.2*Math.exp(-kt*42));
+        v+=Math.sin(2*Math.PI*kf*kt)*0.95*ke;
+        if(tb>=0.5){ var se=Math.exp(-(tb-0.5)*24); v+=(rnd()*0.5+Math.sin(2*Math.PI*186*(tb-0.5))*0.32)*se; }
+        v+=rnd()*0.20*Math.exp(-(t%0.125)*130); }
+      else if(kind===5){ /* Pad — slow, dark, and quiet up top: the hardest test for air */
+        [110,164.8,220,329.6].forEach(function(f,ix){
+          var det=1+(c?1:-1)*0.0016*(ix+1);
+          v+=Math.sin(2*Math.PI*f*det*t)*0.15*(0.55+0.45*Math.sin(2*Math.PI*(0.07+ix*0.031)*t));
+          v+=Math.sin(2*Math.PI*f*2*det*t)*0.045*(0.5+0.5*Math.sin(2*Math.PI*0.12*t)); }); }
+      else if(kind===6){ /* Bell — long tail, so you hear what the release is doing */
+        var bt=t%2.0, be=Math.exp(-bt*2.6), mi=6.5*Math.exp(-bt*4.5);
+        v=Math.sin(2*Math.PI*440*t+mi*Math.sin(2*Math.PI*622.3*t))*0.5*be; }
+      else { /* Sweep — 100 Hz -> 8 k, exponential: shows a filter/EQ curve straight away */
+        var r=80, T=4, ph2=100*T/Math.log(r)*(Math.pow(r,t/T)-1);
+        v=Math.sin(2*Math.PI*ph2)*0.45; }
       d[i]=v; } }
   /* fb431 — NORMALISE TO THE BUS. Every threshold in Compress and OTT is an ABSOLUTE dBFS
      number calibrated for the -26 dBFS Terrain bus. These sources ran at -9..-16 dBFS, i.e.
