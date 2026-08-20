@@ -273,11 +273,44 @@ public:
         for (int b = 0; b < kBands; ++b)
         {
             float mkTop = 0.0f;                    // fb431 — the top half's EXTRA, gated apart
-            float tdn = ts.tdn[b] + cs.tdnOff - grip;
-            float tup = ts.tup[b] + cs.tupOff - grip;
+            // 🔴🔴 fb432 — THE UPWARD COMPUTER HAD NEVER RUN. This is the bug behind "it
+            //    sounds NOTHING like a real OTT". Upward compression lifts what is BELOW its
+            //    threshold, and these thresholds were placed BELOW the programme, so on real
+            //    material every band sat ABOVE T_up and the upward lane was idle — measured on
+            //    the engine's own meters, a bus-level chord, Amount 1.0:
+            //         band   level   T_up    T_dn    grDb
+            //         low    -27.1   -45.0   -46.0  +18.93
+            //         mid    -15.0   -37.0   -37.0  +22.00
+            //         high   -26.7   -42.5   -43.5  +16.81
+            //    grDb is SIGNED and every one of them is POSITIVE: pure downward reduction on
+            //    all three bands. What shipped was a downward multiband compressor wearing the
+            //    name. The header's own voicing paragraph reasons from "the high band sits at
+            //    -45..-50 dBFS"; the engine measures it at -26.7, so the whole table was placed
+            //    against an assumption that was ~20 dB wrong, and the threshold must sit ABOVE
+            //    the band for the lift to have anything to pull against.
+            //    Swept, high-band gain / bands lifting at Amount 1.0:
+            //       +0 -> +2.42 dB, 0 of 3   ·  +10 -> +12.42, 0 of 3  ·  +20 -> +22.21, 2 of 3
+            //       +26 -> +27.85, 3 of 3    ·  +32 -> +33.55, 3 of 3
+            //    +26 is where all three bands lift. The per-Type table's INTERNAL relationships
+            //    are untouched — this corrects where the whole window sits, nothing else.
+            // 🔴🔴 fb432 (2) — AND THE BANDS HAVE TO BE DRIVEN TO A COMMON LEVEL. Each band's
+            //    threshold was individually tuned to where THAT band already sits, which
+            //    PRESERVES the spectral balance — the exact opposite of what an OTT does. The
+            //    band-to-band differences are compressed toward the Type's own mean, so every
+            //    band is hauled toward one target and the spectrum flattens into a sheet.
+            //    Measured on a bus-level chord, dry band spread 13.1 dB:
+            //      per-band thresholds (shipped)  spread 9.6, high band only +3 dB over low
+            //      common window                  spread 7.8, high band +24.8 vs mid +13.7
+            //    The Type still owns WHERE its window sits; it no longer owns the tilt.
+            const float um = (ts.tup[0] + ts.tup[1] + ts.tup[2]) * (1.0f / 3.0f);
+            const float dm = (ts.tdn[0] + ts.tdn[1] + ts.tdn[2]) * (1.0f / 3.0f);
+            float tup = um + 34.0f + (ts.tup[b] - um) * 0.35f + cs.tupOff - grip;
+            float tdn = dm + 34.0f + (ts.tdn[b] - dm) * 0.35f + cs.tdnOff - grip;
             float sdn = ts.sdn[b] * cs.dnMul * press * lo01;
             float sup = ts.sup[b] * cs.upMul * raise * lo01;
-            float mk  = ts.mk[b] * lo01;
+            // fb432 — the makeup was carrying the whole effect while the lift sat idle;
+            //    with the lift doing its job it is a trim again, not the mechanism.
+            float mk  = ts.mk[b] * lo01 * 0.15f;
 
             // ── the high band is where Top Lift lives: threshold RAISED toward the program,
             //    slope steepened, makeup added. §2.4's whole mechanism, on one knob.

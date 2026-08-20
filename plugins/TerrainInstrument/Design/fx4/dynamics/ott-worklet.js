@@ -182,11 +182,20 @@ class TerrainOtt extends AudioWorkletProcessor {
     this.mkT = [0, 0, 0]; this.cap = [0, 0, 0]; this.aAtk = [0, 0, 0]; this.aRel = [0, 0, 0];
     this.atkMs = [0, 0, 0]; this.relMs = [0, 0, 0];
     for (let b = 0; b < 3; ++b) {
-      let tdn = ts.tdn[b] + (cs.tdnOff || 0) - grip;
-      let tup = ts.tup[b] + (cs.tupOff || 0) - grip;
+      // 🔴🔴 fb432 — TWO FAULTS, both of which made this not-an-OTT. (1) The thresholds
+      //     sat BELOW the programme, so every band was ABOVE T_up and the UPWARD computer
+      //     never ran at all — a downward multiband compressor wearing the name. (2) Each
+      //     band's threshold was tuned to where THAT band already sits, which PRESERVES the
+      //     spectral balance, the opposite of an OTT. The window now sits above the programme
+      //     and the band-to-band differences are compressed toward the Type's mean, so every
+      //     band is hauled to a common level. See TerrainOttFx.h for the measured tables.
+      const um = (ts.tup[0] + ts.tup[1] + ts.tup[2]) / 3;
+      const dm = (ts.tdn[0] + ts.tdn[1] + ts.tdn[2]) / 3;
+      let tup = um + 34 + (ts.tup[b] - um) * 0.35 + (cs.tupOff || 0) - grip;
+      let tdn = dm + 34 + (ts.tdn[b] - dm) * 0.35 + (cs.tdnOff || 0) - grip;
       let sdn = ts.sdn[b] * (cs.dnMul || 1) * press * lo01;
       let sup = ts.sup[b] * (cs.upMul || 1) * raise * lo01;
-      let mk = ts.mk[b] * lo01;                       // makeup follows the amount, or Amount 0
+      let mk = ts.mk[b] * lo01 * 0.15;                // fb432 — a trim again, not the mechanism
       let mkTop = 0;                                  // fb431 — the top half's EXTRA, gated apart
       if (b === this.n - 1) {                          // is a +13 dB gain stage and Mix combs
         tup += 12 * topA; sup *= 1 + 1.2 * topA; mk += 4 * topA;
