@@ -484,6 +484,14 @@ struct TerrainBodeFx
         mImage_ = 0.5f * (std::fabs (wet[0]) + std::fabs (wet[1]));
     }
 
+    // Block form. The rack's TW_FX4_APPLY macro drives every fx4 device as
+    // processStereo(&l, &r, n) with n == 1 (the serial chain is per-sample), so
+    // the device must offer that shape. One routine, both call sites.
+    inline void processStereo (float* l, float* r, int n) noexcept
+    {
+        for (int i = 0; i < n; ++i) processStereo (l[i], r[i], l[i], r[i]);
+    }
+
     // ── meters. fb432: read the engine's OWN numbers, and the SIGN of them —
     //    a device whose mechanism never ran still measures "different".
     float meterShiftHz()  const noexcept { return shiftSm_; }   // signed, in Hz
