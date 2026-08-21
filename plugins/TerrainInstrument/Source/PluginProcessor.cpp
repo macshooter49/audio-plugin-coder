@@ -4122,6 +4122,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                         F (p + "X" + juce::String (k),        d + "Band " + juce::String (k + 4),         0.50f);
                         B (p + "X" + juce::String (k) + "ON", d + "Band " + juce::String (k + 4) + " On", false);
                     }
+                    // fb441 — PER-BAND Q (the wheel on a node). 0.5 = x1 = the Type's Q law, bit-exact; 0 = x1/8, 1 = x8.
+                    //   Node-only like the free bells' positions: Q is still not a back knob (the chassis rule), but a
+                    //   scroll over ONE node now narrows/widens THAT band and nothing else (Max: "it shouldn't affect
+                    //   any other bands"). Low/Body/Bite/Air + Band 5..8.
+                    F (p + "LOWQ",  d + "Low Q",  0.50f);  F (p + "BODYQ", d + "Body Q", 0.50f);
+                    F (p + "BITEQ", d + "Bite Q", 0.50f);  F (p + "AIRQ",  d + "Air Q",  0.50f);
+                    for (int k = 1; k <= 4; ++k) F (p + "X" + juce::String (k) + "Q", d + "Band " + juce::String (k + 4) + " Q", 0.50f);
                     for (auto& sx : srcSuf) B (p + sx, d + sx, false);
                     B (p + "POWER",  d + "Power", false);
                     B (p + "ACTIVE", d + "In Chain", false);
@@ -4884,6 +4891,8 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << N (z.nodeDb[b], 2); }
         j << "],\"on\":[";   // fb438 — the free bells' ON flags (4 roles are always on)
         for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << (z.nodeOn[b] ? "1" : "0"); }
+        j << "],\"q\":[";   // fb441 — each node's FINAL Q (the engine's own number, for the wheel readout)
+        for (int b = 0; b < tw::TerrainEqualizerFx::kNumNodes; ++b) { if (b) j << ","; j << N (z.nodeQ[b], 2); }
         j << "]";
         float sum = 0.0f;
         for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) sum += z.curve[k] * (1.0f + 0.01f * (float) k);
@@ -5130,6 +5139,11 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                     q.xOn1 = V.xon[0] != nullptr && V.xon[0]->load() > 0.5f;  q.xOn2 = V.xon[1] != nullptr && V.xon[1]->load() > 0.5f;
                     q.xOn3 = V.xon[2] != nullptr && V.xon[2]->load() > 0.5f;  q.xOn4 = V.xon[3] != nullptr && V.xon[3]->load() > 0.5f;
                 }
+                if (V.q[0] != nullptr)   // fb441 — per-band Q
+                {
+                    q.q1 = V.q[0]->load(); q.q2 = V.q[1]->load(); q.q3 = V.q[2]->load(); q.q4 = V.q[3]->load();
+                    q.q5 = V.q[4]->load(); q.q6 = V.q[5]->load(); q.q7 = V.q[6]->load(); q.q8 = V.q[7]->load();
+                }
                 eqzPool_[(size_t) i].setParams (q);
             }
         }
@@ -5239,7 +5253,10 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
                     v.x[2 * k]     = R (g + "X" + juce::String (k + 1) + "HZ");
                     v.x[2 * k + 1] = R (g + "X" + juce::String (k + 1));
                     v.xon[k]       = R (g + "X" + juce::String (k + 1) + "ON");
+                    v.q[4 + k]     = R (g + "X" + juce::String (k + 1) + "Q");          // fb441 — free-bell Q
                 }
+            if (d == 0)   // fb441 — the role bands' Q
+            { v.q[0] = R (g + "LOWQ"); v.q[1] = R (g + "BODYQ"); v.q[2] = R (g + "BITEQ"); v.q[3] = R (g + "AIRQ"); }
         }
 }
 

@@ -3014,6 +3014,73 @@ void sectionQ()
 
 } // namespace
 
+
+// ═════════════════════════════════════════════════════════════════════════════
+//  §R — fb441: PER-BAND Q (the wheel on a node) and THE SEEDED FREE BELL
+//
+//  Max: "when I scroll and I try to do that notch... band eight or nine gets affected...
+//  it shouldn't affect any other bands." The wheel used to drive Trait (the Type's global
+//  width); it now drives ONE node's own Q multiplier. R3 is that sentence as a gate.
+//
+//  R5 is the fb441 engine bug: the per-block smoother glided sm_[0..10] only, so a free
+//  bell added to a RUNNING device (sm_[11..18]) never arrived — 632.5 Hz / 0.00 dB forever.
+//  Every other gate in this file starts a FRESH engine, which snaps on its first block and
+//  therefore could not see it. R5 seeds first. It is RED on the fb438 engine.
+// ═════════════════════════════════════════════════════════════════════════════
+static void sectionR()
+{
+    std::printf ("\n── §R  fb441 — per-band Q isolation + the seeded free bell ──\n");
+    auto bw3 = [] (const Spec& s) { const double pk = specMax (s); int n = 0; for (int i = 0; i < NB; ++i) if (s.db[i] > pk - 3.0) ++n; return n; };
+    auto binOf = [] (double f) { return (int) std::lround (95.0 * std::log10 (f / 20.0) / 3.0); };
+    {   // R1 — the default is the law, bit-exact
+        EQ::Params a; a.type = 0; a.b4 = 0.9f;
+        EQ::Params b = a; b.q1 = b.q2 = b.q3 = b.q4 = b.q5 = b.q6 = b.q7 = b.q8 = 0.5f;
+        const Spec sa = transferOf (a), sb = transferOf (b);
+        gate ("R1 per-band Q at 0.5 (x1) is BIT-EXACT to the Type's Q law", specDelta (sa, sb) == 0.0, fmt ("max delta %.6f dB", specDelta (sa, sb)));
+    }
+    {   // R2/R3 — Body Q x8: Body narrows; the OTHER bands' own centre gain and Q, as the ENGINE reports them, do not move
+        EQ::Params a; a.type = 0; a.b2 = 0.8f; a.b4 = 0.9f; a.b6 = 0.8f; a.f2 = 0.8f;   // Low/Body/Bite/Air all boosted
+        EQ::Params b = a; b.q2 = 1.0f;
+        const Spec sa = transferOf (a), sb = transferOf (b);
+        // isolate Body's own contribution: Body-only patches at x1 and x8
+        EQ::Params ba; ba.type = 0; ba.b4 = 0.9f; EQ::Params bb = ba; bb.q2 = 1.0f;
+        const Spec sBa = transferOf (ba), sBb = transferOf (bb);
+        const int wA = bw3 (sBa), wB = bw3 (sBb);
+        gate ("R2 Body Q x8 NARROWS Body (-3 dB width in bins shrinks >= 2x)", wB * 2 <= wA && wB >= 1, fmt2 ("x1 %.0f bins -> x8 %.0f bins", wA, wB));
+        // the engine's own per-node report
+        EQ ea, eb; ea.prepare ((double) FS, 128); eb.prepare ((double) FS, 128);
+        std::vector<float> L (128, 0.0f), R (128, 0.0f);
+        for (int k = 0; k < 40; ++k) { ea.setParams (a); ea.processStereo (L.data(), R.data(), 128); eb.setParams (b); eb.processStereo (L.data(), R.data(), 128); }
+        const auto& za = ea.viz(); const auto& zb = eb.viz();
+        bool same = true; double wq = 0, wg = 0;
+        for (int n : { 0, 2, 3 }) { wq = std::max (wq, (double) std::fabs (za.nodeQ[n] - zb.nodeQ[n])); wg = std::max (wg, (double) std::fabs (za.nodeDb[n] - zb.nodeDb[n])); }
+        same = (wq == 0.0 && wg == 0.0);
+        gate ("R3 Body Q x8 leaves Low/Bite/Air's OWN Q and gain untouched (engine report)", same, fmt2 ("max |dQ| %.4f  max |dG| %.4f dB", wq, wg));
+        gate ("R3b ...and Body's reported Q rose ~8x", zb.nodeQ[1] > za.nodeQ[1] * 4.0f, fmt2 ("Body Q %.2f -> %.2f", za.nodeQ[1], zb.nodeQ[1]));
+        note (fmt2 ("   (for the record: response at Low 100 Hz moved %.2f dB, at Air 15.5 kHz %.2f dB — Body's SKIRT leaving, not Low/Air moving)",
+                    sa.db[binOf (100.0)] - sb.db[binOf (100.0)], sa.db[binOf (15500.0)] - sb.db[binOf (15500.0)]));
+    }
+    {   // R4 — a free bell's own Q: x8 narrower, x1/8 wider than x1
+        EQ::Params a; a.type = 0; a.x1 = 0.5f; a.x2 = 0.95f; a.xOn1 = true;
+        EQ::Params n = a; n.q5 = 1.0f; EQ::Params w = a; w.q5 = 0.0f;
+        const int b1 = bw3 (transferOf (a)), bn = bw3 (transferOf (n)), bwid = bw3 (transferOf (w));
+        gate ("R4 free bell Q: x8 narrower, x1/8 wider (-3 dB bins)", bn < b1 && bwid > b1, fmt3 ("x1/8 %.0f  x1 %.0f  x8 %.0f", bwid, b1, bn));
+    }
+    {   // R5 — THE SEEDED FREE BELL
+        EQ e; e.prepare ((double) FS, 128); EQ::Params p; p.type = 0;
+        std::vector<float> L (128), R (128);
+        auto run = [&] (int blocks) { for (int b = 0; b < blocks; ++b) { e.setParams (p);
+            for (int i = 0; i < 128; ++i) { L[(size_t) i] = ((i * 7919) % 1000) / 1000.0f - 0.5f; R[(size_t) i] = L[(size_t) i]; }
+            e.processStereo (L.data(), R.data(), 128); } };
+        run (20);                                                    // SEEDED — a device that has been playing
+        p.x1 = 0.9f; p.x2 = 1.0f; p.xOn1 = true; run (60);            // add Band 5 at ~10 kHz, +max, ON; ~160 ms later
+        const auto& z = e.viz(); const double tgt = 20.0 * std::pow (1000.0, 0.9);
+        gate ("R5 a free bell added to a SEEDED engine ARRIVES (Hz within 2 %, gain > +20 dB)",
+              std::fabs (z.nodeHz[4] - tgt) / tgt < 0.02 && z.nodeDb[4] > 20.0, fmt2 ("hz %.1f  db %.2f", z.nodeHz[4], z.nodeDb[4]));
+        gate ("R5b ...and reports a finite Q for it", std::isfinite (z.nodeQ[4]) && z.nodeQ[4] > 0.0f, fmt ("q %.2f", z.nodeQ[4]));
+    }
+}
+
 int main()
 {
     std::printf ("\n== TERRAIN EQUALIZER FX - certification ==   bus program -26 dBFS, fs %.0f Hz\n", (double) FS);
@@ -3043,6 +3110,7 @@ int main()
     sectionO();
     sectionP();
     sectionQ();
+    sectionR();   // fb441
 
     std::printf ("\n══ RESULT: %d pass, %d FAIL ══\n", gPass, gFail);
     for (auto& s : gFails) std::printf ("   FAILED: %s\n", s.c_str());

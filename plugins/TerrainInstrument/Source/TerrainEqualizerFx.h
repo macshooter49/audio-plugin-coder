@@ -265,6 +265,12 @@ public:
         // an ON per band. Defaults: centre, 0 dB, OFF — a default device is the four role bands only.
         float x1=0.5f,x2=0.5f,x3=0.5f,x4=0.5f,x5=0.5f,x6=0.5f,x7=0.5f,x8=0.5f;
         bool  xOn1=false, xOn2=false, xOn3=false, xOn4=false;
+        // fb441 — PER-BAND Q, the wheel on a node (Max: "scroll on a band... notches or slopes... it shouldn't
+        //   affect any other band"). q1..q4 = Low/Body/Bite/Air, q5..q8 = the free bells. Each is a MULTIPLIER on
+        //   top of the Type's Q law: 0.5 = x1 (bit-exact to the law), 0 = x1/8, 1 = x8 (three octaves of
+        //   width each way). Q is still never a back knob; this is a node-only degree of freedom like the free
+        //   bells' positions, so the chassis rule ("Q is a LAW") survives as the DEFAULT, not as a cage.
+        float q1=0.5f,q2=0.5f,q3=0.5f,q4=0.5f,q5=0.5f,q6=0.5f,q7=0.5f,q8=0.5f;
         // An EQ has NO tempo-relevant time constant. The 4-bar..1/256 rule is satisfied by
         // ABSENCE, not by skipping it: the Dynamic type's ballistics are program-relative
         // milliseconds derived from each band's own centre frequency, which is a property of
@@ -292,6 +298,7 @@ public:
         float nodeHz[kNumNodes] { 100.0f, 550.0f, 3100.0f, 15500.0f, 632.0f, 632.0f, 632.0f, 632.0f };
         float nodeDb[kNumNodes] {};
         bool  nodeOn[kNumNodes] { true, true, true, true, false, false, false, false };   // fb438 — the free bells
+        float nodeQ[kNumNodes] { 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f, 1.0f };        // fb441 — each node's FINAL Q (post law, post wheel, post usableQ) for the readout
         float lvl = 0.0f;
     };
 
@@ -991,6 +998,10 @@ public:
         tg_[15]= clampf (p.x5, 0.0f, 1.0f);  tg_[16]= clampf (p.x6, 0.0f, 1.0f);
         tg_[17]= clampf (p.x7, 0.0f, 1.0f);  tg_[18]= clampf (p.x8, 0.0f, 1.0f);
         xOn_[0] = p.xOn1; xOn_[1] = p.xOn2; xOn_[2] = p.xOn3; xOn_[3] = p.xOn4;
+        tg_[19]= clampf (p.q1, 0.0f, 1.0f);  tg_[20]= clampf (p.q2, 0.0f, 1.0f);   // fb441 — per-band Q (roles)
+        tg_[21]= clampf (p.q3, 0.0f, 1.0f);  tg_[22]= clampf (p.q4, 0.0f, 1.0f);
+        tg_[23]= clampf (p.q5, 0.0f, 1.0f);  tg_[24]= clampf (p.q6, 0.0f, 1.0f);   // fb441 — per-band Q (free bells)
+        tg_[25]= clampf (p.q7, 0.0f, 1.0f);  tg_[26]= clampf (p.q8, 0.0f, 1.0f);
 #ifdef EQ_MUT_MIX_WET
         mixTg_ = 1.0f;                                     // MUTATION: the Mix knob is ignored
 #else
@@ -1098,7 +1109,7 @@ private:
     static constexpr int kNumStages = 13;                    // 4 bands x 2 + slant + 4 free bells (fb438)
     static constexpr int kSlant = 8;
     static constexpr int kFree0 = 9;                         // fb438 — stages 9..12 are the free bells
-    static constexpr int kNumSm = 19;                        // 11 + the free bells' 8 (fb438)
+    static constexpr int kNumSm = 27;                        // 11 + the free bells' 8 (fb438) + 8 per-band Q (fb441)
 
     struct Stage
     {
@@ -1125,8 +1136,12 @@ private:
     static constexpr float kTau[kNumSm] =
     { 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.020f,   // b1..b8
       0.015f, 0.012f, 0.020f,                                            // Slant, Air, Amount
-      0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f }; // fb438 — free bells (freq, gain) x 4
+      0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f, 0.020f, 0.012f,   // fb438 — free bells (freq, gain) x 4
+      0.015f, 0.015f, 0.015f, 0.015f, 0.015f, 0.015f, 0.015f, 0.015f }; // fb441 — per-band Q x 8 (a width glide, like Slant)
 
+    // fb441 — per-band Q multiplier: 0.5 -> exactly 1.0f (std::exp2 (0.0f) == 1.0f, so the default stays
+    //   bit-exact to the Type's law); 0 -> 1/8, 1 -> 8.
+    static float qMulOf (float v01) noexcept { return std::exp2 ((clampf (v01, 0.0f, 1.0f) - 0.5f) * 6.0f); }
     static int   clampi (int v, int lo, int hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
     static float clampf (float v, float lo, float hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
     static double clampd (double v, double lo, double hi) noexcept { return v < lo ? lo : (v > hi ? hi : v); }
@@ -1332,6 +1347,7 @@ private:
         }
         for (int b = 0; b < 4; ++b)
         {
+            q[b] *= qMulOf (sm_[19 + b]);                           // fb441 — the node's own width (wheel), x1 by default
             if (g[b] < 0.0f) q[b] *= C.cutQ;                        // boosts wide, cuts narrow
             q[b] = clampf (q[b], kQMin, kQMax);
             q[b] = (float) usableQ (kd[b], (double) f[b], (double) q[b], (double) g[b], (double) fs_);
@@ -1379,6 +1395,7 @@ private:
 
             viz_.nodeHz[b] = f[b];
             viz_.nodeDb[b] = g[b];
+            viz_.nodeQ[b]  = q[b];                                   // fb441
         }
 
         // ── Tilt: Baxandall's seesaw, one 1-pole high shelf of 2t dB plus a -t dB trim.
@@ -1394,12 +1411,13 @@ private:
             const float fHz = clampf (20.0f * std::pow (1000.0f, tF), 20.0f, 0.45f * fs_);
             const float gDb = clampf ((tG * 2.0f - 1.0f) * kBandDbSpan * amount, -96.0f, kGainCeil);
             const bool  live = xOn_[k] && std::fabs (gDb) > 1e-4f;
-            float qf = clampf ((T.law == LawConstant ? widthMul (shape) : 1.0f), kQMin, kQMax);
+            float qf = clampf ((T.law == LawConstant ? widthMul (shape) : 1.0f) * qMulOf (sm_[23 + k]), kQMin, kQMax);   // fb441 — x the node's own width
             qf = (float) usableQ (0, (double) fHz, (double) qf, (double) gDb, (double) fs_);
             S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
             viz_.nodeHz[kNumBands + k] = fHz;
             viz_.nodeDb[kNumBands + k] = xOn_[k] ? gDb : 0.0f;
             viz_.nodeOn[kNumBands + k] = xOn_[k];
+            viz_.nodeQ[kNumBands + k]  = qf;                         // fb441
         }
 
         slantDb_ = (sm_[8] * 2.0f - 1.0f) * kSlantDbSpan * amount;
@@ -1478,7 +1496,11 @@ private:
             resolve(); designAll (true);
             return;
         }
-        for (int i = 0; i < 11; ++i) sm_[i] += kSm_[i] * (tg_[i] - sm_[i]);
+        // fb441 — kNumSm, not 11. fb438 added the free bells at sm_[11..18] and left this loop at 11, so a
+        //   free bell's (freq, gain) NEVER glided toward its target outside a Type-change snap: measured on a
+        //   seeded engine, a bell added at 10 kHz / +max read 632.5 Hz / 0.00 dB forever. The cert missed it
+        //   because every cert test starts a FRESH engine, which snaps on its first block (§Q1 seeds first now).
+        for (int i = 0; i < kNumSm; ++i) sm_[i] += kSm_[i] * (tg_[i] - sm_[i]);
         resolve();
 #ifdef EQ_MUT_NO_SMOOTH
         designAll (true);            // MUTATION: coefficients SNAP; no per-sample glide

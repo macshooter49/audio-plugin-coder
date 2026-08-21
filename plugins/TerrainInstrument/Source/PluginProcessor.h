@@ -1799,6 +1799,7 @@ private:
         std::atomic<float>* pill1 = nullptr; std::atomic<float>* pill2 = nullptr;
         std::atomic<float>* sync  = nullptr;
         std::atomic<float>* x[8] {}; std::atomic<float>* xon[4] {};   // fb438 — the Equalizer's free bells (null on the other three)
+        std::atomic<float>* q[8] {};                                  // fb441 — the Equalizer's per-band Q (4 roles + 4 free; null on the other three)
         std::atomic<float>* src[6]; };
 
     struct ChoRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;

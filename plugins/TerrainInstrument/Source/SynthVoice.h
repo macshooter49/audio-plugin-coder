@@ -4314,25 +4314,34 @@ namespace tw
                     // CPU: the semitone→Hz pow(2,x) is gated on change — with nothing modulating,
                     // cutSemis is bit-identical every sample and the pow never re-runs.
                     const float cutSemis1 = baseCutSemis  + fMod1 * 96.0f + lfoSemis1 + envCutSm1_ + driftSemis + ktSm1_ + velSm1_ * currentVelocity_ * 72.0f;   // fb178 · fb204 glided
-                    if (cutSemis1 != lastCutSemis1_)
+                    // fb441 — recompute when the cutoff moved > 1 cent (0.01 semitone), not on every LSB. A slow
+                    //   LFO/glide then redesigns every few samples instead of every sample; a fast one is unchanged.
+                    if (std::fabs (cutSemis1 - lastCutSemis1_) > 0.01f)
                     {
                         lastCutSemis1_ = cutSemis1;
                         lastCutHz1_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis1 - 69.0f) / 12.0f));
                     }
-                    const float res1 = juce::jlimit (0.0f, 1.0f,
+                    const float res1Raw = juce::jlimit (0.0f, 1.0f,
                         resSm1_ + resWander * driftState_ * 0.5f);
-                    filterSlot_.setParams (lastCutHz1_, res1, drvSm1_, coefSr); visRes1_ = res1;   // fb204 — glided drive
+                    // fb441 — hand the slots a value that only changes when the ear could (0.05 % of range)
+                    if (std::fabs (res1Raw - sentRes1_) > 0.0005f) sentRes1_ = res1Raw;
+                    if (std::fabs (drvSm1_ - sentDrv1_) > 0.001f)  sentDrv1_ = drvSm1_;
+                    const float res1 = sentRes1_;
+                    filterSlot_.setParams (lastCutHz1_, res1, sentDrv1_, coefSr); visRes1_ = res1Raw;   // fb204 — glided drive
 
                     // Filter 2 cutoff: base + routed envelopes (±96 ST) + LFO + drift.
                     const float cutSemis2 = baseCutSemis2 + fMod2 * 96.0f + lfoSemis2 + envCutSm2_ + driftSemis + ktSm2_ + velSm2_ * currentVelocity_ * 72.0f;   // fb204 glided
-                    if (cutSemis2 != lastCutSemis2_)
+                    if (std::fabs (cutSemis2 - lastCutSemis2_) > 0.01f)   // fb441 — 1-cent threshold, see filter 1
                     {
                         lastCutSemis2_ = cutSemis2;
                         lastCutHz2_ = juce::jlimit (20.0f, fmax, 440.0f * std::pow (2.0f, (cutSemis2 - 69.0f) / 12.0f));
                     }
-                    const float res2 = juce::jlimit (0.0f, 1.0f,
+                    const float res2Raw = juce::jlimit (0.0f, 1.0f,
                         resSm2_ + resWander * driftState_ * 0.5f);
-                    filterSlot2_.setParams (lastCutHz2_, res2, drvSm2_, coefSr); visRes2_ = res2;   // fb204 — glided drive
+                    if (std::fabs (res2Raw - sentRes2_) > 0.0005f) sentRes2_ = res2Raw;   // fb441
+                    if (std::fabs (drvSm2_ - sentDrv2_) > 0.001f)  sentDrv2_ = drvSm2_;
+                    const float res2 = sentRes2_;
+                    filterSlot2_.setParams (lastCutHz2_, res2, sentDrv2_, coefSr); visRes2_ = res2Raw;   // fb204 — glided drive
 
                     // PER-OSC ROUTING combine. Buses: bus1 = scratch (F1's sources), bus2 = fltBus2_
                     // (F2 sources in parallel / F2-only in series), dry = fltDry_ (unrouted, bypass).
@@ -4440,8 +4449,9 @@ namespace tw
                         const int oi = startSample + i;
                         if (a1 || a2)
                         {
-                            sendFilterSlot_.setParams  (lastCutHz1_, res1, drvSm1_, sr);
-                            sendFilterSlot2_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            if ((i & 3) == 0)   // fb441 — mirrors redesign every 4th sample (send path), thresholded values
+                            { sendFilterSlot_.setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              sendFilterSlot2_.setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (sF1L[i], sF1R[i], sF2L[i], sF2R[i], soL, soR, sendFilterSlot_, sendFilterSlot2_);
                             rvbSendL_[oi] += soL + sDryL[i];
                             rvbSendR_[oi] += soR + sDryR[i];
@@ -4458,8 +4468,9 @@ namespace tw
                         const int oi = startSample + i;
                         if (a1 || a2)
                         {
-                            sendFilterSlot3_.setParams (lastCutHz1_, res1, drvSm1_, sr);
-                            sendFilterSlot4_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            if ((i & 3) == 0)   // fb441 — mirrors redesign every 4th sample (send path), thresholded values
+                            { sendFilterSlot3_.setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              sendFilterSlot4_.setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (dF1L[i], dF1R[i], dF2L[i], dF2R[i], soL, soR, sendFilterSlot3_, sendFilterSlot4_);
                             dlySendL_[oi] += soL + dDryL[i];
                             dlySendR_[oi] += soR + dDryR[i];
@@ -4476,8 +4487,9 @@ namespace tw
                         const int oi = startSample + i;
                         if (a1 || a2)
                         {
-                            sendFilterSlot5_.setParams (lastCutHz1_, res1, drvSm1_, sr);
-                            sendFilterSlot6_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            if ((i & 3) == 0)   // fb441 — mirrors redesign every 4th sample (send path), thresholded values
+                            { sendFilterSlot5_.setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              sendFilterSlot6_.setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (tF1L[i], tF1R[i], tF2L[i], tF2R[i], soL, soR, sendFilterSlot5_, sendFilterSlot6_);
                             dstSendL_[oi] += soL + tDryL[i];
                             dstSendR_[oi] += soR + tDryR[i];
@@ -4495,8 +4507,9 @@ namespace tw
                         const int oi = startSample + i;
                         if (a1 || a2)
                         {
-                            sendFilterSlot7_.setParams (lastCutHz1_, res1, drvSm1_, sr);
-                            sendFilterSlot8_.setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            if ((i & 3) == 0)   // fb441 — mirrors redesign every 4th sample (send path), thresholded values
+                            { sendFilterSlot7_.setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              sendFilterSlot8_.setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (xF1L[i], xF1R[i], xF2L[i], xF2R[i], soL, soR, sendFilterSlot7_, sendFilterSlot8_);
                             exSendL_[oi] += soL + xDryL[i];
                             exSendR_[oi] += soR + xDryR[i];
@@ -4519,8 +4532,9 @@ namespace tw
                         const float dl_ = P.dry.getReadPointer(0)[i], dr_ = P.dry.getReadPointer(1)[i];
                         if (a1 || a2)
                         {
-                            P.flt1->setParams (lastCutHz1_, res1, drvSm1_, sr);
-                            P.flt2->setParams (lastCutHz2_, res2, drvSm2_, sr);
+                            if ((i & 3) == 0)   // fb441 — see the named mirrors above
+                            { P.flt1->setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              P.flt2->setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (f1l, f1r, f2l, f2r, soL, soR, *P.flt1, *P.flt2);
                             P.L[oi] += soL + dl_;
                             P.R[oi] += soR + dr_;
@@ -4950,6 +4964,12 @@ namespace tw
         // CPU: semitone→Hz pow() change-gates (unmodulated cutoff = bit-identical per sample).
         // Sentinel -1e9 never matches a real semitone sum, so the first sample always computes.
         float                   lastCutSemis1_ = -1.0e9f, lastCutHz1_ = 20000.0f;
+        // fb441 — CPU: the (res, drive) values last HANDED to setParams. The glided resSm/drvSm and the
+        //   erosion wander move a hair every sample, and every FilterSlot's equality gate then recomputed
+        //   tan()/exp() per sample — in the main pair AND in every send mirror AND every routed pooled
+        //   device, per voice. Below a 1-cent / 0.05 %-of-range change the ear cannot tell; above it we
+        //   recompute exactly as before (audio-rate modulation keeps its per-sample update).
+        float                   sentRes1_ = -1.0f, sentDrv1_ = -1.0f, sentRes2_ = -1.0f, sentDrv2_ = -1.0f;
         float                   visRes1_ = 0.3f, visRes2_ = 0.3f;   // fb163 — live res for the display (post-drift)
         float                   lastCutSemis2_ = -1.0e9f, lastCutHz2_ = 20000.0f;
         // Routing between the two filters + per-filter wet/dry mix.

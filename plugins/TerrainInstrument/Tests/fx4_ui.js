@@ -162,7 +162,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const D=window.__fxDevs(); const d=D.find(z=>z.core==='ott');
     return {trait:[...new Set(trait)], xo:[...new Set(window.__W.map(w=>w[0]))], lowcross:d.back.knobs[0][1]};
   });
-  chk(r4.trait.includes('SYN_EQZ_TRAIT'), 'wheel over the EQ core writes Trait', r4.trait.join(','));
+  chk(!r4.trait.includes('SYN_EQZ_TRAIT') && r4.trait.includes('SYN_EQZ_BODYQ'), 'wheel over the EQ core (its centre = the Body dot) writes Body\'s Q, NEVER Trait (fb441)', r4.trait.join(','));
   chk(r4.xo.includes('SYN_OTT_LOWCROSS'), 'dragging the Multiband\'s first crossover writes Low Cross', r4.xo.join(',')+' model='+(+r4.lowcross).toFixed(1));
 
   // ── readout law + relabel law + the route pill colour
@@ -288,16 +288,65 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const nx=rct.left+(+n5.getAttribute('cx'))/226*rct.width, ny=rct.top+(+n5.getAttribute('cy'))/78*rct.height;
     window.__W.length=0; core.dispatchEvent(ev('pointerdown',nx,ny)); core.dispatchEvent(ev('pointermove',nx-30,ny+10)); document.dispatchEvent(ev('pointerup',nx-30,ny+10));
     out.dragWrites=[...new Set(window.__W.map(w=>w[0]))].filter(x=>/_X1/.test(x)).sort().join(','); out.hzAfter=d.xb?Math.round(20*Math.pow(1000,d.xb[0][0]/100)):null;
-    // right-click it: removed
+    // fb441 — right-click it: the HOUSE MENU opens (Delete band / Reset band); clicking Delete removes it
     window.__W.length=0; core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:nx,clientY:ny}));
+    const cm8=document.getElementById('syn-ctx-menu'); const rows8=cm8?[...cm8.querySelectorAll('.syn-ctx-item')]:[];
+    out.menuRows=rows8.map(r=>r.textContent.trim()).join('|'); const delRow=rows8.find(r=>/^Delete band/.test(r.textContent.trim())); if(delRow) delRow.click();
     out.delWrites=window.__W.filter(w=>/_X1ON$/.test(w[0])).map(w=>w[1]).join(','); out.modelOnAfter=d.xb?d.xb[0][2]:null;
+    try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
     for(let i=0;i<3;i++) window.__fx4Tick(); out.n5opAfter=core.querySelector('.eqz-n[data-b="4"]').getAttribute('opacity');
     return out; });
   chk(r8.nodes===8 && r8.freeHidden===4, 'Equalizer core carries 8 nodes, the 4 free ones hidden by default', 'nodes='+r8.nodes+' hidden='+r8.freeHidden);
   chk(/X1HZ/.test(r8.addWrites)&&/X1ON/.test(r8.addWrites)&&r8.modelOn===1, 'double-click an empty spot ADDS a free bell (writes X1HZ/X1/X1ON, model on)', r8.addWrites+' hz≈'+r8.modelHz);
   chk(r8.n5op!=='0' && r8.n5cx>6.5, 'the new node appears on the curve at the click\'s frequency', 'opacity='+r8.n5op+' cx='+r8.n5cx);
   chk(/X1HZ/.test(r8.dragWrites) && r8.hzAfter<r8.modelHz, 'dragging the free bell writes its Hz (moved left = lower)', r8.modelHz+' → '+r8.hzAfter);
-  chk(r8.delWrites==='0' && r8.modelOnAfter===0 && r8.n5opAfter==='0', 'right-click REMOVES it (X1ON 0, node hidden)', 'writes='+r8.delWrites);
+  chk(/Delete band/.test(r8.menuRows||'') && r8.delWrites==='0' && r8.modelOnAfter===0 && r8.n5opAfter==='0', 'right-click opens the house menu; Delete band REMOVES it (X1ON 0, node hidden)', 'menu='+r8.menuRows+' writes='+r8.delWrites);
+
+  // ── fb441: THE NODE IS THE HANDLE — the grid moves nothing, the wheel on the grid pans, the wheel on a dot is that band's Q only
+  const r9 = await pg.evaluate(()=>{
+    const core=document.querySelector('.fxr-core[data-core="eqz"]'), svg=core.querySelector('svg'), rct=svg.getBoundingClientRect();
+    const D=window.__fxDevs(); const d=D.find(z=>z.core==='eqz'); const out={};
+    for(let i=0;i<3;i++) window.__fx4Tick();
+    const ev=(t,x,y,extra)=>new PointerEvent(t,Object.assign({bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:5,pointerType:'mouse',buttons:1,button:0},extra||{}));
+    const X=(hz)=>rct.left+(6.5+213*Math.log(hz/20)/Math.log(1000))/226*rct.width, Y=(u)=>rct.top+u/78*rct.height;
+    // (a) press on the EMPTY grid (5 kHz, near the top) and drag: NOTHING may be written, no band may move
+    const low0=d.back.knobs[0][1], body0=d.back.knobs[2][1], bite0=d.back.knobs[4][1], air0=d.knobs[1].v;
+    window.__W.length=0; core.dispatchEvent(ev('pointerdown',X(5000),Y(8))); core.dispatchEvent(ev('pointermove',X(5000)-40,Y(8)+20)); document.dispatchEvent(ev('pointerup',X(5000)-40,Y(8)+20));
+    out.gridWrites=window.__W.length; out.gridMoved=(d.back.knobs[0][1]!==low0)||(d.back.knobs[2][1]!==body0)||(d.back.knobs[4][1]!==bite0)||(d.knobs[1].v!==air0);
+    // (b) wheel on the EMPTY grid: the EQ does not act (no writes); the rack is free to pan
+    const clip=document.querySelector('.fxr-clip'); const sl0=clip?clip.scrollLeft:0; window.__W.length=0;
+    const w1=new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:X(5000),clientY:Y(8),deltaY:100}); core.dispatchEvent(w1);
+    out.gridWheelWrites=window.__W.length; out.gridWheelFree=(!w1.defaultPrevented)||(clip&&clip.scrollLeft!==sl0);
+    if(clip) clip.scrollLeft=sl0;   // the pan above moved the card on screen: restore, and re-read the rect for everything below
+    const r2=svg.getBoundingClientRect();
+    // (c) wheel on the BODY dot: handled, writes ONLY SYN_EQZ_BODYQ (no TRAIT, no other band), Q up on wheel-up
+    const nb=core.querySelector('.eqz-n[data-b="1"]'); const bx=r2.left+(+nb.getAttribute('cx'))/226*r2.width, by=r2.top+(+nb.getAttribute('cy'))/78*r2.height;
+    window.__W.length=0; const w2=new WheelEvent('wheel',{bubbles:true,cancelable:true,clientX:bx,clientY:by,deltaY:-100}); core.dispatchEvent(w2);
+    out.nodeWheelPrevented=w2.defaultPrevented; out.nodeWheelWrites=[...new Set(window.__W.map(w=>w[0]))].sort().join(','); out.bodyQ=d.xq?d.xq[1]:null;
+    const X2=(hz)=>r2.left+(6.5+213*Math.log(hz/20)/Math.log(1000))/226*r2.width, Y2=(u)=>r2.top+u/78*r2.height;
+    // (d) hover the Body dot: it lights (.hot, r 3.2) and the core wears the grab cursor; resting on the grid clears it
+    core.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:bx,clientY:by,pointerType:'mouse'})); out.hotOnHover=nb.classList.contains('hot')&&core.classList.contains('eqz-over')&&nb.getAttribute('r')==='3.2';
+    core.dispatchEvent(new PointerEvent('pointermove',{bubbles:true,clientX:X2(5000),clientY:Y2(8),pointerType:'mouse'})); out.hotOnGrid=nb.classList.contains('hot')||core.classList.contains('eqz-over');
+    // (e) double-click ON THE CURVE away from any dot (2 kHz on the flat line, y 39) ADDS a band there at 0 dB
+    window.__W.length=0; core.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,clientX:X2(2000),clientY:Y2(39)}));
+    const aw=window.__W.filter(w=>/_X[1-4](HZ|ON|Q)?$/.test(w[0])); out.curveAddWrites=[...new Set(aw.map(w=>w[0]))].sort().join(','); const gw=aw.find(w=>/_X[1-4]$/.test(w[0])); out.curveAddGain=gw?gw[1]:null;
+    // (f) right-click a ROLE dot (Low): the menu offers Reset band; Delete band is there but disabled (fixed)
+    const nl=core.querySelector('.eqz-n[data-b="0"]'); const lx=r2.left+(+nl.getAttribute('cx'))/226*r2.width, ly=r2.top+(+nl.getAttribute('cy'))/78*r2.height;
+    core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:lx,clientY:ly}));
+    const cm=document.getElementById('syn-ctx-menu'); const rows=cm?[...cm.querySelectorAll('.syn-ctx-item')]:[];
+    out.roleRows=rows.map(r=>(r.classList.contains('disabled')?'~':'')+r.textContent.trim()).join('|');
+    try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
+    // (g) a RIGHT-button press on a dot never starts a drag
+    window.__W.length=0; core.dispatchEvent(ev('pointerdown',bx,by,{button:2,buttons:2})); core.dispatchEvent(ev('pointermove',bx-40,by+20,{buttons:2})); document.dispatchEvent(ev('pointerup',bx-40,by+20,{button:2,buttons:0}));
+    out.rightDragWrites=window.__W.filter(w=>/_BODYHZ$|_BODY$/.test(w[0])).length; try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
+    return out; });
+  chk(r9.gridWrites===0 && !r9.gridMoved, 'press+drag on the EMPTY grid moves NOTHING (the grid is not a handle)', 'writes='+r9.gridWrites+' moved='+r9.gridMoved);
+  chk(r9.gridWheelWrites===0 && r9.gridWheelFree===true, 'wheel over the grid is left to the rack (no EQ writes, pan free)', 'writes='+r9.gridWheelWrites+' free='+r9.gridWheelFree);
+  chk(r9.nodeWheelPrevented===true && r9.nodeWheelWrites==='SYN_EQZ_BODYQ' && r9.bodyQ>50, 'wheel over the Body dot writes ONLY Body\'s Q (no Trait, no other band)', r9.nodeWheelWrites+' q='+r9.bodyQ);
+  chk(r9.hotOnHover===true && r9.hotOnGrid===false, 'hover lights the dot (purple, larger, grab cursor); the grid clears it', 'hover='+r9.hotOnHover+' grid='+r9.hotOnGrid);
+  chk(/_X[1-4]HZ/.test(r9.curveAddWrites)&&/_X[1-4]ON/.test(r9.curveAddWrites)&&/_X[1-4]Q/.test(r9.curveAddWrites)&&r9.curveAddGain===0.5, 'double-click ON THE CURVE adds a band there at 0 dB (gain 0.5, Q at the law)', r9.curveAddWrites+' gain='+r9.curveAddGain);
+  chk(/~Delete band/.test(r9.roleRows||'')&&/(^|\|)Reset band/.test(r9.roleRows||''), 'right-click a ROLE dot: Delete band disabled (fixed), Reset band enabled', r9.roleRows);
+  chk(r9.rightDragWrites===0, 'a right-button press on a dot never drags it', 'writes='+r9.rightDragWrites);
 
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();

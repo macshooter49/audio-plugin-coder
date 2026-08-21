@@ -325,15 +325,16 @@ class TerrainEq extends AudioWorkletProcessor {
     this.fs = sampleRate;
     this.p = { type: 0, character: 0, axis: 0, f1: .5, f2: .5, f3: .5, mix: 1,
                b1: .5, b2: .5, b3: .5, b4: .5, b5: .5, b6: .5, b7: .5, b8: .5,
-               x1: .5, x2: .5, x3: .5, x4: .5, x5: .5, x6: .5, x7: .5, x8: .5, xon1: 0, xon2: 0, xon3: 0, xon4: 0 };   // fb438 — free bells
-    this.tg = new Float64Array(19).fill(0.5);
-    this.sm = new Float64Array(19).fill(0.5);
+               x1: .5, x2: .5, x3: .5, x4: .5, x5: .5, x6: .5, x7: .5, x8: .5, xon1: 0, xon2: 0, xon3: 0, xon4: 0,
+               q1: .5, q2: .5, q3: .5, q4: .5, q5: .5, q6: .5, q7: .5, q8: .5 };   // fb438 — free bells · fb441 — per-band Q
+    this.tg = new Float64Array(27).fill(0.5);   // fb441 — + 8 per-band Q
+    this.sm = new Float64Array(27).fill(0.5);
     this.xOn = [false,false,false,false];
     // fb422: Amount .010 -> .020. It multiplies all four band gains (+-60 dB of authority) and
     // had the SHORTEST tau in the table; an instant Amount write measured 1.63 dB of wet-gain
     // change in ONE sample. The number scales as 1/tau, which is what proves it is a smoothing
     // fault; `Trait` does not move with tau at all, because that one is stored resonator energy.
-    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020, .020,.012,.020,.012,.020,.012,.020,.012];   // + the free bells (fb438)
+    const tau = [.020,.012,.020,.012,.020,.012,.020,.020,.015,.012,.020, .020,.012,.020,.012,.020,.012,.020,.012, .015,.015,.015,.015,.015,.015,.015,.015];   // + the free bells (fb438) + per-band Q (fb441)
     this.k = tau.map(t => 1 - Math.exp(-(DESIGN_BLK / this.fs) / t));
     this.mixSm = 1; this.mixTg = 1;
     this.mixK = 1 - Math.exp(-1 / (0.010 * this.fs));
@@ -372,6 +373,7 @@ class TerrainEq extends AudioWorkletProcessor {
     this.tg[8] = clamp(p.f1,0,1); this.tg[9] = clamp(p.f2,0,1); this.tg[10] = clamp(p.f3,0,1);
     for (let k = 0; k < 8; ++k) this.tg[11 + k] = clamp(p['x' + (k + 1)], 0, 1);     // fb438 — free bells
     for (let k = 0; k < 4; ++k) this.xOn[k] = !!p['xon' + (k + 1)];
+    for (let k = 0; k < 8; ++k) this.tg[19 + k] = clamp(p['q' + (k + 1)], 0, 1);      // fb441 — per-band Q
     this.mixTg = clamp(p.mix,0,1);
   }
 
@@ -450,6 +452,7 @@ class TerrainEq extends AudioWorkletProcessor {
       for (let b = 0; b < 4; ++b)
         q[b] = ring * (1 + CH.e2 * Math.min(Math.abs(g[b]), 60) / 12) * CH.qm[b]; }
     for (let b = 0; b < 4; ++b) {
+      q[b] *= Math.pow(2, (this.sm[19 + b] - 0.5) * 6);                                  // fb441 — the node's own width (x1 by default)
       if (g[b] < 0) q[b] *= CH.cutQ;
       q[b] = clamp(q[b], Q_MIN, Q_MAX);
       q[b] = usableQ(kd[b], f[b], q[b], g[b], this.fs);
@@ -488,7 +491,7 @@ class TerrainEq extends AudioWorkletProcessor {
       const fHz = clamp(20 * Math.pow(1000, tF), 20, 0.45 * this.fs);
       const gDb = clamp((tG * 2 - 1) * DB_SPAN * amount, -96, G_CEIL);
       const live = this.xOn[k] && Math.abs(gDb) > 1e-4;
-      let qf = clamp(T.law === 0 ? widthMul(shape) : 1.0, Q_MIN, Q_MAX);
+      let qf = clamp((T.law === 0 ? widthMul(shape) : 1.0) * Math.pow(2, (this.sm[23 + k] - 0.5) * 6), Q_MIN, Q_MAX);   // fb441 — x the node's own width
       qf = usableQ(0, fHz, qf, gDb, this.fs);
       S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
       this.nodeHz[4 + k] = fHz; this.nodeDb[4 + k] = this.xOn[k] ? gDb : 0; this.nodeOn[4 + k] = this.xOn[k] ? 1 : 0;
