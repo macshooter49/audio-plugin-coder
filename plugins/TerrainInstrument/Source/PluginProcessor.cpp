@@ -4211,6 +4211,39 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             }
         }
 
+        // ═══════════ fb444 — BODE, kind 13. Harald Bode's SSB shifter + the Echobode loop ═══════
+        {
+            const juce::StringArray bodTypes  { "Shift", "Barberpole", "Echobode", "Detune",
+                                                "Ring", "Spiral", "Chorale", "Freeze" };
+            const juce::StringArray bodChars  { "Pristine", "Dome '64", "Tube 735", "Leaky",
+                                                "Tape Loop", "Crush", "Iron", "Ash" };
+            const juce::StringArray bodRoutes { "Normal", "Cross", "Mono Sum", "Wide",
+                                                "Shift First", "Shift Last", "Reserved 7", "Reserved 8" };
+            for (int n = 1; n <= ParameterIDs::kFxInstances; ++n)
+            {
+                const juce::String sfx = (n == 1) ? juce::String() : juce::String (n);
+                const juce::String p   = "SYN_BOD" + sfx + "_";
+                const juce::String d   = "Bode " + (n == 1 ? juce::String() : sfx + " ");
+                // Cardinality FROZEN AT BIRTH (fb373): every list ships at its final width of 8,
+                // so a later addition can never renormalise a saved session into a different Type.
+                C (p + "TYPE",  d + "Type",  bodTypes,  0);
+                C (p + "CHAR",  d + "Char",  bodChars,  0);
+                C (p + "ROUTE", d + "Route", bodRoutes, 0);
+                F (p + "SHIFT", d + "Shift", 0.50f);   F (p + "DIR",  d + "Direction", 1.00f);
+                F (p + "FDBK",  d + "Fdbk",  0.00f);   F (p + "MIX",  d + "Mix",       1.00f);
+                F (p + "FINE",    d + "Fine",     0.50f); F (p + "SPREAD",  d + "Spread",  1.00f);
+                F (p + "TIME",    d + "Time",     0.45f); F (p + "BLUR",    d + "Blur",    0.00f);
+                F (p + "LOWKEEP", d + "Low Keep", 0.00f); F (p + "DAMPING", d + "Damping", 1.00f);
+                F (p + "TOUCH",   d + "Touch",    0.50f); F (p + "DRIFT",   d + "Drift",   0.00f);
+                B (p + "GUARD", d + "Guard", true);
+                B (p + "SYNC",  d + "Sync",  false);
+                for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                B (p + "POWER",  d + "Power", false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
+
         // ═══════════ fb414 — SEND MODE. The rack stops being insert-only. ═══════════════════════
         // Max: "there gotta be a way to have it to where it doesn't distort the sound in which the
         // granulizer is also granulizing... it's coming AFTER the source."
@@ -5200,6 +5233,27 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 ottPool_[(size_t) i].setParams (q);
             }
         }
+        // ── Bode (fb444)
+        {
+            const auto& V = bodRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || bodEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainBodeFx::Params q;
+                // fb373 — a choice is read as an INDEX and clamped to the PARAM's cardinality,
+                // never lround(raw * (N-1)) against a widget's option count.
+                q.type  = juce::jlimit (0, tw::TerrainBodeFx::kNumTypes  - 1, (int) V.type->load());
+                q.chr   = juce::jlimit (0, tw::TerrainBodeFx::kNumChars  - 1, (int) V.chr->load());
+                q.route = juce::jlimit (0, tw::TerrainBodeFx::kNumRoutes - 1, (int) V.axis->load());
+                q.shift = V.f1->load(); q.dir = V.f2->load(); q.fdbk = V.f3->load(); q.mix = V.mix->load();
+                q.fine    = V.b[0]->load(); q.spread  = V.b[1]->load();
+                q.time    = V.b[2]->load(); q.blur    = V.b[3]->load();
+                q.lowKeep = V.b[4]->load(); q.damping = V.b[5]->load();
+                q.touch   = V.b[6]->load(); q.drift   = V.b[7]->load();
+                q.guard = V.pill1 != nullptr && V.pill1->load() > 0.5f;
+                q.sync  = V.sync  != nullptr && V.sync ->load() > 0.5f;
+                bodPool_[(size_t) i].setParams (q);
+            }
+        }
     }
 }
 
@@ -5222,7 +5276,7 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
 
     struct Spec { const char* pfx; const char* axis; const char* f1; const char* f2; const char* f3;
                   const char* b[8]; const char* pill1; const char* pill2; const char* sync; };
-    static const Spec kSpec[4] = {
+    static const Spec kSpec[5] = {
         { "SYN_EQZ", "FOCUS",  "SLANT",  "AIR",   "AMOUNT",
           { "LOWHZ","LOW","BODYHZ","BODY","BITEHZ","BITE","REACH","TRAIT" }, "DELTA", nullptr, nullptr },   // fb437 — Delta pill
         { "SYN_WID", "FIELD",  "AMOUNT", "WIDTH", "RATE",
@@ -5231,11 +5285,16 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
           { "ATTACK","RELEASE","ROUND","HEARCUT","EDGE","CLING","TIE","BURN" }, "AUTO", nullptr, nullptr },
         { "SYN_OTT", "STEREO", "AMOUNT", "CHASE", "TOPLIFT",
           { "LOWCROSS","HIGHCROSS","RAISE","PRESS","GRIP","BASS","MIDS","TREBLE" }, "CREST", nullptr, nullptr },
+        // fb444 — Bode. f1 Shift · f2 Direction · f3 Fdbk · axis Route · pill Guard · sync Sync
+        { "SYN_BOD", "ROUTE",  "SHIFT",  "DIR",   "FDBK",
+          { "FINE","SPREAD","TIME","BLUR","LOWKEEP","DAMPING","TOUCH","DRIFT" }, "GUARD", nullptr, "SYNC" },
     };
-    std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances>* kArr[4] =
-        { &eqzRefs_, &widRefs_, &cmpRefs_, &ottRefs_ };
+    std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances>* kArr[5] =
+        { &eqzRefs_, &widRefs_, &cmpRefs_, &ottRefs_, &bodRefs_ };
+    // fb444 — the two tables are one list in two halves; assert they stay that way.
+    static_assert (sizeof (kSpec) / sizeof (kSpec[0]) == 5, "kSpec and kArr must move together");
 
-    for (int d = 0; d < 4; ++d)
+    for (int d = 0; d < 5; ++d)
         for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         {
             const juce::String n = (i == 0) ? juce::String() : juce::String (i + 1);
@@ -5314,6 +5373,7 @@ TW_FX4_APPLY (applyEqz, eqzPool_, eqzRefs_, eqzEnv_, kEqzSendBase, (V.pill1 != n
 TW_FX4_APPLY (applyWid, widPool_, widRefs_, widEnv_, kWidSendBase, false)
 TW_FX4_APPLY (applyCmp, cmpPool_, cmpRefs_, cmpEnv_, kCmpSendBase, false)
 TW_FX4_APPLY (applyOtt, ottPool_, ottRefs_, ottEnv_, kOttSendBase, false)
+TW_FX4_APPLY (applyBod, bodPool_, bodRefs_, bodEnv_, kBodSendBase, false)   // fb444 — bode
 #undef TW_FX4_APPLY
 
 void TerrainInstrumentAudioProcessor::applyFla (int inst0, float inL, float inR,
@@ -5548,6 +5608,10 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
         add (11, i + 1, cmpRefs_[(size_t) i].active, cmpRefs_[(size_t) i].rank);
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (12, i + 1, ottRefs_[(size_t) i].active, ottRefs_[(size_t) i].rank);
+    // 🔑 fb439 — THE LINE WHOSE ABSENCE MADE FOUR FULLY-BUILT DEVICES DEAD. Every other
+    //    touchpoint can be green and the apply branch below is simply unreachable code.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (13, i + 1, bodRefs_[(size_t) i].active, bodRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -5665,6 +5729,9 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         for (auto& e : widPool_) e.prepare (sr, 1);   //   message thread only, never in
         for (auto& e : cmpPool_) e.prepare (sr, 1);   //   processBlock (the fb415 malloc)
         for (auto& e : ottPool_) e.prepare (sr, 1);
+        { int bi = 0; for (auto& e : bodPool_) e.prepare (sr, bi++); }   // fb444 — per-instance
+                                                                        //   drift seed, so two
+                                                                        //   Bodes never lockstep
         for (auto& e : flaPool_) e.prepare (sr, 1);
         for (auto& e : phaPool_) e.prepare (sr, 1);
     }
@@ -8138,15 +8205,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         //    be true. Four fully-built devices that returned their input unchanged, forever. This
         //    is verbatim the failure the fb365 comment forty lines up warns about: "without it the
         //    pills render and NOTHING consumes them, which is not a dead control but a silent one".
-        const int bases[7] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i,
-                               kEqzSendBase + i, kWidSendBase + i, kCmpSendBase + i, kOttSendBase + i };
-        std::atomic<float>* const* srcs[7] = { choRefs_[(size_t) i].src,
+        const int bases[8] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i,
+                               kEqzSendBase + i, kWidSendBase + i, kCmpSendBase + i, kOttSendBase + i,
+                               kBodSendBase + i };
+        std::atomic<float>* const* srcs[8] = { choRefs_[(size_t) i].src,
                                                flaRefs_[(size_t) i].src,
                                                phaRefs_[(size_t) i].src,
                                                eqzRefs_[(size_t) i].src,
                                                widRefs_[(size_t) i].src,
                                                cmpRefs_[(size_t) i].src,
-                                               ottRefs_[(size_t) i].src };
+                                               ottRefs_[(size_t) i].src,
+                                               bodRefs_[(size_t) i].src };
         // fb444 — the loop bound is DERIVED, never a literal. `bases[7]`/`srcs[7]`/`dv < 7`
         //   was three hand-maintained copies of one number, and fb435 is what happens when a
         //   device is added to two of them. Now adding a kind is one entry in each array and
@@ -8189,6 +8258,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 10) g = &poolRouteG_[(size_t) ((kWidSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 11) g = &poolRouteG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 12) g = &poolRouteG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 13) g = &poolRouteG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -8219,6 +8289,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 10) dstArr = &poolEntryG_[(size_t) ((kWidSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 11) dstArr = &poolEntryG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 12) dstArr = &poolEntryG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
+            else if (ce.kind == 13) dstArr = &poolEntryG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -8910,6 +8981,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 11) { const int q = kCmpSendBase + ce.inst - 1;     // fb435 — compress
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 12) { const int q = kOttSendBase + ce.inst - 1;     // fb435 — multiband
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 13) { const int q = kBodSendBase + ce.inst - 1;     // fb444 — bode
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
@@ -9935,6 +10008,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 else if (ce.kind == 10) applyWid (ce.inst - 1, inL, inR, oL, oR);   // fb426 — widen
                 else if (ce.kind == 11) applyCmp (ce.inst - 1, inL, inR, oL, oR);   // fb426 — compress
                 else if (ce.kind == 12) applyOtt (ce.inst - 1, inL, inR, oL, oR);   // fb426 — ott
+                else if (ce.kind == 13) applyBod (ce.inst - 1, inL, inR, oL, oR);   // fb444 — bode
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);

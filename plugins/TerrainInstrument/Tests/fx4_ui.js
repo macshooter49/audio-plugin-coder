@@ -59,9 +59,9 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const out={counts:{},cores:{},addErr:null};
     // record every param write the UI makes — the only proof the drag reaches the DSP path
     window.__W=[]; const orig=window.__setSynParam; window.__setSynParam=function(id,v){ window.__W.push([id,v]); try{ return orig&&orig(id,v); }catch(e){} };
-    for(const core of ['eqz','wid','cmp','ott']) for(let i=0;i<8;i++){ try{ window.__fxAdd(core); }catch(e){ out.addErr=core+': '+String(e).slice(0,100); } }
+    for(const core of ['eqz','wid','cmp','ott','bod']) for(let i=0;i<8;i++){ try{ window.__fxAdd(core); }catch(e){ out.addErr=core+': '+String(e).slice(0,100); } }
     const D=window.__fxDevs?window.__fxDevs():[];
-    for(const core of ['eqz','wid','cmp','ott']){
+    for(const core of ['eqz','wid','cmp','ott','bod']){
       out.counts[core]=D.filter(d=>d.core===core).length;
       out.cores[core]=document.querySelectorAll('.fxr-dev .fxr-core[data-core="'+core+'"] svg').length;
     }
@@ -72,13 +72,16 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
                ottX:document.querySelectorAll('.fxr-core[data-core="ott"] .ott-xl').length,
                cmpKnee:document.querySelectorAll('.fxr-core[data-core="cmp"] .cmp-knee.dst-curve').length,
                widV:document.querySelectorAll('.fxr-core[data-core="wid"] .wid-v').length,
+               bodRef:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-ref').length,
+               bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-up').length,
                eqzPill:(document.querySelector('.fxr-core[data-core="eqz"]')||{}).closest ? [...document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev').querySelectorAll('.fxr-pill .fxr-t')].map(e=>e.textContent).join(',') : '' };
     return out; });
-  chk(!r1.addErr, 'adding the four devices throws nothing', r1.addErr||'');
-  chk(r1.cards===24, 'eight of each ADD, capped at six each (24 cards)', 'cards='+r1.cards+' '+JSON.stringify(r1.counts));
-  for(const core of ['eqz','wid','cmp','ott']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
+  chk(!r1.addErr, 'adding the five devices throws nothing', r1.addErr||'');
+  chk(r1.cards===30, 'eight of each ADD, capped at six each (30 cards)', 'cards='+r1.cards+' '+JSON.stringify(r1.counts));
+  for(const core of ['eqz','wid','cmp','ott','bod']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
   chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===48, 'Equalizer core = the house line + 8 nodes per card (4 roles + 4 free bells, fb438)', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
+  chk(r1.mark.bodRef===54 && r1.mark.bodUp===54, 'Bode core = the 9-rung harmonic ladder, reference + shifted, per card (fb444)', JSON.stringify({ref:r1.mark.bodRef,up:r1.mark.bodUp}));
   chk(r1.mark.cmpKnee===6 && r1.mark.widV===48, 'Compress knee (house line) + Widen 8 voice beams per card', JSON.stringify({knee:r1.mark.cmpKnee,beams:r1.mark.widV}));
   chk(r1.mark.eqzPill==='Delta', 'the Equalizer has its Delta pill', r1.mark.eqzPill);
 

@@ -222,11 +222,14 @@ int main()
     if (dryRms <= -60.0) { printf ("\n  probe is silent — cannot measure. STOP.\n"); return 2; }
 
     // ── each device: put it in the chain, power it, push its controls, measure the output ─────
-    const Dev devs[4] = {
+    const Dev devs[5] = {
         { "Equalizer", "Equalizer", { "Equalizer Amount", "Equalizer Low",  "Equalizer Body",  "Equalizer Slant" } },
         { "Widen",     "Widen",     { "Widen Amount",     "Widen Width",    "Widen Spread",    nullptr } },
         { "Compress",  "Compress",  { "Compress Push",    "Compress Ratio", "Compress Lift",   nullptr } },
         { "Multiband", "Multiband", { "Multiband Amount", "Multiband Raise","Multiband Press", nullptr } },
+        // fb444 — Bode. Shift is the hero; Fdbk and Direction are the two that most change the
+        // output, so if this row measures Delta 0.00 the device is in the chain and dead.
+        { "Bode",      "Bode",      { "Bode Shift",       "Bode Fdbk",      "Bode Direction",  "Bode Blur" } },
     };
     for (const auto& d : devs)
     {

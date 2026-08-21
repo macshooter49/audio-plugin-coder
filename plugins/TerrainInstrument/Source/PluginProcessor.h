@@ -34,7 +34,8 @@
 #include "TerrainEqualizerFx.h"   // fb426 — chain kind 9
 #include "TerrainWidenFx.h"       // fb426 — chain kind 10
 #include "TerrainCompressFx.h"    // fb426 — chain kind 11
-#include "TerrainOttFx.h"         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
+#include "TerrainOttFx.h"
+#include "TerrainBodeFx.h"        // fb444 — kind 13, the Bode SSB shifter         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -1846,18 +1847,22 @@ private:
     std::array<tw::TerrainChorusFx,  (size_t) ParameterIDs::kFxInstances> choPool_ {};
     // fb426 — the fx4 four. Six instances each, routable · chainable · duplicatable.
     std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances> eqzRefs_ {}, widRefs_ {}, cmpRefs_ {}, ottRefs_ {};
+    std::array<Fx4Refs, (size_t) ParameterIDs::kFxInstances> bodRefs_ {};   // fb444 — Bode reuses the fx4 shape
     std::array<tw::TerrainEqualizerFx, (size_t) ParameterIDs::kFxInstances> eqzPool_ {};
     std::array<tw::TerrainWidenFx,     (size_t) ParameterIDs::kFxInstances> widPool_ {};
     std::array<tw::TerrainCompressFx,  (size_t) ParameterIDs::kFxInstances> cmpPool_ {};
     std::array<tw::TerrainOttFx,       (size_t) ParameterIDs::kFxInstances> ottPool_ {};
+    std::array<tw::TerrainBodeFx,      (size_t) ParameterIDs::kFxInstances> bodPool_ {};   // fb444
     void applyEqz (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyWid (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyCmp (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyOtt (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    void applyBod (int inst0, float inL, float inR, float& outL, float& outR) noexcept;   // fb444
     std::array<tw::TerrainFlangerFx, (size_t) ParameterIDs::kFxInstances> flaPool_ {};
     std::array<tw::TerrainPhaserFx,  (size_t) ParameterIDs::kFxInstances> phaPool_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> choEnv_ {}, flaEnv_ {}, phaEnv_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> eqzEnv_ {}, widEnv_ {}, cmpEnv_ {}, ottEnv_ {};  // fb426
+    std::array<float, (size_t) ParameterIDs::kFxInstances> bodEnv_ {};                                     // fb444
     // fb437 — change-gating for the two big fx4 viz arrays (EQ curve, compressor knee) + the keepalive tick
     std::array<float, (size_t) ParameterIDs::kFxInstances> eqzCurveSent_ {}, cmpKneeSent_ {};
     uint32_t fx4VizTick_ = 0;

@@ -1209,6 +1209,12 @@ namespace ParameterIDs
     constexpr char SYN_CMP_ACTIVE[] = "SYN_CMP_ACTIVE";  constexpr char SYN_CMP_RANK[]   = "SYN_CMP_RANK";
     constexpr char SYN_OTT_TYPE[]   = "SYN_OTT_TYPE";    constexpr char SYN_OTT_POWER[]  = "SYN_OTT_POWER";
     constexpr char SYN_OTT_ACTIVE[] = "SYN_OTT_ACTIVE";  constexpr char SYN_OTT_RANK[]   = "SYN_OTT_RANK";
+    // fb444 — BODE (kind 13). The layout builder composes these from string literals, so this
+    // block exists to make the family greppable, not because anything links against it.
+    //   TYPE CHAR ROUTE · SHIFT DIR FDBK MIX · FINE SPREAD TIME BLUR LOWKEEP DAMPING TOUCH DRIFT
+    //   · GUARD SYNC · SRC_* · POWER ACTIVE RANK SEND
+    constexpr char SYN_BOD_TYPE[]   = "SYN_BOD_TYPE";    constexpr char SYN_BOD_POWER[]  = "SYN_BOD_POWER";
+    constexpr char SYN_BOD_ACTIVE[] = "SYN_BOD_ACTIVE";  constexpr char SYN_BOD_RANK[]   = "SYN_BOD_RANK";
 
     constexpr int  kFxInstances = 6;                  // per device type (1 legacy + 5 extra)
     constexpr char SYN_FX_RANK_SUFFIX[]   = "_RANK";
