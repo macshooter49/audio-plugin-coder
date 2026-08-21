@@ -4180,7 +4180,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 //    Back 8: Low Cross · High Cross · Raise · Press · Grip · Bass · Mids · Treble.
                 {
                     const juce::String p = "SYN_OTT" + sfxN + "_";
-                    const juce::String d = "OTT" + sfxD + " ";
+                    const juce::String d = "Multiband" + sfxD + " ";   // fb439 — the HOST's name matches the
+                        // card (fb434 renamed only the + menu, so every DAW automation lane still
+                        // read "OTT Amount" while the rack said Multiband — the no-doubles law).
+                        // The param IDs stay SYN_OTT_* forever: they key every saved session.
                     C (p + "TYPE",   d + "Type",   ottTypes, 0);        // Over Top
                     C (p + "CHAR",   d + "Char",   ottChars, 0);
                     C (p + "STEREO", d + "Stereo", ottStereo, 0);       // Linked
@@ -5503,6 +5506,29 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
         add (7, i + 1, flaRefs_[(size_t) i].active, flaRefs_[(size_t) i].rank);
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (8, i + 1, phaRefs_[(size_t) i].active, phaRefs_[(size_t) i].rank);
+    // fb439 — EQUALIZER 9 / WIDEN 10 / COMPRESS 11 / MULTIBAND 12, all six of each.
+    //
+    // 🔑 THIS LINE'S ABSENCE WAS THE fb439 BUG. Every OTHER touchpoint for these four kinds
+    //    shipped across fb426-438 — the params, the cached refs, the pools, prepare(), the
+    //    per-block setParams, the route mask (:8136), the entry gains (:8166), the send bases
+    //    (:8854), the apply branch (:9882) and the viz emitter (:4871) — and the UI wrote
+    //    _ACTIVE/_RANK correctly all along. But nothing ever EMITTED a ChainEntry with kind
+    //    9..12, so `else if (ce.kind == 9) applyEqz (...)` was unreachable code and all four
+    //    devices rendered BIT-IDENTICAL output whether they sat in the chain or not: measured
+    //    at Δ = 0.00 dB on level, spectrum, stereo AND crest by Tests/au_fx_path.cpp, which
+    //    renders the real installed plugin rather than an engine header behind a shim.
+    //
+    //    Eleven green touchpoints and one missing one is still a dead device — which is why the
+    //    invariant is now STRUCTURALLY gated for every kind at once by Tests/fx_path_gate.py:
+    //    if any code branches on `ce.kind == K`, rebuildChainOrder MUST be able to produce K.
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add ( 9, i + 1, eqzRefs_[(size_t) i].active, eqzRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (10, i + 1, widRefs_[(size_t) i].active, widRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (11, i + 1, cmpRefs_[(size_t) i].active, cmpRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (12, i + 1, ottRefs_[(size_t) i].active, ottRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)

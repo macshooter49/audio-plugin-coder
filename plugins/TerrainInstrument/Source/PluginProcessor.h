@@ -1654,7 +1654,7 @@ private:
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
     static constexpr int kFxKinds  = 13;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12
-    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 54
+    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 78 (13 x 6)
     static_assert (kChainMax <= tw::FxChainTopology::kMaxSlots,
                    "every activatable device must fit in the topology's slot table");
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};
