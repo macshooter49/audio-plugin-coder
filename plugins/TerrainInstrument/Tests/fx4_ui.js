@@ -348,6 +348,56 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(/~Delete band/.test(r9.roleRows||'')&&/(^|\|)Reset band/.test(r9.roleRows||''), 'right-click a ROLE dot: Delete band disabled (fixed), Reset band enabled', r9.roleRows);
   chk(r9.rightDragWrites===0, 'a right-button press on a dot never drags it', 'writes='+r9.rightDragWrites);
 
+  // ── fb442: THE SPECTRUM IS A CANVAS. Max: "grainy... a static portrait of the last audio... it copies
+  //    and pastes the new audio" — and "it doesn't do it with the main filter", which IS a canvas. The cards
+  //    drew the same feed into an SVG path on a preserveAspectRatio="none" viewBox (the fb356 trap), and
+  //    fb441's peak-per-column made it mesas. These gates pin the renderer, the clearing, and the aggregation.
+  const r10 = await pg.evaluate(async()=>{
+    const out={};
+    // ⚠️ __fxAdd re-renders the whole rack, so ANY node captured before it is detached — query after.
+    if(!document.querySelector('.fxr-core[data-core="flt"]')) window.__fxAdd('flt');
+    await new Promise(r=>setTimeout(r,120));
+    const eq=document.querySelector('.fxr-core[data-core="eqz"]');
+    const fl=document.querySelector('.fxr-core[data-core="flt"]');
+    out.eqCv=!!eq.querySelector('canvas.fx-spec'); out.fltCv=!!fl.querySelector('canvas.fx-spec');
+    out.oldPaths=document.querySelectorAll('.eqz-spec,.flt-spec').length;
+    out.bandMag=typeof window.__fltBandMag==='function';
+    // the canvas must sit UNDER the SVG (the curve and nodes stay on top)
+    const kids=[...eq.children].map(e=>e.tagName.toLowerCase()); out.order=kids.join(',');
+    const ink=(c)=>{ const cv=c.querySelector('canvas.fx-spec'); if(!cv||!cv.width) return -1;
+      const d=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data; let k=0;
+      for(let i=3;i<d.length;i+=4) if(d[i]>6) k++; return +(100*k/(cv.width*cv.height)).toFixed(2); };
+    // a LOUD frame → ink on both cards
+    const N=2048, loud=new Array(N).fill(0.0002);
+    for(let h=1;h<=40;h++){ const b=Math.round(110*h*4096/48000); if(b<N) loud[b]=0.05/h; }
+    for(let k=0;k<4;k++){ window.__terrainEqAnalyzer({pre:loud,post:loud,sr:48000});
+      window.__fx4Tick&&window.__fx4Tick(); if(window.__fltTick) window.__fltTick(); await new Promise(r=>requestAnimationFrame(r)); }
+    out.inkEq=ink(eq); out.inkFlt=ink(fl);
+    // SILENCE → the canvas must go EMPTY (it is cleared and repainted every frame: a stale layer is impossible)
+    const dead=new Array(N).fill(0);
+    for(let k=0;k<4;k++){ window.__terrainEqAnalyzer({pre:dead,post:dead,sr:48000});
+      window.__fx4Tick&&window.__fx4Tick(); if(window.__fltTick) window.__fltTick(); await new Promise(r=>requestAnimationFrame(r)); }
+    out.inkDead=ink(eq);
+    // the aggregator: a pixel spanning many bins returns the PEAK inside it, so a peak between two
+    // point-samples can never be skipped (that skipping, re-rolling per frame, was the "static")
+    // (guarded: on a tree without these hooks the gate must FAIL, not crash the run)
+    try{ const one=new Array(N).fill(0); one[Math.round(5000*4096/48000)]=0.5;
+      window.__terrainEqAnalyzer({pre:one,post:one,sr:48000});
+      out.peakKept=window.__fltBandMag(4700,5300)>=0.49;
+      out.pointMissed=window.__fltBinMag(5300)<0.01;      // the same spot, point-sampled, sees nothing
+      const t441=new Array(N).fill(0); t441[Math.round(1000*4096/44100)]=0.5;
+      window.__terrainEqAnalyzer({pre:t441,post:t441,sr:44100});
+      out.srUsed=window.__fltBandMag(960,1040)>=0.49;
+    }catch(e){ out.peakKept=false; out.pointMissed=false; out.srUsed=false; out.hookErr=String(e).slice(0,60); }
+    return out; });
+  chk(r10.eqCv && r10.fltCv, 'both cards draw their spectrum into a <canvas> (the main filter\'s renderer)', 'eqz='+r10.eqCv+' flt='+r10.fltCv);
+  chk(r10.oldPaths===0, 'the stretched-SVG spectrum paths are GONE (fb356: non-uniform scale warps stroke weight)', 'left='+r10.oldPaths);
+  chk(/^canvas,svg/.test(r10.order), 'the canvas sits UNDER the SVG, so curve + nodes stay on top', r10.order);
+  chk(r10.inkEq>0.5 && r10.inkFlt>0.5, 'a live frame paints both canvases', 'eqz='+r10.inkEq+'%  flt='+r10.inkFlt+'%');
+  chk(r10.inkDead===0, 'SILENCE leaves the canvas completely empty — no stale layer can survive a frame', 'ink='+r10.inkDead+'%');
+  chk(r10.bandMag && r10.peakKept && r10.pointMissed, 'a pixel spanning many bins returns the PEAK (point-sampling would skip it)', 'peakKept='+r10.peakKept+' pointMissed='+r10.pointMissed);
+  chk(r10.srUsed, 'the analyzer feed\'s sample rate is honoured (44.1 k no longer reads 8.8 % sharp)', 'srUsed='+r10.srUsed);
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();
   process.exit(fail?1:0);

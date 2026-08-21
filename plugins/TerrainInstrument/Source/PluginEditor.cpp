@@ -5978,7 +5978,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 if (i > 0) s += ",";
                 s += SFE (postBins[i]);
             }
-            s += "]});}catch(e){}";
+            s += "],sr:";   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
+            s << juce::String (audioProcessor.getSampleRate(), 1);
+            s += "});}catch(e){}";
             webView->evaluateJavascript (s, nullptr);
         }
     }
