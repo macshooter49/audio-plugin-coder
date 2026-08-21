@@ -1870,6 +1870,20 @@ private:
     // fb414 — SEND MODE, per device kind x instance. [kind][inst0]; nullptr reads as insert.
     // fb435 — sized off kFxKinds, not a literal. At 9 it silently excluded the fx4 four.
     std::atomic<float>* sendRef_[kFxKinds][(size_t) ParameterIDs::kFxInstances] {};
+    // fb444 — THE LANE MAP. Which band of an upstream Splitter each device lives in, plus the
+    // per-block resolution of that into slot indices. Resolved once per block in
+    // resolveLanes(), read per sample by the serial chain — no strings, no allocation.
+    std::atomic<float>* laneRef_[kFxKinds][(size_t) ParameterIDs::kFxInstances] {};
+    static constexpr int kMaxLanes = 4;
+    std::array<int,  (size_t) kChainMax> laneSplitter_ {};   // slot -> the Splitter slot above it, or -1
+    std::array<int,  (size_t) kChainMax> laneIdx_      {};   // slot -> which lane (0-based), or -1
+    std::array<int,  (size_t) kChainMax> lanePrev_     {};   // slot -> previous device in the SAME lane, or -1
+    std::array<bool, (size_t) kChainMax> laneConsumed_ {};   // slot -> a later same-lane device eats me
+    std::array<int,  (size_t) kChainMax> laneSplSlot_  {};   // Splitter slot -> its 0..5 buffer index, else -1
+    bool laneClaimed_[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] {};
+    bool laneAny_ = false;                                   // fast bail: no Splitter in the chain
+    std::array<int, (size_t) ParameterIDs::kFxInstances> splLanes_ {};   // live lane count per Splitter
+    void resolveLanes() noexcept;
     void cacheSendRefs();
     void cacheFx3Refs();
     void cacheFx4Refs();     // fb426 — equalizer / widen / compress / ott

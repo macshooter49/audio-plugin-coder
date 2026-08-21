@@ -4274,6 +4274,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                     B (p + "SEND", d, false);
                 }
         }
+
+        // ═══════ fb444 — THE LANE. Which band of an upstream Splitter this device lives in ══════
+        // Serum 2's Splitter is a list with lane headers: LOWS / MIDS / HIGHS, each with a "+",
+        // and a device sits UNDER the lane it belongs to. That is not a graph — it is ONE extra
+        // property per device, and the rack's existing rejoin (the unconsumed-slot sum) already
+        // does the merge. So: one choice per device, registered off the same single kind table
+        // as SEND so the two can never drift apart, and DEFAULT 0 = "Full" — every existing
+        // project loads bit-identical because a device with no Splitter above it ignores this.
+        {
+            const juce::StringArray laneOpts { "Full", "Lane 1", "Lane 2", "Lane 3", "Lane 4",
+                                               "Reserved 6", "Reserved 7", "Reserved 8" };
+            for (int k = 0; k < tw_fx::kKindCount; ++k)
+                for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
+                {
+                    juce::String p (tw_fx::kKindPfx[k]);
+                    if (nn > 1) p = p.dropLastCharacters (1) + juce::String (nn) + "_";
+                    const juce::String d = juce::String (tw_fx::kKindNm[k])
+                                         + (nn > 1 ? (" " + juce::String (nn)) : juce::String()) + " Lane";
+                    C (p + "LANE", d, laneOpts, 0);
+                }
+        }
     }
 
     layout.add (std::make_unique<juce::AudioParameterChoice>(
@@ -5003,6 +5024,67 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
 
 // fb414 — the SEND refs, for every device kind and instance in one table. Built from the same
 // prefix list the params were, so the two cannot drift; a nullptr simply reads as insert.
+// ═══════════════════ fb444 — RESOLVE THE LANES (once per block, no allocation) ═══════════════
+// Serum 2's Splitter is a LIST with lane headers, not a graph: LOWS / MIDS / HIGHS each with a
+// "+", and a device sits UNDER the lane it belongs to. Read that literally and the whole feature
+// is one walk down the chain the rack already has:
+//
+//     [Splitter L/M/H]  [Distortion lane=Mid]  [Filter lane=High]  [Reverb lane=Full]
+//        opens lanes      eats lane 1            eats lane 2         ignores lanes
+//
+//   · a Splitter slot OPENS a lane group and publishes N lane buffers
+//   · a later device whose Lane is 1..N reads that lane instead of the normal chain input
+//   · two devices in the SAME lane chain to each other, in card order — so a lane is itself a
+//     little serial chain, which is exactly what the picture shows
+//   · a device set to "Full" ignores the Splitter entirely and behaves as it always did
+//
+// THE MERGE IS NOT NEW CODE. The rack already sums every slot whose output nothing downstream
+// claimed (fb351's rejoin). A lane's LAST device is unclaimed, so it lands in the mix on its own;
+// an UNUSED lane is summed by the Splitter itself, so a band with no device in it still passes
+// through. That is why this costs no change to FxChainTopology and no widening of any mask.
+void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
+{
+    const int nSlots = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+    laneAny_ = false;
+    for (int c = 0; c < nSlots; ++c)
+    {
+        laneSplitter_[(size_t) c] = -1; laneIdx_[(size_t) c] = -1;
+        lanePrev_[(size_t) c] = -1; laneConsumed_[(size_t) c] = false;
+        laneSplSlot_[(size_t) c] = -1;
+    }
+    for (int a = 0; a < ParameterIDs::kFxInstances; ++a)
+        for (int k = 0; k < kMaxLanes; ++k) laneClaimed_[(size_t) a][(size_t) k] = false;
+
+    int curSpl = -1, curInst = -1, curLanes = 0;
+    for (int c = 0; c < nSlots; ++c)
+    {
+        const auto& ce = chainOrder_[(size_t) c];
+        if (ce.kind == 15)                       // a Splitter opens a new lane group
+        {
+            curSpl = c;
+            curInst = juce::jlimit (0, ParameterIDs::kFxInstances - 1, ce.inst - 1);
+            curLanes = juce::jlimit (2, kMaxLanes, splLanes_[(size_t) curInst]);
+            laneSplSlot_[(size_t) c] = curInst;
+            laneAny_ = true;
+            continue;
+        }
+        if (curSpl < 0) continue;                // nothing above us — plain chain
+        std::atomic<float>* lr = nullptr;
+        if (ce.kind >= 0 && ce.kind < kFxKinds
+            && ce.inst >= 1 && ce.inst <= ParameterIDs::kFxInstances)
+            lr = laneRef_[(size_t) ce.kind][(size_t) (ce.inst - 1)];
+        // fb373 — a choice is an INDEX. Never lround(raw * (N-1)).
+        const int L = (lr != nullptr) ? juce::jlimit (0, kMaxLanes, (int) lr->load()) : 0;
+        if (L <= 0 || L > curLanes) continue;    // "Full", or a lane this Type does not have
+        laneSplitter_[(size_t) c] = curSpl;
+        laneIdx_[(size_t) c]      = L - 1;
+        for (int j = c - 1; j > curSpl; --j)     // chain within the lane, in card order
+            if (laneSplitter_[(size_t) j] == curSpl && laneIdx_[(size_t) j] == L - 1)
+            { lanePrev_[(size_t) c] = j; laneConsumed_[(size_t) j] = true; break; }
+        laneClaimed_[(size_t) curInst][(size_t) (L - 1)] = true;
+    }
+}
+
 void TerrainInstrumentAudioProcessor::cacheSendRefs()
 {
     // fb435 — was a SECOND hand-copied list, still nine kinds long: the fx4 four had SEND
@@ -5013,6 +5095,7 @@ void TerrainInstrumentAudioProcessor::cacheSendRefs()
             juce::String p (tw_fx::kKindPfx[k]);
             if (n > 1) p = p.dropLastCharacters (1) + juce::String (n) + "_";
             sendRef_[(size_t) k][(size_t) (n - 1)] = apvts.getRawParameterValue (p + "SEND");
+            laneRef_[(size_t) k][(size_t) (n - 1)] = apvts.getRawParameterValue (p + "LANE");   // fb444
         }
 }
 
@@ -8268,6 +8351,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int n = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
         for (int c = 0; c < n; ++c) masks[c] = maskOf (chainOrder_[(size_t) c]);
         fxTopo_.build (masks, n);
+        resolveLanes();   // fb444 — turn the flat card list into Splitter lane ownership
 
         // Scatter the ENTRY masks back to per-device arrays — these, not the full route masks, are
         // what the voices tap, so a source routed to three devices is still summed only ONCE.
@@ -9985,6 +10069,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (rightChannel != nullptr) rightChannel[i] -= (exDryR != nullptr ? exDryR[i] : 0.0f) * sc;
             }
             float pendL[(size_t) kChainMax] = {}, pendR[(size_t) kChainMax] = {};
+            // fb444 — the Splitter's published bands. Only a Splitter slot writes here, so this is
+            // six instances x four lanes, not one per chain slot.
+            float lnL[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] = {};
+            float lnR[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] = {};
             const int nSlots = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
             for (int c = 0; c < nSlots; ++c)
             {
@@ -9996,6 +10084,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (fm.any())
                     for (int j = 0; j < c; ++j)
                         if (fm.test (j)) { inL += pendL[j]; inR += pendR[j]; }
+                // fb444 — IN A LANE? Then the input is not the normal chain input at all: it is
+                // either the previous device in this same lane, or the Splitter's band itself.
+                if (laneAny_ && laneSplitter_[(size_t) c] >= 0)
+                {
+                    const int pv = lanePrev_[(size_t) c];
+                    if (pv >= 0) { inL = pendL[(size_t) pv]; inR = pendR[(size_t) pv]; }
+                    else
+                    {
+                        const int si = laneSplSlot_[(size_t) laneSplitter_[(size_t) c]];
+                        const int lk = laneIdx_[(size_t) c];
+                        if (si >= 0 && lk >= 0)
+                        { inL = lnL[(size_t) si][(size_t) lk]; inR = lnR[(size_t) si][(size_t) lk]; }
+                    }
+                }
 
                 float oL = inL, oR = inR;
                 if      (ce.kind == 3) applyGrn (ce.inst - 1, inL, inR, oL, oR);   // fb362 — every instance, one path
@@ -10027,9 +10129,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 pendL[c] = oL; pendR[c] = oR;
             }
-            // whatever nothing downstream claimed comes back to the mix
+            // whatever nothing downstream claimed comes back to the mix. fb444 — a device that
+            // another device IN THE SAME LANE eats is claimed too, so only a lane's LAST device
+            // reaches the mix. That is the whole merge: no new summing code, just one more claim.
             for (int c = 0; c < nSlots; ++c)
-                if (! fxTopo_.consumed[c])
+                if (! fxTopo_.consumed[c] && ! laneConsumed_[(size_t) c])
                 {
                     leftChannel[i] += pendL[c];
                     if (rightChannel != nullptr) rightChannel[i] += pendR[c];
