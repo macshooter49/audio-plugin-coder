@@ -1624,8 +1624,18 @@ private:
     static constexpr int kOttSendBase  = kCmpSendBase + ParameterIDs::kFxInstances;    // 69 — ott
     static_assert (kOttSendBase + ParameterIDs::kFxInstances
                    <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
-    static constexpr int kPoolSendCount = kOttSendBase + ParameterIDs::kFxInstances;   // 75
-    static_assert (kPoolSendCount >= kOttSendBase + ParameterIDs::kFxInstances,
+    // fb444 — the last three kinds. THE FOUR CONSTANTS MOVE TOGETHER, and this time three
+    // devices land at once: each of the three scouts independently derived "sendBase = 75",
+    // which is correct for whichever device is the ONLY new one. Three of them stacked is
+    // 75 / 81 / 87, and writing 75 three times is fb391 again — green build, six slots past
+    // the end of four pool arrays, auval 139.
+    static constexpr int kBodSendBase  = kOttSendBase + ParameterIDs::kFxInstances;    // 75 — bode
+    static constexpr int kUtlSendBase  = kBodSendBase + ParameterIDs::kFxInstances;    // 81 — utility
+    static constexpr int kSplSendBase  = kUtlSendBase + ParameterIDs::kFxInstances;    // 87 — splitter
+    static_assert (kSplSendBase + ParameterIDs::kFxInstances
+                   <= tw::SynthVoice::kPoolSends, "pool send bases outgrew kPoolSends");
+    static constexpr int kPoolSendCount = kSplSendBase + ParameterIDs::kFxInstances;   // 93
+    static_assert (kPoolSendCount >= kSplSendBase + ParameterIDs::kFxInstances,
                    "kPoolSendCount must cover the LAST send base + its instances");
     static_assert (kPoolSendCount <= tw::SynthVoice::kPoolSends,
                    "the voice's kPoolSends must cover every pool send the processor writes");
@@ -1645,7 +1655,8 @@ private:
     //    is audio-thread safe by construction: no strings, no allocation, no lock, no race with the
     //    UI (the UI only writes _ACTIVE/_RANK params; the next block simply reads the new values).
     // kind: 0=Reverb 1=Delay 2=Distortion 3=Granular 4=Tape 5=Filter 6=Chorus 7=Flanger
-    //       8=Phaser 9=Equalizer 10=Widen 11=Compress 12=OTT
+    //       8=Phaser 9=Equalizer 10=Widen 11=Compress 12=Multiband
+    //       13=Bode 14=Utility 15=Splitter
     struct ChainEntry { int kind; int inst; float rank; };
     // fb375 — one slot per addable device, so the rack can never silently drop one. This had been
     // stale since fb365: it read `4 * kFxInstances` (=24) with a "6 of each of 4 devices" comment
@@ -1653,8 +1664,8 @@ private:
     // at :4392/:4417 and vanished with no message. The guard fails safe (no overflow — that was
     // checked) but a silently-dropped device reads as "the rack is broken". Derive it from the kind
     // count instead of hand-maintaining a number: 6 kinds x 6 instances, ~432 bytes.
-    static constexpr int kFxKinds  = 13;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12
-    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 78 (13 x 6)
+    static constexpr int kFxKinds  = 16;     // fb413 — + chorus 6, flanger 7, phaser 8 · fb426 — + equalizer 9, widen 10, compress 11, ott 12 · fb444 — + bode 13, utility 14, splitter 15
+    static constexpr int kChainMax = kFxKinds * ParameterIDs::kFxInstances;    // 96 (16 x 6)
     static_assert (kChainMax <= tw::FxChainTopology::kMaxSlots,
                    "every activatable device must fit in the topology's slot table");
     std::array<ChainEntry, (size_t) kChainMax> chainOrder_ {};

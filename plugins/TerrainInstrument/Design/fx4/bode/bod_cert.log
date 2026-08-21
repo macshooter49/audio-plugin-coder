@@ -1,0 +1,45 @@
+
+══ bod_cert — BODE frequency shifter (kind 13) ══
+
+§A — DIRECTION. Run first. A flipped sideband is a different instrument.
+  ok    dir=UP puts a 1 kHz tone at 1100 Hz, NOT 900             1 kHz + 100 Hz, dir=up -> peak 1100 Hz  ·  1100 is 49.0 dB over 900
+  ok    dir=DOWN mirrors it to 900 Hz                            dir=down -> peak 899 Hz  ·  900 is 49.0 dB over 1100
+  ok    dir=CENTRE is ring mod: BOTH sidebands, no carrier       both sidebands within 0.0 dB, carrier suppressed -104.1 dB
+
+§B — RANGE. The engine this grew from caps at 1000 Hz behind a clamp reading 2000.
+  ok    full travel really is +5000 Hz (not the inherited 1000)  knob at 100%: 1 kHz -> 6000 Hz (want 6000)  ·  engine meter says +4999.8 Hz
+  ok    and -5000 Hz the other way                               knob at 0%: 6 kHz -> 1000 Hz (want 1000)  ·  meter -4999.8 Hz
+  ok    ... and the gate FAILS on the inherited mapping (negative control) the OLD FMAX=1000 mapping reaches only 1000 Hz at full travel
+
+§C — NOTHING FREE-RUNS. Feedback maxed, input removed, the tail must die.
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 0: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 1: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 2: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 3: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 4: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 5: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 6: tail after 1 s of silence = -240.0 dBFS
+  ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 7: tail after 1 s of silence = -240.0 dBFS
+
+§D — LOOP STABILITY. A shifter in a loop walks its content out of band.
+  ok    never diverges, never NaNs, on any Type x Character      12 s at max feedback x 8 types x 8 chars: worst peak 0.17
+  ok    Character has unit slope at zero (it cannot move loop gain) worst small-signal gain deviation across Characters: 0.05 dB
+  ok    the in-loop clip keeps a HOT input bounded (not just stable) 72 cells swept · worst 1.45 (3.2 dBFS) at blur 1.0 / time 0.45 / char 0
+
+§E — THE MIX LAW, THE STEREO MIRROR, AND LOW KEEP.
+  ok    Mix 0 passes the dry through untouched                   worst |out - in| at Mix 0 = 0.00e+00
+  ok    full Spread mirrors the shift: L and R go OPPOSITE ways  L lands 1150 Hz, R lands 850 Hz (mirror: one up, one down)
+  ok    Spread at centre leaves R unshifted (the axis really is continuous) L 1150 Hz · R 1000 Hz (R should sit near the unshifted tone)
+  ok    Low Keep really does bypass the shifter below its corner 60 Hz tone with Low Keep at 200 Hz -> peak stays at 60 Hz
+
+§F — EVERY KNOB KEEPS MOVING (no plateaus, no dead travel).
+  ok    Shift transforms across its whole travel                 Shift     smallest spectral step across 6 = 6.090 dB
+  ok    Direction transforms across its whole travel             Direction smallest spectral step across 6 = 1.797 dB
+  ok    Fdbk transforms across its whole travel                  Fdbk      smallest spectral step across 6 = 1.256 dB
+  ok    Time transforms across its whole travel                  Time      smallest spectral step across 6 = 3.900 dB
+  ok    Blur transforms across its whole travel                  Blur      smallest spectral step across 6 = 1.125 dB
+  ok    Damping transforms across its whole travel               Damping   smallest spectral step across 6 = 0.402 dB
+  ok    Drift transforms across its whole travel                 Drift     smallest spectral step across 6 = 2.915 dB
+
+══ RESULT: 28 pass, 0 FAIL ══
+

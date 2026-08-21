@@ -114,7 +114,11 @@ struct FxChainTopology
     // upstream SLOTS, so THE MASK WIDTH IS THE SLOT CEILING. See the SlotMask comment above for
     // why this is the third size of one bug — and note that raising this number without widening
     // SlotMask is exactly the mistake, because the build stays green and the UB is silent.
-    static constexpr int kMaxSlots    = 96;
+    // fb444 — raised 96 -> 128 DELIBERATELY, while the file was already open, because 96
+    // was exactly 16 kinds x 6 and the three devices landing tonight spend the last three.
+    // 128 is the SlotMask's full width, so this is the last time this number can move at all;
+    // the static_assert below is what makes that a build error rather than silent UB.
+    static constexpr int kMaxSlots    = 128;
     static_assert (kMaxSlots <= 128, "kMaxSlots cannot exceed the SlotMask bit width");
     static constexpr uint8_t kAllSrc  = 0x3F; // all six sources: A B C D Sub Noise
 

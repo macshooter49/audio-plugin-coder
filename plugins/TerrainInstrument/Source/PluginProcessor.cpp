@@ -53,10 +53,12 @@ static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window
 namespace tw_fx {
     static const char* const kKindPfx[] = { "SYN_RVB_","SYN_DLY_","SYN_DST_","SYN_GRN_",
                                             "SYN_TPE_","SYN_FLT_","SYN_CHO_","SYN_FLA_","SYN_PHA_",
-                                            "SYN_EQZ_","SYN_WID_","SYN_CMP_","SYN_OTT_" };
+                                            "SYN_EQZ_","SYN_WID_","SYN_CMP_","SYN_OTT_",
+                                            "SYN_BOD_","SYN_UTL_","SYN_SPL_" };
     static const char* const kKindNm [] = { "Reverb","Delay","Distortion","Granular",
                                             "Tape","Filter","Chorus","Flanger","Phaser",
-                                            "Equalizer","Widen","Compress","Multiband" };
+                                            "Equalizer","Widen","Compress","Multiband",
+                                            "Bode","Utility","Splitter" };
     static constexpr int kKindCount = (int) (sizeof (kKindPfx) / sizeof (kKindPfx[0]));
     static_assert (kKindCount == (int) (sizeof (kKindNm) / sizeof (kKindNm[0])),
                    "prefix and display-name tables must move together");
@@ -8145,7 +8147,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                                widRefs_[(size_t) i].src,
                                                cmpRefs_[(size_t) i].src,
                                                ottRefs_[(size_t) i].src };
-        for (int dv = 0; dv < 7; ++dv)
+        // fb444 — the loop bound is DERIVED, never a literal. `bases[7]`/`srcs[7]`/`dv < 7`
+        //   was three hand-maintained copies of one number, and fb435 is what happens when a
+        //   device is added to two of them. Now adding a kind is one entry in each array and
+        //   the bound follows; the static_assert catches the half-edit at compile time.
+        static constexpr int kRouted = (int) (sizeof (bases) / sizeof (bases[0]));
+        static_assert (kRouted == (int) (sizeof (srcs) / sizeof (srcs[0])),
+                       "every routed device needs BOTH a base and a src[] — fb435 was one missing half");
+        for (int dv = 0; dv < kRouted; ++dv)
         {
             float ps = 0.0f;
             for (int k = 0; k < 6; ++k)
