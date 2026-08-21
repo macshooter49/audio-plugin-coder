@@ -1,0 +1,1542 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>FX5 — Bode · Utility · Splitter, live</title>
+<style>
+:root,#syn-panel{
+  color:var(--text-primary);
+  --bg-main:       #1A1A2E;
+  --bg-hero:       #12121F;
+  --bg-surface:    #232340;
+  --bg-card:       #2A2A48;
+  --bg-card-2:     #252340;
+  --knob-track:    rgba(120,118,160,0.35);
+  --purple-600:    #9B6DFF;
+  --purple-500:    #8B5CF6;
+  --purple-400:    #B794FF;
+  --border:        rgba(58,58,88,0.55);
+  --border-strong: rgba(140,130,180,0.45);
+  --text-primary:  #ECE8F2;
+  --text-secondary: #C5BFD2;
+  --text-muted:    #908599;
+  --text-dim:      #6E6580;
+  --line-bright:   #ECE8F2;
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:radial-gradient(1100px 560px at 30% -10%,#241d3a 0,transparent 60%),#141220;
+  color:var(--text-primary);font-family:-apple-system,'SF Pro Text',system-ui,sans-serif;
+  -webkit-font-smoothing:antialiased;display:flex;flex-direction:column;align-items:center;
+  gap:12px;padding:22px 18px 40px}
+h1{font:600 15px/1.2 -apple-system,system-ui;letter-spacing:.02em;margin:0;color:#e8e4f5}
+.sub{font:400 11.5px/1.5 -apple-system,system-ui;color:#9a92b8;max-width:760px;text-align:center;margin:0}
+.bar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;justify-content:center}
+.bar .lbl{font:500 10px -apple-system,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#7f789c;margin:0 2px 0 10px}
+button{background:#241f38;color:#e8e4f5;border:1px solid #3a3356;border-radius:7px;
+  padding:6px 12px;font:500 11.5px -apple-system,system-ui;cursor:pointer}
+button:hover{background:#2e2846}
+button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
+#status{font:400 11px -apple-system,system-ui;color:#8f88ab;min-height:15px}
+#err{font:400 11px/1.45 ui-monospace,Menlo,monospace;color:#ff9a9a;white-space:pre-wrap;max-width:760px}
+#rackwrap{max-width:100%;overflow-x:auto;overflow-y:hidden;padding:6px 0 2px;scrollbar-width:none}
+#rackwrap::-webkit-scrollbar{display:none}
+#scale{transform-origin:top left;transform:scale(1.2)}
+#rack{display:flex;gap:9px;height:170px;width:max-content}
+#panels{display:flex;gap:9px;width:max-content;align-items:flex-start;margin-top:10px}
+.bpslot{flex:0 0 auto}
+@keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
+#syn-panel .fxr-switch{ position:absolute; top:-18px; left:0; z-index:3; display:flex; align-items:center; gap:0; }
+#syn-panel .fxr-seg{ display:flex; border:1px solid var(--border-strong); border-radius:7px; overflow:hidden; }
+#syn-panel .fxr-tab{ background:transparent; border:0; color:var(--text-muted); font-family:inherit; font-size:9px; letter-spacing:.03em; padding:2px 8px; cursor:pointer; display:flex; align-items:center; gap:5px; font-weight:400; line-height:1; }
+#syn-panel .fxr-tab .fxr-k{ font-weight:700; }
+#syn-panel .fxr-tab + .fxr-tab{ border-left:1px solid var(--border-strong); }
+#syn-panel .fxr-tab.on{ color:var(--purple-400); }
+#syn-panel .fxr-tabhint{ margin-left:auto; font-size:9px; color:var(--text-dim); letter-spacing:1px; font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
+#syn-panel .fxr-macros-pane{ flex-direction:column; justify-content:center; }
+#syn-panel .fxr-clip{ flex:1; min-width:0; overflow-x:auto; overflow-y:hidden; display:flex; scrollbar-width:none; }
+#syn-panel .fxr-clip::-webkit-scrollbar{ display:none; }
+#syn-panel .fxr-rack{ display:flex; gap:9px; align-items:stretch; padding:0; min-height:0; }
+#syn-panel .fxr-dev{ flex:0 0 272px; height:100%; min-height:0; background:transparent; border:1px solid var(--border-strong); border-radius:8px; display:flex; flex-direction:column; transition:border-color .15s, opacity .15s; position:relative; }
+#syn-panel .fxr-dev:hover{ border-color:rgba(255,255,255,.34); }
+#syn-panel .fxr-dev.fxr-off{ opacity:.45; }
+#syn-panel .fxr-dev.fxr-off *{ animation-play-state:paused !important; }
+#syn-panel .fxr-head{ display:flex; align-items:center; gap:6px; padding:5px 8px 4px; height:26px; }
+#syn-panel .fxr-grip{ color:var(--text-dim); font-size:11px; line-height:1; letter-spacing:-2px; cursor:grab; user-select:none; display:flex; align-items:center; }
+#syn-panel .fxr-grip:active{ cursor:grabbing; }
+#syn-panel .fxr-name{ font-size:11.5px; color:var(--text-primary); font-weight:500; white-space:nowrap; line-height:1; display:flex; align-items:center; }
+#syn-panel .fxr-type{ position:relative; font-size:9px; color:var(--text-secondary); border:1px solid var(--border-strong); border-radius:9px; padding:0 7px; height:16px; display:flex; align-items:center; gap:4px; cursor:pointer; font-weight:300; line-height:1; margin-left:3px; white-space:nowrap; }
+#syn-panel .fxr-dev.noback .fxr-type{ max-width:132px; }
+#syn-panel .fxr-dev.noback .fxr-preset{ max-width:104px; }
+#syn-panel .fxr-dev.noback .fxr-headr{ margin-left:6px; }
+#syn-panel .fxr-type .fxr-car{ color:var(--text-muted); font-size:8px; position:relative; top:.5px; }
+#syn-panel .fxr-tw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-tw > span{ grid-area:1/1; white-space:nowrap; display:inline-flex; align-items:center; gap:4px; }
+#syn-panel .fxr-tg{ visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-type-native, #syn-panel .fxr-bk-native{ position:absolute; inset:0; width:100%; height:100%; margin:0; padding:0; border:none; background:transparent; color:transparent; opacity:0; cursor:pointer; -webkit-appearance:none; appearance:none; font-size:9px; }
+#syn-panel .fxr-type-native:focus, #syn-panel .fxr-bk-native:focus{ outline:none; }
+#syn-panel .fxr-preset{ position:relative; display:flex; align-items:center; gap:5px; width:88px; height:16px; border:1px solid var(--border-strong); border-radius:9px; padding:0 9px; cursor:pointer; line-height:1; overflow:hidden; box-sizing:border-box; }
+#syn-panel .fxr-preset .fxr-star{ color:var(--purple-400); font-size:8px; line-height:1; position:relative; top:-1px; }
+#syn-panel .fxr-preset .fxr-pname{ flex:1; min-width:0; text-align:center; font-size:9px; color:var(--text-secondary); font-weight:300; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-preset .fxr-car{ color:var(--text-muted); font-size:8px; margin-left:auto; position:relative; top:.5px; }
+#syn-panel .fxr-spacer{ flex:1; }
+#syn-panel .fxr-headr{ display:flex; align-items:center; gap:9px; }
+#syn-panel .fxr-code{ font-weight:300; font-size:9px; color:var(--text-muted); line-height:1; white-space:nowrap; }
+#syn-panel .fxr-pwr{ width:9px; height:9px; border-radius:50%; border:1px solid var(--purple-400); background:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); cursor:pointer; flex:0 0 auto; }
+#syn-panel .fxr-dev.fxr-off .fxr-pwr{ background:transparent; border-color:var(--text-muted); box-shadow:none; }
+#syn-panel .fxr-swap, #syn-panel .fxr-x{ width:14px; height:14px; display:grid; place-items:center; cursor:pointer; padding:0; background:transparent; border:none; }
+#syn-panel .fxr-swap svg, #syn-panel .fxr-x svg{ grid-area:1/1; width:14px; height:14px; display:block; }
+#syn-panel .fxr-x{ color:var(--text-muted); }
+#syn-panel .fxr-x:hover{ color:#EF4444; }
+#syn-panel .fxr-core{ flex:1 1 0; min-height:0; margin:1px 10px 0; position:relative; overflow:hidden; color:var(--text-primary); }
+#syn-panel .fxr-core svg{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+.fxr-core canvas{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+#syn-panel .fxr-core .eqz-n{ cursor:grab; }
+#syn-panel .fxr-core .eqz-n.hot{ fill:var(--purple-400); }
+#syn-panel .fxr-core[data-core="eqz"].eqz-over{ cursor:grab; }
+#syn-panel .fxr-core .ott-xl{ cursor:ew-resize; }
+#syn-panel .fxr-core .ott-xl.hot{ stroke:var(--purple-400); opacity:1; }
+#syn-panel .fxr-core text{ font-family:-apple-system,'SF Pro Display',system-ui,sans-serif; font-weight:300; pointer-events:none; user-select:none; }
+#syn-panel .fxr-core .dst-curve{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-core .grn-wave{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
+          filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
+          animation:mvBreathe 3.2s ease-in-out infinite; }
+#syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
+#syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+#syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+#syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
+#syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
+#syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
+#syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
+#syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+#syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
+#syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
+#syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-core .bod-n{ cursor:grab; }
+#syn-panel .fxr-core .bod-n.hot{ fill:var(--purple-400); }
+#syn-panel .fxr-core[data-core="bod"].bod-over{ cursor:grab; }
+#syn-panel .fxr-core .spl-n{ cursor:ew-resize; }
+#syn-panel .fxr-core .spl-n.hot{ fill:var(--purple-400); }
+#syn-panel .fxr-core .spl-xl.hot{ stroke:var(--purple-400); opacity:1; }
+#syn-panel .fxr-core[data-core="spl"].spl-over{ cursor:ew-resize; }
+#syn-panel .fxr-core .spl-add{ cursor:pointer; }
+#syn-panel .fxr-core .spl-add:hover .spl-addg{ stroke:var(--purple-400); }
+#syn-panel .fxr-core .spl-add:hover .spl-addt{ fill:var(--purple-400); }
+#syn-panel .utl-bank .fxr-pill{ height:auto; font-size:9px; border-radius:7px; }
+#syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
+                              border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
+                              margin-left:4px; cursor:pointer; }
+#syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
+#syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+#syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
+#syn-panel .fxr-r.fxr-on{ color:var(--text-primary); border-color:var(--purple-400); text-shadow:0 0 4px rgba(255,255,255,.5); }
+#syn-panel .fxr-snd{ flex:0 0 15px; height:14px; display:flex; align-items:center; justify-content:center;
+          border:1px solid var(--border); border-radius:3px; cursor:pointer; box-sizing:border-box;
+          color:var(--text-muted); transition:color .12s, border-color .12s; }
+#syn-panel .fxr-snd svg{ display:block; }
+#syn-panel .fxr-snd:hover{ color:var(--text-secondary); }
+#syn-panel .fxr-snd.fxr-on{ color:var(--purple-400); border-color:var(--purple-400);
+          filter:drop-shadow(0 0 3px rgba(183,148,255,.55)); }
+#syn-panel .fxr-add{ flex:0 0 110px; align-self:stretch; border:1px dashed var(--border-strong); border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:7px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-add:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-plus{ font-size:24px; font-weight:200; line-height:.7; }
+#syn-panel .fxr-rack.fxr-blank{ flex:1 1 auto; min-width:0; }
+#syn-panel .fxr-empty{ flex:1 1 auto; align-self:stretch; min-width:0; border:1px dashed var(--border-strong);
+          border-radius:8px; display:flex; flex-direction:column; align-items:center; justify-content:center;
+          gap:9px; color:var(--text-muted); cursor:pointer; transition:.15s; }
+#syn-panel .fxr-empty:hover{ border-color:var(--purple-400); color:var(--purple-400); }
+#syn-panel .fxr-empty .fxr-eplus{ width:30px; height:30px; display:grid; place-items:center; }
+#syn-panel .fxr-empty .fxr-eplus svg{ width:30px; height:30px; display:block; }
+#syn-panel .fxr-empty .fxr-t{ font-size:10px; letter-spacing:.06em; font-weight:300; }
+#syn-panel .fxr-add .fxr-t{ font-size:9px; letter-spacing:.05em; text-align:center; line-height:1.4; font-weight:300; }
+#syn-panel .fxr-dev.fxr-drag{ opacity:.85; box-shadow:0 12px 30px rgba(0,0,0,.5); z-index:5; }
+#syn-panel .fxr-swap{ color:var(--text-muted); transition:color .12s, filter .12s; }
+#syn-panel .fxr-swap .ic-arrow{ display:none; }
+#syn-panel .fxr-swap.act .ic-plus{ display:none; }
+#syn-panel .fxr-swap.act .ic-arrow{ display:block; }
+#syn-panel .fxr-swap:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
+#syn-panel .fxr-swap.act{ color:#fff; }
+#syn-panel .fxr-back{ display:none; flex:1 1 0; min-height:0; flex-direction:column; padding:7px 12px 9px; }
+#syn-panel .fxr-dev.swapped .fxr-core, #syn-panel .fxr-dev.swapped .fxr-ctrls{ display:none; }
+#syn-panel .fxr-dev.swapped .fxr-back{ display:flex; }
+#syn-panel .fxr-bk-row{ display:flex; justify-content:space-between; align-items:center; flex:0 0 auto; padding:0 2px 2px; }
+#syn-panel .fxr-bk-sel{ display:inline-flex; align-items:center; gap:6px; cursor:pointer; line-height:1.55; }
+#syn-panel .fxr-bk-sel .fxr-bk-k{ font-size:8.5px; color:var(--text-muted); font-weight:300; letter-spacing:.02em; }
+#syn-panel .fxr-bk-vwrap{ position:relative; display:inline-flex; align-items:center; }
+#syn-panel .fxr-bk-sel .fxr-bk-v{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; color:var(--text-primary); font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#syn-panel .fxr-bk-sel .fxr-bk-v .fxr-car{ color:var(--text-muted); font-size:8px; }
+#syn-panel .fxr-bk-sel:hover .fxr-bk-v{ color:#fff; }
+#syn-panel .fxr-bk-vw{ display:grid; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-vw > span{ grid-area:1/1; }
+#syn-panel .fxr-bk-sel .fxr-bk-g{ display:inline-flex; align-items:center; gap:4px; font-size:9.5px; font-weight:400; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; visibility:hidden; pointer-events:none; }
+#syn-panel .fxr-bk-sel .fxr-bk-g .fxr-car{ font-size:8px; }
+#syn-panel .fxr-bk-grid{ flex:1 1 0; min-height:0; display:grid; grid-template-columns:1fr 11px 1fr 11px 1fr 11px 1fr; grid-template-rows:1fr 1fr; align-items:center; justify-items:center; }
+#syn-panel .fxr-bk-sep{ grid-row:1 / 3; width:1px; align-self:stretch; justify-self:center; background:var(--border-strong); margin:5px 0; }
+#syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+#syn-panel .fxr-bk-knob .fxr-dial{ width:32px; height:32px; cursor:ns-resize; }
+#syn-panel .fxr-bk-knob .fxr-lab{ font-size:7.5px; }
+#syn-panel .fxr-core[data-conv="1"] .conv-drop{ position:absolute; inset:0; z-index:5; display:none; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px dashed var(--purple-400); border-radius:6px; background:rgba(18,16,30,.66); color:var(--purple-400); font-size:10px; letter-spacing:.04em; pointer-events:none; }
+#syn-panel .fxr-core[data-conv="1"].conv-drag .conv-drop{ display:flex; }
+#syn-panel .fxr-core[data-conv="1"] .cd-big{ font-size:18px; font-weight:200; line-height:.8; }
+#syn-panel .fxr-core[data-conv="1"] .conv-dur{ position:absolute; right:2px; bottom:1px; z-index:3; font-size:8px; color:var(--text-dim); font-variant-numeric:tabular-nums; pointer-events:none; }
+        /* fb445 — THE LAST THREE CORES. Bode: one node on a shift rail. Splitter: lane REGIONS on the
+           spectrum with crossover NODES (the EQ's grammar — the node is the handle). Utility: a button
+           bank, no scope, per Max. Same strokes, same purple, nothing new invented. */
+        #syn-panel .fxr-core .bod-n{ cursor:grab; }
+        #syn-panel .fxr-core .bod-n.hot{ fill:var(--purple-400); }
+        #syn-panel .fxr-core[data-core="bod"].bod-over{ cursor:grab; }
+        #syn-panel .fxr-core .spl-n{ cursor:ew-resize; }
+        #syn-panel .fxr-core .spl-n.hot{ fill:var(--purple-400); }
+        #syn-panel .fxr-core .spl-xl.hot{ stroke:var(--purple-400); opacity:1; }
+        #syn-panel .fxr-core[data-core="spl"].spl-over{ cursor:ew-resize; }
+        #syn-panel .fxr-core .spl-add{ cursor:pointer; }
+        #syn-panel .fxr-core .spl-add:hover .spl-addg{ stroke:var(--purple-400); }
+        #syn-panel .fxr-core .spl-add:hover .spl-addt{ fill:var(--purple-400); }
+        #syn-panel .utl-bank{ position:absolute; left:0; right:0; top:0; bottom:9px; display:grid; grid-template-columns:repeat(3,1fr);
+                              grid-template-rows:repeat(2,1fr); gap:5px; padding:2px 0 0; }
+        #syn-panel .utl-bank .fxr-pill{ height:auto; font-size:9px; border-radius:7px; }
+        #syn-panel .utl-meter{ position:absolute; left:6.5px; right:6.5px; bottom:1px; height:5px; display:flex; flex-direction:column; gap:1px; }
+        #syn-panel .utl-ch{ flex:1; position:relative; border-radius:1px; background:rgba(255,255,255,0.07); overflow:hidden; }
+        #syn-panel .utl-ch i{ position:absolute; left:0; top:0; bottom:0; width:0%; background:#B794FF; opacity:.0; border-radius:1px; }
+        #syn-panel .utl-bank{ bottom:8px; }
+        /* the lane tag a device wears when it lives inside a Splitter band */
+        #syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
+                              border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
+                              margin-left:4px; cursor:pointer; }
+
+/* the mockup's own scaffolding — NOT part of the lifted rack sheet */
+.fxr-dev{position:relative}
+.bp{display:none;border:1px solid var(--border-strong,#3a3356);border-radius:10px;background:rgba(24,20,38,.72);padding:10px 12px}
+.bp.on{display:block}
+.bp-row{display:flex;gap:10px;align-items:flex-end;margin-bottom:10px}
+.bp-sel{display:flex;flex-direction:column;gap:4px;flex:1;min-width:0}
+.bp-sel label{font:500 9px -apple-system,system-ui;letter-spacing:.08em;text-transform:uppercase;color:#8f88ab}
+.bp-sel select{background:#1c1830;color:#e8e4f5;border:1px solid #3a3356;border-radius:6px;padding:3px 5px;font:400 10.5px -apple-system,system-ui;width:100%}
+.bp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 0;position:relative}
+.bp-k{display:flex;flex-direction:column;align-items:center;gap:4px}
+.bp-k .fxr-lab{font:500 9px -apple-system,system-ui;color:#9a92b8}
+.bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
+</style></head><body>
+<h1>The last three — Bode · Utility · Splitter</h1>
+<p class="sub">The three cards, their cores LIFTED from the plugin (one copy of the code), audible on worklet mirrors of the certified engines.
+Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
+<b>Bode</b>: drag the <b>dot on the rail</b> = Shift (white ghost = where the partials were, purple = where they went), wheel on it = Fdbk, double-click = zero, right-click = Up · Ring · Down.
+<b>Splitter</b>: drag a <b>crossover node</b>, wheel over a <b>band</b> = that lane's gain, right-click a band = Mute · Solo · Flip · Add a device here, the <b>+</b> drops a device into that band.
+<b>Utility</b>: the buttons are the card. Knobs drag up/down, double-click resets.</p>
+<div class="bar">
+  <button id="go">Start audio</button>
+  <button id="play">Play</button>
+  <button id="src">Source: Saw chord</button>
+  <span class="lbl">Hear</span>
+  <button class="hear on" data-h="0">Bode</button><button class="hear" data-h="1">Utility</button>
+  <button class="hear" data-h="2">Splitter</button><button class="hear" data-h="-1">Dry</button>
+  <span class="lbl">Zoom</span>
+  <button class="zoom" data-z="1">1×</button><button class="zoom on" data-z="1.2">1.2×</button><button class="zoom" data-z="1.6">1.6×</button><button class="zoom" data-z="2">2×</button>
+</div>
+<div id="status">Idle.</div><div id="err"></div>
+<div id="rackwrap"><div id="scale"><div id="syn-panel"><div id="rack"></div><div id="panels"></div></div></div></div>
+
+<script id="wk-bod" type="text/plain">// ─────────────────────────────────────────────────────────────────────────────
+// bode-worklet.js — the BODE frequency shifter (chain kind 13) as an AudioWorkletProcessor,
+// so Max can HEAR the spectrum slide in a Safari mockup before judging the card (the fb296 law).
+//
+// A MIRROR OF THE MECHANISM in Source/TerrainBodeFx.h — the same Niemitalo quadrature pair,
+// the same 1-sample align, the same recursive oscillator, the same sideband coefficient
+// (y = i·cos + m·q·sin, m=+1 UP · 0 RING · -1 DOWN, sign PROVEN by bod_cert gate 0), the same
+// ±5000 Hz exponential taper, the same Echobode loop (delay → damping LP → soft clip INSIDE the
+// loop, makeup divided back so Character cannot move loop gain), the same squared input gate so
+// nothing free-runs, the same stereo shift MIRROR. The Characters' voicings are NOT here — this
+// is the card's ears, not the shipping engine; the shipping engine is certified 28/28.
+//
+//   n.port.postMessage({ shift:.5, dir:1, fdbk:0, mix:1, b1..b8, type, character, axis, guard, sync })
+//   n.port.onmessage = e => draw(e.data);   // { shiftHz, blend, fb, lvl, img }
+// ─────────────────────────────────────────────────────────────────────────────
+const AP_I=[0.6923878,0.9360654322959,0.9882295226860,0.9987488452737];
+const AP_Q=[0.4021921162426,0.8561710882420,0.9722909545651,0.9952884791278];
+const SHIFT_MAX=5000, FB_MAX=0.995;
+function tanhF(x){ if(x>5)return 1; if(x<-5)return -1; const x2=x*x; return x*(27+x2)/(27+9*x2); }
+class AP2{ constructor(a){ this.A=a*a; this.x1=this.x2=this.y1=this.y2=0; }
+  p(x){ const y=this.A*(x+this.y2)-this.x2; this.x2=this.x1; this.x1=x; this.y2=this.y1; this.y1=y; return y; } }
+class Quad{
+  constructor(){ this.i=AP_I.map(a=>new AP2(a)); this.q=AP_Q.map(a=>new AP2(a)); this.d=0; this.c=1; this.s=0; this.oc=1; this.os=0; this.n=0; }
+  setHz(hz,fs){ const w=2*Math.PI*hz/fs; this.oc=Math.cos(w); this.os=Math.sin(w); }
+  p(x,m){ let i=x; for(const a of this.i) i=a.p(i); const io=this.d; this.d=i;
+    let q=x; for(const a of this.q) q=a.p(q);
+    const nc=this.oc*this.c-this.os*this.s; this.s=this.os*this.c+this.oc*this.s; this.c=nc;
+    if(++this.n>=512){ this.n=0; const mm=1.5-0.5*(this.c*this.c+this.s*this.s); this.c*=mm; this.s*=mm; }
+    return io*this.c+m*(q*this.s); } }
+class TerrainBode extends AudioWorkletProcessor{
+  constructor(){ super();
+    this.p={shift:.5,dir:1,fdbk:0,mix:1,b1:.5,b2:1,b3:.45,b4:0,b5:0,b6:1,b7:.5,b8:0,type:0,character:0,axis:0,guard:1,sync:0};
+    this.fs=sampleRate; this.quad=[new Quad(),new Quad()];
+    const sz=1<<Math.ceil(Math.log2(this.fs*2.2)); this.mask=sz-1; this.dl=[new Float32Array(sz),new Float32Array(sz)]; this.w=[0,0];
+    this.damp=[0,0]; this.dampG=1; this.lowZ=[0,0]; this.lowG=0; this.lowOn=false;
+    this.dcx=[0,0]; this.dcy=[0,0];
+    this.shiftT=0; this.shiftS=0; this.fbT=0; this.fbS=0; this.timeT=480; this.timeS=480; this.mixT=1; this.mixS=1;
+    this.blend=1; this.ring=1; this.clipK=1; this.spread=-1; this.touch=0; this.env=0; this.gate=0; this.img=0; this.lvl=0;
+    this.port.onmessage=e=>{ Object.assign(this.p,e.data); this.resolve(); }; this.resolve(); this.tick=0; }
+  resolve(){ const p=this.p, c=v=>Math.max(0,Math.min(1,+v||0));
+    const v=2*c(p.shift)-1, mag=Math.pow(SHIFT_MAX+1,Math.abs(v))-1;
+    this.shiftT=(v<0?-mag:mag)+(2*c(p.b1)-1)*2.0;
+    const b=c(p.dir); this.blend=2*b-1; this.ring=1+0.41421356*(1-Math.abs(this.blend));
+    this.fbT=FB_MAX*c(p.fdbk);
+    const ms=0.02*Math.pow(50000,c(p.b3)); this.timeT=Math.max(1,ms*0.001*this.fs);
+    const dHz=400*Math.pow(50,c(p.b6)); this.dampG=1-Math.exp(-2*Math.PI*Math.min(dHz,0.45*this.fs)/this.fs);
+    const lk=c(p.b5); this.lowOn=lk>0.001; const lHz=20*Math.pow(100,lk); this.lowG=1-Math.exp(-2*Math.PI*lHz/this.fs);
+    const K=[1,1.6,2.6,1.2,4,6.5,2,3.2]; this.clipK=K[Math.max(0,Math.min(7,p.character|0))];
+    this.touch=(2*c(p.b7)-1)*1200; this.spread=1-2*c(p.b2); this.mixT=c(p.mix); this.blurMix=c(p.b4); }
+  process(inputs,outputs){
+    const inp=inputs[0], out=outputs[0]; if(!out||!out[0]) return true;
+    const N=out[0].length, L=inp&&inp[0]?inp[0]:null, R=inp&&inp[1]?inp[1]:(L||null);
+    const aP=1-Math.exp(-1/(0.015*this.fs)), aM=1-Math.exp(-1/(0.030*this.fs));
+    let acc=0, img=0;
+    for(let i=0;i<N;i++){
+      const xl=L?L[i]:0, xr=R?R[i]:xl;
+      const rect=0.5*(Math.abs(xl)+Math.abs(xr)); this.env+=(rect>this.env?0.35:0.0006)*(rect-this.env);
+      const gT=this.env>2.2e-4?1:0; this.gate+=(gT>this.gate?0.02:0.0009)*(gT-this.gate); const g2=this.gate*this.gate;
+      this.shiftS+=aP*(this.shiftT-this.shiftS); this.fbS+=aP*(this.fbT-this.fbS); this.timeS+=aM*(this.timeT-this.timeS); this.mixS+=aM*(this.mixT-this.mixS);
+      const touch=this.touch*this.env*this.env*24, gFb=this.fbS*g2;
+      const dry=[xl,xr], x=[xl,xr], low=[0,0], wet=[0,0];
+      if(this.lowOn) for(let c=0;c<2;c++){ this.lowZ[c]+=this.lowG*(x[c]-this.lowZ[c]); low[c]=this.lowZ[c]; x[c]-=low[c]; }
+      for(let c=0;c<2;c++){
+        const mir=c===0?1:this.spread; this.quad[c].setHz((this.shiftS+touch)*mir,this.fs);
+        const len=Math.max(1,Math.min(this.timeS|0,this.mask-2)), fr=this.timeS-Math.floor(this.timeS);
+        const r0=(this.w[c]-len)&this.mask, r1=(this.w[c]-len-1)&this.mask;
+        let tap=this.dl[c][r0]+fr*(this.dl[c][r1]-this.dl[c][r0]);
+        this.damp[c]+=this.dampG*(tap-this.damp[c]); tap=this.damp[c];
+        let u=x[c]+gFb*tap; u=tanhF(u*this.clipK)/this.clipK;
+        const y=this.quad[c].p(u,this.blend)*this.ring;
+        this.dl[c][this.w[c]]=y; this.w[c]=(this.w[c]+1)&this.mask;
+        const dc=y-this.dcx[c]+0.995*this.dcy[c]; this.dcx[c]=y; this.dcy[c]=dc;
+        wet[c]=dc+low[c]; }
+      const wg=Math.sin(1.5707963*this.mixS), dg=Math.cos(1.5707963*this.mixS);
+      const oL=dg*dry[0]+wg*wet[0], oR=dg*dry[1]+wg*wet[1];
+      out[0][i]=oL; if(out[1]) out[1][i]=oR;
+      acc+=oL*oL+oR*oR; img+=Math.abs(wet[0])+Math.abs(wet[1]); }
+    this.lvl=0.9*this.lvl+0.1*Math.sqrt(acc/(2*N)); this.img=0.9*this.img+0.1*(img/(2*N));
+    if(++this.tick>=8){ this.tick=0; this.port.postMessage({shiftHz:this.shiftS,blend:this.blend,fb:this.fbS*this.gate*this.gate,lvl:this.lvl,img:this.img}); }
+    return true; } }
+registerProcessor('terrain-bode',TerrainBode);
+</script>
+<script id="wk-utl" type="text/plain">// ─────────────────────────────────────────────────────────────────────────────
+// utility-worklet.js — the UTILITY glue strip (chain kind 14) as an AudioWorkletProcessor, so
+// the six buttons are AUDIBLE in the Safari mockup (the fb296 law).
+//
+// A MIRROR OF THE MECHANISM in Source/TerrainUtilityFx.h: Gain is a -60..+30 dB fader with
+// unity at exactly 60/90 and a GLIDED -inf at 0; Image is the BOUNDED width (0 mono · ½ neutral
+// · 1 = 300 %, mid never zero — the deliberate contrast with Widen's R11); Steer is constant-
+// power balance; the six pills (Flip L · Flip R · Trade · Sum · DC · Dim); Wiring; Mono Below
+// (a side HPF). Characters' voicings are NOT here. The shipping engine is certified 84/84.
+//
+//   n.port.postMessage({ gain:.667, image:.5, steer:.5, mix:1, b1..b8, flipl, flipr, trade, sum, dc, dim, axis })
+//   n.port.onmessage = e => draw(e.data);   // { lvl, pkL, pkR, gainDb }
+// ─────────────────────────────────────────────────────────────────────────────
+class TerrainUtility extends AudioWorkletProcessor{
+  constructor(){ super(); this.fs=sampleRate;
+    this.p={gain:60/90,image:.5,steer:.5,mix:1,b1:0,b2:.5,b3:0,b4:0,b5:.5,b6:0,b7:0,b8:.5,flipl:0,flipr:0,trade:0,sum:0,dc:0,dim:0,axis:0,type:0,character:0};
+    this.gS=1; this.sideS=1; this.pL=1; this.pR=1; this.mixS=1; this.sumS=0; this.fl=1; this.fr=1; this.dimS=1; this.dcx=[0,0]; this.dcy=[0,0]; this.dcOn=0;
+    this.sz=0; this.sG=0; this.pkL=0; this.pkR=0; this.lvl=0; this.tick=0;
+    this.port.onmessage=e=>{ Object.assign(this.p,e.data); this.resolve(); }; this.resolve(); }
+  resolve(){ const p=this.p, c=v=>Math.max(0,Math.min(1,+v||0));
+    const t=c(p.gain); this.gT=t<=0?0:Math.pow(10,(-60+90*t)/20); if(Math.abs(t-60/90)<1e-4) this.gT=1;
+    const im=c(p.image); this.sideT=im<0.5?im*2:1+4*(im-0.5);            // 0 → 0 · .5 → 1 · 1 → 3 (300 %)
+    const st=c(p.steer), th=(st-0.5)*Math.PI/2; this.pLT=Math.cos(th+Math.PI/4)*1.4142136; this.pRT=Math.sin(th+Math.PI/4)*1.4142136;
+    this.mixT=c(p.mix); this.sumT=+p.sum?1:0; this.flT=+p.flipl?-1:1; this.frT=+p.flipr?-1:1; this.dimT=+p.dim?Math.pow(10,-20/20):1; this.dcOn=+p.dc?1:0; this.trade=+p.trade?1:0;
+    const mb=c(p.b3); this.mbOn=mb>0.001; const mbHz=20*Math.pow(60,mb); this.sG=1-Math.exp(-2*Math.PI*mbHz/this.fs);
+    this.wiring=p.axis|0; }
+  process(inputs,outputs){ const inp=inputs[0], out=outputs[0]; if(!out||!out[0]) return true;
+    const N=out[0].length, L=inp&&inp[0]?inp[0]:null, R=inp&&inp[1]?inp[1]:(L||null); const a=1-Math.exp(-1/(0.02*this.fs));
+    let acc=0, pl=0, pr=0;
+    for(let i=0;i<N;i++){ let xl=L?L[i]:0, xr=R?R[i]:xl; const dl=xl, dr=xr;
+      this.gS+=a*(this.gT-this.gS); this.sideS+=a*(this.sideT-this.sideS); this.pL+=a*(this.pLT-this.pL); this.pR+=a*(this.pRT-this.pR);
+      this.mixS+=a*(this.mixT-this.mixS); this.sumS+=a*(this.sumT-this.sumS); this.fl+=a*(this.flT-this.fl); this.fr+=a*(this.frT-this.fr); this.dimS+=a*(this.dimT-this.dimS);
+      if(this.trade){ const t=xl; xl=xr; xr=t; }
+      if(this.wiring===1){ const d=0.5*(xl-xr); xl=d; xr=-d; } else if(this.wiring===2){ xr=xl; } else if(this.wiring===3){ xl=xr; } else if(this.wiring===4){ xr=0; } else if(this.wiring===5){ xl=0; }
+      xl*=this.fl; xr*=this.fr;
+      let m=0.5*(xl+xr), s=0.5*(xl-xr);
+      if(this.mbOn){ this.sz+=this.sG*(s-this.sz); s-=this.sz; }           // Mono Below: side HPF
+      s*=this.sideS; s*=(1-this.sumS);                                       // Image (bounded) · Sum
+      xl=(m+s)*this.gS*this.pL*this.dimS; xr=(m-s)*this.gS*this.pR*this.dimS;
+      if(this.dcOn){ const yl=xl-this.dcx[0]+0.9987*this.dcy[0]; this.dcx[0]=xl; this.dcy[0]=yl; xl=yl; const yr=xr-this.dcx[1]+0.9987*this.dcy[1]; this.dcx[1]=xr; this.dcy[1]=yr; xr=yr; }
+      const wg=Math.sin(1.5707963*this.mixS), dg=Math.cos(1.5707963*this.mixS);
+      const oL=dg*dl+wg*xl, oR=dg*dr+wg*xr; out[0][i]=oL; if(out[1]) out[1][i]=oR;
+      acc+=oL*oL+oR*oR; pl=Math.max(pl,Math.abs(oL)); pr=Math.max(pr,Math.abs(oR)); }
+    this.pkL=Math.max(pl,this.pkL*0.88); this.pkR=Math.max(pr,this.pkR*0.88); this.lvl=0.9*this.lvl+0.1*Math.sqrt(acc/(2*N));
+    if(++this.tick>=6){ this.tick=0; this.port.postMessage({lvl:this.lvl,pkL:this.pkL,pkR:this.pkR,gainDb:20*Math.log10(Math.max(1e-6,this.gS))}); }
+    return true; } }
+registerProcessor('terrain-utility',TerrainUtility);
+</script>
+<script id="wk-spl" type="text/plain">// ─────────────────────────────────────────────────────────────────────────────
+// splitter-worklet.js — the band SPLITTER (chain kind 15) as an AudioWorkletProcessor, so the
+// lanes light from REAL band energy in the Safari mockup (the fb296 law).
+//
+// A MIRROR OF THE MECHANISM in Source/TerrainSplitterFx.h: Linkwitz-Riley 4th order on the
+// Simper TPT SVF (LP4 + HP4 == AP2 exactly), the lower bands run through the SAME allpass the
+// upper legs receive so the recombination cannot comb, crossovers at f0 · f0·r · f0·r² with
+// r >= 1.4 BY CONSTRUCTION (inversion impossible, not clamped), per-lane gain/mute/solo/flip,
+// the dry through the identical cascade so Mix never combs. Same knob→Hz law as the engine
+// (splitHzFor / spanRatioFor), because a mapping authored in two places is the fb373 defect.
+//
+//   n.port.postMessage({ type:1, slope:2, split:.5, balance:.5, spread:.5, mix:1, b1..b8,
+//                        mute1..4, solo1..4, flip1..4 })
+//   n.port.onmessage = e => draw(e.data);   // { nl, hz[3], pk[4], gt[4], lvl }
+// ─────────────────────────────────────────────────────────────────────────────
+const FC_BOT=25, FC_TOP=10000, SPAN_MIN=1.4, SPAN_MAX=40, G_TOP=12, G_BOT=-60;
+const LANES=[2,3,4,2,2];
+function laneCount(t){ return LANES[Math.max(0,Math.min(4,t|0))]||3; }
+function splitHz(t,k){ const N=laneCount(t), top=N===2?FC_TOP:(N===3?2000:700); return FC_BOT*Math.pow(top/FC_BOT,Math.max(0,Math.min(1,k))); }
+function spanRatio(t,f0,k){ const nx=laneCount(t)-1; if(nx<2) return 1; const rH=Math.pow(FC_TOP/Math.max(FC_BOT,f0),1/(nx-1)); const rT=Math.max(SPAN_MIN*1.05,Math.min(SPAN_MAX,rH)); return SPAN_MIN*Math.pow(rT/SPAN_MIN,Math.max(0,Math.min(1,k))); }
+function laneGain(t){ t=Math.max(0,Math.min(1,t)); if(t<=0) return 0; const d=t<0.5?G_BOT*Math.pow(1-2*t,1.5):(2*G_TOP)*(t-0.5); let g=Math.pow(10,d/20); if(t<0.04) g*=t*25; return g; }
+// Simper TPT SVF, Q = 1/sqrt2 (Butterworth): two in cascade = LR4. ap() = the matching AP2.
+class Svf{ constructor(){ this.g=0; this.k=1.4142136; this.a1=1; this.a2=0; this.a3=0; this.ic1=0; this.ic2=0; }
+  set(fc,fs){ const g=Math.tan(Math.PI*Math.min(fc,0.45*fs)/fs); this.g=g; this.a1=1/(1+g*(g+this.k)); this.a2=g*this.a1; this.a3=g*this.a2; }
+  tick(x){ const v3=x-this.ic2, v1=this.a1*this.ic1+this.a2*v3, v2=this.ic2+this.a2*this.ic1+this.a3*v3;
+    this.ic1=2*v1-this.ic1; this.ic2=2*v2-this.ic2; return {lp:v2,hp:x-this.k*v1-v2}; }
+}
+// LR4 = two Butterworth SVFs in cascade per leg. APc = the matching AP2: lp - k·bp + hp == 2(lp+hp) - x.
+class LR4{ constructor(){ this.a=new Svf(); this.b=new Svf(); this.c=new Svf(); this.d=new Svf(); }
+  set(fc,fs){ this.a.set(fc,fs); this.b.set(fc,fs); this.c.set(fc,fs); this.d.set(fc,fs); }
+  split(x){ const o1=this.a.tick(x); const lo=this.b.tick(o1.lp).lp; const o2=this.c.tick(x); const hi=this.d.tick(o2.hp).hp; return {lo:lo,hi:hi}; } }
+class APc{ constructor(){ this.s=new Svf(); } set(fc,fs){ this.s.set(fc,fs); } p(x){ const o=this.s.tick(x); return o.lp+o.hp-(x-o.lp-o.hp); } } // lp - bp·k + hp == AP2
+class TerrainSplitter extends AudioWorkletProcessor{
+  constructor(){ super(); this.fs=sampleRate;
+    this.p={type:1,slope:2,split:.5,balance:.5,spread:.5,mix:1,b1:.5,b2:.5,b3:.5,b4:.5,b5:.4,b6:.5,b7:.5,b8:.5,
+            mute1:0,mute2:0,mute3:0,mute4:0,solo1:0,solo2:0,solo3:0,solo4:0,flip1:0,flip2:0,flip3:0,flip4:0};
+    this.x=[[new LR4(),new LR4(),new LR4()],[new LR4(),new LR4(),new LR4()]];
+    // align lower bands — ONE allpass instance per (lane, crossover) pair. A stateful filter called
+    // twice per sample is a different filter; sharing them between lane 0 and lane 1 nulled 4 lanes
+    // at only -29 dB. [0]=lane0 by f1 (3-lane) · [1]=lane0 by f1, [2]=lane0 by f2, [3]=lane1 by f2 (4-lane)
+    this.al=[[new APc(),new APc(),new APc(),new APc()],[new APc(),new APc(),new APc(),new APc()]];
+    this.dry=[[new APc(),new APc(),new APc()],[new APc(),new APc(),new APc()]];  // the dry cascade (Mix law)
+    this.pk=[0,0,0,0]; this.lvl=0; this.hz=[0,0,0]; this.nl=3; this.gate=[1,1,1,1]; this.gain=[1,1,1,1];
+    this.port.onmessage=e=>{ Object.assign(this.p,e.data); this.resolve(); }; this.resolve(); this.tick=0; }
+  resolve(){ const p=this.p, t=p.type|0; this.type=t; this.nl=laneCount(t);
+    const f0=splitHz(t,+p.split), r=spanRatio(t,f0,+p.b5); this.hz=[f0,f0*r,f0*r*r].slice(0,this.nl-1); while(this.hz.length<3) this.hz.push(0);
+    for(let c=0;c<2;c++){ for(let k=0;k<3;k++){ const f=this.hz[k]||1000; this.x[c][k].set(f,this.fs); this.dry[c][k].set(f,this.fs); }
+      const f1=this.hz[1]||1000, f2=this.hz[2]||2000; this.al[c][0].set(f1,this.fs); this.al[c][1].set(f1,this.fs); this.al[c][2].set(f2,this.fs); this.al[c][3].set(f2,this.fs); }
+    const anySolo=!!(+p.solo1||+p.solo2||+p.solo3||+p.solo4);
+    for(let k=0;k<4;k++){ const m=+p['mute'+(k+1)], s=+p['solo'+(k+1)]; this.gate[k]=(m?0:1)*(anySolo?(s?1:0):1);
+      const bal=+p.balance-0.5, lift=(k===this.nl-1?1:(k===0?-1:0))*bal*6; // Balance: lane energy morph, ±6 dB between bottom/top lane
+      this.gain[k]=laneGain(+p['b'+(k+1)])*Math.pow(10,lift/20)*(+p['flip'+(k+1)]?-1:1); }
+    this.mix=Math.max(0,Math.min(1,+p.mix)); }
+  split(c,x,lanes){ const N=this.nl, t=this.type;
+    if(t===3){ return; } if(t===4){ return; }
+    if(N===2){ const o=this.x[c][0].split(x); lanes[0]=o.lo; lanes[1]=o.hi; return; }
+    if(N===3){ const o=this.x[c][0].split(x); const u=this.x[c][1].split(o.hi); lanes[0]=this.al[c][0].p(o.lo); lanes[1]=u.lo; lanes[2]=u.hi; return; }
+    const o=this.x[c][0].split(x), u=this.x[c][1].split(o.hi), v=this.x[c][2].split(u.hi);
+    lanes[0]=this.al[c][2].p(this.al[c][1].p(o.lo)); lanes[1]=this.al[c][3].p(u.lo); lanes[2]=v.lo; lanes[3]=v.hi; }
+  dryAligned(c,x){ const N=this.nl, t=this.type; if(t>=3) return x; let y=x; for(let k=0;k<N-1;k++) y=this.dry[c][k].p(y); return y; }
+  process(inputs,outputs){ const inp=inputs[0], out=outputs[0]; if(!out||!out[0]) return true;
+    const N=out[0].length, L=inp&&inp[0]?inp[0]:null, R=inp&&inp[1]?inp[1]:(L||null);
+    const lanes=[0,0,0,0], pk=[0,0,0,0]; let acc=0; const t=this.type;
+    for(let i=0;i<N;i++){ const xl=L?L[i]:0, xr=R?R[i]:xl; let oL=0,oR=0;
+      if(t===3){ const m=0.5*(xl+xr), s=0.5*(xl-xr); const gm=this.gate[0]*this.gain[0], gs=this.gate[1]*this.gain[1];
+        pk[0]=Math.max(pk[0],Math.abs(m)*this.gate[0]); pk[1]=Math.max(pk[1],Math.abs(s)*this.gate[1]); oL=m*gm+s*gs; oR=m*gm-s*gs; }
+      else if(t===4){ const gl=this.gate[0]*this.gain[0], gr=this.gate[1]*this.gain[1]; pk[0]=Math.max(pk[0],Math.abs(xl)*this.gate[0]); pk[1]=Math.max(pk[1],Math.abs(xr)*this.gate[1]); oL=xl*gl; oR=xr*gr; }
+      else { this.split(0,xl,lanes); for(let k=0;k<this.nl;k++){ const v=lanes[k]*this.gate[k]; pk[k]=Math.max(pk[k],Math.abs(v)); oL+=v*this.gain[k]; }
+             this.split(1,xr,lanes); for(let k=0;k<this.nl;k++) oR+=lanes[k]*this.gate[k]*this.gain[k]; }
+      const dL=this.dryAligned(0,xl), dR=this.dryAligned(1,xr);
+      const wg=Math.sin(1.5707963*this.mix), dg=Math.cos(1.5707963*this.mix);
+      const yL=dg*dL+wg*oL, yR=dg*dR+wg*oR; out[0][i]=yL; if(out[1]) out[1][i]=yR; acc+=yL*yL+yR*yR; }
+    for(let k=0;k<4;k++) this.pk[k]=Math.max(pk[k],this.pk[k]*0.86);
+    this.lvl=0.9*this.lvl+0.1*Math.sqrt(acc/(2*N));
+    if(++this.tick>=6){ this.tick=0; this.port.postMessage({nl:this.nl,hz:this.hz.slice(0,3),pk:this.pk.slice(),gt:this.gate.slice(),lvl:this.lvl}); }
+    return true; } }
+registerProcessor('terrain-splitter',TerrainSplitter);
+</script>
+<script>
+"use strict";
+var DEVICES=[{"dev": "Bode", "core": "bod", "proc": "terrain-bode", "pfx": "SYN_BOD_", "types": ["Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze"], "tpN": 8, "chars": ["Pristine", "Dome '64", "Tube 735", "Leaky", "Tape Loop", "Crush", "Iron", "Ash"], "d2k": "Route", "d2": ["Normal", "Cross", "Mono Sum", "Wide", "Shift First", "Shift Last"], "d2p": "ROUTE", "knobs": [["Shift", 50, "SHIFT"], ["Direction", 100, "DIR"], ["Fdbk", 0, "FDBK"], ["Mix", 100, "MIX"]], "keys": ["shift", "dir", "fdbk", "mix"], "back": [["Fine", 50, "FINE"], ["Spread", 100, "SPREAD"], ["Time", 45, "TIME"], ["Blur", 0, "BLUR"], ["Low Keep", 0, "LOWKEEP"], ["Damping", 100, "DAMPING"], ["Touch", 50, "TOUCH"], ["Drift", 0, "DRIFT"]], "pills": [["Sync", 0], ["Guard", 1]], "pillKeys": ["sync", "guard"]}, {"dev": "Utility", "core": "utl", "proc": "terrain-utility", "pfx": "SYN_UTL_", "types": ["Strip", "Turn", "Outer", "Canopy", "Cellar"], "tpN": 8, "chars": ["Cushion", "Brick", "Coil", "Creep", "Tuck", "Rail", "Ripple", "Fuse"], "d2k": "Wiring", "d2": ["Through", "Difference", "L To Both", "R To Both", "L Only", "R Only"], "d2p": "WIRING", "knobs": [["Gain", 66.667, "GAIN"], ["Image", 50, "IMAGE"], ["Steer", 50, "STEER"], ["Mix", 100, "MIX"]], "keys": ["gain", "image", "steer", "mix"], "back": [["Strain", 0, "B1"], ["Clamp", 50, "B2"], ["Mono Below", 0, "B3"], ["Slope", 0, "B4"], ["Twist", 50, "B5"], ["Rumble", 0, "B6"], ["Bleed", 0, "B7"], ["Hinge", 50, "B8"]], "pills": [["Flip L", 0], ["Flip R", 0], ["Trade", 0], ["Sum", 0], ["DC", 0], ["Dim", 0]], "pillKeys": ["flipl", "flipr", "trade", "sum", "dc", "dim"]}, {"dev": "Splitter", "core": "spl", "proc": "terrain-splitter", "pfx": "SYN_SPL_", "types": ["Low / High", "Low / Mid / High", "Sub / Low / Mid / High", "Mid / Side", "Left / Right"], "tpN": 8, "typeIdx": 1, "d1k": "Slope", "d1p": "SLOPE", "chars": ["6 dB", "12 dB", "24 dB", "48 dB"], "charIdx": 2, "d2k": "Latch", "d2": ["Latching", "Exclusive", "Momentary"], "d2p": "LATCH", "knobs": [["Split", 50, "SPLIT"], ["Balance", 50, "BALANCE"], ["Spread", 50, "SPREAD"], ["Mix", 100, "MIX"]], "keys": ["split", "balance", "spread", "mix"], "back": [["Lane 1 Gain", 50, "B1"], ["Lane 2 Gain", 50, "B2"], ["Lane 3 Gain", 50, "B3"], ["Lane 4 Gain", 50, "B4"], ["Span", 40, "B5"], ["Lane 1 Width", 50, "B6"], ["Top Lane Width", 50, "B7"], ["Top Lane Pan", 50, "B8"]], "pills": [["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0]], "pillKeys": ["mute1", "solo1", "flip1", "mute2", "solo2", "flip2", "mute3", "solo3", "flip3", "mute4", "solo4", "flip4"]}];
+var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
+var RLBL=['A','B','C','D','S','N'];
+function knobSVG(pct,label,glyph){
+            pct=Math.max(0,Math.min(100,Math.round(pct)));
+            var cx=15,cy=15,r=11.5;
+            function pt(deg){var a=deg*Math.PI/180;return [cx+r*Math.cos(a),cy+r*Math.sin(a)];}
+            var t0=pt(135),t1=pt(405),v1=pt(135+270*pct/100),large=(270*pct/100)>180?1:0;
+            // fb298 — optional LABEL (sync division "1/8" / ms) replaces the number; arc still tracks pct.
+            // Font shrinks for longer strings so a "1/16T" / "1.2s" fits the FIXED knob (nothing grows/moves).
+            var txt=(label!=null&&label!==undefined)?(''+label):(''+pct);
+            var fs=(label==null)?8:(txt.length>=5?5.5:(txt.length>=4?6.5:7.5));
+            // fb363 — GLYPH mode: some parameters can't be said in a number at all. Shape is the
+            // case that forced it (Max: "I don't know what shape is 37, my nigga") — so the knob
+            // draws the ACTUAL window curve in its middle instead of a percentage. The glyph
+            // replaces the text; the arc still tracks the value, and the knob never changes size.
+            if(glyph){
+              return '<svg viewBox="0 0 30 30">'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+               +'<path d="'+glyph+'" fill="none" stroke="var(--text-secondary)" stroke-width="1.15" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+            }
+            return '<svg viewBox="0 0 30 30">'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 1 1 '+t1[0].toFixed(1)+' '+t1[1].toFixed(1)+'" fill="none" stroke="var(--border-strong)" stroke-width="2" stroke-linecap="round"/>'
+             +'<path d="M'+t0[0].toFixed(1)+' '+t0[1].toFixed(1)+' A '+r+' '+r+' 0 '+large+' 1 '+v1[0].toFixed(1)+' '+v1[1].toFixed(1)+'" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>'
+             +'<text x="15" y="15.4" text-anchor="middle" dominant-baseline="central" font-family="-apple-system,\'SF Pro Display\',sans-serif" font-size="'+fs+'" font-weight="300" fill="var(--text-secondary)">'+txt+'</text></svg>';
+          }
+
+/* ── what the plugin provides around the lifted code ── */
+var rack=document.getElementById('rack');
+var DEV_TEMPLATES=DEVICES.map(function(t){ return { core:t.core, knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2]};}),
+  back:{ knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2]];}) } }; });
+var DEVS=DEVICES.map(function(t){ return {
+  name:t.dev, core:t.core, inst:1, pfx:t.pfx, type:t.types[0], types:t.types, tpN:t.tpN, preset:'Init', on:true,
+  pills:t.pills.map(function(p){return {t:p[0],on:!!p[1]};}), pp:t.pillKeys.map(function(k){return t.pfx+k.toUpperCase();}),
+  route:[true,false,false,false,false,false],
+  knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
+  xp:(t.core==='eqz')?[1,2,3,4].map(function(k){return [t.pfx+'X'+k+'HZ',t.pfx+'X'+k,t.pfx+'X'+k+'ON'];}):null, xb:(t.core==='eqz')?[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]:null,   /* fb438 — the free bells */
+  back:{d1:{k:(t.d1k||'Character'),v:t.chars[t.charIdx||0],opts:t.chars,p:t.pfx+(t.d1p||'CHAR')}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
+        knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
+  typeIdx:(t.typeIdx||0), charIdx:(t.charIdx||0), axisIdx:0, __t:t }; });
+DEVS.forEach(function(d){ d.type=d.types[d.typeIdx]||d.types[0]; });
+function fxParamTail(pid){ return (pid||'').slice((pid||'').lastIndexOf('_')+1); }
+var FX_FMT={
+
+            'eqz|LOWHZ':function(v){ return fx4Hz(20*Math.pow(25,v/100)); },
+            'eqz|BODYHZ':function(v){ return fx4Hz(100*Math.pow(30,v/100)); },
+            'eqz|BITEHZ':function(v){ return fx4Hz(700*Math.pow(20,v/100)); },
+            'eqz|REACH':function(v){ return fx4Hz(6000*Math.pow(40000/6000,v/100)); },
+            'eqz|LOW':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|BODY':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|BITE':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|AIR':function(v){ return fx4Db((v/100*2-1)*30); },
+            'eqz|SLANT':function(v){ var d=(v/100*2-1)*24; return Math.abs(d)<0.3?'flat':fx4Db(d); },
+            'eqz|AMOUNT':function(v){ return Math.round(v*2)+'%'; },
+            'wid|WIDTH':function(v){ var w=Math.round((v-50)*2); return w<=-99?'mono':(w===0?'0':(w>0?'+':'')+w); },
+            'wid|RATE':function(v){ var hz=0.08*Math.pow(14/0.08,v/100); return (hz<10?hz.toFixed(2):Math.round(hz))+'hz'; },
+            'wid|VOICES':function(v){ return (3+Math.round(v/100*5))+'v'; },
+            'cmp|PUSH':function(v){ return fx4DbS(9-48*Math.pow(v/100,0.9)); },
+            'cmp|RATIO':function(v,d){ var z=d&&d.__vz; var r=(z&&z.ratio!==undefined&&z.ratio!==null)?z.ratio:1/(1-Math.min(0.9999,Math.pow(v/100,0.85)));
+              return (r<0||r>99||!isFinite(r))?'∞:1':(r<10?r.toFixed(1):Math.round(r))+':1'; },
+            'cmp|LIFT':function(v){ return fx4DbS(v/100*24); },
+            'cmp|ATTACK':function(v,d){ var z=d&&d.__vz; return (z&&z.atk!==undefined)?fx4Ms(z.atk):undefined; },
+            'cmp|RELEASE':function(v,d){ var z=d&&d.__vz; return (z&&z.rel!==undefined)?fx4Ms(z.rel):undefined; },
+            'cmp|ROUND':function(v,d){ var z=d&&d.__vz; return (z&&z.kneeDb!==undefined)?Math.round(z.kneeDb)+'dB':undefined; },
+            'bod|SHIFT':function(v){ var h=bodShiftHz(v/100), a=Math.abs(h); if(a<0.05) return '0 Hz'; return (h>=0?'+':'−')+(a<1000?a.toFixed(a<10?1:0)+'Hz':(a/1000).toFixed(2)+'k'); },
+            'bod|DIR':function(v){ return v>=98?'Up':(v<=2?'Down':(Math.abs(v-50)<2?'Ring':(v>50?'Up '+Math.round((v-50)*2)+'%':'Dn '+Math.round((50-v)*2)+'%'))); },
+            'bod|FDBK':function(v){ return Math.round(v)+'%'; },
+            'bod|FINE':function(v){ var h=(v/100-0.5)*4; return (h>=0?'+':'')+h.toFixed(2)+'Hz'; },
+            'bod|SPREAD':function(v){ return v<=2?'Mono':(Math.abs(v-50)<2?'Wide':Math.round(v)+'%'); },
+            'bod|TIME':function(v,d){ var sy=d&&d.pp&&d.__sync; if(sy) return FX4_BOD_DIV[Math.round(v/100*19)];
+                                      var ms=0.02*Math.pow(50000,v/100); return ms<1?ms.toFixed(2)+'ms':(ms<1000?ms.toFixed(0)+'ms':(ms/1000).toFixed(2)+'s'); },
+            'bod|BLUR':function(v){ return Math.round(v)+'%'; },
+            'bod|LOWKEEP':function(v){ return v<=0.1?'Off':fx4Hz(20*Math.pow(100,v/100)); },
+            'bod|DAMPING':function(v){ return fx4Hz(400*Math.pow(50,v/100)); },
+            'bod|TOUCH':function(v){ var h=(v/100-0.5)*2*1200; return Math.abs(h)<12?'Off':(h>=0?'+':'')+Math.round(h)+'Hz'; },
+            'bod|DRIFT':function(v){ return v<=0.1?'Still':Math.round(v)+'%'; },
+            'spl|SPLIT':function(v,d){ var t=fx4SplType(d); return fx4Hz(fx4SplHz(t,v/100)); },
+            'spl|BALANCE':function(v){ var x=(v/100-0.5)*12; return Math.abs(x)<0.05?'Even':(x>0?'Top ':'Low ')+Math.abs(x).toFixed(1)+'dB'; },
+            'spl|SPREAD':function(v){ return Math.abs(v-50)<1?'Flat':(v>50?'Wide ':'Tight ')+Math.round(Math.abs(v-50)*2)+'%'; },
+            'spl|B1':function(v){ return fx4SplGainLbl(v); }, 'spl|B2':function(v){ return fx4SplGainLbl(v); },
+            'spl|B3':function(v){ return fx4SplGainLbl(v); }, 'spl|B4':function(v){ return fx4SplGainLbl(v); },
+            'spl|B5':function(v,d){ var t=fx4SplType(d); if(fx4SplLanes(t)<3) return '—'; var f0=fx4SplHz(t,((d&&d.knobs&&d.knobs[0])?d.knobs[0].v:50)/100); return '×'+fx4SplRatio(t,f0,v/100).toFixed(2); },
+            'spl|B6':function(v){ return Math.round(v*2)+'%'; }, 'spl|B7':function(v){ return Math.round(v*2)+'%'; },
+            'spl|B8':function(v){ return Math.abs(v-50)<1?'C':(v<50?'L':'R')+Math.round(Math.abs(v-50)*2); },
+            'utl|GAIN':function(v){ if(v<=0) return '−∞'; var db=-60+90*(v/100); if(Math.abs(v/100-60/90)<1e-3) db=0; return (db>=0?'+':'')+db.toFixed(1)+'dB'; },
+            'utl|IMAGE':function(v){ var im=v/100, pc=im<0.5?im*200:100+400*(im-0.5); return pc<1?'Mono':Math.round(pc)+'%'; },
+            'utl|STEER':function(v){ return Math.abs(v-50)<1?'C':(v<50?'L':'R')+Math.round(Math.abs(v-50)*2); },
+            'utl|B1':function(v){ return v<=0.5?'Off':'+'+(v/100*48).toFixed(0)+'dB'; },
+            'utl|B2':function(v){ return Math.round(v)+'%'; },
+            'utl|B3':function(v){ return v<=0.1?'Off':fx4Hz(20*Math.pow(60,v/100)); },
+            'utl|B4':function(v){ return (1+2*v/100).toFixed(1)+'p'; },
+            'utl|B5':function(v){ var dg=(v/100-0.5)*80; return Math.abs(dg)<0.5?'0°':(dg>0?'+':'')+dg.toFixed(0)+'°'; },
+            'utl|B6':function(v){ return v<=0.1?'Off':fx4Hz(15*Math.pow(320/15,v/100)); },
+            'utl|B7':function(v){ return Math.round(v)+'%'; },
+            'utl|B8':function(v){ return fx4Hz(60*Math.pow(100,v/100)); },
+            'ott|LOWCROSS':function(v,d){ var z=d&&d.__vz; return fx4Hz(z&&z.x?z.x[0]:30*Math.pow(10,v/100)); },
+            'ott|HIGHCROSS':function(v,d){ var z=d&&d.__vz; var x=z&&z.x?z.x[1]:0; return x>0?fx4Hz(x):(z?'—':fx4Hz(1000*Math.pow(8,v/100))); },
+            'ott|RAISE':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
+            'ott|PRESS':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
+            'ott|GRIP':function(v){ return fx4DbS((v/100-0.5)*36); },
+            'ott|BASS':function(v){ return fx4DbS((v/100-0.5)*24); },
+            'ott|MIDS':function(v){ return fx4DbS((v/100-0.5)*24); },
+            'ott|TREBLE':function(v){ return fx4DbS((v/100-0.5)*24); }
+            
+};
+          function fx4SplGainLbl(v){ var t=v/100; if(t<=0) return 'Kill'; var db=t<0.5?-60*Math.pow(1-2*t,1.5):24*(t-0.5); return (Math.abs(db)<0.05?'0.0':(db>0?'+':'')+db.toFixed(1))+'dB'; }
+          function fx4Hz(hz){ return hz>=10000?Math.round(hz/1000)+'k':(hz>=1000?(hz/1000).toFixed(1)+'k':Math.round(hz)+''); }
+          function fx4Db(db){ var r=Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0'; return (r>0?'+':'')+(Math.abs(r)<10?r.toFixed(1):Math.round(r)); }
+          function fx4DbS(db){ var r=Math.abs(db)>=3?Math.round(db):Math.round(db*10)/10; if(Math.abs(r)<0.05) return '0dB'; return (r>0?'+':'')+r+'dB'; }
+          function fx4Ms(ms){ return ms>=1000?(ms/1000).toFixed(1)+'s':(ms<10?ms.toFixed(1):Math.round(ms))+'m'; }
+var FX_STEP={ 'wid|VOICES':6 };
+function fxFmt(core,pid,v,d){ try{ var f=FX_FMT[core+'|'+fxParamTail(pid)]; return f?f(v,d):undefined; }catch(e){ return undefined; } }
+function fxGlyph(){ return null; }
+function fxStep(core,pid){ return FX_STEP[core+'|'+fxParamTail(pid)]||0; }
+function detent(core,pid,v){ var n=fxStep(core,pid); if(n>1) v=Math.round(v/100*(n-1))/(n-1)*100; return v; }
+/* the per-Type relabels — the engines' own tables, same as the plugin */
+var FX4_WID_HERO=['Detune','Depth','Cents','Sway','Wash','Cleave'];
+var FX4_EQZ_TRAIT=['Pinch','Slope','Taper','Dip','Silk','Pivot','Sting'];
+function fx4ApplyType(d,typeName){ var ti=d.types.indexOf(typeName); if(ti<0) return; d.type=typeName; d.typeIdx=ti;
+  if(d.core==='wid') d.knobs[0].l=FX4_WID_HERO[ti]||'Amount'; if(d.core==='eqz') d.back.knobs[7][0]=FX4_EQZ_TRAIT[ti]||'Trait'; }
+DEVS.forEach(function(d){ fx4ApplyType(d,d.type); });
+
+/* ═══ fb437 — THE FX4 CORES (Equalizer · Widen · Compress · Multiband) ══════════════════
+             Shared geometry: the 226x78 viewBox, plot X 6.5..219.5 (fb360), centre y 39, and ONE
+             log-f axis 20 Hz..20 kHz across the plot — the SAME axis on the Equalizer and the
+             Multiband, so a crossover line and an EQ node at the same x mean the same frequency.
+             Every mark has a job: white (currentColor) = structure and controls, purple = the live
+             signal. No grey fills, no blur. Audio brightness lives on separate elements — never a
+             per-frame opacity on a .dst-curve (the fb401 strobe law). The mockup at
+             Design/fx4/mockup/ LIFTS these entries (markers below) — this is the only copy. */
+          var FX4_X0=6.5, FX4_X1=219.5, FX4_PW=213, FX4_CY=39, FX4_VH=78;
+          var FX4_BOD_DIV=['4 bar','3 bar','2 bar','1.5 bar','1 bar','1/2.','1/2','1/4.',
+                           '1/4','1/8.','1/8','1/16.','1/16','1/32.','1/32','1/48','1/64','1/128','1/192','1/256'];
+          function fx4SplGainLbl(v){ var t=v/100; if(t<=0) return 'Kill'; var db=t<0.5?-60*Math.pow(1-2*t,1.5):24*(t-0.5); return (Math.abs(db)<0.05?'0.0':(db>0?'+':'')+db.toFixed(1))+'dB'; }
+          function fx4HzX(hz){ return FX4_X0+FX4_PW*Math.log(Math.max(20,Math.min(20000,hz))/20)/Math.log(1000); }
+          function fx4XHz(x){ return 20*Math.pow(1000,Math.max(0,Math.min(1,(x-FX4_X0)/FX4_PW))); }
+          function fx4FlatD(n){ var d=''; for(var i=0;i<=n;i++){ var x=FX4_X0+FX4_PW*i/n; d+=(i?'L':'M')+x.toFixed(1)+' '+FX4_CY; } return d; }
+
+var CORES={
+
+            /* EQUALIZER — THE LIVING CURVE. The filter card's spectrum underneath (the SAME white
+               7 % fill, the SAME FFT via __fltBinMag), the house white line as the summed response
+               drawn from the engine's own 96-bin curve (evaluated from its LIVE ramped
+               coefficients, so it can never disagree with the audio), a purple fill+glow that
+               breathe with the level, and FOUR NODES: white, filled, small (Max: "fill the dots,
+               make them white, slightly smaller") and pinned ON THE DRAWN LINE at each band's
+               frequency — never at the band's own gain, which is what made them hover off the
+               curve whenever bands overlapped or Slant leaned (the panel EQ's own rule, fb437).
+               fb441 — THE NODE IS THE HANDLE (Pro-Q / EQ Eight / Parametric EQ 2): press within 8 units of
+               a dot to drag it (X = Hz, Y = gain, BOTH delta from the grab — a press never teleports a band);
+               wheel over a dot = THAT band's Q and nothing else (the grid passes the wheel to the rack pan);
+               double-click a dot = reset it, double-click the curve/grid = ADD a band there at 0 dB;
+               right-click a dot = the house menu (Delete band / Reset band), whose HEADER carries that band's
+               Hz and Q — the card itself prints no floating text (fb443). Hover turns the dot purple. */
+            eqz:function(){
+              var g=''; [100,1000,10000].forEach(function(hz){ var x=fx4HzX(hz).toFixed(1); g+='<line x1="'+x+'" y1="4" x2="'+x+'" y2="74"/>'; });
+              var n=''; for(var b=0;b<8;b++) n+='<circle class="eqz-n'+(b>=4?' eqz-free':'')+'" data-b="'+b+'" cx="'+fx4HzX([100,550,3100,15500,632,632,632,632][b]).toFixed(1)+'" cy="39" r="2.4" fill="currentColor" stroke="none"'+(b>=4?' opacity="0"':'')+'/>';   /* fb438 — 4 role + 4 free bells */
+              return '<canvas class="fx-spec"></canvas>'   /* fb442 — the audio layer, under the SVG */
+                +'<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'+g+'</g>'
+                +'<line x1="6.5" y1="39" x2="219.5" y2="39" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="eqz-fill" d="" fill="#B794FF" opacity="0.05"/>'
+                +'<path class="eqz-glow" d="'+fx4FlatD(95)+'" fill="none" stroke="#B794FF" stroke-width="3.4" opacity="0"/>'
+                +'<path class="eqz-curve dst-curve" d="'+fx4FlatD(95)+'"/>'
+                +'<g class="eqz-nodes">'+n+'</g>'
+                +'</svg>';
+            },
+            /* WIDEN — THE VOICE FAN + THE CORRELATION RAIL. The dry centre is a white beam; every
+               wet copy is a purple beam fanned by its LIVE pan and leaning by its LIVE cents (it
+               sways with the engine's own LFO/walk). The fan BLOOMS with level — wider strokes, a
+               purple wedge between the outer voices, like the reverb's bloom (Max, fb437). The
+               rail is the stereo correlation: needle at r; the dashed half is mono danger. */
+            wid:function(){
+              var v=''; for(var i=0;i<8;i++) v+='<line class="wid-v" data-v="'+i+'" x1="113" y1="70" x2="113" y2="70" stroke="#B794FF" stroke-width="1.1" stroke-linecap="round" opacity="0"/>';
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<path class="wid-bloom" d="" fill="#B794FF" opacity="0"/>'
+                +'<line x1="113" y1="70" x2="113" y2="12" stroke="currentColor" stroke-width="1" opacity=".22"/>'
+                +v
+                +'<line class="wid-dry" x1="113" y1="70" x2="113" y2="14" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" opacity=".55"/>'
+                +'<line x1="40" y1="75" x2="113" y2="75" stroke="currentColor" stroke-width="1" opacity=".18" stroke-dasharray="1.5 2.5"/>'
+                +'<line x1="113" y1="75" x2="186" y2="75" stroke="currentColor" stroke-width="1" opacity=".22"/>'
+                +'<line x1="113" y1="73" x2="113" y2="77" stroke="currentColor" stroke-width="1" opacity=".35"/>'
+                +'<line class="wid-r" x1="186" y1="72" x2="186" y2="78" stroke="#B794FF" stroke-width="1.6" stroke-linecap="round" opacity=".8"/>'
+                +'</svg>';
+            },
+            /* COMPRESS — THE PRESS RIVER + THE KNEE. Left: the last ~2.5 s of input (dim outline)
+               and output (the house white line) scrolling; the gap between them is the crushed
+               dB, purple; a white ceiling bar at the threshold presses down by the live gain
+               reduction (purple). Everything behind it is TRANSPARENT (Max, fb437) and there is
+               no number on the card — the press bar IS the number. Right: the transfer curve the
+               engine publishes, the 1:1 diagonal dashed, a purple ball at the live input. */
+            cmp:function(){
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<line x1="6.5" y1="75" x2="138" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="cmp-gap" d="" fill="#B794FF" opacity=".22"/>'
+                +'<path class="cmp-in" d="" fill="none" stroke="currentColor" stroke-width=".8" opacity=".42"/>'
+                +'<path class="cmp-outl dst-curve" d="M6.5 75L138 75"/>'
+                +'<rect class="cmp-press" x="6.5" y="20" width="131.5" height="0" fill="#B794FF" opacity=".35"/>'
+                +'<line class="cmp-thr" x1="6.5" y1="20" x2="138" y2="20" stroke="currentColor" stroke-width="1" opacity=".5"/>'
+                +'<line x1="146" y1="75" x2="219.5" y2="4" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
+                +'<line x1="146" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<line x1="146" y1="75" x2="146" y2="4" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<path class="cmp-knee dst-curve" d="M146 75L219.5 4"/>'
+                +'<circle class="cmp-ball" cx="146" cy="75" r="2.6" fill="#B794FF" opacity=".9"/>'
+                +'</svg>';
+            },
+            /* MULTIBAND — THE JAWS, on the log-f axis. Lanes split at the LIVE crossovers (two on
+               Two Band); per lane a purple level column rides the band's level, two WHITE jaw
+               lines rest at the downward/upward thresholds and MOVE by the reduction/lift, and a
+               purple bite fills where a jaw has moved — the dB being eaten or poured, right now.
+               The crossover lines are draggable (Low Cross / High Cross). */
+            ott:function(){
+              var lanes=''; for(var b=0;b<3;b++){
+                lanes+='<g class="ott-lane" data-b="'+b+'">'
+                  +'<rect class="ott-bite-dn" x="0" y="4" width="0" height="0" fill="#B794FF" opacity=".34"/>'
+                  +'<rect class="ott-bite-up" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".34"/>'
+                  +'<rect class="ott-col" x="0" y="75" width="0" height="0" fill="#B794FF" opacity=".3"/>'
+                  +'<line class="ott-rest-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity="0" stroke-dasharray="1.5 2.5"/>'
+                  +'<line class="ott-rest-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1" opacity="0" stroke-dasharray="1.5 2.5"/>'
+                  +'<line class="ott-edge-dn" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
+                  +'<line class="ott-edge-up" x1="0" y1="0" x2="0" y2="0" stroke="currentColor" stroke-width="1.1" opacity=".72"/>'
+                  +'</g>'; }
+              var xl=''; for(var i=0;i<2;i++) xl+='<line class="ott-xl" data-x="'+i+'" x1="60" y1="3" x2="60" y2="76" stroke="currentColor" stroke-width="1" opacity=".45"/>';
+              return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<line x1="6.5" y1="75" x2="219.5" y2="75" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +lanes+xl
+                +'</svg>';
+            },
+            /* BODE — THE SPECTRUM SLIDES. A frequency shifter adds a FIXED number of Hz to every
+               partial, so 110/220/330 becomes 155/265/375: the ratios are destroyed, and that IS the
+               device. Every shifter plugin in the field draws a knob and a number; none draws the one
+               thing the box actually does. So the core draws the live spectrum TWICE: the dry as a
+               white ghost (where the partials were) and what you hear in purple (where they went),
+               displaced by the shift — and because the axis is log and the shift is linear, the low
+               end swings hard and the top barely moves. That warp is the visual truth of WHY a
+               shifter sounds inharmonic, taught in one look. Ring (Direction at centre) draws the
+               ghost both ways at once. Feedback is heard in the purple (the feed is real) — the echoes
+               stack at +2Δ, +3Δ: the barberpole, seen.
+               THE NODE IS THE HANDLE (fb441): one dot on a rail across the top. Drag it = Shift
+               (delta from the grab, never a teleport); wheel over it = Fdbk; double-click = back to
+               zero; right-click = Up / Ring / Down + reset. Idle with no audio: a white harmonic
+               ladder and its purple shifted twin, so the card is never empty and the shift is
+               always visible. fb442 — the live layers are a <canvas> under the SVG. */
+            bod:function(){
+              var lad='';
+              for(var k=0;k<9;k++){
+                lad+='<line class="bod-ref" data-k="'+k+'" x1="0" y1="50" x2="0" y2="74" stroke="rgba(255,255,255,0.26)" stroke-width="1"/>';
+                lad+='<line class="bod-sh"  data-k="'+k+'" x1="0" y1="38" x2="0" y2="66" stroke="#B794FF" stroke-width="1.3" opacity="0"/>';
+                lad+='<line class="bod-sh2" data-k="'+k+'" x1="0" y1="38" x2="0" y2="66" stroke="#B794FF" stroke-width="1.3" opacity="0"/>';
+              }
+              var cx=(FX4_X0+FX4_PW*0.5).toFixed(1);
+              return '<canvas class="fx-spec"></canvas>'
+                +'<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'
+                +'<line x1="'+fx4HzX(100).toFixed(1)+'" y1="18" x2="'+fx4HzX(100).toFixed(1)+'" y2="74"/>'
+                +'<line x1="'+fx4HzX(1000).toFixed(1)+'" y1="18" x2="'+fx4HzX(1000).toFixed(1)+'" y2="74"/>'
+                +'<line x1="'+fx4HzX(10000).toFixed(1)+'" y1="18" x2="'+fx4HzX(10000).toFixed(1)+'" y2="74"/>'
+                +'</g>'
+                +'<g class="bod-lad">'+lad+'</g>'
+                /* the shift RAIL: a hairline with the zero tick at centre; the node rides it */
+                +'<line x1="'+FX4_X0+'" y1="10" x2="'+FX4_X1+'" y2="10" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +'<line x1="'+cx+'" y1="6.5" x2="'+cx+'" y2="13.5" stroke="rgba(255,255,255,0.30)" stroke-width="1"/>'
+                +'<line class="bod-span" x1="'+cx+'" y1="10" x2="'+cx+'" y2="10" stroke="#B794FF" stroke-width="1.6" opacity="0.55"/>'
+                +'<circle class="bod-n" cx="'+cx+'" cy="10" r="2.4" fill="currentColor" stroke="none"/>'
+                +'</svg>';
+            },
+            /* UTILITY — THE BUTTON BANK. No scope, by request: "utility doesn't even have to have a
+               visualizer, it should just have a whole bunch of buttons on the front, mirroring the same
+               buttons we already have." Six switches, house look, lit purple when on. They are real
+               .fxr-pill nodes inside the card, so the pill handler that has always been there binds
+               them by index against pp[] — one click path, not two. Under them, one thin L/R level
+               pair, because a Gain knob whose effect is invisible breaks the "everything audible
+               interacts visually" rule; it is a meter, not a scope. */
+            utl:function(){
+              var names=['Flip L','Flip R','Trade','Sum','DC','Dim'], h='';
+              for(var i=0;i<names.length;i++)
+                h+='<span class="fxr-pill"><span class="fxr-t">'+names[i]+'</span></span>';
+              return '<div class="utl-bank">'+h+'</div>'
+                +'<div class="utl-meter"><span class="utl-ch" data-ch="0"><i></i></span><span class="utl-ch" data-ch="1"><i></i></span></div>';
+            },
+            /* SPLITTER — LANES ARE REGIONS ON THE SPECTRUM, CROSSOVERS ARE THE HANDLES. The EQ's
+               grammar, exactly: the live spectrum underneath (the same white), and over it each band
+               as a REGION of the log axis, lit purple by that band's own live energy — so an empty,
+               muted or soloed-away band goes dark at a glance. Its name sits at the top; a "+" in the
+               corner drops a device INTO that band (the Serum 2 interaction, kept). The crossover
+               lines carry a NODE at mid-height: drag it (delta from grab) and the band edge moves
+               — node 0 is Split, later nodes are Span; ordering is by construction so they can never
+               cross. Wheel over a region = that lane's Gain. Double-click a node = reset. Right-click
+               a region = the house menu (Mute · Solo · Flip · Add a device here).
+               Mid/Side and Left/Right have no crossovers: two halves, named, each lit by its level. */
+            spl:function(){
+              var h='';
+              for(var k=0;k<4;k++){
+                h+='<g class="spl-lane" data-lane="'+k+'" opacity="0">'
+                 +  '<rect class="spl-rg" data-lane="'+k+'" x="0" y="4" width="0" height="70" fill="#B794FF" opacity="0.05"/>'
+                 +  '<text class="spl-nm" data-lane="'+k+'" x="0" y="12" font-size="7" fill="rgba(255,255,255,0.55)" text-anchor="middle" letter-spacing="0.5"></text>'
+                 +  '<g class="spl-add" data-lane="'+k+'"><rect class="spl-addh" x="0" y="62" width="12" height="12" fill="transparent"/>'
+                 +     '<rect class="spl-addg" x="0" y="63" width="9" height="9" rx="2" fill="none" stroke="rgba(255,255,255,0.40)" stroke-width="0.8"/>'
+                 +     '<text class="spl-addt" x="0" y="70.4" font-size="8.2" fill="rgba(255,255,255,0.70)" text-anchor="middle">+</text></g>'
+                 +'</g>';
+              }
+              for(var x=0;x<3;x++){
+                h+='<line class="spl-xl" data-k="'+x+'" x1="0" y1="4" x2="0" y2="74" stroke="rgba(255,255,255,0.45)" stroke-width="1" opacity="0"/>'
+                 + '<circle class="spl-n" data-k="'+x+'" cx="0" cy="39" r="2.4" fill="currentColor" stroke="none" opacity="0"/>';
+              }
+              return '<canvas class="fx-spec"></canvas>'
+                +'<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
+                +'<g stroke="rgba(255,255,255,0.07)" stroke-width="1">'
+                +'<line x1="'+fx4HzX(100).toFixed(1)+'" y1="4" x2="'+fx4HzX(100).toFixed(1)+'" y2="74"/>'
+                +'<line x1="'+fx4HzX(1000).toFixed(1)+'" y1="4" x2="'+fx4HzX(1000).toFixed(1)+'" y2="74"/>'
+                +'<line x1="'+fx4HzX(10000).toFixed(1)+'" y1="4" x2="'+fx4HzX(10000).toFixed(1)+'" y2="74"/>'
+                +'</g>'
+                +'<line x1="6.5" y1="74" x2="219.5" y2="74" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
+                +h
+                +'</svg>';
+            },
+            
+};
+
+/* devHTML() — structure-for-structure as the plugin emits it */
+function devHTML(d,idx){
+  var pillsInCore=(d.core==='utl'||d.core==='spl');   /* fb445 — the switches live IN the core; the chassis row would be a double */
+  var pills=pillsInCore?'':d.pills.map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'" data-pi="'+i+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+  var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
+  var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+k.p+'">'+knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
+  return '<div class="fxr-dev'+(d.on?'':' fxr-off')+'" data-dev="'+idx+'">'
+    +'<div class="fxr-head">'
+      +'<span class="fxr-grip">\u22ee\u22ee</span><span class="fxr-name">'+d.name+'</span>'
+      +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+d.type+'<span class="fxr-car">\u25be</span></span>'
+        +d.types.map(function(t){return '<span class="fxr-tg">'+t+'<span class="fxr-car">\u25be</span></span>';}).join('')
+        +'</span><select class="fxr-type-native" data-tsel="'+idx+'">'+d.types.map(function(t){return '<option'+(t===d.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></span>'
+      +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">\u2726</span><span class="fxr-pname">Init</span><span class="fxr-car">\u25be</span></span>'
+      +'<span class="fxr-spacer"></span>'
+      +'<span class="fxr-headr"><span class="fxr-swap" data-act="swap" title="More parameters">'+IC_PLUS+IC_ARROW+'</span><span class="fxr-pwr" data-act="pwr"></span><span class="fxr-x" data-act="x" title="Remove">'+IC_X+'</span></span>'
+    +'</div>'
+    +'<div class="fxr-core" data-core="'+d.core+'">'+CORES[d.core]()+'</div>'
+    +'<div class="fxr-ctrls">'
+      +'<div class="fxr-knobs">'+knobs+'</div>'
+      +'<div class="fxr-divider"></div>'
+      +'<div class="fxr-rightcol"><div class="fxr-pills">'+pills+'</div><div class="fxr-route">'+route+'</div></div>'
+    +'</div></div>';
+}
+/* the OFFICIAL back panel (fb275): 2 dropdowns + 8 knobs 4x2 + 3 column separators. Back dials carry
+   data-bk = LABEL (the rack's convention) so __fxRedrawKnobs finds them. */
+function backHTML(d,idx){
+  var ks=d.back.knobs.map(function(b,i){return '<div class="bp-k fxr-bk-knob"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],fxFmt(d.core,b[2],b[1],d),null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
+  var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
+  return '<div class="bp'+(d.__bpOpen?' on':'')+'" data-bp="'+idx+'"><div class="bp-row">'
+    +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option'+(c===d.back.d1.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
+    +'<div class="bp-sel"><label>'+d.back.d2.k+'</label><select data-dsel="'+idx+'">'+d.back.d2.opts.map(function(c){return '<option'+(c===d.back.d2.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
+    +'</div><div class="bp-grid">'+seps+ks+'</div></div>';
+}
+function render(){
+  rack.innerHTML=DEVS.map(devHTML).join('');
+  document.getElementById('panels').innerHTML=DEVS.map(function(d,i){ return '<div class="bpslot">'+backHTML(d,i)+'</div>'; }).join('');
+  fitZoom();
+}
+function reRenderKeepSwap(){ render(); }
+/* redraw one device's knobs from the MODEL — the plugin's __fxRedrawKnobs, here over the mockup's markup */
+window.__fxRedrawKnobs=function(d){ try{
+  var idx=DEVS.indexOf(d), card=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]');
+  if(card){ card.querySelectorAll('.fxr-dial[data-k]').forEach(function(el){ var k=d.knobs[+el.getAttribute('data-k')];
+    el.innerHTML=knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null); var la=el.parentNode.querySelector('.fxr-lab'); if(la&&la.textContent!==k.l) la.textContent=k.l; }); }
+  var bp=document.querySelector('.bp[data-bp="'+idx+'"]');
+  if(bp){ bp.querySelectorAll('.fxr-dial[data-bk]').forEach(function(el){ var lbl=el.getAttribute('data-bk'), row=null;
+    for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; break; } if(!row) return;
+    el.innerHTML=knobSVG(row[1],fxFmt(d.core,row[2],row[1],d),null); var la2=el.parentNode.querySelector('.fxr-lab'); if(la2&&la2.textContent!==row[0]) la2.textContent=row[0]; }); }
+}catch(e){} };
+/* __setSynParam — the plugin's ONE write path. Here: find the param's device + slot, push the worklet key. */
+window.__setSynParam=function(id,norm){ try{
+  for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(id.indexOf(d.pfx)!==0) continue; var tail=id.slice(d.pfx.length), t=d.__t;
+    for(var k=0;k<t.knobs.length;k++) if(t.knobs[k][2]===tail){ push(d,t.keys[k],norm); return; }
+    for(var b=0;b<t.back.length;b++) if(t.back[b][2]===tail){ push(d,'b'+(b+1),norm); return; }
+    for(var p=0;p<t.pillKeys.length;p++) if(t.pillKeys[p].toUpperCase()===tail){ push(d,t.pillKeys[p],norm>0.5?1:0,true); return; }
+    var mx; if((mx=/^X([1-4])HZ$/.exec(tail))){ push(d,'x'+(2*(+mx[1])-1),norm); return; } if((mx=/^X([1-4])ON$/.exec(tail))){ push(d,'xon'+mx[1],norm>0.5?1:0,true); return; } if((mx=/^X([1-4])$/.exec(tail))){ push(d,'x'+(2*(+mx[1])),norm); return; }   /* fb438 */
+    if(tail==='TYPE'){ push(d,'type',Math.round(norm*(d.tpN-1)),true); return; }
+    if(tail===(t.d1p||'CHAR')){ push(d,'character',Math.round(norm*7),true); return; }
+    if(tail===t.d2p){ push(d,'axis',Math.round(norm*7),true); return; }
+  } }catch(e){} };
+
+/* ── the house menu, the toast and the rack's add-menu — what the plugin provides around the lifted handlers ── */
+(function(){
+  var el=null, hideT=null;
+  function hide(){ if(el){ el.remove(); el=null; } document.removeEventListener('pointerdown',onDoc,true); }
+  function onDoc(e){ if(el&&!el.contains(e.target)) hide(); }
+  window.__synShowMenu=function(title,rows,x,y){ hide(); el=document.createElement('div');
+    el.style.cssText='position:fixed;z-index:99;left:'+x+'px;top:'+y+'px;min-width:150px;background:#1c1830;border:1px solid var(--border-strong,#3a3356);border-radius:8px;padding:4px 0;font:400 11px -apple-system,system-ui;color:#e8e4f5;box-shadow:0 8px 24px rgba(0,0,0,.45)';
+    if(title){ var h=document.createElement('div'); h.textContent=title; h.style.cssText='padding:5px 12px 6px;color:#9a92b8;font-size:10px;letter-spacing:.04em;border-bottom:1px solid rgba(255,255,255,.08);margin-bottom:3px'; el.appendChild(h); }
+    rows.forEach(function(r){ var d=document.createElement('div'); d.textContent=r.label; d.style.cssText='padding:5px 12px;cursor:pointer;color:'+(r.white?'#e8e4f5':'#6f6890');
+      d.addEventListener('mouseenter',function(){ d.style.background='rgba(183,148,255,.14)'; }); d.addEventListener('mouseleave',function(){ d.style.background='transparent'; });
+      d.addEventListener('click',function(){ try{ r.onPick&&r.onPick(); }catch(e){} hide(); }); el.appendChild(d); });
+    document.body.appendChild(el); setTimeout(function(){ document.addEventListener('pointerdown',onDoc,true); },0); };
+  window.__synHideMenu=hide;
+  window.__tiToast=function(msg){ var t=document.getElementById('toast'); if(!t){ t=document.createElement('div'); t.id='toast'; t.style.cssText='position:fixed;left:50%;bottom:28px;transform:translateX(-50%);background:#241f38;border:1px solid var(--purple-400,#B794FF);color:#e8e4f5;border-radius:8px;padding:7px 14px;font:500 11.5px -apple-system,system-ui;z-index:98;opacity:0;transition:opacity .18s'; document.body.appendChild(t); }
+    t.textContent=msg; t.style.opacity='1'; clearTimeout(hideT); hideT=setTimeout(function(){ t.style.opacity='0'; },1800); };
+  /* in the plugin this opens the rack's device list, pre-aimed at the lane; here it can only say so */
+  window.fxAddMenu=function(x,y,lane,idx){ var d=DEVS[idx]; var nm=(d&&SPL_LANE_NAMES[fx4SplType(d)]||['Low','Mid','High'])[lane-1]||('Lane '+lane); window.__tiToast('In the plugin: adds a device into the '+nm+' band'); };
+  document.addEventListener('click',function(e){ var a=e.target.closest&&e.target.closest('.spl-add'); if(!a) return; var card=a.closest('.fxr-dev'); if(!card) return;
+    var r=a.getBoundingClientRect(); window.fxAddMenu(r.left,r.bottom+4,(+a.getAttribute('data-lane'))+1,+card.getAttribute('data-dev')); },true);
+})();
+
+/* ═══ the plugin's own tick, drawers and handlers — LIFTED from index.html (markers) ═══ */
+/* ═══ FX4-TICK-BEGIN (fb437) — THE FOUR CARDS, LIVE ═══════════════════════════════════
+             One rAF loop for all four (the fx3 precedent: never a setInterval that free-runs
+             against the compositor). Every number comes off window.__fx4VizPush, the 60 Hz C++
+             PUSH (fb354: push, never poll) — { eqz:[6], wid:[6], cmp:[6], ott:[6] }, an entry per
+             instance, null when not in the chain. Everything drawn GLIDES toward the feed — dB
+             linearly, Hz in log space (the fb163 constant) — so it moves like water and nothing
+             sample-and-holds. Idle = dim, playing = bright from lvl (fb311). The EQ curve arrives
+             only when it CHANGED (and once a second), so the drawer keeps the last one. */
+          function fx4Gl(o,k,t,a){ if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]+=a*(t-o[k]); return o[k]; }
+          function fx4GlLog(o,k,t,a){ t=Math.max(1e-6,t); if(o[k]==null||!isFinite(o[k])) o[k]=t; o[k]=Math.exp(Math.log(o[k])+a*(Math.log(t)-Math.log(o[k]))); return o[k]; }
+          function fx4C01(v){ return Math.max(0,Math.min(1,v||0)); }
+          function fx4SetA(el,k,v){ if(el) el.setAttribute(k,v); }
+          /* the EQ's dB axis (+-30 over the plot) and the Mix-aware drawn response */
+          function fx4DbY(db){ return Math.max(3,Math.min(75,FX4_CY-db*1.1)); }
+          function fx4EffDb(c,m){ if(m>=0.999) return c; var lin=(1-m)+m*Math.pow(10,c/20); return 20*Math.log10(Math.max(1e-6,Math.abs(lin))); }
+          function fx4DrawEqz(core,dev,f){
+            var st=dev.__st||(dev.__st={}); var N=96; if(!st.c){ st.c=new Float32Array(N); }
+            if(f&&f.curve&&f.curve.length===N) st.src=f.curve;                 // the C++ sends it only on change
+            st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            fx4SetA(core.querySelector('.eqz-glow'),'opacity',(0.05+0.30*st.g).toFixed(3));
+            fx4SetA(core.querySelector('.eqz-fill'),'opacity',(0.04+0.12*st.g).toFixed(3));
+            var mix=fx4C01(((dev.knobs&&dev.knobs[3])?dev.knobs[3].v:100)/100), src=st.src||null, d='';
+            for(var i=0;i<N;i++){ var tv=src?src[i]:0; if(!isFinite(tv)) tv=0; st.c[i]+=0.45*(tv-st.c[i]);
+              d+=(i?'L':'M')+(FX4_X0+FX4_PW*i/(N-1)).toFixed(1)+' '+fx4DbY(fx4EffDb(st.c[i],mix)).toFixed(1); }
+            var curve=core.querySelector('.eqz-curve');
+            if(curve&&curve.getAttribute('d')!==d){ curve.setAttribute('d',d); fx4SetA(core.querySelector('.eqz-glow'),'d',d); fx4SetA(core.querySelector('.eqz-fill'),'d',d+'L'+FX4_X1+' '+FX4_CY+'L'+FX4_X0+' '+FX4_CY+'Z'); }
+            // the nodes: at the band's LIVE centre, ON the drawn line (interpolated from the same bins)
+            var nodes=core.querySelectorAll('.eqz-n');
+            for(var b=0;b<nodes.length;b++){
+              // fb438 — a free bell (b>=4) exists only while ON: the feed's flag, or the model's before the first push
+              var on=(b<4)||((f&&f.on)?!!f.on[b]:!!(dev.xb&&dev.xb[b-4]&&dev.xb[b-4][2]));
+              if(!on){ fx4SetA(nodes[b],'opacity','0'); nodes[b].__off=true; continue; } if(nodes[b].__off){ fx4SetA(nodes[b],'opacity','1'); nodes[b].__off=false; }
+              var dflt=[100,550,3100,15500,632,632,632,632][b]; if(b>=4&&dev.xb&&dev.xb[b-4]) dflt=20*Math.pow(1000,dev.xb[b-4][0]/100);
+              var hz=fx4GlLog(st,'hz'+b,(f&&f.hz&&f.hz.length>b)?f.hz[b]:dflt,0.5);
+              var x=Math.max(FX4_X0,Math.min(FX4_X1,fx4HzX(hz))), u=(x-FX4_X0)/FX4_PW*(N-1), i0=Math.floor(u), i1=Math.min(N-1,i0+1), fr=u-i0;
+              var cdb=st.c[i0]*(1-fr)+st.c[i1]*fr;
+              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4EffDb(cdb,mix)).toFixed(1)); }
+            fx4SpecCv(core);   // fb442 — the audio layer, on its own canvas at device resolution
+          }
+          /* ═══ fb442 — THE CARD SPECTRUM IS A CANVAS ═════════════════════════════════════════
+             Max, twice: "chopping and cutting up... grainy and distorted... a static portrait of the
+             last audio... it copies and pastes the new audio" — and, crucially, "it doesn't do it with
+             the MAIN FILTER."
+
+             The main filter's analyzer is a CANVAS: it point-samples binMag at ONE POINT PER CSS PIXEL
+             and repaints the whole thing every frame at device resolution. The cards drew the same feed
+             into an SVG <path> on a viewBox="0 0 226 78" with preserveAspectRatio="none" — a NON-UNIFORM
+             stretch — at a fixed point count (96, then 128). That is the fb356 trap the tape cards already
+             escaped ("a stretched SVG makes stroke weight depend on slope"): under anisotropic scale a
+             0.7-unit stroke draws heavier on shallow segments than steep ones, so a dense zigzag shimmers
+             and reads as dithered; and a fixed point count stops matching the pixel count, so peaks land
+             between samples and re-roll every frame.
+
+             fb441 tried to fix that in the DATA (peak-per-column + ballistics). It made it worse: at Max's
+             card width several adjacent columns own the SAME FFT bin, so they drew identical values —
+             flat-topped mesas with vertical walls, which is exactly the "copy-pasted" look he screenshotted.
+             That aggregator is now GONE.
+
+             This is the main filter's own algorithm on a canvas, sized to the core in device pixels and
+             cleared + repainted every frame: a stale layer is structurally impossible, the stroke is
+             uniform, and one point per CSS pixel means the sampling matches the display at ANY card width. */
+          // ═══ fb445 — THE CANVAS SPECTRUM, GENERALISED: one layer = one REMAP of the same bins. ═══
+          // fx4SpecCv (every card's white audio layer) is one call of this; the Bode's purple "where
+          // it went" and white "where it was" are two more. Same one-point-per-pixel sampling, the
+          // same ~1/6-octave smoothing IN dB (peaks are not eaten by the valleys beside them), the same
+          // fb156 dead-feed law (no signal, no ink) — authored once. The fb442 lessons live here now:
+          // a 60 Hz redraw on a stretched SVG path reads as dithered and static; a canvas sized in
+          // device pixels and cleared every frame cannot freeze.
+          function fx4SpecCanvas(core){
+            var cv=core.querySelector('canvas.fx-spec'); if(!cv) return null;
+            var r=core.getBoundingClientRect(); if(r.width<6||r.height<6) return null;
+            var dpr=Math.min(window.devicePixelRatio||1,3);
+            var W=Math.max(2,Math.round(r.width*dpr)), Hp=Math.max(2,Math.round(r.height*dpr));
+            if(cv.width!==W||cv.height!==Hp){ cv.width=W; cv.height=Hp; }
+            var ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,Hp); return {ctx:ctx,W:W,Hp:Hp,dpr:dpr};
+          }
+          function fx4SpecLayer(ctx,W,Hp,dpr,remap,rgb,aMul,fillA,lineA,lw){
+            if(!(window.__fltHasBins&&window.__fltHasBins())) return 0;
+            var BM=window.__fltBandMag||window.__fltBinMag, SY=window.__fltSpecY, band=!!window.__fltBandMag;
+            var sx=W/226, sy=Hp/78, x0=6.5*sx, pw=213*sx;
+            var n=Math.max(24,Math.round(213*sx/dpr));      // ONE POINT PER CSS PIXEL — the main filter's density
+            var pts=new Float32Array(n+1), raw=new Float32Array(n+1), lvl=0, hw=Math.pow(1000,0.5/n);   // half a pixel, as a frequency ratio
+            for(var i=0;i<=n;i++){ var u=i/n, fc=20*Math.pow(1000,u), fs=remap?remap(fc):fc, m=0;
+              if(fs>10&&fs<22000) m=band?BM(fs/hw,fs*hw):BM(fs);
+              lvl+=m; raw[i]=2+SY(m,74); }
+            var kw=Math.max(1,Math.round(n/140));            // half-width: (2kw+1) px ~= 1/6 octave at any n
+            for(var p=0;p<=n;p++){ var acc=0,ws=0;
+              for(var t=-kw;t<=kw;t++){ var j=p+t; if(j<0) j=0; else if(j>n) j=n; var wt=kw+1-(t<0?-t:t); acc+=raw[j]*wt; ws+=wt; }
+              var yv=acc/ws; if(yv<2) yv=2; else if(yv>76) yv=76; pts[p]=yv*sy; }
+            // aMul lets a layer read bolder at the same level; the CLAMP after it is not optional —
+            // an alpha over 1 is an invalid colour, the canvas throws, and the card blanks (fb445 found
+            // exactly that: Bode showed its idle ladder over a loud Utility because rgba(...,2.09) threw).
+            var a=Math.min(1,Math.min(1,(lvl/(n+1))*300)*(aMul==null?1:aMul)); if(a<=0.02) return 0;
+            var yB=76*sy;
+            ctx.beginPath(); ctx.moveTo(x0,yB);
+            for(var k=0;k<=n;k++) ctx.lineTo(x0+pw*k/n, pts[k]);
+            ctx.lineTo(x0+pw,yB); ctx.closePath();
+            var g=ctx.createLinearGradient(0,0,0,Hp);
+            g.addColorStop(0,'rgba('+rgb+','+(fillA*a).toFixed(3)+')');
+            g.addColorStop(1,'rgba('+rgb+',0.010)');
+            ctx.fillStyle=g; ctx.fill();
+            ctx.beginPath();
+            for(var q=0;q<=n;q++){ var xq=x0+pw*q/n; if(q) ctx.lineTo(xq,pts[q]); else ctx.moveTo(xq,pts[q]); }
+            ctx.strokeStyle='rgba('+rgb+','+(lineA*a).toFixed(3)+')';
+            ctx.lineWidth=Math.max(1,(lw||0.9)*dpr); ctx.lineJoin='round'; ctx.stroke();
+            return a;
+          }
+          function fx4SpecCv(core){ var c=fx4SpecCanvas(core); if(!c) return; fx4SpecLayer(c.ctx,c.W,c.Hp,c.dpr,null,'255,255,255',1,0.10,0.42,0.9); }
+          function fx4DbpY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/72))); }
+          function fx4DrawOtt(core,dev,f){
+            var st=dev.__st||(dev.__st={}); st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var nb=(f&&f.nb)?f.nb:3;
+            var xlo=fx4GlLog(st,'xlo',(f&&f.x)?f.x[0]:120,0.3), xhi=fx4GlLog(st,'xhi',(f&&f.x&&f.x[1]>0)?f.x[1]:2500,0.3);
+            var bounds=[FX4_X0,fx4HzX(xlo),nb===3?fx4HzX(xhi):FX4_X1,FX4_X1];
+            var lanes=core.querySelectorAll('.ott-lane');
+            for(var b=0;b<3;b++){ var L=lanes[b]; if(!L) continue; if(b>=nb){ L.setAttribute('opacity','0'); continue; } L.setAttribute('opacity','1');
+              var lx0=bounds[b], lx1=bounds[b+1], lw=lx1-lx0, cx=(lx0+lx1)/2;
+              var lev=fx4Gl(st,'lv'+b,(f&&f.lv)?Math.max(-66,f.lv[b]):-66,0.35);
+              var gr=fx4Gl(st,'gr'+b,(f&&f.gr)?f.gr[b]:0,0.3);
+              var tdn=fx4Gl(st,'td'+b,(f&&f.tdn)?f.tdn[b]:-20,0.2), tup=fx4Gl(st,'tu'+b,(f&&f.tup)?Math.min(f.tup[b],f.tdn?f.tdn[b]:0):-40,0.2);
+              var yLev=fx4DbpY(lev), yTdn=fx4DbpY(tdn), yTup=fx4DbpY(tup), dn=Math.max(0,gr), up=Math.max(0,-gr);
+              var yDn=fx4DbpY(tdn-dn), yUp=fx4DbpY(tup+up);
+              var col=L.querySelector('.ott-col'); fx4SetA(col,'x',(cx-lw*0.2).toFixed(1)); fx4SetA(col,'width',Math.max(2,lw*0.4).toFixed(1)); fx4SetA(col,'y',yLev.toFixed(1)); fx4SetA(col,'height',Math.max(0,75-yLev).toFixed(1)); fx4SetA(col,'opacity',(0.18+0.62*st.g).toFixed(3));
+              var sx=(cx-lw*0.36).toFixed(1), sw=Math.max(2,lw*0.72).toFixed(1), ex=(+sx+ +sw).toFixed(1);
+              var bdn=L.querySelector('.ott-bite-dn'); fx4SetA(bdn,'x',sx); fx4SetA(bdn,'width',sw); fx4SetA(bdn,'y',yTdn.toFixed(1)); fx4SetA(bdn,'height',Math.max(0,yDn-yTdn).toFixed(1));
+              var bup=L.querySelector('.ott-bite-up'); fx4SetA(bup,'x',sx); fx4SetA(bup,'width',sw); fx4SetA(bup,'y',yUp.toFixed(1)); fx4SetA(bup,'height',Math.max(0,yTup-yUp).toFixed(1));
+              var rdn=L.querySelector('.ott-rest-dn'); fx4SetA(rdn,'x1',sx); fx4SetA(rdn,'x2',ex); fx4SetA(rdn,'y1',yTdn.toFixed(1)); fx4SetA(rdn,'y2',yTdn.toFixed(1)); fx4SetA(rdn,'opacity',dn>0.3?'.22':'0');
+              var rup=L.querySelector('.ott-rest-up'); fx4SetA(rup,'x1',sx); fx4SetA(rup,'x2',ex); fx4SetA(rup,'y1',yTup.toFixed(1)); fx4SetA(rup,'y2',yTup.toFixed(1)); fx4SetA(rup,'opacity',up>0.3?'.22':'0');
+              var edn=L.querySelector('.ott-edge-dn'); fx4SetA(edn,'x1',sx); fx4SetA(edn,'x2',ex); fx4SetA(edn,'y1',yDn.toFixed(1)); fx4SetA(edn,'y2',yDn.toFixed(1));
+              var eup=L.querySelector('.ott-edge-up'); fx4SetA(eup,'x1',sx); fx4SetA(eup,'x2',ex); fx4SetA(eup,'y1',yUp.toFixed(1)); fx4SetA(eup,'y2',yUp.toFixed(1));
+            }
+            var xl=core.querySelectorAll('.ott-xl'); if(xl.length<2) return;
+            fx4SetA(xl[0],'x1',bounds[1].toFixed(1)); fx4SetA(xl[0],'x2',bounds[1].toFixed(1));
+            if(nb===3){ fx4SetA(xl[1],'x1',bounds[2].toFixed(1)); fx4SetA(xl[1],'x2',bounds[2].toFixed(1)); if(!xl[1].classList.contains('hot')) fx4SetA(xl[1],'opacity','.45'); }
+            else fx4SetA(xl[1],'opacity','0');
+          }
+          function fx4RivY(db){ return Math.max(4,Math.min(75,4+(6-db)*(71/66))); }
+          function fx4DrawCmp(core,dev,f){
+            var st=dev.__st||(dev.__st={h:[]}); if(!st.h) st.h=[]; st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var inDb=f?Math.max(-60,Math.min(6,f['in'])):-60, outDb=f?Math.max(-60,Math.min(6,f.out)):-60, gr=f?Math.max(0,f.gr||0):0;
+            st.h.push([inDb,outDb]); if(st.h.length>150) st.h.shift();
+            var RW=131.5, n=st.h.length, pin='', pout='', gap='';
+            for(var i=0;i<n;i++){ var x=FX4_X0+RW*i/149, yi=fx4RivY(st.h[i][0]), yo=fx4RivY(st.h[i][1]);
+              pin+=(i?'L':'M')+x.toFixed(1)+' '+yi.toFixed(1); pout+=(i?'L':'M')+x.toFixed(1)+' '+yo.toFixed(1); }
+            for(var j=n-1;j>=0;j--){ gap+='L'+(FX4_X0+RW*j/149).toFixed(1)+' '+fx4RivY(st.h[j][1]).toFixed(1); }
+            fx4SetA(core.querySelector('.cmp-in'),'d',pin);
+            var ol=core.querySelector('.cmp-outl'); if(ol&&ol.getAttribute('d')!==pout) ol.setAttribute('d',pout);
+            var gp=core.querySelector('.cmp-gap'); fx4SetA(gp,'d',pin+gap+'Z'); fx4SetA(gp,'opacity',(0.12+0.30*st.g).toFixed(3));
+            var thr=fx4Gl(st,'thr',(f&&f.thr!==undefined)?f.thr:-3,0.3), yT=fx4RivY(thr), grs=fx4Gl(st,'gr',gr,0.35);
+            var tl=core.querySelector('.cmp-thr'); fx4SetA(tl,'y1',yT.toFixed(1)); fx4SetA(tl,'y2',yT.toFixed(1));
+            var pr=core.querySelector('.cmp-press'); fx4SetA(pr,'y',yT.toFixed(1)); fx4SetA(pr,'height',Math.max(0,Math.min(75-yT,grs*(71/66))).toFixed(1));
+            // the knee: input -60..+12 dBp across x 146..219.5, output -60..+12 up y 75..4 (sent on change)
+            var KW=73.5, kd=''; if(!st.k){ st.k=new Float32Array(32); for(var q0=0;q0<32;q0++) st.k[q0]=-60+72*q0/31; }
+            if(f&&f.knee&&f.knee.length===32) st.ksrc=f.knee;
+            for(var q=0;q<32;q++){ var tv=st.ksrc?st.ksrc[q]:(-60+72*q/31); if(!isFinite(tv)) tv=-60+72*q/31; st.k[q]+=0.4*(tv-st.k[q]);
+              kd+=(q?'L':'M')+(146+KW*q/31).toFixed(1)+' '+(4+71*(1-(Math.max(-60,Math.min(12,st.k[q]))+60)/72)).toFixed(1); }
+            var kp=core.querySelector('.cmp-knee'); if(kp&&kp.getAttribute('d')!==kd) kp.setAttribute('d',kd);
+            var bi=fx4Gl(st,'bi',inDb,0.5), qq=(Math.max(-60,Math.min(12,bi))+60)/72*31, qa=Math.floor(qq), qb=Math.min(31,qa+1), fr=qq-qa;
+            var bo=st.k[qa]*(1-fr)+st.k[qb]*fr, ball=core.querySelector('.cmp-ball');
+            fx4SetA(ball,'cx',(146+KW*qq/31).toFixed(1)); fx4SetA(ball,'cy',(4+71*(1-(Math.max(-60,Math.min(12,bo))+60)/72)).toFixed(1)); fx4SetA(ball,'opacity',(0.25+0.65*st.g).toFixed(2));
+          }
+          function fx4DrawWid(core,dev,f){
+            var st=dev.__st||(dev.__st={}); st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
+            var nV=(f&&f.nV)?f.nV:6, beams=core.querySelectorAll('.wid-v'), len=54*(0.70+0.30*st.g), sw=(1.1+1.3*st.g).toFixed(2);
+            var minA=9,maxA=-9,tips=[];
+            for(var v=0;v<8;v++){ var el=beams[v]; if(!el) continue; if(v>=nV){ fx4SetA(el,'opacity','0'); continue; }
+              var pan=fx4Gl(st,'p'+v,(f&&f.pan)?f.pan[v]:0,0.25), cents=fx4Gl(st,'c'+v,(f&&f.cents)?f.cents[v]:0,0.25);
+              var a=pan*0.78, tx=113+Math.sin(a)*len+cents/100*5, ty=70-Math.cos(a)*len;
+              fx4SetA(el,'x2',tx.toFixed(1)); fx4SetA(el,'y2',ty.toFixed(1)); fx4SetA(el,'stroke-width',sw); fx4SetA(el,'opacity',(0.20+0.75*st.g).toFixed(3));
+              if(a<minA){minA=a;} if(a>maxA){maxA=a;} tips.push([a,tx,ty]); }
+            // the bloom — a purple wedge between the outermost voices that breathes with the level
+            var bl=core.querySelector('.wid-bloom');
+            if(bl){ if(tips.length>=2){ tips.sort(function(p,q){return p[0]-q[0];}); var pd='M113 70';
+                for(var t=0;t<tips.length;t++) pd+='L'+tips[t][1].toFixed(1)+' '+tips[t][2].toFixed(1); pd+='Z';
+                bl.setAttribute('d',pd); bl.setAttribute('opacity',(0.03+0.22*st.g).toFixed(3)); } else bl.setAttribute('opacity','0'); }
+            fx4SetA(core.querySelector('.wid-dry'),'opacity',(0.30+0.40*st.g).toFixed(3));
+            var r=fx4Gl(st,'r',(f&&f.corr!==undefined)?f.corr:1,0.2), rx=(113+73*Math.max(-1,Math.min(1,r))).toFixed(1);
+            var nd=core.querySelector('.wid-r'); fx4SetA(nd,'x1',rx); fx4SetA(nd,'x2',rx);
+          }
+          // ═══ fb445 — BODE: the spectrum slides. ═══════════════════════════════════════════════
+          function bodShiftHz(v01){ var v=2*v01-1, m=Math.pow(5001,Math.abs(v))-1; return v<0?-m:m; }   // mirrors TerrainBodeFx::setParams EXACTLY
+          function fx4DrawBod(core,dev,f){
+            var kv=function(i,dflt){ var K=dev&&dev.knobs; return (K&&K[i])?K[i].v:dflt; };
+            var shK=kv(0,50)/100, dirK=kv(1,100)/100;
+            var fine=((dev.back&&dev.back.knobs&&dev.back.knobs[0])?dev.back.knobs[0][1]:50)/100;
+            var d=bodShiftHz(shK)+(2*fine-1)*2.0, ad=Math.abs(d), sign=d>=0?1:-1;      // the engine's Hz
+            var up=Math.max(0,2*dirK-1), dn=Math.max(0,1-2*dirK), ring=1-Math.abs(2*dirK-1);
+            var wUp=Math.min(1,up+0.5*ring), wDn=Math.min(1,dn+0.5*ring);             // both lit at the centre = RING
+            // the rail: the node sits at the knob's position (linear in knob = exponential in Hz, so
+            // the fine region near zero is wide by construction); the purple span is the reach from 0
+            var cx=FX4_X0+FX4_PW*0.5, nx=FX4_X0+FX4_PW*shK;
+            var node=core.querySelector('.bod-n'); if(node) node.setAttribute('cx',nx.toFixed(1));
+            var sp=core.querySelector('.bod-span'); if(sp){ sp.setAttribute('x1',Math.min(cx,nx).toFixed(1)); sp.setAttribute('x2',Math.max(cx,nx).toFixed(1)); sp.setAttribute('opacity',(Math.abs(shK-0.5)<0.004?0:0.55).toFixed(2)); }
+            // the canvas: PURPLE = the feed, what you hear · WHITE = the feed mapped back by the shift,
+            // where it was. For an UP shift the content now at f came from f−Δ, so the dry partial that
+            // sat at f is now at f+Δ: sample the feed at f+Δ to draw it where it was. Down mirrors;
+            // Ring draws both ghosts at half weight. At Δ=0 the ghost IS the live curve — nothing moved.
+            var c=fx4SpecCanvas(core), live=0;
+            if(c){
+              // the ghost first (underneath), only once something has actually moved
+              if(ad>=0.5&&wUp>0.01) live=Math.max(live,fx4SpecLayer(c.ctx,c.W,c.Hp,c.dpr,function(fc){ return fc+ad; },'255,255,255',2.4*wUp,0.07,0.40,0.9));
+              if(ad>=0.5&&wDn>0.01) live=Math.max(live,fx4SpecLayer(c.ctx,c.W,c.Hp,c.dpr,function(fc){ return fc-ad; },'255,255,255',2.4*wDn,0.07,0.40,0.9));
+              // the live layer ALWAYS, and BOLD: idle = dim, playing = bright (fb311). At the house's
+              // -26 dBFS bus the raw level term is ~0.19; x3.5 puts the line at ~0.65 alpha.
+              live=Math.max(live,fx4SpecLayer(c.ctx,c.W,c.Hp,c.dpr,null,'183,148,255',3.5,0.30,0.95,1.2));
+            }
+            // idle (no feed, so no ink on the canvas): the harmonic ladder carries the shift instead.
+            var lad=core.querySelector('.bod-lad'), showLad=live<=0.02;
+            if(lad) lad.setAttribute('opacity',showLad?'1':'0');
+            if(showLad){ var f0=110;
+              for(var i=0;i<9;i++){ var hz=f0*(i+1), x;
+                var ref=core.querySelector('.bod-ref[data-k="'+i+'"]'); if(ref){ x=fx4HzX(hz).toFixed(1); ref.setAttribute('x1',x); ref.setAttribute('x2',x); }
+                var s1=core.querySelector('.bod-sh[data-k="'+i+'"]');  if(s1){ x=fx4HzX(Math.max(20,hz+sign*ad)).toFixed(1); s1.setAttribute('x1',x); s1.setAttribute('x2',x); s1.setAttribute('opacity',(ad<0.5?0:0.75*(sign>0?wUp:wDn)).toFixed(3)); }
+                var s2=core.querySelector('.bod-sh2[data-k="'+i+'"]'); if(s2){ x=fx4HzX(Math.max(20,hz-sign*ad)).toFixed(1); s2.setAttribute('x1',x); s2.setAttribute('x2',x); s2.setAttribute('opacity',(ad<0.5?0:0.75*(sign>0?wDn:wUp)).toFixed(3)); }
+              } }
+          }
+          // ═══ fb445 — SPLITTER: lanes are regions on the spectrum, crossovers are the handles. ═══
+          var SPL_LANE_NAMES={0:['Low','High'],1:['Low','Mid','High'],2:['Sub','Low','Mid','High'],3:['Mid','Side'],4:['Left','Right']};
+          // the engine's knob↔Hz laws, MIRRORED (TerrainSplitterFx::splitHzFor / spanRatioFor). A
+          // mapping authored in two places is the fb373 defect, so these are the only copy in the UI.
+          var FX4_SPL_LANES=[2,3,4,2,2], FX4_SPL_BOT=25, FX4_SPL_TOP=10000, FX4_SPL_SMIN=1.4, FX4_SPL_SMAX=40;
+          function fx4SplType(dev){ var T=dev&&dev.types, tv=dev&&dev.type; if(T&&tv!=null){ var ix=T.indexOf(tv); if(ix>=0) return ix; } return 1; }
+          function fx4SplLanes(t){ return FX4_SPL_LANES[Math.max(0,Math.min(4,t|0))]||3; }
+          function fx4SplTop(t){ var N=fx4SplLanes(t); return N===2?FX4_SPL_TOP:(N===3?2000:700); }
+          function fx4SplHz(t,k){ return FX4_SPL_BOT*Math.pow(fx4SplTop(t)/FX4_SPL_BOT,Math.max(0,Math.min(1,k))); }
+          function fx4SplKnob(t,hz){ var top=fx4SplTop(t); hz=Math.max(FX4_SPL_BOT,Math.min(top,hz)); return Math.log(hz/FX4_SPL_BOT)/Math.log(top/FX4_SPL_BOT); }
+          function fx4SplRTop(t,f0){ var nx=fx4SplLanes(t)-1; var rH=Math.pow(FX4_SPL_TOP/Math.max(FX4_SPL_BOT,f0),1/Math.max(1,nx-1)); return Math.max(FX4_SPL_SMIN*1.05,Math.min(FX4_SPL_SMAX,rH)); }
+          function fx4SplRatio(t,f0,k){ var nx=fx4SplLanes(t)-1; if(nx<2) return 1; return FX4_SPL_SMIN*Math.pow(fx4SplRTop(t,f0)/FX4_SPL_SMIN,Math.max(0,Math.min(1,k))); }
+          function fx4SplSpanKnob(t,f0,r){ var nx=fx4SplLanes(t)-1; if(nx<2) return 0; var rT=fx4SplRTop(t,f0); r=Math.max(FX4_SPL_SMIN,Math.min(rT,r)); return Math.log(r/FX4_SPL_SMIN)/Math.log(rT/FX4_SPL_SMIN); }
+          function fx4SplXovers(dev){ var t=fx4SplType(dev), nl=fx4SplLanes(t); if(t>=3) return []; var f0=fx4SplHz(t,((dev.knobs&&dev.knobs[0])?dev.knobs[0].v:50)/100), r=fx4SplRatio(t,f0,((dev.back&&dev.back.knobs&&dev.back.knobs[4])?dev.back.knobs[4][1]:40)/100); var out=[f0]; for(var k=1;k<nl-1;k++) out.push(f0*Math.pow(r,k)); return out; }
+          // the core-resident switches take their lit state from d.pills every frame — the same array
+          // the chassis row would have used, so restore and preset-apply light them with no second path.
+          function fx4PaintCorePills(core,dev){
+            var b=core.querySelectorAll('.utl-bank .fxr-pill'), P=(dev&&dev.pills)||[];
+            for(var i=0;i<b.length;i++) b[i].classList.toggle('fxr-on', !!(P[i]&&P[i].on));
+          }
+          function fx4DrawUtl(core,dev,f){ fx4PaintCorePills(core,dev);
+            var st=dev.__st||(dev.__st={}), chs=core.querySelectorAll('.utl-ch i'), pk=[f?f.pkL:0,f?f.pkR:0];
+            for(var c=0;c<chs.length&&c<2;c++){ var db=20*Math.log10(Math.max(1e-6,pk[c]||0)), lv=fx4Gl(st,'m'+c,Math.max(0,Math.min(1,(db+54)/54)),0.35);
+              chs[c].style.width=(lv*100).toFixed(1)+'%'; chs[c].style.opacity=(lv>0.01?0.85:0).toFixed(2); }
+          }
+          function fx4DrawSpl(core,dev,f){
+            fx4SpecCv(core);
+            var st=dev.__st||(dev.__st={}), t=fx4SplType(dev), nm=SPL_LANE_NAMES[t]||SPL_LANE_NAMES[1];
+            var nl=nm.length, freq=(t<3), xo=fx4SplXovers(dev);   // from the TYPE: the post's nl lags a Type change by a frame (NaN widths)   // the knobs' own law: param-reactive even with no feed
+            var bounds=[FX4_X0];
+            if(freq){ for(var k=0;k<nl-1;k++){ var hz=(f&&f.hz&&f.hz[k]>0)?f.hz[k]:(xo[k]||1000); bounds.push(fx4HzX(fx4GlLog(st,'x'+k,hz,0.35))); } }
+            else bounds.push(FX4_X0+FX4_PW*0.5);
+            bounds.push(FX4_X1);
+            for(var L=0;L<4;L++){
+              var g=core.querySelector('.spl-lane[data-lane="'+L+'"]'); if(!g) continue;
+              var live=L<nl; g.setAttribute('opacity',live?'1':'0'); if(!live) continue;
+              var x0=bounds[L], x1=bounds[L+1], w=Math.max(0,x1-x0);
+              var pk=(f&&f.pk)?f.pk[L]:0, gt=(f&&f.gt)?f.gt[L]:1;
+              var db=20*Math.log10(Math.max(1e-6,pk||0)), lv=fx4Gl(st,'lv'+L,Math.max(0,Math.min(1,(db+60)/60)),0.3);
+              var rg=g.querySelector('.spl-rg'); if(rg){ rg.setAttribute('x',x0.toFixed(1)); rg.setAttribute('width',w.toFixed(1)); rg.setAttribute('opacity',(gt>0.5?(0.03+0.19*lv):0.008).toFixed(3)); }
+              var tn=g.querySelector('.spl-nm'); if(tn){ tn.setAttribute('x',((x0+x1)/2).toFixed(1)); var label=nm[L]||('Lane '+(L+1)); if(tn.textContent!==label) tn.textContent=label; tn.setAttribute('fill',gt>0.5?'rgba(255,255,255,0.55)':'rgba(255,255,255,0.22)'); tn.setAttribute('opacity',w<18?'0':'1'); }
+              var ad=g.querySelector('.spl-add'); if(ad){ var ax=x1-11.5, show=w>16; ad.setAttribute('opacity',show?'1':'0'); var hr=ad.querySelector('.spl-addh'), gr=ad.querySelector('.spl-addg'), tt=ad.querySelector('.spl-addt'); if(hr) hr.setAttribute('x',(ax-1.5).toFixed(1)); if(gr) gr.setAttribute('x',ax.toFixed(1)); if(tt) tt.setAttribute('x',(ax+4.5).toFixed(1)); }
+            }
+            for(var k2=0;k2<3;k2++){
+              var xl=core.querySelector('.spl-xl[data-k="'+k2+'"]'), nd=core.querySelector('.spl-n[data-k="'+k2+'"]');
+              var on=freq&&k2<nl-1, x=on?bounds[k2+1]:(k2===0&&!freq?bounds[1]:0);
+              if(xl){ xl.setAttribute('opacity',on?'1':(k2===0&&!freq?'0.6':'0')); xl.setAttribute('x1',x.toFixed(1)); xl.setAttribute('x2',x.toFixed(1)); }   // M/S · L/R: a fixed centre divider, no node
+              if(nd){ nd.setAttribute('opacity',on?'1':'0'); nd.setAttribute('cx',x.toFixed(1)); }
+            }
+          }
+          var FX4_DRAW={eqz:fx4DrawEqz,wid:fx4DrawWid,cmp:fx4DrawCmp,ott:fx4DrawOtt,bod:fx4DrawBod,spl:fx4DrawSpl,utl:fx4DrawUtl};
+          function fx4Tick(){
+            var feed=window.__fx4VizPush||null;
+            var cards=document.querySelectorAll('.fxr-dev');
+            for(var c=0;c<cards.length;c++){
+              var dev=DEVS[c]; if(!dev||!FX4_DRAW[dev.core]) continue;
+              var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]'); if(!core) continue;
+              var bank=feed?feed[dev.core]:null, f=(bank&&bank.length)?bank[(dev.inst||1)-1]:null;
+              if(f) dev.__vz=f;                                  // the readouts read it (Attack/Release/Ratio/crossovers)
+              try{ FX4_DRAW[dev.core](core,dev,f); }catch(e){}   // fb445 — the pool law, applied to the tick: one card's draw can never blank the others
+            }
+          }
+          (function(){ function l4(){ try{ if(!window.__cardOnly) fx4Tick(); }catch(e){}
+            requestAnimationFrame(l4); } requestAnimationFrame(l4); })();
+          window.__fx4Tick=fx4Tick;   // headless gate hook
+          /* the engine-fed readouts (Attack/Release/Ratio/knee/crossovers) refresh at a gentle rate */
+          setInterval(function(){ try{ for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);
+
+          /* ═══ THE EQUALIZER'S NODES — the Pro-Q grammar (CONTRACT R12), as SVG in the card.
+             Drag X = that band's Hz knob (the engine's own lo/hi per band), drag Y = its gain knob
+             as a DELTA from the grab (the node never jumps), wheel = Trait, double-click = reset.
+             A press that misses every node grabs the band that OWNS that part of the axis. The
+             nodes and the back-8 + front Air are ONE state: the model + __setSynParam, then
+             __fxRedrawKnobs — the fb363/364 discipline. ═══ */
+          (function(){
+            /* fb441 — THE EQUALIZER'S HANDS, rebuilt to the grammar every EQ a producer already knows.
+               Max: "it's too liquidy... I can't even double click on the line to add... when I scroll and try
+               to do that notch, band eight or nine gets affected... the right click doesn't work either."
+               Every one of those was ONE press handler: it ignored which button was down, grabbed the band
+               that OWNED that part of the axis, and set its Hz ABSOLUTELY to the cursor on mouse-down — so
+               the first half of a double-click teleported a band under the cursor (then dblclick "reset"
+               it instead of adding), a right-click dragged, and the wheel drove Trait (global width).
+               Now: THE NODE IS THE HANDLE. Press within HIT units of a dot: drag it, Hz AND gain as deltas
+               from the grab. Wheel over a dot: THAT band's Q, nothing else; over the grid the wheel is left
+               alone so the rack pans. Double-click a dot: reset; double-click anywhere else: ADD a band there
+               at 0 dB (a new band never changes the sound until you move it). Right-click a dot: the house
+               menu — Delete band (free bells) / Reset band. Hover = purple, larger, grab cursor. */
+            var EQZ_LO=[20,100,700,6000], EQZ_HI=[500,3000,14000,40000], drag=null, HIT=8, ctxAt=0;
+            var NAMES=['Low','Body','Bite','Air','Band 5','Band 6','Band 7','Band 8'];
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='eqz')?d:null; }
+            // bands 4..7 are the FREE BELLS: full-range log Hz, no back knob, model d.xb[k]=[hz,gain,on]
+            function gainRef(d,b){ if(b>=4){ var k=b-4; return {get:function(){return d.xb[k][1];},set:function(v){d.xb[k][1]=v; try{window.__setSynParam(d.xp[k][1],v/100);}catch(e){}}}; }
+                                   return b<3?{get:function(){return d.back.knobs[2*b+1][1];},set:function(v){d.back.knobs[2*b+1][1]=v; try{window.__setSynParam(d.back.knobs[2*b+1][2],v/100);}catch(e){}}}
+                                      :{get:function(){return d.knobs[1].v;},set:function(v){d.knobs[1].v=v; try{window.__setSynParam(d.knobs[1].p,v/100);}catch(e){}}}; }
+            function hzGet(d,b){ return b>=4?d.xb[b-4][0]:d.back.knobs[2*b][1]; }
+            function hzSet(d,b,v){ if(b>=4){ var k=b-4; d.xb[k][0]=v; try{window.__setSynParam(d.xp[k][0],v/100);}catch(e){} return; } d.back.knobs[2*b][1]=v; try{window.__setSynParam(d.back.knobs[2*b][2],v/100);}catch(e){} }
+            function freeLo(b){ return b>=4?20:EQZ_LO[b]; } function freeHi(b){ return b>=4?20000:EQZ_HI[b]; }
+            function setOn(d,k,on){ d.xb[k][2]=on?1:0; try{window.__setSynParam(d.xp[k][2],on?1:0);}catch(e){} }
+            function qGet(d,b){ return (d.xq&&d.xq[b]!=null)?d.xq[b]:50; }
+            function qSet(d,b,v){ if(!d.xq) d.xq=[50,50,50,50,50,50,50,50]; d.xq[b]=v; try{ if(d.xqp&&d.xqp[b]) window.__setSynParam(d.xqp[b],v/100); }catch(e){} }
+            function qMul(v){ return Math.pow(2,(v/100-0.5)*6); }
+            function fmtQ(q){ return q>=10?q.toFixed(0):(q>=1?q.toFixed(1):q.toFixed(2)); }
+            /* fb443 — with the card's floating text gone, this menu header is the ONLY place a band's
+               numbers appear, so it carries its unit (the READOUT LAW). The menu has room; the card does not. */
+            function hzLabel(hz){ return hz>=1000 ? (hz/1000).toFixed(hz>=10000?1:2)+' kHz' : Math.round(hz)+' Hz'; }
+            // THE HANDLE IS THE NODE: the nearest VISIBLE dot within HIT units, else nothing (-1). No axis ownership.
+            function pick(core,u){
+              var nodes=core.querySelectorAll('.eqz-n'), best=-1, bd=1e9;
+              for(var i=0;i<nodes.length;i++){ if(nodes[i].getAttribute('opacity')==='0') continue;
+                var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){bd=dd;best=+nodes[i].getAttribute('data-b');} }
+              return bd<=HIT?best:-1;
+            }
+            /* fb443 — THE FLOATING READOUT IS GONE. Max: "whenever I move the high bands there's this text
+               that pops up at the top left — we don't need that... there's no space for that text without it
+               getting crowded. People just got to do this visually." The card already says everything it
+               printed: the node moves, the curve follows, and the back-panel knobs (Low Hz / Low / ... ) carry
+               the numbers under the READOUT LAW. The one message that was not redundant — "no free bands left"
+               — moves to the house toast, which lives OUTSIDE the card and crowds nothing. */
+            function hot(core,b){ var ns=core.querySelectorAll('.eqz-n'); for(var i=0;i<ns.length;i++){ var on=+ns[i].getAttribute('data-b')===b; ns[i].classList.toggle('hot',on); ns[i].setAttribute('r',on?'3.2':'2.4'); } core.classList.toggle('eqz-over',b>=0); }
+            function liveHz(d,b){ var z=d.__vz; if(z&&z.hz&&z.hz.length>b&&isFinite(z.hz[b])) return z.hz[b]; var t=hzGet(d,b)/100; return freeLo(b)*Math.pow(freeHi(b)/freeLo(b),t); }
+            function liveQ(d,b){ var z=d.__vz; return (z&&z.q&&z.q.length>b&&isFinite(z.q[b])&&z.q[b]>0)?z.q[b]:qMul(qGet(d,b)); }
+            function resetBand(core,d,b){
+              if(b>=4){ gainRef(d,b).set(50); qSet(d,b,50); window.__fxRedrawKnobs(d); return; }
+              var t2=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core==='eqz'){ t2=DEV_TEMPLATES[i]; break; } if(!t2) return;
+              hzSet(d,b,t2.back.knobs[2*b][1]); gainRef(d,b).set(b<3?t2.back.knobs[2*b+1][1]:t2.knobs[1].v); qSet(d,b,50); window.__fxRedrawKnobs(d);
+            }
+            function addBand(core,d,u){
+              if(!d.xb||!d.xp) return; var k=-1; for(var q=0;q<4;q++) if(!d.xb[q][2]){ k=q; break; }
+              if(k<0){ try{ if(window.__tiToast) window.__tiToast('8 bands max — right-click one to delete'); }catch(err){} return; }
+              var hz=fx4XHz(u.x), t=Math.log(hz/20)/Math.log(1000); d.xb[k][0]=Math.max(0,Math.min(100,t*100)); d.xb[k][1]=50;   // 0 dB: adding never changes the sound
+              try{ window.__setSynParam(d.xp[k][0],d.xb[k][0]/100); window.__setSynParam(d.xp[k][1],0.5); }catch(err){} qSet(d,4+k,50); setOn(d,k,true);
+              var st=d.__st; if(st){ st['hz'+(4+k)]=hz; }
+            }
+            function bandMenu(core,d,b,x,y){
+              var rows=[{isHeader:true,label:NAMES[b]+'  ·  '+hzLabel(liveHz(d,b))+'  ·  Q '+fmtQ(liveQ(d,b))}];
+              if(b>=4) rows.push({label:'Delete band',onPick:function(){ setOn(d,b-4,false); hot(core,-1); }});
+              else     rows.push({label:'Delete band',isDisabled:true,badge:'fixed'});   // the four roles ARE the device
+              rows.push({label:'Reset band',onPick:function(){ resetBand(core,d,b); }});
+              try{ if(window.__synShowMenu) window.__synShowMenu('',rows,x,y); }catch(e){}
+            }
+            // HOVER: the dot under the pointer lights; leaving the core (or resting on the grid) clears it
+            document.addEventListener('pointermove',function(e){ try{
+              if(drag){ move(e); return; }
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]');
+              if(!core){ var over=document.querySelectorAll('.fxr-core.eqz-over'); for(var i=0;i<over.length;i++) hot(over[i],-1); return; }
+              var svg=core.querySelector('svg'); if(!svg) return; hot(core,pick(core,unit(svg,e)));
+            }catch(err){} });
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'); if(!svg) return;
+              var u=unit(svg,e), b=pick(core,u);
+              if(e.button===2){   // right button: the menu, never a drag (macOS opens menus on mouse-DOWN; the belt below catches the contextmenu too)
+                if(b>=0){ ctxAt=Date.now(); e.preventDefault(); e.stopPropagation(); bandMenu(core,d,b,e.clientX,e.clientY); } return; }
+              if(e.button!==0) return;
+              if(b<0) return;                               // the grid is not a handle — nothing moves, nothing is captured
+              drag={core:core,d:d,b:b,svg:svg,x0:u.x,y0:u.y,h0:hzGet(d,b),g0:gainRef(d,b).get(),lo:freeLo(b),hi:freeHi(b)};
+              hot(core,b); try{ core.setPointerCapture(e.pointerId); }catch(err){}
+              e.preventDefault();
+            }catch(err){} });
+            function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, b=drag.b;
+              // Hz as a DELTA in log-frequency from the grab (never an absolute jump to the cursor)
+              var dT=(Math.log(fx4XHz(u.x))-Math.log(fx4XHz(drag.x0)))/Math.log(drag.hi/drag.lo)*100;
+              hzSet(d,b,Math.max(0,Math.min(100,drag.h0+dT)));
+              var dDb=-(u.y-drag.y0)/1.1;                         // 1.1 units per dB on the plot
+              gainRef(d,b).set(Math.max(0,Math.min(100,drag.g0+dDb/30*50)));
+              window.__fxRedrawKnobs(d);
+            }
+            document.addEventListener('pointerup',function(e){ try{ if(drag){ var c=drag.core, sv=drag.svg; drag=null; hot(c,pick(c,unit(sv,e))); } }catch(err){} drag=null; });
+            // WHEEL = THAT band's Q. Captured at the document so the rack's wheel-to-scrollLeft pan never steals a
+            // scroll made over a DOT — and deliberately NOT touched anywhere else on the core, so a scroll over the
+            // grid or the curve pans the rack exactly like a scroll over any other card.
+            document.addEventListener('wheel',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'); if(!svg) return;
+              var b=pick(core,unit(svg,e)); if(b<0) return;      // not on a dot → leave the event alone (the rack pans)
+              e.preventDefault(); e.stopPropagation();
+              var v=Math.max(0,Math.min(100,qGet(d,b)-e.deltaY*0.12));   // wheel up = narrower (Q up), like Pro-Q / FL
+              qSet(d,b,v); hot(core,b);
+            }catch(err){} },{passive:false,capture:true});
+            document.addEventListener('dblclick',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var u=unit(core.querySelector('svg'),e), b=pick(core,u);
+              if(b>=0) resetBand(core,d,b); else addBand(core,d,u);
+            }catch(err){} });
+            // right-click belt: if the pointerdown above already opened the menu, swallow the contextmenu; else open it here.
+            document.addEventListener('contextmenu',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
+              var d=devFor(core); if(!d) return;
+              /* fb443 — 150 ms, not 500. macOS fires contextmenu in the SAME gesture as the right
+                 pointerdown that already opened the menu (tens of ms later), so this belt only has to
+                 absorb that pair. At 500 ms it also swallowed a DELIBERATE second right-click — caught
+                 by the fb443 gate, which right-clicked twice inside half a second and got no menu. */
+              if(Date.now()-ctxAt<150){ e.preventDefault(); e.stopPropagation(); return; }
+              var b=pick(core,unit(core.querySelector('svg'),e)); if(b<0) return;   // not on a dot: the panel's own handler swallows it
+              e.preventDefault(); e.stopPropagation(); bandMenu(core,d,b,e.clientX,e.clientY);
+            }catch(err){} },true);
+          })();
+          /* ═══ THE MULTIBAND'S CROSSOVERS — drag a lane boundary, the Low/High Cross knob moves ═══ */
+          (function(){
+            var drag=null;
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='ott')?d:null; }
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="ott"]'); if(!core) return;
+              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'), u=unit(svg,e);
+              var best=-1,bd=1e9, xl=core.querySelectorAll('.ott-xl');
+              for(var i=0;i<xl.length;i++){ if(xl[i].getAttribute('opacity')==='0') continue; var dx=Math.abs(u.x-(+xl[i].getAttribute('x1'))); if(dx<bd){bd=dx;best=+xl[i].getAttribute('data-x');} }
+              if(best<0||bd>9) return;
+              drag={core:core,d:d,i:best,svg:svg}; for(var k=0;k<xl.length;k++) xl[k].classList.toggle('hot',+xl[k].getAttribute('data-x')===best);
+              try{ core.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); move(e);
+            }catch(err){} });
+            function move(e){ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, hz=fx4XHz(u.x);
+              var two=(d.type==='Two Band'), lo=drag.i===0?(two?150:30):1000, hi=drag.i===0?(two?2000:300):8000;
+              var t=Math.max(0,Math.min(1,Math.log(hz/lo)/Math.log(hi/lo))), row=d.back.knobs[drag.i];
+              row[1]=t*100; try{ window.__setSynParam(row[2],t); }catch(err){} window.__fxRedrawKnobs(d);
+              /* fb443 — no floating readout here either (Max: "not just the EQ but the multiband as well").
+                 The crossover LINE is the readout: it sits where you dragged it and the lanes resize around it. */
+            }
+            document.addEventListener('pointermove',function(e){ try{ move(e); }catch(err){} });
+            document.addEventListener('pointerup',function(){ try{ if(drag){ var xl=drag.core.querySelectorAll('.ott-xl'); for(var k=0;k<xl.length;k++) xl[k].classList.remove('hot'); } }catch(err){} drag=null; });
+          })();
+          /* ═══ fb445 — BODE: THE NODE IS THE HANDLE. Drag = Shift (delta from the grab), wheel over the
+             node = Fdbk, double-click = zero, right-click = Up / Ring / Down + reset. The rail is not a
+             handle (fb441: the grid is not a handle). ═══ */
+          (function(){
+            var drag=null, lastMenu=0;
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='bod')?d:null; }
+            function near(core,u){ var n=core.querySelector('.bod-n'); if(!n) return false; var dx=u.x-(+n.getAttribute('cx')), dy=u.y-(+n.getAttribute('cy')); return Math.sqrt(dx*dx+dy*dy)<=8; }
+            function hot(core,on){ var n=core.querySelector('.bod-n'); if(n){ n.classList.toggle('hot',!!on); n.setAttribute('r',on?'3.2':'2.4'); } core.classList.toggle('bod-over',!!on); }
+            function setKnob(d,i,v){ v=Math.max(0,Math.min(100,v)); d.knobs[i].v=v; try{ window.__setSynParam(d.knobs[i].p,v/100); }catch(e){} try{ if(window.__fxRedrawKnobs) window.__fxRedrawKnobs(d); }catch(e2){} }
+            function hzLabel(h){ var a=Math.abs(h); if(a<0.05) return '0 Hz'; return (h>=0?'+':'−')+(a<1000?a.toFixed(a<10?1:0)+' Hz':(a/1000).toFixed(2)+' kHz'); }
+            function menu(core,d,x,y){ var dv=d.knobs[1].v, rows=[
+                {label:'Up',   white:dv<98,                 onPick:function(){ setKnob(d,1,100); }},
+                {label:'Ring', white:Math.abs(dv-50)>=2,    onPick:function(){ setKnob(d,1,50); }},
+                {label:'Down', white:dv>2,                  onPick:function(){ setKnob(d,1,0); }},
+                {label:'Reset shift', white:Math.abs(d.knobs[0].v-50)>0.01, onPick:function(){ setKnob(d,0,50); }} ];
+              var fine=((d.back&&d.back.knobs&&d.back.knobs[0])?d.back.knobs[0][1]:50)/100;
+              try{ if(window.__synShowMenu) window.__synShowMenu('Shift  ·  '+hzLabel(bodShiftHz(d.knobs[0].v/100)+(2*fine-1)*2),rows,x,y); }catch(e){} lastMenu=Date.now(); }
+            document.addEventListener('pointermove',function(e){ try{ if(drag) return;
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
+              var svg=core.querySelector('svg'); if(!svg) return; hot(core,near(core,unit(svg,e))); }catch(err){} });
+            document.addEventListener('pointerout',function(e){ try{ var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(core&&!drag&&!(e.relatedTarget&&core.contains(e.relatedTarget))) hot(core,false); }catch(err){} });
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var u=unit(svg,e);
+              if(!near(core,u)) return;
+              if(e.button===2){ menu(core,d,e.clientX,e.clientY); e.preventDefault(); e.stopPropagation(); return; }
+              if(e.button!==0) return;
+              drag={core:core,svg:svg,d:d,x0:u.x,v0:d.knobs[0].v}; hot(core,true); try{ core.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); e.stopPropagation();
+            }catch(err){} },true);
+            document.addEventListener('pointermove',function(e){ try{ if(!drag) return; var u=unit(drag.svg,e); setKnob(drag.d,0,drag.v0+(u.x-drag.x0)/FX4_PW*100); }catch(err){} });
+            document.addEventListener('pointerup',function(){ drag=null; });
+            document.addEventListener('wheel',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; if(!near(core,unit(svg,e))) return;
+              e.preventDefault(); e.stopPropagation(); setKnob(d,2,d.knobs[2].v-e.deltaY*0.12);   // wheel up = more feedback
+            }catch(err){} },{passive:false,capture:true});
+            document.addEventListener('dblclick',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; if(!near(core,unit(svg,e))) return;
+              e.preventDefault(); e.stopPropagation(); setKnob(d,0,50); }catch(err){} },true);
+            document.addEventListener('contextmenu',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; e.preventDefault(); e.stopPropagation();
+              if(Date.now()-lastMenu<150) return;                 // fb443 — the same-gesture belt
+              if(near(core,unit(svg,e))) menu(core,d,e.clientX,e.clientY); }catch(err){} },true);
+          })();
+          /* ═══ fb445 — SPLITTER: crossover NODES + lane REGIONS. Drag a node (delta from grab, in log
+             frequency): node 0 is Split, later nodes are Span — ordering is by construction so they can
+             never cross. Wheel over a region = that lane's Gain. Double-click a node = reset. Right-click
+             a region = Mute / Solo / Flip / Add a device here / Reset. The "+" is its own click. ═══ */
+          (function(){
+            var drag=null, lastMenu=0;
+            function unit(svg,e){ var r=svg.getBoundingClientRect(); return {x:(e.clientX-r.left)/Math.max(1,r.width)*226, y:(e.clientY-r.top)/Math.max(1,r.height)*78}; }
+            function devFor(core){ var card=core.closest('.fxr-dev'); if(!card) return null; var idx=[].indexOf.call(card.parentNode.children,card); var d=DEVS[idx]; return (d&&d.core==='spl')?d:null; }
+            function pickNode(core,u){ var ns=core.querySelectorAll('.spl-n'), best=-1, bd=1e9;
+              for(var i=0;i<ns.length;i++){ if(ns[i].getAttribute('opacity')==='0') continue; var dx=u.x-(+ns[i].getAttribute('cx')), dy=u.y-39; var dd=Math.sqrt(dx*dx+dy*dy); if(dd<bd){ bd=dd; best=+ns[i].getAttribute('data-k'); } }
+              return bd<=8?best:-1; }
+            function laneAt(core,u){ var gs=core.querySelectorAll('.spl-lane'); for(var i=0;i<gs.length;i++){ if(gs[i].getAttribute('opacity')==='0') continue; var r=gs[i].querySelector('.spl-rg'); var x=+r.getAttribute('x'), w=+r.getAttribute('width'); if(u.x>=x&&u.x<=x+w) return +gs[i].getAttribute('data-lane'); } return -1; }
+            function hot(core,k){ var ns=core.querySelectorAll('.spl-n'), xl=core.querySelectorAll('.spl-xl');
+              for(var i=0;i<ns.length;i++){ var on=+ns[i].getAttribute('data-k')===k; ns[i].classList.toggle('hot',on); ns[i].setAttribute('r',on?'3.2':'2.4'); }
+              for(var j=0;j<xl.length;j++) xl[j].classList.toggle('hot',+xl[j].getAttribute('data-k')===k);
+              core.classList.toggle('spl-over',k>=0); }
+            function redraw(d){ try{ if(window.__fxRedrawKnobs) window.__fxRedrawKnobs(d); }catch(e){} }
+            function setFront(d,i,v){ v=Math.max(0,Math.min(100,v)); d.knobs[i].v=v; try{ window.__setSynParam(d.knobs[i].p,v/100); }catch(e){} redraw(d); }
+            function setBack(d,j,v){ v=Math.max(0,Math.min(100,v)); d.back.knobs[j][1]=v; try{ window.__setSynParam(d.back.knobs[j][2],v/100); }catch(e){} redraw(d); }
+            function setPill(d,i,on){ if(!d.pills||!d.pills[i]) return; d.pills[i].on=!!on; try{ if(d.pp&&d.pp[i]) window.__setSynParam(d.pp[i],on?1:0); }catch(e){} }
+            function hzLab(h){ return h>=1000?(h/1000).toFixed(h>=10000?1:2)+' kHz':Math.round(h)+' Hz'; }
+            function laneMenu(core,d,L,x,y){ var t=fx4SplType(d), names=SPL_LANE_NAMES[t]||SPL_LANE_NAMES[1], nm=names[L]||('Lane '+(L+1));
+              var pm=!!(d.pills[3*L]&&d.pills[3*L].on), ps=!!(d.pills[3*L+1]&&d.pills[3*L+1].on), pf=!!(d.pills[3*L+2]&&d.pills[3*L+2].on);
+              var rows=[{label:(pm?'Unmute ':'Mute ')+nm, white:true, onPick:function(){ setPill(d,3*L,!pm); }},
+                        {label:(ps?'Unsolo ':'Solo ')+nm, white:true, onPick:function(){ setPill(d,3*L+1,!ps); }},
+                        {label:(pf?'Unflip ':'Flip ')+nm, white:true, onPick:function(){ setPill(d,3*L+2,!pf); }},
+                        {label:'Add a device in '+nm,     white:true, onPick:function(){ try{ var idx=DEVS.indexOf(d); if(typeof fxAddMenu==='function') fxAddMenu(x,y,L+1,idx); }catch(e){} }},
+                        {label:'Reset crossovers', white:t<3, onPick:function(){ setFront(d,0,50); setBack(d,4,40); }}];
+              var xo=fx4SplXovers(d), lo=L===0?20:xo[L-1], hi=L>=xo.length?20000:xo[L];
+              try{ if(window.__synShowMenu) window.__synShowMenu(nm+(t<3?'  ·  '+hzLab(lo)+' – '+hzLab(hi):''),rows,x,y); }catch(e){} lastMenu=Date.now(); }
+            document.addEventListener('pointermove',function(e){ try{ if(drag) return;
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
+              var svg=core.querySelector('svg'); if(!svg) return; hot(core,pickNode(core,unit(svg,e))); }catch(err){} });
+            document.addEventListener('pointerout',function(e){ try{ var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(core&&!drag&&!(e.relatedTarget&&core.contains(e.relatedTarget))) hot(core,-1); }catch(err){} });
+            document.addEventListener('pointerdown',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
+              if(e.target.closest&&e.target.closest('.spl-add')) return;                  // the "+" is a click, handled by the rack
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var u=unit(svg,e);
+              var k=pickNode(core,u);
+              if(e.button===2){ var L=laneAt(core,u); if(L>=0) laneMenu(core,d,L,e.clientX,e.clientY); e.preventDefault(); e.stopPropagation(); return; }
+              if(e.button!==0||k<0) return;                                                // a region is not a drag handle
+              var xo=fx4SplXovers(d);
+              drag={core:core,svg:svg,d:d,k:k,x0:u.x,hz0:xo[k]||1000,f0:xo[0]||100};
+              hot(core,k); try{ core.setPointerCapture(e.pointerId); }catch(err){} e.preventDefault(); e.stopPropagation();
+            }catch(err){} },true);
+            document.addEventListener('pointermove',function(e){ try{ if(!drag) return; var u=unit(drag.svg,e), d=drag.d, t=fx4SplType(d);
+              var hz=drag.hz0*(fx4XHz(u.x)/fx4XHz(drag.x0));                           // delta from the grab, in log f
+              if(drag.k===0) setFront(d,0,fx4SplKnob(t,hz)*100);
+              else { var f0=fx4SplXovers(d)[0]||drag.f0; setBack(d,4,fx4SplSpanKnob(t,f0,Math.pow(hz/f0,1/drag.k))*100); }
+            }catch(err){} });
+            document.addEventListener('pointerup',function(e){ try{ if(drag){ var c=drag.core, sv=drag.svg; drag=null; hot(c,pickNode(c,unit(sv,e))); } }catch(err){} drag=null; });
+            document.addEventListener('wheel',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var L=laneAt(core,unit(svg,e)); if(L<0||L>3) return;
+              e.preventDefault(); e.stopPropagation(); setBack(d,L,d.back.knobs[L][1]-e.deltaY*0.12);   // wheel up = that lane louder
+            }catch(err){} },{passive:false,capture:true});
+            document.addEventListener('dblclick',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var k=pickNode(core,unit(svg,e)); if(k<0) return;
+              e.preventDefault(); e.stopPropagation(); if(k===0) setFront(d,0,50); else setBack(d,4,40); }catch(err){} },true);
+            document.addEventListener('contextmenu',function(e){ try{
+              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
+              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; e.preventDefault(); e.stopPropagation();
+              if(Date.now()-lastMenu<150) return;
+              var L=laneAt(core,unit(svg,e)); if(L>=0) laneMenu(core,d,L,e.clientX,e.clientY); }catch(err){} },true);
+          })();
+          
+
+render();
+
+/* ── event delegation: knobs (front+back), type/char/axis, pills, power, swap; Hear follows the touched card ── */
+(function(){
+  var drag=null;
+  function devOf(el){ var card=el.closest('.fxr-dev'); if(card) return DEVS[+card.getAttribute('data-dev')]; var bp=el.closest('.bp'); return bp?DEVS[+bp.getAttribute('data-bp')]:null; }
+  document.addEventListener('pointerdown',function(e){
+    var d0=e.target.closest&&(e.target.closest('.fxr-dev')||e.target.closest('.bp')); if(d0){ var dd=devOf(d0); if(dd){ var hi=DEVS.indexOf(dd); if(hi!==hear){ hear=hi; document.querySelectorAll('.hear').forEach(function(x){x.classList.toggle('on',+x.getAttribute('data-h')===hi);}); setHear(); } } }
+    var dial=e.target.closest&&e.target.closest('.fxr-dial'); if(!dial) return;
+    var d=devOf(dial); if(!d) return;
+    var k=dial.getAttribute('data-k'), bk=dial.getAttribute('data-bk'), row=null;
+    if(bk!=null) for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===bk){ row=d.back.knobs[q]; break; }
+    var v0=(k!=null)?d.knobs[+k].v:(row?row[1]:0);
+    drag={d:d,dial:dial,k:k,row:row,y0:e.clientY,v0:v0}; dial.setPointerCapture(e.pointerId); e.preventDefault();
+  },true);
+  document.addEventListener('pointermove',function(e){ if(!drag) return;
+    var v=Math.max(0,Math.min(100,drag.v0+(drag.y0-e.clientY)*0.6)), d=drag.d;
+    if(drag.k!=null){ var kk=d.knobs[+drag.k]; v=detent(d.core,kk.p,v); kk.v=v; window.__setSynParam(kk.p,v/100); }
+    else if(drag.row){ v=detent(d.core,drag.row[2],v); drag.row[1]=v; window.__setSynParam(drag.row[2],v/100); }
+    window.__fxRedrawKnobs(d);
+  });
+  document.addEventListener('pointerup',function(){ drag=null; });
+  document.addEventListener('dblclick',function(e){
+    var dial=e.target.closest&&e.target.closest('.fxr-dial'); if(!dial) return; var d=devOf(dial); if(!d) return;
+    var k=dial.getAttribute('data-k'), bk=dial.getAttribute('data-bk');
+    if(k!=null){ d.knobs[+k].v=d.knobs[+k].d; window.__setSynParam(d.knobs[+k].p,d.knobs[+k].v/100); }
+    else if(bk!=null){ for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===bk){ d.back.knobs[q][1]=d.back.knobs[q][3]; window.__setSynParam(d.back.knobs[q][2],d.back.knobs[q][1]/100); } }
+    window.__fxRedrawKnobs(d);
+  });
+  document.addEventListener('change',function(e){
+    var t=e.target;
+    if(t.hasAttribute('data-tsel')){ var d=DEVS[+t.getAttribute('data-tsel')]; fx4ApplyType(d,d.types[t.selectedIndex]); push(d,'type',t.selectedIndex,true); render(); }
+    if(t.hasAttribute('data-csel')){ var d2=DEVS[+t.getAttribute('data-csel')]; d2.charIdx=t.selectedIndex; d2.back.d1.v=d2.back.d1.opts[t.selectedIndex]; push(d2,'character',t.selectedIndex,true); }
+    if(t.hasAttribute('data-dsel')){ var d3=DEVS[+t.getAttribute('data-dsel')]; d3.axisIdx=t.selectedIndex; d3.back.d2.v=d3.back.d2.opts[t.selectedIndex]; push(d3,'axis',t.selectedIndex,true); }
+  });
+  document.addEventListener('click',function(e){
+    var card=e.target.closest&&e.target.closest('.fxr-dev'); if(!card) return; var d=DEVS[+card.getAttribute('data-dev')];
+    var pill=e.target.closest('.fxr-pill'); if(pill){ var pi=[].indexOf.call(card.querySelectorAll('.fxr-pill'),pill); if(pi<0||!d.pills[pi]) return; d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
+      /* the EQ's Delta is processor-level in the plugin (wet − dry); here the graph does it: the dry leg goes to −1 */
+      if(d.core==='eqz'&&pi===0&&d.__dry&&ac){ d.__dry.gain.setTargetAtTime(d.pills[0].on?-1:0,ac.currentTime,0.02); } return; }
+    var r=e.target.closest('.fxr-r'); if(r){ r.classList.toggle('fxr-on'); return; }
+    if(e.target.closest('.fxr-pwr')){ d.on=!d.on; card.classList.toggle('fxr-off',!d.on); setPower(d); return; }
+    if(e.target.closest('.fxr-swap')){ d.__bpOpen=!d.__bpOpen; var bp=document.querySelector('.bp[data-bp="'+DEVS.indexOf(d)+'"]'); if(bp) bp.classList.toggle('on',d.__bpOpen); fitZoom(); return; }
+  });
+})();
+
+
+/* ═══ AUDIO — one context, one -26 dBFS source, four engines in PARALLEL, Hear picks the ear ═══ */
+var ac=null,srcN=null,playing=false,kind=0,hear=0,dryG=null,master=null;
+var KINDS=['Saw chord','Sine 220','Noise','Pluck','Drums','Pad','Bell','Sweep'];
+function fail(m){ document.getElementById('err').textContent=m; document.getElementById('status').textContent='Failed to start.'; }
+async function addWorklet(code){
+  try{ await ac.audioWorklet.addModule(URL.createObjectURL(new Blob([code],{type:'text/javascript'}))); return 'blob'; }
+  catch(e1){ try{ await ac.audioWorklet.addModule('data:text/javascript;base64,'+btoa(unescape(encodeURIComponent(code)))); return 'data'; }
+    catch(e2){ throw new Error('addModule failed.\nblob: '+e1.message+'\ndata: '+e2.message); } }
+}
+function push(d,k,v,raw){ if(!d.__node||k==null) return; var m={}; m[k]=v; d.__node.port.postMessage(m); }
+function setPower(d){ if(!d.__wet) return; var t=ac.currentTime; d.__wet.gain.setTargetAtTime(d.on?1:0,t,0.02); var dl=(d.core==='eqz'&&d.pills[0]&&d.pills[0].on)?-1:0; d.__dry.gain.setTargetAtTime(d.on?dl:1,t,0.02); }
+function setHear(){ if(!ac) return; var t=ac.currentTime; DEVS.forEach(function(d,i){ if(d.__hear) d.__hear.gain.setTargetAtTime(hear===i?1:0,t,0.03); }); if(dryG) dryG.gain.setTargetAtTime(hear===-1?1:0,t,0.03); }
+/* the worklet posts → the plugin's push field names, so the LIFTED drawers read them unchanged */
+function adapt(core,z){ return z; }   /* the three mirrors already post the plugin's field names */
+window.__fx4VizPush={bod:[null],utl:[null],spl:[null]};
+/* the filter card's spectrum hooks, backed by an AnalyserNode on the Equalizer's wet output */
+var specAn=null, specAnR=null, specBuf=null, specBufR=null;
+window.__fltHasBins=function(){ return !!specAn; };
+window.__fltBinMag=function(hz){ if(!specAn) return 0; if(!specBuf||specBuf.length!==specAn.frequencyBinCount){ specBuf=new Float32Array(specAn.frequencyBinCount); specBufR=new Float32Array(specAn.frequencyBinCount); }
+  if(!window.__specFrame||window.__specFrame!==window.__fx4Frame){ specAn.getFloatFrequencyData(specBuf); if(specAnR) specAnR.getFloatFrequencyData(specBufR); window.__specFrame=window.__fx4Frame; }
+  var sr=ac?ac.sampleRate:48000, bb=hz/(sr/2)*specBuf.length, i0=Math.floor(bb), fr=bb-i0, j0=Math.min(specBuf.length-1,i0), j1=Math.min(specBuf.length-1,i0+1);
+  var l0=isFinite(specBuf[j0])?specBuf[j0]:-200, l1=isFinite(specBuf[j1])?specBuf[j1]:-200;
+  var r0=(specAnR&&isFinite(specBufR[j0]))?specBufR[j0]:-200, r1=(specAnR&&isFinite(specBufR[j1]))?specBufR[j1]:-200;
+  var db=Math.max(l0,r0)*(1-fr)+Math.max(l1,r1)*fr;
+  return Math.pow(10,(db+10)/20)/7.5; };      /* inverse of the plugin's specY input (m*7.5 -> dB), +10 dB visual gain */
+window.__fltSpecY=function(m,h){ var db=20*Math.log10(Math.max(m*7.5,1e-7)), top=6, bot=-92; var y=h*(1-(db-bot)/(top-bot)); return Math.max(-h*0.1,Math.min(h,y)); };
+(function(){ function fr(){ window.__fx4Frame=(window.__fx4Frame||0)+1; requestAnimationFrame(fr); } requestAnimationFrame(fr); })();
+async function boot(){
+  ac=new (window.AudioContext||window.webkitAudioContext)();
+  master=ac.createGain(); master.gain.value=0.55; master.connect(ac.destination);
+  dryG=ac.createGain(); dryG.gain.value=0; dryG.connect(master);
+  var how='';
+  for(var i=0;i<DEVS.length;i++){ var d=DEVS[i];
+    how=await addWorklet(document.getElementById('wk-'+d.core).textContent);
+    d.__node=new AudioWorkletNode(ac,d.__t.proc,{numberOfInputs:1,numberOfOutputs:1,outputChannelCount:[2]});
+    d.__wet=ac.createGain(); d.__dry=ac.createGain(); d.__dry.gain.value=0; d.__hear=ac.createGain(); d.__hear.gain.value=(hear===i)?1:0;
+    d.__node.connect(d.__wet); d.__wet.connect(d.__hear); d.__dry.connect(d.__hear); d.__hear.connect(master);
+    /* the spectrum feed is on the MASTER — what you hear — because the plugin's feed is global too */
+    (function(dd){ dd.__node.port.onmessage=function(e){ var z=e.data||{}; window.__fx4VizPush[dd.core][0]=adapt(dd.core,z); }; })(d);
+    d.__t.keys.forEach(function(k,j){ push(d,k,d.knobs[j].v/100); });
+    d.back.knobs.forEach(function(b,j){ push(d,'b'+(j+1),b[1]/100); });
+    push(d,'type',d.typeIdx,true); push(d,'character',d.charIdx,true); push(d,'axis',d.axisIdx,true);
+    d.pills.forEach(function(p,j){ push(d,d.__t.pillKeys[j],p.on?1:0,true); });
+  }
+  /* STEREO-SAFE: an AnalyserNode downmixes to mono, so Flip L on a mono source (L = -R) sums to NOTHING and
+     the feed dies. Two analysers off a splitter; __fltBinMag reads the louder channel. */
+  var specSplit=ac.createChannelSplitter(2); master.connect(specSplit);
+  specAn=ac.createAnalyser(); specAn.fftSize=2048; specAn.smoothingTimeConstant=0.55; specSplit.connect(specAn,0);
+  specAnR=ac.createAnalyser(); specAnR.fftSize=2048; specAnR.smoothingTimeConstant=0.55; specSplit.connect(specAnR,1);
+  document.getElementById('status').textContent='Running (worklets via '+how+'). Press Play, then drag things.';
+}
+function makeSrc(){
+  var sr=ac.sampleRate, n=Math.floor(sr*4), b=ac.createBuffer(2,n,sr);
+  var sd=0; function rnd(){ sd=(sd*1103515245+12345)&0x7fffffff; return (sd/0x40000000)-1; }
+  for(var c=0;c<2;c++){ var d=b.getChannelData(c); sd=22222;
+    for(var i=0;i<n;i++){ var t=i/sr, v=0;
+      if(kind===0){ [110,138.6,164.8,220].forEach(function(f){ var ph=(t*f)%1; v+=(2*ph-1)*0.16; }); }
+      else if(kind===1){ v=Math.sin(2*Math.PI*220*t)*0.5; }
+      else if(kind===2){ v=rnd()*0.28; }
+      else if(kind===3){ var env=Math.exp(-((t%0.5))*7); [220,330,440].forEach(function(f){ v+=Math.sin(2*Math.PI*f*t)*0.2*env; }); }
+      else if(kind===4){ var tb=t%1.0, kt=tb%0.5, ke=Math.exp(-kt*20), kf=52*(1+3.2*Math.exp(-kt*42));
+        v+=Math.sin(2*Math.PI*kf*kt)*0.95*ke;
+        if(tb>=0.5){ var se=Math.exp(-(tb-0.5)*24); v+=(rnd()*0.5+Math.sin(2*Math.PI*186*(tb-0.5))*0.32)*se; }
+        v+=rnd()*0.20*Math.exp(-(t%0.125)*130); }
+      else if(kind===5){ [110,164.8,220,329.6].forEach(function(f,ix){ var det=1+(c?1:-1)*0.0016*(ix+1);
+          v+=Math.sin(2*Math.PI*f*det*t)*0.15*(0.55+0.45*Math.sin(2*Math.PI*(0.07+ix*0.031)*t));
+          v+=Math.sin(2*Math.PI*f*2*det*t)*0.045*(0.5+0.5*Math.sin(2*Math.PI*0.12*t)); }); }
+      else if(kind===6){ var bt=t%2.0, be=Math.exp(-bt*2.6), mi=6.5*Math.exp(-bt*4.5); v=Math.sin(2*Math.PI*440*t+mi*Math.sin(2*Math.PI*622.3*t))*0.5*be; }
+      else { var r=80, T=4, ph2=100*T/Math.log(r)*(Math.pow(r,t/T)-1); v=Math.sin(2*Math.PI*ph2)*0.45; }
+      d[i]=v; } }
+  var acc=0,d0=b.getChannelData(0); for(var j=0;j<n;j++) acc+=d0[j]*d0[j];
+  var cur=Math.sqrt(acc/n), want=Math.pow(10,-26/20), k=cur>1e-9?want/cur:1;
+  for(var c2=0;c2<2;c2++){ var dd=b.getChannelData(c2); for(var j2=0;j2<n;j2++) dd[j2]*=k; }
+  document.getElementById('src').textContent='Source: '+KINDS[kind];
+  var s=ac.createBufferSource(); s.buffer=b; s.loop=true; return s;
+}
+function start(){ srcN=makeSrc(); DEVS.forEach(function(d){ srcN.connect(d.__node); srcN.connect(d.__dry); }); srcN.connect(dryG); srcN.start(); playing=true; document.getElementById('play').textContent='Stop'; }
+function stop(){ if(srcN){ try{srcN.stop();}catch(e){} srcN.disconnect(); srcN=null; } playing=false; document.getElementById('play').textContent='Play'; }
+document.getElementById('go').addEventListener('click',function(){ if(ac) return; document.getElementById('status').textContent='Starting\u2026'; boot().catch(function(e){fail(String(e&&e.stack||e));}); });
+document.getElementById('play').addEventListener('click',function(){ if(!ac){ fail('Press Start audio first.'); return; } if(ac.state==='suspended') ac.resume(); playing?stop():start(); });
+document.getElementById('src').addEventListener('click',function(){ kind=(kind+1)%KINDS.length; document.getElementById('src').textContent='Source: '+KINDS[kind]; if(playing){ stop(); start(); } });
+document.querySelectorAll('.hear').forEach(function(b){ b.addEventListener('click',function(){ document.querySelectorAll('.hear').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); hear=+b.getAttribute('data-h'); setHear(); }); });
+function fitZoom(){ var zb=document.querySelector('.zoom.on'); if(!zb) return; var z=+zb.getAttribute('data-z'); var sc=document.getElementById('scale'), rw=document.getElementById('rackwrap'), rk=document.getElementById('rack');
+  sc.style.transform='scale('+z+')'; var W=rk.scrollWidth||1115; sc.style.width=W+'px';
+  var cards=rk.querySelectorAll('.fxr-dev'); document.querySelectorAll('.bpslot').forEach(function(sl,i){ if(cards[i]) sl.style.width=cards[i].getBoundingClientRect().width/z+'px'; });
+  rw.style.width=Math.min(window.innerWidth-44,Math.ceil(W*z)+2)+'px'; rw.style.height=((170+10+(document.querySelector('.bp.on')?236:0))*z+10)+'px'; }
+document.querySelectorAll('.zoom').forEach(function(b){ b.addEventListener('click',function(){ document.querySelectorAll('.zoom').forEach(function(x){x.classList.remove('on');}); b.classList.add('on'); fitZoom(); }); });
+(function(){ var fit=Math.max(1,Math.min(2,(window.innerWidth-44)/(document.getElementById('rack').scrollWidth||1115))); var best=null,bd=9; document.querySelectorAll('.zoom').forEach(function(b){ var z=+b.getAttribute('data-z'); if(z<=fit+0.01&&fit-z<bd){bd=fit-z;best=b;} }); (best||document.querySelector('.zoom')).click(); })();
+window.addEventListener('resize',fitZoom);
+</script></body></html>

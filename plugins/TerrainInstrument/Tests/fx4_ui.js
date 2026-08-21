@@ -81,7 +81,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
                cmpKnee:document.querySelectorAll('.fxr-core[data-core="cmp"] .cmp-knee.dst-curve').length,
                widV:document.querySelectorAll('.fxr-core[data-core="wid"] .wid-v').length,
                bodRef:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-ref').length,
-               bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-up').length,
+               bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-sh').length,
                utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .fxr-pill').length,
                utlRow:document.querySelectorAll('.fxr-core[data-core="utl"]').length
                       ? [...document.querySelectorAll('.fxr-dev')].filter(dv=>dv.querySelector('.fxr-core[data-core="utl"]'))
@@ -426,7 +426,10 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     await new Promise(r=>setTimeout(r,260));   // clear the right-click belt left armed by r9
     const out={}; const core=document.querySelector('.fxr-core[data-core="eqz"]');
     out.roNodes=document.querySelectorAll('.eqz-ro,.ott-ro').length;
-    out.anyCardText=[...document.querySelectorAll('.fxr-core text')].length;
+    /* fb445: the LAW is no floating READOUT — a NUMBER on the card. A Splitter lane's NAME and its '+' glyph are
+       structure (the affordance for 'add a device into THIS band'), not readouts. Count <text> carrying the
+       readout signature: digits, Hz, dB, %, Q — which is exactly what the fb443 EQ readout carried. */
+    out.anyCardText=[...document.querySelectorAll('.fxr-core text')].filter(t=>/[0-9]|Hz|dB|%|\bQ\b/.test(t.textContent||'')).length;
     const svg=core.querySelector('svg'), r=svg.getBoundingClientRect();
     const D=window.__fxDevs(), d=D.find(z=>z.core==='eqz');
     const nb=core.querySelector('.eqz-n[data-b="1"]');
