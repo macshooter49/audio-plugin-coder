@@ -20,11 +20,21 @@
   ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 5: tail after 1 s of silence = -240.0 dBFS
   ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 6: tail after 1 s of silence = -240.0 dBFS
   ok    0.5 s note -> 1 s silence, tail below -70 dBFS           char 7: tail after 1 s of silence = -240.0 dBFS
+  ok    ... and on every other Type, at max feedback             Barberpole worst of 8 Characters = -240.0 dBFS (char 0)
+  ok    ... and on every other Type, at max feedback             Echobode   worst of 8 Characters = -172.1 dBFS (char 4)
+  ok    ... and on every other Type, at max feedback             Detune     worst of 8 Characters = -240.0 dBFS (char 0)
+  ok    ... and on every other Type, at max feedback             Ring       worst of 8 Characters = -240.0 dBFS (char 0)
+  ok    ... and on every other Type, at max feedback             Spiral     worst of 8 Characters = -233.0 dBFS (char 0)
+  ok    ... and on every other Type, at max feedback             Chorale    worst of 8 Characters = -228.7 dBFS (char 0)
+  ok    ... and on every other Type, at max feedback             Freeze     worst of 8 Characters = -127.9 dBFS (char 5)
 
 §D — LOOP STABILITY. A shifter in a loop walks its content out of band.
-  ok    never diverges, never NaNs, on any Type x Character      12 s at max feedback x 8 types x 8 chars: worst peak 0.17
-  ok    Character has unit slope at zero (it cannot move loop gain) worst small-signal gain deviation across Characters: 0.05 dB
-  ok    the in-loop clip keeps a HOT input bounded (not just stable) 72 cells swept · worst 1.45 (3.2 dBFS) at blur 1.0 / time 0.45 / char 0
+  ok    never diverges, never NaNs, on any Type x Character      12 s at max feedback x 8 types x 8 chars: worst peak 0.56
+  ok    Character has unit slope at zero (it cannot move loop gain) worst small-signal gain deviation across Characters: 0.22 dB
+  ok    the in-loop clip keeps a HOT input bounded (not just stable) 72 cells, Guard ON · worst 1.06 (0.5 dBFS) at blur 1.0 / time 0.45 / char 1
+  ok    Guard ON is a HARD ceiling on the wet path               worst 1.060 over the same 72 cells (tanh stops at 1.000; the DC blocker after it has a few % of transient gain)
+  ok    ... and with Guard OFF the CLIP alone still bounds it    72 cells, Guard OFF · worst 3.60 (11.1 dBFS) at blur 1.0 / time 0.70 / char 2
+  ok    ... bounded on EVERY Type with the output guard removed  64 cells (8 Types x 8 Chars), Guard OFF: worst 3.80 (11.6 dBFS) on Spiral / char 2
 
 §E — THE MIX LAW, THE STEREO MIRROR, AND LOW KEEP.
   ok    Mix 0 passes the dry through untouched                   worst |out - in| at Mix 0 = 0.00e+00
@@ -33,13 +43,79 @@
   ok    Low Keep really does bypass the shifter below its corner 60 Hz tone with Low Keep at 200 Hz -> peak stays at 60 Hz
 
 §F — EVERY KNOB KEEPS MOVING (no plateaus, no dead travel).
-  ok    Shift transforms across its whole travel                 Shift     smallest spectral step across 6 = 6.090 dB
-  ok    Direction transforms across its whole travel             Direction smallest spectral step across 6 = 1.797 dB
-  ok    Fdbk transforms across its whole travel                  Fdbk      smallest spectral step across 6 = 1.256 dB
-  ok    Time transforms across its whole travel                  Time      smallest spectral step across 6 = 3.900 dB
-  ok    Blur transforms across its whole travel                  Blur      smallest spectral step across 6 = 1.125 dB
-  ok    Damping transforms across its whole travel               Damping   smallest spectral step across 6 = 0.402 dB
-  ok    Drift transforms across its whole travel                 Drift     smallest spectral step across 6 = 2.915 dB
+  ok    Shift transforms across its whole travel                 Shift     smallest spectral step across 6 = 6.096 dB
+  ok    Direction transforms across its whole travel             Direction smallest spectral step across 6 = 1.778 dB
+  ok    Fdbk transforms across its whole travel                  Fdbk      smallest spectral step across 6 = 1.204 dB
+  ok    Time transforms across its whole travel                  Time      smallest spectral step across 6 = 3.779 dB
+  ok    Blur transforms across its whole travel                  Blur      smallest spectral step across 6 = 1.071 dB
+  ok    Damping transforms across its whole travel               Damping   smallest spectral step across 6 = 2.550 dB
+  ok    Drift transforms across its whole travel                 Drift     smallest spectral step across 6 = 5.400 dB
 
-══ RESULT: 28 pass, 0 FAIL ══
+§T — THE TYPES ARE DIFFERENT. fb444 read `type` nowhere; every gate above stayed green.
+      Type          Shift@100%     Shift@75%      Delay@0%   Delay@100%
+      Shift          4999.8 Hz     69.72 Hz        0.02 ms     999.9 ms  
+      Barberpole     2499.9 Hz     49.01 Hz        1.00 ms     300.0 ms  
+      Echobode       3999.9 Hz     62.25 Hz       30.00 ms    3999.8 ms  
+      Detune           25.0 Hz      4.10 Hz        0.50 ms      60.0 ms  
+      Ring           4999.8 Hz    334.36 Hz        0.05 ms     500.0 ms  
+      Spiral         2999.9 Hz     53.78 Hz        5.00 ms     699.9 ms  
+      Chorale        2000.0 Hz     43.73 Hz        2.00 ms     400.0 ms  
+      Freeze         1500.0 Hz     37.74 Hz       40.00 ms    1999.9 ms  
+  ok    each Type has its OWN shift + delay mapping (engine meters) 8 Types, 8 different mappings · 8 distinct Hz at the SAME 75% knob
+      mean |dB| per 1/6-octave band, 52 bands 40 Hz..16 kHz
+      upper right = BROADBAND (110 Hz saw) · lower left = 220 Hz TONE
+                   ShiftBarberpEchobod Detune   Ring SpiralChorale Freeze
+      Shift            ·   7.09   6.77  16.68  12.43  11.61  10.18  13.80
+      Barberpole    7.58      ·   7.48  14.74  10.58   6.29   5.42  10.69
+      Echobode      7.87   4.89      ·  14.68  13.83  11.68   9.26  10.01
+      Detune       19.68  14.60  13.47      ·  17.92  15.73  13.07  14.45
+      Ring         25.76  25.38  24.76  20.88      ·   9.85  11.33  16.41
+      Spiral       16.41  10.36  10.74   8.22  24.79      ·   4.84  13.80
+      Chorale       9.19   3.97   7.16  15.51  25.38  10.67      ·   9.53
+      Freeze       19.07  12.39  11.43  16.12  24.28  12.89  11.95      ·
+  ok    all 28 Type pairs differ by >3 dB on BOTH probes         28 pairs · worst BROADBAND 4.84 dB · worst TONE 3.97 dB · closest pair Barberpole/Chorale
+  ok    ... and white noise is the WRONG probe here (negative control) WHITE noise sees Barberpole/Spiral only 1.53 dB apart; with partials they are 6.29 dB apart
+  ok    T0 Shift — ONE rung, no ladder, no half-steps          500+200: rung1 0.0 · rung2 -131.6 dB · half-step -111.9 dB (both must be far down)
+  ok    T1 Barberpole — f+2d and f+3d ranks AND a half-step rung rungs 700/900/1100 = 60/59/57 dB over floor · half-step 800 = 54 dB
+  ok    ... and the half-step voice is Barberpole's alone        Type 0 at the SAME knobs puts -46 dB at 800 Hz; Barberpole puts 54 dB
+  ok    T2 Echobode — a DISCRETE echo at the Time delay, silence before it 30 ms burst · first echo peaks at 280 ms (want 250) · pre-echo -146 dB down
+  ok    ... while Shift answers immediately (the wet is not a tap) Type 0 at the same delay is LOUD before the echo (0 dB down, vs -146)
+  ok    T3 Detune — sub-2 Hz beating is reachable by hand      knob 0.599 -> 0.90 Hz beat (want 0.90) · modulation index 0.64
+  ok    ... and the same knob on Shift neither compresses to Hz nor beats the SAME knob on Type 0 is +4.4 Hz and beats not at all (index 0.000)
+  ok    T4 Ring — BOTH sidebands + suppressed carrier at Direction = 1.0 dir=1.0: sidebands 9.5 dB apart, carrier -102.6 dB under the weaker
+  ok    ... which is exactly what Direction does NOT do on Shift Type 0 at dir=1.0 tilts 49 dB (one sideband); Ring tilts 9.5 dB
+  ok    T5 Spiral — energy on BOTH sides of the note at once   below/above = -7.4 dB · +d rung -1.9 dB · -0.618d rung -7.9 dB (rel. above)
+  ok    ... where an up-shifting ladder puts nothing below it    Type 0 at dir=up puts -49.5 dB below the note; Spiral puts -7.4 dB
+  ok    T6 Chorale — THREE inharmonic partials from one tone   1 kHz in -> 1300 136 dB · 850 132 dB · 1485 129 dB over floor (spread 8.0 dB)
+  ok    T7 Freeze — a real HOLD that still obeys the free-run law Freeze holds -1.1 dB of the note at +0.30 s, and is -172 dBFS at +0.60 s (law: -70)
+  ok    ... where every other Type has collapsed by then         Shift at the same settings has already fallen -81.2 dB by +0.30 s
+  ok    T7b Freeze CAPTURES: closing the loop does not pile it up steady level -28.1 dB at Feedback 40% -> -39.0 dB at 100% (-10.9 dB)
+  ok    T7c Freeze holds at the BOTTOM of the Feedback knob too  at Feedback = 0 % the loop is still -2.8 dB of the note at +0.30 s
+
+§U — THE CONTROLS fb444 DECLARED AND NEVER READ.
+  ok    Guard is a real control (fb444 read the field nowhere)   hot peak 0.98 with Guard ON vs 3.03 with Guard OFF = +9.8 dB
+  ok    Shift First / Shift Last / In-loop are three different machines In-loop vs First 3.22 dB · vs Last 13.22 dB · First vs Last 11.24 dB
+  ok    Wide really widens (fb444 declared the option and never read it) side/mid = +0.0 dB on Normal, +7.7 dB on Wide (+7.7 dB wider)
+
+§G — AND EVERY KNOB STILL MOVES ON EVERY TYPE (fb425: sweep the matrix, don't sample it).
+      smallest spectral step across 6 positions, dB
+                    Shift     Dir    Fdbk    Time    Blur    Damp   Drift
+      Shift          6.06    1.82    1.21    3.74    1.10    2.58    5.25
+  ok    no dead travel on this Type's seven knobs                Shift      weakest knob is Blur at 1.10 dB
+      Barberpole     6.13    2.26    1.21    4.34    1.34    3.00    5.58
+  ok    no dead travel on this Type's seven knobs                Barberpole weakest knob is Fdbk at 1.21 dB
+      Echobode       6.07    1.65    1.04    4.45    2.01    5.35    5.44
+  ok    no dead travel on this Type's seven knobs                Echobode   weakest knob is Fdbk at 1.04 dB
+      Detune         5.49    1.31    0.86    3.06    0.76    1.72    5.42
+  ok    no dead travel on this Type's seven knobs                Detune     weakest knob is Blur at 0.76 dB
+      Ring           5.58    1.23    0.93    3.80    1.98    1.78    5.30
+  ok    no dead travel on this Type's seven knobs                Ring       weakest knob is Fdbk at 0.93 dB
+      Spiral         6.03    1.84    1.08    3.85    0.89    2.30    5.35
+  ok    no dead travel on this Type's seven knobs                Spiral     weakest knob is Blur at 0.89 dB
+      Chorale        6.17    1.74    1.03    3.75    0.91    2.06    5.29
+  ok    no dead travel on this Type's seven knobs                Chorale    weakest knob is Blur at 0.91 dB
+      Freeze         6.15    1.73    1.15    5.68    1.70    0.67    5.56
+  ok    no dead travel on this Type's seven knobs                Freeze     weakest knob is Damp at 0.67 dB
+
+══ RESULT: 68 pass, 0 FAIL ══
 

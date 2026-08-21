@@ -82,12 +82,17 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
                widV:document.querySelectorAll('.fxr-core[data-core="wid"] .wid-v').length,
                bodRef:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-ref').length,
                bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-sh').length,
-               utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .fxr-pill').length,
-               utlRow:document.querySelectorAll('.fxr-core[data-core="utl"]').length
-                      ? [...document.querySelectorAll('.fxr-dev')].filter(dv=>dv.querySelector('.fxr-core[data-core="utl"]'))
-                          .reduce((a,dv)=>a+dv.querySelectorAll('.fxr-pills .fxr-pill').length,0) : -1,
+               utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .utl-strip .fxr-pill').length,
+               utlRow:[...document.querySelectorAll('.fxr-dev')].filter(dv=>dv.querySelector('.fxr-core[data-core="utl"]'))
+                          .reduce((a,dv)=>a+dv.querySelectorAll('.fxr-pills .fxr-pill').length,0),
+               utlDup:(function(){ var d=[...document.querySelectorAll('.fxr-dev')].find(dv=>dv.querySelector('.fxr-core[data-core="utl"]')); if(!d) return -1;
+                          var core=[...d.querySelectorAll('.utl-cap')].map(e=>e.textContent.trim()), row=[...d.querySelectorAll('.fxr-pills .fxr-t')].map(e=>e.textContent.trim());
+                          return core.filter(x=>row.indexOf(x)>=0).length; })(),
                splLane:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-lane').length,
-               splAdd:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-add').length,
+               splAdd:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-addt').length,
+               splNames:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-nm').length,
+               splLt:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-lt').length,
+               splBoxes:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-addg').length,
                eqzPill:(document.querySelector('.fxr-core[data-core="eqz"]')||{}).closest ? [...document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev').querySelectorAll('.fxr-pill .fxr-t')].map(e=>e.textContent).join(',') : '' };
     return out; });
   chk(!r1.addErr, 'adding the seven devices throws nothing', r1.addErr||'');
@@ -96,9 +101,21 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===48, 'Equalizer core = the house line + 8 nodes per card (4 roles + 4 free bells, fb438)', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
   chk(r1.mark.bodRef===54 && r1.mark.bodUp===54, 'Bode core = the 9-rung harmonic ladder, reference + shifted, per card (fb444)', JSON.stringify({ref:r1.mark.bodRef,up:r1.mark.bodUp}));
-  chk(r1.mark.utlBtn===36, 'Utility core = the six-button bank per card, no scope (fb444, Max: "just a whole bunch of buttons")', 'buttons='+r1.mark.utlBtn);
-  chk(r1.mark.utlRow===0, 'Utility NO DOUBLES — the switches are in the core, so the chassis pill row is empty', 'chassis pills='+r1.mark.utlRow);
-  chk(r1.mark.splLane===24 && r1.mark.splAdd===24, 'Splitter core = four lane rows each with a "+" per card (fb444)', JSON.stringify({lanes:r1.mark.splLane,adds:r1.mark.splAdd}));
+  chk(r1.mark.utlBtn===24, 'Utility core = the four-switch STRIP per card, no scope (fb446, Max: "like the back panel, switches not boxes")', 'switches='+r1.mark.utlBtn);
+  chk(r1.mark.utlRow===12, 'Utility keeps its chassis pills (Sum · Dim) like every other card (fb446)', 'chassis pills='+r1.mark.utlRow);
+  chk(r1.mark.utlDup===0, 'Utility NO DOUBLES — no switch caption repeats on the chassis row', 'dupes='+r1.mark.utlDup);
+  chk(r1.mark.splLane===24 && r1.mark.splAdd===24 && r1.mark.splLt===24, 'Splitter core = four bands, a thin Hz number and a bare "+" each (fb446)', JSON.stringify({lanes:r1.mark.splLane,plus:r1.mark.splAdd,hz:r1.mark.splLt}));
+  chk(r1.mark.splNames===0 && r1.mark.splBoxes===0, 'Splitter: NO band names, NO boxed plus (fb446, Max: "that low and that high has to go · that plus button looks terrible")', JSON.stringify({names:r1.mark.splNames,boxes:r1.mark.splBoxes}));
+  /* ═══ fb446 — THE READOUT LAW, by evaluation over every formatter. A value in a knob face is a BARE
+     NUMBER: no Hz/ms/dB/oct/°; a sign, a %, a k are glyphs of the number; four glyphs, five with a
+     leading sign, a time signature, a ratio, or an arrow. Max: "it's never supposed to move outside
+     of the knob — it's always supposed to be on the inside." */
+  const rl=await pg.evaluate(()=>{ const vals=[0,1,2,5,10,20,25,33,40,50,60,66,75,80,90,95,98,99,100]; const bad=[]; let total=0;
+    const stub=core=>{ const T=(window.__devTemplates||[]).find(t=>t.core===core)||{}; return {core,types:T.types||['x'],type:T.type||(T.types||['x'])[0],knobs:[{v:50},{v:50},{v:50},{v:100}],back:{knobs:[['a',50],['b',50],['c',50],['d',50],['e',40],['f',50],['g',50],['h',50]],d2:{v:'1/8',opts:['Free','1/8']}},pills:[{on:false},{on:false}],__vz:null,xb:[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]}; };
+    const ok=s=>{ if(/Hz|hz|ms\b|dB|oct|°/.test(s)) return false; if(s.length<=4) return true; if(s.length===5&&(/^[+−-]/.test(s)||/bar|\//.test(s)||/:1$/.test(s)||/^←|→$/.test(s))) return true; return false; };
+    const FXT=window.__fxFmtTable||{}; Object.keys(FXT).forEach(key=>{ const f=FXT[key], core=key.split('|')[0]; vals.forEach(v=>{ total++; try{ let s=f(v,stub(core)); if(s==null) return; s=''+s; if(!ok(s)) bad.push(key+'@'+v+'="'+s+'"'); }catch(e){} }); });
+    return {total,n:Object.keys(FXT).length,bad}; });
+  chk(rl.n>=80 && rl.bad.length===0, 'THE READOUT LAW: every formatter, every value, bare and fits ('+rl.total+' values / '+rl.n+' readouts)', rl.bad.slice(0,6).join(' · ')||('clean, '+rl.n+' readouts'));
   chk(r1.mark.cmpKnee===6 && r1.mark.widV===48, 'Compress knee (house line) + Widen 8 voice beams per card', JSON.stringify({knee:r1.mark.cmpKnee,beams:r1.mark.widV}));
   chk(r1.mark.eqzPill==='Delta', 'the Equalizer has its Delta pill', r1.mark.eqzPill);
 
@@ -207,7 +224,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const lcs=getComputedStyle(lp); out.pillBorder=lcs.borderTopColor; out.pillInk=lcs.color;
     return out; });
   chk(/^\d+$|k$/.test(r5.lowHz||'') && /k$/.test(r5.reach||''), 'READOUT LAW: Low Hz / Reach print Hz', r5.lowHz+' / '+r5.reach);
-  chk(/dB$/.test(r5.push||''), 'READOUT LAW: Push prints its threshold in dB', r5.push);
+  chk(/^[+−-]?\d+(\.\d)?$/.test((r5.push||'').trim()), 'READOUT LAW (fb446): Push prints its threshold as a BARE signed number — no dB suffix', r5.push);
   chk(r5.widHero==='Cents', 'RELABEL: Widen type Steady → hero reads Cents', r5.widHero);
   chk(r5.traitLabel==='Sting', 'RELABEL: Equalizer type Chisel → P8 reads Sting', r5.traitLabel);
   // fb440 — Max: "I want the outline to be purple, but the inside to be white just like how we have it
@@ -429,7 +446,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     /* fb445: the LAW is no floating READOUT — a NUMBER on the card. A Splitter lane's NAME and its '+' glyph are
        structure (the affordance for 'add a device into THIS band'), not readouts. Count <text> carrying the
        readout signature: digits, Hz, dB, %, Q — which is exactly what the fb443 EQ readout carried. */
-    out.anyCardText=[...document.querySelectorAll('.fxr-core text')].filter(t=>/[0-9]|Hz|dB|%|\bQ\b/.test(t.textContent||'')).length;
+    out.anyCardText=[...document.querySelectorAll('.fxr-core[data-core="eqz"] text, .fxr-core[data-core="ott"] text')].filter(t=>/[0-9]|Hz|dB|%|\bQ\b/.test(t.textContent||'')).length;   /* fb446: scoped to the two cards fb443 was about — the Splitter's corner Hz numbers are Max's explicit ask */
     const svg=core.querySelector('svg'), r=svg.getBoundingClientRect();
     const D=window.__fxDevs(), d=D.find(z=>z.core==='eqz');
     const nb=core.querySelector('.eqz-n[data-b="1"]');
@@ -450,6 +467,28 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(/BODYHZ/.test(r11.dragStillWrites) && r11.hzMoved, 'dragging a node still writes its Hz with the readout gone', r11.dragStillWrites);
   chk(/Q /.test(r11.secText||'') && /(Hz|k)/.test(r11.secText||''), 'the right-click menu HEADER still reports that band\'s Hz and Q', (r11.secText||'(no menu)').slice(0,70));
 
+  /* ═══ fb446 — LANE CARDS: a device added INTO a Splitter band is hidden unless that band is selected,
+     has NO route row (it is fed by the band), wears the band's range as a tag, and selecting another
+     band hides it. Serum's "click the band, the chain switches", gated. Runs LAST: it rebuilds the rack. */
+  const lcg=await pg.evaluate(()=>{ const out={}; const DEVS=window.__fxrDevs();
+    try{
+      DEVS.length=0; window.__fxAdd('spl'); const si=DEVS.findIndex(d=>d.core==='spl'); const sp=DEVS[si];
+      window.__fxAdd('saturate',2,si);
+      const card=()=>{ const di=DEVS.findIndex(d=>d.core==='saturate'); return {di,el:document.querySelector('.fxr-dev[data-dev="'+di+'"]')}; };
+      let c=card(); out.added=c.di>=0; out.lane=DEVS[c.di]&&DEVS[c.di].lane; out.selAfterAdd=sp.sel;
+      out.visibleWhenSelected=!!(c.el&&!c.el.classList.contains('fxr-hidden')); out.noRoute=!!(c.el&&!c.el.querySelector('.fxr-route'));
+      out.laneClass=!!(c.el&&c.el.classList.contains('fxr-lanecard')); out.tag=c.el?((c.el.querySelector('.fxr-lane')||{}).textContent||''):'';
+      sp.sel=0; window.__fxrRender(); try{ window.__fx4Tick(); }catch(e){} c=card(); out.hiddenWhenOther=!!(c.el&&c.el.classList.contains('fxr-hidden'));
+      try{ window.__fx4Tick(); }catch(e){} const core=document.querySelector('.fxr-core[data-core="spl"]'); const rg=core.querySelector('.spl-rg[data-lane="1"]'); const r=rg.getBoundingClientRect();
+      const ev=(t,x,y,b)=>new PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:7,pointerType:'mouse',button:b||0,buttons:b===2?2:1});
+      rg.dispatchEvent(ev('pointerdown',r.left+r.width/2,r.top+r.height/2,0)); document.dispatchEvent(ev('pointerup',r.left+r.width/2,r.top+r.height/2,0));
+      try{ window.__fx4Tick(); }catch(e){} c=card(); out.selAfterClick=sp.sel; out.visibleAfterClick=!!(c.el&&!c.el.classList.contains('fxr-hidden'));
+    }catch(e){ out.err=String(e).slice(0,160); }
+    return out; });
+  chk(lcg.added&&lcg.lane===2&&lcg.selAfterAdd===1&&lcg.visibleWhenSelected, 'fxAdd INTO band 2 selects that band and the card is visible', JSON.stringify(lcg));
+  chk(lcg.noRoute&&lcg.laneClass&&/–/.test(lcg.tag), 'a lane card has NO route row, the lane class, and wears the band RANGE as its tag', 'tag='+lcg.tag+' noRoute='+lcg.noRoute);
+  chk(lcg.hiddenWhenOther===true, 'selecting a different band HIDES the lane card (the chain switches)', 'hidden='+lcg.hiddenWhenOther);
+  chk(lcg.selAfterClick===1&&lcg.visibleAfterClick===true, 'clicking a band on the core SELECTS it and its chain shows again', JSON.stringify({sel:lcg.selAfterClick,vis:lcg.visibleAfterClick}));
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();
   process.exit(fail?1:0);

@@ -82,7 +82,7 @@ DEVICES = [
       keys=['gain','image','steer','mix'],
       back=[['Strain',0,'B1'],['Clamp',50,'B2'],['Mono Below',0,'B3'],['Slope',0,'B4'],
             ['Twist',50,'B5'],['Rumble',0,'B6'],['Bleed',0,'B7'],['Hinge',50,'B8']],
-      pills=[['Flip L',0],['Flip R',0],['Trade',0],['Sum',0],['DC',0],['Dim',0]], pillKeys=['flipl','flipr','trade','sum','dc','dim']),
+      pills=[['Flip L',0],['Flip R',0],['Trade',0],['DC',0],['Sum',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
  dict(dev='Splitter', core='spl', proc='terrain-splitter', pfx='SYN_SPL_',
       types=['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'], tpN=8, typeIdx=1,
       d1k='Slope', d1p='SLOPE', chars=['6 dB','12 dB','24 dB','48 dB'], charIdx=2,
@@ -202,8 +202,8 @@ var CORES={
 
 /* devHTML() — structure-for-structure as the plugin emits it */
 function devHTML(d,idx){
-  var pillsInCore=(d.core==='utl'||d.core==='spl');   /* fb445 — the switches live IN the core; the chassis row would be a double */
-  var pills=pillsInCore?'':d.pills.map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'" data-pi="'+i+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+  var coreN=(d.core==='utl')?4:(d.core==='spl'?12:0);   /* fb446 — the core's switches come first in DOM order; the chassis row shows the rest */
+  var pills=d.pills.slice(coreN).map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
   var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
   var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+k.p+'">'+knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
   return '<div class="fxr-dev'+(d.on?'':' fxr-off')+'" data-dev="'+idx+'">'
@@ -279,7 +279,8 @@ window.__setSynParam=function(id,norm){ try{
   /* in the plugin this opens the rack's device list, pre-aimed at the lane; here it can only say so */
   window.fxAddMenu=function(x,y,lane,idx){ var d=DEVS[idx]; var nm=(d&&SPL_LANE_NAMES[fx4SplType(d)]||['Low','Mid','High'])[lane-1]||('Lane '+lane); window.__tiToast('In the plugin: adds a device into the '+nm+' band'); };
   document.addEventListener('click',function(e){ var a=e.target.closest&&e.target.closest('.spl-add'); if(!a) return; var card=a.closest('.fxr-dev'); if(!card) return;
-    var r=a.getBoundingClientRect(); window.fxAddMenu(r.left,r.bottom+4,(+a.getAttribute('data-lane'))+1,+card.getAttribute('data-dev')); },true);
+    var di=+card.getAttribute('data-dev'); if(DEVS[di]) DEVS[di].sel=+a.getAttribute('data-lane');
+    var r=a.getBoundingClientRect(); window.fxAddMenu(r.left,r.bottom+4,(+a.getAttribute('data-lane'))+1,di); },true);
 })();
 
 /* ═══ the plugin's own tick, drawers and handlers — LIFTED from index.html (markers) ═══ */

@@ -1925,6 +1925,7 @@ private:
     std::array<int, (size_t) ParameterIDs::kFxInstances> splSlotOf_ {};   // Splitter inst -> its chain slot, or -1
     int laneLast_[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] {};   // lane -> its LAST device slot, or -1
     void resolveLanes() noexcept;
+    static int poolBaseForKind (int kind) noexcept;   // fb446 — one switch over the send bases
     void cacheSendRefs();
     void cacheFx3Refs();
     void cacheFx4Refs();     // fb426 — equalizer / widen / compress / ott

@@ -299,6 +299,51 @@ int main()
         }
     }
 
+    // ══ fb446 — A DEVICE IN A BAND IS POWERED BY THE BAND ═══════════════════════════════════
+    // Lane cards carry NO route row (they are fed by the Splitter's band), so nothing lights their
+    // SRC_* pills — and every pooled apply routine gates on poolRouteAny_. Without the lane-power
+    // rule in resolveLanes(), a Distortion dropped into the Mid band would return its input forever,
+    // bit-identical, with a full green build (fb435's exact shape). So: Splitter + a Distortion in
+    // band 2 with Drive up, NO Distortion routes, versus the Splitter alone — the spectrum must move.
+    {
+        AU a;
+        if (a.open())
+        {
+            const char* SRC[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+            a.set ("Splitter In Chain", 1.0f); a.set ("Splitter Power", 1.0f); a.set ("Splitter Chain Rank", 0.30f);
+            for (int k = 0; k < 6; ++k) a.set (std::string ("Splitter ") + SRC[k], 1.0f);
+            const Render base = a.render();
+            const auto baseSpec = spec (base.L);
+            a.set ("Distortion In Chain", 1.0f); a.set ("Distortion Power", 1.0f); a.set ("Distortion Chain Rank", 0.60f);
+            a.set ("Distortion Lane", 2.0f / 7.0f);      // choice(8): index 2 = "Lane 2" (Mid), never lround(raw*(N-1))
+            a.set ("Distortion Drive", 1.0f); a.set ("Distortion Mix", 1.0f);
+            // deliberately NO "Distortion SRC_*" — a lane card has no route row
+            const Render w = a.render();
+            const double dS = specDist (baseSpec, spec (w.L));
+            const double dL = rmsdb (w.L) - rmsdb (base.L);
+            char det[200];
+            snprintf (det, sizeof det, "Distortion in band 2, unrouted: Δspectrum=%.2f dB/band  Δlevel=%+.2f dB  (0.00 = the lane device is dead)", dS, dL);
+            chk (dS > 0.35 || std::fabs (dL) > 0.35, "a LEGACY device (Distortion) in a Splitter band PROCESSES the band with NO routes lit", det);
+            a.close();
+        }
+        // ... and a POOLED kind (Bode, whose power gate is poolRouteAny_), same shape
+        AU b2;
+        if (b2.open())
+        {
+            const char* SRC[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+            b2.set ("Splitter In Chain", 1.0f); b2.set ("Splitter Power", 1.0f); b2.set ("Splitter Chain Rank", 0.30f);
+            for (int k = 0; k < 6; ++k) b2.set (std::string ("Splitter ") + SRC[k], 1.0f);
+            const Render base = b2.render(); const auto baseSpec = spec (base.L);
+            b2.set ("Bode In Chain", 1.0f); b2.set ("Bode Power", 1.0f); b2.set ("Bode Chain Rank", 0.60f);
+            b2.set ("Bode Lane", 2.0f / 7.0f); b2.set ("Bode Shift", 0.92f); b2.set ("Bode Mix", 1.0f);
+            const Render w = b2.render();
+            const double dS = specDist (baseSpec, spec (w.L)), dL = rmsdb (w.L) - rmsdb (base.L);
+            char det[200]; snprintf (det, sizeof det, "Bode in band 2, unrouted, Shift 92%%: Δspectrum=%.2f dB/band  Δlevel=%+.2f dB", dS, dL);
+            chk (dS > 0.35 || std::fabs (dL) > 0.35, "a POOLED device (Bode) in a Splitter band PROCESSES the band with NO routes lit", det);
+            b2.close();
+        }
+    }
+
     printf ("\n  PASS %d   FAIL %d\n\n", npass, nfail);
     return nfail ? 1 : 0;
 }

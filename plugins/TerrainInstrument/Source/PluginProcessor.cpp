@@ -5144,6 +5144,22 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
 // claimed (fb351's rejoin). A lane's LAST device is unclaimed, so it lands in the mix on its own;
 // an UNUSED lane is summed by the Splitter itself, so a band with no device in it still passes
 // through. That is why this costs no change to FxChainTopology and no widening of any mask.
+// fb446 — the pool-send base of a chain entry, or -1 for the three legacy kinds (whose apply
+// routines do not gate on routing). ONE switch, so the lane-power rule below cannot drift from
+// the bases the way fb435's three hand-copied lists did.
+int TerrainInstrumentAudioProcessor::poolBaseForKind (int kind) noexcept
+{
+    switch (kind)
+    {
+        case 3:  return kGrnSendBase;   case 4:  return kTpeSendBase;   case 5:  return kFltSendBase;
+        case 6:  return kChoSendBase;   case 7:  return kFlaSendBase;   case 8:  return kPhaSendBase;
+        case 9:  return kEqzSendBase;   case 10: return kWidSendBase;   case 11: return kCmpSendBase;
+        case 12: return kOttSendBase;   case 13: return kBodSendBase;   case 14: return kUtlSendBase;
+        case 15: return kSplSendBase;
+        default: return -1;
+    }
+}
+
 void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
 {
     const int nSlots = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
@@ -5194,6 +5210,35 @@ void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
         laneConsumed_[(size_t) c] = true;
         laneClaimed_[(size_t) curInst][(size_t) (L - 1)] = true;
         laneLast_  [(size_t) curInst][(size_t) (L - 1)] = c;
+        // fb446 — A LANE DEVICE IS POWERED BY ITS BAND. Lane cards carry no route row (the UI hides
+        // it: routing a band-fed device anywhere else would be a lie), so nothing lights its
+        // SRC_* pills — and every pooled apply routine gates on poolRouteAny_[base + inst]. Without
+        // this line a device in a band returns its input forever, bit-identical, with a full green
+        // build (fb435's exact shape). Its route GAINS stay zero, so it taps no oscillator; its
+        // input is the band, set by the chain loop above.
+        {
+            const int b = poolBaseForKind (ce.kind);
+            if (b >= 0) poolRouteAny_[(size_t) (b + ce.inst - 1)] = true;
+            else
+            {
+                // The three legacy kinds: instance 1 runs inline and its ENVELOPE requires the
+                // route-active flag (hallEnvT_ = power && hallRouteActive_ ...); the pooled extras
+                // gate on poolRouteAny_ at their own bases (reverb 2*kFxExtra, delay 0, dst kFxExtra
+                // — the same index math the send-buffer resolution uses).
+                if (ce.inst == 1)
+                {
+                    if      (ce.kind == 0) hallRouteActive_ = true;
+                    else if (ce.kind == 1) dlyRouteActive_  = true;
+                    else if (ce.kind == 2) dstRouteActive_  = true;
+                }
+                else if (ce.inst >= 2 && ce.inst - 2 < kFxExtra)
+                {
+                    const int e = ce.inst - 2;
+                    const int q = (ce.kind == 0) ? 2 * kFxExtra + e : (ce.kind == 1) ? e : kFxExtra + e;
+                    poolRouteAny_[(size_t) q] = true;
+                }
+            }
+        }
     }
 }
 
