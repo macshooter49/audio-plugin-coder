@@ -7276,6 +7276,37 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
         #syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
         #syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+        /* fb444 — UTILITY IS A BUTTON BANK, NOT A SCOPE. Max: "utility doesn't even have to have
+           a visualizer, I think utility should just have a whole bunch of BUTTONS on the front,
+           of course mirroring the same buttons that we already have now." So the core IS the
+           buttons: the same .fxr-pill look, the same lit-purple state, laid out 3x2 and big
+           enough to hit. They are real .fxr-pill nodes inside the card, so the pill handler that
+           has always been there binds them by index — no second click path to drift. */
+        #syn-panel .utl-bank{ position:absolute; inset:0; display:grid; grid-template-columns:repeat(3,1fr);
+                              grid-template-rows:repeat(2,1fr); gap:5px; padding:2px 0; }
+        #syn-panel .utl-bank .fxr-pill{ height:auto; font-size:9px; border-radius:7px; }
+        /* fb444 — THE SPLITTER'S LANE STACK. This is the Serum 2 reading made literal: one row
+           per band, each with a "+" that drops a device straight into that lane, the lane's own
+           M/S/F glyphs, and a LIVE level bar so a band that is doing nothing is visibly doing
+           nothing. The rows ARE the lane headers from the reference. */
+        #syn-panel .spl-stack{ position:absolute; inset:0; display:flex; flex-direction:column; gap:2px; padding:1px 0; }
+        #syn-panel .spl-lane{ flex:1; display:flex; align-items:center; gap:4px; min-height:0; }
+        #syn-panel .spl-add{ width:14px; height:14px; flex:0 0 14px; display:flex; align-items:center;
+                             justify-content:center; font-size:11px; line-height:1; color:var(--text-muted);
+                             border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
+        #syn-panel .spl-add:hover{ border-color:var(--purple-400); color:var(--text-primary); }
+        #syn-panel .spl-nm{ flex:0 0 40px; font-size:8px; letter-spacing:.04em; color:var(--text-muted); }
+        #syn-panel .spl-bar{ flex:1 1 auto; height:6px; min-width:0; border:1px solid var(--border-strong);
+                             border-radius:3px; position:relative; overflow:hidden; }
+        #syn-panel .spl-fill{ position:absolute; left:0; top:0; bottom:0; width:0%; background:#B794FF; opacity:.75; }
+        #syn-panel .spl-g{ flex:0 0 12px; height:12px; display:flex; align-items:center; justify-content:center;
+                           font-size:7px; color:var(--text-muted); border:1px solid var(--border-strong);
+                           border-radius:2px; cursor:pointer; }
+        #syn-panel .spl-g.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
+        /* the lane tag a device wears when it lives inside a Splitter band */
+        #syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
+                              border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
+                              margin-left:4px; cursor:pointer; }
         #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
         #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
         #syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
@@ -7979,6 +8010,33 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 +'<path class="bod-arc" d="" fill="none" stroke="#B794FF" stroke-width="1.2" opacity="0"/>'
                 +'</svg>';
             },
+            /* UTILITY — THE BUTTON BANK. No scope, by request. Six switches, house look, lit
+               purple when on. They are .fxr-pill nodes so the existing pill handler binds them by
+               index against the template's pp[] — one click path, not two. */
+            utl:function(){
+              var names=['Flip L','Flip R','Trade','Sum','DC','Dim'], h='';
+              for(var i=0;i<names.length;i++)
+                h+='<span class="fxr-pill"><span class="fxr-t">'+names[i]+'</span></span>';
+              return '<div class="utl-bank">'+h+'</div>';
+            },
+            /* SPLITTER — THE LANE STACK. One row per band: [+] NAME [====live====] M S F.
+               The "+" drops a device straight into that lane, which is the whole interaction from
+               the reference. The bar is the band's LIVE energy, so an empty or muted band reads as
+               empty at a glance. M/S/F are .fxr-pill-indexed too (12 of them, lane order). */
+            spl:function(){
+              var h='';
+              for(var k=0;k<4;k++){
+                h+='<div class="spl-lane" data-lane="'+k+'">'
+                 +   '<span class="spl-add" data-lane="'+k+'">+</span>'
+                 +   '<span class="spl-nm"></span>'
+                 +   '<span class="spl-bar"><span class="spl-fill"></span></span>'
+                 +   '<span class="fxr-pill spl-g"><span class="fxr-t">M</span></span>'
+                 +   '<span class="fxr-pill spl-g"><span class="fxr-t">S</span></span>'
+                 +   '<span class="fxr-pill spl-g"><span class="fxr-t">F</span></span>'
+                 + '</div>';
+              }
+              return '<div class="spl-stack">'+h+'</div>';
+            },
             /* ═══ FX4-CORES-END ═══ */
             reverb:function(){
               // fb360 — the grid now spans the SAME plot bounds as the distortion core (x 6.5 → 219.5),
@@ -8187,7 +8245,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // `||1`: one card works and duplication does not, which is the fb381 FX_PREFIX bug one
           // registry over. The fx3 UI gate now asks for EIGHT of each and requires exactly six
           // back, so a missing entry here cannot pass.
-          var FX_MAXINST={reverb:6,delay:6,saturate:6,granular:6,tape:6,flt:6,cho:6,fla:6,pha:6,eqz:6,wid:6,cmp:6,ott:6,bod:6};   // fb352 — reverb duplicates too: its engines
+          var FX_MAXINST={reverb:6,delay:6,saturate:6,granular:6,tape:6,flt:6,cho:6,fla:6,pha:6,eqz:6,wid:6,cmp:6,ott:6,bod:6,utl:6,spl:6};   // fb352 — reverb duplicates too: its engines
 
           var DEV_TEMPLATES=[
             {name:'Reverb',core:'reverb',type:'Hall',types:['Hall','Room','Plate','Spring','Digital','Vintage','Basin','Shimmer','Convolution'],preset:'Cave',code:'rt 2.4s',on:false,pwrP:'SYN_RVB_POWER',tp:'SYN_RVB_TYPE',rp:['SYN_RVB_SRC_A','SYN_RVB_SRC_B','SYN_RVB_SRC_C','SYN_RVB_SRC_D','SYN_RVB_SRC_SUB','SYN_RVB_SRC_NOISE'],
@@ -8430,6 +8488,41 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                    d2:{k:'Route',v:'Normal',opts:['Normal','Cross','Mono Sum','Wide','Shift First','Shift Last'],p:'SYN_BOD_ROUTE',pN:8},
                    knobs:[['Fine',50,'SYN_BOD_FINE'],['Spread',100,'SYN_BOD_SPREAD'],['Time',45,'SYN_BOD_TIME'],['Blur',0,'SYN_BOD_BLUR'],
                           ['Low Keep',0,'SYN_BOD_LOWKEEP'],['Damping',100,'SYN_BOD_DAMPING'],['Touch',50,'SYN_BOD_TOUCH'],['Drift',0,'SYN_BOD_DRIFT']]}}
+            ,
+            /* fb444 — UTILITY. pills:[] on purpose: the six switches live IN the core as the
+               button bank Max asked for, and because they are real .fxr-pill nodes inside the
+               card the pill handler that has always been there binds them by index against pp[].
+               One click path, not two. Gain's UNITY is 67 (60/90 on a -60..+30 dB fader), so the
+               default is 0 dB and 0 is a glided -inf mute. */
+            {name:'Utility',core:'utl',type:'Strip',
+             types:['Strip','Turn','Outer','Canopy','Cellar'], tpN:8,
+             preset:'Init',code:'',on:false,pwrP:'SYN_UTL_POWER',tp:'SYN_UTL_TYPE',
+             rp:['SYN_UTL_SRC_A','SYN_UTL_SRC_B','SYN_UTL_SRC_C','SYN_UTL_SRC_D','SYN_UTL_SRC_SUB','SYN_UTL_SRC_NOISE'],
+             pills:[{"t":"Flip L","on":false},{"t":"Flip R","on":false},{"t":"Trade","on":false},{"t":"Sum","on":false},{"t":"DC","on":false},{"t":"Dim","on":false}],pp:["SYN_UTL_FLIPL", "SYN_UTL_FLIPR", "SYN_UTL_TRADE", "SYN_UTL_SUM", "SYN_UTL_DC", "SYN_UTL_DIM"],
+             route:[0,0,0,0,0,0],
+             knobs:[{l:'Gain',v:67,p:'SYN_UTL_GAIN'},{l:'Image',v:50,p:'SYN_UTL_IMAGE'},
+                    {l:'Steer',v:50,p:'SYN_UTL_STEER'},{l:'Mix',v:100,p:'SYN_UTL_MIX'}],
+             back:{d1:{k:'Character',v:'Cushion',opts:['Cushion','Brick','Coil','Creep','Tuck','Rail','Ripple','Fuse'],p:'SYN_UTL_CHAR'},
+                   d2:{k:'Wiring',v:'Through',opts:['Through','Difference','L To Both','R To Both','L Only','R Only'],p:'SYN_UTL_WIRING',pN:8},
+                   knobs:[['Strain',0,'SYN_UTL_B1'],['Clamp',50,'SYN_UTL_B2'],['Mono Below',0,'SYN_UTL_B3'],['Slope',0,'SYN_UTL_B4'],
+                          ['Twist',50,'SYN_UTL_B5'],['Rumble',0,'SYN_UTL_B6'],['Bleed',0,'SYN_UTL_B7'],['Hinge',50,'SYN_UTL_B8']]}},
+            /* fb444 — SPLITTER. Twelve lane glyphs (M/S/F per band) ride the same pill-index path
+               as Utility's six; the "+" per lane is its own handler because it ADDS a card. */
+            {name:'Splitter',core:'spl',type:'Low / Mid / High',
+             types:['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'], tpN:8,
+             preset:'Init',code:'',on:false,pwrP:'SYN_SPL_POWER',tp:'SYN_SPL_TYPE',
+             rp:['SYN_SPL_SRC_A','SYN_SPL_SRC_B','SYN_SPL_SRC_C','SYN_SPL_SRC_D','SYN_SPL_SRC_SUB','SYN_SPL_SRC_NOISE'],
+             pills:[{"t":"M","on":false},{"t":"S","on":false},{"t":"F","on":false},{"t":"M","on":false},{"t":"S","on":false},{"t":"F","on":false},{"t":"M","on":false},{"t":"S","on":false},{"t":"F","on":false},{"t":"M","on":false},{"t":"S","on":false},{"t":"F","on":false}],pp:["SYN_SPL_MUTE1", "SYN_SPL_SOLO1", "SYN_SPL_FLIP1", "SYN_SPL_MUTE2", "SYN_SPL_SOLO2", "SYN_SPL_FLIP2", "SYN_SPL_MUTE3", "SYN_SPL_SOLO3", "SYN_SPL_FLIP3", "SYN_SPL_MUTE4", "SYN_SPL_SOLO4", "SYN_SPL_FLIP4"],
+             route:[0,0,0,0,0,0],
+             knobs:[{l:'Split',v:50,p:'SYN_SPL_SPLIT'},{l:'Balance',v:50,p:'SYN_SPL_BALANCE'},
+                    {l:'Spread',v:50,p:'SYN_SPL_SPREAD'},{l:'Mix',v:100,p:'SYN_SPL_MIX'}],
+             /* fb418 NO DOUBLES — d2 was the Type list, which the header pill already carries.
+                A router has exactly ONE voicing axis (Slope), so d2 gets a real second one
+                instead of a second copy of the first: how the lane S glyphs behave. */
+             back:{d1:{k:'Slope',v:'24 dB',opts:['6 dB','12 dB','24 dB','48 dB'],p:'SYN_SPL_SLOPE',pN:8},
+                   d2:{k:'Latch',v:'Latching',opts:['Latching','Exclusive','Momentary'],p:'SYN_SPL_LATCH',pN:8},
+                   knobs:[['Lane 1 Gain',50,'SYN_SPL_B1'],['Lane 2 Gain',50,'SYN_SPL_B2'],['Lane 3 Gain',50,'SYN_SPL_B3'],['Lane 4 Gain',50,'SYN_SPL_B4'],
+                          ['Span',40,'SYN_SPL_B5'],['Lane 1 Width',50,'SYN_SPL_B6'],['Top Lane Width',50,'SYN_SPL_B7'],['Top Lane Pan',50,'SYN_SPL_B8']]}}
           ];
           // ═══ fb346 — THE DYNAMIC CHAIN (UI side) ═══════════════════════════════════════════════
           // DEVS is now the LIVE chain, not a fixed list: built from the _ACTIVE/_RANK params on
@@ -8439,7 +8532,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           // fb381 — a core with no FX_PREFIX entry crashes instPrefix on the SECOND instance:
           // one card works and duplication does not, which is the exact shape of bug you only
           // ever see if you actually add six. All three fb413 cores are here from birth.
-          var FX_PREFIX={bod:'SYN_BOD_',reverb:'SYN_RVB_',delay:'SYN_DLY_',saturate:'SYN_DST_',granular:'SYN_GRN_',tape:'SYN_TPE_',flt:'SYN_FLT_',
+          var FX_PREFIX={bod:'SYN_BOD_',utl:'SYN_UTL_',spl:'SYN_SPL_',reverb:'SYN_RVB_',delay:'SYN_DLY_',saturate:'SYN_DST_',granular:'SYN_GRN_',tape:'SYN_TPE_',flt:'SYN_FLT_',
                          cho:'SYN_CHO_',fla:'SYN_FLA_',pha:'SYN_PHA_',
                          eqz:'SYN_EQZ_',wid:'SYN_WID_',cmp:'SYN_CMP_',ott:'SYN_OTT_'};   // fb426
                                                           // are built LAZILY on the message thread —
@@ -8477,12 +8570,19 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               try{ window.__setSynParam(DEVS[i].rankP, r); }catch(e){}
             }
           }
-          function fxAdd(core){
+          // fb444 — fxAdd takes an optional LANE. The "+" on a Splitter's HIGHS row calls
+          // fxAdd(core, 3), and the new card is born already living in that band: its Lane param
+          // is written before it is ever drawn, and its rank is placed just after the Splitter so
+          // it lands under the right header. That is the whole interaction from the reference.
+          function fxAdd(core, lane, afterIdx){
             var used={}; for(var i=0;i<DEVS.length;i++) if(DEVS[i].core===core) used[DEVS[i].inst]=1;
             var inst=0; for(var n=1;n<=(FX_MAXINST[core]||1);n++) if(!used[n]){ inst=n; break; }
             if(!inst){ try{ if(window.__tiToast) window.__tiToast('Max '+(FX_MAXINST[core]||1)+' × '+core); }catch(e){} return; }
             var d=makeInst(core,inst); if(!d) return;
-            DEVS.push(d);
+            if(lane>0){ d.lane=lane; }
+            if(afterIdx!=null && afterIdx>=0 && afterIdx<DEVS.length) DEVS.splice(afterIdx+1,0,d);
+            else DEVS.push(d);
+            if(lane>0){ try{ window.__setSynParam(d.pfx+'LANE', lane/7); }catch(e){} }   /* choice(8) */
             try{ window.__setSynParam(d.actP,1); }catch(e){}
             // an explicitly ADDED device powers ON — the user asked for it, so it must be audible.
             try{ if(d.pwrP) window.__setSynParam(d.pwrP,1); }catch(e){} d.on=true;
@@ -8507,14 +8607,14 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           }
           // The + menu — reuses the shared purple glass (__synShowMenu), which already clamps so a
           // menu opened at the BOTTOM of the plugin flips up instead of being cut off (Max's ask).
-          function fxAddMenu(x,y){
+          function fxAddMenu(x,y,lane,afterIdx){
             var rows=[];
             for(var i=0;i<DEV_TEMPLATES.length;i++){
               (function(t){
                 var used=0; for(var q=0;q<DEVS.length;q++) if(DEVS[q].core===t.core) used++;
                 var full=used>=(FX_MAXINST[t.core]||1);
                 rows.push({label:t.name+(full?'  (max)':(used?'  ×'+used:'')),white:!full,
-                           onPick:function(){ if(!full) fxAdd(t.core); }});
+                           onPick:function(){ if(!full) fxAdd(t.core, lane, afterIdx); }});
               })(DEV_TEMPLATES[i]);
             }
             // fb368 — Max: "take away where it says add effect. We don't need the word that
@@ -8936,7 +9036,42 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                      arc.setAttribute('d','M'+a0.toFixed(1)+' 24 Q'+((a0+a1)/2).toFixed(1)+' 12 '+a1.toFixed(1)+' 24'); }
             }
           }
-          var FX4_DRAW={eqz:fx4DrawEqz,wid:fx4DrawWid,cmp:fx4DrawCmp,ott:fx4DrawOtt,bod:fx4DrawBod};
+          // SPLITTER — name the bands, show only the ones this Type has, and drive each bar from
+          // the engine's OWN lane peak (fb432: read the mechanism's meters, not a guess). A band
+          // that is muted, soloed away or simply empty reads as empty at a glance.
+          var SPL_LANE_NAMES={0:['Low','High'],1:['Low','Mid','High'],
+                              2:['Sub','Low','Mid','High'],3:['Mid','Side'],4:['Left','Right']};
+          // fb444 — the core-resident switches take their lit state from d.pills every frame, the
+          // same array the chassis row would have used, so restore and preset-apply light them
+          // with no second code path.
+          function fx4PaintCorePills(core,dev){
+            var b=core.querySelectorAll('.fxr-pill'), P=(dev&&dev.pills)||[];
+            for(var i=0;i<b.length;i++) b[i].classList.toggle('fxr-on', !!(P[i]&&P[i].on));
+          }
+          function fx4DrawUtl(core,dev,f){ fx4PaintCorePills(core,dev); }
+          function fx4DrawSpl(core,dev,f){
+            fx4PaintCorePills(core,dev);
+            var ti=0, T=dev&&dev.types, tv=dev&&dev.type;
+            if(T&&tv!=null){ var ix=T.indexOf(tv); if(ix>=0) ti=ix; }
+            var nm=SPL_LANE_NAMES[ti]||SPL_LANE_NAMES[1];
+            var nl=(f&&f.nl)?f.nl:nm.length;
+            var rows=core.querySelectorAll('.spl-lane');
+            for(var k=0;k<rows.length;k++){
+              var live=k<nl;
+              rows[k].style.display=live?'':'none';
+              if(!live) continue;
+              var lab=rows[k].querySelector('.spl-nm'); if(lab) lab.textContent=nm[k]||('Lane '+(k+1));
+              var fill=rows[k].querySelector('.spl-fill');
+              if(fill){
+                var pk=(f&&f.pk)?f.pk[k]:0, gt=(f&&f.gt)?f.gt[k]:1;
+                var db=20*Math.log10(Math.max(1e-6,pk||0));           // -60..0 dBFS -> 0..100 %
+                var w=Math.max(0,Math.min(100,(db+60)/60*100));
+                fill.style.width=w.toFixed(1)+'%';
+                fill.style.opacity=(gt>0.5?0.75:0.14).toFixed(2);      // a muted band goes dim
+              }
+            }
+          }
+          var FX4_DRAW={eqz:fx4DrawEqz,wid:fx4DrawWid,cmp:fx4DrawCmp,ott:fx4DrawOtt,bod:fx4DrawBod,spl:fx4DrawSpl,utl:fx4DrawUtl};
           function fx4Tick(){
             var feed=window.__fx4VizPush||null;
             var cards=document.querySelectorAll('.fxr-dev');
@@ -9637,9 +9772,34 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var bL=dev.querySelector('.fxr-dial[data-bk="Time L"]');     if(bL) bL.innerHTML=knobSVG(dd.knobs[0].v, dlyTimeLabel(dd,'L'));                 // back Time L (mirror)
             var bR=dev.querySelector('.fxr-dial[data-bk="Time R"]');     if(bR) bR.innerHTML=knobSVG(dd.link?dd.knobs[0].v:(dd.tR!=null?dd.tR:50), dlyTimeLabel(dd,dd.link?'L':'R'));   // back Time R
           }catch(e){} }
+          // fb444 — the lane tag. In the reference a device sits INDENTED under its band header;
+          // this rack is a horizontal strip, so the card wears the band's name instead. Same
+          // information, same one glance, and it travels with the card when you drag it. Click it
+          // to cycle bands, click past the last one to leave the Splitter entirely.
+          function laneNamesFor(d){
+            var ti=0, T=d&&d.types, tv=d&&d.type;
+            if(T&&tv!=null){ var ix=T.indexOf(tv); if(ix>=0) ti=ix; }
+            return SPL_LANE_NAMES[ti]||SPL_LANE_NAMES[1];
+          }
+          function laneOwnerOf(idx){        // the nearest Splitter to this card's LEFT
+            for(var i=idx-1;i>=0;i--) if(DEVS[i]&&DEVS[i].core==='spl') return DEVS[i];
+            return null;
+          }
+          function laneTagHTML(d){
+            var i=DEVS.indexOf(d); if(i<0||d.core==='spl') return '';
+            var own=laneOwnerOf(i); if(!own) return '';
+            var L=d.lane||0; if(L<=0) return '';
+            var nm=laneNamesFor(own);
+            return '<span class="fxr-lane" data-lane="1">'+(nm[L-1]||('Lane '+L))+'</span>';
+          }
           function devHTML(d,idx){
             var isConv=(d.core==='reverb'&&d.type==='Convolution');   /* fb292 — Convolution shows the IR waveform, not the grid */
-            var pills=d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
+            /* fb444 — Utility and Splitter keep their switches INSIDE the core (the button bank
+               and the lane strip), so the chassis row would be a second copy of the same controls
+               — the exact double the no-doubles rule forbids. The pills array still exists so the
+               state is tracked and restored; only the ROW is suppressed. */
+            var pillsInCore=(d.core==='utl'||d.core==='spl');
+            var pills=pillsInCore?'':d.pills.map(function(p){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
             var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
             /* ═══ fb415 — 🔑 THE FIRST-SLOT LAW (Max, HARD RULE) ═══════════════════════════
                SEND APPEARS ON THE FIRST DEVICE IN THE CHAIN AND NOWHERE ELSE. Max: "it only
@@ -9663,7 +9823,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var knobs=d.knobs.map(function(k,i){var lbl=(d.core==='delay'&&i===0)?dlyTimeLabel(d):fxFmt(d.core,k.p,k.v,d); return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+(k.p||'')+'">'+knobSVG(k.v,lbl,fxGlyph(d.core,k.p,k.v))+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');   /* fb298 — delay Time shows sync-div/ms · fb363 — the readout law for every other device */
             return '<div class="fxr-dev'+(idx===0?' fxr-sel':'')+(d.on?'':' fxr-off')+(d.noBack?' noback':'')+'" data-dev="'+idx+'">'
               +'<div class="fxr-head">'
-                +'<span class="fxr-grip">⋮⋮</span><span class="fxr-name">'+d.name+'</span>'
+                +'<span class="fxr-grip">⋮⋮</span><span class="fxr-name">'+d.name+laneTagHTML(d)+'</span>'
                 +'<span class="fxr-type"><span class="fxr-tw"><span class="fxr-tl">'+d.type+'<span class="fxr-car">▾</span></span>'+d.types.map(function(t){return '<span class="fxr-tg">'+t+'<span class="fxr-car">▾</span></span>';}).join('')+'</span><select class="fxr-type-native" data-p="'+(d.tp||'')+'">'+d.types.map(function(t){return '<option'+(t===d.type?' selected':'')+'>'+t+'</option>';}).join('')+'</select></span>'   /* fb275 — real <select> dropdown; ghost keeps the footprint fixed */
                 +'<span class="fxr-preset" data-act="preset"><span class="fxr-star">✦</span><span class="fxr-pname">'+d.preset+'</span><span class="fxr-car">▾</span></span>'
                 +'<span class="fxr-spacer"></span>'
@@ -9905,11 +10065,13 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           var FLA_PRESETS={"Tape Zero":[{"name":"Itchycoo","k":[30,55,57,100],"d1":"Sub","bk":[50,null,100,null,null,null,null,null]},{"name":"Bold As Love","k":[0,45,50,100],"d1":"Wide Zero","bk":[45,50,100,null,null,null,null,null],"pl":[1,0]}],"Jet":[{"name":"Jet Takeoff","k":[15,80,96,70],"d1":"Silver","bk":[35,20,null,null,null,null,null,null]},{"name":"Underwater","k":[17,60,12,60],"d1":"Hollow","pl":[1,0]}],"BBD":[{"name":"Silver Mistress","k":[30,50,67,55],"d1":"Mistress","bk":[55,null,null,null,null,null,null,null]},{"name":"Matrix Chime","k":[5,0,77,65],"d1":"Mistress","bk":[62,null,null,null,null,null,null,null]}],"Endless":[{"name":"Endless Rise","k":[40,65,70,60],"d1":"Rise"},{"name":"Endless Fall","k":[30,55,65,55],"d1":"Fall"}],"Envelope":[{"name":"Touch Dive","k":[70,75,72,60],"d1":"Up"},{"name":"Duck Zero","k":[55,85,50,100],"d1":"Down"}],"Step":[{"name":"Stair Machine","k":[50,70,75,65],"d1":"Random","pl":[1,0]}]};
           var PHA_PRESETS={"Ninety":[{"name":"First Phaser","k":[17,45,0,35],"d1":"Script 74","bk":[null,null,null,20,null,null,null,null],"pl":[1,0]},{"name":"Seventies Strut","k":[33,60,45,40],"d1":"Block 78","bk":[null,null,null,null,null,null,null,15],"pl":[1,0]}],"Stone":[{"name":"Deep Stone","k":[11,80,70,50],"d1":"Color On","bk":[null,null,null,null,null,null,30,45],"pl":[1,0]}],"Duo":[{"name":"Twin Orbit","k":[6,65,0,45],"d1":"Series 1:1.33","bk":[null,null,55,60,null,null,null,null],"pl":[1,0]}],"Twelve":[{"name":"Six Notch Scream","k":[50,90,88,60],"d1":"Full Range","bk":[null,null,null,null,null,null,null,30],"pl":[1,0]},{"name":"Sideband Engine","k":[85,40,60,55],"d1":"Hi Range"}],"Kraut":[{"name":"Kosmische Bus","k":[0,75,55,45],"d1":"Slow Bulbs","bk":[null,null,null,35,null,null,null,60],"pl":[1,0]}],"Vibe":[{"name":"Throb","k":[60,55,0,50],"d1":"Chorus Lamp","bk":[null,null,null,null,null,null,20,null]},{"name":"Leslie Liar","k":[68,45,0,100],"d1":"Vibrato Lamp","bk":[null,null,null,45,null,null,null,null]}],"Barber":[{"name":"Up Forever","k":[15,70,0,45],"d1":"Rise 8","bk":[null,45,60,null,null,null,null,null]},{"name":"Down Stairwell","k":[20,65,30,55],"d1":"Rise 12","bk":[null,null,null,null,null,null,null,40]}],"Envy":[{"name":"Auto Quack","k":[35,20,50,60],"d1":"Fast Grab","bk":[null,null,null,null,92,75,null,null]},{"name":"Rubber Down","k":[35,50,60,55],"d1":"Slow Swell","bk":[null,null,null,null,15,30,null,null],"pl":[0,1]}],"Steps":[{"name":"Clockwork","k":[67,70,65,60],"d1":"Random 8","bk":[null,null,40,null,null,null,null,null],"pl":[1,0]}]};
           var BOD_PRESETS={"Shift":[{"name":"Init Shift","k":[50,100,0,100],"d1":"Pristine"},{"name":"Just Off Key","k":[53,100,0,60],"d1":"Pristine","bk":[62,null,null,null,null,null,null,null]},{"name":"Bell Metal","k":[64,100,15,100],"d1":"Iron","bk":[null,null,20,35,null,null,null,null]},{"name":"Sub Grinder","k":[36,0,25,100],"d1":"Tube 735","bk":[null,null,null,null,45,70,null,null]}],"Barberpole":[{"name":"Forever Up","k":[54,100,72,70],"d1":"Dome '64","bk":[null,null,40,55,null,80,null,null]},{"name":"Forever Down","k":[46,0,72,70],"d1":"Dome '64","bk":[null,null,40,55,null,80,null,null]},{"name":"Shepard Stairs","k":[53,100,85,60],"d1":"Leaky","bk":[null,null,28,75,30,65,null,20]}],"Echobode":[{"name":"Echobode Classic","k":[55,100,62,55],"d1":"Tape Loop","bk":[null,null,58,25,null,72,null,25]},{"name":"Dub Descent","k":[45,0,78,50],"d1":"Tape Loop","bk":[null,null,66,45,35,55,null,40],"pl":[1,1]},{"name":"Metal Canyon","k":[62,100,88,65],"d1":"Crush","bk":[null,null,50,90,null,45,null,null]}],"Detune":[{"name":"Hair Width","k":[50,100,0,45],"d1":"Pristine","bk":[57,null,null,null,null,null,null,null]},{"name":"Slow Beating","k":[50,100,20,50],"d1":"Leaky","bk":[53,null,72,null,null,null,null,12]}],"Ring":[{"name":"Pure Ring","k":[58,50,0,100],"d1":"Pristine"},{"name":"Robot Voice","k":[61,50,10,100],"d1":"Crush","bk":[null,null,null,null,25,null,null,null]},{"name":"Clangour","k":[72,50,45,85],"d1":"Iron","bk":[null,null,18,60,null,50,null,null]}],"Spiral":[{"name":"Rising Spiral","k":[52,100,80,60],"d1":"Dome '64","bk":[null,null,35,70,null,60,68,30]},{"name":"Gravity Well","k":[47,0,84,60],"d1":"Ash","bk":[null,null,42,80,40,50,32,45]}],"Chorale":[{"name":"Choir Of Ghosts","k":[51,100,55,55],"d1":"Leaky","bk":[55,null,62,85,45,55,null,35]},{"name":"Glass Chapel","k":[56,100,48,50],"d1":"Dome '64","bk":[null,null,70,95,null,75,null,null]}],"Freeze":[{"name":"Held Cloud","k":[50,100,96,70],"d1":"Tape Loop","bk":[null,null,55,100,null,58,null,null]},{"name":"Screaming Hold","k":[63,100,100,100],"d1":"Crush","bk":[null,null,30,75,null,42,null,null]}]};
+          var UTL_PRESETS={"Strip":[{"name":"Init Strip","k":[67,50,50,100],"d1":"Cushion","d2":"Through"},{"name":"Just Louder","k":[78,50,50,100],"d1":"Cushion"},{"name":"Bus Glue","k":[70,50,50,100],"d1":"Brick","bk":[28,60,null,null,null,null,null,null]},{"name":"Club Mono","k":[67,50,50,100],"d1":"Cushion","bk":[null,null,42,55,null,null,null,null]}],"Turn":[{"name":"Nudge Left","k":[67,50,38,100],"d1":"Cushion"},{"name":"Hard Right","k":[67,50,100,100],"d1":"Cushion"}],"Outer":[{"name":"Wide, Safely","k":[67,74,50,100],"d1":"Ripple"},{"name":"Triple Wide","k":[67,100,50,100],"d1":"Ripple","bk":[null,null,35,null,null,null,null,null]},{"name":"Collapse","k":[67,0,50,100],"d1":"Cushion"}],"Canopy":[{"name":"Air Tilt","k":[67,60,50,100],"d1":"Tuck","bk":[null,null,null,null,null,null,40,62]},{"name":"Sheen Bleed","k":[67,55,50,85],"d1":"Ripple","bk":[null,null,null,null,null,null,66,70]}],"Cellar":[{"name":"Anchor The Low","k":[67,50,50,100],"d1":"Brick","bk":[null,null,50,70,null,45,null,null]},{"name":"Rumble Killer","k":[67,50,50,100],"d1":"Brick","bk":[null,null,30,100,null,80,null,null]}]};
+          var SPL_PRESETS={"Low / High":[{"name":"Two Way","k":[50,50,50,100],"d1":"Low / High","d2":"24 dB"},{"name":"Bass Split 120","k":[36,50,50,100],"d1":"Low / High","d2":"48 dB"}],"Low / Mid / High":[{"name":"Init Three Way","k":[50,50,50,100],"d1":"Low / Mid / High","d2":"24 dB"},{"name":"Wide Tops Only","k":[50,50,78,100],"d1":"Low / Mid / High","d2":"24 dB"},{"name":"Scoop The Mids","k":[50,50,50,100],"d1":"Low / Mid / High","bk":[null,32,null,null,null,null,null,null]},{"name":"Gentle Bands","k":[50,50,50,100],"d1":"Low / Mid / High","d2":"6 dB"}],"Sub / Low / Mid / High":[{"name":"Four Way","k":[42,50,50,100],"d1":"Sub / Low / Mid / High","d2":"24 dB"},{"name":"Sub Anchor","k":[38,50,60,100],"d1":"Sub / Low / Mid / High","bk":[60,null,null,null,null,null,null,null]}],"Mid / Side":[{"name":"M/S Split","k":[50,50,50,100],"d1":"Mid / Side"},{"name":"Sides Only","k":[50,50,50,100],"d1":"Mid / Side","bk":[0,null,null,null,null,null,null,null]}],"Left / Right":[{"name":"L/R Split","k":[50,50,50,100],"d1":"Left / Right"}]};
           /* every core's preset FOLDER and FACTORY list, in one place
  (the fb390 'ask the property, never
              keep a list' law: a new core joins here or it gets no presets — never someone else's) */
-          var FX_PRESET_NS={bod:'bod_',reverb:'rvb_',delay:'dly_',saturate:'dst_',granular:'grn_',tape:'tpe_',flt:'flt_',cho:'cho_',fla:'fla_',pha:'pha_',eqz:'eqz_',wid:'wid_',cmp:'cmp_',ott:'ott_'};
-          var FX_FACTORY={bod:BOD_PRESETS,reverb:RVB_PRESETS,delay:DLY_PRESETS,saturate:DST_PRESETS,granular:GRN_PRESETS,tape:TPE_PRESETS,cho:CHO_PRESETS,fla:FLA_PRESETS,pha:PHA_PRESETS,eqz:EQZ_PRESETS,wid:WID_PRESETS,cmp:CMP_PRESETS,ott:OTT_PRESETS};
+          var FX_PRESET_NS={bod:'bod_',utl:'utl_',spl:'spl_',reverb:'rvb_',delay:'dly_',saturate:'dst_',granular:'grn_',tape:'tpe_',flt:'flt_',cho:'cho_',fla:'fla_',pha:'pha_',eqz:'eqz_',wid:'wid_',cmp:'cmp_',ott:'ott_'};
+          var FX_FACTORY={bod:BOD_PRESETS,utl:UTL_PRESETS,spl:SPL_PRESETS,reverb:RVB_PRESETS,delay:DLY_PRESETS,saturate:DST_PRESETS,granular:GRN_PRESETS,tape:TPE_PRESETS,cho:CHO_PRESETS,fla:FLA_PRESETS,pha:PHA_PRESETS,eqz:EQZ_PRESETS,wid:WID_PRESETS,cmp:CMP_PRESETS,ott:OTT_PRESETS};
           function openRvbPreset(dev,idx,pillEl){ try{
             if(rvbMenu){ closeRvbMenu(); return; }
             var d=DEVS[idx]; if(!d)return; var type=d.type,
@@ -10148,6 +10310,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var rp=d.rp||[]; for(var r=0;r<rp.length;r++) ids.push(rp[r]);
             var xp=d.xp||[]; for(var x=0;x<xp.length;x++){ ids.push(xp[x][0]); ids.push(xp[x][1]); ids.push(xp[x][2]); }   /* fb438 — the free bells */
             var xqp=d.xqp||[]; for(var xq=0;xq<xqp.length;xq++) ids.push(xqp[xq]);   /* fb441 — per-band Q */
+            ids.push(d.pfx?d.pfx+'LANE':null);   /* fb444 — which Splitter band this card lives in */
             Promise.all(ids.map(rd)).then(function(v){ try{
               var i2=0, T=d.types||[];
               if(v[i2]!=null&&d.tpN&&T.length){ var ti=Math.round(v[i2]*(d.tpN-1)); if(ti>=0&&ti<T.length){ d.type=T[ti]; fx4ApplyType(d,d.type); } } i2++;
@@ -10160,6 +10323,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               for(var q=0;q<rp.length;q++){ if(v[i2]!=null&&d.route) d.route[q]=v[i2]>0.5?1:0; i2++; }
               for(var x2=0;x2<xp.length;x2++){ if(!d.xb) d.xb=[]; if(!d.xb[x2]) d.xb[x2]=[50,50,0]; if(v[i2]!=null) d.xb[x2][0]=v[i2]*100; i2++; if(v[i2]!=null) d.xb[x2][1]=v[i2]*100; i2++; if(v[i2]!=null) d.xb[x2][2]=v[i2]>0.5?1:0; i2++; }
               for(var q3=0;q3<xqp.length;q3++){ if(!d.xq) d.xq=[50,50,50,50,50,50,50,50]; if(v[i2]!=null) d.xq[q3]=v[i2]*100; i2++; }   /* fb441 */
+              if(v[i2]!=null) d.lane=Math.round(v[i2]*7); i2++;   /* fb444 — choice(8), so *7 */
               reRenderKeepSwap();
             }catch(e){} }).catch(function(){});
           }catch(e){} }
@@ -10573,6 +10737,28 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 if(dcd.link){ dcd.tR=dcd.knobs[0].v; dcd.divR=dcd.back.d2.v; window.__setSynParam(dcd.pfx+'TIME_R', dcd.tR/100); var oo=dcd.back.d2.opts, ii=oo.indexOf(dcd.divR); if(ii>=0) window.__setSynParam(dcd.pfx+'SYNCDIV_R', oo.length>1?ii/(oo.length-1):0); }   /* relink ⇒ mirror R to L */
                 window.__setSynParam(dcd.pfx+'LINK', dcd.link?1:0);   /* fb349 — per-instance */
                 var cw=dev.querySelector('.dly-chain'); if(cw) cw.innerHTML=chainSVG(dcd.link); refreshDlyTimeKnob(dci); } return; }   /* surgical: only the chain glyph + time labels redraw — nothing moves */
+            /* fb444 — the "+" on a Splitter lane row: add a device straight INTO that band. */
+            var sadd=e.target.closest('.spl-add');
+            if(sadd&&dev){
+              var sIdx=+dev.getAttribute('data-dev');
+              var lane=(+sadd.getAttribute('data-lane'))+1;
+              var rr=sadd.getBoundingClientRect();
+              try{ fxAddMenu(rr.left, rr.bottom+4, lane, sIdx); }catch(e3){}
+              return;
+            }
+            /* fb444 — the lane tag: click cycles the band, past the last one leaves the Splitter. */
+            var ltag=e.target.closest('.fxr-lane');
+            if(ltag&&dev){
+              var li=+dev.getAttribute('data-dev'), ld=DEVS[li];
+              if(ld){
+                var own=laneOwnerOf(li);
+                var nl=own?laneNamesFor(own).length:3;
+                ld.lane=((ld.lane||0)>=nl)?0:((ld.lane||0)+1);
+                try{ window.__setSynParam(ld.pfx+'LANE', (ld.lane||0)/7); }catch(e4){}
+                render();
+              }
+              return;
+            }
             var snd=e.target.closest('.fxr-snd');
             if(snd&&dev){ var sdd=DEVS[+dev.getAttribute('data-dev')];
               if(sdd){ sdd.send=!sdd.send; snd.classList.toggle('fxr-on',!!sdd.send);

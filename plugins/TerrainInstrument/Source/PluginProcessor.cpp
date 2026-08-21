@@ -4333,6 +4333,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 const juce::String d   = "Splitter " + (nn == 1 ? juce::String() : sfx + " ");
                 C (p + "TYPE",  d + "Type",  splTypes,  1);      // Low / Mid / High is the default
                 C (p + "SLOPE", d + "Slope", splSlopes, 2);      // 24 dB/oct
+                // fb418 NO DOUBLES — the back panel's second dropdown must not be a second copy
+                // of the header pill's Type list. A router has one voicing axis, so the second
+                // axis is BEHAVIOURAL: how the lane Solo glyphs latch.
+                C (p + "LATCH", d + "Latch",
+                   juce::StringArray { "Latching", "Exclusive", "Momentary",
+                                       "Reserved 4", "Reserved 5", "Reserved 6",
+                                       "Reserved 7", "Reserved 8" }, 0);
                 F (p + "SPLIT",   d + "Split",   0.50f);  F (p + "BALANCE", d + "Balance", 0.50f);
                 F (p + "SPREAD",  d + "Spread",  0.50f);  F (p + "MIX",     d + "Mix",     1.00f);
                 for (int b = 0; b < 8; ++b)
@@ -5094,6 +5101,24 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdDn (b), 1); }
         j << "],\"tup\":[";
         for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdUp (b), 1); }
+        j << "]}";
+    }
+    // ── SPLITTER: { nl, hz[3], pk[4], gate[4] }. The lane bar on the card is LIVE energy, so a
+    //    band that is muted, soloed away, or simply empty reads as empty at a glance — which is
+    //    the fastest possible answer to "is anything actually in my highs?".
+    j << "],\"spl\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = splRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
+        const auto& E = splPool_[(size_t) i];
+        j << "{\"nl\":" << E.laneCount() << ",\"hz\":[";
+        for (int k = 0; k < 3; ++k) { if (k) j << ","; j << N (E.meterXoverHz (k), 1); }
+        j << "],\"pk\":[";
+        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (E.meterLanePeak (k), 4); }
+        j << "],\"gt\":[";
+        for (int k = 0; k < 4; ++k) { if (k) j << ","; j << N (E.meterLaneGate (k), 2); }
         j << "]}";
     }
     return j + "]}";

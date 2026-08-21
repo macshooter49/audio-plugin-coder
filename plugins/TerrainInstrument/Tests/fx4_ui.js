@@ -59,11 +59,19 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const out={counts:{},cores:{},addErr:null};
     // record every param write the UI makes — the only proof the drag reaches the DSP path
     window.__W=[]; const orig=window.__setSynParam; window.__setSynParam=function(id,v){ window.__W.push([id,v]); try{ return orig&&orig(id,v); }catch(e){} };
-    for(const core of ['eqz','wid','cmp','ott','bod']) for(let i=0;i<8;i++){ try{ window.__fxAdd(core); }catch(e){ out.addErr=core+': '+String(e).slice(0,100); } }
+    for(const core of ['eqz','wid','cmp','ott','bod','utl','spl']) for(let i=0;i<8;i++){ try{ window.__fxAdd(core); }catch(e){ out.addErr=core+': '+String(e).slice(0,100); } }
     const D=window.__fxDevs?window.__fxDevs():[];
-    for(const core of ['eqz','wid','cmp','ott','bod']){
+    for(const core of ['eqz','wid','cmp','ott','bod','utl','spl']){
       out.counts[core]=D.filter(d=>d.core===core).length;
-      out.cores[core]=document.querySelectorAll('.fxr-dev .fxr-core[data-core="'+core+'"] svg').length;
+      // fb444 — this gate means "the CORES entry exists and the card RENDERED", and it used to
+      // prove that by counting <svg>. That was only ever true because every core happened to be
+      // SVG. Utility's core is a button bank and the Splitter's is a lane stack — deliberately
+      // HTML, because Max asked for buttons instead of a scope. Counting svg would have failed
+      // two perfectly correct cards while a genuinely empty core (the fb437 blocker this gate
+      // exists to catch) still slipped through on any HTML core. So: count cores that actually
+      // rendered CONTENT, which is the thing being asserted.
+      out.cores[core]=[...document.querySelectorAll('.fxr-dev .fxr-core[data-core="'+core+'"]')]
+                        .filter(c=>c.children.length>0).length;
     }
     out.cards=document.querySelectorAll('.fxr-dev').length;
     out.mark={ eqzCurve:document.querySelectorAll('.fxr-core[data-core="eqz"] .eqz-curve.dst-curve').length,
@@ -74,14 +82,23 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
                widV:document.querySelectorAll('.fxr-core[data-core="wid"] .wid-v').length,
                bodRef:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-ref').length,
                bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-up').length,
+               utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .fxr-pill').length,
+               utlRow:document.querySelectorAll('.fxr-core[data-core="utl"]').length
+                      ? [...document.querySelectorAll('.fxr-dev')].filter(dv=>dv.querySelector('.fxr-core[data-core="utl"]'))
+                          .reduce((a,dv)=>a+dv.querySelectorAll('.fxr-pills .fxr-pill').length,0) : -1,
+               splLane:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-lane').length,
+               splAdd:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-add').length,
                eqzPill:(document.querySelector('.fxr-core[data-core="eqz"]')||{}).closest ? [...document.querySelector('.fxr-core[data-core="eqz"]').closest('.fxr-dev').querySelectorAll('.fxr-pill .fxr-t')].map(e=>e.textContent).join(',') : '' };
     return out; });
-  chk(!r1.addErr, 'adding the five devices throws nothing', r1.addErr||'');
-  chk(r1.cards===30, 'eight of each ADD, capped at six each (30 cards)', 'cards='+r1.cards+' '+JSON.stringify(r1.counts));
-  for(const core of ['eqz','wid','cmp','ott','bod']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
+  chk(!r1.addErr, 'adding the seven devices throws nothing', r1.addErr||'');
+  chk(r1.cards===42, 'eight of each ADD, capped at six each (42 cards)', 'cards='+r1.cards+' '+JSON.stringify(r1.counts));
+  for(const core of ['eqz','wid','cmp','ott','bod','utl','spl']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
   chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===48, 'Equalizer core = the house line + 8 nodes per card (4 roles + 4 free bells, fb438)', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
   chk(r1.mark.bodRef===54 && r1.mark.bodUp===54, 'Bode core = the 9-rung harmonic ladder, reference + shifted, per card (fb444)', JSON.stringify({ref:r1.mark.bodRef,up:r1.mark.bodUp}));
+  chk(r1.mark.utlBtn===36, 'Utility core = the six-button bank per card, no scope (fb444, Max: "just a whole bunch of buttons")', 'buttons='+r1.mark.utlBtn);
+  chk(r1.mark.utlRow===0, 'Utility NO DOUBLES — the switches are in the core, so the chassis pill row is empty', 'chassis pills='+r1.mark.utlRow);
+  chk(r1.mark.splLane===24 && r1.mark.splAdd===24, 'Splitter core = four lane rows each with a "+" per card (fb444)', JSON.stringify({lanes:r1.mark.splLane,adds:r1.mark.splAdd}));
   chk(r1.mark.cmpKnee===6 && r1.mark.widV===48, 'Compress knee (house line) + Widen 8 voice beams per card', JSON.stringify({knee:r1.mark.cmpKnee,beams:r1.mark.widV}));
   chk(r1.mark.eqzPill==='Delta', 'the Equalizer has its Delta pill', r1.mark.eqzPill);
 
