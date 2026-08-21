@@ -180,12 +180,28 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.traitLabel=[...ecard2.querySelectorAll('.fxr-bk-knob .fxr-lab')].map(e=>e.textContent).pop();
     const on=document.querySelector('.fxr-r.fxr-on')||(()=>{ const r=document.querySelector('.fxr-r'); r.classList.add('fxr-on'); return r; })();
     out.routeBorder=getComputedStyle(on).borderTopColor;
+    out.routeInk=getComputedStyle(on).color;
+    out.routeOffInk=getComputedStyle(document.querySelector('.fxr-r:not(.fxr-on)')).color;
+    // the in-rack sibling that already wears the house grammar correctly: a LIT front pill.
+    const lp=document.querySelector('.fxr-pill.fxr-on')||(()=>{ const q=document.querySelector('.fxr-pill'); q.classList.add('fxr-on'); return q; })();
+    const lcs=getComputedStyle(lp); out.pillBorder=lcs.borderTopColor; out.pillInk=lcs.color;
     return out; });
   chk(/^\d+$|k$/.test(r5.lowHz||'') && /k$/.test(r5.reach||''), 'READOUT LAW: Low Hz / Reach print Hz', r5.lowHz+' / '+r5.reach);
   chk(/dB$/.test(r5.push||''), 'READOUT LAW: Push prints its threshold in dB', r5.push);
   chk(r5.widHero==='Cents', 'RELABEL: Widen type Steady → hero reads Cents', r5.widHero);
   chk(r5.traitLabel==='Sting', 'RELABEL: Equalizer type Chisel → P8 reads Sting', r5.traitLabel);
-  chk(!/183, 148, 255/.test(r5.routeBorder), 'ROUTE PILL: the lit letter\'s border is white, not purple', r5.routeBorder);
+  // fb440 — Max: "I want the outline to be purple, but the inside to be white just like how we have it
+  //   on the four modes." fb437 had read "white letters" as "white everything" and taken the BORDER
+  //   white too — the only white-outline-on-select in the UI, and it rode every card. Both halves are
+  //   gated now, so neither can drift alone, and both are compared to the fb118 mode tile that defines
+  //   the house grammar rather than to a hard-coded hex authored a second time.
+  chk(/183, 148, 255/.test(r5.routeBorder), 'ROUTE PILL: the lit letter\'s OUTLINE is purple-400', r5.routeBorder);
+  chk(r5.routeInk===r5.pillInk && r5.routeInk!==r5.routeOffInk,
+      'ROUTE PILL: the lit LETTER is the same white as a lit front pill (and not the unlit muted ink)',
+      r5.routeInk+'  pill '+r5.pillInk+'  unlit '+r5.routeOffInk);
+  chk(r5.routeBorder===r5.pillBorder,
+      'ROUTE PILL outline == the lit front pill\'s outline — ONE selected-state look, not two',
+      r5.routeBorder+'  vs pill '+r5.pillBorder);
 
   // ── the generic restore: per-id answers, decoded by CARDINALITY (fb373), drives type/knob/pill/route
   const r6 = await pg.evaluate(async()=>{
