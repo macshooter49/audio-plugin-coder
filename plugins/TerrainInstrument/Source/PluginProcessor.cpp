@@ -4275,6 +4275,83 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 }
         }
 
+        // ═══════════ fb444 — UTILITY, kind 14. The glue strip: mostly BUTTONS ═══════════════════
+        // Max: "utility is the most pragmatic use of the effects channel rack... I look at it like
+        // GLUE. It doesn't even have to have a visualizer, it should just have a whole bunch of
+        // BUTTONS on the front, because it's just like — what's that for? It's just utility."
+        // So it carries SIX pills, and every one of them does something nothing else in the plugin
+        // could do: nothing in the rack could re-level between two devices (Master Output is
+        // post-everything, per-osc Level is pre-rack), and there was NO user-facing polarity flip
+        // anywhere in 32k lines.
+        {
+            const juce::StringArray utlTypes { "Strip", "Turn", "Outer", "Canopy", "Cellar",
+                                               "Reserved 6", "Reserved 7", "Reserved 8" };
+            const juce::StringArray utlChars { "Cushion", "Brick", "Coil", "Creep",
+                                               "Tuck", "Rail", "Ripple", "Fuse" };
+            const juce::StringArray utlWiring{ "Through", "Difference", "L To Both", "R To Both",
+                                               "L Only", "R Only", "Reserved 7", "Reserved 8" };
+            const char* const ubn[8] = { "Strain","Clamp","Mono Below","Slope",
+                                         "Twist","Rumble","Bleed","Hinge" };
+            const float ubd[8] = { 0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.5f };
+            const char* const upn[6] = { "Flip L","Flip R","Trade","Sum","DC","Dim" };
+            const char* const upi[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
+            for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
+            {
+                const juce::String sfx = (nn == 1) ? juce::String() : juce::String (nn);
+                const juce::String p   = "SYN_UTL" + sfx + "_";
+                const juce::String d   = "Utility " + (nn == 1 ? juce::String() : sfx + " ");
+                C (p + "TYPE",   d + "Type",   utlTypes,  0);
+                C (p + "CHAR",   d + "Char",   utlChars,  0);
+                C (p + "WIRING", d + "Wiring", utlWiring, 0);
+                // 60/90 is exactly 0 dB on the -60..+30 dB fader, and 0 is a glided -inf mute.
+                F (p + "GAIN",  d + "Gain",  60.0f / 90.0f);
+                F (p + "IMAGE", d + "Image", 0.50f);
+                F (p + "STEER", d + "Steer", 0.50f);
+                F (p + "MIX",   d + "Mix",   1.00f);
+                for (int b = 0; b < 8; ++b) F (p + "B" + juce::String (b + 1), d + ubn[b], ubd[b]);
+                for (int k = 0; k < 6; ++k) B (p + upi[k], d + upn[k], false);
+                for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                B (p + "POWER",  d + "Power", false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
+
+        // ═══════════ fb444 — SPLITTER, kind 15. The band router the lanes hang off ═════════════
+        {
+            const juce::StringArray splTypes  { "Low / High", "Low / Mid / High", "Sub / Low / Mid / High",
+                                                "Mid / Side", "Left / Right",
+                                                "Reserved 6", "Reserved 7", "Reserved 8" };
+            const juce::StringArray splSlopes { "6 dB", "12 dB", "24 dB", "48 dB",
+                                                "Reserved 5", "Reserved 6", "Reserved 7", "Reserved 8" };
+            const char* const bn[8] = { "Lane 1 Gain","Lane 2 Gain","Lane 3 Gain","Lane 4 Gain",
+                                        "Span","Lane 1 Width","Top Lane Width","Top Lane Pan" };
+            for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
+            {
+                const juce::String sfx = (nn == 1) ? juce::String() : juce::String (nn);
+                const juce::String p   = "SYN_SPL" + sfx + "_";
+                const juce::String d   = "Splitter " + (nn == 1 ? juce::String() : sfx + " ");
+                C (p + "TYPE",  d + "Type",  splTypes,  1);      // Low / Mid / High is the default
+                C (p + "SLOPE", d + "Slope", splSlopes, 2);      // 24 dB/oct
+                F (p + "SPLIT",   d + "Split",   0.50f);  F (p + "BALANCE", d + "Balance", 0.50f);
+                F (p + "SPREAD",  d + "Spread",  0.50f);  F (p + "MIX",     d + "Mix",     1.00f);
+                for (int b = 0; b < 8; ++b)
+                    F (p + "B" + juce::String (b + 1), d + bn[b], (b == 4 ? 0.40f : 0.50f));
+                // THE LANE STRIP — glyphs, not knobs (the switch law: a state you toggle is a
+                // switch; a value you sweep is a knob). Three per lane, four lanes.
+                for (int k = 1; k <= 4; ++k)
+                {
+                    B (p + "MUTE" + juce::String (k), d + "Lane " + juce::String (k) + " Mute", false);
+                    B (p + "SOLO" + juce::String (k), d + "Lane " + juce::String (k) + " Solo", false);
+                    B (p + "FLIP" + juce::String (k), d + "Lane " + juce::String (k) + " Flip", false);
+                }
+                for (auto& sx : srcSuf) B (p + sx, d + sx, false);
+                B (p + "POWER",  d + "Power", false);
+                B (p + "ACTIVE", d + "In Chain", false);
+                F (p + "RANK",   d + "Chain Rank", 0.5f);
+            }
+        }
+
         // ═══════ fb444 — THE LANE. Which band of an upstream Splitter this device lives in ══════
         // Serum 2's Splitter is a list with lane headers: LOWS / MIDS / HIGHS, each with a "+",
         // and a device sits UNDER the lane it belongs to. That is not a graph — it is ONE extra
@@ -5053,7 +5130,11 @@ void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
         laneSplSlot_[(size_t) c] = -1;
     }
     for (int a = 0; a < ParameterIDs::kFxInstances; ++a)
-        for (int k = 0; k < kMaxLanes; ++k) laneClaimed_[(size_t) a][(size_t) k] = false;
+    {
+        splSlotOf_[(size_t) a] = -1;
+        for (int k = 0; k < kMaxLanes; ++k)
+        { laneClaimed_[(size_t) a][(size_t) k] = false; laneLast_[(size_t) a][(size_t) k] = -1; }
+    }
 
     int curSpl = -1, curInst = -1, curLanes = 0;
     for (int c = 0; c < nSlots; ++c)
@@ -5065,6 +5146,8 @@ void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
             curInst = juce::jlimit (0, ParameterIDs::kFxInstances - 1, ce.inst - 1);
             curLanes = juce::jlimit (2, kMaxLanes, splLanes_[(size_t) curInst]);
             laneSplSlot_[(size_t) c] = curInst;
+            splSlotOf_[(size_t) curInst] = c;
+            laneConsumed_[(size_t) c] = true;   // its output arrives via the merge, not the sum
             laneAny_ = true;
             continue;
         }
@@ -5080,8 +5163,57 @@ void TerrainInstrumentAudioProcessor::resolveLanes() noexcept
         laneIdx_[(size_t) c]      = L - 1;
         for (int j = c - 1; j > curSpl; --j)     // chain within the lane, in card order
             if (laneSplitter_[(size_t) j] == curSpl && laneIdx_[(size_t) j] == L - 1)
-            { lanePrev_[(size_t) c] = j; laneConsumed_[(size_t) j] = true; break; }
+            { lanePrev_[(size_t) c] = j; break; }
+        // EVERY device in a lane is consumed: its output goes to the Splitter's merge, never
+        // straight to the mix. Only the LAST one in each lane is what the merge reads.
+        laneConsumed_[(size_t) c] = true;
         laneClaimed_[(size_t) curInst][(size_t) (L - 1)] = true;
+        laneLast_  [(size_t) curInst][(size_t) (L - 1)] = c;
+    }
+}
+
+// fb444 — Utility's refs. Six pills, so its own shape.
+void TerrainInstrumentAudioProcessor::cacheUtlRefs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    static const char* pil[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        const juce::String g  = "SYN_UTL" + nn + "_";
+        auto& v = utlRefs_[(size_t) i];
+        v.active = R (g + "ACTIVE"); v.rank = R (g + "RANK"); v.power = R (g + "POWER");
+        v.type = R (g + "TYPE"); v.chr = R (g + "CHAR"); v.wiring = R (g + "WIRING");
+        v.f1 = R (g + "GAIN"); v.f2 = R (g + "IMAGE"); v.f3 = R (g + "STEER"); v.mix = R (g + "MIX");
+        for (int b = 0; b < 8; ++b) v.b[b]    = R (g + "B" + juce::String (b + 1));
+        for (int k = 0; k < 6; ++k) v.pill[k] = R (g + pil[k]);
+        for (int k = 0; k < 6; ++k) v.src[k]  = R (g + sfx[k]);
+    }
+}
+
+// fb444 — the Splitter's refs. Its own routine because its roster is its own shape.
+void TerrainInstrumentAudioProcessor::cacheSplRefs()
+{
+    auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
+    static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
+        const juce::String g  = "SYN_SPL" + nn + "_";
+        auto& v = splRefs_[(size_t) i];
+        v.active = R (g + "ACTIVE"); v.rank = R (g + "RANK"); v.power = R (g + "POWER");
+        v.type = R (g + "TYPE"); v.slope = R (g + "SLOPE");
+        v.split = R (g + "SPLIT"); v.balance = R (g + "BALANCE");
+        v.spread = R (g + "SPREAD"); v.mix = R (g + "MIX");
+        for (int b = 0; b < 8; ++b) v.b[b] = R (g + "B" + juce::String (b + 1));
+        for (int k = 0; k < 4; ++k)
+        {
+            v.mute[k] = R (g + "MUTE" + juce::String (k + 1));
+            v.solo[k] = R (g + "SOLO" + juce::String (k + 1));
+            v.flip[k] = R (g + "FLIP" + juce::String (k + 1));
+        }
+        for (int k = 0; k < 6; ++k) v.src[k] = R (g + sfx[k]);
     }
 }
 
@@ -5316,6 +5448,53 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 ottPool_[(size_t) i].setParams (q);
             }
         }
+        // ── Utility (fb444)
+        {
+            const auto& V = utlRefs_[(size_t) i];
+            if (V.power != nullptr && (V.power->load() > 0.5f || utlEnv_[(size_t) i] > 1.0e-4f))
+            {
+                tw::TerrainUtilityFx::Params q;
+                q.type   = juce::jlimit (0, tw::TerrainUtilityFx::kNumTypeSlots - 1, (int) V.type->load());
+                q.chr    = juce::jlimit (0, tw::TerrainUtilityFx::kNumChars     - 1, (int) V.chr->load());
+                q.wiring = juce::jlimit (0, tw::TerrainUtilityFx::kNumWireSlots - 1, (int) V.wiring->load());
+                q.gain = V.f1->load(); q.image = V.f2->load(); q.steer = V.f3->load(); q.mix = V.mix->load();
+                q.strain    = V.b[0]->load(); q.clamp  = V.b[1]->load();
+                q.monoBelow = V.b[2]->load(); q.slope  = V.b[3]->load();
+                q.twist     = V.b[4]->load(); q.rumble = V.b[5]->load();
+                q.bleed     = V.b[6]->load(); q.hinge  = V.b[7]->load();
+                auto P = [&V] (int k) { return V.pill[k] != nullptr && V.pill[k]->load() > 0.5f; };
+                q.flipL = P (0); q.flipR = P (1); q.trade = P (2);
+                q.sum   = P (3); q.dc    = P (4); q.dim   = P (5);
+                utlPool_[(size_t) i].setParams (q);
+            }
+        }
+        // ── Splitter (fb444). Also publishes splLanes_, which resolveLanes() reads to know
+        //    how many lane headers this card is offering this block.
+        {
+            const auto& V = splRefs_[(size_t) i];
+            if (V.power != nullptr)
+            {
+                tw::TerrainSplitterFx::Params q;
+                q.type  = juce::jlimit (0, tw::TerrainSplitterFx::kNumTypes  - 1, (int) V.type->load());
+                q.slope = juce::jlimit (0, tw::TerrainSplitterFx::kNumSlopes - 1, (int) V.slope->load());
+                q.split = V.split->load(); q.balance = V.balance->load();
+                q.spread = V.spread->load(); q.mix = V.mix->load();
+                for (int k = 0; k < 4; ++k) q.laneGain[k] = V.b[k]->load();
+                q.span = V.b[4]->load();
+                q.laneWidth[0] = V.b[5]->load();
+                const int nl = tw::TerrainSplitterFx::laneCountFor (q.type);
+                q.laneWidth[juce::jmax (0, nl - 1)] = V.b[6]->load();
+                q.lanePan  [juce::jmax (0, nl - 1)] = V.b[7]->load();
+                for (int k = 0; k < 4; ++k)
+                {
+                    q.laneMute[k] = V.mute[k] != nullptr && V.mute[k]->load() > 0.5f;
+                    q.laneSolo[k] = V.solo[k] != nullptr && V.solo[k]->load() > 0.5f;
+                    q.laneFlip[k] = V.flip[k] != nullptr && V.flip[k]->load() > 0.5f;
+                }
+                splPool_[(size_t) i].setParams (q);
+                splLanes_[(size_t) i] = splPool_[(size_t) i].laneCount();
+            }
+        }
         // ── Bode (fb444)
         {
             const auto& V = bodRefs_[(size_t) i];
@@ -5457,6 +5636,62 @@ TW_FX4_APPLY (applyWid, widPool_, widRefs_, widEnv_, kWidSendBase, false)
 TW_FX4_APPLY (applyCmp, cmpPool_, cmpRefs_, cmpEnv_, kCmpSendBase, false)
 TW_FX4_APPLY (applyOtt, ottPool_, ottRefs_, ottEnv_, kOttSendBase, false)
 TW_FX4_APPLY (applyBod, bodPool_, bodRefs_, bodEnv_, kBodSendBase, false)   // fb444 — bode
+
+// fb444 — Utility. Same pool-law shape as TW_FX4_APPLY, written out because its refs struct
+// carries six pills instead of three; the gate and the power fade are identical.
+void TerrainInstrumentAudioProcessor::applyUtl (int inst0, float inL, float inR,
+                                                float& outL, float& outR) noexcept
+{
+    outL = inL; outR = inR;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = utlRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kUtlSendBase + inst0)];
+    float& env = utlEnv_[(size_t) inst0];
+    env += ((powered ? 1.0f : 0.0f) - env) * 0.0015f;
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+    float wl = inL, wr = inR;
+    utlPool_[(size_t) inst0].processStereo (inL, inR, wl, wr);
+    outL = inL * (1.0f - env) + wl * env;
+    outR = inR * (1.0f - env) + wr * env;
+}
+
+// fb444 — THE SPLITTER'S TWO HALVES. Every other device is one-in-one-out and rides
+// TW_FX4_APPLY. This one is one-in-N-out, so it gets a matched pair: split at its own slot,
+// merge once the whole chain has run and the lane devices have had their turn. The engine's
+// contract is exactly one merge per split in the SAME sample — split stashes the phase-matched
+// dry that merge needs for Mix, and merge is where the per-lane trims are applied.
+void TerrainInstrumentAudioProcessor::applySplSplit (int inst0, float inL, float inR,
+                                                     float laneL[4], float laneR[4]) noexcept
+{
+    for (int k = 0; k < 4; ++k) { laneL[k] = 0.0f; laneR[k] = 0.0f; }
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const auto& V = splRefs_[(size_t) inst0];
+    if (V.power == nullptr) return;
+    const bool powered = V.power->load() > 0.5f
+                      && poolRouteAny_[(size_t) (kSplSendBase + inst0)];
+    float& env = splEnv_[(size_t) inst0];
+    env += ((powered ? 1.0f : 0.0f) - env) * 0.0015f;
+    if (! powered && env <= 1.0e-4f) { env = 0.0f; laneL[0] = inL; laneR[0] = inR; return; }
+    splPool_[(size_t) inst0].splitStereo (inL, inR, laneL, laneR);
+}
+
+void TerrainInstrumentAudioProcessor::applySplMerge (int inst0, const float laneL[4], const float laneR[4],
+                                                     float& outL, float& outR) noexcept
+{
+    outL = 0.0f; outR = 0.0f;
+    if (inst0 < 0 || inst0 >= ParameterIDs::kFxInstances) return;
+    const float env = splEnv_[(size_t) inst0];
+    if (env <= 1.0e-4f) { outL = laneL[0]; outR = laneR[0]; return; }
+    float mL = 0.0f, mR = 0.0f;
+    splPool_[(size_t) inst0].mergeStereo (laneL, laneR, mL, mR);
+    // the power fade rides the merged result, so switching the card on is click-free
+    float dL = 0.0f, dR = 0.0f;
+    for (int k = 0; k < 4; ++k) { dL += laneL[k]; dR += laneR[k]; }
+    outL = dL * (1.0f - env) + mL * env;
+    outR = dR * (1.0f - env) + mR * env;
+}
 #undef TW_FX4_APPLY
 
 void TerrainInstrumentAudioProcessor::applyFla (int inst0, float inL, float inR,
@@ -5695,6 +5930,10 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
     //    touchpoint can be green and the apply branch below is simply unreachable code.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
         add (13, i + 1, bodRefs_[(size_t) i].active, bodRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (14, i + 1, utlRefs_[(size_t) i].active, utlRefs_[(size_t) i].rank);
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        add (15, i + 1, splRefs_[(size_t) i].active, splRefs_[(size_t) i].rank);
     // insertion sort — tiny N, no allocation, stable (equal ranks keep a deterministic order so a
     // tie can never reshuffle audibly between blocks).
     for (int i = 1; i < chainCount_; ++i)
@@ -5812,12 +6051,16 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         for (auto& e : widPool_) e.prepare (sr, 1);   //   message thread only, never in
         for (auto& e : cmpPool_) e.prepare (sr, 1);   //   processBlock (the fb415 malloc)
         for (auto& e : ottPool_) e.prepare (sr, 1);
-        { int bi = 0; for (auto& e : bodPool_) e.prepare (sr, bi++); }   // fb444 — per-instance
+        { int bi = 0; for (auto& e : bodPool_) e.prepare (sr, bi++); }
+        for (auto& e : splPool_) e.prepare (sr, 0);                     // fb444 — allocates nothing
+        { int ui = 0; for (auto& e : utlPool_) e.prepare (sr, ui++); }  // fb444   // fb444 — per-instance
                                                                         //   drift seed, so two
                                                                         //   Bodes never lockstep
         for (auto& e : flaPool_) e.prepare (sr, 1);
         for (auto& e : phaPool_) e.prepare (sr, 1);
     }
+    cacheUtlRefs();      // fb444 — Utility's six-pill roster
+    cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
@@ -8288,17 +8531,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         //    be true. Four fully-built devices that returned their input unchanged, forever. This
         //    is verbatim the failure the fb365 comment forty lines up warns about: "without it the
         //    pills render and NOTHING consumes them, which is not a dead control but a silent one".
-        const int bases[8] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i,
+        const int bases[10] = { kChoSendBase + i, kFlaSendBase + i, kPhaSendBase + i,
                                kEqzSendBase + i, kWidSendBase + i, kCmpSendBase + i, kOttSendBase + i,
-                               kBodSendBase + i };
-        std::atomic<float>* const* srcs[8] = { choRefs_[(size_t) i].src,
+                               kBodSendBase + i, kUtlSendBase + i, kSplSendBase + i };
+        std::atomic<float>* const* srcs[10] = { choRefs_[(size_t) i].src,
                                                flaRefs_[(size_t) i].src,
                                                phaRefs_[(size_t) i].src,
                                                eqzRefs_[(size_t) i].src,
                                                widRefs_[(size_t) i].src,
                                                cmpRefs_[(size_t) i].src,
                                                ottRefs_[(size_t) i].src,
-                                               bodRefs_[(size_t) i].src };
+                                               bodRefs_[(size_t) i].src,
+                                               utlRefs_[(size_t) i].src,
+                                               splRefs_[(size_t) i].src };
         // fb444 — the loop bound is DERIVED, never a literal. `bases[7]`/`srcs[7]`/`dv < 7`
         //   was three hand-maintained copies of one number, and fb435 is what happens when a
         //   device is added to two of them. Now adding a kind is one entry in each array and
@@ -8342,6 +8587,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 11) g = &poolRouteG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 12) g = &poolRouteG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 13) g = &poolRouteG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 14) g = &poolRouteG_[(size_t) ((kUtlSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 15) g = &poolRouteG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
             else                   g = (ce.inst == 1) ? dstG_ : &poolRouteG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             uint8_t m = 0;
             for (int s = 0; s < 6; ++s) if (g[s] > 0.0f) m = (uint8_t) (m | (1u << (unsigned) s));
@@ -8374,6 +8621,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             else if (ce.kind == 11) dstArr = &poolEntryG_[(size_t) ((kCmpSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 12) dstArr = &poolEntryG_[(size_t) ((kOttSendBase + ce.inst - 1) * 6)];   // fb435
             else if (ce.kind == 13) dstArr = &poolEntryG_[(size_t) ((kBodSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 14) dstArr = &poolEntryG_[(size_t) ((kUtlSendBase + ce.inst - 1) * 6)];   // fb444
+            else if (ce.kind == 15) dstArr = &poolEntryG_[(size_t) ((kSplSendBase + ce.inst - 1) * 6)];   // fb444
             else                   dstArr = (ce.inst == 1) ? dstEntryG_ : &poolEntryG_[(size_t) ((kFxExtra + ce.inst - 2) * 6)];
             for (int s = 0; s < 6; ++s)
                 dstArr[s] = (fxTopo_.entry[c] & (1u << (unsigned) s)) ? 1.0f : 0.0f;
@@ -9067,6 +9316,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         else if (ce.kind == 12) { const int q = kOttSendBase + ce.inst - 1;     // fb435 — multiband
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else if (ce.kind == 13) { const int q = kBodSendBase + ce.inst - 1;     // fb444 — bode
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 14) { const int q = kUtlSendBase + ce.inst - 1;     // fb444 — utility
+                                 b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
+        else if (ce.kind == 15) { const int q = kSplSendBase + ce.inst - 1;     // fb444 — splitter
                                  b = poolRouteAny_[(size_t) q] ? &poolSendBuf_[(size_t) q] : nullptr; }
         else                   { b = (ce.inst == 1) ? (dstRouteActive_ ? &distortionSendBuf_ : nullptr)
                                                     : (poolRouteAny_[(size_t) (kFxExtra + ce.inst - 2)] ? &poolSendBuf_[(size_t) (kFxExtra + ce.inst - 2)] : nullptr); }
@@ -10111,6 +10364,22 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 else if (ce.kind == 11) applyCmp (ce.inst - 1, inL, inR, oL, oR);   // fb426 — compress
                 else if (ce.kind == 12) applyOtt (ce.inst - 1, inL, inR, oL, oR);   // fb426 — ott
                 else if (ce.kind == 13) applyBod (ce.inst - 1, inL, inR, oL, oR);   // fb444 — bode
+                else if (ce.kind == 14) applyUtl (ce.inst - 1, inL, inR, oL, oR);   // fb444 — utility
+                else if (ce.kind == 15)                                              // fb444 — SPLITTER
+                {
+                    // One in, N out — the only device in the rack that is not an insert. It
+                    // publishes its bands here; the lane devices below read them, and the merge
+                    // runs after the whole chain so the engine's split/merge pair stays matched.
+                    const int si = laneSplSlot_[(size_t) c];
+                    if (si >= 0)
+                    {
+                        float lL[4] = {}, lR[4] = {};
+                        applySplSplit (si, inL, inR, lL, lR);
+                        for (int k = 0; k < kMaxLanes; ++k)
+                        { lnL[(size_t) si][(size_t) k] = lL[k]; lnR[(size_t) si][(size_t) k] = lR[k]; }
+                    }
+                    oL = 0.0f; oR = 0.0f;
+                }
                 else if (ce.inst == 1)
                 {
                     if      (ce.kind == 0) applyRvb (inL, inR, oL, oR);
@@ -10129,6 +10398,27 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 pendL[c] = oL; pendR[c] = oR;
             }
+            // fb444 — THE MERGE. Every Splitter in the chain recombines here, AFTER its lane
+            // devices have run: for each band, take the last device in that lane if one exists,
+            // otherwise the raw band (so a lane with nothing in it still passes through). One
+            // merge per split, same sample, exactly as the engine's contract requires.
+            if (laneAny_)
+                for (int a = 0; a < ParameterIDs::kFxInstances; ++a)
+                {
+                    if (splSlotOf_[(size_t) a] < 0) continue;
+                    float lL[4] = {}, lR[4] = {};
+                    for (int k = 0; k < kMaxLanes; ++k)
+                    {
+                        const int last = laneLast_[(size_t) a][(size_t) k];
+                        lL[k] = (last >= 0) ? pendL[(size_t) last] : lnL[(size_t) a][(size_t) k];
+                        lR[k] = (last >= 0) ? pendR[(size_t) last] : lnR[(size_t) a][(size_t) k];
+                    }
+                    float mL = 0.0f, mR = 0.0f;
+                    applySplMerge (a, lL, lR, mL, mR);
+                    leftChannel[i] += mL;
+                    if (rightChannel != nullptr) rightChannel[i] += mR;
+                }
+
             // whatever nothing downstream claimed comes back to the mix. fb444 — a device that
             // another device IN THE SAME LANE eats is claimed too, so only a lane's LAST device
             // reaches the mix. That is the whole merge: no new summing code, just one more claim.

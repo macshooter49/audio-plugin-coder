@@ -136,7 +136,12 @@
 //                       floor()'d order is dead travel at the bottom).
 //    `Twist`      FREE  M/S rotation, bipolar +-40 deg, centre = none.
 //                       (`Rotate` TAKEN — a bit-crush overflow mode, :9331.)
-//    `Rumble`     FREE  the DC / subsonic block corner, 2 .. 160 Hz.
+//    `Rumble`     FREE  the DC / subsonic block corner, 15 .. 320 Hz. (2..160 Hz
+//                       was the first draft and §H measured it at 0.001 dB
+//                       across the whole knob: four of six steps sat below
+//                       40 Hz, where a first-order corner move is inaudible by
+//                       construction. 320 Hz is where a rumble filter stops
+//                       being useful, not where it stops being clean.)
 //    `Bleed`      FREE  inter-channel crosstalk ABOVE `Hinge`, 0 .. 100 %.
 //                       100 % = the top of the image fully coupled while the
 //                       bottom stays wide — the exact inverse of `Mono Below`.
@@ -213,34 +218,56 @@ struct LP1
     { z += g * (x - z); if (std::fabs (z) < 1e-25f) z = 0.0f; return z; }
 };
 
-// ── THE CROSSOVER. Three cascaded one-poles with a CONTINUOUS order blend.
-//    fb444 is the reason this is not `for (k = 0; k < (int) order; ++k)`: Bode
-//    shipped a `floor(blur * 4)` section count and the first sixth of that knob
-//    was measurably, exactly dead. An order that steps also jumps the group
-//    delay, which clicks. So all three sections always run (their state stays
-//    warm) and `Slope` crossfades between the 1-, 2- and 3-pole outputs.
+// ── THE CROSSOVER. Three cascaded COMPLEMENTARY high-pass sections with a
+//    continuous order blend, and the LOW band derived as `x - hp`.
+//
+//  🚨 fb445 — `x - LP3(x)` IS NOT A THREE-POLE HIGH-PASS, and this cost six
+//     gates. `x - LP(x)` is complementary only for a SINGLE pole. Cascade three
+//     and the low-passed copy carries ~33 degrees of phase lag in the stopband,
+//     so the subtraction stops cancelling: measured, a "3-pole" Mono Below at
+//     410 Hz left the 40-120 Hz side band down only 5 dB (correlation +0.52
+//     where +1.00 was the contract), `Slope` measured 0.09 dB across its whole
+//     travel, and the corner sweep came back NON-MONOTONIC. Every one of those
+//     looks like a different bug and all three are this one line. Each section
+//     here is its own first-order complementary pair, so a cascade of N really
+//     is an N-pole high-pass.
+//
+//  🔑 AND THE CORNER IS COMPENSATED FOR THE ORDER. Cascading identical one-pole
+//     high-passes drags the -3 dB point UP with every section, so an
+//     uncompensated `Slope` would mostly be a FREQUENCY knob wearing a slope
+//     knob's clothes — and `Hinge` would move under it. Dividing the per-stage
+//     corner by sqrt(1/(2^(1/N)-1)) pins the -3 dB point where the user put it
+//     and leaves `Slope` doing only what its name says.
+//
+//  fb444 is why the order BLENDS instead of stepping: Bode shipped a
+//  `floor(blur * 4)` section count and the first sixth of that knob was
+//  measurably, exactly dead. All three sections always run (state stays warm).
 struct XOver
 {
     LP1 s[3];
     float ord = 0.0f;                 // 0 = 1 pole ... 2 = 3 poles
     void reset() noexcept { for (int i = 0; i < 3; ++i) s[i].reset(); }
-    void setHz (float hz, float fs) noexcept
+    void setup (float hz, float slope01, float fs) noexcept
     {
-        const float f = std::max (2.0f, std::min (hz, 0.45f * fs));
-        float g = 1.0f - std::exp (-6.2831853f * f / fs);
+        ord = 2.0f * clamp01 (slope01);
+        static const float kComp[3] = { 1.0f, 1.5538f, 1.9615f };   // -3 dB alignment
+        const int   i    = ord < 1.0f ? 0 : 1;
+        const float f    = ord - (float) i;
+        const float comp = kComp[i] + f * (kComp[i + 1] - kComp[i]);
+        const float fc   = std::max (1.0f, std::min (hz / comp, 0.45f * fs));
+        float g = 1.0f - std::exp (-6.2831853f * fc / fs);
         g = std::max (0.0f, std::min (1.0f, g));
-        for (int i = 0; i < 3; ++i) s[i].setG (g);
+        for (int k = 0; k < 3; ++k) s[k].setG (g);
     }
-    void setOrder (float t) noexcept { ord = 2.0f * clamp01 (t); }
-    inline float lp (float x) noexcept
+    inline float hp (float x) noexcept
     {
-        const float y1 = s[0].process (x);
-        const float y2 = s[1].process (y1);
-        const float y3 = s[2].process (y2);
+        const float h1 = x  - s[0].process (x);
+        const float h2 = h1 - s[1].process (h1);
+        const float h3 = h2 - s[2].process (h2);
         const int   i  = ord < 1.0f ? 0 : 1;
         const float f  = ord - (float) i;
-        const float a  = (i == 0 ? y1 : y2);
-        const float b  = (i == 0 ? y2 : y3);
+        const float a  = (i == 0 ? h1 : h2);
+        const float b  = (i == 0 ? h2 : h3);
         return a + f * (b - a);
     }
 };
@@ -293,6 +320,23 @@ inline float railFold (float x, float c, float fold) noexcept
     return s * (folded + fold * (c - folded));
 }
 
+// 🚨 fb445 — A FLOAT ONE-POLE STALLS, AND IT STALLS SHORT OF ITS TARGET.
+//    `v += a * (t - v)` stops moving as soon as `a * (t - v)` falls below half
+//    an ULP of `v`: the addition rounds to nothing and the smoother PARKS,
+//    forever, a few times 1e-5 away. Measured here — the polarity matrix parked
+//    at -0.999964 instead of -1, and four gates that claimed "EXACTLY" were
+//    quietly false by 1.8e-6 no matter how long the harness seeded. A longer
+//    seed cannot fix this; only a snap can, and the snap has to sit ABOVE the
+//    stall point, which is ulp(t) / (2*a) -- about 3.6e-5 near unity at a 25 ms
+//    time constant. 1e-4 relative clears it with room to spare and is a -80 dB
+//    step, four orders below anything the click gate can see.
+inline float glide (float v, float t, float a) noexcept
+{
+    const float d = t - v;
+    if (std::fabs (d) <= 1.0e-4f * std::max (1.0f, std::fabs (t))) return t;
+    return v + a * d;
+}
+
 // Every optional section in this device can be switched on and off by a pill or
 // by a knob reaching zero, and switching a filter in or out of a live signal is
 // a click. So nothing switches: each section CROSSFADES, and its state stays
@@ -304,8 +348,8 @@ struct Xfade
     void  reset() noexcept { v = target; }
     inline float step (float a) noexcept
     {
-        v += a * (target - v);
-        if (target == 0.0f && v < 1.0e-5f) v = 0.0f;
+        v = glide (v, target, a);
+        if (target == 0.0f && v < 1.0e-5f) v = 0.0f;   // "off" must be a fact
         return v;
     }
 };
@@ -352,8 +396,14 @@ struct TerrainUtilityFx
     // measurable — the fb444 dead-travel failure, one knob over. `Mono Below`
     // at exactly 0 is OFF (crossfaded, so it does not click) and the very first
     // increment is already a real 50 Hz bass-mono.
-    static constexpr float kRumbleMinHz = 2.0f;
-    static constexpr float kRumbleMaxHz = 160.0f;  // eats the bass. Allowed.
+    // fb445 — 2..160 Hz WAS THE TIMIDITY, and §H measured it: 0.001 dB across
+    // the whole knob. Four of six steps sat below 40 Hz, where a first-order
+    // corner move is inaudible by construction. A DC block wants ~15 Hz; a desk
+    // RUMBLE filter is the useful control, and 320 Hz is where it stops being
+    // one (it is eating the bass line by then) rather than where it stops being
+    // clean.
+    static constexpr float kRumbleMinHz =  15.0f;
+    static constexpr float kRumbleMaxHz = 320.0f;
     static constexpr float kHingeMinHz  = 60.0f;
     static constexpr float kHingeMaxHz  = 6000.0f;
     static constexpr float kStrainMaxDb = 48.0f;
@@ -422,6 +472,7 @@ struct TerrainUtilityFx
         }
         msX_.reset();
         mbXf_.reset(); bleedXf_.reset(); dcXf_.reset(); guardXf_.reset();
+        driveSm_ = drive_;
         for (int i = 0; i < 2; ++i) for (int j = 0; j < 2; ++j) matSm_[i][j] = matT_[i][j];
         gainSm_ = -1.0f; mixSm_ = -1.0f; steerLSm_ = 1.0f; steerRSm_ = 1.0f;
         mGainSm_ = 1.0f; sGainSm_ = 1.0f;
@@ -476,7 +527,19 @@ struct TerrainUtilityFx
         // ── the guard.
         strainOn_ = utl_detail::clamp01 (p.strain) > 0.0f;   // EXACTLY 0 = bypass
         drive_    = std::pow (10.0f, kStrainMaxDb * utl_detail::clamp01 (p.strain) / 20.0f);
-        invDrive_ = 1.0f / drive_;
+
+        // 🔑 fb445 — THE RAIL RISES WITH THE SQUARE ROOT OF THE DRIVE (applied in
+        //    applyGuard, from the GLIDED drive). That is not cosmetic. With an
+        //    exact 1/drive makeup — which is what keeps sat'(0) == 1 — a
+        //    hard-clipped output sits at rail/drive, so a FIXED rail would put
+        //    the top of `Strain` 48 dB down: the maximum of the knob would be,
+        //    in practice, a mute. A maximum nobody could want is a maximum set
+        //    wrong, just in the other direction from the usual one. Scaling the
+        //    rail by sqrt(drive) halves that in dB (21 dB at the top, measured,
+        //    and the fader right above it takes it straight back because the
+        //    rail tracks the fader too) while leaving the small-signal slope
+        //    exactly 1 and the top of the knob a genuine square wave.
+
         clampT_   = utl_detail::clamp01 (p.clamp);
         // knee position: 2 % of the rail at Clamp 0 (very soft) up to the rail
         // itself at Clamp 1 (an instantaneous corner). Continuous the whole way.
@@ -491,15 +554,15 @@ struct TerrainUtilityFx
                                                       utl_detail::clamp01 (p.hinge));
         for (int c = 0; c < 2; ++c)
         {
-            bleedX_[c].setHz (hingeHz, fs_); bleedX_[c].setOrder (p.slope);
-            coilX_ [c].setHz (hingeHz, fs_); coilX_ [c].setOrder (p.slope);
-            imgX_  [c].setHz (hingeHz, fs_); imgX_  [c].setOrder (p.slope);
+            bleedX_[c].setup (hingeHz, p.slope, fs_);
+            coilX_ [c].setup (hingeHz, p.slope, fs_);
+            imgX_  [c].setup (hingeHz, p.slope, fs_);
             dcB_   [c].setHz (kRumbleMinHz * std::pow (kRumbleMaxHz / kRumbleMinHz,
                                                        utl_detail::clamp01 (p.rumble)), fs_);
         }
         const float mbT  = utl_detail::clamp01 (p.monoBelow);
         const float mbHz = kMonoBelowMin * std::pow (kMonoBelowHz / kMonoBelowMin, mbT);
-        msX_.setHz (mbHz, fs_); msX_.setOrder (p.slope);
+        msX_.setup (mbHz, p.slope, fs_);
         mbXf_.target    = mbT > 0.0f ? 1.0f : 0.0f;
 
         bleedXf_.target = utl_detail::clamp01 (p.bleed);
@@ -571,16 +634,31 @@ struct TerrainUtilityFx
         //    geometry (a rotation that snaps is a stereo click).
         const float aG = 1.0f - std::exp (-1.0f / (0.015f * fs_));
         const float aM = 1.0f - std::exp (-1.0f / (0.025f * fs_));
-        gainSm_   += aG * (gainT_   - gainSm_);
+        // A one-pole is asymptotic AND, in float, it stalls (see `glide`). Every
+        // one of these controls has a position the user expects to be EXACT —
+        // unity, mute, fully wet, dead centre — so all of them snap.
+        gainSm_ = utl_detail::glide (gainSm_, gainT_, aG);
         // A one-pole never REACHES zero, and this fader's zero is a mute the
         // user will automate. Snap the last inaudible sliver so "0 is silence"
         // is a fact and not an asymptote.
         if (gainT_ == 0.0f && gainSm_ < 1.0e-6f) gainSm_ = 0.0f;
-        mixSm_    += aM * (mixT_    - mixSm_);
-        steerLSm_ += aM * (steerLT_ - steerLSm_);
-        steerRSm_ += aM * (steerRT_ - steerRSm_);
-        mGainSm_  += aM * (mGainT_  - mGainSm_);
-        sGainSm_  += aM * (sGainT_  - sGainSm_);
+        mixSm_    = utl_detail::glide (mixSm_,    mixT_,    aM);
+        steerLSm_ = utl_detail::glide (steerLSm_, steerLT_, aM);
+        steerRSm_ = utl_detail::glide (steerRSm_, steerRT_, aM);
+        mGainSm_  = utl_detail::glide (mGainSm_,  mGainT_,  aM);
+        sGainSm_  = utl_detail::glide (sGainSm_,  sGainT_,  aM);
+        // 🚨 fb445 — THE DRIVE HAS TO GLIDE TOO, and the crossfade alone did not
+        //    save it. Fading the guard's wet/dry is only half the transition:
+        //    when `Strain` leaves zero the DRIVE jumps in the same block, so the
+        //    thing being faded in is a different curve from one sample to the
+        //    next. Measured at 11x a 220 Hz tone's own slope — a real click that
+        //    §I's continuous-knob sweep could never see, because `Strain` is not
+        //    in that sweep (at the top of its travel it makes a square wave,
+        //    whose honest edges dwarf any sine's slope).
+        //    The makeup is derived FROM the glided drive, never smoothed
+        //    separately: two independent one-poles would make drive * makeup
+        //    drift off unity mid-glide and swell by ~2.5 dB.
+        driveSm_ = utl_detail::glide (driveSm_, drive_, aM);
         const float mbAmt    = mbXf_.step (aM);
         const float bleedAmt = bleedXf_.step (aM);
         const float dcAmt    = dcXf_.step (aM);
@@ -602,12 +680,7 @@ struct TerrainUtilityFx
         //        The snap keeps "identity" an exact fact once it has arrived.
         for (int i = 0; i < 2; ++i)
             for (int j = 0; j < 2; ++j)
-            {
-                float& v = matSm_[i][j];
-                const float t = matT_[i][j];
-                v += aM * (t - v);
-                if (std::fabs (t - v) < 1.0e-7f) v = t;
-            }
+                matSm_[i][j] = utl_detail::glide (matSm_[i][j], matT_[i][j], aM);
         {
             const float l0 = x[0], r0 = x[1];
             x[0] = matSm_[0][0] * l0 + matSm_[0][1] * r0;
@@ -620,8 +693,8 @@ struct TerrainUtilityFx
         //        the image closes while the bottom stays wide.
         if (bleedAmt > 0.0f)
         {
-            const float lo0 = bleedX_[0].lp (x[0]), hi0 = x[0] - lo0;
-            const float lo1 = bleedX_[1].lp (x[1]), hi1 = x[1] - lo1;
+            const float hi0 = bleedX_[0].hp (x[0]), lo0 = x[0] - hi0;
+            const float hi1 = bleedX_[1].hp (x[1]), lo1 = x[1] - hi1;
             const float n   = 1.0f / (1.0f + bleedAmt);
             x[0] = lo0 + (hi0 + bleedAmt * hi1) * n;
             x[1] = lo1 + (hi1 + bleedAmt * hi0) * n;
@@ -635,7 +708,7 @@ struct TerrainUtilityFx
         if (guardAmt > 0.0f)
         {
             float gl = x[0], gr = x[1];
-            applyGuard (gl, gr);
+            applyGuard (gl, gr, driveSm_);
             x[0] += guardAmt * (gl - x[0]);
             x[1] += guardAmt * (gr - x[1]);
         }
@@ -657,7 +730,7 @@ struct TerrainUtilityFx
             // Mono Below: high-pass the SIDE. Below the corner the side goes to
             // zero, which IS mono; above it the stereo is untouched. One filter,
             // no phase damage to the mid at all.
-            if (mbAmt > 0.0f) s -= mbAmt * msX_.lp (s);
+            if (mbAmt > 0.0f) s += mbAmt * (msX_.hp (s) - s);
 
             switch (type_)
             {
@@ -670,15 +743,15 @@ struct TerrainUtilityFx
                 case 2:  s *= sGainSm_;                        break;  // Outer
                 case 3:                                                // Canopy
                 {
-                    const float mLo = imgX_[0].lp (m), sLo = imgX_[1].lp (s);
-                    m = mLo + (m - mLo) * mGainSm_;
-                    s = sLo + (s - sLo) * sGainSm_;
+                    const float mHi = imgX_[0].hp (m), sHi = imgX_[1].hp (s);
+                    m = (m - mHi) + mHi * mGainSm_;
+                    s = (s - sHi) + sHi * sGainSm_;
                 } break;
                 case 4:                                                // Cellar
                 {
-                    const float mLo = imgX_[0].lp (m), sLo = imgX_[1].lp (s);
-                    m = (m - mLo) + mLo * mGainSm_;
-                    s = (s - sLo) + sLo * sGainSm_;
+                    const float mHi = imgX_[0].hp (m), sHi = imgX_[1].hp (s);
+                    m = mHi + (m - mHi) * mGainSm_;
+                    s = sHi + (s - sHi) * sGainSm_;
                 } break;
                 default: m *= mGainSm_; s *= sGainSm_;         break;  // Strip
             }
@@ -699,12 +772,18 @@ struct TerrainUtilityFx
         // ═══ 8. BALANCE.
         x[0] *= steerLSm_; x[1] *= steerRSm_;
 
-        // ═══ 9. MIX. Equal power, and Mix 0 is EXACTLY the dry: cos(0) == 1.0f
-        //        and sin(0) == 0.0f, both exact, so nothing is added and nothing
-        //        is scaled. A utility that cannot be A/B'd against itself
-        //        bit-for-bit is not a utility.
-        const float wg = std::sin (1.5707963f * mixSm_);
-        const float dg = std::cos (1.5707963f * mixSm_);
+        // ═══ 9. MIX. Equal power — with BOTH ENDPOINTS EXACT.
+        //        🚨 fb445 — cos(pi/2) IS NOT ZERO IN FLOAT. It is 3.3e-8, so a
+        //        naive equal-power mix leaks the dry at -150 dBFS forever, and
+        //        four separate gates that said "EXACTLY" were quietly false by
+        //        3.7e-9: "Gain 0 is silence", "unity is exactly 0 dB", "Mix 0 is
+        //        bit-identical" and "Strain 0 is a bit-exact bypass". A utility
+        //        that cannot be A/B'd against itself bit-for-bit is not a
+        //        utility, so the two endpoints are branched, not computed.
+        float wg, dg;
+        if      (mixSm_ >= 1.0f) { wg = 1.0f; dg = 0.0f; }
+        else if (mixSm_ <= 0.0f) { wg = 0.0f; dg = 1.0f; }
+        else { wg = std::sin (1.5707963f * mixSm_); dg = std::cos (1.5707963f * mixSm_); }
         outL = dg * dryL + wg * x[0];
         outR = dg * dryR + wg * x[1];
 
@@ -767,12 +846,13 @@ private:
     //    The rail TRACKS THE FADER so Gain stays a gain (see the header note).
     //    The makeup is an exact 1/drive, so sat'(0) == 1 and Strain can never
     //    become a second, secret level control.
-    inline void applyGuard (float& l, float& r) noexcept
+    inline void applyGuard (float& l, float& r, float drv) noexcept
     {
-        const float c = std::max (1e-7f, kRail * std::max (1e-6f, gainSm_));
+        const float invDrv = 1.0f / std::max (1e-6f, drv);
+        const float c = std::max (1e-7f, kRail * std::sqrt (drv) * std::max (1e-6f, gainSm_));
         const float a = c * kneeFrac_;
         const float preL = l, preR = r;
-        float dl = l * drive_, dr = r * drive_;
+        float dl = l * drv, dr = r * drv;
 
         switch (chr_)
         {
@@ -783,8 +863,8 @@ private:
 
             case 2:                                              // Coil
             {   // only the band BELOW the hinge sees the curve; the top passes.
-                const float lo0 = coilX_[0].lp (dl), hi0 = dl - lo0;
-                const float lo1 = coilX_[1].lp (dr), hi1 = dr - lo1;
+                const float hi0 = coilX_[0].hp (dl), lo0 = dl - hi0;
+                const float hi1 = coilX_[1].hp (dr), lo1 = dr - hi1;
                 dl = utl_detail::softCeil (lo0, c, a) + hi0;
                 dr = utl_detail::softCeil (lo1, c, a) + hi1;
             } break;
@@ -814,9 +894,16 @@ private:
             } break;
 
             case 5:                                              // Rail
-            {   // ONE detector for both channels, ONE gain to both: the image
-                // collapses toward the centre under load. Desk-bus behaviour,
-                // and audibly different from two independent limiters.
+            {   // ONE detector for both channels, ONE gain to both — so the L/R
+                // RATIO is preserved exactly and the stereo image does NOT move
+                // under load. Every other Character here limits the channels
+                // independently, which holds the louder side back harder and
+                // drags the image toward the centre. That is precisely why every
+                // desk bus compressor has a stereo-link switch, and it is the
+                // measurable difference §G gates.
+                // (fb445: this comment used to claim the OPPOSITE — that Rail
+                //  collapses the image. The cert disagreed, and the cert was
+                //  right: a common gain cannot change a ratio.)
                 const float lv = std::max (std::fabs (dl), std::fabs (dr));
                 const float g  = lv > 1e-9f ? utl_detail::softCeil (lv, c, a) / lv : 1.0f;
                 dl *= g; dr *= g;
@@ -849,7 +936,7 @@ private:
                 break;
         }
 
-        l = dl * invDrive_; r = dr * invDrive_;
+        l = dl * invDrv; r = dr * invDrv;
 
         // the meter reads the REDUCTION the guard actually applied, signed.
         const float pre = std::max (std::fabs (preL), std::fabs (preR));
@@ -869,7 +956,7 @@ private:
     float gainT_ = 1.0f, gainSm_ = -1.0f;
     float mixT_ = 1.0f, mixSm_ = -1.0f;
     float steerLT_ = 1.0f, steerRT_ = 1.0f, steerLSm_ = 1.0f, steerRSm_ = 1.0f;
-    float drive_ = 1.0f, invDrive_ = 1.0f, clampT_ = 0.5f, kneeFrac_ = 0.51f;
+    float drive_ = 1.0f, driveSm_ = 1.0f, clampT_ = 0.5f, kneeFrac_ = 0.51f;
     float slewHz_ = 20000.0f;
     float imgW_ = 1.0f, mGainT_ = 1.0f, sGainT_ = 1.0f, mGainSm_ = 1.0f, sGainSm_ = 1.0f;
     float turnCos_ = 1.0f, turnSin_ = 0.0f, twCos_ = 1.0f, twSin_ = 0.0f;

@@ -222,7 +222,7 @@ int main()
     if (dryRms <= -60.0) { printf ("\n  probe is silent — cannot measure. STOP.\n"); return 2; }
 
     // ── each device: put it in the chain, power it, push its controls, measure the output ─────
-    const Dev devs[5] = {
+    const Dev devs[7] = {
         { "Equalizer", "Equalizer", { "Equalizer Amount", "Equalizer Low",  "Equalizer Body",  "Equalizer Slant" } },
         { "Widen",     "Widen",     { "Widen Amount",     "Widen Width",    "Widen Spread",    nullptr } },
         { "Compress",  "Compress",  { "Compress Push",    "Compress Ratio", "Compress Lift",   nullptr } },
@@ -230,6 +230,11 @@ int main()
         // fb444 — Bode. Shift is the hero; Fdbk and Direction are the two that most change the
         // output, so if this row measures Delta 0.00 the device is in the chain and dead.
         { "Bode",      "Bode",      { "Bode Shift",       "Bode Fdbk",      "Bode Direction",  "Bode Blur" } },
+        // fb444 — Utility. Gain is the hero; Image and Strain are the two that most change the
+        // output. Note Gain's UNITY is 0.667, so pushing it to 1.0 is a real +30 dB change.
+        { "Utility",   "Utility",   { "Utility Gain",     "Utility Image",  "Utility Strain",  "Utility Twist" } },
+        // fb444 — Splitter. With no lane devices it still shapes: per-lane gains and Balance.
+        { "Splitter",  "Splitter",  { "Splitter Balance", "Splitter Lane 1 Gain", "Splitter Spread", "Splitter Split" } },
     };
     for (const auto& d : devs)
     {
@@ -265,6 +270,33 @@ int main()
                         || std::fabs (dSide) > 0.35 || std::fabs (dCr) > 0.35;
         chk (moved, (std::string (d.label) + ": the audio actually REACHES the device").c_str(), det);
         a.close();
+    }
+
+    // ══ fb444 — THE SPLITTER'S ONE INDISPENSABLE PROPERTY, MEASURED IN THE PLUGIN ══════════
+    // Its engine cert nulls reconstruction at -122 dB, but fb373 is the whole law of this file:
+    // a green engine says nothing about whether the plugin reaches it, or reaches it CORRECTLY.
+    // A splitter that combs at its crossovers is useless no matter how good the UI is, and a
+    // comb would be INAUDIBLE as "broken" - it just sounds slightly thin, forever. So: put a
+    // Splitter in the chain at its DEFAULTS, touch nothing, and require the output to be the
+    // same sound. Every OTHER row in this file asserts Delta != 0; this one asserts Delta ~ 0,
+    // and that asymmetry is the point.
+    {
+        AU a;
+        if (a.open())
+        {
+            a.set ("Splitter In Chain", 1.0f);
+            a.set ("Splitter Power",    1.0f);
+            const char* SRC[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+            for (int k = 0; k < 6; ++k) a.set (std::string ("Splitter ") + SRC[k], 1.0f);
+            const Render w = a.render();
+            const double dL = rmsdb (w.L) - dryRms;
+            const double dS = specDist (drySpec, spec (w.L));
+            char det[200];
+            snprintf (det, sizeof det, "Δlevel=%+.3f dB  Δspectrum=%.3f dB/band  (a comb here would be permanent and inaudible as a fault)", dL, dS);
+            chk (std::fabs (dL) < 0.60 && dS < 1.20,
+                 "Splitter at DEFAULTS is transparent: split and rejoin do not comb", det);
+            a.close();
+        }
     }
 
     printf ("\n  PASS %d   FAIL %d\n\n", npass, nfail);

@@ -35,7 +35,9 @@
 #include "TerrainWidenFx.h"       // fb426 — chain kind 10
 #include "TerrainCompressFx.h"    // fb426 — chain kind 11
 #include "TerrainOttFx.h"
-#include "TerrainBodeFx.h"        // fb444 — kind 13, the Bode SSB shifter         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
+#include "TerrainBodeFx.h"        // fb444 — kind 13, the Bode SSB shifter
+#include "TerrainSplitterFx.h"    // fb444 — kind 15, the band Splitter
+#include "TerrainUtilityFx.h"     // fb444 — kind 14, the glue strip         // fb426 — chain kind 12    // fb413 — the FX-rack phaser  (kind 8, 9 Types)
 #include "ModulationEngine.h"
 #include "ParameterIDs.hpp"
 #include "SamplerVoice.h"
@@ -1853,6 +1855,39 @@ private:
     std::array<tw::TerrainCompressFx,  (size_t) ParameterIDs::kFxInstances> cmpPool_ {};
     std::array<tw::TerrainOttFx,       (size_t) ParameterIDs::kFxInstances> ottPool_ {};
     std::array<tw::TerrainBodeFx,      (size_t) ParameterIDs::kFxInstances> bodPool_ {};   // fb444
+    std::array<tw::TerrainSplitterFx,  (size_t) ParameterIDs::kFxInstances> splPool_ {};   // fb444
+    std::array<tw::TerrainUtilityFx,   (size_t) ParameterIDs::kFxInstances> utlPool_ {};   // fb444
+    // Utility carries SIX pills (Flip L · Flip R · Trade · Sum · DC · Dim) where Fx4Refs has room
+    // for three. Max asked for "a whole bunch of buttons" and that is the device — so it gets its
+    // own refs shape rather than bending the shared one.
+    struct UtlRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* wiring;
+        std::atomic<float>* f1; std::atomic<float>* f2; std::atomic<float>* f3;
+        std::atomic<float>* mix; std::atomic<float>* b[8];
+        std::atomic<float>* pill[6]; std::atomic<float>* src[6]; };
+    std::array<UtlRefs, (size_t) ParameterIDs::kFxInstances> utlRefs_ {};
+    std::array<float,   (size_t) ParameterIDs::kFxInstances> utlEnv_  {};
+    void cacheUtlRefs();
+    void applyUtl (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
+    // The Splitter's roster does not fit Fx4Refs: on top of the 2 choices, 3 front + Mix and the
+    // back 8, it carries a LANE STRIP of 12 switches (mute/solo/flip per lane), which are glyphs
+    // and not knobs (the switch law). So it gets its own refs struct rather than bending the
+    // shared one out of shape for one device.
+    struct SplRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
+        std::atomic<float>* type; std::atomic<float>* slope;
+        std::atomic<float>* split; std::atomic<float>* balance; std::atomic<float>* spread;
+        std::atomic<float>* mix; std::atomic<float>* b[8];
+        std::atomic<float>* mute[4]; std::atomic<float>* solo[4]; std::atomic<float>* flip[4];
+        std::atomic<float>* src[6]; };
+    std::array<SplRefs, (size_t) ParameterIDs::kFxInstances> splRefs_ {};
+    std::array<float,   (size_t) ParameterIDs::kFxInstances> splEnv_  {};
+    void cacheSplRefs();
+    // The Splitter is the ONE device that is not a one-in-one-out insert, so it cannot use
+    // TW_FX4_APPLY. It splits at its own slot and merges after the whole chain has run.
+    void applySplSplit (int inst0, float inL, float inR,
+                        float laneL[4], float laneR[4]) noexcept;
+    void applySplMerge (int inst0, const float laneL[4], const float laneR[4],
+                        float& outL, float& outR) noexcept;
     void applyEqz (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyWid (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyCmp (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
@@ -1883,6 +1918,12 @@ private:
     bool laneClaimed_[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] {};
     bool laneAny_ = false;                                   // fast bail: no Splitter in the chain
     std::array<int, (size_t) ParameterIDs::kFxInstances> splLanes_ {};   // live lane count per Splitter
+    // The engine's contract is ONE mergeStereo per splitStereo, in the SAME sample slot, because
+    // split stashes the phase-matched dry that merge needs for Mix and applies the per-lane trims
+    // on the way back in. The lane devices run AFTER the Splitter's slot, so the merge cannot
+    // happen at that slot — it happens once the chain loop has finished, from these.
+    std::array<int, (size_t) ParameterIDs::kFxInstances> splSlotOf_ {};   // Splitter inst -> its chain slot, or -1
+    int laneLast_[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] {};   // lane -> its LAST device slot, or -1
     void resolveLanes() noexcept;
     void cacheSendRefs();
     void cacheFx3Refs();
