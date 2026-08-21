@@ -398,6 +398,35 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r10.bandMag && r10.peakKept && r10.pointMissed, 'a pixel spanning many bins returns the PEAK (point-sampling would skip it)', 'peakKept='+r10.peakKept+' pointMissed='+r10.pointMissed);
   chk(r10.srUsed, 'the analyzer feed\'s sample rate is honoured (44.1 k no longer reads 8.8 % sharp)', 'srUsed='+r10.srUsed);
 
+  // ── fb443: NO FLOATING READOUT ON A RACK CARD. Max: "there's this text that pops up at the top left,
+  //    we don't need that... there's no space for it without it getting crowded" — EQ and Multiband both.
+  //    Gate the ABSENCE, and gate that dragging still WORKS without it (the removal must not take the
+  //    interaction with it), and that the right-click menu HEADER still carries the band's Hz + Q.
+  const r11 = await pg.evaluate(async()=>{
+    await new Promise(r=>setTimeout(r,260));   // clear the right-click belt left armed by r9
+    const out={}; const core=document.querySelector('.fxr-core[data-core="eqz"]');
+    out.roNodes=document.querySelectorAll('.eqz-ro,.ott-ro').length;
+    out.anyCardText=[...document.querySelectorAll('.fxr-core text')].length;
+    const svg=core.querySelector('svg'), r=svg.getBoundingClientRect();
+    const D=window.__fxDevs(), d=D.find(z=>z.core==='eqz');
+    const nb=core.querySelector('.eqz-n[data-b="1"]');
+    const bx=r.left+(+nb.getAttribute('cx'))/226*r.width, by=r.top+(+nb.getAttribute('cy'))/78*r.height;
+    const ev=(t,x,y)=>new PointerEvent(t,{bubbles:true,cancelable:true,clientX:x,clientY:y,pointerId:9,pointerType:'mouse',buttons:1,button:0});
+    // the menu FIRST, on an untouched node (a drag leaves the node under a different cursor position)
+    core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:bx,clientY:by}));
+    const cm=document.getElementById('syn-ctx-menu');
+    out.menuText=cm?cm.textContent:''; out.secText=cm?[...cm.querySelectorAll('.syn-ctx-section')].map(e=>e.textContent).join('|'):'';
+    try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
+    const hz0=d.back.knobs[2][1];
+    window.__W.length=0;
+    core.dispatchEvent(ev('pointerdown',bx,by)); core.dispatchEvent(ev('pointermove',bx+26,by-8)); document.dispatchEvent(ev('pointerup',bx+26,by-8));
+    out.dragStillWrites=[...new Set(window.__W.map(w=>w[0]))].filter(x=>/BODYHZ|_BODY$/.test(x)).sort().join(',');
+    out.hzMoved=d.back.knobs[2][1]!==hz0;
+    return out; });
+  chk(r11.roNodes===0 && r11.anyCardText===0, 'no floating readout text on ANY rack card (EQ + Multiband)', 'ro='+r11.roNodes+' <text>='+r11.anyCardText);
+  chk(/BODYHZ/.test(r11.dragStillWrites) && r11.hzMoved, 'dragging a node still writes its Hz with the readout gone', r11.dragStillWrites);
+  chk(/Q /.test(r11.secText||'') && /(Hz|k)/.test(r11.secText||''), 'the right-click menu HEADER still reports that band\'s Hz and Q', (r11.secText||'(no menu)').slice(0,70));
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();
   process.exit(fail?1:0);
