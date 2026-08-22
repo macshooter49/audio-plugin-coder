@@ -333,6 +333,12 @@ static const double kEqGate  = -100.0;  // dB below the render's own RMS: "the r
 static const double kAudGate =  -60.0;  // dB below the render's own RMS: "it did something at all"
 static const int    kTypeTries = 4;     // a knob dead at Type 0 is retried on the next few Types
 
+// saturate.SIG (kind 2, knob 1 — the Distortion's Knee) is the one dial the source itself flags:
+// PluginProcessor.cpp:7343-7351, the only rack read site that runs BEFORE buildFxMod(), so
+// instance 1's Knee follows the matrix ONE BLOCK LATE. It is NOT given an allowance here — it is
+// gated exactly like the other 183 and it is characterised on its own below.
+static bool  isOneBlockLateCell (int kind, int knob) { return kind == 2 && knob == 1; }   // saturate.SIG
+
 // RMS and null-depth over BOTH channels — a stereo-only move (Utility Image, Widen) is invisible
 // on L alone, and half the rack's knobs are stereo.
 static double rms2 (const Render& r)
@@ -788,6 +794,38 @@ int main (int argc, char** argv)
              "GATE C2: two half-depth routes on the alias SUM into one slot (they do not fight)", det);
     }
 
+    // ── SIG-LAG — CHARACTERISING THE ONE CELL THAT DOES NOT NULL ──────────────────────────────
+    // saturate.SIG is the only rack read site that runs BEFORE buildFxMod() (PluginProcessor.cpp
+    // :7343-7351, which says so), so instance 1's Knee follows the matrix ONE BLOCK LATE. This
+    // gate does not excuse that — it MEASURES it, so the matrix's one red row has a mechanism
+    // attached and a regression in either direction is visible:
+    //
+    //   • BLOCK 1 ALONE must differ LOUDLY. That is the lag itself: in the routed render the
+    //     Knee is still at its base for that block, in the knob render it is already at 0.50.
+    //   • the steady-state window must then agree CLOSELY but NOT to the floor — and it must NOT
+    //     decay. Measured: -77.2 dBr from block 20 and -76.5 dBr from block 80. One block of a
+    //     different Knee does not wash out of this device; fb345 named the class (grid-leak bias
+    //     and AC-coupled loops carry multi-second state), and the two paths settle a hair apart
+    //     and stay there.
+    //
+    // If the SIG resolve ever moves after buildFxMod(), block 1 goes quiet and the matrix row
+    // goes green — this gate is what will say so.
+    {
+        MtxCfg base; base.kind = 2; base.probe = 1;
+        MtxCfg b = base; b.routes = routeJson (destOf (2, 0, 1), kOff);
+        MtxCfg c = base; c.knobs[1] = kTop;
+        MtxCfg b1 = b, c1 = c; b1.warmup = c1.warmup = false; b1.nblk = c1.nblk = 1; b1.skip = c1.skip = 0;
+        const double blk1 = rel (mtxRender (b1), mtxRender (c1));
+        const double early = rel (mtxRender (b), mtxRender (c));
+        MtxCfg b2 = b, c2 = c; b2.nblk = c2.nblk = 150; b2.skip = c2.skip = 80;
+        const double late = rel (mtxRender (b2), mtxRender (c2));
+        char det[260];
+        snprintf (det, sizeof det, "block 1 alone %.1f dBr; steady state %.1f dBr (from blk 20) / %.1f dBr (from blk 80)",
+                  blk1, early, late);
+        chk (blk1 > -40.0 && early < -60.0 && std::fabs (early - late) < 6.0,
+             "SIG-LAG: instance 1's Knee is ONE BLOCK LATE, and that block does not wash out", det);
+    }
+
     // ── THE WHOLE PANEL AT ONCE ───────────────────────────────────────────────────────────────
     // Every live knob of a device routed simultaneously, each with its OWN depth, versus every
     // knob moved by its own amount. Distinct depths are the point: a PERMUTATION of the
@@ -802,6 +840,11 @@ int main (int argc, char** argv)
         for (int n = 0; n < 12; ++n)
         {
             if (kFxModLeaf[k][n] == nullptr) continue;
+            // saturate.SIG is left out of this one gate ON PURPOSE. It is the single dial that is
+            // NOT equivalent (SIG-LAG below, and its own red row in the matrix); carrying it here
+            // would report the same defect a second time and cost this gate the thing it is FOR —
+            // being able to say that a PERMUTATION of a device's destinations is detectable.
+            if (isOneBlockLateCell (k, n)) continue;
             const float d = 0.03125f * (float) (n + 1);   // 1/32 .. 12/32 — exact, and so are the sums
             char one[96]; snprintf (one, sizeof one, "%s{\"s\":0,\"d\":%d,\"v\":%.6f}", nRoutes ? "," : "", destOf (k, 0, n), d);
             rj += one; ++nRoutes;
@@ -859,8 +902,9 @@ int main (int argc, char** argv)
                 const bool ok = (bEq < kEqGate) && (bAud > kAudGate);
                 char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
                                          kKindName[k], kFxModLeaf[k][n], k, n);
-                char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s",
-                                         bEq, bAud, bType ? "   [needed a livelier Type]" : "");
+                char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s",
+                                         bEq, bAud, bType ? "   [needed a livelier Type]" : "",
+                                         isOneBlockLateCell (k, n) ? "   [the ONE dial read before buildFxMod — see SIG-LAG]" : "");
                 chk (ok, lbl, det);
                 if (! ok) fails.push_back ({ k, n, kFxModLeaf[k][n], bEq, bAud });
                 else if (bAud < -30.0) { char q[80]; snprintf (q, sizeof q, "%s.%s (%.1f dBr)", kKindName[k], kFxModLeaf[k][n], bAud); quietCells.push_back (q); }
