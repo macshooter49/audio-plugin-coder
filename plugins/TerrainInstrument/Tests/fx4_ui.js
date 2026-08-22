@@ -713,6 +713,23 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       drop.ul ? ('ul ' + drop.ul.w.toFixed(2) + 'px @' + drop.ul.l.toFixed(2) + '  word ' + drop.ink.w.toFixed(2) +
                  'px @' + drop.ink.l.toFixed(2) + '  wrapper ' + drop.box.w.toFixed(2) + 'px') : 'no underline');
 
+  /* ═══ fb455 — THREE WINDOWS, AND SAYING WHICH IS THE POINT ═══════════════════════════════════
+     The attenuator is now CLAMPED into the window (index.html, showAtt — the .pmenu clamp), so its
+     placement can only be asserted against a window whose edges are known. This suite's own window
+     is 1560×1200 at __zoomFix 1.9024 = 820 × 630.8 LAYOUT px — which is SHORTER than the page's
+     656 px design box, i.e. it is itself a bottom-edge window: measured, the unclamped meter on the
+     rack's bottom knob ended 7 px BELOW it. The fb453 gate immediately below asserts the meter's
+     raw offset from its mark, which is a statement about the clamp being a NO-OP, and that is only
+     true where the knob has room — so it is run at 1560×1290 = 678 layout px, the SHIPPED
+     condition (the whole 656 box visible with room under it). The gate itself is unchanged; only
+     the window it is asked in is now stated. The two new fb455 gates then take the edges: the
+     bottom at this suite's own 1560×1200, and the top by lifting #syn-panel (.sm-ul/.sm-att are
+     body children, so only the DESTINATION moves and the code path is identical).
+     Each edge gate also asserts what the UNCLAMPED write WOULD have done, so none of them can ever
+     pass vacuously if the layout drifts and the window stops being an edge. */
+  await pg.setViewport({width:1560, height:1290, deviceScaleFactor:2});
+  await new Promise(r=>setTimeout(r,700));
+
   /* ── THE ATTENUATOR'S POSITION, AT A ZOOM THAT IS NOT 1. ═════════════════════════════════════
      🚨 This gate exists because there was none, and that is precisely why a coordinate-space bug
      shipped here twice. At the shipped default zoom is 1, LP() is the identity, and EVERY variant
@@ -765,6 +782,125 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       '  ·  mark right/top ' + att.brRight + '/' + att.brTop +
       '  →  meter at ' + att.gotLeft + '/' + att.gotTop + ', want ' + att.wantLeft + '/' + att.wantTop +
       '  (style ' + att.styleLeft + ', ' + att.styleTop + ')'));
+
+  /* ── …and that gate only MEANS "the clamp is a no-op" if the knob it used actually had room.
+     Assert the room, in the same window, or the no-op claim above is unfalsifiable. */
+  const room = await pg.evaluate(() => { const box=document.querySelector('.sm-att'), vv=box&&box.querySelector('.vv');
+    return {vh:+window.__vh().toFixed(2), h:box?box.offsetHeight:0, head:vv?vv.offsetHeight+5:0, z:window.__zoomFix||1}; });
+  const roomTop = att.wantTop / room.z;                       // the fb453 want, in LAYOUT px
+  chk(!att.err && roomTop <= room.vh - room.h - 6 + 0.01 && roomTop >= room.head + 6 - 0.01,
+      'fb455: …and the window that gate ran in HAD room — so it asserts a NO-OP clamp, not a clamped position',
+      'want top ' + roomTop.toFixed(2) + ' layout px  ·  legal band ' + (room.head + 6).toFixed(2) + '..' +
+      (room.vh - room.h - 6).toFixed(2) + '  (viewport ' + room.vh.toFixed(1) + ' layout px tall)');
+
+  /* ═══ fb455 — THE EDGES. One helper, one REAL press, three windows. ═══════════════════════════
+     Max: "the attenuator gets cut off at the bottom … it doesn't go under that strip." It was never
+     a stacking fault (.sm-att is position:fixed at the maximum z-index and the strip is a NATIVE
+     16 px JUCE component below the WebView) — `top` was simply written verbatim and the window edge
+     cut the box. The control is TALLER THAN ITS BOX: .vv hangs above it on bottom:100% + 5 px, so
+     both gates measure the union — box AND readout — against the window. */
+  const attEdge = async (mode) => pg.evaluate(async (mode) => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (!window.__tiPruneFxRoutes || !window.__fxModDest) return {err:'no fb453 surfaces on this page'};
+    const panel = document.getElementById('syn-panel');
+    window.__tiPruneFxRoutes(0, 1e9);
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb'); const d = D[ri];
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+    await frame(); await frame();
+    const inkOf = (el) => { const l = el.querySelector('.fxr-lab') || el.querySelector('.knob-label');
+                            const rg = document.createRange(); rg.selectNodeContents(l); return rg.getBoundingClientRect(); };
+    const z = window.__zoomFix || 1;
+    let knob, dest, lift = 0;
+    if (mode === 'top') {
+      // the TOPMOST synth-panel destination, lifted until its mark sits ~8 layout px from the edge.
+      // Only #syn-panel moves — the mark and the meter are body children, so this is the same code
+      // path with the destination somewhere else, exactly as if the window were scrolled.
+      knob = [...document.querySelectorAll('#syn-panel .knob[data-mod-dest]')]
+               .filter(k => k.getBoundingClientRect().height > 4 && k.querySelector('.knob-label'))
+               .sort((a,b) => inkOf(a).bottom - inkOf(b).bottom)[0];
+      if (!knob) return {err:'no visible synth-panel destination'};
+      lift = Math.round(inkOf(knob).bottom / z) - 9;
+      panel.style.transform = 'translateY(-' + lift + 'px)';
+      dest = +knob.getAttribute('data-mod-dest');
+    } else {
+      knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
+      dest = window.__fxModDest(d.core, d.inst, 1);
+    }
+    window.__tiAddRoute(0, 1, dest); window.__selMod = {lfo:1};       // an LFO route: the meter IS the readout
+    await frame(); await frame();
+    const ink = inkOf(knob);
+    const u = [...document.querySelectorAll('.sm-ul')].filter(x => x.style.display !== 'none')
+                .find(x => Math.abs(x.getBoundingClientRect().left - ink.left) < 1.5);
+    if (!u) { panel.style.transform = ''; window.__tiPruneFxRoutes(0, 1e9); return {err:'no mark to grab (lift ' + lift + ')'}; }
+    const cap = u.setPointerCapture; u.setPointerCapture = function(){};
+    const br = u.getBoundingClientRect();
+    u.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true, cancelable:true,
+      clientX:br.left + br.width/2, clientY:br.top + 3, button:0, buttons:1, pointerId:33, pointerType:'mouse'}));
+    await frame();
+    const box = document.querySelector('.sm-att'), vv = box.querySelector('.vv');
+    const R = box.getBoundingClientRect(), V = vv.getBoundingClientRect();
+    // what the UNCLAMPED write would have produced — the proof this window really IS an edge
+    const rawT = br.top - 25*z, rawB = rawT + box.offsetHeight*z, rawV = rawT - (vv.offsetHeight + 5)*z;
+    const out = {z, lift, ih: innerHeight, on: box.classList.contains('on'), txt: vv.textContent,
+                 top:+R.top.toFixed(2), bot:+R.bottom.toFixed(2), vvTop:+V.top.toFixed(2), vvBot:+V.bottom.toFixed(2),
+                 rawTop:+rawT.toFixed(2), rawBot:+rawB.toFixed(2), rawVv:+rawV.toFixed(2)};
+    document.dispatchEvent(new PointerEvent('pointerup', {bubbles:true, cancelable:true, pointerId:33, pointerType:'mouse'}));
+    u.setPointerCapture = cap; panel.style.transform = ''; window.__tiPruneFxRoutes(0, 1e9); window.__selMod = {env:1};
+    await frame();
+    return out; }, mode);
+
+  // ── gate 1: a rack card on the BOTTOM edge. This suite's own 1560×1200 = 630.8 layout px IS one.
+  await pg.setViewport({width:1560, height:1200, deviceScaleFactor:2});
+  await new Promise(r=>setTimeout(r,700));
+  const eBot = await attEdge('bottom');
+  chk(!eBot.err && eBot.on && eBot.rawBot > eBot.ih && eBot.top >= 0 && eBot.bot <= eBot.ih && eBot.vvTop >= 0,
+      'fb455 🔴 BOTTOM: dragging the depth of a route on the rack\'s bottom knob — the whole control, meter AND readout, stays inside the window',
+      eBot.err ? eBot.err : ('window ' + eBot.ih + ' px  ·  UNCLAMPED the meter would end at ' + eBot.rawBot +
+      ' (' + (eBot.rawBot - eBot.ih).toFixed(2) + ' px CUT OFF)  →  clamped to ' + eBot.top + '..' + eBot.bot +
+      ', readout top ' + eBot.vvTop + '  ·  ' + eBot.bot.toFixed(2) + ' ≤ ' + eBot.ih));
+
+  // ── gate 2: the same control at the TOP edge — the readout must not clip the other way.
+  const eTop = await attEdge('top');
+  chk(!eTop.err && eTop.on && eTop.rawVv < 0 && eTop.top >= 0 && eTop.bot <= eTop.ih && eTop.vvTop >= 0,
+      'fb455 🔴 TOP: and at the top edge the READOUT does not clip upward either (it hangs above the box, so the box\'s own top is not the limit)',
+      eTop.err ? eTop.err : ('#syn-panel lifted ' + eTop.lift + ' layout px  ·  UNCLAMPED the readout would sit at ' +
+      eTop.rawVv + ' (' + (-eTop.rawVv).toFixed(2) + ' px above the window)  →  clamped: readout ' + eTop.vvTop +
+      ', meter ' + eTop.top + '..' + eTop.bot));
+
+  /* ── AND THE ROUTE LIST AT THE SAME EDGE. fb454 gave showRoutes a flip (below → beside → above)
+     whose every branch already ends in max(6, min(…, VH-mh-6)), so it needs no fb455 change — but
+     "needs no change" is a measurement, not an opinion. Measured here: the list on the rack's
+     bottom knob lands 27 px inside a window the attenuator was falling out of. */
+  const rlist = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    window.__tiPruneFxRoutes(0, 1e9);
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb');
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+    await frame(); await frame();
+    const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
+    window.__tiAddRoute(1, 0, +knob.getAttribute('data-mod-dest')); window.__selMod = {env:1};
+    await frame(); await frame();
+    const l = knob.querySelector('.fxr-lab'); const rg = document.createRange(); rg.selectNodeContents(l);
+    const ink = rg.getBoundingClientRect();
+    const u = [...document.querySelectorAll('.sm-ul')].filter(x => x.style.display !== 'none')
+                .find(x => Math.abs(x.getBoundingClientRect().left - ink.left) < 1.5);
+    if (!u) return {err:'no mark to hover'};
+    u.dispatchEvent(new MouseEvent('mouseenter', {bubbles:false}));
+    await frame();
+    const m = document.querySelector('.sm-routes');
+    if (!m) return {err:'no route list'};
+    const R = m.getBoundingClientRect();
+    const out = {ih:innerHeight, iw:innerWidth, top:+R.top.toFixed(2), bot:+R.bottom.toFixed(2),
+                 left:+R.left.toFixed(2), right:+R.right.toFixed(2), markTop:+u.getBoundingClientRect().top.toFixed(2)};
+    u.dispatchEvent(new MouseEvent('mouseleave', {bubbles:false}));
+    window.__tiPruneFxRoutes(0, 1e9); await frame();
+    return out; });
+  chk(!rlist.err && rlist.top >= 0 && rlist.bot <= rlist.ih && rlist.left >= 0 && rlist.right <= rlist.iw,
+      'fb455/fb454: the ROUTE LIST on that same bottom-edge knob is already inside the window — fb454\'s flip clamps it, so nothing there changed',
+      rlist.err ? rlist.err : ('window ' + rlist.iw + '×' + rlist.ih + '  ·  list ' + rlist.left + '..' + rlist.right +
+      ' × ' + rlist.top + '..' + rlist.bot + '  (' + (rlist.ih - rlist.bot).toFixed(2) + ' px of air under it)'));
 
   /* ── THE RACK SCROLLS, AND IT SCROLLS INSIDE A CLIPPER. .sm-ul is position:fixed and re-measured
      every frame, which the synth panel never exercised because nothing there moves under the

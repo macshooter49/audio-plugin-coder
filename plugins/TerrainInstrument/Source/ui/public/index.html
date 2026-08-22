@@ -28551,7 +28551,35 @@ restoreThemeFromBackend();
      converted with LP() AT THE POINT IT IS READ, and everything downstream is layout px. The
      parameter names say which space they speak so the next reader does not have to guess — this
      is the second time the two spaces have been confused here. */
-  function showAtt(a,xLayout,yLayout){ att.style.left=xLayout+'px'; att.style.top=yLayout+'px'; att.classList.add('on'); updAtt(a); }
+  /* ═══ fb455 — AND IT IS CLAMPED INTO THE WINDOW ══════════════════════════════════════════
+     Max: "the attenuator gets cut off at the bottom. So is there a way where you can put it to
+     where it doesn't go under that strip … and it comes on top of that strip."
+     IT WAS NEVER A STACKING FAULT. .sm-att is position:fixed at z-index 2147483647 — the maximum
+     in this file — so nothing paints over it, and the strip he means is not even in this page:
+     CAPTURE_STRIP_HEIGHT is a 16 px NATIVE JUCE component sitting BELOW the WebView. What was
+     wrong is that `top` was written verbatim, so the box simply ran off the bottom of the WebView
+     and the window edge cut it.
+     MEASURED, at the shipped 820×656: the lowest mark anywhere in the plugin is a rack knob's
+     word (ink bottom 614.5 → mark top 613.5 — identical on the front row, the 4×2 back panel and
+     a splitter lane, so this IS the floor), which put the 50 px meter at 588.5..638.5: 11.5 px
+     BELOW the card's own border, hanging in the band that abuts the strip, and only 17.5 px short
+     of the WebView edge. It is cut OUTRIGHT the moment the host hands the WebView any less height
+     than the 656 design box — the page overflows, it does not compress — and the headless gate's
+     own window (630.8 layout px) is exactly that: 7 px of the meter were off-screen there.
+     THE IDIOM IS THE .pmenu CLAMP, reused verbatim: `max(6, min(y, __vh() - h - 6))`, the same six
+     pixels of margin every menu in this file keeps (13308 · 15830 · 22705 · 32338 · 32915 …). The
+     one addition is that this control is TALLER THAN ITS BOX — .vv hangs above it on bottom:100%
+     plus a 5 px margin — so the upper bound is the READOUT's head, not the box's top. Both edges
+     are covered by one expression, which is why there is no flip: 50 + 16 px always fits.
+     🚨 COORDINATE SPACE (fb453 — the bug that shipped here twice). showAtt is handed LAYOUT px and
+     writes LAYOUT px; every number below is layout px too and NOTHING is converted a second time.
+     __vh() already divides by __zoomFix, and offsetWidth/offsetHeight are unzoomed — the same
+     convention fb454's route-list clamp reads offsetWidth under (measured at zoom 1.9024:
+     att.offsetHeight 50 while its rect is 95.11 px tall). DO NOT ADD AN LP() BELOW. */
+  function showAtt(a,xLayout,yLayout){ att.style.left=xLayout+'px';
+    att.classList.add('on'); updAtt(a);                       /* on + filled BEFORE measuring: display:none measures 0, and so does an empty .vv */
+    var M=6, H=att.offsetHeight||50, HEAD=(attV.offsetHeight||11)+5;   /* HEAD = the readout's box + its margin-bottom */
+    att.style.top=Math.max(HEAD+M, Math.min(yLayout, window.__vh()-H-M))+'px'; }
   function hideAtt(){ att.classList.remove('on'); }
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
