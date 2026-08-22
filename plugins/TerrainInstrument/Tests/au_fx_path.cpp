@@ -909,7 +909,7 @@ int main (int argc, char** argv)
                 // engine's `if (duck > 0.001f)` branch is not even entered at 0. So: if a cell is
                 // inert everywhere at the normal base, probe it again from ZERO before calling it
                 // unproven.
-                for (int op = 0; op < 2 && ! (bAud > kAudFloor && bAud - bEq > kAudMargin); ++op)
+                for (int op = 0; op < 2 && bAud <= kAudFloor; ++op)
                 {
                   const float pBase = (op == 0) ? kBase : 0.0f;
                   const float pTop  = pBase + kOff;
@@ -930,7 +930,12 @@ int main (int argc, char** argv)
                     const Render B = mtxRender (bc), C = mtxRender (cc);
                     const double eq = rel (B, C), aud = rel (B, A);
                     if (aud > bAud) { bAud = aud; bEq = eq; bType = t; bOp = op; }
-                    if (aud > kAudFloor && aud - eq > kAudMargin) break;   // live here — stop hunting
+                    // The search is for an operating point where the DIAL IS LIVE, and that is a
+                    // question about `aud` alone. Folding the margin in here would make a cell whose
+                    // route is WRONG (a large eq) keep hunting through all 16 Types and both
+                    // operating points looking for a null it can never get — which is every cell of
+                    // a --mutate run, and turns a 14-minute sweep into an overnight one.
+                    if (aud > kAudFloor) break;   // live here — stop hunting
                   }
                 }
                 ++cells;
