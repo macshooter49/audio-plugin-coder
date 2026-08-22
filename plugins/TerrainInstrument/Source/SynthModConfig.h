@@ -19,6 +19,7 @@
 #include "SynthLFO.h"
 #include <cmath>
 #include <algorithm>
+#include <array>
 
 namespace wc
 {
@@ -194,11 +195,27 @@ enum class ModDest : int
     LfoRateBase = EnvPBase + 192,   // fb196 — env/LFO on an LFO's RATE (10 dests, Hz mode)
     LfoPhaseBase = LfoRateBase + 10,   // fb245 — env/LFO on an LFO's PHASE (10 dests, read-phase shift 0..1)
     DstMorph = LfoPhaseBase + 10,      // fb340 — Distortion Morph (SYN_DST_SIG): the ABCD bank sweep / knee slot as a first-class dest (bible §6.7)
-    NumDests = DstMorph + 1
+    // ── fb453 — THE FX RACK JOINS THE MATRIX. 12 knobs per device (4 front dials incl. Mix,
+    //    then the 8 back knobs), kFxKinds(16) x kFxInstances(6) = 1,152. The block is a FIXED 12
+    //    even where a device has fewer knobs — the Filter has 4 and no back panel (fb384) — so a
+    //    hole costs one table row and buys arithmetic that never has to move again. APPEND-ONLY:
+    //    saved projects carry dest INTS, so nothing above this line may ever shift.
+    FxModBase = DstMorph + 1,
+    NumDests  = FxModBase + 16 * 6 * 12
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
     "fb340 - the JS data-mod-dest anchor for Morph is hardcoded 693 (index.html stampMorphDest); update BOTH or saved routes break");
+
+inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
+inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
+{ return (int) ModDest::FxModBase + (kind * kFxModInsts + inst) * kFxModKnobs + knob; }
+inline constexpr bool isFxModDest (int d) noexcept
+{ return d >= (int) ModDest::FxModBase && d < (int) ModDest::NumDests; }
+struct FxModAddr { int kind, inst, knob; };
+inline constexpr FxModAddr fxModDecode (int d) noexcept
+{ const int o = d - (int) ModDest::FxModBase;
+  return FxModAddr { o / (kFxModInsts * kFxModKnobs), (o / kFxModKnobs) % kFxModInsts, o % kFxModKnobs }; }
 
 // How a normalized modulation sum is converted to the parameter's real units.
 enum class ModDomain : int { Semitone = 0, Linear01, Bipolar };
@@ -209,8 +226,10 @@ struct DestInfo
     float     fullScale;   // value at depth=1, source=+1 (units depend on domain)
 };
 
-// Per-destination domain + full-scale span. Tunable; indices match ModDest.
-static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
+// The hand-written rows, one per legacy destination. fb453: this array now stops at FxModBase and
+// the FX rack's 1,152 rows are generated below — 1,152 identical hand-typed rows would be 1,152
+// chances to typo one, and every FX knob is a normalised 0..1 parameter anyway.
+static constexpr DestInfo kDestInfoBase[(int) ModDest::FxModBase] = {
     { ModDomain::Semitone, 48.0f },  // Cut1: +/-48 ST (4 oct) at full depth — musical, never 0 Hz
     { ModDomain::Semitone, 48.0f },  // Cut2
     { ModDomain::Linear01,  1.0f },  // Frame
@@ -910,6 +929,15 @@ static constexpr DestInfo kDestInfo[(int) ModDest::NumDests] = {
     { ModDomain::Linear01,  1.0f },  // LfoPhase10
     { ModDomain::Linear01,  1.0f },  // DstMorph (fb340 — index stays aligned with the JS anchor 693)
 };
+inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() noexcept
+{
+    std::array<DestInfo, (int) ModDest::NumDests> a {};
+    for (int i = 0; i < (int) ModDest::FxModBase; ++i) a[(size_t) i] = kDestInfoBase[i];
+    for (int i = (int) ModDest::FxModBase; i < (int) ModDest::NumDests; ++i)
+        a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
+    return a;
+}
+static constexpr auto kDestInfo = makeDestInfo();
 
 // ── Tempo-sync divisions. beatsPerCycle = quarter-notes spanned by one LFO cycle. ──
 //   syncedHz = (BPM/60) / beatsPerCycle.  Straight 1/4 -> 1 beat -> 2 Hz @ 120.
