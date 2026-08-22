@@ -15,6 +15,13 @@
 //   NODE_PATH=<scratchpad>/node_modules node Tests/fx4_ui.js            (page = Source/ui/public/index.html)
 //   FX4_UI_PAGE=/path/to/old/index.html node Tests/fx4_ui.js             (to prove it FAILS on the old tree)
 const puppeteer = require('puppeteer-core');
+const fs = require('fs');
+// fb452 — the EQ curve's grid is authored ONCE, in the engine. This gate reads kCurveBins out of
+// the header and holds the page to it: the day the two disagree, the drawer would silently sit on
+// a stale line with every DSP gate still green (fb373 — verify the path, not just the engine).
+const ENG = process.env.FX4_ENGINE_H || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/TerrainEqualizerFx.h';
+const ENG_BINS = (()=>{ const m=/kCurveBins\s*=\s*(\d+)/.exec(fs.readFileSync(ENG,'utf8')); return m?+m[1]:0; })();
+const NB = ENG_BINS;
 const P = process.env.FX4_UI_PAGE || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
 
 let pass=0, fail=0;
@@ -128,8 +135,8 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r1.mark.eqzPill==='Delta', 'the Equalizer has its Delta pill', r1.mark.eqzPill);
 
   // ── one frame of the REAL push shape, then tick: every window must redraw from it
-  const r2 = await pg.evaluate(()=>{
-    const curve=[]; for(let i=0;i<96;i++){ const hz=20*Math.pow(10,3*i/95); curve.push(-6*Math.exp(-Math.pow(Math.log(hz/90)/0.6,2))+5*Math.exp(-Math.pow(Math.log(hz/550)/0.5,2))+9/(1+Math.pow(12000/hz,2.2))); }
+  const r2 = await pg.evaluate((NB)=>{
+    const curve=[]; for(let i=0;i<NB;i++){ const hz=20*Math.pow(10,3*i/(NB-1)); curve.push(-6*Math.exp(-Math.pow(Math.log(hz/90)/0.6,2))+5*Math.exp(-Math.pow(Math.log(hz/550)/0.5,2))+9/(1+Math.pow(12000/hz,2.2))); }
     const knee=[]; for(let q=0;q<32;q++){ const x=-60+72*q/31; knee.push(x<-18?x:-18+(x+18)*0.25); }
     const six=(o)=>[o,o,o,o,o,o];
     window.__fx4VizPush={ eqz:six({lvl:0.8,hz:[90,550,3100,17000],db:[-6,5,0,9],curve}),
@@ -158,7 +165,16 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.needle=+document.querySelector('.fxr-core[data-core="wid"] .wid-r').getAttribute('x1');
     out.strobe=[...document.querySelectorAll('.fxr-core .dst-curve')].filter(p=>p.hasAttribute('opacity')).length;
     out.grText=document.querySelectorAll('.fxr-core[data-core="cmp"] text').length;
-    return out; });
+    // fb452 — the drawn polyline must have ONE VERTEX PER PUSHED BIN, and the page's own
+    // fallback constant must be the engine's grid.
+    out.vtx=(document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d').match(/[ML]/g)||[]).length;
+    // ... and a feed of a DIFFERENT length must still be CONSUMED, never dropped: that is the
+    // failure the old `curve.length===96` guard would have shipped silently.
+    const half=[]; for(let i=0;i<48;i++) half.push(-3+6*Math.sin(i/7));
+    window.__fx4VizPush.eqz=[{lvl:0.8,hz:[90,550,3100,17000],db:[-6,5,0,9],curve:half},null,null,null,null,null];
+    for(let i=0;i<8;i++) window.__fx4Tick();
+    out.vtxHalf=(document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d').match(/[ML]/g)||[]).length;
+    return out; }, NB);
   chk(r2.eqzMoved, 'Equalizer: the curve redraws from the push');
   chk(r2.nodeOnLine.every(v=>v<1.5), 'Equalizer: every node sits ON the drawn line (never hovering at its own gain)', 'off-line by '+r2.nodeOnLine.map(v=>v.toFixed(2)).join(','));
   chk(/rgb\(2[0-9]{2}, 2[0-9]{2}, 2[0-9]{2}\)|rgb\(255, 255, 255\)/.test(r2.nodeFill), 'Equalizer: nodes are FILLED WHITE (no dark "eye" centres)', r2.nodeFill);
@@ -170,6 +186,11 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(Math.abs(r2.needle-(113+73*0.4))<12, 'Widen: the correlation needle rides r', 'x='+r2.needle.toFixed(1));
   chk(r2.strobe===0, 'STROBE LAW: no .dst-curve carries an inline opacity', r2.strobe+' offenders');
   chk(r2.grText===0, 'Compress: no number on the card (Max: the press bar is the number)', r2.grText+' text nodes');
+  chk(ENG_BINS===192, 'fb452: the engine draws on 192 log bins (the envelope grid)', 'kCurveBins='+ENG_BINS);
+  const pageBins=(()=>{ const m=/FX4_EQ_BINS\s*=\s*(\d+)/.exec(fs.readFileSync(P,'utf8')); return m?+m[1]:-1; })();
+  chk(pageBins===ENG_BINS, 'the page\'s FX4_EQ_BINS IS the engine\'s kCurveBins (one authored grid)', 'page='+pageBins+' engine='+ENG_BINS);
+  chk(r2.vtx===ENG_BINS, 'the EQ curve draws ONE VERTEX PER PUSHED BIN', r2.vtx+' vertices for '+ENG_BINS+' bins');
+  chk(r2.vtxHalf===48, 'a curve of a DIFFERENT length is consumed, not silently dropped (fb373)', r2.vtxHalf+' vertices for a 48-long feed');
 
   // ── drag an EQ node with synthetic pointer events → the Hz + gain params are WRITTEN and the back knob moves
   const r3 = await pg.evaluate(()=>{

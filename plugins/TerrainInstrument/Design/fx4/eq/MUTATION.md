@@ -24,6 +24,43 @@ EQ_MUT_DEAD_CELL   exit=1  RESULT: 145 pass,  2 FAIL   <- fb425, and ONLY §Q se
 EQ_MUT_POLITE_CELL exit=1  RESULT: 146 pass,  1 FAIL   <- fb425, and ONLY §Q sees it
 EQ_MUT_MIX_WET     exit=1  RESULT: 139 pass,  8 FAIL   <- fb425
 EQ_MUT_FLAT_FOCUS  exit=1  RESULT: 144 pass,  3 FAIL   <- fb425, one dropdown OPTION deleted
+EQ_MUT_POINT_CURVE exit=1  RESULT: 156 pass,  3 FAIL   <- fb452, the DISPLAY mutant (below)
+```
+
+## fb452 — `EQ_MUT_POINT_CURVE`, the first mutant that breaks nothing you can hear
+
+Max, on the shipped fb449: *"it bounces up and down like a goofball when I drag a sharp notch."*
+The audio was perfect and every one of the 154 gates was green, because none of them watched the
+drawn curve MOVE. `pushCurve()` point-sampled 96 log bins; a bell narrower than a bin (0.104
+octave) sat between two samples, so the card drew whatever it happened to catch and the depth
+flickered as the notch walked. Measured with `Tests/eq_bounce.cpp`: **10.63 dB of bounce**, which
+is 11.7 px on the card at `fx4DbY`'s 1.1 px/dB.
+
+More bins alone does not fix it — measured, not assumed:
+
+```
+bins    bounce over one decade, Q x8 cut
+  96    10.63 dB   (11.7 px)   <- what shipped as fb449
+ 192     5.59 dB    (6.1 px)   <- the "obvious" fix, and still a goofball
+ 288     3.35 dB    (3.7 px)
+ 384     2.17 dB    (2.4 px)
+1536     0.17 dB    (0.2 px)   <- point sampling only gets honest here: 16x the 60 Hz wire
+```
+
+The fix decimates a fine sub-grid **by truth instead of by position**: 192 bins x 9 sub-frequencies,
+and a bin reports its CENTRE wherever the response is monotone across it (the old contract, kept
+bit-exact) and the local EXTREMUM wherever it actually contains one. Bounce after: **0.14 dB**.
+Cost, wall-clocked over 60 s of audio through the busiest 8-stage cascade: **0.069 % -> 0.095 %**
+of one core, because the cascade is now product-accumulated in linear and logged once per point
+instead of once per stage — 18x the resolution for a quarter of a percent.
+
+`-DEQ_MUT_POINT_CURVE` restores exactly the fb449 sampler and nothing else, so the audio is
+bit-identical and every DSP gate stays green. The three gates it must turn RED:
+
+```
+FAIL  a SHARP notch DRAGGED across the axis holds its drawn depth    5.62 dB of bounce (bar 0.5)
+FAIL     ... and that depth is REAL: a sine swept through that bin   drawn -27.33, sine -29.92 dB
+FAIL     ... same for a sharp BOOST: the drawn peak is a peak        drawn  27.33, sine  29.92 dB
 ```
 
 **The baseline is 147 pass / 0 FAIL.** (fb422 left one pre-existing §O failure — two unruled

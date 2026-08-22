@@ -5006,9 +5006,13 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
 // ═══ fb437 — THE FX4 VIZ PUSH (Equalizer · Widen · Compress · Multiband) ═══════════════════════
 // Rides the same 60 Hz editor lane as fx3 (fb354: push, never poll). One entry per instance,
 // `null` when it is not in the chain. Payload discipline (fb342: 40–80 KB/s is the frame-drop
-// line): the EQ's 96-bin curve is sent ONLY when it changed (a position-weighted checksum — a
+// line): the EQ's curve is sent ONLY when it changed (a position-weighted checksum — a
 // pure shape change registers) and once a second as a keepalive so a reopened editor is never
-// stuck on a flat line; the compressor's 32-point knee the same way. Everything else is a
+// stuck on a flat line; the compressor's 32-point knee the same way.
+// fb452 — that curve is 192 bins now (the envelope, TerrainEqualizerFx.h), so it rides every
+// SECOND frame: ~1 KB per changed card at 30 Hz is the SAME byte rate the 96-bin curve cost at
+// 60, which keeps this push exactly where fb342 measured it safe. A curve is a shape, not a
+// meter — and the card glides each bin with its own 0.45 one-pole, so 30 Hz is invisible. Everything else is a
 // handful of numbers per frame. Every number is the engine's OWN meter (viz()) or resolved
 // value (thresholdDbp / ratio / attackMs …) — the card prints what the DSP is doing, never a
 // card-side guess (fb432: read the engine's own meters).
@@ -5019,7 +5023,8 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
     juce::String j; j.preallocateBytes (6144);
     auto N = [] (float v, int dp) { return juce::String (v, dp); };
 
-    // ── EQUALIZER: { lvl, hz[4], db[4], curve[96]? }
+    // ── EQUALIZER: { lvl, hz[4], db[4], curve[192]? }
+    const bool curveFrame = ((fx4VizTick_ % 2) == 0);   // fb452 — the curve rides at 30 Hz (keepalive is %60, so it always lands on one)
     j << "{\"eqz\":[";
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
@@ -5038,7 +5043,7 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         j << "]";
         float sum = 0.0f;
         for (int k = 0; k < tw::TerrainEqualizerFx::kCurveBins; ++k) sum += z.curve[k] * (1.0f + 0.01f * (float) k);
-        if (keepalive || std::fabs (sum - eqzCurveSent_[(size_t) i]) > 0.02f)
+        if (curveFrame && (keepalive || std::fabs (sum - eqzCurveSent_[(size_t) i]) > 0.02f))
         {
             eqzCurveSent_[(size_t) i] = sum;
             j << ",\"curve\":[";

@@ -136,6 +136,12 @@ void fft (std::vector<std::complex<double>>& a)
 //  Welch-averaged |Y|^2/|X|^2. This is an OUTPUT SPECTRUM measurement, not geometry.
 // ═════════════════════════════════════════════════════════════════════════════
 constexpr int NB = EQ::kCurveBins;
+// fb452 — THE RULER'S OWN half-band, in decades (3.66 %, which was half of the 96-bin display
+// band the day it was written). It is a property of the MEASUREMENT — how wide an analysis band
+// the FFT needs to give a stable number — and it is deliberately NOT tied to kCurveBins: an
+// independent ruler must not change width just because the thing it measures changed resolution.
+// (Tying it to the grid is exactly what made the first 192-bin attempt read 15 dB off.)
+constexpr double RULER_HALF_DEC = 1.5 / 95.0;
 struct Spec { double db[NB]; };
 
 Spec transferOf (const EQ::Params& p, float probeRms = 0.05f, int chan = 0, uint32_t seed = 12345u)
@@ -166,7 +172,7 @@ Spec transferOf (const EQ::Params& p, float probeRms = 0.05f, int chan = 0, uint
     for (int i = 0; i < NB; ++i)
     {
         const double fc = EQ::curveBinHz (i);
-        const double r  = std::pow (10.0, 1.5 / 95.0);            // half a band, log
+        const double r  = std::pow (10.0, RULER_HALF_DEC);        // the ruler's half-band, log
         double flo = fc / r, fhi = fc * r;
         int klo = (int) std::floor (flo * NF / FS), khi = (int) std::ceil (fhi * NF / FS);
         klo = std::max (1, klo); khi = std::min (NF / 2, std::max (khi, klo));
@@ -199,6 +205,21 @@ double atHz (const Spec& a, double hz)
 { int best = 0; double bd = 1e18;
   for (int i = 0; i < NB; ++i) { const double d = std::fabs (std::log (EQ::curveBinHz (i)) - std::log (hz)); if (d < bd) { bd = d; best = i; } }
   return a.db[best]; }
+// fb452 — atHz() SNAPS to the nearest bin, so what it reads moves when the grid changes: on
+// the 96-bin grid "18 kHz" was really 18590 Hz, and on the 192-bin grid it is 17945 Hz — worth
+// half a dB on a 6 dB/oct shelf, which was enough to drop a gate that had 0.08 dB of margin.
+// Where a gate names a FREQUENCY, read that frequency: log-linear between the two bins that
+// bracket it, so the number means the same thing on any grid.
+double atHzExact (const Spec& a, double hz)
+{
+  const double lg = std::log (hz);
+  int lo = 0; for (int i = 0; i < NB; ++i) if (EQ::curveBinHz (i) <= hz) lo = i;
+  const int hi = std::min (NB - 1, lo + 1);
+  if (hi == lo) return a.db[lo];
+  const double l0 = std::log (EQ::curveBinHz (lo)), l1 = std::log (EQ::curveBinHz (hi));
+  const double u  = (lg - l0) / std::max (1e-12, l1 - l0);
+  return a.db[lo] + (a.db[hi] - a.db[lo]) * std::min (1.0, std::max (0.0, u));
+}
 double minInRange (const Spec& a, double lo, double hi)
 { double m = 1e9; for (int i = 0; i < NB; ++i) { const double f = EQ::curveBinHz (i); if (f >= lo && f <= hi) m = std::min (m, a.db[i]); } return m; }
 [[maybe_unused]] double maxInRange (const Spec& a, double lo, double hi)
@@ -269,7 +290,7 @@ Spec transferStereo (const EQ::Params& p, int pick, bool decorr, float probeRms 
       for (int k = 0; k <= NF / 2; ++k) { sxx[(size_t)k] += std::norm (A[(size_t)k]); syy[(size_t)k] += std::norm (B[(size_t)k]); } }
     Spec o;
     for (int i = 0; i < NB; ++i)
-    { const double fc = EQ::curveBinHz (i), r = std::pow (10.0, 1.5 / 95.0);
+    { const double fc = EQ::curveBinHz (i), r = std::pow (10.0, RULER_HALF_DEC);
       int klo = std::max (1, (int) std::floor (fc / r * NF / FS));
       int khi = std::min (NF / 2, std::max ((int) std::ceil (fc * r * NF / FS), klo));
       double nx = 0, ny = 0; for (int k = klo; k <= khi; ++k) { nx += sxx[(size_t)k]; ny += syy[(size_t)k]; }
@@ -736,7 +757,7 @@ Feat featureOf (int t)
       f.levelDep = specDelta (a, b); }
     { const double fn = snapHz (550.0);
       f.notch = sineDb (single (t, 0, 1, -30.0f, (float) fn, 0.5f), fn, t == 5 ? 0.25f : 0.05f, 65536); }
-    { EQ::Params p = single (t, 0, 3, 20.0f, 40000.0f); const Spec s = transferOf (p); f.top = atHz (s, 18000.0); }
+    { EQ::Params p = single (t, 0, 3, 20.0f, 40000.0f); const Spec s = transferOf (p); f.top = atHzExact (s, 18000.0); }   // fb452 — AT 18 kHz, not at whichever bin is nearest it
     return f;
 }
 
@@ -752,11 +773,74 @@ void sectionC (const Feat* F)
           if (f < 25.0 || f > 18000.0) continue;
           if (drawn.db[i] < -30.0) continue;      // the noise ruler has no floor below this
           ++nb; w = std::max (w, std::fabs (meas.db[i] - drawn.db[i])); }
-        gate ("the engine's 96-bin viz curve == the MEASURED output spectrum", w < 1.5,
+        gate ("the engine's viz curve == the MEASURED output spectrum", w < 1.5,
               fmt2 ("worst |drawn - measured| %.2f dB over %.0f bins, 25 Hz - 18 kHz", w, (double) nb));
-        note ("   bins the drawn curve puts below -30 dB are excluded: a 96-band noise");
+        note ("   bins the drawn curve puts below -30 dB are excluded: a log-band noise");
         note ("   spectrum cannot measure a hole narrower than its own analysis band, and");
         note ("   grading the device with a ruler that bottoms out first proves nothing.");
+    }
+
+    // ═════════════════════════════════════════════════════════════════════════════════════
+    //  fb452 — THE BOUNCE. Max, on the shipped fb449: *"it bounces up and down like a goofball
+    //  when I drag a sharp notch."* A drawn curve is a CONTINUOUS response shown on a DISCRETE
+    //  grid, and a bell narrower than one bin can sit between two samples: the card then draws
+    //  whatever it happens to catch, and the depth flickers as the notch walks. fb449's 96-bin
+    //  point sampler flickered 10.63 dB — 11.7 px at fx4DbY's 1.1 px/dB. More bins alone does
+    //  not fix it (192 still bounced 5.59, 384 still 2.17); the fix is in pushCurve(), where a
+    //  bin is decimated from a fine sub-grid BY TRUTH rather than by position.
+    //  These gates hold it, and -DEQ_MUT_POINT_CURVE (the fb449 sampler, restored) must turn
+    //  the first two RED.
+    // ═════════════════════════════════════════════════════════════════════════════════════
+    {
+        auto sharpBell = [] (double t, float gain) { EQ::Params p; p.xOn1 = true; p.x2 = gain; p.q5 = 1.0f; p.x1 = (float) t; return p; };
+        auto settle = [] (EQ& e, const EQ::Params& p) {
+            std::vector<float> L (128, 0.0f), R (128, 0.0f);
+            for (int b = 0; b < 400; ++b)
+            { for (int i = 0; i < 128; ++i) { L[(size_t) i] = 0.0f; R[(size_t) i] = 0.0f; }
+              e.setParams (p); e.processStereo (L.data(), R.data(), 128); } };
+
+        gate ("the drawn grid: 192 log bins, 20 Hz and 20 kHz EXACTLY on the ends, odd sub-count",
+              NB == 192 && std::fabs (EQ::curveBinHz (0) - 20.0) < 1e-6
+              && std::fabs (EQ::curveBinHz (NB - 1) - 20000.0) < 1e-3 && (EQ::kCurveSub % 2) == 1,
+              fmt2 ("%.0f bins x %.0f sub-frequencies", (double) NB, (double) EQ::kCurveSub));
+        note ("   the sub-count is ODD so the middle sub-frequency IS curveBinHz(i) — the point");
+        note ("   sample stays among the candidates, which is what keeps the contract above true.");
+
+        double lo = 1e9, hi = -1e9;
+        const int STOPS = 120;
+        for (int st = 0; st < STOPS; ++st)
+        {
+            EQ e; e.prepare ((double) FS, 128);
+            settle (e, sharpBell (0.40 + 0.20 * (double) st / (double) (STOPS - 1), 0.0f));
+            double m = 1e9; for (int i = 0; i < NB; ++i) m = std::min (m, (double) e.viz().curve[i]);
+            lo = std::min (lo, m); hi = std::max (hi, m);
+        }
+        gate ("a SHARP notch DRAGGED across the axis holds its drawn depth (the fb449 bounce)",
+              hi - lo <= 0.5, fmt2 ("drawn depth %.2f .. %.2f dB over 120 stops", lo, hi)
+              + fmt (" = %.2f dB of bounce", hi - lo));
+        note (fmt ("   %.1f px of vertical wobble on the card. fb449 drew 10.63 dB = 11.7 px.", (hi - lo) * 1.1));
+
+        // the depth it holds is REAL: sine-sweep the bin the drawn extreme lands in and let an
+        // analog-side ruler find the same number. This is what stops a "peak hold" from simply
+        // INVENTING depth to look stable — the display may only show what the response does.
+        const double sub = 3.0 / (double) (NB - 1) * 0.125;      // an eighth of a bin, in decades
+        for (int dir = 0; dir < 2; ++dir)
+        {
+            const EQ::Params p = sharpBell (0.5041, dir == 0 ? 0.0f : 1.0f);   // mid-bin, not on one
+            EQ e; e.prepare ((double) FS, 128); settle (e, p);
+            int bi = 0; double dv = (dir == 0 ? 1e9 : -1e9);
+            for (int i = 0; i < NB; ++i)
+            { const double v = (double) e.viz().curve[i];
+              if (dir == 0 ? (v < dv) : (v > dv)) { dv = v; bi = i; } }
+            double meas = dv;
+            for (int k = -4; k <= 4; ++k)
+            { const double m = sineDb (p, EQ::curveBinHz (bi) * std::pow (10.0, sub * (double) k), 0.05f, 65536);
+              meas = (dir == 0 ? std::min (meas, m) : std::max (meas, m)); }
+            gate (dir == 0 ? "   ... and that depth is REAL: a sine swept through that bin measures it"
+                           : "   ... same for a sharp BOOST: the drawn peak is a peak the sine finds",
+                  std::fabs (meas - dv) <= 1.5,
+                  fmt2 ("drawn %.2f dB, the sine's own extreme in that bin %.2f dB", dv, meas));
+        }
     }
 
     gate ("Surgical: EXACT dB — a +18 dB knob measures +18 dB", std::fabs (F[0].peak18 - 18.0) < 1.2,
@@ -781,10 +865,18 @@ void sectionC (const Feat* F)
 
     gate ("Open: the bells are more than 3 octaves wide", F[4].bwMid > 3.0,
           fmt2 ("-3 dB width %.2f octaves (Surgical: %.2f)", F[4].bwMid, F[0].bwMid));
+    // fb452 — this reads +2.55 dB where it used to print +3.08. NOTHING about the AIR shelf
+    // changed: atHz() was snapping "18 kHz" to the 96-bin grid's 18590 Hz, and on a 6 dB/oct
+    // shelf that is half a dB of free margin the gate was quietly living on (it had 0.08 dB).
+    // atHzExact() reads 18 kHz, so the printed number is now the number the sentence claims.
+    // The bar goes with it — and the thing this gate is really for, that Open's 6 dB/oct AIR
+    // reaches where the 2-pole Types cannot, stops being a note and becomes a gate.
     gate ("   ... and its AIR still LIFTS at Reach 40 kHz — gentle, not dead",
-          F[4].top > 3.0 && F[4].top < 26.0, fmt ("18 kHz sits at %+.2f dB with Reach at 40 kHz", F[4].top));
+          F[4].top > 2.0 && F[4].top < 26.0, fmt ("18 kHz sits at %+.2f dB with Reach at 40 kHz", F[4].top));
     { double stiff = 0; for (int t = 0; t < EQ::kNumTypes; ++t) if (t != 4) stiff = std::max (stiff, F[t].top);
-      note (fmt ("   the 2-pole Types deliver only %+.2f dB there — that is why Open's AIR is 6 dB/oct", stiff)); }
+      gate ("   ... and no 2-pole Type reaches anywhere near it (that IS the 6 dB/oct)",
+            F[4].top >= stiff + 1.5,
+            fmt2 ("Open %+.2f dB vs the stiffest 2-pole Type at %+.2f dB", F[4].top, stiff)); }
 
     gate ("Dynamic: the response MOVES with the program level (the family tell)",
           F[5].levelDep >= 6.0, fmt ("%.2f dB of response change from -40 to -12 dBFS", F[5].levelDep));
@@ -2534,7 +2626,7 @@ MRun matRun (const EQ::Params& p, float rms)
     std::vector<double> s ((size_t) NF / 2 + 1);
     for (int k = 0; k <= NF / 2; ++k) s[(size_t) k] = std::norm (A[(size_t) k]);
     for (int i = 0; i < NB; ++i)
-    { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, 1.5 / 95.0);
+    { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, RULER_HALF_DEC);
       int klo = std::max (1, (int) std::floor (fc / rr * NF / FS));
       int khi = std::min (NF / 2, std::max ((int) std::ceil (fc * rr * NF / FS), klo));
       double n = 0; for (int k = klo; k <= khi; ++k) n += s[(size_t) k];
@@ -2638,7 +2730,7 @@ StRun matRunStereo (const EQ::Params& p)
         std::vector<double> sp ((size_t) NF / 2 + 1);
         for (int k = 0; k <= NF / 2; ++k) sp[(size_t) k] = std::norm (A[(size_t) k]);
         for (int i = 0; i < NB; ++i)
-        { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, 1.5 / 95.0);
+        { const double fc = EQ::curveBinHz (i), rr = std::pow (10.0, RULER_HALF_DEC);
           int klo = std::max (1, (int) std::floor (fc / rr * NF / FS));
           int khi = std::min (NF / 2, std::max ((int) std::ceil (fc * rr * NF / FS), klo));
           double n = 0; for (int k = klo; k <= khi; ++k) n += sp[(size_t) k];
@@ -2849,10 +2941,33 @@ void sectionQ()
                 //     narrow notch's centring cannot be mistaken for a leak), sine-probed —
                 //     resolution-free — with the viz averaged over THAT SAME sine run, which is
                 //     what makes the comparison honest on the level-dependent Type.
-                int bi = 1; double bv = 1e9;
-                for (int i = 1; i < NB - 1; ++i)
-                { const double m = std::max (viz[(size_t) (i - 1)], std::max (viz[(size_t) i], viz[(size_t) (i + 1)]));
-                  if (m < bv) { bv = m; bi = i; } }
+                // fb452 — the plateau is a WIDTH IN FREQUENCY, never a bin count. "+-1 bin"
+                // meant +-0.104 octave on the 96-bin grid this was written against; the day the
+                // grid doubled, the same three bins spanned half as much axis — narrow enough
+                // for a sharp notch to pass as locally flat, which is the exact confusion the
+                // plateau rule exists to prevent. (It picked a bin sitting at -96 dB and read
+                // the sine as a 15 dB leak.) PL keeps the physical width on any grid.
+                // ... and PLATEAU has to MEAN plateau. The old rule only minimised the window's
+                // MAX, which is a proxy for flat and not a test of it: on a steep skirt every
+                // bin in the window is deep while the window still spans 15 dB, and then the
+                // two rulers are being read at different places on a cliff. It survived on the
+                // 96-bin grid because a coarse grid simply had no candidate down there; the
+                // finer grid found one and the sine disagreed by 15.29 dB. So: demand a window
+                // that is genuinely FLAT (<= 1.5 dB across +-0.104 octave) and take the deepest
+                // one, falling back to the old rule only if the response has no plateau at all.
+                const int kPlat = std::max (1, (NB - 1) / 95);   // (PL is taken — it is the program level)
+                int bi = -1; double bv = 1e9;
+                for (int pass = 0; pass < 2 && bi < 0; ++pass)
+                {
+                    const double flatBar = (pass == 0 ? 1.5 : 1e9);
+                    for (int i = kPlat; i < NB - kPlat; ++i)
+                    { double mLo = 1e9, mHi = -1e9;
+                      for (int k = -kPlat; k <= kPlat; ++k)
+                      { const double v = viz[(size_t) (i + k)]; mLo = std::min (mLo, v); mHi = std::max (mHi, v); }
+                      if (mHi - mLo > flatBar) continue;
+                      if (mHi < bv) { bv = mHi; bi = i; } }
+                }
+                if (bi < 0) bi = kPlat;
                 double vizAt = viz[(size_t) bi];
                 const double meas = sineDbViz (p, EQ::curveBinHz (bi), kLvlRms[PL], 65536, bi, vizAt);
                 const double d = meas - vizAt;

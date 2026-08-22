@@ -695,7 +695,7 @@ var CORES={
 
             /* EQUALIZER — THE LIVING CURVE. The filter card's spectrum underneath (the SAME white
                7 % fill, the SAME FFT via __fltBinMag), the house white line as the summed response
-               drawn from the engine's own 96-bin curve (evaluated from its LIVE ramped
+               drawn from the engine's own 192-bin curve (evaluated from its LIVE ramped
                coefficients, so it can never disagree with the audio), a purple fill+glow that
                breathe with the level, and FOUR NODES: white, filled, small (Max: "fill the dots,
                make them white, slightly smaller") and pinned ON THE DRAWN LINE at each band's
@@ -977,7 +977,7 @@ window.__setSynParam=function(id,norm){ try{
           function fx4DbY(db){ return Math.max(3,Math.min(75,FX4_CY-db*1.1)); }
           function fx4EffDb(c,m){ if(m>=0.999) return c; var lin=(1-m)+m*Math.pow(10,c/20); return 20*Math.log10(Math.max(1e-6,Math.abs(lin))); }
           function fx4DrawEqz(core,dev,f){
-            var st=dev.__st||(dev.__st={}); var N=96; if(!st.c){ st.c=new Float32Array(N); }
+            var st=dev.__st||(dev.__st={}); var N=(f&&f.curve&&f.curve.length>1)?f.curve.length:192; if(!st.c||st.c.length!==N){ st.c=new Float32Array(N); }
             if(f&&f.curve&&f.curve.length===N) st.src=f.curve;                 // the C++ sends it only on change
             st.g=fx4Gl(st,'g',f?fx4C01(f.lvl):0,0.18);
             fx4SetA(core.querySelector('.eqz-glow'),'opacity',(0.05+0.30*st.g).toFixed(3));

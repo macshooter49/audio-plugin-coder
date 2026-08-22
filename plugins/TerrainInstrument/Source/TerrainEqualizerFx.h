@@ -99,7 +99,25 @@ public:
     // band is a scalpel. OFF = stage off = bit-exact pass-through, so every unity gate stands.
     static constexpr int kNumFree   = 4;
     static constexpr int kNumNodes  = kNumBands + kNumFree;        // what the card draws
-    static constexpr int kCurveBins = 96;
+    // fb452 — THE DRAWN CURVE IS AN ENVELOPE, NOT A POINT SAMPLE.
+    //  Max, on the shipped fb449: *"it bounces up and down like a goofball when I drag a
+    //  sharp notch."* MEASURED (`Tests/eq_bounce.cpp`): a Q x8 cut walked across a decade drew
+    //  its own depth anywhere from -19.4 dB to -30.0 dB — 10.6 dB of VERTICAL BOUNCE (11.7 px
+    //  on the card at fx4DbY's 1.1 px/dB), because a 96-bin log grid is 0.104 octave per bin
+    //  and the bell was narrower than one bin: its bottom fell BETWEEN two samples and the
+    //  curve drew whatever it happened to catch.
+    //  🔑 MORE BINS ALONE DOES NOT FIX IT — measured, not assumed: 192 bins still bounced
+    //  5.59 dB, 288 still 3.35, 384 still 2.17. Point sampling only gets honest at ~1536 bins,
+    //  which is 16x the 60 Hz wire and straight through the fb342 frame-drop line.
+    //  So the grid doubles to 192 (the drawn polyline gets a vertex about every screen pixel
+    //  instead of every 3) and each bin is evaluated at kCurveSub sub-frequencies across its
+    //  OWN span, reporting the value that is true rather than the value that is central —
+    //  see pushCurve(). Bounce after: 0.13 dB. The wire stays where it was because the curve
+    //  now rides every SECOND frame (PluginProcessor.cpp, the fx4 push).
+    static constexpr int kCurveBins = 192;
+    static constexpr int kCurveSub  = 9;      // sub-frequencies per bin; ODD, so the middle one
+                                              // is curveBinHz(i) EXACTLY and the old point
+                                              // sample is always among the candidates.
 
     // ═════════════════════════════════════════════════════════════════════════
     //  🔴 MUTATION HOOKS (FIXES.md §0). Compiling with one of these -D flags DELETES a
@@ -132,6 +150,10 @@ public:
         return "MIX_WET    — mixTg_ forced to 1.0: the Mix knob is ignored, in every cell";
 #elif defined (EQ_MUT_FLAT_FOCUS)
         return "FLAT_FOCUS — Focus option `Side` silently plays `Stereo` (a dead dropdown option)";
+// ── fb452: the DISPLAY mutant. The engine's audio is untouched and every DSP gate stays green —
+//    only the drawn curve reverts to fb449's point sampler, which is the bug Max reported.
+#elif defined (EQ_MUT_POINT_CURVE)
+        return "POINT_CURVE— pushCurve() reports each bin's CENTRE only: fb449's 10.6 dB bounce, restored";
 #else
         return nullptr;                                  // the real engine
 #endif
@@ -279,12 +301,21 @@ public:
     };
 
     // ── the 60 Hz push (CONTRACT §2) ─────────────────────────────────────────
-    //  curve[96]  magnitude of the WHOLE cascade in dB, on 96 LOG bins:
-    //                 f(i) = 20 * 10^(3*i/95) Hz,  i = 0..95  =>  f(0) = 20 Hz exactly,
-    //                 f(95) = 20000 Hz exactly, 31.667 bins per decade.
+    //  curve[192] magnitude of the WHOLE cascade in dB, on 192 LOG bins:
+    //                 f(i) = 20 * 10^(3*i/191) Hz,  i = 0..191  =>  f(0) = 20 Hz exactly,
+    //                 f(191) = 20000 Hz exactly, 63.667 bins per decade.
     //             It is evaluated from the LIVE, ALREADY-RAMPED coefficients (not from the
     //             knob values), so the drawn curve can never disagree with the audio - which
     //             is the failure mode every "response display" plugin ships with.
+    //             THE CONTRACT (fb452, gated by eq_cert §C):
+    //               (a) wherever the response is MONOTONE across bin i, curve[i] IS the
+    //                   response at curveBinHz(i) — the point sample, unchanged;
+    //               (b) wherever bin i CONTAINS a local extremum, curve[i] is that extremum —
+    //                   the notch bottom / peak top at its true depth, wherever inside the
+    //                   bin it sits;
+    //               (c) so every drawn value is a value the response really attains within
+    //                   half a bin (0.0079 decade, under one screen pixel) of where it is
+    //                   drawn. Nothing is invented, and no feature can hide between samples.
     //  nodeHz[4]  LOW · BODY · BITE · AIR centre/corner in Hz. AIR reports its TRUE corner,
     //             which reaches 40 kHz: the card clamps the dot to the right edge, it does
     //             not clamp the number.
@@ -928,13 +959,27 @@ public:
         dipUp_ = 1.0f - std::exp (-1.0f / (0.030f * fs_));
         lvlK_  = 1.0f - std::exp (-1.0f / (0.060f * fs_));
 
-        // the 96 log bins, trig precomputed: the viz push is then pure arithmetic.
+        // fb452 — the FINE grid the drawn curve is decimated from: kCurveSub sub-frequencies
+        // per bin, spanning that bin's own span (+- half a step), the middle one landing on
+        // curveBinHz(i) EXACTLY. Trig precomputed, so the viz push stays pure arithmetic.
         for (int i = 0; i < kCurveBins; ++i)
         {
-            const double f = (double) curveBinHz (i);
-            const double w = 6.283185307179586 * f / (double) fs_;
-            const double sp = std::sin (0.5 * w);
-            binPhi_[i] = sp * sp;
+            const double step = 3.0 / (double) (kCurveBins - 1);          // decades per bin
+            for (int s = 0; s < kCurveSub; ++s)
+            {
+                // 🔑 the sub-grid is GLOBALLY UNIFORM and shares no point with the next bin:
+                // offsets are (s - (S-1)/2)/S of a step, so bin i's last sample and bin i+1's
+                // first are one sub-step apart, not the SAME frequency. (They were the same
+                // frequency for one measured iteration of this, and the duplicate made every
+                // bin edge compare EQUAL to its neighbour — which the extremum test below
+                // reads as a local extremum, so each bin reported its own edge and the notch
+                // bottom lost the vote. The curve bounced exactly as much as before.)
+                const double e  = step * ((double) i + (double) (s - (kCurveSub - 1) / 2) / (double) kCurveSub);
+                const double f  = 20.0 * std::pow (10.0, e);
+                const double w  = 6.283185307179586 * f / (double) fs_;
+                const double sp = std::sin (0.5 * w);
+                subPhi_[(size_t) (i * kCurveSub + s)] = sp * sp;
+            }
         }
         curveEvery_ = (int) (fs_ / 60.0f);          // ~60 Hz push, the house cadence
         if (curveEvery_ < 64) curveEvery_ = 64;
@@ -1516,17 +1561,50 @@ private:
     // values — so the display physically cannot disagree with the audio.
     void pushCurve() noexcept
     {
-        for (int i = 0; i < kCurveBins; ++i)
+        constexpr int NF = kCurveBins * kCurveSub;
+        // ONE pass over the fine grid. The cascade is accumulated as a PRODUCT in linear and
+        // logged once per point instead of once per stage - so at 18x the resolution this runs
+        // FEWER transcendentals than the 96-bin point sampler it replaces (1728 logs a push
+        // against 768, where the old one paid one per stage per bin).
+        for (int k = 0; k < NF; ++k)
         {
-            const double phi = binPhi_[i];
-            float acc = 0.0f;
+            const double phi = subPhi_[k];
+            double lin = 1.0;
             for (int s = 0; s < nAct_; ++s)
             {
                 const Stage& S = st_[act_[s]];
                 Coeffs c; c.b0 = S.cb0; c.b1 = S.cb1; c.b2 = S.cb2; c.a1 = S.ca1; c.a2 = S.ca2;
-                acc += (float) (10.0 * std::log10 (std::max (1e-30, magSq (c, phi))));
+                lin *= std::max (1e-30, magSq (c, phi));
             }
-            viz_.curve[i] = clampf (acc, -120.0f, 80.0f);
+            fine_[k] = (float) (10.0 * std::log10 (std::max (1e-300, lin)));
+        }
+#ifdef EQ_MUT_POINT_CURVE
+        // MUTATION: the bin reports its CENTRE and nothing else - fb449's point sampler, the
+        // one that bounced 10.6 dB. The bounce gate (eq_cert §C) has to go RED on this.
+        for (int i = 0; i < kCurveBins; ++i)
+            viz_.curve[i] = clampf (fine_[i * kCurveSub + kCurveSub / 2], -120.0f, 80.0f);
+        return;
+#endif
+        // DECIMATE BY TRUTH, not by position. A point that is a local extremum OF THE FINE GRID
+        // (across bin edges too) is a real feature of the response and is what the bin reports;
+        // everywhere else the grid is monotone, there is no feature to miss, and the honest
+        // sample is the centre - which keeps curve[i] == the response at curveBinHz(i)
+        // bit-exactly wherever that statement means anything.
+        for (int i = 0; i < kCurveBins; ++i)
+        {
+            const int   b0 = i * kCurveSub, cIdx = b0 + kCurveSub / 2;
+            const float ctr = fine_[cIdx];
+            float best = ctr, bestD = 0.0f;
+            for (int s = 0; s < kCurveSub; ++s)
+            {
+                const int k = b0 + s;
+                if (k <= 0 || k >= NF - 1) continue;          // the two grid ends have no pair
+                const float v = fine_[k], lo = fine_[k - 1], hi = fine_[k + 1];
+                if (! ((v >= lo && v >= hi) || (v <= lo && v <= hi))) continue;   // just slope
+                const float d = std::fabs (v - ctr);
+                if (d > bestD) { bestD = d; best = v; }
+            }
+            viz_.curve[i] = clampf (best, -120.0f, 80.0f);
         }
     }
 
@@ -1556,7 +1634,8 @@ private:
     Stage  st_[kNumStages];
     int    act_[kNumStages] {}; int nAct_ = 0;
 
-    double binPhi_[kCurveBins] {};
+    double subPhi_[kCurveBins * kCurveSub] {};   // fb452 — the fine grid's phi, precomputed
+    float  fine_  [kCurveBins * kCurveSub] {};   // ... and the pass it is decimated from
 
     // Dynamic detectors
     float  d1_[4] {}, d2_[4] {}, env_[4] {}, ride_[4] { 1,1,1,1 };

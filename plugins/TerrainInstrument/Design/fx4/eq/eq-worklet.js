@@ -16,7 +16,7 @@
 //                          f1: 0.5, f2: 0.5, f3: 0.5, mix: 1,
 //                          b1: 0.5, b2: 0.5, b3: 0.5, b4: 0.5,
 //                          b5: 0.5, b6: 0.5, b7: 0.5, b8: 0.5 });
-//    eq.port.onmessage = e => drawCurve(e.data.curve);   // 96 log bins, 20 Hz - 20 kHz
+//    eq.port.onmessage = e => drawCurve(e.data.curve);   // 192 log bins, 20 Hz - 20 kHz
 //
 //  EVERY DEFAULT IS 0.5 AND 0.5 IS NEUTRAL, so the device boots flat and transparent.
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -125,7 +125,7 @@ const BAND_LO = [20, 100, 700, 6000], BAND_HI = [500, 3000, 14000, 40000];
 const DB_SPAN = 30, SLANT_SPAN = 24, AMOUNT_MAX = 2;
 const Q_MIN = 0.05, Q_MAX = 90, G_CEIL = 72, G_FLOOR = -90;
 const DESIGN_BLK = 64, DET_CAL = 14, MAX_RING_SEC = 3;
-const CURVE_BINS = 96;
+const CURVE_BINS = 192;   // fb452 — the envelope grid (TerrainEqualizerFx.h::kCurveBins)
 
 const clamp = (v, a, b) => v < a ? a : (v > b ? b : v);
 const bandHz = (b, t) => BAND_LO[b] * Math.pow(BAND_HI[b] / BAND_LO[b], clamp(t, 0, 1));
