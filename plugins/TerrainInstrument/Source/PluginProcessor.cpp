@@ -5322,6 +5322,34 @@ void TerrainInstrumentAudioProcessor::cacheSendRefs()
         }
 }
 
+// ═══ fb453 — the rack's modulation destinations resolved to the parameter pointers the rack
+// ALREADY reads. One pointer per (kind, instance, knob), built from the GENERATED map so the
+// dial and its destination stay authored in one place. Message thread only: it builds ID strings.
+//
+// fb373 (verify the PATH, not just the engine): a getRawParameterValue() that returns null here
+// is EXACTLY the failure this law is about — the knob renders, the route saves, every gate stays
+// green, and the modulation never arrives. So the resolved count is kept and asserted.
+void TerrainInstrumentAudioProcessor::cacheFxModRefs()
+{
+    int resolved = 0;
+    for (int k = 0; k < wc::kFxModKinds; ++k)
+      for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+        for (int n = 0; n < wc::kFxModKnobs; ++n)
+        {
+            fxModRef_[k][i][n] = nullptr;
+            if (kFxModLeaf[k][n] == nullptr) continue;    // a hole — the Filter has no back panel
+            const juce::String id = juce::String (kFxModTag[k])
+                                  + (i == 0 ? juce::String() : juce::String (i + 1))
+                                  + "_" + kFxModLeaf[k][n];
+            auto* ref = apvts.getRawParameterValue (id);
+            jassert (ref != nullptr);                     // fb373 — a silent null = a dead knob
+            fxModRef_[k][i][n] = ref;
+            if (ref != nullptr) ++resolved;
+        }
+    fxModRefsResolved_ = resolved;
+    jassert (resolved == kFxModLive * ParameterIDs::kFxInstances);   // 184 x 6 = 1,104
+}
+
 // ═══ fb413 — CHORUS · FLANGER · PHASER refs. One cache, three devices: they share a chassis,
 // so they share a shape, and a single routine is one place to get the grammar right.
 void TerrainInstrumentAudioProcessor::cacheFx3Refs()
@@ -6157,6 +6185,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     cacheUtlRefs();      // fb444 — Utility's six-pill roster
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
+    cacheFxModRefs();    // fb453 — every rack dial's parameter, for the modulation matrix
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
     rebuildChainOrder();
@@ -8452,6 +8481,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (int s = 0; s < numSamples; ++s) flowLfo_[i].processSample();   // advance to track time
         }
     }
+
+    // ── fb453 — THE RACK'S MODULATION. LFO ADDS, ENV OWNS: the same law flowKnob() applies to the
+    //    FLOW knobs (fb184), so a modulated rack knob behaves exactly like a modulated FLOW knob.
+    //    Walked ONCE over the <=128 assignments — the 1,152 destinations are never iterated.
+    //
+    //    🚨 PLACEMENT IS LOAD-BEARING. This sits AFTER the global LFO bank is advanced (directly
+    //    above — otherwise every route would read last block's phase) and BEFORE pushFx3Params()
+    //    below, which is the ONE call where the rack reads its parameters. Built after that call
+    //    — next to flowKnob(), where the math came from — it would hand the rack the PREVIOUS
+    //    block's modulation and nothing at all on the first block. A route must bite on block 1.
+    //
+    //    Keyed BY POINTER, so the Delay's front "Time" and back "Time L" — one parameter,
+    //    SYN_DLY_TIME, since fb306-310's L/R link — land in ONE slot and SUM. No special case.
+    //    The math itself lives in FxModValue.h so fxmod_cert drives the shipped code, not a copy.
+    wc::buildFxMod (fxMod_, synModCfg,
+        [this] (int k, int i, int n) -> const void* { return fxModRef_[k][i][n]; },
+        [] (const void* p) { return static_cast<const std::atomic<float>*> (p)->load(); },
+        [this] (int si)    { return flowLfo_[si].peek(); },
+        // fb179 KNOB-IS-THE-PEAK: monoEnvLevelOf() returns level−1, and addEnv() adds the 1 back
+        // — `dw * (monoEnvLevelOf (s) + 1.0f)`, byte-for-byte flowMod()'s term. NO 0.5f.
+        // CONSEQUENCE: an OWNING envelope drives the knob from ZERO, not from its base.
+        [this] (int src)   { return monoEnvLevelOf (src); });
 
     // Synth renders into its own scratch (broadcast midiMessages unfiltered —
     // the trigger-mode dispatcher above gates the LAYERS only, the synth

@@ -19,6 +19,7 @@
 #include "ConvolutionReverb.h" // fb291 — synth FX-rack Convolution reverb (true FFT convolution + synth/user IR + Reverse/Attack/Distance/Density bake)
 #include "DelayEngine.h"       // fb296 — synth FX-rack Delay (one shared fractional line: Digital/Tape/BBD/Diffuse + ping-pong + HQ interp)
 #include "FxChainTopology.h"   // fb351 — who taps which osc + whose output feeds whom (the SERIAL rack)
+#include "FxModValue.h"        // fb453 — the rack's per-block modulation math (JUCE-free; the cert calls it too)
 #include "DistortionEngine.h"  // fb315 — synth FX-rack Distortion (the 3rd device; 23 modes / 6 families, one shared shell)
 #include "MoogDelay.h"
 #include "TerrainChorus.h"
@@ -1929,6 +1930,30 @@ private:
     void cacheSendRefs();
     void cacheFx3Refs();
     void cacheFx4Refs();     // fb426 — equalizer / widen / compress / ott
+
+    // ═══ fb453 — EVERY RACK KNOB IS A MODULATION DESTINATION ═════════════════════════════════
+    // The generated dial→parameter map (Tools/gen_fx_mod_ids.py reads the UI's own DEV_TEMPLATES,
+    // so the dial and its destination are authored in exactly ONE place). Included INSIDE the
+    // class so the two tables are members, not a second pair of file-scope names.
+    #include "fx_mod_ids.inc"
+    // Resolved once on the message thread: the parameter behind every (kind, instance, knob).
+    // nullptr = that device has no such dial — only the Filter's 8 back slots (fb384).
+    std::atomic<float>* fxModRef_[16][(size_t) ParameterIDs::kFxInstances][12] {};
+    int  fxModRefsResolved_ = 0;   // fb373 — how many of the 1,104 cells actually bound to a param
+    void cacheFxModRefs();         // message thread only (builds ID strings)
+    // The per-block sparse map, KEYED BY POINTER. See FxModValue.h for why that is the whole
+    // answer to the SYN_DLY_TIME alias: two destinations, one parameter, one summed slot.
+    wc::FxModAccum fxMod_;
+    // fb453 — the modulated value for a rack parameter, matched BY POINTER so a read site can
+    // never mis-map (there is no knob index here to get wrong). Zero routes = one branch.
+    inline float M (std::atomic<float>* p) const noexcept
+    {
+       #ifdef FXMOD_MUT_NO_APPLY
+        return p->load();          // MUTATION: the rack ignores the matrix entirely
+       #endif
+        return fxMod_.lookup ((const void*) p, p->load());
+    }
+
     void pushFx3Params() noexcept;      // ONCE PER BLOCK — see the note in the .cpp
     void applyCho (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
     void applyFla (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
