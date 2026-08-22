@@ -52,22 +52,39 @@ Append-only ⇒ every saved project keeps its existing dest ints. Nothing reshuf
 
 ## 3. Where it applies
 
-Each device already reads its params in one uniform shape (`V.f1->load()`, `V.b[k]->load()`), so one
-helper replaces the load at all 16 read sites:
+**CORRECTED after reading all 12 ref structs (the first draft of this section was wrong).** The read
+sites are NOT uniform. Only the newest kinds carry `f1/f2/f3/mix/b[8]`; the older ones carry named
+members in their own order — `RvbRefs{size decay tone mix predelay diffuse moddepth modrate hidamp
+lowdecay lowcut width}`, `TpeRefs{p1 p2 p3 mix time repeats drive age …}`, `FltRefs{cut res drive mix
+env track poles …}`. So there is no single mechanical substitution, and the obvious repair — a
+hand-written `knob index → struct member` map, 184 entries — is a map where one slip silently
+modulates the WRONG knob and every gate still passes.
 
-```cpp
-// fxMod(V.f1, kind, i, 0) == jlimit(0,1, base + lfoSum) * (1-w) + envV   — fb184's math, verbatim
-q.gain = fxMod (V.f1, kFxKindUtility, i, 0);
-```
+**So the match is made by POINTER IDENTITY, never by index arithmetic:**
 
-- **CPU is O(routes), not O(destinations).** Once per block, walk the ≤128 assignments and accumulate
-  into a small sparse map keyed by dest; the 1,152 dests are never iterated. A rack with no routes
-  costs one branch per knob.
+1. `kFxModIds[16][12]` names the parameter behind each dial (the Filter's 8 back slots are `nullptr`).
+   It is **GENERATED from the UI's own card definitions** and committed beside them, exactly like
+   `Design/fx4/eq/shipped_labels.inc` — with a gate that regenerating produces no diff. That is what
+   keeps the dial and the destination authored in ONE place.
+2. That table caches `fxModRef_[kind][inst][knob]` — the same `std::atomic<float>*` the read site
+   already holds.
+3. Per block, the ≤128 assignments are walked ONCE into a sorted `(pointer → modulated value)` array.
+4. Every read site's `V.size->load()` becomes `M (V.size)` — a pure textual substitution that carries
+   no index and therefore **cannot mis-map**. `M` binary-searches the sorted array (≤7 compares) and
+   falls back to `->load()`; with no routes it is one branch.
+
+The equivalence this buys is directly testable, and it is what §7 gates: **modulating knob k by x must
+produce bit-identical audio to moving knob k's own parameter by x.**
+
+- **CPU is O(routes), not O(destinations).** The 1,152 dests are never iterated.
 - **The viz moves for free.** Every core draws from the engine's OWN meters (fb432) and the engine now
   receives the modulated value — an LFO on Bode's Shift slides the streams, on the Splitter's crossover
-  walks the band edge. This satisfies "everything audible interacts visually" by construction, with no
-  new viz code.
-- Devices that are powered off / not in the chain apply nothing and push nothing.
+  walks the band edge. "Everything audible interacts visually", satisfied by construction.
+- ⚠️ **`kDestInfo` is a 694-row literal sized by `NumDests`.** Growing the enum without growing the
+  table zero-fills the new rows — `fullScale = 0.0f` — and every FX route would silently do NOTHING.
+  The table becomes `kDestInfoBase[694]` plus a constexpr builder that fills the FX range with
+  `{Linear01, 1.0f}`, and §7 gates that every FX dest reports 1.0.
+- Devices that are powered off / not in the chain apply nothing.
 
 ## 4. What a modulated rack knob LOOKS like — the existing underline, verbatim
 
@@ -121,9 +138,11 @@ on the wire and nothing new that can disagree.
    day another dest is appended without moving the base, it FAILS), every one round-tripping
    (kind,instance,knob) → dest → back. And the
    apply helper against fb184's math on a table of (base, lfo, env, depth) cases.
-2. **`au_fx_path` (extended, the REAL AU)** — the fb373 law: for each of the 16 kinds, install a route
-   through the same `setSynthMod` bridge the UI uses, render, and assert **the audio moved** — not that
-   a parameter changed. One knob per kind, chosen as the one with the most obvious spectral signature.
+2. **`au_fx_path` (extended, the REAL AU)** — the fb373 law, as an EQUIVALENCE over the full matrix
+   (fb425: sweep the matrix, not a sample). For all 184 live (kind, knob) cells: install a route
+   through the same `setSynthMod` bridge the UI uses, render, and assert the audio equals the audio
+   from moving THAT knob's own parameter by the same amount. A mis-mapped knob fails immediately,
+   which is the whole reason the mapping is generated rather than typed.
 3. **Mutation (mandatory, fb421)** — delete the mod add at the injection site: `au_fx_path`'s mod gates
    must go RED while every existing gate stays green.
 4. **`fx4_ui.js` (extended)** — every rack dial (front and back, every kind) carries a
@@ -136,7 +155,9 @@ on the wire and nothing new that can disagree.
 
 ## 8. Risks
 
-- **The 16-site edit is mechanical and wide.** It will be scripted and every site gated, not hand-typed.
+- **The read-site edit is wide (184 loads across 16 blocks).** It is a pure `X->load()` → `M(X)`
+  substitution carrying no index, scripted rather than hand-typed, and the equivalence matrix in §7
+  is what proves each one landed on the right knob.
 - **The underline is positioned in VIEWPORT space** (`position:fixed`, measured per frame from the
   target's rect). The rack scrolls, and cards move under it — the repaint is already per-frame so it
   should track, but a scrolling container is a case the synth panel never exercised. Gated: scroll
