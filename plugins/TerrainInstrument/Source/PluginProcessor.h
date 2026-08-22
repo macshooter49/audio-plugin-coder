@@ -63,6 +63,8 @@
 #include "SpectralMorph.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
+#include <vector>
+#include <algorithm>
 #include <array>
 #include <limits>
 #include <thread>
@@ -597,6 +599,13 @@ public:
     // fb163 — LIVE FILTER CURVE: loudest voice's post-mod cutoff/res per slot (Hz, 0..1);
     // hz = -1 while idle so the display falls back to the base params.
     std::atomic<float> fltVisHz1_ { -1.f }, fltVisRes1_ { 0.f }, fltVisHz2_ { -1.f }, fltVisRes2_ { 0.f };
+    // fb457 — the loudest voice's EFFECTIVE wavetable frame per osc. -1 = nothing sounding, and
+    // the UI then falls back to the knob, exactly as it always did (so an idle rack is unchanged).
+    std::atomic<float> wtFrameVis_[4] { { -1.f }, { -1.f }, { -1.f }, { -1.f } };
+    // (this section is already public: — line 552. An access specifier added here would have
+    //  closed it and made every member below private; it did, and the editor stopped compiling.)
+    float wtFrameVis (int o) const noexcept
+    { return (o >= 0 && o < 4) ? wtFrameVis_[o].load (std::memory_order_relaxed) : -1.f; }
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
@@ -702,6 +711,7 @@ public:
     juce::String      getTapeVizJson();                                // fb365 — tape cards, one entry per instance
     juce::String      getFx3VizJson();                                 // fb413 — chorus + flanger + phaser, one payload
     juce::String      getFx4VizJson();                                 // fb437 — equalizer + widen + compress + multiband, one payload
+    juce::String      getFxModEffJson();                               // fb457 — OVERPASS 1: every ROUTED rack dial's EFFECTIVE value
     void              setDistortionTableSrc (int osc);                 // fb339 — Table source: -1=generated, 0..3=Osc A-D
     int               getDistortionTableSrc() const noexcept { return dstTableSrc_; }
 
@@ -1949,6 +1959,24 @@ private:
                    "overruns or the top instances have no destinations.");
     int  fxModRefsResolved_ = 0;   // fb373 — how many of the 1,104 cells actually bound to a param
     void cacheFxModRefs();         // message thread only (builds ID strings)
+
+    // ═══ fb457 — OVERPASS 1, "if it's modulated, it MOVES" ═══════════════════════════════════
+    // A card draws its geometry from the UI's own knob model (DEVS), which cannot know that a
+    // route moved the dial — so a modulated Bode/Widen/EQ dial sounded different and looked
+    // frozen. fb453 already resolves the EFFECTIVE value of every routed dial each block; this
+    // publishes it so the drawer can read what the ENGINE is using.
+    //
+    // Keyed by DESTINATION ID, not by pointer: the UI already computes that same integer in
+    // fxModDest(core,inst,knob), so there is no new index convention to get wrong. The alias
+    // (SYN_DLY_TIME is delay knob 0 AND knob 10) is why one pointer can publish TWO dests — the
+    // sorted table keeps them adjacent and both are emitted with the slot's summed value.
+    struct FxEffPair { const void* ptr; int dest; };
+    std::vector<FxEffPair> fxEffByPtr_;            // sorted by ptr; built once in cacheFxModRefs()
+    static constexpr int kFxEffMax = 256;
+    std::atomic<int>   fxEffN_ { 0 };
+    std::atomic<int>   fxEffDest_[kFxEffMax] {};
+    std::atomic<float> fxEffVal_ [kFxEffMax] {};
+    void publishFxModEff() noexcept;               // audio thread; allocation-free
     // The per-block sparse map, KEYED BY POINTER. See FxModValue.h for why that is the whole
     // answer to the SYN_DLY_TIME alias: two destinations, one parameter, one summed slot.
     wc::FxModAccum fxMod_;

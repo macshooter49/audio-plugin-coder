@@ -5016,6 +5016,47 @@ juce::String TerrainInstrumentAudioProcessor::getFx3VizJson()
 // handful of numbers per frame. Every number is the engine's OWN meter (viz()) or resolved
 // value (thresholdDbp / ratio / attackMs …) — the card prints what the DSP is doing, never a
 // card-side guess (fb432: read the engine's own meters).
+// ═══ fb457 — OVERPASS 1. Snapshot the effective value of every ROUTED rack dial.
+// Called from processBlock immediately AFTER wc::buildFxMod(), so the values are THIS block's
+// (fb453 T5b learned what reading the map one line too early costs). Only routed dials exist in
+// the accumulator, so a rack with no routes costs one loop over zero — the same zero-CPU law the
+// modulation itself obeys. Allocation-free: fxEffByPtr_ was built in cacheFxModRefs().
+void TerrainInstrumentAudioProcessor::publishFxModEff() noexcept
+{
+    int out = 0;
+    for (int s = 0; s < fxMod_.count && out < kFxEffMax; ++s)
+    {
+        const void* p = fxMod_.ptr[s];
+        auto it = std::lower_bound (fxEffByPtr_.begin(), fxEffByPtr_.end(), p,
+                                    [] (const FxEffPair& a, const void* q) { return a.ptr < q; });
+        // one parameter can back MORE THAN ONE dial (SYN_DLY_TIME) — publish every dest it backs
+        for (; it != fxEffByPtr_.end() && it->ptr == p && out < kFxEffMax; ++it)
+        {
+            fxEffDest_[out].store (it->dest,      std::memory_order_relaxed);
+            fxEffVal_ [out].store (fxMod_.val[s], std::memory_order_relaxed);
+            ++out;
+        }
+    }
+    fxEffN_.store (out, std::memory_order_release);
+}
+
+// { "<destId>": <0..1>, ... } — sparse, ONLY routed dials. The UI falls back to its own model
+// for everything absent, so an un-routed dial keeps drawing exactly as it always did.
+juce::String TerrainInstrumentAudioProcessor::getFxModEffJson()
+{
+    const int n = fxEffN_.load (std::memory_order_acquire);
+    juce::String j; j.preallocateBytes ((size_t) (16 + n * 18));
+    j << "{";
+    for (int i = 0; i < n; ++i)
+    {
+        if (i) j << ",";
+        j << "\"" << fxEffDest_[i].load (std::memory_order_relaxed) << "\":"
+          << juce::String (fxEffVal_[i].load (std::memory_order_relaxed), 4);
+    }
+    j << "}";
+    return j;
+}
+
 juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
 {
     ++fx4VizTick_;
@@ -5350,6 +5391,19 @@ void TerrainInstrumentAudioProcessor::cacheFxModRefs()
         }
     fxModRefsResolved_ = resolved;
     jassert (resolved == kFxModLive * wc::kFxModInsts);   // 184 x 6 = 1,104
+
+    // fb457 — the reverse table the viz feed walks: every live cell as (parameter, destination),
+    // sorted by parameter so publishFxModEff() can binary-search a slot and then step across the
+    // aliases that share it. Built HERE, on the message thread, so the audio thread never allocates.
+    fxEffByPtr_.clear();
+    fxEffByPtr_.reserve ((size_t) (kFxModLive * wc::kFxModInsts));
+    for (int k = 0; k < wc::kFxModKinds; ++k)
+      for (int i = 0; i < wc::kFxModInsts; ++i)
+        for (int n = 0; n < wc::kFxModKnobs; ++n)
+          if (fxModRef_[k][i][n] != nullptr)
+            fxEffByPtr_.push_back ({ (const void*) fxModRef_[k][i][n], wc::fxModDest (k, i, n) });
+    std::sort (fxEffByPtr_.begin(), fxEffByPtr_.end(),
+               [] (const FxEffPair& a, const FxEffPair& b) { return a.ptr < b.ptr; });
 }
 
 // ═══ fb413 — CHORUS · FLANGER · PHASER refs. One cache, three devices: they share a chassis,
@@ -8516,6 +8570,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // CONSEQUENCE: an OWNING envelope drives the knob from ZERO, not from its base.
         [this] (int src)   { return monoEnvLevelOf (src); });
 
+    // fb457 — OVERPASS 1: publish what the rack is ACTUALLY using, for the cards to draw from.
+    // 🚨 PLACEMENT, same lesson as the Knee below: this must sit AFTER the build or it would
+    //    publish the PREVIOUS block's map and every card would lag the sound by a buffer.
+    //    Gated on vizLive so a closed editor costs nothing (fb148).
+    if (vizLive) publishFxModEff();
+
     // ── fb453 T5b — THE DISTORTION'S KNEE, COMPOSED AND RESOLVED HERE. SIG is the ONE rack dial
     //    that carries BOTH a legacy destination (DstMorph) and a rack destination, so its value is
     //    a COMPOSITION, not a choice: M() supplies the rack-modulated BASE and modP() applies the
@@ -9138,6 +9198,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         fltVisRes1_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes1() :  0.f, std::memory_order_relaxed);
         fltVisHz2_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz2()  : -1.f, std::memory_order_relaxed);
         fltVisRes2_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes2() :  0.f, std::memory_order_relaxed);
+        // fb457 — OVERPASS 1: the waterfall rides the SAME loudest-voice pick as the filter curve,
+        // because the filter is the one thing Max said already moved and this is why.
+        for (int o = 0; o < 4; ++o)
+            wtFrameVis_[o].store (any && bestVoice != nullptr ? bestVoice->getWtFrameVis (o) : -1.f,
+                                  std::memory_order_relaxed);
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
         oscScopePubAccum_ += (double) numSamples;
         if (! vizLive) oscScopePubAccum_ = 0.0;   // fb148 — no backlog while closed (a grown accumulator would publish every block on reopen)

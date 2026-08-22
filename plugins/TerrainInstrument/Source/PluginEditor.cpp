@@ -5609,6 +5609,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         // fb437 — the fx4 four ride the SAME lane: the EQ's curve is change-gated (+1 Hz keepalive),
         // the rest is a handful of numbers per live instance. See getFx4VizJson.
         js << "window.__fx4VizPush=" << audioProcessor.getFx4VizJson() << ";";
+        js << "window.__fxModEff=" << audioProcessor.getFxModEffJson() << ";";   // fb457 — OVERPASS 1
+        js << "window.__wtFrameEff=[" << SF (audioProcessor.wtFrameVis (0), 4) << "," << SF (audioProcessor.wtFrameVis (1), 4)
+           << "," << SF (audioProcessor.wtFrameVis (2), 4) << "," << SF (audioProcessor.wtFrameVis (3), 4) << "];";   // fb457
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

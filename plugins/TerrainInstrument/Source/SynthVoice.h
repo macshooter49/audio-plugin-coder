@@ -499,6 +499,15 @@ namespace tw
         float getFltVisHz2()  const noexcept { return lastCutHz2_; }
         float getFltVisRes1() const noexcept { return visRes1_; }
         float getFltVisRes2() const noexcept { return visRes2_; }
+        /** fb457 — OVERPASS 1, the WAVETABLE half. The same idea as getFltVisHz1() one line up,
+            and deliberately the same mechanism: this is the frame the oscillator is ACTUALLY
+            reading — base + mod-matrix + keytrack + route + FLOW, already one-pole smoothed —
+            not the knob. The waterfall asked juce.getSliderState('..._WT_FRAME') for its
+            position, and a parameter cannot know a route moved it, so the table sat still while
+            the sound swept. Max: "whenever the LFO is on that wavetable position knob, I want it
+            to move automatically." */
+        float getWtFrameVis (int osc) const noexcept
+        { return osc == 0 ? framePos_ : osc == 1 ? framePosB_ : osc == 2 ? framePosC_ : framePosD_; }
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
