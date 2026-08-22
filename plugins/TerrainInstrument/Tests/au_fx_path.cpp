@@ -885,26 +885,49 @@ int main (int argc, char** argv)
                 // mis-mapped destination at all.
                 int dn = n;
                 if (mtxMutate) for (int q = 1; q < 12; ++q) { const int c2 = (n + q) % 12; if (kFxModLeaf[k][c2]) { dn = c2; break; } }
-                double bEq = 999.0, bAud = -999.0; int bType = 0;
-                for (int t = 0; t < nTypes; ++t)
+                double bEq = 999.0, bAud = -999.0; int bType = 0, bOp = 0;
+                // TWO OPERATING POINTS, and the second is only ever reached by a dial that did
+                // nothing at the first. 0.25 -> 0.50 is the sweep; some dials are on a PLATEAU
+                // there and a plateau makes the null vacuous, not wrong. tape.DUCK is the worked
+                // example: TapeFxEngine.h:713 clamps `duckEnv_ * 34 * duck` to 0.96, and on a
+                // chord this loud the clamp is already saturated at duck = 0.25, so 0.25 and 0.50
+                // are the SAME sound. Off the bottom of the range (0.00 -> 0.25) it is not — the
+                // engine's `if (duck > 0.001f)` branch is not even entered at 0. So: if a cell is
+                // inert everywhere at the normal base, probe it again from ZERO before calling it
+                // unproven.
+                for (int op = 0; op < 2 && bAud <= kAudGate; ++op)
                 {
-                    MtxCfg base; base.kind = k; base.type = t; base.probe = n; if (isMix) base.knobs[3] = kBase;
-                    const int key = t * 4 + (isMix ? 1 : 0) + (n == 11 ? 2 : 0);   // n==11 can change the setup (Delay Link)
-                    if (! acache.count (key)) acache[key] = mtxRender (base);
+                  const float pBase = (op == 0) ? kBase : 0.0f;
+                  const float pTop  = pBase + kOff;
+                  for (int t = 0; t < nTypes; ++t)
+                  {
+                    MtxCfg base; base.kind = k; base.type = t; base.probe = n;
+                    if (isMix || op == 1) base.knobs[n] = pBase;
+                    Render A;
+                    if (op == 0)
+                    {
+                        const int key = t * 4 + (isMix ? 1 : 0) + (n == 11 ? 2 : 0);   // n==11 can change the setup (Delay Link)
+                        if (! acache.count (key)) acache[key] = mtxRender (base);
+                        A = acache[key];
+                    }
+                    else A = mtxRender (base);     // op 1 is per-cell, and only inert cells get here
                     MtxCfg bc = base; bc.routes = routeJson (destOf (k, 0, dn), kOff);
-                    MtxCfg cc = base; cc.knobs[n] = kTop;
+                    MtxCfg cc = base; cc.knobs[n] = pTop;
                     const Render B = mtxRender (bc), C = mtxRender (cc);
-                    const double eq = rel (B, C), aud = rel (B, acache[key]);
-                    if (aud > bAud) { bAud = aud; bEq = eq; bType = t; }
-                    if (aud > kAudGate) break;     // live at this Type — no need to hunt for a livelier one
+                    const double eq = rel (B, C), aud = rel (B, A);
+                    if (aud > bAud) { bAud = aud; bEq = eq; bType = t; bOp = op; }
+                    if (aud > kAudGate) break;     // live here — no need to hunt for a livelier Type
+                  }
                 }
                 ++cells;
                 const bool ok = (bEq < kEqGate) && (bAud > kAudGate);
                 char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
                                          kKindName[k], kFxModLeaf[k][n], k, n);
-                char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s",
-                                         bEq, bAud, bType ? "   [needed a livelier Type]" : "",
+                char det[240]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s%s",
+                                         bEq, bAud, bType ? "   [Type " : "",
+                                         bOp ? "   [probed 0.00->0.25: it is on a plateau at 0.25]" : "",
                                          isOneBlockLateCell (k, n) ? "   [the ONE dial read before buildFxMod — see SIG-LAG]" : "");
+                if (bType) { char t2[24]; snprintf (t2, sizeof t2, "%d]", bType); strncat (det, t2, sizeof det - strlen (det) - 1); }
                 chk (ok, lbl, det);
                 if (! ok) fails.push_back ({ k, n, kFxModLeaf[k][n], bEq, bAud });
                 else if (bAud < -30.0) { char q[80]; snprintf (q, sizeof q, "%s.%s (%.1f dBr)", kKindName[k], kFxModLeaf[k][n], bAud); quietCells.push_back (q); }
