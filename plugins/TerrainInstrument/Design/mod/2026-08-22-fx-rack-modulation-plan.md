@@ -334,8 +334,18 @@ void TerrainInstrumentAudioProcessor::cacheFxModRefs()
 
 - [ ] **Step 2: Build the sparse map each block, with fb184's math**
 
-Place it beside the existing `flowKnob` build (`PluginProcessor.cpp:~8855`), AFTER `synModCfg` is
-assembled so it sees resolved depths:
+🚨 **PLACEMENT IS LOAD-BEARING — the first draft of this plan had it wrong.** The rack reads its
+params in `pushFx3Params()`, which `processBlock` calls at **`PluginProcessor.cpp:8661`**. The
+`flowKnob` build this borrows its math from lives at **~8850 — AFTER that call.** Building the map
+there would hand `pushFx3Params` the PREVIOUS block's values, and nothing at all on the first block.
+
+Insert it instead in the window **after the global LFO bank is advanced (`flowLfo_[i].setSettings` /
+`setFrequency` / `processSample`, ~8431-8452) and before `pushFx3Params()` at 8661.** `synModCfg` is
+assembled at ~7870 and hoisted to outer scope (`:7099`), so it is already valid there. Verify
+`monoEnvLevelOf()` is equally valid at that point — it is called at 8852 today; if it depends on
+anything computed between 8661 and 8852, say so in the report rather than moving the call site.
+
+The gate for this is in Task 5: **a route must bite on the FIRST block**, not the second.
 
 ```cpp
     // ── fb453 — THE RACK'S MODULATION. LFO ADDS, ENV OWNS: the same law flowKnob() applies to the
@@ -460,10 +470,16 @@ For each kind 0..15, for each knob 0..11 with a live id:
 5. set the knob to 0.60 with no route, render → `C`;
 6. gate `rms(B − C) < −80 dB` (the route equals the knob) and `rms(B − A) > −60 dB` (it did something).
 
-- [ ] **Step 2: Add the envelope-at-rest gate**
+- [ ] **Step 2: Add the FIRST-BLOCK gate and the envelope-at-rest gate**
+
+Render exactly ONE block with a route installed and assert the output already differs from the
+unmodulated render. This is what catches the map being built after `pushFx3Params()` — a fault that
+is otherwise inaudible and would pass every other gate here.
+
+Then: with an ENV route at full depth and NO note playing, the knob must sit at its base value —
 
 With an ENV route installed at full depth and NO note playing, the knob must sit at its base value —
-this is what catches the `(env+1)*0.5` mapping being wrong (Task 3, Step 2).
+that is what catches the `(env+1)*0.5` mapping being wrong (Task 3, Step 2).
 
 - [ ] **Step 3: Run — 184 cells green**
 
