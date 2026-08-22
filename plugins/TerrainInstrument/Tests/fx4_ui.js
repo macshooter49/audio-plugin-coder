@@ -713,6 +713,59 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       drop.ul ? ('ul ' + drop.ul.w.toFixed(2) + 'px @' + drop.ul.l.toFixed(2) + '  word ' + drop.ink.w.toFixed(2) +
                  'px @' + drop.ink.l.toFixed(2) + '  wrapper ' + drop.box.w.toFixed(2) + 'px') : 'no underline');
 
+  /* ── THE ATTENUATOR'S POSITION, AT A ZOOM THAT IS NOT 1. ═════════════════════════════════════
+     🚨 This gate exists because there was none, and that is precisely why a coordinate-space bug
+     shipped here twice. At the shipped default zoom is 1, LP() is the identity, and EVERY variant
+     — no conversion, one conversion, two conversions — puts the meter in exactly the same place.
+     The fb175 self-heal path (__zoomFix ≈ 1.9, which is what this suite runs at, 1560/820) is the
+     only configuration in which the three are distinguishable, so it is the only configuration in
+     which the assertion means anything. The gate therefore REFUSES to pass at zoom 1.
+     It asserts the RENDERED position, in screen px, relative to the mark it belongs to: the meter
+     sits 7 layout px to the right of the mark's right edge and 25 layout px above its top, which
+     at zoom z is 7·z and 25·z screen px. That statement is true of the correct code and false of
+     both broken ones, and it does not depend on which side of the call does the converting. */
+  const att = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (!window.__tiPruneFxRoutes || !window.__fxModDest) return {err:'no fb453 surfaces on this page'};
+    window.__tiPruneFxRoutes(0, 1e9);
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb'); const d = D[ri];
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+    // an LFO route: the attenuator is the LFO readout (env routes use the hover list instead)
+    window.__tiAddRoute(0, 1, window.__fxModDest(d.core, d.inst, 1)); window.__selMod = {lfo:1};
+    await frame(); await frame();
+    const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
+    const l = knob.querySelector('.fxr-lab'); const rg = document.createRange(); rg.selectNodeContents(l);
+    const ink = rg.getBoundingClientRect();
+    const u = [...document.querySelectorAll('.sm-ul')].filter(x => x.style.display !== 'none')
+                .find(x => Math.abs(x.getBoundingClientRect().left - ink.left) < 1.5);
+    if (!u) return {err:'no mark to grab'};
+    // setPointerCapture rejects a pointerId that was never really down; stub it for the synthetic
+    // press only — it has nothing to do with where the meter is placed.
+    const cap = u.setPointerCapture; u.setPointerCapture = function(){};
+    const br = u.getBoundingClientRect();
+    u.dispatchEvent(new PointerEvent('pointerdown', {bubbles:true, cancelable:true,
+      clientX:br.left + br.width/2, clientY:br.top + 3, button:0, buttons:1, pointerId:31, pointerType:'mouse'}));
+    await frame();
+    const box = document.querySelector('.sm-att');
+    const on = !!(box && box.classList.contains('on'));
+    const R = box ? box.getBoundingClientRect() : null;
+    const z = window.__zoomFix || 1;
+    const out = {z, on, styleLeft: box ? box.style.left : null, styleTop: box ? box.style.top : null,
+                 brRight:+br.right.toFixed(2), brTop:+br.top.toFixed(2),
+                 gotLeft: R ? +R.left.toFixed(2) : null, gotTop: R ? +R.top.toFixed(2) : null,
+                 wantLeft: +(br.right + 7*z).toFixed(2), wantTop: +(br.top - 25*z).toFixed(2)};
+    document.dispatchEvent(new PointerEvent('pointerup', {bubbles:true, cancelable:true, pointerId:31, pointerType:'mouse'}));
+    u.setPointerCapture = cap; window.__tiPruneFxRoutes(0, 1e9); window.__selMod = {env:1};
+    await frame();
+    return out; });
+  chk(!att.err && att.z > 1.05 && att.on && Math.abs(att.gotLeft - att.wantLeft) < 0.6 && Math.abs(att.gotTop - att.wantTop) < 0.6,
+      'fb453 🔴: the attenuator lands 7×zoom right / 25×zoom above its mark — ONE LP() conversion, asserted at zoom ≈ 1.9 (at zoom 1 every variant agrees, which is how this shipped twice)',
+      att.err ? att.err : ('zoom ' + att.z.toFixed(4) + (att.z > 1.05 ? '' : ' ⚠️ ZOOM IS 1 — this gate proves nothing here') +
+      '  ·  mark right/top ' + att.brRight + '/' + att.brTop +
+      '  →  meter at ' + att.gotLeft + '/' + att.gotTop + ', want ' + att.wantLeft + '/' + att.wantTop +
+      '  (style ' + att.styleLeft + ', ' + att.styleTop + ')'));
+
   /* ── THE RACK SCROLLS, AND IT SCROLLS INSIDE A CLIPPER. .sm-ul is position:fixed and re-measured
      every frame, which the synth panel never exercised because nothing there moves under the
      pointer. Two halves: the mark tracks its word while the word is visible, and it goes DOWN when
@@ -725,6 +778,12 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const card = document.querySelectorAll('.fxr-dev')[ri];
     const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
     const clip = document.querySelector('.fxr-clip');
+    if (!window.__tiPruneFxRoutes || !knob.getAttribute('data-mod-dest')) return {err:'no fb453 surfaces on this page'};
+    // self-contained: plant the route this block measures rather than inheriting one from an
+    // earlier block, so re-ordering the suite can never make this gate assert on an empty screen
+    window.__tiPruneFxRoutes(0, 1e9);
+    window.__tiAddRoute(1, 0, +knob.getAttribute('data-mod-dest')); window.__selMod = {env:1};
+    clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8; await frame(); await frame();
     const ink = () => { const l = knob.querySelector('.fxr-lab'); const r = document.createRange(); r.selectNodeContents(l); return r.getBoundingClientRect(); };
     const mark = (i) => [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none')
                           .map(u => u.getBoundingClientRect()).find(x => Math.abs(x.left - i.left) < 1.5);
@@ -765,17 +824,17 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.markWhenNested = !!mark(i3);
     st.remove(); window.__fxrRender(); clip.scrollLeft = before; await frame();
     return out; });
-  chk(scr.moved > 0 && scr.stillIn && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
+  chk(!scr.err && scr.moved > 0 && scr.stillIn && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
       'fb453: the rack SCROLLS and the mark tracks its word (fixed, re-measured per frame, self-heal zoom corrected)',
-      'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom.toFixed(4) + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
+      scr.err ? scr.err : 'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom.toFixed(4) + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
       ' Δw ' + (scr.dw == null ? 'n/a' : scr.dw.toFixed(2)) + ' Δy ' + (scr.dy == null ? 'n/a' : scr.dy.toFixed(2)));
-  chk(scr.dx != null && scr.outOfClip && scr.markWhenOut === false && scr.anyMarkOutsideClip === 0,
+  chk(!scr.err && scr.dx != null && scr.outOfClip && scr.markWhenOut === false && scr.anyMarkOutsideClip === 0,
       'fb453 🔴: a knob scrolled OUT of .fxr-clip paints NO mark — position:fixed must not follow it off the rack',
-      'mark present in view=' + (scr.dx != null) + ' · word out of clip=' + scr.outOfClip + ' its mark drawn=' + scr.markWhenOut +
+      scr.err ? scr.err : 'mark present in view=' + (scr.dx != null) + ' · word out of clip=' + scr.outOfClip + ' its mark drawn=' + scr.markWhenOut +
       '  ·  marks lying outside the clip, whole rack: ' + scr.anyMarkOutsideClip);
-  chk(scr.dx != null && scr.nestedOutOfClip && scr.markWhenNested === false,
+  chk(!scr.err && scr.dx != null && scr.nestedOutOfClip && scr.markWhenNested === false,
       'fb453 🔴: …and it still paints no mark when the CARD itself clips — the visible region is EVERY clipping ancestor intersected, not the nearest',
-      'with #syn-panel .fxr-dev{overflow:' + scr.nestedClips + '}: word out of clip=' + scr.nestedOutOfClip + ' its mark drawn=' + scr.markWhenNested);
+      scr.err ? scr.err : 'with #syn-panel .fxr-dev{overflow:' + scr.nestedClips + '}: word out of clip=' + scr.nestedOutOfClip + ' its mark drawn=' + scr.markWhenNested);
 
   /* ── 🔴 THE PHANTOM DROP TARGET. targets() takes every `#syn-panel [data-mod-dest]` and hit() is
      pure rect geometry — it does not know about overflow. Before the rack joined, nothing in that
@@ -807,13 +866,47 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     ev('pointermove', x, y); ev('pointerup', x, y);
     await frame(); await frame();
     const routes = window.__tiRoutes();
-    return {dest, x:+x.toFixed(1), y:+y.toFixed(1), onRack,
-            over: over ? (over.className && String(over.className).slice(0,40)) || over.tagName : 'none',
-            made: routes.length, hitVictim: routes.some(r => r.d === dest)}; });
+    const out = {dest, x:+x.toFixed(1), y:+y.toFixed(1), onRack,
+                 over: over ? (over.className && String(over.className).slice(0,40)) || over.tagName : 'none',
+                 made: routes.length, hitVictim: routes.some(r => r.d === dest)};
+    /* AND THE FORGIVENESS IS BOUNDED. hit()'s ±3 px grab slop is applied AFTER the clip, on
+       purpose: a knob straddling the clip edge stays grabbable 3 px past its visible edge, which
+       is inside pointer noise and keeps an edge knob no harder to hit than an interior one. That
+       is a deliberate ruling, so it gets a bound rather than a shrug — a release well beyond the
+       edge must still create nothing, and the visible part of the same knob must still work. */
+    let strad = null;
+    for (let sl = 0; sl < clip.scrollWidth && !strad; sl += 23) { clip.scrollLeft = sl; await frame();
+      const R = clip.getBoundingClientRect();
+      document.querySelectorAll('#syn-panel .fxr-dev [data-mod-dest]').forEach(w => {
+        if (strad) return; const r = w.getBoundingClientRect();
+        // it must straddle by enough that a point 12 px past the clip edge is still INSIDE the
+        // knob's own rect — otherwise "no route" is true because the raw rect misses too, and the
+        // gate would pass on the unclipped code as well (it did, first try: a vacuous green).
+        if (r.width > 8 && r.left < R.right - 8 && r.right > R.right + 24) strad = {w, r, R}; }); }
+    if (strad) {
+      const drag = async (X, Y) => { window.__tiPruneFxRoutes(0, 1e9); await frame();
+        ev('pointerdown', T.left + T.width/2, T.top + T.height/2, tab);
+        ev('pointermove', T.left + T.width/2 + 30, T.top + T.height/2 + 30);
+        ev('pointermove', X, Y); ev('pointerup', X, Y); await frame(); return window.__tiRoutes().length; };
+      const cy = strad.r.top + strad.r.height/2;
+      out.straddleDest = +strad.w.getAttribute('data-mod-dest');
+      out.overhang = +(strad.r.right - strad.R.right).toFixed(1);
+      out.pastEdge = +(strad.R.right + 12).toFixed(1);         // 12 px past the edge, 4× the slop, still inside the knob
+      out.madePastEdge = await drag(strad.R.right + 12, cy);
+      out.madeOnVisible = await drag((Math.max(strad.r.left, strad.R.left) + strad.R.right)/2, cy);
+    }
+    window.__tiPruneFxRoutes(0, 1e9);
+    return out; });
   chk(!phantom.err && phantom.onRack === false && phantom.made === 0,
       'fb453 🔴: a drop released OUTSIDE the rack\'s scroller creates NO route — hit() clips to what is visible',
       phantom.err || ('released at (' + phantom.x + ', ' + phantom.y + ') — elementFromPoint says "' + phantom.over +
       '", not the rack — dest ' + phantom.dest + ' would have been written; routes created: ' + phantom.made));
+  chk(!phantom.err && phantom.straddleDest != null && phantom.madePastEdge === 0 && phantom.madeOnVisible === 1,
+      'fb453: …and the ±3 px grab forgiveness is BOUNDED — a half-clipped knob takes a drop on its visible part, and nothing 12 px past the edge',
+      phantom.err || (phantom.straddleDest == null ? 'no straddling knob found at any scroll position'
+        : 'straddling dest ' + phantom.straddleDest + ' (overhangs the clip by ' + phantom.overhang +
+          ' px): routes from a release 12 px past the edge = ' + phantom.madePastEdge +
+          ', from its visible part = ' + phantom.madeOnVisible));
 
   /* ── THE DEPTH TERRITORY'S ANCHOR. The span starts at (1−depth)·knobValue, so the mark only
      tells the truth if the knob's value is real. It cannot come from Juce.getSliderState(): the

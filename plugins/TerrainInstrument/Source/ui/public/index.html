@@ -28500,6 +28500,15 @@ restoreThemeFromBackend();
       if(cs&&/auto|scroll|hidden/.test(cs.overflowX+' '+cs.overflowY)) out.push(n);
       n=n.parentElement; }
     clipCache.set(el,out); return out; }
+  /* fb453 — 🚨 LOAD-BEARING ASSUMPTION: the clip CHAIN (which ancestors clip) is a static property
+     of the stylesheet, so it is cached per element for the life of that element and never
+     invalidated. The rects are read live every frame; only the membership of the chain is cached.
+     That is safe while nothing toggles `overflow` at runtime on an ancestor of a modulation target
+     — verified by grep: the only runtime style.overflow writes in this file are in samp-menu, which
+     is not one. A card re-render replaces the node, which invalidates naturally (WeakMap).
+     IF YOU ADD a path that changes overflow on a live ancestor of a [data-mod-dest], call
+     window.__tiClipCacheFlush() from it. */
+  window.__tiClipCacheFlush=function(){ clipCache=new WeakMap(); };
   function clipRectOf(el){ var cs=clipElsOf(el); if(!cs.length) return null;
     var l=-1e9,t=-1e9,r=1e9,b=1e9;
     for(var i=0;i<cs.length;i++){ var q=cs[i].getBoundingClientRect();
@@ -28509,7 +28518,15 @@ restoreThemeFromBackend();
   function vizRect(el){ var r=el.getBoundingClientRect(), c=clipRectOf(el); if(!c) return r;
     var l=Math.max(r.left,c.left), t=Math.max(r.top,c.top), rt=Math.min(r.right,c.right), b=Math.min(r.bottom,c.bottom);
     return (rt<=l||b<=t)?null:{left:l,top:t,right:rt,bottom:b}; }
-  function showAtt(a,x,y){ att.style.left=LP(x)+'px'; att.style.top=LP(y)+'px'; att.classList.add('on'); updAtt(a); }
+  /* ═══ fb453 — ONE CONVERSION POINT, AND IT IS THE CALL SITE ═══════════════════════════════
+     🚨 This function takes LAYOUT px — the space a style length is written in — and writes them
+     straight through. It does NOT call LP(). It used to, and the call site converted as well, so
+     the measured rect was divided by the zoom TWICE (br.right/z² + 7/z): a ~3 px error became a
+     ~51 px one. The rule this now follows, everywhere in this module: a screen-px rect is
+     converted with LP() AT THE POINT IT IS READ, and everything downstream is layout px. The
+     parameter names say which space they speak so the next reader does not have to guess — this
+     is the second time the two spaces have been confused here. */
+  function showAtt(a,xLayout,yLayout){ att.style.left=xLayout+'px'; att.style.top=yLayout+'px'; att.classList.add('on'); updAtt(a); }
   function hideAtt(){ att.classList.remove('on'); }
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
@@ -28703,7 +28720,13 @@ restoreThemeFromBackend();
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   /* fb453 — vizRect, not getBoundingClientRect: a target is only hittable where it can be SEEN.
      Resolved per event rather than filtered once in targets(), because the clip is live geometry —
-     scrolling the rack mid-drag must reveal and retire targets as it goes. */
+     scrolling the rack mid-drag must reveal and retire targets as it goes.
+     The ±3 px is the pre-existing grab forgiveness and is deliberately applied AFTER the clip, so a
+     knob straddling the clip edge stays grabbable to 3 px past its visible edge. That is not a
+     phantom: the knob is on screen and the user is aiming at it, 3 px is inside pointer noise, and
+     clamping it would make an edge knob HARDER to hit than an interior one. The phantom class —
+     a knob with no visible pixels at all — is closed above by `if(!r) continue`, and both bounds
+     are gated. */
   function hit(x,y){ for(var i=0;i<TG.length;i++){ var r=vizRect(TG[i].el); if(!r) continue; if(x>=r.left-3&&x<=r.right+3&&y>=r.top-3&&y<=r.bottom+3) return TG[i]; } return null; }
   /* fb178 — drag an ENVELOPE from its chip onto any knob (Serum-style). Same ghost,
      same targets, same hit; the drop lands at +100% depth. Click still opens the hub
@@ -28812,7 +28835,10 @@ restoreThemeFromBackend();
           uu.addEventListener('pointerdown',function(e){ ra=routeFor(tEl); if(!ra)return; e.preventDefault(); e.stopPropagation();
             down=true; moved=false; badgeBusy=true; y0=e.clientY; v0=ra.depth; uu.setPointerCapture&&uu.setPointerCapture(e.pointerId);
             if(ra.env){ if(rtHideT)clearTimeout(rtHideT); if(!rtMenu)showRoutes(tEl,uu); }
-            else { var br=uu.getBoundingClientRect(); showAtt(ra, LP(br.right)+7, LP(br.top)-25); }   /* fb453 — convert the RECT, then add the layout-px offsets; LP()ing the sum shrank them to 7/zoom and −25/zoom */
+            /* fb453 — br is SCREEN px, the 7/25 offsets are LAYOUT px (they scale with the UI, like
+               the .sm-att box itself). Convert the rect HERE, then add them; showAtt writes what it
+               is given. The meter lands 7 layout px right of the mark and 25 above its top at any zoom. */
+            else { var br=uu.getBoundingClientRect(); showAtt(ra, LP(br.right)+7, LP(br.top)-25); }
             function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true;
               ra.depth=Math.max(ra.env?0:-1,Math.min(1,v0+(y0-ev.clientY)*0.008));
               if(ra.env)updRouteList(ra); else updAtt(ra); push(); }
