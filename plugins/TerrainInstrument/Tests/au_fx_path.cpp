@@ -232,7 +232,7 @@ int main()
         { "Bode",      "Bode",      { "Bode Shift",       "Bode Fdbk",      "Bode Direction",  "Bode Diffusion" } },   // fb447 — Blur → Diffusion
         // fb444 — Utility. Gain is the hero; Image and Strain are the two that most change the
         // output. Note Gain's UNITY is 0.667, so pushing it to 1.0 is a real +30 dB change.
-        { "Utility",   "Utility",   { "Utility Gain",     "Utility Width",  "Utility Drive",   "Utility Rotate" } },   // fb447 — Image/Strain/Twist → Width/Drive/Rotate
+        { "Utility",   "Utility",   { "Utility Gain",     "Utility Width",  "Utility High Pass", "Utility Drive" } },   // fb450 — the channel strip: Gain · Width · High Pass · Drive
         // fb444 — Splitter. With no lane devices it still shapes: per-lane gains and Balance.
         { "Splitter",  "Splitter",  { "Splitter Balance", "Splitter Lane 1 Gain", "Splitter Spread", "Splitter Split" } },
     };

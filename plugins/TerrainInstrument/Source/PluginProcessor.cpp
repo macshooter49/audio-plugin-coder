@@ -4288,38 +4288,30 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         {
             const juce::StringArray utlTypes { "Strip", "Turn", "Outer", "Canopy", "Cellar",
                                                "Reserved 6", "Reserved 7", "Reserved 8" };
-            const juce::StringArray utlChars { "Cushion", "Brick", "Coil", "Creep",
-                                               "Tuck", "Rail", "Ripple", "Fuse" };
-            const juce::StringArray utlWiring{ "Through", "Difference", "L To Both", "R To Both",
-                                               "L Only", "R Only", "Reserved 7", "Reserved 8" };
-            // fb447 — NAMED BY WHAT THEY DO (fb144). "Strain / Clamp / Twist / Rumble / Bleed / Hinge"
-            // read as jargon on the card ("what the fuck does this even mean?"). Same IDs, plain words:
-            // Drive into the Character's rail · Shape (its second axis) · Rotate (M/S rotation) ·
-            // Low Cut (the DC/subsonic corner the DC lamp engages) · Mono Above (HF coupling — the
-            // exact inverse of Mono Below) · Crossover (the Hz where Mono Above / Coil / Canopy / Cellar hinge).
-            // fb448 — "DC doesn't work" (Max): a 15 Hz DC block is inaudible BY NATURE, which on this rack is a
-            // dead control. The lamp is now the LOW CUT (it engages the block at the `Cut At` corner, 15..320 Hz)
-            // and the corner defaults to 120 Hz so the lamp alone is night and day. Same IDs, same engine.
-            const char* const ubn[8] = { "Drive","Shape","Mono Below","Slope",
-                                         "Rotate","Cut At","Mono Above","Crossover" };
-            const float ubd[8] = { 0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.68f, 0.0f, 0.5f };   // 0.68 = 120 Hz on the 15..320 log taper
-            const char* const upn[6] = { "Flip L","Flip R","Swap","Mono","Low Cut","Dim" };   // fb447 — Trade→Swap, Sum→Mono · fb448 — DC→Low Cut
-            const char* const upi[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
+            // fb450 — THE CHANNEL STRIP (TerrainUtilityFx.h). Max, on the installed fb449: "cut at doesn't do anything,
+            // mono above, crossover, slope, shape don't, drive only makes it QUIETER, the characters don't, wiring
+            // doesn't … remove character and wiring … the next time I load up utility I need to hear a damn near
+            // change." Character, Wiring and the DC lamp are GONE (a declared parameter nothing reads is the fb444
+            // lie, so they are gone from the host too); the eight are a strip, every one audible on a MONO source:
+            // High Pass · Low Pass · Bass · Air · Mono Below · Rotate · Haas · Drive (loudness-matched — LOUDER).
+            const char* const ubn[8] = { "High Pass","Low Pass","Bass","Air",
+                                         "Mono Below","Rotate","Haas","Drive" };
+            const float ubd[8] = { 0.0f, 1.0f, 0.5f, 0.5f, 0.0f, 0.5f, 0.5f, 0.0f };   // OFF · OFF · 0 dB · 0 dB · OFF · 0° · 0 ms · bypass
+            const char* const upn[5] = { "Flip L","Flip R","Swap","Mono","Dim" };   // fb447 — Trade→Swap, Sum→Mono · fb450 — the DC lamp is gone
+            const char* const upi[5] = { "FLIPL","FLIPR","TRADE","SUM","DIM" };
             for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
             {
                 const juce::String sfx = (nn == 1) ? juce::String() : juce::String (nn);
                 const juce::String p   = "SYN_UTL" + sfx + "_";
                 const juce::String d   = "Utility " + (nn == 1 ? juce::String() : sfx + " ");
                 C (p + "TYPE",   d + "Type",   utlTypes,  0);
-                C (p + "CHAR",   d + "Char",   utlChars,  0);
-                C (p + "WIRING", d + "Wiring", utlWiring, 0);
                 // 60/90 is exactly 0 dB on the -60..+30 dB fader, and 0 is a glided -inf mute.
                 F (p + "GAIN",  d + "Gain",  60.0f / 90.0f);
                 F (p + "IMAGE", d + "Width", 0.50f);   // fb447 — Image→Width, Steer→Pan: Serum's words, Max's words
                 F (p + "STEER", d + "Pan",   0.50f);
                 F (p + "MIX",   d + "Mix",   1.00f);
                 for (int b = 0; b < 8; ++b) F (p + "B" + juce::String (b + 1), d + ubn[b], ubd[b]);
-                for (int k = 0; k < 6; ++k) B (p + upi[k], d + upn[k], false);
+                for (int k = 0; k < 5; ++k) B (p + upi[k], d + upn[k], false);
                 for (auto& sx : srcSuf) B (p + sx, d + sx, false);
                 B (p + "POWER",  d + "Power", false);
                 B (p + "ACTIVE", d + "In Chain", false);
@@ -5124,7 +5116,7 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         const auto& E = utlPool_[(size_t) i];
         const float pl = E.meterPeakL(), pr = E.meterPeakR();
         j << "{\"pkL\":" << N (pl, 4) << ",\"pkR\":" << N (pr, 4)
-          << ",\"corr\":" << N (E.meterCorr(), 3) << ",\"wire\":" << E.meterWiring()
+          << ",\"corr\":" << N (E.meterCorr(), 3)
           << ",\"img\":" << N (E.meterImageW(), 3) << ",\"lvl\":" << N (0.5f * (pl + pr), 4) << "}";
     }
     // ── SPLITTER: { nl, hz[3], pk[4], gate[4] }. The lane bar on the card is LIVE energy, so a
@@ -5271,17 +5263,17 @@ void TerrainInstrumentAudioProcessor::cacheUtlRefs()
 {
     auto R = [this] (const juce::String& id) { return apvts.getRawParameterValue (id); };
     static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
-    static const char* pil[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
+    static const char* pil[5] = { "FLIPL","FLIPR","TRADE","SUM","DIM" };   // fb450 — the DC lamp is gone
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
         const juce::String nn = (i == 0) ? juce::String() : juce::String (i + 1);
         const juce::String g  = "SYN_UTL" + nn + "_";
         auto& v = utlRefs_[(size_t) i];
         v.active = R (g + "ACTIVE"); v.rank = R (g + "RANK"); v.power = R (g + "POWER");
-        v.type = R (g + "TYPE"); v.chr = R (g + "CHAR"); v.wiring = R (g + "WIRING");
+        v.type = R (g + "TYPE");
         v.f1 = R (g + "GAIN"); v.f2 = R (g + "IMAGE"); v.f3 = R (g + "STEER"); v.mix = R (g + "MIX");
         for (int b = 0; b < 8; ++b) v.b[b]    = R (g + "B" + juce::String (b + 1));
-        for (int k = 0; k < 6; ++k) v.pill[k] = R (g + pil[k]);
+        for (int k = 0; k < 5; ++k) v.pill[k] = R (g + pil[k]);
         for (int k = 0; k < 6; ++k) v.src[k]  = R (g + sfx[k]);
     }
 }
@@ -5547,18 +5539,16 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
             const auto& V = utlRefs_[(size_t) i];
             if (V.power != nullptr && (V.power->load() > 0.5f || utlEnv_[(size_t) i] > 1.0e-4f))
             {
-                tw::TerrainUtilityFx::Params q;
-                q.type   = juce::jlimit (0, tw::TerrainUtilityFx::kNumTypeSlots - 1, (int) V.type->load());
-                q.chr    = juce::jlimit (0, tw::TerrainUtilityFx::kNumChars     - 1, (int) V.chr->load());
-                q.wiring = juce::jlimit (0, tw::TerrainUtilityFx::kNumWireSlots - 1, (int) V.wiring->load());
+                tw::TerrainUtilityFx::Params q;   // fb450 — the channel strip
+                q.type = juce::jlimit (0, tw::TerrainUtilityFx::kNumTypeSlots - 1, (int) V.type->load());
                 q.gain = V.f1->load(); q.image = V.f2->load(); q.steer = V.f3->load(); q.mix = V.mix->load();
-                q.strain    = V.b[0]->load(); q.clamp  = V.b[1]->load();
-                q.monoBelow = V.b[2]->load(); q.slope  = V.b[3]->load();
-                q.twist     = V.b[4]->load(); q.rumble = V.b[5]->load();
-                q.bleed     = V.b[6]->load(); q.hinge  = V.b[7]->load();
+                q.hp        = V.b[0]->load(); q.lp     = V.b[1]->load();
+                q.bass      = V.b[2]->load(); q.air    = V.b[3]->load();
+                q.monoBelow = V.b[4]->load(); q.rotate = V.b[5]->load();
+                q.haas      = V.b[6]->load(); q.drive  = V.b[7]->load();
                 auto P = [&V] (int k) { return V.pill[k] != nullptr && V.pill[k]->load() > 0.5f; };
-                q.flipL = P (0); q.flipR = P (1); q.trade = P (2);
-                q.sum   = P (3); q.dc    = P (4); q.dim   = P (5);
+                q.flipL = P (0); q.flipR = P (1); q.swap = P (2);
+                q.sum   = P (3); q.dim   = P (4);
                 utlPool_[(size_t) i].setParams (q);
             }
         }

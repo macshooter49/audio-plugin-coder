@@ -108,7 +108,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
   chk(r1.mark.bodNode===6 && r1.mark.bodCanvas===6 && r1.mark.bodGrid===0, 'Bode core = the rail node + the canvas, and NO decade grid (fb447, Max: "those lines are not symmetrical — why are they there?")', JSON.stringify({node:r1.mark.bodNode,canvas:r1.mark.bodCanvas,grid:r1.mark.bodGrid}));
   chk(r1.mark.splGrid===0, 'Splitter core: NO decade grid either (fb447)', 'grid groups='+r1.mark.splGrid);
-  chk(r1.mark.utlBtn===24 && r1.mark.utlRails===12 && r1.mark.utlStrip===0, 'Utility core = the WIRING (two rails per card) + four LAMP switches, the fb446 strip gone (fb447)', JSON.stringify({lamps:r1.mark.utlBtn,rails:r1.mark.utlRails,strip:r1.mark.utlStrip}));
+  chk(r1.mark.utlBtn===18 && r1.mark.utlRails===12 && r1.mark.utlStrip===0, 'Utility core = the two rails per card + THREE lamp switches (fb450: Flip L · Flip R · Swap)', JSON.stringify({lamps:r1.mark.utlBtn,rails:r1.mark.utlRails,strip:r1.mark.utlStrip}));
   chk(r1.mark.utlRow===12, 'Utility keeps its chassis pills (Sum · Dim) like every other card (fb446)', 'chassis pills='+r1.mark.utlRow);
   chk(r1.mark.utlDup===0, 'Utility NO DOUBLES — no switch caption repeats on the chassis row', 'dupes='+r1.mark.utlDup);
   chk(r1.mark.splLane===24 && r1.mark.splAdd===24 && r1.mark.splLt===24, 'Splitter core = four bands, a thin Hz number and a "+" each (fb446)', JSON.stringify({lanes:r1.mark.splLane,plus:r1.mark.splAdd,hz:r1.mark.splLt}))
@@ -207,7 +207,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const D=window.__fxDevs(); const d=D.find(z=>z.core==='ott');
     return {trait:[...new Set(trait)], xo:[...new Set(window.__W.map(w=>w[0]))], lowcross:d.back.knobs[0][1]};
   });
-  chk(!r4.trait.includes('SYN_EQZ_TRAIT') && r4.trait.includes('SYN_EQZ_BODYQ'), 'wheel over the EQ core (its centre = the Body dot) writes Body\'s Q, NEVER Trait (fb441)', r4.trait.join(','));
+  chk(r4.trait.length===0, 'wheel over the EQ core writes NOTHING — the wheel belongs to the rack\'s scroll (fb451, Max: "if I scroll on top of it, it won\'t move to the next effect")', r4.trait.join(',')||'no writes');
   chk(r4.xo.includes('SYN_OTT_LOWCROSS'), 'dragging the Multiband\'s first crossover writes Low Cross', r4.xo.join(',')+' model='+(+r4.lowcross).toFixed(1));
 
   // ── readout law + relabel law + the route pill colour
@@ -387,7 +387,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     return out; });
   chk(r9.gridWrites===0 && !r9.gridMoved, 'press+drag on the EMPTY grid moves NOTHING (the grid is not a handle)', 'writes='+r9.gridWrites+' moved='+r9.gridMoved);
   chk(r9.gridWheelWrites===0 && r9.gridWheelFree===true, 'wheel over the grid is left to the rack (no EQ writes, pan free)', 'writes='+r9.gridWheelWrites+' free='+r9.gridWheelFree);
-  chk(r9.nodeWheelPrevented===true && r9.nodeWheelWrites==='SYN_EQZ_BODYQ' && r9.bodyQ>50, 'wheel over the Body dot writes ONLY Body\'s Q (no Trait, no other band)', r9.nodeWheelWrites+' q='+r9.bodyQ);
+  chk(r9.nodeWheelPrevented===false && !r9.nodeWheelWrites && r9.bodyQ===50, 'wheel over the Body dot writes NOTHING and is left to the rack\'s scroll (fb451 — Q lives on the back panel)', 'writes='+(r9.nodeWheelWrites||'none')+' q='+r9.bodyQ+' prevented='+r9.nodeWheelPrevented);
   chk(r9.hotOnHover===true && r9.hotOnGrid===false, 'hover lights the dot (purple, larger, grab cursor); the grid clears it', 'hover='+r9.hotOnHover+' grid='+r9.hotOnGrid);
   chk(/_X[1-4]HZ/.test(r9.curveAddWrites)&&/_X[1-4]ON/.test(r9.curveAddWrites)&&/_X[1-4]Q/.test(r9.curveAddWrites)&&r9.curveAddGain===0.5, 'double-click ON THE CURVE adds a band there at 0 dB (gain 0.5, Q at the law)', r9.curveAddWrites+' gain='+r9.curveAddGain);
   chk(/~Delete band/.test(r9.roleRows||'')&&/(^|\|)Reset band/.test(r9.roleRows||''), 'right-click a ROLE dot: Delete band disabled (fixed), Reset band enabled', r9.roleRows);
@@ -515,19 +515,22 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const sp=D.find(x=>x.core==='spl'), si=D.indexOf(sp); sp.type='Low / Mid / High'; window.__fxApplyType(sp,sp.type); sp.sel=1; window.__fxrRender(); for(let k=0;k<3;k++) window.__fx4Tick();
     const card=document.querySelectorAll('.fxr-dev')[si], core=card.querySelector('.fxr-core[data-core="spl"]');
     out.rgOp=[...core.querySelectorAll('.spl-rg')].map(r=>r.getAttribute('opacity')).join(',');
-    out.lt=[...core.querySelectorAll('.spl-lt')].map(e=>e.tagName+':'+e.textContent+(e.classList.contains('sel')?'*':'')).join('|');
+    out.lt=[...core.querySelectorAll('.spl-lt')].map(e=>e.tagName+':'+e.textContent+(e.classList.contains('spl-on')?'*':'')).join('|');
+    out.noSelClass=!core.querySelector('.sel');   // fb451 — ".sel" is the panel's global BOX style; nothing in a core may wear it
     out.plusW=Math.round(core.querySelector('.spl-add').getBoundingClientRect().width); out.swapW=Math.round(card.querySelector('.fxr-swap').getBoundingClientRect().width);   // the panel may be SCALED: compare to the header's own box
-    const sh=core.querySelector('.spl-selh'); out.hair=sh?[+sh.getAttribute('x1'),+sh.getAttribute('x2'),+sh.getAttribute('opacity')]:null;
-    const rg=[...core.querySelectorAll('.spl-rg')]; out.hairOnSel=!!(sh&&rg[1]&&Math.abs(+sh.getAttribute('x1')-(+rg[1].getAttribute('x')))<0.2);
+    out.noUnderline=!core.querySelector('.spl-selh');
+    const rg=[...core.querySelectorAll('.spl-rg')]; out.rgSel=rg[1]?rg[1].getAttribute('opacity')+'/'+rg[1].getAttribute('fill'):'';
+    sp.pills.forEach(p=>p.on=false); sp.pills[0].on=true; /* mute band 1 */ window.__fx4VizPush={spl:[{nl:3,hz:[224,1200,0],pk:[0.1,0.1,0.1],gt:[0,1,1]}]}; window.__fx4Tick(); out.rgMuted=rg[0]?rg[0].getAttribute('opacity')+'/'+rg[0].getAttribute('fill'):''; out.ltMutedDim=core.querySelector('.spl-lt[data-lane="0"]').classList.contains('dim'); window.__fx4VizPush=null; sp.pills[0].on=false; window.__fx4Tick();
     out.chassis=[...card.querySelectorAll('.fxr-pills .fxr-t')].map(e=>e.textContent).join(',');
     window.__W.splice(0); sp.pills.forEach(p=>p.on=false); sp.back.d2.v='Latching'; card.querySelectorAll('.fxr-pills .fxr-pill')[1].click(); out.soloWrites=window.__W.splice(0).map(w=>w[0]+'='+w[1]); out.lane2Solo=!!sp.pills[4].on;
     sp.sel=0; window.__fxrRender(); for(let k=0;k<2;k++) window.__fx4Tick(); const card2=document.querySelectorAll('.fxr-dev')[si]; out.pillFollowsSel=card2.querySelectorAll('.fxr-pills .fxr-pill')[1].classList.contains('fxr-on');   // band 1 is NOT soloed → the proxy reads off
     sp.sel=1; window.__fxrRender(); for(let k=0;k<2;k++) window.__fx4Tick(); out.pillBackOn=document.querySelectorAll('.fxr-dev')[si].querySelectorAll('.fxr-pills .fxr-pill')[1].classList.contains('fxr-on');
     sp.pills.forEach(p=>p.on=false); return out; });
   chk(m3.lampBg==='rgb(255, 255, 255)' && m3.lampShadow==='none', 'Utility lamps FILL WHITE when on — no purple, no glow (fb448)', m3.lampBg+' shadow='+m3.lampShadow);
-  chk(m3.lampCaps.join(',')==='Flip L,Flip R,Swap,Low Cut', 'the DC lamp is now LOW CUT (a 15 Hz DC block is inaudible by nature)', m3.lampCaps.join(','));
-  chk(m3.rgOp==='0,0,0,0' && m3.hair && m3.hair[2]>0.5 && m3.hairOnSel, 'Splitter is TRANSPARENT: regions at opacity 0, the selected band wears the purple hairline', 'rg='+m3.rgOp+' hair='+JSON.stringify(m3.hair));
-  chk(/^SPAN:20\|SPAN:\S+\*\|SPAN:\S+/.test(m3.lt||''), 'Splitter numbers are HTML spans, the LOW band says 20, the selected band is bright', m3.lt);
+  chk(m3.lampCaps.join(',')==='Flip L,Flip R,Swap', 'the lamps are Flip L · Flip R · Swap — the DC lamp is GONE (fb450: a 15 Hz DC block is inaudible by nature)', m3.lampCaps.join(','));
+  chk(/^0,0\.07,0,0$/.test(m3.rgOp) && m3.noUnderline && /^0\.07\/#B794FF$/.test(m3.rgSel||''), 'Splitter: the SELECTED band wears a low-opacity purple wash (0.07), the others are transparent, NO underline, NO box (fb451)', 'rg='+m3.rgOp+' sel='+m3.rgSel+' noUnderline='+m3.noUnderline);
+  chk(/^0\.66\/#14121f$/.test(m3.rgMuted||'') && m3.ltMutedDim===true, 'a MUTED band is GREYED OUT — a dark wash over its spectrum and a dim number (fb451)', 'muted='+m3.rgMuted+' dim='+m3.ltMutedDim);
+  chk(/^SPAN:20\|SPAN:\S+\*\|SPAN:\S+/.test(m3.lt||'') && m3.noSelClass===true, 'Splitter numbers are HTML spans, the LOW band says 20, the selected band is bright — and nothing wears the panel\'s ".sel" box class (fb451)', m3.lt+' noSel='+m3.noSelClass);
   chk(m3.swapW>0 && Math.abs(m3.plusW/m3.swapW-11/14)<0.08, 'the band + is 11/14 of the header\'s + box (smaller, same glyph)', 'plus='+m3.plusW+' header='+m3.swapW);
   chk(m3.chassis==='Mute,Solo,Flip' && m3.lane2Solo===true && m3.soloWrites.some(w=>/SYN_SPL_SOLO2=1/.test(w)), 'Splitter chassis pills = Mute · Solo · Flip for the SELECTED band: Solo with band 2 selected writes SOLO2', m3.chassis+' writes='+m3.soloWrites.join(','));
   chk(m3.pillFollowsSel===false && m3.pillBackOn===true, 'the proxy pills FOLLOW the selection (band 1: off · back to band 2: on)', JSON.stringify({b1:m3.pillFollowsSel,b2:m3.pillBackOn}));

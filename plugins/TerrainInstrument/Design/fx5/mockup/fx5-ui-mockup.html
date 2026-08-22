@@ -102,13 +102,13 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
           filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
           animation:mvBreathe 3.2s ease-in-out infinite; }
 #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
-#syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,1fr); align-items:end; min-width:0; }
+#syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,36px); justify-content:space-between; align-items:end; min-width:0; }
 #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
 #syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
 #syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
 #syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
-#syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-3.5px; background:var(--border-strong); }
-#syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:6px; }
+#syn-panel .fxr-divider{ flex:0 0 auto; width:1px; height:92%; align-self:center; position:relative; left:-2px; background:var(--border-strong); }
+#syn-panel .fxr-rightcol{ flex:0 0 92px; display:flex; flex-direction:column; align-items:stretch; justify-content:flex-end; gap:4px; }
 #syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
 #syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
 #syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
@@ -126,23 +126,21 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-core .spl-add svg{ position:static; width:11px; height:11px; display:block; }
 #syn-panel .fxr-core .spl-nums{ position:absolute; inset:0; pointer-events:none; }
 #syn-panel .fxr-core .spl-lt{ position:absolute; top:5px; font-size:7px; line-height:1; letter-spacing:.03em; color:rgba(255,255,255,0.55); white-space:nowrap; transition:color .12s; }
-#syn-panel .fxr-core .spl-lt.sel{ color:rgba(255,255,255,0.92); }
+#syn-panel .fxr-core .spl-lt.spl-on{ color:rgba(255,255,255,0.92); }
 #syn-panel .fxr-core .spl-lt.dim{ color:rgba(255,255,255,0.22); }
 #syn-panel .fxr-core .spl-add:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
-#syn-panel .fxr-core .spl-add.sel{ color:#FFFFFF; }
+#syn-panel .fxr-core .spl-add.spl-on{ color:#FFFFFF; }
 #syn-panel .fxr-dev.fxr-hidden{ display:none; }
 #syn-panel .fxr-dev.fxr-lanecard{ box-shadow: inset 0 1px 0 var(--purple-400); }
-#syn-panel .fxr-rc-lane .fxr-pills{ height:38px; align-items:stretch; }
-#syn-panel .fxr-rc-lane .fxr-pills .fxr-pill{ height:auto; }
+#syn-panel .fxr-rc-lane{ justify-content:flex-end; padding-bottom:18px; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw{ flex:0 0 auto; height:15px; padding:0 2px; gap:4px; border:none; border-radius:0; background:transparent; font-size:7.5px; letter-spacing:.01em; color:var(--text-secondary); text-shadow:none; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw .utl-dot{ width:7px; height:7px; border-radius:50%; border:1px solid var(--text-muted); background:transparent; flex:0 0 auto; transition:background .12s, border-color .12s, box-shadow .12s; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on{ border:none; color:var(--text-primary); text-shadow:none; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on .utl-dot{ background:#FFFFFF; border-color:#FFFFFF; box-shadow:none; }
 #syn-panel .fxr-core .utl-fl.on, #syn-panel .fxr-core .utl-fr.on{ stroke:#FFFFFF; stroke-width:1.8; }
 #syn-panel .fxr-bk-knob.fxr-bk-dead{ opacity:.32; pointer-events:none; }
-#syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
-                              border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
-                              margin-left:4px; cursor:pointer; }
+#syn-panel .fxr-lane{ font-size:8.5px; font-weight:400; letter-spacing:.02em; color:rgba(255,255,255,0.72);
+                              border:none; border-radius:0; padding:0; margin-left:6px; cursor:pointer; line-height:1; }
 #syn-panel .fxr-route{ display:flex; gap:3px; width:100%; }
 #syn-panel .fxr-r{ flex:1; height:14px; display:flex; align-items:center; justify-content:center; font-size:8px; font-weight:400; color:var(--text-muted); border:1px solid var(--border-strong); border-radius:3px; cursor:pointer; }
 #syn-panel .fxr-r .fxr-t{ position:relative; top:0; line-height:1; }
@@ -191,6 +189,10 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-bk-sep{ grid-row:1 / 3; width:1px; align-self:stretch; justify-self:center; background:var(--border-strong); margin:5px 0; }
 #syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:5px; }
 #syn-panel .fxr-bk-knob .fxr-dial{ width:32px; height:32px; cursor:ns-resize; }
+#syn-panel .fxr-bk-nodd .fxr-bk-knob{ gap:7px; }
+#syn-panel .fxr-bk-nodd .fxr-bk-knob .fxr-dial{ width:40px; height:40px; }
+#syn-panel .fxr-bk-nodd .fxr-bk-knob .fxr-lab{ font-size:8.5px; }
+#syn-panel .fxr-bk-nodd .fxr-bk-sep{ margin:9px 0; }
 #syn-panel .fxr-bk-knob .fxr-lab{ font-size:7.5px; }
 #syn-panel .fxr-core[data-conv="1"] .conv-drop{ position:absolute; inset:0; z-index:5; display:none; flex-direction:column; align-items:center; justify-content:center; gap:2px; border:1px dashed var(--purple-400); border-radius:6px; background:rgba(18,16,30,.66); color:var(--purple-400); font-size:10px; letter-spacing:.04em; pointer-events:none; }
 #syn-panel .fxr-core[data-conv="1"].conv-drag .conv-drop{ display:flex; }
@@ -218,17 +220,17 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
            crisp, unscaled, the same thin white; brighter on the selected band, dim on a muted / soloed-away one */
         #syn-panel .fxr-core .spl-nums{ position:absolute; inset:0; pointer-events:none; }
         #syn-panel .fxr-core .spl-lt{ position:absolute; top:5px; font-size:7px; line-height:1; letter-spacing:.03em; color:rgba(255,255,255,0.55); white-space:nowrap; transition:color .12s; }
-        #syn-panel .fxr-core .spl-lt.sel{ color:rgba(255,255,255,0.92); }
+        #syn-panel .fxr-core .spl-lt.spl-on{ color:rgba(255,255,255,0.92); }
         #syn-panel .fxr-core .spl-lt.dim{ color:rgba(255,255,255,0.22); }
         #syn-panel .fxr-core .spl-add:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
-        #syn-panel .fxr-core .spl-add.sel{ color:#FFFFFF; }
+        #syn-panel .fxr-core .spl-add.spl-on{ color:#FFFFFF; }   /* fb451 — not ".sel": #syn-panel .sel is the panel's global selected BOX (it drew a ring around the number) */
         /* fb446 — LANE CARDS: a device that lives inside a Splitter band. No route row (it is fed by the
            band, routing it anywhere else would be a lie), the pills grow to fill the column, and a
            purple top hairline ties it to the lit band above. Hidden unless its band is the selected one. */
         #syn-panel .fxr-dev.fxr-hidden{ display:none; }
         #syn-panel .fxr-dev.fxr-lanecard{ box-shadow: inset 0 1px 0 var(--purple-400); }
-        #syn-panel .fxr-rc-lane .fxr-pills{ height:38px; align-items:stretch; }
-        #syn-panel .fxr-rc-lane .fxr-pills .fxr-pill{ height:auto; }
+        /* fb451 — a lane card's pills are the NORMAL pills (Max: "fat and chubby … too low"), sat on the knobs' centerline */
+        #syn-panel .fxr-rc-lane{ justify-content:flex-end; padding-bottom:18px; }   /* measured: the pill's centre lands on the dial's centre */
         /* fb447 — UTILITY: THE WIRING, DRAWN, AND LAMPS FOR THE SWITCHES. Max on the fb446 strip: "four
            buttons in the front looking stupid … what is this for?" — because a Utility's whole job is
            ROUTING and the card showed none of it. So the core draws the two rails, L and R, through the
@@ -246,9 +248,10 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
         /* fb447 — a back cell this Type cannot bind is DEAD: dim, and not a handle (the relabel law) */
         #syn-panel .fxr-bk-knob.fxr-bk-dead{ opacity:.32; pointer-events:none; }
         /* the lane tag a device wears when it lives inside a Splitter band */
-        #syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
-                              border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
-                              margin-left:4px; cursor:pointer; }
+        /* fb451 — the lane tag is a THIN WHITE NUMBER between the name and the type pill, on the centerline (Max: "why is it
+           all purple and in a box, taking up space … just a thin white number between the pills and the name") */
+        #syn-panel .fxr-lane{ font-size:8.5px; font-weight:400; letter-spacing:.02em; color:rgba(255,255,255,0.72);
+                              border:none; border-radius:0; padding:0; margin-left:6px; cursor:pointer; line-height:1; }
 
 /* the mockup's own scaffolding — NOT part of the lifted rack sheet */
 .fxr-dev{position:relative}
@@ -262,6 +265,9 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 .bp-k{display:flex;flex-direction:column;align-items:center;gap:4px}
 .bp-k .fxr-lab{font:500 9px -apple-system,system-ui;color:#9a92b8}
 .bp-k.fxr-bk-dead{opacity:.32;pointer-events:none}
+.bp-nodd .bp-grid{gap:16px 0;padding:6px 0}
+.bp-nodd .bp-k .fxr-dial{width:40px;height:40px}
+.bp-nodd .bp-k .fxr-lab{font-size:10px}
 .bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
 </style></head><body>
 <h1>The last three — Bode · Utility · Splitter</h1>
@@ -269,7 +275,7 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
 <b>Bode</b>: drag the <b>dot on the rail</b> = Shift — the white ghost is where the partials were, the purple is where they went, and the streams between them run in the shift's direction (feedback keeps them going); wheel on the dot = Fdbk, double-click = zero, right-click = Up · Ring · Down.
 <b>Splitter</b>: click a <b>band</b> to select it (the hairline), the chassis pills Mute · Solo · Flip act on it; drag a <b>crossover node</b>; wheel over a band = that lane's gain; right-click a band = the menu; the <b>+</b> drops a device into that band.
-<b>Utility</b>: the card draws the WIRING — two rails, L and R, through Flip → Swap → Mono → Width/Pan, lit by what leaves on each; the lamps under it are the switches. Knobs drag up/down, double-click resets.</p>
+<b>Utility</b> (fb450, the channel strip): the card draws the two rails, L and R, through Flip → Haas → Mono → Width/Pan → Swap, lit by what leaves on each; the lamps under it are the switches. The back panel is eight knobs, no dropdowns — High Pass · Low Pass · Bass · Air · Mono Below · Rotate · Haas · Drive — every one audible on a mono source. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
   <button id="play">Play</button>
@@ -366,51 +372,76 @@ class TerrainBode extends AudioWorkletProcessor{
 registerProcessor('terrain-bode',TerrainBode);
 </script>
 <script id="wk-utl" type="text/plain">// ─────────────────────────────────────────────────────────────────────────────
-// utility-worklet.js — the UTILITY glue strip (chain kind 14) as an AudioWorkletProcessor, so
-// the six buttons are AUDIBLE in the Safari mockup (the fb296 law).
+// utility-worklet.js — the UTILITY channel strip (chain kind 14, fb450) as an AudioWorkletProcessor, so
+// the card is AUDIBLE in the Safari mockup (the fb296 law).
 //
-// A MIRROR OF THE MECHANISM in Source/TerrainUtilityFx.h: Gain is a -60..+30 dB fader with
-// unity at exactly 60/90 and a GLIDED -inf at 0; Image is the BOUNDED width (0 mono · ½ neutral
-// · 1 = 300 %, mid never zero — the deliberate contrast with Widen's R11); Steer is constant-
-// power balance; the six pills (Flip L · Flip R · Trade · Sum · DC · Dim); Wiring; Mono Below
-// (a side HPF). Characters' voicings are NOT here. The shipping engine is certified 84/84.
+// A MIRROR OF THE MECHANISM in Source/TerrainUtilityFx.h: Flip L/R → Haas → Mono → Gain(×Dim) → High
+// Pass (2-pole) → Low Pass (2-pole) → Bass (low shelf 120 Hz ±12) → Air (high shelf 8 kHz ±12) → Drive
+// (tanh, +12..+40 dB, LOUDNESS makeup at the bus peak) → Mono Below (side HPF) → Width → Rotate → Pan →
+// Swap (at the output) → Mix. Same knob→value laws as the engine. The shipping engine is certified 67/67.
 //
-//   n.port.postMessage({ gain:.667, image:.5, steer:.5, mix:1, b1..b8, flipl, flipr, trade, sum, dc, dim, axis })
-//   n.port.onmessage = e => draw(e.data);   // { lvl, pkL, pkR, gainDb }
+//   n.port.postMessage({ gain:.667, image:.5, steer:.5, mix:1, b1..b8, flipl, flipr, trade, sum, dim, type })
+//   n.port.onmessage = e => draw(e.data);   // { lvl, pkL, pkR, corr, img }
 // ─────────────────────────────────────────────────────────────────────────────
+const BUS_PK=0.05*1.41421356;
+function tanhF(x){ if(x>5)return 1; if(x<-5)return -1; const x2=x*x; return x*(27+x2)/(27+9*x2); }
+class Svf{ constructor(){ this.ic1=0; this.ic2=0; this.g=0; this.a1=1; this.a2=0; this.a3=0; } set(fc,fs){ const f=Math.max(5,Math.min(fc,0.45*fs)); const g=Math.tan(Math.PI*f/fs); this.g=g; const k=1.4142136; const den=1+g*(g+k); this.a1=1/den; this.a2=g*this.a1; this.a3=g*this.a2; }
+  tick(x){ const v3=x-this.ic2, v1=this.a1*this.ic1+this.a2*v3, v2=this.ic2+this.a2*this.ic1+this.a3*v3; this.ic1=2*v1-this.ic1; this.ic2=2*v2-this.ic2; return {lp:v2, hp:x-1.4142136*v1-v2}; } }
+class Shelf{ constructor(){ this.b0=1;this.b1=0;this.b2=0;this.a1=0;this.a2=0;this.z1=0;this.z2=0; }
+  design(high,dB,fc,fs){ const A=Math.pow(10,dB/40), w=2*Math.PI*Math.min(fc,0.45*fs)/fs, cs=Math.cos(w), sn=Math.sin(w), al=sn*0.70710678, sq=2*Math.sqrt(A)*al; let B0,B1,B2,A0,A1,A2;
+    if(!high){ B0=A*((A+1)-(A-1)*cs+sq); B1=2*A*((A-1)-(A+1)*cs); B2=A*((A+1)-(A-1)*cs-sq); A0=(A+1)+(A-1)*cs+sq; A1=-2*((A-1)+(A+1)*cs); A2=(A+1)+(A-1)*cs-sq; }
+    else { B0=A*((A+1)+(A-1)*cs+sq); B1=-2*A*((A-1)+(A+1)*cs); B2=A*((A+1)+(A-1)*cs-sq); A0=(A+1)-(A-1)*cs+sq; A1=2*((A-1)-(A+1)*cs); A2=(A+1)-(A-1)*cs-sq; }
+    this.b0=B0/A0; this.b1=B1/A0; this.b2=B2/A0; this.a1=A1/A0; this.a2=A2/A0; }
+  tick(x){ const y=this.b0*x+this.z1; this.z1=this.b1*x-this.a1*y+this.z2; this.z2=this.b2*x-this.a2*y; return y; } }
 class TerrainUtility extends AudioWorkletProcessor{
   constructor(){ super(); this.fs=sampleRate;
-    this.p={gain:60/90,image:.5,steer:.5,mix:1,b1:0,b2:.5,b3:0,b4:0,b5:.5,b6:0,b7:0,b8:.5,flipl:0,flipr:0,trade:0,sum:0,dc:0,dim:0,axis:0,type:0,character:0};
-    this.gS=1; this.sideS=1; this.pL=1; this.pR=1; this.mixS=1; this.sumS=0; this.fl=1; this.fr=1; this.dimS=1; this.dcx=[0,0]; this.dcy=[0,0]; this.dcOn=0; this.dcR=0.9987;
-    this.sz=0; this.sG=0; this.pkL=0; this.pkR=0; this.lvl=0; this.tick=0;
+    this.p={gain:60/90,image:.5,steer:.5,mix:1,b1:0,b2:1,b3:.5,b4:.5,b5:0,b6:.5,b7:.5,b8:0,flipl:0,flipr:0,trade:0,sum:0,dim:0,type:0};
+    this.gS=1; this.sideS=1; this.pL=1; this.pR=1; this.mixS=1; this.sumS=0; this.fl=1; this.fr=1; this.dimS=1; this.swS=0;
+    this.hp=[new Svf(),new Svf()]; this.lp=[new Svf(),new Svf()]; this.bass=[new Shelf(),new Shelf()]; this.air=[new Shelf(),new Shelf()];
+    this.hpA=0; this.lpA=0; this.bA=0; this.aA=0; this.dA=0; this.hA=0; this.drvS=1; this.haasS=0; this.rotS=0; this.sz=0; this.sG=0; this.mbOn=false;
+    const n=1<<Math.ceil(Math.log2(this.fs*0.025)); this.dl=[new Float32Array(n),new Float32Array(n)]; this.mask=n-1; this.w=0;
+    this.pkL=0; this.pkR=0; this.lvl=0; this.tick=0;
     this.port.onmessage=e=>{ Object.assign(this.p,e.data); this.resolve(); }; this.resolve(); }
   resolve(){ const p=this.p, c=v=>Math.max(0,Math.min(1,+v||0));
-    const t=c(p.gain); this.gT=t<=0?0:Math.pow(10,(-60+90*t)/20); if(Math.abs(t-60/90)<1e-4) this.gT=1;
-    const im=c(p.image); this.sideT=im<0.5?im*2:1+4*(im-0.5);            // 0 → 0 · .5 → 1 · 1 → 3 (300 %)
+    const t=c(p.gain); this.gT=t<=0?0:Math.pow(10,(-60+90*t)/20); if(Math.abs(t-60/90)<1e-4) this.gT=1; if(+p.dim) this.gT*=0.1;
+    const im=c(p.image); this.sideT=im<0.5?im*2:1+4*(im-0.5);
     const st=c(p.steer), th=(st-0.5)*Math.PI/2; this.pLT=Math.cos(th+Math.PI/4)*1.4142136; this.pRT=Math.sin(th+Math.PI/4)*1.4142136;
-    this.mixT=c(p.mix); this.sumT=+p.sum?1:0; this.flT=+p.flipl?-1:1; this.frT=+p.flipr?-1:1; this.dimT=+p.dim?Math.pow(10,-20/20):1; this.dcOn=+p.dc?1:0; this.trade=+p.trade?1:0;
-    this.dcR=Math.exp(-2*Math.PI*(15*Math.pow(320/15,c(p.b6)))/this.fs);   // fb448 — the DC lamp is the LOW CUT at the Cut At corner (b6: 15..320 Hz), as the engine's dcB_ is
-    const mb=c(p.b3); this.mbOn=mb>0.001; const mbHz=20*Math.pow(60,mb); this.sG=1-Math.exp(-2*Math.PI*mbHz/this.fs);
-    this.wiring=p.axis|0; }
+    this.mixT=c(p.mix); this.sumT=+p.sum?1:0; this.flT=+p.flipl?-1:1; this.frT=+p.flipr?-1:1; this.swT=+p.trade?1:0;
+    const hpT=c(p.b1), lpT=c(p.b2); this.hpHz=hpT<=0?0:40*Math.pow(100,hpT); this.lpHz=lpT>=1?0:300*Math.pow(16000/300,lpT);
+    for(let k=0;k<2;k++){ this.hp[k].set(this.hpHz||40,this.fs); this.lp[k].set(this.lpHz||16000,this.fs); }
+    this.bassDb=(2*c(p.b3)-1)*12; this.airDb=(2*c(p.b4)-1)*12; for(let k=0;k<2;k++){ this.bass[k].design(false,this.bassDb,120,this.fs); this.air[k].design(true,this.airDb,8000,this.fs); }
+    const mb=c(p.b5); this.mbOn=mb>0.001; const mbHz=50*Math.pow(30,mb); this.sG=1-Math.exp(-2*Math.PI*mbHz/this.fs);
+    this.rotT=(2*c(p.b6)-1)*40*Math.PI/180; this.haasT=(2*c(p.b7)-1)*20*0.001*this.fs;
+    const dT=c(p.b8); this.drvT=dT<=0?1:Math.pow(10,(12+28*dT)/20); this.drvOn=dT>0; }
   process(inputs,outputs){ const inp=inputs[0], out=outputs[0]; if(!out||!out[0]) return true;
     const N=out[0].length, L=inp&&inp[0]?inp[0]:null, R=inp&&inp[1]?inp[1]:(L||null); const a=1-Math.exp(-1/(0.02*this.fs));
     let acc=0, pl=0, pr=0;
     for(let i=0;i<N;i++){ let xl=L?L[i]:0, xr=R?R[i]:xl; const dl=xl, dr=xr;
       this.gS+=a*(this.gT-this.gS); this.sideS+=a*(this.sideT-this.sideS); this.pL+=a*(this.pLT-this.pL); this.pR+=a*(this.pRT-this.pR);
-      this.mixS+=a*(this.mixT-this.mixS); this.sumS+=a*(this.sumT-this.sumS); this.fl+=a*(this.flT-this.fl); this.fr+=a*(this.frT-this.fr); this.dimS+=a*(this.dimT-this.dimS);
-      if(this.trade){ const t=xl; xl=xr; xr=t; }
-      if(this.wiring===1){ const d=0.5*(xl-xr); xl=d; xr=-d; } else if(this.wiring===2){ xr=xl; } else if(this.wiring===3){ xl=xr; } else if(this.wiring===4){ xr=0; } else if(this.wiring===5){ xl=0; }
+      this.mixS+=a*(this.mixT-this.mixS); this.sumS+=a*(this.sumT-this.sumS); this.fl+=a*(this.flT-this.fl); this.fr+=a*(this.frT-this.fr); this.swS+=a*(this.swT-this.swS);
+      this.hpA+=a*((this.hpHz>0?1:0)-this.hpA); this.lpA+=a*((this.lpHz>0?1:0)-this.lpA); this.bA+=a*((Math.abs(this.bassDb)>0.01?1:0)-this.bA); this.aA+=a*((Math.abs(this.airDb)>0.01?1:0)-this.aA);
+      this.dA+=a*((this.drvOn?1:0)-this.dA); this.drvS+=a*(this.drvT-this.drvS); this.haasS+=a*(this.haasT-this.haasS); this.hA+=a*((Math.abs(this.haasT)>1e-3?1:0)-this.hA); this.rotS+=a*(this.rotT-this.rotS);
       xl*=this.fl; xr*=this.fr;
+      // Haas: one channel delayed (fractional, glided), the other straight
+      this.dl[0][this.w]=xl; this.dl[1][this.w]=xr; { const d=Math.abs(this.haasS), rp=this.w-d, i0=Math.floor(rp), fr=rp-i0, ch=this.haasS<0?1:0; const y=this.dl[ch][i0&this.mask]*(1-fr)+this.dl[ch][(i0+1)&this.mask]*fr; if(ch===0) xl+=this.hA*(y-xl); else xr+=this.hA*(y-xr); } this.w=(this.w+1)&this.mask;
+      { const m=0.5*(xl+xr); xl+=this.sumS*(m-xl); xr+=this.sumS*(m-xr); }
+      xl*=this.gS; xr*=this.gS;
+      if(this.hpA>0){ const h0=this.hp[0].tick(xl).hp, h1=this.hp[1].tick(xr).hp; xl+=this.hpA*(h0-xl); xr+=this.hpA*(h1-xr); }
+      if(this.lpA>0){ const l0=this.lp[0].tick(xl).lp, l1=this.lp[1].tick(xr).lp; xl+=this.lpA*(l0-xl); xr+=this.lpA*(l1-xr); }
+      if(this.bA>0){ xl+=this.bA*(this.bass[0].tick(xl)-xl); xr+=this.bA*(this.bass[1].tick(xr)-xr); }
+      if(this.aA>0){ xl+=this.aA*(this.air[0].tick(xl)-xl); xr+=this.aA*(this.air[1].tick(xr)-xr); }
+      if(this.dA>0){ const drv=Math.max(1,this.drvS), mk=BUS_PK/Math.max(1e-6,tanhF(drv*BUS_PK)); xl+=this.dA*(mk*tanhF(drv*xl)-xl); xr+=this.dA*(mk*tanhF(drv*xr)-xr); }
       let m=0.5*(xl+xr), s=0.5*(xl-xr);
-      if(this.mbOn){ this.sz+=this.sG*(s-this.sz); s-=this.sz; }           // Mono Below: side HPF
-      s*=this.sideS; s*=(1-this.sumS);                                       // Image (bounded) · Sum
-      xl=(m+s)*this.gS*this.pL*this.dimS; xr=(m-s)*this.gS*this.pR*this.dimS;
-      if(this.dcOn){ const yl=xl-this.dcx[0]+this.dcR*this.dcy[0]; this.dcx[0]=xl; this.dcy[0]=yl; xl=yl; const yr=xr-this.dcx[1]+this.dcR*this.dcy[1]; this.dcx[1]=xr; this.dcy[1]=yr; xr=yr; }
+      if(this.mbOn){ this.sz+=this.sG*(s-this.sz); s-=this.sz; }
+      s*=this.sideS;
+      if(Math.abs(this.rotS)>1e-6){ const c=Math.cos(this.rotS), sn=Math.sin(this.rotS); const mm=m*c-s*sn, ss=m*sn+s*c; m=mm; s=ss; }
+      xl=(m+s)*this.pL; xr=(m-s)*this.pR;
+      { const l0=xl, r0=xr; xl=l0+this.swS*(r0-l0); xr=r0+this.swS*(l0-r0); }   // Swap at the output
       const wg=Math.sin(1.5707963*this.mixS), dg=Math.cos(1.5707963*this.mixS);
       const oL=dg*dl+wg*xl, oR=dg*dr+wg*xr; out[0][i]=oL; if(out[1]) out[1][i]=oR;
       acc+=oL*oL+oR*oR; pl=Math.max(pl,Math.abs(oL)); pr=Math.max(pr,Math.abs(oR)); }
     this.pkL=Math.max(pl,this.pkL*0.88); this.pkR=Math.max(pr,this.pkR*0.88); this.lvl=0.9*this.lvl+0.1*Math.sqrt(acc/(2*N));
-    if(++this.tick>=6){ this.tick=0; this.port.postMessage({lvl:this.lvl,pkL:this.pkL,pkR:this.pkR,gainDb:20*Math.log10(Math.max(1e-6,this.gS))}); }
+    if(++this.tick>=6){ this.tick=0; this.port.postMessage({lvl:this.lvl,pkL:this.pkL,pkR:this.pkR,corr:0,img:this.sideT}); }
     return true; } }
 registerProcessor('terrain-utility',TerrainUtility);
 </script>
@@ -494,7 +525,7 @@ registerProcessor('terrain-splitter',TerrainSplitter);
 </script>
 <script>
 "use strict";
-var DEVICES=[{"dev": "Bode", "core": "bod", "proc": "terrain-bode", "pfx": "SYN_BOD_", "types": ["Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze"], "tpN": 8, "chars": ["Pristine", "Dome '64", "Tube 735", "Leaky", "Tape Loop", "Crush", "Iron", "Ash"], "d2k": "Route", "d2": ["Normal", "Cross", "Mono Sum", "Wide", "Shift First", "Shift Last"], "d2p": "ROUTE", "knobs": [["Shift", 50, "SHIFT"], ["Direction", 100, "DIR"], ["Fdbk", 0, "FDBK"], ["Mix", 100, "MIX"]], "keys": ["shift", "dir", "fdbk", "mix"], "back": [["Fine", 50, "FINE"], ["Stereo", 100, "SPREAD"], ["Time", 45, "TIME"], ["Diffusion", 0, "BLUR"], ["Low Keep", 0, "LOWKEEP"], ["Damping", 100, "DAMPING"], ["Env Shift", 50, "TOUCH"], ["Drift", 0, "DRIFT"]], "pills": [["Sync", 0], ["Guard", 1]], "pillKeys": ["sync", "guard"]}, {"dev": "Utility", "core": "utl", "proc": "terrain-utility", "pfx": "SYN_UTL_", "types": ["Strip", "Turn", "Outer", "Canopy", "Cellar"], "tpN": 8, "chars": ["Cushion", "Brick", "Coil", "Creep", "Tuck", "Rail", "Ripple", "Fuse"], "d2k": "Wiring", "d2": ["Through", "Difference", "L To Both", "R To Both", "L Only", "R Only"], "d2p": "WIRING", "knobs": [["Gain", 66.667, "GAIN"], ["Width", 50, "IMAGE"], ["Pan", 50, "STEER"], ["Mix", 100, "MIX"]], "keys": ["gain", "image", "steer", "mix"], "back": [["Drive", 0, "B1"], ["Shape", 50, "B2"], ["Mono Below", 0, "B3"], ["Slope", 0, "B4"], ["Rotate", 50, "B5"], ["Cut At", 68, "B6"], ["Mono Above", 0, "B7"], ["Crossover", 50, "B8"]], "pills": [["Flip L", 0], ["Flip R", 0], ["Swap", 0], ["Low Cut", 0], ["Mono", 0], ["Dim", 0]], "pillKeys": ["flipl", "flipr", "trade", "dc", "sum", "dim"]}, {"dev": "Splitter", "core": "spl", "proc": "terrain-splitter", "pfx": "SYN_SPL_", "types": ["Low / High", "Low / Mid / High", "Sub / Low / Mid / High", "Mid / Side", "Left / Right"], "tpN": 8, "typeIdx": 1, "d1k": "Slope", "d1p": "SLOPE", "chars": ["6 dB", "12 dB", "24 dB", "48 dB"], "charIdx": 2, "d2k": "Solo Mode", "d2": ["Latching", "Exclusive", "Momentary"], "d2p": "LATCH", "knobs": [["Split", 50, "SPLIT"], ["Balance", 50, "BALANCE"], ["Spread", 50, "SPREAD"], ["Mix", 100, "MIX"]], "keys": ["split", "balance", "spread", "mix"], "back": [["Low Gain", 50, "B1"], ["Mid Gain", 50, "B2"], ["High Gain", 50, "B3"], ["Mid Width", 50, "B4"], ["Spacing", 40, "B5"], ["Low Width", 50, "B6"], ["High Width", 50, "B7"], ["High Pan", 50, "B8"]], "pills": [["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["Mute", 0], ["Solo", 0], ["Flip", 0]], "pillKeys": ["mute1", "solo1", "flip1", "mute2", "solo2", "flip2", "mute3", "solo3", "flip3", "mute4", "solo4", "flip4", "px1", "px2", "px3"]}];
+var DEVICES=[{"dev": "Bode", "core": "bod", "proc": "terrain-bode", "pfx": "SYN_BOD_", "types": ["Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze"], "tpN": 8, "chars": ["Pristine", "Dome '64", "Tube 735", "Leaky", "Tape Loop", "Crush", "Iron", "Ash"], "d2k": "Route", "d2": ["Normal", "Cross", "Mono Sum", "Wide", "Shift First", "Shift Last"], "d2p": "ROUTE", "knobs": [["Shift", 50, "SHIFT"], ["Direction", 100, "DIR"], ["Fdbk", 0, "FDBK"], ["Mix", 100, "MIX"]], "keys": ["shift", "dir", "fdbk", "mix"], "back": [["Fine", 50, "FINE"], ["Stereo", 100, "SPREAD"], ["Time", 45, "TIME"], ["Diffusion", 0, "BLUR"], ["Low Keep", 0, "LOWKEEP"], ["Damping", 100, "DAMPING"], ["Env Shift", 50, "TOUCH"], ["Drift", 0, "DRIFT"]], "pills": [["Sync", 0], ["Guard", 1]], "pillKeys": ["sync", "guard"]}, {"dev": "Utility", "core": "utl", "proc": "terrain-utility", "pfx": "SYN_UTL_", "noDD": true, "types": ["Strip", "Turn", "Outer", "Canopy", "Cellar"], "tpN": 8, "chars": ["\u2014"], "d2k": "", "d2": ["\u2014"], "d2p": "NONE", "knobs": [["Gain", 66.667, "GAIN"], ["Width", 50, "IMAGE"], ["Pan", 50, "STEER"], ["Mix", 100, "MIX"]], "keys": ["gain", "image", "steer", "mix"], "back": [["High Pass", 0, "B1"], ["Low Pass", 100, "B2"], ["Bass", 50, "B3"], ["Air", 50, "B4"], ["Mono Below", 0, "B5"], ["Rotate", 50, "B6"], ["Haas", 50, "B7"], ["Drive", 0, "B8"]], "pills": [["Flip L", 0], ["Flip R", 0], ["Swap", 0], ["Mono", 0], ["Dim", 0]], "pillKeys": ["flipl", "flipr", "trade", "sum", "dim"]}, {"dev": "Splitter", "core": "spl", "proc": "terrain-splitter", "pfx": "SYN_SPL_", "types": ["Low / High", "Low / Mid / High", "Sub / Low / Mid / High", "Mid / Side", "Left / Right"], "tpN": 8, "typeIdx": 1, "d1k": "Slope", "d1p": "SLOPE", "chars": ["6 dB", "12 dB", "24 dB", "48 dB"], "charIdx": 2, "d2k": "Solo Mode", "d2": ["Latching", "Exclusive", "Momentary"], "d2p": "LATCH", "knobs": [["Split", 50, "SPLIT"], ["Balance", 50, "BALANCE"], ["Spread", 50, "SPREAD"], ["Mix", 100, "MIX"]], "keys": ["split", "balance", "spread", "mix"], "back": [["Low Gain", 50, "B1"], ["Mid Gain", 50, "B2"], ["High Gain", 50, "B3"], ["Mid Width", 50, "B4"], ["Spacing", 40, "B5"], ["Low Width", 50, "B6"], ["High Width", 50, "B7"], ["High Pan", 50, "B8"]], "pills": [["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["Mute", 0], ["Solo", 0], ["Flip", 0]], "pillKeys": ["mute1", "solo1", "flip1", "mute2", "solo2", "flip2", "mute3", "solo3", "flip3", "mute4", "solo4", "flip4", "px1", "px2", "px3"]}];
 var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
 var RLBL=['A','B','C','D','S','N'];
 function knobSVG(pct,label,glyph){
@@ -538,7 +569,7 @@ var DEVS=DEVICES.map(function(t){ return {
   route:[true,false,false,false,false,false],
   knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
   xp:(t.core==='eqz')?[1,2,3,4].map(function(k){return [t.pfx+'X'+k+'HZ',t.pfx+'X'+k,t.pfx+'X'+k+'ON'];}):null, xb:(t.core==='eqz')?[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]:null,   /* fb438 — the free bells */
-  back:{d1:{k:(t.d1k||'Character'),v:t.chars[t.charIdx||0],opts:t.chars,p:t.pfx+(t.d1p||'CHAR')}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
+  back:{noDD:!!t.noDD, d1:{k:(t.d1k||'Character'),v:t.chars[t.charIdx||0],opts:t.chars,p:t.noDD?null:t.pfx+(t.d1p||'CHAR')}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.noDD?null:t.pfx+t.d2p,pN:8},
         knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
   typeIdx:(t.typeIdx||0), charIdx:(t.charIdx||0), axisIdx:0, __t:t }; });
 DEVS.forEach(function(d){ d.type=d.types[d.typeIdx]||d.types[0]; });
@@ -590,14 +621,15 @@ var FX_FMT={
             'utl|GAIN':function(v){ if(v<=0) return '−∞'; var db=-60+90*(v/100); if(Math.abs(v/100-60/90)<1e-3) db=0; return Math.abs(db)<0.05?'0.0':(db>0?'+':'−')+(Math.abs(db)>=10?Math.round(Math.abs(db)):Math.abs(db).toFixed(1)); },
             'utl|IMAGE':function(v){ var im=v/100, pc=im<0.5?im*200:100+400*(im-0.5); return pc<1?'Mono':Math.round(pc)+'%'; },
             'utl|STEER':function(v){ return Math.abs(v-50)<1?'C':(v<50?'L':'R')+Math.round(Math.abs(v-50)*2); },
-            'utl|B1':function(v){ return v<=0.5?'Off':''+Math.round(v/100*48); },
-            'utl|B2':function(v){ return Math.round(v)+'%'; },
-            'utl|B3':function(v){ return v<=0.1?'Off':fx4Hz(20*Math.pow(60,v/100)); },
-            'utl|B4':function(v){ return ''+Math.round(6*(1+2*v/100)); },   /* fb447 — dB/oct, bare: 6 .. 18 (the house's slope language) */
-            'utl|B5':function(v){ var dg=(v/100-0.5)*80; return Math.abs(dg)<0.5?'0':(dg>0?'+':'−')+Math.abs(dg).toFixed(0); },
-            'utl|B6':function(v){ return fx4Hz(15*Math.pow(320/15,v/100)); },   /* fb448 — always the corner in Hz: the LAMP is the on/off, the knob is where */
-            'utl|B7':function(v){ return Math.round(v)+'%'; },
-            'utl|B8':function(v){ return fx4Hz(60*Math.pow(100,v/100)); },
+            /* fb450 — the channel strip's eight, mirrored from TerrainUtilityFx's own laws (hpHzFor / lpHzFor / shelfDbFor / ...) */
+            'utl|B1':function(v){ return v<=0.5?'Off':fx4Hz(40*Math.pow(100,v/100)); },                       /* High Pass 40 Hz..4 kHz, Off at 0 */
+            'utl|B2':function(v){ return v>=99.5?'Off':fx4Hz(300*Math.pow(16000/300,v/100)); },              /* Low Pass 300 Hz..16 kHz, Off at the top */
+            'utl|B3':function(v){ return fx4DbS((v/100-0.5)*24); },                                           /* Bass ±12 */
+            'utl|B4':function(v){ return fx4DbS((v/100-0.5)*24); },                                           /* Air ±12 */
+            'utl|B5':function(v){ return v<=0.1?'Off':fx4Hz(50*Math.pow(30,v/100)); },                        /* Mono Below 50..1.5k */
+            'utl|B6':function(v){ var dg=(v/100-0.5)*80; return Math.abs(dg)<0.5?'0':(dg>0?'+':'−')+Math.abs(dg).toFixed(0); },   /* Rotate ±40° */
+            'utl|B7':function(v){ var ms=Math.abs(v-50)*0.4; return ms<0.5?'C':(v<50?'L':'R')+Math.round(ms); },            /* Haas ±20 ms: L12 = the image leans left */
+            'utl|B8':function(v){ return v<=0.5?'Off':''+Math.round(12+28*v/100); },                           /* Drive +12..+40 dB, bare */
             'ott|LOWCROSS':function(v,d){ var z=d&&d.__vz; return fx4Hz(z&&z.x?z.x[0]:30*Math.pow(10,v/100)); },
             'ott|HIGHCROSS':function(v,d){ var z=d&&d.__vz; var x=z&&z.x?z.x[1]:0; return x>0?fx4Hz(x):(z?'—':fx4Hz(1000*Math.pow(8,v/100))); },
             'ott|RAISE':function(v){ return (v/100*1.5).toFixed(1)+'x'; },
@@ -671,7 +703,7 @@ var CORES={
                curve whenever bands overlapped or Slant leaned (the panel EQ's own rule, fb437).
                fb441 — THE NODE IS THE HANDLE (Pro-Q / EQ Eight / Parametric EQ 2): press within 8 units of
                a dot to drag it (X = Hz, Y = gain, BOTH delta from the grab — a press never teleports a band);
-               wheel over a dot = THAT band's Q and nothing else (the grid passes the wheel to the rack pan);
+               (fb451 — NO wheel on the core: the wheel is the rack's scroll, Max: "if I scroll on top of it, it won't move to the next effect");
                double-click a dot = reset it, double-click the curve/grid = ADD a band there at 0 dB;
                right-click a dot = the house menu (Delete band / Reset band), whose HEADER carries that band's
                Hz and Q — the card itself prints no floating text (fb443). Hover turns the dot purple. */
@@ -788,8 +820,8 @@ var CORES={
                handler binds them by index (Flip L · Flip R · Swap · DC = pp[0..3]); Mono and Dim are
                pp[4..5] on the chassis pill row like every other card. */
             utl:function(){
-              var lamps=['Flip L','Flip R','Swap','Low Cut'], h='';   /* fb448 — "DC doesn't work": a 15 Hz DC block is inaudible by nature; the lamp is now the LOW CUT at the Cut At corner (default 120 Hz), night and day */
-              for(var i=0;i<4;i++) h+='<span class="fxr-pill utl-sw"><span class="utl-dot"></span><span class="fxr-t">'+lamps[i]+'</span></span>';
+              var lamps=['Flip L','Flip R','Swap'], h='';   /* fb450 — three lamps; Swap is at the OUTPUT (after Pan), so it swaps whatever the strip produced */
+              for(var i=0;i<3;i++) h+='<span class="fxr-pill utl-sw"><span class="utl-dot"></span><span class="fxr-t">'+lamps[i]+'</span></span>';
               return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
                 +'<text class="utl-pin" x="'+(FX4_X0+0.5)+'" y="24.4" font-size="6.5" fill="rgba(255,255,255,0.55)">L</text>'
                 +'<text class="utl-pin" x="'+(FX4_X0+0.5)+'" y="46.4" font-size="6.5" fill="rgba(255,255,255,0.55)">R</text>'
@@ -818,8 +850,9 @@ var CORES={
               var h='', adds='', nums='';
               /* fb448 — TRANSPARENT (Max: "the splitter needs to be transparent, we can see our audio"): the region
                  rect is a HIT AREA only (fill kept so it receives the pointer, opacity 0 — never a wash); the
-                 selected band is marked by a purple segment of the BASELINE under it (fb449 — it was a hairline across
-                 the top and sat on the numbers; the lane cards keep their top hairline); the numbers live in an HTML layer. */
+                 selected band wears a LOW-OPACITY PURPLE WASH (fb451 — the top hairline sat on the numbers, the baseline
+                 segment sat on the spectrum; "no box, nothing moves, just a slight low-opacity purple over it"); a muted or
+                 soloed-away band is GREYED OUT under a dark wash; the numbers live in an HTML layer. */
               for(var k=0;k<4;k++){
                 h+='<g class="spl-lane" data-lane="'+k+'" opacity="0">'
                  +  '<rect class="spl-rg" data-lane="'+k+'" x="0" y="4" width="0" height="70" fill="#B794FF" opacity="0"/>'
@@ -827,7 +860,7 @@ var CORES={
                 adds+='<span class="spl-add" data-lane="'+k+'" style="display:none" title="Add a device in this band">'+IC_PLUS+'</span>';
                 nums+='<span class="spl-lt" data-lane="'+k+'" style="display:none"></span>';
               }
-              h+='<line class="spl-selh" x1="0" y1="74" x2="0" y2="74" stroke="#B794FF" stroke-width="1.4" opacity="0"/>';   /* fb449 — on the BASELINE, under the band (Max: "what's with the line blocking the numbers?") */
+
               for(var x=0;x<3;x++){
                 h+='<line class="spl-xl" data-k="'+x+'" x1="0" y1="4" x2="0" y2="74" stroke="rgba(255,255,255,0.45)" stroke-width="1" opacity="0"/>'
                  + '<circle class="spl-n" data-k="'+x+'" cx="0" cy="39" r="2.4" fill="currentColor" stroke="none" opacity="0"/>';
@@ -845,7 +878,7 @@ var CORES={
 
 /* devHTML() — structure-for-structure as the plugin emits it */
 function devHTML(d,idx){
-  var coreN=(d.core==='utl')?4:(d.core==='spl'?12:0);   /* fb446 — the core's switches come first in DOM order; the chassis row shows the rest */
+  var coreN=(d.core==='utl')?3:(d.core==='spl'?12:0);   /* fb446 — the core's switches come first in DOM order; the chassis row shows the rest (fb450: three lamps) */
   var pills=d.pills.slice(coreN).map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
   var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
   var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+k.p+'">'+knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
@@ -871,6 +904,7 @@ function devHTML(d,idx){
 function backHTML(d,idx){
   var ks=d.back.knobs.map(function(b,i){ var lb=fxFmt(d.core,b[2],b[1],d); return '<div class="bp-k fxr-bk-knob'+(lb==='—'?' fxr-bk-dead':'')+'"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],lb,null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
   var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
+  if(d.back.noDD) return '<div class="bp'+(d.__bpOpen?' on':'')+' bp-nodd" data-bp="'+idx+'"><div class="bp-grid">'+seps+ks+'</div></div>';   /* fb450 — no dropdowns: the knobs take the height */
   return '<div class="bp'+(d.__bpOpen?' on':'')+'" data-bp="'+idx+'"><div class="bp-row">'
     +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option'+(c===d.back.d1.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
     +'<div class="bp-sel"><label>'+d.back.d2.k+'</label><select data-dsel="'+idx+'">'+d.back.d2.opts.map(function(c){return '<option'+(c===d.back.d2.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
@@ -1197,33 +1231,30 @@ window.__setSynParam=function(id,norm){ try{
             var st=dev.__st||(dev.__st={}), P=dev.pills||[], on=function(i){ return !!(P[i]&&P[i].on); };
             var kv=function(i,dflt){ var K=dev.knobs; return (K&&K[i])?K[i].v:dflt; };
             var im=kv(1,50)/100, steer=kv(2,50)/100, wire=0;
-            try{ var wo=dev.back&&dev.back.d2; if(wo&&wo.opts){ var wi=wo.opts.indexOf(wo.v); if(wi>=0) wire=wi; } }catch(e){}
-            var swapS=fx4Gl(st,'sw',on(2)?1:0,0.16), monoS=fx4Gl(st,'mo',on(4)?1:0,0.16);
+            var haasK=((dev.back&&dev.back.knobs&&dev.back.knobs[6])?dev.back.knobs[6][1]:50)/100;   // fb450 — the Haas: the delayed rail's leg starts LATE
+            var swapS=fx4Gl(st,'sw',on(2)?1:0,0.16), monoS=fx4Gl(st,'mo',on(3)?1:0,0.16), haasS=fx4Gl(st,'ha',(haasK-0.5)*2,0.16);
             var wf=(im<0.5?im*2:1+1.2*(im-0.5)*2)*(1-monoS);                 // 0 = mono · ½ = nominal · 1 = wide (the engine's 300 %, drawn at 1.6× so it stays on the card)
             var half=11*Math.max(0,Math.min(1.6,wf)), pan=(0.5-steer)*2*8;    // L leans up
             var yL0=22,yR0=44,yC=33, xA=14, xB=44, xF=60, xS=96, xM=134, xE=FX4_X1;
-            var key=[wire,swapS.toFixed(2),monoS.toFixed(2),half.toFixed(2),pan.toFixed(2)].join('|');
+            var key=[wire,swapS.toFixed(2),monoS.toFixed(2),half.toFixed(2),pan.toFixed(2),haasS.toFixed(2)].join('|');
             if(st.key!==key||st.el!==core){ st.key=key; st.el=core;   // a re-render hands us a NEW svg: redraw into it (the cache is per element, not per card)
-              var legL=(wire===0||wire===1||wire===2||wire===4), legR=(wire===0||wire===1||wire===3||wire===5);   // which PIN feeds which rail's own leg
-              var sL=yL0+(yR0-yL0)*swapS, sR=yR0-(yR0-yL0)*swapS;             // after the swap stage
+              var legL=true, legR=true;                                      // fb450 — no Wiring: both pins feed their rails
+              var lagL=haasS>0?8*haasS:0, lagR=haasS<0?-8*haasS:0;             // the Haas: the delayed rail starts late (it lags)
+              var sL=yL0+(yR0-yL0)*swapS, sR=yR0-(yR0-yL0)*swapS;             // after the swap stage (drawn where it reads — the order on the card)
               var mL=sL+(yC-sL)*monoS, mR=sR+(yC-sR)*monoS;                   // after the mono stage
               var oL=yC-half+pan, oR=yC+half+pan;                              // the output: width + pan
-              function rail(y0,leg,s1,m1,o1){ return 'M'+(leg?xA:xB)+' '+y0+'L'+xF+' '+y0
+              function rail(y0,leg,s1,m1,o1,lag){ return 'M'+((leg?xA:xB)+(lag||0)).toFixed(1)+' '+y0+'L'+xF+' '+y0
                 +'C'+(xF+16)+' '+y0+' '+(xS-16)+' '+s1.toFixed(2)+' '+xS+' '+s1.toFixed(2)
                 +'C'+(xS+14)+' '+s1.toFixed(2)+' '+(xM-12)+' '+m1.toFixed(2)+' '+xM+' '+m1.toFixed(2)
                 +'C'+(xM+30)+' '+m1.toFixed(2)+' '+(xE-30)+' '+o1.toFixed(2)+' '+xE+' '+o1.toFixed(2)
                 +'m-3.4 -2.5l3.4 2.5l-3.4 2.5'; }   // the output chevron: the signal LEAVES here (a rail is a path, not a slider)
-              fx4SetA(core.querySelector('.utl-rl'),'d',rail(yL0,legL,sL,mL,oL));
-              fx4SetA(core.querySelector('.utl-rr'),'d',rail(yR0,legR,sR,mR,oR));
-              var dx='';                                                        // the Wiring's EXTRA legs: the difference X, or a fork
-              if(wire===1) dx='M'+xA+' '+yL0+'L'+xB+' '+yR0+'M'+xA+' '+yR0+'L'+xB+' '+yL0;
-              else if(wire===2) dx='M'+xA+' '+yL0+'C'+(xA+14)+' '+yL0+' '+(xB-12)+' '+yR0+' '+xB+' '+yR0;
-              else if(wire===3) dx='M'+xA+' '+yR0+'C'+(xA+14)+' '+yR0+' '+(xB-12)+' '+yL0+' '+xB+' '+yL0;
-              var xw=core.querySelector('.utl-xw'); if(xw){ xw.setAttribute('d',dx||'M0 0'); xw.__on=!!dx; }
+              fx4SetA(core.querySelector('.utl-rl'),'d',rail(yL0,legL,sL,mL,oL,lagL));
+              fx4SetA(core.querySelector('.utl-rr'),'d',rail(yR0,legR,sR,mR,oR,lagR));
+              var xw=core.querySelector('.utl-xw'); if(xw){ xw.setAttribute('d','M0 0'); xw.__on=false; }   // fb450 — no Wiring legs
             }
             // brightness: the level that actually leaves on each rail (idle 0.22 → playing 0.95); Dim dims it
             var lv=function(pk){ return fx4C01((20*Math.log10(Math.max(1e-6,pk||0))+60)/54); };
-            var gL=fx4Gl(st,'gl',f?lv(f.pkL):0,0.25), gR=fx4Gl(st,'gr',f?lv(f.pkR):0,0.25), dim=on(5)?0.55:1;
+            var gL=fx4Gl(st,'gl',f?lv(f.pkL):0,0.25), gR=fx4Gl(st,'gr',f?lv(f.pkR):0,0.25), dim=on(4)?0.55:1;   // fb450 — Dim is pills[4] now
             var rl=core.querySelector('.utl-rl'), rr=core.querySelector('.utl-rr'), xw2=core.querySelector('.utl-xw');
             fx4SetA(rl,'opacity',((0.22+0.73*gL)*dim).toFixed(3)); fx4SetA(rr,'opacity',((0.22+0.73*gR)*dim).toFixed(3));
             if(xw2) xw2.setAttribute('opacity',xw2.__on?((0.15+0.5*Math.max(gL,gR))*dim).toFixed(3):'0');
@@ -1237,9 +1268,17 @@ window.__setSynParam=function(id,norm){ try{
           // redraw; the mockup provides the same name.
           function fx4SplSelect(d){ try{ if(typeof reRenderKeepSwap==='function') reRenderKeepSwap(); else if(typeof render==='function') render(); }catch(e){} }
           function fx4DrawSpl(core,dev,f){
-            // fb448 — the audio is PURPLE here (what you hear; the Bode's live layer), bold: idle dim, playing bright
-            var cc=fx4SpecCanvas(core); if(cc) fx4SpecLayer(cc.ctx,cc.W,cc.Hp,cc.dpr,null,'183,148,255',3.5,0.30,0.95,1.2);
-            var st=dev.__st||(dev.__st={}), t=fx4SplType(dev), nm=SPL_LANE_NAMES[t]||SPL_LANE_NAMES[1];
+            // fb448 — the audio is PURPLE here (what you hear; the Bode's live layer), bold: idle dim, playing bright.
+            // fb451 — a FLIPPED band draws its spectrum UPSIDE-DOWN (hanging from the top): a polarity flip, seen. The layer is
+            // drawn clipped to the un-flipped bands, then mirrored and clipped to each flipped band (the bounds below).
+            var cc=fx4SpecCanvas(core), st=dev.__st||(dev.__st={});   // (declared here: the mockup page is strict)
+            if(cc){ var fb=st.__flipBounds||null, sxC=cc.W/226, X=cc.ctx;
+              if(fb&&fb.length){ X.save(); X.beginPath(); var px0=0; for(var fi=0;fi<fb.length;fi++){ X.rect(px0,0,Math.max(0,fb[fi][0]*sxC-px0),cc.Hp); px0=fb[fi][1]*sxC; } X.rect(px0,0,cc.W-px0,cc.Hp); X.clip();
+                fx4SpecLayer(X,cc.W,cc.Hp,cc.dpr,null,'183,148,255',3.5,0.30,0.95,1.2); X.restore();
+                for(var fj=0;fj<fb.length;fj++){ X.save(); X.beginPath(); X.rect(fb[fj][0]*sxC,0,(fb[fj][1]-fb[fj][0])*sxC,cc.Hp); X.clip(); X.translate(0,cc.Hp); X.scale(1,-1);
+                  fx4SpecLayer(X,cc.W,cc.Hp,cc.dpr,null,'183,148,255',3.5,0.30,0.95,1.2); X.restore(); } }
+              else fx4SpecLayer(X,cc.W,cc.Hp,cc.dpr,null,'183,148,255',3.5,0.30,0.95,1.2); }
+            var t=fx4SplType(dev), nm=SPL_LANE_NAMES[t]||SPL_LANE_NAMES[1];
             var nl=nm.length, freq=(t<3), xo=fx4SplXovers(dev);   // from the TYPE: the post's nl lags a Type change by a frame (NaN widths)   // the knobs' own law: param-reactive even with no feed
             var bounds=[FX4_X0];
             if(freq){ for(var k=0;k<nl-1;k++){ var hz=(f&&f.hz&&f.hz[k]>0)?f.hz[k]:(xo[k]||1000); bounds.push(fx4HzX(fx4GlLog(st,'x'+k,hz,0.35))); } }
@@ -1252,19 +1291,22 @@ window.__setSynParam=function(id,norm){ try{
               var pk=(f&&f.pk)?f.pk[L]:0, gt=(f&&f.gt)?f.gt[L]:1;
               var db=20*Math.log10(Math.max(1e-6,pk||0)), lv=fx4Gl(st,'lv'+L,Math.max(0,Math.min(1,(db+60)/60)),0.3);
               var sel=((dev.sel||0)===L);
-              var rg=g.querySelector('.spl-rg'); if(rg){ rg.setAttribute('x',x0.toFixed(1)); rg.setAttribute('width',w.toFixed(1)); rg.setAttribute('opacity','0'); }   // fb448 — transparent: a hit area, never a wash
+              // fb451 (Max): the SELECTED band wears a low-opacity purple wash — nothing else moves, no box, no underline; a band
+              // that is MUTED or soloed away is GREYED OUT, its spectrum included (a dark wash over it: "that whole side greys out")
+              var rg=g.querySelector('.spl-rg'); if(rg){ rg.setAttribute('x',x0.toFixed(1)); rg.setAttribute('width',w.toFixed(1));
+                if(gt>0.5){ rg.setAttribute('fill','#B794FF'); rg.setAttribute('opacity',sel?'0.07':'0'); } else { rg.setAttribute('fill','#14121f'); rg.setAttribute('opacity','0.66'); } }
               // the number at the top-left: the frequency this band STARTS at (the first band has none);
               // Mid/Side and Left/Right carry one letter. Thin white; brighter on the selected band.
               // the number at the top-left: the frequency this band STARTS at — the low band says 20 (fb448, Max: "the low
               // doesn't have a number"); Mid/Side and Left/Right carry one letter. HTML, crisp; bright on the selected band.
-              if(lt){ var label=freq?(L===0?'20':fx4Hz(xo[L-1]||0)):((t===3?['M','S']:['L','R'])[L]||''); if(lt.textContent!==label) lt.textContent=label; lt.style.display=w<14?'none':'block'; lt.style.left=((x0+3)/226*100).toFixed(2)+'%'; lt.classList.toggle('sel',sel); lt.classList.toggle('dim',!(gt>0.5)); }
+              if(lt){ var label=freq?(L===0?'20':fx4Hz(xo[L-1]||0)):((t===3?['M','S']:['L','R'])[L]||''); if(lt.textContent!==label) lt.textContent=label; lt.style.display=w<14?'none':'block'; lt.style.left=((x0+3)/226*100).toFixed(2)+'%'; lt.classList.toggle('spl-on',sel); lt.classList.toggle('dim',!(gt>0.5)); }
               // the bare plus, bottom-left, raised clear of the baseline
               // the header's "+", white, raised clear of the baseline (fb447): an HTML glyph positioned by the band's left edge
-              if(ad){ var show=w>16; ad.style.display=show?'grid':'none'; if(show){ ad.style.left=((x0+9)/226*100).toFixed(2)+'%'; ad.classList.toggle('sel',sel); } }
+              if(ad){ var show=w>16; ad.style.display=show?'grid':'none'; if(show){ ad.style.left=((x0+9)/226*100).toFixed(2)+'%'; ad.classList.toggle('spl-on',sel); ad.style.opacity=(gt>0.5?1:0.35).toFixed(2); } }
             }
-            // the selected band is underlined on the baseline (fb449) — the numbers up top stay clear
-            var sh=core.querySelector('.spl-selh'); if(sh){ var Sb=Math.max(0,Math.min(nl-1,dev.sel||0)); sh.setAttribute('x1',bounds[Sb].toFixed(1)); sh.setAttribute('x2',bounds[Sb+1].toFixed(1)); sh.setAttribute('opacity','0.85'); }
             // the chassis pills are PROXIES for the selected band's Mute · Solo · Flip (fb448): paint them from the lane's own state
+            // remember which bands are FLIPPED (with their bounds) for the next frame's mirrored draw
+            var fbs=[]; for(var Lf=0;Lf<nl;Lf++) if(dev.pills[3*Lf+2]&&dev.pills[3*Lf+2].on) fbs.push([bounds[Lf],bounds[Lf+1]]); st.__flipBounds=fbs;
             var cardS=core.closest('.fxr-dev'); if(cardS){ var cp=cardS.querySelectorAll('.fxr-pills .fxr-pill'), Sp=Math.max(0,Math.min(nl-1,dev.sel||0));
               for(var q3=0;q3<3&&q3<cp.length;q3++){ var onP=!!(dev.pills[3*Sp+q3]&&dev.pills[3*Sp+q3].on); cp[q3].classList.toggle('fxr-on',onP); if(dev.pills[12+q3]) dev.pills[12+q3].on=onP; } }
             for(var k2=0;k2<3;k2++){
@@ -1393,17 +1435,6 @@ window.__setSynParam=function(id,norm){ try{
               window.__fxRedrawKnobs(d);
             }
             document.addEventListener('pointerup',function(e){ try{ if(drag){ var c=drag.core, sv=drag.svg; drag=null; hot(c,pick(c,unit(sv,e))); } }catch(err){} drag=null; });
-            // WHEEL = THAT band's Q. Captured at the document so the rack's wheel-to-scrollLeft pan never steals a
-            // scroll made over a DOT — and deliberately NOT touched anywhere else on the core, so a scroll over the
-            // grid or the curve pans the rack exactly like a scroll over any other card.
-            document.addEventListener('wheel',function(e){ try{
-              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
-              var d=devFor(core); if(!d) return; var svg=core.querySelector('svg'); if(!svg) return;
-              var b=pick(core,unit(svg,e)); if(b<0) return;      // not on a dot → leave the event alone (the rack pans)
-              e.preventDefault(); e.stopPropagation();
-              var v=Math.max(0,Math.min(100,qGet(d,b)-e.deltaY*0.12));   // wheel up = narrower (Q up), like Pro-Q / FL
-              qSet(d,b,v); hot(core,b);
-            }catch(err){} },{passive:false,capture:true});
             document.addEventListener('dblclick',function(e){ try{
               var core=e.target.closest&&e.target.closest('.fxr-core[data-core="eqz"]'); if(!core) return;
               var d=devFor(core); if(!d) return; var u=unit(core.querySelector('svg'),e), b=pick(core,u);
@@ -1478,11 +1509,6 @@ window.__setSynParam=function(id,norm){ try{
             }catch(err){} },true);
             document.addEventListener('pointermove',function(e){ try{ if(!drag) return; var u=unit(drag.svg,e); setKnob(drag.d,0,drag.v0+(u.x-drag.x0)/FX4_PW*100); }catch(err){} });
             document.addEventListener('pointerup',function(){ drag=null; });
-            document.addEventListener('wheel',function(e){ try{
-              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
-              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; if(!near(core,unit(svg,e))) return;
-              e.preventDefault(); e.stopPropagation(); setKnob(d,2,d.knobs[2].v-e.deltaY*0.12);   // wheel up = more feedback
-            }catch(err){} },{passive:false,capture:true});
             document.addEventListener('dblclick',function(e){ try{
               var core=e.target.closest&&e.target.closest('.fxr-core[data-core="bod"]'); if(!core) return;
               var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; if(!near(core,unit(svg,e))) return;
@@ -1554,11 +1580,6 @@ window.__setSynParam=function(id,norm){ try{
               else { var f0=fx4SplXovers(d)[0]||drag.f0; setBack(d,4,fx4SplSpanKnob(t,f0,Math.pow(hz/f0,1/drag.k))*100); }
             }catch(err){} });
             document.addEventListener('pointerup',function(e){ try{ if(drag){ var c=drag.core, sv=drag.svg; drag=null; hot(c,pickNode(c,unit(sv,e))); } }catch(err){} drag=null; });
-            document.addEventListener('wheel',function(e){ try{
-              var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
-              var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var L=laneAt(core,unit(svg,e)); if(L<0||L>3) return;
-              e.preventDefault(); e.stopPropagation(); setBack(d,L,d.back.knobs[L][1]-e.deltaY*0.12);   // wheel up = that lane louder
-            }catch(err){} },{passive:false,capture:true});
             document.addEventListener('dblclick',function(e){ try{
               var core=e.target.closest&&e.target.closest('.fxr-core[data-core="spl"]'); if(!core) return;
               var svg=core.querySelector('svg'), d=devFor(core); if(!svg||!d) return; var k=pickNode(core,unit(svg,e)); if(k<0) return;

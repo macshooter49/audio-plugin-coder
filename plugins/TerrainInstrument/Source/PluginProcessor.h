@@ -1861,10 +1861,10 @@ private:
     // for three. Max asked for "a whole bunch of buttons" and that is the device — so it gets its
     // own refs shape rather than bending the shared one.
     struct UtlRefs { std::atomic<float>* active; std::atomic<float>* rank; std::atomic<float>* power;
-        std::atomic<float>* type; std::atomic<float>* chr; std::atomic<float>* wiring;
+        std::atomic<float>* type;                                   // fb450 — Character / Wiring are gone
         std::atomic<float>* f1; std::atomic<float>* f2; std::atomic<float>* f3;
         std::atomic<float>* mix; std::atomic<float>* b[8];
-        std::atomic<float>* pill[6]; std::atomic<float>* src[6]; };
+        std::atomic<float>* pill[5]; std::atomic<float>* src[6]; };   // fb450 — five switches (the DC lamp is gone)
     std::array<UtlRefs, (size_t) ParameterIDs::kFxInstances> utlRefs_ {};
     std::array<float,   (size_t) ParameterIDs::kFxInstances> utlEnv_  {};
     void cacheUtlRefs();

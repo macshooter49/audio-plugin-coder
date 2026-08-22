@@ -76,15 +76,14 @@ DEVICES = [
       back=[['Fine',50,'FINE'],['Stereo',100,'SPREAD'],['Time',45,'TIME'],['Diffusion',0,'BLUR'],
             ['Low Keep',0,'LOWKEEP'],['Damping',100,'DAMPING'],['Env Shift',50,'TOUCH'],['Drift',0,'DRIFT']],
       pills=[['Sync',0],['Guard',1]], pillKeys=['sync','guard']),
- dict(dev='Utility', core='utl', proc='terrain-utility', pfx='SYN_UTL_',
+ dict(dev='Utility', core='utl', proc='terrain-utility', pfx='SYN_UTL_', noDD=True,   # fb450 — the channel strip: no Character / Wiring
       types=['Strip','Turn','Outer','Canopy','Cellar'], tpN=8,
-      chars=['Cushion','Brick','Coil','Creep','Tuck','Rail','Ripple','Fuse'],
-      d2k='Wiring', d2=['Through','Difference','L To Both','R To Both','L Only','R Only'], d2p='WIRING',
+      chars=['—'], d2k='', d2=['—'], d2p='NONE',
       knobs=[['Gain',66.667,'GAIN'],['Width',50,'IMAGE'],['Pan',50,'STEER'],['Mix',100,'MIX']],
       keys=['gain','image','steer','mix'],
-      back=[['Drive',0,'B1'],['Shape',50,'B2'],['Mono Below',0,'B3'],['Slope',0,'B4'],
-            ['Rotate',50,'B5'],['Cut At',68,'B6'],['Mono Above',0,'B7'],['Crossover',50,'B8']],
-      pills=[['Flip L',0],['Flip R',0],['Swap',0],['Low Cut',0],['Mono',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
+      back=[['High Pass',0,'B1'],['Low Pass',100,'B2'],['Bass',50,'B3'],['Air',50,'B4'],
+            ['Mono Below',0,'B5'],['Rotate',50,'B6'],['Haas',50,'B7'],['Drive',0,'B8']],
+      pills=[['Flip L',0],['Flip R',0],['Swap',0],['Mono',0],['Dim',0]], pillKeys=['flipl','flipr','trade','sum','dim']),
  dict(dev='Splitter', core='spl', proc='terrain-splitter', pfx='SYN_SPL_',
       types=['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'], tpN=8, typeIdx=1,
       d1k='Slope', d1p='SLOPE', chars=['6 dB','12 dB','24 dB','48 dB'], charIdx=2,
@@ -136,6 +135,9 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 .bp-k{display:flex;flex-direction:column;align-items:center;gap:4px}
 .bp-k .fxr-lab{font:500 9px -apple-system,system-ui;color:#9a92b8}
 .bp-k.fxr-bk-dead{opacity:.32;pointer-events:none}
+.bp-nodd .bp-grid{gap:16px 0;padding:6px 0}
+.bp-nodd .bp-k .fxr-dial{width:40px;height:40px}
+.bp-nodd .bp-k .fxr-lab{font-size:10px}
 .bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
 </style></head><body>
 <h1>The last three — Bode · Utility · Splitter</h1>
@@ -143,7 +145,7 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
 <b>Bode</b>: drag the <b>dot on the rail</b> = Shift — the white ghost is where the partials were, the purple is where they went, and the streams between them run in the shift's direction (feedback keeps them going); wheel on the dot = Fdbk, double-click = zero, right-click = Up · Ring · Down.
 <b>Splitter</b>: click a <b>band</b> to select it (the hairline), the chassis pills Mute · Solo · Flip act on it; drag a <b>crossover node</b>; wheel over a band = that lane's gain; right-click a band = the menu; the <b>+</b> drops a device into that band.
-<b>Utility</b>: the card draws the WIRING — two rails, L and R, through Flip → Swap → Mono → Width/Pan, lit by what leaves on each; the lamps under it are the switches. Knobs drag up/down, double-click resets.</p>
+<b>Utility</b> (fb450, the channel strip): the card draws the two rails, L and R, through Flip → Haas → Mono → Width/Pan → Swap, lit by what leaves on each; the lamps under it are the switches. The back panel is eight knobs, no dropdowns — High Pass · Low Pass · Bass · Air · Mono Below · Rotate · Haas · Drive — every one audible on a mono source. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
   <button id="play">Play</button>
@@ -177,7 +179,7 @@ var DEVS=DEVICES.map(function(t){ return {
   route:[true,false,false,false,false,false],
   knobs:t.knobs.map(function(k){return {l:k[0],v:k[1],p:t.pfx+k[2],d:k[1]};}),
   xp:(t.core==='eqz')?[1,2,3,4].map(function(k){return [t.pfx+'X'+k+'HZ',t.pfx+'X'+k,t.pfx+'X'+k+'ON'];}):null, xb:(t.core==='eqz')?[[50,50,0],[50,50,0],[50,50,0],[50,50,0]]:null,   /* fb438 — the free bells */
-  back:{d1:{k:(t.d1k||'Character'),v:t.chars[t.charIdx||0],opts:t.chars,p:t.pfx+(t.d1p||'CHAR')}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.pfx+t.d2p,pN:8},
+  back:{noDD:!!t.noDD, d1:{k:(t.d1k||'Character'),v:t.chars[t.charIdx||0],opts:t.chars,p:t.noDD?null:t.pfx+(t.d1p||'CHAR')}, d2:{k:t.d2k,v:t.d2[0],opts:t.d2,p:t.noDD?null:t.pfx+t.d2p,pN:8},
         knobs:t.back.map(function(b){return [b[0],b[1],t.pfx+b[2],b[1]];})},
   typeIdx:(t.typeIdx||0), charIdx:(t.charIdx||0), axisIdx:0, __t:t }; });
 DEVS.forEach(function(d){ d.type=d.types[d.typeIdx]||d.types[0]; });
@@ -206,7 +208,7 @@ var CORES={
 
 /* devHTML() — structure-for-structure as the plugin emits it */
 function devHTML(d,idx){
-  var coreN=(d.core==='utl')?4:(d.core==='spl'?12:0);   /* fb446 — the core's switches come first in DOM order; the chassis row shows the rest */
+  var coreN=(d.core==='utl')?3:(d.core==='spl'?12:0);   /* fb446 — the core's switches come first in DOM order; the chassis row shows the rest (fb450: three lamps) */
   var pills=d.pills.slice(coreN).map(function(p,i){return '<span class="fxr-pill'+(p.on?' fxr-on':'')+'"><span class="fxr-t">'+p.t+'</span></span>';}).join('');
   var route=d.route.map(function(on,i){return '<span class="fxr-r'+(on?' fxr-on':'')+'" data-r="'+i+'"><span class="fxr-t">'+RLBL[i]+'</span></span>';}).join('');
   var knobs=d.knobs.map(function(k,i){return '<div class="fxr-knob"><div class="fxr-dial" data-k="'+i+'" data-p="'+k.p+'">'+knobSVG(k.v,fxFmt(d.core,k.p,k.v,d),null)+'</div><span class="fxr-lab">'+k.l+'</span></div>';}).join('');
@@ -232,6 +234,7 @@ function devHTML(d,idx){
 function backHTML(d,idx){
   var ks=d.back.knobs.map(function(b,i){ var lb=fxFmt(d.core,b[2],b[1],d); return '<div class="bp-k fxr-bk-knob'+(lb==='—'?' fxr-bk-dead':'')+'"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],lb,null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
   var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
+  if(d.back.noDD) return '<div class="bp'+(d.__bpOpen?' on':'')+' bp-nodd" data-bp="'+idx+'"><div class="bp-grid">'+seps+ks+'</div></div>';   /* fb450 — no dropdowns: the knobs take the height */
   return '<div class="bp'+(d.__bpOpen?' on':'')+'" data-bp="'+idx+'"><div class="bp-row">'
     +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option'+(c===d.back.d1.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
     +'<div class="bp-sel"><label>'+d.back.d2.k+'</label><select data-dsel="'+idx+'">'+d.back.d2.opts.map(function(c){return '<option'+(c===d.back.d2.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
