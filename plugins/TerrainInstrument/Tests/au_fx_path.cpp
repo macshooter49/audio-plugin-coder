@@ -35,6 +35,7 @@
 
 // fb453 — the GENERATED map of every rack dial's parameter, [kind][knob]. The matrix below walks
 // exactly this table, so the harness and the plugin cannot disagree about which knob is which.
+#include "SynthModConfig.h"    // wc::fxModDest — the SHIPPED destination arithmetic, not a copy
 #include "fx_mod_ids.inc"
 
 static const double SR = 48000.0;
@@ -311,11 +312,21 @@ struct Dev { const char* label; const char* pfx; const char* knobs[4]; };
 //  plugin REACHES it. fb425: sweep the full matrix, not a sample.)
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
+static int juceClampInst (int i) { return i < 0 ? 0 : (i > 5 ? 5 : i); }
+
 static double nowSec()
 { using namespace std::chrono; return duration<double> (steady_clock::now().time_since_epoch()).count(); }
 
-static const int    kFxModBaseDest = 694;                       // ModDest::FxModBase (SynthModConfig.h)
-static int  destOf (int kind, int inst0, int knob) { return kFxModBaseDest + (kind * 6 + inst0) * 12 + knob; }
+// The destination integer comes from the PLUGIN'S OWN expression. It was a hand-copied
+// `694 + (kind*6 + inst)*12 + knob` here, which is a second authority on the one number the whole
+// matrix pivots on — and `694` is itself a derived constant (ModDest::FxModBase). This harness
+// already builds with `-I Source`, so it can just call the function the rack calls.
+static int destOf (int kind, int inst0, int knob) { return wc::fxModDest (kind, inst0, knob); }
+// ...and pinned, so "use the shipped expression" cannot quietly become "use a different one".
+// 694 is ModDest::FxModBase, the anchor every saved project's route integers are relative to.
+static_assert (wc::fxModDest (0, 0, 0) == 694,      "FxModBase moved — saved FX-rack routes would shift");
+static_assert (wc::fxModDest (14, 0, 0) == 1702,    "the kind/instance stride moved");
+static_assert (wc::fxModDest (15, 5, 11) == 693 + 16 * 6 * 12, "the last cell is the last dest");
 
 // 🚨 EVERY NUMBER IN THIS EXPERIMENT IS AN EXACT BINARY FRACTION, and that is the whole design.
 //    The route's depth reaches the plugin as DECIMAL TEXT inside the state blob and comes back as
@@ -347,11 +358,15 @@ static const double kAudMargin =  60.0;  // ...and the null must sit this far be
 // and it cost three Splitter cells a red row on the run before this one. Sweep them all.
 static const int    kTypeTries = 16;
 
-// saturate.SIG (kind 2, knob 1 — the Distortion's Knee) is the one dial the source itself flags:
-// PluginProcessor.cpp:7343-7351, the only rack read site that runs BEFORE buildFxMod(), so
-// instance 1's Knee follows the matrix ONE BLOCK LATE. It is NOT given an allowance here — it is
-// gated exactly like the other 183 and it is characterised on its own below.
-static bool  isOneBlockLateCell (int kind, int knob) { return kind == 2 && knob == 1; }   // saturate.SIG
+// ── THE OPERATING POINTS, in the order a cell tries them. Only a cell that stayed INERT at one
+//    reaches the next, so 182 of the 184 never leave op 0 and the extra stages cost nothing.
+struct MtxOp { float base; bool stereo; const char* note; };
+static const MtxOp kMtxOps[3] = {
+    { kBase, false, "" },
+    { 0.0f,  false, "   [probed 0.00->0.25: it is on a plateau at 0.25]" },
+    { kBase, true,  "   [needed a STEREO-ASYMMETRIC probe: a mono source cannot excite it]" },
+};
+   // saturate.SIG
 
 // RMS and null-depth over BOTH channels — a stereo-only move (Utility Image, Widen) is invisible
 // on L alone, and half the rack's knobs are stereo.
@@ -374,7 +389,9 @@ static double rel (const Render& a, const Render& b) { return null2 (a, b) - rms
 struct MtxCfg
 {
     int   kind = 0;
+    int   inst = 0;                       // 0-based instance; ids take "" then "2".."6"
     int   type = 0;                       // the device's TYPE choice index
+    bool  stereoUp = false;               // put a stereo-MAKER ahead of the device under test
     bool  mixFull = true;                 // Mix (knob 3) at 1.0 rather than kBase
     std::map<int, float> knobs;           // knob index -> value, overriding the default
     int   probe = -1;                     // the knob this measurement is ABOUT (setup decisions only)
@@ -404,7 +421,9 @@ static Render mtxRender (const MtxCfg& c)
     a.setP ("LFO1_PHASE", 0.0f);
     a.setP ("LFO1_DEPTH", 1.0f);
 
-    const std::string T = kFxModTag[c.kind];
+    // The instance suffix is the plugin's own rule (instPrefix(), index.html; `p = "SYN_UTL" + sfx
+    // + "_"`, PluginProcessor.cpp): instance 1 is bare, 2..6 carry their number.
+    const std::string T = std::string (kFxModTag[c.kind]) + (c.inst == 0 ? std::string() : std::to_string (c.inst + 1));
     a.setP (T + "_ACTIVE", 1.0f);
     a.setP (T + "_POWER",  1.0f);
     static const char* const SRC[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
@@ -416,14 +435,14 @@ static Render mtxRender (const MtxCfg& c)
     //    reason that has nothing to do with modulation.
     if (c.kind == 1)
     {
-        a.setP ("SYN_DLY_SYNC", 0.0f);                       // otherwise Time is on the tempo grid
+        a.setP (T + "_SYNC", 0.0f);                          // otherwise Time is on the tempo grid
         // L/R LINK is the Delay's own fork: LINKED, "Time R" is not read at all and "Spread" is
         // what offsets the two sides; UNLINKED it is the other way round. So the link follows the
         // knob under test — the shipped default for every dial except the one that only exists
         // when the sides are free.
-        a.setP ("SYN_DLY_LINK", c.probe == 11 ? 0.0f : 1.0f);
+        a.setP (T + "_LINK", c.probe == 11 ? 0.0f : 1.0f);
     }
-    if (c.kind == 4) { a.setP ("SYN_TPE_DELAY", 1.0f); a.setP ("SYN_TPE_SYNC", 0.0f); }
+    if (c.kind == 4) { a.setP (T + "_DELAY", 1.0f); a.setP (T + "_SYNC", 0.0f); }
     // 🚨 RESOLVE BY PARAMETER, NOT BY DIAL. The Delay's front "Time" (knob 0) and its back
     //    "Time L" (knob 10) ARE one parameter, so writing the dials in index order writes
     //    SYN_DLY_TIME twice and the SECOND write wins — which silently threw away the override
@@ -436,6 +455,27 @@ static Render mtxRender (const MtxCfg& c)
         for (const auto& kv : c.knobs)
             if (kv.first >= 0 && kv.first < 12 && kFxModLeaf[c.kind][kv.first]) want[kFxModLeaf[c.kind][kv.first]] = kv.second;
         for (const auto& kv : want) a.setP (T + "_" + kv.first, kv.second);
+    }
+    // ── THE MONO BLIND SPOT ───────────────────────────────────────────────────────────────────
+    // 🚨 A DIAL WHOSE ONLY EFFECT IS ON THE INPUT'S L/R ASYMMETRY IS INVISIBLE TO A MONO PROBE,
+    //    and this probe is exactly mono: the pre-existing fb439 rows show it without meaning to —
+    //    Δside comes out as the exact negative of Δlevel on five of the seven devices, which is
+    //    what you get when the dry side channel is a constant floor because L and R are identical.
+    //    cmp.TIE is the one dial of the 184 that landed in that spot. It is the compressor's
+    //    detector STEREO LINK: `mx = max(aL,aR2); d0 = tie*mx + (1-tie)*aL; d1 = tie*mx +
+    //    (1-tie)*aR2` (TerrainCompressFx.h:571-573). With aL == aR2, mx == aL == aR2 and
+    //    d0 = d1 = aL FOR EVERY VALUE OF TIE — an algebraic identity, not a dead knob. So a cell
+    //    that survives both mono operating points gets a stereo-asymmetric source: a Widen (or,
+    //    when Widen itself is under test, a Utility on Rotate + Haas) placed AHEAD in the chain.
+    if (c.stereoUp)
+    {
+        const std::string U = (c.kind == 10) ? "SYN_UTL" : "SYN_WID";
+        a.setP (U + "_ACTIVE", 1.0f); a.setP (U + "_POWER", 1.0f); a.setP (U + "_MIX", 1.0f);
+        for (auto* sc : SRC) a.setP (U + "_" + sc, 1.0f);
+        a.setP (U + "_RANK", 0.20f);                       // upstream of...
+        a.setP (T + "_RANK", 0.80f);                       // ...the device under test
+        if (c.kind == 10) { a.setP ("SYN_UTL_B6", 0.90f); a.setP ("SYN_UTL_B7", 0.90f); }   // Rotate + Haas
+        else { a.setP ("SYN_WID_AMOUNT", 0.90f); a.setP ("SYN_WID_WIDTH", 0.90f); a.setP ("SYN_WID_SPREAD", 0.90f); }
     }
     for (const auto& e : c.extra) a.setP (e.first, e.second);
     a.setRoutes (c.routes);
@@ -465,6 +505,7 @@ int main (int argc, char** argv)
     // matrix, not a sample); the rest exist to shorten a debug loop or to prove the gate's teeth.
     bool  mtxRun = true, mtxQuick = false, mtxMutate = false;
     int   mtxOnlyKind = -1;
+    int   mtxInst = 0;                                       // 0-based; --inst is 1-based like the UI
     for (int i = 1; i < argc; ++i)
     {
         const std::string a = argv[i];
@@ -472,7 +513,8 @@ int main (int argc, char** argv)
         else if (a == "--quick")     mtxQuick = true;            // one knob per kind (16 cells)
         else if (a == "--mutate")    mtxMutate = true;           // route the ADJACENT knob: must FAIL
         else if (a == "--kind" && i + 1 < argc) mtxOnlyKind = atoi (argv[++i]);
-        else if (a == "--help") { printf ("  [--no-matrix] [--quick] [--kind N] [--mutate]\n"); return 0; }
+        else if (a == "--inst" && i + 1 < argc) mtxInst = juceClampInst (atoi (argv[++i]) - 1);   // 1..6 -> 0..5
+        else if (a == "--help") { printf ("  [--no-matrix] [--quick] [--kind N] [--inst 1..6] [--mutate]\n"); return 0; }
     }
     const double t5t0 = nowSec();
 
@@ -808,36 +850,37 @@ int main (int argc, char** argv)
              "GATE C2: two half-depth routes on the alias SUM into one slot (they do not fight)", det);
     }
 
-    // ── SIG-LAG — CHARACTERISING THE ONE CELL THAT DOES NOT NULL ──────────────────────────────
-    // saturate.SIG is the only rack read site that runs BEFORE buildFxMod() (PluginProcessor.cpp
-    // :7343-7351, which says so), so instance 1's Knee follows the matrix ONE BLOCK LATE. This
-    // gate does not excuse that — it MEASURES it, so the matrix's one red row has a mechanism
-    // attached and a regression in either direction is visible:
+    // ── SIG-PARITY — THE GATE THAT USED TO BE "SIG-LAG" ───────────────────────────────────────
+    // History, because it is the whole reason this gate exists. SIG (the Distortion's Knee) was
+    // the ONE dial of the 184 that did not null: it carries both a legacy destination (DstMorph,
+    // fb340) and a rack one, and its resolve was the only rack read site that ran BEFORE
+    // buildFxMod(), so instance 1's Knee followed the matrix ONE BLOCK LATE. The matrix measured
+    // it at -77.17 dBr where every other cell reached -178..-235, and this gate proved the
+    // mechanism: block 1 alone differed by -17.8 dBr, and it did NOT wash out (-77.2 dBr from
+    // block 20, -76.5 dBr from block 80). `ec97a46` moved the resolve below buildFxMod.
     //
-    //   • BLOCK 1 ALONE must differ LOUDLY. That is the lag itself: in the routed render the
-    //     Knee is still at its base for that block, in the knob render it is already at 0.50.
-    //   • the steady-state window must then agree CLOSELY but NOT to the floor — and it must NOT
-    //     decay. Measured: -77.2 dBr from block 20 and -76.5 dBr from block 80. One block of a
-    //     different Knee does not wash out of this device; fb345 named the class (grid-leak bias
-    //     and AC-coupled loops carry multi-second state), and the two paths settle a hair apart
-    //     and stay there.
-    //
-    // If the SIG resolve ever moves after buildFxMod(), block 1 goes quiet and the matrix row
-    // goes green — this gate is what will say so.
+    // So the gate is inverted: it now asserts the FIXED behaviour, and it is self-proving in both
+    // directions because it compares INSTANCE 1 AGAINST INSTANCE 2. Instances 2..6 always read
+    // `M (R.sig)` AFTER the build (PluginProcessor.cpp:~10442) and always nulled at the floor;
+    // instance 1 was the only one that did not. Nothing except "instance 1 reads before the map is
+    // built" predicts that asymmetry — so if the resolve ever moves back above buildFxMod(),
+    // instance 1 breaks, instance 2 does not, and the SPREAD between them is what says so.
     {
-        MtxCfg base; base.kind = 2; base.probe = 1;
-        MtxCfg b = base; b.routes = routeJson (destOf (2, 0, 1), kOff);
-        MtxCfg c = base; c.knobs[1] = kTop;
-        MtxCfg b1 = b, c1 = c; b1.warmup = c1.warmup = false; b1.nblk = c1.nblk = 1; b1.skip = c1.skip = 0;
-        const double blk1 = rel (mtxRender (b1), mtxRender (c1));
-        const double early = rel (mtxRender (b), mtxRender (c));
-        MtxCfg b2 = b, c2 = c; b2.nblk = c2.nblk = 150; b2.skip = c2.skip = 80;
-        const double late = rel (mtxRender (b2), mtxRender (c2));
-        char det[260];
-        snprintf (det, sizeof det, "block 1 alone %.1f dBr; steady state %.1f dBr (from blk 20) / %.1f dBr (from blk 80)",
-                  blk1, early, late);
-        chk (blk1 > -40.0 && early < -60.0 && std::fabs (early - late) < 6.0,
-             "SIG-LAG: instance 1's Knee is ONE BLOCK LATE, and that block does not wash out", det);
+        auto sigNull = [] (int inst, int nblk, int skip, bool warm) {
+            MtxCfg base; base.kind = 2; base.inst = inst; base.probe = 1;
+            base.nblk = nblk; base.skip = skip; base.warmup = warm;
+            MtxCfg b = base; b.routes = routeJson (destOf (2, inst, 1), kOff);
+            MtxCfg c = base; c.knobs[1] = kTop;
+            return rel (mtxRender (b), mtxRender (c));
+        };
+        const double blk1 = sigNull (0, 1, 0, false);        // the AU's very first block
+        const double i1   = sigNull (0, NBLK, SKIP, true);   // instance 1, steady state
+        const double i2   = sigNull (1, NBLK, SKIP, true);   // instance 2, which never had the lag
+        char det[300];
+        snprintf (det, sizeof det, "block 1 %.1f dBr; steady state inst1 %.1f / inst2 %.1f dBr (spread %.1f dB)",
+                  blk1, i1, i2, std::fabs (i1 - i2));
+        chk (blk1 < -100.0 && i1 < -100.0 && std::fabs (i1 - i2) < 40.0,
+             "SIG-PARITY: the Knee is CURRENT on block 1, and instance 1 now matches instance 2", det);
     }
 
     // ── THE WHOLE PANEL AT ONCE ───────────────────────────────────────────────────────────────
@@ -849,18 +892,13 @@ int main (int argc, char** argv)
     for (int k = 0; k < 16; ++k)
     {
         if (mtxOnlyKind >= 0 && k != mtxOnlyKind) continue;
-        MtxCfg flat; flat.kind = k; flat.mixFull = false;
+        MtxCfg flat; flat.kind = k; flat.inst = mtxInst; flat.mixFull = false;
         std::string rj = "[";  std::map<std::string, float> sum;  int nRoutes = 0;
         for (int n = 0; n < 12; ++n)
         {
             if (kFxModLeaf[k][n] == nullptr) continue;
-            // saturate.SIG is left out of this one gate ON PURPOSE. It is the single dial that is
-            // NOT equivalent (SIG-LAG below, and its own red row in the matrix); carrying it here
-            // would report the same defect a second time and cost this gate the thing it is FOR —
-            // being able to say that a PERMUTATION of a device's destinations is detectable.
-            if (isOneBlockLateCell (k, n)) continue;
             const float d = 0.03125f * (float) (n + 1);   // 1/32 .. 12/32 — exact, and so are the sums
-            char one[96]; snprintf (one, sizeof one, "%s{\"s\":0,\"d\":%d,\"v\":%.6f}", nRoutes ? "," : "", destOf (k, 0, n), d);
+            char one[96]; snprintf (one, sizeof one, "%s{\"s\":0,\"d\":%d,\"v\":%.6f}", nRoutes ? "," : "", destOf (k, mtxInst, n), d);
             rj += one; ++nRoutes;
             sum[kFxModLeaf[k][n]] += d;                 // the alias accumulates, exactly as the map does
         }
@@ -869,7 +907,9 @@ int main (int argc, char** argv)
         MtxCfg mov = flat;
         for (int n = 0; n < 12; ++n) if (kFxModLeaf[k][n]) mov.knobs[n] = std::min (1.0f, kBase + sum[kFxModLeaf[k][n]]);
         const Render A0 = mtxRender (flat), Ball = mtxRender (all), Call = mtxRender (mov);
-        char lbl[120]; snprintf (lbl, sizeof lbl, "%s: all %d knobs routed at once == all %d knobs moved", kKindName[k], nRoutes, nRoutes);
+        char lbl[130];
+        if (mtxInst == 0) snprintf (lbl, sizeof lbl, "%s: all %d knobs routed at once == all %d knobs moved", kKindName[k], nRoutes, nRoutes);
+        else              snprintf (lbl, sizeof lbl, "%s%d: all %d knobs routed at once == all %d knobs moved", kKindName[k], mtxInst + 1, nRoutes, nRoutes);
         char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   panel moves the sound %7.2f dBr", rel (Ball, Call), rel (Ball, A0));
         chk (rel (Ball, Call) < kEqGate && rel (Ball, A0) > kAudFloor, lbl, det);
     }
@@ -877,10 +917,11 @@ int main (int argc, char** argv)
     // ══ THE MATRIX ════════════════════════════════════════════════════════════════════════════
     if (mtxRun)
     {
-        printf ("\n  ── the %s matrix%s ──\n", mtxQuick ? "REPRESENTATIVE" : "FULL 184-cell",
+        printf ("\n  ── the %s matrix, INSTANCE %d%s ──\n", mtxQuick ? "REPRESENTATIVE" : "FULL 184-cell",
+                mtxInst + 1,
                 mtxMutate ? "  [MUTATED: the route goes to the ADJACENT knob — every cell MUST fail]" : "");
         std::vector<CellFail> fails; std::vector<std::string> quietCells;
-        int cells = 0;
+        int cells = 0, mutInert = 0, mutBroke = 0, mutHitMix = 0;
         for (int k = 0; k < 16; ++k)
         {
             if (mtxOnlyKind >= 0 && k != mtxOnlyKind) continue;
@@ -914,14 +955,15 @@ int main (int argc, char** argv)
                 // engine's `if (duck > 0.001f)` branch is not even entered at 0. So: if a cell is
                 // inert everywhere at the normal base, probe it again from ZERO before calling it
                 // unproven.
-                for (int op = 0; op < (mtxMutate ? 1 : 2) && bAud <= kAudFloor; ++op)
+                for (int op = 0; op < (mtxMutate ? 1 : 3) && bAud <= kAudFloor; ++op)
                 {
-                  const float pBase = (op == 0) ? kBase : 0.0f;
+                  const float pBase = kMtxOps[op].base;
                   const float pTop  = pBase + kOff;
                   for (int t = 0; t < nTypes; ++t)
                   {
-                    MtxCfg base; base.kind = k; base.type = t; base.probe = n;
-                    if (isMix || op == 1) base.knobs[n] = pBase;
+                    MtxCfg base; base.kind = k; base.inst = mtxInst; base.type = t; base.probe = n;
+                    base.stereoUp = kMtxOps[op].stereo;
+                    if (isMix || op != 0) base.knobs[n] = pBase;
                     Render A;
                     if (op == 0)
                     {
@@ -929,8 +971,8 @@ int main (int argc, char** argv)
                         if (! acache.count (key)) acache[key] = mtxRender (base);
                         A = acache[key];
                     }
-                    else A = mtxRender (base);     // op 1 is per-cell, and only inert cells get here
-                    MtxCfg bc = base; bc.routes = routeJson (destOf (k, 0, dn), kOff);
+                    else A = mtxRender (base);     // ops 1-2 are per-cell, and only inert cells get here
+                    MtxCfg bc = base; bc.routes = routeJson (destOf (k, mtxInst, dn), kOff);
                     MtxCfg cc = base; cc.knobs[n] = pTop;
                     const Render B = mtxRender (bc), C = mtxRender (cc);
                     const double eq = rel (B, C), aud = rel (B, A);
@@ -945,19 +987,40 @@ int main (int argc, char** argv)
                 }
                 ++cells;
                 const bool ok = (bEq < kEqGate) && (bAud > kAudFloor) && (bAud - bEq > kAudMargin);
-                char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
-                                         kKindName[k], kFxModLeaf[k][n], k, n);
+                if (mtxMutate)
+                {
+                    // 🚨 DO NOT LET THE HEADLINE OUTRUN THE FINE PRINT. "184/184 red" is only
+                    //    evidence of TEETH for the cells that went red because the null BROKE.
+                    //    A mutated cell also goes red when the dial it aimed at is inert (the
+                    //    null stays at the floor and the audibility clause fails instead), and
+                    //    --mutate pins Type 0 and one operating point, so the rescues that save
+                    //    those cells in a normal run are switched off. Counted, not glossed.
+                    if (bAud <= kAudFloor) ++mutInert; else ++mutBroke;
+                    if (dn == 3) ++mutHitMix;               // knob 2 always aims at Mix, clamped at 1.0
+                }
+                char lbl[140];
+                if (mtxInst == 0) snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
+                                            kKindName[k], kFxModLeaf[k][n], k, n);
+                else              snprintf (lbl, sizeof lbl, "%s%d.%s (k%02d i%d n%02d): route +0.25 == knob 0.50",
+                                            kKindName[k], mtxInst + 1, kFxModLeaf[k][n], k, mtxInst, n);
                 char ty[24] = ""; if (bType) snprintf (ty, sizeof ty, "   [Type %d]", bType);
-                char det[260]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s%s",
-                                         bEq, bAud, ty,
-                                         bOp ? "   [probed 0.00->0.25: it is on a plateau at 0.25]" : "",
-                                         isOneBlockLateCell (k, n) ? "   [the ONE dial read before buildFxMod — see SIG-LAG]" : "");
+                char det[300]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s%s",
+                                         bEq, bAud, ty, kMtxOps[bOp].note, "");
                 chk (ok, lbl, det);
                 if (! ok) fails.push_back ({ k, n, kFxModLeaf[k][n], bEq, bAud });
                 else if (bAud < -30.0) { char q[80]; snprintf (q, sizeof q, "%s.%s (%.1f dBr)", kKindName[k], kFxModLeaf[k][n], bAud); quietCells.push_back (q); }
             }
         }
         printf ("\n  %d cells swept.  %zu failed.\n", cells, fails.size());
+        if (mtxMutate)
+            printf ("  MUTATION BREAKDOWN: %d red because the NULL BROKE (the gate saw the mis-map),\n"
+                    "                      %d red because the mis-aimed dial is INERT at Type 0 (the null held,\n"
+                    "                        the audibility clause failed) — --mutate pins Type 0 and one\n"
+                    "                        operating point, so the rescues a normal run uses are off here.\n"
+                    "                      %d of them aimed at knob 3 = MIX, which the flat config pins at 1.0,\n"
+                    "                        so the route clamps and moves nothing: a systematic artefact of\n"
+                    "                        \"the ADJACENT knob\", not an independent detection.\n",
+                    mutBroke, mutInert, mutHitMix);
         for (const auto& f : fails)
             printf ("    FAILED  %-8s %-9s (k%02d n%02d)  null=%7.2f dBr  moved=%7.2f dBr  %s\n",
                     kKindName[f.kind], f.leaf.c_str(), f.kind, f.knob, f.eq, f.aud,
