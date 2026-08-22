@@ -887,7 +887,12 @@ int main (int argc, char** argv)
             const std::string T = kFxModTag[k];
             int typeMax = 0;
             { auto it = gInfo.find (AU::pid (T + "_TYPE")); if (it != gInfo.end()) typeMax = (int) it->second.maxValue; }
-            const int nTypes = std::max (1, std::min (kTypeTries, typeMax + 1));
+            // MUTATED runs take the FIRST measurement and nothing else. The retry exists to find a
+            // Type where the dial is live; with the destination deliberately wrong the cell is going
+            // to fail whatever Type it is on, so hunting is pure cost — and expensive cost, because
+            // a mutated cell rarely satisfies the liveness test and therefore sweeps every Type and
+            // both operating points: ~96 renders instead of 2, hours instead of minutes.
+            const int nTypes = mtxMutate ? 1 : std::max (1, std::min (kTypeTries, typeMax + 1));
             std::map<int, Render> acache;                        // key = type*2 + (this is the Mix cell)
             for (int n = 0; n < 12; ++n)
             {
@@ -909,7 +914,7 @@ int main (int argc, char** argv)
                 // engine's `if (duck > 0.001f)` branch is not even entered at 0. So: if a cell is
                 // inert everywhere at the normal base, probe it again from ZERO before calling it
                 // unproven.
-                for (int op = 0; op < 2 && bAud <= kAudFloor; ++op)
+                for (int op = 0; op < (mtxMutate ? 1 : 2) && bAud <= kAudFloor; ++op)
                 {
                   const float pBase = (op == 0) ? kBase : 0.0f;
                   const float pTop  = pBase + kOff;
