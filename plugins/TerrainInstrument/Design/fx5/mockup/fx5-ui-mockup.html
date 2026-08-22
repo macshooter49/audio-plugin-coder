@@ -818,8 +818,8 @@ var CORES={
               var h='', adds='', nums='';
               /* fb448 — TRANSPARENT (Max: "the splitter needs to be transparent, we can see our audio"): the region
                  rect is a HIT AREA only (fill kept so it receives the pointer, opacity 0 — never a wash); the
-                 selected band is marked by a purple hairline across its top (the lane cards' own hairline, so the
-                 band and the cards that live in it wear the same mark); the numbers live in an HTML layer. */
+                 selected band is marked by a purple segment of the BASELINE under it (fb449 — it was a hairline across
+                 the top and sat on the numbers; the lane cards keep their top hairline); the numbers live in an HTML layer. */
               for(var k=0;k<4;k++){
                 h+='<g class="spl-lane" data-lane="'+k+'" opacity="0">'
                  +  '<rect class="spl-rg" data-lane="'+k+'" x="0" y="4" width="0" height="70" fill="#B794FF" opacity="0"/>'
@@ -827,7 +827,7 @@ var CORES={
                 adds+='<span class="spl-add" data-lane="'+k+'" style="display:none" title="Add a device in this band">'+IC_PLUS+'</span>';
                 nums+='<span class="spl-lt" data-lane="'+k+'" style="display:none"></span>';
               }
-              h+='<line class="spl-selh" x1="0" y1="4.6" x2="0" y2="4.6" stroke="#B794FF" stroke-width="1.3" opacity="0"/>';
+              h+='<line class="spl-selh" x1="0" y1="74" x2="0" y2="74" stroke="#B794FF" stroke-width="1.4" opacity="0"/>';   /* fb449 — on the BASELINE, under the band (Max: "what's with the line blocking the numbers?") */
               for(var x=0;x<3;x++){
                 h+='<line class="spl-xl" data-k="'+x+'" x1="0" y1="4" x2="0" y2="74" stroke="rgba(255,255,255,0.45)" stroke-width="1" opacity="0"/>'
                  + '<circle class="spl-n" data-k="'+x+'" cx="0" cy="39" r="2.4" fill="currentColor" stroke="none" opacity="0"/>';
@@ -1262,7 +1262,7 @@ window.__setSynParam=function(id,norm){ try{
               // the header's "+", white, raised clear of the baseline (fb447): an HTML glyph positioned by the band's left edge
               if(ad){ var show=w>16; ad.style.display=show?'grid':'none'; if(show){ ad.style.left=((x0+9)/226*100).toFixed(2)+'%'; ad.classList.toggle('sel',sel); } }
             }
-            // the selected band wears the lane cards' purple top hairline (fb448) — the band and its chain, one mark
+            // the selected band is underlined on the baseline (fb449) — the numbers up top stay clear
             var sh=core.querySelector('.spl-selh'); if(sh){ var Sb=Math.max(0,Math.min(nl-1,dev.sel||0)); sh.setAttribute('x1',bounds[Sb].toFixed(1)); sh.setAttribute('x2',bounds[Sb+1].toFixed(1)); sh.setAttribute('opacity','0.85'); }
             // the chassis pills are PROXIES for the selected band's Mute · Solo · Flip (fb448): paint them from the lane's own state
             var cardS=core.closest('.fxr-dev'); if(cardS){ var cp=cardS.querySelectorAll('.fxr-pills .fxr-pill'), Sp=Math.max(0,Math.min(nl-1,dev.sel||0));
