@@ -151,61 +151,70 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x,y) + 
       const has = !!c.querySelector('.fxr-back'); c.classList.toggle('swapped', open && has); }); }, F.open);
     await new Promise(r => setTimeout(r, 250));
 
-    // ── route every visible knob of this face, in batches that respect the 128-route matrix ──
-    const dests = await pg.evaluate((open) => {
-      const out = [];
-      document.querySelectorAll('#syn-panel .fxr-dev [data-mod-dest]').forEach(c => {
-        const isFront = c.classList.contains('fxr-knob'); if (isFront === !!open) return;
-        const r = c.getBoundingClientRect(); if (r.width && r.height) out.push(+c.getAttribute('data-mod-dest')); });
-      return out; }, F.open);
-    nCells += dests.length;
-
-    const rows = [];
-    for (let i = 0; i < dests.length; i += 120) {
-      const batch = dests.slice(i, i + 120);
-      await pg.evaluate((ds) => { window.__tiPruneFxRoutes(0, 1e9);
-        ds.forEach(d => window.__tiAddRoute(1, 0, d));      // env 1, depth 1.0 ⇒ the span covers the whole word
-        window.__selMod = {env:1}; }, batch);
-      await new Promise(r => setTimeout(r, 260));
-      const got = await pg.evaluate(HARVEST);
-      rows.push(...got.filter(c => F.pick(c) && batch.indexOf(c.dest) >= 0));
+    /* ── route and measure ONE CARD AT A TIME, scrolled into view. 🚨 Two reasons, both hard:
+       the matrix holds 128 routes and a full rack wants 192; and since fb453's clip fix a mark is
+       correctly SUPPRESSED while its knob sits outside `.fxr-clip`, so a single pass over a
+       16-card rack at the shipped 820 width would measure the two cards that happen to be on
+       screen and call it the rack. Every scroll position harvests EVERY visible mark, not just the
+       target card's, so marks from adjacent cards are still tested against each other for bar 1. */
+    const rows = [], byDest = new Map(); let pairWorst = null;
+    for (const kind of KINDS) {
+      const n = await pg.evaluate((kind, open) => {
+        const D = window.__fxrDevs(); const i = D.findIndex(x => x.core === kind); if (i < 0) return 0;
+        const card = document.querySelectorAll('.fxr-dev')[i]; if (!card) return 0;
+        if (open && !card.querySelector('.fxr-back')) return 0;
+        const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+        window.__tiPruneFxRoutes(0, 1e9);
+        // route every knob of this face that is CURRENTLY VISIBLE anywhere in the rack
+        let k = 0; document.querySelectorAll('#syn-panel .fxr-dev [data-mod-dest]').forEach(c => {
+          if (c.classList.contains('fxr-knob') === !!open) return;
+          const r = c.getBoundingClientRect(); if (!r.width || !r.height) return;
+          window.__tiAddRoute(1, 0, +c.getAttribute('data-mod-dest')); k++; });
+        window.__selMod = {env:1}; return k; }, kind, F.open);
+      if (!n) continue;
+      await new Promise(r => setTimeout(r, 240));
+      const got = (await pg.evaluate(HARVEST)).filter(c => F.pick(c));
+      const vis = got.filter(c => c.ul);
+      // bar 1 is a question about what is on screen TOGETHER — asked at each scroll position
+      for (let i = 0; i < vis.length; i++) for (let j = i + 1; j < vis.length; j++) {
+        const A = vis[i], B = vis[j]; if (Math.abs(A.ul.t - B.ul.t) > 2) continue;
+        const gap = Math.max(A.ul.l, B.ul.l) - Math.min(A.ul.r, B.ul.r);
+        if (!pairWorst || gap < pairWorst.v) pairWorst = {v:gap, a:A.core+'/'+A.word, b:B.core+'/'+B.word, face:F.id, kind:'mark↔mark'}; }
+      for (const A of vis) for (const B of vis) { if (A === B) continue;
+        if (B.lab.b < A.ul.t || B.lab.t > A.ul.b) continue;
+        const gap = Math.max(A.ul.l, B.lab.l) - Math.min(A.ul.r, B.lab.r);
+        if (!pairWorst || gap < pairWorst.v) pairWorst = {v:gap, a:A.core+'/'+A.word+' (mark)', b:B.core+'/'+B.word+' (word)', face:F.id, kind:'mark↔word'}; }
+      // the nearest neighbouring mark is only meaningful between two marks measured at the SAME
+      // scroll position — rects from different passes are not in a common frame of reference.
+      for (const A of vis) { let near = null, who = null;
+        for (const B of vis) { if (B === A || Math.abs(A.ul.t - B.ul.t) > 2) continue;
+          const g = Math.max(A.ul.l, B.ul.l) - Math.min(A.ul.r, B.ul.r);
+          if (near == null || g < near) { near = g; who = B.core + '/' + B.word; } }
+        A.near = near; A.nearWho = who; }
+      // each knob is measured once, on the pass where its own card was brought into view
+      got.filter(c => c.core === kind).forEach(c => { if (!byDest.has(c.dest)) byDest.set(c.dest, c); });
     }
+    rows.push(...byDest.values());
     const marked = rows.filter(c => c.ul);
-    nMeasured += marked.length;
+    nCells += rows.length; nMeasured += marked.length;
+    if (pairWorst && pairWorst.v < worst.gap.v) worst.gap = pairWorst;
     console.log('── ' + F.id.toUpperCase() + ' face: ' + marked.length + '/' + rows.length + ' routed knobs carry a mark');
     if (marked.length !== rows.length)
       console.log('   ⚠️  ' + (rows.length - marked.length) + ' routed knob(s) drew NO underline: ' +
         rows.filter(c => !c.ul).slice(0,6).map(c => c.core + '/' + c.word).join(', '));
 
-    // ── 1  no mark touches another mark, or a neighbouring word's ink ─────────────────────────
     const ROWEPS = 2;   // same visual row (all marks of a face share a baseline per card row)
-    for (let i = 0; i < marked.length; i++) for (let j = i + 1; j < marked.length; j++) {
-      const A = marked[i], B = marked[j];
-      if (Math.abs(A.ul.t - B.ul.t) > ROWEPS) continue;                       // different rows never collide
-      const gap = Math.max(A.ul.l, B.ul.l) - Math.min(A.ul.r, B.ul.r);
-      if (gap < worst.gap.v) worst.gap = {v:gap, a:A.core+'/'+A.word, b:B.core+'/'+B.word, face:F.id, kind:'mark↔mark'};
-    }
-    for (const A of marked) for (const B of marked) {
-      if (A === B) continue;
-      if (B.lab.b < A.ul.t || B.lab.t > A.ul.b) continue;                     // the word does not reach the mark's strip
-      const gap = Math.max(A.ul.l, B.lab.l) - Math.min(A.ul.r, B.lab.r);
-      if (gap < worst.gap.v) worst.gap = {v:gap, a:A.core+'/'+A.word+' (mark)', b:B.core+'/'+B.word+' (word)', face:F.id, kind:'mark↔word'};
-    }
 
     // ── 2  the mark stays inside its knob cell ────────────────────────────────────────────────
     for (const A of marked) { const m = Math.min(A.ul.l - A.cell.l, A.cell.r - A.ul.r);
       if (m < worst.margin.v) worst.margin = {v:m, who:A.core+'/'+A.word, face:F.id,
         detail:'cell ' + (A.cell.r - A.cell.l).toFixed(2) + 'px, word ' + A.lab.w.toFixed(2) + 'px'};
-      if (m < MIN_CELL_MARGIN + 1.0) {
+      if (m < MIN_CELL_MARGIN + 1.0)
         // how much clear air the mark ACTUALLY has before the nearest neighbouring mark — the
         // question the cell was standing in for. A tight cell with a wide gap is a different
         // problem from a tight cell with a tight gap, and Max should see which one this is.
-        let near = 1e9, who = '—';
-        for (const B of marked) { if (B === A || Math.abs(A.ul.t - B.ul.t) > ROWEPS) continue;
-          const g = Math.max(A.ul.l, B.ul.l) - Math.min(A.ul.r, B.ul.r);
-          if (g < near) { near = g; who = B.core + '/' + B.word; } }
         tight.push({face:F.id, who:A.core+'/'+A.word, margin:m, cell:A.cell.r - A.cell.l, word:A.lab.w,
-                    near:(near === 1e9 ? null : near), nearWho:who}); } }
+                    near:(A.near == null ? null : A.near), nearWho:A.nearWho || '—'}); }
 
     // ── 3  the line is actually drawn ─────────────────────────────────────────────────────────
     for (const A of marked) { const h = A.rail.h * zoom * DSF;
@@ -270,26 +279,67 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x,y) + 
        the row-1 word's mark is drawn INSIDE the row-2 dial's box. The box is mostly air at the
        top, so most columns read clean — but wherever that dial's arc reaches high, the mark and
        the knob share pixels. Measured as the mark's drawn line against the next dial's box top. */
-    if (F.open) { const rows = {};
-      for (const A of marked) { const key = A.core + '|' + Math.round(A.ul.t);
-        (rows[key] = rows[key] || []).push(A); }
-      const byCore = {};
-      for (const A of marked) (byCore[A.core] = byCore[A.core] || []).push(A);
-      for (const core of Object.keys(byCore)) { const list = byCore[core].slice().sort((a,b) => a.ul.t - b.ul.t);
-        const topY = list[0].ul.t, top = list.filter(x => Math.abs(x.ul.t - topY) < ROWEPS);
-        const dials = await pg.evaluate((core) => { const D = window.__fxrDevs(); const i = D.findIndex(x => x.core === core);
-          const card = document.querySelectorAll('.fxr-dev')[i]; if (!card) return [];
-          return [...card.querySelectorAll('.fxr-bk-knob')].filter(k => /grid-row:\s*2/.test(k.getAttribute('style')||''))
-            .map(k => { const r = k.querySelector('.fxr-dial').getBoundingClientRect(); return {l:r.left, r:r.right, t:r.top}; }); }, core);
-        for (const A of top) { for (const d of dials) { if (A.ul.r < d.l || A.ul.l > d.r) continue;
-          const over = (A.rail.t + A.rail.h) - d.t;      // > 0 ⇒ the line is inside the dial's box
-          if (over > 0) intr.push({core, word:A.word, over}); } } } }
+    if (F.open) {
+      /* Max's second ruling was "nudge it up so it clears the row-2 dial", and the honest test of
+         that is the dial's INK, not its box: the box is mostly air at the top, so a mark inside it
+         may still be nowhere near the arc. Read from the rendered PNG — for each row-1 mark, the
+         topmost painted row inside the dial below it — and report the real clearance. */
+      for (const kind of KINDS) {
+        const ctx = await pg.evaluate((kind) => { const D = window.__fxrDevs(); const i = D.findIndex(x => x.core === kind);
+          const card = document.querySelectorAll('.fxr-dev')[i]; if (!card || !card.querySelector('.fxr-bk-grid')) return null;
+          const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+          window.__tiPruneFxRoutes(0, 1e9);
+          card.querySelectorAll('[data-mod-dest]').forEach(c => { if (c.classList.contains('fxr-knob')) return;
+            const r = c.getBoundingClientRect(); if (r.width && r.height) window.__tiAddRoute(1, 0, +c.getAttribute('data-mod-dest')); });
+          window.__selMod = {env:1}; return true; }, kind);
+        if (!ctx) continue;
+        await new Promise(r => setTimeout(r, 240));
+        const cells = await pg.evaluate((kind) => { const D = window.__fxrDevs(); const i = D.findIndex(x => x.core === kind);
+          const card = document.querySelectorAll('.fxr-dev')[i];
+          const ks = [...card.querySelectorAll('.fxr-bk-knob')]; const out = [];
+          ks.forEach(k => { const m = /grid-column:\s*(\d+);grid-row:\s*(\d+)/.exec(k.getAttribute('style') || ''); if (!m || m[2] !== '1') return;
+            const below = ks.find(x => { const q = /grid-column:\s*(\d+);grid-row:\s*(\d+)/.exec(x.getAttribute('style') || ''); return q && q[1] === m[1] && q[2] === '2'; });
+            if (!below) return;
+            const lab = k.querySelector('.fxr-lab'); const rg = document.createRange(); rg.selectNodeContents(lab);
+            const LR = rg.getBoundingClientRect();
+            const u = [...document.querySelectorAll('.sm-ul')].filter(x => x.style.display !== 'none')
+                        .find(x => Math.abs(x.getBoundingClientRect().left - LR.left) < 1.5);
+            if (!u) return; const R = u.querySelector('.smu-rail').getBoundingClientRect();
+            const dl = below.querySelector('.fxr-dial').getBoundingClientRect();
+            out.push({word:lab.textContent, markBot:R.bottom, markTop:R.top, lt:LR.top, lb:LR.bottom, lx:LR.left, lr:LR.right,
+                      dl:dl.left, dr:dl.right, dt:dl.top}); });
+          return out; }, kind);
+        if (!cells.length) continue;
+        const shot = await pg.screenshot({encoding:'base64', clip:{x:0, y:0, width:VW, height:VH}});
+        const inked = await pg.evaluate((u, cells, D) => new Promise(res => { const im = new Image();
+          im.onload = () => { const c = document.createElement('canvas'); c.width = im.width; c.height = im.height;
+            const x = c.getContext('2d'); x.drawImage(im, 0, 0);
+            const px = (X, Y) => { const d = x.getImageData(X, Y, 1, 1).data; return d[0] + d[1] + d[2]; };
+            res(cells.map(ce => { const bg = px(Math.max(0, Math.round(ce.dl * D) - 6), Math.round((ce.markBot + 3) * D));
+              let arc = null;
+              for (let Y = Math.round(ce.markBot * D) + 1; Y < Math.round((ce.dt + 30) * D); Y++) { let h = false;
+                for (let X = Math.round(ce.dl * D); X < Math.round(ce.dr * D); X++) if (Math.abs(px(X, Y) - bg) > 28) { h = true; break; }
+                if (h) { arc = Y / D; break; } }
+              let gly = null;
+              for (let Y = Math.round(ce.markTop * D) - 1; Y > Math.round(ce.lt * D); Y--) { let h = false;
+                for (let X = Math.round(ce.lx * D); X < Math.round(ce.lr * D); X++) if (Math.abs(px(X, Y) - bg) > 28) { h = true; break; }
+                if (h) { gly = Y / D; break; } }
+              return {word:ce.word, toArc: arc == null ? null : arc - ce.markBot, toWord: gly == null ? null : ce.markTop - gly,
+                      intoBox: (ce.markBot - ce.dt)}; })); };
+          im.onerror = () => res([]); im.src = u; }), 'data:image/png;base64,' + shot, cells, DSF);
+        inked.forEach(r => intr.push(Object.assign({core:kind}, r)));
+      }
+      await pg.evaluate(() => { window.__tiPruneFxRoutes(0, 1e9); });
+    }
 
     // ── 5  the comet: an LFO route, driven, its head's travel along the word ──────────────────
     {
       const probe = marked.slice().sort((a,b) => a.lab.w - b.lab.w)[0];   // the SHORTEST word on this face — the hardest case (the least room for the comet to travel)
       if (probe) {
-        await pg.evaluate((d) => { window.__tiPruneFxRoutes(0, 1e9); window.__tiAddRoute(0, 1, d); window.__selMod = {lfo:1}; }, probe.dest);
+        await pg.evaluate((d, core) => { const D = window.__fxrDevs(); const i = D.findIndex(x => x.core === core);
+          const card = document.querySelectorAll('.fxr-dev')[i]; const clip = document.querySelector('.fxr-clip');
+          if (card) clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;   // fb453 — a mark outside the clip is suppressed; scroll it in
+          window.__tiPruneFxRoutes(0, 1e9); window.__tiAddRoute(0, 1, d); window.__selMod = {lfo:1}; }, probe.dest, probe.core);
         await new Promise(r => setTimeout(r, 200));
         const travel = await pg.evaluate(async (d) => {
           const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
@@ -397,10 +447,18 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x,y) + 
     pixLo.sort((a,b)=>a.lo-b.lo).slice(0,8).forEach(x => console.log('   ' + x.lo.toFixed(2) + ':1 worst vs ' +
       x.med.toFixed(2) + ':1 median   ' + x.who + ' (' + x.face + ')   the worst pixel sits on ' + x.under +
       ' — not the card, but something drawn there')); }
-  if (intr.length) { intr.sort((a,b)=>b.over-a.over);
-    console.log('\n── NOTE: on the 4x2 back panel the ROW-1 mark is drawn inside the ROW-2 dial\'s box ──');
-    const seen = {}; intr.forEach(x => { if (seen[x.core]) return; seen[x.core] = 1;
-      console.log('   ' + x.core + ': the line reaches ' + x.over.toFixed(2) + ' px past the next dial\'s box top (worst word: ' + x.word + ')'); }); }
+  if (intr.length) {
+    const withArc = intr.filter(x => x.toArc != null).sort((a,b) => a.toArc - b.toArc);
+    const withWord = intr.filter(x => x.toWord != null).sort((a,b) => a.toWord - b.toWord);
+    console.log('\n── THE 4x2 BACK PANEL CORRIDOR, measured from the PNG (Max: "nudge it up off the dial") ──');
+    console.log('   the mark must sit between the WORD\'S glyphs above it and the row-2 dial\'s ARC ink below it.');
+    if (withArc.length) console.log('   tightest to the ARC   : ' + withArc[0].toArc.toFixed(2) + ' px  (' + withArc[0].core + '/' + withArc[0].word +
+      ')   — ' + withArc.filter(x => x.toArc <= 0).length + ' of ' + withArc.length + ' touching or overlapping');
+    if (withWord.length) console.log('   tightest to the WORD  : ' + withWord[0].toWord.toFixed(2) + ' px  (' + withWord[0].core + '/' + withWord[0].word +
+      ')   — ' + withWord.filter(x => x.toWord <= 0).length + ' of ' + withWord.length + ' touching or overlapping');
+    const box = intr.filter(x => x.intoBox > 0).sort((a,b) => b.intoBox - a.intoBox);
+    if (box.length) console.log('   (for reference, ' + box.length + ' marks still reach into the dial\'s BOX, worst ' +
+      box[0].intoBox.toFixed(2) + ' px on ' + box[0].core + '/' + box[0].word + ' — the box is air at the top, the arc is the thing you see)'); }
   if (dimAll.length) { dimAll.sort((a,b)=>a-b);
     const q = f => dimAll[Math.min(dimAll.length-1, Math.floor(f*dimAll.length))];
     console.log('\n── DOSSIER, bar 4 (dim state, ' + dimAll.length + ' marks): min ' + dimAll[0].toFixed(2) +

@@ -8632,7 +8632,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
              A knob the device does not have — the Filter has no back panel at all (fb384), and a
              Splitter/Type combination can leave a back cell DEAD (fb447) — gets NO attribute, so
              a hole is never a drop target. */
-          var FXMOD_BASE=694, FXMOD_INSTS=6, FXMOD_KNOBS=12, FXMOD_FRONT=4;   /* knobs 0..3 are the front dials */
+          var FXMOD_BASE=694, FXMOD_KINDS=16, FXMOD_INSTS=6, FXMOD_KNOBS=12, FXMOD_FRONT=4;   /* knobs 0..3 are the front dials */
           var FXMOD_KIND={reverb:0,delay:1,saturate:2,granular:3,tape:4,flt:5,cho:6,fla:7,pha:8,
                           eqz:9,wid:10,cmp:11,ott:12,bod:13,utl:14,spl:15};
           function fxModDest(core,inst,knob){ var k=FXMOD_KIND[core]; if(k==null) return null;
@@ -8642,6 +8642,34 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
           function fxModAttr(core,inst,knob,dead){ if(dead) return '';
             var d=fxModDest(core,inst,knob); return d==null?'':(' data-mod-dest="'+d+'"'); }
           window.__fxModDest=fxModDest;   // headless gate hook
+          function fxModIsDest(d){ return d>=FXMOD_BASE && d<FXMOD_BASE+FXMOD_KINDS*FXMOD_INSTS*FXMOD_KNOBS; }   /* mirrors isFxModDest() in SynthModConfig.h */
+          /* ═══ fb453 — THE KNOB'S VALUE, FROM THE RACK'S OWN MODEL ══════════════════════════════
+             The underline's depth territory is anchored at (1−depth)·knobValue, so the mark needs
+             the dial's 0..1 value every frame. It cannot come from Juce.getSliderState(): the rack
+             has NO WebSliderRelay for ANY of its parameters — deliberately, because at 700+ relays
+             they silently failed to reach the APVTS, so the whole rack is routed through
+             setSynParam/getSynParam instead (PluginEditor.cpp). Asking for a relay that does not
+             exist returns 0 forever AND leaks a bogus SliderState, a console warning and a listener
+             per modulated dial. getSynParam is a native fn and asynchronous, so it is no use inside
+             a 60 Hz frame either.
+             DEVS is the answer and was all along: it is the model the card draws from, kept current
+             by __fxRedrawKnobs and by every knob drag, in the rack's own 0..100 convention. One
+             authorship, synchronous, and exactly the number the dial is showing. */
+          function fxModKnobNorm(dest){
+            if(!fxModIsDest(dest)) return null;
+            var o=dest-FXMOD_BASE,
+                kind=Math.floor(o/(FXMOD_INSTS*FXMOD_KNOBS)),
+                inst=Math.floor(o/FXMOD_KNOBS)%FXMOD_INSTS+1,
+                knob=o%FXMOD_KNOBS, core=null;
+            for(var c in FXMOD_KIND) if(FXMOD_KIND[c]===kind){ core=c; break; }
+            if(!core) return null;
+            for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d.core!==core||d.inst!==inst) continue;
+              var v=null;
+              if(knob<FXMOD_FRONT){ var k=d.knobs&&d.knobs[knob]; if(k) v=k.v; }
+              else { var b=d.back&&d.back.knobs&&d.back.knobs[knob-FXMOD_FRONT]; if(b) v=b[1]; }
+              return (v==null)?null:Math.max(0,Math.min(1,v/100)); }
+            return null; }
+          window.__fxModIsDest=fxModIsDest; window.__fxModKnobNorm=fxModKnobNorm;   // headless gate hooks
           // Rewrites every param ID in a cloned descriptor from SYN_DLY_* to SYN_DLY<inst>_*.
           function instPrefix(core,inst){ var b=FX_PREFIX[core]; return inst<=1?b:b.slice(0,-1)+inst+'_'; }
           function reIdDeep(o,base,pre){
@@ -10069,11 +10097,20 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               fd[i].innerHTML=knobSVG(k.v,lb,fxGlyph(d.core,k.p,k.v));
               var la=fd[i].parentNode&&fd[i].parentNode.querySelector('.fxr-lab'); if(la&&la.textContent!==k.l) la.textContent=k.l; }
             if(d.back&&d.back.knobs){ var bd=card.querySelectorAll('.fxr-dial[data-bk]');
-              for(var j=0;j<bd.length;j++){ var lbl=bd[j].getAttribute('data-bk'), row=null;
-                for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; break; }
+              for(var j=0;j<bd.length;j++){ var lbl=bd[j].getAttribute('data-bk'), row=null, ri=-1;
+                for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; ri=q; break; }
                 if(!row) continue;
                 var lb2=fxFmt(d.core,row[2],row[1],d); bd[j].innerHTML=knobSVG(row[1],lb2,fxGlyph(d.core,row[2],row[1]));
-                var wrap=bd[j].parentNode; if(wrap&&wrap.classList) wrap.classList.toggle('fxr-bk-dead',lb2==='—'); } }   /* fb447 — dead cells follow the Type */
+                var wrap=bd[j].parentNode; if(wrap&&wrap.classList){ var dead2=(lb2==='—');
+                  wrap.classList.toggle('fxr-bk-dead',dead2);   /* fb447 — dead cells follow the Type */
+                  /* fb453 — and so does the DESTINATION. The class alone made this cell dim and
+                     pointer-events:none while it still carried a live data-mod-dest, so it stayed
+                     droppable and kept its mark painting on a knob the Type cannot bind — and this
+                     runs off the 400 ms viz feed, so an OTT cell could flip mid-session. The class
+                     and the attribute now say the same thing, both ways. */
+                  var dst2=fxModDest(d.core,d.inst,FXMOD_FRONT+ri);
+                  if(dead2||dst2==null) wrap.removeAttribute('data-mod-dest');
+                  else wrap.setAttribute('data-mod-dest',dst2); } } }
           }catch(e){} };
           /* The per-Type relabels, mirrored from the engines' own tables (TerrainWidenFx::frontNames,
              TerrainEqualizerFx::shapeName) — the card never invents a name. Applied on add, on a
@@ -28388,11 +28425,28 @@ restoreThemeFromBackend();
     '.sm-att .f{position:absolute;left:1px;right:1px;background:#B794FF;border-radius:3px;box-shadow:0 0 7px rgba(139,92,246,.85);}'+
     '.sm-att .vv{position:absolute;bottom:100%;left:50%;transform:translateX(-50%);margin-bottom:5px;font:600 9px -apple-system,sans-serif;color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.95);white-space:nowrap;}'+
     /* fb182 — S3 signification: the underline (filter-tab grammar: 1.5px, purple-400, r1) */
+    /* ═══ fb453 — MAX'S TWO RULINGS ON THE MARK, both by measurement ═════════════════════════
+       (1) "ALWAYS NOTICEABLE": the DIM (unselected) span was rgba(255,255,255,0.22), which
+           measured 2.68:1 against the card on all 184 rack marks AND on the synth panel's own
+           knobs — under the 3:1 bar everywhere. 0.40 clears it on the LIGHTEST card in the rack
+           (Utility, rgb(52,50,77) → 3.35:1) as well as on the darkest panel. The rail, the
+           un-covered remainder of the word, is raised in the same proportion (0.10 → 0.16) so the
+           depth reading stays legible without competing with the span. The SELECTED purple is
+           untouched and still dominates: 7.06:1 against 3.3:1, better than 2× — the hierarchy Max
+           asked to preserve. This deliberately changes the synth panel too; it is one grammar.
+       (2) "NUDGE IT UP OFF THE DIAL BELOW": on a 4×2 back panel the row-1 mark was drawn over the
+           row-2 dial. Measured from the rendered PNG, the real corridor is between the WORD's
+           glyph ink and the ARC's ink — not the boxes: ordinary cards leave 4.5 px (glyph 568.0 →
+           arc 572.5) and Utility's bigger knobs only 3.5 px (561.5 → 565.0). At top:3px the line
+           sat at lineBox+2.0..+3.5, which CLEARED the ordinary arc by 0.47 px and OVERLAPPED
+           Utility's by 0.5 px — the 2.00:1 utl/Low Pass outlier, exactly. top:1.5px puts it at
+           lineBox+0.5..+2.0: ≥ 1.0 px of air on BOTH sides on the tightest card in the plugin.
+           The 7 px grab strip is deliberately NOT moved — the hit area is unchanged. ═══════════ */
     '.sm-ul{position:fixed;z-index:2147483644;height:7px;background:transparent;cursor:ns-resize;}'+   /* fb189 — 7px hit strip; visuals are children */
-    '.smu-rail{position:absolute;left:0;right:0;top:3px;height:1.5px;background:rgba(255,255,255,0.10);}'+
-    '.smu-span{position:absolute;top:3px;height:1.5px;background:rgba(255,255,255,0.22);}'+   /* the depth's TERRITORY, anchored at (1−d)·knob */
+    '.smu-rail{position:absolute;left:0;right:0;top:1.5px;height:1.5px;background:rgba(255,255,255,0.16);}'+
+    '.smu-span{position:absolute;top:1.5px;height:1.5px;background:rgba(255,255,255,0.40);}'+   /* the depth's TERRITORY, anchored at (1−d)·knob */
     '.sm-ul.sel .smu-span{background:#B794FF;}'+
-    '.smu-comet{position:absolute;top:2.25px;height:3px;pointer-events:none;background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,0.95));box-shadow:0 0 4px rgba(167,139,250,0.55);}'+   /* fb189 — F3 THE COMET (Max's pick) */
+    '.smu-comet{position:absolute;top:0.75px;height:3px;pointer-events:none;background:linear-gradient(90deg,rgba(231,222,255,0),rgba(231,222,255,0.95));box-shadow:0 0 4px rgba(167,139,250,0.55);}'+   /* fb189 — F3 THE COMET (Max's pick) */
     '.smu-comet.rev{background:linear-gradient(270deg,rgba(231,222,255,0),rgba(231,222,255,0.95));}'+
     /* fb254 — LFO identification uses the SAME purple as envelopes (Max: one color, no green/blue).
        The .sel underline already lights #B794FF for env AND LFO; selecting an LFO lights its routes. */
@@ -28408,17 +28462,53 @@ restoreThemeFromBackend();
   function updAtt(a){ var d=Math.max(-1,Math.min(1,a.depth)); attV.textContent=(d>=0?'+':'')+Math.round(d*100)+'%';
     if(d>=0){ attF.style.bottom='50%'; attF.style.top=''; attF.style.height=(d*50).toFixed(1)+'%'; }
     else    { attF.style.top='50%'; attF.style.bottom=''; attF.style.height=(-d*50).toFixed(1)+'%'; } }
-  /* ═══ fb453 — CLIENT PX → LAYOUT PX. 🚨 The whole page is scaled with `zoom` on <html> the
-     moment the plugin window is not its base 820 wide (the top-of-file resize fixer sets
-     window.__zoomFix). Under `zoom`, getBoundingClientRect() reports FINAL SCREEN px, but a px
-     LENGTH WRITTEN BACK into any element's style is multiplied by that same zoom again. Every
-     position:fixed overlay this module places from a measured rect — the drag ghost, the
-     attenuator, the underline, the route list — therefore landed at position × zoom: at 0.65×
-     they crowd into the top-left, at 1.9× they fly off the bottom-right, and the underline stops
-     touching its word at all. The rest of the codebase already works in LAYOUT space (that is
-     exactly why __vw()/__vh() divide by __zoomFix); this is the missing half of that convention.
-     At the shipped default zoom is 1 and LP() is the identity, so nothing moves there. */
+  /* ═══ fb453 — CLIENT PX → LAYOUT PX ═══════════════════════════════════════════════════════
+     SCOPE, stated precisely: this is NOT "every window size". fb175's contract is that a WORKING
+     native pageZoom keeps this page at ~820 CSS px at any window size, and then __zoomFix is 1 and
+     LP() is the identity. The `zoom` on <html> is fb175's LAST-RESORT SELF-HEAL, armed only on a
+     host where the native apply never lands (the page finds itself measuring device px) — and it
+     self-clears the moment native takes over. So the blast radius is that fallback path.
+     On it, though, the bug was total: under `zoom`, getBoundingClientRect() reports FINAL SCREEN
+     px, but a px LENGTH WRITTEN BACK into an element's style is multiplied by that same zoom
+     AGAIN. Every position:fixed overlay this module places from a measured rect — the drag ghost,
+     the attenuator, the underline, the route list — landed at position × zoom, so the underline
+     stopped touching its word at all (reproduced: a word at x 71.39 got its mark at x 135.81 =
+     71.39 × 1.9024). __vw()/__vh() already divide by __zoomFix for exactly this reason; LP() is
+     the missing half of that convention, and a no-op whenever native zoom is healthy. */
   function LP(v){ var z=window.__zoomFix||1; return (z>0)?(v/z):v; }
+  /* ═══ fb453 — THE CLIP. 🚨 targets() collects `#syn-panel [data-mod-dest]` and hit() is pure
+     getBoundingClientRect() geometry: it knows nothing about overflow, pointer-events or
+     elementFromPoint. That was harmless while every destination sat in an unclipped panel — but
+     the FX rack lives in `.fxr-clip{overflow-x:auto}`, so the moment its knobs became
+     destinations, every card scrolled out of view became a PHANTOM DROP TARGET whose rect still
+     answered hit(). A release over a completely different panel could create a route on a knob
+     nobody could see, and a modulated knob scrolled out of view kept painting its mark over
+     whatever sits beside the rack (.sm-ul is position:fixed).
+     Both halves are answered by the same question — what part of this element can actually be
+     seen — so both call clipRectOf(). The clip element is cached per element (a WeakMap: a card
+     re-render hands us a new node, which gets a fresh entry, and the old one is collected), so
+     the 60 Hz underline loop costs one getBoundingClientRect and not a getComputedStyle walk. */
+  var clipCache=new WeakMap();
+  /* EVERY clipping ancestor, not just the nearest — the nearest one is usually the element's own
+     card, which contains it perfectly and would answer "fully visible" for a card that is itself
+     scrolled off the rack. The visible region is the INTERSECTION of the whole chain. */
+  function clipElsOf(el){ if(!el||!el.parentElement) return [];
+    if(clipCache.has(el)) return clipCache.get(el);
+    var n=el.parentElement, out=[];
+    while(n&&n!==document.body&&n!==document.documentElement){
+      var cs=null; try{ cs=getComputedStyle(n); }catch(e){}
+      if(cs&&/auto|scroll|hidden/.test(cs.overflowX+' '+cs.overflowY)) out.push(n);
+      n=n.parentElement; }
+    clipCache.set(el,out); return out; }
+  function clipRectOf(el){ var cs=clipElsOf(el); if(!cs.length) return null;
+    var l=-1e9,t=-1e9,r=1e9,b=1e9;
+    for(var i=0;i<cs.length;i++){ var q=cs[i].getBoundingClientRect();
+      if(q.left>l)l=q.left; if(q.top>t)t=q.top; if(q.right<r)r=q.right; if(q.bottom<b)b=q.bottom; }
+    return {left:l,top:t,right:r,bottom:b}; }
+  /* the part of el that is actually on screen — null when it is entirely clipped away */
+  function vizRect(el){ var r=el.getBoundingClientRect(), c=clipRectOf(el); if(!c) return r;
+    var l=Math.max(r.left,c.left), t=Math.max(r.top,c.top), rt=Math.min(r.right,c.right), b=Math.min(r.bottom,c.bottom);
+    return (rt<=l||b<=t)?null:{left:l,top:t,right:rt,bottom:b}; }
   function showAtt(a,x,y){ att.style.left=LP(x)+'px'; att.style.top=LP(y)+'px'; att.classList.add('on'); updAtt(a); }
   function hideAtt(){ att.classList.remove('on'); }
 
@@ -28445,6 +28535,16 @@ restoreThemeFromBackend();
   var phase=[0,0,0,0,0,0,0,0,0,0], lastT=0;
   // resolve a route's live target element — LFO→LFO tabs re-render (and page), so look them up fresh
   function curEl(a){ if(a.dest>=12&&a.dest<=21) return document.querySelector('#mod-engine .mv-tabs .t[data-tab="'+(a.dest-11)+'"]');
+    /* fb453 — an FX-rack surface is valid only while it still ADVERTISES this destination. A card
+       re-render replaces the node (handled below), but a Type change can also retire a back cell
+       in place: __fxRedrawKnobs marks it dead and strips its data-mod-dest, leaving the very same
+       wrapper in the DOM, dimmed and pointer-events:none. Re-resolve rather than trust the stale
+       handle; if nothing advertises the dest there is no surface, the mark stays down, and the
+       ROUTE SURVIVES — switch the Type back and the cell (and its mark) return. */
+    if(window.__fxModIsDest&&window.__fxModIsDest(a.dest)){
+      var e1=a.el;
+      if(!e1||e1.isConnected===false||!e1.getAttribute||e1.getAttribute('data-mod-dest')!==String(a.dest)) a.el=elForDest(a.dest);
+      return a.el; }
     if(a.el&&a.el.isConnected===false){ var e2=elForDest(a.dest); if(e2)a.el=e2; }   /* fb145 — card grids REBUILD on lane/effect switch */
     return a.el; }
 
@@ -28573,13 +28673,13 @@ restoreThemeFromBackend();
         var stE=ssCache[pidE]; if(stE===undefined){ stE=ssCache[pidE]=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pidE):null; }
         try{ return stE?stE.getNormalisedValue():0; }catch(e){ return 0; } }
       return 0; }
+    /* fb453 — an FX-rack dial's value comes from the RACK'S MODEL, never from a slider state:
+       the rack has no WebSliderRelay for any of its parameters (PluginEditor.cpp routes it all
+       through setSynParam/getSynParam), so getSliderState() would return 0 forever and leak a
+       bogus state + listener per modulated dial. Asked BEFORE the KNOBDEST path so no FX dest
+       ever reaches it. */
+    if(window.__fxModKnobNorm){ var fv=window.__fxModKnobNorm(a.dest); if(fv!=null) return fv; }
     var pid=d2pid(a.dest);
-    /* fb453 — an FX-rack dial's parameter is not in KNOBDEST (its dest is arithmetic, not a
-       table), but the dial itself carries the id: the wrapper we dropped on holds
-       `.fxr-dial[data-p]`. Read it from the element rather than mirroring the 184-cell map a
-       second time — without this the territory anchors at 0 and the span sits at the left of
-       the word instead of on the knob's own value. */
-    if(!pid&&a.el&&a.el.querySelector){ var dd=a.el.querySelector('.fxr-dial[data-p]'); if(dd)pid=dd.getAttribute('data-p')||null; }
     if(!pid)return 0;
     var st=ssCache[pid]; if(st===undefined){ st=ssCache[pid]=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(pid):null; }
     try{ return st?st.getNormalisedValue():0; }catch(e){ return 0; } }
@@ -28601,7 +28701,10 @@ restoreThemeFromBackend();
         if(!g) setTimeout(function(){ try{restore();}catch(e){} },500);                  /* fb145 — pick up routes the card just wrote */
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
-  function hit(x,y){ for(var i=0;i<TG.length;i++){ var r=TG[i].el.getBoundingClientRect(); if(x>=r.left-3&&x<=r.right+3&&y>=r.top-3&&y<=r.bottom+3) return TG[i]; } return null; }
+  /* fb453 — vizRect, not getBoundingClientRect: a target is only hittable where it can be SEEN.
+     Resolved per event rather than filtered once in targets(), because the clip is live geometry —
+     scrolling the rack mid-drag must reveal and retire targets as it goes. */
+  function hit(x,y){ for(var i=0;i<TG.length;i++){ var r=vizRect(TG[i].el); if(!r) continue; if(x>=r.left-3&&x<=r.right+3&&y>=r.top-3&&y<=r.bottom+3) return TG[i]; } return null; }
   /* fb178 — drag an ENVELOPE from its chip onto any knob (Serum-style). Same ghost,
      same targets, same hit; the drop lands at +100% depth. Click still opens the hub
      (drag only past the 5px threshold; the switch-click suppressor below covers it). */
@@ -28709,7 +28812,7 @@ restoreThemeFromBackend();
           uu.addEventListener('pointerdown',function(e){ ra=routeFor(tEl); if(!ra)return; e.preventDefault(); e.stopPropagation();
             down=true; moved=false; badgeBusy=true; y0=e.clientY; v0=ra.depth; uu.setPointerCapture&&uu.setPointerCapture(e.pointerId);
             if(ra.env){ if(rtHideT)clearTimeout(rtHideT); if(!rtMenu)showRoutes(tEl,uu); }
-            else { var br=uu.getBoundingClientRect(); showAtt(ra, br.right+7, br.top-25); }
+            else { var br=uu.getBoundingClientRect(); showAtt(ra, LP(br.right)+7, LP(br.top)-25); }   /* fb453 — convert the RECT, then add the layout-px offsets; LP()ing the sum shrank them to 7/zoom and −25/zoom */
             function mv(ev){ if(!down)return; if(Math.abs(ev.clientY-y0)>2)moved=true;
               ra.depth=Math.max(ra.env?0:-1,Math.min(1,v0+(y0-ev.clientY)*0.008));
               if(ra.env)updRouteList(ra); else updAtt(ra); push(); }
@@ -28725,12 +28828,22 @@ restoreThemeFromBackend();
       try{ var rg=document.createRange(); rg.selectNodeContents(lb); r2=rg.getBoundingClientRect(); }catch(e){}
       if(!r2||r2.width===0) r2=lb.getBoundingClientRect?lb.getBoundingClientRect():null;
       if(!on||!r2||r2.width===0){ u.style.display='none'; return; }
+      /* fb453 — THE CLIP. The rack scrolls inside .fxr-clip, and .sm-ul is position:fixed, so a
+         modulated knob scrolled out of view would keep painting its bar over whichever panel now
+         occupies those pixels. Fully out ⇒ down. Partly out ⇒ TRIMMED with clip-path rather than
+         resized, because the span/comet are fractions of the WHOLE word and must keep measuring
+         against it; clip-path also removes the trimmed strip from hit-testing, so the hover route
+         list cannot be summoned from a pixel the knob does not own. */
+      var cw=clipRectOf(el);
+      if(cw&&(r2.right<=cw.left||r2.left>=cw.right||r2.bottom<=cw.top||r2.top>=cw.bottom)){ u.style.display='none'; return; }
       u.style.display='block';
-      /* fb453 — LP(): the rect is SCREEN px, a style length is re-multiplied by the page zoom.
-         The underline must sit on the word at EVERY window size, not only at the base 820. */
+      /* fb453 — LP(): the rect is SCREEN px, a style length is re-multiplied by fb175's
+         self-heal zoom when it is armed. The underline must sit on the word on that path too. */
       var uw=LP(r2.width);
       u.style.left=LP(r2.left)+'px'; u.style.width=uw+'px';
-      u.style.top=LP(r2.bottom-1)+'px';   /* fb189 — 7px strip; the visual line (children top:3) stays at bottom+2 */
+      u.style.top=LP(r2.bottom-1)+'px';   /* fb189 — 7px strip; the visual line (children top:1.5) sits at bottom+0.5 (fb453) */
+      var trimL=cw?Math.max(0,cw.left-r2.left):0, trimR=cw?Math.max(0,r2.right-cw.right):0;
+      u.style.clipPath=(trimL||trimR)?('inset(-4px '+LP(trimR).toFixed(2)+'px -4px '+LP(trimL).toFixed(2)+'px)'):'';
       u.classList.toggle('sel',m.sel);
       /* fb189 — THE COMET: territory = [(1−d)·knob, (1−d)·knob + d]; the live value rides it.
          Fast attack = streak, slow = pour, LFO = breathe. −1 (no voice) → still. */

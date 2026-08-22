@@ -713,28 +713,191 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
       drop.ul ? ('ul ' + drop.ul.w.toFixed(2) + 'px @' + drop.ul.l.toFixed(2) + '  word ' + drop.ink.w.toFixed(2) +
                  'px @' + drop.ink.l.toFixed(2) + '  wrapper ' + drop.box.w.toFixed(2) + 'px') : 'no underline');
 
-  /* ── THE RACK SCROLLS. .sm-ul is position:fixed and re-measured every frame, which the synth
-     panel never exercised because nothing there moves under the pointer. Scroll the strip and the
-     mark must still be on its word — and it must survive the page ZOOM the plugin applies at any
-     window size other than its base 820 (getBoundingClientRect reports screen px; a px written
-     back into a style is multiplied by that zoom AGAIN). */
+  /* ── THE RACK SCROLLS, AND IT SCROLLS INSIDE A CLIPPER. .sm-ul is position:fixed and re-measured
+     every frame, which the synth panel never exercised because nothing there moves under the
+     pointer. Two halves: the mark tracks its word while the word is visible, and it goes DOWN when
+     the word leaves `.fxr-clip` — otherwise a scrolled-out knob paints a bar over whichever panel
+     now owns those pixels. Also proves the fb175 self-heal zoom is corrected for (this suite runs
+     at 1560 wide, where __zoomFix is 1.9024). */
   const scr = await pg.evaluate(async () => {
     const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
     const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb');
     const card = document.querySelectorAll('.fxr-dev')[ri];
     const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
     const clip = document.querySelector('.fxr-clip');
-    const before = clip.scrollLeft; clip.scrollLeft = before + 140; await frame(); await frame();
-    const l = knob.querySelector('.fxr-lab'); const r = document.createRange(); r.selectNodeContents(l);
-    const ink = r.getBoundingClientRect();
-    const ul = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none')
-                 .map(u => u.getBoundingClientRect()).find(x => Math.abs(x.left - ink.left) < 1.5);
-    return {moved:clip.scrollLeft - before, dx: ul ? (ul.left - ink.left) : null, dw: ul ? (ul.width - ink.width) : null,
-            dy: ul ? (ul.top - (ink.bottom - 1)) : null, zoom:window.__zoomFix || 1}; });
-  chk(scr.moved > 0 && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
-      'fb453: after the rack is SCROLLED the underline is still on its word (fixed, re-measured per frame, zoom-corrected)',
-      'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
+    const ink = () => { const l = knob.querySelector('.fxr-lab'); const r = document.createRange(); r.selectNodeContents(l); return r.getBoundingClientRect(); };
+    const mark = (i) => [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none')
+                          .map(u => u.getBoundingClientRect()).find(x => Math.abs(x.left - i.left) < 1.5);
+    const out = {zoom: window.__zoomFix || 1};
+    // (a) a scroll that keeps the word inside the clip — the mark must follow it exactly
+    const before = clip.scrollLeft; clip.scrollLeft = before + 40; await frame(); await frame();
+    const i1 = ink(), c1 = clip.getBoundingClientRect();
+    out.stillIn = i1.left >= c1.left && i1.right <= c1.right;
+    out.moved = clip.scrollLeft - before;
+    const m1 = mark(i1);
+    out.dx = m1 ? m1.left - i1.left : null; out.dw = m1 ? m1.width - i1.width : null;
+    out.dy = m1 ? m1.top - (i1.bottom - 1) : null;
+    // (b) scroll the word clean out of the clip — the mark must go DOWN, not ride along
+    clip.scrollLeft = clip.scrollWidth; await frame(); await frame();
+    const i2 = ink(), c2 = clip.getBoundingClientRect();
+    out.outOfClip = i2.right <= c2.left || i2.left >= c2.right;
+    out.markWhenOut = !!mark(i2);
+    out.anyMarkOutsideClip = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none')
+      .map(u => u.getBoundingClientRect()).filter(r => r.width > 0 && (r.right <= c2.left || r.left >= c2.right)).length;
+    /* (c) AND IT MUST HOLD THROUGH A NESTED CLIPPER. The visible region is the intersection of
+       EVERY clipping ancestor, not just the nearest one: the nearest is often the element's own
+       card, which contains it perfectly and would happily answer "fully visible" for a card that
+       is itself scrolled off the rack. Today .fxr-dev does not clip, so nearest == .fxr-clip and
+       the two readings agree — which means the stricter code is unexercised and, by fb421, untested.
+       Give the card an overflow and the difference becomes real: a nearest-only walk stops at the
+       card and the mark comes back on a knob nobody can see. */
+    const st = document.createElement('style'); st.textContent = '#syn-panel .fxr-dev{overflow:hidden}';
+    document.head.appendChild(st);
+    // the clip chain is cached per ELEMENT (it is a static property of the layout, and a card
+    // re-render replaces the node), so re-render to make the new rule reach fresh wrappers —
+    // exactly what would happen in the plugin if that overflow were ever added to the stylesheet.
+    window.__fxrRender(); const sl = clip.scrollLeft; clip.scrollLeft = sl; await frame(); await frame();
+    const kn3 = document.querySelectorAll('.fxr-dev')[ri].querySelectorAll('.fxr-knobs .fxr-knob')[1];
+    const l3 = kn3.querySelector('.fxr-lab'); const rg3 = document.createRange(); rg3.selectNodeContents(l3);
+    const i3 = rg3.getBoundingClientRect(), c3 = clip.getBoundingClientRect();
+    out.nestedClips = getComputedStyle(kn3.closest('.fxr-dev')).overflowX;
+    out.nestedOutOfClip = i3.right <= c3.left || i3.left >= c3.right;
+    out.markWhenNested = !!mark(i3);
+    st.remove(); window.__fxrRender(); clip.scrollLeft = before; await frame();
+    return out; });
+  chk(scr.moved > 0 && scr.stillIn && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
+      'fb453: the rack SCROLLS and the mark tracks its word (fixed, re-measured per frame, self-heal zoom corrected)',
+      'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom.toFixed(4) + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
       ' Δw ' + (scr.dw == null ? 'n/a' : scr.dw.toFixed(2)) + ' Δy ' + (scr.dy == null ? 'n/a' : scr.dy.toFixed(2)));
+  chk(scr.dx != null && scr.outOfClip && scr.markWhenOut === false && scr.anyMarkOutsideClip === 0,
+      'fb453 🔴: a knob scrolled OUT of .fxr-clip paints NO mark — position:fixed must not follow it off the rack',
+      'mark present in view=' + (scr.dx != null) + ' · word out of clip=' + scr.outOfClip + ' its mark drawn=' + scr.markWhenOut +
+      '  ·  marks lying outside the clip, whole rack: ' + scr.anyMarkOutsideClip);
+  chk(scr.dx != null && scr.nestedOutOfClip && scr.markWhenNested === false,
+      'fb453 🔴: …and it still paints no mark when the CARD itself clips — the visible region is EVERY clipping ancestor intersected, not the nearest',
+      'with #syn-panel .fxr-dev{overflow:' + scr.nestedClips + '}: word out of clip=' + scr.nestedOutOfClip + ' its mark drawn=' + scr.markWhenNested);
+
+  /* ── 🔴 THE PHANTOM DROP TARGET. targets() takes every `#syn-panel [data-mod-dest]` and hit() is
+     pure rect geometry — it does not know about overflow. Before the rack joined, nothing in that
+     selector lived in a scroller. Now a card scrolled past the right edge of `.fxr-clip` still has
+     a rect sitting over the voice column, and a release there used to create a route on a knob the
+     user cannot see. Released exactly where the reviewer reproduced it. */
+  const phantom = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (!window.__tiPruneFxRoutes || !window.__tiRoutes || !window.__fxModDest || !window.__fxModKnobNorm) return {err:'no fb453 surfaces on this page'};
+    window.__tiPruneFxRoutes(0, 1e9); await frame();
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = 0; await frame();
+    const C = clip.getBoundingClientRect();
+    // a knob whose rect lies entirely PAST the clip's right edge
+    let victim = null;
+    document.querySelectorAll('#syn-panel .fxr-dev [data-mod-dest]').forEach(w => {
+      if (victim) return; const r = w.getBoundingClientRect();
+      if (r.width && r.left >= C.right + 6) victim = {w, r}; });
+    if (!victim) return {err:'no knob lies outside the clip — widen the rack'};
+    const x = victim.r.left + victim.r.width / 2, y = victim.r.top + victim.r.height / 2;
+    const dest = +victim.w.getAttribute('data-mod-dest');
+    const over = document.elementFromPoint(x, y);
+    const onRack = !!(over && over.closest && over.closest('#fxr-rack'));
+    const tab = document.querySelector('#mod-engine .mv-tabs .t[data-tab="1"]');
+    const T = tab.getBoundingClientRect();
+    const ev = (t, X, Y, el) => (el || document).dispatchEvent(new PointerEvent(t,
+      {bubbles:true, cancelable:true, clientX:X, clientY:Y, button:0, buttons:1, pointerId:21, pointerType:'mouse'}));
+    ev('pointerdown', T.left + T.width/2, T.top + T.height/2, tab);
+    ev('pointermove', T.left + T.width/2 + 30, T.top + T.height/2 + 30);
+    ev('pointermove', x, y); ev('pointerup', x, y);
+    await frame(); await frame();
+    const routes = window.__tiRoutes();
+    return {dest, x:+x.toFixed(1), y:+y.toFixed(1), onRack,
+            over: over ? (over.className && String(over.className).slice(0,40)) || over.tagName : 'none',
+            made: routes.length, hitVictim: routes.some(r => r.d === dest)}; });
+  chk(!phantom.err && phantom.onRack === false && phantom.made === 0,
+      'fb453 🔴: a drop released OUTSIDE the rack\'s scroller creates NO route — hit() clips to what is visible',
+      phantom.err || ('released at (' + phantom.x + ', ' + phantom.y + ') — elementFromPoint says "' + phantom.over +
+      '", not the rack — dest ' + phantom.dest + ' would have been written; routes created: ' + phantom.made));
+
+  /* ── THE DEPTH TERRITORY'S ANCHOR. The span starts at (1−depth)·knobValue, so the mark only
+     tells the truth if the knob's value is real. It cannot come from Juce.getSliderState(): the
+     rack has NO WebSliderRelay for any parameter (PluginEditor.cpp routes it through
+     setSynParam/getSynParam), so a slider read returns 0 forever — and a gate that never asserted
+     the offset would call that dead read a pass. Two knob values, two anchors. */
+  const anch = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (!window.__tiPruneFxRoutes || !window.__tiRoutes || !window.__fxModDest || !window.__fxModKnobNorm) return {err:'no fb453 surfaces on this page'};
+    window.__tiPruneFxRoutes(0, 1e9);
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = 0;
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb'); const d = D[ri];
+    const dest = window.__fxModDest(d.core, d.inst, 1);
+    window.__tiAddRoute(0, 1, dest); window.__selMod = {lfo:1};      // LFO route ⇒ depth 0.5
+    const read = async (v) => { d.knobs[1].v = v; window.__fxRedrawKnobs(d); await frame(); await frame();
+      const knob = document.querySelectorAll('.fxr-dev')[ri].querySelectorAll('.fxr-knobs .fxr-knob')[1];
+      const l = knob.querySelector('.fxr-lab'); const rg = document.createRange(); rg.selectNodeContents(l);
+      const ink = rg.getBoundingClientRect();
+      const u = [...document.querySelectorAll('.sm-ul')].filter(x => x.style.display !== 'none')
+                  .find(x => Math.abs(x.getBoundingClientRect().left - ink.left) < 1.5);
+      if (!u) return null;
+      const U = u.getBoundingClientRect(), S = u.children[1].getBoundingClientRect();
+      return {norm: window.__fxModKnobNorm(dest), frac: (S.left - U.left) / U.width, w:U.width}; };
+    const lo = await read(25), hi = await read(100), zero = await read(0);
+    window.__tiPruneFxRoutes(0, 1e9); window.__selMod = {env:1};
+    return {lo, hi, zero, dest}; });
+  const okAnchor = !anch.err && anch.lo && anch.hi && anch.zero &&
+    Math.abs(anch.lo.norm - 0.25) < 0.001 && Math.abs(anch.hi.norm - 1) < 0.001 &&
+    Math.abs(anch.lo.frac - 0.125) < 0.02 && Math.abs(anch.hi.frac - 0.5) < 0.02 && Math.abs(anch.zero.frac) < 0.02;
+  chk(okAnchor, 'fb453: the depth territory ANCHORS ON THE KNOB\'S VALUE — read from the rack\'s model, not from a relay that does not exist',
+      anch.err ? anch.err : anch.lo ? ('knob 0 → span at ' + (anch.zero.frac*100).toFixed(1) + '% (want 0) · knob 25 → ' +
+      (anch.lo.frac*100).toFixed(1) + '% (want 12.5, = (1−0.5)·0.25) · knob 100 → ' +
+      (anch.hi.frac*100).toFixed(1) + '% (want 50)') : 'no underline to measure');
+
+  /* ── fb447/fb453: a back cell the current state cannot bind is DEAD — dim, pointer-events:none.
+     Its class and its data-mod-dest must always agree, INCLUDING when __fxRedrawKnobs flips one
+     mid-session: `ott|HIGHCROSS` reads the live viz feed and returns the dead dash whenever the
+     engine reports no crossover, and that redraw runs every 400 ms. A dead cell holding a live
+     dest would stay droppable and keep painting a mark on a knob that does nothing. The ROUTE must
+     survive the round trip, though — a transient viz value is not the user deleting anything. */
+  const deadg = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    if (!window.__tiPruneFxRoutes || !window.__tiRoutes || !window.__fxModDest || !window.__fxModKnobNorm) return {err:'no fb453 surfaces on this page'};
+    window.__tiPruneFxRoutes(0, 1e9);
+    const D = window.__fxrDevs(); let oi = D.findIndex(x => x.core === 'ott');
+    if (oi < 0) { window.__fxAdd('ott'); oi = window.__fxrDevs().findIndex(x => x.core === 'ott'); }
+    const d = window.__fxrDevs()[oi];
+    const ocard = document.querySelectorAll('.fxr-dev')[oi];
+    ocard.classList.add('swapped');
+    // scroll it into view: marks are correctly SUPPRESSED outside .fxr-clip (the gate above), so a
+    // card parked off the rack would make this gate read "no mark" for the wrong reason.
+    const oclip = document.querySelector('.fxr-clip'); oclip.scrollLeft = ocard.offsetLeft - oclip.offsetLeft - 8;
+    await frame();
+    const cells = () => [...document.querySelectorAll('.fxr-dev')[oi].querySelectorAll('.fxr-bk-knob')]
+      .map(w => ({dead:w.classList.contains('fxr-bk-dead'), dest:w.getAttribute('data-mod-dest'),
+                  lab:w.querySelector('.fxr-lab').textContent}));
+    const disagree = (cs) => cs.filter(c => c.dead === (c.dest != null)).length;   // dead⇒no dest, live⇒dest
+    d.__vz = null; window.__fxRedrawKnobs(d); await frame();
+    const live = cells(); const hx = live.find(c => c.lab === 'High Cross');
+    if (!hx || hx.dest == null) return {err:'High Cross is not bound to begin with'};
+    const dest = +hx.dest;
+    window.__tiAddRoute(1, 0, dest); await frame(); await frame();
+    const routed = window.__tiRoutes().some(r => r.d === dest);
+    const markedWhenLive = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none').length;
+    // the engine reports no crossover — the formatter returns '—' and the cell dies, in place
+    d.__vz = {x:[0,0]}; window.__fxRedrawKnobs(d); await frame(); await frame();
+    const after = cells(); const hx2 = after.find(c => c.lab === 'High Cross');
+    const markedWhenDead = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none').length;
+    const survived = window.__tiRoutes().some(r => r.d === dest);
+    d.__vz = null; window.__fxRedrawKnobs(d); await frame(); await frame();
+    const back = cells(); const hx3 = back.find(c => c.lab === 'High Cross');
+    const markedAgain = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none').length;
+    window.__tiPruneFxRoutes(0, 1e9);
+    return {liveDis:disagree(live), afterDis:disagree(after), backDis:disagree(back),
+            wasDead:!!(hx2 && hx2.dead), destWhenDead:hx2 ? hx2.dest : 'gone',
+            reborn:!!(hx3 && !hx3.dead && hx3.dest != null),
+            routed, survived, markedWhenLive, markedWhenDead, markedAgain}; });
+  chk(!deadg.err && deadg.wasDead && deadg.destWhenDead == null && deadg.reborn &&
+      deadg.liveDis === 0 && deadg.afterDis === 0 && deadg.backDis === 0 &&
+      deadg.routed && deadg.survived && deadg.markedWhenLive === 1 && deadg.markedWhenDead === 0 && deadg.markedAgain === 1,
+      'fb453 🟡: .fxr-bk-dead and data-mod-dest agree through a live __fxRedrawKnobs flip — the mark goes down, the ROUTE survives, both come back',
+      deadg.err || ('cells disagreeing 0/0/0 → ' + deadg.liveDis + '/' + deadg.afterDis + '/' + deadg.backDis +
+      '  ·  High Cross: bound+marked → dead, dest=' + deadg.destWhenDead + ', marks=' + deadg.markedWhenDead +
+      ' → reborn=' + deadg.reborn + ', marks=' + deadg.markedAgain + '  ·  route survived=' + deadg.survived));
 
   /* ── DELETING A DEVICE DROPS ITS ROUTES. Otherwise the next card to take that (kind, instance)
      slot is born already modulated by a route nobody dropped on it. Driven through the real × . */
@@ -747,7 +910,8 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     // route two more of ITS knobs (so the prune sweeps more than the drag's one) AND one knob of a
     // DIFFERENT device — without a survivor the "and nothing else's" half of this gate is a claim
     // about an empty set, which is a gate that has never been tested (fb421).
-    window.__tiAddRoute(1, 0, lo + 2); window.__tiAddRoute(0, 2, lo + 5);
+    window.__tiPruneFxRoutes(0, 1e9);
+    window.__tiAddRoute(1, 0, lo + 1); window.__tiAddRoute(1, 0, lo + 2); window.__tiAddRoute(0, 2, lo + 5);
     const nb = D.find(x => x.core === 'delay'); window.__tiAddRoute(1, 0, window.__fxModDest(nb.core, nb.inst, 1));
     await frame();
     const before = window.__tiRoutes().filter(r => r.d >= lo && r.d < hi).length;
