@@ -330,8 +330,22 @@ static const float  kBase = 0.25f;      // where every rack dial sits for the sw
 static const float  kOff  = 0.25f;      // what the route supplies
 static const float  kTop  = 0.50f;      // kBase + kOff — where the knob goes instead
 static const double kEqGate  = -100.0;  // dB below the render's own RMS: "the route EQUALS the knob"
-static const double kAudGate =  -60.0;  // dB below the render's own RMS: "it did something at all"
-static const int    kTypeTries = 4;     // a knob dead at Type 0 is retried on the next few Types
+// ── "it did something at all", and why it is TWO numbers rather than a threshold ──────────────
+// The equivalence half is vacuous on its own: a dial that does nothing at the point being probed
+// gives B = C = A and a perfect null for the wrong reason. What makes a cell INFORMATIVE is not
+// that the move was loud, it is that the null sits far BELOW the move — so the gate is a margin,
+// with a floor under it so a genuinely dead cell can never sneak through. A dead cell measures
+// −190…−225 dBr here (that is the render's own numerical floor), so a floor at −100 dBr is still
+// ninety-odd dB clear of "nothing happened". cmp.ROUND is the case that made this the rule: it
+// moves the sound by −61.8 dBr and nulls at −215.8 dBr — 154 dB of margin, an entirely proven
+// mapping, and a flat −60 dB threshold would have called it a failure for being 1.8 dB too quiet.
+static const double kAudFloor = -100.0;  // the mechanism must plainly engage
+static const double kAudMargin =  60.0;  // ...and the null must sit this far below the move
+// Many back-panel slots are bound PER TYPE — the Reverb's Mod pair is only real on the types that
+// define modulation, the Splitter's lane-3 slots are unbound in a 2-lane Type (fb447, "the slots
+// that go unbound"). Sampling 4 of a device's 8 or 16 Types is exactly the mistake fb425 is about,
+// and it cost three Splitter cells a red row on the run before this one. Sweep them all.
+static const int    kTypeTries = 16;
 
 // saturate.SIG (kind 2, knob 1 — the Distortion's Knee) is the one dial the source itself flags:
 // PluginProcessor.cpp:7343-7351, the only rack read site that runs BEFORE buildFxMod(), so
@@ -787,7 +801,7 @@ int main (int argc, char** argv)
         char det[260];
         snprintf (det, sizeof det, "front-Time vs back-Time L = %.1f dBr; and each moves the sound %.1f dBr",
                   rel (F0, F10), rel (F0, flat));
-        chk (rel (F0, F10) < kEqGate && rel (F0, flat) > kAudGate,
+        chk (rel (F0, F10) < kEqGate && rel (F0, flat) > kAudFloor,
              "GATE C1: knob 0 and knob 10 ARE one parameter — the two dests are interchangeable", det);
         snprintf (det, sizeof det, "0.125 + 0.125 on the two dests vs 0.25 on one = %.1f dBr", rel (HF, F0));
         chk (rel (HF, F0) < kEqGate,
@@ -857,7 +871,7 @@ int main (int argc, char** argv)
         const Render A0 = mtxRender (flat), Ball = mtxRender (all), Call = mtxRender (mov);
         char lbl[120]; snprintf (lbl, sizeof lbl, "%s: all %d knobs routed at once == all %d knobs moved", kKindName[k], nRoutes, nRoutes);
         char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   panel moves the sound %7.2f dBr", rel (Ball, Call), rel (Ball, A0));
-        chk (rel (Ball, Call) < kEqGate && rel (Ball, A0) > kAudGate, lbl, det);
+        chk (rel (Ball, Call) < kEqGate && rel (Ball, A0) > kAudFloor, lbl, det);
     }
 
     // ══ THE MATRIX ════════════════════════════════════════════════════════════════════════════
@@ -895,7 +909,7 @@ int main (int argc, char** argv)
                 // engine's `if (duck > 0.001f)` branch is not even entered at 0. So: if a cell is
                 // inert everywhere at the normal base, probe it again from ZERO before calling it
                 // unproven.
-                for (int op = 0; op < 2 && bAud <= kAudGate; ++op)
+                for (int op = 0; op < 2 && ! (bAud > kAudFloor && bAud - bEq > kAudMargin); ++op)
                 {
                   const float pBase = (op == 0) ? kBase : 0.0f;
                   const float pTop  = pBase + kOff;
@@ -916,18 +930,18 @@ int main (int argc, char** argv)
                     const Render B = mtxRender (bc), C = mtxRender (cc);
                     const double eq = rel (B, C), aud = rel (B, A);
                     if (aud > bAud) { bAud = aud; bEq = eq; bType = t; bOp = op; }
-                    if (aud > kAudGate) break;     // live here — no need to hunt for a livelier Type
+                    if (aud > kAudFloor && aud - eq > kAudMargin) break;   // live here — stop hunting
                   }
                 }
                 ++cells;
-                const bool ok = (bEq < kEqGate) && (bAud > kAudGate);
+                const bool ok = (bEq < kEqGate) && (bAud > kAudFloor) && (bAud - bEq > kAudMargin);
                 char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
                                          kKindName[k], kFxModLeaf[k][n], k, n);
-                char det[240]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s%s",
-                                         bEq, bAud, bType ? "   [Type " : "",
+                char ty[24] = ""; if (bType) snprintf (ty, sizeof ty, "   [Type %d]", bType);
+                char det[260]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s%s%s",
+                                         bEq, bAud, ty,
                                          bOp ? "   [probed 0.00->0.25: it is on a plateau at 0.25]" : "",
                                          isOneBlockLateCell (k, n) ? "   [the ONE dial read before buildFxMod — see SIG-LAG]" : "");
-                if (bType) { char t2[24]; snprintf (t2, sizeof t2, "%d]", bType); strncat (det, t2, sizeof det - strlen (det) - 1); }
                 chk (ok, lbl, det);
                 if (! ok) fails.push_back ({ k, n, kFxModLeaf[k][n], bEq, bAud });
                 else if (bAud < -30.0) { char q[80]; snprintf (q, sizeof q, "%s.%s (%.1f dBr)", kKindName[k], kFxModLeaf[k][n], bAud); quietCells.push_back (q); }
@@ -937,8 +951,8 @@ int main (int argc, char** argv)
         for (const auto& f : fails)
             printf ("    FAILED  %-8s %-9s (k%02d n%02d)  null=%7.2f dBr  moved=%7.2f dBr  %s\n",
                     kKindName[f.kind], f.leaf.c_str(), f.kind, f.knob, f.eq, f.aud,
-                    f.aud <= kAudGate ? "<- INERT at every Type tried: the cell proves nothing"
-                                      : "<- the route is NOT the knob");
+                    f.aud <= kAudFloor ? "<- INERT at every Type and both operating points: the cell proves nothing"
+                                       : "<- the route is NOT the knob");
         if (! quietCells.empty())
         {
             printf ("    subtle but live (< -30 dBr):");
