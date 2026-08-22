@@ -225,3 +225,31 @@ into the ruled-exemption list, cited to this block — and that list must be **a
 size** so it cannot grow again. `kShared` in `dynamics_cert.cpp` is currently the only exemption
 list in the family with no size assertion, and it is the one that historically self-granted `Auto`.
 Fix that in the same pass.
+
+---
+
+## fb447 / fb448 — the fx5 PLAIN-NAME pass (Max, 2026-08-21 night): "Camp, Rumble, Bumble, bleed, hinge … what the fuck does this even mean?"
+
+The fb144 law applied to the last three devices, IDs untouched, the DAW display names moved with the card
+(`PluginProcessor.cpp` `ubn[]` / `upn[]` / the Bode `F()` lines) so no host ever shows a word the card does not.
+
+| device | old | new | why (what turning it DOES) |
+|---|---|---|---|
+| Utility | `Strain` | **Drive** | drive into the Character's saturation rail, 0..+48 dB |
+| Utility | `Clamp` | **Shape** | the Character's second axis (knee / fold / asymmetry / slew) |
+| Utility | `Twist` | **Rotate** | M/S rotation, ±40° |
+| Utility | `Rumble` → `Low Cut` (fb447) | **Cut At** (fb448) | the corner of the low cut the lamp engages, 15..320 Hz (default 120) |
+| Utility | `Bleed` | **Mono Above** | couples the highs above the Crossover — the inverse of Mono Below |
+| Utility | `Hinge` | **Crossover** | the Hz where Mono Above / Coil / Canopy / Cellar hinge |
+| Utility | `Image` / `Steer` | **Width** / **Pan** | Serum's words, Max's words |
+| Utility | pills `Trade` / `Sum` / `DC` | **Swap** / **Mono** / **Low Cut** (fb448) | a 15 Hz DC block is inaudible by nature; the lamp is the low cut |
+| Bode | `Spread` | **Stereo** | the L/R shift mirror |
+| Bode | `Blur` | **Diffusion** (**Carrier** on the Ring Type, per-Type relabel) | the in-loop smear / the Ring type's carrier bleed |
+| Bode | `Touch` | **Env Shift** | the input level pushes the shift |
+| Splitter | `Span` | **Spacing** | the spacing between crossovers |
+| Splitter | `Latch` (dropdown) | **Solo Mode** | how Solo behaves: Latching · Exclusive · Momentary |
+| Splitter | `Lane N Gain/Width/Pan`, `Top Lane …` | **by BAND per Type** (`FX4_SPL_BACK`) | Low Gain · Mid Width · High Pan · Sub Gain · Side Width · Left Pan …; unbound cells bound (2-lane b3 = lane-1 Pan, 3-lane b4 = Mid Width) or dead (`—`) |
+
+Shared vocabulary this pass leans on (already ruled above): `Drive`, `Shape`, `Low Cut`, `Stereo`, `Drift`,
+`Diffusion`. Gates: `Tests/fx4_ui.js` (readout law by evaluation; relabel per Type; dead cells), `Tests/au_fx_path.cpp`
+(the names as the host sees them).
