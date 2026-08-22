@@ -588,6 +588,181 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(sm.exS2===true && sm.exS1===false && sm.exWrites.some(w=>/SOLO1=0/.test(w)) && sm.exWrites.some(w=>/SOLO2=1/.test(w)), 'Solo Mode EXCLUSIVE: the menu\'s Solo on band 2 un-solos band 1 (model + the param writes)', JSON.stringify({r1:sm.r1,r2:sm.r2,s1:sm.exS1,s2:sm.exS2,writes:sm.exWrites}));
   chk(sm.momDown===true && sm.momUp===false && sm.momWrites.some(w=>/SOLO3=1/.test(w)) && sm.momWrites.some(w=>/SOLO3=0/.test(w)), 'Solo Mode MOMENTARY: press a band = solo, let go = off (model + the param writes)', JSON.stringify({down:sm.momDown,up:sm.momUp,writes:sm.momWrites}));
 
+
+  /* ═══════════════════════════════════════════════════════════════════════════════════════════
+     fb453 — THE RACK'S DIALS ARE MODULATION DESTINATIONS.
+
+     Every knob on every card is now a drop target: the wrapper (.fxr-knob / .fxr-bk-knob) carries
+     `data-mod-dest`, which is what the mod-matrix module scans, and the wrapper is the right box
+     because it holds the WORD — the underline measures the label's ink, not the knob's cell.
+
+     The arithmetic (index.html: fxModDest) is FxModBase + (kind*6 + inst−1)*12 + knob, and the
+     authority for both halves lives in C++: `ModDest::FxModBase` in Source/SynthModConfig.h, and
+     the (kind, knob) → parameter map in Source/fx_mod_ids.inc, which is GENERATED from this very
+     page. So the gate reads both files and holds the page to them. That is the whole point: if a
+     dial and its destination are ever authored twice they will disagree quietly, every DSP gate
+     will stay green, and Max will modulate the wrong knob (fb373, the shape of it).
+     ═══════════════════════════════════════════════════════════════════════════════════════════ */
+  const MODH = process.env.FX_MOD_HEADER || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/SynthModConfig.h';
+  const INC  = process.env.FX_MOD_IDS    || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/fx_mod_ids.inc';
+  const FXIDS = fs.readFileSync(INC, 'utf8'), MODSRC = fs.readFileSync(MODH, 'utf8');
+  // FxModBase = DstMorph + 1, and DstMorph is nailed to 693 by a static_assert in the header.
+  const CPP_BASE = (() => { const m = /static_assert\s*\(\(int\)\s*ModDest::DstMorph\s*==\s*(\d+)/.exec(MODSRC); return m ? (+m[1] + 1) : 0; })();
+  const CPP_INSTS = (() => { const m = /kFxModInsts\s*=\s*(\d+)/.exec(MODSRC); return m ? +m[1] : 0; })();
+  const CPP_KNOBS = (() => { const m = /kFxModKnobs\s*=\s*(\d+)/.exec(MODSRC); return m ? +m[1] : 0; })();
+  const INC_TAG = (() => { const m = /kFxModTag\[16\]\s*=\s*\{([\s\S]*?)\n\};/.exec(FXIDS);
+    return m ? [...m[1].matchAll(/"([^"]+)"/g)].map(x => x[1]) : []; })();
+  const INC_LEAF = (() => { const m = /kFxModLeaf\[16\]\[12\]\s*=\s*\{([\s\S]*?)\n\};/.exec(FXIDS); if (!m) return [];
+    return [...m[1].matchAll(/\{([^{}]*)\}/g)].map(r => r[1].split(',').slice(0, 12)
+      .map(t => { const q = /"([^"]*)"/.exec(t.trim()); return q ? q[1] : null; })); })();
+  const incId = (k, inst, n) => { const leaf = INC_LEAF[k] && INC_LEAF[k][n];
+    return leaf ? (INC_TAG[k] + (inst <= 1 ? '' : String(inst)) + '_' + leaf) : null; };
+  chk(CPP_BASE === 694 && CPP_INSTS === 6 && CPP_KNOBS === 12 && INC_TAG.length === 16 && INC_LEAF.length === 16,
+      'fb453: the C++ is readable and says what the page assumes (FxModBase, 6 instances, 12 knobs, 16 kinds)',
+      'base=' + CPP_BASE + ' insts=' + CPP_INSTS + ' knobs=' + CPP_KNOBS + ' tags=' + INC_TAG.length + ' leafRows=' + INC_LEAF.length);
+
+  // a known rack: several KINDS, and three instances of one kind so the instance term is exercised
+  const md = await pg.evaluate((base, insts, knobs) => {
+    const out = {}; const DEVS = window.__fxrDevs(); DEVS.length = 0;
+    ['reverb','reverb','reverb','delay','flt','utl','spl'].forEach(c => { try { window.__fxAdd(c); } catch(e){} });
+    try { window.__fx4Tick(); } catch(e){}
+    out.baseJs = window.__fxModDest ? window.__fxModDest('reverb', 1, 0) : null;
+    out.cells = []; out.noDest = [];
+    document.querySelectorAll('#syn-panel .fxr-dev').forEach((card, ci) => { const d = DEVS[ci]; if (!d) return;
+      card.querySelectorAll('.fxr-knob,.fxr-bk-knob').forEach(w => {
+        const dial = w.querySelector('.fxr-dial'), dest = w.getAttribute('data-mod-dest');
+        const rec = {core:d.core, inst:d.inst, front:w.classList.contains('fxr-knob'),
+                     word:(w.querySelector('.fxr-lab')||{}).textContent, p:dial ? dial.getAttribute('data-p') : null,
+                     dead:w.classList.contains('fxr-bk-dead')};
+        if (dest == null) { out.noDest.push(rec); return; }
+        const o = (+dest) - base;
+        out.cells.push(Object.assign(rec, {dest:+dest, kind:Math.floor(o / (insts * knobs)),
+                                           i0:Math.floor(o / knobs) % insts, knob:o % knobs})); }); });
+    out.fltBack = (() => { const c = [...document.querySelectorAll('.fxr-dev')].find(x => x.querySelector('.fxr-core[data-core="flt"]'));
+      return c ? {bk:c.querySelectorAll('.fxr-bk-knob').length, dests:c.querySelectorAll('[data-mod-dest]').length,
+                  back:c.querySelectorAll('.fxr-back').length} : null; })();
+    return out; }, CPP_BASE, CPP_INSTS, CPP_KNOBS);
+
+  const expect = 7 * 4 + 6 * 8;   // 7 cards × 4 front dials, and 6 of them own a back panel (the Filter has none)
+  chk(md.cells.length === expect && md.noDest.length === 0,
+      'fb453: EVERY rendered rack knob wrapper carries a data-mod-dest (4 front + 8 back per card, the Filter\'s 4)',
+      'stamped=' + md.cells.length + '/' + expect + ' unstamped=' + md.noDest.length +
+      (md.noDest.length ? ' → ' + md.noDest.slice(0,4).map(x => x.core + '/' + x.word).join(', ') : ''));
+  const uniq = new Set(md.cells.map(c => c.dest));
+  chk(md.cells.length === expect && uniq.size === md.cells.length && md.cells.every(c => c.dest >= CPP_BASE),
+      'fb453: every destination is UNIQUE across a full rack — three Reverbs never share a knob',
+      'unique=' + uniq.size + '/' + md.cells.length + ' reverb instances → ' +
+      [1,2,3].map(i => (md.cells.find(c => c.core === 'reverb' && c.inst === i && c.front && c.knob === 0) || {}).dest).join(','));
+  chk(md.baseJs === CPP_BASE, 'fb453: the page\'s own base equals ModDest::FxModBase from the header', 'js=' + md.baseJs + ' cpp=' + CPP_BASE);
+  chk(md.cells.length === expect && md.cells.every(c => c.inst === c.i0 + 1),
+      'fb453: the instance term decodes back to the card\'s own 1-BASED d.inst (the C++ helper is 0-based)',
+      'mismatches=' + md.cells.filter(c => c.inst !== c.i0 + 1).length);
+
+  // THE CROSS-LANGUAGE CHECK — the dial's parameter must be the one the .inc names for that
+  // (kind, instance, knob). This is what keeps the dial and the destination authored in ONE place.
+  const bad = md.cells.filter(c => c.p !== incId(c.kind, c.inst, c.knob));
+  chk(md.cells.length === expect && bad.length === 0, 'fb453: every dial\'s data-p is the parameter Source/fx_mod_ids.inc names for its (kind, inst, knob)',
+      bad.length ? bad.slice(0,3).map(c => c.core + '/' + c.word + ' dial=' + c.p + ' inc=' + incId(c.kind, c.inst, c.knob)).join(' | ')
+                 : md.cells.length + ' dials agree with the generated C++ map');
+  chk(md.fltBack && md.fltBack.bk === 0 && md.fltBack.back === 0 && md.fltBack.dests === 4 &&
+      !md.cells.some(c => c.kind === 5 && c.knob >= 4),
+      'fb453: the Filter has NO back-panel knobs and NO destinations for them — a hole is never droppable (fb384)',
+      JSON.stringify(md.fltBack) + ' fltBackDests=' + md.cells.filter(c => c.kind === 5 && c.knob >= 4).length);
+
+  /* ── the DROP, through the real drag: press an LFO tab, pull it onto a rack knob, release.
+     Not __tiAddRoute — a probe surface proves the matrix works, never that the rack is reachable. */
+  const drop = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const tab = document.querySelector('#mod-engine .mv-tabs .t[data-tab="1"]'); if (!tab) return {err:'no LFO tab'};
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb');
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8; await frame();
+    const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];   // Decay
+    const dest = +knob.getAttribute('data-mod-dest');
+    const T = tab.getBoundingClientRect(), K = knob.getBoundingClientRect();
+    const ev = (t, x, y, el) => (el || document).dispatchEvent(new PointerEvent(t,
+      {bubbles:true, cancelable:true, clientX:x, clientY:y, button:0, buttons:1, pointerId:11, pointerType:'mouse'}));
+    ev('pointerdown', T.left + T.width/2, T.top + T.height/2, tab);
+    ev('pointermove', T.left + T.width/2 + 30, T.top + T.height/2 + 30);
+    ev('pointermove', K.left + K.width/2, K.top + K.height/2);
+    ev('pointerup',   K.left + K.width/2, K.top + K.height/2);
+    await frame(); await frame();
+    const routes = window.__tiRoutes ? window.__tiRoutes() : [];
+    const ink = (() => { const l = knob.querySelector('.fxr-lab'); const r = document.createRange(); r.selectNodeContents(l); return r.getBoundingClientRect(); })();
+    const zf = window.__zoomFix || 1;
+    const vis = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none');
+    // "it rises" is a COUNT — placement is the next gate's job, so a misplaced mark fails the
+    // right one of the two and the diagnosis is not smeared across both (fb421).
+    const ul = vis.map(u => u.getBoundingClientRect()).sort((a,b) => Math.abs(a.left - ink.left) - Math.abs(b.left - ink.left))[0];
+    return {dest, routes, nUl:vis.length, hasRoute:routes.some(r => r.d === dest && r.s === 'lfo1'),
+            modded:knob.classList.contains('sm-modded'),
+            ul: ul ? {l:ul.left, w:ul.width, t:ul.top} : null,
+            ink:{l:ink.left, w:ink.width, b:ink.bottom}, box:{l:K.left, w:K.width}, zf}; });
+  chk(!drop.err && drop.hasRoute && drop.modded,
+      'fb453: dragging LFO 1 onto a rack knob — the REAL press/pull/release — writes a route',
+      drop.err || ('dest=' + drop.dest + ' routes=' + JSON.stringify(drop.routes)));
+  chk(drop.nUl === 1, 'fb453: and the underline RISES — exactly one .sm-ul for the one modulated element',
+      'visible .sm-ul = ' + drop.nUl + (drop.ul ? '  at ' + JSON.stringify(drop.ul) : ''));
+
+  /* ── fb188's requirement, and the ONE thing the rack does not get for free: the underline covers
+     the WHOLE WORD, exactly. Rack labels are .fxr-lab, not .knob-label; without that selector the
+     lookup falls back to the WRAPPER and underlines the whole 36 px cell instead of the word. */
+  chk(!!drop.ul && Math.abs(drop.ul.w - drop.ink.w) <= 1 && Math.abs(drop.ul.l - drop.ink.l) <= 1 &&
+      Math.abs(drop.ul.w - drop.box.w) > 1,
+      'fb188/fb453: the underline is the LABEL\'S INK wide (±1 px), not the wrapper\'s box',
+      drop.ul ? ('ul ' + drop.ul.w.toFixed(2) + 'px @' + drop.ul.l.toFixed(2) + '  word ' + drop.ink.w.toFixed(2) +
+                 'px @' + drop.ink.l.toFixed(2) + '  wrapper ' + drop.box.w.toFixed(2) + 'px') : 'no underline');
+
+  /* ── THE RACK SCROLLS. .sm-ul is position:fixed and re-measured every frame, which the synth
+     panel never exercised because nothing there moves under the pointer. Scroll the strip and the
+     mark must still be on its word — and it must survive the page ZOOM the plugin applies at any
+     window size other than its base 820 (getBoundingClientRect reports screen px; a px written
+     back into a style is multiplied by that zoom AGAIN). */
+  const scr = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb');
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    const knob = card.querySelectorAll('.fxr-knobs .fxr-knob')[1];
+    const clip = document.querySelector('.fxr-clip');
+    const before = clip.scrollLeft; clip.scrollLeft = before + 140; await frame(); await frame();
+    const l = knob.querySelector('.fxr-lab'); const r = document.createRange(); r.selectNodeContents(l);
+    const ink = r.getBoundingClientRect();
+    const ul = [...document.querySelectorAll('.sm-ul')].filter(u => u.style.display !== 'none')
+                 .map(u => u.getBoundingClientRect()).find(x => Math.abs(x.left - ink.left) < 1.5);
+    return {moved:clip.scrollLeft - before, dx: ul ? (ul.left - ink.left) : null, dw: ul ? (ul.width - ink.width) : null,
+            dy: ul ? (ul.top - (ink.bottom - 1)) : null, zoom:window.__zoomFix || 1}; });
+  chk(scr.moved > 0 && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
+      'fb453: after the rack is SCROLLED the underline is still on its word (fixed, re-measured per frame, zoom-corrected)',
+      'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
+      ' Δw ' + (scr.dw == null ? 'n/a' : scr.dw.toFixed(2)) + ' Δy ' + (scr.dy == null ? 'n/a' : scr.dy.toFixed(2)));
+
+  /* ── DELETING A DEVICE DROPS ITS ROUTES. Otherwise the next card to take that (kind, instance)
+     slot is born already modulated by a route nobody dropped on it. Driven through the real × . */
+  const del = await pg.evaluate(async () => {
+    const frame = () => new Promise(r => requestAnimationFrame(() => requestAnimationFrame(r)));
+    const D = window.__fxrDevs(); const ri = D.findIndex(x => x.core === 'reverb'); const d = D[ri];
+    if (!window.__fxModDest || !window.__tiRoutes) return {err:'no fb453 surfaces on this page'};
+    const lo = window.__fxModDest(d.core, d.inst, 0), hi = lo + 12;
+    const card = document.querySelectorAll('.fxr-dev')[ri];
+    // route two more of ITS knobs (so the prune sweeps more than the drag's one) AND one knob of a
+    // DIFFERENT device — without a survivor the "and nothing else's" half of this gate is a claim
+    // about an empty set, which is a gate that has never been tested (fb421).
+    window.__tiAddRoute(1, 0, lo + 2); window.__tiAddRoute(0, 2, lo + 5);
+    const nb = D.find(x => x.core === 'delay'); window.__tiAddRoute(1, 0, window.__fxModDest(nb.core, nb.inst, 1));
+    await frame();
+    const before = window.__tiRoutes().filter(r => r.d >= lo && r.d < hi).length;
+    const other = window.__tiRoutes().filter(r => r.d < lo || r.d >= hi).length;
+    card.querySelector('[data-act="x"]').dispatchEvent(new MouseEvent('click', {bubbles:true, cancelable:true}));
+    await frame(); await frame();
+    const after = window.__tiRoutes().filter(r => r.d >= lo && r.d < hi).length;
+    const otherAfter = window.__tiRoutes().filter(r => r.d < lo || r.d >= hi).length;
+    const gone = !window.__fxrDevs().some(x => x.core === 'reverb' && x.inst === d.inst);
+    return {lo, before, after, other, otherAfter, gone, left:window.__fxrDevs().length}; });
+  chk(!del.err && del.gone && del.before >= 3 && del.after === 0 && del.other >= 1 && del.otherAfter === del.other,
+      'fb453: deleting a device REMOVES its routes — the whole 12-wide block, and nothing else\'s',
+      (del.err ? del.err : 'block ' + del.lo + '..' + (del.lo + 11) + ': ' + del.before + ' routes → ' + del.after +
+      '   (other devices\' routes ' + del.other + ' → ' + del.otherAfter + ', cards left ' + del.left + ')'));
+
   /* ═══ fb446 — LANE CARDS: a device added INTO a Splitter band is hidden unless that band is selected,
      has NO route row (it is fed by the band), wears the band's range as a tag, and selecting another
      band hides it. Serum's "click the band, the chain switches", gated. Runs LAST: it rebuilds the rack. */
