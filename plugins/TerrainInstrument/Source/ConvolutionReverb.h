@@ -158,7 +158,7 @@ public:
         wetL = mid + sid; wetR = mid - sid;
     }
     // pre-sample-loop hook: do the (possibly heavy) rebake here so it can't spike inside the tight loop
-    void prepareBlock () { if (irDirty && ! xfActive && ! xfPending && (sinceBake += B) >= (int) (0.05f * fs)) rebake(); }
+    void prepareBlock () { if (! xfActive && ! xfPending && bakeDue (B)) rebake(); }
     void process (float* L, float* R, int n)
     { const float dg = std::cos (0.5f * PI * mixExt), wg = std::sin (0.5f * PI * mixExt);
       prepareBlock(); for (int s = 0; s < n; ++s) { float wl, wr; processSample (L[s], R[s], wl, wr); L[s] = dg * L[s] + wg * wl; R[s] = dg * R[s] + wg * wr; } }
@@ -209,7 +209,13 @@ public:
     void forceRebake () { irDirty = true; sinceBake = 1 << 30; rebake(); xfActive = false; xfPending = false; xfGain = 1.0f; }   // HARD swap (no crossfade)
     // fb293 — off-loop HARD bake used ONLY when the reverb is IDLE (no route active): a dropped/selected IR must update
     // the VIZ (bakeL, read by irEnvelope) immediately even with no audio running. Idle ⇒ no output ⇒ hard swap = click-free.
-    void bakeIfDirtyIdle () { if (irDirty) forceRebake(); }
+    // fb453 — THROTTLED through the SAME bakeDue() the powered path uses. Size/Decay/Diffuse/HiDamp/LowDecay
+    // are MODULATABLE now, so a slow LFO on any of them re-trips paramMoved (0.008) every block or two and this
+    // ran a FULL IR bake (Hall ~4.3 ms, Cathedral ~9.5 ms measured @48k) on the AUDIO THREAD every block — more
+    // than a whole 128-sample budget (2.667 ms), i.e. a continuous xrun, and POWER defaults OFF so that is the
+    // arrival state, not a corner. `n` = this block's sample count. The throttle only DELAYS: irDirty is cleared
+    // by rebake() alone, so once the params settle the very next due block bakes the final IR.
+    void bakeIfDirtyIdle (int n) { if (bakeDue (n)) forceRebake(); }
 
 private:
     static inline float clamp01 (float v) { return v < 0 ? 0 : (v > 1 ? 1 : v); }
@@ -219,6 +225,11 @@ private:
     { if (d < 1.0f) d = 1.0f; int di = (int) d; float fr = d - (float) di; float a = b[(size_t)((wr - di) & mask)]; float c = b[(size_t)((wr - di - 1) & mask)]; return a + (c - a) * fr; }
     inline float rand11 () { rng ^= rng << 13; rng ^= rng >> 17; rng ^= rng << 5; return (float)((rng >> 8) & 0xFFFFFFu) * (1.0f / 8388607.5f) - 1.0f; }
     bool paramMoved (float v, float& last) { if (std::fabs (v - last) > 0.008f) { last = v; return true; } return false; }
+    // ── THE ONE BAKE THROTTLE (both paths — powered prepareBlock() and idle bakeIfDirtyIdle()) ──
+    // `sinceBake` counts SAMPLES since the last bake; a dirty IR may re-bake at most every 50 ms. It advances
+    // ONLY while dirty (rebake() zeroes it), so a settled engine never accumulates (and never overflows), and
+    // a knob moved after a long quiet period still waits the same 50 ms the powered path always has.
+    bool bakeDue (int n) { return irDirty && (sinceBake += n) >= (int) (0.05f * fs); }
 
     // ── radix-2 iterative FFT (in-place, re/im). inv=false forward, true inverse (÷N). ──
     void fft (float* re, float* im, bool inv)

@@ -10000,7 +10000,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 convolutionReverb.setShape    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
                 convolutionReverb.setReverse  (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
                 convolutionReverb.updateCoefficients();
-                convolutionReverb.bakeIfDirtyIdle();
+                convolutionReverb.bakeIfDirtyIdle (numSamples);   // fb453 — 50 ms-throttled (a modulated Size baked EVERY block)
             }
         }
         // fb351 — every device is now IN → OUT instead of "add my wet to the master mix". The caller
@@ -10245,7 +10245,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     cv->setShape     ((int) V.modmode->load());
                     cv->setReverse   (V.freeze->load() > 0.5f);
                     cv->updateCoefficients();
-                    cv->bakeIfDirtyIdle();
+                    cv->bakeIfDirtyIdle (numSamples);   // fb453 — 50 ms-throttled (a modulated Size baked EVERY block)
                 }
             }
             if (! powered && env <= 1.0e-4f) return;             // unrouted / off ⇒ zero cost
