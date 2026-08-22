@@ -2,8 +2,14 @@
 //  fb439 — DOES THE PLUGIN REACH THE ENGINE?  The first harness in this tree that renders the
 //  REAL, INSTALLED plugin instead of an engine header behind a shim.
 //
-//    clang++ -O2 -std=c++17 Tests/au_fx_path.cpp -o /tmp/aufx \
+//    clang++ -std=c++17 -O2 -I Tests/shim -I Source Tests/au_fx_path.cpp -o /tmp/au_fx_path \
 //            -framework AudioToolbox -framework AudioUnit -framework CoreFoundation -framework CoreAudio
+//
+//    /tmp/au_fx_path                 the FULL run: the 28 fb439-447 gates + fb453's 184-cell matrix
+//    /tmp/au_fx_path --quick         one representative knob per kind instead of all 184
+//    /tmp/au_fx_path --kind 14       one device
+//    /tmp/au_fx_path --mutate        aim every route at the ADJACENT knob: every cell MUST go red
+//    /tmp/au_fx_path --no-matrix     everything except the matrix
 //
 //  🔑 WHY THIS EXISTS (fb373, restated by Max at fb439): every one of the four fx4 devices passed
 //     its own engine cert — the Equalizer's 147/147 among them — and all four were stone dead in
@@ -311,9 +317,18 @@ static double nowSec()
 static const int    kFxModBaseDest = 694;                       // ModDest::FxModBase (SynthModConfig.h)
 static int  destOf (int kind, int inst0, int knob) { return kFxModBaseDest + (kind * 6 + inst0) * 12 + knob; }
 
-static const float  kBase = 0.35f;      // where every rack dial sits for the sweep
+// 🚨 EVERY NUMBER IN THIS EXPERIMENT IS AN EXACT BINARY FRACTION, and that is the whole design.
+//    The route's depth reaches the plugin as DECIMAL TEXT inside the state blob and comes back as
+//    a double; the knob's value goes in as a float through the host. If the two paths do not agree
+//    to the last bit, the null is measuring the harness's own rounding instead of the plugin.
+//    0.35f + 0.25f is 0.599999994 and the literal 0.60f is 0.600000024 — three parts in a hundred
+//    million, invisible on most knobs (−230 dB) and NOT invisible on a knob with gain behind it:
+//    the Delay's Time is exp(ln(8000)·x) inside a feedback loop, so that same 3e-8 comes back out
+//    at −60 dB. Measured, not hypothesised. 0.25 / 0.25 / 0.50 are exact in binary AND print and
+//    parse exactly, so route-and-knob differ by the CODE PATH and by nothing else.
+static const float  kBase = 0.25f;      // where every rack dial sits for the sweep
 static const float  kOff  = 0.25f;      // what the route supplies
-static const float  kTop  = 0.60f;      // kBase + kOff — where the knob goes instead
+static const float  kTop  = 0.50f;      // kBase + kOff — where the knob goes instead
 static const double kEqGate  = -100.0;  // dB below the render's own RMS: "the route EQUALS the knob"
 static const double kAudGate =  -60.0;  // dB below the render's own RMS: "it did something at all"
 static const int    kTypeTries = 4;     // a knob dead at Type 0 is retried on the next few Types
@@ -342,6 +357,7 @@ struct MtxCfg
     int   type = 0;                       // the device's TYPE choice index
     bool  mixFull = true;                 // Mix (knob 3) at 1.0 rather than kBase
     std::map<int, float> knobs;           // knob index -> value, overriding the default
+    int   probe = -1;                     // the knob this measurement is ABOUT (setup decisions only)
     std::vector<std::pair<std::string, float>> extra;   // any other parameter
     std::string routes = "[]";            // the synModJson blob
     bool  warmup = true;                  // throw-away pass + run loop, so lazy engines exist
@@ -378,14 +394,28 @@ static Render mtxRender (const MtxCfg& c)
     //    these the Delay's Time is on the tempo grid (the knob is ignored) and the Tape's echo
     //    section is switched off entirely (fb366, "the echo is opt-in") — a dead knob for a
     //    reason that has nothing to do with modulation.
-    if (c.kind == 1) { a.setP ("SYN_DLY_SYNC", 0.0f); a.setP ("SYN_DLY_LINK", 0.0f); }
-    if (c.kind == 4) { a.setP ("SYN_TPE_DELAY", 1.0f); a.setP ("SYN_TPE_SYNC", 0.0f); }
-    for (int n = 0; n < 12; ++n)
+    if (c.kind == 1)
     {
-        if (kFxModLeaf[c.kind][n] == nullptr) continue;
-        float v = (n == 3 && c.mixFull) ? 1.0f : kBase;
-        auto it = c.knobs.find (n); if (it != c.knobs.end()) v = it->second;
-        a.setP (T + "_" + kFxModLeaf[c.kind][n], v);
+        a.setP ("SYN_DLY_SYNC", 0.0f);                       // otherwise Time is on the tempo grid
+        // L/R LINK is the Delay's own fork: LINKED, "Time R" is not read at all and "Spread" is
+        // what offsets the two sides; UNLINKED it is the other way round. So the link follows the
+        // knob under test — the shipped default for every dial except the one that only exists
+        // when the sides are free.
+        a.setP ("SYN_DLY_LINK", c.probe == 11 ? 0.0f : 1.0f);
+    }
+    if (c.kind == 4) { a.setP ("SYN_TPE_DELAY", 1.0f); a.setP ("SYN_TPE_SYNC", 0.0f); }
+    // 🚨 RESOLVE BY PARAMETER, NOT BY DIAL. The Delay's front "Time" (knob 0) and its back
+    //    "Time L" (knob 10) ARE one parameter, so writing the dials in index order writes
+    //    SYN_DLY_TIME twice and the SECOND write wins — which silently threw away the override
+    //    on knob 0 and made its "moved the knob" render identical to the flat one. (It cost this
+    //    harness a red cell to find, which is the point of a matrix that sweeps every cell.)
+    {
+        std::map<std::string, float> want;
+        for (int n = 0; n < 12; ++n)
+            if (kFxModLeaf[c.kind][n]) want[kFxModLeaf[c.kind][n]] = (n == 3 && c.mixFull) ? 1.0f : kBase;
+        for (const auto& kv : c.knobs)
+            if (kv.first >= 0 && kv.first < 12 && kFxModLeaf[c.kind][kv.first]) want[kFxModLeaf[c.kind][kv.first]] = kv.second;
+        for (const auto& kv : want) a.setP (T + "_" + kv.first, kv.second);
     }
     for (const auto& e : c.extra) a.setP (e.first, e.second);
     a.setRoutes (c.routes);
@@ -406,6 +436,9 @@ static const char* const kKindName[16] = { "reverb","delay","saturate","granular
 
 int main (int argc, char** argv)
 {
+    // the full run is minutes long and is normally piped to a log; block buffering would hide
+    // every line of it until the process exits.
+    setvbuf (stdout, nullptr, _IOLBF, 0);
     printf ("\n══ fb439 — REAL-PLUGIN PATH TEST (the installed AU, not an engine header) ══\n\n");
 
     // fb453 · Task 5 switches.  The FULL 184-cell matrix is the DEFAULT (fb425 — sweep the whole
@@ -652,12 +685,12 @@ int main (int argc, char** argv)
         double best = 1e9, bestX = 0.0;
         for (int i = 0; i <= 4; ++i)
         {
-            const float x = 0.15f + 0.05f * (float) i;
+            const float x = 0.125f + 0.0625f * (float) i;   // 0.125 .. 0.375, all exact
             MtxCfg c = u; c.knobs[0] = kBase + x;
             const double e = rel (B, mtxRender (c));
             if (e < best) { best = e; bestX = x; }
         }
-        snprintf (det, sizeof det, "best null %.1f dBr at knob = base + %.2f (expected +%.2f)", best, bestX, kOff);
+        snprintf (det, sizeof det, "best null %.1f dBr at knob = base + %.4f (expected +%.4f)", best, bestX, kOff);
         chk (std::fabs (bestX - (double) kOff) < 1e-6 && best < kEqGate,
              "the parked LFO delivers EXACTLY the route's depth (calibrated, not assumed)", det);
     }
@@ -704,7 +737,7 @@ int main (int argc, char** argv)
             MtxCfg z; z.kind = 14; z.extra = envRest; z.knobs[0] = 0.0f;   const Render Z = mtxRender (z);
             MtxCfg b; b.kind = 14; b.extra = envRest; b.knobs[0] = kBase;  const Render Bb = mtxRender (b);
             const double toZero = rel (R, Z), toBase = rel (R, Bb);
-            snprintf (det, sizeof det, "vs knob 0.00 = %.1f dBr   vs knob 0.35 (its base) = %.1f dBr", toZero, toBase);
+            snprintf (det, sizeof det, "vs knob 0.00 = %.1f dBr   vs knob 0.25 (its base) = %.1f dBr", toZero, toBase);
             chk (toZero < -60.0 && toBase > toZero + 40.0,
                  "GATE B1: an ENV route AT REST drives the knob to ZERO, not to its base (fb179)", det);
         }
@@ -719,14 +752,14 @@ int main (int argc, char** argv)
             chk (toOne < -60.0 && toHalf > toOne + 40.0,
                  "GATE B2: an ENV route AT PEAK, depth 1.0, drives the knob to 1.0 — NOT halved", det);
         }
-        {   // AT PEAK, depth 0.5 — base*(1−w) + w = 0.35*0.5 + 0.5 = 0.675. The halved bug: 0.425.
+        {   // AT PEAK, depth 0.5 — base*(1−w) + w = 0.25*0.5 + 0.5 = 0.625. The halved bug: 0.375.
             MtxCfg r; r.kind = 14; r.extra = envPeak; r.knobs[0] = kBase;
             r.routes = routeJson (dst, 0.5f, 104);
             const Render R = mtxRender (r);
-            MtxCfg g; g.kind = 14; g.extra = envPeak; g.knobs[0] = 0.675f; const Render G = mtxRender (g);
-            MtxCfg w; w.kind = 14; w.extra = envPeak; w.knobs[0] = 0.425f; const Render W = mtxRender (w);
+            MtxCfg g; g.kind = 14; g.extra = envPeak; g.knobs[0] = 0.625f; const Render G = mtxRender (g);
+            MtxCfg w; w.kind = 14; w.extra = envPeak; w.knobs[0] = 0.375f; const Render W = mtxRender (w);
             const double toGood = rel (R, G), toWrong = rel (R, W);
-            snprintf (det, sizeof det, "vs knob 0.675 (the crossfade) = %.1f dBr   vs 0.425 (halved) = %.1f dBr", toGood, toWrong);
+            snprintf (det, sizeof det, "vs knob 0.625 (the crossfade) = %.1f dBr   vs 0.375 (halved) = %.1f dBr", toGood, toWrong);
             chk (toGood < -60.0 && toWrong > toGood + 40.0,
                  "GATE B3: depth 0.5 lands on base*(1-w)+w — the ownership CROSSFADE, to scale", det);
         }
@@ -769,7 +802,7 @@ int main (int argc, char** argv)
         for (int n = 0; n < 12; ++n)
         {
             if (kFxModLeaf[k][n] == nullptr) continue;
-            const float d = 0.06f + 0.02f * (float) n;
+            const float d = 0.03125f * (float) (n + 1);   // 1/32 .. 12/32 — exact, and so are the sums
             char one[96]; snprintf (one, sizeof one, "%s{\"s\":0,\"d\":%d,\"v\":%.6f}", nRoutes ? "," : "", destOf (k, 0, n), d);
             rj += one; ++nRoutes;
             sum[kFxModLeaf[k][n]] += d;                 // the alias accumulates, exactly as the map does
@@ -812,8 +845,8 @@ int main (int argc, char** argv)
                 double bEq = 999.0, bAud = -999.0; int bType = 0;
                 for (int t = 0; t < nTypes; ++t)
                 {
-                    MtxCfg base; base.kind = k; base.type = t; if (isMix) base.knobs[3] = kBase;
-                    const int key = t * 2 + (isMix ? 1 : 0);
+                    MtxCfg base; base.kind = k; base.type = t; base.probe = n; if (isMix) base.knobs[3] = kBase;
+                    const int key = t * 4 + (isMix ? 1 : 0) + (n == 11 ? 2 : 0);   // n==11 can change the setup (Delay Link)
                     if (! acache.count (key)) acache[key] = mtxRender (base);
                     MtxCfg bc = base; bc.routes = routeJson (destOf (k, 0, dn), kOff);
                     MtxCfg cc = base; cc.knobs[n] = kTop;
@@ -824,7 +857,7 @@ int main (int argc, char** argv)
                 }
                 ++cells;
                 const bool ok = (bEq < kEqGate) && (bAud > kAudGate);
-                char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.60",
+                char lbl[130]; snprintf (lbl, sizeof lbl, "%s.%s (k%02d n%02d): route +0.25 == knob 0.50",
                                          kKindName[k], kFxModLeaf[k][n], k, n);
                 char det[220]; snprintf (det, sizeof det, "null=%7.2f dBr   moved %7.2f dBr%s",
                                          bEq, bAud, bType ? "   [needed a livelier Type]" : "");
