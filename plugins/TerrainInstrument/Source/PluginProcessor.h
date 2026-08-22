@@ -1938,7 +1938,15 @@ private:
     #include "fx_mod_ids.inc"
     // Resolved once on the message thread: the parameter behind every (kind, instance, knob).
     // nullptr = that device has no such dial — only the Filter's 8 back slots (fb384).
-    std::atomic<float>* fxModRef_[16][(size_t) ParameterIDs::kFxInstances][12] {};
+    // 🚨 EVERY bound comes from the SAME constant cacheFxModRefs() loops on. Hand-typed 16/6/12
+    //    here would let a bumped constant walk this array off its end with no diagnostic, and this
+    //    codebase has bumped exactly this class of constant before (kMaxSlots 96->128, fb444).
+    std::atomic<float>* fxModRef_[wc::kFxModKinds][wc::kFxModInsts][wc::kFxModKnobs] {};
+    static_assert (ParameterIDs::kFxInstances == wc::kFxModInsts,
+                   "fb453 - the rack's instance count and the destination block's must agree: "
+                   "fxModDest() reserves kFxModInsts slots per kind, and cacheFxModRefs() walks "
+                   "one row per plugin instance. Bump one without the other and either the array "
+                   "overruns or the top instances have no destinations.");
     int  fxModRefsResolved_ = 0;   // fb373 — how many of the 1,104 cells actually bound to a param
     void cacheFxModRefs();         // message thread only (builds ID strings)
     // The per-block sparse map, KEYED BY POINTER. See FxModValue.h for why that is the whole

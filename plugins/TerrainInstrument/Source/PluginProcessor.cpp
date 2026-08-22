@@ -5332,8 +5332,10 @@ void TerrainInstrumentAudioProcessor::cacheSendRefs()
 void TerrainInstrumentAudioProcessor::cacheFxModRefs()
 {
     int resolved = 0;
+    // Bounds are the ARRAY's own dimensions (PluginProcessor.h asserts kFxInstances == kFxModInsts),
+    // so a bumped constant cannot leave the loop and the table disagreeing.
     for (int k = 0; k < wc::kFxModKinds; ++k)
-      for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+      for (int i = 0; i < wc::kFxModInsts; ++i)
         for (int n = 0; n < wc::kFxModKnobs; ++n)
         {
             fxModRef_[k][i][n] = nullptr;
@@ -5347,7 +5349,7 @@ void TerrainInstrumentAudioProcessor::cacheFxModRefs()
             if (ref != nullptr) ++resolved;
         }
     fxModRefsResolved_ = resolved;
-    jassert (resolved == kFxModLive * ParameterIDs::kFxInstances);   // 184 x 6 = 1,104
+    jassert (resolved == kFxModLive * wc::kFxModInsts);   // 184 x 6 = 1,104
 }
 
 // ═══ fb413 — CHORUS · FLANGER · PHASER refs. One cache, three devices: they share a chassis,
@@ -8483,8 +8485,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     }
 
     // ── fb453 — THE RACK'S MODULATION. LFO ADDS, ENV OWNS: the same law flowKnob() applies to the
-    //    FLOW knobs (fb184), so a modulated rack knob behaves exactly like a modulated FLOW knob.
-    //    Walked ONCE over the <=128 assignments — the 1,152 destinations are never iterated.
+    //    FLOW knobs (fb184) — the accumulation, the ownership crossfade and the single clamp are
+    //    that lambda's, term for term. Walked ONCE over the <=128 assignments; the 1,152
+    //    destinations are never iterated.
+    //
+    //    ⚠️ ONE DELIBERATE DIFFERENCE, so nobody reads "the same law" as "identical": flowMod()
+    //    scales its LFO by the fb245 LfoAmt destination — `flowLfo_[si].peek() * jlimit (0, 2,
+    //    1 + flowLfoAmt[si])` (see the flowMod lambda below) — and the rack does NOT. A route
+    //    from LfoAmt{n} therefore bends a FLOW knob's LFO but not a rack knob's. That is what
+    //    fb453 specified, not an oversight; if the two are ever to agree it is one expression,
+    //    in the lfoOf callback right here.
     //
     //    🚨 PLACEMENT IS LOAD-BEARING. This sits AFTER the global LFO bank is advanced (directly
     //    above — otherwise every route would read last block's phase) and BEFORE pushFx3Params()
