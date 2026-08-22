@@ -32,6 +32,10 @@ mis-map. LFO adds, ENV owns — fb184's math, unchanged.
 - Bump `TERRAIN_BUILD` in `index.html` to `fb453` on the first build.
 - NO agent fleets without asking Max first, with a token estimate.
 - UI is shown to Max in Safari and approved before it is called done.
+- 🚨 **MAX'S VISUAL BAR (2026-08-22, verbatim): "VISUALLY it must be correct! nothing crammed and
+  always noticable."** This is an acceptance gate on Task 6, not a preference, and it is held by
+  MEASUREMENT the way fb451 held the chassis centerline — a screenshot that "looks fine" is not
+  evidence. The numbers are in Task 6, Step 5.
 
 ---
 
@@ -527,10 +531,29 @@ Gates:
    frame — a case the synth panel never exercised);
 6. deleting the device removes its routes.
 
-- [ ] **Step 5: Screenshot for Max, in Safari**
+- [ ] **Step 5: THE VISUAL BAR — measured, then shown**
 
-Install a few routes across a full rack, screenshot, and READ the PNG before showing it: 12 underlines
-on one card is the density question, and it is Max's call whether it reads busy.
+Max: *"VISUALLY it must be correct! nothing crammed and always noticable."* Twelve underlines on one
+card is a density question, so it is answered with a probe (`Tests/probe_modmarks.js`, the
+`probe_centerline.js` pattern) on a REAL rack — every kind, back panels open, a route on every knob —
+and every number below must hold on every card:
+
+1. **NOT CRAMMED — no collision.** No underline's box intersects another's, or any neighbouring
+   label's ink. Report the worst pair in px.
+2. **NOT CRAMMED — it clears its own knob cell.** Each underline sits fully inside its knob cell's
+   horizontal span and leaves ≥ 2 px to the cell edge, so two adjacent modulated dials never read as
+   one bar.
+3. **ALWAYS NOTICEABLE — it is actually drawn.** Each underline is ≥ 1.5 device px tall and ≥ 60 %
+   of its label's ink width (fb188: it covers the WHOLE word) — nothing sub-pixel, nothing hairline.
+4. **ALWAYS NOTICEABLE — contrast.** The underline's colour against the card background clears a
+   3:1 luminance ratio in BOTH the dim (unselected) and purple (selected) states, sampled from the
+   rendered PNG, not from the CSS.
+5. **The comet is visible on a rack label.** With an LFO running, the comet's travel across the
+   underline is ≥ 4 device px peak-to-peak — if the word is too short for the motion to read, the
+   underline is not doing its job on this card and Max sees it before anything ships.
+
+Then screenshot every kind at shipped scale, **READ the PNGs**, and show Max. If any number above
+fails, that is a design problem to bring to him — not a number to lower.
 
 - [ ] **Step 6: Full verification, then commit**
 
