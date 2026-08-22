@@ -7270,7 +7270,31 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
            columns spread edge to edge (space-between), so the outer dials hug the row's edges the same on every card, and the divider's
            −2 px nudge makes last-dial → divider == divider → pill (measured 11.5 / 11.5 css px by probe_centerline.js). */
         #syn-panel .fxr-knobs{ flex:1; display:grid; grid-template-columns:repeat(4,36px); justify-content:space-between; align-items:end; min-width:0; }
-        #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:4px; min-width:0; }
+        /* fb454 — THE WORD SITS THE SAME DISTANCE UNDER ITS DIAL AS EVERY OTHER KNOB IN THE PLUGIN.
+           Max: "look at the wavetable position... the words are perfectly aligned under the knob, not
+           too far from it... for the front and the back panel I want those letters to be raised up, of
+           course to the exact length that we have for everything else across the board."
+           MEASURED, not eyeballed (Tests/probe_labelgap.js, from the rendered PNG at the shipped
+           820-wide scale): the gap that matters is ARC INK -> GLYPH INK, not box to box, because a
+           dial's box carries dead air below its 270-degree arc that grows with the dial (29px front /
+           32px back / 40px Utility). The canonical is the oscillator's own row — WT Pos / Warp /
+           Spectral / Fold / Blur — at 9.0 px. The rack read 11.25 (front), 12.6 (back), 16.6
+           (Utility): 2 to 8 px too far, and it was the ONLY family in the plugin that did it. It now
+           reads 9.25 / 8.75 / 8.75 — every family inside 0.25 px of the canonical.
+           🚨 THE ANSWER IS QUANTISED TO 1 px, so do not tune these numbers in tenths: Chrome snaps a
+           glyph's baseline to a whole CSS pixel, so sweeping the offset in 0.25 steps moves the
+           measured ink gap in 1.0 steps (11.25 → 10.25 → 9.25 → 8.25) and the HALF-pixel offsets
+           split the back panel's two grid rows a whole pixel apart. 2.5 / 4 / 8 are the landings that
+           sit tight; the fractional part only buys the compensation below.
+           THE COMPENSATED SHRINK: gap goes down by delta and the SAME delta comes back as
+           padding-bottom, so the wrapper's height is unchanged — the dial, the row, the divider, the
+           pills and the card's height all stay exactly where fb451 measured them, and the only thing
+           that moves is the word (and the modulation underline riding on it), UP. That is what Max
+           asked for and it is what buys the underline its room: "way more room and space for our LFO
+           to shine."
+           🚨 THIS RETIRES fb451's "the label's bottom lines up with the bottom of the A/B/C/D/S/N
+           pills". Max: "that's just not what I [want] anymore." The pills did not move; the word did. */
+        #syn-panel .fxr-knob{ display:flex; flex-direction:column; align-items:center; gap:1.5px; padding-bottom:2.5px; min-width:0; }   /* fb454 — was gap:4px; the ink gap measured 11.25 and the canonical is 9.00, so 2.5 px comes off the gap and the SAME 2.5 goes back as padding: nothing but the word moves */
         #syn-panel .fxr-dial{ width:29px; height:29px; cursor:ns-resize; }
         #syn-panel .fxr-dial svg{ width:100%; height:100%; display:block; }
         #syn-panel .fxr-lab{ font-size:7px; letter-spacing:.01em; color:var(--text-secondary); white-space:nowrap; text-align:center; font-weight:400; }
@@ -7401,10 +7425,11 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
         #syn-panel .fxr-bk-sel .fxr-bk-g .fxr-car{ font-size:8px; }
         #syn-panel .fxr-bk-grid{ flex:1 1 0; min-height:0; display:grid; grid-template-columns:1fr 11px 1fr 11px 1fr 11px 1fr; grid-template-rows:1fr 1fr; align-items:center; justify-items:center; }
         #syn-panel .fxr-bk-sep{ grid-row:1 / 3; width:1px; align-self:stretch; justify-self:center; background:var(--border-strong); margin:5px 0; }
-        #syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:5px; }
+        #syn-panel .fxr-bk-knob{ display:flex; flex-direction:column; align-items:center; gap:1px; padding-bottom:4px; }   /* fb454 — was gap:5px (12.6 px of ink gap under a 32px dial); the compensated shrink, see .fxr-knob. The 4x2 grid centres each item in a 1fr row, so an unchanged item height also leaves the row-2 dial exactly where fb453 measured its corridor. */
         #syn-panel .fxr-bk-knob .fxr-dial{ width:32px; height:32px; cursor:ns-resize; }
         /* fb450 — a back with NO dropdowns (Utility): the grid takes the row's height too and the knobs grow */
-        #syn-panel .fxr-bk-nodd .fxr-bk-knob{ gap:7px; }
+        #syn-panel .fxr-bk-nodd .fxr-bk-knob{ gap:0; padding-bottom:8px; }   /* fb454 — a 40px dial hides 7.8 px of dead air below its arc, MORE than the whole 9 px canonical, so reaching it needs the word to start a pixel inside the dial's BOX (gap:0 plus a −1px margin) — the ink still clears the arc by 8.75. Was gap:7px = 16.6 px, the worst in the plugin. */
+        #syn-panel .fxr-bk-nodd .fxr-bk-knob .fxr-lab{ margin-top:-1px; }   /* fb454 — the last 1 px of the 8 px shrink; the box overlaps the dial's dead air, the INK does not. */
         #syn-panel .fxr-bk-nodd .fxr-bk-knob .fxr-dial{ width:40px; height:40px; }
         #syn-panel .fxr-bk-nodd .fxr-bk-knob .fxr-lab{ font-size:8.5px; }
         #syn-panel .fxr-bk-nodd .fxr-bk-sep{ margin:9px 0; }
@@ -28805,10 +28830,40 @@ restoreThemeFromBackend();
       row.appendChild(lab); row.appendChild(x); rtMenu.appendChild(row); rtMenu.__rows.push({a:a,lab:lab}); });
     document.body.appendChild(rtMenu);
     var r=u.getBoundingClientRect(), mw=rtMenu.offsetWidth, mh=rtMenu.offsetHeight;   // measure AFTER append (fb172 law)
-    /* fb453 — __vw()/__vh() and offsetWidth are LAYOUT px; the rect is SCREEN px. Mixing the two
-       put the list a zoom-factor away from the underline it belongs to. LP() converts. */
-    rtMenu.style.left=Math.max(6,Math.min(LP(r.left), window.__vw()-mw-6))+'px';
-    rtMenu.style.top =Math.max(6,Math.min(LP(r.bottom)+5, window.__vh()-mh-6))+'px';
+    /* ═══ fb454 — THE LIST NEVER COVERS THE CONTROL IT BELONGS TO ═══════════════════════════════
+       Max: "on the oscillator wavetable... it comes at the bottom so it doesn't get in the way of
+       our attenuation. Unfortunately, on the front panel because it's so small, our attenuator pops
+       on top... for the widen, it's like right on top of the mix. So every time I try to attenuate
+       it and turn the mix to 100%... I can't." — "make sure that the attenuation, I'm able to use
+       it. It doesn't get in the way of where it says click to X, it doesn't get in the way of
+       anything."
+       BELOW THE WORD IS STILL THE FIRST CHOICE — that is the wavetable panel's behaviour and it is
+       untouched. What was wrong is the FALLBACK. The shipped window is 820×656 (kBaseW/kBaseH minus
+       the capture strip) and the rack lives on its bottom edge, so `top = min(y, __vh()-mh-6)` — the
+       .pmenu clamp — had nowhere to go but UP, straight onto the dial and onto the 7 px drag strip
+       that IS the attenuator. Measured at the shipped size before this fix, on Widen/Detune: a
+       one-route list already covered 3 px of the strip (77 px²), and a two-route list covered the
+       WHOLE strip plus 462 px² of the knob cell and 3 px of its arc.
+       So the clamp becomes a FLIP, the same rule every other menu in this file follows: below if it
+       fits, otherwise BESIDE — right of the control if the panel has the room, else left — and only
+       if neither side exists, clear above. The box it must miss is the union of the destination
+       element, its underline, and the 8 px attenuator meter's lane (showAtt drops it at ul.right+7),
+       because "it doesn't get in the way of anything" includes the meter the drag itself pops.
+       fb453 — __vw()/__vh() and offsetWidth are LAYOUT px while the rect is SCREEN px; LP() converts
+       at the point of reading, and every number below is layout px. ══════════════════════════════ */
+    var er=(el&&el.getBoundingClientRect)?el.getBoundingClientRect():r, M=6, ATT=17;   /* ATT = showAtt's 7px offset + the 8px meter + 2 of air */
+    var VW=window.__vw(), VH=window.__vh();
+    var px1=Math.min(LP(er.left),LP(r.left)), px2=Math.max(LP(er.right),LP(r.right)+ATT);
+    var py1=Math.min(LP(er.top),LP(r.top)),   py2=Math.max(LP(er.bottom),LP(r.bottom));
+    var mL=Math.max(M,Math.min(LP(r.left), VW-mw-M)), mT=LP(r.bottom)+5;
+    if(mT+mh>VH-M){                                    /* no room below — flip, never clamp up onto it */
+      mT=Math.max(M,Math.min(py2-mh, VH-mh-M));        /* beside, bottom-aligned to the control */
+      if(px2+M+mw<=VW-M)    mL=px2+M;                  /* right of it */
+      else if(px1-M-mw>=M)  mL=px1-M-mw;               /* else left of it */
+      else { mT=Math.max(M,py1-mh-5); mL=Math.max(M,Math.min(px1,VW-mw-M)); }   /* neither side exists: clear above */
+    }
+    rtMenu.style.left=mL+'px';
+    rtMenu.style.top =mT+'px';
     rtMenu.addEventListener('mouseenter',function(){ if(rtHideT)clearTimeout(rtHideT); });
     rtMenu.addEventListener('mouseleave',function(){ hideRoutesSoon(); }); }
   // ── live loop: bob each badge/dot in its LFO's shape × depth × master ──
