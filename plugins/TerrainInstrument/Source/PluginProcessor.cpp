@@ -4721,16 +4721,16 @@ void TerrainInstrumentAudioProcessor::applyGrn (int inst0, float inL, float inR,
 
     // ── params, gathered once per sample from the cached pointers (no strings, no allocation) ──
     tw::GranularFxParams gp;
-    gp.density = V.density->load();
-    gp.size    = V.size->load();
-    gp.decay   = V.decay->load() * 1.10f;               // 0..1.10 — the drama is at the top
-    gp.scan    = V.scan->load() * 2.0f - 1.0f;          // 0..1 knob → −1..+1, centre detent
-    gp.spray   = V.spray->load();
-    gp.pitch   = (V.pitch->load() * 2.0f - 1.0f) * 24.0f;
-    gp.detune  = V.detune->load();
-    gp.shape   = V.shape->load();
-    gp.width   = V.width->load();
-    gp.freeze  = V.freeze->load();
+    gp.density = M (V.density);
+    gp.size    = M (V.size);
+    gp.decay   = M (V.decay) * 1.10f;               // 0..1.10 — the drama is at the top
+    gp.scan    = M (V.scan) * 2.0f - 1.0f;          // 0..1 knob → −1..+1, centre detent
+    gp.spray   = M (V.spray);
+    gp.pitch   = (M (V.pitch) * 2.0f - 1.0f) * 24.0f;
+    gp.detune  = M (V.detune);
+    gp.shape   = M (V.shape);
+    gp.width   = M (V.width);
+    gp.freeze  = M (V.freeze);
     gp.type    = (int) V.type->load();                  // choice params read as the INDEX
     gp.character = (int) V.chr->load();
     gp.key     = (int) V.key->load();
@@ -4746,7 +4746,7 @@ void TerrainInstrumentAudioProcessor::applyGrn (int inst0, float inL, float inR,
         // the Delay already lives with — the readout shows the CLAMPED time, not the division.
         gp.windowMs = juce::jlimit (50.0f, 16000.0f, qms * fxDivMult (sd));
     else
-        gp.windowMs = 50.0f * std::pow (320.0f, V.window->load());   // 50 ms → 16 s, log
+        gp.windowMs = 50.0f * std::pow (320.0f, M (V.window));   // 50 ms → 16 s, log
     eng->setParams (gp);
     // Scatter's grid clock, in Hz — a 1/16 at the host tempo. Density picks the division from it.
     eng->setSyncClockHz (4.0f * bpmNow / 60.0f);
@@ -4767,7 +4767,7 @@ void TerrainInstrumentAudioProcessor::applyGrn (int inst0, float inL, float inR,
     eng->processSample (inL, inR, wl, wr);
 
     // Equal-power mix, ramped. 100 % = fully wet, zero dry (the house law).
-    const float m   = V.mix->load();
+    const float m   = M (V.mix);
     const float wetT = std::sin (m * 1.5707963f), dryT = std::cos (m * 1.5707963f);
     float& dry = grnDry_[(size_t) inst0];  float& wet = grnWet_[(size_t) inst0];
     dry += (dryT - dry) * 0.0015f;         wet += (wetT - wet) * 0.0015f;
@@ -4903,8 +4903,8 @@ void TerrainInstrumentAudioProcessor::applyFlt (int inst0, float inL, float inR,
     // fb50 noise-type bug and the fb373 tape-type bug, one denominator apart.
     fp.engine  = juce::jlimit (0, tw::filters::kNumTypes - 1, (int) V.engine->load());
     fp.charIdx = juce::jlimit (0, 5, (int) V.chr->load());
-    fp.cut     = V.cut->load();      fp.res     = V.res->load();
-    fp.drive   = V.drive->load();    fp.mix     = V.mix->load();
+    fp.cut     = M (V.cut);      fp.res     = M (V.res);
+    fp.drive   = M (V.drive);    fp.mix     = M (V.mix);
     fp.env     = V.env->load();      fp.track   = V.track->load();
     fp.poles   = V.poles->load();    fp.sense   = V.sense->load();
     fp.attack  = V.attack->load();   fp.release = V.release->load();
@@ -5421,11 +5421,11 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 tw::TerrainChorusFx::Params cp;
                 cp.type      = juce::jlimit (0, tw::TerrainChorusFx::kNumTypes - 1, (int) V.type->load());
                 cp.character = juce::jlimit (0, tw::TerrainChorusFx::kNumChars - 1, (int) V.chr->load());
-                cp.rate = V.rate->load();  cp.depth = V.depth->load();  cp.feedback = V.feedback->load();
-                cp.mix  = V.mix->load();
-                cp.b1 = V.time->load();    cp.b2 = V.detune->load();   cp.b3 = V.width->load();
-                cp.b4 = V.flutter->load(); cp.b5 = V.drift->load();    cp.b6 = V.colour->load();
-                cp.b7 = V.lowkeep->load(); cp.b8 = V.phase->load();
+                cp.rate = M (V.rate);  cp.depth = M (V.depth);  cp.feedback = M (V.feedback);
+                cp.mix  = M (V.mix);
+                cp.b1 = M (V.time);    cp.b2 = M (V.detune);   cp.b3 = M (V.width);
+                cp.b4 = M (V.flutter); cp.b5 = M (V.drift);    cp.b6 = M (V.colour);
+                cp.b7 = M (V.lowkeep); cp.b8 = M (V.phase);
                 cp.wide      = V.wide != nullptr && V.wide->load() > 0.5f;
                 cp.motion    = (V.motion != nullptr) ? juce::jlimit (0, 3, (int) V.motion->load()) : 0;
                 cp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
@@ -5441,19 +5441,19 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 tw::TerrainFlangerFx::Params fp;
                 fp.type      = juce::jlimit (0, tw::TerrainFlangerFx::kNumTypes - 1, (int) V.type->load());
                 fp.character = juce::jlimit (0, tw::TerrainFlangerFx::kNumChars - 1, (int) V.chr->load());
-                fp.rate = V.rate->load();  fp.depth = V.depth->load();  fp.mix = V.mix->load();
+                fp.rate = M (V.rate);  fp.depth = M (V.depth);  fp.mix = M (V.mix);
                 // ⚠️ FEEDBACK IS BIPOLAR WITH 0.5 AS CENTRE (flanger ROSTER 3, flagged there in
                 // bold as an integration hazard — a unipolar 0 wired here is -99 %, not none).
                 // The INVERT pill mirrors it about that centre: a genuine polarity flip of the
                 // comb, where the resonant peaks land on what were the notches.
                 {
-                    const float fb = juce::jlimit (0.0f, 1.0f, V.feedback->load());
+                    const float fb = juce::jlimit (0.0f, 1.0f, M (V.feedback));
                     const bool  iv = V.invert != nullptr && V.invert->load() > 0.5f;
                     fp.feedback = iv ? (1.0f - fb) : fb;
                 }
-                fp.b1 = V.manual->load();  fp.b2 = V.spread->load();   fp.b3 = V.width->load();
-                fp.b4 = V.damping->load(); fp.b5 = V.shape->load();    fp.b6 = V.bounce->load();
-                fp.b7 = V.tail->load();    fp.b8 = V.lowcut->load();
+                fp.b1 = M (V.manual);  fp.b2 = M (V.spread);   fp.b3 = M (V.width);
+                fp.b4 = M (V.damping); fp.b5 = M (V.shape);    fp.b6 = M (V.bounce);
+                fp.b7 = M (V.tail);    fp.b8 = M (V.lowcut);
                 fp.route     = (V.route != nullptr) ? juce::jlimit (0, 3, (int) V.route->load()) : 0;
                 fp.tempoSync = V.sync != nullptr && V.sync->load() > 0.5f;
                 fp.bpm = bpm;
@@ -5468,11 +5468,11 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 tw::TerrainPhaserFx::Params pp;
                 pp.type      = juce::jlimit (0, tw::TerrainPhaserFx::kNumTypes - 1, (int) V.type->load());
                 pp.character = juce::jlimit (0, tw::TerrainPhaserFx::kNumChars - 1, (int) V.chr->load());
-                pp.rate = V.rate->load();  pp.depth = V.depth->load();  pp.feedback = V.feedback->load();
-                pp.mix  = V.mix->load();
-                pp.b1 = V.center->load();  pp.b2 = V.stages->load();   pp.b3 = V.spread->load();
-                pp.b4 = V.stereo->load();  pp.b5 = V.touch->load();    pp.b6 = V.lag->load();
-                pp.b7 = V.floorK->load();  pp.b8 = V.color->load();
+                pp.rate = M (V.rate);  pp.depth = M (V.depth);  pp.feedback = M (V.feedback);
+                pp.mix  = M (V.mix);
+                pp.b1 = M (V.center);  pp.b2 = M (V.stages);   pp.b3 = M (V.spread);
+                pp.b4 = M (V.stereo);  pp.b5 = M (V.touch);    pp.b6 = M (V.lag);
+                pp.b7 = M (V.floorK);  pp.b8 = M (V.color);
                 // fb412 — the Invert pill XORs the Character's loop sign (a magnitude knob
                 // cannot carry a sign, and its 0 default must not mean "full negative").
                 pp.invert    = V.invert != nullptr && V.invert->load() > 0.5f;
@@ -5500,9 +5500,9 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.type      = juce::jlimit (0, tw::TerrainEqualizerFx::kNumTypes - 1, (int) V.type->load());
                 q.character = juce::jlimit (0, tw::TerrainEqualizerFx::kNumChars - 1, (int) V.chr->load());
                 q.axis      = juce::jlimit (0, tw::TerrainEqualizerFx::kNumFocus - 1, (int) V.axis->load());
-                q.f1 = V.f1->load(); q.f2 = V.f2->load(); q.f3 = V.f3->load(); q.mix = V.mix->load();
-                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
-                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.f1 = M (V.f1); q.f2 = M (V.f2); q.f3 = M (V.f3); q.mix = M (V.mix);
+                q.b1 = M (V.b[0]); q.b2 = M (V.b[1]); q.b3 = M (V.b[2]); q.b4 = M (V.b[3]);
+                q.b5 = M (V.b[4]); q.b6 = M (V.b[5]); q.b7 = M (V.b[6]); q.b8 = M (V.b[7]);
                 if (V.x[0] != nullptr)   // fb438 — the free bells
                 {
                     q.x1 = V.x[0]->load(); q.x2 = V.x[1]->load(); q.x3 = V.x[2]->load(); q.x4 = V.x[3]->load();
@@ -5527,9 +5527,9 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.type      = juce::jlimit (0, tw::TerrainWidenFx::kNumTypes  - 1, (int) V.type->load());
                 q.character = juce::jlimit (0, tw::TerrainWidenFx::kNumChars  - 1, (int) V.chr->load());
                 q.axis      = juce::jlimit (0, tw::TerrainWidenFx::kNumFields - 1, (int) V.axis->load());
-                q.amount = V.f1->load(); q.width = V.f2->load(); q.rate = V.f3->load(); q.mix = V.mix->load();
-                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
-                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.amount = M (V.f1); q.width = M (V.f2); q.rate = M (V.f3); q.mix = M (V.mix);
+                q.b1 = M (V.b[0]); q.b2 = M (V.b[1]); q.b3 = M (V.b[2]); q.b4 = M (V.b[3]);
+                q.b5 = M (V.b[4]); q.b6 = M (V.b[5]); q.b7 = M (V.b[6]); q.b8 = M (V.b[7]);
                 q.retrig    = V.pill1 != nullptr && V.pill1->load() > 0.5f;
                 q.hearMono  = V.pill2 != nullptr && V.pill2->load() > 0.5f;
                 q.tempoSync = V.sync  != nullptr && V.sync->load()  > 0.5f;
@@ -5546,9 +5546,9 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.type      = juce::jlimit (0, tw::TerrainCompressFx::kNumTypes  - 1, (int) V.type->load());
                 q.character = juce::jlimit (0, tw::TerrainCompressFx::kNumChars  - 1, (int) V.chr->load());
                 q.axis      = juce::jlimit (0, tw::TerrainCompressFx::kNumDetect - 1, (int) V.axis->load());
-                q.push = V.f1->load(); q.ratio = V.f2->load(); q.lift = V.f3->load(); q.mix = V.mix->load();
-                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
-                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.push = M (V.f1); q.ratio = M (V.f2); q.lift = M (V.f3); q.mix = M (V.mix);
+                q.b1 = M (V.b[0]); q.b2 = M (V.b[1]); q.b3 = M (V.b[2]); q.b4 = M (V.b[3]);
+                q.b5 = M (V.b[4]); q.b6 = M (V.b[5]); q.b7 = M (V.b[6]); q.b8 = M (V.b[7]);
                 q.autoMakeup = V.pill1 != nullptr && V.pill1->load() > 0.5f;
                 cmpPool_[(size_t) i].setParams (q);
             }
@@ -5562,9 +5562,9 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.type      = juce::jlimit (0, tw::TerrainOttFx::kNumTypes  - 1, (int) V.type->load());
                 q.character = juce::jlimit (0, tw::TerrainOttFx::kNumChars  - 1, (int) V.chr->load());
                 q.axis      = juce::jlimit (0, tw::TerrainOttFx::kNumStereo - 1, (int) V.axis->load());
-                q.amount = V.f1->load(); q.speed = V.f2->load(); q.topLift = V.f3->load(); q.mix = V.mix->load();
-                q.b1 = V.b[0]->load(); q.b2 = V.b[1]->load(); q.b3 = V.b[2]->load(); q.b4 = V.b[3]->load();
-                q.b5 = V.b[4]->load(); q.b6 = V.b[5]->load(); q.b7 = V.b[6]->load(); q.b8 = V.b[7]->load();
+                q.amount = M (V.f1); q.speed = M (V.f2); q.topLift = M (V.f3); q.mix = M (V.mix);
+                q.b1 = M (V.b[0]); q.b2 = M (V.b[1]); q.b3 = M (V.b[2]); q.b4 = M (V.b[3]);
+                q.b5 = M (V.b[4]); q.b6 = M (V.b[5]); q.b7 = M (V.b[6]); q.b8 = M (V.b[7]);
                 q.crest = V.pill1 != nullptr && V.pill1->load() > 0.5f;
                 ottPool_[(size_t) i].setParams (q);
             }
@@ -5576,11 +5576,11 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
             {
                 tw::TerrainUtilityFx::Params q;   // fb450 — the channel strip
                 q.type = juce::jlimit (0, tw::TerrainUtilityFx::kNumTypeSlots - 1, (int) V.type->load());
-                q.gain = V.f1->load(); q.image = V.f2->load(); q.steer = V.f3->load(); q.mix = V.mix->load();
-                q.hp        = V.b[0]->load(); q.lp     = V.b[1]->load();
-                q.bass      = V.b[2]->load(); q.air    = V.b[3]->load();
-                q.monoBelow = V.b[4]->load(); q.rotate = V.b[5]->load();
-                q.haas      = V.b[6]->load(); q.drive  = V.b[7]->load();
+                q.gain = M (V.f1); q.image = M (V.f2); q.steer = M (V.f3); q.mix = M (V.mix);
+                q.hp        = M (V.b[0]); q.lp     = M (V.b[1]);
+                q.bass      = M (V.b[2]); q.air    = M (V.b[3]);
+                q.monoBelow = M (V.b[4]); q.rotate = M (V.b[5]);
+                q.haas      = M (V.b[6]); q.drive  = M (V.b[7]);
                 auto P = [&V] (int k) { return V.pill[k] != nullptr && V.pill[k]->load() > 0.5f; };
                 q.flipL = P (0); q.flipR = P (1); q.swap = P (2);
                 q.sum   = P (3); q.dim   = P (4);
@@ -5596,20 +5596,20 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 tw::TerrainSplitterFx::Params q;
                 q.type  = juce::jlimit (0, tw::TerrainSplitterFx::kNumTypes  - 1, (int) V.type->load());
                 q.slope = juce::jlimit (0, tw::TerrainSplitterFx::kNumSlopes - 1, (int) V.slope->load());
-                q.split = V.split->load(); q.balance = V.balance->load();
-                q.spread = V.spread->load(); q.mix = V.mix->load();
-                for (int k = 0; k < 4; ++k) q.laneGain[k] = V.b[k]->load();
-                q.span = V.b[4]->load();
-                q.laneWidth[0] = V.b[5]->load();
+                q.split = M (V.split); q.balance = M (V.balance);
+                q.spread = M (V.spread); q.mix = M (V.mix);
+                for (int k = 0; k < 4; ++k) q.laneGain[k] = M (V.b[k]);
+                q.span = M (V.b[4]);
+                q.laneWidth[0] = M (V.b[5]);
                 const int nl = tw::TerrainSplitterFx::laneCountFor (q.type);
-                q.laneWidth[juce::jmax (0, nl - 1)] = V.b[6]->load();
-                q.lanePan  [juce::jmax (0, nl - 1)] = V.b[7]->load();
+                q.laneWidth[juce::jmax (0, nl - 1)] = M (V.b[6]);
+                q.lanePan  [juce::jmax (0, nl - 1)] = M (V.b[7]);
                 // fb447 — THE RELABEL LAW (TerrainSplitterFx.h, "THE SLOTS THAT GO UNBOUND"), bound for
                 // real instead of left dead: a 2-lane Type has no lane 3, so b3 is that Type's
                 // "<lane 1> Pan" (the only way to reach lanePan[0]); a 3-lane Type has no lane 4, so b4
                 // is "Mid Width". Max: "lane three and lane four wasn't doing much" — now they do.
-                if (nl == 2) q.lanePan  [0] = V.b[2]->load();
-                if (nl == 3) q.laneWidth[1] = V.b[3]->load();
+                if (nl == 2) q.lanePan  [0] = M (V.b[2]);
+                if (nl == 3) q.laneWidth[1] = M (V.b[3]);
                 for (int k = 0; k < 4; ++k)
                 {
                     q.laneMute[k] = V.mute[k] != nullptr && V.mute[k]->load() > 0.5f;
@@ -5631,11 +5631,11 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 q.type  = juce::jlimit (0, tw::TerrainBodeFx::kNumTypes  - 1, (int) V.type->load());
                 q.chr   = juce::jlimit (0, tw::TerrainBodeFx::kNumChars  - 1, (int) V.chr->load());
                 q.route = juce::jlimit (0, tw::TerrainBodeFx::kNumRoutes - 1, (int) V.axis->load());
-                q.shift = V.f1->load(); q.dir = V.f2->load(); q.fdbk = V.f3->load(); q.mix = V.mix->load();
-                q.fine    = V.b[0]->load(); q.spread  = V.b[1]->load();
-                q.time    = V.b[2]->load(); q.blur    = V.b[3]->load();
-                q.lowKeep = V.b[4]->load(); q.damping = V.b[5]->load();
-                q.touch   = V.b[6]->load(); q.drift   = V.b[7]->load();
+                q.shift = M (V.f1); q.dir = M (V.f2); q.fdbk = M (V.f3); q.mix = M (V.mix);
+                q.fine    = M (V.b[0]); q.spread  = M (V.b[1]);
+                q.time    = M (V.b[2]); q.blur    = M (V.b[3]);
+                q.lowKeep = M (V.b[4]); q.damping = M (V.b[5]);
+                q.touch   = M (V.b[6]); q.drift   = M (V.b[7]);
                 q.guard = V.pill1 != nullptr && V.pill1->load() > 0.5f;
                 q.sync  = V.sync  != nullptr && V.sync ->load() > 0.5f;
                 bodPool_[(size_t) i].setParams (q);
@@ -5908,15 +5908,15 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
     // Both machines now share one surface — Wow / Saturate / Hiss — because both are real
     // transports. The SCULPT/WEAVE/TILT params stay declared (a param can never be removed
     // without renumbering the host's list) but nothing reads them any more.
-    tp.p1 = V.p1->load(); tp.p2 = V.p2->load(); tp.p3 = V.p3->load();
-    tp.mix     = V.mix->load();
-    tp.repeats = V.repeats->load();
-    tp.drive   = V.drive->load();
-    tp.age     = V.age->load();
-    tp.flutter = V.flutter->load();
-    tp.bump    = V.bump->load();
-    tp.width   = V.width->load();
-    tp.duck    = V.duck->load();
+    tp.p1 = M (V.p1); tp.p2 = M (V.p2); tp.p3 = M (V.p3);
+    tp.mix     = M (V.mix);
+    tp.repeats = M (V.repeats);
+    tp.drive   = M (V.drive);
+    tp.age     = M (V.age);
+    tp.flutter = M (V.flutter);
+    tp.bump    = M (V.bump);
+    tp.width   = M (V.width);
+    tp.duck    = M (V.duck);
     tp.delayOn = V.delay != nullptr && V.delay->load() > 0.5f;
 
     // Time: synced to the host grid when the Sync pill is lit (4 bars → 1/256, the rack-wide
@@ -5927,7 +5927,7 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
     if (V.sync != nullptr && V.sync->load() > 0.5f && sd > 0)
         tp.timeSec = juce::jlimit (0.010f, 8.0f, (60.0f / bpmNow) * fxDivMult (sd));
     else
-        tp.timeSec = 0.010f * std::pow (800.0f, V.time->load());
+        tp.timeSec = 0.010f * std::pow (800.0f, M (V.time));
     eng->setParams (tp);
 
     float wl = inL, wr = inR;
@@ -7340,8 +7340,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             return raw;
         };
         // fb340 — Morph's mod resolve lives HERE (modP's scope closes before the FX push site):
+        // fb453 — SIG is the ONE rack dial that carries BOTH a legacy destination (DstMorph) and
+        //   the new rack destination. M() supplies the rack-modulated BASE and modP then applies
+        //   the legacy route on top, so the two compose instead of one erasing the other.
+        //   ⚠️ This is the only rack read site that runs BEFORE the per-block map is built
+        //   (buildFxMod is further down processBlock), so instance 1's SIG follows the rack
+        //   matrix one block late. Instances 2..6 read R.sig after the build and are current.
         dstMorphEff_ = modP (ParameterIDs::SYN_DST_SIG,
-                             rawParam (ParameterIDs::SYN_DST_SIG)->load(),
+                             M (rawParam (ParameterIDs::SYN_DST_SIG)),
                              (int) wc::ModDest::DstMorph);
         // dyn envs (blob ms, no APVTS param) — the editor's own norm curve (1..8000ms, skew .3)
         auto dynModMs = [&] (float ms, int d) -> float
@@ -9953,25 +9959,25 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 // fb352 — the ONE shared per-type routine (see applyRvbTypeParams).
                 RvbSnapshot rp;
-                rp.size      = rawParam (ParameterIDs::SYN_RVB_SIZE)->load();
-                rp.decay     = rawParam (ParameterIDs::SYN_RVB_DECAY)->load();
-                rp.tone      = rawParam (ParameterIDs::SYN_RVB_TONE)->load();
-                rp.predelay  = rawParam (ParameterIDs::SYN_RVB_PREDELAY)->load();
-                rp.diffuse   = rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load();
-                rp.moddepth  = rawParam (ParameterIDs::SYN_RVB_MODDEPTH)->load();
-                rp.modrate   = rawParam (ParameterIDs::SYN_RVB_MODRATE)->load();
-                rp.hidamp    = rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load();
-                rp.lowdecay  = rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load();
-                rp.lowcut    = rawParam (ParameterIDs::SYN_RVB_LOWCUT)->load();
-                rp.width     = rawParam (ParameterIDs::SYN_RVB_WIDTH)->load();
-                rp.mix       = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
+                rp.size      = M (rawParam (ParameterIDs::SYN_RVB_SIZE));
+                rp.decay     = M (rawParam (ParameterIDs::SYN_RVB_DECAY));
+                rp.tone      = M (rawParam (ParameterIDs::SYN_RVB_TONE));
+                rp.predelay  = M (rawParam (ParameterIDs::SYN_RVB_PREDELAY));
+                rp.diffuse   = M (rawParam (ParameterIDs::SYN_RVB_DIFFUSE));
+                rp.moddepth  = M (rawParam (ParameterIDs::SYN_RVB_MODDEPTH));
+                rp.modrate   = M (rawParam (ParameterIDs::SYN_RVB_MODRATE));
+                rp.hidamp    = M (rawParam (ParameterIDs::SYN_RVB_HIDAMP));
+                rp.lowdecay  = M (rawParam (ParameterIDs::SYN_RVB_LOWDECAY));
+                rp.lowcut    = M (rawParam (ParameterIDs::SYN_RVB_LOWCUT));
+                rp.width     = M (rawParam (ParameterIDs::SYN_RVB_WIDTH));
+                rp.mix       = M (rawParam (ParameterIDs::SYN_RVB_MIX));
                 rp.character = (int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER);
                 rp.modmode   = (int) *rawParam (ParameterIDs::SYN_RVB_MODMODE);
                 rp.mod       = rawParam (ParameterIDs::SYN_RVB_MOD)->load()    > 0.5f;
                 rp.freeze    = rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f;
                 rp.duck      = rawParam (ParameterIDs::SYN_RVB_DUCK)->load()   > 0.5f;
                 applyRvbTypeParams (activeRvbType_, rp, rvbEngineSet1());
-                const float mixv = rawParam (ParameterIDs::SYN_RVB_MIX)->load();
+                const float mixv = M (rawParam (ParameterIDs::SYN_RVB_MIX));
                 hallRvbWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 hallRvbDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
                 // fb287 — DUCK is the Room/Spring 2nd pill (SYN_RVB_DUCK). Only those two types ; other types'
@@ -9985,11 +9991,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // Max saw. Bake-affecting params only; bakeIfDirtyIdle hard-bakes off the tight loop (idle ⇒ no click).
             else if (activeRvbType_ == 8 && ! rvbSwapping_)
             {
-                convolutionReverb.setSize     (rawParam (ParameterIDs::SYN_RVB_SIZE)->load());
-                convolutionReverb.setDecay    (rawParam (ParameterIDs::SYN_RVB_DECAY)->load());
-                convolutionReverb.setDensity  (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)->load());
-                convolutionReverb.setAttack   (rawParam (ParameterIDs::SYN_RVB_HIDAMP)->load());
-                convolutionReverb.setDistance (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)->load());
+                convolutionReverb.setSize     (M (rawParam (ParameterIDs::SYN_RVB_SIZE)));
+                convolutionReverb.setDecay    (M (rawParam (ParameterIDs::SYN_RVB_DECAY)));
+                convolutionReverb.setDensity  (M (rawParam (ParameterIDs::SYN_RVB_DIFFUSE)));
+                convolutionReverb.setAttack   (M (rawParam (ParameterIDs::SYN_RVB_HIDAMP)));
+                convolutionReverb.setDistance (M (rawParam (ParameterIDs::SYN_RVB_LOWDECAY)));
                 convolutionReverb.setCharacter((int) *rawParam (ParameterIDs::SYN_RVB_CHARACTER));
                 convolutionReverb.setShape    ((int) *rawParam (ParameterIDs::SYN_RVB_MODMODE));
                 convolutionReverb.setReverse  (rawParam (ParameterIDs::SYN_RVB_FREEZE)->load() > 0.5f);
@@ -10095,7 +10101,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const float qms = 60000.0f / bpmNow;            // quarter-note ms
                 const float timeMs = (sync && syncDiv > 0)
                     ? qms * divMult (syncDiv)
-                    : std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME)->load());   // fb304 — 1 ms → 8000 ms (exp)
+                    : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME)));   // fb304 — 1 ms → 8000 ms (exp)
                 delayEngine.setType      (activeDlyType_);
                 delayEngine.setCharacter ((int) *rawParam (ParameterIDs::SYN_DLY_CHARACTER));
                 delayEngine.setTimeMs    (timeMs);
@@ -10108,23 +10114,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     const int   syncDivR = (int) *rawParam (ParameterIDs::SYN_DLY_SYNCDIV_R);
                     const float timeMsR  = (sync && syncDivR > 0)
                         ? qms * divMult (syncDivR)
-                        : std::pow (8000.0f, rawParam (ParameterIDs::SYN_DLY_TIME_R)->load());
+                        : std::pow (8000.0f, M (rawParam (ParameterIDs::SYN_DLY_TIME_R)));
                     delayEngine.setTimeMsR (timeMsR);
                 }
-                delayEngine.setFeedback  (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)->load() * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
-                delayEngine.setTone      (rawParam (ParameterIDs::SYN_DLY_TONE)->load());
-                delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, rawParam (ParameterIDs::SYN_DLY_LOWCUT)->load()));  // 20..1000 Hz
-                delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, rawParam (ParameterIDs::SYN_DLY_HICUT)->load()));   // 1.2k..18k Hz
-                delayEngine.setSpread    (rawParam (ParameterIDs::SYN_DLY_SPREAD)->load());
-                delayEngine.setWidth     (rawParam (ParameterIDs::SYN_DLY_WIDTH)->load() * 1.6f);              // 0..1.6 M/S
-                delayEngine.setModRate   (0.05f + rawParam (ParameterIDs::SYN_DLY_MODRATE)->load() * 7.95f);   // 0.05..8 Hz
-                delayEngine.setModDepth  (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)->load());
+                delayEngine.setFeedback  (M (rawParam (ParameterIDs::SYN_DLY_FEEDBACK)) * 1.2f);           // fb303 — amplified (0..120%): 100% ≈ "someone playing it back over you" (softClip-bounded in the loop, no runaway)
+                delayEngine.setTone      (M (rawParam (ParameterIDs::SYN_DLY_TONE)));
+                delayEngine.setLowCutHz  (20.0f   * std::pow (50.0f, M (rawParam (ParameterIDs::SYN_DLY_LOWCUT))));  // 20..1000 Hz
+                delayEngine.setHiCutHz   (1200.0f * std::pow (15.0f, M (rawParam (ParameterIDs::SYN_DLY_HICUT))));   // 1.2k..18k Hz
+                delayEngine.setSpread    (M (rawParam (ParameterIDs::SYN_DLY_SPREAD)));
+                delayEngine.setWidth     (M (rawParam (ParameterIDs::SYN_DLY_WIDTH)) * 1.6f);              // 0..1.6 M/S
+                delayEngine.setModRate   (0.05f + M (rawParam (ParameterIDs::SYN_DLY_MODRATE)) * 7.95f);   // 0.05..8 Hz
+                delayEngine.setModDepth  (M (rawParam (ParameterIDs::SYN_DLY_MODDEPTH)));
                 delayEngine.setWow       (rawParam (ParameterIDs::SYN_DLY_WOW)->load());    // fb303 — default 0 now (off); kept for Tape. Full removal + L/R redesign next.
                 delayEngine.setDucking   (rawParam (ParameterIDs::SYN_DLY_DUCK)->load());   // fb303 — default 0 now (Max never liked it)
                 delayEngine.setPing      (rawParam (ParameterIDs::SYN_DLY_PING)->load() > 0.5f);
                 delayEngine.setHQ        (rawParam (ParameterIDs::SYN_DLY_HQ)->load()   > 0.5f);
                 delayEngine.updateCoefficients();
-                const float mixv = rawParam (ParameterIDs::SYN_DLY_MIX)->load();
+                const float mixv = M (rawParam (ParameterIDs::SYN_DLY_MIX));
                 dlyWetT_ = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
                 dlyDryT_ = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             }
@@ -10143,9 +10149,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 distortionEngine.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last-played note (the glide tracker; mono law on a post-mix bus)
                 // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
                 // linear multiplier, that is the dead-first-third bug this device exists to avoid.
-                distortionEngine.setDrive     (rawParam (ParameterIDs::SYN_DST_DRIVE)->load());
+                distortionEngine.setDrive     (M (rawParam (ParameterIDs::SYN_DST_DRIVE)));
                 distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7, resolved in modP's scope): env destroys the attack, the tail stays clean
-                distortionEngine.setTone      (rawParam (ParameterIDs::SYN_DST_TONE)->load());
+                distortionEngine.setTone      (M (rawParam (ParameterIDs::SYN_DST_TONE)));
                 // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
                 // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
                 static const char* const kDstP[8] = {
@@ -10153,10 +10159,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     ParameterIDs::SYN_DST_P4, ParameterIDs::SYN_DST_P5, ParameterIDs::SYN_DST_P6,
                     ParameterIDs::SYN_DST_P7, ParameterIDs::SYN_DST_P8 };
                 for (int pIdx = 0; pIdx < 8; ++pIdx)
-                    distortionEngine.setP (pIdx, rawParam (kDstP[pIdx])->load());
+                    distortionEngine.setP (pIdx, M (rawParam (kDstP[pIdx])));
                 // fb318 — the ENGINE owns Mix now (it is the only place the wet and the dry can be
                 // latency-aligned across the 2× resampler; see DistortionEngine::setMix).
-                distortionEngine.setMix (rawParam (ParameterIDs::SYN_DST_MIX)->load());
+                distortionEngine.setMix (M (rawParam (ParameterIDs::SYN_DST_MIX)));
             }
         }
 
@@ -10230,11 +10236,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 rvbWantType_[(size_t) e].store (8, std::memory_order_relaxed);   // ask for the engine
                 if (auto* cv = rvbEngineSetPool (e).conv)
                 {
-                    cv->setSize      (V.size->load());
-                    cv->setDecay     (V.decay->load());
-                    cv->setDensity   (V.diffuse->load());
-                    cv->setAttack    (V.hidamp->load());
-                    cv->setDistance  (V.lowdecay->load());
+                    cv->setSize      (M (V.size));
+                    cv->setDecay     (M (V.decay));
+                    cv->setDensity   (M (V.diffuse));
+                    cv->setAttack    (M (V.hidamp));
+                    cv->setDistance  (M (V.lowdecay));
                     cv->setCharacter ((int) V.chr->load());
                     cv->setShape     ((int) V.modmode->load());
                     cv->setReverse   (V.freeze->load() > 0.5f);
@@ -10276,12 +10282,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 else swapping = false;
 
                 RvbSnapshot rp;
-                rp.size      = V.size->load();      rp.decay    = V.decay->load();
-                rp.tone      = V.tone->load();      rp.predelay = V.predelay->load();
-                rp.diffuse   = V.diffuse->load();   rp.moddepth = V.moddepth->load();
-                rp.modrate   = V.modrate->load();   rp.hidamp   = V.hidamp->load();
-                rp.lowdecay  = V.lowdecay->load();  rp.lowcut   = V.lowcut->load();
-                rp.width     = V.width->load();     rp.mix      = V.mix->load();
+                rp.size      = M (V.size);      rp.decay    = M (V.decay);
+                rp.tone      = M (V.tone);      rp.predelay = M (V.predelay);
+                rp.diffuse   = M (V.diffuse);   rp.moddepth = M (V.moddepth);
+                rp.modrate   = M (V.modrate);   rp.hidamp   = M (V.hidamp);
+                rp.lowdecay  = M (V.lowdecay);  rp.lowcut   = M (V.lowcut);
+                rp.width     = M (V.width);     rp.mix      = M (V.mix);
                 rp.character = (int) V.chr->load(); rp.modmode  = (int) V.modmode->load();
                 rp.mod       = V.mod->load()    > 0.5f;
                 rp.freeze    = V.freeze->load() > 0.5f;
@@ -10367,7 +10373,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
                 const float qms = 60000.0f / bpmNow;
                 const float timeMs = (sync && sdiv > 0) ? qms * divMult (sdiv)
-                                                        : std::pow (8000.0f, R.time->load());
+                                                        : std::pow (8000.0f, M (R.time));
                 eng.setCharacter ((int) R.chr->load());
                 eng.setTimeMs    (timeMs);
                 const bool lk = R.link->load() > 0.5f;
@@ -10376,16 +10382,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     const int sdR = (int) R.syncdivR->load();
                     eng.setTimeMsR ((sync && sdR > 0) ? qms * divMult (sdR)
-                                                      : std::pow (8000.0f, R.timeR->load()));
+                                                      : std::pow (8000.0f, M (R.timeR)));
                 }
-                eng.setFeedback (R.fb->load() * 1.2f);
-                eng.setTone     (R.tone->load());
-                eng.setLowCutHz (20.0f   * std::pow (50.0f, R.lowcut->load()));
-                eng.setHiCutHz  (1200.0f * std::pow (15.0f, R.hicut->load()));
-                eng.setSpread   (R.spread->load());
-                eng.setWidth    (R.width->load() * 1.6f);
-                eng.setModRate  (0.05f + R.modrate->load() * 7.95f);
-                eng.setModDepth (R.moddepth->load());
+                eng.setFeedback (M (R.fb) * 1.2f);
+                eng.setTone     (M (R.tone));
+                eng.setLowCutHz (20.0f   * std::pow (50.0f, M (R.lowcut)));
+                eng.setHiCutHz  (1200.0f * std::pow (15.0f, M (R.hicut)));
+                eng.setSpread   (M (R.spread));
+                eng.setWidth    (M (R.width) * 1.6f);
+                eng.setModRate  (0.05f + M (R.modrate) * 7.95f);
+                eng.setModDepth (M (R.moddepth));
                 eng.setWow      (R.wow->load());
                 eng.setDucking  (R.duck->load());
                 eng.setPing     (R.ping->load() > 0.5f);
@@ -10401,7 +10407,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             const bool on = powered && ! poolDlySwap_[(size_t) e];   // fb350 — a swapping type fades out first
             env += ((on ? 1.0f : 0.0f) - env) * hallSm_;         // click-free power fade
-            const float mixv = R.mix->load();
+            const float mixv = M (R.mix);
             const float wet  = std::sin (mixv * 0.5f * juce::MathConstants<float>::pi);
             const float dry  = std::cos (mixv * 0.5f * juce::MathConstants<float>::pi);
             // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
@@ -10432,11 +10438,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 eng.setAuto      (R.autoP->load() > 0.5f);
                 eng.setPill2     (R.pill2->load() > 0.5f);
                 eng.setKeyHz     (440.0f * std::pow (2.0f, (synthGlideFrom_ - 69.0f) / 12.0f));   // fb336 — FOLD Track rides the last note
-                eng.setDrive     (R.drive->load());
-                eng.setKnee      (R.sig->load());     // "Knee" is the SIG param (the signature knob)
-                eng.setTone      (R.tone->load());
-                eng.setMix       (R.mix->load());
-                for (int k = 0; k < 8; ++k) eng.setP (k, R.p[k]->load());
+                eng.setDrive     (M (R.drive));
+                eng.setKnee      (M (R.sig));     // "Knee" is the SIG param (the signature knob)
+                eng.setTone      (M (R.tone));
+                eng.setMix       (M (R.mix));
+                for (int k = 0; k < 8; ++k) eng.setP (k, M (R.p[k]));
             }
             env += ((on ? 1.0f : 0.0f) - env) * hallSm_;
             // fb351 — input handed in by the chain (its own oscillator tap + anything feeding it).
