@@ -7129,6 +7129,29 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //  scope-local; hoisting keeps Opus's 5b/5c code verbatim and in-scope.]
     wc::ModConfig synModCfg;
     float         synModBpm = 0.0f;
+    // fb453 T5b — HOISTED FOR THE SAME REASON synModCfg IS, one comment up: a consumer BELOW this
+    // scope needs them. The three mod sums and modP() were scope-local, so the one value that has
+    // to be resolved AFTER wc::buildFxMod() — the Distortion's Knee, see the note at its resolve
+    // site further down — could not reach them. NOTHING about the values changes: the same pass
+    // fills them in the same order, and modP captures them BY REFERENCE, so every call site inside
+    // the scope below reads exactly what it read before. Only the DECLARATIONS moved.
+    float modSums[(int) wc::ModDest::NumDests] = { 0 };
+    float envOwnW[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth| of env claims per Linear01 dest
+    float envOwnV[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth|·env: the owned target (0..1 of span)
+    // fb193 — S4b env-param dests: the same ownership law applied in the param's own
+    // normalized space (convertTo0to1 honors range+skew). Early-out when unrouted.
+    auto modP = [&] (const char* pid, float raw, int d) -> float
+    {
+        const float w0 = envOwnW[d];
+        if (w0 <= 0.0f && modSums[d] == 0.0f) return raw;
+        if (auto* p = apvts.getParameter (juce::String (pid)))
+        {
+            const float w = w0 > 1.0f ? 1.0f : w0;
+            const float n = p->convertTo0to1 (raw);
+            return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
+        }
+        return raw;
+    };
     {
         // ═══ fb75 — UNIVERSAL LFO MOD (block-rate) ═══════════════════════════════════
         // ONE O(routes) pass turns the mod matrix into per-destination offsets for every
@@ -7228,9 +7251,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int k = 0; k < kMaxDynEnvs; ++k) if (gm & (1u << (5 + k))) for (int n2 = 0; n2 < nAdv; ++n2) monoDynEnv_[k].tick();
             }
         }
-        float modSums[(int) wc::ModDest::NumDests] = { 0 };
-        float envOwnW[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth| of env claims per Linear01 dest
-        float envOwnV[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth|·env: the owned target (0..1 of span)
         {
             static const char* const kLfoDepthIds[wc::NUM_LFOS] = {
                 ParameterIDs::LFO1_DEPTH, ParameterIDs::LFO2_DEPTH, ParameterIDs::LFO3_DEPTH,
@@ -7325,30 +7345,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // Wrap helper: base param + this block's mod, clamped ONCE to the param's range.
         auto mdP = [&] (const char* pid, wc::ModDest d, float lo, float hi)
         { return ownM (*rawParam (pid), (int) d, lo, hi); };
-        // fb193 — S4b env-param dests: the same ownership law applied in the param's own
-        // normalized space (convertTo0to1 honors range+skew). Early-out when unrouted.
-        auto modP = [&] (const char* pid, float raw, int d) -> float
-        {
-            const float w0 = envOwnW[d];
-            if (w0 <= 0.0f && modSums[d] == 0.0f) return raw;
-            if (auto* p = apvts.getParameter (juce::String (pid)))
-            {
-                const float w = w0 > 1.0f ? 1.0f : w0;
-                const float n = p->convertTo0to1 (raw);
-                return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
-            }
-            return raw;
-        };
-        // fb340 — Morph's mod resolve lives HERE (modP's scope closes before the FX push site):
-        // fb453 — SIG is the ONE rack dial that carries BOTH a legacy destination (DstMorph) and
-        //   the new rack destination. M() supplies the rack-modulated BASE and modP then applies
-        //   the legacy route on top, so the two compose instead of one erasing the other.
-        //   ⚠️ This is the only rack read site that runs BEFORE the per-block map is built
-        //   (buildFxMod is further down processBlock), so instance 1's SIG follows the rack
-        //   matrix one block late. Instances 2..6 read R.sig after the build and are current.
-        dstMorphEff_ = modP (ParameterIDs::SYN_DST_SIG,
-                             M (rawParam (ParameterIDs::SYN_DST_SIG)),
-                             (int) wc::ModDest::DstMorph);
         // dyn envs (blob ms, no APVTS param) — the editor's own norm curve (1..8000ms, skew .3)
         auto dynModMs = [&] (float ms, int d) -> float
         {
@@ -8519,6 +8515,31 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // — `dw * (monoEnvLevelOf (s) + 1.0f)`, byte-for-byte flowMod()'s term. NO 0.5f.
         // CONSEQUENCE: an OWNING envelope drives the knob from ZERO, not from its base.
         [this] (int src)   { return monoEnvLevelOf (src); });
+
+    // ── fb453 T5b — THE DISTORTION'S KNEE, COMPOSED AND RESOLVED HERE. SIG is the ONE rack dial
+    //    that carries BOTH a legacy destination (DstMorph) and a rack destination, so its value is
+    //    a COMPOSITION, not a choice: M() supplies the rack-modulated BASE and modP() applies the
+    //    legacy route on top of that base. Neither erases the other, and the expression is the
+    //    same one that has been here since fb340.
+    //
+    //    🚨 PLACEMENT IS LOAD-BEARING, and it is why this statement is DOWN here and not in
+    //    modP's own scope where it used to live. M() reads fxMod_, and fxMod_ is built by the
+    //    call directly above. Resolved above that call, the M() half read the PREVIOUS block's
+    //    map: instance 1's Knee followed the rack matrix ONE BLOCK LATE while instances 2..6 —
+    //    which read `M (R.sig)` at the pool push, below — were current. Measured on the shipped
+    //    AU (fb453 T5): a STANDING -77 dBr non-null against the equivalent knob move, and a
+    //    whole-buffer lag (10.7 ms at 512/48k, more at bigger buffers) under a moving LFO or
+    //    envelope. It was the only one of 184 rack cells that was not equivalent.
+    //
+    //    The legacy half did not move with it and did not need to: modSums / envOwnW / envOwnV
+    //    are complete long before this point (the mod-matrix pass runs inside the SYN_* scope
+    //    above), and modP() was hoisted, not copied — there is still exactly ONE implementation
+    //    of the convert-space ownership math (fb393: the second copy is how two paths drift).
+    //    dstMorphEff_ has exactly one consumer, distortionEngine.setKnee() further down, which
+    //    is why moving the write past the build changes the value's TIMING and nothing else.
+    dstMorphEff_ = modP (ParameterIDs::SYN_DST_SIG,
+                         M (rawParam (ParameterIDs::SYN_DST_SIG)),
+                         (int) wc::ModDest::DstMorph);
 
     // Synth renders into its own scratch (broadcast midiMessages unfiltered —
     // the trigger-mode dispatcher above gates the LAYERS only, the synth
@@ -10150,7 +10171,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // Drive is dB-linear inside the engine (48·t^0.8) — do NOT pre-scale it here into a
                 // linear multiplier, that is the dead-first-third bug this device exists to avoid.
                 distortionEngine.setDrive     (M (rawParam (ParameterIDs::SYN_DST_DRIVE)));
-                distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7, resolved in modP's scope): env destroys the attack, the tail stays clean
+                distortionEngine.setKnee      (dstMorphEff_);   // fb340 — Morph/Knee is a first-class dest (§6.7); fb453 T5b resolves it just after wc::buildFxMod() so the rack half is THIS block's: env destroys the attack, the tail stays clean
                 distortionEngine.setTone      (M (rawParam (ParameterIDs::SYN_DST_TONE)));
                 // fb319 — the back-8 goes in RAW; the engine interprets each slot per FAMILY. Slots 0
                 // and 1 are Low Cut / Hi Cut in every family; the rest change meaning per family.
