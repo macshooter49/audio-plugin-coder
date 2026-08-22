@@ -229,10 +229,10 @@ int main()
         { "Multiband", "Multiband", { "Multiband Amount", "Multiband Raise","Multiband Press", nullptr } },
         // fb444 — Bode. Shift is the hero; Fdbk and Direction are the two that most change the
         // output, so if this row measures Delta 0.00 the device is in the chain and dead.
-        { "Bode",      "Bode",      { "Bode Shift",       "Bode Fdbk",      "Bode Direction",  "Bode Blur" } },
+        { "Bode",      "Bode",      { "Bode Shift",       "Bode Fdbk",      "Bode Direction",  "Bode Diffusion" } },   // fb447 — Blur → Diffusion
         // fb444 — Utility. Gain is the hero; Image and Strain are the two that most change the
         // output. Note Gain's UNITY is 0.667, so pushing it to 1.0 is a real +30 dB change.
-        { "Utility",   "Utility",   { "Utility Gain",     "Utility Image",  "Utility Strain",  "Utility Twist" } },
+        { "Utility",   "Utility",   { "Utility Gain",     "Utility Width",  "Utility Drive",   "Utility Rotate" } },   // fb447 — Image/Strain/Twist → Width/Drive/Rotate
         // fb444 — Splitter. With no lane devices it still shapes: per-lane gains and Balance.
         { "Splitter",  "Splitter",  { "Splitter Balance", "Splitter Lane 1 Gain", "Splitter Spread", "Splitter Split" } },
     };
@@ -341,6 +341,34 @@ int main()
             char det[200]; snprintf (det, sizeof det, "Bode in band 2, unrouted, Shift 92%%: Δspectrum=%.2f dB/band  Δlevel=%+.2f dB", dS, dL);
             chk (dS > 0.35 || std::fabs (dL) > 0.35, "a POOLED device (Bode) in a Splitter band PROCESSES the band with NO routes lit", det);
             b2.close();
+        }
+        // ── fb447 — THE RELABEL LAW, BOUND FOR REAL (TerrainSplitterFx.h "THE SLOTS THAT GO UNBOUND"): in a
+        //    2-lane Type b3 ("Lane 3 Gain" to the DAW, "Low Pan" on the card) is lane 1's PAN. Low/High, b3 hard
+        //    left: the RIGHT channel's low band must drop and the left's must not — and in Low/Mid/High the
+        //    same knob is Lane 3 Gain again, so the right low band must NOT move (the binding is per Type).
+        AU pn;
+        if (pn.open())
+        {
+            const char* SRC[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+            auto lowMean = [] (const std::vector<double>& sp) { double a = 0; for (int b = 0; b < 15; ++b) a += sp[(size_t) b]; return a / 15.0; };   // bands 0..14 = 20 Hz .. ~500 Hz (the 2-lane default split)
+            pn.set ("Splitter In Chain", 1.0f); pn.set ("Splitter Power", 1.0f); pn.set ("Splitter Chain Rank", 0.30f);
+            for (int k = 0; k < 6; ++k) pn.set (std::string ("Splitter ") + SRC[k], 1.0f);
+            pn.set ("Splitter Type", 0.0f);                                   // Low / High
+            const Render b0 = pn.render();
+            pn.set ("Splitter Lane 3 Gain", 0.0f);                            // = Low PAN, hard left, in this Type
+            const Render p1 = pn.render();
+            const double dR = lowMean (spec (p1.R)) - lowMean (spec (b0.R)), dLft = lowMean (spec (p1.L)) - lowMean (spec (b0.L));
+            char det[240]; snprintf (det, sizeof det, "Low/High, b3 hard left: right low band %+.1f dB, left low band %+.1f dB", dR, dLft);
+            chk (dR < -6.0 && dLft > -2.5 && dLft < 5.0, "Splitter Low/High: b3 is the LOW band's PAN (right drops, left holds) — the relabel law is bound, not a label", det);
+            pn.set ("Splitter Lane 3 Gain", 0.5f);
+            pn.set ("Splitter Type", 1.0f / 7.0f);                            // Low / Mid / High: b3 is Lane 3 Gain again
+            const Render b1 = pn.render();
+            pn.set ("Splitter Lane 3 Gain", 0.0f);
+            const Render p2 = pn.render();
+            const double dR3 = lowMean (spec (p2.R)) - lowMean (spec (b1.R));
+            snprintf (det, sizeof det, "Low/Mid/High, b3 = 0: right low band %+.1f dB (a pan here would be the wrong binding)", dR3);
+            chk (std::fabs (dR3) < 1.5, "Splitter Low/Mid/High: the same knob is Lane 3 Gain again — the low band's right channel does NOT move", det);
+            pn.close();
         }
     }
 

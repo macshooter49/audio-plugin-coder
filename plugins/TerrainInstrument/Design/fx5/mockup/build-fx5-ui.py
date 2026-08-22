@@ -50,6 +50,8 @@ fmt     = between('/* ═══ FX4-FMT-BEGIN (fb437)', '/* ═══ FX4-FMT-EN
 fmt     = fmt[fmt.index('*/') + 2:]                      # drop the rest of the banner comment
 TB = '/* ═══ FX4-TICK-BEGIN (fb437)'
 tick    = TB + between(TB, '/* ═══ FX4-TICK-END ═══ */', 'tick')
+relabel = between('/* FX5-RELABEL-BEGIN */', '/* FX5-RELABEL-END */', 'relabel')   # fb447 — FX4_SPL_BACK + fx4RelabelFx5, one copy
+assert 'FX4_SPL_BACK' in relabel and 'function fx4RelabelFx5' in relabel, 'the fb447 relabel block did not lift'
 fmt_helpers = '\n'.join(re.findall(r'^\s*function fx4(?:Hz|Db|DbS|Ms|SplGainLbl)\(.*$', src, re.M))
 assert fmt_helpers.count('function') == 5, 'expected the four fx4 formatters + fx4SplGainLbl'
 assert 'bod:function' in cores and 'spl:function' in cores and 'utl:function' in cores, 'the fb445 cores did not lift'
@@ -71,26 +73,26 @@ DEVICES = [
       d2k='Route', d2=['Normal','Cross','Mono Sum','Wide','Shift First','Shift Last'], d2p='ROUTE',
       knobs=[['Shift',50,'SHIFT'],['Direction',100,'DIR'],['Fdbk',0,'FDBK'],['Mix',100,'MIX']],
       keys=['shift','dir','fdbk','mix'],
-      back=[['Fine',50,'FINE'],['Spread',100,'SPREAD'],['Time',45,'TIME'],['Blur',0,'BLUR'],
-            ['Low Keep',0,'LOWKEEP'],['Damping',100,'DAMPING'],['Touch',50,'TOUCH'],['Drift',0,'DRIFT']],
+      back=[['Fine',50,'FINE'],['Stereo',100,'SPREAD'],['Time',45,'TIME'],['Diffusion',0,'BLUR'],
+            ['Low Keep',0,'LOWKEEP'],['Damping',100,'DAMPING'],['Env Shift',50,'TOUCH'],['Drift',0,'DRIFT']],
       pills=[['Sync',0],['Guard',1]], pillKeys=['sync','guard']),
  dict(dev='Utility', core='utl', proc='terrain-utility', pfx='SYN_UTL_',
       types=['Strip','Turn','Outer','Canopy','Cellar'], tpN=8,
       chars=['Cushion','Brick','Coil','Creep','Tuck','Rail','Ripple','Fuse'],
       d2k='Wiring', d2=['Through','Difference','L To Both','R To Both','L Only','R Only'], d2p='WIRING',
-      knobs=[['Gain',66.667,'GAIN'],['Image',50,'IMAGE'],['Steer',50,'STEER'],['Mix',100,'MIX']],
+      knobs=[['Gain',66.667,'GAIN'],['Width',50,'IMAGE'],['Pan',50,'STEER'],['Mix',100,'MIX']],
       keys=['gain','image','steer','mix'],
-      back=[['Strain',0,'B1'],['Clamp',50,'B2'],['Mono Below',0,'B3'],['Slope',0,'B4'],
-            ['Twist',50,'B5'],['Rumble',0,'B6'],['Bleed',0,'B7'],['Hinge',50,'B8']],
-      pills=[['Flip L',0],['Flip R',0],['Trade',0],['DC',0],['Sum',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
+      back=[['Drive',0,'B1'],['Shape',50,'B2'],['Mono Below',0,'B3'],['Slope',0,'B4'],
+            ['Rotate',50,'B5'],['Low Cut',0,'B6'],['Mono Above',0,'B7'],['Crossover',50,'B8']],
+      pills=[['Flip L',0],['Flip R',0],['Swap',0],['DC',0],['Mono',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
  dict(dev='Splitter', core='spl', proc='terrain-splitter', pfx='SYN_SPL_',
       types=['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'], tpN=8, typeIdx=1,
       d1k='Slope', d1p='SLOPE', chars=['6 dB','12 dB','24 dB','48 dB'], charIdx=2,
-      d2k='Latch', d2=['Latching','Exclusive','Momentary'], d2p='LATCH',
+      d2k='Solo Mode', d2=['Latching','Exclusive','Momentary'], d2p='LATCH',
       knobs=[['Split',50,'SPLIT'],['Balance',50,'BALANCE'],['Spread',50,'SPREAD'],['Mix',100,'MIX']],
       keys=['split','balance','spread','mix'],
-      back=[['Lane 1 Gain',50,'B1'],['Lane 2 Gain',50,'B2'],['Lane 3 Gain',50,'B3'],['Lane 4 Gain',50,'B4'],
-            ['Span',40,'B5'],['Lane 1 Width',50,'B6'],['Top Lane Width',50,'B7'],['Top Lane Pan',50,'B8']],
+      back=[['Low Gain',50,'B1'],['Mid Gain',50,'B2'],['High Gain',50,'B3'],['Mid Width',50,'B4'],
+            ['Spacing',40,'B5'],['Low Width',50,'B6'],['High Width',50,'B7'],['High Pan',50,'B8']],
       pills=[['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0]],
       pillKeys=['mute1','solo1','flip1','mute2','solo2','flip2','mute3','solo3','flip3','mute4','solo4','flip4']),
 ]
@@ -133,14 +135,15 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 .bp-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px 0;position:relative}
 .bp-k{display:flex;flex-direction:column;align-items:center;gap:4px}
 .bp-k .fxr-lab{font:500 9px -apple-system,system-ui;color:#9a92b8}
+.bp-k.fxr-bk-dead{opacity:.32;pointer-events:none}
 .bp-sep{position:absolute;top:2%;bottom:2%;width:1px;background:linear-gradient(180deg,transparent,#3a3356 18%,#3a3356 82%,transparent)}
 </style></head><body>
 <h1>The last three — Bode · Utility · Splitter</h1>
 <p class="sub">The three cards, their cores LIFTED from the plugin (one copy of the code), audible on worklet mirrors of the certified engines.
 Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
-<b>Bode</b>: drag the <b>dot on the rail</b> = Shift (white ghost = where the partials were, purple = where they went), wheel on it = Fdbk, double-click = zero, right-click = Up · Ring · Down.
+<b>Bode</b>: drag the <b>dot on the rail</b> = Shift — the white ghost is where the partials were, the purple is where they went, and the streams between them run in the shift's direction (feedback keeps them going); wheel on the dot = Fdbk, double-click = zero, right-click = Up · Ring · Down.
 <b>Splitter</b>: drag a <b>crossover node</b>, wheel over a <b>band</b> = that lane's gain, right-click a band = Mute · Solo · Flip · Add a device here, the <b>+</b> drops a device into that band.
-<b>Utility</b>: the buttons are the card. Knobs drag up/down, double-click resets.</p>
+<b>Utility</b>: the card draws the WIRING — two rails, L and R, through Flip → Swap → Mono → Width/Pan, lit by what leaves on each; the lamps under it are the switches. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
   <button id="play">Play</button>
@@ -191,7 +194,8 @@ function detent(core,pid,v){ var n=fxStep(core,pid); if(n>1) v=Math.round(v/100*
 /* the per-Type relabels — the engines' own tables, same as the plugin */
 var FX4_WID_HERO=['Detune','Depth','Cents','Sway','Wash','Cleave'];
 var FX4_EQZ_TRAIT=['Pinch','Slope','Taper','Dip','Silk','Pivot','Sting'];
-function fx4ApplyType(d,typeName){ var ti=d.types.indexOf(typeName); if(ti<0) return; d.type=typeName; d.typeIdx=ti;
+@@RELABEL@@
+function fx4ApplyType(d,typeName){ var ti=d.types.indexOf(typeName); if(ti<0) return; d.type=typeName; d.typeIdx=ti; fx4RelabelFx5(d,ti);
   if(d.core==='wid') d.knobs[0].l=FX4_WID_HERO[ti]||'Amount'; if(d.core==='eqz') d.back.knobs[7][0]=FX4_EQZ_TRAIT[ti]||'Trait'; }
 DEVS.forEach(function(d){ fx4ApplyType(d,d.type); });
 
@@ -226,7 +230,7 @@ function devHTML(d,idx){
 /* the OFFICIAL back panel (fb275): 2 dropdowns + 8 knobs 4x2 + 3 column separators. Back dials carry
    data-bk = LABEL (the rack's convention) so __fxRedrawKnobs finds them. */
 function backHTML(d,idx){
-  var ks=d.back.knobs.map(function(b,i){return '<div class="bp-k fxr-bk-knob"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],fxFmt(d.core,b[2],b[1],d),null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
+  var ks=d.back.knobs.map(function(b,i){ var lb=fxFmt(d.core,b[2],b[1],d); return '<div class="bp-k fxr-bk-knob'+(lb==='—'?' fxr-bk-dead':'')+'"><div class="fxr-dial" data-bk="'+b[0]+'" data-p="'+b[2]+'">'+knobSVG(b[1],lb,null)+'</div><span class="fxr-lab">'+b[0]+'</span></div>';}).join('');
   var seps=''; for(var s=1;s<4;s++) seps+='<div class="bp-sep" style="left:'+(s*25)+'%"></div>';
   return '<div class="bp'+(d.__bpOpen?' on':'')+'" data-bp="'+idx+'"><div class="bp-row">'
     +'<div class="bp-sel"><label>'+d.back.d1.k+'</label><select data-csel="'+idx+'">'+d.back.d1.opts.map(function(c){return '<option'+(c===d.back.d1.v?' selected':'')+'>'+c+'</option>';}).join('')+'</select></div>'
@@ -247,7 +251,7 @@ window.__fxRedrawKnobs=function(d){ try{
   var bp=document.querySelector('.bp[data-bp="'+idx+'"]');
   if(bp){ bp.querySelectorAll('.fxr-dial[data-bk]').forEach(function(el){ var lbl=el.getAttribute('data-bk'), row=null;
     for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; break; } if(!row) return;
-    el.innerHTML=knobSVG(row[1],fxFmt(d.core,row[2],row[1],d),null); var la2=el.parentNode.querySelector('.fxr-lab'); if(la2&&la2.textContent!==row[0]) la2.textContent=row[0]; }); }
+    var lb3=fxFmt(d.core,row[2],row[1],d); el.innerHTML=knobSVG(row[1],lb3,null); var la2=el.parentNode.querySelector('.fxr-lab'); if(la2&&la2.textContent!==row[0]) la2.textContent=row[0]; if(el.parentNode.classList) el.parentNode.classList.toggle('fxr-bk-dead',lb3==='—'); }); }
 }catch(e){} };
 /* __setSynParam — the plugin's ONE write path. Here: find the param's device + slot, push the worklet key. */
 window.__setSynParam=function(id,norm){ try{
@@ -431,7 +435,8 @@ page = (PAGE.replace('@@THEME@@', theme).replace('@@CSS@@', css).replace('@@KNOB
             .replace('@@DEVICES@@', json.dumps(DEVICES))
             .replace('@@ICP@@', ICP).replace('@@ICA@@', ICA).replace('@@ICX@@', ICX)
             .replace('@@HELPERS@@', helpers).replace('@@CORES@@', cores)
-            .replace('@@FMT@@', fmt).replace('@@FMT_HELPERS@@', fmt_helpers).replace('@@TICK@@', tick))
+            .replace('@@FMT@@', fmt).replace('@@FMT_HELPERS@@', fmt_helpers).replace('@@TICK@@', tick)
+            .replace('@@RELABEL@@', relabel))
 assert '@@' not in page, 'unfilled placeholder'
 io.open(OUT, 'w', encoding='utf-8').write(page)
 print('fb445: theme + %d chars CSS + knobSVG + helpers/cores/fmt/tick (%d/%d/%d/%d chars); wrote %s (%.1f KB)'

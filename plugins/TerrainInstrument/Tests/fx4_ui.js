@@ -80,16 +80,22 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
                ottX:document.querySelectorAll('.fxr-core[data-core="ott"] .ott-xl').length,
                cmpKnee:document.querySelectorAll('.fxr-core[data-core="cmp"] .cmp-knee.dst-curve').length,
                widV:document.querySelectorAll('.fxr-core[data-core="wid"] .wid-v').length,
-               bodRef:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-ref').length,
-               bodUp:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-sh').length,
-               utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .utl-strip .fxr-pill').length,
+               bodNode:document.querySelectorAll('.fxr-core[data-core="bod"] .bod-n').length,
+               bodCanvas:document.querySelectorAll('.fxr-core[data-core="bod"] canvas.fx-spec').length,
+               bodGrid:document.querySelectorAll('.fxr-core[data-core="bod"] svg g[stroke="rgba(255,255,255,0.07)"]').length,   // fb447 — the decade grid is GONE
+               splGrid:document.querySelectorAll('.fxr-core[data-core="spl"] svg g[stroke="rgba(255,255,255,0.07)"]').length,
+               utlBtn:document.querySelectorAll('.fxr-core[data-core="utl"] .utl-lamps .fxr-pill').length,
+               utlRails:document.querySelectorAll('.fxr-core[data-core="utl"] .utl-rl').length+document.querySelectorAll('.fxr-core[data-core="utl"] .utl-rr').length,
+               utlStrip:document.querySelectorAll('.fxr-core[data-core="utl"] .utl-strip, .fxr-core[data-core="utl"] .utl-sw.fxr-pill[style]').length,
                utlRow:[...document.querySelectorAll('.fxr-dev')].filter(dv=>dv.querySelector('.fxr-core[data-core="utl"]'))
                           .reduce((a,dv)=>a+dv.querySelectorAll('.fxr-pills .fxr-pill').length,0),
                utlDup:(function(){ var d=[...document.querySelectorAll('.fxr-dev')].find(dv=>dv.querySelector('.fxr-core[data-core="utl"]')); if(!d) return -1;
-                          var core=[...d.querySelectorAll('.utl-cap')].map(e=>e.textContent.trim()), row=[...d.querySelectorAll('.fxr-pills .fxr-t')].map(e=>e.textContent.trim());
+                          var core=[...d.querySelectorAll('.utl-lamps .fxr-t')].map(e=>e.textContent.trim()), row=[...d.querySelectorAll('.fxr-pills .fxr-t')].map(e=>e.textContent.trim());
                           return core.filter(x=>row.indexOf(x)>=0).length; })(),
                splLane:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-lane').length,
-               splAdd:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-addt').length,
+               splAdd:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-add svg.ic-plus').length,   // fb447 — the + IS the header's glyph
+               splAddIsHeader:(function(){ var a=document.querySelector('.fxr-core[data-core="spl"] .spl-add svg'), h=document.querySelector('.fxr-dev .fxr-swap svg.ic-plus'); return !!(a&&h&&a.outerHTML===h.outerHTML); })(),
+               splAddOld:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-addt, .fxr-core[data-core="spl"] g.spl-add').length,
                splNames:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-nm').length,
                splLt:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-lt').length,
                splBoxes:document.querySelectorAll('.fxr-core[data-core="spl"] .spl-addg').length,
@@ -100,11 +106,13 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   for(const core of ['eqz','wid','cmp','ott','bod','utl','spl']) chk(r1.cores[core]===6, core+': every card renders its CORE (CORES['+core+'] exists)', 'svg cores='+r1.cores[core]);
   chk(r1.mark.eqzCurve===6 && r1.mark.eqzNodes===48, 'Equalizer core = the house line + 8 nodes per card (4 roles + 4 free bells, fb438)', JSON.stringify({curve:r1.mark.eqzCurve,nodes:r1.mark.eqzNodes}));
   chk(r1.mark.ottLanes===18 && r1.mark.ottX===12, 'Multiband core = 3 lanes + 2 crossover lines per card', JSON.stringify({lanes:r1.mark.ottLanes,x:r1.mark.ottX}));
-  chk(r1.mark.bodRef===54 && r1.mark.bodUp===54, 'Bode core = the 9-rung harmonic ladder, reference + shifted, per card (fb444)', JSON.stringify({ref:r1.mark.bodRef,up:r1.mark.bodUp}));
-  chk(r1.mark.utlBtn===24, 'Utility core = the four-switch STRIP per card, no scope (fb446, Max: "like the back panel, switches not boxes")', 'switches='+r1.mark.utlBtn);
+  chk(r1.mark.bodNode===6 && r1.mark.bodCanvas===6 && r1.mark.bodGrid===0, 'Bode core = the rail node + the canvas, and NO decade grid (fb447, Max: "those lines are not symmetrical — why are they there?")', JSON.stringify({node:r1.mark.bodNode,canvas:r1.mark.bodCanvas,grid:r1.mark.bodGrid}));
+  chk(r1.mark.splGrid===0, 'Splitter core: NO decade grid either (fb447)', 'grid groups='+r1.mark.splGrid);
+  chk(r1.mark.utlBtn===24 && r1.mark.utlRails===12 && r1.mark.utlStrip===0, 'Utility core = the WIRING (two rails per card) + four LAMP switches, the fb446 strip gone (fb447)', JSON.stringify({lamps:r1.mark.utlBtn,rails:r1.mark.utlRails,strip:r1.mark.utlStrip}));
   chk(r1.mark.utlRow===12, 'Utility keeps its chassis pills (Sum · Dim) like every other card (fb446)', 'chassis pills='+r1.mark.utlRow);
   chk(r1.mark.utlDup===0, 'Utility NO DOUBLES — no switch caption repeats on the chassis row', 'dupes='+r1.mark.utlDup);
-  chk(r1.mark.splLane===24 && r1.mark.splAdd===24 && r1.mark.splLt===24, 'Splitter core = four bands, a thin Hz number and a bare "+" each (fb446)', JSON.stringify({lanes:r1.mark.splLane,plus:r1.mark.splAdd,hz:r1.mark.splLt}));
+  chk(r1.mark.splLane===24 && r1.mark.splAdd===24 && r1.mark.splLt===24, 'Splitter core = four bands, a thin Hz number and a "+" each (fb446)', JSON.stringify({lanes:r1.mark.splLane,plus:r1.mark.splAdd,hz:r1.mark.splLt}))
+  chk(r1.mark.splAddIsHeader===true && r1.mark.splAddOld===0, 'the band "+" IS the header\'s + glyph, byte-identical SVG (fb447, Max: "literally copy the plus button from the header")', 'identical='+r1.mark.splAddIsHeader+' oldPaths='+r1.mark.splAddOld);;
   chk(r1.mark.splNames===0 && r1.mark.splBoxes===0, 'Splitter: NO band names, NO boxed plus (fb446, Max: "that low and that high has to go · that plus button looks terrible")', JSON.stringify({names:r1.mark.splNames,boxes:r1.mark.splBoxes}));
   /* ═══ fb446 — THE READOUT LAW, by evaluation over every formatter. A value in a knob face is a BARE
      NUMBER: no Hz/ms/dB/oct/°; a sign, a %, a k are glyphs of the number; four glyphs, five with a
@@ -466,6 +474,66 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r11.roNodes===0 && r11.anyCardText===0, 'no floating readout text on ANY rack card (EQ + Multiband)', 'ro='+r11.roNodes+' <text>='+r11.anyCardText);
   chk(/BODYHZ/.test(r11.dragStillWrites) && r11.hzMoved, 'dragging a node still writes its Hz with the readout gone', r11.dragStillWrites);
   chk(/Q /.test(r11.secText||'') && /(Hz|k)/.test(r11.secText||''), 'the right-click menu HEADER still reports that band\'s Hz and Q', (r11.secText||'(no menu)').slice(0,70));
+
+  /* ═══ fb447 — THE BODE LADDER LIVES ON THE CANVAS (no SVG ladder to pop in and out): with no feed at all,
+     a few ticks must leave INK on the Bode canvas (the white rungs + the purple streams), and the streams must
+     MOVE between frames when the shift is non-zero. ═══ */
+  const bl=await pg.evaluate(()=>{ const out={}; const D=window.__fxrDevs(); const d=D.find(x=>x.core==='bod'); if(!d) return {err:'no bode'};
+    const idx=D.indexOf(d), core=document.querySelectorAll('.fxr-dev')[idx].querySelector('.fxr-core[data-core="bod"]'); d.knobs[0].v=78; d.knobs[2].v=40;
+    const hb=window.__fltHasBins; window.__fltHasBins=()=>false;   // NO FEED, for real: the live layers may not ink the canvas here
+    const ink=()=>{ const cv=core.querySelector('canvas.fx-spec'); if(!cv||!cv.width) return -1; const px=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data; let n=0; for(let i=3;i<px.length;i+=4) if(px[i]>8) n++; return n; };
+    for(let k=0;k<48;k++) window.__fx4Tick(); out.ink1=ink();   // the ladder FADES in over a glide (~0.7 s at 60 Hz) — give it the frames a real stop would
+    const snap=()=>{ const cv=core.querySelector('canvas.fx-spec'); const px=cv.getContext('2d').getImageData(0,0,cv.width,cv.height).data; let h=0; for(let i=3;i<px.length;i+=4*7) h=(h*31+px[i])>>>0; return h; };
+    out.h1=snap(); for(let k=0;k<8;k++) window.__fx4Tick(); out.h2=snap(); out.ink2=ink();
+    out.svgLadder=core.querySelectorAll('.bod-ref,.bod-sh,.bod-sh2').length; out.w=core.querySelector('canvas.fx-spec').width;
+    d.knobs[0].v=50; d.knobs[2].v=0; window.__fltHasBins=hb; return out; });
+  chk(bl.ink1>50 && bl.svgLadder===0, 'Bode: with NO feed the canvas carries the ladder (ink), and no SVG ladder exists to pop (fb447)', JSON.stringify(bl));
+  chk(bl.h1!==bl.h2 && bl.ink2>50, 'Bode: the streams MOVE between frames at a non-zero shift (the motion is the shift)', 'hash '+bl.h1+' → '+bl.h2);
+
+  /* ═══ fb447 — THE UTILITY'S RAILS ARE DRAWN, not just declared: after a tick each rail carries a path, the
+     paths MOVE when Swap lights, and the lamps paint from the model. ═══ */
+  const ur=await pg.evaluate(()=>{ const out={}; const D=window.__fxrDevs(); const d=D.find(x=>x.core==='utl'); if(!d) return {err:'no utility'};
+    const idx=D.indexOf(d), core=document.querySelectorAll('.fxr-dev')[idx].querySelector('.fxr-core[data-core="utl"]');
+    d.pills.forEach(p=>p.on=false); for(let k=0;k<3;k++) window.__fx4Tick();
+    const dL=()=>(core.querySelector('.utl-rl').getAttribute('d')||''), dR=()=>(core.querySelector('.utl-rr').getAttribute('d')||'');
+    out.len=dL().length; out.d0=dL(); const before=dL()+'|'+dR();
+    d.pills[2].on=true; for(let k=0;k<40;k++) window.__fx4Tick();                  // Swap glides; 40 frames is plenty
+    out.swapMoved=(dL()+'|'+dR())!==before; out.lampOn=core.querySelectorAll('.utl-lamps .fxr-pill')[2].classList.contains('fxr-on');
+    d.pills[2].on=false; for(let k=0;k<40;k++) window.__fx4Tick(); return out; });
+  chk(ur.len>60 && /^M/.test(ur.d0||''), 'Utility: the rails are DRAWN (a path with real geometry after a tick)', 'len='+ur.len);
+  chk(ur.swapMoved===true && ur.lampOn===true, 'Utility: Swap re-routes the rails and its lamp lights from the model', JSON.stringify({moved:ur.swapMoved,lamp:ur.lampOn}));
+
+  /* ═══ fb447 — THE SPLITTER'S BACK KNOBS WEAR THE BAND'S NAME PER TYPE, and the cells a Type cannot bind are
+     DEAD (dim, '—'), never a knob that does nothing (Max: "lane three and lane four wasn't doing much"). ═══ */
+  const rb=await pg.evaluate(()=>{ const out={}; const D=window.__fxrDevs(); const d=D.find(x=>x.core==='spl'); if(!d) return {err:'no splitter'};
+    const idx=D.indexOf(d); const labels=()=>{ const ks=[...document.querySelectorAll('.fxr-dev')[idx].querySelectorAll('.fxr-bk-knob')]; const out=new Array(8).fill('?');
+      ks.forEach(k=>{ const m=/grid-column:\s*(\d+);\s*grid-row:\s*(\d+)/.exec(k.getAttribute('style')||''); if(!m) return; const i=((+m[1])-1)/2+((+m[2])-1)*4; out[i]=k.querySelector('.fxr-lab').textContent+(k.classList.contains('fxr-bk-dead')?'†':''); }); return out; };
+    const setType=(name)=>{ d.type=name; window.__fxApplyType(d,name); window.__fxrRender(); };   // what the real type-change path does
+    setType('Low / Mid / High'); out.lmh=labels();
+    setType('Low / High'); out.lh=labels(); out.lhB3=(window.__fxFmtTable['spl|B3'])(50,d); out.lhB4=(window.__fxFmtTable['spl|B4'])(50,d);
+    setType('Mid / Side'); out.ms=labels(); out.msB6=(window.__fxFmtTable['spl|B6'])(50,d);
+    setType('Low / Mid / High'); return out; });
+  chk(rb.lmh&&rb.lmh.join('|')==='Low Gain|Mid Gain|High Gain|Mid Width|Spacing|Low Width|High Width|High Pan', 'Splitter L/M/H: the eight back knobs are named by BAND (Low Gain, Mid Width, Spacing …)', (rb.lmh||[]).join('|'));
+  chk(rb.lh&&rb.lh.join('|')==='Low Gain|High Gain|Low Pan|—†|—†|Low Width|High Width|High Pan' && rb.lhB3==='C' && rb.lhB4==='—', 'Splitter Low/High: b3 = Low PAN (bound), b4 + Spacing DEAD and dimmed', (rb.lh||[]).join('|')+' B3='+rb.lhB3+' B4='+rb.lhB4);
+  chk(rb.ms&&rb.ms[5]==='—†'&&rb.ms[2]==='Mid Pan'&&rb.ms[6]==='Side Width'&&rb.msB6==='—', 'Splitter Mid/Side: Mid Width is DEAD by construction, Side Width is the width, Mid Pan bound', (rb.ms||[]).join('|'));
+
+  /* ═══ fb447 — SOLO MODE (the back dropdown fb446 declared and nothing read), through its REAL paths: the lane
+     menu's Solo row (Exclusive un-solos the others) and press-and-hold on a band (Momentary solos while held).
+     The Splitter has no S glyph pills (fb446 moved M/S/F into the right-click menu), so those are the paths. ═══ */
+  const sm=await pg.evaluate(()=>{ const out={}; const D=window.__fxrDevs(); const d=D.find(x=>x.core==='spl'); const idx=D.indexOf(d); const W=()=>window.__W.splice(0);
+    d.type='Low / Mid / High'; window.__fxApplyType(d,d.type); window.__fxrRender(); for(let k=0;k<3;k++) window.__fx4Tick();
+    const card=document.querySelectorAll('.fxr-dev')[idx], core=card.querySelector('.fxr-core[data-core="spl"]'), svg=core.querySelector('svg'); const r=svg.getBoundingClientRect();
+    const px=u=>r.left+r.width*u/226, py=v=>r.top+r.height*v/78; const cx=[...core.querySelectorAll('.spl-rg')].map(e=>(+e.getAttribute('x'))+(+e.getAttribute('width'))/2);
+    let rows=null; const orig=window.__synShowMenu; window.__synShowMenu=function(tt,rw){ rows=rw; };
+    const ev=(type,x,y,btn)=>{ const e=new PointerEvent(type,{bubbles:true,cancelable:true,clientX:x,clientY:y,button:btn||0,buttons:btn===2?2:1,pointerId:1,pointerType:'mouse'}); core.querySelectorAll('.spl-rg')[0].dispatchEvent(e); };
+    const soloVia=(L)=>{ rows=null; ev('pointerdown',px(cx[L]),py(30),2); if(!rows) return 'no menu'; const row=rows.find(rw=>/^(Un)?solo /i.test(rw.label)); if(!row) return 'no solo row'; row.onPick(); return row.label; };
+    d.back.d2.v='Exclusive'; d.pills.forEach(p=>p.on=false); W(); out.r1=soloVia(0); out.r2=soloVia(1); out.exS1=!!d.pills[1].on; out.exS2=!!d.pills[4].on; out.exWrites=W().map(w=>w[0]+'='+w[1]);
+    d.pills.forEach(p=>p.on=false); d.back.d2.v='Momentary'; W(); ev('pointerdown',px(cx[2]),py(30),0); out.momDown=!!d.pills[7].on;
+    document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,cancelable:true,clientX:px(cx[2]),clientY:py(30),button:0,pointerId:1,pointerType:'mouse'}));   // selecting the band re-rendered the rack; the release lands on the live document, as a real mouse's does
+    out.momUp=!!d.pills[7].on; out.momWrites=W().map(w=>w[0]+'='+w[1]);
+    d.back.d2.v='Latching'; window.__synShowMenu=orig; d.pills.forEach(p=>p.on=false); return out; });
+  chk(sm.exS2===true && sm.exS1===false && sm.exWrites.some(w=>/SOLO1=0/.test(w)) && sm.exWrites.some(w=>/SOLO2=1/.test(w)), 'Solo Mode EXCLUSIVE: the menu\'s Solo on band 2 un-solos band 1 (model + the param writes)', JSON.stringify({r1:sm.r1,r2:sm.r2,s1:sm.exS1,s2:sm.exS2,writes:sm.exWrites}));
+  chk(sm.momDown===true && sm.momUp===false && sm.momWrites.some(w=>/SOLO3=1/.test(w)) && sm.momWrites.some(w=>/SOLO3=0/.test(w)), 'Solo Mode MOMENTARY: press a band = solo, let go = off (model + the param writes)', JSON.stringify({down:sm.momDown,up:sm.momUp,writes:sm.momWrites}));
 
   /* ═══ fb446 — LANE CARDS: a device added INTO a Splitter band is hidden unless that band is selected,
      has NO route row (it is fed by the band), wears the band's range as a tag, and selecting another

@@ -477,7 +477,7 @@ struct TerrainUtilityFx
         gainSm_ = -1.0f; mixSm_ = -1.0f; steerLSm_ = 1.0f; steerRSm_ = 1.0f;
         mGainSm_ = 1.0f; sGainSm_ = 1.0f;
         corr_ = 0.0f; corrLL_ = corrRR_ = corrLR_ = 1e-9f;
-        mGuard_ = 0.0f; mMid_ = 0.0f; mSide_ = 0.0f;
+        mGuard_ = 0.0f; mMid_ = 0.0f; mSide_ = 0.0f; pkL_ = 0.0f; pkR_ = 0.0f;
     }
 
     // ── per-block parameter intake (NEVER per sample) ───────────────────────
@@ -787,6 +787,10 @@ struct TerrainUtilityFx
         outL = dg * dryL + wg * x[0];
         outR = dg * dryR + wg * x[1];
 
+        // fb447 — per-channel output peaks, leaky (~30 ms), so the card can light each RAIL
+        //         by what actually leaves on it (the fb311 law: the picture rides the level).
+        pkL_ = std::max (std::fabs (outL), pkL_ * 0.9993f);
+        pkR_ = std::max (std::fabs (outR), pkR_ * 0.9993f);
         // running stereo correlation, leaky, for the meter
         const float lr = 0.9995f;
         corrLL_ = lr * corrLL_ + outL * outL;
@@ -803,6 +807,8 @@ struct TerrainUtilityFx
     float meterCorr()    const noexcept { return corr_; }     // -1 .. +1
     float meterMid()     const noexcept { return mMid_;  }
     float meterSide()    const noexcept { return mSide_; }
+    float meterPeakL()   const noexcept { return pkL_;   }   // fb447 — output peak, left rail
+    float meterPeakR()   const noexcept { return pkR_;   }   // fb447 — output peak, right rail
     int   meterWiring()  const noexcept { return wire_;  }
     int   meterType()    const noexcept { return type_;  }
     float meterImageW()  const noexcept { return imgW_;  }    // 0..3, the real factor
@@ -967,6 +973,7 @@ private:
 
     float corr_ = 0.0f, corrLL_ = 1e-9f, corrRR_ = 1e-9f, corrLR_ = 1e-9f;
     float mGuard_ = 0.0f, mMid_ = 0.0f, mSide_ = 0.0f;
+    float pkL_ = 0.0f, pkR_ = 0.0f;   // fb447
 };
 
 } // namespace tw

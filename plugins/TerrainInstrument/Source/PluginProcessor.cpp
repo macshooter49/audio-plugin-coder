@@ -4231,10 +4231,12 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 C (p + "ROUTE", d + "Route", bodRoutes, 0);
                 F (p + "SHIFT", d + "Shift", 0.50f);   F (p + "DIR",  d + "Direction", 1.00f);
                 F (p + "FDBK",  d + "Fdbk",  0.00f);   F (p + "MIX",  d + "Mix",       1.00f);
-                F (p + "FINE",    d + "Fine",     0.50f); F (p + "SPREAD",  d + "Spread",  1.00f);
-                F (p + "TIME",    d + "Time",     0.45f); F (p + "BLUR",    d + "Blur",    0.00f);
-                F (p + "LOWKEEP", d + "Low Keep", 0.00f); F (p + "DAMPING", d + "Damping", 1.00f);
-                F (p + "TOUCH",   d + "Touch",    0.50f); F (p + "DRIFT",   d + "Drift",   0.00f);
+                // fb447 — NAMED BY WHAT THEY DO (fb144). Max could not tell what Touch / Drift / Blur /
+                // Spread were from the card. The IDs never move; only the words the DAW and the card show.
+                F (p + "FINE",    d + "Fine",      0.50f); F (p + "SPREAD",  d + "Stereo",    1.00f);
+                F (p + "TIME",    d + "Time",      0.45f); F (p + "BLUR",    d + "Diffusion", 0.00f);
+                F (p + "LOWKEEP", d + "Low Keep",  0.00f); F (p + "DAMPING", d + "Damping",   1.00f);
+                F (p + "TOUCH",   d + "Env Shift", 0.50f); F (p + "DRIFT",   d + "Drift",     0.00f);
                 B (p + "GUARD", d + "Guard", true);
                 B (p + "SYNC",  d + "Sync",  false);
                 for (auto& sx : srcSuf) B (p + sx, d + sx, false);
@@ -4290,10 +4292,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                                                "Tuck", "Rail", "Ripple", "Fuse" };
             const juce::StringArray utlWiring{ "Through", "Difference", "L To Both", "R To Both",
                                                "L Only", "R Only", "Reserved 7", "Reserved 8" };
-            const char* const ubn[8] = { "Strain","Clamp","Mono Below","Slope",
-                                         "Twist","Rumble","Bleed","Hinge" };
+            // fb447 — NAMED BY WHAT THEY DO (fb144). "Strain / Clamp / Twist / Rumble / Bleed / Hinge"
+            // read as jargon on the card ("what the fuck does this even mean?"). Same IDs, plain words:
+            // Drive into the Character's rail · Shape (its second axis) · Rotate (M/S rotation) ·
+            // Low Cut (the DC/subsonic corner the DC lamp engages) · Mono Above (HF coupling — the
+            // exact inverse of Mono Below) · Crossover (the Hz where Mono Above / Coil / Canopy / Cellar hinge).
+            const char* const ubn[8] = { "Drive","Shape","Mono Below","Slope",
+                                         "Rotate","Low Cut","Mono Above","Crossover" };
             const float ubd[8] = { 0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.5f };
-            const char* const upn[6] = { "Flip L","Flip R","Trade","Sum","DC","Dim" };
+            const char* const upn[6] = { "Flip L","Flip R","Swap","Mono","DC","Dim" };   // fb447 — Trade→Swap, Sum→Mono (plain words)
             const char* const upi[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
             for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
             {
@@ -4305,8 +4312,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 C (p + "WIRING", d + "Wiring", utlWiring, 0);
                 // 60/90 is exactly 0 dB on the -60..+30 dB fader, and 0 is a glided -inf mute.
                 F (p + "GAIN",  d + "Gain",  60.0f / 90.0f);
-                F (p + "IMAGE", d + "Image", 0.50f);
-                F (p + "STEER", d + "Steer", 0.50f);
+                F (p + "IMAGE", d + "Width", 0.50f);   // fb447 — Image→Width, Steer→Pan: Serum's words, Max's words
+                F (p + "STEER", d + "Pan",   0.50f);
                 F (p + "MIX",   d + "Mix",   1.00f);
                 for (int b = 0; b < 8; ++b) F (p + "B" + juce::String (b + 1), d + ubn[b], ubd[b]);
                 for (int k = 0; k < 6; ++k) B (p + upi[k], d + upn[k], false);
@@ -4325,7 +4332,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             const juce::StringArray splSlopes { "6 dB", "12 dB", "24 dB", "48 dB",
                                                 "Reserved 5", "Reserved 6", "Reserved 7", "Reserved 8" };
             const char* const bn[8] = { "Lane 1 Gain","Lane 2 Gain","Lane 3 Gain","Lane 4 Gain",
-                                        "Span","Lane 1 Width","Top Lane Width","Top Lane Pan" };
+                                        "Spacing","Lane 1 Width","Top Lane Width","Top Lane Pan" };   // fb447 — Span→Spacing (what it is: the spacing between crossovers)
             for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
             {
                 const juce::String sfx = (nn == 1) ? juce::String() : juce::String (nn);
@@ -4336,7 +4343,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 // fb418 NO DOUBLES — the back panel's second dropdown must not be a second copy
                 // of the header pill's Type list. A router has one voicing axis, so the second
                 // axis is BEHAVIOURAL: how the lane Solo glyphs latch.
-                C (p + "LATCH", d + "Latch",
+                C (p + "LATCH", d + "Solo Mode",
                    juce::StringArray { "Latching", "Exclusive", "Momentary",
                                        "Reserved 4", "Reserved 5", "Reserved 6",
                                        "Reserved 7", "Reserved 8" }, 0);
@@ -5103,6 +5110,20 @@ juce::String TerrainInstrumentAudioProcessor::getFx4VizJson()
         for (int b = 0; b < 3; ++b) { if (b) j << ","; j << N (E.thresholdUp (b), 1); }
         j << "]}";
     }
+    // ── UTILITY (fb447): { pkL, pkR, corr, wire, img, lvl } — the card draws the WIRING, and the two
+    //    rails light by what actually leaves on each channel (the engine's own peak meters, fb432).
+    j << "],\"utl\":[";
+    for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+    {
+        if (i) j << ",";
+        const auto& V = utlRefs_[(size_t) i];
+        if (! (V.active != nullptr && V.active->load() > 0.5f)) { j << "null"; continue; }
+        const auto& E = utlPool_[(size_t) i];
+        const float pl = E.meterPeakL(), pr = E.meterPeakR();
+        j << "{\"pkL\":" << N (pl, 4) << ",\"pkR\":" << N (pr, 4)
+          << ",\"corr\":" << N (E.meterCorr(), 3) << ",\"wire\":" << E.meterWiring()
+          << ",\"img\":" << N (E.meterImageW(), 3) << ",\"lvl\":" << N (0.5f * (pl + pr), 4) << "}";
+    }
     // ── SPLITTER: { nl, hz[3], pk[4], gate[4] }. The lane bar on the card is LIVE energy, so a
     //    band that is muted, soloed away, or simply empty reads as empty at a glance — which is
     //    the fastest possible answer to "is anything actually in my highs?".
@@ -5555,6 +5576,12 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                 const int nl = tw::TerrainSplitterFx::laneCountFor (q.type);
                 q.laneWidth[juce::jmax (0, nl - 1)] = V.b[6]->load();
                 q.lanePan  [juce::jmax (0, nl - 1)] = V.b[7]->load();
+                // fb447 — THE RELABEL LAW (TerrainSplitterFx.h, "THE SLOTS THAT GO UNBOUND"), bound for
+                // real instead of left dead: a 2-lane Type has no lane 3, so b3 is that Type's
+                // "<lane 1> Pan" (the only way to reach lanePan[0]); a 3-lane Type has no lane 4, so b4
+                // is "Mid Width". Max: "lane three and lane four wasn't doing much" — now they do.
+                if (nl == 2) q.lanePan  [0] = V.b[2]->load();
+                if (nl == 3) q.laneWidth[1] = V.b[3]->load();
                 for (int k = 0; k < 4; ++k)
                 {
                     q.laneMute[k] = V.mute[k] != nullptr && V.mute[k]->load() > 0.5f;
