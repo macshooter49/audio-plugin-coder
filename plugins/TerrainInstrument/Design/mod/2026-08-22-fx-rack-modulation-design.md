@@ -3,8 +3,9 @@
 Max: *"next, we need to add modulation for these, LFO & ENV."*
 
 **Decided with Max before writing this:** every continuous knob (front 4 + back 8) on every device,
-every instance · ENV means the existing envelopes 1..32 (not a new per-device follower) · a modulated
-dial shows the modulation **riding the dial**, Serum-style.
+every instance · ENV means the existing envelopes 1..32 (not a new per-device follower) · and the
+modulated knob wears **the existing moving underline**, unchanged — *"you can keep it the same as
+how the modulation is already."*
 
 ---
 
@@ -68,24 +69,38 @@ q.gain = fxMod (V.f1, kFxKindUtility, i, 0);
   new viz code.
 - Devices that are powered off / not in the chain apply nothing and push nothing.
 
-## 4. The live dial
+## 4. What a modulated rack knob LOOKS like — the existing underline, verbatim
 
-The dial draws its base arc plus a second arc riding the **modulated** position at 60 Hz.
+**Max, deciding this: *"you can keep it the same as how the modulation is already, we have that
+moving underline."*** So: no second arc, no Serum-style ring, no new pattern. A modulated rack knob
+wears the same `.sm-ul` every modulated control in the plugin wears, and it already moves —
 
-🔑 **The live value is the ENGINE's, pushed — never recomputed in JS.** The UI already holds every LFO
-and env value (`mvL[]`, `mvE[]`) and already does ownership math client-side for the envelope breathing
-curve, so recomputing here would be the cheap path — and it is exactly the "display recomputes what the
-DSP did" failure fb452 spent an evening killing. The processor publishes the effective value it actually
-handed the engine, for modulated knobs only (≤128 floats ≈ 700 B/frame, the EQ curve's order), on the
-existing 60 Hz fx4 push.
+- **THE COMET (fb189)** rides the underline: `territory = [(1−d)·knob, (1−d)·knob + d]`, and the
+  live value travels inside it. Fast attack streaks, a slow envelope pours, an LFO breathes.
+- purple = the SELECTED modulator's route lives here, dim = someone else's (fb182/fb257), so
+  switching modulator flips the whole map instantly.
+- hover = the route list · click = pin it · vertical drag = depth (fb188/fb190).
+
+🔑 **This also deletes the problem the other option created.** A second live arc would have needed
+the engine's effective value pushed at 60 Hz — because a dial that recomputes in JS what the DSP
+did is the "display disagrees with the audio" failure fb452 just spent an evening killing. The
+comet is fed by the modulator's own value, which the UI already receives, so there is nothing new
+on the wire and nothing new that can disagree.
 
 ## 5. UI
 
 - The card renderer hangs `data-mod-dest="<int>"` on the 4 front dials and the 8 back dials, recomputed
   whenever a card's kind or instance changes (the renderer knows both).
-- Everything else is inherited: the existing module handles the drop, the `.sm-modded` underline, the
-  hover route list, the pinned list, and the vertical depth drag (fb188 — the letter badges are retired,
-  the underline IS the grammar). **Nothing new is invented and no new interaction is taught.**
+- Everything else is inherited: the existing module handles the drop, the underline, the comet, the
+  hover route list, the pinned list, and the vertical depth drag (fb188 — the letter badges are
+  retired, the underline IS the grammar). **Nothing new is invented and no new interaction is taught.**
+- **The one rack-specific fix:** the underline measures the word's INK with a Range over
+  `.knob-label` so it covers the whole word exactly (fb188, Max's requirement). Rack labels are not
+  `.knob-label`, so today the lookup would fall back to the element box and underline too much —
+  the label lookup learns the rack's label class. One line, and it is gated.
+- **Routes survive a re-render for free:** `curEl()` already re-resolves an assignment whose element
+  went stale (fb145, for rebuilt card grids), which is exactly what a rack card does on every add,
+  delete, reorder and flip.
 - Back-panel knobs behave identically, behind the flip.
 
 ## 6. State and edge cases
@@ -111,15 +126,18 @@ existing 60 Hz fx4 push.
    a parameter changed. One knob per kind, chosen as the one with the most obvious spectral signature.
 3. **Mutation (mandatory, fb421)** — delete the mod add at the injection site: `au_fx_path`'s mod gates
    must go RED while every existing gate stays green.
-4. **`fx4_ui.js` (extended)** — every rack dial (front and back, every kind) carries a `data-mod-dest`;
-   all are unique; a synthetic drop marks the dial `.sm-modded` and writes the route; the live arc reads
-   the pushed value and not a JS recomputation (push a value that disagrees with the LFO feed and prove
-   the arc follows the PUSH).
+4. **`fx4_ui.js` (extended)** — every rack dial (front and back, every kind) carries a
+   `data-mod-dest`; all are unique; a synthetic drop writes the route and raises an `.sm-ul` on that
+   dial; the underline's width equals the LABEL'S INK, not the element box (the fb188 requirement,
+   which is the one thing the rack does not get for free); and the route survives a card reorder,
+   which is the fb145 path this depends on.
 5. **Mockup first (house rule)** — the live-dial arc is a UI change, so it goes to Safari as real code
    for Max's approval before any of it is built.
 
 ## 8. Risks
 
 - **The 16-site edit is mechanical and wide.** It will be scripted and every site gated, not hand-typed.
-- **The live arc is a new pattern** — nothing else in the plugin draws a modulated position. If it reads
-  busy on a full rack, the fallback already discussed is to show it only for the selected modulator.
+- **The underline is positioned in VIEWPORT space** (`position:fixed`, measured per frame from the
+  target's rect). The rack scrolls, and cards move under it — the repaint is already per-frame so it
+  should track, but a scrolling container is a case the synth panel never exercised. Gated: scroll
+  the rack and prove the underline stays on its word.
