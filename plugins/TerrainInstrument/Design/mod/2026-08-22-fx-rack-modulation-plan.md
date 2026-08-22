@@ -368,7 +368,7 @@ The gate for this is in Task 5: **a route must bite on the FIRST block**, not th
         if (wc::isEnvModSource ((int) as.source))
         { const float dw = std::abs (as.depth);           // ENV OWNS
           fxModOwnW_[slot] += dw;
-          fxModOwnV_[slot] += dw * (monoEnvLevelOf ((int) as.source) + 1.0f) * 0.5f; }
+          fxModOwnV_[slot] += dw * (monoEnvLevelOf ((int) as.source) + 1.0f); }
         else
         { const int si = (int) as.source - (int) wc::ModSource::L1;
           if (si < 0 || si >= wc::NUM_LFOS) continue;     // LFO ADDS
@@ -379,9 +379,15 @@ The gate for this is in Task 5: **a route must bite on the FIRST block**, not th
       fxModVal_[s] = juce::jlimit (0.0f, 1.0f, fxModVal_[s] * (1.0f - w) + fxModOwnV_[s]); }
 ```
 
-Note the `* 0.5f` on the env term: `monoEnvLevelOf` returns −1..+1 for the matrix's bipolar sources
-and the FX knobs are 0..1, so `(env + 1) * 0.5` maps a full envelope across the knob's own travel.
-**Gate this in Task 5** — an envelope at rest must leave the knob at 0, not at half.
+🚨 **`(env + 1.0f)` and NOTHING ELSE — no `* 0.5f`.** An earlier draft of this plan scaled by a half
+and it was WRONG: `monoEnvLevelOf()` returns **`level − 1.0f`** (`PluginProcessor.h`, fb179
+"KNOB-IS-THE-PEAK"), so `(env + 1)` is already the envelope's 0..1 level — exactly a rack knob's
+travel. Halving it would have quietly halved every envelope in the rack. The line above is
+byte-for-byte the term `flowKnob()` uses at `:8858`; if it ever differs from that line, this is wrong.
+
+**What that law MEANS, so Task 5 gates the right thing:** an OWNING envelope drives the knob from
+ZERO, not from its base — at rest the knob reads 0, and the envelope sweeps up to the depth-scaled
+top. That is fb179's "the knob is the peak", and it is exactly what the FLOW knobs already do.
 
 - [ ] **Step 3: The read-site helper**
 
@@ -476,10 +482,15 @@ Render exactly ONE block with a route installed and assert the output already di
 unmodulated render. This is what catches the map being built after `pushFx3Params()` — a fault that
 is otherwise inaudible and would pass every other gate here.
 
-Then: with an ENV route at full depth and NO note playing, the knob must sit at its base value —
+Then the ENVELOPE OWNERSHIP gate — and note carefully what it asserts, because an earlier draft of
+this plan asserted the OPPOSITE and would have blessed a halved implementation while failing a
+correct one. An owning envelope drives the knob from **ZERO**, not from its base (fb179,
+KNOB-IS-THE-PEAK):
 
-With an ENV route installed at full depth and NO note playing, the knob must sit at its base value —
-that is what catches the `(env+1)*0.5` mapping being wrong (Task 3, Step 2).
+- ENV route at full depth, **no note held** → the knob reads **0**, and the device is audibly at its
+  knob-zero setting.
+- the same route with the envelope **held at its peak** → the knob reads the depth-scaled top, and it
+  matches what the identical route does to a FLOW knob.
 
 - [ ] **Step 3: Run — 184 cells green**
 
