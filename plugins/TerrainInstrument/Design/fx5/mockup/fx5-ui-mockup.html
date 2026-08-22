@@ -122,8 +122,12 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .fxr-core[data-core="spl"].spl-over{ cursor:ew-resize; }
 #syn-panel .fxr-core .spl-rg{ cursor:pointer; }
 #syn-panel .fxr-core .spl-adds{ position:absolute; inset:0; pointer-events:none; }
-#syn-panel .fxr-core .spl-add{ position:absolute; bottom:16%; width:14px; height:14px; margin-left:-7px; display:grid; place-items:center; color:rgba(255,255,255,0.80); cursor:pointer; pointer-events:auto; transition:color .12s, filter .12s; }
-#syn-panel .fxr-core .spl-add svg{ position:static; width:14px; height:14px; display:block; }
+#syn-panel .fxr-core .spl-add{ position:absolute; bottom:16%; width:11px; height:11px; margin-left:-5.5px; display:grid; place-items:center; color:rgba(255,255,255,0.80); cursor:pointer; pointer-events:auto; transition:color .12s, filter .12s; }
+#syn-panel .fxr-core .spl-add svg{ position:static; width:11px; height:11px; display:block; }
+#syn-panel .fxr-core .spl-nums{ position:absolute; inset:0; pointer-events:none; }
+#syn-panel .fxr-core .spl-lt{ position:absolute; top:5px; font-size:7px; line-height:1; letter-spacing:.03em; color:rgba(255,255,255,0.55); white-space:nowrap; transition:color .12s; }
+#syn-panel .fxr-core .spl-lt.sel{ color:rgba(255,255,255,0.92); }
+#syn-panel .fxr-core .spl-lt.dim{ color:rgba(255,255,255,0.22); }
 #syn-panel .fxr-core .spl-add:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
 #syn-panel .fxr-core .spl-add.sel{ color:#FFFFFF; }
 #syn-panel .fxr-dev.fxr-hidden{ display:none; }
@@ -133,8 +137,8 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 #syn-panel .utl-lamps .fxr-pill.utl-sw{ flex:0 0 auto; height:15px; padding:0 2px; gap:4px; border:none; border-radius:0; background:transparent; font-size:7.5px; letter-spacing:.01em; color:var(--text-secondary); text-shadow:none; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw .utl-dot{ width:7px; height:7px; border-radius:50%; border:1px solid var(--text-muted); background:transparent; flex:0 0 auto; transition:background .12s, border-color .12s, box-shadow .12s; }
 #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on{ border:none; color:var(--text-primary); text-shadow:none; }
-#syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on .utl-dot{ background:var(--purple-400); border-color:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); }
-#syn-panel .fxr-core .utl-fl.on, #syn-panel .fxr-core .utl-fr.on{ stroke:var(--purple-400); stroke-width:1.8; filter:drop-shadow(0 0 3px rgba(183,148,255,.6)); }
+#syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on .utl-dot{ background:#FFFFFF; border-color:#FFFFFF; box-shadow:none; }
+#syn-panel .fxr-core .utl-fl.on, #syn-panel .fxr-core .utl-fr.on{ stroke:#FFFFFF; stroke-width:1.8; }
 #syn-panel .fxr-bk-knob.fxr-bk-dead{ opacity:.32; pointer-events:none; }
 #syn-panel .fxr-lane{ font-size:7.5px; letter-spacing:.05em; color:var(--purple-400);
                               border:1px solid var(--purple-400); border-radius:3px; padding:0 3px;
@@ -208,8 +212,14 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
            as .fxr-swap — as an HTML layer over the canvas (a path inside the stretched viewBox would
            squash it). White, raised clear of the baseline, purple on hover exactly like the header's. */
         #syn-panel .fxr-core .spl-adds{ position:absolute; inset:0; pointer-events:none; }
-        #syn-panel .fxr-core .spl-add{ position:absolute; bottom:16%; width:14px; height:14px; margin-left:-7px; display:grid; place-items:center; color:rgba(255,255,255,0.80); cursor:pointer; pointer-events:auto; transition:color .12s, filter .12s; }
-        #syn-panel .fxr-core .spl-add svg{ position:static; width:14px; height:14px; display:block; }
+        #syn-panel .fxr-core .spl-add{ position:absolute; bottom:16%; width:11px; height:11px; margin-left:-5.5px; display:grid; place-items:center; color:rgba(255,255,255,0.80); cursor:pointer; pointer-events:auto; transition:color .12s, filter .12s; }   /* fb448 — "a little smaller": 11px (the header's is 14) */
+        #syn-panel .fxr-core .spl-add svg{ position:static; width:11px; height:11px; display:block; }
+        /* fb448 — THE BAND NUMBERS ARE HTML, not <text> in the stretched viewBox (Max: "crunched up in height"):
+           crisp, unscaled, the same thin white; brighter on the selected band, dim on a muted / soloed-away one */
+        #syn-panel .fxr-core .spl-nums{ position:absolute; inset:0; pointer-events:none; }
+        #syn-panel .fxr-core .spl-lt{ position:absolute; top:5px; font-size:7px; line-height:1; letter-spacing:.03em; color:rgba(255,255,255,0.55); white-space:nowrap; transition:color .12s; }
+        #syn-panel .fxr-core .spl-lt.sel{ color:rgba(255,255,255,0.92); }
+        #syn-panel .fxr-core .spl-lt.dim{ color:rgba(255,255,255,0.22); }
         #syn-panel .fxr-core .spl-add:hover{ color:var(--purple-400); filter:drop-shadow(0 0 5px rgba(167,139,250,.6)); }
         #syn-panel .fxr-core .spl-add.sel{ color:#FFFFFF; }
         /* fb446 — LANE CARDS: a device that lives inside a Splitter band. No route row (it is fed by the
@@ -230,8 +240,9 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
         #syn-panel .utl-lamps .fxr-pill.utl-sw{ flex:0 0 auto; height:15px; padding:0 2px; gap:4px; border:none; border-radius:0; background:transparent; font-size:7.5px; letter-spacing:.01em; color:var(--text-secondary); text-shadow:none; }
         #syn-panel .utl-lamps .fxr-pill.utl-sw .utl-dot{ width:7px; height:7px; border-radius:50%; border:1px solid var(--text-muted); background:transparent; flex:0 0 auto; transition:background .12s, border-color .12s, box-shadow .12s; }
         #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on{ border:none; color:var(--text-primary); text-shadow:none; }
-        #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on .utl-dot{ background:var(--purple-400); border-color:var(--purple-400); box-shadow:0 0 6px rgba(183,148,255,.5); }
-        #syn-panel .fxr-core .utl-fl.on, #syn-panel .fxr-core .utl-fr.on{ stroke:var(--purple-400); stroke-width:1.8; filter:drop-shadow(0 0 3px rgba(183,148,255,.6)); }
+        /* fb448 — Max: "it just FILLS in white, not even glows, no fill in purple" */
+        #syn-panel .utl-lamps .fxr-pill.utl-sw.fxr-on .utl-dot{ background:#FFFFFF; border-color:#FFFFFF; box-shadow:none; }
+        #syn-panel .fxr-core .utl-fl.on, #syn-panel .fxr-core .utl-fr.on{ stroke:#FFFFFF; stroke-width:1.8; }
         /* fb447 — a back cell this Type cannot bind is DEAD: dim, and not a handle (the relabel law) */
         #syn-panel .fxr-bk-knob.fxr-bk-dead{ opacity:.32; pointer-events:none; }
         /* the lane tag a device wears when it lives inside a Splitter band */
@@ -257,7 +268,7 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 <p class="sub">The three cards, their cores LIFTED from the plugin (one copy of the code), audible on worklet mirrors of the certified engines.
 Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
 <b>Bode</b>: drag the <b>dot on the rail</b> = Shift — the white ghost is where the partials were, the purple is where they went, and the streams between them run in the shift's direction (feedback keeps them going); wheel on the dot = Fdbk, double-click = zero, right-click = Up · Ring · Down.
-<b>Splitter</b>: drag a <b>crossover node</b>, wheel over a <b>band</b> = that lane's gain, right-click a band = Mute · Solo · Flip · Add a device here, the <b>+</b> drops a device into that band.
+<b>Splitter</b>: click a <b>band</b> to select it (the hairline), the chassis pills Mute · Solo · Flip act on it; drag a <b>crossover node</b>; wheel over a band = that lane's gain; right-click a band = the menu; the <b>+</b> drops a device into that band.
 <b>Utility</b>: the card draws the WIRING — two rails, L and R, through Flip → Swap → Mono → Width/Pan, lit by what leaves on each; the lamps under it are the switches. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
@@ -370,7 +381,7 @@ registerProcessor('terrain-bode',TerrainBode);
 class TerrainUtility extends AudioWorkletProcessor{
   constructor(){ super(); this.fs=sampleRate;
     this.p={gain:60/90,image:.5,steer:.5,mix:1,b1:0,b2:.5,b3:0,b4:0,b5:.5,b6:0,b7:0,b8:.5,flipl:0,flipr:0,trade:0,sum:0,dc:0,dim:0,axis:0,type:0,character:0};
-    this.gS=1; this.sideS=1; this.pL=1; this.pR=1; this.mixS=1; this.sumS=0; this.fl=1; this.fr=1; this.dimS=1; this.dcx=[0,0]; this.dcy=[0,0]; this.dcOn=0;
+    this.gS=1; this.sideS=1; this.pL=1; this.pR=1; this.mixS=1; this.sumS=0; this.fl=1; this.fr=1; this.dimS=1; this.dcx=[0,0]; this.dcy=[0,0]; this.dcOn=0; this.dcR=0.9987;
     this.sz=0; this.sG=0; this.pkL=0; this.pkR=0; this.lvl=0; this.tick=0;
     this.port.onmessage=e=>{ Object.assign(this.p,e.data); this.resolve(); }; this.resolve(); }
   resolve(){ const p=this.p, c=v=>Math.max(0,Math.min(1,+v||0));
@@ -378,6 +389,7 @@ class TerrainUtility extends AudioWorkletProcessor{
     const im=c(p.image); this.sideT=im<0.5?im*2:1+4*(im-0.5);            // 0 → 0 · .5 → 1 · 1 → 3 (300 %)
     const st=c(p.steer), th=(st-0.5)*Math.PI/2; this.pLT=Math.cos(th+Math.PI/4)*1.4142136; this.pRT=Math.sin(th+Math.PI/4)*1.4142136;
     this.mixT=c(p.mix); this.sumT=+p.sum?1:0; this.flT=+p.flipl?-1:1; this.frT=+p.flipr?-1:1; this.dimT=+p.dim?Math.pow(10,-20/20):1; this.dcOn=+p.dc?1:0; this.trade=+p.trade?1:0;
+    this.dcR=Math.exp(-2*Math.PI*(15*Math.pow(320/15,c(p.b6)))/this.fs);   // fb448 — the DC lamp is the LOW CUT at the Cut At corner (b6: 15..320 Hz), as the engine's dcB_ is
     const mb=c(p.b3); this.mbOn=mb>0.001; const mbHz=20*Math.pow(60,mb); this.sG=1-Math.exp(-2*Math.PI*mbHz/this.fs);
     this.wiring=p.axis|0; }
   process(inputs,outputs){ const inp=inputs[0], out=outputs[0]; if(!out||!out[0]) return true;
@@ -393,7 +405,7 @@ class TerrainUtility extends AudioWorkletProcessor{
       if(this.mbOn){ this.sz+=this.sG*(s-this.sz); s-=this.sz; }           // Mono Below: side HPF
       s*=this.sideS; s*=(1-this.sumS);                                       // Image (bounded) · Sum
       xl=(m+s)*this.gS*this.pL*this.dimS; xr=(m-s)*this.gS*this.pR*this.dimS;
-      if(this.dcOn){ const yl=xl-this.dcx[0]+0.9987*this.dcy[0]; this.dcx[0]=xl; this.dcy[0]=yl; xl=yl; const yr=xr-this.dcx[1]+0.9987*this.dcy[1]; this.dcx[1]=xr; this.dcy[1]=yr; xr=yr; }
+      if(this.dcOn){ const yl=xl-this.dcx[0]+this.dcR*this.dcy[0]; this.dcx[0]=xl; this.dcy[0]=yl; xl=yl; const yr=xr-this.dcx[1]+this.dcR*this.dcy[1]; this.dcx[1]=xr; this.dcy[1]=yr; xr=yr; }
       const wg=Math.sin(1.5707963*this.mixS), dg=Math.cos(1.5707963*this.mixS);
       const oL=dg*dl+wg*xl, oR=dg*dr+wg*xr; out[0][i]=oL; if(out[1]) out[1][i]=oR;
       acc+=oL*oL+oR*oR; pl=Math.max(pl,Math.abs(oL)); pr=Math.max(pr,Math.abs(oR)); }
@@ -482,7 +494,7 @@ registerProcessor('terrain-splitter',TerrainSplitter);
 </script>
 <script>
 "use strict";
-var DEVICES=[{"dev": "Bode", "core": "bod", "proc": "terrain-bode", "pfx": "SYN_BOD_", "types": ["Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze"], "tpN": 8, "chars": ["Pristine", "Dome '64", "Tube 735", "Leaky", "Tape Loop", "Crush", "Iron", "Ash"], "d2k": "Route", "d2": ["Normal", "Cross", "Mono Sum", "Wide", "Shift First", "Shift Last"], "d2p": "ROUTE", "knobs": [["Shift", 50, "SHIFT"], ["Direction", 100, "DIR"], ["Fdbk", 0, "FDBK"], ["Mix", 100, "MIX"]], "keys": ["shift", "dir", "fdbk", "mix"], "back": [["Fine", 50, "FINE"], ["Stereo", 100, "SPREAD"], ["Time", 45, "TIME"], ["Diffusion", 0, "BLUR"], ["Low Keep", 0, "LOWKEEP"], ["Damping", 100, "DAMPING"], ["Env Shift", 50, "TOUCH"], ["Drift", 0, "DRIFT"]], "pills": [["Sync", 0], ["Guard", 1]], "pillKeys": ["sync", "guard"]}, {"dev": "Utility", "core": "utl", "proc": "terrain-utility", "pfx": "SYN_UTL_", "types": ["Strip", "Turn", "Outer", "Canopy", "Cellar"], "tpN": 8, "chars": ["Cushion", "Brick", "Coil", "Creep", "Tuck", "Rail", "Ripple", "Fuse"], "d2k": "Wiring", "d2": ["Through", "Difference", "L To Both", "R To Both", "L Only", "R Only"], "d2p": "WIRING", "knobs": [["Gain", 66.667, "GAIN"], ["Width", 50, "IMAGE"], ["Pan", 50, "STEER"], ["Mix", 100, "MIX"]], "keys": ["gain", "image", "steer", "mix"], "back": [["Drive", 0, "B1"], ["Shape", 50, "B2"], ["Mono Below", 0, "B3"], ["Slope", 0, "B4"], ["Rotate", 50, "B5"], ["Low Cut", 0, "B6"], ["Mono Above", 0, "B7"], ["Crossover", 50, "B8"]], "pills": [["Flip L", 0], ["Flip R", 0], ["Swap", 0], ["DC", 0], ["Mono", 0], ["Dim", 0]], "pillKeys": ["flipl", "flipr", "trade", "dc", "sum", "dim"]}, {"dev": "Splitter", "core": "spl", "proc": "terrain-splitter", "pfx": "SYN_SPL_", "types": ["Low / High", "Low / Mid / High", "Sub / Low / Mid / High", "Mid / Side", "Left / Right"], "tpN": 8, "typeIdx": 1, "d1k": "Slope", "d1p": "SLOPE", "chars": ["6 dB", "12 dB", "24 dB", "48 dB"], "charIdx": 2, "d2k": "Solo Mode", "d2": ["Latching", "Exclusive", "Momentary"], "d2p": "LATCH", "knobs": [["Split", 50, "SPLIT"], ["Balance", 50, "BALANCE"], ["Spread", 50, "SPREAD"], ["Mix", 100, "MIX"]], "keys": ["split", "balance", "spread", "mix"], "back": [["Low Gain", 50, "B1"], ["Mid Gain", 50, "B2"], ["High Gain", 50, "B3"], ["Mid Width", 50, "B4"], ["Spacing", 40, "B5"], ["Low Width", 50, "B6"], ["High Width", 50, "B7"], ["High Pan", 50, "B8"]], "pills": [["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0]], "pillKeys": ["mute1", "solo1", "flip1", "mute2", "solo2", "flip2", "mute3", "solo3", "flip3", "mute4", "solo4", "flip4"]}];
+var DEVICES=[{"dev": "Bode", "core": "bod", "proc": "terrain-bode", "pfx": "SYN_BOD_", "types": ["Shift", "Barberpole", "Echobode", "Detune", "Ring", "Spiral", "Chorale", "Freeze"], "tpN": 8, "chars": ["Pristine", "Dome '64", "Tube 735", "Leaky", "Tape Loop", "Crush", "Iron", "Ash"], "d2k": "Route", "d2": ["Normal", "Cross", "Mono Sum", "Wide", "Shift First", "Shift Last"], "d2p": "ROUTE", "knobs": [["Shift", 50, "SHIFT"], ["Direction", 100, "DIR"], ["Fdbk", 0, "FDBK"], ["Mix", 100, "MIX"]], "keys": ["shift", "dir", "fdbk", "mix"], "back": [["Fine", 50, "FINE"], ["Stereo", 100, "SPREAD"], ["Time", 45, "TIME"], ["Diffusion", 0, "BLUR"], ["Low Keep", 0, "LOWKEEP"], ["Damping", 100, "DAMPING"], ["Env Shift", 50, "TOUCH"], ["Drift", 0, "DRIFT"]], "pills": [["Sync", 0], ["Guard", 1]], "pillKeys": ["sync", "guard"]}, {"dev": "Utility", "core": "utl", "proc": "terrain-utility", "pfx": "SYN_UTL_", "types": ["Strip", "Turn", "Outer", "Canopy", "Cellar"], "tpN": 8, "chars": ["Cushion", "Brick", "Coil", "Creep", "Tuck", "Rail", "Ripple", "Fuse"], "d2k": "Wiring", "d2": ["Through", "Difference", "L To Both", "R To Both", "L Only", "R Only"], "d2p": "WIRING", "knobs": [["Gain", 66.667, "GAIN"], ["Width", 50, "IMAGE"], ["Pan", 50, "STEER"], ["Mix", 100, "MIX"]], "keys": ["gain", "image", "steer", "mix"], "back": [["Drive", 0, "B1"], ["Shape", 50, "B2"], ["Mono Below", 0, "B3"], ["Slope", 0, "B4"], ["Rotate", 50, "B5"], ["Cut At", 68, "B6"], ["Mono Above", 0, "B7"], ["Crossover", 50, "B8"]], "pills": [["Flip L", 0], ["Flip R", 0], ["Swap", 0], ["Low Cut", 0], ["Mono", 0], ["Dim", 0]], "pillKeys": ["flipl", "flipr", "trade", "dc", "sum", "dim"]}, {"dev": "Splitter", "core": "spl", "proc": "terrain-splitter", "pfx": "SYN_SPL_", "types": ["Low / High", "Low / Mid / High", "Sub / Low / Mid / High", "Mid / Side", "Left / Right"], "tpN": 8, "typeIdx": 1, "d1k": "Slope", "d1p": "SLOPE", "chars": ["6 dB", "12 dB", "24 dB", "48 dB"], "charIdx": 2, "d2k": "Solo Mode", "d2": ["Latching", "Exclusive", "Momentary"], "d2p": "LATCH", "knobs": [["Split", 50, "SPLIT"], ["Balance", 50, "BALANCE"], ["Spread", 50, "SPREAD"], ["Mix", 100, "MIX"]], "keys": ["split", "balance", "spread", "mix"], "back": [["Low Gain", 50, "B1"], ["Mid Gain", 50, "B2"], ["High Gain", 50, "B3"], ["Mid Width", 50, "B4"], ["Spacing", 40, "B5"], ["Low Width", 50, "B6"], ["High Width", 50, "B7"], ["High Pan", 50, "B8"]], "pills": [["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["M", 0], ["S", 0], ["F", 0], ["Mute", 0], ["Solo", 0], ["Flip", 0]], "pillKeys": ["mute1", "solo1", "flip1", "mute2", "solo2", "flip2", "mute3", "solo3", "flip3", "mute4", "solo4", "flip4", "px1", "px2", "px3"]}];
 var IC_PLUS='<svg class="ic-plus" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="7" y1="2.6" x2="7" y2="11.4"/><line x1="2.6" y1="7" x2="11.4" y2="7"/></svg>', IC_ARROW='<svg class="ic-arrow" viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"><line x1="2.6" y1="7" x2="11.4" y2="7"/><polyline points="6.4,3.4 2.6,7 6.4,10.6"/></svg>', IC_X='<svg viewBox="0 0 14 14" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"><line x1="3.3" y1="3.3" x2="10.7" y2="10.7"/><line x1="10.7" y1="3.3" x2="3.3" y2="10.7"/></svg>';
 var RLBL=['A','B','C','D','S','N'];
 function knobSVG(pct,label,glyph){
@@ -583,7 +595,7 @@ var FX_FMT={
             'utl|B3':function(v){ return v<=0.1?'Off':fx4Hz(20*Math.pow(60,v/100)); },
             'utl|B4':function(v){ return ''+Math.round(6*(1+2*v/100)); },   /* fb447 — dB/oct, bare: 6 .. 18 (the house's slope language) */
             'utl|B5':function(v){ var dg=(v/100-0.5)*80; return Math.abs(dg)<0.5?'0':(dg>0?'+':'−')+Math.abs(dg).toFixed(0); },
-            'utl|B6':function(v){ return v<=0.1?'Off':fx4Hz(15*Math.pow(320/15,v/100)); },
+            'utl|B6':function(v){ return fx4Hz(15*Math.pow(320/15,v/100)); },   /* fb448 — always the corner in Hz: the LAMP is the on/off, the knob is where */
             'utl|B7':function(v){ return Math.round(v)+'%'; },
             'utl|B8':function(v){ return fx4Hz(60*Math.pow(100,v/100)); },
             'ott|LOWCROSS':function(v,d){ var z=d&&d.__vz; return fx4Hz(z&&z.x?z.x[0]:30*Math.pow(10,v/100)); },
@@ -776,7 +788,7 @@ var CORES={
                handler binds them by index (Flip L · Flip R · Swap · DC = pp[0..3]); Mono and Dim are
                pp[4..5] on the chassis pill row like every other card. */
             utl:function(){
-              var lamps=['Flip L','Flip R','Swap','DC'], h='';
+              var lamps=['Flip L','Flip R','Swap','Low Cut'], h='';   /* fb448 — "DC doesn't work": a 15 Hz DC block is inaudible by nature; the lamp is now the LOW CUT at the Cut At corner (default 120 Hz), night and day */
               for(var i=0;i<4;i++) h+='<span class="fxr-pill utl-sw"><span class="utl-dot"></span><span class="fxr-t">'+lamps[i]+'</span></span>';
               return '<svg viewBox="0 0 226 78" preserveAspectRatio="none">'
                 +'<text class="utl-pin" x="'+(FX4_X0+0.5)+'" y="24.4" font-size="6.5" fill="rgba(255,255,255,0.55)">L</text>'
@@ -803,14 +815,19 @@ var CORES={
                Split / Spacing; wheel over a band = its gain; right-click = Mute · Solo · Flip · Add a
                device here · Reset. */
             spl:function(){
-              var h='', adds='';
+              var h='', adds='', nums='';
+              /* fb448 — TRANSPARENT (Max: "the splitter needs to be transparent, we can see our audio"): the region
+                 rect is a HIT AREA only (fill kept so it receives the pointer, opacity 0 — never a wash); the
+                 selected band is marked by a purple hairline across its top (the lane cards' own hairline, so the
+                 band and the cards that live in it wear the same mark); the numbers live in an HTML layer. */
               for(var k=0;k<4;k++){
                 h+='<g class="spl-lane" data-lane="'+k+'" opacity="0">'
-                 +  '<rect class="spl-rg" data-lane="'+k+'" x="0" y="4" width="0" height="70" fill="#B794FF" opacity="0.05"/>'
-                 +  '<text class="spl-lt" data-lane="'+k+'" x="0" y="11.5" font-size="6.5" fill="rgba(255,255,255,0.55)" text-anchor="start"></text>'
+                 +  '<rect class="spl-rg" data-lane="'+k+'" x="0" y="4" width="0" height="70" fill="#B794FF" opacity="0"/>'
                  +'</g>';
                 adds+='<span class="spl-add" data-lane="'+k+'" style="display:none" title="Add a device in this band">'+IC_PLUS+'</span>';
+                nums+='<span class="spl-lt" data-lane="'+k+'" style="display:none"></span>';
               }
+              h+='<line class="spl-selh" x1="0" y1="4.6" x2="0" y2="4.6" stroke="#B794FF" stroke-width="1.3" opacity="0"/>';
               for(var x=0;x<3;x++){
                 h+='<line class="spl-xl" data-k="'+x+'" x1="0" y1="4" x2="0" y2="74" stroke="rgba(255,255,255,0.45)" stroke-width="1" opacity="0"/>'
                  + '<circle class="spl-n" data-k="'+x+'" cx="0" cy="39" r="2.4" fill="currentColor" stroke="none" opacity="0"/>';
@@ -820,6 +837,7 @@ var CORES={
                 +'<line x1="6.5" y1="74" x2="219.5" y2="74" stroke="rgba(255,255,255,0.13)" stroke-width="1"/>'
                 +h
                 +'</svg>'
+                +'<div class="spl-nums">'+nums+'</div>'
                 +'<div class="spl-adds">'+adds+'</div>';
             },
             
@@ -1219,7 +1237,8 @@ window.__setSynParam=function(id,norm){ try{
           // redraw; the mockup provides the same name.
           function fx4SplSelect(d){ try{ if(typeof reRenderKeepSwap==='function') reRenderKeepSwap(); else if(typeof render==='function') render(); }catch(e){} }
           function fx4DrawSpl(core,dev,f){
-            fx4SpecCv(core);
+            // fb448 — the audio is PURPLE here (what you hear; the Bode's live layer), bold: idle dim, playing bright
+            var cc=fx4SpecCanvas(core); if(cc) fx4SpecLayer(cc.ctx,cc.W,cc.Hp,cc.dpr,null,'183,148,255',3.5,0.30,0.95,1.2);
             var st=dev.__st||(dev.__st={}), t=fx4SplType(dev), nm=SPL_LANE_NAMES[t]||SPL_LANE_NAMES[1];
             var nl=nm.length, freq=(t<3), xo=fx4SplXovers(dev);   // from the TYPE: the post's nl lags a Type change by a frame (NaN widths)   // the knobs' own law: param-reactive even with no feed
             var bounds=[FX4_X0];
@@ -1228,19 +1247,26 @@ window.__setSynParam=function(id,norm){ try{
             bounds.push(FX4_X1);
             for(var L=0;L<4;L++){
               var g=core.querySelector('.spl-lane[data-lane="'+L+'"]'); if(!g) continue;
-              var live=L<nl, ad=core.querySelector('.spl-add[data-lane="'+L+'"]'); g.setAttribute('opacity',live?'1':'0'); if(!live){ if(ad) ad.style.display='none'; continue; }
+              var live=L<nl, ad=core.querySelector('.spl-add[data-lane="'+L+'"]'), lt=core.querySelector('.spl-lt[data-lane="'+L+'"]'); g.setAttribute('opacity',live?'1':'0'); if(!live){ if(ad) ad.style.display='none'; if(lt) lt.style.display='none'; continue; }
               var x0=bounds[L], x1=bounds[L+1], w=Math.max(0,x1-x0);
               var pk=(f&&f.pk)?f.pk[L]:0, gt=(f&&f.gt)?f.gt[L]:1;
               var db=20*Math.log10(Math.max(1e-6,pk||0)), lv=fx4Gl(st,'lv'+L,Math.max(0,Math.min(1,(db+60)/60)),0.3);
               var sel=((dev.sel||0)===L);
-              var rg=g.querySelector('.spl-rg'); if(rg){ rg.setAttribute('x',x0.toFixed(1)); rg.setAttribute('width',w.toFixed(1)); rg.setAttribute('opacity',(gt>0.5?(0.03+0.19*lv+(sel?0.06:0)):(sel?0.03:0.008)).toFixed(3)); }
+              var rg=g.querySelector('.spl-rg'); if(rg){ rg.setAttribute('x',x0.toFixed(1)); rg.setAttribute('width',w.toFixed(1)); rg.setAttribute('opacity','0'); }   // fb448 — transparent: a hit area, never a wash
               // the number at the top-left: the frequency this band STARTS at (the first band has none);
               // Mid/Side and Left/Right carry one letter. Thin white; brighter on the selected band.
-              var lt=g.querySelector('.spl-lt'); if(lt){ var label=freq?(L===0?'':fx4Hz(xo[L-1]||0)):((t===3?['M','S']:['L','R'])[L]||''); if(lt.textContent!==label) lt.textContent=label; lt.setAttribute('x',(x0+3).toFixed(1)); lt.setAttribute('fill',sel?'rgba(255,255,255,0.90)':(gt>0.5?'rgba(255,255,255,0.50)':'rgba(255,255,255,0.22)')); lt.setAttribute('opacity',w<14?'0':'1'); }
+              // the number at the top-left: the frequency this band STARTS at — the low band says 20 (fb448, Max: "the low
+              // doesn't have a number"); Mid/Side and Left/Right carry one letter. HTML, crisp; bright on the selected band.
+              if(lt){ var label=freq?(L===0?'20':fx4Hz(xo[L-1]||0)):((t===3?['M','S']:['L','R'])[L]||''); if(lt.textContent!==label) lt.textContent=label; lt.style.display=w<14?'none':'block'; lt.style.left=((x0+3)/226*100).toFixed(2)+'%'; lt.classList.toggle('sel',sel); lt.classList.toggle('dim',!(gt>0.5)); }
               // the bare plus, bottom-left, raised clear of the baseline
               // the header's "+", white, raised clear of the baseline (fb447): an HTML glyph positioned by the band's left edge
               if(ad){ var show=w>16; ad.style.display=show?'grid':'none'; if(show){ ad.style.left=((x0+9)/226*100).toFixed(2)+'%'; ad.classList.toggle('sel',sel); } }
             }
+            // the selected band wears the lane cards' purple top hairline (fb448) — the band and its chain, one mark
+            var sh=core.querySelector('.spl-selh'); if(sh){ var Sb=Math.max(0,Math.min(nl-1,dev.sel||0)); sh.setAttribute('x1',bounds[Sb].toFixed(1)); sh.setAttribute('x2',bounds[Sb+1].toFixed(1)); sh.setAttribute('opacity','0.85'); }
+            // the chassis pills are PROXIES for the selected band's Mute · Solo · Flip (fb448): paint them from the lane's own state
+            var cardS=core.closest('.fxr-dev'); if(cardS){ var cp=cardS.querySelectorAll('.fxr-pills .fxr-pill'), Sp=Math.max(0,Math.min(nl-1,dev.sel||0));
+              for(var q3=0;q3<3&&q3<cp.length;q3++){ var onP=!!(dev.pills[3*Sp+q3]&&dev.pills[3*Sp+q3].on); cp[q3].classList.toggle('fxr-on',onP); if(dev.pills[12+q3]) dev.pills[12+q3].on=onP; } }
             for(var k2=0;k2<3;k2++){
               var xl=core.querySelector('.spl-xl[data-k="'+k2+'"]'), nd=core.querySelector('.spl-n[data-k="'+k2+'"]');
               var on=freq&&k2<nl-1, x=on?bounds[k2+1]:(k2===0&&!freq?bounds[1]:0);
@@ -1543,6 +1569,21 @@ window.__setSynParam=function(id,norm){ try{
               if(Date.now()-lastMenu<150) return;
               var L=laneAt(core,unit(svg,e)); if(L>=0) laneMenu(core,d,L,e.clientX,e.clientY); }catch(err){} },true);
           })();
+          /* ═══ fb448 — SOLO MODE · MOMENTARY on the Splitter's Solo PILL: held = the selected band solos, released = off;
+             the click that follows is told to skip (pill.__momSkip). The band-hold gesture on the core is the other half. ═══ */
+          (function(){
+            document.addEventListener('pointerdown',function(e){ try{
+              var pill=e.target.closest&&e.target.closest('.fxr-pills .fxr-pill'); if(!pill||e.button!==0) return;
+              var card=pill.closest('.fxr-dev'); if(!card) return; var d=DEVS[+card.getAttribute('data-dev')]; if(!d||d.core!=='spl') return;
+              var pi=[].indexOf.call(card.querySelectorAll('.fxr-pills .fxr-pill'),pill); if(pi!==1) return;
+              if(!(d.back&&d.back.d2&&d.back.d2.v==='Momentary')) return;
+              var sL=Math.max(0,d.sel||0), tI=3*sL+1;
+              var set=function(onv){ if(d.pills[tI]) d.pills[tI].on=onv; if(d.pills[13]) d.pills[13].on=onv; pill.classList.toggle('fxr-on',onv); if(d.pp&&d.pp[tI]) window.__setSynParam(d.pp[tI],onv?1:0); };
+              pill.__momSkip=true; set(true);
+              var upP=function(){ document.removeEventListener('pointerup',upP,true); document.removeEventListener('pointercancel',upP,true); set(false); };
+              document.addEventListener('pointerup',upP,true); document.addEventListener('pointercancel',upP,true);
+            }catch(err){} },true);
+          })();
           
 
 render();
@@ -1582,7 +1623,12 @@ render();
   });
   document.addEventListener('click',function(e){
     var card=e.target.closest&&e.target.closest('.fxr-dev'); if(!card) return; var d=DEVS[+card.getAttribute('data-dev')];
-    var pill=e.target.closest('.fxr-pill'); if(pill){ var pi=[].indexOf.call(card.querySelectorAll('.fxr-pill'),pill); if(pi<0||!d.pills[pi]) return; d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
+    var pill=e.target.closest('.fxr-pill'); if(pill&&pill.__momSkip){ pill.__momSkip=false; return; }   /* fb448 — a Momentary Solo rode pointerdown/up */
+    if(pill){ var pi=[].indexOf.call(card.querySelectorAll('.fxr-pill'),pill);
+      if(d.core==='spl'){ /* fb448 — the chassis pills are PROXIES for the selected band's Mute · Solo · Flip */
+        var sL=Math.max(0,d.sel||0), tI=3*sL+pi; if(!d.pills[tI]) return; d.pills[tI].on=!d.pills[tI].on; if(d.pills[12+pi]) d.pills[12+pi].on=d.pills[tI].on; pill.classList.toggle('fxr-on',d.pills[tI].on); push(d,d.__t.pillKeys[tI],d.pills[tI].on?1:0,true);
+        if(pi===1&&d.pills[tI].on&&d.back.d2.v==='Exclusive'){ for(var qx=0;qx<4;qx++) if(qx!==sL&&d.pills[3*qx+1]&&d.pills[3*qx+1].on){ d.pills[3*qx+1].on=false; push(d,d.__t.pillKeys[3*qx+1],0,true); } } return; }
+      if(pi<0||!d.pills[pi]) return; d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
       /* the EQ's Delta is processor-level in the plugin (wet − dry); here the graph does it: the dry leg goes to −1 */
       if(d.core==='eqz'&&pi===0&&d.__dry&&ac){ d.__dry.gain.setTargetAtTime(d.pills[0].on?-1:0,ac.currentTime,0.02); } return; }
     var r=e.target.closest('.fxr-r'); if(r){ r.classList.toggle('fxr-on'); return; }

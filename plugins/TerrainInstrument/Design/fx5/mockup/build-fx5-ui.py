@@ -83,8 +83,8 @@ DEVICES = [
       knobs=[['Gain',66.667,'GAIN'],['Width',50,'IMAGE'],['Pan',50,'STEER'],['Mix',100,'MIX']],
       keys=['gain','image','steer','mix'],
       back=[['Drive',0,'B1'],['Shape',50,'B2'],['Mono Below',0,'B3'],['Slope',0,'B4'],
-            ['Rotate',50,'B5'],['Low Cut',0,'B6'],['Mono Above',0,'B7'],['Crossover',50,'B8']],
-      pills=[['Flip L',0],['Flip R',0],['Swap',0],['DC',0],['Mono',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
+            ['Rotate',50,'B5'],['Cut At',68,'B6'],['Mono Above',0,'B7'],['Crossover',50,'B8']],
+      pills=[['Flip L',0],['Flip R',0],['Swap',0],['Low Cut',0],['Mono',0],['Dim',0]], pillKeys=['flipl','flipr','trade','dc','sum','dim']),
  dict(dev='Splitter', core='spl', proc='terrain-splitter', pfx='SYN_SPL_',
       types=['Low / High','Low / Mid / High','Sub / Low / Mid / High','Mid / Side','Left / Right'], tpN=8, typeIdx=1,
       d1k='Slope', d1p='SLOPE', chars=['6 dB','12 dB','24 dB','48 dB'], charIdx=2,
@@ -93,8 +93,8 @@ DEVICES = [
       keys=['split','balance','spread','mix'],
       back=[['Low Gain',50,'B1'],['Mid Gain',50,'B2'],['High Gain',50,'B3'],['Mid Width',50,'B4'],
             ['Spacing',40,'B5'],['Low Width',50,'B6'],['High Width',50,'B7'],['High Pan',50,'B8']],
-      pills=[['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0]],
-      pillKeys=['mute1','solo1','flip1','mute2','solo2','flip2','mute3','solo3','flip3','mute4','solo4','flip4']),
+      pills=[['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['M',0],['S',0],['F',0],['Mute',0],['Solo',0],['Flip',0]],   # fb448 — the last three are the chassis PROXIES for the selected band
+      pillKeys=['mute1','solo1','flip1','mute2','solo2','flip2','mute3','solo3','flip3','mute4','solo4','flip4','px1','px2','px3']),
 ]
 
 PAGE = u"""<!doctype html>
@@ -142,7 +142,7 @@ button.on{border-color:var(--purple-400);color:#fff;box-shadow:none}
 <p class="sub">The three cards, their cores LIFTED from the plugin (one copy of the code), audible on worklet mirrors of the certified engines.
 Press <b>Start audio</b>, then <b>Play</b>. <b>Hear</b> follows whichever card you touch. The spectrum under every card is what you are hearing.
 <b>Bode</b>: drag the <b>dot on the rail</b> = Shift — the white ghost is where the partials were, the purple is where they went, and the streams between them run in the shift's direction (feedback keeps them going); wheel on the dot = Fdbk, double-click = zero, right-click = Up · Ring · Down.
-<b>Splitter</b>: drag a <b>crossover node</b>, wheel over a <b>band</b> = that lane's gain, right-click a band = Mute · Solo · Flip · Add a device here, the <b>+</b> drops a device into that band.
+<b>Splitter</b>: click a <b>band</b> to select it (the hairline), the chassis pills Mute · Solo · Flip act on it; drag a <b>crossover node</b>; wheel over a band = that lane's gain; right-click a band = the menu; the <b>+</b> drops a device into that band.
 <b>Utility</b>: the card draws the WIRING — two rails, L and R, through Flip → Swap → Mono → Width/Pan, lit by what leaves on each; the lamps under it are the switches. Knobs drag up/down, double-click resets.</p>
 <div class="bar">
   <button id="go">Start audio</button>
@@ -327,7 +327,12 @@ render();
   });
   document.addEventListener('click',function(e){
     var card=e.target.closest&&e.target.closest('.fxr-dev'); if(!card) return; var d=DEVS[+card.getAttribute('data-dev')];
-    var pill=e.target.closest('.fxr-pill'); if(pill){ var pi=[].indexOf.call(card.querySelectorAll('.fxr-pill'),pill); if(pi<0||!d.pills[pi]) return; d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
+    var pill=e.target.closest('.fxr-pill'); if(pill&&pill.__momSkip){ pill.__momSkip=false; return; }   /* fb448 — a Momentary Solo rode pointerdown/up */
+    if(pill){ var pi=[].indexOf.call(card.querySelectorAll('.fxr-pill'),pill);
+      if(d.core==='spl'){ /* fb448 — the chassis pills are PROXIES for the selected band's Mute · Solo · Flip */
+        var sL=Math.max(0,d.sel||0), tI=3*sL+pi; if(!d.pills[tI]) return; d.pills[tI].on=!d.pills[tI].on; if(d.pills[12+pi]) d.pills[12+pi].on=d.pills[tI].on; pill.classList.toggle('fxr-on',d.pills[tI].on); push(d,d.__t.pillKeys[tI],d.pills[tI].on?1:0,true);
+        if(pi===1&&d.pills[tI].on&&d.back.d2.v==='Exclusive'){ for(var qx=0;qx<4;qx++) if(qx!==sL&&d.pills[3*qx+1]&&d.pills[3*qx+1].on){ d.pills[3*qx+1].on=false; push(d,d.__t.pillKeys[3*qx+1],0,true); } } return; }
+      if(pi<0||!d.pills[pi]) return; d.pills[pi].on=!d.pills[pi].on; pill.classList.toggle('fxr-on',d.pills[pi].on); push(d,d.__t.pillKeys[pi],d.pills[pi].on?1:0,true);
       /* the EQ's Delta is processor-level in the plugin (wet − dry); here the graph does it: the dry leg goes to −1 */
       if(d.core==='eqz'&&pi===0&&d.__dry&&ac){ d.__dry.gain.setTargetAtTime(d.pills[0].on?-1:0,ac.currentTime,0.02); } return; }
     var r=e.target.closest('.fxr-r'); if(r){ r.classList.toggle('fxr-on'); return; }

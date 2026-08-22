@@ -503,6 +503,35 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(ur.len>60 && /^M/.test(ur.d0||''), 'Utility: the rails are DRAWN (a path with real geometry after a tick)', 'len='+ur.len);
   chk(ur.swapMoved===true && ur.lampOn===true, 'Utility: Swap re-routes the rails and its lamp lights from the model', JSON.stringify({moved:ur.swapMoved,lamp:ur.lampOn}));
 
+  /* ═══ fb448 — Max's third pass: the lamps FILL WHITE · the Splitter is TRANSPARENT (regions are hit areas,
+     the selected band wears a hairline) · its numbers are HTML and the low band says 20 · the + is 11px · three
+     chassis pills act on the SELECTED band · the DC lamp is a Low Cut you can hear. ═══ */
+  const m3=await pg.evaluate(async()=>{ const out={}; const D=window.__fxrDevs();
+    const u=D.find(x=>x.core==='utl'), ui=D.indexOf(u), ucore=document.querySelectorAll('.fxr-dev')[ui].querySelector('.fxr-core[data-core="utl"]');
+    u.pills.forEach(p=>p.on=false); u.pills[0].on=true; window.__fx4Tick(); await new Promise(r=>setTimeout(r,300));   // the lamp's fill has a 120 ms transition — read it settled, not mid-fade
+    const dot=ucore.querySelector('.utl-lamps .fxr-pill.fxr-on .utl-dot');
+    out.lampBg=dot?getComputedStyle(dot).backgroundColor:'none'; out.lampShadow=dot?getComputedStyle(dot).boxShadow:'none'; u.pills[0].on=false; window.__fx4Tick();
+    out.lampCaps=[...ucore.querySelectorAll('.utl-lamps .fxr-t')].map(e=>e.textContent);
+    const sp=D.find(x=>x.core==='spl'), si=D.indexOf(sp); sp.type='Low / Mid / High'; window.__fxApplyType(sp,sp.type); sp.sel=1; window.__fxrRender(); for(let k=0;k<3;k++) window.__fx4Tick();
+    const card=document.querySelectorAll('.fxr-dev')[si], core=card.querySelector('.fxr-core[data-core="spl"]');
+    out.rgOp=[...core.querySelectorAll('.spl-rg')].map(r=>r.getAttribute('opacity')).join(',');
+    out.lt=[...core.querySelectorAll('.spl-lt')].map(e=>e.tagName+':'+e.textContent+(e.classList.contains('sel')?'*':'')).join('|');
+    out.plusW=Math.round(core.querySelector('.spl-add').getBoundingClientRect().width); out.swapW=Math.round(card.querySelector('.fxr-swap').getBoundingClientRect().width);   // the panel may be SCALED: compare to the header's own box
+    const sh=core.querySelector('.spl-selh'); out.hair=sh?[+sh.getAttribute('x1'),+sh.getAttribute('x2'),+sh.getAttribute('opacity')]:null;
+    const rg=[...core.querySelectorAll('.spl-rg')]; out.hairOnSel=!!(sh&&rg[1]&&Math.abs(+sh.getAttribute('x1')-(+rg[1].getAttribute('x')))<0.2);
+    out.chassis=[...card.querySelectorAll('.fxr-pills .fxr-t')].map(e=>e.textContent).join(',');
+    window.__W.splice(0); sp.pills.forEach(p=>p.on=false); sp.back.d2.v='Latching'; card.querySelectorAll('.fxr-pills .fxr-pill')[1].click(); out.soloWrites=window.__W.splice(0).map(w=>w[0]+'='+w[1]); out.lane2Solo=!!sp.pills[4].on;
+    sp.sel=0; window.__fxrRender(); for(let k=0;k<2;k++) window.__fx4Tick(); const card2=document.querySelectorAll('.fxr-dev')[si]; out.pillFollowsSel=card2.querySelectorAll('.fxr-pills .fxr-pill')[1].classList.contains('fxr-on');   // band 1 is NOT soloed → the proxy reads off
+    sp.sel=1; window.__fxrRender(); for(let k=0;k<2;k++) window.__fx4Tick(); out.pillBackOn=document.querySelectorAll('.fxr-dev')[si].querySelectorAll('.fxr-pills .fxr-pill')[1].classList.contains('fxr-on');
+    sp.pills.forEach(p=>p.on=false); return out; });
+  chk(m3.lampBg==='rgb(255, 255, 255)' && m3.lampShadow==='none', 'Utility lamps FILL WHITE when on — no purple, no glow (fb448)', m3.lampBg+' shadow='+m3.lampShadow);
+  chk(m3.lampCaps.join(',')==='Flip L,Flip R,Swap,Low Cut', 'the DC lamp is now LOW CUT (a 15 Hz DC block is inaudible by nature)', m3.lampCaps.join(','));
+  chk(m3.rgOp==='0,0,0,0' && m3.hair && m3.hair[2]>0.5 && m3.hairOnSel, 'Splitter is TRANSPARENT: regions at opacity 0, the selected band wears the purple hairline', 'rg='+m3.rgOp+' hair='+JSON.stringify(m3.hair));
+  chk(/^SPAN:20\|SPAN:\S+\*\|SPAN:\S+/.test(m3.lt||''), 'Splitter numbers are HTML spans, the LOW band says 20, the selected band is bright', m3.lt);
+  chk(m3.swapW>0 && Math.abs(m3.plusW/m3.swapW-11/14)<0.08, 'the band + is 11/14 of the header\'s + box (smaller, same glyph)', 'plus='+m3.plusW+' header='+m3.swapW);
+  chk(m3.chassis==='Mute,Solo,Flip' && m3.lane2Solo===true && m3.soloWrites.some(w=>/SYN_SPL_SOLO2=1/.test(w)), 'Splitter chassis pills = Mute · Solo · Flip for the SELECTED band: Solo with band 2 selected writes SOLO2', m3.chassis+' writes='+m3.soloWrites.join(','));
+  chk(m3.pillFollowsSel===false && m3.pillBackOn===true, 'the proxy pills FOLLOW the selection (band 1: off · back to band 2: on)', JSON.stringify({b1:m3.pillFollowsSel,b2:m3.pillBackOn}));
+
   /* ═══ fb447 — THE SPLITTER'S BACK KNOBS WEAR THE BAND'S NAME PER TYPE, and the cells a Type cannot bind are
      DEAD (dim, '—'), never a knob that does nothing (Max: "lane three and lane four wasn't doing much"). ═══ */
   const rb=await pg.evaluate(()=>{ const out={}; const D=window.__fxrDevs(); const d=D.find(x=>x.core==='spl'); if(!d) return {err:'no splitter'};

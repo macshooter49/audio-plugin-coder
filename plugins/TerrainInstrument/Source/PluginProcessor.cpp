@@ -4297,10 +4297,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             // Drive into the Character's rail · Shape (its second axis) · Rotate (M/S rotation) ·
             // Low Cut (the DC/subsonic corner the DC lamp engages) · Mono Above (HF coupling — the
             // exact inverse of Mono Below) · Crossover (the Hz where Mono Above / Coil / Canopy / Cellar hinge).
+            // fb448 — "DC doesn't work" (Max): a 15 Hz DC block is inaudible BY NATURE, which on this rack is a
+            // dead control. The lamp is now the LOW CUT (it engages the block at the `Cut At` corner, 15..320 Hz)
+            // and the corner defaults to 120 Hz so the lamp alone is night and day. Same IDs, same engine.
             const char* const ubn[8] = { "Drive","Shape","Mono Below","Slope",
-                                         "Rotate","Low Cut","Mono Above","Crossover" };
-            const float ubd[8] = { 0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.0f, 0.0f, 0.5f };
-            const char* const upn[6] = { "Flip L","Flip R","Swap","Mono","DC","Dim" };   // fb447 — Trade→Swap, Sum→Mono (plain words)
+                                         "Rotate","Cut At","Mono Above","Crossover" };
+            const float ubd[8] = { 0.0f, 0.5f, 0.0f, 0.0f, 0.5f, 0.68f, 0.0f, 0.5f };   // 0.68 = 120 Hz on the 15..320 log taper
+            const char* const upn[6] = { "Flip L","Flip R","Swap","Mono","Low Cut","Dim" };   // fb447 — Trade→Swap, Sum→Mono · fb448 — DC→Low Cut
             const char* const upi[6] = { "FLIPL","FLIPR","TRADE","SUM","DC","DIM" };
             for (int nn = 1; nn <= ParameterIDs::kFxInstances; ++nn)
             {
