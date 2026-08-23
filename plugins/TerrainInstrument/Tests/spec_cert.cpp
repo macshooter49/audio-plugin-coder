@@ -15,9 +15,11 @@
 //  -D on the real header where it cannot; see MUTATION.md notes in the commit.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include "SpectralMorph.h"
+#include "SynthModConfig.h"
 #include "WavetableBank.h"
 #include "Shapers.h"
 #include <cstdio>
+#include <cstring>
 #include <cmath>
 #include <vector>
 #include <string>
@@ -135,6 +137,52 @@ int main (int argc, char** argv)
         int commas = 0; for (size_t i = 0; i < js.size() && js[i] != ']'; ++i) if (js[i] == ',') ++commas;
         snprintf (b, sizeof b, "SPECTRAL_MODES has %d entries, enum Count = %d", commas + 1, (int) tw::SpectralMode::Count);
         gate (commas + 1 == (int) tw::SpectralMode::Count, "N2  SPECTRAL_MODES length == the param's cardinality", b);
+
+        // N3 — THE DESTINATION NUMBERS, COMPARED RATHER THAN COMMENTED. index.html's KNOBDEST
+        // hardcodes the window's base ints; SynthModConfig.h has a static_assert whose MESSAGE says
+        // so. A message is not a check: the assert fires if the C++ moves, and stays silent if the
+        // JS does. Saved projects store dest ints, so a drift here silently re-points every window
+        // route in every existing project at something else.
+        auto jsInt = [&] (const char* key) -> int {
+            const size_t k = htm.find (key); if (k == std::string::npos) return -1;
+            const size_t c = htm.find (':', k); if (c == std::string::npos) return -1;
+            return std::atoi (htm.c_str() + c + 1); };
+        const int jsLo = jsInt ("'SPECTRAL_LO':"), jsHi = jsInt ("'SPECTRAL_HI':");
+        snprintf (b, sizeof b, "KNOBDEST says Lo=%d Hi=%d; the enum says Lo=%d Hi=%d",
+                  jsLo, jsHi, (int) wc::ModDest::SpecLoA, (int) wc::ModDest::SpecHiA);
+        gate (jsLo == (int) wc::ModDest::SpecLoA && jsHi == (int) wc::ModDest::SpecHiA,
+              "N3  the UI's destination ints MATCH the C++ enum", b);
+
+        // N4 — and the rack block's own bound, which the JS derives geometrically. If the C++
+        // appended anything BELOW FxModEnd, these two would disagree and every saved rack route
+        // would shift.
+        const size_t fb = htm.find ("var FXMOD_BASE=");
+        const int jsBase = (fb == std::string::npos) ? -1 : std::atoi (htm.c_str() + fb + 15);
+        snprintf (b, sizeof b, "JS FXMOD_BASE=%d + 16*6*12 = %d; C++ FxModEnd = %d",
+                  jsBase, jsBase + 1152, (int) wc::ModDest::FxModEnd);
+        gate (jsBase == (int) wc::ModDest::FxModBase && jsBase + 1152 == (int) wc::ModDest::FxModEnd,
+              "N4  the rack block's bound agrees across C++ and JS", b);
+
+        // N5 — the window's RANGE is authored twice: once as a NormalisableRange in
+        // createParameterLayout and once as three constants in fmtSynReadout, which has to undo the
+        // same skew to print a harmonic number from a normalised knob. If they drift, the readout
+        // says one harmonic and the DSP uses another — and both look entirely plausible.
+        // read the number that FOLLOWS the key — strlen, not a hand-counted offset. The first
+        // version of this gate used magic skips, mis-counted one by a character, and reported the
+        // C++ low edge as 0. A gate that fails for its own reason is noise; it just happened to
+        // fail loudly rather than pass quietly.
+        auto num = [&] (const std::string& hay, const char* key) -> double {
+            const size_t k = hay.find (key); if (k == std::string::npos) return -1.0;
+            return std::atof (hay.c_str() + k + std::strlen (key)); };
+        const double cLo = num (cpp, "NormalisableRange<float> rLo (");
+        const double cHi = num (cpp, "NormalisableRange<float> rHi (1.0f, ");
+        const double cCe = num (cpp, "rLo.setSkewForCentre (");
+        const double jLo = num (htm, "const SPECWIN_LO = ");
+        const double jHi = num (htm, "SPECWIN_HI = ");
+        const double jCe = num (htm, "SPECWIN_CENTRE = ");
+        snprintf (b, sizeof b, "C++ (%.0f..%.0f, centre %.0f)  JS (%.0f..%.0f, centre %.0f)", cLo, cHi, cCe, jLo, jHi, jCe);
+        gate (cLo > 0 && jLo > 0 && cLo == jLo && cHi == jHi && cCe == jCe,
+              "N5  the window's range+skew agrees across the DSP and the readout", b);
     }
 
     // ── D — DISPERSE ──────────────────────────────────────────────────────────────────────────
