@@ -65,6 +65,7 @@ namespace tw
     public:
         static constexpr int kFrameSize    = 2048;  // power of 2 → cheap modulo via mask
         static constexpr int kNumMipLevels = 34;    // fb301 — SIXTH-OCTAVE ladder (was fb300 third-octave / 19 levels). EDGE-TO-EDGE harmonics: the picked cap now sits within ~1.12× of Nyquist, so G#3's top harmonic reaches ~23.5 kHz (was 21 kHz at third-octave) — flush with Serum's ~23.9 kHz meter edge, no top-right gap. Old octave ladder wasted up to a full octave; third-octave left a ~3 kHz notch at 21–24 kHz; sixth-octave closes it. Cost: 34×16×2048×4B = 4.46 MB/table (~134 MB across 30 factory tables) — the edge-to-edge quality tier, chosen by Max (dial to quarter-octave/24 levels/94 MB if RAM matters more). Affects ALL wavetables: buildFromSpec (30 factory) + buildFromPcm (imports) share this ladder.
+        static constexpr int kBlurMaxTaps  = 32;    // fb464 — most frames any one blur read may sum
         static constexpr int kMaxFrames    = 256;   // hard ceiling on frame count (imported tables);
                                                     // also sizes renderBlend's stack weight array
 
@@ -375,16 +376,37 @@ namespace tw
             }
 
             // ── BLUR PATH — Gaussian over a BOUNDED band around the centre. Frames past ~4σ carry
-            // negligible weight (exp(-8) ≈ 3e-4), so only [lo..hi] is summed → O(frameSize × band)
-            // instead of O(frameSize × N). Keeps blur cheap on big imported tables too.
-            const float sigma = 0.0001f + blur * blur * 9.0f;  // frame-axis spread
+            // negligible weight (exp(-8) ≈ 3e-4), so only [lo..hi] is summed.
+            //
+            // 🚨 fb464 — RE-RANGED, AND THE WIDTH IS NOW A FRACTION OF THE TABLE.
+            //    The old spread was `0.0001 + blur²·9` in ABSOLUTE FRAMES, and Tests/blur_audit.cpp
+            //    measured on the installed AU what that costs:
+            //      blur  25%  →  -53..-102 dB of harmonic change   (inaudible: sigma < 0.6 FRAMES)
+            //      blur  50%  →  -29.. -66 dB
+            //      blur 100%  →  -13.5 dB at best (Prophet Saw), centroid 6.07 -> 4.18
+            //    So the bottom half of the knob did nothing at all, and on a 256-frame IMPORT a
+            //    spread of 9 frames is 3.5% of the table — nothing at any setting. Max: "blur isn't
+            //    really doing much, like not at all."
+            //    Now: sigma scales with N, so blur means the SAME THING on a 16-frame factory table
+            //    and a 256-frame import, and the exponent is 1.25 instead of 2 so the travel is
+            //    close to linear in audible effect instead of all crammed into the top third.
+            //    At blur 1.0 the kernel spans the WHOLE table — the most a frame-axis mean can do.
+            const float sigma = 1.0e-4f + (float) N * 1.05f * std::pow (blur, 1.25f);
             const int   band  = juce::jmin (N, (int) std::ceil (sigma * 4.0f) + 2);
             const int   lo    = juce::jmax (0,     f0 - band);
             const int   hi    = juce::jmin (N - 1, f1 + band);
 
-            float w[kMaxFrames] = { 0.0f };   // sized to kMaxFrames; only [lo..hi] is written/read
+            // 🚨 COST CEILING, and it is what lets blur be MODULATED at all. A wide Gaussian is
+            //    SMOOTH, so sampling the frame axis coarsely is indistinguishable from summing
+            //    every frame — but it turns an O(frameSize × N) worst case (2048 × 256 per voice
+            //    per block on a big import, which is exactly the CPU objection fb75 raised when it
+            //    excluded blur from modulation) into a fixed O(frameSize × kBlurMaxTaps).
+            const int span   = hi - lo + 1;
+            const int stride = juce::jmax (1, (span + kBlurMaxTaps - 1) / kBlurMaxTaps);
+
+            float w[kMaxFrames] = { 0.0f };   // sized to kMaxFrames; only the strided taps are used
             float gsum = 0.0f;
-            for (int f = lo; f <= hi; ++f)
+            for (int f = lo; f <= hi; f += stride)
             {
                 const float d = ((float) f - fIdx) / sigma;
                 const float g = std::exp (-0.5f * d * d);
@@ -392,23 +414,24 @@ namespace tw
                 gsum += g;
             }
             const float gInv = gsum > 1.0e-12f ? (blur / gsum) : 0.0f;
-            for (int f = lo; f <= hi; ++f) w[(size_t) f] *= gInv;     // Gaussian part, scaled by blur
-            w[(size_t) f0] += (1.0f - blur) * (1.0f - fFrac);         // + bilinear part, scaled by (1-blur)
-            w[(size_t) f1] += (1.0f - blur) * fFrac;
+            for (int f = lo; f <= hi; f += stride) w[(size_t) f] *= gInv;
 
-            // Build the blended cycle over the band + accumulate RMS of it and of the bilinear ref.
+            // The bilinear part is added SEPARATELY rather than folded into w[f0]/w[f1]: with a
+            // stride, f0 and f1 need not land on the sampled grid, and a weight written to an
+            // index the accumulation loop never visits would silently vanish.
             double accBlend = 0.0, accRef = 0.0;
             for (int n = 0; n < frameSize_; ++n)
             {
                 float v = 0.0f;
-                for (int f = lo; f <= hi; ++f)
+                for (int f = lo; f <= hi; f += stride)
                     v += w[(size_t) f] * sample (lvl, f, n);
-                out[n] = v;
-                accBlend += (double) v * (double) v;
 
                 const float ref = sample (lvl, f0, n) * (1.0f - fFrac)
                                 + sample (lvl, f1, n) * fFrac;
-                accRef += (double) ref * (double) ref;
+                v += (1.0f - blur) * ref;                 // the un-blurred read, scaled by (1-blur)
+                out[n] = v;
+                accBlend += (double) v * (double) v;
+                accRef   += (double) ref * (double) ref;
             }
 
             // RMS-match to the un-blurred frame → loudness independent of blur amount.
