@@ -106,11 +106,13 @@ namespace tw
         int getFrameSize()    const noexcept { return frameSize_; }
         int getNumMipLevels() const noexcept { return numMipLevels_; }
 
-        /** Reconstruct 8 bandlimited mip levels from a frequency-domain spec.
-         *  Resets internal storage to 16 frames × kFrameSize samples × 8 levels.
-         *  Pure additive synthesis (one sin() per harmonic per sample) — no FFT
-         *  in 10a. ~17M sin() calls per wavetable; budget ~150-200ms each.
-         *  Normalizes each mip level so peak == 1.0. */
+        /** Reconstruct kNumMipLevels (34) band-limited mip levels from a frequency-domain spec.
+         *  Resets internal storage to 16 frames × kFrameSize samples × 34 levels.
+         *  544 inverse REAL transforms of 2048 points (WtFft.h), then one peak-normalise per level.
+         *  MEASURED, M2 Max: 2.27 ms — of which the transforms are ~1.3 ms and the normalise ~0.9.
+         *  (It was 19.1 ms until fb467. The comment that used to live here described Phase 10a's
+         *  sin()-summing 8-level build, which stopped being the code at fb301 and stopped being
+         *  additive long before that.) Normalizes each mip level so peak == 1.0. */
         void buildFromSpec (const WavetableSpec& spec)
         {
             numFrames_     = WavetableSpec::kNumFrames;

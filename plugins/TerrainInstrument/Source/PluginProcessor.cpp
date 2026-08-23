@@ -194,6 +194,19 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 
       apvts (*this, nullptr, "Parameters", createParameterLayout())
 {
+    // fb467 — resolve the spectral window's parameters ONCE. See the members' comment: the
+    // per-block publish must not do a string lookup on the audio thread.
+    {
+        static const char* const LO[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
+                                           ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
+        static const char* const HI[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
+                                           ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
+        for (int o = 0; o < 4; ++o)
+        { specLoParam_[o] = apvts.getParameter (juce::String (LO[o]));
+          specHiParam_[o] = apvts.getParameter (juce::String (HI[o]));
+          jassert (specLoParam_[o] != nullptr && specHiParam_[o] != nullptr); }
+    }
+
     initializePresets();
 
     // LFO ARC L1 — default every drawn-shape table to the triangle (a shape param restored
@@ -260,7 +273,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
         synthEngine.addVoice (v);
     }
 
-    // Spectral-morph rebuild runs on the message thread (the rebuild is ~5.6ms,
+    // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
     // far too heavy for the audio thread). 60Hz polling keeps the morph knob
     // responsive while never touching a buffer the audio thread is reading.
     startTimerHz (60);
@@ -7661,14 +7674,25 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // flat ±N-harmonic offset would be inaudible at harmonic 4 and catastrophic at 400.
             // modP returns the raw value UNCHANGED when nothing is routed, so an unmodulated window
             // publishes exactly its knob value and the rebuild gate below stays quiet.
+            // modP's law (fb193 + fb184's ownership), but through the parameter pointer cached in the
+            // constructor rather than a string lookup — see specLoParam_. Unrouted returns the raw
+            // value EXACTLY, so an unmodulated window cannot nudge the rebuild gate.
+            auto modWin = [&] (juce::RangedAudioParameter* p, float raw, int d) -> float
+            {
+                const float w0 = envOwnW[d];
+                if ((w0 <= 0.0f && modSums[d] == 0.0f) || p == nullptr) return raw;
+                const float w = w0 > 1.0f ? 1.0f : w0;
+                const float n = p->convertTo0to1 (raw);
+                return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
+            };
             static const char* const kLoIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
                                                    ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
             static const char* const kHiIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
                                                    ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
             for (int o = 0; o < 4; ++o)
             {
-                specLoEff_[o].store (modP (kLoIds[o], *rawParam (kLoIds[o]), (int) wc::ModDest::SpecLoA + o), std::memory_order_relaxed);
-                specHiEff_[o].store (modP (kHiIds[o], *rawParam (kHiIds[o]), (int) wc::ModDest::SpecHiA + o), std::memory_order_relaxed);
+                specLoEff_[o].store (modWin (specLoParam_[o], *rawParam (kLoIds[o]), (int) wc::ModDest::SpecLoA + o), std::memory_order_relaxed);
+                specHiEff_[o].store (modWin (specHiParam_[o], *rawParam (kHiIds[o]), (int) wc::ModDest::SpecHiA + o), std::memory_order_relaxed);
             }
         }
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);

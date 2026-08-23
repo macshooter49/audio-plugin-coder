@@ -1344,7 +1344,9 @@ private:
     tw::WavetableBank           wavetableBank;
 
     // ── Spectral Morph (Phase 11c rework) ────────────────────────────────
-    // Per-OSC morphed wavetable. SpectralMorph::apply + buildFromSpec is ~5.6ms
+    // Per-OSC morphed wavetable. SpectralMorph::apply + buildFromSpec is ~2.3 ms (fb467, M2 Max;
+    // it was 19.1 ms until the bake's transform moved to vDSP — and the '~5.6 ms' this comment
+    // used to claim stopped being true at fb301, when the mip ladder went from 8 levels to 34)
     // (too heavy for the audio thread), so the morphed table is rebuilt on the
     // message thread (timerCallback) into a DOUBLE BUFFER and atomic-published
     // to the voices. The audio thread only ever does an atomic pointer load and
@@ -1357,7 +1359,7 @@ private:
         std::atomic<const tw::Wavetable*> live { nullptr };
         std::atomic<int>                  audioReadingIdx { -1 };  // 0/1 = buf in use, -1 = none
         // RACE HARDENING (2026-07-05 scope-flatline root cause): buildFromSpec zeroes then
-        // refills IN PLACE (~5.6ms) while audioReadingIdx only refreshes at block START — a
+        // refills IN PLACE (~2.3 ms, fb467) while audioReadingIdx only refreshes at block START — a
         // voice could render its blend composite from a mid-build (zeroed) table and, with
         // pointer-keyed caching, latch SILENCE for minutes. ready[] parks the audio thread
         // on the plain bank table while a build is in flight; retireCooldown gives in-flight
@@ -1385,6 +1387,13 @@ private:
     // so the timer must build from the MODULATED value, not the raw param). -1 = not yet published.
     std::atomic<float> specLoEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     std::atomic<float> specHiEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    // fb467 — the eight window parameters, RESOLVED ONCE in the constructor. The publish needs the
+    // parameter's own NormalisableRange to modulate in its skewed space, and the general helper
+    // (fb193 modP) reaches it via apvts.getParameter(juce::String(pid)) — a juce::String is a
+    // ref-counted heap buffer, so that is a malloc per routed edge per block on the AUDIO THREAD.
+    // fb456's law: an allocation on the audio thread is a violation regardless of what it costs.
+    juce::RangedAudioParameter* specLoParam_[4] { nullptr, nullptr, nullptr, nullptr };
+    juce::RangedAudioParameter* specHiParam_[4] { nullptr, nullptr, nullptr, nullptr };
 
     // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
     // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-
@@ -1426,7 +1435,7 @@ private:
     //
     // 🚨 IT IS A SEPARATE FUNCTION FOR ONE REASON: wavetableForOsc() WRITES audioReadingIdx, which
     //    is the AUDIO thread's claim on a buffer and the thing rebuildMorphIfNeeded parks on before
-    //    it refills one in place (~5.6 ms). Calling it from the message thread would forge that
+    //    it refills one in place (~2.3 ms, fb467). Calling it from the message thread would forge that
     //    claim and could stall or mis-sequence the rebuild. This twin only READS. It still honours
     //    ready[], so a half-built table is never drawn.
     const tw::Wavetable* wavetableForDisplay (int osc, const MorphSlot& slot, int presetIdx) const noexcept
