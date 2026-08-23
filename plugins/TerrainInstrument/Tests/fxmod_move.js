@@ -333,6 +333,54 @@ const CASES = [
     chk(wtw.bakesPastWindow>=1,    'and it IS serviced once the window passes',       'bakes '+wtw.bakesPastWindow+' after ~2.3s');
   }
 
+  // ── fb463: is the MOTION continuous, or does it step on arrival? ───────────────────────────
+  // Max: "smooth like butter... like we have on the filter." The filter is smooth because its
+  // payload is a small curve on the ONE-WAY 60 Hz push; the waterfall is a whole 3-D table behind
+  // an async request. Every stage was measured sub-millisecond, so what remains is round-trip
+  // latency — unmeasurable from here. So the display morphs between arrivals instead of snapping,
+  // and THAT is what is gated: the interpolation buffer is directly observable.
+  const smooth = await pg.evaluate(async ()=>{
+    const out={}; const W=window.wtWaterfall;
+    if(!W) { out.err='no wtWaterfall'; return out; }
+    if(!W.lerpBuf) { out.err='no lerpBuf — pre-fb463 tree'; return out; }
+    const cv=document.getElementById('osc-wave-a'); if(!cv){ out.err='no canvas'; return out; }
+    W.on.a=true;
+    const mk=(v)=>({n:2,p:8,nf:2,d:Float32Array.from(new Array(16).fill(v))});
+    const now=()=>performance.now();
+
+    // prev = 1.0, current = 0.0, half way through the window -> every point must read 0.5
+    W.cache.a=mk(0.0); W.prev.a=mk(1.0); W.off.a=null;
+    W.xfDur.a=200; W.xfT0.a=now()-100;
+    try{ W.draw('a'); }catch(e){ out.err='draw threw: '+e; return out; }
+    out.mid=W.lerpBuf.a?+W.lerpBuf.a[0].toFixed(4):null;
+
+    // a quarter of the way -> 0.75 (prev-weighted). Proves it is a RAMP, not a one-shot swap.
+    W.cache.a=mk(0.0); W.prev.a=mk(1.0); W.off.a=null;
+    W.xfDur.a=200; W.xfT0.a=now()-50;
+    try{ W.draw('a'); }catch(e){}
+    out.quarter=W.lerpBuf.a?+W.lerpBuf.a[0].toFixed(4):null;
+
+    // past the window -> prev is dropped and the cached stack takes over (idle costs nothing)
+    W.cache.a=mk(0.0); W.prev.a=mk(1.0); W.off.a=null;
+    W.xfDur.a=50; W.xfT0.a=now()-500;
+    try{ W.draw('a'); }catch(e){}
+    out.prevAfter=W.prev.a===null;
+
+    // a table whose SHAPE changed cannot be interpolated against — it must be ignored, not lerped
+    W.cache.a=mk(0.0); W.prev.a={n:4,p:8,nf:4,d:Float32Array.from(new Array(32).fill(1))}; W.off.a=null;
+    W.xfDur.a=200; W.xfT0.a=now()-100;
+    let threw=false; try{ W.draw('a'); }catch(e){ threw=true; }
+    out.mismatchSafe=!threw;
+    return out;
+  });
+  if(smooth.err) chk(false,'fb463 smoothing — probe ran',smooth.err);
+  else {
+    chk(Math.abs(smooth.mid-0.5)<0.06,     'the table MORPHS between arrivals (half way = half way)', 'value '+smooth.mid+' ≈ 0.50');
+    chk(smooth.quarter>smooth.mid+0.10,    'and it is a RAMP, not a swap',                            'quarter '+smooth.quarter+' > mid '+smooth.mid);
+    chk(smooth.prevAfter===true,           'once settled it drops prev — an idle waterfall costs what it did', 'prev cleared');
+    chk(smooth.mismatchSafe===true,        'a table whose SHAPE changed is not interpolated against', 'no throw');
+  }
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close(); process.exit(fail?1:0);
 })().catch(e=>{ console.log('HARNESS ERROR '+e); process.exit(2); });
