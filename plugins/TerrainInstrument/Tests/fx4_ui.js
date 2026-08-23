@@ -150,10 +150,29 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.eqzMoved=document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d')!==flat;
     const nodes=[...document.querySelectorAll('.fxr-core[data-core="eqz"] .eqz-n')].slice(0,4);
     out.nodeCx=nodes.map(n=>+n.getAttribute('cx')); out.nodeCy=nodes.map(n=>+n.getAttribute('cy'));
-    // the node must sit ON the drawn line: sample the curve path at the node's x
+    // 🚨 fb468 — THIS LAW IS RETIRED AND REPLACED. Until fb468 the node was drawn by sampling the
+    //    summed, mix-scaled curve at its own x, and this gate held it there. That is what made cy a
+    //    pure function of cx, so two bands at the same frequency sat at distance 0.0000 and the
+    //    higher-indexed one could never be grabbed; it is also why moving one band moved every other
+    //    band's dot, and why the dot crawled under the cursor at Mix 50 %. The node now carries its
+    //    OWN gain (Tests/eq_ui.js gates C2/C3). What is still true, and what this now measures, is
+    //    that a node with the ONLY non-zero gain still lands on the line — the curve and the dots
+    //    have to agree when there is nothing to disagree about.
     const d=document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d');
     const pts=d.replace(/[ML]/g,' ').trim().split(/\s+/).map(Number); const xs=[],ys=[]; for(let i=0;i<pts.length;i+=2){xs.push(pts[i]);ys.push(pts[i+1]);}
     out.nodeOnLine=nodes.map(n=>{ const x=+n.getAttribute('cx'), y=+n.getAttribute('cy'); let best=1e9; for(let i=0;i<xs.length;i++){ if(Math.abs(xs[i]-x)<1.2) best=Math.min(best,Math.abs(ys[i]-y)); } return best; });
+    out.soloOnLine=(function(){
+      // ONE band moved, every other at 0 dB, Mix 100 %: the dot and the curve must coincide
+      const D=window.__fxDevs(), dv=D.find(z=>z.core==='eqz'); dv.knobs[3].v=100;
+      const cur=new Array(192).fill(0); for(let i=0;i<192;i++) cur[i]=-12*Math.exp(-Math.pow((i-96)/16,2));
+      window.__fx4VizPush.eqz[0]={lvl:0.8,hz:[100,632,3100,15500],db:[0,-12,0,0],on:[1,1,1,1,0,0,0,0],q:[1,1,1,1],curve:cur};
+      for(let i=0;i<10;i++) window.__fx4Tick();
+      const n=document.querySelector('.fxr-core[data-core="eqz"] .eqz-n[data-b="1"]');
+      const dd=document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d');
+      const p2=dd.replace(/[ML]/g,' ').trim().split(/\s+/).map(Number); let best=1e9;
+      const nx=+n.getAttribute('cx'), ny=+n.getAttribute('cy');
+      for(let i=0;i<p2.length;i+=2) if(Math.abs(p2[i]-nx)<1.2) best=Math.min(best,Math.abs(p2[i+1]-ny));
+      return best; })();
     out.nodeFill=getComputedStyle(nodes[1]).fill;
     const col=document.querySelector('.fxr-core[data-core="ott"] .ott-col'); out.ottColH=+col.getAttribute('height');
     const edn=document.querySelector('.fxr-core[data-core="ott"] .ott-edge-dn'); out.ottEdgeY=+edn.getAttribute('y1');
@@ -176,7 +195,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.vtxHalf=(document.querySelector('.fxr-core[data-core="eqz"] .eqz-curve').getAttribute('d').match(/[ML]/g)||[]).length;
     return out; }, NB);
   chk(r2.eqzMoved, 'Equalizer: the curve redraws from the push');
-  chk(r2.nodeOnLine.every(v=>v<1.5), 'Equalizer: every node sits ON the drawn line (never hovering at its own gain)', 'off-line by '+r2.nodeOnLine.map(v=>v.toFixed(2)).join(','));
+  chk(r2.soloOnLine<1.5, 'Equalizer: a band that is the ONLY one moved sits ON the drawn line (fb468 — the dot carries its own gain, so it leaves the line only when other bands are also shaping it)', 'off-line by '+(+r2.soloOnLine).toFixed(2));
   chk(/rgb\(2[0-9]{2}, 2[0-9]{2}, 2[0-9]{2}\)|rgb\(255, 255, 255\)/.test(r2.nodeFill), 'Equalizer: nodes are FILLED WHITE (no dark "eye" centres)', r2.nodeFill);
   chk(r2.nodeCx[0]<r2.nodeCx[1]&&r2.nodeCx[1]<r2.nodeCx[2]&&r2.nodeCx[2]<r2.nodeCx[3], 'Equalizer: nodes at the feed\'s Hz, in order', r2.nodeCx.map(v=>v.toFixed(1)).join(' < '));
   chk(r2.ottColH>0 && r2.ottEdgeY>4, 'Multiband: the level column and the ceiling jaw draw from the push', 'colH='+r2.ottColH.toFixed(1)+' edgeY='+r2.ottEdgeY.toFixed(1));
@@ -217,7 +236,13 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   const r4 = await pg.evaluate(()=>{
     const core=document.querySelector('.fxr-core[data-core="eqz"]'), r=core.getBoundingClientRect();
     window.__W.length=0;
-    core.dispatchEvent(new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-120,clientX:r.left+r.width/2,clientY:r.top+r.height/2}));
+    /* 🚨 fb468 — this used to wheel at the CORE'S CENTRE, which is a coin toss: with the dots now
+       carrying their own gains one of them can sit there, and then this gate would be measuring the
+       new dot behaviour while claiming to measure the rack's scroll. fb451's requirement is about the
+       GRID — "if I scroll on top of it, it won't move to the next effect" — so wheel somewhere there
+       is provably no dot: the top-right corner, above every band's curve. */
+    const wg=new WheelEvent('wheel',{bubbles:true,cancelable:true,deltaY:-120,clientX:r.left+0.93*r.width,clientY:r.top+0.10*r.height});
+    core.dispatchEvent(wg);
     const trait=window.__W.map(w=>w[0]);
     const oc=document.querySelector('.fxr-core[data-core="ott"]'), svg=oc.querySelector('svg'), rc=svg.getBoundingClientRect();
     const xl=oc.querySelector('.ott-xl[data-x="0"]'); const x=+xl.getAttribute('x1');
@@ -228,7 +253,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     const D=window.__fxDevs(); const d=D.find(z=>z.core==='ott');
     return {trait:[...new Set(trait)], xo:[...new Set(window.__W.map(w=>w[0]))], lowcross:d.back.knobs[0][1]};
   });
-  chk(r4.trait.length===0, 'wheel over the EQ core writes NOTHING — the wheel belongs to the rack\'s scroll (fb451, Max: "if I scroll on top of it, it won\'t move to the next effect")', r4.trait.join(',')||'no writes');
+  chk(r4.trait.length===0, 'wheel over the EQ GRID writes NOTHING — the wheel still belongs to the rack\'s scroll (fb451, Max: "if I scroll on top of it, it won\'t move to the next effect")', r4.trait.join(',')||'no writes');
   chk(r4.xo.includes('SYN_OTT_LOWCROSS'), 'dragging the Multiband\'s first crossover writes Low Cross', r4.xo.join(',')+' model='+(+r4.lowcross).toFixed(1));
 
   // ── readout law + relabel law + the route pill colour
@@ -408,7 +433,16 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     return out; });
   chk(r9.gridWrites===0 && !r9.gridMoved, 'press+drag on the EMPTY grid moves NOTHING (the grid is not a handle)', 'writes='+r9.gridWrites+' moved='+r9.gridMoved);
   chk(r9.gridWheelWrites===0 && r9.gridWheelFree===true, 'wheel over the grid is left to the rack (no EQ writes, pan free)', 'writes='+r9.gridWheelWrites+' free='+r9.gridWheelFree);
-  chk(r9.nodeWheelPrevented===false && !r9.nodeWheelWrites && r9.bodyQ===50, 'wheel over the Body dot writes NOTHING and is left to the rack\'s scroll (fb451 — Q lives on the back panel)', 'writes='+(r9.nodeWheelWrites||'none')+' q='+r9.bodyQ+' prevented='+r9.nodeWheelPrevented);
+  /* 🚨 fb468 — FLIPPED, and this is the headline of the EQ audit. fb451's commit ("the wheel no
+     longer eats the rack's scroll") deleted this handler from three cores at once. The Splitter's
+     really did swallow every scroll over its card; the EQ's already released the event whenever the
+     pointer was not on a dot, so it was collateral — and removing it ORPHANED the eight per-band Q
+     parameters, which stayed registered, pushed and applied while nothing in the UI could write one.
+     Max: "I can't even create notches anymore... I hover my mouse over the band and scroll and it
+     scrolls me over to the next effect." Q does NOT live on the back panel and never did: the only
+     other width control is the GLOBAL Trait knob, which is exactly why he also reports that one band
+     moves another. The grid half of fb451's requirement is gated above and still holds. */
+  chk(r9.nodeWheelPrevented===true && r9.nodeWheelWrites==='SYN_EQZ_BODYQ' && r9.bodyQ!==50, 'wheel over the Body dot sets THAT band\'s Q and nothing else (fb468 restores fb441)', 'writes='+(r9.nodeWheelWrites||'none')+' q='+r9.bodyQ+' consumed='+r9.nodeWheelPrevented);
   chk(r9.hotOnHover===true && r9.hotOnGrid===false, 'hover lights the dot (purple, larger, grab cursor); the grid clears it', 'hover='+r9.hotOnHover+' grid='+r9.hotOnGrid);
   chk(/_X[1-4]HZ/.test(r9.curveAddWrites)&&/_X[1-4]ON/.test(r9.curveAddWrites)&&/_X[1-4]Q/.test(r9.curveAddWrites)&&r9.curveAddGain===0.5, 'double-click ON THE CURVE adds a band there at 0 dB (gain 0.5, Q at the law)', r9.curveAddWrites+' gain='+r9.curveAddGain);
   chk(/~Delete band/.test(r9.roleRows||'')&&/(^|\|)Reset band/.test(r9.roleRows||''), 'right-click a ROLE dot: Delete band disabled (fixed), Reset band enabled', r9.roleRows);

@@ -910,7 +910,13 @@ public:
     static float bandHz (int b, float t) noexcept
     {
         static const float lo[4] = {   20.0f,  100.0f,   700.0f,  6000.0f };
-        static const float hi[4] = {  500.0f, 3000.0f, 14000.0f, 40000.0f };
+        // 🚨 fb468 — Air's top was 40 kHz. The card's plot ends at 20 kHz (fx4HzX), so the top 36.5 %
+        //    of this band's travel drew at one pixel column and could not be dragged: measured, a drag
+        //    took Reach 0.5000 -> 0.6346 and then froze for 310 px of mouse travel. 0.6346 is exactly
+        //    log(20k/6k)/log(40k/6k). Nothing above 20 kHz was audible and half of it was unreachable.
+        //    ⚠️ This MOVES an existing patch's Air corner: a stored Reach of t now means 6000*(10/3)^t
+        //    instead of 6000*(20/3)^t. t = 0 (6 kHz) and the default are unchanged.
+        static const float hi[4] = {  500.0f, 3000.0f, 14000.0f, 20000.0f };
         const int i = clampi (b, 0, 3);
         return lo[i] * std::pow (hi[i] / lo[i], clampf (t, 0.0f, 1.0f));
     }
