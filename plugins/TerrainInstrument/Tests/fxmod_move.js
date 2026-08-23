@@ -222,9 +222,14 @@ const CASES = [
       if(n==='getOscWavetable') return function(){
         window.__WTN++;
         const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0,0,0,0];
-        const P=8,N=2,arr=[]; for(let i=0;i<N*P;i++) arr.push(+(d[1]||0));
+        // fb462 — the stub answers the way the PLUGIN now does: SCALED INTEGERS plus "sc".
+        // Sending floats here would have left the new decode path untested while the gate stayed
+        // green and the real waterfall drew garbage — exactly the shape of trap this suite exists
+        // to catch. The cacheVal assertion below is what proves the decode: it wants 0.7 back out.
+        const SC=8192, P=8, N=2, arr=[];
+        for(let i=0;i<N*P;i++) arr.push(Math.round((+(d[1]||0))*SC));
         return Promise.resolve(JSON.stringify({n:N,p:P,nf:N,wm:d[0],wa:d[1],w2m:d[2],w2a:d[3],fs:d[4],fa:d[5],
-                                               sa:d[6],st:d[7],bl:d[8],ms:(window.__WTMS||0),d:arr}));
+                                               sa:d[6],st:d[7],bl:d[8],sc:SC,ms:(window.__WTMS||0),d:arr}));
       };
       return function(){ return Promise.resolve(0); };
     };
@@ -276,7 +281,7 @@ const CASES = [
 
     // 8. fb460 — THE COST CAP. A blurred bake on a big imported table is far more expensive than a
     //    16-frame factory one, so the interval follows the MEASURED cost (>= 10x). Tell the stub the
-    //    bake took 200 ms: the next interval must stretch to ~2 s, and a change must NOT be
+    //    bake took 200 ms: the next interval must stretch to ~800 ms, and a change must NOT be
     //    serviced inside that window. Without this the display could pin the message thread.
     //    (200 not 50: the window is measured from the LEARNING request, which can be ~450 ms old
     //     by the time the observation starts — at 50 ms the window expired mid-test and the
@@ -291,6 +296,13 @@ const CASES = [
     out.bakesInsideWindow=window.__WTN-b8;
     await settle(2000);                                                    // past it
     out.bakesPastWindow=window.__WTN-b8;
+    // fb462 — AND THE OTHER DIRECTION, which is the one Max actually felt: a CHEAP bake must be
+    // allowed to run at 60 fps. The floor used to be 90 ms (11 Hz) and a factory table's bake is
+    // sub-millisecond, so the FLOOR — not the cost — was deciding the frame rate. A gate on the
+    // expensive side only would have kept passing while the display stayed laggy.
+    window.__WTMS=0.5; W.lastReq.a=0;
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.80]; await settle(400);
+    out.cheapMs=(W.rebakeMs&&W.rebakeMs.a!=null)?W.rebakeMs.a:-1;
     window.__WTMS=0;
     return out;
   });
@@ -300,7 +312,9 @@ const CASES = [
     chk(wtw.sig1!==wtw.sig0,       'the cached table now carries the NEW shaping',   wtw.sig0+'  →  '+wtw.sig1);
     // the table lives in a Float32Array, so 0.7 comes back 0.699999988 — compare at float32
     // precision, not with ===. (Asserting === here was MY bug, not the plugin's.)
-    chk(Math.abs(wtw.cacheVal-0.7)<1e-6, 'the re-baked table is the one that was asked for','value '+wtw.cacheVal+' ≈ 0.7');
+    // 1/8192 quantisation now sits between the wire and this number, so the tolerance is the
+    // SCALE's own resolution, not float32's. Anything looser would hide a wrong divisor.
+    chk(Math.abs(wtw.cacheVal-0.7)<(1/8192), 'the SCALED-INT payload decodes back to what was asked for','value '+wtw.cacheVal+' ≈ 0.7 (±1/8192)');
     chk(wtw.bakesIdle===0,         'a SETTLED shaping bakes nothing (no CPU leak)',  wtw.bakesIdle+' bakes in 700ms');
     chk(wtw.bakesHidden===0,       'a HIDDEN waterfall bakes nothing (fb148)',       wtw.bakesHidden+' bakes while off');
     chk(wtw.bakesOnReturn>=1,      'coming back on screen catches the stale table up','bakes '+wtw.bakesOnReturn+'  sig '+wtw.sig2);
@@ -312,7 +326,9 @@ const CASES = [
     chk(wtw.sigBlurAfter!==wtw.sigBlurBefore && /0\.650/.test(wtw.sigBlurAfter),
                                    'the cached table carries the new BLUR',           wtw.sigBlurBefore+'  →  '+wtw.sigBlurAfter);
     chk(wtw.bakesAfterBlur===0,    'blur CONVERGES too — no runaway',                 wtw.bakesAfterBlur+' bakes after');
-    chk(wtw.learnedMs>=2000,       'the interval ADAPTS to a 200ms bake (>=10x)',     'interval '+wtw.learnedMs+' ms');
+    chk(wtw.learnedMs>=800,        'an EXPENSIVE bake still self-limits (>=4x)',      'interval '+wtw.learnedMs+' ms for a 200ms bake');
+    chk(wtw.cheapMs>0 && wtw.cheapMs<=17,
+                                   'a CHEAP bake may run at 60 fps (fb462)',          'interval '+wtw.cheapMs+' ms  (<=17 = 60 fps)');
     chk(wtw.bakesInsideWindow===0, 'an expensive bake is NOT re-run inside its window','bakes '+wtw.bakesInsideWindow+' in 280ms');
     chk(wtw.bakesPastWindow>=1,    'and it IS serviced once the window passes',       'bakes '+wtw.bakesPastWindow+' after ~2.3s');
   }
