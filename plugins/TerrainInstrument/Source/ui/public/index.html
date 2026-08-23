@@ -8869,9 +8869,10 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
               // that its own dial handler updates live on every pointermove
               // (`v=Math.max(0,Math.min(100,sV+(sY-ev.clientY)*0.6))`). Read that. No relay needed,
               // no round trip, and it follows the knob, the curve-drag and a preset alike.
-              var cut01 = Math.max(0, Math.min(1, (dev.knobs[0].v||0)/100));
-              var res01 = Math.max(0, Math.min(1, (dev.knobs[1].v||0)/100));
-              var drv   = Math.max(0, Math.min(1, (dev.knobs[2].v||0)/100));
+              /* fb457 — the rack Filter's own dials ride the engine's value too */
+              var cut01 = Math.max(0, Math.min(1, fxEffV(dev.core,dev.inst,0,(dev.knobs[0].v||0))/100));
+              var res01 = Math.max(0, Math.min(1, fxEffV(dev.core,dev.inst,1,(dev.knobs[1].v||0))/100));
+              var drv   = Math.max(0, Math.min(1, fxEffV(dev.core,dev.inst,2,(dev.knobs[2].v||0))/100));
               var tgtHz = 20*Math.pow(1000, cut01);
 
               // glide the DRAWN value in LOG-f space (the fb163 constant) — the part that reads as
@@ -8934,7 +8935,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 var ms=Math.max(0.05,f.dep||0.05), lfo=f.lfo||0;
                 if(dev.__d3==null) dev.__d3=ms;
                 dev.__d3=Math.exp(Math.log(dev.__d3)+0.25*(Math.log(ms)-Math.log(dev.__d3)));
-                var ph=(dev.back&&dev.back.knobs&&dev.back.knobs[7]?dev.back.knobs[7][1]:100)/100;
+                var ph=fxEffV(dev.core,dev.inst,11,(dev.back&&dev.back.knobs&&dev.back.knobs[7]?dev.back.knobs[7][1]:100))/100;   /* fb457 — back 7 = rack 11 */
                 var dl='',dr='',N=64;
                 for(var i=0;i<=N;i++){
                   var u=i/N, x=FX3_X0+(FX3_X1-FX3_X0)*u;
@@ -8952,7 +8953,7 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
                 // THE RIBBON — the comb magnitude, MIRRORED about the card's centre. Symmetric
                 // by construction, so it cannot drift off centre however the sweep moves.
                 var tau=Math.max(0.02,f.dep||0.02)/1000;          // seconds
-                var g=(dev.knobs&&dev.knobs[2]?(dev.knobs[2].v-50)/50:0);
+                var g=(fxEffV(dev.core,dev.inst,2,(dev.knobs&&dev.knobs[2]?dev.knobs[2].v:50))-50)/50;   /* fb457 */
                 if(dev.__t3==null) dev.__t3=tau;
                 dev.__t3=Math.exp(Math.log(dev.__t3)+0.22*(Math.log(tau)-Math.log(dev.__t3)));
                 var dt='',db='',M=96;
@@ -10920,7 +10921,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   if(!P){ P=[]; for(var i=0;i<cells.length;i++) P.push({
                     p1:frac(i*127.1)*6.283, p2:frac(i*311.7)*6.283, p3:frac(i*74.7)*6.283,
                     w1:0.5+1.1*frac(i*269.5), w2:0.5+1.1*frac(i*419.2), w3:2.0+2.5*frac(i*631.3) }); }
-                  var size=dd?Math.max(0,Math.min(1,(dd.knobs&&dd.knobs[0]?dd.knobs[0].v:30)/100)):0.3;
+                  var size=dd?Math.max(0,Math.min(1,fxEffV(dd.core,dd.inst,0,(dd.knobs&&dd.knobs[0]?dd.knobs[0].v:30))/100)):0.3;   /* fb457 */
                   var T=0.06+1.09*size, t=ts*0.001;                                  // T>1 at size 100 ⇒ every cell saturates lit
                   // fb342 — WRITE gating only, the loop stays armed (fb312 law): cells update at
                   // 30Hz (dwell is 4-12s — invisible) and an unchanged cell (|Δop|<=0.01, i.e. the
@@ -10956,14 +10957,17 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             function msFor(dd,side){ var syncOn=dd.pills&&dd.pills[0]&&dd.pills[0].on;
               var div=(side==='R')?(dd.divR||'1/8'):((dd.back&&dd.back.d2)?dd.back.d2.v:'1/8');
               if(syncOn&&DIVMS[div]) return DIVMS[div];
-              var v=(side==='R')?(dd.tR!=null?dd.tR:50):((dd.knobs&&dd.knobs[0])?dd.knobs[0].v:50);
+              var v=(side==='R')?(dd.tR!=null?dd.tR:50):fxEffV(dd.core,dd.inst,0,((dd.knobs&&dd.knobs[0])?dd.knobs[0].v:50));   /* fb457 */
               return Math.pow(8000, Math.max(0,Math.min(100,v))/100); }   // fb304 free-ms map (matches the DSP)
             function spFor(ms){ var t=Math.log(Math.max(8,ms)/8)/Math.log(1000); return 15+81*Math.max(0,Math.min(1,t)); }   // 8ms→15px (dense) · 8s→96px (sparse)
             function buildGeo(core,dd){
               var msL=msFor(dd,'L'), spL=spFor(msL), linked=(dd.link!==false);
               var msR=linked?msL:msFor(dd,'R'), spR=linked?spL:spFor(msR);
               var ping=dd.pills&&dd.pills[1]&&dd.pills[1].on;
-              var fbv=Math.max(0,Math.min(1,(dd.knobs&&dd.knobs[1]?dd.knobs[1].v:10)/100));
+              /* fb457 — the SIGNATURE above dirties on a modulated Feedback, but the rebuild has to
+                 USE the modulated value too, or the card rebuilds itself back to the knob and
+                 nothing moves. Dirtying without reading is a half-fix that gates green. */
+              var fbv=Math.max(0,Math.min(1,fxEffV(dd.core,dd.inst,1,(dd.knobs&&dd.knobs[1]?dd.knobs[1].v:10))/100));
               var dk=0.30+0.68*fbv;                                       // per-echo gain: fb 0 ⇒ dies fast · fb 100 ⇒ holds
               // fb360 — the echo timeline uses the SAME plot bounds as the other rack cores (6.5 → 219.5),
               // so its origin sits under the "D" of Delay and its right edge mirrors that inset.
@@ -11015,7 +11019,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   st.smooth += (b-st.smooth)*(b>st.smooth?0.85:0.30); }    // fb312 — live: rise ~1 frame, fall smooth
                 var smooth=st.smooth, geo=st.geo, prevPX=st.prevPX;
               {                                                            // guard, no early return — the rAF loop must NEVER die
-                var sig=[msFor(dd,'L').toFixed(1),(dd.link!==false)?'L':msFor(dd,'R').toFixed(1),(dd.knobs[1].v|0),(dd.pills&&dd.pills[1]&&dd.pills[1].on)?1:0].join('|');
+                var sig=[msFor(dd,'L').toFixed(1),(dd.link!==false)?'L':msFor(dd,'R').toFixed(1),(fxEffV(dd.core,dd.inst,1,dd.knobs[1].v)|0),(dd.pills&&dd.pills[1]&&dd.pills[1].on)?1:0].join('|');   /* fb457 — a modulated dial must dirty the signature or the card never repaints */
                 if(sig!==st.lastSig||!geo||geo.core!==core){ geo=st.geo=buildGeo(core,dd); st.lastSig=sig; prevPX=st.prevPX=6.5; }
                 // fb342 — WRITE gating via formatted-string compare (the fb334 d-compare idiom):
                 // at idle every opacity below is a CONSTANT reprinted at 60Hz — the compare kills

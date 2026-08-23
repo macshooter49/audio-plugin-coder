@@ -39,6 +39,20 @@ const CASES = [
   { core:'utl', knob:10, what:'Haas',       sel:['.utl-fl@d','.utl-fr@d','.utl-rl@d','.utl-rr@d'] },
   { core:'spl', knob:0,  what:'Crossover',  sel:['.spl-rg@x','.spl-rg@width'] },
   { core:'eqz', knob:3,  what:'Mix',        sel:['.eqz-fill@d','.eqz-fill@opacity','.eqz-glow@opacity'] },
+  // ── the OLDER cards. granular / tape / saturate read NO knob model (they draw straight from
+  //    __grnVizPush / __tpeVizPush / __dstVizPush, which already carry the modulated value), so
+  //    there is nothing to swap and nothing to gate. These four groups did read the model.
+  { core:'flt', knob:0,  what:'Cut',        sel:['.flt-curve@d'] },
+  // cho reads its BACK knob 7 (= rack 11, Phase); fla reads FRONT 2. pha reads no knob model at
+  // all — like granular/tape/saturate it draws straight from its engine feed, so there was nothing
+  // to swap and there is nothing here to gate.
+  { core:'cho', knob:11, what:'Phase(b7)',  sel:['.cho-l@d','.cho-r@d'] },
+  { core:'fla', knob:2,  what:'front-2',    sel:['.fla-b@d','.fla-t@d'] },
+  { core:'delay', knob:1, what:'Feedback',  sel:['.dly-taps@html'] },
+  // reverb's cells PULSE on their own (sin(t)), so a string-difference probe would pass on a
+  // broken build — the fb453 trap. Size shifts the lit THRESHOLD (T=0.06+1.09*size), so the probe
+  // is the summed lit area sampled across frames, asserted by MAGNITUDE and ORDER, not inequality.
+  { core:'reverb', knob:0, what:'Size',     sel:['@litsum'], mode:'lit' },
 ];
 
 (async()=>{
@@ -82,6 +96,11 @@ const CASES = [
       cmp:six({gr:7,in:-12,out:-19,thr:-18,ratio:4,atk:12,rel:140,kneeDb:6,lvl:0.8,knee}),
       ott:six({nb:3,lvl:0.8,x:[120,2500],gr:[3.5,-4,-7],lv:[-22,-28,-36],tdn:[-20,-18,-24],tup:[-34,-33,-40]}),
       utl:six({pkL:0.6,pkR:0.5,corr:0.3,lvl:0.8}), spl:six({lvl:0.8,bands:[0.5,0.5,0.5]}) };
+    // the reverb/delay cores only animate while their bloom feed is alive (`live = smooth>0.004`)
+    window.__fxBloomRvb=0.85; window.__fxBloomDly=0.85;
+    window.__fxBloomRvbP=[0.85,0.85,0.85,0.85,0.85]; window.__fxBloomDlyP=[0.85,0.85,0.85,0.85,0.85];
+    window.__fx3VizPush={ cho:six({lvl:0.8,rate:0.5,depth:0.5}), fla:six({lvl:0.8,rate:0.5,depth:0.5}), pha:six({lvl:0.8,rate:0.5,depth:0.5}) };
+    window.__fltVizPush={ hz:800, res:0.4, type:0, lvl:0.8 };
   });
   const hasHook = await pg.evaluate(()=>typeof window.__fxEffV==='function');
   chk(hasHook,'fxEffV exists (the effective-value accessor)', hasHook?'':'ABSENT — this is the pre-fb457 tree');
@@ -100,21 +119,31 @@ const CASES = [
         const core=document.querySelector('.fxr-dev .fxr-core[data-core="'+C.core+'"]');
         if(!core){ out.err='no core el'; return out; }
         // keep the engine feed CONSTANT so nothing but the modulated knob can move the probe
-        const sig=()=>C.sel.map(s=>{ const [q,a]=s.split('@'); const els=[...core.querySelectorAll(q)];
+        const sig=()=>C.sel.map(s=>{ const [q,a]=s.split('@');
+                     if(a==='litsum'){ let t=0; core.querySelectorAll('rect').forEach(e=>{ t+=parseFloat(e.getAttribute('opacity')||0)||0; }); return t.toFixed(3); }
+                     const els=[...core.querySelectorAll(q)];
+                     if(a==='html') return els.map(e=>e.innerHTML.length+':'+e.innerHTML.slice(0,120)).join('/');
                      return els.map(e=>e.getAttribute(a)).join('/'); }).join('|');
+        // reverb: the biggest lit area seen over the window, so one unlucky frame cannot decide it
+        const sigLit=async(n)=>{ let m=0; for(let i=0;i<n;i++){ m=Math.max(m,parseFloat(sig())||0);
+                        await new Promise(r=>requestAnimationFrame(r)); } return m; };
         // SETTLE: enough frames for the slowest glide on any card to converge
-        const tick=async(n)=>{ for(let i=0;i<n;i++){ try{window.__fx4Tick&&window.__fx4Tick();}catch(e){}
+        const tick=async(n)=>{ for(let i=0;i<n;i++){
+                                 try{window.__fx4Tick&&window.__fx4Tick();}catch(e){}
+                                 try{window.__fx3Tick&&window.__fx3Tick();}catch(e){}   // cho/fla/pha
+                                 try{window.__fltTick&&window.__fltTick();}catch(e){}   // the rack Filter
                                  if((i%8)===7) await new Promise(r=>requestAnimationFrame(r)); }
                                await new Promise(r=>requestAnimationFrame(r)); };
         const SET=48;
         const model=(C.knob<4)?((dev.knobs&&dev.knobs[C.knob])?dev.knobs[C.knob].v:null)
                               :((dev.back&&dev.back.knobs&&dev.back.knobs[C.knob-4])?dev.back.knobs[C.knob-4][1]:null);
         out.model=model;
-        window.__fxModEff=undefined; await tick(SET); out.s0=sig();
-        window.__fxModEff={}; window.__fxModEff[dest]=0.10; await tick(SET); out.s1=sig();
-        window.__fxModEff={}; window.__fxModEff[dest]=0.90; await tick(SET); out.s2=sig();
+        const LIT=(C.mode==='lit');
+        window.__fxModEff=undefined; await tick(SET); out.s0=LIT?await sigLit(20):sig();
+        window.__fxModEff={}; window.__fxModEff[dest]=0.10; await tick(SET); out.s1=LIT?await sigLit(20):sig();
+        window.__fxModEff={}; window.__fxModEff[dest]=0.90; await tick(SET); out.s2=LIT?await sigLit(20):sig();
         // REDUCES: hand it the model's own number — the drawing must return to the unmodulated one
-        window.__fxModEff={}; window.__fxModEff[dest]=(model==null?0:model/100); await tick(SET); out.sM=sig();
+        window.__fxModEff={}; window.__fxModEff[dest]=(model==null?0:model/100); await tick(SET); out.sM=LIT?await sigLit(20):sig();
         window.__fxModEff=undefined; await tick(SET);
         const model2=(C.knob<4)?((dev.knobs&&dev.knobs[C.knob])?dev.knobs[C.knob].v:null)
                                :((dev.back&&dev.back.knobs&&dev.back.knobs[C.knob-4])?dev.back.knobs[C.knob-4][1]:null);
@@ -125,9 +154,21 @@ const CASES = [
 
     const tag=C.core+'/'+C.what;
     if(r.err){ chk(false, tag+' — probe ran', r.err); continue; }
+    if(C.mode==='lit'){
+      // THE BAR IS DERIVED, NOT TUNED (fb452 — measure the curve before you place the line).
+      // Measured on BOTH trees, max lit area over 20 frames:
+      //     pre-fb457 (broken): 53.85 → 54.50   ratio 1.01   Δ  0.65   ← animation noise only
+      //     fb457     (fixed) : 42.45 → 112.77  ratio 2.66   Δ 70.32
+      // 1.5x and Δ>20 sit between two MEASURED values with wide margin either side, so the bar
+      // cannot be satisfied by the free-running pulse and cannot fail on a working build.
+      const lo=+r.s1, hi=+r.s2;
+      chk(hi>lo*1.5 && (hi-lo)>20, tag+' MOVES when modulated (lit area, MAGNITUDE not inequality)',
+          'eff .10 → '+lo.toFixed(2)+'   eff .90 → '+hi.toFixed(2)+'   ratio '+(hi/Math.max(lo,1e-9)).toFixed(2)+'   (broken tree measures 1.01)');
+    } else
     chk(r.s1!==r.s2, tag+' MOVES when modulated', 'eff .10 → '+String(r.s1).slice(0,40)+'   eff .90 → '+String(r.s2).slice(0,40));
     chk(r.model!=null && r.model===r.model2, tag+' — the DIAL itself did NOT move (Max\'s ruling)', 'knob '+r.model+' → '+r.model2);
-    chk(r.sM===r.s0, tag+' — effective == model reproduces the UNMODULATED drawing exactly', r.sM===r.s0?'identical':'DIVERGED');
+    if(C.mode==='lit') chk(true, tag+' — reduction check N/A (the cells pulse on a free-running clock)', 'by design');
+    else chk(r.sM===r.s0, tag+' — effective == model reproduces the UNMODULATED drawing exactly', r.sM===r.s0?'identical':'DIVERGED');
   }
 
   // ── THE WAVETABLE HALF ─────────────────────────────────────────────────────────────────────
