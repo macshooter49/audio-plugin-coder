@@ -171,6 +171,8 @@ int main()
         { "ENV 2 -> Fold",        ENV2, (int) wc::ModDest::Fold,      2 },
         { "LFO 1 -> Spectral",    LFO1, (int) wc::ModDest::SpectralA, 3 },
         { "ENV 2 -> Spectral",    ENV2, (int) wc::ModDest::SpectralA, 3 },
+        { "LFO 1 -> Blur",        LFO1, (int) wc::ModDest::BlurA,     4 },
+        { "ENV 2 -> Blur",        ENV2, (int) wc::ModDest::BlurA,     4 },
     };
 
     // 🚨 EACH CASE GETS ITS OWN PATCH AND ITS OWN CONTROL. The first version enabled Sync warp,
@@ -179,7 +181,7 @@ int main()
     //    control is also the wrong reference: the noise floor of a synced-warp patch is not the
     //    noise floor of a clean one. So: minimal patch per case, and the SAME patch with NO route
     //    is that case's control. That A/B is the only thing that isolates the route.
-    enum Prep { P_FRAME = 0, P_WARP, P_FOLD, P_SPEC };
+    enum Prep { P_FRAME = 0, P_WARP, P_FOLD, P_SPEC, P_BLUR };
     auto patch = [] (AU& a, int prep) {
         a.setNorm ("Synth Amp Attack",  AU::toNorm (5.f,    1.f, 10000.f));
         a.setNorm ("Synth Amp Decay",   AU::toNorm (2000.f, 1.f, 10000.f));
@@ -196,6 +198,13 @@ int main()
         a.setNorm ("OSC A Fold Amount",         (prep == P_FOLD) ? 0.30f : 0.0f);
         a.setNorm ("OSC A Spectral Type",       (prep == P_SPEC) ? 0.30f : 0.0f);
         a.setNorm ("OSC A Spectral Amount",     (prep == P_SPEC) ? 0.30f : 0.0f);
+        // fb465 — BLUR. Two things this case needs that the others do not:
+        //  · a table whose FRAMES DIFFER. Blur is a weighted mean along the frame axis, so on the
+        //    default Sine preset there is almost nothing to average and the case would read as a
+        //    dead route through no fault of the routing. Prophet Saw is the one fb464 measured.
+        //  · a NON-ZERO base (fb179: an owning envelope travels 0 -> the KNOB, not from it).
+        a.setNorm ("Synth OSC A WT Preset",     (prep == P_BLUR) ? 0.20f : 0.0f);
+        a.setNorm ("OSC A Blur",                (prep == P_BLUR) ? 0.60f : 0.0f);
     };
 
     int pass = 0, fail = 0;
