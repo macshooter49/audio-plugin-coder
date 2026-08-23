@@ -483,6 +483,21 @@ juce::String TerrainInstrumentAudioProcessor::getNoiseWavePeaksJson()
 // ═══ fb458 — WHAT IS SHAPING THE TABLE RIGHT NOW ════════════════════════════════════════════
 // The loudest sounding voice's live values when a note is down, the base parameters when not.
 // Same -1/idle contract as wtFrameVis(): silence must look exactly like it always did.
+// fb459 — the effective spectral amount + type for one osc, message thread.
+// spectralEffAmt_ is what rebuildMorphIfNeeded actually builds from (fb252), and -1 means the
+// audio thread has not run yet, in which case the raw parameter is the honest answer.
+void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOut) const noexcept
+{
+    osc = juce::jlimit (0, 3, osc);
+    static const char* const SA[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
+                                       ParameterIDs::SYN_OSC_C_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
+    static const char* const ST[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
+                                       ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE };
+    const float eff = spectralEffAmt_[osc].load (std::memory_order_relaxed);
+    amtOut  = (eff >= 0.0f) ? eff : rawParam (SA[osc])->load();
+    typeOut = (int) rawParam (ST[osc])->load();
+}
+
 tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc) const noexcept
 {
     osc = juce::jlimit (0, 3, osc);
@@ -518,14 +533,14 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
 juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
-    // Resolve the table the same way the voice does: imported override, else the factory bank.
-    const tw::Wavetable* wt = importSlot_[osc].live.load (std::memory_order_acquire);
-    if (wt == nullptr)
-    {
-        static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                            ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
-        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[osc]));
-    }
+    // fb459 — "Resolve the table the same way the voice does" is what the old comment here CLAIMED,
+    // and it was not true: it read import -> bank and never consulted the MORPH slot, so everything
+    // SPECTRAL was invisible. The voice resolves through wavetableForOsc(); this is its read-only
+    // message-thread twin, same preference order, without forging the audio thread's buffer claim.
+    static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const MorphSlot& mslot = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
+    const tw::Wavetable* wt = wavetableForDisplay (osc, mslot, (int) *apvts.getRawParameterValue (WTP[osc]));
     if (wt == nullptr) return "{}";
 
     const int numFrames = juce::jmax (1, wt->getNumFrames());
@@ -553,8 +568,12 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     out << "{\"n\":" << dispN << ",\"p\":" << pts << ",\"nf\":" << numFrames
         << ",\"wm\":"  << D.warpMode  << ",\"wa\":"  << juce::String (D.warpAmt,  4)
         << ",\"w2m\":" << D.warp2Mode << ",\"w2a\":" << juce::String (D.warp2Amt, 4)
-        << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4)
-        << ",\"d\":[";
+        << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4);
+    {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
+        float sa = 0.0f; int st = 0; spectralDisplay (osc, sa, st);
+        out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st;
+    }
+    out << ",\"d\":[";
     for (int i = 0; i < dispN; ++i)
     {
         const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;

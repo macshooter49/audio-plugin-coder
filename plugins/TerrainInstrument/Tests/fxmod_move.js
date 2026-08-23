@@ -221,9 +221,9 @@ const CASES = [
     window.Juce.getNativeFunction=function(n){
       if(n==='getOscWavetable') return function(){
         window.__WTN++;
-        const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0];
+        const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0,0,0];
         const P=8,N=2,arr=[]; for(let i=0;i<N*P;i++) arr.push(+(d[1]||0));
-        return Promise.resolve(JSON.stringify({n:N,p:P,nf:N,wm:d[0],wa:d[1],w2m:d[2],w2a:d[3],fs:d[4],fa:d[5],d:arr}));
+        return Promise.resolve(JSON.stringify({n:N,p:P,nf:N,wm:d[0],wa:d[1],w2m:d[2],w2a:d[3],fs:d[4],fa:d[5],sa:d[6],st:d[7],d:arr}));
       };
       return function(){ return Promise.resolve(0); };
     };
@@ -231,13 +231,13 @@ const CASES = [
     const settle=async(ms)=>{ const t0=performance.now(); while(performance.now()-t0<ms) await raf(); };
 
     W.on.a=true; W.cache.a=null; W.busy.a=false; W.lastReq.a=0;
-    window.__wtDisp=[[0,0.00,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]];
+    window.__wtDisp=[[0,0.00,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0],[0,0,0,0,0,0,0,0]];
     W.kick(); await settle(350);
     out.sig0=W.cachedSig('a');
 
     // 1. the shaping moves -> the table is re-baked, and the NEW shaping is what came back
     const b1=window.__WTN;
-    window.__wtDisp[0]=[2,0.70,0,0,0,0];
+    window.__wtDisp[0]=[2,0.70,0,0,0,0,0,0];
     await settle(450);
     out.bakesOnChange=window.__WTN-b1; out.sig1=W.cachedSig('a');
     out.cacheVal=(W.cache.a&&W.cache.a.d)?+W.cache.a.d[0]:null;
@@ -247,12 +247,24 @@ const CASES = [
 
     // 3. the waterfall is OFF -> nothing is baked at all (fb148: no UI, no work)
     W.on.a=false; const b3=window.__WTN;
-    window.__wtDisp[0]=[3,0.20,0,0,0,0]; await settle(450);
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0,0]; await settle(450);
     out.bakesHidden=window.__WTN-b3;
 
     // 4. and it catches up the moment it comes back on screen
     W.on.a=true; W.kick(); const b4=window.__WTN; await settle(450);
     out.bakesOnReturn=window.__WTN-b4; out.sig2=W.cachedSig('a');
+
+    // 5. fb459 — SPECTRAL ALONE must re-bake. The morph rebuild is what changes the table, so if
+    //    sa/st were left out of the signature a re-morphed table would look fresh forever.
+    const b5=window.__WTN; const before5=W.cachedSig('a');
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2];   // only spectral amount + type moved
+    await settle(450);
+    out.bakesOnSpectral=window.__WTN-b5; out.sigSpecBefore=before5; out.sigSpecAfter=W.cachedSig('a');
+    // 6. AND IT MUST CONVERGE. If the pushed signature and the cached one ever disagree, the
+    //    comparison never matches and the table re-bakes FOREVER at the throttle rate — a real CPU
+    //    leak, and exactly what the pre-fb459 tree does when spectral is pushed but not cached
+    //    (measured: 5 bakes and still going). Settling is the property, not just "it re-baked".
+    const b6=window.__WTN; await settle(700); out.bakesAfterSpectral=window.__WTN-b6;
     return out;
   });
   if(wtw.err) chk(false,'WARP/FOLD re-bake — probe ran',wtw.err);
@@ -265,6 +277,10 @@ const CASES = [
     chk(wtw.bakesIdle===0,         'a SETTLED shaping bakes nothing (no CPU leak)',  wtw.bakesIdle+' bakes in 700ms');
     chk(wtw.bakesHidden===0,       'a HIDDEN waterfall bakes nothing (fb148)',       wtw.bakesHidden+' bakes while off');
     chk(wtw.bakesOnReturn>=1,      'coming back on screen catches the stale table up','bakes '+wtw.bakesOnReturn+'  sig '+wtw.sig2);
+    chk(wtw.bakesOnSpectral>=1,    'SPECTRAL alone RE-BAKES the table (fb459)',      'bakes '+wtw.bakesOnSpectral);
+    chk(wtw.sigSpecAfter!==wtw.sigSpecBefore && /0\.550/.test(wtw.sigSpecAfter),
+                                   'the cached table carries the new SPECTRAL state', wtw.sigSpecBefore+'  →  '+wtw.sigSpecAfter);
+    chk(wtw.bakesAfterSpectral===0,'and it CONVERGES — no runaway re-bake (CPU leak)',  wtw.bakesAfterSpectral+' bakes in the 700ms after');
   }
 
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');

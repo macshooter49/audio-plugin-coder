@@ -614,6 +614,11 @@ public:
     std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {};
     std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
     tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
+    // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the
+    // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
+    // routed), which is the same number rebuildMorphIfNeeded builds from — so the picture the
+    // waterfall re-bakes is the morph the ear is hearing, not the knob.
+    void spectralDisplay (int o, float& amtOut, int& typeOut) const noexcept;
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
@@ -1404,6 +1409,29 @@ private:
     void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)
     // Audio thread: the wavetable a voice should read for one osc — the imported table if one
     // was dropped, else the morphed/factory table. Atomic load only (no locks).
+    // ═══ fb459 — THE SAME TABLE, RESOLVED FOR THE DISPLAY ═════════════════════════════════════
+    // The waterfall resolved import -> bank and NEVER consulted the morph slot, so everything
+    // SPECTRAL was invisible: turn the Spectral knob and you hear the harmonics reshape while the
+    // table sits still. This is the voice's own preference order — a live+ready morph wins
+    // (morph-of-import or morph-of-preset), else the raw import, else the bank.
+    //
+    // 🚨 IT IS A SEPARATE FUNCTION FOR ONE REASON: wavetableForOsc() WRITES audioReadingIdx, which
+    //    is the AUDIO thread's claim on a buffer and the thing rebuildMorphIfNeeded parks on before
+    //    it refills one in place (~5.6 ms). Calling it from the message thread would forge that
+    //    claim and could stall or mis-sequence the rebuild. This twin only READS. It still honours
+    //    ready[], so a half-built table is never drawn.
+    const tw::Wavetable* wavetableForDisplay (int osc, const MorphSlot& slot, int presetIdx) const noexcept
+    {
+        osc = juce::jlimit (0, 3, osc);
+        if (auto* m = slot.live.load (std::memory_order_acquire))
+        {
+            const int idx = (m == &slot.buf[1]) ? 1 : 0;
+            if (slot.ready[idx].load (std::memory_order_acquire)) return m;
+        }
+        if (auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire)) return imp;
+        return wavetableBank.getTable (presetIdx);
+    }
+
     const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept
     {
         osc = juce::jlimit (0, 3, osc);
