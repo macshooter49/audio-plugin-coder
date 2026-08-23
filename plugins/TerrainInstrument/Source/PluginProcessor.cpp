@@ -486,7 +486,8 @@ juce::String TerrainInstrumentAudioProcessor::getNoiseWavePeaksJson()
 // fb459 — the effective spectral amount + type for one osc, message thread.
 // spectralEffAmt_ is what rebuildMorphIfNeeded actually builds from (fb252), and -1 means the
 // audio thread has not run yet, in which case the raw parameter is the honest answer.
-void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOut) const noexcept
+void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOut,
+                                                        int& loOut, int& hiOut) const noexcept
 {
     osc = juce::jlimit (0, 3, osc);
     static const char* const SA[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
@@ -496,6 +497,17 @@ void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, i
     const float eff = spectralEffAmt_[osc].load (std::memory_order_relaxed);
     amtOut  = (eff >= 0.0f) ? eff : rawParam (SA[osc])->load();
     typeOut = (int) rawParam (ST[osc])->load();
+    // fb467 — the partial WINDOW is part of the state a bake was taken under, exactly as the
+    // amount and the type are. Leave it out and moving Lo/Hi re-morphs the table while the
+    // waterfall keeps drawing the old one, forever (fb459's stale-table failure).
+    static const char* const SL[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
+                                       ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
+    static const char* const SH[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
+                                       ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
+    const float eLo = specLoEff_[osc].load (std::memory_order_relaxed);
+    const float eHi = specHiEff_[osc].load (std::memory_order_relaxed);
+    loOut = (int) std::lround ((eLo >= 0.0f) ? eLo : rawParam (SL[osc])->load());
+    hiOut = (int) std::lround ((eHi >= 0.0f) ? eHi : rawParam (SH[osc])->load());
 }
 
 tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc) const noexcept
@@ -589,8 +601,9 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // bits, far finer than a waterfall that is ~80 px tall.
         << ",\"sc\":8192";
     {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
-        float sa = 0.0f; int st = 0; spectralDisplay (osc, sa, st);
-        out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st;
+        float sa = 0.0f; int st = 0, sl = 1, sh = 512; spectralDisplay (osc, sa, st, sl, sh);
+        out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st
+            << ",\"lo\":" << sl << ",\"hi\":" << sh;   // fb467 — the partial window
     }
     out << ",\"d\":[";
     for (int i = 0; i < dispN; ++i)
@@ -824,7 +837,9 @@ void TerrainInstrumentAudioProcessor::loadImportsRegistry ()
 void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                                             const juce::String& presetId,
                                                             const juce::String& modeId,
-                                                            const juce::String& amtId)
+                                                            const juce::String& amtId,
+                                                            const juce::String& loId,
+                                                            const juce::String& hiId)
 {
     const int   preset = (int) *apvts.getRawParameterValue (presetId);
     const int   mode   = (int) *apvts.getRawParameterValue (modeId);
@@ -835,6 +850,15 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     // entirely on the message thread — the audio thread never pays for a morph rebuild.
     const float effAmt = spectralEffAmt_[juce::jlimit (0, 3, oscIdx)].load (std::memory_order_relaxed);
     const float amount = (effAmt >= 0.0f) ? effAmt : apvts.getRawParameterValue (amtId)->load();   // ->load(): atomic<float> can't deduce in a ternary
+
+    // fb467 — the PARTIAL WINDOW, same publish-then-read shape as the amount above. Rounded to whole
+    // harmonics: the edges ARE harmonic indices, and a modulated edge that wobbles by 0.01 of a
+    // partial would churn a 2.3 ms bake at 60 Hz for a change nothing can hear.
+    const int oi0    = juce::jlimit (0, 3, oscIdx);
+    const float effLo = specLoEff_[oi0].load (std::memory_order_relaxed);
+    const float effHi = specHiEff_[oi0].load (std::memory_order_relaxed);
+    const int lo = (int) std::lround ((effLo >= 0.0f) ? effLo : apvts.getRawParameterValue (loId)->load());
+    const int hi = (int) std::lround ((effHi >= 0.0f) ? effHi : apvts.getRawParameterValue (hiId)->load());
 
     // fb253 — the morph SOURCE is the loaded IMPORT if one exists, else the factory preset spec.
     const int  oi        = juce::jlimit (0, 3, oscIdx);
@@ -851,6 +875,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         slot.builtPreset = preset;
         slot.builtMode   = mode;
         slot.builtAmount = amount;
+        slot.builtLo     = lo;               // fb467 — the EARLY exit records it too, or the gate
+        slot.builtHi     = hi;               //         never matches and the bake runs every tick
         slot.builtImportPtr   = imp;         // fb253
         slot.builtImportEpoch = impEpoch;
         return;
@@ -862,7 +888,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         ? (imp == slot.builtImportPtr && impEpoch == slot.builtImportEpoch)
         : (slot.builtImportPtr == nullptr && preset == slot.builtPreset);
     if (srcSame && mode == slot.builtMode
-        && std::abs (amount - slot.builtAmount) < 1.0e-4f)
+        && std::abs (amount - slot.builtAmount) < 1.0e-4f
+        && lo == slot.builtLo && hi == slot.builtHi)
         return;
 
     // RETIRE COOLDOWN — audioReadingIdx only refreshes at block START, so for up to a
@@ -902,7 +929,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
 
     slot.ready[target].store (false, std::memory_order_release);
     slot.buf[target].buildFromSpec (
-        tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount));
+        tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount, (float) lo, (float) hi));
     slot.ready[target].store (true, std::memory_order_release);
 
     slot.live.store (&slot.buf[target], std::memory_order_release);
@@ -911,6 +938,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     slot.builtPreset = preset;
     slot.builtMode   = mode;
     slot.builtAmount = amount;
+    slot.builtLo     = lo;               // fb467
+    slot.builtHi     = hi;
     slot.builtImportPtr   = imp;         // fb253 — remember the morphed source so a re-import re-morphs
     slot.builtImportEpoch = impEpoch;
 }
@@ -960,16 +989,24 @@ void TerrainInstrumentAudioProcessor::timerCallback()
 
     rebuildMorphIfNeeded (morphA_, 0, ParameterIDs::SYN_OSC_A_WT_PRESET,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
-                          ParameterIDs::SYN_OSC_A_SPECTRAL_AMT);
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_LO,
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_HI);
     rebuildMorphIfNeeded (morphB_, 1, ParameterIDs::SYN_OSC_B_WT_PRESET,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
-                          ParameterIDs::SYN_OSC_B_SPECTRAL_AMT);
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_HI);
     rebuildMorphIfNeeded (morphC_, 2, ParameterIDs::SYN_OSC_C_WT_PRESET,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE,
-                          ParameterIDs::SYN_OSC_C_SPECTRAL_AMT);
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_AMT,
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_LO,
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_HI);
     rebuildMorphIfNeeded (morphD_, 3, ParameterIDs::SYN_OSC_D_WT_PRESET,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE,
-                          ParameterIDs::SYN_OSC_D_SPECTRAL_AMT);
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
     rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
@@ -2346,7 +2383,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE, 1 },
         "OSC A Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
-                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
+                            "Disperse" },
         0));
     // SPECTRAL AMT — morph amount (0 = base table, 1 = full morph).
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2354,6 +2392,21 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
+    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
+    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
+    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
+    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
+    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
+    {
+        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
+        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, 1 },
+            "OSC A Spectral Low", rLo, 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, 1 },
+            "OSC A Spectral High", rHi, 512.0f));
+    }
     // FOLD SHAPE choice (Phase 11d: 3 shapes — Linear / Sine / Triangle)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, 1 },
@@ -2497,13 +2550,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE, 1 },
         "OSC B Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
-                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
         "OSC B Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
+    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
+    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
+    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
+    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
+    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
+    {
+        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
+        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_LO, 1 },
+            "OSC B Spectral Low", rLo, 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_HI, 1 },
+            "OSC B Spectral High", rHi, 512.0f));
+    }
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_SHAPE, 1 },
         "OSC B Fold Shape",
@@ -2642,13 +2711,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, 1 },
         "OSC C Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
-                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, 1 },
         "OSC C Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
+    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
+    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
+    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
+    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
+    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
+    {
+        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
+        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_LO, 1 },
+            "OSC C Spectral Low", rLo, 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_HI, 1 },
+            "OSC C Spectral High", rHi, 512.0f));
+    }
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_FOLD_SHAPE, 1 },
         "OSC C Fold Shape",
@@ -3469,13 +3554,29 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE, 1 },
         "OSC D Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
-                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser" },
+                            "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, 1 },
         "OSC D Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
+    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
+    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
+    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
+    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
+    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
+    {
+        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
+        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_LO, 1 },
+            "OSC D Spectral Low", rLo, 1.0f));
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_HI, 1 },
+            "OSC D Spectral High", rHi, 512.0f));
+    }
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_FOLD_SHAPE, 1 },
         "OSC D Fold Shape",
@@ -7553,6 +7654,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 float eff = mdP (kSpecIds[o], (wc::ModDest) d, 0.0f, 1.0f);
                 if (envOwnW[d] > 0.0f || modSums[d] != 0.0f) eff = std::round (eff * 128.0f) / 128.0f;   // anti-churn, routed only
                 spectralEffAmt_[o].store (eff, std::memory_order_relaxed);
+            }
+            // fb467 — the same publish for the PARTIAL WINDOW's two edges. modP (fb193) is the right
+            // helper here and mdP is not: these params are LOG-mapped over 1..512, and modP converts
+            // through the parameter's own NormalisableRange, so a route moves the edge by RATIO. A
+            // flat ±N-harmonic offset would be inaudible at harmonic 4 and catastrophic at 400.
+            // modP returns the raw value UNCHANGED when nothing is routed, so an unmodulated window
+            // publishes exactly its knob value and the rebuild gate below stays quiet.
+            static const char* const kLoIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
+                                                   ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
+            static const char* const kHiIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
+                                                   ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
+            for (int o = 0; o < 4; ++o)
+            {
+                specLoEff_[o].store (modP (kLoIds[o], *rawParam (kLoIds[o]), (int) wc::ModDest::SpecLoA + o), std::memory_order_relaxed);
+                specHiEff_[o].store (modP (kHiIds[o], *rawParam (kHiIds[o]), (int) wc::ModDest::SpecHiA + o), std::memory_order_relaxed);
             }
         }
         const int   oct     = (int)   *rawParam (ParameterIDs::SYN_OSC_A_OCT);

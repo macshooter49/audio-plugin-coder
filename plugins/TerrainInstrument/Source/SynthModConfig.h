@@ -201,17 +201,34 @@ enum class ModDest : int
     //    hole costs one table row and buys arithmetic that never has to move again. APPEND-ONLY:
     //    saved projects carry dest INTS, so nothing above this line may ever shift.
     FxModBase = DstMorph + 1,
-    NumDests  = FxModBase + 16 * 6 * 12
+    FxModEnd  = FxModBase + 16 * 6 * 12,   // fb467 — the rack block's EXCLUSIVE end (1846)
+    // ── fb467 — THE SPECTRAL MORPH'S PARTIAL WINDOW joins the matrix. These are APPENDED AFTER the
+    //    FX block because saved projects store destination INTS: inserting anywhere below FxModEnd
+    //    would silently shift every rack route in every existing project.
+    //    🚨 AND isFxModDest() BELOW MUST STOP AT FxModEnd, not at NumDests. If it only widens, then
+    //    isFxModDest(1846) is true, FxModValue.h:97 hands 1846 to fxModDecode(), which returns
+    //    kind = 16 into a [16][6][12] array, and PluginProcessor.cpp's refOf lambda returns that
+    //    out-of-bounds element — a NON-NULL garbage pointer that the audio thread then dereferences
+    //    as std::atomic<float>*. Growing NumDests without narrowing this is a crash, not a bug.
+    SpecLoA = FxModEnd, SpecLoB, SpecLoC, SpecLoD,
+    SpecHiA, SpecHiB, SpecHiC, SpecHiD,
+    NumDests
 };
 
 static_assert ((int) ModDest::DstMorph == 693,
     "fb340 - the JS data-mod-dest anchor for Morph is hardcoded 693 (index.html stampMorphDest); update BOTH or saved routes break");
+static_assert ((int) ModDest::FxModBase == 694,
+    "fb453 - the JS mirror hardcodes var FXMOD_BASE=694 (index.html); the rack's 1,152 routes are stored as ints in saved projects");
+static_assert ((int) ModDest::FxModEnd == 1846,
+    "fb467 - the rack block ends at 1846 and the JS fxModIsDest() derives that bound from FXMOD_BASE+16*6*12; anything appended must start HERE");
+static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850 && (int) ModDest::NumDests == 1854,
+    "fb467 - index.html's KNOBDEST hardcodes SPECTRAL_LO=1846 / SPECTRAL_HI=1850; update BOTH or a saved window route lands on the wrong destination");
 
 inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
 inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
 { return (int) ModDest::FxModBase + (kind * kFxModInsts + inst) * kFxModKnobs + knob; }
 inline constexpr bool isFxModDest (int d) noexcept
-{ return d >= (int) ModDest::FxModBase && d < (int) ModDest::NumDests; }
+{ return d >= (int) ModDest::FxModBase && d < (int) ModDest::FxModEnd; }   // fb467 — FxModEnd, NOT NumDests
 struct FxModAddr { int kind, inst, knob; };
 inline constexpr FxModAddr fxModDecode (int d) noexcept
 { const int o = d - (int) ModDest::FxModBase;
@@ -933,7 +950,13 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
 {
     std::array<DestInfo, (int) ModDest::NumDests> a {};
     for (int i = 0; i < (int) ModDest::FxModBase; ++i) a[(size_t) i] = kDestInfoBase[i];
-    for (int i = (int) ModDest::FxModBase; i < (int) ModDest::NumDests; ++i)
+    for (int i = (int) ModDest::FxModBase; i < (int) ModDest::FxModEnd; ++i)
+        a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };     // the 1,152 rack knobs
+    // fb467 — the 8 window edges. Linear01 in the PARAM'S OWN normalised space: the publish uses
+    // fb193's modP(), which converts through the parameter's NormalisableRange, so a route moves the
+    // edge by RATIO (what a log-mapped harmonic index should do) instead of by a flat count of
+    // harmonics that would be inaudible at the bottom and enormous at the top.
+    for (int i = (int) ModDest::FxModEnd; i < (int) ModDest::NumDests; ++i)
         a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;
 }

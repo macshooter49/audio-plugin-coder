@@ -562,6 +562,11 @@ namespace ParameterIDs
     // placeholders so V1 presets stay forward-compatible.
     constexpr char SYN_OSC_A_SPECTRAL_TYPE[] = "SYN_OSC_A_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_A_SPECTRAL_AMT[]  = "SYN_OSC_A_SPECTRAL_AMT";   // float 0..1
+    // fb467 — the spectral morph's PARTIAL WINDOW. Lo/Hi are harmonic indices (1..512,
+    // log-mapped, smoothstep edges). Defaults 1 and 512 = the whole spectrum = exactly the
+    // behaviour before fb467, so no saved patch moves.
+    constexpr char SYN_OSC_A_SPECTRAL_LO[]  = "SYN_OSC_A_SPECTRAL_LO";   // float 1..512 (log)
+    constexpr char SYN_OSC_A_SPECTRAL_HI[]  = "SYN_OSC_A_SPECTRAL_HI";   // float 1..512 (log)
     constexpr char SYN_OSC_A_FOLD_SHAPE[]    = "SYN_OSC_A_FOLD_SHAPE";     // choice {0=LINEAR}
     constexpr char SYN_OSC_A_FOLD_AMT[]      = "SYN_OSC_A_FOLD_AMT";       // float 0..1
     constexpr char SYN_OSC_A_FRAME_SPREAD[]  = "SYN_OSC_A_FRAME_SPREAD";   // float 0..1 (per-sine WT frame spread; real DSP)
@@ -580,6 +585,11 @@ namespace ParameterIDs
 
     constexpr char SYN_OSC_B_SPECTRAL_TYPE[] = "SYN_OSC_B_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_B_SPECTRAL_AMT[]  = "SYN_OSC_B_SPECTRAL_AMT";   // float 0..1
+    // fb467 — the spectral morph's PARTIAL WINDOW. Lo/Hi are harmonic indices (1..512,
+    // log-mapped, smoothstep edges). Defaults 1 and 512 = the whole spectrum = exactly the
+    // behaviour before fb467, so no saved patch moves.
+    constexpr char SYN_OSC_B_SPECTRAL_LO[]  = "SYN_OSC_B_SPECTRAL_LO";   // float 1..512 (log)
+    constexpr char SYN_OSC_B_SPECTRAL_HI[]  = "SYN_OSC_B_SPECTRAL_HI";   // float 1..512 (log)
     constexpr char SYN_OSC_B_FOLD_SHAPE[]    = "SYN_OSC_B_FOLD_SHAPE";     // choice {0=LINEAR}
     constexpr char SYN_OSC_B_FOLD_AMT[]      = "SYN_OSC_B_FOLD_AMT";       // float 0..1
     constexpr char SYN_OSC_B_FRAME_SPREAD[]  = "SYN_OSC_B_FRAME_SPREAD";   // float 0..1
@@ -613,6 +623,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_WARP2_AMT[]   = "SYN_OSC_C_WARP2_AMT";    // float 0..1
     constexpr char SYN_OSC_C_SPECTRAL_TYPE[] = "SYN_OSC_C_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_C_SPECTRAL_AMT[]  = "SYN_OSC_C_SPECTRAL_AMT";   // float 0..1
+    // fb467 — the spectral morph's PARTIAL WINDOW. Lo/Hi are harmonic indices (1..512,
+    // log-mapped, smoothstep edges). Defaults 1 and 512 = the whole spectrum = exactly the
+    // behaviour before fb467, so no saved patch moves.
+    constexpr char SYN_OSC_C_SPECTRAL_LO[]  = "SYN_OSC_C_SPECTRAL_LO";   // float 1..512 (log)
+    constexpr char SYN_OSC_C_SPECTRAL_HI[]  = "SYN_OSC_C_SPECTRAL_HI";   // float 1..512 (log)
     constexpr char SYN_OSC_C_FOLD_SHAPE[]    = "SYN_OSC_C_FOLD_SHAPE";     // choice {0=LINEAR}
     constexpr char SYN_OSC_C_FOLD_AMT[]      = "SYN_OSC_C_FOLD_AMT";       // float 0..1
     constexpr char SYN_OSC_C_FRAME_SPREAD[]  = "SYN_OSC_C_FRAME_SPREAD";   // float 0..1
@@ -645,6 +660,11 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_WARP2_AMT[]   = "SYN_OSC_D_WARP2_AMT";    // float 0..1
     constexpr char SYN_OSC_D_SPECTRAL_TYPE[] = "SYN_OSC_D_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_D_SPECTRAL_AMT[]  = "SYN_OSC_D_SPECTRAL_AMT";   // float 0..1
+    // fb467 — the spectral morph's PARTIAL WINDOW. Lo/Hi are harmonic indices (1..512,
+    // log-mapped, smoothstep edges). Defaults 1 and 512 = the whole spectrum = exactly the
+    // behaviour before fb467, so no saved patch moves.
+    constexpr char SYN_OSC_D_SPECTRAL_LO[]  = "SYN_OSC_D_SPECTRAL_LO";   // float 1..512 (log)
+    constexpr char SYN_OSC_D_SPECTRAL_HI[]  = "SYN_OSC_D_SPECTRAL_HI";   // float 1..512 (log)
     constexpr char SYN_OSC_D_FOLD_SHAPE[]    = "SYN_OSC_D_FOLD_SHAPE";     // choice {0=LINEAR}
     constexpr char SYN_OSC_D_FOLD_AMT[]      = "SYN_OSC_D_FOLD_AMT";       // float 0..1
     constexpr char SYN_OSC_D_FRAME_SPREAD[]  = "SYN_OSC_D_FRAME_SPREAD";   // float 0..1

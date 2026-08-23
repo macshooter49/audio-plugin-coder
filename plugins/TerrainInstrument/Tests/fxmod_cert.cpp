@@ -18,10 +18,23 @@ int main()
     gate ("FxModBase is 694 — the NumDests the rack was appended after",
           (int) ModDest::FxModBase == 694,
           "FxModBase=" + std::to_string ((int) ModDest::FxModBase));
-    gate ("NumDests is 1846 (694 + 16*6*12)", (int) ModDest::NumDests == 1846,
-          "NumDests=" + std::to_string ((int) ModDest::NumDests));
+    // fb467 — the rack block no longer runs to the END of the enum: 8 spectral-window dests are
+    // appended after it. What must not move is where the rack block STOPS.
+    gate ("the rack block still ENDS at 1846 (694 + 16*6*12)", (int) ModDest::FxModEnd == 1846,
+          "FxModEnd=" + std::to_string ((int) ModDest::FxModEnd));
     gate ("the first FX dest is FxModBase", fxModDest (0, 0, 0) == (int) ModDest::FxModBase);
-    gate ("the last FX dest is NumDests-1", fxModDest (15, 5, 11) == (int) ModDest::NumDests - 1);
+    gate ("the last FX dest is FxModEnd-1", fxModDest (15, 5, 11) == (int) ModDest::FxModEnd - 1);
+    gate ("the 8 appended window dests sit ABOVE the rack, 1846..1853",
+          (int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiD == 1853 && (int) ModDest::NumDests == 1854,
+          "SpecLoA=" + std::to_string ((int) ModDest::SpecLoA) + " NumDests=" + std::to_string ((int) ModDest::NumDests));
+    // 🚨 THE ONE THAT MATTERS. isFxModDest must stop at FxModEnd: if it only widened with NumDests,
+    // fxModDecode(1846) would return kind=16 into a [16][6][12] array and the audio thread would
+    // dereference the out-of-bounds element as std::atomic<float>*.
+    bool windowNotRack = true;
+    for (int d = (int) ModDest::FxModEnd; d < (int) ModDest::NumDests; ++d) windowNotRack &= ! isFxModDest (d);
+    gate ("no appended dest answers isFxModDest (the out-of-bounds decode trap)", windowNotRack);
+    gate ("every rack dest still answers isFxModDest",
+          isFxModDest (fxModDest (0,0,0)) && isFxModDest (fxModDest (15,5,11)));
 
     std::printf ("\n[B. every one of the 1,152 round-trips and is unique]\n");
     std::set<int> seen; bool rt = true, uniq = true, inRange = true;

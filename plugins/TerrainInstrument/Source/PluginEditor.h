@@ -309,6 +309,8 @@ private:
     // Phase 11a — OSC A wavetable rework relays (6 new)
     juce::WebSliderRelay synOscASpectralTypeRelay { ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscASpectralAmtRelay  { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscASpectralLoRelay   { ParameterIDs::SYN_OSC_A_SPECTRAL_LO };   // fb467 — partial window
+    juce::WebSliderRelay synOscASpectralHiRelay   { ParameterIDs::SYN_OSC_A_SPECTRAL_HI };
     juce::WebSliderRelay synOscAFoldShapeRelay    { ParameterIDs::SYN_OSC_A_FOLD_SHAPE };
     juce::WebSliderRelay synOscAFoldAmtRelay      { ParameterIDs::SYN_OSC_A_FOLD_AMT };
     juce::WebSliderRelay synOscAFrameSpreadRelay  { ParameterIDs::SYN_OSC_A_FRAME_SPREAD };
@@ -316,6 +318,8 @@ private:
     // Phase 11a — OSC B wavetable rework relays (6 new)
     juce::WebSliderRelay synOscBSpectralTypeRelay { ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscBSpectralAmtRelay  { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscBSpectralLoRelay   { ParameterIDs::SYN_OSC_B_SPECTRAL_LO };   // fb467 — partial window
+    juce::WebSliderRelay synOscBSpectralHiRelay   { ParameterIDs::SYN_OSC_B_SPECTRAL_HI };
     juce::WebSliderRelay synOscBFoldShapeRelay    { ParameterIDs::SYN_OSC_B_FOLD_SHAPE };
     juce::WebSliderRelay synOscBFoldAmtRelay      { ParameterIDs::SYN_OSC_B_FOLD_AMT };
     juce::WebSliderRelay synOscBFrameSpreadRelay  { ParameterIDs::SYN_OSC_B_FRAME_SPREAD };
@@ -349,6 +353,8 @@ private:
     juce::WebSliderRelay synOscCUwidthRelay       { ParameterIDs::SYN_OSC_C_UWIDTH };
     juce::WebSliderRelay synOscCSpectralTypeRelay { ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscCSpectralAmtRelay  { ParameterIDs::SYN_OSC_C_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscCSpectralLoRelay   { ParameterIDs::SYN_OSC_C_SPECTRAL_LO };   // fb467 — partial window
+    juce::WebSliderRelay synOscCSpectralHiRelay   { ParameterIDs::SYN_OSC_C_SPECTRAL_HI };
     juce::WebSliderRelay synOscCFoldShapeRelay    { ParameterIDs::SYN_OSC_C_FOLD_SHAPE };
     juce::WebSliderRelay synOscCFoldAmtRelay      { ParameterIDs::SYN_OSC_C_FOLD_AMT };
     juce::WebSliderRelay synOscCFrameSpreadRelay  { ParameterIDs::SYN_OSC_C_FRAME_SPREAD };
@@ -800,6 +806,8 @@ private:
     juce::WebSliderRelay synOscDGrainSkewRelay     { ParameterIDs::SYN_OSC_D_GRAIN_SKEW };
     juce::WebSliderRelay synOscDSpectralTypeRelay { ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE };
     juce::WebSliderRelay synOscDSpectralAmtRelay  { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT };
+    juce::WebSliderRelay synOscDSpectralLoRelay   { ParameterIDs::SYN_OSC_D_SPECTRAL_LO };   // fb467 — partial window
+    juce::WebSliderRelay synOscDSpectralHiRelay   { ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
     juce::WebSliderRelay synOscDFoldShapeRelay    { ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
     juce::WebSliderRelay synOscDFoldAmtRelay      { ParameterIDs::SYN_OSC_D_FOLD_AMT };
     juce::WebSliderRelay synOscDFrameSpreadRelay  { ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
@@ -1142,6 +1150,8 @@ private:
     // Phase 11a — OSC A attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralTypeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralLoAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscASpectralHiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFoldShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFoldAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAFrameSpreadAttachment;
@@ -1149,6 +1159,8 @@ private:
     // Phase 11a — OSC B attachments
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralTypeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralLoAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBSpectralHiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFoldShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFoldAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBFrameSpreadAttachment;
@@ -1182,6 +1194,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUwidthAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSpectralTypeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSpectralLoAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCSpectralHiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCFoldShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCFoldAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCFrameSpreadAttachment;
@@ -1214,6 +1228,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUwidthAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSpectralTypeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSpectralAmtAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSpectralLoAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDSpectralHiAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDFoldShapeAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDFoldAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDFrameSpreadAttachment;

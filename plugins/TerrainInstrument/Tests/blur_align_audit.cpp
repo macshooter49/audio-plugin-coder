@@ -1,7 +1,8 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 //  fb466 — THE FALSIFICATION TEST for the spectral research's central claim.
 //
-//    clang++ -O2 -std=c++17 -I Tests/shim -I Source Tests/blur_align_audit.cpp -o /tmp/blur_align
+//    clang++ -O2 -std=c++17 -I Tests/shim -I Source Tests/blur_align_audit.cpp -o /tmp/blur_align \
+//            -framework Accelerate   (fb467 — Wavetable.h now bakes through vDSP via WtFft.h)
 //
 //  SPECTRAL-BUILD-BIBLE.md §2.3 derives WHY blur dulls: the frames of a wavetable are not
 //  time-ALIGNED with each other, and averaging misaligned frames is a Gaussian LOW-PASS IN

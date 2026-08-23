@@ -36,6 +36,13 @@ cost a diagnosis once already.
 ⚠️ `fx3_ui.js` needs puppeteer-core, which is not vendored here:
 `NODE_PATH=<a scratchpad>/node_modules node Tests/fx3_ui.js`
 
+⚠️ **fb467 — anything that includes `Wavetable.h` now needs `-framework Accelerate`.** The bake's
+transform moved to `Source/WtFft.h`, which calls vDSP where it exists (19.1 ms -> 2.3 ms per table)
+and falls back to the shipped radix-2 where it does not. Affected today: `spec_cert.cpp`,
+`wtfft_cert.cpp`, `au_spec.cpp`, `blur_align_audit.cpp`. `wtfft_cert.cpp` nulls the two backends
+against each other over all 30 factory tables — it is the gate that says the swap changed the speed
+and not the sound.
+
 `shim/` is a ~20-line stand-in for the four JUCE symbols `TerrainFilters.h` actually uses
 (`jlimit`, `jmin`, `jmax`, `MathConstants`). That is the whole reason the 94-engine filter core
 can be certified offline without building the plugin.

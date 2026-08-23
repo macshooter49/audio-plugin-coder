@@ -84,6 +84,14 @@ target_link_libraries(TerrainInstrument
         juce::juce_recommended_warning_flags
 )
 
+# fb467 — Source/WtFft.h calls vDSP directly (the wavetable bake's transform: 19.1 ms -> 2.3 ms).
+# juce_dsp already drags Accelerate in on Apple, but this is now a FIRST-PARTY dependency of a
+# header the plugin includes, so it is named here rather than inherited by luck. WtFft.h compiles
+# to its scalar reference path where the framework is absent, so non-Apple builds are unaffected.
+if (APPLE)
+    target_link_libraries(TerrainInstrument PRIVATE "-framework Accelerate")
+endif()
+
 # ── Compile definitions ──
 target_compile_definitions(TerrainInstrument
     PUBLIC

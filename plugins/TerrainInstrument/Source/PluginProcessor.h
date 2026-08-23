@@ -618,7 +618,7 @@ public:
     // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
     // routed), which is the same number rebuildMorphIfNeeded builds from — so the picture the
     // waterfall re-bakes is the morph the ear is hearing, not the knob.
-    void spectralDisplay (int o, float& amtOut, int& typeOut) const noexcept;
+    void spectralDisplay (int o, float& amtOut, int& typeOut, int& loOut, int& hiOut) const noexcept;
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
@@ -1368,6 +1368,11 @@ private:
         int   builtPreset = -1;
         int   builtMode   = -1;
         float builtAmount = -1.0f;
+        // fb467 — the partial WINDOW is part of the built table's identity. Without these two the
+        // skip gate below matches on preset/mode/amount alone and Lo/Hi move NOTHING until some
+        // other knob happens to force a rebuild — the failure that builds clean and looks wired.
+        int   builtLo     = -1;
+        int   builtHi     = -1;
         const tw::Wavetable* builtImportPtr = nullptr;   // fb253 — morph SOURCE was this import (nullptr = a factory preset)
         int   builtImportEpoch = -1;                     // fb253 — the import's buildEpoch when morphed (re-import → re-morph)
     };
@@ -1376,6 +1381,10 @@ private:
     // block; the 60 Hz timer's rebuildMorphIfNeeded reads it instead of the raw param. -1 = not yet
     // published (fresh instance / suspended host) → the timer falls back to the raw param.
     std::atomic<float> spectralEffAmt_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    // fb467 — same publish for the partial window's two edges (SpecLo/SpecHi are mod destinations,
+    // so the timer must build from the MODULATED value, not the raw param). -1 = not yet published.
+    std::atomic<float> specLoEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    std::atomic<float> specHiEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
 
     // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
     // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-
@@ -1485,7 +1494,9 @@ private:
     void rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                const juce::String& presetId,
                                const juce::String& modeId,
-                               const juce::String& amtId);
+                               const juce::String& amtId,
+                               const juce::String& loId,
+                               const juce::String& hiId);
     // Resolve the wavetable a voice should read for one OSC: the morphed table
     // when a morph mode is active, else the plain bank table. Publishes which
     // buffer the audio thread is reading (for the rebuild guard).

@@ -365,12 +365,16 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synLegatoRelay)
             .withOptionsFrom(synOscASpectralTypeRelay)
             .withOptionsFrom(synOscASpectralAmtRelay)
+            .withOptionsFrom(synOscASpectralLoRelay)
+            .withOptionsFrom(synOscASpectralHiRelay)
             .withOptionsFrom(synOscAFoldShapeRelay)
             .withOptionsFrom(synOscAFoldAmtRelay)
             .withOptionsFrom(synOscAFrameSpreadRelay)
             .withOptionsFrom(synOscAInterpModeRelay)
             .withOptionsFrom(synOscBSpectralTypeRelay)
             .withOptionsFrom(synOscBSpectralAmtRelay)
+            .withOptionsFrom(synOscBSpectralLoRelay)
+            .withOptionsFrom(synOscBSpectralHiRelay)
             .withOptionsFrom(synOscBFoldShapeRelay)
             .withOptionsFrom(synOscBFoldAmtRelay)
             .withOptionsFrom(synOscBFrameSpreadRelay)
@@ -404,6 +408,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscCUwidthRelay)
             .withOptionsFrom(synOscCSpectralTypeRelay)
             .withOptionsFrom(synOscCSpectralAmtRelay)
+            .withOptionsFrom(synOscCSpectralLoRelay)
+            .withOptionsFrom(synOscCSpectralHiRelay)
             .withOptionsFrom(synOscCFoldShapeRelay)
             .withOptionsFrom(synOscCFoldAmtRelay)
             .withOptionsFrom(synOscCFrameSpreadRelay)
@@ -616,6 +622,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withOptionsFrom(synOscDGrainDirRelay).withOptionsFrom(synOscDGrainSkewRelay)
             .withOptionsFrom(synOscDSpectralTypeRelay)
             .withOptionsFrom(synOscDSpectralAmtRelay)
+            .withOptionsFrom(synOscDSpectralLoRelay)
+            .withOptionsFrom(synOscDSpectralHiRelay)
             .withOptionsFrom(synOscDFoldShapeRelay)
             .withOptionsFrom(synOscDFoldAmtRelay)
             .withOptionsFrom(synOscDFrameSpreadRelay)
@@ -4447,6 +4455,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscASpectralAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SPECTRAL_AMT),
         synOscASpectralAmtRelay, nullptr);
+    synOscASpectralLoAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SPECTRAL_LO),
+        synOscASpectralLoRelay, nullptr);
+    synOscASpectralHiAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_SPECTRAL_HI),
+        synOscASpectralHiRelay, nullptr);
     synOscAFoldShapeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_FOLD_SHAPE),
         synOscAFoldShapeRelay, nullptr);
@@ -4466,6 +4480,12 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     synOscBSpectralAmtAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SPECTRAL_AMT),
         synOscBSpectralAmtRelay, nullptr);
+    synOscBSpectralLoAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SPECTRAL_LO),
+        synOscBSpectralLoRelay, nullptr);
+    synOscBSpectralHiAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_SPECTRAL_HI),
+        synOscBSpectralHiRelay, nullptr);
     synOscBFoldShapeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_FOLD_SHAPE),
         synOscBFoldShapeRelay, nullptr);
@@ -4569,6 +4589,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkO(synOscCUwidthAttachment, ParameterIDs::SYN_OSC_C_UWIDTH, synOscCUwidthRelay);
         mkO(synOscCSpectralTypeAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE, synOscCSpectralTypeRelay);
         mkO(synOscCSpectralAmtAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, synOscCSpectralAmtRelay);
+        mkO(synOscCSpectralLoAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_LO, synOscCSpectralLoRelay);
+        mkO(synOscCSpectralHiAttachment, ParameterIDs::SYN_OSC_C_SPECTRAL_HI, synOscCSpectralHiRelay);
         mkO(synOscCFoldShapeAttachment, ParameterIDs::SYN_OSC_C_FOLD_SHAPE, synOscCFoldShapeRelay);
         mkO(synOscCFoldAmtAttachment, ParameterIDs::SYN_OSC_C_FOLD_AMT, synOscCFoldAmtRelay);
         mkO(synOscCFrameSpreadAttachment, ParameterIDs::SYN_OSC_C_FRAME_SPREAD, synOscCFrameSpreadRelay);
@@ -4598,6 +4620,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         mkO(synOscDUwidthAttachment, ParameterIDs::SYN_OSC_D_UWIDTH, synOscDUwidthRelay);
         mkO(synOscDSpectralTypeAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE, synOscDSpectralTypeRelay);
         mkO(synOscDSpectralAmtAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, synOscDSpectralAmtRelay);
+        mkO(synOscDSpectralLoAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_LO, synOscDSpectralLoRelay);
+        mkO(synOscDSpectralHiAttachment, ParameterIDs::SYN_OSC_D_SPECTRAL_HI, synOscDSpectralHiRelay);
         mkO(synOscDFoldShapeAttachment, ParameterIDs::SYN_OSC_D_FOLD_SHAPE, synOscDFoldShapeRelay);
         mkO(synOscDFoldAmtAttachment, ParameterIDs::SYN_OSC_D_FOLD_AMT, synOscDFoldAmtRelay);
         mkO(synOscDFrameSpreadAttachment, ParameterIDs::SYN_OSC_D_FRAME_SPREAD, synOscDFrameSpreadRelay);
@@ -5619,10 +5643,13 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             {
                 const auto D = audioProcessor.wtDispEffective (o);
                 if (o) js << ",";
-                float sa = 0.0f; int st = 0; audioProcessor.spectralDisplay (o, sa, st);   // fb459
+                float sa = 0.0f; int st = 0, sl = 1, sh = 512;
+                audioProcessor.spectralDisplay (o, sa, st, sl, sh);   // fb459 · fb467 window
                 js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
-                   << "," << SF (sa, 4) << "," << st << "," << SF (D.blur, 4) << "]";   // fb460 — blur
+                   << "," << SF (sa, 4) << "," << st << "," << SF (D.blur, 4)
+                   << "," << sl << "," << sh << "]";   // fb460 blur · fb467 lo/hi — THE ORDER HERE
+                                                       // MUST MATCH cachedSig in index.html
             }
             js << "];";
         }

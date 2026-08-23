@@ -46,6 +46,7 @@ namespace tw
         RandomAmplitudes,     // seeded gain re-roll → mutant / alien (per-preset signature)
         DataCompress,         // quantize + decimate → digital / lo-fi / destroyed
         SpectralPhaser,       // swept comb notches  → hollow / phaser
+        Disperse,             // quadratic phase     → chirped / dense / smeared-in-time
         Count
     };
 
@@ -56,19 +57,68 @@ namespace tw
          *  ready for Wavetable::buildFromSpec. amount<=0 or None returns the base
          *  untouched (and the morph is continuous from there — at amount→0 the stretch
          *  factor → 1, so partials land back on the integer grid losslessly). */
-        static WavetableSpec apply (const WavetableSpec& base, SpectralMode mode, float amount)
+        static WavetableSpec apply (const WavetableSpec& base, SpectralMode mode, float amount,
+                                    float rangeLo = 1.0f, float rangeHi = (float) FrameSpec::kMaxHarmonics)
         {
             amount = std::clamp (amount, 0.0f, 1.0f);
             if (mode == SpectralMode::None || amount <= 0.0f)
                 return base;
 
+            // fb467 — THE BAND TOP, computed ONCE for the whole spec, not per frame. Disperse's
+            // coefficient is normalised by it (see the mode), and a per-frame value would make each
+            // frame disperse by a different amount — the WT-POS sweep would go lumpy. Frames of one
+            // table are one instrument; they share the band.
+            const float top = bandTop (base);
+
+            // fb467 — the window is enforced here so every mode gets it for free and no mode can
+            // forget it. Hi >= Lo + 4 (a window narrower than the smoothstep edges is not a window).
+            const float lo = std::clamp (rangeLo, 1.0f, (float) FrameSpec::kMaxHarmonics);
+            const float hi = std::clamp (std::max (rangeHi, lo + 4.0f), 1.0f, (float) FrameSpec::kMaxHarmonics);
+
             WavetableSpec out;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
-                morphFrame (base.frames[(size_t) f], out.frames[(size_t) f], mode, amount);
+                morphFrame (base.frames[(size_t) f], out.frames[(size_t) f], mode, amount, top, lo, hi);
             return out;
         }
 
     private:
+        // fb467 — the highest ratio carrying real energy anywhere in the spec (-60 dB of the spec's
+        // own peak). Disperse needs it because the SAME musical amount of dispersion is a 21x
+        // different coefficient on a 24-harmonic table and a 511-harmonic one — measured, fb467:
+        // parameterising by the raw coefficient made the knob a lottery, parameterising by CYCLES OF
+        // SPREAD made it behave the same on every table.
+        static float bandTop (const WavetableSpec& s) noexcept
+        {
+            float mx = 0.0f;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const FrameSpec& fs = s.frames[(size_t) f];
+                if (fs.numPartials > 0)
+                    for (int i = 0; i < fs.numPartials; ++i) mx = std::max (mx, std::abs (fs.partials[(size_t) i].amp));
+                else
+                    for (int h = 1; h <= fs.numHarmonics; ++h) mx = std::max (mx, std::abs (fs.amplitudes[(size_t) (h - 1)]));
+            }
+            const float thr = mx * 1.0e-3f;
+            float top = 1.0f;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const FrameSpec& fs = s.frames[(size_t) f];
+                if (fs.numPartials > 0)
+                { for (int i = 0; i < fs.numPartials; ++i)
+                    if (std::abs (fs.partials[(size_t) i].amp) > thr) top = std::max (top, fs.partials[(size_t) i].ratio); }
+                else
+                { for (int h = 1; h <= fs.numHarmonics; ++h)
+                    if (std::abs (fs.amplitudes[(size_t) (h - 1)]) > thr) top = std::max (top, (float) h); }
+            }
+            return top;
+        }
+
+        static float smooth01 (float e0, float e1, float x) noexcept
+        {
+            if (e1 <= e0) return x >= e1 ? 1.0f : 0.0f;
+            const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f);
+            return t * t * (3.0f - 2.0f * t);
+        }
         // Read a frame's spectrum as a unified (ratio, amp, phase) partial list, whether
         // it was authored as integer harmonics OR inharmonic partials. Every mode then
         // operates on this one representation, and we write it back as partials so
@@ -102,10 +152,20 @@ namespace tw
                 out.partials[(size_t) i] = p[i];
         }
 
-        static void morphFrame (const FrameSpec& in, FrameSpec& out, SpectralMode mode, float amount) noexcept
+        static void morphFrame (const FrameSpec& in, FrameSpec& out, SpectralMode mode, float amount,
+                                float bandTopR, float rangeLo, float rangeHi) noexcept
         {
             FrameSpec::Partial p[FrameSpec::kMaxPartials];
             const int n = extract (in, p);
+
+            // fb467 — PARTIAL RANGE. Both edges wide open is the DEFAULT and it takes a separate
+            // path that copies nothing and blends nothing, so an unwindowed patch is bit-identical
+            // to what shipped before this change — the window can never cost an existing preset.
+            const bool loOpen = (rangeLo <= 1.0f + 1.0e-6f);
+            const bool hiOpen = (rangeHi >= (float) FrameSpec::kMaxHarmonics - 1.0e-6f);
+            const bool windowed = ! (loOpen && hiOpen);
+            FrameSpec::Partial q[FrameSpec::kMaxPartials];
+            if (windowed) for (int i = 0; i < n; ++i) q[(size_t) i] = p[(size_t) i];   // the dry copy
 
             switch (mode)
             {
@@ -294,10 +354,67 @@ namespace tw
                     break;
                 }
 
+                case SpectralMode::Disperse:
+                {
+                    // THE CHIRP — a quadratic phase ramp. |X'[h]| == |X[h]| EXACTLY (measured
+                    // -146 dBr or better through buildFromSpec's snap, the 34-level mip ladder and
+                    // the peak normalisation, fb467), so this is the one mode in the menu that is
+                    // constitutionally incapable of dulling anything. What it changes is WHEN in the
+                    // cycle each harmonic peaks: the wave stops being a stack of aligned peaks and
+                    // becomes a smear across the whole period.
+                    //
+                    //   phi(r) += c*(r-1)^2      group delay tau(r) = -(N/pi)*c*(r-1) samples
+                    //   c = pi*D/(H-1)           D = the spread across the band, in CYCLES
+                    //   D(a) = 4*a^2             identity at a=0; the ceiling is D=4
+                    //
+                    // 🚨 D, NOT c, IS THE UNIT, and that is a measurement not a preference (fb467):
+                    //    a fixed c disperses a 511-harmonic table 21x harder than a 24-harmonic one,
+                    //    and the crest curve came out NON-MONOTONE — the knob was a lottery. Divided
+                    //    by the band top it behaves the same on every table.
+                    // 🚨 THE CEILING IS D = 4 because past it the change stops being DIRECTIONAL and
+                    //    just re-rolls: cumulative change vs a=0 saturates at D~2-4 on every table
+                    //    measured, while each 0.1 of the knob still moves the folded output by
+                    //    4.4-17.7 dB — travel everywhere, plateau nowhere.
+                    // Audible route: the fold/warp/drive downstream (a crest change IS a magnitude
+                    // change once it hits a nonlinearity), and the peak-normalised level.
+                    const float D = 4.0f * amount * amount;
+                    const float c = (bandTopR > 2.0f) ? (3.14159265f * D / (bandTopR - 1.0f)) : 0.0f;
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float d = p[(size_t) i].ratio - 1.0f;
+                        p[(size_t) i].phase += c * d * d;
+                    }
+                    break;
+                }
+
                 case SpectralMode::None:
                 case SpectralMode::Count:
                 default:
                     break;   // identity: partials unchanged
+            }
+
+            // fb467 — blend the morphed partial back toward its dry self by the window weight.
+            // AMP, RATIO and PHASE are blended SEPARATELY and phase is blended as an ANGLE through
+            // the shortest arc. Blending the PHASOR instead would be a comb filter with an infinite
+            // null at w = 0.5 (a partial cancelling against a rotated copy of itself), and lerping
+            // the raw angle would take the long way round whenever the two straddle +/-pi.
+            if (windowed)
+            {
+                const float E = 2.0f;
+                for (int i = 0; i < n; ++i)
+                {
+                    const float r  = q[(size_t) i].ratio;                       // the DRY ratio selects
+                    const float wl = loOpen ? 1.0f : smooth01 (rangeLo - E, rangeLo, r);
+                    const float wh = hiOpen ? 1.0f : 1.0f - smooth01 (rangeHi, rangeHi + E, r);
+                    const float w  = wl * wh;
+                    if (w >= 1.0f) continue;
+                    float dPh = p[(size_t) i].phase - q[(size_t) i].phase;
+                    while (dPh >  3.14159265f) dPh -= 6.28318531f;
+                    while (dPh < -3.14159265f) dPh += 6.28318531f;
+                    p[(size_t) i].amp   = q[(size_t) i].amp   + w * (p[(size_t) i].amp   - q[(size_t) i].amp);
+                    p[(size_t) i].ratio = q[(size_t) i].ratio + w * (p[(size_t) i].ratio - q[(size_t) i].ratio);
+                    p[(size_t) i].phase = q[(size_t) i].phase + w * dPh;
+                }
             }
 
             writeBack (out, p, n);

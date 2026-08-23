@@ -13,6 +13,7 @@
 #pragma once
 
 #include <vector>
+#include "WtFft.h"   // fb467 — the bake's transform (vDSP real-f64 where it exists, the shipped radix-2 as reference + fallback)
 #include <cmath>
 #include <cstddef>
 #include <array>
@@ -46,7 +47,19 @@ namespace tw
         // partials become pseudo-harmonic on playback — this is the band-limited
         // wavetable rendition of an inharmonic tone, not a true tracking partial.
         struct Partial { float ratio = 0.0f; float amp = 0.0f; float phase = 0.0f; };
-        static constexpr int kMaxPartials = 96;
+        // 🚨 fb467 — 96 -> 512. THE CAP WAS A CLIFF, NOT A BUDGET. SpectralMorph::extract() copies at
+        //    most kMaxPartials out of a frame that carries up to kMaxHarmonics (512), so the instant
+        //    ANY spectral mode engaged with amount > 0, every harmonic above the 96th was DELETED —
+        //    a step change at amount 0+, on a knob whose whole contract is "0 is the identity and the
+        //    approach to it is continuous". MEASURED (fb467, Tests/spec_cert.cpp gate D2): a phase-only
+        //    mode that is magnitude-exact by construction read -38.6 dBr of magnitude error against
+        //    the unmorphed table at 96, and -152.1 dBr at 512. The whole error was the truncation.
+        //    COST, measured on an M2 Max: the bake is 18.69 ms at 96 and 18.65 ms at 512 — i.e. NONE,
+        //    because the bake is 544 iFFTs and the partial resolve is noise beside them. apply() goes
+        //    0.027 -> 0.034 ms. WavetableSpec 82 -> 160 KB; morphFrame's two stack arrays 2.3 -> 12.3 KB.
+        //    ⚠️ This CHANGES THE SOUND of any existing patch that morphs a table with more than 96
+        //    harmonics — it stops silently low-passing it. That is a bug fix, not a regression.
+        static constexpr int kMaxPartials = 512;
         std::array<Partial, kMaxPartials> partials {};
         int numPartials = 0;
     };
@@ -105,8 +118,11 @@ namespace tw
             numMipLevels_  = kNumMipLevels;
             mipData_.assign ((size_t) (numMipLevels_ * numFrames_ * frameSize_), 0.0f);
 
-            // iFFT synthesis buffer, reused per frame (far faster than summing sines).
-            std::vector<std::complex<double>> specFFT ((size_t) frameSize_);
+            // fb467 — HALF-spectrum synthesis buffers, reused per frame. The spectrum is
+            // conjugate-symmetric by construction and the output is real, so the old full-length
+            // complex array was doing twice the work and then throwing away the imaginary half.
+            std::vector<double> hre ((size_t) (frameSize_ / 2 + 1)), him ((size_t) (frameSize_ / 2 + 1));
+            std::vector<double> cyc ((size_t) frameSize_);
 
             for (int level = 0; level < numMipLevels_; ++level)
             {
@@ -163,27 +179,27 @@ namespace tw
                     }
 
                     // Synthesize the frame by INVERSE FFT of the resolved harmonics —
-                    // mathematically identical to summing sines, ~75x faster (the morph
-                    // engine + bank build depend on this speed). Bin convention:
-                    // X[h] = (A_h/2)(sin φ − i cos φ), conjugate-mirrored at N−h, so the
-                    // raw inverse transform yields Σ A_h·sin(2π h n/N + φ_h) exactly.
-                    const int N = frameSize_;
-                    std::fill (specFFT.begin(), specFFT.end(), std::complex<double> (0.0, 0.0));
-                    for (int h = 1; h <= hMax && h < N - h; ++h)
+                    // mathematically identical to summing sines. Bin convention:
+                    // X[h] = (A_h/2)(sin φ − i cos φ); the conjugate half at N−h is IMPLIED by the
+                    // real transform (fb467 — we used to write it out and then transform it, which
+                    // is where 88.7% of the bake went).
+                    const int N  = frameSize_;
+                    const int HB = std::min (hMax, N / 2 - 1);
+                    std::fill (hre.begin(), hre.end(), 0.0);
+                    std::fill (him.begin(), him.end(), 0.0);
+                    for (int h = 1; h <= HB; ++h)
                     {
                         const double a = rAmp[(size_t) h];
                         if (a == 0.0) continue;
                         const double ph = rPh[(size_t) h];
-                        const std::complex<double> c (0.5 * a * std::sin (ph),
-                                                     -0.5 * a * std::cos (ph));
-                        specFFT[(size_t) h]       = c;
-                        specFFT[(size_t) (N - h)] = std::conj (c);
+                        hre[(size_t) h] =  0.5 * a * std::sin (ph);
+                        him[(size_t) h] = -0.5 * a * std::cos (ph);
                     }
-                    inverseFFT (specFFT);   // raw Σ X[k]·e^{+i2πkn/N} (no normalization)
+                    wtfft::inverseReal (hre.data(), him.data(), N, cyc.data());   // raw Σ X[k]·e^{+i2πkn/N}
 
                     float* dst = &mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_)];
                     for (int sample = 0; sample < N; ++sample)
-                        dst[(size_t) sample] = (float) specFFT[(size_t) sample].real();
+                        dst[(size_t) sample] = (float) cyc[(size_t) sample];
                 }
             }
 
@@ -217,8 +233,10 @@ namespace tw
             const int N    = frameSize_;
             const int last = juce::jmax (0, totalSamples - 1);
             const double span = (double) juce::jmax (0, totalSamples - N);   // window-start range
-            std::vector<std::complex<double>> win  ((size_t) N);
-            std::vector<std::complex<double>> spec ((size_t) N);
+            std::vector<double> win  ((size_t) N);                                  // the real window
+            std::vector<double> wre  ((size_t) (N / 2 + 1)), wim ((size_t) (N / 2 + 1));   // its half spectrum
+            std::vector<double> sre  ((size_t) (N / 2 + 1)), sim ((size_t) (N / 2 + 1));   // the band-limited copy
+            std::vector<double> cyc  ((size_t) N);
 
             for (int frame = 0; frame < numFrames_; ++frame)
             {
@@ -232,26 +250,25 @@ namespace tw
                         v = pcm[(size_t) juce::jlimit (0, last, start + n)];
                     else   // source shorter than one frame → stretch it to fill the cycle
                         v = pcm[(size_t) juce::jlimit (0, last, (int) ((double) n * totalSamples / N))];
-                    win[(size_t) n] = std::complex<double> ((double) v, 0.0);
+                    win[(size_t) n] = (double) v;
                 }
                 // 2) forward FFT → the window's harmonic spectrum (harmonic h == bin h).
-                forwardFFT (win);
+                wtfft::forwardReal (win.data(), N, wre.data(), wim.data());
                 // 3) per mip level, keep harmonics 1..hMax (+ conjugate mirror), drop DC & Nyquist,
                 //    then inverse-FFT. spec[k] = win[k]/N so inverseFFT reconstructs the signal.
                 const double invN = 1.0 / (double) N;
                 for (int level = 0; level < numMipLevels_; ++level)
                 {
                     const int hMax = kMipMaxHarmonics[(size_t) level];
-                    std::fill (spec.begin(), spec.end(), std::complex<double> (0.0, 0.0));
-                    for (int h = 1; h <= hMax && h < N - h; ++h)
-                    {
-                        spec[(size_t) h]       = win[(size_t) h]       * invN;
-                        spec[(size_t) (N - h)] = win[(size_t) (N - h)] * invN;
-                    }
-                    inverseFFT (spec);
+                    const int HB   = std::min (hMax, N / 2 - 1);
+                    std::fill (sre.begin(), sre.end(), 0.0);
+                    std::fill (sim.begin(), sim.end(), 0.0);
+                    for (int h = 1; h <= HB; ++h)
+                    { sre[(size_t) h] = wre[(size_t) h] * invN; sim[(size_t) h] = wim[(size_t) h] * invN; }
+                    wtfft::inverseReal (sre.data(), sim.data(), N, cyc.data());
                     float* dst = &mipData_[(size_t) ((level * numFrames_ + frame) * frameSize_)];
                     for (int n = 0; n < N; ++n)
-                        dst[(size_t) n] = (float) spec[(size_t) n].real();
+                        dst[(size_t) n] = (float) cyc[(size_t) n];
                 }
             }
             normalizeMipLevels();
@@ -269,7 +286,8 @@ namespace tw
             WavetableSpec spec;
             const int N = frameSize_;
             if (numFrames_ < 1 || N < 4 || mipData_.empty()) return spec;
-            std::vector<std::complex<double>> buf ((size_t) N);
+            std::vector<double> buf ((size_t) N);
+            std::vector<double> bre ((size_t) (N / 2 + 1)), bim ((size_t) (N / 2 + 1));
             const int hMax = std::min (FrameSpec::kMaxHarmonics, N / 2 - 1);
             const double invN = 1.0 / (double) N;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
@@ -278,14 +296,14 @@ namespace tw
                     ? (int) std::lround ((double) f / (double) (WavetableSpec::kNumFrames - 1) * (double) (numFrames_ - 1))
                     : 0;
                 const float* src = &mipData_[(size_t) ((size_t) srcFrame * (size_t) frameSize_)];   // mip level 0
-                for (int n = 0; n < N; ++n) buf[(size_t) n] = std::complex<double> ((double) src[(size_t) n], 0.0);
-                forwardFFT (buf);
+                for (int n = 0; n < N; ++n) buf[(size_t) n] = (double) src[(size_t) n];
+                wtfft::forwardReal (buf.data(), N, bre.data(), bim.data());
                 FrameSpec& fs = spec.frames[(size_t) f];
                 fs.numPartials  = 0;                 // harmonic representation
                 fs.numHarmonics = hMax;
                 for (int h = 1; h <= hMax; ++h)
                 {
-                    const std::complex<double> c = buf[(size_t) h] * invN;
+                    const std::complex<double> c (bre[(size_t) h] * invN, bim[(size_t) h] * invN);
                     fs.amplitudes[(size_t) (h - 1)] = (float) (2.0 * std::abs (c));
                     fs.phases[(size_t) (h - 1)]     = (float) std::atan2 (c.real(), -c.imag());
                 }
@@ -1942,45 +1960,10 @@ namespace tw
         }
 
     private:
-        // Forward DFT via the conjugation identity F = conj( inverseFFT( conj(x) ) ) — reuses the
-        // proven radix-2 transform. a[k] ← Σ_n a[n]·e^{-i2πkn/N} (raw, UNnormalized). Build-time only.
-        static void forwardFFT (std::vector<std::complex<double>>& a) noexcept
-        {
-            for (auto& z : a) z = std::conj (z);
-            inverseFFT (a);
-            for (auto& z : a) z = std::conj (z);
-        }
-
-        // In-place radix-2 inverse DFT (raw, UNnormalized): a[n] ← Σ_k a[k]·e^{+i2πkn/N}.
-        // N (= frameSize_, 2048) is a power of two. Build-time only (not real-time).
-        static void inverseFFT (std::vector<std::complex<double>>& a) noexcept
-        {
-            const int n = (int) a.size();
-            for (int i = 1, j = 0; i < n; ++i)               // bit-reversal permutation
-            {
-                int bit = n >> 1;
-                for (; j & bit; bit >>= 1) j ^= bit;
-                j ^= bit;
-                if (i < j) std::swap (a[(size_t) i], a[(size_t) j]);
-            }
-            for (int len = 2; len <= n; len <<= 1)
-            {
-                const double ang = 2.0 * 3.14159265358979323846 / (double) len;  // +sign = inverse
-                const std::complex<double> wlen (std::cos (ang), std::sin (ang));
-                for (int i = 0; i < n; i += len)
-                {
-                    std::complex<double> w (1.0, 0.0);
-                    for (int k = 0; k < len / 2; ++k)
-                    {
-                        const std::complex<double> u = a[(size_t) (i + k)];
-                        const std::complex<double> v = a[(size_t) (i + k + len / 2)] * w;
-                        a[(size_t) (i + k)]               = u + v;
-                        a[(size_t) (i + k + len / 2)]     = u - v;
-                        w *= wlen;
-                    }
-                }
-            }
-        }
+        // fb467 — the hand-rolled radix-2 that used to live here MOVED to WtFft.h, where it is now
+        // BOTH the non-Apple fallback and the reference the certification harness nulls the vDSP
+        // path against (tw::wtfft::radix2Inverse / inverseRealScalar / forwardRealScalar). It is the
+        // same code, byte for byte; it just is not the thing that runs on this machine any more.
 
         float sample (int mipLevel, int frame, int idx) const noexcept
         {
@@ -1991,17 +1974,16 @@ namespace tw
          *  where higher mip levels — with fewer harmonics — sound quieter). */
         void normalizeMipLevels() noexcept
         {
+            // fb467 — one mip LEVEL is contiguous ([level][frame][sample]), so the two passes are a
+            // max-magnitude and a scalar multiply over one run of numFrames_*frameSize_ floats.
+            // Bit-identical to the nested loops this replaces; it is the same arithmetic, vectorised.
+            const int n = numFrames_ * frameSize_;
             for (int lvl = 0; lvl < numMipLevels_; ++lvl)
             {
-                float peak = 0.0f;
-                for (int frame = 0; frame < numFrames_; ++frame)
-                    for (int s = 0; s < frameSize_; ++s)
-                        peak = std::max (peak, std::abs (mipData_[(size_t) ((lvl * numFrames_ + frame) * frameSize_ + s)]));
+                float* p = &mipData_[(size_t) lvl * (size_t) n];
+                const float peak = wtfft::peakMagnitude (p, n);
                 if (peak <= 0.0f) continue;
-                const float scale = 1.0f / peak;
-                for (int frame = 0; frame < numFrames_; ++frame)
-                    for (int s = 0; s < frameSize_; ++s)
-                        mipData_[(size_t) ((lvl * numFrames_ + frame) * frameSize_ + s)] *= scale;
+                wtfft::scaleInPlace (p, n, 1.0f / peak);
             }
         }
 
