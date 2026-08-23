@@ -205,6 +205,68 @@ const CASES = [
     chk(wt.clamped===1,               'an out-of-range feed is clamped, never drawn off the table', '1.8 → '+wt.clamped);
   }
 
+  // ── fb458: WARP / FOLD MADE VISIBLE ────────────────────────────────────────────────────────
+  // Max: "we should be able to see the exact table being edited by each of its types."
+  // The BAKE is C++ (getOscWavetableJson runs the voice's own applyPhaseWarp/applyAmpWarp/
+  // applyFoldADAA, in the voice's order) — this page cannot reach it, so what is gated here is the
+  // JS half: does the waterfall NOTICE the shaping moved, re-bake, and — just as important — does
+  // it stay QUIET when nothing moved and when it is not on screen. A re-bake that never stops is a
+  // CPU leak, and this project just spent a whole round winning CPU back.
+  const wtw = await pg.evaluate(async ()=>{
+    const out={}; const W=window.wtWaterfall;
+    if(!W){ out.err='no wtWaterfall'; return out; }
+    if(typeof W.maybeRebake!=='function'){ out.err='no maybeRebake — pre-fb458 tree'; return out; }
+    window.__WTN=0;
+    // the stub ANSWERS WITH THE SHAPING IT WAS ASKED FOR, so a stale table is detectable
+    window.Juce.getNativeFunction=function(n){
+      if(n==='getOscWavetable') return function(){
+        window.__WTN++;
+        const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0];
+        const P=8,N=2,arr=[]; for(let i=0;i<N*P;i++) arr.push(+(d[1]||0));
+        return Promise.resolve(JSON.stringify({n:N,p:P,nf:N,wm:d[0],wa:d[1],w2m:d[2],w2a:d[3],fs:d[4],fa:d[5],d:arr}));
+      };
+      return function(){ return Promise.resolve(0); };
+    };
+    const raf=()=>new Promise(r=>requestAnimationFrame(r));
+    const settle=async(ms)=>{ const t0=performance.now(); while(performance.now()-t0<ms) await raf(); };
+
+    W.on.a=true; W.cache.a=null; W.busy.a=false; W.lastReq.a=0;
+    window.__wtDisp=[[0,0.00,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0],[0,0,0,0,0,0]];
+    W.kick(); await settle(350);
+    out.sig0=W.cachedSig('a');
+
+    // 1. the shaping moves -> the table is re-baked, and the NEW shaping is what came back
+    const b1=window.__WTN;
+    window.__wtDisp[0]=[2,0.70,0,0,0,0];
+    await settle(450);
+    out.bakesOnChange=window.__WTN-b1; out.sig1=W.cachedSig('a');
+    out.cacheVal=(W.cache.a&&W.cache.a.d)?+W.cache.a.d[0]:null;
+
+    // 2. nothing moves -> NOTHING is baked (a runaway re-bake would be a CPU leak)
+    const b2=window.__WTN; await settle(700); out.bakesIdle=window.__WTN-b2;
+
+    // 3. the waterfall is OFF -> nothing is baked at all (fb148: no UI, no work)
+    W.on.a=false; const b3=window.__WTN;
+    window.__wtDisp[0]=[3,0.20,0,0,0,0]; await settle(450);
+    out.bakesHidden=window.__WTN-b3;
+
+    // 4. and it catches up the moment it comes back on screen
+    W.on.a=true; W.kick(); const b4=window.__WTN; await settle(450);
+    out.bakesOnReturn=window.__WTN-b4; out.sig2=W.cachedSig('a');
+    return out;
+  });
+  if(wtw.err) chk(false,'WARP/FOLD re-bake — probe ran',wtw.err);
+  else {
+    chk(wtw.bakesOnChange>=1,      'WARP/FOLD change RE-BAKES the table',            'bakes '+wtw.bakesOnChange);
+    chk(wtw.sig1!==wtw.sig0,       'the cached table now carries the NEW shaping',   wtw.sig0+'  →  '+wtw.sig1);
+    // the table lives in a Float32Array, so 0.7 comes back 0.699999988 — compare at float32
+    // precision, not with ===. (Asserting === here was MY bug, not the plugin's.)
+    chk(Math.abs(wtw.cacheVal-0.7)<1e-6, 'the re-baked table is the one that was asked for','value '+wtw.cacheVal+' ≈ 0.7');
+    chk(wtw.bakesIdle===0,         'a SETTLED shaping bakes nothing (no CPU leak)',  wtw.bakesIdle+' bakes in 700ms');
+    chk(wtw.bakesHidden===0,       'a HIDDEN waterfall bakes nothing (fb148)',       wtw.bakesHidden+' bakes while off');
+    chk(wtw.bakesOnReturn>=1,      'coming back on screen catches the stale table up','bakes '+wtw.bakesOnReturn+'  sig '+wtw.sig2);
+  }
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close(); process.exit(fail?1:0);
 })().catch(e=>{ console.log('HARNESS ERROR '+e); process.exit(2); });

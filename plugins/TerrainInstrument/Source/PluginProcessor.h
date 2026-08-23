@@ -606,6 +606,14 @@ public:
     //  closed it and made every member below private; it did, and the editor stopped compiling.)
     float wtFrameVis (int o) const noexcept
     { return (o >= 0 && o < 4) ? wtFrameVis_[o].load (std::memory_order_relaxed) : -1.f; }
+
+    // fb458 — the SHAPING the waterfall must draw on top of the frame. wtDispLive_ = 0 means no
+    // voice is sounding, and every consumer then falls back to the base parameters, so an idle
+    // panel and a hand-turned knob look exactly as they did.
+    std::atomic<int>   wtDispLive_[4] { { 0 }, { 0 }, { 0 }, { 0 } };
+    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {};
+    std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
+    tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);

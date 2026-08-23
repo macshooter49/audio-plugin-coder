@@ -508,6 +508,22 @@ namespace tw
             to move automatically." */
         float getWtFrameVis (int osc) const noexcept
         { return osc == 0 ? framePos_ : osc == 1 ? framePosB_ : osc == 2 ? framePosC_ : framePosD_; }
+
+        /** fb458 — everything the WATERFALL needs to draw the table the oscillator is actually
+            reading: the frame AND the shaping applied on top of it. All values are the voice's
+            live, smoothed, post-modulation ones — the same members the render chain reads two
+            thousand lines below — so the picture cannot disagree with the sound. */
+        struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt; int warpMode, warp2Mode, foldShape; };
+        WtDisp getWtDisplay (int osc) const noexcept
+        {
+            switch (osc)
+            {
+                case 1:  return { framePosB_, warpAmountB_, warp2AmountB_, foldAmountB_, warpModeB_, warp2ModeB_, foldShapeB_ };
+                case 2:  return { framePosC_, warpAmountC_, warp2AmountC_, foldAmountC_, warpModeC_, warp2ModeC_, foldShapeC_ };
+                case 3:  return { framePosD_, warpAmountD_, warp2AmountD_, foldAmountD_, warpModeD_, warp2ModeD_, foldShapeD_ };
+                default: return { framePos_,  warpAmount_,  warp2AmountA_, foldAmountA_, warpMode_,  warp2ModeA_, foldShapeA_ };
+            }
+        }
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);

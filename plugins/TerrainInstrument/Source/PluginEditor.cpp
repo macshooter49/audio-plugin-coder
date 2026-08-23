@@ -5612,6 +5612,18 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         js << "window.__fxModEff=" << audioProcessor.getFxModEffJson() << ";";   // fb457 — OVERPASS 1
         js << "window.__wtFrameEff=[" << SF (audioProcessor.wtFrameVis (0), 4) << "," << SF (audioProcessor.wtFrameVis (1), 4)
            << "," << SF (audioProcessor.wtFrameVis (2), 4) << "," << SF (audioProcessor.wtFrameVis (3), 4) << "];";   // fb457
+        {   // fb458 — the WARP/FOLD the oscillator is applying, so the waterfall knows when the
+            // table it is holding has gone stale and must be re-baked through the real chain.
+            js << "window.__wtDisp=[";
+            for (int o = 0; o < 4; ++o)
+            {
+                const auto D = audioProcessor.wtDispEffective (o);
+                if (o) js << ",";
+                js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
+                   << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4) << "]";
+            }
+            js << "];";
+        }
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.

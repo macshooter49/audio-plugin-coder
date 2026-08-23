@@ -480,6 +480,41 @@ juce::String TerrainInstrumentAudioProcessor::getNoiseWavePeaksJson()
     return "{\"min\":[" + mn + "],\"max\":[" + mx + "]}";
 }
 
+// ═══ fb458 — WHAT IS SHAPING THE TABLE RIGHT NOW ════════════════════════════════════════════
+// The loudest sounding voice's live values when a note is down, the base parameters when not.
+// Same -1/idle contract as wtFrameVis(): silence must look exactly like it always did.
+tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc) const noexcept
+{
+    osc = juce::jlimit (0, 3, osc);
+    if (wtDispLive_[osc].load (std::memory_order_relaxed) != 0)
+        return { wtFrameVis_[osc]  .load (std::memory_order_relaxed),
+                 wtWarpAmtVis_[osc].load (std::memory_order_relaxed),
+                 wtWarp2AmtVis_[osc].load (std::memory_order_relaxed),
+                 wtFoldAmtVis_[osc].load (std::memory_order_relaxed),
+                 wtWarpModeVis_[osc] .load (std::memory_order_relaxed),
+                 wtWarp2ModeVis_[osc].load (std::memory_order_relaxed),
+                 wtFoldShapeVis_[osc].load (std::memory_order_relaxed) };
+
+    static const char* const WF [4] = { ParameterIDs::SYN_OSC_A_WT_FRAME,   ParameterIDs::SYN_OSC_B_WT_FRAME,
+                                        ParameterIDs::SYN_OSC_C_WT_FRAME,   ParameterIDs::SYN_OSC_D_WT_FRAME };
+    static const char* const WM [4] = { ParameterIDs::SYN_OSC_A_WARP_MODE,  ParameterIDs::SYN_OSC_B_WARP_MODE,
+                                        ParameterIDs::SYN_OSC_C_WARP_MODE,  ParameterIDs::SYN_OSC_D_WARP_MODE };
+    static const char* const WA [4] = { ParameterIDs::SYN_OSC_A_WARP_AMOUNT,ParameterIDs::SYN_OSC_B_WARP_AMOUNT,
+                                        ParameterIDs::SYN_OSC_C_WARP_AMOUNT,ParameterIDs::SYN_OSC_D_WARP_AMOUNT };
+    static const char* const W2M[4] = { ParameterIDs::SYN_OSC_A_WARP2_MODE, ParameterIDs::SYN_OSC_B_WARP2_MODE,
+                                        ParameterIDs::SYN_OSC_C_WARP2_MODE, ParameterIDs::SYN_OSC_D_WARP2_MODE };
+    static const char* const W2A[4] = { ParameterIDs::SYN_OSC_A_WARP2_AMT,  ParameterIDs::SYN_OSC_B_WARP2_AMT,
+                                        ParameterIDs::SYN_OSC_C_WARP2_AMT,  ParameterIDs::SYN_OSC_D_WARP2_AMT };
+    static const char* const FS [4] = { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, ParameterIDs::SYN_OSC_B_FOLD_SHAPE,
+                                        ParameterIDs::SYN_OSC_C_FOLD_SHAPE, ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
+    static const char* const FA [4] = { ParameterIDs::SYN_OSC_A_FOLD_AMT,   ParameterIDs::SYN_OSC_B_FOLD_AMT,
+                                        ParameterIDs::SYN_OSC_C_FOLD_AMT,   ParameterIDs::SYN_OSC_D_FOLD_AMT };
+    return { rawParam (WF[osc])->load(),  rawParam (WA[osc])->load(),
+             rawParam (W2A[osc])->load(), rawParam (FA[osc])->load(),
+             (int) rawParam (WM[osc])->load(), (int) rawParam (W2M[osc])->load(),
+             (int) rawParam (FS[osc])->load() };
+}
+
 juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
@@ -496,17 +531,62 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     const int numFrames = juce::jmax (1, wt->getNumFrames());
     const int dispN = juce::jlimit (1, 64, numFrames);     // decimate to ≤64 display frames (viz LOD)
     const int pts   = 160;                                 // points per frame polyline
+
+    // ═══ fb458 — THE TABLE AS THE OSCILLATOR IS ACTUALLY READING IT ════════════════════════
+    // Max: "we should be able to see the exact table being edited by each of its types."
+    // The waterfall used to draw the RAW bank frames, so Warp and Fold were invisible — you
+    // could hear the table being reshaped and watch it sit still.
+    //
+    // 🚨 THIS RUNS THE SHIPPED CHAIN, IT DOES NOT REIMPLEMENT IT. applyPhaseWarp / applyAmpWarp
+    //    are the voice's own public statics and applyFoldADAA is the same shaper the render path
+    //    calls; the ORDER below is copied from SynthVoice's read chain (phase warp 1 -> warp 2 ->
+    //    lookup -> window -> amp warp 1 -> amp warp 2 -> fold). A JS reimplementation of twenty-odd
+    //    warp modes is exactly the second-copy trap this codebase has paid for before.
+    //
+    // 🚨 AND IT IS NOT ON THE AUDIO THREAD. fb75 excluded FRAME_SPREAD/BLUR/SPECTRAL from LFO mod
+    //    because they force TABLE RE-RENDERS at audio rate. This is a MESSAGE-THREAD display bake
+    //    of 64x160 points behind a native call — a different thing entirely, and that ruling stands.
+    const auto D = wtDispEffective (osc);
+    const bool doFold = D.foldAmt > 1.0e-6f;
+
     juce::MemoryOutputStream out;
-    out << "{\"n\":" << dispN << ",\"p\":" << pts << ",\"nf\":" << numFrames << ",\"d\":[";
+    out << "{\"n\":" << dispN << ",\"p\":" << pts << ",\"nf\":" << numFrames
+        << ",\"wm\":"  << D.warpMode  << ",\"wa\":"  << juce::String (D.warpAmt,  4)
+        << ",\"w2m\":" << D.warp2Mode << ",\"w2a\":" << juce::String (D.warp2Amt, 4)
+        << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4)
+        << ",\"d\":[";
     for (int i = 0; i < dispN; ++i)
     {
         const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;
-        for (int p = 0; p < pts; ++p)
-        {
-            const float v = wt->lookup (0, framePos, (float) p / (float) pts);   // mip 0 = full bandwidth
-            if (i || p) out << ',';
-            out << juce::String (v, 4);
-        }
+        tw::shapers::FoldState fst {};
+        // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
+        // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
+        // seed it, then draw the second. Only when folding — otherwise the loop is untouched.
+        for (int pass = (doFold ? 0 : 1); pass <= 1; ++pass)
+            for (int p = 0; p < pts; ++p)
+            {
+                double ph = (double) p / (double) pts;
+                float  window = 1.0f;
+                bool   skip   = false;
+                ph = tw::SynthVoice::applyPhaseWarp (D.warpMode, D.warpAmt, ph, window, skip);
+                if (! skip && D.warp2Mode != 0)
+                    ph = tw::SynthVoice::applyPhaseWarp (D.warp2Mode, D.warp2Amt, ph, window, skip);
+                float v = 0.0f;
+                if (! skip)
+                {
+                    const double r = ph - std::floor (ph);          // the voice wraps the same way
+                    v  = wt->lookup (0, framePos, (float) r);       // mip 0 = full bandwidth
+                    v *= window;                                    // PWM / FORMANT post-lookup window
+                    v  = tw::SynthVoice::applyAmpWarp (D.warpMode,  D.warpAmt,  v);
+                    v  = tw::SynthVoice::applyAmpWarp (D.warp2Mode, D.warp2Amt, v);
+                }
+                if (doFold) v = tw::shapers::applyFoldADAA (v, D.foldShape, D.foldAmt, fst);
+                if (pass == 1)
+                {
+                    if (i || p) out << ',';
+                    out << juce::String (v, 4);
+                }
+            }
     }
     out << "]}";
     return out.toString();
@@ -9200,9 +9280,28 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         fltVisRes2_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes2() :  0.f, std::memory_order_relaxed);
         // fb457 — OVERPASS 1: the waterfall rides the SAME loudest-voice pick as the filter curve,
         // because the filter is the one thing Max said already moved and this is why.
+        // fb457/fb458 — the waterfall's feed. Gated on vizLive: with no editor nobody reads these,
+        // and "no UI, no viz work" is the house law (fb148). Costs a closed plugin exactly nothing.
+        if (vizLive)
         for (int o = 0; o < 4; ++o)
             wtFrameVis_[o].store (any && bestVoice != nullptr ? bestVoice->getWtFrameVis (o) : -1.f,
                                   std::memory_order_relaxed);
+        if (vizLive)
+        for (int o = 0; o < 4; ++o)
+        {
+            const bool live = (any && bestVoice != nullptr);
+            if (live)
+            {
+                const auto d = bestVoice->getWtDisplay (o);
+                wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
+                wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
+                wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
+                wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
+                wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
+                wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);
+            }
+            wtDispLive_[o].store (live ? 1 : 0, std::memory_order_relaxed);
+        }
         for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
         oscScopePubAccum_ += (double) numSamples;
         if (! vizLive) oscScopePubAccum_ = 0.0;   // fb148 — no backlog while closed (a grown accumulator would publish every block on reopen)
