@@ -611,7 +611,7 @@ public:
     // voice is sounding, and every consumer then falls back to the base parameters, so an idle
     // panel and a hand-turned knob look exactly as they did.
     std::atomic<int>   wtDispLive_[4] { { 0 }, { 0 }, { 0 }, { 0 } };
-    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {};
+    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {}, wtBlurVis_[4] {};
     std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
     tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
     // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the

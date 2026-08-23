@@ -506,6 +506,7 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
                  wtWarpAmtVis_[osc].load (std::memory_order_relaxed),
                  wtWarp2AmtVis_[osc].load (std::memory_order_relaxed),
                  wtFoldAmtVis_[osc].load (std::memory_order_relaxed),
+                 wtBlurVis_[osc]   .load (std::memory_order_relaxed),
                  wtWarpModeVis_[osc] .load (std::memory_order_relaxed),
                  wtWarp2ModeVis_[osc].load (std::memory_order_relaxed),
                  wtFoldShapeVis_[osc].load (std::memory_order_relaxed) };
@@ -524,8 +525,11 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
                                         ParameterIDs::SYN_OSC_C_FOLD_SHAPE, ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
     static const char* const FA [4] = { ParameterIDs::SYN_OSC_A_FOLD_AMT,   ParameterIDs::SYN_OSC_B_FOLD_AMT,
                                         ParameterIDs::SYN_OSC_C_FOLD_AMT,   ParameterIDs::SYN_OSC_D_FOLD_AMT };
+    static const char* const BL [4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
+                                        ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
     return { rawParam (WF[osc])->load(),  rawParam (WA[osc])->load(),
              rawParam (W2A[osc])->load(), rawParam (FA[osc])->load(),
+             rawParam (BL[osc])->load(),
              (int) rawParam (WM[osc])->load(), (int) rawParam (W2M[osc])->load(),
              (int) rawParam (FS[osc])->load() };
 }
@@ -563,12 +567,22 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     //    of 64x160 points behind a native call — a different thing entirely, and that ruling stands.
     const auto D = wtDispEffective (osc);
     const bool doFold = D.foldAmt > 1.0e-6f;
+    // fb460 — WT BLUR. The voice never reads the table directly when blur is up: it builds ONE
+    // blended single-cycle per block with Wavetable::renderBlend() and reads that. So does this.
+    // renderBlend's own fast path at blur <= 1e-4 is documented bit-identical to lookup(), but it
+    // still writes a whole 2048-sample cycle, which is MORE work than the 160 lookups a display
+    // frame needs — so blur-off keeps the direct lookup and nothing about the common case changes.
+    const bool doBlur = D.blur > 1.0e-4f;
+    std::vector<float> cyc;
+    if (doBlur) cyc.resize ((size_t) juce::jmax (1, wt->getFrameSize()));
+    const double t0ms = juce::Time::getMillisecondCounterHiRes();
 
     juce::MemoryOutputStream out;
     out << "{\"n\":" << dispN << ",\"p\":" << pts << ",\"nf\":" << numFrames
         << ",\"wm\":"  << D.warpMode  << ",\"wa\":"  << juce::String (D.warpAmt,  4)
         << ",\"w2m\":" << D.warp2Mode << ",\"w2a\":" << juce::String (D.warp2Amt, 4)
-        << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4);
+        << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4)
+        << ",\"bl\":"  << juce::String (D.blur, 4);
     {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
         float sa = 0.0f; int st = 0; spectralDisplay (osc, sa, st);
         out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st;
@@ -577,6 +591,8 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     for (int i = 0; i < dispN; ++i)
     {
         const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;
+        // one blended cycle per DISPLAY frame — the same call, at the same mip, the voice makes
+        if (doBlur) wt->renderBlend (0, framePos, D.blur, cyc.data());
         tw::shapers::FoldState fst {};
         // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
         // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
@@ -594,7 +610,8 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
                 if (! skip)
                 {
                     const double r = ph - std::floor (ph);          // the voice wraps the same way
-                    v  = wt->lookup (0, framePos, (float) r);       // mip 0 = full bandwidth
+                    v  = doBlur ? tw::Wavetable::readCycle (cyc.data(), (float) r)   // fb460
+                                : wt->lookup (0, framePos, (float) r);               // mip 0 = full bandwidth
                     v *= window;                                    // PWM / FORMANT post-lookup window
                     v  = tw::SynthVoice::applyAmpWarp (D.warpMode,  D.warpAmt,  v);
                     v  = tw::SynthVoice::applyAmpWarp (D.warp2Mode, D.warp2Amt, v);
@@ -607,7 +624,11 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
                 }
             }
     }
-    out << "]}";
+    // fb460 — the bake TIMES ITSELF and says so. The page uses this to set its own re-bake
+    // interval (>= 10x the measured cost), so the display can never take more than ~10% of the
+    // message thread no matter how big the table or how wide the blur band. A magic constant here
+    // would have been a guess about somebody else's imported wavetable.
+    out << "],\"ms\":" << juce::String (juce::Time::getMillisecondCounterHiRes() - t0ms, 3) << "}";
     return out.toString();
 }
 
@@ -9315,6 +9336,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
                 wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
                 wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
+                wtBlurVis_[o]    .store (d.blur,      std::memory_order_relaxed);   // fb460
                 wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
                 wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
                 wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);

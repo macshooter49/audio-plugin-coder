@@ -513,15 +513,17 @@ namespace tw
             reading: the frame AND the shaping applied on top of it. All values are the voice's
             live, smoothed, post-modulation ones — the same members the render chain reads two
             thousand lines below — so the picture cannot disagree with the sound. */
-        struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt; int warpMode, warp2Mode, foldShape; };
+        // fb460 — blur rides here too: it is the last thing between the table and the ear that the
+        // waterfall could not show. blurX_ is the SMOOTHED value the per-block renderBlend uses.
+        struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt, blur; int warpMode, warp2Mode, foldShape; };
         WtDisp getWtDisplay (int osc) const noexcept
         {
             switch (osc)
             {
-                case 1:  return { framePosB_, warpAmountB_, warp2AmountB_, foldAmountB_, warpModeB_, warp2ModeB_, foldShapeB_ };
-                case 2:  return { framePosC_, warpAmountC_, warp2AmountC_, foldAmountC_, warpModeC_, warp2ModeC_, foldShapeC_ };
-                case 3:  return { framePosD_, warpAmountD_, warp2AmountD_, foldAmountD_, warpModeD_, warp2ModeD_, foldShapeD_ };
-                default: return { framePos_,  warpAmount_,  warp2AmountA_, foldAmountA_, warpMode_,  warp2ModeA_, foldShapeA_ };
+                case 1:  return { framePosB_, warpAmountB_, warp2AmountB_, foldAmountB_, blurB_, warpModeB_, warp2ModeB_, foldShapeB_ };
+                case 2:  return { framePosC_, warpAmountC_, warp2AmountC_, foldAmountC_, blurC_, warpModeC_, warp2ModeC_, foldShapeC_ };
+                case 3:  return { framePosD_, warpAmountD_, warp2AmountD_, foldAmountD_, blurD_, warpModeD_, warp2ModeD_, foldShapeD_ };
+                default: return { framePos_,  warpAmount_,  warp2AmountA_, foldAmountA_, blurA_, warpMode_,  warp2ModeA_, foldShapeA_ };
             }
         }
         void setFilterType (int typeIdx) noexcept

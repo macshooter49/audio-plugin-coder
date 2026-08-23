@@ -5622,7 +5622,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 float sa = 0.0f; int st = 0; audioProcessor.spectralDisplay (o, sa, st);   // fb459
                 js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
-                   << "," << SF (sa, 4) << "," << st << "]";
+                   << "," << SF (sa, 4) << "," << st << "," << SF (D.blur, 4) << "]";   // fb460 — blur
             }
             js << "];";
         }
