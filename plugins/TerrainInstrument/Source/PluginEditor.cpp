@@ -7000,7 +7000,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     padding: 5px 12px;
     font: 700 10px/1 -apple-system, sans-serif; letter-spacing: 0.18em;
     border-radius: 4px; cursor: pointer;
-    color: rgba(245,243,255,0.78);
+)TIHX") + juce::String (R"TIHX(    color: rgba(245,243,255,0.78);
     background: rgba(255,255,255,0.04);
     transition: background 150ms ease, color 150ms ease, transform 80ms ease;
     user-select: none;
@@ -7384,7 +7384,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     border: 1px solid rgba(255,255,255,0.06);
     border-radius: 3px;
     /* Emblem-only buttons (label removed) — symmetric padding for a
-       square-ish symbol cell rather than the tall portrait the labeled
+)TIHX") + juce::String (R"TIHX(       square-ish symbol cell rather than the tall portrait the labeled
        version had. */
     padding: 12px 6px;
     display: flex; align-items: center; justify-content: center;
@@ -7748,7 +7748,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     hero.appendChild(rootWrap);
 
     // ─── A/B/C/D layer pads (Mark 2 placeholders) ─────────────────────────
-    // Visual chrome for the four sampler layers (A/B/C/D) that will land in
+)TIHX") + juce::String (R"TIHX(    // Visual chrome for the four sampler layers (A/B/C/D) that will land in
     // the Mark 2 layer-architecture phase. A is shown as active by default
     // (current single sampler is conceptually layer A); B/C/D are dimmed
     // placeholders. The A pad lights up briefly while any voice is sounding,
@@ -7982,7 +7982,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           '</div>' +
           '<div class="ov-act danger" data-act="del">' +
             '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><path d="M5 5 L 19 19 M 19 5 L 5 19"/></svg>' +
-            'DELETE' +
+)TIHX") + juce::String (R"TIHX(            'DELETE' +
           '</div>' +
         '</div>' +
       '</div>';
@@ -8260,7 +8260,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   // Public: switch the editing layer. Called by the A/B/C/D pad click handler.
   // Snapshot leaving layer → flip C++ atomic → restore entering layer → render.
   window.switchEditingLayer = function (newIdx) {
-    newIdx = Math.max(0, Math.min(3, parseInt(newIdx, 10) || 0));
+)TIHX") + juce::String (R"TIHX(    newIdx = Math.max(0, Math.min(3, parseInt(newIdx, 10) || 0));
     if (newIdx === state.editingLayerIdx) return;
 
     // Snapshot the layer we are leaving (overwrites any stale mirror).
@@ -8602,7 +8602,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       // for just those chops. Without this, a marker drag leaves the previous
       // chop's scan position cached and the white scan line draws at the OLD
       // chop's position multiplied by the NEW chop width, appearing "stuck."
-      var _oldBounds = (state.slices || []).map(function (s) {
+)TIHX") + juce::String (R"TIHX(      var _oldBounds = (state.slices || []).map(function (s) {
         return { start: s ? s.start : -1, end: s ? s.end : -1 };
       });
       state.slices = arr.map(function (s) {
@@ -8900,7 +8900,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       if (s.warpMode > 0
           && s.stretchRatio && Math.abs(s.stretchRatio - 1.0) > 0.005
           && !hideOverlays) {
-        var sl = document.createElement('div');
+)TIHX") + juce::String (R"TIHX(        var sl = document.createElement('div');
         sl.className = 'ti-slice-stretch-label';
         sl.textContent = s.stretchRatio.toFixed(2) + 'x';
         body.appendChild(sl);
@@ -9255,7 +9255,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 
   // Reverse-map a clientX coordinate into a source sample using the
   // CURRENT cumulative chop layout. Walks chopLayouts to find which chop
-  // contains the cursor's x, then interpolates within that chop's source
+)TIHX") + juce::String (R"TIHX(  // contains the cursor's x, then interpolates within that chop's source
   // range proportional to the cursor's position in the chop's visualWidth.
   //
   // Without this, gesture handlers used uniform `frac = (x-left)/W → sample
@@ -9678,7 +9678,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
   }
 
   // Emblem-knob value readouts. Glyph shapes are deliberately STATIC vs the
-  // value — only the numeric text changes. Idle CSS animations (volume bars,
+)TIHX") + juce::String (R"TIHX(  // value — only the numeric text changes. Idle CSS animations (volume bars,
   // fork prongs, stretch breath) keep the panel feeling alive without
   // shifting the layout when the value changes width (e.g. "+12 st" vs "+0").
   function ovRedrawEmblems (idx) {
@@ -9995,7 +9995,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
           var fx = chip.dataset.fx;
           if (fx === 'tape') {
             var next = ((Number(s.fxTapeMachine) || 0) + 1) % 4;
-            s.fxTapeMachine = next;
+)TIHX") + juce::String (R"TIHX(            s.fxTapeMachine = next;
             var fnT = getNativeFn('setSliceFxTapeMachine');
             if (fnT) { try { fnT(idx, next); } catch (_) {} }
           } else {
@@ -10331,7 +10331,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // Click outside the SLICES drawer closes it. Drawer interactions
     // already stopPropagation so they don't reach this listener.
     document.addEventListener('click', function (ev) {
-      var dr = document.getElementById('ti-slicer-drawer');
+)TIHX") + juce::String (R"TIHX(      var dr = document.getElementById('ti-slicer-drawer');
       if (!dr || !dr.classList.contains('open')) return;
       var wrap = document.getElementById('ti-slices-wrap');
       if (wrap && !wrap.contains(ev.target)) closeSlicerDrawer();
@@ -10676,7 +10676,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     var hero = document.getElementById('hero');
     if (!hero) return;
     if (active) hero.classList.add('drag-hover');
-    else hero.classList.remove('drag-hover');
+)TIHX") + juce::String (R"TIHX(    else hero.classList.remove('drag-hover');
   };
 
   window.onLoadingStarted = function (filename) {
@@ -11021,7 +11021,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     // Wrap drawScanViz in try/catch so a thrown exception (e.g. layouts
     // undefined, see drawScanViz comments) cannot prevent the next rAF
     // from being scheduled. Previously a single throw here killed the
-    // entire scan-viz loop for the life of the editor session.
+)TIHX") + juce::String (R"TIHX(    // entire scan-viz loop for the life of the editor session.
     try { drawScanViz(); } catch (_) {}
     _scanRafId = requestAnimationFrame(tickScanViz);
   }
@@ -11506,7 +11506,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         strip.querySelector('[data-fn="solo"]').addEventListener('click', function (ev) {
           var btn = ev.currentTarget;
           var active = ! btn.classList.contains('active');
-          btn.classList.toggle('active', active);
+)TIHX") + juce::String (R"TIHX(          btn.classList.toggle('active', active);
           var fn = getNativeFn('setLayerSolo');
           if (fn) { try { fn(idx, active); } catch (_) {} }
         });
@@ -11754,7 +11754,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
         +       '</div>'
         +     '</div>'
         +   '</div>'
-        +   '<div class="trigger-panel" data-panel="rr">'
+)TIHX") + juce::String (R"TIHX(        +   '<div class="trigger-panel" data-panel="rr">'
         +     '<div class="trigger-hint" style="text-align:center;">Cycling A &rarr; B &rarr; C &rarr; D &middot; skips empty</div>'
         +     '<div class="layer-status-dots" id="rr-dots">'
         +       '<span class="layer-status-dot" data-layer="0">A</span>'
@@ -12081,7 +12081,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
             // Resize neighboring zones around this boundary.
             zones[h].max     = v - 1;
             zones[h + 1].min = v;
-            paintVelocityZones(zones);
+)TIHX") + juce::String (R"TIHX(            paintVelocityZones(zones);
           }
           function onUp () {
             document.removeEventListener('mousemove', onMove);
@@ -12398,7 +12398,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
       });
       // CLEAR — wipes all 4 rolling buffers + flashes for feedback.
       var clearBtn = document.getElementById('stem-clear');
-      if (clearBtn) clearBtn.addEventListener('click', function () {
+)TIHX") + juce::String (R"TIHX(      if (clearBtn) clearBtn.addEventListener('click', function () {
         clearBtn.classList.add('flash');
         setTimeout(function () { clearBtn.classList.remove('flash'); }, 200);
         var fn = getNativeFn('clearStemBuffers');
