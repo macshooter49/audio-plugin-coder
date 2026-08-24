@@ -293,10 +293,13 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
             if (stalledMs >= 3000 && (stalledMs % 5000) < 500)
                 juce::File::getSpecialLocation (juce::File::tempDirectory)
                     .getChildFile ("terrain-stall.txt")
-                    .appendText (juce::String::formatted ("message thread stalled %.1f s | bakes %u | last bake %.1f ms\n",
+                    .appendText (juce::String::formatted ("stalled %.1f s | bakes %u | last bake %.1f ms | frames %u acks %u lastFrame %u B\n",
                                                           stalledMs / 1000.0,
                                                           (unsigned) bakeCount_.load (std::memory_order_relaxed),
-                                                          (double) lastBakeMs_.load (std::memory_order_relaxed)));
+                                                          (double) lastBakeMs_.load (std::memory_order_relaxed),
+                                                          (unsigned) dbgFramesSent_.load (std::memory_order_relaxed),
+                                                          (unsigned) dbgAcks_.load (std::memory_order_relaxed),
+                                                          (unsigned) dbgLastFrameB_.load (std::memory_order_relaxed)));
         }
     });
    #endif
@@ -1014,6 +1017,17 @@ bool TerrainInstrumentAudioProcessor::physicalLeftButtonDown()
    #else
     return juce::ModifierKeys::getCurrentModifiersRealtime().isLeftButtonDown();   // Windows realtime IS physical (GetKeyState)
    #endif
+}
+
+void TerrainInstrumentAudioProcessor::pushQwertyNote (int note, bool on)
+{
+    // fb484 — message thread producer; the audio thread consumes in processBlock. A full ring
+    // drops the event (64 pending key events means something else is already very wrong).
+    const int w = qwertyW_.load (std::memory_order_relaxed);
+    const int next = (w + 1) & 63;
+    if (next == qwertyR_.load (std::memory_order_acquire)) return;
+    qwertyQ_[w] = { juce::jlimit (0, 127, note), on };
+    qwertyW_.store (next, std::memory_order_release);
 }
 
 void TerrainInstrumentAudioProcessor::timerCallback()
@@ -7097,6 +7111,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // fb484 — standalone QWERTY-to-MIDI: drain the key-note ring into the normal MIDI stream.
+    if (wrapperType == wrapperType_Standalone)
+    {
+        int r = qwertyR_.load (std::memory_order_relaxed);
+        const int w = qwertyW_.load (std::memory_order_acquire);
+        while (r != w)
+        {
+            const auto& e = qwertyQ_[r];
+            midiMessages.addEvent (e.on ? juce::MidiMessage::noteOn  (1, e.note, (juce::uint8) 100)
+                                        : juce::MidiMessage::noteOff (1, e.note), 0);
+            r = (r + 1) & 63;
+        }
+        qwertyR_.store (r, std::memory_order_release);
+    }
 
     // ANNULUS polyphony: track currently-held MIDI notes (read-only scan; does not
     // consume midiMessages). The resonator tunes ONE voice per held note → polyphonic,

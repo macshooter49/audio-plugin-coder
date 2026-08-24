@@ -970,6 +970,17 @@ public:
     // thread gates PURE-VIZ production on this (spectrum FFTs, osc-scope publish), so a
     // closed UI costs nothing to visualize for — "closed <= open" by construction.
     std::atomic<int> uiClients_ { 0 };
+    // fb484 — STANDALONE QWERTY-TO-MIDI: the WebView owns keyboard focus, so JS key events call
+    // the qwertyNote native fn (message thread), which pushes into this lock-free SPSC ring;
+    // processBlock (audio thread) drains it into the normal MIDI stream. No locks, no deps.
+    struct QwertyEvt { int note; bool on; };
+    QwertyEvt         qwertyQ_[64] = {};
+    std::atomic<int>  qwertyW_ { 0 }, qwertyR_ { 0 };
+    void pushQwertyNote (int note, bool on);
+    // fb484 — BEACON v2: the editor's viz-transport state, so a freeze names its own cause.
+    std::atomic<uint32_t> dbgFramesSent_ { 0 };     // coalesced frames + keep-alives sent
+    std::atomic<uint32_t> dbgAcks_       { 0 };     // completions that came back
+    std::atomic<uint32_t> dbgLastFrameB_ { 0 };     // bytes of the last sent frame
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)

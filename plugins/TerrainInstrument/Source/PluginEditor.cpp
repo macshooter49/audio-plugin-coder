@@ -1778,6 +1778,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 complete(juce::var(audioProcessor.modStateJson));
             })
+            .withNativeFunction("qwertyNote", [this](const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb484 — standalone QWERTY-to-MIDI: the WebView owns keyboard focus, so the page's
+                // key events call here; a JUCE KeyListener would never see them.
+                if (args.size() >= 2)
+                    audioProcessor.pushQwertyNote ((int) args[0], (bool) args[1]);
+                complete (juce::var());
+            })
             .withNativeFunction("signalPageReady", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1785,6 +1794,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                       // one Windows corner where NavigationCompleted reports failure
                                       // and pageFinishedLoading never fires (gate must not dead-end).
                 pageReady = true;
+                lastFrameHash_ = 0;   // fb484 — pre-boot pushes set the hash; without this reset the
+                                      // first post-ready frame reads "identical" and is SKIPPED —
+                                      // Max's "osc A must be clicked before the viz shows".
                 // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
                 // loaded in the still-alive processor (in-session editor reopen). The old JS side
                 // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
@@ -5562,6 +5574,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // to die whenever anything upstream threw.
     juce::String js;
     js << "window.__tickT=(window.performance&&performance.now)?performance.now():0;";   // fb483 heartbeat rides first
+    if (audioProcessor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
+        js << "window.__isStandalone=1;";   // fb484 — arms the page's QWERTY-to-MIDI handler
     juce::String* frameOut = &js;   // fb483 -- reachable inside blocks that shadow the name js
     js << "try{if(window.updateVisualization){"
        << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
@@ -6220,12 +6234,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         {
             lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
             evalInFlight_.store (0, std::memory_order_relaxed);
+            audioProcessor.dbgAcks_.fetch_add (1, std::memory_order_relaxed);   // fb484 beacon v2
         };
         if (! identical)
         {
             lastFrameHash_ = fh; idleSkips_ = 0;
             evalInFlight_.store (1, std::memory_order_relaxed);
             evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
+            audioProcessor.dbgFramesSent_.fetch_add (1, std::memory_order_relaxed);           // fb484
+            audioProcessor.dbgLastFrameB_.store ((uint32_t) js.length(), std::memory_order_relaxed);
             webView->evaluateJavascript (js, ack);
         }
         else if (++idleSkips_ >= 30)
