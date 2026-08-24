@@ -47,6 +47,8 @@ namespace tw
         DataCompress,         // quantize + decimate → digital / lo-fi / destroyed
         SpectralPhaser,       // swept comb notches  → hollow / phaser
         Disperse,             // quadratic phase     → chirped / dense / smeared-in-time
+        HarmLowCut,           // 4th-order HP in harmonic number → hollow / thin / telephone
+        HarmHighCut,          // 4th-order LP in harmonic number → dark / soft / muted
         Count
     };
 
@@ -383,6 +385,40 @@ namespace tw
                     {
                         const float d = p[(size_t) i].ratio - 1.0f;
                         p[(size_t) i].phase += c * d * d;
+                    }
+                    break;
+                }
+
+                case SpectralMode::HarmLowCut:
+                case SpectralMode::HarmHighCut:
+                {
+                    // ── THE SPECTRAL CUT, and it is NOT the filter you already have ──────────────
+                    //  This cuts by HARMONIC NUMBER, not by hertz, so the corner rides the note: play
+                    //  an octave up and the timbre is identical instead of getting brighter. Serum 2's
+                    //  spectral Lo/Hi markers are in Hz and do not track [M2 p.108]; Vital's kLowPass /
+                    //  kHighPass are a brick wall with a one-harmonic taper and no slope at all
+                    //  (spectral_morph.h:243-305). Ours is a FOURTH-ORDER BUTTERWORTH — the same order
+                    //  Serum uses and the same one fb470 gave the rack EQ's cuts, so a cut is a cut
+                    //  wherever you meet one in this plugin.
+                    //
+                    //  It is also AMPLITUDE-ONLY: no ratio and no phase is touched, so it composes
+                    //  cleanly with Disperse (phase-only) and with the fb467 partial window.
+                    //
+                    //     |H(r)|  =  1 / sqrt(1 + (r/rc)^8)                 High Cut (low-pass)
+                    //     |H(r)|  =  (r/rc)^4 / sqrt(1 + (r/rc)^8)          Low Cut  (high-pass)
+                    //
+                    //  The corners start FAR outside the band so amount 0 is an exact identity, which
+                    //  the house law requires and which a corner parked at harmonic 512 would not give
+                    //  (a 4th-order response is still -3 dB at its own corner).
+                    const bool lowCut = (mode == SpectralMode::HarmLowCut);
+                    const float rc = lowCut ? 0.0625f * std::pow (2.0f, 14.0f * amount)
+                                            : 8192.0f * std::pow (2.0f, -14.0f * amount);
+                    for (int i = 0; i < n; ++i)
+                    {
+                        const float x  = std::max (1.0e-6f, p[(size_t) i].ratio / rc);
+                        const float x4 = x * x * x * x;
+                        const float den = std::sqrt (1.0f + x4 * x4);
+                        p[(size_t) i].amp *= (lowCut ? x4 : 1.0f) / den;
                     }
                     break;
                 }

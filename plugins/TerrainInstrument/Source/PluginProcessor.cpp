@@ -2423,7 +2423,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse" },
+                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
         0));
     // SPECTRAL AMT — morph amount (0 = base table, 1 = full morph).
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2590,7 +2590,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC B Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse" },
+                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
@@ -2751,7 +2751,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC C Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse" },
+                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, 1 },
@@ -3594,7 +3594,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC D Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse" },
+                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, 1 },

@@ -24,6 +24,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include "WtFft.h"
 #include "SynthModConfig.h"
+#include "SpectralMorph.h"
 #include <cstdio>
 #include <cstring>
 #include <cmath>
@@ -212,10 +213,16 @@ int main()
     gate (allThere, "P0  the four spectral parameters are on the AU", allThere ? "" : ("missing:" + miss).c_str());
     if (! allThere) { au.close(); return 1; }
 
-    {   // the choice param must carry NINE options, or picking Disperse lands somewhere else
+    {   // 🚨 THE CARDINALITY, TIED TO THE ENUM AND NOT TO A LITERAL. This gate read `maxValue == 8`
+        //    and went red the moment two modes were added — correctly, but it then has to be edited
+        //    by hand, and a gate you edit to make green is a gate you will eventually edit wrongly.
+        //    Bound to tw::SpectralMode::Count, it re-verifies itself: if the AU ever advertises a
+        //    different number of modes than the enum defines, picking one lands on another (fb373).
         const auto& pi = au.info.at (au.byName.at ("OSC A Spectral Type"));
-        char d[120]; snprintf (d, sizeof d, "declared range %.0f..%.0f", pi.minValue, pi.maxValue);
-        gate ((int) pi.maxValue == 8, "P1  Spectral Type has 9 options (None..Disperse)", d);
+        const int want = (int) tw::SpectralMode::Count - 1;
+        char d[160]; snprintf (d, sizeof d, "declared range %.0f..%.0f; the enum defines %d modes",
+                               pi.minValue, pi.maxValue, (int) tw::SpectralMode::Count);
+        gate ((int) pi.maxValue == want, "P1  the AU advertises exactly as many modes as the enum has", d);
     }
     {   // the defaults, in the AU's normalised convention: 0 = harmonic 1, 1 = harmonic 512
         const float dLo = au.getRaw ("OSC A Spectral Low"), dHi = au.getRaw ("OSC A Spectral High");
@@ -342,6 +349,41 @@ int main()
         const double sdDry = centroidNow (22, 0.0f), sdBlur = centroidNow (22, 1.0f);
         snprintf (d, sizeof d, "SpectralDrift: centroid %.2f dry -> %.2f blurred, and blur still moves it", sdDry, sdBlur);
         gate (std::abs (sdBlur - sdDry) > 0.05, "T2  the tables the twin is REFUSED on still blur", d);
+    }
+
+    // ══ fb471 — THE HARMONIC CUTS, ON THE INSTALLED PLUGIN ═══════════════════════════════════
+    //  Modes 9 and 10. A cut by HARMONIC NUMBER, so it rides the note — Serum 2's spectral Lo/Hi
+    //  markers are in Hz and do not. Measured here as the ratio of low-harmonic to high-harmonic
+    //  energy in the AU's own output, which moves in OPPOSITE directions for the two modes.
+    {
+        auto tilt = [&] (int mode, float amt) {
+            plainPatch (au);
+            au.setRaw  ("Synth OSC A WT Preset", 4.0f);        // ProphetSaw: every harmonic present
+            au.setNorm ("Synth OSC A WT Frame", 0.5f);
+            au.setRaw  ("OSC A Spectral Type", (float) mode);
+            au.setNorm ("OSC A Spectral Amount", amt);
+            au.pump (0.40);
+            const auto sp = au.spectrum (45);
+            const double f0 = 110.0, bin = SR / NFFT;
+            double lo = 0.0, hi = 0.0;
+            for (int h = 1; h <= 40; ++h)
+            { const int k = (int) std::lround (h * f0 / bin);
+              if (k <= 0 || k >= (int) sp.size()) continue;
+              double a = 0.0; for (int j = -2; j <= 2; ++j) if (k+j > 0 && k+j < (int) sp.size()) a = std::max (a, sp[(size_t)(k+j)]);
+              if (h <= 8) lo += a; else hi += a; }
+            return (hi > 0.0) ? 20.0 * std::log10 (std::max (1e-12, lo / hi)) : 0.0; };
+
+        // ⚠️ THE TWO AMOUNTS ARE DIFFERENT ON PURPOSE, and they are computed, not guessed. The
+        //    corner mappings are not mirror images — Low Cut is rc = 0.0625*2^(14a) and High Cut is
+        //    rc = 8192*2^(-14a) — so the SAME amount puts the two corners at different harmonics.
+        //    At 0.6 the High Cut's corner landed at harmonic 24, above almost all of a saw's energy,
+        //    and the metric barely moved. Both are put at harmonic 8 here, where the split is.
+        const double flat = tilt (0, 0.0f);
+        const double cutL = tilt (9,  0.5000f);   // Low Cut,  corner h8: log2(8/0.0625)/14
+        const double cutH = tilt (10, 0.7143f);   // High Cut, corner h8: log2(8192/8)/14
+        char d[230]; snprintf (d, sizeof d, "low/high energy tilt: flat %+.1f dB · Low Cut %+.1f · High Cut %+.1f", flat, cutL, cutH);
+        gate (cutL < flat - 6.0 && cutH > flat + 6.0,
+              "T3  the two harmonic cuts reach the plugin and pull OPPOSITE ways", d);
     }
 
     gate (! au.missing, "P3  every parameter this test asked for exists by name");

@@ -123,15 +123,17 @@ int main (int argc, char** argv)
 
         // every name in the enum must appear in BOTH lists
         const char* names[] = { "Harmonic Stretch", "Inharmonic Stretch", "Vocode", "Smear",
-                                "Random Amps", "Data Compress", "Spectral Phaser", "Disperse" };
+                                "Random Amps", "Data Compress", "Spectral Phaser", "Disperse",
+                                "Harmonic Low Cut", "Harmonic High Cut" };
+        const int nNames = (int) (sizeof (names) / sizeof (names[0]));
         int inCpp = 0, inJs = 0;
         const size_t jsAt = htm.find ("const SPECTRAL_MODES");
         const std::string js = (jsAt == std::string::npos) ? std::string() : htm.substr (jsAt, 400);
         for (const char* n : names) { if (cpp.find (std::string ("\"") + n + "\"") != std::string::npos) ++inCpp;
                                       if (js.find (std::string ("'") + n + "'") != std::string::npos) ++inJs; }
         char b[160];
-        snprintf (b, sizeof b, "%d/8 in the C++ StringArray, %d/8 in SPECTRAL_MODES", inCpp, inJs);
-        gate (inCpp == 8 && inJs == 8, "N1  every SpectralMode name is authored in BOTH lists", b);
+        snprintf (b, sizeof b, "%d/%d in the C++ StringArray, %d/%d in SPECTRAL_MODES", inCpp, nNames, inJs, nNames);
+        gate (inCpp == nNames && inJs == nNames, "N1  every SpectralMode name is authored in BOTH lists", b);
 
         // the JS array's LENGTH is what setChoiceValue divides by — it must equal the enum count
         int commas = 0; for (size_t i = 0; i < js.size() && js[i] != ']'; ++i) if (js[i] == ',') ++commas;
@@ -285,6 +287,78 @@ int main (int argc, char** argv)
             const double fl = 20.0*std::log10 (std::max (1e-12, dd) / std::max (1e-12, tt));
             snprintf (b, sizeof b, "amount 0 on the SAME metric: %+.1f dBr", fl);
             gate (fl < -100.0, "D5  and the metric reads DEAD at amount 0 (the floor D4 needs)", b);
+        }
+    }
+
+    // ── H — THE HARMONIC CUTS ─────────────────────────────────────────────────────────────────
+    //   A fourth-order Butterworth in HARMONIC NUMBER, so the corner rides the note. Serum 2's
+    //   spectral Lo/Hi markers are in Hz and do not track; Vital's are a brick wall with no slope.
+    {
+        // ⚠️ preset 4 (ProphetSaw), NOT 1 (Triangle). A triangle carries ODD HARMONICS ONLY, so the
+        //    first version of these gates probed h2, h4, h64 and h256 — every one of them zero — and
+        //    read "+0.00 dB, no change" at every frequency while the filter worked perfectly. The
+        //    ratio helper below now REFUSES a zero reference instead of returning 0 dB for it.
+        const tw::WavetableSpec base = tw::WavetableBank::specForPreset (4);   // a saw: every harmonic
+        const auto LOCUT  = tw::SpectralMode::HarmLowCut;
+        const auto HICUT  = tw::SpectralMode::HarmHighCut;
+
+        gate (sameSpec (tw::SpectralMorph::apply (base, LOCUT, 0.0f), base)
+           && sameSpec (tw::SpectralMorph::apply (base, HICUT, 0.0f), base),
+              "H1  both cuts are the EXACT identity at amount 0");
+
+        const tw::WavetableSpec dry = tw::SpectralMorph::apply (base, LOCUT, 1.0e-9f);
+
+        // ⚠️ THE PROBE HARMONICS COME FROM THE TABLE, and the AMOUNT is computed backwards from the
+        //    corner we want to land on — not hardcoded. Two versions of this gate read "+0.00 dB, no
+        //    change" at every frequency while the filter was exactly right: the first probed even
+        //    harmonics on a TRIANGLE (odd only, all silent), the second probed h64/h256 on a saw that
+        //    stops near h40. A ratio against a silent reference is not a measurement.
+        //      LOW  CUT: rc = 0.0625 * 2^(14a)   =>  a = log2(rc/0.0625)/14
+        //      HIGH CUT: rc = 8192   * 2^(-14a)  =>  a = log2(8192/rc)/14
+        auto aLow  = [] (double rc) { return (float) (std::log2 (rc / 0.0625) / 14.0); };
+        auto aHigh = [] (double rc) { return (float) (std::log2 (8192.0 / rc) / 14.0); };
+        auto ampAt = [&] (const tw::WavetableSpec& sp, int h) -> double {
+            const tw::FrameSpec& f = sp.frames[8];
+            if (f.numPartials > 0)
+            { for (int i = 0; i < f.numPartials; ++i)
+                if ((int) std::lround (f.partials[(size_t) i].ratio) == h) return std::abs (f.partials[(size_t) i].amp); return 0.0; }
+            return (h >= 1 && h <= f.numHarmonics) ? std::abs (f.amplitudes[(size_t) (h-1)]) : 0.0; };
+        int topH = 1;
+        for (int h = 1; h <= 512; ++h) if (ampAt (dry, h) > 1e-9) topH = h;
+        const int hLo = 2, hC = 8, hHi = std::min (32, topH);
+
+        auto measure = [&] (tw::SpectralMode m, float amt, int h) {
+            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, m, amt);
+            const double d = ampAt (dry, h), v = ampAt (c, h);
+            return (d > 1e-9) ? 20.0 * std::log10 (std::max (1e-12, v / d)) : 1e9; };
+
+        {   // LOW CUT with its corner at harmonic 8
+            const float a = aLow (8.0);
+            const double r2 = measure (LOCUT, a, hLo), r8 = measure (LOCUT, a, hC), rT = measure (LOCUT, a, hHi);
+            const bool have = (r2 < 1e8 && r8 < 1e8 && rT < 1e8);
+            char b[230]; snprintf (b, sizeof b, "top harmonic h%d · h%d %+.1f dB · h%d (the corner) %+.2f dB · h%d %+.3f dB%s",
+                                   topH, hLo, r2, hC, r8, hHi, rT, have ? "" : "  [NO REFERENCE]");
+            gate (have && r2 < -40.0 && std::abs (r8 + 3.01) < 0.15 && rT > -0.6,
+                  "H2  LOW CUT: -3.01 dB at the corner, 24 dB/oct below, clean above", b);
+        }
+        {   // HIGH CUT with its corner at the same harmonic
+            const float a = aHigh (8.0);
+            const double r2 = measure (HICUT, a, hLo), r8 = measure (HICUT, a, hC), rT = measure (HICUT, a, hHi);
+            const bool have = (r2 < 1e8 && r8 < 1e8 && rT < 1e8);
+            char b[230]; snprintf (b, sizeof b, "h%d %+.3f dB · h%d (the corner) %+.2f dB · h%d %+.1f dB%s",
+                                   hLo, r2, hC, r8, hHi, rT, have ? "" : "  [NO REFERENCE]");
+            gate (have && r2 > -0.6 && std::abs (r8 + 3.01) < 0.15 && rT < -40.0,
+                  "H3  HIGH CUT mirrors it, same order", b);
+        }
+        {   // AMPLITUDE-ONLY: it must not move a ratio or a phase, so it composes with Disperse
+            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, LOCUT, 0.6f);
+            const DryList d0 = dryPartials (base.frames[8]);
+            double worstR = 0.0, worstP = 0.0; int n2 = 0;
+            for (int i = 0; i < c.frames[8].numPartials && i < (int) d0.p.size(); ++i)
+            { worstR = std::max (worstR, (double) std::abs (c.frames[8].partials[(size_t) i].ratio - d0.p[(size_t) i].ratio));
+              worstP = std::max (worstP, (double) std::abs (c.frames[8].partials[(size_t) i].phase - d0.p[(size_t) i].phase)); ++n2; }
+            char b[190]; snprintf (b, sizeof b, "worst ratio drift %.3g, worst phase drift %.3g over %d partials", worstR, worstP, n2);
+            gate (worstR == 0.0 && worstP == 0.0 && n2 > 20, "H4  a cut touches AMPLITUDE only", b);
         }
     }
 
