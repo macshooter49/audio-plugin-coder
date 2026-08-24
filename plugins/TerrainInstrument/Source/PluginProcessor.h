@@ -1385,6 +1385,13 @@ private:
     std::atomic<float> spectralEffAmt_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — same publish for the partial window's two edges (SpecLo/SpecHi are mod destinations,
     // so the timer must build from the MODULATED value, not the raw param). -1 = not yet published.
+    // 🚨 fb469 — the EFFECTIVE blur, published unconditionally. The twin build first keyed off
+    //    wtBlurVis_, and that is a DISPLAY value: it is written only when `vizLive` (the editor is
+    //    open) AND a voice is sounding. With the editor closed the twin was therefore never built
+    //    and blur silently kept its old behaviour — caught on the installed AU, where Square's
+    //    centroid still fell 7.93 -> 2.83 while the offline gate said 13.97 -> 17.55. A display feed
+    //    is not a control signal (fb373).
+    std::atomic<float> blurEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     std::atomic<float> specLoEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     std::atomic<float> specHiEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — the eight window parameters, RESOLVED ONCE in the constructor. The publish needs the
@@ -1438,6 +1445,23 @@ private:
     //    it refills one in place (~2.3 ms, fb467). Calling it from the message thread would forge that
     //    claim and could stall or mis-sequence the rebuild. This twin only READS. It still honours
     //    ready[], so a half-built table is never drawn.
+    // fb469 — the SAME resolution, mutable, for the ONE message-thread job that needs to write to
+    // a table: building its blur twin. Same preference order and the same ready[] honour as the
+    // display twin, and like it, it never touches audioReadingIdx. The const_casts are safe: every
+    // one of these objects is a non-const member of this processor; only the ACCESSOR is const.
+    tw::Wavetable* wavetableForBlurTwin (int osc, MorphSlot& slot, int presetIdx) noexcept
+    {
+        osc = juce::jlimit (0, 3, osc);
+        if (auto* m = slot.live.load (std::memory_order_acquire))
+        {
+            const int idx = (m == &slot.buf[1]) ? 1 : 0;
+            if (slot.ready[idx].load (std::memory_order_acquire)) return &slot.buf[idx];
+        }
+        if (auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire))
+            return const_cast<tw::Wavetable*> (imp);
+        return const_cast<tw::Wavetable*> (wavetableBank.getTable (presetIdx));
+    }
+
     const tw::Wavetable* wavetableForDisplay (int osc, const MorphSlot& slot, int presetIdx) const noexcept
     {
         osc = juce::jlimit (0, 3, osc);

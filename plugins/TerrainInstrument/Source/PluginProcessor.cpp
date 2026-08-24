@@ -1020,6 +1020,32 @@ void TerrainInstrumentAudioProcessor::timerCallback()
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
+    // ══ fb469 — THE BLUR TWIN, built on demand ═════════════════════════════════════════════
+    //  A twin is what turns blur from a phasor mean (which CANCELS, and is why Max said "blur
+    //  really doesn't do much") into the magnitude mean. It is only worth building for a table an
+    //  oscillator is ACTUALLY blurring, and Wavetable::buildBlurTwin() refuses outright on the 24
+    //  factory tables where it would change nothing or would switch blur off — so in practice at
+    //  most four exist, 4.25 MB each. ONE PER TICK: the build is ~3 ms and this is the same 60 Hz
+    //  message-thread callback that bakes the morph slots.
+    {
+        static const char* const kPresetIds[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                                   ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+        static const char* const kBlurIds[4]   = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
+                                                   ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
+        MorphSlot* const slots[4] = { &morphA_, &morphB_, &morphC_, &morphD_ };
+        for (int o = 0; o < 4; ++o)
+        {
+            // the EFFECTIVE blur (knob + modulation), published every block whether or not an editor
+            // is open. -1 = the audio thread has not run yet, so fall back to the raw knob.
+            const float be = blurEff_[o].load (std::memory_order_relaxed);
+            const float blurNow = (be >= 0.0f) ? be : apvts.getRawParameterValue (kBlurIds[o])->load();
+            if (blurNow <= 1.0e-4f) continue;
+            const int preset = (int) *apvts.getRawParameterValue (kPresetIds[o]);
+            if (auto* wt = wavetableForBlurTwin (o, *slots[o], preset))
+                if (wt->blurTwinState() == 0) { wt->buildBlurTwin(); break; }   // one per tick
+        }
+    }
+
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
     rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
@@ -7685,6 +7711,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const float n = p->convertTo0to1 (raw);
                 return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
             };
+            // fb469 — the effective BLUR, on the same always-runs path as the spectral amount above.
+            // The message-thread twin build reads this; it must not depend on the editor being open.
+            static const char* const kBlurIds[4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
+                                                     ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
+            for (int o = 0; o < 4; ++o)
+                blurEff_[o].store (mdP (kBlurIds[o], (wc::ModDest) ((int) wc::ModDest::BlurA + o), 0.0f, 1.0f),
+                                   std::memory_order_relaxed);
+
             static const char* const kLoIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
                                                    ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
             static const char* const kHiIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, ParameterIDs::SYN_OSC_B_SPECTRAL_HI,

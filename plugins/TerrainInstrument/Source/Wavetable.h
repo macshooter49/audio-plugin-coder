@@ -352,6 +352,121 @@ namespace tw
             return fr0 + (fr1 - fr0) * fFrac;
         }
 
+        // fb469 — the twin's two bars. Both sit inside gaps measured across the whole factory bank,
+        // printed table by table before either number was chosen (see buildBlurTwin step 2).
+        static constexpr float kTwinMaxCoherence = 0.95f;   // above this nothing is cancelling
+        static constexpr float kTwinMinMove      = 0.12f;   // below this a magnitude blur is inaudible
+
+        /** fb469 — 0 = untried, 1 = a twin exists, -1 = refused (the frames differ only in phase). */
+        int   blurTwinState()   const noexcept { return twinState_; }
+        float blurTwinCoherence() const noexcept { return twinCoherence_; }   // 1 = nothing cancels
+        float blurTwinMove()      const noexcept { return twinMove_; }        // what a magnitude blur still does
+
+        /** fb469 — build the phase-aligned twin the blur TAPS read. MESSAGE THREAD ONLY, once per
+         *  table. Derives from the table's own mip-0 content, so a spec-built factory table and a
+         *  PCM import are handled by the same code. Returns true if a twin now exists. */
+        bool buildBlurTwin()
+        {
+            if (twinState_ != 0) return twinState_ == 1;
+            const int N = frameSize_, H = N / 2;
+            if (numFrames_ < 2 || N < 8 || mipData_.empty()) { twinState_ = -1; return false; }
+
+            // 1) analyse every frame at FULL band (mip 0)
+            std::vector<double> in ((size_t) N), re ((size_t) (H + 1)), im ((size_t) (H + 1));
+            std::vector<std::vector<double>> amp ((size_t) numFrames_), ph ((size_t) numFrames_);
+            for (int f = 0; f < numFrames_; ++f)
+            {
+                const float* src = &mipData_[(size_t) f * (size_t) N];
+                for (int n = 0; n < N; ++n) in[(size_t) n] = (double) src[(size_t) n];
+                wtfft::forwardReal (in.data(), N, re.data(), im.data());
+                amp[(size_t) f].assign ((size_t) (H + 1), 0.0);
+                ph [(size_t) f].assign ((size_t) (H + 1), 0.0);
+                for (int h = 1; h < H; ++h)
+                { const double a = std::sqrt (re[(size_t) h] * re[(size_t) h] + im[(size_t) h] * im[(size_t) h]);
+                  amp[(size_t) f][(size_t) h] = a;
+                  ph [(size_t) f][(size_t) h] = (a > 0.0) ? std::atan2 (im[(size_t) h], re[(size_t) h]) : 0.0; }
+            }
+
+            // 2) IS IT WORTH IT? Two questions, and the answer to both is a measured number.
+            //
+            //    (a) IS ANYTHING CANCELLING?   coherence = SUM_h |SUM_f w A e^{i phi}| / SUM_h SUM_f w A
+            //        1.0 means the frames agree in phase and the blur we already ship IS the
+            //        magnitude mean — a twin would be a byte-for-byte copy of the table. Measured
+            //        over the factory bank: NINETEEN tables read 1.0000 (Sine, ProphetSaw, PPGWave,
+            //        SerumHD, Rise, SpectralSweep...) and the ones that do cancel top out at 0.897.
+            //        The bar sits in that gap.
+            //
+            //    (b) WOULD A MAGNITUDE BLUR STILL DO ANYTHING?   how far the magnitude mean sits from
+            //        the un-blurred centre frame, both normalised. Where the frames differ only in
+            //        phase this is ~0: the magnitude mean IS the dry frame, so taking the
+            //        cancellation away would not soften the sound, it would switch blur OFF.
+            //        Measured on the eleven cancelling tables: 0.000 SpectralDrift · 0.010 PhaseDrift
+            //        · 0.045 CS80Brass · 0.047 JunoStr · 0.059 Dustbowl | 0.191 MoogSqr · 0.297 Pulse
+            //        · 0.310 Square · 0.312 JupiterPWM · 0.333 StaticEvolve · 0.563 Whisper.
+            //        Another gap, 0.059 -> 0.191, and another bar inside it.
+            //
+            //    🚨 THIS RULE IS THE THIRD ONE I WROTE and the first two were measuring the wrong
+            //    thing. The first read the spread out of the SPEC using |amplitude|, which hides a
+            //    NEGATIVE amplitude — and a sign flip IS a phase difference of pi, exactly what
+            //    cancels. The second asked "does the magnitude law move the spectrum more than the
+            //    phasor law?" and the answer is almost always NO — because the phasor law moves it
+            //    more BY DESTROYING IT, which is the thing being fixed. Neither mistake was visible
+            //    without printing the numbers for all thirty tables side by side.
+            const int HD = std::min (H - 1, 96);
+            const int mid = numFrames_ / 2;
+            double sP = 0.0, sM = 0.0, sD = 0.0;
+            std::vector<double> Mv ((size_t) HD + 1, 0.0), Dv ((size_t) HD + 1, 0.0);
+            for (int h = 1; h <= HD; ++h)
+            {
+                double cx = 0.0, cy = 0.0, m = 0.0;
+                for (int f = 0; f < numFrames_; ++f)
+                { const double a = amp[(size_t) f][(size_t) h], p = ph[(size_t) f][(size_t) h];
+                  cx += a * std::cos (p); cy += a * std::sin (p); m += a; }
+                sP += std::sqrt (cx * cx + cy * cy) / (double) numFrames_;
+                Mv[(size_t) h] = m / (double) numFrames_;
+                Dv[(size_t) h] = amp[(size_t) mid][(size_t) h];
+                sM += Mv[(size_t) h]; sD += Dv[(size_t) h];
+            }
+            if (sM <= 1.0e-12 || sD <= 1.0e-12) { twinState_ = -1; return false; }
+            double move = 0.0;
+            for (int h = 1; h <= HD; ++h) move += std::abs (Mv[(size_t) h] / sM - Dv[(size_t) h] / sD);
+            twinCoherence_ = (float) (sP / sM);
+            twinMove_      = (float) move;
+            if (twinCoherence_ > kTwinMaxCoherence) { twinState_ = -1; return false; }   // nothing cancels
+            if (twinMove_      < kTwinMinMove)      { twinState_ = -1; return false; }   // blur would go dead
+
+            // 3) synthesise: every frame's OWN magnitudes, frame 0's phases, band-limited per level
+            twinData_.assign (mipData_.size(), 0.0f);
+            std::vector<double> hre ((size_t) (H + 1)), him ((size_t) (H + 1)), cyc ((size_t) N);
+            for (int level = 0; level < numMipLevels_; ++level)
+            {
+                const int hMax = std::min (kMipMaxHarmonics[(size_t) level], H - 1);
+                for (int f = 0; f < numFrames_; ++f)
+                {
+                    std::fill (hre.begin(), hre.end(), 0.0);
+                    std::fill (him.begin(), him.end(), 0.0);
+                    for (int h = 1; h <= hMax; ++h)
+                    { const double a = amp[(size_t) f][(size_t) h], p = ph[0][(size_t) h];
+                      hre[(size_t) h] = a * std::cos (p); him[(size_t) h] = a * std::sin (p); }
+                    wtfft::inverseReal (hre.data(), him.data(), N, cyc.data());
+                    float* dst = &twinData_[(size_t) (((size_t) level * (size_t) numFrames_ + (size_t) f) * (size_t) N)];
+                    for (int n = 0; n < N; ++n) dst[(size_t) n] = (float) (cyc[(size_t) n] / (double) N);
+                }
+            }
+            // 4) match the ORIGINAL's per-level normalisation, so taps and reference share a scale
+            for (int lvl = 0; lvl < numMipLevels_; ++lvl)
+            {
+                const int n = numFrames_ * frameSize_;
+                const float* o = &mipData_[(size_t) lvl * (size_t) n];
+                float*       t = &twinData_[(size_t) lvl * (size_t) n];
+                const float po = wtfft::peakMagnitude (o, n), pt = wtfft::peakMagnitude (t, n);
+                if (pt > 1.0e-20f) wtfft::scaleInPlace (t, n, po / pt);
+            }
+            twinLive_.store (twinData_.data(), std::memory_order_release);   // LAST
+            twinState_ = 1;
+            return true;
+        }
+
         /** Backwards-compat alias used by legacy callers. Always reads mip 0. */
         float lookup (float framePos, float phase) const noexcept
         {
@@ -421,6 +536,9 @@ namespace tw
             //    every frame — but it turns an O(frameSize × N) worst case (2048 × 256 per voice
             //    per block on a big import, which is exactly the CPU objection fb75 raised when it
             //    excluded blur from modulation) into a fixed O(frameSize × kBlurMaxTaps).
+            // fb469 — the TAPS read the twin when one exists; the un-blurred reference never does,
+            // so blur = 0 is untouched and the crossfade always lands on the real table.
+            const float* tap = twinLive_.load (std::memory_order_acquire);
             const int span   = hi - lo + 1;
             const int stride = juce::jmax (1, (span + kBlurMaxTaps - 1) / kBlurMaxTaps);
 
@@ -443,8 +561,12 @@ namespace tw
             for (int n = 0; n < frameSize_; ++n)
             {
                 float v = 0.0f;
-                for (int f = lo; f <= hi; f += stride)
-                    v += w[(size_t) f] * sample (lvl, f, n);
+                if (tap != nullptr)
+                    for (int f = lo; f <= hi; f += stride)
+                        v += w[(size_t) f] * tap[(size_t) (((size_t) lvl * (size_t) numFrames_ + (size_t) f) * (size_t) frameSize_ + (size_t) n)];
+                else
+                    for (int f = lo; f <= hi; f += stride)
+                        v += w[(size_t) f] * sample (lvl, f, n);
 
                 const float ref = sample (lvl, f0, n) * (1.0f - fFrac)
                                 + sample (lvl, f1, n) * fFrac;
@@ -1988,6 +2110,35 @@ namespace tw
                 wtfft::scaleInPlace (p, n, 1.0f / peak);
             }
         }
+
+        // ══ fb469 — THE BLUR TWIN ══════════════════════════════════════════════════════════
+        //  Blur is a weighted mean over the frame axis taken in the TIME domain, so its spectrum is
+        //      SUM_f w_f * A_f[h] * e^{i phi_f[h]}
+        //  which CANCELS wherever the frames' phases disagree. Measured over all 30 factory tables:
+        //  23 have identical phases frame to frame and lose nothing, but on the rest the cancellation
+        //  is what hollows the sound out — Max: "blur really doesn't do much... it should."
+        //
+        //  🔑 THE IDENTITY THAT MAKES THE FIX FREE. Define a TWIN whose frame f carries its OWN
+        //  magnitudes and the REFERENCE frame's phases:  y_f = IFFT( A_f[h] * e^{i phi_0[h]} ). Then
+        //      SUM_f w_f * y_f[n]   has spectrum   ( SUM_f w_f A_f[h] ) * e^{i phi_0[h]}
+        //  — the magnitude-domain mean, EXACTLY, and cancellation is impossible by construction. So
+        //  the blur already shipped, run unchanged over a pre-baked twin, IS the magnitude law.
+        //  No FFT on the audio thread, no new arithmetic in renderBlend, and blur = 0 still takes the
+        //  fast path off the ORIGINAL table, so an unblurred patch stays bit-identical.
+        //
+        //  🚨 AND IT IS NOT ALWAYS WANTED. Where the frames differ ONLY in phase the magnitude mean
+        //  is the exact identity, and blur would stop doing anything at all. Two factory tables are
+        //  like that — SpectralDrift (frame-to-frame magnitude spread measured at 0.0000) and
+        //  PhaseDrift (0.1203) — and their entire blur effect IS the cancellation. buildBlurTwin()
+        //  measures the spread and REFUSES below kTwinMinSpread. The threshold sits inside a MEASURED
+        //  gap (0.1203 -> 0.3417, the next table up), not on a round number.
+        //
+        //  Lifetime: built once on the message thread and never freed, so the pointer the audio
+        //  thread loads can never dangle. Published LAST, with a release store.
+        float                     twinCoherence_ = 1.0f, twinMove_ = 0.0f;   // what the decision saw
+        std::vector<float>        twinData_;
+        std::atomic<const float*> twinLive_ { nullptr };
+        int                       twinState_ = 0;   // 0 = untried · 1 = built · -1 = refused
 
         int                  numFrames_     = 1;
         int                  frameSize_     = kFrameSize;

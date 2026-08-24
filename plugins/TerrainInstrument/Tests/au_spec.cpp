@@ -312,6 +312,38 @@ int main()
         gate (dist (d9, d0) > MOVED, "M1  an LFO on the window's HIGH edge moves the sound", d);
     }
 
+    // ══ fb469 — THE BLUR TWIN, ON THE INSTALLED PLUGIN ═══════════════════════════════════════
+    //  Offline, blur on Square used to drag the spectral centroid from 13.97 down to 6.44 — it was
+    //  HOLLOWING the sound, which is what Max heard as "blur really doesn't do much". With the
+    //  phase-aligned twin the same blur takes it to 17.55. The SIGN of that move is the test: it is
+    //  a 2.7x swing, so no amount of colouring from the unison, the filters or the amp envelope can
+    //  flip it. The two tables the twin is REFUSED on must be untouched.
+    {
+        auto centroidNow = [&] (int preset, float blurNorm) {
+            plainPatch (au);
+            au.setRaw  ("Synth OSC A WT Preset", (float) preset);
+            au.setNorm ("Synth OSC A WT Frame", 0.5f);
+            au.setNorm ("OSC A Blur", blurNorm);
+            au.pump (0.45);                                  // the twin is built on the 60 Hz timer
+            const auto sp = au.spectrum (45);
+            double num = 0.0, den = 0.0;
+            const double f0 = 110.0, bin = SR / NFFT;        // note 45 = 110 Hz
+            for (int h = 1; h <= 60; ++h)
+            { const int k = (int) std::lround (h * f0 / bin);
+              if (k <= 0 || k >= (int) sp.size()) continue;
+              double a = 0.0; for (int j = -2; j <= 2; ++j) if (k+j > 0 && k+j < (int) sp.size()) a = std::max (a, sp[(size_t) (k+j)]);
+              num += h * a; den += a; }
+            return den > 0 ? num / den : 0.0; };
+
+        const double sqDry = centroidNow (2, 0.0f), sqBlur = centroidNow (2, 1.0f);
+        char d[220]; snprintf (d, sizeof d, "Square: centroid %.2f dry -> %.2f blurred (it used to fall to about half)", sqDry, sqBlur);
+        gate (sqBlur > sqDry * 0.95, "T1  blur no longer HOLLOWS a table that cancels (Square)", d);
+
+        const double sdDry = centroidNow (22, 0.0f), sdBlur = centroidNow (22, 1.0f);
+        snprintf (d, sizeof d, "SpectralDrift: centroid %.2f dry -> %.2f blurred, and blur still moves it", sdDry, sdBlur);
+        gate (std::abs (sdBlur - sdDry) > 0.05, "T2  the tables the twin is REFUSED on still blur", d);
+    }
+
     gate (! au.missing, "P3  every parameter this test asked for exists by name");
     au.close();
     printf ("\n  PASS %d   FAIL %d\n\n", gPass, gFail);
