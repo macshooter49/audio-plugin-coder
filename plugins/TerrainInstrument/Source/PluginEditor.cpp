@@ -1787,6 +1787,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     audioProcessor.pushQwertyNote ((int) args[0], (bool) args[1]);
                 complete (juce::var());
             })
+            .withEventListener (juce::Identifier ("terrainFrameAck"), [this] (const juce::var&)
+            {
+                // fb485 — WINDOWS FRAME TRANSPORT: the page evaluated a frame delivered over the
+                // web-message lane and acked back over the same lane. This replaces the
+                // ExecuteScript completion as the fb482 backpressure ack + wd9 proof-of-life.
+                lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
+                evalInFlight_.store (0, std::memory_order_relaxed);
+                audioProcessor.dbgAcks_.fetch_add (1, std::memory_order_relaxed);
+            })
             .withNativeFunction("signalPageReady", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5521,6 +5530,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
     // fb483 -- the heartbeat JS now rides the FRONT of the coalesced frame; its completion (the
     // single send at the end of this function) is both the fb482 ack and this watchdog's food.
+    if (! isShowing())
+        lastEvalOkMs_ = wdNowMs;   // fb485 — hidden = frames are DROPPED by design; silence is not death
     if (wdNowMs - lastEvalOkMs_ > 3000.0 && wdNowMs - lastRecoveryMs_ > 10000.0)
     {
         ++channelRecoveries_;
@@ -6243,14 +6254,27 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
             audioProcessor.dbgFramesSent_.fetch_add (1, std::memory_order_relaxed);           // fb484
             audioProcessor.dbgLastFrameB_.store ((uint32_t) js.length(), std::memory_order_relaxed);
+           #if JUCE_WINDOWS
+            // fb485 — the frame rides WebView2's web-message lane: no per-frame script parse on the
+            // host side, no completion bounced back through the host's message queue. FL's freeze
+            // was input starvation under exactly that ExecuteScript ping-pong (proven: editor
+            // closed = FL perfect). The page evals the payload and acks via terrainFrameAck.
+            webView->emitEventIfBrowserIsVisible (juce::Identifier ("terrainFrame"), juce::var (js));
+           #else
             webView->evaluateJavascript (js, ack);
+           #endif
         }
         else if (++idleSkips_ >= 30)
         {
             idleSkips_ = 0;
             evalInFlight_.store (1, std::memory_order_relaxed);
             evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
+           #if JUCE_WINDOWS
+            webView->emitEventIfBrowserIsVisible (juce::Identifier ("terrainFrame"),
+                juce::var ("window.__tickT=(window.performance&&performance.now)?performance.now():0;"));   // fb485
+           #else
             webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;", ack);
+           #endif
         }
     }
 }
