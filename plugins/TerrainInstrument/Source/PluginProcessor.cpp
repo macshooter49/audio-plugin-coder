@@ -9396,6 +9396,34 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         float* rsR = hallRouteActive_ ? reverbSendBuf_.getWritePointer (1) : nullptr;
         float* dsL = dlyRouteActive_  ? delaySendBuf_.getWritePointer (0) : nullptr;
         float* dsR = dlyRouteActive_  ? delaySendBuf_.getWritePointer (1) : nullptr;
+        float* dtL = dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr;
+        float* dtR = dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr;
+        float* exL = exUnionAny_ ? routedDryBuf_.getWritePointer (0) : nullptr;
+        float* exR = exUnionAny_ ? routedDryBuf_.getWritePointer (1) : nullptr;
+
+        // ══ fb495 — BROADCAST ONLY WHAT CHANGED ═══════════════════════════════════════════════
+        // See the cache declaration in PluginProcessor.h for the measurement. Every input the loop
+        // below reads is compared, POINTERS INCLUDED, so a buffer resize can never be missed. A
+        // voice that is not rendering cannot care that its (unchanged) routes were not rewritten,
+        // and any change at all forces the full push -- so this is exact, not an approximation.
+        bool routesDirty = ! poolPushValid_;
+        for (int k = 0; k < 6 && ! routesDirty; ++k)
+            routesDirty = (hallEntryG_[k] != lastHallEntryG_[k]) || (dlyEntryG_[k] != lastDlyEntryG_[k])
+                       || (dstEntryG_[k] != lastDstEntryG_[k])   || (exUnionG_[k]  != lastExUnionG_[k]);
+        if (! routesDirty)
+            routesDirty = (rsL != lastRsL_) || (rsR != lastRsR_) || (dsL != lastDsL_) || (dsR != lastDsR_)
+                       || (dtL != lastDtL_) || (dtR != lastDtR_) || (exL != lastExL_) || (exR != lastExR_);
+        for (int q = 0; q < kPoolSendCount && ! routesDirty; ++q)
+        {
+            if (poolRouteAny_[(size_t) q] != lastPoolRouteAny_[(size_t) q]) { routesDirty = true; break; }
+            float* pl = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr;
+            float* pr = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
+            if (pl != lastPoolPtrL_[(size_t) q] || pr != lastPoolPtrR_[(size_t) q]) { routesDirty = true; break; }
+            for (int k = 0; k < 6; ++k)
+                if (poolEntryG_[(size_t) (q * 6 + k)] != lastPoolEntryG_[(size_t) (q * 6 + k)]) { routesDirty = true; break; }
+        }
+        if (routesDirty)
+        {
         for (int vi = 0; vi < kSynthVoiceCount; ++vi)
             if (auto* sv = synthVoices_[(size_t) vi])
             {
@@ -9423,6 +9451,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                               on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr);
                 }
             }
+        // fb495 — the push happened, so the cache now describes what every voice holds.
+        for (int k = 0; k < 6; ++k)
+        {
+            lastHallEntryG_[k] = hallEntryG_[k]; lastDlyEntryG_[k] = dlyEntryG_[k];
+            lastDstEntryG_[k]  = dstEntryG_[k];  lastExUnionG_[k]  = exUnionG_[k];
+        }
+        lastRsL_ = rsL; lastRsR_ = rsR; lastDsL_ = dsL; lastDsR_ = dsR;
+        lastDtL_ = dtL; lastDtR_ = dtR; lastExL_ = exL; lastExR_ = exR;
+        for (int q = 0; q < kPoolSendCount; ++q)
+        {
+            lastPoolRouteAny_[(size_t) q] = poolRouteAny_[(size_t) q];
+            lastPoolPtrL_[(size_t) q] = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr;
+            lastPoolPtrR_[(size_t) q] = poolRouteAny_[(size_t) q] ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
+            for (int k = 0; k < 6; ++k)
+                lastPoolEntryG_[(size_t) (q * 6 + k)] = poolEntryG_[(size_t) (q * 6 + k)];
+        }
+        poolPushValid_ = true;
+        }
     }
 
     // GEODE — the partial budget is a PER-BLOCK quota (partials are re-rendered every block,

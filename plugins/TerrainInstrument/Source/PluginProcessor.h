@@ -1867,6 +1867,25 @@ private:
     // that"). This works out, per block, which device TAPS which oscillator and whose output feeds
     // whom. See FxChainTopology.h for the model + scratchpad/fx_topology_test.cpp for the proof.
     tw::FxChainTopology fxTopo_;
+    // ══ fb495 — THE ROUTE-BROADCAST CACHE ═════════════════════════════════════════════════════
+    // The broadcast in processBlock writes route state into all 96 voices x 93 pool sends on
+    // EVERY call: 17,856 setter calls and ~90,000 memory writes across 1.36 MB of state, measured
+    // at 16.06 us per block = 1.57% of a core at FL Studio's ~980 calls/s, and 2-4x that on
+    // Windows where the L2 is smaller. It only ever needs to run when something it writes has
+    // CHANGED. This mirrors every input it reads -- the write POINTERS included, because the
+    // buffers are resized just above it and a missed resize would leave voices holding stale
+    // write pointers, which is a use-after-free rather than a glitch.
+    bool   poolPushValid_ = false;
+    float  lastHallEntryG_[6] {}, lastDlyEntryG_[6] {}, lastDstEntryG_[6] {}, lastExUnionG_[6] {};
+    float  lastPoolEntryG_[kPoolSendCount * 6] {};
+    bool   lastPoolRouteAny_[kPoolSendCount] {};
+    float* lastPoolPtrL_[kPoolSendCount] {};
+    float* lastPoolPtrR_[kPoolSendCount] {};
+    float* lastRsL_ = nullptr; float* lastRsR_ = nullptr;
+    float* lastDsL_ = nullptr; float* lastDsR_ = nullptr;
+    float* lastDtL_ = nullptr; float* lastDtR_ = nullptr;
+    float* lastExL_ = nullptr; float* lastExR_ = nullptr;
+
     float hallEntryG_[6] { 0,0,0,0,0,0 };            // ENTRY masks — a source enters the rack exactly
     float dlyEntryG_ [6] { 0,0,0,0,0,0 };            // once, at the FIRST device routed to it. These
     float dstEntryG_ [6] { 0,0,0,0,0,0 };            // (not the full route masks) are what the voices
