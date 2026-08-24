@@ -296,11 +296,18 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
                 {
                     const double dspSec = tks / (double) juce::Time::getHighResolutionTicksPerSecond();
                     const double audSec = smp / sr;
+                    const double tps = (double) juce::Time::getHighResolutionTicksPerSecond();
+                    const double gSec = (double) dspGather_.exchange (0, std::memory_order_relaxed) / tps;
+                    const double vSec = (double) dspVoices_.exchange (0, std::memory_order_relaxed) / tps;
+                    const double pSec = dspSec - gSec - vSec;
                     juce::File::getSpecialLocation (juce::File::tempDirectory)
                         .getChildFile ("terrain-cpu.txt")
                         .replaceWithText (juce::String::formatted (
-                            "DSP %.1f%% of one core | bakes %u | frames %u acks %u | lastFrame %u B\n",
+                            "DSP %.1f%% of one core  [gather %.1f | voices %.1f | fx+master %.1f]  blk %d @ %.0f Hz  voices %d | bakes %u | frames %u acks %u | lastFrame %u B\n",
                             100.0 * dspSec / audSec,
+                            100.0 * gSec / audSec, 100.0 * vSec / audSec, 100.0 * pSec / audSec,
+                            dspLastBlk_.load (std::memory_order_relaxed), sr,
+                            oscScopeNv.load (std::memory_order_relaxed),
                             (unsigned) bakeCount_.load (std::memory_order_relaxed),
                             (unsigned) dbgFramesSent_.load (std::memory_order_relaxed),
                             (unsigned) dbgAcks_.load (std::memory_order_relaxed),
@@ -7137,7 +7144,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     {
         TerrainInstrumentAudioProcessor& p; int n; long long t0;
         DspClock (TerrainInstrumentAudioProcessor& pp, int nn)
-            : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks()) {}
+            : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks())
+        { p.dspT0_ = t0; p.dspTA_ = t0; p.dspLastBlk_.store (nn, std::memory_order_relaxed); }
         ~DspClock()
         {
             p.dspTicks_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - t0, std::memory_order_relaxed);
@@ -7650,7 +7658,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (int k = 0; k < 5; ++k)
                 {
                     if ((gm & (1u << k)) == 0) continue;
-                    auto rp = [&] (const char* f) -> float { auto* v = apvts.getRawParameterValue (juce::String (kPfx[k]) + f); return v ? v->load() : 0.0f; };
+                    // fb489 — was `juce::String (kPfx[k]) + f`: a HEAP ALLOCATION per parameter
+                    // read, on the audio thread, 10 per active global-env. Stack buffer instead.
+                    auto rp = [&] (const char* f) -> float
+                    {
+                        char id[64]; const char* a = kPfx[k]; size_t i = 0;
+                        while (*a && i < sizeof id - 1) id[i++] = *a++;
+                        while (*f && i < sizeof id - 1) id[i++] = *f++;
+                        id[i] = 0;
+                        auto* v = apvts.getRawParameterValue (juce::StringRef (id)); return v ? v->load() : 0.0f;
+                    };
                     terrain_setEnvDAHDSR (monoLegEnv_[k], rp("DLY"), rp("A"), rp("H"), rp("D"), rp("S"), rp("R"),
                                           rp("CA"), rp("CD"), rp("CR"), rp("LOOP") > 0.5f);
                 }
@@ -9392,6 +9409,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // grows unbounded and clamps every SPEC voice to 0 active partials (static → silence).
     geodePartialsLive_ = 0;
 
+    // fb489 — PROBE A: everything above this line is block-rate gather (runs with no notes).
+    dspTA_ = (long long) juce::Time::getHighResolutionTicks();
+    dspGather_.fetch_add (dspTA_ - dspT0_, std::memory_order_relaxed);
+
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     // fb131 — MODE CHAIN: re-resolve at the flow stage (the voice scope above owns its own
     // copy). Multiple modes run at once now — the chop/glitch audio inserts process in CHAIN
@@ -9823,6 +9844,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // brings the gain staging into the FX's design window.
     constexpr float kVoiceToFxPad = 0.5f; // -6 dB
     buffer.applyGain (kVoiceToFxPad);
+
+    // fb489 — PROBE B: gather..here is MIDI + voice rendering; everything after is FX + master.
+    dspVoices_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - dspTA_, std::memory_order_relaxed);
 
     // ── ANNULUS RESONATOR — on the SYNTH-SECTION output (PRE-FX). ───────────────
     //    Moved here from end-of-block (2026-07-01, per Max). Reasons:

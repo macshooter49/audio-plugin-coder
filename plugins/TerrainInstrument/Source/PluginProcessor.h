@@ -986,6 +986,13 @@ public:
     // number instead of a guess.
     std::atomic<long long> dspTicks_   { 0 };
     std::atomic<long long> dspSamples_ { 0 };
+    // fb489 — PHASE SPLIT. 26.1% of a core with NO NOTES needs a section name, not a theory.
+    // gather = the ~2,400 lines of block-rate parameter/mod work that run whether or not a note
+    // sounds; voices = renderNextBlock; fx+master = the remainder (total - gather - voices).
+    std::atomic<long long> dspGather_ { 0 };
+    std::atomic<long long> dspVoices_ { 0 };
+    std::atomic<int>       dspLastBlk_ { 0 };
+    long long dspT0_ = 0, dspTA_ = 0;   // audio thread only
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
