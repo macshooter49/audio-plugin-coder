@@ -194,8 +194,34 @@ Good 'Code and libraries are in place'
 
 # -- 4. CONFIGURE -----------------------------------------------------------------------------
 Say '4/6  Setting up the build (a minute or two)'
+
+# JUCE's web UI needs Microsoft's WebView2 loader library at build time. It ships as a NuGet
+# package; JUCE's find script wants a folder that CONTAINS a 'Microsoft.Web.WebView2*' directory
+# with build\native inside. We fetch the exact version JUCE pins and point CMake at it -- no
+# NuGet tooling involved, it is just a zip.
+$wvVersion = '1.0.3485.44'
+$wvParent  = Join-Path $Root 'nuget'
+$wvDir     = Join-Path $wvParent "Microsoft.Web.WebView2.$wvVersion"
+$wvLib     = Join-Path $wvDir 'build\native\x64\WebView2LoaderStatic.lib'
+if (-not (Test-Path $wvLib)) {
+    Note "Fetching the WebView2 SDK $wvVersion (about 9 MB)"
+    New-Item -ItemType Directory -Path $wvDir -Force | Out-Null
+    # Older Windows PowerShell refuses modern TLS unless asked; harmless where it is already on.
+    try { [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor 3072 } catch {}
+    $wvZip = Join-Path $env:TEMP "webview2-$wvVersion.zip"
+    try {
+        Invoke-WebRequest -UseBasicParsing "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$wvVersion" -OutFile $wvZip
+    } catch {
+        Die "Could not download the WebView2 SDK from nuget.org. Check that you are online, then run this again. ($($_.Exception.Message))"
+    }
+    Expand-Archive -Path $wvZip -DestinationPath $wvDir -Force
+    Remove-Item $wvZip -ErrorAction SilentlyContinue
+    if (-not (Test-Path $wvLib)) { Die "The WebView2 SDK unpacked but the library is not where JUCE expects it. Send this back: $wvLib is missing." }
+}
+Good 'WebView2 SDK in place'
+$wvParentFwd = $wvParent -replace '\\','/'
 Push-Location $RepoDir
-cmake -S . -B build -G 'Visual Studio 17 2022' -A x64
+cmake -S . -B build -G 'Visual Studio 17 2022' -A x64 -D "JUCE_WEBVIEW2_PACKAGE_LOCATION=$wvParentFwd"
 if ($LASTEXITCODE -ne 0) { Pop-Location; Die 'CMake could not set the build up. The error is in the text above.' }
 Good 'Build configured'
 
