@@ -25,7 +25,10 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest
+    # windows-latest has moved past VS 2022 (the first run failed with "could not find any
+    # instance of Visual Studio"). Pin the runner that carries VS 2022 so CI compiles with the
+    # SAME toolchain Max has locally -- the point is to reproduce HIS errors, not to find new ones.
+    runs-on: windows-2022
     timeout-minutes: 120
     steps:
       - name: Checkout (with submodules — JUCE, visage, signalsmith)
