@@ -3,6 +3,8 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <unordered_map>
+#include <thread>    // fb481 — the Windows stall beacon
+#include <chrono>
 #include <map>
 #include "GrainEngine.h"
 #include "TapeProcessor.h"
@@ -1432,6 +1434,19 @@ private:
     bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
     void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)
+
+    // fb481 — STALL BEACON. Max's Windows laptop froze every control in the host while audio ran;
+    // the message thread was the casualty and NOTHING reported it. The beacon is a tiny watchdog
+    // thread (Windows only) that watches a heartbeat the 60 Hz processor timer bumps; if the
+    // message thread goes silent >3 s it appends one line to %TEMP%\terrain-stall.txt with the
+    // numbers that decide the diagnosis: how long, how many bakes, how slow the last bake was.
+    std::atomic<uint32_t> mtHeartbeat_ { 0 };
+    std::atomic<float>    lastBakeMs_  { 0.0f };
+    std::atomic<uint32_t> bakeCount_   { 0 };
+   #if JUCE_WINDOWS
+    std::unique_ptr<std::thread> stallBeacon_;
+    std::atomic<bool>            beaconStop_ { false };
+   #endif
     // Audio thread: the wavetable a voice should read for one osc — the imported table if one
     // was dropped, else the morphed/factory table. Atomic load only (no locks).
     // ═══ fb459 — THE SAME TABLE, RESOLVED FOR THE DISPLAY ═════════════════════════════════════

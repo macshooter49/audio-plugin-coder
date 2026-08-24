@@ -1,0 +1,27 @@
+diff --git a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
+index d05a5f8136..e6b2970470 100644
+--- a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
++++ b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
+@@ -1061,7 +1061,13 @@ private:
+                     {
+                         if (weakThis != nullptr)
+                         {
+-                            weakThis->triggerAsyncUpdate();
++                            // JUCE-PATCH terrain fb480: a failed creation used to retrigger
++                            // unconditionally -> createWebView -> fail -> retrigger, an infinite
++                            // async-update storm on the host's message thread (FL Studio's whole
++                            // UI shares it: every control freezes, no error, one core pegged).
++                            // Retry a bounded number of times, then give up and stay blank.
++                            if (controller != nullptr || ++weakThis->creationFailures <= 3)
++                                weakThis->triggerAsyncUpdate();
+                             webView2ConstructionHelper.webView2BeingCreated = nullptr;
+ 
+                             if (controller != nullptr)
+@@ -1232,6 +1238,7 @@ private:
+ 
+     inline static WebView2ConstructionHelper webView2ConstructionHelper;
+     std::deque<std::pair<String, EvaluationCallback>> scriptsWaitingForExecution;
++    int creationFailures = 0;   // JUCE-PATCH terrain fb480: cap the controller-creation retry loop
+ 
+     NativeScaleFactorNotifier scaleFactorNotifier { this,
+                                                     [this] (auto)

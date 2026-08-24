@@ -43,6 +43,7 @@
 #include <cmath>
 #include <algorithm>
 #include <mutex>
+#include <memory>
 
 #if defined (__APPLE__) && __has_include (<Accelerate/Accelerate.h>)
  #define TW_WTFFT_ACCELERATE 1
@@ -158,6 +159,137 @@ namespace tw { namespace wtfft
        #endif
     }
 
+
+    // ── PORTABLE FAST PATH (fb481) — what ships on every non-Apple platform ──────────────────
+    //
+    //  The scalar reference above is correct but was never meant to ship hot: it heap-allocates
+    //  a complex<double> vector PER TRANSFORM and runs a full complex-N pass on real data. On
+    //  Windows that made one table bake (544 transforms) ~8x the Mac's, and the bake runs on the
+    //  MESSAGE thread — a modulated spectral knob on a slow laptop backlogged the queue and froze
+    //  every control in the host (input is the lowest-priority Win32 message class).
+    //
+    //  This path is the same mathematics with the standard real-packing: an N-point real
+    //  transform rides an N/2-point complex FFT (iterative radix-2, precomputed twiddles and
+    //  bit-reversal, cached per size, thread_local work buffer -- zero per-call allocation).
+    //  It is nulled against the scalar reference by Tests/wtfft_portable_cert.cpp.
+    struct PortablePlan
+    {
+        int N = 0, H = 0;                                   // real length, complex half
+        std::vector<int> rev;                                // bit-reversal for H
+        std::vector<std::complex<double>> twF, twI;          // e^{-+i 2pi k/H}, k < H/2
+        std::vector<std::complex<double>> rotF, rotI;        // e^{-+i 2pi j/N}, j < H
+        explicit PortablePlan (int n) : N (n), H (n / 2)
+        {
+            rev.resize ((size_t) H);
+            for (int i = 1, j = 0; i < H; ++i)
+            {
+                int bit = H >> 1;
+                for (; j & bit; bit >>= 1) j ^= bit;
+                j ^= bit; rev[(size_t) i] = j;
+            }
+            const double base = 2.0 * 3.14159265358979323846;
+            twF.resize ((size_t) (H / 2)); twI.resize ((size_t) (H / 2));
+            for (int k = 0; k < H / 2; ++k)
+            { const double a = base * k / (double) H;
+              twF[(size_t) k] = { std::cos (a), -std::sin (a) };
+              twI[(size_t) k] = { std::cos (a),  std::sin (a) }; }
+            rotF.resize ((size_t) H); rotI.resize ((size_t) H);
+            for (int j = 0; j < H; ++j)
+            { const double a = base * j / (double) N;
+              rotF[(size_t) j] = { std::cos (a), -std::sin (a) };
+              rotI[(size_t) j] = { std::cos (a),  std::sin (a) }; }
+        }
+    };
+    inline const PortablePlan& portablePlan (int N) noexcept
+    {
+        static std::mutex m;
+        static std::unique_ptr<PortablePlan> cache[18];
+        const int l = log2i (N);
+        std::lock_guard<std::mutex> lk (m);
+        if (cache[l] == nullptr || cache[l]->N != N) cache[l].reset (new PortablePlan (N));
+        return *cache[l];
+    }
+    inline std::complex<double>* portableScratch (int need) noexcept
+    {
+        static thread_local std::vector<std::complex<double>> buf;
+        if ((int) buf.size() < need) buf.resize ((size_t) need);
+        return buf.data();
+    }
+    // iterative radix-2 over H points; tw = per-plan table (stride-indexed, one table all stages)
+    inline void portableFftH (std::complex<double>* a, const PortablePlan& pl, bool inverse) noexcept
+    {
+        const int H = pl.H;
+        for (int i = 0; i < H; ++i)
+        { const int j = pl.rev[(size_t) i]; if (i < j) std::swap (a[i], a[j]); }
+        const auto* tw = (inverse ? pl.twI : pl.twF).data();
+        for (int len = 2; len <= H; len <<= 1)
+        {
+            const int half = len >> 1, step = H / len;
+            for (int i = 0; i < H; i += len)
+                for (int k = 0; k < half; ++k)
+                {
+                    const std::complex<double> w = tw[(size_t) (k * step)];
+                    const std::complex<double> u = a[i + k];
+                    const std::complex<double> v = a[i + k + half] * w;
+                    a[i + k]        = u + v;
+                    a[i + k + half] = u - v;
+                }
+        }
+    }
+    /** Portable inverse: x[n] = SUM X[k] e^{+i2pi kn/N}, real, raw — same contract as the
+     *  reference. Even/odd repack: C[j] = (X[j]+conj(X[H-j])) + i rotI[j] (X[j]-conj(X[H-j])),
+     *  z = IFFT_H(C), x[2m] = Re z[m], x[2m+1] = Im z[m]. */
+    inline void inverseRealPortable (const double* re, const double* im, int N, double* out) noexcept
+    {
+        const auto& pl = portablePlan (N);
+        const int H = pl.H;
+        auto* c = portableScratch (H);
+        for (int j = 0; j < H; ++j)
+        {
+            const std::complex<double> Xj  (re[(size_t) j], j == 0 ? 0.0 : im[(size_t) j]);
+            const int hj = H - j;
+            const std::complex<double> Xc = (j == 0) ? std::complex<double> (re[(size_t) H], 0.0)
+                                                     : std::conj (std::complex<double> (re[(size_t) hj], hj == H ? 0.0 : im[(size_t) hj]));
+            const std::complex<double> A = Xj + Xc;
+            const std::complex<double> B = pl.rotI[(size_t) j] * (Xj - Xc);
+            c[j] = A + std::complex<double> (0.0, 1.0) * B;
+        }
+        portableFftH (c, pl, true);
+        for (int m = 0; m < H; ++m) { out[(size_t) (2 * m)] = c[m].real(); out[(size_t) (2 * m + 1)] = c[m].imag(); }
+    }
+    /** Portable forward: X[k] = SUM x[n] e^{-i2pi kn/N}, k = 0..N/2, raw — same contract as the
+     *  reference. z[m] = x[2m] + i x[2m+1], Z = FFT_H(z), then the standard split:
+     *  E = (Z[k]+conj(Z[H-k]))/2, O = (Z[k]-conj(Z[H-k]))/(2i), X[k] = E + rotF[k] O. */
+    inline void forwardRealPortable (const double* in, int N, double* re, double* im) noexcept
+    {
+        const auto& pl = portablePlan (N);
+        const int H = pl.H;
+        auto* z = portableScratch (H);
+        for (int m = 0; m < H; ++m) z[m] = { in[(size_t) (2 * m)], in[(size_t) (2 * m + 1)] };
+        portableFftH (z, pl, false);
+        const std::complex<double> mi (0.0, -0.5);   // 1/(2i)
+        for (int k = 0; k <= H; ++k)
+        {
+            const std::complex<double> Zk  = z[k == H ? 0 : k];
+            const std::complex<double> Zc  = std::conj (z[(H - k) % H]);
+            const std::complex<double> E = 0.5 * (Zk + Zc);
+            const std::complex<double> O = mi  * (Zk - Zc);
+            const std::complex<double> X = (k == H) ? (0.5 * (z[0] + std::conj (z[0])) - mi * (z[0] - std::conj (z[0]))) * 0.5
+                                                    : E + pl.rotF[(size_t) k] * O;
+            // k == H: X[H] = E[0] - O[0] with E,O from Z[0] -- write it plainly below instead
+            re[(size_t) k] = X.real(); im[(size_t) k] = X.imag();
+        }
+        // the Nyquist bin, plainly: E0 - O0
+        {
+            const std::complex<double> Z0 = z[0], Zc = std::conj (z[0]);
+            const std::complex<double> E0 = 0.5 * (Z0 + Zc);
+            const std::complex<double> O0 = mi  * (Z0 - Zc);
+            const std::complex<double> XH = E0 - O0;
+            re[(size_t) H] = XH.real(); im[(size_t) H] = XH.imag();
+        }
+        im[0] = 0.0; im[(size_t) H] = 0.0;   // DC and Nyquist of a real signal are real
+    }
+
     /** CERTIFICATION SWITCH — flips both transforms to the scalar reference. It exists so ONE
      *  harness binary can bake the same wavetable BOTH ways and null them against each other
      *  (Tests/wtfft_cert.cpp). Without it the only way to null the swap is to compare against a
@@ -186,6 +318,8 @@ namespace tw { namespace wtfft
             vDSP_ztocD (&sc, 1, (DSPDoubleComplex*) out, 2, (vDSP_Length) H);   // scale = exactly 1.0
             return;
         }
+       #else
+        if (isPow2 (N) && ! useScalarReference()) { inverseRealPortable (re, im, N, out); return; }
        #endif
         inverseRealScalar (re, im, N, out);
     }
@@ -209,6 +343,8 @@ namespace tw { namespace wtfft
             for (int k = 1; k < H; ++k) { re[(size_t) k] = rp[k] * 0.5; im[(size_t) k] = ip[k] * 0.5; }
             return;
         }
+       #else
+        if (isPow2 (N) && ! useScalarReference()) { forwardRealPortable (in, N, re, im); return; }
        #endif
         forwardRealScalar (in, N, re, im);
     }

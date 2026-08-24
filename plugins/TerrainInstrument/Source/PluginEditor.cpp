@@ -138,12 +138,22 @@ static void terrainApplyWebScale (juce::Component& root, double pageZoom, double
 static void terrainApplyWebScale (juce::Component&, double, double) {}
 #endif
 
+// fb480 -- the ONLY reason this subclass exists: know when the first real page load lands, so
+// the editor never evaluates JS into a WebView2 that is still initialising (Windows: pre-load
+// evals queue unboundedly inside JUCE; the freeze class of JUCE bug 64917 lives in that window).
+struct TerrainWebView final : juce::WebBrowserComponent
+{
+    using juce::WebBrowserComponent::WebBrowserComponent;
+    std::function<void()> onPageLoaded;
+    void pageFinishedLoading (const juce::String&) override { if (onPageLoaded) onPageLoaded(); }
+};
+
 //==============================================================================
 TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
     // Create WebBrowserComponent with all relay options
-    webView = std::make_unique<juce::WebBrowserComponent>(
+    webView = std::make_unique<TerrainWebView>(
         juce::WebBrowserComponent::Options()
             .withKeepPageLoadedWhenBrowserIsHidden()   // fb148 — FL hides/shows plugin windows; default = navigate to about:blank + goBack (a visible reload risk)
             .withBackend(juce::WebBrowserComponent::Options::Backend::webview2)
@@ -1771,6 +1781,9 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             .withNativeFunction("signalPageReady", [this](const juce::Array<juce::var>&,
                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
+                pageLoaded_ = true;   // fb480 belt: JS running IS proof the page loaded -- covers the
+                                      // one Windows corner where NavigationCompleted reports failure
+                                      // and pageFinishedLoading never fires (gate must not dead-end).
                 pageReady = true;
                 // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
                 // loaded in the still-alive processor (in-session editor reopen). The old JS side
@@ -3457,6 +3470,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 return getResource(url);
             })
     );
+    static_cast<TerrainWebView*> (webView.get())->onPageLoaded = [this] { pageLoaded_ = true; };   // fb480
 
     addAndMakeVisible(*webView);
 
@@ -5385,6 +5399,22 @@ TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
+
+    // fb480 -- before the first page load, the ONLY per-tick duty is the size self-heal (FL
+    // replays junk sizes at attach, which happens exactly in this window). Everything else in
+    // this function builds or sends JS, and a WebView2 that has not loaded a page yet must not
+    // be sent any: JUCE queues it all unboundedly, and the wd9 watchdog would misread the
+    // silence as a dead channel and reload a page that never arrived.
+    if (! pageLoaded_)
+    {
+        if (healTicks_ < 240 && ! userSized_)
+        {
+            ++healTicks_;
+            if (std::abs (getWidth() - intendedW_) > 4)
+                setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));
+        }
+        return;
+    }
 
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
     // (crisp re-raster) and magnification returns to 1. fb103: the page is told

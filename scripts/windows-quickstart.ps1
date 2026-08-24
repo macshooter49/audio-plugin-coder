@@ -192,6 +192,31 @@ if (-not (Test-Path (Join-Path $RepoDir '_tools\JUCE\CMakeLists.txt'))) {
 }
 Good 'Code and libraries are in place'
 
+# The interface runs on Microsoft's WebView2 Runtime. Win11 ships it; some Win10 machines lack it.
+$wvrKeys = @('HKLM:\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}',
+             'HKCU:\SOFTWARE\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}')
+$wvrOk = $false
+foreach ($k in $wvrKeys) { if (Test-Path $k) { $wvrOk = $true } }
+if (-not $wvrOk) {
+    Note 'WebView2 Runtime not found -- installing it (the UI cannot draw without it)'
+    winget install --id Microsoft.EdgeWebView2Runtime -e --accept-source-agreements --accept-package-agreements
+    if ($LASTEXITCODE -ne 0) { Note 'winget could not install it. If the UI comes up blank, install "WebView2 Evergreen Runtime" from Microsoft by hand.' }
+} else { Good 'WebView2 Runtime present' }
+
+# JUCE has a Windows-only bug: if WebView2 controller creation fails, JUCE retries in an infinite
+# loop on the UI thread -- in FL Studio that freezes the ENTIRE DAW with no error. The repo carries
+# a 3-attempt cap as a patch; apply it to the JUCE checkout (idempotent across re-runs).
+$patch = Join-Path $RepoDir 'scripts\juce-webview2-failure-cap.patch'
+$juceDir = Join-Path $RepoDir '_tools\JUCE'
+git -C $juceDir apply --reverse --check $patch 2>$null
+if ($LASTEXITCODE -eq 0) { Good 'JUCE freeze patch already applied' }
+else {
+    git -C $juceDir apply --check $patch 2>$null
+    if ($LASTEXITCODE -ne 0) { Die 'The JUCE freeze patch no longer applies -- send this line back.' }
+    git -C $juceDir apply $patch
+    Good 'JUCE freeze patch applied'
+}
+
 # -- 4. CONFIGURE -----------------------------------------------------------------------------
 Say '4/6  Setting up the build (a minute or two)'
 

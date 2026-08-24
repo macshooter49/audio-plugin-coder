@@ -1474,6 +1474,10 @@ private:
     // SAVE phase: pull serialized state from JS every 5 ticks (only after pageReady)
     int modStateTickCount { 0 };
     bool pageReady { false };
+    // fb480 -- set on the FIRST real page load (JUCE pageFinishedLoading). Until then the 60Hz
+    // timer must not evaluateJavascript: on Windows/WebView2 pre-load evals queue unboundedly in
+    // JUCE while the browser initialises (and this is the exact window of JUCE bug 64917).
+    bool pageLoaded_ { false };
     juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)
 
     // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals

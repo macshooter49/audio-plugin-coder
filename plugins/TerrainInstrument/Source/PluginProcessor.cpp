@@ -278,11 +278,39 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // responsive while never touching a buffer the audio thread is reading.
     startTimerHz (60);
 
+   #if JUCE_WINDOWS
+    // fb481 — start the stall beacon (see PluginProcessor.h). Diagnostic-only; writes nothing
+    // unless the message thread actually stalls.
+    stallBeacon_ = std::make_unique<std::thread> ([this]
+    {
+        uint32_t last = 0; int stalledMs = 0;
+        while (! beaconStop_.load (std::memory_order_relaxed))
+        {
+            std::this_thread::sleep_for (std::chrono::milliseconds (500));
+            const uint32_t now = mtHeartbeat_.load (std::memory_order_relaxed);
+            if (now != last) { last = now; stalledMs = 0; continue; }
+            stalledMs += 500;
+            if (stalledMs >= 3000 && (stalledMs % 5000) < 500)
+                juce::File::getSpecialLocation (juce::File::tempDirectory)
+                    .getChildFile ("terrain-stall.txt")
+                    .appendText (juce::String::formatted ("message thread stalled %.1f s | bakes %u | last bake %.1f ms\n",
+                                                          stalledMs / 1000.0,
+                                                          (unsigned) bakeCount_.load (std::memory_order_relaxed),
+                                                          (double) lastBakeMs_.load (std::memory_order_relaxed)));
+        }
+    });
+   #endif
+
     loadImportsRegistry();   // IMPORTS (fb60) — restore referenced files/folders from the app-data JSON
 }
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
+   #if JUCE_WINDOWS
+    beaconStop_.store (true, std::memory_order_relaxed);   // fb481 — join before members die
+    if (stallBeacon_ != nullptr && stallBeacon_->joinable()) stallBeacon_->join();
+    stallBeacon_.reset();
+   #endif
     if (! cardWindows_.empty())
         terrainCardLogP ("instance dtor clearing " + juce::String ((int) cardWindows_.size()) + " card window(s)");
     uiClients_.fetch_sub ((int) cardWindows_.size(), std::memory_order_relaxed);   // fb148 — viz census
@@ -948,8 +976,11 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     }
 
     slot.ready[target].store (false, std::memory_order_release);
+    const double bakeT0 = juce::Time::getMillisecondCounterHiRes();   // fb481 — the beacon reports this
     slot.buf[target].buildFromSpec (
         tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount, lo, hi));
+    lastBakeMs_.store ((float) (juce::Time::getMillisecondCounterHiRes() - bakeT0), std::memory_order_relaxed);
+    bakeCount_.fetch_add (1, std::memory_order_relaxed);
     slot.ready[target].store (true, std::memory_order_release);
 
     slot.live.store (&slot.buf[target], std::memory_order_release);
@@ -987,6 +1018,7 @@ bool TerrainInstrumentAudioProcessor::physicalLeftButtonDown()
 
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
+    mtHeartbeat_.fetch_add (1, std::memory_order_relaxed);   // fb481 — the stall beacon watches this
     // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
