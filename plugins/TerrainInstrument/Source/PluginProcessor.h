@@ -1002,6 +1002,10 @@ public:
     // reference platform), and 3-6x fewer at FL's call rate. Forced immediately whenever the
     // block carries MIDI, so a note never starts on stale parameters.
     static constexpr int kGatherSpan = 256;   // samples between gathers (~5.8 ms at 44.1 k)
+    // fb494 — cache-on-change for two libm pow() calls that ran PER SAMPLE (measured). The
+    // smoothers return an identical float once landed, so the branch is taken essentially never
+    // at rest and the result is bit-identical when it is.
+    float lastOutGainDb_ = 1e30f, lastOutGain_ = 1.0f, lastFreezeRaw_ = 1e30f, lastFreeze_ = 0.0f;
     int gatherSpan_ = 1 << 20;                // huge => the very first block always gathers
     wc::ModConfig synModCfgPersist_;          // assigned inside the gather, consumed after it
     float         synModBpmPersist_ = 0.0f;

@@ -57,7 +57,7 @@ public:
         {
             bufL[static_cast<size_t>(wp)] = leftCh[i];
             bufR[static_cast<size_t>(wp)] = rightCh != nullptr ? rightCh[i] : leftCh[i];
-            wp = (wp + 1) % maxSamples;
+            if (++wp >= maxSamples) wp = 0;   // fb494 — was a runtime idiv per sample
         }
 
         writePos.store(wp, std::memory_order_release);

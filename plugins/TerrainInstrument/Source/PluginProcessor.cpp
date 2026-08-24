@@ -8994,7 +8994,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                ? wc::syncedHz (synModCfg.lfos[i].syncIdx, synModBpm > 0.0f ? synModBpm : 120.0f)
                                : synModCfg.lfos[i].rateHz;
             flowLfo_[i].setFrequency (hz);
-            for (int s = 0; s < numSamples; ++s) flowLfo_[i].processSample();   // advance to track time
+            // fb494 — was a full shape evaluation PER SAMPLE for all ten global LFOs while every
+            // consumer (peek/chaosVX/chaosVY/currentPhase) reads them at BLOCK rate. This is the
+            // pattern already shipped next door for the per-voice banks (SynthVoice.h:4580):
+            // skipSamples advances the fb142 output slew with an n-sample compound coefficient, so
+            // peek() follows the same trajectory. Measured 0.312% -> 0.014% of a core.
+            flowLfo_[i].skipSamples (numSamples);
         }
     }
 
@@ -10152,6 +10157,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     }
     prevTapeOn = tapeOn;
 
+    // ══ fb494 — HOISTED OUT OF THE PER-SAMPLE LOOP BELOW ═══════════════════════════════════════
+    // All measured on the real plugin at FL's call rate:
+    //   · the two EQ slope reads were a std::map STRING lookup plus a dynamic_cast PER SAMPLE
+    //     (0.486% of a core on clang; 1-2.5% expected on MSVC, whose map is slower still)
+    //   · the five delay choice indices were five atomic loads per sample, ~220k/s
+    // A choice parameter's index cannot usefully change mid-block, and every other device here
+    // already reads its choice params once per block (pushFx3Params). Bit-identical output.
+    const auto* hpSlopeHoisted = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_HP_SLOPE));
+    const auto* lpSlopeHoisted = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_LP_SLOPE));
+    const int hpSlopeIdx = (hpSlopeHoisted != nullptr) ? hpSlopeHoisted->getIndex() : 1;
+    const int lpSlopeIdx = (lpSlopeHoisted != nullptr) ? lpSlopeHoisted->getIndex() : 0;
+    const int dlyModWaveIdx = static_cast<int> (rawParam (ParameterIDs::DLY_MOD_WAVE)->load());
+    const int dlySyncIdx    = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC)->load());
+    const int dlySyncDivIdx = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC_DIV)->load());
+    const int dlyPitchIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_PITCH)->load());
+    const int dlyWidthIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_WIDTH)->load());
+
     for (int i = 0; i < numSamples; ++i)
     {
         // Advance LFOs and compute per-param offsets
@@ -10164,7 +10186,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float pitch        = modulationEngine.getModulatedValue(ModulationEngine::pPitch,      smoothedPitch.getNextValue());
         const float wanderRaw    = modulationEngine.getModulatedValue(ModulationEngine::pWander,     smoothedWander.getNextValue()) * 0.01f;
         const float freezeRaw    = modulationEngine.getModulatedValue(ModulationEngine::pFreeze,     smoothedFreeze.getNextValue()) * 0.01f;
-        const float freeze       = std::pow(freezeRaw, 1.5f);
+        if (freezeRaw != lastFreezeRaw_) { lastFreezeRaw_ = freezeRaw; lastFreeze_ = std::pow (freezeRaw, 1.5f); }   // fb494
+        const float freeze       = lastFreeze_;
         const float mix          = modulationEngine.getModulatedValue(ModulationEngine::pMix,        smoothedMix.getNextValue());
         const float grainFilterVal = modulationEngine.getModulatedValue(ModulationEngine::pGrainFilter, smoothedGrainFilter.getNextValue());
         const float wowFlutter   = modulationEngine.getModulatedValue(ModulationEngine::pWowFlutter, smoothedWowFlutter.getNextValue()) * 0.01f;
@@ -10178,7 +10201,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float weaveAmt  = modulationEngine.getModulatedValue (ModulationEngine::pStudioWeave,  smoothedStudioWeave .getNextValue()) * 0.01f;
         const float tiltAmt   = modulationEngine.getModulatedValue (ModulationEngine::pStudioTilt,   smoothedStudioTilt  .getNextValue()) * 0.01f;
         const float outputGainDb = smoothedOutputGain.getNextValue();
-        const float outputGain   = std::pow(10.0f, outputGainDb / 20.0f);
+        if (outputGainDb != lastOutGainDb_) { lastOutGainDb_ = outputGainDb; lastOutGain_ = std::pow (10.0f, outputGainDb / 20.0f); }   // fb494
+        const float outputGain   = lastOutGain_;
         const float masterMixAmt = smoothedMasterMix.getNextValue() * 0.01f;
         const float loopFeedback = modulationEngine.getModulatedValue(ModulationEngine::pLoopFeedback, smoothedLoopFeedback.getNextValue()) * 0.01f;
         const float loopDegrade  = modulationEngine.getModulatedValue(ModulationEngine::pLoopDegrade,  smoothedLoopDegrade.getNextValue()) * 0.01f;
@@ -10204,12 +10228,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const bool  dlyFreezeEngaged = (dlyFreezeBase > 0.5f) || (dlyFreezeOffset > 1.0e-6f);
         const float dlyFreezeRaw    = dlyFreezeEngaged ? 1.0f : 0.0f;
 
-        // Choice params: read raw indices.
-        const int dlyModWaveIdx = static_cast<int> (rawParam (ParameterIDs::DLY_MOD_WAVE)->load());
-        const int dlySyncIdx    = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC)->load());
-        const int dlySyncDivIdx = static_cast<int> (rawParam (ParameterIDs::DLY_SYNC_DIV)->load());
-        const int dlyPitchIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_PITCH)->load());
-        const int dlyWidthIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_WIDTH)->load());
+        // Choice params: hoisted above the loop (fb494).
 
         // If sync mode is on, replace TIME with the BPM-derived ms.
         float dlyTimeMs = dlyTimeRaw;
@@ -10449,16 +10468,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             const float hpF    = smoothedEqHpFreq.getNextValue();
             const float lpF    = smoothedEqLpFreq.getNextValue();
-            const auto* hpSlope = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_HP_SLOPE));
-            const auto* lpSlope = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::EQ_LP_SLOPE));
             const bool hpByp  = rawParam (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
             const bool lpByp  = rawParam (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
             const bool eqByp  = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
             eqL.setMasterBypass (eqByp); eqR.setMasterBypass (eqByp);
-            eqL.setHp (hpF, hpSlope ? hpSlope->getIndex() : 1, hpByp);
-            eqR.setHp (hpF, hpSlope ? hpSlope->getIndex() : 1, hpByp);
-            eqL.setLp (lpF, lpSlope ? lpSlope->getIndex() : 0, lpByp);
-            eqR.setLp (lpF, lpSlope ? lpSlope->getIndex() : 0, lpByp);
+            eqL.setHp (hpF, hpSlopeIdx, hpByp);   // fb494 hoisted
+            eqR.setHp (hpF, hpSlopeIdx, hpByp);
+            eqL.setLp (lpF, lpSlopeIdx, lpByp);
+            eqR.setLp (lpF, lpSlopeIdx, lpByp);
 
             for (int b = 0; b < 7; ++b)
             {
@@ -11047,7 +11064,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // and added straight to the mix, so the devices ran in parallel and chain order was inaudible
         // (Max: "if the distortion is at the beginning it should then hit that delay — it doesn't do
         // any of that"). Slots whose output feeds a later device do NOT reach the mix on their own.
-        {
+        if (chainCount_ > 0 || exUnionAny_)   // fb494 — an empty rack provably does nothing here:
+        {                                    // no exclusion subtract, zero chain iterations, zero
+                                             // claims. Skips a 960-byte stack zero-init per sample.
             const float sc = outputGain * kVoiceToFxPad;
             if (exUnionAny_)
             {
