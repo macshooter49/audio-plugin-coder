@@ -1222,7 +1222,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // WAVETABLE AUDITION — headphone preview (one-shot): pluck the osc's current table at a fixed pitch.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.startWavetableAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -1260,7 +1260,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                                                               juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import wavetable — pick an audio file or a folder",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -1310,7 +1310,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // IMPORT (fb60) — load a referenced wavetable file by absolute path → decode → mono → build table.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 juce::File f (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::AudioFormatManager fm; fm.registerBasicFormats();
@@ -1355,7 +1355,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // IMPORT — ONE dialog, pick a FILE or a FOLDER (mirrors pickNoiseImport; reference-in-place).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import a sample — pick an audio file or a folder",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -1389,7 +1389,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // in-memory entry point as a drop (loadOscSampleFromMemory), so peaks/persistence/blend all match.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 juce::File f (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
@@ -1411,7 +1411,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // SAMPLE AUDITION — headphone preview: play the osc's current sample once (post-FX, capped 3.5 s).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.startOscSampleAudition (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -1420,7 +1420,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // WAVETABLE IMPORT — NATIVE file dialog (mirrors pickNoiseFile) → decode → mono → build wavetable.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String ("a");
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto chooser = std::make_shared<juce::FileChooser> (
                     "Import a wavetable",
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
@@ -3037,7 +3037,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // PEROSC — args[0]=osc letter 'a'..'d', args[1]=filename, args[2]=base64 bytes
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 const auto filename = args[1].toString();
                 const auto b64      = args[2].toString();
 
@@ -3063,7 +3063,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // wavetable for this osc. args[0]=osc 'a'..'d', args[1]=filename, args[2]=base64.
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 const auto b64 = args[2].toString();
 
                 juce::MemoryOutputStream decoded;
@@ -3094,7 +3094,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // Wavetable EXTENDER — re-slice the osc's imported source at a new frame count (resolution).
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.setImportFrames (oscIdx, (int) (double) args[1]);
                 complete (juce::var ("ok"));
             })
@@ -3103,7 +3103,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // Wavetable EXTENDER — drop the imported table for this osc (revert to the factory selection).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 audioProcessor.clearImportedWavetable (oscIdx);
                 complete (juce::var ("ok"));
             })
@@ -3112,7 +3112,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // Wavetable EXTENDER viz — return the osc's live table frames as JSON for the 3D waterfall.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
             .withNativeFunction("getOscLfoWave", [this](const juce::Array<juce::var>& args,
@@ -3128,7 +3128,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() >= 2)
                 {
                     const juce::String oscStr = args[0].toString();
-                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                     audioProcessor.setWaterfallView (oscIdx, (bool) args[1]);
                 }
                 complete (juce::var ("ok"));
@@ -3145,7 +3145,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 if (args.size() >= 2)
                 {
                     const juce::String oscStr = args[0].toString();
-                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                    const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                     audioProcessor.setImportName (oscIdx, args[1].toString());
                 }
                 complete (juce::var ("ok"));
@@ -3195,7 +3195,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // args[0]=osc 'a'..'d', args[1]=file name (with or without .wav). Auto-detects wavetable frames.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto name = args[1].toString();
                 auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                                .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
@@ -3224,7 +3224,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 // PEROSC — return the cached peaks JSON for this osc (or "").
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getCachedOscPayload (oscIdx)));
             })
             .withNativeFunction("normalizeOscSample", [this](const juce::Array<juce::var>& args,
@@ -3236,7 +3236,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // and re-push them, so the drawn waveform grows to match what you hear (picture ==
                 // sound). Region/loop edits are untouched (setLoaded only refreshes the wave data).
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
 
                 constexpr float kNormTargetPeak = 0.70f;   // ≈ -3 dBFS — "a little bigger", not slammed
 
@@ -3292,7 +3292,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // path) from one oscillator to another. Works off the live buffer, so it survives
                 // even when the original file is gone. args[0] = source letter, args[1] = dest letter.
                 if (args.size() < 2) { complete (juce::var ("badargs")); return; }
-                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, s[0] - 'a') : 0; };
+                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, (int) s[0] - 'a') : 0; };
                 const int src = toIdx (args[0].toString());
                 const int dst = toIdx (args[1].toString());
                 if (src == dst) { complete (juce::var ("same")); return; }
@@ -3342,7 +3342,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // on a background pool and republishes through loadOscSampleAsync (waveform morphs).
                 if (args.size() < 3) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 const auto filename = args[1].toString();
 
                 juce::MemoryOutputStream decodedStream;
@@ -3365,7 +3365,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // wipe the cached waveform + source path (nothing to restore on reopen), and
                 // kill any live blend (sources, engine, persisted pair). Fresh as a new instance.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
 
                 audioProcessor.getOscSampleBuffer (oscIdx).store (nullptr);
                 audioProcessor.oscSourcePath (oscIdx).clear();
@@ -3387,7 +3387,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // REPLACE — a plain load ends the blend: knob row + arrow disappear, regular
                 // sample mode again. (The incoming load overwrites the audio right after.)
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 resetBlend (oscIdx, true);
                 complete (juce::var ("ok"));
             })
@@ -3397,7 +3397,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // UNDO — pop one blend layer: restore the pre-blend one-shot snapshot and end
                 // the live blend. Repeat to walk a 100-deep stack back to the first one-shot.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto& hist = blendHistory_[(size_t) oscIdx];
                 if (hist.empty()) { complete (juce::var ("none")); return; }
                 auto entry = hist.back();   // { pre-blend buffer, rate } — the one-shot snapshot (memory, no disk)
@@ -3412,7 +3412,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // EXPORT — copy the osc's current one-shot (typically a bake) to a friendly name
                 // in the blend cache and reveal it in Finder: one drag away from the DAW.
                 const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
-                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, oscStr[0] - 'a') : 0;
+                const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto buf = audioProcessor.getOscSampleBuffer (oscIdx).load();
                 if (buf == nullptr || buf->getNumSamples() < 1) { complete (juce::var ("none")); return; }
                 const double rate = audioProcessor.getOscSampleBuffer (oscIdx).getSampleRate();

@@ -101,8 +101,8 @@ target_link_libraries(TerrainInstrument
 #    A PRIVATE definition would cover the library and miss the wrappers.
 if (MSVC)
     target_compile_definitions(TerrainInstrument PUBLIC _USE_MATH_DEFINES)
-    target_compile_options(TerrainInstrument PUBLIC /bigobj)
-    message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj")
+    target_compile_options(TerrainInstrument PUBLIC /bigobj /utf-8)
+    message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj + /utf-8")
 endif()
 
 # fb467 — Source/WtFft.h calls vDSP directly (the wavetable bake's transform: 19.1 ms -> 2.3 ms).
