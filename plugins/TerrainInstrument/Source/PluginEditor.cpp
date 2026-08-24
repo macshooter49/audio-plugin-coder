@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include <cstdlib>   // fb491 — getenv/_putenv_s for the WebView2 browser args
 #include "BinaryData.h"
 
 // fb132 — CARD PRESETS: user presets live beside the imports registry
@@ -152,6 +153,30 @@ struct TerrainWebView final : juce::WebBrowserComponent
 TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
     : AudioProcessorEditor (&p), audioProcessor (p)
 {
+   #if JUCE_WINDOWS
+    // fb491 — WINDOW-DRAG LAG. Max: "even when moving Terrain around it visually lags." While any
+    // Chromium-family window is visible, Windows' native occlusion tracker hooks desktop-wide
+    // WinEvents and re-walks the FULL HWND z-order on every window move, resize or foreground
+    // change — so dragging the plugin window makes the webview repeatedly re-evaluate what is
+    // covering it, on the UI thread FL shares. We do not need it: the editor already drops frames
+    // for a hidden window itself (fb485's isShowing() gate), which is the only thing occlusion
+    // tracking would buy us.
+    //
+    // WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS is read when the WebView2 ENVIRONMENT is created, i.e.
+    // by the first webview in the process, so it must be set before the component below exists.
+    // Appended to any value the user already has rather than clobbering it.
+    {
+        const char* existing = std::getenv ("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS");
+        juce::String args (existing != nullptr ? existing : "");
+        if (! args.contains ("CalculateNativeWinOcclusion"))
+        {
+            if (args.isNotEmpty()) args << " ";
+            args << "--disable-features=CalculateNativeWinOcclusion";
+            _putenv_s ("WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS", args.toRawUTF8());
+        }
+    }
+   #endif
+
     // Create WebBrowserComponent with all relay options
     webView = std::make_unique<TerrainWebView>(
         juce::WebBrowserComponent::Options()
