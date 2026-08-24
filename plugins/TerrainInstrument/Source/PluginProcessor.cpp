@@ -306,7 +306,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
                             "DSP %.1f%% of one core  [gather %.1f | voices %.1f | fx+master %.1f]  blk %d @ %.0f Hz  voices %d | bakes %u | frames %u acks %u | lastFrame %u B\n",
                             100.0 * dspSec / audSec,
                             100.0 * gSec / audSec, 100.0 * vSec / audSec, 100.0 * pSec / audSec,
-                            dspLastBlk_.load (std::memory_order_relaxed), sr,
+                            (int) (smp / juce::jmax (1.0, (double) dspBlocks_.exchange (0, std::memory_order_relaxed))), sr,   // fb492 AVERAGE block
                             oscScopeNv.load (std::memory_order_relaxed),
                             (unsigned) bakeCount_.load (std::memory_order_relaxed),
                             (unsigned) dbgFramesSent_.load (std::memory_order_relaxed),
@@ -7145,7 +7145,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         TerrainInstrumentAudioProcessor& p; int n; long long t0;
         DspClock (TerrainInstrumentAudioProcessor& pp, int nn)
             : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks())
-        { p.dspT0_ = t0; p.dspTA_ = t0; p.dspLastBlk_.store (nn, std::memory_order_relaxed); }
+        { p.dspT0_ = t0; p.dspTA_ = t0; p.dspLastBlk_.store (nn, std::memory_order_relaxed);
+          p.dspBlocks_.fetch_add (1, std::memory_order_relaxed); }   // fb492
         ~DspClock()
         {
             p.dspTicks_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - t0, std::memory_order_relaxed);
@@ -7580,8 +7581,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // AFTER this SYN_* scope closes), so their declarations are hoisted out here.
     // [CC integration note: wiring patch anchored 5b/5c against these but they were
     //  scope-local; hoisting keeps Opus's 5b/5c code verbatim and in-scope.]
-    wc::ModConfig synModCfg;
-    float         synModBpm = 0.0f;
+    // fb492 — these are assigned INSIDE the gather and consumed AFTER it (the FLOW ARP render
+    // site), so they must survive a block on which the gather is skipped. References keep every
+    // existing use site byte-identical.
+    wc::ModConfig& synModCfg = synModCfgPersist_;
+    float&         synModBpm = synModBpmPersist_;
     // fb453 T5b — HOISTED FOR THE SAME REASON synModCfg IS, one comment up: a consumer BELOW this
     // scope needs them. The three mod sums and modP() were scope-local, so the one value that has
     // to be resolved AFTER wc::buildFxMod() — the Distortion's Knee, see the note at its resolve
@@ -7929,6 +7933,17 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float ampD    =         modP (ParameterIDs::SYN_ENV_AMP_D, *rawParam (ParameterIDs::SYN_ENV_AMP_D), (int) wc::ModDest::EnvPBase + 3);   // fb193
         const float ampS    =         modP (ParameterIDs::SYN_ENV_AMP_S, *rawParam (ParameterIDs::SYN_ENV_AMP_S), (int) wc::ModDest::EnvPBase + 4);   // fb193
         const float ampR    =         modP (ParameterIDs::SYN_ENV_AMP_R, *rawParam (ParameterIDs::SYN_ENV_AMP_R), (int) wc::ModDest::EnvPBase + 5);   // fb193
+
+        // ══ fb492 — CONTROL-RATE GATHER GUARD OPENS ═══════════════════════════════════════
+        // Everything from here to the end of this scope is pure "read a knob, push it at the
+        // engines" — no state advances in it except the noise free-run position (handled via
+        // gatherSpanSamples below) and the glide note tracker (safe: MIDI forces a gather).
+        gatherSpan_ += numSamples;
+        const bool gatherDue = (gatherSpan_ >= kGatherSpan) || ! midiMessages.isEmpty();
+        const int  gatherSpanSamples = gatherSpan_;   // samples this gather is responsible for
+        if (gatherDue) gatherSpan_ = 0;
+        if (gatherDue)
+        {
 
         // ── Envelope DAHDSR extension reads (Batch 2/3) ──
         const float ampDly = modP (ParameterIDs::SYN_ENV_AMP_DLY, *rawParam (ParameterIDs::SYN_ENV_AMP_DLY), (int) wc::ModDest::EnvPBase + 0);   // fb193
@@ -8550,7 +8565,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const double nativeOverOut = (nnr > 0.0 && sr > 0.0) ? (nnr / sr) : 1.0;
                 const float  sc   = juce::jlimit (0.0f, 1.0f, noisePitch);
                 const double rate = (sc < 0.5f) ? (0.1 + 1.8 * (double) sc) : (1.0 + 2.0 * ((double) sc - 0.5));
-                noiseFreePos_ += (double) numSamples * rate * nativeOverOut;
+                noiseFreePos_ += (double) gatherSpanSamples * rate * nativeOverOut;   // fb492 — the span, not this block
                 while (noiseFreePos_ >= (double) nlen) noiseFreePos_ -= (double) nlen;
                 if (noiseFreePos_ < 0.0) noiseFreePos_ = 0.0;
                 noiseFreeNorm_.store ((float) (noiseFreePos_ / (double) nlen), std::memory_order_relaxed);
@@ -8833,6 +8848,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             if (m.isNoteOn())       { synthGlideFrom_ = (float) m.getNoteNumber(); ++synthNotesHeld_; }
             else if (m.isNoteOff()) { synthNotesHeld_ = juce::jmax (0, synthNotesHeld_ - 1); }
         }
+        }   // ══ fb492 — CONTROL-RATE GATHER GUARD CLOSES ═══════════════════════════════════
     }
 
     // ── FLOW transport + global LFO bank (block-rate mirror; free or transport-locked) ──

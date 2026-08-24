@@ -993,6 +993,18 @@ public:
     std::atomic<long long> dspGather_ { 0 };
     std::atomic<long long> dspVoices_ { 0 };
     std::atomic<int>       dspLastBlk_ { 0 };
+    std::atomic<long long> dspBlocks_ { 0 };   // fb492 — the meter reported the LAST block size; FL
+                                               // varies it, so only the AVERAGE means anything.
+    // fb492 — CONTROL-RATE GATHER. FL Studio subdivides its buffer and calls processBlock with
+    // ~45-88 sample blocks (measured), i.e. 500-1000 times a second, and ~900 lines of pure
+    // knob-reading ran on EVERY one of them. Those reads now run at ~172 Hz instead: enough for
+    // any knob or modulation move (a 512-sample host already gathers at 86 Hz and that is the
+    // reference platform), and 3-6x fewer at FL's call rate. Forced immediately whenever the
+    // block carries MIDI, so a note never starts on stale parameters.
+    static constexpr int kGatherSpan = 256;   // samples between gathers (~5.8 ms at 44.1 k)
+    int gatherSpan_ = 1 << 20;                // huge => the very first block always gathers
+    wc::ModConfig synModCfgPersist_;          // assigned inside the gather, consumed after it
+    float         synModBpmPersist_ = 0.0f;
     long long dspT0_ = 0, dspTA_ = 0;   // audio thread only
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
 
