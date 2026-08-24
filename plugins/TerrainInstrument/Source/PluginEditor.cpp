@@ -5416,6 +5416,21 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         return;
     }
 
+    // fb482 -- BACKPRESSURE. On Windows every evaluateJavascript is a cross-process COM hop and
+    // this tick makes ~14 of them; a laptop-class channel drains slower than 60 Hz feeds it, the
+    // queue grows without bound, and queued work outranks mouse input -- "major LAG", clicks
+    // seconds behind. Network rule: never send the next frame until the last one is acknowledged.
+    // The wd9 heartbeat below completes once per delivered frame; until it does (or 500 ms
+    // passes -- lost-completion escape; the truly dead channel stays wd9's job), this tick sends
+    // NOTHING. The Mac acknowledges in ~1 ms and never skips; a congested machine self-clocks.
+    {
+        const double bpNow = juce::Time::getMillisecondCounterHiRes();
+        if (evalInFlight_.load (std::memory_order_relaxed) != 0 && bpNow - evalSentMs_ < 500.0)
+            return;
+        evalInFlight_.store (1, std::memory_order_relaxed);
+        evalSentMs_ = bpNow;
+    }
+
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
     // (crisp re-raster) and magnification returns to 1. fb103: the page is told
     // the settled scale so every canvas re-buffers at TRUE device resolution.
@@ -5496,7 +5511,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
     webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;",
                                  [this] (juce::WebBrowserComponent::EvaluationResult)
-                                 { lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes(); });
+                                 { lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
+                                   evalInFlight_.store (0, std::memory_order_relaxed); });   // fb482 -- frame acknowledged
     if (wdNowMs - lastEvalOkMs_ > 3000.0 && wdNowMs - lastRecoveryMs_ > 10000.0)
     {
         ++channelRecoveries_;

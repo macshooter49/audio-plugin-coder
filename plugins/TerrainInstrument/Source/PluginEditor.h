@@ -1478,6 +1478,11 @@ private:
     // timer must not evaluateJavascript: on Windows/WebView2 pre-load evals queue unboundedly in
     // JUCE while the browser initialises (and this is the exact window of JUCE bug 64917).
     bool pageLoaded_ { false };
+    // fb482 -- backpressure: 1 while a pushed frame awaits its heartbeat completion. The timer
+    // sends nothing while set (500 ms escape) so a slow WebView2 channel self-clocks instead of
+    // queueing -- queued work outranks mouse input on Windows, which read as "major LAG".
+    std::atomic<int> evalInFlight_ { 0 };
+    double           evalSentMs_ = 0.0;
     juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)
 
     // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals
