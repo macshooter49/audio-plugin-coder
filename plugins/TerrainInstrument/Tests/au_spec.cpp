@@ -228,7 +228,7 @@ int main()
         const float dLo = au.getRaw ("OSC A Spectral Low"), dHi = au.getRaw ("OSC A Spectral High");
         char d[180]; snprintf (d, sizeof d, "normalised defaults Low %.3f High %.3f (0 = harmonic 1, 1 = harmonic 512)", dLo, dHi);
         gate (std::abs (dLo - 0.0f) < 1e-5f && std::abs (dHi - 1.0f) < 1e-5f,
-              "P2  the window boots WIDE OPEN, so no saved patch moves", d);
+              "P2  both cuts boot OFF, so no saved patch moves", d);
     }
 
     // ── F — THE FLOOR. The same patch, rendered twice. ────────────────────────────────────────
@@ -259,52 +259,49 @@ int main()
     { char d[140]; snprintf (d, sizeof d, "mode 8 vs mode 7 = %+.1f dB (floor %+.1f)", dist (disp, phaser), FLOOR);
       gate (dist (disp, phaser) > MOVED, "D2  mode 8 is NOT mode 7 (the fb373 off-by-one)", d); }
 
-    // ── W — THE PARTIAL WINDOW ────────────────────────────────────────────────────────────────
+    // ── W — THE SPECTRAL CUTS, THROUGH THE PLUGIN ─────────────────────────────────────────────
+    //   fb472: the back panel's Low and High knobs are a fourth-order Butterworth cut in harmonic
+    //   number now, not a window on the morph. The corner positions below are COMPUTED from the
+    //   engine's own constants, so this cannot drift into testing a corner that is off the band.
+    const float tLoH8 = (float) (std::log2 (8.0 / (double) tw::SpectralMorph::kCutLoBase) / (double) tw::SpectralMorph::kCutLoOct);
+    const float tHiH8 = (float) (std::log2 (8.0 / (double) tw::SpectralMorph::kCutHiBase) / (double) tw::SpectralMorph::kCutHiOct);
     plainPatch (au);
-    au.setRaw  ("OSC A Spectral Type", 1.0f);         // Harmonic Stretch — a big, obvious morph
-    au.setNorm ("OSC A Spectral Amount", 1.0f);
-    au.pump (0.35);
-    const auto wide = au.spectrum();
+    au.setRaw ("Synth OSC A WT Preset", 4.0f);          // ProphetSaw: every harmonic present
+    au.pump (0.30);
+    const auto noCut = au.spectrum();
 
-    au.setNorm ("OSC A Spectral High", harmToNorm (16));
+    au.setNorm ("OSC A Spectral Low", tLoH8);
     au.pump (0.35);
-    const auto narrow = au.spectrum();
-    { char d[140]; snprintf (d, sizeof d, "High 512 vs High 16 = %+.1f dB (floor %+.1f)", dist (narrow, wide), FLOOR);
-      gate (dist (narrow, wide) > MOVED, "W1  the HIGH edge reaches the plugin", d); }
+    const auto loCut = au.spectrum();
+    { char d[170]; snprintf (d, sizeof d, "corner at harmonic 8: %+.1f dB from no cut (floor %+.1f)", dist (loCut, noCut), FLOOR);
+      gate (dist (loCut, noCut) > MOVED, "W1  the LOW CUT reaches the plugin, with NO morph mode", d); }
 
-    au.setNorm ("OSC A Spectral High", harmToNorm (512));
-    au.setNorm ("OSC A Spectral Low", harmToNorm (12));
+    au.setNorm ("OSC A Spectral Low", 0.0f);
+    au.setNorm ("OSC A Spectral High", tHiH8);
     au.pump (0.35);
-    const auto lowShut = au.spectrum();
-    { char d[140]; snprintf (d, sizeof d, "Low 400 vs High 512 wide = %+.1f dB (floor %+.1f)", dist (lowShut, wide), FLOOR);
-      gate (dist (lowShut, wide) > MOVED, "W2  the LOW edge reaches the plugin", d); }
+    const auto hiCut = au.spectrum();
+    { char d[170]; snprintf (d, sizeof d, "corner at harmonic 8: %+.1f dB from no cut (floor %+.1f)", dist (hiCut, noCut), FLOOR);
+      gate (dist (hiCut, noCut) > MOVED, "W2  the HIGH CUT reaches the plugin", d); }
 
-    // W3 — the DIRECTIONAL one, and the only gate here that could not pass by accident: a window
-    // that excludes every partial the table actually has must be the SAME SOUND as no morph at all.
-    plainPatch (au);
-    const auto noMorph = au.spectrum();
-    au.setRaw  ("OSC A Spectral Type", 1.0f);
-    au.setNorm ("OSC A Spectral Amount", 1.0f);
-    au.setNorm ("OSC A Spectral Low", harmToNorm (500));
-    au.setNorm ("OSC A Spectral High", harmToNorm (512));
+    // and the two pull OPPOSITE ways — a low cut and a high cut cannot both be "it changed"
+    { char d[170]; snprintf (d, sizeof d, "low-cut vs high-cut = %+.1f dB apart (each vs no cut: %+.1f / %+.1f)",
+                             dist (loCut, hiCut), dist (loCut, noCut), dist (hiCut, noCut));
+      gate (dist (loCut, hiCut) > MOVED, "W3  they are DIFFERENT filters, not one knob twice", d); }
+
+    // both off is the identity again — the floor this whole block is measured against
+    au.setNorm ("OSC A Spectral High", 1.0f);
     au.pump (0.35);
-    const auto shut = au.spectrum();
-    // 🚨 TWO conditions, because the first one alone passes on ANY patch where the morph does
-    //    nothing — including a sine, which is what the boot preset is. The pair is the gate: the
-    //    morph must be doing something wide open, AND the window must take it away.
-    const double wideMoved = dist (wide, noMorph), shutMoved = dist (shut, noMorph);
-    { char d[190]; snprintf (d, sizeof d, "wide open moves %+.1f dB; windowed to 500..512 moves %+.1f dB (floor %+.1f)",
-                             wideMoved, shutMoved, FLOOR);
-      gate (wideMoved > MOVED && shutMoved < FLOOR + 6.0,
-            "W3  a window that excludes everything IS no morph", d); }
+    const auto offAgain = au.spectrum();
+    { char d[170]; snprintf (d, sizeof d, "both knobs returned to off: %+.1f dB from no cut (floor %+.1f)", dist (offAgain, noCut), FLOOR);
+      gate (dist (offAgain, noCut) < FLOOR + 6.0, "W4  turning both back off restores the sound exactly", d); }
 
     // ── M — THE WINDOW AS A MODULATION DESTINATION ────────────────────────────────────────────
     //     dest ints come from SynthModConfig.h, so a renumber breaks this test loudly.
     {
         plainPatch (au);
-        au.setRaw  ("OSC A Spectral Type", 1.0f);
-        au.setNorm ("OSC A Spectral Amount", 1.0f);
-        au.setNorm ("OSC A Spectral High", harmToNorm (24));   // a base the LFO can sweep UP from
+        au.setRaw  ("OSC A Spectral Type", 0.0f);        // no mode at all — the cut stands alone
+        au.setNorm ("OSC A Spectral Amount", 0.0f);
+        au.setNorm ("OSC A Spectral High", tHiH8);       // a corner the LFO can sweep
         au.pump (0.25);
         char j0[128], j1[128];
         snprintf (j0, sizeof j0, "[{\"s\":0,\"d\":%d,\"v\":0.000000}]", (int) wc::ModDest::SpecHiA);
@@ -316,7 +313,7 @@ int main()
         au.setRoutes ("[]"); au.pump (0.2);
         char d[180]; snprintf (d, sizeof d, "dest %d: depth 0.9 vs depth 0 = %+.1f dB (floor %+.1f)",
                                (int) wc::ModDest::SpecHiA, dist (d9, d0), FLOOR);
-        gate (dist (d9, d0) > MOVED, "M1  an LFO on the window's HIGH edge moves the sound", d);
+        gate (dist (d9, d0) > MOVED, "M1  an LFO on the HIGH CUT moves the sound, with no morph mode", d);
     }
 
     // ══ fb469 — THE BLUR TWIN, ON THE INSTALLED PLUGIN ═══════════════════════════════════════
@@ -351,40 +348,9 @@ int main()
         gate (std::abs (sdBlur - sdDry) > 0.05, "T2  the tables the twin is REFUSED on still blur", d);
     }
 
-    // ══ fb471 — THE HARMONIC CUTS, ON THE INSTALLED PLUGIN ═══════════════════════════════════
-    //  Modes 9 and 10. A cut by HARMONIC NUMBER, so it rides the note — Serum 2's spectral Lo/Hi
-    //  markers are in Hz and do not. Measured here as the ratio of low-harmonic to high-harmonic
-    //  energy in the AU's own output, which moves in OPPOSITE directions for the two modes.
-    {
-        auto tilt = [&] (int mode, float amt) {
-            plainPatch (au);
-            au.setRaw  ("Synth OSC A WT Preset", 4.0f);        // ProphetSaw: every harmonic present
-            au.setNorm ("Synth OSC A WT Frame", 0.5f);
-            au.setRaw  ("OSC A Spectral Type", (float) mode);
-            au.setNorm ("OSC A Spectral Amount", amt);
-            au.pump (0.40);
-            const auto sp = au.spectrum (45);
-            const double f0 = 110.0, bin = SR / NFFT;
-            double lo = 0.0, hi = 0.0;
-            for (int h = 1; h <= 40; ++h)
-            { const int k = (int) std::lround (h * f0 / bin);
-              if (k <= 0 || k >= (int) sp.size()) continue;
-              double a = 0.0; for (int j = -2; j <= 2; ++j) if (k+j > 0 && k+j < (int) sp.size()) a = std::max (a, sp[(size_t)(k+j)]);
-              if (h <= 8) lo += a; else hi += a; }
-            return (hi > 0.0) ? 20.0 * std::log10 (std::max (1e-12, lo / hi)) : 0.0; };
-
-        // ⚠️ THE TWO AMOUNTS ARE DIFFERENT ON PURPOSE, and they are computed, not guessed. The
-        //    corner mappings are not mirror images — Low Cut is rc = 0.0625*2^(14a) and High Cut is
-        //    rc = 8192*2^(-14a) — so the SAME amount puts the two corners at different harmonics.
-        //    At 0.6 the High Cut's corner landed at harmonic 24, above almost all of a saw's energy,
-        //    and the metric barely moved. Both are put at harmonic 8 here, where the split is.
-        const double flat = tilt (0, 0.0f);
-        const double cutL = tilt (9,  0.5000f);   // Low Cut,  corner h8: log2(8/0.0625)/14
-        const double cutH = tilt (10, 0.7143f);   // High Cut, corner h8: log2(8192/8)/14
-        char d[230]; snprintf (d, sizeof d, "low/high energy tilt: flat %+.1f dB · Low Cut %+.1f · High Cut %+.1f", flat, cutL, cutH);
-        gate (cutL < flat - 6.0 && cutH > flat + 6.0,
-              "T3  the two harmonic cuts reach the plugin and pull OPPOSITE ways", d);
-    }
+    // (fb471's T3 tested the two spectral MODES. They were removed at fb472 — Max: "not a new
+    //  spectral, not two new spectrum modes" — and W1-W4 above test the same DSP on the knobs it
+    //  moved to.)
 
     gate (! au.missing, "P3  every parameter this test asked for exists by name");
     au.close();

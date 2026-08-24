@@ -123,8 +123,7 @@ int main (int argc, char** argv)
 
         // every name in the enum must appear in BOTH lists
         const char* names[] = { "Harmonic Stretch", "Inharmonic Stretch", "Vocode", "Smear",
-                                "Random Amps", "Data Compress", "Spectral Phaser", "Disperse",
-                                "Harmonic Low Cut", "Harmonic High Cut" };
+                                "Random Amps", "Data Compress", "Spectral Phaser", "Disperse" };
         const int nNames = (int) (sizeof (names) / sizeof (names[0]));
         int inCpp = 0, inJs = 0;
         const size_t jsAt = htm.find ("const SPECTRAL_MODES");
@@ -165,26 +164,22 @@ int main (int argc, char** argv)
         gate (jsBase == (int) wc::ModDest::FxModBase && jsBase + 1152 == (int) wc::ModDest::FxModEnd,
               "N4  the rack block's bound agrees across C++ and JS", b);
 
-        // N5 — the window's RANGE is authored twice: once as a NormalisableRange in
-        // createParameterLayout and once as three constants in fmtSynReadout, which has to undo the
-        // same skew to print a harmonic number from a normalised knob. If they drift, the readout
-        // says one harmonic and the DSP uses another — and both look entirely plausible.
-        // read the number that FOLLOWS the key — strlen, not a hand-counted offset. The first
-        // version of this gate used magic skips, mis-counted one by a character, and reported the
-        // C++ low edge as 0. A gate that fails for its own reason is noise; it just happened to
-        // fail loudly rather than pass quietly.
+        // N5 — the CUT's corner mapping is authored twice: once as constants in SpectralMorph.h and
+        // once in fmtSynReadout, which has to reproduce the same curve to print a harmonic from a
+        // normalised knob. If they drift the readout names one corner while the DSP uses another,
+        // and both look entirely plausible.
         auto num = [&] (const std::string& hay, const char* key) -> double {
             const size_t k = hay.find (key); if (k == std::string::npos) return -1.0;
             return std::atof (hay.c_str() + k + std::strlen (key)); };
-        const double cLo = num (cpp, "NormalisableRange<float> rLo (");
-        const double cHi = num (cpp, "NormalisableRange<float> rHi (1.0f, ");
-        const double cCe = num (cpp, "rLo.setSkewForCentre (");
-        const double jLo = num (htm, "const SPECWIN_LO = ");
-        const double jHi = num (htm, "SPECWIN_HI = ");
-        const double jCe = num (htm, "SPECWIN_CENTRE = ");
-        snprintf (b, sizeof b, "C++ (%.0f..%.0f, centre %.0f)  JS (%.0f..%.0f, centre %.0f)", cLo, cHi, cCe, jLo, jHi, jCe);
-        gate (cLo > 0 && jLo > 0 && cLo == jLo && cHi == jHi && cCe == jCe,
-              "N5  the window's range+skew agrees across the DSP and the readout", b);
+        const double jLoB = num (htm, "const SPECCUT_LO_BASE = "), jLoO = num (htm, "SPECCUT_LO_OCT = ");
+        const double jHiB = num (htm, "SPECCUT_HI_BASE = "),       jHiO = num (htm, "SPECCUT_HI_OCT = ");
+        snprintf (b, sizeof b, "C++ (%.2f, %.0f / %.2f, %.0f)  JS (%.2f, %.0f / %.2f, %.0f)",
+                  (double) tw::SpectralMorph::kCutLoBase, (double) tw::SpectralMorph::kCutLoOct,
+                  (double) tw::SpectralMorph::kCutHiBase, (double) tw::SpectralMorph::kCutHiOct,
+                  jLoB, jLoO, jHiB, jHiO);
+        gate (jLoB == (double) tw::SpectralMorph::kCutLoBase && jLoO == (double) tw::SpectralMorph::kCutLoOct
+           && jHiB == (double) tw::SpectralMorph::kCutHiBase && jHiO == (double) tw::SpectralMorph::kCutHiOct,
+              "N5  the cut's corner mapping agrees across the DSP and the readout", b);
     }
 
     // ── D — DISPERSE ──────────────────────────────────────────────────────────────────────────
@@ -290,159 +285,82 @@ int main (int argc, char** argv)
         }
     }
 
-    // ── H — THE HARMONIC CUTS ─────────────────────────────────────────────────────────────────
-    //   A fourth-order Butterworth in HARMONIC NUMBER, so the corner rides the note. Serum 2's
-    //   spectral Lo/Hi markers are in Hz and do not track; Vital's are a brick wall with no slope.
+    // ── H — THE SPECTRAL CUTS, on their own knobs ─────────────────────────────────────────────
+    //   fb472: Lo/Hi are a fourth-order Butterworth cut in HARMONIC NUMBER, so the corner rides the
+    //   note — Serum 2's spectral Lo/Hi markers are in Hz and do not track. They apply with NO morph
+    //   mode selected, which is the whole reason they live on knobs instead of in the mode list.
     {
-        // ⚠️ preset 4 (ProphetSaw), NOT 1 (Triangle). A triangle carries ODD HARMONICS ONLY, so the
-        //    first version of these gates probed h2, h4, h64 and h256 — every one of them zero — and
-        //    read "+0.00 dB, no change" at every frequency while the filter worked perfectly. The
-        //    ratio helper below now REFUSES a zero reference instead of returning 0 dB for it.
-        const tw::WavetableSpec base = tw::WavetableBank::specForPreset (4);   // a saw: every harmonic
-        const auto LOCUT  = tw::SpectralMode::HarmLowCut;
-        const auto HICUT  = tw::SpectralMode::HarmHighCut;
+        // ⚠️ ProphetSaw, NOT a triangle: a triangle carries ODD HARMONICS ONLY, and probing even
+        //    ones made an earlier version of this gate read "+0.00 dB, no change" at every frequency
+        //    while the filter was exactly right. The probes below are taken from the table.
+        const tw::WavetableSpec base = tw::WavetableBank::specForPreset (4);
+        const auto NONE = tw::SpectralMode::None;
 
-        gate (sameSpec (tw::SpectralMorph::apply (base, LOCUT, 0.0f), base)
-           && sameSpec (tw::SpectralMorph::apply (base, HICUT, 0.0f), base),
-              "H1  both cuts are the EXACT identity at amount 0");
+        gate (sameSpec (tw::SpectralMorph::apply (base, NONE, 0.0f, 0.0f, 1.0f), base),
+              "H1  both cuts OFF, no mode: the EXACT identity");
 
-        const tw::WavetableSpec dry = tw::SpectralMorph::apply (base, LOCUT, 1.0e-9f);
-
-        // ⚠️ THE PROBE HARMONICS COME FROM THE TABLE, and the AMOUNT is computed backwards from the
-        //    corner we want to land on — not hardcoded. Two versions of this gate read "+0.00 dB, no
-        //    change" at every frequency while the filter was exactly right: the first probed even
-        //    harmonics on a TRIANGLE (odd only, all silent), the second probed h64/h256 on a saw that
-        //    stops near h40. A ratio against a silent reference is not a measurement.
-        //      LOW  CUT: rc = 0.0625 * 2^(14a)   =>  a = log2(rc/0.0625)/14
-        //      HIGH CUT: rc = 8192   * 2^(-14a)  =>  a = log2(8192/rc)/14
-        auto aLow  = [] (double rc) { return (float) (std::log2 (rc / 0.0625) / 14.0); };
-        auto aHigh = [] (double rc) { return (float) (std::log2 (8192.0 / rc) / 14.0); };
         auto ampAt = [&] (const tw::WavetableSpec& sp, int h) -> double {
             const tw::FrameSpec& f = sp.frames[8];
             if (f.numPartials > 0)
             { for (int i = 0; i < f.numPartials; ++i)
                 if ((int) std::lround (f.partials[(size_t) i].ratio) == h) return std::abs (f.partials[(size_t) i].amp); return 0.0; }
             return (h >= 1 && h <= f.numHarmonics) ? std::abs (f.amplitudes[(size_t) (h-1)]) : 0.0; };
-        int topH = 1;
-        for (int h = 1; h <= 512; ++h) if (ampAt (dry, h) > 1e-9) topH = h;
+
+        // the dry reference, through the SAME path (a cut just barely on, then read the partials)
+        const tw::WavetableSpec dry = tw::SpectralMorph::apply (base, NONE, 0.0f, 1.0e-7f, 1.0f);
+        int topH = 1; for (int h = 1; h <= 512; ++h) if (ampAt (dry, h) > 1e-9) topH = h;
         const int hLo = 2, hC = 8, hHi = std::min (32, topH);
 
-        auto measure = [&] (tw::SpectralMode m, float amt, int h) {
-            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, m, amt);
+        // the knob position whose corner lands on a given harmonic — computed, never guessed
+        auto tLo = [] (double rc) { return (float) (std::log2 (rc / (double) tw::SpectralMorph::kCutLoBase) / (double) tw::SpectralMorph::kCutLoOct); };
+        auto tHi = [] (double rc) { return (float) (std::log2 (rc / (double) tw::SpectralMorph::kCutHiBase) / (double) tw::SpectralMorph::kCutHiOct); };
+        auto meas = [&] (float lo01, float hi01, int h) {
+            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, NONE, 0.0f, lo01, hi01);
             const double d = ampAt (dry, h), v = ampAt (c, h);
             return (d > 1e-9) ? 20.0 * std::log10 (std::max (1e-12, v / d)) : 1e9; };
 
-        {   // LOW CUT with its corner at harmonic 8
-            const float a = aLow (8.0);
-            const double r2 = measure (LOCUT, a, hLo), r8 = measure (LOCUT, a, hC), rT = measure (LOCUT, a, hHi);
+        {   const float t = tLo (8.0);
+            const double r2 = meas (t, 1.0f, hLo), r8 = meas (t, 1.0f, hC), rT = meas (t, 1.0f, hHi);
             const bool have = (r2 < 1e8 && r8 < 1e8 && rT < 1e8);
-            char b[230]; snprintf (b, sizeof b, "top harmonic h%d · h%d %+.1f dB · h%d (the corner) %+.2f dB · h%d %+.3f dB%s",
+            char b[230]; snprintf (b, sizeof b, "top h%d · h%d %+.1f dB · h%d (the corner) %+.2f dB · h%d %+.3f dB%s",
                                    topH, hLo, r2, hC, r8, hHi, rT, have ? "" : "  [NO REFERENCE]");
             gate (have && r2 < -40.0 && std::abs (r8 + 3.01) < 0.15 && rT > -0.6,
-                  "H2  LOW CUT: -3.01 dB at the corner, 24 dB/oct below, clean above", b);
-        }
-        {   // HIGH CUT with its corner at the same harmonic
-            const float a = aHigh (8.0);
-            const double r2 = measure (HICUT, a, hLo), r8 = measure (HICUT, a, hC), rT = measure (HICUT, a, hHi);
+                  "H2  LOW CUT, with NO morph mode: -3.01 dB at the corner, 24 dB/oct below", b); }
+        {   const float t = tHi (8.0);
+            const double r2 = meas (0.0f, t, hLo), r8 = meas (0.0f, t, hC), rT = meas (0.0f, t, hHi);
             const bool have = (r2 < 1e8 && r8 < 1e8 && rT < 1e8);
             char b[230]; snprintf (b, sizeof b, "h%d %+.3f dB · h%d (the corner) %+.2f dB · h%d %+.1f dB%s",
                                    hLo, r2, hC, r8, hHi, rT, have ? "" : "  [NO REFERENCE]");
             gate (have && r2 > -0.6 && std::abs (r8 + 3.01) < 0.15 && rT < -40.0,
-                  "H3  HIGH CUT mirrors it, same order", b);
-        }
-        {   // AMPLITUDE-ONLY: it must not move a ratio or a phase, so it composes with Disperse
-            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, LOCUT, 0.6f);
+                  "H3  HIGH CUT mirrors it, same order", b); }
+        {   // AMPLITUDE-ONLY, so it composes with Disperse (phase-only) and every other mode
+            const tw::WavetableSpec c = tw::SpectralMorph::apply (base, NONE, 0.0f, tLo (8.0), tHi (24.0));
             const DryList d0 = dryPartials (base.frames[8]);
-            double worstR = 0.0, worstP = 0.0; int n2 = 0;
+            double wR = 0.0, wP = 0.0; int n2 = 0;
             for (int i = 0; i < c.frames[8].numPartials && i < (int) d0.p.size(); ++i)
-            { worstR = std::max (worstR, (double) std::abs (c.frames[8].partials[(size_t) i].ratio - d0.p[(size_t) i].ratio));
-              worstP = std::max (worstP, (double) std::abs (c.frames[8].partials[(size_t) i].phase - d0.p[(size_t) i].phase)); ++n2; }
-            char b[190]; snprintf (b, sizeof b, "worst ratio drift %.3g, worst phase drift %.3g over %d partials", worstR, worstP, n2);
-            gate (worstR == 0.0 && worstP == 0.0 && n2 > 20, "H4  a cut touches AMPLITUDE only", b);
-        }
+            { wR = std::max (wR, (double) std::abs (c.frames[8].partials[(size_t) i].ratio - d0.p[(size_t) i].ratio));
+              wP = std::max (wP, (double) std::abs (c.frames[8].partials[(size_t) i].phase - d0.p[(size_t) i].phase)); ++n2; }
+            char b[190]; snprintf (b, sizeof b, "worst ratio drift %.3g, worst phase drift %.3g over %d partials", wR, wP, n2);
+            gate (wR == 0.0 && wP == 0.0 && n2 > 20, "H4  a cut touches AMPLITUDE only", b); }
+        {   // and it STACKS with a mode rather than replacing it
+            const tw::WavetableSpec m  = tw::SpectralMorph::apply (base, tw::SpectralMode::HarmonicStretch, 1.0f);
+            const tw::WavetableSpec mc = tw::SpectralMorph::apply (base, tw::SpectralMode::HarmonicStretch, 1.0f, tLo (8.0), 1.0f);
+            double lowM = 0.0, lowMC = 0.0;
+            for (int i = 0; i < m.frames[8].numPartials; ++i)
+                if (m.frames[8].partials[(size_t) i].ratio < 6.0f) lowM += std::abs (m.frames[8].partials[(size_t) i].amp);
+            for (int i = 0; i < mc.frames[8].numPartials; ++i)
+                if (mc.frames[8].partials[(size_t) i].ratio < 6.0f) lowMC += std::abs (mc.frames[8].partials[(size_t) i].amp);
+            char b[190]; snprintf (b, sizeof b, "low-partial sum %.4f -> %.4f with the cut on", lowM, lowMC);
+            gate (lowM > 1e-6 && lowMC < lowM * 0.5, "H5  a cut STACKS with a morph mode, it does not replace one", b); }
     }
 
-    // ── W — PARTIAL RANGE ─────────────────────────────────────────────────────────────────────
-    {
-        const tw::WavetableSpec base = tw::WavetableBank::specForPreset (1);
-        const int kMaxH = tw::FrameSpec::kMaxHarmonics;
-
-        // W1 the DEFAULT window is an exact identity — no existing preset may move by one bit.
-        {
-            bool allSame = true;
-            for (int m = 1; m < (int) tw::SpectralMode::Count; ++m)
-                for (float a : { 0.001f, 0.25f, 0.5f, 1.0f })
-                    for (int pr : kHarmonicPresets)
-                    { const tw::WavetableSpec s = tw::WavetableBank::specForPreset (pr);
-                      allSame &= sameSpec (tw::SpectralMorph::apply (s, (tw::SpectralMode) m, a),
-                                           tw::SpectralMorph::apply (s, (tw::SpectralMode) m, a, 1.0f, (float) kMaxH)); }
-            gate (allSame, "W1  Lo=1 Hi=max is BIT-IDENTICAL to the unwindowed call", "8 modes x 4 amounts x 7 tables");
-        }
-
-        // W2 a HIGH edge really protects what is above it
-        {
-            const DryList dry = dryPartials (base.frames[8]);
-            const tw::WavetableSpec wet = tw::SpectralMorph::apply (base, tw::SpectralMode::HarmonicStretch, 1.0f);
-            const tw::WavetableSpec win = tw::SpectralMorph::apply (base, tw::SpectralMode::HarmonicStretch, 1.0f, 1.0f, 32.0f);
-            int above = 0, moved = 0, below = 0, belowFull = 0;
-            for (int i = 0; i < win.frames[8].numPartials && i < (int) dry.p.size(); ++i)
-            {
-                const float r = dry.p[(size_t) i].ratio;
-                if (r > 35.0f) { ++above; if (win.frames[8].partials[(size_t) i].ratio != r) ++moved; }
-                if (r < 30.0f && r >= 1.0f) { ++below;
-                    if (std::abs (win.frames[8].partials[(size_t) i].ratio - wet.frames[8].partials[(size_t) i].ratio) < 1e-4f) ++belowFull; }
-            }
-            char b[200]; snprintf (b, sizeof b, "%d partials above the edge, %d moved; %d below, %d fully morphed", above, moved, below, belowFull);
-            gate (above > 4 && moved == 0 && below > 4 && belowFull == below,
-                  "W2  Hi=32 leaves r>35 untouched and morphs r<30 in full", b);
-        }
-
-        // W3 a LOW edge really protects what is below it
-        {
-            const DryList dry = dryPartials (base.frames[8]);
-            const tw::WavetableSpec win = tw::SpectralMorph::apply (base, tw::SpectralMode::RandomAmplitudes, 1.0f, 64.0f, (float) kMaxH);
-            int below = 0, moved = 0;
-            for (int i = 0; i < win.frames[8].numPartials && i < (int) dry.p.size(); ++i)
-            { const float r = dry.p[(size_t) i].ratio;
-              if (r < 62.0f) { ++below; if (win.frames[8].partials[(size_t) i].amp != dry.p[(size_t) i].amp) ++moved; } }
-            char b[160]; snprintf (b, sizeof b, "%d partials below the edge, %d moved", below, moved);
-            gate (below > 8 && moved == 0, "W3  Lo=64 leaves r<62 untouched", b);
-        }
-
-        // W4 THE PHASOR TRAP. Disperse changes phase and NOTHING else, so a windowed Disperse must
-        //    leave every amplitude exactly alone at EVERY window weight. Lerping the phasor instead
-        //    of the angle is a comb filter with an infinite null at w = 0.5 — a partial cancelling
-        //    against a rotated copy of itself. This gate is the only thing that can see it.
-        {
-            double worst = 0.0; int n = 0;
-            for (float hiEdge : { 24.0f, 48.0f, 96.0f, 192.0f })
-            {
-                const DryList dry = dryPartials (base.frames[8]);
-                const tw::WavetableSpec win = tw::SpectralMorph::apply (base, DISP, 1.0f, 1.0f, hiEdge);
-                for (int i = 0; i < win.frames[8].numPartials && i < (int) dry.p.size(); ++i)
-                { const double a0 = dry.p[(size_t) i].amp, a1 = win.frames[8].partials[(size_t) i].amp;
-                  if (a0 <= 0.0) continue;
-                  worst = std::max (worst, std::abs (a1 - a0) / a0); ++n; }
-            }
-            char b[160]; snprintf (b, sizeof b, "worst amplitude drift %.3g over %d partials x 4 edges", worst, n);
-            gate (worst < 1e-6 && n > 200, "W4  a windowed PHASE-ONLY mode never touches an amplitude", b);
-        }
-
-        // W5 the window is CONTINUOUS across its edge (no click when Lo/Hi is modulated)
-        {
-            float prev = -1.0f; bool smooth = true; float worstJump = 0.0f;
-            for (int k = 0; k <= 200; ++k)
-            {
-                const float hiEdge = 20.0f + (float) k * 0.2f;                 // sweep the edge across a partial
-                const tw::WavetableSpec win = tw::SpectralMorph::apply (base, tw::SpectralMode::HarmonicStretch, 1.0f, 1.0f, hiEdge);
-                float acc = 0.0f; for (int i = 0; i < win.frames[8].numPartials; ++i) acc += std::abs (win.frames[8].partials[(size_t) i].amp);
-                if (prev >= 0.0f) { const float j = std::abs (acc - prev); worstJump = std::max (worstJump, j); if (j > 0.02f * std::max (1.0f, prev)) smooth = false; }
-                prev = acc;
-            }
-            char b[160]; snprintf (b, sizeof b, "worst step over a 0.2-partial edge move: %.4f", worstJump);
-            gate (smooth, "W5  sweeping the Hi edge is continuous (modulatable without clicks)", b);
-        }
-    }
+    // ── W — THE PARTIAL WINDOW IS RETIRED ─────────────────────────────────────────────────────
+    //   fb467 put a smoothstep WINDOW on these two knobs — which partials the morph was allowed to
+    //   touch. fb472 replaced it with an actual cut, at Max's word: "not a new spectral, not two new
+    //   spectrum modes... wire in the low and the high cut in the back channel where it says low and
+    //   high, because I thought that's what it was for." W1-W5 measured a mechanism that no longer
+    //   exists; H1-H5 above measure the one that replaced it, on the same two knobs and the same two
+    //   mod destinations. Recorded rather than deleted quietly, per the porting law.
 
     printf ("\n  PASS %d   FAIL %d\n\n", gPass, gFail);
     return gFail == 0 ? 0 : 1;

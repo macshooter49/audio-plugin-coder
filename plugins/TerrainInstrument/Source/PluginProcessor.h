@@ -618,7 +618,7 @@ public:
     // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
     // routed), which is the same number rebuildMorphIfNeeded builds from — so the picture the
     // waterfall re-bakes is the morph the ear is hearing, not the knob.
-    void spectralDisplay (int o, float& amtOut, int& typeOut, int& loOut, int& hiOut) const noexcept;
+    void spectralDisplay (int o, float& amtOut, int& typeOut, float& loOut, float& hiOut) const noexcept;
     juce::uint32 modDragSeq_ = 0;
     static bool physicalLeftButtonDown();               // fb151 — window-server button truth (see PluginProcessor.cpp)
     void adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w);
@@ -1373,8 +1373,8 @@ private:
         // fb467 — the partial WINDOW is part of the built table's identity. Without these two the
         // skip gate below matches on preset/mode/amount alone and Lo/Hi move NOTHING until some
         // other knob happens to force a rebuild — the failure that builds clean and looks wired.
-        int   builtLo     = -1;
-        int   builtHi     = -1;
+        float builtLo     = -1.0f;
+        float builtHi     = -1.0f;
         const tw::Wavetable* builtImportPtr = nullptr;   // fb253 — morph SOURCE was this import (nullptr = a factory preset)
         int   builtImportEpoch = -1;                     // fb253 — the import's buildEpoch when morphed (re-import → re-morph)
     };

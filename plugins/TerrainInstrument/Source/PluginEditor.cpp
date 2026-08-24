@@ -5643,12 +5643,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             {
                 const auto D = audioProcessor.wtDispEffective (o);
                 if (o) js << ",";
-                float sa = 0.0f; int st = 0, sl = 1, sh = 512;
-                audioProcessor.spectralDisplay (o, sa, st, sl, sh);   // fb459 · fb467 window
+                float sa = 0.0f, sl = 0.0f, sh = 1.0f; int st = 0;
+                audioProcessor.spectralDisplay (o, sa, st, sl, sh);   // fb459 · fb472 cuts
                 js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
                    << "," << SF (sa, 4) << "," << st << "," << SF (D.blur, 4)
-                   << "," << sl << "," << sh << "]";   // fb460 blur · fb467 lo/hi — THE ORDER HERE
+                   << "," << SF (sl, 4) << "," << SF (sh, 4) << "]";   // fb460 blur · fb472 cuts — THE ORDER HERE
                                                        // MUST MATCH cachedSig in index.html
             }
             js << "];";

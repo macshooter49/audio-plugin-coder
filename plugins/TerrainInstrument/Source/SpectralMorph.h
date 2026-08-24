@@ -47,8 +47,6 @@ namespace tw
         DataCompress,         // quantize + decimate → digital / lo-fi / destroyed
         SpectralPhaser,       // swept comb notches  → hollow / phaser
         Disperse,             // quadratic phase     → chirped / dense / smeared-in-time
-        HarmLowCut,           // 4th-order HP in harmonic number → hollow / thin / telephone
-        HarmHighCut,          // 4th-order LP in harmonic number → dark / soft / muted
         Count
     };
 
@@ -59,27 +57,51 @@ namespace tw
          *  ready for Wavetable::buildFromSpec. amount<=0 or None returns the base
          *  untouched (and the morph is continuous from there — at amount→0 the stretch
          *  factor → 1, so partials land back on the integer grid losslessly). */
+        /** fb472 — Lo/Hi are a LOW CUT and a HIGH CUT on the wavetable, taken in HARMONIC NUMBER.
+         *  Max: "wire in the low and the high cut in the back channel where it says low and high,
+         *  because I thought that's what it was for." They were a partial WINDOW on the morph
+         *  (fb467) — an abstraction nobody asked for, on two knobs whose labels promised a filter.
+         *
+         *  Both are FOURTH-ORDER BUTTERWORTH, the order Serum 2 uses on its spectral Lo/Hi markers
+         *  and the one fb470 gave the rack EQ, so a cut is a cut wherever you meet one here:
+         *      |H(r)| = (r/rc)^4 / sqrt(1 + (r/rc)^8)      LOW cut  (high-pass)
+         *      |H(r)| = 1        / sqrt(1 + (r/rc)^8)      HIGH cut (low-pass)
+         *  In harmonic number, so the corner RIDES THE NOTE — Serum's markers are in hertz and do
+         *  not track. Amplitude-only, so it composes with Disperse (phase-only) and with every mode.
+         *
+         *  🚨 A CUT APPLIES WITH mode = None. That is the whole point of it living on its own knobs
+         *     instead of occupying the single mode slot, and it is why this no longer returns `base`
+         *     on `mode == None`.
+         *
+         *  cutLo01 / cutHi01 are the knobs' NORMALISED positions. Both ends are an EXACT identity:
+         *  Lo at 0 and Hi at 1 skip the filter entirely rather than parking a corner at harmonic 1,
+         *  where a fourth-order response would still be -3 dB on the fundamental. */
+        static constexpr float kCutLoBase = 0.25f, kCutLoOct = 11.0f;   // 0 -> h0.25 (off) .. 1 -> h512
+        static constexpr float kCutHiBase = 0.5f,  kCutHiOct = 13.0f;   // 0 -> h0.5      .. 1 -> h4096 (off)
+
+        static float cutLoCorner (float t) noexcept { return kCutLoBase * std::pow (2.0f, kCutLoOct * std::clamp (t, 0.0f, 1.0f)); }
+        static float cutHiCorner (float t) noexcept { return kCutHiBase * std::pow (2.0f, kCutHiOct * std::clamp (t, 0.0f, 1.0f)); }
+        static bool  cutLoOn     (float t) noexcept { return t > 0.0f; }
+        static bool  cutHiOn     (float t) noexcept { return t < 1.0f; }
+
         static WavetableSpec apply (const WavetableSpec& base, SpectralMode mode, float amount,
-                                    float rangeLo = 1.0f, float rangeHi = (float) FrameSpec::kMaxHarmonics)
+                                    float cutLo01 = 0.0f, float cutHi01 = 1.0f)
         {
             amount = std::clamp (amount, 0.0f, 1.0f);
-            if (mode == SpectralMode::None || amount <= 0.0f)
+            const bool morphing = (mode != SpectralMode::None && amount > 0.0f);
+            const bool cutting  = cutLoOn (cutLo01) || cutHiOn (cutHi01);
+            if (! morphing && ! cutting)
                 return base;
 
-            // fb467 — THE BAND TOP, computed ONCE for the whole spec, not per frame. Disperse's
-            // coefficient is normalised by it (see the mode), and a per-frame value would make each
-            // frame disperse by a different amount — the WT-POS sweep would go lumpy. Frames of one
-            // table are one instrument; they share the band.
+            // fb467 — the band top, computed ONCE for the whole spec. Disperse's coefficient is
+            // normalised by it; a per-frame value would make each frame disperse differently and the
+            // WT-POS sweep would go lumpy. Frames of one table are one instrument; they share a band.
             const float top = bandTop (base);
-
-            // fb467 — the window is enforced here so every mode gets it for free and no mode can
-            // forget it. Hi >= Lo + 4 (a window narrower than the smoothstep edges is not a window).
-            const float lo = std::clamp (rangeLo, 1.0f, (float) FrameSpec::kMaxHarmonics);
-            const float hi = std::clamp (std::max (rangeHi, lo + 4.0f), 1.0f, (float) FrameSpec::kMaxHarmonics);
 
             WavetableSpec out;
             for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
-                morphFrame (base.frames[(size_t) f], out.frames[(size_t) f], mode, amount, top, lo, hi);
+                morphFrame (base.frames[(size_t) f], out.frames[(size_t) f],
+                            morphing ? mode : SpectralMode::None, amount, top, cutLo01, cutHi01);
             return out;
         }
 
@@ -115,12 +137,6 @@ namespace tw
             return top;
         }
 
-        static float smooth01 (float e0, float e1, float x) noexcept
-        {
-            if (e1 <= e0) return x >= e1 ? 1.0f : 0.0f;
-            const float t = std::clamp ((x - e0) / (e1 - e0), 0.0f, 1.0f);
-            return t * t * (3.0f - 2.0f * t);
-        }
         // Read a frame's spectrum as a unified (ratio, amp, phase) partial list, whether
         // it was authored as integer harmonics OR inharmonic partials. Every mode then
         // operates on this one representation, and we write it back as partials so
@@ -155,19 +171,10 @@ namespace tw
         }
 
         static void morphFrame (const FrameSpec& in, FrameSpec& out, SpectralMode mode, float amount,
-                                float bandTopR, float rangeLo, float rangeHi) noexcept
+                                float bandTopR, float cutLo01, float cutHi01) noexcept
         {
             FrameSpec::Partial p[FrameSpec::kMaxPartials];
             const int n = extract (in, p);
-
-            // fb467 — PARTIAL RANGE. Both edges wide open is the DEFAULT and it takes a separate
-            // path that copies nothing and blends nothing, so an unwindowed patch is bit-identical
-            // to what shipped before this change — the window can never cost an existing preset.
-            const bool loOpen = (rangeLo <= 1.0f + 1.0e-6f);
-            const bool hiOpen = (rangeHi >= (float) FrameSpec::kMaxHarmonics - 1.0e-6f);
-            const bool windowed = ! (loOpen && hiOpen);
-            FrameSpec::Partial q[FrameSpec::kMaxPartials];
-            if (windowed) for (int i = 0; i < n; ++i) q[(size_t) i] = p[(size_t) i];   // the dry copy
 
             switch (mode)
             {
@@ -389,68 +396,30 @@ namespace tw
                     break;
                 }
 
-                case SpectralMode::HarmLowCut:
-                case SpectralMode::HarmHighCut:
-                {
-                    // ── THE SPECTRAL CUT, and it is NOT the filter you already have ──────────────
-                    //  This cuts by HARMONIC NUMBER, not by hertz, so the corner rides the note: play
-                    //  an octave up and the timbre is identical instead of getting brighter. Serum 2's
-                    //  spectral Lo/Hi markers are in Hz and do not track [M2 p.108]; Vital's kLowPass /
-                    //  kHighPass are a brick wall with a one-harmonic taper and no slope at all
-                    //  (spectral_morph.h:243-305). Ours is a FOURTH-ORDER BUTTERWORTH — the same order
-                    //  Serum uses and the same one fb470 gave the rack EQ's cuts, so a cut is a cut
-                    //  wherever you meet one in this plugin.
-                    //
-                    //  It is also AMPLITUDE-ONLY: no ratio and no phase is touched, so it composes
-                    //  cleanly with Disperse (phase-only) and with the fb467 partial window.
-                    //
-                    //     |H(r)|  =  1 / sqrt(1 + (r/rc)^8)                 High Cut (low-pass)
-                    //     |H(r)|  =  (r/rc)^4 / sqrt(1 + (r/rc)^8)          Low Cut  (high-pass)
-                    //
-                    //  The corners start FAR outside the band so amount 0 is an exact identity, which
-                    //  the house law requires and which a corner parked at harmonic 512 would not give
-                    //  (a 4th-order response is still -3 dB at its own corner).
-                    const bool lowCut = (mode == SpectralMode::HarmLowCut);
-                    const float rc = lowCut ? 0.0625f * std::pow (2.0f, 14.0f * amount)
-                                            : 8192.0f * std::pow (2.0f, -14.0f * amount);
-                    for (int i = 0; i < n; ++i)
-                    {
-                        const float x  = std::max (1.0e-6f, p[(size_t) i].ratio / rc);
-                        const float x4 = x * x * x * x;
-                        const float den = std::sqrt (1.0f + x4 * x4);
-                        p[(size_t) i].amp *= (lowCut ? x4 : 1.0f) / den;
-                    }
-                    break;
-                }
-
                 case SpectralMode::None:
                 case SpectralMode::Count:
                 default:
                     break;   // identity: partials unchanged
             }
 
-            // fb467 — blend the morphed partial back toward its dry self by the window weight.
-            // AMP, RATIO and PHASE are blended SEPARATELY and phase is blended as an ANGLE through
-            // the shortest arc. Blending the PHASOR instead would be a comb filter with an infinite
-            // null at w = 0.5 (a partial cancelling against a rotated copy of itself), and lerping
-            // the raw angle would take the long way round whenever the two straddle +/-pi.
-            if (windowed)
+            // ── fb472 — THE CUT. Applied AFTER the mode, to whatever the mode left, and applied
+            //    even when there is no mode at all. Amplitude only: no ratio and no phase is touched,
+            //    so it composes with Disperse and cannot move a partial off its own frequency.
+            if (cutLoOn (cutLo01))
             {
-                const float E = 2.0f;
+                const float rc = cutLoCorner (cutLo01);
                 for (int i = 0; i < n; ++i)
-                {
-                    const float r  = q[(size_t) i].ratio;                       // the DRY ratio selects
-                    const float wl = loOpen ? 1.0f : smooth01 (rangeLo - E, rangeLo, r);
-                    const float wh = hiOpen ? 1.0f : 1.0f - smooth01 (rangeHi, rangeHi + E, r);
-                    const float w  = wl * wh;
-                    if (w >= 1.0f) continue;
-                    float dPh = p[(size_t) i].phase - q[(size_t) i].phase;
-                    while (dPh >  3.14159265f) dPh -= 6.28318531f;
-                    while (dPh < -3.14159265f) dPh += 6.28318531f;
-                    p[(size_t) i].amp   = q[(size_t) i].amp   + w * (p[(size_t) i].amp   - q[(size_t) i].amp);
-                    p[(size_t) i].ratio = q[(size_t) i].ratio + w * (p[(size_t) i].ratio - q[(size_t) i].ratio);
-                    p[(size_t) i].phase = q[(size_t) i].phase + w * dPh;
-                }
+                { const float x = std::max (1.0e-6f, p[(size_t) i].ratio / rc);
+                  const float x4 = x * x * x * x;
+                  p[(size_t) i].amp *= x4 / std::sqrt (1.0f + x4 * x4); }
+            }
+            if (cutHiOn (cutHi01))
+            {
+                const float rc = cutHiCorner (cutHi01);
+                for (int i = 0; i < n; ++i)
+                { const float x = std::max (1.0e-6f, p[(size_t) i].ratio / rc);
+                  const float x4 = x * x * x * x;
+                  p[(size_t) i].amp *= 1.0f / std::sqrt (1.0f + x4 * x4); }
             }
 
             writeBack (out, p, n);

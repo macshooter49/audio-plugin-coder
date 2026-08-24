@@ -500,7 +500,7 @@ juce::String TerrainInstrumentAudioProcessor::getNoiseWavePeaksJson()
 // spectralEffAmt_ is what rebuildMorphIfNeeded actually builds from (fb252), and -1 means the
 // audio thread has not run yet, in which case the raw parameter is the honest answer.
 void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, int& typeOut,
-                                                        int& loOut, int& hiOut) const noexcept
+                                                        float& loOut, float& hiOut) const noexcept
 {
     osc = juce::jlimit (0, 3, osc);
     static const char* const SA[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,  ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
@@ -519,8 +519,8 @@ void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, i
                                        ParameterIDs::SYN_OSC_C_SPECTRAL_HI, ParameterIDs::SYN_OSC_D_SPECTRAL_HI };
     const float eLo = specLoEff_[osc].load (std::memory_order_relaxed);
     const float eHi = specHiEff_[osc].load (std::memory_order_relaxed);
-    loOut = (int) std::lround ((eLo >= 0.0f) ? eLo : rawParam (SL[osc])->load());
-    hiOut = (int) std::lround ((eHi >= 0.0f) ? eHi : rawParam (SH[osc])->load());
+    loOut = (eLo >= 0.0f) ? eLo : rawParam (SL[osc])->load();
+    hiOut = (eHi >= 0.0f) ? eHi : rawParam (SH[osc])->load();
 }
 
 tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc) const noexcept
@@ -614,9 +614,9 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // bits, far finer than a waterfall that is ~80 px tall.
         << ",\"sc\":8192";
     {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
-        float sa = 0.0f; int st = 0, sl = 1, sh = 512; spectralDisplay (osc, sa, st, sl, sh);
+        float sa = 0.0f, sl = 0.0f, sh = 1.0f; int st = 0; spectralDisplay (osc, sa, st, sl, sh);
         out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st
-            << ",\"lo\":" << sl << ",\"hi\":" << sh;   // fb467 — the partial window
+            << ",\"lo\":" << juce::String (sl, 4) << ",\"hi\":" << juce::String (sh, 4);   // fb472 — the cuts
     }
     out << ",\"d\":[";
     for (int i = 0; i < dispN; ++i)
@@ -870,8 +870,13 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     const int oi0    = juce::jlimit (0, 3, oscIdx);
     const float effLo = specLoEff_[oi0].load (std::memory_order_relaxed);
     const float effHi = specHiEff_[oi0].load (std::memory_order_relaxed);
-    const int lo = (int) std::lround ((effLo >= 0.0f) ? effLo : apvts.getRawParameterValue (loId)->load());
-    const int hi = (int) std::lround ((effHi >= 0.0f) ? effHi : apvts.getRawParameterValue (hiId)->load());
+    // fb472 — the two CUT knobs, as normalised positions. Quantised to 1/512 so a modulated corner
+    // cannot churn a 2.3 ms bake at 60 Hz for a move nothing can hear.
+    const float loRaw = (effLo >= 0.0f) ? effLo : apvts.getRawParameterValue (loId)->load();
+    const float hiRaw = (effHi >= 0.0f) ? effHi : apvts.getRawParameterValue (hiId)->load();
+    const float lo = std::round (juce::jlimit (0.0f, 1.0f, loRaw) * 512.0f) / 512.0f;
+    const float hi = std::round (juce::jlimit (0.0f, 1.0f, hiRaw) * 512.0f) / 512.0f;
+    const bool  cutting = (lo > 0.0f) || (hi < 1.0f);
 
     // fb253 — the morph SOURCE is the loaded IMPORT if one exists, else the factory preset spec.
     const int  oi        = juce::jlimit (0, 3, oscIdx);
@@ -880,7 +885,9 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     const int  impEpoch  = hasImport ? imp->buildEpoch() : -1;
 
     // None (or zero amount) → publish nullptr; voices then read the RAW import (fb253) or the bank.
-    if (mode <= 0 || amount <= 0.0f)
+    // 🚨 fb472 — UNLESS A CUT IS ENGAGED. The cut lives on its own knobs precisely so it does not
+    //    need a morph mode, and this early-out is what would have made it do nothing without one.
+    if ((mode <= 0 || amount <= 0.0f) && ! cutting)
     {
         if (slot.live.load (std::memory_order_relaxed) != nullptr)
             slot.retireCooldown = 2;   // voices may still be mid-block on the retiring buffer
@@ -902,7 +909,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         : (slot.builtImportPtr == nullptr && preset == slot.builtPreset);
     if (srcSame && mode == slot.builtMode
         && std::abs (amount - slot.builtAmount) < 1.0e-4f
-        && lo == slot.builtLo && hi == slot.builtHi)
+        && std::abs (lo - slot.builtLo) < 1.0e-6f && std::abs (hi - slot.builtHi) < 1.0e-6f)
         return;
 
     // RETIRE COOLDOWN — audioReadingIdx only refreshes at block START, so for up to a
@@ -942,7 +949,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
 
     slot.ready[target].store (false, std::memory_order_release);
     slot.buf[target].buildFromSpec (
-        tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount, (float) lo, (float) hi));
+        tw::SpectralMorph::apply (*srcSpec, (tw::SpectralMode) mode, amount, lo, hi));
     slot.ready[target].store (true, std::memory_order_release);
 
     slot.live.store (&slot.buf[target], std::memory_order_release);
@@ -2423,7 +2430,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
+                            "Disperse" },
         0));
     // SPECTRAL AMT — morph amount (0 = base table, 1 = full morph).
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2431,21 +2438,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
-    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
-    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
-    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
-    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
-    {
-        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
-        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, 1 },
-            "OSC A Spectral Low", rLo, 1.0f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, 1 },
-            "OSC A Spectral High", rHi, 512.0f));
-    }
+    // fb472 — THE SPECTRAL LOW CUT and HIGH CUT. Max: "wire in the low and the high cut in the
+    // back channel where it says low and high, because I thought that's what it was for." These two
+    // knobs were a partial WINDOW on the morph (fb467) — an abstraction nobody asked for, on labels
+    // that promised a filter. They are a fourth-order Butterworth cut in HARMONIC NUMBER now, so the
+    // corner rides the note. Plain 0..1 with NO skew: the corner is already exponential in the knob
+    // (0.25 * 2^11t and 0.5 * 2^13t), so a linear knob gives a logarithmic sweep. Low at 0 and High
+    // at 1 skip the filter entirely — an EXACT identity, which parking a corner at harmonic 1 would
+    // not be, because a fourth-order response is still -3 dB at its own corner.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, 1 },
+        "OSC A Spectral Low", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_A_SPECTRAL_HI, 1 },
+        "OSC A Spectral High", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 1.0f));
     // FOLD SHAPE choice (Phase 11d: 3 shapes — Linear / Sine / Triangle)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FOLD_SHAPE, 1 },
@@ -2590,28 +2596,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC B Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_AMT, 1 },
         "OSC B Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
-    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
-    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
-    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
-    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
-    {
-        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
-        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_LO, 1 },
-            "OSC B Spectral Low", rLo, 1.0f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_HI, 1 },
-            "OSC B Spectral High", rHi, 512.0f));
-    }
+    // fb472 — THE SPECTRAL LOW CUT and HIGH CUT. Max: "wire in the low and the high cut in the
+    // back channel where it says low and high, because I thought that's what it was for." These two
+    // knobs were a partial WINDOW on the morph (fb467) — an abstraction nobody asked for, on labels
+    // that promised a filter. They are a fourth-order Butterworth cut in HARMONIC NUMBER now, so the
+    // corner rides the note. Plain 0..1 with NO skew: the corner is already exponential in the knob
+    // (0.25 * 2^11t and 0.5 * 2^13t), so a linear knob gives a logarithmic sweep. Low at 0 and High
+    // at 1 skip the filter entirely — an EXACT identity, which parking a corner at harmonic 1 would
+    // not be, because a fourth-order response is still -3 dB at its own corner.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_LO, 1 },
+        "OSC B Spectral Low", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_B_SPECTRAL_HI, 1 },
+        "OSC B Spectral High", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 1.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FOLD_SHAPE, 1 },
         "OSC B Fold Shape",
@@ -2751,28 +2756,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC C Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_AMT, 1 },
         "OSC C Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
-    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
-    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
-    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
-    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
-    {
-        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
-        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_LO, 1 },
-            "OSC C Spectral Low", rLo, 1.0f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_HI, 1 },
-            "OSC C Spectral High", rHi, 512.0f));
-    }
+    // fb472 — THE SPECTRAL LOW CUT and HIGH CUT. Max: "wire in the low and the high cut in the
+    // back channel where it says low and high, because I thought that's what it was for." These two
+    // knobs were a partial WINDOW on the morph (fb467) — an abstraction nobody asked for, on labels
+    // that promised a filter. They are a fourth-order Butterworth cut in HARMONIC NUMBER now, so the
+    // corner rides the note. Plain 0..1 with NO skew: the corner is already exponential in the knob
+    // (0.25 * 2^11t and 0.5 * 2^13t), so a linear knob gives a logarithmic sweep. Low at 0 and High
+    // at 1 skip the filter entirely — an EXACT identity, which parking a corner at harmonic 1 would
+    // not be, because a fourth-order response is still -3 dB at its own corner.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_LO, 1 },
+        "OSC C Spectral Low", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_C_SPECTRAL_HI, 1 },
+        "OSC C Spectral High", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 1.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_FOLD_SHAPE, 1 },
         "OSC C Fold Shape",
@@ -3594,28 +3598,27 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC D Spectral Type",
         juce::StringArray { "None", "Harmonic Stretch", "Inharmonic Stretch",
                             "Vocode", "Smear", "Random Amps", "Data Compress", "Spectral Phaser",
-                            "Disperse", "Harmonic Low Cut", "Harmonic High Cut" },
+                            "Disperse" },
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_AMT, 1 },
         "OSC D Spectral Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // fb467 — SPECTRAL WINDOW Lo/Hi. Harmonic indices, log-mapped so the bottom of the spectrum
-    // (where the ear lives) gets most of the knob. Defaults 1 / 512 = wide open = today's behaviour;
-    // SpectralMorph::apply takes a bit-identical fast path when both edges are open, so an existing
-    // preset cannot move. apply() also enforces Hi >= Lo + 4 — a window narrower than its own
-    // smoothstep edges is not a window, and inverting them would silently mute the oscillator.
-    {
-        juce::NormalisableRange<float> rLo (1.0f, 512.0f, 1.0f); rLo.setSkewForCentre (32.0f);
-        juce::NormalisableRange<float> rHi (1.0f, 512.0f, 1.0f); rHi.setSkewForCentre (32.0f);
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_LO, 1 },
-            "OSC D Spectral Low", rLo, 1.0f));
-        layout.add (std::make_unique<juce::AudioParameterFloat> (
-            juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_HI, 1 },
-            "OSC D Spectral High", rHi, 512.0f));
-    }
+    // fb472 — THE SPECTRAL LOW CUT and HIGH CUT. Max: "wire in the low and the high cut in the
+    // back channel where it says low and high, because I thought that's what it was for." These two
+    // knobs were a partial WINDOW on the morph (fb467) — an abstraction nobody asked for, on labels
+    // that promised a filter. They are a fourth-order Butterworth cut in HARMONIC NUMBER now, so the
+    // corner rides the note. Plain 0..1 with NO skew: the corner is already exponential in the knob
+    // (0.25 * 2^11t and 0.5 * 2^13t), so a linear knob gives a logarithmic sweep. Low at 0 and High
+    // at 1 skip the filter entirely — an EXACT identity, which parking a corner at harmonic 1 would
+    // not be, because a fourth-order response is still -3 dB at its own corner.
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_LO, 1 },
+        "OSC D Spectral Low", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (
+        juce::ParameterID { ParameterIDs::SYN_OSC_D_SPECTRAL_HI, 1 },
+        "OSC D Spectral High", juce::NormalisableRange<float> (0.0f, 1.0f, 0.0f), 1.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_FOLD_SHAPE, 1 },
         "OSC D Fold Shape",
