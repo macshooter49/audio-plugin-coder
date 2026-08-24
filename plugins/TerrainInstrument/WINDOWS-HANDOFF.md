@@ -33,6 +33,20 @@ Nothing about Windows is broken. The work was simply priced honestly for the fir
 | 256 | 172 | 3.91% | **2.54%** | |
 | 512 (the floor) | 86 | 3.19% | **1.94%** | 1.64× — helps macOS too |
 
+At **fb497** the harness prints its own verdict for the first time:
+`cost(45)/cost(512) = 1.59x — FLAT ENOUGH, the gather no longer rides the host's call rate.`
+(It was **3.45×** at fb491.) Current row: 45→3.14%, 88→2.82%, 128→2.72%, 256→2.60%, 512→1.98%.
+
+### Memory (fb497, measured by the same `auval` command before and after)
+**Peak RSS 18,688 MB → 12,065 MB.** Stem rings −1,009 MB, capture ring −202 MB, wavetable bank
+−107 MB — all now allocated lazily on first real use. Every feature preserved; the trade-offs are
+listed in §5.
+
+### UI (fb497)
+Front page **17.6% → 15.4%**, synth page **26.9% → 18.6%** of a core. Verified by a deterministic
+screenshot diff (seeded RNG, pinned clock, manual rAF stepping, animations frozen): **166 of
+1,872,000 pixels differ** — against a before-vs-before control whose own noise floor was 1,230.
+
 ### UI cost (Chrome CPU profile of the real page; Chrome == WebView2's engine)
 
 - Front page **11.1%** of a core — floor with every animation loop disabled: **0.54%**.
@@ -126,7 +140,10 @@ result 2–5×.
 
 ## 5. WHAT IS OPEN
 
-1. **Memory — landed but NOT yet verified by a build.** Stem rings (−1,009 MB), capture ring
+1. **Memory — DONE and verified (fb497): 18,688 MB → 12,065 MB.** What remains is the *ratchet*:
+   `releaseResources()` (PluginProcessor.cpp ~6845) never frees the stem/capture rings, and
+   **`ModalEngine` allocates waveguide delay lines for EVERY voice in the constructor**
+   (SynthVoice.h:5253). Those two are the next memory targets. Original note follows — Stem rings (−1,009 MB), capture ring
    (−202 MB) and the wavetable bank (−107 MB) are now lazily allocated. **Build and re-measure**
    `/usr/bin/time -l auval -v aumu Tern Wvcr` (macOS) or the Windows equivalent. Trade-offs the
    agent recorded honestly: audio played before the plugin window has *ever* been opened is not
