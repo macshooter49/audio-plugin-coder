@@ -1,0 +1,96 @@
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+#  TERRAIN — WINDOWS BUILD ON EVERY PUSH
+#
+#  Why this exists. Every Windows fix so far has cost a round trip: I ship a commit, Max clones,
+#  waits 10-20 minutes for MSVC, and pastes the error back. That loop is the bottleneck, not the
+#  bugs. A Windows runner compiles the same commit within minutes of the push, so:
+#    · MSVC's errors land in a log I can read myself
+#    · Max downloads a FINISHED .vst3 from the run page — no clone, no PowerShell, no rebuild
+#    · pluginval runs on Windows, catching Windows-only runtime faults before he ever sees them
+#
+#  The two Windows-specific setup steps mirror scripts/windows-quickstart.ps1 exactly: JUCE needs
+#  the WebView2 SDK (a NuGet package, which is just a zip) and the fb480 retry-cap patch.
+# ══════════════════════════════════════════════════════════════════════════════════════════════
+name: Terrain Windows
+
+on:
+  push:
+    branches: [windows-test]
+    paths:
+      - 'plugins/TerrainInstrument/**'
+      - '_tools/**'
+      - 'scripts/juce-webview2-failure-cap.patch'
+      - '.github/workflows/terrain-windows.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 120
+    steps:
+      - name: Checkout (with submodules — JUCE, visage, signalsmith)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Show which build this is
+        shell: pwsh
+        run: |
+          $line = (Select-String -Path plugins/TerrainInstrument/Source/ui/public/index.html -Pattern "TERRAIN_BUILD = 'fb").Line
+          Write-Host "STAMP: $line"
+
+      - name: Fetch the WebView2 SDK
+        shell: pwsh
+        run: |
+          # JUCE's FindWebView2 wants a folder CONTAINING a Microsoft.Web.WebView2* directory.
+          # A .nupkg is a zip, so no NuGet tooling is needed.
+          $ver = '1.0.3485.44'
+          $dir = "$env:GITHUB_WORKSPACE\nuget\Microsoft.Web.WebView2.$ver"
+          New-Item -ItemType Directory -Path $dir -Force | Out-Null
+          Invoke-WebRequest -UseBasicParsing "https://www.nuget.org/api/v2/package/Microsoft.Web.WebView2/$ver" -OutFile webview2.zip
+          Expand-Archive -Path webview2.zip -DestinationPath $dir -Force
+          if (-not (Test-Path "$dir\build\native\x64\WebView2LoaderStatic.lib")) { throw "WebView2 SDK did not unpack as expected" }
+          "WV2=$env:GITHUB_WORKSPACE/nuget" >> $env:GITHUB_ENV
+
+      - name: Apply the JUCE WebView2 retry-cap patch (fb480)
+        shell: pwsh
+        run: |
+          # Idempotent: --reverse --check succeeds only if it is already applied.
+          cmd /c "git -C _tools\JUCE apply --reverse --check ..\..\scripts\juce-webview2-failure-cap.patch 2>nul"
+          if ($LASTEXITCODE -eq 0) { Write-Host "already applied" }
+          else {
+            git -C _tools\JUCE apply ../../scripts/juce-webview2-failure-cap.patch
+            if ($LASTEXITCODE -ne 0) { throw "the JUCE patch no longer applies" }
+            Write-Host "applied"
+          }
+
+      - name: Configure
+        shell: pwsh
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64 -D "JUCE_WEBVIEW2_PACKAGE_LOCATION=$env:WV2"
+
+      - name: Build VST3
+        shell: pwsh
+        run: cmake --build build --config Release --target TerrainInstrument_VST3 -- /m
+
+      - name: Build Standalone
+        shell: pwsh
+        run: cmake --build build --config Release --target TerrainInstrument_Standalone -- /m
+
+      - name: Validate on Windows (pluginval)
+        shell: pwsh
+        continue-on-error: true    # reported, never blocks the artifact
+        run: |
+          Invoke-WebRequest -UseBasicParsing https://github.com/Tracktion/pluginval/releases/download/v1.0.3/pluginval_Windows.zip -OutFile pv.zip
+          Expand-Archive pv.zip -DestinationPath pv -Force
+          $vst3 = Get-ChildItem -Recurse -Filter "Terrain Instrument.vst3" build | Select-Object -First 1
+          Write-Host "validating $($vst3.FullName)"
+          & .\pv\pluginval.exe --strictness-level 5 --validate "$($vst3.FullName)"
+
+      - name: Upload the plugin
+        uses: actions/upload-artifact@v4
+        with:
+          name: TerrainInstrument-windows-vst3
+          path: |
+            build/plugins/TerrainInstrument/TerrainInstrument_artefacts/Release/VST3/**
+            build/plugins/TerrainInstrument/TerrainInstrument_artefacts/Release/Standalone/**
+          if-no-files-found: error
