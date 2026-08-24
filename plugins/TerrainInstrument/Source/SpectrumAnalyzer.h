@@ -4,6 +4,7 @@
 #include <juce_dsp/juce_dsp.h>
 #include <atomic>
 #include <array>
+#include <cstring>   // fb488 — memcpy in the snapshot
 
 //==============================================================================
 // SpectrumAnalyzer
@@ -37,47 +38,64 @@ public:
 
     void reset()
     {
-        writePos = 0;
-        hopCounter = 0;
-        std::fill (timeData.begin(), timeData.end(), 0.0f);
+        writeCount.store (0, std::memory_order_relaxed);
+        lastFftCount = 0;
+        std::fill (ring.begin(), ring.end(), 0.0f);
         for (auto& b : magBuffers) b.fill (0.0f);
         readyIndex.store (-1, std::memory_order_release);
     }
 
-    // Push one mono sample (L+R sum already done by caller). Audio thread.
-    // Uses a circular buffer + hop-based FFT for 75% overlap so the visual
-    // spectrum updates ~47x/sec instead of ~12x/sec at sr=48 kHz.
+    // AUDIO THREAD — one store and one counter bump. THAT IS ALL.
+    // fb488: this used to run the whole analysis INSIDE the real-time callback — every 1024
+    // samples it zero-filled a 32 KB stack array, copied 4096 samples one at a time through a
+    // modulo, windowed them and ran a 4096-point FFT, x2 analysers, ~94 times a second. On Apple
+    // that FFT is vDSP; on Windows juce::dsp::FFT falls back to its own implementation, so the
+    // cost landed on the audio thread of every Windows host — which is exactly why Max's FL
+    // meter read 36% with one sine and no notes WHENEVER THE EDITOR WAS OPEN, and ran like water
+    // when it was closed. The transform now happens in update(), on the message thread, on
+    // demand. Nothing about the published data changes.
     void pushSample (float monoSample) noexcept
     {
-        timeData[(size_t) writePos] = monoSample;
-        writePos = (writePos + 1) % FFT_SIZE;
+        const uint64_t w = writeCount.load (std::memory_order_relaxed);
+        ring[(size_t) (w & (uint64_t) (FFT_SIZE - 1))] = monoSample;
+        writeCount.store (w + 1, std::memory_order_release);
+    }
 
-        if (++hopCounter >= HOP_SIZE)
-        {
-            hopCounter = 0;
+    // MESSAGE THREAD — compute a frame if at least HOP_SIZE new samples have arrived since the
+    // last one. The editor calls this only while a consumer is actually on screen, so a hidden
+    // spectrum now costs literally nothing anywhere.
+    //
+    // The snapshot races the writer by design: the audio thread's next write lands exactly at the
+    // OLDEST sample of our window, and a Hann window multiplies that edge by ~0 — so the raced
+    // samples cannot influence the spectrum. No lock, no copy on the audio thread.
+    void update() noexcept
+    {
+        const uint64_t w = writeCount.load (std::memory_order_acquire);
+        if (w < (uint64_t) FFT_SIZE) return;                    // not enough history yet
+        if (w - lastFftCount < (uint64_t) HOP_SIZE) return;     // nothing new enough to redraw
+        lastFftCount = w;
 
-            // Choose a write buffer that isn't the currently-published one.
-            const int published = readyIndex.load (std::memory_order_acquire);
-            int writeIdx = nextBuf;
-            if (writeIdx == published) writeIdx = (writeIdx + 1) % NUM_BUFS;
-            nextBuf = (writeIdx + 1) % NUM_BUFS;
+        const int published = readyIndex.load (std::memory_order_acquire);
+        int writeIdx = nextBuf;
+        if (writeIdx == published) writeIdx = (writeIdx + 1) % NUM_BUFS;
+        nextBuf = (writeIdx + 1) % NUM_BUFS;
 
-            // Copy from circular buffer into FFT work area, oldest-first.
-            // After a write, writePos points at the *oldest* sample in the ring.
-            std::array<float, FFT_SIZE * 2> work {};
-            for (int i = 0; i < FFT_SIZE; ++i)
-                work[(size_t) i] = timeData[(size_t) ((writePos + i) % FFT_SIZE)];
-            window.multiplyWithWindowingTable (work.data(), FFT_SIZE);
-            fft.performFrequencyOnlyForwardTransform (work.data());
+        // newest FFT_SIZE samples, oldest-first, as two contiguous runs (no per-sample modulo)
+        const size_t start    = (size_t) (w & (uint64_t) (FFT_SIZE - 1));
+        const size_t firstRun = (size_t) FFT_SIZE - start;
+        std::memcpy (work.data(), ring.data() + start, firstRun * sizeof (float));
+        if (start > 0) std::memcpy (work.data() + firstRun, ring.data(), start * sizeof (float));
+        std::fill (work.begin() + FFT_SIZE, work.end(), 0.0f);   // the transform's scratch half
 
-            // Copy magnitudes into the chosen buffer, normalize.
-            const float scale = 1.0f / (float) FFT_SIZE;
-            auto& dst = magBuffers[(size_t) writeIdx];
-            for (int i = 0; i < NUM_BINS; ++i) dst[(size_t) i] = work[(size_t) i] * scale;
+        window.multiplyWithWindowingTable (work.data(), FFT_SIZE);
+        fft.performFrequencyOnlyForwardTransform (work.data());
 
-            readyIndex.store (writeIdx, std::memory_order_release);
-            frameCounter.fetch_add (1, std::memory_order_release);   // fb342 — publish count for the editor's fresh-frame gate
-        }
+        const float scale = 1.0f / (float) FFT_SIZE;
+        auto& dst = magBuffers[(size_t) writeIdx];
+        for (int i = 0; i < NUM_BINS; ++i) dst[(size_t) i] = work[(size_t) i] * scale;
+
+        readyIndex.store (writeIdx, std::memory_order_release);
+        frameCounter.fetch_add (1, std::memory_order_release);   // fb342 — the editor's fresh-frame gate
     }
 
     // UI thread. Returns pointer to NUM_BINS floats, or nullptr if no frame yet.
@@ -98,9 +116,10 @@ private:
     juce::dsp::FFT fft;
     juce::dsp::WindowingFunction<float> window;
 
-    std::array<float, FFT_SIZE> timeData {};
-    int writePos = 0;
-    int hopCounter = 0;
+    std::array<float, FFT_SIZE>     ring {};        // fb488 — audio thread writes, message thread snapshots
+    std::array<float, FFT_SIZE * 2> work {};        // fb488 — a MEMBER: no 32 KB stack zero-fill per frame
+    std::atomic<uint64_t> writeCount { 0 };
+    uint64_t lastFftCount = 0;                      // message thread only
     int nextBuf  = 0;
     std::atomic<uint32_t> frameCounter { 0 };   // fb342 — see frameSeq()
 

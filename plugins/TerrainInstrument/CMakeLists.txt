@@ -101,8 +101,14 @@ target_link_libraries(TerrainInstrument
 #    A PRIVATE definition would cover the library and miss the wrappers.
 if (MSVC)
     target_compile_definitions(TerrainInstrument PUBLIC _USE_MATH_DEFINES)
-    target_compile_options(TerrainInstrument PUBLIC /bigobj /utf-8)
-    message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj + /utf-8")
+    #  fb488 — /arch:AVX. CMake's Release default for MSVC is bare /O2, which targets the SSE2
+    #  baseline: every DSP loop was auto-vectorised 128 bits at a time (or not at all) while the
+    #  Mac gets clang + NEON. AVX is Sandy Bridge (2011) — older than any machine that can run a
+    #  modern DAW — so this raises no practical floor. Deliberately NOT /fp:fast: it lets MSVC
+    #  assume no NaN/Inf, and this codebase's std::isfinite guards are LOAD-BEARING (a NaN token
+    #  printed into a viz frame kills every segment after it — the fb214 class of bug).
+    target_compile_options(TerrainInstrument PUBLIC /bigobj /utf-8 /arch:AVX)
+    message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj + /utf-8 + /arch:AVX")
 endif()
 
 # fb467 — Source/WtFft.h calls vDSP directly (the wavetable bake's transform: 19.1 ms -> 2.3 ms).

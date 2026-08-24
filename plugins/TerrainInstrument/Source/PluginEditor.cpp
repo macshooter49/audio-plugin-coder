@@ -6079,6 +6079,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // frames keep publishing, so the next tick after a flip always passes gate 2.
     {
         const int   pg     = audioProcessor.uiPage.load (std::memory_order_relaxed);
+        // fb488 — run the transform HERE (message thread), and only when something shows it.
+        if (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed))
+        {
+            audioProcessor.analyzerPre.update();
+            audioProcessor.analyzerPost.update();
+        }
         const auto  seqPre  = audioProcessor.analyzerPre.frameSeq();
         const auto  seqPost = audioProcessor.analyzerPost.frameSeq();
         // fb342 review — fltExtOpen_ ORs in: the floating .filt-ext overlay outlives page

@@ -283,10 +283,30 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // unless the message thread actually stalls.
     stallBeacon_ = std::make_unique<std::thread> ([this]
     {
-        uint32_t last = 0; int stalledMs = 0;
+        uint32_t last = 0; int stalledMs = 0; int cpuTick = 0;   // fb488
         while (! beaconStop_.load (std::memory_order_relaxed))
         {
             std::this_thread::sleep_for (std::chrono::milliseconds (500));
+            if ((++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
+            {
+                const double tks = (double) dspTicks_.exchange (0, std::memory_order_relaxed);
+                const double smp = (double) dspSamples_.exchange (0, std::memory_order_relaxed);
+                const double sr  = getSampleRate();
+                if (smp > 0.0 && sr > 0.0)
+                {
+                    const double dspSec = tks / (double) juce::Time::getHighResolutionTicksPerSecond();
+                    const double audSec = smp / sr;
+                    juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("terrain-cpu.txt")
+                        .replaceWithText (juce::String::formatted (
+                            "DSP %.1f%% of one core | bakes %u | frames %u acks %u | lastFrame %u B\n",
+                            100.0 * dspSec / audSec,
+                            (unsigned) bakeCount_.load (std::memory_order_relaxed),
+                            (unsigned) dbgFramesSent_.load (std::memory_order_relaxed),
+                            (unsigned) dbgAcks_.load (std::memory_order_relaxed),
+                            (unsigned) dbgLastFrameB_.load (std::memory_order_relaxed)));
+                }
+            }
             const uint32_t now = mtHeartbeat_.load (std::memory_order_relaxed);
             if (now != last) { last = now; stalledMs = 0; continue; }
             stalledMs += 500;
@@ -7111,6 +7131,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     const auto numChannels = buffer.getNumChannels();
 
     if (numSamples == 0) return;
+
+    // fb488 — DSP load meter (see PluginProcessor.h). Scope guard so every return path counts.
+    struct DspClock
+    {
+        TerrainInstrumentAudioProcessor& p; int n; long long t0;
+        DspClock (TerrainInstrumentAudioProcessor& pp, int nn)
+            : p (pp), n (nn), t0 ((long long) juce::Time::getHighResolutionTicks()) {}
+        ~DspClock()
+        {
+            p.dspTicks_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - t0, std::memory_order_relaxed);
+            p.dspSamples_.fetch_add (n, std::memory_order_relaxed);
+        }
+    } dspClock_ { *this, numSamples };
 
     // fb484 — standalone QWERTY-to-MIDI: drain the key-note ring into the normal MIDI stream.
     if (wrapperType == wrapperType_Standalone)

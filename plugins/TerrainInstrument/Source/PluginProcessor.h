@@ -981,6 +981,11 @@ public:
     std::atomic<uint32_t> dbgFramesSent_ { 0 };     // coalesced frames + keep-alives sent
     std::atomic<uint32_t> dbgAcks_       { 0 };     // completions that came back
     std::atomic<uint32_t> dbgLastFrameB_ { 0 };     // bytes of the last sent frame
+    // fb488 — DSP LOAD METER: processBlock's own time vs the audio time it produced. The beacon
+    // turns it into "% of one core" in %TEMP%\terrain-cpu.txt every 5 s, so a CPU report is a
+    // number instead of a guess.
+    std::atomic<long long> dspTicks_   { 0 };
+    std::atomic<long long> dspSamples_ { 0 };
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
