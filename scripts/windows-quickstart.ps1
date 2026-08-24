@@ -208,12 +208,16 @@ if (-not $wvrOk) {
 # a 3-attempt cap as a patch; apply it to the JUCE checkout (idempotent across re-runs).
 $patch = Join-Path $RepoDir 'scripts\juce-webview2-failure-cap.patch'
 $juceDir = Join-Path $RepoDir '_tools\JUCE'
-git -C $juceDir apply --reverse --check $patch 2>$null
+# The checks BELOW are expected to fail on stderr (that is how "not applied yet" reads), and
+# PowerShell 5.1 turns redirected native stderr into script-killing error records. cmd /c keeps
+# git's stderr inside cmd, so PowerShell only ever sees the exit code.
+cmd /c "git -C ""$juceDir"" apply --reverse --check ""$patch"" 2>nul"
 if ($LASTEXITCODE -eq 0) { Good 'JUCE freeze patch already applied' }
 else {
-    git -C $juceDir apply --check $patch 2>$null
+    cmd /c "git -C ""$juceDir"" apply --check ""$patch"" 2>nul"
     if ($LASTEXITCODE -ne 0) { Die 'The JUCE freeze patch no longer applies -- send this line back.' }
-    git -C $juceDir apply $patch
+    cmd /c "git -C ""$juceDir"" apply ""$patch"" 2>nul"
+    if ($LASTEXITCODE -ne 0) { Die 'Applying the JUCE freeze patch failed -- send this line back.' }
     Good 'JUCE freeze patch applied'
 }
 
