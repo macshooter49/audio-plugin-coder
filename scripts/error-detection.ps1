@@ -126,7 +126,7 @@ function Apply-KnownSolution {
 
 param([System.Collections.Hashtable]$Issue)
 
-    Write-Host "📚 Applying solution for: $($Issue.Title)" -ForegroundColor Cyan
+    Write-Host " Applying solution for: $($Issue.Title)" -ForegroundColor Cyan
 
     if ($Issue.Solution) {
         Write-Host "Solution:" -ForegroundColor Yellow
@@ -153,10 +153,10 @@ param([System.Collections.Hashtable]$Issue)
             try {
                 $commandBlock = $commands -join "`n"
                 Invoke-Expression $commandBlock
-                Write-Host "✅ Automated fix applied successfully" -ForegroundColor Green
+                Write-Host "[ok] Automated fix applied successfully" -ForegroundColor Green
             }
             catch {
-                Write-Host "❌ Automated fix failed: $($_.Exception.Message)" -ForegroundColor Red
+                Write-Host "[X] Automated fix failed: $($_.Exception.Message)" -ForegroundColor Red
                 Write-Host "Manual intervention required" -ForegroundColor Yellow
             }
         }
@@ -167,7 +167,7 @@ param([System.Collections.Hashtable]$Issue)
 
 function New-IssueFromError ([array]$Errors, [string]$BuildOutput) {
 
-    Write-Host "🔍 Auto-capturing new issue..." -ForegroundColor Yellow
+    Write-Host " Auto-capturing new issue..." -ForegroundColor Yellow
 
     # Generate issue ID
     $category = if ($Errors[0].Category) { $Errors[0].Category } else { "build" }
@@ -212,7 +212,7 @@ function New-IssueFromError ([array]$Errors, [string]$BuildOutput) {
             $errorDetails += "- **$($err.Pattern)**: $($err.Line)" + [Environment]::NewLine
         }
 
-        $templateContent = $templateContent -replace "## 💡 Root Cause", ($errorDetails + [Environment]::NewLine + "## 💡 Root Cause")
+        $templateContent = $templateContent -replace "## TIP: Root Cause", ($errorDetails + [Environment]::NewLine + "## TIP: Root Cause")
 
         Set-Content -Path ".kilocode/troubleshooting/resolutions/$newId.md" -Value $templateContent
     }

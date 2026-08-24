@@ -37,7 +37,7 @@ function Test-StateManagementSystem {
 
     try {
         . $modulePath
-        Write-Host "✓ Module loaded successfully" -ForegroundColor Green
+        Write-Host "[ok] Module loaded successfully" -ForegroundColor Green
     } catch {
         Write-Error "Failed to load module: $($_.Exception.Message)"
         return $false
@@ -60,7 +60,7 @@ function Test-StateManagementSystem {
     try {
         $jsonContent = Get-Content $templatePath -Raw
         $template = $jsonContent | ConvertFrom-Json
-        Write-Host "✓ Template loaded successfully" -ForegroundColor Green
+        Write-Host "[ok] Template loaded successfully" -ForegroundColor Green
     } catch {
         Write-Error "Failed to load template: $($_.Exception.Message)"
         return $false
@@ -82,7 +82,7 @@ function Test-StateManagementSystem {
             return $false
         }
     }
-    Write-Host "✓ All required fields present" -ForegroundColor Green
+    Write-Host "[ok] All required fields present" -ForegroundColor Green
 
     # 4. Test Function Availability
     Write-Host "4. Testing function availability..." -ForegroundColor Yellow
@@ -98,7 +98,7 @@ function Test-StateManagementSystem {
             return $false
         }
     }
-    Write-Host "✓ All functions available" -ForegroundColor Green
+    Write-Host "[ok] All functions available" -ForegroundColor Green
 
     # 5. Test Plugin State Creation
     Write-Host "5. Testing plugin state creation..." -ForegroundColor Yellow
@@ -106,7 +106,7 @@ function Test-StateManagementSystem {
     
     # Clean previous run
     if (Test-Path $testPluginPath) { 
-        Write-Host "  Cleanling old test data..." -ForegroundColor Gray
+        Write-Host " Cleanling old test data..." -ForegroundColor Gray
         Remove-Item $testPluginPath -Recurse -Force -ErrorAction SilentlyContinue
     }
     New-Item -ItemType Directory -Path $testPluginPath -Force | Out-Null
@@ -124,7 +124,7 @@ function Test-StateManagementSystem {
              return $false
         }
 
-        Write-Host "✓ Plugin state created" -ForegroundColor Green
+        Write-Host "[ok] Plugin state created" -ForegroundColor Green
     } catch {
         Write-Error "Failed to create state: $($_.Exception.Message)"
         return $false
@@ -151,7 +151,7 @@ function Test-StateManagementSystem {
             return $false
         }
 
-        Write-Host "✓ State updated successfully" -ForegroundColor Green
+        Write-Host "[ok] State updated successfully" -ForegroundColor Green
     } catch {
         Write-Error "Failed to update state: $($_.Exception.Message)"
         return $false
@@ -165,7 +165,7 @@ function Test-StateManagementSystem {
             Write-Error "State validation failed (Should have passed)"
             return $false
         }
-        Write-Host "✓ State validation passed" -ForegroundColor Green
+        Write-Host "[ok] State validation passed" -ForegroundColor Green
     } catch {
         Write-Error "State validation error: $($_.Exception.Message)"
         return $false
@@ -179,7 +179,7 @@ function Test-StateManagementSystem {
             Write-Error "Backup failed to produce a file"
             return $false
         }
-        Write-Host "✓ Backup created: $backupFile" -ForegroundColor Green
+        Write-Host "[ok] Backup created: $backupFile" -ForegroundColor Green
         
         # Test restore
         $restoreResult = Restore-PluginState -PluginPath $testPluginPath -BackupFile $backupFile
@@ -187,7 +187,7 @@ function Test-StateManagementSystem {
             Write-Error "Restore-PluginState returned false"
             return $false
         }
-        Write-Host "✓ Restore successful" -ForegroundColor Green
+        Write-Host "[ok] Restore successful" -ForegroundColor Green
     } catch {
         Write-Error "Backup/restore error: $($_.Exception.Message)"
         return $false
@@ -207,7 +207,7 @@ function Test-StateManagementSystem {
             Write-Error "Error not logged in status.json"
             return $false
         }
-        Write-Host "✓ Error recovery working" -ForegroundColor Green
+        Write-Host "[ok] Error recovery working" -ForegroundColor Green
     } catch {
         Write-Error "Error recovery test failed: $($_.Exception.Message)"
         return $false
@@ -231,7 +231,7 @@ function Test-StateManagementSystem {
             Write-Error "Framework not set correctly. Expected 'visage', got '$($state.ui_framework)'"
             return $false
         }
-        Write-Host "✓ Framework selection working" -ForegroundColor Green
+        Write-Host "[ok] Framework selection working" -ForegroundColor Green
     } catch {
         Write-Error "Framework selection error: $($_.Exception.Message)"
         return $false
@@ -253,7 +253,7 @@ function Test-StateManagementSystem {
     if (Test-Path $testPluginPath) {
         try {
             Remove-Item $testPluginPath -Recurse -Force -ErrorAction Stop
-            Write-Host "✓ Cleanup complete" -ForegroundColor Green
+            Write-Host "[ok] Cleanup complete" -ForegroundColor Green
         } catch {
             Write-Warning "Could not fully remove test directory. (File lock persists). Manual cleanup required for: $testPluginPath"
         }

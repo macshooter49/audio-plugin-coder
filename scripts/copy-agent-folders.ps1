@@ -132,8 +132,8 @@ Write-Host "Copy operation completed." -ForegroundColor Green
 if ($Verbose) {
     Write-Host ""
     Write-Host "Summary:" -ForegroundColor Yellow
-    Write-Host "- .claude → .kilocode" -ForegroundColor Gray
-    Write-Host "- .claude → .agent" -ForegroundColor Gray
+    Write-Host "- .claude -> .kilocode" -ForegroundColor Gray
+    Write-Host "- .claude -> .agent" -ForegroundColor Gray
     Write-Host ""
     Write-Host "This allows the same skills, rules, guides, and workflows" -ForegroundColor Gray
     Write-Host "to work with different AI agents that expect different folder structures." -ForegroundColor Gray

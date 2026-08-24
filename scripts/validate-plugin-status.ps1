@@ -23,14 +23,14 @@ function Test-PluginStatusAccuracy {
 
     $statusPath = Join-Path $PluginPath "status.json"
     if (-not (Test-Path $statusPath)) {
-        Write-Host "  ✗ No status.json found" -ForegroundColor Red
+        Write-Host "  [X] No status.json found" -ForegroundColor Red
         return $false
     }
 
     try {
         $status = Get-Content $statusPath -Raw | ConvertFrom-Json
     } catch {
-        Write-Host "  ✗ Invalid JSON in status.json" -ForegroundColor Red
+        Write-Host "  [X] Invalid JSON in status.json" -ForegroundColor Red
         return $false
     }
 
@@ -74,10 +74,10 @@ function Test-PluginStatusAccuracy {
     }
 
     if ($issues.Count -eq 0) {
-        Write-Host "  ✓ Status accurate and schema compliant" -ForegroundColor Green
+        Write-Host "  [ok] Status accurate and schema compliant" -ForegroundColor Green
         return $true
     } else {
-        Write-Host "  ✗ Issues found:" -ForegroundColor Red
+        Write-Host "  [X] Issues found:" -ForegroundColor Red
         foreach ($issue in $issues) {
             Write-Host "    - $issue" -ForegroundColor Red
         }

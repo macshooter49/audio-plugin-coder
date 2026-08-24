@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Terrain Instrument — one-command Windows setup. Installs what is missing, clones, builds, runs.
+    Terrain Instrument -- one-command Windows setup. Installs what is missing, clones, builds, runs.
 .DESCRIPTION
     Written for a machine that has never built this project. Every step announces what it is doing
     and why, checks that it worked, and stops with a plain-English message if it did not.
@@ -9,6 +9,20 @@
     powershell -ExecutionPolicy Bypass -File .\windows-quickstart.ps1
 .EXAMPLE
     powershell -ExecutionPolicy Bypass -File .\windows-quickstart.ps1 -InstallPlugin
+
+.NOTES
+    *** THIS FILE MUST STAY PURE ASCII. DO NOT ADD BOX-DRAWING OR TYPOGRAPHIC DASHES. ***
+
+    Windows PowerShell 5.1 -- which is what ships with Windows and what runs this -- reads a .ps1
+    with NO byte-order mark as Windows-1252, not UTF-8. A UTF-8 em dash is the three bytes
+    E2 80 94, and CP1252 renders that third byte as U+201D, a RIGHT DOUBLE QUOTATION MARK, which
+    PowerShell accepts as a STRING DELIMITER. So every pretty dash silently opens or closes a
+    string and the parser then fails somewhere else entirely with "Missing closing '}'".
+
+    This actually happened: 487 such characters in the comment banners took the whole script down
+    at a brace 80 lines away from any of them, and it passed both a character-balance check and a
+    hand-written UTF-8 tokenizer, because both read the file the way it was WRITTEN rather than the
+    way PowerShell READS it. Pure ASCII is immune to the question.
 #>
 [CmdletBinding()]
 param(
@@ -50,11 +64,11 @@ function Get-VsState {
 }
 
 Write-Host ''
-Write-Host '  TERRAIN INSTRUMENT — WINDOWS SETUP' -ForegroundColor White
+Write-Host '  TERRAIN INSTRUMENT -- WINDOWS SETUP' -ForegroundColor White
 Write-Host '  This will install what is missing, fetch the code, build it, and open it.' -ForegroundColor DarkGray
 Write-Host '  The first build takes 10-20 minutes. Everything after that is quick.' -ForegroundColor DarkGray
 
-# ── 1. PREREQUISITES ─────────────────────────────────────────────────────────────────────────
+# -- 1. PREREQUISITES -------------------------------------------------------------------------
 Say '1/6  Checking what you already have'
 $needGit   = -not (Have git)
 $needCMake = -not (Have cmake)
@@ -81,7 +95,7 @@ This is the usual mistake and it is a two-minute fix:
   4. Click 'Modify' to install it (a few GB, several minutes)
   5. Run this script again
 
-(Installing Visual Studio again would not help — Windows already considers it installed, so it
+(Installing Visual Studio again would not help -- Windows already considers it installed, so it
 would add nothing. The workload has to be added through the Installer.)
 "@
 }
@@ -119,7 +133,7 @@ Install these by hand, then run this script again:
             Die @"
 Installing Visual Studio failed (winget exit $LASTEXITCODE).
 
-Do it by hand instead — it is reliable and not hard:
+Do it by hand instead -- it is reliable and not hard:
   1. Go to https://visualstudio.microsoft.com/downloads
   2. Download Visual Studio 2022 COMMUNITY (free)
   3. In the installer, tick 'Desktop development with C++'   <-- required
@@ -138,7 +152,7 @@ It will skip everything it just installed and carry straight on.
 "@
 } else { Say '2/6  Nothing to install' ; Good 'All three tools present' }
 
-# ── 3. THE CODE ──────────────────────────────────────────────────────────────────────────────
+# -- 3. THE CODE ------------------------------------------------------------------------------
 Say '3/6  Fetching the code'
 # A short root path matters: Windows gives up past 260 characters and this project nests deeply.
 if ($Root -match '\s') { Die "The folder '$Root' contains a space. Use a path without spaces, e.g. -Root C:\dev" }
@@ -146,7 +160,7 @@ if (-not (Test-Path $Root)) { New-Item -ItemType Directory -Path $Root -Force | 
 git config --global core.longpaths true 2>$null | Out-Null
 
 if (Test-Path (Join-Path $RepoDir '.git')) {
-    Note 'Already cloned — updating instead'
+    Note 'Already cloned -- updating instead'
     Push-Location $RepoDir
     git fetch origin $Branch  ; if ($LASTEXITCODE -ne 0) { Pop-Location; Die 'git fetch failed. Are you online?' }
     git checkout $Branch      ; if ($LASTEXITCODE -ne 0) { Pop-Location; Die "Could not switch to branch '$Branch'." }
@@ -155,7 +169,7 @@ if (Test-Path (Join-Path $RepoDir '.git')) {
     Pop-Location
 } elseif (Test-Path $RepoDir) {
     # A folder is there but it is not a git checkout. git clone would refuse with "destination path
-    # already exists", and the old message blamed the network — the wrong diagnosis entirely.
+    # already exists", and the old message blamed the network -- the wrong diagnosis entirely.
     Die @"
 The folder already exists but is not a git checkout:
   $RepoDir
@@ -178,14 +192,14 @@ if (-not (Test-Path (Join-Path $RepoDir '_tools\JUCE\CMakeLists.txt'))) {
 }
 Good 'Code and libraries are in place'
 
-# ── 4. CONFIGURE ─────────────────────────────────────────────────────────────────────────────
+# -- 4. CONFIGURE -----------------------------------------------------------------------------
 Say '4/6  Setting up the build (a minute or two)'
 Push-Location $RepoDir
 cmake -S . -B build -G 'Visual Studio 17 2022' -A x64
 if ($LASTEXITCODE -ne 0) { Pop-Location; Die 'CMake could not set the build up. The error is in the text above.' }
 Good 'Build configured'
 
-# ── 5. BUILD ─────────────────────────────────────────────────────────────────────────────────
+# -- 5. BUILD ---------------------------------------------------------------------------------
 Say '5/6  Building the standalone app  --  THIS IS THE SLOW ONE, 10-20 minutes'
 Note 'Pages of scrolling text are normal. Only lines containing the word "error" matter.'
 cmake --build build --config Release --target TerrainInstrument_Standalone
@@ -199,10 +213,10 @@ Say '6/6  Building the VST3 plugin (much quicker now)'
 cmake --build build --config Release --target TerrainInstrument_VST3
 $vstOk = ($LASTEXITCODE -eq 0)
 $vst3  = Join-Path $RepoDir "$Artefact\VST3\Terrain Instrument.vst3"
-if ($vstOk -and (Test-Path $vst3)) { Good 'VST3 built' } else { Note 'The VST3 did not build, but the standalone did — that is still a successful test of the synth.' }
+if ($vstOk -and (Test-Path $vst3)) { Good 'VST3 built' } else { Note 'The VST3 did not build, but the standalone did -- that is still a successful test of the synth.' }
 Pop-Location
 
-# ── OPTIONAL INSTALL ─────────────────────────────────────────────────────────────────────────
+# -- OPTIONAL INSTALL -------------------------------------------------------------------------
 if ($InstallPlugin -and $vstOk -and (Test-Path $vst3)) {
     Say 'Installing the VST3 for your DAW'
     $me = [Security.Principal.WindowsPrincipal]::new([Security.Principal.WindowsIdentity]::GetCurrent())
@@ -214,11 +228,11 @@ if ($InstallPlugin -and $vstOk -and (Test-Path $vst3)) {
     } else {
         if (-not (Test-Path $dest)) { New-Item -ItemType Directory -Path $dest -Force | Out-Null }
         Copy-Item -LiteralPath $vst3 -Destination $dest -Recurse -Force
-        Good "Installed to $dest — rescan plugins in your DAW"
+        Good "Installed to $dest -- rescan plugins in your DAW"
     }
 }
 
-# ── DONE ─────────────────────────────────────────────────────────────────────────────────────
+# -- DONE -------------------------------------------------------------------------------------
 Write-Host ''
 Write-Host '  BUILT.' -ForegroundColor Green
 Write-Host "  Opening the synth now. If the window appears, Terrain works on Windows." -ForegroundColor White
