@@ -206,6 +206,36 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   const r6 = await pg.evaluate(()=>({ toast: typeof window.__tiToast }));
   chk(r6.toast==='function','C5  the toast the EQ calls when it runs out of bands is DEFINED','typeof __tiToast = '+r6.toast);
 
+  // ── C6 — fb470: a free band can be a LOW CUT, and the choice is normalised by the PARAM's
+  //        cardinality (8), not by the menu's length (5). fb373 is this exact bug: a choice
+  //        normalised by the dropdown's option count selected a different entry for four rounds
+  //        of green measurement. 1/7 = 0.1429 is Low Cut; 1/4 = 0.25 would be High Cut.
+  const r7 = await pg.evaluate(()=>{
+    const core=document.querySelector('.fxr-core[data-core="eqz"]'), svg=core.querySelector('svg');
+    const D=window.__fxDevs(), d=D.find(z=>z.core==='eqz'); const out={};
+    // turn a free band on and let it draw
+    d.xb[0][0]=50; d.xb[0][1]=50; d.xb[0][2]=1;
+    window.__EQFEED.on=[1,1,1,1,1,0,0,0]; window.__syncFeed(d);
+    for(let i=0;i<8;i++) window.__fx4Tick();
+    const n=core.querySelector('.eqz-n[data-b="4"]'); out.visible=n.getAttribute('opacity')!=='0';
+    const r=svg.getBoundingClientRect();
+    const bx=r.left+(+n.getAttribute('cx'))/226*r.width, by=r.top+(+n.getAttribute('cy'))/78*r.height;
+    window.__W.length=0;
+    core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:bx,clientY:by}));
+    const cm=document.getElementById('syn-ctx-menu'); const rows=cm?[...cm.querySelectorAll('.syn-ctx-item')]:[];
+    out.rows=rows.map(x=>x.textContent.trim()).join('|');
+    const lc=rows.find(x=>/Low Cut/.test(x.textContent));
+    if(lc) lc.click();
+    out.writes=window.__W.filter(w=>/X1SH/.test(w[0])).map(w=>w[0]+'='+(+w[1]).toFixed(4)).join(',');
+    out.model=d.xsh?d.xsh[0]:null;
+    try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
+    return out; });
+  chk(r7.visible===true, 'C6  an added band is visible on the card', 'opacity!=0');
+  chk(/Low Cut/.test(r7.rows||'') && /High Cut/.test(r7.rows||''),
+      'C6  a free band\'s right-click offers Low Cut and High Cut', r7.rows);
+  chk(r7.writes==='SYN_EQZ_X1SH=0.1429' && r7.model===1,
+      'C6  picking Low Cut writes 1/7, not 1/4 (fb373: normalise by the PARAM)', r7.writes+' model='+r7.model);
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();
   process.exit(fail?1:0);

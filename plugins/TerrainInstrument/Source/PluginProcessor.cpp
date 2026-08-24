@@ -4349,6 +4349,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             const juce::StringArray ottChars { "Straight Up","Sharp Ears","Long Ears","Wide Corner","One Detector","Slow Low","Twice Deep","Full Crest" };
             // The four SECOND dropdowns. R6: never `Type` — that is the header pill, and fb418
             // removed exactly this duplicate from three devices. Each changes PHYSICS.
+            // fb470 — a free band's shape. Bell is index 0 so every existing patch is unchanged.
+            const juce::StringArray eqzShapes { "Bell","Low Cut","High Cut","Low Shelf","High Shelf",
+                                                "Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray eqzFocus  { "Stereo","Mid","Side","Left","Right",
                                                 "Reserved 6","Reserved 7","Reserved 8" };
             const juce::StringArray widField  { "Straight","Alternate","Orbit","Swap","Side Only","Gather",
@@ -4388,6 +4391,14 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                         F (p + "X" + juce::String (k) + "HZ", d + "Band " + juce::String (k + 4) + " Hz", 0.50f);
                         F (p + "X" + juce::String (k),        d + "Band " + juce::String (k + 4),         0.50f);
                         B (p + "X" + juce::String (k) + "ON", d + "Band " + juce::String (k + 4) + " On", false);
+                        // fb470 — each free band's SHAPE. Max: "I can't even make a low cut or a high cut"
+                        //   — and he was right, this device had bells and shelves on every Type and no cut
+                        //   of any kind. A cut is 24 dB/oct (the fourth-order Butterworth pair), which is
+                        //   what Serum 2 uses on its spectral Lo/Hi markers [M2 p.108]; the node's wheel
+                        //   rides the first section, so the detent is an exact Butterworth and turning it
+                        //   up adds corner resonance rather than bending the slope.
+                        C (p + "X" + juce::String (k) + "SH", d + "Band " + juce::String (k + 4) + " Shape",
+                           eqzShapes, 0);
                     }
                     // fb441 — PER-BAND Q (the wheel on a node). 0.5 = x1 = the Type's Q law, bit-exact; 0 = x1/8, 1 = x8.
                     //   Node-only like the free bells' positions: Q is still not a back knob (the chassis rule), but a
@@ -5828,6 +5839,8 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                     q.x5 = V.x[4]->load(); q.x6 = V.x[5]->load(); q.x7 = V.x[6]->load(); q.x8 = V.x[7]->load();
                     q.xOn1 = V.xon[0] != nullptr && V.xon[0]->load() > 0.5f;  q.xOn2 = V.xon[1] != nullptr && V.xon[1]->load() > 0.5f;
                     q.xOn3 = V.xon[2] != nullptr && V.xon[2]->load() > 0.5f;  q.xOn4 = V.xon[3] != nullptr && V.xon[3]->load() > 0.5f;
+                    q.sh1 = V.xsh[0] ? (int) V.xsh[0]->load() : 0;  q.sh2 = V.xsh[1] ? (int) V.xsh[1]->load() : 0;   // fb470
+                    q.sh3 = V.xsh[2] ? (int) V.xsh[2]->load() : 0;  q.sh4 = V.xsh[3] ? (int) V.xsh[3]->load() : 0;
                 }
                 if (V.q[0] != nullptr)   // fb441 — per-band Q
                 {
@@ -6020,6 +6033,7 @@ void TerrainInstrumentAudioProcessor::cacheFx4Refs()
                     v.x[2 * k]     = R (g + "X" + juce::String (k + 1) + "HZ");
                     v.x[2 * k + 1] = R (g + "X" + juce::String (k + 1));
                     v.xon[k]       = R (g + "X" + juce::String (k + 1) + "ON");
+                    v.xsh[k]       = R (g + "X" + juce::String (k + 1) + "SH");   // fb470
                     v.q[4 + k]     = R (g + "X" + juce::String (k + 1) + "Q");          // fb441 — free-bell Q
                 }
             if (d == 0)   // fb441 — the role bands' Q

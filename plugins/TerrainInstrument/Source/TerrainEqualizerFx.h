@@ -287,6 +287,10 @@ public:
         // an ON per band. Defaults: centre, 0 dB, OFF — a default device is the four role bands only.
         float x1=0.5f,x2=0.5f,x3=0.5f,x4=0.5f,x5=0.5f,x6=0.5f,x7=0.5f,x8=0.5f;
         bool  xOn1=false, xOn2=false, xOn3=false, xOn4=false;
+        // fb470 — each free band's SHAPE. 0 bell · 1 LOW CUT (high-pass) · 2 HIGH CUT (low-pass)
+        //   · 3 low shelf · 4 high shelf. Max: "I can't even make a low cut or a high cut" — this
+        //   device had no cut of any kind on any Type, only bells and shelves.
+        int   sh1=0, sh2=0, sh3=0, sh4=0;
         // fb441 — PER-BAND Q, the wheel on a node (Max: "scroll on a band... notches or slopes... it shouldn't
         //   affect any other band"). q1..q4 = Low/Body/Bite/Air, q5..q8 = the free bells. Each is a MULTIPLIER on
         //   top of the Type's Q law: 0.5 = x1 (bit-exact to the law), 0 = x1/8, 1 = x8 (three octaves of
@@ -401,9 +405,28 @@ public:
     //    response is forced to a horizontal tangent at Nyquist. That forcing is the whole
     //    of "digital EQ harshness". Used ONLY below fs/24, where the warp is < 0.1 dB and
     //    the design is far better conditioned than the matched fit.
+    /** fb470 — RBJ's LPF / HPF. Deliberately NOT routed through designRbj's gain test: a cut has no
+     *  gain, so "gDb is zero, return identity" would make every cut a bypass. */
+    static Coeffs designCut (int kind, double f0, double Q, double fs) noexcept
+    {
+        Coeffs c;
+        if (Q < 1e-4) Q = 1e-4;
+        const double w  = 6.283185307179586 * clampd (f0, 1.0, 0.45 * fs) / fs;
+        const double cw = std::cos (w), sw = std::sin (w);
+        const double al = sw / (2.0 * Q);
+        double b0, b1, b2;
+        if (kind == kKindLP) { b0 = (1.0 - cw) * 0.5; b1 =  (1.0 - cw); b2 = (1.0 - cw) * 0.5; }
+        else                 { b0 = (1.0 + cw) * 0.5; b1 = -(1.0 + cw); b2 = (1.0 + cw) * 0.5; }
+        const double a0 = 1.0 + al, a1 = -2.0 * cw, a2 = 1.0 - al;
+        const double ia = 1.0 / a0;
+        c.b0 = b0 * ia; c.b1 = b1 * ia; c.b2 = b2 * ia; c.a1 = a1 * ia; c.a2 = a2 * ia;
+        return c;
+    }
+
     static Coeffs designRbj (int kind, double f0, double Q, double gDb, double fs) noexcept
     {
         Coeffs c;
+        if (isCutKind (kind)) return designCut (kind, f0, Q, fs);
         if (gDb > -1e-12 && gDb < 1e-12) return c;
         if (Q < 1e-4) Q = 1e-4;
         const double A = std::pow (10.0, gDb / 40.0);
@@ -1049,6 +1072,8 @@ public:
         tg_[15]= clampf (p.x5, 0.0f, 1.0f);  tg_[16]= clampf (p.x6, 0.0f, 1.0f);
         tg_[17]= clampf (p.x7, 0.0f, 1.0f);  tg_[18]= clampf (p.x8, 0.0f, 1.0f);
         xOn_[0] = p.xOn1; xOn_[1] = p.xOn2; xOn_[2] = p.xOn3; xOn_[3] = p.xOn4;
+        xSh_[0] = clampi (p.sh1, 0, 4); xSh_[1] = clampi (p.sh2, 0, 4);   // fb470
+        xSh_[2] = clampi (p.sh3, 0, 4); xSh_[3] = clampi (p.sh4, 0, 4);
         tg_[19]= clampf (p.q1, 0.0f, 1.0f);  tg_[20]= clampf (p.q2, 0.0f, 1.0f);   // fb441 — per-band Q (roles)
         tg_[21]= clampf (p.q3, 0.0f, 1.0f);  tg_[22]= clampf (p.q4, 0.0f, 1.0f);
         tg_[23]= clampf (p.q5, 0.0f, 1.0f);  tg_[24]= clampf (p.q6, 0.0f, 1.0f);   // fb441 — per-band Q (free bells)
@@ -1157,9 +1182,18 @@ public:
 
 private:
     // ═════════════════════════════════════════════════════════════════════════
-    static constexpr int kNumStages = 13;                    // 4 bands x 2 + slant + 4 free bells (fb438)
+    // fb470 — 17, not 13. A free band can now be a LOW CUT or a HIGH CUT, and a cut worth having is
+    // 24 dB/oct — Serum 2's spectral Lo/Hi markers are a fourth-order Butterworth [M2 p.108], and a
+    // 12 dB/oct "low cut" is the thing people complain about rather than reach for. Stages 13..16 are
+    // the free bells' SECOND poles; they are only ever switched on for a cut.
+    static constexpr int kNumStages = 17;                    // 4 bands x 2 + slant + 4 free bells x 2
     static constexpr int kSlant = 8;
     static constexpr int kFree0 = 9;                         // fb438 — stages 9..12 are the free bells
+    static constexpr int kFree1 = 13;                        // fb470 — 13..16 are their second poles (cuts only)
+    // kind codes, extended: 0 bell · 1/2 shelves (2-pole) · 3/4 shelves (1-pole) · 5 slant
+    //                       6 HIGH-PASS (a LOW CUT) · 7 LOW-PASS (a HIGH CUT)
+    static constexpr int kKindHP = 6, kKindLP = 7;
+    static constexpr bool isCutKind (int k) noexcept { return k == kKindHP || k == kKindLP; }
     static constexpr int kNumSm = 27;                        // 11 + the free bells' 8 (fb438) + 8 per-band Q (fb441)
 
     struct Stage
@@ -1457,16 +1491,40 @@ private:
         //    scales them like every other gain; an OFF or 0 dB band is an OFF stage = bit-exact through.
         for (int k = 0; k < kNumFree; ++k)
         {
-            Stage& S = st_[kFree0 + k];
+            Stage& S  = st_[kFree0 + k];
+            Stage& S2 = st_[kFree1 + k];                       // fb470 — the cut's second pole
             const float tF = sm_[11 + 2 * k], tG = sm_[12 + 2 * k];
             const float fHz = clampf (20.0f * std::pow (1000.0f, tF), 20.0f, 0.45f * fs_);
             const float gDb = clampf ((tG * 2.0f - 1.0f) * kBandDbSpan * amount, -96.0f, kGainCeil);
-            const bool  live = xOn_[k] && std::fabs (gDb) > 1e-4f;
+            const int   sh  = xSh_[k];
+            const int   kd  = (sh == 1) ? kKindHP : (sh == 2) ? kKindLP : (sh == 3) ? 1 : (sh == 4) ? 2 : 0;
+            const bool  cut = isCutKind (kd);
+            // 🚨 A CUT IS LIVE AT ZERO GAIN. Every other shape here is switched off when its gain is
+            //    zero (an off stage is bit-exact through), but a cut HAS no gain — gating it the same
+            //    way would make it a permanent bypass.
+            const bool  live = xOn_[k] && (cut || std::fabs (gDb) > 1e-4f);
             float qf = clampf ((T.law == LawConstant ? widthMul (shape) : 1.0f) * qMulOf (sm_[23 + k]), kQMin, kQMax);   // fb441 — x the node's own width
-            qf = (float) usableQ (0, (double) fHz, (double) qf, (double) gDb, (double) fs_);
-            S.on = live; S.kind = 0; S.f = fHz; S.q = qf; S.g = gDb;
+            qf = (float) usableQ (kd, (double) fHz, (double) qf, (double) gDb, (double) fs_);
+            S.on = live; S.kind = kd; S.f = fHz; S.q = qf; S.g = gDb;
+            S2.on = false;
+            if (live && cut)
+            {   // 24 dB/oct: the fourth-order Butterworth Q pair, 0.5412 and 1.3066. The node's own
+                //   width (the wheel) rides the FIRST section only, so the wheel at its detent gives
+                //   an exact Butterworth and turning it up adds resonance at the corner instead of
+                //   detuning the slope. qf carries the wheel as a multiplier around 1.0.
+                // 🚨 the wheel is qMulOf() DIRECTLY — 1.0 at the detent — and NOT qf. qf carries the
+                //    Type's global Trait width on top, and a cut's slope is its ORDER, not the Type's
+                //    voicing; letting Trait in also made the pair multiply to 1.0 at the corner, so a
+                //    "Butterworth" read +0.00 dB there instead of -3.01 and the whole thing was a
+                //    third of a dB from looking correct while being a different filter.
+                const float wheel = qMulOf (sm_[23 + k]);
+                S.q  = clampf (0.54119610f * wheel, kQMin, kQMax);
+                S2.on = true; S2.kind = kd; S2.f = fHz; S2.g = 0.0f;
+                S2.q = clampf (1.30656296f, kQMin, kQMax);
+            }
             viz_.nodeHz[kNumBands + k] = fHz;
-            viz_.nodeDb[kNumBands + k] = xOn_[k] ? gDb : 0.0f;
+            // a cut has no gain to draw: its node rides the centre line and its CURVE is the shape
+            viz_.nodeDb[kNumBands + k] = (! xOn_[k] || cut) ? 0.0f : gDb;
             viz_.nodeOn[kNumBands + k] = xOn_[k];
             viz_.nodeQ[kNumBands + k]  = qf;                         // fb441
         }
@@ -1492,8 +1550,16 @@ private:
             }
             else if (S.f != S.lf || S.q != S.lq || S.g != S.lg)
             {
-                const Coeffs c = (S.kind >= 3) ? designOnePole (S.kind, (double) S.f, (double) S.g, (double) fs_)
-                                               : designBand    (S.kind, (double) S.f, (double) S.q, (double) S.g, (double) fs_);
+                // 🚨 fb470 — CUTS FIRST, and the order is the whole point. This dispatch used to be
+                //    `(S.kind >= 3) ? designOnePole : designBand`, and `>= 3` is an OPEN-ENDED
+                //    predicate: the moment kinds 6 and 7 existed they were silently swallowed by the
+                //    one-pole SHELF path, which with a cut's zero gain returns the identity. Every
+                //    cut measured EXACTLY 0.00 dB at every frequency — a Low Cut that was a perfect
+                //    bypass, with the engine, the parameter, the model and the menu all correct.
+                //    A new enum value must never be able to fall into an old branch by inequality.
+                const Coeffs c = isCutKind (S.kind) ? designCut     (S.kind, (double) S.f, (double) S.q, (double) fs_)
+                               : (S.kind >= 3)      ? designOnePole (S.kind, (double) S.f, (double) S.g, (double) fs_)
+                                                    : designBand    (S.kind, (double) S.f, (double) S.q, (double) S.g, (double) fs_);
                 S.tb0 = c.b0; S.tb1 = c.b1; S.tb2 = c.b2; S.ta1 = c.a1; S.ta2 = c.a2;
                 S.lf = S.f; S.lq = S.q; S.lg = S.g;
             }
@@ -1637,6 +1703,7 @@ private:
     float  lvlSm_ = 0.0f, lvlK_ = 0.01f;
     int    ctr_ = 0, curveCtr_ = 0, curveEvery_ = 800;
 
+    int    xSh_[kNumFree] {};        // fb470 — each free band's shape (see Params::sh1)
     Stage  st_[kNumStages];
     int    act_[kNumStages] {}; int nAct_ = 0;
 
