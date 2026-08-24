@@ -5827,7 +5827,16 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
         // ── EQUALIZER
         {
             const auto& V = eqzRefs_[(size_t) i];
-            if (V.power != nullptr && (V.power->load() > 0.5f || eqzEnv_[(size_t) i] > 1.0e-4f))
+            // 🚨 fb473 — ...OR THE CARD IS SIMPLY ON THE RACK. This used to push parameters only when
+            //    the device was POWERED, and TW_FX4_APPLY only processes when it is powered AND
+            //    ROUTED. viz_ is written solely from inside processStereo, so an EQ that was added
+            //    but not yet routed — which is EVERY new card, fxAdd boots them unrouted — drew this
+            //    struct's construction defaults for ever: a flat line and four dots parked at
+            //    100/550/3100/15500 Hz that nothing the user did could move. You cannot set up an EQ
+            //    you cannot see.
+            const bool eqzShown  = (V.active != nullptr && V.active->load() > 0.5f);
+            const bool eqzLive   = (V.power  != nullptr && (V.power->load() > 0.5f || eqzEnv_[(size_t) i] > 1.0e-4f));
+            if (V.power != nullptr && (eqzLive || eqzShown))
             {
                 tw::TerrainEqualizerFx::Params q;
                 q.type      = juce::jlimit (0, tw::TerrainEqualizerFx::kNumTypes - 1, (int) V.type->load());
@@ -5851,6 +5860,12 @@ void TerrainInstrumentAudioProcessor::pushFx3Params() noexcept
                     q.q5 = V.q[4]->load(); q.q6 = V.q[5]->load(); q.q7 = V.q[6]->load(); q.q8 = V.q[7]->load();
                 }
                 eqzPool_[(size_t) i].setParams (q);
+                // fb473 — if this instance will not process this block, recompute its DISPLAY here,
+                // on this thread, where nothing else can be touching the object. Measured 18.59 us
+                // per call, self-throttled to every 2nd block = 0.17 % of one core per idle card,
+                // and it stops the moment the card is routed and starts processing for real.
+                if (! (eqzLive && poolRouteAny_[(size_t) (kEqzSendBase + i)]))
+                    eqzPool_[(size_t) i].refreshVizIdle();
             }
         }
         // ── WIDEN.  ⚠️ Width 0.5 is EXACTLY neutral, not 0 — see the param declaration.

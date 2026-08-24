@@ -1086,6 +1086,33 @@ public:
     }
 
     // ── the block. IN-PLACE, wet+dry per Mix. ────────────────────────────────
+    /** fb473 — RECOMPUTE THE DISPLAY WITHOUT PROCESSING AUDIO.
+     *
+     *  An EQ that is on the rack but not yet ROUTED never reaches processStereo (TW_FX4_APPLY
+     *  returns early when poolRouteAny_ is false), and viz_ is written ONLY from inside
+     *  processStereo — so the card drew this struct's construction defaults for ever: a flat line
+     *  and four dots parked at 100/550/3100/15500 Hz, unmoved by anything the user did. Every new
+     *  card boots unrouted, so that was the first thing anyone saw of a fresh EQ.
+     *
+     *  Called from the audio thread's own per-block parameter push, in the branch where this
+     *  instance will NOT process. Nothing else touches the object in that state, so there is no
+     *  race — which is exactly why this does not live on the message thread.
+     *
+     *  Snaps rather than glides: an idle device has nothing to ramp toward and the next block that
+     *  DOES process should start from the knobs, which is what seeded_ already promises. */
+    void refreshVizIdle() noexcept
+    {
+        if (--idleCtr_ > 0) return;
+        idleCtr_ = idleEvery_;
+        for (int i = 0; i < kNumSm; ++i) sm_[i] = tg_[i];
+        mixSm_ = mixTg_;
+        seeded_ = true;
+        resolve();
+        designAll (true);
+        pushCurve();
+        viz_.lvl = 0.0f;                 // it is not passing audio, and the card must not pretend
+    }
+
     void processStereo (float* L, float* R, int n) noexcept
     {
         if (L == nullptr || R == nullptr || n <= 0) return;
@@ -1702,6 +1729,7 @@ private:
     float  dip_ = 1.0f, dipDn_ = 0.1f, dipUp_ = 0.03f;
     float  lvlSm_ = 0.0f, lvlK_ = 0.01f;
     int    ctr_ = 0, curveCtr_ = 0, curveEvery_ = 800;
+    int    idleCtr_ = 1, idleEvery_ = 2;   // fb473 — refresh an IDLE card's display every 2nd block
 
     int    xSh_[kNumFree] {};        // fb470 — each free band's shape (see Params::sh1)
     Stage  st_[kNumStages];

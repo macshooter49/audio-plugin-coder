@@ -236,6 +236,31 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   chk(r7.writes==='SYN_EQZ_X1SH=0.1429' && r7.model===1,
       'C6  picking Low Cut writes 1/7, not 1/4 (fb373: normalise by the PARAM)', r7.writes+' model='+r7.model);
 
+  // ── C7 — fb473: a band's SHAPE is part of its state ───────────────────────────────────────
+  const r8 = await pg.evaluate(()=>{
+    const core=document.querySelector('.fxr-core[data-core="eqz"]'), svg=core.querySelector('svg');
+    const D=window.__fxDevs(), d=D.find(z=>z.core==='eqz'); const out={};
+    d.xsh[0]=2;                                   // pretend the slot was left as a High Cut
+    // a RESET must put it back to Bell
+    const n=core.querySelector('.eqz-n[data-b="4"]');
+    const r=svg.getBoundingClientRect();
+    const bx=r.left+(+n.getAttribute('cx'))/226*r.width, by=r.top+(+n.getAttribute('cy'))/78*r.height;
+    core.dispatchEvent(new MouseEvent('contextmenu',{bubbles:true,cancelable:true,clientX:bx,clientY:by}));
+    const cm=document.getElementById('syn-ctx-menu'); const rows=cm?[...cm.querySelectorAll('.syn-ctx-item')]:[];
+    const rb=rows.find(x=>/Reset band/.test(x.textContent)); if(rb) rb.click();
+    out.afterReset=d.xsh[0];
+    try{ if(window.__synHideMenu) window.__synHideMenu(); }catch(e){}
+    // and a freshly ADDED band must be a Bell even though the slot is recycled
+    d.xsh[0]=1; d.xb[0][2]=0;                     // slot 1 free again, but left as a Low Cut
+    const rr=svg.getBoundingClientRect();
+    core.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,
+      clientX:rr.left+0.62*rr.width, clientY:rr.top+0.5*rr.height}));
+    out.afterAdd=d.xsh[0]; out.addedOn=d.xb[0][2];
+    return out; });
+  chk(r8.afterReset===0, 'C7  Reset band restores the SHAPE to Bell', 'shape after reset = '+r8.afterReset);
+  chk(r8.addedOn===1 && r8.afterAdd===0, 'C7  a newly added band is a Bell, not the slot\'s last shape',
+      'on='+r8.addedOn+' shape='+r8.afterAdd);
+
   console.log('\n  PASS '+pass+'   FAIL '+fail+'\n');
   await b.close();
   process.exit(fail?1:0);
