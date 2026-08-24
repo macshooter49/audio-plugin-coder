@@ -5450,6 +5450,21 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             return;
     }   // fb483 -- arming moved to the single send at the end of this function
 
+    // fb486 — WHALE ALTERNATION (Windows). The frame's two heavy arrays — osc scope (~13 KB
+    // after the diet) and EQ analyzer (~22 KB) — take turns, so a sent frame carries at most
+    // one. 30 Hz for a dense waveform/spectrum is perceptually free, and lighter frames ack
+    // sooner, which RAISES the overall frame rate under fb482's self-clocking. The tiny idle
+    // park-push is NOT gated, so idle frames stay byte-identical and idle-skip keeps working.
+    // The Mac ships every frame whole, unchanged.
+   #if JUCE_WINDOWS
+    const bool pushScopeW = ((frameAlt_ & 1) == 0);
+    const bool pushEqW    = ! pushScopeW;
+    ++frameAlt_;
+   #else
+    constexpr bool pushScopeW = true;
+    constexpr bool pushEqW    = true;
+   #endif
+
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
     // (crisp re-raster) and magnification returns to 1. fb103: the page is told
     // the settled scale so every canvas re-buffers at TRUE device resolution.
@@ -5895,7 +5910,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         else                            { oscScopeStaleTicks_ = 0; lastOscScopeSeq_ = seqNow; }
         const bool feedStale = oscScopeStaleTicks_ > 15;   // ~250 ms @ 60 Hz
         const bool oscActive = audioProcessor.oscScopeActive.load(std::memory_order_relaxed) && ! feedStale;
-        if (oscActive)
+        if (oscActive && pushScopeW)   // fb486 whale gate (the park-push below is NOT gated)
         {
             // SPSC seqlock READ: snapshot the window into locals, retrying if the audio
             // thread published a new frame mid-copy (odd seq, or seq changed). Bounded so
@@ -5916,20 +5931,23 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 if (s0 == s1) break;                           // consistent snapshot
             }
             juce::String os;
-            os.preallocateBytes(40000);   // 4×1024 floats @3dp ≈ 30 KB (still well under the EQ push)
+            os.preallocateBytes(20000);   // fb486 -- 4×512 floats @2dp ≈ 11 KB (stride-2 diet)
             os << "try{if(window.updateOscScope){window.updateOscScope({";
             static const char* oscKey[4] = { "a", "b", "c", "d" };
             for (int o = 0; o < 4; ++o)
             {
                 os << oscKey[o] << ":[";
-                for (int s = 0; s < N; ++s)
+                // fb486 — stride-2 + 2 dp: the scope canvas is a few hundred px wide and ~150 px
+                // tall, so 512 points at 0.01 resolution is at or beyond what a pixel can show.
+                // sr is advertised at HALF below so spp = sr/hz and the scroll advance stay EXACT.
+                for (int s = 0; s < N; s += 2)
                 {
                     if (s > 0) os << ",";
-                    os << SF(win[o][s], 3);
+                    os << SF(win[o][s], 2);
                 }
                 os << "],";
             }
-            os << "hz:" << SF(oscHz, 3) << ",sr:" << SF(oscSr, 1)
+            os << "hz:" << SF(oscHz, 3) << ",sr:" << SF(oscSr * 0.5f, 1)   // fb486 -- half: the window is stride-2 decimated
                << ",nv:" << audioProcessor.oscScopeNv.load(std::memory_order_relaxed)
                << ",lv:" << SF(audioProcessor.oscScopeLv.load(std::memory_order_relaxed), 3)
                << ",tl:" << (audioProcessor.oscScopeTail.load(std::memory_order_relaxed) ? 1 : 0)
@@ -5953,7 +5971,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                << ",active:true});}}catch(e){}";
             js << os;
         }
-        else
+        else if (! oscActive)
         {
             js << "try{if(window.updateOscScope){window.updateOscScope({active:false"
                << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4)
@@ -6069,14 +6087,14 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         const bool  fresh   = (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_);
         const float* preBins  = audioProcessor.analyzerPre.readLatest();
         const float* postBins = audioProcessor.analyzerPost.readLatest();
-        if (wanted && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)
+        if (pushEqW && wanted && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)   // fb486 whale gate
         {
             eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost;
             // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});
             // ~80 KB string at 60 Hz. Modern WebView handles it.
             // VIZ-BULLETPROOF — sanitize like the main tick string: a NaN bin (filter
             // blowup under hot FM) would print 'nan' = ReferenceError = dead EQ eval.
-            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 6); };
+            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 3); };   // fb486 -- 3 dp: sub-pixel on a ~700 px curve, half the bytes of 6
             juce::String s;
             s.preallocateBytes (96 * 1024);   // fb342 — was 4096 unreserved += appends
             s << "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";

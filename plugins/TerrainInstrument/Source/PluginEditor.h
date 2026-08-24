@@ -1485,6 +1485,7 @@ private:
     double           evalSentMs_ = 0.0;
     uint64_t         lastFrameHash_ = 0;   // fb483 -- idle-skip: hash of the last SENT frame
     int              idleSkips_     = 0;   // frames skipped since; every 30th sends a keep-alive
+    int              frameAlt_      = 0;   // fb486 -- Windows whale alternation (scope/EQ take turns)
     juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)
 
     // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals
