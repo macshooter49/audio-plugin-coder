@@ -1483,6 +1483,8 @@ private:
     // queueing -- queued work outranks mouse input on Windows, which read as "major LAG".
     std::atomic<int> evalInFlight_ { 0 };
     double           evalSentMs_ = 0.0;
+    uint64_t         lastFrameHash_ = 0;   // fb483 -- idle-skip: hash of the last SENT frame
+    int              idleSkips_     = 0;   // frames skipped since; every 30th sends a keep-alive
     juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)
 
     // CHANNEL WATCHDOG (wd9) — the WKWebView eval channel can die silently (evals

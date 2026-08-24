@@ -5427,9 +5427,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         const double bpNow = juce::Time::getMillisecondCounterHiRes();
         if (evalInFlight_.load (std::memory_order_relaxed) != 0 && bpNow - evalSentMs_ < 500.0)
             return;
-        evalInFlight_.store (1, std::memory_order_relaxed);
-        evalSentMs_ = bpNow;
-    }
+    }   // fb483 -- arming moved to the single send at the end of this function
 
     // fb102 — settle: after the drag stops, pageZoom takes the real scale
     // (crisp re-raster) and magnification returns to 1. fb103: the page is told
@@ -5509,10 +5507,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // re-enters the existing RESTORE machinery so all UI state re-pushes after the reload.
     const double wdNowMs = juce::Time::getMillisecondCounterHiRes();
     if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
-    webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;",
-                                 [this] (juce::WebBrowserComponent::EvaluationResult)
-                                 { lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
-                                   evalInFlight_.store (0, std::memory_order_relaxed); });   // fb482 -- frame acknowledged
+    // fb483 -- the heartbeat JS now rides the FRONT of the coalesced frame; its completion (the
+    // single send at the end of this function) is both the fb482 ack and this watchdog's food.
     if (wdNowMs - lastEvalOkMs_ > 3000.0 && wdNowMs - lastRecoveryMs_ > 10000.0)
     {
         ++channelRecoveries_;
@@ -5565,6 +5561,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // never take down the segments after it. The osc scope sits LAST in this chain and used
     // to die whenever anything upstream threw.
     juce::String js;
+    js << "window.__tickT=(window.performance&&performance.now)?performance.now():0;";   // fb483 heartbeat rides first
+    juce::String* frameOut = &js;   // fb483 -- reachable inside blocks that shadow the name js
     js << "try{if(window.updateVisualization){"
        << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
     js << "try{if(window.updateTapeLoopState){"
@@ -5985,10 +5983,10 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     }
 
     js << "try{window.__terrainRecovered=" << channelRecoveries_ << ";}catch(e){}";
-    webView->evaluateJavascript(js);
+    // fb483 -- no mid-frame send; the frame accumulates and ships ONCE at the end
 
     // Only save AFTER the page has signaled ready (prevents overwriting stored state with defaults)
-    if (pageReady && (modStateTickCount % 5 == 0))
+    if (pageReady && (modStateTickCount % 15 == 0)   /* fb483 -- 4 Hz is plenty for close-persistence */)
     {
         webView->evaluateJavascript(
             "typeof serializeModState==='function'?serializeModState():''",
@@ -6071,7 +6069,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             s += "],sr:";   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
             s << juce::String (audioProcessor.getSampleRate(), 1);
             s += "});}catch(e){}";
-            webView->evaluateJavascript (s, nullptr);
+            js << s;   // fb483 coalesced
         }
     }
 
@@ -6192,7 +6190,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                         }
                         js << juce::Base64::toBase64 (bright.getData(), bright.getSize())
                            << "'," << IW << "," << IH << ");}catch(e){}";
-                        webView->evaluateJavascript (js, nullptr);
+                        *frameOut << js;   // fb483 coalesced (js here is the block-local image string)
                         geodeImgStore_[o]     = store;
                         geodeImgParams_[o]    = gp;
                         geodeImgCooldown_[o]  = 10;    // ≥ ~166ms between bright re-bakes on knob drags
@@ -6204,7 +6202,38 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 s += "]}";
             }
             s += "});}catch(e){}";
-            if (anyOn) webView->evaluateJavascript (s, nullptr);
+            if (anyOn) js << s;   // fb483 coalesced
+        }
+    }
+    // fb483 — ONE HOP PER FRAME + IDLE-SKIP. Everything above appended into js; ship it as a
+    // single evaluateJavascript whose completion is the fb482 backpressure acknowledgment AND
+    // wd9's proof-of-life. A frame byte-identical to the last (idle: no notes, no knob moving,
+    // nothing free-runs) sends NOTHING — the renderer parses zero script at idle — except a
+    // keep-alive every 30 ticks so wd9 and the ack loop stay fed. Never skipped before
+    // pageReady: the RESTORE pushes must repeat until the page can eat them.
+    {
+        uint64_t fh = 1469598103934665603ULL;
+        for (const char* q = js.toRawUTF8(); *q != 0; ++q)
+            fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;
+        const bool identical = pageReady && fh == lastFrameHash_;
+        auto ack = [this] (juce::WebBrowserComponent::EvaluationResult)
+        {
+            lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
+            evalInFlight_.store (0, std::memory_order_relaxed);
+        };
+        if (! identical)
+        {
+            lastFrameHash_ = fh; idleSkips_ = 0;
+            evalInFlight_.store (1, std::memory_order_relaxed);
+            evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
+            webView->evaluateJavascript (js, ack);
+        }
+        else if (++idleSkips_ >= 30)
+        {
+            idleSkips_ = 0;
+            evalInFlight_.store (1, std::memory_order_relaxed);
+            evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
+            webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;", ack);
         }
     }
 }
