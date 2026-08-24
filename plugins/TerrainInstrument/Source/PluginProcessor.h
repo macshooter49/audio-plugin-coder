@@ -1271,9 +1271,23 @@ public:
     // reads the whole buffer + writeIndex on export; one-sample tear at the
     // wrap boundary is inaudible.
     static constexpr int kStemSeconds = 600;  // 10 min rolling history per layer (user request)
-    // NOTE: 600s x 4 layers x stereo x float32 @ 48k ~= 921 MB allocated in
-    // prepareToPlay. Heavy but user-accepted. If RAM becomes an issue, switch
-    // to int16 storage (halves it) or lazy per-layer allocation on sample load.
+    //
+    // fb496 — LAZY ARM. 600 s x 5 rings x stereo x float32 @ 44.1k is ~1,058 MB, and
+    // prepareToPlay used to pay ALL of it, unconditionally, on every instance.
+    //
+    // 🔑 THE RINGS WERE PROVABLY DEAD UNTIL A SAMPLE WAS LOADED. The per-layer write
+    // is inside the render loop, BELOW `if (! layer.hasSample()) continue;` — so a
+    // layer with no sample never wrote one byte, and exportStemToFile/dragStem only
+    // ever offer a populated layer. So arming on the first loaded sample (see
+    // ensureStemBuffersAllocated, driven from timerCallback = message thread) leaves
+    // the CONTENT of every ring identical to what it was before: the empty prologue
+    // is the only thing that stops being allocated.
+    //
+    // 🚨 totalSize IS THE PUBLICATION FLAG, and that is why it is an atomic. The
+    // audio thread tests it before it touches ring/writeIndex, so it is stored 0
+    // BEFORE setSize and stored non-zero (release) only AFTER the ring is sized,
+    // cleared and its cursors reset. An audio thread that sees non-zero is
+    // guaranteed to see a finished ring behind it. Nothing ever un-arms mid-audio.
     struct StemBuffer
     {
         juce::AudioBuffer<float> ring;
@@ -1283,7 +1297,7 @@ public:
         // and exports unwrap the full 10-min rolling window; below totalSize, the
         // export only writes the actual captured portion (no silent pad).
         std::atomic<int>         samplesWritten { 0 };
-        int                      totalSize  { 0 };  // ring.getNumSamples()
+        std::atomic<int>         totalSize  { 0 };  // ring.getNumSamples(); 0 = not armed
     };
     std::array<StemBuffer, 4> stemBuffers;
     // 5th ring: post-FX master output (the final mixed-through-effects signal).
@@ -1291,6 +1305,24 @@ public:
     // per-sample energy ratios to attribute master_fx back to each layer.
     StemBuffer masterFxBuffer;
     void allocateStemBuffers (double sampleRate);
+    // fb496 — lazy-arm plumbing. MESSAGE THREAD ONLY (it allocates ~1 GB).
+    // Idempotent: after the first successful arm it is a single relaxed load.
+    // Public so the stem UI can arm explicitly the moment it is wired up.
+    void ensureStemBuffersAllocated();
+    bool areStemBuffersArmed() const noexcept
+        { return stemBuffersArmed_.load (std::memory_order_acquire); }
+    // fb496 — the Export ring (RollingCaptureBuffer, ~202 MB) is armed the first time
+    // an editor is created: exportCapture() is reachable from the UI and nowhere else,
+    // and the "N seconds captured" readout is only drawn while an editor exists.
+    void ensureCaptureBufferAllocated();
+    std::atomic<bool>   stemBuffersArmed_ { false };
+    // Latched by ensureCaptureBufferAllocated(). It is a REQUEST, not the arm itself:
+    // a host may create the editor BEFORE the first prepareToPlay, and then there is no
+    // sample rate to size the ring with yet — prepareToPlay honours the request instead.
+    std::atomic<bool>   captureArmRequested_ { false };
+    // The sample rate the host last prepared us at — the rate a lazy arm must use.
+    // 0 until the first prepareToPlay; arming before that is deferred, not guessed.
+    std::atomic<double> preparedSampleRate_ { 0.0 };
     void writeToStemBuffer (int layerIdx, const float* L, const float* R, int numSamples);
     void writeToMasterFxRing (const float* L, const float* R, int numSamples);
     // Export. layerIdx in [0..3] = single stem. dest is the chosen folder.
@@ -1590,8 +1622,34 @@ private:
         }
         slot.audioReadingIdx.store (-1, std::memory_order_release);
         if (imp != nullptr) return imp;
-        return wavetableBank.getTable (presetIdx);
+        // fb496 — the bank builds its factory tables lazily now (see WavetableBank.h).
+        // prepareToPlay and setStateInformation prefetch all four osc presets, so the
+        // ONLY way to arrive here on an unbuilt table is a preset changed while audio
+        // runs, and then only until the next 60 Hz tick. Rather than take the bank's
+        // Sine fallback for those few ms, hold the table this osc was ALREADY playing —
+        // so the change lands one tick late instead of blipping to a sine.
+        // bankLastGood_ is written ONLY here, and wavetableForOsc is called only from
+        // processBlock, so it is plain audio-thread-local state (no atomic needed).
+        if (const auto* built = wavetableBank.getTableIfBuilt (presetIdx))
+        {
+            bankLastGood_[(size_t) osc] = built;
+            return built;
+        }
+        if (bankLastGood_[(size_t) osc] != nullptr) return bankLastGood_[(size_t) osc];
+        return wavetableBank.getTable (presetIdx);   // first block ever: Sine, never null
     }
+
+    // Audio-thread-only: the last built bank table each osc actually used. See above.
+    const tw::Wavetable* bankLastGood_[4] { nullptr, nullptr, nullptr, nullptr };
+
+    /** fb496 — build the factory tables the four oscs currently point at.
+        MESSAGE THREAD ONLY (2.5 ms per table it actually has to build).
+        `budget` caps how many tables one call may build: prepareToPlay and
+        setStateInformation pass 4 (neither is realtime, and a preset load must be
+        complete before the first block); timerCallback passes 1 so a tick can never
+        cost more than the morph rebuild that already lives in it. Returns how many
+        it built. */
+    int prefetchOscWavetables (int budget);
 
     // ── GEODE resynthesis analysis (Engine::SPEC) ────────────────────────
     // Heavy STFT peak-track analysis runs on the message thread (timerCallback) into a

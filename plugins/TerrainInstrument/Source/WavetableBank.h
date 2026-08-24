@@ -1,11 +1,38 @@
 // WavetableBank.h — owns all wavetables indexed by enum.
-// Constructed once at PluginProcessor startup (heavy — generates ~750KB+
-// of data on the constructor call). SynthVoices hold a `const Wavetable*`
-// into the bank's storage; the bank outlives all voices.
+// SynthVoices hold a `const Wavetable*` into the bank's storage; the bank
+// outlives all voices.
+//
+// fb496 — LAZY PER TABLE. The constructor used to build all 30 factory tables
+// eagerly. MEASURED (Tests harness, M2 Max): 128.38 MB and 81.4 ms, per plugin
+// instance, of which a patch can only ever SOUND four (one per osc) — and the
+// bank is a plain member, so four Terrains paid it four times over.
+// One table costs 4.36 MB / 2.5 ms, so the four a patch actually uses are
+// ~17 MB: a ~111 MB saving per instance with the identical audio.
+//
+// 🚨 WHY THE BANK IS NOT A SHARED GLOBAL INSTEAD. It is NOT immutable after
+// construction: PluginProcessor::wavetableForBlurTwin() const_casts a bank
+// table and the message thread WRITES its blur twin into it (fb469). A static
+// shared across instances would put two processors' message-thread work on one
+// object — the exact class of bug the fb444/setDistortionTableSrc comment was
+// left behind for. Lazy-per-table gets most of the memory with none of that.
+//
+// 🔑 THE BUILD IS MESSAGE-THREAD ONLY; getTable() NEVER BUILDS. A table costs
+// 2.5 ms and an allocation, which is a dropout on the audio thread. So:
+//   · ensureBuilt()  — message thread, idempotent, mutex-guarded, builds.
+//   · getTable()     — any thread, wait-free: one acquire load. If the table
+//                      is not built yet it hands back Sine (always built in the
+//                      ctor) rather than a null or a half-built table.
+// The processor prefetches the four osc presets from prepareToPlay and
+// setStateInformation (synchronously — neither is realtime) and tops up one per
+// 60 Hz timer tick, so the audio thread finding an unbuilt table is confined to
+// the <=16.7 ms after a LIVE preset change; wavetableForOsc() covers even that
+// by holding the osc's previous table instead of the Sine fallback.
 #pragma once
 
 #include "Wavetable.h"
 #include <array>
+#include <atomic>
+#include <mutex>
 
 namespace tw
 {
@@ -57,76 +84,56 @@ namespace tw
 
         WavetableBank()
         {
-            // ── Phase 11l — 30 total spec-based wavetables ────────────────────
+            // fb496 — the 30 buildFromSpec() calls that used to live here (81.4 ms, 128.38 MB)
+            // are gone; the per-preset maker mapping they carried is specForPreset() below,
+            // which was already declared the single source of truth for it and validated to
+            // round-trip every preset to its bank table. buildOne() goes through THAT, so a
+            // lazily built table is the byte-identical table the ctor used to build.
             //
-            // Basic (4): 4 fundamental waveforms (Phase 10a, unchanged)
-            tables_[(size_t) Sine]          .buildFromSpec (Wavetable::makeSineSpec());
-            tables_[(size_t) Triangle]      .buildFromSpec (Wavetable::makeTriangleSpec());
-            tables_[(size_t) Square]        .buildFromSpec (Wavetable::makeSquareSpec());
-            tables_[(size_t) Pulse]         .buildFromSpec (Wavetable::makePulseSpec());
-
-            // Analog (6): Phase 11l research-driven — each circuit-grounded and distinct
-            // ProphetSaw: SSM 2030 even-harmonic boost + soft taper (vintage→modern bright)
-            tables_[(size_t) ProphetSaw]    .buildFromSpec (Wavetable::makeProphetSawSpec());
-            // JupiterPWM: Pure pulse-wave formula with authentic harmonic nulls (hollow→narrow)
-            tables_[(size_t) JupiterPWM]    .buildFromSpec (Wavetable::makeJupiterPWMSpec());
-            // MoogSqr: Near-square DC-leakage + even harmonics grow quadratically (square→fat saw)
-            tables_[(size_t) MoogSqr]       .buildFromSpec (Wavetable::makeMoogSqrSpec());
-            // OBXSaw: Gaussian rolloff above h=22 + serial VCA distortion on h=2,3 (clean→gritty)
-            tables_[(size_t) OBXSaw]        .buildFromSpec (Wavetable::makeOBXSawSpec());
-            // CS80Brass: Bandpass formant (HPF reduces h=1,2; bell-curve at h=4-7; dual-VCO scatter)
-            tables_[(size_t) CS80Brass]     .buildFromSpec (Wavetable::makeCS80BrassSpec());
-            // JunoStr: Zero scatter at frame 0 (DCO stability), sub-osc grows, chorus scatter grows
-            tables_[(size_t) JunoStr]       .buildFromSpec (Wavetable::makeJunoStrSpec());
-
-            // Digital (4): Phase 11l research-driven
-            // PPGWave: migrating formant scan + 8-bit grit (spec-based, band-limited)
-            tables_[(size_t) PPGWave]       .buildFromSpec (Wavetable::makePPGWaveSpec());
-            // DX7EP: REAL Algorithm-5 FM (Bessel sidebands, index decay) — spec-based, band-limited
-            tables_[(size_t) DX7EP]         .buildFromSpec (Wavetable::makeDX7EPSpec());
-            // D50Bell: tuned-bell inharmonic partials, strike->sustain decay — spec-based, band-limited
-            tables_[(size_t) D50Bell]       .buildFromSpec (Wavetable::makeD50BellSpec());
-            // M1Piano: stiff-string stretched partials (B=0.0005) — spec-based, band-limited
-            tables_[(size_t) M1Piano]       .buildFromSpec (Wavetable::makeM1PianoSpec());
-
-            // Vocal (3): Phase 11l research-driven — Lorentzian formants (Peterson & Barney 1952)
-            // ChoirAtoO: /a/→/o/ sweep, singer's formant ring, Lorentzian resonance (spec-based)
-            tables_[(size_t) ChoirAtoO]     .buildFromSpec (Wavetable::makeChoirAtoOSpec());
-            // Whisper: Formant-shaped noise (randomized phases = incoherent = noise-like) (spec-based)
-            tables_[(size_t) Whisper]       .buildFromSpec (Wavetable::makeWhisperSpec());
-            // VowelMorph: A→E→I→O→U with /i/→/o/ as most dramatic transition (spec-based)
-            tables_[(size_t) VowelMorph]    .buildFromSpec (Wavetable::makeVowelMorphSpec());
-
-            // Metallic (3): Phase 11l research-driven — physics-based partial ratios
-            // BowedMetal: Vibraphone h=1:4:10 exact integers, bow-lift sweep (spec-based)
-            tables_[(size_t) BowedMetal]    .buildFromSpec (Wavetable::makeBowedMetalSpec());
-            // GlassHarmonics: Free-free bowl modes, h=3 for 2.756× (537¢ error — pending 10c)
-            tables_[(size_t) GlassHarmonics].buildFromSpec (Wavetable::makeGlassHarmonicsSpec());
-            // Railroad: Euler-Bernoulli decay sweep, h=3 for 2.756× (537¢ error — pending 10c)
-            tables_[(size_t) Railroad]      .buildFromSpec (Wavetable::makeRailroadSpec());
-
-            // Experimental (4): Phase 11l research-driven — all spec-based, all distinct process
-            // Dustbowl: 78rpm degradation (LP cutoff + mid-band shellac noise + varispeed jitter)
-            tables_[(size_t) Dustbowl]      .buildFromSpec (Wavetable::makeDustbowlSpec());
-            // StaticEvolve: Static → choir /a/ formant narrative (noise→tone with phase collapse)
-            tables_[(size_t) StaticEvolve]  .buildFromSpec (Wavetable::makeStaticEvolveSpec());
-            // SpectralDrift: IDENTICAL amplitude spectrum, phases drift 0→random (psychoacoustic)
-            tables_[(size_t) SpectralDrift] .buildFromSpec (Wavetable::makeSpectralDriftSpec());
-            // SerumHD: Gaussian center h=3→45 with t^1.5, 20% even boost (brightest in bank)
-            tables_[(size_t) SerumHD]       .buildFromSpec (Wavetable::makeSerumHDSpec());
-
-            // Morph (6): Phase 11h/11j — unchanged
-            tables_[(size_t) Rise]          .buildFromSpec (Wavetable::makeHarmonicRiseSpec());
-            tables_[(size_t) OddEven]       .buildFromSpec (Wavetable::makeOddEvenSpec());
-            tables_[(size_t) PhaseDrift]    .buildFromSpec (Wavetable::makePhaseDriftSpec());
-            tables_[(size_t) SpectralSweep] .buildFromSpec (Wavetable::makeSpectralSweepSpec());
-            tables_[(size_t) FormantRise]   .buildFromSpec (Wavetable::makeFormantRiseSpec());
-            tables_[(size_t) HarmonicSeries].buildFromSpec (Wavetable::makeHarmonicSeriesSpec());
+            // Sine is the one exception: it is built eagerly because it is both preset 0 (the
+            // out-of-range answer getTable() has always given) and the fallback an audio thread
+            // gets if it beats the message thread to a table. 4.36 MB, 2.5 ms.
+            for (auto& b : built_) b.store (false, std::memory_order_relaxed);   // belt-and-braces
+            buildOne (Sine);
         }
 
+        /** Build `preset` if it is not built yet. MESSAGE THREAD ONLY — 2.5 ms and an
+            allocation per table. Idempotent and safe to call every tick. The mutex is
+            never taken by the audio thread (getTable does one atomic load), so it cannot
+            invert priority against the RT path. */
+        void ensureBuilt (int preset)
+        {
+            if (preset < 0 || preset >= kNumPresets) return;
+            if (built_[(size_t) preset].load (std::memory_order_acquire)) return;
+            const std::lock_guard<std::mutex> lock (buildLock_);
+            buildOne (preset);
+        }
+
+        /** True once `preset` has been built. Wait-free — used to decide whether a prefetch
+            still owes work, and by the audio thread to spot a table it must not touch yet. */
+        bool isBuilt (int preset) const noexcept
+        {
+            if (preset < 0 || preset >= kNumPresets) return false;
+            return built_[(size_t) preset].load (std::memory_order_acquire);
+        }
+
+        /** The table if it is built, else nullptr. Wait-free; callable from the audio thread.
+            Callers that can hold a previous table (wavetableForOsc) prefer this over getTable
+            so a live preset change never drops to Sine. */
+        const Wavetable* getTableIfBuilt (int preset) const noexcept
+        {
+            if (preset < 0 || preset >= kNumPresets) return nullptr;
+            if (! built_[(size_t) preset].load (std::memory_order_acquire)) return nullptr;
+            return &tables_[(size_t) preset];
+        }
+
+        /** Wait-free, any thread, NEVER builds and NEVER returns null — the contract every
+            existing caller was written against. An unbuilt table answers Sine (preset 0),
+            which is exactly what an out-of-range preset has always answered. */
         const Wavetable* getTable (int preset) const noexcept
         {
             if (preset < 0 || preset >= kNumPresets) return &tables_[0];
+            if (! built_[(size_t) preset].load (std::memory_order_acquire)) return &tables_[0];
             return &tables_[(size_t) preset];
         }
 
@@ -174,6 +181,20 @@ namespace tw
         }
 
     private:
-        std::array<Wavetable, kNumPresets> tables_;
+        /** The actual build. Caller holds buildLock_ (or is the ctor, pre-publication).
+            🔑 built_ is stored with RELEASE and read with ACQUIRE, and it is stored LAST —
+            an audio thread that sees `true` is guaranteed to see the finished table behind
+            it. Nothing ever un-builds a table, so the pointer can never go stale. */
+        void buildOne (int preset)
+        {
+            const size_t i = (size_t) preset;
+            if (built_[i].load (std::memory_order_relaxed)) return;   // re-check under the lock
+            tables_[i].buildFromSpec (specForPreset (preset));
+            built_[i].store (true, std::memory_order_release);        // publish LAST
+        }
+
+        std::array<Wavetable, kNumPresets>       tables_;
+        std::array<std::atomic<bool>, kNumPresets> built_ {};   // value-init → all false
+        std::mutex                               buildLock_;
     };
 }

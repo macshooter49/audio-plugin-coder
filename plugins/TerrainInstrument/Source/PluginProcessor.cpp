@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include <cstdlib>   // fb496 — std::getenv for the TERRAIN_CPU_PROBE gate
 
 // fb178 — mono-tap DAHDSR forwarding (mirrors SynthVoice::setEnvelopeDAHDSR's mapping)
 static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a, float h,
@@ -284,10 +285,17 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     stallBeacon_ = std::make_unique<std::thread> ([this]
     {
         uint32_t last = 0; int stalledMs = 0; int cpuTick = 0;   // fb488
+        // fb496 — the CPU probe is a DEVELOPMENT instrument: it rewrote a file in TEMP every
+        // 5 seconds, forever, in release builds, for every instance. Opt in with
+        // TERRAIN_CPU_PROBE=1 in the environment. Read ONCE (getenv is not thread-safe against
+        // a concurrent setenv, and the answer cannot change for the life of this thread).
+        // The STALL REPORT below is untouched — it is a crash diagnostic, it writes only when
+        // the message thread has actually been dead for 3 s, and it must survive in the field.
+        const bool cpuProbeOn = (std::getenv ("TERRAIN_CPU_PROBE") != nullptr);
         while (! beaconStop_.load (std::memory_order_relaxed))
         {
             std::this_thread::sleep_for (std::chrono::milliseconds (500));
-            if ((++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
+            if (cpuProbeOn && (++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
             {
                 const double tks = (double) dspTicks_.exchange (0, std::memory_order_relaxed);
                 const double smp = (double) dspSamples_.exchange (0, std::memory_order_relaxed);
@@ -627,7 +635,9 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
     const MorphSlot& mslot = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
-    const tw::Wavetable* wt = wavetableForDisplay (osc, mslot, (int) *apvts.getRawParameterValue (WTP[osc]));
+    const int wtPresetIdx = (int) *apvts.getRawParameterValue (WTP[osc]);
+    wavetableBank.ensureBuilt (wtPresetIdx);   // fb496 — message thread; no-op once built
+    const tw::Wavetable* wt = wavetableForDisplay (osc, mslot, wtPresetIdx);
     if (wt == nullptr) return "{}";
 
     const int numFrames = juce::jmax (1, wt->getNumFrames());
@@ -732,7 +742,9 @@ juce::String TerrainInstrumentAudioProcessor::getOscLfoWaveJson (int osc)
     {
         static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                             ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
-        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[osc]));
+        const int bankPreset = (int) *apvts.getRawParameterValue (WTP[osc]);
+        wavetableBank.ensureBuilt (bankPreset);   // fb496 — message thread; this BAKES into an
+        wt = wavetableBank.getTable (bankPreset); //   LFO shape, so never take the Sine fallback
     }
     if (wt == nullptr) return "{}";
     static const char* const WTF[4] = { ParameterIDs::SYN_OSC_A_WT_FRAME, ParameterIDs::SYN_OSC_B_WT_FRAME,
@@ -781,7 +793,9 @@ void TerrainInstrumentAudioProcessor::setDistortionTableSrc (int osc)
     {
         static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                             ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
-        wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[dstTableSrc_]));
+        const int bankPreset = (int) *apvts.getRawParameterValue (WTP[dstTableSrc_]);
+        wavetableBank.ensureBuilt (bankPreset);   // fb496 — message thread; this BAKES a 16x1025
+        wt = wavetableBank.getTable (bankPreset); //   stack into the distortion engine: build first
     }
     if (wt == nullptr) { distortionEngine.clearUserTable(); return; }
     std::vector<float> stack (16 * 1025);               // LOCAL — a static here is shared ACROSS INSTANCES (pluginval multi-instance = race/segv); this is a UI/state call, the allocation is fine
@@ -1060,6 +1074,23 @@ void TerrainInstrumentAudioProcessor::pushQwertyNote (int note, bool on)
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
     mtHeartbeat_.fetch_add (1, std::memory_order_relaxed);   // fb481 — the stall beacon watches this
+
+    // fb496 — LAZY ARM, on the message thread where the ~1 GB allocation belongs.
+    // The stem rings only ever hold audio from a layer that HAS a sample (the write
+    // sits under `if (! layer.hasSample()) continue;`), so the first loaded sample is
+    // the first instant they could be anything but silence. After the arm this is one
+    // relaxed load per tick; before it, four lock-free pointer checks.
+    if (! stemBuffersArmed_.load (std::memory_order_relaxed))
+    {
+        for (const auto& L : layers)
+            if (L.hasSample()) { ensureStemBuffersAllocated(); break; }
+    }
+
+    // fb496 — top up the lazily built factory wavetables. Budget 1: a tick can never
+    // cost more than the ~2.3 ms morph rebuild that already lives in this callback.
+    // prepareToPlay/setStateInformation already built the four a loaded patch uses, so
+    // this only ever fires for a preset the user changes live.
+    prefetchOscWavetables (1);
     // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
@@ -1121,6 +1152,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
             const float blurNow = (be >= 0.0f) ? be : apvts.getRawParameterValue (kBlurIds[o])->load();
             if (blurNow <= 1.0e-4f) continue;
             const int preset = (int) *apvts.getRawParameterValue (kPresetIds[o]);
+            wavetableBank.ensureBuilt (preset);   // fb496 — never attach a twin to the Sine fallback
             if (auto* wt = wavetableForBlurTwin (o, *slots[o], preset))
                 if (wt->blurTwinState() == 0) { wt->buildBlurTwin(); break; }   // one per tick
         }
@@ -6644,8 +6676,16 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     indySumBuffer.setSize (2, juce::jmax (1, samplesPerBlock), false, true, true);
     indySumBuffer.clear();
 
-    // Mix page Phase D: allocate per-layer rolling stem buffers (~92 MB at 48k).
-    allocateStemBuffers (sampleRate);
+    // fb496 — remember the rate a lazy arm must use, BEFORE anything can arm.
+    preparedSampleRate_.store (sampleRate, std::memory_order_release);
+
+    // Mix page Phase D: the per-layer rolling stem rings (~1,058 MB at 44.1k).
+    // fb496 — no longer allocated here unconditionally. Once ARMED (first sample
+    // loaded into any layer — see ensureStemBuffersAllocated) this reallocates and
+    // clears on every prepareToPlay exactly as it always did, so a rate change is
+    // handled identically. Un-armed, it stays a no-op and costs nothing.
+    if (stemBuffersArmed_.load (std::memory_order_acquire))
+        allocateStemBuffers (sampleRate);
     indyCaptureBus.clear();
 
     smoothedChorusAmount.reset    (sampleRate, 0.02);
@@ -6680,7 +6720,16 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
         smoothedEqHpFreq.setCurrentAndTargetValue (rawParam (ParameterIDs::EQ_HP_FREQ)->load());
         smoothedEqLpFreq.setCurrentAndTargetValue (rawParam (ParameterIDs::EQ_LP_FREQ)->load());
     }
-    captureBuffer.prepare(sampleRate, samplesPerBlock);
+    // fb496 — the Export ring (~202 MB) is armed on first editor open, not here.
+    // Once armed, prepare() runs exactly as before (it keeps the captured audio when
+    // the rate is unchanged and reallocates when it is not).
+    if (captureArmRequested_.load (std::memory_order_acquire))
+        captureBuffer.prepare(sampleRate, samplesPerBlock);
+
+    // fb496 — build the four factory wavetables this patch actually points at before
+    // the first block. prepareToPlay is not realtime, so all four are built here
+    // (~10 ms worst case) and the audio thread never sees an unbuilt table at start-up.
+    prefetchOscWavetables (4);
 
     // Prepare modulation engine
     modulationEngine.prepare(sampleRate);
@@ -11791,6 +11840,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 //==============================================================================
 juce::AudioProcessorEditor* TerrainInstrumentAudioProcessor::createEditor()
 {
+    // fb496 — arm the Export ring (~202 MB) HERE, on the message thread, the first time
+    // this instance is ever given a UI. exportCapture() is reachable from the editor and
+    // nowhere else, and the "N seconds captured" readout is only pushed while an editor
+    // exists — so before this point the ring could not be exported OR seen. Once armed it
+    // stays armed for the life of the instance (closing the window does not free it), so
+    // the rolling window behaves exactly as it always did from here on.
+    ensureCaptureBufferAllocated();
     return new TerrainInstrumentAudioProcessorEditor(*this);
 }
 
@@ -11822,22 +11878,65 @@ juce::String TerrainInstrumentAudioProcessor::getLoadedSamplePath() const
 
 // ── Mix page Phase D: rolling stem buffers ───────────────────────────────────
 
+// MESSAGE THREAD ONLY — this allocates ~1 GB at 44.1 kHz.
+// fb496 — totalSize is the audio thread's go/no-go, so it is un-published FIRST and
+// re-published LAST (release). Everything between is invisible to the writer.
 void TerrainInstrumentAudioProcessor::allocateStemBuffers (double sampleRate)
 {
     const int totalSamples = juce::jmax (1, (int) (sampleRate * (double) kStemSeconds));
-    for (auto& s : stemBuffers)
+    auto arm = [totalSamples] (StemBuffer& s)
     {
+        s.totalSize.store (0, std::memory_order_release);      // writers stand down
         s.ring.setSize (2, totalSamples, false, true, true);
         s.ring.clear();
-        s.totalSize = totalSamples;
         s.writeIndex.store     (0, std::memory_order_relaxed);
         s.samplesWritten.store (0, std::memory_order_relaxed);
+        s.totalSize.store (totalSamples, std::memory_order_release);   // publish LAST
+    };
+    for (auto& s : stemBuffers) arm (s);
+    arm (masterFxBuffer);
+}
+
+// fb496 — arm the rolling stem rings. Idempotent; MESSAGE THREAD ONLY.
+// Driven from timerCallback the moment any layer has a sample loaded, which is the
+// first instant a ring could hold anything but silence (the per-layer write sits
+// under `if (! layer.hasSample()) continue;`). Also safe to call explicitly from the
+// stem UI when it is wired up.
+void TerrainInstrumentAudioProcessor::ensureStemBuffersAllocated()
+{
+    if (stemBuffersArmed_.load (std::memory_order_acquire)) return;
+    const double sr = preparedSampleRate_.load (std::memory_order_acquire);
+    if (sr <= 0.0) return;            // not prepared yet — the next tick will catch it
+    allocateStemBuffers (sr);
+    stemBuffersArmed_.store (true, std::memory_order_release);
+}
+
+// fb496 — arm the Export ring. Idempotent; MESSAGE THREAD ONLY.
+void TerrainInstrumentAudioProcessor::ensureCaptureBufferAllocated()
+{
+    captureArmRequested_.store (true, std::memory_order_release);
+    const double sr = preparedSampleRate_.load (std::memory_order_acquire);
+    if (sr <= 0.0) return;   // editor opened before the first prepareToPlay — it will arm us
+    captureBuffer.prepare (sr, getBlockSize());   // idempotent at an unchanged rate
+}
+
+// fb496 — build the factory tables the four oscs point at, on the MESSAGE THREAD,
+// so the audio thread never has to. See WavetableBank.h and wavetableForOsc().
+int TerrainInstrumentAudioProcessor::prefetchOscWavetables (int budget)
+{
+    static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    int builtNow = 0;
+    for (int o = 0; o < 4 && builtNow < budget; ++o)
+    {
+        auto* rp = rawParam (WTP[o]);
+        if (rp == nullptr) continue;
+        const int preset = (int) rp->load();
+        if (wavetableBank.isBuilt (preset)) continue;   // the common case: one atomic load
+        wavetableBank.ensureBuilt (preset);
+        ++builtNow;
     }
-    masterFxBuffer.ring.setSize (2, totalSamples, false, true, true);
-    masterFxBuffer.ring.clear();
-    masterFxBuffer.totalSize = totalSamples;
-    masterFxBuffer.writeIndex.store     (0, std::memory_order_relaxed);
-    masterFxBuffer.samplesWritten.store (0, std::memory_order_relaxed);
+    return builtNow;
 }
 
 void TerrainInstrumentAudioProcessor::writeToMasterFxRing (const float* L,
@@ -11846,7 +11945,8 @@ void TerrainInstrumentAudioProcessor::writeToMasterFxRing (const float* L,
 {
     if (numSamples <= 0) return;
     auto& s = masterFxBuffer;
-    if (s.totalSize <= 0) return;
+    const int cap = s.totalSize.load (std::memory_order_acquire);   // fb496 — 0 = not armed
+    if (cap <= 0) return;
 
     int w = s.writeIndex.load (std::memory_order_relaxed);
     auto* destL = s.ring.getWritePointer (0);
@@ -11855,11 +11955,11 @@ void TerrainInstrumentAudioProcessor::writeToMasterFxRing (const float* L,
     {
         destL[w] = L[i];
         destR[w] = R[i];
-        if (++w >= s.totalSize) w = 0;
+        if (++w >= cap) w = 0;
     }
     s.writeIndex.store (w, std::memory_order_relaxed);
     const int prev = s.samplesWritten.load (std::memory_order_relaxed);
-    s.samplesWritten.store (juce::jmin (s.totalSize, prev + numSamples),
+    s.samplesWritten.store (juce::jmin (cap, prev + numSamples),
                              std::memory_order_relaxed);
 }
 
@@ -11870,7 +11970,8 @@ void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
 {
     if (layerIdx < 0 || layerIdx > 3 || numSamples <= 0) return;
     auto& s = stemBuffers[(size_t) layerIdx];
-    if (s.totalSize <= 0) return;
+    const int cap = s.totalSize.load (std::memory_order_acquire);   // fb496 — 0 = not armed
+    if (cap <= 0) return;
 
     // Live capture-level meter: decaying peak of what's being written. Read by
     // the UI at ~30Hz to drive the 4 mini-meters on the stem row.
@@ -11890,12 +11991,12 @@ void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
     {
         destL[w] = L[i];
         destR[w] = R[i];
-        if (++w >= s.totalSize) w = 0;
+        if (++w >= cap) w = 0;
     }
     s.writeIndex.store (w, std::memory_order_relaxed);
     // Saturate samplesWritten at totalSize so we know when the ring is fully populated.
     const int prev = s.samplesWritten.load (std::memory_order_relaxed);
-    s.samplesWritten.store (juce::jmin (s.totalSize, prev + numSamples),
+    s.samplesWritten.store (juce::jmin (cap, prev + numSamples),
                              std::memory_order_relaxed);
 }
 
@@ -11904,12 +12005,12 @@ void TerrainInstrumentAudioProcessor::clearStemBuffers()
     for (int i = 0; i < 4; ++i)
     {
         auto& s = stemBuffers[(size_t) i];
-        if (s.totalSize > 0) s.ring.clear();
+        if (s.totalSize.load (std::memory_order_acquire) > 0) s.ring.clear();
         s.writeIndex.store     (0, std::memory_order_relaxed);
         s.samplesWritten.store (0, std::memory_order_relaxed);
         stemCaptureLevel[(size_t) i].store (0.0f, std::memory_order_relaxed);
     }
-    if (masterFxBuffer.totalSize > 0) masterFxBuffer.ring.clear();
+    if (masterFxBuffer.totalSize.load (std::memory_order_acquire) > 0) masterFxBuffer.ring.clear();
     masterFxBuffer.writeIndex.store     (0, std::memory_order_relaxed);
     masterFxBuffer.samplesWritten.store (0, std::memory_order_relaxed);
 }
@@ -11918,7 +12019,10 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
 {
     if (layerIdx < 0 || layerIdx > 3) return {};
     auto& s = stemBuffers[(size_t) layerIdx];
-    if (s.totalSize <= 0) return {};
+    // fb496 — 0 means the rings were never armed (no sample has ever been loaded into
+    // any layer, so nothing was ever captured). Same answer as before: no file.
+    const int ringSize = s.totalSize.load (std::memory_order_acquire);
+    if (ringSize <= 0) return {};
 
     // Only export what's actually been captured. Below totalSize, the ring
     // hasn't wrapped yet — audio sits chronologically at [0..captured-1] and
@@ -11932,8 +12036,8 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
     const int writeIdx = s.writeIndex.load (std::memory_order_relaxed);
 
     const int  mode     = stemSourceMode.load();
-    const bool ringFull = (captured >= s.totalSize);
-    const int  outLen   = ringFull ? s.totalSize : captured;
+    const bool ringFull = (captured >= ringSize);
+    const int  outLen   = ringFull ? ringSize : captured;
 
     juce::AudioBuffer<float> out (2, outLen);
     auto* dstL = out.getWritePointer (0);
@@ -11950,7 +12054,7 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
             {
                 dstL[i] = srcL[srcIdx];
                 dstR[i] = srcR[srcIdx];
-                if (++srcIdx >= s.totalSize) srcIdx = 0;
+                if (++srcIdx >= ringSize) srcIdx = 0;
             }
         }
         else
@@ -11976,7 +12080,7 @@ juce::File TerrainInstrumentAudioProcessor::exportStemToFile (int layerIdx, cons
         constexpr float kEps = 1.0e-7f;
         for (int i = 0; i < outLen; ++i)
         {
-            const int srcIdx = ringFull ? ((writeIdx + i) % s.totalSize) : i;
+            const int srcIdx = ringFull ? ((writeIdx + i) % ringSize) : i;
             float total = kEps;
             float strengths[4];
             for (int j = 0; j < 4; ++j)
@@ -13102,6 +13206,11 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             }
         }
     }
+    // fb496 — the patch just changed all four osc wavetable presets. Build the factory
+    // tables they point at NOW: setStateInformation is the message thread and is not
+    // realtime, and the host can start calling processBlock immediately after it returns.
+    prefetchOscWavetables (4);
+
 }
 
 // ── Task 13: pitchSliceJson → LayerState helper ───────────────────────────────
