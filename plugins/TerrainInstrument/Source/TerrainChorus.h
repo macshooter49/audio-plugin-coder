@@ -204,8 +204,17 @@ private:
             stage2.reset();
         }
 
+        // fb490 — setParams() runs EVERY BLOCK, and each makeLowPass allocates a
+        // reference-counted Coefficients object on the heap, copies it in and destroys it: four
+        // alloc/free pairs per block, on the audio thread, for a value that changes only when the
+        // Character knob moves. The idle profile caught it — setCutoff + assignImpl + ~Coefficients
+        // together were ~20% of processBlock with NO NOTES PLAYING, and heap traffic is precisely
+        // what costs multiples more under Windows' allocator than macOS's.
+        float lastSr_ = 0.0f, lastCutoff_ = -1.0f;
         void setCutoff (double sr, float cutoffHz) noexcept
         {
+            if (cutoffHz == lastCutoff_ && (float) sr == lastSr_) return;   // fb490
+            lastCutoff_ = cutoffHz; lastSr_ = (float) sr;
             // Two cascaded biquads with Q values from Butterworth tables for 4th order:
             // Q1 = 0.541, Q2 = 1.307
             *stage1.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass (sr, cutoffHz, 0.541f);

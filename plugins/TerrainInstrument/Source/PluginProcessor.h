@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include <unordered_map>
+#include <memory>
 #include <thread>    // fb481 — the Windows stall beacon
 #include <chrono>
 #include <map>
@@ -1293,13 +1294,55 @@ private:
     // hit costs one pointer-hash lookup, no allocation. Populated lazily during the first
     // blocks (each unique call site inserts once), read-only forever after. Do NOT call this
     // with a temporary/dynamic string — juce::String args won't compile, by design.
-    mutable std::unordered_map<const void*, std::atomic<float>*> rawParamCache_;   // mutable: memo, called from const getters too
+    // fb490 — FLAT, ALLOCATION-FREE PARAMETER TABLE. A real audio-thread profile of an IDLE
+    // plugin (no notes) put std::__hash_table::find<void const*> at 14% of processBlock: this memo
+    // was a std::unordered_map, i.e. a hash and then a NODE CHASE into scattered heap. libc++
+    // makes that merely wasteful; MSVC's node-based map makes it expensive, which is part of why
+    // identical work costs multiples more on Windows than on the Mac.
+    //
+    // Keys are the ADDRESSES of the ParameterIDs string constants — stable for the process
+    // lifetime — so a power-of-two open-addressed table with linear probing resolves a hit in one
+    // or two cache lines, never allocates and never rehashes.
+    //
+    // fb490b — MEASURED CORRECTION, and the reason this comment is long. The first cut used
+    // std::atomic key slots with ACQUIRE ordering. On Apple Silicon an acquire load is `ldar`, a
+    // barrier; with hundreds of parameter reads per block that cost inlined straight into
+    // processBlock and a re-profile read 5.6% of a core idle against 3.33% before — even though
+    // all four items the change targeted had gone to ZERO. Barriers are free on x86 and expensive
+    // on ARM, so the "fix" was a Windows win paid for by a Mac regression. Instead:
+    //   · PLAIN loads on the hot path (no barrier on any platform). Insert publishes the value,
+    //     then a release FENCE (a few times per id, ever — cost irrelevant), then the key. A
+    //     reader that sees the key sees the value; one that sees a key with a null value takes
+    //     the slow path once rather than dereferencing null.
+    //   · The table lives OFF the processor object, so 64 KB of slots cannot push hot members
+    //     apart and wreck the locality of everything declared after it.
+    struct RawCache
+    {
+        static constexpr size_t kSlots = 4096, kMask = kSlots - 1;
+        const void*         keys[kSlots] {};
+        std::atomic<float>* vals[kSlots] {};
+    };
+    mutable std::unique_ptr<RawCache> rawCache_ { new RawCache() };
     std::atomic<float>* rawParam (const char* id) const
     {
-        const auto it = rawParamCache_.find ((const void*) id);
-        if (it != rawParamCache_.end()) return it->second;
+        auto& c = *rawCache_;
+        const uintptr_t k = (uintptr_t) id;
+        size_t h = (size_t) (((k >> 3) * 11400714819323198485ull) >> 52) & RawCache::kMask;
+        for (int probe = 0; probe < 64; ++probe)
+        {
+            const void* key = c.keys[h];                       // plain load
+            if (key == (const void*) id)
+            {
+                if (auto* v = c.vals[h]) return v;              // null only mid-insert -> slow path
+                break;
+            }
+            if (key == nullptr) break;                         // empty slot: this is where it goes
+            h = (h + 1) & RawCache::kMask;
+        }
         auto* p = const_cast<juce::AudioProcessorValueTreeState&> (apvts).getRawParameterValue (id);
-        rawParamCache_.emplace ((const void*) id, p);
+        c.vals[h] = p;
+        std::atomic_thread_fence (std::memory_order_release);
+        c.keys[h] = (const void*) id;
         return p;
     }
 

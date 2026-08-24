@@ -11498,7 +11498,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             else
             {
-                noiseAudType_ = (int) *apvts.getRawParameterValue (ParameterIDs::SYN_NOISE_TYPE);    // choice index 0..12
+                noiseAudType_ = (int) rawParam (ParameterIDs::SYN_NOISE_TYPE)->load();   // fb490 — cached, no string lookup    // choice index 0..12
                 noisePrevGen_.setSR ((float) sr); noisePrevGen_.setType (noiseAudType_); noisePrevGen_.reset();
                 noiseAudCtr_  = (int) (sr * 1.10);                                                   // ~1.1 s burst
             }
@@ -11597,7 +11597,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                                     ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
-                wt = wavetableBank.getTable ((int) *apvts.getRawParameterValue (WTP[o]));
+                wt = wavetableBank.getTable ((int) rawParam (WTP[o])->load());   // fb490 — cached, no string lookup
             }
             if (wt == nullptr) { wtAudCtr_ = 0; wtAudFade_ = 0; }
             else
