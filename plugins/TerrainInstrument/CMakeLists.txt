@@ -84,6 +84,27 @@ target_link_libraries(TerrainInstrument
         juce::juce_recommended_warning_flags
 )
 
+# ══ fb474 — WINDOWS BUILD READINESS ═══════════════════════════════════════════════════════════
+#  This target has only ever been compiled by clang. Three things MSVC does differently, all found
+#  by inspection before the first Windows build rather than after it:
+#
+#  · _USE_MATH_DEFINES — MSVC's <cmath> does NOT define M_PI (it is not standard C++; libc++ and
+#    libstdc++ provide it anyway). Three headers use it: HarmonicSculptor.h, ShimmerReverb.h and
+#    TapeMachines.h. Set as a COMPILE DEFINITION rather than a #define in those files, so it is on
+#    the command line and therefore in effect before ANY header is read — a #define inside a header
+#    loses the race whenever something else includes <cmath> first.
+#  · /bigobj — PluginProcessor.cpp is 884 KB and PluginEditor.cpp is 742 KB of source. MSVC's COFF
+#    object format caps sections per object file and heavy inline templates blow past it on files
+#    this size. Harmless where it is not needed.
+#  · PUBLIC, not PRIVATE — juce_add_plugin makes this target a STATIC library (JUCEUtils.cmake:2196)
+#    and the VST3 / Standalone wrappers LINK it while also compiling glue that includes our headers.
+#    A PRIVATE definition would cover the library and miss the wrappers.
+if (MSVC)
+    target_compile_definitions(TerrainInstrument PUBLIC _USE_MATH_DEFINES)
+    target_compile_options(TerrainInstrument PUBLIC /bigobj)
+    message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj")
+endif()
+
 # fb467 — Source/WtFft.h calls vDSP directly (the wavetable bake's transform: 19.1 ms -> 2.3 ms).
 # juce_dsp already drags Accelerate in on Apple, but this is now a FIRST-PARTY dependency of a
 # header the plugin includes, so it is named here rather than inherited by luck. WtFft.h compiles

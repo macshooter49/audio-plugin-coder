@@ -16,6 +16,7 @@
 #include "WtFft.h"   // fb467 — the bake's transform (vDSP real-f64 where it exists, the shipped radix-2 as reference + fallback)
 #include <cmath>
 #include <cstddef>
+#include <cstdint>   // fb474 — uint32_t. libc++ leaks it through <cstddef>; MSVC's STL does not.
 #include <array>
 #include <complex>
 #include <algorithm>
