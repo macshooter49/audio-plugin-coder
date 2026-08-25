@@ -244,3 +244,40 @@ plugin rebuild per idea.
   nothing and reported 0.00%. Quote the path inside the argument.
 - **The beacon is WALL-CLOCK paced.** An offline harness rendering 15x faster than real time exits
   before it ever ticks; that looks exactly like "the probe is broken under VST3" and is not.
+
+### fb503 — the WebView cost is NOT rate-related. Four levers falsified in the real plugin.
+
+Traced the renderer (`Tests/ui_trace.js`, self-time per bucket, front page, headful):
+
+    GPU 87.4% | Scripting 12.3% | Layout 4.2% | Style 3.7% | Composite 2.3% | Paint 0.7%
+
+So it is not our JS and not our DOM writes — the earlier "DOM writes are next" hypothesis is dead.
+It is GPU command work. `Tests/ui_layers.js` then ruled out the obvious follow-up: the page has
+only **35-39 compositing layers / 7.0 Mpx** (normal), but **4,821 live elements and 211 canvases**.
+
+**Everything below was BUILT, embedded-verified in the .vst3, and A/B'd COUNTERBALANCED against a
+clean build in the real plugin. All of it was reverted.**
+
+| change | result |
+|---|---|
+| hero terrain half-rate (1 line, 85% of front-page draws) | 176.2% -> 183.7% **worse** |
+| full canvas change-gate (knobs/icons/fx knobs/setupCanvas) | 177% -> 226% **worse** |
+| global rAF cap to 30 fps | 165.7% -> 194.3% **worse** |
+| C++ push rate 60 -> 30 Hz (`TERRAIN_UI_HZ`) | 170.5% -> 171.1% **no effect** |
+| rAF cap AND C++ 30 Hz together | 165.4% -> 195.5% **worse** |
+| all CSS `filter` + `backdrop-filter` off | 170.3% -> 165.8% (~noise) |
+
+⚠️ **CHROME IS NOT A VALID PROXY FOR THE PLUGIN.** The global rAF cap measured a clean win in
+Chrome (GPU 87.4% -> 47.9% at 30 fps, near-linear) and a clean LOSS in the plugin. The plugin has
+C++ pushing a frame every 16 ms, so frames are produced regardless of rAF; capping only batches
+85 loops into one burst. Use Chrome to form a hypothesis, never to accept one.
+
+### What the evidence actually supports
+The cost is not proportional to frame rate — it behaves like a fixed per-vsync price that is paid
+whenever the page is animating AT ALL. The only thing that ever moved it far was stopping every
+loop: `WebView2 149.8% -> 21.2%`, `gpu 110.4% -> 4.9%`.
+
+So the target is **ZERO frames at idle, not fewer frames**. That means every loop parks itself
+when it has nothing to show AND the C++ push stops (fb483's idle-skip already exists but never
+fires, because the LFO phases free-run and make every frame differ). Until the page can reach a
+true idle, throttling anything is measurably counterproductive.

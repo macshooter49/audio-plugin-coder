@@ -34409,5 +34409,22 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   setTimeout(function(){ requestAnimationFrame(tick); requestAnimationFrame(pos); setInterval(badges,900); badges(); },800);
 })();
 </script>
+<style id="fb503-select-fix">
+/* fb503 — WINDOWS: THE TYPE MENUS WERE WHITE-ON-WHITE AND UNREADABLE.
+   Every dropdown here uses the same deliberate idiom — an invisible native <select> laid over a
+   styled <span>, so the span draws the value and the select supplies the real popup
+   (#syn-panel .engine-select is background:transparent; color:transparent). That transparent
+   COLOUR INHERITS INTO THE <option> ELEMENTS. On Windows, Chromium paints the native popup using
+   the option's own computed colour, so every entry rendered invisible against the popup's
+   default light background — the only way to read one was to hover it, because the system
+   highlight overrides the text colour. macOS never showed this: WKWebView draws select popups as
+   native controls and ignores the CSS colour entirely.
+   Style the OPTIONS ONLY, never the select — colouring the select would un-hide the overlay and
+   the value would be drawn twice, once by the span and once by the control.
+   color-scheme:dark makes the popup's own chrome — background, scrollbar, highlight — dark so it
+   matches the panel instead of flashing white. */
+select { color-scheme: dark; }
+select option { color: #EDE7F5; background-color: #1B1526; }
+</style>
 </body>
 </html>
