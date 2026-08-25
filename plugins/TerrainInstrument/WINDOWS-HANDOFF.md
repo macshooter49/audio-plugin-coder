@@ -182,3 +182,65 @@ result 2–5×.
   `if(window.__cardOnly) return;` guard this way).
 - **Measure, then change, then re-measure.** Every wrong turn tonight was a plausible theory that
   a measurement killed in one minute.
+
+---
+
+## 7. fb501/fb502 — THE WINDOW COSTS ~190% OF A CORE, AND IT IS THE PAGE
+
+Measured on the Windows machine with `Tests/win_blk_cpu.cpp --editor` (real editor, real window,
+real-time-paced audio thread, `GetThreadTimes` per thread) plus per-process WebView2 sampling.
+One WT osc, no notes, idle, blk 512:
+
+| | editor CLOSED | editor OPEN |
+|---|---:|---:|
+| audio thread | 7.99% | 10.42% |
+| message thread | 0.52% | 11.08% |
+| plugin process TOTAL | 8.67% | 24.06% |
+| **WebView2 processes** | **0.1%** | **173.7%** |
+
+**~190% of a core, and 85-90% of it is inside WebView2, not the plugin.** The control is clean
+(0.1% closed), so this is unambiguous. Split: gpu-process ~120-150%, renderer ~40-70%.
+
+### What the page costs is REAL, and it is the animation loops
+Killing every `requestAnimationFrame` + interval makes the page static:
+`gpu 110.4% -> 4.9%`, `renderer 39.1% -> 10.8%`, `WebView2 149.8% -> 21.2%`.
+**86% of the UI cost is the page animating itself.** That part is settled.
+
+### ⚠️ WHAT DOES *NOT* WORK — measured, counterbalanced, do not retry blind
+Every one of these was built, embedded (verified by searching the .vst3 binary) and A/B'd:
+
+- **GPU flags.** `--ignore-gpu-blocklist --enable-gpu-rasterization`: 110.4 -> 112.2 (nothing).
+  `--disable-gpu`: total 149.8 -> 223.0 (**worse** — the GPU is already helping).
+- **backdrop-filter.** Neutralising all 38: gpu 110.4 -> 99.1. Worth ~9 points, not 110.
+- **UI push rate.** 60 -> 20 Hz cut ticks 3x but UI cost only 28%, because per-tick cost ROSE
+  (0.92 -> 1.97 ms/tick) as frames grew. Content-driven, not frequency-driven.
+- **🚨 REDUCING CANVAS DRAW RATE MAKES IT WORSE.** Halving the hero terrain's redraw (one line,
+  85% of front-page draw calls) — counterbalanced B/H/H/B/B/H/H/B, 4 runs each:
+      BEFORE 174, 175, 174.7, 181.1  -> mean 176.2%
+      HERO   187.2, 185.3, 182.3, 179.8 -> mean 183.7%
+  Drawing LESS cost MORE, reproducibly. A fuller change-gate across knobs/icons/fx knobs was
+  worse still (226% vs 177%), partly because the gate built a STRING signature per canvas per
+  frame (renderer 42% -> 70%: never allocate in a per-frame path). **All of it was reverted.**
+  Conclusion: canvas draw-call VOLUME is not the driver, and the compositor's response to it is
+  not linear. `Tests/canvas_profile.js` ranks canvases by redraw rate / ops / visibility and shows
+  97% of redrawn pixels are ON SCREEN, so visibility gating cannot be the win either.
+
+### The next hypothesis (untested)
+The loops also write DOM every frame — inline `style.left/width/top`, SVG `setAttribute('d')`,
+`textContent` — across a page carrying 250 border-radius, 106 box-shadow, 38 backdrop-filter.
+That is layout+paint+composite work, which is where a gpu-process burning a CPU core would come
+from. Test it the same way the rAF kill was tested: stub only the DOM writes, leave canvas alone.
+**Iterate in headful Chrome measuring Chrome's own gpu-process** — same engine, no 5-minute
+plugin rebuild per idea.
+
+### Traps this cost time on
+- **The BinaryData cache is real on Windows too.** An edited index.html silently does NOT re-embed;
+  the build "succeeds" with the OLD page. Always verify by searching the built .vst3 for a marker
+  string, and bust it with: delete `build/plugins/TerrainInstrument/juce_binarydata_*_WebUI`,
+  `TerrainInstrument_WebUI.dir`, `Release/TerrainInstrument_WebUI.lib`, then re-run cmake configure.
+- **A/B confounded with run order.** The same binary varies 162-181% run to run (±12%). Always
+  counterbalance (B,A,A,B) and take means, or drift reads as an effect.
+- **`Start-Process -ArgumentList` splits a path containing a space** — those runs silently measured
+  nothing and reported 0.00%. Quote the path inside the argument.
+- **The beacon is WALL-CLOCK paced.** An offline harness rendering 15x faster than real time exits
+  before it ever ticks; that looks exactly like "the probe is broken under VST3" and is not.
