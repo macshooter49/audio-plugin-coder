@@ -508,7 +508,7 @@ static void snapshotThreadCpu (ThreadCpuSnap& out)
     CloseHandle (snap);
 }
 
-static int editorMode (Host& host, int blk, double seconds, bool openEditor)
+static int editorMode (Host& host, int blk, double seconds, bool openEditor, bool playNotes)
 {
     auto inst = host.make (blk);
     if (inst == nullptr) return 1;
@@ -535,10 +535,27 @@ static int editorMode (Host& host, int blk, double seconds, bool openEditor)
         const auto period = std::chrono::duration<double> ((double) blk / SR);
         auto next = std::chrono::steady_clock::now();
         double acc = 0.0;
+        int lastStep = -1;   // fb506 -- note sequencer state
         while (! stop.load (std::memory_order_relaxed))
         {
             next += std::chrono::duration_cast<std::chrono::steady_clock::duration> (period);
             buf.clear(); midi.clear();
+            // fb506 -- REAL PLAYING: an arpeggiated chord, notes on/off every ~300 ms, so the
+            // scope, meters, LFO phase and analyzer all carry CHANGING data. This is the state
+            // Max actually lives in; every earlier editor measurement was idle/static-data.
+            if (playNotes)
+            {
+                const long long blkIdx = blocksDone.load (std::memory_order_relaxed);
+                const double tSec = (double) blkIdx * (double) blk / SR;
+                const int step = (int) (tSec / 0.3);
+                if (step != lastStep)
+                {
+                    static const int seq[4] = { 48, 60, 64, 67 };
+                    if (lastStep >= 0) midi.addEvent (juce::MidiMessage::noteOff (1, seq[lastStep & 3]), 0);
+                    midi.addEvent (juce::MidiMessage::noteOn (1, seq[step & 3], (juce::uint8) 100), 0);
+                    lastStep = step;
+                }
+            }
             const auto t0 = std::chrono::steady_clock::now();
             inst->processBlock (buf, midi);
             const auto t1 = std::chrono::steady_clock::now();
@@ -645,6 +662,7 @@ int main (int argc, char** argv)
     bool wantModalLive = false;
     int  holdBlk = 0; double holdSec = 25.0; bool ftz = false;
     int  edBlk = 0; bool edOpen = true;
+    bool playEd = false;
     bool wantParams = false; juce::String paramFilter;
     for (int i = 1; i < argc; ++i)
     {
@@ -655,6 +673,7 @@ int main (int argc, char** argv)
         else if (a == "--ftz") ftz = true;
         else if (a.startsWith ("--editor=")) edBlk = a.substring (9).getIntValue();
         else if (a == "--noeditor") { edOpen = false; if (edBlk == 0) edBlk = 512; }
+        else if (a == "--play") playEd = true;
         else if (a.startsWith ("--params")) { wantParams = true; if (a.startsWith ("--params=")) paramFilter = a.substring (9); }
         else if (a.startsWith ("--hold=")) holdBlk = a.substring (7).getIntValue();
         else if (a.startsWith ("--secs=")) holdSec = a.substring (7).getDoubleValue();
@@ -670,7 +689,7 @@ int main (int argc, char** argv)
     if (wantModal) return modalMode (host);
     if (wantModalLive) return modalLiveMode (host);
     if (holdBlk > 0) return holdMode (host, holdBlk, holdSec, ftz);
-    if (edBlk > 0) return editorMode (host, edBlk, holdSec, edOpen);
+    if (edBlk > 0) return editorMode (host, edBlk, holdSec, edOpen, playEd);
     if (wantParams) return paramsMode (host, paramFilter);
 
     std::printf ("\n  IDLE DSP cost vs HOST BLOCK SIZE (no notes, no editor, %.0f s per point, %.0f Hz)\n\n",

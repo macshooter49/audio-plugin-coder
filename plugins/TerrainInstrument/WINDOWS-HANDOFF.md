@@ -352,3 +352,41 @@ Still open if more is wanted: the plugin process itself (~23-31% — message-thr
 C++ idle-skip never fires because free-running LFO phases change every frame's hash), and
 whatever REAL audio playback costs (scope/meter data changes every frame during sound — not
 measurable in this harness; Max tests in FL).
+
+### fb506 — THE ROOT CAUSE HAD A NUMBER: THE PANEL IS 360 Hz. Plus the retrigger PLL fix.
+
+**This machine's display is 360 Hz** (Win32_VideoController CurrentRefreshRate=360). On Windows
+rAF fires at PANEL rate, so every "60 fps" loop ran at up to 360 fps — six times the Mac's work.
+It is why per-frame optimisation never moved the number, why the LFO/envelope looked sloppy
+(phase math tuned for 16.7 ms frames on a 2.8 ms budget), and why FL dropped frames.
+
+New instrument: --play in Tests/win_blk_cpu.cpp — the editor harness now PLAYS an arpeggiated
+chord, so scope/LFO/analyzer carry CHANGING data. First honest measurement of Max's real state:
+    PLAY + synth page:  WebView2 212%, plugin process 99%   <- the complaint, quantified
+    idle + synth page:  WebView2 48%,  plugin process 80%
+Push-rate sweep on that state: FLAT (60/30/20 Hz all ~206-238) — the rAF consumer loops are the
+cost during play, not the push.
+
+Shipped (fb506c):
+1. **Pacing, page-aware.** The arbiter's active path runs callbacks at most 60/s ON THE PANEL
+   PAGES (synth/EQ/delay/mod — currentActivePanel truthy); skips wait on a TIMER, never a rAF
+   re-arm (a pending rAF keeps BeginFrame at 360 Hz: measured +24). The front page stays native —
+   pacing measured -114 on the JS-bound synth page but +25 on the compositor-bound front (the
+   hero misaligns with vsync and double-rasters). __UI_FPS overrides live.
+2. **Trigger-aware PLL** (the retrigger glitch): Retrig/Env push the most-active VOICE's phase,
+   which resets on every note-on; the PLL wrapped that backward jump into a fake ~24 Hz forward
+   rate — dot raced, rubber-banded, pinned at start phase. Now: backward jump in a trigger mode =
+   RESET -> snap to DSP truth, never feed the wrap into the rate; byte-equal pinned phase -> ease
+   rate to 0 (park on the pin, no buzzing ahead). Free/mono bit-identical.
+
+Measured (fb506c, same session): PLAY+synth 212 -> 93. idle+synth 48 -> 9.5. Front unchanged by
+design. All gates green (contract 8/8, eq 15/15, fx4 130/130, fx3 48, lfo smooth, fingerprint
+bit-identical). Installed.
+
+STILL OPEN, ranked: (1) plugin process ~93% during synth-page play — the C++ message thread
+composing 60 Hz synth-page frames; segment-level idle-skip / 30 Hz Windows push for the whale
+segments is the lever (push-rate flat result was WEBVIEW-side; the C++ compose cost still scales
+with rate). (2) front-page play ~200% — renderTerrain compositor work. (3) envelope feed has no
+fb498-style interpolation (level/stage step at push rate) and voice-hopping teleports the dot —
+needs C++ voice-selection hysteresis. (4) editor open takes 5-10 s (WebView2 boot + 34k-line
+parse + boot pushes) — unmeasured.

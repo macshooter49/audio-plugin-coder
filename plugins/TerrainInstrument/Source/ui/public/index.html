@@ -35,7 +35,7 @@
   if (!/Windows/.test(navigator.userAgent)) return;
   var raf = window.requestAnimationFrame.bind(window);
   var q = new Map(), nid = 0, scheduled = false, parked = false, styleDone = false;
-  var lastAct = performance.now(), probeTimer = 0;
+  var lastAct = performance.now(), probeTimer = 0, lastFrame = 0;   // fb506 — 60 fps pacing clock
   function isActive(){
     return window.__tiForceActive || !!window.__notesActive
         || (performance.now() - lastAct < 1500);
@@ -67,7 +67,39 @@
   }
   function pump(ts){
     scheduled = false;
-    if (isActive()){ setParked(false); runQueue(ts); return; }
+    if (isActive()){
+      setParked(false);
+      /* ══ fb506 — PACE TO 60. THE ROOT CAUSE OF THE WHOLE WINDOWS SAGA: this machine's panel
+         is 360 Hz (Win32_VideoController CurrentRefreshRate=360), and on Windows rAF fires at
+         PANEL rate — so every "60 fps" loop in this page has been running at 360 fps, SIX times
+         the Mac's work. It is why per-frame optimisations never moved the number (the frame
+         count was the multiplier), why the LFO/envelope looked sloppy (phase math tuned for
+         16.7 ms frames on a 2.8 ms budget), and why FL's own frames dropped. The skip path costs
+         one empty native callback; callbacks run — and therefore the page changes and the
+         compositor composites — at most 60 times a second. On a 60 Hz panel every frame passes
+         and this is a no-op. window.__UI_FPS retunes it live. */
+      /* fb506c — PAGE-AWARE: pacing measured −114 points on the synth page (JS-work-bound: the
+         analyzer, LFO tick, noise viz all halve) but +25 on the FRONT page (compositor-bound:
+         renderTerrain's paint misaligns with vsync under timer pacing and double-rasters). So the
+         panel pages (synth/EQ/delay/mod — the pages Max reports dropping FL's frames) run paced
+         at 60, and the front page stays native. __UI_FPS still overrides both for experiments. */
+      var minGap = 1000 / (window.__UI_FPS || (window.currentActivePanel ? 60 : 1000)) - 1.2;
+      if (ts - lastFrame < minGap){
+        /* fb506b — wait out the remainder with a TIMER, never a rAF re-arm: a pending rAF keeps
+           Chromium's BeginFrame machinery producing frames at the full 360 Hz panel rate even
+           though no callback runs — measured +24 points on the compositor-bound front page. A
+           timer keeps the compositor asleep until the next real tick. */
+        if (q.size && !scheduled){
+          scheduled = true;
+          probeTimer = setTimeout(function(){ probeTimer = 0; raf(pump); },
+                                  Math.max(1, minGap - (ts - lastFrame)));
+        }
+        return;
+      }
+      lastFrame = (ts - lastFrame > 250) ? ts : lastFrame + (1000 / (window.__UI_FPS || 60));
+      runQueue(ts);
+      return;
+    }
     /* fb505 — parked: one drain frame every 5 s. This is NOT ambient life (fb504's 1 fps
        slideshow read as broken 20 fps to Max and was rejected); it exists only so the queue
        stays bounded against push-armed one-shots and so a host-automation edit goes at most
@@ -28559,14 +28591,31 @@ restoreThemeFromBackend();
         window.__lfoMeasT=window.__mvLfoPhT;
         var __gap=(window.__mvLfoPhT-(window.__mvLfoPhTPrev||window.__mvLfoPhT))/1000, __pv=window.__mvLfoPhPrev;
         window.__lfoHz=window.__lfoHz||[];
+        /* fb506 — TRIGGER-AWARE PLL. Retrig/Env push the most-active VOICE's phase
+           (PluginProcessor.cpp:9817), which RESETS to the start phase on every note-on. The old
+           measurement wrapped that backward jump into a huge forward rate (a 0.6-cycle reset over
+           a 16 ms push gap reads as ~24 Hz — inside the <80 gate), poisoning __lfoHz: the dot
+           raced, rubber-banded 25% per push, and under fast retriggers sat PINNED at the start
+           phase, twitching — Max: "the retrigger just sets a fixed phase". And when the pushed
+           phase pins byte-equal (Env end, stopped transport), the rate kept its last poisoned
+           value and the dot buzzed AHEAD of the pin. A backward jump in a trigger mode is a
+           RESET, not a rate: snap to the DSP truth and never feed the wrap into the estimate.
+           Mono maps to Free in the DSP (PluginProcessor.cpp:8569) and Free mode takes the
+           original path bit-identically. */
+        var __mo5=moGet(), __tg5=(__mo5.mn?0:(__mo5.tg||0)), __rst=false;
         if(__pv&&__gap>0.001&&__gap<0.3){
-          var __m=__w01((rP[__i5]||0)-(__pv[__i5]||0))/__gap;
-          if(__m>0&&__m<80) window.__lfoHz[__i5]=(window.__lfoHz[__i5]==null)?__m
-                                                 :(window.__lfoHz[__i5]+(__m-window.__lfoHz[__i5])*0.3);
+          var __d=__w01((rP[__i5]||0)-(__pv[__i5]||0));
+          if(__tg5&&__d>0.5){ __rst=true;
+            if(window.__lfoHz[__i5]==null) window.__lfoHz[__i5]=effHz(); }
+          else if(__tg5&&__d===0){ window.__lfoHz[__i5]=(window.__lfoHz[__i5]||0)*0.7; }
+          else{ var __m=__d/__gap;
+            if(__m>0&&__m<80) window.__lfoHz[__i5]=(window.__lfoHz[__i5]==null)?__m
+                                                   :(window.__lfoHz[__i5]+(__m-window.__lfoHz[__i5])*0.3); }
         }
         var __e=__w01(rP[__i5]||0)-__w01(ph);          // shortest way round the circle
         if(__e>0.5)__e-=1; else if(__e<-0.5)__e+=1;
-        ph=__w01(ph+(Math.abs(__e)>0.35?__e:__e*0.25));  // real discontinuity snaps; drift eases in
+        ph=__rst?__w01(rP[__i5]||0)
+               :__w01(ph+(Math.abs(__e)>0.35?__e:__e*0.25));  // real discontinuity snaps; drift eases in
       }
       ph=__w01(ph+dt*((window.__lfoHz&&window.__lfoHz[__i5])||0));
     }
