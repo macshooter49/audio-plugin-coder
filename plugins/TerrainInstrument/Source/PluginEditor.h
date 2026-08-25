@@ -1474,6 +1474,7 @@ private:
     // SAVE phase: pull serialized state from JS every 5 ticks (only after pageReady)
     int modStateTickCount { 0 };
     bool pageReady { false };
+    bool uiExpDone_ { false };   // fb504 — the %TEMP%\terrain-ui-exp.js dev hook fires once per editor open
     // fb480 -- set on the FIRST real page load (JUCE pageFinishedLoading). Until then the 60Hz
     // timer must not evaluateJavascript: on Windows/WebView2 pre-load evals queue unboundedly in
     // JUCE while the browser initialises (and this is the exact window of JUCE bug 64917).

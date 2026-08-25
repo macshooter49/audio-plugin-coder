@@ -5611,6 +5611,34 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // hasn't fired for >3s while this 60Hz timer is demonstrably running, the channel is
     // dead → reload the page ourselves — the exact manual fix, automated. pageReady=false
     // re-enters the existing RESTORE machinery so all UI state re-pushes after the reload.
+    // fb504 — THE EXPERIMENT HOOK. Every UI-CPU hypothesis so far cost a 6-minute rebuild to
+    // test, and four in a row measured WORSE in the real plugin than in Chrome (the handoff's
+    // "Chrome is not a valid proxy" trap). This makes the REAL plugin the lab: if
+    // %TEMP%\terrain-ui-exp.js exists when the editor opens, its contents run in the page once,
+    // ~1 s after pageReady (the delay lets the boot pushes drain first). Delete the file and the
+    // next editor open is stock. DIAGNOSTIC ONLY, same opt-in idiom as terrain-cpu-on.txt: no
+    // file, no behaviour change, and nothing ships enabled. The eval result lands in
+    // %TEMP%\terrain-ui-exp-result.txt so an experiment can also *report* (DPR, counts, etc.).
+    if (pageReady && ! uiExpDone_ && webView != nullptr)
+    {
+        uiExpDone_ = true;
+        const auto expFile = juce::File::getSpecialLocation (juce::File::tempDirectory)
+                                 .getChildFile ("terrain-ui-exp.js");
+        if (expFile.existsAsFile())
+        {
+            const juce::String js = expFile.loadFileAsString();
+            if (js.isNotEmpty())
+                webView->evaluateJavascript (js, [] (juce::WebBrowserComponent::EvaluationResult r)
+                {
+                    juce::String out = r.getResult() != nullptr ? r.getResult()->toString()
+                                                                : juce::String ("eval error: ")
+                                                                  + (r.getError() != nullptr ? r.getError()->message : "?");
+                    juce::File::getSpecialLocation (juce::File::tempDirectory)
+                        .getChildFile ("terrain-ui-exp-result.txt").replaceWithText (out + "\n");
+                });
+        }
+    }
+
     const double wdNowMs = juce::Time::getMillisecondCounterHiRes();
     if (lastEvalOkMs_ <= 0.0) lastEvalOkMs_ = wdNowMs;   // arm on first tick
     // fb483 -- the heartbeat JS now rides the FRONT of the coalesced frame; its completion (the

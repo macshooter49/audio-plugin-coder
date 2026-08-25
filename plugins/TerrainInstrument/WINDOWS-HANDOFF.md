@@ -281,3 +281,43 @@ So the target is **ZERO frames at idle, not fewer frames**. That means every loo
 when it has nothing to show AND the C++ push stops (fb483's idle-skip already exists but never
 fires, because the LFO phases free-run and make every frame differ). Until the page can reach a
 true idle, throttling anything is measurably counterproductive.
+
+### fb504 — SOLVED: the frame arbiter. WebView2 177% -> 38% at idle, shipped and verified.
+
+The fb503 conclusion held: the cost is per-vsync and near-binary. The loop inventory (7-agent
+sweep, in the fb504 commit) found WHY the page could never rest: of 33 self-rearming rAF loops,
+~24 re-arm even with nothing to draw, 7 intervals poll natives forever (getModDrag at 30 Hz was
+the worst), and 16 infinite CSS + 6 SMIL animations tick the compositor with zero rAF.
+
+**The exp hook made the fix findable**: if %TEMP%\terrain-ui-exp.js exists when the editor opens,
+it runs in the page once (result to terrain-ui-exp-result.txt). Hypothesis cost fell from a
+6-minute rebuild to a 50-second run IN THE REAL PLUGIN. Bisection, cumulative, real plugin:
+    stock idle                                 171.6%
+    rAF parked (freeze)                         62.6%
+    + intervals stopped + CSS/SMIL paused       10.7%
+Also measured on the way: thermal drift makes identical runs read 204-240 normalized — the
+bisect harness now samples '\Processor Information(_Total)\% Processor Performance' during every
+window and prints a clock-normalized column. Sub-15% deltas without it are fiction.
+
+**What shipped (index.html, Windows-UA-gated — the Mac path is byte-untouched):**
+1. THE ARBITER — first script in the page, replaces requestAnimationFrame. Interacting or notes
+   playing = full 60 fps, nothing changes. After 1.5 s of neither: parked — queued rAF callbacks
+   run as a 1 fps slideshow (queue bounded, page never looks dead, automation goes ≤1 s stale),
+   html.ti-parked pauses every CSS animation, SMIL svgs get pauseAnimations(). Any input wakes it
+   in <300 ms; the first note wakes it within ~1 s. window.__tiForceActive=true disables parking.
+2. window.__tiParked gates on the 7 always-on intervals (getModDrag 30 Hz, FMIX x8, cmp/ott
+   400 ms, mod-merge 2.5 s, VIZDBG, lfoXWinSync, crvXWin).
+3. Everything the C++ pushes by direct eval — meters, scope, analyzer — stays LIVE while parked;
+   only pure-JS decoration parks.
+
+**Verified:** counterbalanced A/B on the shipped binary: BEFORE 179.1/175.1, ARBITER 42.5/33.6
+(WebView2, % of one core). Final end-to-end: WebView2 33.0%, plugin process 31.4%. The 8-check
+contract test is Tests/arbiter_contract.js (parks, 1.3 fps parked, <300 ms wake on input, wakes
+on notes, re-parks, 64 fps active, no callback dropped). UI gates eq_ui 15/15, fx4_ui 130/130,
+fx3_ui 48 — all with the arbiter ACTIVE in the test browser. DSP untouched: fingerprint
+446f2e02c4dcb215, live-switch PASS, peak 540.6 MB.
+
+Remaining, in order of measured size: the plugin process message thread (~17% — the 60 Hz push
+build+ship churn; C++ idle-skip never fires because free-running LFO phases change every frame's
+hash), and the active-state cost while PLAYING (unchanged ~170% — next target if playing-with-
+window-open needs to come down too).
