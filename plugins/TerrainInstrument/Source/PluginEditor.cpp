@@ -4733,7 +4733,20 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     }
 
     // Start visualization timer at 60Hz for smooth LFO/mod display
-    startTimerHz(60);
+    // fb501 — the rate is the single biggest lever on the editor's cost, because it multiplies
+    // THREE things at once: timerCallback's own work, the WebView2 hop, and the COM completion
+    // traffic the hop generates on this same thread. Overridable via TERRAIN_UI_HZ purely so the
+    // harness can sweep it without a rebuild; unset it and the behaviour is exactly as before,
+    // on every platform. Read once — the timer is started once.
+    {
+        int uiHz = 60;
+        if (const char* e = std::getenv ("TERRAIN_UI_HZ"))
+        {
+            const int v = juce::String (e).getIntValue();
+            if (v >= 5 && v <= 120) uiHz = v;
+        }
+        startTimerHz (uiHz);
+    }
     audioProcessor.uiClients_.fetch_add (1, std::memory_order_relaxed);   // fb148 — viz census
 
     // Auto-reload the previously-loaded sample(s).
@@ -5445,6 +5458,38 @@ TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
 void TerrainInstrumentAudioProcessorEditor::timerCallback()
 {
     if (webView == nullptr) return;
+
+    // fb501 — THE MESSAGE-THREAD METER. Measured on Windows with one WT osc, no notes, idle:
+    // opening the editor costs the process +17.5 points of CPU, and the biggest single share is
+    // THIS FUNCTION — 11.8% of a core, more than the entire audio thread's DSP. fb489 gave the
+    // audio thread a phase split and that is how the DSP was priced honestly; the UI thread had
+    // no such meter, so its cost has only ever been guessed at. Same shape, same probe file:
+    //   ui <total>% [build <b> | ship <s>]
+    // build = everything that assembles the frame (atomics, float formatting, juce::String
+    // concatenation). ship = the WebView2 hop alone. They answer the only question that matters
+    // here: is it the WORK or the CROSSING? A scope guard so every early return still counts.
+    struct UiClock
+    {
+        TerrainInstrumentAudioProcessor& p; long long t0;
+        UiClock (TerrainInstrumentAudioProcessor& pp)
+            : p (pp), t0 ((long long) juce::Time::getHighResolutionTicks())
+        { p.uiBuildMark_ = 0; }
+        ~UiClock()
+        {
+            const long long t1 = (long long) juce::Time::getHighResolutionTicks();
+            p.uiTicksTotal_.fetch_add (t1 - t0, std::memory_order_relaxed);
+            if (p.uiBuildMark_ != 0)
+            {
+                p.uiTicksBuild_.fetch_add (p.uiBuildMark_ - t0, std::memory_order_relaxed);
+                p.uiTicksShip_ .fetch_add (t1 - p.uiBuildMark_, std::memory_order_relaxed);
+            }
+            else
+            {
+                p.uiTicksBuild_.fetch_add (t1 - t0, std::memory_order_relaxed);   // returned before the ship
+            }
+            p.uiTickCount_.fetch_add (1, std::memory_order_relaxed);
+        }
+    } uiClock_ { audioProcessor };
 
     // fb480 -- before the first page load, the ONLY per-tick duty is the size self-heal (FL
     // replays junk sizes at attach, which happens exactly in this window). Everything else in
@@ -6286,6 +6331,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // keep-alive every 30 ticks so wd9 and the ack loop stay fed. Never skipped before
     // pageReady: the RESTORE pushes must repeat until the page can eat them.
     {
+        audioProcessor.uiBuildMark_ = (long long) juce::Time::getHighResolutionTicks();   // fb501 — build ends, ship begins
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)
             fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;

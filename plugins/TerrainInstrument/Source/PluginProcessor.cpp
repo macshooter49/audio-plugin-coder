@@ -329,10 +329,16 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
                     const double gSec = (double) dspGather_.exchange (0, std::memory_order_relaxed) / tps;
                     const double vSec = (double) dspVoices_.exchange (0, std::memory_order_relaxed) / tps;
                     const double pSec = dspSec - gSec - vSec;
+                    // fb501 — the message thread's share, same window, same units.
+                    const double uiSec  = (double) uiTicksTotal_.exchange (0, std::memory_order_relaxed) / tps;
+                    const double uiBSec = (double) uiTicksBuild_.exchange (0, std::memory_order_relaxed) / tps;
+                    const double uiSSec = (double) uiTicksShip_ .exchange (0, std::memory_order_relaxed) / tps;
+                    const int    uiN    = uiTickCount_.exchange (0, std::memory_order_relaxed);
                     juce::File::getSpecialLocation (juce::File::tempDirectory)
                         .getChildFile ("terrain-cpu.txt")
                         .replaceWithText (juce::String::formatted (
-                            "DSP %.1f%% of one core  [gather %.1f | voices %.1f | fx+master %.1f]  blk %d @ %.0f Hz  voices %d | bakes %u | frames %u acks %u | lastFrame %u B\n",
+                            "DSP %.1f%% of one core  [gather %.1f | voices %.1f | fx+master %.1f]  blk %d @ %.0f Hz  voices %d | bakes %u | frames %u acks %u | lastFrame %u B\n"
+                            "UI  %.1f%% of one core  [build %.1f | ship %.1f]  %d ticks (%.0f Hz), %.2f ms/tick\n",
                             100.0 * dspSec / audSec,
                             100.0 * gSec / audSec, 100.0 * vSec / audSec, 100.0 * pSec / audSec,
                             (int) (smp / juce::jmax (1.0, (double) dspBlocks_.exchange (0, std::memory_order_relaxed))), sr,   // fb492 AVERAGE block
@@ -340,7 +346,10 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
                             (unsigned) bakeCount_.load (std::memory_order_relaxed),
                             (unsigned) dbgFramesSent_.load (std::memory_order_relaxed),
                             (unsigned) dbgAcks_.load (std::memory_order_relaxed),
-                            (unsigned) dbgLastFrameB_.load (std::memory_order_relaxed)));
+                            (unsigned) dbgLastFrameB_.load (std::memory_order_relaxed),
+                            100.0 * uiSec / audSec, 100.0 * uiBSec / audSec, 100.0 * uiSSec / audSec,
+                            uiN, (double) uiN / juce::jmax (0.001, audSec),
+                            uiN > 0 ? 1000.0 * uiSec / (double) uiN : 0.0));
                 }
             }
             const uint32_t now = mtHeartbeat_.load (std::memory_order_relaxed);

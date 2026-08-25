@@ -33,6 +33,12 @@
 #include <cstring>
 #include <xmmintrin.h>
 #include <pmmintrin.h>
+#include <tlhelp32.h>
+#include <map>
+#include <vector>
+#include <algorithm>
+#include <thread>
+#include <atomic>
 
 static const double SR      = 48000.0;   // what this machine's device actually runs at
 static const double SECONDS = 6.0;
@@ -455,8 +461,182 @@ static int paramsMode (Host& host, const juce::String& filter)
     return 0;
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  --editor : WHY DOES OPENING THE WINDOW COST +20?
+//
+//  Every other mode here renders headless and offline, which cannot see the thing Max actually
+//  reports: window closed = butter, window open = spikes and dropped frames. So this mode builds
+//  the real situation and then attributes the cost PER THREAD:
+//
+//    · the REAL editor, in a real window, created through the plugin's own createEditorIfNeeded
+//    · a REAL-TIME-PACED audio thread (one block every blk/SR seconds, like a DAW's callback) —
+//      NOT the free-running offline loop, because free-running starves the UI and would make the
+//      editor look cheap by stealing the core from it
+//    · the message loop pumping on the main thread, exactly as a DAW pumps it
+//
+//  Then GetThreadTimes over every thread in the process says where the CPU went: audio thread,
+//  message thread, or one of the plugin's own workers. WebView2 lives in SEPARATE processes, so
+//  the caller diffs those (see the PowerShell wrapper) — they are not in this table.
+struct ThreadCpuSnap { std::map<DWORD, double> byTid; };
+
+static void snapshotThreadCpu (ThreadCpuSnap& out)
+{
+    out.byTid.clear();
+    const DWORD me = GetCurrentProcessId();
+    HANDLE snap = CreateToolhelp32Snapshot (TH32CS_SNAPTHREAD, 0);
+    if (snap == INVALID_HANDLE_VALUE) return;
+    THREADENTRY32 te {};
+    te.dwSize = sizeof (te);
+    if (Thread32First (snap, &te))
+    {
+        do
+        {
+            if (te.th32OwnerProcessID != me) continue;
+            HANDLE h = OpenThread (THREAD_QUERY_INFORMATION, FALSE, te.th32ThreadID);
+            if (h == nullptr) continue;
+            FILETIME c {}, e {}, k {}, u {};
+            if (GetThreadTimes (h, &c, &e, &k, &u))
+            {
+                ULARGE_INTEGER K {}, U {};
+                K.LowPart = k.dwLowDateTime; K.HighPart = k.dwHighDateTime;
+                U.LowPart = u.dwLowDateTime; U.HighPart = u.dwHighDateTime;
+                out.byTid[te.th32ThreadID] = (double) (K.QuadPart + U.QuadPart) / 1.0e7;   // 100ns units
+            }
+            CloseHandle (h);
+        } while (Thread32Next (snap, &te));
+    }
+    CloseHandle (snap);
+}
+
+static int editorMode (Host& host, int blk, double seconds, bool openEditor)
+{
+    auto inst = host.make (blk);
+    if (inst == nullptr) return 1;
+
+    inst->enableAllBuses();
+    inst->setRateAndBufferSizeDetails (SR, blk);
+    inst->prepareToPlay (SR, blk);
+
+    const DWORD msgTid = GetCurrentThreadId();
+    std::atomic<DWORD> audioTid { 0 };
+    std::atomic<bool>  stop { false };
+    std::atomic<double> dspSec { 0.0 };
+    std::atomic<long long> blocksDone { 0 };
+    std::atomic<long long> lateBlocks { 0 };
+
+    // ── the audio thread: paced to real time, like a host callback ────────────────────────────
+    std::thread audio ([&]
+    {
+        audioTid.store (GetCurrentThreadId());
+        SetThreadPriority (GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+        const int nch = juce::jmax (2, inst->getTotalNumOutputChannels());
+        juce::AudioBuffer<float> buf (nch, blk);
+        juce::MidiBuffer midi;
+        const auto period = std::chrono::duration<double> ((double) blk / SR);
+        auto next = std::chrono::steady_clock::now();
+        double acc = 0.0;
+        while (! stop.load (std::memory_order_relaxed))
+        {
+            next += std::chrono::duration_cast<std::chrono::steady_clock::duration> (period);
+            buf.clear(); midi.clear();
+            const auto t0 = std::chrono::steady_clock::now();
+            inst->processBlock (buf, midi);
+            const auto t1 = std::chrono::steady_clock::now();
+            acc += std::chrono::duration<double> (t1 - t0).count();
+            dspSec.store (acc, std::memory_order_relaxed);
+            blocksDone.fetch_add (1, std::memory_order_relaxed);
+            if (t1 > next) lateBlocks.fetch_add (1, std::memory_order_relaxed);   // missed its slot
+            std::this_thread::sleep_until (next);
+        }
+    });
+
+    // ── the editor, on the message thread ─────────────────────────────────────────────────────
+    std::unique_ptr<juce::DocumentWindow> win;
+    juce::AudioProcessorEditor* ed = nullptr;
+    if (openEditor)
+    {
+        ed = inst->createEditorIfNeeded();
+        if (ed == nullptr) { std::printf ("  !! the plugin returned no editor\n"); }
+        else
+        {
+            win.reset (new juce::DocumentWindow ("Terrain harness", juce::Colours::black,
+                                                 juce::DocumentWindow::allButtons));
+            win->setUsingNativeTitleBar (true);
+            win->setContentNonOwned (ed, true);
+            win->centreWithSize (ed->getWidth(), ed->getHeight());
+            win->setVisible (true);
+            // Chromium THROTTLES requestAnimationFrame for a window it considers hidden or
+            // occluded, and JUCE's own push is gated by emitEventIfBrowserIsVisible. A harness
+            // window that is merely "visible" but behind something measures an idle page and
+            // reports a page cost near zero — which is how a first attempt here read 0.07% for
+            // a UI that visibly animates. Force it genuinely frontmost so the measurement is of
+            // the page a user is actually looking at.
+            win->setAlwaysOnTop (true);
+            win->toFront (true);
+        }
+        // let WebView2 boot and the page settle before the measurement window opens
+        juce::MessageManager::getInstance()->runDispatchLoopUntil (4000);
+    }
+
+    ThreadCpuSnap before, after;
+    const double wall0 = (double) juce::Time::getMillisecondCounterHiRes();
+    const double dsp0  = dspSec.load();
+    const long long blk0 = blocksDone.load(), late0 = lateBlocks.load();
+    snapshotThreadCpu (before);
+
+    juce::MessageManager::getInstance()->runDispatchLoopUntil ((int) (seconds * 1000.0));
+
+    snapshotThreadCpu (after);
+    const double wallSec = ((double) juce::Time::getMillisecondCounterHiRes() - wall0) / 1000.0;
+    const double dspDelta = dspSec.load() - dsp0;
+    const long long blkDelta = blocksDone.load() - blk0, lateDelta = lateBlocks.load() - late0;
+
+    stop.store (true);
+    audio.join();
+
+    if (win != nullptr) { win->setVisible (false); win->clearContentComponent(); win.reset(); }
+    if (ed != nullptr) inst->editorBeingDeleted (ed);
+    inst->releaseResources();
+    inst.reset();
+
+    // ── the report ────────────────────────────────────────────────────────────────────────────
+    std::printf ("\n  EDITOR %s   blk %d   %.1f s wall\n\n", openEditor ? "OPEN" : "CLOSED", blk, wallSec);
+    std::printf ("    audio thread DSP        %6.2f%% of one core   (%lld blocks, %lld late)\n",
+                 100.0 * dspDelta / wallSec, blkDelta, lateDelta);
+
+    struct Row { DWORD tid; double sec; };
+    std::vector<Row> rows;
+    double total = 0.0;
+    for (const auto& kv : after.byTid)
+    {
+        const auto it = before.byTid.find (kv.first);
+        const double d = kv.second - (it == before.byTid.end() ? 0.0 : it->second);
+        if (d > 0.0005) { rows.push_back ({ kv.first, d }); total += d; }
+    }
+    std::sort (rows.begin(), rows.end(), [] (const Row& a, const Row& b) { return a.sec > b.sec; });
+
+    std::printf ("\n    PER-THREAD CPU in this process (%% of one core)\n");
+    for (const auto& r : rows)
+    {
+        const char* tag = (r.tid == msgTid) ? "  <- MESSAGE thread (UI + frame push)"
+                        : (r.tid == audioTid.load()) ? "  <- AUDIO thread"
+                        : "";
+        std::printf ("      tid %-6lu  %6.2f%%%s\n", (unsigned long) r.tid, 100.0 * r.sec / wallSec, tag);
+    }
+    std::printf ("      %-11s %6.2f%%   <- whole process (WebView2 lives in OTHER processes)\n",
+                 "TOTAL", 100.0 * total / wallSec);
+    std::printf ("\n");
+    return 0;
+}
+
 int main (int argc, char** argv)
 {
+    // --editor creates a real window and hands the exit path to JUCE's message loop, which does
+    // not flush a redirected stdout on the way out: the whole run printed NOTHING under
+    // PowerShell while still exiting 0. Unbuffered from the first byte, so a mode that dies
+    // mid-way still shows what it managed to say.
+    setvbuf (stdout, nullptr, _IONBF, 0);
+
     juce::ScopedJuceInitialiser_GUI juceInit;
 
     juce::String path = kDefaultPath;
@@ -464,6 +644,7 @@ int main (int argc, char** argv)
     bool wantModal = false;
     bool wantModalLive = false;
     int  holdBlk = 0; double holdSec = 25.0; bool ftz = false;
+    int  edBlk = 0; bool edOpen = true;
     bool wantParams = false; juce::String paramFilter;
     for (int i = 1; i < argc; ++i)
     {
@@ -472,6 +653,8 @@ int main (int argc, char** argv)
         else if (a == "--modal") wantModal = true;
         else if (a == "--modal-live") wantModalLive = true;
         else if (a == "--ftz") ftz = true;
+        else if (a.startsWith ("--editor=")) edBlk = a.substring (9).getIntValue();
+        else if (a == "--noeditor") { edOpen = false; if (edBlk == 0) edBlk = 512; }
         else if (a.startsWith ("--params")) { wantParams = true; if (a.startsWith ("--params=")) paramFilter = a.substring (9); }
         else if (a.startsWith ("--hold=")) holdBlk = a.substring (7).getIntValue();
         else if (a.startsWith ("--secs=")) holdSec = a.substring (7).getDoubleValue();
@@ -487,6 +670,7 @@ int main (int argc, char** argv)
     if (wantModal) return modalMode (host);
     if (wantModalLive) return modalLiveMode (host);
     if (holdBlk > 0) return holdMode (host, holdBlk, holdSec, ftz);
+    if (edBlk > 0) return editorMode (host, edBlk, holdSec, edOpen);
     if (wantParams) return paramsMode (host, paramFilter);
 
     std::printf ("\n  IDLE DSP cost vs HOST BLOCK SIZE (no notes, no editor, %.0f s per point, %.0f Hz)\n\n",

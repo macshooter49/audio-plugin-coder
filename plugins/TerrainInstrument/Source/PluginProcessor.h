@@ -1010,6 +1010,13 @@ public:
     wc::ModConfig synModCfgPersist_;          // assigned inside the gather, consumed after it
     float         synModBpmPersist_ = 0.0f;
     long long dspT0_ = 0, dspTA_ = 0;   // audio thread only
+
+    // fb501 — MESSAGE-THREAD METER (the editor's timerCallback). Public so the editor can write
+    // them; message thread only, so plain relaxed atomics are ample. Reported in the same probe
+    // line as the DSP split, because "the window costs +17.5 points" needed a number and had none.
+    std::atomic<long long> uiTicksTotal_ { 0 }, uiTicksBuild_ { 0 }, uiTicksShip_ { 0 };
+    std::atomic<int>       uiTickCount_  { 0 };
+    long long              uiBuildMark_  = 0;   // message thread only — where build ends / ship begins
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }
 
     // Spectrum analyzers (public so editor's timerCallback can readLatest() for WebView push)
