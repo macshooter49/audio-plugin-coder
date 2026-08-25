@@ -51,8 +51,13 @@
         st.textContent = 'html.ti-parked *,html.ti-parked *::before,html.ti-parked *::after{animation-play-state:paused !important}';
         document.head.appendChild(st);
       }
-      var svgs = document.querySelectorAll('svg');
-      for (var i = 0; i < svgs.length; i++){ try { p ? svgs[i].pauseAnimations() : svgs[i].unpauseAnimations(); } catch(e) {} }
+      /* fb505 — SMIL stays paused FOREVER on Windows (see the boot pause below): the FLOW
+         emblems' wing-flap/orbit are pure decoration, and Max's verdict after testing fb504 was
+         Serum-2 policy — nothing moves on its own here. So: pause on park, never unpause. */
+      if (p){
+        var svgs = document.querySelectorAll('svg');
+        for (var i = 0; i < svgs.length; i++){ try { svgs[i].pauseAnimations(); } catch(e) {} }
+      }
     } catch(e) {}
   }
   function runQueue(ts){
@@ -63,12 +68,15 @@
   function pump(ts){
     scheduled = false;
     if (isActive()){ setParked(false); runQueue(ts); return; }
-    /* parked: one slideshow frame per second — drains the queue, keeps ambient life at 1 fps */
+    /* fb505 — parked: one drain frame every 5 s. This is NOT ambient life (fb504's 1 fps
+       slideshow read as broken 20 fps to Max and was rejected); it exists only so the queue
+       stays bounded against push-armed one-shots and so a host-automation edit goes at most
+       ~5 s stale. Visually the page is STATIC at idle. */
     setParked(true);
     runQueue(ts);
     if (q.size && !scheduled){
       scheduled = true;
-      probeTimer = setTimeout(function(){ probeTimer = 0; raf(pump); }, 1000);
+      probeTimer = setTimeout(function(){ probeTimer = 0; raf(pump); }, 5000);
     }
   }
   function act(){
@@ -81,16 +89,83 @@
   ['pointerdown','pointermove','pointerup','wheel','keydown','touchstart'].forEach(function(t){
     window.addEventListener(t, act, { capture: true, passive: true });
   });
+  /* fb505 — the FIRST NOTE wakes a parked page INSTANTLY. The C++ frame sets
+     window.__notesActive by direct eval at 60 Hz; with the drain at 5 s, polling it would leave
+     the viz frozen for up to 5 s after the first key press. A property setter turns the
+     assignment itself into the wake signal — zero polling, zero latency. */
+  (function(){
+    var na = window.__notesActive || 0;
+    try {
+      Object.defineProperty(window, '__notesActive', {
+        get: function(){ return na; },
+        set: function(v){ var was = na; na = v; if (v && !was) act(); },
+        configurable: true
+      });
+    } catch(e) {}
+  })();
   window.requestAnimationFrame = function(cb){
     var i = ++nid; q.set(i, cb);
     if (!scheduled){
       scheduled = true;
       if (isActive() || !parked) raf(pump);
-      else probeTimer = setTimeout(function(){ probeTimer = 0; raf(pump); }, 1000);
+      else probeTimer = setTimeout(function(){ probeTimer = 0; raf(pump); }, 5000);
     }
     return i;
   };
   window.cancelAnimationFrame = function(i){ q.delete(i); };
+
+  /* ══ fb505 — THE DECORATION API (Serum-2 policy). Max's verdict after living with fb504:
+     ambient animation is unacceptable on Windows at ANY rate — decoration must be STATIC, and it
+     must stay static even WHILE NOTES PLAY, because the compositor's per-frame price is what
+     eats the machine. Reactive visuals (scope, meters, wavetable, filter curve, envelope, the
+     LFO while a note sounds) keep full 60 fps — they are the product. Two primitives:
+
+     __tiSlow(cb)      — a decorative loop re-arms with THIS instead of requestAnimationFrame.
+                         While the user's pointer/keys are active it refreshes at 2 fps (so
+                         resizes, panel switches and theme changes never look stale); otherwise
+                         one frame per 10 s (self-healing, visually static). On macOS it IS
+                         requestAnimationFrame — zero behaviour change there.
+     __tiDecoDue(key)  — for loops that mix reactive + decorative work (the filter analyzer
+                         draws a REACTIVE spectrum and decorative breathing emblems in the same
+                         frame): call per frame, draw the decoration only when it returns true.
+                         Same cadence contract as __tiSlow; per-key so sites don't starve each
+                         other. On macOS it always returns true. */
+  var decoLast = {};
+  window.__tiSlow = function(cb){
+    var wait = (performance.now() - lastAct < 1500) ? 500 : 10000;
+    setTimeout(function(){ window.requestAnimationFrame(cb); }, wait);
+  };
+  window.__tiDecoDue = function(key){
+    var now = performance.now();
+    var wait = (now - lastAct < 1500) ? 500 : 10000;
+    if (decoLast[key] !== undefined && now - decoLast[key] < wait) return false;
+    decoLast[key] = now;
+    return true;
+  };
+
+  /* fb505 — the always-on decorative CSS animations die permanently on Windows: the breathing
+     strokes, the mod-button glow, the FLOW arp/seq pulses, the grain-icon breathe. Targeted list
+     from the fb504 inventory — one-shot feedback animations (flashes) are NOT in it and keep
+     working. SMIL emblems are paused at boot below and never unpaused. */
+  function killDecor(){
+    try {
+      var st = document.createElement('style');
+      st.id = 'ti-static-decor';
+      st.textContent = '.mod-btn.has-routes,#mod-engine .mv-stroke,.mv-ext .es .mv-stroke,#env-line,'
+        + '.fxr-core .dst-curve,.fxr-core .grn-wave,.flow-mode .arpNote,.flow-mode .arpLine,'
+        + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}';
+      document.head.appendChild(st);
+      var svgs = document.querySelectorAll('svg');
+      for (var i = 0; i < svgs.length; i++){ try { svgs[i].pauseAnimations(); } catch(e) {} }
+      setInterval(function(){                      /* cards built later carry SMIL too */
+        if (window.__tiParked) return;
+        var s2 = document.querySelectorAll('svg');
+        for (var j = 0; j < s2.length; j++){ try { if (!s2[j].animationsPaused()) s2[j].pauseAnimations(); } catch(e) {} }
+      }, 4000);
+    } catch(e) {}
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', killDecor);
+  else killDecor();
 })();
 </script>
 <script>
@@ -7689,18 +7764,18 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             // live wander on the 'live' macros (analog feel)
             var t=0;
             function tick(){ if(window.__cardOnly)return;
-              /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ requestAnimationFrame(tick); return; }
+              /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ (window.__tiSlow||requestAnimationFrame)(tick); return; }
               try{
               t+=0.016; var arr=BANKS[bank];
               for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
-            }catch(e){} requestAnimationFrame(tick); }
+            }catch(e){} (window.__tiSlow||requestAnimationFrame)(tick); }   /* fb505 deco -- analog wander is decoration */
             requestAnimationFrame(tick);
             // SWAY lane — scrolling analog drift trace
             var cv=document.getElementById('rr-lane');
             if(cv&&cv.getContext){
               var cx=cv.getContext('2d'), buf=[]; for(var b2=0;b2<180;b2++) buf.push(0);
               (function lane(){ if(window.__cardOnly)return;
-                /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ requestAnimationFrame(lane); return; }
+                /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ (window.__tiSlow||requestAnimationFrame)(lane); return; }
                 try{
                 var now=t*1000+performance.now()*0; // t drives it; performance.now avoided for determinism-safety
                 var pn=(typeof performance!=='undefined'&&performance.now)?performance.now():t*1000;
@@ -7714,7 +7789,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 cx.stroke();
                 var ly=cv.height/2-buf[buf.length-1]*(cv.height*0.36);
                 cx.fillStyle='#fff'; cx.beginPath(); cx.arc(cv.width-3,ly,2.6,0,7); cx.fill();
-              }catch(e){} requestAnimationFrame(lane); })();
+              }catch(e){} (window.__tiSlow||requestAnimationFrame)(lane); })();   /* fb505 deco */
             }
           }catch(e){ try{console.log('[ribbon] init err',e);}catch(_){} } }
           if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
@@ -13657,8 +13732,8 @@ window.__synArc = function (ring, n, bipolar) {
       if(window.__cardOnly) return;   // fb494 -- RESTORED: fb487 appended its note on this line and
       // swallowed this guard into the comment, so the contour map has been running in every popped
       // card window since. fb487's own half-rate skip follows, on its own line this time.
-      /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ requestAnimationFrame(frame); return; }   // the whole synth page is away: no grid, no contours, no gBCR
-      if(window.__WIN_LITE&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ requestAnimationFrame(frame); return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
+      /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ (window.__tiSlow||requestAnimationFrame)(frame); return; }   /* fb505 deco */   // the whole synth page is away: no grid, no contours, no gBCR
+      if(window.__WIN_LITE&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ (window.__tiSlow||requestAnimationFrame)(frame); return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
       var t=ts/1000, dt=Math.min(0.05,t-last); last=t; tickF(dt);
       /* fb497 — the 32-frame rect cache drawInto() already uses, for the same reason: this box is
          fixed by layout and was costing one forced-layout gBCR every frame. A DEGENERATE cached
@@ -13669,7 +13744,7 @@ window.__synArc = function (ring, n, bipolar) {
       var W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
       if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,r.width,r.height);
-      if(r.width<8||r.height<8){ requestAnimationFrame(frame); return; }
+      if(r.width<8||r.height<8){ (window.__tiSlow||requestAnimationFrame)(frame); return; }
       var w=r.width, h=r.height;
       var g=sampleGrid(46,34,t);
       LEV.forEach(function(th,li){
@@ -13699,7 +13774,7 @@ window.__synArc = function (ring, n, bipolar) {
         ctx.fillStyle=gr; ctx.fillRect(e2[0],e2[1],e2[2],e2[3]);
       });
       ctx.globalCompositeOperation='source-over';
-      requestAnimationFrame(frame);
+      (window.__tiSlow||requestAnimationFrame)(frame);   /* fb505 — the topo landscape is DECORATION: static on Windows, 2fps while interacting */
     }
     requestAnimationFrame(frame);
   }
@@ -23740,16 +23815,22 @@ function animate(timestamp) {
   _prevAnimTime = time;
   state.terrainTime = time;
 
+  // fb505 — Serum-2 policy on Windows: DECORATION is near-static (2 fps while the pointer is
+  // active, one frame per 10 s otherwise), REACTIVE visuals keep 60 fps. renderTerrain stays
+  // full rate — the hero mountain reacts to the audio scope and is the product's identity
+  // visual; at idle the arbiter freezes it anyway. Icons, section icons and the spinning tape
+  // reels are decoration and burn compositor for nothing. On macOS __tiDecoDue is undefined and
+  // every branch below runs exactly as before.
   renderTerrain(time);
   updateMeters(time);
-  updateSectionIcons();
+  if (!window.__tiDecoDue || window.__tiDecoDue('sicons')) updateSectionIcons();
   updateXYAuto(time);
-  updateAnimatedIcons(time);
+  if (!window.__tiDecoDue || window.__tiDecoDue('icons')) updateAnimatedIcons(time);
   // Safari preview: simulate loop progress when no JUCE backend
   if (!juceMode && (state.tapeLoop.playing || state.tapeLoop.recording)) {
     state.tapeLoop.loopProgress = (state.tapeLoop.loopProgress + 0.003) % 1.0;
   }
-  drawTapeReels(time);
+  if (!window.__tiDecoDue || window.__tiDecoDue('reels')) drawTapeReels(time);
   updateModulation(time, dt);
   if (typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);
 
@@ -27125,7 +27206,7 @@ function initFxSuite() {
       tapeTime += dt;
       var tapeCanvas = document.getElementById('tapeMechCanvas');
       if (tapeCanvas && tapeCanvas.width > 0) {
-        drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
+        if (!window.__tiDecoDue || window.__tiDecoDue('tape-viz')) drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);   /* fb505 deco */
       }
       var tapeKnobIds = ['wow', 'saturation', 'hiss'];
       for (var tki = 0; tki < tapeKnobIds.length; tki++) {
@@ -28829,7 +28910,7 @@ restoreThemeFromBackend();
     // then eight full stroked passes, every frame. The FEED still smooths every frame (pollLive +
     // smoothLive stay at 60 Hz so nothing lags behind the audio); only the DRAW halves on Windows.
     var __anlSkip = window.__WIN_LITE && (((window.__anlAlt = (window.__anlAlt|0) + 1) & 1) === 1);
-    try{ pollLive(); smoothLive(); if(!__anlSkip){ drawAnalyzer(); drawEmblems(t); } pollHud(); }catch(e){} requestAnimationFrame(loop); }
+    try{ pollLive(); smoothLive(); if(!__anlSkip){ drawAnalyzer(); if(!window.__tiDecoDue||window.__tiDecoDue('fk-em'))drawEmblems(t); } pollHud(); }catch(e){} requestAnimationFrame(loop); }
   function buildExt(){
     ext=document.createElement('div'); ext.className='filt-ext';
     ext.innerHTML='<div class="fe-h"><span class="fe-g">⠇</span><span class="fe-t">Filter 1</span><span class="fe-x">✕</span></div><div class="fe-b"><canvas></canvas></div>';

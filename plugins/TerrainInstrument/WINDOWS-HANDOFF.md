@@ -321,3 +321,34 @@ Remaining, in order of measured size: the plugin process message thread (~17% �
 build+ship churn; C++ idle-skip never fires because free-running LFO phases change every frame's
 hash), and the active-state cost while PLAYING (unchanged ~170% — next target if playing-with-
 window-open needs to come down too).
+
+### fb505 — SERUM-2 POLICY: decoration static ALWAYS on Windows. WebView2 idle 17%, playing-with-static-data 16%.
+
+Max tested fb504 and rejected the 1 fps ambient slideshow ("that's not gonna work"). Verdict:
+NOTHING moves on its own on Windows — decoration is static even WHILE NOTES PLAY; only REACTIVE
+visuals (scope, meters, wavetable, filter curve, envelope, LFO-during-notes) animate. Shipped:
+
+1. Arbiter drain 1 s -> 5 s (parked page is visually STATIC; queue stays bounded).
+2. `__tiSlow(cb)` — decorative loops re-arm with this: 2 fps while pointer/keys active (resizes
+   never look stale), one frame per 10 s otherwise. On macOS it IS requestAnimationFrame.
+   Applied to: topo contour map, RR wander, SWAY lane.
+3. `__tiDecoDue(key)` — mixed loops draw their decoration only when this fires (same cadence).
+   Applied to: animated icons, section icons, tape reels (front page), FX-suite tape viz,
+   analyzer fk-em emblems. renderTerrain (hero mountain) stays 60 fps — it reacts to the audio
+   scope and is the identity visual; the arbiter freezes it at idle anyway.
+4. The infinite decorative CSS animations die PERMANENTLY on Windows (targeted list, one-shot
+   feedback flashes untouched); SMIL emblems paused at boot and never unpaused.
+5. `__notesActive` is now a property SETTER on Windows: the C++ push assigning it 0->1 wakes a
+   parked page INSTANTLY (the 5 s drain would otherwise leave viz frozen up to 5 s on the first
+   key press).
+
+MEASURED (bisect harness, clock column watched): idle 17.2%, notes-forced-with-static-data
+15.9% — vs 179.3% for the pre-arbiter baseline in the same forced-notes state. Cost is now
+proportional to what CHANGES on screen, not to time passing. Contract test 8/8 (note-wake
+included), eq_ui 15/15, fx4_ui 130/130, fx3_ui 48, lfo_val_smooth ALL PASSED, fingerprint
+446f2e02c4dcb215, peak 540.8 MB. Installed to Program Files (hash-verified).
+
+Still open if more is wanted: the plugin process itself (~23-31% — message-thread push churn;
+C++ idle-skip never fires because free-running LFO phases change every frame's hash), and
+whatever REAL audio playback costs (scope/meter data changes every frame during sound — not
+measurable in this harness; Max tests in FL).
