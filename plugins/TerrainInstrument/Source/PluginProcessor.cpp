@@ -287,14 +287,35 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
         uint32_t last = 0; int stalledMs = 0; int cpuTick = 0;   // fb488
         // fb496 — the CPU probe is a DEVELOPMENT instrument: it rewrote a file in TEMP every
         // 5 seconds, forever, in release builds, for every instance. Opt in with
-        // TERRAIN_CPU_PROBE=1 in the environment. Read ONCE (getenv is not thread-safe against
-        // a concurrent setenv, and the answer cannot change for the life of this thread).
-        // The STALL REPORT below is untouched — it is a crash diagnostic, it writes only when
-        // the message thread has actually been dead for 3 s, and it must survive in the field.
-        const bool cpuProbeOn = (std::getenv ("TERRAIN_CPU_PROBE") != nullptr);
+        // TERRAIN_CPU_PROBE=1 in the environment.
+        //
+        // fb500 — AN ENVIRONMENT VARIABLE CANNOT REACH A DAW LAUNCHED FROM EXPLORER. FL Studio
+        // and Live inherit only the USER/MACHINE environment, never a shell's, and on this
+        // machine TERRAIN_CPU_PROBE is set at neither scope (checked). So fb496's env-only gate
+        // means the probe is OFF in the DAW unless the DAW itself is started from a shell that
+        // exported it — which is not how anyone opens a DAW. The gate is now env-var OR a marker
+        // file, RE-READ while running, so it can be switched on mid-session without restarting:
+        //
+        //     turn on : create %TEMP%\terrain-cpu-on.txt   (any content, or empty)
+        //     turn off: delete it
+        //
+        // Still opt-in, so fb496's complaint (a release build writing a file forever) stands.
+        //
+        // ⚠️ The beacon is WALL-CLOCK paced (500 ms sleeps, reports every ~5 s). An OFFLINE host
+        // that renders faster than real time — Tests/win_blk_cpu.cpp does ~15x — can render
+        // minutes of audio in a couple of seconds and exit before the beacon ever ticks ten
+        // times. That looks exactly like "the probe is broken under VST3" and is not: it needs
+        // ~6 s of WALL time, i.e. --secs must be at least ~15x that. Cost an hour once.
+        const auto tempDir  = juce::File::getSpecialLocation (juce::File::tempDirectory);
+        const auto onMarker = tempDir.getChildFile ("terrain-cpu-on.txt");
+        const bool cpuProbeEnv = (std::getenv ("TERRAIN_CPU_PROBE") != nullptr);
+        bool cpuProbeOn = cpuProbeEnv || onMarker.existsAsFile();
+
         while (! beaconStop_.load (std::memory_order_relaxed))
         {
             std::this_thread::sleep_for (std::chrono::milliseconds (500));
+            // re-read the marker every ~2 s so it can be toggled live
+            if ((cpuTick % 4) == 0) cpuProbeOn = cpuProbeEnv || onMarker.existsAsFile();
             if (cpuProbeOn && (++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
             {
                 const double tks = (double) dspTicks_.exchange (0, std::memory_order_relaxed);
