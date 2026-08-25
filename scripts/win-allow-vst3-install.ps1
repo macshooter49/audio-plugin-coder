@@ -6,8 +6,9 @@
 #  build, which is why builds kept not reaching the DAW. This grants THIS USER Modify rights on
 #  the Terrain bundle folder ONLY -- not on Program Files, not on any other plugin.
 #
-#  Right-click -> Run with PowerShell (as Administrator), or from an admin shell:
-#      powershell -ExecutionPolicy Bypass -File scripts\win-allow-vst3-install.ps1
+#  From an admin shell, use the FULL path -- an elevated PowerShell opens in C:\WINDOWS\system32,
+#  so a repo-relative path does not resolve:
+#      powershell -ExecutionPolicy Bypass -File "C:\dev\audio-plugin-coder\scripts\win-allow-vst3-install.ps1"
 # ==============================================================================================
 $ErrorActionPreference = 'Stop'
 
