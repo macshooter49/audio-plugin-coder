@@ -6177,8 +6177,23 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // frames keep publishing, so the next tick after a flip always passes gate 2.
     {
         const int   pg     = audioProcessor.uiPage.load (std::memory_order_relaxed);
+        // fb507 — THE SILENCE GATE. Measured on Windows: with the SYNTH page open and NOTHING
+        // sounding, this block was the message thread's whale — two 4096-point FFTs plus a
+        // 29 KB string build per tick, 54% of one core [UI build], because "fresh" below only
+        // means the analyzer published a new frame, and an FFT of SILENCE publishes fresh
+        // frames forever. If the output has been inaudible for ~1.5 s (tail included, so the
+        // decay draws to the floor first), skip the transform, the build and the push entirely;
+        // the first audible block re-enters on the next tick. A page-flip edge allows a short
+        // burst so a freshly-opened panel never shows an empty spectrum.
+        const bool audible = audioProcessor.oscScopeNv.load (std::memory_order_relaxed) > 0
+                          || audioProcessor.oscScopeORms.load (std::memory_order_relaxed) > 1.0e-4f;
+        if (audible) eqQuietTicks_ = 0; else if (eqQuietTicks_ < 1000) ++eqQuietTicks_;
+        const bool wantedNow = (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed));
+        if (wantedNow && ! eqWantedPrev_ && eqQuietTicks_ > 60) eqQuietTicks_ = 60;   // flip edge: ~30 pushes
+        eqWantedPrev_ = wantedNow;
+        const bool spectrumLive = eqQuietTicks_ < 90;
         // fb488 — run the transform HERE (message thread), and only when something shows it.
-        if (pg == 1 || pg == 2 || fltExtOpen_.load (std::memory_order_relaxed))
+        if (wantedNow && spectrumLive)
         {
             audioProcessor.analyzerPre.update();
             audioProcessor.analyzerPost.update();
@@ -6191,7 +6206,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         const bool  fresh   = (seqPre != eqPushSeqPre_ || seqPost != eqPushSeqPost_);
         const float* preBins  = audioProcessor.analyzerPre.readLatest();
         const float* postBins = audioProcessor.analyzerPost.readLatest();
-        if (pushEqW && wanted && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)   // fb486 whale gate
+        if (pushEqW && wanted && spectrumLive && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)   // fb486 whale gate + fb507 silence gate
         {
             eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost;
             // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});

@@ -390,3 +390,37 @@ with rate). (2) front-page play ~200% — renderTerrain compositor work. (3) env
 fb498-style interpolation (level/stage step at push rate) and voice-hopping teleports the dot —
 needs C++ voice-selection hysteresis. (4) editor open takes 5-10 s (WebView2 boot + 34k-line
 parse + boot pushes) — unmeasured.
+
+### fb507 — the C++ whale (the EQ spectrum's silence problem) + smooth-while-active decorations
+
+The message-thread meter found it in one line: idle SYNTH page = `UI 57.8% [build 54.2 | ship
+3.6], 15.23 ms/tick, 38 Hz` — the tick could not even reach its own 60 Hz. The whale: the fb342
+EQ spectrum push gates on "a FRESH analyzer frame", but an FFT OF SILENCE publishes fresh frames
+forever — so with the synth page open and nothing sounding, the editor ran two 4096-point FFTs
+AND built a ~29 KB string every tick, for a spectrum whose pixels were the noise floor.
+
+**fb507 SILENCE GATE** (PluginEditor.cpp, fb342 block): inaudible output (voices==0 and
+oscScopeORms < 1e-4) for ~1.5 s (tail draws to the floor first) -> skip the FFTs, the build and
+the push. First audible block re-enters next tick. A page-flip edge allows ~30 pushes so a fresh
+panel never opens blank. Measured: UI build 54.2 -> 6.9, tick 15.2 -> 1.85 ms (58 Hz again),
+message thread 72 -> 18.7, plugin process 72 -> 33.
+
+**fb507 DECORATION CADENCE** (Max's stop/go complaint): __tiSlow/__tiDecoDue are now binary —
+ACTIVE (pointer/keys recent OR notes sounding) = full paced rate, completely smooth; TRUE IDLE =
+frozen (10 s heal). No more 2 fps stop-go while using the plugin.
+
+Four states (fb507): synth-idle WV 16.1 / proc 34 · synth-play WV 116 / proc 96 · front-idle
+18.6 / 29 · front-play 171 / 50. All gates green; fingerprint bit-identical.
+
+NEXT (ranked): (1) play-state C++ ~96% — the spectrum (~47/s x 40 KB) and scope (30/s x 11 KB)
+composes during REAL audio; Windows lever: 2 dp bins + 30 Hz spectrum push. (2) front-play 171%
+— renderTerrain; push-clocking the hero is the planned fix. (3) LFO/env push-paint migration
+(the campaign's smoothness half; PLL deletion). (4) editor open 5-10 s.
+
+UNIVERSALITY (Max's requirement — no machine-specific tuning): every fix keys on BEHAVIOUR, not
+this machine: pacing compares timestamps against 60 fps (no-op on 60 Hz panels, caps 144/240/360
+alike); the arbiter keys on input/notes; the silence gate keys on audibility; __WIN_LITE and the
+arbiter key on the Windows UA, never on hardware. Nothing reads 360 anywhere. Mac path untouched
+and byte-identical (UA-gated) — a Mac-to-Mac transfer behaves as before; ProMotion (120 Hz)
+MacBooks would eventually benefit from the same push-clock migration, but that is a Mac-session
+decision.

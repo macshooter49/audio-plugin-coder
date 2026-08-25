@@ -162,15 +162,21 @@
                          frame): call per frame, draw the decoration only when it returns true.
                          Same cadence contract as __tiSlow; per-key so sites don't starve each
                          other. On macOS it always returns true. */
+  /* fb507 — Max's verdict on the fb505 cadence: 2 fps decoration WHILE USING the plugin reads
+     as stop-go lag ("the tape emblems... stops and goes, looks like it's lagging"). So the
+     contract is now binary: ACTIVE (pointer/keys recently, or notes sounding) = decorations run
+     every paced frame, fully smooth — the 60 fps pacing already bounds what that costs. Only
+     TRUE IDLE freezes them (one heal frame per 10 s). Loops look alive whenever anyone is
+     there to see them, and cost nothing when nobody is. */
   var decoLast = {};
   window.__tiSlow = function(cb){
-    var wait = (performance.now() - lastAct < 1500) ? 500 : 10000;
-    setTimeout(function(){ window.requestAnimationFrame(cb); }, wait);
+    if (isActive()) { window.requestAnimationFrame(cb); return; }
+    setTimeout(function(){ window.requestAnimationFrame(cb); }, 10000);
   };
   window.__tiDecoDue = function(key){
+    if (isActive()) return true;
     var now = performance.now();
-    var wait = (now - lastAct < 1500) ? 500 : 10000;
-    if (decoLast[key] !== undefined && now - decoLast[key] < wait) return false;
+    if (decoLast[key] !== undefined && now - decoLast[key] < 10000) return false;
     decoLast[key] = now;
     return true;
   };

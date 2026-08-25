@@ -856,6 +856,8 @@ private:
     // fb342 — EQ/spectrum push gate: last-pushed analyzer frame counts. MEMBERS, not statics
     // in timerCallback (a static there is shared across instances — the fb339 pluginval trap).
     uint32_t eqPushSeqPre_ = 0xffffffff, eqPushSeqPost_ = 0xffffffff;
+    int      eqQuietTicks_ = 0;      // fb507 — ticks of inaudible output; parks the spectrum FFT+push
+    bool     eqWantedPrev_ = false;  // fb507 — page-flip edge: allow a few pushes so the view isn't blank
     // fb342 review — the floating .filt-ext analyzer overlay outlives page switches (position:fixed,
     // closed only by its own X), so it must keep the spectrum feed alive on ANY page. JS reports
     // open/close via setFltExtOpen; this ORs into the push gate.
