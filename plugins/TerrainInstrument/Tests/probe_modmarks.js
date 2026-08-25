@@ -27,7 +27,7 @@ const puppeteer = require('puppeteer-core');
 const fs = require('fs'), path = require('path'), os = require('os');
 
 const P = process.argv[2] || process.env.FX4_UI_PAGE ||
-  '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+  require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 const SHOTS = process.env.MODMARK_SHOTS || path.join(os.homedir(), 'Desktop', 'fb453-modmarks');
 const KINDS = ['reverb','delay','saturate','granular','tape','flt','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];
 const VW = 820, VH = 760, DSF = 2;          // the shipped base window; zoom == 1
@@ -109,7 +109,7 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x,y) + 
 
 (async () => {
   fs.mkdirSync(SHOTS, {recursive:true});
-  const b = await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b = await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new', args:['--no-sandbox','--allow-file-access-from-files']});
   const pg = await b.newPage(); await pg.setViewport({width:VW, height:VH, deviceScaleFactor:DSF});
   const errs = []; pg.on('pageerror', e => errs.push(String(e).slice(0,180)));

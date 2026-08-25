@@ -28,7 +28,7 @@
 //    show a difference in nothing. A constant feed is pushed first and never changed again, so the
 //    ONLY thing that can move the probe is the modulated knob.
 const puppeteer = require('puppeteer-core');
-const P = process.env.FXMOVE_PAGE || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+const P = process.env.FXMOVE_PAGE || require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 let pass=0, fail=0;
 const chk=(ok,label,detail)=>{ if(ok){pass++;console.log('  ok    '+label+(detail?'   '+detail:''));}
   else{fail++;console.log('  FAIL  '+label+(detail?'   '+detail:''));} };
@@ -56,7 +56,7 @@ const CASES = [
 ];
 
 (async()=>{
-  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b=await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new',args:['--no-sandbox','--allow-file-access-from-files']});
   const pg=await b.newPage(); await pg.setViewport({width:1560,height:1200,deviceScaleFactor:2});
   const errs=[]; pg.on('pageerror',e=>errs.push(String(e).slice(0,160)));

@@ -107,6 +107,15 @@ if (MSVC)
     #  modern DAW — so this raises no practical floor. Deliberately NOT /fp:fast: it lets MSVC
     #  assume no NaN/Inf, and this codebase's std::isfinite guards are LOAD-BEARING (a NaN token
     #  printed into a viz frame kills every segment after it — the fb214 class of bug).
+    #  fb499 — /arch:AVX2, measured. AVX (fb488) gave MSVC 8-wide float registers but NO FMA:
+    #  every multiply-add in the DSP — which is most of it, in every filter, mixer, interpolator
+    #  and waveguide — issued as two instructions. AVX2 brings FMA3, and unlike /fp:fast it does
+    #  NOT permit the compiler to assume the absence of NaN/Inf, so the std::isfinite guards this
+    #  codebase leans on (the fb214 class of bug) remain exactly as valid as before. The floor
+    #  moves from Sandy Bridge (2011) to Haswell (2013).
+    #  FMA fuses multiply-add under a SINGLE rounding, so the last bits of the output change.
+    #  That is normal, inaudible, and was checked with the audio fingerprint gate rather than
+    #  assumed (Tests/win_blk_cpu.cpp --modal).
     target_compile_options(TerrainInstrument PUBLIC /bigobj /utf-8 /arch:AVX)
     message(STATUS "TerrainInstrument: MSVC — _USE_MATH_DEFINES + /bigobj + /utf-8 + /arch:AVX")
 endif()
@@ -127,3 +136,71 @@ target_compile_definitions(TerrainInstrument
         JUCE_USE_CURL=0
         JUCE_VST3_CAN_REPLACE_VST2=0
 )
+
+# ══ fb498 — THE WINDOWS BLOCK-SIZE / MEMORY HARNESS ═══════════════════════════════════════════
+#  Tests/au_blk_cpu.cpp is AudioUnit-only, so every Windows number so far had to be relayed by
+#  hand from a DAW. This target is its port (Tests/win_blk_cpu.cpp) and it is the reason anything
+#  in this session can be claimed as measured rather than believed.
+#
+#  It HOSTS the installed .vst3 through JUCE's own VST3 host rather than linking the plugin's
+#  static library. That is deliberate and load-bearing: juce_add_plugin compiles the JUCE modules
+#  INTO "Terrain Instrument_SharedCode.lib", so a target that both linked that library and
+#  compiled the modules for itself would collide on every JUCE symbol. Hosting the real artifact
+#  also means the harness measures what actually ships, exactly as auval did on the Mac.
+#
+#  JUCE_WEB_BROWSER=0 here (the plugin itself needs 1): the harness never opens an editor, and
+#  leaving it on would drag the WebView2 SDK into a console app for nothing.
+if (WIN32)
+    juce_add_console_app(terrain_winbench PRODUCT_NAME "terrain_winbench")
+
+    target_sources(terrain_winbench PRIVATE Tests/win_blk_cpu.cpp)
+
+    target_compile_definitions(terrain_winbench
+        PRIVATE
+            JUCE_PLUGINHOST_VST3=1
+            JUCE_MODAL_LOOPS_PERMITTED=1   # --modal-live pumps the message loop so the 60 Hz timer ticks
+            JUCE_PLUGINHOST_VST=0
+            JUCE_PLUGINHOST_AU=0
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            _USE_MATH_DEFINES
+    )
+
+    target_compile_options(terrain_winbench PRIVATE /bigobj /utf-8)
+
+    target_link_libraries(terrain_winbench
+        PRIVATE
+            juce::juce_audio_processors
+            juce::juce_audio_utils
+            juce::juce_audio_devices
+            juce::juce_dsp
+            psapi                       # GetProcessMemoryInfo — the peak-working-set read
+        PUBLIC
+            juce::juce_recommended_config_flags
+            juce::juce_recommended_warning_flags
+    )
+
+    message(STATUS "TerrainInstrument: + terrain_winbench (Windows block-size / memory harness)")
+
+    #  The voice memory map. Includes SynthVoice.h and prints sizeof — it links no plugin code
+    #  for the same duplicate-symbol reason as above, and needs nothing at runtime.
+    juce_add_console_app(terrain_sizeof PRODUCT_NAME "terrain_sizeof")
+    target_sources(terrain_sizeof PRIVATE Tests/win_sizeof.cpp)
+    target_include_directories(terrain_sizeof PRIVATE Source)
+    target_compile_definitions(terrain_sizeof
+        PRIVATE
+            JUCE_WEB_BROWSER=0
+            JUCE_USE_CURL=0
+            _USE_MATH_DEFINES
+    )
+    target_compile_options(terrain_sizeof PRIVATE /bigobj /utf-8 /arch:AVX)
+    target_link_libraries(terrain_sizeof
+        PRIVATE
+            signalsmith-stretch
+            juce::juce_audio_basics
+            juce::juce_audio_processors
+            juce::juce_dsp
+        PUBLIC
+            juce::juce_recommended_config_flags
+    )
+endif()

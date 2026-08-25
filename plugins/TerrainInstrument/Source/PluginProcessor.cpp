@@ -1161,6 +1161,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
     rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
+    prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
 }
 
 // No sample loaded → a default harmonic (saw) store so GEODE sounds the instant it's selected.
@@ -1172,6 +1173,42 @@ static void buildDefaultGeodeStore (tw::GeodeFrameStore& out)
         for (int h = 1; h <= WP; ++h)
         { wr[(size_t) f * WP + (h - 1)] = (float) h; wa[(size_t) f * WP + (h - 1)] = 1.f / (float) h; }
     tw::GeodeAnalyzer::buildFromWave (wr.data(), wa.data(), WF, WP, out);
+}
+
+// ═════════ fb498 — MODAL's LAZY ARM (the 1,152 MiB the constructor used to spend) ═════════════
+//  SynthVoice::setCurrentPlaybackSampleRate used to prepare every ModalEngine, and addVoice calls
+//  it (juce_Synthesiser.cpp:117), so the six waveguide delay lines of 96 voices x 4 oscs x 16
+//  unison slots were allocated in THIS CLASS'S CONSTRUCTOR — 1,152 MiB, before prepareToPlay,
+//  for every patch including the ones that never select MODAL (the default engine is WT).
+//
+//  This is the same shape as rebuildGeodeIfNeeded below and as the stem/wavetable arms in
+//  timerCallback: read the engine choice on the MESSAGE THREAD, and do the allocation there only
+//  once something actually asks for it. It is deliberately one-way — nothing un-prepares a voice
+//  while the sample rate holds — so the audio thread can never be handed a pointer that later
+//  goes stale. A sample-rate change clears the flag (SynthVoice.h, setCurrentPlaybackSampleRate)
+//  and the next tick re-arms.
+//
+//  Cost when it does fire: ~12 MiB per voice on the message thread. Only voices, only once.
+//  There is deliberately NO processor-level "already armed" latch. A sample-rate change clears
+//  each voice's own flag, and a processor latch would then early-out and leave MODAL permanently
+//  silent at the new rate. SynthVoice::prepareModalEngines() already early-outs on its own
+//  acquire load, so the cost of re-asking every tick is 4 parameter reads plus (only when MODAL
+//  is selected) 96 atomic loads — nothing, at 60 Hz.
+void TerrainInstrumentAudioProcessor::prepareModalEnginesIfNeeded()
+{
+    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    bool wanted = false;
+    for (int o = 0; o < 4 && ! wanted; ++o)
+        if ((int) *rawParam (ENG[o]) == (int) tw::SynthVoice::Engine::MODAL)   // AudioParameterChoice → the INDEX (CLAUDE.md §4)
+            wanted = true;
+
+    if (! wanted) return;
+
+    for (int i = 0; i < kSynthVoiceCount; ++i)
+        if (auto* v = synthVoices_[i])
+            v->prepareModalEngines();
+
 }
 
 void TerrainInstrumentAudioProcessor::rebuildGeodeIfNeeded (int o)
@@ -6572,6 +6609,13 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
             sv->setLfoCustomTables (lfoTableAudio_);   // LFO ARC L1 — wire drawn-shape tables
         }
     }
+
+    // fb498 — arm MODAL here too, not only from the 60 Hz timer. setCurrentPlaybackSampleRate
+    // above has just cleared every voice's ready flag, so a patch that ALREADY has an osc on
+    // MODAL (loading a saved project, or a host re-preparing at a new rate) would otherwise
+    // render that osc silent until the next timer tick. Doing it here means the only case that
+    // ever waits ~16.7 ms is the user switching an osc TO Modal while playing.
+    prepareModalEnginesIfNeeded();
 
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);

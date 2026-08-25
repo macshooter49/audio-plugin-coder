@@ -36,7 +36,7 @@
 const puppeteer = require('puppeteer-core');
 
 const P = process.argv[2] || process.env.FX4_UI_PAGE ||
-  '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+  require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 const KINDS = ['reverb','delay','saturate','granular','tape','flt','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];
 const VW = 820, VH = 656, DSF = 4;      // the shipped window (kBaseW × kBaseH − the capture strip); zoom == 1
 // 🚨 THE STATISTIC IS THE FAMILY MEAN, and that is not a bar being lowered to fit. Inside one family
@@ -121,7 +121,7 @@ const READ = (u, items, D) => new Promise(res => { const im = new Image();
   im.onerror = () => res([]); im.src = u; });
 
 (async () => {
-  const b = await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b = await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new', args:['--no-sandbox','--allow-file-access-from-files']});
   const pg = await b.newPage(); await pg.setViewport({width:VW, height:VH, deviceScaleFactor:DSF});
   const errs = []; pg.on('pageerror', e => errs.push(String(e).slice(0,160)));

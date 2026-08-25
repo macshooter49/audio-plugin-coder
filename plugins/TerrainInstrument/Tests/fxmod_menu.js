@@ -29,7 +29,7 @@
 const puppeteer = require('puppeteer-core');
 
 const P = process.argv[2] || process.env.FX4_UI_PAGE ||
-  '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+  require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 const KINDS = ['reverb','delay','saturate','granular','tape','flt','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];
 const VW = 820, VH = 656, DSF = 2;      // the shipped WebView box; page zoom == 1
 const ATT_W = 8, ATT_DX = 7;            // .sm-att, and showAtt's offset from the strip's right edge
@@ -113,7 +113,7 @@ const READ = (dest, ATT_W, ATT_DX, sel) => {
 };
 
 (async () => {
-  const b = await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b = await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new', args:['--no-sandbox','--allow-file-access-from-files']});
   const pg = await b.newPage(); await pg.setViewport({width:VW, height:VH, deviceScaleFactor:DSF});
   const errs = []; pg.on('pageerror', e => errs.push(String(e).slice(0,160)));

@@ -84,10 +84,19 @@ namespace tw
             { int u = 0; for (auto& e : harmEngB_) e.prepare (sampleRate_, u++ == 0); }   //  (index 0 = bank anchor)
             { int u = 0; for (auto& e : harmEngC_) e.prepare (sampleRate_, u++ == 0); }
             { int u = 0; for (auto& e : harmEngD_) e.prepare (sampleRate_, u++ == 0); }
-            { int u = 0; for (auto& e : modalEngA_) e.prepare (sampleRate_, u++ == 0); }   // MODAL-ENGINE-VOICE
-            { int u = 0; for (auto& e : modalEngB_) e.prepare (sampleRate_, u++ == 0); }
-            { int u = 0; for (auto& e : modalEngC_) e.prepare (sampleRate_, u++ == 0); }
-            { int u = 0; for (auto& e : modalEngD_) e.prepare (sampleRate_, u++ == 0); }
+            // fb498 — MODAL IS NO LONGER PREPARED HERE. This function is reached from
+            // juce::Synthesiser::addVoice (juce_Synthesiser.cpp:117), i.e. from the PROCESSOR'S
+            // CONSTRUCTOR loop (PluginProcessor.cpp:274), so preparing all four osc arrays here
+            // allocated the waveguide delay lines for every unison slot of every osc of all 96
+            // voices before the host had even called prepareToPlay:
+            //     96 voices x 4 oscs x 16 unison x 6 lines x 8192 floats x 4 B = 1,152 MiB,
+            // measured as 68% of this plugin's entire 1,694 MB peak working set on Windows — and
+            // paid in full by every patch that never selects MODAL at all (the default is WT).
+            // Preparation now happens on the MESSAGE THREAD in prepareModalEnginesIfNeeded(),
+            // only once an osc actually asks for Engine::MODAL. Dropping the flag here is what
+            // makes a SAMPLE-RATE CHANGE re-prepare: the lines are rate-independent in SIZE but
+            // ModalEngine::prepare() also recomputes rate-dependent coefficients.
+            modalReady_.store (false, std::memory_order_release);   // MODAL-ENGINE-VOICE
             sampleWarpA_.prepare (sampleRate_, 2, 1024); sampleWarpB_.prepare (sampleRate_, 2, 1024);
             sampleWarpC_.prepare (sampleRate_, 2, 1024); sampleWarpD_.prepare (sampleRate_, 2, 1024);
             airHpCoef_ = 1.0f - std::exp (-2.0f * juce::MathConstants<float>::pi * 3500.0f / (float) juce::jmax (1.0, sampleRate_));
@@ -822,6 +831,23 @@ namespace tw
             for (auto& e : modalEngB_) e.setPartialBudget (used, cap);
             for (auto& e : modalEngC_) e.setPartialBudget (used, cap);
             for (auto& e : modalEngD_) e.setPartialBudget (used, cap);
+        }
+
+        // fb498 — MODAL's LAZY ARM. MESSAGE THREAD ONLY (the processor's 60 Hz timerCallback and
+        // prepareToPlay), because this allocates 12 MiB per voice and allocation must never
+        // happen on the audio thread. One-way: once ready it is never un-prepared while the rate
+        // holds, so a pointer the audio thread has can never go stale — the same invariant
+        // WavetableBank relies on ("nothing ever un-builds a table", WavetableBank.h:186-187).
+        // The release store is the publication: everything the audio thread will read is written
+        // before it, and renderNextBlock's acquire load pairs with it.
+        void prepareModalEngines()
+        {
+            if (modalReady_.load (std::memory_order_acquire)) return;
+            { int u = 0; for (auto& e : modalEngA_) e.prepare (sampleRate_, u++ == 0); }   // MODAL-ENGINE-VOICE
+            { int u = 0; for (auto& e : modalEngB_) e.prepare (sampleRate_, u++ == 0); }
+            { int u = 0; for (auto& e : modalEngC_) e.prepare (sampleRate_, u++ == 0); }
+            { int u = 0; for (auto& e : modalEngD_) e.prepare (sampleRate_, u++ == 0); }
+            modalReady_.store (true, std::memory_order_release);
         }
         // HARM-VIZ — downsample this voice's live anchor bank into UI bins (audio thread only)
         bool harmLiveBins (int osc, float* out, int nBins) const noexcept
@@ -5251,6 +5277,13 @@ namespace tw
 
         // MODAL-ENGINE-VOICE — per-OSC physical model (Engine::MODAL), same shape as HARM
         std::array<tw::ModalEngine, kMaxUnison> modalEngA_, modalEngB_, modalEngC_, modalEngD_;
+        // fb498 — false until prepareModalEngines() has run on the message thread. Until then the
+        // six DelayA lines inside every one of these engines are EMPTY vectors (size 0), and
+        // DelayA::setDelay would index straight past the end of one (ModalEngine.h:386-395), so
+        // this flag gates the render calls at renderNextBlock — not merely as an optimisation but
+        // as the bounds guard. readPos01() (line ~249) is safe unguarded because it is behind
+        // isActive(), which stays false until a noteOn that only the gated render path can issue.
+        std::atomic<bool> modalReady_ { false };
         tw::ModalParams modalParamsA_, modalParamsB_, modalParamsC_, modalParamsD_;
 
         // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
@@ -5875,10 +5908,27 @@ namespace tw
                         exR[o] = sampleSource_[o]->getSampleRate();
                 }
             }
-            renderModalOsc (modalEngA_, modalParamsA_, engine_  == Engine::MODAL, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  modalBlkA_, modalBlkAL_, modalBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_),  exL[0], exN[0], exR[0]);
-            renderModalOsc (modalEngB_, modalParamsB_, engineB_ == Engine::MODAL, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, modalBlkB_, modalBlkBL_, modalBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_), exL[1], exN[1], exR[1]);
-            renderModalOsc (modalEngC_, modalParamsC_, engineC_ == Engine::MODAL, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, modalBlkC_, modalBlkCL_, modalBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_), exL[2], exN[2], exR[2]);
-            renderModalOsc (modalEngD_, modalParamsD_, engineD_ == Engine::MODAL, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, modalBlkD_, modalBlkDL_, modalBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_), exL[3], exN[3], exR[3]);
+            // fb498 — ONE acquire load, paired with the release store in prepareModalEngines().
+            // While false the six DelayA lines inside every engine are still EMPTY vectors, so a
+            // MODAL osc must not reach them.
+            //
+            // ⚠️ THE GATE GOES ON *level*, NOT ON *isModal*. renderModalOsc's `if (! isModal)
+            // return;` (see its body) deliberately leaves `blk` UNINITIALISED — "this block is
+            // never read for a non-MODAL osc". That contract holds only while `isModal` means
+            // exactly `engine_ == Engine::MODAL`, because the DOWNSTREAM consumer keys off
+            // engine_ too. Passing `mReady && engine_ == MODAL` broke the pair: the consumer
+            // still read the block while the producer had bailed, and an unarmed MODAL osc
+            // emitted GARBAGE — measured as NaN out of the plugin, silent and poisonous.
+            // Forcing the level to 0 instead takes renderModalOsc's `level <= 0` path, which
+            // CLEARS both channels and returns without touching a single engine. blkGateLevel is
+            // still called either way so its per-osc mute-fade state cannot desync.
+            const bool  mReady = modalReady_.load (std::memory_order_acquire);
+            const float mLvA = blkGateLevel (0, level_),  mLvB = blkGateLevel (1, levelB_);
+            const float mLvC = blkGateLevel (2, levelC_), mLvD = blkGateLevel (3, levelD_);
+            renderModalOsc (modalEngA_, modalParamsA_, engine_  == Engine::MODAL, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  modalBlkA_, modalBlkAL_, modalBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, mReady ? mLvA : 0.0f, exL[0], exN[0], exR[0]);
+            renderModalOsc (modalEngB_, modalParamsB_, engineB_ == Engine::MODAL, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, modalBlkB_, modalBlkBL_, modalBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, mReady ? mLvB : 0.0f, exL[1], exN[1], exR[1]);
+            renderModalOsc (modalEngC_, modalParamsC_, engineC_ == Engine::MODAL, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, modalBlkC_, modalBlkCL_, modalBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, mReady ? mLvC : 0.0f, exL[2], exN[2], exR[2]);
+            renderModalOsc (modalEngD_, modalParamsD_, engineD_ == Engine::MODAL, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, modalBlkD_, modalBlkDL_, modalBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, mReady ? mLvD : 0.0f, exL[3], exN[3], exR[3]);
             modalNoteOnPending_ = false;
         }
 

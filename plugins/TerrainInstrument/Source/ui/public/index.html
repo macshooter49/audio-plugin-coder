@@ -27839,6 +27839,9 @@ restoreThemeFromBackend();
   function shEffPts(){   // fb238 — DSP-twin: offsets from the pushed __mvLfoVal truth (fb214 law: freshness-stamped, never a latch)
     if(st.shape!==7)return null;
     var lv=window.__mvLfoVal; if(!lv||!window.__mvLfoPhT||(Date.now()-window.__mvLfoPhT)>250)return null;
+    if(window.__mvLfoValAt){ var __sm=window.__mvLfoSmBuf||(window.__mvLfoSmBuf=[]);   /* fb498 -- one reused buffer, no per-frame allocation */
+      for(var __k=0;__k<lv.length;__k++){ var __q=window.__mvLfoValAt(__k); __sm[__k]=(__q==null)?lv[__k]:__q; }
+      __sm.length=lv.length; lv=__sm; }
     var sp=shGet(), last=sp.pts.length-1, any=false;
     var eff=sp.pts.map(function(q,ix){ var m=q[3], x=q[0], y=q[1];
       if(m&&m.xs>0&&ix>0&&ix<last){ x=shC01(x+(m.xa||0)*(lv[m.xs-1]||0)); any=true; }
@@ -29017,7 +29020,27 @@ restoreThemeFromBackend();
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
-  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length)window.__mvLfoVal=l; if(p&&p.length){ window.__mvLfoPhPrev=window.__mvLfoPh; window.__mvLfoPhTPrev=window.__mvLfoPhT; window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb487 -- prev kept so tick() can MEASURE the LFO rate between pushes */   /* fb238 — values ride for the point-mod ghost */
+  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length){ window.__mvLfoValPrev=window.__mvLfoVal; window.__mvLfoValTPrev=window.__mvLfoValT; window.__mvLfoVal=l; window.__mvLfoValT=Date.now(); } if(p&&p.length){ window.__mvLfoPhPrev=window.__mvLfoPh; window.__mvLfoPhTPrev=window.__mvLfoPhT; window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb487 -- prev kept so tick() can MEASURE the LFO rate between pushes */   /* fb498 -- VALUES now keep prev+stamp too (the fb493 shape applied to values) so consumers can INTERPOLATE instead of latching. A value never wraps, so nothing below uses __w01 or a shortest-arc fold. */   /* fb238 — values ride for the point-mod ghost */
+  /* fb498 -- THE VALUE TWIN OF fb493's PHASE LOCK. __mvLfoVal arrives at the frame-push rate: a
+     60 Hz ceiling, self-clocked by fb482's ack (PluginEditor.cpp:5470), and 0 Hz whenever fb483
+     idle-skips a byte-identical frame. Every consumer LATCHED it, so the comet, the ghost curve
+     and the breathing ADSR all STEPPED at the push rate -- fb493's jolt one level down.
+     This reconstructs the between-push motion by LINEAR INTERPOLATION across the last two pushes,
+     clocked by the MEASURED interval, exactly as fb493 free-runs at a measured rate. Two
+     deliberate differences from fb493: (1) values do NOT wrap, so there is no __w01, no
+     shortest-arc error fold and no cycle-fraction snap -- a big step is a LEGITIMATE full-swing
+     value and is followed, not corrected away; (2) it INTERPOLATES rather than extrapolates,
+     because a value has no predictable derivative (phase does -- its rate). Extrapolating a value
+     is precisely how fb487 snapped backward. Cost: exactly one push interval of latency.
+     Returns null when there is nothing trustworthy to reconstruct, so every caller keeps its
+     existing RAW fallback and nothing ever parks at zero (the state-persists law). */
+  window.__mvLfoValAt=function(i){
+    var cur=window.__mvLfoVal; if(!cur||cur[i]==null) return null;
+    var T=window.__mvLfoValT||window.__mvLfoPhT; if(!T||(Date.now()-T)>250) return null;
+    var pv=window.__mvLfoValPrev, gap=(T-(window.__mvLfoValTPrev||0))/1000;
+    if(!pv||pv[i]==null||!(gap>0.001&&gap<0.3)) return cur[i];
+    var a=(Date.now()-T)/(gap*1000); if(a<0)a=0; else if(a>1)a=1;
+    var out=pv[i]+(cur[i]-pv[i])*a; return isFinite(out)?out:cur[i]; };
   window.__mvChaos=function(vx,vy){ window.__mvChaosX=vx; window.__mvChaosY=vy; window.__mvChaosT=Date.now(); };   /* fb239 — the free-run swirl feed (window globals: this handler lives in the emblems module, shTrajTick in mod-v4) */   // fb217 — real phases ride along (freshness-stamped, never a latch — the fb214 law)
   /* fb182 — S3: the currently SELECTED modulator (env or LFO). Underlines paint purple
      for its routes, dim for everyone else's; switching selection repaints live. */
@@ -29092,7 +29115,7 @@ restoreThemeFromBackend();
       if(a.env){ var dead=!(mvE&&mvE[a.env-1]!=null&&mvE[a.env-1]>=0); if(!dead)live=true;
         var ev=dead?0:mvE[a.env-1];
         var dw=Math.abs(a.depth); if(!dead){ slot.w+=dw; slot.v+=dw*ev; } }
-      else if(a.lfo){ var lv=(mvL&&mvL[a.lfo-1]!=null)?mvL[a.lfo-1]:0;
+      else if(a.lfo){ var lv=window.__mvLfoValAt?window.__mvLfoValAt(a.lfo-1):null; if(lv==null)lv=(mvL&&mvL[a.lfo-1]!=null)?mvL[a.lfo-1]:0;   /* fb498 -- smoothed, raw fallback */
         var mst=1; var ms2=ssCache['LFO'+a.lfo+'_DEPTH'];
         if(ms2===undefined){ ms2=ssCache['LFO'+a.lfo+'_DEPTH']=(window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState('LFO'+a.lfo+'_DEPTH'):null; }
         try{ if(ms2)mst=ms2.getNormalisedValue(); }catch(e){}
@@ -29339,7 +29362,9 @@ restoreThemeFromBackend();
         var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
         var v=ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
              :ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
-                    :((mvL&&mvL[ra.lfo-1]!=null)?(mvL[ra.lfo-1]+1)/2:-1);
+                    :(function(){ var __lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null;   /* fb498 -- smoothed; falls back to the raw latch, never to 0 */
+                        if(__lv==null)__lv=(mvL&&mvL[ra.lfo-1]!=null)?mvL[ra.lfo-1]:null;
+                        return (__lv==null)?-1:(__lv+1)/2; })();
         var anchor=(1-d)*kn;
         sp.style.left=(anchor*gw)+'px'; sp.style.width=(Math.max(0.02,d)*gw)+'px';
         if(v>=0&&!(ra.env&&v<0.004)){

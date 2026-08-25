@@ -3,7 +3,7 @@
 // Two things must hold FOREVER after this: (1) the Import label's position/size is identical whether
 // the search exists or not, and (2) the search field draws NO box — no fill, no border, no radius.
 const puppeteer = require('puppeteer-core');
-const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+const P=require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 const OUT=process.argv[2]||'/private/tmp/claude-501/-Users-macshooter-Developer-VST-Plugins/f793112d-b160-4b3e-b0a3-d7da686e2a12/scratchpad/shots';
 const fs=require('fs'); try{fs.mkdirSync(OUT,{recursive:true});}catch(e){}
 
@@ -16,7 +16,7 @@ const CASES=[
 let FAIL=0; const bad=m=>{FAIL++; return '  ✗ '+m;};
 
 (async()=>{
-  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b=await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new',args:['--no-sandbox','--allow-file-access-from-files']});
   const pg=await b.newPage(); await pg.setViewport({width:1560,height:1200,deviceScaleFactor:3});
   const errs=[]; pg.on('pageerror',e=>errs.push(String(e).slice(0,150)));

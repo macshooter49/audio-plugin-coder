@@ -1668,6 +1668,9 @@ private:
     };
     GeodeSlot geodeSlot_[4];
     void rebuildGeodeIfNeeded (int osc);                 // message thread
+    // fb498 — MODAL's lazy arm. Message thread only (timerCallback + prepareToPlay). See the
+    // definition in PluginProcessor.cpp for why 1,152 MiB used to be spent in the constructor.
+    void prepareModalEnginesIfNeeded();
     // Shared real-time ceiling on TOTAL active partials across ALL SPEC voices/unison in this
     // instance. Additive resynth costs ~1 sine-osc per partial per sample; 3072 pegged a core
     // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst

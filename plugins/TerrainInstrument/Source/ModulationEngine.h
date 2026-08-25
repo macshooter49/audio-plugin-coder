@@ -213,8 +213,24 @@ public:
 
     void processSample()
     {
-        for (int i = 0; i < pNumParams; i++)
-            offsets[i] = 0.0f;
+        // fb499 — CLEAR ONLY WHAT WAS WRITTEN. This ran `offsets[i] = 0` across all pNumParams
+        // (~240 floats, ~960 bytes) EVERY SAMPLE — 48,000 times a second — in the master FX
+        // loop, which itself runs unconditionally whether or not a single effect is powered on.
+        // Measured on Windows: per-sample work is 4.5% of one core at idle, the largest single
+        // bucket of the whole DSP cost, and this clear is inside it.
+        //
+        // offsets[] is written in EXACTLY one place — the enabled-assignment loop below — so
+        // clearing the targets written LAST call is exactly equivalent and costs O(assignments)
+        // instead of O(pNumParams). With no modulation assigned (the default patch) that is
+        // ZERO work instead of 240 stores.
+        //
+        // Self-correcting by construction: an entry never written stays 0 forever, and when an
+        // assignment is removed or disabled its target is still cleared here first, on the call
+        // after it last wrote — so a stale offset can never stick. That is why the dirty list is
+        // rebuilt from what was actually written rather than from the current config.
+        for (int k = 0; k < numDirty_; ++k)
+            offsets[dirtyIdx_[k]] = 0.0f;
+        numDirty_ = 0;
 
         for (int i = 0; i < NUM_LFOS; i++)
         {
@@ -283,6 +299,12 @@ public:
 
             float range = paramMax[asgn.target] - paramMin[asgn.target];
             float scaledDepth = asgn.depth * asgn.depth; // quadratic curve: visible at low values, staged at mid
+            // fb499 — record the target so the next call clears exactly this entry. Duplicates
+            // are harmless (two assignments may share a target; clearing twice is idempotent),
+            // and the list can never overflow: it gains at most one entry per assignment and
+            // holds MAX_ASSIGNMENTS.
+            if (numDirty_ < (int) (sizeof (dirtyIdx_) / sizeof (dirtyIdx_[0])))
+                dirtyIdx_[numDirty_++] = asgn.target;
             offsets[asgn.target] += sourceVal * scaledDepth * range;
         }
     }
@@ -421,6 +443,11 @@ private:
     LFOState lfoState[NUM_LFOS] = {};
     float lfoValues[NUM_LFOS] = {};
     float offsets[pNumParams] = {};
+    // fb499 — the targets written by the last processSample(), so the next one clears exactly
+    // those instead of the whole offsets table. Sized to the assignment ceiling because at most
+    // one entry is appended per enabled assignment.
+    int   dirtyIdx_[MAX_ASSIGNMENTS] = {};
+    int   numDirty_ = 0;
     float phaseInc[NUM_LFOS] = {};
     float xyX = 0.5f, xyY = 0.5f;
     float currentBpm = 120.0f;

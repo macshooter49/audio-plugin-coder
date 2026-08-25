@@ -1,9 +1,9 @@
 // fb392 — MEASURE the drag smoothness. A curve fed by a 15 Hz push steps: consecutive frames are
 // IDENTICAL for ~4 frames then jump. A curve fed by the live slider state moves every frame.
 const puppeteer=require('puppeteer-core');
-const P='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+const P=require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 (async()=>{
-  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b=await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new',args:['--no-sandbox','--allow-file-access-from-files']});
   const pg=await b.newPage(); await pg.setViewport({width:1200,height:900,deviceScaleFactor:2});
   await pg.evaluateOnNewDocument(()=>{

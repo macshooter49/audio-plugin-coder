@@ -19,17 +19,17 @@ const fs = require('fs');
 // fb452 — the EQ curve's grid is authored ONCE, in the engine. This gate reads kCurveBins out of
 // the header and holds the page to it: the day the two disagree, the drawer would silently sit on
 // a stale line with every DSP gate still green (fb373 — verify the path, not just the engine).
-const ENG = process.env.FX4_ENGINE_H || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/TerrainEqualizerFx.h';
+const ENG = process.env.FX4_ENGINE_H || require('path').join(__dirname,'..')+'/Source/TerrainEqualizerFx.h';
 const ENG_BINS = (()=>{ const m=/kCurveBins\s*=\s*(\d+)/.exec(fs.readFileSync(ENG,'utf8')); return m?+m[1]:0; })();
 const NB = ENG_BINS;
-const P = process.env.FX4_UI_PAGE || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/ui/public/index.html';
+const P = process.env.FX4_UI_PAGE || require('path').join(__dirname,'..')+'/Source/ui/public/index.html';
 
 let pass=0, fail=0;
 function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(detail?'   '+detail:''));}
   else {fail++; console.log('  FAIL  '+label+(detail?'   '+detail:''));} }
 
 (async()=>{
-  const b=await puppeteer.launch({executablePath:'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome',
+  const b=await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new',args:['--no-sandbox','--allow-file-access-from-files']});
   const pg=await b.newPage(); await pg.setViewport({width:1560,height:1200,deviceScaleFactor:2});
   const errs=[]; pg.on('pageerror',e=>errs.push(String(e).slice(0,160)));
@@ -316,7 +316,7 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
   try{
     const cp=require('child_process'), fs=require('fs'), os=require('os');
     const bin=os.tmpdir()+'/fx_chars_dump_gate';
-    const root='/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument';
+    const root=require('path').join(__dirname,'..')+'';
     cp.execSync('clang++ -O2 -std=c++17 -I '+root+'/Tests/shim -I '+root+'/Source '+root+'/Tests/fx_chars_dump.cpp -o '+bin,{stdio:'pipe'});
     dumpJson=JSON.parse(cp.execSync(bin).toString());
   }catch(e){ console.log('  (could not build/run Tests/fx_chars_dump.cpp: '+String(e).slice(0,120)+')'); }
@@ -637,8 +637,8 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
      dial and its destination are ever authored twice they will disagree quietly, every DSP gate
      will stay green, and Max will modulate the wrong knob (fb373, the shape of it).
      ═══════════════════════════════════════════════════════════════════════════════════════════ */
-  const MODH = process.env.FX_MOD_HEADER || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/SynthModConfig.h';
-  const INC  = process.env.FX_MOD_IDS    || '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source/fx_mod_ids.inc';
+  const MODH = process.env.FX_MOD_HEADER || require('path').join(__dirname,'..')+'/Source/SynthModConfig.h';
+  const INC  = process.env.FX_MOD_IDS    || require('path').join(__dirname,'..')+'/Source/fx_mod_ids.inc';
   const FXIDS = fs.readFileSync(INC, 'utf8'), MODSRC = fs.readFileSync(MODH, 'utf8');
   // FxModBase = DstMorph + 1, and DstMorph is nailed to 693 by a static_assert in the header.
   const CPP_BASE = (() => { const m = /static_assert\s*\(\(int\)\s*ModDest::DstMorph\s*==\s*(\d+)/.exec(MODSRC); return m ? (+m[1] + 1) : 0; })();
