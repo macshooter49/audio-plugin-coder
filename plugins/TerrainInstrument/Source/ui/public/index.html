@@ -23972,10 +23972,16 @@ function animate(timestamp) {
     window.__heroT += dt * (1 - window.__heroRest);           /* motion eases to stillness */
     var __rt = window.__heroT;
     if (window.__heroRest < 1 || !window.__heroDrawn) {
-      renderTerrain(__rt);
+      /* fb510 — the hero draws at 30 fps while animating (measured: it is the front page's
+         whole play-time cost, ~150% gpu at paced 60). At 3,696 canvas ops per frame, 30 fps on
+         a t*0.4 Perlin drift is imperceptible — the same call fb487 made for the topo map. The
+         final rest frame always draws so the settle never half-finishes. */
+      var __heroHalf = (window.__heroRest < 1) && (((window.__heroAlt2 = (window.__heroAlt2 | 0) + 1) & 1) === 1);
+      if (!__heroHalf) renderTerrain(__rt);
       updateSectionIcons();
       updateAnimatedIcons(__rt);
       drawTapeReels(__rt);
+      if (typeof drawDelayPanel === 'function') drawDelayPanel(__rt, dt * (1 - window.__heroRest));   /* fb510 — the delay comet rests with the hero */
       if (window.__heroRest >= 1) {
         window.__heroDrawn = true;                            /* the rest frame is down — sleep */
         /* the simulated meters bounce on Math.random even in silence — at rest they FALL, like
@@ -23999,7 +24005,7 @@ function animate(timestamp) {
   }
   if (window.__tiQuiet === undefined) drawTapeReels(time);
   updateModulation(time, dt);
-  if (typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);
+  if (window.__tiQuiet === undefined && typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);   /* fb510 -- Mac path; Windows draws it inside the rest-pose block */
 
   requestAnimationFrame(animate);
 }
@@ -27368,12 +27374,26 @@ function initFxSuite() {
     var dt = Math.min((timestamp - lastFxTime) / 1000, 0.1);
     lastFxTime = timestamp;
 
+    /* fb510 — the FX-suite rest ease lives HERE, before the page branches, so it advances no
+       matter which page (tape/space) is showing. Mac: __tiQuiet undefined, factor stays 0. */
+    if (window.__tiQuiet !== undefined) {
+      if (window.__fxRest === undefined) window.__fxRest = 0;
+      if (!window.__tiQuiet) { window.__fxRest = 0; window.__fxRestDrawn = false; }
+      else window.__fxRest = Math.min(1, window.__fxRest + dt / 1.5);
+    }
+
     // Only draw active page
     if (fxSuite.page === 0) {
-      tapeTime += dt;
+      /* fb510 — the tape mech viz rests like the hero: motion eases to a stop over 1.5 s of
+         quiet (a stopped tape LOOKS stopped — that is its rest state, not a freeze), draws one
+         final frame, then sleeps until notes or input return. The ease accumulator lives at the
+         top of fxAnimate. Mac: factor 0, skip never fires — byte-identical. */
+      var __fxr = (window.__fxRest || 0);
+      tapeTime += dt * (1 - __fxr);
       var tapeCanvas = document.getElementById('tapeMechCanvas');
-      if (tapeCanvas && tapeCanvas.width > 0) {
-        if (!window.__tiDecoDue || window.__tiDecoDue('tape-viz')) drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);   /* fb505 deco */
+      if (tapeCanvas && tapeCanvas.width > 0 && (__fxr < 1 || !window.__fxRestDrawn)) {
+        drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
+        if (__fxr >= 1) window.__fxRestDrawn = true;
       }
       var tapeKnobIds = ['wow', 'saturation', 'hiss'];
       for (var tki = 0; tki < tapeKnobIds.length; tki++) {
@@ -27398,9 +27418,10 @@ function initFxSuite() {
     }
 
     if (fxSuite.page === 1) {
-      spaceTime += dt;
+      var __fxr2 = (window.__fxRest || 0);   /* fb510 — same rest ease as the tape page */
+      spaceTime += dt * (1 - __fxr2);
       var spaceCanvas = document.getElementById('spaceVisCanvas');
-      if (spaceCanvas && spaceCanvas.width > 0) {
+      if (spaceCanvas && spaceCanvas.width > 0 && (__fxr2 < 1 || !window.__fxRestDrawn)) {
         drawSpace(spaceCanvas.getContext('2d'), spaceCanvas.width / DPR, spaceCanvas.height / DPR, spaceTime);
       }
       var spaceKnobIds = ['spaceSize', 'spaceDecay', 'spaceTone', 'spaceMix'];
@@ -28853,6 +28874,11 @@ restoreThemeFromBackend();
   var CAT=['lp','lp','hp','lp','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formant','formant','formant','formant','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp','lp','lp','lp','lp','acid','hp','hp','hp','bp','bp','bp','notch','ap','lp','lp','hp','bp','notch','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','comb','comb','comb','comb','karplus','karplus','formant','formant','formant','formant','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','higheq','addbass','samphold','samphold','scream','screambp','lp','lp','lp','ring','radio','reverb','creverb'];   // fb165 — 94 entries, enum order (display model key per type)
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
   function Q(res){ return 0.6+res*res*16; }
+  /* fb510 — MODEL-CURVE CACHE. Display models whose mag() branch reads t (animated combs /
+     phasers / grain / etc.) can never be cached across frames; every key ABSENT here is a pure
+     static function of (type, fc, res, drv). ⚠️ Add any NEW t-reading type here or its idle
+     motion freezes (knob response stays correct either way — all knob inputs are in the key). */
+  var MAG_ANIM={comb:1,combn:1,shimmer:1,karplus:1,formant:1,reverb:1,creverb:1,phaser4:1,phaser8:1,phaser6:1,phaser12:1,phaser16:1,ring:1,bode:1,crush:1,shaper:1,grain:1,ap:1,diffusor:1,addbass:1,samphold:1,radio:1};
   // single biquad-notch amplitude (0 at fk, →1 away) — used to build phaser combs
   function ntch(f,fk,Qn){ var r=f/fk, n=1-r*r; return Math.abs(n)/Math.sqrt(n*n+(r/Qn)*(r/Qn)); }
   // resonant peak amplitude around fp
@@ -28997,10 +29023,24 @@ restoreThemeFromBackend();
     // Curve lives inside [yTop,yBot]; yBot is lifted above the bottom emblems so it respects them (clean overlap only).
     var t=curT, yTop=(isExt?12:29)*dpr, yBot=H-(isExt?10:38)*dpr, breath=1+0.05*Math.sin(t*1.8);   // fb164 — 29 = header bottom (24, measured) + 5px air (the stroke's glow needs the extra 2): the resonant peak tops out JUST BELOW the 1/2/K/E row, never on it (Max's no-overlap law)
     var N=Math.floor(W/dpr), spec=[], crv=[], lvlAcc=0, lvlN=0;
+    /* fb510 — CACHE THE 94-TYPE MODEL. mag() is the transcendental half of this painter and for
+       static (non-MAG_ANIM) types depends ONLY on (type, fc, res, drv). NUMERIC dirty compare
+       (the fb509 law: never build key strings per frame); per-canvas, so main + ext each keep
+       their own. Knob/mod motion changes fc/res/drv/ti numerically -> full rebuild THAT frame
+       (the curve-mirrors-DSP law); the smoothLive one-pole settles to a float fixed point, so
+       exact === resumes cache hits at rest. breath + the audio ripple are applied per frame to
+       the cached POWER below, so nothing goes still. W is keyed separately from N because a dpr
+       change can leave N unchanged while shifting W/dpr (and with it every cached f). */
+    var mc=cv.__mc||(cv.__mc={ti:-1,fc:0,res:0,drv:0,slot:0,N:-1,W:-1,F:null,Hb:null});
+    if(mc.N!==N||mc.W!==W){ mc.F=new Float64Array(N+1); mc.Hb=new Float64Array(N+1);
+      for(var mi=0;mi<=N;mi++) mc.F[mi]=fAtX(mi/N*(W/dpr),W/dpr); mc.N=N; mc.W=W; mc.ti=-1; }
+    if(MAG_ANIM[type]===1||mc.ti!==ti||mc.fc!==fc||mc.res!==res||mc.drv!==drv||mc.slot!==curSlot){
+      for(var mj=0;mj<=N;mj++) mc.Hb[mj]=mag(type,mc.F[mj],fc,res,drv,t);
+      mc.ti=ti; mc.fc=fc; mc.res=res; mc.drv=drv; mc.slot=curSlot; }
     for(var i=0;i<=N;i++){ var x=i/N*W, f=fAtX(i/N*(W/dpr),W/dpr), ie=binMag(f);
       if((i&3)===0){ lvlAcc+=ie; lvlN++; }
       spec.push([x, yTop + Math.max(0, specY(ie,H))*(H-yTop)/H]);   // fb164 — the white viz lives in [yTop,H]: full dB range compressed proportionally below the header, overshoot capped AT the ceiling
-      var Hp=mag(type,f,fc,res,drv,t)*breath, ma=Math.sqrt(Hp), y=curveY(Hp,yTop,yBot);
+      var Hp=mc.Hb[i]*breath, ma=Math.sqrt(Hp), y=curveY(Hp,yTop,yBot);   /* fb510 — cached model power; breath applied per frame so the look is bit-identical */
       // alive: the curve ripples where audio is present, intensified where the filter is attenuating it (it's cutting something)
       y += Math.sin(f*0.012 + t*5 + i*0.22)*ie*(0.6+0.6*Math.max(0,1-ma))*7*dpr;
       if(y<yTop)y=yTop; if(y>yBot+2*dpr)y=yBot+2*dpr;

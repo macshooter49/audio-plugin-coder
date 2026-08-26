@@ -497,3 +497,38 @@ installed.
 NEXT: (1) front-play ~198 — the hero at paced 60 during notes (push-clock migration or 30 fps
 under notes). (2) the push-paint migration proper (LFO playhead first — deletes the PLL). (3)
 ship lane 9-10% [ship] — emitEvent hop; possibly batch. (4) editor open 5-10 s.
+
+### fb510 — hero 30 fps under notes · front loopers rest-posed · the 94-type model CACHED
+
+Max confirms: **FL frame drops are SOLVED** (the fb509 tick fix), animations behave, rest poses
+feel right. Remaining mission: the window's +10-15 machine-% while 5 instances play.
+
+Shipped:
+1. HERO at 30 fps while animating (alternator inside the rest-pose block; the final rest frame
+   always draws). Front-play measured 198 -> 150 in the same epoch.
+2. Front loopers rest-posed like the hero: fxAnimate's tape mech + space viz ease to a stop over
+   1.5 s of quiet (a stopped tape LOOKS stopped), one final frame, sleep; delay-grid comet rides
+   the hero's rest factor. Mac path untouched (all gated on __tiQuiet existing).
+3. THE MODEL-CURVE CACHE (from the recon agent's exact-line plan): drawInto caches fAtX
+   frequencies + raw mag() power per canvas, keyed NUMERICALLY on (ti, fc, res, drv, slot, N, W)
+   — fc/res are post-liveFc/liveRes, so modulated cutoff rebuilds every frame BY CONSTRUCTION
+   (curve-mirrors-DSP law); MAG_ANIM whitelists the 22 t-reading types which bypass the cache so
+   their idle motion never freezes; breath + audio ripple applied per frame to cached power.
+   PROOF: Tests/flt_smooth.js staleFrames=0 (curve updates every frame through a sweep).
+   ⚠️ any future CAT[] type whose mag() branch reads t MUST be added to MAG_ANIM.
+
+MEASUREMENT REALITY: this machine's thermal epochs now swing single-shot runs by ±30% (front-play
+read 150 and 218 for the same front-page code an hour apart). Deltas under ~40 points need
+counterbalanced pairs; the four-state snapshot below is one epoch, order T-synth-idle first:
+    synth-idle 98.6/32 · synth-play 134/48 · front-idle 78/29 · front-play 218/44 (outlier vs
+    the 150 measured pre-cache in a cooler epoch — front-page code identical, treat 150-218 as
+    the honest range).
+
+THE REMAINING TAIL (why idle pages still read ~80-100, not ~20): a long tail of always-running
+loops each doing full redraws at paced 60 — the rack card drivers (granular/tape card
+clearRect+repaint per card per frame, inventory #3/#4), fxKnob draws (ungated since fb502's
+revert), noise-viz, hvRaf, RR/SWAY when visible. No single item is big; together they are the
+floor. The architectural finisher remains THE PUSH-PAINT MIGRATION (approved by Max): widgets
+paint from the C++ push, rAF loops get deleted one by one — LFO playhead first (deletes the
+fb493 PLL), then env, then the per-card feeds. That is the path to "the window costs ~nothing
+unless the DSP is doing something".
