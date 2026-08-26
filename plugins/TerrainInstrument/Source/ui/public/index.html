@@ -297,17 +297,81 @@
     }
   }
   function smilLoop(){
-    var last = 0;
+    var last = 0, alt = 0;
     function frame(ts){
       var dt = last ? Math.min(0.1, (ts - last) / 1000) : 1/60;
       last = ts;
-      smilTick(dt);
+      /* fb511 — 30 fps: the emblem scrub + arp tween at 60 were most of the true-idle residual
+         (WebView 75% with the push lane fully asleep); at ~20 px the halving is imperceptible. */
+      if (((++alt) & 1) === 0) smilTick(dt * 2);
       window.requestAnimationFrame(frame);         /* rides the paced arbiter clock */
     }
     window.requestAnimationFrame(frame);
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', smilLoop);
   else smilLoop();
+})();
+
+/* ══ fb511 — THE FRAME DISPATCHER (both platforms — deliberately OUTSIDE the Windows-only
+   arbiter above, which returns early on Mac). The C++ coalesced frame (fb483) now ends with
+   ';window.__tiFrame&&window.__tiFrame();' — one dispatch per shipped frame, ~60 Hz while
+   anything changes, ZERO at idle (idle-skip sends nothing; nothing changed, so painters have
+   nothing to repaint — that is correct, not a bug). Widgets migrate off their rAF self-loops by
+   registering a painter:
+       window.__tiFrameReg('oscScope', function(ts){ ... });
+   Map by name — re-registering REPLACES, so widget re-inits are safe. Painters keep their own
+   gates (__tiOff occlusion, __cardOnly, quiet/rest logic, numeric dirty flags) — this is only
+   the clock. Each painter runs in its own try/catch: one broken widget never kills the frame,
+   its neighbours, or the C++ eval chain.
+   FALLBACK LANE — the push can go dark (editor closed, Mac standalone quirks, long idle-skip
+   runs: the C++ keepalive only stamps __tickT, it does NOT dispatch; popped-card windows never
+   receive the main frame push at all): a 250 ms interval fires the registry itself whenever no
+   push-driven dispatch has landed for 700 ms. It calls the runner DIRECTLY — never __tiFrame —
+   so it cannot mask the push-lane silence it exists to detect. Registered painters are never
+   dropped (state-persists law); a painter with a clean dirty flag exits immediately, so the
+   4 Hz idle sweep costs nothing. ts is performance.now() — same timebase as the rAF
+   DOMHighResTimeStamp migrated painters were built against. */
+(function(){
+  var reg = new Map(), lastPush = 0;
+  function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
+  function run(ts){
+    reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
+  }
+  window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
+  window.__tiFrameUnreg = function(name){ reg.delete(name); };
+  /* fb511c — PUSH ARMS, VSYNC PAINTS. Running the painters synchronously inside the push eval
+     put every paint on the MESSAGE-EVENT timeline instead of vsync — the same misalignment /
+     double-raster tax measured on the front page under timer pacing (+25), now applied to every
+     widget: counterbalanced A/B read +32 points during play. So a dispatch only marks pending
+     and arms ONE (arbiter-paced) rAF; the painters run vsync-aligned with the freshest pushed
+     data. No pushes -> nothing pending -> zero frames at idle, exactly as designed. */
+  var pend = false;
+  window.__tiFrame = function(){
+    lastPush = nowMs();
+    if (pend) return;
+    pend = true;
+    window.requestAnimationFrame(function(ts){ pend = false; run(ts || nowMs()); });
+  };
+  /* fb511b — when the push lane is DARK (no editor push for 700 ms: browser preview, popped-card
+     windows, editor closed, a dead channel), the fallback is not a 4 Hz heal — it is the REAL
+     alternative clock: a rAF chain through the (paced) wrapped requestAnimationFrame, so
+     painters run at full UI rate exactly as their old self-loops did. The moment pushes return,
+     the chain notices and stands down. Measured need: the UI gate suite runs in pushless Chrome
+     and a 4 Hz fallback failed 18 assertions (eq 14/1, fx4 114/16, flt staleFrames 36). */
+  /* fb511 — the C++ keepalive (every ~500 ms while idle-skip holds) stamps the lane ALIVE
+     without dispatching: pushes are deliberately silent because nothing changed, and the
+     fallback below must not start painting a page that is correctly at rest. No keepalive at
+     all (browser preview, popped cards, dead channel) -> the fallback becomes the clock. */
+  window.__tiAlive = function(){ lastPush = nowMs(); };
+  var fbOn = false;
+  function fbChain(ts){
+    if (nowMs() - lastPush <= 700){ fbOn = false; return; }   /* pushes are back — stand down */
+    run(ts || nowMs());
+    window.requestAnimationFrame(fbChain);
+  }
+  setInterval(function(){
+    if (!fbOn && nowMs() - lastPush > 700){ fbOn = true; window.requestAnimationFrame(fbChain); }
+  }, 250);
 })();
 </script>
 <script>
@@ -7906,18 +7970,18 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             // live wander on the 'live' macros (analog feel)
             var t=0;
             function tick(){ if(window.__cardOnly)return;
-              /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ (window.__tiSlow||requestAnimationFrame)(tick); return; }
+              /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ return; }
               try{
               t+=0.016; var arr=BANKS[bank];
               for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
-            }catch(e){} (window.__tiSlow||requestAnimationFrame)(tick); }   /* fb505 deco -- analog wander is decoration */
-            requestAnimationFrame(tick);
+            }catch(e){} }   /* fb505 deco -- analog wander is decoration; fb511 rides __tiFrame */
+            window.__tiFrameReg('rr-wander', tick);
             // SWAY lane — scrolling analog drift trace
             var cv=document.getElementById('rr-lane');
             if(cv&&cv.getContext){
               var cx=cv.getContext('2d'), buf=[]; for(var b2=0;b2<180;b2++) buf.push(0);
-              (function lane(){ if(window.__cardOnly)return;
-                /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ (window.__tiSlow||requestAnimationFrame)(lane); return; }
+              function lane(){ if(window.__cardOnly)return;
+                /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ return; }
                 try{
                 var now=t*1000+performance.now()*0; // t drives it; performance.now avoided for determinism-safety
                 var pn=(typeof performance!=='undefined'&&performance.now)?performance.now():t*1000;
@@ -7931,7 +7995,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 cx.stroke();
                 var ly=cv.height/2-buf[buf.length-1]*(cv.height*0.36);
                 cx.fillStyle='#fff'; cx.beginPath(); cx.arc(cv.width-3,ly,2.6,0,7); cx.fill();
-              }catch(e){} (window.__tiSlow||requestAnimationFrame)(lane); })();   /* fb505 deco */
+              }catch(e){} } window.__tiFrameReg('rr-lane', lane);   /* fb505 deco; fb511 rides __tiFrame */
             }
           }catch(e){ try{console.log('[ribbon] init err',e);}catch(_){} } }
           if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',init); else init();
@@ -7988,8 +8052,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
              Rides the 60 Hz PUSH (window.__grnVizPush), never a native poll — fb354.              */
           (function(){
             function tick(){
-              if(window.__cardOnly) return requestAnimationFrame(tick);   /* fb342/fb90 guard */
-              /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }
+              if(window.__cardOnly) return;   /* fb342/fb90 guard — card windows get no push and this driver never drew there */
+              /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }
               try{
                 var feed=window.__grnVizPush;
                 var rack=document.getElementById('fxr-rack');
@@ -8042,9 +8106,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   }
                 }
               }catch(e){}
-              requestAnimationFrame(tick);
             }
-            requestAnimationFrame(tick);
+            window.__tiFrameReg('fxr-grn', tick);
           })();
 
           /* ═══ fb365 — THE TAPE CARD DRIVER ═══════════════════════════════════════════════════
@@ -8289,8 +8352,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             window.__tpeDraw=TDRAW;
 
             function tick(){
-              if(window.__cardOnly) return requestAnimationFrame(tick);   /* fb342/fb90 guard */
-              /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }
+              if(window.__cardOnly) return;   /* fb342/fb90 guard — card windows get no push and this driver never drew there */
+              /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }
               try{
                 var feed=window.__tpeVizPush, rack=document.getElementById('fxr-rack');
                 if(rack){
@@ -8315,9 +8378,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   }
                 }
               }catch(e){}
-              requestAnimationFrame(tick);
             }
-            requestAnimationFrame(tick);
+            window.__tiFrameReg('fxr-tape', tick);
           })();
 
           /* ═══ fb437 — THE FX4 CORES (Equalizer · Widen · Compress · Multiband) ══════════════════
@@ -9400,7 +9462,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             }
           }
           (function(){ function l3(){ try{ if(!window.__cardOnly && !(window.__tiOff&&window.__tiOff('fxr-rack'))) fx3Tick(); }catch(e){}   /* fb497 */ 
-            requestAnimationFrame(l3); } requestAnimationFrame(l3); })();
+            } window.__tiFrameReg('fxr-fx3', l3); })();
           window.__fx3Tick=fx3Tick;   // fb413 — headless gate hook
           /* ═══ FX4-TICK-BEGIN (fb437) — THE FOUR CARDS, LIVE ═══════════════════════════════════
              One rAF loop for all four (the fx3 precedent: never a setInterval that free-runs
@@ -9805,7 +9867,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             }
           }
           (function(){ function l4(){ try{ if(!window.__cardOnly && !(window.__tiOff&&window.__tiOff('fxr-rack'))) fx4Tick(); }catch(e){}   /* fb497 */ 
-            requestAnimationFrame(l4); } requestAnimationFrame(l4); })();
+            } window.__tiFrameReg('fxr-fx4', l4); })();
           window.__fx4Tick=fx4Tick;   // headless gate hook
           /* the engine-fed readouts (Attack/Release/Ratio/knee/crossovers) refresh at a gentle rate */
           setInterval(function(){ try{ if(window.__tiQuiet)return; for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);   /* fb504 gated */
@@ -10155,7 +10217,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // the "frame rate drops / looks ass" Max saw. rAF is one redraw per presented frame,
           // and __cardOnly still gates it (the fb90 law).
           (function(){ function loop(){ try{ if(!window.__cardOnly && !(window.__tiOff&&window.__tiOff('fxr-rack'))) fltTick(); }catch(e){}   /* fb497 */ 
-            requestAnimationFrame(loop); } requestAnimationFrame(loop); })();
+            } window.__tiFrameReg('fxr-flt', loop); })();
 
           // ═══ fb392 — CLICK-DRAG, on the slider states themselves ══════════════════════════
           // X = Cutoff on the same log-f axis the curve is drawn on, Y = Res. It now writes
@@ -11373,7 +11435,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
           // lands on the SAME frame as the audio (no trailing smoothing), falls with the tail.
           (function(){ var ST_RVB={};   // fb352 — per-INSTANCE scatter state (was one shared set, so a duplicate's grid never lit); fb342 — bloom rides the push, scF halves the cell write rate
             function frac(a){ var s=Math.sin(a)*43758.5453; return s-Math.floor(s); }   // deterministic per-cell hash
-            function tick(ts){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }   // fb342 — fb90 guard: the rack is display:none in card windows, and getReverbBloom isn't registered there — each popped card was burning 60 never-settling natives/s on the shared message thread (the frame-drop bug)
+            function tick(ts){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }   // fb342 — fb90 guard: the rack is display:none in card windows, and getReverbBloom isn't registered there — each popped card was burning 60 never-settling natives/s on the shared message thread (the frame-drop bug)
               try{
               // fb352 — EVERY reverb card, each with its OWN state and its OWN bloom. This used to be
               // querySelector + DEVS' first reverb + one shared smooth/cells, so a duplicate's grid
@@ -11421,8 +11483,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               }
                 RS.cellsCore=cellsCore; RS.cells=cells; RS.P=P; RS.wasLive=wasLive; RS.scF=scF;
               }                                                                      // fb352 — end per-card loop
-            }catch(e){} requestAnimationFrame(tick); }
-            requestAnimationFrame(tick);
+            }catch(e){} }
+            window.__tiFrameReg('fxr-rvb', tick);
           })();
           // fb296/fb312 — DELAY core: a TRUE echo timeline driven per-frame. Geometry (tap x = the REAL
           // Time; heights + dotted envelope = the REAL feedback decay) rebuilds the instant Time/Fdbk/Sync/
@@ -11487,7 +11549,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               if(!dd||!dd.inst||dd.inst<=1) return +window.__fxBloomDly||0;
               var P=window.__fxBloomDlyP; return (P&&P.length>=dd.inst-1)?(+P[dd.inst-2]||0):0;
             }
-            function tick(ts){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }   // fb342 — fb90 guard (see reverb bloom above)
+            function tick(ts){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }   // fb342 — fb90 guard (see reverb bloom above)
               try{
               var dt=Math.max(0,Math.min(100,ts-lastTs)); lastTs=ts;
               var cards=rack.querySelectorAll('.fxr-dev');
@@ -11528,8 +11590,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 st.prevPX=px;
               }
               }                                                            // fb350 — end per-card loop
-            }catch(e){} requestAnimationFrame(tick); }
-            requestAnimationFrame(tick);
+            }catch(e){} }
+            window.__tiFrameReg('fxr-dly', tick);
           })();
           /* fb292 — CONVOLUTION IR waveform poll: when a conv core exists, pull getConvIR (~8 fps) + redraw ON CHANGE (cheap) */
           /* 🔑🔑 fb374 — THE SIGNATURE LIVES ON THE NODE, NOT IN A MAP THAT OUTLIVES IT.
@@ -11548,7 +11610,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
              cached geo against the LIVE core node, `geo.core!==core`. Same law, and this was
              the one driver still breaking it.) */
           (function(){ var fnConv=null, fc=0;
-            function tick(){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }   // fb342 — fb90 guard (see reverb bloom above)
+            function tick(){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }   // fb342 — fb90 guard (see reverb bloom above)
               try{ fc++;
               // fb359 — EVERY convolution card polls ITS OWN instance. This was querySelector +
               // getConvIR() with no instance, so with two Convolution reverbs the second card drew
@@ -11572,14 +11634,14 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   }catch(e){} }).catch(function(){});
                 })(cards[ci]); }
               }
-            }catch(e){} requestAnimationFrame(tick); }
-            requestAnimationFrame(tick);
+            }catch(e){} }
+            window.__tiFrameReg('fxr-conv', tick);
           })();
           /* fb328 — DISTORTION LIVE CORE: poll the engine's REAL transfer (all 23 modes) + signal
              occupancy at ~15 fps. The purple lives ON the curve exactly where the signal is
              (idle = dark, playing = bright — the audio-reactive hard rule). */
           (function(){ var fn=null, busy=false, busyT=0, lastFeedM=null;   /* fb355 — edge memory for the type follower */
-            function tick(){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ requestAnimationFrame(tick); return; }   // fb342 — fb90 guard: rack core is display:none in card windows; the crv CARD self-syncs via its own crvXWin poll, it never needed this driver
+            function tick(){ if(window.__cardOnly)return; /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }   // fb342 — fb90 guard: rack core is display:none in card windows; the crv CARD self-syncs via its own crvXWin poll, it never needed this driver
               try{
               /* fb334 — MIRROR PASS (Max: "make sure it's ALWAYS evolving"): on drawn modes the
                  mini's geometry repaints from LOCAL CV every frame, feed-independent — a lost
@@ -11669,8 +11731,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 }catch(e){} }
                 if(pushed&&pushed.c&&pushed.c.length) applyDstViz(pushed);
               }
-            }catch(e){} requestAnimationFrame(tick); }
-            requestAnimationFrame(tick);
+            }catch(e){} }
+            window.__tiFrameReg('fxr-dst', tick);
           })();
           /* fb328 — right-click the Distortion core → Extend (Max: NO icon on the face; the LFO's
              right-click grammar). Non-shaper modes also offer the §6.6 send. */
@@ -13874,8 +13936,8 @@ window.__synArc = function (ring, n, bipolar) {
       if(window.__cardOnly) return;   // fb494 -- RESTORED: fb487 appended its note on this line and
       // swallowed this guard into the comment, so the contour map has been running in every popped
       // card window since. fb487's own half-rate skip follows, on its own line this time.
-      /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ (window.__tiSlow||requestAnimationFrame)(frame); return; }   /* fb505 deco */   // the whole synth page is away: no grid, no contours, no gBCR
-      if(window.__WIN_LITE&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ (window.__tiSlow||requestAnimationFrame)(frame); return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
+      /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ return; }   /* fb505 deco -- fb511: __tiFrame re-calls */   // the whole synth page is away: no grid, no contours, no gBCR
+      if(window.__WIN_LITE&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
       var t=ts/1000, dt=Math.min(0.05,t-last); last=t; tickF(dt);
       /* fb497 — the 32-frame rect cache drawInto() already uses, for the same reason: this box is
          fixed by layout and was costing one forced-layout gBCR every frame. A DEGENERATE cached
@@ -13886,7 +13948,7 @@ window.__synArc = function (ring, n, bipolar) {
       var W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
       if(cv.width!==W) cv.width=W; if(cv.height!==H) cv.height=H;
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,r.width,r.height);
-      if(r.width<8||r.height<8){ (window.__tiSlow||requestAnimationFrame)(frame); return; }
+      if(r.width<8||r.height<8){ return; }
       var w=r.width, h=r.height;
       var g=sampleGrid(46,34,t);
       LEV.forEach(function(th,li){
@@ -13916,9 +13978,9 @@ window.__synArc = function (ring, n, bipolar) {
         ctx.fillStyle=gr; ctx.fillRect(e2[0],e2[1],e2[2],e2[3]);
       });
       ctx.globalCompositeOperation='source-over';
-      (window.__tiSlow||requestAnimationFrame)(frame);   /* fb505 — the topo landscape is DECORATION: static on Windows, 2fps while interacting */
+      /* fb505/fb511 — the topo landscape is DECORATION; it now rides window.__tiFrame, no self re-arm */
     }
-    requestAnimationFrame(frame);
+    window.__tiFrameReg('topo', frame);   /* fb511 */
   }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',boot); else boot();
 })();
@@ -16265,8 +16327,8 @@ setTimeout(function wireSynControls () {
           if (h > 0.6) ctx.fillRect (Math.round (i * bw + bw * 0.5 - lw * 0.5), mid - h, lw, h * 2);
         }
       }
-      function hvRaf () { if(window.__cardOnly)return; /* fb497 */ if(!(window.__tiOff&&window.__tiOff('syn-panel'))) try { hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} requestAnimationFrame (hvRaf); }
-      requestAnimationFrame (hvRaf);
+      function hvRaf () { if(window.__cardOnly)return; /* fb497 */ if(!(window.__tiOff&&window.__tiOff('syn-panel'))) try { hvPaint ('a'); hvPaint ('b'); hvPaint ('c'); hvPaint ('d'); } catch (e) {} }
+      window.__tiFrameReg('hv', hvRaf);   /* fb511 */
     } catch (eHv) { console.warn ('[HARM] viz wiring failed', eHv); }
 
     // ════════ SAMPLE engine front — interactive visualizer (engine #2) ════════
@@ -18972,7 +19034,7 @@ setTimeout(function wireSynControls () {
         // e.g. 2.37 = 37% through Attack. We map that straight onto the SAME curve
         // the graph draws, so the dot rides the exact visible line. stageIndex:
         // 0 Idle · 1 Delay · 2 Attack · 3 Hold · 4 Decay · 5 Sustain · 6 Release.
-        var followLevel=-1, followStage=-1, followRAF=0;
+        var followLevel=-1, followStage=-1;
         function placeFollower(){
           if(!followEl) return;
           if(followStage < 0 || followLevel < 0){            // no voice -> fade out
@@ -19004,15 +19066,15 @@ setTimeout(function wireSynControls () {
           followEl.setAttribute('cy', y.toFixed(2));
           followEl.style.opacity='1';
         }
-        // Receive live env state from C++ (60 Hz). Same stale-rAF-id guard as the osc
-        // scope: if WKWebView dropped the pending callback (occlusion/suspend), the
-        // handle lies forever and the dot freezes — trust TIME, reset, redrive.
-        var followLastT = 0;
+        // Receive live env state from C++ (60 Hz). The push IS the paint clock now: the
+        // __tiFrame dispatcher runs at the END of the same evaluated frame, so the
+        // 'envFollow' painter (registered below, AFTER 'envCurve') places the dot on the
+        // breathing layout envModTick published THIS frame. The old one-shot rAF and its
+        // WKWebView stale-handle guard are deleted — no pending callback exists, so there
+        // is no handle to lie and no freeze to heal. Numeric dirty flag, no per-frame keys.
+        var followDirty = 0;
         window.updateEnvFollower = function(level, stageCode){
-          followLevel = level; followStage = stageCode;
-          var n = (window.performance && performance.now) ? performance.now() : 0;
-          if (followRAF && n - followLastT > 250) { try { cancelAnimationFrame(followRAF); } catch(e) {} followRAF = 0; }
-          if(!followRAF){ followRAF=requestAnimationFrame(function(){ followLastT=(window.performance&&performance.now)?performance.now():0; followRAF=0; placeFollower(); }); }
+          followLevel = level; followStage = stageCode; followDirty = 1;
         };
 
         // ── DEPTH slider (right edge) ─ how much PITCH/FILTER envelopes move the sound.
@@ -19430,7 +19492,27 @@ setTimeout(function wireSynControls () {
           reflowNodes(pd.L); __modLayout=pd.L; }   /* fb197 (Max) — NO static base ghost: only the living curve · fb202 — publish the layout for the follower */
         window.__envModTick=envModTick;   /* probe surface (rAF starves under virtual time) */
         window.__envPlaceFollower=placeFollower;   /* fb202 — probe surface */
-        (function __modCurveLoop(){ /* fb497 */ if(!(window.__tiOff&&window.__tiOff('env-canvas'))){ try{ envModTick(); }catch(e){} } requestAnimationFrame(__modCurveLoop); })();
+        /* fb497→push — the env editor rides the C++ frame clock (__tiFrame); the rAF self-loop
+           is DELETED. Registration order is paint order: envCurve publishes __modLayout, then
+           envFollow parks the dot on it — deterministic, never a frame stale (fb202). Hidden
+           (front page / __tiOff), the curve PARKS to base instead of freezing mid-breath: fb483
+           idle-skip means no push may ever come to heal a reopen, and state must stay truthful.
+           NO __cardOnly rAF fallback: there is no env card (card=(arp|chop|gli|rbn|mod|lfo|crv)),
+           env-canvas has no box under .card-only, and popped cards never receive the main frame
+           push — the old loop only ever burned rAF there. */
+        if(window.__tiFrameReg){
+          window.__tiFrameReg('envCurve', function(){
+            if(window.__tiOff&&window.__tiOff('env-canvas')){
+              if(__modActive){ __modActive=false; __modLayout=null; scheduleRender(); }   /* park: a reopen never shows a stale breathing frame */
+              return;
+            }
+            try{ envModTick(); }catch(e){}
+          });
+          window.__tiFrameReg('envFollow', function(){
+            if(!followDirty) return; followDirty=0;
+            placeFollower();   /* unguarded like the old one-shot ran: ~6 attr writes, and the dot's park/fade state stays truthful while the panel is hidden */
+          });
+        }
         var __renderBase = render;   /* fb192 — chips ride every paint: graph sculpts, wire() sync, boot */
         render = function(){ __renderBase(); refreshChips(); };
         updateChip();
@@ -23950,7 +24032,7 @@ function animate(timestamp) {
     // strokes, per-vertex radial gradients, meter DOM thrash and 3 canvas reallocs per frame
     // were painting pixels nobody can see. Keep rescheduling so closing the panel resumes.
     _prevAnimTime = 0;
-    requestAnimationFrame(animate); return;
+    return;   /* fb511 -- __tiFrame re-calls; closing the panel still resumes */
   }
   const time = timestamp * 0.001;
   const dt = _prevAnimTime > 0 ? time - _prevAnimTime : 1/60;
@@ -24007,7 +24089,6 @@ function animate(timestamp) {
   updateModulation(time, dt);
   if (window.__tiQuiet === undefined && typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);   /* fb510 -- Mac path; Windows draws it inside the rest-pose block */
 
-  requestAnimationFrame(animate);
 }
 
 // ==== MODULATION SYSTEM ====
@@ -27369,7 +27450,7 @@ function initFxSuite() {
     if(window.__cardOnly)return; 
     if (typeof currentActivePanel !== 'undefined' && currentActivePanel) {
       lastFxTime = timestamp;   // fb487 -- occluded (see animate); the tape viz's ~15 blurred strokes/frame vanish
-      requestAnimationFrame(fxAnimate); return;
+      return;   /* fb511 -- __tiFrame re-calls */
     }
     var dt = Math.min((timestamp - lastFxTime) / 1000, 0.1);
     lastFxTime = timestamp;
@@ -27480,7 +27561,7 @@ function initFxSuite() {
       // Chorus page animation — markup and draw logic added in Task 18
     }
 
-    requestAnimationFrame(fxAnimate);
+    /* fb511 -- rides window.__tiFrame; no self re-arm */
   }
 
   // ─── Size Canvases to Actual Container ───
@@ -27518,7 +27599,7 @@ function initFxSuite() {
 
   window._fxSizeFn = sizeFxCanvases;
 
-  requestAnimationFrame(fxAnimate);
+  window.__tiFrameReg('fx', fxAnimate);   /* fb511 */
 }
 
 // ---- Chorus Block Drag/Wheel Handlers ----
@@ -27743,7 +27824,7 @@ function init() {
   updateOutputDisplay();
   updateMasterMixDisplay();
   initModSystem();
-  requestAnimationFrame(animate);
+  window.__tiFrameReg('front', animate);   /* fb511 -- front-page master */
 }
 
 // Handle resize
@@ -28725,55 +28806,22 @@ restoreThemeFromBackend();
     if(fd){ fd.setAttribute('cx',x2.toFixed(1)); fd.setAttribute('cy',(MID-yfor(st.shape,(ph+st.phase)%1)*amp).toFixed(1)); } }
   var __chainPrevPh=-1, __chainPlay=0;   // fb245 — CHAIN cycle-wrap tracker (advance the LFO snapshot chain each cycle)
   var __lfoNoteOnT=0, __lfoNotePrev=false, __lfoReadPos=0, __lfoDotFrac=0.5;   // fb247 — direction / rise / smooth follower state
-  function tick(t){ if(window.__cardOnly&&window.__cardOnly!=='lfo')return;
-    /* fb497 */ if(!window.__cardOnly&&window.__tiOff&&window.__tiOff('mod-engine')){ requestAnimationFrame(tick); return; }
+  var __lfoRafMode=0;   // set in boot(): 1 = rAF is the clock (popped card / no dispatcher), 0 = the C++ push clock drives us via __tiFrameReg
+  function lfoFrame(t){ if(window.__cardOnly&&window.__cardOnly!=='lfo')return;
+    if(__lfoRafMode) requestAnimationFrame(lfoFrame);   // popped-card window gets no main push — rAF stays its clock (armed BEFORE any gate so the loop never dies)
+    /* fb497 */ if(!window.__cardOnly&&window.__tiOff&&window.__tiOff('mod-engine')) return;   // occluded: in push mode the dispatcher simply calls us again next push
+    if(t==null)t=performance.now();   // the __tiFrame dispatcher calls with no timestamp
     if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
+    if(dt<0.001)dt=0.001; else if(dt>0.1)dt=0.1;   // real inter-push gap, clamped (first call / tab-suspend safe)
     var rP=window.__mvLfoPh;   // fb217 — THE TRUTH FEED: the DSP's actual LFO phase (Max: 'the follower is seconds off' — it was a free-running JS clock at a fake 120 BPM; now the dot IS the audible read position, sync/rate-mod/transport all inherently exact)
     if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){
-      // fb493 -- PHASE-LOCKED, NOT EXTRAPOLATED. fb487 recomputed ph = pushedPhase + age*rate on
-      // EVERY frame, so the moment a new push landed `age` fell to 0 and the dot SNAPPED back by
-      // however much the estimate had overshot -- a sawtooth jolt at the push rate, which is
-      // exactly what Max saw ("the LFO is jolting back and forth like it's broken"). Worse, a
-      // failed rate estimate stored 0, so the dot alternated between gliding and standing still.
-      //
-      // A local phase now FREE-RUNS at the locked rate and is CORRECTED toward the DSP's truth by
-      // a fraction of the error on each arrival -- a standard phase-locked loop. Motion is
-      // continuous at frame rate, the lock still comes from the engine (so sync, rate-mod and
-      // transport stay exact), and only a genuine discontinuity (retrigger, >0.35 of a cycle)
-      // is taken as a hard jump. The rate estimate is smoothed, and a failed one is IGNORED
-      // rather than treated as "stopped".
-      var __i5=st.tab-1, __w01=function(x){return ((x%1)+1)%1;};
-      if(window.__mvLfoPhT!==window.__lfoMeasT){
-        window.__lfoMeasT=window.__mvLfoPhT;
-        var __gap=(window.__mvLfoPhT-(window.__mvLfoPhTPrev||window.__mvLfoPhT))/1000, __pv=window.__mvLfoPhPrev;
-        window.__lfoHz=window.__lfoHz||[];
-        /* fb506 — TRIGGER-AWARE PLL. Retrig/Env push the most-active VOICE's phase
-           (PluginProcessor.cpp:9817), which RESETS to the start phase on every note-on. The old
-           measurement wrapped that backward jump into a huge forward rate (a 0.6-cycle reset over
-           a 16 ms push gap reads as ~24 Hz — inside the <80 gate), poisoning __lfoHz: the dot
-           raced, rubber-banded 25% per push, and under fast retriggers sat PINNED at the start
-           phase, twitching — Max: "the retrigger just sets a fixed phase". And when the pushed
-           phase pins byte-equal (Env end, stopped transport), the rate kept its last poisoned
-           value and the dot buzzed AHEAD of the pin. A backward jump in a trigger mode is a
-           RESET, not a rate: snap to the DSP truth and never feed the wrap into the estimate.
-           Mono maps to Free in the DSP (PluginProcessor.cpp:8569) and Free mode takes the
-           original path bit-identically. */
-        var __mo5=moGet(), __tg5=(__mo5.mn?0:(__mo5.tg||0)), __rst=false;
-        if(__pv&&__gap>0.001&&__gap<0.3){
-          var __d=__w01((rP[__i5]||0)-(__pv[__i5]||0));
-          if(__tg5&&__d>0.5){ __rst=true;
-            if(window.__lfoHz[__i5]==null) window.__lfoHz[__i5]=effHz(); }
-          else if(__tg5&&__d===0){ window.__lfoHz[__i5]=(window.__lfoHz[__i5]||0)*0.7; }
-          else{ var __m=__d/__gap;
-            if(__m>0&&__m<80) window.__lfoHz[__i5]=(window.__lfoHz[__i5]==null)?__m
-                                                   :(window.__lfoHz[__i5]+(__m-window.__lfoHz[__i5])*0.3); }
-        }
-        var __e=__w01(rP[__i5]||0)-__w01(ph);          // shortest way round the circle
-        if(__e>0.5)__e-=1; else if(__e<-0.5)__e+=1;
-        ph=__rst?__w01(rP[__i5]||0)
-               :__w01(ph+(Math.abs(__e)>0.35?__e:__e*0.25));  // real discontinuity snaps; drift eases in
-      }
-      ph=__w01(ph+dt*((window.__lfoHz&&window.__lfoHz[__i5])||0));
+      // THE PLL IS DEAD (was fb487→fb493→fb506). This painter now runs once per C++ push (the
+      // fb483 coalesced 60 Hz frame is the clock), so the pushed phase IS the playhead — paint it
+      // directly. No rate estimate, no free-run, no correction, no trigger heuristics: a retrig
+      // reset arrives as the pushed phase and paints as-is. Between pushes nothing moves,
+      // because pushes ARE the clock now.
+      var __i5=st.tab-1;
+      ph=(((rP[__i5]||0)%1)+1)%1;
     }
     else { ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // stale/absent feed → the old simulation (boot, headless, suspended host)
     // fb245 — CHAIN advance: step the LFO snapshot chain on each cycle wrap (phase 1→0), the direct analog of
@@ -28802,7 +28850,7 @@ restoreThemeFromBackend();
       // phase bucket: it still visibly lives (32 steps/cycle) at ~1/8th the parse cost.
       if(sic){ var ib=st.shape+'|'+((ph*32)|0);
         if(ib!==sic.__b){ sic.__b=ib; sic.innerHTML=icon(st.shape, ph); } } }   // little living shape emblem
-    requestAnimationFrame(tick); }
+  }
 
   function boot(){
     root=document.getElementById('mod-engine');
@@ -28812,7 +28860,8 @@ restoreThemeFromBackend();
     // re-render on external (automation/host) changes of the ACTIVE lfo
     for(var ln=1;ln<=NLFO;ln++){ (function(n){ ['shape','sync','div','rate','depth','phase'].forEach(function(k){ var s=LP[n]&&LP[n][k]; /* fb235 — guarded: the unguarded read threw at n=2 in card windows (lazy LP), killing boot before tick/shPull — dead follower + stale shapes when popped */ if(s&&s.valueChangedEvent&&s.valueChangedEvent.addListener) s.valueChangedEvent.addListener(function(){ if(n===st.tab){ pull(); render(); } }); }); })(ln); }
     setTimeout(shPull,600); setTimeout(shPull,2500);   // fb206 — hydrate drawn shapes (dynPull race law)
-    requestAnimationFrame(tick);
+    if(!window.__cardOnly&&window.__tiFrameReg){ window.__tiFrameReg('lfoCard', lfoFrame); }   // main window: the C++ push clock drives the painter (one call per evaluated frame)
+    else { __lfoRafMode=1; requestAnimationFrame(lfoFrame); }   // popped 'lfo' card (no main push) or dispatcher absent: rAF stays the clock; lfoFrame self-arms
   }
   var tries=0;
   (function wait(){ if(window.Juce&&window.Juce.getSliderState){ boot(); } else if(tries++<60){ setTimeout(wait,150); } else { boot(); } })();
@@ -29128,13 +29177,13 @@ restoreThemeFromBackend();
   // solid purple block (filter "messed up" on reopen). The loop always reschedules.
   function loop(ts){ if(window.__cardOnly)return; var t=ts/1000; curT=t;
     var __sp=document.getElementById('syn-panel');   // fb487 -- the filter is not on screen and the
-    if(__sp&&__sp.classList.contains('hidden')&&!extOpen){ requestAnimationFrame(loop); return; }   // overlay is closed: no poll, no draw
+    if(__sp&&__sp.classList.contains('hidden')&&!extOpen){ return; }   // overlay is closed: no poll, no draw (fb511 -- __tiFrame re-calls)
     // fb492 -- Max: "FL's frames only start dropping on the SYNTH PAGE". This loop is the page's
     // heaviest painter: a per-CSS-pixel spectrum plus the 94-type transcendental filter model,
     // then eight full stroked passes, every frame. The FEED still smooths every frame (pollLive +
     // smoothLive stay at 60 Hz so nothing lags behind the audio); only the DRAW halves on Windows.
     var __anlSkip = window.__WIN_LITE && (((window.__anlAlt = (window.__anlAlt|0) + 1) & 1) === 1);
-    try{ pollLive(); smoothLive(); if(!__anlSkip){ drawAnalyzer(); if(!window.__tiDecoDue||window.__tiDecoDue('fk-em'))drawEmblems(t); } pollHud(); }catch(e){} requestAnimationFrame(loop); }
+    try{ pollLive(); smoothLive(); if(!__anlSkip){ drawAnalyzer(); if(!window.__tiDecoDue||window.__tiDecoDue('fk-em'))drawEmblems(t); } pollHud(); }catch(e){} }
   function buildExt(){
     ext=document.createElement('div'); ext.className='filt-ext';
     ext.innerHTML='<div class="fe-h"><span class="fe-g">⠇</span><span class="fe-t">Filter 1</span><span class="fe-x">✕</span></div><div class="fe-b"><canvas></canvas></div>';
@@ -29194,7 +29243,7 @@ restoreThemeFromBackend();
     if(!dev.querySelector('.filt-hud')){ hud=document.createElement('div'); hud.className='filt-hud'; dev.appendChild(hud); }
     var tg=dev.querySelector('.filter-toggle');
     if(tg && !tg.querySelector('.filt-exp')){ var ic=document.createElement('div'); ic.className='filt-exp'; ic.innerHTML='<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M6 2 H2 V6 M14 6 V2 H10 M10 14 H14 V10 M2 10 V14 H6"/></svg>'; ic.onclick=openExt; tg.appendChild(ic); }
-    requestAnimationFrame(loop);
+    window.__tiFrameReg('flt-anl', loop);   /* fb511 -- the synth page's main painter rides the C++ frame push */
   }
   var tries=0;
   (function wait(){ var dev=document.getElementById('filter-device'); if(dev&&dev.querySelector('.filter-knobs')){ build(dev); return; } if(tries++<300) setTimeout(wait,100); })();
@@ -29691,7 +29740,7 @@ restoreThemeFromBackend();
     /* fb497 */ // this loop ALREADY read `on` — but only after building a Range and a getBoundingClientRect
     // for EVERY modulated knob, each one a forced layout. Measured at 66 ms/4 s on the front page,
     // where not one of those knobs was on screen. Ask first, measure second.
-    if(!on){ if(!__ulDown){ __ulDown=true; ulMap.forEach(function(u){ u.style.display='none'; }); } requestAnimationFrame(loop); return; }
+    if(!on){ if(!__ulDown){ __ulDown=true; ulMap.forEach(function(u){ u.style.display='none'; }); } return; }
     __ulDown=false;
     /* fb188 — badge positioning retired with the badges; the underline is the surface. */
     // fb182 S3 — underlines: one bar per modulated element; purple = the selected
@@ -29769,8 +29818,8 @@ restoreThemeFromBackend();
         } else cm.style.display='none';
       } else { sp.style.width='0px'; cm.style.display='none'; } });
     ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
-    requestAnimationFrame(loop); }
-  requestAnimationFrame(loop);
+    }
+  window.__tiFrameReg('sm-ul', loop);
 
   // ── restore persisted matrix into the UI (so reload shows the badges, not a clobber) ──
   function elForDest(dest){
@@ -33878,7 +33927,6 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           if (nfnFollow) Promise.resolve (nfnFollow ()).then (function (v) { var f = parseFloat (v); followPos = isNaN (f) ? -1 : f; }).catch (function () {});
         } } catch (e) {} }
       function loop () { if(window.__cardOnly)return; 
-        requestAnimationFrame (loop);
         /* fb497 */ if(window.__tiOff&&window.__tiOff('noise-viz-cv')) return;   // 130 particles into a 1x1 buffer, 60x a second
         frame++;
         if (frame % (vizMode === 2 ? 2 : 5) === 0) poll ();   // native poll — 30 Hz on the waveform (follower), 12 Hz otherwise
@@ -33928,7 +33976,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         }
       }
       window.addEventListener ('resize', function () { cv._w = 0; });
-      resize (); loop ();
+      resize (); window.__tiFrameReg('noise-viz', loop);   /* fb511 */
     }
     function wire () {
       var p = document.getElementById ('noise-prev'); if (! p || p._nw) return; p._nw = true;

@@ -5771,7 +5771,17 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     }
 
     SEGM (0);   // fb509 seg0 = pre (hook/zoom/heal/watchdog)
+    // fb511 — THE LAST DOMINO OF TRUE IDLE. The free-running LFO phases changed every frame's
+    // bytes, so fb483's idle-skip NEVER fired — the frame shipped ~60 Hz forever and every
+    // migrated painter repainted a page where nothing audible was happening. When the output has
+    // been inaudible ~1.5 s (the fb507 counter — one tick of lag, irrelevant at 60 Hz), the
+    // modViz/chaos segment is simply NOT APPENDED: the frame goes byte-identical, idle-skip
+    // ships NOTHING, the dispatcher never fires, painters never run. The LFO dot PARKS at quiet
+    // — the fb505 rest-pose semantics Max approved. The first audible block re-appends and the
+    // whole feed resumes on the next tick.
+    const bool uiQuiet = (eqQuietTicks_ >= 90);
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
+    if (! uiQuiet)
     {
         juce::String eArr, lArr, pArr, xArr, yArr;
         for (int k = 0; k < 32; ++k) { if (k) eArr << ","; eArr << SF(audioProcessor.modVizEnv (k), 3); }
@@ -5953,7 +5963,8 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // ── Synth LFO 1 live value (Batch 1) — drives the modulation strip's scope/dot. ──
     {
         float lfo1 = audioProcessor.synthLfo1Vis.load(std::memory_order_relaxed);
-        js << "try{if(window.updateSynthLFO){window.updateSynthLFO(" << SF(lfo1, 4) << ");}}catch(e){}";
+        if (! uiQuiet)   // fb511 — the second free-runner that broke frame byte-identity at quiet
+            js << "try{if(window.updateSynthLFO){window.updateSynthLFO(" << SF(lfo1, 4) << ");}}catch(e){}";
     }
 
     // ── ANNULUS resonator live feed — real modal energy + output level drive the
@@ -6413,6 +6424,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     {
         SEGM (6);   // fb509 -- everything after geode, up to hash+ship
         audioProcessor.uiBuildMark_ = (long long) juce::Time::getHighResolutionTicks();   // fb501 — build ends, ship begins
+        // fb511 — THE FRAME DISPATCHER TICK. Every shipped frame ends by firing the page-side
+        // painter registry (window.__tiFrame, defined next to the fb504 arbiter): widgets that
+        // migrated off their rAF self-loops repaint exactly once per push. Appended BEFORE the
+        // hash on purpose — an idle frame stays byte-identical, so idle-skip still sends NOTHING
+        // and painters (correctly) don't run: nothing changed. The 30-tick keepalive below stays
+        // dispatch-free (it only feeds wd9/__tickT); painter liveness with a dead push lane is
+        // handled by the dispatcher's own 250 ms fallback in the page. Rides both lanes as-is:
+        // the Windows terrainFrame receiver evals the string, Mac evaluateJavascript executes it.
+        js << ";window.__tiFrame&&window.__tiFrame();";
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)
             fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;
@@ -6447,9 +6467,9 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             evalSentMs_ = juce::Time::getMillisecondCounterHiRes();
            #if JUCE_WINDOWS
             webView->emitEventIfBrowserIsVisible (juce::Identifier ("terrainFrame"),
-                juce::var ("window.__tickT=(window.performance&&performance.now)?performance.now():0;"));   // fb485
+                juce::var ("window.__tickT=(window.performance&&performance.now)?performance.now():0;window.__tiAlive&&window.__tiAlive();"));   // fb485 + fb511 lane-alive stamp
            #else
-            webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;", ack);
+            webView->evaluateJavascript ("window.__tickT=(window.performance&&performance.now)?performance.now():0;window.__tiAlive&&window.__tiAlive();", ack);   // fb511
            #endif
         }
     }

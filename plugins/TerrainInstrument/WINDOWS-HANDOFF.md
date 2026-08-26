@@ -532,3 +532,39 @@ floor. The architectural finisher remains THE PUSH-PAINT MIGRATION (approved by 
 paint from the C++ push, rAF loops get deleted one by one — LFO playhead first (deletes the
 fb493 PLL), then env, then the per-card feeds. That is the path to "the window costs ~nothing
 unless the DSP is doing something".
+
+### fb511 — THE PUSH-PAINT MIGRATION SHIPPED. 22 loops re-clocked onto the C++ push; the page reaches TRUE idle.
+
+The approved architecture, delivered end-to-end via a 5-agent recon fleet whose exact-string
+patches (48 edits) were machine-applied (scratchpad apply-plan.ps1 idiom — every anchor verified
+unique before touching the file):
+1. **The dispatcher**: every shipped C++ frame ends with `;window.__tiFrame&&window.__tiFrame();`
+   (appended BEFORE the FNV hash, so idle-skip semantics hold). Page side: __tiFrameReg(name,fn)
+   registry; a push marks pending and arms ONE paced rAF — **push arms, vsync paints** (running
+   painters synchronously inside the push eval measured +32 during play: the message-event
+   timeline misalignment tax again). When the push lane is DARK >700 ms (browser preview, popped
+   cards, editor closed) a rAF fallback chain becomes the clock at full rate; the C++ keepalive
+   stamps `__tiAlive` so an idle-skipping (alive but silent) lane never triggers it.
+2. **Migrated onto the push clock, rAF self-loops deleted**: LFO card (the fb493/fb506 PLL is
+   DELETED — the dot paints the DSP's pushed phase, retrigger correct by construction), env
+   editor, all nine FX-rack card drivers, filter analyzer, harmonic viz, noise viz, topo, RR
+   wander, SWAY, underline/comet, animate() (front master, rest poses intact), fxAnimate().
+3. **True idle**: at ~1.5 s of inaudible output the C++ stops appending the modViz + synthLfo1
+   segments -> the frame goes BYTE-IDENTICAL -> idle-skip ships nothing -> painters never run.
+   The LFO dot parks at quiet (fb505 rest-pose semantics). First audible block resumes all.
+4. Emblem scrub + arp tween at 30 fps (they were most of the idle residual).
+
+Counterbalanced (pairs.ps1), pre-migration vs migrated: synth+play 130.6 -> 119.7 WV;
+synth idle 90.7 -> 75.5 WV and **plugin proc 31.3 -> 22.3** (the composer truly sleeps).
+Gates: eq 15/15, fx4 130/130, fx3 48, staleFrames 0, contract 7/7, lfo smooth, fingerprint
+bit-identical. Installed.
+
+TWO BUGS THE GATES CAUGHT during application (kept for the record): one agent registered via
+`__tiFrame.reg(...)` instead of `__tiFrameReg(...)` (TypeError killed the underline module —
+15 assertions failed); and the first fallback lane ran at 4 Hz, starving the pushless test
+browser (staleFrames 36). Both fixed; the gate suite is the reason this migration is safe.
+
+REMAINING (the honest tail): idle WV ~70 = the 30 fps emblem motion + smilLoop chain + WebView2
+baseline + unmigrated one-shots; play WV ~120 = real reactive painting (scope/analyzer/LFO at
+60). Next candidates if more is wanted: emblem motion rest-posed at quiet (Max said loopers
+loop — his call), remaining setIntervals, the ship lane, editor-open time (5-10 s).
