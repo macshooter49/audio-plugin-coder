@@ -162,7 +162,16 @@ public:
     // -- configuration (card -> engine) -------------------------------------------
     void setEnabled (GlitchFx fx, bool on) noexcept { enabled_[(int) fx] = on; }
     void setWeight (GlitchFx fx, float wgt) noexcept { weight_[(int) fx] = wgt < 0.f ? 0.f : wgt; }
-    void setMix (float wet) noexcept { mix_ = arpClamp01 (wet); }
+    void setMix (float wet) noexcept
+    {
+        mix_ = arpClamp01 (wet);
+        // laneC audit (2026-08-26) — mixSm_ initialises to 1.0 and only glides inside the
+        // active branch, so the FIRST fire after prepare leaked ~2.5 ms of wet even at mix 0
+        // (FlowGlitch_test T7). While the engine is idle the glide has nothing to smooth:
+        // snap the smoother to the target so the first fire opens at the real mix.
+        if (! glitchActive_ && wetLevel_ <= 0.f)
+            mixSm_ = mix_;
+    }
     // fb142 — OUT MODE (Beat Repeat's most consequential switch): 0 Mix (wet replaces dry
     // during fires, dry between) · 1 Cut (dry mutes for the WHOLE fire window, even through
     // wet gaps) · 2 Gate (only the glitch ever sounds — silence between fires).

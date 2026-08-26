@@ -1119,11 +1119,12 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     // sits under `if (! layer.hasSample()) continue;`), so the first loaded sample is
     // the first instant they could be anything but silence. After the arm this is one
     // relaxed load per tick; before it, four lock-free pointer checks.
-    if (! stemBuffersArmed_.load (std::memory_order_relaxed))
-    {
-        for (const auto& L : layers)
-            if (L.hasSample()) { ensureStemBuffersAllocated(); break; }
-    }
+    // fb517 — PER-LAYER stem arming (laneD): only the layer that received a sample arms its
+    // ring (+ the master-FX ring on the first arm). One loaded sample: +423 MB, not +1,009.
+    for (int li = 0; li < 4; ++li)
+        if (! stemLayerArmed_[(size_t) li].load (std::memory_order_relaxed)
+            && layers[(size_t) li].hasSample())
+            ensureStemLayerAllocated (li);
 
     // fb496 — top up the lazily built factory wavetables. Budget 1: a tick can never
     // cost more than the ~2.3 ms morph rebuild that already lives in this callback.
@@ -1201,6 +1202,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
     rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
+    prepareHarmonicEnginesIfNeeded();   // fb517 — same, for HARM's partial banks
 
     // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
     // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
@@ -1261,6 +1263,25 @@ void TerrainInstrumentAudioProcessor::prepareModalEnginesIfNeeded()
         if (auto* v = synthVoices_[i])
             v->prepareModalEngines();
 
+}
+
+// fb517 — HARM's lazy arm, the fb498 modal shape cloned (message thread only; ~65 MB per
+// instance, laneD-measured; same one-way publication; a sample-rate change clears each
+// voice's harmReady_ in setCurrentPlaybackSampleRate and the next tick re-arms).
+void TerrainInstrumentAudioProcessor::prepareHarmonicEnginesIfNeeded()
+{
+    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    bool wanted = false;
+    for (int o = 0; o < 4 && ! wanted; ++o)
+        if ((int) *rawParam (ENG[o]) == (int) tw::SynthVoice::Engine::HARM)   // AudioParameterChoice → the INDEX (CLAUDE.md §4)
+            wanted = true;
+
+    if (! wanted) return;
+
+    for (int i = 0; i < kSynthVoiceCount; ++i)
+        if (auto* v = synthVoices_[i])
+            v->prepareHarmonicEngines();
 }
 
 void TerrainInstrumentAudioProcessor::rebuildGeodeIfNeeded (int o)
@@ -6668,6 +6689,7 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // render that osc silent until the next timer tick. Doing it here means the only case that
     // ever waits ~16.7 ms is the user switching an osc TO Modal while playing.
     prepareModalEnginesIfNeeded();
+    prepareHarmonicEnginesIfNeeded();   // fb517 — a saved patch already on HARM must not wait a tick
 
     grainEngineL.prepare(sampleRate, samplesPerBlock);
     grainEngineR.prepare(sampleRate, samplesPerBlock);
@@ -9113,15 +9135,36 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
         }
     }
+    // fb517 — THE DSP OBEYS THE TRIGGER (Max: Env/Retrig were "always stuck on free mode").
+    // The global bank was hard-forced Free below, so every GLOBAL consumer — the synth-page
+    // dests >= Res1 (:7920), LfoAmt (:7881/:9657), the FLOW/card knobs (:9672), the fb453 FX
+    // rack (buildFxMod below) and the shape-point re-bakes (:9039/:9079) — kept free-running
+    // while the viz dot (fb231, the most-active voice's phase) stopped or pinned. Measured on
+    // the fb516 AU (Tests/lfo_trigger_cert.cpp): the Env render and the Free render were
+    // IDENTICAL to the last window.
+    // Note-ons come from the same host MIDI the glide tracker reads (:8991); voice activity is
+    // the fb514 ungated voice walk's velVis_ (>= 0 while any voice sounds, release tails
+    // included; -1 when silent — stored every block whether or not an editor exists).
+    bool flowNoteOn = false;
+    for (const auto meta : midiMessages)
+        if (meta.getMessage().isNoteOn()) { flowNoteOn = true; break; }
+    const bool flowAnySounding = flowNoteOn || velVis_.load (std::memory_order_relaxed) >= 0.0f;
     for (int i = 0; i < wc::NUM_LFOS; ++i)
     {
-        {   // fb228 — the voice/mirror CONTRACT: the mirror (global dests + the viz dot) NEVER retrigs
-            //         and carries no per-note motion; voices honor the real trigger/rise/delay.
+        // MONO is already collapsed to Free at the config-build site (:8592 — the
+        // phase-locked-pool law), so for mono this reads Free whatever the card says.
+        const wc::LFOTrigger flowTrig = synModCfg.lfos[i].trigger;
+        {   // fb228 — the voice/mirror CONTRACT, amended by fb517: the mirror now carries the
+            //         TRIGGER (the DSP must match the viz). Per-note rise/delay stay voice-only:
+            //         they shape one note's onset, and the mirror serves the shared value.
             auto ms = synModCfg.lfos[i];
-            ms.trigger = wc::LFOTrigger::Free; ms.riseMs = 0.0f; ms.delayMs = 0.0f; ms.loopPt = -1.0f;
+            ms.riseMs = 0.0f; ms.delayMs = 0.0f;
+            if (flowTrig == wc::LFOTrigger::Free)
+                ms.loopPt = -1.0f;   // the pre-fb517 Free path, byte-identical
             flowLfo_[i].setSettings (ms);
         }
-        if (synModCfg.lfos[i].sync && flowPlaying && lfoMotionAudio_[i].ho != 0
+        if (flowTrig == wc::LFOTrigger::Free
+            && synModCfg.lfos[i].sync && flowPlaying && lfoMotionAudio_[i].ho != 0
             && ! wc::isFreeRunShape (synModCfg.lfos[i].shape))   // fb239 — chaos/dune have no transport phase: always free-run at rate
 
         {
@@ -9140,12 +9183,30 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                ? wc::syncedHz (synModCfg.lfos[i].syncIdx, synModBpm > 0.0f ? synModBpm : 120.0f)
                                : synModCfg.lfos[i].rateHz;
             flowLfo_[i].setFrequency (hz);
-            // fb494 — was a full shape evaluation PER SAMPLE for all ten global LFOs while every
-            // consumer (peek/chaosVX/chaosVY/currentPhase) reads them at BLOCK rate. This is the
-            // pattern already shipped next door for the per-voice banks (SynthVoice.h:4580):
-            // skipSamples advances the fb142 output slew with an n-sample compound coefficient, so
-            // peek() follows the same trajectory. Measured 0.312% -> 0.014% of a core.
-            flowLfo_[i].skipSamples (numSamples);
+            if (flowTrig == wc::LFOTrigger::Free)
+            {
+                // fb494 — was a full shape evaluation PER SAMPLE for all ten global LFOs while every
+                // consumer (peek/chaosVX/chaosVY/currentPhase) reads them at BLOCK rate. This is the
+                // pattern already shipped next door for the per-voice banks (SynthVoice.h:4580):
+                // skipSamples advances the fb142 output slew with an n-sample compound coefficient, so
+                // peek() follows the same trajectory. Measured 0.312% -> 0.014% of a core.
+                flowLfo_[i].skipSamples (numSamples);
+            }
+            else
+            {
+                // fb517 — the note-relative modes (Trig/Env): phase resets at EVERY note-on
+                // (the same reset the voices take at startNote), advances only while any voice
+                // sounds (release tails included), and FREEZES in silence — no advance at all,
+                // so peek() serves the held slewed value and every block-rate consumer sees
+                // true stasis. No transport phase-lock in these modes: a synced rate still set
+                // the SPEED above (grid-locked speed, note-relative phase — the per-voice
+                // banks' exact behaviour). Env pins at its end inside SynthLFO (finished_),
+                // loopPt honoured. noteOn()/skipSamples() are allocation-free.
+                if (flowNoteOn)
+                    flowLfo_[i].noteOn();
+                if (flowAnySounding)
+                    flowLfo_[i].skipSamples (numSamples);
+            }
         }
     }
 
@@ -12002,8 +12063,12 @@ void TerrainInstrumentAudioProcessor::allocateStemBuffers (double sampleRate)
         s.samplesWritten.store (0, std::memory_order_relaxed);
         s.totalSize.store (totalSamples, std::memory_order_release);   // publish LAST
     };
-    for (auto& s : stemBuffers) arm (s);
-    arm (masterFxBuffer);
+    // fb517 — re-arm ONLY what was armed (the per-layer law); un-armed rings stay empty.
+    for (int i = 0; i < 4; ++i)
+        if (stemLayerArmed_[(size_t) i].load (std::memory_order_acquire))
+            arm (stemBuffers[(size_t) i]);
+    if (stemBuffersArmed_.load (std::memory_order_acquire))
+        arm (masterFxBuffer);
 }
 
 // fb496 — arm the rolling stem rings. Idempotent; MESSAGE THREAD ONLY.
@@ -12013,11 +12078,37 @@ void TerrainInstrumentAudioProcessor::allocateStemBuffers (double sampleRate)
 // stem UI when it is wired up.
 void TerrainInstrumentAudioProcessor::ensureStemBuffersAllocated()
 {
-    if (stemBuffersArmed_.load (std::memory_order_acquire)) return;
+    // fb517 — the explicit arm-ALL path (export/stem UI). Normal arming is per-layer, driven
+    // from timerCallback the moment THAT layer has a sample. Idempotent per ring.
+    for (int li = 0; li < 4; ++li)
+        ensureStemLayerAllocated (li);
+}
+
+// fb517 — arm ONE layer's ring (+ the master ring on the first arm ever). MESSAGE THREAD ONLY.
+// The arm body mirrors allocateStemBuffers' lambda — if one changes, change both.
+void TerrainInstrumentAudioProcessor::ensureStemLayerAllocated (int layerIdx)
+{
+    if (layerIdx < 0 || layerIdx > 3) return;
+    if (stemLayerArmed_[(size_t) layerIdx].load (std::memory_order_acquire)) return;
     const double sr = preparedSampleRate_.load (std::memory_order_acquire);
     if (sr <= 0.0) return;            // not prepared yet — the next tick will catch it
-    allocateStemBuffers (sr);
-    stemBuffersArmed_.store (true, std::memory_order_release);
+    const int totalSamples = juce::jmax (1, (int) (sr * (double) kStemSeconds));
+    auto arm = [totalSamples] (StemBuffer& s)
+    {
+        s.totalSize.store (0, std::memory_order_release);      // writers stand down
+        s.ring.setSize (2, totalSamples, false, true, true);
+        s.ring.clear();
+        s.writeIndex.store     (0, std::memory_order_relaxed);
+        s.samplesWritten.store (0, std::memory_order_relaxed);
+        s.totalSize.store (totalSamples, std::memory_order_release);   // publish LAST
+    };
+    if (! stemBuffersArmed_.load (std::memory_order_acquire))
+    {
+        arm (masterFxBuffer);          // the master ring rides the FIRST layer arm
+        stemBuffersArmed_.store (true, std::memory_order_release);
+    }
+    arm (stemBuffers[(size_t) layerIdx]);
+    stemLayerArmed_[(size_t) layerIdx].store (true, std::memory_order_release);
 }
 
 // fb496 — arm the Export ring. Idempotent; MESSAGE THREAD ONLY.

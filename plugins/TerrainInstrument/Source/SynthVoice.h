@@ -80,10 +80,13 @@ namespace tw
             for (auto& e : granEngC_) e.prepare (sampleRate_);  for (auto& e : granEngD_) e.prepare (sampleRate_);
             for (auto& e : geodeEngA_) e.prepare (sampleRate_);  for (auto& e : geodeEngB_) e.prepare (sampleRate_);   // GEODE-ENGINE-VOICE
             for (auto& e : geodeEngC_) e.prepare (sampleRate_);  for (auto& e : geodeEngD_) e.prepare (sampleRate_);
-            { int u = 0; for (auto& e : harmEngA_) e.prepare (sampleRate_, u++ == 0); }   // HARMONIC-ENGINE-VOICE
-            { int u = 0; for (auto& e : harmEngB_) e.prepare (sampleRate_, u++ == 0); }   //  (index 0 = bank anchor)
-            { int u = 0; for (auto& e : harmEngC_) e.prepare (sampleRate_, u++ == 0); }
-            { int u = 0; for (auto& e : harmEngD_) e.prepare (sampleRate_, u++ == 0); }
+            // fb517 — HARM IS NO LONGER PREPARED HERE (the fb498 modal cut, cloned). The four
+            // banks assign ~9 vectors x kMaxPartials floats per engine x 16 unison x 96 voices
+            // (~65 MB per instance, laneD-measured) in the PROCESSOR'S CONSTRUCTOR, paid by
+            // every patch that never selects HARM. prepareHarmonicEnginesIfNeeded() (message
+            // thread) arms them the first time an osc asks for Engine::HARM; dropping the flag
+            // here is what makes a sample-rate change re-prepare.
+            harmReady_.store (false, std::memory_order_release);   // HARMONIC-ENGINE-VOICE
             // fb498 — MODAL IS NO LONGER PREPARED HERE. This function is reached from
             // juce::Synthesiser::addVoice (juce_Synthesiser.cpp:117), i.e. from the PROCESSOR'S
             // CONSTRUCTOR loop (PluginProcessor.cpp:274), so preparing all four osc arrays here
@@ -849,11 +852,24 @@ namespace tw
             { int u = 0; for (auto& e : modalEngD_) e.prepare (sampleRate_, u++ == 0); }
             modalReady_.store (true, std::memory_order_release);
         }
+        // fb517 — HARM's LAZY ARM, the modal pattern above cloned verbatim (same thread rules,
+        // same one-way publication, same acquire/release pairing).
+        void prepareHarmonicEngines()
+        {
+            if (harmReady_.load (std::memory_order_acquire)) return;
+            { int u = 0; for (auto& e : harmEngA_) e.prepare (sampleRate_, u++ == 0); }   // HARMONIC-ENGINE-VOICE
+            { int u = 0; for (auto& e : harmEngB_) e.prepare (sampleRate_, u++ == 0); }   //  (index 0 = bank anchor)
+            { int u = 0; for (auto& e : harmEngC_) e.prepare (sampleRate_, u++ == 0); }
+            { int u = 0; for (auto& e : harmEngD_) e.prepare (sampleRate_, u++ == 0); }
+            harmReady_.store (true, std::memory_order_release);
+        }
         // HARM-VIZ — downsample this voice's live anchor bank into UI bins (audio thread only)
         bool harmLiveBins (int osc, float* out, int nBins) const noexcept
         {
             const Engine oe[4] = { engine_, engineB_, engineC_, engineD_ };
             if (osc < 0 || osc > 3 || oe[osc] != Engine::HARM) return false;
+            // fb517 — unarmed banks hold empty vectors; liveBins must not touch them.
+            if (! harmReady_.load (std::memory_order_acquire)) return false;
             const std::array<tw::HarmonicEngine, kMaxUnison>* engs[4] = { &harmEngA_, &harmEngB_, &harmEngC_, &harmEngD_ };
             return (*engs[osc])[0].liveBins (out, nBins) > 0;
         }
@@ -5284,6 +5300,9 @@ namespace tw
         // as the bounds guard. readPos01() (line ~249) is safe unguarded because it is behind
         // isActive(), which stays false until a noteOn that only the gated render path can issue.
         std::atomic<bool> modalReady_ { false };
+        // fb517 — HARM's arm flag, same contract as modalReady_ above (prepareHarmonicEngines
+        // publishes with release; renderHarmonicBlocks and harmLiveBins load with acquire).
+        std::atomic<bool> harmReady_ { false };
         tw::ModalParams modalParamsA_, modalParamsB_, modalParamsC_, modalParamsD_;
 
         // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
@@ -5820,10 +5839,19 @@ namespace tw
                 && engineC_ != Engine::HARM && engineD_ != Engine::HARM)
                 return;   // no HARM oscillators → free no-op (common case)
             const bool doOn = harmNoteOnPending_;
-            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, blkGateLevel (0, level_));
-            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, blkGateLevel (1, levelB_));
-            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, blkGateLevel (2, levelC_));
-            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, blkGateLevel (3, levelD_));
+            // fb517 — ONE acquire load, paired with prepareHarmonicEngines(). Same law as the
+            // modal gate: THE GATE GOES ON *level*, NOT ON *isHarm* — renderHarmonicOsc's
+            // `if (! isHarm) return;` deliberately leaves blk uninitialised, and the downstream
+            // consumer keys off engine_. Forcing level 0 takes the path that CLEARS both
+            // channels and returns without touching a single (possibly unarmed) engine.
+            // blkGateLevel is still called either way so per-osc mute-fade state cannot desync.
+            const bool  hReady = harmReady_.load (std::memory_order_acquire);
+            const float hLvA = blkGateLevel (0, level_),  hLvB = blkGateLevel (1, levelB_);
+            const float hLvC = blkGateLevel (2, levelC_), hLvD = blkGateLevel (3, levelD_);
+            renderHarmonicOsc (harmEngA_, harmParamsA_, engine_  == Engine::HARM, octOffset_,  semiOffset_,  centsOffset_ + coarseModA_ * 100.f,  harmBlkA_, harmBlkAL_, harmBlkAR_, numSamples, spraySeedA_, doOn, activeUnisonA_, uDetuneCentsA_.data(), uNormA_, hReady ? hLvA : 0.0f);
+            renderHarmonicOsc (harmEngB_, harmParamsB_, engineB_ == Engine::HARM, octOffsetB_, semiOffsetB_, centsOffsetB_ + coarseModB_ * 100.f, harmBlkB_, harmBlkBL_, harmBlkBR_, numSamples, spraySeedB_, doOn, activeUnisonB_, uDetuneCentsB_.data(), uNormB_, hReady ? hLvB : 0.0f);
+            renderHarmonicOsc (harmEngC_, harmParamsC_, engineC_ == Engine::HARM, octOffsetC_, semiOffsetC_, centsOffsetC_ + coarseModC_ * 100.f, harmBlkC_, harmBlkCL_, harmBlkCR_, numSamples, spraySeedC_, doOn, activeUnisonC_, uDetuneCentsC_.data(), uNormC_, hReady ? hLvC : 0.0f);
+            renderHarmonicOsc (harmEngD_, harmParamsD_, engineD_ == Engine::HARM, octOffsetD_, semiOffsetD_, centsOffsetD_ + coarseModD_ * 100.f, harmBlkD_, harmBlkDL_, harmBlkDR_, numSamples, spraySeedD_, doOn, activeUnisonD_, uDetuneCentsD_.data(), uNormD_, hReady ? hLvD : 0.0f);
             harmNoteOnPending_ = false;
         }
 

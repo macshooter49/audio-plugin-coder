@@ -138,6 +138,35 @@ result 2–5×.
 
 ---
 
+## fb517 (2026-08-26, Mac session) — WHAT JUST LANDED, all verified on the installed binaries
+
+- **THE LFO OBEYS THE TRIGGER.** `:9121` had the global `flowLfo_` bank hard-forced Free (fb228
+  mirror contract) while fb231 taught only the viz to stop — Max's "always stuck on free mode".
+  Now: Trig resets on every host note-on and freezes in silence; Env one-shots and pins; Free is
+  fingerprint-identical (sumAbs 3.514103689e+04). `Tests/lfo_trigger_cert.cpp` (AU-level): FAILED
+  3 gates against fb516, **PASS 9/0 on fb517** — Env stasis 195.83→0.40 dB, Trig corr −0.302→1.000,
+  rack-Cut late 0.0922→0.0016. MONO still collapses to Free upstream (pool law).
+- **MEMORY:** per-layer stem arming (`ensureStemLayerAllocated`; one loaded sample = **+423 MB not
+  +1,009**; master ring rides the first arm; prepareToPlay re-arms only the armed set) + HARM
+  lazy-arm (fb498 clone, `harmReady_`, gate on LEVEL; **−65 MB every ctor**). laneD audit:
+  instance-no-UI is **490 MB**; the "2.2 GB" = editor(+220) + all-stems(+1,009) + DAW baseline;
+  Windows' 925 MB is working-set accounting. auval battery peak **9,222 → 9,120 MB**.
+- **GLITCH Chance: WORKS AS SPECED** (`Tests/glitch_chance_cert.cpp` 14/14, mutation-proven):
+  fires = knob % exactly; "sometimes works" = Deja Vu dice-lock (38% dead travel at dv=1),
+  Drop masking (−35 dB), Repeat-on-stationary-audio inaudibility. Real bug found+fixed: mix=0
+  leaked ~2.5 ms wet on the FIRST fire (mixSm_ snap in setMix; FlowGlitch_test 68/68).
+- **UNDERLINES:** fb453 already covered all 16 rack kinds (184/184 marks measured) — the real
+  defects were the attenuator's missing HORIZONTAL clamp and full-word anchoring on clip-trimmed
+  marks (26.7 px adrift). Fixed; `Tests/fxmod_underline.js` 15/15 (4 mutations prove teeth).
+- Suites: eq 15/0 · fx3 48/0 · fx4 131/0 · fxmod_menu 19/0 · fxmod_underline 15/0. pluginval ×2
+  SUCCESS. `au_blk_cpu`: blk-45 3.13–3.35%, slope 1.54–1.77 across 5 runs — **the slope metric
+  has ±0.15 run-to-run noise** (two settled runs read 1.77 then 1.57); best settled = FLAT ENOUGH,
+  indistinguishable from fb516. Consider averaging N runs inside the harness.
+- **QUEUED memory cuts (laneD's ranked plan):** FX-pool arm-on-adoption (Bode 55 + Delay 48 +
+  Convolution 21 + grain 20 ≈ −144 MB — also fixes `FilterSlot::prepare` allocating **72.6 MB on
+  the HAL I/O thread**, PluginProcessor.cpp:9336-9340) · FilterSlot diet (~200 MB voice pool) ·
+  modal arm per-SELECTED-osc · capture-ring arm on export-UI visit · WT bank LRU.
+
 ## 5. WHAT IS OPEN
 
 1. **Memory — DONE and verified (fb497): 18,688 MB → 12,065 MB.** What remains is the *ratchet*:

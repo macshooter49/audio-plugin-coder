@@ -1328,6 +1328,11 @@ public:
     // and the "N seconds captured" readout is only drawn while an editor exists.
     void ensureCaptureBufferAllocated();
     std::atomic<bool>   stemBuffersArmed_ { false };
+    // fb517 — PER-LAYER stem arming (laneD audit: one loaded sample armed ALL FIVE rings at
+    // once = +1,009 MB; now only the receiving layer's ring + the master ring on first arm).
+    // stemBuffersArmed_ keeps meaning "master armed / any layer armed" for the re-arm path.
+    std::array<std::atomic<bool>, 4> stemLayerArmed_ { };
+    void ensureStemLayerAllocated (int layerIdx);
     // Latched by ensureCaptureBufferAllocated(). It is a REQUEST, not the arm itself:
     // a host may create the editor BEFORE the first prepareToPlay, and then there is no
     // sample rate to size the ring with yet — prepareToPlay honours the request instead.
@@ -1683,6 +1688,7 @@ private:
     // fb498 — MODAL's lazy arm. Message thread only (timerCallback + prepareToPlay). See the
     // definition in PluginProcessor.cpp for why 1,152 MiB used to be spent in the constructor.
     void prepareModalEnginesIfNeeded();
+    void prepareHarmonicEnginesIfNeeded();   // fb517 — HARM's clone of the modal arm (~65 MB/instance)
     // Shared real-time ceiling on TOTAL active partials across ALL SPEC voices/unison in this
     // instance. Additive resynth costs ~1 sine-osc per partial per sample; 3072 pegged a core
     // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst
