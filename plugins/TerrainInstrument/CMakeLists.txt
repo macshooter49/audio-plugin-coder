@@ -43,6 +43,7 @@ target_sources(TerrainInstrument
     PRIVATE
         Source/PluginProcessor.cpp
         Source/PluginEditor.cpp
+        Source/TerrainUiPark.cpp
         Source/ParametricEQ_test.cpp
         Source/MoogDelay_test.cpp
         Source/TerrainChorus_test.cpp

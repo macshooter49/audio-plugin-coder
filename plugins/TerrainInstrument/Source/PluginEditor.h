@@ -8,13 +8,29 @@
 #include "ParameterIDs.hpp"
 #include "BlendEngine.h"
 
-class TerrainInstrumentAudioProcessorEditor  : public juce::AudioProcessorEditor,
+class TerrainInstrumentAudioProcessorEditor;   // fb516 -- the thin shell (defined below)
+
+/* fb516 -- THE KEEP-ALIVE UI CORE. This class IS the old editor, renamed: WebView2 + every
+   relay/native/attachment + all push/restore/watchdog state. Now a plain Component OWNED BY
+   THE PROCESSOR (the fb83 card-window idiom), it survives editor close: the shell below adopts
+   it on open and parks it in a hidden desktop holder on close. Serum-class reopen. */
+class TerrainUiCore  : public juce::Component,
                                      public juce::FileDragAndDropTarget,
                                      private juce::Timer
 {
 public:
-    TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor&);
-    ~TerrainInstrumentAudioProcessorEditor() override;
+    TerrainUiCore (TerrainInstrumentAudioProcessor&);
+    ~TerrainUiCore() override;
+
+    // fb516 -- the keep-alive protocol (laws in PluginEditor.cpp)
+    void attach (TerrainInstrumentAudioProcessorEditor* shell);
+    void detach();
+    void resyncAfterReattach();
+    int  bootWidth() const;
+    void parkWebViewNative (void* rawHwnd);   // fb516e -- move the controller to the raw park HWND NOW
+    void armPeerRescue (void* peerHwnd);      // fb516e -- WM_DESTROY child-rescue on the host peer
+    void disarmPeerRescue();
+    void hostPeerDying();                     // fb516e -- fired from the peer's WM_DESTROY (children alive)
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -853,6 +869,11 @@ private:
 
     std::unique_ptr<juce::WebBrowserComponent> webView;
 
+    TerrainInstrumentAudioProcessorEditor* shell_ = nullptr;         // fb516 -- null while parked
+    void* rescuedPeer_ = nullptr;   // fb516e -- host peer HWND carrying our WM_DESTROY subclass
+    void* rescueToken_ = nullptr;   // fb516e -- opaque context owned by TerrainUiPark.cpp
+    std::vector<juce::WebSliderParameterAttachment*> attachments_;   // fb516 -- roster (mkAtt/mkF/mkO record every attachment; insurance, unused in hot paths)
+
     // fb342 — EQ/spectrum push gate: last-pushed analyzer frame counts. MEMBERS, not statics
     // in timerCallback (a static there is shared across instances — the fb339 pluginval trap).
     uint32_t eqPushSeqPre_ = 0xffffffff, eqPushSeqPost_ = 0xffffffff;
@@ -887,11 +908,11 @@ private:
     // to the intended size until the user really drags
     double uiZoom_ = 1.0, restZoom_ = 1.0;
     juce::int64 lfoLiveSeen_ = 0;   // fb236 — last relayed live-stroke seq
-    int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0, healTicks_ = 0;
+    int    zoomPushLeft_ = 0, zoomTick2_ = 0, settleTicks_ = 0;   // fb516 -- healTicks_ moved to the shell
     int    zoomVerifyTicks_ = 0;    // fb175 — countdown to the post-settle layout verify
     double pageVW_ = -1.0;          // fb175 — page-reported innerWidth (eval callback, message thread)
-    int    intendedW_ = 820;
-    bool   userSized_ = false;
+    // fb516 -- intendedW_/userSized_ moved to the shell: the FL junk-size war is a WINDOW
+    // property, and its setSize() must act on the HOST window, not this child component.
 
     // 2b. NATIVE CAPTURE DRAG STRIP (below WebView — receives real mouse events)
     static constexpr int CAPTURE_STRIP_HEIGHT = 16;   // fb272 — thinner strip (Max: "very thin"); whole window a bit shorter. Label font now scales with strip height so text never clips at small window sizes.
@@ -1552,6 +1573,46 @@ private:
     // Declared LAST → destroyed FIRST: the pool must drain its jobs (which touch members
     // above) before anything else in this editor dies.
     juce::ThreadPool blendPool_ { 1 };
+
+    JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainUiCore)
+};
+
+//==============================================================================
+/* fb516 -- THE THIN SHELL. The host-owned AudioProcessorEditor is now just a frame: it adopts
+   the processor-owned TerrainUiCore on open (one synchronous addAndMakeVisible; the fb516 JUCE
+   patch re-parents the WebView2 controller to follow the peer) and hands it back to the hidden
+   holder on close. It keeps ONLY what is genuinely the window's: resize limits, the
+   fb103/fb176/fb514 junk-size war, and the editorWidth memory. */
+class TerrainInstrumentAudioProcessorEditor : public juce::AudioProcessorEditor
+{
+public:
+    explicit TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor&);
+    ~TerrainInstrumentAudioProcessorEditor() override;
+
+    void paint (juce::Graphics& g) override;
+    void resized() override;
+    void onShowingChanged();             // fb516d -- park on HIDE (the only moment the old HWND is guaranteed alive), re-adopt on SHOW
+    void tickSizeHeal();   // fb516 -- driven by the core's 60 Hz timer (the heal needs a clock; the shell has none)
+
+private:
+    TerrainInstrumentAudioProcessor& audioProcessor;
+    TerrainUiCore* core_ = nullptr;   // owned by the processor, borrowed for this window's life
+    int  intendedW_ = 820;
+    bool userSized_ = false;
+    int  healTicks_ = 0;
+
+    // fb516d -- Component::visibilityChanged only reports the OWN flag; SHOWING transitions
+    // (window hidden/shown above us -- FL's close path) need a movement watcher.
+    struct ShowingWatch : public juce::ComponentMovementWatcher
+    {
+        explicit ShowingWatch (TerrainInstrumentAudioProcessorEditor& s)
+            : juce::ComponentMovementWatcher (&s), shell (s) {}
+        void componentMovedOrResized (bool, bool) override {}
+        void componentPeerChanged() override {}
+        void componentVisibilityChanged() override { shell.onShowingChanged(); }
+        TerrainInstrumentAudioProcessorEditor& shell;
+    };
+    ShowingWatch showingWatch_ { *this };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainInstrumentAudioProcessorEditor)
 };

@@ -1,8 +1,73 @@
+diff --git a/modules/juce_gui_extra/misc/juce_WebBrowserComponent.cpp b/modules/juce_gui_extra/misc/juce_WebBrowserComponent.cpp
+index c1fb7d131b..ecd5b97deb 100644
+--- a/modules/juce_gui_extra/misc/juce_WebBrowserComponent.cpp
++++ b/modules/juce_gui_extra/misc/juce_WebBrowserComponent.cpp
+@@ -474,6 +474,12 @@ public:
+         platform->checkWindowAssociation();
+     }
+ 
++    // JUCE-PATCH terrain fb516
++    void parkNativeWindow (void* hwnd)
++    {
++        platform->parkNativeWindow (hwnd);
++    }
++
+     void fallbackPaint (Graphics& webBrowserComponentContext)
+     {
+         platform->fallbackPaint (webBrowserComponentContext);
+@@ -501,6 +507,7 @@ private:
+         virtual void evaluateJavascript (const String&, WebBrowserComponent::EvaluationCallback) = 0;
+         virtual void setWebViewSize (int, int) = 0;
+         virtual void checkWindowAssociation() = 0;
++        virtual void parkNativeWindow (void*) {}   // JUCE-PATCH terrain fb516: default no-op
+ 
+         virtual void focusGainedWithDirection (FocusChangeType, FocusChangeDirection) {}
+         virtual void fallbackPaint (Graphics&) {}
+@@ -605,6 +612,12 @@ WebBrowserComponent::~WebBrowserComponent()
+     lifetimeListeners.call (&WebViewLifetimeListener::webViewDestructed, this);
+ }
+ 
++void WebBrowserComponent::parkNativeWindow (void* nativeWindowHandle)
++{
++    // JUCE-PATCH terrain fb516
++    impl->parkNativeWindow (nativeWindowHandle);
++}
++
+ void WebBrowserComponent::emitEventIfBrowserIsVisible (const Identifier& eventId, const var& object)
+ {
+     if (isVisible())
+diff --git a/modules/juce_gui_extra/misc/juce_WebBrowserComponent.h b/modules/juce_gui_extra/misc/juce_WebBrowserComponent.h
+index 068a1f9aa8..356c551b2d 100644
+--- a/modules/juce_gui_extra/misc/juce_WebBrowserComponent.h
++++ b/modules/juce_gui_extra/misc/juce_WebBrowserComponent.h
+@@ -586,6 +586,12 @@ public:
+     */
+     void emitEventIfBrowserIsVisible (const Identifier& eventId, const var& object);
+ 
++    // JUCE-PATCH terrain fb516: move the live native browser (the WebView2 controller) to a
++    // caller-supplied raw HWND and hide it. Used to PARK the browser in a plugin-owned hidden
++    // window BEFORE the hosting editor window HWND is destroyed -- no JUCE notification fires
++    // early enough for that. No-op on non-Windows backends.
++    void parkNativeWindow (void* nativeWindowHandle);
++
+     //==============================================================================
+     /** This callback is called when the browser is about to navigate
+         to a new location.
 diff --git a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
-index d05a5f8136..568ce692e3 100644
+index d05a5f8136..6e892fb1be 100644
 --- a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
 +++ b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
-@@ -1061,7 +1061,13 @@ private:
+@@ -606,6 +606,9 @@ public:
+ 
+     void componentPeerChanged() override
+     {
++        // JUCE-PATCH terrain fb516: follow the peer -- stock JUCE welds the controller to the
++        // HWND it was born on, so it dies with the first editor window.
++        syncParentWindow();
+         componentMovedOrResized (true, true);
+     }
+ 
+@@ -1061,7 +1064,13 @@ private:
                      {
                          if (weakThis != nullptr)
                          {
@@ -17,11 +82,95 @@ index d05a5f8136..568ce692e3 100644
                              webView2ConstructionHelper.webView2BeingCreated = nullptr;
  
                              if (controller != nullptr)
-@@ -1232,6 +1238,7 @@ private:
+@@ -1121,8 +1130,16 @@ private:
+                                         }
+                                     }
+ 
++                                    // JUCE-PATCH terrain fb516: record the HWND we were actually
++                                    // born on, then immediately follow the peer in case it changed
++                                    // while CreateCoreWebView2Controller was in flight.
++                                    if (HWND bornOn{};
++                                        SUCCEEDED (weakThis->webViewController->get_ParentWindow (&bornOn)))
++                                        weakThis->currentParentHwnd = bornOn;
++
+                                     weakThis->addEventHandlers();
+                                     weakThis->setWebViewPreferences();
++                                    weakThis->syncParentWindow();
+                                     weakThis->componentMovedOrResized (true, true);
+ 
+                                     if (weakThis->urlRequest.url.isNotEmpty())
+@@ -1194,6 +1211,65 @@ private:
+             webViewController->put_IsVisible (shouldBeVisible);
+     }
+ 
++    // JUCE-PATCH terrain fb516: keep-alive support. The controller must always be parented to a
++    // live HWND; there is no put_ParentWindow(nullptr). With no peer we hide and keep the old
++    // parent -- callers must supply a new live parent BEFORE the old HWND is destroyed (JUCE
++    // notifications about peer death all arrive AFTER the HWND is gone, hence parkNativeWindow).
++    HWND getCurrentPeerHwnd() const
++    {
++        if (auto* peer = owner.getTopLevelComponent()->getPeer())
++            return (HWND) peer->getNativeHandle();
++
++        return nullptr;
++    }
++
++    void syncParentWindow()
++    {
++        if (webViewController == nullptr)
++            return;
++
++        auto* newHwnd = getCurrentPeerHwnd();
++
++        if (newHwnd == nullptr)
++        {
++            setControlVisible (false);
++            return;
++        }
++
++        if (newHwnd != currentParentHwnd)
++        {
++            if (! SUCCEEDED (webViewController->put_ParentWindow (newHwnd)))
++            {
++                jassertfalse;   // the controller very likely died with a destroyed parent HWND
++                return;
++            }
++
++            currentParentHwnd = newHwnd;
++            // The webview child HWND moved with the controller; the accessibility native-child
++            // pointer and associatedWebViewNativeWindows entry are the same HWND value and stay
++            // valid -- deliberately NOT re-running the association scan.
++        }
++
++        webViewController->NotifyParentWindowPositionChanged();
++        setControlVisible (owner.isShowing());
++    }
++
++    // JUCE-PATCH terrain fb516: explicit park -- the plugin supplies a raw hidden HWND that is
++    // guaranteed alive; move the controller there NOW (before the editor HWND dies) and hide it.
++    void parkNativeWindow (void* nativeWindowHandle) override
++    {
++        if (webViewController == nullptr || nativeWindowHandle == nullptr)
++            return;
++
++        setControlVisible (false);
++
++        if (SUCCEEDED (webViewController->put_ParentWindow ((HWND) nativeWindowHandle)))
++        {
++            currentParentHwnd = (HWND) nativeWindowHandle;
++            webViewController->NotifyParentWindowPositionChanged();
++        }
++    }
++
+     //==============================================================================
+     WebBrowserComponent& owner;
+     WebBrowserComponent::Options preferences;
+@@ -1232,6 +1308,8 @@ private:
  
      inline static WebView2ConstructionHelper webView2ConstructionHelper;
      std::deque<std::pair<String, EvaluationCallback>> scriptsWaitingForExecution;
 +    int creationFailures = 0;   // JUCE-PATCH terrain fb480: cap the controller-creation retry loop
++    HWND currentParentHwnd = nullptr;   // JUCE-PATCH terrain fb516: HWND the controller is parented to
  
      NativeScaleFactorNotifier scaleFactorNotifier { this,
                                                      [this] (auto)

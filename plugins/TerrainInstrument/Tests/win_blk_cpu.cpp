@@ -692,8 +692,14 @@ static int reopenMode (Host& host, int blk)
     };
     auto closeEd = [&]
     {
-        if (win != nullptr) { win->setVisible (false); win->clearContentComponent(); win.reset(); }
+        // fb516d ORDER LAW (matches FL): HIDE the window first -- the shell's showing-watcher
+        // parks the core synchronously inside this call, while the window's HWND is still alive
+        // (the park log proved every later moment is too late: IsWindow(old)=0 by dtor time).
+        // Then detach + delete the editor, then destroy the window.
+        if (win != nullptr) { win->setVisible (false); }
+        if (win != nullptr) { win->clearContentComponent(); }
         if (ed != nullptr)  { inst->editorBeingDeleted (ed); delete ed; ed = nullptr; }
+        win.reset();
     };
 
     double open1 = 0.0, reopen = 0.0;

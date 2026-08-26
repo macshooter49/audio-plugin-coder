@@ -847,3 +847,58 @@ Max builds on the Mac; Windows stays ready like this:
 5. **CPU regressions are caught by the counterbalanced harnesses** in the session scratchpads
    (pairs2.ps1 A/B, open_ab.ps1 open latency, closed_ab.ps1 background diet, bisect.ps1 exp-hook
    single runs) — re-create them from this file if the scratchpads are gone.
+
+### fb518 — SERUM-CLASS INSTANT REOPEN, measured: 1,789 ms → 83 ms (21×). The UI core survives editor close.
+(Authored in parallel with the Mac session's fb516/fb517 — the code and JUCE-patch comments carry the fb516 tag; the ledger number is fb518.)
+
+Max's final Windows ask: "true loading instant serum 2 style." The acceptance harness landed
+BEFORE the feature (fb516a, `terrain_winbench --reopen`): baseline OPEN1 3,545 ms / REOPEN
+1,789 ms — every open a full WebView2 controller creation + 2.3 MB parse + restore storm.
+
+**THE ARCHITECTURE (rename-not-extract, ~150 lines moved + ~300 added over four files + a
+3-file JUCE patch):**
+- `TerrainUiCore` — the ENTIRE old editor class renamed (WebView2 + ~805 relays + ~771
+  attachments + 248 natives + all push/restore/watchdog state, member-order contract preserved).
+  Owned by the PROCESSOR (the fb83 card-window idiom), it outlives every editor.
+- A thin `TerrainInstrumentAudioProcessorEditor` shell adopts the core on open and keeps only
+  what is genuinely the window's: resize limits, the fb103/fb176/fb514 junk-size war (driven by
+  the core's timer via tickSizeHeal), editorWidth memory.
+- Parked page physics: renderer suspended (put_IsVisible(false) → rAF stopped, ~0 CPU measured)
+  while Component::isVisible() stays TRUE → every relay push keeps flowing → THE PAGE ABSORBS
+  AUTOMATION THE WHOLE TIME IT IS PARKED. Reopen = re-parent + timer restart + resyncAfterReattach
+  (sample waveforms/blends). No reparse, no restore storm, no hero, no transformer.
+- Census law intact (uiClients_ moves in attach/detach → fb148/fb514 audio-thread + 15 Hz
+  governor hold). LRU cap: process-wide, default 1 parked core, TERRAIN_UI_CACHE=0..4; 0 = off =
+  cold path (the escape hatch, harness-verified). Mac: parking disabled (destroy-on-close, a
+  Mac-session decision to enable).
+
+**THE FALSIFICATION TRAIL (four designs died by measurement — kept so nobody retries them):**
+1. Park into a JUCE TopLevelWindow holder → put_ParentWindow = 0x8007139F. Instrumented logging
+   revealed `IsWindow(old)=0`: THE CONTROLLER WAS ALREADY DEAD — its parent HWND had been
+   destroyed before ANY of our code ran.
+2. Park in the shell dtor → too late. Park on Component::visibilityChanged → wrong hook (own
+   flag only). Park via ComponentMovementWatcher showing-change → STILL too late in the bench.
+   Root laws, both measured: **JUCE TopLevelWindows DESTROY their HWND on setVisible(false)**,
+   and **every JUCE notification about a peer's death fires AFTER the HWND is destroyed.** A
+   WebView2 controller dies with its parent HWND, unrecoverably.
+3. Raw ::SetParent rescue of the chrome child after death → impossible (children die with the
+   parent).
+4. THE DESIGN THAT WON: a **raw Win32 hidden window** (TerrainUiPark.cpp — the only TU that
+   includes windows.h; no JUCE visibility semantics can kill it) + an **explicit
+   `webView->parkNativeWindow(rawHwnd)`** JUCE API called (a) from the graceful hide path
+   (ComponentMovementWatcher on the shell — fires synchronously INSIDE the hide call, HWND
+   alive) and (b) from a **WM_DESTROY subclass on the editor's peer** (a parent's WM_DESTROY
+   runs before its children are destroyed — the classic child rescue; host-independent
+   backstop). Adopt-side re-parent rides the fb516 JUCE peer-follow patch (raw → new editor
+   peer, both alive, hr=0).
+
+**MEASURED (the fb516a harness):** OPEN1 ~3.1 s (unchanged, cold) · **REOPEN 77 ms** · parked
+page CPU ≈ 0 (renderer suspended) · TERRAIN_UI_CACHE=0 → cold reopen 1,355 ms (escape hatch
+works) · play states flat vs fb515 (front 86.7/84.9, synth 70.9/60.8 same-epoch). Suite:
+keep-alive ON: OPEN1 3,219 ms / REOPEN 83 ms / hidden-phase settles from ~6% (first seconds after close, page decaying to rest) toward the true-idle floor; TERRAIN_UI_CACHE=0: cold reopen 1,660 ms, ws drops on close (core destroyed) -- the escape hatch is real; play sanity vs fb515: front 79.4 vs 80.3, synth 66.2 vs 61.8 -- flat. Gates: eq 15/15, fx4 130/130, fx3 48, flt staleFrames 0, arbiter contract ALL (incl. the fb512 30fps check), lfo smooth PASS, modal fingerprint 446f2e02c4dcb215 BIT-IDENTICAL, modal-live PASS -- all on the production (diagnostics-stripped) build.
+
+REMAINING TAIL: first-open cost unchanged (~2.6-3.5 s — controller creation + parse; env-cache
+and lazy-boot options documented in fb514/fb515 notes); LRU eviction across 3+ instances is
+manual-tested in FL; Mac parking off pending a Mac session; the unused uiCoreHolder_ member and
+the fb516b/c/d intermediate shell hooks (onShowingChanged + ShowingWatch) are LOAD-BEARING for
+the graceful path — do not remove.

@@ -588,6 +588,17 @@ public:
     // on the message thread) or its own ✕/dock. Type-erased as juce::Component so the
     // concrete window class stays private to PluginEditor.cpp.
     std::map<juce::String, std::unique_ptr<juce::Component>> cardWindows_;
+    // fb516 -- THE KEEP-ALIVE UI CORE (same idiom): the whole main UI survives editor close,
+    // parked in a hidden holder window; the shell adopts it on open. Type-erased so the
+    // concrete TerrainUiCore stays in PluginEditor.h/cpp. See the protocol laws there.
+    std::unique_ptr<juce::Component> uiCore_;
+    std::unique_ptr<juce::Component> uiCoreHolder_;   // (fb516e: superseded by the raw HWND below; kept null)
+    void* uiCoreRawHolder_ = nullptr;   // fb516e -- raw Win32 hidden park window (TerrainUiPark.cpp)
+    juce::uint64 parkedGen_ = 0;
+    juce::Component* ensureUiCoreComponent();       // fb516 -- create-or-adopt (implemented in PluginEditor.cpp)
+    void parkUiCore();                              // fb516 -- shell dtor hands the core here
+    void destroyParkedUiIfGen (juce::uint64 gen);   // fb516 -- deferred LRU eviction target
+    void releaseUiCoreForShutdown();                // fb516 -- dtor / escape-hatch teardown
     // fb236 — the cross-window LIVE STROKE lane: whichever surface is being drawn on posts
     // the active shape here; the 60Hz editor timer relays it to the OTHER window's page.
     juce::CriticalSection         lfoLiveLock_;

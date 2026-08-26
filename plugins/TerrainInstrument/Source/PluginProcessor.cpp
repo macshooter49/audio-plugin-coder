@@ -391,6 +391,8 @@ TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
         terrainCardLogP ("instance dtor clearing " + juce::String ((int) cardWindows_.size()) + " card window(s)");
     uiClients_.fetch_sub ((int) cardWindows_.size(), std::memory_order_relaxed);   // fb148 — viz census
     cardWindows_.clear();   // fb83 — popped card windows die with the plugin INSTANCE (hosts destroy processors on the message thread)
+    releaseUiCoreForShutdown();   // fb516 -- the parked/kept-alive UI core dies with the instance: BEFORE stopTimer()
+                                  // (its blendPool_ drain pumps and its jobs read this processor), AFTER the cards.
 
     // Stop the morph rebuild timer BEFORE any members are destroyed — the
     // callback touches apvts / wavetableBank / morph slots.
@@ -433,8 +435,8 @@ void TerrainInstrumentAudioProcessor::closeCardWindow (const juce::String& id)
     terrainCardLogP ("closing " + id + " (card ✕)");
     if (cardWindows_.erase (id) > 0)
         uiClients_.fetch_sub (1, std::memory_order_relaxed);              // fb148 — viz census
-    if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
-        ed->notifyCardWindowGone (id, false);
+    if (uiCore_ != nullptr)   // fb516 -- the core outlives the editor, so this works even parked
+        static_cast<TerrainUiCore*> (uiCore_.get())->notifyCardWindowGone (id, false);
 }
 
 void TerrainInstrumentAudioProcessor::dockCardWindow (const juce::String& id)
@@ -442,8 +444,8 @@ void TerrainInstrumentAudioProcessor::dockCardWindow (const juce::String& id)
     terrainCardLogP ("docking " + id + " (card ⧉)");
     if (cardWindows_.erase (id) > 0)
         uiClients_.fetch_sub (1, std::memory_order_relaxed);              // fb148 — viz census
-    if (auto* ed = dynamic_cast<TerrainInstrumentAudioProcessorEditor*> (getActiveEditor()))
-        ed->notifyCardWindowGone (id, true);    // no editor open → dock degrades to a plain close
+    if (uiCore_ != nullptr)   // fb516 -- docking now WORKS with the editor closed (the parked page absorbs it)
+        static_cast<TerrainUiCore*> (uiCore_.get())->notifyCardWindowGone (id, true);
 }
 
 //==============================================================================

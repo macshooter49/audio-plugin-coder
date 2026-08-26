@@ -10,6 +10,12 @@
 // windows.h (its min/max/GetObject macros are hostile to a 13k-line JUCE file).
 extern "C" __declspec(dllimport) void* __stdcall GetAncestor (void*, unsigned int);
 extern "C" __declspec(dllimport) void* __stdcall SetFocus (void*);
+// fb516e -- the raw park window + WM_DESTROY rescue live in TerrainUiPark.cpp (the only TU that
+// includes windows.h). See that file for the measured laws that forced this design.
+void* tiCreateRawParkWindow();
+void  tiDestroyRawParkWindow (void*);
+void* tiArmPeerRescue (void* peerHwnd, void (*fn) (void*), void* ctx);
+void  tiDisarmPeerRescue (void* peerHwnd, void* token);
 #endif
 #include "BinaryData.h"
 
@@ -160,8 +166,8 @@ struct TerrainWebView final : juce::WebBrowserComponent
 };
 
 //==============================================================================
-TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
-    : AudioProcessorEditor (&p), audioProcessor (p)
+TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
+    : audioProcessor (p)
 {
    #if JUCE_WINDOWS
     // fb491 — WINDOW-DRAG LAG. Max: "even when moving Terrain around it visually lags." While any
@@ -886,7 +892,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             {
                 const int inst = args.size() >= 1 ? (int) static_cast<double> (args[0]) : 1;   // fb359
                 // fb292 — "Load IR…" menu item → native file chooser → processor decodes from file. Async.
-                auto safe = juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> (this);
+                auto safe = juce::Component::SafePointer<TerrainUiCore> (this);
                 auto chooser = std::make_shared<juce::FileChooser> ("Load impulse response",
                     juce::File(), "*.wav;*.aif;*.aiff;*.flac;*.mp3");
                 auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
@@ -1262,7 +1268,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
                     "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3");
                 const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
                 chooser->launchAsync (flags, [safe, chooser] (const juce::FileChooser& fc)
                 {
                     if (safe == nullptr) return;
@@ -1310,7 +1316,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto flags = juce::FileBrowserComponent::openMode
                                  | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::canSelectDirectories;
-                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
                 chooser->launchAsync (flags, [safe, chooser] (const juce::FileChooser& fc)
                 {
                     if (safe == nullptr) return;
@@ -1334,7 +1340,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto flags = juce::FileBrowserComponent::openMode
                                  | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::canSelectDirectories;
-                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
                 chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
                 {
                     if (safe == nullptr) return;
@@ -1429,7 +1435,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 const auto flags = juce::FileBrowserComponent::openMode
                                  | juce::FileBrowserComponent::canSelectFiles
                                  | juce::FileBrowserComponent::canSelectDirectories;
-                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
                 chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
                 {
                     if (safe == nullptr) return;
@@ -1492,7 +1498,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                     juce::File::getSpecialLocation (juce::File::userMusicDirectory),
                     "*.wav;*.aif;*.aiff;*.flac;*.ogg");
                 const auto flags = juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles;
-                juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
                 chooser->launchAsync (flags, [safe, chooser, oscIdx] (const juce::FileChooser& fc)
                 {
                     if (safe == nullptr) return;
@@ -1862,39 +1868,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 lastFrameHash_ = 0;   // fb484 — pre-boot pushes set the hash; without this reset the
                                       // first post-ready frame reads "identical" and is SKIPPED —
                                       // Max's "osc A must be clicked before the viz shows".
-                // fb514 -- BELT for the page restore: the pre-ready RESTORE pushes ride the Windows
-                // terrainFrame web-message lane, whose page-side listener registers ~6,500 lines
-                // AFTER the script that fires signalPageReady -- pushes into a listenerless lane are
-                // silently dropped, which is why reopen always landed on the hero. evaluateJavascript
-                // (ExecuteScript) needs no listener, and restoreUiPage is idempotent (_uiPageRestored)
-                // so the ?page= boot-URL path landing first makes this a no-op.
-                if (webView != nullptr)
-                    webView->evaluateJavascript ("if(typeof restoreUiPage==='function'){restoreUiPage("
-                                                 + juce::String (audioProcessor.uiPage.load()) + ");}", nullptr);
-                // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
-                // loaded in the still-alive processor (in-session editor reopen). The old JS side
-                // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
-                // "sometimes" (blank waveform even though audio plays). Authoritatively PUSH each
-                // osc's cached waveform payload now that the page is ready — no poll, no race.
-                for (int oi = 0; oi < 4; ++oi)
-                {
-                    const juce::String payload = audioProcessor.getCachedOscPayload (oi);
-                    if (payload.isEmpty()) continue;
-                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
-                    if (webView != nullptr)
-                        webView->evaluateJavascript (
-                            juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
-                            + letter + "'," + payload + ");", nullptr);
-                }
-                // BLEND-RESYNC — re-show the blend knob row for any osc with a live blend
-                for (int oi = 0; oi < 4; ++oi)
-                {
-                    if (! oscBlends_[oi].live) continue;
-                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
-                    if (webView != nullptr)
-                        webView->evaluateJavascript (
-                            juce::String ("if(window.onBlendState)window.onBlendState('") + letter + "',true);", nullptr);
-                }
+                resyncAfterReattach();   // fb516 -- the fb514 belt + sample/blend resync, shared with keep-alive reattach
                 complete({});
             })
             .withNativeFunction("setWireSpaceNoise", [this](const juce::Array<juce::var>& args,
@@ -3526,7 +3500,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 chooser->launchAsync (flags, [buf, rate, chooser] (const juce::FileChooser& fc)
                 {
                     const auto f = fc.getResult();
-                    if (f != juce::File()) TerrainInstrumentAudioProcessorEditor::writeWav24 (f, *buf, rate);
+                    if (f != juce::File()) TerrainUiCore::writeWav24 (f, *buf, rate);
                 });
                 complete (juce::var ("ok"));
             })
@@ -3606,7 +3580,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // Mod redesign Stage 2 — LFOs 2..5 attachments
     {
         auto mkAtt = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
-        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); attachments_.push_back (att.get()); };   // fb516 -- roster
         // ════ SOLO / MUTE per-osc attachments ════
         mkAtt(synOscAEnableAttachment, ParameterIDs::SYN_OSC_A_ENABLE, synOscAEnableRelay);
         mkAtt(synOscAMuteAttachment, ParameterIDs::SYN_OSC_A_MUTE, synOscAMuteRelay);
@@ -4640,7 +4614,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // ── FLOW attachments (mode + latch + 20 per-mode knobs) ──
     {
         auto mkF = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
-        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); attachments_.push_back (att.get()); };   // fb516 -- roster
         mkF(flowModeAttachment, ParameterIDs::FLOW_MODE, flowModeRelay);
         mkF(flowArpLatchAttachment, ParameterIDs::FLOW_ARP_LATCH, flowArpLatchRelay);
         mkF(flowArpRateAttachment, ParameterIDs::FLOW_ARP_RATE, flowArpRateRelay); mkF(flowArpGateAttachment, ParameterIDs::FLOW_ARP_GATE, flowArpGateRelay); mkF(flowArpVaryAttachment, ParameterIDs::FLOW_ARP_VARY, flowArpVaryRelay); mkF(flowArpTrajAttachment, ParameterIDs::FLOW_ARP_TRAJ, flowArpTrajRelay); mkF(flowArpMorphAttachment, ParameterIDs::FLOW_ARP_MORPH, flowArpMorphRelay);
@@ -4663,7 +4637,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     // ── OSC C + D attachments (4-osc) ──
     {
         auto mkO = [this](std::unique_ptr<juce::WebSliderParameterAttachment>& att, const char* id, juce::WebSliderRelay& relay)
-        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); };
+        { att = std::make_unique<juce::WebSliderParameterAttachment>(*audioProcessor.getAPVTS().getParameter(id), relay, nullptr); attachments_.push_back (att.get()); };   // fb516 -- roster
         mkO(synOscCEngineAttachment, ParameterIDs::SYN_OSC_C_ENGINE, synOscCEngineRelay);
         mkO(synOscCOctAttachment, ParameterIDs::SYN_OSC_C_OCT, synOscCOctRelay);
         mkO(synOscCSemiAttachment, ParameterIDs::SYN_OSC_C_SEMI, synOscCSemiRelay);
@@ -4738,38 +4712,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
         webView->goToURL (tiPg > 0 ? tiRoot + "?page=" + juce::String (tiPg) : tiRoot);
     }
 
-    // fb95 — RESIZABLE editor (Max: "every plugin has to have a resize"): the
-    // corner emblem drags it, aspect locked, 0.65×–1.9× of the base look.
-    // resized() scales the web UI via native pageZoom; the last size is
-    // remembered (processor atomic → plugin state), so reopen = your size.
-    {
-        constexpr int kBaseW = 820, kBaseH = 656 + CAPTURE_STRIP_HEIGHT;   // fb261 — web design box grew 640→656 (voice column bottomed at 644, was clipped)
-        setResizeLimits (juce::roundToInt (kBaseW * 0.65), juce::roundToInt (kBaseH * 0.65),
-                         juce::roundToInt (kBaseW * 1.90), juce::roundToInt (kBaseH * 1.90));
-        if (auto* cons = getConstrainer())
-            cons->setFixedAspectRatio ((double) kBaseW / (double) kBaseH);
-        setResizable (true, true);
-        const int savedW = audioProcessor.editorWidth.load();
-        int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
-                         ? savedW : kBaseW;
-        if (getenv ("TERRAIN_ZOOM_KILL") != nullptr) w0 = juce::roundToInt (kBaseW * 0.65);   // fb176 diag: worst case
-        // fb330 — STANDALONE: a size saved in the DAW can be TALLER than this screen once the
-        // wrapper adds its title + options bar — the bottom rack row (Distortion back panel +
-        // core viz) clipped (Max: "cut off at the bottom"). Clamp the BOOT size to the display's
-        // user area; the corner resizer still goes anywhere from there.
-        if (juce::JUCEApplicationBase::isStandaloneApp())
-            if (auto* disp = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
-            {
-                const auto ua   = disp->userArea;
-                const int  maxH = ua.getHeight() - 90;                       // window title + options bar
-                const int  maxW = juce::roundToInt ((double) maxH * kBaseW / (double) kBaseH);
-                w0 = juce::jmin (w0, juce::jmax (juce::roundToInt (kBaseW * 0.65),
-                                                 juce::jmin (maxW, ua.getWidth() - 20)));
-            }
-        intendedW_ = w0;   // fb103 — the self-heal defends this against host junk
-        // Set size AFTER webView is created (setSize triggers resized())
-        setSize (w0, juce::roundToInt ((double) w0 * kBaseH / kBaseW));
-    }
+    // fb516 -- resize limits / boot size / the FL junk-size war moved to the SHELL (the window
+    // owner). This core computes the boot width in bootWidth(); the shell applies it.
 
     // fb148 — one boot-time read of the settings file (the pre-ready push used to re-read it every tick)
     {
@@ -4779,22 +4723,8 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
             bootSettingsJson_ = sf.loadFileAsString().replace ("\\", "\\\\").replace ("'", "\\'");
     }
 
-    // Start visualization timer at 60Hz for smooth LFO/mod display
-    // fb501 — the rate is the single biggest lever on the editor's cost, because it multiplies
-    // THREE things at once: timerCallback's own work, the WebView2 hop, and the COM completion
-    // traffic the hop generates on this same thread. Overridable via TERRAIN_UI_HZ purely so the
-    // harness can sweep it without a rebuild; unset it and the behaviour is exactly as before,
-    // on every platform. Read once — the timer is started once.
-    {
-        int uiHz = 60;
-        if (const char* e = std::getenv ("TERRAIN_UI_HZ"))
-        {
-            const int v = juce::String (e).getIntValue();
-            if (v >= 5 && v <= 120) uiHz = v;
-        }
-        startTimerHz (uiHz);
-    }
-    audioProcessor.uiClients_.fetch_add (1, std::memory_order_relaxed);   // fb148 — viz census
+    // fb516 -- the 60 Hz timer + the fb148 census now start in attach(), the uniform path for
+    // both first construction and every keep-alive reopen.
 
     // Auto-reload the previously-loaded sample(s).
     //
@@ -4809,7 +4739,7 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     //   one.  We iterate all 4 and fire an async decode for every non-empty path
     //   that does not already have a loaded buffer.  loadSampleIntoLayer targets
     //   the correct layer index without touching editingLayer.
-    juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safeThis (this);
+    juce::Component::SafePointer<TerrainUiCore> safeThis (this);
     juce::MessageManager::callAsync ([safeThis]
     {
         if (safeThis == nullptr) return;
@@ -5423,7 +5353,7 @@ private:
     std::unique_ptr<juce::WebBrowserComponent> web;
 };
 
-void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect,
+void TerrainUiCore::popOutCardWindow (const juce::String& id, juce::Rectangle<int> viewportRect,
                                                               std::optional<juce::Point<int>> grabOffset,
                                                               std::optional<juce::Point<int>> mouseScreen)
 {
@@ -5474,7 +5404,7 @@ void TerrainInstrumentAudioProcessorEditor::popOutCardWindow (const juce::String
     audioProcessor.adoptCardWindow (id, std::move (win));   // fb91 — fully independent window (no child-of-host link: Terrain moves alone)
 }
 
-void TerrainInstrumentAudioProcessorEditor::dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen)
+void TerrainUiCore::dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen)
 {
     auto it = audioProcessor.cardWindows_.find (id);
     if (it == audioProcessor.cardWindows_.end() || it->second == nullptr) return;
@@ -5482,7 +5412,7 @@ void TerrainInstrumentAudioProcessorEditor::dragPoppedCardWindow (const juce::St
         cw->dragMoveTo (mouseScreen);
 }
 
-void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::String& id, bool redock)
+void TerrainUiCore::notifyCardWindowGone (const juce::String& id, bool redock)
 {
     if (webView == nullptr) return;
     juce::String js = "try{window.__cardWinGone&&window.__cardWinGone('" + id + "');";
@@ -5492,17 +5422,17 @@ void TerrainInstrumentAudioProcessorEditor::notifyCardWindowGone (const juce::St
     webView->evaluateJavascript (js);
 }
 
-TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
+TerrainUiCore::~TerrainUiCore()
 {
     // Popped cards are fully independent windows (fb91) — nothing to unhook; they
     // live on, processor-owned, until their own ✕/dock or the instance dies.
     stopTimer();
-    audioProcessor.uiClients_.fetch_sub (1, std::memory_order_relaxed);   // fb148 — viz census
+    // fb516 -- census moved to detach(); a parked core is a CLOSED UI (fb148/fb514 law intact).
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
 }
 
 //==============================================================================
-void TerrainInstrumentAudioProcessorEditor::timerCallback()
+void TerrainUiCore::timerCallback()
 {
     if (webView == nullptr) return;
 
@@ -5554,12 +5484,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // silence as a dead channel and reload a page that never arrived.
     if (! pageLoaded_)
     {
-        if (healTicks_ < 240 && ! userSized_)
-        {
-            ++healTicks_;
-            if (std::abs (getWidth() - intendedW_) > 4)
-                setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));
-        }
+        if (shell_ != nullptr) shell_->tickSizeHeal();   // fb516 -- the heal lives on the shell (the window owner)
+       #if JUCE_WINDOWS
+        if (shell_ != nullptr)
+            if (auto* peer = shell_->getPeer())
+                armPeerRescue (peer->getNativeHandle());   // fb516e -- WM_DESTROY rescue backstop
+       #endif
         return;
     }
 
@@ -5663,13 +5593,12 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // attach (FL kept restoring the 533 minimum from one old shrink → "baby mini
     // size" + blur). Until the USER drags, the editor insists on its intended
     // size — the ctor default (820) or this instance's real user choice.
-    if (healTicks_ < 240 && ! userSized_)
-    {
-        ++healTicks_;
-        if (std::abs (getWidth() - intendedW_) > 4)
-            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));   // fb261 — 640→656 (voice column fit)
-    }
-
+    if (shell_ != nullptr) shell_->tickSizeHeal();   // fb516 -- the heal lives on the shell (the window owner)
+   #if JUCE_WINDOWS
+    if (shell_ != nullptr)
+        if (auto* peer = shell_->getPeer())
+            armPeerRescue (peer->getNativeHandle());   // fb516e -- WM_DESTROY rescue backstop
+   #endif
 
     // ── CHANNEL WATCHDOG (wd9) ── the eval channel to the WebContent process can die
     // silently: evals stop executing, no error surfaces, and the scopes freeze/flatline
@@ -6527,37 +6456,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
 }
 
 //==============================================================================
-void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
+void TerrainUiCore::paint (juce::Graphics& g)
 {
     // fb102 — Terrain's own night, not LookAndFeel grey: during live resizes the
     // native webview lags a frame and this background flashes through ("gray bars").
     g.fillAll (juce::Colour (0xFF16141F));
 }
 
-void TerrainInstrumentAudioProcessorEditor::resized()
+void TerrainUiCore::resized()
 {
-   #if JUCE_WINDOWS
-    // fb514 -- JUCE's VST3 wrapper applies host sizes verbatim (no constrainer clamp), and FL
-    // replays a remembered junk size -- typically 533, EXACTLY the minimum, so a below-min check
-    // never fires -- at attach AND on window re-shows, sometimes after the 4 s heal window has
-    // expired. The rule that actually holds: any UNATTENDED shrink (no drag over THIS editor) is
-    // host junk -- re-assert the intended size immediately, forever. A real user shrink always
-    // rides a local drag (the corner resizer / strip are children). Re-entrant setSize() re-runs
-    // resized() at the corrected width for the full layout; the width-differs check stops
-    // ping-pong. Windows-only: Mac hosts never replay junk, Mac behavior unchanged.
-    {
-        auto tiMs0 = juce::Desktop::getInstance().getMainMouseSource();
-        auto* tiU0 = tiMs0.getComponentUnderMouse();
-        const bool tiLocal0 = tiMs0.isDragging() && tiU0 != nullptr
-                              && (tiU0 == this || isParentOf (tiU0));
-        if (! tiLocal0 && getWidth() < intendedW_ - 4)
-        {
-            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));
-            return;
-        }
-    }
-   #endif
-
     auto b = getLocalBounds();
     // fb95 — the strip scales with the window so the web area keeps the exact
     // 820-wide proportions; pageZoom (pushed from timerCallback until the peer
@@ -6572,33 +6479,13 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     terrainApplyWebScale (*this, restZoom_, sc / restZoom_);
     settleTicks_ = 10;                  // ~160ms after the last resize → settle crisp
     zoomPushLeft_ = 12;                 // retries cover the first resized() (peer not up yet)
-    // fb103 — a size only becomes the USER'S intent when a real drag set it. Hosts
-    // (FL) replay remembered junk through resized() too — that must never stick.
-    // fb176 STICKY — FL can deliver the final size after mouse-up: past the 4s heal
-    // window ANY new size is the user's (junk replays only happen at attach).
-    // fb514 -- FL replays a remembered junk size (typically the 533 minimum) at attach, and this
-    // latch used to RATIFY it: (a) isDragging() is process-global across every Terrain instance in
-    // the DLL, so a junk resize landing during ANY drag was adopted as "user intent"; (b) after the
-    // 240-tick heal window, a re-delivered junk size was adopted wholesale. Now: only a drag over
-    // THIS editor (its corner resizer / strip are children) counts, and past the heal window we
-    // adopt host GROWS but never shrinks -- an unattended shrink is FL's junk and keeps being healed.
-    auto tiMs = juce::Desktop::getInstance().getMainMouseSource();
-    auto* tiUnder = tiMs.getComponentUnderMouse();
-    const bool tiLocalDrag = tiMs.isDragging() && tiUnder != nullptr
-                             && (tiUnder == this || isParentOf (tiUnder));
-    const bool tiHostGrow  = healTicks_ >= 240 && getWidth() > intendedW_ + 4;
-    if (tiLocalDrag || tiHostGrow)
-    {
-        userSized_ = true;
-        intendedW_ = getWidth();
-        audioProcessor.editorWidth.store (getWidth());
-    }
+    // fb516 -- the fb103/fb176/fb514 junk-size latch moved to the shell (the window owner).
 }
 
 //==============================================================================
 // CaptureDragStrip implementation
 //==============================================================================
-void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graphics& g)
+void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
 {
     auto b = getLocalBounds().toFloat();
 
@@ -6647,7 +6534,7 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::paint (juce::Graph
     }
 }
 
-void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDown (const juce::MouseEvent&)
+void TerrainUiCore::CaptureDragStrip::mouseDown (const juce::MouseEvent&)
 {
     mouseWasDown = true;
     isDragging = false;
@@ -6660,7 +6547,7 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDown (const j
     }
 }
 
-void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
+void TerrainUiCore::CaptureDragStrip::mouseDrag (const juce::MouseEvent& e)
 {
     if (!mouseWasDown || isDragging) return;
     if (state != 2) return; // only drag when ready
@@ -6686,7 +6573,7 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseDrag (const j
     );
 }
 
-void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseUp (const juce::MouseEvent&)
+void TerrainUiCore::CaptureDragStrip::mouseUp (const juce::MouseEvent&)
 {
     if (mouseWasDown && !isDragging && state == 2)
     {
@@ -6698,7 +6585,7 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseUp (const juc
 }
 
 //==============================================================================
-std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcessorEditor::getResource (const juce::String& url)
+std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (const juce::String& url)
 {
     // All JS is inlined into index.html — only one resource to serve
     // fb514 -- the 2.3 MB HTML was rebuilt (multiple full-buffer copies) on EVERY navigation
@@ -12932,7 +12819,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
 // File drag-drop (Task 11) + sample loading
 // ════════════════════════════════════════════════════════════════════════════
 
-bool TerrainInstrumentAudioProcessorEditor::isInterestedInFileDrag (const juce::StringArray& files)
+bool TerrainUiCore::isInterestedInFileDrag (const juce::StringArray& files)
 {
     if (files.isEmpty()) return false;
     const auto ext = juce::File (files[0]).getFileExtension().toLowerCase();
@@ -12941,19 +12828,19 @@ bool TerrainInstrumentAudioProcessorEditor::isInterestedInFileDrag (const juce::
         || ext == ".terrain" || ext == ".terrainpack";
 }
 
-void TerrainInstrumentAudioProcessorEditor::fileDragEnter (const juce::StringArray&, int, int)
+void TerrainUiCore::fileDragEnter (const juce::StringArray&, int, int)
 {
     if (webView != nullptr)
         webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(true);", nullptr);
 }
 
-void TerrainInstrumentAudioProcessorEditor::fileDragExit (const juce::StringArray&)
+void TerrainUiCore::fileDragExit (const juce::StringArray&)
 {
     if (webView != nullptr)
         webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(false);", nullptr);
 }
 
-void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArray& files, int, int)
+void TerrainUiCore::filesDropped (const juce::StringArray& files, int, int)
 {
     if (webView != nullptr)
         webView->evaluateJavascript ("if (window.onDragHover) window.onDragHover(false);", nullptr);
@@ -12979,7 +12866,7 @@ void TerrainInstrumentAudioProcessorEditor::filesDropped (const juce::StringArra
     // door that mirrored every drop onto the front panel is gone.
 }
 
-void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& file)
+void TerrainUiCore::loadSampleAsync (const juce::File& file)
 {
     currentSampleSourcePath = file.getFullPathName();
     // Push to processor so DAW state save captures it (survives project reload).
@@ -13092,7 +12979,7 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleAsync (const juce::File& f
 // FRONT SAMPLER — sandbox-safe load straight from the base64-decoded bytes (NO temp file). Mirrors
 // loadSampleAsync but feeds SampleLoader::loadFromMemory, so the front #hero drop works even when the
 // host sandbox / macOS TCC blocks disk writes (the same trap that broke the per-osc sample drop).
-void TerrainInstrumentAudioProcessorEditor::loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
 {
     currentSampleSourcePath = filename;
     audioProcessor.setLoadedSamplePath (filename);
@@ -13188,7 +13075,7 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleFromMemory (juce::MemoryBl
 //     (only the currently-editing layer drives the visible waveform display).
 //   - DOES cache the payload when reloading the currently-editing layer so
 //     that subsequent editor reopen (Case 1) still works for that layer.
-void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::File& file,
+void TerrainUiCore::loadSampleIntoLayer (const juce::File& file,
                                                                   int layerIdx)
 {
     if (layerIdx < 0 || layerIdx > 3) return;
@@ -13304,7 +13191,7 @@ void TerrainInstrumentAudioProcessorEditor::loadSampleIntoLayer (const juce::Fil
 // ── PEROSC — per-OSC sample load. Mirrors loadSampleIntoLayer but targets the dedicated
 //    synth-side oscSampleBuffers_[idx], caches a per-OSC payload, and fires
 //    window.onOscSampleLoaded(letter, json) so the UI draws that oscillator's waveform.
-void TerrainInstrumentAudioProcessorEditor::loadOscSampleAsync (int oscIdx, const juce::File& file)
+void TerrainUiCore::loadOscSampleAsync (int oscIdx, const juce::File& file)
 {
     if (oscIdx < 0 || oscIdx > 3) return;
     const char oscLetter = (char) ('a' + oscIdx);
@@ -13350,7 +13237,7 @@ void TerrainInstrumentAudioProcessorEditor::loadOscSampleAsync (int oscIdx, cons
 // PEROSC — sandbox-safe sample load straight from the base64-decoded bytes (NO temp file). Mirrors
 // loadOscSampleAsync but feeds SampleLoader::loadFromMemory, so a dropped sample loads even when the
 // host sandbox / macOS TCC blocks disk writes (which is what broke sample drops in FL Studio).
-void TerrainInstrumentAudioProcessorEditor::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename)
 {
     if (oscIdx < 0 || oscIdx > 3) return;
     const char oscLetter = (char) ('a' + oscIdx);
@@ -13425,7 +13312,7 @@ static std::shared_ptr<juce::AudioBuffer<float>>
     return out;
 }
 
-void TerrainInstrumentAudioProcessorEditor::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
 {
     double rate = 0.0;
     auto raw = readAudioFromMemory (data.getData(), data.getSize(), rate);
@@ -13455,7 +13342,7 @@ void TerrainInstrumentAudioProcessorEditor::loadNoiseSampleFromMemory (juce::Mem
 
 static const char* kBlendSuffixes[6] = { "MORPH", "ATTACK", "BODY", "BREATH", "SCULPT", "DICE" };
 
-juce::File TerrainInstrumentAudioProcessorEditor::blendCacheDir() const
+juce::File TerrainUiCore::blendCacheDir() const
 {
     auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
                  .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Blends");
@@ -13463,7 +13350,7 @@ juce::File TerrainInstrumentAudioProcessorEditor::blendCacheDir() const
     return dir;
 }
 
-std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor::readAudioFile (const juce::File& f, double& rateOut)
+std::shared_ptr<juce::AudioBuffer<float>> TerrainUiCore::readAudioFile (const juce::File& f, double& rateOut)
 {
     rateOut = 0.0;
     juce::AudioFormatManager fm;
@@ -13478,7 +13365,7 @@ std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor:
     return buf;
 }
 
-std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor::readAudioFromMemory (const void* data, size_t size, double& rateOut)
+std::shared_ptr<juce::AudioBuffer<float>> TerrainUiCore::readAudioFromMemory (const void* data, size_t size, double& rateOut)
 {
     rateOut = 0.0;
     juce::AudioFormatManager fm;
@@ -13496,7 +13383,7 @@ std::shared_ptr<juce::AudioBuffer<float>> TerrainInstrumentAudioProcessorEditor:
 
 // Publish a baked / undo AudioBuffer to the osc — WAV-encode it IN MEMORY (no disk) and route through
 // loadOscSampleFromMemory so it reuses the peaks + waveform push. Sandbox-safe (onBlendState pushed by caller).
-void TerrainInstrumentAudioProcessorEditor::publishBlendBuffer (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> buf, double rate)
+void TerrainUiCore::publishBlendBuffer (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> buf, double rate)
 {
     if (oscIdx < 0 || oscIdx > 3 || buf == nullptr || buf->getNumSamples() < 1) return;
     juce::MemoryBlock mb;
@@ -13512,7 +13399,7 @@ void TerrainInstrumentAudioProcessorEditor::publishBlendBuffer (int oscIdx, std:
     loadOscSampleFromMemory (oscIdx, std::move (mb), "(blend)");
 }
 
-bool TerrainInstrumentAudioProcessorEditor::writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate)
+bool TerrainUiCore::writeWav24 (const juce::File& f, const juce::AudioBuffer<float>& b, double rate)
 {
     f.deleteFile();
     juce::WavAudioFormat wav;
@@ -13528,7 +13415,7 @@ bool TerrainInstrumentAudioProcessorEditor::writeWav24 (const juce::File& f, con
     return ok;
 }
 
-tw::BlendParams TerrainInstrumentAudioProcessorEditor::currentBlendParams (int oscIdx) const
+tw::BlendParams TerrainUiCore::currentBlendParams (int oscIdx) const
 {
     tw::BlendParams p;
     float* dst[6] = { &p.morph, &p.attack, &p.body, &p.breath, &p.sculpt, &p.dice };
@@ -13544,7 +13431,7 @@ tw::BlendParams TerrainInstrumentAudioProcessorEditor::currentBlendParams (int o
 
 // End a live blend: drop the pair + engine, wipe the persisted paths, hide the knob row.
 // Used by Replace (any plain load), Undo, and Delete sample. The published audio is untouched.
-void TerrainInstrumentAudioProcessorEditor::resetBlend (int oscIdx, bool pushUi)
+void TerrainUiCore::resetBlend (int oscIdx, bool pushUi)
 {
     if (oscIdx < 0 || oscIdx > 3) return;
     auto& bl = oscBlends_[oscIdx];
@@ -13559,7 +13446,7 @@ void TerrainInstrumentAudioProcessorEditor::resetBlend (int oscIdx, bool pushUi)
             + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "',false);", nullptr);
 }
 
-void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name)
+void TerrainUiCore::startBlend (int oscIdx, std::shared_ptr<juce::AudioBuffer<float>> srcB, double rateB, const juce::String& name)
 {
     juce::ignoreUnused (name);
     if (oscIdx < 0 || oscIdx > 3) return;
@@ -13608,7 +13495,7 @@ void TerrainInstrumentAudioProcessorEditor::startBlend (int oscIdx, std::shared_
     queueBlendBake (oscIdx);
 }
 
-void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
+void TerrainUiCore::queueBlendBake (int oscIdx)
 {
     auto& bl = oscBlends_[oscIdx];
     if (! bl.live || bl.srcA == nullptr || bl.srcB == nullptr || bl.engine == nullptr) return;
@@ -13619,7 +13506,7 @@ void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
     auto engine = bl.engine;   // shared_ptrs ride into the job — safe against re-drops mid-bake
     auto srcA = bl.srcA; auto srcB = bl.srcB;
     const double rateA = bl.rateA, rateB = bl.rateB;
-    juce::Component::SafePointer<TerrainInstrumentAudioProcessorEditor> safe (this);
+    juce::Component::SafePointer<TerrainUiCore> safe (this);
     blendPool_.addJob ([safe, oscIdx, params, engine, srcA, srcB, rateA, rateB]
     {
         if (! engine->isAnalyzed())
@@ -13659,7 +13546,7 @@ void TerrainInstrumentAudioProcessorEditor::queueBlendBake (int oscIdx)
     });
 }
 
-void TerrainInstrumentAudioProcessorEditor::pollBlendKnobs()
+void TerrainUiCore::pollBlendKnobs()
 {
     if (! blendRestoreTried_) { blendRestoreTried_ = true; restoreBlendsFromState(); }
 
@@ -13687,7 +13574,7 @@ void TerrainInstrumentAudioProcessorEditor::pollBlendKnobs()
     }
 }
 
-void TerrainInstrumentAudioProcessorEditor::restoreBlendsFromState()
+void TerrainUiCore::restoreBlendsFromState()
 {
     for (int oi = 0; oi < 4; ++oi)
     {
@@ -13723,7 +13610,7 @@ void TerrainInstrumentAudioProcessorEditor::restoreBlendsFromState()
 
 // ── Stubs (real implementations land in Tasks 18 and 22 of the v0a plan) ────
 
-void TerrainInstrumentAudioProcessorEditor::loadPatch (const juce::File&)
+void TerrainUiCore::loadPatch (const juce::File&)
 {
     // Task 18 (Phase E) — read .terrain JSON, restore APVTS, trigger sample load
     if (webView != nullptr)
@@ -13732,7 +13619,7 @@ void TerrainInstrumentAudioProcessorEditor::loadPatch (const juce::File&)
             nullptr);
 }
 
-void TerrainInstrumentAudioProcessorEditor::importTerrainPack (const juce::File&)
+void TerrainUiCore::importTerrainPack (const juce::File&)
 {
     // Task 22 (Phase E) — unzip .terrainpack to User/Patches + User/Samples, then loadPatch
     if (webView != nullptr)
@@ -13743,11 +13630,375 @@ void TerrainInstrumentAudioProcessorEditor::importTerrainPack (const juce::File&
 
 // fb135 — HOST-KEY BRIDGE: while a web inline editor is armed, keystrokes the host delivers
 // to the plugin land here (JUCE focus) and get piped into the page's registered input.
-bool TerrainInstrumentAudioProcessorEditor::keyPressed (const juce::KeyPress& key)
+bool TerrainUiCore::keyPressed (const juce::KeyPress& key)
 {
     if (! tiEditArmed_.load() || webView == nullptr) return false;
     const auto k = tiKeyToWebKey (key);
     if (k.isEmpty()) return false;
     webView->evaluateJavascript (tiHostKeyJs (k));
     return true;
+}
+
+
+//==============================================================================
+/* fb516 -- THE KEEP-ALIVE PROTOCOL. The core outlives every editor: on close the shell parks it
+   in a hidden desktop holder (the WebView2 controller follows the peer via the fb516 JUCE
+   patch); on open a new shell adopts it back. LAWS, established by recon before any code:
+     1. NEVER re-set pageReady=false -- a kept-alive page never re-parses, so it would never
+        signal ready again and the SAVE poll would die forever.
+     2. NEVER setVisible(false) on the core or the webView -- relay pushes gate on
+        Component::isVisible(), and the parked page must keep absorbing automation. Parking
+        works because the HOLDER is never shown: isShowing() goes false (put_IsVisible(false),
+        renderer suspended, ~zero CPU) while isVisible() stays true (pushes keep flowing).
+     3. Every component move is ONE synchronous addAndMakeVisible while the old window's HWND
+        is still alive -- the controller re-parent needs a live old parent.
+     4. A parked core is a CLOSED UI: uiClients_ moves in attach/detach, so the fb148/fb514
+        audio-thread and timer-governor laws hold unchanged. */
+void TerrainUiCore::parkWebViewNative (void* rawHwnd)
+{
+   #if JUCE_WINDOWS
+    disarmPeerRescue();
+    if (webView != nullptr && rawHwnd != nullptr)
+        webView->parkNativeWindow (rawHwnd);   // fb516 JUCE patch: put_IsVisible(false) + put_ParentWindow(raw)
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent (this);   // parentless while parked; relays keep flowing (isVisible stays true)
+   #else
+    juce::ignoreUnused (rawHwnd);
+   #endif
+}
+
+#if JUCE_WINDOWS
+static void tiRescueTrampoline (void* ctx)
+{
+    static_cast<TerrainUiCore*> (ctx)->hostPeerDying();
+}
+
+void TerrainUiCore::armPeerRescue (void* peerHwnd)
+{
+    if (peerHwnd == nullptr || peerHwnd == rescuedPeer_)
+        return;
+    disarmPeerRescue();
+    rescueToken_ = tiArmPeerRescue (peerHwnd, tiRescueTrampoline, this);
+    if (rescueToken_ != nullptr)
+        rescuedPeer_ = peerHwnd;
+}
+
+void TerrainUiCore::disarmPeerRescue()
+{
+    if (rescuedPeer_ != nullptr || rescueToken_ != nullptr)
+    {
+        tiDisarmPeerRescue (rescuedPeer_, rescueToken_);
+        rescuedPeer_ = nullptr;
+        rescueToken_ = nullptr;
+    }
+}
+
+void TerrainUiCore::hostPeerDying()
+{
+    // The host peer's WM_DESTROY: children (the WebView2 HWND tree) are still alive -- this is
+    // the LAST moment the controller can be moved. Park it now; the shell dtor's park later is
+    // a harmless no-op (already parentless, controller already on the raw window).
+    rescuedPeer_ = nullptr;   // dying HWND: the subclass dissolves with it; free only the token
+    tiDisarmPeerRescue (nullptr, rescueToken_);
+    rescueToken_ = nullptr;
+    audioProcessor.parkUiCore();
+}
+#else
+void TerrainUiCore::armPeerRescue (void*) {}
+void TerrainUiCore::disarmPeerRescue() {}
+void TerrainUiCore::hostPeerDying() {}
+#endif
+
+int TerrainUiCore::bootWidth() const
+{
+    constexpr int kBaseW = 820, kBaseH = 656 + CAPTURE_STRIP_HEIGHT;
+    const int savedW = audioProcessor.editorWidth.load();
+    int w0 = (savedW >= juce::roundToInt (kBaseW * 0.65) && savedW <= juce::roundToInt (kBaseW * 1.90))
+                     ? savedW : kBaseW;
+    if (getenv ("TERRAIN_ZOOM_KILL") != nullptr) w0 = juce::roundToInt (kBaseW * 0.65);   // fb176 diag
+    if (juce::JUCEApplicationBase::isStandaloneApp())
+        if (auto* disp = juce::Desktop::getInstance().getDisplays().getPrimaryDisplay())
+        {
+            const auto ua   = disp->userArea;
+            const int  maxH = ua.getHeight() - 90;                       // window title + options bar (fb330)
+            const int  maxW = juce::roundToInt ((double) maxH * kBaseW / (double) kBaseH);
+            w0 = juce::jmin (w0, juce::jmax (juce::roundToInt (kBaseW * 0.65),
+                                             juce::jmin (maxW, ua.getWidth() - 20)));
+        }
+    return w0;
+}
+
+void TerrainUiCore::attach (TerrainInstrumentAudioProcessorEditor* shell)
+{
+    shell_ = shell;
+    lastEvalOkMs_   = juce::Time::getMillisecondCounterHiRes();   // wd9: a parked gap is not a stall
+    lastRecoveryMs_ = lastEvalOkMs_;
+    evalInFlight_.store (0, std::memory_order_relaxed);           // an ack lost across the gap must not wedge the backpressure escape
+    evalSentMs_     = 0.0;
+    lastFrameHash_  = 0;                                          // force a full first frame (the fb484 law)
+    idleSkips_      = 0;
+    uiExpDone_      = false;                                      // the fb504 exp hook fires once per OPEN (the fb516a harness depends on this)
+    // bootSettingsJson_ deliberately NOT refreshed: it only feeds the pre-ready RESTORE pushes,
+    // which never run again for a kept-alive page (pageReady stays true); theme changes reach a
+    // live page through the normal push lanes.
+    audioProcessor.uiClients_.fetch_add (1, std::memory_order_relaxed);   // fb148 -- viz census
+    {
+        int uiHz = 60;
+        if (const char* e = std::getenv ("TERRAIN_UI_HZ"))
+        {
+            const int v = juce::String (e).getIntValue();
+            if (v >= 5 && v <= 120) uiHz = v;
+        }
+        startTimerHz (uiHz);
+    }
+    resyncAfterReattach();   // typeof-guarded no-ops on a first (pre-ready) attach; the real payload on reopen
+}
+
+void TerrainUiCore::detach()
+{
+    stopTimer();
+    audioProcessor.uiClients_.fetch_sub (1, std::memory_order_relaxed);   // fb148 -- viz census
+    shell_ = nullptr;
+}
+
+void TerrainUiCore::resyncAfterReattach()
+{
+                // fb514 -- BELT for the page restore: the pre-ready RESTORE pushes ride the Windows
+                // terrainFrame web-message lane, whose page-side listener registers ~6,500 lines
+                // AFTER the script that fires signalPageReady -- pushes into a listenerless lane are
+                // silently dropped, which is why reopen always landed on the hero. evaluateJavascript
+                // (ExecuteScript) needs no listener, and restoreUiPage is idempotent (_uiPageRestored)
+                // so the ?page= boot-URL path landing first makes this a no-op.
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(typeof restoreUiPage==='function'){restoreUiPage("
+                                                 + juce::String (audioProcessor.uiPage.load()) + ");}", nullptr);
+                // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
+                // loaded in the still-alive processor (in-session editor reopen). The old JS side
+                // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
+                // "sometimes" (blank waveform even though audio plays). Authoritatively PUSH each
+                // osc's cached waveform payload now that the page is ready — no poll, no race.
+                for (int oi = 0; oi < 4; ++oi)
+                {
+                    const juce::String payload = audioProcessor.getCachedOscPayload (oi);
+                    if (payload.isEmpty()) continue;
+                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
+                    if (webView != nullptr)
+                        webView->evaluateJavascript (
+                            juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
+                            + letter + "'," + payload + ");", nullptr);
+                }
+                // BLEND-RESYNC — re-show the blend knob row for any osc with a live blend
+                for (int oi = 0; oi < 4; ++oi)
+                {
+                    if (! oscBlends_[oi].live) continue;
+                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
+                    if (webView != nullptr)
+                        webView->evaluateJavascript (
+                            juce::String ("if(window.onBlendState)window.onBlendState('") + letter + "',true);", nullptr);
+                }
+}
+
+//==============================================================================
+// fb516 -- the hidden holder + the process-wide parked-core LRU (cap via TERRAIN_UI_CACHE,
+// default 1; 0 = feature off / cold path -- the escape hatch).
+namespace
+{
+    struct TiParkEntry { TerrainInstrumentAudioProcessor* proc; juce::uint64 gen; bool evicting; };
+    std::vector<TiParkEntry> tiParkedCores;
+    juce::uint64 tiParkGenCounter = 0;
+
+    int tiUiCacheCap()
+    {
+        static const int cap = []
+        {
+            if (const char* e = std::getenv ("TERRAIN_UI_CACHE"))
+                return juce::jlimit (0, 4, juce::String (e).getIntValue());
+            return 1;
+        }();
+        return cap;
+    }
+
+    void tiRegistryErase (TerrainInstrumentAudioProcessor* proc)
+    {
+        tiParkedCores.erase (std::remove_if (tiParkedCores.begin(), tiParkedCores.end(),
+                                             [proc] (const TiParkEntry& e) { return e.proc == proc; }),
+                             tiParkedCores.end());
+    }
+}
+
+juce::Component* TerrainInstrumentAudioProcessor::ensureUiCoreComponent()
+{
+    tiRegistryErase (this);   // adopting = no longer parked
+    parkedGen_ = 0;
+    if (uiCore_ == nullptr)
+        uiCore_ = std::make_unique<TerrainUiCore> (*this);
+    return uiCore_.get();
+}
+
+void TerrainInstrumentAudioProcessor::parkUiCore()
+{
+   #if JUCE_WINDOWS
+    if (uiCore_ == nullptr) return;
+    if (tiUiCacheCap() <= 0) { releaseUiCoreForShutdown(); return; }   // escape hatch: cold path, old behavior
+    if (uiCoreRawHolder_ == nullptr)
+        uiCoreRawHolder_ = tiCreateRawParkWindow();
+    static_cast<TerrainUiCore*> (uiCore_.get())->parkWebViewNative (uiCoreRawHolder_);   // fb516e -- controller moved FIRST, explicitly, HWNDs alive
+    tiRegistryErase (this);
+    parkedGen_ = ++tiParkGenCounter;
+    tiParkedCores.push_back ({ this, parkedGen_, false });
+    const int cap = tiUiCacheCap();
+    int live = 0;
+    for (const auto& e : tiParkedCores) if (! e.evicting) ++live;
+    for (auto& e : tiParkedCores)
+    {
+        if (live <= cap) break;
+        if (e.evicting || e.proc == this) continue;
+        e.evicting = true; --live;
+        auto* victimProc = e.proc; const auto victimGen = e.gen;
+        // Deferred: never destroy another instance's webview inside this dtor stack. The async
+        // validates through the registry -- a processor that died meanwhile erased its entry.
+        juce::MessageManager::callAsync ([victimProc, victimGen]
+        {
+            for (const auto& g : tiParkedCores)
+                if (g.proc == victimProc && g.gen == victimGen)
+                    { victimProc->destroyParkedUiIfGen (victimGen); return; }
+        });
+    }
+   #else
+    releaseUiCoreForShutdown();   // Mac keeps destroy-on-close (enabling parking there is a Mac-session decision)
+   #endif
+}
+
+void TerrainInstrumentAudioProcessor::destroyParkedUiIfGen (juce::uint64 gen)
+{
+    if (parkedGen_ != gen || uiCore_ == nullptr) return;
+    if (uiCore_->getParentComponent() != nullptr) return;   // fb516e -- adopted meanwhile (parked = parentless)
+    tiRegistryErase (this);
+    parkedGen_ = 0;
+    uiCore_.reset();     // the holder stays for reuse
+}
+
+void TerrainInstrumentAudioProcessor::releaseUiCoreForShutdown()
+{
+    tiRegistryErase (this);
+    parkedGen_ = 0;
+    uiCore_.reset();
+    uiCoreHolder_.reset();
+   #if JUCE_WINDOWS
+    if (uiCoreRawHolder_ != nullptr) { tiDestroyRawParkWindow (uiCoreRawHolder_); uiCoreRawHolder_ = nullptr; }
+   #endif
+}
+
+//==============================================================================
+// fb516 -- THE THIN SHELL implementation.
+TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (TerrainInstrumentAudioProcessor& p)
+    : juce::AudioProcessorEditor (&p), audioProcessor (p)
+{
+    core_ = static_cast<TerrainUiCore*> (p.ensureUiCoreComponent());
+    addAndMakeVisible (*core_);   // ONE synchronous move out of the holder (or first construction)
+    core_->attach (this);
+
+    constexpr int kBaseW = 820, kBaseH = 672;   // 672 = 656 + the capture strip (core-private constant)
+    setResizeLimits (juce::roundToInt (kBaseW * 0.65), juce::roundToInt (kBaseH * 0.65),
+                     juce::roundToInt (kBaseW * 1.90), juce::roundToInt (kBaseH * 1.90));
+    if (auto* cons = getConstrainer())
+        cons->setFixedAspectRatio ((double) kBaseW / (double) kBaseH);
+    setResizable (true, true);
+    intendedW_ = core_->bootWidth();   // fb103 -- the self-heal defends this against host junk
+    setSize (intendedW_, juce::roundToInt ((double) intendedW_ * kBaseH / kBaseW));
+}
+
+TerrainInstrumentAudioProcessorEditor::~TerrainInstrumentAudioProcessorEditor()
+{
+    if (userSized_)
+        audioProcessor.editorWidth.store (getWidth());
+    if (core_ != nullptr)
+    {
+        core_->detach();
+        audioProcessor.parkUiCore();   // synchronous, inside this dtor: the old HWND is still alive here
+        core_ = nullptr;
+    }
+}
+
+void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
+{
+    g.fillAll (juce::Colour (0xFF16141F));
+}
+
+void TerrainInstrumentAudioProcessorEditor::resized()
+{
+   #if JUCE_WINDOWS
+    // fb514 -- JUCE's VST3 wrapper applies host sizes verbatim (no constrainer clamp), and FL
+    // replays a remembered junk size -- typically 533, EXACTLY the minimum, so a below-min check
+    // never fires -- at attach AND on window re-shows, sometimes after the 4 s heal window has
+    // expired. The rule that actually holds: any UNATTENDED shrink (no drag over THIS editor) is
+    // host junk -- re-assert the intended size immediately, forever. A real user shrink always
+    // rides a local drag (the corner resizer / strip are children). Re-entrant setSize() re-runs
+    // resized() at the corrected width for the full layout; the width-differs check stops
+    // ping-pong. Windows-only: Mac hosts never replay junk, Mac behavior unchanged.
+    {
+        auto tiMs0 = juce::Desktop::getInstance().getMainMouseSource();
+        auto* tiU0 = tiMs0.getComponentUnderMouse();
+        const bool tiLocal0 = tiMs0.isDragging() && tiU0 != nullptr
+                              && (tiU0 == this || isParentOf (tiU0));
+        if (! tiLocal0 && getWidth() < intendedW_ - 4)
+        {
+            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) 672 /* 656 + strip */ / 820.0));
+            return;
+        }
+    }
+   #endif
+
+    if (core_ != nullptr)
+        core_->setBounds (getLocalBounds());
+
+    // fb103 -- a size only becomes the USER'S intent when a real drag set it. fb176 STICKY.
+    // fb514 -- only a drag over THIS editor counts; past the heal window adopt GROWS, never shrinks.
+    auto tiMs = juce::Desktop::getInstance().getMainMouseSource();
+    auto* tiUnder = tiMs.getComponentUnderMouse();
+    const bool tiLocalDrag = tiMs.isDragging() && tiUnder != nullptr
+                             && (tiUnder == this || isParentOf (tiUnder));
+    const bool tiHostGrow  = healTicks_ >= 240 && getWidth() > intendedW_ + 4;
+    if (tiLocalDrag || tiHostGrow)
+    {
+        userSized_ = true;
+        intendedW_ = getWidth();
+        audioProcessor.editorWidth.store (getWidth());
+    }
+}
+
+void TerrainInstrumentAudioProcessorEditor::onShowingChanged()
+{
+    /* fb516c -- THE PARK MOMENT, corrected by measurement. The dtor was TOO LATE: the park log
+       showed IsWindow(old)=0 at dtor time -- the editor window's HWND was already destroyed, the
+       controller died with it (put_ParentWindow=ERROR_INVALID_STATE forever after), and no
+       fallback can move a child of a dead parent. HIDE is the only hook where the old HWND is
+       guaranteed alive -- and every known host (FL explicitly: the fb148 keepPageLoaded note)
+       hides a plugin window before destroying it. Bonus: FL's hide/show-without-destroy cycles
+       now map to park/adopt cycles with live HWNDs on both edges. */
+    if (! isShowing() && core_ != nullptr)
+    {
+        if (userSized_)
+            audioProcessor.editorWidth.store (getWidth());
+        core_->detach();
+        audioProcessor.parkUiCore();   // synchronous; our HWND is alive right now
+        core_ = nullptr;
+    }
+    else if (isShowing() && core_ == nullptr)
+    {
+        core_ = static_cast<TerrainUiCore*> (audioProcessor.ensureUiCoreComponent());
+        addAndMakeVisible (*core_);
+        core_->setBounds (getLocalBounds());
+        core_->attach (this);
+    }
+}
+
+void TerrainInstrumentAudioProcessorEditor::tickSizeHeal()
+{
+    if (healTicks_ < 240 && ! userSized_)
+    {
+        ++healTicks_;
+        if (std::abs (getWidth() - intendedW_) > 4)
+            setSize (intendedW_, juce::roundToInt (intendedW_ * 672.0 / 820.0));
+    }
 }
