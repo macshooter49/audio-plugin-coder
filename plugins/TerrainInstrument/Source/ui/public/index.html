@@ -36,10 +36,24 @@
   var raf = window.requestAnimationFrame.bind(window);
   var q = new Map(), nid = 0, scheduled = false, parked = false, styleDone = false;
   var lastAct = performance.now(), probeTimer = 0, lastFrame = 0;   // fb506 — 60 fps pacing clock
+  /* fb508 — NO MORE FREEZE-FRAMES. Max's verdict on fb504-507's inactivity park: a plugin that
+     freezes mid-decay the moment the DAW pauses "looks like it's lagging... I absolutely hate
+     it". So VISIBLE animation never parks: every widget runs continuously at the paced 60 and
+     decays to its natural rest state (the scope glides to flatline, the spectrum falls to the
+     floor, meters drop — the C++ already does all of that; it was the park freezing them
+     mid-fall that looked broken). What still saves CPU invisibly:
+       · the 60 fps pacing (the actual Windows killer was the 360 Hz panel — that stays fixed)
+       · __tiQuiet below — gates work NOBODY CAN SEE: the native polls, the silence-FFT
+       · the C++ silence gate — a spectrum of silence is not composed at all
+     isActive() is now unconditionally true; the parked machinery below is retained but
+     unreachable (harness experiments can still force it via __tiForcePark). */
   function isActive(){
-    return window.__tiForceActive || !!window.__notesActive
-        || (performance.now() - lastAct < 1500);
+    return ! window.__tiForcePark;
   }
+  /* fb508 — the QUIET flag: no notes and no input for 1.5 s. Gates INVISIBLE work only. */
+  setInterval(function(){
+    window.__tiQuiet = ! window.__notesActive && (performance.now() - lastAct > 1500) && ! window.__tiForceActive;
+  }, 500);
   function setParked(p){
     if (parked === p) return;
     parked = p; window.__tiParked = p;
@@ -83,7 +97,11 @@
          renderTerrain's paint misaligns with vsync under timer pacing and double-rasters). So the
          panel pages (synth/EQ/delay/mod — the pages Max reports dropping FL's frames) run paced
          at 60, and the front page stays native. __UI_FPS still overrides both for experiments. */
-      var minGap = 1000 / (window.__UI_FPS || (window.currentActivePanel ? 60 : 1000)) - 1.2;
+      /* fb508 — pacing now covers EVERY page: with the freeze-park gone, an unpaced front page
+         would run its loops at panel rate (360 fps here) forever. The fb506 page-aware split
+         existed to dodge a +25-point hero misalignment cost during play; that trade inverts
+         once idle animation runs continuously. */
+      var minGap = 1000 / (window.__UI_FPS || 60) - 1.2;
       if (ts - lastFrame < minGap){
         /* fb506b — wait out the remainder with a TIMER, never a rAF re-arm: a pending rAF keeps
            Chromium's BeginFrame machinery producing frames at the full 360 Hz panel rate even
@@ -168,42 +186,76 @@
      every paced frame, fully smooth — the 60 fps pacing already bounds what that costs. Only
      TRUE IDLE freezes them (one heal frame per 10 s). Loops look alive whenever anyone is
      there to see them, and cost nothing when nobody is. */
-  var decoLast = {};
-  window.__tiSlow = function(cb){
-    if (isActive()) { window.requestAnimationFrame(cb); return; }
-    setTimeout(function(){ window.requestAnimationFrame(cb); }, 10000);
-  };
-  window.__tiDecoDue = function(key){
-    if (isActive()) return true;
-    var now = performance.now();
-    if (decoLast[key] !== undefined && now - decoLast[key] < 10000) return false;
-    decoLast[key] = now;
-    return true;
-  };
+  /* fb508 — decorations run CONTINUOUSLY at the paced rate (no throttling, no freeze): Max's
+     final call after living with every variant. The panel-rate cap is what saves the CPU; the
+     motion itself stays. Both helpers survive as passthroughs so the fb505 call sites stand. */
+  window.__tiSlow = function(cb){ window.requestAnimationFrame(cb); };
+  window.__tiDecoDue = function(){ return true; };
 
   /* fb505 — the always-on decorative CSS animations die permanently on Windows: the breathing
      strokes, the mod-button glow, the FLOW arp/seq pulses, the grain-icon breathe. Targeted list
      from the fb504 inventory — one-shot feedback animations (flashes) are NOT in it and keep
      working. SMIL emblems are paused at boot below and never unpaused. */
-  function killDecor(){
-    try {
-      var st = document.createElement('style');
-      st.id = 'ti-static-decor';
-      st.textContent = '.mod-btn.has-routes,#mod-engine .mv-stroke,.mv-ext .es .mv-stroke,#env-line,'
-        + '.fxr-core .dst-curve,.fxr-core .grn-wave,.flow-mode .arpNote,.flow-mode .arpLine,'
-        + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}';
-      document.head.appendChild(st);
-      var svgs = document.querySelectorAll('svg');
-      for (var i = 0; i < svgs.length; i++){ try { svgs[i].pauseAnimations(); } catch(e) {} }
-      setInterval(function(){                      /* cards built later carry SMIL too */
-        if (window.__tiParked) return;
-        var s2 = document.querySelectorAll('svg');
-        for (var j = 0; j < s2.length; j++){ try { if (!s2[j].animationsPaused()) s2[j].pauseAnimations(); } catch(e) {} }
-      }, 4000);
-    } catch(e) {}
+  /* fb508 — THE SMIL SCRUBBER. fb505 paused every SMIL animation permanently because SMIL ticks
+     at the compositor's rate — 360 fps on this class of panel — and cannot be paced by rAF. But
+     Max wants the FLOW emblems MOVING ("the four modes are supposed to move"). So: keep them
+     paused (which detaches them from the panel clock) and advance their timelines BY HAND from
+     the paced 60 fps clock — svg.setCurrentTime() renders one exact frame per call. Identical
+     motion, bounded cost, and the same on a 60 Hz office laptop as on a 360 Hz gaming panel.
+     The CSS breathe animations fb505 killed are NOT re-enabled here as CSS (same panel-rate
+     problem) — they stay dead pending a scrubbed replacement if Max misses a specific one. */
+  /* fb508b — the infinite decorative CSS animations stay DEAD on Windows. They are driven by
+     the compositor at PANEL rate — 360 fps here — and no page code can pace them; re-enabling
+     them in fb508 doubled the idle page cost (WebView 116 -> 225, measured). The visible ones
+     (breathing strokes) can return later as JS tweens on the paced clock if missed. One-shot
+     feedback flashes are not in this list and keep working. */
+  try {
+    var stK = document.createElement('style');
+    stK.id = 'ti-static-decor';
+    stK.textContent = '.mod-btn.has-routes,#mod-engine .mv-stroke,.mv-ext .es .mv-stroke,#env-line,'
+      + '.fxr-core .dst-curve,.fxr-core .grn-wave,.flow-mode .arpNote,.flow-mode .arpLine,'
+      + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}';
+    (document.head || document.documentElement).appendChild(stK);
+  } catch(e) {}
+
+  var smilList = [], smilScan = 0;
+  function smilTick(dt){
+    if ((++smilScan & 255) === 1){                 /* re-scan every ~4 s: cards built later carry SMIL too */
+      smilList = [];
+      try {
+        /* fb508b — ONLY the FLOW emblem svgs. The first cut scrubbed every svg that carried an
+           <animate> — dozens across the page, most of them one-shot transition helpers — and
+           setCurrentTime forces a full re-render of each per call: measured, it DOUBLED the
+           page's idle cost (WebView 116 -> 225). The looping SMIL decorations all live in the
+           four FLOW tiles. Everything else keeps its boot-time pause. */
+        var s2 = document.querySelectorAll('.flow-mode svg');
+        for (var j = 0; j < s2.length; j++){
+          try {
+            if (s2[j].getElementsByTagName('animate').length || s2[j].getElementsByTagName('animateTransform').length){
+              if (!s2[j].animationsPaused()) s2[j].pauseAnimations();
+              smilList.push(s2[j]);
+            }
+          } catch(e) {}
+        }
+      } catch(e) {}
+    }
+    if (window.__tiOff && window.__tiOff('syn-panel')) return;   /* fb508b — tiles off screen: no scrub */
+    for (var i = 0; i < smilList.length; i++){
+      try { smilList[i].setCurrentTime(smilList[i].getCurrentTime() + dt); } catch(e) {}
+    }
   }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', killDecor);
-  else killDecor();
+  function smilLoop(){
+    var last = 0;
+    function frame(ts){
+      var dt = last ? Math.min(0.1, (ts - last) / 1000) : 1/60;
+      last = ts;
+      smilTick(dt);
+      window.requestAnimationFrame(frame);         /* rides the paced arbiter clock */
+    }
+    window.requestAnimationFrame(frame);
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', smilLoop);
+  else smilLoop();
 })();
 </script>
 <script>
@@ -9704,7 +9756,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             requestAnimationFrame(l4); } requestAnimationFrame(l4); })();
           window.__fx4Tick=fx4Tick;   // headless gate hook
           /* the engine-fed readouts (Attack/Release/Ratio/knee/crossovers) refresh at a gentle rate */
-          setInterval(function(){ try{ if(window.__tiParked)return; for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);   /* fb504 gated */
+          setInterval(function(){ try{ if(window.__tiQuiet)return; for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);   /* fb504 gated */
 
           /* ═══ THE EQUALIZER'S NODES — the Pro-Q grammar (CONTRACT R12), as SVG in the card.
              Drag X = that band's Hz knob (the engine's own lo/hi per band), drag Y = its gain knob
@@ -18359,7 +18411,7 @@ setTimeout(function wireSynControls () {
           pill.addEventListener ('wheel', function (ev) { ev.preventDefault (); ev.stopPropagation ();
             wr (v + (ev.deltaY < 0 ? 0.04 : -0.04)); paint (); showVal (); }, { passive: false });
           pill.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); wr (0.0); paint (); showVal (); });   // reset = ZERO (the default)
-          function refresh () { if (window.__tiParked || dragging) return; gp (function (val) { if (! isNaN (val)) { v = Math.max (0, Math.min (1, val)); paint (); } }); }   /* fb504 — 8 of these poll a native every 1.5 s */
+          function refresh () { if (window.__tiQuiet || dragging) return; gp (function (val) { if (! isNaN (val)) { v = Math.max (0, Math.min (1, val)); paint (); } }); }   /* fb504 — 8 of these poll a native every 1.5 s */
           refresh (); [250, 700, 1500].forEach (function (ms) { setTimeout (refresh, ms); });
           setInterval (refresh, 1500);   // stays fresh across back-panel toggles / preset loads (cheap)
         });
@@ -23853,22 +23905,47 @@ function animate(timestamp) {
   _prevAnimTime = time;
   state.terrainTime = time;
 
-  // fb505 — Serum-2 policy on Windows: DECORATION is near-static (2 fps while the pointer is
-  // active, one frame per 10 s otherwise), REACTIVE visuals keep 60 fps. renderTerrain stays
-  // full rate — the hero mountain reacts to the audio scope and is the product's identity
-  // visual; at idle the arbiter freezes it anyway. Icons, section icons and the spinning tape
-  // reels are decoration and burn compositor for nothing. On macOS __tiDecoDue is undefined and
-  // every branch below runs exactly as before.
-  renderTerrain(time);
-  updateMeters(time);
-  if (!window.__tiDecoDue || window.__tiDecoDue('sicons')) updateSectionIcons();
-  updateXYAuto(time);
-  if (!window.__tiDecoDue || window.__tiDecoDue('icons')) updateAnimatedIcons(time);
+  // fb508 — THE REST POSE (Windows only; macOS runs exactly as before). Max's design, in his
+  // words: "some animations don't move until there's audio coming in, and once audio and MIDI
+  // completely stops they go back to default, unmoved — but they don't just freeze." So while
+  // notes sound (or the user interacts) the front page animates fully at the paced 60. When the
+  // last note ends, the motion EASES to a stop over ~1.5 s — a graceful settle, never a
+  // mid-motion freeze — and once settled the heavy painters draw ONE final rest frame and stop
+  // burning entirely. The first note (or any input) resumes instantly. Measured need: the hero
+  // alone at a continuous paced 60 costs ~200% of a core on Windows at idle.
+  if (window.__tiQuiet !== undefined) {
+    if (window.__heroRest === undefined) { window.__heroRest = 0; window.__heroT = time; window.__heroDrawn = false; }
+    if (!window.__tiQuiet) { window.__heroRest = 0; window.__heroDrawn = false; }
+    else window.__heroRest = Math.min(1, window.__heroRest + dt / 1.5);
+    window.__heroT += dt * (1 - window.__heroRest);           /* motion eases to stillness */
+    var __rt = window.__heroT;
+    if (window.__heroRest < 1 || !window.__heroDrawn) {
+      renderTerrain(__rt);
+      updateSectionIcons();
+      updateAnimatedIcons(__rt);
+      drawTapeReels(__rt);
+      if (window.__heroRest >= 1) {
+        window.__heroDrawn = true;                            /* the rest frame is down — sleep */
+        /* the simulated meters bounce on Math.random even in silence — at rest they FALL, like
+           real meters, instead of jittering forever and keeping the compositor awake */
+        try { var __mL = window.__mtL, __mR = window.__mtR;
+              if (__mL) __mL.style.height = '0%'; if (__mR) __mR.style.height = '0%'; } catch(e) {}
+      }
+    }
+    if (!window.__heroDrawn) updateMeters(time);
+    updateXYAuto(time);
+  } else {
+    renderTerrain(time);
+    updateMeters(time);
+    updateSectionIcons();
+    updateXYAuto(time);
+    updateAnimatedIcons(time);
+  }
   // Safari preview: simulate loop progress when no JUCE backend
   if (!juceMode && (state.tapeLoop.playing || state.tapeLoop.recording)) {
     state.tapeLoop.loopProgress = (state.tapeLoop.loopProgress + 0.003) % 1.0;
   }
-  if (!window.__tiDecoDue || window.__tiDecoDue('reels')) drawTapeReels(time);
+  if (window.__tiQuiet === undefined) drawTapeReels(time);
   updateModulation(time, dt);
   if (typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);
 
@@ -28535,7 +28612,7 @@ restoreThemeFromBackend();
     var last=null;
     setInterval(function(){
       var need = window.__cardOnly==='lfo' || (window.__poppedCards&&window.__poppedCards.lfo);
-      if(!need||window.__tiParked)return;   /* fb504 gated */
+      if(!need||window.__tiQuiet)return;   /* fb504 gated */
       if(Date.now()-(window.__shTouchT||0)<450)return;
       try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
         f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
@@ -29665,7 +29742,7 @@ restoreThemeFromBackend();
       var vel=(sv===200), env=(!vel&&sv>=100)?(sv-100+1):0, lfo=(vel||env)?0:(sv+1);   /* fb178 env=100+ · fb261 vel=200 (kVelSrc) — was misdecoded as Env 101 */
       for(var i=0;i<assigns.length;i++) if((vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
       var a=vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}); assigns.push(a); }); markTargets(); }catch(e){} }); }catch(e){} }
-  setInterval(function(){ try{ if(window.__tiParked)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
+  setInterval(function(){ try{ if(window.__tiQuiet)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
      the DOCKED UI too. Local coords come pre-transformed from the main getModDrag native. */
   (function(){ if(window.__cardOnly)return;
@@ -29673,7 +29750,7 @@ restoreThemeFromBackend();
     function clear(){ if(!TGf)return; document.body.classList.remove('sm-dragging');
       TGf.forEach(function(g){ g.el.classList.remove('sm-target','sm-hot'); }); TGf=null; hotFel=null; }
     setInterval(function(){ try{
-      if(window.__tiParked)return;   /* fb504 — a 30 Hz native round-trip was the worst idle timer; a mod drag begins with a pointer event, which wakes the arbiter before this can matter */
+      if(window.__tiQuiet)return;   /* fb504 — a 30 Hz native round-trip was the worst idle timer; a mod drag begins with a pointer event, which wakes the arbiter before this can matter */
       if(!gmd&&window.Juce&&window.Juce.getNativeFunction){ try{ gmd=window.Juce.getNativeFunction('getModDrag'); }catch(e){} }
       if(!gmd)return;
       gmd().then(function(js){ var o=null; try{ o=JSON.parse(js); }catch(e){}
@@ -32410,7 +32487,7 @@ restoreThemeFromBackend();
   (function crvXWin(){ var last=null;
     setInterval(function(){
       var need = window.__cardOnly==='crv' || (window.__poppedCards&&window.__poppedCards.crv);
-      if(!need||window.__tiParked)return;   /* fb504 gated */
+      if(!need||window.__tiQuiet)return;   /* fb504 gated */
       if(Date.now()-(window.__crvTouchT||0)<450)return;
       var f=NF('getDistortionCurves'); if(!f)return;
       try{ f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
@@ -34192,7 +34269,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   var vizDbgEl = null;
   setInterval(function () {
     try {
-      if (window.__tiParked) return;   /* fb504 — the anomaly detector has nothing to detect while the page is parked */
+      if (window.__tiQuiet) return;   /* fb504 — the anomaly detector has nothing to detect while the page is parked */
       var panel = document.getElementById('syn-panel');
       if (!panel) return;
       var n = (window.performance && performance.now) ? performance.now() : 0;

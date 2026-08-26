@@ -424,3 +424,44 @@ arbiter key on the Windows UA, never on hardware. Nothing reads 360 anywhere. Ma
 and byte-identical (UA-gated) — a Mac-to-Mac transfer behaves as before; ProMotion (120 Hz)
 MacBooks would eventually benefit from the same push-clock migration, but that is a Mac-session
 decision.
+
+### fb508 — THE NO-FREEZE DESIGN: rest poses, not parks. And the FL frame-drop mechanism named.
+
+Max rejected the fb504-507 inactivity freeze ("the plugin freezes mid-decay... looks like it's
+lagging... I absolutely hate it") and specified the Mac semantics: reactive viz DECAYS TO A REST
+STATE when audio stops (never freezes mid-motion), loopers keep looping, and only invisible work
+may pause. Also confirmed working: the fb506 LFO retrigger fix ("perfect now") and the envelope.
+
+**THE FL FRAME-DROP MECHANISM, finally named.** Max observed: front page = HIGHER CPU but FL
+stays smooth; synth page = lower CPU but FL's master meter drops frames and window-drags lag.
+Because the editor's 60 Hz timerCallback runs ON FL'S UI THREAD: the synth page's spectrum
+string build stretched ticks to 14-15 ms — that stall IS the frame drop. WebView2's CPU lives in
+separate processes and never blocks FL. **Total CPU was never the FL symptom; tick length is.**
+The probe's `ms/tick` is the number to watch for FL smoothness.
+
+Shipped (fb508d):
+1. isActive() is always true — VISIBLE animation never parks. `__tiQuiet` (no input+no notes
+   1.5 s) replaces `__tiParked` on the 7 interval gates — it gates only INVISIBLE work.
+2. Pacing now covers every page (60 fps cap vs the 360 Hz panel).
+3. SMIL scrubber: FLOW emblems move again — paused from the panel clock, advanced by hand via
+   svg.setCurrentTime() on the paced clock. ⚠️ scrub ONLY '.flow-mode svg': scrubbing every
+   svg with an <animate> DOUBLED page cost (116 -> 225, measured).
+4. Infinite decorative CSS animations STAY dead — they tick at compositor/panel rate and cannot
+   be paced; re-enabling them cost ~+100 (measured). Rebuild wanted ones as paced JS tweens.
+5. THE REST POSE (front page): while notes/input, full animation; after the last note the hero,
+   reels and icons EASE to stillness over 1.5 s, draw one rest frame, and stop burning; fake
+   meters FALL to zero instead of jittering on Math.random forever. First note resumes instantly.
+6. Spectrum build 30 -> 15 Hz + 2 dp bins (never shares a tick with the scope build).
+
+Four states (WebView2 / plugin proc): front-idle 94.6/29 · front-play 198/57 · synth-idle 92/30
+· synth-play 112/81. Versus the saga's start (editor open idle: 171.6 + freeze-free semantics
+impossible), everything now animates continuously AND costs half. Contract v2 7/7, eq 15/15,
+fx4 130/130, fx3 48, lfo smooth, fingerprint bit-identical. Installed.
+
+NEXT, ranked: (1) 🚨 the play-state build is STILL ~55% [UI build] at 42 Hz ticks — the 15 Hz
+spectrum did NOT explain it; something else in timerCallback scales with play. Extend the fb501
+meter to PER-SEGMENT timings, then likely move whale builds to a background composer thread
+(timerCallback must never exceed ~2 ms on FL's UI thread). (2) front-play ~198 — hero at paced
+60 during notes; options: 30 fps under notes, or the push-clock migration. (3) rest poses for
+the remaining front loopers (fxAnimate tape viz, delay comet). (4) LFO/env push-paint migration.
+(5) editor open 5-10 s.

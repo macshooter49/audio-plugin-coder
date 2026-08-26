@@ -1,10 +1,10 @@
-// fb504 — the arbiter's CONTRACT test, against the SHIPPED page in Chrome (same engine, arbiter
-// active because the UA is Windows):
-//   1. after >1.5s of nothing the page PARKS (__tiParked true, CSS animations paused)
-//   2. a pointer event WAKES it instantly
-//   3. __notesActive=1 wakes it within ~1s (the parked probe interval)
-//   4. rAF cadence while parked is ~1fps; while active ~60fps
-//   5. a queued callback is NEVER dropped (state persists)
+// fb508 — the arbiter's CONTRACT, v2 (the no-freeze design), tested against the SHIPPED page in
+// Chrome (same engine; the arbiter is active because the UA is Windows):
+//   1. the page NEVER visibly parks — rAF keeps running through idle (no freeze-frames)
+//   2. cadence is PACED: ~60 fps regardless of panel rate (this rig's panel is 360 Hz)
+//   3. __tiQuiet goes true after ~1.5 s of no input/notes (gates INVISIBLE work: native polls,
+//      the C++ silence gate's JS mirrors) — and false again immediately on input or notes
+//   4. a queued callback always runs (nothing is ever dropped)
 const puppeteer = require('puppeteer-core');
 const URL = 'file:///C:/dev/audio-plugin-coder/plugins/TerrainInstrument/Source/ui/public/index.html';
 
@@ -21,55 +21,43 @@ const URL = 'file:///C:/dev/audio-plugin-coder/plugins/TerrainInstrument/Source/
   const results = [];
   const check = (name, cond) => { results.push({ name, pass: !!cond }); console.log(`  ${cond ? 'ok  ' : 'FAIL'}  ${name}`); };
 
-  // 1: parks after idle
-  await new Promise(r => setTimeout(r, 3000));
-  const s1 = await p.evaluate(() => ({ parked: !!window.__tiParked, cls: document.documentElement.classList.contains('ti-parked') }));
-  check('parks after 1.5s idle (__tiParked true)', s1.parked);
-  check('ti-parked class applied (CSS animations paused)', s1.cls);
+  // 1+3: idle -> quiet flips, but NOTHING parks
+  await new Promise(r => setTimeout(r, 3500));
+  const s1 = await p.evaluate(() => ({ parked: !!window.__tiParked, quiet: !!window.__tiQuiet }));
+  check('never parks at idle (no freeze-frames)', !s1.parked);
+  check('__tiQuiet true after 1.5s idle (invisible work gated)', s1.quiet);
 
-  // 4a: parked rAF cadence ~1fps
-  const parkedFps = await p.evaluate(() => new Promise(res => {
-    let n = 0; const id = setInterval(() => {}, 100000);
-    const t0 = performance.now();
-    function tick(){ n++; if (performance.now() - t0 < 3000) window.requestAnimationFrame(tick); else res(n / 3); }
-    window.requestAnimationFrame(tick);
-    setTimeout(() => res(n / 3), 4000);
-  }));
-  check(`parked cadence ~1fps (measured ${parkedFps.toFixed(1)}/s)`, parkedFps <= 3);
-
-  // 2: pointer wakes instantly
-  await p.mouse.move(600, 400); await p.mouse.move(610, 410);
-  await new Promise(r => setTimeout(r, 300));
-  const s2 = await p.evaluate(() => !!window.__tiParked);
-  check('pointer input wakes it (<300ms)', !s2);
-
-  // 4b: active rAF cadence ~60fps (keep it awake with synthetic moves)
-  const activeFps = await p.evaluate(() => new Promise(res => {
+  // 2: cadence at idle is STILL ~60 (animations keep running), paced not panel-rate
+  const idleFps = await p.evaluate(() => new Promise(res => {
     let n = 0; const t0 = performance.now();
-    const keep = setInterval(() => window.dispatchEvent(new PointerEvent('pointermove')), 400);
-    function tick(){ n++; if (performance.now() - t0 < 2000) window.requestAnimationFrame(tick); else { clearInterval(keep); res(n / 2); } }
+    function tick(){ n++; if (performance.now() - t0 < 2000) window.requestAnimationFrame(tick); else res(n / 2); }
     window.requestAnimationFrame(tick);
   }));
-  check(`active cadence ~60fps (measured ${activeFps.toFixed(0)}/s)`, activeFps > 25);
+  check(`idle cadence is paced ~60fps, not panel rate (measured ${idleFps.toFixed(0)}/s)`, idleFps > 30 && idleFps < 75);
 
-  // 3: notes wake a parked page
-  await new Promise(r => setTimeout(r, 3500));   // let it re-park
-  const s3a = await p.evaluate(() => !!window.__tiParked);
-  check('re-parks after activity ends', s3a);
+  // 3b: input clears quiet fast
+  await p.mouse.move(600, 400); await p.mouse.move(610, 410);
+  await new Promise(r => setTimeout(r, 700));
+  const s2 = await p.evaluate(() => !!window.__tiQuiet);
+  check('input clears __tiQuiet (<700ms)', !s2);
+
+  // 3c: notes clear quiet from a quiet state
+  await new Promise(r => setTimeout(r, 3500));
+  const s3a = await p.evaluate(() => !!window.__tiQuiet);
+  check('re-quiets after activity ends', s3a);
   await p.evaluate(() => { window.__notesActive = 1; });
-  await new Promise(r => setTimeout(r, 1300));
-  const s3b = await p.evaluate(() => !!window.__tiParked);
-  check('a note wakes it within ~1s', !s3b);
+  await new Promise(r => setTimeout(r, 800));
+  const s3b = await p.evaluate(() => !!window.__tiQuiet);
+  check('a note clears __tiQuiet (<800ms)', !s3b);
   await p.evaluate(() => { window.__notesActive = 0; });
 
-  // 5: no callback dropped across a park/wake cycle
+  // 4: callbacks never dropped
   const kept = await p.evaluate(() => new Promise(res => {
     let ran = false;
     window.requestAnimationFrame(() => { ran = true; });
-    setTimeout(() => { window.dispatchEvent(new PointerEvent('pointermove')); }, 2500);
-    setTimeout(() => res(ran), 3500);
+    setTimeout(() => res(ran), 1500);
   }));
-  check('callback queued while parked still runs on wake (state persists)', kept);
+  check('a queued callback always runs (state persists)', kept);
 
   await b.close();
   const fails = results.filter(r => !r.pass).length;

@@ -5527,8 +5527,19 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // park-push is NOT gated, so idle frames stay byte-identical and idle-skip keeps working.
     // The Mac ships every frame whole, unchanged.
    #if JUCE_WINDOWS
+    // fb508 — THE FL FRAME-DROP FIX. This timer runs on the HOST'S UI THREAD (FL paints its own
+    // meters and processes window drags on the same thread that pumps plugin editors), so every
+    // millisecond spent building frame strings here is a millisecond FL's UI cannot paint. The
+    // measured whale: the EQ spectrum build (40-80 KB of float formatting) at 30 Hz stretched
+    // ticks to 5-15 ms during play — exactly matching Max's report that FL's master meter drops
+    // frames ONLY on the synth page (the only page that composes the spectrum), while the
+    // FRONT page — with HIGHER total CPU in the WebView's separate processes — stays smooth.
+    // Total CPU was never the FL symptom; this thread's stall was.
+    // Scope stays 30 Hz (odd ticks); the spectrum now builds on every FOURTH tick (~15 Hz,
+    // perceptually fine for a 700-px spectrum that the JS lerps anyway), so at most ONE whale
+    // build lands on any tick and the worst-case tick stays short.
     const bool pushScopeW = ((frameAlt_ & 1) == 0);
-    const bool pushEqW    = ! pushScopeW;
+    const bool pushEqW    = ((frameAlt_ & 3) == 1);   // ticks 1,5,9,... — never on a scope tick
     ++frameAlt_;
    #else
     constexpr bool pushScopeW = true;
@@ -6213,7 +6224,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
             // ~80 KB string at 60 Hz. Modern WebView handles it.
             // VIZ-BULLETPROOF — sanitize like the main tick string: a NaN bin (filter
             // blowup under hot FM) would print 'nan' = ReferenceError = dead EQ eval.
-            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 3); };   // fb486 -- 3 dp: sub-pixel on a ~700 px curve, half the bytes of 6
+            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 2); };   // fb508 -- 2 dp: still sub-pixel on a ~700 px curve; a third fewer bytes to format and to parse, on the host's UI thread
             juce::String s;
             s.preallocateBytes (96 * 1024);   // fb342 — was 4096 unreserved += appends
             s << "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
