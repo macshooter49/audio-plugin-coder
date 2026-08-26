@@ -149,6 +149,13 @@ result 2–5×.
    agent recorded honestly: audio played before the plugin window has *ever* been opened is not
    captured; arming stems costs an ~80 ms message-thread pause on first sample load; a wavetable
    preset change while playing lands up to 16.7 ms later.
+   **Mac re-verified at fb516 (2026-08-26), fb515 + a stamp bump only:** auval battery peak
+   **11,646 MB (fb497) → 9,222 MB** — the fb498 modal arm landing on macOS. `au_blk_cpu`:
+   blk-45 **3.05%**, slope **1.54×**, "FLAT ENOUGH". pluginval strictness 5 both formats,
+   auval exit 0, UI suites eq 15/0 · fx4 131/0 · fx3 48/0 · fxmod 19/0. Of the two ratchet
+   halves above, the **ModalEngine ctor half is DONE (fb498)**; `releaseResources()` never
+   freeing the rings is the half that remains.
+
 2. **The "18 GB leak" is NOT a leak** — proven (`leaks`: 0 leaked bytes; 2 ctors / 2 dtors; the
    growth converges to +0.0 MB by the third pass). It is **sizing plus a grow-only ratchet**:
    `releaseResources()` never frees the rings, and `ModalEngine` waveguide delay lines are
