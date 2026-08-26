@@ -646,6 +646,82 @@ static int editorMode (Host& host, int blk, double seconds, bool openEditor, boo
     return 0;
 }
 
+// __ fb516: THE KEEP-ALIVE ACCEPTANCE HARNESS ______________________________________________
+// open -> settle -> close -> 8 s HIDDEN phase -> reopen. Readiness signal: the fb504 exp hook
+// (terrain-ui-exp.js in TEMP) -- its result file appears on the first editor tick after
+// pageReady, uniformly for both opens (the keep-alive implementation must re-arm the hook on
+// reattach). The PS driver samples msedgewebview2 CPU between the HIDDEN-PHASE markers.
+// Today (no cache) REOPEN reads as a full cold boot; the bar is REOPEN < 600 ms, hidden CPU ~0.
+static int reopenMode (Host& host, int blk)
+{
+    auto inst = host.make (blk);
+    if (inst == nullptr) return 1;
+    inst->enableAllBuses();
+    inst->setRateAndBufferSizeDetails (SR, blk);
+    inst->prepareToPlay (SR, blk);
+
+    const auto expFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-ui-exp.js");
+    const auto resFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-ui-exp-result.txt");
+
+    juce::AudioProcessorEditor* ed = nullptr;
+    std::unique_ptr<juce::DocumentWindow> win;
+
+    auto openEd = [&] (const char* tag, double* msOut) -> bool
+    {
+        resFile.deleteFile();
+        expFile.replaceWithText (juce::String ("\'") + tag + "\'");
+        const double t0 = juce::Time::getMillisecondCounterHiRes();
+        ed = inst->createEditorIfNeeded();
+        if (ed == nullptr) { std::printf ("  !! no editor\n"); return false; }
+        win = std::make_unique<juce::DocumentWindow> ("Terrain reopen harness", juce::Colours::black,
+                                                      juce::DocumentWindow::allButtons);
+        win->setUsingNativeTitleBar (true);
+        win->setContentNonOwned (ed, true);
+        win->centreWithSize (ed->getWidth(), ed->getHeight());
+        win->setVisible (true);
+        win->setAlwaysOnTop (true);
+        win->toFront (true);
+        while (! resFile.existsAsFile())
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            if (juce::Time::getMillisecondCounterHiRes() - t0 > 30000.0)
+            { std::printf ("  !! %s: page never became ready (30 s)\n", tag); return false; }
+        }
+        *msOut = juce::Time::getMillisecondCounterHiRes() - t0;
+        return true;
+    };
+    auto closeEd = [&]
+    {
+        if (win != nullptr) { win->setVisible (false); win->clearContentComponent(); win.reset(); }
+        if (ed != nullptr)  { inst->editorBeingDeleted (ed); delete ed; ed = nullptr; }
+    };
+
+    double open1 = 0.0, reopen = 0.0;
+    if (! openEd ("r1", &open1)) return 1;
+    std::printf ("  OPEN1   %8.0f ms   (ws %6.0f MB)\n", open1, workingSetMB());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (800);   // settle; never close mid-boot
+    closeEd();
+
+    std::printf ("  HIDDEN-PHASE-START  (ws %6.0f MB after close)\n", workingSetMB());
+    std::fflush (stdout);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (8000);
+    std::printf ("  HIDDEN-PHASE-END    (ws %6.0f MB)\n", workingSetMB());
+    std::fflush (stdout);
+
+    if (! openEd ("r2", &reopen)) return 1;
+    std::printf ("  REOPEN  %8.0f ms   (ws %6.0f MB)\n", reopen, workingSetMB());
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (500);
+    closeEd();
+
+    const char* cache = std::getenv ("TERRAIN_UI_CACHE");
+    std::printf ("  CACHE   %s\n", cache != nullptr ? cache : "(default)");
+    std::printf ("  verdict: %s\n\n", reopen < 600.0 ? "REOPEN IS INSTANT-CLASS (< 600 ms)"
+                                                           : "reopen is a cold boot");
+    inst->releaseResources();
+    inst.reset();
+    return 0;
+}
+
 int main (int argc, char** argv)
 {
     // --editor creates a real window and hands the exit path to JUCE's message loop, which does
@@ -663,6 +739,7 @@ int main (int argc, char** argv)
     int  holdBlk = 0; double holdSec = 25.0; bool ftz = false;
     int  edBlk = 0; bool edOpen = true;
     bool playEd = false;
+    bool wantReopen = false;   // fb516 -- keep-alive acceptance harness
     bool wantParams = false; juce::String paramFilter;
     for (int i = 1; i < argc; ++i)
     {
@@ -674,6 +751,7 @@ int main (int argc, char** argv)
         else if (a.startsWith ("--editor=")) edBlk = a.substring (9).getIntValue();
         else if (a == "--noeditor") { edOpen = false; if (edBlk == 0) edBlk = 512; }
         else if (a == "--play") playEd = true;
+        else if (a == "--reopen") wantReopen = true;   // fb516
         else if (a.startsWith ("--params")) { wantParams = true; if (a.startsWith ("--params=")) paramFilter = a.substring (9); }
         else if (a.startsWith ("--hold=")) holdBlk = a.substring (7).getIntValue();
         else if (a.startsWith ("--secs=")) holdSec = a.substring (7).getDoubleValue();
@@ -689,6 +767,7 @@ int main (int argc, char** argv)
     if (wantModal) return modalMode (host);
     if (wantModalLive) return modalLiveMode (host);
     if (holdBlk > 0) return holdMode (host, holdBlk, holdSec, ftz);
+    if (wantReopen) return reopenMode (host, edBlk > 0 ? edBlk : 512);   // fb516
     if (edBlk > 0) return editorMode (host, edBlk, holdSec, edOpen, playEd);
     if (wantParams) return paramsMode (host, paramFilter);
 
