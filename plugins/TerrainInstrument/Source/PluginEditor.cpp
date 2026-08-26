@@ -1,6 +1,9 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include <cstdlib>   // fb491 — getenv/_putenv_s for the WebView2 browser args
+#include <cstdio>    // fb509 — snprintf: the frame builders format floats without juce::String heap churn
+#include <cstring>
+#include <vector>
 #include "BinaryData.h"
 
 // fb132 — CARD PRESETS: user presets live beside the imports registry
@@ -5491,6 +5494,15 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     } uiClock_ { audioProcessor };
 
+    // fb509 -- per-segment tick meter: where do the milliseconds of a play-state tick go?
+    long long __segT = (long long) juce::Time::getHighResolutionTicks();
+    auto SEGM = [&] (int i)
+    {
+        const long long n = (long long) juce::Time::getHighResolutionTicks();
+        audioProcessor.uiSegTicks_[i].fetch_add (n - __segT, std::memory_order_relaxed);
+        __segT = n;
+    };
+
     // fb480 -- before the first page load, the ONLY per-tick duty is the size self-heal (FL
     // replays junk sizes at attach, which happens exactly in this window). Everything else in
     // this function builds or sends JS, and a WebView2 that has not loaded a page yet must not
@@ -5758,6 +5770,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
            << SF(envFollow, 4) << "," << SF(envStage, 4) << ");}}catch(e){}";
     }
 
+    SEGM (0);   // fb509 seg0 = pre (hook/zoom/heal/watchdog)
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     {
         juce::String eArr, lArr, pArr, xArr, yArr;
@@ -5912,6 +5925,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     }
 
+    SEGM (1);   // fb509 seg1 = modviz + card feeds
     // ── Sample engine MIDI followers (one playhead per held note) ──
     // SAMPLE-FOLLOWER (multi) — push every sounding voice's per-osc read position as a flat
     // [voiceIdx,pos, voiceIdx,pos, …] list. JS keys each line by voiceIdx for stable identity and
@@ -6000,6 +6014,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     }
 
+    SEGM (2);   // fb509 seg2 = followers+annulus+harm
     // ── OSC SCOPE — push the most-active voice's 4 live osc waveform windows ──
     // Read the lock-free oscScope atoms published by the audio thread and hand them
     // to the WebUI's window.updateOscScope. When no voice sounds (active=false) we
@@ -6039,46 +6054,56 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
                 const int s1 = audioProcessor.oscScopeSeq.load(std::memory_order_acquire);
                 if (s0 == s1) break;                           // consistent snapshot
             }
-            juce::String os;
-            os.preallocateBytes(20000);   // fb486 -- 4×512 floats @2dp ≈ 11 KB (stride-2 diet)
-            os << "try{if(window.updateOscScope){window.updateOscScope({";
+            // fb509 — same disease, same cure as the EQ block: the meter measured this build at
+            // 17.8% of a core at 30 Hz (~6 ms per build) — ~1,050 juce::String heap allocations
+            // per frame. One char buffer + snprintf produces the identical bytes.
+            std::vector<char> ob;
+            ob.reserve (24 * 1024);
+            auto AP  = [&ob] (const char* p) { ob.insert (ob.end(), p, p + std::strlen (p)); };
+            auto API = [&ob] (long long v)  { char b[24]; const int n = std::snprintf (b, sizeof b, "%lld", v);
+                                              if (n > 0) ob.insert (ob.end(), b, b + n); };
+            auto APF = [&ob] (float v, int dp) { char b[24]; if (! std::isfinite (v)) v = 0.0f;
+                                                 const int n = std::snprintf (b, sizeof b, "%.*f", dp, (double) v);
+                                                 if (n > 0) ob.insert (ob.end(), b, b + n); };
+            AP ("try{if(window.updateOscScope){window.updateOscScope({");
             static const char* oscKey[4] = { "a", "b", "c", "d" };
             for (int o = 0; o < 4; ++o)
             {
-                os << oscKey[o] << ":[";
+                AP (oscKey[o]); AP (":[");
                 // fb486 — stride-2 + 2 dp: the scope canvas is a few hundred px wide and ~150 px
                 // tall, so 512 points at 0.01 resolution is at or beyond what a pixel can show.
                 // sr is advertised at HALF below so spp = sr/hz and the scroll advance stay EXACT.
                 for (int s = 0; s < N; s += 2)
                 {
-                    if (s > 0) os << ",";
-                    os << SF(win[o][s], 2);
+                    if (s > 0) ob.push_back (',');
+                    APF (win[o][s], 2);
                 }
-                os << "],";
+                AP ("],");
             }
-            os << "hz:" << SF(oscHz, 3) << ",sr:" << SF(oscSr * 0.5f, 1)   // fb486 -- half: the window is stride-2 decimated
-               << ",nv:" << audioProcessor.oscScopeNv.load(std::memory_order_relaxed)
-               << ",lv:" << SF(audioProcessor.oscScopeLv.load(std::memory_order_relaxed), 3)
-               << ",tl:" << (audioProcessor.oscScopeTail.load(std::memory_order_relaxed) ? 1 : 0)
-               << ",orms:" << SF(audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4);
+            AP ("hz:");    APF (oscHz, 3);
+            AP (",sr:");   APF (oscSr * 0.5f, 1);   // fb486 -- half: the window is stride-2 decimated
+            AP (",nv:");   API (audioProcessor.oscScopeNv.load(std::memory_order_relaxed));
+            AP (",lv:");   APF (audioProcessor.oscScopeLv.load(std::memory_order_relaxed), 3);
+            AP (",tl:");   API (audioProcessor.oscScopeTail.load(std::memory_order_relaxed) ? 1 : 0);
+            AP (",orms:"); APF (audioProcessor.oscScopeORms.load(std::memory_order_relaxed), 4);
             // VIZDBG forensics — per-osc window peak / engine / unison / mip / FM index / auto-gain
-            os << ",wpk:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeWpk[(size_t) o].load(std::memory_order_relaxed), 3); }
-            os << "],eng:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeEng[(size_t) o].load(std::memory_order_relaxed); }
-            os << "],au:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeAu[(size_t) o].load(std::memory_order_relaxed); }
-            os << "],mip:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << audioProcessor.oscScopeMip[(size_t) o].load(std::memory_order_relaxed); }
-            os << "],d1e:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeD1e[(size_t) o].load(std::memory_order_relaxed), 2); }
-            os << "],un:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeUn[(size_t) o].load(std::memory_order_relaxed), 2); }
-            os << "],gt:[";
-            for (int o = 0; o < 4; ++o) { if (o) os << ","; os << SF(audioProcessor.oscScopeGt[(size_t) o].load(std::memory_order_relaxed), 2); }
-            os << "],bad:" << audioProcessor.oscScopeBad.load(std::memory_order_relaxed)
-               << ",active:true});}}catch(e){}";
-            js << os;
+            AP (",wpk:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); APF (audioProcessor.oscScopeWpk[(size_t) o].load(std::memory_order_relaxed), 3); }
+            AP ("],eng:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); API (audioProcessor.oscScopeEng[(size_t) o].load(std::memory_order_relaxed)); }
+            AP ("],au:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); API (audioProcessor.oscScopeAu[(size_t) o].load(std::memory_order_relaxed)); }
+            AP ("],mip:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); API (audioProcessor.oscScopeMip[(size_t) o].load(std::memory_order_relaxed)); }
+            AP ("],d1e:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); APF (audioProcessor.oscScopeD1e[(size_t) o].load(std::memory_order_relaxed), 2); }
+            AP ("],un:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); APF (audioProcessor.oscScopeUn[(size_t) o].load(std::memory_order_relaxed), 2); }
+            AP ("],gt:[");
+            for (int o = 0; o < 4; ++o) { if (o) ob.push_back (','); APF (audioProcessor.oscScopeGt[(size_t) o].load(std::memory_order_relaxed), 2); }
+            AP ("],bad:"); API (audioProcessor.oscScopeBad.load(std::memory_order_relaxed));
+            AP (",active:true});}}catch(e){}");
+            js << juce::String::fromUTF8 (ob.data(), (int) ob.size());
         }
         else if (! oscActive)
         {
@@ -6088,6 +6113,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         }
     }
 
+    SEGM (3);   // fb509 seg3 = osc scope
     // ── Mod state lifecycle ──
     // Before pageReady: RESTORE — push saved state every tick (JS may not be ready yet)
     // After pageReady:  SAVE    — pull serialized state from JS every 5 ticks (~83ms)
@@ -6176,6 +6202,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // SpectrumAnalyzer's 75% FFT overlap (~47 fresh frames/s @ 48 kHz), this
     // gives a smooth 60 Hz visual on the EQ canvas.
     //
+    SEGM (4);   // fb509 seg4 = mod-state save
     // fb342 — TWO GATES on this push (it was the loudness-lag tax): readLatest() latches
     // non-null FOREVER after the first note ever played, so this ~40-80KB string was built
     // + pushed at 60Hz for the rest of the session even with every consumer hidden —
@@ -6220,32 +6247,31 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         if (pushEqW && wanted && spectrumLive && fresh && preBins != nullptr && postBins != nullptr && webView != nullptr)   // fb486 whale gate + fb507 silence gate
         {
             eqPushSeqPre_ = seqPre; eqPushSeqPost_ = seqPost;
-            // Build a JS call: window.__terrainEqAnalyzer({pre:[...], post:[...]});
-            // ~80 KB string at 60 Hz. Modern WebView handles it.
-            // VIZ-BULLETPROOF — sanitize like the main tick string: a NaN bin (filter
-            // blowup under hot FM) would print 'nan' = ReferenceError = dead EQ eval.
-            auto SFE = [] (float v) { return juce::String (std::isfinite (v) ? v : 0.0f, 2); };   // fb508 -- 2 dp: still sub-pixel on a ~700 px curve; a third fewer bytes to format and to parse, on the host's UI thread
-            juce::String s;
-            s.preallocateBytes (96 * 1024);   // fb342 — was 4096 unreserved += appends
-            s << "try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[";
-            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
-            {
-                if (i > 0) s += ",";
-                s += SFE (preBins[i]);
-            }
-            s += "],post:[";
-            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i)
-            {
-                if (i > 0) s += ",";
-                s += SFE (postBins[i]);
-            }
-            s += "],sr:";   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
-            s << juce::String (audioProcessor.getSampleRate(), 1);
-            s += "});}catch(e){}";
-            js << s;   // fb483 coalesced
+            // fb509 — THE WHALE WAS THE FORMATTING, NOT THE FFT AND NOT THE CADENCE. The
+            // per-segment meter measured this block at 32.1% of a core AT 15 Hz — ~21 ms per
+            // build — because every bin became a heap-allocated juce::String plus a += that
+            // re-walks the buffer. snprintf into one stack-grown char buffer is the same bytes
+            // at a fraction of the cost. (VIZ-BULLETPROOF kept: NaN sanitised before printing —
+            // a 'nan' token would be a ReferenceError and a dead EQ eval.)
+            std::vector<char> ob;
+            ob.reserve (48 * 1024);
+            auto AP  = [&ob] (const char* p) { ob.insert (ob.end(), p, p + std::strlen (p)); };
+            auto APF = [&ob] (float v) { char b[24]; if (! std::isfinite (v)) v = 0.0f;
+                                         const int n = std::snprintf (b, sizeof b, "%.2f", (double) v);
+                                         if (n > 0) ob.insert (ob.end(), b, b + n); };
+            AP ("try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[");
+            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (preBins[i]); }
+            AP ("],post:[");
+            for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (postBins[i]); }
+            AP ("],sr:");   // fb442 — the page hard-coded 48000; a 44.1 k session drew every spectrum 8.8 % sharp
+            { char b[32]; const int n = std::snprintf (b, sizeof b, "%.1f", audioProcessor.getSampleRate());
+              if (n > 0) ob.insert (ob.end(), b, b + n); }
+            AP ("});}catch(e){}");
+            js << juce::String::fromUTF8 (ob.data(), (int) ob.size());   // fb483 coalesced — ONE conversion for the whole block
         }
     }
 
+    SEGM (5);   // fb509 seg5 = EQ spectrum block
     // ── GEODE SPECTRUM — waterfall viz. An editor-side "display engine" per osc runs the REAL
     //    interpolate+sculpt (GeodeEngine::computeDisplayEnvelope — no audio synth) so the spectrum
     //    reacts to POSITION + every sculpt knob even when no note sounds. Pushed as a SEPARATE
@@ -6385,6 +6411,7 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
     // keep-alive every 30 ticks so wd9 and the ack loop stay fed. Never skipped before
     // pageReady: the RESTORE pushes must repeat until the page can eat them.
     {
+        SEGM (6);   // fb509 -- everything after geode, up to hash+ship
         audioProcessor.uiBuildMark_ = (long long) juce::Time::getHighResolutionTicks();   // fb501 — build ends, ship begins
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)

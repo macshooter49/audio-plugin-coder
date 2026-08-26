@@ -212,6 +212,11 @@
   try {
     var stK = document.createElement('style');
     stK.id = 'ti-static-decor';
+    /* fb509b — the ARP pulses go BACK on the kill list: re-enabling them as CSS was measured at
+       ~108% of a core (synth-idle 88 -> 196 with only those four tweens live), because CSS
+       animations tick at COMPOSITOR rate — the full 360 Hz panel — and nothing in the page can
+       pace them. Their motion is rebuilt below as a JS tween on the paced clock (see arpTick):
+       same keyframes, same timing, ~60 fps cost. */
     stK.textContent = '.mod-btn.has-routes,#mod-engine .mv-stroke,.mv-ext .es .mv-stroke,#env-line,'
       + '.fxr-core .dst-curve,.fxr-core .grn-wave,.flow-mode .arpNote,.flow-mode .arpLine,'
       + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}';
@@ -242,6 +247,53 @@
     if (window.__tiOff && window.__tiOff('syn-panel')) return;   /* fb508b — tiles off screen: no scrub */
     for (var i = 0; i < smilList.length; i++){
       try { smilList[i].setCurrentTime(smilList[i].getCurrentTime() + dt); } catch(e) {}
+    }
+    arpTick(dt);   /* fb509b — the ARP tile rides the same paced clock */
+  }
+
+  /* fb509b — THE ARP TILE'S PULSES, as a paced JS tween. Byte-faithful to the killed CSS:
+       flwArpFire 1.9s: 0/68-100% op .4 sc 1 · 8% op 1 sc 1.55 · 34% op .4  (n2 +0.2s, n3 +0.4s)
+       flwArpFlow 1.0s linear: stroke-dashoffset 0 -> -22                    (l2 +.18s, l3 +.36s)
+       flwChord   1.9s: op .75 <-> 1 · flwSeqLit 2.2s: op .35 <-> 1          (s2/.4 s3/.8 s4/1.2)
+     Inline styles only — geometry untouched (the fixed-positions law). */
+  var arpT = 0, arpEls = null, arpScan = 0;
+  function arpAt(t, a, b, c, oa, ob2, oc){ /* piecewise: 0..a..b..c(=1) keyframe fractions */
+    if (t < a) return oa + (ob2 - oa) * (t / a);
+    if (t < b) return ob2 + (oc - ob2) * ((t - a) / (b - a));
+    return oc;
+  }
+  function arpTick(dt){
+    arpT += dt;
+    if ((++arpScan & 255) === 1 || !arpEls){
+      arpEls = {
+        notes: document.querySelectorAll('.flow-mode .arpNote'),
+        lines: document.querySelectorAll('.flow-mode .arpLine'),
+        holds: document.querySelectorAll('.flow-mode .arpHold'),
+        sqs:   document.querySelectorAll('.flow-mode .sq'),
+      };
+    }
+    var i, el, ph, v;
+    for (i = 0; i < arpEls.notes.length; i++){
+      el = arpEls.notes[i];
+      ph = ((arpT - i * 0.2) / 1.9 % 1 + 1) % 1;
+      v  = arpAt(ph, 0.08, 0.34, 1, 0.4, 1, 0.4);
+      var sc = arpAt(ph, 0.08, 0.34, 1, 1, 1.55, 1);
+      try { el.style.opacity = v.toFixed(3); el.style.transform = 'scale(' + sc.toFixed(3) + ')'; } catch(e) {}
+    }
+    for (i = 0; i < arpEls.lines.length; i++){
+      el = arpEls.lines[i];
+      ph = ((arpT - i * 0.18) / 1.0 % 1 + 1) % 1;
+      try { el.style.strokeDashoffset = (-22 * ph).toFixed(2); } catch(e) {}
+    }
+    for (i = 0; i < arpEls.holds.length; i++){
+      el = arpEls.holds[i];
+      ph = (arpT / 1.9 % 1);
+      try { el.style.opacity = (0.75 + 0.25 * (0.5 - 0.5 * Math.cos(ph * 6.2832))).toFixed(3); } catch(e) {}
+    }
+    for (i = 0; i < arpEls.sqs.length; i++){
+      el = arpEls.sqs[i];
+      ph = (((arpT - i * 0.4) / 2.2) % 1 + 1) % 1;
+      try { el.style.opacity = (0.35 + 0.65 * (0.5 - 0.5 * Math.cos(ph * 6.2832))).toFixed(3); } catch(e) {}
     }
   }
   function smilLoop(){

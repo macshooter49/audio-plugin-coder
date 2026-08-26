@@ -1015,6 +1015,10 @@ public:
     // them; message thread only, so plain relaxed atomics are ample. Reported in the same probe
     // line as the DSP split, because "the window costs +17.5 points" needed a number and had none.
     std::atomic<long long> uiTicksTotal_ { 0 }, uiTicksBuild_ { 0 }, uiTicksShip_ { 0 };
+    // fb509 — PER-SEGMENT tick meter: the 55%-of-a-core play-state build was guessed at twice
+    // (spectrum cadence, formatting) and both guesses missed. Segment names in the editor.
+    static constexpr int kUiSegs = 10;
+    std::atomic<long long> uiSegTicks_[kUiSegs] {};
     std::atomic<int>       uiTickCount_  { 0 };
     long long              uiBuildMark_  = 0;   // message thread only — where build ends / ship begins
     bool vizConsumersLive() const noexcept { return uiClients_.load (std::memory_order_relaxed) > 0; }

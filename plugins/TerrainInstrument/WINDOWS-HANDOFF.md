@@ -465,3 +465,35 @@ meter to PER-SEGMENT timings, then likely move whale builds to a background comp
 60 during notes; options: 30 fps under notes, or the push-clock migration. (3) rest poses for
 the remaining front loopers (fxAnimate tape viz, delay comet). (4) LFO/env push-paint migration.
 (5) editor open 5-10 s.
+
+### fb509 — the per-segment meter caught the real whale: juce::String FORMATTING
+
+The play-state tick was guessed at twice (spectrum cadence, decimal places) and both guesses
+missed. A 7-bucket per-segment meter (SEGM marks in timerCallback; probe line "SEG pre|mv|fol|
+scope|save|eq|geo") named it in one run:
+    eq 32.1% + scope 17.8% of one core — AT 15 Hz / 30 Hz. ~21 ms per spectrum build.
+Not the FFTs. Not the cadence. **juce::String: one heap-allocated String object per float plus a
++= that re-walks the buffer, thousands per frame.** Rewritten as snprintf into one reserved
+std::vector<char>, converted once at the end:
+    scope 17.8 -> 0.9   eq 32.1 -> 2.3   UI build 53.7 -> 10.8   tick 13.5 -> 3.4 ms @ 58 Hz
+    plugin process during synth-page play: ~90 -> ~46
+LAW: never build a push segment with juce::String appends — snprintf into a char buffer, wrap once.
+
+Also this round:
+- ARP tile: it was the one FLOW tile animated by CSS (others are SMIL, hence the scrubber moved
+  3 of 4). Re-enabling its four CSS tweens cost ~108% of a core, A/B-measured (88 -> 196) — CSS
+  animations tick at the 360 Hz compositor and cannot be paced. Rebuilt as a byte-faithful JS
+  tween (arpTick) on the paced clock, riding the SMIL scrubber loop. All four modes now move.
+- LFO "Free acts like retrigger at the 8-bar loop": NOT a bug and NOT Windows. A tempo-SYNCED
+  LFO locks phase to host transport (PluginProcessor.cpp:9115 setPhaseFromTransport, "locks to
+  bar + arp clock"), so a loop wrap audibly resets it — identical code on Mac. If Free+sync
+  should free-run through loop wraps, that is a cross-platform DSP design decision for the Mac
+  session; do not change unilaterally.
+
+Four states (WV / proc): synth-idle 96.5/33 · synth-play 124/46 · front-idle 103/30 ·
+front-play 198/37. Everything animates continuously. All gates green; fingerprint bit-identical;
+installed.
+
+NEXT: (1) front-play ~198 — the hero at paced 60 during notes (push-clock migration or 30 fps
+under notes). (2) the push-paint migration proper (LFO playhead first — deletes the PLL). (3)
+ship lane 9-10% [ship] — emitEvent hop; possibly batch. (4) editor open 5-10 s.
