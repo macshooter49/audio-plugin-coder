@@ -51,6 +51,21 @@ const URL = 'file:///C:/dev/audio-plugin-coder/plugins/TerrainInstrument/Source/
   check('a note clears __tiQuiet (<800ms)', !s3b);
   await p.evaluate(() => { window.__notesActive = 0; });
 
+  // fb512: notes sounding + hands-off >2s -> the page paces to ~30 (NOT 60, and NOT the 15 the
+  // fb510 hero / fb487 topo / fb492 analyzer alternators would compound to). A single note-on sets
+  // lastAct via the __notesActive setter (fb505 instant-wake), so we wait past the 2s hands-off
+  // window before measuring. This check directly guards the accumulator fix (the first fb512 draft
+  // advanced lastFrame by a hardcoded 1/60, so 30 silently stayed ~60 — this would read ~60 and FAIL).
+  await p.evaluate(() => { window.__notesActive = 1; });
+  await new Promise(r => setTimeout(r, 2300));
+  const playFps = await p.evaluate(() => new Promise(res => {
+    let n = 0; const t0 = performance.now();
+    function tick(){ n++; if (performance.now() - t0 < 2000) window.requestAnimationFrame(tick); else res(n / 2); }
+    window.requestAnimationFrame(tick);
+  }));
+  check(`hands-off playback paces to ~30fps, not 60 (measured ${playFps.toFixed(0)}/s)`, playFps > 22 && playFps < 42);
+  await p.evaluate(() => { window.__notesActive = 0; });
+
   // 4: callbacks never dropped
   const kept = await p.evaluate(() => new Promise(res => {
     let ran = false;

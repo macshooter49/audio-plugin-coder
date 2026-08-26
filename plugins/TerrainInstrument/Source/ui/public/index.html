@@ -32,6 +32,7 @@
    State-persists law: parked callbacks are QUEUED, never dropped — on wake they run with a large
    timestamp jump, which the loops' own dt clamps and the fb493 PLL already absorb. */
 (function(){
+  window.__uiPaceFps = window.__uiPaceFps || 60; window.__uiStepScale = window.__uiStepScale || 1;   /* fb512 -- single rate authority; Mac keeps 60/1 so every gate below is a no-op there */
   if (!/Windows/.test(navigator.userAgent)) return;
   var raf = window.requestAnimationFrame.bind(window);
   var q = new Map(), nid = 0, scheduled = false, parked = false, styleDone = false;
@@ -101,7 +102,18 @@
          would run its loops at panel rate (360 fps here) forever. The fb506 page-aware split
          existed to dodge a +25-point hero misalignment cost during play; that trade inverts
          once idle animation runs continuously. */
-      var minGap = 1000 / (window.__UI_FPS || 60) - 1.2;
+      /* fb512 — HANDS-OFF PLAYBACK PAINTS AT 30. Max's screenshots: six instances playing read
+         55 with windows closed and 73 with one open — and after the migration that cost is
+         UNIFORM (one clock), so the remainder IS the real reactive painting at 60 fps. When
+         notes are sounding but the user has not touched the window for 2 s, the whole page
+         paints at 30 (every migrated painter rides this clock, so one line halves the lot —
+         scope, analyzer, LFO, meters). The FIRST pointer/wheel/key snaps it back to 60
+         instantly, so anything you are actually watching while you tweak is full-rate. Pure
+         idle (no notes) is unaffected — the push lane is already asleep there. */
+      var fps = window.__UI_FPS
+             || ((window.__notesActive && performance.now() - lastAct > 2000) ? 30 : 60);
+      window.__uiPaceFps = fps; window.__uiStepScale = 60 / fps;   /* fb512 -- authority: 60->1.0, 30->2.0 */
+      var minGap = 1000 / fps - 1.2;
       if (ts - lastFrame < minGap){
         /* fb506b — wait out the remainder with a TIMER, never a rAF re-arm: a pending rAF keeps
            Chromium's BeginFrame machinery producing frames at the full 360 Hz panel rate even
@@ -114,7 +126,7 @@
         }
         return;
       }
-      lastFrame = (ts - lastFrame > 250) ? ts : lastFrame + (1000 / (window.__UI_FPS || 60));
+      lastFrame = (ts - lastFrame > 4000 / fps) ? ts : lastFrame + (1000 / fps);
       runQueue(ts);
       return;
     }
@@ -7972,7 +7984,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             function tick(){ if(window.__cardOnly)return;
               /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ return; }
               try{
-              t+=0.016; var arr=BANKS[bank];
+              t+=0.016*(window.__uiStepScale||1); var arr=BANKS[bank];
               for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
             }catch(e){} }   /* fb505 deco -- analog wander is decoration; fb511 rides __tiFrame */
             window.__tiFrameReg('rr-wander', tick);
@@ -11472,7 +11484,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                   // 30Hz (dwell is 4-12s — invisible) and an unchanged cell (|Δop|<=0.01, i.e. the
                   // unlit majority at small Size) writes nothing. The values still compute every
                   // pass, so nothing can freeze — only redundant setAttribute style-recalcs die.
-                  if(((scF=(scF+1)&1)===0)) for(var i=0;i<cells.length;i++){ var q=P[i];
+                  if(((window.__uiPaceFps|0)<=45)||((scF=(scF+1)&1)===0)) for(var i=0;i<cells.length;i++){ var q=P[i];
                     var v=0.5+0.27*Math.sin(t*q.w1+q.p1)+0.23*Math.sin(t*q.w2+q.p2); // wandering 0..1 life value
                     var gate=Math.max(0,Math.min(1,(T-v)/0.18));                     // soft fade in/out as v dips under the Size threshold
                     var op=Math.max(0,gate*(0.6+0.35*Math.sin(t*q.w3+q.p3)));        // alive pulse when lit (.25-.95)
@@ -13937,7 +13949,7 @@ window.__synArc = function (ring, n, bipolar) {
       // swallowed this guard into the comment, so the contour map has been running in every popped
       // card window since. fb487's own half-rate skip follows, on its own line this time.
       /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ return; }   /* fb505 deco -- fb511: __tiFrame re-calls */   // the whole synth page is away: no grid, no contours, no gBCR
-      if(window.__WIN_LITE&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
+      if(window.__WIN_LITE&&((window.__uiPaceFps|0)>45)&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
       var t=ts/1000, dt=Math.min(0.05,t-last); last=t; tickF(dt);
       /* fb497 — the 32-frame rect cache drawInto() already uses, for the same reason: this box is
          fixed by layout and was costing one forced-layout gBCR every frame. A DEGENERATE cached
@@ -16322,7 +16334,7 @@ setTimeout(function wireSynControls () {
         var lw = Math.max (1, Math.round (dpr * 1.7));       // matches .mv-stroke width
         ctx.fillStyle = '#ECE8F2';                            // matches .mv-stroke color
         for (var i = 0; i < n; ++i) {
-          cur[i] += ((t[i] || 0) - cur[i]) * 0.4;
+          cur[i] += ((t[i] || 0) - cur[i]) * Math.min(1, 0.4*(window.__uiStepScale||1));
           var h = (cur[i] / 99) * (H * 0.46);                // half-height per side (mirrored)
           if (h > 0.6) ctx.fillRect (Math.round (i * bw + bw * 0.5 - lw * 0.5), mid - h, lw, h * 2);
         }
@@ -22994,7 +23006,7 @@ function drawTapeReels(time) {
 
   // Reel rotation
   if (state.tapeLoop.playing || state.tapeLoop.recording) {
-    state.tapeLoop.reelAngle += 0.05;
+    state.tapeLoop.reelAngle += 0.05*(window.__uiStepScale||1);
   }
   const angle = state.tapeLoop.reelAngle;
 
@@ -24058,7 +24070,7 @@ function animate(timestamp) {
          whole play-time cost, ~150% gpu at paced 60). At 3,696 canvas ops per frame, 30 fps on
          a t*0.4 Perlin drift is imperceptible — the same call fb487 made for the topo map. The
          final rest frame always draws so the settle never half-finishes. */
-      var __heroHalf = (window.__heroRest < 1) && (((window.__heroAlt2 = (window.__heroAlt2 | 0) + 1) & 1) === 1);
+      var __heroHalf = (window.__heroRest < 1) && ((window.__uiPaceFps|0) > 45) && (((window.__heroAlt2 = (window.__heroAlt2 | 0) + 1) & 1) === 1);
       if (!__heroHalf) renderTerrain(__rt);
       updateSectionIcons();
       updateAnimatedIcons(__rt);
@@ -28004,7 +28016,7 @@ restoreThemeFromBackend();
     var redraw=false;
     if(st.shape===9||st.shape===10){
       if(chaosStShape!==st.shape||chaosTrail.length===0){ chaosPrime(st.shape); redraw=true; }   // fb244 — static butterfly on entry OR after a tab-hop clear (was: empty scope until a note)
-      if(window.__notesActive){ chaosAdvance(st.shape, Math.max(0.001,effHz())*(st.shape===9?7:4.5)/60); redraw=true; }   // Serum: animate only while a note plays; FREE = state persists
+      if(window.__notesActive){ chaosAdvance(st.shape, Math.max(0.001,effHz())*(st.shape===9?7:4.5)/60*(window.__uiStepScale||1)); redraw=true; }   // Serum: animate only while a note plays; FREE = state persists
     } else {
       var v=(window.__mvLfoVal&&window.__mvLfoVal[st.tab-1]!=null)?window.__mvLfoVal[st.tab-1]:((typeof mvL!=='undefined'&&mvL)?(mvL[st.tab-1]||0):0);
       duneHist.push(v); if(duneHist.length>170)duneHist.shift();
@@ -29044,7 +29056,7 @@ restoreThemeFromBackend();
     var lhz=liveV?((curSlot===2)?liveV[2]:liveV[0]):-1, lrs=liveV?((curSlot===2)?liveV[3]:liveV[1]):0;
     var tf=Math.log(Math.max(20,(lhz>0?lhz:bf))), tr=Math.max(0,Math.min(1,(lhz>0?lrs:br)));
     if(!liveInit){ liveFcS=tf; liveRsS=tr; liveInit=true; }
-    liveFcS+=(tf-liveFcS)*0.35; liveRsS+=(tr-liveRsS)*0.35;
+    var __fS=Math.min(1,0.35*(window.__uiStepScale||1)); liveFcS+=(tf-liveFcS)*__fS; liveRsS+=(tr-liveRsS)*__fS;
     liveFc=Math.exp(liveFcS); liveRes=liveRsS;
   }
   var inLvl=0; // smoothed input level (drives the curve's aliveness)
@@ -29094,7 +29106,7 @@ restoreThemeFromBackend();
       y += Math.sin(f*0.012 + t*5 + i*0.22)*ie*(0.6+0.6*Math.max(0,1-ma))*7*dpr;
       if(y<yTop)y=yTop; if(y>yBot+2*dpr)y=yBot+2*dpr;
       crv.push([x,y]); }
-    var lvl=lvlN?lvlAcc/lvlN:0; inLvl+=(Math.min(1,lvl*6)-inLvl)*0.15;
+    var lvl=lvlN?lvlAcc/lvlN:0; inLvl+=(Math.min(1,lvl*6)-inLvl)*Math.min(1,0.15*(window.__uiStepScale||1));
     // spectrum (white) — full height, behind everything. fb156 — DEAD-FEED FADE (the
     // fb66 scope law, extended): at silence every spectrum point clamps to y=H, so the
     // stroke lay exactly on the device's bottom edge as a stray gray hairline (Max's
@@ -29182,7 +29194,7 @@ restoreThemeFromBackend();
     // heaviest painter: a per-CSS-pixel spectrum plus the 94-type transcendental filter model,
     // then eight full stroked passes, every frame. The FEED still smooths every frame (pollLive +
     // smoothLive stay at 60 Hz so nothing lags behind the audio); only the DRAW halves on Windows.
-    var __anlSkip = window.__WIN_LITE && (((window.__anlAlt = (window.__anlAlt|0) + 1) & 1) === 1);
+    var __anlSkip = window.__WIN_LITE && ((window.__uiPaceFps|0) > 45) && (((window.__anlAlt = (window.__anlAlt|0) + 1) & 1) === 1);
     try{ pollLive(); smoothLive(); if(!__anlSkip){ drawAnalyzer(); if(!window.__tiDecoDue||window.__tiDecoDue('fk-em'))drawEmblems(t); } pollHud(); }catch(e){} }
   function buildExt(){
     ext=document.createElement('div'); ext.className='filt-ext';
@@ -33933,7 +33945,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (vizMode === 2 && frame % 48 === 0) refreshWave ();   // healer: pick up a sample loaded while the waveform is shown
         // act tracks the noise's ACTUAL output → 0 when nothing plays. Asymmetric: gentle attack, SLOWER release so
         // the cloud fades out organically (Max: fade out slower / breathe / not robotic).
-        act += (targetAct - act) * (targetAct > act ? 0.06 : 0.028);
+        act += (targetAct - act) * (targetAct > act ? 0.06 : 0.028) * (window.__uiStepScale||1);
         if (! cv._w || cv._w < 2) resize ();
         var w = cv._w, h = cv._h, dpr = cv._dpr;
         ctx.setTransform (dpr, 0, 0, dpr, 0, 0); ctx.clearRect (0, 0, w, h);
@@ -33956,7 +33968,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           // PARTICLE CLOUD — an organic, BREATHING cloud. Smooth continuous drift (each particle floats on its own
           // slow sine paths, no per-frame teleporting), a slow global breath, brighter/wider when a note plays.
           var cx = w * 0.5, cy = h * 0.5, base = Math.min (w, h) * 0.5;
-          breathPh += 0.018;                               // slow global breath (~6 s / cycle) — "take it easy"
+          breathPh += 0.018*(window.__uiStepScale||1);    // slow global breath (~6 s / cycle) — "take it easy"
           var breath = 0.86 + 0.14 * Math.sin (breathPh);  // gentle overall pulse
           var e = 0.18 + 0.82 * act;
           var R = base * (0.34 + 0.42 * act) * breath;     // cloud radius: grows with activity, breathes slowly

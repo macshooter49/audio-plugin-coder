@@ -568,3 +568,61 @@ REMAINING (the honest tail): idle WV ~70 = the 30 fps emblem motion + smilLoop c
 baseline + unmigrated one-shots; play WV ~120 = real reactive painting (scope/analyzer/LFO at
 60). Next candidates if more is wanted: emblem motion rest-posed at quiet (Max said loopers
 loop — his call), remaining setIntervals, the ship lane, editor-open time (5-10 s).
+
+### fb512 — HANDS-OFF PLAYBACK PACES TO 30, DONE RIGHT. And the page/push levers, finally separated by measurement.
+
+Max tested fb511 in a 6-instance FL session: **55% closed, 73% open**, and — his words — "plugin wide now,
+NOT just the synth page." That uniformity is fb511 working (one clock everywhere); the residual +18 is the
+**real reactive painting at 60 fps while notes sound**. He asked for the Serum move: 30 fps viz while hands-off,
+instant 60 the moment you touch the window.
+
+**THE MATRIX (counterbalanced, installed fb511 as the rate proxy, pairs2.ps1, clock-normalized).** Two levers
+were separated for the first time — the PAGE paint cap (arbiter `__UI_FPS`) vs the C++ PUSH rate (`TERRAIN_UI_HZ`):
+
+| play state | stock 60/60 | page-30 | cpp-30 | both-30 |
+|---|---:|---:|---:|---:|
+| **SYNTH** WV | 88 | **54 (-38%)** | 72 (-18%) | 50 (-43%) |
+| SYNTH proc | 34 | 33 | 26 | 27 |
+| **FRONT** WV | 230 | ~217 | ~223 | ~210 |
+
+The verdict is two different physics, exactly as fb506c found:
+- **SYNTH page is PAINT-BOUND** — halving the paint rate nearly halves WebView. The page cap is the dominant lever
+  (it reaches the migrated painters AND the self-re-arming rAF loops — scope, wt-waterfall, spectral, redrawCurve —
+  which a C++-rate change does NOT touch). cpp-30 adds only a little WV but cuts proc; not worth its C++-critical-path
+  risk this round.
+- **FRONT page is COMPOSITE-BOUND** — the hero `renderTerrain` GPU composite is a per-vsync price, RATE-IMMUNE:
+  every lever landed inside the +-30% thermal band (clock swung 120-165%). **30 fps does nothing on the front page.**
+  This is the same wall fb503/fb504 hit: "the only thing that moved it far was stopping every loop."
+
+So fb512 ships the **PAGE-SIDE cap only** — big synth win, zero front regression, page-only, Mac byte-identical.
+
+**DONE RIGHT (the fb511-session one-liner had two real bugs a recon pass caught):**
+1. **The pacing accumulator advanced by a hardcoded `1000/60`**, so at a 30 fps target `lastFrame` drifted and the
+   gate leaked back toward 60 — 30 was never actually 30. Fixed: accumulate by the *actual* period `1000/fps`.
+2. **Pacing to 30 COMPOUNDED five call-count alternators to 15 fps** (hero renderTerrain fb510, topo fb487, filter
+   analyzer fb492, reverb cells fb342, noise-viz poll) **and ran nine hard-coded per-call motion steps at HALF SPEED**
+   (rr-wander, tape reels, LFO chaos `/60`, harmonic + cutoff/res followers, noise breath). That is the "looks laggy"
+   Max has rejected every time. Fixed with a **single rate authority**: the arbiter publishes `window.__uiPaceFps`
+   (60/30) and `window.__uiStepScale` (1.0/2.0) each paced frame; the five alternators now cap-at-30 (`skip only while
+   __uiPaceFps > 45`, so they halve 60->30 but never 30->15), and the nine motion steps multiply by `__uiStepScale`
+   so wall-clock speed holds at any pace. **Mac safety by construction:** both globals default to 60/1 on all platforms
+   (set before the Windows-only early return), so on Mac every gate is a no-op and every step scale is x1 — the Mac
+   path stays byte-identical.
+
+New gate: `arbiter_contract.js` now asserts **hands-off playback paces to ~30 fps, not 60** (would have caught bug #1 —
+it reads ~60 with the accumulator broken). All gates green: eq 15/15, fx4 130/130, fx3 48, flt staleFrames 0,
+arbiter contract ALL PASSED (incl. the new 30fps check), lfo_val_smooth ALL PASSED, modal fingerprint 446f2e02c4dcb215
+(bit-identical — JS-only change, DSP untouched), modal-live PASS.
+
+**GROUND-TRUTH A/B (built fb512 auto-30 vs archived fb511, counterbalanced, -Play):**
+    SYNTH: fb511 83.9 -> fb512 56.6 WV (-33%); normalized 135 -> 90; GPU 40 -> 25, renderer 37 -> 26; proc ~33 unchanged (4-run counterbalanced, clock ~160%)
+    FRONT: fb511 219.5 -> fb512 200.0 WV (-9%, a small bonus -- non-hero front painters go 30 hands-off); normalized 298 -> 270; NO regression (4-run counterbalanced)
+
+**THE HONEST CEILING — read before chasing the front page.** Max's 73 is almost certainly the FRONT/main page open
+(its ~230% WV / 16 threads ~= +14%, + proc ~= the +18 he sees; the synth page open is only ~86% WV ~= +8%). fb512 does
+NOT move the front number, because the front cost is the hero terrain's per-vsync GPU composite, which is rate-immune.
+The next real front-page lever is the HERO ITSELF — its canvas resolution, per-frame paint-op count, and the
+backdrop-filters/layers it composites through — NOT its frame rate (proven dead four times). That is a separate
+campaign and it touches Max's "loopers keep looping / the hero is the identity visual" call, so it is his decision,
+not a unilateral cut. Ranked next levers: (1) hero composite cost (front); (2) cpp-30 during hands-off play as a
+follow-on (needs a page->native rate signal; ~extra 5-7% synth WV + ~20% proc); (3) editor-open 5-10 s.
