@@ -422,6 +422,7 @@ static void terrainCardLogP (const juce::String& msg)
 
 void TerrainInstrumentAudioProcessor::adoptCardWindow (const juce::String& id, std::unique_ptr<juce::Component> w)
 {
+    if (tiTimerHz_ != 60) { tiTimerHz_ = 60; startTimerHz (60); }   // fb514 — a UI is arriving; never let it see a slow first tick
     if (cardWindows_.find (id) == cardWindows_.end())
         uiClients_.fetch_add (1, std::memory_order_relaxed);              // fb148 — viz census
     cardWindows_[id] = std::move (w);
@@ -1200,6 +1201,19 @@ void TerrainInstrumentAudioProcessor::timerCallback()
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
     rebuildGeodeIfNeeded (2); rebuildGeodeIfNeeded (3);
     prepareModalEnginesIfNeeded();   // fb498 — arm MODAL's waveguide lines the first time an osc asks for them
+
+    // fb514 — THE CLOSED-EDITOR IDLE GOVERNOR. This timer dispatches on the HOST'S UI thread;
+    // seven closed instances at 60 Hz = 420 message-thread dispatches a second competing with
+    // FL's playlist painting (the reported scroll tearing). With no UI client the tick's only
+    // real duties are the lazy arms and change-gated rebuilds, all of which the tick itself
+    // detects — so run at 15 Hz when idle-and-closed and snap back to 60 the moment a UI
+    // exists. 15 Hz keeps worst-case automation/arm latency at ~66 ms (the --modal-live gate
+    // pumps 150 ms = at least 2 ticks, and the arm work happens INSIDE the tick that sees it).
+    {
+        const bool uiLive = vizConsumersLive();
+        const int wantHz = uiLive ? 60 : 15;
+        if (wantHz != tiTimerHz_) { tiTimerHz_ = wantHz; startTimerHz (wantHz); }
+    }
 }
 
 // No sample loaded → a default harmonic (saw) store so GEODE sounds the instant it's selected.
@@ -7631,6 +7645,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // Per-layer glow update: walk this layer's voices, write into this
             // layer's sliceGlowLevel. snapshotSliceGlowLevels() reads directly
             // from layers[editingLayer].sliceGlowLevel (Task 5 — singleton removed).
+            if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
             {
                 std::array<float, tw::kMaxGlowSlots> blockMax {};
                 for (int v = 0; v < layer.synth.getNumVoices(); ++v)
@@ -9807,68 +9822,74 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                                             sampleFollowPos_[o][cnt[o]].store (p, std::memory_order_relaxed); ++cnt[o]; }
                         }
                 }
-        ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
+        // fb514 — velVis_ (and the voice walk above that computes it) stays UNGATED: the AUDIO path
+        // reads velVis_ at block-rate (fb263 velocity→global mod routes, velGlobal_) — gating it would
+        // zero velocity modulation in exactly the no-editor render the fingerprint gate checks.
         velVis_.store         ((any && bestVoice != nullptr) ? bestVoice->getCurrentVelocity() : -1.f, std::memory_order_relaxed);   // fb262 — live velocity streak feed (most-active voice)
-        // fb189 — the living underline's feed: every env slot from the most-active voice
-        // (envSourceValue returns level−1 → +1 restores raw 0..1) + the global LFO peeks.
-        for (int k = 0; k < 32; ++k)
-            modVizEnv_[k].store ((any && bestVoice != nullptr)
-                                     ? bestVoice->envSourceValue ((int) wc::envSourceFor (k + 1)) + 1.0f
-                                     : -1.f, std::memory_order_relaxed);
-        for (int k = 0; k < wc::NUM_LFOS; ++k)
+        if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
-            modVizLfo_[k].store (flowLfo_[k].peek(), std::memory_order_relaxed);
-            modVizLfoVX_[k].store (flowLfo_[k].chaosVX(), std::memory_order_relaxed);   // fb239 — the swirl feed
-            modVizLfoVY_[k].store (flowLfo_[k].chaosVY(), std::memory_order_relaxed);
-            {   // fb231 — RETRIG/ENV made VISIBLE: a non-Free LFO's dot rides the most-active VOICE's phase
-                //         (resets per note, pins at Env end); Free/mono keep the mirror. (fb228 contract intact.)
-                const bool vTrig = synModCfg.lfos[k].trigger != wc::LFOTrigger::Free;
-                modVizLfoPh_[k].store ((vTrig && any && bestVoice != nullptr)
-                                           ? bestVoice->lfoPhase (k)
-                                           : flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
-            }
-        }
-        noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
-        // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
-        // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.
-        noiseVizPos_.store ((((int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE)) == 2) ? noiseFreeNorm_.load (std::memory_order_relaxed)
-                                                 : (bestVoice != nullptr ? bestVoice->noiseFollowPos01() : -1.0f),
-                            std::memory_order_relaxed);
-        ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
-        // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
-        synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
-        // fb163 — LIVE FILTER CURVE: same loudest-voice pick feeds the filter display.
-        fltVisHz1_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz1()  : -1.f, std::memory_order_relaxed);
-        fltVisRes1_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes1() :  0.f, std::memory_order_relaxed);
-        fltVisHz2_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz2()  : -1.f, std::memory_order_relaxed);
-        fltVisRes2_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes2() :  0.f, std::memory_order_relaxed);
-        // fb457 — OVERPASS 1: the waterfall rides the SAME loudest-voice pick as the filter curve,
-        // because the filter is the one thing Max said already moved and this is why.
-        // fb457/fb458 — the waterfall's feed. Gated on vizLive: with no editor nobody reads these,
-        // and "no UI, no viz work" is the house law (fb148). Costs a closed plugin exactly nothing.
-        if (vizLive)
-        for (int o = 0; o < 4; ++o)
-            wtFrameVis_[o].store (any && bestVoice != nullptr ? bestVoice->getWtFrameVis (o) : -1.f,
-                                  std::memory_order_relaxed);
-        if (vizLive)
-        for (int o = 0; o < 4; ++o)
-        {
-            const bool live = (any && bestVoice != nullptr);
-            if (live)
+            ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
+            // fb189 — the living underline's feed: every env slot from the most-active voice
+            // (envSourceValue returns level−1 → +1 restores raw 0..1) + the global LFO peeks.
+            for (int k = 0; k < 32; ++k)
+                modVizEnv_[k].store ((any && bestVoice != nullptr)
+                                         ? bestVoice->envSourceValue ((int) wc::envSourceFor (k + 1)) + 1.0f
+                                         : -1.f, std::memory_order_relaxed);
+            for (int k = 0; k < wc::NUM_LFOS; ++k)
             {
-                const auto d = bestVoice->getWtDisplay (o);
-                wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
-                wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
-                wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
-                wtBlurVis_[o]    .store (d.blur,      std::memory_order_relaxed);   // fb460
-                wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
-                wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
-                wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);
+                modVizLfo_[k].store (flowLfo_[k].peek(), std::memory_order_relaxed);
+                modVizLfoVX_[k].store (flowLfo_[k].chaosVX(), std::memory_order_relaxed);   // fb239 — the swirl feed
+                modVizLfoVY_[k].store (flowLfo_[k].chaosVY(), std::memory_order_relaxed);
+                {   // fb231 — RETRIG/ENV made VISIBLE: a non-Free LFO's dot rides the most-active VOICE's phase
+                    //         (resets per note, pins at Env end); Free/mono keep the mirror. (fb228 contract intact.)
+                    const bool vTrig = synModCfg.lfos[k].trigger != wc::LFOTrigger::Free;
+                    modVizLfoPh_[k].store ((vTrig && any && bestVoice != nullptr)
+                                               ? bestVoice->lfoPhase (k)
+                                               : flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
+                }
             }
-            wtDispLive_[o].store (live ? 1 : 0, std::memory_order_relaxed);
+            noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
+            // fb66 — waveform follower position. Free → the global tape head (visible even when idle);
+            // Random/Envelope → the loudest sounding voice's read head; -1 = nothing to draw.
+            noiseVizPos_.store ((((int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE)) == 2) ? noiseFreeNorm_.load (std::memory_order_relaxed)
+                                                     : (bestVoice != nullptr ? bestVoice->noiseFollowPos01() : -1.0f),
+                                std::memory_order_relaxed);
+            ampEnvFollowVis.store (any ? bestFollow  : -1.f, std::memory_order_relaxed);
+            // Batch 1 — most-active voice's L1 value drives the live LFO dot (0 when idle).
+            synthLfo1Vis.store    (any ? bestLfo     :  0.f, std::memory_order_relaxed);
+            // fb163 — LIVE FILTER CURVE: same loudest-voice pick feeds the filter display.
+            fltVisHz1_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz1()  : -1.f, std::memory_order_relaxed);
+            fltVisRes1_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes1() :  0.f, std::memory_order_relaxed);
+            fltVisHz2_.store  (any && bestVoice != nullptr ? bestVoice->getFltVisHz2()  : -1.f, std::memory_order_relaxed);
+            fltVisRes2_.store (any && bestVoice != nullptr ? bestVoice->getFltVisRes2() :  0.f, std::memory_order_relaxed);
+            // fb457 — OVERPASS 1: the waterfall rides the SAME loudest-voice pick as the filter curve,
+            // because the filter is the one thing Max said already moved and this is why.
+            // fb457/fb458 — the waterfall's feed. Gated on vizLive: with no editor nobody reads these,
+            // and "no UI, no viz work" is the house law (fb148). Costs a closed plugin exactly nothing.
+            if (vizLive)
+            for (int o = 0; o < 4; ++o)
+                wtFrameVis_[o].store (any && bestVoice != nullptr ? bestVoice->getWtFrameVis (o) : -1.f,
+                                      std::memory_order_relaxed);
+            if (vizLive)
+            for (int o = 0; o < 4; ++o)
+            {
+                const bool live = (any && bestVoice != nullptr);
+                if (live)
+                {
+                    const auto d = bestVoice->getWtDisplay (o);
+                    wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
+                    wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
+                    wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
+                    wtBlurVis_[o]    .store (d.blur,      std::memory_order_relaxed);   // fb460
+                    wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
+                    wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
+                    wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);
+                }
+                wtDispLive_[o].store (live ? 1 : 0, std::memory_order_relaxed);
+            }
+            for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
+            oscScopePubAccum_ += (double) numSamples;
         }
-        for (int o = 0; o < 4; ++o) sampleFollowCount_[o].store (cnt[o], std::memory_order_relaxed);   // count LAST = coherent list
-        oscScopePubAccum_ += (double) numSamples;
         if (! vizLive) oscScopePubAccum_ = 0.0;   // fb148 — no backlog while closed (a grown accumulator would publish every block on reopen)
         const bool oscDoPub = vizLive && (oscScopePubAccum_ >= getSampleRate() / 60.0);
         if (oscDoPub) oscScopePubAccum_ -= getSampleRate() / 60.0;
@@ -11358,7 +11379,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     if (rightChannel != nullptr) rightChannel[i] += pendR[c];
                 }
         }
-        if (i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
+        // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
+        if (vizLive && i == numSamples - 1)   // fb280/fb296 — publish BOTH blooms once/block, after both inserts ran
         {
             // fb312 — INSTANT attack (peak-hold): the smoothed 0.40 attack made the viz lag the audio
             // ~20-60ms and read "late" (Max). The peak now lands the same block; only the fall smooths.
@@ -11414,9 +11436,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             rightChannel[i] = masterSoftClip (mR * limGain_);
 
         // Write to scope buffer (mono mix for visualization)
-        float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
-        scopeBuffer[static_cast<size_t>(scopePos)].store(scopeSample, std::memory_order_relaxed);
-        scopePos = (scopePos + 1) % SCOPE_SIZE;
+        if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
+        {
+            float scopeSample = rightChannel != nullptr ? (leftChannel[i] + rightChannel[i]) * 0.5f : leftChannel[i];
+            scopeBuffer[static_cast<size_t>(scopePos)].store(scopeSample, std::memory_order_relaxed);
+            scopePos = (scopePos + 1) % SCOPE_SIZE;
+        }
     }
 
     // Write final output to rolling capture buffer
@@ -11922,6 +11947,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
 //==============================================================================
 juce::AudioProcessorEditor* TerrainInstrumentAudioProcessor::createEditor()
 {
+    if (tiTimerHz_ != 60) { tiTimerHz_ = 60; startTimerHz (60); }   // fb514 — a UI is arriving; never let it see a slow first tick
+
     // fb496 — arm the Export ring (~202 MB) HERE, on the message thread, the first time
     // this instance is ever given a UI. exportCapture() is reachable from the editor and
     // nowhere else, and the "N seconds captured" readout is only pushed while an editor
@@ -12057,6 +12084,7 @@ void TerrainInstrumentAudioProcessor::writeToStemBuffer (int layerIdx,
 
     // Live capture-level meter: decaying peak of what's being written. Read by
     // the UI at ~30Hz to drive the 4 mini-meters on the stem row.
+    if (vizConsumersLive())   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
     {
         float peak = 0.0f;
         for (int i = 0; i < numSamples; ++i)
@@ -12857,6 +12885,7 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // Presets themselves live on disk only (getUserPresetsFile)
     auto state = apvts.copyState();
     state.setProperty("presetIndex",      currentPresetIndex.load(),  nullptr);
+    state.setProperty("editorWidth",      editorWidth.load(),         nullptr);   // fb514 — clones/reloads keep the user's size (fb96 removed this before the FL junk-replay era; the editor-side latch now stops junk from ever entering this atomic)
     state.setProperty("xyAutoEnabled",    xyAutoEnabled.load(),     nullptr);
     state.setProperty("xyAutoMode",       xyAutoMode.load(),        nullptr);
     state.setProperty("xyAutoSpeed",      xyAutoSpeed.load(),       nullptr);
@@ -13166,6 +13195,11 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
 
             // Restore preset index (clamped to valid range after disk presets load)
             int presetIdx = newState.getProperty("presetIndex", 0);
+
+            {
+                const int ew = (int) newState.getProperty ("editorWidth", 0);
+                editorWidth.store ((ew >= 533 && ew <= 1558) ? ew : 0);   // fb514 — same range the editor ctor enforces; junk falls back to the 820 default
+            }
 
             // Restore XY auto state
             xyAutoEnabled.store(static_cast<float>(newState.getProperty("xyAutoEnabled", 0.f)));

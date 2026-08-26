@@ -400,6 +400,7 @@
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
 window.__cardOnly=(location.search.match(/[?&]card=(arp|chop|gli|rbn|mod|lfo|crv)/)||[])[1]||'';   /* fb229 — lfo joins the card family */   /* fb149 — mod = the pop-out LFO palette */   /* fb328 — crv = the Distortion curve card. ⚠️ THIS regex is the SECOND card-id whitelist (the first is popOutCardWindow's in C++) — miss it and the popped window boots the FULL UI as a mini Terrain */
+window.__bootPage=+((location.search.match(/[?&]page=([1-4])/)||[])[1]||0);   /* fb514 -- reopen lands on the saved panel: C++ appends ?page=N (processor uiPage atomic) so the panel applies at PARSE time -- the hero never paints, no flash, no reopen CPU spike */
 /* fb103 — CRISP AT ANY SIZE: the editor's settled pageZoom is pushed here; the
    devicePixelRatio the page sees becomes base×zoom (capped 3 for CPU), so every
    canvas that sizes buffers from clientWidth×dpr re-rasters at TRUE device
@@ -12521,6 +12522,40 @@ window.__tiHostKey = function (k) {
     inp.value = nv; inp.setSelectionRange(st + 1, st + 1);
   }
 };
+
+/* fb514 -- NO KEY EVER ACTIVATES A CONTROL (Windows/FL: Space must stay the DAW's transport).
+   Capture phase on document runs before every element listener. Text editing is exempt
+   (preset naming, tag picker, inline chip editors; the fb135 host-key bridge dispatches onto
+   the armed input, which is exempt too). Escape/Delete/Backspace stay unguarded so the fb222
+   shaper delete and Escape-close menus keep working. fb484 standalone QWERTY uses letters
+   only -- untouched. Second listener: nothing keeps DOM focus after a pointer interaction,
+   so a clicked pill can never be re-activated by Space (the reported bug). */
+(function(){
+  function tiEditable(t){ if(!t||!t.tagName) return false; var n=t.tagName;
+    if(n==='TEXTAREA'||t.isContentEditable) return true;
+    if(n!=='INPUT') return false;
+    var ty=(t.type||'text').toLowerCase();
+    return ty==='text'||ty==='search'||ty==='password'||ty==='number'||ty==='email'||ty==='url'; }
+  var GUARD={' ':1,'Enter':1,'Tab':1,'ArrowUp':1,'ArrowDown':1,'ArrowLeft':1,'ArrowRight':1};
+  document.addEventListener('keydown',function(e){
+    if(!GUARD[e.key]) return;
+    if(tiEditable(e.target)) return;
+    e.preventDefault(); e.stopPropagation();
+    try{ if(e.target&&e.target.blur) e.target.blur(); }catch(_){}
+  }, true);
+  document.addEventListener('pointerup',function(){
+    setTimeout(function(){
+      var a=document.activeElement;
+      if(!a||a===document.body) return;
+      if(a.tagName==='SELECT') return;
+      if(tiEditable(a)) return;
+      try{ a.blur(); }catch(_){}
+    },0);
+  }, true);
+  document.addEventListener('change',function(e){
+    var t=e.target; if(t&&t.tagName==='SELECT'){ try{ t.blur(); }catch(_){} }
+  }, true);
+})();
 </script>
 
 <script>
@@ -15998,6 +16033,7 @@ function restoreUiPage(n) {
   _uiPageRestored = n;
   if (typeof setActivePanel === 'function') setActivePanel(n >= 1 && n <= 4 ? UI_PAGE_IDS[n - 1] : null);
 }
+  if(!window.__cardOnly&&window.__bootPage>=1&&window.__bootPage<=4){try{restoreUiPage(window.__bootPage);}catch(e){}}   /* fb514 -- parse-time apply: runs before init() registers the front painter, so the front page never boots when reopening onto a panel */
 document.getElementById('eq-btn').addEventListener('click', () => {
   setActivePanel(currentActivePanel === 'eq' ? null : 'eq');
 });
@@ -16202,7 +16238,6 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .fm-knob-wrap .fm-arrow').forEach (function (arrow) {
         function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.fm-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
         arrow.addEventListener ('click', toggle);
-        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
     } catch (eFmW) { console.warn ('[FM-weather] arrow wiring failed', eFmW); }
 
@@ -16211,7 +16246,6 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .geode-knob-wrap .geode-arrow').forEach (function (arrow) {
         function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.geode-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
         arrow.addEventListener ('click', toggle);
-        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
     } catch (eGdW) { console.warn ('[GEODE] arrow wiring failed', eGdW); }
 
@@ -16222,7 +16256,6 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .harm-knob-wrap .harm-arrow').forEach (function (arrow) {
         function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.harm-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
         arrow.addEventListener ('click', toggle);
-        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
     // header FAMILY + SCULPT selectors — the mode UI (bottom buttons retired hm3)
       var HM_SCULPT = ['Keel','Splay','Cull','Tide','Terrace','Clang'];
@@ -16256,7 +16289,6 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .modal-knob-wrap .modal-arrow').forEach (function (arrow) {
         function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.modal-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
         arrow.addEventListener ('click', toggle);
-        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
       var MODAL_FAM = ['Grand','Pluck','Bow','Flute','Reed','Brass','Bars','Bells','Skin'];
       var MODAL_FORMS = [
@@ -17587,7 +17619,6 @@ setTimeout(function wireSynControls () {
       document.querySelectorAll ('#syn-panel .gran-knob-wrap .gk-arrow').forEach (function (arrow) {
         function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.gran-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
         arrow.addEventListener ('click', toggle);
-        arrow.addEventListener ('keydown', function (e) { if (e.key === 'Enter' || e.key === ' ') toggle (e); });
       });
 
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
@@ -34886,10 +34917,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
    native controls and ignores the CSS colour entirely.
    Style the OPTIONS ONLY, never the select — colouring the select would un-hide the overlay and
    the value would be drawn twice, once by the span and once by the control.
-   color-scheme:dark makes the popup's own chrome — background, scrollbar, highlight — dark so it
-   matches the panel instead of flashing white. */
-select { color-scheme: dark; }
-select option { color: #EDE7F5; background-color: #1B1526; }
+   fb514 — the popup is LIGHT (white bg, black text) to match the Mac native look per user
+   requirement. color-scheme:light makes the popup's own chrome — background, scrollbar,
+   highlight — light to match. macOS ignores option CSS entirely (WKWebView draws select
+   popups as native controls), so this block only takes effect on Windows. */
+select { color-scheme: light; }
+select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 </style>
 </body>
 </html>

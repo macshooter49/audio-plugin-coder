@@ -937,7 +937,7 @@ public:
     std::atomic<int>                  oscScopeBad { 0 };// non-finite window samples sanitized at the last publish (overlay: F:PUSH-POISON)
 
     std::atomic<int> currentPresetIndex { 0 };
-    std::atomic<int> editorWidth { 0 };   // fb95 — remembered editor width (0 = default 820); saved in state
+    std::atomic<int> editorWidth { 0 };   // fb95/fb514 — remembered editor width (0 = default 820); saved in state again since fb514 (fb96 dropped it; the editor-side latch now keeps junk sizes out of this atomic)
 
     // XY automation state (synced from JS, captured into presets)
     std::atomic<float> xyAutoEnabled { 0.f };
@@ -971,6 +971,7 @@ public:
     // thread gates PURE-VIZ production on this (spectrum FFTs, osc-scope publish), so a
     // closed UI costs nothing to visualize for — "closed <= open" by construction.
     std::atomic<int> uiClients_ { 0 };
+    int tiTimerHz_ = 60;   // fb514 — closed-editor idle rate governor (timerCallback: 15 Hz with no UI client, 60 Hz otherwise)
     // fb484 — STANDALONE QWERTY-TO-MIDI: the WebView owns keyboard focus, so JS key events call
     // the qwertyNote native fn (message thread), which pushes into this lock-free SPSC ring;
     // processBlock (audio thread) drains it into the normal MIDI stream. No locks, no deps.

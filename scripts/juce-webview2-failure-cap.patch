@@ -1,5 +1,5 @@
 diff --git a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
-index d05a5f8136..e6b2970470 100644
+index d05a5f8136..568ce692e3 100644
 --- a/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
 +++ b/modules/juce_gui_extra/native/juce_WebBrowserComponent_windows.cpp
 @@ -1061,7 +1061,13 @@ private:
@@ -9,7 +9,7 @@ index d05a5f8136..e6b2970470 100644
 -                            weakThis->triggerAsyncUpdate();
 +                            // JUCE-PATCH terrain fb480: a failed creation used to retrigger
 +                            // unconditionally -> createWebView -> fail -> retrigger, an infinite
-+                            // async-update storm on the host's message thread (FL Studio's whole
++                            // async-update storm on the host message thread (FL Studio whole
 +                            // UI shares it: every control freezes, no error, one core pegged).
 +                            // Retry a bounded number of times, then give up and stay blank.
 +                            if (controller != nullptr || ++weakThis->creationFailures <= 3)

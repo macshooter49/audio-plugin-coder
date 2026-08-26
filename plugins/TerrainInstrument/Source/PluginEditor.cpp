@@ -4,6 +4,7 @@
 #include <cstdio>    // fb509 — snprintf: the frame builders format floats without juce::String heap churn
 #include <cstring>
 #include <vector>
+#include <mutex>     // fb514 -- getResource HTML cache guard (WebView2 resource callbacks can run off the message thread)
 #include "BinaryData.h"
 
 // fb132 — CARD PRESETS: user presets live beside the imports registry
@@ -1834,6 +1835,15 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 lastFrameHash_ = 0;   // fb484 — pre-boot pushes set the hash; without this reset the
                                       // first post-ready frame reads "identical" and is SKIPPED —
                                       // Max's "osc A must be clicked before the viz shows".
+                // fb514 -- BELT for the page restore: the pre-ready RESTORE pushes ride the Windows
+                // terrainFrame web-message lane, whose page-side listener registers ~6,500 lines
+                // AFTER the script that fires signalPageReady -- pushes into a listenerless lane are
+                // silently dropped, which is why reopen always landed on the hero. evaluateJavascript
+                // (ExecuteScript) needs no listener, and restoreUiPage is idempotent (_uiPageRestored)
+                // so the ?page= boot-URL path landing first makes this a no-op.
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(typeof restoreUiPage==='function'){restoreUiPage("
+                                                 + juce::String (audioProcessor.uiPage.load()) + ");}", nullptr);
                 // SAMPLE-RESYNC — a freshly (re)loaded WebView has no idea which samples are already
                 // loaded in the still-alive processor (in-session editor reopen). The old JS side
                 // relied on a few timed getOscSamplePayload polls that lost the WKWebView init race
@@ -4692,7 +4702,14 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
     }
 
     // Load embedded web content
-    webView->goToURL(juce::WebBrowserComponent::getResourceProviderRoot());
+    {
+        // fb514 -- reopen lands on the user's page: carry the saved page in the boot URL so
+        // the page applies the panel at PARSE time (zero hero flash, the front painters never
+        // start). uiPage==0 (fresh instance) emits no param -- byte-identical boot.
+        auto tiRoot = juce::WebBrowserComponent::getResourceProviderRoot();
+        const int tiPg = audioProcessor.uiPage.load (std::memory_order_relaxed);
+        webView->goToURL (tiPg > 0 ? tiRoot + "?page=" + juce::String (tiPg) : tiRoot);
+    }
 
     // fb95 — RESIZABLE editor (Max: "every plugin has to have a resize"): the
     // corner emblem drags it, aspect locked, 0.65×–1.9× of the base look.
@@ -5674,7 +5691,14 @@ void TerrainInstrumentAudioProcessorEditor::timerCallback()
         lastRecoveryMs_ = wdNowMs;
         lastEvalOkMs_   = wdNowMs;    // re-arm — the reload needs a moment to come up
         pageReady = false;            // RESTORE machinery re-pushes saved state on ready
-        webView->goToURL (juce::WebBrowserComponent::getResourceProviderRoot());
+        {
+            // fb514 -- reopen lands on the user's page: carry the saved page in the boot URL so
+            // the page applies the panel at PARSE time (zero hero flash, the front painters never
+            // start). uiPage==0 (fresh instance) emits no param -- byte-identical boot.
+            auto tiRoot = juce::WebBrowserComponent::getResourceProviderRoot();
+            const int tiPg = audioProcessor.uiPage.load (std::memory_order_relaxed);
+            webView->goToURL (tiPg > 0 ? tiRoot + "?page=" + juce::String (tiPg) : tiRoot);
+        }
         return;                       // nothing to push into a page that is reloading
     }
 
@@ -6485,6 +6509,28 @@ void TerrainInstrumentAudioProcessorEditor::paint (juce::Graphics& g)
 
 void TerrainInstrumentAudioProcessorEditor::resized()
 {
+   #if JUCE_WINDOWS
+    // fb514 -- JUCE's VST3 wrapper applies host sizes verbatim (no constrainer clamp), and FL
+    // replays a remembered junk size -- typically 533, EXACTLY the minimum, so a below-min check
+    // never fires -- at attach AND on window re-shows, sometimes after the 4 s heal window has
+    // expired. The rule that actually holds: any UNATTENDED shrink (no drag over THIS editor) is
+    // host junk -- re-assert the intended size immediately, forever. A real user shrink always
+    // rides a local drag (the corner resizer / strip are children). Re-entrant setSize() re-runs
+    // resized() at the corrected width for the full layout; the width-differs check stops
+    // ping-pong. Windows-only: Mac hosts never replay junk, Mac behavior unchanged.
+    {
+        auto tiMs0 = juce::Desktop::getInstance().getMainMouseSource();
+        auto* tiU0 = tiMs0.getComponentUnderMouse();
+        const bool tiLocal0 = tiMs0.isDragging() && tiU0 != nullptr
+                              && (tiU0 == this || isParentOf (tiU0));
+        if (! tiLocal0 && getWidth() < intendedW_ - 4)
+        {
+            setSize (intendedW_, juce::roundToInt (intendedW_ * (double) (656 + CAPTURE_STRIP_HEIGHT) / 820.0));
+            return;
+        }
+    }
+   #endif
+
     auto b = getLocalBounds();
     // fb95 — the strip scales with the window so the web area keeps the exact
     // 820-wide proportions; pageZoom (pushed from timerCallback until the peer
@@ -6503,8 +6549,18 @@ void TerrainInstrumentAudioProcessorEditor::resized()
     // (FL) replay remembered junk through resized() too — that must never stick.
     // fb176 STICKY — FL can deliver the final size after mouse-up: past the 4s heal
     // window ANY new size is the user's (junk replays only happen at attach).
-    if (juce::Desktop::getInstance().getMainMouseSource().isDragging()
-        || (healTicks_ >= 240 && std::abs (getWidth() - intendedW_) > 4))
+    // fb514 -- FL replays a remembered junk size (typically the 533 minimum) at attach, and this
+    // latch used to RATIFY it: (a) isDragging() is process-global across every Terrain instance in
+    // the DLL, so a junk resize landing during ANY drag was adopted as "user intent"; (b) after the
+    // 240-tick heal window, a re-delivered junk size was adopted wholesale. Now: only a drag over
+    // THIS editor (its corner resizer / strip are children) counts, and past the heal window we
+    // adopt host GROWS but never shrinks -- an unattended shrink is FL's junk and keeps being healed.
+    auto tiMs = juce::Desktop::getInstance().getMainMouseSource();
+    auto* tiUnder = tiMs.getComponentUnderMouse();
+    const bool tiLocalDrag = tiMs.isDragging() && tiUnder != nullptr
+                             && (tiUnder == this || isParentOf (tiUnder));
+    const bool tiHostGrow  = healTicks_ >= 240 && getWidth() > intendedW_ + 4;
+    if (tiLocalDrag || tiHostGrow)
     {
         userSized_ = true;
         intendedW_ = getWidth();
@@ -6618,13 +6674,34 @@ void TerrainInstrumentAudioProcessorEditor::CaptureDragStrip::mouseUp (const juc
 std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcessorEditor::getResource (const juce::String& url)
 {
     // All JS is inlined into index.html — only one resource to serve
+    // fb514 -- the 2.3 MB HTML was rebuilt (multiple full-buffer copies) on EVERY navigation
+    // including wd9 reloads; the assembled page only changes when the injected settings change,
+    // so cache the finished bytes keyed on them. Key = the concatenation of every runtime input
+    // the build splices in (today just the saved dark-theme flag), so a theme flip changes the
+    // key and naturally misses. getResource can run on a WebView2 (non-message) thread, hence
+    // the mutex-guarded function-local statics.
+    auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
+                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
+    const bool tiDark = settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\"");
+    const juce::String tiCacheKey (tiDark ? "dark" : "light");
+
+    static std::mutex tiHtmlCacheMutex;
+    static juce::String tiHtmlCachedKey;
+    static std::vector<std::byte> tiHtmlCachedBytes;
+    {
+        const std::lock_guard<std::mutex> tiLock (tiHtmlCacheMutex);
+        if (! tiHtmlCachedBytes.empty() && tiHtmlCachedKey == tiCacheKey)
+        {
+            auto tiCopy = tiHtmlCachedBytes;   // Resource owns its bytes -- copy out, keep the cache
+            return juce::WebBrowserComponent::Resource{ std::move(tiCopy), juce::String("text/html; charset=utf-8") };
+        }
+    }
+
     juce::String html (juce::CharPointer_UTF8 (reinterpret_cast<const char*>(BinaryData::index_html)),
                        static_cast<size_t>(BinaryData::index_htmlSize));
 
     // Inject saved theme into HTML so the page loads with the correct theme from frame one
-    auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
-    if (settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\""))
+    if (tiDark)
         html = html.replace("<html lang=\"en\">", "<html lang=\"en\" data-theme=\"dark\">");
 
     // Inject JS-side file drag-drop bridge (Phase C — Task 11). WKWebView
@@ -12814,6 +12891,13 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainInstrumentAudioProcess
     auto utf8 = html.toUTF8();
     std::vector<std::byte> data(static_cast<size_t>(utf8.sizeInBytes()));
     std::memcpy(data.data(), utf8.getAddress(), data.size());
+    {
+        // fb514 -- store the finished bytes by value; the next navigation with the same injected
+        // settings (wd9 reloads, editor reopens) returns them without rebuilding the 2.3 MB page.
+        const std::lock_guard<std::mutex> tiLock (tiHtmlCacheMutex);
+        tiHtmlCachedKey   = tiCacheKey;
+        tiHtmlCachedBytes = data;
+    }
     return juce::WebBrowserComponent::Resource{ std::move(data), juce::String("text/html; charset=utf-8") };
 }
 

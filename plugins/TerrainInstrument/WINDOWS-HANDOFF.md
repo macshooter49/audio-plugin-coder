@@ -670,3 +670,77 @@ follow-on (~extra 5-7% synth WV + ~20% proc; needs a page->native rate signal); 
 5-10 s; (4) audit OTHER hosts/pages for the same restart-a-transition-per-frame anti-pattern
 (grep `transition:` for properties JS writes per frame — only .meter-bar and a max-height (654,
 not per-frame) exist today).
+
+### fb514 — THE WINDOWS POLISH CAMPAIGN: six audited bugs, one commit. Keyboard locked out, reopen lands on your page, junk sizes healed forever, white menus, closed instances go quiet.
+
+Max's list after living with fb513 (multi-agent audit, six specialists, every mechanism verified in
+source before any edit):
+
+1. **NEW INSTANCES OPENED SMALL.** FL replays a remembered junk size per plugin TYPE — typically
+   533, EXACTLY the constrainer minimum — at attach and on re-shows. The fb176 sticky latch
+   RATIFIED it: isDragging() is process-global across all Terrain instances in the DLL, so junk
+   landing during any drag became "user intent"; after the 4 s heal window any re-delivery was
+   adopted wholesale; fb96 had removed state persistence so the user's manual fix never outlived
+   the instance. FIX: (a) the latch only accepts a drag OVER THIS EDITOR, and adopts host GROWS
+   never shrinks; (b) Windows-only eternal clamp in resized(): any UNATTENDED shrink is re-asserted
+   immediately, forever; (c) editorWidth now genuinely saved/restored in plugin state (reverses
+   fb96, deliberately — the latch now guards what enters the atomic); (d) the stale "saved in
+   state" comments made true.
+2. **SPACEBAR TOGGLED THE LAST-CLICKED PILL** (FL transport stolen). Zero blur() existed in all
+   34,896 lines — every clicked <button> kept DOM focus and Space/Enter re-activated it; five
+   arrow divs even had explicit Enter/Space handlers. FIX: capture-phase key guard (Space, Enter,
+   Tab, arrows preventDefault+stopPropagation on non-text targets — text inputs exempt so preset
+   naming still types; Escape/Delete stay for the shaper + menus), pointerup focus-drop (nothing
+   keeps focus after a click), select-blur-on-change, five keydown handlers deleted. NO key ever
+   activates a Terrain control now, on any platform.
+3. **REOPEN ALWAYS LANDED ON THE HERO + multi-second spike.** The page WAS remembered
+   (processor uiPage atomic) but the only restore path — the pre-ready RESTORE push — ships on
+   Windows over the terrainFrame web-message lane whose page-side listener registers ~6,500 lines
+   AFTER the script that fires signalPageReady: pushes into a listenerless lane are silently
+   dropped, every time. Mac was immune (evaluateJavascript needs no listener). FIX, three layers:
+   (a) the boot URL carries ?page=N (uiPage>0 only — fresh instances byte-identical); (b) the page
+   sniffs it next to __cardOnly and applies the panel AT PARSE TIME — the front page never paints,
+   the hero painters never start, no flash, no reopen spike; (c) belt: signalPageReady pushes
+   restoreUiPage via evaluateJavascript (listenerless-lane-proof; idempotent via _uiPageRestored).
+   Also applied to the wd9 recovery reload.
+4. **~5 s EDITOR OPEN.** Measured from inside the real plugin: the 34,896-line page parses in
+   435 ms (domInteractive 399, first paint 428) — the page was never the 5 s. The real serial
+   costs: WebView2 controller creation (serialized process-wide across instances), ~480 SEPARATE
+   AddScriptToExecuteOnDocumentCreated COM calls (one per JUCE relay script), the 2.3 MB HTML
+   string rebuilt on every navigation, and the pre-ready push storm. SHIPPED: getResource now
+   caches the assembled HTML bytes keyed on the injected theme (wd9 reloads + same-process
+   reopens skip the rebuild), and the ?page= boot (item 3) removes the hero boot cost entirely
+   on reopen-to-panel.
+   🚨 **FALSIFIED AND REVERTED — do not retry blind: joining the ~480 user scripts into ONE
+   AddScriptToExecuteOnDocumentCreated call made open 4x SLOWER** — open-to-pageReady, 6 runs
+   each, counterbalanced: stock 2,527-3,401 ms (mean 2,787) vs concatenated 11,648-12,373 ms
+   (mean 11,938). Deterministic, zero overlap. Mechanism unproven (suspects: WebView2 slow path
+   on a ~MB single AddScript payload; a relay script's "use strict" directive strictifying the
+   whole combined block and forcing a slow recovery path) — if anyone re-attempts, bisect with
+   chunked joins and measure open_ab.ps1 before believing anything. The patch file is back to
+   the fb480 cap only.
+   DEFERRED (documented options): WebView2 environment cache across opens (keeps browser
+   processes warm; memory + DLL-unload risk), full editor keep-alive via controller re-parent
+   (the Serum model; biggest win, biggest surgery), lazy page-boot module deferral.
+5. **BLACK ENGINE MENUS.** Not Windows theming — OUR fb503 fix deliberately chose dark
+   (select{color-scheme:dark} + #EDE7F5-on-#1B1526 options). Flipped: color-scheme:light,
+   black-on-white options + optgroups. One CSS edit covers all ~35 native selects (engine pickers,
+   loop modes, harmonic/modal families, WT presets, FM algo, FX rack type/character/quality, TIC
+   steps). Mac unaffected (WKWebView renders native popups and ignores option CSS — fb503's own
+   verified finding).
+6. **PLAYLIST TEARING WITH 7 CLOSED INSTANCES.** The fb148 "no UI, no viz" law was ~60% enforced.
+   The closed-instance leftovers, ranked: the processor's 60 Hz juce::Timer dispatching ON FL'S
+   UI THREAD forever (7 instances = 420 dispatches/s on the exact thread FL paints the playlist
+   with); ~85+ ungated audio-thread viz publishes per block (follower/modViz 96-voice walk, FX
+   blooms, master scope ring per-sample stores, slice-glow dynamic_cast walk, stem capture meter).
+   FIX: timer governor — 15 Hz when no UI client, snapped back to 60 in createEditor/adoptCard
+   (arms/rebuilds happen INSIDE the tick that detects them; the --modal-live gate pumps 150 ms ≥ 2
+   ticks and stays green); all five viz blocks gated on vizLive (pure UI feeds — DSP fingerprint
+   bit-identical by construction). THE MOUNTAIN RE-CONFIRMED CLEAN: renderTerrain exists only
+   inside an open editor's page; no processor-side hero work exists.
+   Closed-instance measured: idle proc-total 7.36 -> 7.08 per instance in the bench (the structural win -- 60->15 Hz message dispatch, 420->105/s across 7 instances on FL UI thread -- is only measurable in a real FL session: Max tests the playlist scroll).
+   DEFERRED (product decisions, Max's call): disarm the capture ring (~202 MB) and stem rings
+   (~1 GB) when the last editor closes — both change "capture audio played while closed"; the
+   per-instance stall-beacon thread → process-wide singleton.
+
+Gates: eq 15/15, fx4 130/130, fx3 48, flt staleFrames 0, arbiter contract ALL (incl. the fb512 30fps check), lfo smooth PASS, modal fingerprint 446f2e02c4dcb215 BIT-IDENTICAL (the viz gates + governor changed zero audio; the recon agent caught that velVis_ feeds velocity->global mod and left it ungated), modal-live PASS at the 15 Hz governor. Front/synth play A/B sanity: front 73.1 vs 72.9, synth 58.9 vs 56.7 -- dead flat, fb512/fb513 wins fully preserved.
