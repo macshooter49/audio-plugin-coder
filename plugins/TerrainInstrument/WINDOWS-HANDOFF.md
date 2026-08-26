@@ -626,3 +626,47 @@ backdrop-filters/layers it composites through — NOT its frame rate (proven dea
 campaign and it touches Max's "loopers keep looping / the hero is the identity visual" call, so it is his decision,
 not a unilateral cut. Ranked next levers: (1) hero composite cost (front); (2) cpp-30 during hands-off play as a
 follow-on (needs a page->native rate signal; ~extra 5-7% synth WV + ~20% proc); (3) editor-open 5-10 s.
+
+### fb513 — THE FRONT PAGE'S WHALE WAS THE FAKE METERS. The hero mountain is innocent.
+
+Max greenlit a hero campaign with an escalation ladder (optimize -> manual-only animations -> kill
+the hero), convinced the "big ass interactive audio mountain" (+ grain/tape engines) was the cost.
+Three exp-hook ladders in the real plugin (bisect.ps1, --play, front page) said otherwise:
+
+**LADDER 1 (structure):** control 231 WV · hero canvas hidden 223 · glow fills off 225 · all mesh
+strokes off 222 · hero at half resolution 224 · glows+strokes off 217 — **the terrain's entire op
+inventory prices at <=14** — but 'front' painter unregistered **54** and +'fx' **26**. The whale was
+inside animate(), not in renderTerrain's draw ops.
+
+**LADDER 2 (function-by-function decomposition of animate()):** tapeMech viz off -6 · grainBreathe
+CSS off -5 · animated icons off ~0 · xy-auto off ~0 · section icons off -5 · updateModulation off
+~0 · **renderTerrain fully off (JS and all): -7** · **updateMeters off: 205 -> 71 (-134% of a
+core; gpu 133->45, renderer 63->21, proc 37->29).**
+
+**THE MECHANISM (law 3 in a costume):** `.meter-bar` carries `transition: height 0.08s` (CSS
+~2601) and `updateMeters` (~23234) writes a new height every paced frame — every write RESTARTS a
+compositor transition, and compositor animations tick at PANEL rate (360 Hz on this machine),
+FOREVER, immune to rAF pacing, push rate, draw-op counts and canvas resolution. That is why every
+rate/op/area lever measured as noise on the front page (fb502/fb503/fb512 included). And the meters
+are `Math.random()` FAKE — not even audio. Two 12-px bars cost more than the entire mountain,
+tape machine, and icon system combined.
+
+**THE FIX (fb513):** `.meter-bar{transition:none !important}` appended to the Windows-only
+ti-static-decor kill list (the fb505 block, UA-gated — Mac byte-identical). The JS already animates
+the height every paced frame, so the bars move exactly as before; the redundant 360 Hz CSS
+double-animation dies. (The RMS textContent relayout measured ~0 once the transition was dead — G3 vs G2 — so it is left untouched.)
+
+**Validation ladder (shippable form, same epoch):** control 225.0 WV -> transition:none 72.7 (gpu 145.7->43.9, rend 70.9->23.7, proc 43.9->30.8) -> +text-frozen 71.9 (text adds nothing). The one CSS line captures the entire meters-off win with the bars still animating.
+
+**GROUND-TRUTH A/B (built fb513 vs archived fb512, counterbalanced, --play):**
+    FRONT: fb512 200.4 -> fb513 72.5 WV (-64%); gpu 132->44, renderer 61->24, proc 37->29; normalized 273 -> 116 (4-run counterbalanced)
+    SYNTH: fb512 57.8 vs fb513 57.9 WV -- dead flat, exactly as predicted (updateMeters never runs with a panel open)
+
+The hero stays. The loopers keep looping. Nothing visible changed.
+
+REMAINING, ranked: (1) the residual front-play floor (~70 WV: renderTerrain+friends at the paced
+rate — real but modest; the E/F ladders price each piece if more is wanted); (2) cpp-30 hands-off
+follow-on (~extra 5-7% synth WV + ~20% proc; needs a page->native rate signal); (3) editor-open
+5-10 s; (4) audit OTHER hosts/pages for the same restart-a-transition-per-frame anti-pattern
+(grep `transition:` for properties JS writes per frame — only .meter-bar and a max-height (654,
+not per-frame) exist today).

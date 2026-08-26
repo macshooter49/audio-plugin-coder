@@ -231,7 +231,16 @@
        same keyframes, same timing, ~60 fps cost. */
     stK.textContent = '.mod-btn.has-routes,#mod-engine .mv-stroke,.mv-ext .es .mv-stroke,#env-line,'
       + '.fxr-core .dst-curve,.fxr-core .grn-wave,.flow-mode .arpNote,.flow-mode .arpLine,'
-      + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}';
+      + '.flow-mode .arpHold,.flow-mode .sq{animation:none !important}'
+      /* fb513 -- THE FRONT PAGE'S REAL WHALE WAS THE FAKE METERS: updateMeters writes .meter-bar
+         height every paced frame INTO a 'transition: height 0.08s' -- each write restarts a
+         compositor transition, which ticks at PANEL rate (360 Hz here) forever. Measured in the
+         real plugin (F-ladder): meters-off = front-play WV 205 -> 71 (-134% of a core); the hero
+         terrain, tape viz, icons, xy-auto ALL measured <=7 each. The JS already animates the
+         height every frame, so the transition is redundant double-animation; killing it keeps
+         the bars moving identically at the paced rate. Windows-only (this block is UA-gated);
+         Mac composites this page through Core Animation and was never the problem. */
+      + '.meter-bar{transition:none !important}';
     (document.head || document.documentElement).appendChild(stK);
   } catch(e) {}
 
