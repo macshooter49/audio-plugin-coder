@@ -456,10 +456,21 @@ if(window.__cardOnly)document.documentElement.className+=' card-only';
   document.head.appendChild(st);
   var done=false; function fire(){ if(done)return; done=true;
     requestAnimationFrame(function(){ requestAnimationFrame(function(){ document.documentElement.classList.add('ti-ready'); }); }); }
+  /* fb515 -- NO MORE TRANSFORMER (Windows). fb147 revealed at load + zoom settle (~250 ms), but
+     the C++ RESTORE / SAMPLE-RESYNC pushes keep dressing the page for another second after that
+     -- Max literally watches it "transform into" itself, widget by widget. On Windows the reveal
+     now ALSO waits for the fonts and for ~400 ms after the page signalled ready (the dressing
+     pushes land inside that window), hard-capped at ~2.6 s so a broken boot can never hold the
+     window black (the fb147 failsafe law). The page appears ONCE, fully dressed, in one fade.
+     Mac keeps the fb147 timing byte-for-byte (UA-gated). */
+  var W515=/Windows/.test(navigator.userAgent), fontsOk=!W515;
+  if(W515&&document.fonts&&document.fonts.ready){ document.fonts.ready.then(function(){ fontsOk=true; }); setTimeout(function(){ fontsOk=true; },1500); } else { fontsOk=true; }
+  function dressed(){ if(!W515) return true;
+    return fontsOk && window.__tiPageReadyT && (performance.now()-window.__tiPageReadyT>400); }
   function go(){ var t0=Date.now();
-    (function w(){ if(window.__uiScaleSettled||Date.now()-t0>250) fire(); else setTimeout(w,40); })(); }
+    (function w(){ if((window.__uiScaleSettled||Date.now()-t0>250)&&(dressed()||Date.now()-t0>2350)) fire(); else setTimeout(w,40); })(); }
   if(document.readyState==='complete') setTimeout(go,0); else window.addEventListener('load',go);
-  setTimeout(fire,1200);
+  setTimeout(fire,W515?2600:1200);
 })();
 </script>
 <style>
@@ -12543,17 +12554,39 @@ window.__tiHostKey = function (k) {
     e.preventDefault(); e.stopPropagation();
     try{ if(e.target&&e.target.blur) e.target.blur(); }catch(_){}
   }, true);
+  /* fb515 -- RETURN THE KEYBOARD TO THE DAW. Blurring (fb514) stopped keys from activating
+     controls but the WebView2 child HWND still HELD Win32 focus, so Space reached the page (and
+     died in the guard) instead of FL's transport -- "I have to click somewhere else in my DAW".
+     After every pointer interaction that is not text editing and not an open <select> popup,
+     ask the C++ to SetFocus the host's top-level window -- exactly what clicking outside does.
+     Windows-only; the standalone keeps focus (QWERTY->MIDI); C++ double-gates on wrapperType. */
+  var tiRelFn=null, tiWin=/Windows/.test(navigator.userAgent);
+  function tiReleaseKeys(){
+    if(!tiWin||window.__isStandalone) return;
+    try{
+      if(!tiRelFn&&window.Juce&&window.Juce.getNativeFunction) tiRelFn=window.Juce.getNativeFunction('releaseKeysToHost');
+      if(tiRelFn) tiRelFn();
+    }catch(_){}
+  }
   document.addEventListener('pointerup',function(){
     setTimeout(function(){
       var a=document.activeElement;
-      if(!a||a===document.body) return;
-      if(a.tagName==='SELECT') return;
-      if(tiEditable(a)) return;
-      try{ a.blur(); }catch(_){}
+      if(a&&a!==document.body){
+        if(a.tagName==='SELECT') return;             /* popup open -- keep focus until change */
+        if(tiEditable(a)) return;                    /* typing -- keep focus */
+        try{ a.blur(); }catch(_){}
+      }
+      tiReleaseKeys();                               /* fb515 -- hand the keys back to FL */
     },0);
   }, true);
   document.addEventListener('change',function(e){
-    var t=e.target; if(t&&t.tagName==='SELECT'){ try{ t.blur(); }catch(_){} }
+    var t=e.target; if(t&&t.tagName==='SELECT'){ try{ t.blur(); }catch(_){} setTimeout(tiReleaseKeys,0); }
+  }, true);
+  document.addEventListener('focusout',function(e){  /* fb515 -- leaving a text field returns the keys */
+    if(tiEditable(e.target)) setTimeout(function(){
+      var a=document.activeElement;
+      if(!a||a===document.body||!tiEditable(a)) tiReleaseKeys();
+    },0);
   }, true);
 })();
 </script>
@@ -13358,6 +13391,7 @@ async function initJuceBindings() {
     // ALWAYS signal page ready, even if init had errors
     // This stops the C++ timer from continuously overwriting JS state with old restore data
     try {
+      window.__tiPageReadyT=performance.now();   /* fb515 -- the dressed-reveal gate waits ~400ms past this stamp (stamped even in preview so the gate browsers reveal promptly) */
       var readyFn = window.Juce && window.Juce.getNativeFunction('signalPageReady');
       if (readyFn) readyFn();
     } catch(e2) {}

@@ -5,6 +5,12 @@
 #include <cstring>
 #include <vector>
 #include <mutex>     // fb514 -- getResource HTML cache guard (WebView2 resource callbacks can run off the message thread)
+#if JUCE_WINDOWS
+// fb515 -- user32 imports for releaseKeysToHost, declared locally so this TU never pulls in
+// windows.h (its min/max/GetObject macros are hostile to a 13k-line JUCE file).
+extern "C" __declspec(dllimport) void* __stdcall GetAncestor (void*, unsigned int);
+extern "C" __declspec(dllimport) void* __stdcall SetFocus (void*);
+#endif
 #include "BinaryData.h"
 
 // fb132 — CARD PRESETS: user presets live beside the imports registry
@@ -905,6 +911,27 @@ TerrainInstrumentAudioProcessorEditor::TerrainInstrumentAudioProcessorEditor (Te
                 // fb134 — an inline text editor just opened in the page: hand the OS keyboard
                 // to the WKWebView (message thread; the peer walk is a few objc calls).
                 tiGrabWebKeys (this);
+                complete (juce::var{});
+            })
+            .withNativeFunction("releaseKeysToHost", [this](const juce::Array<juce::var>&,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb515 -- THE SPACEBAR LATCH, fixed at the ROOT. On Windows the WebView2 child
+                // HWND takes real Win32 keyboard focus on any click inside the page, and FL never
+                // sees another keystroke until the user clicks outside the plugin -- "terrain
+                // latches my controls" (Max). The fb514 page-side key guard stopped keys from
+                // ACTIVATING controls but consumed them instead of returning them. The actual fix
+                // is what clicking outside does: hand focus back to the host's top-level window.
+                // The page calls this after every pointer interaction that is not text editing and
+                // not an open <select> popup. Standalone excluded (its QWERTY->MIDI lives in the
+                // page and needs the focus). Mac never calls it (page-side UA gate) and never
+                // needed it -- FL/mac hosts keep the keys (fb134/fb135).
+               #if JUCE_WINDOWS
+                if (audioProcessor.wrapperType != juce::AudioProcessor::wrapperType_Standalone)
+                    if (auto* peer = getPeer())
+                        if (void* root = GetAncestor (peer->getNativeHandle(), 2 /* GA_ROOT */))
+                            SetFocus (root);
+               #endif
                 complete (juce::var{});
             })
             .withNativeFunction("setCardState", [this](const juce::Array<juce::var>& args,

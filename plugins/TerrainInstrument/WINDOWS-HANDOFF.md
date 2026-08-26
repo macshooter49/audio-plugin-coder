@@ -744,3 +744,70 @@ source before any edit):
    per-instance stall-beacon thread → process-wide singleton.
 
 Gates: eq 15/15, fx4 130/130, fx3 48, flt staleFrames 0, arbiter contract ALL (incl. the fb512 30fps check), lfo smooth PASS, modal fingerprint 446f2e02c4dcb215 BIT-IDENTICAL (the viz gates + governor changed zero audio; the recon agent caught that velVis_ feeds velocity->global mod and left it ungated), modal-live PASS at the 15 Hz governor. Front/synth play A/B sanity: front 73.1 vs 72.9, synth 58.9 vs 56.7 -- dead flat, fb512/fb513 wins fully preserved.
+
+### fb515 — THE KEYBOARD GOES BACK TO THE DAW, and the page appears ONCE, fully dressed.
+
+Max's fb514 test: keys no longer activate Terrain controls (good) but Space stopped reaching FL
+entirely — "terrain latches my controls... I have to click somewhere else". Root cause, one level
+deeper than fb514: on Windows the WebView2 child HWND takes REAL Win32 keyboard focus on any click
+inside the page. fb514's capture-phase guard consumed the keystroke inside the page instead of
+returning it. Mac never shows this because FL/mac never hands the WKWebView the keys at all
+(fb134/fb135 — the whole editArm bridge exists because of it).
+
+**THE FIX — do what clicking outside does, automatically:** a new `releaseKeysToHost` native
+(PluginEditor.cpp, next to grabKeys): `SetFocus(GetAncestor(peerHWND, GA_ROOT))` — hands focus to
+the host's top-level window. The page calls it (fb514 guard block) after every pointerup that is
+not text editing and not an open `<select>` popup, after a select commits, and on focusout of a
+text field. Standalone excluded on BOTH sides (its QWERTY→MIDI needs the focus); Mac never calls
+it (UA gate). Net behavior: click anything in Terrain, press Space → FL plays. Type a preset name →
+typing works; leave the field → keys return to FL.
+⚠️ If FL still swallows Space with the plugin frame focused on some setup, the next escalation is
+SetFocus to FL's MAIN window (walk GA_ROOTOWNER) — one-line change at the marked site.
+
+**THE TRANSFORMER FIX (fb147 extended, Windows-only):** the reveal fired at load+zoom-settle
+(~250 ms) while the C++ RESTORE/SAMPLE-RESYNC pushes kept dressing the page for ~another second —
+the visible "transforming into itself". The reveal now also waits for fonts + ~400 ms past the
+page-ready signal (`__tiPageReadyT` stamp), hard-capped at ~2.6 s (fb147's a-broken-boot-never-
+stays-black law). One fade, fully dressed. Mac timing byte-identical.
+
+Measured: open-to-pageReady 2,853 -> 2,704 ms (parity; the dressed reveal delays only the VISUAL fade, not readiness); front play 72.4 vs 72.3 WV (dead flat). Gates: eq 15/15, fx4 130/130, fx3 48, flt staleFrames 0, arbiter contract ALL, lfo smooth PASS, fingerprint 446f2e02c4dcb215 BIT-IDENTICAL, modal-live PASS.
+
+**THE SERUM TRUE-INSTANT-REOPEN VERDICT (recorded for the next session):** feasible, not a
+same-day change. Requires the audit's three-phase surgery: (A) extract the 474 relays + 247
+native lambdas out of the editor into a processor-owned backend (they currently capture the
+editor `this` — caching the WebView with dangling editor pointers = crash); (B) on editor close,
+re-parent the WebView2 controller into a hidden processor-owned HWND (JUCE patch:
+put_ParentWindow + association re-run) instead of destroying it; (C) on reopen, re-attach +
+reset lastFrameHash_/wd9/zoom. Payoff: reopen goes from ~2.6 s to near-zero and the reopen CPU
+spike disappears entirely (no re-parse, no push storm, no controller creation). Cost: ~150-250 MB
+resident per cached page (LRU cap 1-2 mandatory with 7 instances), plus the biggest JUCE-patch
+surface so far. The environment-cache half-step (keep the browser process warm, still re-create
+the controller) is smaller but was NOT measured this round; the script-concat lesson (fb514: a
+"sure win" measured 4x WORSE) says measure it before believing it.
+
+### THE MAC -> WINDOWS FLOW (for the preset-menu / terrain-patcher era)
+
+Max builds on the Mac; Windows stays ready like this:
+1. **Code flows through git.** Mac work lands on its branch; merge into `windows-test` and push —
+   CI (terrain-windows.yml, windows-2022) builds every push and produces the VST3 artifact. On
+   the Windows box: `git fetch && git reset --hard origin/windows-test`, then
+   `scripts\windows-quickstart.ps1` (applies the JUCE patch, fetches the WebView2 SDK, builds)
+   or grab the CI artifact straight into `C:\Program Files\Common Files\VST3\`.
+2. **Presets are data, not code.** They live in the user preset dir the save/load natives use —
+   copy the preset folder from the Mac to the same location on Windows (or ship factory presets
+   inside the repo so the build carries them). The preset MENU is index.html code — it flows with
+   git like everything else.
+3. **Before trusting a merged build on Windows, run the gate suite** (scratchpad gates.sh idiom:
+   ui_syntax, eq_ui 15, fx4 130, fx3 48, flt_smooth staleFrames 0, arbiter_contract — including
+   the fb512 hands-off-30fps check — lfo_val_smooth, `terrain_winbench --modal` fingerprint +
+   `--modal-live`). They run on any Windows box with Chrome + node; NODE_PATH needs a
+   puppeteer-core node_modules.
+4. **New UI work lands paced by construction** if it follows the laws in this file: painters ride
+   `__tiFrameReg` (never a raF self-loop), per-frame motion multiplies `window.__uiStepScale`,
+   half-rate hacks gate on `__uiPaceFps>45`, no infinite CSS/SMIL animation, no per-frame writes
+   into a CSS `transition`, push segments built with snprintf not juce::String. A Mac-built
+   preset menu that follows those is Windows-clean on arrival; anything that doesn't will show up
+   in pairs2.ps1 within an hour of measurement.
+5. **CPU regressions are caught by the counterbalanced harnesses** in the session scratchpads
+   (pairs2.ps1 A/B, open_ab.ps1 open latency, closed_ab.ps1 background diet, bisect.ps1 exp-hook
+   single runs) — re-create them from this file if the scratchpads are gone.
