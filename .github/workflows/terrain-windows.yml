@@ -18,6 +18,8 @@ on:
     branches: [windows-test]
     paths:
       - 'plugins/TerrainInstrument/**'
+      - 'plugins/TerrainGlitch/**'
+      - 'plugins/TerrainChop/**'
       - '_tools/**'
       - 'scripts/juce-webview2-failure-cap.patch'
       - '.github/workflows/terrain-windows.yml'
@@ -79,6 +81,12 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --target TerrainInstrument_Standalone -- /m
 
+      # fb522 -- the standalone FX plugins (Terrain Glitch / Terrain Chop) ride the same build
+      - name: Build Terrain Glitch (VST3)
+        run: cmake --build build --config Release --target TerrainGlitch_VST3 -- /m
+      - name: Build Terrain Chop (VST3)
+        run: cmake --build build --config Release --target TerrainChop_VST3 -- /m
+
       - name: Validate on Windows (pluginval)
         shell: pwsh
         continue-on-error: true    # reported, never blocks the artifact
@@ -96,4 +104,6 @@ jobs:
           path: |
             build/plugins/TerrainInstrument/TerrainInstrument_artefacts/Release/VST3/**
             build/plugins/TerrainInstrument/TerrainInstrument_artefacts/Release/Standalone/**
+            build/plugins/TerrainGlitch/TerrainGlitch_artefacts/Release/VST3/**
+            build/plugins/TerrainChop/TerrainChop_artefacts/Release/VST3/**
           if-no-files-found: error

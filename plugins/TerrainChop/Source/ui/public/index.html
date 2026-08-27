@@ -1,0 +1,1678 @@
+<!DOCTYPE html>
+<html lang="en" class="card-only">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width">
+<title>Terrain Chop</title>
+<style>
+/* ═══ Terrain Chop — the fb106 CHOP "Ribbon" card AS the plugin.
+   Faithful extraction from Terrain's Source/ui/public/index.html (the normative
+   source): the shared .ti-card kit + the card skin, verbatim. Page = the card,
+   pinned 0,0 on the house night background (the fb82 card-only law). ═══ */
+:root{--purple-400:#B794FF;}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html,body{margin:0;padding:0;}
+html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel-hosted card must survive the card-only visibility sweep */
+/* ═══ fb92 — EXTENSION CARDS v2: the locked four-card design system.
+   ARP "Constellation" · GLITCH "Monitor" · ROBIN "Wheel" · CHOP "Ribbon".
+   Glass + white ink + #B794FF-only + hairline digits + Prophet group boxes +
+   measured rails + MIX in every header. The legacy shell classes
+   (arp-ext/chop-ext/gli-ext/rbn-ext) stay ON the elements — they are the
+   pop-out CONTRACT (CARDS map, edge handoff, card-only boot) — but every
+   visual rule lives on the shared .ti-card kit below. ═══ */
+.ti-card{position:fixed;z-index:2147483645;width:316px;border-radius:14px;
+  background:linear-gradient(180deg,rgba(38,34,62,.84),rgba(28,25,50,.92));
+  -webkit-backdrop-filter:blur(22px) saturate(1.15);backdrop-filter:blur(22px) saturate(1.15);
+  border:1px solid rgba(255,255,255,.14);
+  box-shadow:0 24px 60px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.07);
+  overflow:hidden;display:none;user-select:none;-webkit-user-select:none;
+  font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;
+  font-variant-numeric:tabular-nums;}
+.ti-card.open{display:block;}
+.ti-card .h{display:flex;align-items:center;gap:6px;padding:10px 10px 9px;
+  border-bottom:1px solid rgba(255,255,255,.08);cursor:grab;}
+.ti-card .h.grab{cursor:grabbing;}
+.ti-card .h .g{letter-spacing:2px;color:rgba(255,255,255,.30);font-size:10px;}
+.ti-card .h .dot{width:5px;height:5px;border-radius:50%;background:#B794FF;}
+.ti-card .h .tt{font-size:9px;letter-spacing:1.8px;color:rgba(255,255,255,.92);text-transform:uppercase;font-weight:600;white-space:nowrap;}
+.ti-card .h .pset{flex:1 1 auto;min-width:0;display:flex;align-items:center;justify-content:center;gap:4px;cursor:default;}
+.ti-card .h .pset .pa{color:rgba(255,255,255,.42);font-size:12px;line-height:1;cursor:pointer;padding:0 1px;transition:color .15s ease;}
+.ti-card .h .pset .pa:hover{color:#fff;}
+.ti-card .h .pset .pn{max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-size:9px;letter-spacing:.4px;color:rgba(255,255,255,.9);
+  cursor:pointer;padding:2px 5px;border:1px solid transparent;border-radius:6px;transition:border-color .15s ease;}
+.ti-card .h .pset .pn:hover{border-color:rgba(255,255,255,.28);}
+/* fb133 — preset menu = the Import-browser grammar VERBATIM (Max: "look like this one"):
+   rgba(22,20,34,.72) glass, blur(20) sat(1.4), dim rows -> white pill + a leading dot when
+   current, dim hover wash, and the exact 5px translucent sliders (no chunky white bars). */
+.pmenu{position:fixed;z-index:2147483646;min-width:176px;max-width:206px;max-height:340px;overflow-y:auto;
+  /* fb139 — long names ellipsize inside the row; they can NEVER widen the menu (Max) */
+  background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);
+  border:1px solid rgba(255,255,255,0.11);border-radius:12px;
+  box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);
+  padding:5px;font-family:-apple-system,'SF Pro Text','Helvetica Neue',sans-serif;}
+.pmenu .ps{font-size:7px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.30);padding:6px 9px 3px;}
+.pmenu .pi{display:flex;align-items:center;gap:7px;padding:6px 9px;border-radius:6px;cursor:pointer;
+  font-size:9.5px;letter-spacing:.5px;color:rgba(255,255,255,.5);transition:.1s;}
+.pmenu .pi .nm{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.pmenu .pi:hover{color:rgba(255,255,255,.86);background:rgba(255,255,255,0.05);}
+.pmenu .pi.cur{color:#FFFFFF;background:rgba(255,255,255,0.07);}
+.pmenu .pi.cur::before{content:'•';color:#fff;font-size:9px;line-height:1;flex:none;}
+.pmenu .pi .dx{color:rgba(255,255,255,.30);font-size:9px;display:none;flex:none;}
+.pmenu .pi:hover .dx{display:block;}
+.pmenu .pi .dx:hover{color:#fff;}
+.pmenu .psave{justify-content:center;margin-bottom:3px;
+  border-bottom:1px solid rgba(255,255,255,0.07);border-radius:6px 6px 0 0;}
+.pmenu::-webkit-scrollbar{width:5px;height:5px;}
+.pmenu::-webkit-scrollbar-track{background:transparent;}
+.pmenu::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.13);border-radius:3px;}
+.pmenu::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.30);}
+.pmenu .pinp{width:130px;background:transparent;border:none;outline:none;color:#fff;font:inherit;text-align:center;}
+.ti-card .mix{margin-left:auto;display:flex;align-items:baseline;gap:4px;cursor:ew-resize;
+  font-size:6.5px;letter-spacing:1.2px;text-transform:uppercase;color:rgba(255,255,255,.40);}
+.ti-card .mix b{font-size:11px;font-weight:200;letter-spacing:.3px;color:rgba(255,255,255,.92);
+  font-family:-apple-system,'SF Pro Display',sans-serif;min-width:27px;text-align:right;}
+.ti-card .h .pop{position:relative;top:1px;margin-left:12px;font-size:7px;   /* fb236 — MEASURED: ink center was +1.92px below the header line at 2px (title/Init/100%/x all within ±0.35); 1px = the optical center between Max's two readings */letter-spacing:1.2px;text-transform:uppercase;
+  color:rgba(255,255,255,.45);font-weight:500;cursor:pointer;line-height:1;white-space:nowrap;}
+.ti-card .h .x{margin-left:10px;color:rgba(255,255,255,.80);font-size:12px;cursor:pointer;line-height:1;}
+.ti-card .h .pop:hover,.ti-card .h .x:hover{color:#fff;}
+.mv-ext .h .x{color:rgba(255,255,255,.85);}
+.ti-card .b{padding:12px 14px 14px;display:flex;flex-direction:column;}
+.arp-ext .b,.gli-ext .b{gap:12px;}
+
+/* tabs + panes (hero persists; the control band swaps) */
+.ti-card .tabs{display:flex;justify-content:center;gap:26px;}
+.rbn-ext .tabs{margin:10px 0 12px;}
+.chop-ext .tabs{margin:0 0 12px;}
+.ti-card .tab{position:relative;font-size:8px;letter-spacing:1.8px;text-transform:uppercase;
+  color:rgba(255,255,255,.40);font-weight:500;padding-bottom:5px;cursor:pointer;transition:color .12s;}
+.ti-card .tab:hover{color:rgba(255,255,255,.70);}
+.ti-card .tab.on{color:rgba(255,255,255,.95);}
+.ti-card .tab.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  bottom:0;width:14px;height:2px;border-radius:1px;background:#B794FF;}
+.ti-card .pane{display:none;}
+.ti-card .pane.on{display:flex;flex-direction:column;}
+.arp-ext .pane.on,.gli-ext .pane.on{gap:12px;}
+.ti-card .pane.on{justify-content:center;}   /* equalized spare air splits evenly — never a bottom hole */
+/* fb100 — dead space feeds the BOXES: row sections and trailing boxes stretch to
+   fill the equalized pane; interiors stay centered — air inside an outline reads
+   structured, a naked gap between sections doesn't */
+.ti-card .pane.on>.gboxrow,.ti-card .pane.on>.ctlrow{flex:1 1 auto;}
+.ti-card .pane.on>.gbox:last-child{flex:1 1 auto;display:flex;flex-direction:column;justify-content:center;}
+.ti-card .gboxrow{display:grid;gap:8px;align-items:stretch;}
+.ti-card .gboxrow .gbox{display:flex;flex-direction:column;justify-content:center;}   /* stretched boxes center their innards */
+.gli-ext .pane[data-p="fx"] .gboxrow{grid-template-columns:1.32fr 1fr;}
+.gli-ext .pane[data-p="motion"] .gboxrow{grid-template-columns:1fr 1fr;}
+.gli-ext .outg{gap:8px 7px;padding:2px 4px;}                       /* fb129 — Out fills its box */
+.gli-ext .outg .step{font-size:8px;}
+.chop-ext .pane[data-p="shape"] .gboxrow{grid-template-columns:1.3fr 1fr;}
+.chop-ext .pane .gboxrow .gbox{padding:12px 6px 8px;}
+
+/* Prophet group box: hairline outline, label interrupts the border top-center */
+.ti-card .gbox{position:relative;border:1px solid rgba(255,255,255,.15);border-radius:9px;}
+.ti-card .gbl{position:absolute;top:-4px;left:50%;transform:translateX(-50%);
+  font-size:6px;letter-spacing:1.6px;text-transform:uppercase;line-height:8px;
+  color:rgba(255,255,255,.52);background:#232045;padding:0 6px;white-space:nowrap;pointer-events:none;}
+.chop-ext .pane>.gbox+.gbox,.rbn-ext .pane>.gbox+.gbox{margin-top:13px;}
+.arp-ext .pane .gbox,.gli-ext .pane .gbox{padding:12px 8px 10px;}
+
+/* utility grids for in-system pane content */
+.ti-card .gr3{display:grid;grid-template-columns:repeat(3,1fr);gap:5px;}
+.ti-card .gr4{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;}
+.ti-card .mt8{margin-top:8px;}
+
+/* connector tree (Prophet traces) */
+.ti-card .tree{height:12px;position:relative;}
+.ti-card .tree svg{position:absolute;inset:0;width:100%;height:100%;}
+
+/* the measured-rails cell skeleton: control zone → label rail → value rail */
+.ti-card .cell{display:flex;flex-direction:column;align-items:center;}
+.ti-card .ctl{display:flex;align-items:flex-end;justify-content:center;width:100%;}
+.ti-card .cell .lb{font-size:6.5px;letter-spacing:1.3px;text-transform:uppercase;
+  color:rgba(255,255,255,.45);line-height:1;margin-top:6px;}
+.ti-card .cell .vl{font-size:9px;color:rgba(255,255,255,.90);font-weight:500;line-height:1;margin-top:4px;min-height:9px;}
+.ti-card .big{font-size:44px;font-weight:100;letter-spacing:.5px;color:rgba(255,255,255,.95);
+  font-family:-apple-system,'SF Pro Display',sans-serif;line-height:.82;cursor:ns-resize;}
+.ti-card .big i{font-style:normal;font-size:16px;font-weight:200;color:rgba(255,255,255,.42);}
+.ti-card .k svg,.ti-card .kn{cursor:ns-resize;}
+
+/* hairline knob ring (r=14 · rotate 128 — the locked ring) sizes per card */
+.arp-ext .k svg{width:34px;height:34px;display:block;}
+.gli-ext .k svg{width:32px;height:32px;display:block;}
+.rbn-ext .k svg{width:30px;height:30px;display:block;}
+.chop-ext .k svg{width:30px;height:30px;display:block;}
+
+/* fb143 — THE slider: the osc right-click Volume/Pan/Semitone glass slider, cloned
+   EXACTLY (Max: "the exact same ones on everything — same colors, same notches").
+   16px hit zone · 2px track @ .16 white · purple fill · 2×9 white BAR marker ·
+   1×7 centre notch on bipolar cells. No balls, no glow — the .oscq grammar verbatim. */
+.ti-card .tr{position:relative;height:16px;width:100%;cursor:ew-resize;}
+.ti-card .tr::before{content:'';position:absolute;left:0;right:0;top:50%;transform:translateY(-50%);
+  height:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
+.ti-card .tr u{position:absolute;left:50%;top:50%;width:1px;height:7px;transform:translate(-50%,-50%);
+  background:rgba(255,255,255,0.28);pointer-events:none;}
+.ti-card .tr i{position:absolute;top:50%;transform:translateY(-50%);height:2px;border-radius:1px;
+  background:rgba(255,255,255,.92);pointer-events:none;}   /* fb147 — WHITE like the knob arc (Max: all card knobs + sliders white; the MENU slider keeps its purple) */
+.ti-card .tr b{position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#fff;
+  transform:translate(-50%,-50%);pointer-events:none;}
+/* fb149 — the pop-out LFO PALETTE (?card=mod): park it beside a popped card and drag */
+.ti-card.mod-pal{width:300px;padding:10px 12px 12px;}
+.mod-pal .h{display:flex;align-items:center;justify-content:space-between;cursor:grab;padding-bottom:8px;}
+.mod-pal .h .ttl{font-size:9px;letter-spacing:2px;color:rgba(255,255,255,.55);text-transform:uppercase;}
+.mod-pal .h .x{cursor:pointer;color:rgba(255,255,255,.45);font-size:11px;padding:2px 4px;}
+.mod-pal .h .x:hover{color:#fff;}
+.mod-pal .chips{display:flex;gap:6px;}
+.mod-pal .chips .c{flex:1;text-align:center;font-size:11px;font-weight:400;color:rgba(255,255,255,.45);
+  border:1px solid rgba(255,255,255,.18);border-radius:6px;padding:6px 0;cursor:grab;transition:.12s;}
+.mod-pal .chips .c:hover{color:#fff;border-color:rgba(255,255,255,.45);}
+.mod-pal .chips .c.act{color:#fff;border-color:var(--purple-400);}   /* the button law */
+.mod-pal .hint{margin-top:8px;font-size:7.5px;letter-spacing:.3px;color:rgba(255,255,255,.35);text-align:center;}
+/* fb144 — the VERTICAL cut of THE slider (chop Depth): identical grammar rotated 90° */
+.ti-card .vsl{position:relative;width:16px;min-height:30px;flex:1 1 auto;align-self:center;cursor:ns-resize;}
+.ti-card .vsl::before{content:'';position:absolute;top:0;bottom:0;left:50%;transform:translateX(-50%);
+  width:2px;border-radius:1px;background:rgba(255,255,255,0.16);}
+.ti-card .vsl u{position:absolute;left:50%;top:50%;width:7px;height:1px;transform:translate(-50%,-50%);
+  background:rgba(255,255,255,0.28);pointer-events:none;}
+.ti-card .vsl i{position:absolute;left:50%;transform:translateX(-50%);width:2px;border-radius:1px;
+  background:rgba(255,255,255,.92);pointer-events:none;}   /* fb147 — WHITE like the knob arc */
+.ti-card .vsl b{position:absolute;left:50%;width:9px;height:2px;border-radius:1px;background:#fff;
+  transform:translate(-50%,50%);pointer-events:none;}
+
+
+/* value picker (fb95): a quiet box that opens the NATIVE Apple dropdown —
+   the micro ‹ › arrows are gone (click → SEE the options, never click-and-switch) */
+.ti-card .step{position:relative;width:100%;height:20px;border:1px solid rgba(255,255,255,.18);border-radius:6px;
+  font-size:7.5px;letter-spacing:.2px;color:rgba(255,255,255,.88);white-space:nowrap;transition:border-color .15s;}
+.ti-card .step:hover{border-color:rgba(255,255,255,.50);}
+.ti-card .step em{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+  font-style:normal;pointer-events:none;padding:0 4px;overflow:hidden;}   /* fb138 — symmetric: the 11px chevron reserve pushed every value LEFT of center (Max's eye) */
+.ti-card .step select{position:absolute;inset:0;width:100%;height:100%;opacity:0;cursor:pointer;
+  -webkit-appearance:none;appearance:none;border:none;background:transparent;}
+
+/* toggle pill: purple dot = on */
+.ti-card .togrow{display:grid;grid-template-columns:1fr 1fr;gap:5px;}
+.ti-card .tog{height:20px;border:1px solid rgba(255,255,255,.20);border-radius:6px;
+  display:flex;align-items:center;justify-content:center;gap:4px;cursor:pointer;
+  font-size:6.5px;letter-spacing:1px;text-transform:uppercase;color:rgba(255,255,255,.72);
+  transition:color .15s,border-color .15s;}
+.ti-card .tog:not(.off){border-color:rgba(255,255,255,.85);color:#fff;}
+.ti-card .tog.off{color:rgba(255,255,255,.38);}
+.ti-card .tog i{display:none;}   /* fb99 — no dot: the lit outline IS the on-state */
+
+/* momentary button (Roll) */
+
+/* pattern dots + chain (family furniture) */
+.ti-card .gl{font-size:6.5px;letter-spacing:1.4px;text-transform:uppercase;color:rgba(255,255,255,.32);}
+.ti-card .slotrow{display:flex;align-items:center;justify-content:space-between;padding:0 3px;}
+.rbn-ext .slotrow,.chop-ext .slotrow{margin-top:12px;}
+.ti-card .sd{display:flex;flex-direction:column;align-items:center;gap:4px;width:20px;cursor:pointer;}
+.ti-card .sd i{width:7px;height:7px;border-radius:50%;border:1px solid rgba(255,255,255,.26);transition:background .12s,border-color .12s;}
+.ti-card .sd:hover i{border-color:rgba(255,255,255,.55);}
+.ti-card .sd.on i{background:rgba(255,255,255,.92);border-color:transparent;}
+.ti-card .sd b{font-size:6.5px;font-weight:400;color:rgba(255,255,255,.35);}
+.ti-card .sd.on b{color:rgba(255,255,255,.85);}
+.ti-card .chain{display:flex;align-items:center;gap:7px;margin-top:7px;}
+.ti-card .chip{min-width:15px;height:15px;padding:0 4px;border:1px solid rgba(255,255,255,.18);border-radius:4px;
+  display:flex;align-items:center;justify-content:center;font-size:7px;color:rgba(255,255,255,.55);cursor:pointer;transition:border-color .12s,color .12s;}
+.ti-card .chip:hover{color:rgba(255,255,255,.85);}
+.ti-card .chip.cur{border-color:#B794FF;color:#fff;text-shadow:0 0 3px rgba(255,255,255,.35);}   /* fb125 button law */
+.ti-card .arr{color:rgba(255,255,255,.25);font-size:8px;}
+.ti-card .add{margin-left:auto;color:rgba(255,255,255,.40);font-size:10px;cursor:pointer;}
+.ti-card .add:hover{color:rgba(255,255,255,.85);}
+
+/* bottom-right resize grip (fb95): invisible zone; hairline corner on hover */
+.ti-card .rsz{position:absolute;right:0;bottom:0;width:18px;height:18px;cursor:nwse-resize;z-index:9;}
+.ti-card .rsz::after{content:'';position:absolute;right:4px;bottom:4px;width:7px;height:7px;
+  border-right:1px solid rgba(255,255,255,0);border-bottom:1px solid rgba(255,255,255,0);
+  border-radius:0 0 2px 0;transition:border-color .15s;}
+.ti-card .rsz:hover::after{border-right-color:rgba(255,255,255,.45);border-bottom-color:rgba(255,255,255,.45);}
+
+/* ═══ fb98 — RIGID GRIDS: a name or value can NEVER resize a track or outline
+   (fr tracks have a min-content floor; minmax(0,1fr) removes it) ═══ */
+.ti-card .cell,.ti-card .gbox{min-width:0;}
+.ti-card .cell .lb,.ti-card .cell .vl{white-space:nowrap;max-width:100%;overflow:hidden;text-align:center;}
+.ti-card .gr3{grid-template-columns:repeat(3,minmax(0,1fr));}
+/* fb137 — glitch Out box: the pills must live INSIDE the box (Max's screenshot) */
+.gli-ext .outg{gap:4px;}
+.gli-ext .outg .step{box-sizing:border-box;min-width:0;}
+.gli-ext .outg .step em{font-size:8px;letter-spacing:.2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:0 1px;}
+.ti-card .gr4{grid-template-columns:repeat(4,minmax(0,1fr));}
+.ti-card .togrow{grid-template-columns:repeat(2,minmax(0,1fr));}
+.gli-ext .fx{grid-template-columns:repeat(8,minmax(0,1fr));}
+.rbn-ext .fx{grid-template-columns:repeat(4,minmax(0,1fr));}
+.arp-ext .knobs{grid-template-columns:repeat(4,minmax(0,1fr));}
+.gli-ext .grid5{grid-template-columns:72px repeat(6,minmax(0,1fr));}
+.rbn-ext .hum .in{grid-template-columns:repeat(3,minmax(0,1fr));}
+.rbn-ext .pane[data-p="behavior"] .in,.rbn-ext .pane[data-p="order"] .in{grid-template-columns:repeat(4,minmax(0,1fr));}
+.rbn-ext .feel .cells{grid-template-columns:repeat(3,minmax(0,1fr));}
+.rbn-ext .ctlrow{grid-template-columns:minmax(0,1fr) minmax(0,1.1fr);}
+.chop-ext .ctlrow{grid-template-columns:minmax(0,1fr) minmax(0,1.12fr);}
+.chop-ext .carve .cells{grid-template-columns:repeat(2,minmax(0,1fr));}
+.chop-ext .depth .in{grid-template-columns:repeat(4,minmax(0,1fr));}
+.chop-ext .pane .kin{grid-template-columns:repeat(4,minmax(0,1fr));}
+.chop-ext .pane .kin3{grid-template-columns:repeat(2,minmax(0,1fr));}
+.chop-ext .lanes{grid-template-columns:repeat(6,minmax(0,1fr));}
+.gli-ext .pane[data-p="fx"] .gboxrow{grid-template-columns:minmax(0,1.32fr) minmax(0,1fr);}
+.gli-ext .pane[data-p="motion"] .gboxrow{grid-template-columns:minmax(0,1fr) minmax(0,1fr);}
+.gli-ext .pane[data-p="motion"] .cell .lb{letter-spacing:.8px;}   /* fb138 — QUANT/CLOCK fit their 4-col cells */
+/* fb146 — Motion = full-height verticals (the same fill grammar as chop Shape, scoped .on) */
+.gli-ext .pane[data-p="motion"].on .gbox{display:flex;flex-direction:column;}
+.gli-ext .pane[data-p="motion"].on .gr4,.gli-ext .pane[data-p="motion"].on .gr3{flex:1;align-items:stretch;}
+.gli-ext .pane[data-p="motion"].on .cell{justify-content:flex-end;gap:5px;}
+.gli-ext .grid5 .cell .lb{letter-spacing:.8px;}   /* fb144 — STREAK/STEREO fit their cells (the fb138 Clock treatment) */
+.chop-ext .pane[data-p="shape"] .gboxrow{grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);}
+/* tabs: EQUAL THIRDS — the middle tab rides the card's exact centerline; the
+   underline centers on the INK (letter-spacing leaves a phantom trailing px) */
+.ti-card .tabs{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));justify-items:center;
+  width:196px;align-self:center;gap:0;}
+.ti-card .tab.on::after{left:calc(50% - 0.9px);}
+/* GLITCH chance value: natural kerning (mockup-exact "50%"), whole block right-anchored
+   in its cell — digits grow LEFT into open space; % and the label never move. */
+.gli-ext .big{white-space:nowrap;}
+.gli-ext .big.three{font-size:33px;}   /* "100%" stays inside its cell */
+.gli-ext .chcell .ctl{justify-content:flex-end;padding-right:12px;}
+
+/* ── ARP · Constellation ── */
+.arp-ext .hero{position:relative;height:112px;}
+.arp-ext .hero svg{position:absolute;inset:6px 0 12px 0;width:100%;height:calc(100% - 18px);cursor:crosshair;}
+.arp-ext .leds{position:absolute;left:0;right:0;bottom:0;display:grid;grid-template-columns:repeat(16,1fr);pointer-events:none;}
+.arp-ext .leds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.16);}
+.arp-ext .leds i.on{background:#B794FF;}
+.arp-ext .lanes{display:flex;justify-content:space-between;padding:0 6px;}
+.arp-ext .lane{position:relative;font-size:7px;letter-spacing:.8px;text-transform:uppercase;
+  color:rgba(255,255,255,.38);padding-bottom:4px;cursor:pointer;transition:color .12s;}
+.arp-ext .lane:hover{color:rgba(255,255,255,.70);}
+.arp-ext .lane.on{color:rgba(255,255,255,.95);}
+.arp-ext .lane.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  bottom:0;width:3px;height:3px;border-radius:50%;background:#B794FF;}
+.arp-ext .knobs{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+
+/* ── GLITCH · Monitor ── */
+.gli-ext .screen{display:grid;grid-template-columns:84px 1fr 26px;gap:8px;height:96px;
+  background:#100E1C;border-radius:9px;border:1px solid rgba(255,255,255,.07);
+  padding:9px 10px;box-shadow:inset 0 2px 10px rgba(0,0,0,.5);}
+.gli-ext .ro{display:flex;flex-direction:column;gap:5px;font-weight:300;}
+.gli-ext .ro div{font-size:7px;letter-spacing:1.1px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap;}
+.gli-ext .ro b{color:rgba(255,255,255,.90);font-weight:500;}
+.gli-ext .ro .live b{color:#B794FF;}
+.gli-ext .ro .foot{margin-top:auto;color:rgba(255,255,255,.28);}
+.gli-ext .graph{position:relative;}
+.gli-ext .graph svg{position:absolute;inset:0;width:100%;height:100%;}
+.gli-ext .matrix{display:grid;grid-template-columns:repeat(3,1fr);gap:3px;align-content:start;padding-top:2px;}
+.gli-ext .matrix i{width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.13);justify-self:center;}
+.gli-ext .matrix i.on{background:#B794FF;}
+.gli-ext .matrix i.dim{background:rgba(183,148,255,.35);}
+.gli-ext .matrix i.lv{background:#B794FF;box-shadow:0 0 4px rgba(183,148,255,.65);}   /* fb124 speaker meter */
+.gli-ext .matrix i.pk{background:#D9C8FF;box-shadow:0 0 5px rgba(217,200,255,.8);}
+.gli-ext .fx{display:grid;grid-template-columns:repeat(8,1fr);gap:4px;}
+.gli-ext .fxb{aspect-ratio:1;font-size:6.5px;letter-spacing:.3px;}   /* fb146 — fb145's taller tiles reverted (Max: "I don't like the boxes extended") */
+.gli-ext .fleds{display:grid;grid-template-columns:repeat(8,1fr);margin-top:4px;}
+.gli-ext .grid5{display:grid;grid-template-columns:72px repeat(6,minmax(0,1fr));gap:5px;}
+.gli-ext .big{font-size:38px;}   /* fb142 — the seven-up Fire row: Chance slims a notch */
+.gli-ext .big.three{font-size:29px;}
+.gli-ext .grid5 .ctl{height:48px;}
+.gli-ext .fxsel{display:flex;justify-content:space-between;padding:0 4px;}
+.gli-ext .fxsel .lane{position:relative;font-size:7px;letter-spacing:.6px;text-transform:uppercase;
+  color:rgba(255,255,255,.38);padding-bottom:4px;cursor:pointer;transition:color .12s;}
+.gli-ext .fxsel .lane:hover{color:rgba(255,255,255,.70);}
+.gli-ext .fxsel .lane.on{color:rgba(255,255,255,.95);}
+.gli-ext .fxsel .lane.on::after{content:'';position:absolute;left:50%;transform:translateX(-50%);
+  bottom:0;width:3px;height:3px;border-radius:50%;background:#B794FF;}
+
+/* shared TE button bank base (GLITCH fx + ROBIN stations) */
+.ti-card .fxb{border:1px solid rgba(255,255,255,.20);border-radius:6px;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;text-transform:uppercase;
+  color:rgba(255,255,255,.50);transition:background .12s,color .12s,border-color .12s;}
+.ti-card .fxb:hover{color:rgba(255,255,255,.85);}
+.ti-card .fxb.on{background:rgba(255,255,255,.92);border-color:transparent;color:#1A1A2E;font-weight:600;}
+.ti-card .fxb.cur{border-color:#B794FF;color:#B794FF;}
+.ti-card .fxb.on.cur{background:rgba(255,255,255,.92);color:#1A1A2E;box-shadow:0 0 0 1px #B794FF;}
+.ti-card .fleds i{justify-self:center;width:3px;height:3px;border-radius:50%;background:rgba(255,255,255,.14);}
+.ti-card .fleds i.on{background:#B794FF;}
+
+/* ── ROBIN · Wheel ── */
+.rbn-ext .hero{display:grid;grid-template-columns:1fr 92px;gap:0;height:114px;}
+.rbn-ext .wheel{position:relative;}
+.rbn-ext .wheel svg{position:absolute;inset:0;width:100%;height:100%;}
+.rbn-ext .stat{display:flex;flex-direction:column;gap:5px;justify-content:center;font-weight:300;padding-left:12px;}
+.rbn-ext .stat div{font-size:7px;letter-spacing:1.1px;color:rgba(255,255,255,.42);text-transform:uppercase;white-space:nowrap;}
+.rbn-ext .stat b{color:rgba(255,255,255,.90);font-weight:500;}
+.rbn-ext .stat .live b{color:#B794FF;}
+.rbn-ext .bank{padding:10px 8px 8px;}
+.rbn-ext .fx{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;}
+.rbn-ext .fxb{height:26px;font-size:8.5px;letter-spacing:.5px;}
+.rbn-ext .fleds{display:grid;grid-template-columns:repeat(4,1fr);margin-top:4px;}
+.rbn-ext .ctlrow{display:grid;grid-template-columns:1fr 1.1fr;gap:8px;align-items:end;}
+.rbn-ext .gbox .cell .ctl{height:40px;}
+.rbn-ext .gbox.feel{padding:10px 8px 8px;}
+.rbn-ext .feel .cells{display:grid;grid-template-columns:repeat(3,1fr);gap:9px;margin-top:7px;}   /* fb143 — tracks never touch across cells */
+.rbn-ext .feel .cells .ctl{height:13px;padding:0 4px;align-items:center;}
+.rbn-ext .gbox.hum{padding:10px 6px 8px;}
+.rbn-ext .hum .in{display:grid;grid-template-columns:repeat(3,1fr);}
+.rbn-ext .pane[data-p="behavior"] .in,.rbn-ext .pane[data-p="order"] .in{
+  display:grid;grid-template-columns:repeat(4,1fr);gap:5px;padding:0 2px;}
+.rbn-ext .pane[data-p="behavior"] .gbox,.rbn-ext .pane[data-p="order"] .gbox{padding:12px 8px 10px;}
+.rbn-ext .pane[data-p="behavior"] .cell,.rbn-ext .pane[data-p="order"] .cell{width:100%;}
+.rbn-ext .pane[data-p="behavior"] .cell .step,.rbn-ext .pane[data-p="order"] .cell .step{width:100%;}
+
+/* ── CHOP · Ribbon ── */
+.chop-ext .lanes{display:grid;grid-template-columns:repeat(6,1fr);
+  border:1px solid rgba(255,255,255,.16);border-radius:8px;height:24px;overflow:hidden;margin-bottom:14px;}
+.chop-ext .lane{display:flex;align-items:center;justify-content:center;font-size:7px;
+  letter-spacing:.7px;text-transform:uppercase;color:rgba(255,255,255,.42);cursor:pointer;
+  border-left:1px solid rgba(255,255,255,.09);transition:color .12s,background .12s;}
+.chop-ext .lane:first-child{border-left:none;}
+.chop-ext .lane:hover{color:rgba(255,255,255,.75);}
+.chop-ext .lane.on{color:#fff;background:rgba(183,148,255,.13);box-shadow:inset 0 -2px 0 #B794FF;}
+.chop-ext .ctlrow{display:grid;grid-template-columns:1fr 1.12fr;gap:8px;}
+.chop-ext .gbox.carve{padding:14px 9px 8px;display:flex;flex-direction:column;justify-content:flex-end;}
+.chop-ext .carve .cells{display:grid;grid-template-columns:repeat(2,1fr);gap:4px;margin-top:8px;}
+.chop-ext .carve .cell{gap:6px;}
+.chop-ext .carve .cell .lb{margin-top:0;}
+.chop-ext .gbox.depth{padding:14px 8px 8px;}
+.chop-ext .depth .in{display:grid;grid-template-columns:repeat(4,1fr);height:100%;}   /* fb144 — full-width cells again (the fb143 gap clipped RANGE); vertical tracks cannot touch */
+.chop-ext .depth .cell{justify-content:flex-end;gap:5px;}   /* fb144 — labels anchor the bottom; the vertical slider fills above */
+.chop-ext .depth .cell .lb,.chop-ext .depth .cell .vl{margin-top:0;}
+.chop-ext .ribbon{position:relative;height:52px;margin-top:14px;}
+.chop-ext .ribbon svg{position:absolute;inset:0;width:100%;height:100%;}
+.chop-ext .pane>.gbox{padding:12px 8px 8px;}
+.chop-ext .pane .kin{display:grid;grid-template-columns:repeat(4,1fr);}
+/* fb145 — SHAPE boxes: the vertical sliders fill top-to-bottom; labels keep the shared
+   bottom baseline (Crush…Trim all line up) */
+.chop-ext .pane[data-p="shape"] .gboxrow{align-items:stretch;flex:1;}
+.chop-ext .pane[data-p="shape"].on{display:flex;flex-direction:column;}   /* fb146 — MUST carry .on: without it this out-specifies .pane{display:none} and the boxes leak onto every tab (Max caught it live) */
+.chop-ext .pane[data-p="shape"] .gbox{display:flex;flex-direction:column;}
+.chop-ext .pane[data-p="shape"] .kin,.chop-ext .pane[data-p="shape"] .kin3{flex:1;}
+.chop-ext .pane[data-p="shape"] .cell{justify-content:flex-end;gap:5px;}
+.chop-ext .pane .kin3{display:grid;grid-template-columns:repeat(2,1fr);}
+
+/* ═══ fb82 — card-only boot (popped native window). Page IS one card: pinned
+   0,0, everything else frozen. Popped glass goes opaque (no backdrop to blur). ═══ */
+html.card-only,html.card-only body{overflow:hidden!important;background:#1A1A2E!important;}
+html.card-only:not(.card-only-late) body>*:not(.ti-popcard){visibility:hidden!important;}
+html.card-only-late .ti-preboot{display:none!important;}
+html.card-only .ti-ghost{visibility:hidden!important;pointer-events:none!important;position:relative!important;z-index:2147483646!important;}   /* fb232 — the canonical menu's host branch: laid out, invisible, inert — and LIFTED into its own stacking context so the menu inside it beats the body-level card (a huge z inside an auto-z branch loses to any positive sibling) */
+html.card-only .ti-ghost #syn-ctx-menu.act{visibility:visible!important;pointer-events:auto!important;}
+html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!important;box-shadow:none!important;
+  background:linear-gradient(180deg,#26223E,#1C1932)!important;
+  -webkit-backdrop-filter:none!important;backdrop-filter:none!important;}
+</style>
+</head>
+<body>
+<!-- JUCE Native Interop (inlined from Terrain — the same lib its page uses) -->
+<script>
+if (
+  typeof window.__JUCE__ !== "undefined" &&
+  typeof window.__JUCE__.getAndroidUserScripts !== "undefined" &&
+  typeof window.inAndroidUserScriptEval === "undefined"
+) {
+  window.inAndroidUserScriptEval = true;
+  eval(window.__JUCE__.getAndroidUserScripts());
+  delete window.inAndroidUserScriptEval;
+}
+
+{
+  if (typeof window.__JUCE__ === "undefined") {
+    console.warn(
+      "The 'window.__JUCE__' object is undefined." +
+        " Native integration features will not work." +
+        " Defining a placeholder 'window.__JUCE__' object."
+    );
+
+    window.__JUCE__ = {
+      postMessage: function () {},
+    };
+  }
+
+  if (typeof window.__JUCE__.initialisationData === "undefined") {
+    window.__JUCE__.initialisationData = {
+      __juce__platform: [],
+      __juce__functions: [],
+      __juce__registeredGlobalEventIds: [],
+      __juce__sliders: [],
+      __juce__toggles: [],
+      __juce__comboBoxes: [],
+    };
+  }
+
+  class ListenerList {
+    constructor() {
+      this.listeners = new Map();
+      this.listenerId = 0;
+    }
+
+    addListener(fn) {
+      const newListenerId = this.listenerId++;
+      this.listeners.set(newListenerId, fn);
+      return newListenerId;
+    }
+
+    removeListener(id) {
+      if (this.listeners.has(id)) {
+        this.listeners.delete(id);
+      }
+    }
+
+    callListeners(payload) {
+      for (const [, value] of this.listeners) {
+        value(payload);
+      }
+    }
+  }
+
+  class EventListenerList {
+    constructor() {
+      this.eventListeners = new Map();
+    }
+
+    addEventListener(eventId, fn) {
+      if (!this.eventListeners.has(eventId))
+        this.eventListeners.set(eventId, new ListenerList());
+
+      const id = this.eventListeners.get(eventId).addListener(fn);
+      return [eventId, id];
+    }
+
+    removeEventListener([eventId, id]) {
+      if (this.eventListeners.has(eventId)) {
+        this.eventListeners.get(eventId).removeListener(id);
+      }
+    }
+
+    emitEvent(eventId, object) {
+      if (this.eventListeners.has(eventId))
+        this.eventListeners.get(eventId).callListeners(object);
+    }
+  }
+
+  class Backend {
+    constructor() {
+      this.listeners = new EventListenerList();
+    }
+
+    addEventListener(eventId, fn) {
+      return this.listeners.addEventListener(eventId, fn);
+    }
+
+    removeEventListener([eventId, id]) {
+      this.listeners.removeEventListener([eventId, id]);
+    }
+
+    emitEvent(eventId, object) {
+      window.__JUCE__.postMessage(
+        JSON.stringify({ eventId: eventId, payload: object })
+      );
+    }
+
+    emitByBackend(eventId, object) {
+      this.listeners.emitEvent(eventId, JSON.parse(object));
+    }
+  }
+
+  if (typeof window.__JUCE__.backend === "undefined")
+    window.__JUCE__.backend = new Backend();
+}
+</script>
+<!-- JUCE Frontend Library (inlined from Terrain) -->
+<script>
+(function() {
+  'use strict';
+
+  class PromiseHandler {
+    constructor() {
+      this.lastPromiseId = 0;
+      this.promises = new Map();
+
+      window.__JUCE__.backend.addEventListener(
+        "__juce__complete",
+        ({ promiseId, result }) => {
+          if (this.promises.has(promiseId)) {
+            this.promises.get(promiseId).resolve(result);
+            this.promises.delete(promiseId);
+          }
+        }
+      );
+    }
+
+    createPromise() {
+      const promiseId = this.lastPromiseId++;
+      const result = new Promise((resolve, reject) => {
+        this.promises.set(promiseId, { resolve: resolve, reject: reject });
+      });
+      return [promiseId, result];
+    }
+  }
+
+  const promiseHandler = new PromiseHandler();
+
+  function getNativeFunction(name) {
+    if (!window.__JUCE__.initialisationData.__juce__functions.includes(name))
+      console.warn(
+        "Creating native function binding for '" + name + "', which is unknown to the backend"
+      );
+
+    const f = function () {
+      const [promiseId, result] = promiseHandler.createPromise();
+      window.__JUCE__.backend.emitEvent("__juce__invoke", {
+        name: name,
+        params: Array.prototype.slice.call(arguments),
+        resultId: promiseId,
+      });
+      return result;
+    };
+
+    return f;
+  }
+
+  class ListenerList {
+    constructor() {
+      this.listeners = new Map();
+      this.listenerId = 0;
+    }
+
+    addListener(fn) {
+      const newListenerId = this.listenerId++;
+      this.listeners.set(newListenerId, fn);
+      return newListenerId;
+    }
+
+    removeListener(id) {
+      if (this.listeners.has(id)) {
+        this.listeners.delete(id);
+      }
+    }
+
+    callListeners(payload) {
+      for (const [, value] of this.listeners) {
+        value(payload);
+      }
+    }
+  }
+
+  const BasicControl_valueChangedEventId = "valueChanged";
+  const BasicControl_propertiesChangedId = "propertiesChanged";
+  const SliderControl_sliderDragStartedEventId = "sliderDragStarted";
+  const SliderControl_sliderDragEndedEventId = "sliderDragEnded";
+
+  class SliderState {
+    constructor(name) {
+      if (!window.__JUCE__.initialisationData.__juce__sliders.includes(name))
+        console.warn(
+          "Creating SliderState for '" + name + "', which is unknown to the backend"
+        );
+
+      this.name = name;
+      this.identifier = "__juce__slider" + this.name;
+      this.scaledValue = 0;
+      this.properties = {
+        start: 0, end: 1, skew: 1, name: "", label: "",
+        numSteps: 100, interval: 0, parameterIndex: -1,
+      };
+      this.valueChangedEvent = new ListenerList();
+      this.propertiesChangedEvent = new ListenerList();
+
+      window.__JUCE__.backend.addEventListener(this.identifier, (event) =>
+        this.handleEvent(event)
+      );
+
+      window.__JUCE__.backend.emitEvent(this.identifier, {
+        eventType: "requestInitialUpdate",
+      });
+    }
+
+    setNormalisedValue(newValue) {
+      this.scaledValue = this.snapToLegalValue(
+        this.normalisedToScaledValue(newValue)
+      );
+      window.__JUCE__.backend.emitEvent(this.identifier, {
+        eventType: BasicControl_valueChangedEventId,
+        value: this.scaledValue,
+      });
+    }
+
+    sliderDragStarted() {
+      window.__JUCE__.backend.emitEvent(this.identifier, {
+        eventType: SliderControl_sliderDragStartedEventId,
+      });
+    }
+
+    sliderDragEnded() {
+      window.__JUCE__.backend.emitEvent(this.identifier, {
+        eventType: SliderControl_sliderDragEndedEventId,
+      });
+    }
+
+    handleEvent(event) {
+      if (event.eventType == BasicControl_valueChangedEventId) {
+        this.scaledValue = event.value;
+        this.valueChangedEvent.callListeners();
+      }
+      if (event.eventType == BasicControl_propertiesChangedId) {
+        let { eventType: _, ...rest } = event;
+        this.properties = rest;
+        this.propertiesChangedEvent.callListeners();
+      }
+    }
+
+    getScaledValue() {
+      return this.scaledValue;
+    }
+
+    getNormalisedValue() {
+      return Math.pow(
+        (this.scaledValue - this.properties.start) /
+          (this.properties.end - this.properties.start),
+        this.properties.skew
+      );
+    }
+
+    normalisedToScaledValue(normalisedValue) {
+      return (
+        Math.pow(normalisedValue, 1 / this.properties.skew) *
+          (this.properties.end - this.properties.start) +
+        this.properties.start
+      );
+    }
+
+    snapToLegalValue(value) {
+      const interval = this.properties.interval;
+      if (interval == 0) return value;
+      const start = this.properties.start;
+      const clamp = (val, min = 0, max = 1) => Math.max(min, Math.min(max, val));
+      return clamp(
+        start + interval * Math.floor((value - start) / interval + 0.5),
+        this.properties.start,
+        this.properties.end
+      );
+    }
+  }
+
+  const sliderStates = new Map();
+  for (const sliderName of window.__JUCE__.initialisationData.__juce__sliders)
+    sliderStates.set(sliderName, new SliderState(sliderName));
+
+  function getSliderState(name) {
+    if (!sliderStates.has(name)) sliderStates.set(name, new SliderState(name));
+    return sliderStates.get(name);
+  }
+
+  window.__sliderRegistry = sliderStates;   /* probe surface — the ui_suite reads which param ids the page bound */
+  // Expose API as global
+  window.Juce = {
+    getNativeFunction: getNativeFunction,
+    getSliderState: getSliderState,
+  };
+})();
+</script>
+<script>
+/* ═══ Terrain Chop — the card, extracted. Max: "their whole UI is their card...
+   same UI, just make it a VST3 and an AU." Everything between the EXTRACT markers
+   is paste-derived from Terrain's index.html; adaptations are own-line, commented. ═══ */
+(function(){
+  /* ── PRELUDE — this plugin's glue ── */
+  window.__cardOnly='chop';   /* the fb82 card-only law: this page IS one card */
+  window.__zoomFix=1;
+  window.__vw=function(){ return (window.innerWidth||380)/(window.__zoomFix||1); };
+  window.__vh=function(){ return (window.innerHeight||640)/(window.__zoomFix||1); };
+
+  /* THE SHIM IS THE RELAY. In Terrain the popped-card shim rides the setSynParam/
+     getSynParam natives (a WebSliderRelay serves exactly one WebView); in THIS plugin
+     the editor registers a real relay for every card param, so the shim resolves
+     straight to Juce.getSliderState. In a plain browser / headless harness (no
+     backend sliders registered) it holds the documented default locally and writes
+     go nowhere — exactly as inert as the real backend (the fb393 law). The
+     getSliderState call still runs either way so the ui_suite's registry probe sees
+     every id the card actually bound (verify the PATH, fb373). */
+  window.__synSliderShim=function(id,def){
+    var live=false;
+    try{ live=(window.__JUCE__.initialisationData.__juce__sliders.length>0); }catch(e){}
+    var st=null;
+    try{ if(window.Juce&&window.Juce.getSliderState) st=window.Juce.getSliderState(id); }catch(e){}
+    if(live&&st) return st;
+    var v=(def==null?0.5:def), ls=[];
+    return { getNormalisedValue:function(){ return v; },
+             setNormalisedValue:function(n){ v=Math.max(0,Math.min(1,n)); for(var i=0;i<ls.length;i++){ try{ ls[i](); }catch(e){} } },
+             valueChangedEvent:{ addListener:function(f){ ls.push(f); } } };
+  };
+
+  /* ── EXTRACT: shared card runtime (Terrain index.html) ── */
+    var J = (window.Juce && window.Juce.getSliderState) ? window.Juce : null;
+    var RATE_DIV_RICH=["1/1","1/2.","1/2","1/4.","1/2T","1/4","1/8.","1/4T","1/8","1/16.","1/8T","1/16","1/32.","1/16T","1/32","1/32T","1/64","1/128","1/256"];
+    var TIC=(function(){
+      var FSTK="-apple-system,'SF Pro Text','Helvetica Neue',sans-serif";
+      function C01(n){ return Math.max(0,Math.min(1,n)); }
+      function el(html){ var t=document.createElement('template'); t.innerHTML=html.trim(); return t.content.firstElementChild; }
+      function EA(list,f){ Array.prototype.forEach.call(list,f); }
+      function pct(n){ return Math.round(n*100)+'%'; }
+      function inum(a,b){ return function(n){ return String(Math.round(a+n*(b-a))); }; }
+      // knob ring — r=14, C≈88, rotate(128): dash n*88 of a 132 pattern (the locked look)
+      function knobSVG(){ return '<svg viewBox="0 0 36 36">'
+        +'<circle cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.13)" stroke-width="2"/>'
+        +'<circle class="kf" cx="18" cy="18" r="14" fill="none" stroke="rgba(255,255,255,.92)" stroke-width="2" stroke-linecap="round" stroke-dasharray="0 132" transform="rotate(90 18 18)"/></svg>'; }   /* fb150 — zero at the BOTTOM (was 128deg = 7:30): 50% fills exactly half the ring and lands at 12 o'clock (Max: "50% looked like three-fourths") */
+      function setRing(host,n){ var d=C01(n)*88, kf=host.querySelector('.kf');
+        if(kf) kf.setAttribute('stroke-dasharray', d.toFixed(1)+' '+(132-d).toFixed(1)); }
+
+      /* pointer drag → normalized value; dblclick = reset (suppressed 400ms after a drag) */
+      function dragify(elm,o){
+        var dn=false,s0=0,n0=0,moved=false,lastDragUp=0;
+        elm.addEventListener('pointerdown',function(e){ if(e.button!==0)return; dn=true; moved=false;
+          s0=(o.axis==='x')?e.clientX:e.clientY; n0=o.get();
+          try{ elm.setPointerCapture(e.pointerId); }catch(_){}
+          e.preventDefault(); e.stopPropagation(); });
+        elm.addEventListener('pointermove',function(e){ if(!dn)return;
+          var d=(o.axis==='x')?(e.clientX-s0):(s0-e.clientY);
+          if(Math.abs(d)>2)moved=true;
+          o.set(C01(n0+d/(o.span||140))); });
+        function up(){ if(dn&&moved)lastDragUp=Date.now(); dn=false; }
+        elm.addEventListener('pointerup',up); elm.addEventListener('pointercancel',up);
+        elm.addEventListener('dblclick',function(e){ if(Date.now()-lastDragUp<400)return;
+          if(o.reset!=null)o.set(o.reset); e.preventDefault(); e.stopPropagation(); });
+      }
+
+      /* tiny observable state bag */
+      function mkState(init){ var ls=[];
+        var S={ v:init,
+          on:function(f){ ls.push(f); },
+          set:function(k,val){ if(S.v[k]===val)return; S.v[k]=val;
+            for(var i=0;i<ls.length;i++){ try{ ls[i](k,val); }catch(e){} } } };
+        return S; }
+
+      /* ── cell builders (the measured-rails skeleton: ctl → label → value) ── */
+      /* fb145 — card param -> ModDest index (mirrors the C++ enum append; base 366).
+         The 4 macro-shared params ride the EXISTING flow dests (23/24/25). */
+      var MODDEST={'FLOW_ARP_SWING':366,'FLOW_ARP_MROLL':367,'FLOW_ARP_TIMBRE':368,'FLOW_ARP_GLIDE':369,'FLOW_ARP_P_RANGE':370,'FLOW_ARP_P_CURVE':371,
+        'FLOW_ARP_P_QUANT':372,'FLOW_ARP_P_SLIDE':373,'FLOW_ARP_G_LEN':374,'FLOW_ARP_G_CURVE':375,'FLOW_ARP_G_RAND':376,'FLOW_ARP_G_SLIDE':377,
+        'FLOW_ARP_V_RANGE':378,'FLOW_ARP_V_CURVE':379,'FLOW_ARP_V_RAND':380,'FLOW_ARP_V_FLOOR':381,'FLOW_ARP_O_RANGE':382,'FLOW_ARP_O_BIAS':383,
+        'FLOW_ARP_O_RAND':384,'FLOW_ARP_O_SPREAD':385,'FLOW_ARP_R_COUNT':386,'FLOW_ARP_R_DECAY':387,'FLOW_ARP_R_CURVE':388,'FLOW_ARP_R_AMT':389,
+        'FLOW_ARP_C_AMT':390,'FLOW_ARP_C_BIAS':391,'FLOW_ARP_C_SEED':392,'FLOW_ARP_C_DRIFT':393,'FLOW_ARP_W_DEPTH':394,'FLOW_ARP_W_CURVE':395,
+        'FLOW_ARP_W_SLIDE':396,'FLOW_ARP_W_RAND':397,'FLOW_ARP_BLEND':398,'FLOW_CHOP_SCAN':399,'FLOW_CHOP_WANDER':400,'FLOW_CHOP_SPREAD':401,
+        'FLOW_CHOP_SPEED':402,'FLOW_CHOP_STEPS':403,'FLOW_CHOP_DETUNE':404,'FLOW_CHOP_WOW':405,'FLOW_CHOP_SMOOTH':406,'FLOW_CHOP_GRIT':407,
+        'FLOW_CHOP_TRIM':408,'FLOW_CHOP_O_SPREAD':409,'FLOW_CHOP_O_BIAS':410,'FLOW_CHOP_O_LOCK':411,'FLOW_CHOP_O_SEED':412,'FLOW_CHOP_P_RANGE':413,
+        'FLOW_CHOP_P_STEPS':414,'FLOW_CHOP_P_GLIDE':415,'FLOW_CHOP_P_QUANT':416,'FLOW_CHOP_RV_ODDS':417,'FLOW_CHOP_RV_RUN':418,'FLOW_CHOP_RV_SPREAD':419,
+        'FLOW_CHOP_RV_SNAP':420,'FLOW_CHOP_T_LEN':421,'FLOW_CHOP_T_CURVE':422,'FLOW_CHOP_T_RAND':423,'FLOW_CHOP_T_GATE':424,'FLOW_CHOP_R_COUNT':425,
+        'FLOW_CHOP_R_DECAY':426,'FLOW_CHOP_R_CURVE':427,'FLOW_CHOP_R_ODDS':428,'FLOW_CHOP_D_AMT':429,'FLOW_CHOP_D_SIZE':430,'FLOW_CHOP_D_SPRAY':431,
+        'FLOW_CHOP_D_TONE':432,'FLOW_CHOP_BLEND':433,'FLOW_GLI_DECAY':434,'FLOW_GLI_DROP':435,'FLOW_GLI_BURST':436,'FLOW_GLI_PING':437,
+        'FLOW_GLI_BEND':438,'FLOW_GLI_REP_SIZE':439,'FLOW_GLI_REP_SPEED':440,'FLOW_GLI_REP_FADE':441,'FLOW_GLI_REP_VARY':442,'FLOW_GLI_REV_LEN':443,
+        'FLOW_GLI_REV_FADE':444,'FLOW_GLI_REV_SPRD':445,'FLOW_GLI_REV_SNAP':446,'FLOW_GLI_TAPE_CURVE':447,'FLOW_GLI_TAPE_TIME':448,'FLOW_GLI_TAPE_DEPTH':449,
+        'FLOW_GLI_TAPE_SPIN':450,'FLOW_GLI_GATE_RATE':451,'FLOW_GLI_GATE_SHAPE':452,'FLOW_GLI_GATE_NUDGE':453,'FLOW_GLI_GATE_AMT':454,'FLOW_GLI_PIT_SHIFT':455,
+        'FLOW_GLI_PIT_WALK':456,'FLOW_GLI_PIT_GLIDE':457,'FLOW_GLI_PIT_JUMP':458,'FLOW_GLI_CRSH_BITS':459,'FLOW_GLI_CRSH_RATE':460,'FLOW_GLI_CRSH_TONE':461,
+        'FLOW_GLI_CRSH_AMT':462,'FLOW_GLI_FRZ_SIZE':463,'FLOW_GLI_FRZ_SPRAY':464,'FLOW_GLI_FRZ_SHINE':465,'FLOW_GLI_FRZ_MELT':466,'FLOW_GLI_SCT_SIZE':467,
+        'FLOW_GLI_SCT_AMT':468,'FLOW_GLI_SCT_VARY':469,'FLOW_GLI_SCT_WIDTH':470,'FLOW_GLI_BLEND':471,'FLOW_RBN_VARY':472,'FLOW_RBN_DRIFT':473,
+        'FLOW_RBN_WOBBLE':474,'FLOW_RBN_LVL':475,'FLOW_RBN_PAN':476,'FLOW_RBN_AFTER':477,'FLOW_RBN_GLIDE':478,'FLOW_RBN_OVERLAP':479,
+        'FLOW_RBN_FADE':480,'FLOW_GLI_VARY':23,'FLOW_GLI_TRAJ':24,'FLOW_GLI_MORPH':25,'FLOW_DRF_MORPH':25};
+      function stampMod(card,BIND){
+        /* fb145 — every continuous card control joins the LFO drop-target pool. The
+           observer re-applies after rebuilds (fillDepth/fillEngine wipe their grids). */
+        function apply(){ EA(card.querySelectorAll('[data-ti-key]'),function(c){
+            if(c.hasAttribute('data-mod-dest'))return;
+            var b=BIND[c.getAttribute('data-ti-key')]; if(!b)return;
+            var d=MODDEST[b[0]]; if(d!=null) c.setAttribute('data-mod-dest',String(d)); }); }
+        apply();
+        try{ new MutationObserver(function(){ apply(); }).observe(card,{childList:true,subtree:true}); }catch(e){}
+      }
+      function knobCell(S,key,label,fmt,reset){
+        var c=el('<div class="cell k"><div class="ctl">'+knobSVG()+'</div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+        c.setAttribute('data-ti-key',key);   /* fb145 — LFO drop-target identity */
+        var vl=c.querySelector('.vl');
+        function paint(){ setRing(c,S.v[key]); vl.textContent=(fmt||pct)(S.v[key]); }
+        dragify(c.querySelector('svg'),{get:function(){return S.v[key];},set:function(n){S.set(key,n);},reset:(reset==null?0.5:reset)});
+        S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
+      /* fb143 — ONE slider everywhere: the osc-menu Volume/Pan/Semitone component,
+         cloned exactly. Bipolar cells (reset .5) get the centre notch + centre-out
+         fill like Pan; unipolar fill from the left like Volume. vsCell = the same
+         component (the vertical ball-sliders are gone). */
+      function trCell(S,key,label,fmt,reset){
+        var rst=(reset==null?0.5:reset), bip=Math.abs(rst-0.5)<0.001;
+        var c=el('<div class="cell"><div class="ctl" style="width:100%"><div class="tr">'+(bip?'<u></u>':'')
+          +'<i></i><b></b></div></div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+        c.setAttribute('data-ti-key',key);   /* fb145 — LFO drop-target identity */
+        var fi=c.querySelector('.tr i'), th=c.querySelector('.tr b'), vl=c.querySelector('.vl');
+        function paint(){ var n=S.v[key], p=n*100;
+          th.style.left=p.toFixed(1)+'%';
+          if(bip){ if(n>=0.5){ fi.style.left='50%'; fi.style.width=(p-50).toFixed(1)+'%'; }
+                   else{ fi.style.left=p.toFixed(1)+'%'; fi.style.width=(50-p).toFixed(1)+'%'; } }
+          else{ fi.style.left='0%'; fi.style.width=p.toFixed(1)+'%'; }
+          vl.textContent=(fmt||pct)(n); }
+        dragify(c.querySelector('.tr'),{axis:'x',get:function(){return S.v[key];},set:function(n){S.set(key,n);},span:64,reset:rst});
+        S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
+      function vsStepCell(S,key,list,label,resetIx){
+        /* fb146 — the vertical slider, STEPPED (Max: "I want all of the grid there —
+           it's not going to be dropped down"): marker position = index/(N-1), snaps on
+           drag, the readout names the step. Extra span = the sensitivity he asked for. */
+        var c=el('<div class="cell"><div class="vsl"><i></i><b></b></div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+        c.setAttribute('data-ti-key',key);
+        var fi=c.querySelector('.vsl i'), th=c.querySelector('.vsl b'), vl=c.querySelector('.vl');
+        var N=list.length-1;
+        function paint(){ var ix=S.v[key]; if(ix>N)ix=N; if(ix<0)ix=0; var p=(N?ix/N:0)*100;
+          th.style.bottom=p.toFixed(1)+'%'; fi.style.bottom='0%'; fi.style.height=p.toFixed(1)+'%';
+          vl.textContent=String(list[ix]); }
+        dragify(c.querySelector('.vsl'),{get:function(){return N?(S.v[key]/N):0;},
+          set:function(n){ S.set(key,Math.round(n*N)); },
+          span:Math.max(110,list.length*11), reset:(resetIx==null?0:resetIx)/(N||1)});
+        S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
+      function vsCell(S,key,label,fmt,reset){
+        /* fb144 — the VERTICAL cut of THE slider (chop Depth, Max: "vertical... to fill
+           the space, only for chop"): the exact same grammar rotated 90° — 2px track
+           @ .16 white, purple fill from the bottom (centre-out when bipolar), 9×2 white
+           bar marker, 7×1 centre notch. Fills the box like the old track did. */
+        var rst=(reset==null?0.5:reset), bip=Math.abs(rst-0.5)<0.001;
+        var c=el('<div class="cell"><div class="vsl">'+(bip?'<u></u>':'')
+          +'<i></i><b></b></div><span class="lb">'+label+'</span><span class="vl"></span></div>');
+        c.setAttribute('data-ti-key',key);   /* fb145 — LFO drop-target identity */
+        var fi=c.querySelector('.vsl i'), th=c.querySelector('.vsl b'), vl=c.querySelector('.vl');
+        function paint(){ var n=S.v[key], p=n*100;
+          th.style.bottom=p.toFixed(1)+'%';
+          if(bip){ if(n>=0.5){ fi.style.bottom='50%'; fi.style.height=(p-50).toFixed(1)+'%'; }
+                   else{ fi.style.bottom=p.toFixed(1)+'%'; fi.style.height=(50-p).toFixed(1)+'%'; } }
+          else{ fi.style.bottom='0%'; fi.style.height=p.toFixed(1)+'%'; }
+          vl.textContent=(fmt||pct)(n); }
+        dragify(c.querySelector('.vsl'),{get:function(){return S.v[key];},set:function(n){S.set(key,n);},span:56,reset:rst});
+        S.on(function(k){ if(k===key)paint(); }); paint(); return c; }
+      /* value picker (fb95): native Apple dropdown in the quiet box; state = INDEX */
+      function stepEl(S,key,list,disp){
+        var st=el('<div class="step"><em></em><select></select></div>');   /* fb138 — no dropdown hint (Max: "people will know when they click") */
+        var em=st.querySelector('em'), se=st.querySelector('select');
+        for(var i=0;i<list.length;i++){ var o=document.createElement('option');
+          o.value=String(i); o.textContent=String(list[i]); se.appendChild(o); }
+        function paint(){ var ix=S.v[key];
+          if(ix>=list.length){ S.set(key,list.length-1); return; }   /* fb143 — stale state past a shortened list */
+          em.textContent=disp?disp(list[ix]):list[ix]; se.value=String(ix); }
+        se.addEventListener('change',function(){ S.set(key,parseInt(se.value,10)||0); });
+        se.addEventListener('pointerdown',function(e){ e.stopPropagation(); });
+        S.on(function(k){ if(k===key)paint(); }); paint(); return st; }
+      function stepCell(S,key,list,label,disp){
+        var c=el('<div class="cell"><span class="lb"></span></div>');
+        c.insertBefore(stepEl(S,key,list,disp),c.firstChild);
+        c.querySelector('.lb').textContent=label; c.style.gap='6px'; c.querySelector('.lb').style.marginTop='0';
+        return c; }
+      function togEl(S,key,label){
+        var t=el('<div class="tog"><i></i>'+label+'</div>');
+        function paint(){ t.classList.toggle('off',!S.v[key]); }
+        t.addEventListener('click',function(){ S.set(key,S.v[key]?0:1); });
+        S.on(function(k){ if(k===key)paint(); }); paint(); return t; }
+
+      /* MIX in every header — param-backed (relay in-plugin, shim when popped) */
+      function mixBind(card,pid,def,fmt){
+        var st=null, local=def, b=card.querySelector('.mix b'), mx=card.querySelector('.mix');
+        function cur(){ if(st){ try{ return st.getNormalisedValue(); }catch(e){} } return local; }
+        function paint(){ b.textContent=fmt?fmt(cur()):(Math.round(cur()*100)+'%'); }
+        function resolve(p){ st=null;
+          if(p!=null){
+            if(window.__cardOnly&&window.__synSliderShim){ st=window.__synSliderShim(p,def); }
+            else if(J){ try{ st=J.getSliderState(p); }catch(e){} }
+            if(st&&st.valueChangedEvent&&st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(paint); }
+          paint(); }
+        dragify(mx,{axis:'x',span:160,get:cur,
+          set:function(n){ local=n; if(st){ try{ st.setNormalisedValue(n); }catch(e){} } paint(); },
+          reset:def});
+        mx.title='Drag = mix · double-click = '+Math.round(def*100)+'%';
+        card.__mixRebind=resolve;   /* fb232 — the LFO card re-aims its Depth at whichever LFO is selected */
+        resolve(pid); }
+
+      /* card shell: header (⠿ · dot · title · MIX · Pop Out · ✕) + body + drag/handoff */
+      function shell(cfg){
+        var card=el('<div class="ti-card '+cfg.cls+'">'
+          +'<div class="h"><span class="g">⠿</span><span class="dot"></span><span class="tt">'+cfg.title+'</span>'
+          +'<span class="mix">Mix <b>–</b></span>'
+          +'<span class="pop" title="Pop the card out into a floating window">Pop Out</span>'
+          +'<span class="x" title="Close">✕</span></div>'
+          +'<div class="b"></div></div>');
+        document.body.appendChild(card);
+        if(cfg.mixId&&MODDEST[cfg.mixId]!=null){ var mxe=card.querySelector('.mix');
+          if(mxe) mxe.setAttribute('data-mod-dest',String(MODDEST[cfg.mixId])); }   /* fb145 — the MIX header is a target too */
+        /* fb95 — card scale: default BIGGER (1.2×); the bottom-right grip drags
+           0.85–1.8×, double-click = default; persisted per card. Popped windows
+           follow via __tiPushCardSize (CSS zoom doesn't fire ResizeObserver). */
+        var Z0=1.2, zoom=Z0;
+        try{ var zs=parseFloat(localStorage.getItem('tiZoom_'+cfg.id)); if(zs>0)zoom=Math.max(.85,Math.min(1.8,zs)); }catch(e){}
+        function applyZoom(){
+          try{ var zMax=Math.min(1.8,(screen.availWidth-40)/card.offsetWidth,(screen.availHeight-60)/card.offsetHeight);
+            if(zMax>0.85&&zoom>zMax)zoom=zMax; }catch(e){}
+          card.style.zoom=zoom; if(window.__tiPushCardSize)window.__tiPushCardSize(); }
+        applyZoom();
+        var grip=el('<div class="rsz" title="Drag to resize the card \u00b7 double-click = default"></div>');
+        card.appendChild(grip);
+        (function(){ var gd=false,gsx=0,gsy=0,gz0=zoom;
+          grip.addEventListener('pointerdown',function(e){ gd=true; gsx=e.clientX; gsy=e.clientY; gz0=zoom;
+            try{ grip.setPointerCapture(e.pointerId); }catch(_){}
+            e.preventDefault(); e.stopPropagation(); });
+          grip.addEventListener('pointermove',function(e){ if(!gd)return;
+            zoom=Math.max(.85,Math.min(1.8,gz0+((e.clientX-gsx)+(e.clientY-gsy))/560)); applyZoom(); });
+          function gup(){ if(!gd)return; gd=false; try{ localStorage.setItem('tiZoom_'+cfg.id,String(zoom)); }catch(e){} }
+          grip.addEventListener('pointerup',gup); grip.addEventListener('pointercancel',gup);
+          grip.addEventListener('dblclick',function(e){ zoom=Z0; applyZoom();
+            try{ localStorage.setItem('tiZoom_'+cfg.id,String(zoom)); }catch(_){}
+            e.preventDefault(); e.stopPropagation(); });
+        })();
+        card.querySelector('.x').addEventListener('click',function(){ if(!window.__cardOnly) card.classList.remove('open'); });
+        var h=card.querySelector('.h'), pos=null;
+        h.addEventListener('mousedown',function(e){
+          if(e.target.closest&&e.target.closest('.x,.pop,.mix'))return;
+          if(window.__cardOnly)return;                       // popped: native window drag owns the header
+          e.preventDefault(); h.classList.add('grab');
+          var r=card.getBoundingClientRect(), dx=e.clientX-r.left, dy=e.clientY-r.top;
+          function mv(ev){ if(window.__cardEdgeHandoff&&window.__cardEdgeHandoff(cfg.id,card,ev,dx,dy)){ up(); return; }
+            pos={x:Math.max(4,Math.min(window.__vw()-card.getBoundingClientRect().width-4,ev.clientX-dx)),
+                 y:Math.max(4,Math.min(window.__vh()-40,ev.clientY-dy))};
+            card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; }
+          function up(){ h.classList.remove('grab'); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+          document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+        if(cfg.mixLabel){ var mxl=card.querySelector('.mix');
+          if(mxl&&mxl.firstChild&&mxl.firstChild.nodeType===3) mxl.firstChild.textContent=cfg.mixLabel+' '; }   /* fb232 — the LFO card's MIX slot holds Depth (Max: 'the depth can be the mix') */
+        mixBind(card,cfg.mixId,cfg.mixDef,cfg.mixFmt);
+        return { card:card, body:card.querySelector('.b'),
+          open:function(){
+            /* this page IS the card — pinned 0,0 (the fb82 popcard law; no flow device panel here) */
+            if(!pos){ pos={x:0,y:0}; }
+            card.style.left=pos.x+'px'; card.style.top=pos.y+'px'; card.classList.add('open');
+            /* fb95 — equalize pane heights ONCE (needs the card visible to measure):
+               switching tabs must never move the dots/chain furniture below */
+            if(!card.__eqPanes){ card.__eqPanes=1; requestAnimationFrame(function(){ try{
+              /* measure each pane under its REAL .on CSS (flex-direction/gap live
+                 on .pane.on — a bare display:flex measures as a ROW and lies) */
+              var ps=card.querySelectorAll('.pane'), hMax=0,
+                  zf=parseFloat(card.style.zoom)||1;   // rects are post-zoom; minHeight is layout px
+              EA(ps,function(p2){ var on=p2.classList.contains('on');
+                if(!on){ p2.style.visibility='hidden'; p2.classList.add('on'); }
+                hMax=Math.max(hMax,p2.getBoundingClientRect().height/zf);   // fractional — offsetHeight rounds and leaves 0.5px shifts
+                if(!on){ p2.classList.remove('on'); p2.style.visibility=''; } });
+              if(hMax>0){ hMax=Math.ceil(hMax*4)/4;
+                EA(ps,function(p2){ p2.style.minHeight=hMax+'px'; }); }
+            }catch(e){} }); } } }; }
+
+      /* tabs + panes */
+      function tabsPanes(defs){
+        var tabs=el('<div class="tabs">'+defs.map(function(d,i){
+          return '<span class="tab'+(i?'':' on')+'" data-p="'+d[0]+'">'+d[1]+'</span>'; }).join('')+'</div>');
+        var panes={};
+        defs.forEach(function(d,i){ panes[d[0]]=el('<div class="pane'+(i?'':' on')+'" data-p="'+d[0]+'"></div>'); });
+        tabs.addEventListener('click',function(e){ var t=e.target.closest('.tab'); if(!t)return;
+          EA(tabs.querySelectorAll('.tab'),function(x){ x.classList.toggle('on',x===t); });
+          for(var k in panes) panes[k].classList.toggle('on',k===t.getAttribute('data-p')); });
+        return { tabs:tabs, panes:panes }; }
+
+      /* pattern dots (12 slots, store/recall) + chain (click chip = jump ·
+         dblclick chip = remove · + = append current slot · auto-advances on loop) */
+      function slotsChain(getSnap,setSnap){
+        var wrap=el('<div><div class="slotrow"></div>'
+          +'<div class="chain"><span class="gl" style="margin-right:2px">Chain</span><span class="seq" style="display:flex;gap:7px;align-items:center"></span><span class="add" title="Add current pattern to the chain">+</span></div></div>');
+        var row=wrap.querySelector('.slotrow'), seq=wrap.querySelector('.seq'), addB=wrap.querySelector('.add');
+        var store={}, cur=1, chain=[1], cpos=0;
+        for(var i=1;i<=12;i++){ var s=el('<span class="sd'+(i===1?' on':'')+'"><i></i><b>'+i+'</b></span>');
+          (function(n){ s.addEventListener('click',function(){ select(n); }); })(i); row.appendChild(s); }
+        function paintDots(){ EA(row.children,function(d,i){ d.classList.toggle('on',(i+1)===cur); }); }
+        var lastChipDrag=0;
+        function paintChain(){ seq.innerHTML='';
+          for(var i=0;i<chain.length;i++){
+            if(i)seq.appendChild(el('<span class="arr">›</span>'));
+            (function(ix){
+              var c=el('<span class="chip'+(ix===cpos?' cur':'')+'" data-i="'+ix
+                +'" title="Click and type 1-12 (0 removes) · Enter saves · drag up or down also works">'+chain[ix]+'</span>');
+              /* fb130 — Max: "click it and just put a number in there" — an in-place
+                 editor: the number opens SELECTED (the blue highlight), type, Enter. */
+              function beginEdit(){
+                if(c.querySelector('input'))return;
+                var inp=document.createElement('input');
+                inp.type='text'; inp.maxLength=2; inp.value=String(chain[ix]);
+                inp.style.cssText='width:14px;background:transparent;border:none;outline:none;color:#fff;font:inherit;font-size:inherit;text-align:center;padding:0;margin:0;';
+                c.textContent=''; c.appendChild(inp);
+                try{ inp.focus(); inp.select(); }catch(e){}
+                window.__tiActiveInp=inp; if(window.__tiEditArm)window.__tiEditArm(1);
+                /* fb136 — arming the key bridge steals OS focus and BLURS the input in-host,
+                   which insta-committed the fresh editor (Max: "I have to click twice").
+                   Blur owns nothing now: Enter/Escape + click-away close the edit, and a
+                   refocus tick keeps the number highlighted after the arming blur. */
+                setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} },80);
+                var closed=false;
+                function out(ev){ if(!c.contains(ev.target)) done(true); }
+                setTimeout(function(){ document.addEventListener('pointerdown',out,true); },0);
+                function done(commit){ if(closed)return; closed=true;
+                  document.removeEventListener('pointerdown',out,true);
+                  window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0);
+                  var v=parseInt(inp.value,10);
+                  if(commit&&(inp.value.trim()===''||v===0)&&chain.length>1){
+                    chain.splice(ix,1); if(cpos>=chain.length)cpos=chain.length-1; paintChain(); return; }
+                  if(commit&&v>=1&&v<=12){ chain[ix]=v; if(ix===cpos)select(v); }
+                  paintChain(); }
+                inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
+                  if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
+                inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); });
+              }
+              c.addEventListener('click',function(ev){ ev.stopPropagation();
+                if(Date.now()-lastChipDrag<300)return; beginEdit(); });
+              dragify(c,{get:function(){ return (chain[ix]-1)/11; },
+                set:function(n){ if(c.querySelector('input'))return;
+                  var v=1+Math.round(n*11);
+                  if(v!==chain[ix]){ chain[ix]=v; c.textContent=String(v); lastChipDrag=Date.now();
+                    if(ix===cpos)select(v); } },
+                span:80});
+              seq.appendChild(c);
+            })(i); } mut(); }
+        function mut(){ try{ if(api&&api.onMutate)api.onMutate(); }catch(e){} }   /* fb137 — cardSync push hook */
+        function select(n){ if(n===cur){ paintDots(); return; }
+          try{ store[cur]=getSnap(); }catch(e){}
+          cur=n; if(store[n]!=null){ try{ setSnap(store[n]); }catch(e){} }
+          paintDots(); mut(); }
+        seq.addEventListener('dblclick',function(e){ if(e.target.tagName==='INPUT')return;
+          var c=e.target.closest('.chip'); if(!c)return;
+          if(Date.now()-lastChipDrag<400)return;               /* a drag isn't a remove */
+          if(chain.length<2)return; var i=parseInt(c.getAttribute('data-i'),10)||0;
+          chain.splice(i,1); if(cpos>=chain.length)cpos=chain.length-1; paintChain(); });
+        addB.addEventListener('click',function(){ if(chain.length<8){ chain.push(cur); paintChain(); } });
+        paintChain();
+        var api={ el:wrap,
+          advance:function(){ if(chain.length<2)return; cpos=(cpos+1)%chain.length; select(chain[cpos]); paintChain(); },
+          restart:function(){ cpos=0; if(chain.length&&chain[0]!==cur)select(chain[0]); paintChain(); },   /* fb137 — play-edge retrigger */
+          /* fb132 — presets import/export the whole slots+chain machine (fb137: + cur, + skipApply
+             for the cardSync pull — the live params already hold the sound) */
+          getState:function(){ try{ store[cur]=getSnap(); }catch(e){}
+            var sl={}; for(var k in store)sl[k]=store[k]; return { slots:sl, chain:chain.slice(), cur:cur }; },
+          setState:function(st,skipApply){ store={}; cpos=0;
+            chain=(st&&st.chain&&st.chain.length)?st.chain.slice(0,8):[1];
+            if(st&&st.slots)for(var k in st.slots){ var n=parseInt(k,10); if(n>=1&&n<=12)store[n]=st.slots[k]; }
+            cur=(st&&st.cur>=1&&st.cur<=12)?st.cur:(chain[0]||1);
+            cpos=Math.max(0,chain.indexOf(cur));
+            if(!skipApply&&store[cur]!=null){ try{ setSnap(store[cur]); }catch(e){} }
+            paintDots(); paintChain(); } };
+        return api; }
+
+      /* fb132 — CARD PRESETS: header control (‹ name ›, centered between the title
+         and MIX — Max's spec) + transparent glass menu + save-to-disk (savePreset/
+         getPresets/deletePreset natives, both surfaces). Apply always starts from the
+         card's DEFAULTS and merges the preset over — deterministic, no carryover; MIX
+         is never touched (the Looperator law). Factory slot entries are DELTAS
+         (materialized against the preset base); user-saved slots are the card's own
+         snap strings passed through verbatim. Menu appends to document.body (the
+         scoped-menu gotcha). */
+      function presets(cfg){
+        var S=cfg.S;
+        /* fb168 — the TOPO DICE reach each card through the SAME state the presets own */
+        window.__tiDice = window.__tiDice || {};
+        window.__tiDice[cfg.id] = { S: cfg.S, DEF: cfg.DEF };
+        function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+        var saveFn=NF('savePreset'), listFn=NF('getPresets'), delFn=NF('deletePreset');
+        var user=[], curName='Init';
+        var h=cfg.sh.card.querySelector('.h');
+        var ctl=el('<span class="pset"><span class="pa" title="Previous preset">‹</span>'
+          +'<span class="pn" title="Presets">Init</span>'
+          +'<span class="pa" title="Next preset">›</span></span>');
+        h.insertBefore(ctl,h.querySelector('.mix'));
+        var pas=ctl.querySelectorAll('.pa'), pn=ctl.querySelector('.pn');
+        ctl.addEventListener('pointerdown',function(e){ e.stopPropagation(); });
+        function mergeV(){ var o={},i,k; for(k in cfg.DEF)o[k]=cfg.DEF[k];
+          for(i=0;i<arguments.length;i++){ var a=arguments[i]; if(a)for(k in a)o[k]=a[k]; } return o; }
+        function mkSlot(p,delta){
+          if(cfg.id==='arp'){ var ab=JSON.parse(cfg.laneDef);
+            return JSON.stringify({v:mergeV(p.v,delta&&delta.v), lanes:(delta&&delta.lanes)||p.lanes||ab.lanes||ab}); }
+          if(cfg.id==='rbn') return JSON.stringify({ b:((delta&&delta.b)||p.b||[1,1,1,1]).slice(),
+                                                     v:mergeV(p.v,(delta&&delta.v)||delta) });
+          return JSON.stringify(mergeV(p.v,delta)); }
+        function apply(p){
+          var v=mergeV(p.v);
+          if(cfg.id==='arp'){ var ab2=JSON.parse(cfg.laneDef);
+            cfg.snapSet(JSON.stringify({v:v, lanes:p.lanes||ab2.lanes||ab2})); }
+          else if(cfg.id==='rbn'){ cfg.snapSet(JSON.stringify({ b:(p.b||[1,1,1,1]).slice(), v:v })); }
+          else cfg.snapSet(JSON.stringify(v));
+          var st=null;
+          if(p.slots||p.chain){ st={ slots:{}, chain:(p.chain||[1]).slice() };
+            if(p.slots)for(var n in p.slots){ var sv=p.slots[n];
+              st.slots[n]=(typeof sv==='string')?sv:mkSlot(p,sv); } }
+          cfg.sc.setState(st);
+          curName=p.name; pn.textContent=p.name; }
+        function allP(){ return cfg.factory.concat(user); }
+        function step(d){ var L=allP(); if(!L.length)return; var i=0,j;
+          for(j=0;j<L.length;j++)if(L[j].name===curName){ i=j; break; }
+          apply(L[(i+d+L.length)%L.length]); }
+        pas[0].addEventListener('click',function(e){ e.stopPropagation(); step(-1); });
+        pas[1].addEventListener('click',function(e){ e.stopPropagation(); step(1); });
+        function refresh(cb){ if(!listFn){ if(cb)cb(); return; }
+          try{ Promise.resolve(listFn(cfg.id)).then(function(x){
+            try{ var a=JSON.parse(String(x||'[]')); user=[];
+              for(var i=0;i<a.length;i++)if(a[i]&&a[i].name)user.push(a[i]);
+              user.sort(function(a2,b2){ return a2.name<b2.name?-1:1; });
+            }catch(e){ user=[]; } if(cb)cb(); }).catch(function(){ if(cb)cb(); }); }
+          catch(e){ if(cb)cb(); } }
+        refresh();
+        function collect(name){
+          var o={ name:name }, k;
+          if(cfg.id==='rbn'){ var g=JSON.parse(cfg.snapGet()); o.b=g.b; o.v=g.v; }
+          else if(cfg.id==='arp'){ var ag=JSON.parse(cfg.snapGet()); o.v=ag.v; o.lanes=ag.lanes; }
+          else o.v=JSON.parse(cfg.snapGet());
+          var st=cfg.sc.getState(), hasSlots=false;
+          for(k in st.slots){ hasSlots=true; break; }
+          if(st.chain.length>1||hasSlots){ o.slots=st.slots; o.chain=st.chain; }
+          return o; }
+        var menu=null;
+        function closeMenu(){ saveArmed=false; if(menu){ try{ menu.remove(); }catch(e){} menu=null;
+          document.removeEventListener('pointerdown',outside,true); }
+          /* fb154 — any close releases the key bridge: an outside click mid-typing (or
+             mid-overwrite-arm) used to leave __tiActiveInp pointing at a detached input
+             with the host keys still armed */
+          if(window.__tiActiveInp){ window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0); } }
+        function outside(e){ if(menu&&!menu.contains(e.target)&&e.target!==pn)closeMenu(); }
+        /* fb138 — Max's save flow, name-first ("it's all about the name — like the Apple"):
+           click Save Preset -> type the name (pre-selected; the key bridge) -> Enter.
+           NEW name = saved instantly. A name that already exists in User = the row turns
+           into "Overwrite <name>?" and one more click confirms. Tweaking never silently
+           overwrites anything. */
+        var saveArmed=false;
+        function doSave(nm,payload){ saveArmed=false;
+          if(saveFn){ try{ saveFn(cfg.id,nm,JSON.stringify(payload||collect(nm))); }catch(e){} }
+          curName=nm; pn.textContent=nm;
+          refresh(function(){ if(menu){ closeMenu(); buildMenu(); } }); }
+        function beginSaveInput(rowEl){
+          if(rowEl.querySelector('input'))return;
+          rowEl.textContent='';
+          var inp=document.createElement('input'); inp.type='text'; inp.maxLength=32;
+          inp.className='pinp'; inp.value=curName;
+          rowEl.appendChild(inp); try{ inp.focus(); inp.select(); }catch(e){}
+          window.__tiActiveInp=inp; if(window.__tiEditArm)window.__tiEditArm(1);
+          setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} },80);
+          var closed=false;
+          function fin(){ if(closed)return; closed=true;
+            window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0); }
+          inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
+            if(ev.key==='Escape'){ fin(); closeMenu(); }
+            else if(ev.key==='Enter'){
+              if(inp.__armed){ fin(); doSave(rowEl.__ow); return; }   /* fb154 — the SECOND Enter confirms ("boom") */
+              var nm=(inp.value||'').trim(); if(!nm)return;
+              var exists=false; for(var i=0;i<user.length;i++)if(user[i].name===nm)exists=true;
+              if(exists){
+                /* fb154 — Enter-Enter overwrite (Max: same name + Enter = "Overwrite preset,
+                   boom"). The old flow killed the input on arm, so the confirm was CLICK-ONLY
+                   — the natural second Enter hit nothing. The input now stays alive but
+                   invisible: a real keyboard's keydown AND the FL host-key bridge
+                   (__tiHostKey dispatches onto __tiActiveInp) both land right back here.
+                   Clicking the row still confirms; Escape still bails. */
+                inp.__armed=1; rowEl.__ow=nm; saveArmed=true;
+                inp.style.position='absolute'; inp.style.opacity='0'; inp.style.width='1px'; inp.style.pointerEvents='none';
+                rowEl.appendChild(document.createTextNode('Overwrite '+nm+'?'));
+                try{ inp.focus(); }catch(e2){} }
+              else { fin(); doSave(nm); } } });
+          inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
+        function beginRename(){
+          if(ctl.querySelector('input'))return;
+          var inp=document.createElement('input'); inp.type='text'; inp.maxLength=32;
+          inp.className='pinp'; inp.value=curName; inp.style.width='86px';
+          pn.textContent=''; pn.appendChild(inp);
+          try{ inp.focus(); inp.select(); }catch(e){}
+          window.__tiActiveInp=inp; if(window.__tiEditArm)window.__tiEditArm(1);
+          setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e){} },80);   /* fb136 — survive the arming blur */
+          var closed=false;
+          function out(ev){ if(!ctl.contains(ev.target)) done(true); }
+          setTimeout(function(){ document.addEventListener('pointerdown',out,true); },0);
+          function done(commit){ if(closed)return; closed=true;
+            document.removeEventListener('pointerdown',out,true);
+            window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0);
+            var nm=(inp.value||'').trim(), old=curName;
+            pn.textContent=curName;
+            if(commit&&nm&&nm!==old&&saveFn){
+              var o=collect(nm);
+              try{ saveFn(cfg.id,nm,JSON.stringify(o)); }catch(e){}
+              var wasUser=false; for(var i=0;i<user.length;i++)if(user[i].name===old)wasUser=true;
+              if(wasUser&&delFn){ try{ delFn(cfg.id,old); }catch(e2){} }   // true rename for user presets
+              curName=nm; pn.textContent=nm; refresh(); } }
+          inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
+            if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
+          inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
+        /* fb132 — the menu opens SYNCHRONOUSLY from the cached user list (a native
+           promise that never settles — headless, slow bridge — must never strand it);
+           refresh() runs in the background and rebuilds the open menu if the list moved */
+        function buildMenu(){
+            menu=el('<div class="pmenu"></div>');
+            function section(t){ menu.appendChild(el('<div class="ps">'+t+'</div>')); }
+            function row(p,isUser){
+              var r=el('<div class="pi'+(p.name===curName?' cur':'')+'"><span class="nm"></span>'
+                +(isUser?'<span class="dx" title="Delete this preset">✕</span>':'')+'</div>');
+              r.querySelector('.nm').textContent=p.name;
+              r.addEventListener('click',function(e){
+                if(e.target.classList&&e.target.classList.contains('dx'))return;
+                if(r.querySelector('input'))return;   /* fb138 — mid-rename clicks stay in the row */
+                apply(p); closeMenu(); });
+              if(isUser){ r.querySelector('.dx').addEventListener('click',function(e){ e.stopPropagation();
+                if(delFn){ try{ delFn(cfg.id,p.name); }catch(e2){} }
+                refresh(function(){ closeMenu(); openMenu(); }); });
+                /* fb138 — right-click a user preset's name = rename it in place (the saved
+                   payload travels untouched; only the name changes) */
+                r.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation();
+                  if(r.querySelector('input'))return;
+                  var nm0=p.name, nmEl=r.querySelector('.nm'); nmEl.textContent='';
+                  var inp=document.createElement('input'); inp.type='text'; inp.maxLength=32;
+                  inp.className='pinp'; inp.value=nm0; inp.style.width='100px'; inp.style.textAlign='left';
+                  nmEl.appendChild(inp); try{ inp.focus(); inp.select(); }catch(e2){}
+                  window.__tiActiveInp=inp; if(window.__tiEditArm)window.__tiEditArm(1);
+                  setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(e2){} },80);
+                  var closed=false;
+                  function done(commit){ if(closed)return; closed=true;
+                    window.__tiActiveInp=null; if(window.__tiEditArm)window.__tiEditArm(0);
+                    var nm=(inp.value||'').trim();
+                    if(commit&&nm&&nm!==nm0&&saveFn){
+                      var np={}; for(var k2 in p)np[k2]=p[k2]; np.name=nm;
+                      try{ saveFn(cfg.id,nm,JSON.stringify(np)); }catch(e2){}
+                      if(delFn){ try{ delFn(cfg.id,nm0); }catch(e3){} }
+                      if(curName===nm0){ curName=nm; pn.textContent=nm; }
+                      refresh(function(){ closeMenu(); buildMenu(); }); }
+                    else nmEl.textContent=nm0; }
+                  inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
+                    if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
+                  inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }); }
+              menu.appendChild(r); }
+            var sv=el('<div class="pi psave">＋ Save Preset</div>');
+            sv.addEventListener('click',function(e){ e.stopPropagation();
+              if(sv.__ow){ doSave(sv.__ow); return; }        /* the confirm click */
+              beginSaveInput(sv); });
+            menu.appendChild(sv);
+            var lastSect=null, anySect=false;
+            cfg.factory.forEach(function(p){ if(p.sect)anySect=true; });
+            if(!anySect) section('Factory');
+            cfg.factory.forEach(function(p){ if(anySect&&p.sect!==lastSect){ section(p.sect); lastSect=p.sect; } row(p,false); });
+            if(user.length){ section('User'); user.forEach(function(p){ row(p,true); }); }
+            document.body.appendChild(menu);
+            var r=pn.getBoundingClientRect();
+            menu.style.left=Math.max(6,Math.min(window.__vw()-menu.offsetWidth-6,r.left+r.width/2-menu.offsetWidth/2))+'px';
+            menu.style.top=Math.max(6,Math.min(window.__vh()-menu.offsetHeight-6,r.bottom+6))+'px';
+            setTimeout(function(){ document.addEventListener('pointerdown',outside,true); },0); }
+        function openMenu(){ if(menu){ closeMenu(); return; }
+          var names=user.map(function(u){ return u.name; }).join('|');
+          buildMenu();
+          refresh(function(){ if(!menu)return;
+            if(user.map(function(u){ return u.name; }).join('|')!==names){ closeMenu(); buildMenu(); } }); }
+        pn.addEventListener('click',function(e){ e.stopPropagation(); openMenu(); });
+        pn.addEventListener('contextmenu',function(e){ e.preventDefault(); e.stopPropagation(); closeMenu(); beginRename(); });
+        return { apply:apply }; }
+
+      /* fb137 — slots+chain live in the PROCESSOR (setCardState/getCardState): pop-out,
+         dock-back, and reopen all see ONE truth (the arp-lanes precedent). Push = debounced
+         on every mutation + knob edit + pagehide; pull = at build AND whenever the card
+         reopens (dock-back), with skipApply — the params already hold the live sound. */
+      function cardSync(id,sc,S,card){
+        function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+        var setF=NF('setCardState'), getF=NF('getCardState'), t=null;
+        function pushNow(){ if(setF){ try{ setF(id, JSON.stringify(sc.getState())); }catch(e){} } }
+        function push(){ clearTimeout(t); t=setTimeout(pushNow,200); }
+        function pull(){ if(!getF)return;
+          try{ Promise.resolve(getF(id)).then(function(x){ if(!x)return;
+            try{ var st=JSON.parse(String(x)); if(st&&st.chain&&st.chain.length) sc.setState(st,true); }catch(e){} }).catch(function(){}); }catch(e){} }
+        sc.onMutate=push;
+        S.on(function(){ push(); });
+        pull();
+        try{ new MutationObserver(function(){
+          var open=card.classList.contains('open');
+          if(open&&!card.__wasOpen){ card.__wasOpen=1; pull(); }
+          if(!open)card.__wasOpen=0;
+        }).observe(card,{attributes:true,attributeFilter:['class']}); }catch(e){}
+        window.addEventListener('pagehide',pushNow);
+      }
+
+      /* fb98 — Apple-style hover tips: title attrs, keyed by the visible label.
+         Plain sentences only — these explain, they don't impress. */
+      function applyTips(root,map){
+        EA(root.querySelectorAll('.cell'),function(cl){ var lb=cl.querySelector('.lb'); if(!lb)return;
+          var t=map[lb.textContent.trim().toLowerCase()]; if(t)cl.title=t; });
+        EA(root.querySelectorAll('.tog,.lane,.fxb,.tab'),function(b){
+          var t=map[b.textContent.trim().toLowerCase()]; if(t)b.title=t; });
+      }
+
+      /* per-card rAF driver — runs ONLY while the card is open */
+      function runLoop(card,tick){
+        var on=false,lastT=0;
+        function frame(t){ if(!card.classList.contains('open')){ on=false; return; }
+          /* hidden page: rest the rAF poll — re-arm at ~4 Hz instead of spinning (the Windows-CPU law) */
+          if(document.hidden){ lastT=0; setTimeout(function(){ requestAnimationFrame(frame); },250); return; }
+          if(!lastT)lastT=t; var dt=Math.min(.05,(t-lastT)/1000); lastT=t;
+          try{ tick(dt,t/1000); }catch(e){}
+          requestAnimationFrame(frame); }
+        return function(){ if(on)return; on=true; lastT=0; requestAnimationFrame(frame); }; }
+
+      /* musical clock: div string ("1/16", "1/8.", "1/4T") → steps/sec at 120bpm */
+      function stepsPerSec(div){ var m=/^1\/(\d+)(\.|T)?$/.exec(div); if(!m)return 8;
+        var beats=4/parseInt(m[1],10); if(m[2]==='.')beats*=1.5; if(m[2]==='T')beats*=2/3;
+        return (120/60)/beats; }
+
+      return { el:el, EA:EA, C01:C01, pct:pct, inum:inum, FSTK:FSTK,
+        knobSVG:knobSVG, setRing:setRing, dragify:dragify, mkState:mkState,
+        knobCell:knobCell, vsCell:vsCell, trCell:trCell, stepEl:stepEl, stepCell:stepCell,
+        stampMod:stampMod, MODDEST:MODDEST, vsStepCell:vsStepCell,
+        togEl:togEl, shell:shell, tabsPanes:tabsPanes, slotsChain:slotsChain, applyTips:applyTips,
+        presets:presets, cardSync:cardSync, runLoop:runLoop, stepsPerSec:stepsPerSec };
+    })();
+  /* ── EXTRACT: the card ── */
+    /* ───────── CHOP · "Ribbon" — the memory ribbon, DSP-true ───────── */
+    var chopCardObj=(function(){
+      var built=null;
+      var LANES=[['order','Order'],['pitch','Pitch'],['rev','Rev'],['trim','Trim'],['rpt','Repeat'],['drop','Drop']];
+      var DEPTH={ order:[['spread','Sprd',0],['bias','Bias',.5],['lock','Lock',0],['seed','Seed',.44]],
+        pitch:[['range','Semi',.33],['steps','Steps',0],['glide','Glide',.15],['quant','Fall',0]],   /* fb144 — Semi not Range (Max: plain function words) */
+        rev:  [['chance','Odds',0],['run','Len',.25],['spread','Sprd',0],['snap','Snap',.6]],
+        trim: [['length','Len',.875],['curve','Curve',.3],['random','Rand',0],['gate','Gate',0]],
+        rpt:  [['count','Count',0],['decay','Decay',.4],['curve','Curve',.5],['chance','Odds',1]],
+        drop: [['density','Amt',0],['grain','Size',.4],['spray','Spray',.1],['tone','Tone',.5]] };
+      var DFMT={ seed:TIC.inum(0,16), count:TIC.inum(1,4), range:TIC.inum(0,12), run:TIC.inum(1,4),
+           steps:function(n){ return ['Off','Ev 8','Ev 4','Ev 3','Ev 2','All'][Math.min(5,Math.floor(n*5.999))]; },
+                 bias:function(n){ return String(Math.round((n-.5)*100)); } };
+      function build(){
+        var sh=TIC.shell({cls:'chop-ext',id:'chop',title:'Chop',mixId:'FLOW_CHOP_BLEND',mixDef:1.0});
+        var SLICEL=[2,3,4,6,8,12,16], LOOPL=[2,4,6,8,10,12,16];
+        var init={ lane:'order', slices:4, loop:3, mode:0, always:1, catch:0, time:11,
+                   scan:1, auto:0, spreadM:0, feed:0, freeze:0, collect:0, rpts:1,
+                   stepsC:0, detune:0, wow:0, smooth:.15, fltr:0, grit:0, trimC:.5 };
+        for(var L in DEPTH) DEPTH[L].forEach(function(d){ init[L+'_'+d[0]]=d[2]; });
+        var DEF=JSON.parse(JSON.stringify(init));   // fb132 — preset base
+        var S=TIC.mkState(init);
+        var TIPS={ time:'The speed, in beats', order:'Shuffle the slice order', pitch:'Retune slices',
+          rev:'Flip slices backwards', trim:'Shorten slices', repeat:'Stutter a slice',
+          drop:'Mute slices', slices:'How many pieces', loop:'How much audio loops',
+          mode:'How it steps through the slices', always:'Chop everything',
+          catch:'Wait for a moment, then chop', spread:'Push values apart',
+          bias:'Strays lean older or newer', lock:'Odds a slice stays put', seed:'Pick the shuffle - same number, same flip',
+          range:'How far it jumps, in semitones - 12 is an octave', steps:'Which slices jump - every 2nd, 4th, 8th', glide:'Slide between pitches',
+          fall:'Jumps rise, fall, or take turns', crush:'Coarser, crunchier', chance:'How often it happens', length:'How much of it plays',
+          curve:'Bend the shape', random:'Add a little randomness', gate:'Cut the tail',
+          count:'How many repeats', decay:'Repeats get quieter', amount:'How much it happens',
+          size:'How big the pieces are', spray:'Scatter them', tone:'Bright to dark',
+          scan:'Where in the memory it plays', wander:'Let the window drift',
+          speed:'Stretch the memory - slower and grittier', freeze:'Stop recording', collect:'Keep the good moments',
+          wipe:'Clear the memory', detune:'A little out of tune', wow:'Tape-style warble',
+          smooth:'Soften the edges', filter:'Shape the tone', grit:'Add some dirt',
+          slice:'Cut and reorder', shape:'Color the sound',
+          amt:'How much it happens', len:'How long it lasts',
+          rand:'Add a little randomness', odds:'How often it happens', sprd:'How far slices stray from the pattern' };
+        var MEM=16;                                             // memory cells in the strip
+        var sim={ sub:0, frac:0, off:0, dirV:1, idle:0, wave:[] };
+        (function(){ for(var i=0;i<200;i++)sim.wave.push(0); })();
+        var wPh=[Math.random()*6,Math.random()*6,Math.random()*6];
+        function waveAt(t){ return Math.sin(t*1.7+wPh[0])*.5+Math.sin(t*3.3+wPh[1])*.3+Math.sin(t*7.1+wPh[2])*.2; }
+        var wClock=0;
+        function loopLen(){ return LOOPL[S.v.loop]; }
+        function nSlices(){ return SLICEL[S.v.slices]; }
+        function winStart(){ return Math.round(S.v.scan*(MEM-loopLen())); }
+
+        var tp=TIC.tabsPanes([['slice','Slice'],['scan','Scan'],['shape','Shape']]);
+
+        /* SLICE pane: lanes strip + carve/depth boxes */
+        var lanesEl=TIC.el('<div class="lanes">'+LANES.map(function(l,i){
+          return '<span class="lane'+(i?'':' on')+'" data-l="'+l[0]+'">'+l[1]+'</span>'; }).join('')+'</div>');
+        var ctlrow=TIC.el('<div class="ctlrow"></div>');
+        var carve=TIC.el('<div class="gbox carve"><span class="gbl">Carve</span><div class="togrow"></div><div class="cells"></div></div>');
+        carve.querySelector('.togrow').appendChild(TIC.togEl(S,'always','Always'));
+        carve.querySelector('.togrow').appendChild(TIC.togEl(S,'catch','Catch'));
+        var cc=carve.querySelector('.cells');
+        var tmC=TIC.el('<div class="cell"><span class="lb">Time</span></div>');   /* fb107 — the chop grid division, front and center */
+        tmC.insertBefore(TIC.stepEl(S,'time',RATE_DIV_RICH),tmC.firstChild); cc.appendChild(tmC);
+        var slC=TIC.el('<div class="cell"><span class="lb">Slices</span></div>');
+        slC.insertBefore(TIC.stepEl(S,'slices',SLICEL),slC.firstChild); cc.appendChild(slC);
+        var lpC=TIC.el('<div class="cell"><span class="lb">Loop</span></div>');
+        lpC.insertBefore(TIC.stepEl(S,'loop',LOOPL),lpC.firstChild); cc.appendChild(lpC);
+        var mdC=TIC.el('<div class="cell"><span class="lb">Mode</span></div>');
+        mdC.insertBefore(TIC.stepEl(S,'mode',['Step','Ping','Rand','Walk']),mdC.firstChild); cc.appendChild(mdC);
+        var depth=TIC.el('<div class="gbox depth"><span class="gbl">Order · Depth</span><div class="in"></div></div>');
+        function fillDepth(){ var l=S.v.lane, nm=null;
+          LANES.forEach(function(x){ if(x[0]===l)nm=x[1]; });
+          depth.querySelector('.gbl').textContent=nm+' · Depth';
+          var g=depth.querySelector('.in'); g.innerHTML='';
+          DEPTH[l].forEach(function(d){ g.appendChild(TIC.vsCell(S,l+'_'+d[0],d[1],DFMT[d[0]]||TIC.inum(0,100),d[2])); });
+          TIC.applyTips(depth,TIPS); }
+        lanesEl.addEventListener('click',function(e){ var b=e.target.closest('.lane'); if(!b)return;
+          TIC.EA(lanesEl.querySelectorAll('.lane'),function(x){ x.classList.toggle('on',x===b); });
+          S.set('lane',b.getAttribute('data-l')); fillDepth(); });
+        fillDepth();
+        ctlrow.appendChild(carve); ctlrow.appendChild(depth);
+        tp.panes.slice.appendChild(lanesEl); tp.panes.slice.appendChild(ctlrow);
+
+        /* SCAN pane */
+        var mem=TIC.el('<div class="gbox"><span class="gbl">Memory</span><div class="kin"></div></div>');
+        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'scan','Scan',function(n){
+          return n>0.98?'Now':TIC.pct(n); },1));
+        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'auto','Wander',TIC.inum(0,100),0));
+        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'spreadM','Spread',TIC.inum(0,100),0));
+        mem.querySelector('.kin').appendChild(TIC.knobCell(S,'feed','Speed',TIC.inum(0,100),0));
+        var cap=TIC.el('<div class="gbox"><span class="gbl">Capture</span><div class="gr4"></div></div>');
+        cap.querySelector('.gr4').appendChild(TIC.togEl(S,'freeze','Freeze'));
+        cap.querySelector('.gr4').appendChild(TIC.togEl(S,'collect','Collect'));
+        var wipeB=TIC.el('<div class="tog off"><i></i>Wipe</div>');
+        wipeB.addEventListener('click',function(){ sim.off+=997;
+          if(chopWipeFn){ try{ chopWipeFn(); }catch(e){} }        /* fb106 — clears the DSP memory */
+          wipeB.classList.remove('off');
+          setTimeout(function(){ wipeB.classList.add('off'); },180); });
+        cap.querySelector('.gr4').appendChild(wipeB);
+        var rpC=TIC.el('<div style="display:flex;align-items:center"></div>');
+        rpC.appendChild(TIC.stepEl(S,'rpts',['1','2','3','4'],function(v){ return 'Rpts '+v; }));
+        cap.querySelector('.gr4').appendChild(rpC);
+        tp.panes.scan.appendChild(mem); tp.panes.scan.appendChild(cap);
+
+        /* SHAPE pane */
+        /* fb145 — Character + Bus = full-height VERTICAL glass sliders (Max: "fills this
+           entire space from top to bottom"); the Filter picker is GONE (Max: "fuck a
+           filter — the terrain patcher will own filtering"; FLOW_CHOP_FILTER stays
+           registered + wired, defaulting Off, like the glitch fb129 precedent). */
+        var ch=TIC.el('<div class="gbox"><span class="gbl">Character</span><div class="kin"></div></div>');
+        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'stepsC','Crush',TIC.inum(0,100),0));
+        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'detune','Detune',TIC.inum(0,100),0));
+        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'wow','Wow',TIC.inum(0,100),0));
+        ch.querySelector('.kin').appendChild(TIC.vsCell(S,'smooth','Smooth',TIC.inum(0,100),.15));
+        var bus=TIC.el('<div class="gbox"><span class="gbl">Bus</span><div class="kin3"></div></div>');
+        bus.querySelector('.kin3').appendChild(TIC.vsCell(S,'grit','Grit',TIC.inum(0,100),0));
+        bus.querySelector('.kin3').appendChild(TIC.vsCell(S,'trimC','Trim',TIC.inum(0,100),.5));
+        var shRow=TIC.el('<div class="gboxrow"></div>');
+        shRow.appendChild(ch); shRow.appendChild(bus);
+        tp.panes.shape.appendChild(shRow);
+
+        /* THE RIBBON — persistent below the panes */
+        var rib=TIC.el('<div class="ribbon"><svg viewBox="0 0 288 52" preserveAspectRatio="none"></svg></div>');
+        var rsvg=rib.querySelector('svg');
+        function ribbonPaint(){
+          var s='', cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, ww=loopLen()*cellW, wr=wl+ww, n=nSlices();
+          s+='<rect x="4" y="6" width="280" height="30" rx="5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>';
+          /* the memory waveform: dim past, bright inside the loop window */
+          function seg(x0,x1,op){ if(x1-x0<3)return '';
+            var p=''; for(var x=x0;x<=x1;x+=3){ var v=waveAt((x+sim.off)*.09);
+              p+=(p?' L':'M')+x.toFixed(1)+','+(21-v*9).toFixed(1); }
+            return '<path d="'+p+'" fill="none" stroke="rgba(255,255,255,'+op+')" stroke-width="1"/>'; }
+          s+=seg(6,wl-1,'.28'); s+=seg(wr+1,282,'.28');
+          s+='<rect x="'+wl.toFixed(1)+'" y="6.5" width="'+ww.toFixed(1)+'" height="29" fill="rgba(255,255,255,.055)"/>';
+          s+=seg(wl,wr,'.85');
+          for(var i=1;i<n;i++){ var dx=wl+i*(ww/n);
+            s+='<line x1="'+dx.toFixed(1)+'" y1="6" x2="'+dx.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.16)" stroke-width="1"/>'; }
+          s+='<rect class="nubL" x="'+(wl-3).toFixed(1)+'" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>';
+          s+='<rect class="nubR" x="'+(wr-3).toFixed(1)+'" y="2" width="6" height="3" rx="1" fill="rgba(255,255,255,.40)"/>';
+          s+='<line x1="'+wl.toFixed(1)+'" y1="6" x2="'+wl.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.45)" stroke-width="1" stroke-dasharray="3 2"/>';
+          s+='<line x1="'+wr.toFixed(1)+'" y1="6" x2="'+wr.toFixed(1)+'" y2="36" stroke="rgba(255,255,255,.30)" stroke-width="1"/>';
+          var subW=ww/n, px=wl+(sim.sub+sim.frac)*subW;
+          if(px>wr)px=wr;
+          s+='<line x1="'+px.toFixed(1)+'" y1="4" x2="'+px.toFixed(1)+'" y2="38" stroke="#B794FF" stroke-width="1.4"/>';
+          for(var j=0;j<n;j++){ var lx=wl+(j+.5)*subW;
+            s+='<circle cx="'+lx.toFixed(1)+'" cy="45" r="1.5" fill="'+(j===sim.sub?'#B794FF':'rgba(255,255,255,.18)')+'"/>'; }
+          rsvg.innerHTML=s; }
+        /* ribbon touch: drag window = Scan · drag nubs = Loop · tap a slice = jump */
+        (function(){
+          var mode2=null, downX=0, scan0=0, moved=false;
+          function rx(e){ var r=rsvg.getBoundingClientRect(); return (e.clientX-r.left)/r.width*288; }
+          rsvg.style.cursor='ew-resize';
+          rsvg.addEventListener('pointerdown',function(e){
+            var x=rx(e), cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, wr=wl+loopLen()*cellW;
+            moved=false; downX=x; scan0=S.v.scan;
+            if(Math.abs(x-wl)<6&&x<wl+4) mode2='nl';
+            else if(Math.abs(x-wr)<6) mode2='nr';
+            else if(x>wl&&x<wr) mode2='win';
+            else mode2='jump';
+            try{ rsvg.setPointerCapture(e.pointerId); }catch(_){}
+            e.preventDefault(); });
+          rsvg.addEventListener('pointermove',function(e){ if(!mode2)return;
+            var x=rx(e), cellW=280/MEM; if(Math.abs(x-downX)>2)moved=true;
+            if(mode2==='win'||mode2==='jump'){
+              var span=(MEM-loopLen())*cellW; if(span<=0)return;
+              S.set('scan',TIC.C01(scan0+(x-downX)/span)); ribbonPaint(); }
+            else { var ws=winStart(), wl=4+ws*cellW;
+              if(mode2==='nr'){ var cells=Math.round((x-wl)/cellW);
+                for(var i2=0;i2<LOOPL.length;i2++){ if(LOOPL[i2]>=cells){ S.set('loop',i2); break; } }
+                if(cells>LOOPL[LOOPL.length-1])S.set('loop',LOOPL.length-1); }
+              else { var wr2=wl+loopLen()*cellW, cells2=Math.round((wr2-x)/cellW);
+                for(var i3=0;i3<LOOPL.length;i3++){ if(LOOPL[i3]>=cells2){ S.set('loop',i3); break; } } }
+              ribbonPaint(); } });
+          rsvg.addEventListener('pointerup',function(e){
+            if(mode2&&!moved){ var x=rx(e), cellW=280/MEM, ws=winStart(), wl=4+ws*cellW, ww=loopLen()*cellW;
+              if(x>wl&&x<wl+ww){ var n=nSlices(); sim.sub=Math.max(0,Math.min(n-1,Math.floor((x-wl)/(ww/n)))); sim.frac=0; ribbonPaint(); } }
+            mode2=null; });
+        })();
+        S.on(function(k){ if(k==='slices'||k==='loop'||k==='scan'){ var n=nSlices();
+          if(sim.sub>=n)sim.sub=0; ribbonPaint(); } });
+
+        var snapGet=function(){ var o={}; for(var k in S.v)o[k]=S.v[k]; return JSON.stringify(o); };
+        var snapSet=function(s){ var o=JSON.parse(s); for(var k in o)S.set(k,o[k]); fillDepth(); ribbonPaint(); };
+        var sc=TIC.slotsChain(snapGet,snapSet);
+        /* fb132 — factory bank (fb107 research: Gross Beat slot-1 law, Beat Repeat's
+           Chance lesson, chop-culture flips; Speed = slowdown 0..1, Scan 1 = Now) */
+        var CHOP_PRESETS=[
+          {name:'Init',v:{}},
+          {name:'Half-Time',v:{time:5,'catch':1,always:0,feed:.33,smooth:.3,fltr:1,trim_length:1,trim_curve:.2}},
+          {name:'Doubles',v:{lane:'rpt',time:8,rpt_chance:.35,rpt_count:.33,rpt_decay:.15,rpt_curve:.4,trim_length:.9}},
+          {name:'Gate 16ths',v:{lane:'trim',slices:6,loop:6,trim_length:.55,trim_curve:.85,trim_gate:.4}},
+          {name:'Triplet Roll',v:{time:5,slices:2,rpt_chance:1,rpt_count:.66,rpt_decay:.2,rpt_curve:.6,trim_curve:.3}},
+          {name:'Reverse Flip',v:{lane:'rev',time:8,rev_chance:.3,rev_run:.33,rev_snap:1,rev_spread:.2,
+            order_lock:.7,order_seed:.5}},
+          {name:'Tape Drop',v:{lane:'pitch',time:2,slices:0,'catch':1,always:0,feed:.5,pitch_range:1,
+            pitch_glide:.85,trim_length:1,trim_curve:.2,fltr:1,smooth:.4}},
+          {name:'Riser Stutter',v:{time:8,'catch':1,always:0,rpt_chance:1,rpt_count:1,rpt_decay:0,
+            rpt_curve:.8,pitch_range:.6,pitch_glide:.5,trim_length:.7}},
+          {name:'Scatter Fill',v:{slices:6,'catch':1,always:0,mode:3,auto:.4,spreadM:.6,order_spread:.7,
+            order_seed:.3,drop_density:.1,drop_grain:.3,drop_spray:.4}},
+          {name:'Freeze Juggle',v:{time:8,loop:1,mode:2,freeze:1,scan:.55,auto:.1,trim_length:.9,
+            trim_curve:.3,smooth:.25}},
+          {name:'Ghost Chance',v:{slices:6,rev_chance:.1,rev_run:0,rev_snap:1,rpt_chance:.15,rpt_count:.33,
+            rpt_decay:.4,pitch_range:.25,pitch_glide:.2,drop_density:.05,trim_random:.1,detune:.08}},
+          {name:'Verse Flip',v:{},
+            slots:{1:{},2:{rev_chance:.5,rev_run:.33,rev_snap:1},3:{order_spread:.8,order_seed:.35},
+                   4:{rpt_chance:.8,rpt_count:.66,rpt_decay:.25}},
+            chain:[1,1,2,3,1,1,2,4]},
+          {name:'IDM Machine',v:{slices:6,mode:3,order_spread:.8,order_seed:.3,rev_chance:.25,rev_run:.33,
+            rpt_chance:.4,rpt_count:.5,rpt_decay:.3,drop_density:.15,drop_grain:.25,detune:.2,grit:.3,
+            wow:.15,smooth:.2},
+            slots:{1:{},2:{time:14,rpt_chance:.7},3:{rev_chance:.5,drop_density:.3,spreadM:.5}},
+            chain:[1,2,1,3]} ];
+        TIC.presets({id:'chop',sh:sh,S:S,DEF:DEF,snapGet:snapGet,snapSet:snapSet,sc:sc,factory:CHOP_PRESETS});
+        TIC.cardSync('chop',sc,S,sh.card);
+
+        /* fb106 — DSP WIRING: every Ribbon control ↔ its APVTS param through
+           __synSliderShim (post-ceiling law — works identically on both surfaces).
+           steps>0 = index param (stored as INDEX, sent idx/N). Slot recall replays
+           through S.set, so the chain re-pushes every param for free. */
+        (function(){
+          var PRE={order:'O',pitch:'P',rev:'RV',trim:'T',rpt:'R',drop:'D'};
+          var KN={spread:'SPREAD',bias:'BIAS',lock:'LOCK',seed:'SEED',range:'RANGE',steps:'STEPS',
+                  glide:'GLIDE',quant:'QUANT',chance:'ODDS',run:'RUN',snap:'SNAP',length:'LEN',
+                  curve:'CURVE',random:'RAND',gate:'GATE',count:'COUNT',decay:'DECAY',
+                  density:'AMT',grain:'SIZE',spray:'SPRAY',tone:'TONE'};
+          var BIND={ time:['FLOW_SEQ_RATE',18,1],   /* fb107 — shares the front chop-grid knob (relay when docked) */
+                     'catch':['FLOW_CHOP_CATCH',1], slices:['FLOW_CHOP_SLICES',6], loop:['FLOW_CHOP_LOOP',6],
+                     mode:['FLOW_CHOP_MODE',3], rpts:['FLOW_CHOP_RPTS',3], fltr:['FLOW_CHOP_FILTER',3],
+                     freeze:['FLOW_CHOP_FREEZE',1], collect:['FLOW_CHOP_COLLECT',1],
+                     scan:['FLOW_CHOP_SCAN',0], auto:['FLOW_CHOP_WANDER',0], spreadM:['FLOW_CHOP_SPREAD',0],
+                     feed:['FLOW_CHOP_SPEED',0], stepsC:['FLOW_CHOP_STEPS',0], detune:['FLOW_CHOP_DETUNE',0],
+                     wow:['FLOW_CHOP_WOW',0], smooth:['FLOW_CHOP_SMOOTH',0], grit:['FLOW_CHOP_GRIT',0],
+                     trimC:['FLOW_CHOP_TRIM',0] };
+          for(var L in DEPTH) DEPTH[L].forEach(function(d){
+            BIND[L+'_'+d[0]]=['FLOW_CHOP_'+PRE[L]+'_'+KN[d[0]],0]; });
+          window.__chopProbe={S:S,DEF:DEF,sim:sim,BIND:BIND};   /* probe surface — the ui_suite reads state + the bind map */
+          TIC.stampMod(sh.card,BIND);   /* fb145 — LFO drop targets */
+          Object.keys(BIND).forEach(function(key){
+            var pid=BIND[key][0], steps=BIND[key][1], relay=BIND[key][2], h=null;
+            if(relay&&!window.__cardOnly&&J){ try{ h=J.getSliderState(pid); }catch(e){} }
+            if(!h&&window.__synSliderShim) h=window.__synSliderShim(pid, steps?(S.v[key]/steps):S.v[key]);
+            if(!h)return;
+            var fromParam=false;   /* fb124 — echo guard: a param-originated set must NOT
+              re-push to the param, or drifting round-trips self-oscillate (the chaos-knob
+              "moving like an LFO" fight) */
+            var toUI=function(){ try{ var v=h.getNormalisedValue();
+              fromParam=true; S.set(key, steps?Math.round(v*steps):v); fromParam=false; }catch(e){ fromParam=false; } };
+            toUI();
+            if(h.valueChangedEvent&&h.valueChangedEvent.addListener) h.valueChangedEvent.addListener(toUI);
+            S.on(function(k,v){ if(k!==key||fromParam)return; try{ h.setNormalisedValue(steps?(v/steps):v); }catch(e){} });
+          });
+          /* Always/Catch = one radio pair (Catch is the param; Always = not-Catch) */
+          S.on(function(k,v){
+            if(k==='catch'){ if(v){ if(S.v.always)S.set('always',0); } else if(!S.v.always)S.set('always',1); }
+            else if(k==='always'){ if(v){ if(S.v['catch'])S.set('catch',0); } else if(!S.v['catch'])S.set('catch',1); }
+          });
+          if(S.v.always&&S.v['catch'])S.set('always',0);
+        })();
+        var chopFeedFn=null, chopWipeFn=null;
+        try{ if(window.Juce&&window.Juce.getNativeFunction){
+          chopFeedFn=window.Juce.getNativeFunction('getChopFeed');
+          chopWipeFn=window.Juce.getNativeFunction('chopWipe'); } }catch(e){}
+
+        sh.body.appendChild(tp.tabs);
+        sh.body.appendChild(tp.panes.slice); sh.body.appendChild(tp.panes.scan); sh.body.appendChild(tp.panes.shape);
+        sh.body.appendChild(rib); sh.body.appendChild(sc.el);
+
+        /* fb106 — LIVE ribbon: rAF-poll the DSP feed (getChopFeed). In CHOP mode
+           the playhead and active slice ride the REAL grid clock (BPM, geometry,
+           drops and all); the chain steps on every window wrap. Other FLOW modes:
+           gentle self-clock so the card never looks dead. */
+        var acc=0, feed=null, feedBusy=false, prevSub=0;
+        var start=TIC.runLoop(sh.card,function(dt){
+          if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30);
+          if(window.__chopFeedSynthetic){ feed=window.__chopFeedSynthetic; }   /* probe surface — the ui_suite injects the DSP feed */
+          else if(chopFeedFn&&!feedBusy){ feedBusy=true;
+            try{ Promise.resolve(chopFeedFn()).then(function(fs){ feedBusy=false;
+              try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
+            catch(e){ feedBusy=false; } }
+          var n=nSlices();
+          if(feed&&feed.on===1){
+            var sub=Math.floor(feed.s)%n;
+            sim.frac=Math.max(0,Math.min(1,feed.s-Math.floor(feed.s)));
+            if(feed.pl===1||feed.a===1)sc.__actT=performance.now();   /* fb141 — playing OR audio = life */
+            var go=(performance.now()-(sc.__actT||0)<1500)?1:0;
+            if(go===1&&sc.__pl!==1)sc.restart(); sc.__pl=go;   /* silence -> life retriggers the chain */
+            if(go===1&&sub<prevSub) sc.advance();   /* chain steps on window wrap — frozen only in true silence */
+            if(sub!==prevSub){ prevSub=sub; }
+            sim.sub=sub;
+            ribbonPaint();
+          } else {
+            var sps=8;                                  // fallback grid clock
+            if(!S.v.always){ sim.idle+=dt; if(sim.idle%3>1.6){ ribbonPaint(); return; } }
+            acc+=dt*sps; sim.frac=Math.min(1,acc);
+            while(acc>=1){ acc-=1;
+              var m=S.v.mode;
+              if(m===0){ sim.sub=(sim.sub+1)%n; if(sim.sub===0&&!feed)sc.advance(); }
+              else if(m===1){ sim.sub+=sim.dirV; if(sim.sub>=n-1){sim.sub=n-1;sim.dirV=-1;} if(sim.sub<=0){sim.sub=0;sim.dirV=1;} }
+              else if(m===2){ sim.sub=Math.floor(Math.random()*n); }
+              else { sim.sub=Math.max(0,Math.min(n-1,sim.sub+(Math.random()<.5?-1:1))); } }
+            ribbonPaint();
+          }
+        });
+        ribbonPaint();
+        TIC.applyTips(sh.card,TIPS);
+        return { open:function(){ sh.open(); start(); } }; }
+      return { open:function(){ if(!built)built=build(); built.open(); },
+               ensure:function(){ if(!built)built=build(); } };   /* fb168 — the dice build the card HIDDEN so its state exists before first open */
+    })();
+
+    /* ── BOOT: this page IS the card (the fb82 card-only grammar; the native-window
+       plumbing is swapped for the plugin editor). resizeCardWindow is honored IF the
+       C++ registered it — otherwise the card sits at its natural size and the resize
+       grip hides (a grown card would clip against a fixed editor). ── */
+    (function(){
+      function reg(n){ try{ return window.__JUCE__.initialisationData.__juce__functions.indexOf(n)>=0; }catch(e){ return false; } }
+      function boot(){
+        try{ chopCardObj.open(); }catch(e){ setTimeout(boot,150); return; }
+        var card=document.querySelector('.chop-ext');
+        if(!card||!card.classList.contains('open')){ setTimeout(boot,150); return; }
+        card.classList.add('ti-popcard');
+        document.documentElement.classList.add('card-only-late');   /* body-level glass (the preset menu) must stay visible */
+        var p=card.querySelector('.h .pop'); if(p)p.style.display='none';   /* no pop-out — this window IS the card */
+        var x=card.querySelector('.h .x'); if(x)x.style.display='none';
+        var rs=null;
+        if(reg('resizeCardWindow')){ try{ rs=window.Juce.getNativeFunction('resizeCardWindow'); }catch(e){} }
+        function push(){ if(rs){ try{ var rr=card.getBoundingClientRect(); rs(Math.ceil(rr.width),Math.ceil(rr.height)); }catch(e){} } }
+        window.__tiPushCardSize=push;
+        if(rs){ if(window.ResizeObserver){ try{ new ResizeObserver(push).observe(card); }catch(e){ setInterval(push,600); } } else { setInterval(push,600); } push(); }
+        else { var g=card.querySelector('.rsz'); if(g)g.style.display='none'; }
+        window.__cardEl=card;   /* probe surface */
+      }
+      if(document.readyState==='loading'){ document.addEventListener('DOMContentLoaded',function(){ setTimeout(boot,60); }); }
+      else setTimeout(boot,60);
+    })();
+})();
+</script>
+</body>
+</html>
