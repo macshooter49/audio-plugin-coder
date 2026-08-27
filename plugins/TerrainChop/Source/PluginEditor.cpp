@@ -10,6 +10,8 @@
  #include <objc/message.h>
  #include <objc/runtime.h>
 
+#endif
+
 // fb132 — user presets on disk, one JSON per preset (cloned from TerrainGlitch's tg* helpers)
 static juce::File tcPresetDir (const juce::String& card)
 {
@@ -30,7 +32,6 @@ static juce::String tcSafePresetName (const juce::String& name)
     }
     return out.trim();
 }
-#endif
 
 // lane U's page is authored at this base size; fb95 resize scales it via pageZoom
 static constexpr int kBaseW = 380, kBaseH = 441;   // laneU-measured natural card size — no first-open jump
