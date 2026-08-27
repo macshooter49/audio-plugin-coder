@@ -950,3 +950,23 @@ THE CHECKLIST:
 5. Full Mac gate pass (auval memory number included) + Logic/Live hide-vs-close behavior check
    (the shell's ShowingWatch park-on-hide is cross-platform and fires on any host hide).
 6. Keep `TERRAIN_UI_CACHE` semantics identical (0 = off; default 8 per fb519).
+
+### fb520 — THE WHITE-BLOCK FIX: a dead parked page self-heals instead of being served forever.
+
+Max, scrolling through 6 instances: one editor "got stuck in a frozen white block... no matter
+how many times I open/close it." Mechanism: WebView2 renderers can die randomly under rapid
+window churn; pre-fb518 a close/reopen rebuilt everything, but the keep-alive cache faithfully
+re-adopted the corpse forever. Two fixes:
+1. **Rescue armed at peer-arrival** (ShowingWatch::componentPeerChanged → armPeerRescue), not on
+   the first timer tick — closes the fast-open/close race where an editor died before the
+   WM_DESTROY rescue existed. Belt: disarmPeerRescue in the core dtor.
+2. **wd9 escalation-to-rebuild**: a page that has NEVER acked since attach() (a dead park), or
+   whose reload already failed once, gets its core DESTROYED and rebuilt cold (async, never
+   mid-tick; in-place swap when the editor is open, plain destroy when parked). One transformer
+   open instead of a permanent white block.
+
+Fault-injection acceptance (reopen_kill.ps1 driver): all msedgewebview2 processes MURDERED
+mid-park → reopen self-heals to a ready page in ~11.8 s (3 s silence detection + cold rebuild).
+Normal reopen unaffected (87 ms); reopen2 both-instant (86/90 ms); full gates green, fingerprint
+446f2e02c4dcb215 bit-identical. Future tightening if wanted: probe the controller at adopt time
+to skip the 3 s detection window.

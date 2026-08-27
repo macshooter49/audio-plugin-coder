@@ -599,6 +599,8 @@ public:
     void parkUiCore();                              // fb516 -- shell dtor hands the core here
     void destroyParkedUiIfGen (juce::uint64 gen);   // fb516 -- deferred LRU eviction target
     void releaseUiCoreForShutdown();                // fb516 -- dtor / escape-hatch teardown
+    void destroyUiCoreOnly();                       // fb520 -- kill a dead core, keep the park window
+    void rebuildUiCoreNow();                        // fb520 -- wd9 escalation target (message thread)
     // fb236 — the cross-window LIVE STROKE lane: whichever surface is being drawn on posts
     // the active shape here; the 60Hz editor timer relays it to the OTHER window's page.
     juce::CriticalSection         lfoLiveLock_;

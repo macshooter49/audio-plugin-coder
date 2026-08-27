@@ -31,6 +31,8 @@ public:
     void armPeerRescue (void* peerHwnd);      // fb516e -- WM_DESTROY child-rescue on the host peer
     void disarmPeerRescue();
     void hostPeerDying();                     // fb516e -- fired from the peer's WM_DESTROY (children alive)
+    void requestUiRebuild();                  // fb520 -- wd9 escalation: this core is dead, rebuild cold
+    TerrainInstrumentAudioProcessorEditor* currentShell() const { return shell_; }   // fb520
 
     void paint (juce::Graphics&) override;
     void resized() override;
@@ -872,6 +874,9 @@ private:
     TerrainInstrumentAudioProcessorEditor* shell_ = nullptr;         // fb516 -- null while parked
     void* rescuedPeer_ = nullptr;   // fb516e -- host peer HWND carrying our WM_DESTROY subclass
     void* rescueToken_ = nullptr;   // fb516e -- opaque context owned by TerrainUiPark.cpp
+    bool  ackSinceAttach_ = false;  // fb520 -- has the page acked once since attach()? A no = a dead park
+    bool  rebuildRequested_ = false;// fb520 -- one rebuild per death
+    int   wdTripsNoAck_ = 0;        // fb520 -- consecutive wd9 trips without an ack -> escalate
     std::vector<juce::WebSliderParameterAttachment*> attachments_;   // fb516 -- roster (mkAtt/mkF/mkO record every attachment; insurance, unused in hot paths)
 
     // fb342 — EQ/spectrum push gate: last-pushed analyzer frame counts. MEMBERS, not statics
@@ -1592,6 +1597,8 @@ public:
     void paint (juce::Graphics& g) override;
     void resized() override;
     void onShowingChanged();             // fb516d -- park on HIDE (the only moment the old HWND is guaranteed alive), re-adopt on SHOW
+    void onPeerArrived();                // fb520 -- arm the WM_DESTROY rescue immediately (the timer-tick arming raced fast open/close)
+    void replaceDeadCore();              // fb520 -- swap a dead core for a fresh one, in place
     void tickSizeHeal();   // fb516 -- driven by the core's 60 Hz timer (the heal needs a clock; the shell has none)
 
 private:
@@ -1608,7 +1615,7 @@ private:
         explicit ShowingWatch (TerrainInstrumentAudioProcessorEditor& s)
             : juce::ComponentMovementWatcher (&s), shell (s) {}
         void componentMovedOrResized (bool, bool) override {}
-        void componentPeerChanged() override {}
+        void componentPeerChanged() override { shell.onPeerArrived(); }   // fb520 -- arm the rescue the instant the HWND exists
         void componentVisibilityChanged() override { shell.onShowingChanged(); }
         TerrainInstrumentAudioProcessorEditor& shell;
     };

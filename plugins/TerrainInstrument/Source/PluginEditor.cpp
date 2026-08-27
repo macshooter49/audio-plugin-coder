@@ -1855,6 +1855,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 // web-message lane and acked back over the same lane. This replaces the
                 // ExecuteScript completion as the fb482 backpressure ack + wd9 proof-of-life.
                 lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();
+                ackSinceAttach_ = true; wdTripsNoAck_ = 0;   // fb520 -- proof of life for the escalation
                 evalInFlight_.store (0, std::memory_order_relaxed);
                 audioProcessor.dbgAcks_.fetch_add (1, std::memory_order_relaxed);
             })
@@ -5426,6 +5427,7 @@ TerrainUiCore::~TerrainUiCore()
 {
     // Popped cards are fully independent windows (fb91) — nothing to unhook; they
     // live on, processor-owned, until their own ✕/dock or the instance dies.
+    disarmPeerRescue();   // fb520 -- never leave a subclass pointing at a dying core
     stopTimer();
     // fb516 -- census moved to detach(); a parked core is a CLOSED UI (fb148/fb514 law intact).
     blendPool_.removeAllJobs (true, 4000);   // drain bakes before members die
@@ -5645,6 +5647,16 @@ void TerrainUiCore::timerCallback()
     {
         ++channelRecoveries_;
         lastRecoveryMs_ = wdNowMs;
+        // fb520 -- ESCALATION (the white-block fix). A page that has NEVER acked since attach is
+        // a DEAD park (the fb518 cache would otherwise serve the corpse forever -- Max: "no
+        // matter how many times I open/close it"); a page whose reload already failed once has a
+        // dead controller Navigate cannot save. Both: destroy this core and rebuild it cold --
+        // one transformer open instead of a permanent white block.
+        if (! ackSinceAttach_ || ++wdTripsNoAck_ >= 2)
+        {
+            requestUiRebuild();
+            return;
+        }
         lastEvalOkMs_   = wdNowMs;    // re-arm — the reload needs a moment to come up
         pageReady = false;            // RESTORE machinery re-pushes saved state on ready
         {
@@ -13709,6 +13721,41 @@ void TerrainUiCore::disarmPeerRescue() {}
 void TerrainUiCore::hostPeerDying() {}
 #endif
 
+void TerrainUiCore::requestUiRebuild()
+{
+    // fb520 -- called from OUR OWN timerCallback: never destroy ourselves mid-tick. Hop the
+    // message queue; the processor swaps the core (or just kills a parked corpse).
+    if (rebuildRequested_) return;
+    rebuildRequested_ = true;
+    auto* proc = &audioProcessor;
+    juce::MessageManager::callAsync ([proc] { proc->rebuildUiCoreNow(); });
+}
+
+void TerrainInstrumentAudioProcessorEditor::onPeerArrived()
+{
+   #if JUCE_WINDOWS
+    if (core_ != nullptr)
+        if (auto* peer = getPeer())
+            core_->armPeerRescue (peer->getNativeHandle());
+   #endif
+}
+
+void TerrainInstrumentAudioProcessorEditor::replaceDeadCore()
+{
+    if (core_ != nullptr)
+    {
+        core_->detach();
+        removeChildComponent (core_);
+        core_ = nullptr;
+    }
+    audioProcessor.destroyUiCoreOnly();
+    core_ = static_cast<TerrainUiCore*> (audioProcessor.ensureUiCoreComponent());
+    addAndMakeVisible (*core_);
+    core_->setBounds (getLocalBounds());
+    core_->attach (this);
+    onPeerArrived();   // the fresh core needs its rescue armed too
+}
+
 int TerrainUiCore::bootWidth() const
 {
     constexpr int kBaseW = 820, kBaseH = 656 + CAPTURE_STRIP_HEIGHT;
@@ -13738,6 +13785,7 @@ void TerrainUiCore::attach (TerrainInstrumentAudioProcessorEditor* shell)
     lastFrameHash_  = 0;                                          // force a full first frame (the fb484 law)
     idleSkips_      = 0;
     uiExpDone_      = false;                                      // the fb504 exp hook fires once per OPEN (the fb516a harness depends on this)
+    ackSinceAttach_ = false; wdTripsNoAck_ = 0; rebuildRequested_ = false;   // fb520 -- fresh life-proof window
     // bootSettingsJson_ deliberately NOT refreshed: it only feeds the pre-ready RESTORE pushes,
     // which never run again for a kept-alive page (pageReady stays true); theme changes reach a
     // live page through the normal push lanes.
@@ -13829,6 +13877,23 @@ namespace
                                              [proc] (const TiParkEntry& e) { return e.proc == proc; }),
                              tiParkedCores.end());
     }
+}
+
+void TerrainInstrumentAudioProcessor::destroyUiCoreOnly()
+{
+    tiRegistryErase (this);
+    parkedGen_ = 0;
+    uiCore_.reset();     // the raw park window stays for the successor
+}
+
+void TerrainInstrumentAudioProcessor::rebuildUiCoreNow()
+{
+    auto* core = static_cast<TerrainUiCore*> (uiCore_.get());
+    if (core == nullptr) return;
+    if (auto* shell = core->currentShell())
+        shell->replaceDeadCore();    // editor open: swap in place (one cold boot, window stays up)
+    else
+        destroyUiCoreOnly();         // parked corpse: next open is a clean cold boot
 }
 
 juce::Component* TerrainInstrumentAudioProcessor::ensureUiCoreComponent()
