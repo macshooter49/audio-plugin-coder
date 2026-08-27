@@ -728,6 +728,88 @@ static int reopenMode (Host& host, int blk)
     return 0;
 }
 
+// __ fb519: TWO-INSTANCE keep-alive acceptance _____________________________________________
+// Both instances open (cold), both close (park), then each reopens -- with the default cap
+// BOTH must be instant-class; with TERRAIN_UI_CACHE=1 the older park is evicted and its
+// reopen must be a cold boot (eviction still works). The driver sets the env per run.
+static int reopen2Mode (Host& host, int blk)
+{
+    auto instA = host.make (blk);
+    auto instB = host.make (blk);
+    if (instA == nullptr || instB == nullptr) return 1;
+    for (auto* inst : { instA.get(), instB.get() })
+    {
+        inst->enableAllBuses();
+        inst->setRateAndBufferSizeDetails (SR, blk);
+        inst->prepareToPlay (SR, blk);
+    }
+
+    const auto expFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-ui-exp.js");
+    const auto resFile = juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-ui-exp-result.txt");
+
+    struct Slot { juce::AudioProcessorEditor* ed = nullptr; std::unique_ptr<juce::DocumentWindow> win; };
+    Slot slots[2];
+
+    auto openEd = [&] (int i, juce::AudioPluginInstance& inst, const char* tag, double* msOut) -> bool
+    {
+        resFile.deleteFile();
+        expFile.replaceWithText (juce::String ("\'") + tag + "\'");
+        const double t0 = juce::Time::getMillisecondCounterHiRes();
+        slots[i].ed = inst.createEditorIfNeeded();
+        if (slots[i].ed == nullptr) { std::printf ("  !! no editor (%s)\n", tag); return false; }
+        slots[i].win = std::make_unique<juce::DocumentWindow> ("Terrain reopen2", juce::Colours::black,
+                                                               juce::DocumentWindow::allButtons);
+        slots[i].win->setUsingNativeTitleBar (true);
+        slots[i].win->setContentNonOwned (slots[i].ed, true);
+        slots[i].win->centreWithSize (slots[i].ed->getWidth(), slots[i].ed->getHeight());
+        slots[i].win->setVisible (true);
+        slots[i].win->setAlwaysOnTop (true);
+        slots[i].win->toFront (true);
+        while (! resFile.existsAsFile())
+        {
+            juce::MessageManager::getInstance()->runDispatchLoopUntil (50);
+            if (juce::Time::getMillisecondCounterHiRes() - t0 > 40000.0)
+            { std::printf ("  !! %s: page never became ready (40 s)\n", tag); return false; }
+        }
+        *msOut = juce::Time::getMillisecondCounterHiRes() - t0;
+        return true;
+    };
+    auto closeEd = [&] (int i, juce::AudioPluginInstance& inst)
+    {
+        if (slots[i].win != nullptr) { slots[i].win->setVisible (false); slots[i].win->clearContentComponent(); }
+        if (slots[i].ed != nullptr)  { inst.editorBeingDeleted (slots[i].ed); delete slots[i].ed; slots[i].ed = nullptr; }
+        slots[i].win.reset();
+    };
+
+    double a1=0, b1=0, a2=0, b2=0;
+    if (! openEd (0, *instA, "A1", &a1)) return 1;
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (800);
+    closeEd (0, *instA);
+    if (! openEd (1, *instB, "B1", &b1)) return 1;
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (800);
+    closeEd (1, *instB);
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (1500);
+
+    if (! openEd (0, *instA, "A2", &a2)) return 1;   // the OLDER park -- the fb519 acceptance case
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (400);
+    closeEd (0, *instA);
+    if (! openEd (1, *instB, "B2", &b2)) return 1;
+    juce::MessageManager::getInstance()->runDispatchLoopUntil (400);
+    closeEd (1, *instB);
+
+    const char* cache = std::getenv ("TERRAIN_UI_CACHE");
+    std::printf ("  OPEN  A1 %6.0f ms   B1 %6.0f ms   (cold)\n", a1, b1);
+    std::printf ("  REOPEN A2 %6.0f ms   B2 %6.0f ms   (cache=%s)\n", a2, b2, cache != nullptr ? cache : "default");
+    const bool bothInstant = a2 < 600.0 && b2 < 600.0;
+    const bool oldestCold  = a2 > 900.0 && b2 < 600.0;
+    std::printf ("  verdict: %s\n\n", bothInstant ? "BOTH INSTANT -- every instance keeps its park"
+                                          : oldestCold ? "OLDEST EVICTED (cap respected), newest instant"
+                                                       : "UNEXPECTED -- inspect");
+    for (auto* inst : { instA.get(), instB.get() }) inst->releaseResources();
+    instB.reset(); instA.reset();
+    return 0;
+}
+
 int main (int argc, char** argv)
 {
     // --editor creates a real window and hands the exit path to JUCE's message loop, which does
@@ -746,6 +828,7 @@ int main (int argc, char** argv)
     int  edBlk = 0; bool edOpen = true;
     bool playEd = false;
     bool wantReopen = false;   // fb516 -- keep-alive acceptance harness
+    bool wantReopen2 = false;  // fb519 -- TWO instances, both must reopen instant
     bool wantParams = false; juce::String paramFilter;
     for (int i = 1; i < argc; ++i)
     {
@@ -758,6 +841,7 @@ int main (int argc, char** argv)
         else if (a == "--noeditor") { edOpen = false; if (edBlk == 0) edBlk = 512; }
         else if (a == "--play") playEd = true;
         else if (a == "--reopen") wantReopen = true;   // fb516
+        else if (a == "--reopen2") wantReopen2 = true;  // fb519
         else if (a.startsWith ("--params")) { wantParams = true; if (a.startsWith ("--params=")) paramFilter = a.substring (9); }
         else if (a.startsWith ("--hold=")) holdBlk = a.substring (7).getIntValue();
         else if (a.startsWith ("--secs=")) holdSec = a.substring (7).getDoubleValue();
@@ -773,6 +857,7 @@ int main (int argc, char** argv)
     if (wantModal) return modalMode (host);
     if (wantModalLive) return modalLiveMode (host);
     if (holdBlk > 0) return holdMode (host, holdBlk, holdSec, ftz);
+    if (wantReopen2) return reopen2Mode (host, edBlk > 0 ? edBlk : 512); // fb519
     if (wantReopen) return reopenMode (host, edBlk > 0 ? edBlk : 512);   // fb516
     if (edBlk > 0) return editorMode (host, edBlk, holdSec, edOpen, playEd);
     if (wantParams) return paramsMode (host, paramFilter);

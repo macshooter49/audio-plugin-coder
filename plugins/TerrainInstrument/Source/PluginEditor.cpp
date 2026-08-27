@@ -13809,11 +13809,16 @@ namespace
 
     int tiUiCacheCap()
     {
+        // fb519 -- Max's verdict after living with cap 1 ("only the last-closed was instant"):
+        // EVERY instance in a project keeps its parked UI, so every reopen is the 84 ms one.
+        // Honest cost: ~150-250 MB of suspended renderer per parked instance (~1-1.5 GB across
+        // a 7-instance session) -- accepted deliberately; renderers are visibility-suspended so
+        // parked CPU stays ~0. TERRAIN_UI_CACHE trims it (0 = feature off, cold path).
         static const int cap = []
         {
             if (const char* e = std::getenv ("TERRAIN_UI_CACHE"))
-                return juce::jlimit (0, 4, juce::String (e).getIntValue());
-            return 1;
+                return juce::jlimit (0, 16, juce::String (e).getIntValue());
+            return 8;
         }();
         return cap;
     }

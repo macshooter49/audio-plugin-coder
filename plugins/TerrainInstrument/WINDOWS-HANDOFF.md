@@ -902,3 +902,17 @@ and lazy-boot options documented in fb514/fb515 notes); LRU eviction across 3+ i
 manual-tested in FL; Mac parking off pending a Mac session; the unused uiCoreHolder_ member and
 the fb516b/c/d intermediate shell hooks (onShowingChanged + ShowingWatch) are LOAD-BEARING for
 the graceful path — do not remove.
+
+### fb519 — EVERY instance keeps its parked UI. All reopens are the 84 ms one.
+
+Max's verdict after living with fb518's cap of 1: only the LAST-closed instance was instant; the
+others fell back to the cold "transformer" open. Fix: the parked-core LRU default goes 1 → 8
+(clamp 0..16 via TERRAIN_UI_CACHE; 0 still = feature off / cold path). Honest cost, accepted
+deliberately: ~150-250 MB of visibility-suspended renderer per parked instance (~1-1.5 GB across
+a 7-instance session); parked CPU stays ~0.
+
+New acceptance mode `terrain_winbench --reopen2` (two instances, interleaved): default cap →
+OPEN A1 3,078 / B1 1,757 ms (cold; note the second instance's FIRST open is already ~half — warm
+browser process), REOPEN A2 88 / B2 83 ms — **BOTH INSTANT**. TERRAIN_UI_CACHE=1 → A2 1,543 ms
+(oldest evicted, cold) / B2 91 ms — the eviction machinery verified alive. Full gates green,
+fingerprint 446f2e02c4dcb215 bit-identical.
