@@ -916,3 +916,37 @@ OPEN A1 3,078 / B1 1,757 ms (cold; note the second instance's FIRST open is alre
 browser process), REOPEN A2 88 / B2 83 ms — **BOTH INSTANT**. TERRAIN_UI_CACHE=1 → A2 1,543 ms
 (oldest evicted, cold) / B2 91 ms — the eviction machinery verified alive. Full gates green,
 fingerprint 446f2e02c4dcb215 bit-identical.
+
+### ENABLING INSTANT REOPEN ON MAC — the checklist (for a Mac session; fb518/fb519 context)
+
+WHAT THE MAC INHERITS TODAY ON PULL (safe by construction, no action needed):
+- The core/shell split compiles cross-platform; parking is hard-gated `#if JUCE_WINDOWS` in
+  `parkUiCore()` — the `#else` branch destroys the core on close = the Mac's current behavior,
+  byte-identical. `TerrainUiPark.cpp` is `#ifdef _WIN32` (empty TU on Mac). Every call to the
+  patched `webView->parkNativeWindow()` is inside `JUCE_WINDOWS`, so the Mac's PRISTINE JUCE
+  (the Mac never applies scripts/juce-webview2-failure-cap.patch) builds clean.
+
+WHY MAC ENABLEMENT IS EASIER THAN WINDOWS WAS: the entire Windows war was one law — a WebView2
+controller dies with its parent HWND, and no JUCE notification fires before the HWND dies. macOS
+has no such law: WKWebView is a plain NSView inside JUCE's NSViewComponent, which re-attaches on
+peer change (juce_WebBrowserComponent_mac.mm ~821-824, setView ~915). No raw window, no
+WM_DESTROY rescue needed.
+
+THE CHECKLIST:
+1. RECON FIRST (one pass over juce_WebBrowserComponent_mac.mm): what happens to the WKWebView
+   when the component is hidden / removed from desktop — with `keepPageLoadedWhenBrowserIsHidden`
+   already set (editor Options), the about:blank navigation is already suppressed (mac reads the
+   flag at ~:745/:977). Confirm the WKWebView NSView is RETAINED (not torn down) while the JUCE
+   component is parentless/peerless.
+2. Enable: in `parkUiCore()`, give the `#else` branch the park path (registry + cap logic is
+   already platform-neutral; skip the rawHwnd/rescue pieces — Windows-only). Likely sufficient:
+   just detach the core (parentless component, exactly what parkWebViewNative does after the
+   controller move on Windows). If the NSView needs a live window, a hidden NSWindow holder is
+   the fallback — but measure first; it may not.
+3. `attach()` / `resyncAfterReattach()` / census / wd9 re-arm are already cross-platform.
+4. TEST-FIRST like fb516a: port `--reopen` / `--reopen2` from Tests/win_blk_cpu.cpp into a Mac
+   harness (the reopen modes themselves are pure JUCE — only the CPU/thread sampling around the
+   editor mode is Win32). Baseline the Mac's cold reopen, then flip, then re-measure.
+5. Full Mac gate pass (auval memory number included) + Logic/Live hide-vs-close behavior check
+   (the shell's ShowingWatch park-on-hide is cross-platform and fires on any host hide).
+6. Keep `TERRAIN_UI_CACHE` semantics identical (0 = off; default 8 per fb519).
