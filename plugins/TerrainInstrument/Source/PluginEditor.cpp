@@ -13675,7 +13675,16 @@ void TerrainUiCore::parkWebViewNative (void* rawHwnd)
     if (auto* parent = getParentComponent())
         parent->removeChildComponent (this);   // parentless while parked; relays keep flowing (isVisible stays true)
    #else
+    // fb521 -- MAC PARK (the handoff checklist, step 2). No controller to move and no HWND-death
+    // law: WKWebView is a plain NSView retained by JUCE's NSViewComponent, which re-attaches on
+    // the next addAndMakeVisible (juce_WebBrowserComponent_mac.mm WKWebViewImpl). Parking is just
+    // going parentless. keepPageLoadedWhenBrowserIsHidden (Options, :199) suppresses the
+    // about:blank hide dance, and reloadLastURL() self-cleared at first show, so park/adopt
+    // cycles are navigation-silent. LAW 2 holds: isVisible() stays true, only isShowing() drops.
     juce::ignoreUnused (rawHwnd);
+    disarmPeerRescue();   // no-op on Mac, kept for symmetry
+    if (auto* parent = getParentComponent())
+        parent->removeChildComponent (this);
    #endif
 }
 
@@ -13907,12 +13916,17 @@ juce::Component* TerrainInstrumentAudioProcessor::ensureUiCoreComponent()
 
 void TerrainInstrumentAudioProcessor::parkUiCore()
 {
-   #if JUCE_WINDOWS
     if (uiCore_ == nullptr) return;
     if (tiUiCacheCap() <= 0) { releaseUiCoreForShutdown(); return; }   // escape hatch: cold path, old behavior
+   #if JUCE_WINDOWS
     if (uiCoreRawHolder_ == nullptr)
         uiCoreRawHolder_ = tiCreateRawParkWindow();
     static_cast<TerrainUiCore*> (uiCore_.get())->parkWebViewNative (uiCoreRawHolder_);   // fb516e -- controller moved FIRST, explicitly, HWNDs alive
+   #else
+    // fb521 -- Mac enablement per the handoff checklist: same registry, same LRU, same escape
+    // hatch; the only platform difference is that parking needs no holder window.
+    static_cast<TerrainUiCore*> (uiCore_.get())->parkWebViewNative (nullptr);
+   #endif
     tiRegistryErase (this);
     parkedGen_ = ++tiParkGenCounter;
     tiParkedCores.push_back ({ this, parkedGen_, false });
@@ -13934,9 +13948,6 @@ void TerrainInstrumentAudioProcessor::parkUiCore()
                     { victimProc->destroyParkedUiIfGen (victimGen); return; }
         });
     }
-   #else
-    releaseUiCoreForShutdown();   // Mac keeps destroy-on-close (enabling parking there is a Mac-session decision)
-   #endif
 }
 
 void TerrainInstrumentAudioProcessor::destroyParkedUiIfGen (juce::uint64 gen)

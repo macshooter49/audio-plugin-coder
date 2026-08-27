@@ -167,6 +167,31 @@ result 2–5×.
   the HAL I/O thread**, PluginProcessor.cpp:9336-9340) · FilterSlot diet (~200 MB voice pool) ·
   modal arm per-SELECTED-osc · capture-ring arm on export-UI visit · WT bank LRU.
 
+## fb521 (2026-08-26, Mac session) — MAC KEEP-ALIVE ENABLED, per this file's checklist
+
+- **Measured on the installed AU (Tests/mac_reopen.mm, raw AU host):** cold reopen **653 ms** →
+  parked reopen **65 ms** (open1 ~933 ms); two instances **65/64 ms — both instant** (fb519 law
+  holds on Mac). Beats the Windows 83 ms. `TERRAIN_UI_CACHE=0` remains the cold escape hatch.
+- The enablement was exactly checklist steps 1-2: `parkUiCore()` shares the registry/LRU across
+  platforms; the Mac `parkWebViewNative` is just "go parentless" (WKWebView is a retained NSView;
+  `keepPageLoadedWhenBrowserIsHidden` was already set at :199; `reloadLastURL` self-clears after
+  first show, so park/adopt is navigation-silent). No holder window, no rescue — no HWND-death law.
+- **Standalone sanity:** the page answered a planted exp-hook probe ("standalone-alive") on the
+  fb521 build. pluginval x2 SUCCESS; auval exit 0, battery peak 9,116 MB (parity — auval opens
+  no editors).
+- **HARNESS LAWS, paid for in wrong theories (all encoded in Tests/mac_reopen.mm):**
+  1. THE HOOK-DIR LAW: the plugin's juce tempDirectory = ~/Library/Caches/<EXECUTABLE name>,
+     and for a plugin dylib that is "Terrain Instrument" — NOT the host process. The standalone
+     matched only by name coincidence; every harness variant "failed" on this before anything real.
+  2. THE AUTORELEASE TRAP: createViewFor returns the AU view autoreleased; without an inner pool
+     the wrapper's only teardown (dealloc → deleteEditor) never runs and the second
+     uiViewForAudioUnit returns nil.
+  3. Host the AU view WINDOWLESS in a harness (addToDesktop already provides the desktop
+     presence); a private NSWindow adds a pinning retain.
+- Honest cost, same as Windows: ~parked WebKit per instance stays resident (two-instance run
+  read fp 1,506 MB total). The cap (default 8) trims it; behavior verified: adopt-from-park
+  reuses the SAME core (trace showed no core ctor on reopen).
+
 ## 5. WHAT IS OPEN
 
 1. **Memory — DONE and verified (fb497): 18,688 MB → 12,065 MB.** What remains is the *ratchet*:
