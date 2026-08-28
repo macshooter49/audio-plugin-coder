@@ -61,7 +61,27 @@ Pattern to copy exactly, do not invent: the **`gran-knob-wrap` / `gk-arrow`** tw
 Params already shipped and live: `URANGE` (5..4800 cents), `USTACK` (9 intervals), `UWARP`,
 `UDETUNE`, `UBLEND`, `UWIDTH` (bipolar).
 
-## 3 · PHASING TAKES UNISON'S OLD PLACE ON THE BACK PANEL
+## 3 · PHASING TAKES UNISON'S OLD PLACE ON THE BACK PANEL   ✅ SHIPPED fb532
+**Built.** The back-panel pill that was UNISON is now PHASE, in the same slot at the same size
+(row measured 302x28, 4 pills, unchanged). Right-click gives the four modes directly —
+**Manual · Random · Free · Spread** — and also picks which value the drag edits
+(**Phase · Rand · Voices · Mode**); choosing Manual or Random jumps the value to the knob you
+want next. Detune/Blend/Width LEFT the pill (fb531 put them on the unison page — they were
+duplicated); **Voices stayed, because this pill is its only control in the entire UI** and
+dropping it would have stranded the parameter.
+**NO DSP WAS WRITTEN.** `resolvePhase` already computed Serum's exact model,
+`wrap(Phase + Rand x random)`. Measured through both AUs with `Tests/phase_probe.cpp`:
+at Rand 0 both track **+90.00 deg per quarter turn with R = 1.0000**, the two curves 1.69 deg
+apart (our sine vs their saw). Our Rand goes DEEPER at full (R 0.4048 vs their 0.6939) —
+lifeguard law, keep it.
+🚨 **WHY IT DIDN'T PHASE**: the shipped default mode was FREE, whose branch returns the carried
+accumulator and ignores BOTH knobs. Proof: the measured phases marched continuously across a
+Phase sweep (270→269→321→322→14→14→67→67, +52.5 deg/note) with no jump at any parameter change.
+Default is now **Random**, matching Serum's own init (`A Rand Phase` default 1.0). A fresh
+instance measures **R = 0.2771** — it phases out of the box. 🔒 The library is untouched:
+`migrateBlobToVersion3` is version-gated and pins every older blob to Free.
+
+*(original spec below)*
 Unison vacates the back panel; **phasing moves in** — random phase + current phase position,
 modelled on the reference's measured set: `A Phase` (0–360°, 361 steps) and `A Rand Phase`
 (0–100 amount, default 100 = fully random). Terrain's `SYN_OSC_x_PHASE` / `_PHASE_AMT` /

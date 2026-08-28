@@ -2635,11 +2635,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_PHASE_MODE, 1 },
         "Synth OSC A Phase Mode",
-        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
-               // so every stored 2 in the library is a value nobody has ever heard. Lane V
-               // un-wires that force; without this default change (and the version-3
-               // migration that rewrites stored 2s) the whole library would flip to Random.
+        juce::StringArray { "Manual", "Free", "Random", "Spread" },
+        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+               // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
+               // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
+               // the measured start phase marched CONTINUOUSLY across a Phase sweep
+               // (270->269->321->322->14->14->67->67, a steady +52.5 deg/note) with no jump
+               // at any parameter change. Serum 2 defaults its own "A Rand Phase" to 1.0
+               // (fully random), so this also lands on the reference.
+               // 🔒 THE LIBRARY IS SAFE: migrateBlobToVersion3 is version-GATED
+               // (`if (blobVersion >= 3) return;`) and forces every OLDER blob to 1 (Free),
+               // so this default only ever reaches a FRESH instance or a NEW patch. Nothing
+               // already saved changes sound. fb522 kept "Retrig" as the name; it is
+               // "Manual" now by the pragmatic-names rule — the index is what state stores,
+               // so renaming a choice cannot move a stored value.
 
     // WAVER (back panel pill 2 — replaces the redundant SPECTRAL-mode selector).
     // Per-OSC analog pitch-drift depth (Ornstein–Uhlenbeck, per unison sine).
@@ -2839,11 +2848,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
         "Synth OSC B Phase Mode",
-        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
-               // so every stored 2 in the library is a value nobody has ever heard. Lane V
-               // un-wires that force; without this default change (and the version-3
-               // migration that rewrites stored 2s) the whole library would flip to Random.
+        juce::StringArray { "Manual", "Free", "Random", "Spread" },
+        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+               // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
+               // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
+               // the measured start phase marched CONTINUOUSLY across a Phase sweep
+               // (270->269->321->322->14->14->67->67, a steady +52.5 deg/note) with no jump
+               // at any parameter change. Serum 2 defaults its own "A Rand Phase" to 1.0
+               // (fully random), so this also lands on the reference.
+               // 🔒 THE LIBRARY IS SAFE: migrateBlobToVersion3 is version-GATED
+               // (`if (blobVersion >= 3) return;`) and forces every OLDER blob to 1 (Free),
+               // so this default only ever reaches a FRESH instance or a NEW patch. Nothing
+               // already saved changes sound. fb522 kept "Retrig" as the name; it is
+               // "Manual" now by the pragmatic-names rule — the index is what state stores,
+               // so renaming a choice cannot move a stored value.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WAVER, 1 },
         "Synth OSC B Waver",
@@ -3016,11 +3034,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
         "Synth OSC C Phase Mode",
-        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
-               // so every stored 2 in the library is a value nobody has ever heard. Lane V
-               // un-wires that force; without this default change (and the version-3
-               // migration that rewrites stored 2s) the whole library would flip to Random.
+        juce::StringArray { "Manual", "Free", "Random", "Spread" },
+        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+               // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
+               // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
+               // the measured start phase marched CONTINUOUSLY across a Phase sweep
+               // (270->269->321->322->14->14->67->67, a steady +52.5 deg/note) with no jump
+               // at any parameter change. Serum 2 defaults its own "A Rand Phase" to 1.0
+               // (fully random), so this also lands on the reference.
+               // 🔒 THE LIBRARY IS SAFE: migrateBlobToVersion3 is version-GATED
+               // (`if (blobVersion >= 3) return;`) and forces every OLDER blob to 1 (Free),
+               // so this default only ever reaches a FRESH instance or a NEW patch. Nothing
+               // already saved changes sound. fb522 kept "Retrig" as the name; it is
+               // "Manual" now by the pragmatic-names rule — the index is what state stores,
+               // so renaming a choice cannot move a stored value.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WAVER, 1 },
         "Synth OSC C Waver",
@@ -3193,11 +3220,20 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
         "Synth OSC D Phase Mode",
-        juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
-               // so every stored 2 in the library is a value nobody has ever heard. Lane V
-               // un-wires that force; without this default change (and the version-3
-               // migration that rewrites stored 2s) the whole library would flip to Random.
+        juce::StringArray { "Manual", "Free", "Random", "Spread" },
+        2));   // fb532 — DEFAULT IS RANDOM, and that is what makes a fresh patch actually PHASE.
+               // MEASURED: in FREE (the fb522 default) resolvePhase returns the carried
+               // accumulator and IGNORES both knobs, so Phase and Rand were provably inert —
+               // the measured start phase marched CONTINUOUSLY across a Phase sweep
+               // (270->269->321->322->14->14->67->67, a steady +52.5 deg/note) with no jump
+               // at any parameter change. Serum 2 defaults its own "A Rand Phase" to 1.0
+               // (fully random), so this also lands on the reference.
+               // 🔒 THE LIBRARY IS SAFE: migrateBlobToVersion3 is version-GATED
+               // (`if (blobVersion >= 3) return;`) and forces every OLDER blob to 1 (Free),
+               // so this default only ever reaches a FRESH instance or a NEW patch. Nothing
+               // already saved changes sound. fb522 kept "Retrig" as the name; it is
+               // "Manual" now by the pragmatic-names rule — the index is what state stores,
+               // so renaming a choice cannot move a stored value.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WAVER, 1 },
         "Synth OSC D Waver",
