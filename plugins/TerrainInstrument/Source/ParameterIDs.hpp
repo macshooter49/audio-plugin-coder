@@ -710,28 +710,28 @@ namespace ParameterIDs
     //     because the DSP has silently forced 1 since 2026-07-09 and every stored 2 in the library
     //     has never been heard. See migrateBlobToVersion3() in PluginProcessor.cpp.
     constexpr char SYN_OSC_A_URANGE[]    = "SYN_OSC_A_URANGE";     // float 5..4800 cents, def 50.0, exponential
-    constexpr char SYN_OSC_A_UWARP[]     = "SYN_OSC_A_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_A_UWARP[]     = "SYN_OSC_A_UWARP";      // float -100..+100 %, def 0.0 — LIVE (fanned in the render loop, SynthVoice.h:3519/3520/3620)
     constexpr char SYN_OSC_A_USTACK[]    = "SYN_OSC_A_USTACK";     // choice(9), def 0 = off
     constexpr char SYN_OSC_A_WVAR[]      = "SYN_OSC_A_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
     constexpr char SYN_OSC_A_W2VAR[]     = "SYN_OSC_A_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
     constexpr char SYN_OSC_A_PHASE[]     = "SYN_OSC_A_PHASE";      // float 0..360 deg, def 0.0
     constexpr char SYN_OSC_A_PHASE_AMT[] = "SYN_OSC_A_PHASE_AMT";  // float 0..100 %, def 100.0
     constexpr char SYN_OSC_B_URANGE[]    = "SYN_OSC_B_URANGE";     // float 5..4800 cents, def 50.0, exponential
-    constexpr char SYN_OSC_B_UWARP[]     = "SYN_OSC_B_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_B_UWARP[]     = "SYN_OSC_B_UWARP";      // float -100..+100 %, def 0.0 — LIVE (fanned in the render loop, SynthVoice.h:3519/3520/3620)
     constexpr char SYN_OSC_B_USTACK[]    = "SYN_OSC_B_USTACK";     // choice(9), def 0 = off
     constexpr char SYN_OSC_B_WVAR[]      = "SYN_OSC_B_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
     constexpr char SYN_OSC_B_W2VAR[]     = "SYN_OSC_B_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
     constexpr char SYN_OSC_B_PHASE[]     = "SYN_OSC_B_PHASE";      // float 0..360 deg, def 0.0
     constexpr char SYN_OSC_B_PHASE_AMT[] = "SYN_OSC_B_PHASE_AMT";  // float 0..100 %, def 100.0
     constexpr char SYN_OSC_C_URANGE[]    = "SYN_OSC_C_URANGE";     // float 5..4800 cents, def 50.0, exponential
-    constexpr char SYN_OSC_C_UWARP[]     = "SYN_OSC_C_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_C_UWARP[]     = "SYN_OSC_C_UWARP";      // float -100..+100 %, def 0.0 — LIVE (fanned in the render loop, SynthVoice.h:3519/3520/3620)
     constexpr char SYN_OSC_C_USTACK[]    = "SYN_OSC_C_USTACK";     // choice(9), def 0 = off
     constexpr char SYN_OSC_C_WVAR[]      = "SYN_OSC_C_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
     constexpr char SYN_OSC_C_W2VAR[]     = "SYN_OSC_C_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
     constexpr char SYN_OSC_C_PHASE[]     = "SYN_OSC_C_PHASE";      // float 0..360 deg, def 0.0
     constexpr char SYN_OSC_C_PHASE_AMT[] = "SYN_OSC_C_PHASE_AMT";  // float 0..100 %, def 100.0
     constexpr char SYN_OSC_D_URANGE[]    = "SYN_OSC_D_URANGE";     // float 5..4800 cents, def 50.0, exponential
-    constexpr char SYN_OSC_D_UWARP[]     = "SYN_OSC_D_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_D_UWARP[]     = "SYN_OSC_D_UWARP";      // float -100..+100 %, def 0.0 — LIVE (fanned in the render loop, SynthVoice.h:3519/3520/3620)
     constexpr char SYN_OSC_D_USTACK[]    = "SYN_OSC_D_USTACK";     // choice(9), def 0 = off
     constexpr char SYN_OSC_D_WVAR[]      = "SYN_OSC_D_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
     constexpr char SYN_OSC_D_W2VAR[]     = "SYN_OSC_D_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension

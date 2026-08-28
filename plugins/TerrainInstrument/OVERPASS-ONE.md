@@ -34,7 +34,22 @@ cardinality. Grow the C++ list while any one `<select>` still lists 30 and index
 selects table 45. Sites: `WavetableBank.h:44-82` + `:145-178`, `PluginProcessor.cpp` 2532/2728/
 2888/3048, `index.html` 6239/6513/6806/7080, plus copies at `:33298`, `:33355`, clamp at `:34845`.
 
-## 2 · UNISON GETS ITS OWN BUTTON SET — on EVERY engine
+## 2 · UNISON GETS ITS OWN BUTTON SET — on EVERY engine   ✅ SHIPPED fb531
+**Built.** Six shapers on the page — **Stack · Range · Detune · Warp · Blend · Width** — with Voices
+staying on the front `.uni-pill`. Stack is a CHOICE so it is a pill FIRST in the row, the `.fm-algo`
+idiom verbatim (Max: *"put the pill in the front like FM's algo pill"*). Chevron cycles and wraps;
+no page dots. **NO DSP WORK WAS NEEDED** — `URANGE`/`USTACK`/`UWARP` were already registered, pulled
+(`PluginProcessor.cpp:9277-9287`), pushed to the voice (`:9330`), consumed in the render loop
+(`SynthVoice.h:3519/3520/3620`) **and modulatable**; they had simply never had a control. The
+`(inert)` note on UWARP was a stale comment, now corrected.
+🚨 **TWO CSS TRAPS, BOTH INVISIBLE TO EVERY OTHER CHECK** (compile, auval and pluginval all pass
+with the page unreachable): the wrap must live in `.front-only`, NOT after the geode wrap — that one
+is inside `.sample-view`, which is `display:none` on five engines of seven; and the row must
+out-specify FM's and Harm's `:not(.X-knobs)` hides (1 id + 7 classes) or it renders 0x0 on exactly
+those two. Found by a per-engine DOM ancestor walk. Verified 7/7 engines at 287x38, and the arrow
+cycle measured WT page1->UNISON->page1, FM page1->page2->UNISON->page1.
+
+*(original spec below)*
 Max: *"Unison is connected to all the engines."* Every engine gets an arrow, and unison lives
 behind it as its own knob page:
 - engine has no second page → **unison is page 2**
