@@ -1165,6 +1165,12 @@ void TerrainInstrumentAudioProcessor::timerCallback()
 {
     mtHeartbeat_.fetch_add (1, std::memory_order_relaxed);   // fb481 — the stall beacon watches this
 
+    // fb528 — see prepLock_ in PluginProcessor.h. Everything below this line ARMS or REBUILDS
+    // shared engine state (stem rings, wavetables, the pooled FX engines, MODAL's and HARM's
+    // banks) and prepareToPlay does the same to the same objects from a DIFFERENT thread under
+    // AU. One lock owns all of it. The audio thread never waits on this.
+    const std::lock_guard<std::mutex> prepGuard (prepLock_);
+
     // fb496 — LAZY ARM, on the message thread where the ~1 GB allocation belongs.
     // The stem rings only ever hold audio from a layer that HAS a sample (the write
     // sits under `if (! layer.hasSample()) continue;`), so the first loaded sample is
@@ -1374,7 +1380,11 @@ void TerrainInstrumentAudioProcessor::rebuildGeodeIfNeeded (int o)
             if (nCh > 1) s = 0.5f * (s + rp[1][i]);
             mono[(size_t) i] = s;
         }
-        tw::GeodeAnalyzer::analyzeSample (mono.data(), nSm, nr > 0.0 ? nr : getSampleRate(), slot.buf[bi]);
+        // fb528 — preparedSampleRate_, not getSampleRate(): this runs in timerCallback and
+        // juce::AudioProcessor::currentSampleRate is written by the AU wrapper on the host's
+        // init thread, outside prepLock_. See buildPendingGranularEngines.
+        const double geoSr = preparedSampleRate_.load (std::memory_order_acquire);
+        tw::GeodeAnalyzer::analyzeSample (mono.data(), nSm, nr > 0.0 ? nr : geoSr, slot.buf[bi]);
     }
     else
     {
@@ -2155,7 +2165,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_A_LEVEL, 1 },
         "Synth OSC A Level",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
-        0.7f));
+        // fb528 (Max): 0.7 -> 0.5 so OSC A matches B/C/D and a fresh patch starts balanced.
+        // PAIRED with the JS default mirror (ui/public/index.html, SYN_OSC_A_LEVEL): change
+        // both or the UI reads 70 while the engine starts at 50.
+        0.5f));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_PAN, 1 },
@@ -5350,9 +5363,19 @@ void TerrainInstrumentAudioProcessor::buildPendingGranularEngines()
             && grnPool_[(size_t) i] == nullptr)
         {
             auto e = std::make_unique<tw::GranularFxEngine>();
-            e->prepare (getSampleRate() > 0.0 ? getSampleRate() : 48000.0);
+            // fb528 — NOT getSampleRate(). That reads juce::AudioProcessor::currentSampleRate,
+            // which JuceAU::prepareToPlay writes via setRateAndBufferSizeDetails
+            // (juce_audio_plugin_client_AU_1.mm:271) on the host's init thread BEFORE our
+            // prepareToPlay override runs — i.e. outside prepLock_, so this read raced it
+            // (ThreadSanitizer, juce_AudioProcessor.cpp:378). preparedSampleRate_ is the
+            // processor's own atomic copy, published by prepareToPlay under the lock.
+            const double grnSr = preparedSampleRate_.load (std::memory_order_acquire);
+            e->prepare (grnSr > 0.0 ? grnSr : 48000.0);
             e->setGrainBudget (&granGrainsLive_, kGranBudget);
-            grnPool_[(size_t) i] = std::move (e);        // publish LAST — the audio thread reads this
+            grnPool_[(size_t) i] = std::move (e);        // OWNERSHIP
+            // fb528 — THE PUBLICATION. Release-store the pointer the audio thread actually
+            // reads (grnLive_), after everything prepare() wrote. See grnLive_ in the header.
+            grnLive_[(size_t) i].store (grnPool_[(size_t) i].get(), std::memory_order_release);
         }
 }
 
@@ -5372,7 +5395,7 @@ void TerrainInstrumentAudioProcessor::applyGrn (int inst0, float inL, float inR,
     // Ask the message thread for the engine the moment this instance is wanted. Until it exists the
     // slot PASSES THROUGH (fb351 law: a bypassed device must not break the chain behind it).
     if (powered) grnWantBuild_[(size_t) inst0].store (true, std::memory_order_relaxed);
-    auto* eng = grnPool_[(size_t) inst0].get();
+    auto* eng = grnLive_[(size_t) inst0].load (std::memory_order_acquire);   // fb528 — pairs with the release store
     if (eng == nullptr) return;
 
     // click-free power: fade, never a hard cut
@@ -5451,7 +5474,7 @@ juce::String TerrainInstrumentAudioProcessor::getGranularVizJson()
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
         if (i) out << ",";
-        auto* e = grnPool_[(size_t) i].get();
+        auto* e = grnLive_[(size_t) i].load (std::memory_order_acquire);   // fb528
         const bool live = (e != nullptr) && grnRefs_[(size_t) i].active != nullptr
                        && grnRefs_[(size_t) i].active->load() > 0.5f;
         if (! live) { out << "null"; continue; }
@@ -6604,8 +6627,10 @@ void TerrainInstrumentAudioProcessor::buildPendingTapeEngines()
             && tpePool_[(size_t) i] == nullptr)
         {
             auto e = std::make_unique<tw::TapeFxEngine>();
-            e->prepare (getSampleRate() > 0.0 ? getSampleRate() : 48000.0);
-            tpePool_[(size_t) i] = std::move (e);      // publish LAST — the audio thread reads this
+            const double tpeSr = preparedSampleRate_.load (std::memory_order_acquire);   // fb528 — see buildPendingGranularEngines
+            e->prepare (tpeSr > 0.0 ? tpeSr : 48000.0);
+            tpePool_[(size_t) i] = std::move (e);      // OWNERSHIP
+            tpeLive_[(size_t) i].store (tpePool_[(size_t) i].get(), std::memory_order_release);   // fb528 — THE PUBLICATION
         }
 }
 
@@ -6623,7 +6648,7 @@ void TerrainInstrumentAudioProcessor::applyTpe (int inst0, float inL, float inR,
     float& env = tpeEnv_[(size_t) inst0];
 
     if (powered) tpeWantBuild_[(size_t) inst0].store (true, std::memory_order_relaxed);
-    auto* eng = tpePool_[(size_t) inst0].get();
+    auto* eng = tpeLive_[(size_t) inst0].load (std::memory_order_acquire);   // fb528 — pairs with the release store
     if (eng == nullptr) return;                       // until it exists the slot PASSES THROUGH
 
     tw::TapeFxEngine::Params tp;
@@ -6681,7 +6706,7 @@ juce::String TerrainInstrumentAudioProcessor::getTapeVizJson()
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
         if (i) out << ",";
-        auto* e = tpePool_[(size_t) i].get();
+        auto* e = tpeLive_[(size_t) i].load (std::memory_order_acquire);   // fb528
         const bool live = (e != nullptr) && tpeRefs_[(size_t) i].active != nullptr
                        && tpeRefs_[(size_t) i].active->load() > 0.5f;
         if (! live) { out << "null"; continue; }
@@ -6806,6 +6831,13 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
 
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    // fb528 — see prepLock_ in PluginProcessor.h. This function does NOT run on the message
+    // thread under AU (the host's AudioUnitInitialize thread calls it), so everything below
+    // races the 60 Hz timerCallback unless the two are serialised. Not the audio thread: a
+    // host never calls prepareToPlay and processBlock concurrently, and processBlock never
+    // takes this lock.
+    const std::lock_guard<std::mutex> prepGuard (prepLock_);
+
     for (auto& e : monoLegEnv_) e.prepare (sampleRate);   // fb178 — mono env tap
     for (auto& e : monoDynEnv_) e.prepare (sampleRate);
     monoHeld_ = 0;
@@ -6880,6 +6912,14 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     // skips it), which is the "an empty slot costs exactly zero" law.
     for (auto& d : delayPool_) d.prepare (sampleRate);
     for (auto& d : distPool_)  d.prepare (sampleRate);
+    // fb528 — the FILTER pool is prepared HERE too, not on the first block that notices a new
+    // rate. FilterFxEngine::prepare (FilterFxEngine.h:86) reaches TerrainFilters.h:644
+    // `buf.assign (...)`, a HEAP ALLOCATION, and processBlock ran it under
+    // `if (fltPrepSr_ != getSampleRate())` — i.e. on the AUDIO THREAD, on every rate change.
+    // Latching fltPrepSr_ to the rate we just prepared at means that branch can no longer fire;
+    // it stays in place only as a safety net for a host that renders before preparing.
+    fltPrepSr_ = sampleRate;
+    for (auto& e : fltPool_) e.prepare (sampleRate > 0.0 ? sampleRate : 48000.0, 0);
     // fb352 — pooled reverb: remember the rate for lazily-built engines, re-prepare any that
     // already exist (a rate change must reach them too), and reset the adopted-type markers.
     rvbPoolSr_ = sampleRate;
@@ -7414,10 +7454,19 @@ RvbEngineSet TerrainInstrumentAudioProcessor::rvbEngineSetPool (int e) noexcept
 {
     RvbEngineSet s;
     if ((unsigned) e >= (unsigned) kFxExtra) return s;
+    // fb528 — ACQUIRE the built-mask first, then read only the pointers it says exist. That is
+    // the happens-before edge the nine plain .get()s never had (see rvbBuilt_ in the header).
+    const juce::uint32 m = rvbBuilt_[(size_t) e].load (std::memory_order_acquire);
     auto& g = rvbPool_[(size_t) e];
-    s.hall = g.hall.get();       s.room    = g.room.get();    s.plate   = g.plate.get();
-    s.spring = g.spring.get();   s.digital = g.digital.get(); s.vintage = g.vintage.get();
-    s.basin = g.basin.get();     s.shimmer = g.shimmer.get(); s.conv    = g.conv.get();
+    s.hall    = (m & (1u << 0)) ? g.hall.get()    : nullptr;
+    s.room    = (m & (1u << 1)) ? g.room.get()    : nullptr;
+    s.plate   = (m & (1u << 2)) ? g.plate.get()   : nullptr;
+    s.spring  = (m & (1u << 3)) ? g.spring.get()  : nullptr;
+    s.digital = (m & (1u << 4)) ? g.digital.get() : nullptr;
+    s.vintage = (m & (1u << 5)) ? g.vintage.get() : nullptr;
+    s.basin   = (m & (1u << 6)) ? g.basin.get()   : nullptr;
+    s.shimmer = (m & (1u << 7)) ? g.shimmer.get() : nullptr;
+    s.conv    = (m & (1u << 8)) ? g.conv.get()    : nullptr;
     return s;
 }
 
@@ -7435,7 +7484,11 @@ void TerrainInstrumentAudioProcessor::buildPendingReverbEngines()
         auto make = [sr] (auto& ptr, auto* tag)
         {
             using T = std::remove_pointer_t<decltype (tag)>;
-            if (ptr == nullptr) { ptr = std::make_unique<T>(); ptr->prepare (sr); }
+            // fb528 — BUILD, PREPARE, *then* PUBLISH. The old order assigned `ptr` first and
+            // prepared through it, so the audio thread (which reads this very pointer in
+            // applyRvb) could see a constructed-but-unprepared reverb — empty delay lines and a
+            // zero mask. Same shape as buildPendingTapeEngines: the move is the publication.
+            if (ptr == nullptr) { auto e = std::make_unique<T>(); e->prepare (sr); ptr = std::move (e); }
         };
         switch (want)
         {
@@ -7449,6 +7502,10 @@ void TerrainInstrumentAudioProcessor::buildPendingReverbEngines()
             case 1: make (g.room,    (RoomReverb*)        nullptr); break;
             default:make (g.hall,    (HallReverb*)        nullptr); break;
         }
+        // fb528 — THE PUBLICATION: release-set this type's bit only after the engine above is
+        // built AND prepared. rvbEngineSetPool's acquire load pairs with it.
+        rvbBuilt_[(size_t) e].fetch_or (1u << (juce::uint32) (want <= 8 ? want : 0),
+                                        std::memory_order_release);
     }
 }
 
@@ -12261,7 +12318,9 @@ juce::AudioProcessorEditor* TerrainInstrumentAudioProcessor::createEditor()
     // exists — so before this point the ring could not be exported OR seen. Once armed it
     // stays armed for the life of the instance (closing the window does not free it), so
     // the rolling window behaves exactly as it always did from here on.
-    ensureCaptureBufferAllocated();
+    // fb528 — the arm calls captureBuffer.prepare(), which prepareToPlay also calls; take the
+    // prepare lock so an editor opening cannot resize the ring under a concurrent prepareToPlay.
+    { const std::lock_guard<std::mutex> prepGuard (prepLock_); ensureCaptureBufferAllocated(); }
     return new TerrainInstrumentAudioProcessorEditor(*this);
 }
 

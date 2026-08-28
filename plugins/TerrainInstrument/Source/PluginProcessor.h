@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <memory>
 #include <thread>    // fb481 — the Windows stall beacon
+#include <mutex>     // fb528 — the PREPARE LOCK (see prepLock_)
 #include <chrono>
 #include <map>
 #include "GrainEngine.h"
@@ -1737,6 +1738,26 @@ private:
     // definition in PluginProcessor.cpp for why 1,152 MiB used to be spent in the constructor.
     void prepareModalEnginesIfNeeded();
     void prepareHarmonicEnginesIfNeeded();   // fb517 — HARM's clone of the modal arm (~65 MB/instance)
+    // ══ fb528 — THE PREPARE LOCK ═══════════════════════════════════════════════════════════
+    //  prepareToPlay IS NOT A MESSAGE-THREAD CALLBACK. JUCE's AU wrapper runs it on whatever
+    //  thread calls AudioUnitInitialize/AudioUnitReset (juce_audio_plugin_client_AU_1.mm:274) —
+    //  in pluginval that is a background test thread, in a host it is host-dependent. Every
+    //  "MESSAGE THREAD ONLY (timerCallback and prepareToPlay)" comment in this file was therefore
+    //  asserting something nothing guarantees, and the 60 Hz timer and prepareToPlay ran the SAME
+    //  lazy arms on the SAME objects at the same time: two std::vector<float>::assign()s on one
+    //  vector, one thread's __vdeallocate() nulling __begin_ while the other wrote through it →
+    //  EXC_BAD_ACCESS (address=0x0) on a non-main thread. ThreadSanitizer named both stacks
+    //  (HarmonicEngine.h:103 from PluginProcessor.cpp:6859 vs :1256).
+    //
+    //  EVERY non-realtime path that BUILDS or RESIZES shared engine state takes this lock:
+    //  prepareToPlay, timerCallback, and createEditor's export-ring arm.
+    //  🚨 THE AUDIO THREAD NEVER TAKES IT, and must never be made to. processBlock only reads
+    //  the acquire-published flags/pointers those builders store LAST (harmReady_/modalReady_,
+    //  StemBuffer::totalSize, the pooled-engine pointers), so this is mutual exclusion between
+    //  NON-RT threads only — no lock, no allocation and no blocking on the render thread. It is
+    //  WavetableBank::ensureBuilt's pattern (acquire fast path + a mutex the audio thread never
+    //  touches, WavetableBank.h:104-110) hoisted one level, to the whole arm.
+    std::mutex prepLock_;
     // Shared real-time ceiling on TOTAL active partials across ALL SPEC voices/unison in this
     // instance. Additive resynth costs ~1 sine-osc per partial per sample; 3072 pegged a core
     // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst
@@ -2052,6 +2073,12 @@ private:
     };
     std::array<RvbRefs, (size_t) kFxExtra>         rvbRefs_ {};
     std::array<PoolRvbEngines, (size_t) kFxExtra>  rvbPool_;
+    // fb528 — the same publication edge for the nine lazily-built pooled reverbs, one bit per
+    // type (0 Hall … 8 Convolution). buildPendingReverbEngines sets the bit with a RELEASE
+    // fetch_or after the engine is built AND prepared; rvbEngineSetPool acquire-loads the mask
+    // and only then reads the matching unique_ptr, so the audio thread can never see a pointer
+    // without also seeing the engine behind it. Nine plain `.get()`s had no such edge.
+    std::array<std::atomic<juce::uint32>, (size_t) kFxExtra> rvbBuilt_ {};
     std::array<int,   (size_t) kFxExtra> poolRvbType_ {};      // adopted type (-1 = not adopted yet)
     std::array<bool,  (size_t) kFxExtra> poolRvbSwap_ {};      // type-swap fade in progress
     std::array<float, (size_t) kFxExtra> poolRvbEnv_  {};      // on/off fade env
@@ -2079,6 +2106,16 @@ private:
         std::atomic<float>* src[6]; };
     std::array<GrnRefs, (size_t) ParameterIDs::kFxInstances> grnRefs_ {};
     std::array<std::unique_ptr<tw::GranularFxEngine>, (size_t) ParameterIDs::kFxInstances> grnPool_;
+    // fb528 — THE PUBLICATION POINTER. A std::unique_ptr's stored pointer is a PLAIN object:
+    // `grnPool_[i] = std::move (e)` on the message thread is an ordinary store and applyGrn's
+    // `.get()` on the AUDIO thread an ordinary load, so nothing orders the 8.4 MB ring that
+    // prepare() just built against the audio thread that starts running it — "publish LAST" is
+    // a comment, not a fence, and arm64 is free to make the pointer visible first.
+    // ThreadSanitizer caught exactly this pair (GranularFxEngine::recomputeDerived from
+    // applyGrn/processBlock vs from buildPendingGranularEngines/timerCallback).
+    // grnPool_ still OWNS the engine; THIS is what the audio thread reads, and the release
+    // store in buildPendingGranularEngines is the publication its acquire load pairs with.
+    std::array<std::atomic<tw::GranularFxEngine*>, (size_t) ParameterIDs::kFxInstances> grnLive_ {};
     std::array<std::atomic<bool>,  (size_t) ParameterIDs::kFxInstances> grnWantBuild_ {};   // audio→message
     std::array<float, (size_t) ParameterIDs::kFxInstances> grnEnv_ {};        // on/off fade (click-free)
     std::array<float, (size_t) ParameterIDs::kFxInstances> grnDry_ {};        // ramped equal-power mix
@@ -2105,6 +2142,7 @@ private:
         std::atomic<float>* src[6]; };
     std::array<TpeRefs, (size_t) ParameterIDs::kFxInstances> tpeRefs_ {};
     std::array<std::unique_ptr<tw::TapeFxEngine>, (size_t) ParameterIDs::kFxInstances> tpePool_;
+    std::array<std::atomic<tw::TapeFxEngine*>, (size_t) ParameterIDs::kFxInstances> tpeLive_ {};   // fb528 — see grnLive_
     std::array<std::atomic<bool>, (size_t) ParameterIDs::kFxInstances> tpeWantBuild_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> tpeEnv_ {};    // power fade, click-free
     void applyTpe (int inst0, float inL, float inR, float& outL, float& outR) noexcept;
