@@ -64,6 +64,7 @@ compile_commands.json
 
 # CMake build output (live build dir on this machine)
 build-release/
+build-base/       # fb527 -- cert lanes build a HEAD reference here; never commit it (175 MB slipped in once)
 
 # fb346 — agent verification scratch (Bode Hilbert checks etc). Keep on disk, out of git.
 scratchpad/

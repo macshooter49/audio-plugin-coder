@@ -111,6 +111,46 @@ namespace tw
         //     (b) float precision: fmPhase_ is a float added to a cycle-domain read phase, so at
         //         1024 cycles the ULP is 6.1e-5 cycles = 1/8 of a sample of a 2048-point table.
         //         At the leak's own 6,667-cycle ceiling it would be 4.9e-4 = 1 whole sample.
+        //  ── PD / AM / RM — fb524 OVERPASS ───────────────────────────────────────────────
+        //  kPdCycles 2.20 -> 8.50. The 2.20 was set by a brief that stopped where out-of-harmonic
+        //  energy crossed 2 % — a safety net, and one Max has explicitly forbidden. Measured, the
+        //  law is exactly linear in this constant: 2.20 gave β 13.82 rad = 6.283 rad per unit, so
+        //  8.50 gives β 53.41 rad = 8.50 cycles of phase excursion. The reference measures 50.43
+        //  rad, so this is +5.9 % PAST it — the same posture as FM's +8.50 %.
+        //  WHERE IT GOES DESTRUCTIVE: the 2 % out-of-harmonic point sits at 2.226 cycles, which on
+        //  the 361:1 taper is d = 0.774. Below that the knob is clean, above it is foldback, and
+        //  foldback IS the product at the top (Lifeguard clause 2).
+        //  EXPOSURE: a phase modulator stops meaning anything once its peak phase RATE exceeds
+        //  half a sample, i.e. E = fs/(4π·f_mod) cycles — 38.2 at a 100 Hz modulator, 9.5 at
+        //  400 Hz, 3.8 at 1 kHz. 8.50 delivers 22 % / 89 % / >100 % of that across the musical
+        //  modulator range. There is no single number; this is the honest one.
+        static constexpr float kPdCycles  = 8.50f;    // peak phase excursion in CYCLES at depth 1
+        //  kAmIndex 2.0 -> 10.0. 2.0 was PARITY (peak ×2.999 vs the reference's ×3.007) and parity
+        //  is not the target. The LAW is untouched — y = x·(1 + k·mod) holds the carrier at
+        //  -0.000 dBc by construction because x·mod has no component at f0. Only the range moves.
+        //  EXPOSURE: AM's mechanism is a carrier that is still THERE alongside its sidebands. The
+        //  carrier/sideband ratio is 2/k, so k = 10 puts the carrier 14.0 dB under each sideband;
+        //  by k ≈ 20 it is 20 dB down and the mode has become RM — a duplicate of mode 4, which is
+        //  where the mechanism stops meaning anything. 10.0 of a useful 20.0 = 50 % exposure, and
+        //  3.33× the reference. The gain factor swings [-9, +11]; blendAmp's softBound is linear
+        //  to ±8 and bends above it, so the extreme corner compresses 11.0 -> 10.87 (-0.10 dB).
+        static constexpr float kAmIndex   = 10.0f;    // AM modulation index at depth 1
+        //  RM — kRmLevel STAYS AT 2.0 (see the algebra note at the call site). kRmModDrive is the
+        //  new dimension: MODULATOR DRIVE, normalised by its own peak so it costs no level at all.
+        //  [M] sine modulator, wsTanh drive, peak measured at EXACTLY 1.0000 at every setting:
+        //      gd     0      2      4      6      8     10     12     16     24     48
+        //      THD  0.00  17.19  30.95  36.47  39.33  41.08  42.26  43.75  45.26  46.78 %
+        //      bw99  188    562    938   1312   1312   1688   1688   2062   2812   3938 Hz
+        //  An ideal square is 48.34 %. 24.0 puts the driven modulator at 45.26 % = 93.6 % of a
+        //  square in THD and 2,812 Hz = 15.0x the undriven modulator's bandwidth. EXPOSURE against
+        //  gd = 48 (the point past which the clip transition is narrower than the ear can tell
+        //  apart from an instantaneous one at any musical modulator pitch): 96.8 % on THD, 71 % on
+        //  bw99. ⚠️ THE RING LAW IS UNTOUCHED — this drives the MODULATOR, so our bright 1/m
+        //  product survives and is added to; the reference's darker 1/m^2 law is NOT adopted,
+        //  because Max has not chosen between them and this line must not choose for him.
+        static constexpr float kRmLevel    = 2.0f;
+        static constexpr float kRmModDrive = 24.0f;
+
         static constexpr float kFmBoundLin = 512.0f;    // cycles — linear (inert) below this
         static constexpr float kFmBoundMax = 1024.0f;   // cycles — tanh asymptote
 
@@ -769,7 +809,7 @@ namespace tw
          *  composes cleanly with any wavetable choice. */
         void setWarp (int mode, float amount) noexcept
         {
-            warpMode_   = juce::jlimit (0, 10, mode);
+            warpMode_   = juce::jlimit (0, kWarpModeMax, mode);
             warpAmountBase_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
@@ -956,9 +996,19 @@ namespace tw
             //    T(1.0) = 1.000000  → Δf  96,000 Hz → β 733.87 (C3) / 2,935.5 (C1)
             //  This runs at BLOCK rate (16 calls/block), never per sample, so the exp is free;
             //  the per-sample de-zipper downstream is untouched.
-            b.depth = (b.mode == 1)
-                    ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM — 361:1
-                    : (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);     // house exp-bias curve
+            //  fb524 — PD AND AM JOIN FM ON THE 361:1 CURVE, for the same reason and by the same
+            //  arithmetic. Their ceilings moved 2.20 -> 8.50 cycles and 2.0 -> 10.0 index, i.e.
+            //  3.9x and 5.0x more span, and the house 7.39:1 curve cannot carry that: on the old
+            //  taper the raised PD reaches its 2 % out-of-harmonic budget at HALF travel and the
+            //  raised AM is already +3.8 dB of tremolo at 15 %. On 361:1 the same two constants
+            //  give PD 0.034 cycles / AM index 0.039 at d = 0.15 (cleaner than what ships today),
+            //  PD 0.425 cycles / AM index 0.50 at half travel, and the destructive quarter sits
+            //  at the top where the Lifeguard law puts it. RM keeps the house curve: its depth is
+            //  ALSO its dry/wet and its level, so a 361:1 curve there would just make the mode
+            //  inaudible for the first two thirds of the knob.
+            b.depth = (b.mode >= 1 && b.mode <= 3)
+                    ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM / PD / AM — 361:1
+                    : (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);     // house exp-bias curve (RM)
         }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH
         void setModalParamsB (const tw::ModalParams& p) noexcept { modalParamsB_ = p; }
@@ -998,7 +1048,7 @@ namespace tw
 
         void setWarpB (int mode, float amount) noexcept
         {
-            warpModeB_   = juce::jlimit (0, 10, mode);
+            warpModeB_   = juce::jlimit (0, kWarpModeMax, mode);
             warpAmountBaseB_ = juce::jlimit (0.0f, 1.0f, amount);
         }
 
@@ -1006,9 +1056,9 @@ namespace tw
          *  output phase (Serum WARP1→WARP2 parity). Same mode list as slot 1. */
         void setWarp2 (int modeA, float amountA, int modeB, float amountB) noexcept
         {
-            warp2ModeA_       = juce::jlimit (0, 10, modeA);
+            warp2ModeA_       = juce::jlimit (0, kWarpModeMax, modeA);
             warp2AmountBaseA_ = juce::jlimit (0.0f, 1.0f, amountA);
-            warp2ModeB_       = juce::jlimit (0, 10, modeB);
+            warp2ModeB_       = juce::jlimit (0, kWarpModeMax, modeB);
             warp2AmountBaseB_ = juce::jlimit (0.0f, 1.0f, amountB);
         }
 
@@ -1203,16 +1253,22 @@ namespace tw
                     const double steps = std::round (std::pow (2.0, 5.0 - 4.0 * (double) amount));
                     return (std::floor (p * steps) + 0.25) / steps;
                 }
-                default: return p;   // NONE / RECTIFY / SINE SHAPER (amp-domain)
+                default: return p;   // NONE (0) + every AMP-domain mode (9-34) + the reserved tail
             }
         }
 
-        /** WARP amp-domain stage (modes 9-10) — applied post-lookup, per slot.
+        /** WARP amp-domain stage (modes 9-34) — applied post-lookup, per slot.
          *  `var` is the per-slot VAR knob (SYN_OSC_x_WVAR / _W2VAR), default 0 = the exact
          *  expressions that shipped. Defaulted so the waterfall call site in
          *  PluginProcessor.cpp (getOscWavetableJson, 745-762) still compiles untouched. */
         static float applyAmpWarp (int mode, float amount, float s, float var = 0.0f) noexcept
         {
+            // 🔑 THE GATE. Modes 0-8 are NONE + the eight phase-domain warps, i.e. every patch
+            // that selects no shaper — which is every patch that exists today. ONE compare and
+            // they are out, before any of the shaper family is even considered. This is also
+            // CHEAPER than what shipped (two compares to fall through to `return s`), so the
+            // bit-identity gates stay green and the idle cost goes DOWN, not up.
+            if (mode < 9) return s;
             if (mode == 9)         // RECTIFY: blend dry with |x|×2−1 by amount, VAR = pre-gain
             {
                 // fb522 OVERPASS: [M] we already beat Serum's `Rectify` by 1.89x on centroid and
@@ -1222,9 +1278,9 @@ namespace tw
                 // VAR > 0 is the documented trigger for the 2x oversampling insertion point
                 // (spec §1.2 oversampling plan), which is NOT in this wave: treat var as
                 // destructive-by-request until it lands.
-                // NOTE the four `warpMode == 9` DC-block gates (2966/3261/3546/3831 pre-patch)
-                // need no change: they key on mode + amount, and at amount = 0 Rectify
-                // contributes nothing no matter what var is.
+                // fb524 — the four DC gates that used to key on the literal `warpMode == 9`
+                // now ask warpAmpNeedsDc() instead (below). Rectify's answer is unchanged:
+                // true whenever amount > 0.001, at any var.
                 const float pre  = 1.0f + 3.0f * var;
                 const float sd   = s * pre;
                 const float rect = std::abs (sd) * 2.0f - 1.0f;
@@ -1243,7 +1299,40 @@ namespace tw
                 const float drive = 1.0f + amount * 4.0f;
                 return std::sin (s * (float) (3.14159265358979323846 * 0.5) * drive);
             }
-            return s;
+            // 11..34 — THE SHAPER ROSTER (Shapers.h warpShaper). Pure, stateless, allocation-free,
+            // so the waterfall display gets all 24 for free through getOscWavetableJson (fb458).
+            // 35..47 are the RESERVED tail and fall through to identity there, by design.
+            return tw::shapers::warpShaper (mode, amount, s, var);
+        }
+
+        /** ⛔ THE CARDINALITY. SYN_OSC_x_WARP_MODE / _WARP2_MODE is choice(48): 0-10 the shipped
+         *  eleven, 11-34 the shaper roster, 35-47 RESERVED. It is FROZEN here (RACK LAW C) —
+         *  growing a choice param renumbers every saved patch AND every host automation lane, and
+         *  the UI normalises a selection by an array length (index.html), so the two counts must
+         *  agree forever. Add a mode by filling a RESERVED slot, never by appending a 49th. */
+        static constexpr int kWarpModeMax = 47;
+
+        /** Does this amp-domain warp mode put DC on the output?
+         *  Answers TRUE by DEFAULT — that is deliberate. The four DC gates below used to key on
+         *  the literal `warpMode_ == 9`, so a new mode that rectifies silently shipped a DC
+         *  offset; that is the fb470 failure class in its quietest form. Now the ONLY way to
+         *  avoid the blocker is to be listed as provably odd-symmetric, so forgetting to think
+         *  about it costs a 38 Hz high-pass and never a broken patch.
+         *  ⚠️ Modes 0-8 (phase domain) and 10 (Sine Shaper, odd) return false, which is what
+         *  keeps every shipped patch bit-identical. */
+        static inline bool warpAmpNeedsDc (int mode, float amount, float var) noexcept
+        {
+            if (mode < 9 || amount <= 0.001f) return false;
+            switch (mode)
+            {
+                case 10:                                        // Sine Shaper — odd
+                case 22: case 24: case 25: case 32: case 33:    // odd-symmetric shapers
+                    return false;
+                case 11: case 12: case 13: case 14: case 15: case 16: case 18:
+                case 20: case 23: case 26: case 29: case 34:
+                    return var > 0.0f;                          // symmetric until VAR biases them
+                default: return true;                           // 9, 17, 19, 21, 27, 28, 30, 31 + anything new
+            }
         }
 
         /** PORTAMENTO context, pushed per-block from the processor. fromNote = the last
@@ -2074,13 +2163,13 @@ namespace tw
         void setWavetableD (const tw::Wavetable* wt) noexcept { currentWavetableD_ = wt; }
         void setWavetableFrameC (float pos) noexcept { framePosBaseC_ = juce::jlimit (0.0f, 1.0f, pos); }
         void setWavetableFrameD (float pos) noexcept { framePosBaseD_ = juce::jlimit (0.0f, 1.0f, pos); }
-        void setWarpC (int mode, float amount) noexcept { warpModeC_ = juce::jlimit(0,10,mode); warpAmountBaseC_ = juce::jlimit(0.0f,1.0f,amount); }
-        void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,10,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
+        void setWarpC (int mode, float amount) noexcept { warpModeC_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseC_ = juce::jlimit(0.0f,1.0f,amount); }
+        void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
         void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
         void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
         void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
         void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
-        void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,10,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,10,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
+        void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,kWarpModeMax,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,kWarpModeMax,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
 
         /** FM-ENGINE-VOICE — per-OSC wavetable-carrier FM params (osc 0..3 = A..D).
          *  algo: 0 Stack (M2→M1→carrier) / 1 Split (M1,M2→carrier) / 2 Ring (M2→M1; M1 rings output). */
@@ -3351,10 +3440,30 @@ namespace tw
                             else                 mod = 0.f;               // (no src is unhandled any more)
                             // ── THE CEILINGS (fb522 OVERPASS §1.1). Every number here is measured;
                             //    the ones that are NOT raised are the interesting ones — see below.
-                            if      (b.mode == 2) pm      += (2.20f * d) * mod;              // PD (phase, cycles) — fb523: 1.20 -> 2.20, and with the fb523 tap fix (x1.4142) that is a 2.593x raise in index: measured beta 5.33 -> 13.82 rad at 100 %. WHERE IT STOPS: the fb522 stack measured OOHR 2.40 % at drive 3.6 and 1 % at drive 1.9 AGAINST THE 3 dB-DOWN TAP, i.e. at EFFECTIVE excursions of 2.546 and 1.3435 cycles. Refitting those two points as OOHR ~ E^1.37 puts the 2 % budget at E = 2.226 cycles; 2.20 is the largest honest step that stays inside it and still needs no oversampling. (The fb522 note that PD "hits Nyquist by 3.6 then FALLS BACK" is about E = 2.546, which is above where we now stop.)
+                            if      (b.mode == 2) pm      += (kPdCycles * d) * mod;   // PD (phase offset, in CYCLES). ⛔ THE CONSTANT IS kPdCycles = 8.50 — READ ITS DEFINITION, not this line. fb524 raised it 2.20 -> 8.50 (+5.9 % past the reference's measured beta 50.43) and moved PD onto the 361:1 taper; the old note here described the 2.20 wave and its 2 % out-of-harmonic stopping rule, which no longer applies.
                             else if (b.mode == 1) fmDrive += (kFmDeviationHz * d) * mod;    // FM — fmDrive is now PEAK DEVIATION IN HZ, not a dimensionless index. Was (48.0f * d): deviation = 48*d*f_carrier, so the INDEX was pitch-independent and the DEVIATION scaled with pitch. Inverted here: 4 slots sum their deviations in Hz.
-                            else if (b.mode == 3) amp     *= 1.0f + (2.0f * d) * mod;        // AM — fb523: 7.0 -> 2.0. THE LAW WAS ALREADY RIGHT (y = x*(1 + k*mod) holds the carrier at 1:1 by construction: x*mod has no component at f0). The CONSTANT was not: with the 3 dB-down tap, k_eff = 7*0.7071 = 4.95, so the gain factor swung [-3.95, +5.95] — 495 % modulation, which is why [M] the peak pinned at the MASTER limiter, the carrier read -9.97 dBc (the limiter pulling the whole spectrum down, not a duck in this line) and a -63 dBc floor appeared that the reference does not have. k = 2.0 with the corrected unity tap reproduces the reference EXACTLY: peak x3.000 (ref measured x3.007) and RMS +6.02 dB (ref measured +6.02 dB), with d = 0.5 = classic 100 % AM and 0.5..1.0 the overmodulated half.
-                            else if (b.mode == 4) amp     *= (1.0f - d) + (2.0f * d) * mod;   // RM — fb523: 1.8 -> 2.0, LEVEL ONLY. The ledger is right that at d = 1 this collapses to amp = K*mod and K is pure output gain, so the SPECTRUM is untouched — [M] our quadrature ring product (delta = 90.00 deg, resid 0.37 dB over 40 evens) is deliberately kept; Max has not chosen between our bright 1/m and the reference dark 1/m^2 and this line must not decide it. What K fixes is the 4.4 dB level gap: measured peak factor was 1.8*0.7071 = 1.272 (measured 1.272) against the reference 2.006. Tap fix + K = 2.0 gives 2.000 = -0.03 dB of the reference on peak and +4.77 dB vs its measured +4.79 dB on RMS.
+                            else if (b.mode == 3) amp     *= 1.0f + (kAmIndex * d) * mod;   // AM. ⛔ THE CONSTANT IS kAmIndex = 10.0 — READ ITS DEFINITION. The LAW is unchanged and still right: y = x*(1 + k*mod) holds the carrier at -0.000 dBc by construction, because x*mod has no component at f0. fb524 raised k 2.0 -> 10.0 (2.0 was exact parity, peak x2.999 vs the reference's x3.007) and moved AM onto the 361:1 taper so the low half stays gentle.
+                            else if (b.mode == 4)
+                            {
+                                // RM — fb524 MODULATOR DRIVE. ⚠️ READ THE ALGEBRA BEFORE TOUCHING
+                                // kRmLevel: at d = 1 this collapses to amp = K·mod, so K is PURE
+                                // OUTPUT GAIN and raising it changes loudness and NOTHING ELSE.
+                                // K therefore STAYS at 2.0 (level-matched to the reference at
+                                // -0.03 dB on peak). The extra reach comes from the MODULATOR:
+                                // it is driven through a saturator whose own peak is divided back
+                                // out, so the ring product keeps its level and gains the
+                                // modulator's odd harmonics. Our BRIGHT 1/m ring character is
+                                // preserved and added to — the darker 1/m² law is NOT adopted
+                                // here, because Max has not chosen between them.
+                                const float gd = kRmModDrive * d;
+                                float modDrv = mod;
+                                if (gd > 1.0e-6f)
+                                    modDrv = tw::shapers::wsTanh (gd * mod) / tw::shapers::wsTanh (gd);
+                                amp *= (1.0f - d) + (kRmLevel * d) * modDrv;
+                            }
+                            // fb523's own note on this line, kept because its LEVEL argument is
+                            // still the reason kRmLevel is 2.0 and not something else:
+                            // RM — fb523: 1.8 -> 2.0, LEVEL ONLY. The ledger is right that at d = 1 this collapses to amp = K*mod and K is pure output gain, so the SPECTRUM is untouched — [M] our quadrature ring product (delta = 90.00 deg, resid 0.37 dB over 40 evens) is deliberately kept; Max has not chosen between our bright 1/m and the reference dark 1/m^2 and this line must not decide it. What K fixes is the 4.4 dB level gap: measured peak factor was 1.8*0.7071 = 1.272 (measured 1.272) against the reference 2.006. Tap fix + K = 2.0 gives 2.000 = -0.03 dB of the reference on peak and +4.77 dB vs its measured +4.79 dB on RMS.
                         }
                         // fb523 — THE HZ LAW. WAS: `+ repInc[c] * fmDrive`, where repInc = f_carrier/fs,
                         //  so the added instantaneous frequency was f_carrier·fmDrive Hz — deviation
@@ -3554,8 +3663,9 @@ namespace tw
                 float sA_R = sumAR;
                 // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
                 // with nonzero amount; dormant (bit-identical) otherwise.
-                if ((engine_ == Engine::WT && ((warpMode_ == 9 && warpAmount_ > 0.001f) || (warp2ModeA_ == 9 && warp2AmountA_ > 0.001f)))
-                    || (engine_ == Engine::FM && warp2ModeA_ == 9 && warp2AmountA_ > 0.001f))
+                if ((engine_ == Engine::WT && (warpAmpNeedsDc (warpMode_, warpAmount_, warpVar_[0])
+                                             || warpAmpNeedsDc (warp2ModeA_, warp2AmountA_, warp2Var_[0])))
+                    || (engine_ == Engine::FM && warpAmpNeedsDc (warp2ModeA_, warp2AmountA_, warp2Var_[0])))
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -3860,8 +3970,9 @@ namespace tw
                 float sB_L = sumBL;
                 float sB_R = sumBR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineB_ == Engine::WT && ((warpModeB_ == 9 && warpAmountB_ > 0.001f) || (warp2ModeB_ == 9 && warp2AmountB_ > 0.001f)))
-                    || (engineB_ == Engine::FM && warp2ModeB_ == 9 && warp2AmountB_ > 0.001f))
+                if ((engineB_ == Engine::WT && (warpAmpNeedsDc (warpModeB_, warpAmountB_, warpVar_[1])
+                                             || warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])))
+                    || (engineB_ == Engine::FM && warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])))
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -4154,8 +4265,9 @@ namespace tw
                 float sC_L = sumCL;
                 float sC_R = sumCR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineC_ == Engine::WT && ((warpModeC_ == 9 && warpAmountC_ > 0.001f) || (warp2ModeC_ == 9 && warp2AmountC_ > 0.001f)))
-                    || (engineC_ == Engine::FM && warp2ModeC_ == 9 && warp2AmountC_ > 0.001f))
+                if ((engineC_ == Engine::WT && (warpAmpNeedsDc (warpModeC_, warpAmountC_, warpVar_[2])
+                                             || warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])))
+                    || (engineC_ == Engine::FM && warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])))
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -4448,8 +4560,9 @@ namespace tw
                 float sD_L = sumDL;
                 float sD_R = sumDR;
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
-                if ((engineD_ == Engine::WT && ((warpModeD_ == 9 && warpAmountD_ > 0.001f) || (warp2ModeD_ == 9 && warp2AmountD_ > 0.001f)))
-                    || (engineD_ == Engine::FM && warp2ModeD_ == 9 && warp2AmountD_ > 0.001f))
+                if ((engineD_ == Engine::WT && (warpAmpNeedsDc (warpModeD_, warpAmountD_, warpVar_[3])
+                                             || warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])))
+                    || (engineD_ == Engine::FM && warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])))
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE

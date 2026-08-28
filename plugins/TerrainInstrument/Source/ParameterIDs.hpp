@@ -516,9 +516,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_WT_FRAME[]  = "SYN_OSC_A_WT_FRAME";  // float 0..1 frame position within wavetable
 
     // ── Synth section — Phase 2C (Warp modes: BEND / SYNC / FORMANT) ─────
-    constexpr char SYN_OSC_A_WARP_MODE[]   = "SYN_OSC_A_WARP_MODE";   // choice 0=NONE,1=BEND,2=SYNC,3=FORMANT
+    constexpr char SYN_OSC_A_WARP_MODE[]   = "SYN_OSC_A_WARP_MODE";   // choice(48) FROZEN — 0-10 shipped, 11-34 shapers, 35-47 reserved
     constexpr char SYN_OSC_A_WARP_AMOUNT[] = "SYN_OSC_A_WARP_AMOUNT"; // float 0..1
-    constexpr char SYN_OSC_A_WARP2_MODE[]  = "SYN_OSC_A_WARP2_MODE";  // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_A_WARP2_MODE[]  = "SYN_OSC_A_WARP2_MODE";  // choice(48) FROZEN, chained slot 2 — same list as slot 1
     constexpr char SYN_OSC_A_WARP2_AMT[]   = "SYN_OSC_A_WARP2_AMT";   // float 0..1
 
     // ── Synth section — Phase 9 (OSC B chassis — full mirror of OSC A) ───
@@ -533,9 +533,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_SOLO[]        = "SYN_OSC_B_SOLO";         // bool — solo osc B
     constexpr char SYN_OSC_B_WT_PRESET[]   = "SYN_OSC_B_WT_PRESET";    // choice 0..19
     constexpr char SYN_OSC_B_WT_FRAME[]    = "SYN_OSC_B_WT_FRAME";     // float 0..1
-    constexpr char SYN_OSC_B_WARP_MODE[]   = "SYN_OSC_B_WARP_MODE";    // choice 0..3
+    constexpr char SYN_OSC_B_WARP_MODE[]   = "SYN_OSC_B_WARP_MODE";    // choice(48) FROZEN — see SYN_OSC_A_WARP_MODE
     constexpr char SYN_OSC_B_WARP_AMOUNT[] = "SYN_OSC_B_WARP_AMOUNT";  // float 0..1
-    constexpr char SYN_OSC_B_WARP2_MODE[]  = "SYN_OSC_B_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_B_WARP2_MODE[]  = "SYN_OSC_B_WARP2_MODE";   // choice(48) FROZEN, chained slot 2
     constexpr char SYN_OSC_B_WARP2_AMT[]   = "SYN_OSC_B_WARP2_AMT";    // float 0..1
 
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
@@ -617,9 +617,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_SOLO[]        = "SYN_OSC_C_SOLO";         // bool — solo osc C
     constexpr char SYN_OSC_C_WT_PRESET[]   = "SYN_OSC_C_WT_PRESET";    // choice 0..19
     constexpr char SYN_OSC_C_WT_FRAME[]    = "SYN_OSC_C_WT_FRAME";     // float 0..1
-    constexpr char SYN_OSC_C_WARP_MODE[]   = "SYN_OSC_C_WARP_MODE";    // choice 0..3
+    constexpr char SYN_OSC_C_WARP_MODE[]   = "SYN_OSC_C_WARP_MODE";    // choice(48) FROZEN — see SYN_OSC_A_WARP_MODE
     constexpr char SYN_OSC_C_WARP_AMOUNT[] = "SYN_OSC_C_WARP_AMOUNT";  // float 0..1
-    constexpr char SYN_OSC_C_WARP2_MODE[]  = "SYN_OSC_C_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_C_WARP2_MODE[]  = "SYN_OSC_C_WARP2_MODE";   // choice(48) FROZEN, chained slot 2
     constexpr char SYN_OSC_C_WARP2_AMT[]   = "SYN_OSC_C_WARP2_AMT";    // float 0..1
     constexpr char SYN_OSC_C_SPECTRAL_TYPE[] = "SYN_OSC_C_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_C_SPECTRAL_AMT[]  = "SYN_OSC_C_SPECTRAL_AMT";   // float 0..1
@@ -654,9 +654,9 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_SOLO[]        = "SYN_OSC_D_SOLO";         // bool — solo osc D
     constexpr char SYN_OSC_D_WT_PRESET[]   = "SYN_OSC_D_WT_PRESET";    // choice 0..19
     constexpr char SYN_OSC_D_WT_FRAME[]    = "SYN_OSC_D_WT_FRAME";     // float 0..1
-    constexpr char SYN_OSC_D_WARP_MODE[]   = "SYN_OSC_D_WARP_MODE";    // choice 0..3
+    constexpr char SYN_OSC_D_WARP_MODE[]   = "SYN_OSC_D_WARP_MODE";    // choice(48) FROZEN — see SYN_OSC_A_WARP_MODE
     constexpr char SYN_OSC_D_WARP_AMOUNT[] = "SYN_OSC_D_WARP_AMOUNT";  // float 0..1
-    constexpr char SYN_OSC_D_WARP2_MODE[]  = "SYN_OSC_D_WARP2_MODE";   // choice 0..10, chained slot 2
+    constexpr char SYN_OSC_D_WARP2_MODE[]  = "SYN_OSC_D_WARP2_MODE";   // choice(48) FROZEN, chained slot 2
     constexpr char SYN_OSC_D_WARP2_AMT[]   = "SYN_OSC_D_WARP2_AMT";    // float 0..1
     constexpr char SYN_OSC_D_SPECTRAL_TYPE[] = "SYN_OSC_D_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_D_SPECTRAL_AMT[]  = "SYN_OSC_D_SPECTRAL_AMT";   // float 0..1

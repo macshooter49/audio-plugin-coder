@@ -87,6 +87,41 @@ static inline float masterSoftClip (float x) noexcept
 // ⚠️ ORDER IS THE ENUM ORDER and index N here MUST be Type(N). The choice param stores the
 // index raw, so reordering this list silently repoints every saved patch (the fb165 law in
 // the enum header says the same thing about the enum itself).
+
+// ── WARP MODE NAMES — THE ONE LIST, for all EIGHT warp choice params (4 oscs x 2 slots) ─────
+// fb524. It used to be the same 11-string literal written out eight times; every ceiling wave
+// had to find all eight, and the terrain audit had to go and count them. One source, eight
+// callers, same recycle law as terrainFilterEngineNames() above.
+//
+// 🔑🔑 RACK LAW C — THE CARDINALITY IS 48 AND IT IS FROZEN AT BIRTH.
+//   0-10   the eleven that shipped (indices UNCHANGED — every saved patch keeps its mode)
+//   11-34  the shaper roster (tw::shapers::warpShaper)
+//   35-47  RESERVED. Add a mode by FILLING one of these, never by appending a 49th.
+// Growing a choice param renumbers every host automation lane (which stores the NORMALISED
+// value), and the UI writes a selection as idx/(count-1), so the JS list length and this
+// length must agree forever — that is the fb373 bug, and the guard for it on the JS side is
+// the `WARP_MODES.length === 48` assertion in index.html.
+//
+// ⚠️ ORDER IS THE SWITCH ORDER. Index N here MUST be case N in SynthVoice::applyPhaseWarp /
+// applyAmpWarp / tw::shapers::warpShaper. Reordering silently repoints every saved patch.
+static juce::StringArray terrainWarpModeNames()
+{
+    juce::StringArray w {
+        // 0-10 — shipped: NONE + eight phase-domain warps + two amp-domain shapers
+        "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize",
+        "Rectify", "Sine Shaper",
+        // 11-18 — saturation           19-22 — diode / asymmetric
+        "Tube", "Soft Sat.", "Soft Clip", "Hard Clip", "Overdrive", "Tape Sat.", "Stomp Box",
+        "Transformer", "Diode 1", "Diode 2", "Asym", "Zero-Square",
+        // 23-26 — fold                 27-28 — rectify / octave
+        "Linear Fold", "Sine Fold", "West Coast", "Overflow", "Half Rect", "Doubler",
+        // 29-34 — digital / harmonic / ours
+        "Bitcrush", "Harmonics", "Bias Fold", "Cheby Odd", "Ripple", "Exciter" };
+    for (int i = w.size(); i < 48; ++i) w.add ("Reserved " + juce::String (i));
+    jassert (w.size() == 48);
+    return w;
+}
+
 static juce::StringArray terrainFilterEngineNames()
 {
     juce::StringArray filterTypeChoices;
@@ -2566,7 +2601,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_MODE, 1 },
         "Synth OSC A Warp Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        terrainWarpModeNames(),
         0));
 
     // PHASE mode (back panel pill 1 — replaces the redundant WARP-mode selector).
@@ -2652,7 +2687,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP2_MODE, 1 },
         "Synth OSC A Warp 2 Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        terrainWarpModeNames(),
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP2_AMT, 1 },
@@ -2765,7 +2800,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_MODE, 1 },
         "Synth OSC B Warp Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+        terrainWarpModeNames(), 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
         "Synth OSC B Phase Mode",
@@ -2827,7 +2862,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP2_MODE, 1 },
         "Synth OSC B Warp 2 Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        terrainWarpModeNames(),
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP2_AMT, 1 },
@@ -2931,7 +2966,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP_MODE, 1 },
         "Synth OSC C Warp Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+        terrainWarpModeNames(), 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
         "Synth OSC C Phase Mode",
@@ -2993,7 +3028,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP2_MODE, 1 },
         "Synth OSC C Warp 2 Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        terrainWarpModeNames(),
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP2_AMT, 1 },
@@ -3097,7 +3132,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP_MODE, 1 },
         "Synth OSC D Warp Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" }, 0));
+        terrainWarpModeNames(), 0));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
         "Synth OSC D Phase Mode",
@@ -3932,7 +3967,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP2_MODE, 1 },
         "Synth OSC D Warp 2 Mode",
-        juce::StringArray { "NONE", "Bend", "Sync", "Formant", "PWM", "Skew", "Mirror", "Fractalize", "P-Quantize", "Rectify", "Sine Shaper" },
+        terrainWarpModeNames(),
         0));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WARP2_AMT, 1 },
@@ -13485,9 +13520,18 @@ void TerrainInstrumentAudioProcessor::migrateBlobToVersion3 (juce::ValueTree& st
         kIdentity };           // 8 Filter
 
     // ── (c) WARP AMOUNTS, keyed by the slot's stored WARP MODE ───────────────────────────────
-    //  Mode indices are the "NONE/Bend/Sync/Formant/PWM/Skew/Mirror/Fractalize/P-Quantize/
-    //  Rectify/Sine Shaper" StringArray in createParameterLayout — 0..10, choice(11), no reserved
-    //  slots. Each row is paired with the one constant Lane V changes; if a row's constant does not
+    //  Mode indices are terrainWarpModeNames() — see it for the whole list. THIS TABLE STAYS
+    //  ELEVEN ROWS: it only ever indexes a mode read out of a VERSION < 3 BLOB, and a v2 blob
+    //  cannot contain a mode above 10 because the param was choice(11) when it was written. The
+    //  jlimit(0,10) on the read below is what makes that a guarantee rather than an assumption.
+    //  fb524 grew the param to choice(48); that does NOT grow this table.
+    //  ⚠️ fb524 ALSO CHANGED PD / AM / RM AND ADDED NO VERSION-4 BLOCK, DELIBERATELY. PD 2.20 ->
+    //  8.50 cycles, AM index 2.0 -> 10.0 and both onto the 361:1 taper are all law changes, so an
+    //  old patch WILL sound different. The standing decision covers it: Max keeps no saved
+    //  presets and designs from silence every session; the 20 factory presets are re-tunable and
+    //  re-tuning them is the handoff item, not a migration row. If that ever stops being true,
+    //  add a SEPARATE `if (blobVersion < 4)` block below this one — a chain, not an else.
+    //  no reserved slots. Each row is paired with the one constant Lane V changes; if a row's constant does not
     //  ship, that row must be set back to kIdentity or the patch quietly gets quieter.
     static constexpr Remap kWarpRemap[11] = {
         kIdentity,             //  0 NONE

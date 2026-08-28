@@ -53,6 +53,31 @@
          DIODE + FOLD + DIGITAL, each with its 8 Character voicings.
 */
 
+/*  ── THE SEAM: THIS FILE IS THE BUS DISTORTION. THE OSCILLATOR ONE IS Shapers.h. (fb524) ──────
+    The oscillator WARP shaper roster (SYN_OSC_x_WARP_MODE 11-34) does NOT call into this class,
+    and that is deliberate and measured, not an oversight:
+      * sizeof(tw::DistortionEngine) = 217,656 B. One per (osc x voice) is 27.2 MB and 128
+        oversamplers; one per (osc x unison sine x voice) — which is where a warp shaper actually
+        lives — is 2,048 instances = 435 MB. Categorically out.
+      * shape()/shapeS() are MEMBER functions reading kneeE_, asymE_, chr_, drive01_, pC_[] and
+        rDzC_. They are not "callable straight from the warp path"; extracting them would mean
+        re-plumbing six pieces of per-block state through a static.
+      * The ANALOG family (Tube/Tape/Transformer/StompBox/Overdrive) is STATEFUL by design — sag
+        reservoirs, a kDr = 4096-sample drift/wow ring, tube op-point caches. 4096 floats x 2 ch
+        x 2,048 instances is 67.1 MB for the ring alone, and a per-unison-sine instance would be
+        modelling 16 independent power supplies inside one oscillator, which is not what tape or
+        a tube does anyway. ⛔ DOCUMENTED GAP: the warp Tube/Tape/Transformer/Stomp Box/Overdrive
+        are STATELESS RE-DESIGNS of the same behaviours (Shapers.h wsCubic/wsTape/wsRoot/wsStomp/
+        wsAlg), NOT ports. Sag, wow and drift are only available on the rack card. Say so in the
+        manual rather than letting someone discover it by A/B.
+      * What IS shared: nothing but the design laws, quoted where they are applied — law 2 (the
+        curve must not self-normalise) is answered explicitly in Shapers.h wsDriveForm, and law 3
+        (subtract f(bias), not bias) is implemented there.
+    If you change a curve here, you have NOT changed the oscillator's. That is the whole point of
+    writing this note: two different placements want two different curves, and the failure mode is
+    someone "fixing" one of them and reporting the other as untouched.
+*/
+
 namespace tw
 {
 
