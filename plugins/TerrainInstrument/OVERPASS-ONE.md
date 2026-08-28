@@ -106,6 +106,30 @@ tables — in-house content is required, not preferred).
 
 ---
 ## LAWS THAT BIND ALL OF IT
+🎯 **GATE THE RESULT, NOT THE CAUSE** (HARD RULE, Max 2026-08-28) — a grep gate proves a CAUSE is
+absent, never that the RESULT is good. The wavetable form of it:
+> **A table may not end its content while its last harmonic is above −60 dBc.**
+> No amplitude law lands on a loud value and then jumps to exactly zero. Only truncation does.
+
+`harmonic_ceiling_gate.py` greps for hard-coded loop bounds and is not enough: **`Serum HD` loops to
+`h <= 96` and DELIVERS 17** — a *multiplicative* Gaussian buried it, no ceiling required; `Formant`
+declares 96 and delivers 7. Both pass any grep. **Two defects, never conflate them: THE CLIFF** (loop
+stops at a hard integer — absent content) and **THE EARLY TAPER** (declared count is fiction because a
+multiplicative envelope buried it; the fix is ADDITIVE resonance, `1 + Σ g·exp(…)`, which the TERRA
+kernel already obeys and the legacy generators do not). Measured, twelve legacy tables delete LOUD
+content: Spectral Drift h32 @ **0.0 dBc** (flat spectrum, truncated — the proof case) · Static Evolve
+h64 @ −1.4 · Even h15 @ −23.5 · Prophet Saw h26 @ −25.9 · Dustbowl h30 @ −27.4 · Jupiter PWM h96 @
+−27.8 · Juno Str h30 @ −29.5 · OB-X Saw h22 @ −29.7 · CS-80 Brass h40 @ −30.5 · Moog Sqr h32 @ −31.0 ·
+PPG Wave h64 @ −34.8 · Drift h64 @ −36.1. Control group that must keep passing: DX7 EP −82, Choir
+−67, Whisper −63, Vowel Morph −72, Serum HD −176, Formant −823. Harness: `Tests/wt_profile.py`.
+🔢 **COUNT IS NOT RICHNESS — REPORT Neff, NEVER N60.** Prophet Saw scores **5.7** and Terra Stack
+**4.4**: Terra Stack is correctly saw-like — more bandwidth, same character. The genuinely dense ones
+are Terra Cloud 120.7 · Dust 59.8 · Bar 29.2 · Glass 25.3. N60 is gamed by piling partials at −80 dB.
+⚠️ **`Wavetable_test.cpp` HAS NEVER RUN.** It is compiled into the plugin (`CMakeLists.txt:55`) but
+nothing anywhere instantiates a `juce::UnitTestRunner` — every `expect()` in it is compile-only. That
+is how an assertion reading "harmonic 7 must be PRESENT" sat green while projecting onto the wrong
+quadrature (a square is all-cosine; the sine projection is 0.00000 for every h). QUEUED: wire a runner.
+
 🏊 **THE LIFEGUARD LAW** (CLAUDE.md §5) — the knob's 100% must be the ALGORITHM's 100%; unused
 headroom is a defect; fold-back at the top is the product; the shallow end stays clean; never a
 limiter, never a clamp, never a "safe" ceiling.

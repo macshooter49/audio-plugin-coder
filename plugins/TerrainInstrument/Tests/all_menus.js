@@ -96,9 +96,25 @@ const WARP_N = (() => {
   if (!m) throw new Error('warp cardinality not found in PluginProcessor.cpp');
   return +m[1];
 })();
+// 🚨 fb530 — THE WAVETABLE COUNT IS READ FROM THE SOURCE, NEVER TYPED HERE.
+// This stub used to hardcode 30, and when the bank grew to 46 the harness reported a desync that
+// did not exist — a stub kinder (or here, staler) than the backend is worse than no stub at all.
+// A hardcoded number here is an ELEVENTH site in the ten-site list, so it is derived like WARP_N.
+const WT_N = (() => {
+  const s = fs.readFileSync(path.join(ROOT, 'Source/PluginProcessor.cpp'), 'utf8');
+  const a = s.indexOf('ParameterIDs::SYN_OSC_A_WT_PRESET, 1 }');
+  if (a < 0) throw new Error('SYN_OSC_A_WT_PRESET parameter not found in PluginProcessor.cpp');
+  const b = s.indexOf('juce::StringArray {', a);
+  const e = s.indexOf('},', b);
+  if (b < 0 || e < 0) throw new Error('SYN_OSC_A_WT_PRESET StringArray not found');
+  const body = s.slice(b, e).replace(/\/\/[^\n]*/g, '');          // drop // comments, keep the names
+  const names = body.match(/"(?:[^"\\]|\\.)*"/g) || [];
+  if (names.length < 2) throw new Error('SYN_OSC_A_WT_PRESET StringArray looks empty');
+  return names.length;
+})();
 const CHOICE = {};
 ['A','B','C','D'].forEach((o) => { CHOICE['SYN_OSC_' + o + '_WARP_MODE'] = WARP_N; CHOICE['SYN_OSC_' + o + '_WARP2_MODE'] = WARP_N;
-                                   CHOICE['SYN_OSC_' + o + '_WT_PRESET'] = 30; CHOICE['SYN_OSC_' + o + '_ENGINE'] = 7; });
+                                   CHOICE['SYN_OSC_' + o + '_WT_PRESET'] = WT_N; CHOICE['SYN_OSC_' + o + '_ENGINE'] = 7; });
 CHOICE['SYN_FILTER_TYPE'] = 94; CHOICE['SYN_FILTER2_TYPE'] = 94; CHOICE['SYN_NOISE_TYPE'] = 13;
 
 // The import registries the natives hand back. USER content: one referenced FOLDER and two loose
@@ -382,18 +398,19 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
                engDom: eng ? eng.options.length : null,
                desync: Object.keys(window.__choiceDesync || {}) };
     });
-    chk(card.wt === 30 && card.wtDom === 30, 'COUNT TRAP — the wavetable list and its parameter agree (30)',
-        'param ' + card.wt + ' · dom ' + card.wtDom);
+    chk(card.wt === WT_N && card.wtDom === WT_N, 'COUNT TRAP — the wavetable list and its parameter agree (' + WT_N + ')',
+        'param ' + card.wt + ' · dom ' + card.wtDom + '  [WT_N read from PluginProcessor.cpp]');
     chk(card.eng === 7 && card.engDom === 6, 'COUNT TRAP — a disagreeing list loses to the PARAMETER, and is reported',
         'SYN_OSC_A_ENGINE: param ' + card.eng + ' · dom ' + card.engDom + ' · flagged [' + card.desync.join(',') + ']');
 
     // (b) THE REAL SHAPE OF THE BUG, run live: shove a duplicate "All" optgroup into a BOUND
     //     <select> — 30 more rows, exactly what a careless All would have added — and drive the
     //     menu. The write must still be idx/(30−1). The old code gave idx/(60−1).
+    await pg.evaluate((n) => { window.__WT_N = n; }, WT_N);
     const trap = await pg.evaluate(() => {
       const sel = document.getElementById('osc-a-preset-select'); if (!sel) return { err:'no select' };
       const g = document.createElement('optgroup'); g.label = 'All';
-      for (let i = 0; i < 30; i++) { const o = document.createElement('option'); o.value = String(i);
+      for (let i = 0; i < window.__WT_N; i++) { const o = document.createElement('option'); o.value = String(i);
         o.textContent = 'dup ' + i; g.appendChild(o); }
       sel.insertBefore(g, sel.firstChild);
       const rows = sel.options.length;
@@ -403,11 +420,12 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
       sel.removeChild(g);
       return { rows:rows, norm:e ? e.norm : null, value:e ? e.value : null };
     });
-    const want = 7 / 29;
+    const want = 7 / (WT_N - 1);
     chk(trap.value === 7 && Math.abs((trap.norm || 0) - want) < 1e-9,
-        'COUNT TRAP — 30 duplicate rows in a BOUND <select> cannot move the parameter',
+        'COUNT TRAP — ' + WT_N + ' duplicate rows in a BOUND <select> cannot move the parameter',
         'options.length ' + trap.rows + ' → wrote norm ' + (trap.norm === null ? 'nothing' : trap.norm.toFixed(6))
-        + ' (want ' + want.toFixed(6) + ' = 7/29, NOT ' + (7/59).toFixed(6) + ' = 7/59) → index ' + trap.value);
+        + ' (want ' + want.toFixed(6) + ' = 7/' + (WT_N - 1) + ', NOT ' + (7 / (2 * WT_N - 1)).toFixed(6)
+        + ' = 7/' + (2 * WT_N - 1) + ') → index ' + trap.value);
   }
 
   // ── 6  NO REGRESSION — page errors against the floor ──────────────────────────────────────

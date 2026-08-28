@@ -334,15 +334,25 @@ public:
             }
         }
 
-        beginTest ("Anti-aliasing: Square at C7 selects the 8-harmonic cap (≤8 harmonics)");
+        beginTest ("Anti-aliasing: Square at C7 selects the RICHEST alias-free cap, and nothing above it sounds");
         {
             tw::Wavetable wt;
             wt.buildFromSpec (tw::Wavetable::makeSquareSpec());
-            // C7 ~ 2093 Hz at 48 kHz → maxSafe ~ 11.5 → the cap-8 mip level (fb300: index 16 in
-            // the 19-level ladder; was index 5 in the old 8-level one — same 8-harmonic cap).
+            // C7 ~ 2093 Hz at 48 kHz → maxSafe ~ 11.47.
+            // 🚨 fb530 — THIS TEST USED TO ASSERT THE CAP WAS 8, AND THAT WAS THE BUG IT WAS
+            //    GUARDING. fb301's ladder went 16, 8, 4, 2 at the top — OCTAVE-spaced — so C7 got
+            //    8 of the 11 harmonics Nyquist allows and threw 3 away. The superset ladder adds
+            //    the integers, so C7 now picks 11. Asserting a LITERAL cap froze the defect in
+            //    place; the invariant that actually matters is the one the fb300 test above
+            //    states — pick the richest alias-free level — so assert THAT and derive the cap.
             const double phaseIncC7 = 2093.0 / 48000.0;
             const int lvl = tw::Wavetable::mipLevelForPhaseIncrement (phaseIncC7);
-            expectEquals (tw::Wavetable::kMipMaxHarmonics[(size_t) lvl], 8);
+            const int cap = tw::Wavetable::kMipMaxHarmonics[(size_t) lvl];
+            const int maxSafe = (int) (0.5 / phaseIncC7);                     // 11
+            expect (cap <= maxSafe, juce::String ("C7 picked an ALIASING cap ") + juce::String (cap));
+            expect (lvl == 0 || tw::Wavetable::kMipMaxHarmonics[(size_t) (lvl - 1)] > maxSafe,
+                    juce::String ("C7 left safe harmonics on the table: cap ") + juce::String (cap)
+                    + " when " + juce::String (maxSafe) + " fit");
 
             // Quick DFT: read one cycle and find magnitude at each harmonic bin.
             constexpr int N = 2048;
@@ -350,30 +360,38 @@ public:
             for (int i = 0; i < N; ++i)
                 waveform[(size_t) i] = wt.lookup (lvl, 0.5f, (float) i / (float) N);
 
-            // Check harmonics 9, 11, 13 (odd, beyond the cap-8 level) are silent.
+            // Every odd harmonic ABOVE the chosen cap must be silent — derived from `cap`, so this
+            // keeps testing the real thing whatever the ladder is retuned to.
+            // 🚨 fb530 — BOTH QUADRATURES. This projected onto sin() only, and makeSquareSpec writes
+            //    EVERY harmonic at cosine phase (π/2), so the sine projection of a square is exactly
+            //    0.00000 for every h — including the "harmonic 7 must be PRESENT" check below, which
+            //    therefore could never have passed. It has never fired: Wavetable_test.cpp is compiled
+            //    into the plugin (CMakeLists.txt:55) but nothing runs juce::UnitTestRunner, so these
+            //    assertions are compile-only. Measured on the shipped table, framePos 0.5, mip cap 11:
+            //    |X| h7 = 0.07038, h11 = 0.05446, h12 = 0.00000 — but sin-projection = 0.00000 for ALL.
             constexpr double pi2 = 2.0 * 3.14159265358979323846;
-            for (int h : { 9, 11, 13, 15 })
+            const auto magAt = [&waveform] (int h)
             {
-                double mag = 0.0;
+                double re = 0.0, im = 0.0;
                 for (int i = 0; i < N; ++i)
                 {
-                    const double phase = pi2 * (double) h * (double) i / (double) N;
-                    mag += waveform[(size_t) i] * std::sin (phase);
+                    const double a = pi2 * (double) h * (double) i / (double) N;
+                    re += (double) waveform[(size_t) i] * std::sin (a);
+                    im += (double) waveform[(size_t) i] * std::cos (a);
                 }
-                mag = std::abs (mag) * 2.0 / (double) N;
+                return std::sqrt (re * re + im * im) * 2.0 / (double) N;
+            };
+            for (int h = cap + 1; h <= cap + 8; h += 2)
+            {
+                const double mag = magAt (h);
                 expect (mag < 1.0e-3, juce::String ("harmonic ") + juce::String (h) + " mag=" + juce::String ((float) mag));
             }
 
-            // And harmonic 7 (within the cap-8 level) should be non-trivially present.
+            // And the highest ODD harmonic INSIDE the cap must be non-trivially present.
             {
-                double mag = 0.0;
-                for (int i = 0; i < N; ++i)
-                {
-                    const double phase = pi2 * 7.0 * (double) i / (double) N;
-                    mag += waveform[(size_t) i] * std::sin (phase);
-                }
-                mag = std::abs (mag) * 2.0 / (double) N;
-                expect (mag > 0.01, juce::String ("harmonic 7 mag=") + juce::String ((float) mag));
+                const int hIn = (cap % 2) ? cap : cap - 1;
+                const double mag = magAt (hIn);
+                expect (mag > 0.01, juce::String ("harmonic ") + juce::String (hIn) + " mag=" + juce::String ((float) mag));
             }
         }
     }

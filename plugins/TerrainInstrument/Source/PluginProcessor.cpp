@@ -2601,7 +2601,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
                             // Morph (Phase 11h)
-                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack",
+                            // Terra (fb530) — the clean-room enrichment bank, APPENDED at 30+ so
+                            // indices 0..29 and every saved patch are untouched. 🚨 THE TEN-SITE LAW:
+                            // this StringArray is one of ten places the table list lives. All ten must
+                            // grow in ONE commit or a <select> normalises by the wrong divisor and
+                            // picks a different table. Gated by Tests/wt_list_gate.py.
+                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
+                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
+                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
+                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
+                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
+                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
         0));  // default = Sine
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -2683,11 +2694,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_UBLEND, 1 },
         "Synth OSC A Unison Blend",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 75.0f));   // fb530 — default 100 -> 75 to match the reference's MEASURED factory blend. RANGE stays 0..100.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_UWIDTH, 1 },
         "Synth OSC A Unison Width",
-        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 100.0f));   // fb522 — BIPOLAR (was 0..100).
         // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
         // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
         // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
@@ -2804,7 +2815,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
                             // Morph (Phase 11h)
-                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack",
+                            // Terra (fb530) — the clean-room enrichment bank, APPENDED at 30+ so
+                            // indices 0..29 and every saved patch are untouched. 🚨 THE TEN-SITE LAW:
+                            // this StringArray is one of ten places the table list lives. All ten must
+                            // grow in ONE commit or a <select> normalises by the wrong divisor and
+                            // picks a different table. Gated by Tests/wt_list_gate.py.
+                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
+                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
+                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
+                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
+                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
+                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WT_FRAME, 1 },
@@ -2859,11 +2881,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_UBLEND, 1 },
         "Synth OSC B Unison Blend",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 75.0f));   // fb530 — default 100 -> 75 to match the reference's MEASURED factory blend. RANGE stays 0..100.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_UWIDTH, 1 },
         "Synth OSC B Unison Width",
-        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 100.0f));   // fb522 — BIPOLAR (was 0..100).
         // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
         // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
         // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
@@ -2970,7 +2992,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
                             // Morph (Phase 11h)
-                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack",
+                            // Terra (fb530) — the clean-room enrichment bank, APPENDED at 30+ so
+                            // indices 0..29 and every saved patch are untouched. 🚨 THE TEN-SITE LAW:
+                            // this StringArray is one of ten places the table list lives. All ten must
+                            // grow in ONE commit or a <select> normalises by the wrong divisor and
+                            // picks a different table. Gated by Tests/wt_list_gate.py.
+                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
+                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
+                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
+                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
+                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
+                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WT_FRAME, 1 },
@@ -3025,11 +3058,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_UBLEND, 1 },
         "Synth OSC C Unison Blend",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 75.0f));   // fb530 — default 100 -> 75 to match the reference's MEASURED factory blend. RANGE stays 0..100.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_UWIDTH, 1 },
         "Synth OSC C Unison Width",
-        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 100.0f));   // fb522 — BIPOLAR (was 0..100).
         // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
         // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
         // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
@@ -3136,7 +3169,18 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "Bowed Metal", "Glass Harmonics", "Railroad",
                             "Dustbowl", "Static Evolve", "Spectral Drift", "Serum HD",
                             // Morph (Phase 11h)
-                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack" },
+                            "Rise", "Even", "Drift", "Sweep", "Formant", "Stack",
+                            // Terra (fb530) — the clean-room enrichment bank, APPENDED at 30+ so
+                            // indices 0..29 and every saved patch are untouched. 🚨 THE TEN-SITE LAW:
+                            // this StringArray is one of ten places the table list lives. All ten must
+                            // grow in ONE commit or a <select> normalises by the wrong divisor and
+                            // picks a different table. Gated by Tests/wt_list_gate.py.
+                            // ⚠️ Names are prefixed "Terra " deliberately: indices 26/27/29 are already
+                            //    called Drift/Sweep/Stack and the NO-DOUBLES rule forbids a repeat.
+                            "Terra Stack", "Terra Drift", "Terra Pulse", "Terra Hollow",
+                            "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
+                            "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
+                            "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
         0));  // default = Sine
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WT_FRAME, 1 },
@@ -3191,11 +3235,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_UBLEND, 1 },
         "Synth OSC D Unison Blend",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 75.0f));   // fb530 — default 100 -> 75 to match the reference's MEASURED factory blend. RANGE stays 0..100.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_UWIDTH, 1 },
         "Synth OSC D Unison Width",
-        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 100.0f));   // fb522 — BIPOLAR (was 0..100).
         // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
         // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
         // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().

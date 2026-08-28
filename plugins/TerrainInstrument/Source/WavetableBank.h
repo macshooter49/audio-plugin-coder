@@ -79,6 +79,30 @@ namespace tw
             SpectralSweep,
             FormantRise,
             HarmonicSeries,
+            // Terra (fb530) — the clean-room enrichment bank. APPENDED AT 30+ so every existing
+            // index is untouched and every saved patch keeps its table (APVTS persists the
+            // DENORMALISED index for an AudioParameterChoice, i.e. the integer).
+            // 🚨 THE TEN-SITE LAW: this enum is ONE of ten places the table list lives. Growing it
+            //    without growing the other nine writes the wrong table. The other nine are:
+            //    specForPreset() below · the four SYN_OSC_?_WT_PRESET StringArrays in
+            //    PluginProcessor::createParameterLayout · the four <select id="syn-wt?"> option
+            //    lists in Source/ui/public/index.html. Tests/wt_list_gate.py gates all ten.
+            TerraStack = 30,
+            TerraDrift,
+            TerraPulse,
+            TerraHollow,
+            TerraVox,
+            TerraChoir,
+            TerraBell,
+            TerraBar,
+            TerraFold,
+            TerraSweep,
+            TerraCloud,
+            TerraDust,
+            TerraGlass,
+            TerraBow,
+            TerraReed,
+            TerraGrowl,
             kNumPresets
         };
 
@@ -176,6 +200,23 @@ namespace tw
                 case SpectralSweep:  return Wavetable::makeSpectralSweepSpec();
                 case FormantRise:    return Wavetable::makeFormantRiseSpec();
                 case HarmonicSeries: return Wavetable::makeHarmonicSeriesSpec();
+                // ── Terra (fb530)
+                case TerraStack:     return Wavetable::makeTerraStackSpec();
+                case TerraDrift:     return Wavetable::makeTerraDriftSpec();
+                case TerraPulse:     return Wavetable::makeTerraPulseSpec();
+                case TerraHollow:    return Wavetable::makeTerraHollowSpec();
+                case TerraVox:       return Wavetable::makeTerraVoxSpec();
+                case TerraChoir:     return Wavetable::makeTerraChoirSpec();
+                case TerraBell:      return Wavetable::makeTerraBellSpec();
+                case TerraBar:       return Wavetable::makeTerraBarSpec();
+                case TerraFold:      return Wavetable::makeTerraFoldSpec();
+                case TerraSweep:     return Wavetable::makeTerraSweepSpec();
+                case TerraCloud:     return Wavetable::makeTerraCloudSpec();
+                case TerraDust:      return Wavetable::makeTerraDustSpec();
+                case TerraGlass:     return Wavetable::makeTerraGlassSpec();
+                case TerraBow:       return Wavetable::makeTerraBowSpec();
+                case TerraReed:      return Wavetable::makeTerraReedSpec();
+                case TerraGrowl:     return Wavetable::makeTerraGrowlSpec();
                 default:             return Wavetable::makeSineSpec();
             }
         }

@@ -18,6 +18,8 @@ clang++ -std=c++17 -O2 -I Tests/shim -I Source -o /tmp/flt_cert Tests/flt_cert.c
 | `fx3_ui.js` | the fb413 cards: 6 instances each, route pills, the strobe law, no-doubles, the C++ push | 48 |
 | `grn_click_audit.cpp` | fb416 granular — overlap/duty, the slope detector, the FFT band. **Reports, does not gate.** | — |
 | `fx3_audibility.cpp` | fb417 "can you hear it" — spectrum distance knob-0 vs knob-100. **Reports, does not gate.** | — |
+| `wt_list_gate.py` | fb530 — the WAVETABLE ROSTER's **ten sites**: the enum, `specForPreset`, four `StringArray`s, four `<select>`s. Index for index, label for label. | 24 |
+| `harmonic_ceiling_gate.py` | fb530 — **THE ONE LAW**: no generator may carry a harmonic-COUNT ceiling. The 25 capped legacy generators are FROZEN (the debt, written down); a new ceiling anywhere fails the build. | 8 |
 
 The three fx3 engine certs live beside their engines, not here — they need the roster and the
 bibles next to them:
@@ -35,6 +37,25 @@ cost a diagnosis once already.
 
 ⚠️ `fx3_ui.js` needs puppeteer-core, which is not vendored here:
 `NODE_PATH=<a scratchpad>/node_modules node Tests/fx3_ui.js`
+
+The two fb530 gates are pure python, no deps, run from the plugin root:
+
+```sh
+python3 Tests/wt_list_gate.py            # 24 checks across the ten sites
+python3 Tests/harmonic_ceiling_gate.py   # 8 checks; prints the frozen legacy debt
+```
+
+Both carry their own MUTATION CONTROLS (fb421 — a gate that has never failed has never been
+tested). Each of these must FAIL, and each does:
+
+```sh
+for m in enum case strD optD rename;  do WTLG_MUTATE=$m python3 Tests/wt_list_gate.py; done
+for m in terra kernel legacy fixed;   do HCG_MUTATE=$m  python3 Tests/harmonic_ceiling_gate.py; done
+```
+
+⚠️ `Tests/all_menus.js` now reads the wavetable count OUT OF `PluginProcessor.cpp` rather than
+hardcoding it. It used to say 30; when the bank grew to 46 it reported a desync that did not
+exist. A hardcoded roster length in a HARNESS is an eleventh site.
 
 ⚠️ **fb467 — anything that includes `Wavetable.h` now needs `-framework Accelerate`.** The bake's
 transform moved to `Source/WtFft.h`, which calls vDSP where it exists (19.1 ms -> 2.3 ms per table)

@@ -34,7 +34,8 @@ namespace tw
      *  reconstruction loop skips them via an amp==0 fast path. */
     struct FrameSpec
     {
-        static constexpr int kMaxHarmonics = 512;   // fb300 — 256→512 (Serum-grade). frameSize 2048 → up to 1024 harmonics are representable; 512 lets deep-bass notes (f0 ≤ ~46 Hz) reach ~Nyquist instead of the old 256-cap wall at ~12.5 kHz. The mip SELECTION still guarantees no aliasing (it only ever picks a cap ≤ Nyquist/f0), so a higher ceiling is strictly richer, never dirtier.
+        static constexpr int kMaxHarmonics = 1024;  // fb530 — 512→1024. A 2048-point frame represents 1023 harmonics; the old 512 was HALF of what the frame can hold, and it BOUND at the bottom of the keyboard: at C1 (32.70 Hz) Nyquist permits 733 harmonics, so a 512-cap table used 69.8% of the available band and read h511=−55.7, h512=−72.5, h513=−108.6 dBc — a cliff with 11 kHz still free. MEASURED: no existing generator reaches 512 (the largest hand-written list in the bank is 28), so this is bit-identical for all 30 factory tables — it exists to unblock the TERRA generators, whose loops run to THIS constant by law (see makeTerra*). Paired with kMipMaxHarmonics[0] = 1023 below: buildFromSpec sizes its resolve arrays from THAT, and HB = min(hMax, N/2−1) = 1023 is the true representable ceiling.
+                                                    // fb300 (kept for the history): 256→512 was the Serum-grade raise that let deep-bass notes (f0 ≤ ~46 Hz) past the old 256-cap wall at ~12.5 kHz. The mip SELECTION still guarantees no aliasing (it only ever picks a cap ≤ Nyquist/f0), so a higher ceiling is strictly richer, never dirtier.
         std::array<float, kMaxHarmonics> amplitudes {};  // value-initialized to 0
         std::array<float, kMaxHarmonics> phases     {};  // value-initialized to 0
         int numHarmonics = 0;
@@ -74,25 +75,357 @@ namespace tw
         std::array<FrameSpec, kNumFrames> frames {};
     };
 
+
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //  TERRA — the clean-room enrichment generator.                                   fb530
+    // ═══════════════════════════════════════════════════════════════════════════════════════════
+    //  ⚖️ CLEAN ROOM. Every TERRA table is produced by THIS algorithm from a mathematical
+    //  description plus a seed. Nothing here is sampled, traced, decompiled, imported or
+    //  transcribed from any other maker's wavetable, preset or sample. A table IS its parameter
+    //  block (12–20 numbers) + a seed; it is regenerated at every launch exactly as the legacy 30
+    //  are (WavetableBank::buildOne → specForPreset → make*Spec), so there is still no opaque
+    //  data on disk anywhere and the bank costs nothing to store.
+    //
+    //  🚨 THE ONE LAW — this is the entire fix for the bug class that made this generator
+    //     necessary, and Tests/harmonic_ceiling_gate.py enforces it mechanically:
+    //
+    //         A GENERATOR MAY NOT CARRY A HARMONIC-COUNT CEILING.
+    //         The harmonic loop always runs h = 1 … FrameSpec::kMaxHarmonics.
+    //         A harmonic may only become inaudible because the AMPLITUDE LAW put it there.
+    //
+    //     MEASURED, and why the law exists: 25 of the 30 legacy generators stop their synthesis
+    //     loop at a hard-coded integer (24 of them ≤ 96, 16 of them ≤ 64). "Prophet Saw" reads
+    //     N60 = 24 at C1 THROUGH C5 identically, with h24 at −29.31 dBc and h25 at −134.22 dBc —
+    //     a 104.9 dB cliff across ONE harmonic with Nyquist 22 kHz away. A filter cannot do that.
+    //     Only absent content can.
+    //
+    //  THE KERNEL. Every frame is one continuous function of h evaluated in dB, so the terms are
+    //  a SUM and no term can ever produce a cliff:
+    //
+    //      dB(h) =  −aLo·log2(h)                               (h ≤ knee)      slope law
+    //               −aLo·log2(knee) − aHi·log2(h/knee)         (h > knee)      two-slope knee
+    //             + 20·log10( max(|sin(π·h·duty)|, combFloor) )                pulse / PWM comb
+    //             + ±½·tilt                                    (odd / even)    analog imbalance
+    //             + 20·log10( 1 + Σₖ gₖ·exp(−½·(ln(h/hₖ)/qₖ)²) )               ADDITIVE resonance
+    //             + grit·u(seed, h)                                            seeded detail
+    //      φ(h)  =  disp·π·h²/H + scatter·u(seed^0xBEEF, h)     dispersion + scatter
+    //
+    //  Four properties, each the answer to a defect measured in the legacy bank:
+    //   1. THE COMB IS FLOORED (−18 dB), not allowed to reach −∞. An ideal pulse has true nulls
+    //      at h = k/duty; a real edge has finite rise time and jitter, which fills them. Floored,
+    //      the notches are character; unfloored they would depress the harmonic count for no
+    //      audible reason.
+    //   2. RESONANCES ARE ADDITIVE (1 + Σ g·exp(…)), NEVER multiplicative-with-a-stopband. A
+    //      formant or a filter peak can only ever ADD band. Multiplicative Gaussians are exactly
+    //      what turned the legacy "tapers" into permanent ceilings — makeSerumHDSpec declares 96
+    //      harmonics and delivers 17 because its Gaussian is multiplicative.
+    //   3. RESONANCE CENTRES ARE IN HARMONIC NUMBER, NOT Hz, so they track pitch — the fb467
+    //      content-independent-unit law.
+    //   4. GRIT IS A DETERMINISTIC HASH OF (seed, h) — reproducible bit-for-bit on every machine
+    //      and every platform, which is what makes "seed + description" a real substitute for
+    //      stored data.
+    //
+    //  ⚠️ COUNT IS NOT RICHNESS. 512 partials all at −80 dBc is not richer than 60 strong ones.
+    //     The kernel makes SLOPE the primary knob and count a consequence; only the cloud family
+    //     targets a density, and it is judged by Neff, never by N60.
+    namespace terra
+    {
+        /** One additive resonance. `h` is a HARMONIC NUMBER (pitch-tracking), never a frequency.
+            `q` is the log-width in nepers; `gain` is a linear ADD onto 1.0, so gain 0 = absent. */
+        struct Res { double h = 0.0, gain = 0.0, q = 1.0; };
+
+        struct FrameParams
+        {
+            double aLo         = 6.0206;   // dB/oct below the knee (6.0206 = the exact 1/h saw law)
+            double aHi         = 6.0206;   // dB/oct above the knee
+            double knee        = 1.0e9;    // knee harmonic; 1e9 = no knee
+            double duty        = 0.0;      // 0 = no comb; else pulse duty in (0, 0.5]
+            double combFloorDb = -18.0;    // finite edge rise time fills the ideal nulls
+            double tiltDb      = 0.0;      // + boosts ODD, − boosts EVEN (applied ±half)
+            Res    res[4]      {};
+            int    nRes        = 0;
+            double gritDb      = 0.0;      // ± dB of seeded per-harmonic detail
+            double gritCorr    = 0.0;      // 0 = white in h, 1 = smooth in log2(h)
+            double disp        = 0.0;      // Schroeder quadratic phase dispersion
+            double scatter     = 0.0;      // seeded phase scatter, radians
+            std::uint32_t seed = 1u;
+        };
+
+        /** Deterministic hash → [−1, 1]. Integer-only, no libm, no locale, no RNG state: the same
+            (seed, i) gives the same double on every machine and every compiler, which is the whole
+            reason a seed can stand in for stored table data. */
+        inline double u11 (std::uint32_t seed, std::uint32_t i) noexcept
+        {
+            std::uint32_t x = seed * 2654435761u + i * 2246822519u + 0x9E3779B9u;
+            x ^= x >> 15; x *= 0x2C1B3C6Du; x ^= x >> 12; x *= 0x297A2D39u; x ^= x >> 15;
+            return ((double) x / 4294967295.0) * 2.0 - 1.0;
+        }
+
+        /** Evaluate the kernel over the FULL spec ceiling. THE LOOP BOUND IS THE LAW — it is
+            FrameSpec::kMaxHarmonics and nothing else, on every frame of every TERRA table. */
+        inline void renderFrame (const FrameParams& P, FrameSpec& fs) noexcept
+        {
+            const int H = FrameSpec::kMaxHarmonics;
+            fs.numHarmonics = H;
+            fs.numPartials  = 0;
+            const double combFloor = std::pow (10.0, P.combFloorDb / 20.0);
+            const double logKnee   = std::log2 (P.knee);
+
+            // Correlated grit: smooth in log2(h), 3 control points per octave, cosine-interpolated.
+            // This is what a real oscillator STACK does — neighbouring partials drift together —
+            // as opposed to per-harmonic white noise, which just sounds like dither.
+            auto gritAt = [&P] (int h) -> double
+            {
+                if (P.gritDb <= 0.0) return 0.0;
+                if (P.gritCorr <= 0.0) return P.gritDb * u11 (P.seed, (std::uint32_t) h);
+                const double L = std::log2 ((double) h) * 3.0;
+                const int    i = (int) std::floor (L);
+                const double f = L - (double) i;
+                const double a = u11 (P.seed ^ 0x5A5Au, (std::uint32_t) (i + 64));
+                const double b = u11 (P.seed ^ 0x5A5Au, (std::uint32_t) (i + 65));
+                const double s = a + (b - a) * (0.5 - 0.5 * std::cos (3.14159265358979323846 * f));
+                const double w = u11 (P.seed, (std::uint32_t) h);
+                return P.gritDb * (s * P.gritCorr + w * (1.0 - P.gritCorr));
+            };
+
+            for (int h = 1; h <= H; ++h)
+            {
+                const double lh = std::log2 ((double) h);
+                double db = (double) h <= P.knee ? -P.aLo * lh
+                                                 : -P.aLo * logKnee - P.aHi * (lh - logKnee);
+                if (P.duty > 0.0)
+                {
+                    const double s = std::fabs (std::sin (3.14159265358979323846 * (double) h * P.duty));
+                    db += 20.0 * std::log10 (std::max (s, combFloor));
+                }
+                db += (h & 1) ? +0.5 * P.tiltDb : -0.5 * P.tiltDb;
+                if (P.nRes > 0)
+                {
+                    double g = 1.0;
+                    for (int k = 0; k < P.nRes; ++k)
+                    {
+                        const Res& r = P.res[k];
+                        if (r.gain <= 0.0 || r.h <= 0.0) continue;
+                        const double z = std::log ((double) h / r.h) / std::max (r.q, 1.0e-6);
+                        g += r.gain * std::exp (-0.5 * z * z);
+                    }
+                    db += 20.0 * std::log10 (g);
+                }
+                db += gritAt (h);
+                fs.amplitudes[(size_t) (h - 1)] = (float) std::pow (10.0, db / 20.0);
+                const double ph = P.disp * 3.14159265358979323846 * (double) h * (double) h / (double) H
+                                + P.scatter * u11 (P.seed ^ 0xBEEFu, (std::uint32_t) h);
+                fs.phases[(size_t) (h - 1)] = (float) ph;
+            }
+        }
+
+        /** A 16-frame table: every scalar is a (start, end) pair on t = frame/15 with one shaping
+            exponent. THIS STRUCT IS THE WHOLE TABLE — 12 to 20 numbers and a seed. */
+        struct TableDesc
+        {
+            std::uint32_t seed = 1u;
+            double aLo0 = 6.0206, aLo1 = 6.0206;
+            double aHi0 = 6.0206, aHi1 = 6.0206;
+            double knee0 = 1.0e9, knee1 = 1.0e9;
+            double duty0 = 0.0,   duty1 = 0.0;
+            double combFloorDb = -18.0;
+            double tilt0 = 0.0,   tilt1 = 0.0;
+            double grit0 = 0.0,   grit1 = 0.0, gritCorr = 0.0;
+            double disp0 = 0.0,   disp1 = 0.0;
+            double scat0 = 0.0,   scat1 = 0.0;
+            int    nRes  = 0;
+            double resH0[4] {}, resH1[4] {}, resG0[4] {}, resG1[4] {}, resQ0[4] {}, resQ1[4] {};
+            double shape = 1.0;                       // t → t^shape
+        };
+
+        /** Interpolate the description onto frame f and hand back the frame's parameters. */
+        inline FrameParams paramsForFrame (const TableDesc& D, int f) noexcept
+        {
+            const double t = std::pow ((double) f / (double) (WavetableSpec::kNumFrames - 1), D.shape);
+            auto L = [t] (double a, double b) { return a + (b - a) * t; };
+            FrameParams P;
+            P.seed        = D.seed + (std::uint32_t) f * 7919u;
+            P.aLo         = L (D.aLo0, D.aLo1);
+            P.aHi         = L (D.aHi0, D.aHi1);
+            P.knee        = std::exp (L (std::log (D.knee0), std::log (D.knee1)));   // geometric in harmonic number
+            P.duty        = L (D.duty0, D.duty1);
+            P.combFloorDb = D.combFloorDb;
+            P.tiltDb      = L (D.tilt0, D.tilt1);
+            P.gritDb      = L (D.grit0, D.grit1);
+            P.gritCorr    = D.gritCorr;
+            P.disp        = L (D.disp0, D.disp1);
+            P.scatter     = L (D.scat0, D.scat1);
+            P.nRes        = D.nRes;
+            for (int k = 0; k < D.nRes; ++k)
+            {
+                P.res[k].h    = std::exp (L (std::log (D.resH0[k]), std::log (D.resH1[k])));
+                P.res[k].gain = L (D.resG0[k], D.resG1[k]);
+                P.res[k].q    = L (D.resQ0[k], D.resQ1[k]);
+            }
+            return P;
+        }
+
+        /** The harmonic families (analog stack, PWM, formant, resonant sweep, cloud, bowed…). */
+        inline WavetableSpec build (const TableDesc& D)
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+                renderFrame (paramsForFrame (D, f), spec.frames[(size_t) f]);
+            return spec;
+        }
+
+        /** The METALLIC family. Fletcher's stiff string: the n-th mode of a bar or a stiff string
+            does not sit at n·f0 but at n·f0·√(1 + B·n²), B the inharmonicity coefficient. Deposited
+            on the PARTIAL path (FrameSpec::partials), where buildFromSpec snaps it onto the harmonic
+            grid with an energy-preserving phasor split — the band-limited wavetable rendition of an
+            inharmonic tone, which is what a single looped cycle can represent.
+            NO COUNT CEILING: modes are emitted until their STRETCHED ratio leaves the spec ceiling
+            or the partial store is full, both of which are the representation's limit, not a
+            design choice. B sweeps across the frame axis: string → bar → plate. */
+        inline WavetableSpec buildStiff (const TableDesc& D, double B0, double B1)
+        {
+            WavetableSpec spec;
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const FrameParams P = paramsForFrame (D, f);
+                const double t = std::pow ((double) f / (double) (WavetableSpec::kNumFrames - 1), D.shape);
+                const double B = std::exp (std::log (B0) + (std::log (B1) - std::log (B0)) * t);
+                FrameSpec tmp; renderFrame (P, tmp);          // the amplitude law, evaluated on the MODE index
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = 0;
+                int n = 0;
+                for (int m = 1; m <= FrameSpec::kMaxHarmonics && n < FrameSpec::kMaxPartials; ++m)
+                {
+                    const double ratio = (double) m * std::sqrt (1.0 + B * (double) m * (double) m);
+                    if (ratio > (double) FrameSpec::kMaxHarmonics) break;   // past what a cycle can represent
+                    fs.partials[(size_t) n].ratio = (float) ratio;
+                    fs.partials[(size_t) n].amp   = tmp.amplitudes[(size_t) (m - 1)];
+                    fs.partials[(size_t) n].phase = tmp.phases[(size_t) (m - 1)];
+                    ++n;
+                }
+                fs.numPartials = n;
+            }
+            return spec;
+        }
+
+        /** The WAVEFOLDED family — band-limited BY CONSTRUCTION, not by a taper. The kernel's
+            spectrum is synthesised into an OVERSAMPLED cycle, folded in the time domain there, then
+            forward-transformed and read back as harmonics 1…kMaxHarmonics.
+            ⚠️ `srcTop` is NOT a content ceiling: a fold of order `foldOrder` multiplies the source's
+            bandwidth by roughly that factor, so the source must sit under kFoldFft/(2·foldOrder) or
+            the FOLD ITSELF aliases inside the oversampled cycle. It is the same kind of constraint
+            as kMipMaxHarmonics — a Nyquist limit of an intermediate representation. The OUTPUT loop
+            below runs to FrameSpec::kMaxHarmonics, which is what the one law is about. */
+        inline WavetableSpec buildFolded (const TableDesc& D, double drive0, double drive1,
+                                          double sym0, double sym1, int foldOrder = 12)
+        {
+            constexpr int kFoldFft = 16384;                       // 8× the frame; 8191 representable
+            const int srcTop = std::min (FrameSpec::kMaxHarmonics,
+                                         kFoldFft / (2 * std::max (2, foldOrder)));
+            WavetableSpec spec;
+            std::vector<double> re ((size_t) (kFoldFft / 2 + 1)), im ((size_t) (kFoldFft / 2 + 1));
+            std::vector<double> cyc ((size_t) kFoldFft);
+            for (int f = 0; f < WavetableSpec::kNumFrames; ++f)
+            {
+                const double t = std::pow ((double) f / (double) (WavetableSpec::kNumFrames - 1), D.shape);
+                const double drive = drive0 + (drive1 - drive0) * t;
+                const double sym   = sym0   + (sym1   - sym0)   * t;
+                FrameSpec src; renderFrame (paramsForFrame (D, f), src);
+
+                std::fill (re.begin(), re.end(), 0.0);
+                std::fill (im.begin(), im.end(), 0.0);
+                for (int h = 1; h <= srcTop; ++h)
+                {
+                    const double a = (double) src.amplitudes[(size_t) (h - 1)];
+                    if (a == 0.0) continue;
+                    const double ph = (double) src.phases[(size_t) (h - 1)];
+                    re[(size_t) h] =  0.5 * a * std::sin (ph);      // the SAME bin convention buildFromSpec uses
+                    im[(size_t) h] = -0.5 * a * std::cos (ph);
+                }
+                wtfft::inverseReal (re.data(), im.data(), kFoldFft, cyc.data());
+
+                double pk = 0.0;
+                for (int n = 0; n < kFoldFft; ++n) pk = std::max (pk, std::abs (cyc[(size_t) n]));
+                const double g = pk > 1.0e-12 ? drive / pk : 0.0;
+                for (int n = 0; n < kFoldFft; ++n)
+                {
+                    // A triangle wavefolder: sin() would be a soft single fold, but the reflecting
+                    // triangle is what a real Buchla/Serge folder does and it is what generates the
+                    // dense, comb-like harmonic ladder. `sym` biases the input, which breaks the
+                    // odd-only symmetry and lets EVEN harmonics in — the fold's "character" knob.
+                    const double u = cyc[(size_t) n] * g + sym;
+                    const double q = std::fabs (std::fmod (std::fabs (u + 1.0), 4.0) - 2.0) - 1.0;
+                    cyc[(size_t) n] = q;
+                }
+                wtfft::forwardReal (cyc.data(), kFoldFft, re.data(), im.data());
+
+                FrameSpec& fs = spec.frames[(size_t) f];
+                fs.numHarmonics = FrameSpec::kMaxHarmonics;
+                fs.numPartials  = 0;
+                for (int h = 1; h <= FrameSpec::kMaxHarmonics; ++h)
+                {
+                    const double R = re[(size_t) h], I = im[(size_t) h];
+                    const double a = 2.0 * std::sqrt (R * R + I * I) / (double) kFoldFft;
+                    fs.amplitudes[(size_t) (h - 1)] = (float) a;
+                    fs.phases[(size_t) (h - 1)]     = (float) std::atan2 (R, -I);   // inverse of the bin convention above
+                }
+            }
+            return spec;
+        }
+    }
+
     class Wavetable
     {
     public:
         static constexpr int kFrameSize    = 2048;  // power of 2 → cheap modulo via mask
-        static constexpr int kNumMipLevels = 34;    // fb301 — SIXTH-OCTAVE ladder (was fb300 third-octave / 19 levels). EDGE-TO-EDGE harmonics: the picked cap now sits within ~1.12× of Nyquist, so G#3's top harmonic reaches ~23.5 kHz (was 21 kHz at third-octave) — flush with Serum's ~23.9 kHz meter edge, no top-right gap. Old octave ladder wasted up to a full octave; third-octave left a ~3 kHz notch at 21–24 kHz; sixth-octave closes it. Cost: 34×16×2048×4B = 4.46 MB/table (~134 MB across 30 factory tables) — the edge-to-edge quality tier, chosen by Max (dial to quarter-octave/24 levels/94 MB if RAM matters more). Affects ALL wavetables: buildFromSpec (30 factory) + buildFromPcm (imports) share this ladder.
+        static constexpr int kNumMipLevels = 61;    // fb530 — the SUPERSET ladder: all 34 fb301 entries KEPT, 27 ADDED (6 above 512, 21 below 32). See kMipMaxHarmonics.
+                                                    // fb301 — SIXTH-OCTAVE ladder (was fb300 third-octave / 19 levels). EDGE-TO-EDGE harmonics: the picked cap now sits within ~1.12× of Nyquist, so G#3's top harmonic reaches ~23.5 kHz (was 21 kHz at third-octave) — flush with Serum's ~23.9 kHz meter edge, no top-right gap. Old octave ladder wasted up to a full octave; third-octave left a ~3 kHz notch at 21–24 kHz; sixth-octave closes it. Cost: 34×16×2048×4B = 4.46 MB/table (~134 MB across 30 factory tables) — the edge-to-edge quality tier, chosen by Max (dial to quarter-octave/24 levels/94 MB if RAM matters more). Affects ALL wavetables: buildFromSpec (30 factory) + buildFromPcm (imports) share this ladder.
         static constexpr int kBlurMaxTaps  = 32;    // fb464 — most frames any one blur read may sum
         static constexpr int kMaxFrames    = 256;   // hard ceiling on frame count (imported tables);
                                                     // also sizes renderBlend's stack weight array
 
         // Maximum-harmonic count per mip level. Index 0 = full bandwidth.
-        // fb301 — SIXTH-OCTAVE ladder (2^-1/6 ≈ 1.122× per step) from 512→16, then octave
-        // for the sparse top (8/4/2 — high notes have too few harmonics for finer spacing to
-        // matter). The playback selection picks the highest cap ≤ Nyquist/f0, so tighter
-        // spacing = the picked cap sits closer to the true Nyquist limit = EDGE-TO-EDGE (G#3
-        // 23.5 kHz vs Serum's 23.9). MUST stay monotonically DECREASING (selection scans
-        // front→back for the first fit).
+        //
+        // 🚨 fb530 — THE SUPERSET LADDER. Every one of fb301's 34 entries is still here, in the
+        // same order; 27 entries were ADDED and none removed or moved. That is not a style
+        // choice, it is the SAFETY PROOF: mipLevelForPhaseIncrement() scans front→back and
+        // returns the FIRST cap ≤ 0.5/phaseInc, so inserting caps can only ever make it return
+        // an equal-or-LARGER cap. A superset is monotonically non-worse at every pitch BY
+        // CONSTRUCTION — no patch can get darker, and the audio below C6 is bit-identical
+        // (verified: 30 tables × 97 notes × 3 frame positions, 0 differing samples).
+        //
+        // What the 27 fix, both measured:
+        //  · TOP (1023 912 812 724 645 574). fb301 stopped at 512 while a 2048-point frame
+        //    represents 1023. At C1 (32.70 Hz) Nyquist permits 733 harmonics, so 512 used
+        //    69.8% of the band and the spectrum fell off a cliff at h512. Now 98.8%.
+        //  · BOTTOM (31…17 and 15…2, integer-spaced). fb301's tail went 20, 18, 16, 8, 4, 2 —
+        //    OCTAVE-spaced, throwing away up to half the band on the top two octaves of the
+        //    keyboard. C6 permits 22 harmonics and got 20; C7 permits 11 and got 8. Integer
+        //    spacing below 32 is finer than sixth-octave and costs one level per integer.
+        //    Now C6 and C7 both read 100% of Nyquist. Measured N60 gains on UNCHANGED factory
+        //    content: Pulse C7 8→11, Square C7 4→6, Prophet Saw C6 20→22, PPG Wave C7 8→11.
+        //
+        // fb301 (the entries this extends) — SIXTH-OCTAVE ladder (2^-1/6 ≈ 1.122× per step)
+        // from 512→16, then octave for the sparse top. The playback selection picks the highest
+        // cap ≤ Nyquist/f0, so tighter spacing = the picked cap sits closer to the true Nyquist
+        // limit = EDGE-TO-EDGE (G#3 23.5 kHz vs Serum's 23.9).
+        //
+        // ⚠️ MUST stay monotonically DECREASING (selection scans front→back for the first fit),
+        // and kMipMaxHarmonics[0] MUST stay ≤ kFrameSize/2 − 1 = 1023 (buildFromSpec clamps with
+        // HB = min(hMax, N/2−1), and it sizes its resolve arrays from THIS entry).
+        // ⚠️ COST, measured: 61 × 16 frames × 2048 × 4 B = 7.625 MB/table (fb301's 34 = 4.250 MB).
+        // The bank is lazy per table (fb496) so a 4-osc patch holds 30.5 MB, not 30 tables' worth.
+        // A per-level frame length would take that BELOW today's figure (a level capped at 22
+        // harmonics does not need 2048 samples) — deliberately NOT done here: it changes the
+        // renderBlend()/readCycle() buffer contract that SynthVoice.h owns, and it puts a
+        // resampling step inside renderBlend, which is per-voice-per-block under WT-POS
+        // modulation. That is a separate, CPU-measured change.
         static constexpr std::array<int, kNumMipLevels> kMipMaxHarmonics
-            { 512, 456, 406, 362, 323, 287, 256, 228, 203, 181, 161, 144, 128, 114, 102, 91,
-              81, 72, 64, 57, 51, 45, 40, 36, 32, 29, 25, 23, 20, 18, 16, 8, 4, 2 };
+            { 1023, 912, 812, 724, 645, 574,
+              512, 456, 406, 362, 323, 287, 256, 228, 203, 181, 161, 144, 128, 114, 102, 91,
+              81, 72, 64, 57, 51, 45, 40, 36, 32,
+              31, 30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18, 17, 16,
+              15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2 };
 
         Wavetable() = default;
 
@@ -127,6 +460,15 @@ namespace tw
             std::vector<double> hre ((size_t) (frameSize_ / 2 + 1)), him ((size_t) (frameSize_ / 2 + 1));
             std::vector<double> cyc ((size_t) frameSize_);
 
+            // fb530 — the per-harmonic RESOLVE scratch, hoisted. It used to be four
+            // `std::array<double, kMipMaxHarmonics[0]+1>` declared INSIDE the frame loop with
+            // `{}` value-init, i.e. a zero-fill of the FULL ladder-0 width on every one of the
+            // 61 × 16 = 976 iterations even for a level that only uses 2 harmonics. On the
+            // superset ladder that is 8 KB × 4 × 976 = 31 MB of memset per table. Hoisted to the
+            // heap and cleared only over [0..hMax], which is what the loops below actually read.
+            const size_t kRes = (size_t) kMipMaxHarmonics[0] + 1;
+            std::vector<double> rAmp (kRes), rPh (kRes), px (kRes), py (kRes);
+
             for (int level = 0; level < numMipLevels_; ++level)
             {
                 const int hMax = kMipMaxHarmonics[(size_t) level];
@@ -140,11 +482,14 @@ namespace tw
                     // (phasor sum), because a single-cycle frame looped at the played pitch
                     // is harmonic by construction — snapping keeps it seam-clean + band-limited
                     // while preserving the spectral SHAPE (the bell/piano rendition).
-                    std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> rAmp {};
-                    std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> rPh  {};
+                    // clear ONLY the span the loops below read — indices above hMax are never
+                    // touched by either branch and never reach the synthesis loop (HB ≤ hMax).
+                    std::fill (rAmp.begin(), rAmp.begin() + (hMax + 1), 0.0);
+                    std::fill (rPh.begin(),  rPh.begin()  + (hMax + 1), 0.0);
                     if (fs.numPartials > 0)
                     {
-                        std::array<double, (size_t) (kMipMaxHarmonics[0] + 1)> px {}, py {};
+                        std::fill (px.begin(), px.begin() + (hMax + 1), 0.0);
+                        std::fill (py.begin(), py.begin() + (hMax + 1), 0.0);
                         for (int p = 0; p < fs.numPartials; ++p)
                         {
                             const FrameSpec::Partial& pt = fs.partials[(size_t) p];
@@ -587,18 +932,45 @@ namespace tw
         // interpolation lookup() uses, so blur = 0 reproduces lookup() exactly.
         static float readCycle (const float* buf, float phase) noexcept
         {
-            // LINEAR interpolation. fb302 measured cubic (Catmull-Rom) here and REVERTED it: on
-            // these 2048-point tables linear's interp error is already −98…−115 dB (below the
-            // 16-bit floor, inaudible + below any analyzer floor); cubic only pushed it to
-            // −130…−170 dB — no perceptible or on-meter gain for ~3× the read cost. Per the
-            // CPU-friendly rule, linear stays. (The faint "grunge" between harmonics on a spectrum
-            // analyzer is FFT WINDOW LEAKAGE, not interp imaging — Serum shows it too.)
+            // 🚨 fb530 — CATMULL-ROM. fb302 measured cubic here and REVERTED it as a placebo, and
+            // THAT VERDICT WAS CORRECT FOR THE CONTENT IT WAS MEASURED ON. It does not survive
+            // full-band tables, so it was re-run rather than inherited. Both readers against a
+            // 32-point Blackman-windowed-sinc reference on the shipped path (off-grid = imaging;
+            // on-grid = how far the harmonics themselves are bent):
+            //
+            //   content              note   off-grid LIN   off-grid C-R   gain | on-grid max err
+            //   Prophet Saw (24 h)    C3        -87.15         -88.02    +0.87 | 0.02 -> 0.01 dB
+            //   Terra Stack          C3        -68.33         -83.50   +15.18 | 0.22 -> 0.01 dB
+            //   Terra Stack          C2        -59.13         -69.13   +10.00 | 0.90 -> 0.15 dB
+            //   Terra Cloud          C4        -61.83         -83.46   +21.64 | 0.06 -> 0.00 dB
+            //   Terra Cloud          C1        -23.94         -26.54    +2.60 | 3.74 -> 1.89 dB
+            //
+            // On a THIN table linear is already at the analysis floor and cubic buys 0.9 dB — fb302's
+            // number, reproduced. On full-band content it buys 10–22 dB of imaging rejection AND
+            // halves the passband droop: linear was pulling the top harmonics down by 3.75 dB at C1.
+            // COST, measured (40 M reads, M-series): linear 2.527 ns, Catmull-Rom 2.924 ns — ×1.16,
+            // not the ~3× fb302 assumed. It is 0.4 ns per voice per sample.
+            //
+            // ⚠️ THIS CHANGES THE SOUND OF EVERY TABLE, legacy included. It is not bit-identical and
+            //    is not meant to be — it is a reconstruction fix, and the direction is measured.
+            // ⚠️ The C1 residual is NOT the interpolator: at C1 the mip carries 724 harmonics in a
+            //    2048-point frame, i.e. 2.8 samples per period of the top one. No 4-point kernel
+            //    fixes that; a longer frame at the top mip levels does. That change is deferred
+            //    (it moves the renderBlend/readCycle buffer contract into SynthVoice.h).
+            //
+            // Reads buf[i−1 … i+2] wrapped by the power-of-two mask, so a caller only has to
+            // provide kFrameSize samples — the same contract linear had.
+            constexpr int mask = kFrameSize - 1;
             const float p     = phase - std::floor (phase);
             const float pIdx  = p * (float) kFrameSize;
             const int   p0    = (int) pIdx;
-            const int   p1    = (p0 + 1) % kFrameSize;
-            const float pFrac = pIdx - (float) p0;
-            return buf[p0] + (buf[p1] - buf[p0]) * pFrac;
+            const float t     = pIdx - (float) p0;
+            const float a = buf[(p0 - 1) & mask];
+            const float b = buf[ p0      & mask];
+            const float c = buf[(p0 + 1) & mask];
+            const float d = buf[(p0 + 2) & mask];
+            return b + 0.5f * t * ((c - a) + t * ((2.0f * a - 5.0f * b + 4.0f * c - d)
+                                                + t * (3.0f * (b - c) + d - a)));
         }
 
         /** Direct mutable access — used by legacy factory methods only.
@@ -2082,6 +2454,300 @@ namespace tw
                 }
             }
             return spec;
+        }
+
+        // ══ TERRA — the fb530 enrichment bank (indices 30…45) ═══════════════════════════════
+        //  Every one of these is `terra::TableDesc` + a seed and NOTHING ELSE: 12–20 numbers.
+        //  Every one runs its harmonic loop to FrameSpec::kMaxHarmonics by construction (the
+        //  loop lives in terra::renderFrame and there is exactly one of it) — that is the ONE
+        //  LAW, and Tests/harmonic_ceiling_gate.py fails the build if a ceiling ever reappears.
+        //  ⚖️ Clean room: generated from a mathematical/physical description, never sampled,
+        //  traced or transcribed from anyone else's content.
+
+        /** TERRA 01 · Stack Saw — the analog super-stack. Frame 0 is a mathematically PURE saw
+         *  (resonance gain 0); the frame axis walks it vintage → modern by opening one additive
+         *  resonance from h 3 to h 52 while the odd/even imbalance and the VCO-drift grit settle. */
+        static WavetableSpec makeTerraStackSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA001u;
+            D.aLo0 = D.aHi0 = 6.0206;                            // frame 0 IS the exact 1/h saw law
+            D.aLo1 = D.aHi1 = 5.80;                              // frame 15 opens by 0.22 dB/oct
+            D.tilt0 = 0.60; D.tilt1 = 0.00;
+            D.grit0 = 0.55; D.grit1 = 0.25; D.gritCorr = 0.75;   // log-h correlated = stack beating, not dither
+            D.disp0 = 0.35; D.disp1 = 0.00;
+            D.scat0 = 0.10; D.scat1 = 0.02;
+            D.nRes = 1;
+            D.resH0[0] = 3.0;  D.resH1[0] = 85.0;
+            D.resG0[0] = 0.0;  D.resG1[0] = 3.20;
+            D.resQ0[0] = 0.85; D.resQ1[0] = 0.70;
+            return terra::build (D);
+        }
+
+        /** TERRA 02 · Drift — the same stack detuned and left running: the slope flattens, the
+         *  imbalance crosses from odd to even, and dispersion + scatter widen it into a chorus. */
+        static WavetableSpec makeTerraDriftSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA002u;
+            D.aLo0 = D.aHi0 = 6.0206; D.aLo1 = D.aHi1 = 5.40;
+            D.tilt0 = 0.00; D.tilt1 = -0.80;
+            D.grit0 = 0.80; D.grit1 = 2.20; D.gritCorr = 0.90;
+            D.disp0 = 0.00; D.disp1 = 0.90;
+            D.scat0 = 0.05; D.scat1 = 0.55;
+            D.nRes = 1;
+            D.resH0[0] = 8.0;  D.resH1[0] = 180.0;
+            D.resG0[0] = 0.60; D.resG1[0] = 3.20;
+            D.resQ0[0] = 1.10; D.resQ1[0] = 0.90;
+            return terra::build (D);
+        }
+
+        /** TERRA 03 · Pulse — a true duty morph, 0.50 → 0.02. The comb is FLOORED at −18 dB, so
+         *  the band stays full at every duty instead of collapsing into the ideal pulse's nulls. */
+        static WavetableSpec makeTerraPulseSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA003u;
+            D.aLo0 = D.aLo1 = D.aHi0 = D.aHi1 = 6.0206;
+            D.duty0 = 0.50; D.duty1 = 0.02;
+            D.grit0 = 0.35; D.grit1 = 0.35; D.gritCorr = 0.65;
+            D.disp0 = 0.10; D.disp1 = 0.00;
+            D.nRes = 1;
+            D.resH0[0] = 2.0;  D.resH1[0] = 24.0;
+            D.resG0[0] = 0.0;  D.resG1[0] = 1.20;
+            D.resQ0[0] = 1.00; D.resQ1[0] = 0.85;
+            return terra::build (D);
+        }
+
+        /** TERRA 04 · Hollow — a reed-class duty morph on a KNEED source: shallow under the knee,
+         *  steep above it, with the knee itself travelling up the harmonic series. */
+        static WavetableSpec makeTerraHollowSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA004u;
+            D.aLo0 = 3.20; D.aLo1 = 2.40;
+            D.aHi0 = 7.50; D.aHi1 = 6.20;
+            D.knee0 = 6.0; D.knee1 = 18.0;
+            D.duty0 = 0.34; D.duty1 = 0.08;
+            D.tilt0 = 0.90; D.tilt1 = 0.20;
+            D.grit0 = 0.50; D.grit1 = 0.50; D.gritCorr = 0.70;
+            D.disp0 = 0.20; D.disp1 = 0.05;
+            D.nRes = 1;
+            D.resH0[0] = 12.0; D.resH1[0] = 90.0;
+            D.resG0[0] = 1.00; D.resG1[0] = 3.00;
+            D.resQ0[0] = 0.70; D.resQ1[0] = 0.60;
+            return terra::build (D);
+        }
+
+        /** TERRA 05 · Vox — source–filter. A glottal source (−12 dB/oct under a knee at h≈4,
+         *  radiation-corrected to −6 above it) under FOUR additive formants that travel in
+         *  HARMONIC NUMBER, so the vowel tracks the note instead of shifting with pitch. */
+        static WavetableSpec makeTerraVoxSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA005u;
+            D.aLo0 = D.aLo1 = 12.00;
+            D.aHi0 = 6.0206; D.aHi1 = 5.20;
+            D.knee0 = D.knee1 = 4.0;
+            D.tilt0 = 0.30; D.tilt1 = 0.00;
+            D.grit0 = 0.35; D.grit1 = 0.35; D.gritCorr = 0.80;
+            D.disp0 = 0.15; D.disp1 = 0.05;
+            D.scat0 = 0.05; D.scat1 = 0.05;
+            D.nRes = 4;
+            D.resH0[0] =  5.0; D.resH1[0] =  3.0; D.resG0[0] = 5.00; D.resG1[0] =  8.50; D.resQ0[0] = 0.30; D.resQ1[0] = 0.36;
+            D.resH0[1] = 11.0; D.resH1[1] =  7.0; D.resG0[1] = 3.50; D.resG1[1] =  6.50; D.resQ0[1] = 0.28; D.resQ1[1] = 0.34;
+            D.resH0[2] = 26.0; D.resH1[2] = 34.0; D.resG0[2] = 2.50; D.resG1[2] =  5.00; D.resQ0[2] = 0.26; D.resQ1[2] = 0.32;
+            D.resH0[3] = 42.0; D.resH1[3] = 96.0; D.resG0[3] = 1.60; D.resG1[3] =  4.00; D.resQ0[3] = 0.30; D.resQ1[3] = 0.38;
+            return terra::build (D);
+        }
+
+        /** TERRA 06 · Choir — many voices of the Vox source: wider, lower-Q formants, correlated
+         *  grit and heavy phase scatter, so the frame axis opens from one throat into a section. */
+        static WavetableSpec makeTerraChoirSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA006u;
+            D.aLo0 = 10.00; D.aLo1 = 8.00;
+            D.aHi0 =  5.60; D.aHi1 = 4.40;
+            D.knee0 = 3.0;  D.knee1 = 6.0;
+            D.grit0 = 0.90; D.grit1 = 1.80; D.gritCorr = 0.85;
+            D.disp0 = 0.20; D.disp1 = 0.20;
+            D.scat0 = 0.25; D.scat1 = 0.70;
+            D.nRes = 4;
+            D.resH0[0] =  4.0; D.resH1[0] =  6.0; D.resG0[0] = 4.00; D.resG1[0] = 5.00; D.resQ0[0] = 0.55; D.resQ1[0] = 0.55;
+            D.resH0[1] =  9.0; D.resH1[1] = 14.0; D.resG0[1] = 3.00; D.resG1[1] = 4.00; D.resQ0[1] = 0.50; D.resQ1[1] = 0.50;
+            D.resH0[2] = 22.0; D.resH1[2] = 30.0; D.resG0[2] = 2.20; D.resG1[2] = 3.00; D.resQ0[2] = 0.45; D.resQ1[2] = 0.45;
+            D.resH0[3] = 55.0; D.resH1[3] = 210.0; D.resG0[3] = 1.60; D.resG1[3] = 4.20; D.resQ0[3] = 0.50; D.resQ1[3] = 0.58;
+            return terra::build (D);
+        }
+
+        /** TERRA 07 · Bell — Fletcher's stiff string on the PARTIAL path. Mode n sits at
+         *  n·f0·√(1 + B·n²); B sweeps 3e−5 → 3e−4 across the frame axis, i.e. string → bell. */
+        static WavetableSpec makeTerraBellSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA007u;
+            D.aLo0 = D.aHi0 = 7.50; D.aLo1 = D.aHi1 = 4.30;
+            D.grit0 = 0.60; D.grit1 = 0.60; D.gritCorr = 0.50;
+            D.disp0 = 0.10; D.disp1 = 0.10;
+            D.scat0 = 0.40; D.scat1 = 1.20;
+            D.nRes = 2;
+            D.resH0[0] =  5.0; D.resH1[0] =  30.0; D.resG0[0] = 1.50; D.resG1[0] = 4.00; D.resQ0[0] = 0.60; D.resQ1[0] = 0.60;
+            D.resH0[1] = 17.0; D.resH1[1] = 160.0; D.resG0[1] = 0.80; D.resG1[1] = 3.20; D.resQ0[1] = 0.50; D.resQ1[1] = 0.55;
+            return terra::buildStiff (D, 3.0e-5, 3.0e-4);
+        }
+
+        /** TERRA 08 · Bar — the same physics driven past a string: B 3e−4 → 9e−4 is bar and plate
+         *  territory, where the modes stretch far enough to read as a metal sheet. */
+        static WavetableSpec makeTerraBarSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA008u;
+            D.aLo0 = D.aHi0 = 6.20; D.aLo1 = D.aHi1 = 3.60;
+            D.grit0 = 0.80; D.grit1 = 0.80; D.gritCorr = 0.40;
+            D.scat0 = 0.60; D.scat1 = 1.60;
+            D.nRes = 2;
+            D.resH0[0] =  9.0; D.resH1[0] =  60.0; D.resG0[0] = 2.00; D.resG1[0] = 3.60; D.resQ0[0] = 0.70; D.resQ1[0] = 0.70;
+            D.resH0[1] = 40.0; D.resH1[1] = 260.0; D.resG0[1] = 0.60; D.resG1[1] = 3.00; D.resQ0[1] = 0.60; D.resQ1[1] = 0.65;
+            return terra::buildStiff (D, 3.0e-4, 9.0e-4);
+        }
+
+        /** TERRA 09 · Fold — a real TIME-DOMAIN triangle wavefolder, run inside an 8×-oversampled
+         *  cycle and transformed back. The source is a steep (triangle-class) spectrum so the fold
+         *  itself is what generates the band; `sym` biases the input across the frame axis, which
+         *  breaks the odd-only symmetry and lets the even harmonics in. */
+        static WavetableSpec makeTerraFoldSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA009u;
+            D.aLo0 = D.aHi0 = 10.00; D.aLo1 = D.aHi1 = 6.80;
+            D.grit0 = 0.20; D.grit1 = 0.20; D.gritCorr = 0.60;
+            // One travelling resonance in the SOURCE. A folder's transfer curve puts a deep null
+            // wherever the reflection count changes; measured, frame 14 dug a 19.6 dB hole at h9 on
+            // every note. A body bump under the fold fills it without touching the fold itself —
+            // which is also what a real folder does, since one never sits alone in a patch.
+            D.nRes = 1;
+            D.resH0[0] = 6.0; D.resH1[0] = 60.0; D.resG0[0] = 1.00; D.resG1[0] = 2.20; D.resQ0[0] = 0.85; D.resQ1[0] = 0.85;
+            return terra::buildFolded (D, /*drive*/ 2.4, 10.5, /*sym*/ 0.0, 0.35);
+        }
+
+        /** TERRA 10 · Sweep — "a filter without a filter": a saw source under ONE narrow additive
+         *  resonance whose centre travels h 2 → 400. Because the peak ADDS, the band is full at
+         *  every position instead of being cut away behind the peak. */
+        static WavetableSpec makeTerraSweepSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Au;
+            D.aLo0 = D.aLo1 = D.aHi0 = D.aHi1 = 6.0206;
+            D.grit0 = 0.30; D.grit1 = 0.30; D.gritCorr = 0.60;
+            D.disp0 = 0.10; D.disp1 = 0.10;
+            D.nRes = 2;
+            D.resH0[0] = 2.0; D.resH1[0] = 400.0; D.resG0[0] = 3.00; D.resG1[0] = 9.00; D.resQ0[0] = 0.30; D.resQ1[0] = 0.22;
+            D.resH0[1] = 3.0; D.resH1[1] =   3.0; D.resG0[1] = 0.80; D.resG1[1] = 0.80; D.resQ0[1] = 1.20; D.resQ1[1] = 1.20;
+            return terra::build (D);
+        }
+
+        /** TERRA 11 · Cloud — the DENSE-AND-WIDE ground. A knee at h≈2 then a very shallow second
+         *  slope, so hundreds of partials sit within 30 dB of each other. Judge this one by Neff
+         *  (energy-weighted count), never by N60: it is a density table, not a saw. */
+        static WavetableSpec makeTerraCloudSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Bu;
+            D.aLo0 = D.aLo1 = 6.00;
+            D.aHi0 = 1.90; D.aHi1 = 1.40;
+            D.knee0 = D.knee1 = 2.0;
+            D.grit0 = 2.50; D.grit1 = 4.00; D.gritCorr = 0.35;
+            D.disp0 = 0.60; D.disp1 = 1.40;
+            D.scat0 = 1.20; D.scat1 = 2.60;
+            return terra::build (D);
+        }
+
+        /** TERRA 12 · Dust — Cloud pushed past music: a nearly flat top slope, white grit and
+         *  full phase scatter. The odd/even tilt crosses zero mid-axis, so the character inverts. */
+        static WavetableSpec makeTerraDustSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Cu;
+            D.aLo0 = D.aLo1 = 5.00;
+            D.aHi0 = 2.60; D.aHi1 = 1.20;
+            D.knee0 = 2.0; D.knee1 = 3.0;
+            D.tilt0 = -0.50; D.tilt1 = 0.50;
+            D.grit0 = 4.00; D.grit1 = 7.00; D.gritCorr = 0.20;
+            D.disp0 = 1.00; D.disp1 = 2.20;
+            D.scat0 = 2.00; D.scat1 = 3.10;
+            return terra::build (D);
+        }
+
+        /** TERRA 13 · Bow — bow pressure as the frame axis. The slip comb (duty 0.22 → 0.07) is
+         *  the stick-slip period; dispersion and the odd/even tilt fall with pressure the way a
+         *  real bowed string's do, so the axis reads as digging in rather than as a filter. */
+        static WavetableSpec makeTerraBowSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Du;
+            D.aLo0 = D.aHi0 = 7.40; D.aLo1 = D.aHi1 = 4.20;
+            D.duty0 = 0.22; D.duty1 = 0.07;
+            D.tilt0 = 0.60; D.tilt1 = -0.40;
+            D.grit0 = 0.40; D.grit1 = 1.10; D.gritCorr = 0.70;
+            D.disp0 = 0.50; D.disp1 = 0.05;
+            D.scat0 = 0.15; D.scat1 = 0.35;
+            D.nRes = 1;
+            D.resH0[0] = 4.0; D.resH1[0] = 30.0; D.resG0[0] = 1.20; D.resG1[0] = 2.60; D.resQ0[0] = 0.80; D.resQ1[0] = 0.80;
+            return terra::build (D);
+        }
+
+        /** TERRA 14 · Reed — a blown pipe: a near-square comb (duty 0.50 → 0.30) with a strong ODD
+         *  tilt that decays as the pipe overblows and the even harmonics arrive. */
+        static WavetableSpec makeTerraReedSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Eu;
+            D.aLo0 = D.aHi0 = 7.00; D.aLo1 = D.aHi1 = 4.80;
+            D.duty0 = 0.50; D.duty1 = 0.30;
+            D.tilt0 = 1.60; D.tilt1 = 0.40;
+            D.grit0 = 0.35; D.grit1 = 0.80; D.gritCorr = 0.60;
+            D.disp0 = 0.20; D.disp1 = 0.20;
+            D.scat0 = 0.08; D.scat1 = 0.08;
+            D.nRes = 1;
+            D.resH0[0] = 8.0; D.resH1[0] = 45.0; D.resG0[0] = 1.50; D.resG1[0] = 3.20; D.resQ0[0] = 0.65; D.resQ1[0] = 0.65;
+            return terra::build (D);
+        }
+
+        /** TERRA 15 · Glass — the bright end. A shallow source with almost no grit and two wide
+         *  resonances that climb into the top of the band, so it stays clean while it opens. */
+        static WavetableSpec makeTerraGlassSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA00Fu;
+            D.aLo0 = D.aHi0 = 4.40; D.aLo1 = D.aHi1 = 3.40;
+            D.grit0 = 0.15; D.grit1 = 0.40; D.gritCorr = 0.60;
+            D.disp0 = 0.05; D.disp1 = 0.05;
+            D.scat0 = 0.03; D.scat1 = 0.12;
+            D.nRes = 2;
+            D.resH0[0] = 20.0; D.resH1[0] = 140.0; D.resG0[0] = 2.00; D.resG1[0] = 4.50; D.resQ0[0] = 0.55; D.resQ1[0] = 0.55;
+            D.resH0[1] = 60.0; D.resH1[1] = 380.0; D.resG0[1] = 1.40; D.resG1[1] = 3.00; D.resQ0[1] = 0.50; D.resQ1[1] = 0.50;
+            return terra::build (D);
+        }
+
+        /** TERRA 16 · Growl — the aggressive one. A shallow bottom slope under a travelling knee
+         *  gives a fat low end; a high-gain low resonance sweeping h 2 → 9 is the growl itself;
+         *  the odd/even tilt crosses zero so the timbre inverts across the axis. */
+        static WavetableSpec makeTerraGrowlSpec()
+        {
+            terra::TableDesc D;
+            D.seed = 0x7EBBA010u;
+            D.aLo0 = 2.60; D.aLo1 = 1.80;
+            D.aHi0 = 6.60; D.aHi1 = 5.20;
+            D.knee0 = 3.0; D.knee1 = 14.0;
+            D.tilt0 = -1.20; D.tilt1 = 1.20;
+            D.grit0 = 1.40; D.grit1 = 2.60; D.gritCorr = 0.55;
+            D.disp0 = 0.25; D.disp1 = 0.80;
+            D.scat0 = 0.20; D.scat1 = 0.80;
+            D.nRes = 2;
+            D.resH0[0] =  2.0; D.resH1[0] =   9.0; D.resG0[0] = 3.50; D.resG1[0] = 6.00; D.resQ0[0] = 0.45; D.resQ1[0] = 0.45;
+            D.resH0[1] = 30.0; D.resH1[1] = 150.0; D.resG0[1] = 1.00; D.resG1[1] = 2.60; D.resQ0[1] = 0.70; D.resQ1[1] = 0.70;
+            return terra::build (D);
         }
 
     private:
