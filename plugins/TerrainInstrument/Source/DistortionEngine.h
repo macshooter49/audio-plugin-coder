@@ -288,6 +288,30 @@ public:
                                                            // SlewClip makeup ×(0.75+0.5d)) stepped on a
                                                            // knob yank — measured 4.3× click floor. The
                                                            // control head glides drive01_ at smth_.
+        // ⚠️🔑 fb522 LANE D — DO NOT "FIX" THE DRIVE FLOOR HERE. THE CONSTRAINT IS ALGEBRAIC.
+        // A lane proposed lowering the floor so that Drive 0 is transparent (it is not: at a -12 dBFS
+        // engine input Hard Clip measures 8.04% THD at Drive 0). That change was BUILT AND MEASURED on
+        // this header (scratchpad/laneD/lvl0.cpp) and REVERTED, because the two goals are mutually
+        // exclusive under a fixed output trim, and the proof is one line of algebra:
+        //
+        //     let G = pre-shaper gain at Drive 0, T = the post-trim (see `y *= (1.0f / kPreGain)`).
+        //     The shaper is bounded to +-1, so:
+        //        unity LEVEL at Drive 0  <=>  G * T == 1        (the fb321 unity-headroom law)
+        //        TRANSPARENCY at Drive 0 <=>  busPeak * G < 1   <=>  busPeak < T
+        //
+        //     Both hold only when the bus sits BELOW the output ceiling T. Today T = 1/kPreGain =
+        //     -12.04 dBFS, and the engine is transparent at Drive 0 at every level up to about
+        //     -14 dBFS (measured: THD 0.0004% at -14, 0.0018% at -12, 8.04% by -12 with the AU's
+        //     default Knee 0.65 in play). THE ENGINE IS CORRECTLY CALIBRATED FOR ITS OWN STATED BUS
+        //     REFERENCE (refLevel_ = 0.05 = -26.02 dBFS), where Drive 0 measures 0.0001% THD.
+        //
+        // So the 8% is NOT a fault in this file: the FX bus is presenting -12 to -15 dBFS where this
+        // engine's design reference is -26 dBFS. Lowering the floor here buys transparency and PAYS
+        // -12.08 dB of level the moment the device is switched on — measured, and exactly the
+        // regression fb321 was created to prevent. The real repair is the bus staging (outside this
+        // header) or a deliberate, preset-visible move of BOTH T and the floor together. Whoever takes
+        // that on: move `1.0f / kPreGain` at the post-trim and this floor in ONE commit, or the
+        // level jumps. That pair is a lockstep just like Shapers.h:13's kFoldPre.
         if (family() == FAM_FOLD) driveT_ = 1.0f + t * 62.0f;
         else                      driveT_ = std::pow (10.0f, maxDriveDb() * std::pow (t, 0.8f) * 0.05f);
     }
@@ -637,12 +661,30 @@ private:
         }
 
         // ── the nonlinearity ─────────────────────────────────────────────────
-        // 🔑 MEASURED CALIBRATION (harness dst_harness.cpp, driven at the REAL -26 dBFS bus level).
-        // kPreGain was 4.0 and Hard Clip then measured THD = 0.00% for the FIRST 20% OF TRAVEL — the
-        // textbook dead first third, because a hard clipper below threshold does literally nothing and
-        // 0.05 * 4 * g only reaches the knee at g ≈ 4.6. At 8.0 the knee is reached by ~10% travel, so
-        // every degree of the knob is alive on the razor mode too. Soft Clip is unaffected at the top
-        // (bounded) and merely starts a touch warmer.
+        // 🔑 CALIBRATION — READ kPreGain'S DEFINITION (bottom of this file), NOT THIS COMMENT, FOR THE
+        // LIVE VALUE. It is 4.0f. An older revision of this block argued for 8.0f and was left behind
+        // when fb321 lowered it 8.0 -> 4.0 on Max's field report ("I can't turn the drive up to 5-10%
+        // without it sounding like 100%"). That stale text cost a later measurement lane a proposal to
+        // set kPreGain to 0.25 — a -24 dB error derived from a baseline that had not existed for
+        // months. The number lives at exactly one site; this comment explains it and never restates it.
+        //
+        // 🔑 WHERE THE PRE-SHAPER GAIN ACTUALLY COMES FROM (fb522 lane D, measured on this header via
+        // scratchpad/laneD/probe1.cpp — the offline harness compiles THIS FILE verbatim, fb283 law):
+        //     total pre-shaper gain (dB) = 20*log10(kPreGain) + driveDb(t)
+        // With Knee = 0 (exact razor, kneePre inactive) the clipping onset is a closed form: the rail
+        // is touched when inputPeak * kPreGain * driveGain = 1. At Drive 0 that predicts an onset at
+        // -20*log10(kPreGain) = -12.04 dBFS, and the harness measures the engine transparent (gain
+        // -0.04 dB, THD 0.002%) at -12.00 dBFS and clipping hard by -6.00 dBFS. Model and measurement
+        // agree to 0.04 dB: THERE IS NO UNACCOUNTED GAIN STAGE IN THIS PATH. inEnv_ is NOT an input
+        // normaliser — it scales biasE_ and gates feedback only (see the fb345 grid-leak notes above)
+        // — and the real auto-gain (autoZ_/autoOn_) is OFF by default and sits AFTER the shaper.
+        //
+        // ⚠️ MEASURE AT THE ENGINE'S INPUT NODE, NOT AT THE PLUGIN'S OUTPUT. Between this engine and
+        // the plugin output sits the master chain including Output Gain (-12..+12 dB). A lane that
+        // level-matched on the plugin's BYPASSED OUTPUT peak with Output Gain at max reported the
+        // engine as ~30 dB hotter than Serum's; measured, the engine's own input sat ~6.5 dB BELOW the
+        // output peak it was matched on, and the remainder was the drive TAPER (see setDrive), not a
+        // constant. Two different quantities, one number — do not fold them together again.
         //
         // BIAS IS APPLIED PRE-DRIVE, not post. Post-drive (`x*P*g + b`) the offset is swamped by the
         // driven signal — measured even/odd swing was only 0.000 -> 0.411 against a >4 gate. Pre-drive
@@ -914,8 +956,26 @@ private:
             // fucked up"). Correct law: knob up ⇒ the slope ceiling comes DOWN, exponentially:
             // 0 = off · default grazes only the razor tips · top = total sludge (no-playing-safe).
             // fb342 — pow hoisted (moved-knob cache; the fs_ factor is baked in, flush() re-keys it)
+            // ── fb522 lane D — THE EXPONENT IS SQUARED. Measured, the old `0.0028^p7` put the shared
+            // 0.5 default at sU = 0.0185, which does NOT "graze the razor tips" (the line above): it
+            // clamps the whole waveform. A slew limiter driven past its ceiling emits a fixed-slope
+            // triangle whose shape is set by sU ALONE, so Drive stops mattering entirely. That is the
+            // measured "Diode 2's knob runs BACKWARDS" AND the measured "Diode 2 is too dull" — one
+            // bug, two symptoms (scratchpad/laneD/d2b.cpp, d2c.cpp, sine 250 Hz, -15 dBFS in):
+            //     P7 0.00 : THD 18.0 -> 32.2 -> 44.7 -> 48.0 % across Drive, bw99 4250 Hz  (healthy)
+            //     P7 0.50 : THD 18.0 -> 8.7 -> 8.3 -> 8.65 % — FALLS, then frozen; bw99  250 Hz
+            // Squaring the exponent moves the middle of the knob and PINS BOTH ENDS: p7 = 0 still
+            // gives 0.35 (off) and p7 = 1 still gives the identical 0.00098 sludge floor, so the
+            // no-playing-safe ceiling is untouched and only the default's position changes. The
+            // shared 0.5 default now lands at sU = 0.0805, i.e. where the fb325 comment always said
+            // it should be — edges rounded, body intact.
+            // ⚠️ KNOWN AND MEASURED, NOT FIXED HERE: above p7 ~ 0.8 the tone freezes (THD 10.67 %,
+            // bw99 500 Hz at every point) and only the LEVEL keeps falling, to -17.7 dB at p7 = 1.
+            // That is what a slew limiter does once it owns the waveform, and un-plateauing it means
+            // giving the ceiling a signal-tracking term (the fb345 grid-leak treatment) — a bigger,
+            // preset-visible change than this lane can certify without a build.
             if (std::fabs (pC_[6] - dslP_) > 1.0e-6f)
-            { dslP_ = pC_[6]; dslC_ = 0.35f * std::pow (0.0028f, pC_[6]) * (48000.0f / (float) fs_); }
+            { dslP_ = pC_[6]; dslC_ = 0.35f * std::pow (0.0028f, pC_[6] * pC_[6]) * (48000.0f / (float) fs_); }
             const float sU = dslC_;
             yA = slewZ_[c] + juce::jlimit (-sU, sU, yA - slewZ_[c]); slewZ_[c] = yA;
             if (os2) { yB = slewZ_[c] + juce::jlimit (-sU, sU, yB - slewZ_[c]); slewZ_[c] = yB; }

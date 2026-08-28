@@ -201,6 +201,30 @@ Same for the `.component`. If pluginval `Open plugin (cold)` fails with exit 137
   fully wet; "loud" = LOUD). No control whose effect you can't perceive; calibrate range/curve so
   the full sweep reads (not unusable at 2–10%, but bold at the top). Serum 2 is the bar. Full text:
   memory `feedback-dramaticism-parameters-hardrule`.
+- **🏊‍♂️🦈 THE LIFEGUARD LAW (Max, PERMANENT — 2026-08-27).** *"I'm a lifeguard and I tell somebody, hey,
+  you shouldn't go past the deep end because there's sharks out there. They could stay in the low and the
+  mid-end and have an amazing swim. But what if somebody's like, fuck them sharks, I'm going out to the deep
+  end… it's on them. It's gonna sound loud, big, disgusting sometimes, but that's okay, because it's on them.
+  **Which means my 100% shouldn't be 50.**"* Three rules, in priority order:
+  **(1) THE KNOB'S 100% MUST BE THE ALGORITHM'S 100%.** The failure is not timidity in the abstract — it is
+  shipping a control whose maximum delivers what its midpoint could have. **UNUSED HEADROOM IS A DEFECT, in
+  the same class as a dead knob.**
+  **(2) IT IS MEASURABLE — the EXPOSURE RATIO** = what the knob delivers at max ÷ what the engine can still
+  deliver before the mechanism stops meaning anything. Worked example (fb523, measured): Terrain's FM knob
+  reached β=33.95 at C3 / 33.87 at C1 while the engine could reach β≈182 / 732 **with zero aliasing** ⇒
+  **19% exposure at C3, 5% at C1.** That is why "our FM is mathematically correct" (10/10 Bessel nulls on
+  theory) was never the same as "our FM is finished". Audit every parameter for EXPOSURE, not just movement.
+  **(3) THE LOW END IS THE OTHER HALF OF THE JOB.** 10–50% must stay clean, musical and useful — dirt at 15%
+  is a defect because it removes the user's ability to be tasteful. So this is always a **TAPER** problem: one
+  sweep from genuinely clean to genuinely violent. **Never a limiter, never a clamp, never a "safe" ceiling.**
+  ⚠️ Corollary: **fold-back is the product, not a failure** — at 100% FM the reference puts 73.11% of its
+  energy off the harmonic grid (ours 4.52%), and that is the destruction being asked for. NEVER cite an
+  aliasing percentage as a reason to stop, and never write "needs oversampling" as a blocker on raising a
+  ceiling — oversampling buys CLEAN loudness and sometimes the dirty version IS the product.
+  ⚠️ But **a clamp can be part of the sound — MEASURE before deleting one**: fb523 found RM's `jlimit(-6,6)`
+  was actively clipping at full depth, so removing it changed the character. A clamp is either a safety net to
+  delete or an accidental distortion stage that became part of the instrument. Full text: memory
+  `feedback-no-playing-safe-max-ranges-hardrule`.
 - **🔬 PERCEPTUAL TEST HARNESS (Max, PERMANENT — the fb283 law).** EVERY parameter you build or change is
   validated with an OFFLINE PERCEPTUAL harness that tracks **HEARING** — not a visual before/after, not
   sample-difference. Measure **phase-INDEPENDENT** metrics that correlate with the ear: **magnitude-spectrum

@@ -212,6 +212,22 @@ enum class ModDest : int
     //    as std::atomic<float>*. Growing NumDests without narrowing this is a crash, not a bug.
     SpecLoA = FxModEnd, SpecLoB, SpecLoC, SpecLoD,
     SpecHiA, SpecHiB, SpecHiC, SpecHiD,
+    // ── fb522 · LANE P — THE OVERPASS DESTS. Appended at the TAIL for the same reason fb467's
+    //    window edges were: saved projects store destination INTS, so inserting anywhere below
+    //    this line silently re-points every existing route. 24 dests = 6 controls x 4 oscs.
+    //    Every one of them takes the generated Linear01 x 1.0 row from makeDestInfo()'s tail loop,
+    //    which is correct because every read site normalises its base into 0..1 (or into the
+    //    parameter's OWN normalised space via modP) before the sum is added — see the block
+    //    comment on that loop.
+    //    UniRange / PhaseOff ride modP (the param's NormalisableRange): URANGE is EXPONENTIAL over
+    //    5..4800 cents and PhaseOff is 0..360 deg, so a route must move them by RATIO / by fraction
+    //    of the knob, never by a flat +-1 in raw units.
+    UniRangeA, UniRangeB, UniRangeC, UniRangeD,       // unison detune SCALE, cents (exponential param)
+    UniWarpA,  UniWarpB,  UniWarpC,  UniWarpD,        // unison WARP SPREAD, bipolar -1..+1
+    WarpVarA,  WarpVarB,  WarpVarC,  WarpVarD,        // warp slot 1 second dimension, 0..1
+    Warp2VarA, Warp2VarB, Warp2VarC, Warp2VarD,       // warp slot 2 second dimension, 0..1
+    PhaseOffA, PhaseOffB, PhaseOffC, PhaseOffD,       // note-on phase offset, degrees (via modP)
+    PhaseAmtA, PhaseAmtB, PhaseAmtC, PhaseAmtD,       // phase-mode depth, 0..1
     NumDests
 };
 
@@ -221,8 +237,13 @@ static_assert ((int) ModDest::FxModBase == 694,
     "fb453 - the JS mirror hardcodes var FXMOD_BASE=694 (index.html); the rack's 1,152 routes are stored as ints in saved projects");
 static_assert ((int) ModDest::FxModEnd == 1846,
     "fb467 - the rack block ends at 1846 and the JS fxModIsDest() derives that bound from FXMOD_BASE+16*6*12; anything appended must start HERE");
-static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850 && (int) ModDest::NumDests == 1854,
+static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850,
     "fb467 - index.html's KNOBDEST hardcodes SPECTRAL_LO=1846 / SPECTRAL_HI=1850; update BOTH or a saved window route lands on the wrong destination");
+static_assert ((int) ModDest::UniRangeA == 1854 && (int) ModDest::UniWarpA  == 1858
+            && (int) ModDest::WarpVarA  == 1862 && (int) ModDest::Warp2VarA == 1866
+            && (int) ModDest::PhaseOffA == 1870 && (int) ModDest::PhaseAmtA == 1874
+            && (int) ModDest::NumDests  == 1878,
+    "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended");
 
 inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
 inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
@@ -952,10 +973,13 @@ inline constexpr std::array<DestInfo, (int) ModDest::NumDests> makeDestInfo() no
     for (int i = 0; i < (int) ModDest::FxModBase; ++i) a[(size_t) i] = kDestInfoBase[i];
     for (int i = (int) ModDest::FxModBase; i < (int) ModDest::FxModEnd; ++i)
         a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };     // the 1,152 rack knobs
-    // fb467 — the 8 window edges. Linear01 in the PARAM'S OWN normalised space: the publish uses
-    // fb193's modP(), which converts through the parameter's NormalisableRange, so a route moves the
-    // edge by RATIO (what a log-mapped harmonic index should do) instead of by a flat count of
-    // harmonics that would be inaudible at the bottom and enormous at the top.
+    // fb467 — the 8 window edges, and fb522 — the 24 overpass dests. Linear01 in the PARAM'S OWN
+    // normalised space: the publish uses fb193's modP(), which converts through the parameter's
+    // NormalisableRange, so a route moves the edge by RATIO (what a log-mapped harmonic index or an
+    // exponential cents range should do) instead of by a flat count of harmonics that would be
+    // inaudible at the bottom and enormous at the top. The fb522 rows that are plain percentages
+    // (UniWarp/WarpVar/Warp2Var/PhaseAmt) are normalised by their read site's /100.0f instead, which
+    // lands in the same 0..1 (or -1..+1) space — so one generated row is right for all 32.
     for (int i = (int) ModDest::FxModEnd; i < (int) ModDest::NumDests; ++i)
         a[(size_t) i] = DestInfo { ModDomain::Linear01, 1.0f };
     return a;

@@ -581,7 +581,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_UNISON[]        = "SYN_OSC_A_UNISON";         // int 1..16 voices (per-OSC)
     constexpr char SYN_OSC_A_UDETUNE[]       = "SYN_OSC_A_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_A_UBLEND[]        = "SYN_OSC_A_UBLEND";         // float 0..100 % centre-vs-outer balance
-    constexpr char SYN_OSC_A_UWIDTH[]        = "SYN_OSC_A_UWIDTH";         // float 0..100 % stereo spread
+    constexpr char SYN_OSC_A_UWIDTH[]        = "SYN_OSC_A_UWIDTH";         // fb522 — float -100..+100 % stereo spread, default +50 (WAS 0..100/+50; the denormalised value is unchanged, only the normalised half it sits in)
 
     constexpr char SYN_OSC_B_SPECTRAL_TYPE[] = "SYN_OSC_B_SPECTRAL_TYPE";  // choice {0=NONE}
     constexpr char SYN_OSC_B_SPECTRAL_AMT[]  = "SYN_OSC_B_SPECTRAL_AMT";   // float 0..1
@@ -604,7 +604,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_B_UNISON[]        = "SYN_OSC_B_UNISON";         // int 1..16 voices (per-OSC)
     constexpr char SYN_OSC_B_UDETUNE[]       = "SYN_OSC_B_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_B_UBLEND[]        = "SYN_OSC_B_UBLEND";         // float 0..100 % centre-vs-outer balance
-    constexpr char SYN_OSC_B_UWIDTH[]        = "SYN_OSC_B_UWIDTH";         // float 0..100 % stereo spread
+    constexpr char SYN_OSC_B_UWIDTH[]        = "SYN_OSC_B_UWIDTH";         // fb522 — float -100..+100 % stereo spread, default +50 (WAS 0..100/+50; the denormalised value is unchanged, only the normalised half it sits in)
     // ── OSC C + D chassis ids (4-osc) — mirror OSC B ──
     constexpr char SYN_OSC_C_ENGINE[]      = "SYN_OSC_C_ENGINE";       // enum 0..5
     constexpr char SYN_OSC_C_OCT[]         = "SYN_OSC_C_OCT";          // int -3..+3
@@ -642,7 +642,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_C_UNISON[]        = "SYN_OSC_C_UNISON";         // int 1..16 voices (per-OSC)
     constexpr char SYN_OSC_C_UDETUNE[]       = "SYN_OSC_C_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_C_UBLEND[]        = "SYN_OSC_C_UBLEND";         // float 0..100 % centre-vs-outer balance
-    constexpr char SYN_OSC_C_UWIDTH[]        = "SYN_OSC_C_UWIDTH";         // float 0..100 % stereo spread
+    constexpr char SYN_OSC_C_UWIDTH[]        = "SYN_OSC_C_UWIDTH";         // fb522 — float -100..+100 % stereo spread, default +50 (WAS 0..100/+50; the denormalised value is unchanged, only the normalised half it sits in)
     constexpr char SYN_OSC_D_ENGINE[]      = "SYN_OSC_D_ENGINE";       // enum 0..5
     constexpr char SYN_OSC_D_OCT[]         = "SYN_OSC_D_OCT";          // int -3..+3
     constexpr char SYN_OSC_D_SEMI[]        = "SYN_OSC_D_SEMI";         // int -12..+12
@@ -679,7 +679,64 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_UNISON[]        = "SYN_OSC_D_UNISON";         // int 1..16 voices (per-OSC)
     constexpr char SYN_OSC_D_UDETUNE[]       = "SYN_OSC_D_UDETUNE";        // float 0..100 % pitch fan
     constexpr char SYN_OSC_D_UBLEND[]        = "SYN_OSC_D_UBLEND";         // float 0..100 % centre-vs-outer balance
-    constexpr char SYN_OSC_D_UWIDTH[]        = "SYN_OSC_D_UWIDTH";         // float 0..100 % stereo spread
+    constexpr char SYN_OSC_D_UWIDTH[]        = "SYN_OSC_D_UWIDTH";         // fb522 — float -100..+100 % stereo spread, default +50 (WAS 0..100/+50; the denormalised value is unchanged, only the normalised half it sits in)
+
+    // ════════ fb522 · LANE P — THE OVERPASS PARAMS (unison range/warp/stack · warp VAR · phase) ════════
+    //  Every one of these defaults to TODAY'S BEHAVIOUR, so a patch saved before this wave renders
+    //  bit-identically until the user moves the knob. That is the whole point of the defaults below —
+    //  do not "improve" one without a version-4 migration.
+    //
+    //  URANGE  float 5..4800 cents, default 50.0, EXPONENTIAL (cents = 5 * 960^t, a custom
+    //          NormalisableRange lambda pair — NOT a JUCE power skew, which is a power curve on the
+    //          LINEAR span and would not give equal cents-ratio per knob degree).
+    //          🔑 default 50.0 EXACTLY reproduces SynthVoice.h's kUniMaxDetuneCents = 50.0f (verified
+    //          at SynthVoice.h:6217), which is the hard-coded constant it replaces. t(50) =
+    //          ln(10)/ln(960) = 0.335313 — see the note in createParameterLayout.
+    //  UWARP   float -100..+100 %, default 0.0 — unison WARP SPREAD (fans warp amount across the
+    //          unison sines). 0 = every sine gets the same warp = today.
+    //  USTACK  choice(9), default 0 = off — the unison interval stack, measured from Serum 2's
+    //          "A Uni Stack" (param id 1000025, serum2-curated.md §4). Option 0 is off, so default
+    //          = today. ⚠️ fb470: a stack mode that falls into a default branch is SILENT — Lane V
+    //          must switch exhaustively, never `default: break`.
+    //  WVAR / W2VAR  float 0..100 %, default 0.0 — the SECOND DIMENSION of warp slots 1 and 2.
+    //          These exist so the non-invertible ceiling raises (RM modulator drive, Rectify
+    //          pre-gain, Mirror fold count) ride a NEW knob that defaults to 0 instead of changing
+    //          the meaning of a stored WARP_AMOUNT. At 0 the render must be bit-identical.
+    //  PHASE      float 0..360 degrees, default 0.0 — per-osc note-on phase offset. 0 = today.
+    //  PHASE_AMT  float 0..100 %, default 100.0 — scales RANDOM's randomisation and SPREAD's fan.
+    //          100 = full, which is what resolvePhase already does unscaled, so 100 = today.
+    //  ⚠️ SYN_OSC_x_PHASE_MODE is NOT redeclared here — it already exists above (574/597/635/672)
+    //     and its ID is FROZEN. fb522 changes only its REGISTERED DEFAULT, 2 (Random) -> 1 (Free),
+    //     because the DSP has silently forced 1 since 2026-07-09 and every stored 2 in the library
+    //     has never been heard. See migrateBlobToVersion3() in PluginProcessor.cpp.
+    constexpr char SYN_OSC_A_URANGE[]    = "SYN_OSC_A_URANGE";     // float 5..4800 cents, def 50.0, exponential
+    constexpr char SYN_OSC_A_UWARP[]     = "SYN_OSC_A_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_A_USTACK[]    = "SYN_OSC_A_USTACK";     // choice(9), def 0 = off
+    constexpr char SYN_OSC_A_WVAR[]      = "SYN_OSC_A_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
+    constexpr char SYN_OSC_A_W2VAR[]     = "SYN_OSC_A_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
+    constexpr char SYN_OSC_A_PHASE[]     = "SYN_OSC_A_PHASE";      // float 0..360 deg, def 0.0
+    constexpr char SYN_OSC_A_PHASE_AMT[] = "SYN_OSC_A_PHASE_AMT";  // float 0..100 %, def 100.0
+    constexpr char SYN_OSC_B_URANGE[]    = "SYN_OSC_B_URANGE";     // float 5..4800 cents, def 50.0, exponential
+    constexpr char SYN_OSC_B_UWARP[]     = "SYN_OSC_B_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_B_USTACK[]    = "SYN_OSC_B_USTACK";     // choice(9), def 0 = off
+    constexpr char SYN_OSC_B_WVAR[]      = "SYN_OSC_B_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
+    constexpr char SYN_OSC_B_W2VAR[]     = "SYN_OSC_B_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
+    constexpr char SYN_OSC_B_PHASE[]     = "SYN_OSC_B_PHASE";      // float 0..360 deg, def 0.0
+    constexpr char SYN_OSC_B_PHASE_AMT[] = "SYN_OSC_B_PHASE_AMT";  // float 0..100 %, def 100.0
+    constexpr char SYN_OSC_C_URANGE[]    = "SYN_OSC_C_URANGE";     // float 5..4800 cents, def 50.0, exponential
+    constexpr char SYN_OSC_C_UWARP[]     = "SYN_OSC_C_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_C_USTACK[]    = "SYN_OSC_C_USTACK";     // choice(9), def 0 = off
+    constexpr char SYN_OSC_C_WVAR[]      = "SYN_OSC_C_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
+    constexpr char SYN_OSC_C_W2VAR[]     = "SYN_OSC_C_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
+    constexpr char SYN_OSC_C_PHASE[]     = "SYN_OSC_C_PHASE";      // float 0..360 deg, def 0.0
+    constexpr char SYN_OSC_C_PHASE_AMT[] = "SYN_OSC_C_PHASE_AMT";  // float 0..100 %, def 100.0
+    constexpr char SYN_OSC_D_URANGE[]    = "SYN_OSC_D_URANGE";     // float 5..4800 cents, def 50.0, exponential
+    constexpr char SYN_OSC_D_UWARP[]     = "SYN_OSC_D_UWARP";      // float -100..+100 %, def 0.0 (inert)
+    constexpr char SYN_OSC_D_USTACK[]    = "SYN_OSC_D_USTACK";     // choice(9), def 0 = off
+    constexpr char SYN_OSC_D_WVAR[]      = "SYN_OSC_D_WVAR";       // float 0..100 %, def 0.0 — warp slot 1 second dimension
+    constexpr char SYN_OSC_D_W2VAR[]     = "SYN_OSC_D_W2VAR";      // float 0..100 %, def 0.0 — warp slot 2 second dimension
+    constexpr char SYN_OSC_D_PHASE[]     = "SYN_OSC_D_PHASE";      // float 0..360 deg, def 0.0
+    constexpr char SYN_OSC_D_PHASE_AMT[] = "SYN_OSC_D_PHASE_AMT";  // float 0..100 %, def 100.0
 
     // ── SAMPLE-ENGINE-IDS — per-OSC Sample engine params (Opus, 2026-06-25) ──
     constexpr char SYN_OSC_A_SAMPLE_SCAN[]       = "SYN_OSC_A_SAMPLE_SCAN";       // float -1..+1 bipolar — playback rate+direction

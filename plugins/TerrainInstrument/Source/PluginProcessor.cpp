@@ -208,6 +208,20 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
           jassert (specLoParam_[o] != nullptr && specHiParam_[o] != nullptr); }
     }
 
+    // fb522 — same one-time resolution, same reason (see the members' comment): URANGE is
+    // exponential and PHASE is 0..360 deg, so both are modulated through their own
+    // NormalisableRange, and the string lookup that needs must not happen per block.
+    {
+        static const char* const UR[4] = { ParameterIDs::SYN_OSC_A_URANGE, ParameterIDs::SYN_OSC_B_URANGE,
+                                           ParameterIDs::SYN_OSC_C_URANGE, ParameterIDs::SYN_OSC_D_URANGE };
+        static const char* const PH[4] = { ParameterIDs::SYN_OSC_A_PHASE,  ParameterIDs::SYN_OSC_B_PHASE,
+                                           ParameterIDs::SYN_OSC_C_PHASE,  ParameterIDs::SYN_OSC_D_PHASE };
+        for (int o = 0; o < 4; ++o)
+        { uniRangeParam_[o] = apvts.getParameter (juce::String (UR[o]));
+          phaseOffParam_[o] = apvts.getParameter (juce::String (PH[o]));
+          jassert (uniRangeParam_[o] != nullptr && phaseOffParam_[o] != nullptr); }
+    }
+
     initializePresets();
 
     // LFO ARC L1 — default every drawn-shape table to the triangle (a shape param restored
@@ -2556,13 +2570,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0));
 
     // PHASE mode (back panel pill 1 — replaces the redundant WARP-mode selector).
-    // 0=RETRIG (all voices to phase 0, tight/punchy) · 1=FREE (never reset, analog) ·
-    // 2=RANDOM (fresh decorrelated phase each note, default) · 3=SPREAD (even fan, wide+repeatable)
+    // 0=RETRIG (all voices to phase 0, tight/punchy) · 1=FREE (never reset, analog — THE DEFAULT
+    // since fb522, and what the DSP has actually produced since 2026-07-09) ·
+    // 2=RANDOM (fresh decorrelated phase each note) · 3=SPREAD (even fan, wide+repeatable)
     layout.add (std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_PHASE_MODE, 1 },
         "Synth OSC A Phase Mode",
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        2));
+        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
+               // so every stored 2 in the library is a value nobody has ever heard. Lane V
+               // un-wires that force; without this default change (and the version-3
+               // migration that rewrites stored 2s) the whole library would flip to Random.
 
     // WAVER (back panel pill 2 — replaces the redundant SPECTRAL-mode selector).
     // Per-OSC analog pitch-drift depth (Ornstein–Uhlenbeck, per unison sine).
@@ -2621,7 +2639,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_UWIDTH, 1 },
         "Synth OSC A Unison Width",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
+        // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
+        // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WARP_AMOUNT, 1 },
@@ -2749,7 +2770,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_B_PHASE_MODE, 1 },
         "Synth OSC B Phase Mode",
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        2));
+        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
+               // so every stored 2 in the library is a value nobody has ever heard. Lane V
+               // un-wires that force; without this default change (and the version-3
+               // migration that rewrites stored 2s) the whole library would flip to Random.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WAVER, 1 },
         "Synth OSC B Waver",
@@ -2791,7 +2815,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_UWIDTH, 1 },
         "Synth OSC B Unison Width",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
+        // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
+        // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_WARP_AMOUNT, 1 },
@@ -2909,7 +2936,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_C_PHASE_MODE, 1 },
         "Synth OSC C Phase Mode",
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        2));
+        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
+               // so every stored 2 in the library is a value nobody has ever heard. Lane V
+               // un-wires that force; without this default change (and the version-3
+               // migration that rewrites stored 2s) the whole library would flip to Random.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WAVER, 1 },
         "Synth OSC C Waver",
@@ -2951,7 +2981,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_UWIDTH, 1 },
         "Synth OSC C Unison Width",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
+        // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
+        // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_WARP_AMOUNT, 1 },
@@ -3069,7 +3102,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_OSC_D_PHASE_MODE, 1 },
         "Synth OSC D Phase Mode",
         juce::StringArray { "Retrig", "Free", "Random", "Spread" },
-        2));
+        1));   // fb522 — default was 2 (Random). The DSP has FORCED 1 (Free) since 2026-07-09,
+               // so every stored 2 in the library is a value nobody has ever heard. Lane V
+               // un-wires that force; without this default change (and the version-3
+               // migration that rewrites stored 2s) the whole library would flip to Random.
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_WAVER, 1 },
         "Synth OSC D Waver",
@@ -3111,7 +3147,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_UWIDTH, 1 },
         "Synth OSC D Unison Width",
-        juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));
+        juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 50.0f));   // fb522 — BIPOLAR (was 0..100).
+        // The DENORMALISED value is unchanged (50 still means 50), so no stored patch moves and the
+        // version-3 migration has nothing to rewrite. What DOES move is the NORMALISED position
+        // (0.5 -> 0.75), which only a host AUTOMATION LANE stores — see migrateBlobToVersion3().
 
     // ════════ SAMPLE-ENGINE-PARAMS (Opus, 2026-06-25) ════════
     // ── SAMPLE engine params — OSC A ──
@@ -3592,6 +3631,97 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         static const char* const WS_C[12] = { ParameterIDs::SYN_OSC_C_WSLOT1_MODE, ParameterIDs::SYN_OSC_C_WSLOT1_SRC, ParameterIDs::SYN_OSC_C_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT2_MODE, ParameterIDs::SYN_OSC_C_WSLOT2_SRC, ParameterIDs::SYN_OSC_C_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT3_MODE, ParameterIDs::SYN_OSC_C_WSLOT3_SRC, ParameterIDs::SYN_OSC_C_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT4_MODE, ParameterIDs::SYN_OSC_C_WSLOT4_SRC, ParameterIDs::SYN_OSC_C_WSLOT4_DEPTH };
         static const char* const WS_D[12] = { ParameterIDs::SYN_OSC_D_WSLOT1_MODE, ParameterIDs::SYN_OSC_D_WSLOT1_SRC, ParameterIDs::SYN_OSC_D_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT2_MODE, ParameterIDs::SYN_OSC_D_WSLOT2_SRC, ParameterIDs::SYN_OSC_D_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT3_MODE, ParameterIDs::SYN_OSC_D_WSLOT3_SRC, ParameterIDs::SYN_OSC_D_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT4_MODE, ParameterIDs::SYN_OSC_D_WSLOT4_SRC, ParameterIDs::SYN_OSC_D_WSLOT4_DEPTH };
         addBlendSlots (WS_A, "A"); addBlendSlots (WS_B, "B"); addBlendSlots (WS_C, "C"); addBlendSlots (WS_D, "D");
+    }
+
+    // ════════ fb522 · LANE P — THE OVERPASS PARAMS (7 per osc x 4 = 28) ════════
+    //  EVERY default below reproduces TODAY'S RENDER EXACTLY. That is a hard requirement, not a
+    //  courtesy: this wave raises DSP ceilings, and a ceiling raise that also moves a default is a
+    //  silent, permanent change to every saved patch. If you edit a default here you owe a
+    //  version-4 migration.
+    {
+        // URANGE's curve. JUCE's `skew` argument is a POWER curve on the LINEAR span
+        // (value = lo + (hi-lo)*t^(1/skew)) and is NOT what "exponential" means for a cents
+        // control — equal knob travel must buy an equal RATIO of detune, or the bottom of the
+        // range is a dead zone. So the mapping is stated directly:
+        //      cents = 5 * 960^t          (960 == 4800/5, the full ratio of the range)
+        // and therefore the shipped default of 50.0 cents sits at
+        //      t = ln(50/5) / ln(960) = ln(10)/ln(960) = 0.335313
+        // 🚨 The DESIGN BRIEF for this lane quoted "t ~= 0.4374" for this same 5..4800 range. That
+        // number is arithmetically wrong for cents = 5*960^t and is NOT used here — 0.4374 would
+        // put the default at 5*960^0.4374 = 100.8 cents, i.e. DOUBLE the constant it is required to
+        // reproduce. What actually matters, and what is gated, is the DENORMALISED default: 50.0f,
+        // which is exactly SynthVoice.h:6217's kUniMaxDetuneCents (verified against the file).
+        const juce::NormalisableRange<float> uniRangeCents {
+            5.0f, 4800.0f,
+            [] (float lo, float hi, float t) { return lo * std::pow (hi / lo, juce::jlimit (0.0f, 1.0f, t)); },
+            [] (float lo, float hi, float v) { return std::log (juce::jlimit (lo, hi, v) / lo) / std::log (hi / lo); },
+            [] (float lo, float hi, float v) { return juce::jlimit (lo, hi, v); } };
+
+        // ⚠️ fb373 / fb342 — THE OPTION COUNT IS THE CARDINALITY. This list is 9 long and the JS
+        // mirror MUST be 9 long: the knob-menu writer normalises a pick by the JS array's length
+        // (index.html:19844, `idx / (cfg.options.length - 1)`), not by the parameter's own
+        // cardinality, so a list that disagrees re-points every saved selection.
+        // ⚠️ fb470 — option 0 is "Off" and every other option MUST get its own explicit branch in
+        // the voice. A stack mode that falls through a `default:` builds clean, shows its name in
+        // the UI, and never changes the sound.
+        const juce::StringArray uniStackOpts { "Off", "12 (1x)", "12 (2x)", "12 (3x)",
+                                               "12+7 (1x)", "12+7 (2x)", "12+7 (3x)",
+                                               "Center-12", "Center-24" };   // measured from Serum 2 "A Uni Stack" (AU id 1000025)
+
+        struct OverpassIds { const char* urange; const char* uwarp; const char* ustack;
+                             const char* wvar;   const char* w2var; const char* phase; const char* phaseAmt; };
+        static const OverpassIds kOverpass[4] = {
+            { ParameterIDs::SYN_OSC_A_URANGE, ParameterIDs::SYN_OSC_A_UWARP, ParameterIDs::SYN_OSC_A_USTACK,
+              ParameterIDs::SYN_OSC_A_WVAR,   ParameterIDs::SYN_OSC_A_W2VAR, ParameterIDs::SYN_OSC_A_PHASE,
+              ParameterIDs::SYN_OSC_A_PHASE_AMT },
+            { ParameterIDs::SYN_OSC_B_URANGE, ParameterIDs::SYN_OSC_B_UWARP, ParameterIDs::SYN_OSC_B_USTACK,
+              ParameterIDs::SYN_OSC_B_WVAR,   ParameterIDs::SYN_OSC_B_W2VAR, ParameterIDs::SYN_OSC_B_PHASE,
+              ParameterIDs::SYN_OSC_B_PHASE_AMT },
+            { ParameterIDs::SYN_OSC_C_URANGE, ParameterIDs::SYN_OSC_C_UWARP, ParameterIDs::SYN_OSC_C_USTACK,
+              ParameterIDs::SYN_OSC_C_WVAR,   ParameterIDs::SYN_OSC_C_W2VAR, ParameterIDs::SYN_OSC_C_PHASE,
+              ParameterIDs::SYN_OSC_C_PHASE_AMT },
+            { ParameterIDs::SYN_OSC_D_URANGE, ParameterIDs::SYN_OSC_D_UWARP, ParameterIDs::SYN_OSC_D_USTACK,
+              ParameterIDs::SYN_OSC_D_WVAR,   ParameterIDs::SYN_OSC_D_W2VAR, ParameterIDs::SYN_OSC_D_PHASE,
+              ParameterIDs::SYN_OSC_D_PHASE_AMT } };
+
+        for (int o = 0; o < 4; ++o)
+        {
+            const juce::String n = "Synth OSC " + juce::String (juce::String::charToString ((juce::juce_wchar) ('A' + o))) + " ";
+            const auto& id = kOverpass[o];
+            // UNISON RANGE — the SCALE of the unison detune fan, in cents. Replaces the hard-coded
+            // kUniMaxDetuneCents. 50.0 == that constant, so the render is bit-identical at default.
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.urange, 1 }, n + "Unison Range", uniRangeCents, 50.0f));
+            // UNISON WARP SPREAD — fans warp amount across the unison sines. 0 = every sine
+            // identical = today. Bipolar so the fan can run either way.
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.uwarp, 1 }, n + "Unison Warp",
+                juce::NormalisableRange<float> (-100.0f, 100.0f, 0.1f), 0.0f));
+            // UNISON STACK — the only unison control that changes HARMONY rather than thickness.
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { id.ustack, 1 }, n + "Unison Stack", uniStackOpts, 0));
+            // WARP VAR / WARP 2 VAR — the second dimension of each warp slot, and the preset-SAFE
+            // carrier for the non-invertible ceiling raises (RM modulator drive, Rectify pre-gain,
+            // Mirror fold count). Default 0 is the identity: at 0 the render must be bit-identical
+            // to the pre-VAR build on all 11 modes. That identity is the FLOOR half of the gate
+            // (fb462) — proving loudness at 100 without proving transparency at 0 is half a test.
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.wvar, 1 }, n + "Warp Var",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.w2var, 1 }, n + "Warp 2 Var",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+            // PHASE — note-on phase offset in degrees. 0 = today's alignment. (Serum's own A Phase
+            // defaults to 180; Terrain keeps 0 so nothing moves.)
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.phase, 1 }, n + "Phase",
+                juce::NormalisableRange<float> (0.0f, 360.0f, 0.1f), 0.0f));
+            // PHASE AMOUNT — scales RANDOM's randomisation and SPREAD's fan. 100 = unscaled =
+            // exactly what resolvePhase already does, so 100 = today.
+            layout.add (std::make_unique<juce::AudioParameterFloat> (
+                juce::ParameterID { id.phaseAmt, 1 }, n + "Phase Amount",
+                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+        }
     }
 
     // ════════ UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB per oscillator ════════
@@ -8929,11 +9059,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   uniCountA = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_A_UNISON), (int) wc::ModDest::UniVoicesA + 0, 1.0f, 16.0f)));   // fb78 — stepped voices mod
         const float uniDetA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetA, 0.0f, 1.0f);     // fb77 — unison pill mod
         const float uniBlnA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendA, 0.0f, 1.0f);
-        const float uniWidA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthA, 0.0f, 1.0f);
+        const float uniWidA   =       ownM (*rawParam (ParameterIDs::SYN_OSC_A_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthA, -1.0f, 1.0f);   // fb522 — UWIDTH is bipolar now; the clamp floor moved with the range. Default +50 still reads exactly 0.5, so nothing sounds different until the knob goes negative.
         const int   uniCountB = juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_B_UNISON), (int) wc::ModDest::UniVoicesA + 1, 1.0f, 16.0f)));   // fb78 — stepped voices mod
         const float uniDetB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UDETUNE) / 100.0f, (int) wc::ModDest::UniDetB, 0.0f, 1.0f);
         const float uniBlnB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendB, 0.0f, 1.0f);
-        const float uniWidB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, 0.0f, 1.0f);
+        const float uniWidB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, -1.0f, 1.0f);   // fb522 — bipolar
 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
@@ -8957,17 +9087,70 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
         const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_UNISON), (int) wc::ModDest::UniVoicesA + 2, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, 0.0f, 1.0f);
+        const float uniDetC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, -1.0f, 1.0f);   // fb522 — bipolar
         const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
         const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_UNISON), (int) wc::ModDest::UniVoicesA + 3, 1.0f, 16.0f)));   // fb78 — stepped voices mod
-        const float uniDetD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, 0.0f, 1.0f);
+        const float uniDetD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, -1.0f, 1.0f);   // fb522 — bipolar
         const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
         const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
         const int   interpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_INTERP_MODE);
+
+        // ── fb522 · LANE P — THE OVERPASS READS. All block-rate, all defaulted to today's
+        //    behaviour, all staged into overpassOsc_[] for the voice push.
+        //    🚧 NOT PUSHED YET: SynthVoice.h exposes no setter for any of these and this lane does
+        //    not own that file. The handoff names the exact signatures. Reading + modulating here
+        //    now means the only thing left is the call.
+        //    URANGE and PHASE go through modWinP (the parameter's own NormalisableRange) because
+        //    URANGE is EXPONENTIAL over 5..4800 cents and PHASE is 0..360 degrees: a route has to
+        //    move them by ratio / by fraction of the knob. The other four are plain percentages and
+        //    normalise with /100.0f, so ownM's flat sum is already the right shape for them.
+        {
+            // Same law as fb193's modP and fb467's modWin, but against a pointer cached in the
+            // constructor — no juce::String, no malloc on the audio thread (fb456).
+            // Unrouted returns the raw value EXACTLY, so an unmodulated knob cannot drift.
+            auto modWinP = [&] (juce::RangedAudioParameter* prm, float raw, int d) -> float
+            {
+                const float w0 = envOwnW[d];
+                if ((w0 <= 0.0f && modSums[d] == 0.0f) || prm == nullptr) return raw;
+                const float w = w0 > 1.0f ? 1.0f : w0;
+                const float nrm = prm->convertTo0to1 (raw);
+                return prm->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (nrm + modSums[d]) * (1.0f - w) + envOwnV[d]));
+            };
+            struct OverpassIds { const char* urange; const char* uwarp; const char* ustack;
+                                 const char* wvar;   const char* w2var; const char* phase; const char* phaseAmt; };
+            static const OverpassIds kOP[4] = {
+                { ParameterIDs::SYN_OSC_A_URANGE, ParameterIDs::SYN_OSC_A_UWARP, ParameterIDs::SYN_OSC_A_USTACK,
+                  ParameterIDs::SYN_OSC_A_WVAR,   ParameterIDs::SYN_OSC_A_W2VAR, ParameterIDs::SYN_OSC_A_PHASE,
+                  ParameterIDs::SYN_OSC_A_PHASE_AMT },
+                { ParameterIDs::SYN_OSC_B_URANGE, ParameterIDs::SYN_OSC_B_UWARP, ParameterIDs::SYN_OSC_B_USTACK,
+                  ParameterIDs::SYN_OSC_B_WVAR,   ParameterIDs::SYN_OSC_B_W2VAR, ParameterIDs::SYN_OSC_B_PHASE,
+                  ParameterIDs::SYN_OSC_B_PHASE_AMT },
+                { ParameterIDs::SYN_OSC_C_URANGE, ParameterIDs::SYN_OSC_C_UWARP, ParameterIDs::SYN_OSC_C_USTACK,
+                  ParameterIDs::SYN_OSC_C_WVAR,   ParameterIDs::SYN_OSC_C_W2VAR, ParameterIDs::SYN_OSC_C_PHASE,
+                  ParameterIDs::SYN_OSC_C_PHASE_AMT },
+                { ParameterIDs::SYN_OSC_D_URANGE, ParameterIDs::SYN_OSC_D_UWARP, ParameterIDs::SYN_OSC_D_USTACK,
+                  ParameterIDs::SYN_OSC_D_WVAR,   ParameterIDs::SYN_OSC_D_W2VAR, ParameterIDs::SYN_OSC_D_PHASE,
+                  ParameterIDs::SYN_OSC_D_PHASE_AMT } };
+            for (int o = 0; o < 4; ++o)
+            {
+                auto& opStage = overpassOsc_[o];
+                opStage.uniRangeCents = juce::jlimit (5.0f, 4800.0f,
+                    modWinP (uniRangeParam_[o], *rawParam (kOP[o].urange), (int) wc::ModDest::UniRangeA + o));
+                opStage.uniWarp   = ownM (*rawParam (kOP[o].uwarp)    / 100.0f, (int) wc::ModDest::UniWarpA  + o, -1.0f, 1.0f);
+                opStage.warpVar   = ownM (*rawParam (kOP[o].wvar)     / 100.0f, (int) wc::ModDest::WarpVarA  + o,  0.0f, 1.0f);
+                opStage.warp2Var  = ownM (*rawParam (kOP[o].w2var)    / 100.0f, (int) wc::ModDest::Warp2VarA + o,  0.0f, 1.0f);
+                opStage.phaseAmt  = ownM (*rawParam (kOP[o].phaseAmt) / 100.0f, (int) wc::ModDest::PhaseAmtA + o,  0.0f, 1.0f);
+                opStage.phaseOffDeg = juce::jlimit (0.0f, 360.0f,
+                    modWinP (phaseOffParam_[o], *rawParam (kOP[o].phase), (int) wc::ModDest::PhaseOffA + o));
+                // STACK is a switch, not a knob: no mod destination, and the clamp is the parameter's
+                // own cardinality so a stale JS option list can never index past the table (fb373).
+                opStage.uniStack  = juce::jlimit (0, 8, (int) *rawParam (kOP[o].ustack));
+            }
+        }
 
         // Phase 8b polish-3 — push VOICES knob into UnisonSynth as polyphony cap.
         // VOICES=8 → exactly 8 simultaneous, new notes steal oldest (Serum 2 behavior).
@@ -8998,6 +9181,31 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
                 tv->setUnisonC (uniCountC, uniDetC, uniBlnC, uniWidC);  tv->setUnisonD (uniCountD, uniDetD, uniBlnD, uniWidD);
+                // ── fb523 · THE SEAM. Lane P staged all seven overpass knobs per osc into
+                //    overpassOsc_[] and Lane V added the setters, but the CALL belonged to
+                //    neither lane's file and shipped MISSING: 28 parameters that built clean,
+                //    read back perfectly at the AU boundary, moved in the UI — and changed
+                //    nothing. That is fb470's exact failure class (a value that falls through
+                //    to a default branch is indistinguishable from a value that works), and it
+                //    is why the URANGE 20x gate measured 1.00x. Cert: cert523 uni.
+                {
+                    const auto& oA = overpassOsc_[0]; const auto& oB = overpassOsc_[1];
+                    const auto& oC = overpassOsc_[2]; const auto& oD = overpassOsc_[3];
+                    tv->setUnisonRangeA (oA.uniRangeCents); tv->setUnisonRangeB (oB.uniRangeCents);
+                    tv->setUnisonRangeC (oC.uniRangeCents); tv->setUnisonRangeD (oD.uniRangeCents);
+                    tv->setUnisonWarpA  (oA.uniWarp);       tv->setUnisonWarpB  (oB.uniWarp);
+                    tv->setUnisonWarpC  (oC.uniWarp);       tv->setUnisonWarpD  (oD.uniWarp);
+                    tv->setUnisonStackA (oA.uniStack);      tv->setUnisonStackB (oB.uniStack);
+                    tv->setUnisonStackC (oC.uniStack);      tv->setUnisonStackD (oD.uniStack);
+                    tv->setWarpVar      (oA.warpVar,     oB.warpVar);
+                    tv->setWarpVarCD    (oC.warpVar,     oD.warpVar);
+                    tv->setWarp2Var     (oA.warp2Var,    oB.warp2Var);
+                    tv->setWarp2VarCD   (oC.warp2Var,    oD.warp2Var);
+                    tv->setPhaseOffset  (oA.phaseOffDeg, oB.phaseOffDeg);
+                    tv->setPhaseOffsetCD(oC.phaseOffDeg, oD.phaseOffDeg);
+                    tv->setPhaseAmount  (oA.phaseAmt,    oB.phaseAmt);
+                    tv->setPhaseAmountCD(oC.phaseAmt,    oD.phaseAmt);
+                }
                 tv->setBlurCD (blurC, blurD);
                 tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
                 tv->setInterpModeCD (interpModeC, interpModeD);
@@ -13024,9 +13232,13 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         state.setProperty ("noiseVizMode", noiseVizMode_, nullptr);   // fb66 — noise waveform/particle viz choice (default particle)
 
     // ── V2 format marker ─────────────────────────────────────────────────────
-    // Task 12: introduce version=2 and editingLayer so Task 13 (setStateInformation)
-    // can distinguish V1 blobs (no "version" property) from V2 blobs.
-    state.setProperty ("version",      2,                   nullptr);
+    // Task 12: introduce a version marker and editingLayer so setStateInformation can
+    // distinguish V1 blobs (no "version" property) from V2 blobs. fb522 raised the marker
+    // to 3; the V1/V2 branch below still keys off ">= 2", so a 3 reads as V2-or-newer.
+    // fb522 — bumped 2 -> 3. Version 3 says: PHASE_MODE has been corrected to the value the DSP
+    // has actually been producing since 2026-07-09, and the blend/warp depths in this blob are
+    // stated against the RAISED ceiling constants. See migrateBlobToVersion3().
+    state.setProperty ("version",      3,                   nullptr);
     // fb362 — ROUTES ARE EXPLICIT FROM HERE ON. An added device now boots with every route pill
     // OFF (Max: "everything should be off and it's gonna be per routable"), which collides with the
     // fb348 migration: that rule reads "powered + no routes" as a pre-fb348 main-send device and
@@ -13179,6 +13391,323 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     copyXmlToBinary (*xml, destData);
 }
 
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//  fb522 · LANE P — THE VERSION-3 BLOB MIGRATION
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//  Runs on the ValueTree inside setStateInformation, BEFORE apvts.replaceState() and BEFORE
+//  synModJson reaches setSynthModMatrix(). It is idempotent PER LOAD: it rewrites a freshly parsed
+//  copy of the host's blob, never accumulated live state, so re-loading the same v2 blob twice
+//  migrates the same original numbers twice and lands on the same answer.
+//
+//  🚨 IT MUST NOT WRITE THE "version" PROPERTY. A V1 blob has none at all, and the V1/V2 branch
+//     further down in setStateInformation re-reads that property to choose loadV1State vs
+//     loadV2State. Stamping 3 here would send every V1 blob down the V2 path.
+//
+//  🚨 WHEN A VERSION 4 ARRIVES: add a SECOND, SEPARATE `if (blobVersion < 4)` block below this
+//     one — a chain, not an else. A v2 blob that nobody opened during the v3 wave still needs the
+//     v3 rescale AND the v4 rescale when it is finally opened.
+//
+//  WHY DIVIDE. Every factor below is the RECIPROCAL of a ceiling raise Lane V makes in the DSP.
+//  The audible result is (stored depth x ceiling constant); the ceiling is multiplied there, so the
+//  stored depth is divided here, and the product — what the patch sounds like — does not move.
+//  Getting one of these wrong is silent and permanent, which is why the MUTATION GATE (fb421) for
+//  this function is: set one factor to 1.0f, load a preset that uses that mode at a non-zero depth,
+//  and the render must MEASURABLY drift. A factor that can be broken without the gate going red is
+//  a factor nobody has tested.
+void TerrainInstrumentAudioProcessor::migrateBlobToVersion3 (juce::ValueTree& state)
+{
+    const int blobVersion = (int) state.getProperty ("version", 1);   // absent == V1
+    if (blobVersion >= 3) return;
+
+    // ── THE TABLE ────────────────────────────────────────────────────────────────────────────
+    //  ONE place. To opt a change out of this wave, set its row to the identity {1.0f, 0.0f} —
+    //  there is nothing to hunt for.
+    //  Form: newAmount = offset + scale * oldAmount.  A pure rescale has offset 0; P-Quantize's
+    //  proposed remap is affine, which is why the row carries both.
+    struct Remap { float scale; float offset; };
+    static constexpr Remap kIdentity { 1.0f, 0.0f };
+
+    // ── (b) BLEND-SLOT DEPTHS, keyed by the slot's stored MODE ───────────────────────────────
+    //  Mode indices are the "Off/FM/PD/AM/RM/Sync/Warp/Dist/Filter" StringArray in
+    //  createParameterLayout — Off=0 FM=1 PD=2 AM=3 RM=4 Sync=5 Warp=6 Dist=7 Filter=8.
+    //  ⚠️ fb523 — THE WHOLE TABLE IS IDENTITY NOW, AND TWO SEPARATE FINDINGS PUT IT THERE.
+    //
+    //  (1) THE ROWS THIS TABLE SHIPPED WITH DID NOT DO WHAT THEY SAY, AND THE COMMENT THAT
+    //      JUSTIFIED THEM WAS STALE. It cited "SynthVoice.h lines 2808-2811" and quoted
+    //      `fmDrive += (12.0f * d)`; the live constants were at 3237-3240 and the drive was
+    //      already 48.0f — the note described the code BEFORE fb522's own raise. Verified by
+    //      reading the definition lines, per the standing rule.
+    //      Worse, the Remap form is AFFINE ON THE STORED PARAMETER (newAmount = offset +
+    //      scale·oldAmount) but the stored parameter is NOT the depth the DSP multiplies: it is
+    //      re-tapered in SynthVoice::setBlendSlot by an exp-bias curve before it reaches any
+    //      constant. A rescale that preserves the sound must be applied in TAPER space, and
+    //      T(0.25·d) ≠ 0.25·T(d). Worked through on the FM row it shipped with:
+    //          stored 1.0 → old index 12.0 × T(1.00) = 12.000
+    //          stored 1.0 → row scales it to 0.25 → new 48.0 × T(0.25) = 48 × 0.10203 = 4.897
+    //      i.e. the "sound-preserving" rescale was measurably 2.45× QUIET. The AM row
+    //      {0.2571} has the same defect (1.800 → 7.0 × T(0.2571) = 0.737, 2.44× quiet).
+    //      An affine row cannot express this remap; only a nonlinear one can, and there is
+    //      nothing left to preserve (below).
+    //
+    //  (2) MAX HAS STATED THERE IS NO SAVED LIBRARY. He sound-designs from silence every
+    //      session, and a sweep of the whole tree for writers of SYN_OSC_?_WSLOT?_DEPTH finds
+    //      exactly two files — ParameterIDs.hpp (the id strings) and this one (the layout).
+    //      NO FACTORY PRESET SETS A BLEND SLOT AT ALL: the factory bank is the Terrain FX bank
+    //      (grainSize/density/spray/…), and the UI builds blend ids dynamically with no preset
+    //      table behind them. So there is no patch, factory or user, for these rows to protect.
+    //
+    //  WHAT CHANGES MEANING FOR A STORED BLEND DEPTH (fb523 — VERIFIED against the live
+    //  definition lines in SynthVoice.h, not against a comment):
+    //    FM — LAW CHANGE, no valid rescale exists and none is invented. `fmDrive` was a
+    //         dimensionless index (deviation = 48·d·f_carrier); it is now PEAK DEVIATION IN HZ
+    //         (kFmDeviationHz = 96000). The taper also changed, for FM only, from the house
+    //         7.39:1 exp-bias to 361:1. A stored depth of 1.0 was β = 33.95 at every pitch and
+    //         is now β = 733.9 at C3 / 2,935 at C1 — the index is deliberately no longer
+    //         pitch-invariant, so no single number can map the old value onto the new one at
+    //         more than one note. Identity, by instruction.
+    //    PD — 1.20 → 2.20 cycles, and the fb523 modulator-tap fix multiplies every tap by √2:
+    //         a stored depth now buys 2.593× the index it used to (β 5.33 → 13.82 at 100 %).
+    //    AM — 7.0 → 2.0, against the same √2 tap: a stored depth now buys 0.404× the gain
+    //         swing it used to. That is the point — 7.0 was 495 % modulation and it lived on
+    //         the master limiter.
+    //    RM — 1.8 → 2.0, against the same √2 tap: +3.92 dB at full depth, spectrum identical
+    //         (at d = 1 the law collapses to amp = K·mod and K is pure output gain).
+    //    Sync/Warp/Dist/Filter — untouched, and were already identity.
+    static constexpr Remap kBlendRemap[9] = {
+        kIdentity,             // 0 Off       — nothing stored means anything
+        kIdentity,             // 1 FM        — LAW CHANGE (index → Hz). No valid rescale; see above.
+        kIdentity,             // 2 PD        — SynthVoice.h:3343 1.20f -> 2.20f (+ √2 tap). Meaning changes.
+        kIdentity,             // 3 AM        — SynthVoice.h:3345 7.0f -> 2.0f  (+ √2 tap). Meaning changes.
+        kIdentity,             // 4 RM        — SynthVoice.h:3346 1.8f -> 2.0f  (+ √2 tap). Meaning changes.
+        kIdentity,             // 5 Sync
+        kIdentity,             // 6 Warp
+        kIdentity,             // 7 Dist
+        kIdentity };           // 8 Filter
+
+    // ── (c) WARP AMOUNTS, keyed by the slot's stored WARP MODE ───────────────────────────────
+    //  Mode indices are the "NONE/Bend/Sync/Formant/PWM/Skew/Mirror/Fractalize/P-Quantize/
+    //  Rectify/Sine Shaper" StringArray in createParameterLayout — 0..10, choice(11), no reserved
+    //  slots. Each row is paired with the one constant Lane V changes; if a row's constant does not
+    //  ship, that row must be set back to kIdentity or the patch quietly gets quieter.
+    static constexpr Remap kWarpRemap[11] = {
+        kIdentity,             //  0 NONE
+        { 0.5f,    0.0f },     //  1 Bend       — bend coefficient 0.5 -> 1.0
+        { 1.0f,      0.0f },   //  2 Sync      — IDENTITY: the 4 -> 6 raise was REVERTED (see
+                               //      warpRateMul). No rescale, and none is POSSIBLE: WARP_AMOUNT has a
+                               //      0.001 step, so 2/3 snaps to 0.333 and rate 2^(6*0.333)=3.9945
+                               //      straddles the mip boundary at exactly 4.0 - cert measured a
+                               //      non-monotonic 6% centroid jump across one step.       — rate exponent 4 -> 6      (2/3)
+        { 1.0f,      0.0f },   //  3 Formant   — IDENTITY: the 4 -> 6 raise was REVERTED (see
+                               //      warpRateMul). No rescale, and none is POSSIBLE: WARP_AMOUNT has a
+                               //      0.001 step, so 2/3 snaps to 0.333 and rate 2^(6*0.333)=3.9945
+                               //      straddles the mip boundary at exactly 4.0 - cert measured a
+                               //      non-monotonic 6% centroid jump across one step.    — same exponent as Sync     (2/3)
+        { 0.5f,    0.0f },     //  4 PWM        — duty span 0.45 -> 0.90
+        { 8.0f/9.0f, 0.0f },   //  5 Skew       — knee span 0.4 -> 0.45     (0.4/0.45)
+        kIdentity,             //  6 Mirror     — no constant exists to raise; the fold count is a NEW
+                               //                dimension carried on WVAR, default 0 = today
+        { 1.0f,      0.0f },   //  7 Fractalize — IDENTITY: the 7 -> 12 raise was REVERTED
+                               //      after cert measured it LOSING harmonics (nharm 183->25 at half
+                               //      travel, 20->8 at full, centroid x0.86). Multiplying a
+                               //      band-limited mip's read rate TRANSPOSES partials out through
+                               //      Nyquist instead of creating them - the same structural defect
+                               //      as Sync (npeaks 8-10 vs the reference's 423). No migration.
+        kIdentity,             //  8 P-Quantize — 🚧 PARKED. The design pass proposes steps 2^(5-4a) ->
+                               //                2^(9-8a), whose inverse is the AFFINE row
+                               //                { 0.5f, 0.5f }, together with a separate transparency
+                               //                fix at a = 0. Neither is in this wave's brief, so the
+                               //                row stays the identity until both land together.
+        kIdentity,             //  9 Rectify    — no constant to raise; the pre-gain is a NEW dimension
+                               //                on WVAR, default 0 = today
+        kIdentity };           // 10 Sine Shaper— 🚧 PARKED. Proposed re-law 1+4a -> 1+3.2a inverts to
+                               //                { 1.25f, 0.0f } CLIPPED AT 1.0, and is only partly
+                               //                invertible: a patch parked above a = 0.8 sat on the
+                               //                backwards side of sin()'s turning point and would
+                               //                migrate to something BRIGHTER than it had. Not in this
+                               //                wave's brief; parked rather than half-applied.
+
+    // ── small ValueTree helpers (the tree's "value" property is the DENORMALISED value — JUCE
+    //    ParameterAdapter::flushToTree writes denormalise(parameter.getValue()), verified in
+    //    juce_AudioProcessorValueTreeState.cpp:150/161) ──────────────────────────────────────
+    auto findParam = [&state] (const char* id) -> juce::ValueTree
+    {
+        for (int c = 0; c < state.getNumChildren(); ++c)
+        {
+            auto ch = state.getChild (c);
+            if (ch.hasType ("PARAM") && ch.getProperty ("id").toString() == id) return ch;
+        }
+        return {};
+    };
+    auto readParam = [&findParam] (const char* id, float fallback, bool& found) -> float
+    {
+        auto ch = findParam (id);
+        found = ch.isValid();
+        return found ? (float) ch.getProperty ("value", fallback) : fallback;
+    };
+    auto writeParam = [&state, &findParam] (const char* id, float v)
+    {
+        auto ch = findParam (id);
+        if (ch.isValid()) { ch.setProperty ("value", v, nullptr); return; }
+        juce::ValueTree p ("PARAM");
+        p.setProperty ("id", id, nullptr);
+        p.setProperty ("value", v, nullptr);
+        state.appendChild (p, nullptr);
+    };
+
+    // ── (a) PHASE MODE — THE HIGHEST-RISK ITEM IN THE WHOLE WAVE ─────────────────────────────
+    //  SYN_OSC_x_PHASE_MODE has been registered with default 2 (Random) while the DSP has FORCED
+    //  1 (Free) since 2026-07-09 (SynthVoice.h setPhaseMode / setPhaseModeCD ignore their argument).
+    //  So every saved patch and every factory preset carries a stored 2 that has NEVER BEEN HEARD.
+    //  The moment Lane V un-wires that force, the entire library flips Free -> Random unless the
+    //  stored value is corrected here first. Forced unconditionally to 1, and CREATED at 1 when the
+    //  blob predates the parameter, so a load can never leave it undefined.
+    //  FLOOR half of the gate (fb462): after this runs, a v2 blob must render BIT-IDENTICALLY to
+    //  the pre-change build — because 1 (Free) is exactly what it has always actually sounded like.
+    {
+        static const char* const kPhaseModeIds[4] = {
+            ParameterIDs::SYN_OSC_A_PHASE_MODE, ParameterIDs::SYN_OSC_B_PHASE_MODE,
+            ParameterIDs::SYN_OSC_C_PHASE_MODE, ParameterIDs::SYN_OSC_D_PHASE_MODE };
+        for (auto* pid : kPhaseModeIds) writeParam (pid, 1.0f);   // 1 == Free
+    }
+
+    // ── (b) BLEND DEPTHS — per slot, keyed by that slot's own stored mode ────────────────────
+    static const char* const kBlendModeIds[4][4] = {
+        { ParameterIDs::SYN_OSC_A_WSLOT1_MODE, ParameterIDs::SYN_OSC_A_WSLOT2_MODE,
+          ParameterIDs::SYN_OSC_A_WSLOT3_MODE, ParameterIDs::SYN_OSC_A_WSLOT4_MODE },
+        { ParameterIDs::SYN_OSC_B_WSLOT1_MODE, ParameterIDs::SYN_OSC_B_WSLOT2_MODE,
+          ParameterIDs::SYN_OSC_B_WSLOT3_MODE, ParameterIDs::SYN_OSC_B_WSLOT4_MODE },
+        { ParameterIDs::SYN_OSC_C_WSLOT1_MODE, ParameterIDs::SYN_OSC_C_WSLOT2_MODE,
+          ParameterIDs::SYN_OSC_C_WSLOT3_MODE, ParameterIDs::SYN_OSC_C_WSLOT4_MODE },
+        { ParameterIDs::SYN_OSC_D_WSLOT1_MODE, ParameterIDs::SYN_OSC_D_WSLOT2_MODE,
+          ParameterIDs::SYN_OSC_D_WSLOT3_MODE, ParameterIDs::SYN_OSC_D_WSLOT4_MODE } };
+    static const char* const kBlendDepthIds[4][4] = {
+        { ParameterIDs::SYN_OSC_A_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT2_DEPTH,
+          ParameterIDs::SYN_OSC_A_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT4_DEPTH },
+        { ParameterIDs::SYN_OSC_B_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT2_DEPTH,
+          ParameterIDs::SYN_OSC_B_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_B_WSLOT4_DEPTH },
+        { ParameterIDs::SYN_OSC_C_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT2_DEPTH,
+          ParameterIDs::SYN_OSC_C_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_C_WSLOT4_DEPTH },
+        { ParameterIDs::SYN_OSC_D_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT2_DEPTH,
+          ParameterIDs::SYN_OSC_D_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_D_WSLOT4_DEPTH } };
+
+    int  blendMode[4][4] = {};                 // also feeds the mod-matrix pass below
+    for (int o = 0; o < 4; ++o)
+        for (int sl = 0; sl < 4; ++sl)
+        {
+            bool haveMode = false, haveDepth = false;
+            const int m = juce::jlimit (0, 8, (int) readParam (kBlendModeIds[o][sl], 0.0f, haveMode));
+            blendMode[o][sl] = m;
+            const float d = readParam (kBlendDepthIds[o][sl], 0.0f, haveDepth);
+            if (! haveDepth) continue;         // nothing stored ⇒ nothing to rescale
+            const auto& r = kBlendRemap[m];
+            writeParam (kBlendDepthIds[o][sl], juce::jlimit (0.0f, 1.0f, r.offset + r.scale * d));
+        }
+
+    // ── (c) WARP AMOUNTS — slot 1 and slot 2, per osc, keyed by that slot's own stored mode ──
+    static const char* const kWarpModeIds[4]  = {
+        ParameterIDs::SYN_OSC_A_WARP_MODE,  ParameterIDs::SYN_OSC_B_WARP_MODE,
+        ParameterIDs::SYN_OSC_C_WARP_MODE,  ParameterIDs::SYN_OSC_D_WARP_MODE };
+    static const char* const kWarpAmtIds[4]   = {
+        ParameterIDs::SYN_OSC_A_WARP_AMOUNT, ParameterIDs::SYN_OSC_B_WARP_AMOUNT,
+        ParameterIDs::SYN_OSC_C_WARP_AMOUNT, ParameterIDs::SYN_OSC_D_WARP_AMOUNT };
+    static const char* const kWarp2ModeIds[4] = {
+        ParameterIDs::SYN_OSC_A_WARP2_MODE, ParameterIDs::SYN_OSC_B_WARP2_MODE,
+        ParameterIDs::SYN_OSC_C_WARP2_MODE, ParameterIDs::SYN_OSC_D_WARP2_MODE };
+    static const char* const kWarp2AmtIds[4]  = {
+        ParameterIDs::SYN_OSC_A_WARP2_AMT,  ParameterIDs::SYN_OSC_B_WARP2_AMT,
+        ParameterIDs::SYN_OSC_C_WARP2_AMT,  ParameterIDs::SYN_OSC_D_WARP2_AMT };
+
+    int warpMode[4] = {}, warp2Mode[4] = {};   // also feed the mod-matrix pass below
+    for (int o = 0; o < 4; ++o)
+    {
+        bool have = false;
+        warpMode[o]  = juce::jlimit (0, 10, (int) readParam (kWarpModeIds[o],  0.0f, have));
+        warp2Mode[o] = juce::jlimit (0, 10, (int) readParam (kWarp2ModeIds[o], 0.0f, have));
+
+        bool haveAmt = false;
+        const float a1 = readParam (kWarpAmtIds[o], 0.0f, haveAmt);
+        if (haveAmt)
+        {
+            const auto& r = kWarpRemap[warpMode[o]];
+            writeParam (kWarpAmtIds[o], juce::jlimit (0.0f, 1.0f, r.offset + r.scale * a1));
+        }
+        const float a2 = readParam (kWarp2AmtIds[o], 0.0f, haveAmt);
+        if (haveAmt)
+        {
+            const auto& r = kWarpRemap[warp2Mode[o]];
+            writeParam (kWarp2AmtIds[o], juce::jlimit (0.0f, 1.0f, r.offset + r.scale * a2));
+        }
+    }
+
+    // ── (b)+(c) THE MATCHING MOD-MATRIX DEPTHS ───────────────────────────────────────────────
+    //  A route's depth multiplies the SAME destination the knob feeds, so a knob that is divided
+    //  by 4 with a route left at full depth still gets 4x the modulation it used to. The routes
+    //  live in the "synModJson" blob (an array of {s,d,v}), NOT in APVTS, and this rewrite must
+    //  happen before setStateInformation hands that string to setSynthModMatrix().
+    //  Only the SCALE is applied to a route depth, never the offset: a route is a DELTA around the
+    //  knob, and an affine offset belongs to the knob's absolute position, not to its modulation.
+    //  (Every row that ships in this wave has offset 0 anyway; the guard is for the parked rows.)
+    {
+        const juce::String smIn = state.getProperty ("synModJson", juce::String()).toString();
+        if (smIn.isNotEmpty())
+        {
+            auto parsedJson = juce::JSON::parse (smIn);
+            if (auto* arr = parsedJson.getArray())
+            {
+                // dest int -> scale. Built once from the same two tables above, so a row edited up
+                // there automatically reaches the routes too.
+                auto scaleForDest = [&] (int d) -> float
+                {
+                    for (int o = 0; o < 4; ++o)
+                    {
+                        for (int sl = 0; sl < 4; ++sl)
+                            if (d == (int) wc::ModDest::BlendDepthA1 + o * 4 + sl)
+                                return kBlendRemap[blendMode[o][sl]].scale;
+
+                        // WARP 1 amount: the four dests are NOT contiguous (Warp is dest 3, from the
+                        // original OSC-A block; WarpB/C/D were appended later), so they are named.
+                        static const wc::ModDest kWarp1Dest[4] = {
+                            wc::ModDest::Warp, wc::ModDest::WarpB, wc::ModDest::WarpC, wc::ModDest::WarpD };
+                        if (d == (int) kWarp1Dest[o]) return kWarpRemap[warpMode[o]].scale;
+
+                        if (d == (int) wc::ModDest::Warp2A + o) return kWarpRemap[warp2Mode[o]].scale;
+                    }
+                    return 1.0f;
+                };
+
+                bool touched = false;
+                for (auto& item : *arr)
+                {
+                    if (auto* obj = item.getDynamicObject())
+                    {
+                        const int   d = (int) obj->getProperty ("d");
+                        const float k = scaleForDest (d);
+                        if (k == 1.0f) continue;
+                        const float v = (float) (double) obj->getProperty ("v");
+                        obj->setProperty ("v", (double) juce::jlimit (-1.0f, 1.0f, v * k));
+                        touched = true;
+                    }
+                }
+                if (touched)
+                    state.setProperty ("synModJson", juce::JSON::toString (parsedJson, true), nullptr);
+            }
+        }
+    }
+
+    // ── (d) UWIDTH BIPOLAR REMAP — DELIBERATELY A NO-OP, AND HERE IS THE PROOF ───────────────
+    //  The brief asks for w_new_norm = 0.5 + 0.5 * w_old_norm. That is correct in NORMALISED
+    //  space. But APVTS stores the DENORMALISED value in the tree, and in denormalised units the
+    //  same remap is the identity:
+    //      old range 0..100      : w_old_norm = v / 100
+    //      new range -100..+100  : w_new      = -100 + 200 * (0.5 + 0.5 * (v / 100)) = v
+    //  So 50 still means 50, every stored width already carries its correct new meaning, and
+    //  rewriting the tree here would MOVE patches that must not move. Nothing to do — stated
+    //  explicitly rather than omitted, so the next reader does not "fix" the gap.
+    //  ⚠️ WHAT IS NOT MIGRATABLE: a host AUTOMATION LANE stores the NORMALISED value and is owned
+    //     by the host, not by this blob. A lane written against 0..100 that held 0.5 (= 50 %) now
+    //     replays as 0.5 -> 0 %. There is no hook that can reach it. Ship note, not a code fix.
+}
+
 void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int sizeInBytes)
 {
     std::unique_ptr<juce::XmlElement> xmlState (getXmlFromBinary (data, sizeInBytes));
@@ -13285,6 +13814,12 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         }
                     }
             }
+
+            // ── fb522 migration: VERSION 3. Must run HERE — after the older per-param
+            //    migrations above (so it sees their results) and before BOTH
+            //    apvts.replaceState() and the synModJson read below, because it rewrites
+            //    APVTS PARAM children AND the mod-matrix blob. See migrateBlobToVersion3().
+            migrateBlobToVersion3 (newState);
 
             // Restore preset index (clamped to valid range after disk presets load)
             int presetIdx = newState.getProperty("presetIndex", 0);

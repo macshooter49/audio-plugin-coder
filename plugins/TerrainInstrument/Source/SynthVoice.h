@@ -54,6 +54,66 @@ namespace tw
 
         static constexpr int kMaxUnison = 16;   // Serum-parity unison ceiling (was 8)
 
+        // ══ fb523 · THE FM LAW — HZ OF DEVIATION (was: radians of index) ═════════════════════
+        //  [M] The reference measures Δf = 88,480 Hz × depth⁴, PITCH-INDEPENDENT IN HZ to ±0.4 %
+        //  over depth 0.2–0.7 at both C1 and C3, with the aliasing onset it predicts
+        //  ((24000/88480)^¼ = 0.7215) confirmed between measured depth 0.70 (clean) and 0.80
+        //  (aliased) ON BOTH NOTES. Ours measured β = 5.3094(e^{2d}−1), IDENTICAL at C1 and C3
+        //  to 0.4 % — a constant INDEX, which is the property being inverted here.
+        //
+        //  kFmDeviationHz — the ceiling. 96,000 Hz is 8.50 % (+0.71 dB) ABOVE the reference's
+        //  measured 88,480 Hz, i.e. 4× the 24 kHz Nyquist of a 48 kHz session. β at 100 %:
+        //  733.9 at C3 (ref 676) and 2,935 at C1 (ref's extrapolated 2,705). We match the
+        //  ceiling and beat it, on both notes.
+        //  ⚠️ An Hz law is also SAMPLE-RATE independent by construction: at a 192 kHz session
+        //  rate 96 kHz of deviation only just reaches Nyquist, so the top of the knob is
+        //  correspondingly less destructive there. That is the reference's behaviour too.
+        //
+        //  kFmTaperRate — the taper, ln(361) = 5.888878. depth' = (e^{5.888878·d} − 1)/360,
+        //  i.e. Δf = 96000·(361^d − 1)/360. Chosen against three requirements:
+        //   · NO DEAD ZONE. A raw 4th power (the reference's law) has T'(0) = 0 — its first
+        //     10 % of travel buys Δf = 8.8 Hz, β = 0.068 at C3, inaudible. Ours gives
+        //     T(0.1) = 0.0022277 → Δf = 213.9 Hz → β = 1.63 at C3 / 6.54 at C1. Audible from
+        //     the first 1 % of travel (d = 0.01 → Δf = 16.18 Hz → β = 0.49 at C1).
+        //   · NO PLATEAU. T'(1)/T'(0) = 361; the curve is steepest at the top and T(1) = 1
+        //     exactly. Every knob unit buys the same RATIO of deviation — the same law the
+        //     shipped URANGE knob uses (cents = 5·960^t).
+        //   · MUSICAL VALUES IN THE LOW HALF. T(0.5) = 1/(√361 + 1) = 0.05 exactly, i.e.
+        //     Δf = 4,800 Hz = β 36.7 at C3 / 146.8 at C1. The whole classic-FM range
+        //     (β 1…40 at C3) lives in the bottom half of the knob; the top quarter is the
+        //     destructive region — Δf crosses Nyquist (24 kHz) at d = ln(91)/ln(361) = 0.7660.
+        //  ALIASING CURVE (out-of-harmonic energy, square carrier, C3). Taken from the
+        //  reference's own MEASURED off-grid sweep re-expressed as a function of DEVIATION
+        //  (which is carrier/Nyquist physics, not a plugin property) and read back through
+        //  our taper: 1 % at d = 0.491, 2 % at d = 0.588, 5 % at 0.744, 10 % at 0.791,
+        //  20 % at 0.843, and the reference's own 100 % condition (73 % off-grid) at 0.986.
+        //  On a SINE carrier there is no measurable off-grid energy at all below Δf ≈ 24 kHz
+        //  (d = 0.766). So the knob is clean through its musical half, crosses the 2 % budget
+        //  just past centre on a rich carrier, and its top quarter is deliberately unusable.
+        //  ⚠️ THE TAPER IS PER-MODE and lives in setBlendSlot(); PD/AM/RM keep the house
+        //     exp-bias curve (e^{2d}−1)/(e²−1) untouched.
+        static constexpr float kFmDeviationHz = 96000.0f;   // peak deviation at depth = 1, per slot
+        static constexpr float kFmTaperRate   = 5.888878f;  // ln(361) — see above
+        static constexpr float kFmTaperNorm   = 1.0f / 360.0f;   // 1/(361−1)
+        static constexpr float kFmLeak        = 0.9997f;    // UNCHANGED: leaky integrator, corner 2.29 Hz @48k
+        //  THE SOFT BOUND, RE-DERIVED — it did not matter before and it does now.
+        //  Excursion in CYCLES is Δf/(2π·f_mod), which under an Hz law EXPLODES as f_mod falls
+        //  (under the old index law it was pitch-independent and topped out at 5.4 cycles, so
+        //  the shipped ±16/±32 knee never engaged at all — measured β 33.95 vs a 50.27 wall).
+        //   · At full deviation the excursion is 116.80 cycles at C3 and 467.20 at C1.
+        //   · The bound is EXACTLY LINEAR (bit-identical, softBound returns x unchanged) for
+        //     every modulator at or above f_mod = 96000/(2π·512) = 29.842 Hz at 100 % depth —
+        //     i.e. across the entire keyboard from B0 (30.87 Hz) up, at every depth. It is
+        //     therefore inaudible in the musical range by construction, not by taste.
+        //   · Below that it is a tanh knee, asymptotic to ±1024 cycles. Two things it stops:
+        //     (a) a sub-audio LFO source (src 7..16), whose DC excursion the leak alone caps at
+        //         (Δf/fs)/(1−kFmLeak) = 6,667 cycles at 48 kHz — 6.5× past the bound;
+        //     (b) float precision: fmPhase_ is a float added to a cycle-domain read phase, so at
+        //         1024 cycles the ULP is 6.1e-5 cycles = 1/8 of a sample of a 2048-point table.
+        //         At the leak's own 6,667-cycle ceiling it would be 4.9e-4 = 1 whole sample.
+        static constexpr float kFmBoundLin = 512.0f;    // cycles — linear (inert) below this
+        static constexpr float kFmBoundMax = 1024.0f;   // cycles — tanh asymptote
+
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
             return dynamic_cast<SynthSound*> (s) != nullptr;
@@ -63,6 +123,7 @@ namespace tw
         {
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
+            invSampleRate_ = (float) (1.0 / sampleRate_);   // fb523 — FM is Hz-of-deviation now: Δcycles/sample = Δf/fs
             noiseSR_ = (float) sampleRate_;   // NOISE engine Hz-based math (hum/wind/rumble/SVF)
             ampEnv_.prepare (sampleRate_);
             ampEnv_.setMinRelease (0.005);   // fb297 — 5ms declick FLOOR on the AMP env only: release=0 stays tight
@@ -883,7 +944,21 @@ namespace tw
             BlendSlotV& b = blendSlot_[osc][slot];
             b.mode = mode; b.src = src;
             const float dc = juce::jlimit (0.f, 1.f, depth);
-            b.depth = (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);   // house exp-bias curve
+            // fb523 — THE TAPER IS PER-MODE NOW. Everything except FM keeps the house exp-bias
+            //  curve (e^{2d}−1)/(e²−1) BIT-FOR-BIT. FM gets a 361:1 curve because its ceiling
+            //  moved from a 33.9-radian index to 96 kHz of deviation — a 21.6× (C3) / 86× (C1)
+            //  larger span that the house curve's 7.39:1 taper cannot spread without cramming
+            //  every musical value into the bottom 5 % of the knob.
+            //    T(d) = (361^d − 1)/360 = (e^{ln(361)·d} − 1)/360
+            //    T(0.1) = 0.0022277 → Δf   213.9 Hz → β  1.63 (C3) /  6.54 (C1)
+            //    T(0.5) = 0.050000  → Δf 4,800.0 Hz → β 36.69 (C3) / 146.8 (C1)   ← exactly 1/(√361+1)
+            //    T(0.7660) = 0.2500 → Δf  24,000 Hz  = Nyquist at 48 kHz: aliasing onset
+            //    T(1.0) = 1.000000  → Δf  96,000 Hz → β 733.87 (C3) / 2,935.5 (C1)
+            //  This runs at BLOCK rate (16 calls/block), never per sample, so the exp is free;
+            //  the per-sample de-zipper downstream is untouched.
+            b.depth = (b.mode == 1)
+                    ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM — 361:1
+                    : (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);     // house exp-bias curve
         }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH
         void setModalParamsB (const tw::ModalParams& p) noexcept { modalParamsB_ = p; }
@@ -947,16 +1022,19 @@ namespace tw
 
         /** Per-OSC UNISON (back panel pill, replaces the old global UNISON+SPREAD).
          *  count   1..16 voices stacked per note (Serum-parity).
-         *  detune  0..1 → pitch fan ±kUniMaxDetuneCents at the edges (the "fat").
+         *  detune  0..1 → the pitch TAPER only. fb522: the fan is ±(detune^2.5 · URANGE)
+         *                 cents at the edges; the SCALE is the SYN_OSC_x_URANGE knob (5..4800 c,
+         *                 default 50 = the retired kUniMaxDetuneCents), not a constant any more.
          *  blend   0..1 → balance of the centre voice vs the detuned/outer voices:
          *                 1 = all voices equal; 0 = only the centre voice (mono).
          *                 Modelled per-voice as gain = 1 − (1−blend)·|u_norm|.
-         *  width   0..1 → stereo spread (equal-power pan) of the voices L↔R.
+         *  width  −1..+1 → stereo spread (equal-power pan) of the voices L↔R. fb522: BIPOLAR
+         *                 (SYN_OSC_x_UWIDTH is −100..+100); negative mirrors the field.
          *  Blend gain is pre-multiplied into the pan tables so the render loop is
          *  unchanged; auto-gain (1/√Σgain²) holds perceived loudness as voices rise. */
         void setUnisonA (int count, float detune01, float blend01, float width01) noexcept
         {
-            setUnisonImpl (activeUnisonA_, uDetuneCentsA_, uPanLTA_, uPanRTA_, uNormTA_,
+            setUnisonImpl (0, activeUnisonA_, uDetuneCentsA_, uPanLTA_, uPanRTA_, uNormTA_,
                            uPanLA_, uPanRA_, uNormA_, uniSnapA_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
@@ -964,11 +1042,30 @@ namespace tw
         }
         void setUnisonB (int count, float detune01, float blend01, float width01) noexcept
         {
-            setUnisonImpl (activeUnisonB_, uDetuneCentsB_, uPanLTB_, uPanRTB_, uNormTB_,
+            setUnisonImpl (1, activeUnisonB_, uDetuneCentsB_, uPanLTB_, uPanRTB_, uNormTB_,
                            uPanLB_, uPanRB_, uNormB_, uniSnapB_,
                            count, detune01, blend01, width01);
             updateUnisonFramePositions();
             if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (glideNote_);
+        }
+
+        /** SOFT BOUND (fb522) — a ceiling with an EXACTLY LINEAR core.
+         *    |x| <= lin : returns x bit-for-bit.
+         *    |x| >  lin : lin + (lim-lin)*tanh((|x|-lin)/(lim-lin)), signed — C1-continuous
+         *                 at the knee (slope 1 on both sides) and asymptotic to +/-lim.
+         *  DEVIATION, deliberate, from OVERPASS-SPEC §1.1 items 2 and 5, which proposed a
+         *  GLOBAL `lim*tanh(x/lim)`. That form is nonlinear EVERYWHERE: it costs 2 % of FM
+         *  depth already at the old +/-8 wall, and it turns the inert AM/RM gain of exactly
+         *  1.0 into 0.9987 (-0.011 dB on every voice that has any armed blend slot). The
+         *  knee form removes the audible flat-top without touching the small-signal region,
+         *  which is what the spec actually wanted. */
+        static inline float softBound (float x, float lin, float lim) noexcept
+        {
+            const float a = std::fabs (x);
+            if (a <= lin) return x;
+            const float span = lim - lin;
+            const float y    = lin + span * std::tanh ((a - lin) / span);
+            return (x < 0.0f) ? -y : y;
         }
 
         /** WARP phase-domain remap (modes 1-8) — EXACT math of the original inline
@@ -978,23 +1075,39 @@ namespace tw
          *  silence gate ORs into `skipLookup`. Modes 0/9/10 pass phase through
          *  (9/10 are amp-domain — see applyAmpWarp). */
         static double applyPhaseWarp (int mode, float amount, double p,
-                                      float& window, bool& skipLookup) noexcept
+                                      float& window, bool& skipLookup, float var = 0.0f) noexcept
         {
             switch (mode)
             {
-                case 1:  // BEND
+                case 1:  // BEND — full-cycle phase bend
                 {
+                    // fb522 OVERPASS: 0.5 -> 1.0. [M] we already beat Serum's `Bend +/-` here
+                    // (cen 6022 / bw99 12428 vs 1396 / 1960); chained x2 (~= this 1.0) measures
+                    // cen 8336 / bw99 20930 at OOHR <= 0.0101, so the headroom is free of aliasing.
                     const double pi2 = 2.0 * 3.14159265358979323846;
-                    const double w = p + (double) amount * 0.5 * std::sin (pi2 * p);
+                    const double w = p + (double) amount * 1.0 * std::sin (pi2 * p);
                     return w - std::floor (w);
                 }
-                case 2:  // SYNC — 1×..16× exponential (Vital-style)
+                case 2:  // SYNC — 1x..64x exponential (Vital-style)
                 {
+                    // 🚨 fb523 — THE LIVE EXPONENT ON THE LINE BELOW IS 4, NOT 6. fb522 raised it
+                    // 4 -> 6 and fb523 REVERTED it after cert measured the raise LOSING harmonics
+                    // (centroid x1.97 but nharm 8 -> 4 and 112 -> 57). This note said "4 -> 6" while
+                    // the code said 4 — a stale comment on a live line, which already produced one
+                    // wrong proposal this session. Read the definition, not the note. KNOWN CEILING,
+                    // NOT FIXED HERE: multiplying the read rate of a band-limited mip TRANSPOSES
+                    // partials out through Nyquist instead of creating them — `nharm` falls
+                    // 183 -> 45 -> 8 across the sweep where Serum's Sync makes 423 peaks. The
+                    // real fix is phase-reset hard sync with PolyBLEP (spec §2, item W1).
+                    // ⚠️ warpRateMul() below (search the identifier — line numbers rot) MUST carry the
+                    //    mip is chosen for a rate 4x slower than the one actually read.
                     const double w = p * std::pow (2.0, (double) amount * 4.0);
                     return w - std::floor (w);
                 }
                 case 3:  // FORMANT — windowed sync (half-sine bell keyed off the input phase)
                 {
+                    // 🚨 fb523 — LIVE EXPONENT IS 4. fb522's 4 -> 6 was reverted with SYNC's (same
+                    // transposition law, same warpRateMul dependency). This note used to claim 6.
                     const double w  = p * std::pow (2.0, (double) amount * 4.0);
                     const double pi = 3.14159265358979323846;
                     window *= static_cast<float> (std::sin (pi * p));
@@ -1002,25 +1115,54 @@ namespace tw
                 }
                 case 4:  // PWM — duty-cycle window
                 {
-                    const double duty = juce::jmax (0.10, 1.0 - (double) amount * 0.45);
+                    // fb522 OVERPASS — BUG FIX, not a raise. With 0.45 the duty at amount = 1
+                    // is 0.55, so the 0.10 floor written on this very line was UNREACHABLE and
+                    // the knob only ever swept half of its intended range: [M] centroid moved
+                    // 5849 -> 6481, i.e. +11 % across 90 % of the knob. 0.90 makes the floor
+                    // exactly reachable at amount = 1 → a real 10 % pulse.
+                    const double duty = juce::jmax (0.10, 1.0 - (double) amount * 0.90);
                     if (p >= duty) { skipLookup = true; return p; }
                     return p / duty;
                 }
                 case 5:  // SKEW — piecewise 2-segment peak shift
                 {
-                    const double knee = juce::jmax (0.05, 0.5 - (double) amount * 0.4);
+                    // fb522 OVERPASS — same unreachable-floor defect as PWM: at 0.4 the knee at
+                    // amount = 1 is 0.10 while the coded floor is 0.05. 0.45 makes the floor
+                    // reachable. [M] the remaining bw99 gap to Serum's `Asym` (4582 vs 9419) is
+                    // STRUCTURAL — a piecewise-LINEAR remap has a bounded corner spectrum. The
+                    // real fix is a smooth power warp p^(1/(1+k*a)), not a larger linear span.
+                    const double knee = juce::jmax (0.05, 0.5 - (double) amount * 0.45);
                     return (p < knee) ? p / knee * 0.5
                                       : 0.5 + (p - knee) / (1.0 - knee) * 0.5;
                 }
-                case 6:  // MIRROR — squeezed-mirror blend
+                case 6:  // MIRROR — squeezed-mirror blend, VAR = fold count
                 {
-                    const double mirrored = (p < 0.5) ? p * 2.0 : 2.0 - p * 2.0;
+                    // fb522 OVERPASS: `amount` already reaches 1.0 (fully mirrored) — there is no
+                    // constant here to raise. [M] two folds already MEETS Serum's `Mirror`
+                    // (cen 6862 / bw99 14651 vs 6000 / 14783), so the new dimension is the FOLD
+                    // COUNT and it rides the per-slot VAR: N = 1 + 3*var, var default 0 → N = 1 →
+                    // the exact expression that shipped (var = 0 is bit-identical by construction).
+                    const double folds = 1.0 + 3.0 * (double) var;
+                    // fb523 —  is NOT a no-op at folds = 1. A phase landing
+                    // marginally outside [0,1) - which unison sines do - wraps here where the
+                    // shipped expression did not, and cert measured -78.4 dB of difference on
+                    // Mirror at unison >= 2 with VAR at 0 (N=1 was clean; only sine 0 is in play).
+                    // Inaudible, but it falsified the in-code claim "bit-identical by
+                    // construction". Taking p unchanged at folds == 1 makes that claim TRUE.
+                    const double qf = (folds == 1.0) ? p
+                                                     : (p * folds) - std::floor (p * folds);
+                    const double mirrored = (qf < 0.5) ? qf * 2.0 : 2.0 - qf * 2.0;
                     const double w = p * (1.0 - (double) amount) + mirrored * (double) amount;
                     return w - std::floor (w);
                 }
-                case 7:  // FRACTALIZE — fmod cascade, N = 1..8
+                case 7:  // FRACTALIZE — fmod cascade, N = 1..13
                 {
-                    const double w = p * (1.0 + (double) amount * 7.0);
+                    // 🚨 fb523 — LIVE COEFFICIENT IS 7, NOT 12. fb522's 7 -> 12 was reverted; the
+                    // reason is on the code line itself below.
+                    // Same structural caveat as SYNC: this transposes partials rather than
+                    // creating them (`nharm` collapses 20 -> 2 when chained), so the raise buys
+                    // brightness, not density. ⚠️ warpRateMul() carries this constant too.
+                    const double w = p * (1.0 + (double) amount * 7.0);   // fb523 REVERTED 12 -> 7: [M] the raise LOST harmonics (nharm 183->25 at d=0.5, 20->8 at d=1.0) for a LOWER centroid (x0.86). Reading a band-limited mip faster transposes its partials out through Nyquist; it cannot create new ones. Same class as SYNC (npeaks 8-10 vs 423) and it needs the same fix - real bandwidth, not a bigger multiplier.
                     return w - std::floor (w);
                 }
                 case 8:  // P-QUANTIZE — phase staircase, 32→2 steps, QUARTER-sampled.
@@ -1034,6 +1176,30 @@ namespace tw
                     // (0.25/0.75) AND the sine nulls (0/0.5), so no table convention can zero every
                     // sample point — audible across the whole 0–100% range; at steps=2 it reads a
                     // clean hard 2-step square at ±table peaks. (RT-safe, DSP-only, no UI mirror.)
+                    // ⛔ fb522 OVERPASS — CONSTANT DELIBERATELY NOT CHANGED. The spec proposes
+                    // 2^(9-8a) (512 -> 2 steps); it is blocked on an unexplained defect and the
+                    // investigation is written here so nobody re-opens it from scratch:
+                    //  (a) THE +63 % AT a = 0 IS NOT A BUG, IT IS THE RANGE. At a = 0 this line
+                    //      gives steps = 32, not infinity — a 32-point sample-and-hold of the
+                    //      wavetable. [M] cen 6362 vs the bare carrier's 3901 is exactly what a
+                    //      32-point S&H does. There is no transparent end of this knob to find;
+                    //      the floor of the range IS the defect, which is what 2^(9-8a) fixes.
+                    //  (b) THE "DEAD KNOB" IS PARTLY A BLIND METRIC. A phase staircase makes the
+                    //      output piecewise-constant, so its spectrum is dominated by the STEP
+                    //      DISCONTINUITY, whose tail is -6 dB/oct regardless of how many steps
+                    //      there are. 32 small edges and 2 large edges have nearly the same
+                    //      spectral centroid — hence [M] +4.6 % end-to-end on cen and +5.4 % on
+                    //      bw99 for a transform that plainly changes the timbre. Re-measure with
+                    //      harmonic COUNT / fundamental-to-first-image ratio before re-lawing.
+                    //  (c) OOHR IS BLIND HERE TOO, for a related reason: `steps` is an INTEGER,
+                    //      so every S&H image lands at a multiple of steps*f0 — on the harmonic
+                    //      grid — and an out-of-harmonic ratio can never see it. [M] OOHR <=
+                    //      0.0016 across the sweep is therefore not evidence of cleanliness.
+                    //  (d) A SEPARATE, REAL fb325 BREACH: std::round() makes this a STAIRCASE in
+                    //      the knob, not a curve — steps = 2 for every a >= 0.9195, so the top
+                    //      8 % of the knob is a hard plateau, and there are only 31 distinct
+                    //      values in total. A re-law must also crossfade between adjacent integer
+                    //      step counts, or it ships a new plateau on top of an unknown.
                     const double steps = std::round (std::pow (2.0, 5.0 - 4.0 * (double) amount));
                     return (std::floor (p * steps) + 0.25) / steps;
                 }
@@ -1041,16 +1207,39 @@ namespace tw
             }
         }
 
-        /** WARP amp-domain stage (modes 9-10) — applied post-lookup, per slot. */
-        static float applyAmpWarp (int mode, float amount, float s) noexcept
+        /** WARP amp-domain stage (modes 9-10) — applied post-lookup, per slot.
+         *  `var` is the per-slot VAR knob (SYN_OSC_x_WVAR / _W2VAR), default 0 = the exact
+         *  expressions that shipped. Defaulted so the waterfall call site in
+         *  PluginProcessor.cpp (getOscWavetableJson, 745-762) still compiles untouched. */
+        static float applyAmpWarp (int mode, float amount, float s, float var = 0.0f) noexcept
         {
-            if (mode == 9)         // RECTIFY: blend dry with |x|×2−1 by amount
+            if (mode == 9)         // RECTIFY: blend dry with |x|×2−1 by amount, VAR = pre-gain
             {
-                const float rect = std::abs (s) * 2.0f - 1.0f;
+                // fb522 OVERPASS: [M] we already beat Serum's `Rectify` by 1.89x on centroid and
+                // 5.32x on bw99, so there is no parity gap — the headroom goes on VAR as a
+                // PRE-GAIN (1 + 3*var), default 0 → `pre` is exactly 1.0f and `s * 1.0f == s`,
+                // i.e. bit-identical. ⚠️ [M] pre-gain 2 measures OOHR 0.056 — over the 2 % budget.
+                // VAR > 0 is the documented trigger for the 2x oversampling insertion point
+                // (spec §1.2 oversampling plan), which is NOT in this wave: treat var as
+                // destructive-by-request until it lands.
+                // NOTE the four `warpMode == 9` DC-block gates (2966/3261/3546/3831 pre-patch)
+                // need no change: they key on mode + amount, and at amount = 0 Rectify
+                // contributes nothing no matter what var is.
+                const float pre  = 1.0f + 3.0f * var;
+                const float sd   = s * pre;
+                const float rect = std::abs (sd) * 2.0f - 1.0f;
                 return s * (1.0f - amount) + rect * amount;
             }
             if (mode == 10)        // SINE SHAPER: sin(x × π/2 × (1 + amount×4))
             {
+                // ⛔ fb522 OVERPASS — CONSTANT DELIBERATELY NOT RAISED. [M] this knob TURNS OVER
+                // at 80 %: centroid climbs 4025 -> 11440 at a = 0.8 and then FALLS to 8855 at
+                // a = 1.0, because sin() folds back through its own turning point. Its a = 0.8
+                // peak already BEATS Serum's Sine Shaper (10305), and it is already outside the
+                // 2 % aliasing budget inside its shipped range (OOHR 0.0177 at 0.7, 0.0570 at
+                // 0.8; 1 % at a ~= 0.65). Raising the 4.0 moves the turnover DOWN the knob and
+                // buys nothing. It needs a re-law (1 + 3.2*a, so the brightest point lands at
+                // a = 1) plus 2x oversampling above a = 0.60 — one commit, not this one.
                 const float drive = 1.0f + amount * 4.0f;
                 return std::sin (s * (float) (3.14159265358979323846 * 0.5) * drive);
             }
@@ -1149,7 +1338,27 @@ namespace tw
             glideNote_ = glideStart_ + (glideTarget_ - glideStart_) * shaped;
             if (glideProgress_ >= 1.0) glideNote_ = glideTarget_;
         }
-        void setUnisonImpl (int& activeCount,
+        /** UNISON STACK (fb522) — the semitone layers of each SYN_OSC_x_USTACK option, in the
+         *  C++ option order registered by Lane P:
+         *    0 Off · 1 "12 (1x)" · 2 "12 (2x)" · 3 "12 (3x)" ·
+         *    4 "12+7 (1x)" · 5 "12+7 (2x)" · 6 "12+7 (3x)" · 7 Center-12 · 8 Center-24
+         *  [M] Center-12 is the big one: an octave-down layer contributes a complete
+         *  HALF-INTEGER partial series (0.5x, 1.5x, 2.5x … f0) and its fundamental measures
+         *  5.9 dB ABOVE the played pitch. Center-24 gives the quarter-integer series. */
+        static constexpr int kStackSemis[9][7] = {
+            {   0,  0,  0,  0,  0,  0,  0 },   // 0 Off (never read — the add is skipped)
+            {   0, 12,  0,  0,  0,  0,  0 },   // 1  12 (1x)
+            {   0, 12, 24,  0,  0,  0,  0 },   // 2  12 (2x)
+            {   0, 12, 24, 36,  0,  0,  0 },   // 3  12 (3x)
+            {   0,  7, 12,  0,  0,  0,  0 },   // 4  12+7 (1x)
+            {   0,  7, 12, 19, 24,  0,  0 },   // 5  12+7 (2x)
+            {   0,  7, 12, 19, 24, 31, 36 },   // 6  12+7 (3x)
+            { -12,  0,  0,  0,  0,  0,  0 },   // 7  Center-12
+            { -24,  0,  0,  0,  0,  0,  0 } }; // 8  Center-24
+        static constexpr int kStackLayers[9] = { 1, 2, 3, 4, 3, 5, 7, 2, 2 };
+
+        void setUnisonImpl (int osc,
+                            int& activeCount,
                             std::array<float, kMaxUnison>& detCents,
                             std::array<float, kMaxUnison>& panL,
                             std::array<float, kMaxUnison>& panR,
@@ -1163,9 +1372,41 @@ namespace tw
             activeCount = juce::jlimit (1, kMaxUnison, count);
             const float det = juce::jlimit (0.0f, 1.0f, detune01);
             const float bl  = juce::jlimit (0.0f, 1.0f, blend01);
-            const float wid = juce::jlimit (0.0f, 1.0f, width01);
+            // fb522 — WIDTH is BIPOLAR now (SYN_OSC_x_UWIDTH is -100..+100). The old
+            // jlimit(0,1) swallowed the whole negative half SILENTLY: it built clean, the UI
+            // moved, the sound never changed — fb470's exact failure class.
+            const float wid = juce::jlimit (-1.0f, 1.0f, width01);
+            // fb522 — cache the args so advanceUnisonRangeGlide() can re-run this function at
+            // block rate while URANGE glides, with everything else held exactly as pushed.
+            uniArgs_[(size_t) osc] = { count, detune01, blend01, width01 };
+            const float range = uniRangeSm_[(size_t) osc];
+            const int   stack = uniStack_[(size_t) osc];
+            const int   nLay  = kStackLayers[stack];
+            // a stack needs at least one WHOLE voice per layer; below that it is inert, which
+            // is what [M] Serum does ("12 (2x)" is bit-identical to Off at 2 voices).
+            const int   per   = (stack > 0) ? (activeCount / nLay) : 0;
 
             float gainSq = 0.0f;   // Σ (panL² + panR²) = Σ blendGain² → auto-gain
+            // fb523 — THE MODULATOR-TAP PAN CORRECTION (the 3 dB bug).
+            //  modPrev_[] taps each osc as the MONO SUM of its PANNED pair, 0.5·(L+R). A centred
+            //  voice is panned EQUAL-POWER at cos(π/4) = sin(π/4) = 0.7071, so that mono sum is
+            //  0.5·(0.7071x + 0.7071x) = 0.7071x — every blend modulator arrived 3.01 dB DOWN, and
+            //  its depth VARIED with unison Width and count (a hard-panned pair gives 0.5·(1+0)=0.5).
+            //  [M] FM at 100 % measured β = 33.946 where drive 48 predicts 48.000; 48/√2 = 33.9411,
+            //  a 0.014 % match. (The RMS-normalised-table hypothesis is REFUTED: Wavetable.h states
+            //  "Normalizes each mip level so peak == 1.0" in three places. The pan law is the cause.)
+            //  THE FIX, and why it is a scalar rather than a second accumulator: the per-voice
+            //  amplitude weight g is pan-INDEPENDENT by construction (panL² + panR² = g²·(cos²+sin²)
+            //  = g²), so the pan-invariant mono tap is norm·Σ s_u·g_u while the shipped tap is
+            //  norm·Σ s_u·g_u·0.5(cosθ_u + sinθ_u). Their ratio is a constant of the unison
+            //  geometry alone — Σg / Σ g·0.5(cos+sin) — so ONE multiply at the tap site restores
+            //  pan- and width-invariance and leaves the whole per-osc chain (warp, spectral,
+            //  blendAmp, sub) inside the tap where it has always been.
+            //  EXACT for unison = 1 (one voice, no weighting ambiguity: correction = √2), and exact
+            //  in both the correlated and the decorrelated limit whenever the mirror pairs share g
+            //  — which the fb255 blend law guarantees. Between those limits it is a weighting
+            //  approximation whose error is bounded by the spread of 0.5(cos+sin) ∈ [0.5, 0.7071].
+            float monoNum = 0.0f, monoDen = 0.0f;
             for (int u = 0; u < activeCount; ++u)
             {
                 if (activeCount <= 1)
@@ -1174,23 +1415,71 @@ namespace tw
                     panL[(size_t) u] = 0.7071f;
                     panR[(size_t) u] = 0.7071f;
                     gainSq += 1.0f;     // 0.7071² + 0.7071² = 1 (centre voice, equal power)
+                    monoNum += 1.0f; monoDen += 0.7071f;   // fb523 — correction = 1/0.7071 = √2 exactly
                     continue;
                 }
                 const float u_norm = ((float) u / (float) (activeCount - 1)) * 2.0f - 1.0f;  // -1..+1
-                detCents[(size_t) u] = u_norm * det * kUniMaxDetuneCents;
+                // fb522 — DETUNE = TAPER × RANGE (was: taper only, against a hard-coded 50 c).
+                //  · RANGE is the new SYN_OSC_x_URANGE knob, 5..4800 cents of half-spread. Its
+                //    default 50.0 reproduces the retired kUniMaxDetuneCents exactly.
+                //  · TAPER is d^2.5. [M] Serum's total spread fits 400·d^2.5 EXACTLY at every
+                //    one of five knob points (1.2649/12.500/70.711/194.87/400.00 predicted vs
+                //    1.26/12.50/70.71/194.86/400.00 measured); ours was pure linear (100·d).
+                //    ⚠️ [C] d^2.5 is NOT a no-op at the default range: at d = 0.25 it gives
+                //    1.5625 c where linear gave 12.5 c. It IS exactly invertible —
+                //    d_new = d_old^0.4 — so a migration can restore every stored patch. That
+                //    migration is a HANDOFF to the parameter lane; it is not in this file.
+                const float detT = det * det * std::sqrt (det);                 // d^2.5
+                float cents = u_norm * detT * range;
+                if (per >= 1)   // STACK — whole-semitone layers, engine-agnostic (it is just cents)
+                    cents += 100.0f * (float) kStackSemis[stack][juce::jmin (nLay - 1, u / per)];
+                detCents[(size_t) u] = cents;
                 // BLEND — centre voice (u_norm≈0) full, outer voices scaled toward `blend`, SYMMETRICALLY
                 // in |u_norm| (a voice and its mirror always share a gain → equal L/R energy).
                 // fb255 — was `(u==0) ? 1.0f : …`, which pinned the LEFTMOST voice (u=0, u_norm=-1) to full
                 // gain while its right mirror scaled down → the unison leaned LEFT (Max's bug, worse at high
                 // Width). The floor keeps UNISON=2/BLEND=0 audible (the anchor's real job) without the bias.
                 const float g = std::fmax (kUniBlendFloor, 1.0f - (1.0f - bl) * std::fabs (u_norm));
+                // ── WIDTH — THE STEREO LAW (fb522) ────────────────────────────────────────
+                // WAS: `angle = (u_norm*wid + 1)*π/4`, an ORDERED fan. Its energy-pan position
+                // works out to −cos(π·u/(N−1)), which leaves the inner voices at only −0.105 at
+                // N = 16 — nearly centred. The model predicts side/mid = 0.2542 there and the
+                // harness MEASURED 0.2470, so the model IS the shipped law.
+                // Serum measures corr −0.0005 / side-mid 1.0009 at N = 16 (fully decorrelated)
+                // against our +0.6039 / 0.2470 = a 6.07 dB side-energy deficit. That is
+                // alternate hard-panning, and the same model gives
+                //     side/mid = (1 − cos(π·|w|/2)) / (1 + cos(π·|w|/2))
+                // → exactly 0 at w = 0 (mono; side energy stays exactly 0.000e+00, which we
+                // already beat Serum on) and exactly 1.0000 at |w| = 1.
+                // The side assignment is ANTISYMMETRIC under the mirror u ↔ (N−1−u). That is
+                // what protects the three things that must not move:
+                //   · a mirror pair shares |u_norm|, hence shares the fb255 blend gain g, so L
+                //     and R always carry the SAME multiset of gains → L/R balance is exact for
+                //     every voice count, even AND odd (an odd count's centre voice maps to
+                //     itself and stays centred). cos((1−w)π/4) = sin((1+w)π/4), so the two
+                //     sides are exact mirrors of each other.
+                //   · the auto-gain is not merely preserved, it is ALGEBRAICALLY UNTOUCHED:
+                //     panL² + panR² = g²·(cos²θ + sin²θ) = g², and g does not depend on the pan
+                //     law at all — so gainSq, and therefore norm = 1/√Σg², is bit-identical to
+                //     the old law for every count, blend and width. ([M] flat to 0.08 dB across
+                //     voice count, which BEATS Serum's +4.21 dB drift — we keep that win.)
+                //   · N = 1, 2 and 3 reproduce the OLD law exactly (sides −1/+1 and 0), which
+                //     is why [M] Terrain already matched Serum at N = 2.
+                // Negative `wid` mirrors the field, which is what the bipolar knob now means.
+                const int   mirror = activeCount - 1 - u;
+                const float side   = (u == mirror) ? 0.0f
+                                   : (u <  mirror) ? ((u      & 1) ?  1.0f : -1.0f)
+                                                   : ((mirror & 1) ? -1.0f :  1.0f);
                 // WIDTH — equal-power pan, angle in [0, π/2]; BLEND gain folded into the table
                 // so the render loop stays a plain sAu·pan multiply.
-                const float angle = (u_norm * wid + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
+                const float angle = (side * wid + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
                 panL[(size_t) u] = std::cos (angle) * g;
                 panR[(size_t) u] = std::sin (angle) * g;
                 gainSq += panL[(size_t) u] * panL[(size_t) u] + panR[(size_t) u] * panR[(size_t) u];
+                monoNum += g;                                                        // fb523 — pan-INDEPENDENT weight
+                monoDen += 0.5f * (panL[(size_t) u] + panR[(size_t) u]);            // fb523 — == g·0.5(cosθ+sinθ)
             }
+            updateUniWarpSpread (osc);   // fb522 — per-sine WARP fan depends on activeCount
             for (int u = activeCount; u < kMaxUnison; ++u)
             {
                 detCents[(size_t) u] = 0.0f;
@@ -1199,10 +1488,96 @@ namespace tw
             }
             // AUTO-GAIN — RMS-constant: holds perceived loudness as voices/blend change.
             norm = (gainSq > 1.0e-9f) ? (1.0f / std::sqrt (gainSq)) : 1.0f;
+            monoTapCorrT_[(size_t) osc] = (monoDen > 1.0e-9f) ? (monoNum / monoDen) : 1.0f;   // fb523 — √2 at unison 1
             // fb204 — structural change (voice count) = a NEW stereo image, snap don't glide;
             // continuous Width/Blend moves ride the per-sample one-pole in the render loop.
             if (! snapped || activeCount != oldCount)
-            { panLLive = panL; panRLive = panR; normLive = norm; snapped = true; }
+            { panLLive = panL; panRLive = panR; normLive = norm; snapped = true; monoTapCorr_[(size_t) osc] = monoTapCorrT_[(size_t) osc]; }
+        }
+
+        // ── fb522 OVERPASS — unison RANGE / WARP-SPREAD / STACK plumbing ────────────────
+        /** Re-run setUnisonImpl for one osc with its cached args (used by the RANGE glide). */
+        void reapplyUnison (int osc) noexcept
+        {
+            const UniArgs a = uniArgs_[(size_t) osc];
+            switch (osc)
+            {
+                case 0: setUnisonImpl (0, activeUnisonA_, uDetuneCentsA_, uPanLTA_, uPanRTA_, uNormTA_, uPanLA_, uPanRA_, uNormA_, uniSnapA_, a.count, a.det, a.blend, a.width); break;
+                case 1: setUnisonImpl (1, activeUnisonB_, uDetuneCentsB_, uPanLTB_, uPanRTB_, uNormTB_, uPanLB_, uPanRB_, uNormB_, uniSnapB_, a.count, a.det, a.blend, a.width); break;
+                case 2: setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, a.count, a.det, a.blend, a.width); break;
+                default:setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, a.count, a.det, a.blend, a.width); break;
+            }
+        }
+        void setUniRangeImpl (int osc, float cents) noexcept
+        {
+            const float t = juce::jlimit (5.0f, 4800.0f, cents);
+            uniRangeT_[(size_t) osc] = t;
+            if (! uniRangeSeeded_[(size_t) osc])          // first push SEEDS — never glide into tune
+            {
+                uniRangeSeeded_[(size_t) osc] = true;
+                const float prev = uniRangeSm_[(size_t) osc];
+                uniRangeSm_[(size_t) osc] = t;
+                // At the default 50.0 this is a no-op against the seeded constant, so a stock
+                // patch never re-enters setUnisonImpl here at all — and, importantly, a URANGE
+                // push that arrives BEFORE the first setUnison broadcast cannot rebuild the pan
+                // tables from the placeholder uniArgs_.
+                if (t != prev) reapplyUnison (osc);
+            }
+        }
+        void setUniWarpImpl (int osc, float bip) noexcept
+        {
+            const float v = juce::jlimit (-1.0f, 1.0f, bip);
+            if (v == uniWarp_[(size_t) osc]) return;
+            uniWarp_[(size_t) osc] = v;
+            updateUniWarpSpread (osc);
+        }
+        void setUniStackImpl (int osc, int mode) noexcept
+        {
+            const int m = juce::jlimit (0, 8, mode);
+            if (m == uniStack_[(size_t) osc]) return;
+            uniStack_[(size_t) osc] = m;
+            reapplyUnison (osc);                          // the stack lives in the detune-cents table
+        }
+        /** Per-sine WARP fan: sine u gets warpAmount + uwarp·u_norm. `uniWarpOn_` is the
+         *  bit-identity gate — at uwarp = 0 the render loop takes the untouched `warpAmount_`
+         *  path and pays literally nothing. */
+        void updateUniWarpSpread (int osc) noexcept
+        {
+            const float w   = uniWarp_[(size_t) osc];
+            const int   cnt = (osc == 0) ? activeUnisonA_ : (osc == 1) ? activeUnisonB_
+                            : (osc == 2) ? activeUnisonC_ : activeUnisonD_;
+            std::array<float, kMaxUnison>& t = (osc == 0) ? uWarpOffA_ : (osc == 1) ? uWarpOffB_
+                                             : (osc == 2) ? uWarpOffC_ : uWarpOffD_;
+            for (int u = 0; u < kMaxUnison; ++u)
+            {
+                const float u_norm = (cnt > 1 && u < cnt)
+                                   ? ((float) u / (float) (cnt - 1)) * 2.0f - 1.0f : 0.0f;
+                t[(size_t) u] = w * u_norm;
+            }
+            const bool on = (w != 0.0f) && (cnt > 1);
+            switch (osc) { case 0: uniWarpOnA_ = on; break; case 1: uniWarpOnB_ = on; break;
+                           case 2: uniWarpOnC_ = on; break; default: uniWarpOnD_ = on; break; }
+        }
+        /** URANGE is CONTINUOUS, so it must GLIDE, not snap (the fb204 law: a voice-count
+         *  change is a new image and snaps; a continuous move rides the 2.5 ms one-pole).
+         *  It is evaluated ONCE PER BLOCK because every pitch quantity in this voice is
+         *  block-rate by construction — portamento itself advances in advanceGlide(numSamples)
+         *  and the per-sine increments are re-derived in updateUnisonPhaseIncrements*() right
+         *  below this call. A per-sample RANGE would mean re-deriving 2,048 phase increments
+         *  per sample. Coefficient is the exact 2.5 ms one-pole integrated over the block.
+         *  Costs nothing and is BIT-IDENTICAL when the knob is not moving: the recompute is
+         *  skipped entirely once |target − current| falls under 1e-4 cents. */
+        void advanceUnisonRangeGlide (int numSamples) noexcept
+        {
+            const float c = 1.0f - std::exp (-(float) numSamples
+                                             / (0.0025f * (float) juce::jmax (1.0, sampleRate_)));
+            for (int o = 0; o < 4; ++o)
+            {
+                const float d = uniRangeT_[(size_t) o] - uniRangeSm_[(size_t) o];
+                if (std::fabs (d) < 1.0e-4f) { uniRangeSm_[(size_t) o] = uniRangeT_[(size_t) o]; continue; }
+                uniRangeSm_[(size_t) o] += d * c;
+                reapplyUnison (o);
+            }
         }
 
         /** Phase 11a — Set per-OSC FRAME SPREAD (0..1). Pushed per-block from
@@ -1417,12 +1792,54 @@ namespace tw
 
         void setPhaseMode (int modeA, int modeB) noexcept
         {
-            // Phase tile RETIRED (2026-07-09, Max's call): phase is HARDWIRED to FREE —
-            // accumulators never reset, every note starts where the wave happens to be.
-            // The PHASE_MODE params stay registered (IDs FROZEN) but are ignored.
-            juce::ignoreUnused (modeA, modeB);
-            phaseModeA_ = 1; phaseModeB_ = 1;
+            // fb522 — UN-HARDWIRED. From 2026-07-09 until now both lines below read
+            // `phaseModeA_ = 1` behind an ignoreUnused, so all four modes rendered
+            // BIT-IDENTICALLY ([M] 0.000000e+00 at two note-on offsets) — the modes were
+            // provably dead. ⚠️ SHIP-TOGETHER LAW: this un-wiring is only safe in the SAME
+            // BUILD as the version-3 migration that forces every stored PHASE_MODE to 1,
+            // because the param's registered default was 2 (Random) — without the migration
+            // 100 % of the library flips Free -> Random on load.
+            phaseModeA_ = juce::jlimit (0, 3, modeA);
+            phaseModeB_ = juce::jlimit (0, 3, modeB);
         }
+
+        /** PHASE offset, degrees (SYN_OSC_x_PHASE). Stored in CYCLES. */
+        void setPhaseOffset   (float degA, float degB) noexcept { phaseOff_[0] = juce::jlimit (0.0f, 360.0f, degA) * (1.0f / 360.0f); phaseOff_[1] = juce::jlimit (0.0f, 360.0f, degB) * (1.0f / 360.0f); }
+        void setPhaseOffsetCD (float degC, float degD) noexcept { phaseOff_[2] = juce::jlimit (0.0f, 360.0f, degC) * (1.0f / 360.0f); phaseOff_[3] = juce::jlimit (0.0f, 360.0f, degD) * (1.0f / 360.0f); }
+        /** PHASE amount 0..1 (SYN_OSC_x_PHASE_AMT) — scales RANDOM's draw and SPREAD's fan. */
+        void setPhaseAmount   (float amtA, float amtB) noexcept { phaseAmt_[0] = juce::jlimit (0.0f, 1.0f, amtA); phaseAmt_[1] = juce::jlimit (0.0f, 1.0f, amtB); }
+        void setPhaseAmountCD (float amtC, float amtD) noexcept { phaseAmt_[2] = juce::jlimit (0.0f, 1.0f, amtC); phaseAmt_[3] = juce::jlimit (0.0f, 1.0f, amtD); }
+
+        // ── fb522 OVERPASS — UNISON RANGE / WARP SPREAD / STACK, per osc ─────────────
+        /** UNISON RANGE, cents of half-spread at Detune = 100 % (SYN_OSC_x_URANGE, 5..4800).
+         *  Replaces the hard-coded kUniMaxDetuneCents = 50.0f. CONTINUOUS → it GLIDES on a
+         *  2.5 ms one-pole (advanceUnisonRangeGlide, per block); the first push seeds without
+         *  a glide so a freshly loaded patch does not sweep into tune. */
+        void setUnisonRangeA (float cents) noexcept { setUniRangeImpl (0, cents); }
+        void setUnisonRangeB (float cents) noexcept { setUniRangeImpl (1, cents); }
+        void setUnisonRangeC (float cents) noexcept { setUniRangeImpl (2, cents); }
+        void setUnisonRangeD (float cents) noexcept { setUniRangeImpl (3, cents); }
+        /** UNISON WARP SPREAD, bipolar -1..+1 (SYN_OSC_x_UWARP). Fans the WARP amount across
+         *  the unison sines: sine u gets warpAmount + uwarp*u_norm, clamped to 0..1. Serum has
+         *  two of these (Warp 1 / Warp 2 spread); we have one knob and apply it to BOTH slots. */
+        void setUnisonWarpA (float bip) noexcept { setUniWarpImpl (0, bip); }
+        void setUnisonWarpB (float bip) noexcept { setUniWarpImpl (1, bip); }
+        void setUnisonWarpC (float bip) noexcept { setUniWarpImpl (2, bip); }
+        void setUnisonWarpD (float bip) noexcept { setUniWarpImpl (3, bip); }
+        /** UNISON STACK, 0..8 (SYN_OSC_x_USTACK). A semitone table applied to the unison
+         *  voice pitches; 0 = Off is bit-identical (the add is skipped entirely). */
+        void setUnisonStackA (int mode) noexcept { setUniStackImpl (0, mode); }
+        void setUnisonStackB (int mode) noexcept { setUniStackImpl (1, mode); }
+        void setUnisonStackC (int mode) noexcept { setUniStackImpl (2, mode); }
+        void setUnisonStackD (int mode) noexcept { setUniStackImpl (3, mode); }
+        /** WARP slot VAR, 0..1 (SYN_OSC_x_WVAR / _W2VAR). 0 = identity for every mode.
+         *  Live today on MIRROR (fold count N = 1+3*var) and RECTIFY (pre-gain 1+3*var).
+         *  PARKED: the RM modulator drive the spec also puts on VAR — see the RM comment at
+         *  the blend-slot law; it is a blend-slot dimension, not a warp-slot one. */
+        void setWarpVar    (float varA, float varB) noexcept { warpVar_[0]  = juce::jlimit (0.0f, 1.0f, varA); warpVar_[1]  = juce::jlimit (0.0f, 1.0f, varB); }
+        void setWarpVarCD  (float varC, float varD) noexcept { warpVar_[2]  = juce::jlimit (0.0f, 1.0f, varC); warpVar_[3]  = juce::jlimit (0.0f, 1.0f, varD); }
+        void setWarp2Var   (float varA, float varB) noexcept { warp2Var_[0] = juce::jlimit (0.0f, 1.0f, varA); warp2Var_[1] = juce::jlimit (0.0f, 1.0f, varB); }
+        void setWarp2VarCD (float varC, float varD) noexcept { warp2Var_[2] = juce::jlimit (0.0f, 1.0f, varC); warp2Var_[3] = juce::jlimit (0.0f, 1.0f, varD); }
 
         /** WAVER depth per OSC, 0..1 (analog pitch drift; from SYN_OSC_A/B_WAVER / 100).
          *  Replaces the old EROSION pitch sine-LFO with a bounded Ornstein–Uhlenbeck
@@ -1459,13 +1876,29 @@ namespace tw
         // accumulator's current value (used by FREE so it keeps running across notes).
         double resolvePhase (int mode, int u, int osc, double carried) noexcept
         {
+            // fb522 — the two new knobs fold in here and NOWHERE else (note-on only, [M] zero CPU):
+            //   base = SYN_OSC_x_PHASE / 360   (cycles)    amt = SYN_OSC_x_PHASE_AMT / 100
+            // At base = 0 and amt = 1 every branch returns the EXACT expression that shipped, so
+            // FREE (the only mode that has been reachable since 2026-07-09) is bit-identical.
+            // ⚠️ SPREAD uses u/cnt, NOT u/(cnt-1): voice 0 anchors at phase 0 and the fan
+            //    deliberately never closes the loop — the fb255 blend law assumes that anchor.
+            //    DO NOT "fix" it.
+            // ⚠️ FREE ignores `amt` on purpose: it carries an accumulator, there is nothing
+            //    random to scale. `base` still offsets its one-time seed.
+            const double base = (double) phaseOff_[(size_t) osc];
+            const double amt  = (double) phaseAmt_[(size_t) osc];
+            auto wrap = [] (double x) noexcept { return x - std::floor (x); };
             switch (mode)
             {
-                case 0: return 0.0;                                                              // RETRIG — aligned, punchy
+                case 0: return (base == 0.0) ? 0.0 : wrap (base);                                // RETRIG — aligned, punchy
                 case 3: { const int cnt = (osc == 0) ? activeUnisonA_ : (osc == 1) ? activeUnisonB_ : (osc == 2) ? activeUnisonC_ : activeUnisonD_;
-                          return (cnt > 1) ? (double) u / (double) cnt : 0.0; }                     // SPREAD — even fan (per-OSC)
-                case 2: return nextPhaseRandom();                                                 // RANDOM — fresh each note
-                case 1: default: return phaseSeeded_ ? carried : seedPhase (u, osc);              // FREE — seed once, then carry
+                          const double fan = (cnt > 1) ? (double) u / (double) cnt : 0.0;
+                          return (base == 0.0 && amt == 1.0) ? fan : wrap (base + amt * fan); }   // SPREAD — even fan (per-OSC)
+                case 2: { const double r = nextPhaseRandom();   // drawn ONCE either way — it mutates phaseRng_
+                          return (base == 0.0 && amt == 1.0) ? r : wrap (base + amt * r); }       // RANDOM — fresh each note
+                case 1: default: { if (phaseSeeded_) return carried;                             // FREE — seed once, then carry
+                                   const double sd = seedPhase (u, osc);
+                                   return (base == 0.0) ? sd : wrap (base + sd); }
             }
         }
 
@@ -1645,8 +2078,8 @@ namespace tw
         void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,10,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
         void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
         void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
-        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
-        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
+        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,10,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,10,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
 
         /** FM-ENGINE-VOICE — per-OSC wavetable-carrier FM params (osc 0..3 = A..D).
@@ -1699,8 +2132,8 @@ namespace tw
         void setBlurCD (float blurC01, float blurD01) noexcept { blurTargetC_=juce::jlimit(0.0f,1.0f,blurC01); blurTargetD_=juce::jlimit(0.0f,1.0f,blurD01); }
         void setPhaseModeCD (int modeC, int modeD) noexcept
         {
-            juce::ignoreUnused (modeC, modeD);   // hardwired FREE (tile retired — see setPhaseMode)
-            phaseModeC_ = 1; phaseModeD_ = 1;
+            phaseModeC_ = juce::jlimit (0, 3, modeC);   // fb522 — un-hardwired; see setPhaseMode
+            phaseModeD_ = juce::jlimit (0, 3, modeD);
         }
         void setWaverCD (float c, float d) noexcept { waverC_=juce::jlimit(0.0f,1.0f,c); waverD_=juce::jlimit(0.0f,1.0f,d); }
         void setFoldCD (int shapeC, float amountC, int shapeD, float amountD) noexcept { foldShapeC_=juce::jlimit(0,2,shapeC); foldAmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); foldShapeD_=juce::jlimit(0,2,shapeD); foldAmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
@@ -2454,11 +2887,30 @@ namespace tw
                 pitchEnvSemis_ = pit;
                 mod1Bus_ = m1; mod2Bus_ = m2;
             }
+            // fb522 — URANGE glide (block-rate; see advanceUnisonRangeGlide). It must run BEFORE
+            // the increments are re-derived, because it rewrites the per-sine detune-cents table.
+            advanceUnisonRangeGlide (numSamples);
             // Re-derive per-sine phase increments with updated drift + glide pitch
             updateUnisonPhaseIncrementsA (glideNote_);
             updateUnisonPhaseIncrementsB (glideNote_);
             updateUnisonPhaseIncrementsC (glideNote_);
             updateUnisonPhaseIncrementsD (glideNote_);
+            // fb522 — SUB AS A BLEND SOURCE: the arm pass further down (the one that fills
+            // modSrcForce_/blkCarrierArmed_) runs AFTER prepareSubBlock, so the Sub force flag
+            // has to be derived here or it would always be one block late. TRAP, measured:
+            // prepareSubBlock gates the whole lane on `wEff > 1e-5f`, so at Sub Mix 0 the sub
+            // oscillator does not tick at all and the modulator tap reads silence — which is
+            // exactly the "turn it down, still hear it modulate" behaviour modSrcForce_ exists
+            // to prevent for the oscs. Forcing the lane on is inaudible: its weight still ramps
+            // to 0, so subMix contributes v*0 and multiplies the osc by n = 1.0f.
+            for (int o = 0; o < 4; ++o) subForce_[o] = false;
+            for (int c = 0; c < 4; ++c)
+                for (int sl = 0; sl < 4; ++sl)
+                {
+                    const BlendSlotV& b = blendSlot_[c][sl];
+                    if (b.mode >= 1 && b.mode <= 4 && b.src == 4 && b.depth >= 1.0e-6f)   // fb523 — TRACKS the arm pass and the inner loop; all three thresholds are one threshold. A Sub-sourced slot below this gate never ticks its sub lane, so subModTap_ stays 0 and the slot is silently inert.
+                        subForce_[c] = true;                     // Sub(4) = the CARRIER'S OWN sub
+                }
             prepareSubBlock (numSamples);   // SUB — voice-anchored per-osc sub lanes (universal box)
 
             // Phase 10a / Phase 8b — pick mip level using sine 0 (centre-detuned,
@@ -2467,12 +2919,43 @@ namespace tw
             // Phase 11d AA — phase-multiply warps (SYNC, FORMANT, FRACTALIZE) read the
             // table faster than the base increment, so pick the mip for the WARPED rate
             // (more band-limited → far less aliasing). Other modes use rate ×1.
+            // ⚠️ LOCKSTEP with applyPhaseWarp: these three constants ARE the ones at cases 2/3/7.
+            //    fb522 raised them 4 -> 6 and 7 -> 12; fb523 REVERTED BOTH to 4 and 7 after cert
+            //    measured the raises LOSING harmonics (Fractalize nharm 183->25 at half travel;
+            //    Sync/Formant centroid x1.97 but nharm 8->4 and 112->57). Reading a band-limited
+            //    mip faster TRANSPOSES partials out through Nyquist - it cannot create them - so a
+            //    bigger exponent buys brightness by subtraction. The real fix is real bandwidth
+            //    (PolyBLEP hard sync), tracked as ledger C1.
+            //    🔑 THE TRAP THAT BIT US: reverting case 7 here and NOT in this lambda compiles
+            //    clean and is silent - the mip is then picked for a rate 1.7x faster than the one
+            //    actually read. A constant that also feeds a SELECTION path lives in two places.
             auto warpRateMul = [] (int mode, float amt) -> double
             {
                 if (mode == 2 || mode == 3) return std::pow (2.0, (double) amt * 4.0); // SYNC / FORMANT (1..16x)
                 if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
                 return 1.0;
             };
+            // fb522 — UNISON-aware mip pick. The mip is chosen from sine 0's rate, and the old
+            // premise ("±25 cents of unison detune doesn't cross a mip boundary") dies the moment
+            // URANGE reaches 4800 cents or STACK adds +36 semitones: an outer sine reading a table
+            // band-limited for the BASE pitch transposes its top harmonics straight through
+            // Nyquist. Widen the reference by the largest UPWARD offset, counting only the part
+            // that exceeds the legacy ±50-cent constant — so anything inside the old range picks
+            // exactly the mip it always picked (that is the URANGE = 50 bit-identity gate), and
+            // the widening is continuous across the threshold (no mip pop at 50.0001 cents).
+            auto uniRateMul = [] (const std::array<float, kMaxUnison>& cents, int cnt) -> double
+            {
+                float m = 0.0f;
+                for (int u = 0; u < cnt; ++u) m = juce::jmax (m, cents[(size_t) u]);
+                return (m <= kUniMaxDetuneCents) ? 1.0
+                     : std::pow (2.0, (double) (m - kUniMaxDetuneCents) / 1200.0);
+            };
+            // fb522 — the WARP FAN (UWARP) raises the warp amount on the outer sines, so the mip
+            // must be picked for the fanned maximum too. |uwarp| = 0 → jlimit of the unchanged
+            // amount → bit-identical.
+            auto warpFan = [this] (int osc, float amt) -> float
+            { return uniWarp_[(size_t) osc] == 0.0f ? amt
+                   : juce::jlimit (0.0f, 1.0f, amt + std::fabs (uniWarp_[(size_t) osc])); };
             // ── FM-ENGINE-VOICE block-rate conditioning + WEATHERING SUITE slow processes ──
             // Smooth every knob, run STRIKE's decay and AGE's drift walks, then fold it all
             // into the per-osc EFFECTIVE values the per-sample core reads. All pow()/exp()
@@ -2597,10 +3080,10 @@ namespace tw
                 m += (double) fmFxMipAdd_[o];
                 return juce::jmin (m, 64.0);   // sanity cap — extreme depth×ratio must dull, never vanish
             };
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpAmount_) * warpRateMul (warp2ModeA_, warp2AmountA_) * fmRateMul (engine_,  0));
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpAmountB_) * warpRateMul (warp2ModeB_, warp2AmountB_) * fmRateMul (engineB_, 1));
-            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpAmountC_) * warpRateMul (warp2ModeC_, warp2AmountC_) * fmRateMul (engineC_, 2));
-            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpAmountD_) * warpRateMul (warp2ModeD_, warp2AmountD_) * fmRateMul (engineD_, 3));
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
+            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpFan (2, warpAmountC_)) * warpRateMul (warp2ModeC_, warpFan (2, warp2AmountC_)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
+            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpFan (3, warpAmountD_)) * warpRateMul (warp2ModeD_, warpFan (3, warp2AmountD_)) * fmRateMul (engineD_, 3) * uniRateMul (uDetuneCentsD_, activeUnisonD_));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -2717,17 +3200,69 @@ namespace tw
                         || e == Engine::HARM || e == Engine::MODAL; };
                 for (int o = 0; o < 4; ++o) { modSrcForce_[o] = false; blkCarrierArmed_[o] = false; }
                 noiseForce_ = false;   // fb64 — set when any osc blends WITH the noise (so its tap is generated even if noise output is off)
+                anyBlendArmed_ = false;
                 for (int c = 0; c < 4; ++c)
                     for (int s = 0; s < 4; ++s)
                     {
                         const BlendSlotV& b = blendSlot_[c][s];
-                        if (b.mode < 1 || b.mode > 4 || b.depth < 1.0e-4f) continue;      // armed FM/PD/AM/RM only
+                        // fb522 CPU — the arm flag has to survive the RELEASE of a slot as well as
+                        // its engagement: the per-sample law reads the DE-ZIPPERED depth, so a slot
+                        // whose knob just hit 0 must keep running until the smoothed value has
+                        // decayed under the same threshold the inner loop uses, or turning a blend
+                        // down would hard-cut instead of fading.
+                        // 🚨 fb523 — 1e-4 -> 1e-6 IN ALL THREE PLACES, AND THEY MUST MOVE TOGETHER.
+                        // This gate and the inner loop's `d < 1e-6` are the SAME threshold wearing
+                        // two hats: if the arm pass keeps 1e-4 while the inner loop drops to 1e-6,
+                        // every depth in between builds clean, shows in the UI, and is skipped
+                        // before the DSP ever runs — fb373's "verify the path, not just the engine"
+                        // failure exactly. The reason for the move is in the inner loop: under the
+                        // Hz law a depth of 1e-4 is Δf = 9.6 Hz = an audible −17 dBc sideband at C1.
+                        if (b.mode >= 1 && b.mode <= 4
+                            && (b.depth >= 1.0e-6f || blendDepthSm_[c][s] >= 1.0e-6f))
+                            anyBlendArmed_ = true;
+                        if (b.mode < 1 || b.mode > 4 || b.depth < 1.0e-6f) continue;      // armed FM/PD/AM/RM only
                         if ((b.mode == 1 || b.mode == 2) && isBlock (eng[c]))
                             blkCarrierArmed_[c] = true;                                   // FM/PD phase-modulate c's block (AM/RM don't need the ring)
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
                         else if (b.src == 5) noiseForce_         = true;                  // Noise as source (fb64)
                         else if (b.src == 6) modSrcForce_[c]     = true;                  // Self
+                        // b.src == 4 (Sub) is handled earlier — it has to be known before
+                        // prepareSubBlock() runs. See the subForce_ scan there.
                     }
+                // ── THE FREE CPU WIN (fb522). The per-sample blend law below is ~50 flops per
+                // sample PER VOICE (16 de-zipper FMAs before any mode test, 4 unguarded fmPhase_
+                // integrators, 8 soft bounds) and it ran unconditionally on every patch, including
+                // the overwhelming majority that blend nothing — ≈89 Mflop/s of pure waste.
+                // Skipping it is BIT-IDENTICAL, not approximately so, and here is why:
+                //  · blendOff[] initialises to 0.f and blendAmp[] to 1.f each sample, which is
+                //    exactly what the skipped code would have produced with every slot at mode 0.
+                //  · the ONE piece of state that could survive a disarm is fmPhase_, whose leaky
+                //    integrator decays but never reaches 0. So we do not disarm until it has: the
+                //    flag stays true while any |fmPhase_| is above 1e-7, and we zero it on the
+                //    transition. A 1e-7-cycle phase step is 8.7e-4 degrees — it cannot click, and
+                //    it is bounded by construction rather than assumed.
+                //  · the de-zipper is a state machine, so parking it could leave a STALE smoothed
+                //    depth that pops the next time a slot arms (a slot at mode 0 with a high knob
+                //    would freeze its smoothed value high, then arm at full depth). We converge it
+                //    instead: while nothing is armed the smoothed value is written straight to its
+                //    target, which is where the old code's exponential was heading anyway and is
+                //    unobservable because nothing reads it. Same for the LFO taps.
+                if (! anyBlendArmed_)
+                    for (int c = 0; c < 4; ++c)
+                        if (std::fabs (fmPhase_[c]) > 1.0e-7f) { anyBlendArmed_ = true; break; }
+                if (! anyBlendArmed_)
+                {
+                    for (int c = 0; c < 4; ++c)
+                    {
+                        fmPhase_[c] = 0.0f;                       // |x| <= 1e-7 here, proven above
+                        for (int s = 0; s < 4; ++s)
+                        {
+                            blendDepthSm_[c][s] = blendSlot_[c][s].depth;
+                            const int src = blendSlot_[c][s].src;
+                            if (src >= 7 && src <= 16) blendLfoSm_[c][s] = synthLfo_[src - 7].peek();
+                        }
+                    }
+                }
             }
 
             // SAMPLE-ENGINE-VOICE — render any SAMP oscillators' stereo blocks for this
@@ -2749,6 +3284,12 @@ namespace tw
             const bool uLoopB = (! oscDead_[1] || modSrcForce_[1]) && (engineB_ != Engine::SAMP && engineB_ != Engine::GRAN && engineB_ != Engine::SPEC && engineB_ != Engine::HARM && engineB_ != Engine::MODAL);
             const bool uLoopC = (! oscDead_[2] || modSrcForce_[2]) && (engineC_ != Engine::SAMP && engineC_ != Engine::GRAN && engineC_ != Engine::SPEC && engineC_ != Engine::HARM && engineC_ != Engine::MODAL);
             const bool uLoopD = (! oscDead_[3] || modSrcForce_[3]) && (engineD_ != Engine::SAMP && engineD_ != Engine::GRAN && engineD_ != Engine::SPEC && engineD_ != Engine::HARM && engineD_ != Engine::MODAL);
+            // fb523 — does this osc's signal reach modPrev_ THROUGH the unison pan tables? Only WT
+            //  and FM render inside the unison loop; every block engine bypasses cos/sin entirely.
+            const bool mcOnA = (engine_  == Engine::WT || engine_  == Engine::FM);
+            const bool mcOnB = (engineB_ == Engine::WT || engineB_ == Engine::FM);
+            const bool mcOnC = (engineC_ == Engine::WT || engineC_ == Engine::FM);
+            const bool mcOnD = (engineD_ == Engine::WT || engineD_ == Engine::FM);
             const float invNsBlend = 1.0f / (float) juce::jmax (1, numSamples);   // fb248 — frame-crossfade ramp denom
             for (int i = 0; i < numSamples; ++i)
             {
@@ -2772,6 +3313,7 @@ namespace tw
                 for (int gu = 0; gu < activeUnisonD_; ++gu) { uPanLD_[(size_t) gu] += (uPanLTD_[(size_t) gu] - uPanLD_[(size_t) gu]) * lvlSmCoef_; uPanRD_[(size_t) gu] += (uPanRTD_[(size_t) gu] - uPanRD_[(size_t) gu]) * lvlSmCoef_; }
                 uNormA_ += (uNormTA_ - uNormA_) * lvlSmCoef_; uNormB_ += (uNormTB_ - uNormB_) * lvlSmCoef_;
                 uNormC_ += (uNormTC_ - uNormC_) * lvlSmCoef_; uNormD_ += (uNormTD_ - uNormD_) * lvlSmCoef_;
+                for (int mo = 0; mo < 4; ++mo) monoTapCorr_[mo] += (monoTapCorrT_[mo] - monoTapCorr_[mo]) * lvlSmCoef_;   // fb523 — the modulator-tap pan correction rides the SAME 2.5 ms glide as the pan tables
                 // Per-osc SUB contributions this sample (mono, post-normalization) — filled by
                 // subMix, used by the filter router to route the Sub independently of its osc.
                 float subMono0 = 0.f, subMono1 = 0.f, subMono2 = 0.f, subMono3 = 0.f;
@@ -2782,9 +3324,11 @@ namespace tw
                 //    rides the read phase. Modulator taps = previous-sample pre-gain osc outputs (any-to-any). ──
                 float blendOff[4] = { 0.f, 0.f, 0.f, 0.f };
                 float blendAmp[4] = { 1.f, 1.f, 1.f, 1.f };   // AM/RM amplitude gain (1 = inert; multiplies the carrier)
+                if (anyBlendArmed_)   // fb522 CPU — see the arm pass above for the bit-identity proof
                 {
-                    const float repInc[4] = { (float) uPhaseIncA_[0], (float) uPhaseIncB_[0],
-                                              (float) uPhaseIncC_[0], (float) uPhaseIncD_[0] };
+                    // fb523 — repInc[] (the per-carrier phase increment) is GONE: it was the ONLY
+                    //  consumer of the old pitch-proportional FM law and nothing else in this block
+                    //  reads it. Its removal is the load-bearing half of the unit change.
                     for (int c = 0; c < 4; ++c)
                     {
                         float pm = 0.f, fmDrive = 0.f, amp = 1.0f;
@@ -2793,7 +3337,7 @@ namespace tw
                             BlendSlotV& b = blendSlot_[c][s];
                             blendDepthSm_[c][s] += (b.depth - blendDepthSm_[c][s]) * 0.0025f;   // de-zipper
                             const float d = blendDepthSm_[c][s];
-                            if (b.mode == 0 || d < 1.0e-4f) continue;                            // Off / silent
+                            if (b.mode == 0 || d < 1.0e-6f) continue;   // Off / silent — fb523: 1e-4 -> 1e-6. Under the Hz law d = 1e-4 is Δf = 9.6 Hz = β 0.29 at C1 (a −17 dBc sideband), i.e. the old gate became an AUDIBLE dead zone in the bottom 0.6 % of the FM knob. At 1e-6 it is Δf = 0.096 Hz = β 0.0029 = −51 dBc, and the dead travel is 0.006 % of the knob.
                             float mod;
                             if      (b.src < 4)  mod = modPrev_[b.src];   // Osc A..D (any-to-any)
                             else if (b.src == 5) mod = noiseModTap_;      // Noise (fb64) — FM/PD/AM/RM an osc WITH the noise
@@ -2803,16 +3347,45 @@ namespace tw
                                 blendLfoSm_[c][s] += (synthLfo_[b.src - 7].peek() - blendLfoSm_[c][s]) * lvlSmCoef_;
                                 mod = blendLfoSm_[c][s];
                             }
-                            else                 mod = 0.f;               // Sub(4): still no-op
-                            if      (b.mode == 2) pm      += (1.20f * d) * mod;              // PD (phase, cycles)
-                            else if (b.mode == 1) fmDrive += (12.0f * d) * mod;              // FM (freq deviation)
-                            else if (b.mode == 3) amp     *= 1.0f + (1.8f * d) * mod;        // AM — carrier*(1+1.8·d·mod): fundamental KEPT; 1.8 drive → night-and-day at 100%
-                            else if (b.mode == 4) amp     *= (1.0f - d) + (1.8f * d) * mod;   // RM — ring: dry fades, wet driven 1.8× so full ring reads hard [EAR-TUNABLE]
+                            else if (b.src == 4) mod = subModTap_[c];      // fb522 — SUB: the CARRIER'S OWN sub, per-carrier exactly like Self (src 6). subMix runs AFTER blendOff[] is built, so this tap is one sample delayed, matching modPrev_ and noiseModTap_.
+                            else                 mod = 0.f;               // (no src is unhandled any more)
+                            // ── THE CEILINGS (fb522 OVERPASS §1.1). Every number here is measured;
+                            //    the ones that are NOT raised are the interesting ones — see below.
+                            if      (b.mode == 2) pm      += (2.20f * d) * mod;              // PD (phase, cycles) — fb523: 1.20 -> 2.20, and with the fb523 tap fix (x1.4142) that is a 2.593x raise in index: measured beta 5.33 -> 13.82 rad at 100 %. WHERE IT STOPS: the fb522 stack measured OOHR 2.40 % at drive 3.6 and 1 % at drive 1.9 AGAINST THE 3 dB-DOWN TAP, i.e. at EFFECTIVE excursions of 2.546 and 1.3435 cycles. Refitting those two points as OOHR ~ E^1.37 puts the 2 % budget at E = 2.226 cycles; 2.20 is the largest honest step that stays inside it and still needs no oversampling. (The fb522 note that PD "hits Nyquist by 3.6 then FALLS BACK" is about E = 2.546, which is above where we now stop.)
+                            else if (b.mode == 1) fmDrive += (kFmDeviationHz * d) * mod;    // FM — fmDrive is now PEAK DEVIATION IN HZ, not a dimensionless index. Was (48.0f * d): deviation = 48*d*f_carrier, so the INDEX was pitch-independent and the DEVIATION scaled with pitch. Inverted here: 4 slots sum their deviations in Hz.
+                            else if (b.mode == 3) amp     *= 1.0f + (2.0f * d) * mod;        // AM — fb523: 7.0 -> 2.0. THE LAW WAS ALREADY RIGHT (y = x*(1 + k*mod) holds the carrier at 1:1 by construction: x*mod has no component at f0). The CONSTANT was not: with the 3 dB-down tap, k_eff = 7*0.7071 = 4.95, so the gain factor swung [-3.95, +5.95] — 495 % modulation, which is why [M] the peak pinned at the MASTER limiter, the carrier read -9.97 dBc (the limiter pulling the whole spectrum down, not a duck in this line) and a -63 dBc floor appeared that the reference does not have. k = 2.0 with the corrected unity tap reproduces the reference EXACTLY: peak x3.000 (ref measured x3.007) and RMS +6.02 dB (ref measured +6.02 dB), with d = 0.5 = classic 100 % AM and 0.5..1.0 the overmodulated half.
+                            else if (b.mode == 4) amp     *= (1.0f - d) + (2.0f * d) * mod;   // RM — fb523: 1.8 -> 2.0, LEVEL ONLY. The ledger is right that at d = 1 this collapses to amp = K*mod and K is pure output gain, so the SPECTRUM is untouched — [M] our quadrature ring product (delta = 90.00 deg, resid 0.37 dB over 40 evens) is deliberately kept; Max has not chosen between our bright 1/m and the reference dark 1/m^2 and this line must not decide it. What K fixes is the 4.4 dB level gap: measured peak factor was 1.8*0.7071 = 1.272 (measured 1.272) against the reference 2.006. Tap fix + K = 2.0 gives 2.000 = -0.03 dB of the reference on peak and +4.77 dB vs its measured +4.79 dB on RMS.
                         }
-                        fmPhase_[c] = 0.9997f * fmPhase_[c] + repInc[c] * fmDrive;   // integrate freq → phase
-                        fmPhase_[c] = juce::jlimit (-8.f, 8.f, fmPhase_[c]);         // bound (thru-zero + feedback safe)
+                        // fb523 — THE HZ LAW. WAS: `+ repInc[c] * fmDrive`, where repInc = f_carrier/fs,
+                        //  so the added instantaneous frequency was f_carrier·fmDrive Hz — deviation
+                        //  PROPORTIONAL TO CARRIER PITCH, which is what made the index pitch-independent
+                        //  ([M] β identical at C1 and C3 to 0.4 %). NOW: fmDrive is already Hz, so
+                        //  ×(1/fs) is cycles per sample and the deviation is a constant number of Hz at
+                        //  every pitch — the index grows as pitch falls, 4× per two octaves down.
+                        //  ⚠️ repInc is deliberately GONE from this line. Re-introducing it anywhere
+                        //  (including a "mip selection" helper) re-creates the pitch-proportional law.
+                        fmPhase_[c] = kFmLeak * fmPhase_[c] + invSampleRate_ * fmDrive;   // integrate Hz → cycles
+                        // fb523 — ±16/±32 -> ±512/±1024 CYCLES. Under the old index law the
+                        //  excursion was pitch-independent and topped out at 5.4 cycles, so the
+                        //  shipped knee NEVER ENGAGED (that is why [M] measured β 33.95 against a
+                        //  50.27 "wall" and matched 48/√2 to 0.014 % instead). Under the Hz law the
+                        //  excursion is Δf/(2π·f_mod) cycles, which explodes as f_mod falls. See
+                        //  kFmBoundLin/kFmBoundMax for the derivation: LINEAR (bit-identical) for
+                        //  every modulator at or above 29.842 Hz at full depth, i.e. the whole
+                        //  keyboard from B0 up; a tanh knee only below that, where the leak alone
+                        //  would allow 6,667 cycles of DC excursion.
+                        fmPhase_[c] = softBound (fmPhase_[c], kFmBoundLin, kFmBoundMax);
                         blendOff[c] = pm + fmPhase_[c];
-                        blendAmp[c] = juce::jlimit (-6.0f, 6.0f, amp);   // safety ceiling for stacked AM/RM on a hot modulator (never touches 1–2 slot use)
+                        // fb522 — ±6 -> ±16 with a soft knee; the knee is linear to ±8, which keeps
+                        // the INERT gain of exactly 1.0 exactly 1.0 (a global tanh would have made it
+                        // 0.9987 and quietly re-levelled every blended patch by −0.011 dB).
+                        // fb523 — CONSTANTS UNCHANGED, and now they are genuinely a safety net rather
+                        // than part of the sound: with AM at k = 2.0 and RM at K = 2.0 against a
+                        // modulator tap whose musical peak is 1.0, |amp| ≤ 3 (AM) / 2 (RM) — a
+                        // quarter of the linear region. The knee is only reachable by the pathological
+                        // case of a tap sitting on its own ±4 clamp (self-feedback, a hot block
+                        // engine), which is exactly what it is for.
+                        blendAmp[c] = softBound (amp, 8.0f, 16.0f);
                     }
                 }
 
@@ -2829,15 +3402,22 @@ namespace tw
                             if (currentWavetable_ != nullptr)
                             {
                                 double warpedPhase = uPhaseA_[(size_t) u];
+                                // fb522 — UWARP: the per-sine WARP FAN. `uniWarpOnA_` is the
+                                // bit-identity gate — at UWARP = 0 (the default, and every patch in
+                                // the library) this is a predicted branch straight onto the untouched
+                                // block value and costs nothing. Both slots share the one knob (Serum
+                                // has two; the fan direction is the sine's own u_norm either way).
+                                const float wAmt1A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warpAmount_ + uWarpOffA_[(size_t) u]) : warpAmount_;
+                                const float wAmt2A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + uWarpOffA_[(size_t) u]) : warp2AmountA_;
                                 float  window      = 1.0f;   // PWM, FORMANT use this post-lookup window
                                 bool   skipLookup  = false;  // PWM silence half-cycle
 
                                 // WARP slot 1 — phase-domain remap (exact original math, factored to
                                 // applyPhaseWarp so a second slot can chain on its output).
-                                warpedPhase = applyPhaseWarp (warpMode_, warpAmount_, warpedPhase, window, skipLookup);
+                                warpedPhase = applyPhaseWarp (warpMode_, wAmt1A, warpedPhase, window, skipLookup, warpVar_[0]);
                                 // WARP 2 — second slot, in SERIES on slot 1's output (Serum parity).
                                 if (! skipLookup && warp2ModeA_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeA_, warp2AmountA_, warpedPhase, window, skipLookup);
+                                    warpedPhase = applyPhaseWarp (warp2ModeA_, wAmt2A, warpedPhase, window, skipLookup, warp2Var_[0]);
 
                                 if (skipLookup)
                                 {
@@ -2850,8 +3430,8 @@ namespace tw
                                     double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA); sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
                                     sAu *= window;
 
-                                    sAu = applyAmpWarp (warpMode_,    warpAmount_,    sAu);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
-                                    sAu = applyAmpWarp (warp2ModeA_,  warp2AmountA_,  sAu);   // WARP 2 amp-domain, chained
+                                    sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0]);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
+                                    sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0]);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -2927,8 +3507,10 @@ namespace tw
                             // FM now — phase warp remaps the carrier AFTER the modulators (classic
                             // warped-FM: Sync/PWM/Formant on the operator output), amp modes shape it.
                             float fmWin = 1.0f; bool fmSkip = false;
+                            // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            const float wAmt2A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + uWarpOffA_[(size_t) u]) : warp2AmountA_;
                             if (warp2ModeA_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeA_, warp2AmountA_, cPh, fmWin, fmSkip);
+                                cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0]);
                             if (fmSkip) sAu = 0.0f;
                             else
                             {
@@ -2936,7 +3518,7 @@ namespace tw
                                         ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
                                 sAu *= fmWin;
-                                sAu = applyAmpWarp (warp2ModeA_, warp2AmountA_, sAu);
+                                sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0]);
                             }
                             if (alg == 2)
                                 sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
@@ -3018,7 +3600,7 @@ namespace tw
                 // above, and an un-blended osc bypasses this entirely (bit-identical to today).
                 if (blkCarrierArmed_[0] || blkArmSm_[0] > 1.0e-4f)
                     blendReadBlock (0, blendOff[0], blkCarrierArmed_[0], sA_L, sA_R);
-                sA_L *= blendAmp[0]; sA_R *= blendAmp[0];   // BLEND AM/RM (amplitude-domain, all engines; 1.0 = inert)
+                if (anyBlendArmed_) { sA_L *= blendAmp[0]; sA_R *= blendAmp[0]; }   // BLEND AM/RM (amplitude-domain, all engines; 1.0 = inert) — fb522 skips the x1.0 when nothing is armed
                 // SUB — voice-anchored sub layer, mono/centered, energy-neutral sum
                 if (sub_[0].on) subMix (0, sA_L, sA_R, subMono0);
                 if (! spectralBypassA_)
@@ -3145,13 +3727,20 @@ namespace tw
                             if (currentWavetableB_ != nullptr)
                             {
                                 double warpedPhase = uPhaseB_[(size_t) u];
+                                // fb522 — UWARP: the per-sine WARP FAN. `uniWarpOnB_` is the
+                                // bit-identity gate — at UWARP = 0 (the default, and every patch in
+                                // the library) this is a predicted branch straight onto the untouched
+                                // block value and costs nothing. Both slots share the one knob (Serum
+                                // has two; the fan direction is the sine's own u_norm either way).
+                                const float wAmt1B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warpAmountB_ + uWarpOffB_[(size_t) u]) : warpAmountB_;
+                                const float wAmt2B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + uWarpOffB_[(size_t) u]) : warp2AmountB_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeB_, warpAmountB_, warpedPhase, window, skipLookup);
+                                warpedPhase = applyPhaseWarp (warpModeB_, wAmt1B, warpedPhase, window, skipLookup, warpVar_[1]);
                                 if (! skipLookup && warp2ModeB_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeB_, warp2AmountB_, warpedPhase, window, skipLookup);
+                                    warpedPhase = applyPhaseWarp (warp2ModeB_, wAmt2B, warpedPhase, window, skipLookup, warp2Var_[1]);
 
                                 if (skipLookup)
                                 {
@@ -3163,8 +3752,8 @@ namespace tw
                                     double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB); sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
                                     sBu *= window;
 
-                                    sBu = applyAmpWarp (warpModeB_,   warpAmountB_,   sBu);   // slot 1 amp-domain
-                                    sBu = applyAmpWarp (warp2ModeB_,  warp2AmountB_,  sBu);   // WARP 2 amp-domain, chained
+                                    sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1]);   // slot 1 amp-domain
+                                    sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1]);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -3225,8 +3814,10 @@ namespace tw
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            const float wAmt2B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + uWarpOffB_[(size_t) u]) : warp2AmountB_;
                             if (warp2ModeB_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeB_, warp2AmountB_, cPh, fmWin, fmSkip);
+                                cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1]);
                             if (fmSkip) sBu = 0.0f;
                             else
                             {
@@ -3234,7 +3825,7 @@ namespace tw
                                         ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sBu *= fmWin;
-                                sBu = applyAmpWarp (warp2ModeB_, warp2AmountB_, sBu);
+                                sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1]);
                             }
                             if (alg == 2)
                                 sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
@@ -3313,7 +3904,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC B's rendered block (see OSC A).
                 if (blkCarrierArmed_[1] || blkArmSm_[1] > 1.0e-4f)
                     blendReadBlock (1, blendOff[1], blkCarrierArmed_[1], sB_L, sB_R);
-                sB_L *= blendAmp[1]; sB_R *= blendAmp[1];   // BLEND AM/RM
+                if (anyBlendArmed_) { sB_L *= blendAmp[1]; sB_R *= blendAmp[1]; }   // BLEND AM/RM — fb522 skips the x1.0 when nothing is armed
                 if (sub_[1].on) subMix (1, sB_L, sB_R, subMono1);
                 if (! spectralBypassB_)
                 {
@@ -3430,13 +4021,20 @@ namespace tw
                             if (currentWavetableC_ != nullptr)
                             {
                                 double warpedPhase = uPhaseC_[(size_t) u];
+                                // fb522 — UWARP: the per-sine WARP FAN. `uniWarpOnC_` is the
+                                // bit-identity gate — at UWARP = 0 (the default, and every patch in
+                                // the library) this is a predicted branch straight onto the untouched
+                                // block value and costs nothing. Both slots share the one knob (Serum
+                                // has two; the fan direction is the sine's own u_norm either way).
+                                const float wAmt1C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warpAmountC_ + uWarpOffC_[(size_t) u]) : warpAmountC_;
+                                const float wAmt2C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + uWarpOffC_[(size_t) u]) : warp2AmountC_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeC_, warpAmountC_, warpedPhase, window, skipLookup);
+                                warpedPhase = applyPhaseWarp (warpModeC_, wAmt1C, warpedPhase, window, skipLookup, warpVar_[2]);
                                 if (! skipLookup && warp2ModeC_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeC_, warp2AmountC_, warpedPhase, window, skipLookup);
+                                    warpedPhase = applyPhaseWarp (warp2ModeC_, wAmt2C, warpedPhase, window, skipLookup, warp2Var_[2]);
 
                                 if (skipLookup)
                                 {
@@ -3448,8 +4046,8 @@ namespace tw
                                     double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC); sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
                                     sCu *= window;
 
-                                    sCu = applyAmpWarp (warpModeC_,   warpAmountC_,   sCu);   // slot 1 amp-domain
-                                    sCu = applyAmpWarp (warp2ModeC_,  warp2AmountC_,  sCu);   // WARP 2 amp-domain, chained
+                                    sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2]);   // slot 1 amp-domain
+                                    sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2]);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -3510,8 +4108,10 @@ namespace tw
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            const float wAmt2C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + uWarpOffC_[(size_t) u]) : warp2AmountC_;
                             if (warp2ModeC_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeC_, warp2AmountC_, cPh, fmWin, fmSkip);
+                                cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2]);
                             if (fmSkip) sCu = 0.0f;
                             else
                             {
@@ -3519,7 +4119,7 @@ namespace tw
                                         ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sCu *= fmWin;
-                                sCu = applyAmpWarp (warp2ModeC_, warp2AmountC_, sCu);
+                                sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2]);
                             }
                             if (alg == 2)
                                 sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
@@ -3598,7 +4198,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC C's rendered block (see OSC A).
                 if (blkCarrierArmed_[2] || blkArmSm_[2] > 1.0e-4f)
                     blendReadBlock (2, blendOff[2], blkCarrierArmed_[2], sC_L, sC_R);
-                sC_L *= blendAmp[2]; sC_R *= blendAmp[2];   // BLEND AM/RM
+                if (anyBlendArmed_) { sC_L *= blendAmp[2]; sC_R *= blendAmp[2]; }   // BLEND AM/RM — fb522 skips the x1.0 when nothing is armed
                 if (sub_[2].on) subMix (2, sC_L, sC_R, subMono2);
                 if (! spectralBypassC_)
                 {
@@ -3715,13 +4315,20 @@ namespace tw
                             if (currentWavetableD_ != nullptr)
                             {
                                 double warpedPhase = uPhaseD_[(size_t) u];
+                                // fb522 — UWARP: the per-sine WARP FAN. `uniWarpOnD_` is the
+                                // bit-identity gate — at UWARP = 0 (the default, and every patch in
+                                // the library) this is a predicted branch straight onto the untouched
+                                // block value and costs nothing. Both slots share the one knob (Serum
+                                // has two; the fan direction is the sine's own u_norm either way).
+                                const float wAmt1D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warpAmountD_ + uWarpOffD_[(size_t) u]) : warpAmountD_;
+                                const float wAmt2D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + uWarpOffD_[(size_t) u]) : warp2AmountD_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeD_, warpAmountD_, warpedPhase, window, skipLookup);
+                                warpedPhase = applyPhaseWarp (warpModeD_, wAmt1D, warpedPhase, window, skipLookup, warpVar_[3]);
                                 if (! skipLookup && warp2ModeD_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeD_, warp2AmountD_, warpedPhase, window, skipLookup);
+                                    warpedPhase = applyPhaseWarp (warp2ModeD_, wAmt2D, warpedPhase, window, skipLookup, warp2Var_[3]);
 
                                 if (skipLookup)
                                 {
@@ -3733,8 +4340,8 @@ namespace tw
                                     double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD); sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
                                     sDu *= window;
 
-                                    sDu = applyAmpWarp (warpModeD_,   warpAmountD_,   sDu);   // slot 1 amp-domain
-                                    sDu = applyAmpWarp (warp2ModeD_,  warp2AmountD_,  sDu);   // WARP 2 amp-domain, chained
+                                    sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3]);   // slot 1 amp-domain
+                                    sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3]);   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -3795,8 +4402,10 @@ namespace tw
                             if (alg == 1) cPh += (double) (d2 * m2);
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
+                            // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            const float wAmt2D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + uWarpOffD_[(size_t) u]) : warp2AmountD_;
                             if (warp2ModeD_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeD_, warp2AmountD_, cPh, fmWin, fmSkip);
+                                cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3]);
                             if (fmSkip) sDu = 0.0f;
                             else
                             {
@@ -3804,7 +4413,7 @@ namespace tw
                                         ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sDu *= fmWin;
-                                sDu = applyAmpWarp (warp2ModeD_, warp2AmountD_, sDu);
+                                sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3]);
                             }
                             if (alg == 2)
                                 sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
@@ -3883,7 +4492,7 @@ namespace tw
                 // BLEND MODES (carrier = block engine): phase-modulate OSC D's rendered block (see OSC A).
                 if (blkCarrierArmed_[3] || blkArmSm_[3] > 1.0e-4f)
                     blendReadBlock (3, blendOff[3], blkCarrierArmed_[3], sD_L, sD_R);
-                sD_L *= blendAmp[3]; sD_R *= blendAmp[3];   // BLEND AM/RM
+                if (anyBlendArmed_) { sD_L *= blendAmp[3]; sD_R *= blendAmp[3]; }   // BLEND AM/RM — fb522 skips the x1.0 when nothing is armed
                 if (sub_[3].on) subMix (3, sD_L, sD_R, subMono3);
                 if (! spectralBypassD_)
                 {
@@ -4192,8 +4801,16 @@ namespace tw
                 }
                 // BLEND MODES: capture each osc's PRE-GAIN sample as the modulator tap (1-sample delay for
                 // next iteration). These are pre level/pan/gate → a source at LEVEL 0 still modulates.
-                modPrev_[0] = 0.5f * (sA_L + sA_R); modPrev_[1] = 0.5f * (sB_L + sB_R);
-                modPrev_[2] = 0.5f * (sC_L + sC_R); modPrev_[3] = 0.5f * (sD_L + sD_R);
+                // fb523 — × monoTapCorr_: the tap is now PRE-PAN in effect (see setUnisonImpl).
+                //  ⚠️ The correction applies ONLY to the engines that actually pass through the
+                //  unison pan tables (WT and FM). SAMP/GRAN/SPEC/HARM/MODAL overwrite sX_L/sX_R
+                //  straight from their block buffers and never see cos/sin at all, so 0.5·(L+R)
+                //  is already the right mono downmix for them — applying √2 there would be a
+                //  spurious +3 dB. The mcOn* flags are block constants (see uLoop* above).
+                modPrev_[0] = (mcOnA ? monoTapCorr_[0] : 1.0f) * 0.5f * (sA_L + sA_R);
+                modPrev_[1] = (mcOnB ? monoTapCorr_[1] : 1.0f) * 0.5f * (sB_L + sB_R);
+                modPrev_[2] = (mcOnC ? monoTapCorr_[2] : 1.0f) * 0.5f * (sC_L + sC_R);
+                modPrev_[3] = (mcOnD ? monoTapCorr_[3] : 1.0f) * 0.5f * (sD_L + sD_R);
                 for (int mc = 0; mc < 4; ++mc) modPrev_[mc] = juce::jlimit (-4.f, 4.f, modPrev_[mc]);
             }
 
@@ -4918,6 +5535,7 @@ namespace tw
         }
 
         double sampleRate_      = 48000.0;
+        float  invSampleRate_   = 1.0f / 48000.0f;   // fb523 — set in setCurrentPlaybackSampleRate; the FM Hz→cycles/sample scale
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
         float  velDepth_ = 0.5f;   // fb262 — velocity CURVE amount (0..1, repurposed from depth): 0.5=linear, >0.5 lifts soft hits, <0.5 hardens. NO LONGER touches amp.
@@ -5240,8 +5858,15 @@ namespace tw
                 // exponential-bias perceptual level (house curve law — never p^k)
                 const float wEff = wKnob <= 0.f ? 0.f
                                  : (std::exp (2.0f * wKnob) - 1.0f) / (std::exp (2.0f) - 1.0f);
-                sl.on = wEff > 1e-5f || sl.w > 1e-5f;    // stays on to RAMP OUT (declick)
-                if (! sl.on) { sl.dw = 0.f; sl.dn = (1.f - sl.n) * invN; sl.xf = 0.f; continue; }
+                // fb522 — `|| subForce_[o]` keeps the lane TICKING when a blend slot names Sub as
+                // its source. Without it the tap reads silence at Sub Mix 0 (wEff = 0 → sl.on
+                // false → subMix is never called), which is the same class of bug modSrcForce_
+                // fixes for the oscs. It is inaudible: wEff is still 0, so sl.w ramps to 0 and
+                // subMix adds v*0 to the mix and multiplies the osc by n, which settles at 1.0f.
+                // MUTATION GATE: delete `|| subForce_[o]` and the Sub-as-blend-source test must
+                // go red (the modulator flatlines at Sub Mix 0).
+                sl.on = wEff > 1e-5f || sl.w > 1e-5f || subForce_[o];    // stays on to RAMP OUT (declick)
+                if (! sl.on) { sl.dw = 0.f; sl.dn = (1.f - sl.n) * invN; sl.xf = 0.f; subModTap_[o] = 0.f; continue; }
                 // pitch source MATCHES the engine: WT/FM glide (glideNote_); the sample-family
                 // engines snap to currentMidiNote_ at note-on — the sub must stay glued to its
                 // OWN osc, not slide away from it during portamento (cleanup-sweep fix)
@@ -5278,7 +5903,14 @@ namespace tw
                 sl.xf += sl.dxf; if (sl.xf < 0.f) sl.xf = 0.f;
             }
             else v = sl.osc.tick (sl.inc, sl.form);
-            v = sl.osc.heat (v, sl.hCur) * sl.w;
+            v = sl.osc.heat (v, sl.hCur);
+            // fb522 — the SUB modulator tap (blend src 4), taken PRE-WEIGHT for the same reason
+            // modPrev_ is taken pre-gain: a source turned down to silence must still modulate.
+            // Bounded to the same ±4 as modPrev_/noiseModTap_ so the blend ceilings above are
+            // dimensioned against one known modulator range. (Splitting the old single line
+            // `heat(...) * sl.w` in two is bit-identical — same operations, same order.)
+            subModTap_[o] = juce::jlimit (-4.f, 4.f, v);
+            v *= sl.w;
             subAcc += v * sl.n;          // sub's share of the normalized sum (mono)
             l = (l + v) * sl.n;
             r = (r + v) * sl.n;
@@ -5312,6 +5944,9 @@ namespace tw
         float blendLfoSm_[4][4]   = {};   // fb225 — per-sample glide over the BLOCK-STEPPED LFO value (peek updates once per block; consumed per sample = a ~344Hz staircase = Max's 'heavy static'. The COMB-CLICK law applied at the consumption site.)
         float modPrev_[4] = { 0.f, 0.f, 0.f, 0.f };   // prev-sample pre-gain osc outputs = the modulator taps
         float noiseModTap_ = 0.0f;                    // fb64 — the NOISE modulator tap (src=5), pre-gain, 1-sample delayed
+        float subModTap_[4] = { 0.f, 0.f, 0.f, 0.f }; // fb522 — the SUB modulator tap (src=4), PER CARRIER, pre-weight, 1-sample delayed
+        bool  subForce_[4]  = { false, false, false, false };   // fb522 — a blend slot names Sub → keep the lane ticking at Sub Mix 0
+        bool  anyBlendArmed_ = false;                 // fb522 — any FM/PD/AM/RM slot live (or still decaying) this block
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
         // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
@@ -5325,9 +5960,20 @@ namespace tw
         //                         through a short delay ring (below) = FM/PD *on a sample*.
         bool  modSrcForce_[4]     = { false, false, false, false };
         bool  blkCarrierArmed_[4] = { false, false, false, false };
-        static constexpr int   kBlkRing     = 256;      // ring length (power of two → mask 255)
-        static constexpr int   kBlkMaxOff   = 64;       // ± sample excursion at full depth (also the base delay)
-        static constexpr float kBlkOffScale = 40.0f;    // blendOff (cycles) → samples  [EAR-TUNABLE: raise = deeper]
+        // fb522 OVERPASS — the block-carrier PD path was ~10x tamer than the WT path at the same
+        // knob: [C] a WT carrier gets PD in CYCLES (±1.20 turns) while a block carrier got the
+        // same number scaled to ±64 SAMPLES, which at 100 Hz / 48 kHz (one cycle = 480 samples)
+        // tops out near ⅛ of a cycle. 64 -> 256 and 40 -> 160 closes it.
+        // ⚠️ THE RING MUST GROW WITH IT. The read pointer sits `kBlkMaxOff` behind the write and
+        // swings ±kBlkMaxOff, so the deepest read is 2·kBlkMaxOff behind — 512 samples now. At
+        // the old ring of 256 that read would have wrapped PAST the write pointer and returned
+        // the future, i.e. garbage, not a deeper effect. 1024 preserves the exact margin the old
+        // geometry had (ring = 4·kBlkMaxOff). Cost: 8 KB -> 32 KB per voice.
+        static constexpr int   kBlkRing     = 1024;     // ring length (power of two → mask 1023)
+        static constexpr int   kBlkMaxOff   = 256;      // ± sample excursion at full depth (also the base delay)
+        static constexpr float kBlkOffScale = 160.0f;   // blendOff (cycles) → samples  [EAR-TUNABLE: raise = deeper]
+        static_assert (2 * kBlkMaxOff < kBlkRing, "blendReadBlock would read past the write pointer");
+        static_assert ((kBlkRing & (kBlkRing - 1)) == 0, "kBlkRing must be a power of two (it is used as a mask)");
         static constexpr float kBlkArmCoef  = 0.0012f;  // ~20 ms one-pole to declick the delay engaging/leaving
         float blkRingL_[4][kBlkRing] = {};
         float blkRingR_[4][kBlkRing] = {};
@@ -5544,7 +6190,19 @@ namespace tw
             rL[w] = L; rR[w] = R;                                            // write the (shaped) block output
             blkArmSm_[c] += ((armed ? 1.0f : 0.0f) - blkArmSm_[c]) * kBlkArmCoef;   // declick delay in/out
             const float amt   = blkArmSm_[c];
-            const float offS  = juce::jlimit (-(float) kBlkMaxOff, (float) kBlkMaxOff, offCycles * kBlkOffScale) * amt;
+            // fb523 — HARD CLAMP -> SOFT KNEE, and this is a REGRESSION FIX FOR MY OWN CHANGE,
+            //  not a taste call. offCycles·160 saturates at ±256 samples, i.e. at 1.60 cycles of
+            //  excursion. Under the old INDEX law the FM integrator reached 1.60 cycles at knob
+            //  0.55, so a block-engine carrier had a 45 %-wide plateau. Under the new HZ law it
+            //  reaches 1.60 cycles at knob 0.302 at C3 (Δf = 1,315 Hz) and 0.222 at C1 — a
+            //  70 %-wide plateau, and a flat-topped ramp is discontinuity products, not depth.
+            //  softBound is linear (bit-identical) below ±128 samples and asymptotic to ±256, so
+            //  the ring geometry and its static_assert are untouched and the knob keeps
+            //  developing all the way to 100 % on block engines too.
+            //  ⚠️ This path is a SAMPLE-DELAY approximation of phase modulation and is bounded by
+            //  the ring, so it can never be pitch-independent the way the wavetable path now is.
+            //  Making it so is a separate build item, not a constant.
+            const float offS  = softBound (offCycles * kBlkOffScale, 0.5f * (float) kBlkMaxOff, (float) kBlkMaxOff) * amt;
             const float delay = (float) kBlkMaxOff * amt;                    // base delay ramps in with the arm
             float rp = (float) w - delay + offS + (float) kBlkRing;          // read behind write (kept positive)
             int i0 = (int) rp; const float fr = rp - (float) i0;
@@ -6212,15 +6870,45 @@ namespace tw
         std::array<float,  kMaxUnison> uPanLB_        { 0.7071f };
         std::array<float,  kMaxUnison> uPanRB_        { 0.7071f };
 
+        // fb523 — THE MODULATOR-TAP PAN CORRECTION, per osc. Target written by setUnisonImpl;
+        //  the live copy snaps on a structural change and otherwise glides on lvlSmCoef_ exactly
+        //  like uPanL/uPanR, so a Width sweep cannot zipper the modulation depth. √2 = the
+        //  unison-1 value, so a voice that never receives a broadcast is already correct.
+        float monoTapCorr_ [4] = { 1.41421356f, 1.41421356f, 1.41421356f, 1.41421356f };
+        float monoTapCorrT_[4] = { 1.41421356f, 1.41421356f, 1.41421356f, 1.41421356f };
         int   activeUnisonA_ = 1, activeUnisonB_ = 1;   // 1..kMaxUnison per OSC
         float uNormA_ = 1.0f,     uNormB_ = 1.0f;       // auto-gain: 1/sqrt(Σ blendGain²) — holds loudness as voices rise
-        static constexpr float kUniMaxDetuneCents = 50.0f;  // ±50 cents (±½ semitone) of detune at 100 %
+        // fb522 — this is NO LONGER the detune scale: SYN_OSC_x_URANGE is (5..4800 cents,
+        // default 50.0). What survives here is the LEGACY REFERENCE, and it has two live jobs:
+        //   1. the seed for uniRangeT_/uniRangeSm_ below, so a voice that never receives a
+        //      broadcast detunes exactly as it always did;
+        //   2. the threshold in uniRateMul() — the mip pick only widens for the part of the
+        //      spread that goes BEYOND this constant, which is what makes URANGE = 50
+        //      bit-identical to the pre-fb522 build.
+        static constexpr float kUniMaxDetuneCents = 50.0f;  // ±50 cents (±½ semitone): the pre-fb522 fixed scale
         // fb255 — UNISON BLEND FLOOR: the minimum per-voice blend gain, applied SYMMETRICALLY (both the
         // leftmost and rightmost voices). Replaces the old voice-0-only "always full gain" anchor, which
         // pinned the LEFTMOST voice loud while blend scaled the right down → the sound leaned LEFT (worse
         // at high Width). A symmetric floor keeps UNISON=2/BLEND=0 from going silent (the reason the anchor
         // existed) WITHOUT breaking L/R balance. Only active below ~blend 0.15; auto-gain restores loudness.
         static constexpr float kUniBlendFloor = 0.15f;
+
+        // ── fb522 OVERPASS — new per-osc unison / warp / phase state ────────────────────
+        struct UniArgs { int count = 1; float det = 0.0f, blend = 1.0f, width = 0.5f; };
+        UniArgs uniArgs_[4] {};                       // last args pushed to setUnisonImpl, per osc
+        // URANGE (cents of half-spread at Detune 100 %). Seeded from the retired constant so a
+        // voice that never receives a broadcast detunes exactly as it did before.
+        float uniRangeT_[4]  = { kUniMaxDetuneCents, kUniMaxDetuneCents, kUniMaxDetuneCents, kUniMaxDetuneCents };
+        float uniRangeSm_[4] = { kUniMaxDetuneCents, kUniMaxDetuneCents, kUniMaxDetuneCents, kUniMaxDetuneCents };
+        bool  uniRangeSeeded_[4] = { false, false, false, false };
+        float uniWarp_[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };   // UWARP, bipolar warp fan across the sines
+        int   uniStack_[4] = { 0, 0, 0, 0 };               // USTACK option index (0 = Off)
+        std::array<float, kMaxUnison> uWarpOffA_ {}, uWarpOffB_ {}, uWarpOffC_ {}, uWarpOffD_ {};
+        bool  uniWarpOnA_ = false, uniWarpOnB_ = false, uniWarpOnC_ = false, uniWarpOnD_ = false;
+        float warpVar_[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };   // WVAR  — per-osc WARP slot 1 VAR
+        float warp2Var_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // W2VAR — per-osc WARP slot 2 VAR
+        float phaseOff_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // SYN_OSC_x_PHASE, in CYCLES (param is degrees)
+        float phaseAmt_[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // SYN_OSC_x_PHASE_AMT, 0..1 (param default 100 %)
 
         // ── WAVER — per-(osc × unison sine) OU analog pitch drift (replaces the old
         //    EROSION pitch sine-LFO). Depth 0..1 per osc; cents state + per-sine RNG. ──

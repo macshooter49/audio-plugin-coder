@@ -579,6 +579,13 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
+    // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
+    // setSynthModMatrix(). No-op for a blob that already carries version >= 3.
+    // 🚨 It must NOT rewrite the "version" property: a V1 blob has none at all, and the V1/V2
+    // branch further down re-reads that property to pick loadV1State vs loadV2State.
+    static void migrateBlobToVersion3 (juce::ValueTree& state);
+
     juce::AudioProcessorValueTreeState& getAPVTS() { return apvts; }
 
     // ── fb83: popped-out FLOW card windows live on the PROCESSOR ──
@@ -1547,6 +1554,34 @@ private:
     // fb456's law: an allocation on the audio thread is a violation regardless of what it costs.
     juce::RangedAudioParameter* specLoParam_[4] { nullptr, nullptr, nullptr, nullptr };
     juce::RangedAudioParameter* specHiParam_[4] { nullptr, nullptr, nullptr, nullptr };
+
+    // ── fb522 · LANE P — THE OVERPASS STAGE ───────────────────────────────────────────────────
+    // URANGE is EXPONENTIAL (5..4800 cents) and PHASE is 0..360 degrees, so a mod route on either
+    // must move it through the parameter's OWN NormalisableRange (fb193 modP), not by a flat delta
+    // in raw units. modP reaches the parameter with apvts.getParameter(juce::String(pid)) — a
+    // juce::String is a ref-counted heap buffer, i.e. a malloc PER ROUTED KNOB PER BLOCK on the
+    // audio thread, which fb456's law forbids outright. Same fix as fb467's window edges: resolve
+    // the pointers once, in the constructor.
+    juce::RangedAudioParameter* uniRangeParam_[4] { nullptr, nullptr, nullptr, nullptr };
+    juce::RangedAudioParameter* phaseOffParam_[4] { nullptr, nullptr, nullptr, nullptr };
+    // The per-block resolved values, in the units the voice will want. Written once per block in
+    // processBlock (audio thread) and read in the same pass by the voice push loop — same thread,
+    // so no atomics and no publish. 🚧 The push itself is NOT wired yet: SynthVoice.h has no setter
+    // for any of these and this lane does not own that file. The exact setter signatures Lane V has
+    // to add are in this lane's handoff list; until they exist the stage is filled and parked, which
+    // is deliberate — it means the reads, the mod routing and the clamps are all in place and only
+    // the one-line push is outstanding.
+    struct OverpassOscStage
+    {
+        float uniRangeCents = 50.0f;   // 5..4800 cents. 50 == SynthVoice.h:6217 kUniMaxDetuneCents.
+        float uniWarp       = 0.0f;    // -1..+1  (UWARP % / 100)
+        int   uniStack      = 0;       // 0..8, 0 = Off
+        float warpVar       = 0.0f;    // 0..1    (WVAR  % / 100)
+        float warp2Var      = 0.0f;    // 0..1    (W2VAR % / 100)
+        float phaseOffDeg   = 0.0f;    // 0..360 degrees
+        float phaseAmt      = 1.0f;    // 0..1    (PHASE_AMT % / 100); 1 = unscaled = today
+    };
+    OverpassOscStage overpassOsc_[4];
 
     // ── Wavetable EXTENDER — per-osc imported tables ("turn anything into a wavetable") ──
     // Built on the message thread from dropped audio (Wavetable::buildFromPcm) then atomic-

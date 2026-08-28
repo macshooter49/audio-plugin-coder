@@ -5864,12 +5864,41 @@ void TerrainUiCore::timerCallback()
 
         // fb232 — the popped LFO card's follower rides the SAME truth feed (fb217):
         // the dot in the floating window IS the audible read position too.
-        if (auto itL = audioProcessor.cardWindows_.find ("lfo");
-            itL != audioProcessor.cardWindows_.end() && itL->second != nullptr)
-            if (auto* cwv = dynamic_cast<TerrainCardWindow*> (itL->second.get()))
-                cwv->evalJs ("try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];"
-                             "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}"
-                             "window.__mvLfoPhT=Date.now();}catch(e){}");   // fb238 vals + fb239 swirl + fb241 note flag ride to the card
+        // fb524 — AND SO DOES EVERY OTHER CARD WINDOW. Max, on a popped GLITCH card: "there's no
+        // underlines, I can't even see them." The living underline (fb182) now paints inside popped
+        // cards, and its comet rides __modViz — which ONLY the "lfo" card had ever been handed. An
+        // arp/chop/gli/rbn window received no env values, no LFO values and no velocity, so even
+        // with the painter running the mark would have had nothing to move.
+        // ONE STRING, EVERY CARD. window.__modViz is a superset of the three raw globals the lfo
+        // card was given: it writes __mvLfoVal/__mvLfoPh AND their freshness stamps AND the fb498
+        // prev/interpolation pair (which the raw assignment destroyed by overwriting cur before
+        // __modViz could keep it), plus the env array the underline needs for env routes. The raw
+        // form is kept as the else-branch so a page that somehow parsed without the mod module is
+        // no worse off than before.
+        if (! audioProcessor.cardWindows_.empty())   // fb524 — no card open, no string built: this runs at 60 Hz
+        {
+            const juce::String cardFeed =
+                "try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvVel=" + SF (velV, 3) + ";"
+                "if(window.__modViz){window.__modViz([" + eArr + "],[" + lArr + "],[" + pArr + "]);}"
+                "else{window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];window.__mvLfoPhT=Date.now();}"
+                "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}}catch(e){}";
+            // 🔑 fb525 — SNAPSHOT BEFORE YOU EVAL. `evalJs` calls evaluateJavascript, which PUMPS
+            // THE RUN LOOP; a queued card close then runs cardWindows_.erase() (PluginProcessor.cpp
+            // :450/:459), and because the map owns each window by unique_ptr the erase DESTROYS it.
+            // Iterating the map across N evalJs calls therefore invalidated the iterator AND left
+            // `cwv` dangling — an intermittent SIGSEGV that pluginval's Automation pass reproduced
+            // 1 run in 2 (48 kHz / blk 512). fb232's original code was only ever exposed to this
+            // narrowly: one find("lfo") and one immediate call.
+            // The collect loop performs NO eval, so it cannot be re-entered; the eval loop holds
+            // SafePointers, which null themselves if a window dies while the loop is running.
+            juce::Array<juce::Component::SafePointer<TerrainCardWindow>> feedTargets;
+            for (auto& kv : audioProcessor.cardWindows_)
+                if (auto* cwv = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
+                    feedTargets.add (juce::Component::SafePointer<TerrainCardWindow> (cwv));
+            for (auto& sp : feedTargets)
+                if (auto* cwv = sp.getComponent())
+                    cwv->evalJs (cardFeed);   // fb238 vals + fb239 swirl + fb241 note flag + fb262 velocity ride to every card
+        }
     }
 
     // fb343 — the popped CRV card's live feed rode a 66ms self-poll (15Hz): Drive/Asym motion
