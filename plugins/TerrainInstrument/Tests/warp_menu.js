@@ -255,7 +255,12 @@ const PILL = { 'SYN_OSC_A_WARP2_MODE':'#osc-a-warp2-val', 'SYN_OSC_B_WARP2_MODE'
     const opened = await pg.evaluate((s) => { window.__wmWavetable(); return window.__wmOpen(s, 300, 220); }, KNOB['SYN_OSC_A_WARP_MODE']);
     const rows = await pg.evaluate(() => { const panes = window.__wmPanes(); if (panes.length < 2) return null;
       const cats = window.__wmRows(panes[0]); const all = [];
-      cats.forEach((c, ci) => { c.el.click(); window.__wmRows(window.__wmPanes()[1]).forEach((r) => all.push(c.name + '/' + r.name)); });
+      // fb524 — the house browser now puts an "All" union folder at the top of EVERY category
+      // column. It MIRRORS the families below it (same item objects, same pick), so totalling it
+      // here would count every mode twice. Its own correctness is gated by Tests/all_menus.js;
+      // this bar is about the FAMILIES, so it walks the families only.
+      cats.filter((c) => c.name !== 'All')
+          .forEach((c) => { c.el.click(); window.__wmRows(window.__wmPanes()[1]).forEach((r) => all.push(c.name + '/' + r.name)); });
       return { cats: cats.map((c)=>c.name), all: all }; });
     await pg.evaluate(() => window.__wmClose());
     chk(opened === 'browser', 'FAMILIES — right-click WARP opens the house two-pane browser (not a 770px flat list)', 'opened=' + opened);
