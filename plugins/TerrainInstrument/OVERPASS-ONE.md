@@ -116,3 +116,54 @@ writes the call. 28 params shipped inert that way and passed pluginval, auval AN
 Every new parameter needs a MOVEMENT gate, not just a floor gate.
 🔗 **A CONSTANT THAT FEEDS A SELECTION PATH LIVES IN TWO PLACES** (`warpRateMul`, the JS default
 mirrors, `kFoldPre`). Change both or it compiles clean and silently misbehaves.
+
+---
+
+## 🆕 FOUND 2026-08-28 BY THE NOVEL-WARP RESEARCH — verified independently
+
+### 🟠 FIVE SHIPPED WARP MODES EMIT DC WITH NO BLOCKER — needs Max's call, it is a SOUND CHANGE
+`warpAmpNeedsDc()` (`SynthVoice.h:1325`) opens `if (mode < 9 || amount <= 0.001f) return false;`,
+so the phase-domain modes never arm `wtRectDc*`. **A non-bijective phase remap changes the cycle
+mean**, and measured worst-case |DC| as a fraction of full scale:
+**Mirror 0.249 · P-Quantize 0.212 (saw) · Sync/Formant 0.172 · Fractalize 0.123.**
+I confirmed the gate and grepped the chain: **there is no other DC removal anywhere downstream of
+the oscillator sum.** It also survives the unison sum — every sine gets the same warp, so the
+offset adds coherently. Consequences: eaten headroom, an asymmetric waveform, and early limiter
+engagement (`kLimiterThresh = 0.90`).
+⚠️ **Why it is not an overnight fix:** arming the blocker is a 38 Hz high-pass on five modes that
+have shipped for months — it changes existing sounds and breaks bit-identity. Options are (a) arm
+it and accept the change, (b) arm it only above an amount threshold, (c) leave it and document.
+**Max decides.** Also note the research doc's own build-checklist got this exactly backwards — it
+claimed phase modes "cannot possibly produce DC" and must be added to the `return false` list.
+The measurement says the `default: return true` is correct.
+
+### The novel-shape research: measured, and the headline candidate DIED
+`scratchpad/novel-warp-modes.md` (708 lines) + `scratchpad/warpbench/` (the rig: exactly-periodic
+f0 so every FFT bin is exact, tables band-limited to the note's mip limit so the baseline aliases
+at **0.000%**, and an 8x-oversampled truth reference; shipped modes copied verbatim from
+`SynthVoice.h`/`Shapers.h` so every comparison is against what actually ships).
+- **C1 SHATTER as specced is not a scramble, it is a x3 PITCH SHIFT.** `j = (i*3) & (N-1)` is
+  multiplication mod 2^m — a linear map — so the read head advances three slices per slice. On a
+  sine at full amount the fundamental measures **-340.3 dB**: the note is gone. It accidentally
+  reimplemented Fractalize. **The bit-reversal variant (C1b) is the real one** and it is strong:
+  nh 163 at amount 0.20, zero DC, f0 intact until the very top.
+- Survivors worth building, with numbers in the doc: **C1b SHATTER (bit-reversal)**, **C3 ZENO**
+  (projective/Mobius quantise with a PULL — fixes P-Quantize's three documented defects at once),
+  **C2 CRUMPLE** (fBm domain warp; the only candidate that generates EVEN harmonics, and 0.000%
+  alias at C3), **C5 FRACTAL** (Takagi folder, genuinely odd at +160..+195 dB odd/even, zero DC,
+  and the first shaper with a dB/oct SLOPE knob).
+- Killed by measurement: **C4 GRAY is dead travel** (nh = 1 at amount 0.2 AND 0.5 — nothing happens
+  until 1.0), **C7 PERSPECTIVE is not transparent at 0** (nh 65, f0 -13.1 dB with the knob at zero).
+- ⚠️ Two build traps for whoever ships these: `warpAmpNeedsDc` defaults `true` for index >= 9, which
+  is CORRECT for these (see above) — do not "fix" it; and **`warpRateMul()` takes `(mode, amt)` and
+  NOT `var`**, so any mode whose read rate depends on VAR would be band-limited for the wrong rate
+  — exactly the fb523 "the raise LOST harmonics" failure. Widen the lambda.
+- Independent confirmation of a known defect: **P-Quantize at amount 0.00 measures nh 11 and
+  centroid 1262 Hz against dry's nh 1 / 131 Hz.** Its transparency defect is real and reproducible
+  outside the plugin.
+- 🔑 Correction to a claim I had repeated: "a 1-periodic phase remap folds back onto the harmonic
+  grid so OOHR is blind to it" only holds when `sr/f0` is an integer, which it generally is not.
+  Shipped Bend at C7 amount 1.0 measures **18.7% inharmonic**. OOHR sees these modes fine.
+- Highest-value idea that does NOT fit today's signature: `p -> p + a*table'(p)` — steering the read
+  by the table's own SLOPE (an unsharp mask, not a displacement map). The reference does not have
+  it; it needs a table pointer in `applyPhaseWarp`.
