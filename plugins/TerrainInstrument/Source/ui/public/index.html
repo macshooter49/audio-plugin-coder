@@ -4941,6 +4941,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    same wrap the others have; it holds one page, so its arrow goes straight to unison. */
 #syn-panel .wt-knob-wrap { flex: 0 0 auto; position: relative; display: flex; align-items: stretch; gap: 3px; }
 #syn-panel .wt-knob-wrap > .osc-knobs { flex: 1 1 auto; min-width: 0; }
+/* fb533 — WT WAS THE ONLY ENGINE WITH ONE PAGE, so its chevron jumped straight to unison and the
+   cycle read 1 -> 3. It now has a real page 2 (the warp SECOND-DIMENSION knobs + keytrack), so
+   every engine cycles 1 -> 2 -> 3. Same .pg2 idiom as fm/harm/modal/geode/gran.
+   Grid stays the WT row's own 5 columns so page 2's knobs land exactly under page 1's. */
+#syn-panel .wt-knob-wrap .wt-pg2 { display: none; }
+#syn-panel .wt-knob-wrap.pg2 .wt-pg1 { display: none; }
+#syn-panel .wt-knob-wrap.pg2 .wt-pg2 { display: grid; }
+#syn-panel .wt-knob-wrap.pg2 .uni-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 #syn-panel .device.osc.engine-fm .wt-knob-wrap,
 #syn-panel .device.osc.engine-harm .wt-knob-wrap,
 #syn-panel .device.osc.engine-modal .wt-knob-wrap,
@@ -6400,12 +6408,23 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    the same chevron as every other engine. One page, so the arrow goes
                    straight to the UNISON page. -->
               <div class="wt-knob-wrap">
-              <div class="osc-knobs">
+              <div class="osc-knobs wt-pg1">
                 <div class="knob" data-syn="SYN_OSC_A_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
+                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
+                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
+                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
+                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
+                   2026-07-09), so a Route knob would be a dead control. -->
+              <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_WVAR" title="Warp Var — the SECOND dimension of warp slot 1. On the non-invertible modes this is the one that opens the ceiling (RM modulator drive, Rectify pre-gain, Mirror fold count). 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_W2VAR" title="Warp 2 Var — the same second dimension for warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -6734,12 +6753,23 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    the same chevron as every other engine. One page, so the arrow goes
                    straight to the UNISON page. -->
               <div class="wt-knob-wrap">
-              <div class="osc-knobs">
+              <div class="osc-knobs wt-pg1">
                 <div class="knob" data-syn="SYN_OSC_B_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
+                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
+                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
+                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
+                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
+                   2026-07-09), so a Route knob would be a dead control. -->
+              <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_WVAR" title="Warp Var — the SECOND dimension of warp slot 1. On the non-invertible modes this is the one that opens the ceiling (RM modulator drive, Rectify pre-gain, Mirror fold count). 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_W2VAR" title="Warp 2 Var — the same second dimension for warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -7087,12 +7117,23 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    the same chevron as every other engine. One page, so the arrow goes
                    straight to the UNISON page. -->
               <div class="wt-knob-wrap">
-              <div class="osc-knobs">
+              <div class="osc-knobs wt-pg1">
                 <div class="knob" data-syn="SYN_OSC_C_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
+                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
+                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
+                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
+                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
+                   2026-07-09), so a Route knob would be a dead control. -->
+              <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_WVAR" title="Warp Var — the SECOND dimension of warp slot 1. On the non-invertible modes this is the one that opens the ceiling (RM modulator drive, Rectify pre-gain, Mirror fold count). 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_W2VAR" title="Warp 2 Var — the same second dimension for warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -7421,12 +7462,23 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    the same chevron as every other engine. One page, so the arrow goes
                    straight to the UNISON page. -->
               <div class="wt-knob-wrap">
-              <div class="osc-knobs">
+              <div class="osc-knobs wt-pg1">
                 <div class="knob" data-syn="SYN_OSC_D_WT_FRAME"><div class="knob-ring"></div><div class="knob-label">WT Pos</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
+              </div>
+              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
+                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
+                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
+                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
+                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
+                   2026-07-09), so a Route knob would be a dead control. -->
+              <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_WVAR" title="Warp Var — the SECOND dimension of warp slot 1. On the non-invertible modes this is the one that opens the ceiling (RM modulator drive, Rectify pre-gain, Mirror fold count). 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_W2VAR" title="Warp 2 Var — the same second dimension for warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -16648,7 +16700,8 @@ setTimeout(function wireSynControls () {
         }
         var wrap = arrow.closest (UNI_WRAPS); if (! wrap) return;
         var last;
-        if (wrap.classList.contains ('wt-knob-wrap'))        last = true;                       // one page
+        // fb533 — WT has TWO pages now, so it is no longer the 'straight to unison' case.
+        if (wrap.classList.contains ('wt-knob-wrap'))        last = wrap.classList.contains ('pg2');
         else if (wrap.classList.contains ('samp-knob-wrap')) last = ! dev.classList.contains ('blend-on')
                                                                  || dev.classList.contains ('blend-pg2');
         else                                                last = wrap.classList.contains ('pg2');
@@ -16657,6 +16710,16 @@ setTimeout(function wireSynControls () {
         dev.classList.add ('uni-page');
       }, true);
     } catch (eUP) { console.warn ('[uni-page] wiring failed', eUP); }
+
+    // ════════ WT page flip (fb533) — same idiom as .fm-arrow, on the wrap's own chevron ════════
+    try {
+      document.querySelectorAll ('#syn-panel .wt-knob-wrap .uni-arrow').forEach (function (arrow) {
+        arrow.addEventListener ('click', function (e) {
+          e.preventDefault (); e.stopPropagation ();
+          var w = arrow.closest ('.wt-knob-wrap'); if (w) w.classList.toggle ('pg2');
+        });
+      });
+    } catch (eWT) { console.warn ('[WT] arrow wiring failed', eWT); }
 
     // ════════ FM WEATHERING page flip — thin white arrow, gran-knob-wrap pattern ════════
     try {
@@ -20423,6 +20486,7 @@ setTimeout(function wireSynControls () {
       const SPECTRAL_MODES = ['None','Harmonic Stretch','Inharmonic Stretch','Vocode','Smear','Random Amps','Data Compress','Spectral Phaser','Disperse'];
       const FOLD_SHAPES = ['Linear','Sine','Triangle'];
       const INTERP_MODES = ['Linear','Stepped'];
+      const KEYTRACK_DESTS = ['Frame','Warp','Fold'];   // fb533 — == SYN_OSC_x_KEYTRACK_DEST choice order
       const STRETCH_MODES = ['Tones','Beats','Texture'];
       const FORMANT_MODES = ['Normal','Inverted','Cross-Formant','Spectral-Tilt'];
       // RESYNTH — Shape targets live on the SHAPE knob's right-click (matches WARP/FOLD; off the visualizer).
@@ -20433,6 +20497,10 @@ setTimeout(function wireSynControls () {
       const GEODE_CUTS   = ['LP','HP'];
 
       const KNOB_MENUS = {
+        'SYN_OSC_A_KEYTRACK':   { header: 'OSC A — KEYTRACK DEST', modeParam: 'SYN_OSC_A_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
+        'SYN_OSC_B_KEYTRACK':   { header: 'OSC B — KEYTRACK DEST', modeParam: 'SYN_OSC_B_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
+        'SYN_OSC_C_KEYTRACK':   { header: 'OSC C — KEYTRACK DEST', modeParam: 'SYN_OSC_C_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
+        'SYN_OSC_D_KEYTRACK':   { header: 'OSC D — KEYTRACK DEST', modeParam: 'SYN_OSC_D_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
         'SYN_OSC_A_GEODE_CUT':   { header: 'OSC A — CUT (LP/HP)', modeParam: 'SYN_OSC_A_GEODE_CUT_MODE', options: GEODE_CUTS },
         'SYN_OSC_A_GEODE_HAZE':  { header: 'OSC A — DRIVE MODE', modeParam: 'SYN_OSC_A_GEODE_DRIVE_MODE', options: GEODE_DRIVES },
         'SYN_OSC_A_GEODE_SIEVE': { header: 'OSC A — SIEVE MODE', modeParam: 'SYN_OSC_A_GEODE_SIEVE_MODE', options: GEODE_SIEVES },
