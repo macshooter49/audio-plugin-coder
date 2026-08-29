@@ -3819,7 +3819,10 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             // UNISON RANGE — the SCALE of the unison detune fan, in cents. Replaces the hard-coded
             // kUniMaxDetuneCents. 50.0 == that constant, so the render is bit-identical at default.
             layout.add (std::make_unique<juce::AudioParameterFloat> (
-                juce::ParameterID { id.urange, 1 }, n + "Unison Range", uniRangeCents, 50.0f));
+                // fb538 — 50 -> 150 cents. 50 was the retired kUniMaxDetuneCents; at full Detune that is
+                // half a semitone of wobble, which reads as VIBRATO, not unison. 150 is the 3x
+                // Max asked for; the Range knob still runs 5..4800 for the extremes.
+                juce::ParameterID { id.urange, 1 }, n + "Unison Range", uniRangeCents, 150.0f));
             // UNISON WARP SPREAD — fans warp amount across the unison sines. 0 = every sine
             // identical = today. Bipolar so the fan can run either way.
             layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -3843,12 +3846,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             // defaults to 180; Terrain keeps 0 so nothing moves.)
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { id.phase, 1 }, n + "Phase",
-                juce::NormalisableRange<float> (0.0f, 360.0f, 0.1f), 0.0f));
+                // fb538 — 0..1, ONE CYCLE, not degrees. Measured off Serum 2: "A Phase" and
+                // "A Rand Phase" are both 0..1. Max: "phasing goes from 0 to 1, not even 100."
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
             // PHASE AMOUNT — scales RANDOM's randomisation and SPREAD's fan. 100 = unscaled =
             // exactly what resolvePhase already does, so 100 = today.
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { id.phaseAmt, 1 }, n + "Phase Amount",
-                juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 100.0f));
+                // fb538 — 0..1 to match. A stored 100 clamps to 1.0, the SAME thing it always
+                // meant (fully random), so the library is unharmed.
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 1.0f));
         }
     }
 
@@ -8476,7 +8483,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const tw::Wavetable* wt       = wavetableForOsc (0, morphA_, wtPreset);
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *rawParam (ParameterIDs::SYN_OSC_A_WARP_MODE);
-        const int   phaseModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_PHASE_MODE);
+        const int   phaseModeA = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmount =       *rawParam (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
         // Phase 3 — OSC A engine choice
         const int engineIdx = (int) *rawParam (ParameterIDs::SYN_OSC_A_ENGINE);
@@ -8491,7 +8498,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float wtFrameB   =        *rawParam (ParameterIDs::SYN_OSC_B_WT_FRAME);
         const tw::Wavetable* wtB = wavetableForOsc (1, morphB_, wtPresetB);
         const int   warpModeB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP_MODE);
-        const int   phaseModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_PHASE_MODE);
+        const int   phaseModeB = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
         // WARP 2 — chained second slot per OSC
         const int   warp2ModeA = (int)  *rawParam (ParameterIDs::SYN_OSC_A_WARP2_MODE);
@@ -8521,7 +8528,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   wtPresetC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WT_PRESET);
         const float wtFrameC=*rawParam (ParameterIDs::SYN_OSC_C_WT_FRAME);
         const tw::Wavetable* wtC = wavetableForOsc (2, morphC_, wtPresetC);
-        const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_PHASE_MODE);
+        const int   warpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP_MODE), phaseModeC=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmountC=*rawParam (ParameterIDs::SYN_OSC_C_WARP_AMOUNT);
         const int   warp2ModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_WARP2_MODE);
         const float warp2AmtC=mdP (ParameterIDs::SYN_OSC_C_WARP2_AMT, wc::ModDest::Warp2C, 0.0f, 1.0f);
@@ -8536,7 +8543,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const int   wtPresetD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WT_PRESET);
         const float wtFrameD=*rawParam (ParameterIDs::SYN_OSC_D_WT_FRAME);
         const tw::Wavetable* wtD = wavetableForOsc (3, morphD_, wtPresetD);
-        const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_PHASE_MODE);
+        const int   warpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP_MODE), phaseModeD=/* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmountD=*rawParam (ParameterIDs::SYN_OSC_D_WARP_AMOUNT);
         const int   warp2ModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_WARP2_MODE);
         const float warp2AmtD=mdP (ParameterIDs::SYN_OSC_D_WARP2_AMT, wc::ModDest::Warp2D, 0.0f, 1.0f);
@@ -9315,8 +9322,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 opStage.uniWarp   = ownM (*rawParam (kOP[o].uwarp)    / 100.0f, (int) wc::ModDest::UniWarpA  + o, -1.0f, 1.0f);
                 opStage.warpVar   = ownM (*rawParam (kOP[o].wvar)     / 100.0f, (int) wc::ModDest::WarpVarA  + o,  0.0f, 1.0f);
                 opStage.warp2Var  = ownM (*rawParam (kOP[o].w2var)    / 100.0f, (int) wc::ModDest::Warp2VarA + o,  0.0f, 1.0f);
-                opStage.phaseAmt  = ownM (*rawParam (kOP[o].phaseAmt) / 100.0f, (int) wc::ModDest::PhaseAmtA + o,  0.0f, 1.0f);
-                opStage.phaseOffDeg = juce::jlimit (0.0f, 360.0f,
+                // fb538 — the /100 is gone: the parameter is 0..1 now, like Serum's.
+                opStage.phaseAmt  = ownM (*rawParam (kOP[o].phaseAmt), (int) wc::ModDest::PhaseAmtA + o,  0.0f, 1.0f);
+                // fb538 — the parameter is CYCLES (0..1) now; SynthVoice still speaks degrees,
+                // so the x360 lives here at the seam and the DSP is untouched.
+                opStage.phaseOffDeg = juce::jlimit (0.0f, 360.0f, 360.0f *
                     modWinP (phaseOffParam_[o], *rawParam (kOP[o].phase), (int) wc::ModDest::PhaseOffA + o));
                 // STACK is a switch, not a knob: no mod destination, and the clamp is the parameter's
                 // own cardinality so a stale JS option list can never index past the table (fb373).

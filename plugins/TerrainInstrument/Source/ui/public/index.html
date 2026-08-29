@@ -4665,7 +4665,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 /* fb536 — EIGHT: Voices joins the back row, which is per-osc and shown on every engine, so
    the knob is reachable whatever engine is loaded. Measured after the change, not assumed:
    label clipping is checked with scrollWidth vs clientWidth on the real editor. */
-#syn-panel .device.osc .back-only > .osc-knobs { grid-template-columns: repeat(8, 1fr); }
+#syn-panel .device.osc .back-only > .osc-knobs { grid-template-columns: repeat(7, 1fr); }
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .knob-ring {
   position: relative;                 /* holds the arc SVG — no layout/flow change */
@@ -4953,12 +4953,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    what read as uneven). They cannot be balanced against the UNISON set: sets 1-2 live in
    .wt-knob-wrap and render on the Wavetable engine ONLY, while the unison set renders on
    every engine, so a knob moved across would vanish on six engines out of seven. */
-#syn-panel .wt-knob-wrap .wt-pg1,
-#syn-panel .wt-knob-wrap .wt-pg2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
-#syn-panel .wt-knob-wrap .wt-pg2 { display: none; }
-#syn-panel .wt-knob-wrap.pg2 .wt-pg1 { display: none; }
-#syn-panel .wt-knob-wrap.pg2 .wt-pg2 { display: grid; }
-#syn-panel .wt-knob-wrap.pg2 .uni-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 #syn-panel .device.osc.engine-fm .wt-knob-wrap,
 #syn-panel .device.osc.engine-harm .wt-knob-wrap,
 #syn-panel .device.osc.engine-modal .wt-knob-wrap,
@@ -4969,6 +4963,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    verbatim, native <select> overlaid (the dropdowns-not-click-rotate rule). It sits FIRST in the
    row, where FM's Algo pill sits. margin-top:2px is what puts its LABEL on the knobs' baseline. */
 #syn-panel .uni-stack { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+/* fb538 — VOICES shows its NUMBER. Same pill geometry as Stack so the label shares the knobs'
+   baseline; the face carries the count, because the count IS the information. */
+#syn-panel .uni-voices { display: flex; flex-direction: column; align-items: center; gap: 2px; }
+#syn-panel .uni-voices-pill { position: relative; height: 20px; min-width: 30px; margin-top: 2px; padding: 0 6px;
+  border: 1px solid var(--border-strong); border-radius: 10px; cursor: ns-resize; user-select: none;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+#syn-panel .uni-voices-val { font-size: 10px; letter-spacing: .4px; font-weight: 400; line-height: 1;
+  color: var(--text-primary); pointer-events: none; font-variant-numeric: tabular-nums; }
 #syn-panel .uni-stack-pill { position: relative; height: 20px; min-width: 42px; margin-top: 2px; padding: 0 7px;
   border: 1px solid var(--border-strong); border-radius: 10px;
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -5433,7 +5435,9 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .kt-depth { cursor: ns-resize; user-select: none; color: var(--text-muted); }
 #syn-panel .kt-depth.dragging { color: var(--text-primary); }
 /* (rt-pill CSS removed 2026-07-09 — ROUTE tiles retired for COARSE) */
-#syn-panel .sel.uni-pill { gap: 3px; }
+#syn-panel .sel.ph-pill { gap: 3px; }   /* fb538 */
+#syn-panel .ph-pill .ph-label { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; white-space: nowrap; }
+#syn-panel .ph-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; font-variant-numeric: tabular-nums; }
 #syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
 #syn-panel .uni-pill.act .uni-val { color: var(--text-primary); }
@@ -6423,18 +6427,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-              </div>
-              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
-                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
-                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
-                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
-                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
-                   2026-07-09), so a Route knob would be a dead control. -->
-              <div class="osc-knobs wt-pg2">
                 <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -6445,13 +6438,19 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
+                <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
+                     parameter (1..16) and the COUNT is the information, so the value lives
+                     on the face: you see "7 voices", you never infer it by ear. -->
+                <div class="uni-voices" data-osc="a" title="Voices — unison voice count, 1 to 16. Drag to step; double-click back to 1.">
+                  <div class="uni-voices-pill"><span class="uni-voices-val">1</span></div>
+                  <div class="knob-label">Voices</div>
+                </div>
                 <div class="uni-stack" data-osc="a" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_A_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_UDETUNE" title="Detune — how far the voices spread inside the Range"><div class="knob-ring"></div><div class="knob-label">Detune</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_UWARP" title="Warp — fans the WARP AMOUNT across the unison voices so no two are shaped alike. Bipolar; 0 = every voice identical."><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_UBLEND" title="Blend — centre voice against the outer ones"><div class="knob-ring"></div><div class="knob-label">Blend</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_UWIDTH" title="Width — stereo spread of the unison fan. Bipolar."><div class="knob-ring"></div><div class="knob-label">Width</div></div>
               </div>
@@ -6632,9 +6631,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-mode-value" id="osc-a-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-a-warp2-val" data-warp2-mode="SYN_OSC_A_WARP2_MODE" data-warp2-amt="SYN_OSC_A_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
-                <div class="sel uni-pill" data-uni-active="phase" title="PHASE — right-click for Manual / Random / Free / Spread, or pick which value to drag (Phase / Rand / Mode). Rand 0 = every note starts at exactly Phase (tight, coherent, punchy). Rand 100 = a fresh random phase every note. Double-click resets.">
-                  <div class="sel-value uni-param-value" id="osc-a-uni-param-value">Phase</div>
-                  <div class="sel-value uni-val" id="osc-a-uni-val" data-uni-phase="SYN_OSC_A_PHASE" data-uni-rand="SYN_OSC_A_PHASE_AMT" data-uni-mode="SYN_OSC_A_PHASE_MODE"><b>0</b><i class="uni-suffix">&deg;</i></div>
+                <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
+                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
+                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                  <div class="sel-value ph-label">Phase</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE"><b>0.000</b></div>
+                </div>
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                  <div class="sel-value ph-label">Rand</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE_AMT"><b>1.000</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -6650,7 +6656,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -6769,18 +6774,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-              </div>
-              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
-                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
-                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
-                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
-                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
-                   2026-07-09), so a Route knob would be a dead control. -->
-              <div class="osc-knobs wt-pg2">
                 <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -6791,13 +6785,19 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
+                <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
+                     parameter (1..16) and the COUNT is the information, so the value lives
+                     on the face: you see "7 voices", you never infer it by ear. -->
+                <div class="uni-voices" data-osc="b" title="Voices — unison voice count, 1 to 16. Drag to step; double-click back to 1.">
+                  <div class="uni-voices-pill"><span class="uni-voices-val">1</span></div>
+                  <div class="knob-label">Voices</div>
+                </div>
                 <div class="uni-stack" data-osc="b" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_B_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_UDETUNE" title="Detune — how far the voices spread inside the Range"><div class="knob-ring"></div><div class="knob-label">Detune</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_UWARP" title="Warp — fans the WARP AMOUNT across the unison voices so no two are shaped alike. Bipolar; 0 = every voice identical."><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_UBLEND" title="Blend — centre voice against the outer ones"><div class="knob-ring"></div><div class="knob-label">Blend</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_UWIDTH" title="Width — stereo spread of the unison fan. Bipolar."><div class="knob-ring"></div><div class="knob-label">Width</div></div>
               </div>
@@ -6978,9 +6978,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-mode-value" id="osc-b-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-b-warp2-val" data-warp2-mode="SYN_OSC_B_WARP2_MODE" data-warp2-amt="SYN_OSC_B_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
-                <div class="sel uni-pill" data-uni-active="phase" title="PHASE — right-click for Manual / Random / Free / Spread, or pick which value to drag (Phase / Rand / Mode). Rand 0 = every note starts at exactly Phase (tight, coherent, punchy). Rand 100 = a fresh random phase every note. Double-click resets.">
-                  <div class="sel-value uni-param-value" id="osc-b-uni-param-value">Phase</div>
-                  <div class="sel-value uni-val" id="osc-b-uni-val" data-uni-phase="SYN_OSC_B_PHASE" data-uni-rand="SYN_OSC_B_PHASE_AMT" data-uni-mode="SYN_OSC_B_PHASE_MODE"><b>0</b><i class="uni-suffix">&deg;</i></div>
+                <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
+                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
+                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                  <div class="sel-value ph-label">Phase</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE"><b>0.000</b></div>
+                </div>
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                  <div class="sel-value ph-label">Rand</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE_AMT"><b>1.000</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -6996,7 +7003,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_B_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -7134,18 +7140,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_C_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-              </div>
-              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
-                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
-                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
-                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
-                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
-                   2026-07-09), so a Route knob would be a dead control. -->
-              <div class="osc-knobs wt-pg2">
                 <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -7156,13 +7151,19 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
+                <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
+                     parameter (1..16) and the COUNT is the information, so the value lives
+                     on the face: you see "7 voices", you never infer it by ear. -->
+                <div class="uni-voices" data-osc="c" title="Voices — unison voice count, 1 to 16. Drag to step; double-click back to 1.">
+                  <div class="uni-voices-pill"><span class="uni-voices-val">1</span></div>
+                  <div class="knob-label">Voices</div>
+                </div>
                 <div class="uni-stack" data-osc="c" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_C_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_UDETUNE" title="Detune — how far the voices spread inside the Range"><div class="knob-ring"></div><div class="knob-label">Detune</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_UWARP" title="Warp — fans the WARP AMOUNT across the unison voices so no two are shaped alike. Bipolar; 0 = every voice identical."><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_UBLEND" title="Blend — centre voice against the outer ones"><div class="knob-ring"></div><div class="knob-label">Blend</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_UWIDTH" title="Width — stereo spread of the unison fan. Bipolar."><div class="knob-ring"></div><div class="knob-label">Width</div></div>
               </div>
@@ -7343,9 +7344,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-mode-value" id="osc-c-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-c-warp2-val" data-warp2-mode="SYN_OSC_C_WARP2_MODE" data-warp2-amt="SYN_OSC_C_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
-                <div class="sel uni-pill" data-uni-active="phase" title="PHASE — right-click for Manual / Random / Free / Spread, or pick which value to drag (Phase / Rand / Mode). Rand 0 = every note starts at exactly Phase (tight, coherent, punchy). Rand 100 = a fresh random phase every note. Double-click resets.">
-                  <div class="sel-value uni-param-value" id="osc-c-uni-param-value">Phase</div>
-                  <div class="sel-value uni-val" id="osc-c-uni-val" data-uni-phase="SYN_OSC_C_PHASE" data-uni-rand="SYN_OSC_C_PHASE_AMT" data-uni-mode="SYN_OSC_C_PHASE_MODE"><b>0</b><i class="uni-suffix">&deg;</i></div>
+                <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
+                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
+                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                  <div class="sel-value ph-label">Phase</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE"><b>0.000</b></div>
+                </div>
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                  <div class="sel-value ph-label">Rand</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE_AMT"><b>1.000</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -7361,7 +7369,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_C_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -7480,18 +7487,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_D_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-              </div>
-              <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
-                   anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
-                   slots (the carrier for the non-invertible ceiling raises); Keytrack scales
-                   a destination by note. ⚠️ ROUTE (Src/Dest/Amt) is deliberately NOT here:
-                   SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
-                   2026-07-09), so a Route knob would be a dead control. -->
-              <div class="osc-knobs wt-pg2">
                 <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
@@ -7502,13 +7498,19 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
+                <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
+                     parameter (1..16) and the COUNT is the information, so the value lives
+                     on the face: you see "7 voices", you never infer it by ear. -->
+                <div class="uni-voices" data-osc="d" title="Voices — unison voice count, 1 to 16. Drag to step; double-click back to 1.">
+                  <div class="uni-voices-pill"><span class="uni-voices-val">1</span></div>
+                  <div class="knob-label">Voices</div>
+                </div>
                 <div class="uni-stack" data-osc="d" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_D_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_UDETUNE" title="Detune — how far the voices spread inside the Range"><div class="knob-ring"></div><div class="knob-label">Detune</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_UWARP" title="Warp — fans the WARP AMOUNT across the unison voices so no two are shaped alike. Bipolar; 0 = every voice identical."><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_UBLEND" title="Blend — centre voice against the outer ones"><div class="knob-ring"></div><div class="knob-label">Blend</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_UWIDTH" title="Width — stereo spread of the unison fan. Bipolar."><div class="knob-ring"></div><div class="knob-label">Width</div></div>
               </div>
@@ -7689,9 +7691,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-mode-value" id="osc-d-warp2-mode">None</div>
                   <div class="sel-value warp2-val" id="osc-d-warp2-val" data-warp2-mode="SYN_OSC_D_WARP2_MODE" data-warp2-amt="SYN_OSC_D_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
-                <div class="sel uni-pill" data-uni-active="phase" title="PHASE — right-click for Manual / Random / Free / Spread, or pick which value to drag (Phase / Rand / Mode). Rand 0 = every note starts at exactly Phase (tight, coherent, punchy). Rand 100 = a fresh random phase every note. Double-click resets.">
-                  <div class="sel-value uni-param-value" id="osc-d-uni-param-value">Phase</div>
-                  <div class="sel-value uni-val" id="osc-d-uni-val" data-uni-phase="SYN_OSC_D_PHASE" data-uni-rand="SYN_OSC_D_PHASE_AMT" data-uni-mode="SYN_OSC_D_PHASE_MODE"><b>0</b><i class="uni-suffix">&deg;</i></div>
+                <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
+                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
+                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                  <div class="sel-value ph-label">Phase</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE"><b>0.000</b></div>
+                </div>
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                  <div class="sel-value ph-label">Rand</div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE_AMT"><b>1.000</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -7707,7 +7716,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_D_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -16691,49 +16699,78 @@ setTimeout(function wireSynControls () {
       });
     } catch (eUS) { console.warn ('[uni-stack] wiring failed', eUS); }
 
-    // ════════ UNISON PAGE — the LAST page on every engine (fb531) ════════
-    //  ONE delegated CAPTURE-phase listener. Capture matters: the per-engine .pg2 toggles are
-    //  plain bubble listeners, so running first lets us swallow the click that would otherwise
-    //  flip an engine back to page 1 when what the user wants is the unison page. Every existing
-    //  engine handler is left exactly as it is.
-    //    · WT / Sample-without-blend  — one page, so the chevron goes STRAIGHT to unison.
-    //    · everything else            — unison is reached from that engine's LAST page.
-    try {
-      var UNI_WRAPS = '.wt-knob-wrap, .fm-knob-wrap, .harm-knob-wrap, .modal-knob-wrap, .geode-knob-wrap, .gran-knob-wrap, .samp-knob-wrap';
-      document.addEventListener ('click', function (e) {
-        var t = e.target; if (! t || ! t.closest) return;
-        var arrow = t.closest ('#syn-panel .uni-arrow, #syn-panel .gk-arrow, #syn-panel .fm-arrow, #syn-panel .harm-arrow, #syn-panel .modal-arrow, #syn-panel .geode-arrow, #syn-panel .bl-arrow');
-        if (! arrow) return;
-        var dev = arrow.closest ('.device.osc'); if (! dev) return;
-
-        if (dev.classList.contains ('uni-page')) {          // leaving unison -> back to page 1
-          e.preventDefault (); e.stopPropagation ();
-          dev.classList.remove ('uni-page', 'blend-pg2');
-          dev.querySelectorAll (UNI_WRAPS).forEach (function (w) { w.classList.remove ('pg2'); });
-          return;
+    // ════════ THE SET ARROW (fb538) — ONE STEP AT A TIME, UNISON ALWAYS LAST ════════
+    //  Max: "I want these to be like pawns... they don't jump two steps like a knight."
+    //
+    //  🚨 WHY THE OLD ONE JUMPED. It INFERRED the current set from the wrap's .pg2 class. That
+    //     class survives an engine change and an editor reopen, so a wrap still carrying .pg2 from
+    //     an earlier visit read as "already on the last engine set" and the very next click went
+    //     straight to UNISON — one step forward, then two back to get home. My own gate never saw
+    //     it because the probe cleared .pg2 before each engine; the real plugin does not.
+    //
+    //  THE FIX: the device owns an explicit INDEX. Nothing is inferred from a class; the classes
+    //  are only ever WRITTEN from the index. Order is always engine set 1 [, engine set 2], then
+    //  UNISON LAST, and one click moves exactly one step.
+    (function initSetArrows () {
+      try {
+        var WRAP_OF = [
+          { cls: 'engine-fm',       wrap: '.fm-knob-wrap'    },
+          { cls: 'engine-harm',     wrap: '.harm-knob-wrap'  },
+          { cls: 'engine-modal',    wrap: '.modal-knob-wrap' },
+          { cls: 'engine-geode',    wrap: '.geode-knob-wrap' },
+          { cls: 'engine-granular', wrap: '.gran-knob-wrap'  },
+          { cls: 'engine-sample',   wrap: '.samp-knob-wrap'  }
+        ];
+        function live (dev) {
+          for (var i = 0; i < WRAP_OF.length; ++i)
+            if (dev.classList.contains (WRAP_OF[i].cls)) {
+              var sample = WRAP_OF[i].cls === 'engine-sample';
+              return { wrap: dev.querySelector (WRAP_OF[i].wrap),
+                       // Sample only has a second set while a blend is live
+                       engineSets: sample ? (dev.classList.contains ('blend-on') ? 2 : 1) : 2,
+                       sample: sample };
+            }
+          return { wrap: dev.querySelector ('.wt-knob-wrap'), engineSets: 1, sample: false };
         }
-        var wrap = arrow.closest (UNI_WRAPS); if (! wrap) return;
-        var last;
-        // fb533 — WT has TWO pages now, so it is no longer the 'straight to unison' case.
-        if (wrap.classList.contains ('wt-knob-wrap'))        last = wrap.classList.contains ('pg2');
-        else if (wrap.classList.contains ('samp-knob-wrap')) last = ! dev.classList.contains ('blend-on')
-                                                                 || dev.classList.contains ('blend-pg2');
-        else                                                last = wrap.classList.contains ('pg2');
-        if (! last) return;                                  // not there yet — let the engine toggle run
-        e.preventDefault (); e.stopPropagation ();
-        dev.classList.add ('uni-page');
-      }, true);
-    } catch (eUP) { console.warn ('[uni-page] wiring failed', eUP); }
-
-    // ════════ WT page flip (fb533) — same idiom as .fm-arrow, on the wrap's own chevron ════════
-    try {
-      document.querySelectorAll ('#syn-panel .wt-knob-wrap .uni-arrow').forEach (function (arrow) {
-        arrow.addEventListener ('click', function (e) {
-          e.preventDefault (); e.stopPropagation ();
-          var w = arrow.closest ('.wt-knob-wrap'); if (w) w.classList.toggle ('pg2');
+        function apply (dev, idx) {
+          var L = live (dev), n = L.engineSets + 1;          // +1 = the unison set
+          idx = ((idx % n) + n) % n;
+          dev.dataset.setIdx = idx;
+          var uni = (idx === L.engineSets);                  // UNISON IS ALWAYS THE LAST INDEX
+          dev.classList.toggle ('uni-page', uni);
+          if (L.wrap && ! L.sample) L.wrap.classList.toggle ('pg2', ! uni && idx === 1);
+          if (L.sample) dev.classList.toggle ('blend-pg2', ! uni && idx === 1);
+        }
+        // 🚨 THE OBSERVER MUST KEY ON THE *ENGINE*, NOT ON ANY CLASS apply() TOUCHES. A first cut
+        //    compared the live wrap's className — but apply() writes .pg2 onto that very wrap and
+        //    .uni-page onto the device, so every step re-fired the observer, which reset the index
+        //    to 0: on WT that cancelled every click outright.
+        function engineKey (dev) {
+          for (var i = 0; i < WRAP_OF.length; ++i)
+            if (dev.classList.contains (WRAP_OF[i].cls))
+              return WRAP_OF[i].cls + (dev.classList.contains ('blend-on') ? '+b' : '');
+          return 'wt';
+        }
+        document.querySelectorAll ('#syn-panel .device.osc').forEach (function (dev) {
+          dev.dataset.engKey = engineKey (dev);
+          apply (dev, 0);
+          try {
+            new MutationObserver (function () {
+              var k = engineKey (dev);
+              if (dev.dataset.engKey !== k) { dev.dataset.engKey = k; apply (dev, 0); }
+            }).observe (dev, { attributes: true, attributeFilter: ['class'] });
+          } catch (eMo) {}
         });
-      });
-    } catch (eWT) { console.warn ('[WT] arrow wiring failed', eWT); }
+        document.addEventListener ('click', function (e) {
+          var t = e.target; if (! t || ! t.closest) return;
+          var arrow = t.closest ('#syn-panel .uni-arrow, #syn-panel .gk-arrow, #syn-panel .fm-arrow, #syn-panel .harm-arrow, #syn-panel .modal-arrow, #syn-panel .geode-arrow, #syn-panel .bl-arrow');
+          if (! arrow) return;
+          var dev = arrow.closest ('.device.osc'); if (! dev) return;
+          e.preventDefault (); e.stopPropagation ();   // we own the step; no per-engine toggle runs
+          apply (dev, (parseInt (dev.dataset.setIdx, 10) || 0) + 1);
+        }, true);
+      } catch (eSA) { console.warn ('[set-arrow] wiring failed', eSA); }
+    })();
 
     // ════════ FM WEATHERING page flip — thin white arrow, gran-knob-wrap pattern ════════
     try {
@@ -18848,123 +18885,86 @@ setTimeout(function wireSynControls () {
     //    The arrow lights purple when the amount is non-zero. ──
     // (initRoutePills removed 2026-07-09 — the Note→Frame rt-pill tiles were retired for COARSE)
 
-    // ── PHASE pill (fb532) — the back-panel pill that used to be UNISON. ─────────────────────
-    //  Unison got its own knob page on every engine in fb531, so Detune/Blend/Width were being
-    //  DUPLICATED here; they left. Phase / Rand / Mode moved in. VOICES STAYED, because this pill
-    //  is the only control for SYN_OSC_x_UNISON anywhere in the UI — dropping it would have
-    //  stranded the parameter, which is the exact bug class fb531 was cleaning up.
-    //
-    //  🚨 THE MODEL IS SERUM'S, AND resolvePhase ALREADY COMPUTED IT: wrap(Phase + Rand x random).
-    //     MEASURED through both AUs (Tests/phase_probe.cpp), start phase per note:
-    //       Rand 0 -> R = 1.0000 (ours) vs 1.0000 (theirs); Phase tracks +90.00 deg per quarter turn
-    //       on BOTH, the two curves 1.69 deg apart (our sine vs their saw, not a behaviour gap).
-    //     So NO DSP was written for this. What was broken was that the shipped default mode is
-    //     FREE, whose branch ignores both knobs, and that no control existed at all.
-    //
-    //  Right-click gives the four modes DIRECTLY (Max: "right click for random and manual etc.
-    //  then we choose the phasing") and also picks which value the drag edits. Choosing Manual or
-    //  Random additionally jumps the value to the knob you'd actually want next.
-    (function initPhasePills() {
+    // ════════ PHASE — two plain values, no menu (fb538) ════════
+    //  Max: "Serum 2 only has random phasing and something else... quit with the fucking menus."
+    //  Measured off Serum 2 in fb532: `A Phase` and `A Rand Phase`, BOTH 0..1. Ours now read the
+    //  same scale (they were 0-360 degrees and 0-100 %). Rand 0 = deterministic at Phase, Rand 1 =
+    //  a fresh random phase every note — which is why Serum needs no mode selector and nor do we.
+    (function initPhaseVals () {
       try {
-        const PARAMS = [
-          { key: 'phase',  label: 'Phase',  suffix: '\u00B0' },
-          { key: 'rand',   label: 'Rand',   suffix: '%' },
-          { key: 'mode',   label: 'Mode',   suffix: ''  },
-        ];
-        // value order is the C++ StringArray: 0 Retrig, 1 Free, 2 Random, 3 Spread.
-        // "Manual" is the pragmatic-name rule applied to Retrig: it is what the knob DOES.
-        const MODES = [ { v: 0, label: 'Manual' }, { v: 2, label: 'Random' },
-                        { v: 1, label: 'Free'   }, { v: 3, label: 'Spread' } ];
-        document.querySelectorAll('#syn-panel .uni-pill').forEach(function(pill) {
+        document.querySelectorAll('#syn-panel .ph-val').forEach(function (valEl) {
           try {
-            const valEl = pill.querySelector('.uni-val');
-            const numEl = valEl ? valEl.querySelector('b') : null;
-            const sufEl = valEl ? valEl.querySelector('.uni-suffix') : null;
-            const labEl = pill.querySelector('.uni-param-value');
-            if (!valEl || !numEl || !window.Juce || !window.Juce.getSliderState) return;
-            const ids = { phase: valEl.dataset.uniPhase, rand: valEl.dataset.uniRand,
-                          mode:  valEl.dataset.uniMode };   // fb534 — Voices left for its own pill
-            const states = {};
-            Object.keys(ids).forEach(function(k){ try { states[k] = window.Juce.getSliderState(ids[k]); } catch(e){} });
-            if (!pill.dataset.uniActive) pill.dataset.uniActive = 'phase';
-            const getActive = function(){ return pill.dataset.uniActive || 'phase'; };
-            const modeVal = function(){ const st = states.mode;
-              return (st && st.getScaledValue) ? Math.round(st.getScaledValue()) : 1; };
-            const refresh = function() {
-              try {
-                const a = getActive(); const st = states[a]; if (!st) return;
-                if (a === 'mode') {
-                  const m = MODES.find(function(x){ return x.v === modeVal(); });
-                  numEl.textContent = m ? m.label : '?';
-                  if (sufEl) sufEl.textContent = '';
-                } else {
-                  numEl.textContent = Math.round(st.getScaledValue ? st.getScaledValue() : 0);
-                  const p = PARAMS.find(function(x){ return x.key === a; });
-                  if (sufEl) sufEl.textContent = p ? p.suffix : '';
-                }
-                if (labEl) { const p = PARAMS.find(function(x){ return x.key === a; });
-                             labEl.textContent = p ? p.label : a; }
-                // lamp: lit whenever the oscillator is actually PHASING (i.e. not free-running)
-                pill.classList.toggle('act', modeVal() !== 1);
-              } catch (e) {}
+            var numEl = valEl.querySelector('b');
+            if (!numEl || !window.Juce || !window.Juce.getSliderState) return;
+            var st = window.Juce.getSliderState(valEl.dataset.ph);
+            if (!st) { console.warn('[phase] no state for', valEl.dataset.ph); return; }
+            var refresh = function () {
+              try { numEl.textContent = (st.getScaledValue ? st.getScaledValue() : 0).toFixed(3); } catch (e) {}
             };
-            Object.keys(states).forEach(function(k) {
-              const st = states[k];
-              if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
-                st.valueChangedEvent.addListener(function(){ if (k === getActive() || k === 'mode') refresh(); });
-            });
-            pill.addEventListener('contextmenu', function(ev) {
-              ev.preventDefault(); ev.stopPropagation();
-              if (!window.__synShowMenu) return;
-              const a = getActive(), mv = modeVal();
-              const items = PARAMS.map(function(p) {
-                return { label: p.label, isChecked: (p.key === a),
-                         onPick: function(){ pill.dataset.uniActive = p.key; refresh(); } };
-              }).concat (MODES.map(function(m) {
-                return { label: m.label, isChecked: (m.v === mv),
-                         onPick: function(){
-                           try { const st = states.mode; if (st) st.setNormalisedValue(m.v / 3); } catch(e){}
-                           // land on the knob you'd reach for next
-                           if (m.v === 0) pill.dataset.uniActive = 'phase';
-                           else if (m.v === 2) pill.dataset.uniActive = 'rand';
-                           refresh();
-                         } };
-              }));
-              window.__synShowMenu('PHASE', items, ev.clientX, ev.clientY);
-            });
-            let startY = 0, startN = 0, drag = false;
-            const onMove = function(ev) {
-              if (!drag) return;
-              const st = states[getActive()]; if (!st) return;
-              const dy = startY - ev.clientY;
-              const nN = Math.max(0, Math.min(1, startN + dy / 150));
-              try { st.setNormalisedValue(nN); } catch (e) {}
-              refresh();
-            };
-            const onUp = function() { drag = false; document.removeEventListener('pointermove', onMove); document.removeEventListener('pointerup', onUp); };
-            valEl.addEventListener('pointerdown', function(ev) {
-              if (ev.button !== 0) return;   // right-click is the menu, never a drag
-              try {
-                const st = states[getActive()]; if (!st) return;
-                drag = true; startY = ev.clientY;
-                startN = st.getNormalisedValue ? st.getNormalisedValue() : 0;
+            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
+            var y0 = 0, n0 = 0, drag = false;
+            var mv = function (ev) { if (!drag) return;
+              try { st.setNormalisedValue(Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150))); } catch (e) {}
+              refresh(); };
+            var up = function () { drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+            valEl.addEventListener('pointerdown', function (ev) {
+              if (ev.button !== 0) return;
+              try { drag = true; y0 = ev.clientY; n0 = st.getNormalisedValue ? st.getNormalisedValue() : 0;
                 if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId);
-                document.addEventListener('pointermove', onMove);
-                document.addEventListener('pointerup', onUp);
-                ev.preventDefault(); ev.stopPropagation();
-              } catch (e) {}
+                document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+                ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
             });
-            // dblclick -> the ACTIVE param back to its registered default, in NORMALISED terms:
-            //   Phase 0 deg -> 0 | Rand 100 % -> 1 | Voices 1 -> 0 | Mode 2 (Random) -> 2/3
-            const PH_DEF = { phase: 0.0, rand: 1.0, mode: 2 / 3 };
-            valEl.addEventListener('dblclick', function(ev) {
+            valEl.addEventListener('dblclick', function (ev) {
               ev.preventDefault(); ev.stopPropagation();
-              try { const st = states[getActive()]; if (st) st.setNormalisedValue(PH_DEF[getActive()] || 0); refresh(); } catch (e) {}
+              try { st.setNormalisedValue(valEl.dataset.ph.indexOf('_AMT') > 0 ? 1 : 0); } catch (e) {}
+              refresh();
             });
             refresh();
-          } catch (perPill) { console.warn('[PHASE] pill init failed', perPill); }
+          } catch (per) { console.warn('[phase] val init failed', per); }
         });
-      } catch (e) { console.warn('[PHASE] initPhasePills failed', e); }
+      } catch (e) { console.warn('[phase] initPhaseVals failed', e); }
+    })();
+
+    // ════════ VOICES — a NUMBER you can read, not a blind slider (fb538) ════════
+    //  Max: "voices has a solid number in the middle of it instead of a fucking slider... We want
+    //  to actually see the number inside. Oh okay, it's seven voices."
+    //  SYN_OSC_x_UNISON is already an INT parameter 1..16, so every step is exact by construction.
+    (function initVoicesNumber () {
+      try {
+        document.querySelectorAll('#syn-panel .uni-voices').forEach(function (cell) {
+          try {
+            var pill  = cell.querySelector('.uni-voices-pill');
+            var valEl = cell.querySelector('.uni-voices-val');
+            var osc   = (cell.dataset.osc || 'a').toUpperCase();
+            if (!pill || !valEl || !window.Juce || !window.Juce.getSliderState) return;
+            var st = window.Juce.getSliderState('SYN_OSC_' + osc + '_UNISON');
+            if (!st) { console.warn('[voices] no state for osc', osc); return; }
+            var refresh = function () {
+              try { var n = Math.round(st.getScaledValue ? st.getScaledValue() : 1);
+                    valEl.textContent = n; pill.classList.toggle('act', n > 1); } catch (e) {}
+            };
+            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
+            var y0 = 0, n0 = 0, drag = false;
+            var mv = function (ev) { if (!drag) return;
+              try { st.setNormalisedValue(Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150))); } catch (e) {}
+              refresh(); };
+            var up = function () { drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
+            pill.addEventListener('pointerdown', function (ev) {
+              if (ev.button !== 0) return;
+              try { drag = true; y0 = ev.clientY; n0 = st.getNormalisedValue ? st.getNormalisedValue() : 0;
+                if (pill.setPointerCapture) pill.setPointerCapture(ev.pointerId);
+                document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
+                ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
+            });
+            pill.addEventListener('dblclick', function (ev) {
+              ev.preventDefault(); ev.stopPropagation();
+              try { st.setNormalisedValue(0); } catch (e) {}   // 1 voice
+              refresh();
+            });
+            refresh();
+          } catch (per) { console.warn('[voices] init failed', per); }
+        });
+      } catch (e) { console.warn('[voices] initVoicesNumber failed', e); }
     })();
 
     // ══════════ BLEND MODES — B1..B4 cross-osc warp slots (P1: FM + PD, any-to-any) ══════════
