@@ -4897,7 +4897,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .osc-knobs.samp-knobs { grid-template-columns: repeat(6, 1fr); }
 
 /* ════════════════ UNISON PAGE — the LAST page on every engine (OVERPASS ONE item 2) ════════════
-   Voices keeps the front .uni-pill it already has; THIS page carries the six SHAPERS. Three of
+   Voices leads this set as a NUMBER (fb538); the rest are the shapers. Three of
    them — Range, Stack, Warp — are fully registered, pulled (PluginProcessor.cpp:9277-9287), pushed
    to the voice (:9330), consumed in the render loop (SynthVoice.h:3519/3520/3620) and are already
    MOD DESTINATIONS. They have simply never had a control. No DSP work: this is the UI half only.
@@ -5439,10 +5439,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .sel.ph-pill { gap: 3px; }   /* fb538 */
 #syn-panel .ph-pill .ph-label { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; white-space: nowrap; }
 #syn-panel .ph-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; font-variant-numeric: tabular-nums; }
-#syn-panel .uni-pill .uni-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#syn-panel .uni-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
-#syn-panel .uni-pill.act .uni-val { color: var(--text-primary); }
-#syn-panel .uni-suffix { font-style: normal; opacity: 0.75; }
 #syn-panel .sel.sub-pill { gap: 3px; }
 #syn-panel .sub-pill .sub-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .sub-pill .sub-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
@@ -6427,11 +6423,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
-              <!-- UNISON PAGE (fb531) — the LAST page on every engine. Voices keeps the front
-                   .uni-pill; these six are the SHAPERS. Range / Stack / Warp were registered,
-                   pulled, pushed to the voice, consumed in the render loop AND modulatable, with
-                   no control anywhere — this is the UI half only, no DSP change.
-                   Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
+              <!-- UNISON SET — the LAST set on every engine (fb531, current shape fb538). Voices
+                   leads it as a NUMBER, then the five shapers. Range and Stack were registered,
+                   pulled, pushed to the voice, consumed in the render loop AND modulatable with no
+                   control anywhere until fb531; Warp left the set in fb538 (Max: it does nothing).
+                   Stack is a CHOICE, so it is a pill in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
                 <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
@@ -6769,11 +6765,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
-              <!-- UNISON PAGE (fb531) — the LAST page on every engine. Voices keeps the front
-                   .uni-pill; these six are the SHAPERS. Range / Stack / Warp were registered,
-                   pulled, pushed to the voice, consumed in the render loop AND modulatable, with
-                   no control anywhere — this is the UI half only, no DSP change.
-                   Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
+              <!-- UNISON SET — the LAST set on every engine (fb531, current shape fb538). Voices
+                   leads it as a NUMBER, then the five shapers. Range and Stack were registered,
+                   pulled, pushed to the voice, consumed in the render loop AND modulatable with no
+                   control anywhere until fb531; Warp left the set in fb538 (Max: it does nothing).
+                   Stack is a CHOICE, so it is a pill in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
                 <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
@@ -7130,11 +7126,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
-              <!-- UNISON PAGE (fb531) — the LAST page on every engine. Voices keeps the front
-                   .uni-pill; these six are the SHAPERS. Range / Stack / Warp were registered,
-                   pulled, pushed to the voice, consumed in the render loop AND modulatable, with
-                   no control anywhere — this is the UI half only, no DSP change.
-                   Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
+              <!-- UNISON SET — the LAST set on every engine (fb531, current shape fb538). Voices
+                   leads it as a NUMBER, then the five shapers. Range and Stack were registered,
+                   pulled, pushed to the voice, consumed in the render loop AND modulatable with no
+                   control anywhere until fb531; Warp left the set in fb538 (Max: it does nothing).
+                   Stack is a CHOICE, so it is a pill in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
                 <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
@@ -7472,11 +7468,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               </div>
                 <div class="uni-arrow" role="button" tabindex="0" title="Unison — Stack · Range · Detune · Warp · Blend · Width" aria-label="Unison controls"></div>
               </div>
-              <!-- UNISON PAGE (fb531) — the LAST page on every engine. Voices keeps the front
-                   .uni-pill; these six are the SHAPERS. Range / Stack / Warp were registered,
-                   pulled, pushed to the voice, consumed in the render loop AND modulatable, with
-                   no control anywhere — this is the UI half only, no DSP change.
-                   Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
+              <!-- UNISON SET — the LAST set on every engine (fb531, current shape fb538). Voices
+                   leads it as a NUMBER, then the five shapers. Range and Stack were registered,
+                   pulled, pushed to the voice, consumed in the render loop AND modulatable with no
+                   control anywhere until fb531; Warp left the set in fb538 (Max: it does nothing).
+                   Stack is a CHOICE, so it is a pill in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
                 <!-- fb538 — VOICES READS AS A NUMBER, never a bare ring. It is an INT
@@ -16753,30 +16749,12 @@ setTimeout(function wireSynControls () {
       } catch (eSA) { console.warn ('[set-arrow] wiring failed', eSA); }
     })();
 
-    // ════════ FM WEATHERING page flip — thin white arrow, gran-knob-wrap pattern ════════
-    try {
-      document.querySelectorAll ('#syn-panel .fm-knob-wrap .fm-arrow').forEach (function (arrow) {
-        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.fm-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
-        arrow.addEventListener ('click', toggle);
-      });
-    } catch (eFmW) { console.warn ('[FM-weather] arrow wiring failed', eFmW); }
 
-    // ════════ GEODE sculpt page flip — thin white arrow (same pattern as FM) ════════
-    try {
-      document.querySelectorAll ('#syn-panel .geode-knob-wrap .geode-arrow').forEach (function (arrow) {
-        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.geode-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
-        arrow.addEventListener ('click', toggle);
-      });
-    } catch (eGdW) { console.warn ('[GEODE] arrow wiring failed', eGdW); }
 
     // ════════ HARMONIC ENGINE UI — page flip, mode buttons, white partial-bar viz ════════
     // HEALERS: every path try/caught; the painter re-queries its canvas each frame (survives
     // DOM churn) and a TIME watchdog wipes bars if the C++ feed goes silent (engine switched).
     try {
-      document.querySelectorAll ('#syn-panel .harm-knob-wrap .harm-arrow').forEach (function (arrow) {
-        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.harm-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
-        arrow.addEventListener ('click', toggle);
-      });
     // header FAMILY + SCULPT selectors — the mode UI (bottom buttons retired hm3)
       var HM_SCULPT = ['Keel','Splay','Cull','Tide','Terrace','Clang'];
       document.querySelectorAll ('#syn-panel .hm-sculpt-select').forEach (function (sel) {
@@ -16806,10 +16784,6 @@ setTimeout(function wireSynControls () {
 
     // ════════ MODAL ENGINE UI — page flip + FAMILY/FORM selectors (instrument names per family) ════════
     try {
-      document.querySelectorAll ('#syn-panel .modal-knob-wrap .modal-arrow').forEach (function (arrow) {
-        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.modal-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
-        arrow.addEventListener ('click', toggle);
-      });
       var MODAL_FAM = ['Grand','Pluck','Bow','Flute','Reed','Brass','Bars','Bells','Skin'];
       var MODAL_FORMS = [
         ['Concert','Upright','Tack','Felt','Silver'], ['Steel','Nylon','Lute','Harp','Sitar'],
@@ -18136,10 +18110,6 @@ setTimeout(function wireSynControls () {
       // (The old right-click "reassign" menu was removed 2026-07-02. Page 1 = essentials, page 2 =
       //  the rest. All page-2 knobs are bound by the general .knob[data-syn] binder even while hidden,
       //  so they just work the moment they are revealed — no reflow, no re-bind.)
-      document.querySelectorAll ('#syn-panel .gran-knob-wrap .gk-arrow').forEach (function (arrow) {
-        function toggle (e) { e.preventDefault (); e.stopPropagation (); var w = arrow.closest ('.gran-knob-wrap'); if (w) w.classList.toggle ('pg2'); }
-        arrow.addEventListener ('click', toggle);
-      });
 
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
@@ -30343,10 +30313,10 @@ restoreThemeFromBackend();
       var p=v.getAttribute(attr);
       if(p&&KNOBDEST.hasOwnProperty(p)) out.push({el:v,dest:KNOBDEST[p],kind:'knob'}); });   // Mix, or Drive when selected
     document.querySelectorAll('#syn-panel .warp2-pill .warp2-val[data-warp2-amt]').forEach(function(v){ var p=v.getAttribute('data-warp2-amt'); if(KNOBDEST.hasOwnProperty(p)) out.push({el:v,dest:KNOBDEST[p],kind:'knob'}); });   // fb77 — WARP2 amount
-    document.querySelectorAll('#syn-panel .uni-pill').forEach(function(pill){ var v=pill.querySelector('.uni-val'); if(!v) return;
-      var a=pill.dataset.uniActive||'phase';                                       // fb532 — the pill is PHASE now; drop still hits the ACTIVE param
-      var attr=(a==='rand')?'data-uni-rand':((a==='mode')?'data-uni-mode':'data-uni-phase');
-      var p=v.getAttribute(attr); if(p&&KNOBDEST.hasOwnProperty(p)) out.push({el:v,dest:KNOBDEST[p],kind:'knob'}); });
+    // fb541 — the .uni-pill drop target is gone with the pill itself (fb538 split it into the two
+    // .ph-pill values). Phase and Rand are reached as ordinary .ph-val elements below.
+    document.querySelectorAll('#syn-panel .ph-val[data-ph]').forEach(function(v){
+      var p=v.getAttribute('data-ph'); if(p&&KNOBDEST.hasOwnProperty(p)) out.push({el:v,dest:KNOBDEST[p],kind:'knob'}); });
     var cut=document.querySelector('#syn-panel .device.filter .fk-em canvas[data-em="cut"]'); if(cut) out.push({el:cut.parentElement,dest:-1,kind:'cut'}); // dest resolved at drop (slot)
     document.querySelectorAll('#syn-panel [data-mod-dest]').forEach(function(el){ out.push({el:el,dest:+el.getAttribute('data-mod-dest'),kind:'knob'}); });   // fb75 — F1/F2 pills, blend pills, noise knobs, osc letters
     document.querySelectorAll('.ti-card [data-mod-dest]').forEach(function(el){ out.push({el:el,dest:+el.getAttribute('data-mod-dest'),kind:'knob'}); });   // fb145 — every card knob/slider (docked)
@@ -30753,7 +30723,7 @@ restoreThemeFromBackend();
     if(!found) document.querySelectorAll('#syn-panel .coarse-pill .coarse-val[data-coarse]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-coarse')]===dest) found=k; });
     if(!found) document.querySelectorAll('#syn-panel .sub-pill .sub-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-sub-weight')]===dest||KNOBDEST[k.getAttribute('data-sub-heat')]===dest||KNOBDEST[k.getAttribute('data-sub-range')]===dest||KNOBDEST[k.getAttribute('data-sub-form')]===dest) found=k; });
     if(!found) document.querySelectorAll('#syn-panel .warp2-pill .warp2-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-warp2-amt')]===dest) found=k; });   // fb77
-    if(!found) document.querySelectorAll('#syn-panel .uni-pill .uni-val').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-uni-phase')]===dest||KNOBDEST[k.getAttribute('data-uni-rand')]===dest) found=k; });   // fb77/78
+    if(!found) document.querySelectorAll('#syn-panel .ph-val[data-ph]').forEach(function(k){ if(KNOBDEST[k.getAttribute('data-ph')]===dest) found=k; });   // fb541 — .ph-val replaced the uni-pill
     return found; }
   /* fb187 — dest → short display name ("Level A", "WT Pos C", "Feedback B") for the env
      hub badges. Tiered: reverse-KNOBDEST + suffix prettifier → static non-osc ids →
