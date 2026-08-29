@@ -4719,7 +4719,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .fm-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .fm-arrow:hover { opacity: .95; }
 #syn-panel .fm-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
-#syn-panel .fm-knob-wrap.pg2 .fm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* HARMONIC ENGINE (engine #5, additive) — two pages, each = 6 mode buttons over 6 knobs.
    .harm-arrow flips (.pg2). Buttons are thin-white pills, purple on select (house aesthetic).
    The viz (.harm-view) rides the osc-display footprint: a centered white flatline with thin
@@ -4734,7 +4733,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .harm-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .harm-arrow:hover { opacity: .95; }
 #syn-panel .harm-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
-#syn-panel .harm-knob-wrap.pg2 .harm-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* MODAL-ENGINE knob panel — mirrors .harm-knob-wrap, 2 pages × 5 knobs, thin-white arrow */
 #syn-panel .modal-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 /* ── MODAL wears the SAMPLE shell (mv2) — structurally IDENTICAL to Granular: front-only is
@@ -4783,7 +4781,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .modal-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .modal-arrow:hover { opacity: .95; }
 #syn-panel .modal-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
-#syn-panel .modal-knob-wrap.pg2 .modal-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 
 #syn-panel .hm-mode-wrap.hm-sculpt { margin-left: 7px; }
 #syn-panel .harm-view { position: absolute; inset: 0; display: none; }
@@ -4800,7 +4797,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .geode-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .geode-arrow:hover { opacity: .95; }
 #syn-panel .geode-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
-#syn-panel .geode-knob-wrap.pg2 .geode-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* GEODE spectral WATERFALL viz — occupies the SAME transparent osc-display footprint; shown only
    when engine=Geode (the plain oscilloscope .osc-wave hides). Front white ridge + receding purple
    frame-ghosts + POSITION playhead (drawn in JS: window.__geodeSpectrum). Thin-white / no-glass. */
@@ -4826,7 +4822,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .gk-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .gk-arrow:hover { opacity: .95; }
 #syn-panel .gk-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
-#syn-panel .gran-knob-wrap.pg2 .gk-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* BLEND — secret second knob row on the Sample view (samp-knob-wrap mirrors gran-knob-wrap).
    .blend-on (a live blend exists, pushed by C++) reveals the flip arrow; .blend-pg2 swaps rows. */
 #syn-panel .samp-knob-wrap { display: flex; align-items: stretch; gap: 2px; flex: 0 0 auto; }
@@ -4838,7 +4833,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .bl-arrow:hover { opacity: .95; }
 #syn-panel .bl-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
 #syn-panel .device.osc.blend-on .bl-arrow { display: block; }
-#syn-panel .device.osc.blend-pg2 .bl-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 #syn-panel .device.osc.blend-pg2 .samp-knobs { display: none; }
 #syn-panel .device.osc.blend-pg2 .blend-knobs { display: grid; }
 
@@ -4980,6 +4974,13 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .uni-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
 #syn-panel .uni-arrow:hover { opacity: .95; }
 #syn-panel .uni-arrow::before { content: ""; position: absolute; top: 50%; left: 50%; width: 6px; height: 6px; margin: -4px 0 0 -4px; border-right: 1.4px solid #fff; border-top: 1.4px solid #fff; transform: rotate(45deg); }
+/* fb539 — THE CHEVRON POINTS BACK ON THE LAST SET AND ONLY THERE. Six rules used to flip it on
+   .pg2 as well, which was right when a second engine page WAS the end — but unison is the end
+   now, so set 2 was drawing a back-arrow in the middle of the run: it read as "you are at the
+   end", and then clicking it went FORWARD to unison. Max: "set 2 is at the END when it should be
+   in the middle... keep the order, change the placement." The cycle was already correct; the
+   arrow was lying about where you were. MEASURED: the row itself renders at an identical
+   top=153 left=29 on set 1, set 2 and unison, so nothing ever moved — only this glyph did. */
 #syn-panel .uni-knob-wrap .uni-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
 /* Sample with NO blend has only one page and its .bl-arrow is hidden, so it carries its own
    forward chevron; when blend IS live the existing .bl-arrow does page 2 and unison is page 3. */
