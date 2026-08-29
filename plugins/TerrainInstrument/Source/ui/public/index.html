@@ -4662,7 +4662,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 /* fb467 — the osc BACK row carries the spectral partial window alongside the tuning knobs. SEVEN
    even columns of 39.71px (302px of content, 6 gaps of 4px), measured at the 820px design width;
    the FRONT row stays at five because seven there needs 45.58px for 'Spectral' and clips it. */
-#syn-panel .device.osc .back-only > .osc-knobs { grid-template-columns: repeat(7, 1fr); }
+/* fb536 — EIGHT: Voices joins the back row, which is per-osc and shown on every engine, so
+   the knob is reachable whatever engine is loaded. Measured after the change, not assumed:
+   label clipping is checked with scrollWidth vs clientWidth on the real editor. */
+#syn-panel .device.osc .back-only > .osc-knobs { grid-template-columns: repeat(8, 1fr); }
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .knob-ring {
   position: relative;                 /* holds the arc SVG — no layout/flow change */
@@ -4925,10 +4928,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    0x0 on exactly those two engines while the other five were fine. 8 classes beats 7. Measured
    per-engine by a DOM probe, because nothing else sees this. */
 #syn-panel .device.osc.uni-page:not(.swapped) .front-only .uni-knob-wrap .osc-knobs.uni-knobs { display: grid; }
-/* fb535 — SEVEN cells: Voices leads, then the six shapers. Seven is already the osc BACK
-   row's width, so it is a proven fit at the 820px design width. */
 #syn-panel .uni-knob-wrap .uni-knobs { flex: 1 1 auto; min-width: 0; display: grid;
-  grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; align-items: center; }
+  grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; align-items: center; }
 #syn-panel .uni-knobs .knob-label { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; text-align: center; }
 /* on the unison page every ENGINE row and wrap stands down, whichever engine is live */
 #syn-panel .device.osc.uni-page:not(.swapped) .front-only .osc-knobs:not(.uni-knobs) { display: none; }
@@ -4947,10 +4948,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    cycle read 1 -> 3. It now has a real page 2 (the warp SECOND-DIMENSION knobs + keytrack), so
    every engine cycles 1 -> 2 -> 3. Same .pg2 idiom as fm/harm/modal/geode/gran.
    Grid stays the WT row's own 5 columns so page 2's knobs land exactly under page 1's. */
-/* fb535 — page 2 carries THREE controls, so it gets its own even three-column grid: they spread
-   across the full width instead of sitting left-aligned in a five-wide grid with a hole on the
-   right, which is what looked lopsided. Page 1 keeps its own five. */
-#syn-panel .wt-knob-wrap .wt-pg2 { display: none; grid-template-columns: repeat(3, minmax(0, 1fr)); }
+/* fb536 — THE TWO WAVETABLE SETS ARE NOW BOTH FOUR. Blur moved off set 1 onto the head of
+   set 2, so paging between them no longer changes the knob pitch (it was 5 then 3, which is
+   what read as uneven). They cannot be balanced against the UNISON set: sets 1-2 live in
+   .wt-knob-wrap and render on the Wavetable engine ONLY, while the unison set renders on
+   every engine, so a knob moved across would vanish on six engines out of seven. */
+#syn-panel .wt-knob-wrap .wt-pg1,
+#syn-panel .wt-knob-wrap .wt-pg2 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+#syn-panel .wt-knob-wrap .wt-pg2 { display: none; }
 #syn-panel .wt-knob-wrap.pg2 .wt-pg1 { display: none; }
 #syn-panel .wt-knob-wrap.pg2 .wt-pg2 { display: grid; }
 #syn-panel .wt-knob-wrap.pg2 .uni-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
@@ -6418,7 +6423,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_A_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
                    anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
@@ -6427,6 +6431,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
                    2026-07-09), so a Route knob would be a dead control. -->
               <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_A_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
@@ -6440,7 +6445,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
-                <div class="knob" data-syn="SYN_OSC_A_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off; everything else on this set only does something above 1."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
                 <div class="uni-stack" data-osc="a" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
@@ -6646,6 +6650,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_A_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
+                <div class="knob" data-syn="SYN_OSC_A_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -6764,7 +6769,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_B_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
                    anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
@@ -6773,6 +6777,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
                    2026-07-09), so a Route knob would be a dead control. -->
               <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_B_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
@@ -6786,7 +6791,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
-                <div class="knob" data-syn="SYN_OSC_B_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off; everything else on this set only does something above 1."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
                 <div class="uni-stack" data-osc="b" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
@@ -6992,6 +6996,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_B_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
+                <div class="knob" data-syn="SYN_OSC_B_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -7129,7 +7134,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_C_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-                <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
                    anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
@@ -7138,6 +7142,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
                    2026-07-09), so a Route knob would be a dead control. -->
               <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_C_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
@@ -7151,7 +7156,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
-                <div class="knob" data-syn="SYN_OSC_C_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off; everything else on this set only does something above 1."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
                 <div class="uni-stack" data-osc="c" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
@@ -7357,6 +7361,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_C_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
+                <div class="knob" data-syn="SYN_OSC_C_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
@@ -7475,7 +7480,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_D_WARP_AMOUNT"><div class="knob-ring"></div><div class="knob-label">Warp</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_AMT"><div class="knob-ring"></div><div class="knob-label">Spectral</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FOLD_AMT"><div class="knob-ring"></div><div class="knob-label">Fold</div></div>
-                <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
               </div>
               <!-- WT PAGE 2 (fb533) — the three LIVE wavetable params that had no control
                    anywhere. Warp Var / Warp 2 Var are the SECOND DIMENSION of the two warp
@@ -7484,6 +7488,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    SynthVoice::setRoute hard-zeroes the amount ("the route is DEAD", retired
                    2026-07-09), so a Route knob would be a dead control. -->
               <div class="osc-knobs wt-pg2">
+                <div class="knob" data-syn="SYN_OSC_D_FRAME_SPREAD" title="Wavetable frame BLUR — blends a Gaussian band of frames around the current WT position (works at any unison count)"><div class="knob-ring"></div><div class="knob-label">Blur</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_WVAR" title="Warp Var — the SECOND dimension of warp slot 1 (the Warp knob on page 1). On the non-invertible modes this is what opens the ceiling: RM modulator drive, Rectify pre-gain, Mirror fold count. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">Warp Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_W2VAR" title="Warp 2 Var — the second dimension of warp slot 2. 0 is the identity."><div class="knob-ring"></div><div class="knob-label">W2 Var</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_KEYTRACK" title="Keytrack — scales the destination by the note played, so the sound opens up the keyboard. Right-click the knob to choose the destination: Frame / Warp / Fold."><div class="knob-ring"></div><div class="knob-label">Keytrack</div></div>
@@ -7497,7 +7502,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                    Stack is a CHOICE, so it is a pill FIRST in the row, exactly like FM's Algo. -->
               <div class="uni-knob-wrap">
               <div class="osc-knobs uni-knobs">
-                <div class="knob" data-syn="SYN_OSC_D_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off; everything else on this set only does something above 1."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
                 <div class="uni-stack" data-osc="d" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
                   <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
@@ -7703,6 +7707,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_D_PAN"><div class="knob-ring"></div><div class="knob-label">Pan</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_LO" title="Low Cut — a 24 dB/oct high-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully down is off."><div class="knob-ring"></div><div class="knob-label">Low</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_SPECTRAL_HI" title="High Cut — a 24 dB/oct low-pass on the wavetable itself, set in HARMONIC number, so the corner rides the note instead of sitting at a fixed frequency. Fully up is off."><div class="knob-ring"></div><div class="knob-label">High</div></div>
+                <div class="knob" data-syn="SYN_OSC_D_UNISON" title="Voices — unison voice count for this oscillator, 1 to 8. 1 is off. The rest of unison (Stack / Range / Detune / Warp / Blend / Width) is on this oscillator's UNISON set, on every engine."><div class="knob-ring"></div><div class="knob-label">Voices</div></div>
               </div>
             </div>
           </div>
