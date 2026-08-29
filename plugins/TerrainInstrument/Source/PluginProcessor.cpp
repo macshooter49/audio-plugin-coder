@@ -13374,6 +13374,10 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     state.setProperty("tapeLinkEnabled",    tapeLinkEnabled.load(),       nullptr);
     state.setProperty("chorusEnabled",      chorusEnabled.load(),         nullptr);
     state.setProperty("delayEnabled",       delayEnabled.load(),          nullptr);
+    // fb537 — THE PAGE YOU WERE ON SURVIVES A SESSION RELOAD. uiPage was an in-memory atomic
+    // only: it persisted while the instance lived (close/reopen the editor restored it) but was
+    // never written to the blob, so reloading a project always dropped back to the front page.
+    state.setProperty("uiPage",             uiPage.load(),                nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
     {
@@ -14116,6 +14120,10 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 presetIdx = 0;
             currentPresetIndex.store(presetIdx);
 
+            // fb537 — restore the page BEFORE replaceState so the editor's first tick already
+            // pushes the right one (the ?page=N parse-time apply means the front never paints).
+            // Absent property == a blob older than fb537: fall back to 1 (SYN), the new default.
+            uiPage.store (juce::jlimit (0, 4, (int) newState.getProperty ("uiPage", 1)));
             apvts.replaceState (newState);
 
             // Mark 2 Phase 1 audio-fix: V1 backward-compat. V1 presets carry

@@ -986,7 +986,10 @@ public:
     // Last-viewed UI page for THIS instance (0=front 1=syn 2=eq 3=dly 4=mod). In-memory ONLY —
     // deliberately NOT saved in getStateInformation or the settings file: closing/reopening the
     // editor restores the page, while every NEW instance (or project reload) starts on the front page.
-    std::atomic<int> uiPage { 0 };
+    // fb537 — 1 == the SYN page. Was 0 (front/hero): a fresh instance opened on the hero page
+    // and every session reload went back to it. Codes are shared with the JS UI_PAGE_IDS list:
+    // 0 front, 1 syn, 2 eq, 3 dly, 4 mod. Persisted in the state blob as "uiPage".
+    std::atomic<int> uiPage { 1 };
 
     // fb148 — UI-consumer census: the main editor + every popped card window. The audio
     // thread gates PURE-VIZ production on this (spectrum FFTs, osc-scope publish), so a
