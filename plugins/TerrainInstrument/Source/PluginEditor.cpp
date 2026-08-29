@@ -3240,6 +3240,18 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 dir.revealToUser();
                 complete (juce::var (dir.getFullPathName()));
             })
+            .withNativeFunction("revealPath", [this](const juce::Array<juce::var>& args,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb540 — "Locate Folder" on a browser category's right-click. Reveals an
+                // IMPORTED folder/file in Finder. openImportsFolder already covers the built-in
+                // Wavetables directory; this one takes the registry path an import was added from.
+                if (args.size() < 1) { complete (juce::var (false)); return; }
+                const juce::File f (args[0].toString());
+                if (! f.exists()) { complete (juce::var (false)); return; }
+                f.revealToUser();
+                complete (juce::var (true));
+            })
             .withNativeFunction("listImports", [this](const juce::Array<juce::var>&,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
