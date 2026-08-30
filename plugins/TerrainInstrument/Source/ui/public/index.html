@@ -19245,7 +19245,7 @@ setTimeout(function wireSynControls () {
       // 35-47 — RESERVED. They exist so the LENGTH is right; the picker never lists them.
       // Filling one in C++ means filling it HERE, in the same slot, and filing it in a family
       // below — the guard fails the boot if a live index is not filed.
-      'Reserved 35', 'Reserved 36', 'Reserved 37', 'Reserved 38', 'Reserved 39', 'Reserved 40',
+      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   'Reserved 37', 'Reserved 38', 'Reserved 39', 'Reserved 40',
       'Reserved 41', 'Reserved 42', 'Reserved 43', 'Reserved 44', 'Reserved 45', 'Reserved 46',
       'Reserved 47'
     ];
@@ -19265,7 +19265,10 @@ setTimeout(function wireSynControls () {
       { label: 'Diode & Asym',idx: [19, 20, 21] },
       { label: 'Fold',        idx: [23, 24, 25, 26, 31] },
       { label: 'Rectify',     idx: [9, 27, 28] },
-      { label: 'Digital',     idx: [29, 30, 32, 33, 34] }
+      { label: 'Digital',     idx: [29, 30, 32, 33, 34] },
+      // fb543 — OVERPASS ONE item 4. Its own family: these are the only warp modes that are
+      // FILTERS (stateful) rather than per-sample shapers, and the reference files them apart too.
+      { label: 'Filter',      idx: [35, 36] }
     ];
 
     // Every warp-mode PARAMETER in the plugin — the guard reads its cardinality from each.

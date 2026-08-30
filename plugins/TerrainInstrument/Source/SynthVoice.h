@@ -1320,6 +1320,58 @@ namespace tw
          *  about it costs a 38 Hz high-pass and never a broken patch.
          *  ⚠️ Modes 0-8 (phase domain) and 10 (Sine Shaper, odd) return false, which is what
          *  keeps every shipped patch bit-identical. */
+        // ═══ WARP FILTER — modes 35 (LP) / 36 (HP). OVERPASS ONE item 4. ═══════════════════════
+        //  Serum has LPF and HPF as per-oscillator warp modes (measured off its own parameter
+        //  strings: its warp list is 70 long, LPF at index 17 and HPF at 18). These are ours.
+        //
+        //  🔑 WHY THIS RUNS ON THE SUMMED OSC AND NOT PER UNISON SINE. A filter is a LINEAR
+        //     operator, so sum(f(x_i)) == f(sum(x_i)) EXACTLY, as long as every sine gets the same
+        //     coefficients. Filtering after the unison sum is therefore not an approximation, it is
+        //     the same result for 1/16 of the work and 1/16 of the state (12 KB across all 96
+        //     voices instead of ~530 KB). ⚠️ The one case where it diverges is UWARP ≠ 0, which fans
+        //     the warp AMOUNT per sine so the coefficients would differ; the filter takes the
+        //     osc's un-fanned amount there. That is a deliberate trade, not an oversight.
+        //
+        //  UNITS, per the fb467 content-independent law and the Low/High cuts that already ship:
+        //  the corner is in HARMONIC NUMBER, so it rides the note instead of sitting at a fixed Hz.
+        //     amount 0 -> 128 harmonics  = wide open = TRANSPARENT (the fb462 floor law: every warp
+        //                                  mode must be the identity at 0)
+        //     amount 1 -> 1 harmonic     = only the fundamental survives
+        //  ⚠️ This is the OPPOSITE DIRECTION to Serum, measured: raising their warp ADDS harmonics,
+        //     so their 0 is the closed end. Ours obeys our own transparency-at-zero law instead.
+        //  VAR is the resonance (Q 0.5 .. 10), which is what the slot's second dimension is for.
+        struct WarpFiltCoef { float g = 0.0f, k = 2.0f, a1 = 1.0f, a2 = 0.0f, a3 = 0.0f;
+                              bool hp = false, on = false; };
+        struct WarpFiltState { float ic1 = 0.0f, ic2 = 0.0f; };
+
+        static inline void warpFiltCoef (WarpFiltCoef& c, int mode, float amount, float var,
+                                         double f0Hz, double sr) noexcept
+        {
+            c.on = (mode == 35 || mode == 36) && amount > 0.001f && f0Hz > 0.0 && sr > 0.0;
+            if (! c.on) return;
+            c.hp = (mode == 36);
+            const double harm = std::pow (128.0, 1.0 - (double) amount);      // 128 -> 1
+            const double fc   = juce::jlimit (20.0, sr * 0.45, f0Hz * harm);
+            const double g    = std::tan (3.14159265358979323846 * fc / sr);
+            const float  Q    = 0.5f + juce::jlimit (0.0f, 1.0f, var) * 9.5f;  // 0.5 .. 10
+            c.k  = 1.0f / Q;
+            c.g  = (float) g;
+            c.a1 = (float) (1.0 / (1.0 + g * (g + (double) c.k)));
+            c.a2 = (float) (g * (double) c.a1);
+            c.a3 = (float) (g * (double) c.a2);
+        }
+        // Zavalishin TPT state-variable filter — one multiply-add chain, no allocation, no branches.
+        static inline float warpFiltTick (const WarpFiltCoef& c, WarpFiltState& st, float v0) noexcept
+        {
+            const float v3 = v0 - st.ic2;
+            const float v1 = c.a1 * st.ic1 + c.a2 * v3;
+            const float v2 = st.ic2 + c.a2 * st.ic1 + c.a3 * v3;
+            st.ic1 = 2.0f * v1 - st.ic1;
+            st.ic2 = 2.0f * v2 - st.ic2;
+            const float out = c.hp ? (v0 - c.k * v1 - v2) : v2;
+            return std::isfinite (out) ? out : 0.0f;      // resonance + a pathological corner
+        }
+
         static inline bool warpAmpNeedsDc (int mode, float amount, float var) noexcept
         {
             if (mode < 9 || amount <= 0.001f) return false;
@@ -1331,6 +1383,10 @@ namespace tw
                 case 11: case 12: case 13: case 14: case 15: case 16: case 18:
                 case 20: case 23: case 26: case 29: case 34:
                     return var > 0.0f;                          // symmetric until VAR biases them
+                case 35: case 36:
+                    return false;   // 🚨 WARP FILTER. Falling into `default: return true` below
+                                    // would arm the 38 Hz DC blocker on top of a LOW-PASS and
+                                    // quietly high-pass it — the fb470 trap, exactly.
                 default: return true;                           // 9, 17, 19, 21, 27, 28, 30, 31 + anything new
             }
         }
@@ -3169,6 +3225,21 @@ namespace tw
                 m += (double) fmFxMipAdd_[o];
                 return juce::jmin (m, 64.0);   // sanity cap — extreme depth×ratio must dull, never vanish
             };
+            // WARP FILTER coefficients — per block, per (osc, slot). f0 comes straight off
+            // sine 0's phase increment, which is already computed here for the mip pick.
+            {
+                const int   md[4][2] = { { warpMode_,  warp2ModeA_ }, { warpModeB_, warp2ModeB_ },
+                                         { warpModeC_, warp2ModeC_ }, { warpModeD_, warp2ModeD_ } };
+                const float am[4][2] = { { warpAmount_,  warp2AmountA_ }, { warpAmountB_, warp2AmountB_ },
+                                         { warpAmountC_, warp2AmountC_ }, { warpAmountD_, warp2AmountD_ } };
+                const float vr[4][2] = { { warpVar_[0], warp2Var_[0] }, { warpVar_[1], warp2Var_[1] },
+                                         { warpVar_[2], warp2Var_[2] }, { warpVar_[3], warp2Var_[3] } };
+                const double inc[4]  = { uPhaseIncA_[0], uPhaseIncB_[0], uPhaseIncC_[0], uPhaseIncD_[0] };
+                for (int o = 0; o < 4; ++o)
+                    for (int sl = 0; sl < 2; ++sl)
+                        warpFiltCoef (wfCoef_[o][sl], md[o][sl], am[o][sl], vr[o][sl],
+                                      inc[o] * sampleRate_, sampleRate_);
+            }
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
             currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
             currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpFan (2, warpAmountC_)) * warpRateMul (warp2ModeC_, warpFan (2, warp2AmountC_)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
@@ -3661,6 +3732,13 @@ namespace tw
                 sumAR *= uNormA_;
                 float sA_L = sumAL;
                 float sA_R = sumAR;
+                // WARP FILTER (modes 35/36) — on the SUMMED osc. Linear operator, so this is
+                // identical to filtering every sine, at 1/16 the cost. Both slots chain.
+                for (int sl = 0; sl < 2; ++sl)
+                    if (wfCoef_[0][sl].on) {
+                        sA_L = warpFiltTick (wfCoef_[0][sl], wfState_[0][sl][0], sA_L);
+                        sA_R = warpFiltTick (wfCoef_[0][sl], wfState_[0][sl][1], sA_R);
+                    }
                 // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
                 // with nonzero amount; dormant (bit-identical) otherwise.
                 if ((engine_ == Engine::WT && (warpAmpNeedsDc (warpMode_, warpAmount_, warpVar_[0])
@@ -3969,6 +4047,13 @@ namespace tw
                 sumBR *= uNormB_;
                 float sB_L = sumBL;
                 float sB_R = sumBR;
+                // WARP FILTER (modes 35/36) — on the SUMMED osc. Linear operator, so this is
+                // identical to filtering every sine, at 1/16 the cost. Both slots chain.
+                for (int sl = 0; sl < 2; ++sl)
+                    if (wfCoef_[1][sl].on) {
+                        sB_L = warpFiltTick (wfCoef_[1][sl], wfState_[1][sl][0], sB_L);
+                        sB_R = warpFiltTick (wfCoef_[1][sl], wfState_[1][sl][1], sB_R);
+                    }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineB_ == Engine::WT && (warpAmpNeedsDc (warpModeB_, warpAmountB_, warpVar_[1])
                                              || warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])))
@@ -4264,6 +4349,13 @@ namespace tw
                 sumCR *= uNormC_;
                 float sC_L = sumCL;
                 float sC_R = sumCR;
+                // WARP FILTER (modes 35/36) — on the SUMMED osc. Linear operator, so this is
+                // identical to filtering every sine, at 1/16 the cost. Both slots chain.
+                for (int sl = 0; sl < 2; ++sl)
+                    if (wfCoef_[2][sl].on) {
+                        sC_L = warpFiltTick (wfCoef_[2][sl], wfState_[2][sl][0], sC_L);
+                        sC_R = warpFiltTick (wfCoef_[2][sl], wfState_[2][sl][1], sC_R);
+                    }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineC_ == Engine::WT && (warpAmpNeedsDc (warpModeC_, warpAmountC_, warpVar_[2])
                                              || warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])))
@@ -4559,6 +4651,13 @@ namespace tw
                 sumDR *= uNormD_;
                 float sD_L = sumDL;
                 float sD_R = sumDR;
+                // WARP FILTER (modes 35/36) — on the SUMMED osc. Linear operator, so this is
+                // identical to filtering every sine, at 1/16 the cost. Both slots chain.
+                for (int sl = 0; sl < 2; ++sl)
+                    if (wfCoef_[3][sl].on) {
+                        sD_L = warpFiltTick (wfCoef_[3][sl], wfState_[3][sl][0], sD_L);
+                        sD_R = warpFiltTick (wfCoef_[3][sl], wfState_[3][sl][1], sD_R);
+                    }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineD_ == Engine::WT && (warpAmpNeedsDc (warpModeD_, warpAmountD_, warpVar_[3])
                                              || warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])))
@@ -7017,6 +7116,10 @@ namespace tw
         float uniWarp_[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };   // UWARP, bipolar warp fan across the sines
         int   uniStack_[4] = { 0, 0, 0, 0 };               // USTACK option index (0 = Off)
         std::array<float, kMaxUnison> uWarpOffA_ {}, uWarpOffB_ {}, uWarpOffC_ {}, uWarpOffD_ {};
+        // WARP FILTER (fb543) — [osc][slot] coefficients, [osc][slot][L/R] state. 8 B of state
+        // per channel: 4 x 2 x 2 x 8 = 128 B per voice, 12 KB across all 96 voices.
+        WarpFiltCoef  wfCoef_[4][2] {};
+        WarpFiltState wfState_[4][2][2] {};
         bool  uniWarpOnA_ = false, uniWarpOnB_ = false, uniWarpOnC_ = false, uniWarpOnD_ = false;
         float warpVar_[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };   // WVAR  — per-osc WARP slot 1 VAR
         float warp2Var_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // W2VAR — per-osc WARP slot 2 VAR

@@ -116,7 +116,10 @@ static juce::StringArray terrainWarpModeNames()
         // 23-26 — fold                 27-28 — rectify / octave
         "Linear Fold", "Sine Fold", "West Coast", "Overflow", "Half Rect", "Doubler",
         // 29-34 — digital / harmonic / ours
-        "Bitcrush", "Harmonics", "Bias Fold", "Cheby Odd", "Ripple", "Exciter" };
+        "Bitcrush", "Harmonics", "Bias Fold", "Cheby Odd", "Ripple", "Exciter",
+        // 35-36 — OVERPASS ONE item 4: the filter AS a warp mode. Corner in HARMONIC number so it
+        // rides the note (the fb467 unit law); amount 0 = wide open = transparent; VAR = resonance.
+        "LP Filter", "HP Filter" };
     for (int i = w.size(); i < 48; ++i) w.add ("Reserved " + juce::String (i));
     jassert (w.size() == 48);
     return w;

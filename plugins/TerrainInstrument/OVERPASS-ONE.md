@@ -87,7 +87,22 @@ modelled on the reference's measured set: `A Phase` (0–360°, 361 steps) and `
 (0–100 amount, default 100 = fully random). Terrain's `SYN_OSC_x_PHASE` / `_PHASE_AMT` /
 `_PHASE_MODE` already exist and are LIVE as of fb526 — this is the UI half.
 
-## 4 · FILTER AS A WARP MODE, AND AS A MODULATION SOURCE
+## 4 · FILTER AS A WARP MODE, AND AS A MODULATION SOURCE   ◐ HALF SHIPPED fb543
+**Half A — filter AS a warp mode: DONE.** Modes **35 `LP Filter` / 36 `HP Filter`**, a TPT
+state-variable filter. Corner in **harmonic number** so it rides the note; **amount 0 = wide
+open = transparent** (our fb462 law — note this is the OPPOSITE direction to Serum, measured:
+raising *their* warp ADDS harmonics, so their 0 is the closed end); **VAR = resonance** (Q 0.5–10).
+Runs on the SUMMED osc, not per sine: a filter is LINEAR so `Σf(xᵢ) = f(Σxᵢ)` exactly, giving the
+identical result for 1/16 the cost — 12 KB of state across all 96 voices instead of ~530 KB.
+(Diverges only when UWARP ≠ 0, which fans the amount per sine; documented in the code.)
+Measured: corner tracks the note at ratio **1.00–1.01** across two octaves; LP 0.85 leaves
+**1.98 harmonics** against a predicted 2.07. Gate: `Tests/warp_filter_probe.cpp`.
+**Half B — filter as a MODULATION SOURCE is NOT done.** Serum cross-modulates *from* a filter's
+output (`FM (Filter 1)`, `RM (Filter 2)` — confirmed in its measured 70-mode list). That is a
+different change: it needs the blend-slot machinery to take a filter tap as a SOURCE, which is
+item 8 territory (slots 7 `Dist` / 8 `Filter` are still inert).
+
+*(original spec below)*
 The reference has LPF and HPF as per-oscillator warp modes, and can cross-modulate **from a
 filter's output** (`FM (Filter 1)`, `RM (Filter 2)`). We have neither. 78 of our 94 filter types
 are ≤232 bytes and allocation-free, so the reuse is cheap — but **exclude the 16 delay-line types**
