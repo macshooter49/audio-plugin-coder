@@ -2420,6 +2420,10 @@ namespace tw
             if (phaseRng_ == 0u)
                 phaseRng_ = (static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this)) ^ 0xA5A5A5A5u) | 1u;
 
+            // fb544 — every branch of resolvePhase folds `base` into the value it returns, so the
+            // accumulators seeded below already CONTAIN the knob. Sync the tracker to that or the
+            // first block after note-on would slide the note by the whole knob value on top.
+            for (int o = 0; o < 4; ++o) phaseOffApplied_[(size_t) o] = (double) phaseOff_[(size_t) o];
             for (int u = 0; u < kMaxUnison; ++u)
             {
                 uPhaseA_[(size_t) u]      = resolvePhase (phaseModeA_, u, 0, uPhaseA_[(size_t) u]);
@@ -3451,6 +3455,30 @@ namespace tw
             const bool mcOnC = (engineC_ == Engine::WT || engineC_ == Engine::FM);
             const bool mcOnD = (engineD_ == Engine::WT || engineD_ == Engine::FM);
             const float invNsBlend = 1.0f / (float) juce::jmax (1, numSamples);   // fb248 — frame-crossfade ramp denom
+            // ── PHASE OFFSET — CONTINUOUS, not merely a note-on seed (fb544) ──────────────────
+            //  MEASURED against Serum 2: move its `A Phase` while a note is HELD and the held note
+            //  CHANGES (+4.7 dB rel). Ours was bit-identical (-79.8 dB) because resolvePhase runs
+            //  at note-on and NOWHERE ELSE — so the knob was silent under your fingers, which is
+            //  exactly what "it doesn't move and make sound" means.
+            //  Serum's model is ONE mechanism, not two: the knob is a CONTINUOUS read offset and
+            //  note-on seeds only the random part on top of it. Implemented here as a per-sample
+            //  nudge to the phase INCREMENT, so every read site inherits it for free and not one
+            //  read site has to be touched (fb523's seam law — the fewer call sites, the fewer
+            //  places to forget). Adding d/numSamples for one block slides the accumulator by
+            //  exactly d and leaves it there.
+            //  ⚠️ Spreading d ACROSS the block is not a smoothing nicety — it is the whole effect.
+            //  A phase slide is a momentary pitch bend, and that bend is the sound of the knob
+            //  moving. Jumping instead would click and then be inaudible (steady-state absolute
+            //  phase of one oscillator cannot be heard).
+            //  FLOOR (fb462): a static knob gives d = 0.0 exactly, and `inc + 0.0` is bit-exact in
+            //  IEEE-754, so an untouched patch renders bit-identically to the pre-fb544 build.
+            for (int o = 0; o < 4; ++o)
+            {
+                double d = (double) phaseOff_[(size_t) o] - phaseOffApplied_[(size_t) o];
+                d -= std::floor (d + 0.5);                                  // shortest way round the circle
+                phaseOffStep_[(size_t) o]    = d / (double) juce::jmax (1, numSamples);
+                phaseOffApplied_[(size_t) o] = (double) phaseOff_[(size_t) o];
+            }
             for (int i = 0; i < numSamples; ++i)
             {
                 const float blendFrac = (float) (i + 1) * invNsBlend;   // fb248 — 0→1 across the block: prev blend → new blend (seamless frame move)
@@ -3619,8 +3647,9 @@ namespace tw
                                 sAu = static_cast<float> (2.0 * uPhaseA_[(size_t) u] - 1.0);
                                 sAu -= static_cast<float> (polyBlep (uPhaseA_[(size_t) u], uPhaseIncA_[(size_t) u]));
                             }
-                            uPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u];
+                            uPhaseA_[(size_t) u] += uPhaseIncA_[(size_t) u] + phaseOffStep_[0];   // fb544 — continuous PHASE
                             if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
+                            else if (uPhaseA_[(size_t) u] < 0.0) uPhaseA_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -3706,8 +3735,9 @@ namespace tw
                             uModPhaseA_[(size_t) u]  -= std::floor (uModPhaseA_[(size_t) u]);
                             uMod2PhaseA_[(size_t) u] += inc * fmR2Eff_[0];
                             uMod2PhaseA_[(size_t) u] -= std::floor (uMod2PhaseA_[(size_t) u]);
-                            uPhaseA_[(size_t) u] += inc;
+                            uPhaseA_[(size_t) u] += inc + phaseOffStep_[0];   // fb544 — continuous PHASE
                             if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
+                            else if (uPhaseA_[(size_t) u] < 0.0) uPhaseA_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -3949,8 +3979,9 @@ namespace tw
                                 sBu = static_cast<float> (2.0 * uPhaseB_[(size_t) u] - 1.0);
                                 sBu -= static_cast<float> (polyBlep (uPhaseB_[(size_t) u], uPhaseIncB_[(size_t) u]));
                             }
-                            uPhaseB_[(size_t) u] += uPhaseIncB_[(size_t) u];
+                            uPhaseB_[(size_t) u] += uPhaseIncB_[(size_t) u] + phaseOffStep_[1];   // fb544 — continuous PHASE
                             if (uPhaseB_[(size_t) u] >= 1.0) uPhaseB_[(size_t) u] -= 1.0;
+                            else if (uPhaseB_[(size_t) u] < 0.0) uPhaseB_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -4021,8 +4052,9 @@ namespace tw
                             uModPhaseB_[(size_t) u]  -= std::floor (uModPhaseB_[(size_t) u]);
                             uMod2PhaseB_[(size_t) u] += inc * fmR2Eff_[1];
                             uMod2PhaseB_[(size_t) u] -= std::floor (uMod2PhaseB_[(size_t) u]);
-                            uPhaseB_[(size_t) u] += inc;
+                            uPhaseB_[(size_t) u] += inc + phaseOffStep_[1];   // fb544 — continuous PHASE
                             if (uPhaseB_[(size_t) u] >= 1.0) uPhaseB_[(size_t) u] -= 1.0;
+                            else if (uPhaseB_[(size_t) u] < 0.0) uPhaseB_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -4251,8 +4283,9 @@ namespace tw
                                 sCu = static_cast<float> (2.0 * uPhaseC_[(size_t) u] - 1.0);
                                 sCu -= static_cast<float> (polyBlep (uPhaseC_[(size_t) u], uPhaseIncC_[(size_t) u]));
                             }
-                            uPhaseC_[(size_t) u] += uPhaseIncC_[(size_t) u];
+                            uPhaseC_[(size_t) u] += uPhaseIncC_[(size_t) u] + phaseOffStep_[2];   // fb544 — continuous PHASE
                             if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
+                            else if (uPhaseC_[(size_t) u] < 0.0) uPhaseC_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -4323,8 +4356,9 @@ namespace tw
                             uModPhaseC_[(size_t) u]  -= std::floor (uModPhaseC_[(size_t) u]);
                             uMod2PhaseC_[(size_t) u] += inc * fmR2Eff_[2];
                             uMod2PhaseC_[(size_t) u] -= std::floor (uMod2PhaseC_[(size_t) u]);
-                            uPhaseC_[(size_t) u] += inc;
+                            uPhaseC_[(size_t) u] += inc + phaseOffStep_[2];   // fb544 — continuous PHASE
                             if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
+                            else if (uPhaseC_[(size_t) u] < 0.0) uPhaseC_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -4553,8 +4587,9 @@ namespace tw
                                 sDu = static_cast<float> (2.0 * uPhaseD_[(size_t) u] - 1.0);
                                 sDu -= static_cast<float> (polyBlep (uPhaseD_[(size_t) u], uPhaseIncD_[(size_t) u]));
                             }
-                            uPhaseD_[(size_t) u] += uPhaseIncD_[(size_t) u];
+                            uPhaseD_[(size_t) u] += uPhaseIncD_[(size_t) u] + phaseOffStep_[3];   // fb544 — continuous PHASE
                             if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
+                            else if (uPhaseD_[(size_t) u] < 0.0) uPhaseD_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -4625,8 +4660,9 @@ namespace tw
                             uModPhaseD_[(size_t) u]  -= std::floor (uModPhaseD_[(size_t) u]);
                             uMod2PhaseD_[(size_t) u] += inc * fmR2Eff_[3];
                             uMod2PhaseD_[(size_t) u] -= std::floor (uMod2PhaseD_[(size_t) u]);
-                            uPhaseD_[(size_t) u] += inc;
+                            uPhaseD_[(size_t) u] += inc + phaseOffStep_[3];   // fb544 — continuous PHASE
                             if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
+                            else if (uPhaseD_[(size_t) u] < 0.0) uPhaseD_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
                             break;
                         }
 
@@ -7125,6 +7161,11 @@ namespace tw
         float warp2Var_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // W2VAR — per-osc WARP slot 2 VAR
         float phaseOff_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // SYN_OSC_x_PHASE, in CYCLES (param is degrees)
         float phaseAmt_[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // SYN_OSC_x_PHASE_AMT, 0..1 (param default 100 %)
+        // fb544 — PHASE IS CONTINUOUS. `phaseOffApplied_` is how much of phaseOff_ is currently
+        // baked into the running accumulators; `phaseOffStep_` is the per-sample slide that closes
+        // the gap over exactly one block. Both are per-VOICE, because each voice's accumulator is.
+        double phaseOffApplied_[4] = { 0.0, 0.0, 0.0, 0.0 };
+        double phaseOffStep_[4]    = { 0.0, 0.0, 0.0, 0.0 };
 
         // ── WAVER — per-(osc × unison sine) OU analog pitch drift (replaces the old
         //    EROSION pitch sine-LFO). Depth 0..1 per osc; cents state + per-sine RNG. ──

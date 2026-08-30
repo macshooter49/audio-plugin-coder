@@ -61,7 +61,29 @@ Pattern to copy exactly, do not invent: the **`gran-knob-wrap` / `gk-arrow`** tw
 Params already shipped and live: `URANGE` (5..4800 cents), `USTACK` (9 intervals), `UWARP`,
 `UDETUNE`, `UBLEND`, `UWIDTH` (bipolar).
 
-## 3 · PHASING TAKES UNISON'S OLD PLACE ON THE BACK PANEL   ✅ SHIPPED fb532
+## 3 · PHASING TAKES UNISON'S OLD PLACE ON THE BACK PANEL   ✅ SHIPPED fb532 · REPAIRED fb544
+
+> **fb544 — it did not actually work, and here is the measurement.** Two defects, both found
+> by driving the shipped AU rather than reading the code:
+> 1. **The pills were wired to nothing.** fb538 built them on `Juce.getSliderState()`, but
+>    `SYN_OSC_x_PHASE` / `_PHASE_AMT` have **no `WebSliderRelay`** — only `_PHASE_MODE` does.
+>    In the page `setNormalisedValue(0.5)` reported success and read back 0.5 while the host
+>    still read Phase = 0. Rand displaying **`0`** for a parameter whose value is **1.0** was the
+>    visible tell. Rewired onto `__setSynParam` / `getSynParam`, the same path the FX rack uses
+>    for exactly this reason. Now: drag +75 px → reads `180°`, host reads `0.5`.
+> 2. **Phase was note-on only.** `resolvePhase` ran in `startNote` and nowhere else, so turning
+>    the knob under a held note did nothing. MEASURED against Serum 2 holding one note and moving
+>    its `A Phase`: **Serum +4.7 dB, ours −79.8 dB (bit-identical)**. Serum's phase is a
+>    CONTINUOUS read offset; note-on seeds only the random part on top of it. Ours now is too:
+>    **−79.8 → +6.0 dB**, with the note-on phase unchanged (R = 1.0000, +89.69° per quarter
+>    turn vs Serum's +89.56°) and an untouched patch **bit-identical** (FNV1a `4dd4e4e947978375`
+>    on 96,000 samples, both builds).
+>
+> Readout is now **degrees** (`0°`–`360°`) and Rand **0–100**, which is what Serum shows;
+> the PARAMETERS stay 0..1, the scale Serum automates on and the one fb538 ruled.
+> Reaches **WT and FM** — the two engines that use the phase accumulator. SPEC/HARM/MODAL
+> render their own oscillator and are unaffected; SAMP/GRAN are silent with no sample loaded,
+> so they are unmeasured rather than "no effect".
 **Built.** The back-panel pill that was UNISON is now PHASE, in the same slot at the same size
 (row measured 302x28, 4 pills, unchanged). Right-click gives the four modes directly —
 **Manual · Random · Free · Spread** — and also picks which value the drag edits

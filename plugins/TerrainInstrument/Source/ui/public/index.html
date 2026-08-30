@@ -6624,15 +6624,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-val" id="osc-a-warp2-val" data-warp2-mode="SYN_OSC_A_WARP2_MODE" data-warp2-amt="SYN_OSC_A_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
-                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
-                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
-                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                     Rand 0 = every note starts exactly at Phase; Rand 100 = fresh random each
+                     note. The PARAMETERS are 0..1 (the scale Serum actually uses, measured); the
+                     READOUTS are degrees and percent (the units Serum actually shows). fb544. -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle the oscillator reads, 0° to 360°. It is CONTINUOUS: turn it while a note is held and the held note moves with you. Drag; double-click resets to 0°.">
                   <div class="sel-value ph-label">Phase</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE"><b>0.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE"><b>0°</b></div>
                 </div>
-                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note, 0 to 100. 0 = dead coherent and punchy (and Phase is exact); 100 = a fresh random phase every note, which is why Phase stops mattering at the note edge.">
                   <div class="sel-value ph-label">Rand</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE_AMT"><b>1.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_A_PHASE_AMT"><b>100</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -6966,15 +6967,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-val" id="osc-b-warp2-val" data-warp2-mode="SYN_OSC_B_WARP2_MODE" data-warp2-amt="SYN_OSC_B_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
-                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
-                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
-                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                     Rand 0 = every note starts exactly at Phase; Rand 100 = fresh random each
+                     note. The PARAMETERS are 0..1 (the scale Serum actually uses, measured); the
+                     READOUTS are degrees and percent (the units Serum actually shows). fb544. -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle the oscillator reads, 0° to 360°. It is CONTINUOUS: turn it while a note is held and the held note moves with you. Drag; double-click resets to 0°.">
                   <div class="sel-value ph-label">Phase</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE"><b>0.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE"><b>0°</b></div>
                 </div>
-                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note, 0 to 100. 0 = dead coherent and punchy (and Phase is exact); 100 = a fresh random phase every note, which is why Phase stops mattering at the note edge.">
                   <div class="sel-value ph-label">Rand</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE_AMT"><b>1.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_B_PHASE_AMT"><b>100</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -7327,15 +7329,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-val" id="osc-c-warp2-val" data-warp2-mode="SYN_OSC_C_WARP2_MODE" data-warp2-amt="SYN_OSC_C_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
-                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
-                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
-                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                     Rand 0 = every note starts exactly at Phase; Rand 100 = fresh random each
+                     note. The PARAMETERS are 0..1 (the scale Serum actually uses, measured); the
+                     READOUTS are degrees and percent (the units Serum actually shows). fb544. -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle the oscillator reads, 0° to 360°. It is CONTINUOUS: turn it while a note is held and the held note moves with you. Drag; double-click resets to 0°.">
                   <div class="sel-value ph-label">Phase</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE"><b>0.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE"><b>0°</b></div>
                 </div>
-                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note, 0 to 100. 0 = dead coherent and punchy (and Phase is exact); 100 = a fresh random phase every note, which is why Phase stops mattering at the note edge.">
                   <div class="sel-value ph-label">Rand</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE_AMT"><b>1.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_C_PHASE_AMT"><b>100</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -7669,15 +7672,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="sel-value warp2-val" id="osc-d-warp2-val" data-warp2-mode="SYN_OSC_D_WARP2_MODE" data-warp2-amt="SYN_OSC_D_WARP2_AMT"><b>0</b><i class="warp2-suffix">%</i></div>
                 </div>
                 <!-- fb538 — PHASE: Serum's two parameters and nothing else. No mode menu.
-                     Rand 0 = every note starts exactly at Phase; Rand 1 = fresh random each
-                     note. Both read 0.000-1.000, the scale Serum actually uses (measured). -->
-                <div class="sel ph-pill" title="PHASE — where in the cycle every note starts, 0.000 to 1.000 (one full cycle). Drag; double-click resets to 0.">
+                     Rand 0 = every note starts exactly at Phase; Rand 100 = fresh random each
+                     note. The PARAMETERS are 0..1 (the scale Serum actually uses, measured); the
+                     READOUTS are degrees and percent (the units Serum actually shows). fb544. -->
+                <div class="sel ph-pill" title="PHASE — where in the cycle the oscillator reads, 0° to 360°. It is CONTINUOUS: turn it while a note is held and the held note moves with you. Drag; double-click resets to 0°.">
                   <div class="sel-value ph-label">Phase</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE"><b>0.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE"><b>0°</b></div>
                 </div>
-                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note. 0 = dead coherent and punchy; 1 = a fresh random phase every note.">
+                <div class="sel ph-pill" title="RAND — how much the start phase is randomised per note, 0 to 100. 0 = dead coherent and punchy (and Phase is exact); 100 = a fresh random phase every note, which is why Phase stops mattering at the note edge.">
                   <div class="sel-value ph-label">Rand</div>
-                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE_AMT"><b>1.000</b></div>
+                  <div class="sel-value ph-val" data-ph="SYN_OSC_D_PHASE_AMT"><b>100</b></div>
                 </div>
                 <div class="sel coarse-pill" title="COARSE — continuous pitch offset, ±64 semitones, never snaps. The smooth pitch lane: drag it, automate it, drop an LFO on it for sweeps and dives. Double-click resets to 0.">
                   <div class="sel-value coarse-param-value">Coarse</div>
@@ -18842,35 +18846,60 @@ setTimeout(function wireSynControls () {
     //  same scale (they were 0-360 degrees and 0-100 %). Rand 0 = deterministic at Phase, Rand 1 =
     //  a fresh random phase every note — which is why Serum needs no mode selector and nor do we.
     (function initPhaseVals () {
+      // ⚠️ fb544 — THESE PILLS WERE WIRED TO NOTHING. fb538 built them on
+      // Juce.getSliderState(), but SYN_OSC_x_PHASE and _PHASE_AMT have NO WebSliderRelay —
+      // only _PHASE_MODE does. The failure is silent and is already documented in this file
+      // (see fb453, ~line 9530): "asking for a relay that does not exist returns 0 forever AND
+      // leaks a bogus SliderState". MEASURED in the real AU before this rewrite: in the page
+      // setNormalisedValue(0.5) reported success and the state read back 0.5, while the host
+      // still read Phase = 0 and Rand = 1. The pill was a local echo. Rand's readout showed
+      // "0" for a parameter whose value is 1.0 — that was the tell, and it is why "phase does
+      // nothing" was literally true from the panel even though the DSP measured correct.
+      // The rack's own answer applies here: a local model + __setSynParam, which writes the
+      // APVTS directly, plus one asynchronous getSynParam at open so a loaded patch shows its
+      // own number instead of the default.
       try {
+        var getFn = null;
+        try { if (window.Juce && window.Juce.getNativeFunction) getFn = window.Juce.getNativeFunction('getSynParam'); } catch (e) {}
         document.querySelectorAll('#syn-panel .ph-val').forEach(function (valEl) {
           try {
-            var numEl = valEl.querySelector('b');
-            if (!numEl || !window.Juce || !window.Juce.getSliderState) return;
-            var st = window.Juce.getSliderState(valEl.dataset.ph);
-            if (!st) { console.warn('[phase] no state for', valEl.dataset.ph); return; }
-            var refresh = function () {
-              try { numEl.textContent = (st.getScaledValue ? st.getScaledValue() : 0).toFixed(3); } catch (e) {}
+            var numEl = valEl.querySelector('b'); if (!numEl) return;
+            var id = valEl.dataset.ph; if (!id) return;
+            // READ LIKE THE REFERENCE (fb544). Serum's PARAMETER is 0..1 — measured, and that is
+            // still our parameter, our automation scale and our mod range — but its READOUT is
+            // "360" with a degree sign and Rand's is a plain "100". Max pointed at that row.
+            // Degrees are also the only unit the number means anything in: 180 is the opposite
+            // side of the cycle, 90 a quarter turn.
+            var isPhase = id.indexOf('_AMT') < 0;
+            var norm = isPhase ? 0.0 : 1.0;          // the registered defaults, until the read lands
+            var y0 = 0, n0 = 0, drag = false;        // declared BEFORE the async read reads it
+            var paint = function () {
+              numEl.textContent = isPhase ? (Math.round(norm * 360) + '°')
+                                          : String(Math.round(norm * 100));
             };
-            if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
-            var y0 = 0, n0 = 0, drag = false;
+            var push = function () { try { window.__setSynParam(id, norm); } catch (e) {} };
+            // the processor is the authority — but getSynParam is a native fn and ASYNC, so it
+            // cannot be read inside a drag. Read it once here and hold the value in `norm`.
+            if (getFn) { try { getFn(id).then(function (v) {
+                if (typeof v === 'number' && !drag) { norm = Math.max(0, Math.min(1, v)); paint(); } }); } catch (e) {} }
             var mv = function (ev) { if (!drag) return;
-              try { st.setNormalisedValue(Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150))); } catch (e) {}
-              refresh(); };
+              norm = Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150));
+              paint(); push(); };
             var up = function () { drag = false; document.removeEventListener('pointermove', mv); document.removeEventListener('pointerup', up); };
             valEl.addEventListener('pointerdown', function (ev) {
               if (ev.button !== 0) return;
-              try { drag = true; y0 = ev.clientY; n0 = st.getNormalisedValue ? st.getNormalisedValue() : 0;
-                if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId);
+              try { drag = true; y0 = ev.clientY; n0 = norm;
+                // its own try — a throw here (some pointerIds are not capturable) must NOT skip
+                // the two listeners below, or the drag silently never moves. fb544.
+                try { if (valEl.setPointerCapture) valEl.setPointerCapture(ev.pointerId); } catch (pc) {}
                 document.addEventListener('pointermove', mv); document.addEventListener('pointerup', up);
                 ev.preventDefault(); ev.stopPropagation(); } catch (e) {}
             });
             valEl.addEventListener('dblclick', function (ev) {
               ev.preventDefault(); ev.stopPropagation();
-              try { st.setNormalisedValue(valEl.dataset.ph.indexOf('_AMT') > 0 ? 1 : 0); } catch (e) {}
-              refresh();
+              norm = isPhase ? 0.0 : 1.0; paint(); push();   // Phase -> 0 deg, Rand -> 100
             });
-            refresh();
+            paint();
           } catch (per) { console.warn('[phase] val init failed', per); }
         });
       } catch (e) { console.warn('[phase] initPhaseVals failed', e); }
@@ -18895,7 +18924,6 @@ setTimeout(function wireSynControls () {
                     valEl.textContent = n; pill.classList.toggle('act', n > 1); } catch (e) {}
             };
             if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
-            var y0 = 0, n0 = 0, drag = false;
             var mv = function (ev) { if (!drag) return;
               try { st.setNormalisedValue(Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150))); } catch (e) {}
               refresh(); };
