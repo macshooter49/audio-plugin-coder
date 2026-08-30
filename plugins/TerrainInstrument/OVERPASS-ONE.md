@@ -130,16 +130,60 @@ filter's output** (`FM (Filter 1)`, `RM (Filter 2)`). We have neither. 78 of our
 are ≤232 bytes and allocation-free, so the reuse is cheap — but **exclude the 16 delay-line types**
 (CombCore is 96 B + 32 KB heap/channel ⇒ 8.2 MB).
 
+> **Open: Var IS the resonance and has no knob.** fb538 deleted the Warp Var / W2 Var knobs, so
+> Q (0.5–10, measured: it lifts the centroid 3.45 → 5.14) is reachable only from the mod matrix.
+> **Owner is now item 6A** — the filter extension card is the right home for it. Deliberately NOT
+> giving it a temporary knob, which 6A would only delete.
+
 ## 5 · REAL HARD SYNC (PolyBLEP)
 Unblocks Sync, Formant **and** Fractalize — all three raises were REVERTED after cert measured
 them *losing* harmonics (nharm 183→25). Reading a band-limited mip faster transposes partials out
 through Nyquist; it cannot create them. Our peak count stays 8–10 against the reference's **423**.
 
-## 6 · MORE WAYS TO SHAPE A WAVETABLE — Max's own ask, and our edge
-*"I wonder what else type of warp modes we can have… something creative, something that Serum 2
-doesn't have. Something we can get our edge on."* He loves P-Quantize and the folds. Research
-brief: find shaping mechanisms **no major synth ships**. Plus **custom/drawable warp shapes** —
-he expects that to be the best one.
+## 6 · WARP EXTENSION CARDS — a warp mode can OPEN INTO a card   ⬅ Max, 2026-08-30
+*"the warp modes are gonna have extension cards based on what particular mode that's at… I told
+you I wanted that same distortion card that we have for the effect rack distortion to be an
+extension. We right-click, we have an option to extend at the top of the menu… We can also do
+that for the filter — it'll pop out the filter, we already have a filter extension where we can
+click the resonance so we can actually sculpt and draw the resonance… that's what I want, the
+extension cards, to be able to make our own shapes — our own custom warp modes, our own shapes
+that warp the wavetable."*
+
+**This absorbs the old item 6** (*"something creative, something Serum 2 doesn't have… plus
+custom/drawable warp shapes — he expects that to be the best one"*). Same feature: the drawable
+warp shape IS an extension card. The card system is the chassis that ask was always waiting for,
+and it retro-fits every warp mode we have already shipped.
+
+**The affordance already exists.** `openTwoPaneBrowser` takes `cfg.importLabel` + `cfg.onImport`
+and pins an action button at the top of the picker (`index.html:34676`) — that is literally
+"an option to extend at the top of the menu". The warp picker already routes through that same
+browser (`warpPickerOpen`, `:19396`). So this is a new panel, not new menu plumbing.
+
+**Build order — smallest first, each one shippable alone:**
+- **6A · FILTER extension** (modes 35/36). The rack's filter card already exists (`CORES.flt`,
+  `:9048`) with the live spectrum via `__fltBinMag`. Reuse it as the extension.
+  🎯 **This also closes the fb543 loose end**: Warp Var IS the resonance, and fb538 deleted the
+  Var knob, so today resonance is reachable only from the mod matrix. The card is a *better*
+  home for it than the knob would be — do NOT bolt a temporary knob on; it would be deleted here.
+- **6B · DISTORTION extension.** Reuse the rack's distortion card verbatim (23 modes, 6 families).
+  Needs a distortion warp mode to attach to — slot 37+.
+- **6C · DRAW YOUR OWN WARP SHAPE.** The custom mode: a drawn curve becomes the phase/amp map.
+  Max expects this to be the best one. This is the real prize; A and B are the chassis for it.
+
+**ROOM: slots 37–47 are free — eleven more warp modes.** Answers Max's *"unless there's a way to
+add more… maybe we can do this with all types of filters"*: yes. We ship **94 filter engines**
+already, so band-pass / notch / comb / formant can each be a warp mode, each opening the same card.
+
+**⚠️ WHAT THE FILTER WARP ACTUALLY IS — Max asked, and he is right about the effect but the
+mechanism is worth stating exactly.** It does NOT reshape the wavetable data or the phase read.
+The other 34 warp modes are phase-domain remaps (they bend *where* in the cycle you read) or
+amp-domain shapers (they bend the *value* you got). Modes 35/36 are neither: a real stateful TPT
+filter running on that oscillator's **summed** output (`SynthVoice.h:3765`), after the unison sum,
+before the mix, before the main filter. So "it's already a filter built inside of it" is correct.
+It sounds different from the main filter for three reasons, all deliberate: the corner is in
+**harmonic number** so it tracks the note (the main filter is in Hz and dulls as you play up);
+it is **per-oscillator and pre-mix** so it can carve osc A against osc B; and **both warp slots
+chain**, so LP in slot 1 + HP in slot 2 is a per-osc band-pass.
 
 ## 7 · FME / FML — missing capabilities, not depth
 Exponential FM and carrier-splitting FM. Measured: FME at d=0.4 puts everything at (k±0.111)·f0
