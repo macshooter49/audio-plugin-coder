@@ -34413,6 +34413,26 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         return Array.prototype.map.call (gs[i].getElementsByTagName ('option'), function (op) { return op.value; });
     return all;                                                          // import folder etc. -> whole list
   };
+  // fb548 — WHICH FOLDER IS THE CURRENT TABLE IN? Derived from the <select>'s own optgroups every
+  // time, never remembered. fb540 stepped `window.__wtFolder[o]` instead, which is written in
+  // exactly ONE place — picking an item in the two-pane browser (:34583) — and is a plain JS
+  // global, so it is `{}` on every editor open and stale the moment the table changes any other
+  // way (the arrows themselves, a preset load, automation, the native select). With it unset
+  // __wtFolderValues falls back to the WHOLE FLAT LIST, so the arrows walked straight out of the
+  // folder. MEASURED from Juno Str (9, Analog's last): next gave 10, 11, 12 — PPG Wave, DX7 EP,
+  // D-50 Bell, i.e. three tables deep into Digital. Max: "I want to go to the next one in my
+  // folder, but it doesn't. And it goes and jumps to another folder."
+  // A table belongs to exactly one optgroup, so deriving is unambiguous, survives reopen, needs no
+  // state, and is exactly what "the next wavetable in the folder" means.
+  window.__wtFolderOf = function (o, value) {
+    var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return null;
+    var gs = sel.getElementsByTagName ('optgroup');
+    for (var i = 0; i < gs.length; i++) {
+      var ops = gs[i].getElementsByTagName ('option');
+      for (var j = 0; j < ops.length; j++) if (ops[j].value === String (value)) return gs[i].label;
+    }
+    return null;
+  };
   window.wtStepPreset = function (o, dir) {
     var WT = window.wtWaterfall;
     // CONTEXT-AWARE: if this osc is on an IMPORT, step within the imports list (don't jump back to the
@@ -34439,7 +34459,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     if (! sel.options.length) return;
     // fb540 — STEP WITHIN THE CURRENT FOLDER and wrap inside it. Stepping the flat list is what
     // threw Max into 'a random table within another folder'.
-    var vals = window.__wtFolderValues (o, window.__wtFolder[o]);
+    // fb548 — the folder of the TABLE YOU ARE ON, not a remembered browsing state. Falls back to
+    // the remembered folder only if the current value is in no optgroup (an import, say).
+    var vals = window.__wtFolderValues (o, window.__wtFolderOf (o, sel.value) || window.__wtFolder[o]);
     if (! vals.length) vals = Array.prototype.map.call (sel.options, function (op) { return op.value; });
     var vi = vals.indexOf (sel.value); if (vi < 0) vi = 0;           // not in this folder -> enter at its head
     var want = vals[(vi + dir + vals.length) % vals.length];
