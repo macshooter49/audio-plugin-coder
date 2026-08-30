@@ -282,6 +282,22 @@ carries 26 shapers — but this is the *modulatable* version.
 | **FM on rich carriers** | 2% out-of-harmonic at knob **0.372**, not the predicted 0.588. `fmRateMul` covers only `Engine::FM`, so blend-FM's excursion never reaches the mip pick. Top should break; the shallow end must stay clean. |
 | **Diode 2** | drive knob runs **backwards** (THD 9.5 → 8.2). Fix compiled in but **never certified through the plugin**. |
 
+## 🚨 THE PARAMETER AUDIT IS NO LONGER OPTIONAL — and one third of it is now automated
+**fb547.** Max: *"it doesn't seem like range or stack is doing anything."* Both were wired to
+nothing. `SYN_OSC_x_URANGE` and `SYN_OSC_x_USTACK` had **no `WebSliderRelay`**, so
+`getSliderState` handed the panel a live-looking state that read 0 forever (Range's real default
+is 150 cents) and swallowed every write. MEASURED before the fix, with a relayed knob as control:
+
+    Warp Amount (relay)  set(0.8) -> host 0.8          ✓
+    Unison Range         set(0.8) -> host 0.495301     ✗ unchanged
+    Unison Stack         set(0.8) -> host 0            ✗ unchanged
+
+That is the THIRD time this exact failure has shipped (fb544 phase pills, fb546 note, fb547), and
+**twice a human found it before we did.** `Tests/relay_gate.py` now fails the build if any
+`data-syn` / `getSliderState` control is bound to a parameter with no relay — mutation-tested by
+deleting one relay, which reds it. The remaining two thirds of the audit (does each knob MOVE, and
+what is its exposure ratio) are still open below.
+
 ## HOUSEKEEPING
 - **Sweep every `Tests/*` cert for the preset-0 trap.** Terrain's WT Preset renders as preset 0
   headless without a message-thread pump — every cert that selects a table has been measuring the

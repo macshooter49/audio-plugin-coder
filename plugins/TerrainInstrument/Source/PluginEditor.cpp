@@ -373,6 +373,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withOptionsFrom(synOscARouteDestRelay)
             .withOptionsFrom(synOscARouteAmtRelay)
             .withOptionsFrom(synOscAUnisonRelay)
+            .withOptionsFrom(synOscAUrangeRelay)
+            .withOptionsFrom(synOscAUstackRelay)
             .withOptionsFrom(synOscAUdetuneRelay)
             .withOptionsFrom(synOscAUblendRelay)
             .withOptionsFrom(synOscAUwidthRelay)
@@ -399,6 +401,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withOptionsFrom(synOscBRouteDestRelay)
             .withOptionsFrom(synOscBRouteAmtRelay)
             .withOptionsFrom(synOscBUnisonRelay)
+            .withOptionsFrom(synOscBUrangeRelay)
+            .withOptionsFrom(synOscBUstackRelay)
             .withOptionsFrom(synOscBUdetuneRelay)
             .withOptionsFrom(synOscBUblendRelay)
             .withOptionsFrom(synOscBUwidthRelay)
@@ -454,6 +458,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withOptionsFrom(synOscCRouteDestRelay)
             .withOptionsFrom(synOscCRouteAmtRelay)
             .withOptionsFrom(synOscCUnisonRelay)
+            .withOptionsFrom(synOscCUrangeRelay)
+            .withOptionsFrom(synOscCUstackRelay)
             .withOptionsFrom(synOscCUdetuneRelay)
             .withOptionsFrom(synOscCUblendRelay)
             .withOptionsFrom(synOscCUwidthRelay)
@@ -488,6 +494,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withOptionsFrom(synOscDRouteDestRelay)
             .withOptionsFrom(synOscDRouteAmtRelay)
             .withOptionsFrom(synOscDUnisonRelay)
+            .withOptionsFrom(synOscDUrangeRelay)
+            .withOptionsFrom(synOscDUstackRelay)
             .withOptionsFrom(synOscDUdetuneRelay)
             .withOptionsFrom(synOscDUblendRelay)
             .withOptionsFrom(synOscDUwidthRelay)
@@ -4465,6 +4473,12 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
     synOscAUnisonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UNISON),
         synOscAUnisonRelay, nullptr);
+    synOscAUrangeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_URANGE),
+        synOscAUrangeRelay, nullptr);
+    synOscAUstackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_USTACK),
+        synOscAUstackRelay, nullptr);
     synOscAUdetuneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_A_UDETUNE),
         synOscAUdetuneRelay, nullptr);
@@ -4531,6 +4545,12 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
     synOscBUnisonAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UNISON),
         synOscBUnisonRelay, nullptr);
+    synOscBUrangeAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_URANGE),
+        synOscBUrangeRelay, nullptr);
+    synOscBUstackAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
+        *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_USTACK),
+        synOscBUstackRelay, nullptr);
     synOscBUdetuneAttachment = std::make_unique<juce::WebSliderParameterAttachment>(
         *audioProcessor.getAPVTS().getParameter(ParameterIDs::SYN_OSC_B_UDETUNE),
         synOscBUdetuneRelay, nullptr);
@@ -4680,6 +4700,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
         mkO(synOscCRouteDestAttachment, ParameterIDs::SYN_OSC_C_ROUTE_DEST, synOscCRouteDestRelay);
         mkO(synOscCRouteAmtAttachment, ParameterIDs::SYN_OSC_C_ROUTE_AMT, synOscCRouteAmtRelay);
         mkO(synOscCUnisonAttachment, ParameterIDs::SYN_OSC_C_UNISON, synOscCUnisonRelay);
+        mkO(synOscCUrangeAttachment, ParameterIDs::SYN_OSC_C_URANGE, synOscCUrangeRelay);
+        mkO(synOscCUstackAttachment, ParameterIDs::SYN_OSC_C_USTACK, synOscCUstackRelay);
         mkO(synOscCUdetuneAttachment, ParameterIDs::SYN_OSC_C_UDETUNE, synOscCUdetuneRelay);
         mkO(synOscCUblendAttachment, ParameterIDs::SYN_OSC_C_UBLEND, synOscCUblendRelay);
         mkO(synOscCUwidthAttachment, ParameterIDs::SYN_OSC_C_UWIDTH, synOscCUwidthRelay);
@@ -4711,6 +4733,8 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
         mkO(synOscDRouteDestAttachment, ParameterIDs::SYN_OSC_D_ROUTE_DEST, synOscDRouteDestRelay);
         mkO(synOscDRouteAmtAttachment, ParameterIDs::SYN_OSC_D_ROUTE_AMT, synOscDRouteAmtRelay);
         mkO(synOscDUnisonAttachment, ParameterIDs::SYN_OSC_D_UNISON, synOscDUnisonRelay);
+        mkO(synOscDUrangeAttachment, ParameterIDs::SYN_OSC_D_URANGE, synOscDUrangeRelay);
+        mkO(synOscDUstackAttachment, ParameterIDs::SYN_OSC_D_USTACK, synOscDUstackRelay);
         mkO(synOscDUdetuneAttachment, ParameterIDs::SYN_OSC_D_UDETUNE, synOscDUdetuneRelay);
         mkO(synOscDUblendAttachment, ParameterIDs::SYN_OSC_D_UBLEND, synOscDUblendRelay);
         mkO(synOscDUwidthAttachment, ParameterIDs::SYN_OSC_D_UWIDTH, synOscDUwidthRelay);

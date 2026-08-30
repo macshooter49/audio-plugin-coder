@@ -292,6 +292,11 @@ private:
     juce::WebSliderRelay synOscARouteDestRelay    { ParameterIDs::SYN_OSC_A_ROUTE_DEST };
     juce::WebSliderRelay synOscARouteAmtRelay     { ParameterIDs::SYN_OSC_A_ROUTE_AMT };
     juce::WebSliderRelay synOscAUnisonRelay       { ParameterIDs::SYN_OSC_A_UNISON };
+    // fb547 — URANGE / USTACK had NO relay, so getSliderState handed the panel a dead
+    // state: it read 0 forever (Range's real default is 0.495) and swallowed every write.
+    // Max: "it doesn't seem like range or stack is doing anything" — literally true.
+    juce::WebSliderRelay synOscAUrangeRelay       { ParameterIDs::SYN_OSC_A_URANGE };
+    juce::WebSliderRelay synOscAUstackRelay       { ParameterIDs::SYN_OSC_A_USTACK };
     juce::WebSliderRelay synOscAUdetuneRelay      { ParameterIDs::SYN_OSC_A_UDETUNE };
     juce::WebSliderRelay synOscAUblendRelay       { ParameterIDs::SYN_OSC_A_UBLEND };
     juce::WebSliderRelay synOscAUwidthRelay       { ParameterIDs::SYN_OSC_A_UWIDTH };
@@ -320,6 +325,8 @@ private:
     juce::WebSliderRelay synOscBRouteDestRelay    { ParameterIDs::SYN_OSC_B_ROUTE_DEST };
     juce::WebSliderRelay synOscBRouteAmtRelay     { ParameterIDs::SYN_OSC_B_ROUTE_AMT };
     juce::WebSliderRelay synOscBUnisonRelay       { ParameterIDs::SYN_OSC_B_UNISON };
+    juce::WebSliderRelay synOscBUrangeRelay       { ParameterIDs::SYN_OSC_B_URANGE };
+    juce::WebSliderRelay synOscBUstackRelay       { ParameterIDs::SYN_OSC_B_USTACK };
     juce::WebSliderRelay synOscBUdetuneRelay      { ParameterIDs::SYN_OSC_B_UDETUNE };
     juce::WebSliderRelay synOscBUblendRelay       { ParameterIDs::SYN_OSC_B_UBLEND };
     juce::WebSliderRelay synOscBUwidthRelay       { ParameterIDs::SYN_OSC_B_UWIDTH };
@@ -366,6 +373,8 @@ private:
     juce::WebSliderRelay synOscCRouteDestRelay    { ParameterIDs::SYN_OSC_C_ROUTE_DEST };
     juce::WebSliderRelay synOscCRouteAmtRelay     { ParameterIDs::SYN_OSC_C_ROUTE_AMT };
     juce::WebSliderRelay synOscCUnisonRelay       { ParameterIDs::SYN_OSC_C_UNISON };
+    juce::WebSliderRelay synOscCUrangeRelay       { ParameterIDs::SYN_OSC_C_URANGE };
+    juce::WebSliderRelay synOscCUstackRelay       { ParameterIDs::SYN_OSC_C_USTACK };
     juce::WebSliderRelay synOscCUdetuneRelay      { ParameterIDs::SYN_OSC_C_UDETUNE };
     juce::WebSliderRelay synOscCUblendRelay       { ParameterIDs::SYN_OSC_C_UBLEND };
     juce::WebSliderRelay synOscCUwidthRelay       { ParameterIDs::SYN_OSC_C_UWIDTH };
@@ -400,6 +409,8 @@ private:
     juce::WebSliderRelay synOscDRouteDestRelay    { ParameterIDs::SYN_OSC_D_ROUTE_DEST };
     juce::WebSliderRelay synOscDRouteAmtRelay     { ParameterIDs::SYN_OSC_D_ROUTE_AMT };
     juce::WebSliderRelay synOscDUnisonRelay       { ParameterIDs::SYN_OSC_D_UNISON };
+    juce::WebSliderRelay synOscDUrangeRelay       { ParameterIDs::SYN_OSC_D_URANGE };
+    juce::WebSliderRelay synOscDUstackRelay       { ParameterIDs::SYN_OSC_D_USTACK };
     juce::WebSliderRelay synOscDUdetuneRelay      { ParameterIDs::SYN_OSC_D_UDETUNE };
     juce::WebSliderRelay synOscDUblendRelay       { ParameterIDs::SYN_OSC_D_UBLEND };
     juce::WebSliderRelay synOscDUwidthRelay       { ParameterIDs::SYN_OSC_D_UWIDTH };
@@ -1145,6 +1156,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscARouteAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUrangeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUstackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUdetuneAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUblendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAUwidthAttachment;
@@ -1171,6 +1184,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBRouteAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUrangeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUstackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUdetuneAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUblendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscBUwidthAttachment;
@@ -1217,6 +1232,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCRouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCRouteAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUrangeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUstackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUdetuneAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUblendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscCUwidthAttachment;
@@ -1251,6 +1268,8 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDRouteDestAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDRouteAmtAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUnisonAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUrangeAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUstackAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUdetuneAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUblendAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscDUwidthAttachment;

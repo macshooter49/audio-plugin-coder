@@ -4965,6 +4965,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 #syn-panel .uni-voices-val { font-size: 10px; letter-spacing: .4px; font-weight: 400; line-height: 1;
   color: var(--text-primary); pointer-events: none; font-variant-numeric: tabular-nums; }
+/* fb547 — AT ONE VOICE THE WHOLE PAGE IS INERT, AND IT SHOULD LOOK IT. Stack, Range, Detune,
+   Blend and Width all describe how the unison voices differ from EACH OTHER; with a single voice
+   there is nothing to differ. MEASURED: at Voices=1, Stack 0 and Stack 5 render IDENTICALLY
+   (npeaks 24, centroid 266 Hz, ooh -45.5 both). That is a correct no-op but an INVISIBLE one, and
+   it is the other half of why "range or stack isn't doing anything" got reported. Voices itself
+   stays lit because it is the way out. Everything stays draggable: set it up, then raise Voices. */
+#syn-panel .uni-knobs > * { transition: opacity .15s ease; }
+#syn-panel .uni-knobs.uni-solo > *:not(.uni-voices) { opacity: .34; }
 #syn-panel .uni-stack-pill { position: relative; height: 20px; min-width: 42px; margin-top: 2px; padding: 0 7px;
   border: 1px solid var(--border-strong); border-radius: 10px;
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
@@ -18115,12 +18123,48 @@ setTimeout(function wireSynControls () {
       //  the rest. All page-2 knobs are bound by the general .knob[data-syn] binder even while hidden,
       //  so they just work the moment they are revealed — no reflow, no re-bind.)
 
+      // ══ fb547 — THE TAPER PROXY. Some knobs are exponential; JUCE's relay is not. ══════════
+      //  MEASURED on Range: the parameter's NormalisableRange is 5..4800 cents with an EXPONENTIAL
+      //  skew (its own default, 150 cents, sits at param-normalised 0.495301 — exactly
+      //  log(150/5)/log(4800/5)). But WebSliderRelay normalises LINEARLY across [start,end], so the
+      //  knob reported 0.030 for that same 150 cents and dragged linearly in CENTS:
+      //      knob 0.00 ->    5c   ooh -12.7      knob 0.50 -> 2403c   ooh  -0.9
+      //      knob 0.25 -> 1204c   ooh  -1.7      knob 1.00 -> 4800c   ooh  -1.1
+      //  i.e. the whole effect happened in the first quarter and the remaining THREE QUARTERS were
+      //  indistinguishable mush, while the supersaw region every player actually wants (5-50 cents)
+      //  was the first 1 % of travel. That is the second half of "range doesn't do anything".
+      //
+      //  The fix carries NO CURVE CONSTANTS IN JS, deliberately — a curve copied here would be
+      //  fb523's "a constant that feeds a selection path lives in two places" all over again.
+      //  The parameter's normalised value ALREADY IS the exponential position, and getSynParam /
+      //  __setSynParam both speak exactly that, so the proxy just routes through them. The relay
+      //  stays attached and keeps doing what it is good at: getScaledValue (real cents, for the
+      //  readout) and valueChangedEvent (so host automation still repaints the ring).
+      const EXP_TAPER = /^SYN_OSC_[A-D]_URANGE$/;
+      window.__synKnobState = function (id) {
+        var raw = null;
+        try { raw = window.Juce.getSliderState (id); } catch (e) {}
+        if (! EXP_TAPER.test (id)) return raw;
+        var pv = 0, getFn = null;
+        try { getFn = window.Juce.getNativeFunction ('getSynParam'); } catch (e) {}
+        var pull = function () { if (! getFn) return;
+          try { getFn (id).then (function (v) { if (typeof v === 'number') pv = v; }); } catch (e) {} };
+        pull();
+        if (raw && raw.valueChangedEvent && raw.valueChangedEvent.addListener) raw.valueChangedEvent.addListener (pull);
+        return {
+          getNormalisedValue: function () { return pv; },
+          setNormalisedValue: function (v) { pv = Math.max (0, Math.min (1, v));
+                                             try { window.__setSynParam (id, pv); } catch (e) {} },
+          getScaledValue: function () { return raw && raw.getScaledValue ? raw.getScaledValue() : pv; },
+          valueChangedEvent: raw ? raw.valueChangedEvent : null
+        };
+      };
       const knobEls = document.querySelectorAll ('#syn-panel .knob[data-syn]');
       knobEls.forEach ((knobEl) => {
         try {
           const paramId = knobEl.dataset.syn;
           if (! paramId || ! window.Juce || ! window.Juce.getSliderState) return;
-          const state = window.Juce.getSliderState (paramId);
+          const state = window.__synKnobState (paramId);   // fb547 — exponential knobs get a proxy
           if (! state) {
             console.warn ('[SYN-knob] no SliderState for', paramId);
             return;
@@ -18921,7 +18965,10 @@ setTimeout(function wireSynControls () {
             if (!st) { console.warn('[voices] no state for osc', osc); return; }
             var refresh = function () {
               try { var n = Math.round(st.getScaledValue ? st.getScaledValue() : 1);
-                    valEl.textContent = n; pill.classList.toggle('act', n > 1); } catch (e) {}
+                    valEl.textContent = n; pill.classList.toggle('act', n > 1);
+                    // fb547 — the row dims itself at one voice; see .uni-solo in the CSS.
+                    var row = cell.closest ? cell.closest('.uni-knobs') : null;
+                    if (row) row.classList.toggle('uni-solo', n <= 1); } catch (e) {}
             };
             if (st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener(refresh);
             var mv = function (ev) { if (!drag) return;
