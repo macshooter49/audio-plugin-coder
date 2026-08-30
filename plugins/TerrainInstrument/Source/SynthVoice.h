@@ -1124,6 +1124,47 @@ namespace tw
          *  `window` (slot-1 entry value is 1.0 → identical to the old assign) and PWM's
          *  silence gate ORs into `skipLookup`. Modes 0/9/10 pass phase through
          *  (9/10 are amp-domain — see applyAmpWarp). */
+        // ═══ SYNC / FORMANT / FRACTALIZE RATIO — ONE DEFINITION EACH (fb545) ══════════════
+        //  applyPhaseWarp() AND warpRateMul() both read these. They used to be two literals in two
+        //  places, which is precisely the fb523 trap ("a constant that also feeds a SELECTION path
+        //  lives in two places") — reverting one and not the other picks the mip for the wrong rate,
+        //  compiles clean and is silent. Naming them makes that trap structurally impossible.
+        //
+        //  ⚠️ WHY 4.6 AND NOT 4.0 — MEASURED, and it is not a "raise".
+        //  Hard sync's harmonics come from the DISCONTINUITY at the master wrap: the slave jumps
+        //  from phase frac(R) back to 0. When R is an EXACT INTEGER the slave completes a whole
+        //  number of cycles per master period, the jump height is table(0) - table(0) = 0, and
+        //  there is no sync at all — just a transposed table, band-limited by a mip picked for the
+        //  faster rate, so the harmonic count DIVIDES BY R. That is physics, not a bug.
+        //  The bug was WHERE those zeros landed. 2^(4a) puts R = 1,2,4,8,16 at a = 0, .25, .5,
+        //  .75, 1.0 — every detent, both endpoints, and the double-click default.
+        //      MEASURED on Terra Stack (203 peaks dry), OLD mapping:
+        //          a=0.25  R=2.00  npeaks 102   (= 203/2)      a=0.30  R=2.30  npeaks 212
+        //          a=0.50  R=4.00  npeaks  51   (= 203/4)      a=0.55  R=4.59  npeaks 215
+        //      Serum 2 swept 0->1 under its own Sync never drops below 200 until a = 1.0 exactly.
+        //  This is also the true source of the "nharm 183 -> 45 -> 8" that got fb522's raise
+        //  reverted in fb523: that cert sampled 0.25 / 0.5 / 0.75 — the three dead points.
+        //  4.6 clears every detent AND every tenth (R = 2.22 / 4.93 / 10.93 / 24.25 at the
+        //  quarters) and raises the ceiling 16x -> 24.25x, which is the raise fb522 wanted.
+        //  ⚠️ Any replacement value must be checked the same way: 2^(k*a) is an integer at
+        //  a = log2(m)/k, so k must not make log2(m)/k land on a round number for small m.
+        static constexpr double kSyncExp2    = 4.6;  // SYNC      : R = 2^(a*k), 1 .. 24.25x
+        static constexpr double kFormantExp2 = 4.0;  // FORMANT   : R = 2^(a*k), 1 .. 16x — NOT RAISED, see below
+        static constexpr double kFractalMul  = 7.5;  // FRACTALIZE: R = 1 + a*k, 1 ..  8.5x
+
+        //  ⚠️ FORMANT SHARES SYNC'S LINE BUT NOT SYNC'S DEFECT — MEASURED, DO NOT "TIDY" THESE
+        //  INTO ONE CONSTANT. Formant windows the grain with sin(pi*p), and that window is zero at
+        //  BOTH ends of the master period, so it removes the very discontinuity Sync lives on. Its
+        //  harmonics come from the WINDOW, not from the edge, so an integer ratio costs it nothing
+        //  and it never had dead detents:
+        //      Terra Stack, FORMANT, pre-fb545:  a = .25/.50/.75/1.0 -> npeaks 205 / 206 / 216 / 191
+        //  Raising it to 4.6 alongside Sync was measured and REVERTED in the same session:
+        //      the same four points became 202 / 213 / 196 / 111 — brighter (centroid 3524 -> 4730)
+        //      but a THIRD of the density gone at the top, because a bigger ratio only transposes
+        //      the grain into a harder mip. That is precisely the trade fb523 reverted, and it is
+        //      still a bad one. Sync is the exception, not the rule: it is the only one of the
+        //      three whose content is CREATED by the discontinuity.
+
         static double applyPhaseWarp (int mode, float amount, double p,
                                       float& window, bool& skipLookup, float var = 0.0f) noexcept
         {
@@ -1140,27 +1181,35 @@ namespace tw
                 }
                 case 2:  // SYNC — 1x..64x exponential (Vital-style)
                 {
-                    // 🚨 fb523 — THE LIVE EXPONENT ON THE LINE BELOW IS 4, NOT 6. fb522 raised it
-                    // 4 -> 6 and fb523 REVERTED it after cert measured the raise LOSING harmonics
-                    // (centroid x1.97 but nharm 8 -> 4 and 112 -> 57). This note said "4 -> 6" while
-                    // the code said 4 — a stale comment on a live line, which already produced one
-                    // wrong proposal this session. Read the definition, not the note. KNOWN CEILING,
-                    // NOT FIXED HERE: multiplying the read rate of a band-limited mip TRANSPOSES
-                    // partials out through Nyquist instead of creating them — `nharm` falls
-                    // 183 -> 45 -> 8 across the sweep where Serum's Sync makes 423 peaks. The
-                    // real fix is phase-reset hard sync with PolyBLEP (spec §2, item W1).
-                    // ⚠️ warpRateMul() below (search the identifier — line numbers rot) MUST carry the
-                    //    mip is chosen for a rate 4x slower than the one actually read.
-                    const double w = p * std::pow (2.0, (double) amount * 4.0);
+                    // fb545 — the exponent is kSyncExp2 (4.6), defined once at the top of this class
+                    // with the measurement behind it. The old note here said "LIVE EXPONENT IS 4,
+                    // NOT 6" and described fb522's raise being reverted for LOSING harmonics
+                    // (183 -> 45 -> 8). That reversion was right about the numbers and wrong about
+                    // the cause: the cert sampled a = .25/.50/.75, which 2^(4a) maps to R = 2, 4, 8
+                    // EXACTLY — the three ratios at which hard sync has no discontinuity and
+                    // degenerates to a transposed, harder-mipped table. It was measuring the dead
+                    // detents, not a bandwidth ceiling. Terra Stack, npeaks at those detents:
+                    //     4.0 -> 102 / 51 / 27 / 13        4.6 -> 200 / 215 / 212 / 210
+                    const double w = p * std::pow (2.0, (double) amount * kSyncExp2);
                     return w - std::floor (w);
                 }
                 case 3:  // FORMANT — windowed sync (half-sine bell keyed off the input phase)
                 {
-                    // 🚨 fb523 — LIVE EXPONENT IS 4. fb522's 4 -> 6 was reverted with SYNC's (same
-                    // transposition law, same warpRateMul dependency). This note used to claim 6.
-                    const double w  = p * std::pow (2.0, (double) amount * 4.0);
+                    // fb545 — kFormantExp2 is 4.0 and stays 4.0. Formant was measured alongside
+                    // Sync and does NOT share its defect (the window kills the edge — full note at
+                    // the constant). Raising it to 4.6 cost a third of the density at the top.
+                    const double w  = p * std::pow (2.0, (double) amount * kFormantExp2);
                     const double pi = 3.14159265358979323846;
-                    window *= static_cast<float> (std::sin (pi * p));
+                    // fb545 — THE WINDOW NOW OBEYS THE KNOB. It used to be applied at FULL depth
+                    // regardless of `amount`, so Formant at 0 was not the dry signal at all:
+                    // MEASURED, peak 0.078049 (warp off) vs 0.018869 with Formant at amount 0, a
+                    // different render entirely (FNV1a 420f4c70e44f4039 vs cfecb7e0141d2eb0).
+                    // That is the same "not transparent at amount 0" defect this repo already
+                    // files against Sine Shaper. Crossfading to 1.0 makes amount 0 EXACTLY warp-off
+                    // while leaving amount 1 bit-identical to what shipped — sin() is untouched
+                    // there, so the mode's character at full travel does not move.
+                    window *= static_cast<float> (1.0 - (double) amount
+                                                  + (double) amount * std::sin (pi * p));
                     return w - std::floor (w);
                 }
                 case 4:  // PWM — duty-cycle window
@@ -1207,12 +1256,12 @@ namespace tw
                 }
                 case 7:  // FRACTALIZE — fmod cascade, N = 1..13
                 {
-                    // 🚨 fb523 — LIVE COEFFICIENT IS 7, NOT 12. fb522's 7 -> 12 was reverted; the
-                    // reason is on the code line itself below.
-                    // Same structural caveat as SYNC: this transposes partials rather than
-                    // creating them (`nharm` collapses 20 -> 2 when chained), so the raise buys
-                    // brightness, not density. ⚠️ warpRateMul() carries this constant too.
-                    const double w = p * (1.0 + (double) amount * 7.0);   // fb523 REVERTED 12 -> 7: [M] the raise LOST harmonics (nharm 183->25 at d=0.5, 20->8 at d=1.0) for a LOWER centroid (x0.86). Reading a band-limited mip faster transposes its partials out through Nyquist; it cannot create new ones. Same class as SYNC (npeaks 8-10 vs 423) and it needs the same fix - real bandwidth, not a bigger multiplier.
+                    // fb545 — the coefficient is kFractalMul (7.5), defined once at the top. 1 + 7a
+                    // put R = 8 EXACTLY at a = 1.0, so the knob's maximum was its one dead point:
+                    // npeaks 27 at full travel against 204 just below it. 7.5 moves that zero off
+                    // the end of the knob — measured 215 / 213 / 215 / 208 across the detents.
+                    const double w = p * (1.0 + (double) amount * kFractalMul);   // fb545 — was 7.0; the
+                    // only dead point 1+7a had was the MAX (a=1 -> R=8 exactly). 7.5 moves it off the end.
                     return w - std::floor (w);
                 }
                 case 8:  // P-QUANTIZE — phase staircase, 32→2 steps, QUARTER-sampled.
@@ -3069,19 +3118,17 @@ namespace tw
             // table faster than the base increment, so pick the mip for the WARPED rate
             // (more band-limited → far less aliasing). Other modes use rate ×1.
             // ⚠️ LOCKSTEP with applyPhaseWarp: these three constants ARE the ones at cases 2/3/7.
-            //    fb522 raised them 4 -> 6 and 7 -> 12; fb523 REVERTED BOTH to 4 and 7 after cert
-            //    measured the raises LOSING harmonics (Fractalize nharm 183->25 at half travel;
-            //    Sync/Formant centroid x1.97 but nharm 8->4 and 112->57). Reading a band-limited
-            //    mip faster TRANSPOSES partials out through Nyquist - it cannot create them - so a
-            //    bigger exponent buys brightness by subtraction. The real fix is real bandwidth
-            //    (PolyBLEP hard sync), tracked as ledger C1.
-            //    🔑 THE TRAP THAT BIT US: reverting case 7 here and NOT in this lambda compiles
-            //    clean and is silent - the mip is then picked for a rate 1.7x faster than the one
-            //    actually read. A constant that also feeds a SELECTION path lives in two places.
+            //    fb545 — these now read kSyncExp2 / kFormantExp2 / kFractalMul, ONE definition each
+            //    at the top of the class, so the trap below cannot recur by construction. The
+            //    trap was real and is worth keeping written down:
+            //    🔑 reverting a ratio here and not in applyPhaseWarp (or the reverse) compiles
+            //    clean and is SILENT — the mip is then picked for a rate the reader never uses.
+            //    A constant that also feeds a SELECTION path must live in exactly one place.
             auto warpRateMul = [] (int mode, float amt) -> double
             {
-                if (mode == 2 || mode == 3) return std::pow (2.0, (double) amt * 4.0); // SYNC / FORMANT (1..16x)
-                if (mode == 7)              return 1.0 + (double) amt * 7.0;            // FRACTALIZE (1..8x)
+                if (mode == 2)              return std::pow (2.0, (double) amt * kSyncExp2);     // SYNC    (1..24.25x)
+                if (mode == 3)              return std::pow (2.0, (double) amt * kFormantExp2);  // FORMANT (1..16x)
+                if (mode == 7)              return 1.0 + (double) amt * kFractalMul;       // FRACTALIZE (1..8.5x)
                 return 1.0;
             };
             // fb522 — UNISON-aware mip pick. The mip is chosen from sine 0's rate, and the old

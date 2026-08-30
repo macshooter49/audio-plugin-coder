@@ -135,10 +135,60 @@ are ≤232 bytes and allocation-free, so the reuse is cheap — but **exclude th
 > **Owner is now item 6A** — the filter extension card is the right home for it. Deliberately NOT
 > giving it a temporary knob, which 6A would only delete.
 
-## 5 · REAL HARD SYNC (PolyBLEP)
-Unblocks Sync, Formant **and** Fractalize — all three raises were REVERTED after cert measured
-them *losing* harmonics (nharm 183→25). Reading a band-limited mip faster transposes partials out
-through Nyquist; it cannot create them. Our peak count stays 8–10 against the reference's **423**.
+## 5 · REAL HARD SYNC   ✅ SHIPPED fb545 — *and PolyBLEP was not what was wrong*
+**The premise of this item was a measurement artifact, and the fix is one constant.**
+
+The item said our sync "loses harmonics" and needed PolyBLEP for real bandwidth. Measured against
+Serum 2 before writing any code, that is not what is happening.
+
+**What is actually true.** Hard sync's harmonics come from the DISCONTINUITY at the master wrap —
+the slave jumps from phase `frac(R)` back to 0. When **R is an exact integer** the slave completes
+a whole number of cycles per master period, the jump height is `table(0) − table(0) = 0`, there is
+no sync at all, and what is left is a transposed table band-limited by a mip picked for the faster
+rate — so the harmonic count **divides by R**. That is physics, not a bug.
+
+The bug was **where those zeros landed**. `2^(4a)` puts R = 1, 2, 4, 8, 16 at a = 0, .25, .50, .75,
+1.0 — every detent, both endpoints, and the double-click default. Serum swept 0→1 never drops below
+200 peaks until a = 1.0 exactly. **This is also the true source of the "nharm 183 → 45 → 8" that got
+fb522's raise reverted in fb523**: that cert sampled .25/.50/.75, which are precisely the three dead
+points. Reproduced exactly (Terra Stack, 203 peaks dry): 102 / 51 / 27 at those settings, and 212 /
+215 at the non-integer settings either side.
+
+**Fix — the ratio mapping, one named constant each** (`kSyncExp2` / `kFormantExp2` / `kFractalMul`,
+defined once and read by BOTH `applyPhaseWarp` and `warpRateMul`, which structurally kills the
+fb523 two-places trap):
+
+| Terra Stack, npeaks | a=0.25 | 0.50 | 0.75 | 1.00 | |
+|---|---|---|---|---|---|
+| **Sync** `2^(4a)` → `2^(4.6a)` | 102 → **200** | 51 → **215** | 27 → **212** | 13 → **210** | ceiling 16× → 24.25× |
+| **Fractalize** `1+7a` → `1+7.5a` | 215 → 215 | 216 → 213 | 204 → **215** | 27 → **208** | max was the one dead point |
+| **Formant** — **deliberately NOT raised** | 205 → 204 | 206 → 205 | 216 → 215 | 191 → 191 | see below |
+
+**Formant shares Sync's line but not Sync's defect.** Its `sin(pi*p)` window is zero at both ends
+of the master period, so it removes the very discontinuity Sync lives on — its harmonics come from
+the window, integer ratios cost it nothing, and it never had dead detents. Raising it to 4.6 was
+tried and reverted in the same session: 202 / 213 / 196 / **111**, a third of the density gone at
+the top for brightness. That is exactly the trade fb523 reverted and it is still a bad one.
+
+**PolyBLEP was not needed and was not added.** The alias floor was measured at the harmonic
+MIDPOINTS `(k+0.5)·f0`, where a periodic signal has nothing and Hann leakage is below −100 dB:
+
+    Serum 2 Sync   −122 → −99 dBc   (worsens as it brightens)
+    Terrain  after −107 → −119 dBc  (flat, at the dry floor)
+
+We alias *less* than the reference because the mip is already chosen for the slave rate, so the
+edge is formed from band-limited material. Adding BLEP would be risk with no measurable gain.
+`uSyncPhase*_` stays an unused stub. **At full travel we now hold 210 peaks where Serum drops to
+13** (its own max is an integer ratio).
+
+**Also fixed: Formant is transparent at amount 0.** Its window used to apply at full depth
+regardless of the knob — peak 0.078049 warp-off vs 0.018869 with Formant at 0, a different render
+entirely. Same "not transparent at amount 0" defect this doc files against Sine Shaper. All four
+modes (off / Sync / Formant / Fractalize) at amount 0 now render **bit-identically**,
+FNV1a `420f4c70e44f4039` over 96,000 samples — and that gate is live, because Formant failed it.
+
+⚠️ Patches using Sync or Fractalize **above 0 will move** — that is the point of the fix. Amount 0
+is bit-identical, so anything with warp off or parked at zero is untouched.
 
 ## 6 · WARP EXTENSION CARDS — a warp mode can OPEN INTO a card   ⬅ Max, 2026-08-30
 *"the warp modes are gonna have extension cards based on what particular mode that's at… I told
