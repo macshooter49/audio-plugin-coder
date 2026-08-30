@@ -17939,7 +17939,16 @@ setTimeout(function wireSynControls () {
             const v = parseInt (engineEl.value, 10);
             const isWT = (v === 0);
             wtEl.style.opacity        = isWT ? '1' : '0.35';
-            wtEl.style.pointerEvents  = isWT ? 'auto' : 'none';
+            // fb549 — NEVER 'auto'. This is the native <select>, and it is deliberately held at
+            // pointer-events:none so the OS dropdown can never open: the glass folder browser is
+            // wired to the WRAP around it (index.html ~34637, "Intercept the native WT dropdown").
+            // `isWT ? 'auto' : 'none'` handed the click back to the OS list on every return to the
+            // Wavetable engine, and this handler runs on EVERY engine change. MEASURED:
+            //     after the glass block ran   a="none"   (correct)
+            //     engine -> SAMP              a="none"
+            //     engine -> back to WT        a="auto"   <- flat 46-item OS list, no folders
+            // Only osc A was affected because this dim block is hardcoded to SYN_OSC_A_*.
+            wtEl.style.pointerEvents  = 'none';
             wtEl.title                = isWT ? '' : 'WAVETABLE preset (only for WT engine)';
           } catch (e) { console.warn ('[SYN] engine dim apply failed', e); }
         };
@@ -18124,16 +18133,22 @@ setTimeout(function wireSynControls () {
       //  so they just work the moment they are revealed — no reflow, no re-bind.)
 
       // ══ fb547 — THE TAPER PROXY. Some knobs are exponential; JUCE's relay is not. ══════════
-      //  MEASURED on Range: the parameter's NormalisableRange is 5..4800 cents with an EXPONENTIAL
-      //  skew (its own default, 150 cents, sits at param-normalised 0.495301 — exactly
-      //  log(150/5)/log(4800/5)). But WebSliderRelay normalises LINEARLY across [start,end], so the
-      //  knob reported 0.030 for that same 150 cents and dragged linearly in CENTS:
+      //  MEASURED on Range. Its NormalisableRange is built from CUSTOM CONVERSION LAMBDAS —
+      //  `lo * pow(hi/lo, t)` over 5..4800 cents — so 150 cents sits at param-normalised
+      //  0.495301, exactly log(150/5)/log(4800/5), which is what the host reports.
+      //  🔑 WebSliderRelay honours a plain `skew` FACTOR but IGNORES custom lambdas. Verified
+      //  both ways: SYN_FILTER1_CUT (20..20000, skew 0.25) reports relay-normalised 0.5000 for
+      //  its skew-correct 1268.8 Hz — correct — while Range reported 0.030 for 150 cents, the
+      //  LINEAR position, and therefore dragged linearly in CENTS:
       //      knob 0.00 ->    5c   ooh -12.7      knob 0.50 -> 2403c   ooh  -0.9
       //      knob 0.25 -> 1204c   ooh  -1.7      knob 1.00 -> 4800c   ooh  -1.1
       //  i.e. the whole effect happened in the first quarter and the remaining THREE QUARTERS were
       //  indistinguishable mush, while the supersaw region every player actually wants (5-50 cents)
       //  was the first 1 % of travel. That is the second half of "range doesn't do anything".
       //
+      //  ⚠️ SCOPE, measured so nobody re-audits it: `uniRangeCents` is the ONLY lambda-built range
+      //  in the plugin (37 other params use a skew factor and are fine), so this proxy is for
+      //  Range and nothing else. Add to EXP_TAPER only if another lambda-built range appears.
       //  The fix carries NO CURVE CONSTANTS IN JS, deliberately — a curve copied here would be
       //  fb523's "a constant that feeds a selection path lives in two places" all over again.
       //  The parameter's normalised value ALREADY IS the exponential position, and getSynParam /
