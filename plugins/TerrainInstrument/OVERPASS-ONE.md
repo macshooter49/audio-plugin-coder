@@ -190,7 +190,7 @@ FNV1a `420f4c70e44f4039` over 96,000 samples — and that gate is live, because 
 ⚠️ Patches using Sync or Fractalize **above 0 will move** — that is the point of the fix. Amount 0
 is bit-identical, so anything with warp off or parked at zero is untouched.
 
-## 6 · WARP EXTENSION CARDS — a warp mode can OPEN INTO a card   ⬅ Max, 2026-08-30
+## 6 · WARP EXTENSION CARDS   ◐ CHASSIS + 6A/6B SHIPPED fb546 · 6C NEXT
 *"the warp modes are gonna have extension cards based on what particular mode that's at… I told
 you I wanted that same distortion card that we have for the effect rack distortion to be an
 extension. We right-click, we have an option to extend at the top of the menu… We can also do
@@ -209,16 +209,44 @@ and pins an action button at the top of the picker (`index.html:34676`) — that
 "an option to extend at the top of the menu". The warp picker already routes through that same
 browser (`warpPickerOpen`, `:19396`). So this is a new panel, not new menu plumbing.
 
-**Build order — smallest first, each one shippable alone:**
-- **6A · FILTER extension** (modes 35/36). The rack's filter card already exists (`CORES.flt`,
-  `:9048`) with the live spectrum via `__fltBinMag`. Reuse it as the extension.
-  🎯 **This also closes the fb543 loose end**: Warp Var IS the resonance, and fb538 deleted the
-  Var knob, so today resonance is reachable only from the mod matrix. The card is a *better*
-  home for it than the knob would be — do NOT bolt a temporary knob on; it would be deleted here.
-- **6B · DISTORTION extension.** Reuse the rack's distortion card verbatim (23 modes, 6 families).
-  Needs a distortion warp mode to attach to — slot 37+.
-- **6C · DRAW YOUR OWN WARP SHAPE.** The custom mode: a drawn curve becomes the phase/amp map.
-  Max expects this to be the best one. This is the real prize; A and B are the chassis for it.
+**SHIPPED fb546 — one card, not three.** A warp mode is exactly one of three things and each is
+already a pure static in the DSP, so the card asks C++ for its curve (`getWarpCurve`) instead of
+reimplementing thirty-odd modes in JS — the same fb458 law that keeps the waterfall honest:
+
+| kind | modes | the curve | measured |
+|---|---|---|---|
+| **filter** | 35–36 | \|H\| vs **harmonic number** — an impulse through the shipped `warpFiltTick` | LP at amt .5 → CORNER 11, resonant peak |
+| **amp** | 9–34 | the transfer curve, `applyAmpWarp` | Hard Clip rails at ±1, identity diagonal behind it |
+| **phase** | 1–8 | where in the cycle it reads, `applyPhaseWarp` | Sync at .35 → **3 ramps + a 0.05 partial** = R 3.05 ✓ |
+
+So **6A and 6B both landed in the one card**, and 6B needed no new warp slot after all — modes 11–34
+*are* the distortion family (Tube, Tape Sat., Diode, Overdrive, the folds…), and they now all open.
+Phase modes came free, which means Extend works on every live mode rather than two.
+
+**The body is the instrument**, the same ruling as the main filter's `.filt-ext` (Serum manual
+p.142): drag it. X and Y are always the slot's two dimensions. MEASURED end-to-end through the
+shipped AU — a click at 25 % / 25 % of the body:
+    amp    → Warp Amount **0.248**, Warp Var **0.753**
+    filter → Warp Amount **0.752** (x is the CORNER, so dragging right OPENS it), Var **0.753**
+🎯 **This closes fb543's open resonance question.** Var IS the Q and it now has a home better than
+the knob would have been.
+
+**Extend rides the browser's top action row** (`importLabel`/`onImport`, index.html:34676) — Max:
+*"an option to extend at the top of the menu"*. Offered only when a mode is selected: measured 1
+row at mode 35, **0 rows at None**, so that gate can fail. `osc` and `slot` are DERIVED from the
+mode param id both call sites already had, so nothing new is plumbed through two unrelated pills.
+
+**THE SIGNATURE IS THE AXIS.** On a filter mode x is **harmonic number** — 1 2 4 8 16 32 64 128 —
+because this filter's corner rides the note, so those gridlines stay put at every pitch. That is
+the one thing separating it from the main filter and nothing else in the plugin has that axis.
+On amp and phase the faint diagonal is the identity: distance from it is what the mode does.
+
+⚠️ **Two things deliberately not done yet**, both honest gaps rather than oversights:
+- **No live spectrum under the curve.** The rack's filter card has one; this does not, so it is
+  not yet "dramatically audio-reactive" by the house rule. It reacts to the knobs, not the audio.
+- **6C · DRAW YOUR OWN WARP SHAPE** — the prize, and the reason the chassis exists. A drawn curve
+  becomes the phase/amp map of a custom mode in a RESERVED slot (37–47).
+
 
 **ROOM: slots 37–47 are free — eleven more warp modes.** Answers Max's *"unless there's a way to
 add more… maybe we can do this with all types of filters"*: yes. We ship **94 filter engines**

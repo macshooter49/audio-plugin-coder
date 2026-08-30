@@ -3189,6 +3189,15 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
+            .withNativeFunction("getWarpCurve", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb546 — WARP EXTENSION CARD. args = [ osc ('a'..'d'), slot (0|1) ].
+                const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                const int slotIdx = args.size() > 1 ? juce::jlimit (0, 1, (int) args[1]) : 0;
+                complete (juce::var (audioProcessor.getWarpCurveJson (oscIdx, slotIdx)));
+            })
             .withNativeFunction("getOscLfoWave", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {

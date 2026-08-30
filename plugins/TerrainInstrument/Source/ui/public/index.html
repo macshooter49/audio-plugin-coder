@@ -19393,14 +19393,28 @@ setTimeout(function wireSynControls () {
       for (var i = 0; i < WARP_FAMILIES.length; i++) if (WARP_FAMILIES[i].idx.indexOf(idx) >= 0) return i;
       return 0; };
     const warpLiveCount = WARP_FAMILIES.reduce(function (n, f) { return n + f.idx.length; }, 0);
-    const warpPickerOpen = function (ev, header, curIdx, pick) {
+    // fb546 — `modeParamId` is the 5th argument and both call sites already had it in hand
+    // (SYN_OSC_x_WARP_MODE / _WARP2_MODE), so osc and slot are DERIVED rather than plumbed
+    // through two unrelated pill implementations. No new state, nothing to keep in sync.
+    const warpPickerOpen = function (ev, header, curIdx, pick, modeParamId) {
       var g = window.__warpGuard({ quiet: true });
       if (!g.ok) { window.__warpGuard(); return null; }      // refuse to write an index we cannot trust
       var cats = WARP_FAMILIES.map(function (f) {
         return { label: f.label, items: f.idx.map(function (i) {
           return { name: WARP_MODES[i], sel: (i === curIdx), pick: function () { pick(i); } }; }) }; });
+      // fb546 — EXTEND rides the browser's top action row, the slot the Import button uses
+      // everywhere else (index.html:34676). Max: "we have an option to extend at the top of the
+      // menu". Offered only when a mode is actually selected — None has no curve to open.
+      var xm = /SYN_OSC_([A-D])_WARP(2?)_MODE/.exec (String (modeParamId || ''));
+      var xCfg = {};
+      if (xm && curIdx > 0 && window.__openWarpExt) {
+        var xOsc = xm[1].toLowerCase(), xSlot = xm[2] ? 1 : 0;
+        xCfg.importLabel = '⤢ EXTEND';
+        xCfg.onImport = function () { try { window.__openWarpExt (xOsc, xSlot, ev); } catch (e) {} };
+      }
       if (window.openTwoPaneBrowser)
         return window.openTwoPaneBrowser(ev, { cats: cats, openCat: warpFamilyOf(curIdx),
+                                               importLabel: xCfg.importLabel, onImport: xCfg.onImport,
                                                searchPlaceholder: 'Search ' + warpLiveCount + ' warp modes…' });
       if (!window.__synShowMenu) return null;
       var rows = [];
@@ -19412,6 +19426,222 @@ setTimeout(function wireSynControls () {
       window.__synShowMenu(header, rows, ev.clientX, ev.clientY);
       return null; };
     try { window.__warpPicker = warpPickerOpen; window.__warpFamilies = WARP_FAMILIES; } catch (e) {}
+
+    /* ══════════════════════════════════════════════════════════════════════════════════════
+       fb546 — THE WARP EXTENSION CARD.  OVERPASS ONE item 6.
+       Max: "the warp modes are gonna have extension cards based on what particular mode that's
+       at... we right-click, we have an option to extend at the top of the menu... it'll pop out
+       the filter, we can click the resonance so we can actually sculpt and draw the resonance."
+
+       ONE card, not three. A warp mode is exactly one of three things and each already exists as
+       a pure static in the DSP, so the card asks C++ for the curve (getWarpCurve) instead of
+       reimplementing thirty-odd modes in JS — the fb458 law that keeps the waterfall honest:
+           filter  35-36   |H| against HARMONIC NUMBER   (impulse through the shipped warpFiltTick)
+           amp      9-34   the transfer curve             (applyAmpWarp)
+           phase     1-8   where in the cycle it reads    (applyPhaseWarp)
+
+       THE SIGNATURE IS THE AXIS. On a filter mode the x axis is HARMONIC NUMBER, not hertz —
+       1 2 4 8 16 32 64 128 — because this filter's corner rides the note. Those gridlines stay
+       put at every pitch, which is the one thing that makes it different from the main filter and
+       the reason it sounds different. Nothing else in this plugin has that axis.
+       On amp and phase modes the faint diagonal is the identity: the curve's distance from it is
+       exactly what the mode is doing.
+
+       The body is an INSTRUMENT, the same ruling as the main filter's extension (Serum manual
+       p.142, our .filt-ext): drag it. X and Y are the slot's two dimensions, always.
+       ⚠️ Writes go through __setSynParam, NOT getSliderState — these params have no relay, which
+       is what fb544 got caught by.
+       ══════════════════════════════════════════════════════════════════════════════════════ */
+    (function warpExtCard () {
+      var el = null, cv = null, ctx = null, cur = null, dat = null, poll = 0, raf = 0, drag = false;
+      var CSS = '.warp-ext{position:fixed;z-index:2147483645;width:300px;background:#12121F;'
+        + 'border:1px solid rgba(140,130,180,0.45);border-radius:12px;box-shadow:0 18px 50px rgba(0,0,0,.6);'
+        + "display:none;font-family:-apple-system,sans-serif;}"
+        + '.warp-ext.open{display:block;}'
+        + '.warp-ext .we-h{display:flex;align-items:center;gap:9px;padding:8px 12px;'
+        + 'border-bottom:1px solid rgba(58,58,88,0.55);cursor:grab;background:rgba(255,255,255,.03);}'
+        + '.warp-ext .we-g{letter-spacing:2px;color:#4a4f68;font-size:10px;}'
+        + '.warp-ext .we-t{font-size:9px;letter-spacing:1.6px;color:#C5BFD2;font-weight:600;white-space:nowrap;}'
+        + '.warp-ext .we-x{margin-left:auto;color:#908599;cursor:pointer;font-size:13px;line-height:1;}'
+        + '.warp-ext .we-x:hover{color:#fff;}'
+        + '.warp-ext .we-b{position:relative;height:150px;cursor:crosshair;}'
+        + '.warp-ext .we-b canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}'
+        + '.warp-ext .we-f{display:flex;gap:18px;padding:7px 12px 9px;border-top:1px solid rgba(58,58,88,0.55);}'
+        + '.warp-ext .we-r{display:flex;align-items:baseline;gap:6px;}'
+        + '.warp-ext .we-k{font-size:7.5px;letter-spacing:1.4px;color:rgba(255,255,255,.42);text-transform:uppercase;}'
+        + '.warp-ext .we-v{font-size:11px;color:#ECE8F2;font-variant-numeric:tabular-nums;font-weight:300;}';
+
+      function build () {
+        var st = document.createElement ('style'); st.textContent = CSS; document.head.appendChild (st);
+        el = document.createElement ('div'); el.className = 'warp-ext';
+        el.innerHTML = '<div class="we-h"><span class="we-g">⠇</span><span class="we-t"></span>'
+                     + '<span class="we-x">✕</span></div>'
+                     + '<div class="we-b"><canvas></canvas></div>'
+                     + '<div class="we-f"><div class="we-r"><span class="we-k xk"></span><span class="we-v xv"></span></div>'
+                     + '<div class="we-r"><span class="we-k yk"></span><span class="we-v yv"></span></div></div>';
+        document.body.appendChild (el);
+        cv = el.querySelector ('canvas'); ctx = cv.getContext ('2d');
+        el.querySelector ('.we-x').onclick = close;
+        // header drag — same grammar as .filt-ext
+        el.querySelector ('.we-h').onmousedown = function (e) {
+          if (e.target.classList.contains ('we-x')) return;
+          e.preventDefault();
+          var r = el.getBoundingClientRect(), dx = e.clientX - r.left, dy = e.clientY - r.top;
+          function mv (ev) {
+            el.style.left = Math.max (4, Math.min ((window.__vw ? window.__vw() : innerWidth) - el.offsetWidth - 4, ev.clientX - dx)) + 'px';
+            el.style.top  = Math.max (4, Math.min ((window.__vh ? window.__vh() : innerHeight) - 60, ev.clientY - dy)) + 'px'; }
+          function up () { document.removeEventListener ('mousemove', mv); document.removeEventListener ('mouseup', up); }
+          document.addEventListener ('mousemove', mv); document.addEventListener ('mouseup', up);
+        };
+        attachXY (el.querySelector ('.we-b'));
+      }
+
+      // ── the body IS the control (the .filt-ext ruling) ────────────────────────────────────
+      function attachXY (body) {
+        function apply (ev) {
+          if (! cur || ! dat) return;
+          var r = body.getBoundingClientRect();
+          var xn = Math.max (0, Math.min (1, (ev.clientX - r.left) / Math.max (1, r.width)));
+          var yn = Math.max (0, Math.min (1, (ev.clientY - r.top)  / Math.max (1, r.height)));
+          // FILTER: x is the corner ON the harmonic axis, so dragging RIGHT opens it — which is
+          // how every filter display in every synth behaves. amount 1 = closed = far left.
+          var amt = (dat.kind === 'filter') ? (1 - xn) : xn;
+          var vr  = 1 - yn;
+          dat.amt = amt; dat.var = vr;                       // paint from the gesture immediately
+          try { window.__setSynParam (cur.slot ? 'SYN_OSC_' + cur.O + '_WARP2_AMT'
+                                               : 'SYN_OSC_' + cur.O + '_WARP_AMOUNT', amt); } catch (e) {}
+          try { window.__setSynParam (cur.slot ? 'SYN_OSC_' + cur.O + '_W2VAR'
+                                               : 'SYN_OSC_' + cur.O + '_WVAR', vr); } catch (e) {}
+          paint();
+        }
+        body.addEventListener ('mousedown', function (ev) {
+          if (ev.button !== 0) return; ev.preventDefault(); drag = true; apply (ev);
+          function mv (e2) { if (drag) apply (e2); }
+          function up () { drag = false; document.removeEventListener ('mousemove', mv); document.removeEventListener ('mouseup', up); }
+          document.addEventListener ('mousemove', mv); document.addEventListener ('mouseup', up);
+        });
+      }
+
+      function fetchCurve () {
+        if (! cur) return;
+        try {
+          var f = window.Juce && window.Juce.getNativeFunction && window.Juce.getNativeFunction ('getWarpCurve');
+          if (! f) return;
+          f (cur.osc, cur.slot).then (function (txt) {
+            try { var d = JSON.parse (txt); if (! drag) dat = d; else { dat.pts = d.pts; dat.kind = d.kind; dat.mode = d.mode; }
+                  head(); paint(); } catch (e) {}
+          });
+        } catch (e) {}
+      }
+
+      function head () {
+        if (! el || ! dat) return;
+        var name = (window.WARP_MODES && window.WARP_MODES[dat.mode]) || 'Warp';
+        el.querySelector ('.we-t').textContent =
+          name.toUpperCase() + '  ·  OSC ' + cur.O + '  ·  WARP ' + (cur.slot + 1);
+        var filt = dat.kind === 'filter';
+        el.querySelector ('.xk').textContent = filt ? 'Corner' : 'Amount';
+        el.querySelector ('.yk').textContent = filt ? 'Res'    : 'Var';
+        // READOUT LAW (fb446): bare numbers. Corner is a HARMONIC number, Res is a Q.
+        el.querySelector ('.xv').textContent = filt ? String (Math.round (Math.pow (128, 1 - dat.amt)))
+                                                    : String (Math.round (dat.amt * 100));
+        el.querySelector ('.yv').textContent = filt ? (0.5 + dat['var'] * 9.5).toFixed (1)
+                                                    : String (Math.round (dat['var'] * 100));
+      }
+
+      function paint () {
+        if (! el || ! ctx || ! dat || ! el.classList.contains ('open')) return;
+        var w = cv.clientWidth, h = cv.clientHeight, dpr = window.devicePixelRatio || 1;
+        if (cv.width !== Math.round (w * dpr)) { cv.width = Math.round (w * dpr); cv.height = Math.round (h * dpr); }
+        ctx.setTransform (dpr, 0, 0, dpr, 0, 0);
+        ctx.clearRect (0, 0, w, h);
+        var P = dat.pts || [], n = P.length, kind = dat.kind;
+        var padL = 8, padR = 8, padT = 10, padB = kind === 'filter' ? 16 : 10;
+        var gw = w - padL - padR, gh = h - padT - padB;
+        function X (i) { return padL + gw * (i / Math.max (1, n - 1)); }
+        var Y;
+        // AMP autoscales, SYMMETRICALLY about 0 and never tighter than +-1.2. MEASURED reason:
+        // an asymmetric shaper is not centred. Hard Clip at var 0.3 returns [-2.000, 0.000] —
+        // wsDriveForm DC-compensates by subtracting f(bias*drive), so the whole transfer curve
+        // sits below zero and a fixed +-1.6 window clipped it straight off the card. The floor of
+        // 1.2 keeps the ordinary +-1 shapers from breathing as you turn the knob, and staying
+        // symmetric about 0 is what makes the offset VISIBLE instead of normalising it away.
+        var aMax = 1.2;
+        if (kind === 'amp') for (var q = 0; q < n; ++q) aMax = Math.max (aMax, Math.abs (P[q]));
+        if (kind === 'filter') Y = function (v) { return padT + gh * (1 - (v + 72) / 96); };       // -72..+24 dB
+        else if (kind === 'amp') Y = function (v) { return padT + gh * (1 - (v + aMax) / (2 * aMax)); };
+        else Y = function (v) { return padT + gh * (1 - v); };                                     // 0..1
+
+        // ── grid ────────────────────────────────────────────────────────────────────────────
+        ctx.strokeStyle = 'rgba(255,255,255,0.07)'; ctx.lineWidth = 1;
+        if (kind === 'filter') {
+          // THE SIGNATURE: harmonic gridlines, fixed at every pitch because the corner rides the note
+          ctx.font = '7px -apple-system,sans-serif'; ctx.textAlign = 'center';
+          ctx.fillStyle = 'rgba(255,255,255,0.34)';
+          [1, 2, 4, 8, 16, 32, 64, 128].forEach (function (k) {
+            var x = padL + gw * (Math.log (k) / Math.log (128));
+            ctx.beginPath(); ctx.moveTo (x, padT); ctx.lineTo (x, padT + gh); ctx.stroke();
+            ctx.fillText (String (k), x, h - 4);
+          });
+          ctx.strokeStyle = 'rgba(255,255,255,0.13)';                       // 0 dB
+          ctx.beginPath(); ctx.moveTo (padL, Y (0)); ctx.lineTo (w - padR, Y (0)); ctx.stroke();
+        } else {
+          // the identity diagonal — the "before". Distance from it IS what the mode does.
+          ctx.setLineDash ([2, 3]);
+          ctx.beginPath();
+          if (kind === 'amp') { ctx.moveTo (padL, Y (-1)); ctx.lineTo (w - padR, Y (1)); }   // identity, same scale
+          else               { ctx.moveTo (padL, Y (0));  ctx.lineTo (w - padR, Y (1)); }
+          ctx.stroke(); ctx.setLineDash ([]);
+        }
+
+        // ── the curve — the house white line, .dst-curve's exact treatment ──────────────────
+        if (n > 1) {
+          ctx.beginPath();
+          var started = false;
+          for (var i = 0; i < n; ++i) {
+            var v = P[i];
+            if (kind === 'phase' && v < 0) { started = false; continue; }   // PWM's silent half-cycle
+            var x = X (i), y = Y (v);
+            if (! started) { ctx.moveTo (x, y); started = true; } else ctx.lineTo (x, y);
+          }
+          ctx.strokeStyle = '#ECE8F2'; ctx.lineWidth = 1.3;
+          ctx.shadowColor = 'rgba(150,120,220,0.55)'; ctx.shadowBlur = 6;
+          ctx.stroke(); ctx.shadowBlur = 0;
+        }
+
+        // ── the node — this is the thing you grab ───────────────────────────────────────────
+        var nx = (kind === 'filter') ? padL + gw * (1 - dat.amt) : padL + gw * dat.amt;
+        var ny = padT + gh * (1 - dat['var']);
+        ctx.beginPath(); ctx.arc (nx, ny, 4.5, 0, 6.2832);
+        ctx.fillStyle = '#ECE8F2'; ctx.shadowColor = 'rgba(150,120,220,0.8)'; ctx.shadowBlur = 9;
+        ctx.fill(); ctx.shadowBlur = 0;
+      }
+
+      function loop () { if (! el || ! el.classList.contains ('open')) { raf = 0; return; } paint(); raf = requestAnimationFrame (loop); }
+      function close () {
+        if (! el) return; el.classList.remove ('open');
+        if (poll) { clearInterval (poll); poll = 0; }
+        if (raf) { cancelAnimationFrame (raf); raf = 0; }
+      }
+
+      // osc = 'a'..'d', slot = 0|1, ev = the click that asked for it (anchors the panel)
+      window.__openWarpExt = function (osc, slot, ev) {
+        if (! el) build();
+        cur = { osc: osc, O: String (osc).toUpperCase(), slot: slot | 0 };
+        dat = null;
+        var x = (ev && ev.clientX ? ev.clientX : 60), y = (ev && ev.clientY ? ev.clientY : 60);
+        var vw = window.__vw ? window.__vw() : innerWidth, vh = window.__vh ? window.__vh() : innerHeight;
+        el.style.left = Math.max (6, Math.min (vw - 306, x - 150)) + 'px';
+        el.style.top  = Math.max (6, Math.min (vh - 230, y + 14))  + 'px';
+        el.classList.add ('open');
+        fetchCurve();
+        if (! poll) poll = setInterval (fetchCurve, 120);      // follows mod + the knobs, not just us
+        if (! raf)  raf  = requestAnimationFrame (loop);
+      };
+      window.__warpExtOpen = function () { return !! (el && el.classList.contains ('open')); };
+      window.__closeWarpExt = close;
+    })();
+
 
     // ── WARP 2 pills — RIGHT-CLICK = mode menu, LEFT-DRAG value = amount %.
     //    DUAL-PURPOSE / ENGINE-CONDITIONAL: when the osc is in the SAMPLE engine
@@ -19513,7 +19743,7 @@ setTimeout(function wireSynControls () {
               // 35 live warp modes do not go in a flat list (Max: "sub menus or a way to scroll so
               // the menu doesn't get too damn big") — the house two-pane browser, families + search.
               // The 6 SAMPLE modes stay in the house right-click menu; that list did not grow.
-              if (c.isWarp) { warpPickerOpen(ev, c.header, cur, put); return; }
+              if (c.isWarp) { warpPickerOpen(ev, c.header, cur, put, c.modeParamId); return; }
               if (!window.__synShowMenu) return;
               const items = c.modes.map(function(name, i) {
                 return { label: name, isChecked: (i === cur), onPick: function() { put(i); } };
@@ -20557,7 +20787,8 @@ setTimeout(function wireSynControls () {
           // 770px flat list. Every other menu here is still short enough to be a flat menu.
           if (cfg.picker === 'warp' && window.__warpPicker) {
             window.__warpPicker(e, cfg.header, currentIdx,
-                                (idx) => setChoiceIndex(cfg.modeParam, idx, cfg.options.length));
+                                (idx) => setChoiceIndex(cfg.modeParam, idx, cfg.options.length),
+                                cfg.modeParam);
             return;
           }
           const items = cfg.options.map((label, idx) => ({

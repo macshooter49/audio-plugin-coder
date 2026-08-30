@@ -638,6 +638,10 @@ public:
     std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {}, wtBlurVis_[4] {};
     std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
     tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
+    // fb546 — WARP EXTENSION CARD. The curve for one warp slot, computed by the SHIPPED statics
+    // (applyPhaseWarp / applyAmpWarp / warpFiltCoef + warpFiltTick) exactly as getOscWavetableJson
+    // does for the waterfall — never a JS reimplementation of thirty-odd modes (the fb458 law).
+    juce::String getWarpCurveJson (int osc, int slot);
     // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the
     // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
     // routed), which is the same number rebuildMorphIfNeeded builds from — so the picture the

@@ -718,6 +718,98 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
              (int) rawParam (FS[osc])->load() };
 }
 
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  fb546 — THE WARP EXTENSION CARD'S CURVE.  OVERPASS ONE item 6.
+//
+//  One card, three kinds, because a warp mode is exactly one of three things and each is already
+//  a pure static on SynthVoice. Nothing here re-derives anything:
+//     phase  (1-8)    w = applyPhaseWarp(...)    — where in the cycle it reads
+//     amp    (9-34)   y = applyAmpWarp(...)      — the transfer curve
+//     filter (35-36)  |H| vs HARMONIC NUMBER     — an impulse through warpFiltTick, then a DFT
+//  🚨 The filter magnitude is measured by running the SHIPPED coefficients through the SHIPPED
+//     tick and transforming the impulse response. The analytic transfer function of a TPT SVF is
+//     easy to write down and would have been a SECOND COPY of the filter — the exact trap fb458
+//     names. If warpFiltTick changes, this curve changes with it, for free.
+//  The x axis is HARMONIC NUMBER, which is why f0 is nominal: the corner rides the note, so the
+//  curve is the same shape at every pitch. (Only the sr*0.45 clamp is pitch-dependent, and at the
+//  nominal 110 Hz nothing clamps.)
+juce::String TerrainInstrumentAudioProcessor::getWarpCurveJson (int osc, int slot)
+{
+    osc  = juce::jlimit (0, 3, osc);
+    slot = juce::jlimit (0, 1, slot);
+    static const char* const WV [4] = { ParameterIDs::SYN_OSC_A_WVAR,  ParameterIDs::SYN_OSC_B_WVAR,
+                                        ParameterIDs::SYN_OSC_C_WVAR,  ParameterIDs::SYN_OSC_D_WVAR };
+    static const char* const W2V[4] = { ParameterIDs::SYN_OSC_A_W2VAR, ParameterIDs::SYN_OSC_B_W2VAR,
+                                        ParameterIDs::SYN_OSC_C_W2VAR, ParameterIDs::SYN_OSC_D_W2VAR };
+    const auto  D    = wtDispEffective (osc);
+    const int   mode = slot == 0 ? D.warpMode : D.warp2Mode;
+    const float amt  = juce::jlimit (0.0f, 1.0f, slot == 0 ? D.warpAmt : D.warp2Amt);
+    const float var  = juce::jlimit (0.0f, 1.0f,
+                          *apvts.getRawParameterValue (slot == 0 ? WV[osc] : W2V[osc]) / 100.0f);
+
+    juce::String j;
+    j << "{\"mode\":" << mode << ",\"slot\":" << slot
+      << ",\"amt\":"  << juce::String (amt, 4) << ",\"var\":" << juce::String (var, 4);
+
+    if (mode == 0) return j + ",\"kind\":\"none\",\"pts\":[]}";
+
+    if (mode == 35 || mode == 36)
+    {
+        const double sr = getSampleRate() > 0.0 ? getSampleRate() : 48000.0;
+        const double f0 = 110.0;                       // nominal — the axis is harmonics, not Hz
+        tw::SynthVoice::WarpFiltCoef  c;
+        tw::SynthVoice::WarpFiltState st;
+        tw::SynthVoice::warpFiltCoef (c, mode, amt, var, f0, sr);
+        constexpr int M = 1024;                        // impulse response length
+        std::vector<float> h ((size_t) M, 0.0f);
+        h[0] = tw::SynthVoice::warpFiltTick (c, st, 1.0f);
+        for (int n = 1; n < M; ++n) h[(size_t) n] = tw::SynthVoice::warpFiltTick (c, st, 0.0f);
+
+        constexpr int P = 64;                          // probe points, log-spaced over 1..128 harmonics
+        j << ",\"kind\":\"filter\",\"x0\":1,\"x1\":128,\"pts\":[";
+        for (int i = 0; i < P; ++i)
+        {
+            const double harm = std::pow (128.0, (double) i / (double) (P - 1));   // 1 .. 128
+            const double w    = 2.0 * juce::MathConstants<double>::pi * (f0 * harm) / sr;
+            double re = 0.0, im = 0.0, cr = 1.0, ci = 0.0;
+            const double cw = std::cos (w), sw = std::sin (w);
+            for (int n = 0; n < M; ++n)
+            {
+                re += (double) h[(size_t) n] * cr;  im -= (double) h[(size_t) n] * ci;
+                const double nr = cr * cw - ci * sw;                 // rotate by w (cheap, drift-free enough
+                ci = cr * sw + ci * cw;  cr = nr;                    // over 1024 steps for a display)
+            }
+            const double dB = 20.0 * std::log10 (juce::jmax (1.0e-6, std::sqrt (re * re + im * im)));
+            j << (i ? "," : "") << juce::String (juce::jlimit (-72.0, 24.0, dB), 2);
+        }
+        return j + "]}";
+    }
+
+    if (mode >= 9)                                     // AMP domain — the transfer curve
+    {
+        constexpr int P = 129;
+        j << ",\"kind\":\"amp\",\"x0\":-1,\"x1\":1,\"pts\":[";
+        for (int i = 0; i < P; ++i)
+        {
+            const float x = -1.0f + 2.0f * (float) i / (float) (P - 1);
+            const float y = tw::SynthVoice::applyAmpWarp (mode, amt, x, var);
+            j << (i ? "," : "") << juce::String (juce::jlimit (-2.0f, 2.0f, y), 4);
+        }
+        return j + "]}";
+    }
+
+    constexpr int P = 129;                             // PHASE domain — where in the cycle it reads
+    j << ",\"kind\":\"phase\",\"x0\":0,\"x1\":1,\"pts\":[";
+    for (int i = 0; i < P; ++i)
+    {
+        const double p0 = (double) i / (double) (P - 1);
+        float window = 1.0f; bool skip = false;
+        const double w = tw::SynthVoice::applyPhaseWarp (mode, amt, p0, window, skip, var);
+        j << (i ? "," : "") << juce::String (skip ? -1.0 : juce::jlimit (0.0, 1.0, w), 4);
+    }
+    return j + "]}";
+}
+
 juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
