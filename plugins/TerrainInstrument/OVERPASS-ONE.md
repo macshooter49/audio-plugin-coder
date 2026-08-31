@@ -271,6 +271,63 @@ with a real 14.65 Hz component; FML at d=0.2 splits the carrier into 133.30 + 12
 Already allocated in the parameter and **still inert** (verified). Lower priority now that warp
 carries 26 shapers — but this is the *modulatable* version.
 
+## 9 · AUDIO AS A MODULATION SOURCE — the oscillators and the noise   ⬅ Max, 2026-08-31
+Max saw it on a Serum 2 reel: *"he was able to literally take the noise and make it a modulation
+source on Osc A's volume… the noise was like a little plucky thing so the audio was plucking the
+volume."* He wants our four oscillators and the noise engine (not the sub) to be draggable mod
+sources — from the osc header, or straight off the wavetable visualiser.
+
+**WHAT WE HAVE, measured.** `ModSource` is 10 LFOs · EnvAmp/EnvFilter/EnvMod1/EnvMod2/EnvPitch ·
+Velocity · Note · 8 DRIFT lanes · 27 dynamic envelopes. **Every one is control-rate. There is no
+audio source of any kind**, and modulation is staged **per block** (`ownM`/`modWinP`).
+
+**TWO DESIGNS, AND THEY ARE DIFFERENT PRODUCTS. Do not conflate them.**
+- **9A · FOLLOWER (block-rate).** Take the osc/noise **amplitude envelope**, smooth it, hand it to
+  the matrix as an ordinary source. This is what "the audio is plucking the volume" actually
+  sounds like. It fits the existing architecture exactly — one new ModSource family plus a
+  follower — and it reaches **every destination we already have** (1,152 in the FX rack alone) on
+  day one. Low risk, high reach. **Ship this first.**
+- **9B · TRUE AUDIO-RATE.** The modulator's own sample, per sample. Volume → ring mod / AM;
+  pitch → FM. Needs a per-sample path the block-rate matrix does not have, and only a handful of
+  destinations are even meaningful. ⚠️ Note we ALREADY ship audio-rate modulation under other
+  names: the FM engine, and RM/AM as blend modes. 9B is narrower than it sounds.
+
+UI: we already have a mod-drag system (`getModDrag`/`setModDrag`) — this is a new drag SOURCE
+affordance on the osc header and the noise card, not new plumbing.
+
+## 10 · CURVE EVERYWHERE — and the one that matters is the MOD CONNECTION   ⬅ Max, 2026-08-31
+Max: *"when he put that noise on Osc A's volume he right-clicked the volume and pressed curve
+edit… I wanna know how deep the Serum curve edits go."*
+
+**WHAT SERUM EXPOSES, measured off its own 2,623 AU parameters.** Only two curve families are
+parameters at all: **`Env 1-4 Atk/Dec/Rel Curve`** (12 knobs) and **`Porta Curve`**. Its mod matrix
+is **64 slots** exposing only `Mod N Amount` and `Mod N Out`.
+⚠️ **Everything drawn — LFO shapes, and the per-connection curve Max watched — is internal state,
+NOT an AU parameter, so I could not enumerate it from here and have not.** The reel is the spec for
+that behaviour; treat "Serum's curve list" as unmeasured until we read it off the UI.
+
+**WHAT WE HAVE.** LFO drawing · the distortion curve card (fb328, persisted as a JSON blob — the
+precedent for a drawn editor that survives a save) · FLOW arp/chop/gli `*_CURVE` knobs (single-value
+shapes) · fb546's warp cards, which VIEW a curve today and become editable at 6C.
+**WHAT WE DO NOT HAVE:** a mod assignment is `{ source, dest, depth, enabled }` — **no curve, no
+polarity, no offset. A connection is a straight linear scale.** And our envelopes have no segment
+curves at all, where Serum ships 12.
+
+**RANKED, most expressive first:**
+1. **10A · THE MOD-CONNECTION CURVE.** Remap a modulator's output through a drawn curve, per
+   connection. This is the one from the reel and it is the biggest multiplier in the whole
+   document: it turns all 40+ existing sources into arbitrary shapes without adding a single
+   source. Right-click a modulated knob → *Edit Curve*.
+2. **10B · ENVELOPE SEGMENT CURVES** — Atk/Dec/Rel shape per envelope. Serum has 12; we have none.
+3. **10C · velocity / key-tracking curves.**
+   (Drawable WARP shapes are already item **6C** and are not duplicated here.)
+
+**🔑 THE SEQUENCING THAT MATTERS: 10A wants the SAME drawn-curve editor 6C builds.** Do 6C first
+and 10A is mostly wiring. And note the reel Max watched is exactly **9A + 10A** — the follower plus
+the connection curve. That pair, in that order, is the shortest path to the thing he saw.
+
+---
+
 ---
 
 ## THE BROKEN THINGS — LAST, by Max's instruction ("the final creases")
