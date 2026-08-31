@@ -3740,7 +3740,12 @@ namespace tw
                     const int fk = wc::followIndexOf ((int) as.source);
                     if (fk < 0) continue;
                     anyFollowArmed_ = true;
-                    if (fk < 4) modSrcForce_[fk] = true; else noiseForce_ = true;
+                    // ⚠️ fb556 — `else noiseForce_` was right when 4 was the last follower and is a
+                    //  BUG the moment there are seven: a follower on Filter 1 would have forced the
+                    //  NOISE to render. The filters need no forcing at all — a filter nothing is
+                    //  routed into genuinely has no output to follow.
+                    if      (fk < 4)  modSrcForce_[fk] = true;
+                    else if (fk == 4) noiseForce_      = true;
                 }
                 // ── THE FREE CPU WIN (fb522). The per-sample blend law below is ~50 flops per
                 // sample PER VOICE (16 de-zipper FMAs before any mode test, 4 unguarded fmPhase_
@@ -5772,6 +5777,12 @@ namespace tw
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * pR; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w2L; outR = w2R;
+                            // fb556 — OVERPASS 4B: the filters as modulation sources. ⚠️ ONLY the
+                            //  MAIN pair: this lambda also serves the SEND filters and every pooled
+                            //  duplicate, and without the identity test the last one to run each
+                            //  sample would win and the tap would follow whatever the send happened
+                            //  to be doing.
+                            if (&f1 == &filterSlot_) { fltOut_[0] = 0.5f * (w1L + w1R); fltOut_[1] = 0.5f * (w2L + w2R); }
                         }
                         else         // PARALLEL: F1(bus1) + F2(bus2), each with its own post-drive
                         {
@@ -5786,6 +5797,7 @@ namespace tw
                                       w2R = mixSm2_ * wr + (1.0f - mixSm2_) * b2R; }
                             pdrive (w2L, w2R, pdrvSm2_, driveType2_, drvNorm2_);
                             outL = w1L + w2L; outR = w1R + w2R;
+                            if (&f1 == &filterSlot_) { fltOut_[0] = 0.5f * (w1L + w1R); fltOut_[1] = 0.5f * (w2L + w2R); }   // fb556
                         }
                     };
 
@@ -5815,6 +5827,26 @@ namespace tw
                         widen (oL, oR);
                         sL[i] = oL + dryL; sR[i] = oR + dryR;
                     }
+                    // fb556 — the FILTER FOLLOWERS, ticked here because this is where the filters
+                    //  actually run. Same peak detector as fb552's; only the tap differs.
+                    //  ⚠️ WHY THESE ARE FOLLOWERS AND NOT AUDIO TAPS, since the reference offers
+                    //  `FM (Filter 1)`: renderNextBlock is TWO per-sample loops — oscillators and
+                    //  the blend stage first (the taps land at the end of that one), then the
+                    //  filters, here. A filter value read by the blend stage is therefore one whole
+                    //  BLOCK old, not one sample, and a modulator whose delay is the host's buffer
+                    //  size is not a sound you can ship. Merging the loops is the fix and it is a
+                    //  real one: 94 filter types, oversampling, send and pooled duplicates, series
+                    //  and parallel routing, all on the hottest path in the voice. An ENVELOPE of
+                    //  the filter has no such problem — a block of delay on a contour is nothing —
+                    //  so that is what ships, and the audio-rate version stays open with its price
+                    //  written down rather than half-built.
+                    if (anyFollowArmed_)
+                        for (int fk = 0; fk < 2; ++fk)
+                        {
+                            const float af = std::fabs (fltOut_[fk]);
+                            float& fv = follow_[5 + fk];
+                            fv = (af > fv) ? af : fv + (af - fv) * followRelCoef_;
+                        }
 
                     // fb287 — POST-FILTER REVERB SEND: run the routed-osc send buses through the dedicated
                     // send-filters with the SAME coefficients (cutoff/res/drive) computed this sample, single-
@@ -6641,7 +6673,8 @@ namespace tw
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
         const std::atomic<const wc::ModCurveSet*>* modCurves_ = nullptr;   // fb554
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
-        float follow_[wc::kNumFollowers] = { 0.f, 0.f, 0.f, 0.f, 0.f };   // fb552 — osc A-D + noise peak followers, 0..1
+        float follow_[wc::kNumFollowers] = {};   // fb552 — osc A-D + noise, fb556 + filter 1/2 — peak followers, 0..1
+        float fltOut_[2] = { 0.f, 0.f };        // fb556 — the two filters' own output, per sample, main pair only
         float followRelCoef_ = 0.0f;                                       // fb552 — set with the sample rate
         bool  anyFollowArmed_ = false;                                     // fb552 — CPU: no routed follower, no per-sample tick
         double blendCarrInc_[4] = { 0.0, 0.0, 0.0, 0.0 };   // fb551 — carrier rate in cycles/sample, block-rate. MODES 9/10 ONLY (see kFmExpOctaves).

@@ -35,7 +35,9 @@ enum class ModSource : int
     Drift1, Drift2, Drift3, Drift4, Drift5, Drift6, Drift7, Drift8,  // FLOW·DRIFT lanes (block-rate bipolar) — append-only (replaced dead SeqMod)
     EnvPitch,                  // fb178 — the fifth legacy envelope (pitch) as a matrix source
     EnvD1, EnvD2, EnvD3, EnvD4, EnvD5, EnvD6, EnvD7, EnvD8, EnvD9, EnvD10, EnvD11, EnvD12, EnvD13, EnvD14, EnvD15, EnvD16, EnvD17, EnvD18, EnvD19, EnvD20, EnvD21, EnvD22, EnvD23, EnvD24, EnvD25, EnvD26, EnvD27,   // fb178 — dynamic envelopes 6..32 (Row 3)
-    FollowA, FollowB, FollowC, FollowD, FollowN,   // fb552 — AUDIO AS A MODULATION SOURCE: the amplitude
+    FollowA, FollowB, FollowC, FollowD, FollowN,
+    FollowF1, FollowF2,                            // fb556 — OVERPASS 4B: the two filters as sources
+                                                   // fb552 — AUDIO AS A MODULATION SOURCE: the amplitude
                                                    // envelope of osc A-D and of the NOISE, as ordinary
                                                    // matrix sources. Deliberately NO Sub (Max's exclusion).
                                                    // ⚠️ APPENDED AT THE END on purpose. Putting them next
@@ -1069,7 +1071,7 @@ static constexpr int kVelSrc     = 200;   // fb260 — Velocity mod-source wire 
 //  (fb554), which is precisely what OVERPASS 10C asked for.
 static constexpr int kNoteSrc = 201;
 static constexpr int kFollowSrcBase = 210;
-static constexpr int kNumFollowers  = 5;
+static constexpr int kNumFollowers  = 7;   // fb556 — osc A-D, Noise, Filter 1, Filter 2
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
 {
     switch (envNum)

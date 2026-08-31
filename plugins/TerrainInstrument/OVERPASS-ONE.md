@@ -109,7 +109,7 @@ modelled on the reference's measured set: `A Phase` (0–360°, 361 steps) and `
 (0–100 amount, default 100 = fully random). Terrain's `SYN_OSC_x_PHASE` / `_PHASE_AMT` /
 `_PHASE_MODE` already exist and are LIVE as of fb526 — this is the UI half.
 
-## 4 · FILTER AS A WARP MODE, AND AS A MODULATION SOURCE   ◐ HALF SHIPPED fb543
+## 4 · FILTER AS A WARP MODE, AND AS A MODULATION SOURCE   ✅ **BOTH HALVES — fb543 + fb556**
 **Half A — filter AS a warp mode: DONE.** Modes **35 `LP Filter` / 36 `HP Filter`**, a TPT
 state-variable filter. Corner in **harmonic number** so it rides the note; **amount 0 = wide
 open = transparent** (our fb462 law — note this is the OPPOSITE direction to Serum, measured:
@@ -119,10 +119,43 @@ identical result for 1/16 the cost — 12 KB of state across all 96 voices inste
 (Diverges only when UWARP ≠ 0, which fans the amount per sine; documented in the code.)
 Measured: corner tracks the note at ratio **1.00–1.01** across two octaves; LP 0.85 leaves
 **1.98 harmonics** against a predicted 2.07. Gate: `Tests/warp_filter_probe.cpp`.
-**Half B — filter as a MODULATION SOURCE is NOT done.** Serum cross-modulates *from* a filter's
-output (`FM (Filter 1)`, `RM (Filter 2)` — confirmed in its measured 70-mode list). That is a
-different change: it needs the blend-slot machinery to take a filter tap as a SOURCE, which is
-item 8 territory (slots 7 `Dist` / 8 `Filter` are still inert).
+### ✅ Half B — the filter IS a modulation source, fb556
+Two new sources, **`Follow Filter 1` / `Follow Filter 2`** (wire 215/216), joining fb552's family.
+Drag the word **Filter** on the filter device onto any knob; **one grip, resolved by the ACTIVE
+slot** at drop time — the same rule the cutoff *destination* already follows, so "the filter" means
+the filter you are looking at. The tap is taken inside `filterBuses` and is guarded by an identity
+test (`&f1 == &filterSlot_`) because that lambda also serves the SEND filters and every pooled
+duplicate: without it the last one to run each sample would win.
+
+**MEASURED.** Osc B runs through Filter 1; **Osc A is dry and never touches it**; `Follow Filter 1
+→ Osc A Level` at full depth. Vary how hard the filter is driven, and Osc A follows:
+
+| Osc B level | Osc A, no route | Osc A via Follow F1 | ratio |
+|---|---:|---:|---:|
+| 0.00 | 0.1250 | **0.0000** | — (nothing in the filter, nothing to follow) |
+| 0.15 | 0.1250 | 0.0184 | 0.1227 |
+| 0.35 | 0.1250 | 0.0430 | 0.1229 |
+| 0.50 | 0.1251 | 0.0614 | 0.1228 |
+| 0.80 | 0.1251 | 0.0983 | 0.1229 |
+
+Exactly proportional — the ratio holds to 0.2 % across the sweep — while the unrouted control is
+flat. Osc A's loudness *is* the filter's output level.
+
+**🚨 IT IS A FOLLOWER AND NOT AN AUDIO TAP, AND THAT IS STRUCTURAL, NOT LAZY.** The reference offers
+`FM (Filter 1)`, i.e. the filter's own SAMPLE into the blend slot. `renderNextBlock` is **two**
+per-sample loops: oscillators and the blend stage first (the modulator taps land at the end of that
+one, line ~5489), then the filters (~5800). A filter value read by the blend stage is therefore one
+whole **BLOCK** old, not one sample — a modulator whose delay is the host's buffer size is not a
+sound you can ship, and it would break under fb-"the host may subdivide the buffer". Merging the two
+loops is the real fix and it is a real cost: 94 filter types, oversampling, send and pooled
+duplicates, series and parallel routing, all on the hottest path in the voice. An **envelope** of
+the filter has no such problem — a block of delay on a contour is nothing — so that is what ships,
+and the audio-rate version stays open with its price written down instead of half-built.
+
+⚠️ One thing I could not demonstrate in the harness: **cutoff-dependence**. The follower tracks the
+filter's output level exactly (above), but I could not get a cutoff sweep to move anything, and I
+could not tell whether that is filter type 27's own response or my two carriers sitting 45 Hz apart
+(too close for the demodulator to separate). Flagging it rather than claiming it.
 
 *(original spec below)*
 The reference has LPF and HPF as per-oscillator warp modes, and can cross-modulate **from a

@@ -30940,6 +30940,12 @@ restoreThemeFromBackend();
            Saying both things every pass makes the race harmless instead of a coin flip. */
         L.title='Oscillator '+o.toUpperCase()+' on/off — or DRAG onto any knob to make this oscillator\'s own loudness the modulator. It keeps following with the Level at 0.';
       });
+      /* fb556 — OVERPASS 4B: the FILTER is a modulation source. One grip for both slots, resolved
+         by the ACTIVE slot at drop time — the same rule the cutoff DESTINATION already follows, so
+         "the filter" means the filter you are looking at. */
+      var fl=document.querySelector('#filter-device .device-label');
+      if(fl){ fl.setAttribute('data-drag-follow','6');
+        fl.title='Filter — drag onto any knob to make the ACTIVE filter slot\'s own output level the modulator.'; }
       var nn=document.getElementById('noise-name');
       if(nn){ nn.setAttribute('data-drag-follow','5');
         nn.title='Select noise — or DRAG onto any knob to make the noise\'s own loudness the modulator. It keeps following with the noise off.'; }
@@ -30950,7 +30956,9 @@ restoreThemeFromBackend();
     var fk=+t.getAttribute('data-drag-follow')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         if(window.__synHideMenu)window.__synHideMenu();
-        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='\u2248'+(fk<5?'ABCD'.charAt(fk-1):'N'); document.body.appendChild(ghost);
+        ghost=document.createElement('div'); ghost.className='sm-ghost';
+        ghost.textContent='\u2248'+(fk<5?'ABCD'.charAt(fk-1):(fk===5?'N':'F'));   /* fb556 */
+        document.body.appendChild(ghost);
         document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(209+fk,ev.screenX,ev.screenY,0); }   /* 210+ = follower wire (== wc::kFollowSrcBase) */
@@ -30958,7 +30966,9 @@ restoreThemeFromBackend();
     function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
       if(started){ var g=hit(ev.clientX,ev.clientY);
         if(window.__tiModDragPush) window.__tiModDragPush(209+fk,ev.screenX,ev.screenY,1);
-        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addFollowAssign(fk,dest,g.el); }
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest);
+               var fkk=(fk===6)?(actSlot()===2?7:6):fk;   /* fb556 — one grip, the ACTIVE slot */
+               addFollowAssign(fkk,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   /* fb555 — drag KEY out as a mod source, exactly like Velocity above. Depth lands at FULL: it is
@@ -30987,7 +30997,7 @@ restoreThemeFromBackend();
 
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
-  var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise'];   /* fb552 */
+  var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
   function srcName(a){ return a.note?'Key':(a.fol?('Follow '+FOL_NAME[a.fol-1]):(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)))); }
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
