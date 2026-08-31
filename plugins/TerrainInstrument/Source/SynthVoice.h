@@ -1332,6 +1332,10 @@ namespace tw
         // whole, self-consistent curve — never a half-redrawn one.
         using DrawSlot = std::atomic<const DrawCurve*>;
         void setDrawTable (const DrawSlot* t) noexcept { drawTable_ = t; }
+        // fb554 — the mod-connection curves. A pointer to the processor's ATOMIC, not to a set:
+        //  the set it points at is replaced on every matrix edit, and the voice must always read
+        //  the current one.
+        void setModCurves (const std::atomic<const wc::ModCurveSet*>* a) noexcept { modCurves_ = a; }
         const DrawCurve* drawFor (int osc, int slot) const noexcept
         { return (drawTable_ != nullptr) ? drawTable_[(size_t) (osc * 2 + slot)].load (std::memory_order_relaxed)
                                          : nullptr; }
@@ -3133,6 +3137,13 @@ namespace tw
                     else if (wc::isFollowModSource (sI))  srcV = followSourceValue (sI);   // fb552 — audio as a source
                     else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
                     else continue;
+                    // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last
+                    //  line before srcV fans out into the ownership laws, the semitone sums and the
+                    //  per-sample paths, so every one of them sees the curved value and none of
+                    //  them needs to know the curve exists.
+                    if (as.curve >= 0)
+                        srcV = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr,
+                                                  as.curve, sI, srcV);
                     // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
                     // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
                     // the shape IS the level — knob anywhere, Serum's level-down pluck included.
@@ -6623,6 +6634,7 @@ namespace tw
         bool  subForce_[4]  = { false, false, false, false };   // fb522 — a blend slot names Sub → keep the lane ticking at Sub Mix 0
         bool  anyBlendArmed_ = false;                 // fb522 — any FM/PD/AM/RM slot live (or still decaying) this block
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
+        const std::atomic<const wc::ModCurveSet*>* modCurves_ = nullptr;   // fb554
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
         float follow_[wc::kNumFollowers] = { 0.f, 0.f, 0.f, 0.f, 0.f };   // fb552 — osc A-D + noise peak followers, 0..1
         float followRelCoef_ = 0.0f;                                       // fb552 — set with the sample rate

@@ -460,10 +460,38 @@ polarity, no offset. A connection is a straight linear scale.** And our envelope
 curves at all, where Serum ships 12.
 
 **RANKED, most expressive first:**
-1. **10A · THE MOD-CONNECTION CURVE.** Remap a modulator's output through a drawn curve, per
-   connection. This is the one from the reel and it is the biggest multiplier in the whole
-   document: it turns all 40+ existing sources into arbitrary shapes without adding a single
-   source. Right-click a modulated knob → *Edit Curve*.
+1. **10A · THE MOD-CONNECTION CURVE.**   ✅ **SHIPPED fb554**
+   Right-click any modulated knob → **Curve · <source>**. 129 points, the same resolution and the
+   same drawing idiom as fb550's warp curve, so a drawn curve means one thing everywhere here.
+   Double-click inside → straight line, and a straightened route carries **no curve at all** rather
+   than an identity one: transparent by construction, not by arithmetic.
+
+   **The curve rides the ROUTE**, in the JSON that already round-trips through `getSynthMod` and
+   the patch state — no new native function, no new persistence, and no way for a curve to get
+   separated from the connection it belongs to. `applyModCurve()` is **one function** called from
+   both the per-voice evaluator and the processor's global pass: sources do not share a convention
+   (envelopes and followers arrive as level−1, velocity as 0..1, LFO/Drift as ±1), so each is
+   mapped into 0..1, curved, and mapped back by its own inverse. Two copies of that would have
+   drifted silently — the same knob curving differently depending on whether its destination
+   happens to be per-voice or global.
+
+   **MEASURED** — the fb552 rig (one render, two carriers, envelopes demodulated and correlated),
+   same route, four curves:
+
+   | curve | r(env A, env B) | Osc A env sd | |
+   |---|---:|---:|---|
+   | none | +0.908 | 46.1 % | the shipped straight multiply |
+   | **y = x** | **+0.909** | **46.2 %** | identity — indistinguishable from none ✅ |
+   | **y = 1−x** | **−0.864** | 97.8 % | **the sign flips** — loud source now means quiet knob |
+   | step at 0.5 | +0.840 | 60.2 % | a hard gate |
+
+   **The UI, driven end to end**: drag → route → right-click → `Curve · Follow Osc B` → the editor
+   opens (168×124) → 129 points drawn with real mouse events → the curve is in the saved patch.
+   ⚠️ The probe could not reach it for six runs, for two reasons that are both about the harness,
+   not the plugin: the hover underline needs rAF, which an offscreen window suspends, and the
+   300 ms post-drag click suppressor eats a synthetic click that lands microseconds after a drop.
+   A human hits neither. `window.__tiCurveEdit` / `__tiCurveOf` are the headless gate hooks that
+   settled it, in the same idiom as `__tiRoutes`.
 2. **10B · ENVELOPE SEGMENT CURVES** — Atk/Dec/Rel shape per envelope. Serum has 12; we have none.
 3. **10C · velocity / key-tracking curves.**
    (Drawable WARP shapes are already item **6C** and are not duplicated here.)

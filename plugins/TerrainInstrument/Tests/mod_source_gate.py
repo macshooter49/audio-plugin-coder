@@ -44,7 +44,8 @@ if gate:
             fails.append("the door's reject test omits `%s`" % fam)
 
 # ── 2 · THE JS ENCODER. Every family's base constant must appear. ────────────────────────────
-enc = re.search(r'var arr=assigns\.map\(function\(a\)\{return \{s:\((.*?)\),d:a\.dest', js)
+# tolerant of the encoder being a one-liner or a body (fb554 gave it a `c` field and a body)
+enc = re.search(r'var arr=assigns\.map\(function\(a\)\{.{0,40}?s:\((.*?)\),d:a\.dest', js, re.S)
 if not enc: fails.append("could not find the JS wire encoder")
 else:
     e = enc.group(1)
@@ -67,6 +68,22 @@ elif ('wire>=%d' % FOL) not in card.group(0).replace(' ', ''):
     fails.append("the popped card's receiver does not pass follower wire codes through; `wire-1` "
                  "would write %d..%d — one rejected outright, the rest pointing at the wrong source"
                  % (FOL - 1, FOL + NFOL - 2))
+
+# ── 5 · fb554 · THE CONNECTION CURVE MUST ROUND-TRIP ────────────────────────────────────────
+#  It rides the route JSON, so the encoder must emit `c` and the decoder must read it back. If
+#  only one side knows, a drawn curve is silently lost on the next reload — which is the same
+#  silent class as everything else this gate exists for.
+# the ASSIGNMENT, guarded by the curve's own presence — `if(false) o.c=a.curve...` must still red
+enc_win = js[enc.start():enc.start() + 400].replace(' ', '') if enc else ''
+if enc and 'if(a.curve)o.c=a.curve' not in enc_win:
+    fails.append("the JS encoder never writes the connection curve (`c`) — a drawn curve would not survive a save")
+if 'a.curve=String(o.c)' not in js.replace(' ', ''):
+    fails.append("the JS decoder never reads the connection curve back (`o.c`)")
+# the exact CALL, not the substring: `applyModCurveX` contains `applyModCurve` and would pass
+if 'wc::applyModCurve (' not in (root / 'Source' / 'SynthVoice.h').read_text():
+    fails.append("the per-voice evaluator never applies the connection curve")
+if 'wc::applyModCurve (' not in proc:
+    fails.append("the processor's global pass never applies the connection curve")
 
 if fails:
     print("  ❌ mod source gate"); [print("     " + f) for f in fails]; sys.exit(1)

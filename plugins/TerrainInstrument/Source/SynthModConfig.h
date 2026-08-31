@@ -1026,7 +1026,24 @@ struct Assignment
     ModSource auxSource = ModSource::L1; // (Batch 3) scales depth; ignored in Batch 1
     bool      useAux  = false;
     bool      enabled = false;
+    int       curve   = -1;             // fb554 — index into ModCurveSet, or -1 for "straight line"
 };
+
+// ── fb554 · OVERPASS 10A — THE MOD-CONNECTION CURVE ─────────────────────────────────────────
+//  A route was {source, dest, depth} and nothing else: a connection was a straight multiply. This
+//  is the biggest multiplier in the OVERPASS document precisely because it adds no sources — it
+//  turns every one of the 40+ we already have into an arbitrary shape, per connection. Right-click
+//  a modulated knob -> Edit Curve.
+//  129 points, the SAME resolution and the same idea as fb550's drawn warp curve, so the two
+//  editors agree about what a drawn curve is. The set is double-buffered and published by pointer
+//  exactly like that one: the message thread fills the spare and stores it, the audio thread loads
+//  it once and can never see a half-redrawn shape.
+static constexpr int kModCurvePts  = 129;
+static constexpr int kMaxModCurves = 32;   // per patch. A patch with 32 DRAWN connections is not a patch.
+struct ModCurve    { float pts[kModCurvePts] = {}; bool set = false; };
+struct ModCurveSet { ModCurve c[kMaxModCurves]; };
+
+
 
 static constexpr int MAX_ASSIGNMENTS = 128;   // fb178 — envelopes joined the matrix (was 32)
 
@@ -1079,6 +1096,31 @@ inline bool isFollowModSource (int sI) noexcept { return followIndexOf (sI) >= 0
     is read as level−1. A follower that reached three of the four would build clean, show in the UI,
     save in the patch, and modulate WRONG rather than not at all — which is worse. */
 inline bool isShapeModSource (int sI) noexcept { return isEnvModSource (sI) || isFollowModSource (sI); }
+
+/** fb554 — remap a source's output through its connection curve.
+    🔑 ONE DEFINITION, called from BOTH the per-voice evaluator and the processor's global pass.
+    fb551/fb552 both cost a bug to the same shape: a law that lives in two places drifts, and here
+    the drift would be silent — the same knob would curve differently depending on whether its
+    destination happens to be per-voice or global.
+    Sources do not share a convention, so the curve is applied in the one place they do agree:
+    normalised 0..1. Envelopes and followers arrive as level-1, velocity as 0..1, LFO/Drift as
+    -1..+1; each is mapped in, curved, and mapped back by its own inverse. */
+inline float applyModCurve (const ModCurveSet* set, int curveIdx, int sI, float v) noexcept
+{
+    if (set == nullptr || curveIdx < 0 || curveIdx >= kMaxModCurves) return v;
+    const ModCurve& mc = set->c[curveIdx];
+    if (! mc.set) return v;
+    const bool shape = isShapeModSource (sI);
+    const bool vel   = (sI == (int) ModSource::Velocity);
+    float u = shape ? (v + 1.0f) : (vel ? v : 0.5f * (v + 1.0f));
+    u = u < 0.0f ? 0.0f : (u > 1.0f ? 1.0f : u);
+    const float  x  = u * (float) (kModCurvePts - 1);
+    const int    i0 = (int) x;
+    const int    i1 = (i0 < kModCurvePts - 1) ? i0 + 1 : i0;
+    const float  fr = x - (float) i0;
+    const float  y  = mc.pts[i0] + (mc.pts[i1] - mc.pts[i0]) * fr;
+    return shape ? (y - 1.0f) : (vel ? y : (2.0f * y - 1.0f));
+}
 
 // ---------------------------------------------------------------------------
 //  Accumulation helpers — the "base + sum(source*depth)" model, clamp ONCE.

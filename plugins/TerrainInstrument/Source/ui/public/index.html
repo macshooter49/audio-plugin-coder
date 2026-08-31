@@ -30465,7 +30465,17 @@ restoreThemeFromBackend();
     '.sm-routes .rr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 8px;border-radius:5px;}'+
     '.sm-routes .rr:hover{background:rgba(167,139,250,0.12);}'+
     '.sm-routes .rx{color:rgba(255,255,255,0.45);cursor:pointer;padding:0 2px;}'+
-    '.sm-routes .rx:hover{color:#fff;}';
+    '.sm-routes .rx:hover{color:#fff;}'+
+    /* fb554 — the curve grip sits between the label and the cross. Dim until a curve exists,
+       then white, so a curved connection reads as curved without opening it. The editor is the
+       same glass as the list it comes from (Max: match the existing UI, never invent). */
+    '.sm-routes .rc{color:rgba(255,255,255,0.30);cursor:pointer;padding:0 2px;font-size:13px;line-height:1;}'+
+    '.sm-routes .rc:hover{color:#fff;}'+
+    '.sm-routes .rc.on{color:rgba(255,255,255,0.92);}'+
+    '.sm-curve{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.16);border-radius:8px;padding:7px 8px 6px;box-shadow:0 8px 26px rgba(0,0,0,0.45);}'+
+    '.sm-curve .sc-ttl{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:5px;}'+
+    '.sm-curve canvas{display:block;border:1px solid rgba(255,255,255,0.14);border-radius:4px;cursor:crosshair;}'+
+    '.sm-curve .sc-hint{font-size:8px;letter-spacing:0.8px;color:rgba(255,255,255,0.34);margin-top:4px;text-align:center;}';
   document.head.appendChild(st);
   // shared attenuation meter (shown while holding a badge)
   var att=document.createElement('div'); att.className='sm-att'; att.innerHTML='<div class="vv"></div><div class="f"></div>'; document.body.appendChild(att);
@@ -30588,7 +30598,11 @@ restoreThemeFromBackend();
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
     lastLocalEdit=Date.now();   /* fb524 — the mirror's prune stands down while a local edit is still in flight */
     if(window.__cardOnly&&!restoredOnce) return;   /* fb524 — a card's assigns are a MIRROR: pushing before the first getSynthMod lands would write an empty matrix over a live one */
-    var arr=assigns.map(function(a){return {s:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1))),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ · fb552 — followers ride 210+ (== wc::kFollowSrcBase) */
+    var arr=assigns.map(function(a){ var o={s:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1))),d:a.dest,v:+a.depth.toFixed(4)};
+      /* fb554 — the CONNECTION CURVE rides the route itself, so it round-trips through
+         getSynthMod and the patch state with no separate channel to get out of step. */
+      if(a.curve) o.c=a.curve.map(function(y){return (+y).toFixed(4);}).join(',');
+      return o; });   /* fb178 — env sources ride 100+ · fb552 — followers ride 210+ (== wc::kFollowSrcBase) */
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
   // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
@@ -30773,7 +30787,7 @@ restoreThemeFromBackend();
   window.__tiPruneFxRoutes=function(lo,hi){ if(lo==null||hi==null) return 0; var n=0;
     for(var i=assigns.length-1;i>=0;i--) if(assigns[i].dest>=lo&&assigns[i].dest<hi){ assigns.splice(i,1); n++; }
     if(n){ markTargets(); push(); } return n; };
-  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo))),d:a.dest,v:a.depth}; }); };   /* fb453 — gate surface: read the matrix without touching it */
+  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo))),d:a.dest,v:a.depth,c:(a.curve?a.curve.length:0)}; }); };   /* fb554 — the gate surface reports the connection curve too */   /* fb453 — gate surface: read the matrix without touching it */
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
   function knobNorm(a){
     if(a.dest>=481&&a.dest<481+192){ var kE=a.dest-481, eN=Math.floor(kE/6);   /* fb193 — legacy env params have real params; dyn anchor at 0 */
@@ -30950,6 +30964,97 @@ restoreThemeFromBackend();
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
   function hideRoutesSoon(){ if(rtHideT)clearTimeout(rtHideT); rtHideT=setTimeout(function(){ if(!badgeBusy)hideRoutes(); },250); }   /* fb190 — never hide mid-drag */
   document.addEventListener('pointerdown',function(e){ if(rtMenu&&!rtMenu.contains(e.target)&&!(e.target.closest&&e.target.closest('.sm-ul'))) hideRoutes(); });   /* fb190 — closest: the ul's children are the target now */
+  /* ═══ fb554 · OVERPASS 10A — THE MOD-CONNECTION CURVE EDITOR ════════════════════════════
+     The one thing the OVERPASS calls the biggest multiplier in the document: it adds no sources,
+     it turns all 40-odd we already have into arbitrary shapes, per connection.
+     129 points, the same resolution and the same drawing idiom as fb550's warp curve, so a drawn
+     curve means the same thing everywhere in this plugin. X is the modulator's own output
+     normalised 0..1 (an envelope's level, an LFO's swing mapped through zero); Y is what the
+     connection actually delivers. The straight diagonal IS the shipped behaviour, which is why
+     double-click restores it and why an undrawn route carries no curve at all rather than an
+     identity one — transparent by construction, not by arithmetic. */
+  var curveEd=null;
+  function closeCurveEditor(){ if(curveEd){ curveEd.remove(); curveEd=null; } }
+  function openCurveEditor(a,anchor){
+    closeCurveEditor();
+    var N=129;
+    if(!a.curve){ a.curve=[]; for(var i=0;i<N;i++) a.curve.push(i/(N-1)); }
+    var W=168,H=124;
+    var box=document.createElement('div'); box.className='sm-curve';
+    var ttl=document.createElement('div'); ttl.className='sc-ttl'; ttl.textContent=srcName(a)+' \u2192 curve';
+    var cv=document.createElement('canvas'); cv.width=W*2; cv.height=H*2; cv.style.width=W+'px'; cv.style.height=H+'px';
+    var hint=document.createElement('div'); hint.className='sc-hint'; hint.textContent='draw \u00B7 double-click = straight';
+    box.appendChild(ttl); box.appendChild(cv); box.appendChild(hint); document.body.appendChild(box);
+    var r=anchor.getBoundingClientRect(), M=6, VW=window.__vw(), VH=window.__vh();
+    box.style.left=Math.max(M,Math.min(LP(r.left),VW-box.offsetWidth-M))+'px';
+    box.style.top =Math.max(M,Math.min(LP(r.bottom)+4,VH-box.offsetHeight-M))+'px';
+    curveEd=box;
+    var g=cv.getContext('2d');
+    function paint(){
+      g.clearRect(0,0,cv.width,cv.height);
+      g.strokeStyle='rgba(255,255,255,0.16)'; g.lineWidth=2;
+      g.beginPath(); g.moveTo(0,cv.height); g.lineTo(cv.width,0); g.stroke();      /* the identity */
+      g.strokeStyle='rgba(255,255,255,0.92)'; g.lineWidth=3; g.beginPath();
+      for(var i=0;i<N;i++){ var X=i/(N-1)*cv.width, Y=(1-a.curve[i])*cv.height; if(i)g.lineTo(X,Y); else g.moveTo(X,Y); }
+      g.stroke();
+    }
+    var pushT=0;
+    function pushCurve(force){ var now=Date.now(); if(!force&&now-pushT<45)return; pushT=now; push(); }
+    var lastX=-1;
+    function apply(ev){
+      var b=cv.getBoundingClientRect();
+      var xn=Math.max(0,Math.min(1,(ev.clientX-b.left)/Math.max(1,b.width)));
+      var yn=Math.max(0,Math.min(1,(ev.clientY-b.top )/Math.max(1,b.height)));
+      var i=Math.round(xn*(N-1)), v=1-yn;
+      if(lastX<0)lastX=i;
+      /* interpolate across a fast drag: a gap in a mod curve is a step, and a step is a click */
+      var a0=Math.min(lastX,i), a1=Math.max(lastX,i), v0=(lastX===i)?v:a.curve[lastX];
+      for(var k=a0;k<=a1;++k){ var t=(a1===a0)?1:(k-a0)/(a1-a0); a.curve[k]=(lastX<=i)?(v0+(v-v0)*t):(v+(v0-v)*t); }
+      lastX=i; paint(); pushCurve();
+    }
+    cv.addEventListener('mousedown',function(ev){ if(ev.button!==0)return; ev.preventDefault(); ev.stopPropagation();
+      lastX=-1; apply(ev);
+      function mv(e2){ apply(e2); }
+      function up(){ lastX=-1; pushCurve(true); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
+      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+    cv.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation();
+      a.curve=null; push(); closeCurveEditor(); markTargets(); });   /* back to a straight line = no curve at all */
+    box.addEventListener('mousedown',function(ev){ ev.stopPropagation(); });
+    paint();
+  }
+  document.addEventListener('mousedown',function(ev){
+    if(curveEd && !(ev.target.closest && ev.target.closest('.sm-curve'))) closeCurveEditor(); },true);
+  /* fb554 — headless gate hooks, the same idiom as __tiRoutes / __fxrDevs / __fltTick. The curve
+     editor's entry points are a hover list and a right-click menu, and NEITHER can be exercised in
+     the offscreen probe window (no rAF, so no underline; see the UI-probe law). These let a gate
+     open the editor and read the curve without one. */
+  window.__tiCurveEdit=function(i){ var a=assigns[i|0]; if(a) openCurveEditor(a, curEl(a)||document.body); return !!a; };
+  window.__tiCurveOf =function(i){ var a=assigns[i|0]; return (a&&a.curve)?a.curve.slice():null; };
+  /* fb554 — RIGHT-CLICK A MODULATED KNOB -> "Curve". This is the gesture Max described from the
+     reel ("he right-clicked the volume and pressed curve edit"), and it is also the entry point
+     that does not depend on the hover underline. Strictly gated on `.knob` elements that ALREADY
+     carry a route: an unmodulated knob, a blend pill, an arrow and every other right-click in the
+     panel are untouched, because there is nothing to curve there. */
+  document.addEventListener('contextmenu',function(ev){
+    var el=ev.target&&ev.target.closest?ev.target.closest('#syn-panel .knob'):null; if(!el)return;
+    /* ⚠️ MATCH THREE WAYS, not on element identity alone. A route remembers the element it was
+       DROPPED on (a.el), curEl() re-resolves it as the panel re-renders, and elForDest() maps the
+       destination back to whatever is on screen now — and for a freshly dropped route those are
+       not always the same node. Matching on one of them made this menu open on nothing at all:
+       the handler bailed, and the "Curve" row I was reading in the probe belonged to some other
+       menu entirely. Match the DESTINATION, which is the thing that is actually stable. */
+    var list=assigns.filter(function(a){
+      if(curEl(a)===el||a.el===el) return true;
+      try{ return elForDest(a.dest)===el; }catch(e){ return false; } });
+    if(!list.length)return;
+    ev.preventDefault(); ev.stopPropagation();
+    var rows=list.map(function(a){ return { label:'Curve  \u00B7  '+srcName(a), white:!!a.curve,
+      onPick:function(){ openCurveEditor(a,el); } }; });
+    list.forEach(function(a){ if(a.curve) rows.push({ label:'Straighten  \u00B7  '+srcName(a),
+      onPick:function(){ a.curve=null; push(); markTargets(); } }); });
+    try{ if(window.__synShowMenu) window.__synShowMenu('',rows,ev.clientX,ev.clientY); }catch(e){}
+  },true);
+
   function showRoutes(el,u){ hideRoutes();
     var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
     rtMenu=document.createElement('div'); rtMenu.className='sm-routes';
@@ -30958,7 +31063,12 @@ restoreThemeFromBackend();
       var lab=document.createElement('span'); lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%';
       var x=document.createElement('span'); x.className='rx'; x.textContent='\u2715'; x.title='remove';
       x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
-      row.appendChild(lab); row.appendChild(x); rtMenu.appendChild(row); rtMenu.__rows.push({a:a,lab:lab}); });
+      /* fb554 — EDIT CURVE. The connection is a straight multiply until you draw something here;
+         the glyph fills in once a curve exists, so a curved route is visible without opening it. */
+      var cv=document.createElement('span'); cv.className='rc'+(a.curve?' on':''); cv.textContent='\u223F';
+      cv.title='Edit curve — reshape what this modulator does on its way to the knob. Double-click inside to go back to a straight line.';
+      cv.addEventListener('click',function(ev){ ev.stopPropagation(); openCurveEditor(a,row); });
+      row.appendChild(lab); row.appendChild(cv); row.appendChild(x); rtMenu.appendChild(row); rtMenu.__rows.push({a:a,lab:lab,cv:cv}); });
     document.body.appendChild(rtMenu);
     var r=u.getBoundingClientRect(), mw=rtMenu.offsetWidth, mh=rtMenu.offsetHeight;   // measure AFTER append (fb172 law)
     /* ═══ fb454 — THE LIST NEVER COVERS THE CONTROL IT BELONGS TO ═══════════════════════════════
@@ -31228,7 +31338,9 @@ restoreThemeFromBackend();
       if(live) live[ky(vel,env,lfo,fol,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
       if(!el)return;
       for(var i=0;i<assigns.length;i++) if((fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo)))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
-      var a=fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}:(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el})); assigns.push(a); });
+      var a=fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}:(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}));
+      if(o.c){ try{ a.curve=String(o.c).split(',').map(Number); }catch(e){} }   /* fb554 */
+      assigns.push(a); });
       if(live&&!badgeBusy&&(Date.now()-lastLocalEdit)>1500)
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
           if(!live[ky(aq.vel,aq.env,aq.lfo,aq.fol,aq.dest)]) assigns.splice(q,1); }

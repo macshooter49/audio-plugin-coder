@@ -325,6 +325,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
         auto* v = new tw::SynthVoice();
+        v->setModCurves (&modCurves_);    // fb554 — set ONCE; the SET it points at is republished later
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
@@ -8392,13 +8393,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (const auto& r : synModRoutes)
             {
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
+                const wc::ModCurveSet* mcSet = modCurves_.load (std::memory_order_acquire);   // fb554
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
                 {
                     // fb183 — env→LEVEL went PER-VOICE (ownership in SynthVoice): the shared
                     // mono tap re-opened every sounding voice's level on any note-on — the
                     // ghost-note gate Max heard. Levels never read the tap again.
                     if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
-                    const float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));
+                    float lv = monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1));
+                    lv = wc::applyModCurve (mcSet, r.curve, (int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1), lv);   // fb554
                     // fb184 — OWNERSHIP for every unipolar (Linear01) dest: the env claims the
                     // knob by |depth| instead of offsetting it — knob-down + atten-100 follows
                     // the shape (Max's law, generalized from fb183 Levels). Semitone/Bipolar
@@ -8422,7 +8425,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     //  Levels are skipped here on purpose — fb183: per-voice owns them, and a
                     //  shared tap re-opened every sounding voice's level (the ghost-note bug).
                     if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
-                    const float lv = followVis_[r.src - wc::kFollowSrcBase].load (std::memory_order_relaxed) - 1.0f;
+                    const float lv = wc::applyModCurve (mcSet, r.curve,
+                                          (int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase),
+                                          followVis_[r.src - wc::kFollowSrcBase].load (std::memory_order_relaxed) - 1.0f);   // fb554
                     const auto& diF = wc::kDestInfo[r.dest];
                     if (diF.domain == wc::ModDomain::Linear01)
                     {
@@ -8436,13 +8441,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 }
                 if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
                 {
-                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], velGlobal_, r.depth);
+                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
+                                          wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Velocity, velGlobal_), r.depth);   // fb554
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                 const float master = *rawParam (kLfoDepthIds[r.src]);   // per-LFO MASTER ring (same law as the matrix merge below)
                 modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
-                                                          flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src]), r.depth * master);   // fb245 — LfoAmt now scales global dests too
+                                                          wc::applyModCurve (mcSet, r.curve, r.src,
+                                                              flowLfo_[r.src].peek() * juce::jlimit (0.0f, 2.0f, 1.0f + lfoAmt[r.src])), r.depth * master);   // fb245 — LfoAmt now scales global dests too
             }
         }
         { // ZPROBE-ENV log
@@ -9143,6 +9150,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — envelope source
                     {
                         synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
+                        synModCfg.assignments[na].curve   = r.curve;   // fb554
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = std::abs (r.depth);   // fb180 — envelope depth is MAGNITUDE (direction is always knob-is-the-peak; the inverted mode read as 'the sound comes back')
                         synModCfg.assignments[na].enabled = true;
@@ -9152,6 +9160,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     {   // fb552 — FOLLOWER → per-voice source. Depth is a MAGNITUDE, like an envelope's
                         // (fb180): the direction is always knob-is-the-peak, never inverted.
                         synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase));
+                        synModCfg.assignments[na].curve   = r.curve;   // fb554
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = std::abs (r.depth);
                         synModCfg.assignments[na].enabled = true;
@@ -9160,6 +9169,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     if (r.src == wc::kVelSrc)   // fb260 — Velocity → per-voice source (signed depth, no LFO master)
                     {
                         synModCfg.assignments[na].source  = wc::ModSource::Velocity;
+                        synModCfg.assignments[na].curve   = r.curve;   // fb554
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = r.depth;
                         synModCfg.assignments[na].enabled = true;
@@ -9168,6 +9178,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
                     const float master = *rawParam (lp[r.src].depth);
                     synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::L1 + r.src);
+                        synModCfg.assignments[na].curve   = r.curve;   // fb554
                     synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                     synModCfg.assignments[na].depth   = r.depth * master;
                     synModCfg.assignments[na].enabled = true;
@@ -13003,6 +13014,10 @@ void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& jso
 void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)
 {
     std::vector<SynModRoute> parsed;
+    // fb554 — fill the SPARE curve set as the routes are parsed, then publish it whole (below).
+    auto& spare = modCurveSet_[modCurveSpare_];
+    for (auto& mc : spare.c) mc.set = false;
+    int nCurves = 0;
     auto v = juce::JSON::parse (json);
     if (auto* arr = v.getArray())
     {
@@ -13012,6 +13027,23 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             r.src   = (int)   item.getProperty ("s", 0);
             r.dest  = (int)   item.getProperty ("d", 0);
             r.depth = (float) (double) item.getProperty ("v", 0.0);
+            r.curve = -1;
+            {   // fb554 — the connection curve rides the ROUTE, in the JSON that already round-trips
+                //  through getSynthMod and the patch state. No new native function, no new
+                //  persistence: a curve cannot get separated from the connection it belongs to.
+                const juce::String cs = item.getProperty ("c", juce::var()).toString();
+                if (cs.isNotEmpty() && nCurves < wc::kMaxModCurves)
+                {
+                    auto& mc = spare.c[nCurves];
+                    juce::StringArray sa; sa.addTokens (cs, ",", "");
+                    const int n = juce::jmin (sa.size(), wc::kModCurvePts);
+                    for (int k = 0; k < wc::kModCurvePts; ++k)
+                        mc.pts[k] = (n > 0) ? sa[juce::jmin (k, n - 1)].getFloatValue()
+                                            : (float) k / (float) (wc::kModCurvePts - 1);
+                    mc.set = (n > 1);
+                    if (mc.set) r.curve = nCurves++;
+                }
+            }
             const bool lfoSrc = (r.src >= 0 && r.src < wc::NUM_LFOS);
             const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
             const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
@@ -13034,6 +13066,10 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
         if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
             gm |= (1u << (r.src - wc::kEnvSrcBase));   // ANY env route arms the mono tap (flow knobs sit below Res1)
     monoEnvGlobalMask_.store (gm, std::memory_order_release);
+    // fb554 — publish the whole set, THEN the routes that index into it. A block that sees the new
+    //  routes must already be able to see their curves; the other order would index an old set.
+    modCurves_.store (&spare, std::memory_order_release);
+    modCurveSpare_ ^= 1;
     const juce::ScopedLock sl (synModLock);
     synModRoutes = std::move (parsed);
     synModJson   = json;

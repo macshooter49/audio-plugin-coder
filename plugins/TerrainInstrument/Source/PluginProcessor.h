@@ -650,6 +650,14 @@ public:
     //  A curve that is (within 1e-4) the identity publishes NULLPTR, which is what makes mode 37
     //  bit-exact dry until something is actually drawn.
     tw::SynthVoice::DrawCurve            drawCurve_[8][2];
+    // fb554 — THE MOD-CONNECTION CURVES. Double-buffered and published by pointer, the same shape
+    //  as drawCurve_ above and for the same reason: the message thread rewrites the whole set on
+    //  every matrix edit while the audio thread is reading it. Publishing a POINTER TO THE WHOLE
+    //  SET (rather than per-curve) means a block can never see one route's new curve next to
+    //  another's old one — the set is atomic, not the curve.
+    wc::ModCurveSet                      modCurveSet_[2];
+    std::atomic<const wc::ModCurveSet*>  modCurves_ { nullptr };
+    int                                  modCurveSpare_ = 0;
     int                                  drawSpare_[8] = { 0,0,0,0,0,0,0,0 };
     tw::SynthVoice::DrawSlot             drawTable_[8];      // what every voice reads
     void         setWarpDrawCurve (int osc, int slot, const juce::String& csv);
@@ -1133,7 +1141,7 @@ public:
     // ── Synth mod-matrix (drag-to-assign): LFO source → synth dest, depth. The editor
     //    pushes the route list as JSON via the setSynthMod native fn; we parse it into a
     //    thread-safe vector the audio thread copies into synModCfg each block. Persisted.
-    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; };
+    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; };   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line
     // FLOW · ARP lane pattern (fb105): UI pushes JSON, audio thread copies into the
     // engine on version bump (synModLock pattern). Raw JSON kept verbatim for state save.
     mutable juce::CriticalSection arpLaneLock_;
