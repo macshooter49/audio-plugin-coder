@@ -8317,6 +8317,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             <div class="vm-voiceview">
               <div class="voice-row" data-syn-row="SYN_VOICES"><span>Voices</span><b>8</b></div>
               <div class="voice-row rr-vis-vel" data-syn-row="SYN_VEL_DEPTH"><span class="vel-src" data-drag-vel="1">Velocity</span><b>50</b></div>
+              <!-- fb555 — KEY TRACKING as a mod source. The label drags out exactly like Velocity's;
+                   the number is the LIVE key position of the sounding note, so the row moves while
+                   you play (Max's law: if it is audible it is visible). It has no parameter of its
+                   own — key tracking IS the route you drag from here. -->
+              <div class="voice-row rr-vis-key"><span class="vel-src" data-drag-note="1">Key</span><b id="rr-key-val">—</b></div>
               <div class="voice-row" data-syn-row="SYN_PORTA"><span>Portamento</span><b>0</b></div>
               <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><span>Glide</span><b>50</b></div>
               <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
@@ -30598,7 +30603,7 @@ restoreThemeFromBackend();
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
     lastLocalEdit=Date.now();   /* fb524 — the mirror's prune stands down while a local edit is still in flight */
     if(window.__cardOnly&&!restoredOnce) return;   /* fb524 — a card's assigns are a MIRROR: pushing before the first getSynthMod lands would write an empty matrix over a live one */
-    var arr=assigns.map(function(a){ var o={s:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1))),d:a.dest,v:+a.depth.toFixed(4)};
+    var arr=assigns.map(function(a){ var o={s:(a.note?201:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1)))),d:a.dest,v:+a.depth.toFixed(4)};
       /* fb554 — the CONNECTION CURVE rides the route itself, so it round-trips through
          getSynthMod and the patch state with no separate channel to get out of step. */
       if(a.curve) o.c=a.curve.map(function(y){return (+y).toFixed(4);}).join(',');
@@ -30673,7 +30678,12 @@ restoreThemeFromBackend();
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
-  window.__modViz=function(e,l,p){ mvE=e; mvL=l; if(l&&l.length){ window.__mvLfoValPrev=window.__mvLfoVal; window.__mvLfoValTPrev=window.__mvLfoValT; window.__mvLfoVal=l; window.__mvLfoValT=Date.now(); } if(p&&p.length){ window.__mvLfoPhPrev=window.__mvLfoPh; window.__mvLfoPhTPrev=window.__mvLfoPhT; window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb487 -- prev kept so tick() can MEASURE the LFO rate between pushes */   /* fb498 -- VALUES now keep prev+stamp too (the fb493 shape applied to values) so consumers can INTERPOLATE instead of latching. A value never wraps, so nothing below uses __w01 or a shortest-arc fold. */   /* fb238 — values ride for the point-mod ghost */
+  window.__modViz=function(e,l,p){
+    /* fb555 — the Key row has no parameter; its number is the SOUNDING NOTE's key position, so the
+       row moves while you play. Rides the push that is already happening; no new poll, no rAF. */
+    try{ var _k=document.getElementById('rr-key-val');
+         if(_k){ var nv=window.__mvNote; _k.textContent=(window.__notesActive&&nv!=null)?String(Math.round(nv*100)):'\u2014'; } }catch(_e){}
+    mvE=e; mvL=l; if(l&&l.length){ window.__mvLfoValPrev=window.__mvLfoVal; window.__mvLfoValTPrev=window.__mvLfoValT; window.__mvLfoVal=l; window.__mvLfoValT=Date.now(); } if(p&&p.length){ window.__mvLfoPhPrev=window.__mvLfoPh; window.__mvLfoPhTPrev=window.__mvLfoPhT; window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb487 -- prev kept so tick() can MEASURE the LFO rate between pushes */   /* fb498 -- VALUES now keep prev+stamp too (the fb493 shape applied to values) so consumers can INTERPOLATE instead of latching. A value never wraps, so nothing below uses __w01 or a shortest-arc fold. */   /* fb238 — values ride for the point-mod ghost */
   /* fb498 -- THE VALUE TWIN OF fb493's PHASE LOCK. __mvLfoVal arrives at the frame-push rate: a
      60 Hz ceiling, self-clocked by fb482's ack (PluginEditor.cpp:5470), and 0 Hz whenever fb483
      idle-skips a byte-identical frame. Every consumer LATCHED it, so the comet, the ghost curve
@@ -30710,6 +30720,7 @@ restoreThemeFromBackend();
   document.addEventListener('pointerdown',function(e){ var t=e.target; if(!t||!t.closest)return;
     if(t.closest('#mod-engine')){ if(window.__lfoCurTab)window.__selMod={lfo:window.__lfoCurTab()}; }
     else if(t.closest('.device.envs')){ if(window.__envCurNum)window.__selMod={env:window.__envCurNum()}; }
+    else if(t.closest('.rr-vis-key')){ window.__selMod={note:1}; }   /* fb555 — same focus rule as the Velocity row below */
     else if(t.closest('.rr-vis-vel')){ window.__selMod={vel:1}; }   /* fb262 — touching the Velocity row selects it → its routes glow purple, same focus-follows-interaction as env/LFO */
   },true);
   var badgeBusy=false;                                        // fb145 — a live depth drag wins over restore()
@@ -30755,12 +30766,14 @@ restoreThemeFromBackend();
   /* fb552 — AUDIO AS A MODULATION SOURCE. k = 1..4 (Osc A-D) or 5 (Noise). Depth lands at 1.0
      like an env/velocity route, because the C++ law is the same one: at full depth the destination
      follows the source's SHAPE (ownership), so anything less has to be a deliberate attenuation. */
+  function addNoteAssign(dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].note&&assigns[i].dest===dest) return;   /* fb555 */
+    if(assigns.length>=128)return; var a={note:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function addFollowAssign(k,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].fol===k&&assigns[i].dest===dest) return;
     if(assigns.length>=128)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
+      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)||(a.note&&sm.note))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
     return hit||first; }
   /* fb194 — THE BREATHING CURVE's data: per-env param-mod state {w,v,sum}×6 (Dly..Rel),
      the exact C++ split — env sources = ownership claim, LFO sources = additive × master. */
@@ -30787,7 +30800,7 @@ restoreThemeFromBackend();
   window.__tiPruneFxRoutes=function(lo,hi){ if(lo==null||hi==null) return 0; var n=0;
     for(var i=assigns.length-1;i>=0;i--) if(assigns[i].dest>=lo&&assigns[i].dest<hi){ assigns.splice(i,1); n++; }
     if(n){ markTargets(); push(); } return n; };
-  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo))),d:a.dest,v:a.depth,c:(a.curve?a.curve.length:0)}; }); };   /* fb554 — the gate surface reports the connection curve too */   /* fb453 — gate surface: read the matrix without touching it */
+  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.note?'key':(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo)))),d:a.dest,v:a.depth,c:(a.curve?a.curve.length:0)}; }); };   /* fb554 — the gate surface reports the connection curve too */   /* fb453 — gate surface: read the matrix without touching it */
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
   function knobNorm(a){
     if(a.dest>=481&&a.dest<481+192){ var kE=a.dest-481, eN=Math.floor(kE/6);   /* fb193 — legacy env params have real params; dyn anchor at 0 */
@@ -30948,6 +30961,23 @@ restoreThemeFromBackend();
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addFollowAssign(fk,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  /* fb555 — drag KEY out as a mod source, exactly like Velocity above. Depth lands at FULL: it is
+     a shape source, so at 100 % the destination follows the keyboard and less is a deliberate
+     attenuation (fb178/fb263's law, and fb552's). */
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-note]'); if(!t)return;
+    var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Key'; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(201,ev.screenX,ev.screenY,0); }   /* 201 == wc::kNoteSrc */
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(201,ev.screenX,ev.screenY,1);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addNoteAssign(dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   // suppress the tab's switch-click right after a drag
   document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')||e.target.closest('#syn-panel .syn-ctx-item')||e.target.closest('#syn-panel [data-drag-follow]')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 env chip · fb195 hub rows · fb552 — the noise NAME is both a picker and a mod grip, so a drag must not also open the picker */
   /* fb153 — the fb149 'Pop' palette launcher is retired (chip + handler). The palette
@@ -30958,7 +30988,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise'];   /* fb552 */
-  function srcName(a){ return a.fol?('Follow '+FOL_NAME[a.fol-1]):(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo))); }
+  function srcName(a){ return a.note?'Key':(a.fol?('Follow '+FOL_NAME[a.fol-1]):(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)))); }
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
@@ -31145,7 +31175,7 @@ restoreThemeFromBackend();
     var seen=new Map(), sm=window.__selMod||{};
     assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
       var m=seen.get(el); if(!m){ m={sel:false}; seen.set(el,m); }
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
+      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)||(a.note&&sm.note)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
     seen.forEach(function(m,el){
       var u=ulMap.get(el);
       if(!u){ u=document.createElement('div'); u.className='sm-ul'; document.body.appendChild(u);
@@ -31221,7 +31251,8 @@ restoreThemeFromBackend();
       var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=uw;   /* fb453 — the children live in the ul's own (layout) space */
       if(ra){
         var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
-        var v=ra.fol?((window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1)   /* fb552 — a follower's comet rides the SOUND it follows (Max's law: if it is audible it is visible) */
+        var v=ra.note?((window.__mvNote!=null)?window.__mvNote:-1)   /* fb555 — the Key comet rides the sounding note */
+             :ra.fol?((window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1)   /* fb552 — a follower's comet rides the SOUND it follows (Max's law: if it is audible it is visible) */
              :ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
              :ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
                     :(function(){ var __lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null;   /* fb498 -- smoothed; falls back to the raw latch, never to 0 */
@@ -31327,23 +31358,28 @@ restoreThemeFromBackend();
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr))return;   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
       var live=window.__cardOnly?Object.create(null):null;
-      function ky(sVel,sEnv,sLfo,sFol,d){ return (sFol?('f'+sFol):(sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo))))+'_'+d; }
+      function ky(sVel,sEnv,sLfo,sFol,sNote,d){ return (sNote?'k':(sFol?('f'+sFol):(sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo)))))+'_'+d; }
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
       /* fb552 — followers = 210..214 (wc::kFollowSrcBase). 🚨 THE ENV TEST NOW HAS AN UPPER BOUND
          AND ALWAYS NEEDED ONE: `sv>=100` alone swallowed every future wire code — 210 decoded as
          "Env 111". fb261 already paid for this once when 200 came back as Env 101 and the fix was
          to special-case 200 rather than to bound the range. Bounded now. */
       var fol=(sv>=210&&sv<215)?(sv-210+1):0;
-      var vel=(!fol&&sv===200), env=(!fol&&!vel&&sv>=100&&sv<200)?(sv-100+1):0, lfo=(fol||vel||env)?0:(sv+1);
-      if(live) live[ky(vel,env,lfo,fol,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
+      var note=(!fol&&sv===201);   /* fb555 — key tracking (== wc::kNoteSrc) */
+      var vel=(!fol&&!note&&sv===200), env=(!fol&&!note&&!vel&&sv>=100&&sv<200)?(sv-100+1):0, lfo=(fol||note||vel||env)?0:(sv+1);
+      if(live) live[ky(vel,env,lfo,fol,note,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
       if(!el)return;
-      for(var i=0;i<assigns.length;i++) if((fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo)))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
-      var a=fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}:(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}));
+      for(var i=0;i<assigns.length;i++) if((note?assigns[i].note:(fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo))))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
+      var a=note?{note:1,dest:dest,depth:(+o.v||1.0),el:el}
+              :(fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}
+              :(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}
+              :(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}
+                   :{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el})));
       if(o.c){ try{ a.curve=String(o.c).split(',').map(Number); }catch(e){} }   /* fb554 */
       assigns.push(a); });
       if(live&&!badgeBusy&&(Date.now()-lastLocalEdit)>1500)
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
-          if(!live[ky(aq.vel,aq.env,aq.lfo,aq.fol,aq.dest)]) assigns.splice(q,1); }
+          if(!live[ky(aq.vel,aq.env,aq.lfo,aq.fol,aq.note,aq.dest)]) assigns.splice(q,1); }
       restoredOnce=true; markTargets(); }catch(e){} }); }catch(e){} }
   var restoredOnce=false;   /* fb524 — a card must never push() an empty mirror over a live matrix before its first read lands */
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} };   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */

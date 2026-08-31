@@ -8439,6 +8439,24 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     modSums[r.dest] += wc::routeContribution (diF, lv, std::abs (r.depth));
                     continue;
                 }
+                if (r.src == wc::kNoteSrc)
+                {
+                    // fb555 — KEY TRACKING at block rate, for the dests that are not per-voice.
+                    //  Same shape law as the env tap and the followers: unipolar, so it OWNS a
+                    //  Linear01 knob rather than offsetting it.
+                    const float lv = wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Note,
+                                          noteVis_.load (std::memory_order_relaxed) - 1.0f);
+                    const auto& diN = wc::kDestInfo[r.dest];
+                    if (diN.domain == wc::ModDomain::Linear01)
+                    {
+                        const float dwN = std::abs (r.depth);
+                        envOwnW[r.dest] += dwN;
+                        envOwnV[r.dest] += dwN * (lv + 1.0f);
+                        continue;
+                    }
+                    modSums[r.dest] += wc::routeContribution (diN, lv, std::abs (r.depth));
+                    continue;
+                }
                 if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
                 {
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
@@ -9161,6 +9179,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         // (fb180): the direction is always knob-is-the-peak, never inverted.
                         synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase));
                         synModCfg.assignments[na].curve   = r.curve;   // fb554
+                        synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                        synModCfg.assignments[na].depth   = std::abs (r.depth);
+                        synModCfg.assignments[na].enabled = true;
+                        ++na; continue;
+                    }
+                    if (r.src == wc::kNoteSrc)
+                    {   // fb555 — key tracking → per-voice. Depth is a MAGNITUDE, like every other
+                        // shape source: the direction is always "the knob is the top of the keyboard".
+                        synModCfg.assignments[na].source  = wc::ModSource::Note;
+                        synModCfg.assignments[na].curve   = r.curve;
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = std::abs (r.depth);
                         synModCfg.assignments[na].enabled = true;
@@ -10496,6 +10524,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         //  follower route go silent in exactly the no-editor render a fingerprint gate checks.
         for (int fk = 0; fk < wc::kNumFollowers; ++fk)
             followVis_[fk].store ((any && bestVoice != nullptr) ? bestVoice->followValue01 (fk) : 0.f, std::memory_order_relaxed);
+        // fb555 — and the key position, on the same ungated walk and for the same reason.
+        noteVis_.store ((any && bestVoice != nullptr) ? bestVoice->getKeyRamp01() : 0.f, std::memory_order_relaxed);
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
             ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
@@ -13048,13 +13078,14 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
             const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
             const bool folSrc = (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers);   // fb552
+            const bool notSrc = (r.src == wc::kNoteSrc);   // fb555 — key tracking
             // 🚨 THIS LINE IS THE DOOR, AND A NEW SOURCE THAT IS NOT NAMED HERE IS DROPPED SILENTLY.
             //    fb552 shipped five new sources, wired them through six other files, and every one of
             //    them would have been thrown away right here — the drag would work, the underline
             //    would draw, the patch would save, and nothing would modulate. That is fb373's law
             //    ("a green harness proves the ENGINE, never that the plugin REACHES it") wearing a
             //    validator's clothes. Tests/mod_source_gate.py now reds the build on it.
-            if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc)        continue;
+            if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc && ! notSrc) continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);

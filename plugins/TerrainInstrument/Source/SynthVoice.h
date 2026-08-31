@@ -404,6 +404,10 @@ namespace tw
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
         // polls the most-active voice each timer tick and pushes this to the WebUI.
         float getAmpEnvLevel() const noexcept { return (float) ampEnv_.level(); }
+        /** fb555 — the voice's KEY POSITION, 0 at kKtLowNote and 1 at kKtHighNote, latched at
+            note-on. Deliberately the SAME ramp the KEYTRACK feature already uses (ktRamp_) rather
+            than a second normalisation: "Note" and "keytrack" have to mean the same thing. */
+        float getKeyRamp01() const noexcept { return ktRamp_; }
         float getCurrentVelocity() const noexcept { return currentVelocity_; }   // fb262 — most-active-voice velocity for the live streak viz
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
         float dbgWarpEffA() const noexcept { return warpAmount_; }   // fb188 — probe tap
@@ -3135,6 +3139,7 @@ namespace tw
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
                     else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
                     else if (wc::isFollowModSource (sI))  srcV = followSourceValue (sI);   // fb552 — audio as a source
+                    else if (wc::isNoteModSource (sI))    srcV = ktRamp_ - 1.0f;              // fb555 — key tracking, level-1 like every shape source
                     else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
                     else continue;
                     // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last

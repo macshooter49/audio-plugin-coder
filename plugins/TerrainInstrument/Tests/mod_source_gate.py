@@ -25,21 +25,21 @@ def const(name, default=None):
     if default is not None: return default
     fails.append("SynthModConfig.h has no `%s`" % name); return -1
 
-ENV = const('kEnvSrcBase'); VEL = const('kVelSrc')
+ENV = const('kEnvSrcBase'); VEL = const('kVelSrc'); NOTE = const('kNoteSrc')
 FOL = const('kFollowSrcBase'); NFOL = const('kNumFollowers')
 
 # ── 1 · THE DOOR. setSynthModMatrix must name every family. ─────────────────────────────────
 m = re.search(r'setSynthModMatrix[^{]*\{(.{0,4000}?)synModJson\s*=', proc, re.S)
 door = m.group(1) if m else ''
 if not door: fails.append("could not find setSynthModMatrix's body")
-for fam, tok in (('LFO', 'NUM_LFOS'), ('Env', 'kEnvSrcBase'),
-                 ('Velocity', 'kVelSrc'), ('Follower', 'kFollowSrcBase')):
+for fam, tok in (('LFO', 'NUM_LFOS'), ('Env', 'kEnvSrcBase'), ('Velocity', 'kVelSrc'),
+                 ('Follower', 'kFollowSrcBase'), ('Key', 'kNoteSrc')):
     if tok not in door:
         fails.append("the setSynthModMatrix door never mentions %s (%s) — every route from that "
                      "family is dropped by the bare `continue`, silently" % (fam, tok))
 gate = re.search(r'if \(! *lfoSrc[^;]*\)\s*continue;', door)
 if gate:
-    for fam in ('folSrc', 'velSrc', 'envSrc'):
+    for fam in ('folSrc', 'velSrc', 'envSrc', 'notSrc'):
         if fam not in gate.group(0):
             fails.append("the door's reject test omits `%s`" % fam)
 
@@ -49,7 +49,7 @@ enc = re.search(r'var arr=assigns\.map\(function\(a\)\{.{0,40}?s:\((.*?)\),d:a\.
 if not enc: fails.append("could not find the JS wire encoder")
 else:
     e = enc.group(1)
-    for val, fam in ((FOL, 'follower'), (VEL, 'velocity'), (ENV, 'envelope')):
+    for val, fam in ((FOL, 'follower'), (VEL, 'velocity'), (ENV, 'envelope'), (NOTE, 'key tracking')):
         if str(val) not in e:
             fails.append("the JS encoder never emits the %s base (%d) — the UI cannot express that source" % (fam, val))
 
@@ -80,7 +80,12 @@ if enc and 'if(a.curve)o.c=a.curve' not in enc_win:
 if 'a.curve=String(o.c)' not in js.replace(' ', ''):
     fails.append("the JS decoder never reads the connection curve back (`o.c`)")
 # the exact CALL, not the substring: `applyModCurveX` contains `applyModCurve` and would pass
-if 'wc::applyModCurve (' not in (root / 'Source' / 'SynthVoice.h').read_text():
+# fb555 — Note must be EVALUATED, not merely declared. It sat in the enum unread for a whole
+#  arc: no evaluator, no wire code, no UI. A source nobody can reach is not a source.
+sv = (root / 'Source' / 'SynthVoice.h').read_text()
+if 'wc::isNoteModSource (sI)' not in sv:
+    fails.append("SynthVoice never evaluates ModSource::Note — it would be declared and inert, which is how it shipped for an entire arc")
+if 'wc::applyModCurve (' not in sv:
     fails.append("the per-voice evaluator never applies the connection curve")
 if 'wc::applyModCurve (' not in proc:
     fails.append("the processor's global pass never applies the connection curve")

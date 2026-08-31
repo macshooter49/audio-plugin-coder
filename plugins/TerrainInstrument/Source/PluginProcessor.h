@@ -911,6 +911,7 @@ public:
     //  rack, the macros). Published from the most-active voice, exactly like velVis_ below.
     //  ⚠️ Rest value is 0, not −1: a follower at rest genuinely IS zero, so there is no sentinel.
     std::atomic<float> followVis_[wc::kNumFollowers] { {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
+    std::atomic<float> noteVis_ { 0.f };   // fb555 — most-active voice's key position 0..1 (global routes + the UI comet)
     std::atomic<float> velVis_ { -1.f };   // fb262 — most-active voice velocity (−1 = silent) for the live velocity streak
     // fb264 — master peak-limiter state (audio-thread only; coeffs set in prepareToPlay). Stereo-linked
     // gain-reduction before the safety clip so dense chords stay loud without squaring into hard-clip buzz.
@@ -927,6 +928,7 @@ public:
     float modVizVel () const noexcept { return velVis_.load (std::memory_order_relaxed); }
     // fb552 — a follower's live level for the UI. Max's hard rule is that anything audible must be
     //  visible, and a route whose underline never moves reads as a dead route.
+    float modVizNote () const noexcept { return noteVis_.load (std::memory_order_relaxed); }   // fb555
     float modVizFollow (int k) const noexcept
     { return (k >= 0 && k < wc::kNumFollowers) ? followVis_[k].load (std::memory_order_relaxed) : 0.0f; }   // fb262 — live velocity for the streak
     float modVizLfoPh (int k) const noexcept { return (k >= 0 && k < wc::NUM_LFOS) ? modVizLfoPh_[k].load (std::memory_order_relaxed) : 0.f; }

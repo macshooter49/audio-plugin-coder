@@ -1060,6 +1060,14 @@ struct ModConfig
 static constexpr int kEnvSrcBase = 100;
 static constexpr int kVelSrc     = 200;   // fb260 — Velocity mod-source wire code (JS→C++); maps to ModSource::Velocity
 // fb552 — FOLLOWER wire codes 210..214 = osc A,B,C,D, Noise. Same JS→C++ blob channel as the two above.
+// fb555 — KEY TRACKING. ModSource::Note has existed since Batch 2 and was evaluated NOWHERE:
+//  declared in the enum, offered by no UI, read by no evaluator. This gives it a wire code and a
+//  value. It is a SHAPE source (below): unipolar, and it OWNS a Linear01 destination, which is
+//  what makes "the knob is what the top of the keyboard does, and low notes pull down from it"
+//  fall out for free — the same law envelopes and followers already obey. Any other key-tracking
+//  shape, including a classic bipolar pivot at middle C, is a curve you draw on the connection
+//  (fb554), which is precisely what OVERPASS 10C asked for.
+static constexpr int kNoteSrc = 201;
 static constexpr int kFollowSrcBase = 210;
 static constexpr int kNumFollowers  = 5;
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
@@ -1095,7 +1103,8 @@ inline bool isFollowModSource (int sI) noexcept { return followIndexOf (sI) >= 0
     whether a source owns Level, owns the wavetable trio, joins the block-constant cutoff sum, and
     is read as level−1. A follower that reached three of the four would build clean, show in the UI,
     save in the patch, and modulate WRONG rather than not at all — which is worse. */
-inline bool isShapeModSource (int sI) noexcept { return isEnvModSource (sI) || isFollowModSource (sI); }
+inline bool isNoteModSource (int sI) noexcept { return sI == (int) ModSource::Note; }   // fb555
+inline bool isShapeModSource (int sI) noexcept { return isEnvModSource (sI) || isFollowModSource (sI) || isNoteModSource (sI); }
 
 /** fb554 — remap a source's output through its connection curve.
     🔑 ONE DEFINITION, called from BOTH the per-voice evaluator and the processor's global pass.

@@ -492,8 +492,51 @@ curves at all, where Serum ships 12.
    300 ms post-drag click suppressor eats a synthetic click that lands microseconds after a drop.
    A human hits neither. `window.__tiCurveEdit` / `__tiCurveOf` are the headless gate hooks that
    settled it, in the same idiom as `__tiRoutes`.
-2. **10B · ENVELOPE SEGMENT CURVES** — Atk/Dec/Rel shape per envelope. Serum has 12; we have none.
-3. **10C · velocity / key-tracking curves.**
+2. **10B · ENVELOPE SEGMENT CURVES**   ✅ **ALREADY SHIPPED — this entry was wrong**
+   "Serum has 12; we have none" was **stale and false**, and it was written without looking. We have
+   **96**: the five legacy envelopes each carry Attack/Decay/Release curve *parameters*
+   (`Synth Amp/Filter/Pitch/Mod 1/Mod 2 · {Attack,Decay,Release} Curve`, 15 in APVTS), and all 27
+   dynamic envelopes carry `ca`/`cd`/`cr` per segment in their own blob (81 more). Against Serum's 12.
+
+   **VERIFIED, not just counted** — Amp Attack held long, the rising contour sampled at ¼/½/¾ of its
+   climb:
+
+   | Attack Curve | ¼ | ½ | ¾ | |
+   |---|---:|---:|---:|---|
+   | 0.00 | 0.061 | 0.170 | 0.475 | concave — slow, then fast |
+   | 0.50 | 0.259 | 0.493 | 0.698 | linear |
+   | 1.00 | 0.687 | 0.860 | 0.890 | convex — fast, then slow |
+
+   Nothing to build. **The lesson is the entry itself**: a roadmap line claimed a gap that a
+   two-minute parameter dump would have refuted, and it survived three sessions.
+
+3. **10C · velocity / key-tracking curves.**   ✅ **SHIPPED fb555**
+   - **Velocity** already had a curve knob (`Synth Velocity Curve`, fb262) and, since fb554, a
+     *drawn* per-connection curve as well. Nothing to build.
+   - **Key tracking did not exist as a mod source at all.** `ModSource::Note` had been in the enum
+     since Batch 2 and was **evaluated nowhere**: no wire code, no evaluator, offered by no UI. Now
+     it is a real source — wire code **201**, drag the **Key** row out of the voice panel.
+
+   It joins the **shape family** (unipolar, `level−1`), so it OWNS a Linear01 destination the way an
+   envelope does: *the knob is what the top of the keyboard does, and low notes pull down from it*.
+   Any other key-tracking shape — including a classic bipolar pivot at middle C — is a curve you
+   draw on the connection (fb554). **That is what 10C asked for, and 10A had already built it.**
+   Its value is the plugin's own `ktRamp_` (0 at C1, 1 at C6, latched at note-on), deliberately the
+   same ramp the existing KEYTRACK feature uses — "Note" and "keytrack" have to mean one thing.
+
+   **MEASURED** — `Key → Osc A Level` at full depth, against a flat control, level predicted by
+   `(note−36)/60`:
+
+   | note | no route | Key → Level A | predicted |
+   |---|---:|---:|---:|
+   | 24 | 0.2500 | **0.0000** | 0.000 (below C1, clamped) |
+   | 48 | 0.2500 | **0.1000** | 0.100 |
+   | 60 | 0.2500 | **0.2000** | 0.200 |
+   | 72 | 0.2500 | **0.3000** | 0.300 |
+   | 96 | 0.2500 | **0.5000** | 0.500 |
+
+   Exact to five decimals at every note; the control is flat, so without the route there is no key
+   dependence at all. The **Key row's number is the live key position**, so it moves while you play.
    (Drawable WARP shapes are already item **6C** and are not duplicated here.)
 
 **🔑 THE SEQUENCING THAT MATTERS: 10A wants the SAME drawn-curve editor 6C builds.** Do 6C first
