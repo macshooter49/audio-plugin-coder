@@ -263,9 +263,65 @@ It sounds different from the main filter for three reasons, all deliberate: the 
 it is **per-oscillator and pre-mix** so it can carve osc A against osc B; and **both warp slots
 chain**, so LP in slot 1 + HP in slot 2 is a per-osc band-pass.
 
-## 7 · FME / FML — missing capabilities, not depth
-Exponential FM and carrier-splitting FM. Measured: FME at d=0.4 puts everything at (k±0.111)·f0
-with a real 14.65 Hz component; FML at d=0.2 splits the carrier into 133.30 + 128.17 Hz.
+## 7 · FME / FML — missing capabilities, not depth   ✅ SHIPPED fb551
+The reference ships **three** FM curves and we shipped one. Blend modes **9 `FM Exp`** and
+**10 `FM Clamp`** close it — the blend slot is our equivalent of its FM-family warp, because ours
+already picks its own source (Osc A-D · Sub · Noise · Self · LFO 1-10).
+
+- **FM** (mode 1, unchanged) — thru-zero. A deviation in **Hz** added to the read rate; drive it
+  negative and the carrier reverses and keeps oscillating.
+- **FM Exp** (mode 9) — the deviation is a **ratio**: `f = f_c·2^(10·d·mod)`. ⚠️ The only blend mode
+  that is pitch-proportional, and deliberately so: exponential FM is a 1 V/oct law. The carrier's
+  rate comes back under its own name (`blendCarrInc_`), read by modes 9/10 and nothing else —
+  fb523's deletion of `repInc[]` from mode 1's line stands.
+  **Octaves SUM across slots** (2^a·2^b), so multiple slots compose correctly and cost one exp per
+  carrier per sample rather than one per slot.
+  🔑 **It takes a LINEAR taper, not the 361:1 one**, and the measurement is why: its depth is
+  already an exponent, so the FM taper on top made the knob doubly exponential and crushed the mode
+  into its last 15 % (centroid 113 Hz at half travel against mode 1's 3,076). Linear in octaves
+  lands on mode 1's own curve — two exponentials in `d` with similar bases.
+  🔑 **No pitch drift**, and not by luck: exponential FM classically runs sharp, and `kFmLeak`'s
+  2.29 Hz corner turns a constant frequency offset into a constant PHASE offset for free.
+- **FM Clamp** (mode 10) — linear FM that is **not** thru-zero: the total instantaneous rate is
+  clamped at zero, so the carrier stalls but never reverses. Same ceiling, same taper as mode 1;
+  the clamp is the only difference and it is the whole mode.
+
+**MEASURED — stationary tone, sine carrier at 110 Hz, modulator = Osc B, every point taken on a
+settled state (the row before it discarded).** `alias` = peak at the `(k+0.5)·f0` midpoints, where a
+periodic signal has nothing.
+
+| knob | FM centroid / alias | FM Exp | FM Clamp |
+|---|---|---|---|
+| 0.00 | 110 Hz · −118 dBc | 110 Hz · −119 | 110 Hz · −119 |
+| 0.10 | 237 · −115 | 126 · −118 | 213 · −111 |
+| 0.30 | 897 · −114 | 232 · −116 | 498 · −111 |
+| 0.50 | 3,121 · −110 | 900 · −110 | 1,803 · −110 |
+| 0.70 | 10,367 · −103 | 3,347 · −109 | 5,785 · −109 |
+| 1.00 | 10,559 · **−58** | 11,580 · −96 | 11,809 · −94 |
+
+- **The floor is exact.** At depth 0 all three read the dry spectrum (1 peak, 110 Hz, ooh −47.8).
+- **The ceilings all arrive**, and the two new modes get there *cleaner* than mode 1 does (−96/−94
+  against −58 dBc), because mode 1's top is deliberately reference-matched destructive territory.
+- **FM Clamp is darker through the musical range** (0.56× FM's centroid at half travel), which is
+  the reference's own direction for FML (its FML/FM centroid ratio is 0.33).
+
+**🚨 NEITHER NEW MODE FEEDS THE MIP PICKER, and that is a decision, not an oversight.** Mode 1 does
+not either: its aliasing above d ≈ 0.59 is measured and reference-matched. The exposure is the same
+order in all three — at 110 Hz mode 1's full-depth read rate is 735× the carrier and mode 9's is
+2^10 = 1024× — so dulling 9/10 while 1 stays bright would make the clamp mode darker than its own
+sibling for a reason that has nothing to do with the clamp.
+
+**Two things were built, A/B'd, and thrown away.** A C¹ knee on the clamp (to kill the corner's
+infinite bandwidth) measured **identically** to the hard corner on a stationary tone, so the corner
+stays — it is literally what the mode is called. The reading that argued for the knee (−71.4 dBc)
+was a **harness artefact**: the first spectrum after a big parameter change carries the previous
+setting's tail. See [[feedback-the-first-spectrum-after-a-change-is-the-previous-one]].
+
+**Gates.** `Tests/blend_mode_gate.py` (new, mutation-tested both ways) reds the build if the C++
+`modes` StringArray and the JS `MODES` array disagree, if any mode lacks a pill token, or if a live
+mode is missing from `famMode()` — the last one is fb470's trap, and it is real: dropping modes 9/10
+from ONE of the six mode-range tests in SynthVoice.h made both modes **completely silent** while FM
+kept working, which is exactly what the mutation run showed.
 
 ## 8 · BLEND SLOTS 7 `Dist` / 8 `Filter`
 Already allocated in the parameter and **still inert** (verified). Lower priority now that warp

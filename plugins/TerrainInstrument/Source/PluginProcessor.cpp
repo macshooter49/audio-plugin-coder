@@ -3903,7 +3903,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     {
         auto addBlendSlots = [&layout] (const char* const id[12], const juce::String& osc)
         {
-            const juce::StringArray modes { "Off", "FM", "PD", "AM", "RM", "Sync", "Warp", "Dist", "Filter" };
+            // fb551 — APPEND-ONLY. Indices 0-8 are frozen: APVTS stores the DENORMALISED index
+            //  (verified in a real saved state — SYN_OSC_A_WARP_MODE reads "37.0", not a 0-1 value),
+            //  so growing this list cannot move an existing patch's mode. It DOES move the
+            //  normalised value a host automation lane writes — the same, accepted consequence as
+            //  fb524's warp param going choice(11) -> choice(48).
+            //  ⚠️ THE JS `MODES` ARRAY IN index.html MUST STAY THE SAME LENGTH AND ORDER: both
+            //  sides normalise with (length - 1) and fb373's law is exactly this mismatch.
+            const juce::StringArray modes { "Off", "FM", "PD", "AM", "RM", "Sync", "Warp", "Dist", "Filter",
+                                            "FM Exp", "FM Clamp" };
             const juce::StringArray srcs  { "Osc A", "Osc B", "Osc C", "Osc D", "Sub", "Noise", "Self",
                                             "LFO 1", "LFO 2", "LFO 3", "LFO 4", "LFO 5", "LFO 6", "LFO 7", "LFO 8", "LFO 9", "LFO 10" };   // fb223 — WARP x LFO: drawn shapes as blend sources (APPEND-ONLY; JS NSRC must equal this count)
             for (int s = 0; s < 4; ++s)

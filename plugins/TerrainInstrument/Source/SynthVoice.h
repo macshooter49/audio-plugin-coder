@@ -153,6 +153,63 @@ namespace tw
 
         static constexpr float kFmBoundLin = 512.0f;    // cycles — linear (inert) below this
         static constexpr float kFmBoundMax = 1024.0f;   // cycles — tanh asymptote
+        //  ── fb551 · OVERPASS ITEM 7 — THE TWO MISSING FM LAWS ───────────────────────────────
+        //  The reference ships THREE FM curves [M2 pp.55-56] and we shipped one. Mode 1 is the
+        //  THRU-ZERO one: a deviation in Hz added to the read rate, free to drive the instantaneous
+        //  frequency negative, at which point the carrier reverses and keeps oscillating.
+        //
+        //  · MODE 9 · FM EXP — the deviation is a RATIO, not a number of Hz: f = f_c·2^(N·d·mod).
+        //    ⚠️ THIS MODE IS PITCH-PROPORTIONAL ON PURPOSE AND IT IS THE ONLY ONE THAT IS. fb523
+        //    deliberately deleted repInc[] from mode 1's line to kill a pitch-proportional law
+        //    there, and left a warning not to reintroduce it "anywhere". This is the one exemption
+        //    and it is not a loophole: exponential FM is DEFINED in octaves — a 1 V/oct law — so
+        //    its deviation must scale with the carrier or it is not exponential FM. That is why the
+        //    carrier's rate comes back under its own name (blendCarrInc_) and why modes 9 and 10
+        //    are the ONLY readers of it. Mode 1's line is untouched and stays Hz-absolute.
+        //    Octaves SUM across slots (2^a·2^b = 2^(a+b)) — correct, and one exp per carrier per
+        //    sample instead of one per slot.
+        //    kFmExpOctaves = 10: at C3 the UPWARD peak is f_c·(2^10 − 1) = 133.8 kHz of deviation,
+        //    39 % past mode 1's 96 kHz ceiling, while the DOWNWARD peak is bounded at −f_c — the
+        //    frequency approaches zero but never crosses it. That asymmetry IS the mode, and it is
+        //    what the manual means by "small changes in the modulator's amplitude cause dramatic
+        //    changes … brighter or harsher".
+        //    ⚠️ NO PITCH DRIFT, AND IT IS NOT LUCK. The mean of 2^(k·mod) over a bipolar modulator
+        //    is > 1, so exponential FM classically runs SHARP. Our leaky integrator (kFmLeak,
+        //    corner 2.29 Hz) turns a constant frequency offset into a constant PHASE offset, so
+        //    the sharpening is removed for free by machinery that was already there. Anyone who
+        //    "fixes" kFmLeak to a true integrator will make this mode drift.
+        //
+        //  · MODE 10 · FM CLAMP — linear FM that is NOT thru-zero: the total instantaneous rate is
+        //    clamped at zero, so the carrier can stall but never reverses. Same kFmDeviationHz
+        //    ceiling and the same 361:1 taper as mode 1; the clamp is the ONLY difference and it is
+        //    the whole mode. It half-wave rectifies the frequency excursion, and that asymmetry is
+        //    what splits the carrier — the measured signature of the reference's own FML.
+        //
+        //  🚨 NEITHER MODE FEEDS THE MIP PICKER, AND THAT IS DELIBERATE — read this before "fixing"
+        //  it under fb545/fb550's rate law. Mode 1 does not feed it either: its aliasing above
+        //  d ≈ 0.59 is a MEASURED, REFERENCE-MATCHED property (see the aliasing curve above — the
+        //  reference's own 100 % condition is 73 % off-grid), not an oversight. And the exposure is
+        //  the same order in all three: at C3 mode 1's full-depth read rate is 735× the carrier and
+        //  mode 9's is 2^10 = 1024×. Dulling 9 and 10 while 1 stays bright would make the clamp
+        //  mode darker than its own sibling for a reason that has nothing to do with the clamp.
+        static constexpr float kFmExpOctaves = 10.0f;   // mode 9 — peak pitch excursion in OCTAVES at depth 1
+        static constexpr float kFmExpOctLin  = 10.0f;   // softBound: exactly linear to here …
+        //  🚫 THE CLAMP IS A HARD CORNER AND IT STAYS ONE — this is a road already walked, so do not
+        //  walk it again. A corner in instantaneous frequency has infinite bandwidth, so a C¹ knee
+        //  (linear until the total rate falls to a quarter of the carrier's, then an exponential
+        //  approach to 0⁺) was built and A/B'd against the corner on a stationary tone. IT MADE NO
+        //  MEASURABLE DIFFERENCE: alias floor at knob 0.3/0.5/0.7/1.0 read −115/−110/−102/−94 dBc
+        //  with the knee and −112/−114/−108/−94 without it — the same numbers inside the harness's
+        //  own spread. So the corner stays, because it is literally what the mode is called and what
+        //  the reference's own description says ("a clamp at zero"), and a softened clamp would be a
+        //  quieter definition bought with nothing.
+        //  ⚠️ The reading that ORIGINALLY argued for the knee (−71.4 dBc) was a measurement artefact:
+        //  the first spectrum after a big parameter change carries the previous setting's tail. Every
+        //  number above is taken on a settled state, with the row before it discarded.
+        static constexpr float kFmExpOctMax  = 16.0f;   // … tanh asymptote past it. A modulator tap sitting on
+                                                        // its own ±4 clamp (self-feedback into a hot block engine)
+                                                        // would otherwise ask for 2^40; a HARD clamp there would
+                                                        // click, so it gets the same knee every other bound uses.
 
         bool canPlaySound (juce::SynthesiserSound* s) override
         {
@@ -1006,8 +1063,10 @@ namespace tw
             //  at the top where the Lifeguard law puts it. RM keeps the house curve: its depth is
             //  ALSO its dry/wet and its level, so a 361:1 curve there would just make the mode
             //  inaudible for the first two thirds of the knob.
-            b.depth = (b.mode >= 1 && b.mode <= 3)
-                    ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM / PD / AM — 361:1
+            b.depth = blendIsLinTaper (b.mode)
+                    ? dc                                                            // FM EXP — the depth IS the exponent (octaves); see blendIsLinTaper
+                    : blendIsFmTaper (b.mode)                                       // fb551 — FM / PD / AM + FM CLAMP
+                    ? (std::exp (kFmTaperRate * dc) - 1.0f) * kFmTaperNorm          // FM / PD / AM / FM CLAMP — 361:1
                     : (std::exp (2.0f * dc) - 1.0f) / (std::exp (2.0f) - 1.0f);     // house exp-bias curve (RM)
         }
         void setModalParamsA (const tw::ModalParams& p) noexcept { modalParamsA_ = p; }   // MODAL-ENGINE-PUSH
@@ -1109,6 +1168,56 @@ namespace tw
          *  1.0 into 0.9987 (-0.011 dB on every voice that has any armed blend slot). The
          *  knee form removes the audible flat-top without touching the small-signal region,
          *  which is what the spec actually wanted. */
+        // ── fb551 — ONE DEFINITION OF "WHICH BLEND MODES ARE WHAT". Six separate range tests
+        //  (`mode >= 1 && mode <= 4`, `mode >= 1 && mode <= 3`, `mode == 1 || mode == 2`) decided
+        //  whether a slot arms, forces its source to render, ticks its sub lane, gets the 361:1
+        //  taper, and phase-modulates a block engine. fb470's law is exactly this shape: a new enum
+        //  value that falls into an old branch BUILDS CLEAN AND IS SILENT. Adding modes 9/10 to
+        //  five of the six sites would have shipped a mode that shows in the UI, stores in the
+        //  patch, and never makes a sound. They are predicates now, so that cannot recur.
+        static constexpr bool blendIsPhase   (int m) noexcept { return m == 1 || m == 2 || m == 9 || m == 10; }   // writes blendOff[] — FM / PD / FM EXP / FM CLAMP
+        static constexpr bool blendIsLive    (int m) noexcept { return (m >= 1 && m <= 4) || m == 9 || m == 10; } // has a DSP law at all
+        static constexpr bool blendIsFmTaper (int m) noexcept { return (m >= 1 && m <= 3) || m == 10; }           // rides the 361:1 curve (RM keeps the house curve; FM EXP is linear — see blendIsLinTaper)
+        // fb551 — FM EXP TAKES A LINEAR TAPER, AND THE MEASUREMENT IS WHY. Its depth is already an
+        //  EXPONENT (octaves), so putting the 361:1 curve on top makes the knob doubly exponential
+        //  and crushes the whole mode into its last 15 %. MEASURED with the 361:1 taper, sine
+        //  carrier at 110 Hz, spectral centroid: knob 0.5 gave 113 Hz against mode 1's 3,076 Hz,
+        //  and knob 0.8 gave 367 Hz against 16,297 Hz — the mode was there and inaudible.
+        //  Linear in octaves lands almost exactly on mode 1's own curve, which is not a coincidence:
+        //  Δf_exp = f_c·(1024^d − 1) against Δf_fm = 96000·(361^d − 1)/360, two exponentials in d
+        //  with similar bases. At C1's 110 Hz the pair reads 3,410 vs 4,800 Hz at half travel and
+        //  28,050 vs 29,376 Hz at 0.8 — the same musical territory, reached by a different law.
+        static constexpr bool blendIsLinTaper (int m) noexcept { return m == 9; }
+
+        /** 2^x to ~0.05 % relative error with no libm call. Mode 9 needs ONE exp PER SAMPLE PER
+         *  CARRIER; std::exp2f there is a libm call on the audio thread and the CPU-friendly rule
+         *  forbids it. Same polynomial as HarmonicEngine's own private fastExp2 — duplicated on
+         *  purpose rather than made public, because it is eight flops and a pure approximation:
+         *  unlike a TUNING CONSTANT (fb523's law about a value living in two places) there is
+         *  nothing here for two copies to disagree about. */
+        static inline float fastExp2 (float x) noexcept
+        {
+            x = x < -60.f ? -60.f : (x > 60.f ? 60.f : x);
+            const float fl = std::floor (x);
+            const float f  = x - fl;
+            //  ⚠️ THE LAST COEFFICIENT IS 1 − 0.69583 − 0.22606, NOT the 0.078024 the source this
+            //  came from uses. With 0.078024 the polynomial gives p(1) = 1.999914 while the exponent
+            //  shift gives 2.000000 on the other side, so THE FUNCTION STEPS BY 4.3e-5 AT EVERY
+            //  INTEGER. HarmonicEngine only ever feeds it slow control values, where that is nothing;
+            //  mode 9 feeds it an AUDIO-RATE exponent that crosses integers thousands of times a
+            //  second, and each crossing is a discontinuity in the instantaneous FREQUENCY.
+            //  Forcing the coefficients to sum to exactly 1 makes p(1) = 2 and the seam vanish, for
+            //  8.6e-5 of extra peak approximation error — which is nothing.
+            //  ⚖️ HONEST SCOPE: this was A/B'd on a stationary tone and DID NOT MOVE THE ALIAS FLOOR
+            //  (−108/−115/−110/−95 dBc with, −115/−115/−104/−97 without, across knob 0.3…1.0). It is
+            //  kept because a discontinuous exp2 is a defect whatever this particular metric can
+            //  resolve, and removing it costs nothing. It is NOT kept on the strength of a number.
+            const float p  = 1.f + f * (0.69583f + f * (0.22606f + f * 0.07811f));
+            union { float fv; std::int32_t bits; } u; u.fv = p;
+            u.bits += (std::int32_t) fl << 23;
+            return u.fv;
+        }
+
         static inline float softBound (float x, float lin, float lim) noexcept
         {
             const float a = std::fabs (x);
@@ -3145,7 +3254,7 @@ namespace tw
                 for (int sl = 0; sl < 4; ++sl)
                 {
                     const BlendSlotV& b = blendSlot_[c][sl];
-                    if (b.mode >= 1 && b.mode <= 4 && b.src == 4 && b.depth >= 1.0e-6f)   // fb523 — TRACKS the arm pass and the inner loop; all three thresholds are one threshold. A Sub-sourced slot below this gate never ticks its sub lane, so subModTap_ stays 0 and the slot is silently inert.
+                    if (blendIsLive (b.mode) && b.src == 4 && b.depth >= 1.0e-6f)   // fb523 — TRACKS the arm pass and the inner loop; all three thresholds are one threshold. A Sub-sourced slot below this gate never ticks its sub lane, so subModTap_ stays 0 and the slot is silently inert.
                         subForce_[c] = true;                     // Sub(4) = the CARRIER'S OWN sub
                 }
             prepareSubBlock (numSamples);   // SUB — voice-anchored per-osc sub lanes (universal box)
@@ -3457,6 +3566,12 @@ namespace tw
                     return e == Engine::SAMP || e == Engine::GRAN || e == Engine::SPEC
                         || e == Engine::HARM || e == Engine::MODAL; };
                 for (int o = 0; o < 4; ++o) { modSrcForce_[o] = false; blkCarrierArmed_[o] = false; }
+                // fb551 — THE CARRIER'S OWN RATE, snapshotted once per block. Read by modes 9 and
+                //  10 and by nothing else (mode 1 is Hz-absolute and must stay that way — fb523).
+                //  Representative = unison sine 0, the same reference the mip pick uses: the unison
+                //  voices share one fmPhase_ per carrier, so one rate has to stand for the set.
+                blendCarrInc_[0] = uPhaseIncA_[0];  blendCarrInc_[1] = uPhaseIncB_[0];
+                blendCarrInc_[2] = uPhaseIncC_[0];  blendCarrInc_[3] = uPhaseIncD_[0];
                 noiseForce_ = false;   // fb64 — set when any osc blends WITH the noise (so its tap is generated even if noise output is off)
                 anyBlendArmed_ = false;
                 for (int c = 0; c < 4; ++c)
@@ -3475,11 +3590,11 @@ namespace tw
                         // before the DSP ever runs — fb373's "verify the path, not just the engine"
                         // failure exactly. The reason for the move is in the inner loop: under the
                         // Hz law a depth of 1e-4 is Δf = 9.6 Hz = an audible −17 dBc sideband at C1.
-                        if (b.mode >= 1 && b.mode <= 4
+                        if (blendIsLive (b.mode)
                             && (b.depth >= 1.0e-6f || blendDepthSm_[c][s] >= 1.0e-6f))
                             anyBlendArmed_ = true;
-                        if (b.mode < 1 || b.mode > 4 || b.depth < 1.0e-6f) continue;      // armed FM/PD/AM/RM only
-                        if ((b.mode == 1 || b.mode == 2) && isBlock (eng[c]))
+                        if (! blendIsLive (b.mode) || b.depth < 1.0e-6f) continue;        // armed FM/PD/AM/RM/EXP/CLAMP only
+                        if (blendIsPhase (b.mode) && isBlock (eng[c]))
                             blkCarrierArmed_[c] = true;                                   // FM/PD phase-modulate c's block (AM/RM don't need the ring)
                         if      (b.src < 4)  modSrcForce_[b.src] = true;                  // Osc A..D as source
                         else if (b.src == 5) noiseForce_         = true;                  // Noise as source (fb64)
@@ -3613,7 +3728,8 @@ namespace tw
                     //  reads it. Its removal is the load-bearing half of the unit change.
                     for (int c = 0; c < 4; ++c)
                     {
-                        float pm = 0.f, fmDrive = 0.f, amp = 1.0f;
+                        float pm = 0.f, fmDrive = 0.f, amp = 1.0f, expOct = 0.f;   // fb551 — expOct: mode 9's octaves, summed across slots
+                        bool  clampZero = false;                                   // fb551 — mode 10 armed on this carrier
                         for (int s = 0; s < 4; ++s)
                         {
                             BlendSlotV& b = blendSlot_[c][s];
@@ -3654,6 +3770,14 @@ namespace tw
                                     modDrv = tw::shapers::wsTanh (gd * mod) / tw::shapers::wsTanh (gd);
                                 amp *= (1.0f - d) + (kRmLevel * d) * modDrv;
                             }
+                            // fb551 — FM EXP. Octaves, not Hz: they SUM here and become a single
+                            //  multiplier below. ⛔ THE CONSTANT IS kFmExpOctaves = 10 — read its
+                            //  definition for why this mode alone is allowed to be pitch-proportional.
+                            else if (b.mode == 9)  expOct   += (kFmExpOctaves * d) * mod;
+                            // fb551 — FM CLAMP. Identical drive to mode 1 (same Hz ceiling, same
+                            //  taper); the ONLY difference is the flag, which clamps the total rate
+                            //  at zero below so the carrier stalls instead of reversing.
+                            else if (b.mode == 10) { fmDrive += (kFmDeviationHz * d) * mod; clampZero = true; }
                             // fb523's own note on this line, kept because its LEVEL argument is
                             // still the reason kRmLevel is 2.0 and not something else:
                             // RM — fb523: 1.8 -> 2.0, LEVEL ONLY. The ledger is right that at d = 1 this collapses to amp = K*mod and K is pure output gain, so the SPECTRUM is untouched — [M] our quadrature ring product (delta = 90.00 deg, resid 0.37 dB over 40 evens) is deliberately kept; Max has not chosen between our bright 1/m and the reference dark 1/m^2 and this line must not decide it. What K fixes is the 4.4 dB level gap: measured peak factor was 1.8*0.7071 = 1.272 (measured 1.272) against the reference 2.006. Tap fix + K = 2.0 gives 2.000 = -0.03 dB of the reference on peak and +4.77 dB vs its measured +4.79 dB on RMS.
@@ -3666,6 +3790,30 @@ namespace tw
                         //  every pitch — the index grows as pitch falls, 4× per two octaves down.
                         //  ⚠️ repInc is deliberately GONE from this line. Re-introducing it anywhere
                         //  (including a "mip selection" helper) re-creates the pitch-proportional law.
+                        // fb551 — EXPONENTIAL, folded in as Hz so one integrator serves every FM
+                        //  mode. Δf = f_c·(2^oct − 1), so oct = 0 contributes EXACTLY 0 (2^0 − 1)
+                        //  and costs nothing: modes 1/2/3/4 remain bit-identical, gated not
+                        //  approximated. The softBound is on the OCTAVES, not the Hz — see
+                        //  kFmExpOctMax for the ±4-tap case it exists for.
+                        if (expOct != 0.0f)
+                            fmDrive += (float) (blendCarrInc_[c] * sampleRate_)
+                                     * (fastExp2 (softBound (expOct, kFmExpOctLin, kFmExpOctMax)) - 1.0f);
+                        //  FM CLAMP — the total instantaneous rate is (carrier + added); clamping it
+                        //  at zero means the added rate can never be more negative than the carrier's
+                        //  own. ⚠️ THE ELSE BRANCH IS THE ORIGINAL STATEMENT, CHARACTER FOR CHARACTER,
+                        //  and it is written this way on purpose: hoisting `invSampleRate_ * fmDrive`
+                        //  into a named local lets the compiler contract a DIFFERENT pair of operands
+                        //  into an FMA, which changes the last bit of every FM/PD/AM/RM patch that
+                        //  ever shipped. Bit-identity here is gated, not assumed — but it should not
+                        //  have to rest on a gate when the alternative is one `else`.
+                        if (clampZero)
+                        {
+                            float dCyc = invSampleRate_ * fmDrive;
+                            const float floorCyc = -(float) blendCarrInc_[c];     // total rate = carrier + dCyc ≥ 0
+                            if (dCyc < floorCyc) dCyc = floorCyc;                 // the carrier stalls; it never reverses
+                            fmPhase_[c] = kFmLeak * fmPhase_[c] + dCyc;
+                        }
+                        else
                         fmPhase_[c] = kFmLeak * fmPhase_[c] + invSampleRate_ * fmDrive;   // integrate Hz → cycles
                         // fb523 — ±16/±32 -> ±512/±1024 CYCLES. Under the old index law the
                         //  excursion was pitch-independent and topped out at 5.4 cycles, so the
@@ -6291,6 +6439,7 @@ namespace tw
         bool  anyBlendArmed_ = false;                 // fb522 — any FM/PD/AM/RM slot live (or still decaying) this block
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
+        double blendCarrInc_[4] = { 0.0, 0.0, 0.0, 0.0 };   // fb551 — carrier rate in cycles/sample, block-rate. MODES 9/10 ONLY (see kFmExpOctaves).
         // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
         // matrix, both inert (false) for any patch with no active FM/PD slot → existing sound is
         // byte-identical whenever nothing is blended:
