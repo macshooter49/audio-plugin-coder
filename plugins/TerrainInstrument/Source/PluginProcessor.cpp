@@ -8414,6 +8414,26 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     modSums[r.dest] += wc::routeContribution (diR, lv, std::abs (r.depth));   // fb180 — magnitude
                     continue;
                 }
+                if (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers)
+                {
+                    // fb552 — FOLLOWER at block rate, for the dests that are not per-voice. Same
+                    //  law as the mono env tap above, and for the same reason: it is a unipolar
+                    //  SHAPE source, so it OWNS a Linear01 knob instead of offsetting it.
+                    //  Levels are skipped here on purpose — fb183: per-voice owns them, and a
+                    //  shared tap re-opened every sounding voice's level (the ghost-note bug).
+                    if (r.dest >= (int) wc::ModDest::LevelA && r.dest <= (int) wc::ModDest::LevelD) continue;
+                    const float lv = followVis_[r.src - wc::kFollowSrcBase].load (std::memory_order_relaxed) - 1.0f;
+                    const auto& diF = wc::kDestInfo[r.dest];
+                    if (diF.domain == wc::ModDomain::Linear01)
+                    {
+                        const float dwF = std::abs (r.depth);
+                        envOwnW[r.dest] += dwF;
+                        envOwnV[r.dest] += dwF * (lv + 1.0f);
+                        continue;
+                    }
+                    modSums[r.dest] += wc::routeContribution (diF, lv, std::abs (r.depth));
+                    continue;
+                }
                 if (r.src == wc::kVelSrc)   // fb263 — VELOCITY at block-rate: reaches Level/Pan/Res/FX/macros (global, most-active voice). Fixes velocity→Volume being a silent no-op (viz moved, no audio).
                 {
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], velGlobal_, r.depth);
@@ -9125,6 +9145,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                         synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = std::abs (r.depth);   // fb180 — envelope depth is MAGNITUDE (direction is always knob-is-the-peak; the inverted mode read as 'the sound comes back')
+                        synModCfg.assignments[na].enabled = true;
+                        ++na; continue;
+                    }
+                    if (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers)
+                    {   // fb552 — FOLLOWER → per-voice source. Depth is a MAGNITUDE, like an envelope's
+                        // (fb180): the direction is always knob-is-the-peak, never inverted.
+                        synModCfg.assignments[na].source  = (wc::ModSource) ((int) wc::ModSource::FollowA + (r.src - wc::kFollowSrcBase));
+                        synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                        synModCfg.assignments[na].depth   = std::abs (r.depth);
                         synModCfg.assignments[na].enabled = true;
                         ++na; continue;
                     }
@@ -10451,6 +10480,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // reads velVis_ at block-rate (fb263 velocity→global mod routes, velGlobal_) — gating it would
         // zero velocity modulation in exactly the no-editor render the fingerprint gate checks.
         velVis_.store         ((any && bestVoice != nullptr) ? bestVoice->getCurrentVelocity() : -1.f, std::memory_order_relaxed);   // fb262 — live velocity streak feed (most-active voice)
+        // fb552 — the followers' global feed rides the SAME ungated voice walk, and must: the audio
+        //  path reads it at block rate, so gating it on "is an editor open" would make every global
+        //  follower route go silent in exactly the no-editor render a fingerprint gate checks.
+        for (int fk = 0; fk < wc::kNumFollowers; ++fk)
+            followVis_[fk].store ((any && bestVoice != nullptr) ? bestVoice->followValue01 (fk) : 0.f, std::memory_order_relaxed);
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
             ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
@@ -12981,7 +13015,14 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             const bool lfoSrc = (r.src >= 0 && r.src < wc::NUM_LFOS);
             const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
             const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
-            if (! lfoSrc && ! envSrc && ! velSrc)                    continue;
+            const bool folSrc = (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers);   // fb552
+            // 🚨 THIS LINE IS THE DOOR, AND A NEW SOURCE THAT IS NOT NAMED HERE IS DROPPED SILENTLY.
+            //    fb552 shipped five new sources, wired them through six other files, and every one of
+            //    them would have been thrown away right here — the drag would work, the underline
+            //    would draw, the patch would save, and nothing would modulate. That is fb373's law
+            //    ("a green harness proves the ENGINE, never that the plugin REACHES it") wearing a
+            //    validator's clothes. Tests/mod_source_gate.py now reds the build on it.
+            if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc)        continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);

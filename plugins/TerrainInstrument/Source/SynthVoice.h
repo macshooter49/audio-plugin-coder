@@ -192,6 +192,23 @@ namespace tw
         //  the same order in all three: at C3 mode 1's full-depth read rate is 735× the carrier and
         //  mode 9's is 2^10 = 1024×. Dulling 9 and 10 while 1 stays bright would make the clamp
         //  mode darker than its own sibling for a reason that has nothing to do with the clamp.
+        //  ── fb552 · THE FOLLOWERS (OVERPASS item 9A) — audio as a modulation source ──────────
+        //  The amplitude envelope of osc A-D and of the noise, handed to the matrix as ordinary
+        //  sources. The taps already existed: modPrev_[] and noiseModTap_ are the PRE-GAIN,
+        //  one-sample-delayed outputs the blend slots read, which is why a follower keeps working
+        //  with its source's Level at 0 (modSrcForce_/noiseForce_ make it render anyway).
+        //
+        //  🔑 PEAK DETECTOR, NOT A MEAN ONE, and the reason is ripple. |sin| has a DC term plus a
+        //  ripple at 2·f0; a symmetric one-pole fast enough to catch a pluck (τ ≈ 3 ms, corner
+        //  53 Hz) passes that ripple wholesale at any bass note, and the "envelope" then wobbles at
+        //  twice the pitch. An INSTANT attack with a slow release holds the peak across the cycle,
+        //  so the output is flat for every f0 above ~1/kFollowReleaseMs and the transient is still
+        //  exact. It also fixes the scale for free: a full-scale oscillator reads exactly 1.0, with
+        //  no fudge factor to go stale when the tables change.
+        //  kFollowReleaseMs is therefore the ONE number that matters: it is the fastest decay the
+        //  follower can express, and the slowest pitch it can hold without rippling. 25 ms holds
+        //  everything above ~40 Hz and still lets a pluck read as a pluck.
+        static constexpr double kFollowReleaseMs = 25.0;
         static constexpr float kFmExpOctaves = 10.0f;   // mode 9 — peak pitch excursion in OCTAVES at depth 1
         static constexpr float kFmExpOctLin  = 10.0f;   // softBound: exactly linear to here …
         //  🚫 THE CLAMP IS A HARD CORNER AND IT STAYS ONE — this is a road already walked, so do not
@@ -221,6 +238,7 @@ namespace tw
             juce::SynthesiserVoice::setCurrentPlaybackSampleRate (sr);
             sampleRate_ = (sr > 0.0) ? sr : 48000.0;
             invSampleRate_ = (float) (1.0 / sampleRate_);   // fb523 — FM is Hz-of-deviation now: Δcycles/sample = Δf/fs
+            followRelCoef_ = 1.0f - std::exp (-1.0f / (float) (kFollowReleaseMs * 0.001 * sampleRate_));   // fb552
             noiseSR_ = (float) sampleRate_;   // NOISE engine Hz-based math (hum/wind/rumble/SVF)
             ampEnv_.prepare (sampleRate_);
             ampEnv_.setMinRelease (0.005);   // fb297 — 5ms declick FLOOR on the AMP env only: release=0 stays tight
@@ -340,6 +358,14 @@ namespace tw
         /** fb183 — RAW envelope level 0..1 for OWNERSHIP dests (Level): the shape
             itself. envSourceValue() keeps the knob-is-the-peak delta for offset dests. */
         float envSourceRaw01 (int sI) const noexcept { return envSourceValue (sI) + 1.0f; }
+
+        /** fb552 — a follower's raw 0..1 level (the taps clamp at ±4, so this clamps at 1). */
+        float followValue01 (int k) const noexcept
+        { return (k >= 0 && k < wc::kNumFollowers) ? juce::jlimit (0.0f, 1.0f, follow_[k]) : 0.0f; }
+        /** fb552 — and its ROUTING value, which is level−1 for exactly the reason an envelope's is:
+            the knob is the peak, so a loud source sits AT the knob and a quiet one pulls below it. */
+        float followSourceValue (int sI) const noexcept
+        { return followValue01 (wc::followIndexOf (sI)) - 1.0f; }
 
         // ── Envelope follower taps (for the UI playhead dot) ──
         // Live amp-env output [0,1] and whether this voice is sounding. The editor
@@ -3046,13 +3072,14 @@ namespace tw
                     else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
                                                           srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
                     else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
+                    else if (wc::isFollowModSource (sI))  srcV = followSourceValue (sI);   // fb552 — audio as a source
                     else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
                     else continue;
                     // fb183 — env→LEVEL is OWNERSHIP, not offset: depth crossfades the knob
                     // toward the envelope's own shape (eff = (1−Σd)·knob + Σd·env). At 100%
                     // the shape IS the level — knob anywhere, Serum's level-down pluck included.
                     // Per-voice: each note plucks its OWN level (the mono-tap ghost is dead).
-                    if (wc::isEnvModSource (sI)
+                    if (wc::isShapeModSource (sI)   // fb552 — a FOLLOWER owns Level exactly like an env: this line is the reel (the noise plucking Osc A's volume)
                         && (int) as.dest >= (int) wc::ModDest::LevelA
                         && (int) as.dest <= (int) wc::ModDest::LevelD)
                     {
@@ -3065,7 +3092,7 @@ namespace tw
                     // fb188 — same OWNERSHIP law for the voice-evaluated wavetable trio
                     // (Frame/Warp/Fold, all four oscs). Semitone dests (Coarse/Cut) stay
                     // offset; LfoAmt stays multiplicative.
-                    if (wc::isEnvModSource (sI))
+                    if (wc::isShapeModSource (sI))   // fb552 — and the wavetable trio the same way
                     {
                         int vi = -1;
                         switch (as.dest)
@@ -3086,7 +3113,7 @@ namespace tw
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
-                    if (wc::isEnvModSource (sI) || sI == (int) wc::ModSource::Velocity)   // fb260 — velocity→cutoff joins the block-constant semitone sum, exactly like env
+                    if (wc::isShapeModSource (sI) || sI == (int) wc::ModSource::Velocity)   // fb260 · fb552 followers join the block-constant sum — velocity→cutoff joins the block-constant semitone sum, exactly like env
                     {
                         if      (as.dest == wc::ModDest::Cut1) { envCutBlk1_ += c; continue; }
                         else if (as.dest == wc::ModDest::Cut2) { envCutBlk2_ += c; continue; }
@@ -3602,6 +3629,22 @@ namespace tw
                         // b.src == 4 (Sub) is handled earlier — it has to be known before
                         // prepareSubBlock() runs. See the subForce_ scan there.
                     }
+                // fb552 — FOLLOWERS ARM THE SAME WAY A BLEND SLOT DOES, and they must, for the same
+                //  reason: a follower on an oscillator you have turned down to 0 has to keep
+                //  following it. modSrcForce_/noiseForce_ already mean exactly "render this source
+                //  even though nothing is listening to it", so a routed follower just sets them.
+                //  ⚠️ THIS MUST STAY ABOVE the uLoopA..D gate and the noise render gate — those read
+                //  the flags. Below them it would build clean and follow silence.
+                anyFollowArmed_ = false;
+                for (int a = 0; a < modConfig_.numAssignments; ++a)
+                {
+                    const auto& as = modConfig_.assignments[a];
+                    if (! as.enabled) continue;
+                    const int fk = wc::followIndexOf ((int) as.source);
+                    if (fk < 0) continue;
+                    anyFollowArmed_ = true;
+                    if (fk < 4) modSrcForce_[fk] = true; else noiseForce_ = true;
+                }
                 // ── THE FREE CPU WIN (fb522). The per-sample blend law below is ~50 flops per
                 // sample PER VOICE (16 de-zipper FMAs before any mode test, 4 unguarded fmPhase_
                 // integrators, 8 soft bounds) and it ran unconditionally on every patch, including
@@ -5302,6 +5345,18 @@ namespace tw
                 modPrev_[2] = (mcOnC ? monoTapCorr_[2] : 1.0f) * 0.5f * (sC_L + sC_R);
                 modPrev_[3] = (mcOnD ? monoTapCorr_[3] : 1.0f) * 0.5f * (sD_L + sD_R);
                 for (int mc = 0; mc < 4; ++mc) modPrev_[mc] = juce::jlimit (-4.f, 4.f, modPrev_[mc]);
+                // fb552 — THE FOLLOWERS, on the taps that were just written. Instant attack, one-pole
+                //  release: see kFollowReleaseMs for why it is a peak detector and not a mean one.
+                if (anyFollowArmed_)
+                {
+                    for (int fk = 0; fk < 4; ++fk)
+                    {
+                        const float a = std::fabs (modPrev_[fk]);
+                        follow_[fk] = (a > follow_[fk]) ? a : follow_[fk] + (a - follow_[fk]) * followRelCoef_;
+                    }
+                    const float an = std::fabs (noiseModTap_);
+                    follow_[4] = (an > follow_[4]) ? an : follow_[4] + (an - follow_[4]) * followRelCoef_;
+                }
             }
 
             // fb122 ROBIN Pan — the station leans (unity at center, applied to every bus)
@@ -6439,6 +6494,9 @@ namespace tw
         bool  anyBlendArmed_ = false;                 // fb522 — any FM/PD/AM/RM slot live (or still decaying) this block
         bool  noiseForce_  = false;                   // fb64 — noise is used as a blend source this block → generate it even if output off
         float fmPhase_[4] = { 0.f, 0.f, 0.f, 0.f };   // per-carrier FM integrator (freq-dev → phase; leaky, thru-zero)
+        float follow_[wc::kNumFollowers] = { 0.f, 0.f, 0.f, 0.f, 0.f };   // fb552 — osc A-D + noise peak followers, 0..1
+        float followRelCoef_ = 0.0f;                                       // fb552 — set with the sample rate
+        bool  anyFollowArmed_ = false;                                     // fb552 — CPU: no routed follower, no per-sample tick
         double blendCarrInc_[4] = { 0.0, 0.0, 0.0, 0.0 };   // fb551 — carrier rate in cycles/sample, block-rate. MODES 9/10 ONLY (see kFmExpOctaves).
         // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
         // matrix, both inert (false) for any patch with no active FM/PD slot → existing sound is

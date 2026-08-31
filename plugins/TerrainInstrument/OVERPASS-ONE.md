@@ -327,7 +327,7 @@ kept working, which is exactly what the mutation run showed.
 Already allocated in the parameter and **still inert** (verified). Lower priority now that warp
 carries 26 shapers — but this is the *modulatable* version.
 
-## 9 · AUDIO AS A MODULATION SOURCE — the oscillators and the noise   ⬅ Max, 2026-08-31
+## 9 · AUDIO AS A MODULATION SOURCE — the oscillators and the noise   ◐ **9A SHIPPED fb552**
 Max saw it on a Serum 2 reel: *"he was able to literally take the noise and make it a modulation
 source on Osc A's volume… the noise was like a little plucky thing so the audio was plucking the
 volume."* He wants our four oscillators and the noise engine (not the sub) to be draggable mod
@@ -350,6 +350,48 @@ audio source of any kind**, and modulation is staged **per block** (`ownM`/`modW
 
 UI: we already have a mod-drag system (`getModDrag`/`setModDrag`) — this is a new drag SOURCE
 affordance on the osc header and the noise card, not new plumbing.
+
+### ✅ 9A SHIPPED — fb552
+Five new `ModSource`s (`FollowA..D`, `FollowN`), wire codes 210-214, **appended at the end of the
+enum** so nothing shifted. Drag the word **Osc** on any oscillator — the same label that is its
+on/off — or the **noise's own name**, onto any knob. No Sub, by Max's exclusion.
+
+**THE DETECTOR IS A PEAK DETECTOR, NOT A MEAN ONE, and ripple is why.** `|sin|` carries a ripple at
+2·f0; a symmetric one-pole fast enough to catch a pluck (τ ≈ 3 ms, corner 53 Hz) passes that
+wholesale at any bass note and the "envelope" wobbles at twice the pitch. Instant attack + a 25 ms
+release holds the peak across the cycle: flat above ~40 Hz, transient still exact, **and the scale
+comes out right for free** — a full-scale oscillator reads exactly 1.0, no fudge factor to go stale
+when the tables change. `kFollowReleaseMs` is the one number that matters (fastest decay it can
+express / slowest pitch it can hold).
+
+**IT FOLLOWS THE SOUND, NOT THE FADER.** The taps are `modPrev_[]`/`noiseModTap_` — the same
+pre-gain taps the blend slots read — so a routed follower sets `modSrcForce_`/`noiseForce_` and
+keeps following a source whose Level is 0 **or that is switched off entirely**. Verified: with Osc B
+disabled, a follower on it still drove Osc A's Level to full.
+
+**It owns Level exactly like an envelope** (fb183): at depth 100 % the destination IS the source's
+shape. That one line is the reel.
+
+**MEASURED — one render, two carriers, so there is no alignment to argue about.** Osc A low, Osc B
+high and tremolo'd by an AM blend; complex-demodulate each carrier and correlate their envelopes:
+
+| | Osc A env sd | r(env A, env B) |
+|---|---:|---:|
+| **Follow B → Level A** | **46.0 %** | **+0.910** |
+| no route | 8.2 % | +0.113 |
+
+**THE DOOR NEARLY ATE THE WHOLE FEATURE.** `setSynthModMatrix` drops an unrecognised source with a
+bare `continue`. Five sources were wired through six files and every route would have been thrown
+away there — drag working, underline drawing, patch saving, nothing modulating. Proved load-bearing
+without a rebuild, by sending codes either side of it: **s=211 → r +0.910; s=209 and s=215 → +0.12,
+identical to no route at all.** `Tests/mod_source_gate.py` (new, all four doors mutation-tested)
+now reds the build on it, on a JS/C++ encoder mismatch, on a decoder with no upper bound (wire 210
+used to decode as "Env 111" — fb261's bug one family later), and on the popped card's `wire-1`.
+
+**Floor gated**: with followers compiled in and none routed, dry/FM/FM-Exp render 1/55/39 peaks at
+110/3119/943 Hz against the pre-change build's 1/55/39 at 110/3124/972 — inside the harness spread.
+
+**Still open: 9B** (true audio-rate), and the follower's timing is fixed rather than a knob.
 
 ## 10 · CURVE EVERYWHERE — and the one that matters is the MOD CONNECTION   ⬅ Max, 2026-08-31
 Max: *"when he put that noise on Osc A's volume he right-clicked the volume and pressed curve

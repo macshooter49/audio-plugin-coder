@@ -5841,6 +5841,10 @@ void TerrainUiCore::timerCallback()
         for (int k = 0; k < 10; ++k) { if (k) yArr << ","; yArr << SF(audioProcessor.modVizLfoVY (k), 3); }
         const int notesOn = (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0;   // fb241 — note-gated chaos viz (free-running motion, animates only while MIDI plays)
         const float velV = audioProcessor.modVizVel();   // fb262 — live velocity for the streak
+        js << "window.__mvFol=[";   // fb552 — five numbers a frame, on the push that already runs
+        for (int fk = 0; fk < wc::kNumFollowers; ++fk)
+            js << (fk ? "," : "") << SF (audioProcessor.modVizFollow (fk), 3);
+        js << "];";
         js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 

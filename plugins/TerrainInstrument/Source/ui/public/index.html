@@ -5428,7 +5428,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .voice-meta { padding-top: 4px; display: flex; flex-direction: column; gap: 8px; font-size: 9px; color: var(--text-secondary); letter-spacing: 1px; font-weight: 200; }
 #syn-panel .voice-row { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 6px; padding: 1px 4px; }   /* fb259 — emblems removed: label left, value right, uniform padding on EVERY row → V/V/P/G stack dead-even */
 #syn-panel .voice-row b { color: #FFFFFF; font-size: 13px; font-weight: 200; letter-spacing: 0.5px; }
-#syn-panel .voice-row .vel-src { cursor: grab; }   /* fb260 — the Velocity label lifts out as a mod source (drag onto any knob), like an env/LFO */
+#syn-panel .voice-row .vel-src { cursor: grab; }
+/* fb552 — the same grip idiom for AUDIO AS A MODULATOR: the word "Osc" on each oscillator and the
+   noise's own name lift out as mod sources. Drag one onto any knob and that sound's loudness
+   modulates it. */
+#syn-panel [data-drag-follow],
+#syn-panel .device.osc .device-label[data-drag-follow] { cursor: grab; }   /* the second selector is not
+   redundant: .device.osc .device-label already sets cursor:pointer at higher specificity, so the plain
+   attribute rule loses. MEASURED in the real editor — all four osc grips read "pointer" until this. */   /* fb260 — the Velocity label lifts out as a mod source (drag onto any knob), like an env/LFO */
 /* Phase 8a — draggable voice rows */
 #syn-panel .sel[data-syn-row] { cursor: ns-resize; user-select: none; }
 #syn-panel .voice-toggle-row { display: flex; gap: 4px; padding: 2px 0; }
@@ -30580,7 +30587,7 @@ restoreThemeFromBackend();
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
     lastLocalEdit=Date.now();   /* fb524 — the mirror's prune stands down while a local edit is still in flight */
     if(window.__cardOnly&&!restoredOnce) return;   /* fb524 — a card's assigns are a MIRROR: pushing before the first getSynthMod lands would write an empty matrix over a live one */
-    var arr=assigns.map(function(a){return {s:(a.vel?200:(a.env?100+(a.env-1):a.lfo-1)),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ */
+    var arr=assigns.map(function(a){return {s:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1))),d:a.dest,v:+a.depth.toFixed(4)};});   /* fb178 — env sources ride 100+ · fb552 — followers ride 210+ (== wc::kFollowSrcBase) */
     if(pushFn)try{ pushFn(JSON.stringify(arr)); }catch(e){} }
 
   // ── LFO shape + rate (JS mirror of the engine, for the live visual) ──
@@ -30730,10 +30737,15 @@ restoreThemeFromBackend();
     if(assigns.length>=128)return; var a={env:env,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function addVelAssign(dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].vel&&assigns[i].dest===dest) return;   /* fb260 — velocity source route (dedupe by dest) */
     if(assigns.length>=128)return; var a={vel:1,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }   /* fb263 — velocity routes land at full depth (like env) so 100% velocity = full effect; attenuate via the ring */
+  /* fb552 — AUDIO AS A MODULATION SOURCE. k = 1..4 (Osc A-D) or 5 (Noise). Depth lands at 1.0
+     like an env/velocity route, because the C++ law is the same one: at full depth the destination
+     follows the source's SHAPE (ownership), so anything less has to be a deliberate attenuation. */
+  function addFollowAssign(k,dest,el){ for(var i=0;i<assigns.length;i++) if(assigns[i].fol===k&&assigns[i].dest===dest) return;
+    if(assigns.length>=128)return; var a={fol:k,dest:dest,depth:1.0,el:el}; assigns.push(a); markTargets(); push(); }
   function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel))hit=a; });   /* fb262 — velocity joins the selected-source test */
+      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
     return hit||first; }
   /* fb194 — THE BREATHING CURVE's data: per-env param-mod state {w,v,sum}×6 (Dly..Rel),
      the exact C++ split — env sources = ownership claim, LFO sources = additive × master. */
@@ -30760,7 +30772,7 @@ restoreThemeFromBackend();
   window.__tiPruneFxRoutes=function(lo,hi){ if(lo==null||hi==null) return 0; var n=0;
     for(var i=assigns.length-1;i>=0;i--) if(assigns[i].dest>=lo&&assigns[i].dest<hi){ assigns.splice(i,1); n++; }
     if(n){ markTargets(); push(); } return n; };
-  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo)),d:a.dest,v:a.depth}; }); };   /* fb453 — gate surface: read the matrix without touching it */
+  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo))),d:a.dest,v:a.depth}; }); };   /* fb453 — gate surface: read the matrix without touching it */
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
   function knobNorm(a){
     if(a.dest>=481&&a.dest<481+192){ var kE=a.dest-481, eN=Math.floor(kE/6);   /* fb193 — legacy env params have real params; dyn anchor at 0 */
@@ -30885,8 +30897,44 @@ restoreThemeFromBackend();
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addVelAssign(dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  /* fb552 — AUDIO AS A MODULATION SOURCE (OVERPASS 9A). The grips are assigned here rather than
+     written into the markup so all five stay in one place and the four oscillators cannot drift
+     apart. The word "Osc" on each oscillator is the grip Max asked for ("I drag where it says
+     oscillator"); the noise's own name is the fifth. NO SUB — his exclusion. */
+  (function armFollowGrips(){
+    function arm(){
+      ['a','b','c','d'].forEach(function(o,i){
+        var d=document.getElementById('osc-'+o+'-device'); if(!d)return;
+        var L=d.querySelector('.device-label'); if(!L)return;
+        L.setAttribute('data-drag-follow',String(i+1));
+        /* ⚠️ SET UNCONDITIONALLY, every pass. This label is ALSO the oscillator's on/off, and
+           wireOscEnable() writes its own title from a setTimeout — whichever ran last used to win.
+           Saying both things every pass makes the race harmless instead of a coin flip. */
+        L.title='Oscillator '+o.toUpperCase()+' on/off — or DRAG onto any knob to make this oscillator\'s own loudness the modulator. It keeps following with the Level at 0.';
+      });
+      var nn=document.getElementById('noise-name');
+      if(nn){ nn.setAttribute('data-drag-follow','5');
+        nn.title='Select noise — or DRAG onto any knob to make the noise\'s own loudness the modulator. It keeps following with the noise off.'; }
+    }
+    arm(); [250,900,2000].forEach(function(ms){ setTimeout(arm,ms); });   /* fb548 — the panel is built by a deferred ladder; arm on every rung */
+  })();
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-follow]'); if(!t)return;
+    var fk=+t.getAttribute('data-drag-follow')||1; var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        if(window.__synHideMenu)window.__synHideMenu();
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='\u2248'+(fk<5?'ABCD'.charAt(fk-1):'N'); document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(209+fk,ev.screenX,ev.screenY,0); }   /* 210+ = follower wire (== wc::kFollowSrcBase) */
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(209+fk,ev.screenX,ev.screenY,1);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addFollowAssign(fk,dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   // suppress the tab's switch-click right after a drag
-  document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')||e.target.closest('#syn-panel .syn-ctx-item')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 env chip · fb195 hub rows */
+  document.addEventListener('click',function(e){ var t=e.target.closest&&(e.target.closest('#mod-engine .mv-tabs .t')||e.target.closest('#syn-panel .env-sel')||e.target.closest('#syn-panel .syn-ctx-item')||e.target.closest('#syn-panel [data-drag-follow]')); if(t&&Date.now()-lastDragEnd<300){ e.stopImmediatePropagation(); e.preventDefault(); } },true);   /* fb178 env chip · fb195 hub rows · fb552 — the noise NAME is both a picker and a mod grip, so a drag must not also open the picker */
   /* fb153 — the fb149 'Pop' palette launcher is retired (chip + handler). The palette
      page mode (?card=mod, bootModPal) stays DORMANT so an already-open/restored palette
      window still works, and the docked foreign receiver stays LIVE — it also caches
@@ -30894,7 +30942,8 @@ restoreThemeFromBackend();
 
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
-  function srcName(a){ return a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)); }
+  var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise'];   /* fb552 */
+  function srcName(a){ return a.fol?('Follow '+FOL_NAME[a.fol-1]):(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo))); }
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
@@ -30985,7 +31034,7 @@ restoreThemeFromBackend();
     var seen=new Map(), sm=window.__selMod||{};
     assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
       var m=seen.get(el); if(!m){ m={sel:false}; seen.set(el,m); }
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
+      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
     seen.forEach(function(m,el){
       var u=ulMap.get(el);
       if(!u){ u=document.createElement('div'); u.className='sm-ul'; document.body.appendChild(u);
@@ -31061,7 +31110,8 @@ restoreThemeFromBackend();
       var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=uw;   /* fb453 — the children live in the ul's own (layout) space */
       if(ra){
         var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
-        var v=ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
+        var v=ra.fol?((window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1)   /* fb552 — a follower's comet rides the SOUND it follows (Max's law: if it is audible it is visible) */
+             :ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
              :ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
                     :(function(){ var __lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null;   /* fb498 -- smoothed; falls back to the raw latch, never to 0 */
                         if(__lv==null)__lv=(mvL&&mvL[ra.lfo-1]!=null)?mvL[ra.lfo-1]:null;
@@ -31166,16 +31216,21 @@ restoreThemeFromBackend();
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr))return;   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
       var live=window.__cardOnly?Object.create(null):null;
-      function ky(sVel,sEnv,sLfo,d){ return (sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo)))+'_'+d; }
+      function ky(sVel,sEnv,sLfo,sFol,d){ return (sFol?('f'+sFol):(sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo))))+'_'+d; }
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
-      var vel=(sv===200), env=(!vel&&sv>=100)?(sv-100+1):0, lfo=(vel||env)?0:(sv+1);   /* fb178 env=100+ · fb261 vel=200 (kVelSrc) — was misdecoded as Env 101 */
-      if(live) live[ky(vel,env,lfo,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
+      /* fb552 — followers = 210..214 (wc::kFollowSrcBase). 🚨 THE ENV TEST NOW HAS AN UPPER BOUND
+         AND ALWAYS NEEDED ONE: `sv>=100` alone swallowed every future wire code — 210 decoded as
+         "Env 111". fb261 already paid for this once when 200 came back as Env 101 and the fix was
+         to special-case 200 rather than to bound the range. Bounded now. */
+      var fol=(sv>=210&&sv<215)?(sv-210+1):0;
+      var vel=(!fol&&sv===200), env=(!fol&&!vel&&sv>=100&&sv<200)?(sv-100+1):0, lfo=(fol||vel||env)?0:(sv+1);
+      if(live) live[ky(vel,env,lfo,fol,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
       if(!el)return;
-      for(var i=0;i<assigns.length;i++) if((vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
-      var a=vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el}); assigns.push(a); });
+      for(var i=0;i<assigns.length;i++) if((fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo)))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
+      var a=fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}:(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}:(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}:{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el})); assigns.push(a); });
       if(live&&!badgeBusy&&(Date.now()-lastLocalEdit)>1500)
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
-          if(!live[ky(aq.vel,aq.env,aq.lfo,aq.dest)]) assigns.splice(q,1); }
+          if(!live[ky(aq.vel,aq.env,aq.lfo,aq.fol,aq.dest)]) assigns.splice(q,1); }
       restoredOnce=true; markTargets(); }catch(e){} }); }catch(e){} }
   var restoredOnce=false;   /* fb524 — a card must never push() an empty mirror over a live matrix before its first read lands */
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} };   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
@@ -36249,7 +36304,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           var de=document.elementFromPoint(dx,dy), dh=de&&de.closest?de.closest('[data-mod-dest]'):null;
           if(dh){ var dest=+dh.getAttribute('data-mod-dest'), wire=o.l|0;
             /* fb524b — THE WIRE CODE IS NOT ALWAYS "SOURCE + 1". The main window streams the drag as
-               a WIRE code (LFO n = n · Env n = 100+(n-1)+1 · Velocity = 200 == wc::kVelSrc) and this
+               a WIRE code (LFO n = n · Env n = 100+(n-1)+1 · Velocity = 200 == wc::kVelSrc ·
+               Follower = 210+k == wc::kFollowSrcBase, fb552) and this
                receiver used to write `s: wire-1` for all three. That is right for an LFO and right
                for an Env by construction, and WRONG for Velocity: it wrote s=199, which is outside
                BOTH accepted source ranges in setSynthModMatrix (lfo 0..9, env [100,132), vel ==200),
@@ -36259,7 +36315,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
                Depth follows the same law the docked drop obeys: envelope and velocity drops land at
                FULL (fb178/fb263 — "the drop is all envelope"), LFO drops at 0.5. The cap is
                wc::MAX_ASSIGNMENTS (128 since fb178), not the stale 32 the docked path left behind. */
-            var sv=(wire===200)?200:(wire-1), dv=(sv===200||sv>=100)?1.0:0.5;
+            /* fb552 — followers (210..214) are streamed AS the wire code, like Velocity, and must
+               NOT have 1 subtracted: `wire-1` would have written 209..213, i.e. one route rejected
+               outright and four pointing at the WRONG oscillator. Same shape as the fb524b bug
+               above, one source family later. */
+            var sv=(wire>=210&&wire<215)?wire:((wire===200)?200:(wire-1)), dv=(sv>=200||sv>=100)?1.0:0.5;
             rmw(function(arr){ for(var i=0;i<arr.length;i++) if((arr[i].s|0)===sv&&(arr[i].d|0)===dest) return arr;
               if(arr.length<128) arr.push({s:sv,d:dest,v:dv}); return arr; }, kick); } }
         if(o.s)seen=o.s; clearMarks(); }

@@ -35,6 +35,13 @@ enum class ModSource : int
     Drift1, Drift2, Drift3, Drift4, Drift5, Drift6, Drift7, Drift8,  // FLOW·DRIFT lanes (block-rate bipolar) — append-only (replaced dead SeqMod)
     EnvPitch,                  // fb178 — the fifth legacy envelope (pitch) as a matrix source
     EnvD1, EnvD2, EnvD3, EnvD4, EnvD5, EnvD6, EnvD7, EnvD8, EnvD9, EnvD10, EnvD11, EnvD12, EnvD13, EnvD14, EnvD15, EnvD16, EnvD17, EnvD18, EnvD19, EnvD20, EnvD21, EnvD22, EnvD23, EnvD24, EnvD25, EnvD26, EnvD27,   // fb178 — dynamic envelopes 6..32 (Row 3)
+    FollowA, FollowB, FollowC, FollowD, FollowN,   // fb552 — AUDIO AS A MODULATION SOURCE: the amplitude
+                                                   // envelope of osc A-D and of the NOISE, as ordinary
+                                                   // matrix sources. Deliberately NO Sub (Max's exclusion).
+                                                   // ⚠️ APPENDED AT THE END on purpose. Putting them next
+                                                   // to the other "real" sources would have shifted
+                                                   // EnvD1..EnvD27 by five, and this enum says
+                                                   // append-only for the same reason ModDest does.
     NumSources
 };
 static constexpr int NUM_LFOS = 10;
@@ -1035,6 +1042,9 @@ struct ModConfig
 // fb178 — envelope sources (Row 3 S2). Blob src encoding: 100 + (envNum-1), Env 1..32.
 static constexpr int kEnvSrcBase = 100;
 static constexpr int kVelSrc     = 200;   // fb260 — Velocity mod-source wire code (JS→C++); maps to ModSource::Velocity
+// fb552 — FOLLOWER wire codes 210..214 = osc A,B,C,D, Noise. Same JS→C++ blob channel as the two above.
+static constexpr int kFollowSrcBase = 210;
+static constexpr int kNumFollowers  = 5;
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
 {
     switch (envNum)
@@ -1052,6 +1062,23 @@ inline bool isEnvModSource (int sI) noexcept
         || sI == (int) ModSource::EnvPitch
         || (sI >= (int) ModSource::EnvD1 && sI <= (int) ModSource::EnvD1 + 26);
 }
+
+// fb552 — the FOLLOWER predicates. `followIndexOf` returns 0..4 (osc A-D, Noise) or −1.
+inline int followIndexOf (int sI) noexcept
+{
+    const int k = sI - (int) ModSource::FollowA;
+    return (k >= 0 && k < kNumFollowers) ? k : -1;
+}
+inline bool isFollowModSource (int sI) noexcept { return followIndexOf (sI) >= 0; }
+/** fb552 — "does this source behave like an ENVELOPE in the routing math?" — i.e. unipolar, and it
+    OWNS a Linear01 destination rather than offsetting it (fb183/fb184's ownership law), so at depth
+    100 % the destination follows the source's SHAPE. Envelopes and followers both do; LFOs, Drift
+    and Velocity do not.
+    🚨 THIS EXISTS SO fb470 CANNOT RECUR HERE. Four separate `isEnvModSource(sI)` tests decide
+    whether a source owns Level, owns the wavetable trio, joins the block-constant cutoff sum, and
+    is read as level−1. A follower that reached three of the four would build clean, show in the UI,
+    save in the patch, and modulate WRONG rather than not at all — which is worse. */
+inline bool isShapeModSource (int sI) noexcept { return isEnvModSource (sI) || isFollowModSource (sI); }
 
 // ---------------------------------------------------------------------------
 //  Accumulation helpers — the "base + sum(source*depth)" model, clamp ONCE.
