@@ -311,10 +311,22 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // Synth engine — Phase 1 MPV (one SynthSound + kSynthVoiceCount voices)
     // CPU: keep TYPED pointers alongside — the audio thread iterates all 96 voices several
     // times per block, and each dynamic_cast is a real RTTI walk (~300 casts/block killed).
+    // fb550 — the drawn-warp table. std::atomic<T*> is NOT zero-initialised by default, and the
+    // curves must read as the identity before anything is drawn, so both are set explicitly here,
+    // BEFORE any voice is handed the table.
+    for (int i = 0; i < 8; ++i)
+    {
+        drawTable_[i].store (nullptr, std::memory_order_relaxed);
+        for (int b = 0; b < 2; ++b)
+            for (int k = 0; k < tw::SynthVoice::kDrawPts; ++k)
+                drawCurve_[i][b].pts[k] = (float) k / (float) (tw::SynthVoice::kDrawPts - 1);
+    }
     synthEngine.addSound (new tw::SynthSound());
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
         auto* v = new tw::SynthVoice();
+        v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
+                                          // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
         // CPU: instance-wide grain budget — every granular engine shares one live-grain
         // counter, so 4 dense granular oscs × polyphony thin gracefully at kGranBudget
@@ -733,6 +745,53 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
 //  The x axis is HARMONIC NUMBER, which is why f0 is nominal: the corner rides the note, so the
 //  curve is the same shape at every pitch. (Only the sr*0.45 clamp is pitch-dependent, and at the
 //  nominal 110 Hz nothing clamps.)
+// ══════════════════════════════════════════════════════════════════════════════════════════════
+//  fb550 — THE DRAWN WARP CURVE.  OVERPASS ONE item 6C.
+//  csv = 129 numbers, 0..1, the map w = f(p). Anything else is rejected whole rather than
+//  half-applied, because a partially-parsed curve is a discontinuity and a discontinuity is a click.
+void TerrainInstrumentAudioProcessor::setWarpDrawCurve (int osc, int slot, const juce::String& csv)
+{
+    osc = juce::jlimit (0, 3, osc); slot = juce::jlimit (0, 1, slot);
+    const int idx = osc * 2 + slot;
+    auto toks = juce::StringArray::fromTokens (csv, ",", "");
+    toks.removeEmptyStrings();
+    if (toks.size() != tw::SynthVoice::kDrawPts) return;          // wrong length -> ignore entirely
+
+    const int spare = drawSpare_[idx];
+    auto& dst = drawCurve_[idx][spare];
+    bool identity = true;
+    for (int i = 0; i < tw::SynthVoice::kDrawPts; ++i)
+    {
+        const float v = juce::jlimit (0.0f, 1.0f, toks[i].getFloatValue());
+        dst.pts[i] = v;
+        const float ident = (float) i / (float) (tw::SynthVoice::kDrawPts - 1);
+        if (std::abs (v - ident) > 1.0e-4f) identity = false;
+    }
+    // STEEPEST READ RATE. A near-vertical drawn segment reads the table as fast as Sync does, so
+    // warpRateMul() needs this number or the mip is picked for 1x and the curve aliases (fb545).
+    float mx = 1.0f;
+    for (int i = 1; i < tw::SynthVoice::kDrawPts; ++i)
+        mx = juce::jmax (mx, std::abs (dst.pts[i] - dst.pts[i - 1]) * (float) (tw::SynthVoice::kDrawPts - 1));
+    dst.slope = juce::jlimit (1.0f, 64.0f, mx);
+
+    drawSpare_[idx] = 1 - spare;                                   // the old live buffer is now spare
+    drawTable_[idx].store (identity ? nullptr : &dst, std::memory_order_release);
+}
+
+juce::String TerrainInstrumentAudioProcessor::getWarpDrawCurveCsv (int osc, int slot) const
+{
+    osc = juce::jlimit (0, 3, osc); slot = juce::jlimit (0, 1, slot);
+    const int idx = osc * 2 + slot;
+    const auto* live = drawTable_[idx].load (std::memory_order_acquire);
+    juce::String out;
+    for (int i = 0; i < tw::SynthVoice::kDrawPts; ++i)
+    {
+        const float v = live ? live->pts[i] : (float) i / (float) (tw::SynthVoice::kDrawPts - 1);
+        out << (i ? "," : "") << juce::String (v, 4);
+    }
+    return out;
+}
+
 juce::String TerrainInstrumentAudioProcessor::getWarpCurveJson (int osc, int slot)
 {
     osc  = juce::jlimit (0, 3, osc);
@@ -752,6 +811,16 @@ juce::String TerrainInstrumentAudioProcessor::getWarpCurveJson (int osc, int slo
       << ",\"amt\":"  << juce::String (amt, 4) << ",\"var\":" << juce::String (var, 4);
 
     if (mode == 0) return j + ",\"kind\":\"none\",\"pts\":[]}";
+
+    if (mode == 37)                                    // DRAW — the card edits these points
+    {
+        const auto* live = drawTable_[osc * 2 + slot].load (std::memory_order_acquire);
+        j << ",\"kind\":\"draw\",\"x0\":0,\"x1\":1,\"pts\":[";
+        for (int i = 0; i < tw::SynthVoice::kDrawPts; ++i)
+            j << (i ? "," : "") << juce::String (live ? live->pts[i]
+                                                     : (float) i / (float) (tw::SynthVoice::kDrawPts - 1), 4);
+        return j + "]}";
+    }
 
     if (mode == 35 || mode == 36)
     {
@@ -13668,6 +13737,12 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
         state.setProperty ("wtImportFile"   + s, importIsFile_[o],      nullptr);
         state.setProperty ("wtImportName"   + s, importName_[o],        nullptr);
     }
+    // fb550 — DRAWN WARP CURVES. Written ONLY when something was actually drawn: a curve that is
+    // the identity publishes nullptr, so an untouched patch gains not one byte and old patches
+    // load byte-identically.
+    for (int i = 0; i < 8; ++i)
+        if (drawTable_[i].load (std::memory_order_acquire) != nullptr)
+            state.setProperty ("warpDraw" + juce::String (i), getWarpDrawCurveCsv (i / 2, i % 2), nullptr);
     for (int o = 0; o < 4; ++o) state.setProperty ("wt3dView" + juce::String (o), wt3dView_[o], nullptr);
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
@@ -14144,6 +14219,14 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             // The editor re-loads the buffer on GUI open via getNoiseSampleSel. Empty = algorithmic type.
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
             noiseVizMode_ = (int) newState.getProperty ("noiseVizMode", 1);   // fb66 — restore noise viz choice (default particle)
+
+            // fb550 — DRAWN WARP CURVES. Absent property == never drawn == the identity, which is
+            // exactly what a fresh instance already holds, so nothing is cleared on its behalf.
+            for (int i = 0; i < 8; ++i)
+            {
+                const juce::String csv = newState.getProperty ("warpDraw" + juce::String (i), juce::String()).toString();
+                if (csv.isNotEmpty()) setWarpDrawCurve (i / 2, i % 2, csv);
+            }
 
             // Wavetable EXTENDER — restore embedded imports (or clear the osc if none was saved).
             for (int o = 0; o < 4; ++o)

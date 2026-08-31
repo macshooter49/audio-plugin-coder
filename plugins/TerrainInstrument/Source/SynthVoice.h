@@ -1148,6 +1148,26 @@ namespace tw
         //  quarters) and raises the ceiling 16x -> 24.25x, which is the raise fb522 wanted.
         //  ⚠️ Any replacement value must be checked the same way: 2^(k*a) is an integer at
         //  a = log2(m)/k, so k must not make log2(m)/k land on a round number for small m.
+        // ═══ DRAW YOUR OWN WARP SHAPE — OVERPASS ONE item 6C (fb550) ═══════════════════════
+        //  Mode 37 reads a curve the user drew: w = f(p), both 0..1. The curve is OWNED by the
+        //  processor (message thread draws, audio thread reads) and reaches the voice as a plain
+        //  pointer into a double-buffered store, so there is no lock and no allocation here.
+        //  ⚠️ `slope` is not decoration. A steep stretch of a drawn curve reads the table FASTER
+        //  than 1x, exactly like Sync does, so it needs the same mip treatment or it aliases —
+        //  that is what warpRateMul() uses it for. It is computed once when the curve is written.
+        struct DrawCurve { float pts[129] = {}; float slope = 1.0f; };
+        static constexpr int kDrawPts = 129;
+
+        // 8 entries, [osc * 2 + slot]; any may be null (nothing drawn -> mode 37 is the identity).
+        // ATOMIC because the message thread re-points a slot while this thread is reading it; the
+        // buffers themselves are double-buffered on the processor side, so a load always yields a
+        // whole, self-consistent curve — never a half-redrawn one.
+        using DrawSlot = std::atomic<const DrawCurve*>;
+        void setDrawTable (const DrawSlot* t) noexcept { drawTable_ = t; }
+        const DrawCurve* drawFor (int osc, int slot) const noexcept
+        { return (drawTable_ != nullptr) ? drawTable_[(size_t) (osc * 2 + slot)].load (std::memory_order_relaxed)
+                                         : nullptr; }
+
         static constexpr double kSyncExp2    = 4.6;  // SYNC      : R = 2^(a*k), 1 .. 24.25x
         static constexpr double kFormantExp2 = 4.0;  // FORMANT   : R = 2^(a*k), 1 .. 16x — NOT RAISED, see below
         static constexpr double kFractalMul  = 7.5;  // FRACTALIZE: R = 1 + a*k, 1 ..  8.5x
@@ -1166,10 +1186,26 @@ namespace tw
         //      three whose content is CREATED by the discontinuity.
 
         static double applyPhaseWarp (int mode, float amount, double p,
-                                      float& window, bool& skipLookup, float var = 0.0f) noexcept
+                                      float& window, bool& skipLookup, float var = 0.0f,
+                                      const DrawCurve* draw = nullptr) noexcept
         {
             switch (mode)
             {
+                case 37:   // DRAW — the user's own phase map (fb550)
+                {
+                    // No curve drawn yet == the identity, so the mode is transparent the moment it
+                    // is selected and the fb462 floor holds without a special case.
+                    if (draw == nullptr) return p;
+                    const double x  = p * (double) (kDrawPts - 1);
+                    const int    i0 = juce::jlimit (0, kDrawPts - 1, (int) x);
+                    const int    i1 = juce::jlimit (0, kDrawPts - 1, i0 + 1);
+                    const double f  = x - (double) i0;
+                    const double c  = (double) draw->pts[i0] + ((double) draw->pts[i1] - (double) draw->pts[i0]) * f;
+                    // CROSSFADE FROM THE IDENTITY, so amount is a real depth control and amount 0
+                    // is bit-exact dry (p + 0*(c-p) == p in IEEE-754).
+                    const double w = p + (double) amount * (c - p);
+                    return w - std::floor (w);
+                }
                 case 1:  // BEND — full-cycle phase bend
                 {
                     // fb522 OVERPASS: 0.5 -> 1.0. [M] we already beat Serum's `Bend +/-` here
@@ -1432,6 +1468,9 @@ namespace tw
                 case 11: case 12: case 13: case 14: case 15: case 16: case 18:
                 case 20: case 23: case 26: case 29: case 34:
                     return var > 0.0f;                          // symmetric until VAR biases them
+                case 37:
+                    return false;   // 🚨 DRAW is PHASE-DOMAIN (fb550). `default: return true` would
+                                    // arm the 38 Hz blocker on a mode that cannot make DC.
                 case 35: case 36:
                     return false;   // 🚨 WARP FILTER. Falling into `default: return true` below
                                     // would arm the 38 Hz DC blocker on top of a LOW-PASS and
@@ -3124,8 +3163,16 @@ namespace tw
             //    🔑 reverting a ratio here and not in applyPhaseWarp (or the reverse) compiles
             //    clean and is SILENT — the mip is then picked for a rate the reader never uses.
             //    A constant that also feeds a SELECTION path must live in exactly one place.
-            auto warpRateMul = [] (int mode, float amt) -> double
+            auto warpRateMul = [] (int mode, float amt, double drawSlope = 1.0) -> double
             {
+                // fb550 — a drawn curve's steepest stretch IS a read-rate multiplier: without this a
+                // near-vertical hand-drawn segment reads a mip band-limited for 1x and aliases.
+                // ⚠️ IT MUST TRACK `amt`. applyPhaseWarp CROSSFADES the curve in (p + amt*(c-p)),
+                // so at amt = 0 the read rate is exactly 1x and asking for the full slope there
+                // picks a mip for a rate nothing is reading at. MEASURED with w = p^2 (slope 2):
+                // the flat multiplier made amount 0 render npeaks 102 against the dry table's 203
+                // — exactly half, the fb545 signature — and broke the transparency floor.
+                if (mode == 37) return juce::jlimit (1.0, 64.0, 1.0 + (double) amt * (drawSlope - 1.0));
                 if (mode == 2)              return std::pow (2.0, (double) amt * kSyncExp2);     // SYNC    (1..24.25x)
                 if (mode == 3)              return std::pow (2.0, (double) amt * kFormantExp2);  // FORMANT (1..16x)
                 if (mode == 7)              return 1.0 + (double) amt * kFractalMul;       // FRACTALIZE (1..8.5x)
@@ -3291,10 +3338,10 @@ namespace tw
                         warpFiltCoef (wfCoef_[o][sl], md[o][sl], am[o][sl], vr[o][sl],
                                       inc[o] * sampleRate_, sampleRate_);
             }
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
-            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpFan (2, warpAmountC_)) * warpRateMul (warp2ModeC_, warpFan (2, warp2AmountC_)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
-            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpFan (3, warpAmountD_)) * warpRateMul (warp2ModeD_, warpFan (3, warp2AmountD_)) * fmRateMul (engineD_, 3) * uniRateMul (uDetuneCentsD_, activeUnisonD_));
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_), (drawFor (0, 0) ? (double) drawFor (0, 0)->slope : 1.0))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_), (drawFor (0, 1) ? (double) drawFor (0, 1)->slope : 1.0)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_), (drawFor (1, 0) ? (double) drawFor (1, 0)->slope : 1.0)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_), (drawFor (1, 1) ? (double) drawFor (1, 1)->slope : 1.0)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
+            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpFan (2, warpAmountC_), (drawFor (2, 0) ? (double) drawFor (2, 0)->slope : 1.0)) * warpRateMul (warp2ModeC_, warpFan (2, warp2AmountC_), (drawFor (2, 1) ? (double) drawFor (2, 1)->slope : 1.0)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
+            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpFan (3, warpAmountD_), (drawFor (3, 0) ? (double) drawFor (3, 0)->slope : 1.0)) * warpRateMul (warp2ModeD_, warpFan (3, warp2AmountD_), (drawFor (3, 1) ? (double) drawFor (3, 1)->slope : 1.0)) * fmRateMul (engineD_, 3) * uniRateMul (uDetuneCentsD_, activeUnisonD_));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -3669,10 +3716,10 @@ namespace tw
 
                                 // WARP slot 1 — phase-domain remap (exact original math, factored to
                                 // applyPhaseWarp so a second slot can chain on its output).
-                                warpedPhase = applyPhaseWarp (warpMode_, wAmt1A, warpedPhase, window, skipLookup, warpVar_[0]);
+                                warpedPhase = applyPhaseWarp (warpMode_, wAmt1A, warpedPhase, window, skipLookup, warpVar_[0], drawFor (0, 0));
                                 // WARP 2 — second slot, in SERIES on slot 1's output (Serum parity).
                                 if (! skipLookup && warp2ModeA_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeA_, wAmt2A, warpedPhase, window, skipLookup, warp2Var_[0]);
+                                    warpedPhase = applyPhaseWarp (warp2ModeA_, wAmt2A, warpedPhase, window, skipLookup, warp2Var_[0], drawFor (0, 1));
 
                                 if (skipLookup)
                                 {
@@ -3766,7 +3813,7 @@ namespace tw
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             const float wAmt2A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + uWarpOffA_[(size_t) u]) : warp2AmountA_;
                             if (warp2ModeA_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0]);
+                                cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0], drawFor (0, 1));
                             if (fmSkip) sAu = 0.0f;
                             else
                             {
@@ -4003,9 +4050,9 @@ namespace tw
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeB_, wAmt1B, warpedPhase, window, skipLookup, warpVar_[1]);
+                                warpedPhase = applyPhaseWarp (warpModeB_, wAmt1B, warpedPhase, window, skipLookup, warpVar_[1], drawFor (1, 0));
                                 if (! skipLookup && warp2ModeB_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeB_, wAmt2B, warpedPhase, window, skipLookup, warp2Var_[1]);
+                                    warpedPhase = applyPhaseWarp (warp2ModeB_, wAmt2B, warpedPhase, window, skipLookup, warp2Var_[1], drawFor (1, 1));
 
                                 if (skipLookup)
                                 {
@@ -4083,7 +4130,7 @@ namespace tw
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             const float wAmt2B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + uWarpOffB_[(size_t) u]) : warp2AmountB_;
                             if (warp2ModeB_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1]);
+                                cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1], drawFor (1, 1));
                             if (fmSkip) sBu = 0.0f;
                             else
                             {
@@ -4307,9 +4354,9 @@ namespace tw
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeC_, wAmt1C, warpedPhase, window, skipLookup, warpVar_[2]);
+                                warpedPhase = applyPhaseWarp (warpModeC_, wAmt1C, warpedPhase, window, skipLookup, warpVar_[2], drawFor (2, 0));
                                 if (! skipLookup && warp2ModeC_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeC_, wAmt2C, warpedPhase, window, skipLookup, warp2Var_[2]);
+                                    warpedPhase = applyPhaseWarp (warp2ModeC_, wAmt2C, warpedPhase, window, skipLookup, warp2Var_[2], drawFor (2, 1));
 
                                 if (skipLookup)
                                 {
@@ -4387,7 +4434,7 @@ namespace tw
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             const float wAmt2C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + uWarpOffC_[(size_t) u]) : warp2AmountC_;
                             if (warp2ModeC_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2]);
+                                cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2], drawFor (2, 1));
                             if (fmSkip) sCu = 0.0f;
                             else
                             {
@@ -4611,9 +4658,9 @@ namespace tw
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeD_, wAmt1D, warpedPhase, window, skipLookup, warpVar_[3]);
+                                warpedPhase = applyPhaseWarp (warpModeD_, wAmt1D, warpedPhase, window, skipLookup, warpVar_[3], drawFor (3, 0));
                                 if (! skipLookup && warp2ModeD_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeD_, wAmt2D, warpedPhase, window, skipLookup, warp2Var_[3]);
+                                    warpedPhase = applyPhaseWarp (warp2ModeD_, wAmt2D, warpedPhase, window, skipLookup, warp2Var_[3], drawFor (3, 1));
 
                                 if (skipLookup)
                                 {
@@ -4691,7 +4738,7 @@ namespace tw
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             const float wAmt2D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + uWarpOffD_[(size_t) u]) : warp2AmountD_;
                             if (warp2ModeD_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3]);
+                                cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3], drawFor (3, 1));
                             if (fmSkip) sDu = 0.0f;
                             else
                             {
@@ -7206,6 +7253,7 @@ namespace tw
         bool  uniWarpOnA_ = false, uniWarpOnB_ = false, uniWarpOnC_ = false, uniWarpOnD_ = false;
         float warpVar_[4]  = { 0.0f, 0.0f, 0.0f, 0.0f };   // WVAR  — per-osc WARP slot 1 VAR
         float warp2Var_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // W2VAR — per-osc WARP slot 2 VAR
+        const DrawSlot* drawTable_ = nullptr;   // fb550 — processor-owned table, may be null
         float phaseOff_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };   // SYN_OSC_x_PHASE, in CYCLES (param is degrees)
         float phaseAmt_[4] = { 1.0f, 1.0f, 1.0f, 1.0f };   // SYN_OSC_x_PHASE_AMT, 0..1 (param default 100 %)
         // fb544 — PHASE IS CONTINUOUS. `phaseOffApplied_` is how much of phaseOff_ is currently

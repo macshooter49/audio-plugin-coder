@@ -190,7 +190,7 @@ FNV1a `420f4c70e44f4039` over 96,000 samples — and that gate is live, because 
 ⚠️ Patches using Sync or Fractalize **above 0 will move** — that is the point of the fix. Amount 0
 is bit-identical, so anything with warp off or parked at zero is untouched.
 
-## 6 · WARP EXTENSION CARDS   ◐ CHASSIS + 6A/6B SHIPPED fb546 · 6C NEXT
+## 6 · WARP EXTENSION CARDS   ✅ SHIPPED — chassis + 6A/6B fb546 · **6C fb550**
 *"the warp modes are gonna have extension cards based on what particular mode that's at… I told
 you I wanted that same distortion card that we have for the effect rack distortion to be an
 extension. We right-click, we have an option to extend at the top of the menu… We can also do

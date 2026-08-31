@@ -642,6 +642,18 @@ public:
     // (applyPhaseWarp / applyAmpWarp / warpFiltCoef + warpFiltTick) exactly as getOscWavetableJson
     // does for the waterfall — never a JS reimplementation of thirty-odd modes (the fb458 law).
     juce::String getWarpCurveJson (int osc, int slot);
+
+    // ═══ fb550 — DRAW YOUR OWN WARP SHAPE (OVERPASS ONE item 6C) ══════════════════════════════
+    //  8 curves, indexed [osc * 2 + slot]. DOUBLE-BUFFERED: the message thread fills the spare
+    //  and then publishes it with one atomic pointer store, so the audio thread never observes a
+    //  half-redrawn curve and neither side ever locks or allocates.
+    //  A curve that is (within 1e-4) the identity publishes NULLPTR, which is what makes mode 37
+    //  bit-exact dry until something is actually drawn.
+    tw::SynthVoice::DrawCurve            drawCurve_[8][2];
+    int                                  drawSpare_[8] = { 0,0,0,0,0,0,0,0 };
+    tw::SynthVoice::DrawSlot             drawTable_[8];      // what every voice reads
+    void         setWarpDrawCurve (int osc, int slot, const juce::String& csv);
+    juce::String getWarpDrawCurveCsv (int osc, int slot) const;
     // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the
     // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
     // routed), which is the same number rebuildMorphIfNeeded builds from — so the picture the

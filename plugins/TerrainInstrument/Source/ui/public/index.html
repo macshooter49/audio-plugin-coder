@@ -19335,7 +19335,7 @@ setTimeout(function wireSynControls () {
       // 35-47 — RESERVED. They exist so the LENGTH is right; the picker never lists them.
       // Filling one in C++ means filling it HERE, in the same slot, and filing it in a family
       // below — the guard fails the boot if a live index is not filed.
-      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   'Reserved 37', 'Reserved 38', 'Reserved 39', 'Reserved 40',
+      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   /* 37 */ 'Draw',   'Reserved 38', 'Reserved 39', 'Reserved 40',
       'Reserved 41', 'Reserved 42', 'Reserved 43', 'Reserved 44', 'Reserved 45', 'Reserved 46',
       'Reserved 47'
     ];
@@ -19358,7 +19358,10 @@ setTimeout(function wireSynControls () {
       { label: 'Digital',     idx: [29, 30, 32, 33, 34] },
       // fb543 — OVERPASS ONE item 4. Its own family: these are the only warp modes that are
       // FILTERS (stateful) rather than per-sample shapers, and the reference files them apart too.
-      { label: 'Filter',      idx: [35, 36] }
+      { label: 'Filter',      idx: [35, 36] },
+      // fb550 — OVERPASS ONE item 6C. Its own family because it is the only mode whose shape is
+      // DATA rather than an algorithm: the curve lives in the patch, not in the code.
+      { label: 'Draw',        idx: [37] }
     ];
 
     // Every warp-mode PARAMETER in the plugin — the guard reads its cardinality from each.
@@ -19560,8 +19563,37 @@ setTimeout(function wireSynControls () {
 
       // ── the body IS the control (the .filt-ext ruling) ────────────────────────────────────
       function attachXY (body) {
+        // fb550 — DRAW MODE: the body is a canvas, not an XY pad. Painting writes the curve the
+        // DSP reads, so what you draw IS the phase map. `lastX` interpolates across fast drags so
+        // a quick flick cannot leave a gap (a gap is a step, and a step is a click).
+        var lastX = -1;
+        function paintCurve (ev) {
+          var r = body.getBoundingClientRect();
+          var xn = Math.max (0, Math.min (1, (ev.clientX - r.left) / Math.max (1, r.width)));
+          var yn = Math.max (0, Math.min (1, (ev.clientY - r.top)  / Math.max (1, r.height)));
+          var n = dat.pts.length, i = Math.round (xn * (n - 1)), v = 1 - yn;
+          if (lastX < 0) lastX = i;
+          var a0 = Math.min (lastX, i), a1 = Math.max (lastX, i);
+          var v0 = (lastX === i) ? v : dat.pts[lastX];
+          for (var k = a0; k <= a1; ++k) {
+            var t = (a1 === a0) ? 1 : (k - a0) / (a1 - a0);
+            dat.pts[k] = (lastX <= i) ? (v0 + (v - v0) * t) : (v + (v0 - v) * t);
+          }
+          lastX = i; paint(); pushCurve();
+        }
+        var pushT = 0;
+        function pushCurve (force) {
+          var now = Date.now();
+          if (! force && now - pushT < 45) return;      // hear it WHILE drawing, without flooding
+          pushT = now;
+          try {
+            var f = window.Juce.getNativeFunction ('setWarpDrawCurve');
+            if (f) f (cur.osc, cur.slot, dat.pts.map (function (v) { return v.toFixed (4); }).join (','));
+          } catch (e) {}
+        }
         function apply (ev) {
           if (! cur || ! dat) return;
+          if (dat.kind === 'draw') { paintCurve (ev); return; }
           var r = body.getBoundingClientRect();
           var xn = Math.max (0, Math.min (1, (ev.clientX - r.left) / Math.max (1, r.width)));
           var yn = Math.max (0, Math.min (1, (ev.clientY - r.top)  / Math.max (1, r.height)));
@@ -19577,10 +19609,20 @@ setTimeout(function wireSynControls () {
           paint();
         }
         body.addEventListener ('mousedown', function (ev) {
-          if (ev.button !== 0) return; ev.preventDefault(); drag = true; apply (ev);
+          if (ev.button !== 0) return; ev.preventDefault(); drag = true; lastX = -1; apply (ev);
           function mv (e2) { if (drag) apply (e2); }
-          function up () { drag = false; document.removeEventListener ('mousemove', mv); document.removeEventListener ('mouseup', up); }
+          function up () { drag = false; lastX = -1;
+            if (dat && dat.kind === 'draw') pushCurve (true);      // always land the final shape
+            document.removeEventListener ('mousemove', mv); document.removeEventListener ('mouseup', up); }
           document.addEventListener ('mousemove', mv); document.addEventListener ('mouseup', up);
+        });
+        // double-click = back to the straight line, i.e. transparent again
+        body.addEventListener ('dblclick', function (ev) {
+          if (! dat || dat.kind !== 'draw') return;
+          ev.preventDefault(); ev.stopPropagation();
+          var n = dat.pts.length;
+          for (var i = 0; i < n; ++i) dat.pts[i] = i / (n - 1);
+          paint(); pushCurve (true);
         });
       }
 
@@ -19590,7 +19632,13 @@ setTimeout(function wireSynControls () {
           var f = window.Juce && window.Juce.getNativeFunction && window.Juce.getNativeFunction ('getWarpCurve');
           if (! f) return;
           f (cur.osc, cur.slot).then (function (txt) {
-            try { var d = JSON.parse (txt); if (! drag) dat = d; else { dat.pts = d.pts; dat.kind = d.kind; dat.mode = d.mode; }
+            try { var d = JSON.parse (txt);
+                  // ⚠️ NEVER let the poll overwrite the points while the pen is down — that is a
+                  // fight between the poll and the hand, and the hand loses every 120 ms.
+                  if (drag && dat) { dat.kind = d.kind; dat.mode = d.mode; }
+                  else { d.drawn = (d.kind === 'draw') && d.pts.some (function (v, i) {
+                           return Math.abs (v - i / (d.pts.length - 1)) > 1e-3; });
+                         dat = d; }
                   head(); paint(); } catch (e) {}
           });
         } catch (e) {}
@@ -19601,14 +19649,15 @@ setTimeout(function wireSynControls () {
         var name = (window.WARP_MODES && window.WARP_MODES[dat.mode]) || 'Warp';
         el.querySelector ('.we-t').textContent =
           name.toUpperCase() + '  ·  OSC ' + cur.O + '  ·  WARP ' + (cur.slot + 1);
-        var filt = dat.kind === 'filter';
+        var filt = dat.kind === 'filter', drw = dat.kind === 'draw';
         el.querySelector ('.xk').textContent = filt ? 'Corner' : 'Amount';
-        el.querySelector ('.yk').textContent = filt ? 'Res'    : 'Var';
+        el.querySelector ('.yk').textContent = filt ? 'Res' : (drw ? 'Curve' : 'Var');
         // READOUT LAW (fb446): bare numbers. Corner is a HARMONIC number, Res is a Q.
         el.querySelector ('.xv').textContent = filt ? String (Math.round (Math.pow (128, 1 - dat.amt)))
                                                     : String (Math.round (dat.amt * 100));
         el.querySelector ('.yv').textContent = filt ? (0.5 + dat['var'] * 9.5).toFixed (1)
-                                                    : String (Math.round (dat['var'] * 100));
+                                                    : (drw ? (dat.drawn ? 'drawn' : 'straight')
+                                                           : String (Math.round (dat['var'] * 100)));
       }
 
       function paint () {
@@ -19671,7 +19720,9 @@ setTimeout(function wireSynControls () {
           ctx.stroke(); ctx.shadowBlur = 0;
         }
 
-        // ── the node — this is the thing you grab ───────────────────────────────────────────
+        // ── the node — this is the thing you grab. DRAW has none: there the whole surface is
+        //    the control and a node parked at (amount, var) would just be a lie on the canvas.
+        if (kind === 'draw') return;
         var nx = (kind === 'filter') ? padL + gw * (1 - dat.amt) : padL + gw * dat.amt;
         var ny = padT + gh * (1 - dat['var']);
         ctx.beginPath(); ctx.arc (nx, ny, 4.5, 0, 6.2832);

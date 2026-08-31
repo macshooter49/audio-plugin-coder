@@ -3197,6 +3197,19 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 complete (juce::var (audioProcessor.getOscWavetableJson (oscIdx)));
             })
+            .withNativeFunction("setWarpDrawCurve", [this](const juce::Array<juce::var>& args,
+                                                            juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb550 — args = [ osc ('a'..'d'), slot (0|1), csv of 129 values 0..1 ].
+                if (args.size() >= 3)
+                {
+                    const juce::String oscStr = args[0].toString();
+                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int slotIdx = juce::jlimit (0, 1, (int) args[1]);
+                    audioProcessor.setWarpDrawCurve (oscIdx, slotIdx, args[2].toString());
+                }
+                complete (juce::var{});
+            })
             .withNativeFunction("getWarpCurve", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
