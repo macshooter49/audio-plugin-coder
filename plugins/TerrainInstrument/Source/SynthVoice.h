@@ -209,6 +209,39 @@ namespace tw
         //  follower can express, and the slowest pitch it can hold without rippling. 25 ms holds
         //  everything above ~40 Hz and still lets a pluck read as a pluck.
         static constexpr double kFollowReleaseMs = 25.0;
+        //  ── fb553 · BLEND MODE 6 `Warp` — TRUE AUDIO-RATE MODULATION (OVERPASS item 9B, and
+        //  item 8 with it) ───────────────────────────────────────────────────────────────────
+        //  9A gave the matrix a source's ENVELOPE. 9B is the source's own SAMPLE, per sample —
+        //  and the honest reading of that is not "a new kind of route". Our block-staged matrix
+        //  cannot deliver a per-sample value to 487 destinations, and it should not try: on the
+        //  480 that are block-rate an audio-rate value is either inaudible or noise, and a route
+        //  that silently does nothing is worse than one that does not exist.
+        //  So 9B goes where per-sample modulation ALREADY LIVES — the blend slot, which is exactly
+        //  a {source, depth} pair evaluated every sample. FM/PD spend it on phase and AM/RM on
+        //  amplitude; mode 6 spends it on the WARP AMOUNT.
+        //
+        //  🔑 WHY THIS IS BIGGER THAN IT LOOKS, and why it closes item 8 as well. "Warp amount" is
+        //  one knob with 37 different meanings: modes 9-34 are SHAPERS (so this is audio-rate
+        //  distortion drive — item 8's `Dist`), modes 35/36 are the per-osc TPT filter (so this is
+        //  per-oscillator FILTER FM — item 8's `Filter`), and mode 37 is the curve you drew. One
+        //  blend mode delivers all three, with no new parameter anywhere, which is what the
+        //  OVERPASS meant by "the modulatable version".
+        //
+        //  BOTH WARP SLOTS, on purpose. The pill says "this source drives my warp", and an osc has
+        //  two warp slots; driving only slot 1 would make the feature work or not depending on
+        //  which slot the shaper happens to sit in.
+        //
+        //  ⚠️ WT AND FM ENGINES ONLY. SAMP/GRAN/SPEC/HARM/MODAL overwrite their output from block
+        //  buffers and never evaluate a per-sample warp amount at all, so there is nothing to
+        //  modulate there. Not a limitation of this mode — a fact about those engines.
+        //
+        //  🚨 IT MUST WIDEN THE MIP, and fb545/fb550 are why. The mip level is chosen ONCE PER
+        //  BLOCK from the warp amount; sweeping that amount at audio rate makes the instantaneous
+        //  read rate exceed what the chosen mip is band-limited for, and the table's top octave
+        //  aliases. blendWarpMax_ carries the worst-case swing into warpFan(), and it TRACKS DEPTH
+        //  so depth 0 asks for exactly the base rate — fb550's floor bug, avoided by construction.
+        //  kWarpModDepth = 1.0: a full-scale modulator at full depth sweeps the whole 0..1 knob.
+        static constexpr float kWarpModDepth = 1.0f;
         static constexpr float kFmExpOctaves = 10.0f;   // mode 9 — peak pitch excursion in OCTAVES at depth 1
         static constexpr float kFmExpOctLin  = 10.0f;   // softBound: exactly linear to here …
         //  🚫 THE CLAMP IS A HARD CORNER AND IT STAYS ONE — this is a road already walked, so do not
@@ -1202,7 +1235,7 @@ namespace tw
         //  five of the six sites would have shipped a mode that shows in the UI, stores in the
         //  patch, and never makes a sound. They are predicates now, so that cannot recur.
         static constexpr bool blendIsPhase   (int m) noexcept { return m == 1 || m == 2 || m == 9 || m == 10; }   // writes blendOff[] — FM / PD / FM EXP / FM CLAMP
-        static constexpr bool blendIsLive    (int m) noexcept { return (m >= 1 && m <= 4) || m == 9 || m == 10; } // has a DSP law at all
+        static constexpr bool blendIsLive    (int m) noexcept { return (m >= 1 && m <= 4) || m == 6 || m == 9 || m == 10; } // has a DSP law at all (fb553 — 6 = audio-rate Warp)
         static constexpr bool blendIsFmTaper (int m) noexcept { return (m >= 1 && m <= 3) || m == 10; }           // rides the 361:1 curve (RM keeps the house curve; FM EXP is linear — see blendIsLinTaper)
         // fb551 — FM EXP TAKES A LINEAR TAPER, AND THE MEASUREMENT IS WHY. Its depth is already an
         //  EXPONENT (octaves), so putting the 361:1 curve on top makes the knob doubly exponential
@@ -1579,6 +1612,31 @@ namespace tw
             c.a1 = (float) (1.0 / (1.0 + g * (g + (double) c.k)));
             c.a2 = (float) (g * (double) c.a1);
             c.a3 = (float) (g * (double) c.a2);
+        }
+        /** fb553 — THE SAME COEFFICIENTS, CHEAP ENOUGH TO RECOMPUTE EVERY SAMPLE.
+         *  warpFiltCoef() runs once per block, which is right for a knob and useless for a cutoff
+         *  being swept at audio rate: MEASURED, blend mode 6 on warp mode 35 changed NOTHING —
+         *  npeaks 1, centroid 110 Hz, identical to the static filter — because the per-sample warp
+         *  amount never reached the filter at all. That is the silently-inert failure this codebase
+         *  keeps paying for (fb470), and "the mode is live but does nothing on two of its 37
+         *  settings" is exactly the shape of it.
+         *  So: no std::tan and no std::pow on the audio thread. The corner is f0·128^(1−a), so
+         *  x = π·f0/fs · 2^(7(1−a)) — one fastExp2 — and tan(x) comes from a Padé [3/2], exact to
+         *  0.1 % through the musical range and 3 % at the very top of the sweep, where the filter is
+         *  wide open and the error is a cutoff nobody can hear. ~20 flops, and only when armed.
+         *  ⚠️ THE STATIC PATH STILL USES std::tan. That is deliberate: depth 0 does not arm, so an
+         *  unmodulated filter is bit-identical to what shipped, and the approximation can never
+         *  move a patch that is not using this mode. */
+        static inline void warpFiltFast (WarpFiltCoef& c, float kx, float xMin, float amount) noexcept
+        {
+            float x = kx * fastExp2 (7.0f * (1.0f - amount));
+            x = juce::jlimit (xMin, 1.41372f, x);            // the static path's own [20 Hz, 0.45·sr] clamp
+            const float x2 = x * x;
+            const float g  = x * (15.0f - x2) / (15.0f - 6.0f * x2);   // tan, Padé [3/2]
+            c.g  = g;
+            c.a1 = 1.0f / (1.0f + g * (g + c.k));
+            c.a2 = g * c.a1;
+            c.a3 = g * c.a2;
         }
         // Zavalishin TPT state-variable filter — one multiply-add chain, no allocation, no branches.
         static inline float warpFiltTick (const WarpFiltCoef& c, WarpFiltState& st, float v0) noexcept
@@ -3333,8 +3391,11 @@ namespace tw
             // must be picked for the fanned maximum too. |uwarp| = 0 → jlimit of the unchanged
             // amount → bit-identical.
             auto warpFan = [this] (int osc, float amt) -> float
-            { return uniWarp_[(size_t) osc] == 0.0f ? amt
-                   : juce::jlimit (0.0f, 1.0f, amt + std::fabs (uniWarp_[(size_t) osc])); };
+            { // fb553 — the blend-warp swing widens the same worst case the unison fan does, and for
+              //  the same reason: the mip is picked once per block for the widest amount anything
+              //  will actually read. Zero when no mode-6 slot is armed, so this stays bit-identical.
+              const float w = std::fabs (uniWarp_[(size_t) osc]) + blendWarpMax_[(size_t) osc];
+              return w == 0.0f ? amt : juce::jlimit (0.0f, 1.0f, amt + w); };
             // ── FM-ENGINE-VOICE block-rate conditioning + WEATHERING SUITE slow processes ──
             // Smooth every knob, run STRIKE's decay and AGE's drift walks, then fold it all
             // into the per-osc EFFECTIVE values the per-sample core reads. All pow()/exp()
@@ -3469,10 +3530,17 @@ namespace tw
                 const float vr[4][2] = { { warpVar_[0], warp2Var_[0] }, { warpVar_[1], warp2Var_[1] },
                                          { warpVar_[2], warp2Var_[2] }, { warpVar_[3], warp2Var_[3] } };
                 const double inc[4]  = { uPhaseIncA_[0], uPhaseIncB_[0], uPhaseIncC_[0], uPhaseIncD_[0] };
+                wfXMin_ = (float) (3.14159265358979323846 * 20.0 / sampleRate_);   // fb553
                 for (int o = 0; o < 4; ++o)
+                {
+                    wfKx_[o] = (float) (3.14159265358979323846 * inc[o]);   // fb553 — π·f0/fs
                     for (int sl = 0; sl < 2; ++sl)
+                    {
+                        wfAmt_[o][sl] = am[o][sl];   // fb553 — the un-fanned block amount (see the filter's own note)
                         warpFiltCoef (wfCoef_[o][sl], md[o][sl], am[o][sl], vr[o][sl],
                                       inc[o] * sampleRate_, sampleRate_);
+                    }
+                }
             }
             currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_), (drawFor (0, 0) ? (double) drawFor (0, 0)->slope : 1.0))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_), (drawFor (0, 1) ? (double) drawFor (0, 1)->slope : 1.0)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
             currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_), (drawFor (1, 0) ? (double) drawFor (1, 0)->slope : 1.0)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_), (drawFor (1, 1) ? (double) drawFor (1, 1)->slope : 1.0)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
@@ -3635,6 +3703,19 @@ namespace tw
                 //  even though nothing is listening to it", so a routed follower just sets them.
                 //  ⚠️ THIS MUST STAY ABOVE the uLoopA..D gate and the noise render gate — those read
                 //  the flags. Below them it would build clean and follow silence.
+                // fb553 — mode 6's worst-case warp swing, per osc, for the mip pick below. It
+                //  TRACKS DEPTH: at depth 0 this is 0 and warpFan asks for exactly the base rate.
+                for (int c = 0; c < 4; ++c)
+                {
+                    float mx = 0.0f;
+                    for (int s = 0; s < 4; ++s)
+                        if (blendSlot_[c][s].mode == 6)
+                            // the SMOOTHED depth too: turning mode 6 down must fade, not hard-cut
+                            // back onto the block-rate coefficients mid-decay (fb522's arm law).
+                            mx += kWarpModDepth * juce::jmax (blendSlot_[c][s].depth, blendDepthSm_[c][s]);
+                    blendWarpMax_[c]   = juce::jlimit (0.0f, 1.0f, mx);
+                    blendWarpArmed_[c] = mx > 0.0f;
+                }
                 anyFollowArmed_ = false;
                 for (int a = 0; a < modConfig_.numAssignments; ++a)
                 {
@@ -3764,6 +3845,7 @@ namespace tw
                 //    rides the read phase. Modulator taps = previous-sample pre-gain osc outputs (any-to-any). ──
                 float blendOff[4] = { 0.f, 0.f, 0.f, 0.f };
                 float blendAmp[4] = { 1.f, 1.f, 1.f, 1.f };   // AM/RM amplitude gain (1 = inert; multiplies the carrier)
+                float blendWarp[4] = { 0.f, 0.f, 0.f, 0.f };   // fb553 — mode 6: audio-rate offset added to BOTH warp amounts (0 = inert)
                 if (anyBlendArmed_)   // fb522 CPU — see the arm pass above for the bit-identity proof
                 {
                     // fb523 — repInc[] (the per-carrier phase increment) is GONE: it was the ONLY
@@ -3771,7 +3853,7 @@ namespace tw
                     //  reads it. Its removal is the load-bearing half of the unit change.
                     for (int c = 0; c < 4; ++c)
                     {
-                        float pm = 0.f, fmDrive = 0.f, amp = 1.0f, expOct = 0.f;   // fb551 — expOct: mode 9's octaves, summed across slots
+                        float pm = 0.f, fmDrive = 0.f, amp = 1.0f, expOct = 0.f, wrp = 0.f;   // fb551 — expOct: mode 9's octaves, summed across slots · fb553 — wrp: mode 6's warp offset
                         bool  clampZero = false;                                   // fb551 — mode 10 armed on this carrier
                         for (int s = 0; s < 4; ++s)
                         {
@@ -3821,6 +3903,9 @@ namespace tw
                             //  taper); the ONLY difference is the flag, which clamps the total rate
                             //  at zero below so the carrier stalls instead of reversing.
                             else if (b.mode == 10) { fmDrive += (kFmDeviationHz * d) * mod; clampZero = true; }
+                            // fb553 — AUDIO-RATE WARP. No integrator, no bound: the warp amount is
+                            //  a plain 0..1 knob and the use site already clamps it there.
+                            else if (b.mode == 6)  wrp     += (kWarpModDepth * d) * mod;
                             // fb523's own note on this line, kept because its LEVEL argument is
                             // still the reason kRmLevel is 2.0 and not something else:
                             // RM — fb523: 1.8 -> 2.0, LEVEL ONLY. The ledger is right that at d = 1 this collapses to amp = K*mod and K is pure output gain, so the SPECTRUM is untouched — [M] our quadrature ring product (delta = 90.00 deg, resid 0.37 dB over 40 evens) is deliberately kept; Max has not chosen between our bright 1/m and the reference dark 1/m^2 and this line must not decide it. What K fixes is the 4.4 dB level gap: measured peak factor was 1.8*0.7071 = 1.272 (measured 1.272) against the reference 2.006. Tap fix + K = 2.0 gives 2.000 = -0.03 dB of the reference on peak and +4.77 dB vs its measured +4.79 dB on RMS.
@@ -3879,6 +3964,7 @@ namespace tw
                         // case of a tap sitting on its own ±4 clamp (self-feedback, a hot block
                         // engine), which is exactly what it is for.
                         blendAmp[c] = softBound (amp, 8.0f, 16.0f);
+                        blendWarp[c] = wrp;   // fb553 — clamped at the use site, together with the knob and the unison fan
                     }
                 }
 
@@ -3900,8 +3986,8 @@ namespace tw
                                 // the library) this is a predicted branch straight onto the untouched
                                 // block value and costs nothing. Both slots share the one knob (Serum
                                 // has two; the fan direction is the sine's own u_norm either way).
-                                const float wAmt1A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warpAmount_ + uWarpOffA_[(size_t) u]) : warpAmount_;
-                                const float wAmt2A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + uWarpOffA_[(size_t) u]) : warp2AmountA_;
+                                const float wAmt1A = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warpAmount_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warpAmount_;
+                                const float wAmt2A = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warp2AmountA_;
                                 float  window      = 1.0f;   // PWM, FORMANT use this post-lookup window
                                 bool   skipLookup  = false;  // PWM silence half-cycle
 
@@ -4002,7 +4088,7 @@ namespace tw
                             // warped-FM: Sync/PWM/Formant on the operator output), amp modes shape it.
                             float fmWin = 1.0f; bool fmSkip = false;
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
-                            const float wAmt2A = uniWarpOnA_ ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + uWarpOffA_[(size_t) u]) : warp2AmountA_;
+                            const float wAmt2A = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warp2AmountA_;
                             if (warp2ModeA_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0], drawFor (0, 1));
                             if (fmSkip) sAu = 0.0f;
@@ -4051,8 +4137,19 @@ namespace tw
                 // identical to filtering every sine, at 1/16 the cost. Both slots chain.
                 for (int sl = 0; sl < 2; ++sl)
                     if (wfCoef_[0][sl].on) {
+                        // fb553 — AUDIO-RATE CUTOFF. Armed only by a mode-6 blend slot, so the
+                        //  unmodulated path below is the original two lines, untouched.
+                        if (blendWarpArmed_[0])
+                        {
+                            WarpFiltCoef cf = wfCoef_[0][sl];
+                            warpFiltFast (cf, wfKx_[0], wfXMin_,
+                                          juce::jlimit (0.0f, 1.0f, wfAmt_[0][sl] + blendWarp[0]));
+                            sA_L = warpFiltTick (cf, wfState_[0][sl][0], sA_L);
+                            sA_R = warpFiltTick (cf, wfState_[0][sl][1], sA_R);
+                        }
+                        else {
                         sA_L = warpFiltTick (wfCoef_[0][sl], wfState_[0][sl][0], sA_L);
-                        sA_R = warpFiltTick (wfCoef_[0][sl], wfState_[0][sl][1], sA_R);
+                        sA_R = warpFiltTick (wfCoef_[0][sl], wfState_[0][sl][1], sA_R); }
                     }
                 // RECTIFY DC block — only when this osc's wavetable warp == Rectify (slot 1 or 2)
                 // with nonzero amount; dormant (bit-identical) otherwise.
@@ -4235,8 +4332,8 @@ namespace tw
                                 // the library) this is a predicted branch straight onto the untouched
                                 // block value and costs nothing. Both slots share the one knob (Serum
                                 // has two; the fan direction is the sine's own u_norm either way).
-                                const float wAmt1B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warpAmountB_ + uWarpOffB_[(size_t) u]) : warpAmountB_;
-                                const float wAmt2B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + uWarpOffB_[(size_t) u]) : warp2AmountB_;
+                                const float wAmt1B = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warpAmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warpAmountB_;
+                                const float wAmt2B = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warp2AmountB_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
@@ -4319,7 +4416,7 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
-                            const float wAmt2B = uniWarpOnB_ ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + uWarpOffB_[(size_t) u]) : warp2AmountB_;
+                            const float wAmt2B = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warp2AmountB_;
                             if (warp2ModeB_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1], drawFor (1, 1));
                             if (fmSkip) sBu = 0.0f;
@@ -4368,8 +4465,19 @@ namespace tw
                 // identical to filtering every sine, at 1/16 the cost. Both slots chain.
                 for (int sl = 0; sl < 2; ++sl)
                     if (wfCoef_[1][sl].on) {
+                        // fb553 — AUDIO-RATE CUTOFF. Armed only by a mode-6 blend slot, so the
+                        //  unmodulated path below is the original two lines, untouched.
+                        if (blendWarpArmed_[1])
+                        {
+                            WarpFiltCoef cf = wfCoef_[1][sl];
+                            warpFiltFast (cf, wfKx_[1], wfXMin_,
+                                          juce::jlimit (0.0f, 1.0f, wfAmt_[1][sl] + blendWarp[1]));
+                            sB_L = warpFiltTick (cf, wfState_[1][sl][0], sB_L);
+                            sB_R = warpFiltTick (cf, wfState_[1][sl][1], sB_R);
+                        }
+                        else {
                         sB_L = warpFiltTick (wfCoef_[1][sl], wfState_[1][sl][0], sB_L);
-                        sB_R = warpFiltTick (wfCoef_[1][sl], wfState_[1][sl][1], sB_R);
+                        sB_R = warpFiltTick (wfCoef_[1][sl], wfState_[1][sl][1], sB_R); }
                     }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineB_ == Engine::WT && (warpAmpNeedsDc (warpModeB_, warpAmountB_, warpVar_[1])
@@ -4539,8 +4647,8 @@ namespace tw
                                 // the library) this is a predicted branch straight onto the untouched
                                 // block value and costs nothing. Both slots share the one knob (Serum
                                 // has two; the fan direction is the sine's own u_norm either way).
-                                const float wAmt1C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warpAmountC_ + uWarpOffC_[(size_t) u]) : warpAmountC_;
-                                const float wAmt2C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + uWarpOffC_[(size_t) u]) : warp2AmountC_;
+                                const float wAmt1C = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warpAmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warpAmountC_;
+                                const float wAmt2C = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warp2AmountC_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
@@ -4623,7 +4731,7 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
-                            const float wAmt2C = uniWarpOnC_ ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + uWarpOffC_[(size_t) u]) : warp2AmountC_;
+                            const float wAmt2C = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warp2AmountC_;
                             if (warp2ModeC_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2], drawFor (2, 1));
                             if (fmSkip) sCu = 0.0f;
@@ -4672,8 +4780,19 @@ namespace tw
                 // identical to filtering every sine, at 1/16 the cost. Both slots chain.
                 for (int sl = 0; sl < 2; ++sl)
                     if (wfCoef_[2][sl].on) {
+                        // fb553 — AUDIO-RATE CUTOFF. Armed only by a mode-6 blend slot, so the
+                        //  unmodulated path below is the original two lines, untouched.
+                        if (blendWarpArmed_[2])
+                        {
+                            WarpFiltCoef cf = wfCoef_[2][sl];
+                            warpFiltFast (cf, wfKx_[2], wfXMin_,
+                                          juce::jlimit (0.0f, 1.0f, wfAmt_[2][sl] + blendWarp[2]));
+                            sC_L = warpFiltTick (cf, wfState_[2][sl][0], sC_L);
+                            sC_R = warpFiltTick (cf, wfState_[2][sl][1], sC_R);
+                        }
+                        else {
                         sC_L = warpFiltTick (wfCoef_[2][sl], wfState_[2][sl][0], sC_L);
-                        sC_R = warpFiltTick (wfCoef_[2][sl], wfState_[2][sl][1], sC_R);
+                        sC_R = warpFiltTick (wfCoef_[2][sl], wfState_[2][sl][1], sC_R); }
                     }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineC_ == Engine::WT && (warpAmpNeedsDc (warpModeC_, warpAmountC_, warpVar_[2])
@@ -4843,8 +4962,8 @@ namespace tw
                                 // the library) this is a predicted branch straight onto the untouched
                                 // block value and costs nothing. Both slots share the one knob (Serum
                                 // has two; the fan direction is the sine's own u_norm either way).
-                                const float wAmt1D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warpAmountD_ + uWarpOffD_[(size_t) u]) : warpAmountD_;
-                                const float wAmt2D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + uWarpOffD_[(size_t) u]) : warp2AmountD_;
+                                const float wAmt1D = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warpAmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warpAmountD_;
+                                const float wAmt2D = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warp2AmountD_;
                                 float  window      = 1.0f;
                                 bool   skipLookup  = false;
 
@@ -4927,7 +5046,7 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
-                            const float wAmt2D = uniWarpOnD_ ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + uWarpOffD_[(size_t) u]) : warp2AmountD_;
+                            const float wAmt2D = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warp2AmountD_;
                             if (warp2ModeD_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3], drawFor (3, 1));
                             if (fmSkip) sDu = 0.0f;
@@ -4976,8 +5095,19 @@ namespace tw
                 // identical to filtering every sine, at 1/16 the cost. Both slots chain.
                 for (int sl = 0; sl < 2; ++sl)
                     if (wfCoef_[3][sl].on) {
+                        // fb553 — AUDIO-RATE CUTOFF. Armed only by a mode-6 blend slot, so the
+                        //  unmodulated path below is the original two lines, untouched.
+                        if (blendWarpArmed_[3])
+                        {
+                            WarpFiltCoef cf = wfCoef_[3][sl];
+                            warpFiltFast (cf, wfKx_[3], wfXMin_,
+                                          juce::jlimit (0.0f, 1.0f, wfAmt_[3][sl] + blendWarp[3]));
+                            sD_L = warpFiltTick (cf, wfState_[3][sl][0], sD_L);
+                            sD_R = warpFiltTick (cf, wfState_[3][sl][1], sD_R);
+                        }
+                        else {
                         sD_L = warpFiltTick (wfCoef_[3][sl], wfState_[3][sl][0], sD_L);
-                        sD_R = warpFiltTick (wfCoef_[3][sl], wfState_[3][sl][1], sD_R);
+                        sD_R = warpFiltTick (wfCoef_[3][sl], wfState_[3][sl][1], sD_R); }
                     }
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineD_ == Engine::WT && (warpAmpNeedsDc (warpModeD_, warpAmountD_, warpVar_[3])
@@ -6498,6 +6628,11 @@ namespace tw
         float followRelCoef_ = 0.0f;                                       // fb552 — set with the sample rate
         bool  anyFollowArmed_ = false;                                     // fb552 — CPU: no routed follower, no per-sample tick
         double blendCarrInc_[4] = { 0.0, 0.0, 0.0, 0.0 };   // fb551 — carrier rate in cycles/sample, block-rate. MODES 9/10 ONLY (see kFmExpOctaves).
+        float  blendWarpMax_[4]   = { 0.f, 0.f, 0.f, 0.f };   // fb553 — mode 6's worst-case warp swing, block-rate, for the mip pick
+        float  wfKx_[4]     = { 0.f, 0.f, 0.f, 0.f };        // fb553 — π·f0/fs per osc, so the per-sample corner needs no divide
+        float  wfXMin_      = 0.f;                            // fb553 — π·20/fs, the static path's own lower clamp
+        float  wfAmt_[4][2] = { { 0.f, 0.f }, { 0.f, 0.f }, { 0.f, 0.f }, { 0.f, 0.f } };   // fb553 — each warp slot's block amount, to add the audio-rate offset to
+        bool   blendWarpArmed_[4] = { false, false, false, false };   // fb553 — keeps the per-sample warp branch predicted when nothing is armed
         // BLEND MODES — ALL-ENGINES support (2026-07-12). Two per-block flags derived from the warp
         // matrix, both inert (false) for any patch with no active FM/PD slot → existing sound is
         // byte-identical whenever nothing is blended:

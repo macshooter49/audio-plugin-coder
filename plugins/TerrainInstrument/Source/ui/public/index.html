@@ -19026,9 +19026,9 @@ setTimeout(function wireSynControls () {
         var MODES = ['Off','FM','PD','AM','RM','Sync','Warp','Dist','Filter','FM Exp','FM Clamp'];   // == SYN_OSC_x_WSLOTn_MODE choice order
         // The pill is ~35px wide and shows MODE(SRC); a full name does not fit, so the pill gets a
         // two-glyph token from the same family as FM/PD/AM/RM and the menu + tooltip carry the name.
-        var PILL  = ['B','FM','PD','AM','RM','Sync','Warp','Dist','Filt','FE','FC'];
-        var P1ON  = { FM: 1, PD: 1, AM: 1, RM: 1, 'FM Exp': 1, 'FM Clamp': 1 };  // active families; Sync/Warp/Dist still 'soon'
-        function famMode (m) { return (m >= 1 && m <= 4) || m === 9 || m === 10; }   // fb551 — takes a SOURCE. Mirrors blendIsLive() in SynthVoice.h; fb470's law lives on this side of the wall too.
+        var PILL  = ['B','FM','PD','AM','RM','Sync','WP','Dist','Filt','FE','FC'];   /* fb553 — mode 6 went live; 'Warp' does not fit a 35px pill, 'WP' does */
+        var P1ON  = { FM: 1, PD: 1, AM: 1, RM: 1, 'FM Exp': 1, 'FM Clamp': 1, Warp: 1 };  // active families; Sync/Dist/Filter stay 'soon'. fb553 — Warp went live, and it IS Dist and Filter: it drives whatever the osc's warp slots are already set to.
+        function famMode (m) { return (m >= 1 && m <= 4) || m === 6 || m === 9 || m === 10; }   // fb553 — 6 = audio-rate Warp · fb551 — takes a SOURCE. Mirrors blendIsLive() in SynthVoice.h; fb470's law lives on this side of the wall too.
         var NSRC  = 17;                                                          // SRC choices: Osc A..D / Sub / Noise / Self / LFO 1-10 (fb223 — MUST equal the C++ srcs StringArray count)
         var bstate = {};                                                         // "a1" -> {mode,src,depth}  (display source of truth)
         function st  (o, s) { var k = o + s; return bstate[k] || (bstate[k] = { mode: 0, src: ('abcd'.indexOf(o) + 1) % 4, depth: 0 }); }
@@ -19037,7 +19037,7 @@ setTimeout(function wireSynControls () {
         function wSrc  (o, s, v) { st(o, s).src  = v; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'SRC'),  v / (NSRC - 1)); }
         function wDep  (o, s, d) { d = Math.max(0, Math.min(1, d)); st(o, s).depth = d; if (window.__setSynParam) window.__setSynParam (pid(o, s, 'DEPTH'), d); }
 
-        var MENU_FAM = ['Off','FM','FM Exp','FM Clamp','PD','AM','RM'];   // FINAL blend arsenal — Sync/Warp/Dist removed (redundant with the front/back warp modes; Max 2026-07-12). Enum in C++ keeps them (frozen), just not shown. fb551 — the three FM curves sit together.
+        var MENU_FAM = ['Off','FM','FM Exp','FM Clamp','PD','AM','RM','Warp'];   // FINAL blend arsenal — Sync/Warp/Dist removed (redundant with the front/back warp modes; Max 2026-07-12). Enum in C++ keeps them (frozen), just not shown. fb551 — the three FM curves sit together.
         var pillOf = {};                                                   // "a1" -> pill element (for reopen refresh)
         function srcLtr (v) { return (v < 4) ? 'ABCD'.charAt(v) : (v === 5 ? 'N' : (v === 6 ? 'S' : (v >= 7 && v <= 16 ? 'L' + (v - 6) : '?'))); }   // N = Noise (fb64), S = Self (PD only), L1-L10 = LFO shapes (fb223)
 
@@ -19049,7 +19049,8 @@ setTimeout(function wireSynControls () {
           pill.innerHTML = '<span class="bp-txt">' + (PILL[b.mode] || MODES[b.mode]) + '<span class="bp-par">(</span>' + srcLtr(b.src) + '<span class="bp-par">)</span></span>';
           pill.classList.add('act');
           var _sn = (b.src >= 7 && b.src <= 16) ? 'the LFO ' + (b.src - 6) + ' shape (drawn curve as the warp)' : (b.src === 5) ? 'the Noise' : (b.src === 6) ? 'itself (feedback)' : 'Osc ' + String(srcLtr(b.src)).toUpperCase();
-          var _mn = { 9: 'FM Exp — the modulator moves this oscillator\'s pitch in OCTAVES, so a small change in it is a huge change in the sound. Screams where plain FM growls.',
+          var _mn = { 6: 'Warp — this source drives BOTH of this oscillator\'s warp slots at AUDIO RATE. Whatever the warp is set to is what gets modulated: a shaper becomes audio-rate distortion, the filter modes become per-oscillator filter FM, and a drawn curve gets swept thousands of times a second. Wavetable and FM engines only.',
+                      9: 'FM Exp — the modulator moves this oscillator\'s pitch in OCTAVES, so a small change in it is a huge change in the sound. Screams where plain FM growls.',
                       10: 'FM Clamp — linear FM that never reverses the carrier: it stalls at zero instead of running backwards, which splits the carrier in two.' }[b.mode];
           pill.title = MODES[b.mode] + ' from ' + _sn + ' — hover or drag for depth. The source modulates even at volume 0.' + (_mn ? '\n' + _mn : '');
         }

@@ -323,9 +323,11 @@ mode is missing from `famMode()` — the last one is fb470's trap, and it is rea
 from ONE of the six mode-range tests in SynthVoice.h made both modes **completely silent** while FM
 kept working, which is exactly what the mutation run showed.
 
-## 8 · BLEND SLOTS 7 `Dist` / 8 `Filter`
-Already allocated in the parameter and **still inert** (verified). Lower priority now that warp
-carries 26 shapers — but this is the *modulatable* version.
+## 8 · BLEND SLOTS 7 `Dist` / 8 `Filter`   ✅ **CLOSED BY fb553 — as one mode, not two**
+Slots 7/8 stay frozen and inert **on purpose**. Blend mode **6 `Warp`** (fb553, item 9B) delivers
+both and more: it drives the oscillator's warp amount at audio rate, and "warp amount" is one knob
+with 37 meanings — modes 9-34 are shapers (`Dist`), 35/36 are the per-osc filter (`Filter`), 37 is
+the curve you drew. One mode, no new parameters, and the last two empty boxes never need filling.
 
 ## 9 · AUDIO AS A MODULATION SOURCE — the oscillators and the noise   ◐ **9A SHIPPED fb552**
 Max saw it on a Serum 2 reel: *"he was able to literally take the noise and make it a modulation
@@ -391,7 +393,53 @@ used to decode as "Env 111" — fb261's bug one family later), and on the popped
 **Floor gated**: with followers compiled in and none routed, dry/FM/FM-Exp render 1/55/39 peaks at
 110/3119/943 Hz against the pre-change build's 1/55/39 at 110/3124/972 — inside the harness spread.
 
-**Still open: 9B** (true audio-rate), and the follower's timing is fixed rather than a knob.
+**Still open:** the follower's attack/release are fixed constants rather than knobs.
+
+### ✅ 9B SHIPPED — fb553, as blend mode 6 `Warp`
+9A gave the matrix a source's ENVELOPE; 9B is the source's own SAMPLE, per sample. The honest
+reading of that is **not** a new kind of route: the block-staged matrix cannot deliver a per-sample
+value to 487 destinations, and on the 480 that are block-rate an audio-rate value is inaudible or
+noise — a route that silently does nothing is worse than one that does not exist. So 9B went where
+per-sample modulation already lives: **the blend slot**, which is exactly a {source, depth} pair
+evaluated every sample. FM/PD spend it on phase, AM/RM on amplitude, **mode 6 on the warp amount**.
+Both warp slots, so it works wherever the shaper happens to sit. **WT and FM engines only** —
+SAMP/GRAN/SPEC/HARM/MODAL never evaluate a per-sample warp amount at all.
+
+**MEASURED on a full-bandwidth table (Terra Stack, loaded through the real editor — every earlier
+warp alias number in this document was taken on preset 0, a SINE, where table aliasing is
+impossible):**
+
+| | npeaks | centroid | out-of-harm | alias pk/rms |
+|---|---:|---:|---:|---:|
+| table dry | 203 | 391 Hz | −45.7 | −113.7 / −135.7 |
+| Bitcrush static | 216 | 459 | −27.7 | −112.2 / −120.4 |
+| **+ Warp d = 0** | 216 | 459 | −27.7 | −111.2 / −120.3 |
+| + Warp d = 0.60 | 216 | 582 | −25.6 | −110.8 / −117.2 |
+| Sync (knob 0) static | 203 | 391 | −45.7 | −113.3 / −135.6 |
+| + Warp d = 1.00 | 216 | **2,983** | −16.8 | −110.5 / −121.4 |
+| LP Filter static | 47 | 189 | −45.9 | −118.6 / −140.1 |
+| + Warp d = 0.70 | **107** | 228 | −45.7 | −114.9 / −136.4 |
+
+**🚨 THE FILTER MODES DID NOTHING AT FIRST, and that is the whole reason this item was worth doing
+carefully.** `warpFiltCoef()` runs once per block — right for a knob, useless for a cutoff swept at
+audio rate. Mode 6 on warp mode 35 measured **npeaks 1, centroid 110 Hz, identical to the static
+filter**: live, saved, drawn, silent. Fixed with a per-sample coefficient recompute that costs no
+transcendental (`fastExp2` for the corner, a Padé [3/2] for `tan`), armed only by a mode-6 slot, so
+an unmodulated filter is bit-identical to what shipped.
+
+**🚨 AND THE MIP HAD TO WIDEN — measured, at last, on a table that can show it.** The mip is chosen
+once per block from the warp amount; sweeping it at audio rate makes the read rate exceed what that
+mip is band-limited for. Sync at knob 0 with full modulation, mip blind vs mip widened:
+
+| | alias peak | alias rms | out-of-harm |
+|---|---:|---:|---:|
+| mip blind to the swing | −95.0 dBc | −101.2 | −12.2 |
+| **mip widened (shipped)** | **−110.5** | **−121.4** | −16.8 |
+
+**15.5 dB of peak alias and 20.2 dB of RMS**, and it costs nothing when no mode-6 slot is armed.
+The same test on preset 0 showed *no difference at all* — a sine has no upper harmonics to alias, so
+it cannot fail a mip test. That is worth remembering before trusting any alias number from this
+harness. See [[feedback-a-sine-carrier-cannot-fail-a-mip-test]].
 
 ## 10 · CURVE EVERYWHERE — and the one that matters is the MOD CONNECTION   ⬅ Max, 2026-08-31
 Max: *"when he put that noise on Osc A's volume he right-clicked the volume and pressed curve

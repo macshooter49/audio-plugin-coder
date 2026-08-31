@@ -41,7 +41,7 @@ if not mf: fails.append("could not find the JS famMode() predicate")
 else:
     fam = mf.group(1)
     for idx, name in enumerate(c):
-        if name in ('Off', 'Sync', 'Warp', 'Dist', 'Filter'):   # frozen / not offered
+        if name in ('Off', 'Sync', 'Dist', 'Filter'):   # still frozen. fb553 took 'Warp' off this list.
             continue
         ok = ("m === %d" % idx) in fam or (idx <= 4 and "m >= 1 && m <= 4" in fam)
         if not ok:
