@@ -8320,8 +8320,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               <!-- fb555 — KEY TRACKING as a mod source. The label drags out exactly like Velocity's;
                    the number is the LIVE key position of the sounding note, so the row moves while
                    you play (Max's law: if it is audible it is visible). It has no parameter of its
-                   own — key tracking IS the route you drag from here. -->
-              <div class="voice-row rr-vis-key"><span class="vel-src" data-drag-note="1">Key</span><b id="rr-key-val">—</b></div>
+                   own — key tracking IS the route you drag from here.
+                   fb557 — it reads 0 at rest rather than a dash, because 0 is not "unknown": it is
+                   exactly what a routed destination is receiving when nothing is held. -->
+              <div class="voice-row rr-vis-key"><span class="vel-src" data-drag-note="1">Key</span><b id="rr-key-val">0</b></div>
               <div class="voice-row" data-syn-row="SYN_PORTA"><span>Portamento</span><b>0</b></div>
               <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><span>Glide</span><b>50</b></div>
               <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
@@ -30682,7 +30684,7 @@ restoreThemeFromBackend();
     /* fb555 — the Key row has no parameter; its number is the SOUNDING NOTE's key position, so the
        row moves while you play. Rides the push that is already happening; no new poll, no rAF. */
     try{ var _k=document.getElementById('rr-key-val');
-         if(_k){ var nv=window.__mvNote; _k.textContent=(window.__notesActive&&nv!=null)?String(Math.round(nv*100)):'\u2014'; } }catch(_e){}
+         if(_k){ var nv=window.__mvNote; _k.textContent=String(Math.round((nv!=null?nv:0)*100)); } }catch(_e){}
     mvE=e; mvL=l; if(l&&l.length){ window.__mvLfoValPrev=window.__mvLfoVal; window.__mvLfoValTPrev=window.__mvLfoValT; window.__mvLfoVal=l; window.__mvLfoValT=Date.now(); } if(p&&p.length){ window.__mvLfoPhPrev=window.__mvLfoPh; window.__mvLfoPhTPrev=window.__mvLfoPhT; window.__mvLfoPh=p; window.__mvLfoPhT=Date.now(); } };   /* fb487 -- prev kept so tick() can MEASURE the LFO rate between pushes */   /* fb498 -- VALUES now keep prev+stamp too (the fb493 shape applied to values) so consumers can INTERPOLATE instead of latching. A value never wraps, so nothing below uses __w01 or a shortest-arc fold. */   /* fb238 — values ride for the point-mod ghost */
   /* fb498 -- THE VALUE TWIN OF fb493's PHASE LOCK. __mvLfoVal arrives at the frame-push rate: a
      60 Hz ceiling, self-clocked by fb482's ack (PluginEditor.cpp:5470), and 0 Hz whenever fb483
@@ -31018,7 +31020,13 @@ restoreThemeFromBackend();
   function openCurveEditor(a,anchor){
     closeCurveEditor();
     var N=129;
-    if(!a.curve){ a.curve=[]; for(var i=0;i<N;i++) a.curve.push(i/(N-1)); }
+    /* fb557 — OPENING the editor must not CURVE the connection. It used to write an identity curve
+       onto the route the moment the panel appeared, which (a) put 129 numbers in the patch for a
+       route nobody had drawn on, (b) lit the grip as if a curve existed, and (c) quietly defeated
+       fb554's own rule that a straight connection carries NO curve rather than an identity one —
+       `mc.set` went true and the DSP started running a lookup to arrive back where it started.
+       The points live here until the first stroke; `a.curve` is only assigned by paint(). */
+    var pts = a.curve ? a.curve.slice() : (function(){ var q=[]; for(var i=0;i<N;i++) q.push(i/(N-1)); return q; })();
     var W=168,H=124;
     var box=document.createElement('div'); box.className='sm-curve';
     var ttl=document.createElement('div'); ttl.className='sc-ttl'; ttl.textContent=srcName(a)+' \u2192 curve';
@@ -31035,7 +31043,7 @@ restoreThemeFromBackend();
       g.strokeStyle='rgba(255,255,255,0.16)'; g.lineWidth=2;
       g.beginPath(); g.moveTo(0,cv.height); g.lineTo(cv.width,0); g.stroke();      /* the identity */
       g.strokeStyle='rgba(255,255,255,0.92)'; g.lineWidth=3; g.beginPath();
-      for(var i=0;i<N;i++){ var X=i/(N-1)*cv.width, Y=(1-a.curve[i])*cv.height; if(i)g.lineTo(X,Y); else g.moveTo(X,Y); }
+      for(var i=0;i<N;i++){ var X=i/(N-1)*cv.width, Y=(1-pts[i])*cv.height; if(i)g.lineTo(X,Y); else g.moveTo(X,Y); }
       g.stroke();
     }
     var pushT=0;
@@ -31048,8 +31056,9 @@ restoreThemeFromBackend();
       var i=Math.round(xn*(N-1)), v=1-yn;
       if(lastX<0)lastX=i;
       /* interpolate across a fast drag: a gap in a mod curve is a step, and a step is a click */
-      var a0=Math.min(lastX,i), a1=Math.max(lastX,i), v0=(lastX===i)?v:a.curve[lastX];
-      for(var k=a0;k<=a1;++k){ var t=(a1===a0)?1:(k-a0)/(a1-a0); a.curve[k]=(lastX<=i)?(v0+(v-v0)*t):(v+(v0-v)*t); }
+      var a0=Math.min(lastX,i), a1=Math.max(lastX,i), v0=(lastX===i)?v:pts[lastX];
+      for(var k=a0;k<=a1;++k){ var t=(a1===a0)?1:(k-a0)/(a1-a0); pts[k]=(lastX<=i)?(v0+(v-v0)*t):(v+(v0-v)*t); }
+      a.curve=pts;   /* fb557 — the FIRST stroke is what curves the connection, not opening the panel */
       lastX=i; paint(); pushCurve();
     }
     cv.addEventListener('mousedown',function(ev){ if(ev.button!==0)return; ev.preventDefault(); ev.stopPropagation();
