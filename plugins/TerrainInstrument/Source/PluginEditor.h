@@ -1542,6 +1542,7 @@ private:
     // silence while the 60Hz timer demonstrably runs ⇒ reload the page ourselves
     // (the manual close/reopen fix, automated). See timerCallback.
     double lastEvalOkMs_      = 0;
+    int    lastMidiMapV_      = -1;   // fb563 (4) — the CC map version last pushed to the page
     double lastRecoveryMs_    = 0;
     int    channelRecoveries_ = 0;
 

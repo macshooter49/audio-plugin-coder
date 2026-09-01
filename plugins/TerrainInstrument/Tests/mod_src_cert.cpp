@@ -241,11 +241,16 @@ int main()
     au.set (LVL, 0.0f); au.pump (0.2);
     au.setRoutes ("[{\"s\":240,\"d\":64,\"v\":1.0}]");
     std::vector<double> rr; for (int i = 0; i < 6; ++i) rr.push_back (rmsDb (au.note (60)));
-    double rmin = 1e9, rmax = -1e9; bool distinct = true;
-    for (size_t i = 0; i < rr.size(); ++i) { rmin = std::min (rmin, rr[i]); rmax = std::max (rmax, rr[i]);
-        for (size_t j = 0; j < i; ++j) if (std::abs (rr[i] - rr[j]) < 0.1) distinct = false; }
-    std::string rs; for (double x : rr) rs += fmt ("%.1f ", x);
-    chk (rmax - rmin > 6.0 && distinct, "6  RANDOM 1 → Level A: six notes, six different levels", rs + "dB");
+    // Level A = knob (0) + Random × depth (1.0), so each note's RMS IS the note's random value in
+    // dB: uniform on 0..1 lands half the draws within 6 dB of full, and in dB two of six will often
+    // sit a tenth apart. Judge it back in LINEAR, against the macro-100 level (= rand 1.0): a
+    // spread over 0.3 and a standard deviation over 0.1 (uniform 0..1 has 0.29) — the failure this
+    // guards against is every note landing on the SAME value (no per-note draw at all).
+    std::vector<double> lin; for (double x : rr) lin.push_back (std::pow (10.0, (x - m1) / 20.0));
+    double lmin = 1e9, lmax = -1e9, mean = 0; for (double x : lin) { lmin = std::min (lmin, x); lmax = std::max (lmax, x); mean += x / (double) lin.size(); }
+    double var = 0; for (double x : lin) var += (x - mean) * (x - mean) / (double) lin.size();
+    std::string rs; for (double x : lin) rs += fmt ("%.2f ", x);
+    chk (lmax - lmin > 0.3 && std::sqrt (var) > 0.1, "6  RANDOM 1 → Level A: six notes, six draws (linear spread > 0.3, sd > 0.1)", rs + fmt ("· spread %.2f sd %.2f", lmax - lmin, std::sqrt (var)));
 
     // ── 7 · ALT ──
     au.setRoutes ("[{\"s\":244,\"d\":64,\"v\":1.0}]");

@@ -931,6 +931,27 @@ public:
     /** fb563 (3) — any source's live value as 0..1 from the processor's own views, for the global half of
         "Scale by". LFOs are the free-running mirrors, envelopes the mono tap, the rest the published feeds. */
     float globalSourceTo01 (int wire) noexcept;
+    // ══ fb563 (4) — MIDI LEARN + THE CC MAP ═════════════════════════════════════════════════
+    //  "MIDI Learn" on any control: the NEXT CC the host sends binds to that parameter (absolute,
+    //  0..127 → the parameter's normalised range). The audio thread only STORES (atomics); the
+    //  message-thread timer APPLIES with setValueNotifyingHost, so the host sees ordinary parameter
+    //  changes and automation stays honest. The map persists in the state as midiCcMap =
+    //  {"74":"SYN_OSC_A_WARP_AMOUNT",…} and the editor is pushed the map whenever it changes.
+    void setMidiLearn (const juce::String& paramId);     // "" cancels
+    void removeMidiCc (const juce::String& paramId);
+    void setMidiMapJson (const juce::String& json);
+    juce::String getMidiMapJson() const;
+    int  midiMapVersion() const noexcept { return midiMapVersion_.load (std::memory_order_relaxed); }
+    int  midiLearnedCc()  const noexcept { return midiLearnedCc_.load (std::memory_order_relaxed); }
+    void midiCcSeen (int cc, int value) noexcept;        // audio thread
+    void applyPendingMidiCc();                            // message thread (the processor timer)
+    std::atomic<int>   midiLearnParam_ { -1 };            // parameter INDEX to learn, −1 = idle
+    std::atomic<int>   midiCcParam_[128];                 // parameter index per CC, −1 = unmapped
+    std::atomic<float> midiCcPending_[128];
+    std::atomic<int>   midiCcDirty_[128];
+    std::atomic<int>   midiMapDirty_ { 0 };
+    std::atomic<int>   midiMapVersion_ { 0 };
+    std::atomic<int>   midiLearnedCc_ { -1 };
     // fb264 — master peak-limiter state (audio-thread only; coeffs set in prepareToPlay). Stereo-linked
     // gain-reduction before the safety clip so dense chords stay loud without squaring into hard-clip buzz.
     float limEnv_ = 0.0f, limGain_ = 1.0f, limAtkCoef_ = 0.0f, limRelCoef_ = 0.0f;

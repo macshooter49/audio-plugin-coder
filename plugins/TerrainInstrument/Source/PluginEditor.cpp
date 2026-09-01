@@ -845,6 +845,18 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                         v = p->getValue();
                 complete (juce::var (v));
             })
+            // fb563 (4) — MIDI LEARN. setMidiLearn(id) arms the next CC for that parameter ("" cancels);
+            // removeMidiCc(id) drops every CC bound to it; getMidiMap() answers {"74":"SYN_…"}. The map is
+            // also PUSHED to the page whenever it changes (timerCallback), so the menu never polls.
+            .withNativeFunction("setMidiLearn", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { audioProcessor.setMidiLearn (args.size() ? args[0].toString() : juce::String()); complete (juce::var{}); })
+            .withNativeFunction("removeMidiCc", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { if (args.size()) audioProcessor.removeMidiCc (args[0].toString()); complete (juce::var{}); })
+            .withNativeFunction("getMidiMap", [this](const juce::Array<juce::var>&,
+                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { complete (juce::var (audioProcessor.getMidiMapJson())); })
             .withNativeFunction("getConvIR", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5860,6 +5872,12 @@ void TerrainUiCore::timerCallback()
         for (int rk = 0; rk < 4; ++rk) p2Feed << (rk ? "," : "") << SF (audioProcessor.modVizRand (rk), 3);
         p2Feed << "];window.__mvAlt=" << SF (audioProcessor.modVizAlt(), 1) << ";";
         js << p2Feed;
+        if (audioProcessor.midiMapVersion() != lastMidiMapV_)
+        {   // fb563 (4) — the CC map changed (a learn landed, a binding was removed): push it ONCE
+            lastMidiMapV_ = audioProcessor.midiMapVersion();
+            js << "try{window.__midiMap=" << audioProcessor.getMidiMapJson() << ";window.__midiLearnedCc=" << audioProcessor.midiLearnedCc()
+               << ";if(window.__midiMapChanged)window.__midiMapChanged();}catch(e){}";
+        }
         js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 

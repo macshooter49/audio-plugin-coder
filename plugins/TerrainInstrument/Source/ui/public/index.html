@@ -31589,6 +31589,29 @@ restoreThemeFromBackend();
   function resetDest(g){ var el=g.el; if(!el) return;
     var t=(el.querySelector&&(el.querySelector('.knob-ring')||el.querySelector('.fxr-dial')||el.querySelector('.ctl svg')||el.querySelector('canvas')))||el;
     try{ t.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,view:window})); }catch(e){} }
+  /* ═══ fb563 (4) — MIDI LEARN ═══════════════════════════════════════════════════════════════
+     "MIDI Learn" on any control that has a parameter: the plugin arms the next CC for it (the
+     row reads "waiting…" until a CC arrives — the processor pushes the new map and the open menu
+     rebuilds), then the row reads "MIDI CC 74 · Remove". The map lives in the processor and in
+     the patch; the page only mirrors it (window.__midiMap, pushed once per change). */
+  var midiLearnFor=null, lastMenu=null;
+  function nativeCall(nm){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(nm):null; if(f) return f.apply(null,[].slice.call(arguments,1)); }catch(e){} return null; }
+  function paramIdOf(g){ var el=g.el; if(!el||!el.getAttribute) return null;
+    var id=el.getAttribute('data-syn')||el.getAttribute('data-coarse')||el.getAttribute('data-warp2-amt')||el.getAttribute('data-ph');
+    if(!id&&el.classList&&el.classList.contains('sub-val')){ var pill=el.closest('.sub-pill'), act=(pill&&pill.dataset.subActive)||'weight'; id=el.getAttribute('data-sub-'+act); }
+    if(!id&&el.classList&&el.classList.contains('fxr-dial')) id=el.getAttribute('data-p');
+    if(!id&&el.querySelector){ var d=el.querySelector('.fxr-dial[data-p]'); if(d) id=d.getAttribute('data-p'); }
+    return id||null; }
+  function midiCcFor(pid){ var m=window.__midiMap; if(!m||!pid) return null; for(var k in m) if(m[k]===pid) return +k; return null; }
+  window.__midiMapChanged=function(){ midiLearnFor=null;
+    try{ var cc=window.__midiLearnedCc; if(cc!=null&&cc>=0&&window.__tiToast) window.__tiToast('Learned CC '+cc); }catch(e){}
+    try{ var m=document.getElementById('syn-ctx-menu'); if(lastMenu&&m&&m.classList.contains('act')) lastMenu(); }catch(e){} };
+  window.__midiLearnFor=function(){ return midiLearnFor; };   /* gate hook */
+  function midiRows(g){ var pid=paramIdOf(g); if(!pid) return [];
+    var cc=midiCcFor(pid);
+    if(cc!=null) return [{ label:'MIDI CC '+cc, badge:'Remove', onPick:function(){ nativeCall('removeMidiCc',pid); try{ if(window.__midiMap) delete window.__midiMap[String(cc)]; }catch(e){} } }];
+    if(midiLearnFor===pid) return [{ label:'MIDI Learn', badge:'waiting…', onPick:function(){ midiLearnFor=null; nativeCall('setMidiLearn',''); } }];
+    return [{ label:'MIDI Learn', onPick:function(){ midiLearnFor=pid; nativeCall('setMidiLearn',pid); } }]; }
   function openCtlMenu(g,ev){ if(!window.__synShowMenu) return false;
     var x=ev.clientX, y=ev.clientY, name=ctlName(g);
     function build(){
@@ -31601,12 +31624,13 @@ restoreThemeFromBackend();
       if(extra.length){ if(rows.length) rows.push({isSep:true}); extra.forEach(function(r){ rows.push(r); }); }
       if(rows.length) rows.push({isSep:true});
       rows.push({ label:'Reset to default', onPick:function(){ resetDest(g); } });
+      midiRows(g).forEach(function(r){ rows.push(r); });   /* fb563 (4) */
       if(rts.length) rows.push({ label:'Copy modulators', onPick:function(){ modClip=rts.map(function(a){ return {S:srcOf(a),depth:a.depth,curve:a.curve?a.curve.slice():null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}; }); } });
       if(g.dest!=null&&modClip&&modClip.length) rows.push({ label:'Paste modulators', onPick:function(){
         modClip.forEach(function(c){ var a=addRoute(c.S,g.dest,g.el); if(a){ a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; } });
         markTargets(); push(); } });
       window.__synShowMenu(name, rows, x, y); }
-    build(); return true; }
+    lastMenu=build; build(); return true; }
   /* THE ONE LISTENER. Capture phase on the document, so it runs before every element-level
      right-click handler and claims a destination before any of them can open a second menu.
      Anything that is not a destination — the envelope graph, a mode tile, the noise name, a rack

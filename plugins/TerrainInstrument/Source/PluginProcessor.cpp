@@ -326,6 +326,8 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
             for (int k = 0; k < tw::SynthVoice::kDrawPts; ++k)
                 drawCurve_[i][b].pts[k] = (float) k / (float) (tw::SynthVoice::kDrawPts - 1);
     }
+    for (int cc = 0; cc < 128; ++cc)   // fb563 (4) — the CC map starts empty (atomic arrays do not value-initialise themselves)
+    { midiCcParam_[cc].store (-1, std::memory_order_relaxed); midiCcPending_[cc].store (0.0f, std::memory_order_relaxed); midiCcDirty_[cc].store (0, std::memory_order_relaxed); }
     synthEngine.addSound (new tw::SynthSound());
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
@@ -1380,6 +1382,7 @@ void TerrainInstrumentAudioProcessor::pushQwertyNote (int note, bool on)
 void TerrainInstrumentAudioProcessor::timerCallback()
 {
     mtHeartbeat_.fetch_add (1, std::memory_order_relaxed);   // fb481 — the stall beacon watches this
+    applyPendingMidiCc();   // fb563 (4) — learned CCs land on their parameters here, on the message thread
 
     // fb528 — see prepLock_ in PluginProcessor.h. Everything below this line ARMS or REBUILDS
     // shared engine state (stem rings, wavetables, the pooled FX engines, MODAL's and HARM's
@@ -7889,7 +7892,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
-            if (m.isController() && m.getControllerNumber() == 1) midiWheelT_ = (float) m.getControllerValue() / 127.0f;
+            if (m.isController())
+            {
+                const int cc = m.getControllerNumber(), cv = m.getControllerValue();
+                if (cc == 1) midiWheelT_ = (float) cv / 127.0f;
+                midiCcSeen (cc, cv);   // fb563 (4) — MIDI Learn + the CC map (the audio-thread half: store only)
+            }
             else if (m.isChannelPressure())                        midiAtT_    = (float) m.getChannelPressureValue() / 127.0f;
             else if (m.isAftertouch())                             midiAtT_    = (float) m.getAfterTouchValue() / 127.0f;
             else if (m.isPitchWheel())                             midiBendT_  = (float) (m.getPitchWheelValue() - 8192) / 8192.0f;
@@ -13164,6 +13172,81 @@ void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& jso
 
 // Synth mod-matrix: JS pushes an array [{ "s":src, "d":dest, "v":depth }, …]. Parse it
 // (message thread) into a thread-safe route list the audio thread copies each block.
+// ══ fb563 (4) — MIDI LEARN + THE CC MAP ═════════════════════════════════════════════════════
+void TerrainInstrumentAudioProcessor::setMidiLearn (const juce::String& paramId)
+{
+    int idx = -1;
+    if (paramId.isNotEmpty())
+        if (auto* p = apvts.getParameter (paramId)) idx = p->getParameterIndex();
+    midiLearnParam_.store (idx, std::memory_order_relaxed);
+    midiLearnedCc_.store (-1, std::memory_order_relaxed);
+}
+void TerrainInstrumentAudioProcessor::removeMidiCc (const juce::String& paramId)
+{
+    if (auto* p = apvts.getParameter (paramId))
+    {
+        const int idx = p->getParameterIndex();
+        for (int cc = 0; cc < 128; ++cc)
+            if (midiCcParam_[cc].load (std::memory_order_relaxed) == idx) midiCcParam_[cc].store (-1, std::memory_order_relaxed);
+    }
+    midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
+}
+juce::String TerrainInstrumentAudioProcessor::getMidiMapJson() const
+{
+    juce::String out ("{"); bool first = true;
+    const auto& params = getParameters();
+    for (int cc = 0; cc < 128; ++cc)
+    {
+        const int idx = midiCcParam_[cc].load (std::memory_order_relaxed);
+        if (idx < 0 || idx >= params.size()) continue;
+        if (auto* wid = dynamic_cast<juce::AudioProcessorParameterWithID*> (params[idx]))
+        { out << (first ? "" : ",") << "\"" << cc << "\":\"" << wid->paramID << "\""; first = false; }
+    }
+    return out + "}";
+}
+void TerrainInstrumentAudioProcessor::setMidiMapJson (const juce::String& json)
+{
+    for (int cc = 0; cc < 128; ++cc) midiCcParam_[cc].store (-1, std::memory_order_relaxed);
+    auto v = juce::JSON::parse (json);
+    if (auto* obj = v.getDynamicObject())
+        for (auto& kv : obj->getProperties())
+        {
+            const int cc = kv.name.toString().getIntValue();
+            if (cc < 0 || cc > 127) continue;
+            if (auto* p = apvts.getParameter (kv.value.toString())) midiCcParam_[cc].store (p->getParameterIndex(), std::memory_order_relaxed);
+        }
+    midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
+}
+void TerrainInstrumentAudioProcessor::midiCcSeen (int cc, int value) noexcept
+{
+    if (cc < 0 || cc > 127) return;
+    const int learn = midiLearnParam_.load (std::memory_order_relaxed);
+    if (learn >= 0)
+    {   // the next CC binds; CC 1 keeps feeding the wheel as well — both are honest
+        midiCcParam_[cc].store (learn, std::memory_order_relaxed);
+        midiLearnParam_.store (-1, std::memory_order_relaxed);
+        midiLearnedCc_.store (cc, std::memory_order_relaxed);
+        midiMapDirty_.store (1, std::memory_order_relaxed);
+    }
+    if (midiCcParam_[cc].load (std::memory_order_relaxed) >= 0)
+    {
+        midiCcPending_[cc].store ((float) value / 127.0f, std::memory_order_relaxed);
+        midiCcDirty_[cc].store (1, std::memory_order_relaxed);
+    }
+}
+void TerrainInstrumentAudioProcessor::applyPendingMidiCc()
+{
+    const auto& params = getParameters();
+    for (int cc = 0; cc < 128; ++cc)
+    {
+        if (midiCcDirty_[cc].exchange (0, std::memory_order_relaxed) == 0) continue;
+        const int idx = midiCcParam_[cc].load (std::memory_order_relaxed);
+        if (idx >= 0 && idx < params.size())
+            params[idx]->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, midiCcPending_[cc].load (std::memory_order_relaxed)));
+    }
+    if (midiMapDirty_.exchange (0, std::memory_order_relaxed)) midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
+}
+
 float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
 {
     const int sI = wc::sourceForWire (wire);
@@ -13816,6 +13899,7 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     state.setProperty("uiPage",             uiPage.load(),                nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
+    { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); }   // fb563 (4)
     {
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
@@ -14510,6 +14594,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                 rebuildImport (o);
             }
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
+            setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
