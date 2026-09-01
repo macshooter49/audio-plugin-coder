@@ -308,6 +308,65 @@ const HELPERS = () => {
   chk(r.f6 === '{"fol":6}' && r.f7 === '{"fol":7}' && r.x217 === 'null' && r.key === '{"note":1}' && r.vel === '{"vel":1}' && r.e32 === '{"env":32}' && r.x132 === 'null' && r.x10 === 'null'
       && r.m1 === '{"mac":1}' && r.m8 === '{"mac":8}' && r.x228 === 'null' && r.whl === '{"whl":1}' && r.at === '{"at":1}' && r.bend === '{"bend":1}' && r.r1 === '{"rnd":1}' && r.r4 === '{"rnd":4}' && r.x245 === 'null' && r.alt === '{"alt":1}' && r.ident,
       '7  decode: followers 215/216, macros 220..227, wheel 230, aftertouch 231, bend 232, random 240..243, alt 244; 217/228/245/132/10 rejected; encode∘decode = identity', JSON.stringify(r));
+  // ── 10 · BYPASS + SCALE BY (Phase 3) — the route row's own right-click ─────────────────────
+  r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3);
+    const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');
+    window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]'));
+    const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); if (! row) return { err:'no row' };
+    const q = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 6, view:window }));
+    const st = window.__mState(); return { head:st.head, rows:st.rows }; });
+  chk(r.rows && r.rows.some(x => x === 'Bypass') && r.rows.some(x => x.startsWith('Scale by')) && r.rows.some(x => x === 'Remove') && r.head === 'Env 1 · 100%',
+      '10 right-click a route row → Bypass · Scale by › · Remove, titled by the connection', JSON.stringify(r));
+  r = await pg.evaluate(() => { window.__natives.length = 0; const ok = window.__mRow('Bypass'); const st = window.__mState();
+    const pushed = window.__natives.filter(n => n.fn === 'setSynthMod').map(n => n.args[0]).pop() || '';
+    return { ok, routes: window.__routes(), routesTxt: st.routes, pushed: /"b":1/.test(pushed), dim: (document.querySelector('#syn-ctx-menu .syn-ctx-route') || {}).style && document.querySelector('#syn-ctx-menu .syn-ctx-route').style.opacity }; });
+  chk(r.ok && r.routes[0] && r.routes[0].b === 1 && r.routes[0].s === 'env1' && r.pushed && r.routesTxt[0] === 'Env 1 · off' && r.dim === '0.45',
+      '10 Bypass keeps the connection, marks it b:1 on the wire, the row reads "off" and dims', JSON.stringify({ b:r.routes[0] && r.routes[0].b, pushed:r.pushed, txt:r.routesTxt, dim:r.dim }));
+  r = await pg.evaluate(() => { const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); const q = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 6, view:window }));
+    const a = window.__mRow('Bypass'); const rt = window.__routes(); return { a, b: rt[0] && rt[0].b }; });
+  chk(r.a && r.b === 0, '10 Bypass again → un-bypassed', JSON.stringify(r));
+  r = await pg.evaluate(() => { const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); const q = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 6, view:window }));
+    const ok = window.__mRow('Scale by'); const cats = window.__bCats(); window.__natives.length = 0; const p = window.__bPick('Macros', 'Macro 2');
+    const pushed = window.__natives.filter(n => n.fn === 'setSynthMod').map(n => n.args[0]).pop() || '';
+    try { window.__tpbClose(); } catch(e){}
+    window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]')); const st = window.__mState();
+    return { ok, cats, p, x: (window.__routes()[0] || {}).x, pushed: /"x":221/.test(pushed), txt: st.routes }; });
+  chk(r.ok && r.cats && r.cats.length === 7 && r.p === 'dot' && r.x === 'mac2' && r.pushed && r.txt[0] === 'Env 1 × Macro 2 · 100%',
+      '10 Scale by › opens the families, Macro 2 becomes the aux (x:221 on the wire), the row reads "Env 1 × Macro 2"', JSON.stringify({ cats:r.cats, x:r.x, pushed:r.pushed, txt:r.txt }));
+  r = await pg.evaluate(() => { const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); const q = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 6, view:window }));
+    const ok = window.__mRow('No scaling'); return { ok, x: (window.__routes()[0] || {}).x, txt: window.__mState().routes }; });
+  chk(r.ok && r.x === null && r.txt[0] === 'Env 1 · 100%', '10 No scaling → the aux is gone', JSON.stringify(r));
+
+  // ── 11 · MIDI LEARN (Phase 4) — the row, the native calls, the pushed map ──────────────────
+  r = await pg.evaluate(() => { window.__mClose(); window.__natives.length = 0; window.__midiMap = {};
+    const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');
+    const st = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]'));
+    const has = st.rows.some(x => x === 'MIDI Learn'); const ok = window.__mRow('MIDI Learn');
+    const calls = window.__natives.filter(n => n.fn === 'setMidiLearn').map(n => n.args[0]);
+    const st2 = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]'));
+    return { has, ok, calls, waiting: st2.rows.some(x => x.startsWith('MIDI Learn') && /waiting/.test(x)), learning: window.__midiLearnFor() }; });
+  chk(r.has && r.ok && r.calls.length === 1 && r.calls[0] === 'SYN_OSC_A_WARP_AMOUNT' && r.waiting && r.learning === 'SYN_OSC_A_WARP_AMOUNT',
+      '11 "MIDI Learn" on Warp A arms the parameter (setMidiLearn) and the row reads "waiting…"', JSON.stringify(r));
+  r = await pg.evaluate(() => { // the processor pushes the new map once the CC lands — simulate that push
+    window.__midiMap = { "74": "SYN_OSC_A_WARP_AMOUNT" }; window.__midiLearnedCc = 74; window.__midiMapChanged();
+    const st = window.__mState(); const row = st.rows.find(x => x.startsWith('MIDI CC 74'));
+    window.__natives.length = 0; const ok = window.__mRow('MIDI CC 74');
+    const rm = window.__natives.filter(n => n.fn === 'removeMidiCc').map(n => n.args[0]);
+    const st3 = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]'));
+    return { rebuilt: st.act, row, ok, rm, back: st3.rows.some(x => x === 'MIDI Learn'), learning: window.__midiLearnFor() }; });
+  chk(r.rebuilt && r.row && /Remove$/.test(r.row) && r.ok && r.rm.length === 1 && r.rm[0] === 'SYN_OSC_A_WARP_AMOUNT' && r.back && r.learning === null,
+      '11 the pushed map rebuilds the open menu into "MIDI CC 74 · Remove"; Remove calls removeMidiCc and the row is "MIDI Learn" again', JSON.stringify(r));
+  r = await pg.evaluate(() => { window.__mClose();
+    const D = window.__fxrDevs(); const i = D.findIndex(x => x && x.core === 'reverb'); const card = document.querySelectorAll('#syn-panel .fxr-dev')[i];
+    const kn = card.querySelector('.fxr-knob[data-mod-dest]'); const clip = document.querySelector('.fxr-clip'); clip.scrollLeft = card.offsetLeft - clip.offsetLeft - 8;
+    const st = window.__mOpen(kn); window.__natives.length = 0; window.__mRow('MIDI Learn'); const calls = window.__natives.filter(n => n.fn === 'setMidiLearn').map(n => n.args[0]);
+    window.__mClose(); return { has: st.rows.some(x => x === 'MIDI Learn'), calls }; });
+  chk(r.has && r.calls.length === 1 && /^SYN_RVB_/.test(r.calls[0]), '11 a rack knob offers MIDI Learn on its own parameter id', JSON.stringify(r));
+
   // ── 9 · THE MACROS VIEW (Phase 2) ───────────────────────────────────────────────────────
   r = await pg.evaluate(async () => { window.__mClose(); window.__clearRoutes();
     const btn = document.querySelector('#syn-panel .vm-macros-btn'); if (! btn) return { err:'no Macros button' }; btn.click();

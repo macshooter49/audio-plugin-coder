@@ -409,6 +409,28 @@ namespace tw
             than a second normalisation: "Note" and "keytrack" have to mean the same thing. */
         float getKeyRamp01() const noexcept { return ktRamp_; }
         float getCurrentVelocity() const noexcept { return currentVelocity_; }   // fb262 — most-active-voice velocity for the live streak viz
+        /** fb563 (3) — the value of ANY modulation source for this voice, in that family's own convention
+            (LFO / drift / bend −1..+1 · env / follower / Key level−1 · velocity / macro / wheel / aftertouch /
+            random / alt 0..1). `ok` is false for a source this voice cannot read. One reader, used for the
+            main source AND the aux "Scale by" source, so the two can never disagree. */
+        float sourceValueOf (int sI, const float* lfoPk, bool& ok) const noexcept
+        {
+            ok = true;
+            if      (sI >= 0 && sI < wc::NUM_LFOS) return lfoPk[sI];
+            else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
+                                                  return modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
+            else if (wc::isEnvModSource (sI))     return envSourceValue (sI);   // fb178
+            else if (wc::isFollowModSource (sI))  return followSourceValue (sI);   // fb552 — audio as a source
+            else if (wc::isNoteModSource (sI))    return ktRamp_ - 1.0f;              // fb555 — key tracking, level-1 like every shape source
+            else if (sI == (int) wc::ModSource::Velocity) return std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped
+            else if (wc::isMacroModSource (sI))            return (gsrc_ != nullptr) ? gsrc_->macro[wc::macroIndexOf (sI)].load (std::memory_order_relaxed) : 0.0f;   // fb563 Phase 2
+            else if (sI == (int) wc::ModSource::Wheel)      return (gsrc_ != nullptr) ? gsrc_->wheel.load (std::memory_order_relaxed) : 0.0f;
+            else if (sI == (int) wc::ModSource::Aftertouch) return (gsrc_ != nullptr) ? gsrc_->aftertouch.load (std::memory_order_relaxed) : 0.0f;
+            else if (sI == (int) wc::ModSource::Bend)       return (gsrc_ != nullptr) ? gsrc_->bend.load (std::memory_order_relaxed) : 0.0f;   // −1..+1
+            else if (wc::isRandModSource (sI))             return rand_[wc::randIndexOf (sI)];
+            else if (sI == (int) wc::ModSource::Alt)        return alt_;
+            ok = false; return 0.0f;
+        }
         float getRand01 (int k) const noexcept { return (k >= 0 && k < 4) ? rand_[k] : 0.0f; }   // fb563 — this note's random values
         float getAlt01() const noexcept { return alt_; }                                          // fb563 — this note's alternator
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
@@ -3191,24 +3213,17 @@ namespace tw
                     const auto& as = modConfig_.assignments[a];
                     if (! as.enabled) continue;
                     const int sI = (int) as.source;
-                    // source value: LFO peak (0..9), or a FLOW·DRIFT lane (Drift1..Drift8, block-rate bipolar)
-                    float srcV;
-                    if      (sI >= 0 && sI < wc::NUM_LFOS) srcV = lfoPk[sI];
-                    else if (sI >= (int) wc::ModSource::Drift1 && sI < (int) wc::ModSource::Drift1 + 8)
-                                                          srcV = modConfig_.driftLanes[sI - (int) wc::ModSource::Drift1];
-                    else if (wc::isEnvModSource (sI))     srcV = envSourceValue (sI);   // fb178
-                    else if (wc::isFollowModSource (sI))  srcV = followSourceValue (sI);   // fb552 — audio as a source
-                    else if (wc::isNoteModSource (sI))    srcV = ktRamp_ - 1.0f;              // fb555 — key tracking, level-1 like every shape source
-                    else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
-                    // fb563 — PHASE 2 SOURCES. Global ones read the processor's atomics (a macro moves every
-                    //  block, so no ModConfig copy); the per-note ones are this voice's own.
-                    else if (wc::isMacroModSource (sI))            srcV = (gsrc_ != nullptr) ? gsrc_->macro[wc::macroIndexOf (sI)].load (std::memory_order_relaxed) : 0.0f;
-                    else if (sI == (int) wc::ModSource::Wheel)      srcV = (gsrc_ != nullptr) ? gsrc_->wheel.load (std::memory_order_relaxed) : 0.0f;
-                    else if (sI == (int) wc::ModSource::Aftertouch) srcV = (gsrc_ != nullptr) ? gsrc_->aftertouch.load (std::memory_order_relaxed) : 0.0f;
-                    else if (sI == (int) wc::ModSource::Bend)       srcV = (gsrc_ != nullptr) ? gsrc_->bend.load (std::memory_order_relaxed) : 0.0f;   // −1..+1
-                    else if (wc::isRandModSource (sI))             srcV = rand_[wc::randIndexOf (sI)];
-                    else if (sI == (int) wc::ModSource::Alt)        srcV = alt_;
-                    else continue;
+                    // fb563 (3) — ONE reader for every family (sourceValueOf), so the aux "Scale by" source is read
+                    //  exactly the way the main source is. A bypassed route never reaches a voice (the processor drops it).
+                    bool okS = true;
+                    float srcV = sourceValueOf (sI, lfoPk, okS);
+                    if (! okS) continue;
+                    float asDepth = as.depth;
+                    if (as.useAux)
+                    {   // "Scale by": the aux source's 0..1 value scales the DEPTH, whatever the main family's law
+                        bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA);
+                        if (okA) asDepth *= wc::sourceTo01 ((int) as.auxSource, av);
+                    }
                     // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last
                     //  line before srcV fans out into the ownership laws, the semitone sums and the
                     //  per-sample paths, so every one of them sees the curved value and none of
@@ -3225,7 +3240,7 @@ namespace tw
                         && (int) as.dest <= (int) wc::ModDest::LevelD)
                     {
                         const int gI = (int) as.dest - (int) wc::ModDest::LevelA;
-                        const float dW = std::abs (as.depth);
+                        const float dW = std::abs (asDepth);
                         envLvlOwn_[gI]   += dW;
                         envLvlDrive_[gI] += dW * (srcV + 1.0f);   // srcV is level−1 → restore raw 0..1
                         continue;
@@ -3246,12 +3261,12 @@ namespace tw
                         }
                         if (vi >= 0)
                         {
-                            const float dwV = std::abs (as.depth);
+                            const float dwV = std::abs (asDepth);
                             vOwnW[vi] += dwV; vOwnV[vi] += dwV * (srcV + 1.0f);
                             continue;
                         }
                     }
-                    const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
+                    const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, asDepth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
                     if (wc::isShapeModSource (sI) || wc::isBlockConstantSource (sI))   // fb563 — every block-constant source (velocity, macros, wheel, aftertouch, bend, random, alt) · fb260 · fb552 followers join the block-constant sum — velocity→cutoff joins the block-constant semitone sum, exactly like env

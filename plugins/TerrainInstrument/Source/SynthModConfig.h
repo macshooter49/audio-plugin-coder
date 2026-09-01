@@ -1161,6 +1161,24 @@ inline bool isFollowModSource (int sI) noexcept { return followIndexOf (sI) >= 0
 inline bool isNoteModSource (int sI) noexcept { return sI == (int) ModSource::Note; }   // fb555
 inline bool isShapeModSource (int sI) noexcept { return isEnvModSource (sI) || isFollowModSource (sI) || isNoteModSource (sI); }
 
+/** fb563 (3) — any wire code → its ModSource, or −1. The ONE map for every family (the aux "Scale by"
+    source may be anything the main source may be). */
+inline int sourceForWire (int wire) noexcept
+{
+    if (wire >= 0 && wire < NUM_LFOS)                  return (int) ModSource::L1 + wire;
+    if (wire >= kEnvSrcBase && wire < kEnvSrcBase + 32) return (int) envSourceFor (wire - kEnvSrcBase + 1);
+    if (wire == kVelSrc)                               return (int) ModSource::Velocity;
+    if (wire == kNoteSrc)                              return (int) ModSource::Note;
+    if (wire >= kFollowSrcBase && wire < kFollowSrcBase + kNumFollowers) return (int) ModSource::FollowA + (wire - kFollowSrcBase);
+    return phase2SourceForWire (wire);
+}
+/** fb563 (3) — a source's value mapped to 0..1 for SCALING a depth ("Scale by"): shape sources arrive
+    as level−1, the unipolar additive ones as 0..1, LFOs / drift / bend as −1..+1. */
+inline float sourceTo01 (int sI, float v) noexcept
+{
+    const float u = isShapeModSource (sI) ? (v + 1.0f) : (isUniAdditiveSource (sI) ? v : 0.5f * (v + 1.0f));
+    return u < 0.0f ? 0.0f : (u > 1.0f ? 1.0f : u);
+}
 /** fb554 — remap a source's output through its connection curve.
     🔑 ONE DEFINITION, called from BOTH the per-voice evaluator and the processor's global pass.
     fb551/fb552 both cost a bug to the same shape: a law that lives in two places drifts, and here

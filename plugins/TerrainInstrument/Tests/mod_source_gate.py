@@ -30,7 +30,7 @@ ENV = const('kEnvSrcBase'); VEL = const('kVelSrc'); NOTE = const('kNoteSrc')
 FOL = const('kFollowSrcBase'); NFOL = const('kNumFollowers')
 
 # ── 1 · THE DOOR. setSynthModMatrix must name every family. ─────────────────────────────────
-m = re.search(r'setSynthModMatrix[^{]*\{(.{0,4000}?)synModJson\s*=', proc, re.S)
+m = re.search(r'setSynthModMatrix \(const juce::String& json\)\s*\{(.{0,12000}?)synModJson\s*=', proc, re.S)   # the DEFINITION, and a body that has grown past 4000 chars
 door = m.group(1) if m else ''
 if not door: fails.append("could not find setSynthModMatrix's body")
 for fam, tok in (('LFO', 'NUM_LFOS'), ('Env', 'kEnvSrcBase'), ('Velocity', 'kVelSrc'),

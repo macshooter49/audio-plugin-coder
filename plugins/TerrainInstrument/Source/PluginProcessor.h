@@ -928,6 +928,9 @@ public:
     float modVizBend() const noexcept       { return globalSrc_.bend.load (std::memory_order_relaxed); }
     float modVizRand (int k) const noexcept { return (k >= 0 && k < 4) ? randVis_[k].load (std::memory_order_relaxed) : 0.f; }
     float modVizAlt() const noexcept        { return altVis_.load (std::memory_order_relaxed); }
+    /** fb563 (3) — any source's live value as 0..1 from the processor's own views, for the global half of
+        "Scale by". LFOs are the free-running mirrors, envelopes the mono tap, the rest the published feeds. */
+    float globalSourceTo01 (int wire) noexcept;
     // fb264 — master peak-limiter state (audio-thread only; coeffs set in prepareToPlay). Stereo-linked
     // gain-reduction before the safety clip so dense chords stay loud without squaring into hard-clip buzz.
     float limEnv_ = 0.0f, limGain_ = 1.0f, limAtkCoef_ = 0.0f, limRelCoef_ = 0.0f;
@@ -1158,7 +1161,7 @@ public:
     // ── Synth mod-matrix (drag-to-assign): LFO source → synth dest, depth. The editor
     //    pushes the route list as JSON via the setSynthMod native fn; we parse it into a
     //    thread-safe vector the audio thread copies into synModCfg each block. Persisted.
-    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; };   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line
+    struct SynModRoute { int src = 0; int dest = 0; float depth = 0.0f; int curve = -1; bool bypass = false; int aux = -1; };   // fb554 — curve = index into the published ModCurveSet, -1 = a straight line · fb563 (3) — bypass keeps the route but mutes it; aux = the "Scale by" source's wire code, −1 = none
     // FLOW · ARP lane pattern (fb105): UI pushes JSON, audio thread copies into the
     // engine on version bump (synModLock pattern). Raw JSON kept verbatim for state save.
     mutable juce::CriticalSection arpLaneLock_;

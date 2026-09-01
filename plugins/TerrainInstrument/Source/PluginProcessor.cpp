@@ -8467,8 +8467,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // but the processor global path read the RAW peek, so LfoAmt silently no-op'd for every global route.
             // Pre-pass the amt exactly like the per-voice pass (source × master × depth), then scale the peek below.
             float lfoAmt[wc::NUM_LFOS] = { 0.0f };
-            for (const auto& r : synModRoutes)
+            for (const auto& r0 : synModRoutes)
             {
+                if (r0.bypass) continue;   // fb563 (3)
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux);   // fb563 (3) — "Scale by"
                 if (r.dest < (int) wc::ModDest::LfoAmt1 || r.dest >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
                 if (r.src >= 0 && r.src < wc::NUM_LFOS)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rawParam (kLfoDepthIds[r.src]));
@@ -8477,8 +8479,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             }
             const float velCurve01_ = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
             const float velGlobal_  = std::pow (juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed)), std::pow (3.0f, 1.0f - 2.0f * velCurve01_));
-            for (const auto& r : synModRoutes)
+            for (const auto& r0 : synModRoutes)
             {
+                if (r0.bypass) continue;   // fb563 (3) — bypassed: in the list, out of the sum
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 const wc::ModCurveSet* mcSet = modCurves_.load (std::memory_order_acquire);   // fb554
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
@@ -9265,6 +9269,13 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 for (const auto& r : synModRoutes)
                 {
                     if (na >= wc::MAX_ASSIGNMENTS) break;
+                    if (r.bypass) continue;   // fb563 (3) — a bypassed route reaches no voice
+                    {   // fb563 (3) — the aux "Scale by" source rides the slot the branch below fills; a branch
+                        //  that rejects the route leaves the slot to the next one, which rewrites both fields.
+                        const int auxSI = wc::sourceForWire (r.aux);
+                        synModCfg.assignments[na].auxSource = (wc::ModSource) (auxSI >= 0 ? auxSI : 0);
+                        synModCfg.assignments[na].useAux    = (auxSI >= 0);
+                    }
                     if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — envelope source
                     {
                         synModCfg.assignments[na].source  = wc::envSourceFor (r.src - wc::kEnvSrcBase + 1);
@@ -13153,6 +13164,25 @@ void TerrainInstrumentAudioProcessor::setSlicesFromJson (const juce::String& jso
 
 // Synth mod-matrix: JS pushes an array [{ "s":src, "d":dest, "v":depth }, …]. Parse it
 // (message thread) into a thread-safe route list the audio thread copies each block.
+float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
+{
+    const int sI = wc::sourceForWire (wire);
+    if (sI < 0) return 1.0f;
+    float v = 0.0f;
+    if      (wire >= 0 && wire < wc::NUM_LFOS)                 v = flowLfo_[wire].peek();
+    else if (wc::isEnvModSource (sI))                          v = monoEnvLevelOf (sI);
+    else if (sI == (int) wc::ModSource::Velocity)              v = juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed));
+    else if (wc::isNoteModSource (sI))                         v = noteVis_.load (std::memory_order_relaxed) - 1.0f;
+    else if (wc::isFollowModSource (sI))                       v = followVis_[wc::followIndexOf (sI)].load (std::memory_order_relaxed) - 1.0f;
+    else if (wc::isMacroModSource (sI))                        v = globalSrc_.macro[wc::macroIndexOf (sI)].load (std::memory_order_relaxed);
+    else if (sI == (int) wc::ModSource::Wheel)                 v = globalSrc_.wheel.load (std::memory_order_relaxed);
+    else if (sI == (int) wc::ModSource::Aftertouch)            v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
+    else if (sI == (int) wc::ModSource::Bend)                  v = globalSrc_.bend.load (std::memory_order_relaxed);
+    else if (wc::isRandModSource (sI))                         v = randVis_[wc::randIndexOf (sI)].load (std::memory_order_relaxed);
+    else if (sI == (int) wc::ModSource::Alt)                   v = altVis_.load (std::memory_order_relaxed);
+    return wc::sourceTo01 (sI, v);
+}
+
 void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)
 {
     std::vector<SynModRoute> parsed;
@@ -13170,6 +13200,9 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             r.dest  = (int)   item.getProperty ("d", 0);
             r.depth = (float) (double) item.getProperty ("v", 0.0);
             r.curve = -1;
+            r.bypass = ((int) item.getProperty ("b", 0)) != 0;                       // fb563 (3) — a bypassed route stays in the list, contributes nothing
+            r.aux    = (int) item.getProperty ("x", -1);                             // fb563 (3) — "Scale by": the aux source's wire code
+            if (r.aux >= 0 && wc::sourceForWire (r.aux) < 0) r.aux = -1;             //   an unknown aux code is no aux, never an LFO
             {   // fb554 — the connection curve rides the ROUTE, in the JSON that already round-trips
                 //  through getSynthMod and the patch state. No new native function, no new
                 //  persistence: a curve cannot get separated from the connection it belongs to.
@@ -13207,8 +13240,8 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     // fb178 — which envelopes feed GLOBAL (processor-side) dests → the mono tap
     uint32_t gm = 0;
     for (const auto& r : parsed)
-        if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
-            gm |= (1u << (r.src - wc::kEnvSrcBase));   // ANY env route arms the mono tap (flow knobs sit below Res1)
+        if (! r.bypass && r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
+            gm |= (1u << (r.src - wc::kEnvSrcBase));   // ANY env route arms the mono tap (flow knobs sit below Res1) · fb563 (3) — not a bypassed one
     monoEnvGlobalMask_.store (gm, std::memory_order_release);
     // fb554 — publish the whole set, THEN the routes that index into it. A block that sees the new
     //  routes must already be able to see their curves; the other order would index an old set.

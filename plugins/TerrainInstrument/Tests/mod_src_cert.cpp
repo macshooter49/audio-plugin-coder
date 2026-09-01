@@ -268,6 +268,24 @@ int main()
     au.set (MAC1, 1.0f); au.pump (0.2); const double c1 = rmsDb (au.note (60));
     chk (c0 > -30 && c1 < -60, "8  … and a connection curve y = 1 − x inverts it: macro 0 loud, macro 100 silent", fmt ("%.1f dB → %.1f dB", c0, c1));
 
+    // ── 9 · BYPASS (Phase 3) — the route stays in the list, the processor skips it ──
+    au.set (LVL, 0.0f); au.set (MAC1, 1.0f); au.pump (0.2);
+    au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"b\":1}]");
+    const double by1 = rmsDb (au.note (60));
+    au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"b\":0}]");
+    const double by0 = rmsDb (au.note (60));
+    chk (by1 < -70 && by0 > -30, "9  BYPASS: the same Macro 1 → Level A route is silent bypassed, loud un-bypassed", fmt ("%.1f dB / %.1f dB", by1, by0));
+
+    // ── 10 · SCALE BY (Phase 3) — Macro 2 scales the depth of Macro 1 → Level A ──
+    const std::string MAC2 = au.find ("Macro 2");
+    au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"x\":221}]");
+    au.set (MAC2, 0.0f); au.pump (0.2); const double sx0 = rmsDb (au.note (60));
+    au.set (MAC2, 0.5f); au.pump (0.2); const double sx5 = rmsDb (au.note (60));
+    au.set (MAC2, 1.0f); au.pump (0.2); const double sx1 = rmsDb (au.note (60));
+    chk (sx0 < -70 && sx1 > -30 && (sx1 - sx5) > 3.0 && (sx1 - sx5) < 9.0,
+         "10 SCALE BY: Macro 1 → Level A × Macro 2: aux 0 silent, aux 50 % about −6 dB, aux 100 full", fmt ("%.1f / %.1f / %.1f dB", sx0, sx5, sx1));
+    au.set (MAC2, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);
+
     au.close();
     std::printf ("\n  %d pass · %d fail\n\n", PASS, FAIL);
     return FAIL ? 1 : 0;
