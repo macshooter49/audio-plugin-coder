@@ -913,6 +913,21 @@ public:
     std::atomic<float> followVis_[wc::kNumFollowers] { {0.f}, {0.f}, {0.f}, {0.f}, {0.f} };
     std::atomic<float> noteVis_ { 0.f };   // fb555 — most-active voice's key position 0..1 (global routes + the UI comet)
     std::atomic<float> velVis_ { -1.f };   // fb262 — most-active voice velocity (−1 = silent) for the live velocity streak
+    // fb563 — PHASE 2 SOURCES. The global ones (macros · wheel · aftertouch · bend) live in
+    //  globalSrc_ and both halves (the voice and the block loop) read the atomics directly; the
+    //  per-note ones (random 1-4 · alt) are published from the most-active voice for the global
+    //  half, exactly like velVis_ — and for the same reason, UNGATED (the audio path reads them).
+    wc::GlobalModSources globalSrc_;
+    std::atomic<float> randVis_[4] { {0.f}, {0.f}, {0.f}, {0.f} };
+    std::atomic<float> altVis_ { 0.f };
+    float midiWheelT_ = 0.f, midiAtT_ = 0.f, midiBendT_ = 0.f;          // audio thread only: the last MIDI value seen
+    float midiWheelSm_ = 0.f, midiAtSm_ = 0.f, midiBendSm_ = 0.f;       // audio thread only: 10 ms one-pole at block rate
+    float modVizMacro (int k) const noexcept { return (k >= 0 && k < wc::kNumMacros) ? globalSrc_.macro[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizWheel() const noexcept      { return globalSrc_.wheel.load (std::memory_order_relaxed); }
+    float modVizAftertouch() const noexcept { return globalSrc_.aftertouch.load (std::memory_order_relaxed); }
+    float modVizBend() const noexcept       { return globalSrc_.bend.load (std::memory_order_relaxed); }
+    float modVizRand (int k) const noexcept { return (k >= 0 && k < 4) ? randVis_[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizAlt() const noexcept        { return altVis_.load (std::memory_order_relaxed); }
     // fb264 — master peak-limiter state (audio-thread only; coeffs set in prepareToPlay). Stereo-linked
     // gain-reduction before the safety clip so dense chords stay loud without squaring into hard-clip buzz.
     float limEnv_ = 0.0f, limGain_ = 1.0f, limAtkCoef_ = 0.0f, limRelCoef_ = 0.0f;

@@ -20,6 +20,8 @@
 #include <cmath>
 #include <algorithm>
 #include <array>
+#include <atomic>
+#include <cstdint>
 
 namespace wc
 {
@@ -44,6 +46,14 @@ enum class ModSource : int
                                                    // to the other "real" sources would have shifted
                                                    // EnvD1..EnvD27 by five, and this enum says
                                                    // append-only for the same reason ModDest does.
+    // fb563 — PHASE 2 SOURCES, appended (append-only, like everything above): the eight MACROS,
+    //  the three MIDI performance sources, four per-note RANDOM values and the per-note ALT.
+    //  Macros · Wheel · Aftertouch · Rand · Alt are UNIPOLAR 0..1 and ADDITIVE with a signed depth
+    //  (the Velocity law, not the envelope's ownership law: a macro at 0 leaves the knob where it
+    //  is). Bend is BIPOLAR −1..+1 and additive (the LFO law). None of them is a shape source.
+    Macro1, Macro2, Macro3, Macro4, Macro5, Macro6, Macro7, Macro8,
+    Wheel, Aftertouch, Bend,
+    Rand1, Rand2, Rand3, Rand4, Alt,
     NumSources
 };
 static constexpr int NUM_LFOS = 10;
@@ -1072,6 +1082,49 @@ static constexpr int kVelSrc     = 200;   // fb260 — Velocity mod-source wire 
 static constexpr int kNoteSrc = 201;
 static constexpr int kFollowSrcBase = 210;
 static constexpr int kNumFollowers  = 7;   // fb556 — osc A-D, Noise, Filter 1, Filter 2
+// fb563 — PHASE 2 wire codes. One helper, phase2SourceForWire(), turns a code into the enum for the
+//  door (setSynthModMatrix), the per-voice build and the block-rate loop, so the three sites cannot
+//  drift apart the way the JS decoders did (Tests/mod_source_gate.py reads these against the JS).
+static constexpr int kMacroSrcBase  = 220;  static constexpr int kNumMacros = 8;    // 220..227 = Macro 1..8
+static constexpr int kWheelSrc      = 230;                                          // mod wheel (CC 1)
+static constexpr int kAftertouchSrc = 231;                                          // channel / poly pressure
+static constexpr int kBendSrc       = 232;                                          // pitch wheel, −1..+1
+static constexpr int kRandSrcBase   = 240;  static constexpr int kNumRands  = 4;    // 240..243 = Random 1..4 per note-on
+static constexpr int kAltSrc        = 244;                                          // 0/1, flips every note-on
+inline int macroIndexOf (int sI) noexcept { const int k = sI - (int) ModSource::Macro1; return (k >= 0 && k < kNumMacros) ? k : -1; }
+inline int randIndexOf  (int sI) noexcept { const int k = sI - (int) ModSource::Rand1;  return (k >= 0 && k < kNumRands)  ? k : -1; }
+inline bool isMacroModSource (int sI) noexcept { return macroIndexOf (sI) >= 0; }
+inline bool isRandModSource  (int sI) noexcept { return randIndexOf (sI) >= 0; }
+/** unipolar 0..1 AND additive with a signed depth — the Velocity law. */
+inline bool isUniAdditiveSource (int sI) noexcept
+{
+    return sI == (int) ModSource::Velocity || isMacroModSource (sI) || sI == (int) ModSource::Wheel
+        || sI == (int) ModSource::Aftertouch || isRandModSource (sI) || sI == (int) ModSource::Alt;
+}
+/** block-constant for a whole buffer (no per-sample path): joins the block-constant cutoff sum. */
+inline bool isBlockConstantSource (int sI) noexcept
+{ return isUniAdditiveSource (sI) || sI == (int) ModSource::Bend; }
+inline int phase2SourceForWire (int wire) noexcept
+{
+    if (wire >= kMacroSrcBase && wire < kMacroSrcBase + kNumMacros) return (int) ModSource::Macro1 + (wire - kMacroSrcBase);
+    if (wire == kWheelSrc)      return (int) ModSource::Wheel;
+    if (wire == kAftertouchSrc) return (int) ModSource::Aftertouch;
+    if (wire == kBendSrc)       return (int) ModSource::Bend;
+    if (wire >= kRandSrcBase && wire < kRandSrcBase + kNumRands)   return (int) ModSource::Rand1 + (wire - kRandSrcBase);
+    if (wire == kAltSrc)        return (int) ModSource::Alt;
+    return -1;
+}
+/** fb563 — the GLOBAL sources, owned by the processor, read by every voice and by the block loop
+    straight from these atomics (no ModConfig copy, no change-gate — a macro moves every block). */
+struct GlobalModSources
+{
+    std::atomic<float> macro[kNumMacros] {};
+    std::atomic<float> wheel { 0.0f };
+    std::atomic<float> aftertouch { 0.0f };
+    std::atomic<float> bend { 0.0f };            // −1..+1
+    std::atomic<float> bendRangeSemis { 2.0f };
+    std::atomic<uint32_t> altCounter { 0 };      // every note-on takes a number; its low bit is that note's Alt
+};
 inline ModSource envSourceFor (int envNum) noexcept   // envNum 1..32
 {
     switch (envNum)
@@ -1122,7 +1175,7 @@ inline float applyModCurve (const ModCurveSet* set, int curveIdx, int sI, float 
     const ModCurve& mc = set->c[curveIdx];
     if (! mc.set) return v;
     const bool shape = isShapeModSource (sI);
-    const bool vel   = (sI == (int) ModSource::Velocity);
+    const bool vel   = isUniAdditiveSource (sI);   // fb563 — velocity's 0..1 convention now covers macros · wheel · aftertouch · random · alt
     float u = shape ? (v + 1.0f) : (vel ? v : 0.5f * (v + 1.0f));
     u = u < 0.0f ? 0.0f : (u > 1.0f ? 1.0f : u);
     const float  x  = u * (float) (kModCurvePts - 1);

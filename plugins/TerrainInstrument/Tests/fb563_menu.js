@@ -62,7 +62,7 @@ function mutatedPage () {
   if (MUT === 2) sub("if(ex){ removeAssign(ex); o.sel=false; } else { addRoute(S,g.dest,g.el); o.sel=true; }",
                      "addRoute(S,g.dest,g.el); o.sel=true;");
   if (MUT === 3) sub("    rowsFor: function (el, ev) { var out = [], n = el, hops = 0;", "    rowsFor: function (el, ev) { return []; var out = [], n = el, hops = 0;");
-  if (MUT === 4) sub("var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7};", "var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:5};");
+  if (MUT === 4) sub("var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220,", "var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:5, MACRO:220,");
   const p = path.join(os.tmpdir(), 'fb563_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }
 
@@ -80,7 +80,7 @@ const STUB = (cfg) => {
   const mk = (name) => { const n = CH[name] || 0;
     const props = n ? { start:0, end:n-1, skew:1, name, label:'', numSteps:n, interval:1, parameterIndex:states.size }
                     : { start:0, end:1, skew:1, name, label:'', numSteps:100, interval:0, parameterIndex:states.size };
-    const st = { name, norm:0, properties:props,
+    const st = { name, norm:(name === 'SYN_BEND_RANGE' ? 2/24 : 0), properties:props,   // the bend range's registered default (2 st) — the only non-zero default the bars read back
       getScaledValue(){ return n ? Math.round(st.norm*(n-1)) : st.norm; },
       setScaledValue(v){ st.norm = n ? v/(n-1) : v; },
       getNormalisedValue(){ return st.norm; },
@@ -95,6 +95,7 @@ const STUB = (cfg) => {
   window.__stubState = get;
   const nativeFn = (nm) => (...a) => new Promise((r) => { window.__natives.push({ fn:nm, args:a.map(String) });
     if (/getPresets/i.test(nm)) return r('[]'); if (/getSynthMod$/.test(nm)) return r('[]');
+    if (/^getSynParam$/.test(nm)) return r(String(get(String(a[0])).getNormalisedValue()));   // the relay-free read-back, from the same stub state the writes land in
     if (/Json|JSON/.test(nm)) return r('{}'); r(0); });
   window.Juce = { getSliderState:get, getToggleState:get, getComboBoxState:get, getNativeFunction:nativeFn,
                   backend:{ addEventListener(){}, removeEventListener(){}, emitEvent(){} } };
@@ -211,7 +212,7 @@ const HELPERS = () => {
   let s = await pg.evaluate((sel) => { window.__mClose(); return window.__mOpen(document.querySelector(sel)); }, WARP);
   chk(s.act && s.head === 'Warp A', '2  Warp A opens its menu, named', JSON.stringify({ head:s.head, rows:s.rows }));
   let r = await pg.evaluate(() => { const ok = window.__mRow('Modulate'); return { ok, cats: window.__bCats(), menu: window.__mState().act }; });
-  chk(r.ok && r.cats && r.cats.join('|') === 'All|Envelopes|LFOs|Keys|Audio' && ! r.menu, '2  Modulate › opens the browser: All · Envelopes · LFOs · Keys · Audio, the menu steps aside', JSON.stringify(r.cats));
+  chk(r.ok && r.cats && r.cats.join('|') === 'All|Envelopes|LFOs|Macros|Keys|Audio|MIDI' && ! r.menu, '2  Modulate › opens the browser: All · Envelopes · LFOs · Macros · Keys · Audio · MIDI, the menu steps aside', JSON.stringify(r.cats));
   r = await pg.evaluate(() => { const a = window.__bPick('LFOs', 'LFO 2'); return { a, routes: window.__routes(), open: !!document.querySelector('.tpb-panel') }; });
   chk(r.a === 'dot' && r.open && r.routes.length === 1 && r.routes[0].s === 'lfo2' && r.routes[0].d === 3 && Math.abs(r.routes[0].v - 0.5) < 1e-6,
       '2  LFO 2 → route {lfo2 → 3, 0.5}, the dot lit, the browser still open', JSON.stringify(r));
@@ -223,6 +224,14 @@ const HELPERS = () => {
   chk(r.a === 'picked' && r.routes.some(x => x.s === 'fol7' && x.d === 3), '2  search "filter 2" → Filter 2 routes as the seventh follower (215/216 were unreadable before)', JSON.stringify(r.routes));
   const envInAll = await pg.evaluate(() => { const s = document.querySelector('.tpb-srch'); s.value = ''; s.oninput(); window.__bPick('All', 'Env 1'); return window.__bRows(window.__bPanes()[1]).filter(x => x.dot).map(x => x.name); });
   chk(envInAll.indexOf('Filter 2') >= 0 && envInAll.indexOf('Env 1') < 0, '2  All mirrors the state: a toggled-off Env 1 loses its dot, Filter 2 keeps it', JSON.stringify(envInAll));
+  // fb563 Phase 2 — the six new families route through the same picker, at the same defaults
+  r = await pg.evaluate(() => { const a = window.__bPick('Macros', 'Macro 3'), b = window.__bPick('MIDI', 'Mod Wheel'), c = window.__bPick('Keys', 'Random 2'), d = window.__bPick('Keys', 'Alt'), e = window.__bPick('MIDI', 'Pitch Bend'), f = window.__bPick('MIDI', 'Aftertouch');
+    return { a, b, c, d, e, f, routes: window.__routes().filter(x => /^(mac|whl|rnd|alt|bend|at)/.test(x.s)).map(x => x.s + '@' + x.v).sort().join(',') }; });
+  chk(r.a === 'dot' && r.b === 'dot' && r.c === 'dot' && r.d === 'dot' && r.e === 'dot' && r.f === 'dot' && r.routes === 'alt@1,at@1,bend@1,mac3@1,rnd2@1,whl@1',
+      '2  Macro 3 · Mod Wheel · Random 2 · Alt · Pitch Bend · Aftertouch all route at full depth', r.routes);
+  r = await pg.evaluate(() => { window.__mClose(); const st = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]')); return st.routes; });
+  chk(r.some(x => x === 'Macro 3 · 100%') && r.some(x => x === 'Mod Wheel · 100%') && r.some(x => x === 'Random 2 · 100%') && r.some(x => x === 'Alt · 100%') && r.some(x => x === 'Pitch Bend · 100%') && r.some(x => x === 'Aftertouch · 100%'),
+      '2  and the menu names each of them on its own row', JSON.stringify(r));
 
   // ── 3 · THE ROUTE ROW ───────────────────────────────────────────────────────────────────
   await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3); window.__tiAddRoute(0, 2, 3); });
@@ -293,10 +302,32 @@ const HELPERS = () => {
 
   // ── 7 · THE CODEC ───────────────────────────────────────────────────────────────────────
   r = await pg.evaluate(() => { const W = window.__modWire; const d = (n) => JSON.stringify(W.decode(n));
-    let ident = true; for (const n of [0,1,9,100,101,131,200,201,210,211,214,215,216]) { const s = W.decode(n); if (! s || W.encode(s) !== n) ident = false; }
-    return { f6:d(215), f7:d(216), x217:d(217), key:d(201), vel:d(200), e32:d(131), x132:d(132), x10:d(10), ident }; });
-  chk(r.f6 === '{"fol":6}' && r.f7 === '{"fol":7}' && r.x217 === 'null' && r.key === '{"note":1}' && r.vel === '{"vel":1}' && r.e32 === '{"env":32}' && r.x132 === 'null' && r.x10 === 'null' && r.ident,
-      '7  decode: 215→Filter 1, 216→Filter 2, 217/132/10 rejected, 201→Key, 200→Velocity; encode∘decode = identity', JSON.stringify(r));
+    let ident = true; for (const n of [0,1,9,100,101,131,200,201,210,211,214,215,216,220,227,230,231,232,240,243,244]) { const s = W.decode(n); if (! s || W.encode(s) !== n) ident = false; }
+    return { f6:d(215), f7:d(216), x217:d(217), key:d(201), vel:d(200), e32:d(131), x132:d(132), x10:d(10),
+             m1:d(220), m8:d(227), x228:d(228), whl:d(230), at:d(231), bend:d(232), r1:d(240), r4:d(243), x245:d(245), alt:d(244), ident }; });
+  chk(r.f6 === '{"fol":6}' && r.f7 === '{"fol":7}' && r.x217 === 'null' && r.key === '{"note":1}' && r.vel === '{"vel":1}' && r.e32 === '{"env":32}' && r.x132 === 'null' && r.x10 === 'null'
+      && r.m1 === '{"mac":1}' && r.m8 === '{"mac":8}' && r.x228 === 'null' && r.whl === '{"whl":1}' && r.at === '{"at":1}' && r.bend === '{"bend":1}' && r.r1 === '{"rnd":1}' && r.r4 === '{"rnd":4}' && r.x245 === 'null' && r.alt === '{"alt":1}' && r.ident,
+      '7  decode: followers 215/216, macros 220..227, wheel 230, aftertouch 231, bend 232, random 240..243, alt 244; 217/228/245/132/10 rejected; encode∘decode = identity', JSON.stringify(r));
+  // ── 9 · THE MACROS VIEW (Phase 2) ───────────────────────────────────────────────────────
+  r = await pg.evaluate(async () => { window.__mClose(); window.__clearRoutes();
+    const btn = document.querySelector('#syn-panel .vm-macros-btn'); if (! btn) return { err:'no Macros button' }; btn.click();
+    const cells = [...document.querySelectorAll('#syn-panel .vm-macro')]; const vis = cells.filter(c => c.getBoundingClientRect().width > 2).length;
+    window.__natives.length = 0; window.__macroSet(2, 63); const w = window.__natives.filter(n => n.fn === 'setSynParam' && n.args[0] === 'SYN_MACRO_3');
+    // a REAL drag on the macro's name onto Warp A (the drag grip, not the picker). The docked GLITCH
+    // card sits over Warp A (fb524b: an open card is opaque to drops), so it is closed first.
+    document.querySelectorAll('.ti-card.open').forEach(c => c.classList.remove('open'));
+    const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');   // the sweep flipped osc A to its back face; Warp A lives on the front
+    const lab = document.querySelector('#syn-panel .vm-macro[data-macro="5"] .vm-ml'), knob = document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]');
+    const lr = lab.getBoundingClientRect(), kr = knob.getBoundingClientRect();
+    const ev = (t, type, x, y) => t.dispatchEvent(new PointerEvent(type, { bubbles:true, cancelable:true, clientX:x, clientY:y, pointerId:1, buttons:1, screenX:x, screenY:y }));
+    ev(lab, 'pointerdown', lr.left + 4, lr.top + 4);
+    ev(document, 'pointermove', lr.left + 20, lr.top + 20); ev(document, 'pointermove', kr.left + kr.width/2, kr.top + kr.height/2);
+    ev(document, 'pointerup', kr.left + kr.width/2, kr.top + kr.height/2);
+    return { n: cells.length, vis, v3: window.__macroVal(2), writes: w.length, norm: w.length ? +w[0].args[1] : null, routes: window.__routes(), bend: window.__bendRange() }; });
+  chk(r.n === 8 && r.vis === 8, '9  the Macros view shows eight real macros', JSON.stringify({ n:r.n, vis:r.vis }));
+  chk(r.v3 === 63 && r.writes === 1 && Math.abs(r.norm - 0.63) < 1e-6, '9  a macro writes SYN_MACRO_n through setSynParam (63 → 0.63)', JSON.stringify({ v3:r.v3, writes:r.writes, norm:r.norm }));
+  chk(r.routes.length === 1 && r.routes[0].s === 'mac5' && r.routes[0].d === 3 && r.routes[0].v === 1, '9  dragging a macro\'s NAME onto Warp A makes the route {mac5 → 3, 1.0}', JSON.stringify(r.routes));
+  chk(r.bend === 2, '9  the Bend row reads its default range, 2 semitones', JSON.stringify(r.bend));
 
   // ── 8 · NO REGRESSION ───────────────────────────────────────────────────────────────────
   s = await pg.evaluate(() => { window.__mClose(); const svg = document.querySelector('#syn-panel .device.envs svg'); if (! svg) return { act:false, rows:['no env svg'] }; return window.__mOpen(svg); });

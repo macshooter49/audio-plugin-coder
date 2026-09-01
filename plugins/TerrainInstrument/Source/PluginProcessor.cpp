@@ -331,6 +331,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     {
         auto* v = new tw::SynthVoice();
         v->setModCurves (&modCurves_);    // fb554 — set ONCE; the SET it points at is republished later
+        v->setGlobalSources (&globalSrc_); // fb563 — set ONCE; the VALUES inside change every block
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
@@ -4374,6 +4375,15 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_VEL_DEPTH, 1 },
         "Synth Velocity Curve",
         juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 50.0f));   // default 50 = linear response
+    for (int k = 0; k < wc::kNumMacros; ++k)   // fb563 — MACROS 1-8: plain 0..100 knobs that are also modulation sources
+        layout.add (std::make_unique<juce::AudioParameterFloat> (
+            juce::ParameterID { juce::String ("SYN_MACRO_") + juce::String (k + 1), 1 },
+            "Synth Macro " + juce::String (k + 1),
+            juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
+    layout.add (std::make_unique<juce::AudioParameterFloat> (   // fb563 — PITCH BEND range, semitones (hard-wired to every oscillator)
+        juce::ParameterID { ParameterIDs::SYN_BEND_RANGE, 1 },
+        "Synth Bend Range",
+        juce::NormalisableRange<float> (0.0f, 24.0f, 1.0f), 2.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_GLIDE_CURVE, 1 },
         "Synth Glide Curve",
@@ -7870,6 +7880,33 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         qwertyR_.store (r, std::memory_order_release);
     }
 
+    // ══ fb563 — MIDI PERFORMANCE SOURCES + MACROS ═══════════════════════════════════════════
+    //  Nothing read the wheel, aftertouch or pitch bend before this (pitchWheelMoved /
+    //  controllerMoved were empty overrides). One read-only walk, then a 10 ms one-pole at block
+    //  rate so a 7-bit wheel step lands as a slope and not a stair; the macros are the plain
+    //  APVTS knobs, read here so both halves of the matrix see one number per block.
+    {
+        for (const auto meta : midiMessages)
+        {
+            const auto m = meta.getMessage();
+            if (m.isController() && m.getControllerNumber() == 1) midiWheelT_ = (float) m.getControllerValue() / 127.0f;
+            else if (m.isChannelPressure())                        midiAtT_    = (float) m.getChannelPressureValue() / 127.0f;
+            else if (m.isAftertouch())                             midiAtT_    = (float) m.getAfterTouchValue() / 127.0f;
+            else if (m.isPitchWheel())                             midiBendT_  = (float) (m.getPitchWheelValue() - 8192) / 8192.0f;
+        }
+        const float kSm = 1.0f - std::exp (-(float) numSamples / ((float) juce::jmax (1.0, getSampleRate()) * 0.010f));
+        midiWheelSm_ += (midiWheelT_ - midiWheelSm_) * kSm;
+        midiAtSm_    += (midiAtT_    - midiAtSm_)    * kSm;
+        midiBendSm_  += (midiBendT_  - midiBendSm_)  * kSm;
+        globalSrc_.wheel.store (midiWheelSm_, std::memory_order_relaxed);
+        globalSrc_.aftertouch.store (midiAtSm_, std::memory_order_relaxed);
+        globalSrc_.bend.store (juce::jlimit (-1.0f, 1.0f, midiBendSm_), std::memory_order_relaxed);
+        globalSrc_.bendRangeSemis.store (*rawParam (ParameterIDs::SYN_BEND_RANGE), std::memory_order_relaxed);
+        static const char* const kMacroIds[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
+                                                              ParameterIDs::SYN_MACRO_5, ParameterIDs::SYN_MACRO_6, ParameterIDs::SYN_MACRO_7, ParameterIDs::SYN_MACRO_8 };
+        for (int k = 0; k < wc::kNumMacros; ++k) globalSrc_.macro[k].store (*rawParam (kMacroIds[k]) * 0.01f, std::memory_order_relaxed);
+    }
+
     // ANNULUS polyphony: track currently-held MIDI notes (read-only scan; does not
     // consume midiMessages). The resonator tunes ONE voice per held note → polyphonic,
     // pitched, no glide. note-on adds, note-off removes, all-notes-off clears.
@@ -8511,6 +8548,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest],
                                           wc::applyModCurve (mcSet, r.curve, (int) wc::ModSource::Velocity, velGlobal_), r.depth);   // fb554
+                    continue;
+                }
+                if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)
+                {   // fb563 — the GLOBAL half of the new sources: additive, signed depth, curved like every other route.
+                    //  Random / Alt are per-note values, so the global half follows the most-active voice (velVis_'s law).
+                    float v = 0.0f;
+                    if      (wc::isMacroModSource (p2))                v = globalSrc_.macro[wc::macroIndexOf (p2)].load (std::memory_order_relaxed);
+                    else if (p2 == (int) wc::ModSource::Wheel)         v = globalSrc_.wheel.load (std::memory_order_relaxed);
+                    else if (p2 == (int) wc::ModSource::Aftertouch)    v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
+                    else if (p2 == (int) wc::ModSource::Bend)          v = globalSrc_.bend.load (std::memory_order_relaxed);
+                    else if (wc::isRandModSource (p2))                 v = randVis_[wc::randIndexOf (p2)].load (std::memory_order_relaxed);
+                    else if (p2 == (int) wc::ModSource::Alt)           v = altVis_.load (std::memory_order_relaxed);
+                    modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyModCurve (mcSet, r.curve, p2, v), r.depth);
                     continue;
                 }
                 if (r.src < 0 || r.src >= wc::NUM_LFOS) continue;
@@ -9248,6 +9298,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     {
                         synModCfg.assignments[na].source  = wc::ModSource::Velocity;
                         synModCfg.assignments[na].curve   = r.curve;   // fb554
+                        synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
+                        synModCfg.assignments[na].depth   = r.depth;
+                        synModCfg.assignments[na].enabled = true;
+                        ++na; continue;
+                    }
+                    if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)
+                    {   // fb563 — macros · wheel · aftertouch · bend · random · alt → per-voice, SIGNED depth (the velocity law)
+                        synModCfg.assignments[na].source  = (wc::ModSource) p2;
+                        synModCfg.assignments[na].curve   = r.curve;
                         synModCfg.assignments[na].dest    = (wc::ModDest) r.dest;
                         synModCfg.assignments[na].depth   = r.depth;
                         synModCfg.assignments[na].enabled = true;
@@ -10576,6 +10635,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             followVis_[fk].store ((any && bestVoice != nullptr) ? bestVoice->followValue01 (fk) : 0.f, std::memory_order_relaxed);
         // fb555 — and the key position, on the same ungated walk and for the same reason.
         noteVis_.store ((any && bestVoice != nullptr) ? bestVoice->getKeyRamp01() : 0.f, std::memory_order_relaxed);
+        // fb563 — this note's Random 1-4 and Alt, for the global half of those routes and the comets. Same walk, same reason.
+        for (int rk = 0; rk < 4; ++rk) randVis_[rk].store ((any && bestVoice != nullptr) ? bestVoice->getRand01 (rk) : 0.f, std::memory_order_relaxed);
+        altVis_.store ((any && bestVoice != nullptr) ? bestVoice->getAlt01() : 0.f, std::memory_order_relaxed);
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
             ampEnvVis.store       (any ? best       : -1.f, std::memory_order_relaxed);
@@ -13129,13 +13191,14 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
             const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
             const bool folSrc = (r.src >= wc::kFollowSrcBase && r.src < wc::kFollowSrcBase + wc::kNumFollowers);   // fb552
             const bool notSrc = (r.src == wc::kNoteSrc);   // fb555 — key tracking
+            const bool p2Src  = (wc::phase2SourceForWire (r.src) >= 0);   // fb563 — kMacroSrcBase · kWheelSrc · kAftertouchSrc · kBendSrc · kRandSrcBase · kAltSrc
             // 🚨 THIS LINE IS THE DOOR, AND A NEW SOURCE THAT IS NOT NAMED HERE IS DROPPED SILENTLY.
             //    fb552 shipped five new sources, wired them through six other files, and every one of
             //    them would have been thrown away right here — the drag would work, the underline
             //    would draw, the patch would save, and nothing would modulate. That is fb373's law
             //    ("a green harness proves the ENGINE, never that the plugin REACHES it") wearing a
             //    validator's clothes. Tests/mod_source_gate.py now reds the build on it.
-            if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc && ! notSrc) continue;
+            if (! lfoSrc && ! envSrc && ! velSrc && ! folSrc && ! notSrc && ! p2Src) continue;
             if (r.dest < 0 || r.dest >= (int) wc::ModDest::NumDests) continue;
             r.depth = juce::jlimit (-1.0f, 1.0f, r.depth);
             if (parsed.size() < (size_t) wc::MAX_ASSIGNMENTS) parsed.push_back (r);

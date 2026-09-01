@@ -409,6 +409,8 @@ namespace tw
             than a second normalisation: "Note" and "keytrack" have to mean the same thing. */
         float getKeyRamp01() const noexcept { return ktRamp_; }
         float getCurrentVelocity() const noexcept { return currentVelocity_; }   // fb262 — most-active-voice velocity for the live streak viz
+        float getRand01 (int k) const noexcept { return (k >= 0 && k < 4) ? rand_[k] : 0.0f; }   // fb563 — this note's random values
+        float getAlt01() const noexcept { return alt_; }                                          // fb563 — this note's alternator
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
         float dbgWarpEffA() const noexcept { return warpAmount_; }   // fb188 — probe tap
         float dbgLvlSm (int g) const noexcept   // fb183 — probe tap: the glided per-voice level
@@ -1340,6 +1342,7 @@ namespace tw
         //  the set it points at is replaced on every matrix edit, and the voice must always read
         //  the current one.
         void setModCurves (const std::atomic<const wc::ModCurveSet*>* a) noexcept { modCurves_ = a; }
+        void setGlobalSources (wc::GlobalModSources* g) noexcept { gsrc_ = g; }   // fb563 — set ONCE; the values inside change per block
         const DrawCurve* drawFor (int osc, int slot) const noexcept
         { return (drawTable_ != nullptr) ? drawTable_[(size_t) (osc * 2 + slot)].load (std::memory_order_relaxed)
                                          : nullptr; }
@@ -2697,6 +2700,11 @@ namespace tw
 
             currentMidiNote_ = midiNote;
             currentVelocity_ = velocity;
+            // fb563 — PER-NOTE RANDOM + ALT: four fresh uniform values every note-on (each note gets
+            //  its own, so a chord spreads), and a 0/1 that flips on every note-on plugin-wide —
+            //  the counter lives in the processor so the notes of a chord alternate note by note.
+            for (int k = 0; k < 4; ++k) rand_[k] = rng_.nextFloat();
+            alt_ = (gsrc_ != nullptr) ? (float) (gsrc_->altCounter.fetch_add (1u, std::memory_order_relaxed) & 1u) : 0.0f;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
             if (robinGlideFrom_ >= 0.0)                    // fb122 — Glide: slide in from the last station's note
                 beginGlideRobin (robinGlideFrom_, midiNote, robinGlideSec_);
@@ -3192,6 +3200,14 @@ namespace tw
                     else if (wc::isFollowModSource (sI))  srcV = followSourceValue (sI);   // fb552 — audio as a source
                     else if (wc::isNoteModSource (sI))    srcV = ktRamp_ - 1.0f;              // fb555 — key tracking, level-1 like every shape source
                     else if (sI == (int) wc::ModSource::Velocity) srcV = std::pow (juce::jlimit (0.0f, 1.0f, currentVelocity_), std::pow (3.0f, 1.0f - 2.0f * velDepth_));   // fb262 — velocity source, CURVE-shaped (velDepth_ repurposed as the curve: 0.5=linear, >0.5 lifts soft hits, <0.5 hardens)
+                    // fb563 — PHASE 2 SOURCES. Global ones read the processor's atomics (a macro moves every
+                    //  block, so no ModConfig copy); the per-note ones are this voice's own.
+                    else if (wc::isMacroModSource (sI))            srcV = (gsrc_ != nullptr) ? gsrc_->macro[wc::macroIndexOf (sI)].load (std::memory_order_relaxed) : 0.0f;
+                    else if (sI == (int) wc::ModSource::Wheel)      srcV = (gsrc_ != nullptr) ? gsrc_->wheel.load (std::memory_order_relaxed) : 0.0f;
+                    else if (sI == (int) wc::ModSource::Aftertouch) srcV = (gsrc_ != nullptr) ? gsrc_->aftertouch.load (std::memory_order_relaxed) : 0.0f;
+                    else if (sI == (int) wc::ModSource::Bend)       srcV = (gsrc_ != nullptr) ? gsrc_->bend.load (std::memory_order_relaxed) : 0.0f;   // −1..+1
+                    else if (wc::isRandModSource (sI))             srcV = rand_[wc::randIndexOf (sI)];
+                    else if (sI == (int) wc::ModSource::Alt)        srcV = alt_;
                     else continue;
                     // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last
                     //  line before srcV fans out into the ownership laws, the semitone sums and the
@@ -3238,7 +3254,7 @@ namespace tw
                     const float c = wc::routeContribution (wc::kDestInfo[(int) as.dest], srcV, as.depth);
                     // fb178 — env→cutoff joins the filter's semitone sum as a block constant
                     // (LFO→cutoff stays per-sample below; envs advance per block anyway).
-                    if (wc::isShapeModSource (sI) || sI == (int) wc::ModSource::Velocity)   // fb260 · fb552 followers join the block-constant sum — velocity→cutoff joins the block-constant semitone sum, exactly like env
+                    if (wc::isShapeModSource (sI) || wc::isBlockConstantSource (sI))   // fb563 — every block-constant source (velocity, macros, wheel, aftertouch, bend, random, alt) · fb260 · fb552 followers join the block-constant sum — velocity→cutoff joins the block-constant semitone sum, exactly like env
                     {
                         if      (as.dest == wc::ModDest::Cut1) { envCutBlk1_ += c; continue; }
                         else if (as.dest == wc::ModDest::Cut2) { envCutBlk2_ += c; continue; }
@@ -3273,6 +3289,13 @@ namespace tw
                     }
                 }
                 // FRAME/WARP/FOLD — keytrack crossfade + ROUTE + LFO mod, clamp once.
+                // fb563 — PITCH BEND, hard-wired: the wheel moves every oscillator by its range in
+                //  semitones, riding the per-block COARSE lane the matrix already uses (glided downstream).
+                if (gsrc_ != nullptr)
+                {
+                    const float bendSemi = gsrc_->bend.load (std::memory_order_relaxed) * gsrc_->bendRangeSemis.load (std::memory_order_relaxed);
+                    for (int o = 0; o < 4; ++o) mCrs[o] += bendSemi;
+                }
                 coarseModA_ = mCrs[0]; coarseModB_ = mCrs[1]; coarseModC_ = mCrs[2]; coarseModD_ = mCrs[3];
                 for (int o = 0; o < 4; ++o) { subWMod_[o] = mSw[o]; subHMod_[o] = mSh[o]; }
                 // fb188 — ownership applied at the wavetable-trio app sites (w=0 → legacy exactly)
@@ -6300,6 +6323,10 @@ namespace tw
         int    currentMidiNote_ = 60;
         float  currentVelocity_ = 1.0f;
         float  velDepth_ = 0.5f;   // fb262 — velocity CURVE amount (0..1, repurposed from depth): 0.5=linear, >0.5 lifts soft hits, <0.5 hardens. NO LONGER touches amp.
+        wc::GlobalModSources* gsrc_ = nullptr;        // fb563 — the processor's macros · wheel · aftertouch · bend (+ the alt counter)
+        float  rand_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };  // fb563 — this note's Random 1..4
+        float  alt_ = 0.0f;                            // fb563 — this note's Alt (0 or 1)
+        juce::Random rng_;                             // fb563 — per-voice, time-seeded
 
         // ── OSC SCOPE — per-osc audio-thread ring buffers (A/B/C/D) ─────────────
         // Live oscilloscope tap: per output sample the render loop writes each

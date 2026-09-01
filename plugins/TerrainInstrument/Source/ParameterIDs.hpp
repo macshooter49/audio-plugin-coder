@@ -541,6 +541,12 @@ namespace ParameterIDs
     // ── Synth section — Phase 8a (Voice settings + flagship features) ────
     constexpr char SYN_VOICES[]   = "SYN_VOICES";    // int 1..16, polyphony cap (display-only this phase)
     constexpr char SYN_VEL_DEPTH[] = "SYN_VEL_DEPTH"; // fb260 — float 0..100 → velocity→amp depth (100=full dynamics, 0=flat)
+    // fb563 — the eight MACROS (0..100, plain knobs that are also modulation sources) + the pitch-bend range
+    constexpr char SYN_MACRO_1[] = "SYN_MACRO_1"; constexpr char SYN_MACRO_2[] = "SYN_MACRO_2";
+    constexpr char SYN_MACRO_3[] = "SYN_MACRO_3"; constexpr char SYN_MACRO_4[] = "SYN_MACRO_4";
+    constexpr char SYN_MACRO_5[] = "SYN_MACRO_5"; constexpr char SYN_MACRO_6[] = "SYN_MACRO_6";
+    constexpr char SYN_MACRO_7[] = "SYN_MACRO_7"; constexpr char SYN_MACRO_8[] = "SYN_MACRO_8";
+    constexpr char SYN_BEND_RANGE[] = "SYN_BEND_RANGE";   // fb563 — pitch-bend range in semitones, 0..24, default 2
     constexpr char SYN_UNISON[]   = "SYN_UNISON";    // int 1..8, voices stacked per note
     constexpr char SYN_SPREAD[]   = "SYN_SPREAD";    // float 0..100, % detune+pan width for unison stack
     constexpr char SYN_EROSION[]  = "SYN_EROSION";   // float 0..100, % analog per-voice drift amount

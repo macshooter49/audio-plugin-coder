@@ -5898,6 +5898,13 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             <button class="theme-btn" id="theme-dark-btn">Dark</button>
           </div>
         </div>
+        <!-- fb563 — PITCH BEND RANGE. A global performance setting, so it lives here (the voice column
+             is a fixed-height box: one more row there pushed the rack's knob words off the window).
+             Drag the number, double-click for 2. Relay-free (setSynParam / getSynParam). -->
+        <div class="settings-row" id="rr-bend-row" title="Pitch bend range in semitones — drag the number, double-click for 2">
+          <span class="settings-label">Pitch bend range</span>
+          <span><b style="cursor:ns-resize;user-select:none;font-weight:400;font-variant-numeric:tabular-nums;">2</b><span style="opacity:.55;margin-left:4px;">st</span></span>
+        </div>
       </div>
       <div class="settings-footer">
         <span class="settings-version">Terrain v3.0 by Waves Crate</span>
@@ -8113,11 +8120,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:7px; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
         #syn-panel .vm-voiceview > .voice-toggle-row{ margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
         /* 9-macro view (placeholder — real design later) swaps in when 'Macros' is selected */
-        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb272 — same box geometry as vm-voiceview so toggling Macros never reflows anything */
+        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr); gap:4px; padding-top:0; }   /* fb563 — eight macros, 4×2 */   /* fb272 — same box geometry as vm-voiceview so toggling Macros never reflows anything */
         #syn-panel .vm-macro{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; min-width:0; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
-        #syn-panel .vm-macro .vm-ml{ font-size:7px; letter-spacing:.2px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; }
+        #syn-panel .vm-macro .vm-ml{ font-size:7px; letter-spacing:.2px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; cursor:grab; }   /* fb563 — the name is the drag grip */
         /* Macros view active → only the Macros button lights (suppress Mono/Legato/Poly highlight) */
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
@@ -12521,16 +12528,46 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var vm=document.querySelector('#syn-panel .voice-meta'), mv=document.getElementById('vm-macroview');
             var vv=document.querySelector('#syn-panel .vm-voiceview'), mbtn=document.querySelector('#syn-panel .vm-macros-btn');
             if(!vm||!mv||!vv) return;
-            var seed=[42,68,30,55,20,74,50,38,61], mh='';
-            for(var i=0;i<9;i++){ mh+='<div class="vm-macro"><div class="vm-mk" data-v="'+seed[i]+'">'+knobSVG(seed[i])+'</div><div class="vm-ml">Macro '+(i+1)+'</div></div>'; }
+            /* fb563 — EIGHT REAL MACROS, 4×2 (the house chassis grid, never 3×3 with one empty).
+               Each is the APVTS knob SYN_MACRO_n: written through __setSynParam, seeded once from
+               getSynParam (relay-free — fb544's modern path), painted with the rack's knobSVG so the
+               bare number sits on the face (the readout law). The NAME is a drag grip
+               (data-drag-macro) and the control menu's Macros family lists the same eight. */
+            var NM=8, val=[0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;
+            for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
+              +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it, or right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
             mv.innerHTML=mh;
+            var mks=mv.querySelectorAll('.vm-mk');
+            function paintM(i){ var mk=mks[i]; if(!mk) return; mk.setAttribute('data-v',Math.round(val[i])); mk.innerHTML=knobSVG(val[i]); }
+            function writeM(i,v){ val[i]=Math.max(0,Math.min(100,v)); paintM(i); try{ if(window.__setSynParam) window.__setSynParam('SYN_MACRO_'+(i+1), val[i]/100); }catch(_){} }
+            function seedM(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynParam'):null; if(!g) return;
+              for(var i=0;i<NM;i++)(function(i){ var r=g('SYN_MACRO_'+(i+1)); if(r&&r.then) r.then(function(n){ var f=parseFloat(n); if(isFinite(f)){ val[i]=Math.max(0,Math.min(100,f*100)); paintM(i); } }); })(i); }catch(_){} }
+            seedM(); [900,2500].forEach(function(ms){ setTimeout(seedM,ms); });   /* the natives may land after the first pass (fb548 — the page is built by a ladder) */
             mv.addEventListener('pointerdown',function(e){ try{
-              var mk=e.target.closest('.vm-mk'); if(!mk) return; e.preventDefault();
-              var sy=e.clientY, sv=+mk.getAttribute('data-v')||50;
-              function mvm(ev){ var nv=Math.max(0,Math.min(100,sv+(sy-ev.clientY)*0.6)); mk.setAttribute('data-v',Math.round(nv)); mk.innerHTML=knobSVG(nv); }
-              function up(){ document.removeEventListener('pointermove',mvm); document.removeEventListener('pointerup',up); }
+              var mk=e.target.closest('.vm-mk'); if(!mk) return; if(e.button!==0) return; e.preventDefault();
+              var i=[].indexOf.call(mks,mk); if(i<0) return; var sy=e.clientY, sv=val[i], moved=false;
+              function mvm(ev){ if(Math.abs(ev.clientY-sy)>1) moved=true; writeM(i, sv+(sy-ev.clientY)*0.6); }
+              function up(){ document.removeEventListener('pointermove',mvm); document.removeEventListener('pointerup',up); if(moved) lastMacroDrag=Date.now(); }
               document.addEventListener('pointermove',mvm); document.addEventListener('pointerup',up);
             }catch(_){ } });
+            mv.addEventListener('dblclick',function(e){ try{ var mk=e.target.closest('.vm-mk'); if(!mk) return; if(Date.now()-lastMacroDrag<400) return;   /* double-click = default (0), the fb363 law */
+              var i=[].indexOf.call(mks,mk); if(i>=0) writeM(i,0); }catch(_){ } });
+            window.__macroVal=function(i){ return val[i]; }; window.__macroSet=function(i,v){ writeM(i,v); };   /* headless gate hooks */
+            /* fb563 — the PITCH BEND RANGE row (semitones): drag the number, double-click = 2. Relay-free, like the macros. */
+            (function(){ try{ var row=document.getElementById('rr-bend-row'), b=row&&row.querySelector('b'); if(!row||!b) return; var st=2;
+              function paintB(){ b.textContent=String(Math.round(st)); }
+              function writeB(v){ st=Math.max(0,Math.min(24,Math.round(v))); paintB(); try{ if(window.__setSynParam) window.__setSynParam('SYN_BEND_RANGE', st/24); }catch(_){} }
+              function seedB(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynParam'):null; if(!g) return;
+                var r=g('SYN_BEND_RANGE'); if(r&&r.then) r.then(function(n){ var f=parseFloat(n); if(isFinite(f)){ st=Math.round(f*24); paintB(); } }); }catch(_){} }
+              seedB(); [900,2500].forEach(function(ms){ setTimeout(seedB,ms); });
+              var y0=0, s0=0, dn=false, mvd=false, lastUp=0;
+              row.addEventListener('pointerdown',function(e){ if(e.button!==0) return; dn=true; mvd=false; y0=e.clientY; s0=st; e.preventDefault();
+                function mvb(ev){ if(!dn) return; var d=(y0-ev.clientY)/6; if(Math.abs(d)>=0.5) mvd=true; writeB(s0+d); }
+                function upb(){ dn=false; if(mvd) lastUp=Date.now(); document.removeEventListener('pointermove',mvb); document.removeEventListener('pointerup',upb); }
+                document.addEventListener('pointermove',mvb); document.addEventListener('pointerup',upb); });
+              row.addEventListener('dblclick',function(e){ e.preventDefault(); if(Date.now()-lastUp<400) return; writeB(2); });
+              window.__bendRange=function(){ return st; };
+            }catch(_){} })();
             function showMacros(on){ try{ vm.classList.toggle('vm-macros-active',on); mv.style.display=on?'grid':'none'; vv.style.display=on?'none':'flex'; if(mbtn) mbtn.classList.toggle('on',on); }catch(_){ } }
             if(mbtn) mbtn.addEventListener('click',function(){ showMacros(!vm.classList.contains('vm-macros-active')); });   // fb272 — real toggle: click Macros to enter, click again to return to the voice params
             [].forEach.call(document.querySelectorAll('#syn-panel .vm-4 .voice-toggle:not(.vm-macros-btn)'),function(b){ b.addEventListener('click',function(){ showMacros(false); }); });
@@ -30990,21 +31027,35 @@ restoreThemeFromBackend();
      so a Filter 1 / Filter 2 route came back from the processor as "LFO 216"; the card's receiver
      special-cased 200 and turned a Key drop (201) into a Velocity route. One encoder, one decoder,
      both here, and Tests/mod_source_gate.py reads the constants out of this table against the C++. */
-  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7};   /* == kEnvSrcBase · kVelSrc · kNoteSrc · kFollowSrcBase · kNumFollowers */
-  function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):a.lfo-1))); }
+  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220, NMACRO:8, WHEEL:230, AT:231, BEND:232, RAND:240, NRAND:4, ALT:244};
+  /* == kEnvSrcBase · kVelSrc · kNoteSrc · kFollowSrcBase · kNumFollowers · kMacroSrcBase · kNumMacros · kWheelSrc · kAftertouchSrc · kBendSrc · kRandSrcBase · kNumRands · kAltSrc
+     fb563 Phase 2 — the six new families ride the same table, the same encoder and the same decoder. */
+  function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):(a.mac?WIRE.MACRO+(a.mac-1):(a.whl?WIRE.WHEEL:(a.at?WIRE.AT:(a.bend?WIRE.BEND:(a.rnd?WIRE.RAND+(a.rnd-1):(a.alt?WIRE.ALT:a.lfo-1))))))))); }
   function decodeSrc(sv){ sv=sv|0;
     if(sv>=WIRE.FOL&&sv<WIRE.FOL+WIRE.NFOL) return {fol:sv-WIRE.FOL+1};
+    if(sv>=WIRE.MACRO&&sv<WIRE.MACRO+WIRE.NMACRO) return {mac:sv-WIRE.MACRO+1};
+    if(sv>=WIRE.RAND&&sv<WIRE.RAND+WIRE.NRAND)    return {rnd:sv-WIRE.RAND+1};
+    if(sv===WIRE.WHEEL) return {whl:1};
+    if(sv===WIRE.AT)    return {at:1};
+    if(sv===WIRE.BEND)  return {bend:1};
+    if(sv===WIRE.ALT)   return {alt:1};
     if(sv===WIRE.NOTE) return {note:1};
     if(sv===WIRE.VEL)  return {vel:1};
     if(sv>=WIRE.ENV&&sv<WIRE.ENV+32) return {env:sv-WIRE.ENV+1};   /* Env 1..32, the same [100,132) the processor accepts */
     if(sv>=0&&sv<10)   return {lfo:sv+1};
     return null; }   /* an unknown code is NOT an LFO — it is dropped, never invented */
-  function srcKey(a){ return a.note?'k':(a.fol?('f'+a.fol):(a.vel?'v':(a.env?('e'+a.env):('l'+a.lfo)))); }
-  function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, every shape source at full (fb178/fb263/fb552) */
+  var SRC_KEYS=['note','fol','vel','env','lfo','mac','whl','at','bend','rnd','alt'];   /* every family an assign can carry — ONE list, so a new family is one word here */
+  function srcKey(a){ for(var i=0;i<SRC_KEYS.length;i++){ var k=SRC_KEYS[i]; if(a[k]) return k+a[k]; } return '?'; }
+  function srcOf(a){ for(var i=0;i<SRC_KEYS.length;i++){ var k=SRC_KEYS[i]; if(a[k]){ var o={}; o[k]=a[k]; return o; } } return {}; }
+  function srcTag(a){ return a.note?'key':(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:(a.lfo?'lfo'+a.lfo:(a.mac?'mac'+a.mac:(a.whl?'whl':(a.at?'at':(a.bend?'bend':(a.rnd?'rnd'+a.rnd:(a.alt?'alt':'?')))))))))); }   /* the gate surface's spelling */
+  function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, everything else at full (fb178/fb263/fb552) */
+  function isMagnitudeSrc(a){ return !!(a.env||a.fol||a.note); }   /* the shape sources — the C++ takes |depth|; every other family carries a SIGNED depth */
   function findRoute(S,dest){ var k=srcKey(S); for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcKey(a)===k) return a; } return null; }
+  function addP2Assign(S,dest,el){ if(findRoute(S,dest)) return; if(assigns.length>=128) return;   /* fb563 Phase 2 — macros · wheel · aftertouch · bend · random · alt: one generic adder */
+    var a=srcOf(S); a.dest=dest; a.depth=srcDefaultDepth(S); a.el=el; assigns.push(a); markTargets(); push(); }
   function addRoute(S,dest,el){ if(S.lfo) addAssign(S.lfo,dest,el); else if(S.env) addEnvAssign(S.env,dest,el); else if(S.vel) addVelAssign(dest,el);
-    else if(S.note) addNoteAssign(dest,el); else if(S.fol) addFollowAssign(S.fol,dest,el); return findRoute(S,dest); }
-  window.__modWire={ENV:WIRE.ENV,VEL:WIRE.VEL,NOTE:WIRE.NOTE,FOL:WIRE.FOL,NFOL:WIRE.NFOL,encode:encodeSrc,decode:decodeSrc};
+    else if(S.note) addNoteAssign(dest,el); else if(S.fol) addFollowAssign(S.fol,dest,el); else addP2Assign(S,dest,el); return findRoute(S,dest); }
+  window.__modWire=Object.assign({encode:encodeSrc,decode:decodeSrc},WIRE);
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
   window.__modViz=function(e,l,p){
     /* fb555 — the Key row has no parameter; its number is the SOUNDING NOTE's key position, so the
@@ -31048,6 +31099,7 @@ restoreThemeFromBackend();
   document.addEventListener('pointerdown',function(e){ var t=e.target; if(!t||!t.closest)return;
     if(t.closest('#mod-engine')){ if(window.__lfoCurTab)window.__selMod={lfo:window.__lfoCurTab()}; }
     else if(t.closest('.device.envs')){ if(window.__envCurNum)window.__selMod={env:window.__envCurNum()}; }
+    else if(t.closest('.vm-macro')){ var _mc=+(t.closest('.vm-macro').getAttribute('data-macro')||0); if(_mc) window.__selMod={mac:_mc}; }   /* fb563 — touching a macro lights its routes */
     else if(t.closest('.rr-vis-key')){ window.__selMod={note:1}; }   /* fb555 — same focus rule as the Velocity row below */
     else if(t.closest('.rr-vis-vel')){ window.__selMod={vel:1}; }   /* fb262 — touching the Velocity row selects it → its routes glow purple, same focus-follows-interaction as env/LFO */
   },true);
@@ -31101,7 +31153,7 @@ restoreThemeFromBackend();
   function markTargets(){ document.querySelectorAll('.sm-modded').forEach(function(e){e.classList.remove('sm-modded');}); assigns.forEach(function(a){ var el=curEl(a); if(el)el.classList.add('sm-modded'); }); }
   function routeFor(el){ var sm=window.__selMod||{}, first=null, hit=null;   /* fb188 — the underline's depth drag edits the SELECTED modulator's route here, else the first */
     assigns.forEach(function(a){ if(curEl(a)!==el)return; if(!first)first=a;
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)||(a.note&&sm.note))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
+      if(srcKey(a)===srcKey(sm))hit=a; });   /* fb262 — velocity joins the selected-source test · fb552 followers too */
     return hit||first; }
   /* fb194 — THE BREATHING CURVE's data: per-env param-mod state {w,v,sum}×6 (Dly..Rel),
      the exact C++ split — env sources = ownership claim, LFO sources = additive × master. */
@@ -31129,7 +31181,7 @@ restoreThemeFromBackend();
   window.__tiPruneFxRoutes=function(lo,hi){ if(lo==null||hi==null) return 0; var n=0;
     for(var i=assigns.length-1;i>=0;i--) if(assigns[i].dest>=lo&&assigns[i].dest<hi){ assigns.splice(i,1); n++; }
     if(n){ markTargets(); push(); } return n; };
-  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:(a.note?'key':(a.fol?'fol'+a.fol:(a.vel?'vel':(a.env?'env'+a.env:'lfo'+a.lfo)))),d:a.dest,v:a.depth,c:(a.curve?a.curve.length:0)}; }); };   /* fb554 — the gate surface reports the connection curve too */   /* fb453 — gate surface: read the matrix without touching it */
+  window.__tiRoutes=function(){ return assigns.map(function(a){ return {s:srcTag(a),d:a.dest,v:a.depth,c:(a.curve?a.curve.length:0)}; }); };   /* fb554 — the gate surface reports the connection curve too */   /* fb453 — gate surface: read the matrix without touching it */
   var ssCache={};   /* fb189 — knob normalized value for the territory anchor */
   function knobNorm(a){
     if(a.dest>=481&&a.dest<481+192){ var kE=a.dest-481, eN=Math.floor(kE/6);   /* fb193 — legacy env params have real params; dyn anchor at 0 */
@@ -31238,6 +31290,23 @@ restoreThemeFromBackend();
         if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addEnvAssign(en,dest,g.el); }
         if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
+  /* fb563 — drag a MACRO'S NAME onto any knob, exactly like Velocity below. The wire code
+     streamed to popped cards is WIRE.MACRO+k-1 (== wc::kMacroSrcBase), which the card's receiver
+     passes through untouched (every code ≥ 200 is itself). */
+  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-macro]'); if(!t)return;
+    var mk=+t.getAttribute('data-drag-macro')||1; var sx=e.clientX, sy=e.clientY, started=false;
+    function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
+        ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='M'+mk; document.body.appendChild(ghost);
+        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+      ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
+      if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(WIRE.MACRO+mk-1,ev.screenX,ev.screenY,0); }
+      var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
+    function up(ev){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up);
+      if(started){ var g=hit(ev.clientX,ev.clientY);
+        if(window.__tiModDragPush) window.__tiModDragPush(WIRE.MACRO+mk-1,ev.screenX,ev.screenY,1);
+        if(g){ var dest=g.kind==='cut'?(actSlot()===2?1:0):(g.kind==='fslot'?g.pair[actSlot()===2?1:0]:g.dest); addP2Assign({mac:mk},dest,g.el); }
+        if(ghost){ghost.remove();ghost=null;} document.body.classList.remove('sm-dragging'); TG.forEach(function(x){ x.el.classList.remove('sm-target','sm-hot'); }); TG=[]; lastDragEnd=Date.now(); } }
+    document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   /* fb260 — drag VELOCITY from the voice panel onto any knob, exactly like an env/LFO. The
      label (data-drag-vel) is the source grip; the row's number stays the vel→amp depth. */
   document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel]'); if(!t)return;
@@ -31327,7 +31396,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
-  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
+  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?('Macro '+a.mac):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?('Random '+a.rnd):(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
@@ -31404,7 +31473,6 @@ restoreThemeFromBackend();
      "Curve" menu that lived here, KNOB_MENUS' mode pickers, the pill menus and the rack's drive
      flavour — speak through window.__ctlMenuRows now instead of racing for the same gesture. ═══ */
   var modClip=null;   /* Copy / Paste modulators — a session clipboard, never persisted */
-  function srcOf(a){ return a.note?{note:1}:(a.fol?{fol:a.fol}:(a.vel?{vel:1}:(a.env?{env:a.env}:{lfo:a.lfo}))); }
   /* which destination is under this element — the drag's own targets() list, the drop's own slot
      resolution (cut / fslot follow the ACTIVE filter tab), fb524b's opaque-card rule, and the
      SMALLEST surface wins so a pill inside a knob row answers for itself, not for the row. */
@@ -31427,7 +31495,7 @@ restoreThemeFromBackend();
      velocity are SIGNED (centre tick, fill from the middle); envelopes, followers and Key are
      magnitudes (the C++ takes |depth|), so their slider fills from the left. */
   function routeRow(a,g,rebuild){
-    var uni=!(a.lfo||a.vel);
+    var uni=isMagnitudeSrc(a);   /* fb563 — env / follower / Key fill from the left; every other family is signed */
     var wrap=document.createElement('div'); wrap.className='syn-ctx-route'; wrap.style.cssText='padding:4px 12px 7px 12px;';
     var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px;';
     var lab=document.createElement('span'); lab.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.72);font-size:11px;font-weight:300;';
@@ -31475,13 +31543,17 @@ restoreThemeFromBackend();
     function mk(S,name){ var o={name:name,sel:!!findRoute(S,g.dest)};
       o.pick=function(){ var ex=findRoute(S,g.dest); if(ex){ removeAssign(ex); o.sel=false; } else { addRoute(S,g.dest,g.el); o.sel=true; } }; return o; }
     var envN=5; try{ if(window.__envCount) envN=window.__envCount()|0; }catch(e){}
-    var envs=[], lfos=[], i;
+    var envs=[], lfos=[], macs=[], rnds=[], i;
     for(i=1;i<=envN;i++) envs.push(mk({env:i},'Env '+i));
     for(i=1;i<=10;i++)   lfos.push(mk({lfo:i},'LFO '+i));
-    var cats=[ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos},
-               {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')]},
-               {label:'Audio',items:FOL_NAME.map(function(nm,k){ return mk({fol:k+1},nm); })} ];
-    var first=routesOn(g.dest)[0], oc; if(first){ oc=first.env?0:(first.lfo?1:((first.vel||first.note)?2:3)); }   /* open on the family already in use; a bare knob opens on All */
+    for(i=1;i<=WIRE.NMACRO;i++) macs.push(mk({mac:i},'Macro '+i));   /* fb563 Phase 2 */
+    for(i=1;i<=WIRE.NRAND;i++)  rnds.push(mk({rnd:i},'Random '+i));
+    var cats=[ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos}, {label:'Macros',items:macs},
+               {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')].concat(rnds,[mk({alt:1},'Alt')])},
+               {label:'Audio',items:FOL_NAME.map(function(nm,k){ return mk({fol:k+1},nm); })},
+               {label:'MIDI',items:[mk({whl:1},'Mod Wheel'),mk({at:1},'Aftertouch'),mk({bend:1},'Pitch Bend')]} ];
+    var first=routesOn(g.dest)[0], oc;
+    if(first){ oc=first.env?0:(first.lfo?1:(first.mac?2:((first.vel||first.note||first.rnd||first.alt)?3:(first.fol?4:5)))); }   /* open on the family already in use; a bare knob opens on All */
     if(window.__synHideMenu) window.__synHideMenu();
     window.openTwoPaneBrowser(ev,{ cats:cats, openCat:oc, multi:true, searchPlaceholder:'Search modulators…' }); }
   /* Reset = exactly what a double-click does on that control (the fb363 law), so the two can never disagree. */
@@ -31664,6 +31736,16 @@ restoreThemeFromBackend();
       if(L<o.r.right&&R>o.r.left&&T<o.r.bottom&&B>o.r.top) return true; }
     return false; }
 
+  /* fb563 — the live value behind a Phase 2 source's comet (0..1, −1 = nothing yet), or null for
+     every older family so the chain below keeps its own readings. Bend is bipolar → mapped to 0..1. */
+  function p2v(a){ try{
+      if(a.mac)  return (window.__mvMacro&&window.__mvMacro[a.mac-1]!=null)?window.__mvMacro[a.mac-1]:-1;
+      if(a.whl)  return (window.__mvWheel!=null)?window.__mvWheel:-1;
+      if(a.at)   return (window.__mvAT!=null)?window.__mvAT:-1;
+      if(a.bend) return (window.__mvBend!=null)?(window.__mvBend+1)/2:-1;
+      if(a.rnd)  return (window.__mvRand&&window.__mvRand[a.rnd-1]!=null)?window.__mvRand[a.rnd-1]:-1;
+      if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1; }catch(e){}
+    return null; }
   function loop(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
     var on = window.__cardOnly ? true
@@ -31681,7 +31763,7 @@ restoreThemeFromBackend();
     var seen=new Map(), sm=window.__selMod||{}, __ov=null;   /* fb560 — the overlay boxes, collected lazily: no marks, no query */
     assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
       var m=seen.get(el); if(!m){ m={sel:false}; seen.set(el,m); }
-      if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)||(a.note&&sm.note)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
+      if(srcKey(a)===srcKey(sm)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
     seen.forEach(function(m,el){
       var u=ulMap.get(el);
       if(!u){ u=document.createElement('div'); u.className='sm-ul'; document.body.appendChild(u);
@@ -31763,7 +31845,8 @@ restoreThemeFromBackend();
       var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=uw;   /* fb453 — the children live in the ul's own (layout) space */
       if(ra){
         var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
-        var v=ra.note?((window.__mvNote!=null)?window.__mvNote:-1)   /* fb555 — the Key comet rides the sounding note */
+        var v=(p2v(ra)!=null)?p2v(ra)   /* fb563 — macros · wheel · aftertouch · bend · random · alt ride the same comet */
+             :ra.note?((window.__mvNote!=null)?window.__mvNote:-1)   /* fb555 — the Key comet rides the sounding note */
              :ra.fol?((window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1)   /* fb552 — a follower's comet rides the SOUND it follows (Max's law: if it is audible it is visible) */
              :ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
              :ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
@@ -31880,27 +31963,21 @@ restoreThemeFromBackend();
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g)return;
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr))return;   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
       var live=window.__cardOnly?Object.create(null):null;
-      function ky(sVel,sEnv,sLfo,sFol,sNote,d){ return (sNote?'k':(sFol?('f'+sFol):(sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo)))))+'_'+d; }
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
       /* fb563 — ONE decoder (decodeSrc, beside the encoder). The hand-written chain that lived
          here stopped at `sv<215` while fb556 had grown the followers to seven: a Filter 1 /
          Filter 2 route (215/216) fell through every test and was resurrected as "LFO 216" — the
          fb261 bug ("Env 101") a third time. An unknown code is dropped now, never invented. */
       var S=decodeSrc(sv); if(!S) return;
-      var fol=S.fol||0, note=!!S.note, vel=!!S.vel, env=S.env||0, lfo=S.lfo||0;
-      if(live) live[ky(vel,env,lfo,fol,note,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
+      if(live) live[srcKey(S)+'_'+dest]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
       if(!el)return;
-      for(var i=0;i<assigns.length;i++) if((note?assigns[i].note:(fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo))))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
-      var a=note?{note:1,dest:dest,depth:(+o.v||1.0),el:el}
-              :(fol?{fol:fol,dest:dest,depth:(+o.v||1.0),el:el}
-              :(vel?{vel:1,dest:dest,depth:(+o.v||0.5),el:el}
-              :(env?{env:env,dest:dest,depth:(+o.v||1.0),el:el}
-                   :{lfo:lfo,dest:dest,depth:(+o.v||0.5),el:el})));
+      var ex=findRoute(S,dest); if(ex){ if(!badgeBusy)ex.depth=(+o.v||ex.depth); return; }   /* fb145 — depth edits made in a popped card flow back */
+      var a=srcOf(S); a.dest=dest; a.depth=(+o.v||srcDefaultDepth(S)); a.el=el;   /* fb563 — one shape for every family */
       if(o.c){ try{ a.curve=String(o.c).split(',').map(Number); }catch(e){} }   /* fb554 */
       assigns.push(a); });
       if(live&&!badgeBusy&&(Date.now()-lastLocalEdit)>1500)
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
-          if(!live[ky(aq.vel,aq.env,aq.lfo,aq.fol,aq.note,aq.dest)]) assigns.splice(q,1); }
+          if(!live[srcKey(aq)+'_'+aq.dest]) assigns.splice(q,1); }
       restoredOnce=true; markTargets(); }catch(e){} }); }catch(e){} }
   var restoredOnce=false;   /* fb524 — a card must never push() an empty mirror over a live matrix before its first read lands */
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} };   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */

@@ -5849,6 +5849,17 @@ void TerrainUiCore::timerCallback()
         for (int fk = 0; fk < wc::kNumFollowers; ++fk)
             js << (fk ? "," : "") << SF (audioProcessor.modVizFollow (fk), 3);
         js << "];";
+        // fb563 — the Phase 2 sources' live values, for their comets (Max's law: audible ⇒ visible)
+        juce::String p2Feed;
+        p2Feed << "window.__mvMacro=[";
+        for (int mk = 0; mk < wc::kNumMacros; ++mk) p2Feed << (mk ? "," : "") << SF (audioProcessor.modVizMacro (mk), 3);
+        p2Feed << "];window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
+               << ";window.__mvAT=" << SF (audioProcessor.modVizAftertouch(), 3)
+               << ";window.__mvBend=" << SF (audioProcessor.modVizBend(), 3)
+               << ";window.__mvRand=[";
+        for (int rk = 0; rk < 4; ++rk) p2Feed << (rk ? "," : "") << SF (audioProcessor.modVizRand (rk), 3);
+        p2Feed << "];window.__mvAlt=" << SF (audioProcessor.modVizAlt(), 1) << ";";
+        js << p2Feed;
         js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 
@@ -5944,7 +5955,7 @@ void TerrainUiCore::timerCallback()
         if (! audioProcessor.cardWindows_.empty())   // fb524 — no card open, no string built: this runs at 60 Hz
         {
             const juce::String cardFeed =
-                "try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvVel=" + SF (velV, 3) + ";"
+                p2Feed + "try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvVel=" + SF (velV, 3) + ";"
                 "if(window.__modViz){window.__modViz([" + eArr + "],[" + lArr + "],[" + pArr + "]);}"
                 "else{window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];window.__mvLfoPhT=Date.now();}"
                 "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}}catch(e){}";

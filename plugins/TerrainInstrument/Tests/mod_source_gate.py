@@ -12,10 +12,10 @@ identical to no route at all.
 This gate checks the four places agree. It cannot check that the DSP is right — that is what the
 audio measurement is for — only that a source the UI can emit is a source the processor accepts.
 """
-import re, sys, pathlib
+import re, sys, pathlib, os
 root = pathlib.Path(__file__).resolve().parent.parent
 cfg  = (root / 'Source' / 'SynthModConfig.h').read_text()
-proc = (root / 'Source' / 'PluginProcessor.cpp').read_text()
+proc = pathlib.Path(os.environ.get('MSG_PROC') or (root / 'Source' / 'PluginProcessor.cpp')).read_text()
 import os
 js   = pathlib.Path(os.environ.get('MSG_JS') or (root / 'Source' / 'ui' / 'public' / 'index.html')).read_text()
 fails = []
@@ -48,20 +48,24 @@ if gate:
 #  Three hand-written decoders had drifted apart (restore() stopped at `sv<215` while the C++ had
 #  seven followers; the popped card special-cased 200 and turned a Key drop into Velocity). Now
 #  the wire codes live in one JS table and this gate reads it AGAINST SynthModConfig.h.
-wt = re.search(r'var WIRE=\{ENV:(\d+),\s*VEL:(\d+),\s*NOTE:(\d+),\s*FOL:(\d+),\s*NFOL:(\d+)\}', js)
-if not wt: fails.append("could not find the JS WIRE table (`var WIRE={ENV:..,VEL:..,NOTE:..,FOL:..,NFOL:..}`)")
+wt = re.search(r'var WIRE=\{([^}]*)\}', js)
+if not wt: fails.append("could not find the JS WIRE table (`var WIRE={...}`)")
 else:
-    for got, want, nm in ((int(wt.group(1)), ENV, 'kEnvSrcBase'), (int(wt.group(2)), VEL, 'kVelSrc'),
-                          (int(wt.group(3)), NOTE, 'kNoteSrc'), (int(wt.group(4)), FOL, 'kFollowSrcBase'),
-                          (int(wt.group(5)), NFOL, 'kNumFollowers')):
-        if got != want:
-            fails.append("JS WIRE table says %d where C++ %s = %d — the UI and the processor disagree about a wire code" % (got, nm, want))
+    tbl = dict((k.strip(), int(v)) for k, v in re.findall(r'(\w+)\s*:\s*(\d+)', wt.group(1)))
+    PAIRS = (('ENV', 'kEnvSrcBase'), ('VEL', 'kVelSrc'), ('NOTE', 'kNoteSrc'), ('FOL', 'kFollowSrcBase'), ('NFOL', 'kNumFollowers'),
+             ('MACRO', 'kMacroSrcBase'), ('NMACRO', 'kNumMacros'), ('WHEEL', 'kWheelSrc'), ('AT', 'kAftertouchSrc'),
+             ('BEND', 'kBendSrc'), ('RAND', 'kRandSrcBase'), ('NRAND', 'kNumRands'), ('ALT', 'kAltSrc'))
+    for jk, ck in PAIRS:
+        want = const(ck)
+        if jk not in tbl: fails.append("the JS WIRE table has no %s (C++ %s = %d) — the UI cannot express that family" % (jk, ck, want))
+        elif tbl[jk] != want:
+            fails.append("JS WIRE.%s = %d but C++ %s = %d — the UI and the processor disagree about a wire code" % (jk, tbl[jk], ck, want))
 enc = re.search(r'function encodeSrc\(a\)\{ return (.*?); \}', js)
 if not enc: fails.append("could not find the JS wire encoder (encodeSrc)")
 else:
-    for tok, fam in (('WIRE.FOL', 'follower'), ('WIRE.VEL', 'velocity'), ('WIRE.ENV', 'envelope'), ('WIRE.NOTE', 'key tracking')):
+    for tok in ('WIRE.FOL', 'WIRE.VEL', 'WIRE.ENV', 'WIRE.NOTE', 'WIRE.MACRO', 'WIRE.WHEEL', 'WIRE.AT', 'WIRE.BEND', 'WIRE.RAND', 'WIRE.ALT'):
         if tok not in enc.group(1):
-            fails.append("encodeSrc never emits the %s base (%s) — the UI cannot express that source" % (fam, tok))
+            fails.append("encodeSrc never emits %s — the UI cannot express that source" % tok)
 if 's:encodeSrc(a)' not in js.replace(' ', ''):
     fails.append("push() does not encode through encodeSrc — a second encoder is a second place to drift")
 
@@ -70,12 +74,12 @@ dec = re.search(r'function decodeSrc\(sv\)\{(.*?)return null; \}', js, re.S)
 if not dec: fails.append("could not find the JS wire decoder (decodeSrc)")
 else:
     d = dec.group(1).replace(' ', '')
-    if 'sv<WIRE.FOL+WIRE.NFOL' not in d:
-        fails.append("decodeSrc does not bound the followers by WIRE.NFOL — a seventh follower would decode as an LFO (the fb556 hole)")
-    if 'sv<WIRE.ENV+32' not in d:
-        fails.append("decodeSrc does not bound the envelopes at 32 — a later wire code would decode as an envelope (the fb261 bug)")
-    if 'sv<10' not in d:
-        fails.append("decodeSrc does not bound the LFOs at 10")
+    for bound, why in (('sv<WIRE.FOL+WIRE.NFOL', 'a seventh follower would decode as an LFO (the fb556 hole)'),
+                       ('sv<WIRE.ENV+32', 'a later wire code would decode as an envelope (the fb261 bug)'),
+                       ('sv<10', 'an unknown code would decode as an LFO'),
+                       ('sv<WIRE.MACRO+WIRE.NMACRO', 'a ninth macro code would be invented'),
+                       ('sv<WIRE.RAND+WIRE.NRAND', 'a fifth random code would be invented')):
+        if bound not in d: fails.append("decodeSrc is missing the bound `%s` — %s" % (bound, why))
 if 'var S=decodeSrc(sv);' not in js:
     fails.append("restore() does not decode through decodeSrc — a second decoder is a second place to drift")
 
@@ -86,6 +90,21 @@ if not card:
 elif int(card.group(1)) != VEL:
     fails.append("the popped card passes wire codes through from %d, not from kVelSrc (%d): Velocity, Key or the "
                  "followers would be off by one" % (int(card.group(1)), VEL))
+
+# ── 4b · fb563 PHASE 2 — the C++ sites. One helper (phase2SourceForWire) must name every constant,
+#          and the door, the per-voice build and the block loop must all ask it. ─────────────────
+helper = re.search(r'inline int phase2SourceForWire \(int wire\) noexcept\s*\{(.*?)\n\}', cfg, re.S)
+if not helper: fails.append("SynthModConfig.h has no phase2SourceForWire()")
+else:
+    for tok in ('kMacroSrcBase', 'kWheelSrc', 'kAftertouchSrc', 'kBendSrc', 'kRandSrcBase', 'kAltSrc'):
+        if tok not in helper.group(1): fails.append("phase2SourceForWire() never maps %s — that family is dropped at every C++ door" % tok)
+if 'phase2SourceForWire (r.src)' not in door:
+    fails.append("the setSynthModMatrix door never asks phase2SourceForWire — macros, wheel, aftertouch, bend, random and alt are dropped silently")
+if proc.count('phase2SourceForWire (r.src)') < 3:
+    fails.append("phase2SourceForWire is asked at %d site(s); the door, the per-voice build and the block loop make 3" % proc.count('phase2SourceForWire (r.src)'))
+sv_ = (root / 'Source' / 'SynthVoice.h').read_text()
+for tok in ('wc::isMacroModSource (sI)', 'wc::ModSource::Wheel', 'wc::ModSource::Aftertouch', 'wc::ModSource::Bend', 'wc::isRandModSource (sI)', 'wc::ModSource::Alt'):
+    if tok not in sv_: fails.append("SynthVoice never evaluates %s — declared and inert (the fb555 shape)" % tok)
 
 # ── 5 · fb554 · THE CONNECTION CURVE MUST ROUND-TRIP ────────────────────────────────────────
 #  It rides the route JSON, so the encoder must emit `c` and the decoder must read it back. If
