@@ -7,7 +7,8 @@ let FAIL=0; const bad=m=>{FAIL++;return '  ✗ '+m;};
   const b=await puppeteer.launch({executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new',args:['--no-sandbox','--allow-file-access-from-files']});
   const pg=await b.newPage(); await pg.setViewport({width:820,height:656,deviceScaleFactor:2});
-  const errs=[]; pg.on('pageerror',e=>errs.push(String(e).slice(0,150)));
+  // the one-press-one-step bar throws ON PURPOSE inside a callback; that is the stimulus, not a defect
+  const errs=[]; pg.on('pageerror',e=>{ const t=String(e); if(!/deliberate/.test(t)) errs.push(t.slice(0,150)); });
   await pg.goto('file://'+P,{waitUntil:'load'}); await new Promise(r=>setTimeout(r,2400));
   const r=await pg.evaluate(async()=>{
     const sp=document.getElementById('syn-panel'); sp.classList.remove('hidden');
@@ -35,6 +36,15 @@ let FAIL=0; const bad=m=>{FAIL++;return '  ✗ '+m;};
       if(g.vals.indexOf(sel.value)<0){ left=sel.value; break; } }
     out.neverLeft = (left===null); out.leaked=left;
 
+    // ── fb562 · ONE PRESS, ONE STEP. `.then(f).catch(g)` is not try/catch: if f throws, g runs
+    //    too, so a callback that failed stepped the arrow TWICE. Prove the shipped collector
+    //    calls back exactly once even when the callback itself throws.
+    out.cbCalls = 0;
+    try { window.__wtAllCats('a', function(){ out.cbCalls++; throw new Error('deliberate'); }); }
+    catch(e){ /* thrown asynchronously; the count is what matters */ }
+    await wait(700);
+    out.onceOnly = (out.cbCalls === 1);
+
     // ── ALL: if that is where you browsed, that is what you step ──
     const flat=[...sel.options].map(o=>o.value);
     window.__wtFolder['a']='All';
@@ -58,6 +68,8 @@ let FAIL=0; const bad=m=>{FAIL++;return '  ✗ '+m;};
                                    : bad('the All test is vacuous here'));
     console.log(r.allOk ? '  ✓ browsing All steps All — across folder boundaries, in the browser\'s order'
                         : bad('All did not step All: got '+r.allStep+', expected '+r.allWant));
+    console.log(r.onceOnly ? '  ✓ one press, one step — the collector calls back exactly once even when the callback throws'
+                           : bad('the collector called back '+r.cbCalls+' times: one press would step twice'));
   }
   console.log('page errors: '+(errs.length?errs.join(' | '):'none')); if(errs.length)FAIL++;
   console.log(FAIL? '\n  '+FAIL+' FAILED' : '\n  ALL BARS GREEN');

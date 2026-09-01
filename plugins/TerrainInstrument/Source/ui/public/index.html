@@ -19868,6 +19868,7 @@ setTimeout(function wireSynControls () {
          — the exact complaint that started this ("the curvature doesn't respond to the actual
          audio"). Capturing at amount 0 therefore opens it to 100 %; a slot already doing
          something keeps the amount it had. */
+      var wPollT = 0;   /* fb562 — the ONE live follow-poll; see openWarpCurve */
       function openWarpCurve (osc, slot, d, ev) {
         var U = window.__crvUtil, O = String (osc).toUpperCase(), N = 129;
         var pMode = slot ? 'SYN_OSC_' + O + '_WARP2_MODE' : 'SYN_OSC_' + O + '_WARP_MODE';
@@ -19969,12 +19970,30 @@ setTimeout(function wireSynControls () {
            the moment you touch a point (captured) the ink is the truth and the poll stands down,
            and it also stands down for 600 ms after any edit so the poll can never fight the hand
            (the fb546 law). Stops itself when the card closes or another host takes it. */
+        /* ⚠️ fb562 — ONE POLL, NOT ONE PER OPEN. The stop condition was "the host stopped being
+           warp" — which is false the moment you Extend a DIFFERENT warp slot, because that host is
+           ALSO 'warp'. So every open left the previous poll running forever, fetching a slot
+           nobody is looking at every 300 ms, and mutating its own detached closure. Open the card
+           twenty times and twenty of them are still running. A token the newest open owns is the
+           whole fix; the older ones see it change and retire. */
+        /* ⚠️ fb562 — RESOLVE THE NATIVE HERE. The poll called `f`, which lives in
+           __openWarpExt's scope, not this one: a ReferenceError on the FIRST tick, swallowed by
+           the outer catch, which then cleared the interval. So "the card follows the slot" has
+           never once run since it was written — it died 300 ms after every open, silently, and
+           the only reason anyone noticed is that the clean-up sweep counted the intervals. A
+           catch that exists to stop a runaway loop will hide a typo forever; the gate below
+           (fb562_warpfollow) is what actually holds this up. */
+        var gwc = null;
+        try { gwc = window.Juce && window.Juce.getNativeFunction && window.Juce.getNativeFunction ('getWarpCurve'); } catch (eN) {}
+        if (wPollT) { clearInterval (wPollT); wPollT = 0; }
         var wPoll = setInterval (function () { try {
+          if (wPoll !== wPollT) { clearInterval (wPoll); return; }   // a newer card took over
           var st = window.__crvOpenState ? window.__crvOpenState() : null;
-          if (! st || st.err || ! st.open || st.key !== 'warp') { clearInterval (wPoll); return; }
+          if (! st || st.err || ! st.open || st.key !== 'warp') { clearInterval (wPoll); if (wPollT === wPoll) wPollT = 0; return; }
           if (captured) return;
           if (Date.now() - (window.__crvTouchT || 0) < 600) return;
-          f (osc, slot | 0).then (function (txt) { try {
+          if (! gwc) { clearInterval (wPoll); if (wPollT === wPoll) wPollT = 0; return; }
+          gwc (osc, slot | 0).then (function (txt) { try {
             var d2 = null; try { d2 = JSON.parse (txt); } catch (e) {}
             if (! d2 || ! d2.pts || ! d2.pts.length || (d2.mode | 0) === mode) return;
             if (captured || (Date.now() - (window.__crvTouchT || 0) < 600)) return;
@@ -19989,7 +20008,8 @@ setTimeout(function wireSynControls () {
               return Math.max (0, Math.min (1, v)); });
             pts = U.fit (raw2, dom === 'phase'); U.repaint();
           } catch (e2) {} }).catch (function () {});
-        } catch (e) { clearInterval (wPoll); } }, 300);
+        } catch (e) { clearInterval (wPoll); if (wPollT === wPoll) wPollT = 0; } }, 300);
+        wPollT = wPoll;
       }
 
       /* the door: ask C++ what this slot IS, then send it to the instrument that fits it. */
@@ -35397,7 +35417,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         .concat ((legacy || []).map (function (nm) { return { kind: 'import', name: nm, path: null }; }));
       if (loose.length) cats.push ({ label: 'Imports', items: loose });
       cb (cats);
-    }).catch (function () { cb (cats); });
+    /* ⚠️ fb562 — .then(f).catch(g) IS NOT try/catch. If cb() itself throws inside the then, the
+       catch fires and calls cb() A SECOND TIME — one arrow press, two steps. The two-argument
+       form only runs the failure handler when the PROMISE rejects, never when the success handler
+       does, which is what was meant here. */
+    }, function () { cb (cats); });
   };
 
   function wtApplyItem (o, it) {
@@ -35430,7 +35454,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   window.wtStepPreset = function (o, dir) {
     if (wtStepBusy[o]) return;                      // one step per click: the list is fetched async
     wtStepBusy[o] = 1;
-    var done = function () { wtStepBusy[o] = 0; };
+    var released = false;
+    var done = function () { if (released) return; released = true; wtStepBusy[o] = 0; };
+    setTimeout (done, 1500);   /* fb562 — a backstop: if the collector never answers at all, the arrow must not be dead for the session */
     window.__wtAllCats (o, function (cats) {
       try {
         if (! cats.length) return;
@@ -35484,7 +35510,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var gnf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction : null;
       if (gnf) { var snf = gnf ('setWavetableName'); if (snf) snf (osc, name); }
       if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = name; if (WT.fetch) WT.fetch (osc); }
-      try { window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = null; } catch (e9) {}   /* fb560 — the file picker returns a name, not a registry path */
+      /* ⚠️ fb562 — DO NOT CLEAR __wtPath HERE. C++ calls this from loadWavetableByPath too, and
+         its ordering against that call's own .then() is not defined — so the clear could land
+         AFTER the path was set and quietly remove the arrow's tiebreaker. It does not need
+         clearing anyway: the NAME is authoritative (fb560), so a stale path simply matches
+         nothing among the name-matching candidates and is ignored. The three places that really
+         know there is no path (a drop, a legacy import, a state restore) still clear it. */
     } catch (e) {}
   };
   window.onWavetableImportsChanged = function (osc) { if (window.__wtReopen) window.__wtReopen (); };   // native fires after a WT import lands → reopen shows it
