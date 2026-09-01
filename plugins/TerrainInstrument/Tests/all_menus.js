@@ -213,6 +213,11 @@ const HELPERS = () => {
       if (which === 'warp') {
         const el = document.querySelector('#syn-panel [data-syn="SYN_OSC_A_WARP_AMOUNT"]'); if (!el) return 'no warp knob';
         el.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:300, clientY:200 }));
+        // fb563 — the right-click opens the CONTROL MENU; the warp browser is its "Warp mode ›" row
+        const cm = document.getElementById('syn-ctx-menu');
+        const row = cm ? [...cm.querySelectorAll('.syn-ctx-item')].find((d) => /^Warp mode/.test(d.textContent.trim())) : null;
+        if (! row) return 'no Warp mode row in the control menu';
+        row.click();
       } else if (which === 'filter')   { if (!window.__fltTypeMenuOpen) return 'no __fltTypeMenuOpen'; window.__fltTypeMenuOpen(window.__amEv()); }
       else if (which === 'fxfilter')   { if (!window.__fltOpenBrowser) return 'no __fltOpenBrowser';
                                          window.__fltOpenBrowser(window.__amEv(), window.__amFxDev()); }

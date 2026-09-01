@@ -68,7 +68,7 @@ function mutatedPage(){
   if(MUT===1) sub("function loop(ts){ if(window.__cardOnly==='mod')return;","function loop(ts){ if(window.__cardOnly)return;");
   if(MUT===2) sub("    document.querySelectorAll('.ti-card [data-mod-dest]').forEach(function(el){ out.push({el:el,dest:+el.getAttribute('data-mod-dest'),kind:'knob'}); });",
                   "    /* mutation: card cells are not drop targets */");
-  if(MUT===3) sub("            var sv=(wire===200)?200:(wire-1), dv=(sv===200||sv>=100)?1.0:0.5;",
+  if(MUT===3) sub("            var sv=(wire>=200)?wire:(wire-1), dv=(sv>=100)?1.0:0.5;",
                   "            var sv=wire-1, dv=0.5;");
   if(MUT===4) sub("    att.style.left=Math.max(M+OV, Math.min(xLayout, window.__vw()-W-M-OV))+'px';\n"+
                   "    att.style.top=Math.max(HEAD+M, Math.min(yLayout, window.__vh()-H-M))+'px'; }",

@@ -152,6 +152,13 @@ const HELPERS = () => {
   window.__wmOpen = function(sel, x, y){
     const el = document.querySelector(sel); if (!el) return 'no element ' + sel;
     el.dispatchEvent(new MouseEvent('contextmenu', {bubbles:true, cancelable:true, clientX:(x||300), clientY:(y||200)}));
+    // fb563 — the right-click opens the CONTROL MENU first (Modulate · routes · Reset); the mode
+    // list is its "Warp mode ›" / "Mode ›" row. Drive that row, exactly as a user would.
+    const cm = document.getElementById('syn-ctx-menu');
+    if (cm && cm.classList.contains('act')) {
+      const row = [...cm.querySelectorAll('.syn-ctx-item')].find((d) => /^(Warp mode|Mode)/.test(d.textContent.trim()));
+      if (row) row.click();
+    }
     return window.__wmPanel() ? 'browser' : (document.getElementById('syn-ctx-menu')||{}).classList &&
            document.getElementById('syn-ctx-menu').classList.contains('act') ? 'ctxmenu' : 'none';
   };

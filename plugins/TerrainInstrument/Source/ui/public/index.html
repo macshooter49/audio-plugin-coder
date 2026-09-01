@@ -414,6 +414,22 @@ window.__extGlyph = function (px) { var d = px || 13;
   return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
        + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
        + '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-8 8"/><path d="M3 21l8-8"/></svg>'; };
+/* ══ fb563 — THE CONTROL MENU'S EXTRA-ROW REGISTRY ══════════════════════════════════════════
+   Every knob, pill and emblem opens ONE right-click menu now (the SYNTH MOD MATRIX module owns
+   it: Modulate › · the routes · Reset · Copy/Paste). A control that also has something of its
+   own to offer — a warp mode, a fold shape, a drive flavour, a blend family — registers it HERE
+   and the menu shows it as a row ("Warp mode · Bend ›") instead of opening a second, competing
+   menu on the same right-click. Registered by ELEMENT (the row belongs to that control) or by a
+   MATCHER (a rack knob is re-rendered, so it is found by shape, not by handle). Defined this
+   early so any module, in any order, can register before the menu ever opens. ══════════════ */
+window.__ctlMenuRows = (function () { var byEl = new WeakMap(), matchers = [];
+  return {
+    on: function (el, fn) { if (el && fn) byEl.set (el, fn); },
+    match: function (fn) { if (fn) matchers.push (fn); },
+    rowsFor: function (el, ev) { var out = [], n = el, hops = 0;
+      while (n && hops < 4) { var f = byEl.get (n); if (f) { try { out = out.concat (f (ev, n) || []); } catch (e) {} break; } n = n.parentElement; hops++; }
+      for (var i = 0; i < matchers.length; i++) { try { var r = matchers[i] (el, ev); if (r && r.length) out = out.concat (r); } catch (e) {} }
+      return out; } }; })();
 </script>
 <script>
 /* fb82 — POPPED-CARD BOOT FLAG. A popped-out FLOW extension card is this SAME page
@@ -10781,23 +10797,26 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // fb384 — RIGHT-CLICK THE DRIVE KNOB to pick its flavour. Max: "I'd rather us do that by
           // just right click on the drive knob" — which is why the back panel could go: the one
           // control that lived there now lives on the knob it belongs to.
-          document.addEventListener('contextmenu',function(ev){
-            var kn=ev.target.closest && ev.target.closest('.fxr-knob');
-            if(!kn) return;
-            var card=kn.closest('.fxr-dev'); if(!card) return;
+          // fb563 — it is a "Drive type · Tube ›" row in the control menu now. A rack knob is
+          // re-rendered on every type change, so it is matched by SHAPE, not by handle.
+          if(window.__ctlMenuRows) window.__ctlMenuRows.match(function(el,ev){
+            var kn=el&&el.closest?el.closest('.fxr-knob'):null; if(!kn&&el&&el.querySelector) kn=el.querySelector('.fxr-knob');
+            if(!kn) return null;
+            var card=kn.closest('.fxr-dev'); if(!card) return null;
             var idx=[].indexOf.call(card.parentNode.children,card);
-            var dev=DEVS[idx]; if(!dev||dev.core!=='flt') return;
-            var lab=(kn.querySelector('.fxr-kl')||{}).textContent||'';
-            if(!/Drive/i.test(lab)) return;
-            ev.preventDefault(); ev.stopPropagation();
+            var dev=DEVS[idx]; if(!dev||dev.core!=='flt') return null;
+            var lab=(kn.querySelector('.fxr-lab,.fxr-kl')||{}).textContent||'';   /* fb563 — the FRONT word is .fxr-lab; `.fxr-kl` alone never matched, so the fb384 flavour menu had been silently dead */
+            if(!/Drive/i.test(lab)) return null;
             var opts=(dev.back&&dev.back.d2)?dev.back.d2.opts:['Tube','Diode','Fold','Hard','Crush','Fuzz'];
             var cur=Math.max(0,opts.indexOf(dev.back.d2.v));
-            var rows=opts.map(function(o,i){ return {label:o,white:(i===cur),onPick:function(){
-              dev.back.d2.v=o;
-              try{ window.__setSynParam(dev.back.d2.p, opts.length>1?i/(opts.length-1):0); }catch(e){}
-            }};});
-            try{ if(window.__synShowMenu) window.__synShowMenu('',rows,ev.clientX,ev.clientY); }catch(e){}
-          }, true);
+            return [{label:'Drive type',badge:(opts[cur]||'')+'  ›',keepOpen:true,onPick:function(){
+              var rows=opts.map(function(o,i){ return {label:o,white:(i===cur),onPick:function(){
+                dev.back.d2.v=o;
+                try{ window.__setSynParam(dev.back.d2.p, opts.length>1?i/(opts.length-1):0); }catch(e){}
+              }};});
+              try{ if(window.__synShowMenu) window.__synShowMenu('',rows,ev.clientX,ev.clientY); }catch(e){}
+            }}];
+          });
 
 
           window.__fxAdd=fxAdd; window.__fxAddMenu=fxAddMenu;
@@ -19169,7 +19188,11 @@ setTimeout(function wireSynControls () {
           pillOf[o + s] = pill;
           paintLabel(pill, o, s);
           var drag = false, hover = false, y0 = 0, d0 = 0;
-          pill.addEventListener('contextmenu', function (ev) { ev.preventDefault(); ev.stopPropagation(); menu(pill, o, s, ev.clientX, ev.clientY); });
+          /* fb563 — the blend family menu is a "Blend mode · FM ›" row in the control menu now (the
+             pill is a modulation destination, so the right-click itself belongs to the one menu). */
+          if (window.__ctlMenuRows) window.__ctlMenuRows.on(pill, function (ev) {
+            return [{ label: 'Blend mode', badge: (MODES[st(o, s).mode] || 'Off') + '  ›', keepOpen: true,
+                      onPick: function () { menu(pill, o, s, ev.clientX, ev.clientY); } }]; });
           pill.addEventListener('mouseenter', function () { hover = true; if (!drag && st(o, s).mode !== 0) paintValue(pill, o, s); });
           pill.addEventListener('mouseleave', function () { hover = false; if (!drag) paintLabel(pill, o, s); });
           function mv (ev) { if (!drag) return; var nd = Math.max(0, Math.min(1, d0 + (y0 - ev.clientY) / 150)); wDep(o, s, nd); paintValue(pill, o, s); }
@@ -19289,15 +19312,18 @@ setTimeout(function wireSynControls () {
               if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
                 st.valueChangedEvent.addListener(function(){ if (k === getActive() || k === 'weight') refresh(); });
             });
-            pill.addEventListener('contextmenu', function(ev) {
-              ev.preventDefault(); ev.stopPropagation();
-              if (!window.__synShowMenu) return;
-              const a = getActive();
-              const items = PARAMS.map(function(p) {
-                return { label: p.label, isChecked: (p.key === a),
-                         onPick: function(){ pill.dataset.subActive = p.key; refresh(); } };
-              });
-              window.__synShowMenu('SUB', items, ev.clientX, ev.clientY);
+            /* fb563 — "Sub shows · Mix ›" is a row in the control menu now; the pill's right-click is the one menu. */
+            if (window.__ctlMenuRows) window.__ctlMenuRows.on(pill, function(ev) {
+              const a = getActive(); let cur = '';
+              PARAMS.forEach(function(p) { if (p.key === a) cur = p.label; });
+              return [{ label: 'Sub shows', badge: cur + '  ›', keepOpen: true, onPick: function() {
+                if (!window.__synShowMenu) return;
+                const items = PARAMS.map(function(p) {
+                  return { label: p.label, isChecked: (p.key === a),
+                           onPick: function(){ pill.dataset.subActive = p.key; refresh(); } };
+                });
+                window.__synShowMenu('SUB', items, ev.clientX, ev.clientY);
+              } }];
             });
             let startY = 0, startN = 0, drag = false;
             const onMove = function(ev) {
@@ -20128,9 +20154,9 @@ setTimeout(function wireSynControls () {
               if (st && st.valueChangedEvent && st.valueChangedEvent.addListener)
                 st.valueChangedEvent.addListener(refresh);
             });
-            // right-click -> mode menu (same menu chrome as the front panel + UNISON)
-            pill.addEventListener('contextmenu', function(ev) {
-              ev.preventDefault(); ev.stopPropagation();
+            // fb563 — the mode menu is a "Warp mode · Bend ›" row in the control menu (same chrome as
+            // the front knobs' row); the pill's own right-click is the one menu, since it is a destination.
+            const openWarp2Mode = function(ev) {
               const c = ctx();
               const cur = modeIdxOf(c);
               const put = function(i) {
@@ -20140,12 +20166,17 @@ setTimeout(function wireSynControls () {
               // 35 live warp modes do not go in a flat list (Max: "sub menus or a way to scroll so
               // the menu doesn't get too damn big") — the house two-pane browser, families + search.
               // The 6 SAMPLE modes stay in the house right-click menu; that list did not grow.
-              if (c.isWarp) { warpPickerOpen(ev, c.header, cur, put, c.modeParamId); return; }
+              if (c.isWarp) { if (window.__synHideMenu) window.__synHideMenu(); warpPickerOpen(ev, c.header, cur, put, c.modeParamId); return; }
               if (!window.__synShowMenu) return;
               const items = c.modes.map(function(name, i) {
                 return { label: name, isChecked: (i === cur), onPick: function() { put(i); } };
               });
               window.__synShowMenu(c.header, items, ev.clientX, ev.clientY);
+            };
+            if (window.__ctlMenuRows) window.__ctlMenuRows.on(pill, function(ev) {
+              const c = ctx(), cur = modeIdxOf(c);
+              return [{ label: c.isWarp ? 'Warp mode' : 'Mode', badge: (c.modes[cur] || '') + '  ›', keepOpen: true,
+                        onPick: function() { openWarp2Mode(ev); } }];
             });
             // left-drag the value -> amount only (of whichever engine is active)
             let startY = 0, startN = 0, drag = false, dragAmt = null;
@@ -20691,6 +20722,7 @@ setTimeout(function wireSynControls () {
           selChip.innerHTML='Env '+envNumOf(curEnv); refreshChips(); }   /* fb191 — shelf follows the env */
         window.__envUpdateChip = updateChip;
         window.__envCurNum = function(){ return envNumOf(curEnv) || 1; };   /* fb178 — the drag source */
+        window.__envCount  = function(){ return 5 + dynEnvs.length; };        /* fb563 — the modulator picker lists exactly the envelopes that exist */
 
         // ── Filter ENV knob  <->  depth link ───────────────────────────────────
         // The filter's ENV knob (SYN_FILTER{1,2}_ENV, bipolar -1..+1) IS the env
@@ -21176,6 +21208,13 @@ setTimeout(function wireSynControls () {
         'SYN_OSC_C_SAMPLE_FORMANT': { header: 'OSC C — FORMANT', modeParam: 'SYN_OSC_C_SAMPLE_FORMANT_MODE', options: FORMANT_MODES },
         'SYN_OSC_D_SAMPLE_FORMANT': { header: 'OSC D — FORMANT', modeParam: 'SYN_OSC_D_SAMPLE_FORMANT_MODE', options: FORMANT_MODES }
       };
+      // fb563 — the control menu's row for each mode picker, in plain Title Case (the type mandate):
+      // "Warp mode · Bend ›". The legacy ALL-CAPS header still titles the list that opens from it.
+      const MODE_ROW = [[/_WARP_MODE$/, 'Warp mode'], [/_FOLD_SHAPE$/, 'Fold shape'], [/_INTERP_MODE$/, 'Interpolation'],
+                        [/_KEYTRACK_DEST$/, 'Keytrack target'], [/_GEODE_CUT_MODE$/, 'Cut mode'], [/_GEODE_DRIVE_MODE$/, 'Drive mode'],
+                        [/_GEODE_SIEVE_MODE$/, 'Sieve mode'], [/_GEODE_SHAPE_TARGET$/, 'Shape'], [/_SPECTRAL_TYPE$/, 'Spectral mode'],
+                        [/_SAMPLE_STRETCH_MODE$/, 'Stretch mode'], [/_SAMPLE_FORMANT_MODE$/, 'Formant mode']];
+      const modeRowLabel = (p) => { for (const m of MODE_ROW) if (m[0].test(p)) return m[1]; return 'Mode'; };
 
       // Wire contextmenu on each WARP/SPECTRAL/FOLD knob.
       // Find knobs by `data-syn` attribute.
@@ -21183,13 +21222,17 @@ setTimeout(function wireSynControls () {
         const dataSyn = knobEl.getAttribute('data-syn');
         const cfg = KNOB_MENUS[dataSyn];
         if (!cfg) return;
-        knobEl.addEventListener('contextmenu', (e) => {
-          e.preventDefault();
-          e.stopPropagation();
+        /* fb563 — THE MODE PICKER IS A ROW IN THE CONTROL MENU, not a second right-click.
+           Right-click any knob → the one menu (Modulate › · routes · Reset …); a knob with a mode
+           adds "Warp mode · Bend ›" to it, and THAT row opens what the right-click used to open:
+           the families-and-search browser for warp, the flat house list for everything else.
+           Same options, same writer, same cardinality guard — only the door moved. */
+        const openModeMenu = (e) => {
           const currentIdx = getChoiceIndex(cfg.modeParam, cfg.options.length);
           // WARP is 48 values / 35 live modes — it gets the families-and-search browser, not a
           // 770px flat list. Every other menu here is still short enough to be a flat menu.
           if (cfg.picker === 'warp' && window.__warpPicker) {
+            if (window.__synHideMenu) window.__synHideMenu();
             window.__warpPicker(e, cfg.header, currentIdx,
                                 (idx) => setChoiceIndex(cfg.modeParam, idx, cfg.options.length),
                                 cfg.modeParam);
@@ -21209,6 +21252,11 @@ setTimeout(function wireSynControls () {
             }
           }));
           showMenu(cfg.header, items, e.clientX, e.clientY);
+        };
+        if (window.__ctlMenuRows) window.__ctlMenuRows.on(knobEl, (e) => {
+          const cur = getChoiceIndex(cfg.modeParam, cfg.options.length);
+          return [{ label: modeRowLabel(cfg.modeParam), badge: (cfg.options[cur] || '') + '  ›',
+                    keepOpen: true, onPick: () => openModeMenu(e) }];
         });
       });
 
@@ -21222,18 +21270,8 @@ setTimeout(function wireSynControls () {
         paint();
       });
 
-      // Right-click on the WT POS / SPREAD knobs just suppresses the
-      // bubble (no menu yet — those are future phases).
-      ['SYN_OSC_A_WT_FRAME','SYN_OSC_B_WT_FRAME','SYN_OSC_C_WT_FRAME','SYN_OSC_D_WT_FRAME','SYN_OSC_A_FRAME_SPREAD','SYN_OSC_B_FRAME_SPREAD','SYN_OSC_C_FRAME_SPREAD','SYN_OSC_D_FRAME_SPREAD',
-       'SYN_OSC_A_SPECTRAL_LO','SYN_OSC_B_SPECTRAL_LO','SYN_OSC_C_SPECTRAL_LO','SYN_OSC_D_SPECTRAL_LO',
-       'SYN_OSC_A_SPECTRAL_HI','SYN_OSC_B_SPECTRAL_HI','SYN_OSC_C_SPECTRAL_HI','SYN_OSC_D_SPECTRAL_HI'].forEach(p => {
-        document.querySelectorAll('#syn-panel [data-syn="' + p + '"]').forEach(el => {
-          el.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          });
-        });
-      });
+      // fb563 — the WT POS / SPREAD / SPECTRAL LO-HI right-click suppressors are gone: every one
+      // of those knobs is a modulation destination, so the control menu claims the gesture now.
 
       // ─────────────────────────────────────────────────────────────────
       // Batch 1 Filter UI — dropdown (NONE pinned top, grouped), wire the
@@ -21663,17 +21701,20 @@ setTimeout(function wireSynControls () {
           const driveKnob = document.querySelectorAll('#syn-panel .device.filter .flt-back-knobs .knob')[1];
           if (driveKnob) {
             driveKnob.title = 'Drive — post-filter drive. Right-click for type: Tube · Diode · Fold · Hard · Crush · Fuzz';
-            driveKnob.addEventListener('contextmenu', (ev) => {
-              ev.preventDefault(); ev.stopPropagation();
-              if (! window.__synShowMenu) return;
+            /* fb563 — the type list is a "Drive type · Tube ›" row in the control menu now. */
+            if (window.__ctlMenuRows) window.__ctlMenuRows.on(driveKnob, (ev) => {
               const f = curF();
-              const items = DRIVE_TYPES.map((label, idx) => ({
-                label: label,
-                isChecked: idx === (fst[f].drive || 0),
-                onPick: () => { fst[f].drive = idx;
-                  try { if (window.__setSynParam) window.__setSynParam(FDRVTYPE_ID[f], idx / (DRIVE_TYPES.length - 1)); } catch (e) {} }
-              }));
-              window.__synShowMenu('FILTER ' + f + ' DRIVE', items, ev.clientX, ev.clientY);
+              return [{ label: 'Drive type', badge: (DRIVE_TYPES[fst[f].drive || 0] || '') + '  ›', keepOpen: true,
+                onPick: () => {
+                  if (! window.__synShowMenu) return;
+                  const items = DRIVE_TYPES.map((label, idx) => ({
+                    label: label,
+                    isChecked: idx === (fst[f].drive || 0),
+                    onPick: () => { fst[f].drive = idx;
+                      try { if (window.__setSynParam) window.__setSynParam(FDRVTYPE_ID[f], idx / (DRIVE_TYPES.length - 1)); } catch (e) {} }
+                  }));
+                  window.__synShowMenu('FILTER ' + f + ' DRIVE', items, ev.clientX, ev.clientY);
+                } }];
             });
           }
           // the 1/2 tabs swap which filter's back-state is shown
@@ -30868,7 +30909,7 @@ restoreThemeFromBackend();
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
     lastLocalEdit=Date.now();   /* fb524 — the mirror's prune stands down while a local edit is still in flight */
     if(window.__cardOnly&&!restoredOnce) return;   /* fb524 — a card's assigns are a MIRROR: pushing before the first getSynthMod lands would write an empty matrix over a live one */
-    var arr=assigns.map(function(a){ var o={s:(a.note?201:(a.fol?210+(a.fol-1):(a.vel?200:(a.env?100+(a.env-1):a.lfo-1)))),d:a.dest,v:+a.depth.toFixed(4)};
+    var arr=assigns.map(function(a){ var o={s:encodeSrc(a),d:a.dest,v:+a.depth.toFixed(4)};   /* fb563 — one codec (encodeSrc / decodeSrc) for the encoder, the decoder and the popped card */
       /* fb554 — the CONNECTION CURVE rides the route itself, so it round-trips through
          getSynthMod and the patch state with no separate channel to get out of step. */
       if(a.curve) o.c=a.curve.map(function(y){return (+y).toFixed(4);}).join(',');
@@ -30942,6 +30983,28 @@ restoreThemeFromBackend();
   var FSLOT_BACK ={ 'Mix':[62,63], 'Drive':[60,61], 'Env':[56,57], 'Vel':[340,341], 'Track':[342,343] };   // fb78 — the WHOLE back row routes now; front RES/DRV/ENV target the runtime .fk-em emblems
   function actSlot(){ var p2=document.getElementById('filter-pill-2'); return (p2&&p2.classList.contains('act'))?2:1; }
   var assigns=[];   // {lfo,dest,depth,getEl}
+  /* ═══ fb563 — ONE WIRE CODEC ═══════════════════════════════════════════════════════════════
+     The wire code (the `s` field of the matrix JSON, == the C++ constants in SynthModConfig.h)
+     was hand-decoded in THREE places — push(), restore() and the popped card's receiver — and
+     they had drifted: restore() stopped at `sv<215` while fb556 had grown the followers to seven,
+     so a Filter 1 / Filter 2 route came back from the processor as "LFO 216"; the card's receiver
+     special-cased 200 and turned a Key drop (201) into a Velocity route. One encoder, one decoder,
+     both here, and Tests/mod_source_gate.py reads the constants out of this table against the C++. */
+  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7};   /* == kEnvSrcBase · kVelSrc · kNoteSrc · kFollowSrcBase · kNumFollowers */
+  function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):a.lfo-1))); }
+  function decodeSrc(sv){ sv=sv|0;
+    if(sv>=WIRE.FOL&&sv<WIRE.FOL+WIRE.NFOL) return {fol:sv-WIRE.FOL+1};
+    if(sv===WIRE.NOTE) return {note:1};
+    if(sv===WIRE.VEL)  return {vel:1};
+    if(sv>=WIRE.ENV&&sv<WIRE.ENV+32) return {env:sv-WIRE.ENV+1};   /* Env 1..32, the same [100,132) the processor accepts */
+    if(sv>=0&&sv<10)   return {lfo:sv+1};
+    return null; }   /* an unknown code is NOT an LFO — it is dropped, never invented */
+  function srcKey(a){ return a.note?'k':(a.fol?('f'+a.fol):(a.vel?'v':(a.env?('e'+a.env):('l'+a.lfo)))); }
+  function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, every shape source at full (fb178/fb263/fb552) */
+  function findRoute(S,dest){ var k=srcKey(S); for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcKey(a)===k) return a; } return null; }
+  function addRoute(S,dest,el){ if(S.lfo) addAssign(S.lfo,dest,el); else if(S.env) addEnvAssign(S.env,dest,el); else if(S.vel) addVelAssign(dest,el);
+    else if(S.note) addNoteAssign(dest,el); else if(S.fol) addFollowAssign(S.fol,dest,el); return findRoute(S,dest); }
+  window.__modWire={ENV:WIRE.ENV,VEL:WIRE.VEL,NOTE:WIRE.NOTE,FOL:WIRE.FOL,NFOL:WIRE.NFOL,encode:encodeSrc,decode:decodeSrc};
   var mvE=null, mvL=null;   /* fb189 — live env/LFO values pushed by the editor feed */
   window.__modViz=function(e,l,p){
     /* fb555 — the Key row has no parameter; its number is the SOUNDING NOTE's key position, so the
@@ -31264,7 +31327,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
-  function srcName(a){ return a.note?'Key':(a.fol?('Follow '+FOL_NAME[a.fol-1]):(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)))); }
+  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):('LFO '+a.lfo)))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
     rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=srcName(a)+' \u00B7 '+Math.round(a.depth*100)+'%'; }); }
@@ -31321,34 +31384,146 @@ restoreThemeFromBackend();
      open the editor and read the curve without one. */
   window.__tiCurveEdit=function(i){ var a=assigns[i|0]; if(a) openCurveEditor(a, curEl(a)||document.body); return !!a; };
   window.__tiCurveOf =function(i){ var a=assigns[i|0]; return (a&&a.curve)?a.curve.slice():null; };
-  /* fb554 — RIGHT-CLICK A MODULATED KNOB -> "Curve". This is the gesture Max described from the
-     reel ("he right-clicked the volume and pressed curve edit"), and it is also the entry point
-     that does not depend on the hover underline. Strictly gated on `.knob` elements that ALREADY
-     carry a route: an unmodulated knob, a blend pill, an arrow and every other right-click in the
-     panel are untouched, because there is nothing to curve there. */
+  /* ═══ fb563 — THE CONTROL MENU ═══════════════════════════════════════════════════════════════
+     Max: "every button, every parameter on Serum has this right-click menu... make this
+     pragmatic so that all users can use this... a simple menu that has everything on there."
+     ONE right-click menu on EVERY modulation destination — synth knobs, pills, the filter
+     emblems, the rack, the flow cards — built from the house menu, in this order:
+        <control name>                      the header
+        Modulate ›                          the two-pane browser: families left, sources right,
+                                            a dot on every source already routed here; a click
+                                            toggles it and the panel stays open; search on top
+        LFO 2 · 45%   [slider]   ⤢  ✕       one row per connection: drag = depth, ⤢ = curve, ✕ = remove
+        Remove all modulators               (when there are two or more)
+        ── control-specific rows ──         "Warp mode · Bend ›", "Drive type · Tube ›" … (the registry)
+        Reset to default
+        Copy modulators · Paste modulators
+     It is the SECOND DOOR to the SAME routes the drag-and-drop makes: same targets(), same
+     addXAssign, same push(), so the underline, the comet, the hover list and the patch all see
+     one matrix. Drag-and-drop is untouched. The four right-click systems it replaces — the fb554
+     "Curve" menu that lived here, KNOB_MENUS' mode pickers, the pill menus and the rack's drive
+     flavour — speak through window.__ctlMenuRows now instead of racing for the same gesture. ═══ */
+  var modClip=null;   /* Copy / Paste modulators — a session clipboard, never persisted */
+  function srcOf(a){ return a.note?{note:1}:(a.fol?{fol:a.fol}:(a.vel?{vel:1}:(a.env?{env:a.env}:{lfo:a.lfo}))); }
+  /* which destination is under this element — the drag's own targets() list, the drop's own slot
+     resolution (cut / fslot follow the ACTIVE filter tab), fb524b's opaque-card rule, and the
+     SMALLEST surface wins so a pill inside a knob row answers for itself, not for the row. */
+  function destAt(target){ if(!target||!target.closest) return null;
+    var tg=targets(), best=null, bestA=1e12;
+    var card=target.closest('.ti-card.open');
+    for(var i=0;i<tg.length;i++){ var t=tg[i]; if(!t.el||!(t.el===target||t.el.contains(target))) continue;
+      if(card&&!card.contains(t.el)) continue;
+      var r=t.el.getBoundingClientRect(), A=r.width*r.height; if(A<bestA){ best=t; bestA=A; } }
+    if(!best) return null;
+    var dest=best.kind==='cut'?(actSlot()===2?1:0):(best.kind==='fslot'?best.pair[actSlot()===2?1:0]:best.dest);
+    return {el:best.el,dest:dest,kind:best.kind}; }
+  function routesOn(dest){ return assigns.filter(function(a){ return a.dest===dest; }); }
+  function ctlName(g){ if(g.dest!=null){ try{ var n=destShortName(g.dest); if(n&&n!=='Knob') return n; }catch(e){} }
+    var lb=g.el&&g.el.querySelector&&g.el.querySelector('.knob-label,.fxr-lab,.fxr-kl,.lb');
+    var t=(lb?lb.textContent:((g.el&&g.el.textContent)||'')).trim(); return t.length>18?t.slice(0,16)+'…':t; }
+  function depthText(a){ return Math.round(a.depth*100)+'%'; }
+  /* THE ROUTE ROW — the hover list's line ("LFO 2 · 45%  ⤢  ✕") with the envelope hub's depth
+     slider under it. Both are shipped components, copied, not redrawn (the recycle law). LFO and
+     velocity are SIGNED (centre tick, fill from the middle); envelopes, followers and Key are
+     magnitudes (the C++ takes |depth|), so their slider fills from the left. */
+  function routeRow(a,g,rebuild){
+    var uni=!(a.lfo||a.vel);
+    var wrap=document.createElement('div'); wrap.className='syn-ctx-route'; wrap.style.cssText='padding:4px 12px 7px 12px;';
+    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px;';
+    var lab=document.createElement('span'); lab.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.72);font-size:11px;font-weight:300;';
+    var cvDim=function(){ return a.curve?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.30)'; };
+    var cv=document.createElement('span'); cv.className='ctl-crv'; cv.title='Extend — draw this connection’s curve';
+    cv.style.cssText='flex:none;display:inline-flex;align-items:center;cursor:pointer;color:'+cvDim()+';';
+    cv.innerHTML=window.__extGlyph?window.__extGlyph(11):'⤡';
+    var x=document.createElement('span'); x.className='ctl-rx'; x.textContent='✕'; x.title='Remove this modulator';
+    x.style.cssText='flex:none;cursor:pointer;color:rgba(255,255,255,0.45);font-size:10px;padding:0 1px;';
+    cv.onmouseenter=function(){ cv.style.color='#fff'; }; cv.onmouseleave=function(){ cv.style.color=cvDim(); };
+    x.onmouseenter =function(){ x.style.color='#fff'; };  x.onmouseleave =function(){ x.style.color='rgba(255,255,255,0.45)'; };
+    cv.addEventListener('click',function(ev){ ev.stopPropagation(); if(window.__synHideMenu)window.__synHideMenu(); openCurveEditor(a,g.el||document.body); });
+    x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); rebuild(); });
+    row.appendChild(lab); row.appendChild(cv); row.appendChild(x);
+    /* the hub's slider, verbatim: 2px track · centre tick · purple-500 fill · thin white marker (fb143: no ball, no glow) */
+    var track=document.createElement('div'); track.className='ctl-depth'; track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
+    if(!uni){ var center=document.createElement('div'); center.style.cssText='position:absolute;left:50%;top:-3px;width:1px;height:8px;background:rgba(255,255,255,0.28);'; track.appendChild(center); }
+    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;height:2px;border-radius:1px;background:#8B5CF6;';
+    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
+    track.appendChild(fill); track.appendChild(marker);
+    wrap.appendChild(row); wrap.appendChild(track);
+    function paint(){ var d=Math.max(-1,Math.min(1,a.depth)), pct=uni?Math.abs(d)*100:(d+1)/2*100;
+      marker.style.left=pct+'%';
+      if(uni){ fill.style.left='0'; fill.style.width=pct+'%'; }
+      else if(d>=0){ fill.style.left='50%'; fill.style.width=(pct-50)+'%'; }
+      else { fill.style.left=pct+'%'; fill.style.width=(50-pct)+'%'; }
+      lab.textContent=srcName(a)+' · '+depthText(a); }
+    paint();
+    function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width)));
+      a.depth=uni?t:(t*2-1); paint(); updRouteList(a); push(); }
+    var dragging=false;
+    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; badgeBusy=true;
+      try{ track.setPointerCapture(ev.pointerId); }catch(e){} fromX(ev.clientX); });
+    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
+    function up(ev){ if(dragging){ dragging=false; badgeBusy=false; try{ track.releasePointerCapture(ev.pointerId); }catch(e){} } }
+    track.addEventListener('pointerup',up); track.addEventListener('pointercancel',up);
+    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); a.depth=srcDefaultDepth(a); paint(); updRouteList(a); push(); });
+    wrap.addEventListener('click',function(ev){ ev.stopPropagation(); });   /* a row is not a menu item: touching it never closes the menu */
+    return wrap; }
+  /* THE MODULATOR PICKER — the house two-pane browser (the warp browser, the filter browser), in
+     MULTI mode: every routed source carries the dot, a click toggles it, the panel stays open,
+     search finds "Filter 2" without knowing it is filed under Audio. */
+  function openSourcePicker(g,ev){
+    if(!window.openTwoPaneBrowser) return;
+    function mk(S,name){ var o={name:name,sel:!!findRoute(S,g.dest)};
+      o.pick=function(){ var ex=findRoute(S,g.dest); if(ex){ removeAssign(ex); o.sel=false; } else { addRoute(S,g.dest,g.el); o.sel=true; } }; return o; }
+    var envN=5; try{ if(window.__envCount) envN=window.__envCount()|0; }catch(e){}
+    var envs=[], lfos=[], i;
+    for(i=1;i<=envN;i++) envs.push(mk({env:i},'Env '+i));
+    for(i=1;i<=10;i++)   lfos.push(mk({lfo:i},'LFO '+i));
+    var cats=[ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos},
+               {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')]},
+               {label:'Audio',items:FOL_NAME.map(function(nm,k){ return mk({fol:k+1},nm); })} ];
+    var first=routesOn(g.dest)[0], oc; if(first){ oc=first.env?0:(first.lfo?1:((first.vel||first.note)?2:3)); }   /* open on the family already in use; a bare knob opens on All */
+    if(window.__synHideMenu) window.__synHideMenu();
+    window.openTwoPaneBrowser(ev,{ cats:cats, openCat:oc, multi:true, searchPlaceholder:'Search modulators…' }); }
+  /* Reset = exactly what a double-click does on that control (the fb363 law), so the two can never disagree. */
+  function resetDest(g){ var el=g.el; if(!el) return;
+    var t=(el.querySelector&&(el.querySelector('.knob-ring')||el.querySelector('.fxr-dial')||el.querySelector('.ctl svg')||el.querySelector('canvas')))||el;
+    try{ t.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,view:window})); }catch(e){} }
+  function openCtlMenu(g,ev){ if(!window.__synShowMenu) return false;
+    var x=ev.clientX, y=ev.clientY, name=ctlName(g);
+    function build(){
+      var rows=[], rts=(g.dest!=null)?routesOn(g.dest):[];
+      if(g.dest!=null){
+        rows.push({ label:'Modulate', badge:'›', onPick:function(){ openSourcePicker(g,ev); } });
+        rts.forEach(function(a){ rows.push({ node:routeRow(a,g,build) }); });
+        if(rts.length>1) rows.push({ label:'Remove all modulators', onPick:function(){ rts.slice().forEach(removeAssign); } }); }
+      var extra=[]; try{ extra=window.__ctlMenuRows?window.__ctlMenuRows.rowsFor(g.el,ev):[]; }catch(e){}
+      if(extra.length){ if(rows.length) rows.push({isSep:true}); extra.forEach(function(r){ rows.push(r); }); }
+      if(rows.length) rows.push({isSep:true});
+      rows.push({ label:'Reset to default', onPick:function(){ resetDest(g); } });
+      if(rts.length) rows.push({ label:'Copy modulators', onPick:function(){ modClip=rts.map(function(a){ return {S:srcOf(a),depth:a.depth,curve:a.curve?a.curve.slice():null}; }); } });
+      if(g.dest!=null&&modClip&&modClip.length) rows.push({ label:'Paste modulators', onPick:function(){
+        modClip.forEach(function(c){ var a=addRoute(c.S,g.dest,g.el); if(a){ a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; } });
+        markTargets(); push(); } });
+      window.__synShowMenu(name, rows, x, y); }
+    build(); return true; }
+  /* THE ONE LISTENER. Capture phase on the document, so it runs before every element-level
+     right-click handler and claims a destination before any of them can open a second menu.
+     Anything that is not a destination — the envelope graph, a mode tile, the noise name, a rack
+     core, empty panel — is left alone and its own handler runs exactly as before. */
   document.addEventListener('contextmenu',function(ev){
-    var el=ev.target&&ev.target.closest?ev.target.closest('#syn-panel .knob'):null; if(!el)return;
-    /* ⚠️ MATCH THREE WAYS, not on element identity alone. A route remembers the element it was
-       DROPPED on (a.el), curEl() re-resolves it as the panel re-renders, and elForDest() maps the
-       destination back to whatever is on screen now — and for a freshly dropped route those are
-       not always the same node. Matching on one of them made this menu open on nothing at all:
-       the handler bailed, and the "Curve" row I was reading in the probe belonged to some other
-       menu entirely. Match the DESTINATION, which is the thing that is actually stable. */
-    var list=assigns.filter(function(a){
-      if(curEl(a)===el||a.el===el) return true;
-      try{ return elForDest(a.dest)===el; }catch(e){ return false; } });
-    if(!list.length)return;
-    ev.preventDefault(); ev.stopPropagation();
-    /* fb560 — ONE ROW PER CONNECTION, wearing the emblem. It used to be two rows each — "Curve ·
-       X" and, once curved, "Straighten · X" — so a knob with two modulators opened a four-row menu
-       on top of whatever menu that knob already had. Max: "it almost opens up two menus and the
-       right-click 'edit shape or curve' gets in the way of everything."  Straighten lives INSIDE
-       the editor's footer now (fb559), which is also where you can see what you are straightening,
-       so the second row was duplicating a control that had already moved. */
-    var rows=list.map(function(a){ return { label:srcName(a)+'  \u00B7  Curve', white:!!a.curve, icon:true,
-      onPick:function(){ openCurveEditor(a,el); } }; });
-    try{ if(window.__synShowMenu) window.__synShowMenu('',rows,ev.clientX,ev.clientY); }catch(e){}
+    var t=ev.target; if(!t||!t.closest) return;
+    if(t.closest('.syn-ctx-menu,.tpb-panel,.sm-routes,.samp-menu,.pmenu,.mv-menu,.rand-menu')) return;   /* a menu's own right-clicks are its own business */
+    var g=destAt(t);
+    if(!g){ /* not a destination — but a control with registered rows (the Keytrack knob's target
+               list, say) still gets the one menu, minus its modulation half */
+      var el=t.closest('#syn-panel [data-syn], .fxr-knob, .fxr-bk-knob'); if(!el) return;
+      var ex=[]; try{ ex=window.__ctlMenuRows?window.__ctlMenuRows.rowsFor(el,ev):[]; }catch(e){}
+      if(!ex.length) return; g={el:el,dest:null,kind:'ctl'}; }
+    ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
+    hideRoutes(); openCtlMenu(g,ev);
   },true);
+  window.__ctlDestAt=function(el){ var g=destAt(el); return g?{dest:g.dest,kind:g.kind}:null; };   /* headless gate hooks */
+  window.__ctlClip=function(){ return modClip?modClip.length:0; };
 
   function showRoutes(el,u){ hideRoutes();
     var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
@@ -31707,13 +31882,12 @@ restoreThemeFromBackend();
       var live=window.__cardOnly?Object.create(null):null;
       function ky(sVel,sEnv,sLfo,sFol,sNote,d){ return (sNote?'k':(sFol?('f'+sFol):(sVel?'v':(sEnv?('e'+sEnv):('l'+sLfo)))))+'_'+d; }
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
-      /* fb552 — followers = 210..214 (wc::kFollowSrcBase). 🚨 THE ENV TEST NOW HAS AN UPPER BOUND
-         AND ALWAYS NEEDED ONE: `sv>=100` alone swallowed every future wire code — 210 decoded as
-         "Env 111". fb261 already paid for this once when 200 came back as Env 101 and the fix was
-         to special-case 200 rather than to bound the range. Bounded now. */
-      var fol=(sv>=210&&sv<215)?(sv-210+1):0;
-      var note=(!fol&&sv===201);   /* fb555 — key tracking (== wc::kNoteSrc) */
-      var vel=(!fol&&!note&&sv===200), env=(!fol&&!note&&!vel&&sv>=100&&sv<200)?(sv-100+1):0, lfo=(fol||note||vel||env)?0:(sv+1);
+      /* fb563 — ONE decoder (decodeSrc, beside the encoder). The hand-written chain that lived
+         here stopped at `sv<215` while fb556 had grown the followers to seven: a Filter 1 /
+         Filter 2 route (215/216) fell through every test and was resurrected as "LFO 216" — the
+         fb261 bug ("Env 101") a third time. An unknown code is dropped now, never invented. */
+      var S=decodeSrc(sv); if(!S) return;
+      var fol=S.fol||0, note=!!S.note, vel=!!S.vel, env=S.env||0, lfo=S.lfo||0;
       if(live) live[ky(vel,env,lfo,fol,note,dest)]=1;   /* fb524 — the blackboard's census is taken BEFORE the no-surface bail: a dest this card does not show is still a LIVE route and must not be pruned */
       if(!el)return;
       for(var i=0;i<assigns.length;i++) if((note?assigns[i].note:(fol?assigns[i].fol===fol:(vel?assigns[i].vel:(env?assigns[i].env===env:assigns[i].lfo===lfo))))&&assigns[i].dest===dest){ if(!badgeBusy)assigns[i].depth=(+o.v||assigns[i].depth); return; }   /* fb145 — depth edits made in a popped card flow back */
@@ -36134,7 +36308,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           (cat.items || []).forEach (function (it) {
             if (String (it.name).toLowerCase().indexOf (q) < 0) return;
             var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
-            d.onclick = function () { try { it.pick (); } catch (e) {} close (); };
+            /* fb563 — a MULTI browser (the modulator picker) toggles and stays open: you add three
+               sources in a row without reopening it. Its pick() owns `sel`; the list just repaints. */
+            d.onclick = function () { try { it.pick (); } catch (e) {} if (cfg.multi) { renderSearch (q); return; } close (); };
             itemsEl.appendChild (d); n++;
           });
         });
@@ -36151,7 +36327,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       function renderItems (ci) { itemsEl.innerHTML = ''; var cat = cfg.cats[ci]; if (! cat) return;
         (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
           d.onclick = function () { try { it.pick (); } catch (e) {}   // single-click = SELECT (commit) + (if headphone on) audition it ONCE
-            cfg.cats.forEach (function (c) { (c.items || []).forEach (function (x) { x.sel = false; }); }); it.sel = true;
+            if (! cfg.multi) { cfg.cats.forEach (function (c) { (c.items || []).forEach (function (x) { x.sel = false; }); }); it.sel = true; }   /* fb563 — multi: pick() owns sel, several rows may carry the dot */
             renderItems (ci);
             if (window.__tpbPreviewOn && cfg.onAudition) { clearTimeout (window.__tpbPrevT); window.__tpbPrevT = setTimeout (function () { try { cfg.onAudition (); } catch (e) {} }, 120); } };   // 120ms lets the commit propagate; re-click = re-trigger
           d.ondblclick = function () { clearTimeout (window.__tpbPrevT); close (); };   // double-click = select (already committed on click) + close the menu
@@ -37260,7 +37436,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
                NOT have 1 subtracted: `wire-1` would have written 209..213, i.e. one route rejected
                outright and four pointing at the WRONG oscillator. Same shape as the fb524b bug
                above, one source family later. */
-            var sv=(wire>=210&&wire<215)?wire:((wire===200)?200:(wire-1)), dv=(sv>=200||sv>=100)?1.0:0.5;
+            /* fb563 — EVERY code from 200 up is streamed AS ITSELF: Velocity 200, Key 201 (the old
+               `wire===200` special case turned a Key drop into a VELOCITY route), and all seven
+               followers 210..216 (the old `wire<215` sent Filter 1 / Filter 2 to the wrong source).
+               One rule, no list to keep in step with kNumFollowers. */
+            var sv=(wire>=200)?wire:(wire-1), dv=(sv>=100)?1.0:0.5;
             rmw(function(arr){ for(var i=0;i<arr.length;i++) if((arr[i].s|0)===sv&&(arr[i].d|0)===dest) return arr;
               if(arr.length<128) arr.push({s:sv,d:dest,v:dv}); return arr; }, kick); } }
         if(o.s)seen=o.s; clearMarks(); }
