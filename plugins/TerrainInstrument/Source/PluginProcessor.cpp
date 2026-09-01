@@ -119,7 +119,12 @@ static juce::StringArray terrainWarpModeNames()
         "Bitcrush", "Harmonics", "Bias Fold", "Cheby Odd", "Ripple", "Exciter",
         // 35-36 — OVERPASS ONE item 4: the filter AS a warp mode. Corner in HARMONIC number so it
         // rides the note (the fb467 unit law); amount 0 = wide open = transparent; VAR = resonance.
-        "LP Filter", "HP Filter" };
+        "LP Filter", "HP Filter",
+        // 37-38 — the two DRAWN modes. One per-slot table of 129 points; the MODE says what those
+        // points MEAN. 37 is a PHASE map (where in the cycle to read — fb550), 38 an AMP transfer
+        // (what to do to the sample — fb559). 38 exists so "capture this warp mode and edit it"
+        // works on the 26 shapers too, not only on the 8 phase warps.
+        "Draw", "Draw Amp" };
     for (int i = w.size(); i < 48; ++i) w.add ("Reserved " + juce::String (i));
     jassert (w.size() == 48);
     return w;
@@ -813,10 +818,14 @@ juce::String TerrainInstrumentAudioProcessor::getWarpCurveJson (int osc, int slo
 
     if (mode == 0) return j + ",\"kind\":\"none\",\"pts\":[]}";
 
-    if (mode == 37)                                    // DRAW — the card edits these points
+    if (mode == 37 || mode == 38)                      // DRAW / DRAW AMP — the card edits these points
     {
+        // fb559 — both drawn modes read the SAME per-slot table; only the MEANING differs (37 is
+        // a phase map over the cycle, 38 a transfer curve over the sample). The card therefore
+        // edits one thing either way, and `dom` tells it which axis it is looking at.
         const auto* live = drawTable_[osc * 2 + slot].load (std::memory_order_acquire);
-        j << ",\"kind\":\"draw\",\"x0\":0,\"x1\":1,\"pts\":[";
+        j << ",\"kind\":\"draw\",\"dom\":\"" << (mode == 38 ? "amp" : "phase")
+          << "\",\"x0\":0,\"x1\":1,\"pts\":[";
         for (int i = 0; i < tw::SynthVoice::kDrawPts; ++i)
             j << (i ? "," : "") << juce::String (live ? live->pts[i]
                                                      : (float) i / (float) (tw::SynthVoice::kDrawPts - 1), 4);

@@ -2458,10 +2458,26 @@ private:
                 // fb328 — the USER'S drawn curve (card / Send To Shaper) replaces the generated
                 // banks on the two drawn modes; smooth / odd-enforce / slope-norm still apply, so
                 // every engine law holds on user ink. Busy write ⇒ skip this round (cvForce_ holds).
-                if (bank < 4 && uCvHas_[bank].load (std::memory_order_relaxed)
+                // fb559 — MORPH IS DEPTH, NOT A BANK SWEEP. The card no longer has A/B/C/D or a
+                // morph rail (Max: "take away A, B, C, and D... and take away that slider"), so
+                // there is no second bank to sweep TO — a Morph that swept into GENERATED banks
+                // the user cannot see or edit is a knob that silently replaces their drawing.
+                //   The four banks stay, because cvMorph()'s A→B→C→D crossfade is already an exact
+                // piecewise-linear sweep — they are re-purposed as a DEPTH LADDER from the straight
+                // line to the ONE drawn curve:
+                //       bank 0 = x            (identity — the clean line)
+                //       bank 1 = x + (u-x)/3
+                //       bank 2 = x + 2(u-x)/3
+                //       bank 3 = u            (the curve you drew)
+                // so morph 0→1 is a dead-linear 0→100 % of your ink, and every downstream law
+                // (per-bank slope-norm, Smooth, odd-enforce, the 40 ms crossfade) still runs on a
+                // REAL baked curve per rung rather than on a blend of two finished maps.
+                //   The JS still sends ONE curve, in bank "a" exactly as it always has, so the
+                // blob, the presets, drawnC() and the per-point mod path are untouched.
+                if (uCvHas_[0].load (std::memory_order_relaxed)
                     && ! uCvBusy_.load (std::memory_order_acquire)
                     && (mode_ == Shaper || mode_ == ShaperAsym))
-                    y = uCv_[bank][cell];
+                    y = x + (uCv_[0][cell] - x) * ((float) bank * (1.0f / 3.0f));
                 else switch (mode_)
                 {
                     case ShaperAsym:                                     // fb330 — 4 generated banks

@@ -396,6 +396,26 @@
 })();
 </script>
 <script>
+/* ══ fb558 — THE EXTEND EMBLEM. Max: "make the Xtend logo more prominent... as big as the X
+   button... and I want you to put it right next to there. When people see this emblem, they're
+   going to know, oh, this is the extension menu."
+
+   It was '⤢ EXTEND' — a 8.5px all-caps word on the FAR side of the header from the ✕, which is
+   the one place the eye is not looking when it wants a card. It is now a GLYPH, drawn on the ✕'s
+   own geometry (13px box, 24-unit viewBox, stroke 2.2, round caps, currentColor, .5 → white on
+   hover) and seated in the ✕'s own cluster. Two corners opening away from each other reads as
+   "this opens into something bigger" at 13px, and it cannot be confused with the ✕'s two crossing
+   full-length strokes.
+
+   ONE DEFINITION. The browser header, every right-click Extend row and anything added later all
+   draw from here, because an emblem that means "extension" in three slightly different shapes
+   means nothing (fb448 — core glyphs are HTML layers, so this is markup, not a font character). ══ */
+window.__extGlyph = function (px) { var d = px || 13;
+  return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+       + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+       + '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-8 8"/><path d="M3 21l8-8"/></svg>'; };
+</script>
+<script>
 /* fb82 — POPPED-CARD BOOT FLAG. A popped-out FLOW extension card is this SAME page
    loaded in its own native window with ?card=<id>; sniffed synchronously here (before
    any CSS/JS) so the card-only chrome applies from frame one — no full-UI flash. */
@@ -2941,8 +2961,6 @@ html.card-only .ti-popcard{visibility:visible!important;}   /* fb231 — a panel
 .ti-card.crv-ext .h .pop:hover{color:#fff;}
 .ti-card.crv-ext .b{padding:0;gap:0;}
 .crv-ext .card-scope{background:transparent;border:none;border-radius:0;margin:1px 11px 0;position:relative;overflow:hidden;cursor:crosshair;}
-.crv-ext .crv-rail{position:relative;width:30px;height:2px;background:rgba(255,255,255,.14);border-radius:1px;cursor:ew-resize;flex:none;}
-.crv-ext .crv-rail i{position:absolute;top:-2px;width:6px;height:6px;margin-left:-3px;border-radius:50%;background:var(--purple-400,#B794FF);box-shadow:0 0 4px rgba(183,148,255,.6);pointer-events:none;}
 .crv-ext .crv-foot .qt{font-size:8.5px;color:rgba(255,255,255,.34);letter-spacing:.06em;font-weight:300;white-space:nowrap;cursor:pointer;transition:color .12s;}
 .crv-ext .crv-foot .qt:hover{color:#fff;}
 .crv-ext .card-scope svg{display:block;width:100%;height:auto;aspect-ratio:456/220;}
@@ -4556,6 +4574,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 }
 #syn-panel .sel {
   flex: 1;
+  /* fb558 — MIN-WIDTH:0 IS THE WHOLE FIX. A flex item defaults to min-width:auto, i.e.
+     min-CONTENT, so one long unbreakable word ("Fractalize", "P-Quantize") shoves its own
+     pill wider and squeezes all four neighbours — Max: "it does something to where it
+     leaves the box... it plays with the padding again". With min-width:0 the five pills are
+     ALWAYS exactly (row - gaps)/5 wide whatever is written in them, and the name ellipses
+     instead of moving anything. Structural, not a measured constant: it holds for a warp
+     mode nobody has written yet. */
+  min-width: 0;
   border: 1px solid var(--border-strong);
   border-radius: 6px;
   background: var(--bg-hero);
@@ -4576,6 +4602,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
   color: var(--text-primary);
   font-size: 10px; letter-spacing: 0.4px; font-weight: 300;
   line-height: 1.2;   /* descender room — 'Square'/'Shape' tails must never clip */
+  /* fb558 — the other half of the pill law: never wider than the pill, and when the name
+     does not fit it ENDS in an ellipsis rather than being sliced mid-letter by the parent's
+     overflow:hidden. 5px of side inset keeps the … off the 1px border. */
+  max-width: calc(100% - 5px);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
 /* The <select> overlays the sel, transparent, takes the clicks */
 #syn-panel .sel-select {
@@ -4960,7 +4991,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 /* fb538 — VOICES shows its NUMBER. Same pill geometry as Stack so the label shares the knobs'
    baseline; the face carries the count, because the count IS the information. */
 #syn-panel .uni-voices { display: flex; flex-direction: column; align-items: center; gap: 2px; }
-#syn-panel .uni-voices-pill { position: relative; height: 20px; min-width: 30px; margin-top: 2px; padding: 0 6px;
+#syn-panel .uni-voices-pill { position: relative; height: 20px; width: 30px; margin-top: 2px; padding: 0 6px;   /* fb558 — WIDTH, not min-width: 1 and 16 must occupy the same pill */
   border: 1px solid var(--border-strong); border-radius: 10px; cursor: ns-resize; user-select: none;
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 #syn-panel .uni-voices-val { font-size: 10px; letter-spacing: .4px; font-weight: 400; line-height: 1;
@@ -4973,10 +5004,26 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    stays lit because it is the way out. Everything stays draggable: set it up, then raise Voices. */
 #syn-panel .uni-knobs > * { transition: opacity .15s ease; }
 #syn-panel .uni-knobs.uni-solo > *:not(.uni-voices) { opacity: .34; }
-#syn-panel .uni-stack-pill { position: relative; height: 20px; min-width: 42px; margin-top: 2px; padding: 0 7px;
+/* fb558 — THE STACK PILL MUST NOT BREATHE. min-width:42px + shrink-to-fit meant the pill
+   was as wide as whatever was CURRENTLY selected: "Off" gave 42px, "12+7 (3x)" gave ~68px,
+   so picking the biggest stack mode shoved the pill (and its neighbours) sideways. Max: "the
+   pill should stay exactly where it's at. It does that thing where it plays with the padding
+   again."  THE FIX IS A HIDDEN SIZER, not a measured px constant: ::before carries the widest
+   option string at the exact same type, stacked in the SAME grid cell as the live value, so
+   the pill is permanently as wide as its worst case and the visible text is centred inside
+   it. Nothing is ever ellipsed (every option fits by construction) and the width is identical
+   on Mac and Windows whatever the font metrics do — which a hard-coded 68px would not be. */
+#syn-panel .uni-stack-pill { position: relative; height: 20px; margin-top: 2px; padding: 0 7px;
   border: 1px solid var(--border-strong); border-radius: 10px;
-  display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
-#syn-panel .uni-stack-val { font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 1;
+  display: grid; place-items: center; box-sizing: border-box; }
+/* ⚠️ NO `overflow:hidden` HERE. It makes the span a scroll container, and a scroll container
+   contributes NOTHING to its grid column's intrinsic width — measured: the sizer itself was
+   50.27px wide and the pill still came out 44.5px, sized by the visible word. `height:0` alone
+   keeps the pill's fixed 20px while the nine hidden lines still set the column. */
+#syn-panel .uni-stack-sizer { grid-area: 1 / 1; visibility: hidden; pointer-events: none; height: 0; }
+#syn-panel .uni-stack-sizer i { display: block; font-style: normal; white-space: nowrap;
+  font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 0; }
+#syn-panel .uni-stack-val { grid-area: 1 / 1; font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 1;
   color: var(--text-primary); pointer-events: none; white-space: nowrap; }
 /* the chevron — same 12px thin-white glyph as every other page arrow; points BACK on the unison page */
 #syn-panel .uni-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
@@ -5462,7 +5509,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .coarse-pill .coarse-param-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .coarse-pill .coarse-val { cursor: ns-resize; user-select: none; color: var(--text-primary); }
 #syn-panel .sel.warp2-pill { gap: 3px; }
-#syn-panel .warp2-pill .warp2-mode-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* fb559 — MEASURED, and it was not the overflow everyone assumed. The name never escaped this
+   pill: `max-width:100%` clipped it exactly AT the border, so "Sine Shaper" rendered with 0.00px
+   of clearance and "P-Quantize" with 1.77px, hard against a 1px stroke. That is what reads as
+   "it leaves the box" (Max) — a word touching its own frame looks like a word that has escaped
+   it, and it gets worse with the editor's zoom (measured 0 / -1 / -2 / -3px at zoom 1 / 1.35 /
+   1.902 / 2.5). 6px of reserved inset gives every name 3px a side and makes the ellipsis appear
+   one letter EARLIER instead of never — which is the "dot dot dot" he asked for. */
+#syn-panel .warp2-pill .warp2-mode-value { font-size: 9px; line-height: 1.1; opacity: 0.8; pointer-events: none; max-width: calc(100% - 6px); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 #syn-panel .warp2-val { cursor: ns-resize; user-select: none; color: var(--text-primary); line-height: 1.25; padding: 0; }
 #syn-panel .warp2-pill.act .warp2-val { color: var(--text-primary); }
 #syn-panel .warp2-suffix { font-style: normal; opacity: 0.75; }
@@ -6453,7 +6507,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="a" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_A_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -6796,7 +6850,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="b" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_B_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -7019,7 +7073,12 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               <span class="noise-nav" id="noise-next" title="Next noise">&rsaquo;</span>
             </div>
             <div class="noise-front">
-              <div class="noise-viz"><canvas id="noise-viz-cv"></canvas></div>
+              <!-- fb558 — the VIZ is the second grip on the same source (Max: "I would like for us
+                   to be able to click and drag on the visualizer, the waveform, and drag it
+                   somewhere"). Same data-drag-follow="5" the name carries, so it is the same one
+                   handler and the same follower — no second code path to keep in sync. The canvas
+                   has no click of its own, so there is nothing here to disambiguate. -->
+              <div class="noise-viz" data-drag-follow="5" title="Noise waveform — drag onto any knob to make the noise's own loudness the modulator. It keeps following with the noise off."><canvas id="noise-viz-cv"></canvas></div>
               <div class="noise-knobs">
                 <div class="knob"><div class="knob-ring"></div><div class="knob-label">Level</div></div>
                 <div class="knob"><div class="knob-ring"></div><div class="knob-label">Scan</div></div>
@@ -7158,7 +7217,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="c" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_C_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -7501,7 +7560,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="d" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_D_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -10851,7 +10910,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // APART (Soft 65 · Hard 8 · Zero-Sq 45 · Slew 50) so the modes never boot in their overlap
           // zone. Pushed on USER type change only — restore-on-reopen never overwrites a saved value.
           var DST_SIG_DEF={'Soft Clip':65,'Hard Clip':8,'Zero-Square':35,'Slew Clip':50,
-                           'Shaper':0,'Shaper Asym':0,'Harmonics':40,'Table':35,   /* fb331 — drawn modes BOOT ON BANK A: SIG is the A→B→C→D sweep (×3 since fb330), so the old 10/20 boots parked the engine 30-60% into the staircase bank while the user edits A — the ink/viz "don't align" bug. 0 = the drawn curve IS what you hear. */
+                           'Shaper':100,'Shaper Asym':100,'Harmonics':40,'Table':35,   /* fb331 — the drawn modes must boot where THE DRAWN CURVE IS WHAT YOU HEAR. fb559 flipped the arithmetic, not the intent: Morph used to be the A→B→C→D bank sweep (so bank A = 0), and is now the DEPTH of your one curve against the straight line (so your curve = 100). Booting at 0 under the new law would mean "drawing does nothing until you find a knob", which is the exact trap fb331 closed. */
                            'Downsample':25,'Bitcrush':25,'Overflow':15};   // DIGITAL: 0=clean, up=destroy; boot audible-not-jumpscare (fb309). Bipolar sigs → 50 centre
           function dstApplyType(dev,typeName,pushSig){
             var ti=(dev.types||[]).indexOf(typeName); if(ti<0)ti=5;
@@ -12160,7 +12219,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var ty=dd?dd.type:'Distortion';
             var fam=DST_FAMS[Math.max(0,dd?dd.types.indexOf(dd.type):0)]||'CLIP';
             var rows=[{isHeader:true,label:'Distortion — '+ty},
-                      {label:'Extend',white:true,onPick:function(){ if(window.__openCrvCard)window.__openCrvCard(); }}];
+                      {label:'Extend',white:true,icon:true,onPick:function(){ if(window.__openCrvCard)window.__openCrvCard(); }}];   /* fb558 — the emblem */
             if(fam!=='SHAPER') rows.push({label:'Edit as Shaper curve',white:true,onPick:function(){ if(window.__crvSendToShaper)window.__crvSendToShaper(); }});
             if(window.__synShowMenu) window.__synShowMenu('',rows,e.clientX,e.clientY);
           }catch(err){} });
@@ -19359,7 +19418,7 @@ setTimeout(function wireSynControls () {
       // 35-47 — RESERVED. They exist so the LENGTH is right; the picker never lists them.
       // Filling one in C++ means filling it HERE, in the same slot, and filing it in a family
       // below — the guard fails the boot if a live index is not filed.
-      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   /* 37 */ 'Draw',   'Reserved 38', 'Reserved 39', 'Reserved 40',
+      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   /* 37 */ 'Draw',   /* 38 */ 'Draw Amp',   'Reserved 39', 'Reserved 40',
       'Reserved 41', 'Reserved 42', 'Reserved 43', 'Reserved 44', 'Reserved 45', 'Reserved 46',
       'Reserved 47'
     ];
@@ -19385,7 +19444,11 @@ setTimeout(function wireSynControls () {
       { label: 'Filter',      idx: [35, 36] },
       // fb550 — OVERPASS ONE item 6C. Its own family because it is the only mode whose shape is
       // DATA rather than an algorithm: the curve lives in the patch, not in the code.
-      { label: 'Draw',        idx: [37] }
+      // fb559 — 38 joins 37 here. 37 is a PHASE map (where in the cycle to read), 38 an AMP
+      // transfer (what to do to the sample). Two domains, one drawn table per slot, one editor:
+      // capturing any warp mode's real shape picks whichever of the two matches its domain, so
+      // "make this mode mine and edit it" now works on 34 modes instead of 8.
+      { label: 'Draw',        idx: [37, 38] }
     ];
 
     // Every warp-mode PARAMETER in the plugin — the guard reads its cardinality from each.
@@ -19498,12 +19561,13 @@ setTimeout(function wireSynControls () {
       var xCfg = {};
       if (xm && curIdx > 0 && window.__openWarpExt) {
         var xOsc = xm[1].toLowerCase(), xSlot = xm[2] ? 1 : 0;
-        xCfg.importLabel = '⤢ EXTEND';
+        xCfg.importIcon = true;   /* fb558 — the emblem, seated next to the ✕ */
+        xCfg.importTitle = 'Extend — open this warp mode\u2019s curve card';
         xCfg.onImport = function () { try { window.__openWarpExt (xOsc, xSlot, ev); } catch (e) {} };
       }
       if (window.openTwoPaneBrowser)
         return window.openTwoPaneBrowser(ev, { cats: cats, openCat: warpFamilyOf(curIdx),
-                                               importLabel: xCfg.importLabel, onImport: xCfg.onImport,
+                                               importIcon: xCfg.importIcon, importTitle: xCfg.importTitle, onImport: xCfg.onImport,
                                                searchPlaceholder: 'Search ' + warpLiveCount + ' warp modes…' });
       if (!window.__synShowMenu) return null;
       var rows = [];
@@ -19762,7 +19826,12 @@ setTimeout(function wireSynControls () {
       }
 
       // osc = 'a'..'d', slot = 0|1, ev = the click that asked for it (anchors the panel)
-      window.__openWarpExt = function (osc, slot, ev) {
+      /* fb559 — this card is the FILTER modes' card now, and only theirs. Its axis is HARMONIC
+         NUMBER (1 2 4 8 16 32 64 128) against |H|, which is the one thing that makes warp-filter
+         different from the main filter and is not a curve you can draw — so it keeps its own
+         instrument. Every other warp mode opens the house curve editor instead (openWarpCurve
+         below), where its real shape arrives as draggable points you can own. */
+      function openFilterExt (osc, slot, ev) {
         if (! el) build();
         cur = { osc: osc, O: String (osc).toUpperCase(), slot: slot | 0 };
         dat = null;
@@ -19774,7 +19843,99 @@ setTimeout(function wireSynControls () {
         fetchCurve();
         if (! poll) poll = setInterval (fetchCurve, 120);      // follows mod + the knobs, not just us
         if (! raf)  raf  = requestAnimationFrame (loop);
+      }
+
+      /* ══ fb559 — ANY WARP MODE, AS POINTS YOU OWN ═══════════════════════════════════════════
+         Max: "this is what I wanted the warp modes to consist of — every new warp mode I open,
+         it shows us the exact shape and all we get to do is edit and customize and create our
+         own custom warp mode."
+
+         The shape arrives from C++ (getWarpCurve — the shipped DSP's own output, never a JS
+         re-implementation, the fb458 law) and is fitted to <=32 control points. The moment you
+         move one, the slot CAPTURES: the mode param flips to the drawn mode of the SAME domain
+         (37 Draw for the phase family, 38 Draw Amp for the shapers) seeded with exactly the shape
+         that was on screen, so the sound does not jump at the instant of capture — it just
+         becomes yours. This is §6.6 Send To Shaper, generalised off the Distortion.
+
+         ⚠️ AND IT MUST BE AUDIBLE. Both drawn modes crossfade from the identity by AMOUNT, so a
+         capture landing on a slot whose Amount is 0 would be a curve you can see and cannot hear
+         — the exact complaint that started this ("the curvature doesn't respond to the actual
+         audio"). Capturing at amount 0 therefore opens it to 100 %; a slot already doing
+         something keeps the amount it had. */
+      function openWarpCurve (osc, slot, d, ev) {
+        var U = window.__crvUtil, O = String (osc).toUpperCase(), N = 129;
+        var pMode = slot ? 'SYN_OSC_' + O + '_WARP2_MODE' : 'SYN_OSC_' + O + '_WARP_MODE';
+        var pAmt  = slot ? 'SYN_OSC_' + O + '_WARP2_AMT'  : 'SYN_OSC_' + O + '_WARP_AMOUNT';
+        var pVar  = slot ? 'SYN_OSC_' + O + '_W2VAR'      : 'SYN_OSC_' + O + '_WVAR';
+        var mode  = d.mode | 0;
+        var dom   = (d.kind === 'amp') ? 'amp' : (d.kind === 'draw' ? (d.dom || 'phase') : 'phase');
+        var amt   = +d.amt || 0, vr = +d.var || 0;
+        // the fetched curve, normalised into the editor's 0..1 y whatever domain it came from
+        var n0 = d.pts.length;
+        var raw = d.pts.map (function (v, i) {
+          if (d.kind === 'amp')   return Math.max (0, Math.min (1, (v + 1) / 2));
+          if (d.kind === 'phase') return (v < 0) ? (i / (n0 - 1)) : Math.max (0, Math.min (1, v));   // -1 == skipLookup: draw it as the identity
+          return Math.max (0, Math.min (1, v)); });
+        var pts = U.fit (raw), captured = (mode === 37 || mode === 38);
+        function modeName () { return (window.WARP_MODES && window.WARP_MODES[mode]) || 'Warp'; }
+        function writeMode (idx) {
+          var card = 0; try { card = window.__paramCardinality ? window.__paramCardinality (pMode) : 0; } catch (e) {}
+          if (! card || card < 2) return false;   // fb373's law: never normalise on a LIST length — no cardinality, no write
+          try { window.__setSynParam (pMode, idx / (card - 1)); } catch (e) { return false; }
+          return true; }
+        var host = { key:'warp', anchor:false, bars:false, live:false, oddToggle:null, _src:'',
+          pts:function(){ return pts; },
+          setPts:function(p){ pts = p; },
+          setSrc:function(n){ host._src = n; },
+          chip:function(){ return host._src ? ('from ' + host._src) : (captured ? '' : ('from ' + modeName())); },
+          odd:function(){ return false; },
+          drawn:function(){ return true; },
+          title:function(){ return modeName() + '  \u00b7  OSC ' + O + '  \u00b7  WARP ' + (slot + 1) + '  \u2014  Curve'; },
+          foot:function(){ return '<span class="qt" data-act="wamt" title="Drag — Amount: how far this curve bends the sound away from dry">amount ' + Math.round (amt * 100) + '</span><span class="crv-ro">\u00b7</span>'; },
+          footDrag:function (act, t, e) {
+            if (act !== 'wamt') return; e.preventDefault();
+            var v0 = amt, y0 = e.clientY;
+            var mv = function (ev2) { amt = Math.max (0, Math.min (1, v0 + (y0 - ev2.clientY) * 0.006));
+              try { window.__setSynParam (pAmt, amt); } catch (e3) {}
+              t.textContent = 'amount ' + Math.round (amt * 100); };
+            var up = function () { window.removeEventListener ('mousemove', mv); window.removeEventListener ('mouseup', up); };
+            window.addEventListener ('mousemove', mv); window.addEventListener ('mouseup', up); },
+          push:function(){
+            if (! captured) {
+              var target = (dom === 'amp') ? 38 : 37;
+              if (! writeMode (target)) return;             // silence beats a lie (the warp-guard law)
+              captured = true; mode = target;
+              /* ⚠️ AMOUNT LANDS AT 1.0, ALWAYS — and this is the one thing the first draft got
+                 wrong. getWarpCurve returns applyPhaseWarp/applyAmpWarp evaluated AT THE SLOT'S
+                 CURRENT AMOUNT: the shape on screen is the FINISHED map, amount already inside
+                 it. Both drawn modes then crossfade that map from the identity by amount again —
+                 so preserving the old amount applied it TWICE and the sound jumped at the instant
+                 of capture. MEASURED before the fix: capturing Soft Clip at 0.75 with no edit at
+                 all moved the spectrum -13.6 dB relative and dropped the rms 656 -> 521, i.e.
+                 "make this mine" quietly changed it. At 1.0 the drawn map IS what was playing,
+                 and pulling amount DOWN from there blends back toward dry, which is what the
+                 knob means everywhere else. */
+              amt = 1.0; try { window.__setSynParam (pAmt, 1.0); } catch (e) {}
+              U.repaint(); }
+            var tbl = U.bake (pts, N);
+            try { var f = window.Juce.getNativeFunction ('setWarpDrawCurve');
+                  if (f) f (osc, slot, tbl.map (function (v) { return v.toFixed (4); }).join (',')); } catch (e) {} } };
+        window.__crvOpen (host, (ev && ev.target) ? ev.target : null);
+      }
+
+      /* the door: ask C++ what this slot IS, then send it to the instrument that fits it. */
+      window.__openWarpExt = function (osc, slot, ev) {
+        var f = null;
+        try { f = window.Juce && window.Juce.getNativeFunction && window.Juce.getNativeFunction ('getWarpCurve'); } catch (e) {}
+        if (! f || ! window.__crvOpen || ! window.__crvUtil) { openFilterExt (osc, slot, ev); return; }
+        var ev2 = { clientX: (ev && ev.clientX) || 60, clientY: (ev && ev.clientY) || 60, target: ev && ev.target };
+        f (osc, slot | 0).then (function (txt) {
+          var d = null; try { d = JSON.parse (txt); } catch (e) {}
+          if (! d || ! d.pts || ! d.pts.length || d.kind === 'filter') { openFilterExt (osc, slot, ev2); return; }
+          openWarpCurve (osc, slot | 0, d, ev2);
+        }).catch (function () { openFilterExt (osc, slot, ev2); });
       };
+      window.__openWarpFilterExt = openFilterExt;
       window.__warpExtOpen = function () { return !! (el && el.classList.contains ('open')); };
       window.__closeWarpExt = close;
     })();
@@ -20759,6 +20920,13 @@ setTimeout(function wireSynControls () {
                         + (it.isChecked ? (it.white ? ' checked wsel' : ' checked') : '')   /* fb66 — white selection when {white:true} */
                         + (it.isDisabled ? ' disabled' : '');
           div.textContent = it.label;
+          /* fb558 — {icon:true} prefixes the shared EXTEND emblem. textContent lands FIRST (it
+             wipes children), so the glyph is inserted after it. .syn-ctx-item is already a flex
+             row with an 8px gap, so the emblem needs no geometry of its own. */
+          if (it.icon) { var ig = document.createElement('span');
+            ig.style.cssText = 'flex:none;display:flex;align-items:center;color:inherit;opacity:.82;';   /* thin-white law: the emblem is INK, not a purple accent */
+            ig.innerHTML = (it.icon === true && window.__extGlyph) ? window.__extGlyph(11) : String(it.icon);
+            div.insertBefore(ig, div.firstChild); }
           if (it.dragEnv) div.setAttribute('data-drag-env', it.dragEnv);   /* fb195 — hub rows drag out as modulator sources */
           if (it.badge) {
             const b = document.createElement('span');
@@ -29641,7 +29809,7 @@ restoreThemeFromBackend();
       { label:'Oscillator C', white:true, onPick:function(){ wtToLfo(2); } },
       { label:'Oscillator D', white:true, onPick:function(){ wtToLfo(3); } },
       { isHeader:true, label:'Window' },
-      { label:'Extend', white:true, onPick:function(){ openExt(); } }
+      { label:'Extend', white:true, icon:true, onPick:function(){ openExt(); } }   /* fb558 — the emblem */
     ].concat(lbRows.length?[{isHeader:true,label:'Loopback'}].concat(lbRows):[]), e.clientX, e.clientY);
   }
   function yfor(k,t){var c=(k===7?1:CYC),p=(t*c)%1;   // fb206 — Custom draws ONE cycle (the editor IS the cycle)
@@ -30478,11 +30646,7 @@ restoreThemeFromBackend();
        same glass as the list it comes from (Max: match the existing UI, never invent). */
     '.sm-routes .rc{color:rgba(255,255,255,0.30);cursor:pointer;padding:0 2px;font-size:13px;line-height:1;}'+
     '.sm-routes .rc:hover{color:#fff;}'+
-    '.sm-routes .rc.on{color:rgba(255,255,255,0.92);}'+
-    '.sm-curve{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.16);border-radius:8px;padding:7px 8px 6px;box-shadow:0 8px 26px rgba(0,0,0,0.45);}'+
-    '.sm-curve .sc-ttl{font-size:9px;letter-spacing:1.1px;text-transform:uppercase;color:rgba(255,255,255,0.55);margin-bottom:5px;}'+
-    '.sm-curve canvas{display:block;border:1px solid rgba(255,255,255,0.14);border-radius:4px;cursor:crosshair;}'+
-    '.sm-curve .sc-hint{font-size:8px;letter-spacing:0.8px;color:rgba(255,255,255,0.34);margin-top:4px;text-align:center;}';
+    '.sm-routes .rc.on{color:rgba(255,255,255,0.92);}';   /* fb559 — .sm-curve retired: the connection curve is a HOST on the house editor now, and wears its chrome */
   document.head.appendChild(st);
   // shared attenuation meter (shown while holding a badge)
   var att=document.createElement('div'); att.className='sm-att'; att.innerHTML='<div class="vv"></div><div class="f"></div>'; document.body.appendChild(att);
@@ -30795,6 +30959,7 @@ restoreThemeFromBackend();
         slot.sum+=a.depth*mst*lv; live=true; } });
     return (found&&live)?out:null; };
   window.__tiAddRoute=function(env,lfo,dest){ var el=elForDest(dest); if(env)addEnvAssign(env,dest,el); else addAssign(lfo,dest,el); };   /* fb194 — probe surface */
+  window.__tiAddNoteRoute=function(dest){ addNoteAssign(dest, elForDest(dest)); return assigns.length; };   /* fb559 — probe surface: KEY is the only source that holds still for a whole note, which is what makes it the one you can measure a CONNECTION CURVE with */
   /* fb453 — PRUNE A DELETED DEVICE'S ROUTES. The rack calls this from fxRemove() with the
      device's 12-wide destination block. Without it the NEXT card to take that (kind, instance)
      slot would inherit the dead card's modulation — a ghost route nobody asked for, on a knob
@@ -31015,64 +31180,42 @@ restoreThemeFromBackend();
      connection actually delivers. The straight diagonal IS the shipped behaviour, which is why
      double-click restores it and why an undrawn route carries no curve at all rather than an
      identity one — transparent by construction, not by arithmetic. */
-  var curveEd=null;
-  function closeCurveEditor(){ if(curveEd){ curveEd.remove(); curveEd=null; } }
+  /* ══ fb559 — THE MOD-CONNECTION CURVE MOVED INTO THE HOUSE CURVE EDITOR ══════════════════
+     fb554 shipped its own 129-cell canvas you smear with the mouse: no points, no tensions, no
+     grid, no snap, no shapes, no seeds — a different instrument from the one two panels away.
+     Max: "this distortion menu needs to be the menu for our curves... we already made one, but
+     you made new ones, and these new ones suck."  He is describing exactly that gap.
+     The connection is now a HOST on the shared editor (see __crvOpen). The TRUTH on the wire is
+     unchanged — 129 samples in `a.curve`, the same field the patch already round-trips — so the
+     DSP, the persistence and fb554's "a straight connection carries NO curve" rule all still
+     hold. The points are re-fitted from those samples on open, which is why nothing new has to
+     be persisted for the handles to come back. */
+  function closeCurveEditor(){ try{ if(window.__crvClose&&window.__crvHostKey&&window.__crvHostKey()==='mod') window.__crvClose(); }catch(e){} }
   function openCurveEditor(a,anchor){
-    closeCurveEditor();
-    var N=129;
-    /* fb557 — OPENING the editor must not CURVE the connection. It used to write an identity curve
-       onto the route the moment the panel appeared, which (a) put 129 numbers in the patch for a
-       route nobody had drawn on, (b) lit the grip as if a curve existed, and (c) quietly defeated
-       fb554's own rule that a straight connection carries NO curve rather than an identity one —
-       `mc.set` went true and the DSP started running a lookup to arrive back where it started.
-       The points live here until the first stroke; `a.curve` is only assigned by paint(). */
-    var pts = a.curve ? a.curve.slice() : (function(){ var q=[]; for(var i=0;i<N;i++) q.push(i/(N-1)); return q; })();
-    var W=168,H=124;
-    var box=document.createElement('div'); box.className='sm-curve';
-    var ttl=document.createElement('div'); ttl.className='sc-ttl'; ttl.textContent=srcName(a)+' \u2192 curve';
-    var cv=document.createElement('canvas'); cv.width=W*2; cv.height=H*2; cv.style.width=W+'px'; cv.style.height=H+'px';
-    var hint=document.createElement('div'); hint.className='sc-hint'; hint.textContent='draw \u00B7 double-click = straight';
-    box.appendChild(ttl); box.appendChild(cv); box.appendChild(hint); document.body.appendChild(box);
-    var r=anchor.getBoundingClientRect(), M=6, VW=window.__vw(), VH=window.__vh();
-    box.style.left=Math.max(M,Math.min(LP(r.left),VW-box.offsetWidth-M))+'px';
-    box.style.top =Math.max(M,Math.min(LP(r.bottom)+4,VH-box.offsetHeight-M))+'px';
-    curveEd=box;
-    var g=cv.getContext('2d');
-    function paint(){
-      g.clearRect(0,0,cv.width,cv.height);
-      g.strokeStyle='rgba(255,255,255,0.16)'; g.lineWidth=2;
-      g.beginPath(); g.moveTo(0,cv.height); g.lineTo(cv.width,0); g.stroke();      /* the identity */
-      g.strokeStyle='rgba(255,255,255,0.92)'; g.lineWidth=3; g.beginPath();
-      for(var i=0;i<N;i++){ var X=i/(N-1)*cv.width, Y=(1-pts[i])*cv.height; if(i)g.lineTo(X,Y); else g.moveTo(X,Y); }
-      g.stroke();
-    }
-    var pushT=0;
-    function pushCurve(force){ var now=Date.now(); if(!force&&now-pushT<45)return; pushT=now; push(); }
-    var lastX=-1;
-    function apply(ev){
-      var b=cv.getBoundingClientRect();
-      var xn=Math.max(0,Math.min(1,(ev.clientX-b.left)/Math.max(1,b.width)));
-      var yn=Math.max(0,Math.min(1,(ev.clientY-b.top )/Math.max(1,b.height)));
-      var i=Math.round(xn*(N-1)), v=1-yn;
-      if(lastX<0)lastX=i;
-      /* interpolate across a fast drag: a gap in a mod curve is a step, and a step is a click */
-      var a0=Math.min(lastX,i), a1=Math.max(lastX,i), v0=(lastX===i)?v:pts[lastX];
-      for(var k=a0;k<=a1;++k){ var t=(a1===a0)?1:(k-a0)/(a1-a0); pts[k]=(lastX<=i)?(v0+(v-v0)*t):(v+(v0-v)*t); }
-      a.curve=pts;   /* fb557 — the FIRST stroke is what curves the connection, not opening the panel */
-      lastX=i; paint(); pushCurve();
-    }
-    cv.addEventListener('mousedown',function(ev){ if(ev.button!==0)return; ev.preventDefault(); ev.stopPropagation();
-      lastX=-1; apply(ev);
-      function mv(e2){ apply(e2); }
-      function up(){ lastX=-1; pushCurve(true); document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
-      document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
-    cv.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation();
-      a.curve=null; push(); closeCurveEditor(); markTargets(); });   /* back to a straight line = no curve at all */
-    box.addEventListener('mousedown',function(ev){ ev.stopPropagation(); });
-    paint();
+    var U=window.__crvUtil; if(!U||!window.__crvOpen) return;
+    var N=129, pushMod=push;
+    var pts = a.curve ? U.fit(a.curve) : U.unity();
+    var host={ key:'mod',
+      anchor:false,          /* a mod curve is a UNIPOLAR 0..1 map — no centre to pin */
+      bars:false, live:false, oddToggle:null,
+      _src:'',
+      pts:function(){ return pts; },
+      setPts:function(p){ pts=p; },
+      setSrc:function(n){ host._src=n; },
+      chip:function(){ return host._src?('from '+host._src):''; },
+      odd:function(){ return false; },
+      drawn:function(){ return true; },
+      title:function(){ return srcName(a)+'  \u2014  Curve'; },
+      foot:function(){ return '<span class="qt" data-act="straight" title="Back to the straight line — the connection then carries no curve at all">straighten</span><span class="crv-ro">\u00b7</span>'; },
+      footClick:function(act){ if(act!=='straight')return;
+        pts=U.unity(); a.curve=null; pushMod(); markTargets(); U.repaint(); },
+      push:function(){ var tbl=U.bake(pts,N);
+        /* the fb554 law, kept: an identity curve is NO curve. It is cheaper in the DSP and it is
+           the only way "is this connection curved?" can stay a truthful question. */
+        a.curve = U.isStraight(tbl) ? null : tbl;
+        pushMod(); markTargets(); } };
+    window.__crvOpen(host, anchor||document.body);
   }
-  document.addEventListener('mousedown',function(ev){
-    if(curveEd && !(ev.target.closest && ev.target.closest('.sm-curve'))) closeCurveEditor(); },true);
   /* fb554 — headless gate hooks, the same idiom as __tiRoutes / __fxrDevs / __fltTick. The curve
      editor's entry points are a hover list and a right-click menu, and NEITHER can be exercised in
      the offscreen probe window (no rAF, so no underline; see the UI-probe law). These let a gate
@@ -33480,7 +33623,7 @@ restoreThemeFromBackend();
   var TYPES=['Tube','Tape','Transformer','Stomp Box','Overdrive','Soft Clip','Hard Clip','Zero-Square','Slew Clip','Diode 1','Diode 2','Asym','Rectify','Linear Fold','Sine Fold','West Coast','Shaper','Shaper Asym','Harmonics','Table','Downsample','Bitcrush','Overflow'];
   function famOfI(i){ return i<=4?'ANALOG':i<=8?'CLIP':i<=12?'DIODE':i<=15?'FOLD':i<=19?'SHAPER':'DIGITAL'; }
   var CGRIDS=[2,3,4,5,8,12,16,24,32];   // the LFO's grid ladder (fb212)
-  var CV={ bank:0, gh:8, gv:8, sn:1, tool:0, unpin:false, src:'', tsrc:-1,   /* fb339 — Table source (-1 Gen, 0-3 A-D) */
+  var CV={ gh:8, gv:8, sn:1, tool:0, unpin:false, src:'', tsrc:-1,   /* fb559 — `bank` is gone: one curve, and Morph is its DEPTH */   /* fb339 — Table source (-1 Gen, 0-3 A-D) */
     a:[[0,0.10,0],[0.30,0.22,0.55],[0.5,0.5,0],[0.70,0.78,0.55],[1,0.90,0]],           // gentle S = the engine's default bank A
     b:[[0,0.10,0],[0.24,0.10,0],[0.25,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.75,0.70,0],[0.76,0.90,0],[1,0.90,0]],   // razor staircase = bank B
     c:(function(){ var pF=[],i; for(i=0;i<=16;i++){ var x=i/16; pF.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*4.712389-2.3561945)).toFixed(4),0]); } return pF; })(),   // sine fold = bank C (fb330)
@@ -33496,9 +33639,85 @@ restoreThemeFromBackend();
   function pill2On(){ try{ if(!pPill)pPill=PS('SYN_DST_PILL2',0); return pPill?pPill.getNormalisedValue()>0.5:false; }catch(e){ return false; } }
   function beyondV(){ try{ if(!pP7)pP7=PS('SYN_DST_P7',0.5); return pP7?Math.round(pP7.getNormalisedValue()*100):0; }catch(e){ return 0; } }
   function isShFam(){ return famOfI(typeIdx())==='SHAPER'; }
-  function isOdd(){ var ti=typeIdx(); return TYPES[ti]==='Shaper' || (famOfI(ti)==='SHAPER'&&pill2On()); }
-  function cPts(){ return [CV.a,CV.b,CV.c,CV.d][Math.max(0,Math.min(3,CV.bank))]; }
-  function setPts(p){ var k=['a','b','c','d'][Math.max(0,Math.min(3,CV.bank))]; CV[k]=p; }
+  function isOddDst(){ var ti=typeIdx(); return TYPES[ti]==='Shaper' || (famOfI(ti)==='SHAPER'&&pill2On()); }
+
+  /* ═══ fb559 — THIS IS THE PLUGIN'S CURVE EDITOR NOW, NOT THE DISTORTION'S ═══════════════════
+     Max: "this distortion menu needs to be the menu for our curves, not just any distortion
+     menu. It's the perfect menu — it gives us odd shapes, it gives us able to customize it, and
+     we can edit the curves like this... this has to be our curve menu."
+
+     He is right, and the reason is not taste. We had THREE curve editors and they had already
+     drifted into three different instruments:
+        fb328 (here)  points, tensions, brushes, grid, snap, seeds, a 32-pt cap, Send To Shaper
+        fb550 (warp)  a paint-only strip — no points, no tension, no menu
+        fb554 (mod)   a 129-cell canvas you smear with the mouse; no points either
+     A curve is one idea. Three implementations of one idea is three bug surfaces and three
+     grammars to learn, and it is why the two younger ones "suck": they are not worse designs,
+     they are the same design with everything below this line missing.
+
+     ONE editor, THREE HOSTS. A host owns exactly four things:
+         pts() / setPts()   where the control points live
+         push()             how a change reaches the DSP
+         title() / foot()   what the header and the footer say
+         odd() / drawn()    whether odd-symmetry and the point editor apply
+     Everything else — the tension evaluator, the fat hit targets, the midpoint curve dots, the
+     brushes, the grid ladder, snap, flips, the seed library, Wavetable→Curve, LFO→Curve, the
+     32-point cap — is written ONCE here and every host gets all of it for free. Add a fourth
+     curve to the plugin and it is a 20-line object, not a fourth editor.
+     ═══════════════════════════════════════════════════════════════════════════════════════ */
+  var HOST=null;                            // null == the Distortion host below
+  /* ⚠️ NOT `H`. This module already declares `var W=456,H=220` (the hero's pixel height) LOWER
+     DOWN in the same function scope, and `var H = 220` silently overwrites a hoisted
+     `function H(){}` — so every host lookup returned the number 220 and threw "H is not a
+     function". It builds, it renders, and the curve card simply never opens. A one-letter helper
+     in a 700-line module is a collision waiting for whoever comes next; this one has a name. */
+  function curHost(){ return HOST||DSTH; }
+  function cPts(){ return curHost().pts(); }
+  function setPts(p){ curHost().setPts(p); }
+  function isOdd(){ var h=curHost(); return h.odd?h.odd():false; }
+
+  var DSTH={ key:'dst',
+    /* fb559 — ONE BANK. A/B/C/D are gone from the footer (Max: "take away A, B, C and D... and
+       take away that slider"), and with them the only way to edit B-D — so Morph stopped being a
+       bank sweep and became DEPTH (DistortionEngine.h bakeCurves: the four banks are re-purposed
+       as a straight-line→your-curve ladder). The blob still carries b/c/d so every saved preset
+       still loads; nothing writes them any more. */
+    pts:function(){ return CV.a; },
+    setPts:function(p){ CV.a=p; },
+    setSrc:function(n){ CV.src=n; },
+    push:function(){ pushNow(); },
+    anchor:true,                            // §6.8-3 — f(0)=0: a bipolar transfer passes the centre
+    bars:true,                              // the Harmonics bar-draw lives on this host only
+    live:true,                              // the engine occupancy feed lights this host's line
+    odd:isOddDst,
+    oddToggle:function(){ toggleSym(); },
+    drawn:function(){ var ty=TYPES[typeIdx()]; return isShFam()&&ty!=='Harmonics'&&ty!=='Table'; },
+    title:function(){ return TYPES[typeIdx()]+' — Curve'; },
+    /* fb559 — the ✦ chip says what it MEANS now. It was a bare "Soft Clip" sitting next to a
+       title that said "Shaper Asym", which reads as a broken picker; Max: "I don't know why it
+       says soft clip. Why can't I change soft clip?" It is not a picker — it is provenance: you
+       double-clicked the curve while on Soft Clip, Send To Shaper sampled that mode's real
+       transfer curve into points, and this remembers where the ink came from. */
+    chip:function(){ return (CV.src&&isShFam())?('from '+CV.src):''; },
+    foot:function(){ return '<span class="qt" data-act="beyond" title="Drag — Beyond (Distortion back panel, P7)">beyond '+beyondV()+'</span><span class="crv-ro">\u00b7</span>'; },
+    heroIdle:function(){ var ty=TYPES[typeIdx()]; return ty==='Harmonics'?harmSVG():liveSVG(); },
+    footIdle:function(){ var ty=TYPES[typeIdx()];
+      if(!isShFam()) return '<span class="crv-ro">'+ty+' \u2014 live curve \u00b7 double-click to edit as Shaper</span><span style="flex:1"></span>';
+      if(ty==='Harmonics') return '<span class="crv-ro">Bars 1\u201316 \u00b7 down = phase-flip</span>'
+        +'<span class="mv-c" data-act="clearbars">Clear</span><span style="flex:1"></span>'
+        +'<span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
+      var srcs=['Stock','A','B','C','D'], tt2='';
+      var tth=['Built-in morph table','Oscillator A\u2019s wavetable','Oscillator B\u2019s wavetable','Oscillator C\u2019s wavetable','Oscillator D\u2019s wavetable'];
+      for(var si2=0;si2<5;si2++) tt2+='<span class="t'+(CV.tsrc===si2-1?' act':'')+'" data-tsrc="'+(si2-1)+'" title="'+tth[si2]+'">'+srcs[si2]+'</span>';
+      return '<div class="mv-tabs srcs">'+tt2+'</div><span class="crv-ro">Morph sweeps the frame stack</span>'
+        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>'; },
+    menuHead:function(rows){ var ty=TYPES[typeIdx()];
+      if(!isShFam()){ rows.push({isHeader:true,label:'Distortion \u2014 '+ty});
+        rows.push({label:'Edit as Shaper curve',white:true,onPick:function(){ sendToShaper(); }}); return true; }
+      if(ty==='Harmonics'){ rows.push({isHeader:true,label:'Harmonics \u2014 draw the spectrum'});
+        rows.push({label:'Clear bars',white:true,onPick:function(){ for(var i=0;i<16;i++)CV.bars[i]=0; CV.bars[0]=1; cPush(); paint(); }}); return true; }
+      if(ty==='Table'){ rows.push({isHeader:true,label:'Table \u2014 Morph sweeps the frames'}); return true; }
+      return false; } };
 
   /* the house tension + NON-periodic evaluator (§6.8-1 — PERIODICITY MUST DIE) */
   function cBias(t,c){ if(Math.abs(c)<1e-4)return t; var P=-c*8; return (Math.exp(P*t)-1)/(Math.exp(P)-1); }
@@ -33510,7 +33729,11 @@ restoreThemeFromBackend();
       for(var i=a+1;i<b;i++){ var d=Math.abs((pp[i][0]-ax)*dy-(pp[i][1]-ay)*dx)/L; if(d>dm){dm=d;ix=i;} }
       if(dm>eps&&ix>0){ keep[ix]=true; st2.push([a,ix]); st2.push([ix,b]); } }
     var out=[]; for(var j=0;j<pp.length;j++) if(keep[j])out.push(pp[j]); return out; }
-  function ensureAnchor(g){ if(CV.unpin)return g;   // §6.8-3 — f(0)=0 by default; Unpin = the deliberate Bias gesture
+  /* fb559 — HOST-GATED. Pinning x=0.5 to y=0.5 is the DISTORTION's law (a bipolar transfer must
+     pass through zero or it makes DC). A mod-connection curve and a warp curve are UNIPOLAR maps
+     over 0..1 — "half the modulator gives half the destination" is a choice, not a law — so
+     forcing a point through their middle would be an editor inventing a constraint. */
+  function ensureAnchor(g){ if(CV.unpin||!curHost().anchor)return g;   // §6.8-3 — f(0)=0 by default; Unpin = the deliberate Bias gesture
     var has=false; for(var i=0;i<g.length;i++) if(Math.abs(g[i][0]-0.5)<1e-4){ has=true; g[i][1]=0.5; }
     if(!has){ g.push([0.5,0.5,0]); g.sort(function(a,b){return a[0]-b[0];}); }
     return g; }
@@ -33524,7 +33747,7 @@ restoreThemeFromBackend();
     bars:CV.bars.map(function(v){return +(+v).toFixed(3);}), src:CV.src, gh:CV.gh, gv:CV.gv, sn:CV.sn }); }
   function pushNow(){ var j=blob(); if(j===lastPush)return; lastPush=j;
     var f=NF('setDistortionCurves'); if(f){ try{ f(j); }catch(e){} } }
-  function cPush(){ window.__crvTouchT=Date.now(); if(pushT)return; pushT=setTimeout(function(){ pushT=null; pushNow(); },40); }
+  function cPush(){ window.__crvTouchT=Date.now(); if(pushT)return; pushT=setTimeout(function(){ pushT=null; try{ curHost().push(); }catch(e){} },40); }   /* fb559 — whichever host is mounted */
   function applyBlob(j){ try{ var v=JSON.parse(j); if(!v)return;
     function mpIn(q){ var p2=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')p2[3]=q[3]; return p2; }   /* fb340 — mods survive the round-trip */
     if(v.a&&v.a.length>1) CV.a=v.a.map(mpIn);
@@ -33557,9 +33780,8 @@ restoreThemeFromBackend();
     out[0][0]=0; out[out.length-1][0]=1; return out; }
   function occG(){ var s='',i; for(i=0;i<48;i++) s+='<line class="crv-oc" data-b="'+i+'" opacity="0"/>'; return '<g class="crv-occ">'+s+'</g>'; }
   function heroSVG(){
-    var ti=typeIdx(), ty=TYPES[ti];
-    if(!isShFam()||ty==='Table') return liveSVG();
-    if(ty==='Harmonics') return harmSVG();
+    var h=curHost();
+    if(!h.drawn()) return h.heroIdle?h.heroIdle():liveSVG();   /* fb559 — only the DST host has non-drawn views */
     var odd=isOdd(), p=ensureAnchor(cPts()), full=odd?symm(p):p;
     var d=pathD(odd?full.filter(function(q){return q[0]>=0.4999;}):full);
     var fillD='M0 '+fy(full[0][1]).toFixed(1)+' '+pathD(full).replace(/^M/,'L')+'L'+W+' '+fy(0.5)+' L0 '+fy(0.5)+' Z';
@@ -33602,44 +33824,35 @@ restoreThemeFromBackend();
        +'<text class="crv-num" x="'+cx.toFixed(1)+'" y="'+(FB+8)+'">'+(i+1)+'</text>'; }
     return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()+'<path class="crv-hg" d="'+ghost+'"/>'+s+'</svg>'; }
 
+  /* fb559 — THE FOOTER IS THE SAME FOUR THINGS ON EVERY HOST. The A/B/C/D tabs and the Morph
+     rail are GONE (Max) — see DSTH.pts for what happened to Morph. What is left is exactly what
+     he asked to keep, plus whatever the host itself owns:
+         Shapes ▾   the whole menu: grid, snap, flips, brushes, seeds, Wavetable→ and LFO→Curve
+         snap       does a drag land on the grid
+         odd/free   ONLY where odd symmetry is a real law (the Distortion; see DSTH.oddToggle)
+         <host>     e.g. the Distortion's 'beyond' (its back-panel P7), a warp slot's Amount
+         N pts      how many draggable points the curve has right now — the 32 cap is the ceiling */
   function footHTML(){
-    var ti=typeIdx(), ty=TYPES[ti];
-    if(!isShFam())
-      return '<span class="crv-ro">'+ty+' — live curve · double-click to edit as Shaper</span>'
-        +'<span style="flex:1"></span>';
-    if(ty==='Harmonics')
-      return '<span class="crv-ro">Bars 1–16 · down = phase-flip</span>'
-        +'<span class="mv-c" data-act="clearbars">Clear</span>'
-        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>';
-    if(ty==='Table'){
-      // fb343 — 'Gen' renamed 'Stock' (Max: "whatever that is" = the name failed the pragmatic law);
-      // titles say what each source IS; .srcs class = word-width pills (see CSS).
-      var srcs=['Stock','A','B','C','D'], tt2='';   // fb339 — SOURCE pills: the osc's REAL frame stack becomes the morph
-      var tth=['Built-in morph table','Oscillator A’s wavetable','Oscillator B’s wavetable','Oscillator C’s wavetable','Oscillator D’s wavetable'];
-      for(var si2=0;si2<5;si2++) tt2+='<span class="t'+(CV.tsrc===si2-1?' act':'')+'" data-tsrc="'+(si2-1)+'" title="'+tth[si2]+'">'+srcs[si2]+'</span>';
-      return '<div class="mv-tabs srcs">'+tt2+'</div>'
-        +'<span class="crv-ro">Morph sweeps the frame stack</span>'
-        +'<span style="flex:1"></span><span class="mv-c" data-act="beyond">beyond '+beyondV()+'</span>'; }
-    var tabs=''; for(var bi=0;bi<4;bi++) tabs+='<span class="t'+(CV.bank===bi?' act':'')+'" data-bank="'+bi+'">'+['A','B','C','D'][bi]+'</span>';
-    return '<div class="mv-tabs">'+tabs+'</div>'
-      +'<span class="crv-rail" data-act="morph" title="Morph A→B"><i style="left:'+morphPct()+'%"></i></span>'
-      +'<span class="mv-c" data-act="shapes">Shapes <span class="ar">▾</span></span>'
+    var h=curHost();
+    if(!h.drawn()) return h.footIdle?h.footIdle():'<span class="crv-ro">'+h.title()+'</span><span style="flex:1"></span>';
+    return '<span class="mv-c" data-act="shapes">Shapes <span class="ar">\u25be</span></span>'
       +'<span style="flex:1"></span>'
-      +'<span class="qt" data-act="snapt" title="Snap drags to the grid — the crooked-line killer (fb335)">snap '+(CV.sn?'on':'off')+'</span><span class="crv-ro">·</span>'
-      +'<span class="qt" data-act="sym" title="Odd: the right half rules, zero DC — the Sym pill">'+(isOdd()?'odd':'free')+'</span><span class="crv-ro">·</span>'
-      +'<span class="qt" data-act="beyond" title="Drag — Beyond (back P7)">beyond '+beyondV()+'</span><span class="crv-ro">·</span>'
+      +'<span class="qt" data-act="snapt" title="Snap drags to the grid — the crooked-line killer (fb335)">snap '+(CV.sn?'on':'off')+'</span><span class="crv-ro">\u00b7</span>'
+      +(h.oddToggle?('<span class="qt" data-act="sym" title="Odd: the right half rules, zero DC — the Sym pill">'+(isOdd()?'odd':'free')+'</span><span class="crv-ro">\u00b7</span>'):'')
+      +(h.foot?h.foot():'')
       +'<span class="crv-ro">'+cPts().length+' pts</span>'; }
-  function morphPct(){ try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); return pSig?Math.round(pSig.getNormalisedValue()*100):0; }catch(e){ return 0; } }
 
   function paint(){ if(!card)return;
-    var tt=card.querySelector('.tt'); if(tt)tt.textContent=TYPES[typeIdx()]+' — Curve';   // fb329 — the mockup's title grammar
-    if(hdrChip){ if(CV.src&&isShFam()){ hdrChip.style.display='inline-flex'; hdrChip.innerHTML='<b>✦</b>'+CV.src; }
+    var h=curHost();
+    var tt=card.querySelector('.tt'); if(tt)tt.textContent=h.title();   // fb329 — the mockup's title grammar · fb559 — the HOST names itself
+    if(hdrChip){ var ch=h.chip?h.chip():''; if(ch){ hdrChip.style.display='inline-flex'; hdrChip.innerHTML='<b>\u2726</b>'+ch; }
       else hdrChip.style.display='none'; }
     hero.innerHTML=heroSVG(); foot.innerHTML=footHTML(); bindHero(); }
   function paintField(){ if(!card)return; hero.innerHTML=heroSVG(); bindHero(); }
 
   /* the live overlay — fed by the rack driver in the main window, self-polled when card-only */
   window.__crvLiveTick=function(o){ try{ if(!card||!card.classList.contains('open'))return;
+    if(!curHost().live)return;   /* fb559 — the Distortion's signal-occupancy feed lights the Distortion's line; a warp or mod curve has its own truth */
     if(o.m!==lastM){ lastM=o.m; paint(); return; }        // type moved (any window) → full repaint
     var svg=hero.querySelector('svg'); if(!svg)return;
     // fb330 — ONE transform for card + core (Max: "they should be moving equally, looking equally"):
@@ -33684,6 +33897,7 @@ restoreThemeFromBackend();
      (odd-mirror applied), in the feed's array convention so the mini viz can swap it in
      1:1. null outside the drawn modes ⇒ callers fall back to the engine feed. */
   function drawnC(N){ try{
+    if(HOST) return null;   /* fb559 — only the Distortion host mirrors into the rack's mini viz */
     var ty=TYPES[typeIdx()];
     if(ty!=='Shaper'&&ty!=='Shaper Asym') return null;
     var p=ensureAnchor(cPts()), full=isOdd()?symm(p):p, out=[],i;
@@ -33695,7 +33909,7 @@ restoreThemeFromBackend();
      dial + the card's footer rail as LFO drop targets (the data-mod-dest pool, fb75 grammar).
      Interval = rebuild-proof (the rack re-renders on type changes; the pool re-collects on drag). */
   (function stampMorphDest(){ try{
-      document.querySelectorAll('#syn-panel .fxr-dial[data-p="SYN_DST_SIG"], #syn-panel .crv-rail').forEach(function(el){
+      document.querySelectorAll('#syn-panel .fxr-dial[data-p="SYN_DST_SIG"]').forEach(function(el){   /* fb559 — .crv-rail retired with the banks */
         if(!el.hasAttribute('data-mod-dest')) el.setAttribute('data-mod-dest','693'); });
     }catch(e){} setTimeout(stampMorphDest,1200); })();
   /* fb333 — boot pull (the fb232 LFO law): CV must mirror the SAVED blob before the card ever
@@ -33766,17 +33980,18 @@ restoreThemeFromBackend();
     function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); cPush(); paint(); }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
   function bindHero(){ if(!hero)return;
-    var ti=typeIdx(), ty=TYPES[ti], drawn=(isShFam()&&ty!=='Harmonics'&&ty!=='Table');
+    var h=curHost(), drawn=h.drawn();
     hero.style.cursor=(drawn&&CV.tool)?'crosshair':'';
     hero.oncontextmenu=function(e){ e.preventDefault();
-      var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
+      var bar=h.bars&&e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
       if(bar){ CV.bars[+bar.getAttribute('data-i')]=0; paintField(); cPush(); return; }
       var nh=e.target.closest&&e.target.closest('.sh-hit');   // fb340 — right-click a POINT = the fb238 mod menu
       if(nh&&drawn){ crvPtMenu(+nh.getAttribute('data-i'), e); return; }
       crvMenu(e); };
     hero.ondblclick=function(e){
-      if(!isShFam()){ sendToShaper(); return; }           // §6.6 — ANY mode's curve becomes yours
-      if(!drawn)return;
+      if(!drawn){ if(h.capture){ h.capture(); return; }   /* fb559 — §6.6 generalised: on ANY host, double-clicking a
+                                                              curve you cannot edit CAPTURES it into points you can */
+                  return; }
       var p=cPts(), t=e.target, hitCd=t.classList&&t.classList.contains('cdh'),
           hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
       if(hitCd||hitNd) ni=+t.getAttribute('data-i');
@@ -33789,7 +34004,7 @@ restoreThemeFromBackend();
       cPush(); paintField(); };
     hero.onpointerdown=function(e){
       if(e.button===2)return;
-      var bar=e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
+      var bar=h.bars&&e.target.closest&&e.target.closest('.crv-barh, .crv-bar');
       if(bar){ e.preventDefault();
         var pnt=perFrame(function(ev){ var q=heroPos(ev); var bi=Math.max(0,Math.min(15,Math.floor(q.x*16)));
           CV.bars[bi]=Math.max(-1,Math.min(1,(q.y-0.5)/0.46)); paintField(); cPush(); });   // fb343 — coalesced
@@ -33860,7 +34075,7 @@ restoreThemeFromBackend();
     'Razor Stair':[[0,0.06,0],[0.24,0.06,0],[0.25,0.30,0],[0.49,0.30,0],[0.5,0.5,0],[0.51,0.70,0],[0.755,0.70,0],[0.76,0.94,0],[1,0.94,0]],
     'Fold Sine':  (function(){ var p=[],i; for(i=0;i<=16;i++){ var x=i/16; p.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*9.42477-4.71239)).toFixed(4),0]); } return p; })() };
   function seedTo(p2,nm){ var g=p2.map(function(q){return q.slice();});
-    setPts(g); ensureAnchor(cPts()); CV.src=nm||''; sel=-1; cPush(); paint(); }
+    setPts(g); ensureAnchor(cPts()); if(curHost().setSrc)curHost().setSrc(nm||''); sel=-1; cPush(); paint(); }   /* fb559 */
   // fb343 — seed toast (the .mv-toast glass, recycled): law-⑤ hardening — a never-settling
   // native (the fb90 class that silently killed the osc clone in the popped window) now
   // SURFACES instead of dying as a mystery no-op.
@@ -33870,7 +34085,9 @@ restoreThemeFromBackend();
   // fb343/fb331 — a clone seed must BE the sound: Morph lands on the SEEDED (current) bank —
   // bank k is audible at SIG=k/3 (the engine's A→B→C→D sweep). Flat 0 would re-create the
   // inaudible-seed bug whenever the edited bank is B-D. sendToShaper's force is the precedent.
-  function crvSigForce(){ try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(CV.bank/3); }catch(e){} }
+  /* fb559 — was CV.bank/3 (park Morph on the bank you seeded). Morph is DEPTH now, so a seed
+     that is meant to BE the sound lands at FULL depth. Only the Distortion has a Morph at all. */
+  function crvSigForce(){ if(HOST)return; try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(1); }catch(e){} }
   function oscToCurve(o){   // fb248 pipeline — the REAL osc frame via getOscLfoWave, NON-cyclic (a transfer curve is not a cycle)
     var f=NF('getOscLfoWave'); if(!f){ crvToast('Seed unavailable'); return; }
     var fired=false, wd=setTimeout(function(){ fired=true; crvToast('Osc '+['A','B','C','D'][o]+' didn’t answer — seed skipped'); },300);
@@ -33965,20 +34182,13 @@ restoreThemeFromBackend();
     if(cur>0) rows.push({ node:crvAmtNode(ix) });
     window.__synShowMenu('',rows,e.clientX,e.clientY); }
   function crvMenu(e){ if(!window.__synShowMenu)return;
-    var ti=typeIdx(), ty=TYPES[ti], drawn=(isShFam()&&ty!=='Harmonics'&&ty!=='Table');
+    var h=curHost();
     function tool(lbl,t){ return { label:lbl, isChecked:CV.tool===t, white:true, onPick:function(){ CV.tool=(CV.tool===t&&t!==0)?0:t; paintField(); } }; }
     var rows=[];
-    if(!isShFam()){
-      rows.push({isHeader:true,label:'Distortion — '+ty});
-      rows.push({label:'Edit as Shaper curve',white:true,onPick:function(){ sendToShaper(); }});
-      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
-    if(ty==='Harmonics'){
-      rows.push({isHeader:true,label:'Harmonics — draw the spectrum'});
-      rows.push({label:'Clear bars',white:true,onPick:function(){ for(var i=0;i<16;i++)CV.bars[i]=0; CV.bars[0]=1; cPush(); paint(); }});
-      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
-    if(ty==='Table'){
-      rows.push({isHeader:true,label:'Table — Morph sweeps the frames'});
-      window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
+    /* fb559 — a host may own the WHOLE menu (the Distortion's non-drawn modes do), otherwise
+       every host gets the identical library below. */
+    if(h.menuHead&&h.menuHead(rows)){ window.__synShowMenu('',rows,e.clientX,e.clientY); return; }
+    if(h.menuTop) h.menuTop(rows);
     rows.push({ node:gridNode('lv','gh') });
     rows.push({ node:gridNode('tm','gv') });
     rows.push({ label:'Snap', isChecked:!!CV.sn, white:true, onPick:function(){ CV.sn=CV.sn?0:1; cPush(); } });
@@ -34011,8 +34221,9 @@ restoreThemeFromBackend();
     rows.push({isHeader:true,label:'LFO → Curve'});
     for(var n=1;n<=10;n++)(function(nn){ rows.push({label:'LFO '+nn,white:true,onPick:function(){ lfoToCurve(nn); }}); })(n);
     rows.push({isHeader:true,label:'Curve'});
-    rows.push({ label:'Unpin centre', isChecked:!!CV.unpin, white:true, onPick:function(){ CV.unpin=!CV.unpin; ensureAnchor(cPts()); cPush(); paint(); } });
+    if(h.anchor) rows.push({ label:'Unpin centre', isChecked:!!CV.unpin, white:true, onPick:function(){ CV.unpin=!CV.unpin; ensureAnchor(cPts()); cPush(); paint(); } });
     rows.push({ label:'Clear to unity', white:true, onPick:function(){ CV.unpin=false; seedTo(SEEDS['Unity'],''); } });
+    if(h.menuTail) h.menuTail(rows);
     window.__synShowMenu('',rows,e.clientX,e.clientY); }
 
   /* ── Send To Shaper (§6.6) — the REAL engine curve → ≤32 points → exact tension fit ── */
@@ -34028,13 +34239,14 @@ restoreThemeFromBackend();
       if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
       var im=Math.round((a[0]+b[0])/2*(N-1)), ym=(o.c[im]/pk+1)*0.5, r=(ym-a[1])/(b[1]-a[1]);
       a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
-    CV.a=p2; CV.bank=0; CV.src=ty; CV.unpin=true;        // the sent curve lands VERBATIM (no forced centre)
+    CV.a=p2; CV.src=ty; CV.unpin=true;                   // the sent curve lands VERBATIM (no forced centre)
+    HOST=null;                                           // fb559 — Send To Shaper is a DISTORTION gesture; it always lands on that host
     setTypeUI('Shaper Asym');
     // fb331 — the sent curve must BE what you hear: Morph→0 (bank A) + Beyond→0, forced HERE because
     // the popped window's setTypeUI writes only the type param — dstApplyType's per-mode boots never
     // run there. That's how Soft Clip's 0.65 knee leaked into the Morph slot = the engine sat at 95%
     // bank C while Max drew on bank A (probe: corrC=.983/corrA=.218 at 0.65 → corrA=1.000 at 0).
-    try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(0); }catch(e){}
+    try{ if(!pSig)pSig=PS('SYN_DST_SIG',0); if(pSig)pSig.setNormalisedValue(1); }catch(e){}   /* fb559 — Morph is DEPTH: the sent curve IS the sound at 100 %, not at 0 (which is now the clean line) */
     try{ if(!pP7)pP7=PS('SYN_DST_P7',0.5); if(pP7)pP7.setNormalisedValue(0); }catch(e){}
     // fb345 — the shared-slot law, P6 edition: a stale Gap-0 (=Bias −1 on SHAPER) muted the sent
     // curve by up to 24 dB. Bias lands CENTERED with the send.
@@ -34068,43 +34280,44 @@ restoreThemeFromBackend();
     hero=T.el('<div class="card-scope crv-hero"></div>'); crvSh.body.appendChild(hero);
     foot=T.el('<div class="crv-foot"></div>'); crvSh.body.appendChild(foot);
     foot.addEventListener('click',function(e){
-      var t=e.target.closest&&e.target.closest('[data-bank],[data-act],[data-tsrc]'); if(!t)return;
+      var t=e.target.closest&&e.target.closest('[data-act],[data-tsrc]'); if(!t)return;
       if(t.getAttribute('data-tsrc')!=null){ CV.tsrc=+t.getAttribute('data-tsrc');   // fb339 — Table source pill
         var fT=NF('setDstTableSrc'); if(fT){ try{ fT(CV.tsrc); }catch(e2){} } paint(); return; }
-      if(t.getAttribute('data-bank')!=null){ CV.bank=+t.getAttribute('data-bank'); sel=-1; paint(); return; }
       var a=t.getAttribute('data-act');
       if(a==='shapes'){ var r=t.getBoundingClientRect(); var fake={clientX:r.left,clientY:r.bottom+4,preventDefault:function(){}}; crvMenu(fake); }
-      else if(a==='sym'){ toggleSym(); }
+      else if(a==='sym'){ var ot=curHost().oddToggle; if(ot)ot(); }
       else if(a==='snapt'){ CV.sn=CV.sn?0:1; cPush(); paint(); }   // fb335 — snap state VISIBLE + one click (it silently persisted in the blob before)
       else if(a==='clearbars'){ for(var i=0;i<16;i++)CV.bars[i]=0; CV.bars[0]=1; cPush(); paint(); }
+      else { var fc=curHost().footClick; if(fc)fc(a,t,e); }   /* fb559 — a host's own chips */
     });
+    /* fb559 — the Morph rail is retired with the banks. What is left on pointerdown is the
+       vertical-drag chip grammar, and the HOST says which chips it owns. */
     foot.addEventListener('pointerdown',function(e){
-      var r0=e.target.closest&&e.target.closest('.crv-rail');
-      if(r0){ e.preventDefault();                          // fb329 — the footer Morph rail is LIVE (writes SYN_DST_SIG)
-        if(!pSig)pSig=PS('SYN_DST_SIG',0); if(!pSig)return;
-        var rr=r0.getBoundingClientRect(), dot=r0.querySelector('i');
-        var setM=perFrame(function(ev){ var nv=Math.max(0,Math.min(1,(ev.clientX-rr.left)/Math.max(1,rr.width)));
-          pSig.setNormalisedValue(nv); if(dot)dot.style.left=(nv*100)+'%'; });   // fb343 — coalesced: the popped rail fired one native write PER EVENT
-        setM(e);
-        var upM=function(){ window.removeEventListener('pointermove',setM); window.removeEventListener('pointerup',upM); };
-        window.addEventListener('pointermove',setM); window.addEventListener('pointerup',upM); return; }
-      var t=e.target.closest&&e.target.closest('[data-act="beyond"]'); if(!t)return;
-      e.preventDefault();
-      if(!pP7)pP7=PS('SYN_DST_P7',0.5); if(!pP7)return;
-      var v0=pP7.getNormalisedValue(), y0=e.clientY;
-      var mv=function(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.006));
-        pP7.setNormalisedValue(nv); t.textContent='beyond '+Math.round(nv*100); };
-      var up=function(){ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); };
-      window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up);
+      var t=e.target.closest&&e.target.closest('[data-act]'); if(!t)return;
+      var a=t.getAttribute('data-act');
+      if(a==='beyond'){ e.preventDefault();
+        if(!pP7)pP7=PS('SYN_DST_P7',0.5); if(!pP7)return;
+        var v0=pP7.getNormalisedValue(), y0=e.clientY;
+        var mv=function(ev){ var nv=Math.max(0,Math.min(1,v0+(y0-ev.clientY)*0.006));
+          pP7.setNormalisedValue(nv); t.textContent='beyond '+Math.round(nv*100); };
+        var up=function(){ window.removeEventListener('pointermove',mv); window.removeEventListener('pointerup',up); };
+        window.addEventListener('pointermove',mv); window.addEventListener('pointerup',up); return; }
+      var fd=curHost().footDrag; if(fd) fd(a,t,e);
     });
   }
-  function openCrv(){
-    if(!window.__cardOnly&&window.__poppedCards&&window.__poppedCards.crv){   // already floating — refocus, never duplicate
+  function openCrv(host,anchorEl){
+    /* fb559 — the pop-out path is the DISTORTION host's alone: a popped window boots card-only
+       and re-creates the DST host from the processor blob, which a mod-connection or warp host
+       (whose truth lives in the patch, not in that blob) could not survive. Switching hosts
+       therefore always uses the docked card. */
+    if(!host&&!window.__cardOnly&&window.__poppedCards&&window.__poppedCards.crv){   // already floating — refocus, never duplicate
       try{ var pf=NF('popOutCard'); if(pf){ pf('crv',0,0,0,0); return; } }catch(e){}
       return; }
+    var switching=(HOST!==(host||null));
+    HOST=host||null; sel=-1;
     buildCrv(); if(!card)return;
-    if(!card.__placed){ card.__placed=1;
-      var dv=document.querySelector('#syn-panel .fxr-core[data-core="saturate"]');
+    if(!card.__placed||switching){ card.__placed=1;
+      var dv=anchorEl||document.querySelector('#syn-panel .fxr-core[data-core="saturate"]');
       var r=dv?dv.getBoundingClientRect():{left:300,top:300,right:560};
       var px=Math.min((window.__vw?window.__vw():innerWidth)-514, Math.max(8, r.left-120)),
           py=Math.max(8, r.top-330);
@@ -34118,9 +34331,57 @@ restoreThemeFromBackend();
       if(r.top<4)       card.style.top='4px';
     }catch(e){} });
     lastM=-1; paint();                                    // paint from CACHE first — the JUCE promise may never settle (the law)
-    pullBlob(function(){ lastM=-1; paint(); });
+    if(!HOST) pullBlob(function(){ lastM=-1; paint(); });
+    else if(HOST.pull) HOST.pull(function(){ paint(); });
   }
-  window.__openCrvCard=openCrv;
+  window.__openCrvCard=function(){ openCrv(null); };
+  /* ── fb559 · THE PUBLIC DOOR ────────────────────────────────────────────────────────────────
+     window.__crvOpen(hostSpec, anchorEl) mounts ANY curve in this editor. The spec is documented
+     on DSTH above; the two shipped guests are the mod-connection curve and the warp slot curve.
+     window.__crvUtil hands out the shared maths so a host can convert between its own storage
+     (a dense 129-sample table, which is what both DSPs eat) and the editor's control points —
+     WITHOUT a second copy of the tension evaluator, which is exactly how the three editors drifted
+     apart in the first place. */
+  window.__crvOpen=function(spec,anchorEl){ openCrv(spec,anchorEl); };
+  window.__crvClose=function(){ try{ if(card)card.classList.remove('open'); }catch(e){} };
+  window.__crvHostKey=function(){ var h=curHost(); return h?h.key:''; };
+  /* fb559 — HEADLESS GATE HOOKS, the __tiRoutes / __fxrDevs / __fltTick idiom. The editor's
+     entry points are gestures (a right-click row, a menu Extend, a drag on a fat hit target) and
+     the offscreen probe window has no rAF, so the hover-driven ones cannot be exercised there at
+     all (the UI-probe law). These drive the SAME host methods the hand drives — cPush included —
+     so a green run means the real path ran, not a mock of it. */
+  window.__crvPts=function(){ try{ return cPts().map(function(q){ return [q[0],q[1],q[2]||0]; }); }catch(e){ return null; } };
+  window.__crvSetPts=function(arr){ try{ setPts(arr.map(function(q){ return [+q[0],+q[1],+(q[2]||0)]; }));
+    ensureAnchor(cPts()); sel=-1; cPush(); paint(); return cPts().length; }catch(e){ return -1; } };
+  window.__crvOpenState=function(){ try{ return { key:curHost().key, open:!!(card&&card.classList.contains('open')),
+    title:curHost().title(), pts:cPts().length, drawn:!!curHost().drawn() }; }catch(e){ return {err:String(e&&e.message||e)}; } };
+  window.__crvUtil={
+    /* dense table -> <=32 control points with exact tensions. The Send To Shaper fit (§6.1),
+       lifted verbatim so a guest host gets the same quality of capture the Distortion gets. */
+    fit:function(arr){ var N=arr.length, raw=[], i;
+      for(i=0;i<N;i++) raw.push([i/(N-1), Math.max(0,Math.min(1,arr[i]))]);
+      var simp=cRdp(raw,0.008); if(simp.length>32)simp=cRdp(raw,0.02); if(simp.length>32)simp=cRdp(raw,0.05);
+      if(simp.length>32)simp=simp.slice(0,32);
+      var p2=simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];});
+      for(i=0;i<p2.length-1;i++){ var a=p2[i],b=p2[i+1];
+        if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
+        var im=Math.round((a[0]+b[0])/2*(N-1)), ym=Math.max(0,Math.min(1,arr[im])), r=(ym-a[1])/(b[1]-a[1]);
+        a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
+      return p2; },
+    /* control points -> dense table, through the SAME evaluator the ink is drawn with, so what
+       you see and what the DSP runs cannot disagree (the fb333 authority law). */
+    bake:function(pts,N){ var out=[],i; for(i=0;i<N;i++) out.push(evalP(pts,i/(N-1))); return out; },
+    isStraight:function(arr){ var i,N=arr.length; for(i=0;i<N;i++) if(Math.abs(arr[i]-i/(N-1))>1.5e-3) return false; return true; },
+    unity:function(){ return SEEDS['Unity'].map(function(q){return q.slice();}); },
+    /* a dense sampled array rendered in the editor's own field — for a host whose curve is real
+       but not editable (the warp FILTER modes' |H|). Uses this module's grid and geometry, so a
+       read-only view and an editable one are the same picture. */
+    denseSVG:function(arr){ var n=arr.length, lo=1e9, hi=-1e9, i;
+      for(i=0;i<n;i++){ if(arr[i]<lo)lo=arr[i]; if(arr[i]>hi)hi=arr[i]; }
+      var sp=(hi-lo)>1e-6?(hi-lo):1, d='';
+      for(i=0;i<n;i++) d+=(i?'L':'M')+fx(i/(n-1)).toFixed(1)+' '+fy((arr[i]-lo)/sp*0.92+0.04).toFixed(1)+' ';
+      return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()+haloP(d)+'<path class="mv-stroke crv-ink" d="'+d+'"/></svg>'; },
+    repaint:function(){ try{ if(card&&card.classList.contains('open'))paint(); }catch(e){} } };
 
   /* card-only window: ADAPTIVE fallback self-poll. fb343 — the primary feed RIDES THE 60Hz C++
      timer push (the fb232 LFO-card grammar, PluginEditor timerCallback → __crvLiveTick), which
@@ -35271,7 +35532,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;height:31px;padding:0 9px;border-bottom:1px solid rgba(255,255,255,0.07);flex:none;';
       // LEFT — Import button replaces the old "Noise Library" title (Max's call)
       var impBtn = document.createElement ('div');
-      if (cfg.onImport) { impBtn.innerHTML = cfg.importLabel || '＋ Import';
+      // fb558 — importIcon:true moves this action OUT of the left title slot and into the ✕'s
+      // cluster on the right, as the shared emblem at the ✕'s exact size. `onImport` stays set
+      // either way, so PANEL_H and the search row's placement are untouched to the pixel — the
+      // header keeps its two-row shape, only the button's form and seat change.
+      if (cfg.onImport && cfg.importIcon) { impBtn = null; }
+      else if (cfg.onImport) { impBtn.innerHTML = cfg.importLabel || '＋ Import';
         // fb394 — flex:none + nowrap make "does not move" STRUCTURAL: whatever else lands in this row,
         // the import label can never be shrunk, wrapped or ellipsed by it. (fb389's search sat here and
         // crowded it — Max: "import wavetables, import noise, all that shit looks clobbered.")
@@ -35279,7 +35545,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         impBtn.onmouseenter = function () { impBtn.style.color = WHITE; };
         impBtn.onmouseleave = function () { impBtn.style.color = 'rgba(255,255,255,.62)'; };
         impBtn.onclick = function () { try { cfg.onImport (); } catch (e) {} close (); }; }
-      head.appendChild (impBtn);
+      head.appendChild (impBtn || document.createElement ('span'));
       // RIGHT — [headphone preview TOGGLE] [X close], BOTH no-box, on the same baseline as Import (Max: no box on
       // the headphone either; move it left to make room for an X so there's a way out of the menu).
       var right = document.createElement ('div'); right.style.cssText = 'flex:none;display:flex;align-items:center;gap:11px;';
@@ -35305,6 +35571,15 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         hp.onmouseleave = function () { paintHp (); };
         hp.onclick = function () { window.__tpbPreviewOn = ! prevOn (); paintHp (); if (prevOn ()) { try { cfg.onAudition (); } catch (e) {} } };   // toggle; turning ON auditions the current selection once
         right.appendChild (hp); }
+      // fb558 — THE EXTEND EMBLEM, immediately left of the ✕ and built to the ✕'s spec.
+      if (cfg.onImport && cfg.importIcon) {
+        var eb = document.createElement ('div'); eb.title = cfg.importTitle || 'Extend — open this mode\u2019s card';
+        eb.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;color:rgba(255,255,255,.5);';
+        eb.innerHTML = window.__extGlyph ? window.__extGlyph (13) : '\u2921';
+        eb.onmouseenter = function () { eb.style.color = WHITE; };
+        eb.onmouseleave = function () { eb.style.color = 'rgba(255,255,255,.5)'; };
+        eb.onclick = function () { try { cfg.onImport (); } catch (e) {} close (); };
+        right.appendChild (eb); }
       var xb = document.createElement ('div'); xb.title = 'Close';   // explicit way out (Max) — one click closes
       xb.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;color:rgba(255,255,255,.5);';
       xb.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>';
@@ -35637,7 +35912,23 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var n = document.getElementById ('noise-next'), nm = document.getElementById ('noise-name'), pw = document.getElementById ('noise-pow');
       p.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); step (-1); });
       n.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); step (1); });
-      nm.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); noiseBrowserOpen (e); });
+      /* fb558 — THE NAME IS TWO GESTURES, AND MOUSEDOWN COULD ONLY EVER BE ONE OF THEM.
+         fb552 made this label a mod-source grip (data-drag-follow="5"), but the browser still
+         opened on MOUSEDOWN — so the menu was already up before the hand had moved a pixel, and
+         every attempt to drag the noise onto a knob fought a 384px panel that had just landed
+         under the cursor. Max: "every time I try to click and hold it and click and drag it it
+         just opens up the noise menu."
+         THE DECISION BELONGS TO MOUSEUP, and it uses the SAME 5px threshold the drag grip uses
+         (document pointerdown handler, ~line 30958) — one threshold, so the two gestures can
+         never both fire and can never both miss. Under 5px it was a click: open the browser,
+         anchored where you PRESSED. At or over: that was a drag, and the grip already has it.
+         Listening on document (capture) means letting go anywhere still resolves the gesture. */
+      nm.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation ();
+        var sx = e.clientX, sy = e.clientY;
+        var up = function (ev) { document.removeEventListener ('mouseup', up, true);
+          if (Math.abs (ev.clientX - sx) + Math.abs (ev.clientY - sy) >= 5) return;   // that was a DRAG — the grip owns it
+          noiseBrowserOpen (e); };
+        document.addEventListener ('mouseup', up, true); });
       pw.addEventListener ('mousedown', function (e) { if (e.button !== 0) return; e.preventDefault (); e.stopPropagation (); toggleOn (); });
       var kEls = document.querySelectorAll ('#noise-mod .noise-knobs .knob');
       Array.prototype.forEach.call (kEls, function (k, idx) { if (k._nw || ! KN[idx]) return; k._nw = true; wireKnob (k, KN[idx]); });

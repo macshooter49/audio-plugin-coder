@@ -1522,8 +1522,31 @@ namespace tw
          *  `var` is the per-slot VAR knob (SYN_OSC_x_WVAR / _W2VAR), default 0 = the exact
          *  expressions that shipped. Defaulted so the waterfall call site in
          *  PluginProcessor.cpp (getOscWavetableJson, 745-762) still compiles untouched. */
-        static float applyAmpWarp (int mode, float amount, float s, float var = 0.0f) noexcept
+        static float applyAmpWarp (int mode, float amount, float s, float var = 0.0f,
+                                   const DrawCurve* draw = nullptr) noexcept
         {
+            /* fb559 — MODE 38 `Draw Amp`. Mode 37 `Draw` is a PHASE map, so "capture this warp
+               mode's shape and edit it" only ever worked for the eight phase-domain modes — on
+               Rectify or Sine Fold there was nothing to capture INTO, and the curve card could
+               only show you the shape and not let you own it (Max: "every new warp mode I open,
+               it shows us the exact shape and all we get to do is edit and customize and create
+               our own custom warp mode").
+                 38 is that mode for the amp domain, and it costs no new storage: it reads the
+               SAME per-slot drawn table 37 does (drawTable_[osc*2+slot]) — the MODE decides
+               whether those 129 points mean "where in the cycle to read" or "what to do to the
+               sample". Input -1..1 maps to the curve's x; the curve's 0..1 y maps back to -1..1.
+               Crossfaded from the identity by amount, so amount 0 is bit-exact dry (s + 0*(c-s)
+               == s in IEEE-754) and the fb462 floor gate holds with no special case. */
+            if (mode == 38)
+            {
+                if (draw == nullptr) return s;
+                const float x  = juce::jlimit (0.0f, 1.0f, s * 0.5f + 0.5f) * (float) (kDrawPts - 1);
+                const int   i0 = juce::jlimit (0, kDrawPts - 1, (int) x);
+                const int   i1 = juce::jlimit (0, kDrawPts - 1, i0 + 1);
+                const float f  = x - (float) i0;
+                const float c  = (draw->pts[i0] + (draw->pts[i1] - draw->pts[i0]) * f) * 2.0f - 1.0f;
+                return s + amount * (c - s);
+            }
             // 🔑 THE GATE. Modes 0-8 are NONE + the eight phase-domain warps, i.e. every patch
             // that selects no shaper — which is every patch that exists today. ONE compare and
             // they are out, before any of the shaper family is even considered. This is also
@@ -1676,6 +1699,13 @@ namespace tw
                     return false;   // 🚨 WARP FILTER. Falling into `default: return true` below
                                     // would arm the 38 Hz DC blocker on top of a LOW-PASS and
                                     // quietly high-pass it — the fb470 trap, exactly.
+                case 38:
+                    return true;    // fb559 — DRAW AMP. An arbitrary drawn transfer curve is the
+                                    // ONE amp mode that can make DC at any var, so `true` is the
+                                    // right answer — but it is written out rather than left to
+                                    // fall into `default`, because fb470's law is that a new enum
+                                    // value must never inherit an old branch by accident, even
+                                    // when the branch happens to be correct.
                 default: return true;                           // 9, 17, 19, 21, 27, 28, 30, 31 + anything new
             }
         }
@@ -4030,8 +4060,8 @@ namespace tw
                                     double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA); sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
                                     sAu *= window;
 
-                                    sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0]);   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
-                                    sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0]);   // WARP 2 amp-domain, chained
+                                    sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0], drawFor (0, 0));   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
+                                    sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -4119,7 +4149,7 @@ namespace tw
                                         ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
                                 sAu *= fmWin;
-                                sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0]);
+                                sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));
                             }
                             if (alg == 2)
                                 sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
@@ -4373,8 +4403,8 @@ namespace tw
                                     double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB); sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
                                     sBu *= window;
 
-                                    sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1]);   // slot 1 amp-domain
-                                    sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1]);   // WARP 2 amp-domain, chained
+                                    sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1], drawFor (1, 0));   // slot 1 amp-domain
+                                    sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -4447,7 +4477,7 @@ namespace tw
                                         ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sBu *= fmWin;
-                                sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1]);
+                                sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));
                             }
                             if (alg == 2)
                                 sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
@@ -4688,8 +4718,8 @@ namespace tw
                                     double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC); sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
                                     sCu *= window;
 
-                                    sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2]);   // slot 1 amp-domain
-                                    sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2]);   // WARP 2 amp-domain, chained
+                                    sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2], drawFor (2, 0));   // slot 1 amp-domain
+                                    sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -4762,7 +4792,7 @@ namespace tw
                                         ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sCu *= fmWin;
-                                sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2]);
+                                sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));
                             }
                             if (alg == 2)
                                 sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
@@ -5003,8 +5033,8 @@ namespace tw
                                     double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD); sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
                                     sDu *= window;
 
-                                    sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3]);   // slot 1 amp-domain
-                                    sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3]);   // WARP 2 amp-domain, chained
+                                    sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3], drawFor (3, 0));   // slot 1 amp-domain
+                                    sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -5077,7 +5107,7 @@ namespace tw
                                         ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sDu *= fmWin;
-                                sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3]);
+                                sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));
                             }
                             if (alg == 2)
                                 sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
