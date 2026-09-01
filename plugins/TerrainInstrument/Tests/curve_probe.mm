@@ -127,6 +127,13 @@ static double dist (std::vector<double>& A, std::vector<double>& B) {   // relat
 
 int main (int argc, char** argv) {
   @autoreleasepool {
+    /* ⚠️ LINE-BUFFER FIRST. This harness tears down a JUCE plugin inside a raw AU host, and JUCE's
+       Timer thread can outlive the MessageManager on exit (EXC_BAD_ACCESS in
+       MessageQueue::post -> pthread_mutex_lock on 0x0). That crash happens AFTER the measurements
+       are printed — but with block-buffered stdout the whole report dies in the buffer and the run
+       looks like it produced nothing at all, which reads as "the editor crashes" when it does not.
+       Buffer by line and every measured number survives the exit. */
+    setvbuf (stdout, nullptr, _IOLBF, 0);
     [NSApplication sharedApplication];
     [NSApp setActivationPolicy: NSApplicationActivationPolicyRegular];
     [NSApp finishLaunching]; [NSApp activateIgnoringOtherApps: YES];
@@ -188,7 +195,7 @@ int main (int argc, char** argv) {
       v = nil; pumpMs (600);
       return out ? std::string (out.UTF8String) : std::string(); };
 
-    if (actPath) printf ("  gesture: %s", runHook (actPath, 2500.0).c_str());
+    if (actPath) printf ("  gesture: %s", runHook (actPath, getenv ("CP_SETTLE") ? atof (getenv ("CP_SETTLE")) : 2500.0).c_str());
     if (const char* rp = getenv ("CP_REPORT")) printf ("  report : %s", runHook (rp, 300.0).c_str());
 
     for (int i = 0; i < 40; ++i) CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.02, false);

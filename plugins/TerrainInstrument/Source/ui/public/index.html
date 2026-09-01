@@ -17140,6 +17140,7 @@ setTimeout(function wireSynControls () {
                         var wd = document.getElementById ('osc-' + osc + '-preset-display'); if (wd) wd.textContent = wnm;
                         var wsn = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('setWavetableName') : null; if (wsn) wsn (osc, wnm);
                         if (window.wtWaterfall) { window.wtWaterfall.imported[osc] = true; if (! window.wtWaterfall.importName) window.wtWaterfall.importName = {}; window.wtWaterfall.importName[osc] = wnm; window.wtWaterfall.fetch (osc); }
+                        try { window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = null; } catch (e9) {}   /* fb560 — a DROP knows no registry path */
                       } catch (_) {} }); } catch (_) {} });
               return;
             }
@@ -19559,7 +19560,12 @@ setTimeout(function wireSynControls () {
       // menu". Offered only when a mode is actually selected — None has no curve to open.
       var xm = /SYN_OSC_([A-D])_WARP(2?)_MODE/.exec (String (modeParamId || ''));
       var xCfg = {};
-      if (xm && curIdx > 0 && window.__openWarpExt) {
+      /* fb560 — `curIdx > 0` was evaluated ONCE, when the picker opened. The browser commits a
+         mode on a SINGLE click and keeps the panel open (only a double-click closes it), so opening
+         the picker while the slot was None and then clicking PWM left you looking at a header with
+         no Extend emblem in it — the exact "I put it on there and then it gets in the way of our
+         menu" confusion. The emblem is always there now; picking None and pressing it says so. */
+      if (xm && window.__openWarpExt) {
         var xOsc = xm[1].toLowerCase(), xSlot = xm[2] ? 1 : 0;
         xCfg.importIcon = true;   /* fb558 — the emblem, seated next to the ✕ */
         xCfg.importTitle = 'Extend — open this warp mode\u2019s curve card';
@@ -19878,6 +19884,13 @@ setTimeout(function wireSynControls () {
           return Math.max (0, Math.min (1, v)); });
         var pts = U.fit (raw), captured = (mode === 37 || mode === 38);
         function modeName () { return (window.WARP_MODES && window.WARP_MODES[mode]) || 'Warp'; }
+        /* fb560 — THE HEADER MUST NOT RENAME ITSELF UNDER YOUR HAND. Capturing flips the slot's
+           mode param to 37/38, so a title read live off `mode` turned "PWM · OSC A · WARP 1" into
+           "Draw · OSC A · WARP 1" the instant you moved a point — the card stopped naming the
+           thing you opened, mid-edit. Max: "the warp mode that I'm using, I should see the exact
+           shape, the exact name reflect." The panel's own pill still shows Draw, which is the
+           truth about the PARAMETER; this names the CURVE, which is what you are editing. */
+        var openedAs = modeName();
         function writeMode (idx) {
           var card = 0; try { card = window.__paramCardinality ? window.__paramCardinality (pMode) : 0; } catch (e) {}
           if (! card || card < 2) return false;   // fb373's law: never normalise on a LIST length — no cardinality, no write
@@ -19887,10 +19900,10 @@ setTimeout(function wireSynControls () {
           pts:function(){ return pts; },
           setPts:function(p){ pts = p; },
           setSrc:function(n){ host._src = n; },
-          chip:function(){ return host._src ? ('from ' + host._src) : (captured ? '' : ('from ' + modeName())); },
+          chip:function(){ return ''; },   /* fb560 — no chip on any host; the title names the curve */
           odd:function(){ return false; },
           drawn:function(){ return true; },
-          title:function(){ return modeName() + '  \u00b7  OSC ' + O + '  \u00b7  WARP ' + (slot + 1) + '  \u2014  Curve'; },
+          title:function(){ return openedAs + '  \u00b7  OSC ' + O + '  \u00b7  WARP ' + (slot + 1) + '  \u2014  Curve'; },   /* fb560 */
           foot:function(){ return '<span class="qt" data-act="wamt" title="Drag — Amount: how far this curve bends the sound away from dry">amount ' + Math.round (amt * 100) + '</span><span class="crv-ro">\u00b7</span>'; },
           footDrag:function (act, t, e) {
             if (act !== 'wamt') return; e.preventDefault();
@@ -19921,6 +19934,34 @@ setTimeout(function wireSynControls () {
             try { var f = window.Juce.getNativeFunction ('setWarpDrawCurve');
                   if (f) f (osc, slot, tbl.map (function (v) { return v.toFixed (4); }).join (',')); } catch (e) {} } };
         window.__crvOpen (host, (ev && ev.target) ? ev.target : null);
+
+        /* fb560 — THE CARD WAS A ONE-SHOT SNAPSHOT. It fetched once and never looked again, so
+           changing the warp mode with the card open left it showing — and naming — the mode you
+           had before, forever. Follow the slot while the curve is still THEIRS and not yours:
+           the moment you touch a point (captured) the ink is the truth and the poll stands down,
+           and it also stands down for 600 ms after any edit so the poll can never fight the hand
+           (the fb546 law). Stops itself when the card closes or another host takes it. */
+        var wPoll = setInterval (function () { try {
+          var st = window.__crvOpenState ? window.__crvOpenState() : null;
+          if (! st || st.err || ! st.open || st.key !== 'warp') { clearInterval (wPoll); return; }
+          if (captured) return;
+          if (Date.now() - (window.__crvTouchT || 0) < 600) return;
+          f (osc, slot | 0).then (function (txt) { try {
+            var d2 = null; try { d2 = JSON.parse (txt); } catch (e) {}
+            if (! d2 || ! d2.pts || ! d2.pts.length || (d2.mode | 0) === mode) return;
+            if (captured || (Date.now() - (window.__crvTouchT || 0) < 600)) return;
+            mode = d2.mode | 0; openedAs = modeName();
+            dom = (d2.kind === 'amp') ? 'amp' : (d2.kind === 'draw' ? (d2.dom || 'phase') : 'phase');
+            amt = +d2.amt || 0; vr = +d2.var || 0;
+            captured = (mode === 37 || mode === 38);
+            var n2 = d2.pts.length;
+            var raw2 = d2.pts.map (function (v, i) {
+              if (d2.kind === 'amp')   return Math.max (0, Math.min (1, (v + 1) / 2));
+              if (d2.kind === 'phase') return (v < 0) ? (i / (n2 - 1)) : Math.max (0, Math.min (1, v));
+              return Math.max (0, Math.min (1, v)); });
+            pts = U.fit (raw2); U.repaint();
+          } catch (e2) {} }).catch (function () {});
+        } catch (e) { clearInterval (wPoll); } }, 300);
       }
 
       /* the door: ask C++ what this slot IS, then send it to the instrument that fits it. */
@@ -19931,9 +19972,19 @@ setTimeout(function wireSynControls () {
         var ev2 = { clientX: (ev && ev.clientX) || 60, clientY: (ev && ev.clientY) || 60, target: ev && ev.target };
         f (osc, slot | 0).then (function (txt) {
           var d = null; try { d = JSON.parse (txt); } catch (e) {}
-          if (! d || ! d.pts || ! d.pts.length || d.kind === 'filter') { openFilterExt (osc, slot, ev2); return; }
+          /* fb560 — ONLY A FILTER MODE GETS THE FILTER CARD. This used to fall through to it on
+             FIVE different failures (no natives, bad JSON, kind:"none" from mode 0, a rejected
+             promise, and the real filter case), and openFilterExt opens a SECOND, different card
+             that neither closes nor touches the curve card — so a failed Extend left whatever was
+             already on screen standing, with a small extra panel beside it. Max: "it almost opens
+             up two menus." A failure now says it failed. */
+          if (d && d.kind === 'filter') { openFilterExt (osc, slot, ev2); return; }
+          if (! d || ! d.pts || ! d.pts.length) {
+            if (window.__crvToast) window.__crvToast (d && d.kind === 'none' ? 'No warp mode selected'
+                                                                            : 'Could not read this warp mode\u2019s curve');
+            return; }
           openWarpCurve (osc, slot | 0, d, ev2);
-        }).catch (function () { openFilterExt (osc, slot, ev2); });
+        }).catch (function () { if (window.__crvToast) window.__crvToast ('Could not read this warp mode\u2019s curve'); });
       };
       window.__openWarpFilterExt = openFilterExt;
       window.__warpExtOpen = function () { return !! (el && el.classList.contains ('open')); };
@@ -30644,7 +30695,7 @@ restoreThemeFromBackend();
     /* fb554 — the curve grip sits between the label and the cross. Dim until a curve exists,
        then white, so a curved connection reads as curved without opening it. The editor is the
        same glass as the list it comes from (Max: match the existing UI, never invent). */
-    '.sm-routes .rc{color:rgba(255,255,255,0.30);cursor:pointer;padding:0 2px;font-size:13px;line-height:1;}'+
+    '.sm-routes .rc{color:rgba(255,255,255,0.30);cursor:pointer;padding:0 2px;display:inline-flex;align-items:center;}'+   /* fb560 — the emblem is an SVG now; the font-size that sized a text glyph is gone */
     '.sm-routes .rc:hover{color:#fff;}'+
     '.sm-routes .rc.on{color:rgba(255,255,255,0.92);}';   /* fb559 — .sm-curve retired: the connection curve is a HOST on the house editor now, and wears its chrome */
   document.head.appendChild(st);
@@ -31202,7 +31253,7 @@ restoreThemeFromBackend();
       pts:function(){ return pts; },
       setPts:function(p){ pts=p; },
       setSrc:function(n){ host._src=n; },
-      chip:function(){ return host._src?('from '+host._src):''; },
+      chip:function(){ return ''; },   /* fb560 — no chip on any host; the title names the curve */
       odd:function(){ return false; },
       drawn:function(){ return true; },
       title:function(){ return srcName(a)+'  \u2014  Curve'; },
@@ -31240,10 +31291,14 @@ restoreThemeFromBackend();
       try{ return elForDest(a.dest)===el; }catch(e){ return false; } });
     if(!list.length)return;
     ev.preventDefault(); ev.stopPropagation();
-    var rows=list.map(function(a){ return { label:'Curve  \u00B7  '+srcName(a), white:!!a.curve,
+    /* fb560 — ONE ROW PER CONNECTION, wearing the emblem. It used to be two rows each — "Curve ·
+       X" and, once curved, "Straighten · X" — so a knob with two modulators opened a four-row menu
+       on top of whatever menu that knob already had. Max: "it almost opens up two menus and the
+       right-click 'edit shape or curve' gets in the way of everything."  Straighten lives INSIDE
+       the editor's footer now (fb559), which is also where you can see what you are straightening,
+       so the second row was duplicating a control that had already moved. */
+    var rows=list.map(function(a){ return { label:srcName(a)+'  \u00B7  Curve', white:!!a.curve, icon:true,
       onPick:function(){ openCurveEditor(a,el); } }; });
-    list.forEach(function(a){ if(a.curve) rows.push({ label:'Straighten  \u00B7  '+srcName(a),
-      onPick:function(){ a.curve=null; push(); markTargets(); } }); });
     try{ if(window.__synShowMenu) window.__synShowMenu('',rows,ev.clientX,ev.clientY); }catch(e){}
   },true);
 
@@ -31257,8 +31312,16 @@ restoreThemeFromBackend();
       x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
       /* fb554 — EDIT CURVE. The connection is a straight multiply until you draw something here;
          the glyph fills in once a curve exists, so a curved route is visible without opening it. */
-      var cv=document.createElement('span'); cv.className='rc'+(a.curve?' on':''); cv.textContent='\u223F';
-      cv.title='Edit curve — reshape what this modulator does on its way to the knob. Double-click inside to go back to a straight line.';
+      /* fb560 — THE SAME EMBLEM, EVERYWHERE. This was a bare ∿ (U+223F) at 13px sitting next to a
+         ✕ that inherits the list's 10px — a different medium, a different shape and half again
+         the height of the cross beside it. Max: "the extension button looks way different than our
+         real extension, but you already made an extension button next to our X... that should be
+         the extension button." It is window.__extGlyph now, at 11px so it matches the ✕ in this
+         row exactly, and it strokes with currentColor so the dim / hover / lit-when-curved rules
+         below keep working untouched. */
+      var cv=document.createElement('span'); cv.className='rc'+(a.curve?' on':'');
+      cv.innerHTML=(window.__extGlyph?window.__extGlyph(11):'\u2921');
+      cv.title='Extend — open this connection\u2019s curve. Reshape what this modulator does on its way to the knob.';
       cv.addEventListener('click',function(ev){ ev.stopPropagation(); openCurveEditor(a,row); });
       row.appendChild(lab); row.appendChild(cv); row.appendChild(x); rtMenu.appendChild(row); rtMenu.__rows.push({a:a,lab:lab,cv:cv}); });
     document.body.appendChild(rtMenu);
@@ -31320,6 +31383,64 @@ restoreThemeFromBackend();
      #syn-panel is inside the .ti-preboot sweep (display:none) — the gate would answer "off" and
      kill the loop a second time. The card IS the window: it is always on, and it carries at most
      ~13 destinations, so there is nothing to save by asking. */
+  /* ═══ fb560 — THE MODULATION MARKS PAINT UNDER EVERY MENU ═══════════════════════════════════
+     Max: "the streaks and the lines under the parameter, that purple streak — it overlays on top
+     of the menu. Whenever we open up another menu it overlays on top of it, which looks very bad.
+     It needs to be UNDER."
+
+     WHY Z-INDEX CANNOT FIX THIS, measured in the page: `#syn-panel` is `position:absolute;
+     z-index:30`, so it is a STACKING CONTEXT — every menu inside it is sealed into z=30 relative
+     to <body> no matter what its own z-index says (the house context menu computes 2147483646 and
+     still loses). `.sm-ul` is `position:fixed` on <body> at 2147483644, i.e. a sibling of the whole
+     panel. elementFromPoint at a shared pixel returned the mark's own <i>. Raising the menu cannot
+     work; moving the menu out of the panel would break its clamp, its zoom math and its hit tests.
+
+     SO THE MARK STANDS DOWN INSTEAD, and only where it is actually covered: a mark is hidden iff
+     its 7px strip INTERSECTS an open overlay. Precise, not global — a mark on the far side of the
+     panel keeps showing while a small menu is open, which is what you want while patching.
+
+     THE SELECTOR LIST IS FORGIVING BY DESIGN: closed menus are display:none, so their rect is
+     0x0 and the size filter drops them. That means the BARE class is enough — no ".open" to keep
+     in sync, and a menu that changes how it hides still works. Adding a new overlay = one word.
+     ⚠️ AND IT MUST NOT UNDO fb524: a mark that belongs to a CARD cell is deliberately raised above
+     that card (z 646) so it can be seen and dragged. Its OWN card is therefore excluded here. */
+  var UL_OVER='.syn-ctx-menu,.samp-menu,.mv-menu,.rand-menu,.rand-menu-backdrop,.reso-menu,.pmenu,'
+             +'.tpb-panel,.ti-card,.mv-ext,.warp-ext,.filt-ext,.eq-ctx-menu,.preset-ctx-menu,'
+             +'#context-menu,#mod-ctx-menu,.tag-picker,.delete-confirm,.preset-overlay,'
+             +'#settings-panel,.rr-pop,.delay-mod-popover';
+  /* AND A NET FOR THE ONE NOBODY REMEMBERS TO ADD: an overlay in this file is either one of the
+     classes above or a <body> child that sets a huge z-index in its OWN inline style at open time
+     (the two-pane browser, the cascading menus, the ghost cards). Reading `style.zIndex` is a plain
+     property read — no getComputedStyle, no layout — and <body> has a handful of children, so this
+     costs nothing and means a menu added next month is covered without touching this list. */
+  /* ⚠️ A BOX IS NOT A PICTURE. The size filter alone was WRONG and would have deleted marks in
+     the shipping plugin: measured at idle, with no menu open anywhere, `#mod-ctx-menu` is
+     display:block, opacity:0, pointer-events:none at [9,8,220,273] — a full-size invisible box
+     parked over the top-left of the panel. Every mark under it would have gone dark forever, and
+     the bug would have read as "the underlines stopped working". So a candidate only counts if it
+     is actually PAINTING. getComputedStyle is only ever called on the handful that already passed
+     the cheap rect test (one element at idle), so this costs nothing per frame. */
+  function overlayBoxes(){ var out=[], seenEl=[];
+    function add(e){ if(seenEl.indexOf(e)>=0)return; var r=e.getBoundingClientRect();
+      if(!(r.width>2&&r.height>2)) return;
+      try{ var c=getComputedStyle(e);
+        if(c.visibility==='hidden'||c.display==='none'||(+c.opacity)<0.01) return; }catch(x){}
+      seenEl.push(e); out.push({r:r,el:e}); }
+    try{ var ns=document.querySelectorAll(UL_OVER); for(var i=0;i<ns.length;i++) add(ns[i]); }catch(e){}
+    try{ var kids=document.body.children;
+      for(var k=0;k<kids.length;k++){ var el=kids[k], z=el.style&&el.style.zIndex;
+        if(!z||(+z)<2147480000) continue;
+        if(el.classList&&(el.classList.contains('sm-ul')||el.classList.contains('sm-routes')
+           ||el.classList.contains('sm-att')||el.classList.contains('sm-ghost')
+           ||el.classList.contains('mv-toast'))) continue;   /* the marks' own furniture never hides them */
+        add(el); } }catch(e2){}
+    return out; }
+  function coveredBy(L,T,R,B,boxes,ownCard){
+    for(var i=0;i<boxes.length;i++){ var o=boxes[i];
+      if(ownCard&&(o.el===ownCard||o.el.contains(ownCard)||ownCard.contains(o.el))) continue;   /* fb524 — never hide a card cell's own mark */
+      if(L<o.r.right&&R>o.r.left&&T<o.r.bottom&&B>o.r.top) return true; }
+    return false; }
+
   function loop(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
     var on = window.__cardOnly ? true
@@ -31334,7 +31455,7 @@ restoreThemeFromBackend();
     // fb182 S3 — underlines: one bar per modulated element; purple = the selected
     // modulator's route lives here, dim = someone else's. Repaints every frame, so
     // switching envelopes/LFOs flips the map instantly (Max's signification).
-    var seen=new Map(), sm=window.__selMod||{};
+    var seen=new Map(), sm=window.__selMod||{}, __ov=null;   /* fb560 — the overlay boxes, collected lazily: no marks, no query */
     assigns.forEach(function(a){ var el=curEl(a); if(!el)return;
       var m=seen.get(el); if(!m){ m={sel:false}; seen.set(el,m); }
       if((a.env&&sm.env===a.env)||(a.lfo&&sm.lfo===a.lfo)||(a.vel&&sm.vel)||(a.fol&&sm.fol===a.fol)||(a.note&&sm.note)) m.sel=true; });   /* fb262 — velocity route glows purple when Velocity is the selected source */
@@ -31399,6 +31520,12 @@ restoreThemeFromBackend();
          list cannot be summoned from a pixel the knob does not own. */
       var cw=clipRectOf(el);
       if(cw&&(r2.right<=cw.left||r2.left>=cw.right||r2.bottom<=cw.top||r2.top>=cw.bottom)){ u.style.display='none'; return; }
+      /* fb560 — covered? then down. Both rects are SCREEN px (getBoundingClientRect), so they are
+         directly comparable; the strip is the word's width by 7px starting one px above its baseline
+         box, which is exactly what .sm-ul occupies. */
+      if(__ov===null) __ov=overlayBoxes();
+      if(__ov.length && coveredBy(r2.left, r2.bottom-1, r2.right, r2.bottom+6, __ov,
+                                  (el.closest?el.closest('.ti-card'):null))){ u.style.display='none'; return; }
       u.style.display='block';
       /* fb453 — LP(): the rect is SCREEN px, a style length is re-multiplied by fb175's
          self-heal zoom when it is armed. The underline must sit on the word on that path too. */
@@ -31432,6 +31559,16 @@ restoreThemeFromBackend();
     ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
     }
   window.__tiFrameReg('sm-ul', loop);
+  /* fb560 — HEADLESS GATE HOOKS (the __tiRoutes / __fltTick idiom). This loop is rAF-driven, and
+     BOTH of this project's probes run in windows that are never composited — the offscreen AU
+     editor and headless Chrome — so rAF is throttled or suspended and the marks never paint. That
+     is the fb548 UI-probe law, and it made the one thing worth gating here untestable. __ulTick()
+     runs exactly one iteration of the shipped loop on demand; __ulOverlays() reports what the
+     stand-down currently considers to be covering the panel. Neither is a re-implementation. */
+  window.__ulTick=function(){ try{ loop((window.performance&&performance.now)?performance.now():0); return document.querySelectorAll('.sm-ul').length; }catch(e){ return -1; } };
+  window.__ulOverlays=function(){ try{ return overlayBoxes().map(function(o){
+    return { cls:(o.el.id?('#'+o.el.id):(String(o.el.className||o.el.tagName).split(' ')[0])),
+             r:[o.r.left|0,o.r.top|0,o.r.width|0,o.r.height|0] }; }); }catch(e){ return null; } };
 
   // ── restore persisted matrix into the UI (so reload shows the badges, not a clobber) ──
   function elForDest(dest){
@@ -33639,6 +33776,16 @@ restoreThemeFromBackend();
   function pill2On(){ try{ if(!pPill)pPill=PS('SYN_DST_PILL2',0); return pPill?pPill.getNormalisedValue()>0.5:false; }catch(e){ return false; } }
   function beyondV(){ try{ if(!pP7)pP7=PS('SYN_DST_P7',0.5); return pP7?Math.round(pP7.getNormalisedValue()*100):0; }catch(e){ return 0; } }
   function isShFam(){ return famOfI(typeIdx())==='SHAPER'; }
+  /* ⚠️ fb560 — THE PIN IS THE DISTORTION'S LAW, AND FOUR PLACES DID NOT KNOW THAT.
+     fb559 correctly gated ensureAnchor() on curHost().anchor, so a warp or mod curve never gets a
+     point FORCED onto its centre. But the four places that ASK "is this the anchor?" kept testing
+     the bare `|x-0.5|<1e-4 && !CV.unpin` — so on a guest host any fitted point that happened to
+     land on x=0.5 was drawn with the anchor ring, could not be dragged, and could not be deleted.
+     Max: "double clicking on the curve doesn't allow me to edit it... I should be able to have the
+     points already ready to edit." On a 129-sample fit, a point at exactly the middle is common.
+     One predicate now, used everywhere: on the Distortion it is byte-identical to what shipped. */
+  function isPinned(x){ return curHost().anchor && !CV.unpin && Math.abs(x-0.5)<1e-4; }
+
   function isOddDst(){ var ti=typeIdx(); return TYPES[ti]==='Shaper' || (famOfI(ti)==='SHAPER'&&pill2On()); }
 
   /* ═══ fb559 — THIS IS THE PLUGIN'S CURVE EDITOR NOW, NOT THE DISTORTION'S ═══════════════════
@@ -33691,14 +33838,24 @@ restoreThemeFromBackend();
     live:true,                              // the engine occupancy feed lights this host's line
     odd:isOddDst,
     oddToggle:function(){ toggleSym(); },
+    /* fb560 — REGRESSION REPAIR. fb559 generalised the hero's double-click to `curHost().capture()`
+       and then never gave the Distortion host a capture, so §6.6 Send To Shaper — double-click ANY
+       non-drawn distortion mode to turn its real curve into points you own — silently did nothing
+       from that gesture. The menu row still worked, which is why it survived a build and a gate.
+       ⚠️ IT STAYS A DELIBERATE GESTURE HERE, unlike the warp card where the first drag captures.
+       The difference is measured, not stylistic: capturing a warp mode is transparent (-31.6 dB
+       residual, fb559), while Send To Shaper CHANGES THE DISTORTION TYPE and forces Morph, Beyond
+       and Bias — an audible jump that must never come from a stray drag. */
+    capture:function(){ sendToShaper(); },
     drawn:function(){ var ty=TYPES[typeIdx()]; return isShFam()&&ty!=='Harmonics'&&ty!=='Table'; },
     title:function(){ return TYPES[typeIdx()]+' — Curve'; },
-    /* fb559 — the ✦ chip says what it MEANS now. It was a bare "Soft Clip" sitting next to a
-       title that said "Shaper Asym", which reads as a broken picker; Max: "I don't know why it
-       says soft clip. Why can't I change soft clip?" It is not a picker — it is provenance: you
-       double-clicked the curve while on Soft Clip, Send To Shaper sampled that mode's real
-       transfer curve into points, and this remembers where the ink came from. */
-    chip:function(){ return (CV.src&&isShFam())?('from '+CV.src):''; },
+    /* fb560 — THE ✦ CHIP IS GONE. fb559 relabelled it "from Soft Clip" to explain itself and it
+       still read as a second, broken title: Max, one arc later — "I don't know what the fuck that
+       means, I don't care if it's from soft clip, I'm literally editing the curve." Provenance is
+       a nicety; a header that can be misread as naming the wrong thing is a bug. The title alone
+       says what the curve IS, on every host. CV.src is still tracked and still persisted (the
+       seeds write it) — nothing is drawn from it. */
+    chip:function(){ return ''; },
     foot:function(){ return '<span class="qt" data-act="beyond" title="Drag — Beyond (Distortion back panel, P7)">beyond '+beyondV()+'</span><span class="crv-ro">\u00b7</span>'; },
     heroIdle:function(){ var ty=TYPES[typeIdx()]; return ty==='Harmonics'?harmSVG():liveSVG(); },
     footIdle:function(){ var ty=TYPES[typeIdx()];
@@ -33735,8 +33892,31 @@ restoreThemeFromBackend();
      forcing a point through their middle would be an editor inventing a constraint. */
   function ensureAnchor(g){ if(CV.unpin||!curHost().anchor)return g;   // §6.8-3 — f(0)=0 by default; Unpin = the deliberate Bias gesture
     var has=false; for(var i=0;i<g.length;i++) if(Math.abs(g[i][0]-0.5)<1e-4){ has=true; g[i][1]=0.5; }
-    if(!has){ g.push([0.5,0.5,0]); g.sort(function(a,b){return a[0]-b[0];}); }
+    if(!has){
+      /* ⚠️ fb560 — THE 33rd POINT IS NOT HARMLESS. This used to push unconditionally, so a 32-point
+         curve became 33 — and dstBakePts (PluginProcessor.cpp:13303) does `if (np >= 32) break;`
+         and then `pts[np-1].x = 1.0f`, which DRAGS the surviving 32nd point to the right edge. The
+         curve you hear stops being the curve you drew, silently. It was unreachable until now
+         because every 32-point producer sets CV.unpin first (Send To Shaper, Wavetable→Curve,
+         LFO→Curve); the freehand pen is the first caller that can arrive here full. At the cap,
+         MOVE the point already nearest the centre instead of adding one. */
+      if(g.length>=32){ var bi=-1,bd=1e9;
+        for(var k=1;k<g.length-1;k++){ var d=Math.abs(g[k][0]-0.5); if(d<bd){ bd=d; bi=k; } }
+        if(bi>0){ g[bi][0]=0.5; g[bi][1]=0.5; g.sort(function(a,b){return a[0]-b[0];}); return g; } }
+      g.push([0.5,0.5,0]); g.sort(function(a,b){return a[0]-b[0];}); }
     return g; }
+
+  /* dense 0..1 samples -> <=32 control points with exact tensions (the §6.1 midpoint fit). */
+  function fitDense(arr){ var N=arr.length, raw=[], i;
+    for(i=0;i<N;i++) raw.push([i/(N-1), Math.max(0,Math.min(1,arr[i]))]);
+    var simp=cRdp(raw,0.008); if(simp.length>32)simp=cRdp(raw,0.02); if(simp.length>32)simp=cRdp(raw,0.05);
+    if(simp.length>32)simp=simp.slice(0,32);
+    var p2=simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];});
+    for(i=0;i<p2.length-1;i++){ var a=p2[i],b=p2[i+1];
+      if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
+      var im=Math.round((a[0]+b[0])/2*(N-1)), ym=Math.max(0,Math.min(1,arr[im])), r=(ym-a[1])/(b[1]-a[1]);
+      a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
+    return p2; }
   function snapV(v,n){ return Math.round(v*n)/n; }
 
   /* ── transport — §6.5 cadence: 40 ms leading edge so consecutive fades butt together ── */
@@ -33793,7 +33973,7 @@ restoreThemeFromBackend();
       var yT=Math.min(1,q[1]+ay), yB2=Math.max(0,q[1]-ay);
       mdb+='<rect class="sh-modr" x="'+(cx-3).toFixed(1)+'" y="'+fy(yT).toFixed(1)+'" width="6" height="'+Math.max(2,(fy(yB2)-fy(yT))).toFixed(1)+'" rx="2"/>'; });
     vis.forEach(function(q){ var idx=p.indexOf(q),cx=fx(q[0]).toFixed(1),cy=fy(q[1]).toFixed(1);
-      var anc=(Math.abs(q[0]-0.5)<1e-4&&!CV.unpin&&idx!==0&&idx!==p.length-1);
+      var anc=(isPinned(q[0])&&idx!==0&&idx!==p.length-1);   /* fb560 */
       nd+='<circle class="sh-nd'+(sel===idx?' sel':'')+'" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="2.6"/>';
       if(anc) nd+='<circle class="crv-anc" cx="'+cx+'" cy="'+cy+'" r="5.2"/>';
       hd+='<circle class="sh-hit" data-i="'+idx+'" cx="'+cx+'" cy="'+cy+'" r="12"/>'; });
@@ -33979,6 +34159,50 @@ restoreThemeFromBackend();
     function mv(ev){ apply(ev); }
     function up(){ document.removeEventListener('pointermove',mv); document.removeEventListener('pointerup',up); cPush(); paint(); }
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); }
+  /* ═══ fb560 — THE FREEHAND PEN ══════════════════════════════════════════════════════════════
+     Max: "I wanna be able to draw shapes just like our Path on LFO — draw it freely and then it
+     turns into a real curve... either we draw it and it actually turns into a multi-point type of
+     curve, or quantize to the grid."
+
+     It draws into a DENSE 129-cell buffer in the field's own x domain — last write wins per column,
+     with a fast flick interpolated so a quick stroke leaves no holes — and then runs the SAME
+     fitter Send To Shaper uses (fitDense) to turn that stroke into <=32 tensioned control points.
+     So "draw freely" and "a real curve you can move around" are the same object from the first
+     frame: the handles appear under the pen, and cPush makes it audible while you are still
+     drawing it. Snap on = each grid column becomes a flat shelf, i.e. "quantize to the grid".
+
+     It starts from the curve that is ALREADY there, not from a blank field, so a stroke across one
+     corner edits only what it crosses — the same rule the brushes follow. And it inherits every
+     host law for free: odd symmetry mirrors the right half, the centre anchor stays pinned on the
+     Distortion, and the 32-point cap is the fitter's own. */
+  function freehandGesture(e){
+    sel=-1;
+    var h=curHost(), odd=isOdd(), anch=!!(h.anchor&&!CV.unpin), N=129, i;
+    var cells=new Array(N), p0=cPts();
+    for(i=0;i<N;i++) cells[i]=evalP(p0,i/(N-1));
+    var li=-1;
+    function put(ev){ var q=heroPos(ev);
+      if(odd&&q.x<0.5) return;                       // odd: the left half is generated ink, never drawn on
+      var y=CV.sn?snapV(q.y,CV.gh):q.y, j;
+      if(CV.sn){ var g=CV.gv, ci=Math.max(0,Math.min(g-1,Math.floor(q.x*g)));
+        var a0=Math.round(ci/g*(N-1)), b0=Math.min(N-1,Math.round((ci+1)/g*(N-1)));
+        for(j=a0;j<=b0;j++) cells[j]=y;              // a flat shelf per column = quantised to the grid
+        li=-1; return; }
+      var ix=Math.max(0,Math.min(N-1,Math.round(q.x*(N-1))));
+      if(li>=0&&Math.abs(ix-li)>1){ var lo=Math.min(li,ix), hi=Math.max(li,ix), ya=cells[li];
+        for(j=lo;j<=hi;j++){ var t=(j-lo)/(hi-lo); cells[j]=(ix>li)?(ya+(y-ya)*t):(y+(ya-y)*t); } }
+      else cells[ix]=y;
+      li=ix; }
+    function commit(){
+      if(odd) for(i=0;i<N;i++){ var m=N-1-i; if(i<m) cells[i]=1-cells[m]; }   // the right half rules (symm())
+      var g2=fitDense(cells);
+      if(anch&&g2.length>31) g2=g2.slice(0,31);      // leave room for the centre anchor (see ensureAnchor)
+      setPts(g2); ensureAnchor(cPts()); }
+    var pf=perFrame(function(ev){ put(ev); commit(); paintField(); cPush(); });
+    put(e); commit(); paintField(); cPush();
+    function up(){ document.removeEventListener('pointermove',pf); document.removeEventListener('pointerup',up); cPush(); paint(); }
+    document.addEventListener('pointermove',pf); document.addEventListener('pointerup',up); }
+
   function bindHero(){ if(!hero)return;
     var h=curHost(), drawn=h.drawn();
     hero.style.cursor=(drawn&&CV.tool)?'crosshair':'';
@@ -33996,7 +34220,7 @@ restoreThemeFromBackend();
           hitNd=t.classList&&t.classList.contains('sh-hit')&&!hitCd, ni=-1;
       if(hitCd||hitNd) ni=+t.getAttribute('data-i');
       if(hitCd){ if(p[ni]&&(p[ni][2]||0)!==0){ p[ni][2]=0; cPush(); paintField(); } return; }   // dbl-click a curve dot = straight
-      if(hitNd){ if(ni>0&&ni<p.length-1&&p.length>2&&!(Math.abs(p[ni][0]-0.5)<1e-4&&!CV.unpin)){ sel=-1; p.splice(ni,1); cPush(); paintField(); } return; }
+      if(hitNd){ if(ni>0&&ni<p.length-1&&p.length>2&&!isPinned(p[ni][0])){ sel=-1; p.splice(ni,1); cPush(); paintField(); } return; }   /* fb560 */
       if(p.length>=32)return;
       var q=heroPos(e), odd=isOdd(); if(odd&&q.x<0.5)return;
       var nx=CV.sn?snapV(q.x,CV.gv):q.x, ny=CV.sn?snapV(q.y,CV.gh):q.y;
@@ -34012,6 +34236,11 @@ restoreThemeFromBackend();
         var up0=function(){ window.removeEventListener('pointermove',pnt); window.removeEventListener('pointerup',up0); paint(); };
         window.addEventListener('pointermove',pnt); window.addEventListener('pointerup',up0); return; }
       if(!drawn)return;
+      /* ⚠️ fb560 — THIS LINE MUST STAY ABOVE THE BRUSH LINE. stampCellC's shape switch ends in an
+         unguarded `else` (the sine stamp), so a tool 7 that reached stampGesture would draw sine
+         cells: it builds, it draws something, and it looks deliberate. The only thing that keeps
+         the pen a pen is being dispatched first. */
+      if(CV.tool===7){ e.preventDefault(); freehandGesture(e); return; }
       if(CV.tool||e.shiftKey){ e.preventDefault(); stampGesture(e,CV.tool||1); return; }   // fb221 — Shift-drag = step-draw
       var p=cPts();
       var cd=e.target.closest&&e.target.closest('.sh-hit.cdh');
@@ -34026,7 +34255,7 @@ restoreThemeFromBackend();
       if(hit){ e.preventDefault();
         var i3=+hit.getAttribute('data-i'); sel=i3;
         var isEnd=(i3===0||i3===p.length-1);
-        var isAnc=(Math.abs(p[i3][0]-0.5)<1e-4&&!CV.unpin);
+        var isAnc=isPinned(p[i3][0]);   /* fb560 */
         var odd=isOdd();
         var mvP=perFrame(function(ev){ var q=heroPos(ev), pt=p[i3]; if(!pt)return;
           if(!isEnd&&!isAnc){
@@ -34080,6 +34309,7 @@ restoreThemeFromBackend();
   // native (the fb90 class that silently killed the osc clone in the popped window) now
   // SURFACES instead of dying as a mystery no-op.
   var crvTo=null,crvToT=0;
+  window.__crvToast=function(m){ crvToast(m); };   /* fb560 — the pop-out guards need to say why */
   function crvToast(m){ try{ if(!crvTo){ crvTo=document.createElement('div'); crvTo.className='mv-toast'; document.body.appendChild(crvTo); }
     crvTo.textContent=m; crvTo.style.opacity='1'; clearTimeout(crvToT); crvToT=setTimeout(function(){ crvTo.style.opacity='0'; },1400); }catch(e){} }
   // fb343/fb331 — a clone seed must BE the sound: Morph lands on the SEEDED (current) bank —
@@ -34199,7 +34429,7 @@ restoreThemeFromBackend();
       // this flattens the whole bank. Vertical steps (same x, two y's) SURVIVE — only true dups and
       // the middles of 3+ stacked points collapse. The pinned centre anchor keeps x=0.5 exactly.
       var p=cPts().slice(),i,out=[];
-      for(i=0;i<p.length;i++){ var anc=(Math.abs(p[i][0]-0.5)<1e-4&&!CV.unpin);
+      for(i=0;i<p.length;i++){ var anc=isPinned(p[i][0]);   /* fb560 */
         out.push([anc?0.5:snapV(p[i][0],CV.gv), anc?p[i][1]:snapV(p[i][1],CV.gh), p[i][2]||0]); }
       out.sort(function(a2,b2){return a2[0]-b2[0];});
       var ded=[]; for(i=0;i<out.length;i++){ var pr=ded[ded.length-1], pr2=ded[ded.length-2];
@@ -34214,6 +34444,7 @@ restoreThemeFromBackend();
     rows.push(tool('Point · edit',0)); rows.push(tool('Straight line',1));
     rows.push(tool('Ramp up',2)); rows.push(tool('Ramp down',3));
     rows.push(tool('Square',4)); rows.push(tool('Triangle',5)); rows.push(tool('Sine',6));
+    rows.push(tool('Freehand \u00b7 draw it',7));   /* fb560 — the only non-stamp tool, so it sits last */
     rows.push({isHeader:true,label:'Seeds'});
     Object.keys(SEEDS).forEach(function(k){ rows.push({label:k,white:true,onPick:function(){ CV.unpin=false; seedTo(SEEDS[k],k==='Unity'?'':k); }}); });
     rows.push({isHeader:true,label:'Wavetable → Curve'});
@@ -34353,21 +34584,36 @@ restoreThemeFromBackend();
   window.__crvPts=function(){ try{ return cPts().map(function(q){ return [q[0],q[1],q[2]||0]; }); }catch(e){ return null; } };
   window.__crvSetPts=function(arr){ try{ setPts(arr.map(function(q){ return [+q[0],+q[1],+(q[2]||0)]; }));
     ensureAnchor(cPts()); sel=-1; cPush(); paint(); return cPts().length; }catch(e){ return -1; } };
+  /* fb560 — drive the pen without a pointer: xy = [[x,y],...] in 0..1, the same put/commit path. */
+  window.__crvFreehand=function(xy){ try{
+    var h=curHost(), odd=isOdd(), anch=!!(h.anchor&&!CV.unpin), N=129, i;
+    var cells=new Array(N), p0=cPts();
+    for(i=0;i<N;i++) cells[i]=evalP(p0,i/(N-1));
+    var li=-1;
+    (xy||[]).forEach(function(q){
+      var x=Math.max(0,Math.min(1,+q[0])), y=Math.max(0,Math.min(1,+q[1])), j;
+      if(odd&&x<0.5) return;
+      if(CV.sn){ y=snapV(y,CV.gh); var g=CV.gv, ci=Math.max(0,Math.min(g-1,Math.floor(x*g)));
+        var a0=Math.round(ci/g*(N-1)), b0=Math.min(N-1,Math.round((ci+1)/g*(N-1)));
+        for(j=a0;j<=b0;j++) cells[j]=y; li=-1; return; }
+      var ix=Math.max(0,Math.min(N-1,Math.round(x*(N-1))));
+      if(li>=0&&Math.abs(ix-li)>1){ var lo=Math.min(li,ix), hi=Math.max(li,ix), ya=cells[li];
+        for(j=lo;j<=hi;j++){ var t=(j-lo)/(hi-lo); cells[j]=(ix>li)?(ya+(y-ya)*t):(y+(ya-y)*t); } }
+      else cells[ix]=y;
+      li=ix; });
+    if(odd) for(i=0;i<N;i++){ var m=N-1-i; if(i<m) cells[i]=1-cells[m]; }
+    var g2=fitDense(cells);
+    if(anch&&g2.length>31) g2=g2.slice(0,31);
+    setPts(g2); ensureAnchor(cPts()); sel=-1; cPush(); paint();
+    return cPts().length; }catch(e){ return -1; } };
+  window.__crvTool=function(t){ if(t!=null) CV.tool=t|0; paintField(); return CV.tool; };
   window.__crvOpenState=function(){ try{ return { key:curHost().key, open:!!(card&&card.classList.contains('open')),
     title:curHost().title(), pts:cPts().length, drawn:!!curHost().drawn() }; }catch(e){ return {err:String(e&&e.message||e)}; } };
   window.__crvUtil={
     /* dense table -> <=32 control points with exact tensions. The Send To Shaper fit (§6.1),
        lifted verbatim so a guest host gets the same quality of capture the Distortion gets. */
-    fit:function(arr){ var N=arr.length, raw=[], i;
-      for(i=0;i<N;i++) raw.push([i/(N-1), Math.max(0,Math.min(1,arr[i]))]);
-      var simp=cRdp(raw,0.008); if(simp.length>32)simp=cRdp(raw,0.02); if(simp.length>32)simp=cRdp(raw,0.05);
-      if(simp.length>32)simp=simp.slice(0,32);
-      var p2=simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];});
-      for(i=0;i<p2.length-1;i++){ var a=p2[i],b=p2[i+1];
-        if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
-        var im=Math.round((a[0]+b[0])/2*(N-1)), ym=Math.max(0,Math.min(1,arr[im])), r=(ym-a[1])/(b[1]-a[1]);
-        a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
-      return p2; },
+    fit:fitDense,   /* fb560 — lifted to a module function so the freehand pen can call the SAME
+                       fitter; a second copy here is how the three editors drifted apart before */
     /* control points -> dense table, through the SAME evaluator the ink is drawn with, so what
        you see and what the DSP runs cannot disagree (the fb333 authority law). */
     bake:function(pts,N){ var out=[],i; for(i=0;i<N;i++) out.push(evalP(pts,i/(N-1))); return out; },
@@ -34470,6 +34716,18 @@ restoreThemeFromBackend();
        mouseup. Returns true so the caller runs its up() cleanup; false (inside, no
        native fns, error) keeps the plain clamped drag — nothing changes in a browser. */
     window.__cardEdgeHandoff=function(id,card,ev,grabDX,grabDY){
+      /* fb560 — A GUEST CURVE CANNOT LEAVE THE WINDOW. Pop-out sends the C++ nothing but a
+         three-letter card id; the new window loads ?card=crv and its ONLY boot path is
+         __openCrvCard() -> openCrv(null) -> the DISTORTION host, refilled from getDistortionCurves.
+         So a popped-out WARP or MOD curve was never "reverting" — the new window never learned a
+         guest existed, and it showed the distortion's curve under the distortion's title. Max:
+         "when I bring it outside of the plugin or I pop it out, it goes back to being a regular
+         shape... I still see shaper asymmetric from soft clip."
+         Returning false is this function's own documented "stay docked" outcome, so the card keeps
+         following the cursor inside the window — the drag is not dead, it just cannot tear off. */
+      if(id==='crv'&&window.__crvHostKey&&window.__crvHostKey()!=='dst'){
+        if(window.__crvToast) window.__crvToast('This curve lives in the patch \u2014 only the Distortion curve pops out');
+        return false; }
       var T=28;
       if(ev.clientX>-T&&ev.clientX<window.innerWidth+T&&ev.clientY>-T&&ev.clientY<window.innerHeight+T)return false;
       var f=NF('popOutCard'); if(!f)return false;
@@ -34494,6 +34752,9 @@ restoreThemeFromBackend();
       e.preventDefault(); e.stopPropagation();
       var id=null,k; for(k in CARDS){ if(card.classList.contains(CARDS[k])){ id=k; break; } }
       if(!id)return;
+      if(id==='crv'&&window.__crvHostKey&&window.__crvHostKey()!=='dst'){   /* fb560 — see __cardEdgeHandoff */
+        if(window.__crvToast) window.__crvToast('This curve lives in the patch \u2014 only the Distortion curve pops out');
+        return; }
       var f=NF('popOutCard'); if(!f)return;               // no native (browser/old build) → ⧉ inert, card stays put
       var r=card.getBoundingClientRect();
       try{ f(id,Math.round(r.left),Math.round(r.top),Math.round(r.width),Math.round(r.height)); }catch(e2){ return; }
@@ -34992,47 +35253,154 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     }
     return null;
   };
-  window.wtStepPreset = function (o, dir) {
+  /* ═══ fb560 — ONE LIST, ONE FOLDER, ONE ARROW ═══════════════════════════════════════════════
+     Max: "when I'm in a certain folder for my wavetables, the arrow goes to some random one. It
+     doesn't stay in the folder I'm in. I have Pluto 2 Wavetable Banks by DYNOX — when I'm in that
+     folder the arrow should go to the next Pluto 2 one... and when I'm in the ALL folder it should
+     go to the next one in the All folder."
+
+     WHAT WAS WRONG: this function was TWO disjoint universes and only one of them knew about
+     folders. fb540/fb548 taught the FACTORY branch to derive its folder from the <select>'s own
+     optgroups — correct, and untouched below. But the moment the osc was on an IMPORT it took an
+     early return into a different world: the native `listImports`, which is a NON-recursive scan
+     of exactly one legacy directory (PluginEditor.cpp — findChildFiles(..., false, "*.wav") over
+     .../Noizefield/Terrain Instrument/Wavetables). That list has no folders in it AT ALL, so an
+     imported table could not possibly step within one — it stepped a flat alphabetical list of
+     whatever happens to sit in the legacy drop folder. Meanwhile the BROWSER builds its import
+     categories from a completely different source, the registry (`listWtImports`), and loads them
+     by absolute PATH. Two sources, two load paths, one arrow: that is the whole bug.
+
+     NOW: one ordered list, built the way the browser builds its own left column — Basic Shapes,
+     each Factory subfolder, each registered import folder, then loose Imports. The arrow steps
+     inside whichever category owns the current table, and 'All' is a category like any other:
+     if that is where you picked from, that is what you step. Nothing is remembered that cannot be
+     re-derived: the categories come from the same two natives the browser asks on every open, so
+     this survives a browser close, an editor reopen and a patch load. `__wtFolder[o]` is consulted
+     FIRST (it is the folder you were actually browsing, which is the only way 'All' can be known)
+     but only while it still contains the current table — the instant it goes stale we fall back to
+     deriving, which is exactly fb548's law and the reason its bug cannot come back. */
+  window.__wtPath = window.__wtPath || {};      // per-osc: the abs path of the import in play (disambiguates duplicate basenames)
+  var wtStepBusy = {};
+
+  // the ordered categories, factory + imports, in the browser's own order
+  window.__wtAllCats = function (o, cb) {
+    var sel = document.getElementById ('osc-' + o + '-preset-select');
+    var cats = [];
+    if (sel) {
+      var gs = sel.getElementsByTagName ('optgroup');
+      if (gs.length) {
+        for (var i = 0; i < gs.length; i++) {
+          var ops = gs[i].getElementsByTagName ('option'), items = [];
+          for (var j = 0; j < ops.length; j++) items.push ({ kind: 'preset', name: ops[j].textContent, value: ops[j].value });
+          cats.push ({ label: gs[i].label, items: items });
+        }
+      } else {   // no optgroups (a stripped page): one flat factory category, still steppable
+        var it2 = Array.prototype.map.call (sel.options, function (op) { return { kind: 'preset', name: op.textContent, value: op.value }; });
+        if (it2.length) cats.push ({ label: 'Presets', items: it2 });
+      }
+    }
+    /* ⚠️ fb560 — A NEVER-SETTLING NATIVE MUST NOT EAT THE ARROW. `Promise.all` over two raw native
+       calls hangs forever if either one never answers — and in a page whose backend is absent or
+       wedged, JUCE's binding shim does exactly that (measured: __wtAllCats never called back at
+       all in a plain browser). The old code got away with the same shape because only the IMPORT
+       branch was async; unifying the two universes put every arrow press behind these calls, so a
+       dead native would have killed the arrows outright instead of just the import half. 250 ms,
+       then carry on with whatever we have — the factory folders come from the <select> and need no
+       native at all, so the arrow still works with the backend on fire. */
+    var pj = function (fn) { var f = wtNfn (fn);
+      if (! f) return Promise.resolve (null);
+      return new Promise (function (res) { var done = false;
+        var t = setTimeout (function () { if (! done) { done = true; res (null); } }, 250);
+        var land = function (v) { if (done) return; done = true; clearTimeout (t); res (v); };
+        try { Promise.resolve (f ()).then (function (js) { var o = null;
+                try { o = JSON.parse (js); } catch (e) {} land (o); })
+              .catch (function () { land (null); }); }
+        catch (e) { land (null); } }); };
+    Promise.all ([pj ('listWtImports'), pj ('listImports')]).then (function (r) {
+      var reg = r[0] || {}, legacy = r[1] || [];
+      (reg.folders || []).forEach (function (f) {
+        cats.push ({ label: f.name, items: (f.items || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; }) }); });
+      var loose = (reg.files || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; })
+        .concat ((legacy || []).map (function (nm) { return { kind: 'import', name: nm, path: null }; }));
+      if (loose.length) cats.push ({ label: 'Imports', items: loose });
+      cb (cats);
+    }).catch (function () { cb (cats); });
+  };
+
+  function wtApplyItem (o, it) {
     var WT = window.wtWaterfall;
-    // CONTEXT-AWARE: if this osc is on an IMPORT, step within the imports list (don't jump back to the
-    // built-in presets). Otherwise step the built-in WT_PRESET list. Each list wraps within itself.
-    if (WT && WT.imported[o]) {
-      var lf = wtNfn ('listImports');
-      var stepImp = function (list) {
-        if (! list || ! list.length) return;
-        var cur = (WT.importName && WT.importName[o]) ? WT.importName[o] : '';
-        var i = list.indexOf (cur); if (i < 0) i = 0;
-        i = (i + dir + list.length) % list.length;
-        var nm = list[i], f = wtNfn ('loadImportedWavetable');
-        if (f) Promise.resolve (f (o, nm)).then (function () {
-          var disp = document.getElementById ('osc-' + o + '-preset-display'); if (disp) disp.textContent = nm;
-          var snf = wtNfn ('setWavetableName'); if (snf) snf (o, nm);
-          if (! WT.importName) WT.importName = {}; WT.importName[o] = nm; WT.fetch (o);
-        });
-      };
-      if (lf) Promise.resolve (lf()).then (function (js) { var a = []; try { a = JSON.parse (js); } catch (e) {} stepImp (a); }).catch (function () {});
+    if (! it) return;
+    if (it.kind === 'preset') {
+      var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return;
+      sel.value = it.value;
+      sel.dispatchEvent (new Event ('change', { bubbles: true }));
+      try { var pss = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_WT_PRESET');
+            var pid = 'SYN_OSC_' + o.toUpperCase () + '_WT_PRESET';
+            var pn = window.__synChoiceCount ? window.__synChoiceCount (pid, sel) : sel.options.length;   /* the PARAM's cardinality, not the row count (fb373) */
+            if (pss) pss.setNormalisedValue ((parseInt (sel.value, 10) || 0) / Math.max (1, pn - 1)); } catch (e) {}
+      window.__wtPath[o] = null;
+      var cf = wtNfn ('clearWavetable');
+      if (cf) Promise.resolve (cf (o)).then (function () { if (WT) { WT.imported[o] = false; if (WT.importName) WT.importName[o] = ''; WT.fetch (o); } });
       return;
     }
-    // built-in presets
-    var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return;
-    if (! sel.options.length) return;
-    // fb540 — STEP WITHIN THE CURRENT FOLDER and wrap inside it. Stepping the flat list is what
-    // threw Max into 'a random table within another folder'.
-    // fb548 — the folder of the TABLE YOU ARE ON, not a remembered browsing state. Falls back to
-    // the remembered folder only if the current value is in no optgroup (an import, say).
-    var vals = window.__wtFolderValues (o, window.__wtFolderOf (o, sel.value) || window.__wtFolder[o]);
-    if (! vals.length) vals = Array.prototype.map.call (sel.options, function (op) { return op.value; });
-    var vi = vals.indexOf (sel.value); if (vi < 0) vi = 0;           // not in this folder -> enter at its head
-    var want = vals[(vi + dir + vals.length) % vals.length];
-    sel.value = want;
-    sel.dispatchEvent (new Event ('change', { bubbles: true }));
-    try { var pss = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_WT_PRESET');
-          var pid = 'SYN_OSC_' + o.toUpperCase () + '_WT_PRESET';
-          var pn = window.__synChoiceCount ? window.__synChoiceCount (pid, sel) : n;   /* the PARAM's cardinality, not the row count (fb373) */
-          if (pss) pss.setNormalisedValue ((parseInt (sel.value, 10) || 0) / Math.max (1, pn - 1)); } catch (e) {}
-    var cf = wtNfn ('clearWavetable');
-    if (cf) Promise.resolve (cf (o)).then (function () { if (WT) { WT.imported[o] = false; if (WT.importName) WT.importName[o] = ''; WT.fetch (o); } });
+    // an IMPORT — by absolute path when the registry knows one, by name for a legacy drop
+    var land = function () {
+      var disp = document.getElementById ('osc-' + o + '-preset-display'); if (disp) disp.textContent = it.name;
+      var snf = wtNfn ('setWavetableName'); if (snf) snf (o, it.name);
+      if (WT) { WT.imported[o] = true; if (! WT.importName) WT.importName = {}; WT.importName[o] = it.name; WT.fetch (o); }
+      window.__wtPath[o] = it.path || null; };
+    var f = it.path ? wtNfn ('loadWavetableByPath') : wtNfn ('loadImportedWavetable');
+    if (! f) return;
+    try { Promise.resolve (it.path ? f (o, it.path) : f (o, it.name)).then (land).catch (function () {}); } catch (e) {}
+  }
+
+  window.wtStepPreset = function (o, dir) {
+    if (wtStepBusy[o]) return;                      // one step per click: the list is fetched async
+    wtStepBusy[o] = 1;
+    var done = function () { wtStepBusy[o] = 0; };
+    window.__wtAllCats (o, function (cats) {
+      try {
+        if (! cats.length) return;
+        var WT = window.wtWaterfall;
+        var onImport = !!(WT && WT.imported[o]);
+        var sel = document.getElementById ('osc-' + o + '-preset-select');
+        var curVal = sel ? sel.value : null;
+        var curNm  = (WT && WT.importName) ? (WT.importName[o] || '') : '';
+        var curPth = window.__wtPath[o] || null;
+        /* ⚠️ fb560 — THE NAME IS AUTHORITATIVE, THE PATH ONLY BREAKS TIES. `WT.importName` is
+           written by all SEVEN sites that can put an import on an osc (the drop handler, the file
+           picker, the cascade menu, the browser, a state restore, and this stepper); `__wtPath` is
+           written by the two that know a path. If the path led, one of those five name-only sites
+           would leave it stale and the arrow would silently follow a file that is no longer loaded.
+           So: match on the name, and use the path only to choose between same-named tables in
+           different folders. A stale path then simply loses every comparison and costs nothing. */
+        var isCur  = function (it) {
+          if (onImport) return it.kind === 'import' && it.name === curNm;
+          return it.kind === 'preset' && String (it.value) === String (curVal); };
+        var isExact = function (it) { return isCur (it) && (!curPth || !it.path || it.path === curPth); };
+
+        // WHICH FOLDER? the one you were browsing, while it still holds this table; else the one
+        // that owns it; else All.  'All' is a real answer, not a fallback (Max).
+        var want = window.__wtFolder[o], list = null, at = -1;
+        var flat = function () { var a = []; cats.forEach (function (c) { a = a.concat (c.items || []); }); return a; };
+        if (want === 'All') { list = flat(); }
+        else if (want) { for (var w = 0; w < cats.length; w++) if (cats[w].label === want) {
+            if ((cats[w].items || []).some (isCur)) list = cats[w].items; break; } }
+        if (! list) for (var c2 = 0; c2 < cats.length && ! list; c2++)
+          if ((cats[c2].items || []).some (isExact)) list = cats[c2].items;
+        if (! list) for (var c3 = 0; c3 < cats.length && ! list; c3++)
+          if ((cats[c3].items || []).some (isCur)) list = cats[c3].items;
+        if (! list) list = flat();
+        if (! list.length) return;
+
+        for (var k = 0; k < list.length; k++) if (isExact (list[k])) { at = k; break; }
+        if (at < 0) for (var k2 = 0; k2 < list.length; k2++) if (isCur (list[k2])) { at = k2; break; }
+        if (at < 0) at = (dir > 0) ? -1 : 0;        // not in this folder -> enter at its head/tail
+        wtApplyItem (o, list[(at + dir + list.length) % list.length]);
+      } finally { done(); }
+    });
   };
+
   // ═══ CASCADING FOLDER MENU (Serum-2 style) ═══ left-click the header name → Basic Shapes / Factory /
   // Imported folders; hover a folder → its submenu flies out to the side; a leaf = a built-in preset or
   // an imported table. Replaces the old single flat scrolling list.
@@ -35043,6 +35411,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var gnf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction : null;
       if (gnf) { var snf = gnf ('setWavetableName'); if (snf) snf (osc, name); }
       if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = name; if (WT.fetch) WT.fetch (osc); }
+      try { window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = null; } catch (e9) {}   /* fb560 — the file picker returns a name, not a registry path */
     } catch (e) {}
   };
   window.onWavetableImportsChanged = function (osc) { if (window.__wtReopen) window.__wtReopen (); };   // native fires after a WT import lands → reopen shows it
@@ -35089,13 +35458,15 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
             var pss = window.Juce.getSliderState (wpid);
             var wpn = window.__synChoiceCount ? window.__synChoiceCount (wpid, sel) : sel.options.length;   /* the PARAM's cardinality, not the row count (fb373) */
             if (pss) pss.setNormalisedValue ((parseInt (v, 10) || 0) / Math.max (1, wpn - 1)); } catch (e) {}
+      try { window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = null; } catch (e) {}   /* fb560 — leaving imports clears the path */
       var cf = wtNfn ('clearWavetable'); if (cf) Promise.resolve (cf (osc)).then (function () { if (WT) { WT.imported[osc] = false; if (WT.importName) WT.importName[osc] = ''; WT.fetch (osc); } });
       closeAll ();
     }
     function applyImport (nm) {
       var f = wtNfn ('loadImportedWavetable'); if (f) Promise.resolve (f (osc, nm)).then (function () {
         if (disp) disp.textContent = nm; var snf = wtNfn ('setWavetableName'); if (snf) snf (osc, nm);
-        if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = nm; WT.fetch (osc); } });
+        if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = nm; WT.fetch (osc); }
+        try { window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = null; } catch (e9) {} });   /* fb560 — a legacy drop-folder import has no path */
       closeAll ();
     }
 
@@ -35149,7 +35520,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       else if (node.folder === 'Factory') (node.children || []).forEach (function (sub) { wcats.push ({ label: sub.folder, items: toItems (sub.children) }); });
     });
     window.__wtReopen = function () { window.openWtSelectMenu (osc, ev); };
-    function loadWtByPathJS (path) { var f = wtNfn ('loadWavetableByPath'); if (f) { try { f (osc, path); } catch (e) {} } }   // load a referenced table by abs path
+    function loadWtByPathJS (path) {
+      /* fb560 — remember WHICH file, not just which name: two folders can hold a "Saw" and the
+         arrow has to know which one it is standing on. Cleared whenever a factory preset lands
+         (wtApplyItem) so a stale path can never match a later step. */
+      window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = path;
+      var f = wtNfn ('loadWavetableByPath'); if (f) { try { f (osc, path); } catch (e) {} } }   // load a referenced table by abs path
     function openWtBrowser (importLeaves, reg) {
       reg = reg || { files: [], folders: [] };
       var mkImp = function (it) { return { name: it.name, path: it.path, sel: (curImp () === it.name), pick: (function (p) { return function () { loadWtByPathJS (p); }; }) (it.path) }; };
@@ -35290,6 +35666,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     Promise.resolve (fn()).then (function (js) { var st = {}; try { st = JSON.parse (js); } catch (e) { return; }
       ['a','b','c','d'].forEach (function (o) { var s = st[o]; if (s && s.active) {
         wtWaterfall.imported[o] = true; if (! wtWaterfall.importName) wtWaterfall.importName = {}; wtWaterfall.importName[o] = s.name || '';
+        try { window.__wtPath = window.__wtPath || {}; window.__wtPath[o] = null; } catch (e9) {}   /* fb560 — a restore carries a name, not a path */
         var disp = document.getElementById ('osc-' + o + '-preset-display'); if (disp && s.name) disp.textContent = s.name;
         if (wtWaterfall.on[o]) wtWaterfall.fetch (o);
       } });
@@ -35520,6 +35897,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         (document.head || document.documentElement).appendChild (_st); }
       var esc = function (s) { return String (s).replace (/&/g, '&amp;').replace (/</g, '&lt;').replace (/>/g, '&gt;'); };
       var panel = document.createElement ('div');
+      panel.className = 'tpb-panel';   // fb560 — so the modulation marks can tell when this is covering them
       // fb394 — where search gets its OWN row (any browser with an Import label) that row is 26px of NEW
       // chrome, so the panel grows by 26px instead of stealing 26px from the list: the two panes keep the
       // exact height they had before search existed. Where search rides the header row, nothing changes.
