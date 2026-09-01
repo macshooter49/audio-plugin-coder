@@ -755,7 +755,8 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
 //  fb550 — THE DRAWN WARP CURVE.  OVERPASS ONE item 6C.
 //  csv = 129 numbers, 0..1, the map w = f(p). Anything else is rejected whole rather than
 //  half-applied, because a partially-parsed curve is a discontinuity and a discontinuity is a click.
-void TerrainInstrumentAudioProcessor::setWarpDrawCurve (int osc, int slot, const juce::String& csv)
+void TerrainInstrumentAudioProcessor::setWarpDrawCurve (int osc, int slot, const juce::String& csv,
+                                                        float rateOverride)
 {
     osc = juce::jlimit (0, 3, osc); slot = juce::jlimit (0, 1, slot);
     const int idx = osc * 2 + slot;
@@ -775,10 +776,33 @@ void TerrainInstrumentAudioProcessor::setWarpDrawCurve (int osc, int slot, const
     }
     // STEEPEST READ RATE. A near-vertical drawn segment reads the table as fast as Sync does, so
     // warpRateMul() needs this number or the mip is picked for 1x and the curve aliases (fb545).
+    //
+    // ⚠️ fb561 — A WRAP IS NOT A SLOPE. This used to take std::abs of every step, so a phase map
+    // that WRAPS — 0.95 -> 0.02, the thing every sync-shaped sound is made of — read as a step of
+    // 0.93, i.e. a "read rate" of 119x, clamped to 64. The mip was then picked for a 64x read that
+    // nothing performs, and the curve came back dull and quiet. It is not a fast read at all: it is
+    // a phase RESET, exactly what hard sync does, and the table restarts from the top.
+    //   MEASURED, and this is why captured phase warps did not sound like their originals: Bend,
+    // Skew and P-Quantize ask warpRateMul() for 1.0x, Fractalize 8.5x, Sync up to 24.25x — while
+    // the captured copy of any of them asked for the clamp, 64x. Taking the WRAPPED difference
+    // (anything past half a cycle is a reset, not travel) makes a drawn sawtooth ask for the rate
+    // its ramps actually read at, which is what the mip law wanted in the first place.
     float mx = 1.0f;
     for (int i = 1; i < tw::SynthVoice::kDrawPts; ++i)
-        mx = juce::jmax (mx, std::abs (dst.pts[i] - dst.pts[i - 1]) * (float) (tw::SynthVoice::kDrawPts - 1));
-    dst.slope = juce::jlimit (1.0f, 64.0f, mx);
+    {
+        float d = dst.pts[i] - dst.pts[i - 1];
+        if (d >  0.5f) d -= 1.0f;                                  // a reset, seen backwards
+        if (d < -0.5f) d += 1.0f;                                  // a reset
+        mx = juce::jmax (mx, std::abs (d) * (float) (tw::SynthVoice::kDrawPts - 1));
+    }
+    /* fb561 — A CAPTURE INHERITS ITS SOURCE'S READ RATE. Left to derive its own, a copy of Skew
+       asked for 3.1x where Skew asks for 1.0x, picked a more band-limited mip and came back +2.8 dB
+       — the copy did not sound like the thing it copied. rateOverride > 0 means "this curve IS
+       mode N at amount a; ask the mip law what IT would have asked". Everything the user draws by
+       hand still derives, which is the fb550 law and correct: a hand-drawn near-vertical segment
+       really does read the table that fast. */
+    dst.slope = (rateOverride > 0.0f) ? juce::jlimit (1.0f, 64.0f, rateOverride)
+                                      : juce::jlimit (1.0f, 64.0f, mx);
 
     drawSpare_[idx] = 1 - spare;                                   // the old live buffer is now spare
     drawTable_[idx].store (identity ? nullptr : &dst, std::memory_order_release);
@@ -878,7 +902,24 @@ juce::String TerrainInstrumentAudioProcessor::getWarpCurveJson (int osc, int slo
     }
 
     constexpr int P = 129;                             // PHASE domain — where in the cycle it reads
-    j << ",\"kind\":\"phase\",\"x0\":0,\"x1\":1,\"pts\":[";
+    /* fb561 — IS THIS MODE A PURE PHASE MAP? applyPhaseWarp returns two things the drawn mode 37
+       cannot express: a per-sample WINDOW (an amplitude envelope over the cycle — Formant) and
+       skipLookup (a hard gate that silences part of the cycle — PWM). A curve alone cannot carry
+       either, so capturing one of those modes into a drawn curve is not a copy, it is a different
+       sound wearing the same shape. The card asks first and refuses rather than lying.
+       `rate` is what this mode asks the mip law for: a captured copy inherits it, or it picks a
+       different mip and comes back at a different level. */
+    bool pure = true;
+    for (int i = 0; i < P && pure; ++i)
+    {
+        const double p0 = (double) i / (double) (P - 1);
+        float window = 1.0f; bool skip = false;
+        tw::SynthVoice::applyPhaseWarp (mode, amt, p0, window, skip, var);
+        if (skip || std::abs (window - 1.0f) > 1.0e-4f) pure = false;
+    }
+    j << ",\"kind\":\"phase\",\"pure\":" << (pure ? "true" : "false")
+      << ",\"rate\":" << juce::String (tw::SynthVoice::warpReadRate (mode, amt), 4)
+      << ",\"x0\":0,\"x1\":1,\"pts\":[";
     for (int i = 0; i < P; ++i)
     {
         const double p0 = (double) i / (double) (P - 1);

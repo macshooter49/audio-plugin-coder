@@ -1344,6 +1344,27 @@ namespace tw
         { return (drawTable_ != nullptr) ? drawTable_[(size_t) (osc * 2 + slot)].load (std::memory_order_relaxed)
                                          : nullptr; }
 
+        /** fb561 — THE READ-RATE A WARP MODE ASKS THE MIP LAW FOR. Lifted out of renderNextBlock's
+            lambda so the PROCESSOR can ask the identical question when it captures a mode into a
+            drawn curve: a copy that does not inherit its source's read rate picks a different mip
+            and comes back at a different level, which is the whole of "the captured warp doesn't
+            sound like the warp". MEASURED before this existed: Skew asks 1.0x, its captured copy
+            asked 3.1x (its own steepest ramp) and landed +2.8 dB louder; Mirror, whose map is
+            almost flat, asked ~1.0x either way and was faithful to -16.7 dB. One definition. */
+        static double warpReadRate (int mode, float amt, double drawSlope = 1.0) noexcept
+        {
+            // fb550 — a drawn curve's steepest stretch IS a read-rate multiplier: without this a
+            // near-vertical hand-drawn segment reads a mip band-limited for 1x and aliases.
+            // ⚠️ IT MUST TRACK `amt`. applyPhaseWarp CROSSFADES the curve in (p + amt*(c-p)),
+            // so at amt = 0 the read rate is exactly 1x and asking for the full slope there
+            // picks a mip for a rate nothing is reading at.
+            if (mode == 37) return juce::jlimit (1.0, 64.0, 1.0 + (double) amt * (drawSlope - 1.0));
+            if (mode == 2)  return std::pow (2.0, (double) amt * kSyncExp2);      // SYNC    (1..24.25x)
+            if (mode == 3)  return std::pow (2.0, (double) amt * kFormantExp2);   // FORMANT (1..16x)
+            if (mode == 7)  return 1.0 + (double) amt * kFractalMul;              // FRACTALIZE (1..8.5x)
+            return 1.0;
+        }
+
         static constexpr double kSyncExp2    = 4.6;  // SYNC      : R = 2^(a*k), 1 .. 24.25x
         static constexpr double kFormantExp2 = 4.0;  // FORMANT   : R = 2^(a*k), 1 .. 16x — NOT RAISED, see below
         static constexpr double kFractalMul  = 7.5;  // FRACTALIZE: R = 1 + a*k, 1 ..  8.5x
@@ -3404,20 +3425,7 @@ namespace tw
             //    clean and is SILENT — the mip is then picked for a rate the reader never uses.
             //    A constant that also feeds a SELECTION path must live in exactly one place.
             auto warpRateMul = [] (int mode, float amt, double drawSlope = 1.0) -> double
-            {
-                // fb550 — a drawn curve's steepest stretch IS a read-rate multiplier: without this a
-                // near-vertical hand-drawn segment reads a mip band-limited for 1x and aliases.
-                // ⚠️ IT MUST TRACK `amt`. applyPhaseWarp CROSSFADES the curve in (p + amt*(c-p)),
-                // so at amt = 0 the read rate is exactly 1x and asking for the full slope there
-                // picks a mip for a rate nothing is reading at. MEASURED with w = p^2 (slope 2):
-                // the flat multiplier made amount 0 render npeaks 102 against the dry table's 203
-                // — exactly half, the fb545 signature — and broke the transparency floor.
-                if (mode == 37) return juce::jlimit (1.0, 64.0, 1.0 + (double) amt * (drawSlope - 1.0));
-                if (mode == 2)              return std::pow (2.0, (double) amt * kSyncExp2);     // SYNC    (1..24.25x)
-                if (mode == 3)              return std::pow (2.0, (double) amt * kFormantExp2);  // FORMANT (1..16x)
-                if (mode == 7)              return 1.0 + (double) amt * kFractalMul;       // FRACTALIZE (1..8.5x)
-                return 1.0;
-            };
+            { return warpReadRate (mode, amt, drawSlope); };   // fb561 — one definition, now a static (below)
             // fb522 — UNISON-aware mip pick. The mip is chosen from sine 0's rate, and the old
             // premise ("±25 cents of unison detune doesn't cross a mip boundary") dies the moment
             // URANGE reaches 4800 cents or STACK adds +36 semitones: an outer sine reading a table

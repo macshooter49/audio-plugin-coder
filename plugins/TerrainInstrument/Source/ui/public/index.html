@@ -19882,7 +19882,18 @@ setTimeout(function wireSynControls () {
           if (d.kind === 'amp')   return Math.max (0, Math.min (1, (v + 1) / 2));
           if (d.kind === 'phase') return (v < 0) ? (i / (n0 - 1)) : Math.max (0, Math.min (1, v));   // -1 == skipLookup: draw it as the identity
           return Math.max (0, Math.min (1, v)); });
-        var pts = U.fit (raw), captured = (mode === 37 || mode === 38);
+        var wrapN = (U.wraps ? U.wraps (raw) : 0);
+        /* fb561 — what C++ says about this mode: `pure` = a phase map and nothing else (no window,
+           no skip gate — see getWarpCurveJson), `rate` = the read rate it asks the mip law for. */
+        var srcPure = (d.kind !== 'phase') || (d.pure !== false);
+        var srcRate = +d.rate || 0;
+        var baseCurve = raw.slice();
+        var pts = U.fit (raw, dom === 'phase'), captured = (mode === 37 || mode === 38);
+        /* fb561 — 32 points cannot hold a map with more resets than that. Say it once, on open,
+           rather than hand back a smooth approximation of a thing whose whole character is the
+           discontinuity (Sync at the top of its knob wraps ~24 times). */
+        if (dom === 'phase' && wrapN > 15 && window.__crvToast)
+          window.__crvToast ('This shape resets ' + wrapN + ' times \u2014 more than a 32-point curve holds; the copy is approximate');
         function modeName () { return (window.WARP_MODES && window.WARP_MODES[mode]) || 'Warp'; }
         /* fb560 — THE HEADER MUST NOT RENAME ITSELF UNDER YOUR HAND. Capturing flips the slot's
            mode param to 37/38, so a title read live off `mode` turned "PWM · OSC A · WARP 1" into
@@ -19915,6 +19926,13 @@ setTimeout(function wireSynControls () {
             window.addEventListener ('mousemove', mv); window.addEventListener ('mouseup', up); },
           push:function(){
             if (! captured) {
+              /* fb561 — SOME MODES ARE NOT A CURVE. applyPhaseWarp also returns a per-sample WINDOW
+                 (Formant) and a skip gate (PWM); a drawn curve carries neither, so "capture" there
+                 would silently hand back a different sound wearing the same shape. MEASURED: PWM
+                 +10.8 dB, Formant -2.8 dB, against -16.7 dB for a mode that IS a pure map. Refuse. */
+              if (! srcPure) {
+                if (window.__crvToast) window.__crvToast (openedAs + ' is more than a curve \u2014 it also gates the cycle, so it cannot be copied into one');
+                U.repaint(); return; }
               var target = (dom === 'amp') ? 38 : 37;
               if (! writeMode (target)) return;             // silence beats a lie (the warp-guard law)
               captured = true; mode = target;
@@ -19931,8 +19949,18 @@ setTimeout(function wireSynControls () {
               amt = 1.0; try { window.__setSynParam (pAmt, 1.0); } catch (e) {}
               U.repaint(); }
             var tbl = U.bake (pts, N);
+            /* fb561 — WHILE THIS IS STILL YOUR COPY OF <mode>, IT READS LIKE <mode>. A drawn curve
+               normally derives its own read rate from its steepest stretch, which is right for ink
+               you drew — but a COPY that derives its own picks a different mip than its source and
+               comes back at a different level (Skew: source 1.0x, copy 3.1x, +2.8 dB). So the copy
+               inherits the source's rate until it has actually been reshaped; past 0.02 of change
+               it is your curve, and it protects itself. */
+            var drift = 0, di;
+            for (di = 0; di < N && di < baseCurve.length; ++di)
+              drift = Math.max (drift, Math.abs (tbl[di] - baseCurve[di]));
+            var rate = (dom === 'phase' && srcRate > 0 && drift < 0.02) ? srcRate : -1;
             try { var f = window.Juce.getNativeFunction ('setWarpDrawCurve');
-                  if (f) f (osc, slot, tbl.map (function (v) { return v.toFixed (4); }).join (',')); } catch (e) {} } };
+                  if (f) f (osc, slot, tbl.map (function (v) { return v.toFixed (4); }).join (','), rate); } catch (e) {} } };
         window.__crvOpen (host, (ev && ev.target) ? ev.target : null);
 
         /* fb560 — THE CARD WAS A ONE-SHOT SNAPSHOT. It fetched once and never looked again, so
@@ -19959,7 +19987,7 @@ setTimeout(function wireSynControls () {
               if (d2.kind === 'amp')   return Math.max (0, Math.min (1, (v + 1) / 2));
               if (d2.kind === 'phase') return (v < 0) ? (i / (n2 - 1)) : Math.max (0, Math.min (1, v));
               return Math.max (0, Math.min (1, v)); });
-            pts = U.fit (raw2); U.repaint();
+            pts = U.fit (raw2, dom === 'phase'); U.repaint();
           } catch (e2) {} }).catch (function () {});
         } catch (e) { clearInterval (wPoll); } }, 300);
       }
@@ -33906,17 +33934,61 @@ restoreThemeFromBackend();
       g.push([0.5,0.5,0]); g.sort(function(a,b){return a[0]-b[0];}); }
     return g; }
 
-  /* dense 0..1 samples -> <=32 control points with exact tensions (the §6.1 midpoint fit). */
-  function fitDense(arr){ var N=arr.length, raw=[], i;
-    for(i=0;i<N;i++) raw.push([i/(N-1), Math.max(0,Math.min(1,arr[i]))]);
-    var simp=cRdp(raw,0.008); if(simp.length>32)simp=cRdp(raw,0.02); if(simp.length>32)simp=cRdp(raw,0.05);
-    if(simp.length>32)simp=simp.slice(0,32);
+  /* dense 0..1 samples over [s..e] -> <=budget control points with exact tensions (§6.1). */
+  function fitRun(arr,s,e,N,budget){ var raw=[], i;
+    for(i=s;i<=e;i++) raw.push([i/(N-1), Math.max(0,Math.min(1,arr[i]))]);
+    if(raw.length<=2) return raw.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; });
+    /* fb561 — SPEND THE BUDGET. The ladder used to start at 0.004 and stop at the first tolerance
+       that fit, so a run with 10 points of headroom was fitted as coarsely as one with none.
+       Start tight and walk out only as far as the cap forces: a captured Bend went from -4.1 dB
+       residual to -20.4 dB on the reset fix alone, and the rest of the gap is exactly this. */
+    var eps=[0.0012,0.003,0.006,0.012,0.03,0.07,0.15], simp=cRdp(raw,eps[0]), k;
+    for(k=1;k<eps.length&&simp.length>budget;k++) simp=cRdp(raw,eps[k]);
+    if(simp.length>budget) simp=simp.slice(0,budget);
     var p2=simp.map(function(q){return [+q[0].toFixed(4),+q[1].toFixed(4),0];});
     for(i=0;i<p2.length-1;i++){ var a=p2[i],b=p2[i+1];
       if(b[0]-a[0]<1e-4||Math.abs(b[1]-a[1])<1e-4){ a[2]=0; continue; }
       var im=Math.round((a[0]+b[0])/2*(N-1)), ym=Math.max(0,Math.min(1,arr[im])), r=(ym-a[1])/(b[1]-a[1]);
       a[2]=(r<=0.018||r>=0.982)?0:Math.max(-1,Math.min(1,0.25*Math.log(r/(1-r)))); }
     return p2; }
+
+  /* fb561 — WRAP-AWARE FIT. A PHASE map is not one curve, it is a run of ramps separated by
+     RESETS, and a reset is the whole point of every sync-shaped sound. Fitting it as a single
+     curve made RDP spend its budget approximating the vertical jumps, and the tension evaluator
+     then rendered each one as a steep RAMP — which does not reset the read head, it sweeps it
+     across the whole table in a couple of samples. That is a loud broadband burst once per cycle,
+     and it is why a captured Bend came back at 2.3x the level of the Bend it copied.
+     The editor has been able to draw a true vertical step since fb208 (two points on the same x).
+     So: cut the map at every reset, fit each ramp on its own budget, and JOIN the runs with
+     coincident x — the step is then exact, not approximated. */
+  function fitDense(arr,wrapAware){ var N=arr.length, i;
+    if(wrapAware){
+      var cuts=[]; for(i=1;i<N;i++) if(Math.abs(arr[i]-arr[i-1])>0.5) cuts.push(i);
+      /* Each reset costs 2 of the 32 points, so past ~15 of them there is no budget left for the
+         ramps between and a faithful copy is not representable. Say so rather than fit mush. */
+      if(cuts.length && cuts.length<=15){
+        var runs=[], st=0;
+        for(i=0;i<cuts.length;i++){ runs.push([st,cuts[i]-1]); st=cuts[i]; }
+        runs.push([st,N-1]);
+        var tot=0; runs.forEach(function(r){ tot+=(r[1]-r[0]+1); });
+        var out=[], spare=Math.max(0,32-runs.length*2), k;
+        for(k=0;k<runs.length;k++){
+          var len=runs[k][1]-runs[k][0]+1;
+          var pr=fitRun(arr,runs[k][0],runs[k][1],N,2+Math.floor(spare*len/Math.max(1,tot)));
+          /* ⚠️ DO NOT MERGE THE TWO X VALUES. The first cut of this pulled the next run's first
+             point back onto the previous run's last x to make a "true vertical step" — and moved
+             the reset ONE SAMPLE EARLY, which on a sawtooth phase map is a whole cycle-start in
+             the wrong place. The dense map does not contain an infinitely steep edge either: it
+             steps between two ADJACENT samples. Keeping both endpoints reproduces exactly that —
+             a straight segment 1/128 of a cycle wide, tension 0 — and it is exact, not an
+             approximation of exact. */
+          out=out.concat(pr); }
+        if(out.length>32) out=out.slice(0,32);
+        if(out.length>1){ out[0][0]=0; out[out.length-1][0]=1; }
+        return out; }
+    }
+    return fitRun(arr,0,N-1,N,32); }
+  fitDense.wraps=function(arr){ var n=0,i; for(i=1;i<arr.length;i++) if(Math.abs(arr[i]-arr[i-1])>0.5) n++; return n; };
   function snapV(v,n){ return Math.round(v*n)/n; }
 
   /* ── transport — §6.5 cadence: 40 ms leading edge so consecutive fades butt together ── */
@@ -34619,6 +34691,7 @@ restoreThemeFromBackend();
     bake:function(pts,N){ var out=[],i; for(i=0;i<N;i++) out.push(evalP(pts,i/(N-1))); return out; },
     isStraight:function(arr){ var i,N=arr.length; for(i=0;i<N;i++) if(Math.abs(arr[i]-i/(N-1))>1.5e-3) return false; return true; },
     unity:function(){ return SEEDS['Unity'].map(function(q){return q.slice();}); },
+    wraps:function(arr){ return fitDense.wraps(arr); },   /* fb561 — how many phase RESETS a map has */
     /* a dense sampled array rendered in the editor's own field — for a host whose curve is real
        but not editable (the warp FILTER modes' |H|). Uses this module's grid and geometry, so a
        read-only view and an editable one are the same picture. */

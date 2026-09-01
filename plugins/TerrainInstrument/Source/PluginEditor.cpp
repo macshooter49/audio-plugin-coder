@@ -3206,7 +3206,10 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                     const juce::String oscStr = args[0].toString();
                     const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                     const int slotIdx = juce::jlimit (0, 1, (int) args[1]);
-                    audioProcessor.setWarpDrawCurve (oscIdx, slotIdx, args[2].toString());
+                    // fb561 — optional 4th arg: the source mode's read rate, so a CAPTURED curve
+                    // picks the same mip its source did. Absent (a hand-drawn edit) -> derive.
+                    audioProcessor.setWarpDrawCurve (oscIdx, slotIdx, args[2].toString(),
+                                                     args.size() > 3 ? (float) (double) args[3] : -1.0f);
                 }
                 complete (juce::var{});
             })

@@ -660,7 +660,7 @@ public:
     int                                  modCurveSpare_ = 0;
     int                                  drawSpare_[8] = { 0,0,0,0,0,0,0,0 };
     tw::SynthVoice::DrawSlot             drawTable_[8];      // what every voice reads
-    void         setWarpDrawCurve (int osc, int slot, const juce::String& csv);
+    void         setWarpDrawCurve (int osc, int slot, const juce::String& csv, float rateOverride = -1.0f);   // fb561 — rateOverride: a CAPTURE inherits its source's mip read-rate
     juce::String getWarpDrawCurveCsv (int osc, int slot) const;
     // fb459 — what the SPECTRAL morph is doing right now. The amount is the EFFECTIVE one the
     // audio thread publishes each block (fb252/fb76: base + LFO/env, quantised to 1/128 only when
