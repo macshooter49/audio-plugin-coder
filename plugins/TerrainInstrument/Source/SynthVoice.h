@@ -3191,12 +3191,14 @@ namespace tw
                         const auto& as = modConfig_.assignments[a];
                         if (! as.enabled) continue;
                         const int sI = (int) as.source, dI = (int) as.dest;
-                        float sv2;
-                        if      (sI >= 0 && sI < wc::NUM_LFOS) sv2 = lfoPk[sI];
-                        else if (wc::isEnvModSource (sI))      sv2 = envSourceValue (sI);   // fb178
-                        else continue;
-                        if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
-                            amt[dI - (int) wc::ModDest::LfoAmt1] += sv2 * as.depth;
+                        if (dI < (int) wc::ModDest::LfoAmt1 || dI >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
+                        // fb563 clean-up — this pass read LFO and envelope sources only, so a macro or the wheel on an
+                        //  LFO's amount was silently nothing; it reads every family through the one reader now, and the
+                        //  aux "Scale by" scales it exactly as the main pass below does.
+                        bool ok2 = true; const float sv2 = sourceValueOf (sI, lfoPk, ok2); if (! ok2) continue;
+                        float d2 = as.depth;
+                        if (as.useAux) { bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA); if (okA) d2 *= wc::sourceTo01 ((int) as.auxSource, av); }
+                        amt[dI - (int) wc::ModDest::LfoAmt1] += sv2 * d2;
                     }
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
                 }

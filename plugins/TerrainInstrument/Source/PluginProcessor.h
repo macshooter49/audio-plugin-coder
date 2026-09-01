@@ -931,6 +931,7 @@ public:
     /** fb563 (3) — any source's live value as 0..1 from the processor's own views, for the global half of
         "Scale by". LFOs are the free-running mirrors, envelopes the mono tap, the rest the published feeds. */
     float globalSourceTo01 (int wire) noexcept;
+    float globalSourceValue (int wire) noexcept;   // fb563 clean-up — the family-convention value (the twin of the voice's sourceValueOf)
     // ══ fb563 (4) — MIDI LEARN + THE CC MAP ═════════════════════════════════════════════════
     //  "MIDI Learn" on any control: the NEXT CC the host sends binds to that parameter (absolute,
     //  0..127 → the parameter's normalised range). The audio thread only STORES (atomics); the

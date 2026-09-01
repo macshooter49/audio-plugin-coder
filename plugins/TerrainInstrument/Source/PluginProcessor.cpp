@@ -8484,6 +8484,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rawParam (kLfoDepthIds[r.src]));
                 else if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1)) * std::abs (r.depth);
+                else if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)   // fb563 clean-up — macros · wheel · aftertouch · bend · random · alt bend a global LFO's amount too
+                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += globalSourceValue (r.src) * r.depth;
             }
             const float velCurve01_ = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
             const float velGlobal_  = std::pow (juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed)), std::pow (3.0f, 1.0f - 2.0f * velCurve01_));
@@ -13247,10 +13249,10 @@ void TerrainInstrumentAudioProcessor::applyPendingMidiCc()
     if (midiMapDirty_.exchange (0, std::memory_order_relaxed)) midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
 }
 
-float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
-{
+float TerrainInstrumentAudioProcessor::globalSourceValue (int wire) noexcept
+{   // fb563 clean-up — the family-convention value of any source from the processor's own views (the twin of the voice's sourceValueOf)
     const int sI = wc::sourceForWire (wire);
-    if (sI < 0) return 1.0f;
+    if (sI < 0) return 0.0f;
     float v = 0.0f;
     if      (wire >= 0 && wire < wc::NUM_LFOS)                 v = flowLfo_[wire].peek();
     else if (wc::isEnvModSource (sI))                          v = monoEnvLevelOf (sI);
@@ -13263,7 +13265,12 @@ float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
     else if (sI == (int) wc::ModSource::Bend)                  v = globalSrc_.bend.load (std::memory_order_relaxed);
     else if (wc::isRandModSource (sI))                         v = randVis_[wc::randIndexOf (sI)].load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Alt)                   v = altVis_.load (std::memory_order_relaxed);
-    return wc::sourceTo01 (sI, v);
+    return v;
+}
+float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
+{
+    const int sI = wc::sourceForWire (wire);
+    return (sI < 0) ? 1.0f : wc::sourceTo01 (sI, globalSourceValue (wire));
 }
 
 void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)
