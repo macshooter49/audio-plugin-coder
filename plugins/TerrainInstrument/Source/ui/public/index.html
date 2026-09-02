@@ -14550,10 +14550,18 @@ window.__synArc = function (ring, n, bipolar) {
         if(skip[k]) return;
         var dv=d.DEF[k]; if(typeof dv!=='number') return;   // lanes/tiles/strings keep their shape
         var cur=d.S.v[k];
+        // fb569 — KEEP THE PANNING IN THE CENTRE. Max: "the glitch fucks with the panning... I want all
+        //  the panning to be in the center if it randomizes." Pan/balance are forced to their default
+        //  (centre); width/spread are left alone (never widened by the dice into a mono-killing extreme).
+        if(/pan|balance/i.test(k)){ d.S.set(k, dv); return; }
+        if(/width|spread/i.test(k)) return;
         if(lad[k]!=null){ d.S.set(k, Math.floor(Math.random()*(lad[k]+1))); return; }
         if((dv===0||dv===1)&&(cur===0||cur===1)){ d.S.set(k, Math.random()<0.5?0:1); return; }
         if(dv>1&&Math.round(dv)===dv) return;               // unknown enum/index — hands off
-        d.S.set(k, Math.random());
+        // fb569 — A MUSICAL RANGE, not the raw 0..1. The extremes are where the dice "spits out
+        //  choppy inaudible bullshit" (bit-crush at 100 %, an effect at 0 % = no effect). Roll inside
+        //  0.08..0.72 so every rolled preset is audibly different AND still plays.
+        d.S.set(k, 0.08 + Math.random() * 0.64);
       });
       if(id==='gli') diceGrids(/^FLOW_GLI_[A-Z]+_GRID$/);
     }
@@ -31422,7 +31430,7 @@ restoreThemeFromBackend();
   /* fb195 — hub rows drag out as env sources (Max: put an envelope on ANOTHER envelope's
      params — open the hub, pull the 'Env 1' row onto Env 2's Atk chip). Same machinery as
      the chip drag; the menu hides the moment the pull starts. */
-  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel .syn-ctx-menu [data-drag-env]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel .syn-ctx-menu [data-drag-env]'); if(!t)return;
     var en=+t.getAttribute('data-drag-env')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         if(window.__synHideMenu)window.__synHideMenu();
@@ -31440,7 +31448,7 @@ restoreThemeFromBackend();
   /* fb563 — drag a MACRO'S NAME onto any knob, exactly like Velocity below. The wire code
      streamed to popped cards is WIRE.MACRO+k-1 (== wc::kMacroSrcBase), which the card's receiver
      passes through untouched (every code ≥ 200 is itself). */
-  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-macro]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return;   /* fb569 — LEFT button only: a right-click on a macro must open the menu (Rename), never arm a drag whose phantom move then eats the Rename click */ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-macro]'); if(!t)return;
     var mk=+t.getAttribute('data-drag-macro')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='M'+mk; document.body.appendChild(ghost);
@@ -31456,7 +31464,7 @@ restoreThemeFromBackend();
     document.addEventListener('pointermove',mv); document.addEventListener('pointerup',up); });
   /* fb260 — drag VELOCITY from the voice panel onto any knob, exactly like an env/LFO. The
      label (data-drag-vel) is the source grip; the row's number stays the vel→amp depth. */
-  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-vel]'); if(!t)return;
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Vel'; document.body.appendChild(ghost);
@@ -31497,7 +31505,7 @@ restoreThemeFromBackend();
     }
     arm(); [250,900,2000].forEach(function(ms){ setTimeout(arm,ms); });   /* fb548 — the panel is built by a deferred ladder; arm on every rung */
   })();
-  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-follow]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-follow]'); if(!t)return;
     var fk=+t.getAttribute('data-drag-follow')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         if(window.__synHideMenu)window.__synHideMenu();
@@ -31519,7 +31527,7 @@ restoreThemeFromBackend();
   /* fb555 — drag KEY out as a mod source, exactly like Velocity above. Depth lands at FULL: it is
      a shape source, so at 100 % the destination follows the keyboard and less is a deliberate
      attenuation (fb178/fb263's law, and fb552's). */
-  document.addEventListener('pointerdown',function(e){ var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-note]'); if(!t)return;
+  document.addEventListener('pointerdown',function(e){ if(e.button)return; var t=e.target.closest&&e.target.closest('#syn-panel [data-drag-note]'); if(!t)return;
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Key'; document.body.appendChild(ghost);

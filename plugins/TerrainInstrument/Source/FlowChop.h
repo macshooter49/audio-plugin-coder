@@ -212,7 +212,13 @@ public:
             ? ((traj > 0.004f) ? chopStyle (traj)                            // TRAJ macro engaged → its 6-style ladder
                                : kOrderStyle[arpClampi (ext_.modeOrder, 0, 3)])
             : ((styleOv_ >= 0 && styleOv_ < kChopStyleN) ? (ChopStyle) styleOv_ : chopStyle (traj));
-        const float gFrac   = arpClamp01 (gate < 0.05f ? 0.05f : gate);
+        // fb569 — LONGER CHOPS. Max: "the gate of the chop mode is just ass... it gates it too early,
+        //  too choppy — pull the trim up, more length." The base gate mapped 0..1 straight with a 5%
+        //  floor, so a low gate (the dice loves low values) made 5%-of-a-step blips = dropouts. Lift
+        //  the floor to 35% and keep the full 100% at the top: staccato is still available, but the
+        //  bottom of the range is a musical chop, not a click. The extension panel's own tLen (below)
+        //  is unchanged — a hand on the card still gets the whole range.
+        const float gFrac   = arpClamp01 (0.35f + 0.65f * arpClamp01 (gate));
         const float pitchAmt = arpClamp01 (morph);                          // MORPH adds pitch spice
         const float flipAmt  = arpClamp01 (vary);
 
