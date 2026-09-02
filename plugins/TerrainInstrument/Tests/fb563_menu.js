@@ -35,12 +35,24 @@
 //      rejects 217, 132 and 10, and encode∘decode is the identity on every accepted code.
 //   8  NO REGRESSION — zero page errors; the fb554 "· Curve" rows are gone; a right-click on the
 //      envelope graph (not a destination) still opens the ENVELOPE menu through its own handler.
+//  12  THE GRID (fb564) — no header, no separators; every word on ONE left rail; every value on ONE
+//      right edge (tabular); ⤢ · ✕ · › are identical 16 px boxes sharing ONE right rail; 24 px rows.
+//      A double-click on a picker source ASSIGNS it and closes (it used to toggle off and close).
+//      A click on a route row opens its options (Bypass · Scale by · Remove) — no title, same grid.
+//  13  A MACRO IS A CONTROL (fb564) — right-click a Macros-view knob → Rename · Reset to default ·
+//      MIDI Learn (arming SYN_MACRO_n); a rename renames the picker entry, the route row and the
+//      hover list, and reaches the processor (setMacroNames).
+//  14  COPY WITH MODULATORS (fb564) — the osc menu offers Copy oscillator · Copy with modulators ·
+//      Paste oscillator; the paste calls copyOscParams(a,b) and re-aims every route on A's knobs at
+//      B's twin knobs with the same depths.
 //
 //  PROOF THE BARS CAN FAIL (fb421 — a gate that has never failed has never been tested):
 //    FB563_MUTATE=1  deletes the capture listener                     → bars 1-6 red
 //    FB563_MUTATE=2  the picker only ever adds (never toggles off)     → bar 2 red
 //    FB563_MUTATE=3  the registry returns no rows                       → bar 4 red
 //    FB563_MUTATE=4  followers bounded at five again (the shipped bug)  → bars 2 and 7 red
+//    FB563_MUTATE=5  the picker's double-click fix removed (fb564)       → bar 12 red
+//    FB563_MUTATE=6  the ✕ / ⤢ boxes shrunk to 10 px (fb564)            → bar 12 red
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const puppeteer = require('puppeteer-core');
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -63,6 +75,10 @@ function mutatedPage () {
                      "addRoute(S,g.dest,g.el); o.sel=true;");
   if (MUT === 3) sub("    rowsFor: function (el, ev) { var out = [], n = el, hops = 0;", "    rowsFor: function (el, ev) { return []; var out = [], n = el, hops = 0;");
   if (MUT === 4) sub("var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220,", "var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:5, MACRO:220,");
+  if (MUT === 5) { sub("            if (cfg.multi && ev && ev.detail >= 2) { if (! it.sel) { try { it.pick (); } catch (e) {} } close (); return; }\n            try { it.pick (); } catch (e) {}   // single-click",
+                        "            try { it.pick (); } catch (e) {}   // single-click");
+                   sub("clearTimeout (window.__tpbPrevT); if (cfg.multi && ! it.sel) { try { it.pick (); } catch (e) {} } close (); };", "clearTimeout (window.__tpbPrevT); close (); };"); }
+  if (MUT === 6) sub(".ctl-rx { width: 16px; height: 16px; display: grid;", ".ctl-rx { width: 10px; height: 10px; display: grid;");
   const p = path.join(os.tmpdir(), 'fb563_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }
 
@@ -117,11 +133,12 @@ const HELPERS = () => {
     return window.__mState(); };
   window.__mState = () => { const m = M(), act = !!(m && m.classList.contains('act'));
     const rows = act ? [...m.querySelectorAll('.syn-ctx-item')].map(d => d.textContent.trim()) : [];
-    const routes = act ? [...m.querySelectorAll('.syn-ctx-route')].map(d => d.querySelector('span').textContent.trim()) : [];
+    const routes = act ? [...m.querySelectorAll('.syn-ctx-route')].map(d => d.querySelector('.ctl-name').textContent.trim() + ' · ' + d.querySelector('.ctl-val').textContent.trim()) : [];   /* fb564 — name and value are two columns; spelled as one line here */
+    const cls = act ? m.className : ''; const seps = act ? m.querySelectorAll('.syn-ctx-sep').length : 0;
     const head = act && m.querySelector('.syn-ctx-header') ? m.querySelector('.syn-ctx-header').textContent.trim() : '';
     const browser = !!document.querySelector('.tpb-panel');
     const rect = act ? (() => { const q = m.getBoundingClientRect(); return [q.left, q.top, q.right, q.bottom].map(v => +v.toFixed(1)); })() : null;
-    return { act, head, rows, routes, browser, rect }; };
+    return { act, head, rows, routes, browser, rect, cls, seps }; };
   window.__mRow = (prefix) => { const m = M(); if (! m) return false;
     const d = [...m.querySelectorAll('.syn-ctx-item')].find(x => x.textContent.trim().startsWith(prefix)); if (! d) return false; d.click(); return true; };
   window.__mClose = () => { try { window.__synHideMenu(); } catch(e){} try { if (window.__tpbClose) window.__tpbClose(); } catch(e){} };
@@ -136,11 +153,11 @@ const HELPERS = () => {
     const it = window.__bRows(window.__bPanes()[1]).find(r => r.name === name); if (! it) return 'no hit ' + name; it.el.click(); return 'picked'; };
   window.__routes = () => window.__tiRoutes();
   window.__clearRoutes = () => { window.__tiPruneFxRoutes(0, 1e9); };
-  window.__sliderDrag = (i, frac) => { const m = M(); const rows = m ? [...m.querySelectorAll('.syn-ctx-route')] : []; const row = rows[i]; if (! row) return 'no row';
-    const tr = row.querySelector('.ctl-depth'), r = tr.getBoundingClientRect(); const x = r.left + r.width*frac, y = r.top + 1;
-    tr.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, cancelable:true, clientX:x, clientY:y, pointerId:1, buttons:1 }));
-    tr.dispatchEvent(new PointerEvent('pointermove', { bubbles:true, cancelable:true, clientX:x, clientY:y, pointerId:1, buttons:1 }));
-    tr.dispatchEvent(new PointerEvent('pointerup',   { bubbles:true, cancelable:true, clientX:x, clientY:y, pointerId:1 }));
+  window.__valDrag = (i, dy) => { const m = M(); const rows = m ? [...m.querySelectorAll('.syn-ctx-route')] : []; const row = rows[i]; if (! row) return 'no row';
+    const v = row.querySelector('.ctl-val'), r = v.getBoundingClientRect(); const x = r.left + r.width/2, y = r.top + r.height/2;   /* fb564 — the value IS the depth editor: up = more */
+    v.dispatchEvent(new PointerEvent('pointerdown', { bubbles:true, cancelable:true, clientX:x, clientY:y, pointerId:1, buttons:1, button:0 }));
+    v.dispatchEvent(new PointerEvent('pointermove', { bubbles:true, cancelable:true, clientX:x, clientY:y - dy, pointerId:1, buttons:1 }));
+    v.dispatchEvent(new PointerEvent('pointerup',   { bubbles:true, cancelable:true, clientX:x, clientY:y - dy, pointerId:1 }));
     return 'dragged'; };
   window.__rowClick = (i, cls) => { const m = M(); const rows = m ? [...m.querySelectorAll('.syn-ctx-route')] : []; const row = rows[i]; if (! row) return 'no row';
     const g = row.querySelector('.' + cls); if (! g) return 'no glyph'; g.click(); return 'clicked'; };
@@ -210,7 +227,7 @@ const HELPERS = () => {
   const WARP = '#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]';
   await pg.evaluate(() => window.__clearRoutes());
   let s = await pg.evaluate((sel) => { window.__mClose(); return window.__mOpen(document.querySelector(sel)); }, WARP);
-  chk(s.act && s.head === 'Warp A', '2  Warp A opens its menu, named', JSON.stringify({ head:s.head, rows:s.rows }));
+  chk(s.act && s.head === '' && /\bctl\b/.test(s.cls) && s.seps === 0, '2  Warp A opens its menu — no header, no separators, the grid (fb564)', JSON.stringify({ head:s.head, cls:s.cls, seps:s.seps, rows:s.rows }));
   let r = await pg.evaluate(() => { const ok = window.__mRow('Modulate'); return { ok, cats: window.__bCats(), menu: window.__mState().act }; });
   chk(r.ok && r.cats && r.cats.join('|') === 'All|Envelopes|LFOs|Macros|Keys|Audio|MIDI' && ! r.menu, '2  Modulate › opens the browser: All · Envelopes · LFOs · Macros · Keys · Audio · MIDI, the menu steps aside', JSON.stringify(r.cats));
   r = await pg.evaluate(() => { const a = window.__bPick('LFOs', 'LFO 2'); return { a, routes: window.__routes(), open: !!document.querySelector('.tpb-panel') }; });
@@ -238,10 +255,13 @@ const HELPERS = () => {
   s = await pg.evaluate((sel) => window.__mOpen(document.querySelector(sel)), WARP);
   chk(s.routes.length === 2 && s.routes[0] === 'Env 1 · 100%' && s.routes[1] === 'LFO 2 · 50%' && s.rows.some(x => x === 'Remove all modulators'),
       '3  two connections → two rows with their depths, and Remove all modulators', JSON.stringify(s.routes));
-  r = await pg.evaluate(() => { const a = window.__sliderDrag(1, 0.9); return { a, routes: window.__routes(), row: window.__mState().routes[1] }; });
-  chk(r.routes[1] && Math.abs(r.routes[1].v - 0.8) < 0.03 && /LFO 2 · 8\d%/.test(r.row), '3  drag the LFO 2 slider to 90% → depth +80% (signed, centre = 0)', JSON.stringify({ v:r.routes[1] && r.routes[1].v, row:r.row }));
-  r = await pg.evaluate(() => { const a = window.__sliderDrag(0, 0.5); return { a, routes: window.__routes(), row: window.__mState().routes[0] }; });
-  chk(r.routes[0] && Math.abs(r.routes[0].v - 0.5) < 0.03 && /Env 1 · 5\d%/.test(r.row), '3  drag the Env 1 slider to half → depth 50% (a magnitude, fills from the left)', JSON.stringify({ v:r.routes[0] && r.routes[0].v, row:r.row }));
+  r = await pg.evaluate(() => { const a = window.__valDrag(1, 30); return { a, routes: window.__routes(), row: window.__mState().routes[1] }; });
+  chk(r.routes[1] && Math.abs(r.routes[1].v - 0.8) < 0.015 && /LFO 2 · 80%/.test(r.row), '3  drag the LFO 2 value up 30 px → depth +80% (1 px = 1 %, signed)', JSON.stringify({ v:r.routes[1] && r.routes[1].v, row:r.row }));
+  r = await pg.evaluate(() => { const a = window.__valDrag(0, -50); return { a, routes: window.__routes(), row: window.__mState().routes[0] }; });
+  chk(r.routes[0] && Math.abs(r.routes[0].v - 0.5) < 0.015 && /Env 1 · 50%/.test(r.row), '3  drag the Env 1 value down 50 px → depth 50% (a magnitude, floors at 0)', JSON.stringify({ v:r.routes[0] && r.routes[0].v, row:r.row }));
+  r = await pg.evaluate(() => { const a = window.__valDrag(0, -200); const v1 = window.__routes()[0].v; const row = document.querySelector('#syn-ctx-menu .syn-ctx-route .ctl-val');
+    row.dispatchEvent(new MouseEvent('dblclick', { bubbles:true, cancelable:true, view:window })); return { a, v1, v2: window.__routes()[0].v, row: window.__mState().routes[0] }; });
+  chk(r.v1 === 0 && r.v2 === 1 && r.row === 'Env 1 · 100%', '3  an over-drag floors at 0 %; double-click the value → the drop default (100 %)', JSON.stringify(r));
   r = await pg.evaluate(() => { const a = window.__rowClick(0, 'ctl-crv'); return { a, host: window.__crvHostKey ? window.__crvHostKey() : null, menu: window.__mState().act }; });
   chk(r.a === 'clicked' && r.host === 'mod' && ! r.menu, '3  ⤢ opens the house curve editor on the connection (host = mod), the menu steps aside', JSON.stringify(r));
   await pg.evaluate(() => { try { window.__crvClose(); } catch(e){} });
@@ -252,7 +272,8 @@ const HELPERS = () => {
   // ── 4 · CONTROL ROWS FOLD IN ────────────────────────────────────────────────────────────
   s = await pg.evaluate((sel) => { window.__mClose(); return window.__mOpen(document.querySelector(sel)); }, WARP);
   const wm = s.rows.find(x => x.startsWith('Warp mode'));
-  chk(!!wm && /›$/.test(wm), '4  Warp A carries "Warp mode · <current> ›"', JSON.stringify(wm));
+  const wmArrow = await pg.evaluate(() => [...document.querySelectorAll('#syn-ctx-menu .syn-ctx-item')].filter(d => d.textContent.trim().startsWith('Warp mode') && d.querySelector('.syn-ctx-arrow')).length);
+  chk(!!wm && wm.length > 'Warp mode'.length && wmArrow === 1, '4  Warp A carries "Warp mode · <current>" with the chevron box (fb564: an SVG on the right rail, not a character)', JSON.stringify({ wm, wmArrow }));
   r = await pg.evaluate(() => { const ok = window.__mRow('Warp mode'); const cats = window.__bCats(); const menu = window.__mState().act;
     window.__emits.length = 0; const p = window.__bPick('All', 'Bend'); const em = window.__emits.filter(e => e.name === 'SYN_OSC_A_WARP_MODE'); return { ok, cats, menu, p, em }; });
   if (! (r.cats && r.cats.length)) r.guard = await pg.evaluate(() => { try { return window.__warpGuard({ quiet:true }); } catch(e) { return String(e); } });
@@ -316,11 +337,12 @@ const HELPERS = () => {
     const q = row.getBoundingClientRect();
     row.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 6, view:window }));
     const st = window.__mState(); return { head:st.head, rows:st.rows }; });
-  chk(r.rows && r.rows.some(x => x === 'Bypass') && r.rows.some(x => x.startsWith('Scale by')) && r.rows.some(x => x === 'Remove') && r.head === 'Env 1 · 100%',
-      '10 right-click a route row → Bypass · Scale by › · Remove, titled by the connection', JSON.stringify(r));
+  chk(r.rows && r.rows.some(x => x === 'Bypass') && r.rows.some(x => x.startsWith('Scale by')) && r.rows.some(x => x === 'Remove') && r.head === '',
+      '10 right-click a route row → Bypass · Scale by › · Remove (no title — the fb564 grid)', JSON.stringify(r));
   r = await pg.evaluate(() => { window.__natives.length = 0; const ok = window.__mRow('Bypass'); const st = window.__mState();
     const pushed = window.__natives.filter(n => n.fn === 'setSynthMod').map(n => n.args[0]).pop() || '';
-    return { ok, routes: window.__routes(), routesTxt: st.routes, pushed: /"b":1/.test(pushed), dim: (document.querySelector('#syn-ctx-menu .syn-ctx-route') || {}).style && document.querySelector('#syn-ctx-menu .syn-ctx-route').style.opacity }; });
+    const nm = document.querySelector('#syn-ctx-menu .syn-ctx-route .ctl-name');
+    return { ok, routes: window.__routes(), routesTxt: st.routes, pushed: /"b":1/.test(pushed), dim: nm ? getComputedStyle(nm).opacity : null }; });
   chk(r.ok && r.routes[0] && r.routes[0].b === 1 && r.routes[0].s === 'env1' && r.pushed && r.routesTxt[0] === 'Env 1 · off' && r.dim === '0.45',
       '10 Bypass keeps the connection, marks it b:1 on the wire, the row reads "off" and dims', JSON.stringify({ b:r.routes[0] && r.routes[0].b, pushed:r.pushed, txt:r.routesTxt, dim:r.dim }));
   r = await pg.evaluate(() => { const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); const q = row.getBoundingClientRect();
@@ -387,6 +409,99 @@ const HELPERS = () => {
   chk(r.v3 === 63 && r.writes === 1 && Math.abs(r.norm - 0.63) < 1e-6, '9  a macro writes SYN_MACRO_n through setSynParam (63 → 0.63)', JSON.stringify({ v3:r.v3, writes:r.writes, norm:r.norm }));
   chk(r.routes.length === 1 && r.routes[0].s === 'mac5' && r.routes[0].d === 3 && r.routes[0].v === 1, '9  dragging a macro\'s NAME onto Warp A makes the route {mac5 → 3, 1.0}', JSON.stringify(r.routes));
   chk(r.bend === 2, '9  the Bend row reads its default range, 2 semitones', JSON.stringify(r.bend));
+
+  // ── 12 · THE GRID (fb564) ───────────────────────────────────────────────────────────────
+  // ⚠️ bar 9 ended with a REAL drag; the page's fb178 guard swallows any .syn-ctx-item click
+  // within 300 ms of a drag's end (a drop must never double as a click). A mouse cannot get
+  // here that fast; this gate can, so it waits like a hand would.
+  await new Promise(r => setTimeout(r, 350));
+  r = await pg.evaluate((sel) => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3); window.__tiAddRoute(0, 2, 3);
+    const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');
+    const st = window.__mOpen(document.querySelector(sel)); const m = document.getElementById('syn-ctx-menu');
+    const R = (el) => el.getBoundingClientRect();
+    const labels = [...m.querySelectorAll('.syn-ctx-lab, .ctl-name')].map(e => +R(e).left.toFixed(1));
+    const vals = [...m.querySelectorAll('.ctl-val')].map(e => +R(e).right.toFixed(1));
+    const rail = [...m.querySelectorAll('.ctl-rx, .syn-ctx-arrow')].map(e => ({ r:+R(e).right.toFixed(1), w:+R(e).width.toFixed(1), h:+R(e).height.toFixed(1) }));
+    const crv = [...m.querySelectorAll('.ctl-crv')].map(e => ({ r:+R(e).right.toFixed(1), w:+R(e).width.toFixed(1), h:+R(e).height.toFixed(1) }));
+    const rows = [...m.querySelectorAll('.syn-ctx-item, .syn-ctx-route')].map(e => +R(e).height.toFixed(1));
+    const uniq = (a) => [...new Set(a)];
+    return { head:st.head, seps:st.seps, labels:uniq(labels), vals:uniq(vals), rail:uniq(rail.map(x => x.r)), boxes:uniq(rail.concat(crv).map(x => x.w + 'x' + x.h)), crv:uniq(crv.map(x => x.r)), rows:uniq(rows), n:labels.length, nRail:rail.length, nCrv:crv.length }; }, WARP);
+  chk(r.head === '' && r.seps === 0 && r.n >= 7 && r.labels.length === 1 && r.vals.length === 1 && r.nRail >= 4 && r.rail.length === 1 && r.nCrv === 2 && r.crv.length === 1
+      && r.boxes.length === 1 && r.boxes[0] === '16x16' && r.rows.length === 1 && r.rows[0] === 24,
+      '12 the grid: no header, no rules, one left rail for every word, one right edge for every value, ⤢ · ✕ · › identical 16 px boxes on one right rail, 24 px rows', JSON.stringify(r));
+  // the hover colours: ✕ goes RED, ⤢ goes white (Max: "whenever we hover over the X button, it's red")
+  r = await pg.evaluate(() => { const x = document.querySelector('#syn-ctx-menu .ctl-rx'), c = document.querySelector('#syn-ctx-menu .ctl-crv');
+    const st = document.createElement('style'); st.textContent = '#syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-rx.__hov { color:#EF4444; }'; document.head.appendChild(st);   // :hover cannot be forced from script; the rule under test is read from the sheet instead
+    const rules = [...document.styleSheets].flatMap(s => { try { return [...s.cssRules]; } catch(e) { return []; } }).map(r => r.cssText || '');
+    const red = rules.some(t => /\.ctl-rx:hover/.test(t) && /239, 68, 68|#ef4444/i.test(t)), white = rules.some(t => /\.ctl-crv:hover/.test(t) && /255, 255, 255|#fff/i.test(t));
+    st.remove(); return { red, white, rest: getComputedStyle(x).color }; });
+  chk(r.red && r.white && r.rest === 'rgba(255, 255, 255, 0.45)', '12 ✕ rests at .45 white and turns red on hover; ⤢ turns white', JSON.stringify(r));
+  // a click on the row opens its options — no second right-click needed
+  r = await pg.evaluate(() => { const row = document.querySelector('#syn-ctx-menu .syn-ctx-route'); const q = row.getBoundingClientRect();
+    row.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, clientX:q.left + 30, clientY:q.top + 12, view:window })); const st = window.__mState(); return { rows:st.rows, head:st.head, cls:st.cls }; });
+  chk(r.rows.length >= 3 && r.rows[0] === 'Bypass' && r.rows[1].startsWith('Scale by') && r.rows.some(x => x === 'Remove') && r.head === '' && /\bctl\b/.test(r.cls),
+      '12 a click on a route row opens Bypass · Scale by › · Remove, in the same grid', JSON.stringify(r));
+  // a DOUBLE-CLICK on a picker source assigns it and closes (the second click of the pair never toggles it off)
+  r = await pg.evaluate((sel) => { window.__mClose(); window.__clearRoutes(); window.__mOpen(document.querySelector(sel)); window.__mRow('Modulate');
+    const p = window.__bPanes(); window.__bRows(p[0]).find(c => c.name === 'LFOs').el.click();
+    const it = () => { const p = window.__bPanes(); if (p.length < 2) return null; return window.__bRows(p[1]).find(x => x.name === 'LFO 4') || null; };   // null once the picker has closed
+    const dbl = (el) => { el.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, detail:1, view:window }));
+                          const el2 = it() ? it().el : el;   // the list repaints after a click; the second click lands on the repainted row
+                          el2.dispatchEvent(new MouseEvent('click', { bubbles:true, cancelable:true, detail:2, view:window }));
+                          const el3 = it() ? it().el : el2; el3.dispatchEvent(new MouseEvent('dblclick', { bubbles:true, cancelable:true, detail:2, view:window })); };
+    dbl(it().el); const a = { routes: window.__routes().map(x => x.s), open: !!document.querySelector('.tpb-panel') };
+    // and on a source that is ALREADY routed: the double-click keeps it and closes
+    window.__mOpen(document.querySelector(sel)); window.__mRow('Modulate'); window.__bRows(window.__bPanes()[0]).find(c => c.name === 'LFOs').el.click();
+    dbl(it().el); const b = { routes: window.__routes().map(x => x.s), open: !!document.querySelector('.tpb-panel') };
+    return { a, b }; }, WARP);
+  chk(r.a.routes.join() === 'lfo4' && ! r.a.open && r.b.routes.join() === 'lfo4' && ! r.b.open,
+      '12 double-click LFO 4 in the picker → routed AND the picker closed; double-click it again → still routed, closed', JSON.stringify(r));
+
+  // ── 13 · A MACRO IS A CONTROL (fb564) ───────────────────────────────────────────────────
+  r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes();
+    const btn = document.querySelector('#syn-panel .vm-macros-btn'); const vm = document.querySelector('#syn-panel .voice-meta'); if (btn && vm && ! vm.classList.contains('vm-macros-active')) btn.click();
+    const mel = document.querySelector('#syn-panel .vm-macro[data-macro="3"]'); const st = window.__mOpen(mel);
+    window.__natives.length = 0; const ml = window.__mRow('MIDI Learn'); const learn = window.__natives.filter(n => n.fn === 'setMidiLearn').map(n => n.args[0]);
+    const st2 = window.__mOpen(mel); const waiting = st2.rows.some(x => /^MIDI Learn.*waiting/.test(x));
+    window.__mRow('MIDI Learn');   // cancels the arm
+    return { rows: st.rows, ml, learn, waiting, dest: st.rows.some(x => x.startsWith('Modulate')) }; });
+  chk(r.rows.join('|') === 'Rename|Reset to default|MIDI Learn' && ! r.dest && r.ml && r.learn.join() === 'SYN_MACRO_3' && r.waiting,
+      '13 right-click Macro 3 → Rename · Reset to default · MIDI Learn (no Modulate: a macro is a source); MIDI Learn arms SYN_MACRO_3 and reads waiting…', JSON.stringify(r));
+  r = await pg.evaluate(() => { window.__mClose(); window.__tiAddRoute(0, 0, 3); try { window.__tiRoutes(); } catch(e){}
+    const mel = document.querySelector('#syn-panel .vm-macro[data-macro="3"]'); window.__mOpen(mel); window.__mRow('Rename');
+    const inp = document.querySelector('#syn-panel .vm-macro[data-macro="3"] .vm-ml input'); const armed = window.__tiActiveInp === inp;
+    if (inp) { inp.value = 'Cutoff'; inp.dispatchEvent(new KeyboardEvent('keydown', { key:'Enter', bubbles:true })); }
+    window.__natives.length = 0; window.__macroRename(3, 'Cutoff');
+    const saved = window.__natives.filter(n => n.fn === 'setMacroNames').map(n => n.args[0]).pop() || '';
+    const label = document.querySelector('#syn-panel .vm-macro[data-macro="3"] .vm-ml').textContent.trim();
+    // the route from Macro 3 to Warp A (a REAL pick through the picker) reads by the new name
+    const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');
+    window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]')); window.__mRow('Modulate');
+    const pick = window.__bPick('Macros', 'Cutoff'); window.__mClose();
+    const st = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]')); window.__mClose();
+    window.__macroRename(3, '');   // back to the default so later bars read "Macro 3"
+    return { armed, saved, label, pick, routes: st.routes, name3: window.__macroName(3) }; });
+  chk(r.armed && r.label === 'Cutoff' && /"Cutoff"/.test(r.saved) && r.pick === 'dot' && r.routes.some(x => x === 'Cutoff · 100%') && r.name3 === 'Macro 3',
+      '13 Rename → a field (armed for the host-key bridge); "Cutoff" lands on the knob, in the picker, on the route row and in setMacroNames', JSON.stringify(r));
+
+  // ── 14 · COPY WITH MODULATORS (fb564) ───────────────────────────────────────────────────
+  r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3); window.__tiAddRoute(0, 2, 4); window.__tiAddRoute(0, 5, 673);   // Env 1 → Warp A · LFO 2 → Fold A · LFO 5 → LFO 1 Rate (not the oscillator's)
+    const rs = window.__routes(); const idx = rs.findIndex(x => x.s === 'lfo2'); if (idx >= 0) try { window.__tiSetBypass(idx, 1); } catch(e){}
+    const mods = window.__tiOscRoutes('a');
+    const dispA = document.querySelector('#osc-a-device .osc-display'), dispB = document.querySelector('#osc-b-device .osc-display');
+    const open = (d) => { const q = d.getBoundingClientRect(); d.dispatchEvent(new MouseEvent('contextmenu', { bubbles:true, cancelable:true, clientX:q.left + 20, clientY:q.top + 10, view:window }));
+      const m = document.querySelector('.samp-menu.open'); return m ? [...m.children].map(c => c.textContent.trim()).filter(Boolean) : []; };
+    const rowsA = open(dispA); const cw = [...document.querySelector('.samp-menu.open').children].find(c => /^Copy with modulators/.test(c.textContent.trim())); if (cw) cw.click();
+    const clip = window.__oscClip ? { from: window.__oscClip.from, n: window.__oscClip.mods ? window.__oscClip.mods.length : -1 } : null;
+    const rowsB = open(dispB); window.__natives.length = 0;
+    const pr = [...document.querySelector('.samp-menu.open').children].find(c => /^Paste oscillator A/.test(c.textContent.trim())); if (pr) pr.click();
+    const call = window.__natives.filter(n => n.fn === 'copyOscParams').map(n => n.args.join('>'));
+    return new Promise(res => setTimeout(() => res({ mods: mods.map(m => m.sfx + ':' + Object.keys(m.S)[0] + Object.values(m.S)[0] + '@' + m.depth + (m.byp ? '·byp' : '')).sort(), rowsA: rowsA.filter(x => /oscillator|modulators/.test(x)), clip, rowsB: rowsB.filter(x => /^Paste oscillator/.test(x)), call,
+      onB: window.__routes().filter(x => x.d === 10 || x.d === 11).map(x => x.s + '→' + x.d + '@' + x.v + (x.b ? '·byp' : '')).sort(), onA: window.__routes().filter(x => x.d === 3 || x.d === 4).length, rate: window.__routes().filter(x => x.d === 673).length }), 60)); });
+  chk(r.mods && r.mods.join() === 'FOLD_AMT:lfo2@0.5·byp,WARP_AMOUNT:env1@1' && r.rowsA.join('|') === 'Copy oscillator|Copy with modulators' && r.clip && r.clip.from === 'a' && r.clip.n === 2,
+      '14 osc A\'s menu: Copy oscillator · Copy with modulators — the copy carries Warp A + Fold A (bypass kept), not the LFO-rate route', JSON.stringify({ mods:r.mods, rowsA:r.rowsA, clip:r.clip }));
+  chk(r.rowsB.join() === 'Paste oscillator A' && r.call.join() === 'a>b' && r.onB.join() === 'env1→10@1,lfo2→11@0.5·byp' && r.onA === 2 && r.rate === 1,
+      '14 osc B\'s menu: Paste oscillator A → copyOscParams(a,b) and the two routes land on Warp B + Fold B with their depths; A keeps its own', JSON.stringify({ rowsB:r.rowsB, call:r.call, onB:r.onB, onA:r.onA, rate:r.rate }));
 
   // ── 8 · NO REGRESSION ───────────────────────────────────────────────────────────────────
   s = await pg.evaluate(() => { window.__mClose(); const svg = document.querySelector('#syn-panel .device.envs svg'); if (! svg) return { act:false, rows:['no env svg'] }; return window.__mOpen(svg); });

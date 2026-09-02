@@ -942,6 +942,15 @@ public:
     void removeMidiCc (const juce::String& paramId);
     void setMidiMapJson (const juce::String& json);
     juce::String getMidiMapJson() const;
+    // fb564 — MACRO NAMES ("Cutoff", not "Macro 3"): a JSON array of eight strings owned by the page,
+    // persisted in the state as macroNames. Message thread only (the natives and the state).
+    void setMacroNamesJson (const juce::String& json);
+    juce::String getMacroNamesJson() const;
+    // fb564 — COPY / PASTE AN OSCILLATOR: the imported wavetable goes across with the parameters
+    // (rebuilt on the target from the same source audio); no import on the source clears the target's.
+    void copyOscImport (int src, int dst);
+    bool hasOscImport (int osc) const noexcept;
+    juce::String getImportName (int osc) const;
     int  midiMapVersion() const noexcept { return midiMapVersion_.load (std::memory_order_relaxed); }
     int  midiLearnedCc()  const noexcept { return midiLearnedCc_.load (std::memory_order_relaxed); }
     void midiCcSeen (int cc, int value) noexcept;        // audio thread
@@ -1689,6 +1698,8 @@ private:
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
     juce::ThreadPool   wtBuildPool_ { 1 };
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
+    juce::String       macroNamesJson_;                                    // fb564 — ["Cutoff","",…] as the page wrote it
+    mutable juce::CriticalSection macroNamesLock_;
     bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
     void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)

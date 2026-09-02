@@ -13206,6 +13206,40 @@ juce::String TerrainInstrumentAudioProcessor::getMidiMapJson() const
     }
     return out + "}";
 }
+void TerrainInstrumentAudioProcessor::setMacroNamesJson (const juce::String& json)
+{
+    const juce::ScopedLock sl (macroNamesLock_);
+    macroNamesJson_ = json.trim();
+}
+
+juce::String TerrainInstrumentAudioProcessor::getMacroNamesJson() const
+{
+    const juce::ScopedLock sl (macroNamesLock_);
+    return macroNamesJson_;
+}
+
+bool TerrainInstrumentAudioProcessor::hasOscImport (int osc) const noexcept
+{
+    return ! importedPcm_[(size_t) juce::jlimit (0, 3, osc)].empty();
+}
+
+juce::String TerrainInstrumentAudioProcessor::getImportName (int osc) const
+{
+    return importName_[juce::jlimit (0, 3, osc)];
+}
+
+void TerrainInstrumentAudioProcessor::copyOscImport (int src, int dst)
+{
+    src = juce::jlimit (0, 3, src); dst = juce::jlimit (0, 3, dst);
+    if (src == dst) return;
+    if (! hasOscImport (src)) { if (hasOscImport (dst)) clearImportedWavetable (dst); return; }   // the target sounds like the source: no import there either
+    importedPcm_[dst]  = importedPcm_[src];
+    importFrames_[dst] = importFrames_[src];
+    importIsFile_[dst] = importIsFile_[src];
+    importName_[dst]   = importName_[src];
+    rebuildImportAsync (dst);   // the same off-thread build an import gets (fb248)
+}
+
 void TerrainInstrumentAudioProcessor::setMidiMapJson (const juce::String& json)
 {
     for (int cc = 0; cc < 128; ++cc) midiCcParam_[cc].store (-1, std::memory_order_relaxed);
@@ -13907,6 +13941,7 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
     { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); }   // fb563 (4)
+    { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); }   // fb564
     {
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
@@ -14602,6 +14637,7 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
             }
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
+            setMacroNamesJson (newState.getProperty ("macroNames", "").toString());   // fb564 — empty = the eight defaults
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));

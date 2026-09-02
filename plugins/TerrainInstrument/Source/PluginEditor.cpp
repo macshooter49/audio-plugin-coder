@@ -857,6 +857,72 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withNativeFunction("getMidiMap", [this](const juce::Array<juce::var>&,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             { complete (juce::var (audioProcessor.getMidiMapJson())); })
+            .withNativeFunction("getMacroNames", [this](const juce::Array<juce::var>&,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {   // fb564 — the eight macro names as the page wrote them ("[]" = defaults)
+                const auto j = audioProcessor.getMacroNamesJson();
+                complete (juce::var (j.isNotEmpty() ? j : juce::String ("[]")));
+            })
+            .withNativeFunction("setMacroNames", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() >= 1) audioProcessor.setMacroNamesJson (args[0].toString());
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction("copyOscParams", [this](const juce::Array<juce::var>& args,
+                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb564 — COPY / PASTE AN OSCILLATOR (the osc menu's "Copy oscillator" / "Paste
+                // oscillator"). Every SYN_OSC_<src>_ parameter lands on its SYN_OSC_<dst>_ twin through
+                // setValueNotifyingHost (the host sees ordinary parameter changes), the loaded sample
+                // buffer comes across exactly as copyOscSample does it, and the imported wavetable is
+                // rebuilt on the target from the same source audio. Solo and mute stay where they are: a
+                // paste changes what the oscillator IS, never what is audible in the mix right now.
+                // Returns {"copied":n,"importActive":bool,"importName":"…"} so the page can dress the
+                // target's display. args[0] = source letter, args[1] = destination letter.
+                if (args.size() < 2) { complete (juce::var ("badargs")); return; }
+                auto toIdx = [] (const juce::String& s) { return s.isNotEmpty() ? juce::jlimit (0, 3, (int) s[0] - 'a') : 0; };
+                const int src = toIdx (args[0].toString());
+                const int dst = toIdx (args[1].toString());
+                if (src == dst) { complete (juce::var ("same")); return; }
+                const juce::String srcPre = "SYN_OSC_" + juce::String::charToString ((juce::juce_wchar) ('A' + src)) + "_";
+                const juce::String dstPre = "SYN_OSC_" + juce::String::charToString ((juce::juce_wchar) ('A' + dst)) + "_";
+                auto& ap = audioProcessor.getAPVTS();
+                int n = 0;
+                for (auto* prm : audioProcessor.getParameters())
+                {
+                    auto* rp = dynamic_cast<juce::RangedAudioParameter*> (prm);
+                    if (rp == nullptr || ! rp->paramID.startsWith (srcPre)) continue;
+                    const juce::String sfx = rp->paramID.substring (srcPre.length());
+                    if (sfx == "SOLO" || sfx == "MUTE") continue;
+                    auto* tp = ap.getParameter (dstPre + sfx);
+                    if (tp == nullptr) continue;
+                    tp->beginChangeGesture();
+                    tp->setValueNotifyingHost (rp->getValue());
+                    tp->endChangeGesture();
+                    ++n;
+                }
+                auto srcBuf = audioProcessor.getOscSampleBuffer (src).load();
+                if (srcBuf != nullptr && srcBuf->getNumSamples() > 0)
+                {
+                    audioProcessor.getOscSampleBuffer (dst).store (std::make_shared<juce::AudioBuffer<float>> (*srcBuf));
+                    audioProcessor.oscSourcePath (dst) = audioProcessor.oscSourcePath (src);
+                    const juce::String payload = audioProcessor.getCachedOscPayload (src);
+                    audioProcessor.setCachedOscPayload (payload, dst);
+                    const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + dst)));
+                    if (webView != nullptr && payload.isNotEmpty())
+                        webView->evaluateJavascript (
+                            juce::String ("if(window.onOscSampleLoaded)window.onOscSampleLoaded('")
+                            + letter + "'," + payload + ");", nullptr);
+                }
+                audioProcessor.copyOscImport (src, dst);
+                const bool impActive = audioProcessor.hasOscImport (src);
+                juce::DynamicObject::Ptr o = new juce::DynamicObject();
+                o->setProperty ("copied", n);
+                o->setProperty ("importActive", impActive);
+                o->setProperty ("importName", impActive ? audioProcessor.getImportName (src) : juce::String());
+                complete (juce::var (juce::JSON::toString (juce::var (o.get()), true)));
+            })
             .withNativeFunction("getConvIR", [this](const juce::Array<juce::var>& args,
                                                     juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5845,6 +5911,12 @@ void TerrainUiCore::timerCallback()
     // — the fb505 rest-pose semantics Max approved. The first audible block re-appends and the
     // whole feed resumes on the next tick.
     const bool uiQuiet = (eqQuietTicks_ >= 90);
+    // fb564 — the MACRO values ride OUTSIDE the quiet gate: a learned CC or host automation moves a
+    // macro with no note sounding, and the Macros view's knob must follow it. The bytes are constant
+    // while nothing moves, so the fb511 idle-skip still sees a byte-identical frame.
+    js << "window.__mvMacro=[";
+    for (int mk = 0; mk < wc::kNumMacros; ++mk) js << (mk ? "," : "") << SF (audioProcessor.modVizMacro (mk), 3);
+    js << "];";
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     if (! uiQuiet)
     {
@@ -5863,9 +5935,7 @@ void TerrainUiCore::timerCallback()
         js << "];";
         // fb563 — the Phase 2 sources' live values, for their comets (Max's law: audible ⇒ visible)
         juce::String p2Feed;
-        p2Feed << "window.__mvMacro=[";
-        for (int mk = 0; mk < wc::kNumMacros; ++mk) p2Feed << (mk ? "," : "") << SF (audioProcessor.modVizMacro (mk), 3);
-        p2Feed << "];window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
+        p2Feed << "window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
                << ";window.__mvAT=" << SF (audioProcessor.modVizAftertouch(), 3)
                << ";window.__mvBend=" << SF (audioProcessor.modVizBend(), 3)
                << ";window.__mvRand=[";

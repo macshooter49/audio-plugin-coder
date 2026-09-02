@@ -414,6 +414,19 @@ window.__extGlyph = function (px) { var d = px || 13;
   return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
        + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
        + '<path d="M15 3h6v6"/><path d="M9 21H3v-6"/><path d="M21 3l-8 8"/><path d="M3 21l8-8"/></svg>'; };
+/* fb564 — THE CROSS AND THE CHEVRON, drawn on the ⤢'s own geometry: the same 24-unit viewBox, the
+   same 2.2 stroke, the same round caps, seated in the same 16 px box. Max: "the X is very small
+   while the extension is big... it needs to be parallel with each other." Two glyphs that share a
+   row are one family or they are noise. ONE definition each — the control menu's route rows, its
+   submenu rows, the hover list under a knob all draw from here (the fb560 law, again). */
+window.__xGlyph = function (px) { var d = px || 13;
+  return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+       + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+       + '<path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg>'; };
+window.__chevGlyph = function (px) { var d = px || 13;
+  return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
+       + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+       + '<path d="M9 5l7 7-7 7"/></svg>'; };
 /* ══ fb563 — THE CONTROL MENU'S EXTRA-ROW REGISTRY ══════════════════════════════════════════
    Every knob, pill and emblem opens ONE right-click menu now (the SYNTH MOD MATRIX module owns
    it: Modulate › · the routes · Reset · Copy/Paste). A control that also has something of its
@@ -5646,6 +5659,37 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               overflow: hidden;
               text-overflow: ellipsis;
             }
+            /* ═══ fb564 — THE CONTROL MENU'S GRID ═════════════════════════════════════════════════
+               Max: "everything must be symmetrical... not everything is set to the left side...
+               Envelope 1 and Envelope 5 are pushed all the way over to the left but everything
+               isn't... the X button is very small compared to our extension button... no header,
+               no separators." One left rail for every word (14 px, no phantom check column), one
+               right rail for every trailing box (16 px: › on a row that opens, ✕ on a route, the
+               dot on a checked row), the value in its own tabular column so 100 % under 100 %
+               lands to the pixel, 24 px rows all the way down, no rules between the groups.
+               Scoped to .ctl so the classic list (mode pickers, the noise menu, the envelope hub)
+               does not move by a pixel. */
+            #syn-panel .syn-ctx-menu.ctl { min-width: 200px; padding: 6px 0; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item { display: grid; grid-template-columns: minmax(0,1fr) auto 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item::before { content: none; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item .syn-ctx-lab { grid-column: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item .syn-ctx-badge { grid-column: 2; margin-left: 0; padding-left: 0; max-width: 112px; text-align: right; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-arrow,
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-ck { grid-column: 3; width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-item:hover .syn-ctx-arrow { color: #FFFFFF; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-ck { color: var(--purple-400); }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route { display: grid; grid-template-columns: minmax(0,1fr) 36px 16px 16px; column-gap: 8px; align-items: center; height: 24px; padding: 0 10px 0 14px; cursor: pointer; color: var(--text-primary); }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route:hover { background: rgba(139,92,246,0.18); color: #FFFFFF; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-name { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route.byp .ctl-name { opacity: .45; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val { text-align: right; font-variant-numeric: tabular-nums; font-size: 10px; letter-spacing: .2px; color: rgba(255,255,255,0.45); cursor: ns-resize; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val:hover,
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-val.drag { color: #FFFFFF; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv,
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-rx { width: 16px; height: 16px; display: grid; place-items: center; color: rgba(255,255,255,0.45); cursor: pointer; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv.on { color: rgba(255,255,255,0.92); }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-crv:hover { color: #FFFFFF; }
+            #syn-panel .syn-ctx-menu.ctl .syn-ctx-route .ctl-rx:hover { color: #EF4444; }   /* Max: "whenever we hover over the X button, it's red" */
             /* TwoFilters — 1/2 slot tabs: small, semi-transparent until active, aligned with the + swap button */
             #syn-panel .filter-toggle .ft-pill {
               width: 16px; height: 14px; font-size: 8.5px;
@@ -8125,6 +8169,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
         #syn-panel .vm-macro .vm-ml{ font-size:7px; letter-spacing:.2px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; cursor:grab; }   /* fb563 — the name is the drag grip */
+        #syn-panel .vm-macro .vm-mi{ width:100%; box-sizing:border-box; font:inherit; font-size:7px; letter-spacing:.2px; text-align:center; background:none; border:0; border-bottom:1px solid rgba(255,255,255,.42); border-radius:0; color:#fff; outline:none; padding:0; margin:0; }   /* fb564 — the rename field: the name's own type on a hairline, nothing else */
         /* Macros view active → only the Macros button lights (suppress Mono/Legato/Poly highlight) */
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
@@ -12534,10 +12579,40 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                bare number sits on the face (the readout law). The NAME is a drag grip
                (data-drag-macro) and the control menu's Macros family lists the same eight. */
             var NM=8, val=[0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;
-            for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
+            for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'" data-pid="SYN_MACRO_'+(i+1)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
               +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it, or right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
             mv.innerHTML=mh;
             var mks=mv.querySelectorAll('.vm-mk');
+            /* fb564 — NAMES. A macro is called what you call it ("Cutoff", not "Macro 3"): on the knob,
+               in the picker, on every route row and in the hover list. Persisted in the patch
+               (macroNames, through the processor). Rename = the control menu's Rename row → the name
+               becomes a field (the fb135 host-key bridge types into it), Enter / blur commit, Esc reverts. */
+            var names=['','','','','','','',''], mls=mv.querySelectorAll('.vm-ml');
+            window.__macroName=function(k){ return (names[k-1]||'').trim()||('Macro '+k); };
+            function paintNames(){ for(var i=0;i<NM;i++){ if(mls[i]) mls[i].textContent=window.__macroName(i+1); } try{ if(window.__macroNamesChanged) window.__macroNamesChanged(); }catch(_){} }
+            function seedNames(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getMacroNames'):null; if(!g) return;
+              var r=g(); if(r&&r.then) r.then(function(js){ try{ var arr=JSON.parse(String(js||'[]')); if(Array.isArray(arr)){ for(var i=0;i<NM;i++) names[i]=String(arr[i]||''); paintNames(); } }catch(_){} }); }catch(_){} }
+            seedNames(); [900,2500].forEach(function(ms){ setTimeout(seedNames,ms); });
+            function commitName(i,nm){ names[i]=String(nm||'').trim().slice(0,24); paintNames();
+              try{ var sf=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setMacroNames'):null; if(sf) sf(JSON.stringify(names)); }catch(_){} }
+            function renameM(i){ var lab=mls[i]; if(!lab||lab.querySelector('input')) return; var old=window.__macroName(i+1);
+              lab.textContent=''; var inp=document.createElement('input'); inp.type='text'; inp.maxLength=24; inp.className='vm-mi'; inp.value=old; lab.appendChild(inp);
+              function done(save){ if(!inp.parentNode) return; var v=inp.value; if(window.__tiActiveInp===inp){ window.__tiActiveInp=null; if(window.__tiEditArm) window.__tiEditArm(0); }
+                if(save) commitName(i,v); else paintNames(); }
+              window.__tiActiveInp=inp; if(window.__tiEditArm) window.__tiEditArm(1);
+              try{ inp.focus(); inp.select(); }catch(_){} setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(_){} },80);
+              inp.addEventListener('keydown',function(ev){ ev.stopPropagation(); if(ev.key==='Enter') done(true); else if(ev.key==='Escape') done(false); });
+              inp.addEventListener('blur',function(){ setTimeout(function(){ done(true); },0); });
+              inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
+            window.__macroRename=function(k,nm){ commitName(k-1,nm); }; window.__macroRenameOpen=function(k){ renameM(k-1); };   /* gate hooks */
+            [].forEach.call(mv.querySelectorAll('.vm-macro'),function(mel){ if(window.__ctlMenuRows) window.__ctlMenuRows.on(mel,function(ev,el){ var k=+(el.getAttribute('data-macro')||0); if(!k) return [];
+              return [{ label:'Rename', onPick:function(){ renameM(k-1); } }]; }); });
+            /* fb564 — THE KNOB FOLLOWS THE PARAMETER. A learned CC or host automation moves SYN_MACRO_n
+               with no pointer near this view; the editor feed carries the live values (window.__mvMacro,
+               outside the quiet gate), so the face repaints from them whenever a hand is not on it. */
+            var macroDrag=false;
+            setInterval(function(){ try{ if(macroDrag||mv.style.display==='none') return; var m=window.__mvMacro; if(!m||!m.length) return;
+              for(var i=0;i<NM;i++){ var v=Math.round((+m[i]||0)*100); if(v!==Math.round(val[i])){ val[i]=v; paintM(i); } } }catch(_){} },150);
             function paintM(i){ var mk=mks[i]; if(!mk) return; mk.setAttribute('data-v',Math.round(val[i])); mk.innerHTML=knobSVG(val[i]); }
             function writeM(i,v){ val[i]=Math.max(0,Math.min(100,v)); paintM(i); try{ if(window.__setSynParam) window.__setSynParam('SYN_MACRO_'+(i+1), val[i]/100); }catch(_){} }
             function seedM(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynParam'):null; if(!g) return;
@@ -12545,9 +12620,9 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             seedM(); [900,2500].forEach(function(ms){ setTimeout(seedM,ms); });   /* the natives may land after the first pass (fb548 — the page is built by a ladder) */
             mv.addEventListener('pointerdown',function(e){ try{
               var mk=e.target.closest('.vm-mk'); if(!mk) return; if(e.button!==0) return; e.preventDefault();
-              var i=[].indexOf.call(mks,mk); if(i<0) return; var sy=e.clientY, sv=val[i], moved=false;
+              var i=[].indexOf.call(mks,mk); if(i<0) return; var sy=e.clientY, sv=val[i], moved=false; macroDrag=true;
               function mvm(ev){ if(Math.abs(ev.clientY-sy)>1) moved=true; writeM(i, sv+(sy-ev.clientY)*0.6); }
-              function up(){ document.removeEventListener('pointermove',mvm); document.removeEventListener('pointerup',up); if(moved) lastMacroDrag=Date.now(); }
+              function up(){ macroDrag=false; document.removeEventListener('pointermove',mvm); document.removeEventListener('pointerup',up); if(moved) lastMacroDrag=Date.now(); }
               document.addEventListener('pointermove',mvm); document.addEventListener('pointerup',up);
             }catch(_){ } });
             mv.addEventListener('dblclick',function(e){ try{ var mk=e.target.closest('.vm-mk'); if(!mk) return; if(Date.now()-lastMacroDrag<400) return;   /* double-click = default (0), the fb363 law */
@@ -17486,6 +17561,33 @@ setTimeout(function wireSynControls () {
             var ps = document.createElement ('div'); ps.className = 'sepd'; m.appendChild (ps);
           }
         } catch (_) {}
+        /* fb564 — COPY / PASTE THE OSCILLATOR. Every SYN_OSC_x_ parameter, the loaded sample and the
+           imported wavetable go across in C++ (copyOscParams); "with modulators" also carries every
+           connection on this oscillator's knobs, re-aimed at the twin knob on the target (Serum's
+           "Copy (w/mods)"). A session clipboard, never persisted. */
+        try {
+          var _L = oscLetter, _clipO = window.__oscClip;
+          var _mkRow = function (svg, text, fn) { var r = document.createElement ('div'); r.innerHTML = svg + text;
+            r.addEventListener ('click', function () { try { fn (); } catch (_) {} m.classList.remove ('open'); }); m.appendChild (r); return r; };
+          var _ICO_COPY  = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="5.5" y="5.5" width="8" height="8" rx="1"/><path d="M10.5 5.5V3.5a1 1 0 0 0-1-1h-6a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2"/></svg>';
+          var _ICO_PASTE = '<svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="6" width="8" height="8" rx="1"/><path d="M6.5 6 V4 H10 V6"/></svg>';
+          _mkRow (_ICO_COPY, 'Copy oscillator', function () { window.__oscClip = { from: _L, mods: null };
+            if (window.__tiToast) window.__tiToast ('Copied oscillator ' + _L.toUpperCase ()); });
+          _mkRow (_ICO_COPY, 'Copy with modulators', function () { var mods = window.__tiOscRoutes ? window.__tiOscRoutes (_L) : []; window.__oscClip = { from: _L, mods: mods };
+            if (window.__tiToast) window.__tiToast ('Copied oscillator ' + _L.toUpperCase () + ' with ' + mods.length + ' modulator' + (mods.length === 1 ? '' : 's')); });
+          if (_clipO && _clipO.from && _clipO.from !== _L) {
+            _mkRow (_ICO_PASTE, 'Paste oscillator ' + _clipO.from.toUpperCase (), function () {
+              var cf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('copyOscParams') : null;
+              var fin = function (js) { var st = null; try { st = JSON.parse (String (js || 'null')); } catch (_) {}
+                /* the wavetable display follows the paste: an import carries its name; a factory table is a parameter and the relay already moved the select */
+                try { var WT = window.wtWaterfall; if (WT && st && typeof st === 'object') { WT.imported[_L] = !! st.importActive; if (! WT.importName) WT.importName = {}; WT.importName[_L] = st.importName || '';
+                  var disp = document.getElementById ('osc-' + _L + '-preset-display'); if (disp && st.importActive && st.importName) disp.textContent = st.importName; if (WT.fetch) WT.fetch (_L); } } catch (_) {}
+                var n = 0; if (_clipO.mods && window.__tiPasteOscRoutes) n = window.__tiPasteOscRoutes (_L, _clipO.mods) | 0;
+                if (window.__tiToast) window.__tiToast ('Pasted oscillator ' + _clipO.from.toUpperCase () + ' \u2192 ' + _L.toUpperCase () + (_clipO.mods ? ' with ' + n + ' modulator' + (n === 1 ? '' : 's') : '')); };
+              if (cf) Promise.resolve (cf (_clipO.from, _L)).then (fin).catch (function () { fin (null); }); else fin (null); });
+          }
+          var _osep = document.createElement ('div'); _osep.className = 'sepd'; m.appendChild (_osep);
+        } catch (_) {}
         try { var _rdev = e && e.target ? e.target.closest ('.device.osc') : null;
               /* Resynth extras retired — Cut LP/HP, Drive mode, Sieve mode, Shape target all live on the KNOB right-clicks now (KNOB_MENUS) */ } catch (_) {}
         m.appendChild (buildOscQuick (oscLetter));
@@ -21060,8 +21162,9 @@ setTimeout(function wireSynControls () {
       // isHeader: render as section header (no click handler)
       // isDisabled: render dimmed, no click handler (for "soon" placeholders)
       // badge: small trailing text (e.g. "soon") rendered after the label
-      const showMenu = (header, items, x, y) => {
+      const showMenu = (header, items, x, y, opts) => {
         menuEl.innerHTML = '';
+        menuEl.classList.toggle('ctl', !! (opts && opts.cls === 'ctl'));   /* fb564 — the control menu's GRID (one left rail, one right rail, no rules, no header); every other caller keeps the classic list untouched */
         if (header) {
           const h = document.createElement('div');
           h.className = 'syn-ctx-header';
@@ -21087,7 +21190,7 @@ setTimeout(function wireSynControls () {
           div.className = 'syn-ctx-item'
                         + (it.isChecked ? (it.white ? ' checked wsel' : ' checked') : '')   /* fb66 — white selection when {white:true} */
                         + (it.isDisabled ? ' disabled' : '');
-          div.textContent = it.label;
+          const lab = document.createElement('span'); lab.className = 'syn-ctx-lab'; lab.textContent = it.label; div.appendChild(lab);   /* fb564 — the word in its own span so the grid can place it; the row's textContent is unchanged for every reader */
           /* fb558 — {icon:true} prefixes the shared EXTEND emblem. textContent lands FIRST (it
              wipes children), so the glyph is inserted after it. .syn-ctx-item is already a flex
              row with an 8px gap, so the emblem needs no geometry of its own. */
@@ -21101,6 +21204,13 @@ setTimeout(function wireSynControls () {
             b.className = 'syn-ctx-badge';
             b.textContent = it.badge;
             div.appendChild(b);
+          }
+          if (it.sub) {   /* fb564 — a row that opens something carries an SVG chevron in the SAME 16 px box the route rows' ✕ sits in: one right rail */
+            const a = document.createElement('span'); a.className = 'syn-ctx-arrow';
+            a.innerHTML = window.__chevGlyph ? window.__chevGlyph(12) : '\u203A'; div.appendChild(a);
+          } else if (it.isChecked && opts && opts.cls === 'ctl') {   /* fb564 — the grid has no left-hand dot; a checked row carries its mark in the right-hand box instead */
+            const ck = document.createElement('span'); ck.className = 'syn-ctx-ck';
+            ck.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" fill="currentColor"/></svg>'; div.appendChild(ck);
           }
           if (! it.isDisabled) {
             div.addEventListener('click', () => {
@@ -30817,8 +30927,8 @@ restoreThemeFromBackend();
     '.sm-routes{position:fixed;z-index:2147483647;background:rgba(24,24,38,0.92);-webkit-backdrop-filter:blur(14px) saturate(1.3);backdrop-filter:blur(14px) saturate(1.3);border:1px solid rgba(255,255,255,0.10);border-radius:8px;padding:5px 4px;min-width:128px;font:400 10px -apple-system,\'SF Pro Text\',sans-serif;color:rgba(255,255,255,0.85);}'+
     '.sm-routes .rr{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:3px 8px;border-radius:5px;}'+
     '.sm-routes .rr:hover{background:rgba(167,139,250,0.12);}'+
-    '.sm-routes .rx{color:rgba(255,255,255,0.45);cursor:pointer;padding:0 2px;}'+
-    '.sm-routes .rx:hover{color:#fff;}'+
+    '.sm-routes .rx{color:rgba(255,255,255,0.45);cursor:pointer;padding:0 2px;display:inline-flex;align-items:center;}'+   /* fb564 — an SVG box, seated like the ⤢ beside it */
+    '.sm-routes .rx:hover{color:#EF4444;}'+
     /* fb554 — the curve grip sits between the label and the cross. Dim until a curve exists,
        then white, so a curved connection reads as curved without opening it. The editor is the
        same glass as the list it comes from (Max: match the existing UI, never invent). */
@@ -31401,7 +31511,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
-  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?('Macro '+a.mac):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?('Random '+a.rnd):(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
+  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?((window.__macroName&&window.__macroName(a.mac))||('Macro '+a.mac)):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?('Random '+a.rnd):(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   /* fb563 (3) — "LFO 2 × Macro 1 · 45%", "Env 1 · off": one spelling for the hover list and the menu row */
   function routeLabel(a){ return srcName(a)+(a.aux?(' \u00D7 '+srcName(a.aux)):'')+' \u00B7 '+(a.byp?'off':(Math.round(a.depth*100)+'%')); }
@@ -31465,15 +31575,18 @@ restoreThemeFromBackend();
      pragmatic so that all users can use this... a simple menu that has everything on there."
      ONE right-click menu on EVERY modulation destination — synth knobs, pills, the filter
      emblems, the rack, the flow cards — built from the house menu, in this order:
-        <control name>                      the header
-        Modulate ›                          the two-pane browser: families left, sources right,
+        Modulate                        ›   the two-pane browser: families left, sources right,
                                             a dot on every source already routed here; a click
-                                            toggles it and the panel stays open; search on top
-        LFO 2 · 45%   [slider]   ⤢  ✕       one row per connection: drag = depth, ⤢ = curve, ✕ = remove
+                                            toggles it, a double-click assigns and closes; search
+        LFO 2                  45%   ⤢  ✕   one row per connection: drag the number = depth,
+                                            ⤢ = curve, ✕ = remove, click the row = its options
         Remove all modulators               (when there are two or more)
-        ── control-specific rows ──         "Warp mode · Bend ›", "Drive type · Tube ›" … (the registry)
+        Warp mode                Bend   ›   the control's own rows (the registry)
         Reset to default
+        MIDI Learn
         Copy modulators · Paste modulators
+     fb564 — NO header (you know what you right-clicked), NO separators, one grid: every word on
+     one left rail, every trailing box (›, ✕, the check) on one right rail, the values tabular.
      It is the SECOND DOOR to the SAME routes the drag-and-drop makes: same targets(), same
      addXAssign, same push(), so the underline, the comet, the hover list and the patch all see
      one matrix. Drag-and-drop is untouched. The four right-click systems it replaces — the fb554
@@ -31497,63 +31610,50 @@ restoreThemeFromBackend();
     var lb=g.el&&g.el.querySelector&&g.el.querySelector('.knob-label,.fxr-lab,.fxr-kl,.lb');
     var t=(lb?lb.textContent:((g.el&&g.el.textContent)||'')).trim(); return t.length>18?t.slice(0,16)+'…':t; }
   function depthText(a){ return Math.round(a.depth*100)+'%'; }
-  /* THE ROUTE ROW — the hover list's line ("LFO 2 · 45%  ⤢  ✕") with the envelope hub's depth
-     slider under it. Both are shipped components, copied, not redrawn (the recycle law). LFO and
-     velocity are SIGNED (centre tick, fill from the middle); envelopes, followers and Key are
-     magnitudes (the C++ takes |depth|), so their slider fills from the left. */
+  /* THE ROUTE ROW (fb564) — one grid row per connection:  Env 1 ······ 100%  ⤢  ✕
+     The name in the left column, the depth in its own tabular column (drag it up or down, 1 px =
+     1 %, double-click = the drop default), then ⤢ and ✕ in two identical 16 px boxes on the right
+     rail. The depth slider that used to hang under each row is gone — Max: "we could already edit
+     that under the parameter name... there's going to be a line and a streak there": the knob's
+     own underline is the attenuator; this number is the same value, readable and grabbable, and
+     nothing more. Clicking the row itself opens its options (Bypass · Scale by · Remove), so they
+     are one click away instead of hidden behind a second right-click. */
+  function routeName(a){ return srcName(a)+(a.aux?(' × '+srcName(a.aux)):''); }
   function routeRow(a,g,rebuild){
-    var uni=isMagnitudeSrc(a);   /* fb563 — env / follower / Key fill from the left; every other family is signed */
-    var wrap=document.createElement('div'); wrap.className='syn-ctx-route'; wrap.style.cssText='padding:4px 12px 7px 12px;';
-    var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px;margin-bottom:6px;';
-    var lab=document.createElement('span'); lab.style.cssText='flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:rgba(255,255,255,0.72);font-size:11px;font-weight:300;';
-    var cvDim=function(){ return a.curve?'rgba(255,255,255,0.92)':'rgba(255,255,255,0.30)'; };
+    var uni=isMagnitudeSrc(a);   /* env / follower / Key are magnitudes (0..1); every other family carries a signed depth */
+    var wrap=document.createElement('div'); wrap.className='syn-ctx-route';
+    var nm=document.createElement('span'); nm.className='ctl-name';
+    var val=document.createElement('span'); val.className='ctl-val'; val.title='Depth — drag up or down, double-click for the default';
     var cv=document.createElement('span'); cv.className='ctl-crv'; cv.title='Extend — draw this connection’s curve';
-    cv.style.cssText='flex:none;display:inline-flex;align-items:center;cursor:pointer;color:'+cvDim()+';';
-    cv.innerHTML=window.__extGlyph?window.__extGlyph(11):'⤡';
-    var x=document.createElement('span'); x.className='ctl-rx'; x.textContent='✕'; x.title='Remove this modulator';
-    x.style.cssText='flex:none;cursor:pointer;color:rgba(255,255,255,0.45);font-size:10px;padding:0 1px;';
-    cv.onmouseenter=function(){ cv.style.color='#fff'; }; cv.onmouseleave=function(){ cv.style.color=cvDim(); };
-    x.onmouseenter =function(){ x.style.color='#fff'; };  x.onmouseleave =function(){ x.style.color='rgba(255,255,255,0.45)'; };
+    cv.innerHTML=window.__extGlyph?window.__extGlyph(12):'⤡';
+    var x=document.createElement('span'); x.className='ctl-rx'; x.title='Remove this modulator';
+    x.innerHTML=window.__xGlyph?window.__xGlyph(12):'✕';
+    wrap.appendChild(nm); wrap.appendChild(val); wrap.appendChild(cv); wrap.appendChild(x);
+    function paint(){ nm.textContent=routeName(a); val.textContent=a.byp?'off':depthText(a); wrap.classList.toggle('byp',!!a.byp); cv.classList.toggle('on',!!a.curve); }
+    paint();
     cv.addEventListener('click',function(ev){ ev.stopPropagation(); if(window.__synHideMenu)window.__synHideMenu(); openCurveEditor(a,g.el||document.body); });
     x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); rebuild(); });
-    row.appendChild(lab); row.appendChild(cv); row.appendChild(x);
-    /* the hub's slider, verbatim: 2px track · centre tick · purple-500 fill · thin white marker (fb143: no ball, no glow) */
-    var track=document.createElement('div'); track.className='ctl-depth'; track.style.cssText='position:relative;height:2px;border-radius:1px;background:rgba(255,255,255,0.16);cursor:ew-resize;';
-    if(!uni){ var center=document.createElement('div'); center.style.cssText='position:absolute;left:50%;top:-3px;width:1px;height:8px;background:rgba(255,255,255,0.28);'; track.appendChild(center); }
-    var fill=document.createElement('div'); fill.style.cssText='position:absolute;top:0;height:2px;border-radius:1px;background:#8B5CF6;';
-    var marker=document.createElement('div'); marker.style.cssText='position:absolute;top:50%;width:2px;height:9px;border-radius:1px;background:#FFFFFF;transform:translate(-50%,-50%);';
-    track.appendChild(fill); track.appendChild(marker);
-    wrap.appendChild(row); wrap.appendChild(track);
-    function paint(){ var d=Math.max(-1,Math.min(1,a.depth)), pct=uni?Math.abs(d)*100:(d+1)/2*100;
-      marker.style.left=pct+'%';
-      if(uni){ fill.style.left='0'; fill.style.width=pct+'%'; }
-      else if(d>=0){ fill.style.left='50%'; fill.style.width=(pct-50)+'%'; }
-      else { fill.style.left=pct+'%'; fill.style.width=(50-pct)+'%'; }
-      lab.textContent=routeLabel(a); wrap.style.opacity=a.byp?'.45':''; }
-    paint();
-    /* fb563 (3) — RIGHT-CLICK A ROW: Bypass (keeps the connection, mutes it) · Scale by › (a second
-       source scales this depth — Serum's Aux) · Remove. The power features live one level down so
-       the main menu stays the simple one. */
+    var dragging=false, y0=0, d0=0;
+    val.addEventListener('pointerdown',function(ev){ if(ev.button!==0) return; ev.preventDefault(); ev.stopPropagation();
+      dragging=true; y0=ev.clientY; d0=a.depth; badgeBusy=true; val.classList.add('drag'); try{ val.setPointerCapture(ev.pointerId); }catch(e){} });
+    val.addEventListener('pointermove',function(ev){ if(!dragging) return; ev.preventDefault();
+      var d=d0+(y0-ev.clientY)/100; a.depth=uni?Math.max(0,Math.min(1,d)):Math.max(-1,Math.min(1,d)); paint(); updRouteList(a); push(); });
+    function up(ev){ if(!dragging) return; dragging=false; badgeBusy=false; val.classList.remove('drag'); try{ val.releasePointerCapture(ev.pointerId); }catch(e){} }
+    val.addEventListener('pointerup',up); val.addEventListener('pointercancel',up);
+    val.addEventListener('click',function(ev){ ev.stopPropagation(); });
+    val.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); a.depth=srcDefaultDepth(a); paint(); updRouteList(a); push(); });
+    /* fb563 (3) — the row's options: Bypass (keeps the connection, mutes it) · Scale by › (a second
+       source scales this depth — Serum's Aux) · Remove. Right-click or a plain click, same menu. */
     wrap.addEventListener('contextmenu',function(ev){ ev.preventDefault(); ev.stopPropagation(); rowMenu(a,g,rebuild,ev); });
-    function fromX(cx){ var r=track.getBoundingClientRect(); var t=Math.max(0,Math.min(1,(cx-r.left)/Math.max(1,r.width)));
-      a.depth=uni?t:(t*2-1); paint(); updRouteList(a); push(); }
-    var dragging=false;
-    track.addEventListener('pointerdown',function(ev){ ev.preventDefault(); ev.stopPropagation(); dragging=true; badgeBusy=true;
-      try{ track.setPointerCapture(ev.pointerId); }catch(e){} fromX(ev.clientX); });
-    track.addEventListener('pointermove',function(ev){ if(dragging){ ev.preventDefault(); fromX(ev.clientX); } });
-    function up(ev){ if(dragging){ dragging=false; badgeBusy=false; try{ track.releasePointerCapture(ev.pointerId); }catch(e){} } }
-    track.addEventListener('pointerup',up); track.addEventListener('pointercancel',up);
-    track.addEventListener('dblclick',function(ev){ ev.preventDefault(); ev.stopPropagation(); a.depth=srcDefaultDepth(a); paint(); updRouteList(a); push(); });
-    wrap.addEventListener('click',function(ev){ ev.stopPropagation(); });   /* a row is not a menu item: touching it never closes the menu */
+    wrap.addEventListener('click',function(ev){ ev.stopPropagation(); rowMenu(a,g,rebuild,ev); });
     return wrap; }
   function rowMenu(a,g,rebuild,ev){ if(!window.__synShowMenu) return;
     var rows=[
       { label:'Bypass', isChecked:!!a.byp, keepOpen:true, onPick:function(){ a.byp=a.byp?0:1; push(); markTargets(); rebuild(); } },
-      { label:'Scale by', badge:(a.aux?srcName(a.aux):'None')+'  \u203A', keepOpen:true, onPick:function(){ openAuxPicker(a,rebuild,ev); } } ];
+      { label:'Scale by', badge:(a.aux?srcName(a.aux):'None'), sub:true, keepOpen:true, onPick:function(){ openAuxPicker(a,rebuild,ev); } } ];
     if(a.aux) rows.push({ label:'No scaling', keepOpen:true, onPick:function(){ a.aux=null; push(); rebuild(); } });
-    rows.push({isSep:true});
     rows.push({ label:'Remove', keepOpen:true, onPick:function(){ removeAssign(a); rebuild(); } });
-    window.__synShowMenu(routeLabel(a), rows, ev.clientX, ev.clientY); }
+    window.__synShowMenu(null, rows, ev.clientX, ev.clientY, {cls:'ctl'}); }
   /* the aux picker — the same families, single-select, the current aux dotted */
   function openAuxPicker(a,rebuild,ev){ if(!window.openTwoPaneBrowser) return;
     function mk(S,name){ var o={name:name,sel:!!(a.aux&&srcKey(a.aux)===srcKey(S))};
@@ -31579,7 +31679,7 @@ restoreThemeFromBackend();
     var envs=[], lfos=[], macs=[], rnds=[], i;
     for(i=1;i<=envN;i++) envs.push(mk({env:i},'Env '+i));
     for(i=1;i<=10;i++)   lfos.push(mk({lfo:i},'LFO '+i));
-    for(i=1;i<=WIRE.NMACRO;i++) macs.push(mk({mac:i},'Macro '+i));   /* fb563 Phase 2 */
+    for(i=1;i<=WIRE.NMACRO;i++) macs.push(mk({mac:i},(window.__macroName&&window.__macroName(i))||('Macro '+i)));   /* fb563 Phase 2 · fb564 the macro's own name */
     for(i=1;i<=WIRE.NRAND;i++)  rnds.push(mk({rnd:i},'Random '+i));
     return [ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos}, {label:'Macros',items:macs},
              {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')].concat(rnds,[mk({alt:1},'Alt')])},
@@ -31587,7 +31687,7 @@ restoreThemeFromBackend();
              {label:'MIDI',items:[mk({whl:1},'Mod Wheel'),mk({at:1},'Aftertouch'),mk({bend:1},'Pitch Bend')]} ]; }
   /* Reset = exactly what a double-click does on that control (the fb363 law), so the two can never disagree. */
   function resetDest(g){ var el=g.el; if(!el) return;
-    var t=(el.querySelector&&(el.querySelector('.knob-ring')||el.querySelector('.fxr-dial')||el.querySelector('.ctl svg')||el.querySelector('canvas')))||el;
+    var t=(el.querySelector&&(el.querySelector('.knob-ring')||el.querySelector('.fxr-dial')||el.querySelector('.ctl svg')||el.querySelector('.vm-mk')||el.querySelector('canvas')))||el;
     try{ t.dispatchEvent(new MouseEvent('dblclick',{bubbles:true,cancelable:true,view:window})); }catch(e){} }
   /* ═══ fb563 (4) — MIDI LEARN ═══════════════════════════════════════════════════════════════
      "MIDI Learn" on any control that has a parameter: the plugin arms the next CC for it (the
@@ -31597,7 +31697,7 @@ restoreThemeFromBackend();
   var midiLearnFor=null, lastMenu=null;
   function nativeCall(nm){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(nm):null; if(f) return f.apply(null,[].slice.call(arguments,1)); }catch(e){} return null; }
   function paramIdOf(g){ var el=g.el; if(!el||!el.getAttribute) return null;
-    var id=el.getAttribute('data-syn')||el.getAttribute('data-coarse')||el.getAttribute('data-warp2-amt')||el.getAttribute('data-ph');
+    var id=el.getAttribute('data-pid')||el.getAttribute('data-syn')||el.getAttribute('data-coarse')||el.getAttribute('data-warp2-amt')||el.getAttribute('data-ph');   /* fb564 — data-pid: a relay-free control's parameter (the macros) */
     if(!id&&el.classList&&el.classList.contains('sub-val')){ var pill=el.closest('.sub-pill'), act=(pill&&pill.dataset.subActive)||'weight'; id=el.getAttribute('data-sub-'+act); }
     if(!id&&el.classList&&el.classList.contains('fxr-dial')) id=el.getAttribute('data-p');
     if(!id&&el.querySelector){ var d=el.querySelector('.fxr-dial[data-p]'); if(d) id=d.getAttribute('data-p'); }
@@ -31607,29 +31707,32 @@ restoreThemeFromBackend();
     try{ var cc=window.__midiLearnedCc; if(cc!=null&&cc>=0&&window.__tiToast) window.__tiToast('Learned CC '+cc); }catch(e){}
     try{ var m=document.getElementById('syn-ctx-menu'); if(lastMenu&&m&&m.classList.contains('act')) lastMenu(); }catch(e){} };
   window.__midiLearnFor=function(){ return midiLearnFor; };   /* gate hook */
+  window.__macroNamesChanged=function(){ try{ markTargets(); }catch(e){} try{ var m=document.getElementById('syn-ctx-menu'); if(lastMenu&&m&&m.classList.contains('act')) lastMenu(); }catch(e){} };   /* fb564 — a renamed macro renames its rows everywhere */
   function midiRows(g){ var pid=paramIdOf(g); if(!pid) return [];
     var cc=midiCcFor(pid);
     if(cc!=null) return [{ label:'MIDI CC '+cc, badge:'Remove', onPick:function(){ nativeCall('removeMidiCc',pid); try{ if(window.__midiMap) delete window.__midiMap[String(cc)]; }catch(e){} } }];
     if(midiLearnFor===pid) return [{ label:'MIDI Learn', badge:'waiting…', onPick:function(){ midiLearnFor=null; nativeCall('setMidiLearn',''); } }];
     return [{ label:'MIDI Learn', onPick:function(){ midiLearnFor=pid; nativeCall('setMidiLearn',pid); } }]; }
+  /* fb564 — a registry row spelled "Warp mode · Bend ›" becomes a grid row: the badge is the word, the
+     chevron is the box on the right rail (the same box the route rows' ✕ lives in). */
+  function subRow(r){ if(r&&typeof r.badge==='string'&&/\u203A\s*$/.test(r.badge)){ r.badge=r.badge.replace(/\s*\u203A\s*$/,''); r.sub=true; } return r; }
   function openCtlMenu(g,ev){ if(!window.__synShowMenu) return false;
-    var x=ev.clientX, y=ev.clientY, name=ctlName(g);
+    var x=ev.clientX, y=ev.clientY;
     function build(){
       var rows=[], rts=(g.dest!=null)?routesOn(g.dest):[];
       if(g.dest!=null){
-        rows.push({ label:'Modulate', badge:'›', onPick:function(){ openSourcePicker(g,ev); } });
+        rows.push({ label:'Modulate', sub:true, onPick:function(){ openSourcePicker(g,ev); } });
         rts.forEach(function(a){ rows.push({ node:routeRow(a,g,build) }); });
         if(rts.length>1) rows.push({ label:'Remove all modulators', onPick:function(){ rts.slice().forEach(removeAssign); } }); }
       var extra=[]; try{ extra=window.__ctlMenuRows?window.__ctlMenuRows.rowsFor(g.el,ev):[]; }catch(e){}
-      if(extra.length){ if(rows.length) rows.push({isSep:true}); extra.forEach(function(r){ rows.push(r); }); }
-      if(rows.length) rows.push({isSep:true});
+      extra.forEach(function(r){ rows.push(subRow(r)); });   /* fb564 — no rules between the groups: one even list (Max: "we don't need the spacers") */
       rows.push({ label:'Reset to default', onPick:function(){ resetDest(g); } });
       midiRows(g).forEach(function(r){ rows.push(r); });   /* fb563 (4) */
       if(rts.length) rows.push({ label:'Copy modulators', onPick:function(){ modClip=rts.map(function(a){ return {S:srcOf(a),depth:a.depth,curve:a.curve?a.curve.slice():null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}; }); } });
       if(g.dest!=null&&modClip&&modClip.length) rows.push({ label:'Paste modulators', onPick:function(){
         modClip.forEach(function(c){ var a=addRoute(c.S,g.dest,g.el); if(a){ a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; } });
         markTargets(); push(); } });
-      window.__synShowMenu(name, rows, x, y); }
+      window.__synShowMenu(null, rows, x, y, {cls:'ctl'}); }   /* fb564 — no header: "people are going to know what they're right-clicking" */
     lastMenu=build; build(); return true; }
   /* THE ONE LISTENER. Capture phase on the document, so it runs before every element-level
      right-click handler and claims a destination before any of them can open a second menu.
@@ -31641,7 +31744,7 @@ restoreThemeFromBackend();
     var g=destAt(t);
     if(!g){ /* not a destination — but a control with registered rows (the Keytrack knob's target
                list, say) still gets the one menu, minus its modulation half */
-      var el=t.closest('#syn-panel [data-syn], .fxr-knob, .fxr-bk-knob'); if(!el) return;
+      var el=t.closest('#syn-panel [data-syn], .fxr-knob, .fxr-bk-knob, #syn-panel .vm-macro'); if(!el) return;   /* fb564 — a Macros-view knob: Rename · Reset · MIDI Learn */
       var ex=[]; try{ ex=window.__ctlMenuRows?window.__ctlMenuRows.rowsFor(el,ev):[]; }catch(e){}
       if(!ex.length) return; g={el:el,dest:null,kind:'ctl'}; }
     ev.preventDefault(); ev.stopPropagation(); ev.stopImmediatePropagation();
@@ -31649,6 +31752,18 @@ restoreThemeFromBackend();
   },true);
   window.__ctlDestAt=function(el){ var g=destAt(el); return g?{dest:g.dest,kind:g.kind}:null; };   /* headless gate hooks */
   window.__ctlClip=function(){ return modClip?modClip.length:0; };
+  /* fb564 — COPY WITH MODULATORS (the osc menu): every connection whose destination is one of this
+     oscillator's own parameters, keyed by the parameter SUFFIX so it can be re-aimed at the twin
+     knob on another oscillator. A destination without a SYN_OSC_x_ parameter (the filter, the rack,
+     an LFO's rate) is not the oscillator's and stays where it is. */
+  window.__tiOscRoutes=function(L){ var re=new RegExp('^SYN_OSC_'+String(L).toUpperCase()+'_(.+)$'), out=[];
+    assigns.forEach(function(a){ var pid=d2pid(a.dest), m=pid?re.exec(pid):null; if(!m) return;
+      out.push({S:srcOf(a),sfx:m[1],depth:a.depth,curve:a.curve?a.curve.slice():null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}); });
+    return out; };
+  window.__tiPasteOscRoutes=function(L,mods){ var n=0; (mods||[]).forEach(function(c){ var pid='SYN_OSC_'+String(L).toUpperCase()+'_'+c.sfx; if(!KNOBDEST.hasOwnProperty(pid)) return;
+      var dest=KNOBDEST[pid], el=elForDest(dest); if(!el) return; var ex=findRoute(c.S,dest); if(ex) removeAssign(ex);
+      var a=addRoute(c.S,dest,el); if(!a) return; a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; n++; });
+    markTargets(); push(); return n; };
 
   function showRoutes(el,u){ hideRoutes();
     var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
@@ -31656,7 +31771,7 @@ restoreThemeFromBackend();
     rtMenu.__rows=[];   /* fb190 — the list IS the attenuator readout: rows update live during drags */
     list.forEach(function(a){ var row=document.createElement('div'); row.className='rr';
       var lab=document.createElement('span'); lab.textContent=routeLabel(a); if(a.byp) lab.style.opacity='.45';   /* fb563 (3) */
-      var x=document.createElement('span'); x.className='rx'; x.textContent='\u2715'; x.title='remove';
+      var x=document.createElement('span'); x.className='rx'; x.innerHTML=(window.__xGlyph?window.__xGlyph(11):'\u2715'); x.title='remove';   /* fb564 — the same cross as the menu, on the ⤢'s geometry */
       x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
       /* fb554 — EDIT CURVE. The connection is a straight multiply until you draw something here;
          the glyph fills in once a curve exists, so a curved route is visible without opening it. */
@@ -36443,7 +36558,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
             var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
             /* fb563 — a MULTI browser (the modulator picker) toggles and stays open: you add three
                sources in a row without reopening it. Its pick() owns `sel`; the list just repaints. */
-            d.onclick = function () { try { it.pick (); } catch (e) {} if (cfg.multi) { renderSearch (q); return; } close (); };
+            d.onclick = function (ev) {
+              if (cfg.multi && ev && ev.detail >= 2) { if (! it.sel) { try { it.pick (); } catch (e) {} } close (); return; }   /* fb564 — the second click of a double-click never toggles OFF: it makes sure the source is assigned, then closes */
+              try { it.pick (); } catch (e) {} if (cfg.multi) { renderSearch (q); return; } close (); };
             itemsEl.appendChild (d); n++;
           });
         });
@@ -36459,11 +36576,18 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       };
       function renderItems (ci) { itemsEl.innerHTML = ''; var cat = cfg.cats[ci]; if (! cat) return;
         (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
-          d.onclick = function () { try { it.pick (); } catch (e) {}   // single-click = SELECT (commit) + (if headphone on) audition it ONCE
+          d.onclick = function (ev) {
+            /* fb564 — DOUBLE-CLICK ASSIGNS. Max: "I double-click something, it just closes the menu
+               without assigning it at all... if we double-click a parameter or modulation source, it
+               assigns it." A double-click is two clicks: the first toggled the source ON, the second
+               used to toggle it OFF again and then the dblclick closed the panel — net nothing. The
+               second click (ev.detail 2) now guarantees the source is assigned and closes. */
+            if (cfg.multi && ev && ev.detail >= 2) { if (! it.sel) { try { it.pick (); } catch (e) {} } close (); return; }
+            try { it.pick (); } catch (e) {}   // single-click = SELECT (commit) + (if headphone on) audition it ONCE
             if (! cfg.multi) { cfg.cats.forEach (function (c) { (c.items || []).forEach (function (x) { x.sel = false; }); }); it.sel = true; }   /* fb563 — multi: pick() owns sel, several rows may carry the dot */
             renderItems (ci);
             if (window.__tpbPreviewOn && cfg.onAudition) { clearTimeout (window.__tpbPrevT); window.__tpbPrevT = setTimeout (function () { try { cfg.onAudition (); } catch (e) {} }, 120); } };   // 120ms lets the commit propagate; re-click = re-trigger
-          d.ondblclick = function () { clearTimeout (window.__tpbPrevT); close (); };   // double-click = select (already committed on click) + close the menu
+          d.ondblclick = function () { clearTimeout (window.__tpbPrevT); if (cfg.multi && ! it.sel) { try { it.pick (); } catch (e) {} } close (); };   // double-click = select (already committed on click) + close the menu; fb564: a multi picker makes sure it is ON
           itemsEl.appendChild (d); }); }
       function paintDelete () { if (! delBtn) return; var cat = cfg.cats[selCat];
         if (cat && cat.delKind === 'folder') { delBtn.textContent = 'Delete Folder'; delBtn.style.display = ''; }
