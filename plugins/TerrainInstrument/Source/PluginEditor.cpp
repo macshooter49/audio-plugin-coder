@@ -5819,19 +5819,36 @@ void TerrainUiCore::timerCallback()
     // segment after it in this one evaluateJavascript string. (This is how the osc scope
     // flatlined forever while audio kept playing — an upstream segment threw each tick, so
     // the parked scope never received another active:true push.) Sanitize at the source.
-    auto SF = [] (float v, int dp) { return juce::String (std::isfinite (v) ? v : 0.0f, dp); };
-
-    // Read scope buffer
-    juce::String scopeData;
-    scopeData.preallocateBytes(2048);
-    scopeData << "[";
-    for (int i = 0; i < TerrainInstrumentAudioProcessor::SCOPE_SIZE; ++i)
+    // fb567 — AND SNAP SUB-RESOLUTION RESIDUE TO A CLEAN ZERO. After a note the scope buffer held
+    // ±1e-6 leftovers that printed as "-0.0000" one tick and "0.0000" the next, so no two idle
+    // frames were ever byte-identical and the idle-skip never fired (measured: 55 frames/s in
+    // silence). A value below half the last printed digit IS zero on the page; print it as one.
+    auto SF = [] (float v, int dp)
     {
-        if (i > 0) scopeData << ",";
-        float val = audioProcessor.scopeBuffer[static_cast<size_t>(i)].load(std::memory_order_relaxed);
-        scopeData << SF(val, 4);
+        static const double half[] = { 0.5, 0.05, 0.005, 0.0005, 0.00005, 0.000005, 0.0000005 };
+        const float q = std::isfinite (v) ? v : 0.0f;
+        const bool  z = (dp >= 0 && dp <= 6) && std::fabs (q) < half[dp];
+        return juce::String (z ? 0.0f : q, dp);
+    };
+
+    // fb511's silence gate, hoisted (fb567): the front-page scope below was the one segment built
+    // and shipped every tick regardless of it — the string alone was ~2% of a core at idle.
+    const bool uiQuiet = (eqQuietTicks_ >= 90);
+    // Read scope buffer — only while the output has been audible within ~1.5 s (fb567). A quiet
+    // scope is flat; the page keeps its last (flat) frame and the bytes stop changing.
+    juce::String scopeData;
+    if (! uiQuiet)
+    {
+        scopeData.preallocateBytes(2048);
+        scopeData << "[";
+        for (int i = 0; i < TerrainInstrumentAudioProcessor::SCOPE_SIZE; ++i)
+        {
+            if (i > 0) scopeData << ",";
+            float val = audioProcessor.scopeBuffer[static_cast<size_t>(i)].load(std::memory_order_relaxed);
+            scopeData << SF(val, 4);
+        }
+        scopeData << "]";
     }
-    scopeData << "]";
 
     // Read BPM for grain sync display
     float bpm = audioProcessor.currentBPM.load();
@@ -5855,8 +5872,9 @@ void TerrainUiCore::timerCallback()
     if (audioProcessor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
         js << "window.__isStandalone=1;";   // fb484 — arms the page's QWERTY-to-MIDI handler
     juce::String* frameOut = &js;   // fb483 -- reachable inside blocks that shadow the name js
-    js << "try{if(window.updateVisualization){"
-       << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
+    if (! uiQuiet)   // fb567 — the hero scope rests with the rest of the page in silence
+        js << "try{if(window.updateVisualization){"
+           << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
     js << "try{if(window.updateTapeLoopState){"
        << "window.updateTapeLoopState("
        << (tapeLoopRec > 0.5f ? "true" : "false") << ","
@@ -5869,26 +5887,21 @@ void TerrainUiCore::timerCallback()
        << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}}catch(e){}";
     int captureState = audioProcessor.captureExportState.load();
     float captureAvail = audioProcessor.getCaptureAvailableSeconds();
-    js << "try{if(window.updateCaptureState){"
-       << "window.updateCaptureState("
-       << captureState << ","
-       << SF(captureAvail, 1) << ");}}catch(e){}";
+    // fb567 — the capture strip's "seconds available" grows every tenth of a second, in silence
+    // too (measured: it alone kept 10 frames/s shipping on a silent page). It rides only while the
+    // output is audible — or when the export STATE changes, which must always reach the page.
+    if (! uiQuiet || captureState != lastCapturePushed_)
+    {
+        lastCapturePushed_ = captureState;
+        js << "try{if(window.updateCaptureState){"
+           << "window.updateCaptureState("
+           << captureState << ","
+           << SF(captureAvail, 1) << ");}}catch(e){}";
+    }
 
     // Update native drag strip state
     captureDragStrip.updateState(captureState, captureAvail);
 
-    // Push LFO outputs from C++ engine to JS for visualization (mod rings, waveform preview)
-    {
-        float lfo0 = audioProcessor.modulationEngine.lfoOutputsAtomic[0].load(std::memory_order_relaxed);
-        float lfo1 = audioProcessor.modulationEngine.lfoOutputsAtomic[1].load(std::memory_order_relaxed);
-        float lfo2 = audioProcessor.modulationEngine.lfoOutputsAtomic[2].load(std::memory_order_relaxed);
-        float p0 = audioProcessor.modulationEngine.lfoPhasesAtomic[0].load(std::memory_order_relaxed);
-        float p1 = audioProcessor.modulationEngine.lfoPhasesAtomic[1].load(std::memory_order_relaxed);
-        float p2 = audioProcessor.modulationEngine.lfoPhasesAtomic[2].load(std::memory_order_relaxed);
-        js << "try{if(window.updateLFOOutputs){window.updateLFOOutputs("
-           << SF(lfo0, 4) << "," << SF(lfo1, 4) << "," << SF(lfo2, 4) << ","
-           << SF(p0, 4) << "," << SF(p1, 4) << "," << SF(p2, 4) << ");}}catch(e){}";
-    }
 
     // ── Envelope follower (playhead dot) ──
     // Push the most-active voice's live AMP-env level to the WebUI. -1 = no voice
@@ -5910,7 +5923,33 @@ void TerrainUiCore::timerCallback()
     // ships NOTHING, the dispatcher never fires, painters never run. The LFO dot PARKS at quiet
     // — the fb505 rest-pose semantics Max approved. The first audible block re-appends and the
     // whole feed resumes on the next tick.
-    const bool uiQuiet = (eqQuietTicks_ >= 90);
+    // (uiQuiet — fb511's gate — is computed at the top of the frame since fb567, see the scope)
+    // fb567 — THE LEGACY BANK WAS THE FRAME THAT NEVER SLEPT. The front page's own three-LFO
+    // ModulationEngine bank (master-FX offsets) free-runs at 1 Hz from prepare — with NO
+    // assignment at all, in every patch — and its phases were pushed here every tick, four
+    // decimals each, AHEAD of the quiet gate. So no idle frame was ever byte-identical, fb483's
+    // idle-skip never fired, __tiFrame dispatched at 60 Hz forever and every painter ran on a
+    // silent page (Max: "stop the animation loop when the MIDI is not inside"). The bank's
+    // values are display-only (mod rings, waveform preview) and nothing draws them without an
+    // assignment, so the push now exists only while an assignment is live AND the output is
+    // audible. The engine itself no longer advances the bank with nothing assigned (ModulationEngine.h).
+    if (! uiQuiet && audioProcessor.modulationEngine.liveAssignments() > 0)
+    {
+        float lfo0 = audioProcessor.modulationEngine.lfoOutputsAtomic[0].load(std::memory_order_relaxed);
+        float lfo1 = audioProcessor.modulationEngine.lfoOutputsAtomic[1].load(std::memory_order_relaxed);
+        float lfo2 = audioProcessor.modulationEngine.lfoOutputsAtomic[2].load(std::memory_order_relaxed);
+        float p0 = audioProcessor.modulationEngine.lfoPhasesAtomic[0].load(std::memory_order_relaxed);
+        float p1 = audioProcessor.modulationEngine.lfoPhasesAtomic[1].load(std::memory_order_relaxed);
+        float p2 = audioProcessor.modulationEngine.lfoPhasesAtomic[2].load(std::memory_order_relaxed);
+        js << "try{if(window.updateLFOOutputs){window.updateLFOOutputs("
+           << SF(lfo0, 4) << "," << SF(lfo1, 4) << "," << SF(lfo2, 4) << ","
+           << SF(p0, 4) << "," << SF(p1, 4) << "," << SF(p2, 4) << ");}}catch(e){}";
+    }
+    // fb567 — THE SOUNDING FLAG RIDES OUTSIDE THE QUIET GATE. window.__notesActive is what the LFO
+    // panel's painter parks and fades on; it used to be written only inside the modViz segment, so
+    // once the segment was dropped the page never saw the last edge. One constant byte at idle.
+    const int notesOn = (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0;   // fb241 — any voice sounding, release tails included
+    js << "window.__notesActive=" << notesOn << ";window.__notesActiveT=Date.now();";   // the stamp: the page trusts the flag only while its feed is alive (a popped card with the editor closed has none)
     // fb564 — the MACRO values ride OUTSIDE the quiet gate: a learned CC or host automation moves a
     // macro with no note sounding, and the Macros view's knob must follow it. The bytes are constant
     // while nothing moves, so the fb511 idle-skip still sees a byte-identical frame.
@@ -5936,7 +5975,7 @@ void TerrainUiCore::timerCallback()
         for (int k = 0; k < 10; ++k) { if (k) pArr << ","; pArr << SF(audioProcessor.modVizLfoPh (k), 4); }   // fb217 — real LFO phases
         for (int k = 0; k < 10; ++k) { if (k) xArr << ","; xArr << SF(audioProcessor.modVizLfoVX (k), 3); }   // fb239 — the swirl feed
         for (int k = 0; k < 10; ++k) { if (k) yArr << ","; yArr << SF(audioProcessor.modVizLfoVY (k), 3); }
-        const int notesOn = (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0;   // fb241 — note-gated chaos viz (free-running motion, animates only while MIDI plays)
+        // (notesOn — fb241's note gate for the chaos viz — is computed above the quiet gate since fb567)
         const float velV = audioProcessor.modVizVel();   // fb262 — live velocity for the streak
         js << "window.__mvNote=" << SF (audioProcessor.modVizNote(), 3) << ";";   // fb555
         js << "window.__mvFol=[";   // fb552 — five numbers a frame, on the push that already runs
@@ -5955,7 +5994,7 @@ void TerrainUiCore::timerCallback()
             js << "try{window.__midiMap=" << audioProcessor.getMidiMapJson() << ";window.__midiLearnedCc=" << audioProcessor.midiLearnedCc()
                << ";if(window.__midiMapChanged)window.__midiMapChanged();}catch(e){}";
         }
-        js << "try{window.__notesActive=" << notesOn << ";window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"
+        js << "try{window.__mvVel=" << SF(velV, 3) << ";if(window.__modViz){window.__modViz([" << eArr << "],[" << lArr << "],[" << pArr << "]);}"   // fb567 — __notesActive is written above the gate now
               "if(window.__mvChaos){window.__mvChaos([" << xArr << "],[" << yArr << "]);}}catch(e){}";
 
         // fb342 — the FX-rack blooms ride THIS push instead of two 60fps JS native polls
@@ -6050,7 +6089,7 @@ void TerrainUiCore::timerCallback()
         if (! audioProcessor.cardWindows_.empty())   // fb524 — no card open, no string built: this runs at 60 Hz
         {
             const juce::String cardFeed =
-                p2Feed + "try{window.__notesActive=" + juce::String (notesOn) + ";window.__mvVel=" + SF (velV, 3) + ";"
+                p2Feed + "try{window.__notesActive=" + juce::String (notesOn) + ";window.__notesActiveT=Date.now();window.__mvVel=" + SF (velV, 3) + ";"
                 "if(window.__modViz){window.__modViz([" + eArr + "],[" + lArr + "],[" + pArr + "]);}"
                 "else{window.__mvLfoPh=[" + pArr + "];window.__mvLfoVal=[" + lArr + "];window.__mvLfoPhT=Date.now();}"
                 "if(window.__mvChaos){window.__mvChaos([" + xArr + "],[" + yArr + "]);}}catch(e){}";
@@ -6630,6 +6669,29 @@ void TerrainUiCore::timerCallback()
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)
             fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;
         const bool identical = pageReady && fh == lastFrameHash_;
+        // fb567 — THE FRAME-DIFF PROBE. Opt-in (TERRAIN_CPU_PROBE in the environment, the beacon's
+        // switch): when a frame ships at idle, append the first bytes that differ from the last sent
+        // frame to <tempDirectory>/terrain-frame-diff.txt, at most twice a second. Names the segment
+        // that keeps the page awake instead of guessing at it. Zero cost when off (one static bool).
+        {
+            static const bool frameDiffProbe = (std::getenv ("TERRAIN_CPU_PROBE") != nullptr);
+            if (frameDiffProbe && pageReady && ! identical)
+            {
+                const double nowMs = juce::Time::getMillisecondCounterHiRes();
+                if (lastFrameJs_.isNotEmpty() && nowMs - lastDiffDumpMs_ > 400.0)
+                {
+                    lastDiffDumpMs_ = nowMs;
+                    const char* a = js.toRawUTF8(); const char* b = lastFrameJs_.toRawUTF8();
+                    int i = 0; while (a[i] != 0 && b[i] != 0 && a[i] == b[i]) ++i;
+                    const juce::String ctx = juce::String::fromUTF8 (a + juce::jmax (0, i - 80)).substring (0, 220);
+                    juce::File::getSpecialLocation (juce::File::tempDirectory).getChildFile ("terrain-frame-diff.txt")
+                        .appendText (juce::String::formatted ("t=%.0f len=%d idx=%d notes=%d quiet=%d | ", nowMs, (int) js.length(), i,
+                                                              (audioProcessor.ampEnvVis.load (std::memory_order_relaxed) >= 0.0f) ? 1 : 0, (int) uiQuiet)
+                                     + ctx.replace ("\n", " ") + "\n");
+                }
+                lastFrameJs_ = js;
+            }
+        }
         auto ack = [this] (juce::WebBrowserComponent::EvaluationResult)
         {
             lastEvalOkMs_ = juce::Time::getMillisecondCounterHiRes();

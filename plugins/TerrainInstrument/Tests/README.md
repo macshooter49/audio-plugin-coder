@@ -24,6 +24,8 @@ clang++ -std=c++17 -O2 -I Tests/shim -I Source -o /tmp/flt_cert Tests/flt_cert.c
 | `fxmod_cert.cpp` | fb453 — the FX rack's modulation destinations and the SHIPPED per-block math (`FxModValue.h`, JUCE-free); **fb566** every family reaches the rack (macro · wheel · velocity · bend add, follower · Key own), Scale by and the connection curve apply, a source with no view is dropped. `clang++ -std=c++17 -O2 -I Tests/shim -I Source Tests/fxmod_cert.cpp` | 46 |
 | `mod_src_cert.cpp` | fb563 — the six new SOURCES reach the audio on the installed AU (macro · wheel · aftertouch · bend · random · alt), the door drops unknown codes, depth sign, a MACRO AS A DESTINATION (wheel → Macro 1 → Level A; fb565), Macro 9 on wire 228, **fb566** a macro (and the whole wheel → macro chain) into the RACK's reverb mix, the Free LFO RUNS while a note sounds and PARKS across silence (A/B), the connection curve, bypass, scale by. Level A at ZERO so the source is the only way to a sound. | 22 |
 | `midi_learn_cert.cpp` | fb563 — a learned CC moves its parameter on the installed AU; the map installs and round-trips through the state; CC 1 bound to a knob still drives the wheel source. | 7 |
+| `lfo_park.js` | fb567 — THE LFO PLAYHEAD in the plugin: rides the pushed phase while notes sound; NEVER creeps on a stale feed (the pre-fb567 painter simulated 342 px/s of motion in silence); fades out in .35 s when no voice sounds and back in .12 s on the first; the painter RESTS (0 DOM writes over 60 dispatches); the rAF-mode loop (a popped card) stops in silence and a push restarts it. Mutations: 1 = the old painter (simulation, no rest) → bars 2, 4 red; 2 = no idle class → bars 0, 3, 6 red. | 11 |
+| `mac_idle_frames.mm` | fb567 — the INSTALLED AU, its real editor (windowless, fb521), audio rendered at real-time pace on a thread: frames the editor SHIPS per second at idle (≤ 6 — measured 0), with a note held (≥ 20 — 59), and at idle again after it (0). Reads the plugin's own beacon (`terrain-cpu.txt`, on the Mac since fb567, opt-in), whose DSP / UI lines are the Mac editor-open numbers. Before fb567: 53 / 54 / 59 — the loop never stopped. | 5 |
 
 The three fx3 engine certs live beside their engines, not here — they need the roster and the
 bibles next to them:
@@ -110,3 +112,34 @@ UI→param→DSP round trip is gated separately and headlessly.
 * **Check your own detector before believing it.** A one-pole HP at 6 kHz leaks a 220 Hz sine at
   −28.7 dB, so it reported "−32 dB of HF" on every case — below what the bare probe scores. A
   detector that reads the same on clean and dirty is worse than none.
+
+## fb567 — the loop rests (2026-09-02)
+
+Max: *"The LFO pauses, and then it just keeps going... Stop the animation loop when the MIDI is not
+inside and there's nothing being played. Put the animation loop back whenever we are playing."*
+
+`mac_idle_frames.mm` measured the shipped fb566 build first: **53 frames/s at idle, 59 after a
+note** — the editor's loop had never once rested, so every migrated painter ran on a silent page.
+Four causes, found in this order, each named by measurement rather than guessed:
+
+1. **The page's LFO painter simulated.** `lfoFrame` kept fb217's fallback, "stale feed → `ph +=
+   dt*effHz()`". fb511 makes the feed go stale at idle *by design* and fb566 parks the DSP LFO
+   there, so the dot swept on the page's own clock while the DSP held. `lfo_park.js` bar 2.
+2. **The legacy ModulationEngine bank.** Three front-page LFOs at a default 1 Hz, advanced every
+   sample from prepare with no assignment in any patch, and their phases pushed every tick *ahead*
+   of the quiet gate — so no idle frame was ever byte-identical. Now: pushed only with a live
+   assignment and audible output; the engine skips the bank with nothing assigned.
+3. **The hero scope's residue.** After a note the scope array printed `-0.0000` one tick and
+   `0.0000` the next (±1e-6 leftovers). `SF()` now snaps anything under half the last printed digit
+   to a clean zero, and the scope segment rides inside the quiet gate.
+4. **The capture strip's seconds.** "Seconds available" grew every tenth of a second in silence —
+   10 frames/s on its own. It rides only while audible, or when the export STATE changes.
+
+**THE FRAME-DIFF PROBE.** Set `TERRAIN_CPU_PROBE=1` (or the beacon's marker file) and the editor
+appends the first bytes that differ between consecutive shipped frames to
+`<tempDirectory>/terrain-frame-diff.txt` (twice a second at most). Causes 3 and 4 were invisible to
+code reading and took one run each to name. Zero cost when off.
+
+**THE LAW.** An idle frame is a contract: everything appended outside the quiet gate must be
+constant in silence, and a value below the page's printed resolution is zero. When idle frames
+ship, run the probe — do not reason about which segment it might be.

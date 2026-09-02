@@ -1532,6 +1532,9 @@ private:
     std::atomic<int> evalInFlight_ { 0 };
     double           evalSentMs_ = 0.0;
     uint64_t         lastFrameHash_ = 0;   // fb483 -- idle-skip: hash of the last SENT frame
+    int              lastCapturePushed_ = -1;   // fb567 — the export state last pushed (a change always ships, even in silence)
+    juce::String     lastFrameJs_;         // fb567 — FRAME-DIFF PROBE (opt-in, TERRAIN_CPU_PROBE): the last sent frame, to name the bytes that broke idle
+    double           lastDiffDumpMs_ = 0.0;
     int              idleSkips_     = 0;   // frames skipped since; every 30th sends a keep-alive
     int              frameAlt_      = 0;   // fb486 -- Windows whale alternation (scope/EQ take turns)
     juce::String bootSettingsJson_;   // fb148 — InstrumentSettings.json read ONCE at open (the pre-ready tick was hitting disk ~60x/sec)

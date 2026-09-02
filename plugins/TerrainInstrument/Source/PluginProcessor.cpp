@@ -352,9 +352,26 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     // responsive while never touching a buffer the audio thread is reading.
     startTimerHz (60);
 
-   #if JUCE_WINDOWS
+   #if JUCE_WINDOWS || JUCE_MAC
     // fb481 — start the stall beacon (see PluginProcessor.h). Diagnostic-only; writes nothing
     // unless the message thread actually stalls.
+    // fb567 — ON THE MAC TOO. The same opt-in (TERRAIN_CPU_PROBE=1 in the environment, or the
+    // marker file terrain-cpu-on.txt in the plugin's juce tempDirectory, which on the Mac is
+    // ~/Library/Caches/Terrain Instrument/). Tests/mac_idle_frames.mm reads its frames counter
+    // to prove the editor's loop rests at idle; the CPU lines are the Mac editor-open numbers.
+    // On the Mac the beacon is OPT-IN AT CONSTRUCTION: no thread, no directory, no stall log unless
+    // asked for. The marker path is built from the home directory on purpose — getSpecialLocation
+    // (tempDirectory) CREATES ~/Library/Caches/<name>/ as a side effect, and an editor-less host
+    // (auval, the headless certs) must leave no trace. Windows keeps fb481's always-on watchdog.
+    const bool beaconWanted =
+       #if JUCE_MAC
+        (std::getenv ("TERRAIN_CPU_PROBE") != nullptr)
+         || juce::File::getSpecialLocation (juce::File::userHomeDirectory)
+                .getChildFile ("Library/Caches/Terrain Instrument/terrain-cpu-on.txt").existsAsFile();
+       #else
+        true;
+       #endif
+    if (beaconWanted)
     stallBeacon_ = std::make_unique<std::thread> ([this]
     {
         uint32_t last = 0; int stalledMs = 0; int cpuTick = 0;   // fb488
@@ -386,7 +403,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 
         while (! beaconStop_.load (std::memory_order_relaxed))
         {
-            std::this_thread::sleep_for (std::chrono::milliseconds (500));
+            beaconWake_.wait (500);   // fb567 — interruptible: the destructor signals it, so the join returns at once
             // re-read the marker every ~2 s so it can be toggled live
             if ((cpuTick % 4) == 0) cpuProbeOn = cpuProbeEnv || onMarker.existsAsFile();
             if (cpuProbeOn && (++cpuTick % 10) == 0)   // fb488 — every ~5 s: the DSP load, as a number
@@ -436,7 +453,12 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
             const uint32_t now = mtHeartbeat_.load (std::memory_order_relaxed);
             if (now != last) { last = now; stalledMs = 0; continue; }
             stalledMs += 500;
-            if (stalledMs >= 3000 && (stalledMs % 5000) < 500)
+           #if JUCE_MAC
+            const bool stallLogOn = cpuProbeOn;   // fb567 — the Mac writes nothing unless asked: a host that never pumps the main run loop (auval, a headless cert) reads as a permanent "stall"
+           #else
+            const bool stallLogOn = true;
+           #endif
+            if (stallLogOn && stalledMs >= 3000 && (stalledMs % 5000) < 500)
                 juce::File::getSpecialLocation (juce::File::tempDirectory)
                     .getChildFile ("terrain-stall.txt")
                     .appendText (juce::String::formatted ("stalled %.1f s | bakes %u | last bake %.1f ms | frames %u acks %u lastFrame %u B\n",
@@ -455,8 +477,9 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
 
 TerrainInstrumentAudioProcessor::~TerrainInstrumentAudioProcessor()
 {
-   #if JUCE_WINDOWS
+   #if JUCE_WINDOWS || JUCE_MAC
     beaconStop_.store (true, std::memory_order_relaxed);   // fb481 — join before members die
+    beaconWake_.signal();                                   // fb567 — wake the 500 ms wait so the join is immediate
     if (stallBeacon_ != nullptr && stallBeacon_->joinable()) stallBeacon_->join();
     stallBeacon_.reset();
    #endif

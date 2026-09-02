@@ -1716,9 +1716,10 @@ private:
     std::atomic<uint32_t> mtHeartbeat_ { 0 };
     std::atomic<float>    lastBakeMs_  { 0.0f };
     std::atomic<uint32_t> bakeCount_   { 0 };
-   #if JUCE_WINDOWS
+   #if JUCE_WINDOWS || JUCE_MAC   // fb567 — the Mac runs the beacon too (opt-in, see PluginProcessor.cpp)
     std::unique_ptr<std::thread> stallBeacon_;
     std::atomic<bool>            beaconStop_ { false };
+    juce::WaitableEvent          beaconWake_;   // fb567 — the beacon's interruptible 500 ms wait
    #endif
     // Audio thread: the wavetable a voice should read for one osc — the imported table if one
     // was dropped, else the morphed/factory table. Atomic load only (no locks).

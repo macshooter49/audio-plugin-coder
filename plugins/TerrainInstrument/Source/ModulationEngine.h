@@ -188,6 +188,7 @@ public:
         {
             activeConfig = pendingConfig;
             configPending.store (false, std::memory_order_relaxed);
+            liveAssign_.store (activeConfig.numAssignments, std::memory_order_relaxed);   // fb567 — the editor's read
         }
         currentBpm = bpm;
 
@@ -232,6 +233,12 @@ public:
             offsets[dirtyIdx_[k]] = 0.0f;
         numDirty_ = 0;
 
+        // fb567 — NOTHING ASSIGNED, NOTHING ADVANCES. These three LFOs ran at 1 Hz from prepare in
+        // every patch — three waveform evaluations per sample, forever, for a bank whose only
+        // consumers are the assignment loop below and the editor's display push (both empty
+        // without an assignment). The phases hold; the first assignment resumes them from where
+        // they stopped. Audio with an assignment is untouched.
+        if (activeConfig.numAssignments > 0)
         for (int i = 0; i < NUM_LFOS; i++)
         {
             const auto& lfo = activeConfig.lfos[i];
@@ -278,7 +285,7 @@ public:
             lfoOutputsAtomic[i].store (lfoValues[i], std::memory_order_relaxed);
             lfoPhasesAtomic[i].store (st.phase, std::memory_order_relaxed);
         }
-        slewInit = true;   // fb142-lfo — all three snapped once; glide from here on
+        if (activeConfig.numAssignments > 0) slewInit = true;   // fb142-lfo — all three snapped once; glide from here on (fb567: only once they have run)
 
         float xySourceX = (xyX - 0.5f) * 2.0f;
         float xySourceY = (xyY - 0.5f) * 2.0f;
@@ -425,6 +432,7 @@ public:
 
     std::atomic<float> lfoOutputsAtomic[NUM_LFOS] = {};
     std::atomic<float> lfoPhasesAtomic[NUM_LFOS] = {};
+    int liveAssignments() const noexcept { return liveAssign_.load (std::memory_order_relaxed); }   // fb567 — message thread: is anything assigned? (the display push exists only then)
 
 private:
     //==============================================================================
@@ -439,6 +447,7 @@ private:
     Config pendingConfig;
     Config activeConfig;
     std::atomic<bool> configPending { false };
+    std::atomic<int>  liveAssign_ { 0 };   // fb567 — activeConfig.numAssignments, mirrored for the editor
 
     LFOState lfoState[NUM_LFOS] = {};
     float lfoValues[NUM_LFOS] = {};
