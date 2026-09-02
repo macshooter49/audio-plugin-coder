@@ -5684,10 +5684,12 @@ namespace tw
                     const auto& as = modConfig_.assignments[a];
                     if (! as.enabled) continue;
                     const int sI = (int) as.source, dI = (int) as.dest;
-                    if (sI < 0 || sI >= wc::NUM_LFOS) continue;
+                    const bool sIsLfo = (sI >= 0 && sI < wc::NUM_LFOS);
+                    // fb568 — a NON-LFO cutoff route (macro/wheel/aftertouch/bend/random/alt/follower/key)
+                    //  arms the cut gather too; only an LFO source needs its per-sample tick.
                     if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
-                    { lfoTickMask |= (1u << sI); anyCutRoute = true; }
-                    else if (dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
+                    { if (sIsLfo) lfoTickMask |= (1u << sI); anyCutRoute = true; }
+                    else if (sIsLfo && dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
                     { lfoTickMask |= (1u << sI) | (1u << (dI - (int) wc::ModDest::LfoAmt1)); anyAmtRoute = true; }
                 }
                 for (int i = 0; i < numSamples; ++i)
@@ -5742,10 +5744,24 @@ namespace tw
                         {
                             const auto& as = modConfig_.assignments[a];
                             if (! as.enabled) continue;
+                            if (as.dest != wc::ModDest::Cut1 && as.dest != wc::ModDest::Cut2) continue;
                             const int sIdx = (int) as.source;
-                            if (sIdx < 0 || sIdx >= wc::NUM_LFOS) continue;   // Batch 1: LFO sources only
+                            // fb568 — THE CUT GATHER KNEW ONLY LFOs. A macro/wheel/aftertouch/bend/random/alt route to
+                            //  the cutoff was gathered into envCutBlk1_ in the mod-matrix prelude — but that accumulator
+                            //  reads back ZERO by the time this filter loop runs (proven), so every non-LFO cutoff route
+                            //  was silent (Max: "random cutoff doesn't do anything audible"). Read every family through
+                            //  the one reader, HERE, where LFO->cutoff already provably reaches the filter. Env keeps its
+                            //  own smoothed envCutBlk1_/fMod1 path; Velocity keeps velSm1_ below — neither is double-counted.
+                            float sv; bool okc = true;
+                            if      (sIdx >= 0 && sIdx < wc::NUM_LFOS)  sv = lfoOut_[sIdx];
+                            else if (wc::isEnvModSource (sIdx))         continue;
+                            else if (sIdx == (int) wc::ModSource::Velocity) continue;
+                            else                                        sv = sourceValueOf (sIdx, lfoOut_, okc);
+                            if (! okc) continue;
+                            if (as.curve >= 0)
+                                sv = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr, as.curve, sIdx, sv);
                             const wc::DestInfo& info = wc::kDestInfo[(int) as.dest];
-                            const float contrib = wc::routeContribution (info, lfoOut_[sIdx], as.depth);
+                            const float contrib = wc::routeContribution (info, sv, as.depth);
                             if      (as.dest == wc::ModDest::Cut1) lfoSemis1 += contrib;
                             else if (as.dest == wc::ModDest::Cut2) lfoSemis2 += contrib;
                         }
