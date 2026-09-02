@@ -24,8 +24,8 @@ int main()
           "FxModEnd=" + std::to_string ((int) ModDest::FxModEnd));
     gate ("the first FX dest is FxModBase", fxModDest (0, 0, 0) == (int) ModDest::FxModBase);
     gate ("the last FX dest is FxModEnd-1", fxModDest (15, 5, 11) == (int) ModDest::FxModEnd - 1);
-    gate ("the 8 appended window dests sit ABOVE the rack, 1846..1853",
-          (int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiD == 1853 && (int) ModDest::NumDests == 1854,
+    gate ("the 8 appended window dests sit ABOVE the rack, 1846..1853, and NumDests has grown past them (fb522 · fb565)",
+          (int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiD == 1853 && (int) ModDest::NumDests > 1853,
           "SpecLoA=" + std::to_string ((int) ModDest::SpecLoA) + " NumDests=" + std::to_string ((int) ModDest::NumDests));
     // 🚨 THE ONE THAT MATTERS. isFxModDest must stop at FxModEnd: if it only widened with NumDests,
     // fxModDecode(1846) would return kind=16 into a [16][6][12] array and the audio thread would
@@ -124,6 +124,8 @@ int main()
             float* ref[16][6][12] {};
             float  lfo[NUM_LFOS] {};
             float  env[(int) ModSource::NumSources] {};
+            float  src[(int) ModSource::NumSources] {};   // fb566 — every other family's value, in its convention
+            bool   has[(int) ModSource::NumSources] {};   // fb566 — which of them this fake rack has a view of
             int    cells = 0;
 
             FakeRack()
@@ -144,22 +146,93 @@ int main()
         };
         FakeRack R;
 
+        const ModCurveSet* curves = nullptr;   // fb566 — a bar below installs one
         auto build = [&] (FxModAccum& acc, const ModConfig& cfg)
         {
-            buildFxMod (acc, cfg,
+            // fb566 — ONE source callback, by ModSource, in each family's convention (the plugin's
+            // sourceValueOfSrc): LFOs from the bank, envelopes as level−1, everything else from src[].
+            buildFxMod (acc, cfg, curves,
                 [&] (int k, int i, int n) -> const void* { return R.ref[k][i][n]; },
                 []  (const void* p) { return *static_cast<const float*> (p); },
-                [&] (int si)  { return R.lfo[si]; },
-                [&] (int src) { return R.env[src]; });
+                [&] (int sI, bool& ok)
+                {
+                    if (sI >= 0 && sI < NUM_LFOS) { ok = true; return R.lfo[sI]; }
+                    if (isEnvModSource (sI))      { ok = true; return R.env[sI]; }
+                    ok = R.has[sI]; return R.src[sI];
+                });
         };
         auto route = [] (ModConfig& c, ModSource s, int dest, float depth)
         { auto& a = c.assignments[c.numAssignments++];
           a.source = s; a.dest = (ModDest) dest; a.depth = depth; a.enabled = true; };
+        auto routeAux = [] (ModConfig& c, ModSource s, int dest, float depth, ModSource aux)
+        { auto& a = c.assignments[c.numAssignments++];
+          a.source = s; a.dest = (ModDest) dest; a.depth = depth; a.enabled = true; a.useAux = true; a.auxSource = aux; };
         auto near_ = [] (float a, float b) { return std::fabs (a - b) < 1e-5f; };
 
         gate ("the map resolves 1,104 cells (184 x 6) over 1,098 parameters (183 x 6)",
               R.cells == kFxModLive * kFxModInsts && (int) R.param.size() == kFxModDistinct * kFxModInsts,
               std::to_string (R.cells) + " cells / " + std::to_string (R.param.size()) + " params");
+
+        // ═══ fb566 — EVERY FAMILY REACHES THE RACK ═══════════════════════════════════════════
+        // The walk knew two families and dropped the rest at `si >= NUM_LFOS → continue`. Max:
+        // "reverb mix to macro one... it's not moving." Each bar below is one family the old walk
+        // threw away, judged by the global pass's law: shapes OWN, everything else ADDS.
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.2f;                       // the reverb MIX
+          R.has[(int) ModSource::Macro1] = true; R.src[(int) ModSource::Macro1] = 0.5f;
+          route (c, ModSource::Macro1, fxModDest (0, 0, 3), 1.0f);
+          build (acc, c);
+          gate ("fb566 a MACRO route ADDS: base 0.2 + (macro 0.5 x depth 1) = 0.7 — the reverb mix follows Macro 1",
+                acc.count == 1 && near_ (acc.val[0], 0.7f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.2f;
+          R.has[(int) ModSource::Wheel] = true; R.src[(int) ModSource::Wheel] = 1.0f;
+          route (c, ModSource::Wheel, fxModDest (0, 0, 3), 0.5f);
+          build (acc, c);
+          gate ("fb566 the MOD WHEEL adds: 0.2 + (1.0 x 0.5) = 0.7", acc.count == 1 && near_ (acc.val[0], 0.7f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.5f;
+          R.has[(int) ModSource::Velocity] = true; R.src[(int) ModSource::Velocity] = 0.8f;
+          route (c, ModSource::Velocity, fxModDest (0, 0, 3), -0.5f);
+          build (acc, c);
+          gate ("fb566 VELOCITY adds with a SIGNED depth: 0.5 + (0.8 x -0.5) = 0.1", near_ (acc.val[0], 0.1f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.5f;
+          R.has[(int) ModSource::Bend] = true; R.src[(int) ModSource::Bend] = -1.0f;
+          route (c, ModSource::Bend, fxModDest (0, 0, 3), 0.3f);
+          build (acc, c);
+          gate ("fb566 PITCH BEND is bipolar: 0.5 + (-1 x 0.3) = 0.2", near_ (acc.val[0], 0.2f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.7f;
+          R.has[(int) ModSource::FollowA] = true; R.src[(int) ModSource::FollowA] = -1.0f;   // the follower at level 0 (level−1 convention)
+          route (c, ModSource::FollowA, fxModDest (0, 0, 3), 1.0f);
+          build (acc, c);
+          const float rest = acc.val[0];
+          ModConfig c2; FxModAccum acc2; R.src[(int) ModSource::FollowA] = 0.0f;         // level 1
+          route (c2, ModSource::FollowA, fxModDest (0, 0, 3), 1.0f);
+          build (acc2, c2);
+          gate ("fb566 a FOLLOWER OWNS like an envelope: level 0 reads 0 (not the base 0.7), level 1 reads 1.0",
+                near_ (rest, 0.0f) && near_ (acc2.val[0], 1.0f), std::to_string (rest) + " / " + std::to_string (acc2.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.7f;
+          R.has[(int) ModSource::Note] = true; R.src[(int) ModSource::Note] = -0.5f;      // key position 0.5 (level−1)
+          route (c, ModSource::Note, fxModDest (0, 0, 3), 1.0f);
+          build (acc, c);
+          gate ("fb566 KEY OWNS: key position 0.5 at depth 1 reads 0.5", near_ (acc.val[0], 0.5f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.2f;
+          R.has[(int) ModSource::Macro1] = true; R.src[(int) ModSource::Macro1] = 1.0f;
+          R.has[(int) ModSource::Macro2] = true; R.src[(int) ModSource::Macro2] = 0.5f;
+          routeAux (c, ModSource::Macro1, fxModDest (0, 0, 3), 1.0f, ModSource::Macro2);
+          build (acc, c);
+          gate ("fb566 SCALE BY reaches the rack: Macro 1 (1.0) x depth 1 scaled by Macro 2 at 50 % = +0.5 → 0.7", near_ (acc.val[0], 0.7f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.0f;
+          ModCurveSet cs {}; cs.c[0].set = true; for (int k = 0; k < kModCurvePts; ++k) cs.c[0].pts[k] = 1.0f - (float) k / (float) (kModCurvePts - 1);   // y = 1 − x
+          curves = &cs;
+          R.has[(int) ModSource::Macro1] = true; R.src[(int) ModSource::Macro1] = 1.0f;
+          route (c, ModSource::Macro1, fxModDest (0, 0, 3), 1.0f); c.assignments[0].curve = 0;
+          build (acc, c);
+          const float inverted = acc.val[0];
+          curves = nullptr;
+          gate ("fb566 the CONNECTION CURVE reaches the rack: y = 1 − x turns macro 1.0 into +0.0", near_ (inverted, 0.0f), std::to_string (inverted)); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.4f;
+          route (c, (ModSource) ((int) ModSource::Drift1), fxModDest (0, 0, 3), 1.0f);   // a source the processor has no view of
+          build (acc, c);
+          gate ("fb566 a source with no view (ok=false) is DROPPED, never invented: the knob stays at its base",
+                acc.count == 1 && near_ (acc.val[0], 0.4f), std::to_string (acc.val[0])); }
 
         // ── an LFO route ADDS ───────────────────────────────────────────────────────────────
         { ModConfig c; FxModAccum acc; R.at (0, 0, 0) = 0.4f; R.lfo[0] = 1.0f;
@@ -273,9 +346,14 @@ int main()
           build (acc, c);
           gate ("a disabled route opens no slot", acc.count == 0); }
         { ModConfig c; FxModAccum acc; R.at (0, 0, 0) = 0.4f;
-          route (c, ModSource::Velocity, fxModDest (0, 0, 0), 0.5f);   // no block-rate value
+          // fb566 — this bar used to route VELOCITY and expect the base: the walk's "only LFOs have a
+          // global value" rule, written down as a law. Velocity has had a block-rate value since fb263
+          // (velVis_), and it reaches the rack now (the fb566 bars above). What is still true is the
+          // fb393 half: a source the rack has NO view of is dropped, never invented.
+          R.has[(int) ModSource::Velocity] = false;
+          route (c, ModSource::Velocity, fxModDest (0, 0, 0), 0.5f);
           build (acc, c);
-          gate ("a source with no global value leaves the knob at its base — flowMod's own rule",
+          gate ("a source this rack has no view of (ok=false) leaves the knob at its base — dropped, never invented",
                 acc.count == 1 && near_ (acc.val[0], 0.4f), std::to_string (acc.val[0])); }
 
         // ── a non-FX destination is not this map's business ─────────────────────────────────

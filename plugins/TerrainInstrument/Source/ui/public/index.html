@@ -31911,16 +31911,39 @@ restoreThemeFromBackend();
       if(L<o.r.right&&R>o.r.left&&T<o.r.bottom&&B>o.r.top) return true; }
     return false; }
 
+  /* fb566 — THE HAND-DRIVEN COMETS RIDE AT THE FRAME RATE. Max: "whenever I connect anything to the
+     mod wheel it has a weird lag... choppy... it needs to be as smooth as clicking and dragging it
+     with our mouse." The wheel, aftertouch, bend and the macros arrive on the editor feed at the push
+     rate (≤ 60 Hz, self-clocked, 0 Hz when idle) and the comet LATCHED each push — fb493's jolt one
+     level down, exactly what fb498 fixed for the LFOs. Same law here: the C++ calls __mvP2Tick once
+     per push (outside the quiet gate, so a wheel with no note sounding still moves its streak); the
+     tick keeps the last two samples and their clock, and p2v() interpolates between them by the
+     MEASURED push interval. One push of latency, never a step; a stale clock (> 250 ms, the idle
+     case) hands back the raw value so nothing ever parks on a guess. Cheap on Windows: one small
+     snapshot per push, no timer, no extra paint. */
+  var p2Cur=null, p2Prev=null, p2T=0, p2TPrev=0;
+  window.__mvP2Tick=function(){ try{
+      var m=window.__mvMacro||[], now=Date.now();
+      var snap={w:window.__mvWheel, a:window.__mvAT, b:window.__mvBend, m:m.slice()};
+      if(p2Cur&&snap.w===p2Cur.w&&snap.a===p2Cur.a&&snap.b===p2Cur.b&&snap.m.length===p2Cur.m.length){ var same=true; for(var i=0;i<snap.m.length;i++){ if(snap.m[i]!==p2Cur.m[i]){ same=false; break; } } if(same) return; }   /* an identical push is not a new sample: the clock stays honest */
+      p2Prev=p2Cur; p2TPrev=p2T; p2Cur=snap; p2T=now; }catch(e){} };
+  function p2At(cur,prev){ if(cur==null) return null; if(prev==null||!p2T) return cur;
+    var now=Date.now(); if((now-p2T)>250) return cur;
+    var gap=(p2T-p2TPrev)/1000; if(!(gap>0.001&&gap<0.3)) return cur;
+    var a=(now-p2T)/(gap*1000); if(a<0)a=0; else if(a>1)a=1;
+    var out=prev+(cur-prev)*a; return isFinite(out)?out:cur; }
   /* fb563 — the live value behind a Phase 2 source's comet (0..1, −1 = nothing yet), or null for
      every older family so the chain below keeps its own readings. Bend is bipolar → mapped to 0..1. */
   function p2v(a){ try{
-      if(a.mac)  return (window.__mvMacro&&window.__mvMacro[a.mac-1]!=null)?window.__mvMacro[a.mac-1]:-1;
-      if(a.whl)  return (window.__mvWheel!=null)?window.__mvWheel:-1;
-      if(a.at)   return (window.__mvAT!=null)?window.__mvAT:-1;
-      if(a.bend) return (window.__mvBend!=null)?(window.__mvBend+1)/2:-1;
+      var C=p2Cur, Pv=p2Prev;
+      if(a.mac){ var k=a.mac-1; if(C&&C.m[k]!=null) return p2At(C.m[k],Pv?Pv.m[k]:null); return (window.__mvMacro&&window.__mvMacro[k]!=null)?window.__mvMacro[k]:-1; }
+      if(a.whl){ if(C&&C.w!=null) return p2At(C.w,Pv?Pv.w:null); return (window.__mvWheel!=null)?window.__mvWheel:-1; }
+      if(a.at){  if(C&&C.a!=null) return p2At(C.a,Pv?Pv.a:null); return (window.__mvAT!=null)?window.__mvAT:-1; }
+      if(a.bend){ if(C&&C.b!=null){ var bb=p2At(C.b,Pv?Pv.b:null); return (bb+1)/2; } return (window.__mvBend!=null)?(window.__mvBend+1)/2:-1; }
       if(a.rnd)  return (window.__mvRand&&window.__mvRand[a.rnd-1]!=null)?window.__mvRand[a.rnd-1]:-1;
       if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1; }catch(e){}
     return null; }
+  window.__tiP2Value=function(S){ return p2v(S); };   /* gate hook — the value the comet would draw right now */
   function loop(ts){ if(window.__cardOnly==='mod')return; var t=ts/1000; if(!lastT)lastT=t; var dt=Math.min(0.05,t-lastT); lastT=t;
     for(var n=1;n<=10;n++){ phase[n-1]+=dt*lfoHz(n); if(phase[n-1]>=1)phase[n-1]-=Math.floor(phase[n-1]); }   // (kept for the future "knob moves with the LFO" pass)
     var on = window.__cardOnly ? true

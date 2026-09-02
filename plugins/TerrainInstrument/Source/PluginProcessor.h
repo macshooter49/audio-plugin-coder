@@ -935,6 +935,7 @@ public:
         "Scale by". LFOs are the free-running mirrors, envelopes the mono tap, the rest the published feeds. */
     float globalSourceTo01 (int wire) noexcept;
     float globalSourceValue (int wire) noexcept;   // fb563 clean-up — the family-convention value (the twin of the voice's sourceValueOf)
+    float sourceValueOfSrc (int sI, bool& ok) noexcept;   // fb566 — the same reader by ModSource; ok=false for a source the processor has no view of
     // ══ fb563 (4) — MIDI LEARN + THE CC MAP ═════════════════════════════════════════════════
     //  "MIDI Learn" on any control: the NEXT CC the host sends binds to that parameter (absolute,
     //  0..127 → the parameter's normalised range). The audio thread only STORES (atomics); the

@@ -5919,6 +5919,14 @@ void TerrainUiCore::timerCallback()
     js << "];window.__mvMacroBase=[";   // fb565 — the knob (the parameter) beside the modulated value: the face follows the knob, the comet the modulation
     for (int mk = 0; mk < wc::kNumMacros; ++mk) js << (mk ? "," : "") << SF (audioProcessor.modVizMacroBase (mk), 3);
     js << "];";
+    // fb566 — the WHEEL, AFTERTOUCH and BEND ride outside the quiet gate too: a hand on the wheel with
+    // no note sounding must move its streak. Then ONE call tells the page a fresh sample landed, so
+    // its comets interpolate between pushes at the frame rate (the fb498 law, for these families).
+    // Constant bytes while nothing moves — the idle-skip still sees a byte-identical frame.
+    js << "window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
+       << ";window.__mvAT=" << SF (audioProcessor.modVizAftertouch(), 3)
+       << ";window.__mvBend=" << SF (audioProcessor.modVizBend(), 3)
+       << ";if(window.__mvP2Tick)window.__mvP2Tick();";
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     if (! uiQuiet)
     {
@@ -5937,10 +5945,7 @@ void TerrainUiCore::timerCallback()
         js << "];";
         // fb563 — the Phase 2 sources' live values, for their comets (Max's law: audible ⇒ visible)
         juce::String p2Feed;
-        p2Feed << "window.__mvWheel=" << SF (audioProcessor.modVizWheel(), 3)
-               << ";window.__mvAT=" << SF (audioProcessor.modVizAftertouch(), 3)
-               << ";window.__mvBend=" << SF (audioProcessor.modVizBend(), 3)
-               << ";window.__mvRand=[";
+        p2Feed << "window.__mvRand=[";   // fb566 — wheel / aftertouch / bend moved above the quiet gate; the per-note pair stays here
         for (int rk = 0; rk < 4; ++rk) p2Feed << (rk ? "," : "") << SF (audioProcessor.modVizRand (rk), 3);
         p2Feed << "];window.__mvAlt=" << SF (audioProcessor.modVizAlt(), 1) << ";";
         js << p2Feed;

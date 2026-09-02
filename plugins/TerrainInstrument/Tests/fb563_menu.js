@@ -498,6 +498,19 @@ const HELPERS = () => {
       && r.name === 'Macro 3' && r.macNames.indexOf('Macro 3') < 0 && r.macNames.indexOf('Macro 2') >= 0 && r.macNames.indexOf('Macro 9') >= 0 && r.rts.join() === 'LFO 1 · 50%,Macro 2 · 100%' && r.ul >= 1,
       '15 Macro 3 is destination 1880: Modulate › LFO 1 and Macro 2 route to it (LFO half, macro full), it is named "Macro 3", its own picker hides Macro 3 and offers Macro 9, its rows read on its menu, it has an underline', JSON.stringify(r));
 
+  // ── 16 · THE HAND-DRIVEN COMET RIDES AT THE FRAME RATE (fb566) ───────────────────────────
+  //  The feed pushes the wheel at ≤ 60 Hz and calls __mvP2Tick once per push; between two pushes the
+  //  comet's value must move THROUGH the gap, not sit on the last push and jump.
+  r = await pg.evaluate(async () => { const sleep = (ms) => new Promise(r => setTimeout(r, ms));
+    const push = (w) => { window.__mvWheel = w; window.__mvP2Tick(); };
+    push(0.0); await sleep(100); push(0.0); await sleep(100);   // two identical pushes: the clock must NOT count them as motion
+    push(0.2); await sleep(100); push(1.0);                       // a 100 ms cadence, then a step from 0.2 to 1.0
+    const v0 = window.__tiP2Value({ whl:1 }); await sleep(30); const v1 = window.__tiP2Value({ whl:1 }); await sleep(30); const v2 = window.__tiP2Value({ whl:1 });
+    await sleep(320); const v3 = window.__tiP2Value({ whl:1 });   // the clock is stale now: the raw value, never a guess
+    return { v0:+v0.toFixed(3), v1:+v1.toFixed(3), v2:+v2.toFixed(3), v3:+v3.toFixed(3) }; });
+  chk(r.v0 >= 0.2 && r.v0 < 0.6 && r.v1 > r.v0 && r.v2 > r.v1 && r.v2 < 1.0 && r.v3 === 1.0,
+      '16 a wheel push 0.2 → 1.0 on a 100 ms cadence: the comet value climbs THROUGH the gap (interpolated) and lands on 1.0 once the clock is stale', JSON.stringify(r));
+
   // ── 14 · COPY WITH MODULATORS (fb564) ───────────────────────────────────────────────────
   r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3); window.__tiAddRoute(0, 2, 4); window.__tiAddRoute(0, 5, 673);   // Env 1 → Warp A · LFO 2 → Fold A · LFO 5 → LFO 1 Rate (not the oscillator's)
     const rs = window.__routes(); const idx = rs.findIndex(x => x.s === 'lfo2'); if (idx >= 0) try { window.__tiSetBypass(idx, 1); } catch(e){}

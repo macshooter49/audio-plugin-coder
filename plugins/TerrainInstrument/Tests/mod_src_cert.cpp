@@ -88,6 +88,15 @@ struct AU
     void close() { if (au) { AudioUnitUninitialize (au); AudioComponentInstanceDispose (au); au = nullptr; } }
     std::string find (const std::string& needle) const
     { for (auto& kv : byName) if (kv.first.find (needle) != std::string::npos) return kv.first; return ""; }
+    // fb566 — by JUCE parameter ID (au_fx_path.cpp's idiom): generateAUParameterID() = String::hashCode() with the sign bit cleared
+    static AudioUnitParameterID pid (const std::string& id) { uint32_t r = 0; for (unsigned char ch : id) r = 31u * r + (uint32_t) ch; return (AudioUnitParameterID) (r & 0x7FFFFFFFu); }
+    bool hasId (const std::string& id) const { return info.count (pid (id)) > 0; }
+    bool setId (const std::string& id, float norm)
+    {
+        auto it = info.find (pid (id)); if (it == info.end()) return false;
+        const auto& pi = it->second;
+        return AudioUnitSetParameter (au, it->first, kAudioUnitScope_Global, 0, pi.minValue + norm * (pi.maxValue - pi.minValue), 0) == noErr;
+    }
     bool set (const std::string& n, float norm)
     {
         auto it = byName.find (n); if (it == byName.end()) return false;
@@ -290,6 +299,61 @@ int main()
     chk (sx0 < -70 && sx1 > -30 && (sx1 - sx5) > 3.0 && (sx1 - sx5) < 9.0,
          "10 SCALE BY: Macro 1 → Level A × Macro 2: aux 0 silent, aux 50 % about −6 dB, aux 100 full", fmt ("%.1f / %.1f / %.1f dB", sx0, sx5, sx1));
     au.set (MAC2, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);
+
+    // ── 12 · A MACRO REACHES THE RACK (fb566) — Max's chain: wheel → Macro 1 → the reverb's MIX ──
+    //  The rack's walk knew LFO and envelope routes only; a macro (or the wheel, velocity, a follower)
+    //  into any rack knob was silent. Measured on the wet TAIL after note-off: dry-only (mix 0) dies with
+    //  the note; a mix opened by the macro rings on. The reverb is a real rack device here (ACTIVE +
+    //  POWER + the osc A send), its MIX knob at 0 so the route is the only way to a tail.
+    {
+        const bool haveRvb = au.hasId ("SYN_RVB_MIX") && au.hasId ("SYN_RVB_POWER") && au.hasId ("SYN_RVB_ACTIVE") && au.hasId ("SYN_RVB_SRC_A");
+        chk (haveRvb, "12 the AU exposes the reverb's Mix, Power, Active and Source A (by parameter id)");
+        au.set (LVL, 1.0f); au.setId ("SYN_RVB_ACTIVE", 1.0f); au.setId ("SYN_RVB_POWER", 1.0f); au.setId ("SYN_RVB_SRC_A", 1.0f); au.setId ("SYN_RVB_MIX", 0.0f);
+        au.pump (0.6); au.midi (0x90, 60, 100); au.render (20); au.midi (0x80, 60, 0); au.render (40); au.pump (0.6);   // a throw-away note + run loop: the pooled reverb is built on the message thread (fb352)
+        auto tailDb = [&] () { au.midi (0x90, 60, 100); au.render (30); au.midi (0x80, 60, 0); au.render (40); return rmsDb (au.render (30)); };   // 0.4 s after the release ends
+        au.setRoutes ("[{\"s\":220,\"d\":697,\"v\":1.0}]");   // Macro 1 → dest 697 = fxModDest (reverb, inst 1, MIX)
+        au.set (MAC1, 0.0f); au.pump (0.2); const double rt0 = tailDb();
+        au.set (MAC1, 1.0f); au.pump (0.2); const double rt1 = tailDb();
+        chk (rt0 < -60 && rt1 > -45 && (rt1 - rt0) > 15, "12 MACRO 1 → Reverb Mix (knob at 0): macro 0 → no tail, macro 100 → the reverb rings after note-off", fmt ("%.1f dB → %.1f dB", rt0, rt1));
+        au.set (MAC1, 0.0f); au.pump (0.2);
+        au.setRoutes ("[{\"s\":230,\"d\":1878,\"v\":1.0},{\"s\":220,\"d\":697,\"v\":1.0}]");   // the whole chain: wheel → Macro 1 → Reverb Mix
+        au.midi (0xB0, 1, 0);   au.render (30); const double rc0 = tailDb();
+        au.midi (0xB0, 1, 127); au.render (30); const double rc1 = tailDb();
+        chk (rc0 < -60 && rc1 > -45 && (rc1 - rc0) > 15, "12 THE CHAIN: wheel → Macro 1 → Reverb Mix: wheel 0 → no tail, wheel 127 → the tail", fmt ("%.1f dB → %.1f dB", rc0, rc1));
+        au.midi (0xB0, 1, 0); au.render (30);
+        au.setRoutes ("[]"); au.setId ("SYN_RVB_ACTIVE", 0.0f); au.setId ("SYN_RVB_POWER", 0.0f); au.setId ("SYN_RVB_SRC_A", 0.0f); au.setId ("SYN_RVB_MIX", 0.35f); au.set (LVL, 0.0f); au.pump (0.4);
+    }
+
+    // ── 13 · THE FREE LFO PARKS IN SILENCE (fb566) — Max: "when the MIDI is done, everything stops" ──
+    //  LFO 1, Ramp, on Level A (knob at 0.5, depth 0.5). RUNS while a note sounds: two windows of one
+    //  held note differ. PARKS between notes: a long silence moves it by nothing — the second note's
+    //  window matches the first's within the LFO's own travel during the sounding time.
+    {
+        const std::string LR = au.find ("LFO 1 Rate"), LS = au.find ("LFO 1 Shape"), LD = au.find ("LFO 1 Depth"), LSY = au.find ("LFO 1 Sync");
+        chk (! LR.empty() && ! LS.empty() && ! LD.empty(), "13 the AU exposes LFO 1 Rate, Shape and Depth", LR + " / " + LS + " / " + LD);
+        // ⚠️ the Shape choice runs 0..10 on the AU (eleven shapes), so the index is normalised against the
+        //    AU's OWN max — 3/6 landed on S&H (random steps: the RUNS bar read a coin toss and the
+        //    PARKS bar a hold). Ramp = 3, monotone within a cycle, the honest ruler for both.
+        const float shapeMax = au.info.at (au.byName.at (LS)).maxValue;
+        au.set (LVL, 0.5f); au.set (LS, 3.0f / shapeMax); au.set (LD, 1.0f); if (! LSY.empty()) au.set (LSY, 0.0f);   // Ramp, master depth 1, free rate
+        au.setRoutes ("[{\"s\":0,\"d\":64,\"v\":0.5}]");
+        auto windowDb = [&] (int fromBlk, int toBlk) { std::vector<float> all; for (int b = 0; b < toBlk; ++b) { auto x = au.render (1); if (b >= fromBlk) all.insert (all.end(), x.begin(), x.end()); } return rmsDb (all); };
+        // RUNS: 0.5 Hz (normalised 0.267 on the 0.01..40 Hz skew-0.3 range) — 0.8 s apart is 40 % of a ramp cycle
+        au.set (LR, 0.267f); au.pump (0.2);
+        au.midi (0x90, 60, 100); const double w1 = windowDb (19, 28); const double w2 = windowDb (56, 65); au.midi (0x80, 60, 0); au.render (40);
+        chk (std::abs (w2 - w1) > 2.0, "13 LFO 1 RUNS while the note sounds: two windows 0.8 s apart differ", fmt ("%.1f dB vs %.1f dB", w1, w2));
+        // PARKS — A/B: the SAME note after 1 s of silence and after 5 s of silence. The release tail's
+        // travel (the voice sounds ~0.3 s past note-off) is in BOTH; only the silence differs. Ramp at
+        // 0.03 Hz (normalised 0.102): parked, the two windows sit ~0.02 cycles apart (< 0.5 dB); free-
+        // running, the extra 4 s is 0.12 cycles of ramp (~2.4 dB, more across a wrap).
+        au.set (LR, 0.102f); au.pump (0.2);
+        auto noteWin = [&] () { au.midi (0x90, 60, 100); const double w = windowDb (37, 47); au.midi (0x80, 60, 0); au.render (40); return w; };
+        noteWin();
+        au.render (94);  const double pa = noteWin();   // 1.0 s of silence, then the note
+        au.render (469); const double pb = noteWin();   // 5.0 s of silence, then the note
+        chk (std::abs (pb - pa) < 1.5, "13 LFO 1 PARKS in silence: the note after 5 s of silence matches the note after 1 s (free-running would drift ~2.4 dB)", fmt ("%.1f dB vs %.1f dB (Δ %.2f)", pa, pb, pb - pa));
+        au.setRoutes ("[]"); au.set (LVL, 0.0f); au.set (LR, 0.5f); au.set (LS, 0.0f); au.pump (0.2);
+    }
 
     // ── 11 · A MACRO IS A DESTINATION (fb565) — the wheel drives Macro 1 (knob at 0), Macro 1 drives Level A ──
     au.set (LVL, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);

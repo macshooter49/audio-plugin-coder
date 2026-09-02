@@ -84,11 +84,25 @@ struct FxModAccum
 //   refOf  (kind, inst, knob) -> const void*  — the parameter behind that dial, or nullptr if
 //                                               the device has no such dial (the Filter's 8)
 //   baseOf (const void*)      -> float        — that parameter's un-modulated value
-//   lfoOf  (int lfoIndex)     -> float        — the global LFO's current output (bipolar)
-//   envOf  (int modSource)    -> float        — monoEnvLevelOf(): the level MINUS ONE
-template <typename RefOf, typename BaseOf, typename LfoOf, typename EnvOf>
-inline void buildFxMod (FxModAccum& acc, const ModConfig& cfg,
-                        RefOf refOf, BaseOf baseOf, LfoOf lfoOf, EnvOf envOf)
+//   srcOf  (int modSource, bool& ok) -> float — ANY source's value in its family's convention:
+//                                               LFO −1..+1 · env / follower / Key = level MINUS
+//                                               ONE (monoEnvLevelOf's convention) · velocity,
+//                                               macro, wheel, aftertouch, random, alt 0..1 ·
+//                                               bend −1..+1. ok=false for a source it has no
+//                                               view of (dropped, never invented).
+//   curves                    -> the fb554 connection-curve set (nullptr = every route straight)
+//
+//  fb566 — EVERY FAMILY. The walk knew two: an envelope OWNED, an LFO ADDED, and every other
+//  source fell through `si >= NUM_LFOS → continue` — velocity, the followers, Key, the macros,
+//  the wheel, aftertouch, bend, random, alt: SILENT on every rack knob, since the rack became
+//  modulatable (fb453). Max: "I'm trying to connect my reverb mix to macro one... it's not
+//  moving." The law is the global pass's, family for family: a SHAPE source (env / follower /
+//  Key) owns the knob; everything else adds with a signed depth; the connection curve (fb554)
+//  and Scale by (fb563-3) apply here exactly as they do on a synth knob. The rack was the one
+//  evaluator of three that had neither.
+template <typename RefOf, typename BaseOf, typename SrcOf>
+inline void buildFxMod (FxModAccum& acc, const ModConfig& cfg, const ModCurveSet* curves,
+                        RefOf refOf, BaseOf baseOf, SrcOf srcOf)
 {
     acc.reset();
     for (int a = 0; a < cfg.numAssignments; ++a)
@@ -100,14 +114,22 @@ inline void buildFxMod (FxModAccum& acc, const ModConfig& cfg,
         if (ref == nullptr) continue;                   // a hole — that device has no such dial
         const int slot = acc.slotFor (ref, baseOf (ref));
         if (slot < 0) continue;
-        if (isEnvModSource ((int) as.source))           // ENV OWNS
-            acc.addEnv (slot, envOf ((int) as.source), as.depth);
-        else                                            // LFO ADDS
+        const int sI = (int) as.source;
+        bool ok = false;
+        float v = srcOf (sI, ok);
+        if (! ok) continue;                             // no view of that source here — dropped, never invented
+        v = applyModCurve (curves, as.curve, sI, v);   // fb554 — the connection curve, in the family's own convention
+        float depth = as.depth;
+        if (as.useAux)                                  // fb563 (3) — Scale by: a second source scales the DEPTH
         {
-            const int si = (int) as.source - (int) ModSource::L1;
-            if (si < 0 || si >= NUM_LFOS) continue;      // only LFO sources have a global value
-            acc.addLfo (slot, kDestInfo[(size_t) as.dest], lfoOf (si), as.depth);
+            bool okA = false;
+            const float av = srcOf ((int) as.auxSource, okA);
+            if (okA) depth *= sourceTo01 ((int) as.auxSource, av);
         }
+        if (isShapeModSource (sI))                      // ENV · FOLLOWER · KEY OWN (level−1 in, +1 inside)
+            acc.addEnv (slot, v, depth);
+        else                                            // LFO · velocity · macro · wheel · aftertouch · bend · random · alt ADD
+            acc.addLfo (slot, kDestInfo[(size_t) as.dest], v, depth);
     }
     acc.finish();
 }

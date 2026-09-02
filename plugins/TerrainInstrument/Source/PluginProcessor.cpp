@@ -9950,9 +9950,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             && ! wc::isFreeRunShape (synModCfg.lfos[i].shape))   // fb239 — chaos/dune have no transport phase: always free-run at rate
 
         {
-            const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
-            const double tdScale = (synModCfg.lfos[i].tripDot == 1 ? (2.0 / 3.0) : synModCfg.lfos[i].tripDot == 2 ? 1.5 : 1.0);   // fb228 — TRIP/DOT scale the bar cycle
-            flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / ((double) bpc * tdScale), 1.0)); // locks to bar + arp clock
+            // fb566 — ...and only while something SOUNDS (Max: "when the MIDI is done, everything
+            // stops, including the LFO... like Serum"). In silence the bar phase is not applied,
+            // the LFO holds where it was, and the next note re-locks it to the bar.
+            if (flowAnySounding)
+            {
+                const float bpc = wc::kSyncDivisions[ juce::jlimit (0, wc::kNumSyncDivisions - 1, synModCfg.lfos[i].syncIdx) ].beatsPerCycle;
+                const double tdScale = (synModCfg.lfos[i].tripDot == 1 ? (2.0 / 3.0) : synModCfg.lfos[i].tripDot == 2 ? 1.5 : 1.0);   // fb228 — TRIP/DOT scale the bar cycle
+                flowLfo_[i].setPhaseFromTransport ((float) std::fmod (flowPpq / ((double) bpc * tdScale), 1.0)); // locks to bar + arp clock
+            }
         }
         else
         {
@@ -9972,7 +9978,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 // pattern already shipped next door for the per-voice banks (SynthVoice.h:4580):
                 // skipSamples advances the fb142 output slew with an n-sample compound coefficient, so
                 // peek() follows the same trajectory. Measured 0.312% -> 0.014% of a core.
-                flowLfo_[i].skipSamples (numSamples);
+                // fb566 — THE FREE LFO PARKS IN SILENCE. Max: "stop the free-running LFO from just
+                // free-running forever... Serum 2: every time you press a MIDI, everything moves;
+                // when the MIDI is done, everything stops, including the LFO... the dot fades out
+                // and the LFO just pauses." Free now means free-running WHILE ANYTHING SOUNDS
+                // (release tails included — the same flowAnySounding the note-relative modes use):
+                // no note-on reset, no phase jump, just a hold. The published phase stops
+                // changing, the feed goes byte-identical, the fb511 idle-skip ships nothing, the
+                // painters rest — the CPU win Max asked for, on Windows first.
+                if (flowAnySounding)
+                    flowLfo_[i].skipSamples (numSamples);
             }
             else
             {
@@ -10013,14 +10028,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    Keyed BY POINTER, so the Delay's front "Time" and back "Time L" — one parameter,
     //    SYN_DLY_TIME, since fb306-310's L/R link — land in ONE slot and SUM. No special case.
     //    The math itself lives in FxModValue.h so fxmod_cert drives the shipped code, not a copy.
-    wc::buildFxMod (fxMod_, synModCfg,
+    //    fb566 — EVERY FAMILY reaches the rack now (Max: "reverb mix to macro one... not moving"):
+    //    one reader (sourceValueOfSrc — the same one the global pass and Scale by use), the fb554
+    //    curve set, and the walk decides OWN vs ADD by family exactly as the global pass does.
+    //    fb179 KNOB-IS-THE-PEAK still holds for the shape sources: level−1 in, addEnv() adds the
+    //    1 back — an OWNING envelope drives the knob from ZERO, not from its base. NO 0.5f.
+    wc::buildFxMod (fxMod_, synModCfg, modCurves_.load (std::memory_order_acquire),
         [this] (int k, int i, int n) -> const void* { return fxModRef_[k][i][n]; },
         [] (const void* p) { return static_cast<const std::atomic<float>*> (p)->load(); },
-        [this] (int si)    { return flowLfo_[si].peek(); },
-        // fb179 KNOB-IS-THE-PEAK: monoEnvLevelOf() returns level−1, and addEnv() adds the 1 back
-        // — `dw * (monoEnvLevelOf (s) + 1.0f)`, byte-for-byte flowMod()'s term. NO 0.5f.
-        // CONSEQUENCE: an OWNING envelope drives the knob from ZERO, not from its base.
-        [this] (int src)   { return monoEnvLevelOf (src); });
+        [this] (int sI, bool& ok) { return sourceValueOfSrc (sI, ok); });
 
     // fb457 — OVERPASS 1: publish what the rack is ACTUALLY using, for the cards to draw from.
     // 🚨 PLACEMENT, same lesson as the Knee below: this must sit AFTER the build or it would
@@ -13307,8 +13323,14 @@ float TerrainInstrumentAudioProcessor::globalSourceValue (int wire) noexcept
 {   // fb563 clean-up — the family-convention value of any source from the processor's own views (the twin of the voice's sourceValueOf)
     const int sI = wc::sourceForWire (wire);
     if (sI < 0) return 0.0f;
+    bool ok = false;
+    return sourceValueOfSrc (sI, ok);
+}
+float TerrainInstrumentAudioProcessor::sourceValueOfSrc (int sI, bool& ok) noexcept
+{   // fb566 — ONE reader by ModSource, so the global pass, the aux scaler and the rack's walk cannot disagree about a family
+    ok = true;
     float v = 0.0f;
-    if      (wire >= 0 && wire < wc::NUM_LFOS)                 v = flowLfo_[wire].peek();
+    if      (sI >= 0 && sI < wc::NUM_LFOS)                     v = flowLfo_[sI].peek();
     else if (wc::isEnvModSource (sI))                          v = monoEnvLevelOf (sI);
     else if (sI == (int) wc::ModSource::Velocity)              v = juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed));
     else if (wc::isNoteModSource (sI))                         v = noteVis_.load (std::memory_order_relaxed) - 1.0f;
@@ -13319,6 +13341,7 @@ float TerrainInstrumentAudioProcessor::globalSourceValue (int wire) noexcept
     else if (sI == (int) wc::ModSource::Bend)                  v = globalSrc_.bend.load (std::memory_order_relaxed);
     else if (wc::isRandModSource (sI))                         v = randVis_[wc::randIndexOf (sI)].load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Alt)                   v = altVis_.load (std::memory_order_relaxed);
+    else ok = false;                                                // drift lanes and anything newer: no processor view — dropped, never invented
     return v;
 }
 float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept

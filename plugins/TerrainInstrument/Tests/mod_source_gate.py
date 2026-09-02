@@ -119,6 +119,16 @@ if 'wc::ModDest::MacroDest1 + k' not in proc:
 nm = re.search(r'kNumMacros = (\d+)', cfg)
 if nm and int(nm.group(1)) != 9: fails.append("kNumMacros is %s, Max asked for nine (3×3)" % nm.group(1))
 
+# ── 4d · fb566 — THE RACK'S WALK KNOWS EVERY FAMILY. buildFxMod asks one by-source reader (the same
+#          one the global pass and Scale by use) and never drops a family with a bare `continue`. ──
+fxv = (root / 'Source' / 'FxModValue.h').read_text()
+if 'si >= NUM_LFOS) continue' in fxv:
+    fails.append("FxModValue.h still drops every non-LFO, non-envelope source (`si >= NUM_LFOS) continue`) — a macro into a rack knob is silent")
+for tok in ('isShapeModSource (sI)', 'applyModCurve (curves', 'sourceTo01 ((int) as.auxSource'):
+    if tok not in fxv: fails.append("FxModValue.h's buildFxMod is missing `%s` — the rack evaluates a law the other two evaluators have" % tok)
+if 'sourceValueOfSrc (sI, ok)' not in proc:
+    fails.append("PluginProcessor.cpp's rack call does not hand buildFxMod sourceValueOfSrc — a second reader is a second place to drift")
+
 # ── 5 · fb554 · THE CONNECTION CURVE MUST ROUND-TRIP ────────────────────────────────────────
 #  It rides the route JSON, so the encoder must emit `c` and the decoder must read it back. If
 #  only one side knows, a drawn curve is silently lost on the next reload — which is the same
