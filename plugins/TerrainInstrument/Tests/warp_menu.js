@@ -192,9 +192,10 @@ const PILL = { 'SYN_OSC_A_WARP2_MODE':'#osc-a-warp2-val', 'SYN_OSC_B_WARP2_MODE'
   const b = await puppeteer.launch({ executablePath:(process.env.CHROME_PATH||'/Applications/Google Chrome.app/Contents/MacOS/Google Chrome'),
     headless:'new', args:['--no-sandbox','--allow-file-access-from-files'] });
   // ── THE FLOOR (fb462) — a page error only counts if the PRE-CHANGE page did not already throw
-  //    it. WARPM_PREPAGE is the page as it stood before this wave; without one there is no floor
-  //    and the bar says so instead of passing vacuously.
-  const PRE = process.env.WARPM_PREPAGE || '';
+  //    it. WARPM_PREPAGE is the page as it stood before this wave; unset, the floor is git HEAD's
+  //    page (Tests/floor_page.js) — so the bar measures uncommitted work against the last commit
+  //    and never goes red for want of a variable.
+  const PRE = require('./floor_page')('WARPM_PREPAGE');
   let baseErrs = null;
   if (PRE && fs.existsSync(PRE)) {
     const p0 = await b.newPage(); await p0.setViewport({width:VW, height:VH, deviceScaleFactor:DSF});

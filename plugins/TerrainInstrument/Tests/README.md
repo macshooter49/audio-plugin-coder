@@ -56,6 +56,14 @@ for m in enum case strD optD rename;  do WTLG_MUTATE=$m python3 Tests/wt_list_ga
 for m in terra kernel legacy fixed;   do HCG_MUTATE=$m  python3 Tests/harmonic_ceiling_gate.py; done
 ```
 
+**The floor is git's business (fb565).** `warp_menu.js`, `all_menus.js` and `flowmod_gesture.js`
+measure a change against the page AS IT STOOD BEFORE it (a page error, a card footprint only
+counts if the pre-change page did not already have it). They used to take that page from
+`WARPM_PREPAGE` / `ALLM_PREPAGE` / `FLOWG_PREPAGE` and go red without it — three bars every
+session stepped over as "pre-existing". `Tests/floor_page.js` now hands them git HEAD's
+`index.html` when the variable is unset (the pre-change page for uncommitted work; on a clean
+tree, the page itself). Set the variable only to floor against an older commit.
+
 ⚠️ `Tests/all_menus.js` now reads the wavetable count OUT OF `PluginProcessor.cpp` rather than
 hardcoding it. It used to say 30; when the bank grew to 46 it reported a desync that did not
 exist. A hardcoded roster length in a HARNESS is an eleventh site.

@@ -224,7 +224,10 @@ const HELPERS = () => {
       else if (which === 'wavetable')  { if (!window.openWtSelectMenu) return 'no openWtSelectMenu'; window.openWtSelectMenu('a', window.__amEv()); }
       else if (which === 'sample')     { if (!window.openSampleBrowser) return 'no openSampleBrowser'; window.openSampleBrowser('a', window.__amEv()); }
       else if (which === 'noise')      { const nm = document.getElementById('noise-name'); if (!nm) return 'no #noise-name';
-                                         nm.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, cancelable:true, button:0, clientX:300, clientY:200 })); }
+                                         // fb558 — the name is TWO gestures: the browser opens on the MOUSEUP of a press that moved
+                                         // under 5 px (a drag of the same label is the follower grip). A mousedown alone opens nothing.
+                                         nm.dispatchEvent(new MouseEvent('mousedown', { bubbles:true, cancelable:true, button:0, clientX:300, clientY:200 }));
+                                         nm.dispatchEvent(new MouseEvent('mouseup',   { bubbles:true, cancelable:true, button:0, clientX:300, clientY:200 })); }
       else return 'unknown browser ' + which;
     } catch (e) { return 'threw: ' + String(e).slice(0, 120); }
     return 'opened';
@@ -260,8 +263,8 @@ const settle = (ms) => new Promise((r) => setTimeout(r, ms));
     headless:'new', args:['--no-sandbox','--allow-file-access-from-files'] });
 
   // ── THE FLOOR (fb462) — a page error only counts if the PRE-CHANGE page did not already throw
-  //    it. Without a floor there is no floor, and the bar says so instead of passing vacuously.
-  const PRE = process.env.ALLM_PREPAGE || '';
+  //    it. ALLM_PREPAGE names that page; unset, the floor is git HEAD's page (Tests/floor_page.js).
+  const PRE = require('./floor_page')('ALLM_PREPAGE');
   let baseErrs = null;
   if (PRE && fs.existsSync(PRE)) {
     const p0 = await b.newPage(); await p0.setViewport({ width:VW, height:VH, deviceScaleFactor:DSF });

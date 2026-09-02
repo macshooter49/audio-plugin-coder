@@ -398,20 +398,21 @@ console.log('');
       'FLOOR — the underline system returns to EXACTLY its unmodulated footprint',
       'before '+JSON.stringify(foot0)+'  after '+JSON.stringify(after.foot));
   await pg.close();
-  /* and fb524 must not have put anything on an unmodulated card that was not there before: the
-     same footprint, measured on the PRE-fb524 page (git HEAD) at the same bounds. */
+  /* and a change must not put anything on an unmodulated card that was not there before: the
+     same footprint, measured on the FLOOR page at the same bounds. FLOWG_PREPAGE names that page;
+     unset, it is git HEAD's page (Tests/floor_page.js) — the pre-change page for uncommitted work. */
   {
-    const PRE=process.env.FLOWG_PREPAGE;
+    const PRE=require('./floor_page')('FLOWG_PREPAGE');
     if(!PRE||!fs.existsSync(PRE)){
-      chk(false,'FLOOR — an unmodulated card is unchanged from the pre-fb524 page',
-          'FLOWG_PREPAGE not set/found — cannot compare');
+      chk(false,'FLOOR — an unmodulated card is unchanged from the floor page (HEAD)',
+          'FLOWG_PREPAGE not set/found and git HEAD unavailable — cannot compare');
     } else {
       const p2=await openPopped(browser,'gli',PRE);
       const pf=await p2.evaluate(()=>window.__aFoot());
       try{ await p2.close(); }catch(e){}
       chk(JSON.stringify(pf)===JSON.stringify(foot0),
-          'FLOOR — an unmodulated card is unchanged from the pre-fb524 page',
-          'pre '+JSON.stringify(pf)+'  now '+JSON.stringify(foot0));
+          'FLOOR — an unmodulated card is unchanged from the floor page (HEAD)',
+          'floor '+JSON.stringify(pf)+'  now '+JSON.stringify(foot0));
     }
   }
 }
