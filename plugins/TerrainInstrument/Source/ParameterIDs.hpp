@@ -546,6 +546,7 @@ namespace ParameterIDs
     constexpr char SYN_MACRO_3[] = "SYN_MACRO_3"; constexpr char SYN_MACRO_4[] = "SYN_MACRO_4";
     constexpr char SYN_MACRO_5[] = "SYN_MACRO_5"; constexpr char SYN_MACRO_6[] = "SYN_MACRO_6";
     constexpr char SYN_MACRO_7[] = "SYN_MACRO_7"; constexpr char SYN_MACRO_8[] = "SYN_MACRO_8";
+    constexpr char SYN_MACRO_9[] = "SYN_MACRO_9";   // fb565 — the ninth (Max's 3×3)
     constexpr char SYN_BEND_RANGE[] = "SYN_BEND_RANGE";   // fb563 — pitch-bend range in semitones, 0..24, default 2
     constexpr char SYN_UNISON[]   = "SYN_UNISON";    // int 1..8, voices stacked per note
     constexpr char SYN_SPREAD[]   = "SYN_SPREAD";    // float 0..100, % detune+pan width for unison stack

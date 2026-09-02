@@ -51,7 +51,7 @@ enum class ModSource : int
     //  Macros · Wheel · Aftertouch · Rand · Alt are UNIPOLAR 0..1 and ADDITIVE with a signed depth
     //  (the Velocity law, not the envelope's ownership law: a macro at 0 leaves the knob where it
     //  is). Bend is BIPOLAR −1..+1 and additive (the LFO law). None of them is a shape source.
-    Macro1, Macro2, Macro3, Macro4, Macro5, Macro6, Macro7, Macro8,
+    Macro1, Macro2, Macro3, Macro4, Macro5, Macro6, Macro7, Macro8, Macro9,   // fb565 — NINE (Max's 3×3); contiguous: macroIndexOf() subtracts Macro1
     Wheel, Aftertouch, Bend,
     Rand1, Rand2, Rand3, Rand4, Alt,
     NumSources
@@ -247,6 +247,12 @@ enum class ModDest : int
     Warp2VarA, Warp2VarB, Warp2VarC, Warp2VarD,       // warp slot 2 second dimension, 0..1
     PhaseOffA, PhaseOffB, PhaseOffC, PhaseOffD,       // note-on phase offset, degrees (via modP)
     PhaseAmtA, PhaseAmtB, PhaseAmtC, PhaseAmtD,       // phase-mode depth, 0..1
+    // ── fb565 · MACROS AS DESTINATIONS. Max: "there's no way to modulate the macros." Appended
+    //    at the tail (saved routes store these ints). A macro is a global 0..1 value, so its routes
+    //    are summed in the processor's GLOBAL pass (PluginProcessor.cpp, after the ownership
+    //    lambdas) under the same Linear01 ownership law as every other knob, and the result is
+    //    what every "Macro n" SOURCE reads (globalSrc_.macro). Generated Linear01 × 1.0 rows.
+    MacroDest1, MacroDest2, MacroDest3, MacroDest4, MacroDest5, MacroDest6, MacroDest7, MacroDest8, MacroDest9,
     NumDests
 };
 
@@ -261,8 +267,9 @@ static_assert ((int) ModDest::SpecLoA == 1846 && (int) ModDest::SpecHiA == 1850,
 static_assert ((int) ModDest::UniRangeA == 1854 && (int) ModDest::UniWarpA  == 1858
             && (int) ModDest::WarpVarA  == 1862 && (int) ModDest::Warp2VarA == 1866
             && (int) ModDest::PhaseOffA == 1870 && (int) ModDest::PhaseAmtA == 1874
-            && (int) ModDest::NumDests  == 1878,
-    "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended");
+            && (int) ModDest::MacroDest1 == 1878 && (int) ModDest::NumDests == 1887,
+    "fb522 - the JS mod-dest menu mirrors these ints (index.html KNOBDEST); a shift here re-points every saved overpass route. NumDests was 1854 before this block was appended. "
+    "fb565 - index.html stamps the Macros view from window.__MACRO_DEST=1878 (ModDest::MacroDest1); Tests/mod_source_gate.py reads both");
 
 inline constexpr int kFxModKinds = 16, kFxModInsts = 6, kFxModKnobs = 12;
 inline constexpr int fxModDest (int kind, int inst, int knob) noexcept
@@ -1085,7 +1092,7 @@ static constexpr int kNumFollowers  = 7;   // fb556 — osc A-D, Noise, Filter 1
 // fb563 — PHASE 2 wire codes. One helper, phase2SourceForWire(), turns a code into the enum for the
 //  door (setSynthModMatrix), the per-voice build and the block-rate loop, so the three sites cannot
 //  drift apart the way the JS decoders did (Tests/mod_source_gate.py reads these against the JS).
-static constexpr int kMacroSrcBase  = 220;  static constexpr int kNumMacros = 8;    // 220..227 = Macro 1..8
+static constexpr int kMacroSrcBase  = 220;  static constexpr int kNumMacros = 9;    // 220..228 = Macro 1..9 (fb565 — nine, Max's 3×3; 229 stays free, 230 is the wheel)
 static constexpr int kWheelSrc      = 230;                                          // mod wheel (CC 1)
 static constexpr int kAftertouchSrc = 231;                                          // channel / poly pressure
 static constexpr int kBendSrc       = 232;                                          // pitch wheel, −1..+1

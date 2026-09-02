@@ -427,6 +427,10 @@ window.__chevGlyph = function (px) { var d = px || 13;
   return '<svg width="' + d + '" height="' + d + '" viewBox="0 0 24 24" fill="none" stroke="currentColor"'
        + ' stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
        + '<path d="M9 5l7 7-7 7"/></svg>'; };
+/* fb565 — MACROS ARE DESTINATIONS: the first macro's ModDest (SynthModConfig.h pins MacroDest1 == 1878;
+   Tests/mod_source_gate.py reads both). Defined this early because the Macros view (built long before the
+   matrix module) stamps data-mod-dest from it, and the matrix names the destinations from it. */
+window.__MACRO_DEST = 1878;
 /* ══ fb563 — THE CONTROL MENU'S EXTRA-ROW REGISTRY ══════════════════════════════════════════
    Every knob, pill and emblem opens ONE right-click menu now (the SYNTH MOD MATRIX module owns
    it: Modulate › · the routes · Reset · Copy/Paste). A control that also has something of its
@@ -8164,7 +8168,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:7px; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
         #syn-panel .vm-voiceview > .voice-toggle-row{ margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
         /* 9-macro view (placeholder — real design later) swaps in when 'Macros' is selected */
-        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(4,1fr); grid-template-rows:repeat(2,1fr); gap:4px; padding-top:0; }   /* fb563 — eight macros, 4×2 */   /* fb272 — same box geometry as vm-voiceview so toggling Macros never reflows anything */
+        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb565 — NINE macros, 3×3 (Max: "I liked my three rows of three") */   /* fb272 — same box geometry as vm-voiceview so toggling Macros never reflows anything */
         #syn-panel .vm-macro{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; min-width:0; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
@@ -12578,8 +12582,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                getSynParam (relay-free — fb544's modern path), painted with the rack's knobSVG so the
                bare number sits on the face (the readout law). The NAME is a drag grip
                (data-drag-macro) and the control menu's Macros family lists the same eight. */
-            var NM=8, val=[0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;
-            for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'" data-pid="SYN_MACRO_'+(i+1)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
+            var NM=9, val=[0,0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;   /* fb565 — nine, 3×3 */
+            for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'" data-pid="SYN_MACRO_'+(i+1)+'" data-mod-dest="'+((window.__MACRO_DEST||1878)+i)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
               +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it, or right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
             mv.innerHTML=mh;
             var mks=mv.querySelectorAll('.vm-mk');
@@ -12587,7 +12591,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                in the picker, on every route row and in the hover list. Persisted in the patch
                (macroNames, through the processor). Rename = the control menu's Rename row → the name
                becomes a field (the fb135 host-key bridge types into it), Enter / blur commit, Esc reverts. */
-            var names=['','','','','','','',''], mls=mv.querySelectorAll('.vm-ml');
+            var names=['','','','','','','','',''], mls=mv.querySelectorAll('.vm-ml');
             window.__macroName=function(k){ return (names[k-1]||'').trim()||('Macro '+k); };
             function paintNames(){ for(var i=0;i<NM;i++){ if(mls[i]) mls[i].textContent=window.__macroName(i+1); } try{ if(window.__macroNamesChanged) window.__macroNamesChanged(); }catch(_){} }
             function seedNames(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getMacroNames'):null; if(!g) return;
@@ -12611,7 +12615,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                with no pointer near this view; the editor feed carries the live values (window.__mvMacro,
                outside the quiet gate), so the face repaints from them whenever a hand is not on it. */
             var macroDrag=false;
-            setInterval(function(){ try{ if(macroDrag||mv.style.display==='none') return; var m=window.__mvMacro; if(!m||!m.length) return;
+            setInterval(function(){ try{ if(macroDrag||mv.style.display==='none') return; var m=window.__mvMacroBase; if(!m||!m.length) return;   /* fb565 — the KNOB's value; the modulated value rides the underline's comet */
               for(var i=0;i<NM;i++){ var v=Math.round((+m[i]||0)*100); if(v!==Math.round(val[i])){ val[i]=v; paintM(i); } } }catch(_){} },150);
             function paintM(i){ var mk=mks[i]; if(!mk) return; mk.setAttribute('data-v',Math.round(val[i])); mk.innerHTML=knobSVG(val[i]); }
             function writeM(i,v){ val[i]=Math.max(0,Math.min(100,v)); paintM(i); try{ if(window.__setSynParam) window.__setSynParam('SYN_MACRO_'+(i+1), val[i]/100); }catch(_){} }
@@ -31140,7 +31144,7 @@ restoreThemeFromBackend();
      so a Filter 1 / Filter 2 route came back from the processor as "LFO 216"; the card's receiver
      special-cased 200 and turned a Key drop (201) into a Velocity route. One encoder, one decoder,
      both here, and Tests/mod_source_gate.py reads the constants out of this table against the C++. */
-  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220, NMACRO:8, WHEEL:230, AT:231, BEND:232, RAND:240, NRAND:4, ALT:244};
+  var WIRE={ENV:100, VEL:200, NOTE:201, FOL:210, NFOL:7, MACRO:220, NMACRO:9, WHEEL:230, AT:231, BEND:232, RAND:240, NRAND:4, ALT:244};
   /* == kEnvSrcBase · kVelSrc · kNoteSrc · kFollowSrcBase · kNumFollowers · kMacroSrcBase · kNumMacros · kWheelSrc · kAftertouchSrc · kBendSrc · kRandSrcBase · kNumRands · kAltSrc
      fb563 Phase 2 — the six new families ride the same table, the same encoder and the same decoder. */
   function encodeSrc(a){ return a.note?WIRE.NOTE:(a.fol?WIRE.FOL+(a.fol-1):(a.vel?WIRE.VEL:(a.env?WIRE.ENV+(a.env-1):(a.mac?WIRE.MACRO+(a.mac-1):(a.whl?WIRE.WHEEL:(a.at?WIRE.AT:(a.bend?WIRE.BEND:(a.rnd?WIRE.RAND+(a.rnd-1):(a.alt?WIRE.ALT:a.lfo-1))))))))); }
@@ -31164,7 +31168,8 @@ restoreThemeFromBackend();
   function srcDefaultDepth(S){ return S.lfo?0.5:1.0; }   /* the DROP defaults: an LFO lands at half, everything else at full (fb178/fb263/fb552) */
   function isMagnitudeSrc(a){ return !!(a.env||a.fol||a.note); }   /* the shape sources — the C++ takes |depth|; every other family carries a SIGNED depth */
   function findRoute(S,dest){ var k=srcKey(S); for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(a.dest===dest&&srcKey(a)===k) return a; } return null; }
-  function addP2Assign(S,dest,el){ if(findRoute(S,dest)) return; if(assigns.length>=128) return;   /* fb563 Phase 2 — macros · wheel · aftertouch · bend · random · alt: one generic adder */
+  function addP2Assign(S,dest,el){ if(findRoute(S,dest)) return; if(assigns.length>=128) return;
+    if(S.mac&&dest===(window.__MACRO_DEST||1878)+S.mac-1) return;   /* fb565 — a macro never modulates itself */   /* fb563 Phase 2 — macros · wheel · aftertouch · bend · random · alt: one generic adder */
     var a=srcOf(S); a.dest=dest; a.depth=srcDefaultDepth(S); a.el=el; assigns.push(a); markTargets(); push(); }
   function addRoute(S,dest,el){ if(S.lfo) addAssign(S.lfo,dest,el); else if(S.env) addEnvAssign(S.env,dest,el); else if(S.vel) addVelAssign(dest,el);
     else if(S.note) addNoteAssign(dest,el); else if(S.fol) addFollowAssign(S.fol,dest,el); else addP2Assign(S,dest,el); return findRoute(S,dest); }
@@ -31669,17 +31674,18 @@ restoreThemeFromBackend();
     if(!window.openTwoPaneBrowser) return;
     function mk(S,name){ var o={name:name,sel:!!findRoute(S,g.dest)};
       o.pick=function(){ var ex=findRoute(S,g.dest); if(ex){ removeAssign(ex); o.sel=false; } else { addRoute(S,g.dest,g.el); o.sel=true; } }; return o; }
-    var cats=buildSrcCats(mk);
+    var cats=buildSrcCats(mk,g.dest);
     var first=routesOn(g.dest)[0], oc; if(first) oc=famIndexOf(first);   /* open on the family already in use; a bare knob opens on All */
     if(window.__synHideMenu) window.__synHideMenu();
     window.openTwoPaneBrowser(ev,{ cats:cats, openCat:oc, multi:true, searchPlaceholder:'Search modulators…' }); }
   /* the six families, built once for both pickers from one list */
-  function buildSrcCats(mk){
+  function buildSrcCats(mk,skipDest){
     var envN=5; try{ if(window.__envCount) envN=window.__envCount()|0; }catch(e){}
-    var envs=[], lfos=[], macs=[], rnds=[], i;
+    var envs=[], lfos=[], macs=[], rnds=[], i, MD=(window.__MACRO_DEST||1878);
     for(i=1;i<=envN;i++) envs.push(mk({env:i},'Env '+i));
     for(i=1;i<=10;i++)   lfos.push(mk({lfo:i},'LFO '+i));
-    for(i=1;i<=WIRE.NMACRO;i++) macs.push(mk({mac:i},(window.__macroName&&window.__macroName(i))||('Macro '+i)));   /* fb563 Phase 2 · fb564 the macro's own name */
+    for(i=1;i<=WIRE.NMACRO;i++){ if(skipDest!=null&&skipDest===MD+i-1) continue;   /* fb565 — a macro's own picker does not offer itself */
+      macs.push(mk({mac:i},(window.__macroName&&window.__macroName(i))||('Macro '+i))); }   /* fb563 Phase 2 · fb564 the macro's own name */
     for(i=1;i<=WIRE.NRAND;i++)  rnds.push(mk({rnd:i},'Random '+i));
     return [ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos}, {label:'Macros',items:macs},
              {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')].concat(rnds,[mk({alt:1},'Alt')])},
@@ -32100,6 +32106,7 @@ restoreThemeFromBackend();
     if(d>=673&&d<683) return 'LFO '+(d-672)+' Rate';   /* fb196 */
     if(d>=481&&d<481+192){ var kE=d-481; return 'Env '+(Math.floor(kE/6)+1)+' '+['Dly','Atk','Hld','Dec','Sus','Rel'][kE%6]; }   /* fb193 */
     if(d>=12&&d<=21) return 'LFO '+(d-11)+' Amt';
+    { var MD=(window.__MACRO_DEST||1878); if(d>=MD&&d<MD+WIRE.NMACRO) return (window.__macroName?window.__macroName(d-MD+1):('Macro '+(d-MD+1))); }   /* fb565 — a macro is a destination, by its own name */
     var pid=d2pid(d);
     if(pid){ var m=/^SYN_OSC_([A-D])_(.+)$/.exec(pid); if(m) return prettySfx(m[2])+' '+m[1]; }
     if(DEST_FIXED[d]) return DEST_FIXED[d];

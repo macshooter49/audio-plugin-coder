@@ -13,7 +13,7 @@
 //  source is the ONLY thing that can make a sound: silence = the door dropped it.
 //
 //  THE BARS
-//   1  NEGATIVE CONTROL — Level A at 0 with NO route is silent; with an UNKNOWN wire code (228) it
+//   1  NEGATIVE CONTROL — Level A at 0 with NO route is silent; with an UNKNOWN wire code (229) it
 //      stays silent (the door drops it, never invents a source).
 //   2  MACRO — Macro 1 → Level A: macro at 0 is silent, at 100 it is loud (> 40 dB apart).
 //   3  MOD WHEEL — CC 1 → Level A: wheel 0 silent, wheel 127 loud.
@@ -199,9 +199,9 @@ int main()
     // ── 1 · NEGATIVE CONTROL ──
     au.setRoutes ("[]");
     const double silent = rmsDb (au.note (60));
-    au.setRoutes ("[{\"s\":228,\"d\":64,\"v\":1.0}]");
+    au.setRoutes ("[{\"s\":229,\"d\":64,\"v\":1.0}]");   // fb565 — 228 is Macro 9 now; 229 is the gap before the wheel
     const double unknown = rmsDb (au.note (60));
-    chk (silent < -70 && unknown < -70, "1  Level A at 0: silent with no route, still silent with an UNKNOWN wire code (228)", fmt ("%.1f dB / %.1f dB", silent, unknown));
+    chk (silent < -70 && unknown < -70, "1  Level A at 0: silent with no route, still silent with an UNKNOWN wire code (229)", fmt ("%.1f dB / %.1f dB", silent, unknown));
 
     // ── 2 · MACRO ──
     au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0}]");
@@ -290,6 +290,28 @@ int main()
     chk (sx0 < -70 && sx1 > -30 && (sx1 - sx5) > 3.0 && (sx1 - sx5) < 9.0,
          "10 SCALE BY: Macro 1 → Level A × Macro 2: aux 0 silent, aux 50 % about −6 dB, aux 100 full", fmt ("%.1f / %.1f / %.1f dB", sx0, sx5, sx1));
     au.set (MAC2, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);
+
+    // ── 11 · A MACRO IS A DESTINATION (fb565) — the wheel drives Macro 1 (knob at 0), Macro 1 drives Level A ──
+    au.set (LVL, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);
+    au.setRoutes ("[{\"s\":230,\"d\":1878,\"v\":1.0},{\"s\":220,\"d\":64,\"v\":1.0}]");
+    au.midi (0xB0, 1, 0);   au.render (30); const double md0 = rmsDb (au.note (60));
+    au.midi (0xB0, 1, 127); au.render (30); const double md1 = rmsDb (au.note (60));
+    chk (md0 < -70 && md1 > -30 && (md1 - md0) > 40, "11 MACRO AS A DESTINATION: wheel → Macro 1 (knob at 0) → Level A: wheel 0 silent, wheel 127 loud", fmt ("%.1f dB → %.1f dB", md0, md1));
+    au.midi (0xB0, 1, 0); au.render (30);
+    // the route removed, the knob's own value is back in charge (macroModded_ clears)
+    au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0}]");
+    au.midi (0xB0, 1, 127); au.render (30); const double md2 = rmsDb (au.note (60));
+    chk (md2 < -70, "11 … and with the wheel → Macro 1 route removed, wheel 127 no longer reaches Level A (the knob at 0 rules again)", fmt ("%.1f dB", md2));
+    au.midi (0xB0, 1, 0); au.render (30);
+    // the ninth macro exists on the wire (228 is Macro 9 now, not an unknown)
+    const std::string MAC9 = au.find ("Macro 9");
+    au.setRoutes ("[{\"s\":228,\"d\":64,\"v\":1.0}]");
+    if (! MAC9.empty()) { au.set (MAC9, 0.0f); au.pump (0.2); }
+    const double n9a = rmsDb (au.note (60));
+    if (! MAC9.empty()) { au.set (MAC9, 1.0f); au.pump (0.2); }
+    const double n9b = rmsDb (au.note (60));
+    chk (! MAC9.empty() && n9a < -70 && n9b > -30, "11 MACRO 9 (wire 228) → Level A: the parameter exists, 0 silent, 100 loud", fmt ("%.1f dB → %.1f dB", n9a, n9b));
+    if (! MAC9.empty()) { au.set (MAC9, 0.0f); au.pump (0.2); }
 
     au.close();
     std::printf ("\n  %d pass · %d fail\n\n", PASS, FAIL);

@@ -106,6 +106,19 @@ sv_ = (root / 'Source' / 'SynthVoice.h').read_text()
 for tok in ('wc::isMacroModSource (sI)', 'wc::ModSource::Wheel', 'wc::ModSource::Aftertouch', 'wc::ModSource::Bend', 'wc::isRandModSource (sI)', 'wc::ModSource::Alt'):
     if tok not in sv_: fails.append("SynthVoice never evaluates %s — declared and inert (the fb555 shape)" % tok)
 
+# ── 4c · fb565 — MACROS ARE DESTINATIONS. The page stamps data-mod-dest from ONE number; it must equal
+#          the C++ MacroDest1, and the global pass must actually apply the range. ─────────────────
+mjs  = re.search(r'window\.__MACRO_DEST\s*=\s*(\d+)', js)
+mcpp = re.search(r'\(int\) ModDest::MacroDest1 == (\d+)', cfg)
+if not mjs:  fails.append("index.html has no window.__MACRO_DEST — the Macros view cannot stamp its destinations")
+if not mcpp: fails.append("SynthModConfig.h has no static_assert pinning ModDest::MacroDest1")
+if mjs and mcpp and int(mjs.group(1)) != int(mcpp.group(1)):
+    fails.append("JS __MACRO_DEST = %s but C++ MacroDest1 = %s — a route into a macro would land on the wrong destination" % (mjs.group(1), mcpp.group(1)))
+if 'wc::ModDest::MacroDest1 + k' not in proc:
+    fails.append("PluginProcessor.cpp never applies MacroDest1..9 in the global pass — a route into a macro is silently nothing")
+nm = re.search(r'kNumMacros = (\d+)', cfg)
+if nm and int(nm.group(1)) != 9: fails.append("kNumMacros is %s, Max asked for nine (3×3)" % nm.group(1))
+
 # ── 5 · fb554 · THE CONNECTION CURVE MUST ROUND-TRIP ────────────────────────────────────────
 #  It rides the route JSON, so the encoder must emit `c` and the decoder must read it back. If
 #  only one side knows, a drawn curve is silently lost on the next reload — which is the same

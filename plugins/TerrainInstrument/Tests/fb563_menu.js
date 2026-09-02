@@ -323,12 +323,12 @@ const HELPERS = () => {
 
   // ── 7 · THE CODEC ───────────────────────────────────────────────────────────────────────
   r = await pg.evaluate(() => { const W = window.__modWire; const d = (n) => JSON.stringify(W.decode(n));
-    let ident = true; for (const n of [0,1,9,100,101,131,200,201,210,211,214,215,216,220,227,230,231,232,240,243,244]) { const s = W.decode(n); if (! s || W.encode(s) !== n) ident = false; }
+    let ident = true; for (const n of [0,1,9,100,101,131,200,201,210,211,214,215,216,220,227,228,230,231,232,240,243,244]) { const s = W.decode(n); if (! s || W.encode(s) !== n) ident = false; }
     return { f6:d(215), f7:d(216), x217:d(217), key:d(201), vel:d(200), e32:d(131), x132:d(132), x10:d(10),
-             m1:d(220), m8:d(227), x228:d(228), whl:d(230), at:d(231), bend:d(232), r1:d(240), r4:d(243), x245:d(245), alt:d(244), ident }; });
+             m1:d(220), m8:d(227), m9:d(228), x229:d(229), whl:d(230), at:d(231), bend:d(232), r1:d(240), r4:d(243), x245:d(245), alt:d(244), ident }; });
   chk(r.f6 === '{"fol":6}' && r.f7 === '{"fol":7}' && r.x217 === 'null' && r.key === '{"note":1}' && r.vel === '{"vel":1}' && r.e32 === '{"env":32}' && r.x132 === 'null' && r.x10 === 'null'
-      && r.m1 === '{"mac":1}' && r.m8 === '{"mac":8}' && r.x228 === 'null' && r.whl === '{"whl":1}' && r.at === '{"at":1}' && r.bend === '{"bend":1}' && r.r1 === '{"rnd":1}' && r.r4 === '{"rnd":4}' && r.x245 === 'null' && r.alt === '{"alt":1}' && r.ident,
-      '7  decode: followers 215/216, macros 220..227, wheel 230, aftertouch 231, bend 232, random 240..243, alt 244; 217/228/245/132/10 rejected; encode∘decode = identity', JSON.stringify(r));
+      && r.m1 === '{"mac":1}' && r.m8 === '{"mac":8}' && r.m9 === '{"mac":9}' && r.x229 === 'null' && r.whl === '{"whl":1}' && r.at === '{"at":1}' && r.bend === '{"bend":1}' && r.r1 === '{"rnd":1}' && r.r4 === '{"rnd":4}' && r.x245 === 'null' && r.alt === '{"alt":1}' && r.ident,
+      '7  decode: followers 215/216, macros 220..228 (nine — fb565), wheel 230, aftertouch 231, bend 232, random 240..243, alt 244; 217/229/245/132/10 rejected; encode∘decode = identity', JSON.stringify(r));
   // ── 10 · BYPASS + SCALE BY (Phase 3) — the route row's own right-click ─────────────────────
   r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3);
     const oa = document.getElementById('osc-a-device'); if (oa) oa.classList.remove('swapped');
@@ -405,7 +405,7 @@ const HELPERS = () => {
     ev(document, 'pointermove', lr.left + 20, lr.top + 20); ev(document, 'pointermove', kr.left + kr.width/2, kr.top + kr.height/2);
     ev(document, 'pointerup', kr.left + kr.width/2, kr.top + kr.height/2);
     return { n: cells.length, vis, v3: window.__macroVal(2), writes: w.length, norm: w.length ? +w[0].args[1] : null, routes: window.__routes(), bend: window.__bendRange() }; });
-  chk(r.n === 8 && r.vis === 8, '9  the Macros view shows eight real macros', JSON.stringify({ n:r.n, vis:r.vis }));
+  chk(r.n === 9 && r.vis === 9, '9  the Macros view shows nine real macros, three rows of three (fb565)', JSON.stringify({ n:r.n, vis:r.vis }));
   chk(r.v3 === 63 && r.writes === 1 && Math.abs(r.norm - 0.63) < 1e-6, '9  a macro writes SYN_MACRO_n through setSynParam (63 → 0.63)', JSON.stringify({ v3:r.v3, writes:r.writes, norm:r.norm }));
   chk(r.routes.length === 1 && r.routes[0].s === 'mac5' && r.routes[0].d === 3 && r.routes[0].v === 1, '9  dragging a macro\'s NAME onto Warp A makes the route {mac5 → 3, 1.0}', JSON.stringify(r.routes));
   chk(r.bend === 2, '9  the Bend row reads its default range, 2 semitones', JSON.stringify(r.bend));
@@ -465,8 +465,8 @@ const HELPERS = () => {
     const st2 = window.__mOpen(mel); const waiting = st2.rows.some(x => /^MIDI Learn.*waiting/.test(x));
     window.__mRow('MIDI Learn');   // cancels the arm
     return { rows: st.rows, ml, learn, waiting, dest: st.rows.some(x => x.startsWith('Modulate')) }; });
-  chk(r.rows.join('|') === 'Rename|Reset to default|MIDI Learn' && ! r.dest && r.ml && r.learn.join() === 'SYN_MACRO_3' && r.waiting,
-      '13 right-click Macro 3 → Rename · Reset to default · MIDI Learn (no Modulate: a macro is a source); MIDI Learn arms SYN_MACRO_3 and reads waiting…', JSON.stringify(r));
+  chk(r.rows.filter(x => x !== 'Paste modulators').join('|') === 'Modulate|Rename|Reset to default|MIDI Learn' && r.dest && r.ml && r.learn.join() === 'SYN_MACRO_3' && r.waiting,
+      '13 right-click Macro 3 → Modulate · Rename · Reset to default · MIDI Learn (fb565: a macro is a destination too); MIDI Learn arms SYN_MACRO_3 and reads waiting…', JSON.stringify(r));
   r = await pg.evaluate(() => { window.__mClose(); window.__tiAddRoute(0, 0, 3); try { window.__tiRoutes(); } catch(e){}
     const mel = document.querySelector('#syn-panel .vm-macro[data-macro="3"]'); window.__mOpen(mel); window.__mRow('Rename');
     const inp = document.querySelector('#syn-panel .vm-macro[data-macro="3"] .vm-ml input'); const armed = window.__tiActiveInp === inp;
@@ -483,6 +483,20 @@ const HELPERS = () => {
     return { armed, saved, label, pick, routes: st.routes, name3: window.__macroName(3) }; });
   chk(r.armed && r.label === 'Cutoff' && /"Cutoff"/.test(r.saved) && r.pick === 'dot' && r.routes.some(x => x === 'Cutoff · 100%') && r.name3 === 'Macro 3',
       '13 Rename → a field (armed for the host-key bridge); "Cutoff" lands on the knob, in the picker, on the route row and in setMacroNames', JSON.stringify(r));
+
+  // ── 15 · A MACRO IS A DESTINATION (fb565) ────────────────────────────────────────────────
+  r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes();
+    const MD = window.__MACRO_DEST; const mel = document.querySelector('#syn-panel .vm-macro[data-macro="3"]');
+    const g = window.__ctlDestAt(mel); window.__mOpen(mel); window.__mRow('Modulate');
+    const cats = window.__bCats(); window.__bRows(window.__bPanes()[0]).find(c => c.name === 'Macros').el.click();
+    const macNames = window.__bRows(window.__bPanes()[1]).map(x => x.name);
+    const p1 = window.__bPick('LFOs', 'LFO 1'), p2 = window.__bPick('Macros', 'Macro 2'); window.__mClose();
+    const routes = window.__routes().map(x => x.s + '→' + x.d + '@' + x.v).sort(); const name = window.__destShortName(MD + 2);
+    const st = window.__mOpen(mel); window.__mClose(); const ul = window.__ulTick ? window.__ulTick() : -1;
+    return { MD, attr: mel.getAttribute('data-mod-dest'), g, cats: cats && cats.length, macNames, p1, p2, routes, name, rts: st.routes, ul }; });
+  chk(r.MD === 1878 && r.attr === '1880' && r.g && r.g.dest === 1880 && r.cats === 7 && r.p1 === 'dot' && r.p2 === 'dot' && r.routes.join() === 'lfo1→1880@0.5,mac2→1880@1'
+      && r.name === 'Macro 3' && r.macNames.indexOf('Macro 3') < 0 && r.macNames.indexOf('Macro 2') >= 0 && r.macNames.indexOf('Macro 9') >= 0 && r.rts.join() === 'LFO 1 · 50%,Macro 2 · 100%' && r.ul >= 1,
+      '15 Macro 3 is destination 1880: Modulate › LFO 1 and Macro 2 route to it (LFO half, macro full), it is named "Macro 3", its own picker hides Macro 3 and offers Macro 9, its rows read on its menu, it has an underline', JSON.stringify(r));
 
   // ── 14 · COPY WITH MODULATORS (fb564) ───────────────────────────────────────────────────
   r = await pg.evaluate(() => { window.__mClose(); window.__clearRoutes(); window.__tiAddRoute(1, 0, 3); window.__tiAddRoute(0, 2, 4); window.__tiAddRoute(0, 5, 673);   // Env 1 → Warp A · LFO 2 → Fold A · LFO 5 → LFO 1 Rate (not the oscillator's)

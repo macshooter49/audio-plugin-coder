@@ -5916,6 +5916,8 @@ void TerrainUiCore::timerCallback()
     // while nothing moves, so the fb511 idle-skip still sees a byte-identical frame.
     js << "window.__mvMacro=[";
     for (int mk = 0; mk < wc::kNumMacros; ++mk) js << (mk ? "," : "") << SF (audioProcessor.modVizMacro (mk), 3);
+    js << "];window.__mvMacroBase=[";   // fb565 — the knob (the parameter) beside the modulated value: the face follows the knob, the comet the modulation
+    for (int mk = 0; mk < wc::kNumMacros; ++mk) js << (mk ? "," : "") << SF (audioProcessor.modVizMacroBase (mk), 3);
     js << "];";
     // fb189 — the living underline: all env slots + the LFO bank, one compact call.
     if (! uiQuiet)

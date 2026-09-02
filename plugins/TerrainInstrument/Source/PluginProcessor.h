@@ -918,11 +918,14 @@ public:
     //  per-note ones (random 1-4 · alt) are published from the most-active voice for the global
     //  half, exactly like velVis_ — and for the same reason, UNGATED (the audio path reads them).
     wc::GlobalModSources globalSrc_;
+    std::atomic<float> macroBaseVis_[wc::kNumMacros] {};   // fb565 — the macro KNOB's own value (the parameter) for the Macros view's face; globalSrc_.macro is the MODULATED one
+    bool               macroModded_[wc::kNumMacros] {};    // fb565 — audio thread only: the last global pass found a route INTO this macro
     std::atomic<float> randVis_[4] { {0.f}, {0.f}, {0.f}, {0.f} };
     std::atomic<float> altVis_ { 0.f };
     float midiWheelT_ = 0.f, midiAtT_ = 0.f, midiBendT_ = 0.f;          // audio thread only: the last MIDI value seen
     float midiWheelSm_ = 0.f, midiAtSm_ = 0.f, midiBendSm_ = 0.f;       // audio thread only: 10 ms one-pole at block rate
     float modVizMacro (int k) const noexcept { return (k >= 0 && k < wc::kNumMacros) ? globalSrc_.macro[k].load (std::memory_order_relaxed) : 0.f; }
+    float modVizMacroBase (int k) const noexcept { return (k >= 0 && k < wc::kNumMacros) ? macroBaseVis_[k].load (std::memory_order_relaxed) : 0.f; }   // fb565 — the knob, not the modulation
     float modVizWheel() const noexcept      { return globalSrc_.wheel.load (std::memory_order_relaxed); }
     float modVizAftertouch() const noexcept { return globalSrc_.aftertouch.load (std::memory_order_relaxed); }
     float modVizBend() const noexcept       { return globalSrc_.bend.load (std::memory_order_relaxed); }

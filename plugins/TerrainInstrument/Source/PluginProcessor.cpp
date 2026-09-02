@@ -7911,8 +7911,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         globalSrc_.bend.store (juce::jlimit (-1.0f, 1.0f, midiBendSm_), std::memory_order_relaxed);
         globalSrc_.bendRangeSemis.store (*rawParam (ParameterIDs::SYN_BEND_RANGE), std::memory_order_relaxed);
         static const char* const kMacroIds[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
-                                                              ParameterIDs::SYN_MACRO_5, ParameterIDs::SYN_MACRO_6, ParameterIDs::SYN_MACRO_7, ParameterIDs::SYN_MACRO_8 };
-        for (int k = 0; k < wc::kNumMacros; ++k) globalSrc_.macro[k].store (*rawParam (kMacroIds[k]) * 0.01f, std::memory_order_relaxed);
+                                                              ParameterIDs::SYN_MACRO_5, ParameterIDs::SYN_MACRO_6, ParameterIDs::SYN_MACRO_7, ParameterIDs::SYN_MACRO_8,
+                                                              ParameterIDs::SYN_MACRO_9 };   // fb565 — nine
+        for (int k = 0; k < wc::kNumMacros; ++k)
+        {   // fb565 — the knob is the BASE. A macro with a route INTO it keeps the value the global pass
+            //  stored at the end of the previous block (macroModded_), so the modulation is not clobbered here.
+            const float base = *rawParam (kMacroIds[k]) * 0.01f;
+            macroBaseVis_[k].store (base, std::memory_order_relaxed);
+            if (! macroModded_[k]) globalSrc_.macro[k].store (base, std::memory_order_relaxed);
+        }
     }
 
     // ANNULUS polyphony: track currently-held MIDI notes (read-only scan; does not
@@ -8636,6 +8643,19 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const float w = w0 > 1.0f ? 1.0f : w0;
             return juce::jlimit (0.0f, 1.0f, (s + modSums[d]) * (1.0f - w) + envOwnV[d]);
         };
+        // fb565 — MACROS AS DESTINATIONS. Max: "there's no way to modulate the macros." A macro is a
+        // global 0..1 value, so its routes are summed in THIS pass under the same ownership law as
+        // every other Linear01 knob, and the result is what every "Macro n" source reads next block
+        // (globalSrc_.macro — the voices and the global pass alike). A macro routed INTO another macro
+        // reads that macro's value as it stood at the top of this block: one block of latency per
+        // link, never a feedback spiral. The knob's own value stays in macroBaseVis_ for the UI.
+        for (int k = 0; k < wc::kNumMacros; ++k)
+        {
+            const int d = (int) wc::ModDest::MacroDest1 + k;
+            const bool routed = (envOwnW[d] > 0.0f || modSums[d] != 0.0f);
+            macroModded_[k] = routed;
+            if (routed) globalSrc_.macro[k].store (ownM (macroBaseVis_[k].load (std::memory_order_relaxed), d, 0.0f, 1.0f), std::memory_order_relaxed);
+        }
         // fb252 — SPECTRAL MOD: publish the effective (base + LFO/env) spectral amount per osc so the
         // message-thread morph rebuild (rebuildMorphIfNeeded reads spectralEffAmt_) follows modulation.
         // mdP applies the same ownership law as every other Linear01 dest (LFO additive via modSums, env
