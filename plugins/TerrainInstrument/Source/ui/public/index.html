@@ -12577,11 +12577,12 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var vm=document.querySelector('#syn-panel .voice-meta'), mv=document.getElementById('vm-macroview');
             var vv=document.querySelector('#syn-panel .vm-voiceview'), mbtn=document.querySelector('#syn-panel .vm-macros-btn');
             if(!vm||!mv||!vv) return;
-            /* fb563 — EIGHT REAL MACROS, 4×2 (the house chassis grid, never 3×3 with one empty).
+            /* fb563 — REAL MACROS (fb565: NINE, 3×3 — Max: "I liked my three rows of three"; each cell is
+               also a modulation DESTINATION, data-mod-dest from window.__MACRO_DEST).
                Each is the APVTS knob SYN_MACRO_n: written through __setSynParam, seeded once from
                getSynParam (relay-free — fb544's modern path), painted with the rack's knobSVG so the
                bare number sits on the face (the readout law). The NAME is a drag grip
-               (data-drag-macro) and the control menu's Macros family lists the same eight. */
+               (data-drag-macro) and the control menu's Macros family lists the same nine. */
             var NM=9, val=[0,0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;   /* fb565 — nine, 3×3 */
             for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'" data-pid="SYN_MACRO_'+(i+1)+'" data-mod-dest="'+((window.__MACRO_DEST||1878)+i)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
               +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it, or right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
