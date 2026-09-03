@@ -13,7 +13,9 @@
 //  the rack's tape canvas 300×150 with 0 ink, the front's 360×139 with 0 ink). Every bar below holds with frames 0.
 //
 //  THE BARS
-//   1  THE SIMULATION HOLDS — a registered painter runs 0 times in 1.2 s.
+//   1  THE SIMULATION HOLDS — after the boot settle, a registered painter runs 0 times in 1.2 s.
+//      (fb577 note: a gesture now deliberately wakes a repair frame, and boot fires ~120 transitionends,
+//      so this bar measures a SETTLED page — "no frames without a reason", which is the actual law.)
 //   2  THE FRONT MACHINE IS DRAWN AT BOOT — #tapeMechCanvas has ink.
 //   3  A RESIZE AT REST REPAINTS — window._fxSizeFn() wipes the canvas; it has ink again at once.
 //   4  A MACHINE CHANGE REPAINTS — the ▶ arrow's click handler changes the picture (a different ink bbox) at once.
@@ -21,7 +23,7 @@
 //   6  THE RACK CARD IS DRAWN WHEN ADDED — __fxAdd('tape') → ink within 200 ms.
 //   7  A WIPED CARD HEALS — blank → ink within 1.4 s.
 //   8  THE STUDIO CARD SITS IN THE MIDDLE — the ink's centre within 3 % of h of the canvas centre (was −5.9 %).
-//   9  NO IDLE COST — 2 s at rest with painted machines: 0 frames, the tape painter ran at most once.
+//   9  NO IDLE COST — 2 s at rest, a full second after the last gesture: 0 frames, the tape painter at most once.
 //  10  THE WATCHDOG'S SAMPLE READS INK on a drawn card and on the drawn front (its middle row/column).
 //
 //  PROOF THE BARS CAN FAIL:  TAPE_ALIVE_MUTATE=1 (no boot ticks, no observers)      → 6 red
@@ -78,8 +80,9 @@ function mutatedPage () {
   const frames = () => pg.evaluate(() => window.__probeFrames | 0);
   await pg.evaluate(() => { window.__probeFrames = 0; window.__tiFrameReg('probe', () => { window.__probeFrames++; }); });
   // boot() opened the synth; the front page first
-  await pg.evaluate(() => { try { document.getElementById('syn-btn').click(); } catch (e) {} }); await sleep(1200);
-  chk((await frames()) === 0, '1  THE SIMULATION HOLDS: a registered painter ran 0 times in 1.2 s (the host at rest)', 'frames ' + (await frames()));
+  await pg.evaluate(() => { try { document.getElementById('syn-btn').click(); } catch (e) {} }); await sleep(2500);   /* fb577 — let boot's ~120 transitionends and the guard's first heal settle */
+  const s0 = await frames(); await sleep(1200); const s1 = await frames();
+  chk(s1 - s0 === 0, '1  THE SIMULATION HOLDS: settled, a registered painter ran 0 times in 1.2 s (the host at rest)', 'frames ' + (s1 - s0));
   const F0 = await INK('#tapeMechCanvas');
   chk(F0.n > 0, '2  THE FRONT MACHINE IS DRAWN AT BOOT, with frames 0', JSON.stringify({ ink: F0.n, size: F0.w + 'x' + F0.h, frames: await frames() }));
   await pg.evaluate(() => { window._fxSizeFn(); }); await sleep(30); const F1 = await INK('#tapeMechCanvas');
@@ -96,8 +99,10 @@ function mutatedPage () {
   await pg.evaluate(() => { const c = document.querySelector('#fxr-rack .fxr-core[data-core="tape"] canvas'); c.width = c.width; }); const Rw = await INK('#fxr-rack .fxr-core[data-core="tape"] canvas'); await sleep(1400); const R1 = await INK('#fxr-rack .fxr-core[data-core="tape"] canvas');
   chk(Rw.n === 0 && R1.n > 0, '7  A WIPED CARD HEALS within 1.4 s (the watchdog)', JSON.stringify({ wiped: Rw.n, healed: R1.n, frames: await frames() }));
   chk(R1.n > 0 && Math.abs(R1.dc) <= 0.03, '8  THE STUDIO CARD SITS IN THE MIDDLE: the ink centre within 3 % of h of the canvas centre (was −5.9 %)', 'ink centre y ' + (R1.cy || 0).toFixed(0) + ' vs ' + (R1.h / 2).toFixed(0) + ' (' + ((R1.dc || 0) * 100).toFixed(1) + '% of h) · bbox y ' + R1.y0 + '..' + R1.y1 + ' of ' + R1.h);
-  const t0 = await pg.evaluate(() => window.__tpeTicks | 0); await sleep(2000); const t1 = await pg.evaluate(() => window.__tpeTicks | 0);
-  chk((await frames()) === 0 && t1 - t0 <= 1, '9  NO IDLE COST: 2 s at rest with painted machines → 0 frames, the tape painter ran at most once', 'frames ' + (await frames()) + ' · tape ticks ' + (t1 - t0));
+  await sleep(1000);   /* fb577 — a full second past the last gesture: the burst is done */
+  const q0 = await frames(), t0 = await pg.evaluate(() => window.__tpeTicks | 0); await sleep(2000);
+  const q1 = await frames(), t1 = await pg.evaluate(() => window.__tpeTicks | 0);
+  chk(q1 - q0 === 0 && t1 - t0 <= 1, '9  NO IDLE COST: 2 s at rest, a second past the last gesture → 0 frames, the tape painter ran at most once', 'frames ' + (q1 - q0) + ' · tape ticks ' + (t1 - t0));
   const Fs = await INK('#tapeMechCanvas');
   chk(R1.sample === true && Fs.sample === true, '10 THE WATCHDOG\'S SAMPLE READS INK on the drawn card and the drawn front', JSON.stringify({ card: R1.sample, front: Fs.sample }));
   if (errs.length) console.log('   page errors: ' + errs.join(' | '));

@@ -393,6 +393,110 @@
   setInterval(function(){
     if (!fbOn && nowMs() - lastPush > 700){ fbOn = true; window.requestAnimationFrame(fbChain); }
   }, 250);
+
+  /* ═══ fb577 — NOTHING THAT HAS A PICTURE STAYS BLANK WHEN THE CLOCK STOPS ═══════════════════════
+     Max, after fb576 fixed the tape machines: "make sure that this doesn't happen with anything else.
+     We want these to always be drawn on even though they can stop the animation loop. We still want
+     the visual to pop up and appear there."
+
+     fb576 wired the two tape faces by hand. THE SAME HOLE EXISTS FOR EVERY CANVAS: a canvas is blank
+     until a painter draws it, painters run only on a shipped frame, and since fb566/fb567 no frame is
+     shipped at rest. MEASURED on the installed AU (c27581a, no note played, frames 0): after leaving
+     the front page for the synth panel and coming back, the HERO — #terrain-canvas, 820x276 — was
+     blank, and so were spaceVisCanvas, the four Space knob icons, reso-cv, noise-viz-cv, the filter
+     device's five canvases and a new card's .fx-spec. Boot paints once (the restore pushes still ship
+     frames), so nothing was blank at boot; everything shown, re-shown or resized AFTERWARDS was.
+
+     ONE mechanism, not eight: a canvas cannot be blank for long, whoever draws it.
+       · a gesture (pointerdown / click / transitionend) — a panel opened, a page turned, a card
+         added — wakes ONE frame, so every painter redraws once. No gesture, no frame.
+       · a canvas that CHANGES SIZE has just been wiped by that resize (the canvas law) → one frame.
+       · a 1 Hz watchdog offers ONE repaint per (canvas, size, visibility): a canvas found blank is
+         offered a frame; if it is still blank at the next tick it is a signal display with no signal
+         (an idle spectrum, an unplayed waveform) and is NEVER chased again. So the page still ships
+         ZERO frames at idle — mac_idle_frames stays 0 frames/s — and a canvas that has genuinely lost
+         its picture gets it back within a second.
+     A wake also clears BOTH rest latches — fb510's __fxRestDrawn (the FX suite: the tape and Space
+     canvases) and fb508's __heroDrawn (the front master: the hero terrain, the section icons, the
+     animated icons, the loop reels, the delay panel). Those latches are what kept a wiped canvas blank
+     no matter how often the painters ran: once the rest frame is down the whole block is skipped. They
+     re-latch on the very frame the wake grants, so the rest pose is unchanged — it is redrawn, not resumed. */
+  /* A WAKE PAINTS DIRECTLY, NOT THROUGH rAF. fb511c routes the STREAM through requestAnimationFrame for
+     vsync alignment, but a wake is a one-off repair and rAF is not always alive to serve it: MEASURED on
+     the installed AU through the harness, where the page is `document.hidden` — WebKit suspends rAF
+     entirely, the repair frame never came, and every canvas stayed blank (the probe counted 0 frames
+     across six navigations while clicking). fb576's tape fix called its painter directly, which is
+     exactly why the tape faces healed there and nothing else did. So: call the registry.
+     `painting` guards the loop a repair could otherwise start — a painter that RESIZES a canvas would
+     trip the ResizeObserver below, which would wake again, forever. */
+  var painting = false, paintedAt = 0;
+  function runOnce(ts){ if (painting) return; painting = true; try { run(ts || nowMs()); } finally { painting = false; paintedAt = nowMs(); } }
+  function repaintOnce(){ if (pend) return; pend = true; window.requestAnimationFrame(function(ts){ pend = false; runOnce(ts); }); }
+  var wokeAt = 0;
+  function wake(){ var t = nowMs(); if (t - wokeAt < 40) return; wokeAt = t; window.__fxRestDrawn = false; window.__heroDrawn = false; runOnce(t); }
+  /* A gesture is caught in the CAPTURE phase — before the handler that acts on it — so one frame there
+     would paint the page as it was BEFORE the click. Hence a small burst: now, after the handler has run,
+     and after the layout it caused has settled. Three frames per gesture, none at all without one. */
+  var burstAt = 0;
+  /* NEVER PAINT INSIDE THE GESTURE. The listeners are CAPTURE phase, so painting there runs every painter
+     BEFORE the app's own handler — and painters call natives (getSynParam and friends). MEASURED: that
+     re-ordering made Tests/all_menus.js fail 2-3 of its 42 bars at random (a menu pick recorded the painters'
+     native reads as part of its own write set). So a gesture only SCHEDULES: after the handler has run (0),
+     after the layout it caused (90), and after a short animation (350). */
+  function wakeBurst(){ var t = nowMs(); setTimeout(wake, 0); if (t - burstAt < 400) return;   /* one burst per gesture, not one per event of it (pointerdown and click are ONE gesture) */
+    burstAt = t; setTimeout(wake, 90); setTimeout(wake, 350); }
+  window.__tiRepaint = function(){ runOnce(nowMs()); }; window.__tiWake = wake; window.__tiWakeBurst = wakeBurst;
+  window.__tiWakes = 0;   /* the gates count them: a wake is an EVENT, never a loop */
+  window.__tiWhy = { pointer:0, click:0, resize:0, heal:0 };   /* which trigger — so a loop names itself (this is how the transitionend trap above was caught) */
+  function wakeCounted(why){ window.__tiWakes++; if (why) window.__tiWhy[why]++; wakeBurst(); }
+  document.addEventListener('pointerdown', function(){ wakeCounted('pointer'); }, true);
+  document.addEventListener('click', function(){ wakeCounted('click'); }, true);
+  /* NO transitionend TRIGGER. It looks like the right signal for "a panel finished opening" and it is a
+     trap: MEASURED on the synth panel, transitionend fires ~25 times a SECOND for as long as the panel is
+     open (a re-armed CSS transition somewhere in it), which would wake a frame 25 times a second forever —
+     the exact idle cost fb566/fb567 removed. The gesture burst (0 / 90 / 350 ms) covers an opening panel,
+     and the 1 Hz watchdog covers anything slower. */
+  var CRO = window.ResizeObserver ? new ResizeObserver(function(){ if (painting || nowMs() - paintedAt < 120) return;   /* the repair's own resizes are not a reason to repair again */
+    wakeCounted('resize'); }) : null;
+  function cvVisible(cv){
+    if (! cv.width || ! cv.height || cv.offsetParent === null) return false;
+    var r = cv.getBoundingClientRect();
+    if (r.width < 3 || r.height < 3) return false;
+    if (r.bottom < 0 || r.right < 0 || r.top > (window.innerHeight || 0) || r.left > (window.innerWidth || 0)) return false;
+    var cs = window.getComputedStyle(cv);
+    return cs.visibility !== 'hidden' && +cs.opacity > 0.02;
+  }
+  function cvInked(cv){   /* the middle row and column — ~450 px, not the surface */
+    try{ var ctx = cv.getContext('2d'); if (! ctx) return true;
+      var row = ctx.getImageData(0, cv.height >> 1, cv.width, 1).data;
+      for (var i = 3; i < row.length; i += 4) if (row[i]) return true;
+      var col = ctx.getImageData(cv.width >> 1, 0, 1, cv.height).data;
+      for (var j = 3; j < col.length; j += 4) if (col[j]) return true;
+      return false; }catch(e){ return true; }
+  }
+  window.__tiCvVisible = cvVisible; window.__tiCvInked = cvInked;
+  setInterval(function(){
+    try{
+      var list = document.querySelectorAll('canvas'), need = false;
+      for (var i = 0; i < list.length; i++){
+        var cv = list[i];
+        if (CRO && ! cv.__tiRO){ cv.__tiRO = 1; try{ CRO.observe(cv); }catch(e){} }
+        if (! cvVisible(cv)) continue;
+        if (cvInked(cv)){ cv.__tiOffer = null; continue; }
+        var key = cv.width + 'x' + cv.height;
+        if (cv.__tiOffer === key) continue;   /* offered already in this exact state: not chased again */
+        cv.__tiOffer = key; need = true;
+      }
+      if (need){ window.__tiHeals = (window.__tiHeals | 0) + 1; window.__tiWhy.heal++;
+        /* Some canvases are drawn ONCE at boot by a plain function no painter calls — the output icon, the
+           settings and randomize glyphs, the section icons, the EQ curve. A frame does not restore those, so a
+           heal redraws them by name. MEASURED on the installed AU: #output-icon-canvas came back blank after a
+           trip to the synth panel and no frame could bring it back. Draw-only functions, run only on a heal. */
+        try{ ['updateSectionIcons','drawRandomizeIcon','_drawRandomizeChevron','drawSettingsIcon','drawOutputIcon','redrawEqCanvas','redrawEqHandles']
+          .forEach(function(fn){ if (typeof window[fn] === 'function') window[fn](); }); }catch(e){}
+        wake(); }
+    }catch(e){}
+  }, 1000);
 })();
 </script>
 <script>
