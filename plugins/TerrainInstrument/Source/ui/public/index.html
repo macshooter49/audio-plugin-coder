@@ -8873,6 +8873,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             /* ── 3. WIRE — spools, two eyelets, a gantry holding four heads ON the strand ── */
             function drawWire(ctx,w,h,V){
               var B=bounds(w,h), mx=B.mid, cy=B.cy;
+              ctx.translate(0,h*0.06);   /* fb576 — Max: "bring the studio visualizer down a little bit to be in the middle": measured 12 px high on the 194 px card (the VU pair at the top, the reels short of the bottom); +6 % of h centres the ink */
               ctx.lineJoin='round'; ctx.lineCap='round';
               var lit=0.18+0.82*V.l;
               var TY=cy+h*0.06;                              /* the transport sits low… */
@@ -8939,6 +8940,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             function tick(){
               if(window.__cardOnly) return;   /* fb342/fb90 guard — card windows get no push and this driver never drew there */
               /* fb497 */ if(window.__tiOff&&window.__tiOff('fxr-rack')){ return; }
+              window.__tpeTicks=(window.__tpeTicks|0)+1;   /* fb576 — counted, so the idle-cost gate can see this never runs at rest */
               try{
                 var feed=window.__tpeVizPush, rack=document.getElementById('fxr-rack');
                 if(rack){
@@ -8947,6 +8949,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                     var card=cards[ci], di=+card.getAttribute('data-dev'), dd=DEVS[di];
                     if(!dd||dd.core!=='tape') continue;
                     var cv=card.querySelector('.fxr-core[data-core="tape"] canvas'); if(!cv) continue;
+                    watchCanvas(cv);   /* fb576 — a canvas that changes size (a panel shown, a card reflowed) repaints without a frame */
                     var r=cv.getBoundingClientRect();
                     var cw=Math.max(1,Math.round(r.width)), chh=Math.max(1,Math.round(r.height));
                     if(!r.width||!r.height) continue;
@@ -8958,13 +8961,43 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                     var ctx=cv.getContext('2d');
                     ctx.clearRect(0,0,cv.width,cv.height);
                     ctx.save(); ctx.scale(TDPR,TDPR);
-                    fn(ctx,cw,chh,V);
+                    try{ fn(ctx,cw,chh,V); }catch(e1){ try{ ctx.restore(); ctx.save(); ctx.scale(TDPR,TDPR); fn(ctx,cw,chh,ZERO); }catch(e2){} }   /* fb576 — a throw mid-draw never leaves a cleared canvas: the machine at rest is drawn instead */
                     ctx.restore();
                   }
                 }
               }catch(e){}
             }
             window.__tiFrameReg('fxr-tape', tick);
+            /* ═══ fb576 — A TAPE MACHINE NEVER DISAPPEARS ═══════════════════════════════════════════════
+               Max (two screenshots, the Cassette card and the front's TAPE page both empty): "cassette has
+               disappeared, and on the front it's also disappeared... Does it have something to do with
+               everything stopping once MIDI just stops?" Yes. These machines are CANVASES painted by the
+               frame clock, and since fb566/fb567 the clock stops at rest (an idle frame is byte-identical,
+               idle-skip ships nothing, painters never run — the law Max asked for). So a tape canvas created
+               or resized while nothing plays — a card added, a type changed, a preset loaded, a panel shown,
+               the page opened — had NEVER been painted. MEASURED on the installed AU, a fresh open, no note:
+               frames 0, the rack's tape canvas 300×150 with 0 ink 1.5 s after it was added, the front's
+               360×139 with 0 ink. Every other card is DOM/SVG and was fine.
+               The cure is not to wake the clock (idle stays at zero frames — mac_idle_frames holds) but to
+               paint DIRECTLY, no frame needed, whenever a tape canvas can have lost its picture:
+                 · the rack's DOM changes (a card added / rebuilt / retyped)       → MutationObserver → tick
+                 · a tape canvas changes size (the panel shown, a reflow)          → ResizeObserver   → tick
+                 · the page has just booted (the patch's own cards, no feed yet)   → 300 / 900 / 2500 ms
+                 · and a 1 Hz watchdog that samples the middle row + column of every visible tape canvas
+                   and repaints if it finds no ink at all — the self-heal Max asked for ("every time it
+                   tries to fuck up"). At rest with a painted machine it reads ~450 pixels a second and
+                   paints nothing. With no feed the machine is drawn at rest (ZERO), which is the picture. */
+            window.__tpeTick=tick;
+            var RO=(window.ResizeObserver)?new ResizeObserver(function(){ soon(); }):null;
+            function watchCanvas(cv){ if(RO&&!cv.__tpeRO){ cv.__tpeRO=1; try{ RO.observe(cv); }catch(e){} } }
+            var pend=false; function soon(){ if(pend) return; pend=true; setTimeout(function(){ pend=false; tick(); },0); }
+            try{ var rackEl=document.getElementById('fxr-rack'); if(rackEl&&window.MutationObserver) new MutationObserver(soon).observe(rackEl,{childList:true,subtree:true}); }catch(e){}
+            [300,900,2500].forEach(function(ms){ setTimeout(tick,ms); });
+            function inked(cv){ try{ if(!cv.width||!cv.height) return true; var ctx=cv.getContext('2d'); var row=ctx.getImageData(0,cv.height>>1,cv.width,1).data, col=ctx.getImageData(cv.width>>1,0,1,cv.height).data;
+              for(var i=3;i<row.length;i+=4) if(row[i]) return true; for(var j=3;j<col.length;j+=4) if(col[j]) return true; return false; }catch(e){ return true; } }
+            window.__tpeInked=inked;
+            setInterval(function(){ try{ if(window.__cardOnly) return; var rack=document.getElementById('fxr-rack'); if(!rack) return; var cvs=rack.querySelectorAll('.fxr-core[data-core="tape"] canvas');
+              for(var i=0;i<cvs.length;i++){ var r=cvs[i].getBoundingClientRect(); if(r.width&&r.height&&!inked(cvs[i])){ tick(); return; } } }catch(e){} },1000);
           })();
 
           /* ═══ fb437 — THE FX4 CORES (Equalizer · Widen · Compress · Multiband) ══════════════════
@@ -27188,6 +27221,7 @@ function initFxSuite() {
 
   // Canvas setup helper
   function fxSetupCanvas(canvas, w, h) {
+    canvas.__ink = false;   /* fb576 — a resize wipes the picture; the watchdog and the direct redraw know */
     canvas.width = w * DPR;
     canvas.height = h * DPR;
     canvas.style.width = w + 'px';
@@ -27658,6 +27692,7 @@ function initFxSuite() {
   }
 
   function updateMachineSwitcher() {
+    try { redrawTapeMech(); } catch (e) {}   /* fb576 — a machine change at rest is drawn at once */
     var nameEl = document.getElementById('machineName');
     if (nameEl) nameEl.textContent = TAPE_MACHINES[state.tapeMachine];
     var dots = document.querySelectorAll('.machine-dot');
@@ -29182,6 +29217,7 @@ function initFxSuite() {
       var tapeCanvas = document.getElementById('tapeMechCanvas');
       if (tapeCanvas && tapeCanvas.width > 0 && (__fxr < 1 || !window.__fxRestDrawn)) {
         drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
+        tapeCanvas.__ink = true;
         if (__fxr >= 1) window.__fxRestDrawn = true;
       }
       var tapeKnobIds = ['wow', 'saturation', 'hiss'];
@@ -29273,6 +29309,17 @@ function initFxSuite() {
   }
 
   // ─── Size Canvases to Actual Container ───
+  /* fb576 — THE FRONT MACHINE NEVER DISAPPEARS (the rack's twin, see the fxr-tape painter). The canvas is painted
+     by fxAnimate on the frame clock, which stops at rest; and after the fb510 rest frame, __fxRestDrawn refused every
+     further draw — so a resize at rest (a panel shown, the window resized) wiped the machine until notes returned.
+     Now the machine is drawn directly after every resize and machine change, and a 1 Hz watchdog repaints a visible
+     canvas found with no ink. */
+  function redrawTapeMech() {
+    try { var c = document.getElementById('tapeMechCanvas'); if (!c || !c.width) return;
+      drawTapeVisualization(c.getContext('2d'), c.width / DPR, c.height / DPR, tapeTime); c.__ink = true; window.__fxRestDrawn = false; } catch (e) {}
+  }
+  window.__fxTapeRedraw = redrawTapeMech;
+  setInterval(function () { try { var c = document.getElementById('tapeMechCanvas'); if (c && c.width && c.offsetParent !== null && window.__tpeInked && !window.__tpeInked(c)) redrawTapeMech(); } catch (e) {} }, 1000);
   function sizeFxCanvases() {
     var container = document.querySelector('.fx-pages-container');
     if (!container) return;
@@ -29284,6 +29331,7 @@ function initFxSuite() {
     if (tapeMech) {
       var mechH = Math.max(60, ch - 70);
       fxSetupCanvas(tapeMech, Math.min(cw - 20, 360), mechH);
+      redrawTapeMech();   /* fb576 — the resize wiped it: draw the machine NOW, no frame needed (at rest the clock never comes) */
     }
 
     var spaceVis = document.getElementById('spaceVisCanvas');
