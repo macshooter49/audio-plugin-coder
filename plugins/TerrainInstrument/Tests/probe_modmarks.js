@@ -83,7 +83,8 @@ const HARVEST = () => {
       let cellBox = {l:CR.left, r:CR.right};
       if (!front && trk) { const m = /grid-column:\s*(\d+)/.exec(cell.getAttribute('style') || '');
         const t = trk[(m ? +m[1] : 1) - 1]; if (t) cellBox = {l:t[0], r:t[1]}; }
-      const hit = uls.find(u => Math.abs(u.r.left - LR.left) < 0.75 && Math.abs(u.r.top - (LR.bottom - 1)) < 0.75);
+      const air = window.__markAir ? window.__markAir(lab) : 0;   // fb571 — the mark keeps AIR under its word, by surface
+      const hit = uls.find(u => Math.abs(u.r.left - LR.left) < 0.75 && Math.abs(u.r.top - (LR.bottom - 1 + air)) < 0.75);
       const rail = hit ? hit.el.querySelector('.smu-rail').getBoundingClientRect() : null;
       const span = hit ? hit.el.querySelector('.smu-span').getBoundingClientRect() : null;
       const cmt  = hit ? hit.el.querySelector('.smu-comet') : null;

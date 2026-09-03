@@ -8186,7 +8186,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .vm-macro{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; min-width:0; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
-        #syn-panel .vm-macro .vm-ml{ font-size:7px; letter-spacing:.2px; color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; cursor:grab; }   /* fb563 — the name is the drag grip */
+        #syn-panel .vm-macro .vm-ml{ font-size:8px; letter-spacing:.2px;   /* fb571 — the synth page's one label size (.knob-label is 8 px): Max read 'Baby' as smaller than 'Macro 2' — lowercase letters against a digit — and the macros sat a size under Fold/Blur besides */ color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; cursor:grab; }   /* fb563 — the name is the drag grip */
         #syn-panel .vm-macro .vm-mi{ width:100%; box-sizing:border-box; font:inherit; font-size:7px; letter-spacing:.2px; text-align:center; background:none; border:0; border-bottom:1px solid rgba(255,255,255,.42); border-radius:0; color:#fff; outline:none; padding:0; margin:0; }   /* fb564 — the rename field: the name's own type on a hairline, nothing else */
         /* Macros view active → only the Macros button lights (suppress Mono/Legato/Poly highlight) */
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
@@ -32075,7 +32075,7 @@ restoreThemeFromBackend();
            attenuator and the route list (2147483647) still win over it, as they must. */
         if(el.closest&&el.closest('.ti-card')) u.style.zIndex='2147483646';
         ulMap.set(el,u); }
-      var lb=(el.querySelector&&el.querySelector('.knob-label,.fxr-lab,.lb'))||el;   /* fb453 — a rack knob's word is .fxr-lab; without it the underline measures the WRAPPER box and covers far too much (fb188: the whole word, exactly) */   /* fb524 — a CARD cell's word is .lb (`.ti-card .cell .lb`, 3149 — the class exists nowhere else, so this can only ever match a card). Without it every FLOW-card mark spanned the whole CELL, dial included: the same too-much-box fb453 fixed for the rack. */
+      var lb=(el.querySelector&&el.querySelector('.knob-label,.fxr-lab,.lb,.vm-ml'))||el;   /* fb453 — a rack knob's word is .fxr-lab; without it the underline measures the WRAPPER box and covers far too much (fb188: the whole word, exactly) */   /* fb524 — a CARD cell's word is .lb (`.ti-card .cell .lb`, 3149 — the class exists nowhere else, so this can only ever match a card). Without it every FLOW-card mark spanned the whole CELL, dial included: the same too-much-box fb453 fixed for the rack. */
       var r2=null;   /* fb188 — measure the word's INK (a Range over the text), not the box:
                         the underline covers the WHOLE word, exactly (Max) */
       try{ var rg=document.createRange(); rg.selectNodeContents(lb); r2=rg.getBoundingClientRect(); }catch(e){}
@@ -32092,15 +32092,24 @@ restoreThemeFromBackend();
       /* fb560 — covered? then down. Both rects are SCREEN px (getBoundingClientRect), so they are
          directly comparable; the strip is the word's width by 7px starting one px above its baseline
          box, which is exactly what .sm-ul occupies. */
+      /* fb571 — AIR UNDER THE WORD. Max: "the modulation is way too close to the bottom of the word...
+         bump it down a little, one or two pixels, to where it's not so close but still close enough."
+         The line used to sit at box-bottom + 0.5, i.e. a pixel under the letters and touching a
+         descender. One rule for the EYE — the line sits 4.5 px under the ink of every knob word —
+         which is +2 on the 8 px words (synth knobs, macros, flow cells; their box ends 2 px under the
+         baseline) and +3 on the rack's 7 px words (box ends 1 px under). MEASURED room under the line
+         after the nudge: rack front >= 6.5 px, rack back >= 13 px. The envelope shelf chips stay ("I
+         think it's fine"); pills, tabs and emblems are untouched. The 7 px grab strip moves with the line. */
+      var air=markAir(lb);
       if(__ov===null) __ov=overlayBoxes();
-      if(__ov.length && coveredBy(r2.left, r2.bottom-1, r2.right, r2.bottom+6, __ov,
+      if(__ov.length && coveredBy(r2.left, r2.bottom-1+air, r2.right, r2.bottom+6+air, __ov,
                                   (el.closest?el.closest('.ti-card'):null))){ u.style.display='none'; return; }
       u.style.display='block';
       /* fb453 — LP(): the rect is SCREEN px, a style length is re-multiplied by fb175's
          self-heal zoom when it is armed. The underline must sit on the word on that path too. */
       var uw=LP(r2.width);
       u.style.left=LP(r2.left)+'px'; u.style.width=uw+'px';
-      u.style.top=LP(r2.bottom-1)+'px';   /* fb189 — 7px strip; the visual line (children top:1.5) sits at bottom+0.5 (fb453) */
+      u.style.top=LP(r2.bottom-1+air)+'px';   /* fb189 — 7px strip; the visual line (children top:1.5) sits at bottom+0.5 (fb453) + the fb571 air */
       var trimL=cw?Math.max(0,cw.left-r2.left):0, trimR=cw?Math.max(0,r2.right-cw.right):0;
       u.style.clipPath=(trimL||trimR)?('inset(-4px '+LP(trimR).toFixed(2)+'px -4px '+LP(trimL).toFixed(2)+'px)'):'';
       u.classList.toggle('sel',m.sel); u.classList.toggle('byp',!m.live);   /* fb563 (3) */
@@ -32128,6 +32137,14 @@ restoreThemeFromBackend();
       } else { sp.style.width='0px'; cm.style.display='none'; } });
     ulMap.forEach(function(u,el){ if(!seen.has(el)){ u.remove(); ulMap.delete(el); } });
     }
+  /* fb571 — how much AIR (layout px) a mark keeps under its word, by the word's surface. One table,
+     so the eye reads one rule; a new surface lands in the 2 px default unless its room says otherwise. */
+  function markAir(lb){ try{ var c=lb&&lb.classList; if(!c) return 2;
+      if(c.contains('ec')) return 0;                                              /* the envelope shelf: fine as it is (Max) */
+      if(c.contains('fxr-lab')) return 3;                                          /* rack dials (both faces): a 7 px word whose box ends 1 px under the baseline — 3 lands the line 4.5 px under the ink, like the 8 px words */
+      if(c.contains('knob-label')||c.contains('vm-ml')||c.contains('lb')) return 2;    /* synth knobs · macros · flow cells (8 px words: box = baseline + 2) */
+      return 0; }catch(e){ return 0; } }                                            /* pills, tabs, emblems: unchanged */
+  window.__markAir=markAir;   /* the gate reads the table */
   window.__tiFrameReg('sm-ul', loop);
   /* fb560 — HEADLESS GATE HOOKS (the __tiRoutes / __fltTick idiom). This loop is rAF-driven, and
      BOTH of this project's probes run in windows that are never composited — the offscreen AU
