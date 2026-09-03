@@ -8182,12 +8182,27 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:7px; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
         #syn-panel .vm-voiceview > .voice-toggle-row{ margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
         /* 9-macro view (placeholder — real design later) swaps in when 'Macros' is selected */
-        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb565 — NINE macros, 3×3 (Max: "I liked my three rows of three") */   /* fb272 — same box geometry as vm-voiceview so toggling Macros never reflows anything */
+        #syn-panel .vm-macroview{ flex:1; min-height:0; display:grid; grid-template-columns:repeat(3,1fr); grid-template-rows:repeat(3,1fr); gap:4px; padding-top:0; }   /* fb565 — NINE macros, 3×3 (Max: "I liked my three rows of three") */   /* fb272 claimed "same box geometry as vm-voiceview so toggling Macros never reflows anything" — it did not hold, see fb574 below */
+        /* fb574 — NOTHING MOVES WHEN MACROS TOGGLES. Max (with a screenshot): "every time we press macros, it does
+           that padding and that resize again, which then, in turn, fucks up with our LFO visualization... it moved
+           the bottom of the effect. Nothing can move." MEASURED (Chromium at the host's 820×656, a Chorus in the
+           rack, LFO 1 on WT Pos + Mix): the bottom row is a grid whose height is its content's, and this column
+           swapped its two views with display:none — so the row, the rack and every device at height:100% took the
+           height of whichever view was showing: 187 px with the voice params (150 tall), 159 with the macros (122).
+           The rack bottom rose 28 px on every press, the Mix word with it, and the marks — painted on the frame
+           clock, which is asleep at idle (fb511c) — stayed where the OLD layout had put them. Now both views sit
+           IN FLOW in one grid cell: the column is as tall as the TALLER view in either state, and the view not
+           showing is visibility:hidden (no paint, no hit-test — never display:none, which drops it from the height). */
+        #syn-panel .ribbon-row.rr-new .voice-meta{ display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); row-gap:7px; }
+        #syn-panel .ribbon-row.rr-new .voice-meta > .vm-4{ grid-row:1; grid-column:1; }
+        #syn-panel .ribbon-row.rr-new .vm-voiceview, #syn-panel .ribbon-row.rr-new .vm-macroview{ grid-row:2; grid-column:1; min-height:0; }
+        #syn-panel .voice-meta.vm-macros-active .vm-voiceview{ visibility:hidden; pointer-events:none; }
+        #syn-panel .voice-meta:not(.vm-macros-active) .vm-macroview{ visibility:hidden; pointer-events:none; }
         #syn-panel .vm-macro{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; min-width:0; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
         #syn-panel .vm-macro .vm-ml{ font-size:8px; letter-spacing:.2px;   /* fb571 — the synth page's one label size (.knob-label is 8 px): Max read 'Baby' as smaller than 'Macro 2' — lowercase letters against a digit — and the macros sat a size under Fold/Blur besides */ color:var(--text-secondary); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:100%; text-align:center; cursor:grab; }   /* fb563 — the name is the drag grip */
-        #syn-panel .vm-macro .vm-mi{ width:100%; box-sizing:border-box; font:inherit; font-size:7px; letter-spacing:.2px; text-align:center; background:none; border:0; border-bottom:1px solid rgba(255,255,255,.42); border-radius:0; color:#fff; outline:none; padding:0; margin:0; }   /* fb564 — the rename field: the name's own type on a hairline, nothing else */
+        #syn-panel .vm-macro .vm-mi{ width:100%; box-sizing:border-box; font:inherit; font-size:8px; /* fb574 — the field is the label's size (8 px, fb571), not a size under it */ letter-spacing:.2px; text-align:center; background:none; border:0; border-bottom:1px solid rgba(255,255,255,.42); border-radius:0; color:#fff; outline:none; padding:0; margin:0; }   /* fb564 — the rename field: the name's own type on a hairline, nothing else */
         /* Macros view active → only the Macros button lights (suppress Mono/Legato/Poly highlight) */
         #syn-panel .voice-meta.vm-macros-active .vm-4 .voice-toggle:not(.vm-macros-btn).on{ border-color:rgba(255,255,255,.42); color:var(--text-primary); }
         #syn-panel .fxr-pane{ flex:1; min-width:0; min-height:0; display:flex; }
@@ -8473,7 +8488,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               <div class="voice-row" data-syn-row="SYN_GLIDE_CURVE"><span>Glide</span><b>50</b></div>
               <div class="voice-toggle-row"><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_ALWAYS">Always</button><button class="voice-toggle" data-syn-toggle="SYN_GLIDE_SCALED">Scaled</button></div>
             </div>
-            <div class="vm-macroview" id="vm-macroview" style="display:none;"></div>
+            <div class="vm-macroview" id="vm-macroview"></div>   <!-- fb574 — shown/hidden by the CSS (visibility, in flow), never display -->
           </div>
         </div>
         <script>
@@ -12599,16 +12614,17 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                (data-drag-macro) and the control menu's Macros family lists the same nine. */
             var NM=9, val=[0,0,0,0,0,0,0,0,0], mh='', lastMacroDrag=0;   /* fb565 — nine, 3×3 */
             for(var i=0;i<NM;i++){ mh+='<div class="vm-macro" data-macro="'+(i+1)+'" data-pid="SYN_MACRO_'+(i+1)+'" data-mod-dest="'+((window.__MACRO_DEST||1878)+i)+'"><div class="vm-mk" data-v="0">'+knobSVG(0)+'</div>'
-              +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it, or right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
+              +'<div class="vm-ml" data-drag-macro="'+(i+1)+'" title="Macro '+(i+1)+' \u2014 drag this name onto any knob to modulate it \u00b7 double-click to rename \u00b7 right-click a knob \u2192 Modulate \u2192 Macros">Macro '+(i+1)+'</div></div>'; }
             mv.innerHTML=mh;
             var mks=mv.querySelectorAll('.vm-mk');
             /* fb564 — NAMES. A macro is called what you call it ("Cutoff", not "Macro 3"): on the knob,
                in the picker, on every route row and in the hover list. Persisted in the patch
-               (macroNames, through the processor). Rename = the control menu's Rename row → the name
-               becomes a field (the fb135 host-key bridge types into it), Enter / blur commit, Esc reverts. */
+               (macroNames, through the processor). Rename = the control menu's Rename row, or a double-click
+               on the name (fb574) → the name becomes a field (the fb135 host-key bridge types into it);
+               Enter or a click elsewhere commits, Esc reverts — never blur (fb574: the arming blur). */
             var names=['','','','','','','','',''], mls=mv.querySelectorAll('.vm-ml');
             window.__macroName=function(k){ return (names[k-1]||'').trim()||('Macro '+k); };
-            function paintNames(){ for(var i=0;i<NM;i++){ if(mls[i]) mls[i].textContent=window.__macroName(i+1); } try{ if(window.__macroNamesChanged) window.__macroNamesChanged(); }catch(_){} }
+            function paintNames(){ for(var i=0;i<NM;i++){ if(mls[i]&&!mls[i].querySelector('input')) mls[i].textContent=window.__macroName(i+1); } try{ if(window.__macroNamesChanged) window.__macroNamesChanged(); }catch(_){} }   /* fb574 — never over an OPEN field (measured on the installed AU: the field died at +400 ms with no blur — the late names seed had repainted the word over it) */
             function seedNames(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getMacroNames'):null; if(!g) return;
               var r=g(); if(r&&r.then) r.then(function(js){ try{ var arr=JSON.parse(String(js||'[]')); if(Array.isArray(arr)){ for(var i=0;i<NM;i++) names[i]=String(arr[i]||''); paintNames(); } }catch(_){} }); }catch(_){} }
             seedNames(); [900,2500].forEach(function(ms){ setTimeout(seedNames,ms); });
@@ -12616,12 +12632,19 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               try{ var sf=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setMacroNames'):null; if(sf) sf(JSON.stringify(names)); }catch(_){} }
             function renameM(i){ var lab=mls[i]; if(!lab||lab.querySelector('input')) return; var old=window.__macroName(i+1);
               lab.textContent=''; var inp=document.createElement('input'); inp.type='text'; inp.maxLength=24; inp.className='vm-mi'; inp.value=old; lab.appendChild(inp);
-              function done(save){ if(!inp.parentNode) return; var v=inp.value; if(window.__tiActiveInp===inp){ window.__tiActiveInp=null; if(window.__tiEditArm) window.__tiEditArm(0); }
+              var closed=false;
+              function done(save){ if(closed||!inp.parentNode) return; closed=true; document.removeEventListener('pointerdown',out,true); var v=inp.value; if(window.__tiActiveInp===inp){ window.__tiActiveInp=null; if(window.__tiEditArm) window.__tiEditArm(0); }
+                try{ inp.parentNode.removeChild(inp); }catch(_){}   /* the field leaves first: paintNames skips a label that still holds one */
                 if(save) commitName(i,v); else paintNames(); }
+              /* fb574 — NO BLUR HANDLER. Arming the bridge makes the C++ (editArm) grabKeyboardFocus(); WebKit fires
+                 blur on the field the instant JUCE takes focus, and the old blur→commit closed the field before a
+                 single key could land — Max: "I press rename, and it's not working." The fb136 preset rename already
+                 knew ("survive the arming blur") and has no blur handler: a click anywhere OUTSIDE the name commits. */
+              function out(ev){ if(!lab.contains(ev.target)) done(true); }   /* fb574 */
+              setTimeout(function(){ document.addEventListener('pointerdown',out,true); },0);
               window.__tiActiveInp=inp; if(window.__tiEditArm) window.__tiEditArm(1);
               try{ inp.focus(); inp.select(); }catch(_){} setTimeout(function(){ try{ inp.focus(); inp.select(); }catch(_){} },80);
               inp.addEventListener('keydown',function(ev){ ev.stopPropagation(); if(ev.key==='Enter') done(true); else if(ev.key==='Escape') done(false); });
-              inp.addEventListener('blur',function(){ setTimeout(function(){ done(true); },0); });
               inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
             window.__macroRename=function(k,nm){ commitName(k-1,nm); }; window.__macroRenameOpen=function(k){ renameM(k-1); };   /* gate hooks */
             [].forEach.call(mv.querySelectorAll('.vm-macro'),function(mel){ if(window.__ctlMenuRows) window.__ctlMenuRows.on(mel,function(ev,el){ var k=+(el.getAttribute('data-macro')||0); if(!k) return [];
@@ -12630,7 +12653,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                with no pointer near this view; the editor feed carries the live values (window.__mvMacro,
                outside the quiet gate), so the face repaints from them whenever a hand is not on it. */
             var macroDrag=false;
-            setInterval(function(){ try{ if(macroDrag||mv.style.display==='none') return; var m=window.__mvMacroBase; if(!m||!m.length) return;   /* fb565 — the KNOB's value; the modulated value rides the underline's comet */
+            setInterval(function(){ try{ if(macroDrag||!vm.classList.contains('vm-macros-active')) return; var m=window.__mvMacroBase;   /* fb574 — the view's state is the class, not an inline display */ if(!m||!m.length) return;   /* fb565 — the KNOB's value; the modulated value rides the underline's comet */
               for(var i=0;i<NM;i++){ var v=Math.round((+m[i]||0)*100); if(v!==Math.round(val[i])){ val[i]=v; paintM(i); } } }catch(_){} },150);
             function paintM(i){ var mk=mks[i]; if(!mk) return; mk.setAttribute('data-v',Math.round(val[i])); mk.innerHTML=knobSVG(val[i]); }
             function writeM(i,v){ val[i]=Math.max(0,Math.min(100,v)); paintM(i); try{ if(window.__setSynParam) window.__setSynParam('SYN_MACRO_'+(i+1), val[i]/100); }catch(_){} }
@@ -12644,7 +12667,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               function up(){ macroDrag=false; document.removeEventListener('pointermove',mvm); document.removeEventListener('pointerup',up); if(moved) lastMacroDrag=Date.now(); }
               document.addEventListener('pointermove',mvm); document.addEventListener('pointerup',up);
             }catch(_){ } });
-            mv.addEventListener('dblclick',function(e){ try{ var mk=e.target.closest('.vm-mk'); if(!mk) return; if(Date.now()-lastMacroDrag<400) return;   /* double-click = default (0), the fb363 law */
+            mv.addEventListener('dblclick',function(e){ try{ var ml=e.target.closest('.vm-ml'); if(ml){ var j=[].indexOf.call(mls,ml); if(j>=0&&!ml.querySelector('input')) renameM(j); return; }   /* fb574 — double-click the NAME = rename it (Max: "make it so that we can double-click on the name") */
+              var mk=e.target.closest('.vm-mk'); if(!mk) return; if(Date.now()-lastMacroDrag<400) return;   /* double-click = default (0), the fb363 law */
               var i=[].indexOf.call(mks,mk); if(i>=0) writeM(i,0); }catch(_){ } });
             window.__macroVal=function(i){ return val[i]; }; window.__macroSet=function(i,v){ writeM(i,v); };   /* headless gate hooks */
             /* fb563 — the PITCH BEND RANGE row (semitones): drag the number, double-click = 2. Relay-free, like the macros. */
@@ -12662,7 +12686,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               row.addEventListener('dblclick',function(e){ e.preventDefault(); if(Date.now()-lastUp<400) return; writeB(2); });
               window.__bendRange=function(){ return st; };
             }catch(_){} })();
-            function showMacros(on){ try{ vm.classList.toggle('vm-macros-active',on); mv.style.display=on?'grid':'none'; vv.style.display=on?'none':'flex'; if(mbtn) mbtn.classList.toggle('on',on); }catch(_){ } }
+            function showMacros(on){ try{ vm.classList.toggle('vm-macros-active',on); if(mbtn) mbtn.classList.toggle('on',on); if(window.__tiFrame) window.__tiFrame(); }catch(_){ } }   /* fb574 — the CSS shows one view and hides the other IN PLACE (visibility, one grid cell): nothing beside or below this column moves; one frame is armed so every painter re-measures against whatever did change */
             if(mbtn) mbtn.addEventListener('click',function(){ showMacros(!vm.classList.contains('vm-macros-active')); });   // fb272 — real toggle: click Macros to enter, click again to return to the voice params
             [].forEach.call(document.querySelectorAll('#syn-panel .vm-4 .voice-toggle:not(.vm-macros-btn)'),function(b){ b.addEventListener('click',function(){ showMacros(false); }); });
           }catch(e){} })();
@@ -32088,6 +32112,9 @@ restoreThemeFromBackend();
                         the underline covers the WHOLE word, exactly (Max) */
       try{ var rg=document.createRange(); rg.selectNodeContents(lb); r2=rg.getBoundingClientRect(); }catch(e){}
       if(!r2||r2.width===0) r2=lb.getBoundingClientRect?lb.getBoundingClientRect():null;
+      /* fb574 — a word in a view that is IN FLOW but visibility:hidden (the Macros view while the voice params
+         show, and vice versa) has a real rect; its mark must not paint over whatever is showing in that box. */
+      try{ if(getComputedStyle(lb).visibility==='hidden'){ u.style.display='none'; return; } }catch(e){}
       if(!on||!r2||r2.width===0){ u.style.display='none'; return; }
       /* fb453 — THE CLIP. The rack scrolls inside .fxr-clip, and .sm-ul is position:fixed, so a
          modulated knob scrolled out of view would keep painting its bar over whichever panel now
