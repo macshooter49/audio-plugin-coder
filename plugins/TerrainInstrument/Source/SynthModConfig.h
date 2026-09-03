@@ -1102,6 +1102,21 @@ inline int macroIndexOf (int sI) noexcept { const int k = sI - (int) ModSource::
 inline int randIndexOf  (int sI) noexcept { const int k = sI - (int) ModSource::Rand1;  return (k >= 0 && k < kNumRands)  ? k : -1; }
 inline bool isMacroModSource (int sI) noexcept { return macroIndexOf (sI) >= 0; }
 inline bool isRandModSource  (int sI) noexcept { return randIndexOf (sI) >= 0; }
+/** fb572 — ONE RANDOM, INDEPENDENT PER ROUTE. Max: "every time we put the parameter on there, it should just
+    be random. It shouldn't be linked to each other... I want random to just be actually random and we don't
+    have to have 4 randoms." A note draws ONE seed at note-on; every route reads its own value as a pure
+    function of that seed and the route's identity (dest, and which Random it named), so two routes never
+    share a draw, a rebuilt or re-ordered matrix cannot re-map a sounding note's draws, and there is no table.
+    Murmur3's fmix32; a 24-bit mantissa so the page's twin (Math.imul) reproduces it bit-exactly
+    (Tests/rand_hash_gate.py holds the two together). */
+inline uint32_t modHashMix (uint32_t h) noexcept
+{ h ^= h >> 16; h *= 0x85EBCA6Bu; h ^= h >> 13; h *= 0xC2B2AE35u; h ^= h >> 16; return h; }
+inline float randForRoute (uint32_t noteSeed, int dest, int randOrdinal) noexcept
+{
+    const uint32_t h = modHashMix (noteSeed ^ (0x9E3779B9u * (uint32_t) (dest + 1)) ^ (0x85EBCA6Bu * (uint32_t) (randOrdinal + 1)));
+    return (float) (h >> 8) * (1.0f / 16777216.0f);
+}
+static constexpr int kRandAuxDestBias = 65536;   // fb572 — a "Scale by Random" draws its own value: the aux hashes dest + this
 /** unipolar 0..1 AND additive with a signed depth — the Velocity law. */
 inline bool isUniAdditiveSource (int sI) noexcept
 {

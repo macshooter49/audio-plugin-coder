@@ -174,6 +174,14 @@ static double rmsDb (const std::vector<float>& v)
 { double s = 0; for (float x : v) s += (double) x * x; return 10.0 * std::log10 (s / std::max<size_t> (1, v.size()) + 1e-30); }
 
 // fundamental by FFT peak with parabolic interpolation, on a Hann window
+static double pearson (const std::vector<double>& a, const std::vector<double>& b)   // fb572 — two Random routes must not move together
+{
+    const size_t n = std::min (a.size(), b.size()); if (n < 3) return 0.0;
+    double ma = 0, mb = 0; for (size_t i = 0; i < n; ++i) { ma += a[i] / (double) n; mb += b[i] / (double) n; }
+    double sab = 0, saa = 0, sbb = 0; for (size_t i = 0; i < n; ++i) { sab += (a[i] - ma) * (b[i] - mb); saa += (a[i] - ma) * (a[i] - ma); sbb += (b[i] - mb) * (b[i] - mb); }
+    return (saa > 0 && sbb > 0) ? sab / std::sqrt (saa * sbb) : 0.0;
+}
+static double spreadOf (const std::vector<double>& a) { double lo = 1e9, hi = -1e9; for (double x : a) { lo = std::min (lo, x); hi = std::max (hi, x); } return a.empty() ? 0.0 : hi - lo; }
 static double f0Hz (const std::vector<float>& v)
 {
     const size_t N = 16384; if (v.size() < N) return 0;
@@ -268,6 +276,29 @@ int main()
     for (size_t i = 0; i + 1 < al.size(); ++i) { const bool lo = al[i] < -60, lo2 = al[i + 1] < -60; if (lo == lo2) alternates = false; }
     std::string as; for (double x : al) as += fmt ("%.1f ", x);
     chk (alternates, "7  ALT → Level A: six notes alternate loud / silent / loud …", as + "dB");
+
+    // ── 7b · ONE RANDOM, INDEPENDENT PER ROUTE (fb572) ──
+    //  Max: "every time we put the parameter on there, it should just be random... they shouldn't be linked to each
+    //  other." Two routes from the ONE Random — Level A (64) and Coarse A (42, ±24 st at full depth) — over 24 notes:
+    //  the level draw and the pitch draw must be UNCORRELATED. Before fb572 one draw (rand_[0]) drove both and this
+    //  read r = +1.00. 24 notes, not 12: P(|r| > 0.5) for independent draws is ~1.3 % at n = 24 (~10 % at 12 — a bar
+    //  that reds one run in ten is a bar nobody trusts, fb570's lesson). Pearson is scale-free, so the pitch rides in
+    //  raw semitones; a draw near 0 is near silence and cannot be pitched, so those notes are dropped and counted.
+    au.set (LVL, 0.0f); au.pump (0.2);
+    au.setRoutes ("[{\"s\":240,\"d\":64,\"v\":1.0},{\"s\":240,\"d\":42,\"v\":1.0}]");
+    std::vector<double> lv9, pt9; int quiet9 = 0;
+    for (int i = 0; i < 24; ++i)
+    {
+        const auto body = au.note (60, 40, 12, 40);
+        const double l = std::pow (10.0, (rmsDb (body) - m1) / 20.0);
+        if (l < 0.03) { ++quiet9; continue; }
+        lv9.push_back (l); pt9.push_back (12.0 * std::log2 (std::max (1.0, f0Hz (body)) / 261.63));
+    }
+    const double r9 = pearson (lv9, pt9);
+    chk (lv9.size() >= 16 && std::abs (r9) < 0.5, "7b ONE RANDOM: two routes (Level A, Coarse A) over 24 notes draw INDEPENDENTLY (|r| < 0.5; read +1.00 before)",
+         fmt ("r = %+.2f over %.0f notes (%.0f too quiet to pitch)", r9, (double) lv9.size(), (double) quiet9));
+    chk (spreadOf (lv9) > 0.3 && spreadOf (pt9) > 6.0, "7b … and each route still scatters on its own (level spread > 0.3, pitch spread > 6 st)",
+         fmt ("level spread %.2f · pitch spread %.1f st", spreadOf (lv9), spreadOf (pt9)));
 
     // ── 8 · DEPTH SIGN + CURVE ──
     au.set (LVL, 1.0f); au.pump (0.2);

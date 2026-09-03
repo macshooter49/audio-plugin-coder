@@ -6052,9 +6052,10 @@ void TerrainUiCore::timerCallback()
         js << "];";
         // fb563 — the Phase 2 sources' live values, for their comets (Max's law: audible ⇒ visible)
         juce::String p2Feed;
-        p2Feed << "window.__mvRand=[";   // fb566 — wheel / aftertouch / bend moved above the quiet gate; the per-note pair stays here
-        for (int rk = 0; rk < 4; ++rk) p2Feed << (rk ? "," : "") << SF (audioProcessor.modVizRand (rk), 3);
-        p2Feed << "];window.__mvAlt=" << SF (audioProcessor.modVizAlt(), 1) << ";";
+        // fb572 — ONE Random: the page hashes the most-active note's SEED per route (the JS twin of randForRoute),
+        //  an INTEGER on the wire (a 3-decimal float would truncate it); -1 = no note sounds (the comet stays still)
+        p2Feed << "window.__mvRandSeed=" << (audioProcessor.modVizRandLive() ? juce::String ((juce::int64) audioProcessor.modVizRandSeed()) : juce::String ("-1"))
+               << ";window.__mvAlt=" << SF (audioProcessor.modVizAlt(), 1) << ";";
         js << p2Feed;
         if (audioProcessor.midiMapVersion() != lastMidiMapV_)
         {   // fb563 (4) — the CC map changed (a learn landed, a binding was removed): push it ONCE

@@ -105,6 +105,13 @@ if proc.count('phase2SourceForWire (r.src)') < 3:
 sv_ = (root / 'Source' / 'SynthVoice.h').read_text()
 for tok in ('wc::isMacroModSource (sI)', 'wc::ModSource::Wheel', 'wc::ModSource::Aftertouch', 'wc::ModSource::Bend', 'wc::isRandModSource (sI)', 'wc::ModSource::Alt'):
     if tok not in sv_: fails.append("SynthVoice never evaluates %s — declared and inert (the fb555 shape)" % tok)
+# fb572 — the voice's Random branch hashes the ROUTE (seed, dest, ordinal); the processor's two readers too; the page carries the twin
+if 'wc::randForRoute (noteSeed_, dest, wc::randIndexOf (sI))' not in sv_:
+    fails.append("SynthVoice's Random branch does not draw per route (randForRoute (noteSeed_, dest, ...)) — two Random routes would share one draw again")
+if proc.count('wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), ') < 2:
+    fails.append("the processor's Random readers (the global pass and sourceValueOfSrc) do not both hash per route")
+if 'window.__randForRoute=randForRoute' not in js:
+    fails.append("the page has no randForRoute twin — the Random comet could not show the DSP's draw")
 
 # ── 4c · fb565 — MACROS ARE DESTINATIONS. The page stamps data-mod-dest from ONE number; it must equal
 #          the C++ MacroDest1, and the global pass must actually apply the range. ─────────────────
@@ -126,8 +133,16 @@ if 'si >= NUM_LFOS) continue' in fxv:
     fails.append("FxModValue.h still drops every non-LFO, non-envelope source (`si >= NUM_LFOS) continue`) — a macro into a rack knob is silent")
 for tok in ('isShapeModSource (sI)', 'applyModCurve (curves', 'sourceTo01 ((int) as.auxSource'):
     if tok not in fxv: fails.append("FxModValue.h's buildFxMod is missing `%s` — the rack evaluates a law the other two evaluators have" % tok)
-if 'sourceValueOfSrc (sI, ok)' not in proc:
-    fails.append("PluginProcessor.cpp's rack call does not hand buildFxMod sourceValueOfSrc — a second reader is a second place to drift")
+if 'sourceValueOfSrc (sI, ok, dest)' not in proc:
+    fails.append("PluginProcessor.cpp's rack call does not hand buildFxMod sourceValueOfSrc (with the dest) — a second reader is a second place to drift")
+# ── fb572 · A CURVE EDIT MUST RE-BROADCAST. modCfgEq is the contract for "what a voice must know"; it compared
+#    source/dest/depth/aux/enabled and not `curve`, so a curve drawn on a route the voices already held never reached
+#    them (Max: "I have an envelope on the fold and a curve edit... it's not doing anything"). The comparison must
+#    name the field. ─────────────────────────────────────────────────────────────────────────────────────────────
+mce = proc.find('static bool modCfgEq ('); mce_body = proc[mce:mce + 1600] if mce >= 0 else ''
+if mce < 0 or 'x.curve != y.curve' not in mce_body:
+    fails.append("modCfgEq does not compare `curve` — a curve drawn on an existing route would never re-broadcast to the voices (fb572)")
+
 
 # ── 5 · fb554 · THE CONNECTION CURVE MUST ROUND-TRIP ────────────────────────────────────────
 #  It rides the route JSON, so the encoder must emit `c` and the decoder must read it back. If

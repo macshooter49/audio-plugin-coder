@@ -242,12 +242,12 @@ const HELPERS = () => {
   const envInAll = await pg.evaluate(() => { const s = document.querySelector('.tpb-srch'); s.value = ''; s.oninput(); window.__bPick('All', 'Env 1'); return window.__bRows(window.__bPanes()[1]).filter(x => x.dot).map(x => x.name); });
   chk(envInAll.indexOf('Filter 2') >= 0 && envInAll.indexOf('Env 1') < 0, '2  All mirrors the state: a toggled-off Env 1 loses its dot, Filter 2 keeps it', JSON.stringify(envInAll));
   // fb563 Phase 2 — the six new families route through the same picker, at the same defaults
-  r = await pg.evaluate(() => { const a = window.__bPick('Macros', 'Macro 3'), b = window.__bPick('MIDI', 'Mod Wheel'), c = window.__bPick('Keys', 'Random 2'), d = window.__bPick('Keys', 'Alt'), e = window.__bPick('MIDI', 'Pitch Bend'), f = window.__bPick('MIDI', 'Aftertouch');
+  r = await pg.evaluate(() => { const a = window.__bPick('Macros', 'Macro 3'), b = window.__bPick('MIDI', 'Mod Wheel'), c = window.__bPick('Keys', 'Random'), d = window.__bPick('Keys', 'Alt'), e = window.__bPick('MIDI', 'Pitch Bend'), f = window.__bPick('MIDI', 'Aftertouch');
     return { a, b, c, d, e, f, routes: window.__routes().filter(x => /^(mac|whl|rnd|alt|bend|at)/.test(x.s)).map(x => x.s + '@' + x.v).sort().join(',') }; });
-  chk(r.a === 'dot' && r.b === 'dot' && r.c === 'dot' && r.d === 'dot' && r.e === 'dot' && r.f === 'dot' && r.routes === 'alt@1,at@1,bend@1,mac3@1,rnd2@1,whl@1',
-      '2  Macro 3 · Mod Wheel · Random 2 · Alt · Pitch Bend · Aftertouch all route at full depth', r.routes);
+  chk(r.a === 'dot' && r.b === 'dot' && r.c === 'dot' && r.d === 'dot' && r.e === 'dot' && r.f === 'dot' && r.routes === 'alt@1,at@1,bend@1,mac3@1,rnd1@1,whl@1',
+      '2  Macro 3 · Mod Wheel · Random · Alt · Pitch Bend · Aftertouch all route at full depth', r.routes);
   r = await pg.evaluate(() => { window.__mClose(); const st = window.__mOpen(document.querySelector('#syn-panel .knob[data-syn="SYN_OSC_A_WARP_AMOUNT"]')); return st.routes; });
-  chk(r.some(x => x === 'Macro 3 · 100%') && r.some(x => x === 'Mod Wheel · 100%') && r.some(x => x === 'Random 2 · 100%') && r.some(x => x === 'Alt · 100%') && r.some(x => x === 'Pitch Bend · 100%') && r.some(x => x === 'Aftertouch · 100%'),
+  chk(r.some(x => x === 'Macro 3 · 100%') && r.some(x => x === 'Mod Wheel · 100%') && r.some(x => x === 'Random · 100%') && r.some(x => x === 'Alt · 100%') && r.some(x => x === 'Pitch Bend · 100%') && r.some(x => x === 'Aftertouch · 100%'),
       '2  and the menu names each of them on its own row', JSON.stringify(r));
 
   // ── 3 · THE ROUTE ROW ───────────────────────────────────────────────────────────────────

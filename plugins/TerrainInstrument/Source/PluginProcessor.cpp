@@ -7555,7 +7555,13 @@ static bool modCfgEq (const wc::ModConfig& a, const wc::ModConfig& b) noexcept
     {
         const auto& x = a.assignments[i]; const auto& y = b.assignments[i];
         if (x.source != y.source || x.dest != y.dest || x.depth != y.depth
-            || x.auxSource != y.auxSource || x.useAux != y.useAux || x.enabled != y.enabled)
+            || x.auxSource != y.auxSource || x.useAux != y.useAux || x.enabled != y.enabled
+            || x.curve != y.curve)   // fb572 — A CURVE EDIT MUST RE-BROADCAST. The voices index the published curve set by THIS
+                                     // number; a curve drawn on a route they already hold (-1 -> n, or n -> n+1 when another
+                                     // route straightens) changed nothing this comparison looked at, so setModConfig never
+                                     // ran and every per-voice destination kept a stale index. Max: "I have an envelope on the
+                                     // fold and a curve edit... it's not doing anything." Only the global pass and the rack,
+                                     // which read the route list each block, ever heard a curve drawn on an existing route.
             return false;
     }
     for (int i = 0; i < 8; ++i)
@@ -8508,21 +8514,21 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (const auto& r0 : synModRoutes)
             {
                 if (r0.bypass) continue;   // fb563 (3)
-                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux);   // fb563 (3) — "Scale by"
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by"
                 if (r.dest < (int) wc::ModDest::LfoAmt1 || r.dest >= (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS) continue;
                 if (r.src >= 0 && r.src < wc::NUM_LFOS)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += flowLfo_[r.src].peek() * (r.depth * *rawParam (kLfoDepthIds[r.src]));
                 else if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)
                     lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += monoEnvLevelOf ((int) wc::envSourceFor (r.src - wc::kEnvSrcBase + 1)) * std::abs (r.depth);
                 else if (const int p2 = wc::phase2SourceForWire (r.src); p2 >= 0)   // fb563 clean-up — macros · wheel · aftertouch · bend · random · alt bend a global LFO's amount too
-                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += globalSourceValue (r.src) * r.depth;
+                    lfoAmt[r.dest - (int) wc::ModDest::LfoAmt1] += globalSourceValue (r.src, r.dest) * r.depth;
             }
             const float velCurve01_ = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb263 — velocity block-rate feed: curve-shaped, most-active voice
             const float velGlobal_  = std::pow (juce::jmax (0.0f, velVis_.load (std::memory_order_relaxed)), std::pow (3.0f, 1.0f - 2.0f * velCurve01_));
             for (const auto& r0 : synModRoutes)
             {
                 if (r0.bypass) continue;   // fb563 (3) — bypassed: in the list, out of the sum
-                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
+                SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
                 const wc::ModCurveSet* mcSet = modCurves_.load (std::memory_order_acquire);   // fb554
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
@@ -8602,7 +8608,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     else if (p2 == (int) wc::ModSource::Wheel)         v = globalSrc_.wheel.load (std::memory_order_relaxed);
                     else if (p2 == (int) wc::ModSource::Aftertouch)    v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
                     else if (p2 == (int) wc::ModSource::Bend)          v = globalSrc_.bend.load (std::memory_order_relaxed);
-                    else if (wc::isRandModSource (p2))                 v = randVis_[wc::randIndexOf (p2)].load (std::memory_order_relaxed);
+                    else if (wc::isRandModSource (p2))                 v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), r.dest, wc::randIndexOf (p2)) : 0.0f;   // fb572 — this route's own draw from the most-active note
                     else if (p2 == (int) wc::ModSource::Alt)           v = altVis_.load (std::memory_order_relaxed);
                     modSums[r.dest] += wc::routeContribution (wc::kDestInfo[r.dest], wc::applyModCurve (mcSet, r.curve, p2, v), r.depth);
                     continue;
@@ -10059,7 +10065,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     wc::buildFxMod (fxMod_, synModCfg, modCurves_.load (std::memory_order_acquire),
         [this] (int k, int i, int n) -> const void* { return fxModRef_[k][i][n]; },
         [] (const void* p) { return static_cast<const std::atomic<float>*> (p)->load(); },
-        [this] (int sI, bool& ok) { return sourceValueOfSrc (sI, ok); });
+        [this] (int sI, int dest, bool& ok) { return sourceValueOfSrc (sI, ok, dest); });   // fb572 — dest rides along: a Random route draws its own value
 
     // fb457 — OVERPASS 1: publish what the rack is ACTUALLY using, for the cards to draw from.
     // 🚨 PLACEMENT, same lesson as the Knee below: this must sit AFTER the build or it would
@@ -10716,7 +10722,8 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // fb555 — and the key position, on the same ungated walk and for the same reason.
         noteVis_.store ((any && bestVoice != nullptr) ? bestVoice->getKeyRamp01() : 0.f, std::memory_order_relaxed);
         // fb563 — this note's Random 1-4 and Alt, for the global half of those routes and the comets. Same walk, same reason.
-        for (int rk = 0; rk < 4; ++rk) randVis_[rk].store ((any && bestVoice != nullptr) ? bestVoice->getRand01 (rk) : 0.f, std::memory_order_relaxed);
+        randSeedVis_.store ((any && bestVoice != nullptr) ? bestVoice->getNoteSeed() : 0u, std::memory_order_relaxed);   // fb572 — the seed, hashed per route by the readers
+        randSeedLive_.store ((any && bestVoice != nullptr) ? 1 : 0, std::memory_order_relaxed);
         altVis_.store ((any && bestVoice != nullptr) ? bestVoice->getAlt01() : 0.f, std::memory_order_relaxed);
         if (vizLive)   // fb514 — UI feed only: skip when no editor/card exists (fb148 law, now enforced)
         {
@@ -13348,14 +13355,14 @@ void TerrainInstrumentAudioProcessor::applyPendingMidiCc()
     if (midiMapDirty_.exchange (0, std::memory_order_relaxed)) midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
 }
 
-float TerrainInstrumentAudioProcessor::globalSourceValue (int wire) noexcept
+float TerrainInstrumentAudioProcessor::globalSourceValue (int wire, int dest) noexcept
 {   // fb563 clean-up — the family-convention value of any source from the processor's own views (the twin of the voice's sourceValueOf)
     const int sI = wc::sourceForWire (wire);
     if (sI < 0) return 0.0f;
     bool ok = false;
-    return sourceValueOfSrc (sI, ok);
+    return sourceValueOfSrc (sI, ok, dest);
 }
-float TerrainInstrumentAudioProcessor::sourceValueOfSrc (int sI, bool& ok) noexcept
+float TerrainInstrumentAudioProcessor::sourceValueOfSrc (int sI, bool& ok, int dest) noexcept
 {   // fb566 — ONE reader by ModSource, so the global pass, the aux scaler and the rack's walk cannot disagree about a family
     ok = true;
     float v = 0.0f;
@@ -13368,15 +13375,15 @@ float TerrainInstrumentAudioProcessor::sourceValueOfSrc (int sI, bool& ok) noexc
     else if (sI == (int) wc::ModSource::Wheel)                 v = globalSrc_.wheel.load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Aftertouch)            v = globalSrc_.aftertouch.load (std::memory_order_relaxed);
     else if (sI == (int) wc::ModSource::Bend)                  v = globalSrc_.bend.load (std::memory_order_relaxed);
-    else if (wc::isRandModSource (sI))                         v = randVis_[wc::randIndexOf (sI)].load (std::memory_order_relaxed);
+    else if (wc::isRandModSource (sI))                         v = randSeedLive_.load (std::memory_order_relaxed) ? wc::randForRoute (randSeedVis_.load (std::memory_order_relaxed), dest, wc::randIndexOf (sI)) : 0.0f;   // fb572 — per route
     else if (sI == (int) wc::ModSource::Alt)                   v = altVis_.load (std::memory_order_relaxed);
     else ok = false;                                                // drift lanes and anything newer: no processor view — dropped, never invented
     return v;
 }
-float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
+float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire, int dest) noexcept
 {
     const int sI = wc::sourceForWire (wire);
-    return (sI < 0) ? 1.0f : wc::sourceTo01 (sI, globalSourceValue (wire));
+    return (sI < 0) ? 1.0f : wc::sourceTo01 (sI, globalSourceValue (wire, dest));
 }
 
 void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)

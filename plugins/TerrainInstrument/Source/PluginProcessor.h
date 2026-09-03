@@ -920,7 +920,8 @@ public:
     wc::GlobalModSources globalSrc_;
     std::atomic<float> macroBaseVis_[wc::kNumMacros] {};   // fb565 — the macro KNOB's own value (the parameter) for the Macros view's face; globalSrc_.macro is the MODULATED one
     bool               macroModded_[wc::kNumMacros] {};    // fb565 — audio thread only: the last global pass found a route INTO this macro
-    std::atomic<float> randVis_[4] { {0.f}, {0.f}, {0.f}, {0.f} };
+    std::atomic<uint32_t> randSeedVis_ { 0u };   // fb572 — the most-active voice's note seed: the global half hashes it per route
+    std::atomic<int>      randSeedLive_ { 0 };   // fb572 — 0 = no voice sounds (the Random comet reads -1, the global half 0)
     std::atomic<float> altVis_ { 0.f };
     float midiWheelT_ = 0.f, midiAtT_ = 0.f, midiBendT_ = 0.f;          // audio thread only: the last MIDI value seen
     float midiWheelSm_ = 0.f, midiAtSm_ = 0.f, midiBendSm_ = 0.f;       // audio thread only: 10 ms one-pole at block rate
@@ -929,13 +930,14 @@ public:
     float modVizWheel() const noexcept      { return globalSrc_.wheel.load (std::memory_order_relaxed); }
     float modVizAftertouch() const noexcept { return globalSrc_.aftertouch.load (std::memory_order_relaxed); }
     float modVizBend() const noexcept       { return globalSrc_.bend.load (std::memory_order_relaxed); }
-    float modVizRand (int k) const noexcept { return (k >= 0 && k < 4) ? randVis_[k].load (std::memory_order_relaxed) : 0.f; }
+    uint32_t modVizRandSeed() const noexcept { return randSeedVis_.load (std::memory_order_relaxed); }   // fb572
+    bool     modVizRandLive() const noexcept { return randSeedLive_.load (std::memory_order_relaxed) != 0; }
     float modVizAlt() const noexcept        { return altVis_.load (std::memory_order_relaxed); }
     /** fb563 (3) — any source's live value as 0..1 from the processor's own views, for the global half of
         "Scale by". LFOs are the free-running mirrors, envelopes the mono tap, the rest the published feeds. */
-    float globalSourceTo01 (int wire) noexcept;
-    float globalSourceValue (int wire) noexcept;   // fb563 clean-up — the family-convention value (the twin of the voice's sourceValueOf)
-    float sourceValueOfSrc (int sI, bool& ok) noexcept;   // fb566 — the same reader by ModSource; ok=false for a source the processor has no view of
+    float globalSourceTo01 (int wire, int dest = -1) noexcept;              // fb572 — dest: a Random route draws its own value
+    float globalSourceValue (int wire, int dest = -1) noexcept;   // fb563 clean-up — the family-convention value (the twin of the voice's sourceValueOf)
+    float sourceValueOfSrc (int sI, bool& ok, int dest = -1) noexcept;   // fb566 — the same reader by ModSource; ok=false for a source the processor has no view of
     // ══ fb563 (4) — MIDI LEARN + THE CC MAP ═════════════════════════════════════════════════
     //  "MIDI Learn" on any control: the NEXT CC the host sends binds to that parameter (absolute,
     //  0..127 → the parameter's normalised range). The audio thread only STORES (atomics); the

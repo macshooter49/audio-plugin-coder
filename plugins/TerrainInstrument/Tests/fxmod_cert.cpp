@@ -126,6 +126,7 @@ int main()
             float  env[(int) ModSource::NumSources] {};
             float  src[(int) ModSource::NumSources] {};   // fb566 — every other family's value, in its convention
             bool   has[(int) ModSource::NumSources] {};   // fb566 — which of them this fake rack has a view of
+            uint32_t seed = 0x2545F491u;                   // fb572 — the sounding note's seed: a Random route hashes its own draw from it
             int    cells = 0;
 
             FakeRack()
@@ -154,10 +155,11 @@ int main()
             buildFxMod (acc, cfg, curves,
                 [&] (int k, int i, int n) -> const void* { return R.ref[k][i][n]; },
                 []  (const void* p) { return *static_cast<const float*> (p); },
-                [&] (int sI, bool& ok)
+                [&] (int sI, int dest, bool& ok)   // fb572 — the walk hands the route's dest along: a Random route draws its own value
                 {
                     if (sI >= 0 && sI < NUM_LFOS) { ok = true; return R.lfo[sI]; }
                     if (isEnvModSource (sI))      { ok = true; return R.env[sI]; }
+                    if (isRandModSource (sI))     { ok = true; return randForRoute (R.seed, dest, randIndexOf (sI)); }
                     ok = R.has[sI]; return R.src[sI];
                 });
         };
@@ -219,6 +221,12 @@ int main()
           routeAux (c, ModSource::Macro1, fxModDest (0, 0, 3), 1.0f, ModSource::Macro2);
           build (acc, c);
           gate ("fb566 SCALE BY reaches the rack: Macro 1 (1.0) x depth 1 scaled by Macro 2 at 50 % = +0.5 → 0.7", near_ (acc.val[0], 0.7f), std::to_string (acc.val[0])); }
+        { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.0f; R.at (0, 0, 4) = 0.0f;   // fb572 — ONE Random, independent per route
+          route (c, ModSource::Rand1, fxModDest (0, 0, 3), 1.0f); route (c, ModSource::Rand1, fxModDest (0, 0, 4), 1.0f);
+          build (acc, c);
+          const float d3 = randForRoute (R.seed, fxModDest (0, 0, 3), 0), d4 = randForRoute (R.seed, fxModDest (0, 0, 4), 0);
+          gate ("fb572 ONE RANDOM on two rack knobs: each knob gets ITS OWN draw from the note's seed (never one draw for both)",
+                near_ (acc.val[0], d3) && near_ (acc.val[1], d4) && std::abs (d3 - d4) > 0.05f, std::to_string (acc.val[0]) + " / " + std::to_string (acc.val[1])); }
         { ModConfig c; FxModAccum acc; R.at (0, 0, 3) = 0.0f;
           ModCurveSet cs {}; cs.c[0].set = true; for (int k = 0; k < kModCurvePts; ++k) cs.c[0].pts[k] = 1.0f - (float) k / (float) (kModCurvePts - 1);   // y = 1 − x
           curves = &cs;

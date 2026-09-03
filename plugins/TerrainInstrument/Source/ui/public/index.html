@@ -31565,7 +31565,7 @@ restoreThemeFromBackend();
   // ── fb182 S3 — underline bars + the hover route-list ──
   var ulMap=new Map(), rtMenu=null, rtHideT=null;
   var FOL_NAME=['Osc A','Osc B','Osc C','Osc D','Noise','Filter 1','Filter 2'];   /* fb552 · fb556 */
-  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?((window.__macroName&&window.__macroName(a.mac))||('Macro '+a.mac)):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?('Random '+a.rnd):(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
+  function srcName(a){ return a.note?'Key':(a.fol?FOL_NAME[a.fol-1]:(a.vel?'Velocity':(a.env?('Env '+a.env):(a.lfo?('LFO '+a.lfo):(a.mac?((window.__macroName&&window.__macroName(a.mac))||('Macro '+a.mac)):(a.whl?'Mod Wheel':(a.at?'Aftertouch':(a.bend?'Pitch Bend':(a.rnd?'Random':(a.alt?'Alt':'?')))))))))); }   /* fb563 — a follower is named by what it follows ("Osc A", "Filter 1"), the way the picker's Audio family lists it */
   function hideRoutes(){ if(rtMenu){ rtMenu.remove(); rtMenu=null; } }
   /* fb563 (3) — "LFO 2 × Macro 1 · 45%", "Env 1 · off": one spelling for the hover list and the menu row */
   function routeLabel(a){ return srcName(a)+(a.aux?(' \u00D7 '+srcName(a.aux)):'')+' \u00B7 '+(a.byp?'off':(Math.round(a.depth*100)+'%')); }
@@ -31752,7 +31752,7 @@ restoreThemeFromBackend();
     for(i=1;i<=10;i++)   lfos.push(mk({lfo:i},'LFO '+i));
     for(i=1;i<=WIRE.NMACRO;i++){ if(skipDest!=null&&skipDest===MD+i-1) continue;   /* fb565 — a macro's own picker does not offer itself */
       macs.push(mk({mac:i},(window.__macroName&&window.__macroName(i))||('Macro '+i))); }   /* fb563 Phase 2 · fb564 the macro's own name */
-    for(i=1;i<=WIRE.NRAND;i++)  rnds.push(mk({rnd:i},'Random '+i));
+    rnds.push(mk({rnd:1},'Random'));   /* fb572 — ONE Random (Max: "we don't have to have 4 randoms"): every route draws its own value. Wire codes 241-243 still decode and play for old patches, unlisted. */
     return [ {label:'Envelopes',items:envs}, {label:'LFOs',items:lfos}, {label:'Macros',items:macs},
              {label:'Keys',items:[mk({vel:1},'Velocity'),mk({note:1},'Key')].concat(rnds,[mk({alt:1},'Alt')])},
              {label:'Audio',items:FOL_NAME.map(function(nm,k){ return mk({fol:k+1},nm); })},
@@ -31999,13 +31999,17 @@ restoreThemeFromBackend();
     var out=prev+(cur-prev)*a; return isFinite(out)?out:cur; }
   /* fb563 — the live value behind a Phase 2 source's comet (0..1, −1 = nothing yet), or null for
      every older family so the chain below keeps its own readings. Bend is bipolar → mapped to 0..1. */
+  /* fb572 — randForRoute, the JS twin of SynthModConfig.h's: Murmur3 fmix32 over (seed ^ golden*(dest+1) ^ 0x85EBCA6B*(k+1)), 24-bit mantissa */
+  function modHashMix(h){ h^=h>>>16; h=Math.imul(h,0x85EBCA6B)>>>0; h^=h>>>13; h=Math.imul(h,0xC2B2AE35)>>>0; h^=h>>>16; return h>>>0; }
+  function randForRoute(seed,dest,k){ var h=modHashMix(((seed>>>0) ^ (Math.imul(0x9E3779B9,(dest+1)|0)>>>0) ^ (Math.imul(0x85EBCA6B,(k+1)|0)>>>0))>>>0); return (h>>>8)/16777216; }
+  window.__randForRoute=randForRoute;   /* the gate reads the twin */
   function p2v(a){ try{
       var C=p2Cur, Pv=p2Prev;
       if(a.mac){ var k=a.mac-1; if(C&&C.m[k]!=null) return p2At(C.m[k],Pv?Pv.m[k]:null); return (window.__mvMacro&&window.__mvMacro[k]!=null)?window.__mvMacro[k]:-1; }
       if(a.whl){ if(C&&C.w!=null) return p2At(C.w,Pv?Pv.w:null); return (window.__mvWheel!=null)?window.__mvWheel:-1; }
       if(a.at){  if(C&&C.a!=null) return p2At(C.a,Pv?Pv.a:null); return (window.__mvAT!=null)?window.__mvAT:-1; }
       if(a.bend){ if(C&&C.b!=null){ var bb=p2At(C.b,Pv?Pv.b:null); return (bb+1)/2; } return (window.__mvBend!=null)?(window.__mvBend+1)/2:-1; }
-      if(a.rnd)  return (window.__mvRand&&window.__mvRand[a.rnd-1]!=null)?window.__mvRand[a.rnd-1]:-1;
+      if(a.rnd)  return (window.__mvRandSeed!=null&&window.__mvRandSeed>=0)? randForRoute(window.__mvRandSeed>>>0, a.dest|0, (a.rnd-1)|0) : -1;   /* fb572 — this route's own draw from the sounding note's seed (the C++ twin, held bit-exact by Tests/rand_hash_gate.py) */
       if(a.alt)  return (window.__mvAlt!=null)?window.__mvAlt:-1; }catch(e){}
     return null; }
   window.__tiP2Value=function(S){ return p2v(S); };   /* gate hook — the value the comet would draw right now */

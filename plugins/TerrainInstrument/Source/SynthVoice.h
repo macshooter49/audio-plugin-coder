@@ -413,7 +413,7 @@ namespace tw
             (LFO / drift / bend −1..+1 · env / follower / Key level−1 · velocity / macro / wheel / aftertouch /
             random / alt 0..1). `ok` is false for a source this voice cannot read. One reader, used for the
             main source AND the aux "Scale by" source, so the two can never disagree. */
-        float sourceValueOf (int sI, const float* lfoPk, bool& ok) const noexcept
+        float sourceValueOf (int sI, const float* lfoPk, bool& ok, int dest = -1) const noexcept   // fb572 — dest: a Random route draws its OWN value
         {
             ok = true;
             if      (sI >= 0 && sI < wc::NUM_LFOS) return lfoPk[sI];
@@ -427,11 +427,11 @@ namespace tw
             else if (sI == (int) wc::ModSource::Wheel)      return (gsrc_ != nullptr) ? gsrc_->wheel.load (std::memory_order_relaxed) : 0.0f;
             else if (sI == (int) wc::ModSource::Aftertouch) return (gsrc_ != nullptr) ? gsrc_->aftertouch.load (std::memory_order_relaxed) : 0.0f;
             else if (sI == (int) wc::ModSource::Bend)       return (gsrc_ != nullptr) ? gsrc_->bend.load (std::memory_order_relaxed) : 0.0f;   // −1..+1
-            else if (wc::isRandModSource (sI))             return rand_[wc::randIndexOf (sI)];
+            else if (wc::isRandModSource (sI))             return wc::randForRoute (noteSeed_, dest, wc::randIndexOf (sI));   // fb572 — one Random, independent per route
             else if (sI == (int) wc::ModSource::Alt)        return alt_;
             ok = false; return 0.0f;
         }
-        float getRand01 (int k) const noexcept { return (k >= 0 && k < 4) ? rand_[k] : 0.0f; }   // fb563 — this note's random values
+        uint32_t getNoteSeed() const noexcept { return noteSeed_; }   // fb572 — this note's seed; the global half hashes it per route (randForRoute)
         float getAlt01() const noexcept { return alt_; }                                          // fb563 — this note's alternator
         bool  isAmpEnvActive() const noexcept { return ampEnv_.isActive(); }
         float dbgWarpEffA() const noexcept { return warpAmount_; }   // fb188 — probe tap
@@ -2725,7 +2725,7 @@ namespace tw
             // fb563 — PER-NOTE RANDOM + ALT: four fresh uniform values every note-on (each note gets
             //  its own, so a chord spreads), and a 0/1 that flips on every note-on plugin-wide —
             //  the counter lives in the processor so the notes of a chord alternate note by note.
-            for (int k = 0; k < 4; ++k) rand_[k] = rng_.nextFloat();
+            noteSeed_ = (uint32_t) rng_.nextInt();   // fb572 — ONE seed per note; every Random route hashes its own draw from it
             alt_ = (gsrc_ != nullptr) ? (float) (gsrc_->altCounter.fetch_add (1u, std::memory_order_relaxed) & 1u) : 0.0f;
             beginGlide (midiNote);     // PORTAMENTO — snap or start the slide (sets glideNote_)
             if (robinGlideFrom_ >= 0.0)                    // fb122 — Glide: slide in from the last station's note
@@ -3195,9 +3195,9 @@ namespace tw
                         // fb563 clean-up — this pass read LFO and envelope sources only, so a macro or the wheel on an
                         //  LFO's amount was silently nothing; it reads every family through the one reader now, and the
                         //  aux "Scale by" scales it exactly as the main pass below does.
-                        bool ok2 = true; const float sv2 = sourceValueOf (sI, lfoPk, ok2); if (! ok2) continue;
+                        bool ok2 = true; const float sv2 = sourceValueOf (sI, lfoPk, ok2, (int) as.dest); if (! ok2) continue;
                         float d2 = as.depth;
-                        if (as.useAux) { bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA); if (okA) d2 *= wc::sourceTo01 ((int) as.auxSource, av); }
+                        if (as.useAux) { bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA, (int) as.dest + wc::kRandAuxDestBias); if (okA) d2 *= wc::sourceTo01 ((int) as.auxSource, av); }
                         amt[dI - (int) wc::ModDest::LfoAmt1] += sv2 * d2;
                     }
                     for (int L = 0; L < wc::NUM_LFOS; ++L) lfoPk[L] *= juce::jlimit (0.0f, 2.0f, 1.0f + amt[L]);
@@ -3218,12 +3218,12 @@ namespace tw
                     // fb563 (3) — ONE reader for every family (sourceValueOf), so the aux "Scale by" source is read
                     //  exactly the way the main source is. A bypassed route never reaches a voice (the processor drops it).
                     bool okS = true;
-                    float srcV = sourceValueOf (sI, lfoPk, okS);
+                    float srcV = sourceValueOf (sI, lfoPk, okS, (int) as.dest);
                     if (! okS) continue;
                     float asDepth = as.depth;
                     if (as.useAux)
                     {   // "Scale by": the aux source's 0..1 value scales the DEPTH, whatever the main family's law
-                        bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA);
+                        bool okA = true; const float av = sourceValueOf ((int) as.auxSource, lfoPk, okA, (int) as.dest + wc::kRandAuxDestBias);
                         if (okA) asDepth *= wc::sourceTo01 ((int) as.auxSource, av);
                     }
                     // fb554 — THE CONNECTION CURVE, applied here and nowhere else. This is the last
@@ -5756,7 +5756,7 @@ namespace tw
                             if      (sIdx >= 0 && sIdx < wc::NUM_LFOS)  sv = lfoOut_[sIdx];
                             else if (wc::isEnvModSource (sIdx))         continue;
                             else if (sIdx == (int) wc::ModSource::Velocity) continue;
-                            else                                        sv = sourceValueOf (sIdx, lfoOut_, okc);
+                            else                                        sv = sourceValueOf (sIdx, lfoOut_, okc, (int) as.dest);
                             if (! okc) continue;
                             if (as.curve >= 0)
                                 sv = wc::applyModCurve (modCurves_ != nullptr ? modCurves_->load (std::memory_order_acquire) : nullptr, as.curve, sIdx, sv);
@@ -6357,7 +6357,7 @@ namespace tw
         float  currentVelocity_ = 1.0f;
         float  velDepth_ = 0.5f;   // fb262 — velocity CURVE amount (0..1, repurposed from depth): 0.5=linear, >0.5 lifts soft hits, <0.5 hardens. NO LONGER touches amp.
         wc::GlobalModSources* gsrc_ = nullptr;        // fb563 — the processor's macros · wheel · aftertouch · bend (+ the alt counter)
-        float  rand_[4] = { 0.0f, 0.0f, 0.0f, 0.0f };  // fb563 — this note's Random 1..4
+        uint32_t noteSeed_ = 0;                        // fb572 — this note's seed (was rand_[4]: four shared draws)
         float  alt_ = 0.0f;                            // fb563 — this note's Alt (0 or 1)
         juce::Random rng_;                             // fb563 — per-voice, time-seeded
 

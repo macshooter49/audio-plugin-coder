@@ -84,7 +84,8 @@ struct FxModAccum
 //   refOf  (kind, inst, knob) -> const void*  — the parameter behind that dial, or nullptr if
 //                                               the device has no such dial (the Filter's 8)
 //   baseOf (const void*)      -> float        — that parameter's un-modulated value
-//   srcOf  (int modSource, bool& ok) -> float — ANY source's value in its family's convention:
+//   srcOf  (int modSource, int dest, bool& ok) -> float — ANY source's value in its family's convention
+//                                               (fb572: dest rides along so a Random route draws its own):
 //                                               LFO −1..+1 · env / follower / Key = level MINUS
 //                                               ONE (monoEnvLevelOf's convention) · velocity,
 //                                               macro, wheel, aftertouch, random, alt 0..1 ·
@@ -116,14 +117,14 @@ inline void buildFxMod (FxModAccum& acc, const ModConfig& cfg, const ModCurveSet
         if (slot < 0) continue;
         const int sI = (int) as.source;
         bool ok = false;
-        float v = srcOf (sI, ok);
+        float v = srcOf (sI, (int) as.dest, ok);   // fb572 — the route's dest: a Random route draws its own value
         if (! ok) continue;                             // no view of that source here — dropped, never invented
         v = applyModCurve (curves, as.curve, sI, v);   // fb554 — the connection curve, in the family's own convention
         float depth = as.depth;
         if (as.useAux)                                  // fb563 (3) — Scale by: a second source scales the DEPTH
         {
             bool okA = false;
-            const float av = srcOf ((int) as.auxSource, okA);
+            const float av = srcOf ((int) as.auxSource, (int) as.dest + kRandAuxDestBias, okA);
             if (okA) depth *= sourceTo01 ((int) as.auxSource, av);
         }
         if (isShapeModSource (sI))                      // ENV · FOLLOWER · KEY OWN (level−1 in, +1 inside)
