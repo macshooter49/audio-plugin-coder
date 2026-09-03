@@ -1239,6 +1239,14 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                     if (kv.second != nullptr) ids.add (kv.first);
                 complete (juce::var (ids.joinIntoString (",")));
             })
+            .withNativeFunction("retargetCard", [this](const juce::Array<juce::var>& args,
+                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb570 — ONE CURVE EDITOR: the floating card switches host IN PLACE. The main view parked the
+                // new identity with setCardState(id, …) first; this hands it to the popped page and re-fronts it.
+                if (args.size() >= 1) retargetCardWindow (args[0].toString());
+                complete (juce::var{});
+            })
             .withNativeFunction("getNoiseViz", [this](const juce::Array<juce::var>&,
                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -3300,6 +3308,17 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 const int slotIdx = args.size() > 1 ? juce::jlimit (0, 1, (int) args[1]) : 0;
                 complete (juce::var (audioProcessor.getWarpCurveJson (oscIdx, slotIdx)));
             })
+            .withNativeFunction("getParamCardinality", [this](const juce::Array<juce::var>& args,
+                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb570 — the cardinality of a stepped param (0 for a float / unknown), the relay-free twin of
+                // __paramCardinality's relay read, so a CARD WINDOW (no relays) can write a choice param lawfully.
+                int n = 0;
+                if (args.size() >= 1)
+                    if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
+                        if (p->isDiscrete() && p->getNumSteps() > 1 && p->getNumSteps() < 100000) n = p->getNumSteps();
+                complete (juce::var (n));
+            })
             .withNativeFunction("getOscLfoWave", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -5056,6 +5075,39 @@ public:
                 {
                     complete (juce::var (proc.getDistortionCurvesJson()));
                 })
+                // fb570 — EVERY HOST POPS OUT: the WARP host's natives and the cardinality source live on THIS
+                // list too (the law above — the fourth time it bit: fb328, fb342, fb343, now the guests).
+                // Tests/card_natives_gate.py holds the two lists together from here on.
+                .withNativeFunction ("getWarpCurve", [&proc](const juce::Array<juce::var>& args,
+                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    const juce::String oscStr = args.size() > 0 ? args[0].toString() : juce::String();
+                    const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                    const int slotIdx = args.size() > 1 ? juce::jlimit (0, 1, (int) args[1]) : 0;
+                    complete (juce::var (proc.getWarpCurveJson (oscIdx, slotIdx)));
+                })
+                .withNativeFunction ("setWarpDrawCurve", [&proc](const juce::Array<juce::var>& args,
+                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    if (args.size() >= 3)
+                    {
+                        const juce::String oscStr = args[0].toString();
+                        const int oscIdx  = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
+                        const int slotIdx = juce::jlimit (0, 1, (int) args[1]);
+                        proc.setWarpDrawCurve (oscIdx, slotIdx, args[2].toString(),
+                                               args.size() > 3 ? (float) (double) args[3] : -1.0f);
+                    }
+                    complete (juce::var{});
+                })
+                .withNativeFunction ("getParamCardinality", [&proc](const juce::Array<juce::var>& args,
+                                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+                {
+                    int n = 0;
+                    if (args.size() >= 1)
+                        if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
+                            if (p->isDiscrete() && p->getNumSteps() > 1 && p->getNumSteps() < 100000) n = p->getNumSteps();
+                    complete (juce::var (n));
+                })
                 .withNativeFunction ("setDstTableSrc", [&proc](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -5550,6 +5602,22 @@ void TerrainUiCore::dragPoppedCardWindow (const juce::String& id, juce::Point<in
     if (it == audioProcessor.cardWindows_.end() || it->second == nullptr) return;
     if (auto* cw = dynamic_cast<TerrainCardWindow*> (it->second.get()))
         cw->dragMoveTo (mouseScreen);
+}
+
+void TerrainUiCore::retargetCardWindow (const juce::String& id)
+{
+    // fb570 — hand the popped page the identity the main view just parked, then re-front the window
+    // through the already-popped branch of popOutCardWindow (its rescue + toFront(false), never focus).
+    auto it = audioProcessor.cardWindows_.find (id);
+    if (it == audioProcessor.cardWindows_.end() || it->second == nullptr) return;
+    if (auto* cw = dynamic_cast<TerrainCardWindow*> (it->second.get()))
+    {
+        const juce::String spec = audioProcessor.getCardStateJson (id);
+        const juce::String lit  = (spec.isNotEmpty() && spec.startsWithChar ('{')) ? spec : juce::String ("null");
+        cw->evalJs ("try{window.__crvBootHost&&window.__crvBootHost(" + lit + ");}catch(e){}");
+        terrainCardLog ("retarget " + id + "  " + lit);
+    }
+    popOutCardWindow (id, {});
 }
 
 void TerrainUiCore::notifyCardWindowGone (const juce::String& id, bool redock)
@@ -6116,8 +6184,13 @@ void TerrainUiCore::timerCallback()
     // in the main window mirrored to the card in visible steps (Max: "moves very slow... like
     // water" is the bar). It now rides THIS 60Hz timer exactly like the LFO card above (fb232
     // grammar); the JS self-poll is demoted to a 500ms natives-absent fallback lane.
-    if (auto itCv = audioProcessor.cardWindows_.find ("crv");
-        itCv != audioProcessor.cardWindows_.end() && itCv->second != nullptr)
+    // fb570 — a floating GUEST host (warp / mod) discards this feed at __crvLiveTick: skip the 60 Hz eval for it.
+    // The identity is read only when a crv window exists (the common idle tick pays nothing — review #10).
+    const auto itCv = audioProcessor.cardWindows_.find ("crv");
+    const bool haveCrv = itCv != audioProcessor.cardWindows_.end() && itCv->second != nullptr;
+    const bool crvIsDst = haveCrv && [this]{ const juce::String cs = audioProcessor.getCardStateJson ("crv");
+                                             return cs.isEmpty() || cs.contains ("\"dst\""); }();
+    if (crvIsDst)
         if (auto* cwv2 = dynamic_cast<TerrainCardWindow*> (itCv->second.get()))
             cwv2->evalJs ("try{window.__crvPushT=Date.now();var o=" + audioProcessor.getDistortionCurveVizJson()
                           + ";if(o&&o.c&&o.c.length){window.__dstViz=o;"
@@ -6140,10 +6213,31 @@ void TerrainUiCore::timerCallback()
             {
                 js << "try{if(window.__crvXApply){window.__crvXApply(" << dj << ");}}catch(e){}";
                 if (auto itC3 = audioProcessor.cardWindows_.find ("crv");
-                    itC3 != audioProcessor.cardWindows_.end() && itC3->second != nullptr)
+                    crvIsDst && itC3 != audioProcessor.cardWindows_.end() && itC3->second != nullptr)   // fb570 — a guest re-reads its own truth
                     if (auto* cwc3 = dynamic_cast<TerrainCardWindow*> (itC3->second.get()))
                         cwc3->evalJs ("try{if(window.__crvXApply){window.__crvXApply(" + dj + ");}}catch(e){}");
             }
+        }
+    }
+
+    // fb570 — THE MOD MATRIX RELAY (fb343's pattern for the curve blob). The synth mod matrix has two
+    // authors — the docked page and any popped card — and each serialises its OWN mirror as the whole
+    // matrix. Until now the other side learned of a write only through its 2.5 s restore() poll, so a
+    // curve drawn in a popped window was overwritten by the docked page's next depth drag inside that
+    // gap (review #5/#8). synModVersion_ bumps on every setSynthModMatrix; when it moves, every page
+    // re-reads within a tick (throttled to one kick per 150 ms while a drag streams writes).
+    {
+        const int mv = audioProcessor.synModVersion_.load (std::memory_order_acquire);
+        const double nowMs = juce::Time::getMillisecondCounterHiRes();
+        if (mv != synModRelaySeen_ && nowMs - synModRelayMs_ > 150.0)
+        {
+            synModRelaySeen_ = mv; synModRelayMs_ = nowMs;
+            const juce::String kick ("try{window.__tiModRestore&&window.__tiModRestore();}catch(e){}");
+            js << kick;
+            for (auto& kv : audioProcessor.cardWindows_)
+                if (kv.second != nullptr)
+                    if (auto* cwm = dynamic_cast<TerrainCardWindow*> (kv.second.get()))
+                        cwm->evalJs (kick);
         }
     }
 

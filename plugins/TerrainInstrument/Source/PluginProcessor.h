@@ -1293,6 +1293,7 @@ public:
     int                           dstPtNpShared_[4] { 0,0,0,0 }, dstPtNpAudio_[4] { 0,0,0,0 };
     bool                          dstPtHasModShared_ = false, dstPtHasModAudio_ = false, dstPtDirty_ = false;
     std::atomic<int>              dstPtVersion_ { 0 };
+    std::atomic<int>              synModVersion_ { 0 };   // fb570 — bumps on every setSynthModMatrix; the editor relays a re-read to every page
     int                           dstPtSeen_ = 0;
     float                         dstPtSrcLast_[10] {};
     float                         dstMorphEff_ = 0.65f;   // fb340 — modded Morph, computed in modP's scope, consumed at the FX push

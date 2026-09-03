@@ -902,6 +902,8 @@ private:
     // fb343 — last-relayed curve-blob version (the lfoLiveSeen_ pattern). Starts at the counter's
     // initial value so boot does NOT relay (crvXWin's boot pull already covers cold state).
     int dstPtRelaySeen_ = 0;
+    int    synModRelaySeen_ = 0;     // fb570 — the mod-matrix relay's last seen version
+    double synModRelayMs_   = 0.0;   // fb570 — its throttle (one kick per 150 ms)
 
     // 2a. POPPED-OUT FLOW EXTENSION CARDS (fb82/fb83) — ⧉ on a card header detaches
     // it into a borderless always-on-top native window holding its OWN WebView, booted
@@ -918,6 +920,7 @@ private:
                             std::optional<juce::Point<int>> grabOffset  = {},
                             std::optional<juce::Point<int>> mouseScreen = {});
     void dragPoppedCardWindow (const juce::String& id, juce::Point<int> mouseScreen);
+    void retargetCardWindow   (const juce::String& id);   // fb570 — the floating curve card switches host in place
 
     // fb95/fb102/fb103 — resizable editor: magnification rides the drag, pageZoom
     // settles crisp (+ DPR push so canvases re-raster); junk host sizes self-heal

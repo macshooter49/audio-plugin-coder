@@ -32,9 +32,19 @@
 //   8  DEAD FEED — a popped card whose editor has closed receives nothing: the flag's freshness stamp
 //      expires, the head parks and the loop stops; the next push with notes revives it.
 //
-//  PROOF THE BARS CAN FAIL: against 9356ab0's page bars 2, 3, 4 and 6 are red.
+//   9  FADE SHAPE (fb570) — the fade-out runs on ITS OWN .35 s curve: 150 ms after the notes end the dot
+//      and the line are still > 20 % visible, the computed transition-duration in idle is 0.35s, and the
+//      head is gone by 700 ms. Bar 3 alone could not tell a 120 ms fade from a 350 ms one — which is how
+//      fb567 shipped a fade-out that lost its `transition` to the base rule by specificity (Max: "it just
+//      static clicks out... it's supposed to fade away").
+//  10  BREATH RESTS (fb570) — in silence the curve's breathing (mvBreathe) is PAUSED, not removed: no
+//      blink of the line at the park edge, nothing in the panel moves; it breathes again on the first note.
+//
+//  PROOF THE BARS CAN FAIL: against 9356ab0's page bars 2, 3, 4 and 6 are red; against d493db0..8e6b551
+//  (fb567-569) bars 9 and 10 are red.
 //    LFO_PARK_MUTATE=1  the pre-fb567 painter: simulation back, no rest       → bars 2, 4 red
 //    LFO_PARK_MUTATE=2  the idle class is never applied                         → bars 3, 4 red
+//    LFO_PARK_MUTATE=3  the fb567 idle selectors (lose the cascade)              → bars 9, 10 red
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const puppeteer = require('puppeteer-core');
 const fs = require('fs'), path = require('path'), os = require('os');
@@ -56,6 +66,9 @@ function mutatedPage () {
   if (MUT === 1) { sub("else if(!window.Juce&&!window.__JUCE__){ ph+=dt*effHz();", "else { ph+=dt*effHz();");
                    sub("if(!live){ if(__lfoIdle) return; __lfoIdle=true;", "if(!live){ if(false) return; __lfoIdle=true;"); }
   if (MUT === 2) sub("function lfoIdle(on){", "function lfoIdle(on){ return;");
+  if (MUT === 3) { sub("#mod-engine.mv-idle .mv-play,#mod-engine.mv-idle .mv-foll,.lfo-ext.mv-idle .card-scope .mv-play,.lfo-ext.mv-idle .card-scope .mv-foll,.mv-ext.mv-idle .es .mv-play,.mv-ext.mv-idle .es .mv-foll{opacity:0;transition:opacity .35s ease;}",
+                        ".mv-idle .mv-play,.mv-idle .mv-foll{opacity:0;transition:opacity .35s ease;}");
+                   sub("#mod-engine.mv-idle .mv-stroke,.mv-ext.mv-idle .es .mv-stroke{animation-play-state:paused;}", ".mv-idle .mv-stroke{animation:none;}"); }
   const p = path.join(os.tmpdir(), 'lfo_park_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }
 
@@ -203,6 +216,36 @@ async function boot (pg, P, rafMode) {
   chk(res.o > 0.99 && res.c.cx > res.a.cx && Math.abs(res.c.cx - res.c.x1) < 0.6,
       '5  RESUME: notes back — opacity 1 within 500 ms and the head tracks the phase again',
       'opacity ' + res.o + ' after ' + res.at.toFixed(0) + ' ms; x ' + res.a.cx.toFixed(1) + ' → ' + res.c.cx.toFixed(1));
+
+  // ── 9 · FADE SHAPE + 10 · BREATH RESTS (fb570) ──────────────────────────────────────────
+  // The park edge is driven exactly as bar 2 drives it, but the clock starts BEFORE the dispatcher
+  // fires so the samples are timed from the frame that carries the flag off, as Max's eye is.
+  const fade = await pg.evaluate(async () => {
+    const raf = () => new Promise(r => requestAnimationFrame(() => r()));
+    await window.__lp.push(0.3, 1); await window.__lp.push(0.4, 1); await new Promise(r => setTimeout(r, 250));
+    const fd = document.querySelector('#mod-engine #mv-fd'), pl = document.querySelector('#mod-engine #mv-ph');
+    const stroke = document.querySelector('#mod-engine .mv-stroke'), root = document.getElementById('mod-engine');
+    const o0 = +getComputedStyle(fd).opacity, ps0 = stroke ? getComputedStyle(stroke).animationPlayState : '';
+    window.__notesActive = 0; window.__notesActiveT = Date.now();
+    const P = [0.4,0,0,0,0,0,0,0,0,0], L = [0.5,0,0,0,0,0,0,0,0,0]; window.__modViz([], L, P);
+    const t0 = performance.now(); if (window.__tiFrame) window.__tiFrame();
+    const samples = []; let dur = '', idleAt = -1, ps1 = '';
+    while (performance.now() - t0 < 700) {
+      await raf(); const t = performance.now() - t0;
+      if (idleAt < 0 && root.classList.contains('mv-idle')) { idleAt = t; dur = getComputedStyle(fd).transitionDuration; ps1 = stroke ? getComputedStyle(stroke).animationPlayState : ''; }
+      samples.push([t, +getComputedStyle(fd).opacity, +getComputedStyle(pl).opacity]);
+    }
+    const at = (ms) => { let b = samples[0]; for (const s of samples) if (Math.abs(s[0] - ms) < Math.abs(b[0] - ms)) b = s; return b; };
+    // and the first note brings the breath back
+    await window.__lp.push(0.5, 1); await raf(); const ps2 = stroke ? getComputedStyle(stroke).animationPlayState : '';
+    return { o0, ps0, idleAt, dur, ps1, ps2, s150: at(150), s300: at(300), end: samples[samples.length - 1], n: samples.length }; });
+  chk(fade.o0 > 0.99 && fade.idleAt >= 0 && fade.dur === '0.35s' && fade.s150[1] > 0.2 && fade.s150[2] > 0.2 && fade.end[1] < 0.01 && fade.end[2] < 0.01,
+      '9  FADE SHAPE: the fade-out runs on the .35 s curve — still > 20 % visible at 150 ms, transition 0.35s, gone by 700 ms',
+      'idle at ' + fade.idleAt.toFixed(0) + ' ms, transition ' + (fade.dur || '?') + ', opacity @150 ms ' + fade.s150[1].toFixed(2) + '/' + fade.s150[2].toFixed(2)
+      + ', @300 ms ' + fade.s300[1].toFixed(2) + ', end ' + fade.end[1].toFixed(2) + ' (' + fade.n + ' samples)');
+  chk(fade.ps0 === 'running' && fade.ps1 === 'paused' && fade.ps2 === 'running',
+      '10 BREATH RESTS: the curve\'s breathing is PAUSED in silence (no blink) and runs again on the first note',
+      'live ' + fade.ps0 + ' → idle ' + fade.ps1 + ' → note ' + fade.ps2);
 
   // ── 7 · NO REGRESSION (main page) ───────────────────────────────────────────────────────
   chk(errs.length === 0, '7  zero page errors on the main page', errs.length ? errs.join(' | ') : '');

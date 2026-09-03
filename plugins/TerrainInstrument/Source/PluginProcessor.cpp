@@ -10735,9 +10735,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 {   // fb231 — RETRIG/ENV made VISIBLE: a non-Free LFO's dot rides the most-active VOICE's phase
                     //         (resets per note, pins at Env end); Free/mono keep the mirror. (fb228 contract intact.)
                     const bool vTrig = synModCfg.lfos[k].trigger != wc::LFOTrigger::Free;
-                    modVizLfoPh_[k].store ((vTrig && any && bestVoice != nullptr)
-                                               ? bestVoice->lfoPhase (k)
-                                               : flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
+                    // fb570 — THE PARKING FRAME HOLDS. When the last voice ends, a Trig/Env LFO used to switch its
+                    // published phase to the global bank's in the very block the sounding flag went false, and the
+                    // page places the head ONE last time from that frame before it fades — a jump, then the fade
+                    // (measured 342 -> 91 px). With no voice the per-voice phase simply holds its last value; the
+                    // next note-on publishes the fresh voice phase (a Retrig reset lands where it always did).
+                    if (! vTrig)
+                        modVizLfoPh_[k].store (flowLfo_[k].currentPhase(), std::memory_order_relaxed);   // fb217 — real phase for the follower
+                    else if (any && bestVoice != nullptr)
+                        modVizLfoPh_[k].store (bestVoice->lfoPhase (k), std::memory_order_relaxed);
                 }
             }
             noiseVizLevel_.store  ((*rawParam (ParameterIDs::SYN_NOISE_ON) > 0.5f && any) ? juce::jmax (0.f, best) : 0.f, std::memory_order_relaxed);   // NOISE viz trigger
@@ -13375,6 +13381,7 @@ float TerrainInstrumentAudioProcessor::globalSourceTo01 (int wire) noexcept
 
 void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& json)
 {
+    synModVersion_.fetch_add (1, std::memory_order_acq_rel);   // fb570 — every page re-reads (the editor's relay)
     std::vector<SynModRoute> parsed;
     // fb554 — fill the SPARE curve set as the routes are parsed, then publish it whole (below).
     auto& spare = modCurveSet_[modCurveSpare_];
