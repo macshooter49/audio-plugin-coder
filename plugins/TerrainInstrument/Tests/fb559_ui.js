@@ -17,7 +17,8 @@
 //  PROOF THE BARS CAN FAIL (fb421 — a gate that has never failed has never been tested):
 //    · .warp2-mode-value back to max-width:100%          -> bar 1 reds (0px clearance)
 //    · its reserve made absurd (nothing ever ellipses)   -> bar 1 reds twice
-//    · .uni-stack-sizer given back overflow:hidden       -> bar 2 reds (9 widths, 9 positions)
+//    · .uni-stack-sizer given back overflow:hidden       -> bar 2 reds (the cell resizes, the row moves)
+//    · the sizer put back INSIDE the pill (pre-fb578)     -> bar 2 reds (the pill is 66px at "Off", not 30)
 //    · the warp picker asks for a WORD instead of the emblem -> bar 3 reds
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 // fb559 — THE PILL LAW + THE EXTEND EMBLEM, measured in the real page.
@@ -72,29 +73,57 @@ let FAIL=0; const bad=m=>{FAIL++; return '  ✗ '+m;};
   console.log(r1.lefts.length===1 ? '  ✓ it never moves: left '+r1.lefts[0]+'px'
               : bad('the pill MOVES: '+JSON.stringify(r1.lefts))); }
 
-  // ── BAR 2 · the UNISON STACK pill must not resize with its option ─────────────
+  // ── BAR 2 · the UNISON STACK cell never moves; the PILL is the Voices pill's size ─────────────
+  //   fb558 froze the PILL. fb578 lets it hug its own text instead, because the frozen pill was
+  //   permanently as wide as "Center-24" (50.3px of text -> a ~66px pill) beside a 30px Voices pill —
+  //   and this row is `repeat(6, minmax(0,1fr))`, so that 66px was SPILLING ~11px into the Voices and
+  //   Range columns either side. Max, with a screenshot at "Off": "remove the pill from stack, or resize
+  //   the pill because it looks too big next to the other buttons." fb558's law is untouched and is
+  //   gated here at the layer that actually owns it — the column, its neighbours and the row hold one
+  //   rect across all nine options — while the pill matches the Voices pill at "Off" and fits its column.
   const r2 = await pg.evaluate(()=>{
     // the unison row is page 3 of the FRONT, so the back view has to go and the page shown
     const dev=document.getElementById('osc-a-device'); if(dev) dev.classList.remove('swapped');
     document.querySelectorAll('#osc-a-device .front-only, #osc-a-device .uni-knob-wrap').forEach(e=>e.style.display='flex');
     const wrap=document.querySelector('#syn-panel .uni-stack[data-osc="a"]'); if(!wrap) return {err:'no uni-stack'};
     const pill=wrap.querySelector('.uni-stack-pill'), val=wrap.querySelector('.uni-stack-val');
+    const vPill=document.querySelector('#syn-panel .uni-voices[data-osc="a"] .uni-voices-pill')
+             || document.querySelector('#syn-panel .uni-voices-pill');
+    const nbr=wrap.parentElement.querySelector('.knob[data-syn$="_URANGE"]');   /* the neighbour that fb558 watched get shoved */
     const opts=[...wrap.querySelectorAll('select option')].map(o=>o.textContent);
-    const out=[]; let overflow=0;
+    const out=[]; let overflow=0, offW=null;
     for(const o of opts){ val.textContent=o;
-      const pr=pill.getBoundingClientRect(), vr=val.getBoundingClientRect();
-      out.push({o,w:+pr.width.toFixed(2),left:+pr.left.toFixed(2)});
+      const cr=wrap.getBoundingClientRect(), pr=pill.getBoundingClientRect(), vr=val.getBoundingClientRect();
+      const nr=nbr?nbr.getBoundingClientRect():{left:0};
+      out.push({o, cellW:+cr.width.toFixed(2), cellL:+cr.left.toFixed(2), nbrL:+nr.left.toFixed(2),
+                pillW:+pr.width.toFixed(2), off:+((pr.left+pr.width/2)-(cr.left+cr.width/2)).toFixed(2)});
+      if(o==='Off'){ offW=+pr.width.toFixed(2); out[out.length-1].fits = (pr.left>=cr.left-0.5 && pr.right<=cr.right+0.5); }
       if(vr.right>pr.right+0.51||vr.left<pr.left-0.51) overflow++; }
-    if(out.length && out[0].w<=0) return {err:'the stack pill measured 0px wide — the panel is still hidden'};
-    return {opts:opts.length, widths:[...new Set(out.map(x=>x.w))], lefts:[...new Set(out.map(x=>x.left))], overflow};
+    if(out.length && out[0].cellW<=0) return {err:'the stack cell measured 0px wide — the panel is still hidden'};
+    const off=out.find(x=>x.o==='Off');
+    return {opts:opts.length, offFits:!!(off&&off.fits), widest:Math.max(...out.map(x=>x.pillW)),
+            cellW:[...new Set(out.map(x=>x.cellW))], cellL:[...new Set(out.map(x=>x.cellL))],
+            nbrL:[...new Set(out.map(x=>x.nbrL))], worstOff:Math.max(...out.map(x=>Math.abs(x.off))),
+            offW, voicesW:vPill?+vPill.getBoundingClientRect().width.toFixed(2):null,
+            pillW:[...new Set(out.map(x=>x.pillW))].sort((a,b)=>a-b), overflow};
   });
-  console.log('\nBAR 2 — the unison STACK pill, all '+r2.opts+' options');
+  console.log('\nBAR 2 — the unison STACK cell + pill, all '+r2.opts+' options');
   if(r2.err){ console.log(bad(r2.err)); }else{
-  console.log(r2.widths&&r2.widths.length===1 ? '  ✓ one width for every option: '+r2.widths[0]+'px'
-              : bad('the stack pill breathes: '+JSON.stringify(r2.widths)));
-  console.log(r2.lefts&&r2.lefts.length===1 ? '  ✓ it never moves: left '+r2.lefts[0]+'px'
-              : bad('the stack pill MOVES: '+JSON.stringify(r2.lefts)));
-  console.log(r2.overflow===0 ? '  ✓ every option fits — nothing is clipped' : bad(r2.overflow+' options clipped')); }
+  console.log(r2.cellW&&r2.cellW.length===1 && r2.cellL&&r2.cellL.length===1
+              ? '  ✓ the CELL never resizes or moves: '+r2.cellW[0]+'px at left '+r2.cellL[0]+'px'
+              : bad('the cell moves or resizes: w '+JSON.stringify(r2.cellW)+' left '+JSON.stringify(r2.cellL)));
+  console.log(r2.nbrL&&r2.nbrL.length===1 ? '  ✓ the neighbour (Range) never moves: left '+r2.nbrL[0]+'px'
+              : bad('the neighbour MOVES: '+JSON.stringify(r2.nbrL)));
+  console.log(r2.worstOff<=0.6 ? '  ✓ the pill stays centred in the cell (worst '+r2.worstOff+'px)'
+              : bad('the pill drifts off centre: '+r2.worstOff+'px'));
+  console.log((r2.offW!=null&&r2.voicesW!=null&&Math.abs(r2.offW-r2.voicesW)<=0.6)
+              ? '  ✓ at "Off" the pill IS the Voices pill: '+r2.offW+'px vs '+r2.voicesW+'px  (was ~66px — fb578)'
+              : bad('at "Off" the pill is '+r2.offW+'px against the Voices pill\'s '+r2.voicesW+'px'));
+  console.log(r2.offFits ? '  ✓ at "Off" the pill sits INSIDE its column — it no longer spills into Voices and Range'
+              : bad('at "Off" the pill still overflows its column'));
+  console.log(r2.overflow===0 ? '  ✓ every option renders in full — nothing is clipped ('+r2.pillW[0]+'..'+r2.pillW[r2.pillW.length-1]+'px)'
+              : bad(r2.overflow+' options clipped'));
+  console.log('    (note: the longest options still exceed the '+r2.cellW[0]+'px column — widest pill '+r2.widest+'px — exactly as they did before fb578; shortening those nine names is a separate call for Max)'); }
 
   // ── BAR 3 · the EXTEND emblem sits next to the ✕, at the ✕'s size ─────────────
   const r3 = await pg.evaluate(()=>{

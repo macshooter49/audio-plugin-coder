@@ -5155,26 +5155,39 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    stays lit because it is the way out. Everything stays draggable: set it up, then raise Voices. */
 #syn-panel .uni-knobs > * { transition: opacity .15s ease; }
 #syn-panel .uni-knobs.uni-solo > *:not(.uni-voices) { opacity: .34; }
-/* fb558 — THE STACK PILL MUST NOT BREATHE. min-width:42px + shrink-to-fit meant the pill
-   was as wide as whatever was CURRENTLY selected: "Off" gave 42px, "12+7 (3x)" gave ~68px,
-   so picking the biggest stack mode shoved the pill (and its neighbours) sideways. Max: "the
-   pill should stay exactly where it's at. It does that thing where it plays with the padding
-   again."  THE FIX IS A HIDDEN SIZER, not a measured px constant: ::before carries the widest
-   option string at the exact same type, stacked in the SAME grid cell as the live value, so
-   the pill is permanently as wide as its worst case and the visible text is centred inside
-   it. Nothing is ever ellipsed (every option fits by construction) and the width is identical
-   on Mac and Windows whatever the font metrics do — which a hard-coded 68px would not be. */
-#syn-panel .uni-stack-pill { position: relative; height: 20px; margin-top: 2px; padding: 0 7px;
-  border: 1px solid var(--border-strong); border-radius: 10px;
-  display: grid; place-items: center; box-sizing: border-box; }
-/* ⚠️ NO `overflow:hidden` HERE. It makes the span a scroll container, and a scroll container
-   contributes NOTHING to its grid column's intrinsic width — measured: the sizer itself was
+/* fb558 — NOTHING IN THIS ROW MOVES WHEN THE STACK CHANGES. min-width:42px + shrink-to-fit meant
+   the pill was as wide as whatever was CURRENTLY selected: "Off" gave 42px, "12+7 (3x)" gave ~68px,
+   so picking the biggest stack mode shoved the pill AND ITS NEIGHBOURS sideways. Max: "the pill
+   should stay exactly where it's at. It does that thing where it plays with the padding again."
+   THE FIX IS A HIDDEN SIZER, not a measured px constant: it carries all nine option strings at the
+   exact same type, so the reserved width is the true worst case on Mac and Windows alike, whatever
+   the font metrics do — which a hard-coded 68px would not be.
+
+   fb578 — THE PILL HUGS ITS TEXT; THE COLUMN IS WHAT NEVER MOVES. Max, with a screenshot of the row
+   at "Off": "remove the pill from stack, or resize the pill because it looks too big next to the
+   other buttons." MEASURED, and it was worse than it looked: this row is
+   `grid-template-columns: repeat(6, minmax(0,1fr))`, so every cell is exactly 1/6 of the row — 44.5px
+   at the shipped width — and `minmax(0, ...)` lets content OVERFLOW rather than widen the column. The
+   widest option, "Center-24", is 50.3px of text, so the frozen pill stood at ~66px and was spilling
+   ~11px into the Voices and Range columns on either side, permanently, even while it read "Off"
+   (15.5px of text) beside a 30px Voices pill. So the pill now HUGS its own value at the Voices pill's
+   exact geometry (min-width 30px, the same 6px padding), centred in its column: at "Off" the two pills
+   are the same 30px. fb558's law is untouched and is now enforced by the GRID rather than by the pill —
+   the column, its neighbours and the whole row hold one rect whatever is selected, which is what "the
+   pill should stay exactly where it's at" was protecting. The sizer stays as the belt-and-braces if
+   that column rule is ever loosened, and nothing is ever ellipsed: every option renders in full. */
+#syn-panel .uni-stack-pill { position: relative; height: 20px; margin-top: 2px; padding: 0 6px;   /* fb578 — the Voices pill's padding, so "Off" lands on its exact 30px */
+  border: 1px solid var(--border-strong); border-radius: 10px; min-width: 30px;
+  display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
+/* ⚠️ NO `overflow:hidden` HERE, and it must stay IN FLOW. Either one stops it contributing its
+   intrinsic width to the cell — measured under the old grid arrangement: the sizer itself was
    50.27px wide and the pill still came out 44.5px, sized by the visible word. `height:0` alone
-   keeps the pill's fixed 20px while the nine hidden lines still set the column. */
-#syn-panel .uni-stack-sizer { grid-area: 1 / 1; visibility: hidden; pointer-events: none; height: 0; }
+   keeps the column's height while the nine hidden lines still set its width. The negative margin
+   cancels the one extra `gap:2px` this sibling adds, so the Stack label stays on the knobs' baseline. */
+#syn-panel .uni-stack-sizer { visibility: hidden; pointer-events: none; height: 0; margin-bottom: -2px; }
 #syn-panel .uni-stack-sizer i { display: block; font-style: normal; white-space: nowrap;
   font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 0; }
-#syn-panel .uni-stack-val { grid-area: 1 / 1; font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 1;
+#syn-panel .uni-stack-val { font-size: 9px; letter-spacing: .6px; font-weight: 300; line-height: 1;
   color: var(--text-primary); pointer-events: none; white-space: nowrap; }
 /* the chevron — same 12px thin-white glyph as every other page arrow; points BACK on the unison page */
 #syn-panel .uni-arrow { flex: 0 0 12px; align-self: center; width: 12px; height: 20px; cursor: pointer; position: relative; opacity: .5; transition: opacity .15s; }
@@ -6696,7 +6709,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="a" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_A_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_A_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -7039,7 +7052,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="b" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_B_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_B_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -7406,7 +7419,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="c" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_C_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_C_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
@@ -7749,7 +7762,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                   <div class="knob-label">Voices</div>
                 </div>
                 <div class="uni-stack" data-osc="d" title="Unison Stack — the only unison control that changes HARMONY rather than thickness. Off = a plain detune fan.">
-                  <div class="uni-stack-pill"><span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
+                  <span class="uni-stack-sizer" aria-hidden="true"><i>Off</i><i>12 (1x)</i><i>12 (2x)</i><i>12 (3x)</i><i>12+7 (1x)</i><i>12+7 (2x)</i><i>12+7 (3x)</i><i>Center-12</i><i>Center-24</i></span><div class="uni-stack-pill"><span class="uni-stack-val">Off</span><select class="sel-select" data-syn="SYN_OSC_D_USTACK"><option value="0">Off</option><option value="1">12 (1x)</option><option value="2">12 (2x)</option><option value="3">12 (3x)</option><option value="4">12+7 (1x)</option><option value="5">12+7 (2x)</option><option value="6">12+7 (3x)</option><option value="7">Center-12</option><option value="8">Center-24</option></select></div>
                   <div class="knob-label">Stack</div>
                 </div>
                 <div class="knob" data-syn="SYN_OSC_D_URANGE" title="Range — the SCALE of the unison detune fan, 5 to 4800 cents. Exponential, so every knob degree is the same cents RATIO."><div class="knob-ring"></div><div class="knob-label">Range</div></div>
