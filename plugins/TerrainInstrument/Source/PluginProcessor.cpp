@@ -332,7 +332,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
     for (int i = 0; i < kSynthVoiceCount; ++i)
     {
         auto* v = new tw::SynthVoice();
-        v->setModCurves (&modCurves_);    // fb554 — set ONCE; the SET it points at is republished later
+        v->setModCurves (&modCurvesLive_);    // fb554 — set ONCE; the SET it points at is republished later · fb573 — the audio thread's own copy
         v->setGlobalSources (&globalSrc_); // fb563 — set ONCE; the VALUES inside change every block
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
@@ -1096,9 +1096,70 @@ juce::String TerrainInstrumentAudioProcessor::getOscLfoWaveJson (int osc)
 
 // fb340 — the dstBakePts tension math on FLOAT points (the audio-thread per-point-mod rebake
 // cannot build juce::vars). MUST stay formula-identical to dstBakePts (the :8046 twin lineage).
-void TerrainInstrumentAudioProcessor::dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n) noexcept
+// fb573 — THE CURVE SET THE AUDIO READS IS ITS OWN. Called UNDER synModLock (the same lock the routes are read
+//  under): setSynthModMatrix publishes the set, the point lists and the routes inside one critical section, so
+//  a set copied here is never older than the routes read beside it (the fb554 "set before routes" law, kept).
+//  The message thread writes the SPARE half of the point lists and flips the published index under the lock, so
+//  the memcpy below never races a writer. No allocation: two memcpys and a struct copy, on change only.
+void TerrainInstrumentAudioProcessor::refreshModCurveAudio() noexcept
 {
-    if (np < 2) { for (int i = 0; i < n; ++i) out[i] = (float) i / (float) (n - 1) * 2.0f - 1.0f; return; }
+    const wc::ModCurveSet* pub = modCurves_.load (std::memory_order_acquire);
+    const int pv = modPtVersion_.load (std::memory_order_acquire);
+    if (pub == modCurvesPubSeen_ && pv == modPtSeen_) return;
+    if (pub != nullptr) modCurveAudio_ = *pub;
+    const int hf = modPtPubIdx_;
+    std::memcpy (modPtAudio_,   modPtShared_[hf],   sizeof (modPtAudio_));
+    std::memcpy (modPtNpAudio_, modPtNpShared_[hf], sizeof (modPtNpAudio_));
+    modPtHasModAudio_ = modPtHasModShared_[hf];
+    modPtDirty_ = true; modPtSeen_ = pv; modCurvesPubSeen_ = pub;
+    modCurvesLive_.store (&modCurveAudio_, std::memory_order_release);
+}
+// fb573 — re-bake every slot that carries a point mod from the global bank's peeks — the Distortion's fb340 loop,
+//  one host over. Gates: no mods = zero cost; sources still (the parked Free bank, fb566) = no re-bake, so silence
+//  stays byte-identical. A per-voice route on a Retrig/Env LFO curves by the GLOBAL bank's phase here, exactly the
+//  Distortion's law (and what the page's handles show).
+void TerrainInstrumentAudioProcessor::rebakeModCurveAudio() noexcept
+{
+    if (! modPtHasModAudio_) return;
+    float sv[wc::NUM_LFOS];
+    for (int mS = 0; mS < wc::NUM_LFOS; ++mS) sv[mS] = flowLfo_[mS].peek();
+    bool need = modPtDirty_;
+    for (int k = 0; k < wc::kMaxModCurves && ! need; ++k)
+        for (int i2 = 0; i2 < modPtNpAudio_[k] && ! need; ++i2)
+        {
+            const auto& q = modPtAudio_[k][i2];
+            if (q.ys > 0 && std::fabs (sv[q.ys - 1] - modPtSrcLast_[q.ys - 1]) > 0.002f) need = true;
+            if (q.xs > 0 && std::fabs (sv[q.xs - 1] - modPtSrcLast_[q.xs - 1]) > 0.002f) need = true;
+        }
+    if (! need) return;
+    modPtDirty_ = false;
+    for (int mS = 0; mS < wc::NUM_LFOS; ++mS) modPtSrcLast_[mS] = sv[mS];
+    for (int k = 0; k < wc::kMaxModCurves; ++k)
+    {
+        const int np2 = modPtNpAudio_[k];
+        if (np2 < 2) continue;
+        bool modded = false;
+        for (int i2 = 0; i2 < np2 && ! modded; ++i2) modded = (modPtAudio_[k][i2].ys > 0 || modPtAudio_[k][i2].xs > 0);
+        if (! modded) continue;
+        LfoShapePtM eff2[32];
+        for (int i2 = 0; i2 < np2; ++i2)
+        {
+            eff2[i2] = modPtAudio_[k][i2];
+            if (eff2[i2].ys > 0)
+                eff2[i2].y = juce::jlimit (0.0f, 1.0f, eff2[i2].y + eff2[i2].ya * sv[eff2[i2].ys - 1]);
+            if (eff2[i2].xs > 0 && i2 > 0 && i2 < np2 - 1)
+                eff2[i2].x = juce::jlimit (0.0f, 1.0f, eff2[i2].x + eff2[i2].xa * sv[eff2[i2].xs - 1]);
+        }
+        std::sort (eff2, eff2 + np2, [] (const LfoShapePtM& A2, const LfoShapePtM& B2) { return A2.x < B2.x; });
+        eff2[0].x = 0.0f; eff2[np2 - 1].x = 1.0f;
+        dstBakeEff (eff2, np2, modCurveAudio_.c[k].pts, wc::kModCurvePts, false);
+        modCurveAudio_.c[k].set = true;
+    }
+}
+
+void TerrainInstrumentAudioProcessor::dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n, bool bipolar) noexcept
+{
+    if (np < 2) { for (int i = 0; i < n; ++i) { const float u = (float) i / (float) (n - 1); out[i] = bipolar ? u * 2.0f - 1.0f : u; } return; }
     int seg = 0;
     for (int i = 0; i < n; ++i)
     {
@@ -1108,7 +1169,8 @@ void TerrainInstrumentAudioProcessor::dstBakeEff (const LfoShapePtM* pts, int np
         float t = juce::jlimit (0.0f, 1.0f, (p - pts[seg].x) / w);
         const float c = pts[seg].c;
         if (std::fabs (c) > 1.0e-4f) { const float P8 = -c * 8.0f; t = (std::exp (P8 * t) - 1.0f) / (std::exp (P8) - 1.0f); }
-        out[i] = (pts[seg].y + (pts[seg + 1].y - pts[seg].y) * t) * 2.0f - 1.0f;
+        const float y = pts[seg].y + (pts[seg + 1].y - pts[seg].y) * t;
+        out[i] = bipolar ? y * 2.0f - 1.0f : y;   // fb573 — the connection curves are 0..1 tables
     }
 }
 
@@ -8507,6 +8569,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 ParameterIDs::LFO7_DEPTH, ParameterIDs::LFO8_DEPTH, ParameterIDs::LFO9_DEPTH,
                 ParameterIDs::LFO10_DEPTH };
             const juce::ScopedLock sl (synModLock);
+            refreshModCurveAudio(); rebakeModCurveAudio();   // fb573 — under THIS lock: the set beside the routes it belongs to
             // fb245 — LFO→LFO amt for GLOBAL dests. Per-voice already scales its LFO peaks (SynthVoice ~1985),
             // but the processor global path read the RAW peek, so LfoAmt silently no-op'd for every global route.
             // Pre-pass the amt exactly like the per-voice pass (source × master × depth), then scale the peek below.
@@ -8530,7 +8593,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 if (r0.bypass) continue;   // fb563 (3) — bypassed: in the list, out of the sum
                 SynModRoute r = r0; if (r0.aux >= 0) r.depth *= globalSourceTo01 (r0.aux, r0.dest + wc::kRandAuxDestBias);   // fb563 (3) — "Scale by" scales the DEPTH, whatever the family's law
                 if (r.dest < (int) wc::ModDest::Res1 || r.dest >= (int) wc::ModDest::NumDests) continue;
-                const wc::ModCurveSet* mcSet = modCurves_.load (std::memory_order_acquire);   // fb554
+                const wc::ModCurveSet* mcSet = modCurvesLive_.load (std::memory_order_acquire);   // fb554 · fb573 — the audio-owned copy
                 if (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32)   // fb178 — mono env tap
                 {
                     // fb183 — env→LEVEL went PER-VOICE (ownership in SynthVoice): the shared
@@ -9325,6 +9388,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             // via LFO→LFO so you can put an LFO on an LFO's depth).
             {
                 const juce::ScopedLock sl (synModLock);
+                refreshModCurveAudio(); rebakeModCurveAudio();   // fb573 — an edit between the two lock scopes lands here, one block sooner
                 for (const auto& r : synModRoutes)
                 {
                     if (na >= wc::MAX_ASSIGNMENTS) break;
@@ -10062,7 +10126,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     //    curve set, and the walk decides OWN vs ADD by family exactly as the global pass does.
     //    fb179 KNOB-IS-THE-PEAK still holds for the shape sources: level−1 in, addEnv() adds the
     //    1 back — an OWNING envelope drives the knob from ZERO, not from its base. NO 0.5f.
-    wc::buildFxMod (fxMod_, synModCfg, modCurves_.load (std::memory_order_acquire),
+    wc::buildFxMod (fxMod_, synModCfg, modCurvesLive_.load (std::memory_order_acquire),   // fb573 — the audio-owned copy
         [this] (int k, int i, int n) -> const void* { return fxModRef_[k][i][n]; },
         [] (const void* p) { return static_cast<const std::atomic<float>*> (p)->load(); },
         [this] (int sI, int dest, bool& ok) { return sourceValueOfSrc (sI, ok, dest); });   // fb572 — dest rides along: a Random route draws its own value
@@ -13394,6 +13458,9 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     auto& spare = modCurveSet_[modCurveSpare_];
     for (auto& mc : spare.c) mc.set = false;
     int nCurves = 0;
+    const int sp = modCurveSpare_;   // fb573 — the SPARE half of the point lists rides with the spare curve set
+    bool hasPtMod = false;           // fb573 — any slot carrying a per-point mod
+    for (int k = 0; k < wc::kMaxModCurves; ++k) modPtNpShared_[sp][k] = 0;
     auto v = juce::JSON::parse (json);
     if (auto* arr = v.getArray())
     {
@@ -13423,6 +13490,33 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
                     if (mc.set) r.curve = nCurves++;
                 }
             }
+            if (r.curve >= 0)
+            {   // fb573 — "p": this route's control points (<= 32, [x,y,t] or [x,y,t,{ys,ya,xs,xa}]) for the slot the
+                //  curve occupies; a slot without "p" is static. The audio thread re-bakes modded slots (see processBlock).
+                int np = 0;
+                if (auto* pa = item.getProperty ("p", juce::var()).getArray())
+                    for (const auto& e : *pa)
+                    {
+                        if (np >= 32) break;
+                        auto* t = e.getArray(); if (t == nullptr || t->size() < 2) continue;
+                        auto& q = modPtShared_[sp][r.curve][np];
+                        q = LfoShapePtM{};
+                        q.x = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[0]);
+                        q.y = juce::jlimit (0.0f, 1.0f, (float) (double) (*t)[1]);
+                        if (t->size() > 2) q.c = juce::jlimit (-1.0f, 1.0f, (float) (double) (*t)[2]);
+                        if (t->size() > 3 && (*t)[3].isObject())
+                        {
+                            const auto& m = (*t)[3];
+                            q.xs = juce::jlimit (0, 10, (int) m.getProperty ("xs", 0));
+                            q.xa = juce::jlimit (-1.0f, 1.0f, (float) (double) m.getProperty ("xa", 0.0));
+                            q.ys = juce::jlimit (0, 10, (int) m.getProperty ("ys", 0));
+                            q.ya = juce::jlimit (-1.0f, 1.0f, (float) (double) m.getProperty ("ya", 0.0));
+                            if (q.ys > 0 || q.xs > 0) hasPtMod = true;
+                        }
+                        ++np;
+                    }
+                modPtNpShared_[sp][r.curve] = (np >= 2) ? np : 0;
+            }
             const bool lfoSrc = (r.src >= 0 && r.src < wc::NUM_LFOS);
             const bool envSrc = (r.src >= wc::kEnvSrcBase && r.src < wc::kEnvSrcBase + 32);   // fb178
             const bool velSrc = (r.src == wc::kVelSrc);   // fb260 — Velocity source
@@ -13449,9 +13543,14 @@ void TerrainInstrumentAudioProcessor::setSynthModMatrix (const juce::String& jso
     monoEnvGlobalMask_.store (gm, std::memory_order_release);
     // fb554 — publish the whole set, THEN the routes that index into it. A block that sees the new
     //  routes must already be able to see their curves; the other order would index an old set.
+    // fb573 — ONE critical section for the set, the point lists and the routes: the audio thread copies the set
+    //  under this same lock, right before it reads the routes, so the two can never disagree by a block (the
+    //  review's finding: the old block-head copy could pair NEW routes with a STALE set for one buffer).
+    const juce::ScopedLock sl (synModLock);
+    modPtHasModShared_[sp] = hasPtMod; modPtPubIdx_ = sp;
+    modPtVersion_.fetch_add (1, std::memory_order_release);
     modCurves_.store (&spare, std::memory_order_release);
     modCurveSpare_ ^= 1;
-    const juce::ScopedLock sl (synModLock);
     synModRoutes = std::move (parsed);
     synModJson   = json;
 }

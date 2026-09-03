@@ -386,6 +386,37 @@ int main()
         au.setRoutes ("[]"); au.set (LVL, 0.0f); au.set (LR, 0.5f); au.set (LS, 0.0f); au.pump (0.2);
     }
 
+    // ── 14 · AN LFO ON A POINT (fb573) — a connection curve's own point rides LFO 2; the level follows ──
+    //  Max: "make sure that the curves can have LFO on them." Macro 1 at 100 % → Level A through a 3-point curve
+    //  whose END point (x = 1: the value the macro reads) is modulated by LFO 2 (Ramp, ±0.5): the level at x = 1
+    //  walks 0..1 over the cycle, so two windows 0.8 s apart differ; with the amount off the same windows match.
+    //  Between notes the Free bank parks (fb566) and the 0.002 gate re-bakes nothing, so the note after 5 s of
+    //  silence matches the note after 1 s (bar 13's A/B). The route carries `p` (points + mods) beside `c`.
+    {
+        const std::string L2R = au.find ("LFO 2 Rate"), L2S = au.find ("LFO 2 Shape"), L2D = au.find ("LFO 2 Depth"), L2SY = au.find ("LFO 2 Sync");
+        chk (! L2R.empty() && ! L2S.empty() && ! L2D.empty(), "14 the AU exposes LFO 2 Rate, Shape and Depth", L2R + " / " + L2S + " / " + L2D);
+        const float shapeMax2 = au.info.at (au.byName.at (L2S)).maxValue;
+        au.set (L2S, 3.0f / shapeMax2); au.set (L2D, 1.0f); if (! L2SY.empty()) au.set (L2SY, 0.0f); au.set (L2R, 0.267f);   // Ramp, 0.5 Hz, free
+        au.set (LVL, 0.0f); au.set (MAC1, 1.0f); au.pump (0.2);
+        std::string cB; for (int k = 0; k < 129; ++k) { const double x = k / 128.0; if (k) cB += ","; cB += fmt ("%.4f", x < 0.5 ? x : 0.5); }   // the base bake of the points below
+        const std::string pMod  = "[[0,0,0],[0.5,0.5,0],[1,0.5,0,{\"ys\":2,\"ya\":0.5}]]";
+        const std::string pNone = "[[0,0,0],[0.5,0.5,0],[1,0.5,0]]";
+        auto windowDb14 = [&] (int fromBlk, int toBlk) { std::vector<float> all; for (int b = 0; b < toBlk; ++b) { auto x = au.render (1); if (b >= fromBlk) all.insert (all.end(), x.begin(), x.end()); } return rmsDb (all); };
+        au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"c\":\"" + cB + "\",\"p\":" + pMod + "}]"); au.pump (0.2);
+        au.midi (0x90, 60, 100); const double q1 = windowDb14 (19, 28); const double q2 = windowDb14 (56, 65); au.midi (0x80, 60, 0); au.render (40);
+        chk (std::abs (q2 - q1) > 2.0, "14 AN LFO ON A POINT: LFO 2 (ramp) on the curve's end point — two windows 0.8 s apart differ", fmt ("%.1f dB vs %.1f dB", q1, q2));
+        au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"c\":\"" + cB + "\",\"p\":" + pNone + "}]"); au.pump (0.2);
+        au.midi (0x90, 60, 100); const double s1 = windowDb14 (19, 28); const double s2 = windowDb14 (56, 65); au.midi (0x80, 60, 0); au.render (40);
+        chk (std::abs (s2 - s1) < 0.5, "14 … and with the point's amount off the same two windows match", fmt ("%.1f dB vs %.1f dB", s1, s2));
+        au.setRoutes ("[{\"s\":220,\"d\":64,\"v\":1.0,\"c\":\"" + cB + "\",\"p\":" + pMod + "}]"); au.set (L2R, 0.102f); au.pump (0.2);   // slow ramp for the park A/B
+        auto noteWin14 = [&] () { au.midi (0x90, 60, 100); const double w = windowDb14 (37, 47); au.midi (0x80, 60, 0); au.render (40); return w; };
+        noteWin14();
+        au.render (94);  const double pa = noteWin14();
+        au.render (469); const double pb = noteWin14();
+        chk (std::abs (pb - pa) < 1.5, "14 … and the parked bank re-bakes nothing in silence: the note after 5 s of silence matches the note after 1 s", fmt ("%.1f dB vs %.1f dB (Δ %.2f)", pa, pb, std::abs (pb - pa)));
+        au.setRoutes ("[]"); au.set (MAC1, 0.0f); au.set (L2R, 0.5f); au.set (L2S, 0.0f); au.pump (0.2);
+    }
+
     // ── 11 · A MACRO IS A DESTINATION (fb565) — the wheel drives Macro 1 (knob at 0), Macro 1 drives Level A ──
     au.set (LVL, 0.0f); au.set (MAC1, 0.0f); au.pump (0.2);
     au.setRoutes ("[{\"s\":230,\"d\":1878,\"v\":1.0},{\"s\":220,\"d\":64,\"v\":1.0}]");

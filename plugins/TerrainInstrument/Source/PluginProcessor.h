@@ -1285,7 +1285,7 @@ public:
     // (256 lerps) when a source it listens to actually moved.
     struct LfoShapePtM { float x = 0, y = 0, c = 0; int xs = 0; float xa = 0; int ys = 0; float ya = 0; };
     static void bakeLfoShapeTable (const LfoShapePtM* pts, int np, float* tb) noexcept;   // one bake, both threads
-    static void dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n) noexcept;  // fb340 — NON-periodic curve bake (the dstBakePts tension twin, float-point input)
+    static void dstBakeEff (const LfoShapePtM* pts, int np, float* out, int n, bool bipolar = true) noexcept;  // fb340 — NON-periodic curve bake (the dstBakePts tension twin, float-point input) · fb573 — bipolar=false bakes 0..1 (the connection curves)
     static void bakeLfoPathTable  (const LfoShapePtM* pts, int np, float* tb) noexcept;   // fb239 — Path: arc-length traversal of a free 2D drawing
     LfoShapePtM                   lfoPtShared_[wc::NUM_LFOS][160];
     LfoShapePtM                   lfoPtAudio_ [wc::NUM_LFOS][160];
@@ -1295,6 +1295,24 @@ public:
     int                           dstPtNpShared_[4] { 0,0,0,0 }, dstPtNpAudio_[4] { 0,0,0,0 };
     bool                          dstPtHasModShared_ = false, dstPtHasModAudio_ = false, dstPtDirty_ = false;
     std::atomic<int>              dstPtVersion_ { 0 };
+    // fb573 — PER-POINT LFO MOD ON THE CONNECTION CURVES (fb340's machinery moved one host over). The message
+    //  thread parses each route's control points + mods ("p") into the curve SLOT's shared list and bumps the
+    //  version; the audio thread copies on change, re-bakes the modded slots from the global bank's peeks into
+    //  ITS OWN copy of the published set (modCurveAudio_), and is the only writer of what the voices, the global
+    //  pass and the rack read (modCurvesLive_). Max: "let's just make sure that the curves can have LFO on them."
+    LfoShapePtM                   modPtShared_[2][wc::kMaxModCurves][32];   // [half]: the message thread writes the SPARE half (modCurveSpare_), publishes it under synModLock
+    LfoShapePtM                   modPtAudio_ [wc::kMaxModCurves][32];
+    int                           modPtNpShared_[2][wc::kMaxModCurves] {}, modPtNpAudio_[wc::kMaxModCurves] {};
+    bool                          modPtHasModShared_[2] { false, false }, modPtHasModAudio_ = false, modPtDirty_ = false;
+    int                           modPtPubIdx_ = 0;                          // the published half — written and read under synModLock
+    std::atomic<int>              modPtVersion_ { 0 };
+    void refreshModCurveAudio() noexcept;   // audio thread, UNDER synModLock: copy the published set + points on change
+    void rebakeModCurveAudio()  noexcept;   // audio thread: re-bake every slot with a point mod from the bank's peeks (the 0.002 gate)
+    int                           modPtSeen_ = 0;
+    float                         modPtSrcLast_[wc::NUM_LFOS] {};
+    wc::ModCurveSet               modCurveAudio_;
+    const wc::ModCurveSet*        modCurvesPubSeen_ = nullptr;
+    std::atomic<const wc::ModCurveSet*> modCurvesLive_ { nullptr };
     std::atomic<int>              synModVersion_ { 0 };   // fb570 — bumps on every setSynthModMatrix; the editor relays a re-read to every page
     int                           dstPtSeen_ = 0;
     float                         dstPtSrcLast_[10] {};

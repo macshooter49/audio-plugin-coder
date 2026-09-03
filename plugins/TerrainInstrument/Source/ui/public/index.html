@@ -31114,6 +31114,7 @@ restoreThemeFromBackend();
       /* fb554 — the CONNECTION CURVE rides the route itself, so it round-trips through
          getSynthMod and the patch state with no separate channel to get out of step. */
       if(a.curve) o.c=a.curve.map(function(y){return (+y).toFixed(4);}).join(',');
+      if(a.curve&&a.pts&&window.__crvUtil) o.p=window.__crvUtil.packPts(a.pts);   /* fb573 — the points + per-point mods, beside the base bake */
       if(a.byp) o.b=1;                    /* fb563 (3) — bypassed: stays in the list, the processor skips it */
       if(a.aux) o.x=encodeSrc(a.aux);     /* fb563 (3) — "Scale by": the aux source, same codec */
       return o; });   /* fb178 — env sources ride 100+ · fb552 — followers ride 210+ (== wc::kFollowSrcBase) */
@@ -31596,7 +31597,7 @@ restoreThemeFromBackend();
   function openCurveEditor(a,anchor){
     var U=window.__crvUtil; if(!U||!window.__crvOpen) return;
     var N=129, pushMod=push;
-    var pts = a.curve ? U.fit(a.curve) : U.unity();
+    var pts = a.pts ? a.pts.map(U.clonePt) : (a.curve ? U.fit(a.curve) : U.unity());   /* fb573 — a curve with point mods reopens from its POINTS, mods and all */
     var host={ key:'mod',
       anchor:false,          /* a mod curve is a UNIPOLAR 0..1 map — no centre to pin */
       bars:false, live:false, oddToggle:null,
@@ -31611,11 +31612,14 @@ restoreThemeFromBackend();
       title:function(){ return srcName(a)+'  \u2014  Curve'; },
       foot:function(){ return '<span class="qt" data-act="straight" title="Back to the straight line — the connection then carries no curve at all">straighten</span><span class="crv-ro">\u00b7</span>'; },
       footClick:function(act){ if(act!=='straight')return;
-        pts=U.unity(); a.curve=null; pushMod(); markTargets(); U.repaint(); },
-      push:function(){ var tbl=U.bake(pts,N);
+        pts=U.unity(); a.curve=null; a.pts=null; pushMod(); markTargets(); U.repaint(); },
+      push:function(){ var tbl=U.bake(pts,N), mod=U.anyMod(pts);
         /* the fb554 law, kept: an identity curve is NO curve. It is cheaper in the DSP and it is
-           the only way "is this connection curved?" can stay a truthful question. */
-        a.curve = U.isStraight(tbl) ? null : tbl;
+           the only way "is this connection curved?" can stay a truthful question.
+           fb573 — a curve with a POINT MOD keeps its slot even when its base is straight: the C++ re-bakes the slot
+           from the points as the LFO moves, so the points ride the wire beside the base bake ("p" next to "c"). */
+        a.curve = (U.isStraight(tbl)&&!mod) ? null : tbl;
+        a.pts = mod ? pts.map(U.clonePt) : null;
         pushMod(); markTargets(); } };
     window.__crvOpen(host, anchor||null);   /* fb570 — a null anchor takes openCrv's own placement (document.body's rect put the card at 8,8) */
   }
@@ -31800,9 +31804,9 @@ restoreThemeFromBackend();
       extra.forEach(function(r){ rows.push(subRow(r)); });   /* fb564 — no rules between the groups: one even list (Max: "we don't need the spacers") */
       rows.push({ label:'Reset to default', onPick:function(){ resetDest(g); } });
       midiRows(g).forEach(function(r){ rows.push(r); });   /* fb563 (4) */
-      if(rts.length) rows.push({ label:'Copy modulators', onPick:function(){ modClip=rts.map(function(a){ return {S:srcOf(a),depth:a.depth,curve:a.curve?a.curve.slice():null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}; }); } });
+      if(rts.length) rows.push({ label:'Copy modulators', onPick:function(){ modClip=rts.map(function(a){ return {S:srcOf(a),depth:a.depth,curve:a.curve?a.curve.slice():null,pts:(a.pts&&window.__crvUtil)?a.pts.map(window.__crvUtil.clonePt):null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}; }); } });
       if(g.dest!=null&&modClip&&modClip.length) rows.push({ label:'Paste modulators', onPick:function(){
-        modClip.forEach(function(c){ var a=addRoute(c.S,g.dest,g.el); if(a){ a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; } });
+        modClip.forEach(function(c){ var a=addRoute(c.S,g.dest,g.el); if(a){ a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.pts=(c.pts&&window.__crvUtil)?c.pts.map(window.__crvUtil.clonePt):null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; } });
         markTargets(); push(); } });
       window.__synShowMenu(null, rows, x, y, {cls:'ctl'}); }   /* fb564 — no header: "people are going to know what they're right-clicking" */
     lastMenu=build; build(); return true; }
@@ -31830,11 +31834,11 @@ restoreThemeFromBackend();
      an LFO's rate) is not the oscillator's and stays where it is. */
   window.__tiOscRoutes=function(L){ var re=new RegExp('^SYN_OSC_'+String(L).toUpperCase()+'_(.+)$'), out=[];
     assigns.forEach(function(a){ var pid=d2pid(a.dest), m=pid?re.exec(pid):null; if(!m) return;
-      out.push({S:srcOf(a),sfx:m[1],depth:a.depth,curve:a.curve?a.curve.slice():null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}); });
+      out.push({S:srcOf(a),sfx:m[1],depth:a.depth,curve:a.curve?a.curve.slice():null,pts:(a.pts&&window.__crvUtil)?a.pts.map(window.__crvUtil.clonePt):null,byp:a.byp?1:0,aux:a.aux?srcOf(a.aux):null}); });
     return out; };
   window.__tiPasteOscRoutes=function(L,mods){ var n=0; (mods||[]).forEach(function(c){ var pid='SYN_OSC_'+String(L).toUpperCase()+'_'+c.sfx; if(!KNOBDEST.hasOwnProperty(pid)) return;
       var dest=KNOBDEST[pid], el=elForDest(dest); if(!el) return; var ex=findRoute(c.S,dest); if(ex) removeAssign(ex);
-      var a=addRoute(c.S,dest,el); if(!a) return; a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; n++; });
+      var a=addRoute(c.S,dest,el); if(!a) return; a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.pts=(c.pts&&window.__crvUtil)?c.pts.map(window.__crvUtil.clonePt):null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; n++; });
     markTargets(); push(); return n; };
 
   function showRoutes(el,u){ hideRoutes();
@@ -32269,11 +32273,13 @@ restoreThemeFromBackend();
            reached the docked assigns, so the docked window's next push() wrote the stale one back — the fb524
            drift, curve edition. Merged only once the local hand has been idle 1.5 s, like the prune. */
         if(!badgeBusy&&(Date.now()-lastLocalEdit)>1500){ var nc=null; if(o.c){ try{ nc=String(o.c).split(',').map(Number); }catch(e){} }
-          ex.curve=nc; if(o.b) ex.byp=1; else delete ex.byp;
+          ex.curve=nc; ex.pts=(o.p&&window.__crvUtil)?o.p.map(window.__crvUtil.unpackPt):null;   /* fb573 */
+          if(o.b) ex.byp=1; else delete ex.byp;
           if(o.x!=null){ var X2=decodeSrc(o.x|0); if(X2) ex.aux=X2; else delete ex.aux; } else delete ex.aux; }
         return; }
       var a=srcOf(S); a.dest=dest; a.depth=(+o.v||srcDefaultDepth(S)); a.el=el;   /* fb563 — one shape for every family */
       if(o.c){ try{ a.curve=String(o.c).split(',').map(Number); }catch(e){} }   /* fb554 */
+      if(o.p&&window.__crvUtil){ try{ a.pts=o.p.map(window.__crvUtil.unpackPt); }catch(e){} }   /* fb573 */
       if(o.b) a.byp=1;                                                          /* fb563 (3) */
       if(o.x!=null){ var X=decodeSrc(o.x|0); if(X) a.aux=X; }
       assigns.push(a); });
@@ -34682,7 +34688,7 @@ restoreThemeFromBackend();
     if(hdrChip){ var ch=h.chip?h.chip():''; if(ch){ hdrChip.style.display='inline-flex'; hdrChip.innerHTML='<b>\u2726</b>'+ch; }
       else hdrChip.style.display='none'; }
     hero.innerHTML=heroSVG(); foot.innerHTML=footHTML(); bindHero(); }
-  function paintField(){ if(!card)return; hero.innerHTML=heroSVG(); bindHero(); }
+  function paintField(){ if(!card)return; crvEffLastD=''; hero.innerHTML=heroSVG(); bindHero(); }   /* fb573 — a rebuilt hero starts from the base points; the painter re-applies the live points next frame */
 
   /* the live overlay — fed by the rack driver in the main window, self-polled when card-only */
   window.__crvLiveTick=function(o){ try{ if(!card||!card.classList.contains('open'))return;
@@ -34734,7 +34740,7 @@ restoreThemeFromBackend();
     if(HOST) return null;   /* fb559 — only the Distortion host mirrors into the rack's mini viz */
     var ty=TYPES[typeIdx()];
     if(ty!=='Shaper'&&ty!=='Shaper Asym') return null;
-    var p=ensureAnchor(cPts()), full=isOdd()?symm(p):p, out=[],i;
+    var p=crvEffCur||ensureAnchor(cPts()), full=isOdd()?symm(p):p, out=[],i;   /* fb573 — the rack's mini viz and the occupancy light follow the LIVE points */
     for(i=0;i<N;i++) out.push(evalP(full, i/(N-1))*2-1);
     return out;
   }catch(e){ return null; } }
@@ -35052,6 +35058,7 @@ restoreThemeFromBackend();
       var q=cPts()[ix]; if(q&&q[3]&&q[3].ys>0){ q[3].ya=0.5; cPush(); pnt(); paintField(); } });
     return wrap; }
   function crvPtMenu(ix,e){ if(!window.__synShowMenu)return;
+    if(curHost().key==='warp'){ if(window.__crvToast) window.__crvToast('Point modulation lives on the Distortion and the connection curves \u2014 a warp curve is next'); return; }   /* fb573 — never offer a control the DSP does not carry */
     var p=cPts(), q=p[ix]; if(!q)return;
     var cur=(q[3]&&q[3].ys)||0;
     var rows=[{isHeader:true,label:'Point '+(ix+1)+' — modulate Y'}];
@@ -35288,6 +35295,38 @@ restoreThemeFromBackend();
      all (the UI-probe law). These drive the SAME host methods the hand drives — cPush included —
      so a green run means the real path ran, not a mock of it. */
   window.__crvPts=function(){ try{ return cPts().map(function(q){ return [q[0],q[1],q[2]||0]; }); }catch(e){ return null; } };
+  /* fb573 — THE POINTS MOVE. A modded point rides the same LFO value the C++ re-bake consumed (__mvLfoValAt, the fb498
+     feed): each frame the ink, its halo trio and the modded handles are re-evaluated from the EFFECTIVE points,
+     write-gated (a parked LFO writes nothing); a stale feed puts the static drawing back once. Odd-symmetry views
+     (the Shaper's mirrored half) keep the static drawing. */
+  var crvEffLastD='', crvEffCur=null;   /* crvEffCur — this frame's effective points (null = the base drawing stands); drawnC() mirrors them into the rack */
+  function crvPtModTick(){ try{
+      if(!card||!card.classList.contains('open')||isOdd()){ if(crvEffLastD){ crvEffLastD=''; crvEffCur=null; paintField(); } return; }
+      var h=curHost(); if(!h.drawn()) return;
+      var p=cPts(); if(!window.__crvUtil.anyMod(p)) { if(crvEffLastD){ crvEffLastD=''; crvEffCur=null; paintField(); } return; }
+      var lv=window.__mvLfoVal; if(!lv) return;   /* no feed has ever arrived: the base drawing stands */
+      /* a STALE feed is not "no modulation": the bank PARKS on its last value (fb566) and so does the DSP's table, so the page
+         holds the last pushed values too (the raw latch); only a FRESH feed is eased (__mvLfoValAt, fb498) */
+      var fresh=!!window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250;
+      var sm=[]; for(var k=0;k<lv.length;k++){ var q2=(fresh&&window.__mvLfoValAt)?window.__mvLfoValAt(k):null; sm[k]=(q2==null)?lv[k]:q2; }
+      var eff=window.__crvUtil.effPts(p,sm); if(!eff) return;
+      var d=pathD(eff); if(d===crvEffLastD) return; crvEffLastD=d; crvEffCur=eff;
+      var svg=hero.querySelector('svg'); if(!svg) return;
+      var ink=svg.querySelector('.crv-ink'); if(ink) ink.setAttribute('d',d);
+      var hls=svg.querySelectorAll('.crv-halo'); for(var hh=0;hh<hls.length;hh++) hls[hh].setAttribute('d',d);
+      for(var i=0;i<p.length;i++){ var m=p[i][3]; if(!m||!(m.ys>0)) continue; var y=eff[i]?eff[i][1]:p[i][1];   /* x-mods re-sort; y-mods keep their index */
+        var nd=svg.querySelector('.sh-nd[data-i="'+i+'"]'), ht=svg.querySelector('.sh-hit[data-i="'+i+'"]:not(.cdh)'); var cy=fy(y).toFixed(1);
+        if(nd) nd.setAttribute('cy',cy); if(ht) ht.setAttribute('cy',cy); }
+      var cds=svg.querySelectorAll('.sh-cd'); for(var c2=0;c2<cds.length;c2++){ var ci=+cds[c2].getAttribute('data-i'); if(!eff[ci]||!eff[ci+1]) continue;   /* the tension dots ride the live segment */
+        var mx=(eff[ci][0]+eff[ci+1][0])/2, my=fy(evalP(eff,mx)).toFixed(1), mxs=fx(mx).toFixed(1);
+        cds[c2].setAttribute('cx',mxs); cds[c2].setAttribute('cy',my); var chh=svg.querySelector('.sh-hit.cdh[data-i="'+ci+'"]'); if(chh){ chh.setAttribute('cx',mxs); chh.setAttribute('cy',my); } }
+    }catch(e){} }
+  if(window.__tiFrameReg) window.__tiFrameReg('crv-ptmod', crvPtModTick);
+  window.__crvPtMod=function(ix,src,amt){ try{ var q=cPts()[ix|0]; if(!q) return false;   /* gate hook — the point-mod menu's exact write */
+      if((src|0)>0){ q[3]=q[3]||{xs:0,xa:0,ys:0,ya:0}; q[3].ys=src|0; q[3].ya=(amt==null)?0.5:+amt; } else if(q[3]){ q[3].ys=0; q[3].ya=0; if(!(q[3].xs>0)) delete q[3]; }
+      cPush(); paint(); return true; }catch(e){ return false; } };
+  window.__crvPtsFull=function(){ try{ return cPts().map(window.__crvUtil.clonePt); }catch(e){ return null; } };
+  window.__crvPtModTick=crvPtModTick;
   window.__crvSetPts=function(arr){ try{ setPts(arr.map(function(q){ return [+q[0],+q[1],+(q[2]||0)]; }));
     ensureAnchor(cPts()); sel=-1; cPush(); paint(); return cPts().length; }catch(e){ return -1; } };
   /* fb560 — drive the pen without a pointer: xy = [[x,y],...] in 0..1, the same put/commit path. */
@@ -35334,7 +35373,21 @@ restoreThemeFromBackend();
       var sp=(hi-lo)>1e-6?(hi-lo):1, d='';
       for(i=0;i<n;i++) d+=(i?'L':'M')+fx(i/(n-1)).toFixed(1)+' '+fy((arr[i]-lo)/sp*0.92+0.04).toFixed(1)+' ';
       return '<svg viewBox="0 0 '+W+' '+H+'">'+gridG()+haloP(d)+'<path class="mv-stroke crv-ink" d="'+d+'"/></svg>'; },
-    repaint:function(){ try{ if(card&&card.classList.contains('open'))paint(); }catch(e){} } };
+    repaint:function(){ try{ if(card&&card.classList.contains('open'))paint(); }catch(e){} },
+    /* fb573 — the point grammar, shared by every host: [x,y,t] or [x,y,t,{xs,xa,ys,ya}] (fb238/fb340) */
+    packPts:function(P){ return P.map(function(q){ var t3=[+(+q[0]).toFixed(4),+(+q[1]).toFixed(4),+(+(q[2]||0)).toFixed(3)];
+      if(q[3]&&(q[3].ys>0||q[3].xs>0)) t3.push({xs:q[3].xs||0,xa:+(+(q[3].xa||0)).toFixed(3),ys:q[3].ys||0,ya:+(+(q[3].ya||0)).toFixed(3)}); return t3; }); },
+    unpackPt:function(q){ var p2=[+q[0],+q[1],+(q[2]||0)]; var c1=function(v){ return Math.max(-1,Math.min(1,+v||0)); }, cs=function(v){ return Math.max(0,Math.min(10,v|0)); };
+      if(q[3]&&typeof q[3]==='object') p2[3]={xs:cs(q[3].xs),xa:c1(q[3].xa),ys:cs(q[3].ys),ya:c1(q[3].ya)}; return p2; },   /* the C++ parse's ranges */
+    clonePt:function(q){ var p2=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object') p2[3]={xs:q[3].xs|0,xa:+(q[3].xa||0),ys:q[3].ys|0,ya:+(q[3].ya||0)}; return p2; },
+    anyMod:function(P){ for(var i=0;i<P.length;i++){ var m=P[i][3]; if(m&&(m.ys>0||m.xs>0)) return true; } return false; },
+    /* the EFFECTIVE points for the live LFO values lv (−1..1 per LFO): the C++ re-bake's rule (offset · clamp · sort · pin) */
+    effPts:function(P,lv){ var last=P.length-1, any=false;
+      var eff=P.map(function(q,ix){ var m=q[3], x=q[0], y=q[1];
+        if(m&&m.xs>0&&ix>0&&ix<last){ x=Math.max(0,Math.min(1,x+(m.xa||0)*(lv[m.xs-1]||0))); any=true; }
+        if(m&&m.ys>0){ y=Math.max(0,Math.min(1,y+(m.ya||0)*(lv[m.ys-1]||0))); any=true; }
+        return [x,y,q[2]||0,q[3]]; });
+      if(!any) return null; eff.sort(function(a,b){ return a[0]-b[0]; }); eff[0][0]=0; eff[eff.length-1][0]=1; return eff; } };
 
   /* card-only window: ADAPTIVE fallback self-poll. fb343 — the primary feed RIDES THE 60Hz C++
      timer push (the fb232 LFO-card grammar, PluginEditor timerCallback → __crvLiveTick), which
