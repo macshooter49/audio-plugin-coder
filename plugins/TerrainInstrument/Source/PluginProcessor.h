@@ -920,6 +920,9 @@ public:
     wc::GlobalModSources globalSrc_;
     std::atomic<float> macroBaseVis_[wc::kNumMacros] {};   // fb565 — the macro KNOB's own value (the parameter) for the Macros view's face; globalSrc_.macro is the MODULATED one
     bool               macroModded_[wc::kNumMacros] {};    // fb565 — audio thread only: the last global pass found a route INTO this macro
+    float              macroSm_[wc::kNumMacros] {};        // fb575 — audio thread only: the macro base after its 15 ms one-pole (every path glides: the mouse, the wheel, host automation)
+    std::atomic<float> macroCcT_[wc::kNumMacros] { -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, -1.0f };   // fb575 — a learned CC's value for this macro, stored by the audio thread the block it arrives; −1 = none (applyPendingMidiCc releases it once the parameter carries it)
+    int                macroParamIdx_[wc::kNumMacros] { -1, -1, -1, -1, -1, -1, -1, -1, -1 };   // fb575 — SYN_MACRO_k's parameter index (prepareToPlay), so a macro's CC is told from any other
     std::atomic<uint32_t> randSeedVis_ { 0u };   // fb572 — the most-active voice's note seed: the global half hashes it per route
     std::atomic<int>      randSeedLive_ { 0 };   // fb572 — 0 = no voice sounds (the Random comet reads -1, the global half 0)
     std::atomic<float> altVis_ { 0.f };

@@ -24,10 +24,14 @@
 //      inactive one is visibility:hidden, never display:none; a routed MACRO's mark shows only while the
 //      Macros view shows (visible marks 2 → 3 → 2).
 //   5  MONO MOVES NOTHING EITHER — the other three buttons on that row leave the rack where it is.
+//   6  THE PILLS GO WITH THEIR VIEW (fb575) — 40 ms after each click the Always pill's computed visibility is the
+//      view's (hidden with Macros on, visible with it off), the hidden view is opacity 0, and the pill's transition
+//      names colours only — never `all`/visibility (the real WebKit page never ended that transition: measured 3 s+).
 //
 //  PROOF THE BARS CAN FAIL:  MACROS_STILL_MUTATE=1 (showMacros writes display again)   → 1-4 red
 //                            MACROS_STILL_MUTATE=2 (the painter ignores visibility)     → 4 red
 //                            MACROS_STILL_MUTATE=3 (the hidden voice view back to display:none) → 1-4 red
+//                            MACROS_STILL_MUTATE=4 (the pills back to `transition:.14s` = all)     → 6 red
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 
 const puppeteer = require('puppeteer-core');
@@ -63,6 +67,7 @@ function mutatedPage () {
   if (MUT === 1) sub("if(mbtn) mbtn.classList.toggle('on',on); if(window.__tiFrame) window.__tiFrame(); }catch(_){ } }", "if(mbtn) mbtn.classList.toggle('on',on); mv.style.display=on?'grid':'none'; vv.style.display=on?'none':'flex'; if(window.__tiFrame) window.__tiFrame(); }catch(_){ } }");
   if (MUT === 2) sub("if(getComputedStyle(lb).visibility==='hidden'){ u.style.display='none'; return; }", "if(false){ u.style.display='none'; return; }");
   if (MUT === 3) sub("#syn-panel .voice-meta.vm-macros-active .vm-voiceview{ visibility:hidden;", "#syn-panel .voice-meta.vm-macros-active .vm-voiceview{ display:none;");
+  if (MUT === 4) sub("#syn-panel .ribbon-row.rr-new .voice-toggle{ transition:color .14s, border-color .14s, background-color .14s; }", "#syn-panel .ribbon-row.rr-new .voice-toggle{ transition:.14s; }");
   const p = path.join(os.tmpdir(), 'macros_still_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }
 
@@ -100,8 +105,10 @@ function mutatedPage () {
       marks: { wt: near(W(wtLab)), mix: near(W(mixLab)), mac: near(W(macLab)) }, visMarks: vis.length };
   });
   await tick(); const M0 = await MEAS();
-  await pg.click('#syn-panel .vm-macros-btn'); await sleep(350); const M1s = await MEAS(); await tick(); const M1 = await MEAS();
-  await pg.click('#syn-panel .vm-macros-btn'); await sleep(350); const M2s = await MEAS(); await tick(); const M2 = await MEAS();
+  const PILL = () => pg.evaluate(() => { const vv = document.querySelector('#syn-panel .vm-voiceview'), p = [].slice.call(document.querySelectorAll('#syn-panel .vm-voiceview .voice-toggle')).filter(b => b.textContent.trim() === 'Always')[0];
+    const cs = getComputedStyle(p); return { vis: cs.visibility, viewOpacity: getComputedStyle(vv).opacity, transition: cs.transition }; });
+  await pg.click('#syn-panel .vm-macros-btn'); await sleep(40); const P1 = await PILL(); await sleep(310); const M1s = await MEAS(); await tick(); const M1 = await MEAS();
+  await pg.click('#syn-panel .vm-macros-btn'); await sleep(40); const P2 = await PILL(); await sleep(310); const M2s = await MEAS(); await tick(); const M2 = await MEAS();
   await pg.click('#syn-panel .vm-4 [data-syn-toggle="SYN_MONO"]'); await sleep(300); const MM = await MEAS(); await pg.click('#syn-panel .vm-4 [data-syn-toggle="SYN_MONO"]'); await sleep(200);
   const same = (a, b, tol = 0.02) => !!a && !!b && ['l', 't', 'r', 'b'].every(k => Math.abs(a[k] - b[k]) <= tol);
   const fb = r => r ? r.b.toFixed(2) : 'null', ft = r => r ? r.t.toFixed(2) : 'null';
@@ -119,6 +126,9 @@ function mutatedPage () {
       '4  ONE BOX: both views share one cell (same rect, both in flow), the inactive one is visibility:hidden; the routed macro\'s mark shows only with the Macros view (2 → 3 → 2)',
       `off: vv ${M0.vis.vvD}/${M0.vis.vv} mv ${M0.vis.mvD}/${M0.vis.mv} · on: vv ${M1.vis.vvD}/${M1.vis.vv} mv ${M1.vis.mvD}/${M1.vis.mv} · view rects off ${JSON.stringify(M0.vv)} vs ${JSON.stringify(M0.mv)} · marks ${M0.visMarks} → ${M1.visMarks} → ${M2.visMarks}`);
   chk(same(M0.row, MM.row) && same(M0.dev, MM.dev), '5  MONO MOVES NOTHING EITHER', `row bottom ${fb(M0.row)} → ${fb(MM.row)} · device bottom ${fb(M0.dev)} → ${fb(MM.dev)}`);
+  chk(P1.vis === 'hidden' && P1.viewOpacity === '0' && P2.vis === 'visible' && P2.viewOpacity === '1' && !/\ball\b|visibility/.test(P1.transition),
+      '6  THE PILLS GO WITH THEIR VIEW: 40 ms after each click the Always pill is the view\'s visibility, the hidden view is opacity 0, the pill transitions colours only',
+      `on: ${P1.vis}/opacity ${P1.viewOpacity} · off: ${P2.vis}/opacity ${P2.viewOpacity} · transition "${P1.transition}"`);
   console.log(`   record: row h ${M0.row.h} (macros on ${M1.row.h}) · panel bottom ${M0.panel.b} of 656 · doc ${M0.docH} · voice view h ${M0.vv ? M0.vv.h : '-'} · macro view h ${M1.mv ? M1.mv.h : '-'} (in the off state ${M0.mv ? M0.mv.h : '-'})`);
   if (errs.length) console.log('   page errors: ' + errs.join(' | '));
   console.log(`\n══ RESULT: ${pass} pass, ${fail} FAIL ══`);

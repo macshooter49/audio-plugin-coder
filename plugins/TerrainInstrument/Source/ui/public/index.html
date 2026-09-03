@@ -8179,6 +8179,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .ribbon-row.rr-new .voice-toggle-row{ gap:5px; }
         #syn-panel .ribbon-row.rr-new .voice-toggle{ padding:4px 0; }
         #syn-panel .ribbon-row.rr-new .vm-4 .voice-toggle{ font-size:8.5px; letter-spacing:.2px; padding:4px 1px; }   /* 4 buttons fit without squeezing the words */
+        /* fb575 — THE PILLS GO WITH THEIR VIEW. The row-4 button rule above says `transition:.14s` = ALL properties,
+           visibility included; when fb574 hid the voice view (visibility, inherited) every Always/Scaled pill began
+           a 140 ms visibility transition — and the real WebKit page never ended it: measured on the installed AU,
+           the pill's computed visibility stayed "visible" for the whole 3 s after the click (the parked page's
+           animation clock does not advance), so the two pills sat over the bottom macro row until something else
+           repainted. Max: "it lags for a couple of seconds... it glitches." Two rules: the pills transition their
+           COLOURS only, and a hidden view is also opacity:0, so nothing inside it can show through a transition. */
+        #syn-panel .ribbon-row.rr-new .voice-toggle{ transition:color .14s, border-color .14s, background-color .14s; }
         #syn-panel .vm-voiceview{ flex:1; min-height:0; display:flex; flex-direction:column; justify-content:space-between; gap:7px; }   /* fb272 — even distribution: as row-4 grows the rows spread evenly (no single big gap before Always/Scaled) */
         #syn-panel .vm-voiceview > .voice-toggle-row{ margin-top:0; }   /* fb272 — space-between already lands Always/Scaled at the bottom */
         /* 9-macro view (placeholder — real design later) swaps in when 'Macros' is selected */
@@ -8196,8 +8204,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .ribbon-row.rr-new .voice-meta{ display:grid; grid-template-columns:minmax(0,1fr); grid-template-rows:auto minmax(0,1fr); row-gap:7px; }
         #syn-panel .ribbon-row.rr-new .voice-meta > .vm-4{ grid-row:1; grid-column:1; }
         #syn-panel .ribbon-row.rr-new .vm-voiceview, #syn-panel .ribbon-row.rr-new .vm-macroview{ grid-row:2; grid-column:1; min-height:0; }
-        #syn-panel .voice-meta.vm-macros-active .vm-voiceview{ visibility:hidden; pointer-events:none; }
-        #syn-panel .voice-meta:not(.vm-macros-active) .vm-macroview{ visibility:hidden; pointer-events:none; }
+        #syn-panel .voice-meta.vm-macros-active .vm-voiceview{ visibility:hidden; opacity:0; pointer-events:none; }   /* fb575 — opacity too: see the pills note above */
+        #syn-panel .voice-meta:not(.vm-macros-active) .vm-macroview{ visibility:hidden; opacity:0; pointer-events:none; }
         #syn-panel .vm-macro{ display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; cursor:pointer; min-width:0; }
         #syn-panel .vm-macro .vm-mk{ width:26px; height:26px; color:var(--text-primary); }
         #syn-panel .vm-macro .vm-mk svg{ width:100%; height:100%; display:block; }
@@ -12653,6 +12661,12 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                with no pointer near this view; the editor feed carries the live values (window.__mvMacro,
                outside the quiet gate), so the face repaints from them whenever a hand is not on it. */
             var macroDrag=false;
+            /* fb575 — THE FACE RIDES THE FRAME CLOCK. The 150 ms poll below repainted the knob ~7 times a second under
+               the wheel (measured: 8 repaints in a 1 s sweep against 60 shipped frames — "it's still choppy"), while a
+               drag repaints on every pointer move. Every shipped frame now repaints a face whose value moved; the poll
+               stays as the fallback for a value that changes while no frame ships. */
+            if(window.__tiFrameReg) window.__tiFrameReg('vm-face',function(){ try{ if(macroDrag||!vm.classList.contains('vm-macros-active')) return; var m=window.__mvMacroBase; if(!m||!m.length) return;
+              for(var i=0;i<NM;i++){ var v=(+m[i]||0)*100; if(Math.abs(v-val[i])>=0.5){ val[i]=v; paintM(i); } } }catch(_){} });
             setInterval(function(){ try{ if(macroDrag||!vm.classList.contains('vm-macros-active')) return; var m=window.__mvMacroBase;   /* fb574 — the view's state is the class, not an inline display */ if(!m||!m.length) return;   /* fb565 — the KNOB's value; the modulated value rides the underline's comet */
               for(var i=0;i<NM;i++){ var v=Math.round((+m[i]||0)*100); if(v!==Math.round(val[i])){ val[i]=v; paintM(i); } } }catch(_){} },150);
             function paintM(i){ var mk=mks[i]; if(!mk) return; mk.setAttribute('data-v',Math.round(val[i])); mk.innerHTML=knobSVG(val[i]); }

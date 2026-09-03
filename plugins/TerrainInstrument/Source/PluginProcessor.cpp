@@ -7239,6 +7239,17 @@ void TerrainInstrumentAudioProcessor::rebuildChainOrder() noexcept
 
 void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBlock)
 {
+    {   // fb575 — the macro base's smoother starts where the knob stands (no glide on transport start), and the
+        //  macro parameters' indices are known before the first CC can arrive
+        static const char* const ids[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
+                                                         ParameterIDs::SYN_MACRO_5, ParameterIDs::SYN_MACRO_6, ParameterIDs::SYN_MACRO_7, ParameterIDs::SYN_MACRO_8, ParameterIDs::SYN_MACRO_9 };
+        for (int k = 0; k < wc::kNumMacros; ++k)
+        {
+            if (auto* p = apvts.getParameter (ids[k])) macroParamIdx_[k] = p->getParameterIndex();
+            if (auto* r = rawParam (ids[k])) macroSm_[k] = *r * 0.01f;
+            macroCcT_[k].store (-1.0f, std::memory_order_relaxed);
+        }
+    }
     // fb528 — see prepLock_ in PluginProcessor.h. This function does NOT run on the message
     // thread under AU (the host's AudioUnitInitialize thread calls it), so everything below
     // races the 60 Hz timerCallback unless the two are serialised. Not the audio thread: a
@@ -8004,10 +8015,23 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         static const char* const kMacroIds[wc::kNumMacros] = { ParameterIDs::SYN_MACRO_1, ParameterIDs::SYN_MACRO_2, ParameterIDs::SYN_MACRO_3, ParameterIDs::SYN_MACRO_4,
                                                               ParameterIDs::SYN_MACRO_5, ParameterIDs::SYN_MACRO_6, ParameterIDs::SYN_MACRO_7, ParameterIDs::SYN_MACRO_8,
                                                               ParameterIDs::SYN_MACRO_9 };   // fb565 — nine
+        const float kSmM = 1.0f - std::exp (-(float) numSamples / ((float) juce::jmax (1.0, getSampleRate()) * 0.015f));   // fb575 — the macro base's 15 ms one-pole
         for (int k = 0; k < wc::kNumMacros; ++k)
         {   // fb565 — the knob is the BASE. A macro with a route INTO it keeps the value the global pass
             //  stored at the end of the previous block (macroModded_), so the modulation is not clobbered here.
-            const float base = *rawParam (kMacroIds[k]) * 0.01f;
+            // fb575 — THE WHEEL IS AS SMOOTH AS THE MOUSE. A learned CC used to reach this knob only from the
+            //  message-thread timer (60 Hz with a UI, 15 Hz without) and land as a raw per-block step — measured
+            //  on the installed AU: 1.6 % jumps and 45 ms plateaus under the wheel against 0.67 % / 9 ms under
+            //  the mouse (Tests/macro_wheel_cert.cpp). Now the CC leads from the audio thread the block it
+            //  arrives (macroCcT_, released by applyPendingMidiCc once the parameter carries it), and EVERY path
+            //  — the mouse, the wheel, host automation — glides through the same 15 ms one-pole. The face
+            //  (macroBaseVis_) shows the glide.
+            float tgt = *rawParam (kMacroIds[k]) * 0.01f;
+            const float ccT = macroCcT_[k].load (std::memory_order_relaxed);
+            if (ccT >= 0.0f) tgt = ccT;
+            macroSm_[k] += (tgt - macroSm_[k]) * kSmM;
+            if (std::abs (tgt - macroSm_[k]) < 1e-5f) macroSm_[k] = tgt;
+            const float base = macroSm_[k];
             macroBaseVis_[k].store (base, std::memory_order_relaxed);
             if (! macroModded_[k]) globalSrc_.macro[k].store (base, std::memory_order_relaxed);
         }
@@ -13400,10 +13424,14 @@ void TerrainInstrumentAudioProcessor::midiCcSeen (int cc, int value) noexcept
         midiLearnedCc_.store (cc, std::memory_order_relaxed);
         midiMapDirty_.store (1, std::memory_order_relaxed);
     }
-    if (midiCcParam_[cc].load (std::memory_order_relaxed) >= 0)
+    const int idx = midiCcParam_[cc].load (std::memory_order_relaxed);
+    if (idx >= 0)
     {
-        midiCcPending_[cc].store ((float) value / 127.0f, std::memory_order_relaxed);
+        const float v = (float) value / 127.0f;
+        midiCcPending_[cc].store (v, std::memory_order_relaxed);
         midiCcDirty_[cc].store (1, std::memory_order_relaxed);
+        for (int k = 0; k < wc::kNumMacros; ++k)   // fb575 — a macro's CC leads the audio THIS block; the timer's landing releases it
+            if (idx == macroParamIdx_[k]) macroCcT_[k].store (v, std::memory_order_relaxed);
     }
 }
 void TerrainInstrumentAudioProcessor::applyPendingMidiCc()
@@ -13414,7 +13442,12 @@ void TerrainInstrumentAudioProcessor::applyPendingMidiCc()
         if (midiCcDirty_[cc].exchange (0, std::memory_order_relaxed) == 0) continue;
         const int idx = midiCcParam_[cc].load (std::memory_order_relaxed);
         if (idx >= 0 && idx < params.size())
-            params[idx]->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, midiCcPending_[cc].load (std::memory_order_relaxed)));
+        {
+            const float v = juce::jlimit (0.0f, 1.0f, midiCcPending_[cc].load (std::memory_order_relaxed));
+            params[idx]->setValueNotifyingHost (v);
+            for (int k = 0; k < wc::kNumMacros; ++k)   // fb575 — the parameter now carries this value: hand the audio back to it (a NEWER CC keeps its lead)
+                if (idx == macroParamIdx_[k]) { float e = v; macroCcT_[k].compare_exchange_strong (e, -1.0f, std::memory_order_relaxed); }
+        }
     }
     if (midiMapDirty_.exchange (0, std::memory_order_relaxed)) midiMapVersion_.fetch_add (1, std::memory_order_relaxed);
 }
