@@ -31508,6 +31508,30 @@ restoreThemeFromBackend();
       var rtG=document.getElementById('mv-rate')||document.getElementById('mv-div');
       if(atG&&rtG) out.push({el:rtG,dest:673+(+atG.getAttribute('data-tab'))-1,kind:'knob'}); })();   /* fb195/196 — Dep + RATE target the SELECTED LFO */
     return out; }
+  /* ═══ fb580 — A TARGET YOU CANNOT SEE IS NOT A DROP TARGET ═══════════════════════════════════
+     hit() is pure rect geometry over this list, and fb453 taught it about OVERFLOW (a knob scrolled
+     off the rack). It knew nothing about VISIBILITY, which cost nothing while every hidden surface
+     used display:none and therefore had no rect at all. fb574 changed that: the Macros view and the
+     voice params now share one grid cell and the inactive one is visibility:hidden IN FLOW, so its
+     nine macro cells kept full-size rects. MEASURED by Tests/fx4_ui.js's phantom-drop bar: a
+     modulator released over the voice column wrote a route to dest 1884 — Macro 7 — while the
+     Macros view was not even on screen.
+     🚨 FILTER THE DRAG'S LIST, NEVER targets() ITSELF. targets() is also the "which element owns
+     this destination" directory — elForDest()/destUnder() walk it — so filtering it there made
+     every route to an off-screen destination fail to be created at all: measured, fb563_menu lost
+     5 bars and warp_menu 5 (the browser could no longer route to anything not on screen).
+     Once per drag, at the seven TG= sites: the Macros button cannot be clicked mid-drag, so the
+     answer cannot go stale while the pointer is down. */
+  function dropTargets(){ return targets().filter(function(t){ return dropVisible(t.el); }); }
+  function dropVisible(el){
+    if(!el) return false;
+    try{ if(el.checkVisibility) return el.checkVisibility({checkVisibilityCSS:true, opacityProperty:true}); }catch(e){}
+    var n=el;
+    while(n && n!==document.body && n!==document.documentElement){
+      var cs=null; try{ cs=getComputedStyle(n); }catch(e){ return true; }
+      if(cs.display==='none' || cs.visibility==='hidden' || (+cs.opacity||0) < 0.02) return false;
+      n=n.parentElement; }
+    return true; }
 
   // ── badges + dots ──
   /* fb188 — the letter badges (E4/L1) are RETIRED (Max: tired of the letters). The
@@ -31592,7 +31616,7 @@ restoreThemeFromBackend();
     var n=+t.getAttribute('data-tab'); if(!n)return; var sx=e.clientX, sy=e.clientY, started=false;   // ignore page arrows
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent=n; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';   /* fb453 — layout px (the page may be zoomed) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); });
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(n,ev.screenX,ev.screenY,0); } }   /* fb145 — popped cards ride the blackboard */
@@ -31642,7 +31666,7 @@ restoreThemeFromBackend();
     var en=(window.__envCurNum?window.__envCurNum():1)|0; if(!en)en=1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';   /* fb453 — layout px (the page may be zoomed) */
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(100+en,ev.screenX,ev.screenY,0); }   /* fb196 — torn-off card windows see ENV drags (100+ = env wire) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -31660,7 +31684,7 @@ restoreThemeFromBackend();
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         if(window.__synHideMenu)window.__synHideMenu();
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='E'+en; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';   /* fb453 — layout px (the page may be zoomed) */
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(100+en,ev.screenX,ev.screenY,0); }   /* fb196 — torn-off card windows see ENV drags (100+ = env wire) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -31677,7 +31701,7 @@ restoreThemeFromBackend();
     var mk=+t.getAttribute('data-drag-macro')||1; var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='M'+mk; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(WIRE.MACRO+mk-1,ev.screenX,ev.screenY,0); }
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -31693,7 +31717,7 @@ restoreThemeFromBackend();
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Vel'; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';   /* fb453 — layout px (the page may be zoomed) */
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(200,ev.screenX,ev.screenY,0); }   /* 200 = velocity wire (== wc::kVelSrc) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -31737,7 +31761,7 @@ restoreThemeFromBackend();
         ghost=document.createElement('div'); ghost.className='sm-ghost';
         ghost.textContent='\u2248'+(fk<5?'ABCD'.charAt(fk-1):(fk===5?'N':'F'));   /* fb556 */
         document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(209+fk,ev.screenX,ev.screenY,0); }   /* 210+ = follower wire (== wc::kFollowSrcBase) */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -31756,7 +31780,7 @@ restoreThemeFromBackend();
     var sx=e.clientX, sy=e.clientY, started=false;
     function mv(ev){ if(!started){ if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<5)return; started=true;
         ghost=document.createElement('div'); ghost.className='sm-ghost'; ghost.textContent='Key'; document.body.appendChild(ghost);
-        document.body.classList.add('sm-dragging'); TG=targets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
+        document.body.classList.add('sm-dragging'); TG=dropTargets(); TG.forEach(function(g){ g.el.classList.add('sm-target'); }); }
       ghost.style.left=LP(ev.clientX)+'px'; ghost.style.top=LP(ev.clientY)+'px';
       if(window.__tiModDragPush&&(!mv._t||ev.timeStamp-mv._t>33)){ mv._t=ev.timeStamp; window.__tiModDragPush(201,ev.screenX,ev.screenY,0); }   /* 201 == wc::kNoteSrc */
       var hot=hit(ev.clientX,ev.clientY); TG.forEach(function(g){ g.el.classList.toggle('sm-hot', g===hot); }); }
@@ -32527,7 +32551,8 @@ restoreThemeFromBackend();
         if(o.c!==1){ clear(); return; }                       // only PALETTE drags; our own are local
         if(o.p===0){
           if(!o['in']){ clear(); return; }                    /* fb150 — aliasing fix: only when truly over THIS window */
-          if(!TGf){ TGf=targets(); document.body.classList.add('sm-dragging');
+          if(!TGf){ TGf=dropTargets();   /* fb580 — the cross-window drop obeys the same rule: never land on a target that is not on screen */
+            document.body.classList.add('sm-dragging');
             TGf.forEach(function(g){ g.el.classList.add('sm-target'); }); }
           var hot=null;
           for(var i=0;i<TGf.length;i++){ var r=TGf[i].el.getBoundingClientRect();

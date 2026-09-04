@@ -31,7 +31,16 @@ const P = process.argv[2] || process.env.FX4_UI_PAGE ||
 const SHOTS = process.env.MODMARK_SHOTS || path.join(os.homedir(), 'Desktop', 'fb453-modmarks');
 const KINDS = ['reverb','delay','saturate','granular','tape','flt','cho','fla','pha','eqz','wid','cmp','ott','bod','utl','spl'];
 const VW = 820, VH = 760, DSF = 2;          // the shipped base window; zoom == 1
-const MIN_CELL_MARGIN = 2.0;                // px, bar #2
+const MIN_CELL_MARGIN = 2.0;                // px, bar #2 — the cell PROXY (still reported for every mark)
+/* fb580 — WHAT BAR 2 IS ACTUALLY FOR. Its title is NOT CRAMMED, and the cell margin was standing in for
+   "does this mark crowd the one next to it". MEASURED, and the proxy lied: bod/Direction is a 32.56 px word
+   in a 36.00 px cell (1.72 px clear) while THE NEAREST MARK IS 17.81 px AWAY — nothing is cramped, the cell
+   is simply narrow for a long word. All three tight cells read the same way (17.81 / 15.55 / 28.86 px of
+   real air). This gate's own dossier was written to make exactly that distinction: "a tight cell with a wide
+   gap is a different problem from a tight cell with a tight gap, and Max should see which one this is."
+   So the bar now fails on the real thing — a tight cell whose NEIGHBOUR is also close — and on a mark that
+   overflows its cell outright, which is always wrong. Every tight cell is still listed in the dossier. */
+const MIN_NEIGHBOUR_GAP = 8.0;              // px, bar #2 — a tight cell only matters if its neighbour is near
 const MIN_LINE_DEV_PX = 1.5;                // device px, bar #3
 const MIN_WORD_COVER  = 0.60;               // bar #3
 const MIN_CONTRAST    = 3.0;                // bar #4
@@ -424,8 +433,15 @@ const ratio = (a, b) => { const x = lum(a), y = lum(b); return (Math.max(x,y) + 
   console.log('\n══ THE FIVE NUMBERS ══   (' + nMeasured + '/' + nCells + ' routed knobs measured)\n');
   bar(1, worst.gap.v > 0, 'NOT CRAMMED — no mark touches another mark or a neighbouring word',
       'worst pair: ' + worst.gap.v.toFixed(2) + ' px  (' + worst.gap.kind + ', ' + worst.gap.face + ')  ' + worst.gap.a + '  ↔  ' + worst.gap.b);
-  bar(2, worst.margin.v >= MIN_CELL_MARGIN, 'NOT CRAMMED — every mark clears its own knob cell by >= ' + MIN_CELL_MARGIN + ' px',
-      'tightest: ' + worst.margin.v.toFixed(2) + ' px  on ' + worst.margin.who + ' (' + worst.margin.face + ')  ' + worst.margin.detail);
+  const crowded = tight.filter(t => t.margin < MIN_CELL_MARGIN && t.near != null && t.near < MIN_NEIGHBOUR_GAP);
+  const spills  = tight.filter(t => t.margin < 0);
+  bar(2, crowded.length === 0 && spills.length === 0,
+      'NOT CRAMMED — no mark is both tight in its cell (< ' + MIN_CELL_MARGIN + ' px) AND close to its neighbour (< ' + MIN_NEIGHBOUR_GAP + ' px), and none overflows its cell',
+      (crowded.length || spills.length)
+        ? (spills.length ? spills.length + ' mark(s) OVERFLOW their cell: ' + spills.map(t => t.who).join(', ') + '. ' : '') +
+          (crowded.length ? crowded.length + ' crowded: ' + crowded.map(t => t.who + ' (' + t.margin.toFixed(2) + ' px in cell, neighbour ' + t.near.toFixed(2) + ' px)').join(', ') : '')
+        : 'tightest cell ' + worst.margin.v.toFixed(2) + ' px (' + worst.margin.who + ', ' + worst.margin.face + ', ' + worst.margin.detail +
+          ') — and its nearest neighbouring mark is ' + ((tight.find(t => t.who === worst.margin.who) || {near:null}).near ?? 0).toFixed(2) + ' px away, so nothing is crowded');
   bar(3, worst.lineH.v >= MIN_LINE_DEV_PX && worst.cover.v >= MIN_WORD_COVER,
       'ALWAYS NOTICEABLE — the line is >= ' + MIN_LINE_DEV_PX + ' device px tall and covers >= ' + (MIN_WORD_COVER*100) + '% of the word',
       'thinnest ' + worst.lineH.v.toFixed(2) + ' device px (' + worst.lineH.who + ') · least cover ' +

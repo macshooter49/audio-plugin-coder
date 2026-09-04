@@ -965,7 +965,12 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     out.moved = clip.scrollLeft - before;
     const m1 = mark(i1);
     out.dx = m1 ? m1.left - i1.left : null; out.dw = m1 ? m1.width - i1.width : null;
-    out.dy = m1 ? m1.top - (i1.bottom - 1) : null;
+    /* fb571 put AIR under every knob word — the line sits at ink-bottom − 1 + markAir(label), which is
+       +3 on the rack's 7 px words. This bar predates that and hard-coded air 0, so it read the intended
+       nudge as 3 px of drift. MEASURED on the current page: styleTop = LP(1206.55 − 1 + 3) = 635.262 px,
+       rendered back to 1208.55 at zoom 1.9024 — exactly where fb571 says. So compare against the RULE. */
+    out.air = window.__markAir ? window.__markAir(knob.querySelector('.fxr-lab')) : 0;
+    out.dy = m1 ? m1.top - (i1.bottom - 1 + out.air) : null;
     // (b) scroll the word clean out of the clip — the mark must go DOWN, not ride along
     clip.scrollLeft = clip.scrollWidth; await frame(); await frame();
     const i2 = ink(), c2 = clip.getBoundingClientRect();
@@ -995,8 +1000,8 @@ function chk(ok,label,detail){ if(ok){pass++; console.log('  ok    '+label+(deta
     st.remove(); window.__fxrRender(); clip.scrollLeft = before; await frame();
     return out; });
   chk(!scr.err && scr.moved > 0 && scr.stillIn && scr.dx != null && Math.abs(scr.dx) <= 1 && Math.abs(scr.dw) <= 1 && Math.abs(scr.dy) <= 1,
-      'fb453: the rack SCROLLS and the mark tracks its word (fixed, re-measured per frame, self-heal zoom corrected)',
-      scr.err ? scr.err : 'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom.toFixed(4) + ' → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
+      'fb453: the rack SCROLLS and the mark tracks its word (fixed, re-measured per frame, self-heal zoom corrected; fb571 air honoured)',
+      scr.err ? scr.err : 'scrolled ' + scr.moved + 'px at zoom ' + scr.zoom.toFixed(4) + ' (air ' + scr.air + ') → Δx ' + (scr.dx == null ? 'n/a' : scr.dx.toFixed(2)) +
       ' Δw ' + (scr.dw == null ? 'n/a' : scr.dw.toFixed(2)) + ' Δy ' + (scr.dy == null ? 'n/a' : scr.dy.toFixed(2)));
   chk(!scr.err && scr.dx != null && scr.outOfClip && scr.markWhenOut === false && scr.anyMarkOutsideClip === 0,
       'fb453 🔴: a knob scrolled OUT of .fxr-clip paints NO mark — position:fixed must not follow it off the rack',
