@@ -635,7 +635,7 @@ public:
     // voice is sounding, and every consumer then falls back to the base parameters, so an idle
     // panel and a hand-turned knob look exactly as they did.
     std::atomic<int>   wtDispLive_[4] { { 0 }, { 0 }, { 0 }, { 0 } };
-    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {}, wtBlurVis_[4] {};
+    std::atomic<float> wtWarpAmtVis_[4] {}, wtWarp2AmtVis_[4] {}, wtFoldAmtVis_[4] {};
     std::atomic<int>   wtWarpModeVis_[4] {}, wtWarp2ModeVis_[4] {}, wtFoldShapeVis_[4] {};
     tw::SynthVoice::WtDisp wtDispEffective (int o) const noexcept;
     // fb546 — WARP EXTENSION CARD. The curve for one warp slot, computed by the SHIPPED statics
@@ -1644,6 +1644,8 @@ private:
         // other knob happens to force a rebuild — the failure that builds clean and looks wired.
         float builtLo     = -1.0f;
         float builtHi     = -1.0f;
+        // fb583 — STRETCH is part of the built table's identity for exactly the reason Lo/Hi are.
+        float builtStretch = -1.0f;
         const tw::Wavetable* builtImportPtr = nullptr;   // fb253 — morph SOURCE was this import (nullptr = a factory preset)
         int   builtImportEpoch = -1;                     // fb253 — the import's buildEpoch when morphed (re-import → re-morph)
     };
@@ -1654,13 +1656,13 @@ private:
     std::atomic<float> spectralEffAmt_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — same publish for the partial window's two edges (SpecLo/SpecHi are mod destinations,
     // so the timer must build from the MODULATED value, not the raw param). -1 = not yet published.
-    // 🚨 fb469 — the EFFECTIVE blur, published unconditionally. The twin build first keyed off
-    //    wtBlurVis_, and that is a DISPLAY value: it is written only when `vizLive` (the editor is
-    //    open) AND a voice is sounding. With the editor closed the twin was therefore never built
-    //    and blur silently kept its old behaviour — caught on the installed AU, where Square's
+    // 🚨 fb583 — the EFFECTIVE STRETCH, published unconditionally, and the lesson fb469 paid for:
+    //    this must NOT key off a display atomic. wtBlurVis_ was one, written only when the editor
+    //    was open AND a voice was sounding, so with the editor closed the dependent work never ran
+    //    and the knob silently kept its old behaviour — caught on the installed AU, where Square's
     //    centroid still fell 7.93 -> 2.83 while the offline gate said 13.97 -> 17.55. A display feed
-    //    is not a control signal (fb373).
-    std::atomic<float> blurEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
+    //    is not a control signal (fb373). The bake AND the waterfall both read THIS.
+    std::atomic<float> stretchEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     std::atomic<float> specLoEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     std::atomic<float> specHiEff_[4] { { -1.0f }, { -1.0f }, { -1.0f }, { -1.0f } };
     // fb467 — the eight window parameters, RESOLVED ONCE in the constructor. The publish needs the
@@ -1892,7 +1894,16 @@ private:
                                const juce::String& modeId,
                                const juce::String& amtId,
                                const juce::String& loId,
-                               const juce::String& hiId);
+                               const juce::String& hiId,
+                               const juce::String& stretchId);
+    // fb583 — the EFFECTIVE stretch (knob + modulation) for one osc, message thread. Same
+    // -1/fallback contract as spectralDisplay's amount: this is the number the bake is taken
+    // under, so the display MUST read it too or the waterfall draws a table that is not the
+    // one sounding (fb459's stale-table failure, and fb467's repeat of it).
+    float stretchEffective (int osc) const noexcept;
+    // fb583 — the stretched source spec lives here, not on the stack: a WavetableSpec is ~229 KB
+    // and rebuildMorphIfNeeded already holds one (presetSpec) plus SpectralMorph::apply's return.
+    tw::WavetableSpec stretchScratch_ {};
     // Resolve the wavetable a voice should read for one OSC: the morphed table
     // when a morph mode is active, else the plain bank table. Publishes which
     // buffer the audio thread is reading (for the rebuild guard).

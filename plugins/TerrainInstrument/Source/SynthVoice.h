@@ -774,15 +774,15 @@ namespace tw
         // fb582 — the `spread` field is the SMOOTHED spread. The waterfall draws ONE cycle, and spread
         // is a property of the unison STACK (each voice a different frame), so the display no longer
         // bends the drawn cycle with it — it just reports the value.
-        struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt, spread; int warpMode, warp2Mode, foldShape; };
+        struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt, stretch; int warpMode, warp2Mode, foldShape; };
         WtDisp getWtDisplay (int osc) const noexcept
         {
             switch (osc)
             {
-                case 1:  return { framePosB_, warpAmountB_, warp2AmountB_, foldAmountB_, spreadB_, warpModeB_, warp2ModeB_, foldShapeB_ };
-                case 2:  return { framePosC_, warpAmountC_, warp2AmountC_, foldAmountC_, spreadC_, warpModeC_, warp2ModeC_, foldShapeC_ };
-                case 3:  return { framePosD_, warpAmountD_, warp2AmountD_, foldAmountD_, spreadD_, warpModeD_, warp2ModeD_, foldShapeD_ };
-                default: return { framePos_,  warpAmount_,  warp2AmountA_, foldAmountA_, spreadA_, warpMode_,  warp2ModeA_, foldShapeA_ };
+                case 1:  return { framePosB_, warpAmountB_, warp2AmountB_, foldAmountB_, 0.0f, warpModeB_, warp2ModeB_, foldShapeB_ };
+                case 2:  return { framePosC_, warpAmountC_, warp2AmountC_, foldAmountC_, 0.0f, warpModeC_, warp2ModeC_, foldShapeC_ };
+                case 3:  return { framePosD_, warpAmountD_, warp2AmountD_, foldAmountD_, 0.0f, warpModeD_, warp2ModeD_, foldShapeD_ };
+                default: return { framePos_,  warpAmount_,  warp2AmountA_, foldAmountA_, 0.0f, warpMode_,  warp2ModeA_, foldShapeA_ };
             }
         }
         void setFilterType (int typeIdx) noexcept
@@ -2092,18 +2092,6 @@ namespace tw
             }
         }
 
-        /** Phase 11a — Set per-OSC FRAME SPREAD (0..1). Pushed per-block from
-         *  PluginProcessor broadcast. Caches the amount; per-sine offsets are
-         *  recomputed in updateUnisonFramePositions() each block (and on
-         *  setUnison/startNote) so SPREAD tracks UNISON count changes correctly. */
-        /** WT BLUR amount per OSC (0..1). Replaces the old per-sine FRAME_SPREAD: turns
-         *  the knob into a frame-blend width. Smoothed + applied per block in renderNextBlock. */
-        void setSpread (float spreadA01, float spreadB01) noexcept
-        {
-            spreadTargetA_ = juce::jlimit (0.0f, 1.0f, spreadA01);
-            spreadTargetB_ = juce::jlimit (0.0f, 1.0f, spreadB01);
-        }
-
         /** PHASE mode per OSC (0=RETRIG, 1=FREE, 2=RANDOM, 3=SPREAD). Governs how each
          *  unison sine's phase accumulator is initialised at note-on. Pushed per block. */
         void setSub (int o, int range, int form, float weight, float heatK) noexcept
@@ -2641,7 +2629,6 @@ namespace tw
             fmScorchKnob_[o] = juce::jlimit (0.0f, 1.0f, scorch);
             fmStorm_[o]      = juce::jlimit (0.0f, 1.0f, storm);
         }
-        void setSpreadCD (float spreadC01, float spreadD01) noexcept { spreadTargetC_=juce::jlimit(0.0f,1.0f,spreadC01); spreadTargetD_=juce::jlimit(0.0f,1.0f,spreadD01); }
         void setPhaseModeCD (int modeC, int modeD) noexcept
         {
             phaseModeC_ = juce::jlimit (0, 3, modeC);   // fb522 — un-hardwired; see setPhaseMode
@@ -3648,14 +3635,6 @@ namespace tw
             // unison sine reads it via readCycle, so frame-blend cost is per-block, not
             // per-sample. The blend is the mip's frames summed at one band edge → alias-free;
             // RMS-matched inside renderBlend → no level change; blur 0 → exact old lookup.
-            if (std::abs (spreadTargetA_ - spreadA_) < 1.0e-4f) spreadA_ = spreadTargetA_;
-            else                                            spreadA_ += (spreadTargetA_ - spreadA_) * 0.25f;
-            if (std::abs (spreadTargetB_ - spreadB_) < 1.0e-4f) spreadB_ = spreadTargetB_;
-            else                                            spreadB_ += (spreadTargetB_ - spreadB_) * 0.25f;
-            if (std::abs (spreadTargetC_ - spreadC_) < 1.0e-4f) spreadC_ = spreadTargetC_;
-            else                                            spreadC_ += (spreadTargetC_ - spreadC_) * 0.25f;
-            if (std::abs (spreadTargetD_ - spreadD_) < 1.0e-4f) spreadD_ = spreadTargetD_;
-            else                                            spreadD_ += (spreadTargetD_ - spreadD_) * 0.25f;
 
             blendXfA_ = blendXfB_ = blendXfC_ = blendXfD_ = false;   // fb248 — armed only on a fresh blend rebuild below
             if (currentWavetable_ != nullptr)
@@ -3666,12 +3645,12 @@ namespace tw
                 // Wavetable objects IN PLACE (same pointer, new content), so pointer identity
                 // alone latched a mid-rebuild (zeroed) composite as permanent SILENCE.
                 const int epA = currentWavetable_->buildEpoch();
-                if (fpA != lastFpA_ || spreadA_ != lastSpreadA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_ || epA != lastEpochA_)
+                if (fpA != lastFpA_ || currentMipLevelA_ != lastMipA_ || currentWavetable_ != lastWtA_ || epA != lastEpochA_)
                 {
                     if (blendValidA_) { blendPrevA_ = blendA_; blendXfA_ = true; }   // fb248 — keep old, glide to new across the block
                     currentWavetable_->renderBlend (currentMipLevelA_, fpA, 0.0f, blendA_.data());   // fb582 — never blurred: spread is per-VOICE, so this stays the plain frame
                     blendValidA_ = true;
-                    lastFpA_ = fpA; lastSpreadA_ = spreadA_; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_; lastEpochA_ = epA;
+                    lastFpA_ = fpA; lastMipA_ = currentMipLevelA_; lastWtA_ = currentWavetable_; lastEpochA_ = epA;
                 }
             }
             if (currentWavetableB_ != nullptr)
@@ -3679,12 +3658,12 @@ namespace tw
                 float fpB = framePosB_;
                 if (interpModeB_ == 1) { const float Nf = 16.0f; fpB = std::round (fpB * (Nf - 1.0f)) / (Nf - 1.0f); }
                 const int epB = currentWavetableB_->buildEpoch();
-                if (fpB != lastFpB_ || spreadB_ != lastSpreadB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_ || epB != lastEpochB_)
+                if (fpB != lastFpB_ || currentMipLevelB_ != lastMipB_ || currentWavetableB_ != lastWtB_ || epB != lastEpochB_)
                 {
                     if (blendValidB_) { blendPrevB_ = blendB_; blendXfB_ = true; }   // fb248
                     currentWavetableB_->renderBlend (currentMipLevelB_, fpB, 0.0f, blendB_.data());   // fb582 — never blurred: spread is per-VOICE, so this stays the plain frame
                     blendValidB_ = true;
-                    lastFpB_ = fpB; lastSpreadB_ = spreadB_; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_; lastEpochB_ = epB;
+                    lastFpB_ = fpB; lastMipB_ = currentMipLevelB_; lastWtB_ = currentWavetableB_; lastEpochB_ = epB;
                 }
             }
             if (currentWavetableC_ != nullptr)
@@ -3692,12 +3671,12 @@ namespace tw
                 float fpC = framePosC_;
                 if (interpModeC_ == 1) { const float Nf = 16.0f; fpC = std::round (fpC * (Nf - 1.0f)) / (Nf - 1.0f); }
                 const int epC = currentWavetableC_->buildEpoch();
-                if (fpC != lastFpC_ || spreadC_ != lastSpreadC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_ || epC != lastEpochC_)
+                if (fpC != lastFpC_ || currentMipLevelC_ != lastMipC_ || currentWavetableC_ != lastWtC_ || epC != lastEpochC_)
                 {
                     if (blendValidC_) { blendPrevC_ = blendC_; blendXfC_ = true; }   // fb248
                     currentWavetableC_->renderBlend (currentMipLevelC_, fpC, 0.0f, blendC_.data());   // fb582 — never blurred: spread is per-VOICE, so this stays the plain frame
                     blendValidC_ = true;
-                    lastFpC_ = fpC; lastSpreadC_ = spreadC_; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_; lastEpochC_ = epC;
+                    lastFpC_ = fpC; lastMipC_ = currentMipLevelC_; lastWtC_ = currentWavetableC_; lastEpochC_ = epC;
                 }
             }
             if (currentWavetableD_ != nullptr)
@@ -3705,12 +3684,12 @@ namespace tw
                 float fpD = framePosD_;
                 if (interpModeD_ == 1) { const float Nf = 16.0f; fpD = std::round (fpD * (Nf - 1.0f)) / (Nf - 1.0f); }
                 const int epD = currentWavetableD_->buildEpoch();
-                if (fpD != lastFpD_ || spreadD_ != lastSpreadD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_ || epD != lastEpochD_)
+                if (fpD != lastFpD_ || currentMipLevelD_ != lastMipD_ || currentWavetableD_ != lastWtD_ || epD != lastEpochD_)
                 {
                     if (blendValidD_) { blendPrevD_ = blendD_; blendXfD_ = true; }   // fb248
                     currentWavetableD_->renderBlend (currentMipLevelD_, fpD, 0.0f, blendD_.data());   // fb582 — never blurred: spread is per-VOICE, so this stays the plain frame
                     blendValidD_ = true;
-                    lastFpD_ = fpD; lastSpreadD_ = spreadD_; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_; lastEpochD_ = epD;
+                    lastFpD_ = fpD; lastMipD_ = currentMipLevelD_; lastWtD_ = currentWavetableD_; lastEpochD_ = epD;
                 }
             }
 
@@ -4108,9 +4087,7 @@ namespace tw
                                     // WT BLUR — read the per-block blended single-cycle buffer
                                     // (frame position, stepped-interp and blur already applied at block rate).
                                     double rpA = warpedPhase + (double) blendOff[0]; rpA -= std::floor (rpA);
-                                    sAu = (spreadA_ > 1.0e-4f && activeUnisonA_ > 1)   /* fb582 — this voice's own frame */
-                                        ? currentWavetable_->lookup (currentMipLevelA_, spreadFrame (framePos_, spreadA_, u, activeUnisonA_, interpModeA_ == 1), (float) rpA)
-                                        : wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
+                                    sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
                                     sAu *= window;
 
                                     sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0], drawFor (0, 0));   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
@@ -4454,9 +4431,7 @@ namespace tw
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
                                     double rpB = warpedPhase + (double) blendOff[1]; rpB -= std::floor (rpB);
-                                    sBu = (spreadB_ > 1.0e-4f && activeUnisonB_ > 1)   /* fb582 — this voice's own frame */
-                                        ? currentWavetableB_->lookup (currentMipLevelB_, spreadFrame (framePosB_, spreadB_, u, activeUnisonB_, interpModeB_ == 1), (float) rpB)
-                                        : wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
+                                    sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
                                     sBu *= window;
 
                                     sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1], drawFor (1, 0));   // slot 1 amp-domain
@@ -4772,9 +4747,7 @@ namespace tw
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
                                     double rpC = warpedPhase + (double) blendOff[2]; rpC -= std::floor (rpC);
-                                    sCu = (spreadC_ > 1.0e-4f && activeUnisonC_ > 1)   /* fb582 — this voice's own frame */
-                                        ? currentWavetableC_->lookup (currentMipLevelC_, spreadFrame (framePosC_, spreadC_, u, activeUnisonC_, interpModeC_ == 1), (float) rpC)
-                                        : wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
+                                    sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
                                     sCu *= window;
 
                                     sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2], drawFor (2, 0));   // slot 1 amp-domain
@@ -5090,9 +5063,7 @@ namespace tw
                                 {
                                     // WT BLUR — read the per-block blended single-cycle buffer.
                                     double rpD = warpedPhase + (double) blendOff[3]; rpD -= std::floor (rpD);
-                                    sDu = (spreadD_ > 1.0e-4f && activeUnisonD_ > 1)   /* fb582 — this voice's own frame */
-                                        ? currentWavetableD_->lookup (currentMipLevelD_, spreadFrame (framePosD_, spreadD_, u, activeUnisonD_, interpModeD_ == 1), (float) rpD)
-                                        : wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
+                                    sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
                                     sDu *= window;
 
                                     sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3], drawFor (3, 0));   // slot 1 amp-domain
@@ -7623,8 +7594,6 @@ namespace tw
         // changes; blend* hold the pre-built blended single-cycle buffer that every
         // unison sine reads via Wavetable::readCycle. last* gate rebuilds to "on change".
         // blur 0 ⇒ renderBlend reproduces the old bilinear lookup exactly.
-        float spreadTargetA_ = 0.0f, spreadTargetB_ = 0.0f;
-        float spreadA_ = 0.0f, spreadB_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendA_ {};
         std::array<float, tw::Wavetable::kFrameSize> blendB_ {};
         // fb248 — FRAME-MOVE CROSSFADE: the per-block blend cache only rebuilds when the frame position
@@ -7647,32 +7616,13 @@ namespace tw
            per voice would be ~20 renderBlend calls per voice per block; a direct lookup is 2 reads
            and a lerp per sample and costs NOTHING when spread is off, where the old path runs
            untouched and bit-identical. */
-        static inline float spreadFrame (float fp, float spread, int u, int count, bool stepped) noexcept
-        {
-            if (count <= 1 || spread <= 1.0e-4f) return fp;
-            // THE BAND SHIFTS, IT DOES NOT PILE UP. A plain clamp at the table's ends put HALF the
-            // stack on frame 0 whenever WT Pos sat at 0 — the knob did a fraction of its work exactly
-            // where a lot of patches live, and it made the response lumpy (measured: the distance from
-            // the unspread stack was BIGGER at 0.25 than at 0.5). So the band keeps its full width and
-            // slides inside the table instead: at full spread you always get the whole table, wherever
-            // WT Pos is, and where there is room the centre voice still sits exactly on WT Pos.
-            const float w  = spread * 0.5f;                                     // half-width: the whole table at full spread
-            float lo = fp - w, hi = fp + w;
-            if (lo < 0.0f)      { hi -= lo;        lo = 0.0f; }
-            else if (hi > 1.0f) { lo -= hi - 1.0f; hi = 1.0f; }
-            lo = juce::jlimit (0.0f, 1.0f, lo); hi = juce::jlimit (0.0f, 1.0f, hi);
-            const float t = (float) u / (float) (count - 1);                    // 0..1 — the detune fan's own seat
-            float f = lo + (hi - lo) * t;
-            if (stepped) { const float Nf = 16.0f; f = std::round (f * (Nf - 1.0f)) / (Nf - 1.0f); }
-            return f;
-        }
         static inline float wtBlendRead (const float* cur, const float* prev, bool xf, float frac, float ph) noexcept
         {   // frac: 0 at block start → prev (continuous with last block), 1 at block end → new
             const float c = tw::Wavetable::readCycle (cur, ph);
             return xf ? (c + (tw::Wavetable::readCycle (prev, ph) - c) * (1.0f - frac)) : c;
         }
-        float lastFpA_ = -2.0f, lastSpreadA_ = -2.0f; int lastMipA_ = -2; int lastEpochA_ = -1;
-        float lastFpB_ = -2.0f, lastSpreadB_ = -2.0f; int lastMipB_ = -2; int lastEpochB_ = -1;
+        float lastFpA_ = -2.0f; int lastMipA_ = -2; int lastEpochA_ = -1;
+        float lastFpB_ = -2.0f; int lastMipB_ = -2; int lastEpochB_ = -1;
         // The source table pointer is ALSO a blend dependency: Spectral Morph and live
         // preset changes swap currentWavetable_ with frame/blur/mip unchanged, so the
         // gate must watch the pointer too or the blend keeps stale (pre-morph) bytes.
@@ -7829,9 +7779,8 @@ namespace tw
         int    routeSrcC_ = 0, routeDestC_ = 0; float routeAmtC_ = 0.0f;
         std::array<float, kMaxUnison> uFramePosC_{};
         float  frameSpreadC01_ = 0.0f;
-        float  spreadTargetC_ = 0.0f, spreadC_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendC_{};
-        float  lastFpC_ = -2.0f, lastSpreadC_ = -2.0f; int lastMipC_ = -2; int lastEpochC_ = -1;
+        float  lastFpC_ = -2.0f; int lastMipC_ = -2; int lastEpochC_ = -1;
         const tw::Wavetable* lastWtC_ = nullptr;
         int    phaseModeC_ = 2;
         int    foldShapeC_ = 0; float foldAmountC_ = 0.0f;
@@ -7870,9 +7819,8 @@ namespace tw
         int    routeSrcD_ = 0, routeDestD_ = 0; float routeAmtD_ = 0.0f;
         std::array<float, kMaxUnison> uFramePosD_{};
         float  frameSpreadD01_ = 0.0f;
-        float  spreadTargetD_ = 0.0f, spreadD_ = 0.0f;
         std::array<float, tw::Wavetable::kFrameSize> blendD_{};
-        float  lastFpD_ = -2.0f, lastSpreadD_ = -2.0f; int lastMipD_ = -2; int lastEpochD_ = -1;
+        float  lastFpD_ = -2.0f; int lastMipD_ = -2; int lastEpochD_ = -1;
         const tw::Wavetable* lastWtD_ = nullptr;
         int    phaseModeD_ = 2;
         int    foldShapeD_ = 0; float foldAmountD_ = 0.0f;

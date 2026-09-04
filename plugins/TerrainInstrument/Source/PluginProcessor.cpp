@@ -1,4 +1,5 @@
 #include "PluginProcessor.h"
+#include "HarmonicStretch.h"   // fb583 — STRETCH: the spec transform the morph bake runs
 #include <cstdlib>   // fb496 — std::getenv for the TERRAIN_CPU_PROBE gate
 
 // fb178 — mono-tap DAHDSR forwarding (mirrors SynthVoice::setEnvelopeDAHDSR's mapping)
@@ -726,15 +727,27 @@ void TerrainInstrumentAudioProcessor::spectralDisplay (int osc, float& amtOut, i
     hiOut = (eHi >= 0.0f) ? eHi : rawParam (SH[osc])->load();
 }
 
+float TerrainInstrumentAudioProcessor::stretchEffective (int osc) const noexcept
+{
+    osc = juce::jlimit (0, 3, osc);
+    static const char* const SS[4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
+                                       ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
+    const float eff = stretchEff_[osc].load (std::memory_order_relaxed);
+    return (eff >= 0.0f) ? eff : rawParam (SS[osc])->load();
+}
+
 tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc) const noexcept
 {
     osc = juce::jlimit (0, 3, osc);
+    // fb583 — STRETCH is NOT a per-voice display feed. It is a property of the baked table, so it
+    // reads from the same effective value rebuildMorphIfNeeded builds from, sounding or silent.
+    const float stretchNow = stretchEffective (osc);
     if (wtDispLive_[osc].load (std::memory_order_relaxed) != 0)
         return { wtFrameVis_[osc]  .load (std::memory_order_relaxed),
                  wtWarpAmtVis_[osc].load (std::memory_order_relaxed),
                  wtWarp2AmtVis_[osc].load (std::memory_order_relaxed),
                  wtFoldAmtVis_[osc].load (std::memory_order_relaxed),
-                 wtBlurVis_[osc]   .load (std::memory_order_relaxed),
+                 stretchNow,
                  wtWarpModeVis_[osc] .load (std::memory_order_relaxed),
                  wtWarp2ModeVis_[osc].load (std::memory_order_relaxed),
                  wtFoldShapeVis_[osc].load (std::memory_order_relaxed) };
@@ -753,11 +766,9 @@ tw::SynthVoice::WtDisp TerrainInstrumentAudioProcessor::wtDispEffective (int osc
                                         ParameterIDs::SYN_OSC_C_FOLD_SHAPE, ParameterIDs::SYN_OSC_D_FOLD_SHAPE };
     static const char* const FA [4] = { ParameterIDs::SYN_OSC_A_FOLD_AMT,   ParameterIDs::SYN_OSC_B_FOLD_AMT,
                                         ParameterIDs::SYN_OSC_C_FOLD_AMT,   ParameterIDs::SYN_OSC_D_FOLD_AMT };
-    static const char* const BL [4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
-                                        ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
     return { rawParam (WF[osc])->load(),  rawParam (WA[osc])->load(),
              rawParam (W2A[osc])->load(), rawParam (FA[osc])->load(),
-             rawParam (BL[osc])->load(),
+             stretchNow,
              (int) rawParam (WM[osc])->load(), (int) rawParam (W2M[osc])->load(),
              (int) rawParam (FS[osc])->load() };
 }
@@ -1006,7 +1017,9 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         << ",\"wm\":"  << D.warpMode  << ",\"wa\":"  << juce::String (D.warpAmt,  4)
         << ",\"w2m\":" << D.warp2Mode << ",\"w2a\":" << juce::String (D.warp2Amt, 4)
         << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4)
-        << ",\"bl\":"  << juce::String (D.spread, 4)
+        << ",\"bl\":"  << juce::String (D.stretch, 4)   // fb583 — STRETCH. The page keys its
+                                                          // waterfall cache on this, so moving the knob
+                                                          // is what makes the drawn table re-fetch.
         // fb462 — SMOOTHNESS. The samples go out as SCALED INTEGERS, not "%.4f" text. Measured:
         // 10,240 values cost 1.124 ms to format as decimals and 0.116 ms as ints — 9.7x, and 28%
         // fewer bytes. At 60 Hz that difference alone is 60 ms/s of message thread. 1/8192 is ~12
@@ -1022,7 +1035,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     {
         const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;
         // one blended cycle per DISPLAY frame — the same call, at the same mip, the voice makes
-        if (doBlur) wt->renderBlend (0, framePos, D.spread, cyc.data());   // fb582 — doBlur is false now; kept so the path stays compiled and reviewable
+        if (doBlur) wt->renderBlend (0, framePos, 0.0f, cyc.data());   // fb583 — doBlur is false; the path stays compiled and reviewable
         tw::shapers::FoldState fst {};
         // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
         // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
@@ -1317,7 +1330,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
                                                             const juce::String& modeId,
                                                             const juce::String& amtId,
                                                             const juce::String& loId,
-                                                            const juce::String& hiId)
+                                                            const juce::String& hiId,
+                                                            const juce::String& stretchId)
 {
     const int   preset = (int) *apvts.getRawParameterValue (presetId);
     const int   mode   = (int) *apvts.getRawParameterValue (modeId);
@@ -1343,6 +1357,15 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     const float hi = std::round (juce::jlimit (0.0f, 1.0f, hiRaw) * 512.0f) / 512.0f;
     const bool  cutting = (lo > 0.0f) || (hi < 1.0f);
 
+    // fb583 — STRETCH. Same publish-then-read shape as the amount and the two cut edges above, and
+    // quantised for the same reason: this knob keys a 2.3 ms bake, and an LFO wobbling it by 0.001
+    // would churn one every tick for a move nothing can hear. 1/512 of the travel is finer than the
+    // ear and finer than the knob's own pixels. `stretching` is the exact analogue of `cutting`:
+    // it engages the lane on its own, with no morph mode selected.
+    const float stRaw   = stretchEffective (oi0);
+    const float stretch = std::round (juce::jlimit (0.0f, 1.0f, stRaw) * 512.0f) / 512.0f;
+    const bool  stretching = (stretch > 0.0f);
+
     // fb253 — the morph SOURCE is the loaded IMPORT if one exists, else the factory preset spec.
     const int  oi        = juce::jlimit (0, 3, oscIdx);
     const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
@@ -1352,7 +1375,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     // None (or zero amount) → publish nullptr; voices then read the RAW import (fb253) or the bank.
     // 🚨 fb472 — UNLESS A CUT IS ENGAGED. The cut lives on its own knobs precisely so it does not
     //    need a morph mode, and this early-out is what would have made it do nothing without one.
-    if ((mode <= 0 || amount <= 0.0f) && ! cutting)
+    if ((mode <= 0 || amount <= 0.0f) && ! cutting && ! stretching)
     {
         if (slot.live.load (std::memory_order_relaxed) != nullptr)
             slot.retireCooldown = 2;   // voices may still be mid-block on the retiring buffer
@@ -1362,6 +1385,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         slot.builtAmount = amount;
         slot.builtLo     = lo;               // fb467 — the EARLY exit records it too, or the gate
         slot.builtHi     = hi;               //         never matches and the bake runs every tick
+        slot.builtStretch = stretch;         // fb583 — and so does this one, for that same reason
         slot.builtImportPtr   = imp;         // fb253
         slot.builtImportEpoch = impEpoch;
         return;
@@ -1374,7 +1398,8 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         : (slot.builtImportPtr == nullptr && preset == slot.builtPreset);
     if (srcSame && mode == slot.builtMode
         && std::abs (amount - slot.builtAmount) < 1.0e-4f
-        && std::abs (lo - slot.builtLo) < 1.0e-6f && std::abs (hi - slot.builtHi) < 1.0e-6f)
+        && std::abs (lo - slot.builtLo) < 1.0e-6f && std::abs (hi - slot.builtHi) < 1.0e-6f
+        && std::abs (stretch - slot.builtStretch) < 1.0e-6f)
         return;
 
     // RETIRE COOLDOWN — audioReadingIdx only refreshes at block START, so for up to a
@@ -1412,6 +1437,16 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
         srcSpec    = &presetSpec;
     }
 
+    // fb583 — STRETCH runs FIRST, on the source spectrum, and the morph + the cut then operate on
+    // the stretched partials — so the cut still cuts the band you actually HEAR, and a morph mode
+    // shapes what is really there. HarmonicStretch::apply is the identity at 0, and `stretching`
+    // above means we do not even call it then.
+    if (stretching)
+    {
+        tw::HarmonicStretch::applyInto (*srcSpec, stretch, stretchScratch_);
+        srcSpec = &stretchScratch_;
+    }
+
     slot.ready[target].store (false, std::memory_order_release);
     const double bakeT0 = juce::Time::getMillisecondCounterHiRes();   // fb481 — the beacon reports this
     slot.buf[target].buildFromSpec (
@@ -1428,6 +1463,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     slot.builtAmount = amount;
     slot.builtLo     = lo;               // fb467
     slot.builtHi     = hi;
+    slot.builtStretch = stretch;         // fb583
     slot.builtImportPtr   = imp;         // fb253 — remember the morphed source so a re-import re-morphs
     slot.builtImportEpoch = impEpoch;
 }
@@ -1516,48 +1552,33 @@ void TerrainInstrumentAudioProcessor::timerCallback()
                           ParameterIDs::SYN_OSC_A_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_A_SPECTRAL_LO,
-                          ParameterIDs::SYN_OSC_A_SPECTRAL_HI);
+                          ParameterIDs::SYN_OSC_A_SPECTRAL_HI,
+                          ParameterIDs::SYN_OSC_A_FRAME_SPREAD);
     rebuildMorphIfNeeded (morphB_, 1, ParameterIDs::SYN_OSC_B_WT_PRESET,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
-                          ParameterIDs::SYN_OSC_B_SPECTRAL_HI);
+                          ParameterIDs::SYN_OSC_B_SPECTRAL_HI,
+                          ParameterIDs::SYN_OSC_B_FRAME_SPREAD);
     rebuildMorphIfNeeded (morphC_, 2, ParameterIDs::SYN_OSC_C_WT_PRESET,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_C_SPECTRAL_LO,
-                          ParameterIDs::SYN_OSC_C_SPECTRAL_HI);
+                          ParameterIDs::SYN_OSC_C_SPECTRAL_HI,
+                          ParameterIDs::SYN_OSC_C_FRAME_SPREAD);
     rebuildMorphIfNeeded (morphD_, 3, ParameterIDs::SYN_OSC_D_WT_PRESET,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_TYPE,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
-                          ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
-    // ══ fb469 — THE BLUR TWIN, built on demand ═════════════════════════════════════════════
-    //  A twin is what turns blur from a phasor mean (which CANCELS, and is why Max said "blur
-    //  really doesn't do much") into the magnitude mean. It is only worth building for a table an
-    //  oscillator is ACTUALLY blurring, and Wavetable::buildBlurTwin() refuses outright on the 24
-    //  factory tables where it would change nothing or would switch blur off — so in practice at
-    //  most four exist, 4.25 MB each. ONE PER TICK: the build is ~3 ms and this is the same 60 Hz
-    //  message-thread callback that bakes the morph slots.
-    {
-        static const char* const kPresetIds[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                                   ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
-        static const char* const kBlurIds[4]   = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
-                                                   ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
-        MorphSlot* const slots[4] = { &morphA_, &morphB_, &morphC_, &morphD_ };
-        for (int o = 0; o < 4; ++o)
-        {
-            // the EFFECTIVE blur (knob + modulation), published every block whether or not an editor
-            // is open. -1 = the audio thread has not run yet, so fall back to the raw knob.
-            const float be = blurEff_[o].load (std::memory_order_relaxed);
-            const float blurNow = (be >= 0.0f) ? be : apvts.getRawParameterValue (kBlurIds[o])->load();
-            if (blurNow <= 1.0e-4f) continue;
-            const int preset = (int) *apvts.getRawParameterValue (kPresetIds[o]);
-            wavetableBank.ensureBuilt (preset);   // fb496 — never attach a twin to the Sine fallback
-            if (auto* wt = wavetableForBlurTwin (o, *slots[o], preset))
-                if (wt->blurTwinState() == 0) { wt->buildBlurTwin(); break; }   // one per tick
-        }
-    }
+                          ParameterIDs::SYN_OSC_D_SPECTRAL_HI,
+                          ParameterIDs::SYN_OSC_D_FRAME_SPREAD);
+    // fb583 — THE BLUR TWIN BUILDER IS GONE. A twin only ever existed to make Wavetable::renderBlend
+    //  average frames in the MAGNITUDE domain instead of cancelling in the phasor domain, and nothing
+    //  calls renderBlend with a non-zero blur any more (the knob is STRETCH now, and it transforms the
+    //  spec before the bake instead of blending cycles after it). Left running, this loop would have
+    //  built a 4.25 MB twin per oscillator, 3 ms at a time on the message thread, for a buffer with no
+    //  reader. Wavetable::buildBlurTwin() and Tests/blur_twin_cert.cpp stay: the library function is
+    //  still correct and still proven, it simply has no caller in the instrument.
 
     // GEODE — analyze any SPEC oscillator's source into partials+noise (off the audio thread).
     rebuildGeodeIfNeeded (0); rebuildGeodeIfNeeded (1);
@@ -3074,10 +3095,11 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         "OSC A Fold Amount",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
-    // BLUR (real DSP — frame-blend width; repurposes the old FRAME_SPREAD param ID)
+    // STRETCH (fb583 — harmonic-domain partial remap; still the old FRAME_SPREAD param ID, and still
+    // 0..1 default 0, so every saved patch restores as neutral and nothing needs migrating)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, 1 },
-        "OSC A Spread",
+        "OSC A Stretch",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     // INTERP MODE choice (Phase 11g: 2 modes — Linear / Stepped)
@@ -3265,7 +3287,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FRAME_SPREAD, 1 },
-        "OSC B Spread",
+        "OSC B Stretch",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -3451,7 +3473,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_FRAME_SPREAD, 1 },
-        "OSC C Spread",
+        "OSC C Stretch",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -4425,7 +4447,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_FRAME_SPREAD, 1 },
-        "OSC D Spread",
+        "OSC D Stretch",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -8804,13 +8826,16 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                 const float n = p->convertTo0to1 (raw);
                 return p->convertFrom0to1 (juce::jlimit (0.0f, 1.0f, (n + modSums[d]) * (1.0f - w) + envOwnV[d]));
             };
-            // fb469 — the effective BLUR, on the same always-runs path as the spectral amount above.
-            // The message-thread twin build reads this; it must not depend on the editor being open.
-            static const char* const kBlurIds[4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
-                                                     ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
+            // fb583 — the effective STRETCH, on the same always-runs path as the spectral amount
+            // above. rebuildMorphIfNeeded bakes from this and wtDispEffective draws from it, so it
+            // must not depend on an editor being open (fb469: a display feed is not a control
+            // signal). The ModDest slots keep their enum names — the routes users already saved
+            // point at these, and the destination is still "that knob on that oscillator".
+            static const char* const kStretchIds[4] = { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, ParameterIDs::SYN_OSC_B_FRAME_SPREAD,
+                                                        ParameterIDs::SYN_OSC_C_FRAME_SPREAD, ParameterIDs::SYN_OSC_D_FRAME_SPREAD };
             for (int o = 0; o < 4; ++o)
-                blurEff_[o].store (mdP (kBlurIds[o], (wc::ModDest) ((int) wc::ModDest::BlurA + o), 0.0f, 1.0f),
-                                   std::memory_order_relaxed);
+                stretchEff_[o].store (mdP (kStretchIds[o], (wc::ModDest) ((int) wc::ModDest::BlurA + o), 0.0f, 1.0f),
+                                      std::memory_order_relaxed);
 
             static const char* const kLoIds[4] = { ParameterIDs::SYN_OSC_A_SPECTRAL_LO, ParameterIDs::SYN_OSC_B_SPECTRAL_LO,
                                                    ParameterIDs::SYN_OSC_C_SPECTRAL_LO, ParameterIDs::SYN_OSC_D_SPECTRAL_LO };
@@ -9755,8 +9780,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
         // in Phase 11c (SPECTRAL) and 11d (FOLD).
-        const float blurA = mdP (ParameterIDs::SYN_OSC_A_FRAME_SPREAD, wc::ModDest::BlurA, 0.0f, 1.0f);   // fb76 — blur is LFO-routable (bounded Gaussian band; same cost path as frame-LFO + static blur)
-        const float blurB = mdP (ParameterIDs::SYN_OSC_B_FRAME_SPREAD, wc::ModDest::BlurB, 0.0f, 1.0f);
 
         // Phase 11d — FOLD per OSC.
         const int   foldShapeA  = (int) *rawParam (ParameterIDs::SYN_OSC_A_FOLD_SHAPE);
@@ -9768,19 +9791,20 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         // off the audio thread (see timerCallback / resolveMorphTable). The TYPE/AMT
         // params are read on the message thread; nothing to push per-voice here.
 
+        // fb583 — STRETCH is NOT pushed per-voice. It is baked into the table on the message
+        // thread (rebuildMorphIfNeeded), so the audio thread's only job is publishing the
+        // effective value into stretchEff_ — which the gather above already does.
         // Phase 11g — INTERP per OSC.
         const int interpModeA = (int) *rawParam (ParameterIDs::SYN_OSC_A_INTERP_MODE);
         const int interpModeB = (int) *rawParam (ParameterIDs::SYN_OSC_B_INTERP_MODE);
         // OSC C / D — unison / blur / fold / interp (4-osc)
         const int   uniCountC=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_C_UNISON), (int) wc::ModDest::UniVoicesA + 2, 1.0f, 16.0f)));   // fb78 — stepped voices mod
         const float uniDetC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UDETUNE)/100.0f, (int) wc::ModDest::UniDetC, 0.0f, 1.0f), uniBlnC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UBLEND)/100.0f, (int) wc::ModDest::UniBlendC, 0.0f, 1.0f), uniWidC=ownM (*rawParam (ParameterIDs::SYN_OSC_C_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthC, -1.0f, 1.0f);   // fb522 — bipolar
-        const float blurC=mdP (ParameterIDs::SYN_OSC_C_FRAME_SPREAD, wc::ModDest::BlurC, 0.0f, 1.0f);
         const int   foldShapeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_FOLD_SHAPE);
         const float foldAmtC=*rawParam (ParameterIDs::SYN_OSC_C_FOLD_AMT);
         const int   interpModeC=(int)*rawParam (ParameterIDs::SYN_OSC_C_INTERP_MODE);
         const int   uniCountD=juce::jlimit (1, 16, (int) std::lround (ownM (*rawParam (ParameterIDs::SYN_OSC_D_UNISON), (int) wc::ModDest::UniVoicesA + 3, 1.0f, 16.0f)));   // fb78 — stepped voices mod
         const float uniDetD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UDETUNE)/100.0f, (int) wc::ModDest::UniDetD, 0.0f, 1.0f), uniBlnD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UBLEND)/100.0f, (int) wc::ModDest::UniBlendD, 0.0f, 1.0f), uniWidD=ownM (*rawParam (ParameterIDs::SYN_OSC_D_UWIDTH)/100.0f, (int) wc::ModDest::UniWidthD, -1.0f, 1.0f);   // fb522 — bipolar
-        const float blurD=mdP (ParameterIDs::SYN_OSC_D_FRAME_SPREAD, wc::ModDest::BlurD, 0.0f, 1.0f);
         const int   foldShapeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_FOLD_SHAPE);
         const float foldAmtD=*rawParam (ParameterIDs::SYN_OSC_D_FOLD_AMT);
         const int   interpModeD=(int)*rawParam (ParameterIDs::SYN_OSC_D_INTERP_MODE);
@@ -9866,7 +9890,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 tv->setUnisonA (uniCountA, uniDetA, uniBlnA, uniWidA);   // per-OSC UNISON
                 tv->setUnisonB (uniCountB, uniDetB, uniBlnB, uniWidB);
-                tv->setSpread (blurA, blurB);   // fb582 — WT SPREAD (per-voice frame fan)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
                 tv->setUnisonC (uniCountC, uniDetC, uniBlnC, uniWidC);  tv->setUnisonD (uniCountD, uniDetD, uniBlnD, uniWidD);
@@ -9895,7 +9918,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     tv->setPhaseAmount  (oA.phaseAmt,    oB.phaseAmt);
                     tv->setPhaseAmountCD(oC.phaseAmt,    oD.phaseAmt);
                 }
-                tv->setSpreadCD (blurC, blurD);
                 tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
                 tv->setInterpModeCD (interpModeC, interpModeD);
                 tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
@@ -10873,7 +10895,6 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
                     wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
                     wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
-                    wtBlurVis_[o]    .store (d.spread,    std::memory_order_relaxed);   // fb460 · fb582 — the SPREAD value
                     wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
                     wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
                     wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);
