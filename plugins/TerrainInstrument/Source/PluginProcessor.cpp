@@ -996,7 +996,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     // renderBlend's own fast path at blur <= 1e-4 is documented bit-identical to lookup(), but it
     // still writes a whole 2048-sample cycle, which is MORE work than the 160 lookups a display
     // frame needs — so blur-off keeps the direct lookup and nothing about the common case changes.
-    const bool doBlur = D.blur > 1.0e-4f;
+    const bool doBlur = false;   // fb582 — spread is a property of the unison STACK, not of one cycle: the waterfall draws the plain frame
     std::vector<float> cyc;
     if (doBlur) cyc.resize ((size_t) juce::jmax (1, wt->getFrameSize()));
     const double t0ms = juce::Time::getMillisecondCounterHiRes();
@@ -1006,7 +1006,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         << ",\"wm\":"  << D.warpMode  << ",\"wa\":"  << juce::String (D.warpAmt,  4)
         << ",\"w2m\":" << D.warp2Mode << ",\"w2a\":" << juce::String (D.warp2Amt, 4)
         << ",\"fs\":"  << D.foldShape << ",\"fa\":"  << juce::String (D.foldAmt,  4)
-        << ",\"bl\":"  << juce::String (D.blur, 4)
+        << ",\"bl\":"  << juce::String (D.spread, 4)
         // fb462 — SMOOTHNESS. The samples go out as SCALED INTEGERS, not "%.4f" text. Measured:
         // 10,240 values cost 1.124 ms to format as decimals and 0.116 ms as ints — 9.7x, and 28%
         // fewer bytes. At 60 Hz that difference alone is 60 ms/s of message thread. 1/8192 is ~12
@@ -1022,7 +1022,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     {
         const float framePos = (dispN > 1) ? (float) i / (float) (dispN - 1) : 0.0f;
         // one blended cycle per DISPLAY frame — the same call, at the same mip, the voice makes
-        if (doBlur) wt->renderBlend (0, framePos, D.blur, cyc.data());
+        if (doBlur) wt->renderBlend (0, framePos, D.spread, cyc.data());   // fb582 — doBlur is false now; kept so the path stays compiled and reviewable
         tw::shapers::FoldState fst {};
         // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
         // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
@@ -3077,7 +3077,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     // BLUR (real DSP — frame-blend width; repurposes the old FRAME_SPREAD param ID)
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_FRAME_SPREAD, 1 },
-        "OSC A Blur",
+        "OSC A Spread",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     // INTERP MODE choice (Phase 11g: 2 modes — Linear / Stepped)
@@ -3265,7 +3265,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_B_FRAME_SPREAD, 1 },
-        "OSC B Blur",
+        "OSC B Spread",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -3451,7 +3451,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_C_FRAME_SPREAD, 1 },
-        "OSC C Blur",
+        "OSC C Spread",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -4425,7 +4425,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_D_FRAME_SPREAD, 1 },
-        "OSC D Blur",
+        "OSC D Spread",
         juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f),
         0.0f));
     layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -9866,7 +9866,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             {
                 tv->setUnisonA (uniCountA, uniDetA, uniBlnA, uniWidA);   // per-OSC UNISON
                 tv->setUnisonB (uniCountB, uniDetB, uniBlnB, uniWidB);
-                tv->setBlur (blurA, blurB);   // WT BLUR (frame blend)
+                tv->setSpread (blurA, blurB);   // fb582 — WT SPREAD (per-voice frame fan)
                 tv->setFold (foldShapeA, foldAmtA, foldShapeB, foldAmtB);   // Phase 11d
                 tv->setInterpMode (interpModeA, interpModeB);   // Phase 11g
                 tv->setUnisonC (uniCountC, uniDetC, uniBlnC, uniWidC);  tv->setUnisonD (uniCountD, uniDetD, uniBlnD, uniWidD);
@@ -9895,7 +9895,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     tv->setPhaseAmount  (oA.phaseAmt,    oB.phaseAmt);
                     tv->setPhaseAmountCD(oC.phaseAmt,    oD.phaseAmt);
                 }
-                tv->setBlurCD (blurC, blurD);
+                tv->setSpreadCD (blurC, blurD);
                 tv->setFoldCD (foldShapeC, foldAmtC, foldShapeD, foldAmtD);
                 tv->setInterpModeCD (interpModeC, interpModeD);
                 tv->setGlide (portaSec, glCurve01, glAlways, glScaled, synthGlideFrom_, glAnyHeld);   // PORTAMENTO
@@ -10873,7 +10873,7 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     wtWarpAmtVis_[o] .store (d.warpAmt,   std::memory_order_relaxed);
                     wtWarp2AmtVis_[o].store (d.warp2Amt,  std::memory_order_relaxed);
                     wtFoldAmtVis_[o] .store (d.foldAmt,   std::memory_order_relaxed);
-                    wtBlurVis_[o]    .store (d.blur,      std::memory_order_relaxed);   // fb460
+                    wtBlurVis_[o]    .store (d.spread,    std::memory_order_relaxed);   // fb460 · fb582 — the SPREAD value
                     wtWarpModeVis_[o] .store (d.warpMode,  std::memory_order_relaxed);
                     wtWarp2ModeVis_[o].store (d.warp2Mode, std::memory_order_relaxed);
                     wtFoldShapeVis_[o].store (d.foldShape, std::memory_order_relaxed);

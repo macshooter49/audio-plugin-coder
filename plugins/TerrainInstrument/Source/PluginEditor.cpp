@@ -6135,7 +6135,7 @@ void TerrainUiCore::timerCallback()
                 audioProcessor.spectralDisplay (o, sa, st, sl, sh);   // fb459 · fb472 cuts
                 js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
-                   << "," << SF (sa, 4) << "," << st << "," << SF (D.blur, 4)
+                   << "," << SF (sa, 4) << "," << st << "," << SF (D.spread, 4)
                    << "," << SF (sl, 4) << "," << SF (sh, 4) << "]";   // fb460 blur · fb472 cuts — THE ORDER HERE
                                                        // MUST MATCH cachedSig in index.html
             }
