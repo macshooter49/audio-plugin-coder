@@ -5143,7 +5143,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    baseline; the face carries the count, because the count IS the information. */
 #syn-panel .uni-voices { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .uni-voices-pill { position: relative; height: 20px; width: 30px; margin-top: 2px; padding: 0 6px;   /* fb558 — WIDTH, not min-width: 1 and 16 must occupy the same pill */
-  border: 1px solid var(--border-strong); border-radius: 10px; cursor: ns-resize; user-select: none;
+  /* fb579 — NO OUTLINE ON THE UNISON PILLS. Max asked to try it ("let's try removing the pill outline on voices
+     and stack... just have them work the same way"), looked at it, and kept it: "PERFECT". The two values now carry
+     the same visual weight as the knobs' own numbers, so the row reads as six things of one kind instead of two
+     boxes and four dials — and the longest stack names no longer draw an oval across their neighbours' columns.
+     The stroke is TRANSPARENT rather than removed, so every box metric — the 30px width, the drag target, the
+     select overlay, the label's baseline — is byte-identical and only the outline is gone. Interaction is
+     unchanged: Voices still drags (ns-resize), Stack is still the native <select>. */
+  border: 1px solid transparent; border-radius: 10px; cursor: ns-resize; user-select: none;
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 #syn-panel .uni-voices-val { font-size: 10px; letter-spacing: .4px; font-weight: 400; line-height: 1;
   color: var(--text-primary); pointer-events: none; font-variant-numeric: tabular-nums; }
@@ -5177,7 +5184,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    pill should stay exactly where it's at" was protecting. The sizer stays as the belt-and-braces if
    that column rule is ever loosened, and nothing is ever ellipsed: every option renders in full. */
 #syn-panel .uni-stack-pill { position: relative; height: 20px; margin-top: 2px; padding: 0 6px;   /* fb578 — the Voices pill's padding, so "Off" lands on its exact 30px */
-  border: 1px solid var(--border-strong); border-radius: 10px; min-width: 30px;
+  border: 1px solid transparent; border-radius: 10px; min-width: 30px;   /* fb579 — transparent, not removed: the geometry is untouched (see .uni-voices-pill) */
   display: flex; align-items: center; justify-content: center; box-sizing: border-box; }
 /* ⚠️ NO `overflow:hidden` HERE, and it must stay IN FLOW. Either one stops it contributing its
    intrinsic width to the cell — measured under the old grid arrangement: the sizer itself was
