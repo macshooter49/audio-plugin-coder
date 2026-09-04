@@ -353,7 +353,7 @@
    4 Hz idle sweep costs nothing. ts is performance.now() — same timebase as the rAF
    DOMHighResTimeStamp migrated painters were built against. */
 (function(){
-  var reg = new Map(), lastPush = 0;
+  var reg = new Map(), lastPush = nowMs(), laneSeen = false;   /* fb581 — see THE LANE IS THE CLOCK below */
   function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function run(ts){
     reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
@@ -368,7 +368,7 @@
      data. No pushes -> nothing pending -> zero frames at idle, exactly as designed. */
   var pend = false;
   window.__tiFrame = function(){
-    lastPush = nowMs();
+    lastPush = nowMs(); laneSeen = true;   /* fb581 — a real push: this page HAS a lane */
     if (pend) return;
     pend = true;
     window.requestAnimationFrame(function(ts){ pend = false; run(ts || nowMs()); });
@@ -383,16 +383,44 @@
      without dispatching: pushes are deliberately silent because nothing changed, and the
      fallback below must not start painting a page that is correctly at rest. No keepalive at
      all (browser preview, popped cards, dead channel) -> the fallback becomes the clock. */
-  window.__tiAlive = function(){ lastPush = nowMs(); };
+  window.__tiAlive = function(){ lastPush = nowMs(); laneSeen = true; };
+  /* ═══ fb581 — THE LANE IS THE CLOCK. A QUIET LANE MEANS REST, NEVER "DRIVE YOURSELF" ═══════════
+     Max: "could you at least put the LFO to rest instead of it free running again... it always has to
+     react and respond and be linked to the midi signal. Whenever there's midi stoppage, there's
+     nothing moving." And: sometimes a fresh instance free-runs, then later behaves.
+
+     THE BUG, reproduced and measured in Chromium by driving the lane exactly as the plugin does:
+        lane alive, keepalive every 500 ms  →  rest
+        lane QUIET (the plugin resting)     →  46 fps, everything animating
+        keepalive every 2000 ms             →  46 fps
+     The fallback below exists for a page with NO lane at all — a browser preview, a gate, a card
+     window on a dead channel — where the C++ never speaks and the page must be its own clock. It
+     decided "no lane" from SILENCE, and silence is exactly what a resting plugin sounds like. Two
+     ways in: (1) `lastPush` started at 0, so from page load until the first push the gap looked
+     infinite and a fresh instance free-ran until the C++ caught up — Max's "new instance" case;
+     (2) the keepalive is sent every 30 skipped frames, which is 500 ms at the editor's 60 Hz but
+     2 s the moment that timer is slowed (the 15 Hz idle-and-closed path, an occluded window, a busy
+     message thread) — past the 700 ms threshold, so the page took over precisely when the host was
+     under load. That is why it looked random, and why it hit the LFO, the filter and the randomiser
+     together: they all ride this one clock.
+
+     THE RULE NOW: once this page has EVER heard the lane — one push, one keepalive — it never drives
+     itself again. Silence from a lane that exists means the plugin is resting, which is the whole of
+     fb566/fb567 and what Max asked for. A page that has never heard it keeps the old fallback, so the
+     browser preview and the gate suite are untouched. Nothing here can be faked by a stub: only the
+     C++ calls __tiFrame / __tiAlive (the one page-side caller, fb574's showMacros, now asks
+     __tiWake for a repair frame instead — a layout change is not a push). */
   var fbOn = false;
   function fbChain(ts){
-    if (nowMs() - lastPush <= 700){ fbOn = false; return; }   /* pushes are back — stand down */
+    if (laneSeen || nowMs() - lastPush <= 700){ fbOn = false; return; }   /* the lane exists, or pushes are back — stand down */
     run(ts || nowMs());
     window.requestAnimationFrame(fbChain);
   }
   setInterval(function(){
+    if (laneSeen) return;                                     /* fb581 — this page has a clock; a quiet one means REST */
     if (!fbOn && nowMs() - lastPush > 700){ fbOn = true; window.requestAnimationFrame(fbChain); }
   }, 250);
+  window.__tiLaneSeen = function(){ return laneSeen; };       /* the gate reads it */
 
   /* ═══ fb577 — NOTHING THAT HAS A PICTURE STAYS BLANK WHEN THE CLOCK STOPS ═══════════════════════
      Max, after fb576 fixed the tape machines: "make sure that this doesn't happen with anything else.
@@ -12857,7 +12885,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               row.addEventListener('dblclick',function(e){ e.preventDefault(); if(Date.now()-lastUp<400) return; writeB(2); });
               window.__bendRange=function(){ return st; };
             }catch(_){} })();
-            function showMacros(on){ try{ vm.classList.toggle('vm-macros-active',on); if(mbtn) mbtn.classList.toggle('on',on); if(window.__tiFrame) window.__tiFrame(); }catch(_){ } }   /* fb574 — the CSS shows one view and hides the other IN PLACE (visibility, one grid cell): nothing beside or below this column moves; one frame is armed so every painter re-measures against whatever did change */
+            function showMacros(on){ try{ vm.classList.toggle('vm-macros-active',on); if(mbtn) mbtn.classList.toggle('on',on); if(window.__tiWake) window.__tiWake(); }catch(_){ } }   /* fb574 — the CSS shows one view and hides the other IN PLACE (visibility, one grid cell): nothing beside or below this column moves; one frame is armed so every painter re-measures against whatever did change */
             if(mbtn) mbtn.addEventListener('click',function(){ showMacros(!vm.classList.contains('vm-macros-active')); });   // fb272 — real toggle: click Macros to enter, click again to return to the voice params
             [].forEach.call(document.querySelectorAll('#syn-panel .vm-4 .voice-toggle:not(.vm-macros-btn)'),function(b){ b.addEventListener('click',function(){ showMacros(false); }); });
           }catch(e){} })();
