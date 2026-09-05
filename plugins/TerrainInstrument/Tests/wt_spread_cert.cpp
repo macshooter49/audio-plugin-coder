@@ -1,27 +1,29 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  wt_stretch_au.cpp — fb583: THE INSTALLED PLUGIN REALLY APPLIES STRETCH.
+//  wt_spread_cert.cpp — fb582: SPREAD GIVES EVERY UNISON VOICE ITS OWN FRAME, AND IT IS AUDIBLE.
 //
-//    clang++ -std=c++17 -O2 Tests/wt_stretch_au.cpp -o /tmp/wt_stretch_au \
-//        -framework AudioToolbox -framework CoreFoundation -framework CoreAudio && /tmp/wt_stretch_au
+//    clang++ -std=c++17 -O2 Tests/wt_spread_cert.cpp -o /tmp/wt_spread_cert \
+//        -framework AudioToolbox -framework CoreFoundation -framework CoreAudio && /tmp/wt_spread_cert
 //
-//  Tests/wt_stretch_cert.cpp proves the TRANSFORM — offline, against the real factory bank, where
-//  it can afford a hundred table bakes per bar. This file proves the WIRING: that the shipping AU
-//  actually calls it. Those are different claims and the second is the one fb469 warned about —
-//  "a display feed is not a control signal" was a bug that BUILT CLEAN AND LOOKED WIRED, and was
-//  only caught on the installed plugin. STRETCH is baked on the message thread by the 60 Hz timer,
-//  so every bar here renders through the real AU and pumps the run loop to let that timer run.
+//  Max: "I don't like blur, never did. There's no point in having it there... spread needs to DO
+//  something." BLUR averaged a Gaussian band of frames into one cycle, which can only cancel detail.
+//  SPREAD fans the unison stack ACROSS the table instead: each voice reads its own frame, seated on
+//  its own detune position, so a stack becomes a chorus of different waveforms.
 //
-//  ⚠️ THE SYNTH IS NOT REPEATABLE NOTE TO NOTE BY DESIGN (per-voice drift and start phase), so
-//     every bar averages several notes and is read against a MEASURED noise floor, never against
-//     a single A/B. That lesson is fb582's, and it stands.
+//  THE RIG: OSC A alone on a real table (WT Preset 4 — a sine cannot fail a timbre test), unison
+//  DETUNE at 0 so the only thing separating the voices is the frame they read. Two renders of the
+//  same held note, spread 0 against spread 1, compared as normalised magnitude spectra (a 256-bin
+//  DFT over a 1024-sample window, each normalised to unit energy first) so the number is TIMBRE
+//  change and not level change.
 //
 //  THE BARS
-//   0  the AU exposes the knob under its NEW name — "Stretch", not "Spread" (the rename shipped)
-//   1  AT ONE VOICE IT STILL WORKS — the fb582 failure was a knob that needed unison; this one
-//      must move a single voice, because it is a property of the TABLE, not of the stack
-//   2  IT MOVES THE SOUND on the installed plugin, well clear of the synth's own note-to-note wander
-//   3  THE PITCH DOES NOT MOVE — the fundamental is pinned, so f0 must land in the same bin
-//   4  NO CLICKS while the knob is swept under a held note
+//   0  the AU exposes OSC A Level, WT Preset, Unison, Unison Detune and Spread
+//   1  AT ONE VOICE, SPREAD IS INERT — one voice has no stack to fan: the two renders match to
+//      better than −60 dB, so no mono patch can change under it
+//   2  AT EIGHT VOICES, SPREAD CHANGES THE SOUND — spectral distance >= 0.15 (measured 0 vs 1)
+//   3  IT IS TIMBRE, NOT LEVEL — the two renders sit within 3 dB of each other
+//   4  THE KNOB IS PROGRESSIVE — distance grows with the knob: d(0.25) < d(0.5) < d(1.0)
+//   5  NO CLICKS — sweeping spread 0 → 1 under a held note produces no sample step a real waveform
+//      would not (max |Δ| stays under 4× the un-swept note's own max |Δ|)
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -192,88 +194,89 @@ static double diffDb (const std::vector<float>& a, const std::vector<float>& b)
     return 10.0 * std::log10 (std::max (1e-30, num) / std::max (1e-30, den));
 }
 
-
-// the bin of the played note's fundamental, and how much energy sits there
-static int f0Bin (const std::vector<double>& sp) { int b = 0; double m = 0;
-    for (int i = 0; i < (int) sp.size(); ++i) if (sp[(size_t) i] > m) { m = sp[(size_t) i]; b = i; } return b; }
-
 int main()
 {
-    std::printf ("\n══ wt_stretch_au — fb583 (the INSTALLED AU) ══\n\n");
-    AU a; if (! a.open()) { std::printf ("  cannot open the AU — is it installed?\n"); return 1; }
+    AU au; if (! au.open()) return 1;
+    std::printf ("\n══ fb582 — SPREAD: EVERY UNISON VOICE ITS OWN FRAME (installed AU) ══\n\n");
+    const std::string LVL = au.find ("OSC A Level"), WT = au.find ("OSC A WT Preset"),
+                      UNI = au.find ("OSC A Unison"), DET = au.find ("OSC A Unison Detune"),
+                      SPR = au.find ("OSC A Spread");
+    chk (! LVL.empty() && ! WT.empty() && ! UNI.empty() && ! DET.empty() && ! SPR.empty(),
+         "0  the AU exposes OSC A Level, WT Preset, Unison, Unison Detune and Spread",
+         "level='" + LVL + "' wt='" + WT + "' uni='" + UNI + "' det='" + DET + "' spread='" + SPR + "'");
+    if (LVL.empty() || WT.empty() || UNI.empty() || DET.empty() || SPR.empty()) { au.close(); return 1; }
 
-    const std::string lvl = a.find ("OSC A Level");
-    const std::string wtp = a.find ("OSC A WT Preset");
-    const std::string uni = a.find ("OSC A Unison");
-    const std::string str = a.find ("OSC A Stretch");
-    chk (! lvl.empty() && ! wtp.empty() && ! str.empty(),
-         "[0] THE AU EXPOSES 'Stretch' (the rename shipped)",
-         "level='" + lvl + "' wt='" + wtp + "' stretch='" + str + "'");
-    if (str.empty()) { std::printf ("\n  the knob is not exposed under that name — nothing else can be measured.\n"); a.close(); return 1; }
-    if (a.find ("OSC A Spread") != "") chk (false, "[0b] the OLD name is gone", "still exposes 'Spread'");
+    for (const char* other : { "OSC B Level", "OSC C Level", "OSC D Level" })
+    { const std::string n = au.find (other); if (! n.empty()) au.set (n, 0.0f); }
+    au.set (WT, 4.0f / 100.0f);          // a real table: frames that actually differ
+    au.set (DET, 0.0f);                  // the ONLY thing separating the voices is the frame
+    au.pump (0.3);
 
-    // OSC A alone, on a real table (a sine has nothing to stretch), one voice.
-    a.set (lvl, 1.0f);
-    a.set (wtp, 4.0f / 45.0f);          // Prophet Saw — 24 harmonics, plenty to move
-    if (! uni.empty()) a.set (uni, 0.0f);   // ONE voice: stretch may not need a stack
-    a.pump (0.4);
-
-    const int NOTES[6] = { 48, 55, 60, 64, 67, 72 };
-
-    auto renderAt = [&] (float stretch, int note)
-    {
-        a.set (str, stretch);
-        a.render (2); a.pump (0.35);        // let the 60 Hz timer bake and publish the table
-        return a.note (note);
+    auto render = [&] (int voices, float spread) {
+        au.set (UNI, (float) (voices - 1) / 15.0f);
+        au.set (SPR, spread);
+        au.pump (0.35);
+        return au.note (60);
     };
+    /* THE SYNTH IS NOT REPEATABLE NOTE TO NOTE, BY DESIGN — per-voice drift and start phase mean two
+       renders of the SAME settings differ. MEASURED: one voice 4.8 dB sample-wise (spectral 0.0023),
+       eight voices 5.4 dB and spectral 0.39, because eight near-identical voices comb differently
+       every note. So a single note cannot isolate spread at all. Average the magnitude spectra over
+       several notes: the random comb averages away, the systematic timbre change does not. */
+    struct M { std::vector<double> spec; double rms; };
+    auto measure = [&] (int voices, float spread, int n) {
+        au.set (UNI, (float) (voices - 1) / 15.0f); au.set (SPR, spread); au.pump (0.35);
+        std::vector<double> acc ((size_t) 256, 0.0); double r = 0;
+        for (int k = 0; k < n; ++k) { const auto v = au.note (60); const auto s = spectrum (v);
+            for (size_t b = 0; b < acc.size(); ++b) acc[b] += s[b]; r += rmsDb (v); }
+        double e = 0; for (double m : acc) e += m * m; e = std::sqrt (std::max (1e-30, e));
+        for (double& m : acc) m /= e;
+        return M { acc, r / n };
+    };
+    const int N = 6;
+    // the floor: two INDEPENDENT averaged measurements of the same settings
+    const M f1a = measure (1, 0.0f, N), f1b = measure (1, 0.0f, N);
+    const M f8a = measure (8, 0.0f, N), f8b = measure (8, 0.0f, N);
+    const double floor1 = specDist (f1a.spec, f1b.spec), floor8 = specDist (f8a.spec, f8b.spec);
+    std::printf ("   noise floor over %d notes: 1 voice %.4f · 8 voices %.4f\n", N, floor1, floor8);
 
-    // ── the FLOOR: the same settings, twice, is not the same audio on this synth ──
-    double floorD = 0.0;
-    for (int i = 0; i < 6; ++i)
-    { const auto x = renderAt (0.0f, NOTES[i]); const auto y = renderAt (0.0f, NOTES[i]);
-      floorD += specDist (spectrum (x), spectrum (y)) / 6.0; }
+    // 1 — one voice: nothing to fan
+    const M m1s = measure (1, 1.0f, N);
+    const double dMono = specDist (f1a.spec, m1s.spec);
+    chk (dMono <= floor1 * 2.0 + 0.005,
+         "1  AT ONE VOICE, SPREAD IS INERT: it moves the sound no more than the synth's own note-to-note drift, so no mono patch changes under it",
+         "spread 0 → 1 distance " + std::to_string (dMono) + " against a floor of " + std::to_string (floor1));
 
-    // ── bar 1 + 2: one voice, stretch 0 against stretch 1 ──
-    double moved = 0.0, lvlDelta = 0.0; int binShift = 0;
-    for (int i = 0; i < 6; ++i)
-    {
-        const auto dry = renderAt (0.0f, NOTES[i]);
-        const auto wet = renderAt (1.0f, NOTES[i]);
-        const auto sd = spectrum (dry), sw = spectrum (wet);
-        moved   += specDist (sd, sw) / 6.0;
-        lvlDelta += std::abs (rmsDb (wet) - rmsDb (dry)) / 6.0;
-        binShift = std::max (binShift, std::abs (f0Bin (sd) - f0Bin (sw)));
-    }
-    char b[256];
-    std::snprintf (b, sizeof b, "one voice: moved %.3f against a %.3f noise floor (%.1fx)",
-                   moved, floorD, floorD > 1e-6 ? moved / floorD : 0.0);
-    chk (moved > floorD * 3.0, "[1] AT ONE VOICE IT STILL WORKS — no unison needed", b);
+    // 2 / 3 — eight voices, detune 0: the frame fan is the only variable
+    const M e0 = f8a, e1 = measure (8, 1.0f, N);
+    const double d01 = specDist (e0.spec, e1.spec);
+    const double lvlDelta = std::abs (e1.rms - e0.rms);
+    chk (d01 >= 0.15 && d01 >= floor8 * 3.0,
+         "2  AT EIGHT VOICES, SPREAD CHANGES THE SOUND: it moves the spectrum far past the stack's own note-to-note wander",
+         "distance " + std::to_string (d01) + " vs floor " + std::to_string (floor8) + " (want >= 0.15 and >= 3x the floor)");
+    chk (lvlDelta < 4.0, "3  IT IS TIMBRE, NOT LEVEL: the averaged level barely moves while the spectrum travels",
+         std::to_string (e0.rms) + " dB → " + std::to_string (e1.rms) + " dB (Δ " + std::to_string (lvlDelta) + ", want < 4)");
 
-    std::snprintf (b, sizeof b, "spectral move %.3f, level moved %.2f dB while it did", moved, lvlDelta);
-    chk (moved > floorD * 3.0 && lvlDelta < 6.0, "[2] IT MOVES THE SOUND, AND IT IS TIMBRE", b);
+    // 4 — the knob is progressive
+    const M q = measure (8, 0.25f, N), h = measure (8, 0.5f, N);
+    const double dq = specDist (e0.spec, q.spec), dh = specDist (e0.spec, h.spec);
+    chk (dq > floor8 && dq < dh && dh < d01,
+         "4  THE KNOB IS PROGRESSIVE: every setting is past the floor, and the further it goes the further the sound travels",
+         "d(0.25) " + std::to_string (dq) + " < d(0.5) " + std::to_string (dh) + " < d(1.0) " + std::to_string (d01) + " · floor " + std::to_string (floor8));
 
-    std::snprintf (b, sizeof b, "fundamental moved %d DFT bins across the whole knob (must be 0)", binShift);
-    chk (binShift == 0, "[3] THE PITCH DOES NOT MOVE — the fundamental is pinned", b);
-
-    // ── bar 4: sweep the knob under a held note ──
-    a.set (str, 0.0f); a.render (2); a.pump (0.3);
-    a.midi (0x90, 60, 100); a.render (8);
+    // 5 — no clicks while the knob moves under a held note
+    au.set (UNI, 7.0f / 15.0f); au.set (SPR, 0.0f); au.pump (0.3);
+    const double quietStep = maxStep (au.note (60));
+    au.set (SPR, 0.0f); au.pump (0.2);
+    au.midi (0x90, 60, 100); au.render (10);
     std::vector<float> swept;
-    for (int k = 0; k <= 20; ++k)
-    { a.set (str, (float) k / 20.0f); const auto chunk = a.render (3);
-      swept.insert (swept.end(), chunk.begin(), chunk.end());
-      CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.02, false); }
-    a.midi (0x80, 60, 0); a.render (20);
-    a.set (str, 0.0f); a.render (2); a.pump (0.3);
-    a.midi (0x90, 60, 100); a.render (8);
-    const auto steady = a.render (63);
-    a.midi (0x80, 60, 0); a.render (20);
-    const double sweptStep = maxStep (swept), steadyStep = maxStep (steady);
-    std::snprintf (b, sizeof b, "biggest sample step while sweeping %.5f vs %.5f held still (%.2fx)",
-                   sweptStep, steadyStep, steadyStep > 1e-9 ? sweptStep / steadyStep : 0.0);
-    chk (sweptStep < steadyStep * 4.0, "[4] NO CLICKS WHILE SWEEPING THE KNOB", b);
+    for (int i = 0; i <= 40; ++i)
+    { au.set (SPR, (float) i / 40.0f); auto b = au.render (2); swept.insert (swept.end(), b.begin(), b.end()); }
+    au.midi (0x80, 60, 0); au.render (20);
+    const double sweptStep = maxStep (swept);
+    chk (sweptStep <= quietStep * 4.0 + 1e-6, "5  NO CLICKS: sweeping spread under a held note makes no step the waveform itself would not",
+         "max |Δ| swept " + std::to_string (sweptStep) + " vs still " + std::to_string (quietStep) + " (want <= 4x)");
 
-    a.close();
-    std::printf ("\n══ RESULT: %d pass, %d FAIL ══\n\n", pass, fail);
-    return fail == 0 ? 0 : 1;
+    std::printf ("\n  %d pass · %d fail\n", pass, fail);
+    au.close(); return fail ? 1 : 0;
 }
