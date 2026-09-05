@@ -1032,9 +1032,11 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // note) and this one advances once per DRAWN point. The drawing was already approximate in
         // exactly this way — it reads mip 0 rather than the note's own mip.
         const bool  doFb = D.feedback > 1.0e-4f;
-        const float fbFr = tw::SynthVoice::kWtFbFrame * D.feedback;
+        const float fbFr = tw::SynthVoice::kWtFbFrame * std::pow (D.feedback, tw::SynthVoice::kWtFbFrameExp);
         const float fbPh = tw::SynthVoice::kWtFbPhase * std::pow (D.feedback, tw::SynthVoice::kWtFbExp);
-        float fbState = 0.0f;
+        const float fbRw = juce::jlimit (0.0f, 1.0f, (D.feedback - tw::SynthVoice::kWtFbRawFrom)
+                                                   / (1.0f - tw::SynthVoice::kWtFbRawFrom));
+        float fbState = 0.0f, fbRaw = 0.0f;
         // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
         // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
         // seed it, then draw the second. Feedback needs that lap for the same reason.
@@ -1052,14 +1054,15 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
                 {
                     double r = ph - std::floor (ph);               // the voice wraps the same way
                     float  fpUse = framePos;
-                    if (doFb)                                       // fb584 — bend BOTH, as the voice does
-                    { r += (double) (fbPh * fbState); r -= std::floor (r);
-                      fpUse = juce::jlimit (0.0f, 1.0f, framePos + fbFr * fbState); }
+                    if (doFb)                                       // fb585 — bend BOTH, as the voice does
+                    { const float fbv = fbState + fbRw * (fbRaw - fbState);
+                      r += (double) (fbPh * fbv); r -= std::floor (r);
+                      fpUse = tw::SynthVoice::fbFrameFold (framePos + fbFr * fbv); }
                     v  = doBlur ? tw::Wavetable::readCycle (cyc.data(), (float) r)   // fb460
                                 : wt->lookup (0, fpUse, (float) r);                  // mip 0 = full bandwidth
                     // the loop closes on the RAW table output, before the window and the warps —
                     // exactly where SynthVoice closes it
-                    if (doFb) fbState = 0.5f * (fbState + v);
+                    if (doFb) { fbState = 0.5f * (fbState + v); fbRaw = v; }
                     v *= window;                                    // PWM / FORMANT post-lookup window
                     v  = tw::SynthVoice::applyAmpWarp (D.warpMode,  D.warpAmt,  v);
                     v  = tw::SynthVoice::applyAmpWarp (D.warp2Mode, D.warp2Amt, v);

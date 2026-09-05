@@ -332,8 +332,13 @@ int main()
     std::snprintf (b, sizeof b, "spectral move per quarter: %.3f / %.3f / %.3f / %.3f (this synth's own floor: %.3f); top/bottom %.1fx",
                    moved[1], moved[2], moved[3], moved[4], floorD,
                    moved[1] > 1e-6 ? moved[4]/moved[1] : 0.0);
-    chk (moved[4] > moved[3] && moved[3] > floorD * 1.5 && moved[4] > floorD * 3.0,
-         "[4] THE TOP HALF PROGRESSES, well clear of the floor", b);
+    //    ⚠️ AND NOT `moved[3] > floor*1.5` EITHER, which is what this bar said first. Knob 0.50 is
+    //    the TURN — bar 2 certifies the travel below it is still nearly clean — so that reading sits
+    //    within a whisker of the floor (measured 0.149-0.256 against a floor of 0.073-0.107, i.e. a
+    //    x1.5 bar of 0.11-0.16) and flipped red about one run in six. The comparison that is never
+    //    marginal is the top against everything under it: measured 4.8x to 10.2x, never below 3x.
+    chk (moved[4] > moved[3] * 3.0 && moved[4] > floorD * 5.0,
+         "[4] THE TOP DOMINATES EVERYTHING BELOW IT", b);
 
     // ── sweep under a held note ──
     a.set (fbk, 0.0f); a.render (2); a.pump (0.3);

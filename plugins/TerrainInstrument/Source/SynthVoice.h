@@ -2809,6 +2809,8 @@ namespace tw
                 // FM-ENGINE-VOICE — M2 phases + M1 feedback memory start clean each note
                 uMod2PhaseA_[(size_t) u] = 0.0;  uMod2PhaseB_[(size_t) u] = 0.0;
                 uMod2PhaseC_[(size_t) u] = 0.0;  uMod2PhaseD_[(size_t) u] = 0.0;
+                wtFbYA_[(size_t) u] = 0.0f; wtFbYB_[(size_t) u] = 0.0f;   // fb585
+                wtFbYC_[(size_t) u] = 0.0f; wtFbYD_[(size_t) u] = 0.0f;
                 wtFbA_[(size_t) u] = 0.0f;  wtFbB_[(size_t) u] = 0.0f;   // fb584
                 wtFbC_[(size_t) u] = 0.0f;  wtFbD_[(size_t) u] = 0.0f;
                 fmFbA_[(size_t) u] = 0.0f;  fmFbB_[(size_t) u] = 0.0f;
@@ -3650,10 +3652,38 @@ namespace tw
             // Per BLOCK, never per sample: the taper is a pow() and the knob cannot move inside
             // a block anyway.
             const float fbAmtA = fbAmtA_, fbAmtB = fbAmtB_, fbAmtC = fbAmtC_, fbAmtD = fbAmtD_;
-            const float fbFrA = kWtFbFrame * fbAmtA, fbPhA = kWtFbPhase * std::pow (fbAmtA, kWtFbExp);
-            const float fbFrB = kWtFbFrame * fbAmtB, fbPhB = kWtFbPhase * std::pow (fbAmtB, kWtFbExp);
-            const float fbFrC = kWtFbFrame * fbAmtC, fbPhC = kWtFbPhase * std::pow (fbAmtC, kWtFbExp);
-            const float fbFrD = kWtFbFrame * fbAmtD, fbPhD = kWtFbPhase * std::pow (fbAmtD, kWtFbExp);
+            // fb585 — RAISING THE CEILING WITHOUT DIRTYING THE FLOOR. Turning the two depths up on
+            // their own would have pushed grit down into the bottom of the knob, which the law
+            // forbids. Steepening the TAPERS at the same time pays for it: a steeper exponent drags
+            // the dirt further up the travel, and that is what buys the headroom. MEASURED, worst of
+            // four tables x four octaves, against what fb584 shipped:
+            //                              @10%    @25%   @100%   vs WT Pos   quietest step
+            //   fb584  0.25s   / 0.80s^4    -37.5   -27.5   +14.6     1.07x       0.41 dB
+            //   fb585  0.80s^1.5/12s^8      -37.5   -26.4   +27.1     1.80x       0.41 dB
+            // THE WHOLE BOTTOM HALF IS UNCHANGED, and the top is 12.5 dB further off the harmonic
+            // grid with 68% more distance from anything WT Pos can reach.
+            //
+            // ⚠️ THE FRAME MAX IS SMALL ON PURPOSE, AND IT COST TWO WRONG ANSWERS TO LEARN WHY.
+            //    4.0*s^3 read a beautiful -52.6 dB at 10% — because that end of the knob was DEAD
+            //    (4 of 20 adjacent steps moved the spectrum by under 1 dB). Clean is not the same as
+            //    clean AND useful, which is what the law actually asks for. Opening the taper back up
+            //    to 4.0*s^2 revived it and immediately dirtied 25% to -15.5 dB, past the bar. The way
+            //    out is that THE TOP DOES NOT COME FROM THE FRAME AT ALL: at frame max 1.0 the full-
+            //    travel ratio is 1.74, and at 4.0 it is 1.80. So the frame path was dropped to where
+            //    the bottom is both clean and alive, and the PHASE path was given the whole ceiling.
+            auto fbTaper = [] (float a, float& fr, float& ph, float& raw)
+            {
+                fr  = kWtFbFrame * std::pow (a, kWtFbFrameExp);
+                ph  = kWtFbPhase * std::pow (a, kWtFbExp);
+                // ...and the second lever, which is the one that actually removes a ceiling rather
+                // than raising it: the DX7 mean filter is the GOVERNOR (the patents put it there to
+                // stop the oscillatory burst each period). Above kWtFbRawFrom it is blended out and
+                // the loop runs raw.
+                raw = juce::jlimit (0.0f, 1.0f, (a - kWtFbRawFrom) / (1.0f - kWtFbRawFrom));
+            };
+            float fbFrA, fbPhA, fbRwA, fbFrB, fbPhB, fbRwB, fbFrC, fbPhC, fbRwC, fbFrD, fbPhD, fbRwD;
+            fbTaper (fbAmtA, fbFrA, fbPhA, fbRwA);  fbTaper (fbAmtB, fbFrB, fbPhB, fbRwB);
+            fbTaper (fbAmtC, fbFrC, fbPhC, fbRwC);  fbTaper (fbAmtD, fbFrD, fbPhD, fbRwD);
             // 🔇 fb584 — a ~1.2 ms PER-SAMPLE glide on both depths, because the house rule asks for a
             //    per-sample ramp on any continuous parameter, and fb204 put exactly this under the FM
             //    index, which is the same kind of quantity (a modulation DEPTH, where a block-rate
@@ -4094,7 +4124,8 @@ namespace tw
                     // by the whole stack, so u == 0 is the sample tick.
                     if (u == 0)
                     { fbFrNowA_ += (fbFrA - fbFrNowA_) * fbGlide;
-                      fbPhNowA_ += (fbPhA - fbPhNowA_) * fbGlide; }
+                      fbPhNowA_ += (fbPhA - fbPhNowA_) * fbGlide;
+                      fbRwNowA_ += (fbRwA - fbRwNowA_) * fbGlide; }
                     float sAu = 0.0f;
 
                     switch (engine_)
@@ -4134,11 +4165,13 @@ namespace tw
                                     {   // fb584 — WT FEEDBACK. The blend buffer holds ONE frame, and frame
                                         // feedback needs a different one every sample, so this reads the table
                                         // directly — the same trade the blend path was always built to allow.
-                                        const float fbv = wtFbA_[(size_t) u];
+                                        const float mn  = wtFbA_[(size_t) u];                 // the governed signal
+                                        const float fbv = mn + fbRwNowA_ * (wtFbYA_[(size_t) u] - mn);
                                         double rpf = rpA + (double) (fbPhNowA_ * fbv); rpf -= std::floor (rpf);
-                                        const float fpf = juce::jlimit (0.0f, 1.0f, framePos_ + fbFrNowA_ * fbv);
+                                        const float fpf = fbFrameFold (framePos_ + fbFrNowA_ * fbv);
                                         sAu = currentWavetable_->lookup (currentMipLevelA_, fpf, (float) rpf);
-                                        wtFbA_[(size_t) u] = 0.5f * (wtFbA_[(size_t) u] + sAu);   // the DX7 mean filter
+                                        wtFbA_[(size_t) u]  = 0.5f * (mn + sAu);   // the DX7 mean filter
+                                        wtFbYA_[(size_t) u] = sAu;                 // ...and the RAW tap it is blended against
                                     }
                                     else
                                         sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
@@ -4457,7 +4490,8 @@ namespace tw
                     // by the whole stack, so u == 0 is the sample tick.
                     if (u == 0)
                     { fbFrNowB_ += (fbFrB - fbFrNowB_) * fbGlide;
-                      fbPhNowB_ += (fbPhB - fbPhNowB_) * fbGlide; }
+                      fbPhNowB_ += (fbPhB - fbPhNowB_) * fbGlide;
+                      fbRwNowB_ += (fbRwB - fbRwNowB_) * fbGlide; }
                     float sBu = 0.0f;
 
                     switch (engineB_)
@@ -4494,11 +4528,13 @@ namespace tw
                                     {   // fb584 — WT FEEDBACK. The blend buffer holds ONE frame, and frame
                                         // feedback needs a different one every sample, so this reads the table
                                         // directly — the same trade the blend path was always built to allow.
-                                        const float fbv = wtFbB_[(size_t) u];
+                                        const float mn  = wtFbB_[(size_t) u];                 // the governed signal
+                                        const float fbv = mn + fbRwNowB_ * (wtFbYB_[(size_t) u] - mn);
                                         double rpf = rpB + (double) (fbPhNowB_ * fbv); rpf -= std::floor (rpf);
-                                        const float fpf = juce::jlimit (0.0f, 1.0f, framePosB_ + fbFrNowB_ * fbv);
+                                        const float fpf = fbFrameFold (framePosB_ + fbFrNowB_ * fbv);
                                         sBu = currentWavetableB_->lookup (currentMipLevelB_, fpf, (float) rpf);
-                                        wtFbB_[(size_t) u] = 0.5f * (wtFbB_[(size_t) u] + sBu);   // the DX7 mean filter
+                                        wtFbB_[(size_t) u]  = 0.5f * (mn + sBu);   // the DX7 mean filter
+                                        wtFbYB_[(size_t) u] = sBu;                 // ...and the RAW tap it is blended against
                                     }
                                     else
                                         sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
@@ -4789,7 +4825,8 @@ namespace tw
                     // by the whole stack, so u == 0 is the sample tick.
                     if (u == 0)
                     { fbFrNowC_ += (fbFrC - fbFrNowC_) * fbGlide;
-                      fbPhNowC_ += (fbPhC - fbPhNowC_) * fbGlide; }
+                      fbPhNowC_ += (fbPhC - fbPhNowC_) * fbGlide;
+                      fbRwNowC_ += (fbRwC - fbRwNowC_) * fbGlide; }
                     float sCu = 0.0f;
 
                     switch (engineC_)
@@ -4826,11 +4863,13 @@ namespace tw
                                     {   // fb584 — WT FEEDBACK. The blend buffer holds ONE frame, and frame
                                         // feedback needs a different one every sample, so this reads the table
                                         // directly — the same trade the blend path was always built to allow.
-                                        const float fbv = wtFbC_[(size_t) u];
+                                        const float mn  = wtFbC_[(size_t) u];                 // the governed signal
+                                        const float fbv = mn + fbRwNowC_ * (wtFbYC_[(size_t) u] - mn);
                                         double rpf = rpC + (double) (fbPhNowC_ * fbv); rpf -= std::floor (rpf);
-                                        const float fpf = juce::jlimit (0.0f, 1.0f, framePosC_ + fbFrNowC_ * fbv);
+                                        const float fpf = fbFrameFold (framePosC_ + fbFrNowC_ * fbv);
                                         sCu = currentWavetableC_->lookup (currentMipLevelC_, fpf, (float) rpf);
-                                        wtFbC_[(size_t) u] = 0.5f * (wtFbC_[(size_t) u] + sCu);   // the DX7 mean filter
+                                        wtFbC_[(size_t) u]  = 0.5f * (mn + sCu);   // the DX7 mean filter
+                                        wtFbYC_[(size_t) u] = sCu;                 // ...and the RAW tap it is blended against
                                     }
                                     else
                                         sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
@@ -5121,7 +5160,8 @@ namespace tw
                     // by the whole stack, so u == 0 is the sample tick.
                     if (u == 0)
                     { fbFrNowD_ += (fbFrD - fbFrNowD_) * fbGlide;
-                      fbPhNowD_ += (fbPhD - fbPhNowD_) * fbGlide; }
+                      fbPhNowD_ += (fbPhD - fbPhNowD_) * fbGlide;
+                      fbRwNowD_ += (fbRwD - fbRwNowD_) * fbGlide; }
                     float sDu = 0.0f;
 
                     switch (engineD_)
@@ -5158,11 +5198,13 @@ namespace tw
                                     {   // fb584 — WT FEEDBACK. The blend buffer holds ONE frame, and frame
                                         // feedback needs a different one every sample, so this reads the table
                                         // directly — the same trade the blend path was always built to allow.
-                                        const float fbv = wtFbD_[(size_t) u];
+                                        const float mn  = wtFbD_[(size_t) u];                 // the governed signal
+                                        const float fbv = mn + fbRwNowD_ * (wtFbYD_[(size_t) u] - mn);
                                         double rpf = rpD + (double) (fbPhNowD_ * fbv); rpf -= std::floor (rpf);
-                                        const float fpf = juce::jlimit (0.0f, 1.0f, framePosD_ + fbFrNowD_ * fbv);
+                                        const float fpf = fbFrameFold (framePosD_ + fbFrNowD_ * fbv);
                                         sDu = currentWavetableD_->lookup (currentMipLevelD_, fpf, (float) rpf);
-                                        wtFbD_[(size_t) u] = 0.5f * (wtFbD_[(size_t) u] + sDu);   // the DX7 mean filter
+                                        wtFbD_[(size_t) u]  = 0.5f * (mn + sDu);   // the DX7 mean filter
+                                        wtFbYD_[(size_t) u] = sDu;                 // ...and the RAW tap it is blended against
                                     }
                                     else
                                         sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
@@ -7653,14 +7695,26 @@ namespace tw
         //     the product, exactly as the law says it sometimes is.
     public:   // the display bakes the SAME curve (PluginProcessor::getOscWavetableJson), so these
               // are shared rather than copied — a second set of numbers is a second source of truth
-        static constexpr float kWtFbFrame = 0.25f;   // frame displacement at full travel
-        static constexpr float kWtFbPhase = 0.80f;   // phase displacement, in CYCLES, at full
-        static constexpr float kWtFbExp   = 4.0f;    // the phase taper — it owns only the top
+        static constexpr float kWtFbFrame    = 0.80f;   // frame displacement at full travel
+        static constexpr float kWtFbFrameExp = 1.5f;    // ...and its taper
+        static constexpr float kWtFbPhase    = 12.0f;   // phase displacement, in CYCLES, at full
+        static constexpr float kWtFbExp      = 8.0f;    // the phase taper — it owns only the top
+        static constexpr float kWtFbRawFrom  = 0.80f;   // above this the DX7 governor is blended OUT
+
+        /** The frame axis FOLDS at the table ends instead of sticking to them. At full travel the
+            displacement is +/-4 against a 0..1 axis, so a clamp would pin the read to frame 0 or 15
+            for most of every cycle — motion turned into a flat spot. Reflecting keeps it moving,
+            and MEASURED it is strictly better on every number: +27.3 dB inharmonic at full against
+            +25.4 clamped, 1.80x the WT Pos axis against 1.76, and very slightly less level swing. */
+        static inline float fbFrameFold (float f) noexcept
+        { const float x = std::fmod (std::fabs (f), 2.0f); return (x <= 1.0f) ? x : 2.0f - x; }
     private:
         std::array<float, kMaxUnison>  wtFbA_ {}, wtFbB_ {}, wtFbC_ {}, wtFbD_ {};
+        std::array<float, kMaxUnison>  wtFbYA_ {}, wtFbYB_ {}, wtFbYC_ {}, wtFbYD_ {};   // fb585 raw tap
         // the de-zippered depths actually used by the read (fb584)
         float fbFrNowA_ = 0.0f, fbFrNowB_ = 0.0f, fbFrNowC_ = 0.0f, fbFrNowD_ = 0.0f;
         float fbPhNowA_ = 0.0f, fbPhNowB_ = 0.0f, fbPhNowC_ = 0.0f, fbPhNowD_ = 0.0f;
+        float fbRwNowA_ = 0.0f, fbRwNowB_ = 0.0f, fbRwNowC_ = 0.0f, fbRwNowD_ = 0.0f;
         // ── FM WEATHERING SUITE (page 2) — knob targets + smoothed + slow-process state ──
         std::array<float, 4> fmStrike_ {}, fmAge_ {}, fmRust_ {}, fmQuakeKnob_ {}, fmScorchKnob_ {}, fmStorm_ {};
         std::array<float, 4> fmStrikeSm_ {}, fmAgeSm_ {}, fmRustSm_ {}, fmQuakeSm_ {}, fmScorchSm_ {}, fmStormSm_ {};

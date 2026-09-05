@@ -34,47 +34,27 @@
 using namespace tw;
 static const double SR = 48000.0;
 static const int NF = 32768, WARM = 8192;
-static int OS = 1;                       // oversampling factor for the feedback oscillator
-
-// a windowed-sinc decimation lowpass — good enough to show what oversampling buys
-static std::vector<double> decimate (const std::vector<double>& x, int os, int nOut)
-{
-    if (os == 1) return x;
-    const int T = 128;                                     // taps per side
-    std::vector<double> h ((size_t) 2*T+1);
-    const double fc = 0.5 / os;                            // cutoff at the target Nyquist
-    double sum = 0;
-    for (int i = -T; i <= T; ++i)
-    { const double t = (double) i;
-      const double sinc = (i == 0) ? 2.0*fc : std::sin (2.0*M_PI*fc*t)/(M_PI*t);
-      const double win  = 0.42 - 0.5*std::cos (2.0*M_PI*(i+T)/(2.0*T)) + 0.08*std::cos (4.0*M_PI*(i+T)/(2.0*T));
-      h[(size_t)(i+T)] = sinc * win; sum += sinc * win; }
-    for (auto& v : h) v /= sum;
-    std::vector<double> out ((size_t) nOut, 0.0);
-    for (int n = 0; n < nOut; ++n)
-    { const long c = (long) n * os; double a = 0;
-      for (int i = -T; i <= T; ++i) { const long k = c + i; if (k >= 0 && k < (long) x.size()) a += x[(size_t)k]*h[(size_t)(i+T)]; }
-      out[(size_t)n] = a; }
-    return out;
-}
+// the frame axis FOLDS at the table ends rather than sticking — SynthVoice::fbFrameFold
+static double fold01 (double f)
+{ const double x = std::fmod (std::fabs (f), 2.0); return (x <= 1.0) ? x : 2.0 - x; }
 
 static std::vector<double> run (const Wavetable& w, int mip, double framePos, double f0,
-                                double phaseFB, double frameFB, int nOut)
+                                double phaseFB, double frameFB, double rawBlend, int nOut)
 {
-    const int nRun = nOut * OS;
-    std::vector<double> raw ((size_t) nRun, 0.0);
-    double phase = 0.0, fb = 0.0, y = 0.0;
-    const double inc = f0 / (SR * OS);
-    for (int n = -WARM*OS; n < nRun; ++n)
+    std::vector<double> out ((size_t) nOut, 0.0);
+    double phase = 0.0, mean = 0.0, y = 0.0;
+    const double inc = f0 / SR;
+    for (int n = -WARM; n < nOut; ++n)
     {
-        fb = 0.5 * (fb + y);                                  // DX7 mean filter
+        mean = 0.5 * (mean + y);                              // the DX7 governor...
+        const double fb = mean + rawBlend * (y - mean);       // ...blended out above kWtFbRawFrom
         double rp = phase + phaseFB * fb; rp -= std::floor (rp);
-        const double fp = std::min (1.0, std::max (0.0, framePos + frameFB * fb));
+        const double fp = fold01 (framePos + frameFB * fb);
         y = (double) w.lookup (mip, (float) fp, (float) rp);
         phase += inc; phase -= std::floor (phase);
-        if (n >= 0) raw[(size_t) n] = y;
+        if (n >= 0) out[(size_t) n] = y;
     }
-    return decimate (raw, OS, nOut);
+    return out;
 }
 struct Spec { std::vector<double> mag; int K; };
 static Spec spectrum (const std::vector<double>& x, int K)
@@ -119,13 +99,16 @@ static void gate (bool c, const char* n, const std::string& d = "")
 { c ? ++gPass : ++gFail; std::printf ("  %-5s %-54s %s\n", c ? "ok" : "FAIL", n, d.c_str()); }
 
 // the shipping constants — SynthVoice::kWtFbFrame / kWtFbPhase / kWtFbExp
-static const double FMAX = 0.25, PMAX = 0.80, PEXP = 4.0;
+// the shipping constants — SynthVoice::kWtFbFrame / kWtFbFrameExp / kWtFbPhase / kWtFbExp / kWtFbRawFrom
+static const double FMAX = 0.80, FEXP = 1.5, PMAX = 12.0, PEXP = 8.0, RAWFROM = 0.80;
+static const double kInert = 0.2;   // see the dead-zone scan below for why 0.2 and not 1.0
+static double rawAt (double s) { return std::min (1.0, std::max (0.0, (s - RAWFROM) / (1.0 - RAWFROM))); }
 
 int main()
 {
     for (auto& n : NT) { const double f = 440.0*std::pow(2.0,(n.midi-69)/12.0);
                          n.K = std::max(1,(int)std::lround(f*NF/SR)); }
-    std::printf ("\n══ wt_feedback_cert — fb584 ══  frame %.2f*s   phase %.2f*s^%.0f\n\n", FMAX, PMAX, PEXP);
+    std::printf ("\n══ wt_feedback_cert — fb585 ══  frame %.2f*s^%.1f  phase %.1f*s^%.0f  governor off above %.2f\n\n", FMAX, FEXP, PMAX, PEXP, RAWFROM);
 
     double worstLowAlias = -1e9, bestTopAlias = -1e9, worstRatio = 1e9, worstLevel = 0, worstStep = 1e9;
     double meanRatio = 0; std::string lowWho, ratWho;
@@ -138,14 +121,29 @@ int main()
         const int mip3 = Wavetable::mipLevelForMidiNote (NT[1].midi, SR);
         const double f3 = NT[1].K*SR/NF;
         std::vector<std::vector<double>> sweep;
-        for (int j = 0; j <= 100; ++j) sweep.push_back (full (spectrum (run (*w, mip3, (double)j/100.0, f3, 0,0, NF), NT[1].K)));
+        for (int j = 0; j <= 100; ++j) sweep.push_back (full (spectrum (run (*w, mip3, (double)j/100.0, f3, 0,0,0, NF), NT[1].K)));
         double self=0; { const auto& a=sweep[35]; for (auto& s2:sweep) self=std::max(self,dist(a,s2)); }
+
+        // A REAL dead-zone scan: 20 adjacent steps across the whole travel, not 5 coarse ones.
+        // ⚠️ THE THRESHOLD IS 0.2 dB, NOT 1.0, AND THAT IS NOT A MOVED GOALPOST. 1.0 was calibrated
+        //    when this sampled 5 COARSE points (steps 10-25% of the travel wide); at 5%-wide steps
+        //    it condemns the shipped fb584 too, which reads the same 0.41 dB here. This render is
+        //    deterministic — no note-to-note noise at all — so anything above ~0.2 dB is a real
+        //    change, and the bar keeps its teeth: the 4.0*s^3 taper that WAS dead reads 0.00.
+        // 4.0*s^3 passed the coarse version and was dead at the bottom; this is what caught it.
+        { std::vector<double> pf2;
+          for (int q = 0; q <= 20; ++q)
+          { const double sq = (double) q/20.0;
+            const auto xf = run (*w, mip3, 0.35, f3, PMAX*std::pow(sq,PEXP), FMAX*std::pow(sq,FEXP), rawAt(sq), NF);
+            const auto hf = full (spectrum (xf, NT[1].K));
+            if (! pf2.empty()) { const double d = dist (hf, pf2); worstStep = std::min (worstStep, d); if (d < kInert) ++inertCells; }
+            pf2 = hf; } }
 
         std::vector<double> prev; double r0=0;
         for (double s : { 0.0, 0.10, 0.25, 0.50, 0.75, 1.0 })
         {
-            const double pf = PMAX*std::pow(s,PEXP), ff = FMAX*s;
-            const auto x = run (*w, mip3, 0.35, f3, pf, ff, NF);
+            const double pf = PMAX*std::pow(s,PEXP), ff = FMAX*std::pow(s,FEXP), rb = rawAt(s);
+            const auto x = run (*w, mip3, 0.35, f3, pf, ff, rb, NF);
             const auto h = full (spectrum (x, NT[1].K));
             if (s == 0.0) r0 = rmsOf (x);
             // THE LOW HALF MUST STAY CLEAN ON EVERY TABLE AND EVERY OCTAVE. "worst" here means
@@ -155,7 +153,7 @@ int main()
                 for (int i = 0; i < 4; ++i)
                 {
                     const int mi = Wavetable::mipLevelForMidiNote (NT[i].midi, SR);
-                    const double a2 = aliasDb (spectrum (run (*w, mi, 0.35, NT[i].K*SR/NF, pf, ff, NF), NT[i].K));
+                    const double a2 = aliasDb (spectrum (run (*w, mi, 0.35, NT[i].K*SR/NF, pf, ff, rb, NF), NT[i].K));
                     if (a2 > worstLowAlias) { worstLowAlias = a2; lowWho = std::string (PRN[p]) + " at " + NT[i].n; }
                 }
             if (s == 1.0)
@@ -163,14 +161,13 @@ int main()
                 for (int i = 0; i < 4; ++i)
                 { const int mi = Wavetable::mipLevelForMidiNote (NT[i].midi, SR);
                   bestTopAlias = std::max (bestTopAlias,
-                      aliasDb (spectrum (run (*w, mi, 0.35, NT[i].K*SR/NF, pf, ff, NF), NT[i].K))); }
+                      aliasDb (spectrum (run (*w, mi, 0.35, NT[i].K*SR/NF, pf, ff, rb, NF), NT[i].K))); }
                 double closest=1e9; for (auto& s2:sweep) closest=std::min(closest,dist(h,s2));
                 const double r = self>0.01?closest/self:0.0;
                 meanRatio += r/4.0;
                 if (r < worstRatio) { worstRatio = r; ratWho = PRN[p]; }
             }
             worstLevel = std::max (worstLevel, std::fabs (20*std::log10(std::max(rmsOf(x),1e-9)/std::max(r0,1e-9))));
-            if (! prev.empty()) { const double d = dist (h, prev); worstStep = std::min (worstStep, d); if (d < 1.0) ++inertCells; }
             prev = h;
         }
     }
@@ -186,8 +183,8 @@ int main()
     std::snprintf (b, sizeof b, "mean %.2fx the table's own WT Pos span, worst %.2fx on %s", meanRatio, worstRatio, ratWho.c_str());
     gate (meanRatio >= 0.90 && worstRatio >= 0.70, "[3] NOT IMITABLE BY WT POS at full travel", b);
 
-    std::snprintf (b, sizeof b, "quietest step between adjacent knob positions: %.1f dB (%d inert of 20)", worstStep, inertCells);
-    gate (inertCells == 0, "[4] NO DEAD ZONE — every part of the travel moves", b);
+    std::snprintf (b, sizeof b, "quietest of 20 adjacent steps across the travel: %.2f dB (%d below %.1f)", worstStep, inertCells, kInert);
+    gate (inertCells == 0 && worstStep >= kInert, "[4] NO DEAD ZONE — every part of the travel moves", b);
 
     std::snprintf (b, sizeof b, "worst level swing across the whole knob: %.2f dB", worstLevel);
     gate (worstLevel <= 6.0, "[5] TIMBRE AND RUIN, NOT A VOLUME RAMP", b);
