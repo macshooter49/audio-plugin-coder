@@ -8,6 +8,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
+#include "FmOperators.h"   // fb587 — the FM operator stage, shared with the display
 #include "TerrainFilters.h"
 #include "Shapers.h"          // fb313 — shared waveshapers (tw::shapers): the fold + its ADAA antiderivative,
                               // one copy for the oscillator path AND the FX-rack Distortion FOLD family.
@@ -775,6 +776,28 @@ namespace tw
         // is a property of the unison STACK (each voice a different frame), so the display no longer
         // bends the drawn cycle with it — it just reports the value.
         struct WtDisp { float frame, warpAmt, warp2Amt, foldAmt, feedback; int warpMode, warp2Mode, foldShape; };
+        /** fb587 — the operator stage's parameters as the VOICE actually has them: block-conditioned
+            (Strike / Age / key-scale folded in) and de-zippered. The display cannot derive these —
+            the conditioning happens here, not in the processor — so it takes this snapshot the same
+            way the waterfall already takes getWtDisplay(). Cosmetic and tear-tolerant. */
+        tw::FmOps::Params fmDisplayParams (int osc) const noexcept
+        {
+            const size_t o = (size_t) juce::jlimit (0, 3, osc);
+            tw::FmOps::Params p;
+            p.alg = fmAlgo_[o];
+            p.d1  = fmD1Now_[o] * fmScorchIdxMulNow_[o];
+            p.d2  = fmD2Now_[o] * fmScorchIdxMulNow_[o];
+            p.fbk = fmFbNow_[o];
+            p.storm12 = fmStormM12Now_[o];  p.storm21 = fmStormM21Now_[o];
+            p.scorchPre = fmScorchPreNow_[o];  p.scorchBias = fmScorchBiasNow_[o];
+            p.scorchTanhBias = fmScorchTanhBiasNow_[o];  p.scorchMakeup = fmScorchMakeupNow_[o];
+            p.quakeIdx = fmQuakeIdxNow_[o];  p.quakeFry = fmQuakeFryNow_[o];
+            p.quakeSubRatio = fmQuakeSubRatio_[o];
+            p.ratio1 = fmR1Eff_[o];  p.ratio2 = fmR2Eff_[o];  p.rustTps = fmRustTps_[o];
+            p.ringDepth = fmD1Sm_[o];
+            return p;
+        }
+
         WtDisp getWtDisplay (int osc) const noexcept
         {
             switch (osc)
@@ -4225,32 +4248,25 @@ namespace tw
                             const float  d2  = fmD2Now_[0] * fmScorchIdxMulNow_[0];
                             const float  fbk = fmFbNow_[0];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[0];
-                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseA_[(size_t) u]
-                                                        + (double) (fmStormM12Now_[0] * fmPrevM1A_[(size_t) u]))));
-                            // SCORCH — asymmetric drive on M2 (adds harmonics → richer sidebands)
-                            if (fmScorchPreNow_[0] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[0] * m2 + fmScorchBiasNow_[0]) - fmScorchTanhBiasNow_[0]) * fmScorchMakeupNow_[0];
-                            double m1Arg = uModPhaseA_[(size_t) u] + (double) (fbk * fmFbA_[(size_t) u])
-                                         + (double) (fmStormM21Now_[0] * m2);
-                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 → M1
-                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            // SCORCH — same drive on M1 (the operator that hits the carrier)
-                            if (fmScorchPreNow_[0] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[0] * m1 + fmScorchBiasNow_[0]) - fmScorchTanhBiasNow_[0]) * fmScorchMakeupNow_[0];
-                            fmFbA_[(size_t) u] = 0.5f * (fmFbA_[(size_t) u] + m1);
-                            fmPrevM1A_[(size_t) u] = m1;
-                            // QUAKE — phase-locked subharmonic operator folded into the carrier phase
-                            double qSubA = 0.0;
-                            if (fmQuakeIdxNow_[0] > 1.0e-5f)
-                            {
-                                fmQuakePhaseA_[(size_t) u] += inc * (double) fmQuakeSubRatio_[0];
-                                fmQuakePhaseA_[(size_t) u] -= std::floor (fmQuakePhaseA_[(size_t) u]);
-                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseA_[(size_t) u]));
-                                if (fmQuakeFryNow_[0] > 0.0f) sub += fmQuakeFryNow_[0] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubA = (double) (fmQuakeIdxNow_[0] * sub);
-                            }
-                            double cPh = uPhaseA_[(size_t) u] + qSubA + (double) blendOff[0];   // BLEND inject
-                            if (alg != 2) cPh += (double) (d1 * m1);
-                            if (alg == 1) cPh += (double) (d2 * m2);
-                            cPh -= std::floor (cPh);
+                            // fb587 — THE OPERATOR STAGE MOVED TO Source/FmOperators.h. It used to live inline HERE,
+                            // and identically in the three other oscillators, which is why the DISPLAY could never
+                            // show FM: there was no function for it to call, and this codebase forbids the drawing
+                            // keeping a second copy of DSP. Now the voice and the waterfall read one source.
+                            // Tests/fm_ops_cert.cpp proves the move is bit-for-bit null (960k samples, 0 differ).
+                            tw::FmOps::Params fmP;
+                            fmP.alg = alg;  fmP.d1 = d1;  fmP.d2 = d2;  fmP.fbk = fbk;
+                            fmP.storm12 = fmStormM12Now_[0];      fmP.storm21 = fmStormM21Now_[0];
+                            fmP.scorchPre = fmScorchPreNow_[0];   fmP.scorchBias = fmScorchBiasNow_[0];
+                            fmP.scorchTanhBias = fmScorchTanhBiasNow_[0]; fmP.scorchMakeup = fmScorchMakeupNow_[0];
+                            fmP.quakeIdx = fmQuakeIdxNow_[0];     fmP.quakeFry = fmQuakeFryNow_[0];
+                            fmP.quakeSubRatio = fmQuakeSubRatio_[0];
+                            fmP.ratio1 = fmR1Eff_[0];  fmP.ratio2 = fmR2Eff_[0];  fmP.rustTps = fmRustTps_[0];
+                            fmP.ringDepth = fmD1Sm_[0];
+                            tw::FmOps::State fmS { uModPhaseA_[(size_t) u], uMod2PhaseA_[(size_t) u],
+                                                   fmQuakePhaseA_[(size_t) u], fmFbA_[(size_t) u], fmPrevM1A_[(size_t) u] };
+                            const tw::FmOps::Out fmO = tw::FmOps::run (fmS, fmP, inc, uPhaseA_[(size_t) u], (double) blendOff[0]);
+                            const float m1 = fmO.m1;
+                            double cPh = fmO.carrierPhase;
                             // WARP 2 on the FM carrier (2026-07-09): the back-panel pill works on
                             // FM now — phase warp remaps the carrier AFTER the modulators (classic
                             // warped-FM: Sync/PWM/Formant on the operator output), amp modes shape it.
@@ -4276,12 +4292,13 @@ namespace tw
                                 sAu = applyAmpWarp (warpMode_, wAmt1Afm, sAu, warpVar_[0], drawFor (0, 0));   // fb586 — slot 1 first
                                 sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));
                             }
-                            if (alg == 2)
-                                sAu *= (1.0f - fmD1Sm_[0]) + fmD1Sm_[0] * m1;      // ring dry→wet on depth 1
-                            uModPhaseA_[(size_t) u]  += inc * fmR1Eff_[0] + fmRustTps_[0];
-                            uModPhaseA_[(size_t) u]  -= std::floor (uModPhaseA_[(size_t) u]);
-                            uMod2PhaseA_[(size_t) u] += inc * fmR2Eff_[0];
-                            uMod2PhaseA_[(size_t) u] -= std::floor (uMod2PhaseA_[(size_t) u]);
+                            if (alg == 2) sAu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
+                            tw::FmOps::advance (fmS, fmP, inc);   // fb587
+                            uModPhaseA_[(size_t) u]   = fmS.m1Phase;
+                            uMod2PhaseA_[(size_t) u]  = fmS.m2Phase;
+                            fmQuakePhaseA_[(size_t) u] = fmS.quakePhase;
+                            fmFbA_[(size_t) u]        = fmS.fbMem;
+                            fmPrevM1A_[(size_t) u]    = fmS.prevM1;
                             uPhaseA_[(size_t) u] += inc + phaseOffStep_[0];   // fb544 — continuous PHASE
                             if (uPhaseA_[(size_t) u] >= 1.0) uPhaseA_[(size_t) u] -= 1.0;
                             else if (uPhaseA_[(size_t) u] < 0.0) uPhaseA_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
@@ -4587,29 +4604,25 @@ namespace tw
                             const float  d2  = fmD2Now_[1] * fmScorchIdxMulNow_[1];
                             const float  fbk = fmFbNow_[1];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[1];
-                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseB_[(size_t) u]
-                                                        + (double) (fmStormM12Now_[1] * fmPrevM1B_[(size_t) u]))));
-                            if (fmScorchPreNow_[1] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[1] * m2 + fmScorchBiasNow_[1]) - fmScorchTanhBiasNow_[1]) * fmScorchMakeupNow_[1];
-                            double m1Arg = uModPhaseB_[(size_t) u] + (double) (fbk * fmFbB_[(size_t) u])
-                                         + (double) (fmStormM21Now_[1] * m2);
-                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
-                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPreNow_[1] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[1] * m1 + fmScorchBiasNow_[1]) - fmScorchTanhBiasNow_[1]) * fmScorchMakeupNow_[1];
-                            fmFbB_[(size_t) u] = 0.5f * (fmFbB_[(size_t) u] + m1);
-                            fmPrevM1B_[(size_t) u] = m1;
-                            double qSubB = 0.0;
-                            if (fmQuakeIdxNow_[1] > 1.0e-5f)
-                            {
-                                fmQuakePhaseB_[(size_t) u] += inc * (double) fmQuakeSubRatio_[1];
-                                fmQuakePhaseB_[(size_t) u] -= std::floor (fmQuakePhaseB_[(size_t) u]);
-                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseB_[(size_t) u]));
-                                if (fmQuakeFryNow_[1] > 0.0f) sub += fmQuakeFryNow_[1] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubB = (double) (fmQuakeIdxNow_[1] * sub);
-                            }
-                            double cPh = uPhaseB_[(size_t) u] + qSubB + (double) blendOff[1];   // BLEND inject
-                            if (alg != 2) cPh += (double) (d1 * m1);
-                            if (alg == 1) cPh += (double) (d2 * m2);
-                            cPh -= std::floor (cPh);
+                            // fb587 — THE OPERATOR STAGE MOVED TO Source/FmOperators.h. It used to live inline HERE,
+                            // and identically in the three other oscillators, which is why the DISPLAY could never
+                            // show FM: there was no function for it to call, and this codebase forbids the drawing
+                            // keeping a second copy of DSP. Now the voice and the waterfall read one source.
+                            // Tests/fm_ops_cert.cpp proves the move is bit-for-bit null (960k samples, 0 differ).
+                            tw::FmOps::Params fmP;
+                            fmP.alg = alg;  fmP.d1 = d1;  fmP.d2 = d2;  fmP.fbk = fbk;
+                            fmP.storm12 = fmStormM12Now_[1];      fmP.storm21 = fmStormM21Now_[1];
+                            fmP.scorchPre = fmScorchPreNow_[1];   fmP.scorchBias = fmScorchBiasNow_[1];
+                            fmP.scorchTanhBias = fmScorchTanhBiasNow_[1]; fmP.scorchMakeup = fmScorchMakeupNow_[1];
+                            fmP.quakeIdx = fmQuakeIdxNow_[1];     fmP.quakeFry = fmQuakeFryNow_[1];
+                            fmP.quakeSubRatio = fmQuakeSubRatio_[1];
+                            fmP.ratio1 = fmR1Eff_[1];  fmP.ratio2 = fmR2Eff_[1];  fmP.rustTps = fmRustTps_[1];
+                            fmP.ringDepth = fmD1Sm_[1];
+                            tw::FmOps::State fmS { uModPhaseB_[(size_t) u], uMod2PhaseB_[(size_t) u],
+                                                   fmQuakePhaseB_[(size_t) u], fmFbB_[(size_t) u], fmPrevM1B_[(size_t) u] };
+                            const tw::FmOps::Out fmO = tw::FmOps::run (fmS, fmP, inc, uPhaseB_[(size_t) u], (double) blendOff[1]);
+                            const float m1 = fmO.m1;
+                            double cPh = fmO.carrierPhase;
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
@@ -4632,12 +4645,13 @@ namespace tw
                                 sBu = applyAmpWarp (warpModeB_, wAmt1Bfm, sBu, warpVar_[1], drawFor (1, 0));   // fb586 — slot 1 first
                                 sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));
                             }
-                            if (alg == 2)
-                                sBu *= (1.0f - fmD1Sm_[1]) + fmD1Sm_[1] * m1;
-                            uModPhaseB_[(size_t) u]  += inc * fmR1Eff_[1] + fmRustTps_[1];
-                            uModPhaseB_[(size_t) u]  -= std::floor (uModPhaseB_[(size_t) u]);
-                            uMod2PhaseB_[(size_t) u] += inc * fmR2Eff_[1];
-                            uMod2PhaseB_[(size_t) u] -= std::floor (uMod2PhaseB_[(size_t) u]);
+                            if (alg == 2) sBu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
+                            tw::FmOps::advance (fmS, fmP, inc);   // fb587
+                            uModPhaseB_[(size_t) u]   = fmS.m1Phase;
+                            uMod2PhaseB_[(size_t) u]  = fmS.m2Phase;
+                            fmQuakePhaseB_[(size_t) u] = fmS.quakePhase;
+                            fmFbB_[(size_t) u]        = fmS.fbMem;
+                            fmPrevM1B_[(size_t) u]    = fmS.prevM1;
                             uPhaseB_[(size_t) u] += inc + phaseOffStep_[1];   // fb544 — continuous PHASE
                             if (uPhaseB_[(size_t) u] >= 1.0) uPhaseB_[(size_t) u] -= 1.0;
                             else if (uPhaseB_[(size_t) u] < 0.0) uPhaseB_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
@@ -4930,29 +4944,25 @@ namespace tw
                             const float  d2  = fmD2Now_[2] * fmScorchIdxMulNow_[2];
                             const float  fbk = fmFbNow_[2];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[2];
-                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseC_[(size_t) u]
-                                                        + (double) (fmStormM12Now_[2] * fmPrevM1C_[(size_t) u]))));
-                            if (fmScorchPreNow_[2] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[2] * m2 + fmScorchBiasNow_[2]) - fmScorchTanhBiasNow_[2]) * fmScorchMakeupNow_[2];
-                            double m1Arg = uModPhaseC_[(size_t) u] + (double) (fbk * fmFbC_[(size_t) u])
-                                         + (double) (fmStormM21Now_[2] * m2);
-                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
-                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPreNow_[2] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[2] * m1 + fmScorchBiasNow_[2]) - fmScorchTanhBiasNow_[2]) * fmScorchMakeupNow_[2];
-                            fmFbC_[(size_t) u] = 0.5f * (fmFbC_[(size_t) u] + m1);
-                            fmPrevM1C_[(size_t) u] = m1;
-                            double qSubC = 0.0;
-                            if (fmQuakeIdxNow_[2] > 1.0e-5f)
-                            {
-                                fmQuakePhaseC_[(size_t) u] += inc * (double) fmQuakeSubRatio_[2];
-                                fmQuakePhaseC_[(size_t) u] -= std::floor (fmQuakePhaseC_[(size_t) u]);
-                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseC_[(size_t) u]));
-                                if (fmQuakeFryNow_[2] > 0.0f) sub += fmQuakeFryNow_[2] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubC = (double) (fmQuakeIdxNow_[2] * sub);
-                            }
-                            double cPh = uPhaseC_[(size_t) u] + qSubC + (double) blendOff[2];   // BLEND inject
-                            if (alg != 2) cPh += (double) (d1 * m1);
-                            if (alg == 1) cPh += (double) (d2 * m2);
-                            cPh -= std::floor (cPh);
+                            // fb587 — THE OPERATOR STAGE MOVED TO Source/FmOperators.h. It used to live inline HERE,
+                            // and identically in the three other oscillators, which is why the DISPLAY could never
+                            // show FM: there was no function for it to call, and this codebase forbids the drawing
+                            // keeping a second copy of DSP. Now the voice and the waterfall read one source.
+                            // Tests/fm_ops_cert.cpp proves the move is bit-for-bit null (960k samples, 0 differ).
+                            tw::FmOps::Params fmP;
+                            fmP.alg = alg;  fmP.d1 = d1;  fmP.d2 = d2;  fmP.fbk = fbk;
+                            fmP.storm12 = fmStormM12Now_[2];      fmP.storm21 = fmStormM21Now_[2];
+                            fmP.scorchPre = fmScorchPreNow_[2];   fmP.scorchBias = fmScorchBiasNow_[2];
+                            fmP.scorchTanhBias = fmScorchTanhBiasNow_[2]; fmP.scorchMakeup = fmScorchMakeupNow_[2];
+                            fmP.quakeIdx = fmQuakeIdxNow_[2];     fmP.quakeFry = fmQuakeFryNow_[2];
+                            fmP.quakeSubRatio = fmQuakeSubRatio_[2];
+                            fmP.ratio1 = fmR1Eff_[2];  fmP.ratio2 = fmR2Eff_[2];  fmP.rustTps = fmRustTps_[2];
+                            fmP.ringDepth = fmD1Sm_[2];
+                            tw::FmOps::State fmS { uModPhaseC_[(size_t) u], uMod2PhaseC_[(size_t) u],
+                                                   fmQuakePhaseC_[(size_t) u], fmFbC_[(size_t) u], fmPrevM1C_[(size_t) u] };
+                            const tw::FmOps::Out fmO = tw::FmOps::run (fmS, fmP, inc, uPhaseC_[(size_t) u], (double) blendOff[2]);
+                            const float m1 = fmO.m1;
+                            double cPh = fmO.carrierPhase;
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
@@ -4975,12 +4985,13 @@ namespace tw
                                 sCu = applyAmpWarp (warpModeC_, wAmt1Cfm, sCu, warpVar_[2], drawFor (2, 0));   // fb586 — slot 1 first
                                 sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));
                             }
-                            if (alg == 2)
-                                sCu *= (1.0f - fmD1Sm_[2]) + fmD1Sm_[2] * m1;
-                            uModPhaseC_[(size_t) u]  += inc * fmR1Eff_[2] + fmRustTps_[2];
-                            uModPhaseC_[(size_t) u]  -= std::floor (uModPhaseC_[(size_t) u]);
-                            uMod2PhaseC_[(size_t) u] += inc * fmR2Eff_[2];
-                            uMod2PhaseC_[(size_t) u] -= std::floor (uMod2PhaseC_[(size_t) u]);
+                            if (alg == 2) sCu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
+                            tw::FmOps::advance (fmS, fmP, inc);   // fb587
+                            uModPhaseC_[(size_t) u]   = fmS.m1Phase;
+                            uMod2PhaseC_[(size_t) u]  = fmS.m2Phase;
+                            fmQuakePhaseC_[(size_t) u] = fmS.quakePhase;
+                            fmFbC_[(size_t) u]        = fmS.fbMem;
+                            fmPrevM1C_[(size_t) u]    = fmS.prevM1;
                             uPhaseC_[(size_t) u] += inc + phaseOffStep_[2];   // fb544 — continuous PHASE
                             if (uPhaseC_[(size_t) u] >= 1.0) uPhaseC_[(size_t) u] -= 1.0;
                             else if (uPhaseC_[(size_t) u] < 0.0) uPhaseC_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE
@@ -5273,29 +5284,25 @@ namespace tw
                             const float  d2  = fmD2Now_[3] * fmScorchIdxMulNow_[3];
                             const float  fbk = fmFbNow_[3];                        // (SCORCH grit already folded in)
                             const int    alg = fmAlgo_[3];
-                            float m2 = static_cast<float> (std::sin (pi2 * (uMod2PhaseD_[(size_t) u]
-                                                        + (double) (fmStormM12Now_[3] * fmPrevM1D_[(size_t) u]))));
-                            if (fmScorchPreNow_[3] > 1.0f) m2 = (fmFastTanh (fmScorchPreNow_[3] * m2 + fmScorchBiasNow_[3]) - fmScorchTanhBiasNow_[3]) * fmScorchMakeupNow_[3];
-                            double m1Arg = uModPhaseD_[(size_t) u] + (double) (fbk * fmFbD_[(size_t) u])
-                                         + (double) (fmStormM21Now_[3] * m2);
-                            if (alg != 1) m1Arg += (double) (d2 * m2);       // STACK + RING: M2 -> M1
-                            float m1 = static_cast<float> (std::sin (pi2 * m1Arg));
-                            if (fmScorchPreNow_[3] > 1.0f) m1 = (fmFastTanh (fmScorchPreNow_[3] * m1 + fmScorchBiasNow_[3]) - fmScorchTanhBiasNow_[3]) * fmScorchMakeupNow_[3];
-                            fmFbD_[(size_t) u] = 0.5f * (fmFbD_[(size_t) u] + m1);
-                            fmPrevM1D_[(size_t) u] = m1;
-                            double qSubD = 0.0;
-                            if (fmQuakeIdxNow_[3] > 1.0e-5f)
-                            {
-                                fmQuakePhaseD_[(size_t) u] += inc * (double) fmQuakeSubRatio_[3];
-                                fmQuakePhaseD_[(size_t) u] -= std::floor (fmQuakePhaseD_[(size_t) u]);
-                                float sub = static_cast<float> (std::sin (pi2 * fmQuakePhaseD_[(size_t) u]));
-                                if (fmQuakeFryNow_[3] > 0.0f) sub += fmQuakeFryNow_[3] * (sub - sub * sub * sub * (1.0f / 6.0f));
-                                qSubD = (double) (fmQuakeIdxNow_[3] * sub);
-                            }
-                            double cPh = uPhaseD_[(size_t) u] + qSubD + (double) blendOff[3];   // BLEND inject
-                            if (alg != 2) cPh += (double) (d1 * m1);
-                            if (alg == 1) cPh += (double) (d2 * m2);
-                            cPh -= std::floor (cPh);
+                            // fb587 — THE OPERATOR STAGE MOVED TO Source/FmOperators.h. It used to live inline HERE,
+                            // and identically in the three other oscillators, which is why the DISPLAY could never
+                            // show FM: there was no function for it to call, and this codebase forbids the drawing
+                            // keeping a second copy of DSP. Now the voice and the waterfall read one source.
+                            // Tests/fm_ops_cert.cpp proves the move is bit-for-bit null (960k samples, 0 differ).
+                            tw::FmOps::Params fmP;
+                            fmP.alg = alg;  fmP.d1 = d1;  fmP.d2 = d2;  fmP.fbk = fbk;
+                            fmP.storm12 = fmStormM12Now_[3];      fmP.storm21 = fmStormM21Now_[3];
+                            fmP.scorchPre = fmScorchPreNow_[3];   fmP.scorchBias = fmScorchBiasNow_[3];
+                            fmP.scorchTanhBias = fmScorchTanhBiasNow_[3]; fmP.scorchMakeup = fmScorchMakeupNow_[3];
+                            fmP.quakeIdx = fmQuakeIdxNow_[3];     fmP.quakeFry = fmQuakeFryNow_[3];
+                            fmP.quakeSubRatio = fmQuakeSubRatio_[3];
+                            fmP.ratio1 = fmR1Eff_[3];  fmP.ratio2 = fmR2Eff_[3];  fmP.rustTps = fmRustTps_[3];
+                            fmP.ringDepth = fmD1Sm_[3];
+                            tw::FmOps::State fmS { uModPhaseD_[(size_t) u], uMod2PhaseD_[(size_t) u],
+                                                   fmQuakePhaseD_[(size_t) u], fmFbD_[(size_t) u], fmPrevM1D_[(size_t) u] };
+                            const tw::FmOps::Out fmO = tw::FmOps::run (fmS, fmP, inc, uPhaseD_[(size_t) u], (double) blendOff[3]);
+                            const float m1 = fmO.m1;
+                            double cPh = fmO.carrierPhase;
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
                             // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
@@ -5318,12 +5325,13 @@ namespace tw
                                 sDu = applyAmpWarp (warpModeD_, wAmt1Dfm, sDu, warpVar_[3], drawFor (3, 0));   // fb586 — slot 1 first
                                 sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));
                             }
-                            if (alg == 2)
-                                sDu *= (1.0f - fmD1Sm_[3]) + fmD1Sm_[3] * m1;
-                            uModPhaseD_[(size_t) u]  += inc * fmR1Eff_[3] + fmRustTps_[3];
-                            uModPhaseD_[(size_t) u]  -= std::floor (uModPhaseD_[(size_t) u]);
-                            uMod2PhaseD_[(size_t) u] += inc * fmR2Eff_[3];
-                            uMod2PhaseD_[(size_t) u] -= std::floor (uMod2PhaseD_[(size_t) u]);
+                            if (alg == 2) sDu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
+                            tw::FmOps::advance (fmS, fmP, inc);   // fb587
+                            uModPhaseD_[(size_t) u]   = fmS.m1Phase;
+                            uMod2PhaseD_[(size_t) u]  = fmS.m2Phase;
+                            fmQuakePhaseD_[(size_t) u] = fmS.quakePhase;
+                            fmFbD_[(size_t) u]        = fmS.fbMem;
+                            fmPrevM1D_[(size_t) u]    = fmS.prevM1;
                             uPhaseD_[(size_t) u] += inc + phaseOffStep_[3];   // fb544 — continuous PHASE
                             if (uPhaseD_[(size_t) u] >= 1.0) uPhaseD_[(size_t) u] -= 1.0;
                             else if (uPhaseD_[(size_t) u] < 0.0) uPhaseD_[(size_t) u] += 1.0;   // fb544 — the step can be NEGATIVE

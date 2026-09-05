@@ -990,6 +990,15 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     //    because they force TABLE RE-RENDERS at audio rate. This is a MESSAGE-THREAD display bake
     //    of 64x160 points behind a native call — a different thing entirely, and that ruling stands.
     const auto D = wtDispEffective (osc);
+    // fb587 — THE DRAWING NOW KNOWS WHICH ENGINE IT IS DRAWING. It never did: it always drew
+    // table -> warp -> fold, so on FM it faithfully drew the CARRIER and none of the modulation
+    // sitting on top of it, and Max's "whatever the ratio does, I need to actually see it move
+    // the table" was structurally impossible. The operator stage is shared now (FmOperators.h),
+    // so the picture runs the very code the voice runs.
+    static const char* const ENG[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                        ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+    const bool doFm = ((int) *apvts.getRawParameterValue (ENG[osc])) == (int) tw::SynthVoice::Engine::FM;
+    const tw::FmOps::Params fmP = fmDisplayParams_[(size_t) osc];
     const bool doFold = D.foldAmt > 1.0e-6f;
     // fb460 — WT BLUR. The voice never reads the table directly when blur is up: it builds ONE
     // blended single-cycle per block with Wavetable::renderBlend() and reads that. So does this.
@@ -1011,6 +1020,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // 10,240 values cost 1.124 ms to format as decimals and 0.116 ms as ints — 9.7x, and 28%
         // fewer bytes. At 60 Hz that difference alone is 60 ms/s of message thread. 1/8192 is ~12
         // bits, far finer than a waterfall that is ~80 px tall.
+        << ",\"fm\":" << juce::String (fmDisplaySignature (osc), 4)   // fb587
         << ",\"sc\":8192";
     {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
         float sa = 0.0f, sl = 0.0f, sh = 1.0f; int st = 0; spectralDisplay (osc, sa, st, sl, sh);
@@ -1031,21 +1041,34 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // recursion advances once per AUDIO sample (SR/f0 of them per cycle, so it varies with the
         // note) and this one advances once per DRAWN point. The drawing was already approximate in
         // exactly this way — it reads mip 0 rather than the note's own mip.
-        const bool  doFb = D.feedback > 1.0e-4f;
+        const bool  doFb = (D.feedback > 1.0e-4f) && ! doFm;   // fb587 — FM's branch never reads it
         const float fbFr = tw::SynthVoice::kWtFbFrame * std::pow (D.feedback, tw::SynthVoice::kWtFbFrameExp);
         const float fbPh = tw::SynthVoice::kWtFbPhase * std::pow (D.feedback, tw::SynthVoice::kWtFbExp);
         const float fbRw = juce::jlimit (0.0f, 1.0f, (D.feedback - tw::SynthVoice::kWtFbRawFrom)
                                                    / (1.0f - tw::SynthVoice::kWtFbRawFrom));
         float fbState = 0.0f, fbRaw = 0.0f;
+        // fb587 — the operator stage's own state for THIS drawn frame. inc is one carrier cycle
+        // across `pts` points, so each modulator completes exactly its RATIO of cycles per drawn
+        // cycle — which is the thing the ratio knob actually means. Reset per frame, and the silent
+        // seeding lap below lets the feedback memory settle before anything is drawn.
+        tw::FmOps::State fmS {};
+        const double fmInc = 1.0 / (double) pts;
+        tw::FmOps::Out fmO {};
         // The fold's ADAA carries a one-sample history, so the FIRST point of a cycle would draw a
         // transient that the ear never hears (the ADAA history-seed gotcha). Run one silent lap to
         // seed it, then draw the second. Feedback needs that lap for the same reason.
-        for (int pass = ((doFold || doFb) ? 0 : 1); pass <= 1; ++pass)
+        for (int pass = ((doFold || doFb || doFm) ? 0 : 1); pass <= 1; ++pass)
             for (int p = 0; p < pts; ++p)
             {
                 double ph = (double) p / (double) pts;
                 float  window = 1.0f;
                 bool   skip   = false;
+                if (doFm)   // FM -> warp 1 -> warp 2 -> read, the voice's own order
+                {
+                    fmO = tw::FmOps::run (fmS, fmP, fmInc, ph, 0.0);
+                    ph  = fmO.carrierPhase;
+                    tw::FmOps::advance (fmS, fmP, fmInc);
+                }
                 ph = tw::SynthVoice::applyPhaseWarp (D.warpMode, D.warpAmt, ph, window, skip);
                 if (! skip && D.warp2Mode != 0)
                     ph = tw::SynthVoice::applyPhaseWarp (D.warp2Mode, D.warp2Amt, ph, window, skip);
@@ -1067,6 +1090,7 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
                     v  = tw::SynthVoice::applyAmpWarp (D.warpMode,  D.warpAmt,  v);
                     v  = tw::SynthVoice::applyAmpWarp (D.warp2Mode, D.warp2Amt, v);
                 }
+                if (doFm && fmP.alg == 2) v *= fmO.ringGain;   // fb587 — RING scales the output
                 if (doFold) v = tw::shapers::applyFoldADAA (v, D.foldShape, D.foldAmt, fst);
                 if (pass == 1)
                 {
@@ -10864,6 +10888,9 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             for (int o = 0; o < 4; ++o)
                 wtFrameVis_[o].store (any && bestVoice != nullptr ? bestVoice->getWtFrameVis (o) : -1.f,
                                       std::memory_order_relaxed);
+            if (vizLive)
+            for (int o = 0; o < 4; ++o)   // fb587 — the operator stage, for the FM waterfall
+                if (any && bestVoice != nullptr) fmDisplayParams_[(size_t) o] = bestVoice->fmDisplayParams (o);
             if (vizLive)
             for (int o = 0; o < 4; ++o)
             {

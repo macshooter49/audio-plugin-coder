@@ -6136,7 +6136,8 @@ void TerrainUiCore::timerCallback()
                 js << "[" << D.warpMode << "," << SF (D.warpAmt, 4) << "," << D.warp2Mode
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
                    << "," << SF (sa, 4) << "," << st << "," << SF (D.feedback, 4)
-                   << "," << SF (sl, 4) << "," << SF (sh, 4) << "]";   // fb460 blur · fb472 cuts — THE ORDER HERE
+                   << "," << SF (sl, 4) << "," << SF (sh, 4)
+                   << "," << SF (audioProcessor.fmDisplaySignature (o), 4) << "]";   // fb587 — FM   // fb460 blur · fb472 cuts — THE ORDER HERE
                                                        // MUST MATCH cachedSig in index.html
             }
             js << "];";

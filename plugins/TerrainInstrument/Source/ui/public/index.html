@@ -36163,7 +36163,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       /* fb467 — lo/hi ride here too, in the SAME ORDER __wtDisp emits them (PluginEditor.cpp).
          Order matters as much as presence: a mismatch makes the two signatures differ forever,
          which is not a stale table but a table that re-bakes at the maximum rate for good. */
-      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi].map(function(v){ return (+v).toFixed(3); }).join(','):''; },
+      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi,t.fm].map(function(v){ return (+v).toFixed(3); }).join(','):''; },   /* fb587 — t.fm LAST, matching __wtDisp */
     maybeRebake:function(o,now){
       if(wtWaterfall.busy[o]) return;
       if(now-(wtWaterfall.lastReq[o]||0) < (wtWaterfall.rebakeMs[o]||wtWaterfall.REBAKE_MS)) return;

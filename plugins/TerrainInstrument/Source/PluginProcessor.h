@@ -63,6 +63,7 @@
 #include "LayerState.h"
 #include "IndyFxChain.h"
 #include "SynthVoice.h"
+#include "FmOperators.h"
 #include "WavetableBank.h"
 #include "SpectralMorph.h"
 #include <juce_audio_formats/juce_audio_formats.h>
@@ -1885,6 +1886,28 @@ private:
     // HARM-ENGINE — per-osc knob snapshots for the editor's display banks (written in the
     // processBlock gather; read on the message thread — cosmetic, tear-tolerant)
     std::array<tw::HarmParams, 4> harmDisplayParams_ {};
+    // fb587 — the FM operator stage's live parameters, for the waterfall. Same contract as
+    // harmDisplayParams_ above: written in the processBlock gather, read on the message thread,
+    // cosmetic and tear-tolerant. Without it the drawing has no way to know what the operators
+    // are doing, because the conditioning (Strike / Age / key-scale) happens inside the voice.
+    std::array<tw::FmOps::Params, 4> fmDisplayParams_ {};
+
+public:
+    /** fb587 — one scalar that moves whenever ANY FM operator control moves. The waterfall only
+        re-fetches when its signature changes, so without this the C++ would happily draw the new
+        FM shape and the page would never ask for it — the picture would freeze the moment the
+        cache warmed. Weights are mutually irrational-ish so two different rigs cannot collide. */
+    float fmDisplaySignature (int osc) const noexcept
+    {
+        const tw::FmOps::Params& p = fmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        return (float) (p.alg * 1.0 + p.d1 * 3.1 + p.d2 * 5.3 + p.fbk * 7.7
+                      + p.storm12 * 11.3 + p.storm21 * 13.7
+                      + p.scorchPre * 17.1 + p.scorchBias * 19.3
+                      + p.quakeIdx * 23.9 + p.quakeFry * 29.1 + p.quakeSubRatio * 31.5
+                      + p.ratio1 * 37.3 + p.ratio2 * 41.1 + p.rustTps * 4300.0
+                      + p.ringDepth * 43.7);
+    }
+private:
 
     void timerCallback() override;        // message thread — rebuilds morph tables
     void rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
