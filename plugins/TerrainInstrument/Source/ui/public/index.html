@@ -5163,6 +5163,25 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .device.osc.engine-geode .wt-knob-wrap,
 #syn-panel .device.osc.engine-granular .wt-knob-wrap,
 #syn-panel .device.osc.engine-sample .wt-knob-wrap { display: none; }
+/* ══ fb586 — THE WAVETABLE SET ON FM, AS ITS THIRD PAGE ═══════════════════════════════════════
+   FM's carrier IS this oscillator's wavetable cycle, so WT Pos / Warp / Spectral / Fold were
+   always live on FM and simply had nowhere to be touched. They get a page of their own here.
+
+   🚨 IT IS THE SAME FOUR ELEMENTS, NOT A COPY. Knobs auto-bind through
+      querySelectorAll('#syn-panel .knob[data-syn]'), so a duplicated data-syn would bind TWICE —
+      and the mod-matrix lookup keeps only the LAST match, so the ring and the mark would land on
+      one copy and not the other. Reusing .wt-knob-wrap avoids the whole class of bug.
+
+   🚨 AND FEEDBACK IS DELIBERATELY NOT HERE. The FM engine already owns a Feedback knob on its
+      first page; a second one on the same engine is the duplicate this project keeps killing.
+      So the set is FOUR, and the grid is re-declared as FOUR EVEN COLUMNS — hiding the fifth out
+      of a five-column grid would leave a hole on one side, which is exactly what must not happen.
+      Four columns, filling the width, symmetric. */
+#syn-panel .device.osc.engine-fm.fm-wtpage:not(.swapped) .fm-knob-wrap { display: none; }
+#syn-panel .device.osc.engine-fm.fm-wtpage:not(.swapped) .wt-knob-wrap { display: flex; }
+#syn-panel .device.osc.engine-fm.fm-wtpage .wt-knob-wrap .osc-knobs.wt-pg1 {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; align-items: center; }
+#syn-panel .device.osc.engine-fm.fm-wtpage .wt-knob-wrap .knob[data-syn$="_FRAME_SPREAD"] { display: none; }
 /* STACK is a 9-way CHOICE, so it is a PILL in the row and never a knob — the .fm-algo idiom
    verbatim, native <select> overlaid (the dropdowns-not-click-rotate rule). It sits FIRST in the
    row, where FM's Algo pill sits. margin-top:2px is what puts its LABEL on the knobs' baseline. */
@@ -6777,7 +6796,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_A_FM_BEND" title="Scorch — in-loop FM drive: feedback grit + waveshaped operators → warm to molten"><div class="knob-ring"></div><div class="knob-label">Scorch</div></div>
                 <div class="knob" data-syn="SYN_OSC_A_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
               </div>
-              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
+              <div class="fm-arrow" role="button" tabindex="0" title="Next FM set — weathering, then the wavetable set (WT Pos · Warp · Spectral · Fold), then unison" aria-label="More FM controls"></div>
               </div>
               <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
                    Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
@@ -7120,7 +7139,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_B_FM_BEND" title="Scorch — in-loop FM drive: feedback grit + waveshaped operators → warm to molten"><div class="knob-ring"></div><div class="knob-label">Scorch</div></div>
                 <div class="knob" data-syn="SYN_OSC_B_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
               </div>
-              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
+              <div class="fm-arrow" role="button" tabindex="0" title="Next FM set — weathering, then the wavetable set (WT Pos · Warp · Spectral · Fold), then unison" aria-label="More FM controls"></div>
               </div>
               <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
                    Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
@@ -7487,7 +7506,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_C_FM_BEND" title="Scorch — in-loop FM drive: feedback grit + waveshaped operators → warm to molten"><div class="knob-ring"></div><div class="knob-label">Scorch</div></div>
                 <div class="knob" data-syn="SYN_OSC_C_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
               </div>
-              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
+              <div class="fm-arrow" role="button" tabindex="0" title="Next FM set — weathering, then the wavetable set (WT Pos · Warp · Spectral · Fold), then unison" aria-label="More FM controls"></div>
               </div>
               <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
                    Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
@@ -7830,7 +7849,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <div class="knob" data-syn="SYN_OSC_D_FM_BEND" title="Scorch — in-loop FM drive: feedback grit + waveshaped operators → warm to molten"><div class="knob-ring"></div><div class="knob-label">Scorch</div></div>
                 <div class="knob" data-syn="SYN_OSC_D_FM_STORM" title="Storm — the modulators modulate EACH OTHER: thicken → snarl → bounded chaos (feed it Rust)"><div class="knob-ring"></div><div class="knob-label">Storm</div></div>
               </div>
-              <div class="fm-arrow" role="button" tabindex="0" title="FM weathering — Strike · Age · Rust · Quake · Scorch · Storm" aria-label="More FM controls"></div>
+              <div class="fm-arrow" role="button" tabindex="0" title="Next FM set — weathering, then the wavetable set (WT Pos · Warp · Spectral · Fold), then unison" aria-label="More FM controls"></div>
               </div>
               <!-- HARM-ENGINE-UI hm3 — two pure knob pages, exact fm-knob-wrap geometry.
                    Family + Sculpt mode selectors live in the HEADER corner (where the wavetable
@@ -17168,10 +17187,13 @@ setTimeout(function wireSynControls () {
           for (var i = 0; i < WRAP_OF.length; ++i)
             if (dev.classList.contains (WRAP_OF[i].cls)) {
               var sample = WRAP_OF[i].cls === 'engine-sample';
+              // fb586 — FM has THREE engine sets: operators, weathering, then the WAVETABLE set
+              // (its carrier is a wavetable, so those four knobs belong to it).
+              var fm = WRAP_OF[i].cls === 'engine-fm';
               return { wrap: dev.querySelector (WRAP_OF[i].wrap),
                        // Sample only has a second set while a blend is live
-                       engineSets: sample ? (dev.classList.contains ('blend-on') ? 2 : 1) : 2,
-                       sample: sample };
+                       engineSets: sample ? (dev.classList.contains ('blend-on') ? 2 : 1) : (fm ? 3 : 2),
+                       sample: sample, fm: fm };
             }
           return { wrap: dev.querySelector ('.wt-knob-wrap'), engineSets: 1, sample: false };
         }
@@ -17182,6 +17204,9 @@ setTimeout(function wireSynControls () {
           var uni = (idx === L.engineSets);                  // UNISON IS ALWAYS THE LAST INDEX
           dev.classList.toggle ('uni-page', uni);
           if (L.wrap && ! L.sample) L.wrap.classList.toggle ('pg2', ! uni && idx === 1);
+          // fb586 — FM's set 2 is its wavetable page. The class goes on the DEVICE, not the wrap,
+          // because the wavetable set is a SIBLING of the FM wrap and CSS cannot look backwards.
+          dev.classList.toggle ('fm-wtpage', !! L.fm && ! uni && idx === 2);
           if (L.sample) dev.classList.toggle ('blend-pg2', ! uni && idx === 1);
         }
         // 🚨 THE OBSERVER MUST KEY ON THE *ENGINE*, NOT ON ANY CLASS apply() TOUCHES. A first cut

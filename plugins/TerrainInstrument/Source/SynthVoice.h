@@ -4256,8 +4256,15 @@ namespace tw
                             // warped-FM: Sync/PWM/Formant on the operator output), amp modes shape it.
                             float fmWin = 1.0f; bool fmSkip = false;
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
+                            // alone, so the 'Warp' knob was the one genuinely dead control on this engine —
+                            // which mattered the moment the wavetable set got a page here. Slot 1 now runs
+                            // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
+                            const float wAmt1Afm = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warpAmount_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warpAmount_;
+                            if (warpMode_ != 0)
+                                cPh = applyPhaseWarp (warpMode_, wAmt1Afm, cPh, fmWin, fmSkip, warpVar_[0], drawFor (0, 0));
                             const float wAmt2A = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warp2AmountA_;
-                            if (warp2ModeA_ != 0)
+                            if (! fmSkip && warp2ModeA_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0], drawFor (0, 1));
                             if (fmSkip) sAu = 0.0f;
                             else
@@ -4266,6 +4273,7 @@ namespace tw
                                         ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
                                 sAu *= fmWin;
+                                sAu = applyAmpWarp (warpMode_, wAmt1Afm, sAu, warpVar_[0], drawFor (0, 0));   // fb586 — slot 1 first
                                 sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));
                             }
                             if (alg == 2)
@@ -4604,8 +4612,15 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
+                            // alone, so the 'Warp' knob was the one genuinely dead control on this engine —
+                            // which mattered the moment the wavetable set got a page here. Slot 1 now runs
+                            // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
+                            const float wAmt1Bfm = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warpAmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warpAmountB_;
+                            if (warpModeB_ != 0)
+                                cPh = applyPhaseWarp (warpModeB_, wAmt1Bfm, cPh, fmWin, fmSkip, warpVar_[1], drawFor (1, 0));
                             const float wAmt2B = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warp2AmountB_;
-                            if (warp2ModeB_ != 0)
+                            if (! fmSkip && warp2ModeB_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1], drawFor (1, 1));
                             if (fmSkip) sBu = 0.0f;
                             else
@@ -4614,6 +4629,7 @@ namespace tw
                                         ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sBu *= fmWin;
+                                sBu = applyAmpWarp (warpModeB_, wAmt1Bfm, sBu, warpVar_[1], drawFor (1, 0));   // fb586 — slot 1 first
                                 sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));
                             }
                             if (alg == 2)
@@ -4939,8 +4955,15 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
+                            // alone, so the 'Warp' knob was the one genuinely dead control on this engine —
+                            // which mattered the moment the wavetable set got a page here. Slot 1 now runs
+                            // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
+                            const float wAmt1Cfm = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warpAmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warpAmountC_;
+                            if (warpModeC_ != 0)
+                                cPh = applyPhaseWarp (warpModeC_, wAmt1Cfm, cPh, fmWin, fmSkip, warpVar_[2], drawFor (2, 0));
                             const float wAmt2C = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warp2AmountC_;
-                            if (warp2ModeC_ != 0)
+                            if (! fmSkip && warp2ModeC_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2], drawFor (2, 1));
                             if (fmSkip) sCu = 0.0f;
                             else
@@ -4949,6 +4972,7 @@ namespace tw
                                         ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sCu *= fmWin;
+                                sCu = applyAmpWarp (warpModeC_, wAmt1Cfm, sCu, warpVar_[2], drawFor (2, 0));   // fb586 — slot 1 first
                                 sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));
                             }
                             if (alg == 2)
@@ -5274,8 +5298,15 @@ namespace tw
                             cPh -= std::floor (cPh);
                             float fmWin = 1.0f; bool fmSkip = false;   // WARP 2 on the FM carrier
                             // fb522 — the WARP FAN reaches the FM carrier's warp slot too (see the WT branch).
+                            // fb586 — WARP SLOT 1 REACHES THE FM CARRIER TOO. It never did: FM ran slot 2
+                            // alone, so the 'Warp' knob was the one genuinely dead control on this engine —
+                            // which mattered the moment the wavetable set got a page here. Slot 1 now runs
+                            // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
+                            const float wAmt1Dfm = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warpAmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warpAmountD_;
+                            if (warpModeD_ != 0)
+                                cPh = applyPhaseWarp (warpModeD_, wAmt1Dfm, cPh, fmWin, fmSkip, warpVar_[3], drawFor (3, 0));
                             const float wAmt2D = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warp2AmountD_;
-                            if (warp2ModeD_ != 0)
+                            if (! fmSkip && warp2ModeD_ != 0)
                                 cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3], drawFor (3, 1));
                             if (fmSkip) sDu = 0.0f;
                             else
@@ -5284,6 +5315,7 @@ namespace tw
                                         ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
                                 sDu *= fmWin;
+                                sDu = applyAmpWarp (warpModeD_, wAmt1Dfm, sDu, warpVar_[3], drawFor (3, 0));   // fb586 — slot 1 first
                                 sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));
                             }
                             if (alg == 2)
