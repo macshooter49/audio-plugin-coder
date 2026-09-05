@@ -102,15 +102,6 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
   console.log (`\n══ fm_wtpage_gate — fb586 ══  ${PAGE}\n`);
   if (r.err) { console.log ('  harness error: ' + r.err); await b.close(); process.exit (1); }
 
-  gate (r.wtPage && r.wrapShown && ! r.fmShown,
-        '[1] FM\'s THIRD set IS the wavetable set',
-        `setIdx=${r.setIdx} fm-wtpage=${r.wtPage} wt shown=${r.wrapShown} fm wrap shown=${r.fmShown}`);
-
-  const labels = r.visible.map (v => v.label).join (' · ');
-  gate (r.visible.length === 4,
-        '[2] FOUR knobs, not five — Feedback is not duplicated onto FM',
-        `${r.visible.length} visible: ${labels}   hidden: ${r.hidden.join (',') || '(none)'}`);
-
   // 🚨 A GATE THAT PASSES ON ZEROS IS WORSE THAN NO GATE. The first run of this file reported
   //    "gaps 0.00 / 0.00 / 0.00, spread 0.00" and called it perfectly even — the panel had simply
   //    never laid out, so every rect was empty. Nothing below is allowed to run until the geometry
@@ -120,6 +111,15 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
         `row width ${(r.rowW || 0).toFixed (1)} px, knob centres ${r.visible.map (v => v.c.toFixed (0)).join (',')}`);
   if (! laidOut) { console.log (`\n  ❌ geometry is degenerate — the layout bars cannot be trusted, not asserting them\n`);
                    await b.close(); process.exit (1); }
+
+  gate (r.wtPage && r.wrapShown && ! r.fmShown,
+        '[1] FM\'s THIRD set IS the wavetable set',
+        `setIdx=${r.setIdx} fm-wtpage=${r.wtPage} wt shown=${r.wrapShown} fm wrap shown=${r.fmShown}`);
+
+  const labels = r.visible.map (v => v.label).join (' · ');
+  gate (r.visible.length === 4,
+        '[2] FOUR knobs, not five — Feedback is not duplicated onto FM',
+        `${r.visible.length} visible: ${labels}   hidden: ${r.hidden.join (',') || '(none)'}`);
 
   const cs = r.visible.map (v => v.c);
   const gaps = cs.slice (1).map ((c, i) => c - cs[i]);
