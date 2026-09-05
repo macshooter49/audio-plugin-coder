@@ -1357,6 +1357,87 @@ void TerrainInstrumentAudioProcessor::loadImportsRegistry ()
     }
 }
 
+// ═══ fb588 — WHICH SPEC IS THIS OSCILLATOR'S TABLE? ═════════════════════════════════════════
+// Lifted verbatim out of rebuildMorphIfNeeded so the HARMONIC bake gets the IDENTICAL answer.
+// Max: "same menu to select WT as well. Let's get it import, etc." — an imported table has to be
+// a legal additive source, and it is, because both callers resolve the source through here.
+// The import analysis (toSpec = 16 FFTs) stays cached on pointer + buildEpoch exactly as before.
+// MESSAGE THREAD ONLY (it can write importSpec_).
+const tw::WavetableSpec* TerrainInstrumentAudioProcessor::oscSourceSpec (int oscIdx, int preset,
+                                                                        tw::WavetableSpec& scratch)
+{
+    const int oi = juce::jlimit (0, 3, oscIdx);
+    const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
+    if (imp != nullptr)
+    {
+        const int impEpoch = imp->buildEpoch();
+        if (imp != importSpecSrc_[oi] || impEpoch != importSpecEpoch_[oi])
+        {
+            importSpec_[oi]      = imp->toSpec();
+            importSpecSrc_[oi]   = imp;
+            importSpecEpoch_[oi] = impEpoch;
+        }
+        return &importSpec_[oi];
+    }
+    scratch = tw::WavetableBank::specForPreset (preset);
+    return &scratch;
+}
+
+// ═══ fb588 — BAKE THE 16-FRAME GRID THE ADDITIVE BANK READS ═════════════════════════════════
+// Message thread, 60 Hz, change-gated on the SOURCE only (never on HUE — HUE is the audio
+// thread's job, see HarmTableSource::blend). Double-buffered with the same retire cooldown as
+// MorphSlot: audioReadingIdx only refreshes at block start, so a buffer the audio thread has
+// "left" can still be in use for up to a full block.
+void TerrainInstrumentAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
+{
+    const int oi = juce::jlimit (0, 3, oscIdx);
+    auto& slot = harmTable_[oi];
+
+    static const char* const ENG[4]  = { ParameterIDs::SYN_OSC_A_ENGINE,    ParameterIDs::SYN_OSC_B_ENGINE,
+                                         ParameterIDs::SYN_OSC_C_ENGINE,    ParameterIDs::SYN_OSC_D_ENGINE };
+    static const char* const MODE[4] = { ParameterIDs::SYN_OSC_A_HARM_MODE, ParameterIDs::SYN_OSC_B_HARM_MODE,
+                                         ParameterIDs::SYN_OSC_C_HARM_MODE, ParameterIDs::SYN_OSC_D_HARM_MODE };
+    static const char* const PRE[4]  = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+
+    // Only bake for an oscillator that is actually on HARMONIC/Table — 64 KB and 16 frame
+    // conversions per oscillator is not something to do for a panel nobody is using.
+    const bool wanted = ((int) *apvts.getRawParameterValue (ENG[oi])  == (int) tw::SynthVoice::Engine::HARM)
+                     && ((int) *apvts.getRawParameterValue (MODE[oi]) == 6);
+    if (! wanted) return;
+
+    const int  preset    = (int) *apvts.getRawParameterValue (PRE[oi]);
+    const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
+    const int  impEpoch  = (imp != nullptr) ? imp->buildEpoch() : -1;
+    const bool srcSame   = (imp != nullptr)
+                             ? (imp == slot.builtImportPtr && impEpoch == slot.builtImportEpoch)
+                             : (slot.builtImportPtr == nullptr && preset == slot.builtPreset);
+    if (srcSame && slot.live.load (std::memory_order_relaxed) != nullptr) return;
+
+    if (slot.retireCooldown > 0) { --slot.retireCooldown; return; }
+
+    const int target = slot.buildIdx;
+    // 🚨 ALLOCATE FIRST. This guard exists to refuse rebuilding the buffer the voices are reading,
+    //    but on the very first tick `live` and `grid[target]` are BOTH null, so comparing them was
+    //    true and the bake never ran — once, ever. The oscillator then fell through to the
+    //    mainMode = 0 fallback and Table sounded exactly like Blade, which is precisely what
+    //    Tests/harm_table_au.cpp measured (0.0 dB from Blade, and the preset menu doing nothing).
+    if (slot.grid[target] == nullptr)
+        slot.grid[target].reset (new tw::HarmTableSource::Grid());
+    if (slot.live.load (std::memory_order_relaxed) == slot.grid[target].get()) return;
+
+    tw::WavetableSpec scratch;
+    const tw::WavetableSpec* src = oscSourceSpec (oi, preset, scratch);
+    tw::HarmTableSource::bake (*src, *slot.grid[target]);
+
+    slot.live.store (slot.grid[target].get(), std::memory_order_release);
+    slot.buildIdx         = 1 - target;
+    slot.retireCooldown   = 2;
+    slot.builtPreset      = preset;
+    slot.builtImportPtr   = imp;
+    slot.builtImportEpoch = impEpoch;
+}
+
 void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                                             const juce::String& presetId,
                                                             const juce::String& modeId,
@@ -1440,22 +1521,7 @@ void TerrainInstrumentAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int
     // the import changes — toSpec is 16 FFTs), else the factory preset spec. Both are 16-frame specs, so
     // morph-of-import behaves exactly like morph-of-preset (raw import still plays full-res when morph off).
     tw::WavetableSpec presetSpec;
-    const tw::WavetableSpec* srcSpec;
-    if (hasImport)
-    {
-        if (imp != importSpecSrc_[oi] || impEpoch != importSpecEpoch_[oi])
-        {
-            importSpec_[oi]      = imp->toSpec();
-            importSpecSrc_[oi]   = imp;
-            importSpecEpoch_[oi] = impEpoch;
-        }
-        srcSpec = &importSpec_[oi];
-    }
-    else
-    {
-        presetSpec = tw::WavetableBank::specForPreset (preset);
-        srcSpec    = &presetSpec;
-    }
+    const tw::WavetableSpec* srcSpec = oscSourceSpec (oi, preset, presetSpec);
 
     slot.ready[target].store (false, std::memory_order_release);
     const double bakeT0 = juce::Time::getMillisecondCounterHiRes();   // fb481 — the beacon reports this
@@ -1577,6 +1643,7 @@ void TerrainInstrumentAudioProcessor::timerCallback()
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
+    for (int o = 0; o < 4; ++o) rebuildHarmTableIfNeeded (o);   // fb588 — HARMONICS <- WAVETABLES
     // fb584 — THE BLUR TWIN BUILDER IS GONE. A twin only ever existed to make renderBlend average
     //  frames in the MAGNITUDE domain instead of cancelling in the phasor domain, and nothing calls
     //  renderBlend with a non-zero blur any more. Left running it would have built a 4.25 MB twin per
@@ -4014,7 +4081,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     {
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { id[0], 1 }, "Synth OSC " + osc + " Harmonic Mode",
-            juce::StringArray { "Blade", "Neon", "Console", "Chant", "Bronze", "Hornet" }, 0));
+            juce::StringArray { "Blade", "Neon", "Console", "Chant", "Bronze", "Hornet", "Table" }, 0));
         layout.add (std::make_unique<juce::AudioParameterChoice> (
             juce::ParameterID { id[1], 1 }, "Synth OSC " + osc + " Harmonic Sculpt",
             juce::StringArray { "Keel", "Splay", "Cull", "Tide", "Terrace", "Clang" }, 0));
@@ -7609,6 +7676,10 @@ void TerrainInstrumentAudioProcessor::prepareToPlay (double sampleRate, int samp
     smoothedDlyDuck.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_DUCK)->load());
     smoothedDelayFreeze.setCurrentAndTargetValue(rawParam (ParameterIDs::DLY_FREEZE)->load());
 
+    // fb588 — prime the HARM table grids so an oscillator already on Table sounds on the very
+    // first block, instead of waiting for the 60 Hz timer's first tick.
+    for (int o = 0; o < 4; ++o) rebuildHarmTableIfNeeded (o);
+
 }
 
 void TerrainInstrumentAudioProcessor::releaseResources()
@@ -9322,6 +9393,33 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             h.shine = ownM (h.shine, (int) wc::ModDest::HarmShineA + o, 0.0f, 1.0f);
             h.wilt  = ownM (h.wilt, (int) wc::ModDest::HarmWiltA + o, 0.0f, 1.0f);
             h.forge = ownM (h.forge, (int) wc::ModDest::HarmFizzA + o, 0.0f, 1.0f);
+            // ── fb588 — TABLE family: the bank's recipe comes from a wavetable ──────────────
+            //  HUE selects the FRAME. HUE already means "morph within the chosen family" on the
+            //  other six, and HARM has no WT Pos knob of its own, so the meaning carries over
+            //  intact — and because it is read AFTER ownM above, the frame scan is fully
+            //  modulatable. The message thread did the expensive conversion; this is a lerp.
+            if (h.mainMode == 6)
+            {
+                if (const tw::HarmTableSource::Grid* g = harmTable_[o].live.load (std::memory_order_acquire))
+                {
+                    h.tableN     = tw::HarmTableSource::blend (*g, h.hue, harmAmpScratch_[o],
+                                                               harmPhaseScratch_[o],
+                                                               tw::HarmTableSource::kMaxN);
+                    h.tableAmp   = harmAmpScratch_[o];
+                    h.tablePhase = harmPhaseScratch_[o];
+                    // The rebuild gate is content-identity: the SOURCE plus where in it we are.
+                    h.tableSig   = g->sig + h.hue * 1024.0f;
+                }
+                else
+                {
+                    // The grid is baked on the message thread, so for the first tick after an
+                    // engine/preset switch there is nothing to read yet. case 6 with a null table
+                    // renders SILENCE, so fall back to Blade for that tick rather than dropping
+                    // the oscillator out. prepareToPlay primes all four, so this is a switch-only
+                    // window of at most one 60 Hz tick.
+                    h.mainMode = 0;
+                }
+            }
             harmP[o] = h;
         }
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread

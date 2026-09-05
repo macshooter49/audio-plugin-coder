@@ -62,7 +62,7 @@ namespace harm {
 // ── knob/mode snapshot pushed from the processor (cheap store, block-rate) ──
 struct HarmParams
 {
-    int   mainMode   = 0;     // 0 Blade 1 Neon 2 Console 3 Chant 4 Bronze 5 Hornet
+    int   mainMode   = 0;     // 0 Blade 1 Neon 2 Console 3 Chant 4 Bronze 5 Hornet 6 TABLE
     int   sculptMode = 0;     // 0 Keel 1 Splay 2 Cull 3 Tide 4 Terrace 5 Clang
     float hue    = 0.35f;     // main-family regime morph
     float count  = 0.5f;      // partial count, log taper 8..512 (continuous — equal-power fade)
@@ -77,12 +77,27 @@ struct HarmParams
     float wilt   = 0.5f;      // time arrow: highs decay ↔ highs bloom (0.5 = off)
     float forge  = 0.0f;      // analog drive: ADAA tanh + feedback fuzz on the summed osc
 
+    // ── fb588 — TABLE source. mainMode 6 builds the bank from a WAVETABLE instead of a procedural
+    //    family: the caller resolves the chosen table at the chosen frame into these two arrays
+    //    (per-harmonic amplitude and phase, index 0 = harmonic 1) and hands over borrowed pointers.
+    //    They are owned by the caller and must outlive the block.
+    //    🚨 PHASE IS CARRIED, NOT DISCARDED, and that was measured rather than assumed: with
+    //       magnitude only, every frame of Spectral Drift has an IDENTICAL amplitude spectrum
+    //       (makeSpectralDriftSpec writes one constant amplitude and morphs only phase), so WT Pos
+    //       would have been a dead knob on it — and the same table would fold into a different
+    //       sound here than on the wavetable engine, which reads as a bug.
+    const float* tableAmp   = nullptr;
+    const float* tablePhase = nullptr;
+    int          tableN     = 0;
+    float        tableSig   = 0.0f;   // moves when the resolved table content moves (rebuild gate)
+
     bool operator== (const HarmParams& o) const noexcept
     {
         return mainMode==o.mainMode && sculptMode==o.sculptMode
             && hue==o.hue && count==o.count && lean==o.lean && fan==o.fan
             && grit==o.grit && braid==o.braid && carve==o.carve && churn==o.churn
-            && root==o.root && shine==o.shine && wilt==o.wilt;   // forge is post-render (no rebuild)
+            && root==o.root && shine==o.shine && wilt==o.wilt
+            && tableSig==o.tableSig && tableN==o.tableN;   // forge is post-render (no rebuild)
     }
     bool operator!= (const HarmParams& o) const noexcept { return ! (*this == o); }
 };
@@ -149,9 +164,29 @@ public:
         // a slightly different waveform. HORNET instead fires NEAR-ALIGNED phases — the
         // band-limited impulse-train buzz is its identity (small jitter keeps headroom sane).
         const bool buzz = (p_.mainMode == 5);
+        const bool fromTable = (p_.mainMode == 6 && p_.tablePhase != nullptr && p_.tableN > 0);
+        // 🚨 fb588 — WHY THE TABLE'S PHASES GET A ROTATION AND NOT A COPY. Each unison sibling owns
+        //    its own phase_ accumulator, and the hash gives each of them a DIFFERENT random set,
+        //    which is what makes uNorm's 1/sqrt(N) power law true. Hand every sibling the table's
+        //    phases verbatim and they become identical and coherent: their peaks land on the same
+        //    sample and a 16-voice note-on sums linearly instead of by root-N.
+        //    The fix is a rotation LINEAR IN HARMONIC NUMBER. For this family ratio_[j] = j+1, so
+        //    adding (j+1)*theta is a pure TIME SHIFT of the whole waveform — every sibling still
+        //    reproduces the table's wave exactly, only its peaks land somewhere else.
+        const float theta = hash01 (seed_ ^ 0x5bf03635u);
         for (int j = 0; j < harm::kMaxPartials; ++j)
-            phase_[(size_t) j] = buzz ? 0.06f * hash01 ((std::uint32_t) j * 2654435761u ^ seed_)
-                                      : hash01 ((std::uint32_t) j * 2654435761u ^ seed_);
+        {
+            if (fromTable)
+            {
+                const float tp = (j < p_.tableN) ? p_.tablePhase[(size_t) j] : 0.f;
+                float ph = tp * (1.f / 6.28318530718f) + (float) (j + 1) * theta;
+                ph -= std::floor (ph);
+                phase_[(size_t) j] = ph;
+            }
+            else
+                phase_[(size_t) j] = buzz ? 0.06f * hash01 ((std::uint32_t) j * 2654435761u ^ seed_)
+                                          : hash01 ((std::uint32_t) j * 2654435761u ^ seed_);
+        }
         std::fill (ampZL_.begin(), ampZL_.end(), 0.f);   // start silent → first block ramps in
         std::fill (ampZR_.begin(), ampZR_.end(), 0.f);
         lastSpan_ = 0;
@@ -625,6 +660,17 @@ private:
                 }
                 break;
             }
+            case 6: // ── fb588 — TABLE: the bank IS a wavetable's spectrum ──
+            {
+                // Multiplies into the count window like every other family, so the PARTIALS knob
+                // still fades the top of the bank exactly as it does on Blade or Chant. Harmonics
+                // the table does not have are silenced rather than left at the window value.
+                for (int j = 0; j < nEff; ++j)
+                    amp_[(size_t) j] *= (p_.tableAmp != nullptr && j < p_.tableN)
+                                          ? p_.tableAmp[(size_t) j] : 0.f;
+                break;
+            }
+
             case 5: // ── HORNET — pulse-train buzz wall ──
             {
                 const int   K = (int) std::lround (12.f * fastExp2 (fastLog2 ((float) nEff / 12.f) * k));   // exp growth

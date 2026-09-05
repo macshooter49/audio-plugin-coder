@@ -1057,7 +1057,7 @@ namespace ParameterIDs
     // ════════ HARM-ENGINE-IDS — per-OSC HARMONIC additive oscillator (Engine::HARM, slot 5;
     // the never-exposed NOISE engine slot, ID frozen + meaning remapped — house precedent).
     // 2 mode rows (MAIN / SCULPT) + 12 knob laws; DSP in HarmonicEngine.h (2026-07-08). ════════
-    constexpr char SYN_OSC_A_HARM_MODE[]         = "SYN_OSC_A_HARM_MODE";   // choice: Blade Neon Console Chant Bronze Hornet
+    constexpr char SYN_OSC_A_HARM_MODE[]         = "SYN_OSC_A_HARM_MODE";   // choice: Blade Neon Console Chant Bronze Hornet Table
     constexpr char SYN_OSC_A_HARM_SCULPT[]       = "SYN_OSC_A_HARM_SCULPT";   // choice: Keel Splay Cull Tide Terrace Clang
     constexpr char SYN_OSC_A_HARM_HUE[]          = "SYN_OSC_A_HARM_HUE";   // 0..1 main-family regime morph
     constexpr char SYN_OSC_A_HARM_COUNT[]        = "SYN_OSC_A_HARM_COUNT";   // 0..1 partial count (log 8..512)

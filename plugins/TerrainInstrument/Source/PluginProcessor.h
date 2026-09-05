@@ -65,6 +65,7 @@
 #include "SynthVoice.h"
 #include "FmOperators.h"
 #include "WavetableBank.h"
+#include "HarmTableSource.h"   // fb588 — wavetable -> additive-bank partials
 #include "SpectralMorph.h"
 #include <juce_audio_formats/juce_audio_formats.h>
 #include <atomic>
@@ -684,8 +685,31 @@ public:
      *  (plain struct copy of block-rate floats — a torn read costs one cosmetic frame). */
     bool  harmVizLive (int osc) const noexcept { return harmVizLive_[(size_t) juce::jlimit (0, 3, osc)].load (std::memory_order_relaxed) != 0; }
     float harmVizBin (int osc, int b) const noexcept { return harmVizBins_[(size_t) juce::jlimit (0, 3, osc)][(size_t) juce::jlimit (0, 95, b)].load (std::memory_order_relaxed); }
-    const tw::HarmParams& harmDisplayParams (int osc) const noexcept
-    { return harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)]; }
+    /** fb588 — BY VALUE, and the TABLE arrays are re-blended HERE on the message thread.
+        The scalars above tolerate a torn read (one cosmetic frame). The Table family's amp/phase
+        arrays would not have been the same bargain: harmP points them at harmAmpScratch_, which
+        the AUDIO thread rewrites every block, so the picture would have been reading 512 floats
+        out from under a live writer. Re-blending from the published grid — the same grid, the
+        same HUE, the same blend() the voice runs — costs one lerp per repaint and makes the
+        display read nothing the audio thread owns. It also means the waterfall/bars now draw the
+        WAVETABLE's spectrum, which is the whole point of the family. */
+    tw::HarmParams harmDisplayParams (int osc) const noexcept
+    {
+        const int o = juce::jlimit (0, 3, osc);
+        tw::HarmParams p = harmDisplayParams_[(size_t) o];
+        if (p.mainMode == 6)
+        {
+            if (const tw::HarmTableSource::Grid* g = harmTable_[(size_t) o].live.load (std::memory_order_acquire))
+            {
+                p.tableN     = tw::HarmTableSource::blend (*g, p.hue, harmDispAmp_[o], harmDispPhase_[o],
+                                                           tw::HarmTableSource::kMaxN);
+                p.tableAmp   = harmDispAmp_[o];
+                p.tablePhase = harmDispPhase_[o];
+            }
+            else p.mainMode = 0;    // matches the audio thread's not-yet-baked fallback
+        }
+        return p;
+    }
     /** Returns the sample buffer for the currently-editing layer.
      *  Task 5: routes through layers[editingLayer] instead of the old singleton. */
     tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
@@ -1722,6 +1746,34 @@ private:
     tw::WavetableSpec  importSpec_[4];
     const tw::Wavetable* importSpecSrc_[4]   = { nullptr, nullptr, nullptr, nullptr };
     int                importSpecEpoch_[4]   = { -1, -1, -1, -1 };
+
+    // ══ fb588 — HARMONICS ← WAVETABLES ═══════════════════════════════════════════════════════
+    //  The additive bank can take its 512-partial recipe from a wavetable — factory OR imported —
+    //  instead of one of the six procedural families. The SOURCE is chosen exactly the way the
+    //  spectral morph chooses it (importSpec_ cache if a table is loaded, else the factory preset),
+    //  which is why that selection is factored into oscSourceSpec() rather than written twice.
+    //
+    //  🚨 THE SPLIT IS THE WHOLE POINT. HUE picks the frame and HUE is modulatable, so the frame
+    //     position moves per BLOCK on the audio thread. Converting a partial-list frame costs up to
+    //     512 x (cos,sin,sqrt,atan2) — so all 16 frames are converted ONCE per source change here on
+    //     the message thread, and the audio thread only lerps between two of them.
+    struct HarmTableSlot
+    {
+        std::unique_ptr<tw::HarmTableSource::Grid>    grid[2];
+        std::atomic<const tw::HarmTableSource::Grid*> live { nullptr };
+        int  buildIdx         = 0;
+        int  retireCooldown   = 0;      // same contract as MorphSlot: voices may still be mid-block
+        const tw::Wavetable* builtImportPtr = nullptr;
+        int  builtImportEpoch = -1;
+        int  builtPreset      = -2;     // -2 = nothing built yet (a real preset index is >= 0)
+    };
+    HarmTableSlot harmTable_[4];
+    // The audio thread blends into these; HarmParams points at them for the rest of the block.
+    float harmAmpScratch_  [4][tw::HarmTableSource::kMaxN] = {};
+    float harmPhaseScratch_[4][tw::HarmTableSource::kMaxN] = {};
+    // the DISPLAY's own copy — written only on the message thread, in harmDisplayParams()
+    mutable float harmDispAmp_  [4][tw::HarmTableSource::kMaxN] = {};
+    mutable float harmDispPhase_[4][tw::HarmTableSource::kMaxN] = {};
     // fb248 — imported-table build pool (1 serialized worker). The FFT reconstruction of 8 mip levels ×
     // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
@@ -1910,6 +1962,11 @@ public:
 private:
 
     void timerCallback() override;        // message thread — rebuilds morph tables
+    void rebuildHarmTableIfNeeded (int oscIdx);      // fb588 — message thread, bakes the 16-frame grid
+    // fb588 — the ONE place that answers "which spec is this oscillator's table?": the cached
+    // analysis of a loaded import, else the factory preset. rebuildMorphIfNeeded had this inline;
+    // the HARM bake needs the identical answer, so it lives here instead of being written twice.
+    const tw::WavetableSpec* oscSourceSpec (int oscIdx, int preset, tw::WavetableSpec& scratch);
     void rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
                                const juce::String& presetId,
                                const juce::String& modeId,
