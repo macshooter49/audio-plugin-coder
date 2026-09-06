@@ -5486,10 +5486,59 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    glass browser come back on the HARM header. Recycled, not rebuilt: openWtSelectMenu binds to
    #osc-<o>-preset-select on a timer regardless of engine, so simply un-hiding this wrap gives
    HARM the identical two-pane menu — factory tables and user imports both — that the wavetable
-   engine has. Only the BARE .preset-wrap comes back; the family/sculpt/sample wraps stay hidden. */
+   engine has. Only the BARE .preset-wrap comes back; the family/sculpt/sample wraps stay hidden.
+   ⚠️ fb595: THAT LAST SENTENCE WAS NEVER TRUE. The :not() chain only limits what THIS rule un-hides;
+   it hides nothing. The family and sculpt chips are shown for the whole HARM engine by the earlier
+   .hm-mode-wrap rule above (and .hm-sculpt also carries .hm-mode-wrap), so on Table the corner
+   carries THREE name-chips where every other engine carries one. That is the collision. */
 #syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
   .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { display: inline-block; }
-#syn-panel .device.osc.engine-harm.harm-table .wt-nav { display: inline-block; }
+/* fb595 — THE ARROWS. .device-corner-preset is a FLEX container, so a flex item's display is
+   BLOCKIFIED: the old `inline-block` here computed to `block` and threw away the align-items /
+   justify-content centring that the canonical .wt-nav rule below relies on — the glyph fell to the
+   TOP-LEFT of its 11×16 box. Measured on the shipped page: glyph inset 0.00 / 6.03 (should be 3.01 /
+   3.02) and 2.5 px high. Max: "the arrows are way taller than the names ... centered and symmetrical
+   just like the arrows are centered and symmetrical everywhere." inline-flex restores the wavetable
+   engine's exact arrow geometry — bar 3 of Tests/harm_header_gate.js measures both in one run. */
+#syn-panel .device.osc.engine-harm.harm-table .wt-nav { display: inline-flex; }
+
+/* fb595 — THE HEADER NEVER COLLIDES, AND NOTHING MOVES.
+   Max: "it still collides ... because our table names are longer ... make sure the names don't
+   overlap no matter what ... it gets cut off really early ... dot, dot, dot ... Nothing moves.
+   Everything has to stay fixed."
+
+   THE MECHANISM: .device-label-row (left:17) and .device-corner-preset (right:14) are BOTH
+   position:absolute in the same 16 px band. Neither is in the other's flow, so when the corner
+   cluster outgrows the room beside "OSC · Harmonic" it grows LEFT straight through it — no reflow,
+   no wrap, no clip, superimposed glyphs. On Table the cluster holds Table + sculpt + ‹ name › + A +
+   plus six 6 px gaps, and a real table name ("PLUTO 2 - JNO CORE") puts it 70 px over budget.
+
+   THE FIX, in three parts, all scoped to .engine-harm.harm-table so no other engine can move:
+     1. the cluster is given a FIXED width — not max-width — so its left edge is always at the same
+        x whatever the name says. Budget: 330.1 padding box − 17 inset − 85.5 ("OSC · Harmonic")
+        − 6 clearance = 124 reserved. Bar 1 measures the clearance; it must stay ≥ 4 px.
+     2. every child is pinned flex:0 0 auto so flex-shrink cannot chew the chips ("Ta…" / "Cla…"
+        was measured and photographed on the way here), and the NAME wrap alone is flex:1 1 auto
+        with min-width:0 — it absorbs ALL the slack, growing for a short name and shrinking for a
+        long one. So Table · sculpt · ‹ sit at the left edge and › · A · + at the right edge, at the
+        same pixels for every table in the bank. Only the name's text changes.
+     3. the name fills its slot, centred, and truncates through the ellipsis .preset-display ALREADY
+        carries (max-width / overflow / text-overflow, fb-era) — a short name sits centred between
+        the arrows, a long one fills the slot and ends in …. Reused, not invented.
+
+   THE COST, STATED PLAINLY: with the widest sculpt word (Terrace) the name slot is ~21 px; with
+   Keel ~39 px. The header physically cannot hold OSC · Harmonic + Table + a sculpt word + ‹name›
+   + A + + in 299 px, and the name is the only thing that can give without hiding a LIVE control
+   (Sculpt is audible on Table — applySculpt runs with no mainMode guard). The REAL fix is folding
+   Table into the wavetable menu (no seventh category ⇒ no third chip ⇒ the name gets its 108 px
+   back); this makes the header legal until then. */
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset { width: calc(100% - 124px); }
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset > * { flex: 0 0 auto; }
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
+  > .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { flex: 1 1 auto; min-width: 0; }
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
+  > .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) > .preset-display
+  { display: block; width: 100%; box-sizing: border-box; text-align: center; }
 #syn-panel .device.osc.engine-modal .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device-corner-preset .md-fam-wrap { display: none; }   /* default-hide — must outrank the base .preset-wrap display (mirrors .hm-mode-wrap) */
 #syn-panel .device.osc.engine-modal .device-corner-preset .md-fam-wrap { display: inline-flex; }
