@@ -4930,6 +4930,49 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    the knob is reachable whatever engine is loaded. Measured after the change, not assumed:
    label clipping is checked with scrollWidth vs clientWidth on the real editor. */
 #syn-panel .device.osc .back-only > .osc-knobs { grid-template-columns: repeat(7, 1fr); }
+
+/* fb594 — THE SPECTRAL WINDOW ONLY EXISTS ON TWO ENGINES, SO IT ONLY SHOWS ON TWO.
+   ⚠️ The fb536 comment above is STALE: the back row is SEVEN, not eight — there is no Voices
+      knob in .back-only (measured: Oct · Semi · Cent · Level · Pan · Low · High).
+
+   Lo/Hi reach the audio through exactly ONE line — PluginProcessor.cpp:1615,
+   `slot.buf[target].buildFromSpec (SpectralMorph::apply (*srcSpec, mode, amount, lo, hi))`
+   inside rebuildMorphIfNeeded. That builds the per-osc MorphSlot wavetable, which reaches a voice
+   via wavetableForOsc → currentWavetable_ → blendA_ (SynthVoice.h:3742), and blendA_ is read by
+   exactly TWO engine cases: Engine::WT (SynthVoice.h:4200) and Engine::FM (SynthVoice.h:4289).
+   The other five are a hard `sAu = 0.0f` at SynthVoice.h:4308-4312 and render their own blocks.
+   So on Sample, Granular, Resynth/Geode, Harmonic and Modal these two knobs are INERT.
+
+   🚨 HARMONIC IS DEAD **INCLUDING ITS TABLE FAMILY**, which is the one that looks live. fb588 gave
+      HARM a 7th family whose additive recipe IS a wavetable, so the instinct is that a wavetable
+      cut must reach it. It does not: HARM/Table bakes through oscSourceSpec → specForPreset
+      (PluginProcessor.cpp:1516) — no morph, no cut. Verified by two independent traces.
+
+   THE PARAMS STAY. Only the CONTROL is hidden. They are identity at their defaults (Lo=0.0,
+   Hi=1.0, PluginProcessor.cpp:3236-3241), they are LIVE on WT/FM, and they are mod destinations
+   1846..1853 pinned by a static_assert in SynthModConfig.h:265-266. Deleting the parameters would
+   renumber the mod matrix and break every saved patch and automation lane — Tests/spec_cert.cpp
+   would go red, which is the one dangerous wrong turn here.
+
+   AND THE GRID IS RE-DECLARED, not just the knobs hidden — the fb586 law (see .fm-wtpage above):
+   hiding 2 of 7 columns without re-declaring leaves TWO DEAD COLUMNS hanging off the right edge.
+   Five columns, filling the width, symmetric. */
+#syn-panel .device.osc.engine-sample   .back-only > .osc-knobs,
+#syn-panel .device.osc.engine-granular .back-only > .osc-knobs,
+#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs,
+#syn-panel .device.osc.engine-harm     .back-only > .osc-knobs,
+#syn-panel .device.osc.engine-modal    .back-only > .osc-knobs { grid-template-columns: repeat(5, 1fr); }
+
+#syn-panel .device.osc.engine-sample   .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
+#syn-panel .device.osc.engine-sample   .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
+#syn-panel .device.osc.engine-granular .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
+#syn-panel .device.osc.engine-granular .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
+#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
+#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
+#syn-panel .device.osc.engine-harm     .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
+#syn-panel .device.osc.engine-harm     .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
+#syn-panel .device.osc.engine-modal    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
+#syn-panel .device.osc.engine-modal    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"] { display: none; }
 #syn-panel .knob { display: flex; flex-direction: column; align-items: center; gap: 2px; }
 #syn-panel .knob-ring {
   position: relative;                 /* holds the arc SVG — no layout/flow change */
