@@ -10443,9 +10443,36 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                      Mix 50 % the dot travelled a fraction of the cursor's distance and felt STUCK.
                  The CURVE still shows the mix-scaled composite — that is what you hear. The DOT shows
                  what that band is set to, which is what you are dragging. Every real EQ does this. */
-              var gdb=(f&&f.db&&f.db.length>b&&isFinite(f.db[b])) ? f.db[b] : modelDb(dev,b);
-              var y=fx4Gl(st,'db'+b,gdb,0.5);
-              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(y).toFixed(1)); }
+              /* ═══ fb592 — THE DOT IS ON THE LINE. ALWAYS. ═════════════════════════════════════
+                 Max: "if you look at the dots they're not on the line... Could you make sure the dots
+                 never go off the fucking line? they always stay on the line no matter what because
+                 it's gonna throw us off." And the "little white dot" at the far right he asked about
+                 IS this — the Air band's handle, drawn at its own gain while the curve near it had
+                 been pulled somewhere else, so it read as a foreign object floating off the edge.
+                 MEASURED before this change: with Air at -3.8 dB and everything else flat, band 3's
+                 dot sat 4.2 units below a curve that was 4.2 units away — on a plot only 78 units tall.
+
+                 ⚠️ THIS DELIBERATELY REVERSES HALF OF fb468, whose note sits directly above. Read it:
+                    it moved the dot OFF the summed curve for three reasons, and only ONE of them still
+                    applies here.
+                      · "the drag felt stuck at Mix 50 %" — GONE, and not because of this change: the
+                        drag is delta-based (drag.g0 + dDb from the grab point), so where the dot is
+                        DRAWN cannot affect how the parameter tracks the cursor.
+                      · "two bands at the same frequency were one ungrabbable dot" — still true, and
+                        pick() now disambiguates by AIM instead of by draw order (see below), which is
+                        strictly better than the fb468 tie-break it replaces.
+                      · "moving one band moved every other band's dot" — this is now TRUE AGAIN, and it
+                        is not a bug: it is what "on the line" means. A wide shelf lifts its
+                        neighbours' dots because it genuinely lifts the response under them. Max asked
+                        for the line to be the truth, and the line is the composite.
+
+                 Sampled from st.c — THE VERY ARRAY THE PATH ABOVE IS BUILT FROM — with the same mix
+                 mapping and the same linear interpolation the polyline uses between its points. So the
+                 dot is not "near" the curve, it is ON it by construction, to the pixel, at any zoom. */
+              var fi=(N-1)*(x-FX4_X0)/FX4_PW, i0=Math.max(0,Math.min(N-1,Math.floor(fi)));
+              var i1=Math.min(N-1,i0+1), ft=fi-i0;
+              var cv0=st.c[i0]||0, cv1=st.c[i1]||0, cvx=cv0+(cv1-cv0)*(isFinite(ft)?ft:0);
+              fx4SetA(nodes[b],'cx',x.toFixed(1)); fx4SetA(nodes[b],'cy',fx4DbY(fx4EffDb(cvx,mix)).toFixed(1)); }
             fx4SpecCv(core);   // fb442 — the audio layer, on its own canvas at device resolution
           }
           /* ═══ fb442 — THE CARD SPECTRUM IS A CANVAS ═════════════════════════════════════════
@@ -10845,8 +10872,26 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                  rarer now that the dots carry their own gain, but two bands CAN still coincide exactly
                  (same Hz and same gain), and when they do the one drawn last — the one you can see —
                  is the one you get. */
+              /* fb592 — AND THE TIE-BREAK IS NOW *AIM*, NOT DRAW ORDER. Since the dots ride the
+                 line, two bands at the same frequency share one spot far more often than they did,
+                 and "whichever was drawn last" gave you no way to reach the other one. Every
+                 candidate within the hit radius is scored by how close the CURSOR is to that band's
+                 OWN gain — so with a +20 and a -20 band stacked at 300 Hz, aiming high grabs the
+                 boost and aiming low grabs the cut, which is the only information the user has to
+                 give. Distance still decides between bands that are genuinely apart; own-gain only
+                 breaks a near-tie (within 1.5 units). */
+              var dv=devFor(core), cands=[];
               for(var i=0;i<nodes.length;i++){ if(nodes[i].getAttribute('opacity')==='0') continue;
-                var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy')); var dd=Math.sqrt(dx*dx+dy*dy); if(dd<=bd){bd=dd;best=+nodes[i].getAttribute('data-b');} }
+                var dx=u.x-(+nodes[i].getAttribute('cx')), dy=u.y-(+nodes[i].getAttribute('cy'));
+                var dd=Math.sqrt(dx*dx+dy*dy); var bb=+nodes[i].getAttribute('data-b');
+                cands.push({b:bb,d:dd}); if(dd<=bd){bd=dd;best=bb;} }
+              if(bd<=HIT){
+                var tie=cands.filter(function(c){ return c.d<=bd+1.5; });
+                if(tie.length>1){ var ba=1e9;
+                  for(var t2=0;t2<tie.length;t2++){
+                    var own=fx4DbY((dv&&dv.__vz&&dv.__vz.db&&isFinite(dv.__vz.db[tie[t2].b])) ? dv.__vz.db[tie[t2].b] : modelDb(dv,tie[t2].b));
+                    var ad=Math.abs(u.y-own); if(ad<ba){ ba=ad; best=tie[t2].b; } } }
+              }
               return bd<=HIT?best:-1;
             }
             /* fb443 — THE FLOATING READOUT IS GONE. Max: "whenever I move the high bands there's this text
