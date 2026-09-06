@@ -5138,6 +5138,55 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    with the engine rules, so it must stay BELOW them. */
 #syn-panel .device.osc.uni-page:not(.swapped) .front-only  { display: flex; }
 #syn-panel .device.osc.uni-page:not(.swapped) .sample-view { display: none; }
+/* ── fb590 — THE UNISON PAGE KEEPS THE ENGINE'S OWN VISUALISER ──────────────────────────────
+   Max: "I want the visualizer to stay the same in each engine category... Unison needs to be
+   linked to their respective engine icons, not the wave table."
+   The two rules directly above rescue the unison KNOB ROW, which exists only inside .front-only.
+   But Sample, Granular, Resynth and Modal keep their PICTURE in the sibling .sample-view, so
+   re-showing .front-only handed those four engines the WAVETABLE oscilloscope, and hiding
+   .sample-view took their own display away with it. Collateral, not intent — the comment above
+   shows the author was rescuing the row and did not know the picture rode on that container.
+   (Harmonic escaped this only because its rules key on .osc-wave/.harm-view, never .front-only.)
+
+   So on those four engines the unison page shows BOTH: .sample-view for the picture — its knob
+   wraps are already stood down by the .uni-page block below — and .front-only for the unison row
+   only, with .osc-display suppressed so the wavetable scope cannot come back.
+
+   ⚠️ order:1 ON .front-only, NOT order:-1 ON .sample-view. .device.osc is a flex COLUMN whose
+      FIRST child is the device header, so order:-1 would jump the picture above the header.
+      order:1 leaves header(0), .sample-view(0), .front-only(1) — picture, then unison row.
+      .back-only is display:none unless .swapped (4701), so it never lands between them.
+   Specificity: 1 id + 6 classes here against 1 id + 5 above, so these win on merit rather than on
+   source order — the fragility the block above warns about does not extend to them. */
+#syn-panel .device.osc.uni-page:not(.swapped).engine-sample   .sample-view,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-granular .sample-view,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-geode    .sample-view,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-modal    .sample-view { display: flex; flex: 0 0 auto !important; }
+#syn-panel .device.osc.uni-page:not(.swapped).engine-sample   .front-only,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-granular .front-only,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-geode    .front-only,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-modal    .front-only { order: 1; flex: 0 0 auto !important; }
+/* ⚠️ flex:0 0 auto AND THE 7px, BOTH MEASURED, NOT GUESSED. .front-only and .sample-view are each
+   flex:1, so they split the 110 px below the header 55/55 — the 65 px picture then overflowed its
+   55 px box and sat ON TOP of the unison row (measured gap: -10 px) with the row riding 17 px high
+   at y=136. Sizing .front-only to its content hands the remainder back to the picture, and the 7 px
+   🚨 !important IS LOAD-BEARING HERE, and it is the one thing that can work: BOTH .front-only and
+   .sample-view carry an INLINE `flex: 1` in the markup (index.html:6792 / 6893), and an inline
+   style beats every selector no matter how specific. Without it the two containers kept splitting
+   the space 55/55, the 65 px picture overflowed its 55 px box and sat ON TOP of the unison row
+   (measured gap -10 px, row riding 17 px high at y=136). Sizing .front-only to its content hands
+   the remainder back to the picture. BOTH containers are content-sized and NO margin is added:
+   .device.osc already supplies the 7 px itself (computed row-gap: 7px), so a margin double-spaced
+   it. This is exactly what the wavetable engine does — it lets .front-only size to its content and
+   overflow the padding box by 6 px — which is why the unison page now measures IDENTICALLY on all
+   seven engines: picture h=65 at y=81, row at y=153, gap 7.
+   The unison page now lands on the SAME geometry as every other engine: picture h=65 at y=81, row
+   at y=153, gap 7. Held by Tests/osc_view_gate.js bar 1, which compares all seven engines against
+   the baseline each engine shows on its own page. */
+#syn-panel .device.osc.uni-page:not(.swapped).engine-sample   .osc-display,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-granular .osc-display,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-geode    .osc-display,
+#syn-panel .device.osc.uni-page:not(.swapped).engine-modal    .osc-display { display: none; }
 /* 🚨 AND THE ROW ITSELF MUST OUT-SPECIFY THE ENGINE HIDES. FM and Harm bury every rival row with
    `.engine-X:not(.swapped) .front-only .osc-knobs:not(.X-knobs)` — 1 id + 7 classes. The plain
    `.uni-knob-wrap .uni-knobs` rule above is 1 id + 2 and LOSES to it, so the unison page rendered
@@ -17121,7 +17170,7 @@ setTimeout(function wireSynControls () {
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran || isModal) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran || isModal || isSpec) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o);   /* fb590 — isSpec ADDED. Resynth shares this very .sample-view, so leaving it out meant switching an osc TO Resynth never re-requested its payload: the view stayed :not(.loaded), and .samp-drop ("Drop sample here") sat at opacity .5 under the spectrogram forever. The only other restore path is the 10-shot timeout burst that stops 9 s after page load. */ if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 6); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
           // MENU-STUCK MITIGATION — WKWebView can leave a native <select> unable to REOPEN after a
           // change that mutates its own subtree (switching an osc to FM re-lays-out the osc view).
@@ -17229,6 +17278,24 @@ setTimeout(function wireSynControls () {
           // because the wavetable set is a SIBLING of the FM wrap and CSS cannot look backwards.
           dev.classList.toggle ('fm-wtpage', !! L.fm && ! uni && idx === 2);
           if (L.sample) dev.classList.toggle ('blend-pg2', ! uni && idx === 1);
+          /* ── fb590 — A PAGE FLIP CAN MAKE A CANVAS VISIBLE, AND A CANVAS THAT WAS HIDDEN IS BLANK.
+             drawPeaks() returns silently when the canvas has no layout box ("if (w < 2 || h < 2)
+             return"), and setLoaded() adds .loaded regardless — so a payload that arrived while
+             the view was hidden marks the oscillator loaded and paints NOTHING, and apply() used
+             to change these classes without ever repainting. Result: a waveform that is
+             blank-but-loaded until some unrelated event happens to redraw it. Now every page flip
+             repaints the sample family and re-kicks the Resynth painter. Cheap: a single rAF, and
+             only for a device that actually owns one of these views. */
+          try {
+            var oL = (dev.id || '').replace (/^osc-([a-d])-device$/, '$1');
+            if (oL && oL.length === 1) {
+              var c = dev.classList;
+              if (c.contains ('engine-sample') || c.contains ('engine-granular')
+                  || c.contains ('engine-geode') || c.contains ('engine-modal'))
+              { if (window.__terrainSampleRedraw) window.__terrainSampleRedraw (oL);
+                if (window.__geodeRepaint) window.__geodeRepaint (oL); }
+            }
+          } catch (eRp) {}
         }
         // 🚨 THE OBSERVER MUST KEY ON THE *ENGINE*, NOT ON ANY CLASS apply() TOUCHES. A first cut
         //    compared the live wrap's className — but apply() writes .pg2 onto that very wrap and
@@ -36258,7 +36325,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     kick:function(){ if(!wtWaterfall.raf) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
     loop:function(){ wtWaterfall.raf=0; var any=false, now=(window.performance&&performance.now)?performance.now():Date.now();
       for(var k=0;k<OSC_IDS.length;k++){ var o=OSC_IDS[k]; var cv=document.getElementById('osc-wave-'+o);
-        if(wtWaterfall.on[o]&&cv&&cv.offsetParent!==null){
+        /* fb590 — AND THE LOOP OBEYS THE ENGINE TOO. canWaterfall() gated only the CLICK, so a
+           waterfall switched on while the osc was Wavetable/FM kept its on[o] flag through an
+           engine change and redrew the moment anything made #osc-wave-<o> visible again — which
+           the unison page used to do on every sample-family engine. Visibility was never the
+           right question; "is this engine allowed a waterfall" is. */
+        if(wtWaterfall.on[o]&&cv&&cv.offsetParent!==null&&wtWaterfall.canWaterfall(o)){
           try{ wtWaterfall.maybeRebake(o,now); }catch(e){}   /* fb458 — only for a VISIBLE waterfall */
           try{ wtWaterfall.draw(o); }catch(e){} any=true; } }
       if(any) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
@@ -38090,11 +38162,20 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       for (var i = 0; i < 4; i++) {
         var o = IDS[i], d = f && f[o], s = st[o];
         if (!d || !d.on) { if (s.on) wipe(o); s.on = false; continue; }
-        s.on = true; s.lastMs = now;
+        s.on = true; s.lastMs = now; s.idle = false;   // fb590 — the feed is back; resume animating
         var p = +d.p; s.pos = (p === p && p >= 0 && p <= 1) ? p : 0;
       }
       kick();
     } catch (err) {}
+  };
+
+  /* fb590 — REPAINT ON DEMAND, without needing the feed. A page flip or an engine switch can
+     make this canvas visible again long after the feed parked (see the stall note in paint()).
+     The baked layers are still held, so one deferred paint restores the picture; deferred because
+     the caller has just changed classes and the box has no size until layout settles. */
+  window.__geodeRepaint = function (o) {
+    try { var s = st[o]; if (! s || (! s.ghost && ! s.bright)) return;
+          requestAnimationFrame (function () { try { paint (o); } catch (e) {} }); } catch (e) {}
   };
 
   // osc went dark (sample deleted / engine switched) → clear the canvas and drop the baked
@@ -38111,7 +38192,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   function kick() { if (!raf) raf = requestAnimationFrame(draw); }
   function draw() {
     raf = 0; var any = false;
-    for (var i = 0; i < 4; i++) { var o = IDS[i]; if (st[o].on) { any = true; try { paint(o); } catch (e) {} } }
+    for (var i = 0; i < 4; i++) { var o = IDS[i]; if (st[o].on) { try { paint(o); } catch (e) {} if (! st[o].idle) any = true; } }
     if (any) raf = requestAnimationFrame(draw);
   }
 
@@ -38148,8 +38229,24 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     } catch (eFl) {}
     ctx.restore();
 
+    /* ── fb590 — A STALLED FEED MEANS "NOTHING CHANGED", NOT "THE SOUND IS GONE" ────────────
+       Max: "it should just be static like everything else... the LFO doesn't disappear... so
+       basically I expect the sample not to disappear."
+       This used to read `s.on = false; wipe(o);` — and wipe() clears the canvas AND drops the
+       baked ghost/bright layers. That is why the Resynth picture "popped in and out", and why it
+       looked MIDI-driven: the editor idle-skips a frame that is byte-identical to the last one
+       and its 30-tick keepalive is deliberately dispatch-free, so __geodeSpectrum simply STOPS
+       ARRIVING once nothing moves. Live MIDI keeps the per-voice follower bytes changing inside
+       that same frame string, so playing was the only thing holding the picture up. Stop playing,
+       1500 ms later the watchdog wiped it, and the ".samp-drop / Drop sample here" text underneath
+       showed through — the placeholder never appeared, the spectrogram left.
+       Now the stall only PARKS the animation: the last painted frame stays on the canvas, the
+       baked layers are kept, and the rAF loop stops (which is the CPU saving Max asked for — a
+       still picture must not cost 60 fps). The genuine "this oscillator went dark" path is
+       untouched and still wipes: __geodeSpectrum's `if (!d || !d.on) wipe(o)`, which fires when
+       C++ reports the engine off or the store empty. */
     var now = (window.performance && performance.now) ? performance.now() : 0;
-    if (now - s.lastMs > 1500) { s.on = false; wipe(o); }   // stalled channel → don't freeze a stale image
+    if (now - s.lastMs > 1500) s.idle = true;   // park the loop; the image STAYS
   }
 
   window.addEventListener('resize', function () { for (var i = 0; i < 4; i++) if (st[IDS[i]].on) { try { paint(IDS[i]); } catch (e) {} } });
