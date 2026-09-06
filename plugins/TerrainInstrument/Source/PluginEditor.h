@@ -894,6 +894,13 @@ private:
     // in timerCallback (a static there is shared across instances — the fb339 pluginval trap).
     uint32_t eqPushSeqPre_ = 0xffffffff, eqPushSeqPost_ = 0xffffffff;
     int      eqQuietTicks_ = 0;      // fb507 — ticks of inaudible output; parks the spectrum FFT+push
+    // fb591 — WHEN IS THE UI *NOT* AT REST? Until now the only answer was "when the output is
+    // audible", and eqQuietTicks_ above is literally the EQ analyser's silence counter that fb567
+    // promoted into the whole page's rest signal. A HAND ON THE CONTROLS is the other answer, and
+    // it was missing: with no MIDI, dragging the rack never lifted the gate, so the entire
+    // fx-rack/LFO/filter viz push stayed switched off while the user was using it.
+    // Stamped by the "uiGesture" native; read by uiQuiet at the top of every frame.
+    double   uiGestureAtMs_ = -1.0e9;
     bool     eqWantedPrev_ = false;  // fb507 — page-flip edge: allow a few pushes so the view isn't blank
     // fb342 review — the floating .filt-ext analyzer overlay outlives page switches (position:fixed,
     // closed only by its own X), so it must keep the spectrum feed alive on ANY page. JS reports

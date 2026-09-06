@@ -479,6 +479,60 @@
   function wakeCounted(why){ window.__tiWakes++; if (why) window.__tiWhy[why]++; wakeBurst(); }
   document.addEventListener('pointerdown', function(){ wakeCounted('pointer'); }, true);
   document.addEventListener('click', function(){ wakeCounted('click'); }, true);
+  /* ═══ fb591 — A GESTURE THAT LASTS MUST PAINT WHILE IT LASTS ════════════════════════════════
+     Max: "I can't drag the LFO, and I can't drag the multi-band areas. Whenever there is no MIDI
+     coming in... What if I want to have it on pause and simply move the LFO or move the EQ? I
+     should still be able to use them even if there's no MIDI coming in or sound."
+
+     THE HOLE, exactly: wakeBurst above is THREE FRAMES (0 / 90 / 350 ms) and it is armed by
+     pointerdown and click. That is the right shape for a CLICK. A DRAG is neither — it is a
+     stream of pointermove over seconds, and there was no pointermove wake, no wheel wake and no
+     key wake anywhere. So at rest a drag painted once as it began, nothing at all while it moved,
+     and once more when it ended: the value tracked the mouse and the PICTURE stood still. With a
+     note playing the push lane ships ~60 Hz and covers it completely, which is exactly why this
+     only ever showed up with no MIDI — and why it reads as "everything really stops".
+
+     🚨 THIS DOES NOT BREAK fb581. That law says a page which has heard the lane must never invent
+        a clock from SILENCE, because silence from a live lane means the plugin is RESTING. This
+        clock is not invented from silence — it is driven by the USER'S HAND, which is a real
+        signal and the one thing a resting plugin must still answer to. It runs only while a
+        pointer is actually down (or briefly after a wheel/key), and stops dead on release, so
+        idle still ships ZERO frames and mac_idle_frames is untouched.
+
+     ⚠️ AND IT PAINTS ON rAF, NEVER INSIDE THE EVENT. The listeners are capture-phase; painting
+        there would run every painter BEFORE the app's own handler — the re-ordering that made
+        Tests/all_menus.js fail 2-3 of 42 bars at random (see the note on wakeBurst above). A
+        frame scheduled on rAF lands after the handler, which is the whole point. */
+  var gRaf = 0, gDown = false, gTail = 0;
+  function gFrame(ts){
+    gRaf = 0;
+    runOnce(ts || nowMs());
+    if (gDown || nowMs() < gTail) { gTell(); gRaf = window.requestAnimationFrame(gFrame); }
+  }
+  /* fb591 — AND TELL THE C++ SIDE. Painting faster is only half of it: the whole fx-rack / LFO /
+     filter viz push lives behind `if (! uiQuiet)` in PluginEditor, and uiQuiet was driven purely by
+     AUDIO AUDIBILITY — so with no note playing, the data the rack draws itself from was dead for
+     the entire gesture no matter how often we painted. The fx-rack EQ reads its node FREQUENCY
+     only from that push, so its picture physically could not follow a drag. One cheap no-payload
+     native, at most every 400 ms while a gesture lasts, re-opens the feed exactly while a hand is
+     on the controls — and nothing at all when it is not, so rest stays rest. */
+  var gNat = null, gNatAt = 0;
+  function gTell(){
+    var t = nowMs(); if (t - gNatAt < 400) return; gNatAt = t;
+    try { if (gNat === null && window.Juce && window.Juce.getNativeFunction)
+            gNat = window.Juce.getNativeFunction('uiGesture') || false;
+          if (gNat) gNat(); } catch (e) {}
+  }
+  function gKick(){ gTell(); if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }
+  function gEnd(){ gDown = false; gTail = nowMs() + 450; gKick(); }   /* a tail, so the release frame lands */
+  document.addEventListener('pointerdown',   function(){ gDown = true; gKick(); }, true);
+  document.addEventListener('pointerup',     gEnd, true);
+  document.addEventListener('pointercancel', gEnd, true);
+  /* a wheel or an arrow-key nudge is a STREAM too (a knob scrubbed by the wheel emits dozens of
+     events), and neither had ANY wake before — so both ride a short tail rather than a burst. */
+  document.addEventListener('wheel',   function(){ gTail = nowMs() + 350; gKick(); }, true);
+  document.addEventListener('keydown', function(){ gTail = nowMs() + 350; gKick(); }, true);
+  window.__tiGestureLive = function(){ return gDown || nowMs() < gTail; };   /* the gate reads it */
   /* NO transitionend TRIGGER. It looks like the right signal for "a panel finished opening" and it is a
      trap: MEASURED on the synth panel, transitionend fires ~25 times a SECOND for as long as the panel is
      open (a re-armed CSS transition somewhere in it), which would wake a frame 25 times a second forever —
@@ -30851,7 +30905,17 @@ restoreThemeFromBackend();
     // the .mv-idle fade, and every call after that returns before it touches the DOM — until a note brings the
     // flag back. Chain, follower, ghost, trail, head and emblem all rest with it. This bookkeeping runs BEFORE
     // the occlusion gate, so a note-off with the panel off-screen still parks it.
-    if(!live){ if(__lfoIdle) return; __lfoIdle=true; lfoIdle(true); }
+    /* fb591 — ...BUT A HAND ON IT IS NOT SILENCE EITHER. This early-return is fb567/fb581's park and
+       it is right: with no note, the HEAD must stop moving. It was also unconditional, so once
+       parked this painter returned before touching the DOM on every later call — and everything it
+       draws besides the head (the ghost curve, the trajectory, the chain) froze with it. Max, on
+       exactly this: "What if I want to have it on pause and simply move the LFO?" So while a
+       gesture is live we fall THROUGH and paint. The park itself is untouched: __lfoIdle stays set,
+       lfoIdle(false) is still only reached by a real note, and the phase we paint is the held one —
+       so the head still does not move. It resumes returning the moment the hand comes off. */
+    if(!live){ var __gest = !!(window.__tiGestureLive && window.__tiGestureLive());
+               if(__lfoIdle && ! __gest) return;
+               if(! __lfoIdle){ __lfoIdle=true; lfoIdle(true); } }
     else if(__lfoIdle){ __lfoIdle=false; lfoIdle(false); }
     /* fb497 */ if(!window.__cardOnly&&window.__tiOff&&window.__tiOff('mod-engine')) return;   // occluded: in push mode the dispatcher simply calls us again next push
     if(t==null)t=performance.now();   // the __tiFrame dispatcher calls with no timestamp

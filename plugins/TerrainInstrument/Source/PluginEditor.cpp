@@ -713,6 +713,15 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             {
                 complete(audioProcessor.getSynthModMatrix());
             })
+            // fb591 — THE PAGE TELLING US A HAND IS ON IT. Called once at the start of a gesture
+            // and roughly every 400 ms while it lasts (pointer down, wheel, key). Cheap on purpose:
+            // no payload, no reply to parse — the only thing it carries is "now".
+            .withNativeFunction("uiGesture", [this](const juce::Array<juce::var>&,
+                                                    juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                uiGestureAtMs_ = juce::Time::getMillisecondCounterHiRes();
+                complete(juce::var{});
+            })
             .withNativeFunction("setSynthEnvs", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion completion)
             {
@@ -5901,7 +5910,17 @@ void TerrainUiCore::timerCallback()
 
     // fb511's silence gate, hoisted (fb567): the front-page scope below was the one segment built
     // and shipped every tick regardless of it — the string alone was ~2% of a core at idle.
-    const bool uiQuiet = (eqQuietTicks_ >= 90);
+    // fb591 — ...AND A HAND ON THE CONTROLS IS NOT SILENCE. Max: "What if I want to have it on
+    // pause and simply move the LFO or move the EQ? ... I should still be able to use them even if
+    // there's no MIDI coming in or sound."
+    // This gate switches off the ENTIRE rack/LFO/filter/scope viz push (see every `if (! uiQuiet)`
+    // below), and it was driven purely by audio audibility — so with no note playing the feed the
+    // rack draws itself FROM was dead for the whole gesture. Painting faster could never have fixed
+    // that: the fx-rack EQ reads its node FREQUENCY only from this push, so the picture physically
+    // could not follow the drag. 1.5 s of grace so a slow drag never flickers back to rest between
+    // the 400 ms stamps; when the hand stops, rest returns exactly as before and idle stays 0.
+    const bool uiTouched = (juce::Time::getMillisecondCounterHiRes() - uiGestureAtMs_) < 1500.0;
+    const bool uiQuiet   = (eqQuietTicks_ >= 90) && ! uiTouched;
     // Read scope buffer — only while the output has been audible within ~1.5 s (fb567). A quiet
     // scope is flat; the page keeps its last (flat) frame and the bytes stop changing.
     juce::String scopeData;
