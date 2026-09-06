@@ -6137,7 +6137,9 @@ void TerrainUiCore::timerCallback()
                    << "," << SF (D.warp2Amt, 4) << "," << D.foldShape << "," << SF (D.foldAmt, 4)
                    << "," << SF (sa, 4) << "," << st << "," << SF (D.feedback, 4)
                    << "," << SF (sl, 4) << "," << SF (sh, 4)
-                   << "," << SF (audioProcessor.fmDisplaySignature (o), 4) << "]";   // fb587 — FM   // fb460 blur · fb472 cuts — THE ORDER HERE
+                   << "," << SF (audioProcessor.fmDisplaySignature (o), 4)             // fb587 — FM
+                   << "," << SF (audioProcessor.harmDisplaySignature (o), 4) << "]";   // fb589 — HARM/Table
+                                                       // fb460 blur · fb472 cuts — THE ORDER HERE
                                                        // MUST MATCH cachedSig in index.html
             }
             js << "];";

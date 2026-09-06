@@ -693,6 +693,20 @@ public:
         same HUE, the same blend() the voice runs — costs one lerp per repaint and makes the
         display read nothing the audio thread owns. It also means the waterfall/bars now draw the
         WAVETABLE's spectrum, which is the whole point of the family. */
+    /** fb589 — a scalar that moves whenever anything the additive WATERFALL draws would move:
+        the family, the sculpt mode, every sculpt knob, and (through tableSig) both the table
+        source and the HUE position within it. The waterfall re-bakes on signature change, so a
+        field left out of here is a knob the picture ignores. */
+    float harmDisplaySignature (int osc) const noexcept
+    {
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        return (float) ((double) p.mainMode * 101.7 + (double) p.sculptMode * 71.3
+                      + (double) p.tableSig * 0.37 + (double) p.tableN * 1.9
+                      + p.hue * 13.1 + p.count * 17.7 + p.lean * 19.3 + p.fan * 23.9
+                      + p.grit * 29.1 + p.braid * 31.5 + p.carve * 37.3 + p.churn * 41.1
+                      + p.root * 43.7 + p.shine * 47.9 + p.wilt * 53.3 + p.forge * 59.1);
+    }
+
     tw::HarmParams harmDisplayParams (int osc) const noexcept
     {
         const int o = juce::jlimit (0, 3, osc);
@@ -1768,6 +1782,14 @@ private:
         int  builtPreset      = -2;     // -2 = nothing built yet (a real preset index is >= 0)
     };
     HarmTableSlot harmTable_[4];
+    // fb589 — THE ADDITIVE WATERFALL. Its own engine instance, deliberately NOT the editor's
+    // harmDispEng_[]: that one is mid-flight every 60 Hz tick baking the bars, and a 16-row HUE
+    // sweep would be walking through its state. One instance serves all four oscillators because
+    // getOscWavetableJson bakes one oscillator at a time on the message thread.
+    tw::HarmonicEngine harmWfEng_;
+    bool  harmWfInit_ = false;
+    float harmWfAmp_  [tw::HarmTableSource::kMaxN] = {};
+    float harmWfPhase_[tw::HarmTableSource::kMaxN] = {};
     // The audio thread blends into these; HarmParams points at them for the rest of the block.
     float harmAmpScratch_  [4][tw::HarmTableSource::kMaxN] = {};
     float harmPhaseScratch_[4][tw::HarmTableSource::kMaxN] = {};

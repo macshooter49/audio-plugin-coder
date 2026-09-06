@@ -4997,6 +4997,18 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .harm-view canvas { display: block; width: 100%; height: 100%; }
 #syn-panel .device.osc.engine-harm .osc-wave { display: none; }
 #syn-panel .device.osc.engine-harm .harm-view { display: block; }
+/* ── fb589 — THE ADDITIVE WATERFALL ────────────────────────────────────────────────────────
+   Max: "I think the additive mode should only be waterfall or something." Agreed shape: the BARS
+   STAY PRIMARY — they are the additive engine's native picture and they are what the six
+   procedural families get. The WATERFALL appears only where there is actually a table axis to
+   scan: the Table family (.harm-table), and only while the view is engaged (.wt3d, set by
+   wtWaterfall.toggle/restoreView). Then the wavetable canvas takes the display back and the bars
+   step aside, which is the same .osc-wave host, the same #osc-wave-<o> canvas and the same
+   renderer the wavetable engine uses — nothing here is a second copy.
+   Leaving Table drops .harm-table, so the bars return automatically without touching wtWaterfall's
+   saved state; coming back brings the waterfall with it. */
+#syn-panel .device.osc.engine-harm.harm-table.wt3d .osc-wave  { display: flex; }
+#syn-panel .device.osc.engine-harm.harm-table.wt3d .harm-view { display: none; }
 /* GEODE ENGINE knobs — resynthesis; 2 pages (Play / Sculpt), .geode-arrow flips (.pg2). Mirrors .fm-knob-wrap. */
 #syn-panel .geode-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 #syn-panel .device.osc.engine-geode:not(.swapped) .geode-knob-wrap { display: flex; }
@@ -17277,7 +17289,13 @@ setTimeout(function wireSynControls () {
         function paint () { var i = 0; try { i = Math.max (0, Math.min (6, Math.round (st.getNormalisedValue () * 6))); } catch (e) {}
           disp.textContent = HM_FAM[i] || 'Blade'; try { sel.value = String (i); } catch (e) {}
           // fb588 — Table takes its recipe from the WT preset menu, so show that menu only here.
-          try { var dv = sel.closest ('.device'); if (dv) dv.classList.toggle ('harm-table', i === 6); } catch (e2) {} }
+          try { var dv = sel.closest ('.device'); if (dv) dv.classList.toggle ('harm-table', i === 6); } catch (e2) {}
+          // fb589 — leaving Table must drop the waterfall class too, or the CSS would keep the bars
+          // hidden on a family that has no table axis to scan. Re-entering Table with the waterfall
+          // still saved-on brings it straight back (state persists — nothing turns off by itself).
+          try { var oL = (sel.getAttribute ('data-oscl') || 'a');
+                if (window.wtWaterfall) { window.wtWaterfall.syncClass (oL);
+                  if (i === 6 && window.wtWaterfall.on[oL]) { window.wtWaterfall.fetch (oL); window.wtWaterfall.kick(); } } } catch (e3) {} }
         sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { st.setNormalisedValue (i / 6); } catch (e) {} paint (); });
         try { st.valueChangedEvent.addListener (paint); } catch (e) {}
         paint ();
@@ -36174,7 +36192,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       /* fb467 — lo/hi ride here too, in the SAME ORDER __wtDisp emits them (PluginEditor.cpp).
          Order matters as much as presence: a mismatch makes the two signatures differ forever,
          which is not a stale table but a table that re-bakes at the maximum rate for good. */
-      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi,t.fm].map(function(v){ return (+v).toFixed(3); }).join(','):''; },   /* fb587 — t.fm LAST, matching __wtDisp */
+      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi,t.fm,t.hm].map(function(v){ return (+v).toFixed(3); }).join(','):''; },   /* fb587 — t.fm, then fb589 — t.hm LAST, matching __wtDisp */
     maybeRebake:function(o,now){
       if(wtWaterfall.busy[o]) return;
       if(now-(wtWaterfall.lastReq[o]||0) < (wtWaterfall.rebakeMs[o]||wtWaterfall.REBAKE_MS)) return;
@@ -36186,7 +36204,29 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
        already smoothed), published by the same loudest-voice pass that feeds the live filter
        curve. -1 = nothing sounding → fall back to the parameter, so an idle panel is unchanged
        and a hand-turned knob still moves the table exactly as before. */
+    /* fb589 — is this oscillator showing the ADDITIVE table? The waterfall is allowed there, and
+       when it is, the depth axis is HUE (the additive bank has no WT Frame knob — HUE is what
+       selects the frame, see HarmTableSource). Read from the DOM because the CSS is the truth. */
+    dev:function(o){ try{ var cv=document.getElementById('osc-wave-'+o); return cv?cv.closest('.device.osc'):null; }catch(e){ return null; } },
+    isHarmTable:function(o){ var d=wtWaterfall.dev(o);
+      return !!(d && d.classList.contains('engine-harm') && d.classList.contains('harm-table')); },
+    /* 🚨 THE ENGINE GUARD THAT WAS MISSING. The click handler is bound to EVERY .osc-display, so
+       before fb589 clicking a Harmonic / Sample / Granular / Resynth / Modal display flipped
+       wtWaterfall.on[o] AND persisted wt3dView_ through setWaterfallView — while .osc-wave was
+       display:none, so offsetParent was null, the loop skipped it and nothing ever drew. The flag
+       moved invisibly. Waterfall is offered on the wavetable and FM engines (as before) and now on
+       HARM/Table; everywhere else the click is refused instead of silently corrupting saved state. */
+    canWaterfall:function(o){ var d=wtWaterfall.dev(o); if(!d) return true;
+      var c=d.classList;
+      if(c.contains('engine-sample')||c.contains('engine-granular')||c.contains('engine-geode')||c.contains('engine-modal')) return false;
+      if(c.contains('engine-harm')) return c.contains('harm-table');
+      return true; },
+    /* the CSS swap (bars <-> waterfall on HARM/Table) is keyed on a class, because wtWaterfall.on
+       is JS state and stylesheets cannot see it */
+    syncClass:function(o){ try{ var d=wtWaterfall.dev(o); if(d) d.classList.toggle('wt3d', !!wtWaterfall.on[o]); }catch(e){} },
     wtpos:function(o){
+      if(wtWaterfall.isHarmTable(o)){
+        try{ var hs=window.Juce.getSliderState('SYN_OSC_'+o.toUpperCase()+'_HARM_HUE'); return hs?Math.max(0,Math.min(1,hs.getNormalisedValue())):0; }catch(e){ return 0; } }
       try{ var e=window.__wtFrameEff, i={a:0,b:1,c:2,d:3}[String(o).toLowerCase()];
            if(e&&i!=null&&e[i]>=0) return Math.max(0,Math.min(1,e[i])); }catch(e){}
       try{ var ss=window.Juce.getSliderState('SYN_OSC_'+o.toUpperCase()+'_WT_FRAME'); return ss?Math.max(0,Math.min(1,ss.getNormalisedValue())):0; }catch(e){return 0;} },
@@ -36208,8 +36248,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           /* fb460 — never spend more than ~10% of the message thread on the display */
           if(t.ms!=null) wtWaterfall.rebakeMs[o]=Math.max(16,Math.round(4*(+t.ms||0)));   /* fb462 */
           wtWaterfall.kick(); } }catch(e){} }).catch(function(){ wtWaterfall.busy[o]=false; }); }catch(e){ wtWaterfall.busy[o]=false; } },
-    toggle:function(o){ wtWaterfall._viewRestored=true;   // fb71 — user took control of the view; the one-shot restore must not override it
+    toggle:function(o){ if(!wtWaterfall.canWaterfall(o)) return;   // fb589 — see canWaterfall
+      wtWaterfall._viewRestored=true;   // fb71 — user took control of the view; the one-shot restore must not override it
       wtWaterfall.on[o]=!wtWaterfall.on[o];
+      wtWaterfall.syncClass(o);
       try{ var sv=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setWaterfallView'):null; if(sv) sv(o, wtWaterfall.on[o]); }catch(e){}   // remember the view so it survives editor reopen
       if(wtWaterfall.on[o]){ wtWaterfall.fetch(o); wtWaterfall.kick(); }
       else { var cv=document.getElementById('osc-wave-'+o); if(cv){ cv.getContext('2d').clearRect(0,0,cv.width,cv.height); } if(typeof kickScope==='function') kickScope(); } },
@@ -36270,7 +36312,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     try { if (! (window.Juce && window.Juce.getSliderState)) return; } catch (e) { return; }
     var any = false;
     ['a','b','c','d'].forEach (function (o) {
-      ['SYN_OSC_' + o.toUpperCase() + '_WT_PRESET', 'SYN_OSC_' + o.toUpperCase() + '_ENGINE'].forEach (function (id) {
+      ['SYN_OSC_' + o.toUpperCase() + '_WT_PRESET', 'SYN_OSC_' + o.toUpperCase() + '_ENGINE',
+     'SYN_OSC_' + o.toUpperCase() + '_HARM_MODE']   /* fb589 — the additive table is a source too */.forEach (function (id) {
         var ss = null; try { ss = window.Juce.getSliderState (id); } catch (e) {}
         if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener) {
           ss.valueChangedEvent.addListener (function () { try { if (wtWaterfall.on[o]) wtWaterfall.fetch (o); } catch (e) {} });
@@ -36770,9 +36813,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // saved-on → waterfall · saved-off → oscilloscope (Max: "if I was on the oscilloscope, stay there — regardless").
       ['a','b','c','d'].forEach (function (o) {
         var want = !! st[o];
-        if (want && ! wtWaterfall.on[o]) { wtWaterfall.on[o] = true; wtWaterfall.fetch (o); wtWaterfall.kick(); }   // don't call setWaterfallView — already correct in the processor
+        if (want && ! wtWaterfall.on[o]) { wtWaterfall.on[o] = true; wtWaterfall.fetch (o); wtWaterfall.kick(); wtWaterfall.syncClass (o); }   // don't call setWaterfallView — already correct in the processor
         else if (! want && wtWaterfall.on[o]) {
-          wtWaterfall.on[o] = false;
+          wtWaterfall.on[o] = false; wtWaterfall.syncClass (o);
           var cv = document.getElementById ('osc-wave-' + o); if (cv) { try { cv.getContext ('2d').clearRect (0, 0, cv.width, cv.height); } catch (e) {} }
           if (typeof kickScope === 'function') kickScope ();   // hand the canvas back to the 2D oscilloscope
         }

@@ -221,15 +221,27 @@ const CASES = [
     window.Juce.getNativeFunction=function(n){
       if(n==='getOscWavetable') return function(){
         window.__WTN++;
-        const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0,0,0,0,1,512];
+        const d=(window.__wtDisp&&window.__wtDisp[0])||[0,0,0,0,0,0,0,0,0,1,512,0,0];
         // fb462 — the stub answers the way the PLUGIN now does: SCALED INTEGERS plus "sc".
         // Sending floats here would have left the new decode path untested while the gate stayed
         // green and the real waterfall drew garbage — exactly the shape of trap this suite exists
         // to catch. The cacheVal assertion below is what proves the decode: it wants 0.7 back out.
         const SC=8192, P=8, N=2, arr=[];
         for(let i=0;i<N*P;i++) arr.push(Math.round((+(d[1]||0))*SC));
+        // 🚨 fb589 — THE STUB MUST ECHO EVERY SLOT cachedSig READS, or this whole file lies.
+        //    cachedSig takes [wm,wa,w2m,w2a,fs,fa,sa,st,bl,lo,hi,fm,hm]. This stub answered 11 of
+        //    those 13, so from fb587 onward its signatures ended ",NaN,NaN" while shapeSig ended in
+        //    real numbers — the two could never converge, and the four CONVERGENCE bars below have
+        //    been reporting a runaway re-bake ever since. VERIFIED PRE-EXISTING, and note the page
+        //    override is an ENV VAR, not argv (passing a path as argv silently tests the working
+        //    tree and "proves" nothing):
+        //        git show <fb588>:.../Tests/fxmod_move.js       > /tmp/t.js
+        //        git show <fb588>:.../ui/public/index.html      > /tmp/p.html
+        //        FXMOVE_PAGE=/tmp/p.html node /tmp/t.js   -> 53 pass, 5 FAIL
+        //    against 58 pass / 0 fail here. Adding fm/hm here restores the alarm.
         return Promise.resolve(JSON.stringify({n:N,p:P,nf:N,wm:d[0],wa:d[1],w2m:d[2],w2a:d[3],fs:d[4],fa:d[5],
-                                               sa:d[6],st:d[7],bl:d[8],lo:d[9],hi:d[10],sc:SC,ms:(window.__WTMS||0),d:arr}));
+                                               sa:d[6],st:d[7],bl:d[8],lo:d[9],hi:d[10],
+                                               fm:d[11],hm:d[12],sc:SC,ms:(window.__WTMS||0),d:arr}));
       };
       return function(){ return Promise.resolve(0); };
     };
@@ -237,13 +249,13 @@ const CASES = [
     const settle=async(ms)=>{ const t0=performance.now(); while(performance.now()-t0<ms) await raf(); };
 
     W.on.a=true; W.cache.a=null; W.busy.a=false; W.lastReq.a=0;
-    window.__wtDisp=[[0,0.00,0,0,0,0,0,0,0,1,512],[0,0,0,0,0,0,0,0,0,1,512],[0,0,0,0,0,0,0,0,0,1,512],[0,0,0,0,0,0,0,0,0,1,512]];
+    window.__wtDisp=[[0,0.00,0,0,0,0,0,0,0,1,512,0,0],[0,0,0,0,0,0,0,0,0,1,512,0,0],[0,0,0,0,0,0,0,0,0,1,512,0,0],[0,0,0,0,0,0,0,0,0,1,512,0,0]];
     W.kick(); await settle(350);
     out.sig0=W.cachedSig('a');
 
     // 1. the shaping moves -> the table is re-baked, and the NEW shaping is what came back
     const b1=window.__WTN;
-    window.__wtDisp[0]=[2,0.70,0,0,0,0,0,0,0,1,512];
+    window.__wtDisp[0]=[2,0.70,0,0,0,0,0,0,0,1,512,0,0];
     await settle(450);
     out.bakesOnChange=window.__WTN-b1; out.sig1=W.cachedSig('a');
     out.cacheVal=(W.cache.a&&W.cache.a.d)?+W.cache.a.d[0]:null;
@@ -253,7 +265,7 @@ const CASES = [
 
     // 3. the waterfall is OFF -> nothing is baked at all (fb148: no UI, no work)
     W.on.a=false; const b3=window.__WTN;
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0,0,0,1,512]; await settle(450);
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0,0,0,1,512,0,0]; await settle(450);
     out.bakesHidden=window.__WTN-b3;
 
     // 4. and it catches up the moment it comes back on screen
@@ -263,7 +275,7 @@ const CASES = [
     // 5. fb459 — SPECTRAL ALONE must re-bake. The morph rebuild is what changes the table, so if
     //    sa/st were left out of the signature a re-morphed table would look fresh forever.
     const b5=window.__WTN; const before5=W.cachedSig('a');
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0,1,512];   // only spectral amount + type moved
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0,1,512,0,0];   // only spectral amount + type moved
     await settle(450);
     out.bakesOnSpectral=window.__WTN-b5; out.sigSpecBefore=before5; out.sigSpecAfter=W.cachedSig('a');
     // 6. AND IT MUST CONVERGE. If the pushed signature and the cached one ever disagree, the
@@ -274,7 +286,7 @@ const CASES = [
 
     // 7. fb460 — BLUR alone must re-bake, and settle.
     const b7=window.__WTN; const beforeBlur=W.cachedSig('a');
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.65,1,512];        // only blur moved
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.65,1,512,0,0];        // only blur moved
     await settle(450);
     out.bakesOnBlur=window.__WTN-b7; out.sigBlurBefore=beforeBlur; out.sigBlurAfter=W.cachedSig('a');
     const b7b=window.__WTN; await settle(700); out.bakesAfterBlur=window.__WTN-b7b;
@@ -286,7 +298,7 @@ const CASES = [
     //     stale table: it reads as a table that re-bakes at the maximum rate for ever. Adding lo/hi
     //     to cachedSig turned three gates red in this file before the stub learned the new shape.
     const b7w=window.__WTN; const beforeWin=W.cachedSig('a');
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.65,1,32];         // only the window's HIGH edge moved
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.65,1,32,0,0];         // only the window's HIGH edge moved
     await settle(450);
     out.bakesOnWindow=window.__WTN-b7w; out.sigWinBefore=beforeWin; out.sigWinAfter=W.cachedSig('a');
     const b7c=window.__WTN; await settle(700); out.bakesAfterWindow=window.__WTN-b7c;
@@ -299,12 +311,12 @@ const CASES = [
     //     by the time the observation starts — at 50 ms the window expired mid-test and the
     //     failure was my timing, not the plugin's. A window that dwarfs the slop tests the rule.)
     window.__WTMS=200;
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.70,1,512]; await settle(450);   // one bake, learns ms=50
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.70,1,512,0,0]; await settle(450);   // one bake, learns ms=50
     // must DEGRADE, not throw: on a tree without the adaptive interval this used to crash the whole
     // run, and a harness error reads as "inconclusive" when it should read as FAIL.
     out.learnedMs=(W.rebakeMs&&W.rebakeMs.a!=null)?W.rebakeMs.a:-1;
     const b8=window.__WTN;
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.75,1,512]; await settle(280);   // inside the window
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.75,1,512,0,0]; await settle(280);   // inside the window
     out.bakesInsideWindow=window.__WTN-b8;
     await settle(2000);                                                    // past it
     out.bakesPastWindow=window.__WTN-b8;
@@ -313,7 +325,7 @@ const CASES = [
     // sub-millisecond, so the FLOOR — not the cost — was deciding the frame rate. A gate on the
     // expensive side only would have kept passing while the display stayed laggy.
     window.__WTMS=0.5; W.lastReq.a=0;
-    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.80,1,512]; await settle(400);
+    window.__wtDisp[0]=[3,0.20,0,0,0,0,0.55,2,0.80,1,512,0,0]; await settle(400);
     out.cheapMs=(W.rebakeMs&&W.rebakeMs.a!=null)?W.rebakeMs.a:-1;
     window.__WTMS=0;
     return out;
@@ -339,7 +351,11 @@ const CASES = [
                                    'the cached table carries the new BLUR',           wtw.sigBlurBefore+'  →  '+wtw.sigBlurAfter);
     chk(wtw.bakesAfterBlur===0,    'blur CONVERGES too — no runaway',                 wtw.bakesAfterBlur+' bakes after');
     chk(wtw.bakesOnWindow>=1,      'the PARTIAL WINDOW alone RE-BAKES the table (fb467)', 'bakes '+wtw.bakesOnWindow);
-    chk(wtw.sigWinAfter!==wtw.sigWinBefore && /,32\.000$/.test(wtw.sigWinAfter),
+    // fb589 — the anchor was /,32\.000$/, i.e. "hi is the LAST slot". That was an accident of the
+    // slot order at fb467; fb587 appended fm and fb589 appended hm, so the tail moved and this bar
+    // failed while testing nothing. The INTENT is "the cached signature carries hi = 32", so match
+    // it positionally-independently and it survives the next slot too.
+    chk(wtw.sigWinAfter!==wtw.sigWinBefore && /(^|,)32\.000(,|$)/.test(wtw.sigWinAfter),
                                    'the cached table carries the new WINDOW',          wtw.sigWinBefore+'  →  '+wtw.sigWinAfter);
     chk(wtw.bakesAfterWindow===0,  'the window CONVERGES too — no runaway',            wtw.bakesAfterWindow+' bakes after');
     chk(wtw.learnedMs>=800,        'an EXPENSIVE bake still self-limits (>=4x)',      'interval '+wtw.learnedMs+' ms for a 200ms bake');

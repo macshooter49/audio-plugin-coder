@@ -424,6 +424,53 @@ public:
         }
     }
 
+    /** fb589 — ONE PERIOD OF THE BANK AS A WAVEFORM, for the additive waterfall.
+        Max: "I think the additive mode should only be waterfall or something."
+
+        displayBins answers "what partials are in the bank"; this answers "what does the bank
+        LOOK like", which is what a waterfall row is. It reads the POST-SCULPT arrays on purpose:
+        drawing the raw table would leave Carve, Lean, Shine, Wilt, Grit, Braid and Fan invisible,
+        and this project's law is that a visualiser mirrors the DSP and MOVES with the knobs.
+
+        ⚠️ NO std::sin IN THE INNER LOOP. 512 partials x 160 points x 16 rows is 1.3M transcendental
+           calls per bake, which is not a 60 Hz budget. Each partial is advanced by a complex
+           ROTATION instead — two trig calls per PARTIAL, then 4 multiplies and 2 adds per point.
+           Over 160 points the rotation's drift is far below a pixel.
+
+        Renders one period of the FUNDAMENTAL. Partials whose ratio the sculpt row has pushed off
+        the integer grid simply do not close the loop, which is honest: the sound does not either. */
+    /** Read-only views of the POST-SCULPT bank. These exist so Tests/harm_waterfall_cert.cpp can
+        build a literal std::sin reference and hold displayCycle's rotation recurrence to it; there
+        is no other caller and they carry no state. */
+    int   debugNumPartials()      const noexcept { return nP_; }
+    float debugAmp   (int j)      const noexcept { return (j >= 0 && j < nP_) ? amp_[(size_t) j]   : 0.f; }
+    float debugRatio (int j)      const noexcept { return (j >= 0 && j < nP_) ? ratio_[(size_t) j] : 0.f; }
+    float debugPhase (int j)      const noexcept { return (j >= 0 && j < nP_) ? phase_[(size_t) j] : 0.f; }
+
+    void displayCycle (float* out, int n) const noexcept
+    {
+        if (out == nullptr || n <= 0) return;
+        for (int i = 0; i < n; ++i) out[i] = 0.f;
+        if (nP_ <= 0) return;
+        const float twoPi = 2.f * harm::kPi;
+        for (int j = 0; j < nP_; ++j)
+        {
+            const float a = amp_[(size_t) j];
+            if (a <= 1.0e-6f) continue;
+            const float dphi = twoPi * ratio_[(size_t) j] / (float) n;   // per-point advance
+            const float c = std::cos (dphi), sn = std::sin (dphi);
+            float x = std::cos (twoPi * phase_[(size_t) j]);             // phase_ is in TURNS
+            float y = std::sin (twoPi * phase_[(size_t) j]);
+            for (int i = 0; i < n; ++i)
+            {
+                out[i] += a * y;
+                const float nx = x * c - y * sn;
+                y = x * sn + y * c;
+                x = nx;
+            }
+        }
+    }
+
     // live white bins from the CURRENT bank — voice anchors feed the UI bars while a
     // note sounds (same index compression as displayBins; no ghost layer needed here)
     int liveBins (float* out, int nBins) const noexcept

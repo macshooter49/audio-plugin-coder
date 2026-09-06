@@ -968,6 +968,87 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     const MorphSlot& mslot = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
     const int wtPresetIdx = (int) *apvts.getRawParameterValue (WTP[osc]);
     wavetableBank.ensureBuilt (wtPresetIdx);   // fb496 — message thread; no-op once built
+    // ═══ fb589 — THE ADDITIVE WATERFALL ════════════════════════════════════════════════════
+    //  Max: "I think the additive mode should only be waterfall or something."  Agreed shape:
+    //  the BARS stay primary on the six procedural families, and the WATERFALL appears when the
+    //  source is a wavetable — because that is the case where there is a table axis to scan.
+    //
+    //  🚨 SAME PAYLOAD, SAME RENDERER. This emits the exact key set the wavetable waterfall
+    //     already consumes (n/p/nf/d/sc + the staleness keys), so wtWaterfall needs no second
+    //     drawing path. fb587 made this function FM-aware for the same reason; the alternative
+    //     — a parallel additive renderer in JS — is the second-copy trap this file already warns
+    //     about twice.
+    //
+    //  🚨 AND THE ROWS ARE THE BANK, NOT THE TABLE. Each row runs the SHIPPED HarmonicEngine at
+    //     that HUE and reads its post-sculpt partials, so Carve/Lean/Shine/Wilt/Grit/Braid/Fan
+    //     all move the picture. Drawing the raw table would have been a flat placeholder wearing
+    //     a waterfall's clothes, which this project's display law forbids.
+    {
+        static const char* const ENGH[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
+                                             ParameterIDs::SYN_OSC_C_ENGINE, ParameterIDs::SYN_OSC_D_ENGINE };
+        const bool harmTableView = ((int) *apvts.getRawParameterValue (ENGH[osc]) == (int) tw::SynthVoice::Engine::HARM)
+                                && (harmDisplayParams_[(size_t) osc].mainMode == 6);
+        const tw::HarmTableSource::Grid* wg = harmTable_[(size_t) osc].live.load (std::memory_order_acquire);
+        if (harmTableView && wg != nullptr)
+        {
+            const double t0 = juce::Time::getMillisecondCounterHiRes();
+            const int rows = tw::WavetableSpec::kNumFrames;   // the additive source IS a 16-frame spec
+            const int pts  = 160;                             // identical to the wavetable path
+            if (! harmWfInit_)
+            { harmWfEng_.prepare (48000.0, true); harmWfEng_.setDisplayMode (true); harmWfInit_ = true; }
+
+            std::vector<float> grid ((size_t) rows * (size_t) pts, 0.0f);
+            tw::HarmParams rp = harmDisplayParams_[(size_t) osc];
+            float peak = 1.0e-9f;
+            for (int r = 0; r < rows; ++r)
+            {
+                rp.hue = (rows > 1) ? (float) r / (float) (rows - 1) : 0.0f;
+                rp.tableN     = tw::HarmTableSource::blend (*wg, rp.hue, harmWfAmp_, harmWfPhase_,
+                                                            tw::HarmTableSource::kMaxN);
+                rp.tableAmp   = harmWfAmp_;
+                rp.tablePhase = harmWfPhase_;
+                rp.tableSig   = wg->sig + rp.hue * 1024.0f;
+                harmWfEng_.setParams (rp);
+                // ⚠️ ONE FIXED SEED FOR EVERY ROW. noteOn gives each unison sibling a rigid phase
+                //    rotation keyed off the seed (fb588); a different seed per row would time-shift
+                //    each row by a different amount and the morph would read as noise instead of a
+                //    surface. Same seed = same rotation = the rows line up and the shape is legible.
+                harmWfEng_.noteOn (110.0, 0x5EEDFA11u);
+                harmWfEng_.prepareBank (1);      // n>0 required; 1 sample of churn drift per row
+                harmWfEng_.displayCycle (&grid[(size_t) r * (size_t) pts], pts);
+                for (int q = 0; q < pts; ++q)
+                    peak = std::max (peak, std::fabs (grid[(size_t) r * (size_t) pts + (size_t) q]));
+            }
+            // normalise the WHOLE grid, not each row: per-row normalisation would erase the level
+            // differences BETWEEN frames, which are exactly what the table axis is showing.
+            const float gnorm = 0.98f / peak;
+
+            juce::String o2;
+            o2.preallocateBytes ((size_t) rows * (size_t) pts * 6 + 512);
+            float sa = 0.0f, sl = 0.0f, sh = 1.0f; int st = 0; spectralDisplay (osc, sa, st, sl, sh);
+            const auto DH = wtDispEffective (osc);
+            o2 << "{\"n\":" << rows << ",\"p\":" << pts << ",\"nf\":" << rows
+               << ",\"wm\":"  << DH.warpMode  << ",\"wa\":"  << juce::String (DH.warpAmt,  4)
+               << ",\"w2m\":" << DH.warp2Mode << ",\"w2a\":" << juce::String (DH.warp2Amt, 4)
+               << ",\"fs\":"  << DH.foldShape << ",\"fa\":"  << juce::String (DH.foldAmt,  4)
+               << ",\"bl\":"  << juce::String (DH.feedback, 4)
+               << ",\"fm\":"  << juce::String (fmDisplaySignature (osc), 4)
+               << ",\"sc\":8192"
+               << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st
+               << ",\"lo\":" << juce::String (sl, 4) << ",\"hi\":" << juce::String (sh, 4)
+               << ",\"hm\":" << juce::String (harmDisplaySignature (osc), 4)
+               << ",\"d\":[";
+            for (int r = 0; r < rows; ++r)
+                for (int q = 0; q < pts; ++q)
+                {
+                    if (r || q) o2 << ",";
+                    o2 << juce::jlimit (-32768, 32767, juce::roundToInt (grid[(size_t) r * (size_t) pts + (size_t) q] * gnorm * 8192.0f));
+                }
+            o2 << "],\"ms\":" << juce::String (juce::Time::getMillisecondCounterHiRes() - t0, 2) << "}";
+            return o2;
+        }
+    }
+
     const tw::Wavetable* wt = wavetableForDisplay (osc, mslot, wtPresetIdx);
     if (wt == nullptr) return "{}";
 
@@ -1021,6 +1102,11 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
         // fewer bytes. At 60 Hz that difference alone is 60 ms/s of message thread. 1/8192 is ~12
         // bits, far finer than a waterfall that is ~80 px tall.
         << ",\"fm\":" << juce::String (fmDisplaySignature (osc), 4)   // fb587
+        // 🚨 fb589 — "hm" RIDES ON BOTH PATHS OR NEITHER. cachedSig reads t.hm off whatever payload
+        //    came back; if the wavetable path omitted it the JS would compare "NaN" against a real
+        //    number and the two signatures would never converge — not a stale table, a table that
+        //    re-bakes at the maximum rate forever (the fb467 note in index.html says exactly this).
+        << ",\"hm\":" << juce::String (harmDisplaySignature (osc), 4)
         << ",\"sc\":8192";
     {   // fb459 — the SPECTRAL state this bake was taken under, so a stale table is detectable
         float sa = 0.0f, sl = 0.0f, sh = 1.0f; int st = 0; spectralDisplay (osc, sa, st, sl, sh);
