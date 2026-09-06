@@ -8622,6 +8622,35 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .fxr-pills{ display:flex; gap:5px; width:100%; }
         #syn-panel .fxr-pill{ flex:1; height:18px; display:flex; align-items:center; justify-content:center; background:transparent; border:1px solid var(--border-strong); border-radius:9px; font-size:8.5px; letter-spacing:.03em; color:var(--text-muted); font-weight:300; cursor:pointer; }
         #syn-panel .fxr-pill .fxr-t{ position:relative; top:0; line-height:1; }
+        /* ═══ fb593 — A LANE CARD'S PILLS OWN THE WHOLE COLUMN ═══════════════════════════════
+           Max, on a Widen inside the Splitter: "these two pills leave deadspace at the bottom, we
+           dont need this deadspace... retrig and mono should be stacked and the pills should extend
+           to fill up that space."
+           THE CAUSE: the right column has two forms (see the builder) — an ordinary card is
+           [pills row][route row], a LANE card is pills ONLY, because a device inside a Splitter band
+           is routed by its band and has no route row to draw. Nothing replaced that row, so exactly
+           HALF the column was empty. Measured on a Widen lane card: column 56.2 px, pills row 28.1,
+           empty below 28.1.
+           This is not a new design either — the lane-card comment in the builder already says "its
+           pills fill the column". That was the intent; it was never expressed in CSS.
+           Stacking is safe for EVERY device that can be a lane card: the chassis row is
+           d.pills.slice(coreN), which is at most 2 here — Utility's five keep three lamps inside its
+           core, and the Splitter (the only 3) is excluded from lane cards by `d.core!=='spl'`. */
+        /* GRID, not flex-grow. The column is stretched to the control row by align-self, but a
+           flex CHILD with flex:1 1 auto refused to take the freed 18 px (measured: column 41.31,
+           pills row stayed at its 23.31 content height). A grid track of 1fr is not a request —
+           the row IS the column's height, and grid stretches its items into it by default. */
+        /* ⚠️ ABSOLUTE, because the column's height is NOT DEFINITE from the inside. It gets its
+           height from align-self:stretch — resolved AFTER its children are sized — so a child asking
+           for 1fr or height:100% resolves against the CONTENT height and stays short. Measured
+           through three attempts: flex:1 1 auto left the row at 23.55 in a 41.55 column, a 1fr grid
+           track did the same, and height:100% likewise. Taking the pills out of flow and pinning
+           them to the column's padding box sidesteps the circularity entirely: inset:0 is definite
+           the moment the column has been stretched, which it has (41.55 with a 23.55 child is the
+           proof that stretch applied). */
+        #syn-panel .fxr-rightcol.fxr-rc-lane{ align-self:stretch; position:relative; }
+        #syn-panel .fxr-rightcol.fxr-rc-lane .fxr-pills{ position:absolute; inset:0; flex-direction:column; gap:4px; width:auto; min-height:0; }
+        #syn-panel .fxr-rightcol.fxr-rc-lane .fxr-pill{ height:auto; flex:1 1 0; min-height:0; }
         #syn-panel .fxr-pill.fxr-on{ border-color:var(--purple-400); color:var(--text-primary); text-shadow:0 0 4px rgba(255,255,255,.5); }
         /* fb445 — THE LAST THREE CORES. Bode: one node on a shift rail. Splitter: lane REGIONS on the
            spectrum with crossover NODES (the EQ's grammar — the node is the handle). Utility: the
