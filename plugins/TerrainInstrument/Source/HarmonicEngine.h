@@ -82,9 +82,42 @@ namespace harm {
     //  it is the one axis the mod matrix cannot express — an LFO on HarmHue resolves once per
     //  BLOCK per OSCILLATOR (PluginProcessor.cpp:9481/9495) and moves the whole chord in one
     //  phase. Measured swing 12.0-42.7 dB at 25 %, flux(100 %) = 3.9x flux(50 %), 0 cents.
-    constexpr float kChurnDepth  = 0.25f;   // +-0.25 of the frame axis
-    constexpr float kChurnRateHz = 3.0f;    // top rate
-    constexpr float kChurnCurve  = 4.0f;    // (2^(4C)-1)/15 — silent early, fast at the top
+    // ── fb600 CHURN RETUNE — it was a RATE knob with a FIXED depth ───────────
+    //  kChurnDepth was a CONSTANT +-0.25 of the frame axis at every knob position, so the knob
+    //  moved only the rate and 75 % of its travel bought nothing: measured SWING on ProphetSaw
+    //  at churn .25/.50/.75/1.00 = 12.03 / 12.85 / 12.84 / 12.79 dB — FLAT. Unused headroom is
+    //  a defect in the same class as a dead knob. And the RATE curve put the bottom two thirds
+    //  on a geological timescale: 3.0*(2^(4C)-1)/15 makes churn 0.25 a 5.00 s period (a 300 ms
+    //  pluck gets 6 % of one cycle) and churn 0.15 a 9.70 s one, while the TOP was only 3 Hz.
+    //  Now DEPTH RIDES THE KNOB (kChurnDepthFloor..1 x kChurnDepth), the top rate is 10 Hz and
+    //  the curve is gentler so the low half is reachable instead of silent.
+    //  AFTER, same measurement: SWING .25/.50/.75/1.00 = 8.41 / 12.85 / 16.08 / 15.07 dB — the knob
+    //  now has a TAPER instead of a plateau (less at 25 %, more at the top), and the headline is the
+    //  LIFEGUARD LAW's exposure ratio, mSPAN(churn 1.0) / the table's whole-axis ceiling:
+    //      ProphetSaw 44.1 % -> 66.8 %      Rise 41.4 % -> 63.2 %      VowelMorph 103.7 % -> 72.7 %
+    //  ⚠️ VowelMorph is a REGRESSION at the very top and it is deliberate, not overlooked. That table
+    //  reaches its whole-axis ceiling by churn 0.25 (mSPAN 17.10 of a 21.02 ceiling), so the extra
+    //  DEPTH buys it nothing and the extra RATE costs it: at a fixed depth 0.45, measured mSPAN is
+    //  20.92 dB at 0.5 Hz, 19.76 at 3 Hz, 18.04 at 5 Hz, 15.78 at 10 Hz. At the top of the knob the
+    //  character deliberately stops being a SCAN and becomes a fast warble — that is the deep end.
+    constexpr float kChurnDepth      = 0.45f;  // +-0.45 of the frame axis at the TOP of the knob
+    constexpr float kChurnDepthFloor = 0.12f;  // depth at knob 0+, as a fraction of kChurnDepth
+    constexpr float kChurnRateHz     = 10.0f;  // top rate
+    constexpr float kChurnCurve      = 3.0f;   // (2^(3C)-1)/7 — still EXACTLY 0 at 0, reachable at 0.25
+    // ── fb600 THE FIFTH-SLOT FIX: a per-VOICE RATE detune ────────────────────
+    //  noteOn resets driftPh_ to 0, so every voice struck in the SAME BLOCK shared one drift
+    //  phase. Measured on a perfectly quantised A2/C#3/E3/A3 chord, all four note-ons in ONE
+    //  block, worst |driftPos(a)-driftPos(b)| over 60 blocks:  0.000000000 before, 0.247404724
+    //  now. In the hearing metric (1/6-octave band distance, seed-only floor subtracted) that is
+    //  a chord which decorrelates by -0.7 % of its own motion before and 29.9 % after — i.e. the
+    //  fb599 CHURN *was* an LFO on HarmHue for anything played in time, which is the fifth-slot
+    //  failure: a control must not land where an existing control already goes. Gate G8.
+    //  ⚠️ It is a RATE spread and NOT a randomised START PHASE on purpose: a start-phase scatter
+    //  wins the same decorrelation but moves where the note BEGINS, and "every note starts at its
+    //  own Hue" is the property the line above this one exists to protect. (The fb600 diagnosis
+    //  pass measured that trade as 1.20 dB of note-on spread for rate vs 15.38 dB for phase; this
+    //  cert did not re-measure it, because the rate spread is what shipped.)
+    constexpr float kChurnRateSpread = 0.30f;  // +-30 % per-voice rate detune
 }
 
 // ── knob/mode snapshot pushed from the processor (cheap store, block-rate) ──
@@ -251,6 +284,10 @@ public:
         }
         tB_ = 0.f;
         driftPh_ = 0.f;   // fb6xx — CHURN's frame scan is NOTE-RELATIVE: every note starts at its own Hue
+        // fb600 — per-VOICE drift RATE, so a perfectly quantised chord does not scan as one body
+        // (see kChurnRateSpread). Cached at note-on: seed_ is fixed for the note, so this is a
+        // constant per voice and the phase accumulator stays C0-continuous.
+        driftRateMul_ = 1.f + harm::kChurnRateSpread * (hash01 (seed_ * 2654435761u) - 0.5f) * 2.f;
         gNorm_ = -1.f;   // sentinel: snap the renorm gain on the first block (no fade-up swell)
     }
 
@@ -267,13 +304,18 @@ public:
         const float chRate = harm::kChurnRateHz
                            * (fastExp2 (harm::kChurnCurve * clamp01 (p_.churn)) - 1.f)
                            / (fastExp2 (harm::kChurnCurve) - 1.f);      // EXACTLY 0.f at churn = 0
-        driftPh_ += chRate * dt;
+        driftPh_ += chRate * driftRateMul_ * dt;   // fb600 — per-voice rate detune
         driftPh_ -= std::floor (driftPh_);
         driftOn_ = (chRate > 0.f && p_.mainMode == 6 && p_.tableGridAmp != nullptr
                     && p_.tableFrames > 1 && p_.tableStride > 0 && ! displayMode_);
         if (driftOn_)
         {   // FOLD (not clamp) so the excursion is the same everywhere on the Hue axis
-            float x = clamp01 (p_.hue) + harm::kChurnDepth * sineAt (driftPh_);
+            // fb600 — DEPTH RIDES THE KNOB. It was a constant, which is why SWING was flat
+            // across .25/.50/.75/1.00 (12.03/12.85/12.84/12.79 dB) — the knob only moved the rate.
+            const float chDepth = harm::kChurnDepth
+                                * (harm::kChurnDepthFloor
+                                   + (1.f - harm::kChurnDepthFloor) * clamp01 (p_.churn));
+            float x = clamp01 (p_.hue) + chDepth * sineAt (driftPh_);
             x = x < 0.f ? -x : x;
             if (x > 1.f) x = 2.f - x;
             driftPos_ = x;
@@ -519,6 +561,11 @@ public:
     float debugAmp   (int j)      const noexcept { return (j >= 0 && j < nP_) ? amp_[(size_t) j]   : 0.f; }
     float debugRatio (int j)      const noexcept { return (j >= 0 && j < nP_) ? ratio_[(size_t) j] : 0.f; }
     float debugPhase (int j)      const noexcept { return (j >= 0 && j < nP_) ? phase_[(size_t) j] : 0.f; }
+    // fb600 — the CHURN drift is a per-voice INTERNAL state; the fifth-slot question ("does a
+    // quantised chord scan as one body or as four?") is a statement about it directly, so expose
+    // it read-only for the cert instead of inferring it from the audio.
+    float debugDriftPos()         const noexcept { return driftPos_; }
+    bool  debugDriftOn()          const noexcept { return driftOn_;  }
 
     void displayCycle (float* out, int n) const noexcept
     {
@@ -1211,6 +1258,7 @@ private:
     float  tB_ = 0.f, orbit_ = 0.f, ouGlobal_ = 0.f, rootHold_ = -1.f;
     float  gNorm_ = 1.f, gNormS_ = 1.f, uniScatCents_ = 0.f, shineChurn_ = 1.f;
     float  driftPh_ = 0.f, driftPos_ = 0.f;   // fb6xx CHURN — note-relative frame-scan phase / position
+    float  driftRateMul_ = 1.f;               // fb600 CHURN — per-voice drift-rate detune (kChurnRateSpread)
     bool   driftOn_ = false;
     bool   skipTick_ = false;
     int    lastSpan_ = 0;

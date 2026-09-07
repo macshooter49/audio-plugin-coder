@@ -4773,7 +4773,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
     addDlyF (ParameterIDs::SYN_DLY_MIX,      "Delay Mix",        0.34f);
     addDlyF (ParameterIDs::SYN_DLY_LOWCUT,   "Delay Low Cut",    0.22f);
     addDlyF (ParameterIDs::SYN_DLY_HICUT,    "Delay Hi Cut",     0.72f);
-    addDlyF (ParameterIDs::SYN_DLY_SPREAD,   "Delay Spread",     0.60f);
+    // fb600 — SPREAD DEFAULT 0.60 -> 0.05. Max: "the spread offsets the time of the delay when it
+    // shouldn't... I expect one fourth delay and one fourth repeats back. Instead it's one fourth but
+    // it's offset a little bit." He was reading the meter right. DelayEngine.h:107 pushes the RIGHT
+    // tap to time·(1 + spread·0.35), and R re-reads at ITS OWN longer time, so the error COMPOUNDS:
+    // at 48 kHz/120 BPM/sync 1/4 (500.000 ms) the shipped 0.60 put R at 604.98 / 1209.98 / 1814.97 /
+    // 2419.96 ms — +419.96 ms by the fourth repeat, 84 % of a beat off the grid. 0.05 leaves +8.732 ms
+    // (1.75 % off-grid, +34.96 ms by repeat 4) — squarely in the Haas window, and MEASURED to keep the
+    // width: inter-channel correlation -0.219 and side/mid 1.249, indistinguishable from 0.60. Not 0,
+    // which WOULD collapse to mono (r = +1.000). The RANGE is untouched — 100 % is still +35 %.
+    addDlyF (ParameterIDs::SYN_DLY_SPREAD,   "Delay Spread",     0.05f);
     addDlyF (ParameterIDs::SYN_DLY_WIDTH,    "Delay Width",      0.78f);
     addDlyF (ParameterIDs::SYN_DLY_MODRATE,  "Delay Mod Rate",   0.40f);
     addDlyF (ParameterIDs::SYN_DLY_MODDEPTH, "Delay Mod Depth",  0.0f);    // fb303 — Mod OFF by default (Max: delay was wonky-on-turn-on)
@@ -4923,7 +4932,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                 F (p + "FEEDBACK", d + "Feedback", 0.10f);
                 F (p + "TONE", d + "Tone", 0.44f);   F (p + "MIX",      d + "Mix",       0.34f);
                 F (p + "LOWCUT", d + "Low Cut", 0.22f); F (p + "HICUT", d + "Hi Cut",    0.72f);
-                F (p + "SPREAD", d + "Spread", 0.60f);  F (p + "WIDTH", d + "Width",     0.78f);
+                F (p + "SPREAD", d + "Spread", 0.05f);  F (p + "WIDTH", d + "Width",     0.78f);   // fb600 — lockstep with instance 1 (see the note there): 0.60 put R 21 % off the grid and compounding.
                 F (p + "MODRATE", d + "Mod Rate", 0.40f); F (p + "MODDEPTH", d + "Mod Depth", 0.0f);
                 F (p + "WOW", d + "Wow", 0.0f);      F (p + "DUCK",     d + "Ducking",   0.0f);
                 for (auto& s : srcSuf) B (p + s, d + s, false);
@@ -14443,6 +14452,14 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // was written by a build where no-routes MEANS no-routes", so the migration skips it. Kept
     // separate from "version" so the V1/V2 branch below is untouched.
     state.setProperty ("fxRoutesExplicit", 1,               nullptr);
+    // fb600 — DELAY SPREAD HAS BEEN REBASED. The Spread default moved 0.60 -> 0.05 (0.60 pushed the
+    // RIGHT delay tap 21 % off the grid and compounded it every repeat), and setStateInformation
+    // snaps a stored exact-0.600 to 0.05 so already-saved projects stop offsetting. This property
+    // says "this blob was written by a build that already knows", so a post-fb600 session where Max
+    // has DELIBERATELY parked Spread at 0.600 is never re-snapped on the next load. Kept separate
+    // from "version" for the same reason fxRoutesExplicit is: that property gates
+    // migrateBlobToVersion3() and the V1/V2 branch below, and must not move for this.
+    state.setProperty ("dlySpreadRebased", 1,              nullptr);
     state.setProperty ("editingLayer", editingLayer.load(), nullptr);
     // Mix page Phase 2: global trigger-mode state at the root level.
     state.setProperty ("triggerMode",     triggerMode.load(),     nullptr);
@@ -15022,6 +15039,33 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         {
                             const float v = (float) ch.getProperty ("value", 0.0f);
                             if (std::abs (v - 0.5f) < 1e-4f) ch.setProperty ("value", 0.0f, nullptr);
+                        }
+                    }
+            }
+
+            // fb600 migration: DELAY SPREAD. Max: "every time I load up a delay the spread is up and
+            // then offsets the time." The default moved 0.60 -> 0.05 (see the registration note), but a
+            // default-only change leaves every already-saved project carrying 0.60 in its blob and Max
+            // hearing the identical bug on reload. Measured at 48 kHz/120 BPM/sync 1/4: 0.60 put the R
+            // tap 104.982 ms late and COMPOUNDING (+419.96 ms by repeat 4). So pre-fb600 blobs snap the
+            // EXACT old default to the new one, for instance 1 and the pooled 2..kFxInstances alike.
+            // Only exactly 0.600 — a deliberate post-fb600 Spread of 0.600 is a knife-edge rarity, the
+            // same reasoning the FRACTURE block above writes down. The marker is a SEPARATE property
+            // (see "dlySpreadRebased" in getStateInformation), never a "version" bump: that property
+            // gates migrateBlobToVersion3() and the V1/V2 branch below.
+            if (! newState.hasProperty ("dlySpreadRebased"))
+            {
+                juce::StringArray spreadIds { ParameterIDs::SYN_DLY_SPREAD };
+                for (int n = 2; n <= ParameterIDs::kFxInstances; ++n)
+                    spreadIds.add ("SYN_DLY" + juce::String (n) + "_SPREAD");
+                for (const auto& sid : spreadIds)
+                    for (int c = 0; c < newState.getNumChildren(); ++c)
+                    {
+                        auto ch = newState.getChild (c);
+                        if (ch.hasType ("PARAM") && ch.getProperty ("id").toString() == sid)
+                        {
+                            const float v = (float) ch.getProperty ("value", 0.0f);
+                            if (std::abs (v - 0.60f) < 1e-4f) ch.setProperty ("value", 0.05f, nullptr);
                         }
                     }
             }

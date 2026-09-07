@@ -720,6 +720,51 @@ public:
         return p.mainMode == 6 ? juce::jlimit (0.0f, 1.0f, p.hue) : -1.0f;
     }
 
+    // fb600 — CHURN IS INVISIBLE, AND fb599's OWN INDICATOR IS LYING ABOUT IT.
+    // harmHueVis above is documented in the page as "the position the BANK IS READING, not the
+    // knob" — but the moment CHURN > 0 the bank reads driftPos_, which is per-VOICE and
+    // note-relative, so the line is drawn at a position no voice is actually at. And the
+    // waterfall cannot show the motion either: driftOn_ requires ! displayMode_
+    // (HarmonicEngine.h:297) and the display engines run in display mode, while the display bake
+    // (PluginProcessor.cpp:1017) calls noteOn then prepareBank(1), pinning tB_ = 0 — and CHURN is
+    // a RATE, so a rate at t = 0 is zero. MEASURED: the waterfall grid's FNV-1a fingerprint is
+    // 247d78ac2423058d at churn 0, 0.5 AND 1.0, in every sculpt mode. Not one pixel moved, while
+    // harmDisplaySignature() (which DOES include churn * 41.1) forced a 0.349 ms re-bake on every
+    // churn move to repaint identical pixels.
+    //
+    // A per-voice position cannot honestly be drawn as one line, so what is published is the
+    // ENVELOPE: the HALF-WIDTH of the excursion on the 0..1 Hue axis, which the page paints as a
+    // translucent BAND around the Hue line. This is a band, NOT a position — every sounding voice
+    // sits somewhere inside it, at its own phase.
+    // 0 means "nothing to draw": not on the Table family, or CHURN at 0 (where chRate is EXACTLY
+    // 0 and driftOn_ is false, so the excursion really is nothing — the kChurnDepthFloor term is
+    // the depth at knob 0+, not at knob 0).
+    // NOTE the audio path FOLDS at the axis ends (HarmonicEngine.h:306-308), so near hue 0 or 1
+    // the real excursion reflects inward; the page clips the band to the axis for the same look.
+    float harmChurnBandVis (int osc) const noexcept
+    {
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const float c = juce::jlimit (0.0f, 1.0f, p.churn);
+        if (p.mainMode != 6 || c <= 0.0f) return 0.0f;
+        return tw::harm::kChurnDepth * (tw::harm::kChurnDepthFloor
+                                        + (1.0f - tw::harm::kChurnDepthFloor) * c);   // same expression as HarmonicEngine.h:303
+    }
+
+    // fb600 — the band's own SPEED, in Hz, so the page animates at the knob's rate instead of
+    // guessing one. Same chRate expression the audio path runs (HarmonicEngine.h:292), with
+    // std::exp2f standing in for the engine's private fastExp2 — that approximation is worth well
+    // under a pixel here, and this is a picture, not a bank. NOMINAL rate: each voice multiplies it
+    // by its own driftRateMul_ (+-kChurnRateSpread = +-30 %), which is exactly why the page draws a
+    // band and not a line.
+    float harmChurnRateVis (int osc) const noexcept
+    {
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        const float c = juce::jlimit (0.0f, 1.0f, p.churn);
+        if (p.mainMode != 6 || c <= 0.0f) return 0.0f;
+        return tw::harm::kChurnRateHz * (std::exp2f (tw::harm::kChurnCurve * c) - 1.0f)
+                                      / (std::exp2f (tw::harm::kChurnCurve) - 1.0f);
+    }
+
     tw::HarmParams harmDisplayParams (int osc) const noexcept
     {
         const int o = juce::jlimit (0, 3, osc);

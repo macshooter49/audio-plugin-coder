@@ -6147,6 +6147,17 @@ void TerrainUiCore::timerCallback()
         // position line. -1 = not on the Table family, and the page falls back to the knob.
         js << "window.__harmHueEff=[" << SF (audioProcessor.harmHueVis (0), 4) << "," << SF (audioProcessor.harmHueVis (1), 4)
            << "," << SF (audioProcessor.harmHueVis (2), 4) << "," << SF (audioProcessor.harmHueVis (3), 4) << "];";
+        // fb600 — CHURN, THE SAME LANE. __harmHueEff alone was lying once CHURN > 0: the bank is then
+        // reading driftPos_, which is PER-VOICE, so no single line is honest. These two publish the
+        // ENVELOPE instead — __harmChurnBand is the HALF-WIDTH of the excursion on the 0..1 Hue axis
+        // (a BAND drawn around the Hue line, not a position; every sounding voice is somewhere inside
+        // it at its own phase) and __harmChurnRate is that band's speed in Hz, so the page breathes at
+        // the knob's own rate rather than an invented one. Both are 0 = draw nothing (not on the Table
+        // family, or CHURN at 0). Same 4-element per-OSC shape as __harmHueEff above.
+        js << "window.__harmChurnBand=[" << SF (audioProcessor.harmChurnBandVis (0), 4) << "," << SF (audioProcessor.harmChurnBandVis (1), 4)
+           << "," << SF (audioProcessor.harmChurnBandVis (2), 4) << "," << SF (audioProcessor.harmChurnBandVis (3), 4) << "];";
+        js << "window.__harmChurnRate=[" << SF (audioProcessor.harmChurnRateVis (0), 4) << "," << SF (audioProcessor.harmChurnRateVis (1), 4)
+           << "," << SF (audioProcessor.harmChurnRateVis (2), 4) << "," << SF (audioProcessor.harmChurnRateVis (3), 4) << "];";
         {   // fb458 — the WARP/FOLD the oscillator is applying, so the waterfall knows when the
             // table it is holding has gone stale and must be re-baked through the real chain.
             js << "window.__wtDisp=[";
