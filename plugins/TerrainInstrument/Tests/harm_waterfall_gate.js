@@ -176,19 +176,29 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
         '[2] THE TABLE FAMILY CAN ENGAGE IT',
         `after one click: waterfall=${t2.wave} bars=${t2.bars} wt3d class=${t2.wt3d} on=${t2.on}`);
 
-  const bad = r.refused.filter (f => f.changed || f.persisted || f.canW);
+  /* fb599 — INVERTED ON PURPOSE. Max: "I only want to use tables for this ... I don't want the
+     families anymore." The gather pins mainMode = 6 for every HARM oscillator, so there is no
+     longer such a thing as a procedural family at run time: whatever index is STORED, the engine
+     is on Table and the waterfall is its view. The old bar asserted the opposite and is exactly
+     what tables-only retires. What must still hold is that a stored index cannot take the
+     waterfall AWAY — a patch saved on Blade gets the same picture as one saved on Table. */
+  const bad = r.refused.filter (f => ! f.canW);
   gate (bad.length === 0,
-        '[3] THE SIX PROCEDURAL FAMILIES REFUSE THE CLICK (regression)',
-        bad.length ? ('leaked: ' + JSON.stringify (bad))
-                   : 'families 0-5: no state flip, no setWaterfallView call, canWaterfall=false for all six');
+        '[3] EVERY STORED FAMILY GETS THE WATERFALL — tables-only, whatever the patch saved',
+        bad.length ? ('refused: ' + JSON.stringify (bad))
+                   : 'stored families 0-5 all report canWaterfall=true — the engine is on Table regardless');
 
-  gate (r.onTableEngaged.wave && r.leftTable.bars && ! r.leftTable.wave && r.returned.wave,
-        '[4] LEAVING Table RETURNS THE BARS — and returning restores the waterfall',
-        `on Table waterfall=${r.onTableEngaged.wave} → Console bars=${r.leftTable.bars}/wave=${r.leftTable.wave} → back waterfall=${r.returned.wave} (on stayed ${r.returned.on})`);
+  /* fb599 — there is no "leaving Table" any more, so the bar becomes its opposite: selecting a
+     retired family must NOT drop the waterfall or bring the bars back. */
+  gate (r.onTableEngaged.wave && r.leftTable.wave && ! r.leftTable.bars && r.returned.wave,
+        '[4] A RETIRED FAMILY DOES NOT TAKE THE WATERFALL AWAY — the view never falls back to the bars',
+        `on Table waterfall=${r.onTableEngaged.wave} → stored Console waterfall=${r.leftTable.wave}/bars=${r.leftTable.bars} → back ${r.returned.wave} (on stayed ${r.returned.on})`);
 
-  gate (Math.abs (r.posOnTable - 0.83) < 1e-6 && Math.abs (r.posOffTable - 0.11) < 1e-6,
-        '[5] THE DEPTH AXIS FOLLOWS HUE on Table, WT Frame elsewhere',
-        `HUE=0.83 WT_FRAME=0.11 → on Table wtpos=${r.posOnTable} (read ${(r.idsOnTable||[]).join(',') || 'nothing'}), off Table wtpos=${r.posOffTable} (read ${(r.idsOffTable||[]).join(',') || 'nothing'})`);
+  /* fb599 — HUE on every stored family, because every one of them IS Table now. The additive bank
+     has no WT Frame knob; reading SYN_OSC_x_WT_FRAME on a HARM oscillator would be the bug. */
+  gate (Math.abs (r.posOnTable - 0.83) < 1e-6 && Math.abs (r.posOffTable - 0.83) < 1e-6,
+        '[5] THE DEPTH AXIS FOLLOWS HUE — on every stored family, tables-only',
+        `HUE=0.83 WT_FRAME=0.11 → stored Table wtpos=${r.posOnTable} (read ${(r.idsOnTable||[]).join(',') || 'nothing'}), stored Console wtpos=${r.posOffTable} (read ${(r.idsOffTable||[]).join(',') || 'nothing'})`);
 
   gate (r.shapeSig === r.cachedSig && r.shapeSig !== '' && r.shapeSigShort !== r.cachedSig,
         '[6] THE SIGNATURE CONVERGES — 13 slots, both sides, same order',

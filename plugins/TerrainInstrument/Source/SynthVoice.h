@@ -1106,6 +1106,20 @@ namespace tw
             for (auto& e : modalEngD_) e.setPartialBudget (used, cap);
         }
 
+        // fb599 — THE HARM POOL CENSUS. The 640-partial pool was handed out first-come-first-served
+        // and then the render MUTED whoever arrived last: measured, the 6th note of a C3 cluster at
+        // PARTIALS 1.00 rendered at -209.8 dB, and a new low note STOLE the budget of notes already
+        // sounding (four held notes went to 0.00000 RMS for 61/61 blocks). The census lets every bank
+        // know how many are drawing this block so each can take its equal share BEFORE anyone renders.
+        // Only the additive banks are enrolled; Geode and Modal keep the old policy for now.
+        void setHarmPartialCensus (int* live, const int* prev) noexcept
+        {
+            for (auto& e : harmEngA_) e.setBudgetCensus (live, prev);
+            for (auto& e : harmEngB_) e.setBudgetCensus (live, prev);
+            for (auto& e : harmEngC_) e.setBudgetCensus (live, prev);
+            for (auto& e : harmEngD_) e.setBudgetCensus (live, prev);
+        }
+
         // fb498 — MODAL's LAZY ARM. MESSAGE THREAD ONLY (the processor's 60 Hz timerCallback and
         // prepareToPlay), because this allocates 12 MiB per voice and allocation must never
         // happen on the audio thread. One-way: once ready it is never un-prepared while the rate

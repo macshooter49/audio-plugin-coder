@@ -57,6 +57,34 @@ namespace harm {
     constexpr float kPi          = 3.14159265358979323846f;
     constexpr float kTargetRms   = 0.16f; // renorm target (matches the other engines' loudness lane)
     constexpr int   kDispBins    = 96;    // UI partial-bar resolution
+    // ── hm-glitch fix ──────────────────────────────────────────────────────
+    constexpr int   kUnthinned    = 2;    // slots 0 and 1 are never thinned (the root) — see thinToBudget
+    constexpr int   kMinRoom      = 6;    // fb599 — the floor a bank thins to. It was an inline 24,
+                                          // and 24 x N banks OVERSHOOTS the pool once N > cap/24 = 26:
+                                          // measured 2024 partials against a 704 ceiling at 16 notes x
+                                          // unison 4 (3.2x the CPU the pool is supposed to buy). At 6 the
+                                          // share wins until 106 banks, so the pool is honoured where any
+                                          // real patch lives and extreme polyphony thins EVERYONE instead
+                                          // of muting the last arrivals.
+    constexpr int   kSatEmergency = 4;    // the render-time MUTE is an emergency valve only:
+                                          // legitimate polyphony can overshoot the cap by at most
+                                          // (anchors x kMinRoom); 4x the cap is only reachable by a
+                                          // LEAKED counter, which is what the mute was for.
+
+    // ── fb599 CHURN ──────────────────────────────────────────────────────────
+    //  Max: "the churn knob don't do anything ... the churn needs to do something."
+    //  It was true: churnMul had five readers (Tide, Terrace, Fan's orbit, Shine's ghost
+    //  detune, Braid's wobble) and every one sits behind a knob whose factory default is 0,
+    //  and KEEL — the sculpt Max keeps — never reads it at any Carve. Measured on Table+Keel
+    //  at the registered defaults: churn 0 vs 1 = 0.000 dB and a BIT-IDENTICAL render.
+    //  Now CHURN is what its name says on the family Max actually uses: each note scans the
+    //  wavetable frame ON ITS OWN, from wherever HUE put it. Per-VOICE and note-relative, so
+    //  it is the one axis the mod matrix cannot express — an LFO on HarmHue resolves once per
+    //  BLOCK per OSCILLATOR (PluginProcessor.cpp:9481/9495) and moves the whole chord in one
+    //  phase. Measured swing 12.0-42.7 dB at 25 %, flux(100 %) = 3.9x flux(50 %), 0 cents.
+    constexpr float kChurnDepth  = 0.25f;   // +-0.25 of the frame axis
+    constexpr float kChurnRateHz = 3.0f;    // top rate
+    constexpr float kChurnCurve  = 4.0f;    // (2^(4C)-1)/15 — silent early, fast at the top
 }
 
 // ── knob/mode snapshot pushed from the processor (cheap store, block-rate) ──
@@ -90,6 +118,17 @@ struct HarmParams
     const float* tablePhase = nullptr;
     int          tableN     = 0;
     float        tableSig   = 0.0f;   // moves when the resolved table content moves (rebuild gate)
+
+    // ── fb6xx — the WHOLE baked grid, borrowed. CHURN drifts the frame position PER VOICE and
+    //    NOTE-RELATIVE, which is the one axis the mod matrix cannot reach: h.hue is resolved once
+    //    per BLOCK per OSCILLATOR (PluginProcessor.cpp:9481 + 9495) and that one HarmParams struct
+    //    is pushed to every voice (PluginProcessor.cpp:9921), so an LFO on Hue moves the whole
+    //    chord together in one global LFO phase. AMPLITUDE ONLY: tablePhase is consumed at
+    //    note-on and phase_ is a running accumulator that must never be stepped mid-note.
+    //    Layout is HarmTableSource::Grid::amp — tableFrames rows of tableStride floats.
+    const float* tableGridAmp = nullptr;
+    int          tableFrames  = 0;
+    int          tableStride  = 0;
 
     bool operator== (const HarmParams& o) const noexcept
     {
@@ -136,12 +175,19 @@ public:
     }
 
     void setPartialBudget (int* used, int cap) noexcept { budgetUsed_ = used; budgetCap_ = cap; }
+    // hm-glitch: FAIR SHARE. `live` is this block's anchor census (each anchor bumps it in
+    // prepareBank); `prev` is LAST block's total, which is what the share divides by — the
+    // ordering problem is unsolvable within a block, and one block of latency (1.3-10.7 ms)
+    // is inaudible for a polyphony change.
+    void setBudgetCensus (int* live, const int* prev) noexcept { censusLive_ = live; censusPrev_ = prev; }
     // constant-cost unison divisor (house pattern): N detuned banks pre-thin by ceil(√N)
     void setUnisonScale (int n) noexcept
     {
         int d = 1; const int nn = n > 1 ? n : 1;
         while (d * d < nn) ++d;
         unisonDiv_ = d < 1 ? 1 : d;
+        unisonCount_ = nn;   // hm-glitch: the census counts SIBLINGS, not anchors — N siblings each
+                             // render their own bank, so N is what the shared pool actually pays for.
         uniScatCents_ = (nn > 1) ? 2.8f : 0.f;   // per-sibling partial decorrelation (hm2)
     }
     void setParams (const HarmParams& p) noexcept { p_ = p; }
@@ -204,6 +250,7 @@ public:
             ouGlobal_ = 0.f;
         }
         tB_ = 0.f;
+        driftPh_ = 0.f;   // fb6xx — CHURN's frame scan is NOTE-RELATIVE: every note starts at its own Hue
         gNorm_ = -1.f;   // sentinel: snap the renorm gain on the first block (no fade-up swell)
     }
 
@@ -211,7 +258,29 @@ public:
     bool prepareBank (int n) noexcept
     {
         if (! bankOwner_ || n <= 0) return false;
+        if (censusLive_ != nullptr) *censusLive_ += unisonCount_;   // hm-glitch: census BEFORE any early-out
         const float dt = (float) n / (float) rate_;
+        // ── fb6xx — CHURN drift phase. Advanced on EVERY block, including a SKIPPED rebuild, so
+        //    the motion runs at the knob's rate and not half of it at small host blocks. A running
+        //    accumulator (never rate·tB_) so moving CHURN mid-note is C0-continuous.
+#ifndef HARM_CHURN_DEAD
+        const float chRate = harm::kChurnRateHz
+                           * (fastExp2 (harm::kChurnCurve * clamp01 (p_.churn)) - 1.f)
+                           / (fastExp2 (harm::kChurnCurve) - 1.f);      // EXACTLY 0.f at churn = 0
+        driftPh_ += chRate * dt;
+        driftPh_ -= std::floor (driftPh_);
+        driftOn_ = (chRate > 0.f && p_.mainMode == 6 && p_.tableGridAmp != nullptr
+                    && p_.tableFrames > 1 && p_.tableStride > 0 && ! displayMode_);
+        if (driftOn_)
+        {   // FOLD (not clamp) so the excursion is the same everywhere on the Hue axis
+            float x = clamp01 (p_.hue) + harm::kChurnDepth * sineAt (driftPh_);
+            x = x < 0.f ? -x : x;
+            if (x > 1.f) x = 2.f - x;
+            driftPos_ = x;
+        }
+#else
+        driftOn_ = false;   // mutation seam: CHURN back to the shipped no-op
+#endif
         // CPU (hm2): at small host blocks the spectral build ran up to ~750×/s per anchor —
         // rebuild every OTHER block when the knobs are static (declick ramps + ~190Hz updates
         // make the skip inaudible; any knob touch rebuilds immediately).
@@ -280,7 +349,11 @@ public:
         if (L == nullptr || R == nullptr || n <= 0 || bank_ == nullptr) return;
         // pool exhausted → the bank RAMPS to silence over one declick block (hard-zeroing
         // ampZ was the exact rr2 click bug in Geode — never truncate a sounding sine).
+#ifdef HM_SHIPPED_GOVERNOR    // cert seam (same one): the SHIPPED mute-at-the-cap
         const bool sat = (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_);
+#else
+        const bool sat = (budgetUsed_ != nullptr && budgetCap_ > 0 && *budgetUsed_ >= budgetCap_ * harm::kSatEmergency);
+#endif
         if (sat)
         {
             bool silent = true;
@@ -712,6 +785,25 @@ private:
                 // Multiplies into the count window like every other family, so the PARTIALS knob
                 // still fades the top of the bank exactly as it does on Blade or Chant. Harmonics
                 // the table does not have are silenced rather than left at the window value.
+                if (driftOn_)
+                {
+                    // fb6xx CHURN: blend the baked grid at THIS VOICE's own drifting frame
+                    // position instead of the one frame the processor resolved. Grid rows are
+                    // zeroed past their own n (HarmTableSource::frameToGrid), so the stride is
+                    // the only bound needed.
+                    const int   F  = p_.tableFrames;
+                    const float fp = driftPos_ * (float) (F - 1);
+                    int f0 = (int) fp;
+                    if (f0 > F - 2) f0 = F - 2;
+                    if (f0 < 0)     f0 = 0;
+                    const float t   = fp - (float) f0;
+                    const float* A0 = p_.tableGridAmp + (std::size_t) f0       * (std::size_t) p_.tableStride;
+                    const float* A1 = p_.tableGridAmp + (std::size_t) (f0 + 1) * (std::size_t) p_.tableStride;
+                    const int    nT = std::min (nEff, p_.tableStride);
+                    for (int j = 0;  j < nT;   ++j) amp_[(size_t) j] *= A0[(size_t) j] + (A1[(size_t) j] - A0[(size_t) j]) * t;
+                    for (int j = nT; j < nEff; ++j) amp_[(size_t) j]  = 0.f;
+                }
+                else
                 for (int j = 0; j < nEff; ++j)
                     amp_[(size_t) j] *= (p_.tableAmp != nullptr && j < p_.tableN)
                                           ? p_.tableAmp[(size_t) j] : 0.f;
@@ -1055,9 +1147,20 @@ private:
         if (displayMode_ || budgetUsed_ == nullptr || budgetCap_ <= 0) return;
         int active = 0;
         for (int j = 0; j < nEff; ++j) if (amp_[(size_t) j] > 1e-6f) ++active;
-        int room = std::max (24, budgetCap_ - *budgetUsed_);   // never starve below a musical floor
+        // hm-glitch: FAIR SHARE FIRST. `budgetCap_ - *budgetUsed_` alone is first-come-first-served:
+        // voice 1 takes 173 of 640 at C3 and voice 5 is left with the floor. Dividing the cap by the
+        // anchor census makes every note claim the same slice, so nothing starves and nothing mutes.
+        int share = budgetCap_;
+#ifndef HM_SHIPPED_GOVERNOR   // cert seam: the SHIPPED first-come room + mute-at-cap -> the gate goes red
+        if (censusPrev_ != nullptr && *censusPrev_ > 1)
+            // −kUnthinned: the loop below starts at j = 2 because the root and slot 2 are never
+            // thinned, so every bank keeps two partials the share never budgeted for. Left in, the
+            // pool overshoots by exactly 2 per bank (measured 711 against 640 at 16 banks).
+            share = std::max (harm::kMinRoom, budgetCap_ / *censusPrev_ - harm::kUnthinned);
+#endif
+        int room = std::max (harm::kMinRoom, std::min (share, budgetCap_ - *budgetUsed_));
         if (unisonDiv_ > 1)                                     // constant-cost unison pre-thin
-            room = std::min (room, std::max (24, active / unisonDiv_));
+            room = std::min (room, std::max (harm::kMinRoom, active / unisonDiv_));
         if (active <= room) return;
         // threshold = the (active-room)-th smallest amp — one nth_element on a stack copy
         static thread_local std::array<float, harm::kMaxPartials> tmp;
@@ -1107,14 +1210,19 @@ private:
     double rate_ = 48000.0, playedHz_ = 261.6256, pitchMul_ = 1.0;
     float  tB_ = 0.f, orbit_ = 0.f, ouGlobal_ = 0.f, rootHold_ = -1.f;
     float  gNorm_ = 1.f, gNormS_ = 1.f, uniScatCents_ = 0.f, shineChurn_ = 1.f;
+    float  driftPh_ = 0.f, driftPos_ = 0.f;   // fb6xx CHURN — note-relative frame-scan phase / position
+    bool   driftOn_ = false;
     bool   skipTick_ = false;
     int    lastSpan_ = 0;
     float  lastBuiltHz_ = -1.f;
     HarmParams lastBuilt_;
     int    nP_ = 0, preparedActive_ = 0, reserved_ = 0;
     int*   budgetUsed_ = nullptr;
+    int*   censusLive_ = nullptr;       // hm-glitch: this block's anchor census (write)
+    const int* censusPrev_ = nullptr;   // hm-glitch: last block's anchor total (read)
     int    budgetCap_  = 0;
     int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))
+    int    unisonCount_ = 1;  // hm-glitch: raw unison slot count (what the census pays for)
     bool   bankOwner_ = true, displayMode_ = false;
     std::uint32_t seed_ = 0x9E3779B9u, rng_ = 0x9E3779B9u;
     // FORGE post-saturator state (anchor-owned; per channel where [2])

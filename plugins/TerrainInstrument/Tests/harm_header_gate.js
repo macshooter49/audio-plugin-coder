@@ -1,40 +1,87 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  harm_header_gate.js — fb595: THE HARMONICS HEADER NEVER COLLIDES, THE ARROWS ARE CENTRED,
-//                        AND NOTHING MOVES.
+//  harm_header_gate.js — fb599: THE HARMONICS HEADER **IS** THE WAVETABLE HEADER.
+//                        TABLES ONLY — NO FAMILY CHIP, NO SCULPT CHIP, NO CLAMP.
 //
 //    NODE_PATH=<scratchpad>/node_modules node Tests/harm_header_gate.js [page.html]
 //
-//  Max, with a screenshot reading "OSC TaHarmonicKeel ‹ PLUTO 2 - JNO … ›": "it still collides ...
-//  because our table names are longer ... the arrows are way taller than the names ... make sure
-//  the names don't overlap no matter what ... it gets cut off really early ... dot, dot, dot ...
-//  the arrows centered and symmetrical just like everywhere ... Nothing moves. Everything has to
-//  stay fixed ... run a bunch of tests on it."
+//  Max: "I only want to use tables for this. I don't want the families — Keel, the peel, whatever
+//  the fuck those things are. I don't want those anymore. Only tables, so I need the header to be
+//  cleared and only have tables on there. Make it look like wavetable if anything, the header."
+//  (and, on the sculpt: "if we have to use one then we have to use keel" — Keel IS sculptMode 0.)
 //
-//  WHY fb588's OWN GATE PASSED WHILE FOUR WORDS PAINTED ON TOP OF EACH OTHER: harm_wtmenu_gate.js
-//  asserts `display !== 'none'` on every bar and never measures a rectangle. This gate measures
-//  nothing BUT rectangles, across every state the header can be in:
-//      7 families × 6 sculpt words × 3 name lengths = 126 header states, plus the wavetable
-//      engine's own arrows measured in the same run as the reference.
+//  WHAT THIS GATE REPLACED. fb595 measured the same 126 header states but asserted the OPPOSITE
+//  grammar: a FIXED-WIDTH corner cluster (`width: calc(100% - 124px)`) that never moved, because
+//  the Table header carried THREE name-chips — Table + a sculpt word + the table name — where
+//  every other engine carries one, and the clamp was the only thing keeping the cluster from
+//  growing LEFT through "OSC · Harmonic". The cost was measured and stated at the time: the name
+//  slot fell to 20.4 px on Terrace, so even "Sine" ellipsised. fb599 removes the CAUSE — both
+//  chips come off — so the clamp is retired and the name is back on the shared 108 px cap. The
+//  bars therefore flipped: bar 5 no longer says "nothing moves", it says "it moves EXACTLY like
+//  the wavetable engine", measured against that engine in the same run.
+//
+//  ⚠️  THE PARAMS ARE NOT RETIRED. SYN_OSC_*_HARM_MODE still registers all seven choices
+//      (Blade Neon Console Chant Bronze Hornet Table) and HARM_SCULPT all six (Keel … Clang) —
+//      never renumber a choice. The UI stops OFFERING them; PluginProcessor.cpp's HARM gather
+//      forces mainMode = 6 / sculptMode = 0. A preset saved on Blade loads with its index intact
+//      and plays its table — which is exactly what bar 8 measures, at boot, before this harness
+//      has touched a single <select>.
 //
 //  THE BARS
 //   0  THE PANEL ACTUALLY LAID OUT — nothing below may be asserted on a page that never rendered
 //   1  NO OVERLAP, EVER — no two visible header words share pixels in ANY of the 126 states, and
-//      the label row keeps ≥ 4 px of clear air to the corner cluster (WebKit and Chromium differ
-//      in sub-pixel font advance; a 0.7 px clearance is a collision waiting for a font update)
-//   2  THE NAME GIVES, THE CHIPS DON'T — on Table with a long name the NAME ends in … and the
-//      Table / sculpt chips are intact (a flex-shrink fix that chews "Ta…" fails this bar)
-//   3  THE ARROWS ARE CENTRED — each ‹ › glyph sits centred in its box (equal insets) and on the
-//      name's text centreline, and Table's arrows measure IDENTICAL to the wavetable engine's
-//   4  THE ARROWS ARE SYMMETRIC — equal box gaps either side of the name, every sculpt, every name
-//   5  NOTHING MOVES — for a given sculpt word, every header element except the name's text sits
-//      at the SAME pixels across all three name lengths; and across all 126 states the label row
-//      and the A slot never move at all
+//      the label row keeps ≥ 4 px of clear air to the corner cluster
+//   2  THE CHIPS ARE GONE — neither the family chip nor the sculpt chip is visible in ANY state,
+//      and the corner cluster's visible children are the wavetable engine's, in its order
+//   3  THE ARROWS ARE CENTRED — each ‹ › glyph sits centred in its box and on the name's text
+//      centreline, and measures IDENTICAL to the wavetable engine's
+//   4  THE ARROWS ARE SYMMETRIC — equal box gaps either side of the name slot, every state
+//   5  THE HEADER **IS** THE WAVETABLE ENGINE'S — for each name length every corner child sits at
+//      the SAME pixels as the wavetable reference; the header is INVARIANT to the two retired
+//      choices (all 7 × 6 combinations give one signature per name); label row and A never move
 //   6  OTHER ENGINES ARE UNTOUCHED — the wavetable engine's cluster has no width clamp and its
-//      arrows come from the canonical rule (the fix is scoped by selector, and this proves it)
+//      arrows come from the canonical rule (the change is scoped by selector, and this proves it)
+//   7  NO CLAMP, AND THE NAME HAS ITS 108 px BACK — HARM's corner computes to the SAME width as
+//      the wavetable engine's for the same name, no corner child is flex:1, and a long name fills
+//      the full 108 px cap (fb595 measured 20.4–39.9 px here)
+//   8  A PRESET SAVED ON A RETIRED FAMILY STILL HAS A HEADER — measured at BOOT, before this
+//      harness sets any select: on HARM the bare name wrap and both arrows are visible and no
+//      chip is, whatever family index the stored preset carries
+//
+//  PROOF THE BARS CAN FAIL (source-level mutation — a mutation the runtime could undo is no proof):
+//    HARM_HDR_MUTATE=1  the two chips come back (fb588's `display: inline-flex`)   → 1, 2, 5, 7, 8 red
+//    HARM_HDR_MUTATE=2  the fb595 fixed-width clamp comes back                     → 5, 7 red
+//    HARM_HDR_MUTATE=3  the name wrap is re-scoped to .harm-table and the class
+//                       goes back to a toggle on i === 6 (a preset stored on any
+//                       family but Table then has no name and no arrows)           → 2, 3, 4, 5, 7, 8 red
+//  AND ON THE SHIPPED PAGE (a4887be, before fb599): 2, 3, 4, 5, 7, 8 red — 6 of the 9 bars.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
+const fs   = require ('fs');
+const os   = require ('os');
 const path = require ('path');
 const puppeteer = require ('puppeteer-core');
-const PAGE = process.argv[2] || path.resolve (__dirname, '../Source/ui/public/index.html');
+const SRC = process.argv[2] || path.resolve (__dirname, '../Source/ui/public/index.html');
+const MUT = +(process.env.HARM_HDR_MUTATE || 0);
+
+// ── the page, mutated at SOURCE ───────────────────────────────────────────────────────────────
+const A_CHIPS = `#syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: none; }`;
+const A_CLAMP = `#syn-panel .device.osc.engine-harm .device-corner-preset
+  .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { display: inline-block; }`;
+const A_PIN   = `          try { var dv = sel.closest ('.device'); if (dv) dv.classList.add ('harm-table'); } catch (e2) {}`;
+let PAGE = SRC;
+if (MUT) {
+  let h = fs.readFileSync (SRC, 'utf8');
+  const swap = (a, b, tag) => { if (h.indexOf (a) < 0) throw new Error ('MUT ' + MUT + ': anchor not found — ' + tag); h = h.replace (a, b); };
+  if (MUT === 1) swap (A_CHIPS, `#syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: inline-flex; }`, 'chips');
+  if (MUT === 2) swap (A_CLAMP, A_CLAMP + `
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset { width: calc(100% - 124px); }
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset > * { flex: 0 0 auto; }
+#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
+  > .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { flex: 1 1 auto; min-width: 0; }`, 'clamp');
+  if (MUT === 3) { swap (A_CLAMP, A_CLAMP.replace ('.engine-harm ', '.engine-harm.harm-table '), 'rescope');
+                   swap (A_PIN, `          try { var dv = sel.closest ('.device'); if (dv) dv.classList.toggle ('harm-table', i === 6); } catch (e2) {}`, 'pin'); }
+  PAGE = path.join (process.env.HARM_HDR_TMP || os.tmpdir(), 'harm_header_mut' + MUT + '.html');
+  fs.writeFileSync (PAGE, h);
+}
 
 const STUB = () => {
   const mk = () => ({getScaledValue:()=>0.5,setScaledValue(){},getNormalisedValue:()=>0.5,setNormalisedValue(){},
@@ -70,7 +117,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
   await new Promise (r => setTimeout (r, 2400));
 
   const r = await p.evaluate (() => {
-    const out = { err: null, states: [], ref: null };
+    const out = { err: null, states: [], ref: {}, boot: null };
     try {
       const dev = document.querySelector ('#syn-panel .device.osc');
       if (! dev) { out.err = 'no osc device'; return out; }
@@ -83,6 +130,7 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
       out.sculpts = [...scSel.options].map (o => o.textContent);
 
       const NAMES = { short: 'Sine', long: 'PLUTO 2 - JNO CORE', xlong: 'PLUTO 2 - JNO CORE EXTENDED MIX' };
+      const NK = Object.keys (NAMES);
       const R = (el) => { const q = el.getBoundingClientRect(), d = devR();
         return { x: +(q.left - d.left).toFixed (2), y: +(q.top - d.top).toFixed (2), w: +q.width.toFixed (2), h: +q.height.toFixed (2) }; };
       const ink = (el) => {   // the text node's own box — where the glyph actually is inside its box
@@ -97,49 +145,65 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
         if (e.tagName === 'SELECT') { if (! e.options.length) e.add (new Option (t, '0'));
           e.options[Math.max (0, e.selectedIndex)].textContent = t; } else e.textContent = t; };
 
-      const label = dev.querySelector ('.device-label-row');
+      const label  = dev.querySelector ('.device-label-row');
       const corner = dev.querySelector ('.device-corner-preset');
-      const eng = document.getElementById ('osc-a-engine-display');
       const nameDisp = document.getElementById ('osc-a-preset-display');
-      const nameSel  = document.getElementById ('osc-a-preset-select');
       const famDisp  = document.getElementById ('osc-a-harmmode-display');
       const scDisp   = document.getElementById ('osc-a-harmsculpt-display');
+      const ENG = ['engine-sample','engine-granular','engine-geode','engine-harm','engine-modal','engine-fm'];
 
-      // ── the REFERENCE: the wavetable engine's own arrows, long name ───────────────────────────
+      // the cluster signature: every visible corner child, its first class token and its rect
+      const clusterSig = () => [...corner.children].filter (vis).map (ch => {
+        const q = R (ch); return `${(ch.className||'').toString().split(/\s+/)[0]}@${q.x},${q.y},${q.w},${q.h}`; }).join (' ');
+      const clusterCls = () => [...corner.children].filter (vis)
+        .map (ch => (ch.className||'').toString().split(/\s+/)[0]).join (' ');
+
+      // ── BAR 8's measurement, FIRST: the page as it boots, with only the engine class flipped.
+      //    Nothing here sets a <select>: this is what a preset saved on a retired family shows. ──
+      dev.classList.add ('engine-harm');
+      out.boot = { fam: famDisp ? famDisp.textContent.trim() : '', harmTable: dev.classList.contains ('harm-table'),
+                   nameVisible: vis (nameDisp.parentElement),
+                   nameSlotW: vis (nameDisp.parentElement) ? R (nameDisp.parentElement).w : 0,
+                   navs: [...dev.querySelectorAll ('.wt-nav')].filter (vis).length,
+                   chips: [famDisp, scDisp].filter (e => e && vis (e)).length,
+                   cls: clusterCls() };
+
+      // ── the REFERENCE: the wavetable engine's own header, all three name lengths ─────────────
       const measureArrows = () => {
         const navs = [...dev.querySelectorAll ('.wt-nav')].filter (vis);
         if (navs.length !== 2) return { n: navs.length };
         const [L, Rr] = navs.map (n => ({ box: R (n), ink: ink (n), disp: getComputedStyle (n).display }));
-        const nb = R (nameDisp), ni = ink (nameDisp), wb = R (nameDisp.parentElement);   // wb = the SLOT (the flex item); nb = the label inside it
+        const nb = R (nameDisp), ni = ink (nameDisp), wb = R (nameDisp.parentElement);
         const insetL = (a) => +(a.ink.x - a.box.x).toFixed (2), insetR = (a) => +((a.box.x + a.box.w) - (a.ink.x + a.ink.w)).toFixed (2);
         const cy = (q) => q.y + q.h / 2;
         return { n: 2,
-          L: { insetL: insetL (L), insetR: insetR (L), dy: +(cy (L.ink) - cy (ni)).toFixed (2), disp: L.disp, box: L.box },
-          R: { insetL: insetL (Rr), insetR: insetR (Rr), dy: +(cy (Rr.ink) - cy (ni)).toFixed (2), disp: Rr.disp, box: Rr.box },
-          gapL: +(nb.x - (L.box.x + L.box.w)).toFixed (2), gapR: +(Rr.box.x - (nb.x + nb.w)).toFixed (2),
+          L: { insetL: insetL (L), insetR: insetR (L), dy: +(cy (L.ink) - cy (ni)).toFixed (2), disp: L.disp },
+          R: { insetL: insetL (Rr), insetR: insetR (Rr), dy: +(cy (Rr.ink) - cy (ni)).toFixed (2), disp: Rr.disp },
           gapLw: +(wb.x - (L.box.x + L.box.w)).toFixed (2), gapRw: +(Rr.box.x - (wb.x + wb.w)).toFixed (2),
-          dispOff: +(nb.x - wb.x).toFixed (2) };   // the label's offset inside its slot — Max's deliberate 1 px nudge (.preset-display left:1px)
+          dispOff: +(nb.x - wb.x).toFixed (2) };   // .preset-display left:1px — Max's optical nudge, shared
       };
-      const ENG = ['engine-sample','engine-granular','engine-geode','engine-harm','engine-modal','engine-fm'];
       ENG.forEach (c => dev.classList.remove (c)); dev.classList.remove ('harm-table');
-      put ('osc-a-engine-display', 'Wavetable'); put ('osc-a-preset-display', NAMES.long); put ('osc-a-preset-select', NAMES.long);
-      out.ref = measureArrows();
-      out.refNameGrow = getComputedStyle (nameDisp.parentElement).flexGrow;
-      out.refCornerMaxW = getComputedStyle (corner).maxWidth; out.refCornerW = getComputedStyle (corner).width;
+      put ('osc-a-engine-display', 'Wavetable');
+      for (const nk of NK) {
+        put ('osc-a-preset-display', NAMES[nk]); put ('osc-a-preset-select', NAMES[nk]);
+        out.ref[nk] = { sig: clusterSig(), cls: clusterCls(), cornerW: getComputedStyle (corner).width,
+                        slotW: R (nameDisp.parentElement).w, arrows: measureArrows() };
+      }
+      out.refNameGrow  = getComputedStyle (nameDisp.parentElement).flexGrow;
+      out.refCornerMaxW = getComputedStyle (corner).maxWidth;
+      out.nameMaxW = getComputedStyle (nameDisp).maxWidth;
 
-      // ── the 126 harmonics states ──────────────────────────────────────────────────────────────
+      // ── the 126 harmonics states: 7 stored families × 6 stored sculpts × 3 names ─────────────
+      //    The two chips are gone, so the header MUST be blind to the first two dimensions.
       dev.classList.add ('engine-harm');
       put ('osc-a-engine-display', 'Harmonic');
       for (let f = 0; f < out.fams.length; ++f) {
         famSel.value = String (f); famSel.dispatchEvent (new Event ('change', { bubbles: true }));
-        put ('osc-a-harmmode-display', out.fams[f]);
         for (let sc = 0; sc < out.sculpts.length; ++sc) {
           scSel.value = String (sc); scSel.dispatchEvent (new Event ('change', { bubbles: true }));
-          put ('osc-a-harmsculpt-display', out.sculpts[sc]);
-          for (const nk of Object.keys (NAMES)) {
+          for (const nk of NK) {
             put ('osc-a-preset-display', NAMES[nk]); put ('osc-a-preset-select', NAMES[nk]);
-            const st = { f, fam: out.fams[f], sc, sculpt: out.sculpts[sc], nk, isTable: dev.classList.contains ('harm-table') };
-            // every visible text-bearing element in the header band, with its box
+            const st = { f, fam: out.fams[f], sc, sculpt: out.sculpts[sc], nk };
             const items = [];
             dev.querySelectorAll ('*').forEach (el => {
               if (! vis (el)) return; const q = R (el);
@@ -149,7 +213,6 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
               t = t.replace (/\s+/g, ' ').trim(); if (! t) return;
               items.push ({ t, id: el.id || '', cls: (el.className || '').toString().split (/\s+/)[0], ...q });
             });
-            st.items = items;
             st.overlaps = [];
             for (let i = 0; i < items.length; ++i) for (let j = i + 1; j < items.length; ++j) {
               const a = items[i], c = items[j];
@@ -158,19 +221,17 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
             }
             const lr = R (label), cr = R (corner);
             st.clear = +(cr.x - (lr.x + lr.w)).toFixed (2);
-            st.labelRect = lr; st.cornerRect = cr;
-            st.aRect = R (dev.querySelector ('.osc-letter'));
-            // the "nothing moves" signature: every corner child except the name display
-            st.fixedSig = [...corner.children].filter (vis).map (ch => {
-              const q = R (ch); const isName = ch.contains (nameDisp);
-              return isName ? `name@${q.x + q.w}|${q.y}` : `${(ch.className||'').toString().split(/\s+/)[0]}@${q.x},${q.y},${q.w},${q.h}`;   // the name pins its RIGHT edge
-            }).join (' ');
-            if (st.isTable) {
-              st.nameEllipsis = nameDisp.scrollWidth > nameDisp.clientWidth + 0.5;
-              st.chipIntact = famDisp.scrollWidth <= famDisp.clientWidth + 0.5 && scDisp.scrollWidth <= scDisp.clientWidth + 0.5;
-              st.nameBoxW = R (nameDisp).w;
-              st.arrows = measureArrows();
-            }
+            st.labelRect = lr; st.aRect = R (dev.querySelector ('.osc-letter'));
+            st.chipsVisible = [famDisp, scDisp].filter (e => e && vis (e))
+                                .map (e => e.id + '="' + e.textContent.trim() + '"');
+            st.sig = clusterSig(); st.cls = clusterCls();
+            st.cornerW = getComputedStyle (corner).width;
+            st.slotW = R (nameDisp.parentElement).w;
+            st.slotGrow = getComputedStyle (nameDisp.parentElement).flexGrow;
+            st.flexKids = [...corner.children].filter (vis)
+              .map (ch => getComputedStyle (ch).flexGrow).filter (g => g !== '0').length;
+            st.nameEllipsis = nameDisp.scrollWidth > nameDisp.clientWidth + 0.5;
+            st.arrows = measureArrows();
             out.states.push (st);
           }
         }
@@ -179,60 +240,75 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
     return out;
   });
 
-  console.log (`\n══ harm_header_gate — fb595 ══  ${PAGE}\n`);
+  console.log (`\n══ harm_header_gate — fb599 ══  ${PAGE}${MUT ? '   (HARM_HDR_MUTATE=' + MUT + ')' : ''}\n`);
   if (r.err) { console.log ('  harness error: ' + r.err); await b.close(); process.exit (1); }
 
-  const laidOut = r.devW > 100 && r.states.length === 7 * 6 * 3 && r.ref && r.ref.n === 2;
-  gate (laidOut, '[0] THE PANEL ACTUALLY LAID OUT — 126 header states + the wavetable reference',
-        `osc width ${(r.devW||0).toFixed (1)} px, ${r.states.length} states, reference arrows ${r.ref ? r.ref.n : 0}`);
+  const laidOut = r.devW > 100 && r.states.length === 7 * 6 * 3 && r.ref.long && r.ref.long.arrows.n === 2;
+  gate (laidOut, '[0] THE PANEL ACTUALLY LAID OUT — 126 header states + the wavetable reference at 3 name lengths',
+        `osc width ${(r.devW||0).toFixed (1)} px, ${r.states.length} states, reference arrows ${r.ref.long ? r.ref.long.arrows.n : 0}`);
   if (! laidOut) { console.log ('\n  ❌ degenerate page — not asserting anything on it\n'); await b.close(); process.exit (1); }
 
-  const S = r.states, T = S.filter (s => s.isTable);
+  const S = r.states;
   const bad1 = S.filter (s => s.overlaps.length || s.clear < 4);
-  const worstClear = Math.min (...S.map (s => s.clear));
   gate (bad1.length === 0,
         '[1] NO OVERLAP, EVER — and ≥ 4 px of clear air between the two clusters, all 126 states',
         bad1.length ? `${bad1.length} bad: e.g. ${bad1[0].fam}/${bad1[0].sculpt}/${bad1[0].nk} clear ${bad1[0].clear} ${bad1[0].overlaps.slice (0, 2).join (' ')}`
-                    : `0 overlaps; worst clearance ${worstClear.toFixed (2)} px (Table states: ${T.length})`);
+                    : `0 overlaps; worst clearance ${Math.min (...S.map (s => s.clear)).toFixed (2)} px`);
 
-  const longT = T.filter (s => s.nk !== 'short');
-  const bad2 = longT.filter (s => ! s.nameEllipsis || ! s.chipIntact);
-  gate (bad2.length === 0 && T.filter (s => s.nk === 'short').every (s => s.chipIntact),
-        '[2] THE NAME GIVES, THE CHIPS DON\'T — long names end in …, Table and the sculpt word stay whole',
-        bad2.length ? `${bad2.length} bad: e.g. ${bad2[0].sculpt}/${bad2[0].nk} ellipsis=${bad2[0].nameEllipsis} chips=${bad2[0].chipIntact}`
-                    : `name slot ${Math.min (...T.map (s => s.nameBoxW)).toFixed (1)}–${Math.max (...T.map (s => s.nameBoxW)).toFixed (1)} px across sculpts; every long name ellipsised`);
+  const bad2 = S.filter (s => s.chipsVisible.length || s.cls !== r.ref[s.nk].cls);
+  gate (bad2.length === 0,
+        '[2] THE CHIPS ARE GONE — no family word, no sculpt word, and the cluster is the wavetable engine\'s',
+        bad2.length ? `${bad2.length} bad: e.g. ${bad2[0].fam}/${bad2[0].sculpt}/${bad2[0].nk} chips ${JSON.stringify (bad2[0].chipsVisible)} cluster [${bad2[0].cls}] vs wavetable [${r.ref[bad2[0].nk].cls}]`
+                    : `0 chips in 126 states; cluster children [${S[0].cls}] — identical to the wavetable engine's`);
 
-  const cen = (a) => Math.abs (a.insetL - a.insetR) <= 1.0 && Math.abs (a.dy) <= 1.5;
+  const cen  = (a) => Math.abs (a.insetL - a.insetR) <= 1.0 && Math.abs (a.dy) <= 1.5;
   const same = (a, b) => Math.abs (a.insetL - b.insetL) <= 0.5 && Math.abs (a.insetR - b.insetR) <= 0.5 && Math.abs (a.dy - b.dy) <= 0.5;
-  const bad3 = T.filter (s => ! (s.arrows.n === 2 && cen (s.arrows.L) && cen (s.arrows.R) && same (s.arrows.L, r.ref.L) && same (s.arrows.R, r.ref.R)));
-  const a0 = T[0].arrows;
+  const bad3 = S.filter (s => ! (s.arrows.n === 2 && cen (s.arrows.L) && cen (s.arrows.R)
+                                 && same (s.arrows.L, r.ref[s.nk].arrows.L) && same (s.arrows.R, r.ref[s.nk].arrows.R)));
+  const a0 = (S.find (s => s.arrows.n === 2) || S[0]).arrows;
   gate (bad3.length === 0,
         '[3] THE ARROWS ARE CENTRED — glyph centred in its box and on the name\'s line, identical to the wavetable engine',
-        bad3.length ? `${bad3.length} bad: e.g. ${bad3[0].sculpt}/${bad3[0].nk} ‹ inset ${bad3[0].arrows.L.insetL}/${bad3[0].arrows.L.insetR} dy ${bad3[0].arrows.L.dy} (ref ${r.ref.L.insetL}/${r.ref.L.insetR} dy ${r.ref.L.dy})`
-                    : `Table ‹ inset ${a0.L.insetL}/${a0.L.insetR} dy ${a0.L.dy}  › ${a0.R.insetL}/${a0.R.insetR} dy ${a0.R.dy}  ·  wavetable ref ‹ ${r.ref.L.insetL}/${r.ref.L.insetR} dy ${r.ref.L.dy}  (display ${a0.L.disp})`);
+        bad3.length ? `${bad3.length} bad: e.g. ${bad3[0].fam}/${bad3[0].sculpt}/${bad3[0].nk} → ` + (bad3[0].arrows.n !== 2
+                        ? `${bad3[0].arrows.n} visible ‹ › (the header has no stepper at all)`
+                        : `‹ inset ${bad3[0].arrows.L.insetL}/${bad3[0].arrows.L.insetR} dy ${bad3[0].arrows.L.dy} (ref ${r.ref[bad3[0].nk].arrows.L.insetL}/${r.ref[bad3[0].nk].arrows.L.insetR})`)
+                    : `HARM ‹ inset ${a0.L.insetL}/${a0.L.insetR} dy ${a0.L.dy}  › ${a0.R.insetL}/${a0.R.insetR} dy ${a0.R.dy}  ·  wavetable ref ‹ ${r.ref.short.arrows.L.insetL}/${r.ref.short.arrows.L.insetR} (display ${a0.L.disp})`);
 
-  // The SLOT (the flex item) must be symmetric between the arrows. The label INSIDE it carries
-  // `.preset-display { position:relative; left:1px }` — "Max: nudge the name text RIGHT 1px (between
-  // the ‹ › selectors)" — a deliberate optical nudge shared with every engine, so the bar requires
-  // Table's label offset to EQUAL the wavetable engine's, not to be zero.
-  const bad4 = T.filter (s => Math.abs (s.arrows.gapLw - s.arrows.gapRw) > 0.5 || Math.abs (s.arrows.dispOff - r.ref.dispOff) > 0.25);
+  const bad4 = S.filter (s => s.arrows.n !== 2 || Math.abs (s.arrows.gapLw - s.arrows.gapRw) > 0.5
+                           || Math.abs (s.arrows.dispOff - r.ref[s.nk].arrows.dispOff) > 0.25);
   gate (bad4.length === 0,
         '[4] THE ARROWS ARE SYMMETRIC — equal gaps either side of the name slot, and the name sits in it exactly as on the wavetable engine',
-        bad4.length ? `${bad4.length} bad: e.g. ${bad4[0].sculpt}/${bad4[0].nk} slot gaps ${bad4[0].arrows.gapLw} vs ${bad4[0].arrows.gapRw}, label offset ${bad4[0].arrows.dispOff} (ref ${r.ref.dispOff})`
-                    : `slot gaps ${a0.gapLw} / ${a0.gapRw} px on every Table state; label offset in slot ${a0.dispOff} px = wavetable's ${r.ref.dispOff} (Max's 1 px nudge, shared)`);
+        bad4.length ? `${bad4.length} bad: e.g. ${bad4[0].fam}/${bad4[0].sculpt}/${bad4[0].nk} → ` + (bad4[0].arrows.n !== 2
+                        ? `${bad4[0].arrows.n} visible ‹ ›`
+                        : `slot gaps ${bad4[0].arrows.gapLw} vs ${bad4[0].arrows.gapRw}, label offset ${bad4[0].arrows.dispOff} (ref ${r.ref[bad4[0].nk].arrows.dispOff})`)
+                    : `slot gaps ${a0.gapLw} / ${a0.gapRw} px in every state; label offset in slot ${a0.dispOff} px = wavetable's ${r.ref.short.arrows.dispOff} (Max's 1 px nudge, shared)`);
 
-  // nothing moves: per sculpt, the fixed signature is identical across the three names
-  const moved = [];
-  for (let sc = 0; sc < 6; ++sc) { const g = T.filter (s => s.sc === sc);
-    if (new Set (g.map (s => s.fixedSig)).size !== 1) moved.push (g[0].sculpt); }
+  const bad5 = S.filter (s => s.sig !== r.ref[s.nk].sig);
+  const perName = {}; for (const s of S) (perName[s.nk] = perName[s.nk] || new Set()).add (s.sig);
+  const blind = Object.keys (perName).every (k => perName[k].size === 1);
   const lab = new Set (S.map (s => JSON.stringify (s.labelRect))), aSlot = new Set (S.map (s => JSON.stringify (s.aRect)));
-  gate (moved.length === 0 && lab.size === 1 && aSlot.size === 1,
-        '[5] NOTHING MOVES — same pixels for every element but the name\'s text, across all names; the label row and A never move',
-        moved.length ? `moved on sculpt: ${moved.join (', ')}` : `fixed across 3 names on all 6 sculpts; label row ${lab.size} distinct rect(s), A slot ${aSlot.size}, over 126 states`);
+  gate (bad5.length === 0 && blind && lab.size === 1 && aSlot.size === 1,
+        '[5] THE HEADER **IS** THE WAVETABLE ENGINE\'S — same pixels per name, blind to family and sculpt, label row and A fixed',
+        bad5.length ? `${bad5.length} bad: e.g. ${bad5[0].fam}/${bad5[0].sculpt}/${bad5[0].nk}\n          HARM ${bad5[0].sig}\n          WT   ${r.ref[bad5[0].nk].sig}`
+                    : ! blind ? `header still varies with family/sculpt: ${Object.keys (perName).map (k => k + '=' + perName[k].size).join (' ')} distinct signatures`
+                    : `every corner child on the wavetable engine's pixels, all 3 names; ${Object.keys (perName).length} signatures over 7×6 stored choices; label row ${lab.size} rect, A slot ${aSlot.size}`);
 
-  gate (r.refCornerMaxW === 'none' && r.refNameGrow === '0' && r.ref.L.disp === 'flex',
+  gate (r.refCornerMaxW === 'none' && r.refNameGrow === '0' && r.ref.long.arrows.L.disp === 'flex',
         '[6] OTHER ENGINES ARE UNTOUCHED — no clamp, no fill, canonical arrows on the wavetable engine',
-        `wavetable corner max-width=${r.refCornerMaxW} · name slot flex-grow=${r.refNameGrow} (Table's is 1) · arrows display=${r.ref.L.disp} (blockified inline-flex)`);
+        `wavetable corner max-width=${r.refCornerMaxW} · name slot flex-grow=${r.refNameGrow} · arrows display=${r.ref.long.arrows.L.disp} (blockified inline-flex)`);
+
+  const bad7 = S.filter (s => s.cornerW !== r.ref[s.nk].cornerW || s.flexKids !== 0 || s.slotGrow !== '0');
+  const longSlot = Math.min (...S.filter (s => s.nk !== 'short').map (s => s.slotW));
+  const cap = parseFloat (r.nameMaxW);
+  gate (bad7.length === 0 && Math.abs (longSlot - cap) <= 0.5,
+        '[7] NO CLAMP, AND THE NAME HAS ITS 108 px BACK — the corner sizes to its content exactly as the wavetable engine\'s',
+        bad7.length ? `${bad7.length} bad: e.g. ${bad7[0].sculpt}/${bad7[0].nk} corner width ${bad7[0].cornerW} (wavetable ${r.ref[bad7[0].nk].cornerW}), ${bad7[0].flexKids} flexing child(ren), name slot flex-grow ${bad7[0].slotGrow}`
+                    : `corner width ${S[0].cornerW}/${r.ref.short.cornerW} (short) · ${r.ref.long.cornerW} (long); long-name slot ${longSlot.toFixed (2)} px = the shared .preset-display cap ${r.nameMaxW}`);
+
+  const bt = r.boot;
+  gate (!!bt && bt.nameVisible && bt.navs === 2 && bt.chips === 0 && bt.cls === r.ref.short.cls,
+        '[8] A PRESET SAVED ON A RETIRED FAMILY STILL HAS A HEADER — measured at boot, before this harness sets any select',
+        bt ? `stored family "${bt.fam}" · .harm-table ${bt.harmTable} · name wrap visible ${bt.nameVisible} (slot ${bt.nameSlotW} px) · ‹ › ${bt.navs} · chips ${bt.chips} · cluster [${bt.cls}]`
+           : 'no boot snapshot');
 
   console.log (`\n  ${fail ? '❌' : '✅'} ${pass} passed, ${fail} failed\n`);
   await b.close();

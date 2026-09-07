@@ -707,6 +707,19 @@ public:
                       + p.root * 43.7 + p.shine * 47.9 + p.wilt * 53.3 + p.forge * 59.1);
     }
 
+    // fb599 — THE ADDITIVE TWIN OF wtFrameVis(). Max: "whenever I put an LFO on Hue, why isn't the
+    // visualizer moving?" The C++ already had the right number — harmDisplayParams_ is snapshotted
+    // AFTER ownM applies the mod matrix, byte-identical to what the voices hear — but the page's
+    // wtWaterfall.wtpos() returned early for HARM/Table on the RAW APVTS slider, which by
+    // construction cannot carry matrix output, while the wavetable engine four lines below already
+    // read the post-matrix window.__wtFrameEff. This publishes the same lane for HARM.
+    // -1 means "not on the Table family" → the page falls back to the knob, exactly as before.
+    float harmHueVis (int osc) const noexcept
+    {
+        const tw::HarmParams& p = harmDisplayParams_[(size_t) juce::jlimit (0, 3, osc)];
+        return p.mainMode == 6 ? juce::jlimit (0.0f, 1.0f, p.hue) : -1.0f;
+    }
+
     tw::HarmParams harmDisplayParams (int osc) const noexcept
     {
         const int o = juce::jlimit (0, 3, osc);
@@ -1956,6 +1969,12 @@ private:
     // (measured ~40%% for the oscillator alone, and STRETCH pinned it there). 640 ≈ <10%% worst
     // case and thins gracefully (keepLoudest) under heavy chords. (rs2 CPU-cliff fix.)
     static constexpr int kGeodePartialBudget = 640;      // all SPEC + HARM voices/unison combined
+    // fb599 — the HARM pool CENSUS: how many additive banks are drawing this block, and last
+    // block's answer (this block's fair-share divisor). Audio-thread only, same contract as the
+    // counter below. One block of latency is inaudible for a polyphony change; prev is floored at
+    // 1 so the very first block of a cluster behaves exactly as it always did.
+    int harmBanksLive_ = 0;
+    int harmBanksPrev_ = 1;
     int geodePartialsLive_ = 0;                          // audio-thread only (no atomics)
     // HARM-ENGINE — per-osc knob snapshots for the editor's display banks (written in the
     // processBlock gather; read on the message thread — cosmetic, tear-tolerant)

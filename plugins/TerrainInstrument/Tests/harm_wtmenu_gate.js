@@ -115,9 +115,15 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
         '[2] PICKING Table REVEALS THE WAVETABLE NAME + its stepper arrows',
         `harm-table class=${tbl.hasClass}  name shown=${tbl.wrapShown}  arrows shown=${tbl.navShown}`);
 
+  /* fb599 — INVERTED ON PURPOSE (tables-only). fb588 made the wavetable name a Table-ONLY surface
+     because six other families shared the header; they are retired, the gather pins mainMode = 6,
+     and the name is now the ONLY thing in that corner. The bar that mattered — that this is the
+     SAME element the glass browser binds to, never a copy — is bar [4] and is untouched.
+     ⚠️ A HARM oscillator whose STORED family is not Table used to have NO NAME AND NO ARROWS AT
+     ALL (measured at boot on the shipped page); this bar is now what catches that coming back. */
   const others = r.perFamily.slice (0, 6);
-  gate (others.every (f => ! f.wrapShown && ! f.hasClass),
-        '[3] THE OTHER SIX STILL HIDE IT — a Table-only surface',
+  gate (others.every (f => f.wrapShown && f.hasClass),
+        '[3] EVERY STORED FAMILY SHOWS THE NAME — the header is the wavetable header now',
         others.map (f => `${f.fam}:${f.wrapShown ? 'shown' : 'hidden'}`).join (' '));
 
   gate (r.boundIsSame && r.idCount === 1,

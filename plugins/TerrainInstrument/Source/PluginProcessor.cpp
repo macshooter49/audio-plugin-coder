@@ -342,6 +342,7 @@ TerrainInstrumentAudioProcessor::TerrainInstrumentAudioProcessor()
         // instead of multiplying to thousands of grains (≈8.5 ns per grain-sample each).
         v->setGrainBudget (&granGrainsLive_, kGranBudget);
         v->setPartialBudget (&geodePartialsLive_, kGeodePartialBudget);   // GEODE-ENGINE — shared partial budget
+        v->setHarmPartialCensus (&harmBanksLive_, &harmBanksPrev_);       // fb599 — HARM's fair share of that pool
         v->setGeodeStores (&geodeSlot_[0].live, &geodeSlot_[1].live,
                            &geodeSlot_[2].live, &geodeSlot_[3].live);      // GEODE-ENGINE — atomic store pointers
         synthEngine.addVoice (v);
@@ -1481,15 +1482,18 @@ void TerrainInstrumentAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
 
     static const char* const ENG[4]  = { ParameterIDs::SYN_OSC_A_ENGINE,    ParameterIDs::SYN_OSC_B_ENGINE,
                                          ParameterIDs::SYN_OSC_C_ENGINE,    ParameterIDs::SYN_OSC_D_ENGINE };
-    static const char* const MODE[4] = { ParameterIDs::SYN_OSC_A_HARM_MODE, ParameterIDs::SYN_OSC_B_HARM_MODE,
-                                         ParameterIDs::SYN_OSC_C_HARM_MODE, ParameterIDs::SYN_OSC_D_HARM_MODE };
+    // (fb599 — the MODE[] table is gone with the mode half of the gate below.)
     static const char* const PRE[4]  = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
                                          ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
 
     // Only bake for an oscillator that is actually on HARMONIC/Table — 64 KB and 16 frame
     // conversions per oscillator is not something to do for a panel nobody is using.
-    const bool wanted = ((int) *apvts.getRawParameterValue (ENG[oi])  == (int) tw::SynthVoice::Engine::HARM)
-                     && ((int) *apvts.getRawParameterValue (MODE[oi]) == 6);
+    // 🚨 fb599 — THE MODE HALF OF THIS GATE IS GONE, AND IT IS LOAD-BEARING. The gather above now
+    //    pins h.mainMode = 6 for every HARM oscillator, so an oscillator whose STORED family is
+    //    still Blade must get a grid baked too. Leave the `== 6` in and such a patch never gets one:
+    //    the not-yet-baked fallback fires on EVERY block instead of one and HARM plays Blade for
+    //    ever — measured 19.25 dB from the table it should be playing.
+    const bool wanted = ((int) *apvts.getRawParameterValue (ENG[oi]) == (int) tw::SynthVoice::Engine::HARM);
     if (! wanted) return;
 
     const int  preset    = (int) *apvts.getRawParameterValue (PRE[oi]);
@@ -4173,8 +4177,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
             juce::StringArray { "Keel", "Splay", "Cull", "Tide", "Terrace", "Clang" }, 0));
         static const char* nm[12] = { "Hue", "Partials", "Lean", "Fan", "Grit", "Braid",
                                       "Carve", "Churn", "Root", "Shine", "Wilt", "Forge" };
+        //                             Hue  Part  Lean  Fan  Grit Braid Carve Churn Root Shine Wilt Forge
+        // fb599 — CHURN's default drops 0.5 → 0. It used to be inert at any value (it had five
+        // readers and every one sat behind a knob defaulting to 0), so 0.5 was free; now it scans
+        // the frame, and 0.5 would put every existing Harmonic patch in motion without being asked.
+        // Neutral at rest, opt in by turning it — the project's "neutral is bit-identical" law.
         static const float dv[12] = { 0.35f, 0.5f, 0.5f, 0.f, 0.f, 0.f,
-                                      0.f, 0.5f, 0.f, 0.f, 0.5f, 0.f };
+                                      0.f, 0.f, 0.f, 0.f, 0.5f, 0.f };
         for (int k = 0; k < 12; ++k)
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { id[k + 2], 1 }, "Synth OSC " + osc + " Harmonic " + nm[k],
@@ -9464,8 +9473,15 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         {
             const char* const* id = HARM_IDS[o];
             tw::HarmParams h;
-            h.mainMode   = (int) *rawParam (id[0]);
-            h.sculptMode = (int) *rawParam (id[1]);
+            // fb599 — TABLES ONLY. Max: "I only want to use tables for this ... I don't want the
+            // families anymore ... if we have to use one then we have to use keel." id[0] HARM_MODE
+            // and id[1] HARM_SCULPT stay REGISTERED with all their choices (never renumber a choice
+            // param — saved state and automation lanes are addressed by normalised value); they are
+            // simply no longer read. Keel IS sculptMode 0, the registered default. At the registered
+            // default Carve (0) the sculpt pin is bit-identical anyway — applySculpt returns before
+            // it ever reads sculptMode — so only a patch with a non-Keel sculpt AND Carve up moves.
+            h.mainMode   = 6;
+            h.sculptMode = 0;
             h.hue   = *rawParam (id[2]);  h.count = *rawParam (id[3]);  h.lean  = *rawParam (id[4]);
             h.fan   = *rawParam (id[5]);  h.grit  = *rawParam (id[6]);  h.braid = *rawParam (id[7]);
             h.carve = *rawParam (id[8]);  h.churn = *rawParam (id[9]);  h.root  = *rawParam (id[10]);
@@ -9499,6 +9515,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
                     h.tablePhase = harmPhaseScratch_[o];
                     // The rebuild gate is content-identity: the SOURCE plus where in it we are.
                     h.tableSig   = g->sig + h.hue * 1024.0f;
+                    // fb599 CHURN — the whole frame stack, so a voice can scan it on its own between
+                    // blocks. Read inside prepareBank, later in this same processBlock than the blend
+                    // just above, and the Grid is double-buffered with retireCooldown = 2 and never
+                    // freed (only reused) — see rebuildHarmTableIfNeeded. ⚠️ THAT COOLDOWN NOW GUARDS
+                    // AUDIO, NOT JUST A PICTURE: shortening it would break sound, not a waterfall.
+                    h.tableGridAmp = &g->amp[0][0];
+                    h.tableFrames  = tw::WavetableSpec::kNumFrames;
+                    h.tableStride  = tw::HarmTableSource::kMaxN;
                 }
                 else
                 {
@@ -10810,6 +10834,10 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
     // unlike grains which persist and retire). Reset it to 0 before the voices render, or it
     // grows unbounded and clamps every SPEC voice to 0 active partials (static → silence).
     geodePartialsLive_ = 0;
+    // fb599 — and the HARM census rolls over with it: last block's count of drawing banks is this
+    // block's fair-share divisor, so every additive voice knows its share before the first renders.
+    harmBanksPrev_ = harmBanksLive_ > 0 ? harmBanksLive_ : 1;
+    harmBanksLive_ = 0;
 
     // fb489 — PROBE A: everything above this line is block-rate gather (runs with no notes).
     dspTA_ = (long long) juce::Time::getHighResolutionTicks();

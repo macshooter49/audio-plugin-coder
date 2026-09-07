@@ -6143,6 +6143,10 @@ void TerrainUiCore::timerCallback()
         js << "window.__fxModEff=" << audioProcessor.getFxModEffJson() << ";";   // fb457 — OVERPASS 1
         js << "window.__wtFrameEff=[" << SF (audioProcessor.wtFrameVis (0), 4) << "," << SF (audioProcessor.wtFrameVis (1), 4)
            << "," << SF (audioProcessor.wtFrameVis (2), 4) << "," << SF (audioProcessor.wtFrameVis (3), 4) << "];";   // fb457
+        // fb599 — the same lane for the HARMONIC engine's Hue, so an LFO on it moves the purple
+        // position line. -1 = not on the Table family, and the page falls back to the knob.
+        js << "window.__harmHueEff=[" << SF (audioProcessor.harmHueVis (0), 4) << "," << SF (audioProcessor.harmHueVis (1), 4)
+           << "," << SF (audioProcessor.harmHueVis (2), 4) << "," << SF (audioProcessor.harmHueVis (3), 4) << "];";
         {   // fb458 — the WARP/FOLD the oscillator is applying, so the waterfall knows when the
             // table it is holding has gone stale and must be re-baked through the real chain.
             js << "window.__wtDisp=[";

@@ -5505,7 +5505,12 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .device.osc.engine-geode .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device.osc.engine-harm .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device-corner-preset .hm-mode-wrap { display: none; }   /* must outrank the base .preset-wrap display rule */
-#syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: inline-flex; }
+/* fb599 — TABLES ONLY. Max: "Only tables, so I need the header to be cleared ... Make it look like
+   wavetable if anything, the header." The family chip (Blade..Hornet|Table) and the sculpt chip
+   (Keel..Clang) are GONE from the corner. .hm-sculpt carries .hm-mode-wrap, so this one rule takes
+   both. The <select>s stay in the markup and the two CHOICE params stay registered with every entry
+   (never renumber a choice) — the UI just stops offering them; the engine forces Table + Keel. */
+#syn-panel .device.osc.engine-harm .device-corner-preset .hm-mode-wrap { display: none; }
 /* ── fb588 — HARMONICS <- WAVETABLES ───────────────────────────────────────────────────────
    On the Table family the bank's recipe IS a wavetable, so the SAME wavetable name + the SAME
    glass browser come back on the HARM header. Recycled, not rebuilt: openWtSelectMenu binds to
@@ -5516,7 +5521,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    it hides nothing. The family and sculpt chips are shown for the whole HARM engine by the earlier
    .hm-mode-wrap rule above (and .hm-sculpt also carries .hm-mode-wrap), so on Table the corner
    carries THREE name-chips where every other engine carries one. That is the collision. */
-#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
+#syn-panel .device.osc.engine-harm .device-corner-preset
   .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { display: inline-block; }
 /* fb595 — THE ARROWS. .device-corner-preset is a FLEX container, so a flex item's display is
    BLOCKIFIED: the old `inline-block` here computed to `block` and threw away the align-items /
@@ -5525,45 +5530,15 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    3.02) and 2.5 px high. Max: "the arrows are way taller than the names ... centered and symmetrical
    just like the arrows are centered and symmetrical everywhere." inline-flex restores the wavetable
    engine's exact arrow geometry — bar 3 of Tests/harm_header_gate.js measures both in one run. */
-#syn-panel .device.osc.engine-harm.harm-table .wt-nav { display: inline-flex; }
+#syn-panel .device.osc.engine-harm .wt-nav { display: inline-flex; }
 
-/* fb595 — THE HEADER NEVER COLLIDES, AND NOTHING MOVES.
-   Max: "it still collides ... because our table names are longer ... make sure the names don't
-   overlap no matter what ... it gets cut off really early ... dot, dot, dot ... Nothing moves.
-   Everything has to stay fixed."
-
-   THE MECHANISM: .device-label-row (left:17) and .device-corner-preset (right:14) are BOTH
-   position:absolute in the same 16 px band. Neither is in the other's flow, so when the corner
-   cluster outgrows the room beside "OSC · Harmonic" it grows LEFT straight through it — no reflow,
-   no wrap, no clip, superimposed glyphs. On Table the cluster holds Table + sculpt + ‹ name › + A +
-   plus six 6 px gaps, and a real table name ("PLUTO 2 - JNO CORE") puts it 70 px over budget.
-
-   THE FIX, in three parts, all scoped to .engine-harm.harm-table so no other engine can move:
-     1. the cluster is given a FIXED width — not max-width — so its left edge is always at the same
-        x whatever the name says. Budget: 330.1 padding box − 17 inset − 85.5 ("OSC · Harmonic")
-        − 6 clearance = 124 reserved. Bar 1 measures the clearance; it must stay ≥ 4 px.
-     2. every child is pinned flex:0 0 auto so flex-shrink cannot chew the chips ("Ta…" / "Cla…"
-        was measured and photographed on the way here), and the NAME wrap alone is flex:1 1 auto
-        with min-width:0 — it absorbs ALL the slack, growing for a short name and shrinking for a
-        long one. So Table · sculpt · ‹ sit at the left edge and › · A · + at the right edge, at the
-        same pixels for every table in the bank. Only the name's text changes.
-     3. the name fills its slot, centred, and truncates through the ellipsis .preset-display ALREADY
-        carries (max-width / overflow / text-overflow, fb-era) — a short name sits centred between
-        the arrows, a long one fills the slot and ends in …. Reused, not invented.
-
-   THE COST, STATED PLAINLY: with the widest sculpt word (Terrace) the name slot is ~21 px; with
-   Keel ~39 px. The header physically cannot hold OSC · Harmonic + Table + a sculpt word + ‹name›
-   + A + + in 299 px, and the name is the only thing that can give without hiding a LIVE control
-   (Sculpt is audible on Table — applySculpt runs with no mainMode guard). The REAL fix is folding
-   Table into the wavetable menu (no seventh category ⇒ no third chip ⇒ the name gets its 108 px
-   back); this makes the header legal until then. */
-#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset { width: calc(100% - 124px); }
-#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset > * { flex: 0 0 auto; }
-#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
-  > .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) { flex: 1 1 auto; min-width: 0; }
-#syn-panel .device.osc.engine-harm.harm-table .device-corner-preset
-  > .preset-wrap:not(.hm-mode-wrap):not(.md-fam-wrap):not(.samp-name-wrap) > .preset-display
-  { display: block; width: 100%; box-sizing: border-box; text-align: center; }
+/* fb599 — THE fb595 CLAMP IS RETIRED. It existed because the Table header carried THREE
+   name-chips (Table + a sculpt word + the table name) where every other engine carries one, and
+   the fixed-width cluster was the only way to stop it growing left through "OSC · Harmonic".
+   With both chips gone the cluster is ‹ name › + A + — byte-for-byte the wavetable engine's —
+   so the name is back on the shared .preset-display 108 px cap and the header needs no special
+   case at all. MEASURED: name slot 20.4-39.9 px clamped -> 108.0 px unclamped, clearance
+   6.67 px -> 26.67 px worst-case (Tests/harm_header_gate.js bars 1/5/7). */
 #syn-panel .device.osc.engine-modal .device-corner-preset .preset-wrap { display: none; }
 #syn-panel .device-corner-preset .md-fam-wrap { display: none; }   /* default-hide — must outrank the base .preset-wrap display (mirrors .hm-mode-wrap) */
 #syn-panel .device.osc.engine-modal .device-corner-preset .md-fam-wrap { display: inline-flex; }
@@ -5622,7 +5597,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .device.osc.engine-sample .wt-nav,
 #syn-panel .device.osc.engine-granular .wt-nav,
 #syn-panel .device.osc.engine-geode .wt-nav,
-#syn-panel .device.osc.engine-harm .wt-nav,
 #syn-panel .device.osc.engine-modal .wt-nav { display: none; }   /* arrows only for the wavetable/FM preset */
 .samp-menu .wt-caret { margin-left: auto; opacity: 0.5; padding-left: 16px; }   /* the › on a folder row */
 .samp-menu div.hl { background: rgba(139,92,246,0.22); color: #fff; }           /* the open/hovered folder in the cascade */
@@ -17614,15 +17588,16 @@ setTimeout(function wireSynControls () {
         var st = null; try { st = window.Juce.getSliderState ('SYN_OSC_' + oscL.toUpperCase () + '_HARM_MODE'); } catch (e) {}
         if (! st || ! disp) return;
         function paint () { var i = 0; try { i = Math.max (0, Math.min (6, Math.round (st.getNormalisedValue () * 6))); } catch (e) {}
-          disp.textContent = HM_FAM[i] || 'Blade'; try { sel.value = String (i); } catch (e) {}
-          // fb588 — Table takes its recipe from the WT preset menu, so show that menu only here.
-          try { var dv = sel.closest ('.device'); if (dv) dv.classList.toggle ('harm-table', i === 6); } catch (e2) {}
-          // fb589 — leaving Table must drop the waterfall class too, or the CSS would keep the bars
-          // hidden on a family that has no table axis to scan. Re-entering Table with the waterfall
-          // still saved-on brings it straight back (state persists — nothing turns off by itself).
+          // fb599 — TABLES ONLY. The processor forces mainMode = 6 for HARM (PluginProcessor.cpp,
+          // HARM-ENGINE-GATHER), so this osc is ALWAYS on Table whatever the stored choice says —
+          // a preset saved on Blade loads with its index intact and simply plays its table. The chip
+          // is hidden by CSS, so the display text is inert; the class is PINNED, not toggled, or an
+          // old preset's mainMode 0 would drop the waterfall the engine is actually rendering.
+          disp.textContent = 'Table'; try { sel.value = '6'; } catch (e) {}
+          try { var dv = sel.closest ('.device'); if (dv) dv.classList.add ('harm-table'); } catch (e2) {}
           try { var oL = (sel.getAttribute ('data-oscl') || 'a');
                 if (window.wtWaterfall) { window.wtWaterfall.syncClass (oL);
-                  if (i === 6 && window.wtWaterfall.on[oL]) { window.wtWaterfall.fetch (oL); window.wtWaterfall.kick(); } } } catch (e3) {} }
+                  if (window.wtWaterfall.on[oL]) { window.wtWaterfall.fetch (oL); window.wtWaterfall.kick(); } } } catch (e3) {} }
         sel.addEventListener ('change', function () { var i = parseInt (sel.value, 10) || 0; try { st.setNormalisedValue (i / 6); } catch (e) {} paint (); });
         try { st.valueChangedEvent.addListener (paint); } catch (e) {}
         paint ();
@@ -36587,6 +36562,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     syncClass:function(o){ try{ var d=wtWaterfall.dev(o); if(d) d.classList.toggle('wt3d', !!wtWaterfall.on[o]); }catch(e){} },
     wtpos:function(o){
       if(wtWaterfall.isHarmTable(o)){
+        /* fb599 — THE SAME OVERPASS-ONE LAW THE WAVETABLE PATH ALREADY OBEYS (fb457, just below):
+           the position the BANK IS READING, not the knob. __harmHueEff is the per-block MODULATED
+           Hue the audio itself uses (PluginProcessor.cpp:9481 -> harmDisplayParams_), pushed at
+           60 Hz beside __wtFrameEff. -1 = not on Table / nothing to say -> fall back to the
+           parameter, so an idle panel and a hand-turned knob behave exactly as before. */
+        try{ var he=window.__harmHueEff, hi={a:0,b:1,c:2,d:3}[String(o).toLowerCase()];
+             if(he&&hi!=null&&he[hi]>=0) return Math.max(0,Math.min(1,he[hi])); }catch(e){}
         try{ var hs=window.Juce.getSliderState('SYN_OSC_'+o.toUpperCase()+'_HARM_HUE'); return hs?Math.max(0,Math.min(1,hs.getNormalisedValue())):0; }catch(e){ return 0; } }
       try{ var e=window.__wtFrameEff, i={a:0,b:1,c:2,d:3}[String(o).toLowerCase()];
            if(e&&i!=null&&e[i]>=0) return Math.max(0,Math.min(1,e[i])); }catch(e){}
