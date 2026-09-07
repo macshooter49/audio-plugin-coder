@@ -537,7 +537,7 @@ public:
         for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) ++alive;
         int childRoom = 16;
         if (budgetUsed_ != nullptr && budgetCap_ > 0)
-            childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - alive));
+            childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - std::max (active, alive)));   // fb597 — at SHAPE=0 alive ≤ active (SIEVE / bitrate / silent slots zero partials), and 922aec6 subtracted ACTIVE: subtracting `alive` gave DRIVE children MORE room under budget pressure = different audio with the knob at 0 (measured 16 → 20 partials). max() is bit-identical at 0; spawn can only push alive ABOVE active.
         nP = applyDriveChildren (nP, childRoom);
 
         regionGain_ = fadeGain (pos01_);             // sampler-parity FADE IN/OUT (positional gain)
@@ -1110,6 +1110,8 @@ private:
             }
 
 #ifndef GEODE_NO_SPAWN
+            if (quota > 0)   // fb597 — a saturated shared budget (quota 0) must not spawn-then-thin-to-nothing
+            {
             // ── rs-shapefix (1): SPAWN the target's MISSING harmonics — "the sample BECOMES the wave".
             // winner[n] == -1 is the "no source partial rounds to n" map. Each such harmonic is born
             // at ratio n EXACTLY with amp = ref·W(n)·shape (the blend above with a zero source term),
@@ -1163,8 +1165,8 @@ private:
                 if (shE > 1e-12f && srcE > 0.f)
                 {
                     float g = std::sqrt (srcE / shE);                         // equal RMS: measured 0.1 dB spread across targets on every source
-                    if (p_.shapeTarget == 10) g *= 0.7f;                      // fb596 — METAL's zero-phase crest is 4.7 vs a saw's 2.0: at equal RMS its PEAK sat +7.5 dB over the source's (1.50 abs). ×0.7 AFTER the match holds it near 1.05 (Vowel 1.08) for 3 dB of Metal and nothing else. (A recipe scale would be cancelled by the match above.)
-                    g = 1.f + (g - 1.f) * shape;
+                    if (p_.shapeTarget == 10) g *= 1.f - 0.3f * shape;        // fb596/597 — METAL's zero-phase crest is 4.7 vs a saw's 2.0: at equal RMS its PEAK sat +7.5 dB over the source's (1.50 abs). ×0.7 at full knob holds it near 1.05 (Vowel 1.08) for 3 dB of Metal and nothing else — and the trim FADES IN with the knob so Metal does not step −3 dB the instant SHAPE leaves 0. (A recipe scale would be cancelled by the match.)
+                    // fb597 — NO second `shape` blend on g: shE is already the CURRENT-knob bank energy, so sqrt(srcE/shE) is the exact equal-RMS gain at every knob position (the blend left a mid-knob RMS bulge: Half −1.3 / Metal +2.0 dB at 0.5). The enclosing `if (shape > 1e-3f)` keeps SHAPE=0 bit-identical.
                     for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) wr_.amp[(size_t) j] *= g;
                 }
             }
@@ -1181,6 +1183,7 @@ private:
                 if (alive > quota) keepLoudest (nP, quota);
             }
 #endif
+            }   // if (quota > 0)
         }
 
         // ── FORMANT — pitch-preserving envelope shift (true-envelope method) ──

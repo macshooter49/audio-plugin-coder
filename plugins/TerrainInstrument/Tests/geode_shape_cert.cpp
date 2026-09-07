@@ -308,6 +308,8 @@ int main()
     //    G5 no click      SHAPE stepped 0→1 and 1→0 mid-note: no first-difference spike beyond 1.5× steady
     //    G6 continuity    a MOVING read-head over a churning store: no live slot changes frequency (home slots)   (-DGEODE_SPAWN_APPEND_ONLY → 43 jumps)
     //    G7 identity      SHAPE=0 is bit-identical to the SHIPPED engine: three fingerprints from the pre-fb596 header   (-DGEODE_MUT_SHAPE0)
+    //    G7b pressure     seven more fingerprints under budget/Bloom/Sieve/Quality/Cut — fb596 itself is RED here (16 → 20 partials)
+    //    G4b mid-knob     RMS at SHAPE=0.5 within ±1 dB — fb596 itself is RED here (a second `shape` blend on the gain)
     //  KEPT = the nine that survive the audit — Hollow (5) and Bright (9) are TILT positions, hidden in the menu.
     // ═══════════════════════════════════════════════════════════════════════════════════════════
     {
@@ -384,6 +386,23 @@ int main()
             }
             std::snprintf (ln, sizeof ln, "worst non-Metal %s (limit ±1) · Metal %+.2f..%+.2f dB (its documented −3.1 dB peak trim, window −4.1..−2.1)", ww.c_str(), metalMin, metalMax);
             bar (worst <= 1.0 && metalMin >= -4.1 && metalMax <= -2.1, "[G4] SHAPE CHANGES TIMBRE, NOT LOUDNESS — RMS at SHAPE=1 within ±1 dB of SHAPE=0, every kept target, every source", ln);
+            // fb597 — and at MID-knob: the shipped fb596 blended the equal-RMS gain by `shape` a second time, leaving a
+            // bulge at 0.5 (Half −1.3 / Metal +2.0 dB). Metal's trim fades in with the knob: expected 20·log10(1 − 0.3·s).
+            double worstMid = 0; std::string wm;
+            for (int s = 0; s < 3; ++s)
+            {
+                GeodeParams p0; p0.scan = 0.f; p0.quality = 0.8f; p0.shape = 0.f;
+                const double r0 = rmsOf (renderSteady (p0, *SRC[s], playHz, sr));
+                for (int k = 0; k < 9; ++k)
+                {
+                    GeodeParams p = p0; p.shape = 0.5f; p.shapeTarget = KEPT[k];
+                    const double db = 20.0 * std::log10 (rmsOf (renderSteady (p, *SRC[s], playHz, sr)) / r0);
+                    const double want = (KEPT[k] == 10) ? 20.0 * std::log10 (1.0 - 0.3 * std::pow (0.5, 0.72)) : 0.0;   // the 0.72 taper is applied before the trim
+                    const double err = std::fabs (db - want);
+                    if (err > worstMid) { worstMid = err; std::snprintf (ln, sizeof ln, "%s/%s %+.2f dB (want %+.2f)", SN[s], SHN[KEPT[k]], db, want); wm = ln; }
+                }
+            }
+            bar (worstMid <= 1.0, "[G4b] …AND AT MID-KNOB — RMS at SHAPE=0.5 within ±1 dB of SHAPE=0 (Metal on its fade-in trim curve)", "worst " + wm);
         }
 
         // ── G5 no click  +  G6 continuity ──
@@ -450,6 +469,37 @@ int main()
                 same = same && (h == SHIPPED[s]);
             }
             bar (same, "[G7] SHAPE=0 IS BIT-IDENTICAL TO THE SHIPPED ENGINE — three fingerprints", det);
+
+            // fb597 — G7b: the SEVEN PRESSURE scenarios the reviewers used to catch fb596 (silent slots · BLOOM drive
+            // children · a saturated shared budget · SIEVE · low QUALITY · CUT). fb596 subtracted `alive` instead of
+            // `active` from the children's room and gave Bloom MORE partials at SHAPE=0 under a cap (16 → 20).
+            auto mk = [&] (int Hn, int silentFrom, float expo) { std::vector<float> R, Aa;
+                for (int n = 1; n <= Hn; ++n) { R.push_back ((float) n); Aa.push_back (n >= silentFrom ? 0.f : 1.f / std::pow ((float) n, expo)); }
+                return makeFrom (R, Aa, (float) playHz); };
+            auto stSil = mk (12, 9, 1.f), st12 = mk (12, 99, 1.f), stDull = mk (12, 99, 2.f);
+            struct Case { const char* nm; GeodeFrameStore* st; int cap; float drive; int driveMode; float sieve; int sieveMode; float quality; float cut; int cutMode; std::uint64_t ship; };
+            const Case CASES[7] = {
+                { "silent-slots BLOOM cap20",   &stSil,  20, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0, 0x2f206b841445a5b6ull },
+                { "silent-slots BLOOM nocap",   &stSil,   0, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0, 0xba98231cafb482afull },
+                { "SIEVE floor.5 BLOOM cap20",  &st12,   20, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0, 0xa6d69d968896bfb3ull },
+                { "SIEVE floor.5 BLOOM nocap",  &st12,    0, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0, 0xa6d69d968896bfb3ull },
+                { "dull q.4 BLOOM cap20",       &stDull, 20, 0.9f, 1, 0.f,  0, 0.4f, 0.5f, 0, 0x0b9943379a4e2bd4ull },
+                { "CUT LP.4 BLOOM cap20",       &st12,   20, 0.9f, 1, 0.f,  0, 1.f,  0.4f, 0, 0x097a3402007ffd57ull },
+                { "plain cap20",                &st12,   20, 0.f,  0, 0.f,  0, 1.f,  0.5f, 0, 0x2e17ef90258802f2ull } };
+            bool same7 = true; std::string det7;
+            for (const Case& cs : CASES)
+            {
+                GeodeEngine e; e.prepare (sr); e.setFrameStore (cs.st); int live = 0; if (cs.cap > 0) e.setPartialBudget (&live, cs.cap);
+                GeodeParams p; p.scan = 0.f; p.shape = 0.f; p.quality = cs.quality; p.drive = cs.drive; p.driveMode = cs.driveMode;
+                p.sieve = cs.sieve; p.sieveMode = cs.sieveMode; p.cut = cs.cut; p.cutMode = cs.cutMode;
+                e.setParams (p); e.noteOn (playHz, 999);
+                const int Nn = 8192; std::vector<float> L ((size_t) Nn, 0.f), R ((size_t) Nn, 0.f);
+                for (int off = 0; off < Nn; off += 256) { live = 0; e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], 256); e.postProcess (&L[(size_t) off], &R[(size_t) off], 256); }
+                const std::uint64_t h = fnv (L, 0, (size_t) Nn);
+                std::snprintf (ln, sizeof ln, "%s %016llx/%d%s · ", cs.nm, (unsigned long long) h, e.preparedActive(), h == cs.ship ? "" : "≠SHIPPED"); det7 += ln;
+                same7 = same7 && (h == cs.ship);
+            }
+            bar (same7, "[G7b] …AND UNDER PRESSURE — silent slots, Bloom children, a saturated budget, Sieve, low Quality, Cut: seven more fingerprints", det7);
         }
 
         std::printf ("\n  %s %d passed, %d failed\n", fail ? "❌" : "✅", pass, fail);
