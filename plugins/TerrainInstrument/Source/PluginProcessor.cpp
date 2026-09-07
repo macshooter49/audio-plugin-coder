@@ -9419,12 +9419,12 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             const char* const* id = GEODE_IDS[o];
             tw::GeodeParams g;
             g.start   = *rawParam (id[0]);  g.stretch = *rawParam (id[1]);  g.scan    = *rawParam (id[2]);
-            g.crush   = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  g.cut     = *rawParam (id[5]);
+            g.crush   = *rawParam (id[3]);  g.formant = *rawParam (id[4]);  /* id[5] GEODE_CUT retired (fb598) — Low/High below */
             g.sieve   = *rawParam (id[6]);  g.shape   = *rawParam (id[7]);  g.drive   = *rawParam (id[8]);
             g.smear   = *rawParam (id[9]);  g.tilt    = *rawParam (id[10]); g.quality = *rawParam (id[11]);   // id[9] = FRACTURE repurposed as MELT
             g.formantKeep = *rawParam (id[12]) > 0.5f;
             /* id[13] GEODE_LOOP retired (kept for preset compat) · id[14] BEDROCK reserved */
-            g.shapeTarget = (int) *rawParam (id[15]);   g.cutMode   = (int) *rawParam (id[16]);
+            g.shapeTarget = (int) *rawParam (id[15]);   /* id[16] GEODE_CUT_MODE retired (fb598) */
             g.driveMode   = (int) *rawParam (id[17]);   g.sieveMode = (int) *rawParam (id[18]);
             // SAMPLER-PARITY region/loop/fades — SHARED with the Sample engine's params (idle while
             // this osc runs Resynth): one region UI, one preset story (rs7).
@@ -9441,7 +9441,11 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
             g.start   = ownM (g.start, (int) wc::ModDest::GeoStartA + o, 0.0f, 1.0f);
             g.smear   = ownM (g.smear, (int) wc::ModDest::GeoMeltA + o, 0.0f, 1.0f);
             g.scan    = ownM (g.scan, (int) wc::ModDest::GeoScanA + o, 0.0f, 1.0f);
-            g.cut     = ownM (g.cut, (int) wc::ModDest::GeoCutA + o, 0.0f, 1.0f);
+            /* fb598 — the Resynth cut is the BACK ROW's Low/High now, two coexisting stages (HP by Low, LP by High) on the Cut's own
+               DSP. Their MODULATED edges are already published per block as specLoEff_/specHiEff_ (mod dests 1846..1853) a few
+               hundred lines above; read them here so Resynth hears the mod matrix on them exactly as the wavetable engine does. */
+            { const float eLo = specLoEff_[o].load (std::memory_order_relaxed), eHi = specHiEff_[o].load (std::memory_order_relaxed);
+              g.lo = eLo >= 0.0f ? eLo : 0.0f;  g.hi = eHi >= 0.0f ? eHi : 1.0f; }
             g.shape   = ownM (g.shape, (int) wc::ModDest::GeoShapeA + o, 0.0f, 1.0f);
             g.stretch = ownM (g.stretch, (int) wc::ModDest::GeoStretchA + o, 0.0f, 1.0f);
             g.drive   = ownM (g.drive, (int) wc::ModDest::GeoDriveA + o, 0.0f, 1.0f);

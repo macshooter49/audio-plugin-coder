@@ -470,6 +470,10 @@ int main()
             }
             bar (same, "[G7] SHAPE=0 IS BIT-IDENTICAL TO THE SHIPPED ENGINE — three fingerprints", det);
 
+            // fb598 — the six BLOOM rows were RE-BAKED from the fb598 engine: Bloom now spawns children where it spawned NONE
+            // (its add() was rejected on any bank that reached slot 96 — see Tests/geode_drive_cert.cpp D3), so those renders
+            // legitimately changed at SHAPE=0. They are fb598 regression fingerprints now; 'plain cap20' (drive 0) is still
+            // the 922aec6 identity, and G7's three fingerprints above still are.
             // fb597 — G7b: the SEVEN PRESSURE scenarios the reviewers used to catch fb596 (silent slots · BLOOM drive
             // children · a saturated shared budget · SIEVE · low QUALITY · CUT). fb596 subtracted `alive` instead of
             // `active` from the children's room and gave Bloom MORE partials at SHAPE=0 under a cap (16 → 20).
@@ -477,21 +481,21 @@ int main()
                 for (int n = 1; n <= Hn; ++n) { R.push_back ((float) n); Aa.push_back (n >= silentFrom ? 0.f : 1.f / std::pow ((float) n, expo)); }
                 return makeFrom (R, Aa, (float) playHz); };
             auto stSil = mk (12, 9, 1.f), st12 = mk (12, 99, 1.f), stDull = mk (12, 99, 2.f);
-            struct Case { const char* nm; GeodeFrameStore* st; int cap; float drive; int driveMode; float sieve; int sieveMode; float quality; float cut; int cutMode; std::uint64_t ship; };
+            struct Case { const char* nm; GeodeFrameStore* st; int cap; float drive; int driveMode; float sieve; int sieveMode; float quality; float hi; std::uint64_t ship; };   // rs2-cut: `hi` (the back-row High = LP) replaces cut/cutMode — the shipped rows ran Cut LP at 0.5 (NOT neutral), so hi=0.5 here; every fingerprint is UNCHANGED (same DSP)
             const Case CASES[7] = {
-                { "silent-slots BLOOM cap20",   &stSil,  20, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0, 0x2f206b841445a5b6ull },
-                { "silent-slots BLOOM nocap",   &stSil,   0, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0, 0xba98231cafb482afull },
-                { "SIEVE floor.5 BLOOM cap20",  &st12,   20, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0, 0xa6d69d968896bfb3ull },
-                { "SIEVE floor.5 BLOOM nocap",  &st12,    0, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0, 0xa6d69d968896bfb3ull },
-                { "dull q.4 BLOOM cap20",       &stDull, 20, 0.9f, 1, 0.f,  0, 0.4f, 0.5f, 0, 0x0b9943379a4e2bd4ull },
-                { "CUT LP.4 BLOOM cap20",       &st12,   20, 0.9f, 1, 0.f,  0, 1.f,  0.4f, 0, 0x097a3402007ffd57ull },
-                { "plain cap20",                &st12,   20, 0.f,  0, 0.f,  0, 1.f,  0.5f, 0, 0x2e17ef90258802f2ull } };
+                { "silent-slots BLOOM cap20",   &stSil,  20, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0x7fc4d84714b4f201ull },
+                { "silent-slots BLOOM nocap",   &stSil,   0, 0.9f, 1, 0.f,  0, 1.f,  0.5f, 0xcd293b4798923311ull },
+                { "SIEVE floor.5 BLOOM cap20",  &st12,   20, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0x11840ada2da75db2ull },
+                { "SIEVE floor.5 BLOOM nocap",  &st12,    0, 0.9f, 1, 0.5f, 0, 1.f,  0.5f, 0x11840ada2da75db2ull },
+                { "dull q.4 BLOOM cap20",       &stDull, 20, 0.9f, 1, 0.f,  0, 0.4f, 0.5f, 0x0fa3e300de6eef19ull },
+                { "HIGH(LP).4 BLOOM cap20",     &st12,   20, 0.9f, 1, 0.f,  0, 1.f,  0.4f, 0x3b5f919a10e7bfd7ull },
+                { "plain cap20",                &st12,   20, 0.f,  0, 0.f,  0, 1.f,  0.5f, 0x2e17ef90258802f2ull } };
             bool same7 = true; std::string det7;
             for (const Case& cs : CASES)
             {
                 GeodeEngine e; e.prepare (sr); e.setFrameStore (cs.st); int live = 0; if (cs.cap > 0) e.setPartialBudget (&live, cs.cap);
                 GeodeParams p; p.scan = 0.f; p.shape = 0.f; p.quality = cs.quality; p.drive = cs.drive; p.driveMode = cs.driveMode;
-                p.sieve = cs.sieve; p.sieveMode = cs.sieveMode; p.cut = cs.cut; p.cutMode = cs.cutMode;
+                p.sieve = cs.sieve; p.sieveMode = cs.sieveMode; p.hi = cs.hi;
                 e.setParams (p); e.noteOn (playHz, 999);
                 const int Nn = 8192; std::vector<float> L ((size_t) Nn, 0.f), R ((size_t) Nn, 0.f);
                 for (int off = 0; off < Nn; off += 256) { live = 0; e.setParams (p); e.renderBlockAdd (&L[(size_t) off], &R[(size_t) off], 256); e.postProcess (&L[(size_t) off], &R[(size_t) off], 256); }

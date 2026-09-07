@@ -22,8 +22,9 @@
 //
 //  THE BARS
 //   0  THE BACK ROW ACTUALLY LAID OUT — nothing below is asserted on an invisible row
-//   1  THE TWO LIVE ENGINES KEEP ALL SEVEN — Wavetable and FM are untouched
-//   2  THE FIVE DEAD ENGINES SHOW FIVE — Lo/Hi gone on Sample/Granular/Resynth/Harmonic/Modal
+//   1  THE THREE LIVE ENGINES KEEP ALL SEVEN — Wavetable and FM untouched; RESYNTH joined them (rs2-cut:
+//      GeodeEngine.h reads Lo/Hi as its two coexisting cuts — see Tests/geode_cut_cert.cpp)
+//   2  THE FOUR DEAD ENGINES SHOW FIVE — Lo/Hi gone on Sample/Granular/Harmonic/Modal
 //   3  NO HOLE — even column spacing and a row midpoint on the container midpoint, every engine
 //   4  THE PARAMS SURVIVE — the knobs are HIDDEN, never removed from the DOM (deleting them would
 //      renumber mod destinations 1846..1853 and break every saved patch)
@@ -115,15 +116,16 @@ const gate = (ok, name, detail) => { ok ? ++pass : ++fail;
   if (! laidOut) { console.log ('\n  ❌ degenerate row — refusing to assert on it\n');
                    await b.close(); process.exit (1); }
 
-  const live = r.rows.filter (x => x.name === 'Wavetable' || x.name === 'FM');
-  const dead = r.rows.filter (x => x.name !== 'Wavetable' && x.name !== 'FM');
+  const LIVE = ['Wavetable', 'FM', 'Resynth'];   // rs2-cut — Resynth reads Lo/Hi now (GeodeEngine.h LOW/HIGH)
+  const live = r.rows.filter (x => LIVE.includes (x.name));
+  const dead = r.rows.filter (x => ! LIVE.includes (x.name));
 
   gate (live.every (x => x.shown === 7),
-        '[1] THE TWO LIVE ENGINES KEEP ALL SEVEN — Lo/Hi is real on WT and FM',
+        '[1] THE THREE LIVE ENGINES KEEP ALL SEVEN — Lo/Hi is real on WT, FM and Resynth (rs2-cut)',
         live.map (x => `${x.name} ${x.shown}`).join ('  ·  '));
 
   gate (dead.every (x => x.shown === 5 && ! x.syns.some (s => /SPECTRAL/.test (s))),
-        '[2] THE FIVE DEAD ENGINES SHOW FIVE — no inert Lo/Hi anywhere',
+        '[2] THE FOUR DEAD ENGINES SHOW FIVE — no inert Lo/Hi anywhere',
         dead.map (x => `${x.name} ${x.shown}`).join ('  ·  '));
 
   const HOLE = 1.5;   // px — even columns land well inside this; one dead column is ~40px out

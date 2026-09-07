@@ -143,7 +143,8 @@ int main()
           check ("unison-adopt", estFund (&LA[(size_t) (Nn / 2)], Nn / 2, sr)); }
     }
     { GeodeParams p = base; p.crush = 0.8f; check ("crush=0.8", renderFund (p, st, playHz, sr)); }
-    { GeodeParams p = base; p.cut = 0.4f; p.cutMode = 0; check ("cut=LP.4", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.hi = 0.4f; check ("high=LP.4", renderFund (p, st, playHz, sr)); }
+    { GeodeParams p = base; p.lo = 0.6f; check ("low=HP.6", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.sieve = 0.5f; check ("sieve=0.5", renderFund (p, st, playHz, sr)); }
     { GeodeParams p = base; p.tilt = 0.9f; check ("tilt=0.9", renderFund (p, st, playHz, sr)); }
 
@@ -210,7 +211,7 @@ int main()
         std::vector<GeodeEngine> engs ((size_t) banks);
         int live = 0;
         GeodeParams wp; wp.quality = 1.0f; wp.stretch = 0.98f; wp.scan = 0.5f;      // STRETCH pad
-        wp.formant = 1.0f; wp.tilt = 0.9f; wp.shape = 1.0f; wp.cut = 0.4f; wp.drive = 0.7f; // all sculpt ON
+        wp.formant = 1.0f; wp.tilt = 0.9f; wp.shape = 1.0f; wp.hi = 0.4f; wp.lo = 0.3f; wp.drive = 0.7f; // all sculpt ON
         wp.smear = 0.8f; wp.driveMode = 1; wp.sieve = 0.3f; wp.sieveMode = 2;       // rs6 kitchen sink: MELT + BLOOM children + CLOAK O(n²)
         for (int i = 0; i < banks; ++i)
         { auto& e = engs[(size_t) i]; e.prepare (sr); e.setFrameStore (&st);

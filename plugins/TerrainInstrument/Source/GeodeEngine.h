@@ -14,9 +14,9 @@
 //    STRETCH  time-stretch / freeze (slows the read-head)      [read-head]
 //    START    read-head start position                         [read-head]
 //    SIEVE    spectral gate (the lossy "data-removal" hero)    [amp]
-//    CUT      spectral filter, LP or HP (~24 dB/oct)           [amp]
+//    LOW/HIGH TWO coexisting spectral cuts: Low = HP, High = LP (~24 dB/oct each) [amp]  (rs2-cut: the back-row SPECTRAL_LO/HI knobs)
 //    SHAPE    morph→sine/square/saw: tune overtones to harmonics [amp+tune] (Chebyshev W(n))
-//    FORMANT  true-envelope shift — moves envelope, not pitch  [amp]  (Röbel; kernel-smoothed)
+//    FORMANT  true-envelope shift — moves envelope, not pitch  [amp]  (Röbel; peak interpolant, thins AFTER the shift)
 //    TILT     spectral tilt bright/dark                        [amp]
 //    QUALITY  active partial budget (16..96)                   [amp]
 //    DRIVE    spectral distortion (soft-clip, adds harmonics)  [post-synth, period-preserving]
@@ -90,7 +90,10 @@ struct GeodeParams
     float stretch = 0.f;    // 0..1 time-stretch / freeze amount       (APVTS: GEODE_FOSSIL)
     float scan    = 0.5f;   // 0..1 play/scan rate: 0=hold .5=natural 1=2× (APVTS: GEODE_CREEP)
     float sieve   = 0.f;    // 0..1 spectral gate (lossy hero)         (APVTS: GEODE_SIEVE)
-    float cut     = 1.f;    // 0..1 spectral filter (1 = open)         (APVTS: GEODE_CUT)
+    // rs2-cut — the single CUT knob (GEODE_CUT + GEODE_CUT_MODE, LP-or-HP) is RETIRED: those two params stay
+    // registered (state / mod-dest numbering) but nothing reads them. The BACK ROW's Low/High are the cuts now.
+    float lo      = 0.f;    // 0..1 HIGH-PASS corner, 0 = off (exact identity) (APVTS: SYN_OSC_x_SPECTRAL_LO)
+    float hi      = 1.f;    // 0..1 LOW-PASS corner,  1 = off (exact identity) (APVTS: SYN_OSC_x_SPECTRAL_HI)
     float shape   = 0.f;    // 0..1 morph toward target waveform       (APVTS: GEODE_DISTILL)
     float drive   = 0.f;    // 0..1 spectral distortion (post-synth)   (APVTS: GEODE_HAZE)
     // ── page 2 (Sculpt & Fidelity) ──
@@ -101,7 +104,6 @@ struct GeodeParams
     float smear   = 0.f;    // 0..1 MELT — temporal amp smear across frames (APVTS: GEODE_FRACTURE, repurposed)
     // ── choices / toggles ──
     int   shapeTarget = 2;  // 0..10 sine…metal (see shapeWeight)       (APVTS: GEODE_SHAPE_TARGET)
-    int   cutMode     = 0;  // 0=LP 1=HP                                (APVTS: GEODE_CUT_MODE)
     int   driveMode   = 0;  // 0 Saturate 1 Bloom 2 Glint 3 Moire 4 Foldback 5 Ember (APVTS: GEODE_DRIVE_MODE)
     int   sieveMode   = 0;  // 0 Floor 1 Sparse 2 Cloak 3 Flicker 4 Rake 5 Parity   (APVTS: GEODE_SIEVE_MODE)
     // ── SAMPLER-PARITY region/loop/fades (rs7) — SHARED with the Sample engine's params (they are
@@ -121,9 +123,9 @@ struct GeodeParams
     bool operator== (const GeodeParams& o) const noexcept
     {
         return start==o.start && stretch==o.stretch && scan==o.scan && sieve==o.sieve
-            && cut==o.cut && shape==o.shape && drive==o.drive && quality==o.quality
+            && lo==o.lo && hi==o.hi && shape==o.shape && drive==o.drive && quality==o.quality
             && formant==o.formant && tilt==o.tilt && crush==o.crush && smear==o.smear
-            && shapeTarget==o.shapeTarget && cutMode==o.cutMode
+            && shapeTarget==o.shapeTarget
             && driveMode==o.driveMode && sieveMode==o.sieveMode
             && regionStart==o.regionStart && regionEnd==o.regionEnd
             && loopStart==o.loopStart && loopEnd==o.loopEnd
@@ -423,10 +425,12 @@ public:
         phase_.assign (geode::kMaxPartials, 0.f);
         ampZ_.assign  (geode::kMaxPartials, 0.f);   // declick: per-partial previous-block gain
         scatMul_.fill (1.f);
+        childKey_.fill (-1);   // fb598
         wr_.ratio.fill (0.f); wr_.amp.fill (0.f);
         pos01_ = 0.f; prevPos_ = -1.f; driveSm_ = 0.f;   // fb204
         makeup_ = 1.0f;
         crushHoldL_ = crushHoldR_ = 0.f; crushCnt_ = 0;
+        emberLpL_ = emberLpR_ = 0.f;   // fb598
     }
 
     // Shared partial budget (processor-owned int, audio-thread only — no atomics).
@@ -510,9 +514,9 @@ public:
 
         applySmear (clamp01 (pos01_), nf);   // MELT — temporal amp smear: frames bleed together (pad-ify)
 
-        // ── CPU GOVERNOR: decide the active-partial count BEFORE sculpting (rs2). The sculpt pass
-        // is where FORMANT's O(n²) envelope lives — thinning first means it (and every per-partial
-        // op) only touches partials we will actually render. QUALITY sets the ceiling (its floor is
+        // ── CPU GOVERNOR: decide the active-partial count BEFORE sculpting (rs2). Thinning first means every
+        // per-partial sculpt op only touches partials we will actually render (rs2-formant: FORMANT, now
+        // O(n log n), thins AFTER its shift — see below). QUALITY sets the ceiling (its floor is
         // the lo-fi zone — see applyBitrate); CONSTANT-COST UNISON divides it; the shared processor
         // budget is the final hard ceiling (thins gracefully).
         // rs-shapefix: `quota` = the partial count this voice is ALLOWED (QUALITY → unison → shared
@@ -526,9 +530,18 @@ public:
             if (room < quota) quota = std::max (0, room);
         }
         const int active = std::min (quota, nP);
-        if (active < nP) keepLoudest (nP, active);   // zero all but the loudest `active` (slots preserved)
+        // rs2-formant: with FORMANT active the thin moves AFTER the envelope shift (inside applySculpt, as
+        // SHAPE's post-thin): the shifted humps need LIVE carriers, and thinning on pre-shift loudness killed
+        // exactly the partials the shift was about to lift (measured: quality 0.3 on a 3-hump vowel, the hump
+        // due at harmonic 32 had no partial to land on). FORMANT=0.5 keeps the shipped pre-thin bit-identical.
+#ifdef GEODE_FORMANT_PRETHIN
+        const bool formantOn = false;   // cert seam: the SHIPPED thin-before-shift order → F8 must go red
+#else
+        const bool formantOn = std::fabs (p_.formant - 0.5f) > 5e-4f && p_.formantKeep && nP > 1;
+#endif
+        if (active < nP && ! formantOn) keepLoudest (nP, active);   // zero all but the loudest `active` (slots preserved)
 
-        nP = applySculpt (nP, quota);   // SHAPE/FORMANT/TILT/CUT/SIEVE — SHAPE may SPAWN (≤ quota), returns the new count
+        nP = applySculpt (nP, quota);   // SHAPE/FORMANT/TILT/LOW/HIGH/SIEVE — SHAPE may SPAWN (≤ quota), returns the new count
 
         applyBitrate (nP);  // QUALITY low = spectral bit-crush: quantize amps to few levels (lossy encode)
 
@@ -679,8 +692,19 @@ public:
                         const float b  = driveSm_ * 0.4f;
                         const float mk = 1.f / (1.f + driveSm_ * 0.8f);
                         const float dc = softClip (b);
+#ifdef GEODE_EMBER_WARMTH   /* fb598: OPT-IN. Max: "Saturate sounds great, Foldback sounds great, and the one under Foldback" — Ember stays EXACTLY as shipped. It measures 1.8-2.4 dB from Saturate on real samples (same softClip, two gains); the warmth one-pole that would separate them is here under a seam for the day he wants it. */
+                        // fb598 — the WARMTH that makes Ember its own mode: a one-pole low-pass AFTER the shaper
+                        // whose corner falls 12 kHz → 2.5 kHz with the knob. It darkens the distortion PRODUCTS
+                        // (which the spectral CUT, applied before synthesis, never touches). Without it Ember
+                        // measured 1.8-2.4 dB from Saturate on analysed samples = the same shaper at a lower gain.
+                        const float k = (12000.f - driveSm_ * 9500.f) * (float) (2.0 * geode::kPi / rate_);
+                        emberLpL_ += ((softClip (L[i] * g + b) - dc) * mk - emberLpL_) * (k > 1.f ? 1.f : k);
+                        emberLpR_ += ((softClip (R[i] * g + b) - dc) * mk - emberLpR_) * (k > 1.f ? 1.f : k);
+                        L[i] = emberLpL_; R[i] = emberLpR_;
+#else
                         L[i] = (softClip (L[i] * g + b) - dc) * mk;
                         R[i] = (softClip (R[i] * g + b) - dc) * mk;
+#endif
                     }
                     break;
                 }
@@ -948,55 +972,118 @@ private:
     {
         const float drive = clamp01 (p_.drive);
         const int   mode  = p_.driveMode;
-        if (drive <= 1e-3f || mode < 1 || mode > 3 || room <= 0 || nP < 1) return nP;
+        if (drive <= 1e-3f || mode < 1 || mode > 3 || room <= 0 || nP < 1)
+        {
+            for (int j = 0; j < geode::kMaxPartials; ++j) childKey_[(size_t) j] = -1;   // no children this block → nothing is owned
+            return nP;
+        }
         float ref = 1e-9f;
         for (int j = 0; j < nP; ++j) ref = std::max (ref, wr_.amp[(size_t) j]);
-        int total = nP;
-        auto add = [&] (float r, float a) noexcept
+        // fb598 — CHILDREN TAKE FREE SLOTS, NOT "THE SLOTS AFTER nP". The tracker leaves a real sample's
+        // bank 96 slots deep (kMaxPartials is also the analysis depth), and the SHAPE spawn's home slots run
+        // to 95 too — so `total = nP` started AT the cap and add() rejected every child: Bloom/Glint/Moire
+        // were silent on every dense sample and on every SHAPE > 0 (measured 0 children, dF 0.0 dB).
+        // A free slot = one the source/spawn is not sounding this block (amp 0, or above nP) whose voice is
+        // SILENT (ampZ_ ≈ 0 → the child ramps in from nothing, no frequency hop) — or a slot this same
+        // child (parent slot × kind) owned last block, so a sustained child keeps its phase and slot.
+        int total = nP, hi = nP;                                                    // total: the cert's append seam only
+        const int keyBase = mode * geode::kMaxPartials * 4;                         // a mode switch never inherits the other mode's slot
+        bool owned[geode::kMaxPartials];
+        for (int j = 0; j < geode::kMaxPartials; ++j) owned[j] = false;
+        for (int j = nP; j < geode::kMaxPartials; ++j) wr_.amp[(size_t) j] = 0.f;   // last block's children above the source
+        auto isFree = [&] (int j) noexcept
         {
-            if (total >= geode::kMaxPartials || room <= 0 || r < 0.75f || a <= 1e-6f) return;
-            wr_.ratio[(size_t) total] = r; wr_.amp[(size_t) total] = a; ++total; --room;
+            if (owned[j]) return false;
+            if (j < nP && wr_.amp[(size_t) j] > 0.f) return false;               // the source / spawn sounds here
+            return true;
         };
-        if (mode == 1)          // BLOOM — Chebyshev harmonic growth on the loudest parents
+        auto add = [&] (int key, float r, float a) noexcept
         {
+            if (room <= 0 || r < 0.75f || a <= 1e-6f) return;
+            int s = -1;
+#ifdef GEODE_DRIVE_MUT_APPEND
+            if (total < geode::kMaxPartials) s = total; else return;                // cert seam: the shipped "slot after nP" placement → starved on a full bank
+            wr_.ratio[(size_t) s] = r; wr_.amp[(size_t) s] = a; owned[s] = true; childKey_[(size_t) s] = key; ++total; --room; if (s + 1 > hi) hi = s + 1; return;
+#endif
+            for (int j = 0; j < geode::kMaxPartials; ++j)                          // (1) my own slot from last block
+#ifndef GEODE_DRIVE_MUT_NOKEY
+                if (childKey_[(size_t) j] == key && isFree (j)) { s = j; break; }
+#else
+                (void) key;   // cert seam: no sticky slot → a child re-lands wherever the top-down scan says (hops)
+#endif
+            if (s < 0)
+                for (int j = geode::kMaxPartials - 1; j >= 0; --j)                 // (2) a SILENT free slot, top down
+                    if (isFree (j) && ampZ_[(size_t) j] <= 1e-7f && childKey_[(size_t) j] < 0) { s = j; break; }
+            if (s < 0)
+                for (int j = geode::kMaxPartials - 1; j >= 0; --j)                 // (3) any free slot (a dying voice — rare)
+                    if (isFree (j)) { s = j; break; }
+            if (s < 0) return;
+            wr_.ratio[(size_t) s] = r; wr_.amp[(size_t) s] = a; owned[s] = true; childKey_[(size_t) s] = key; ++total; --room;
+            if (s + 1 > hi) hi = s + 1;
+        };
+        // the loudest-N parents — a threshold from an nth_element over the audible amps (slot order is
+        // NOT loudness order: the shipped "first 8 over 0.06·ref" took whatever sat low in the bank)
+        auto loudestThr = [&] (int keep, float minR) noexcept
+        {
+            float tmp[geode::kMaxPartials]; int n = 0;
+            for (int j = 0; j < nP; ++j)
+                if (wr_.amp[(size_t) j] > 1e-6f && wr_.ratio[(size_t) j] >= minR) tmp[n++] = wr_.amp[(size_t) j];
+            if (n <= keep) return 0.f;
+            std::nth_element (tmp, tmp + (n - keep), tmp + n);
+            return tmp[n - keep];
+        };
+        if (mode == 1)          // BLOOM — Chebyshev harmonic growth on the loudest parents (2nd + 3rd harmonic of each)
+        {
+            const float thr = loudestThr (8, 0.f);
             int used = 0;
             for (int j = 0; j < nP && used < 8; ++j)
             {
-                const float a = wr_.amp[(size_t) j];
-                if (a < 0.06f * ref) continue;
-                const float r = wr_.ratio[(size_t) j];
-                if (r <= 0.f) continue;
-                add (r * 2.f, a * drive * 0.60f);
-                add (r * 3.f, a * drive * 0.32f);
+                const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
+                if (a <= 1e-6f || a < thr || r <= 0.f) continue;
+                add (keyBase + j * 4 + 0, r * 2.f, a * drive * 0.90f);
+                add (keyBase + j * 4 + 1, r * 3.f, a * drive * 0.50f);
                 ++used;
             }
         }
-        else if (mode == 2)     // GLINT — HF exciter: re-hallucinate sizzle above the mids only
-        {
+        else if (mode == 2)     // GLINT — HF exciter: the loudest parents each throw a 4th and 6th harmonic (two octaves
+        {                       // up and a twelfth over that — new sizzle where the sample had little) and everything above the
+                                // spectral centroid gets a presence lift. (was: octave copies of partials ≥ ratio 3 — on a real
+                                // sample whose f0 the analyser read an octave or two low that is EVERY partial, so the "lift" was
+                                // a volume knob and the octave copies sat above Nyquist = silent)
+            float num = 0.f, den = 0.f;
+            for (int j = 0; j < nP; ++j) { const float a = wr_.amp[(size_t) j]; if (a > 1e-6f && wr_.ratio[(size_t) j] > 0.f) { num += a * wr_.ratio[(size_t) j]; den += a; } }
+            const float rc = den > 1e-9f ? num / den : 3.f;
+            const float thr = loudestThr (8, 0.f);
+            int used = 0;
             for (int j = 0; j < nP; ++j)
             {
                 const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
-                if (a <= 1e-6f || r < 3.f) continue;
-                add (r * 2.f, a * drive * 0.85f);
-                wr_.amp[(size_t) j] *= (1.f + drive * 0.6f);        // presence lift on the uppers
+                if (a <= 1e-6f || r <= 0.f) continue;
+                if (r >= rc) wr_.amp[(size_t) j] *= (1.f + drive * 0.6f);        // presence lift on the uppers
+                if (used < 8 && a >= thr) { add (keyBase + j * 4 + 0, r * 4.f, a * drive * 0.80f); add (keyBase + j * 4 + 1, r * 6.f, a * drive * 0.40f); ++used; }
             }
         }
-        else                    // MOIRE — intermod sidebands f_i±f_j of the loudest pairs (clangorous)
-        {
-            int idx[6]; int k = 0;
-            for (int j = 0; j < nP && k < 6; ++j)                    // loudest-first-ish: take audible parents
-                if (wr_.amp[(size_t) j] > 0.30f * ref && wr_.ratio[(size_t) j] > 0.f) idx[k++] = j;
-            for (int i = 0; i < k; ++i)
-                for (int j = i + 1; j < k; ++j)
-                {
-                    const float ri = wr_.ratio[(size_t) idx[i]], rj = wr_.ratio[(size_t) idx[j]];
-                    const float aa = wr_.amp[(size_t) idx[i]] * wr_.amp[(size_t) idx[j]] / ref * drive * 1.7f;
-                    add (ri + rj, aa);
-                    add (std::fabs (ri - rj), aa);                   // add() rejects < 0.75 → pitch protected
-                }
+        else                    // MOIRE — a detuned GHOST LATTICE: each of the loudest overtones gets a copy above and
+        {                       // below it (±(2..8)% = 35..135 cents at full knob) → beating, clangorous interference.
+                                // The fundamental never gets a ghost (r ≥ 1.5) → the played pitch stays unambiguous.
+                                // (was: f_i±f_j intermod of parents over 0.3·ref — on harmonic material those land ON
+                                // existing harmonics, and a 1/n² source has one such parent = no pairs = nothing)
+            const float thr = loudestThr (8, 1.5f);
+            const float eps = 0.02f + 0.06f * drive;
+            int used = 0;
+            for (int j = 0; j < nP && used < 8; ++j)
+            {
+                const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
+                if (a <= 1e-6f || r < 1.5f || a < thr) continue;
+                add (keyBase + j * 4 + 0, r * (1.f + eps), a * drive * 0.65f);
+                add (keyBase + j * 4 + 1, r * (1.f - eps), a * drive * 0.65f);
+                ++used;
+            }
         }
-        wr_.nPartials = total;
-        return total;
+        for (int j = 0; j < geode::kMaxPartials; ++j)
+            if (! owned[j]) childKey_[(size_t) j] = -1;                            // a slot nobody claimed this block is nobody's
+        wr_.nPartials = hi;
+        return hi;
     }
 
     // rasterize the working bank → log-freq magnitude bins (peak-hold, normalized, 3-tap smoothed)
@@ -1051,7 +1138,7 @@ private:
 
     // sculpt the working partial bank in place. AMPLITUDE-domain, except SHAPE may glide OVERTONE
     // ratios onto exact harmonics (it tunes them — the fundamental at ratio 1 never moves, so the
-    // played pitch is fixed). Order: SHAPE → FORMANT → TILT → CUT → SIEVE. All identity at neutral.
+    // played pitch is fixed). Order: SHAPE → FORMANT → TILT → LOW(HP) → HIGH(LP) → SIEVE. All identity at neutral.
     int applySculpt (int nP, int quota) noexcept
     {
 #ifdef GEODE_MUT_SHAPE0
@@ -1109,9 +1196,9 @@ private:
                 wr_.amp[(size_t) j] = wr_.amp[(size_t) j] * (1.f - shape) + target * shape;
             }
 
-#ifndef GEODE_NO_SPAWN
-            if (quota > 0)   // fb597 — a saturated shared budget (quota 0) must not spawn-then-thin-to-nothing
+            if (quota > 0)   // fb597 — a saturated shared budget (quota 0) must not spawn-then-thin-to-nothing (fb598: the brace pairs OUTSIDE the -D seams so every mutant still compiles)
             {
+#ifndef GEODE_NO_SPAWN
             // ── rs-shapefix (1): SPAWN the target's MISSING harmonics — "the sample BECOMES the wave".
             // winner[n] == -1 is the "no source partial rounds to n" map. Each such harmonic is born
             // at ratio n EXACTLY with amp = ref·W(n)·shape (the blend above with a zero source term),
@@ -1188,19 +1275,27 @@ private:
 
         // ── FORMANT — pitch-preserving envelope shift (true-envelope method) ──
         // Move the spectral ENVELOPE, never the partial frequencies (research: P(k)=A(k·f)/A(k)).
-        // Envelope is a Gaussian log-frequency KERNEL SMOOTHER (band-limited interpolation through the
-        // peaks) → it can't track individual partials; gain clamp keeps it from nulling the fundamental
-        // or getting harsh. FKEEP off = no formant processing.
+        // rs2-formant: the envelope is the line THROUGH THE PARTIAL PEAKS — linear in (ln r, ln a) between
+        // neighbouring live partials (Röbel's true envelope on a peak-picked bank IS the peak interpolant),
+        // with a −12 dB/oct resonance skirt beyond the first and the last partial. The shipped estimator was
+        // a NORMALISED Gaussian mean ±0.7 oct wide (smoothEnv, bw 0.5): it reduced every envelope to its
+        // trend, so E(r/s)/E(r) collapsed to the trend ratio — a constant s^k on power-law sources (C: −11 dB
+        // at x=0 with dF 0.9 = a VOLUME knob) and a +10 dB tilt on a 3-hump vowel whose humps never moved.
+        // Gain = E(r/s)/E(r) clamped ±30 dB (the old ±12 dB capped a 24 dB hump), then an equal-RMS level
+        // match (as SHAPE's) so the knob changes timbre, never loudness. FKEEP off = no formant processing.
+        // Cost: one insertion sort of ≤ kMaxActive partials + 2 binary searches per partial — cheaper than
+        // the shipped O(active²) exp() kernel.
         const float fShift = (p_.formant - 0.5f) * 2.f;   // -1..+1
         if (std::fabs (fShift) > 1e-3f && p_.formantKeep && nP > 1)
         {
-            float snapR[geode::kMaxPartials], snapA[geode::kMaxPartials];   // stack — no RT alloc
+#ifdef GEODE_FORMANT_OLD_ENV
+            float snapR[geode::kMaxPartials], snapA[geode::kMaxPartials];   // cert seam: the SHIPPED estimator
             std::copy (wr_.ratio.begin(), wr_.ratio.begin() + nP, snapR);
             std::copy (wr_.amp.begin(),   wr_.amp.begin()   + nP, snapA);
-            const float shiftMul = std::pow (2.f, fShift);   // ±1 octave envelope stretch
+            const float shiftMul = std::pow (2.f, fShift);
             for (int j = 0; j < nP; ++j)
             {
-                if (wr_.amp[(size_t) j] <= 0.f) continue;    // skip thinned slots → FORMANT is O(active²), not O(96²)
+                if (wr_.amp[(size_t) j] <= 0.f) continue;
                 const float r = wr_.ratio[(size_t) j];
                 if (r <= 0.f) continue;
                 const float eHere  = smoothEnv (r,            snapR, snapA, nP);
@@ -1212,7 +1307,60 @@ private:
                     wr_.amp[(size_t) j] *= gain;
                 }
             }
+#else
+            float ex[geode::kMaxPartials], ey[geode::kMaxPartials];   // (ln r, ln a) of the live bank, sorted by r — stack, no RT alloc
+            int ne = 0;
+            for (int j = 0; j < nP; ++j)
+            {
+                const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
+                if (a <= 0.f || r <= 0.f) continue;
+                const float x = std::log (r), y = std::log (a);
+                int k = ne++;                                               // insertion sort: the bank is mostly ascending already
+                while (k > 0 && ex[k - 1] > x) { ex[k] = ex[k - 1]; ey[k] = ey[k - 1]; --k; }
+                ex[k] = x; ey[k] = y;
+            }
+            if (ne >= 2)
+            {
+                const float shiftLn = fShift * 0.6931472f;   // ln(2^fShift): ±1 octave envelope shift
+ #ifdef GEODE_FORMANT_CLAMP12
+                constexpr float kClampLn = 1.3862944f;       // cert seam: the shipped ±12 dB clamp
+ #else
+                constexpr float kClampLn = 3.4538776f;       // ±30 dB
+ #endif
+                float e0 = 0.f, e1 = 0.f;
+                for (int j = 0; j < nP; ++j)
+                {
+                    const float a = wr_.amp[(size_t) j], r = wr_.ratio[(size_t) j];
+                    if (a <= 0.f || r <= 0.f) continue;
+                    const float x = std::log (r);
+                    float g = trueEnv (x - shiftLn, ex, ey, ne) - trueEnv (x, ex, ey, ne);   // ln gain = ln E(r/s) − ln E(r)
+                    if (g < -kClampLn) g = -kClampLn; else if (g > kClampLn) g = kClampLn;
+                    const float an = a * std::exp (g);
+                    e0 += a * a; e1 += an * an;
+                    wr_.amp[(size_t) j] = an;
+ #ifdef GEODE_MUT_FORMANT_PITCH
+                    wr_.ratio[(size_t) j] = r * std::exp (shiftLn);   // cert seam: shift the FREQUENCIES → F3 must go red
+ #endif
+                }
+ #ifndef GEODE_NO_FORMANT_LEVEL
+                if (e1 > 1e-12f && e0 > 0.f)
+                {
+                    const float lm = std::sqrt (e0 / e1);                 // equal RMS: timbre, not loudness
+                    for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) wr_.amp[(size_t) j] *= lm;
+                }
+ #endif
+            }
+#endif
+            // the governor's thin, deferred from prepareBank: keep the loudest `quota` of the SHIFTED bank
+            {
+                int alive = 0;
+                for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) ++alive;
+                if (alive > quota) keepLoudest (nP, quota);
+            }
         }
+#ifdef GEODE_MUT_FORMANT0
+        if (nP > 0) wr_.amp[0] *= 1.0001f;   // cert seam: touches the bank OUTSIDE the FORMANT gate → F5 must go red
+#endif
 
         // ── TILT — bipolar spectral tilt about ratio 1.0 (bright/dark). Amplified: ±3.2 exponent so
         // it goes from fully dark to screaming bright well before the extremes. ──
@@ -1225,32 +1373,40 @@ private:
                 wr_.amp[(size_t) j] *= std::pow (r, tilt * 3.2f);
             }
 
-        // ── CUT — spectral filter, LP (remove highs) or HP (remove lows), ~24 dB/oct ──
-        // 1.0 = fully open; turning DOWN filters harder. The cutoff sweeps EXPONENTIALLY across the whole
-        // knob (like a real filter freq) so it's audible everywhere — not crammed into the bottom 15%.
-        if (p_.cut < 0.999f)
+        // ── LOW / HIGH — TWO coexisting spectral cuts, ~24 dB/oct each (rs2-cut). Max: "this IS spectral so they
+        // need a low and a high pass filter ... these two need to coexist and sculpt the sound, and we can't do
+        // that if we're right-clicking and moving back and forth between the two." The back-row LOW knob
+        // (SYN_OSC_x_SPECTRAL_LO, 0 = off) is the HIGH-PASS; the HIGH knob (SYN_OSC_x_SPECTRAL_HI, 1 = off) is
+        // the LOW-PASS. SAME DSP as the retired single CUT knob: the corner sweeps EXPONENTIALLY across the knob
+        // (like a real filter freq) and a partial past the corner is divided by (distance ratio)^4. High at x is
+        // bit-identical to the old Cut LP at x; Low at x to the old Cut HP at 1-x. Each end is an EXACT identity
+        // (no partial touched), so Low=0 / High=1 is a no-op and the two stages compose into a BAND.
+        if (p_.lo > 0.001f) // LOW = high-pass: remove the bottom
         {
-            const float knob = clamp01 (p_.cut);
-            if (p_.cutMode == 0) // LP
-            {
-                const float cutR = 0.6f * std::pow (96.f, knob);    // knob 0→0.6× · 0.5→5.9× · 1→58× — tops just above real content, no dead zone (hm2)
-                for (int j = 0; j < nP; ++j)
-                    if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] > cutR)
-                    {
-                        const float over = wr_.ratio[(size_t) j] / cutR;
-                        wr_.amp[(size_t) j] /= (over * over * over * over);   // ~24 dB/oct
-                    }
-            }
-            else // HP
-            {
-                const float cutR = 0.5f * std::pow (90.f, 1.f - knob);   // knob 1→0.5× (open) · 0.5→4.7× · 0→45×
-                for (int j = 0; j < nP; ++j)
-                    if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] < cutR)
-                    {
-                        const float under = cutR / std::max (0.05f, wr_.ratio[(size_t) j]);
-                        wr_.amp[(size_t) j] /= (under * under * under * under);
-                    }
-            }
+#ifdef GEODE_MUT_LO_CURVE
+            const float cutR = 0.25f * std::pow (2.f, 11.f * clamp01 (p_.lo));   // cert seam: the WAVETABLE's curve, not the Cut's → the "same DSP" bar must go red
+#else
+            const float cutR = 0.5f * std::pow (90.f, clamp01 (p_.lo));          // lo 0→0.5× (off) · 0.5→4.7× · 1→45×  (== the old Cut HP at knob 1-lo)
+#endif
+            for (int j = 0; j < nP; ++j)
+                if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] < cutR)
+                {
+                    const float under = cutR / std::max (0.05f, wr_.ratio[(size_t) j]);
+                    wr_.amp[(size_t) j] /= (under * under * under * under);   // ~24 dB/oct
+                }
+        }
+#ifdef GEODE_MUT_EXCLUSIVE
+        else                // cert seam: LP only when HP is idle = the old one-mode knob → the BAND bar must go red
+#endif
+        if (p_.hi < 0.999f) // HIGH = low-pass: remove the top
+        {
+            const float cutR = 0.6f * std::pow (96.f, clamp01 (p_.hi));    // hi 0→0.6× · 0.5→5.9× · 1→58× — tops just above real content, no dead zone (hm2)
+            for (int j = 0; j < nP; ++j)
+                if (wr_.amp[(size_t) j] > 0.f && wr_.ratio[(size_t) j] > cutR)
+                {
+                    const float over = wr_.ratio[(size_t) j] / cutR;
+                    wr_.amp[(size_t) j] /= (over * over * over * over);   // ~24 dB/oct
+                }
         }
 
         // ── SIEVE — the lossy data-removal hero, now with 6 flavors (right-click the knob).
@@ -1343,6 +1499,22 @@ private:
     // smooth spectral envelope sampled at `ratio` — Gaussian kernel over the (snapshot) partial bank.
     // A band-limited interpolation through the peaks: it passes through the partials without tracking
     // any single one (research: true-envelope property). Reads a SNAPSHOT so the caller can mutate amps.
+    // rs2-formant: true envelope of the live bank at log-ratio x — linear in (ln r, ln a) between the two
+    // neighbouring partials; beyond the first / last partial a −12 dB/oct resonance skirt (slope −2 per ln unit),
+    // so shifting DOWN pulls the bank's top edge in (darker, "bigger") and shifting UP thins the fundamental
+    // below the first hump (smaller) — both what a scaled vocal tract does, both audible on a hump-less source.
+    static float trueEnv (float x, const float* ex, const float* ey, int ne) noexcept
+    {
+        constexpr float kSkirt = 2.f;   // −12 dB/oct: ×¼ per octave = −2·ln2 per ln2 of frequency
+        if (x <= ex[0])      return ey[0]      - kSkirt * (ex[0] - x);
+        if (x >= ex[ne - 1]) return ey[ne - 1] - kSkirt * (x - ex[ne - 1]);
+        int lo = 0, hi = ne - 1;              // binary search: ex[lo] ≤ x < ex[hi]
+        while (hi - lo > 1) { const int mid = (lo + hi) >> 1; if (ex[mid] <= x) lo = mid; else hi = mid; }
+        const float dx = ex[hi] - ex[lo];
+        const float t  = dx > 1e-9f ? (x - ex[lo]) / dx : 0.f;
+        return ey[lo] + (ey[hi] - ey[lo]) * t;
+    }
+
     static float smoothEnv (float ratio, const float* rr, const float* aa, int nP) noexcept
     {
         if (ratio < 1e-4f) ratio = 1e-4f;
@@ -1397,6 +1569,7 @@ private:
     int    reserved_ = 0;             // budget currently reserved by this (anchor) engine
     float  makeup_ = 1.f;
     float  crushHoldL_ = 0.f, crushHoldR_ = 0.f;   // CRUSH sample-and-hold state
+    float  emberLpL_ = 0.f, emberLpR_ = 0.f;       // fb598 — EMBER post-shaper warmth one-pole state
     int    crushCnt_ = 0;
     std::uint32_t rng_ = 0x9E3779B9u;
     std::uint32_t flickerTick_ = 0;   // FLICKER sieve epoch clock (incremented per rendered block)
@@ -1405,6 +1578,7 @@ private:
     int    unisonDiv_  = 1;   // constant-cost unison divisor = ceil(sqrt(unison count))
     float  uniScatCents_ = 0.f;                                    // hm2 — per-sibling decorrelation depth
     std::array<float, geode::kMaxPartials> scatMul_ { };           // hm2 — per-sibling static freq scatter
+    std::array<int,   geode::kMaxPartials> childKey_ { };          // fb598 — DRIVE child (parent slot × 4 + kind) owning each slot, -1 = none
 };
 
 } // namespace tw

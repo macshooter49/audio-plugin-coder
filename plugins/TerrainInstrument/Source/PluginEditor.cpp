@@ -6674,12 +6674,16 @@ void TerrainUiCore::timerCallback()
                 const char* const* g = GID[o];
                 tw::GeodeParams gp;   // display path: same REMAP as the audio gather (POSITION→start, etc.)
                 gp.start   = rp (g[0]);  gp.stretch = rp (g[1]);  gp.scan    = rp (g[2]);
-                gp.crush   = rp (g[3]);  gp.formant = rp (g[4]);  gp.cut     = rp (g[5]);
+                gp.crush   = rp (g[3]);  gp.formant = rp (g[4]);  /* g[5] GEODE_CUT retired (fb598) */
                 gp.sieve   = rp (g[6]);  gp.shape   = rp (g[7]);  gp.drive   = rp (g[8]);
                 gp.smear = rp (g[9]);  gp.tilt = rp (g[10]); gp.quality = rp (g[11]);   // g[9] = FRACTURE repurposed as MELT
                 gp.formantKeep = rp (g[12]) > 0.5f;   /* g[13] GEODE_LOOP retired */
-                gp.shapeTarget = (int) rp (g[15]);   gp.cutMode   = (int) rp (g[16]);
+                gp.shapeTarget = (int) rp (g[15]);   /* g[16] GEODE_CUT_MODE retired (fb598) */
                 gp.driveMode   = (int) rp (g[17]);   gp.sieveMode = (int) rp (g[18]);
+                /* fb598 — the waterfall must show the BACK ROW's Low/High cut (the Resynth cut lives there now, HP by Low,
+                   LP by High). spectralDisplay() already hands the editor the per-osc Lo/Hi the wavetable picture uses. */
+                { float sAmt = 0.f, sLo = 0.f, sHi = 1.f; int sType = 0;
+                  audioProcessor.spectralDisplay (o, sAmt, sType, sLo, sHi); gp.lo = sLo; gp.hi = sHi; }
                 gp.regionStart = rp (g[19]);  gp.regionEnd    = rp (g[20]);   // shared SAMPLE_* region (rs7)
                 gp.loopStart   = rp (g[21]);  gp.loopEnd      = rp (g[22]);
                 gp.loopMode    = (int) rp (g[23]);
@@ -6699,10 +6703,10 @@ void TerrainUiCore::timerCallback()
                     constexpr int IW = 128, IH = 64;
                     auto contentChanged = [] (const tw::GeodeParams& a, const tw::GeodeParams& b) noexcept
                     {
-                        return a.sieve != b.sieve || a.cut != b.cut || a.shape != b.shape
+                        return a.sieve != b.sieve || a.lo != b.lo || a.hi != b.hi || a.shape != b.shape
                             || a.drive != b.drive || a.quality != b.quality || a.formant != b.formant
                             || a.tilt != b.tilt || a.smear != b.smear || a.shapeTarget != b.shapeTarget
-                            || a.cutMode != b.cutMode || a.driveMode != b.driveMode
+                            || a.driveMode != b.driveMode
                             || a.sieveMode != b.sieveMode || a.formantKeep != b.formantKeep;
                     };
                     if (geodeImgCooldown_[o] > 0)  --geodeImgCooldown_[o];

@@ -6305,6 +6305,14 @@ namespace tw
             {
                 finishing_ = false;
                 playing_   = false;
+                // fb598 — the fast-kill above frees the slot while the amp env is still in Release (level
+                // < 1e-4 but the segment not done: a pluck with sustain 0 EVERY note, a pad with a ≥ ~2.3 s
+                // release). Once playing_ is false this voice is never ticked again, so the env stayed non-Idle
+                // forever and isAmpEnvActive() kept reporting a sounding voice: the follower gather, ampEnvVis /
+                // __notesActive and the noise-carrier pick all saw a dead voice — Max's "static white line
+                // always stuck in the middle" on the Resynth display. Reset here exactly as the steal path does.
+                ampEnv_.reset();
+                fltEnvT_.reset(); pitchEnvT_.reset(); mod1EnvT_.reset(); mod2EnvT_.reset();
                 clearCurrentNote();
             }
         }

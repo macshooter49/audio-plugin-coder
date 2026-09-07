@@ -4956,10 +4956,14 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 
    AND THE GRID IS RE-DECLARED, not just the knobs hidden — the fb586 law (see .fm-wtpage above):
    hiding 2 of 7 columns without re-declaring leaves TWO DEAD COLUMNS hanging off the right edge.
-   Five columns, filling the width, symmetric. */
+   Five columns, filling the width, symmetric.
+
+   rs2-cut — RESYNTH LEFT THIS LIST. Its engine reads these two knobs now (GeodeEngine.h LOW/HIGH: the
+   retired front-page Cut's ~24 dB/oct DSP applied TWICE, Low = HP and High = LP, coexisting — PluginProcessor
+   gathers specLoEff_/specHiEff_ into GeodeParams::lo/hi), so on engine-geode the back row is SEVEN again.
+   Sample / Granular / Harmonic / Modal stay at five: nothing reads Lo/Hi there. */
 #syn-panel .device.osc.engine-sample   .back-only > .osc-knobs,
 #syn-panel .device.osc.engine-granular .back-only > .osc-knobs,
-#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs,
 #syn-panel .device.osc.engine-harm     .back-only > .osc-knobs,
 #syn-panel .device.osc.engine-modal    .back-only > .osc-knobs { grid-template-columns: repeat(5, 1fr); }
 
@@ -4967,8 +4971,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .device.osc.engine-sample   .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
 #syn-panel .device.osc.engine-granular .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
 #syn-panel .device.osc.engine-granular .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
-#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
-#syn-panel .device.osc.engine-geode    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
 #syn-panel .device.osc.engine-harm     .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
 #syn-panel .device.osc.engine-harm     .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_HI"],
 #syn-panel .device.osc.engine-modal    .back-only > .osc-knobs > .knob[data-syn$="_SPECTRAL_LO"],
@@ -5078,9 +5080,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    1.5px lower than the loop-mode/engine glyphs. Nudge ONLY the family TEXT up so Grand/Concert sit
    on the exact same line as One-Shot · Modal (the [A]/[+] boxes are already aligned, so don't move them). */
 #syn-panel .device.osc.engine-modal .md-fam-wrap .preset-display { position: relative; top: -1.5px; }
-/* drop the loop-mode ▾ arrow on Modal so One-Shot matches the family pills (they have no arrow) —
-   also removes the small low mark it left between One-Shot and Grand. */
-#syn-panel .device.osc.engine-modal .samp-head .samp-sel::after { display: none; }
+/* (mv3's Modal-only "drop the loop-mode ▾" override retired in rs2 — the ▾ no longer exists on any engine.) */
 #syn-panel .modal-knob-wrap .modal-knobs { flex: 1; display: grid; grid-template-columns: repeat(5, 1fr); gap: 4px; align-items: center; }
 #syn-panel .modal-knob-wrap .modal-pg2 { display: none; }
 #syn-panel .modal-knob-wrap.pg2 .modal-pg1 { display: none; }
@@ -5109,7 +5109,15 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 /* GEODE ENGINE knobs — resynthesis; 2 pages (Play / Sculpt), .geode-arrow flips (.pg2). Mirrors .fm-knob-wrap. */
 #syn-panel .geode-knob-wrap { flex: 0 0 auto; position: relative; display: none; align-items: stretch; gap: 3px; }
 #syn-panel .device.osc.engine-geode:not(.swapped) .geode-knob-wrap { display: flex; }
-#syn-panel .geode-knob-wrap .geode-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }   /* 6 equal cols: page-1 = 6 knobs, page-2 = 6 (Melt fills col 6) */
+#syn-panel .geode-knob-wrap .geode-knobs { flex: 1; display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; align-items: center; }   /* 6 equal cols: page-2 = 6 (Melt fills col 6); page-1 re-declared as 5 below (rs2-cut) */
+/* rs2-cut — LP + HP TO THE BACK. Max: "take away the low pass and the high pass filter and put it in the back ...
+   so the first panel is going to have FIVE." Page 1 is Scan · Stretch · Sieve · Shape · Drive: the CUT knob is
+   HIDDEN (attribute selector — no markup change; GEODE_CUT / GEODE_CUT_MODE stay registered and in the DOM, so
+   saved state and the GeoCut mod-destination number survive) and the grid is RE-DECLARED as five — the fb586
+   law: hiding 1 of 6 columns without re-declaring leaves a dead column on the right. The back row's Low/High
+   (SYN_OSC_x_SPECTRAL_LO/HI) are the Resynth cuts now — see the fb594 block above and GeodeEngine.h LOW/HIGH. */
+#syn-panel .geode-knob-wrap .geode-pg1 { grid-template-columns: repeat(5, 1fr); }
+#syn-panel .geode-knob-wrap .geode-pg1 > .knob[data-syn$="_GEODE_CUT"] { display: none; }
 #syn-panel .geode-knob-wrap .geode-pg2 { display: none; }
 #syn-panel .geode-knob-wrap.pg2 .geode-pg1 { display: none; }
 #syn-panel .geode-knob-wrap.pg2 .geode-pg2 { display: grid; }
@@ -5412,11 +5420,28 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    in the middle... keep the order, change the placement." The cycle was already correct; the
    arrow was lying about where you were. MEASURED: the row itself renders at an identical
    top=153 left=29 on set 1, set 2 and unison, so nothing ever moved — only this glyph did. */
-#syn-panel .uni-knob-wrap .uni-arrow::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+/* rs2 — the fb539 flip is retired: every row now carries a real ‹ on its left (below), so the
+   › on the right points FORWARD on every set, the unison set included (forward from the last set
+   wraps to set 1, exactly as before — the cycle never changed, only the glyph). */
 /* Sample with NO blend has only one page and its .bl-arrow is hidden, so it carries its own
    forward chevron; when blend IS live the existing .bl-arrow does page 2 and unison is page 3. */
 #syn-panel .samp-knob-wrap .uni-arrow { display: block; }
 #syn-panel .device.osc.blend-on .samp-knob-wrap .uni-arrow { display: none; }
+/* ══ rs2 — THE LEFT ARROW: EVERY KNOB ROW GETS ‹ › ═══════════════════════════════════════════
+   Max: "I need a set of arrows, not just one arrow to the right ... every engine needs to have a
+   left and a right arrow ... spaced out properly and both in the middle, both centered ... no
+   changes on the button size or the button spacing, it's all perfect ... universal."
+   The ‹ IS the › — initSetArrows clones each wrap's own forward arrow (same 12×20 box, same 6 px
+   chevron, same opacity) and tags it .set-prev: the glyph mirrored with the exact fb539 transform,
+   and the box pulled 15 px (12 box + 3 gap) LEFT of the wrap, into the device's 14 px padding.
+   The knob grid keeps its full width, so NOT ONE KNOB MOVES (measured: every knob rect on every
+   set of every engine is identical with the ‹ hidden). It is an exact mirror about the grid:
+   › box = grid.right + 3 … + 15 ; ‹ box = grid.left − 15 … − 3.
+   .samp-knob-wrap's gap is 2 px, so its ‹ pulls 14 px — still the exact mirror. */
+#syn-panel .front-only .set-prev, #syn-panel .sample-view .set-prev { margin-left: -15px; }
+#syn-panel .samp-knob-wrap .set-prev { margin-left: -14px; }
+#syn-panel .set-prev::before { transform: rotate(-135deg); margin: -4px 0 0 -2px; }
+#syn-panel .device.osc.blend-on .samp-knob-wrap .uni-arrow.set-prev { display: block; opacity: .9; }   /* the ‹ stays when blend's own › (.bl-arrow, opacity .9) takes the right slot — and matches it */
 
 /* ── refinements: no markers, line-ramp fades, header dropdowns, drop affordance ── */
 #syn-panel .samp-h i { display: none; }   /* markers removed — keep only the separator lines */
@@ -5562,7 +5587,12 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 
 #syn-panel .samp-sel { position: relative; display: inline-flex; align-items: center; }
 #syn-panel .samp-sel-disp { font-size: 9px; font-weight: 400; letter-spacing: .4px; color: var(--text-secondary); white-space: nowrap; user-select: none; pointer-events: none; transition: color .12s; }
-#syn-panel .samp-sel::after { content: '▾'; font-size: 6px; color: var(--text-muted); margin-left: 3px; pointer-events: none; }
+/* rs2 — NO DROPDOWN DOT. This rule drew a 6 px '▾' after the loop-mode word (6.13 px wide, the
+   LAST thing in the label row). It was the first thing the ‹ name › corner cluster ran into on
+   Sample / Granular / Resynth: measured 2.5 px into the ‹ with "Appliances", 5.3 px with the
+   default "Load Sample". Max: "get rid of ALL dots that you have next to drop down menus ...
+   people aren't stupid." Modal had already dropped it (mv3). Gone, not hidden — nothing in the
+   label row sits to its right, so nothing else moves. */
 #syn-panel .samp-sel:hover .samp-sel-disp { color: var(--text-primary); }
 #syn-panel .samp-sel select { -webkit-appearance: none; appearance: none; position: absolute; inset: 0; width: 100%; height: 100%;
   margin: 0; padding: 0; background: transparent; color: transparent; border: none; font-size: 9px; opacity: 0; cursor: pointer; z-index: 2; }
@@ -17528,6 +17558,16 @@ setTimeout(function wireSynControls () {
           return 'wt';
         }
         document.querySelectorAll ('#syn-panel .device.osc').forEach (function (dev) {
+          // rs2 — THE LEFT ARROW. Each wrap's own › is CLONED as a ‹ at the head of the row (the
+          // wt-nav / samp-nav header arrows are built the same way, at runtime, in pairs).
+          // .set-prev mirrors the glyph and pulls the box into the device padding — no knob moves.
+          dev.querySelectorAll ('.wt-knob-wrap, .uni-knob-wrap, .fm-knob-wrap, .harm-knob-wrap, .modal-knob-wrap, .samp-knob-wrap, .gran-knob-wrap, .geode-knob-wrap').forEach (function (w) {
+            var fwd = null; for (var i = w.children.length - 1; i >= 0; --i) if (/-arrow\b/.test (w.children[i].className || '')) { fwd = w.children[i]; break; }
+            if (! fwd || fwd.classList.contains ('set-prev') || w.querySelector (':scope > .set-prev')) return;
+            var pv = fwd.cloneNode (false); pv.classList.add ('set-prev');
+            pv.title = 'Previous set'; pv.setAttribute ('aria-label', 'Previous set');
+            w.insertBefore (pv, w.firstChild);
+          });
           dev.dataset.engKey = engineKey (dev);
           apply (dev, 0);
           try {
@@ -17543,7 +17583,7 @@ setTimeout(function wireSynControls () {
           if (! arrow) return;
           var dev = arrow.closest ('.device.osc'); if (! dev) return;
           e.preventDefault (); e.stopPropagation ();   // we own the step; no per-engine toggle runs
-          apply (dev, (parseInt (dev.dataset.setIdx, 10) || 0) + 1);
+          apply (dev, (parseInt (dev.dataset.setIdx, 10) || 0) + (arrow.classList.contains ('set-prev') ? -1 : 1));   // rs2 — ‹ is one step BACK; apply() wraps −1 to the last set
         }, true);
       } catch (eSA) { console.warn ('[set-arrow] wiring failed', eSA); }
     })();
@@ -18573,7 +18613,7 @@ setTimeout(function wireSynControls () {
       // (pos01 = 0..1 across the whole buffer). One white line per held note, each at its own speed
       // (higher notes scan faster). Lines are keyed by voiceIdx so a held note keeps the SAME line
       // (no jump); when a voice stops it drops out of the list and its line fades out (CSS .4s).
-      window.updateSampleFollower = function (osc, list) {
+      function applyFollower (osc, list) {
         try {
           try { window.__geodeFollow = window.__geodeFollow || {}; window.__geodeFollow[osc] = list || []; } catch (eF) {}   // Resynth waterfall reads this for its white MIDI followers
           var S = SAMP[osc]; if (! S || ! S.phPool) return;
@@ -18590,7 +18630,30 @@ setTimeout(function wireSynControls () {
           for (var k = 0; k < pool.length; k++)                              // voices that stopped → fade out
             if (pool[k]._on && ! seen[pool[k]._vi]) { pool[k]._on = false; pool[k]._vi = -1; pool[k].classList.remove ('on'); }
         } catch (e) {}
-      };
+      }
+      /* fb598 — THE FOLLOWER IS A MIDI VISUAL. Max: "there's a static white line always stuck in the middle...
+         the follower is simply just a MIDI response visual and it wouldn't be of use if it was just a static
+         line." A line lives only while its feed is FRESH — fb567's law for the LFO head (live = flag && stamp
+         < 700 ms), applied to the read-heads. The editor pushes this list every SHIPPED frame (PluginEditor.cpp,
+         the SAMPLE-FOLLOWER block, outside the quiet gate); when the frame goes byte-identical the push idle-skips
+         and the LAST list stays in __geodeFollow / on the .samp-ph pool forever: a parked voice (SynthVoice.h's
+         release fast-kill frees the slot with the amp env still in Release, so isAmpEnvActive() keeps it in the
+         gather) drew a white head that nothing ever cleared. No feed → no truth → the lines go (the .samp-ph
+         fade is the existing .4 s CSS; the Resynth canvas repaints ONCE, directly, keeping its picture — fb577). */
+      window.__followT = 0;
+      window.updateSampleFollower = function (osc, list) { window.__followT = Date.now (); applyFollower (osc, list); };
+      setInterval (function () {
+        try {
+          if (! window.__followT || Date.now () - window.__followT < 700) return;
+          ['a', 'b', 'c', 'd'].forEach (function (o) {
+            var S = SAMP[o], fl = window.__geodeFollow && window.__geodeFollow[o], on = !! (fl && fl.length);
+            if (! on && S && S.phPool) for (var k = 0; k < S.phPool.length; k++) if (S.phPool[k]._on) { on = true; break; }
+            if (! on) return;
+            applyFollower (o, []);
+            if (window.__geodeFollowRepaint) window.__geodeFollowRepaint (o);
+          });
+        } catch (e) {}
+      }, 250);
 
       // C++ → JS: a real sample finished loading for an oscillator → draw it.
       window.onOscSampleLoaded = function (osc, payload) { try { var S = SAMP[osc]; if (S && S.setLoaded) S.setLoaded (payload); } catch (e) {}
@@ -18920,10 +18983,15 @@ setTimeout(function wireSynControls () {
         /* fb472 — the spectral CUTS. A bare harmonic number: the corner the fourth-order Butterworth
            sits at. Each knob's far end SKIPS the filter outright — an exact identity, which parking a
            corner at harmonic 1 would not be — and that end reads 'off'. */
-        if (paramId.indexOf ('_SPECTRAL_LO') >= 0)
-          return (n <= 0) ? 'off' : String (Math.max (1, Math.round (SPECCUT_LO_BASE * Math.pow (2, SPECCUT_LO_OCT * n))));
-        if (paramId.indexOf ('_SPECTRAL_HI') >= 0)
-          return (n >= 1) ? 'off' : String (Math.min (512, Math.round (SPECCUT_HI_BASE * Math.pow (2, SPECCUT_HI_OCT * n))));
+        if (paramId.indexOf ('_SPECTRAL_LO') >= 0 || paramId.indexOf ('_SPECTRAL_HI') >= 0) {
+          /* rs2-cut — on RESYNTH the same two knobs drive the engine's own LOW/HIGH cuts (GeodeEngine.h), whose
+             corners are the retired Cut's: 0.5·90^n (Low) and 0.6·96^n (High), in partial ratio. Same 'off' ends. */
+          let geo = false;
+          try { const kEl = document.querySelector ('#syn-panel .knob[data-syn="' + paramId + '"]'); const dv = kEl && kEl.closest ('.device.osc'); geo = !! (dv && dv.classList.contains ('engine-geode')); } catch (e) {}
+          if (paramId.indexOf ('_SPECTRAL_LO') >= 0)
+            return (n <= 0) ? 'off' : String (Math.max (1, Math.round (geo ? 0.5 * Math.pow (90, n) : SPECCUT_LO_BASE * Math.pow (2, SPECCUT_LO_OCT * n))));
+          return (n >= 1) ? 'off' : String (Math.min (512, Math.round (geo ? 0.6 * Math.pow (96, n) : SPECCUT_HI_BASE * Math.pow (2, SPECCUT_HI_OCT * n))));
+        }
         if (paramId.indexOf ('_FOLD_AMT')     >= 0) return pct + '%';
         if (paramId.indexOf ('_OCT')  >= 0) { const v = Math.round (-3   + n * 6);   return (v > 0 ? '+' : '') + v + ' oct'; }
         if (paramId.indexOf ('_SEMI') >= 0) { const v = Math.round (-12  + n * 24);  return (v > 0 ? '+' : '') + v + ' st'; }
@@ -21912,23 +21980,18 @@ setTimeout(function wireSynControls () {
 
       const GEODE_DRIVES = ['Saturate','Bloom','Glint','Moire','Foldback','Ember'];
       const GEODE_SIEVES = ['Floor','Sparse','Cloak','Flicker','Rake','Parity'];
-      const GEODE_CUTS   = ['LP','HP'];
 
       const KNOB_MENUS = {
         'SYN_OSC_A_KEYTRACK':   { header: 'OSC A — KEYTRACK DEST', modeParam: 'SYN_OSC_A_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
         'SYN_OSC_B_KEYTRACK':   { header: 'OSC B — KEYTRACK DEST', modeParam: 'SYN_OSC_B_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
         'SYN_OSC_C_KEYTRACK':   { header: 'OSC C — KEYTRACK DEST', modeParam: 'SYN_OSC_C_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
         'SYN_OSC_D_KEYTRACK':   { header: 'OSC D — KEYTRACK DEST', modeParam: 'SYN_OSC_D_KEYTRACK_DEST', options: KEYTRACK_DESTS },   // fb533
-        'SYN_OSC_A_GEODE_CUT':   { header: 'OSC A — CUT (LP/HP)', modeParam: 'SYN_OSC_A_GEODE_CUT_MODE', options: GEODE_CUTS },
         'SYN_OSC_A_GEODE_HAZE':  { header: 'OSC A — DRIVE MODE', modeParam: 'SYN_OSC_A_GEODE_DRIVE_MODE', options: GEODE_DRIVES },
         'SYN_OSC_A_GEODE_SIEVE': { header: 'OSC A — SIEVE MODE', modeParam: 'SYN_OSC_A_GEODE_SIEVE_MODE', options: GEODE_SIEVES },
-        'SYN_OSC_B_GEODE_CUT':   { header: 'OSC B — CUT (LP/HP)', modeParam: 'SYN_OSC_B_GEODE_CUT_MODE', options: GEODE_CUTS },
         'SYN_OSC_B_GEODE_HAZE':  { header: 'OSC B — DRIVE MODE', modeParam: 'SYN_OSC_B_GEODE_DRIVE_MODE', options: GEODE_DRIVES },
         'SYN_OSC_B_GEODE_SIEVE': { header: 'OSC B — SIEVE MODE', modeParam: 'SYN_OSC_B_GEODE_SIEVE_MODE', options: GEODE_SIEVES },
-        'SYN_OSC_C_GEODE_CUT':   { header: 'OSC C — CUT (LP/HP)', modeParam: 'SYN_OSC_C_GEODE_CUT_MODE', options: GEODE_CUTS },
         'SYN_OSC_C_GEODE_HAZE':  { header: 'OSC C — DRIVE MODE', modeParam: 'SYN_OSC_C_GEODE_DRIVE_MODE', options: GEODE_DRIVES },
         'SYN_OSC_C_GEODE_SIEVE': { header: 'OSC C — SIEVE MODE', modeParam: 'SYN_OSC_C_GEODE_SIEVE_MODE', options: GEODE_SIEVES },
-        'SYN_OSC_D_GEODE_CUT':   { header: 'OSC D — CUT (LP/HP)', modeParam: 'SYN_OSC_D_GEODE_CUT_MODE', options: GEODE_CUTS },
         'SYN_OSC_D_GEODE_HAZE':  { header: 'OSC D — DRIVE MODE', modeParam: 'SYN_OSC_D_GEODE_DRIVE_MODE', options: GEODE_DRIVES },
         'SYN_OSC_D_GEODE_SIEVE': { header: 'OSC D — SIEVE MODE', modeParam: 'SYN_OSC_D_GEODE_SIEVE_MODE', options: GEODE_SIEVES },
         'SYN_OSC_A_GEODE_DISTILL': { header: 'OSC A — SHAPE', modeParam: 'SYN_OSC_A_GEODE_SHAPE_TARGET', options: GEODE_SHAPES, hide: GEODE_SHAPES_HIDDEN },
@@ -21963,7 +22026,7 @@ setTimeout(function wireSynControls () {
       // fb563 — the control menu's row for each mode picker, in plain Title Case (the type mandate):
       // "Warp mode · Bend ›". The legacy ALL-CAPS header still titles the list that opens from it.
       const MODE_ROW = [[/_WARP_MODE$/, 'Warp mode'], [/_FOLD_SHAPE$/, 'Fold shape'], [/_INTERP_MODE$/, 'Interpolation'],
-                        [/_KEYTRACK_DEST$/, 'Keytrack target'], [/_GEODE_CUT_MODE$/, 'Cut mode'], [/_GEODE_DRIVE_MODE$/, 'Drive mode'],
+                        [/_KEYTRACK_DEST$/, 'Keytrack target'], [/_GEODE_DRIVE_MODE$/, 'Drive mode'],
                         [/_GEODE_SIEVE_MODE$/, 'Sieve mode'], [/_GEODE_SHAPE_TARGET$/, 'Shape'], [/_SPECTRAL_TYPE$/, 'Spectral mode'],
                         [/_SAMPLE_STRETCH_MODE$/, 'Stretch mode'], [/_SAMPLE_FORMANT_MODE$/, 'Formant mode']];
       const modeRowLabel = (p) => { for (const m of MODE_ROW) if (m[0].test(p)) return m[1]; return 'Mode'; };
@@ -22012,15 +22075,8 @@ setTimeout(function wireSynControls () {
         });
       });
 
-      // RESYNTH — the CUT knob's LABEL follows its LP/HP mode (right-click the knob to switch).
-      ['A','B','C','D'].forEach(function (O) {
-        var ss = null; try { ss = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState('SYN_OSC_' + O + '_GEODE_CUT_MODE') : null; } catch (e) {}
-        var el = document.querySelector('#syn-panel [data-syn="SYN_OSC_' + O + '_GEODE_CUT"] .knob-label');
-        if (!el) return;
-        function paint () { var i = 0; try { i = ss ? Math.round(ss.getNormalisedValue()) : 0; } catch (e) {} var t = i ? 'HP' : 'LP'; el.textContent = t; el.dataset.lbl = t; }   // dataset.lbl → drag-readout restores the MODE name, not 'Cut'
-        try { if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener) ss.valueChangedEvent.addListener(paint); } catch (e) {}
-        paint();
-      });
+      // rs2-cut — the RESYNTH CUT knob (and its LP/HP label-follow + right-click mode menu) is RETIRED: the
+      // back row's Low/High are the Resynth cuts now, coexisting. GEODE_CUT / GEODE_CUT_MODE stay registered.
 
       // fb563 — the WT POS / SPREAD / SPECTRAL LO-HI right-click suppressors are gone: every one
       // of those knobs is a modulation destination, so the control menu claims the gesture now.
@@ -38414,6 +38470,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   window.__geodeRepaint = function (o) {
     try { var s = st[o]; if (! s || (! s.ghost && ! s.bright)) return;
           requestAnimationFrame (function () { try { paint (o); } catch (e) {} }); } catch (e) {}
+  };
+  /* fb598 — the follower watchdog cleared __geodeFollow[o]: repaint ONCE, DIRECTLY (a wake paints directly, never
+     through rAF — fb577), so the stale white head leaves the canvas while the baked picture stays (fb590). */
+  window.__geodeFollowRepaint = function (o) {
+    try { var s = st[o]; if (! s || ! s.on || (! s.ghost && ! s.bright)) return; paint (o); } catch (e) {}
   };
 
   // osc went dark (sample deleted / engine switched) → clear the canvas and drop the baked
