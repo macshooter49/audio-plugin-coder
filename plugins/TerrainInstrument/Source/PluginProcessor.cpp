@@ -980,6 +980,12 @@ juce::String TerrainInstrumentAudioProcessor::getOscWavetableJson (int osc)
     //     — a parallel additive renderer in JS — is the second-copy trap this file already warns
     //     about twice.
     //
+    //  🚨 fb601 — AND THE TABLE IS THE HARM ONE. The grid this reads is harmTable_[osc], which
+    //     rebuildHarmTableIfNeeded now bakes from SYN_OSC_x_HARM_TABLE — NOT from the wtPresetIdx
+    //     resolved above, which feeds the WAVETABLE path further down. One source for the picture
+    //     and the sound: harmDisplaySignature() re-bakes on p.tableSig, and tableSig is g->sig,
+    //     the fingerprint of this same grid.
+    //
     //  🚨 AND THE ROWS ARE THE BANK, NOT THE TABLE. Each row runs the SHIPPED HarmonicEngine at
     //     that HUE and reads its post-sculpt partials, so Carve/Lean/Shine/Wilt/Grit/Braid/Fan
     //     all move the picture. Drawing the raw table would have been a flat placeholder wearing
@@ -1483,8 +1489,17 @@ void TerrainInstrumentAudioProcessor::rebuildHarmTableIfNeeded (int oscIdx)
     static const char* const ENG[4]  = { ParameterIDs::SYN_OSC_A_ENGINE,    ParameterIDs::SYN_OSC_B_ENGINE,
                                          ParameterIDs::SYN_OSC_C_ENGINE,    ParameterIDs::SYN_OSC_D_ENGINE };
     // (fb599 — the MODE[] table is gone with the mode half of the gate below.)
-    static const char* const PRE[4]  = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
-                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    // 🚨 fb601 — HARMONICS RESOLVES ITS OWN TABLE. This used to be SYN_OSC_x_WT_PRESET, shared with
+    //    the wavetable engine, whose default 0 = Sine gave the additive bank a 0.43-semitone frame
+    //    axis to sculpt (CHURN 1.00 dB end to end; 4.53 dB on Prophet Saw, the new HARM default,
+    //    whose axis is 19.15 st).
+    //    This function early-returns unless the ENGINE is HARM, so every read of PRE[] below is a
+    //    Harmonics read — the wavetable engine's own preset lane is untouched.
+    //    ⚠️ The IMPORT still wins over both: oscSourceSpec() prefers importSlot_ whenever a table is
+    //    loaded, so an imported wavetable reaches Harmonics exactly as it always did, and this
+    //    index only chooses the FACTORY fallback.
+    static const char* const PRE[4]  = { ParameterIDs::SYN_OSC_A_HARM_TABLE, ParameterIDs::SYN_OSC_B_HARM_TABLE,
+                                         ParameterIDs::SYN_OSC_C_HARM_TABLE, ParameterIDs::SYN_OSC_D_HARM_TABLE };
 
     // Only bake for an oscillator that is actually on HARMONIC/Table — 64 KB and 16 frame
     // conversions per oscillator is not something to do for a panel nobody is using.
@@ -3075,7 +3090,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
 
 
     // ── Synth section — Phase 2A (Wavetable foundation) ──────────────────
-    layout.add (std::make_unique<juce::AudioParameterChoice> (
+    // fb601 — THE ROSTER IS CAPTURED HERE, NEVER RETYPED. SYN_OSC_x_HARM_TABLE (registered at the
+    // very end of this layout) has to offer these exact 46 names in this exact order, and a second
+    // typed copy of a 46-entry list is precisely how a silent renumber starts. The literal below
+    // STAYS a literal inside this expression because it is SITE 3 of the ten-site gate —
+    // Tests/wt_list_gate.py parses the `juce::StringArray {` that follows this ParameterID — so the
+    // parameter is built first, its own `choices` taken, and only then handed to the layout.
+    auto wtPresetA = std::make_unique<juce::AudioParameterChoice> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_PRESET, 1 },
         "Synth OSC A WT Preset",
         juce::StringArray { "Sine", "Triangle", "Square", "Pulse",
@@ -3098,7 +3119,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
                             "Terra Vox", "Terra Choir", "Terra Bell", "Terra Bar",
                             "Terra Fold", "Terra Sweep", "Terra Cloud", "Terra Dust",
                             "Terra Glass", "Terra Bow", "Terra Reed", "Terra Growl" },
-        0));  // default = Sine
+        0);  // default = Sine
+    const juce::StringArray wtRoster = wtPresetA->choices;   // fb601 — the ONE roster (see above)
+    layout.add (std::move (wtPresetA));
 
     layout.add (std::make_unique<juce::AudioParameterFloat> (
         juce::ParameterID { ParameterIDs::SYN_OSC_A_WT_FRAME, 1 },
@@ -5857,6 +5880,37 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         juce::ParameterID { ParameterIDs::SYN_RESO_MATERIAL, 1 }, "Reso Material",
         juce::StringArray { "String", "Pluck", "Piano", "Bar", "Metal", "Drum" }, 0));
 
+    // ══ fb601 — HARMONICS' OWN TABLE. Registered LAST, with the other late params: APPENDING to
+    //    the layout is safe, renumbering an existing choice is not (the fb342 law).
+    //    fb599 pins the additive family to Table, so this list IS the Harmonics engine's source —
+    //    and until now it read SYN_OSC_x_WT_PRESET, whose default is 0 = Sine. MEASURED on the
+    //    default patch, knob 0 -> 1, with the additive bank fed from Sine: CHURN moves the
+    //    magnitude spectrum 1.00 dB, Braid 0.24, Root 0.04, Fan 0.56, Wilt 0.77, Grit 0.86 — all
+    //    inaudible, because Sine's whole 16-frame axis spans 0.43 semitones of spectral centroid.
+    //    The same six on Prophet Saw: 4.53 · 2.19 · 0.45 · 5.53 · 22.30 · 4.74 dB, 4.5x to 29x more,
+    //    over a 19.15 st axis. On harm_churn_cert's own gated depth metric CHURN at 100 % moves
+    //    Prophet Saw 8.73 dB against Sine's 2.46, and reaches 66.8 % of its own whole-axis ceiling.
+    //    Same 46 names as the wavetable engine (`wtRoster` IS that parameter's own `choices`, so
+    //    the two lists cannot drift), different DEFAULT — the two engines want opposite things
+    //    from index 0, and the Wavetable engine keeps Sine untouched.
+    //    Alternatives measured (frame axis st / CHURN mSPAN dB): Even 13.22/9.05 · Vowel Morph
+    //    19.07/15.29 · Serum HD 41.92/62.33 · Rise 49.42/38.47 — all louder, none as universally
+    //    musical. ("Harm Series" from the brief is NOT a table in this build — it is in no
+    //    StringArray, enum or <select>.) Prophet Saw is the safe pick; changing it is the one
+    //    string below. 🔒 By NAME, not by number: indexOf pins it to "Prophet Saw" (index 4 today)
+    //    whatever happens around it.
+    //    A patch saved before fb601 has no HARM_TABLE child and is seeded from its own WT_PRESET
+    //    in setStateInformation, so nothing already saved changes timbre — see "harmTableSplit".
+    {
+        const int defTable = juce::jmax (0, wtRoster.indexOf ("Prophet Saw"));
+        static const char* const ids[4]  = { ParameterIDs::SYN_OSC_A_HARM_TABLE, ParameterIDs::SYN_OSC_B_HARM_TABLE,
+                                             ParameterIDs::SYN_OSC_C_HARM_TABLE, ParameterIDs::SYN_OSC_D_HARM_TABLE };
+        static const char* const nms[4]  = { "Synth OSC A Harm Table", "Synth OSC B Harm Table",
+                                             "Synth OSC C Harm Table", "Synth OSC D Harm Table" };
+        for (int o = 0; o < 4; ++o)
+            layout.add (std::make_unique<juce::AudioParameterChoice> (
+                juce::ParameterID { ids[o], 1 }, nms[o], wtRoster, defTable));
+    }
 
     return layout;
 }
@@ -14460,6 +14514,16 @@ void TerrainInstrumentAudioProcessor::getStateInformation (juce::MemoryBlock& de
     // from "version" for the same reason fxRoutesExplicit is: that property gates
     // migrateBlobToVersion3() and the V1/V2 branch below, and must not move for this.
     state.setProperty ("dlySpreadRebased", 1,              nullptr);
+    // fb601 — HARMONICS HAS ITS OWN TABLE FROM HERE ON. SYN_OSC_x_HARM_TABLE is a NEW param, so a
+    // blob written before fb601 has no PARAM child for it and would boot every Harmonic oscillator
+    // on the new Prophet Saw default — i.e. every already-saved Harmonic patch would change timbre.
+    // setStateInformation seeds it from that oscillator's own WT_PRESET when this property is
+    // absent. This says "this blob already knows about the split", so a post-fb601 session where
+    // Max has DELIBERATELY chosen a table (Sine included) is never re-seeded on the next load —
+    // "absent PARAM child" is the pre-fb601 tell, NOT "this osc is on table 0". Kept separate from
+    // "version" for the same reason the two above are: that property gates migrateBlobToVersion3()
+    // and the V1/V2 branch.
+    state.setProperty ("harmTableSplit", 1,               nullptr);
     state.setProperty ("editingLayer", editingLayer.load(), nullptr);
     // Mix page Phase 2: global trigger-mode state at the root level.
     state.setProperty ("triggerMode",     triggerMode.load(),     nullptr);
@@ -15069,6 +15133,50 @@ void TerrainInstrumentAudioProcessor::setStateInformation (const void* data, int
                         }
                     }
             }
+
+            // fb601 migration: HARMONICS GOT ITS OWN TABLE. The additive bank read SYN_OSC_x_WT_PRESET
+            // until now; it reads SYN_OSC_x_HARM_TABLE from fb601 on, and that param's registered
+            // default is Prophet Saw (index 4), not Sine. A blob written before fb601 has no PARAM
+            // child for it at all, so without this every saved Harmonic patch would come back on a
+            // different table — a 19.15 st frame axis instead of Sine's 0.43 st, and 4.5x to 29x the
+            // response on every additive knob. Seeding HARM_TABLE from that oscillator's own
+            // WT_PRESET reproduces the old shared-parameter behaviour exactly, so an old patch is
+            // bit-identical. An absent WT_PRESET child means that blob would have loaded WT_PRESET's
+            // own default, 0 = Sine, which is what the 0.0f fallback below reproduces.
+            // The marker is a SEPARATE property ("harmTableSplit", see getStateInformation), never a
+            // "version" bump; and the test is "this blob predates fb601", never "this osc is on
+            // table 0", so a user who deliberately picks Prophet Saw — or Sine — is never stomped.
+            // ══ fb601-MIGRATION-BEGIN — the cert slices these lines verbatim; keep the markers ══
+            if (! newState.hasProperty ("harmTableSplit"))
+            {
+                static const char* const wtIds[4]   = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                                        ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+                static const char* const harmIds[4] = { ParameterIDs::SYN_OSC_A_HARM_TABLE, ParameterIDs::SYN_OSC_B_HARM_TABLE,
+                                                        ParameterIDs::SYN_OSC_C_HARM_TABLE, ParameterIDs::SYN_OSC_D_HARM_TABLE };
+                for (int o = 0; o < 4; ++o)
+                {
+                    float wtVal = 0.0f;                       // no WT_PRESET child ⇒ that blob loaded Sine
+                    juce::ValueTree harmCh;                   // invalid unless the blob somehow carries one
+                    for (int c = 0; c < newState.getNumChildren(); ++c)
+                    {
+                        auto ch = newState.getChild (c);
+                        if (! ch.hasType ("PARAM")) continue;
+                        const juce::String cid = ch.getProperty ("id").toString();
+                        if      (cid == wtIds[o])   wtVal  = (float) ch.getProperty ("value", 0.0f);
+                        else if (cid == harmIds[o]) harmCh = ch;
+                    }
+                    if (harmCh.isValid())
+                        harmCh.setProperty ("value", wtVal, nullptr);
+                    else
+                    {
+                        juce::ValueTree hp ("PARAM");
+                        hp.setProperty ("id", harmIds[o], nullptr);
+                        hp.setProperty ("value", wtVal, nullptr);
+                        newState.appendChild (hp, nullptr);
+                    }
+                }
+            }
+            // ══ fb601-MIGRATION-END ══
 
             // ── fb522 migration: VERSION 3. Must run HERE — after the older per-param
             //    migrations above (so it sees their results) and before BOTH

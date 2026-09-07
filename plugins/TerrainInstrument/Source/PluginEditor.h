@@ -654,6 +654,13 @@ private:
     juce::WebSliderRelay synOscDHarmShineRelay { ParameterIDs::SYN_OSC_D_HARM_SHINE };
     juce::WebSliderRelay synOscDHarmWiltRelay  { ParameterIDs::SYN_OSC_D_HARM_WILT };
     juce::WebSliderRelay synOscDHarmFizzRelay  { ParameterIDs::SYN_OSC_D_HARM_FIZZ };
+    // fb601 — the Harmonics header's OWN table selection (46-name roster, default Prophet Saw).
+    // Same relay/attachment shape as synOscxWtPresetRelay: the page writes it through
+    // Juce.getSliderState(id).setNormalisedValue(index / (N - 1)) like every other bound <select>.
+    juce::WebSliderRelay synOscAHarmTableRelay { ParameterIDs::SYN_OSC_A_HARM_TABLE };
+    juce::WebSliderRelay synOscBHarmTableRelay { ParameterIDs::SYN_OSC_B_HARM_TABLE };
+    juce::WebSliderRelay synOscCHarmTableRelay { ParameterIDs::SYN_OSC_C_HARM_TABLE };
+    juce::WebSliderRelay synOscDHarmTableRelay { ParameterIDs::SYN_OSC_D_HARM_TABLE };
 
     // ════ MODAL-ENGINE relays — physical modeling oscillator (13 × 4 osc) ════
     juce::WebSliderRelay synOscAModalFamilyRelay { ParameterIDs::SYN_OSC_A_MODAL_FAMILY };
@@ -1451,6 +1458,7 @@ private:
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmShineAttachment, synOscBHarmShineAttachment, synOscCHarmShineAttachment, synOscDHarmShineAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmWiltAttachment, synOscBHarmWiltAttachment, synOscCHarmWiltAttachment, synOscDHarmWiltAttachment;
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmFizzAttachment, synOscBHarmFizzAttachment, synOscCHarmFizzAttachment, synOscDHarmFizzAttachment;
+    std::unique_ptr<juce::WebSliderParameterAttachment> synOscAHarmTableAttachment, synOscBHarmTableAttachment, synOscCHarmTableAttachment, synOscDHarmTableAttachment;   // fb601
 
     // ── MODAL-ENGINE attachments (13 × 4 osc) ──
     std::unique_ptr<juce::WebSliderParameterAttachment> synOscAModalFamilyAttachment, synOscBModalFamilyAttachment, synOscCModalFamilyAttachment, synOscDModalFamilyAttachment;

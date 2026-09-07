@@ -63,7 +63,7 @@ static void buildTable()
     for (int j = gTblN; j < H::kMaxPartials; ++j) { gTblAmp[j] = 0.f; gTblPhase[j] = 0.f; }
 }
 
-// ── the SHIPPED gather, transcribed: what PluginProcessor.cpp:9469-9515 hands the voice ───────
+// ── the SHIPPED gather, transcribed: what PluginProcessor.cpp:9526-9600 hands the voice ───────
 //    `storedMode` is the preset's HARM_MODE choice index; `gridLive` is whether the message
 //    thread has baked a grid for this oscillator (rebuildHarmTableIfNeeded, ~1491).
 struct Gathered { HarmParams p; };
@@ -191,6 +191,17 @@ int main()
     //    case 0). Its only remaining readers are SHINE's detune rate (:753), BRAID's beat wobble
     //    (:1002) and FAN's orbit (:1023) — each gated on its own knob, and all three of those knobs
     //    default to 0.0 (PluginProcessor.cpp:4176-4177 dv[]). So on a FACTORY-DEFAULT HARM patch:
+    //
+    //    🚨 fb601 — THIS BLOCK USED TO PRINT "Churn 0.00 vs 1.00 -> 0.0000" AND STOP THERE, which
+    //    reads exactly like "CHURN DOES NOTHING" and is the first thing a future session would
+    //    find. It is not a measurement of CHURN at all. Since fb600 the knob's whole effect is the
+    //    per-VOICE frame drift at HarmonicEngine.h:308-322, and that path is gated on
+    //        chRate > 0 && mainMode == 6 && tableGridAmp != nullptr
+    //                   && tableFrames > 1 && tableStride > 0 && ! displayMode_
+    //    — and the table this cert builds is a SINGLE RESOLVED FRAME (tableAmp/tablePhase, no
+    //    GRID at all), exactly like the display bake. tableGridAmp is null, so driftOn_ is false
+    //    and the number is STRUCTURALLY zero: it says nothing about the knob. It is kept, labelled,
+    //    and then the real thing is measured underneath it against a 16-frame grid.
     {
         HarmParams base = gatherFIXED (6, 0).p;
         base.hue = 0.35f; base.count = 0.5f; base.lean = 0.5f; base.fan = 0.0f; base.grit = 0.0f;
@@ -201,11 +212,65 @@ int main()
         HarmParams b2 = base; b2.shine = 0.6f; b2.fan = 0.7f; b2.braid = 0.5f;
         HarmParams lo2 = b2, hi2 = b2; lo2.churn = 0.0f; hi2.churn = 1.0f;
         const double dLive = wmove (prepared (lo2, 188), prepared (hi2, 188));
-        std::printf ("\n  CHURN DIAGNOSTIC (item 2): Churn 0.00 vs 1.00 on the registered defaults\n"
-                     "        (Fan=Braid=Shine=Carve=0) → %.4f (amp dB + pitch cents + pan, all weighted).\n"
+        std::printf ("\n  CHURN DIAGNOSTIC (item 2), NO GRID — the sculpt readers only:\n"
+                     "        Churn 0.00 vs 1.00 on the registered defaults (Fan=Braid=Shine=Carve=0)\n"
+                     "        → %.4f (amp dB + pitch cents + pan, all weighted).\n"
                      "        With Shine 0.6 / Fan 0.7 / Braid 0.5 up → %.4f on the same metric.\n"
-                     "        Pinning the sculpt to Keel REMOVES Tide and Terrace, the only two sculpt\n"
-                     "        readers of churnMul — Churn's reach shrinks, it does not grow.\n", dDef, dLive);
+                     "        ⚠️ THIS ZERO IS STRUCTURAL, NOT A VERDICT ON CHURN. tableGridAmp is null on a\n"
+                     "        statically-prepared single-frame bank, so driftOn_ (HarmonicEngine.h:308) is\n"
+                     "        false and the fb600 frame drift — the knob's ENTIRE effect — cannot run.\n"
+                     "        Pinning the sculpt to Keel also removes Tide and Terrace, the only two sculpt\n"
+                     "        readers of churnMul, so what is left here can only shrink.\n", dDef, dLive);
+
+        // ── fb601 — AND NOW THE REAL THING: the same knob against a real 16-frame GRID. ────────
+        //    HarmTableSource::frameToGrid hands the voice tableFrames rows of tableStride floats
+        //    and CHURN walks that axis per voice. A single snapshot is worthless — the drift is a
+        //    sine, so at some instants it is back at Hue and the distance is 0 by construction.
+        //    Sampled across ~1 s of engine time instead, and both the peak and the mean printed.
+        static float gGrid[16 * H::kMaxPartials];
+        const int F = 16, STR = H::kMaxPartials;
+        for (int f = 0; f < F; ++f)
+        {
+            const double u = (double) f / (F - 1);
+            double e = 0.0;
+            for (int j = 0; j < STR; ++j)
+            {   // a formant that walks up the bank as the frame index rises — the frame axis a
+                // wavetable actually has, not noise
+                const double n = j + 1;
+                const double ctr = 3.0 + 26.0 * u;
+                const double a = std::exp (-std::pow ((n - ctr) / 3.0, 2.0)) + 0.10 / std::pow (n, 1.2);
+                gGrid[f * STR + j] = (float) a; e += a * a;
+            }
+            const float g = (float) (1.0 / std::sqrt (std::max (1e-12, e)));
+            for (int j = 0; j < STR; ++j) gGrid[f * STR + j] *= g;
+        }
+        // the RESOLVED frame the processor would hand a churn-0 voice at this Hue — so the two
+        // sides differ by the DRIFT and by nothing else
+        static float gRes[H::kMaxPartials];
+        {
+            const float fp = base.hue * (float) (F - 1);
+            int f0 = (int) fp; if (f0 > F - 2) f0 = F - 2; if (f0 < 0) f0 = 0;
+            const float t = fp - (float) f0;
+            for (int j = 0; j < STR; ++j)
+                gRes[j] = gGrid[f0 * STR + j] + (gGrid[(f0 + 1) * STR + j] - gGrid[f0 * STR + j]) * t;
+        }
+        HarmParams gl = base, gh = base;
+        for (HarmParams* q : { &gl, &gh })
+        { q->tableAmp = gRes; q->tableN = STR; q->tableGridAmp = gGrid; q->tableFrames = F; q->tableStride = STR; }
+        gl.churn = 0.0f; gh.churn = 1.0f;
+        double peak = 0.0, sum = 0.0; int nS = 0;
+        const Bank still = prepared (gl, 188);
+        for (int blocks : { 24, 48, 72, 96, 120, 144, 168, 188 })
+        { const double d2 = wmove (still, prepared (gh, blocks)); peak = std::max (peak, d2); sum += d2; ++nS; }
+        HarmParams g25 = gh; g25.churn = 0.25f;
+        double peak25 = 0.0;
+        for (int blocks : { 24, 48, 72, 96, 120, 144, 168, 188 })
+            peak25 = std::max (peak25, wmove (still, prepared (g25, blocks)));
+        std::printf ("\n  CHURN DIAGNOSTIC (item 2), WITH A 16-FRAME GRID — the fb600 path, live:\n"
+                     "        Churn 0.00 vs 1.00, sampled at 8 instants over ~1 s → peak %.4f, mean %.4f\n"
+                     "        Churn 0.00 vs 0.25 on the same sampling            → peak %.4f\n"
+                     "        (0 here WOULD be a verdict: it would mean the drift is not reaching the bank.)\n",
+                     peak, sum / nS, peak25);
     }
 
     std::printf ("\n  %s %d passed, %d failed\n\n", (pass == tot) ? "OK" : "FAILED", pass, tot - pass);

@@ -17308,6 +17308,64 @@ function __synChoiceCount (paramId, el) {
 }
 try { window.__synChoiceCount = __synChoiceCount; } catch (e) {}
 
+// 🚨 fb601 — ONE HEADER, TWO PARAMS. The Harmonics engine reads its spectrum from its OWN table
+//   choice, SYN_OSC_x_HARM_TABLE (registered default Prophet Saw); the Wavetable engine keeps
+//   SYN_OSC_x_WT_PRESET (default Sine, unchanged — patches saved before fb601 migrate in the
+//   processor). They SHARE the header, the ‹ › stepper, the glass two-pane browser and the one
+//   <select> that lists the 46 tables (♻️ RECYCLE — a second copy would be the failure), so the
+//   branch lives HERE, in one place, and every read and write asks which param this osc owns.
+//   WHY: on Sine the whole 16-frame axis spans 0.43 semitones of spectral centroid, so the
+//   additive knobs measured 0.79 dB (CHURN) … 0.86 dB (Grit) end to end — inaudible. The same
+//   CHURN sweep on Prophet Saw measures 12.85 dB.
+//   HARD LAW: this branch can no-op — on a processor that has not registered HARM_TABLE yet it
+//   quietly falls back to WT_PRESET — so it SAYS which param it took, once per (osc, param), on
+//   both the read (the boot re-sync) and the write.
+// ⚠️ AND IT MUST NOT GUESS THAT THE PARAM EXISTS. JUCE hands back a SliderState for ANY name you
+//   ask for, so a typo or a half-landed build reads 0 and writes into a void — the header would
+//   sit on "Sine" while the ‹ › did nothing at all. `properties.parameterIndex` is the JS-side −1
+//   until the backend has actually answered for that id (the same test __paramCardinality uses),
+//   so we LATCH on the first confirmation and never look again: before it, HARM behaves exactly as
+//   fb600 shipped (WT_PRESET); after it, the header is HARM_TABLE for good. The boot re-sync
+//   ladder (120/400/1000/2200 ms) re-reads, so the name lands as soon as the relay is up.
+var __harmTblOK = {};
+function __harmTblLive (L) {
+  if (__harmTblOK[L]) return true;
+  try { var st = window.Juce.getSliderState ('SYN_OSC_' + L + '_HARM_TABLE');
+        var p = st && st.properties;
+        if (p && p.parameterIndex >= 0) { __harmTblOK[L] = 1;
+          try { console.info ('[fb601] SYN_OSC_' + L + '_HARM_TABLE is live (parameterIndex ' + p.parameterIndex
+            + ', ' + p.numSteps + ' choices) — the Harmonics header is on its own table now'); } catch (e2) {}
+          return true; } } catch (e) {}
+  return false;
+}
+function __synTablePid (o) {
+  var dev = null, L = String (o).toUpperCase ();
+  try { dev = document.getElementById ('osc-' + o + '-device'); } catch (e) {}
+  var harm = !!(dev && dev.classList.contains ('engine-harm'));
+  return 'SYN_OSC_' + L + ((harm && __harmTblLive (L)) ? '_HARM_TABLE' : '_WT_PRESET');
+}
+// the osc letter behind a header table <select> — '' for every OTHER [data-syn] control, which is
+// what keeps this branch scoped to the four osc headers and nothing else.
+function __synTableOsc (el) {
+  try { var m = /^osc-([a-d])-preset-select$/.exec ((el && el.id) || ''); return m ? m[1] : ''; } catch (e) { return ''; }
+}
+var __synTableSaid = {};
+function __synTableState (o, fallback) {
+  var pid = __synTablePid (o), st = null;
+  try { st = window.Juce.getSliderState (pid) || null; } catch (e) { st = null; }
+  var dev = null; try { dev = document.getElementById ('osc-' + o + '-device'); } catch (e) {}
+  var harm = !!(dev && dev.classList.contains ('engine-harm'));
+  var key = o + '|' + pid;
+  if (! __synTableSaid[key]) { __synTableSaid[key] = 1;
+    try { console.info ('[fb601] osc ' + o + ' header write -> ' + pid
+      + ((harm && pid.indexOf ('_HARM_TABLE') < 0)
+          ? '  ⚠️ ON THE HARMONICS ENGINE BUT HARM_TABLE IS NOT REGISTERED — writing the fb600 path'
+          : '')); } catch (e) {} }
+  return st || fallback;
+}
+try { window.__synTablePid = __synTablePid; window.__synTableOsc = __synTableOsc;
+      window.__harmTblLive = __harmTblLive; } catch (e) {}
+
 setTimeout(function wireSynControls () {
   try {
     const controls = document.querySelectorAll('[data-syn]');
@@ -17342,7 +17400,13 @@ setTimeout(function wireSynControls () {
               // thing missing is the divisor, and the divisor is the PARAM's cardinality. See the
               // __synChoiceCount comment above: this line was the fb373 trap and is now closed at source.
               const numChoices = __synChoiceCount (paramId, el);
-              state.setNormalisedValue (numChoices > 1 ? v / (numChoices - 1) : 0);
+              // fb601 — the four osc header <select>s drive SYN_OSC_x_HARM_TABLE while their osc is
+              //   on the Harmonics engine, SYN_OSC_x_WT_PRESET otherwise. The two choice lists are
+              //   the same 46 tables, so the divisor above is right for both and only the
+              //   DESTINATION moves; every other bound control is its own param, always.
+              const __tblO = __synTableOsc (el);
+              (__tblO ? __synTableState (__tblO, state) : state)
+                .setNormalisedValue (numChoices > 1 ? v / (numChoices - 1) : 0);
             } else {
               const min = parseFloat (el.min);
               const max = parseFloat (el.max);
@@ -17359,6 +17423,11 @@ setTimeout(function wireSynControls () {
         if (state.valueChangedEvent && state.valueChangedEvent.addListener) {
           state.valueChangedEvent.addListener (() => {
             try {
+              // fb601 — WT_PRESET must not stomp the header while HARM_TABLE owns it. The osc's
+              //   OTHER table param is still live (automation, a patch load) and this listener is
+              //   bound to a fixed id, so it stands down whenever it is not the active one.
+              const __rbO = __synTableOsc (el);
+              if (__rbO && __synTablePid (__rbO) !== paramId) return;
               const v = state.getNormalisedValue();
               if (el.tagName === 'SELECT') {
                 const val = state.getScaledValue ? state.getScaledValue() : v;
@@ -17394,7 +17463,12 @@ setTimeout(function wireSynControls () {
           // Engine-conditional front: Sample engine (index 1) swaps the wavetable
           // front for the .sample-view. Redraw its canvas when it becomes visible
           // (a hidden canvas has zero size, so the initial draw is a no-op).
-          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran || isModal || isSpec) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o);   /* fb590 — isSpec ADDED. Resynth shares this very .sample-view, so leaving it out meant switching an osc TO Resynth never re-requested its payload: the view stayed :not(.loaded), and .samp-drop ("Drop sample here") sat at opacity .5 under the spectrogram forever. The only other restore path is the 10-shot timeout burst that stops 9 s after page load. */ if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {} }
+          try { var dev = disp.closest ('.device.osc'); if (dev) { var isSamp = (i === 1); var isGran = (i === 2); var isFm = (i === 4); dev.classList.toggle ('engine-sample', isSamp); dev.classList.toggle ('engine-granular', isGran); dev.classList.toggle ('engine-fm', isFm); var isSpec = (i === 3); dev.classList.toggle ('engine-geode', isSpec); var isHarm = (i === 5); dev.classList.toggle ('engine-harm', isHarm); var isModal = (i === 6); dev.classList.toggle ('engine-modal', isModal); if ((isSamp || isGran || isModal || isSpec) && window.__terrainSampleRedraw) window.__terrainSampleRedraw (o);   /* fb590 — isSpec ADDED. Resynth shares this very .sample-view, so leaving it out meant switching an osc TO Resynth never re-requested its payload: the view stayed :not(.loaded), and .samp-drop ("Drop sample here") sat at opacity .5 under the spectrogram forever. The only other restore path is the 10-shot timeout burst that stops 9 s after page load. */ if (window.__terrainWarp2Refresh) window.__terrainWarp2Refresh (); } } catch (e) {}
+          /* fb601 — THE ENGINE MOVED, SO THE TABLE PARAM MOVED. Wavetable -> Harmonic swaps the
+             header from WT_PRESET to HARM_TABLE; without this the name keeps showing the table the
+             OTHER engine holds while the DSP plays this one's. Re-reads from the param, never from
+             a default (STATE PERSISTS). */
+          try { if (window.__oscHeaderResync) window.__oscHeaderResync (); } catch (e) {} }
         function pick () { try { var i = parseInt (sel.value, 10); if (isNaN (i)) i = 0; es.setNormalisedValue (i / 6); disp.textContent = ENGINE_NAMES[i] || 'Wavetable'; } catch (e) {}
           // MENU-STUCK MITIGATION — WKWebView can leave a native <select> unable to REOPEN after a
           // change that mutates its own subtree (switching an osc to FM re-lays-out the osc view).
@@ -36728,7 +36802,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     var any = false;
     ['a','b','c','d'].forEach (function (o) {
       ['SYN_OSC_' + o.toUpperCase() + '_WT_PRESET', 'SYN_OSC_' + o.toUpperCase() + '_ENGINE',
-     'SYN_OSC_' + o.toUpperCase() + '_HARM_MODE']   /* fb589 — the additive table is a source too */.forEach (function (id) {
+     'SYN_OSC_' + o.toUpperCase() + '_HARM_MODE',   /* fb589 — the additive table is a source too */
+     'SYN_OSC_' + o.toUpperCase() + '_HARM_TABLE']  /* fb601 — …and since fb601 that table is its OWN param */.forEach (function (id) {
         var ss = null; try { ss = window.Juce.getSliderState (id); } catch (e) {}
         if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener) {
           ss.valueChangedEvent.addListener (function () { try { if (wtWaterfall.on[o]) wtWaterfall.fetch (o); } catch (e) {} });
@@ -36868,8 +36943,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return;
       sel.value = it.value;
       sel.dispatchEvent (new Event ('change', { bubbles: true }));
-      try { var pss = window.Juce.getSliderState ('SYN_OSC_' + o.toUpperCase () + '_WT_PRESET');
-            var pid = 'SYN_OSC_' + o.toUpperCase () + '_WT_PRESET';
+      try { var pid = window.__synTablePid ? window.__synTablePid (o)                                /* fb601 — HARM_TABLE on the Harmonics engine, WT_PRESET everywhere else */
+                                          : 'SYN_OSC_' + o.toUpperCase () + '_WT_PRESET';
+            var pss = window.Juce.getSliderState (pid);
             var pn = window.__synChoiceCount ? window.__synChoiceCount (pid, sel) : sel.options.length;   /* the PARAM's cardinality, not the row count (fb373) */
             if (pss) pss.setNormalisedValue ((parseInt (sel.value, 10) || 0) / Math.max (1, pn - 1)); } catch (e) {}
       window.__wtPath[o] = null;
@@ -36995,7 +37071,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 
     function applyPreset (v) {
       sel.value = v; sel.dispatchEvent (new Event ('change', { bubbles: true }));
-      try { var wpid = 'SYN_OSC_' + osc.toUpperCase () + '_WT_PRESET';
+      try { var wpid = window.__synTablePid ? window.__synTablePid (osc)                             /* fb601 — same header, whichever engine owns it */
+                                            : 'SYN_OSC_' + osc.toUpperCase () + '_WT_PRESET';
             var pss = window.Juce.getSliderState (wpid);
             var wpn = window.__synChoiceCount ? window.__synChoiceCount (wpid, sel) : sel.options.length;   /* the PARAM's cardinality, not the row count (fb373) */
             if (pss) pss.setNormalisedValue ((parseInt (v, 10) || 0) / Math.max (1, wpn - 1)); } catch (e) {}
@@ -38641,7 +38718,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     if (! (window.Juce && window.Juce.getSliderState)) return;
     ['a','b','c','d'].forEach(function (o) {
       var L = o.toUpperCase();
-      var ps = ss('SYN_OSC_' + L + '_WT_PRESET'),
+      /* fb601 — the header's table param is per-ENGINE: Harmonics reads SYN_OSC_x_HARM_TABLE,
+         everything else SYN_OSC_x_WT_PRESET. This block is the boot authority for the name, so it
+         is what makes a reopen show the table the DSP is actually playing. */
+      var tpid = window.__synTablePid ? window.__synTablePid (o) : ('SYN_OSC_' + L + '_WT_PRESET');
+      var ps = ss(tpid),
           psel = document.getElementById('osc-' + o + '-preset-select'),
           pdisp = document.getElementById('osc-' + o + '-preset-display');
       if (ps && psel) {
@@ -38651,10 +38732,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
            quietly. Clamp by the PARAM's cardinality (__synChoiceCount asks the backend first), and
            if the index has no row, SAY SO rather than showing somebody else's table name. */
         var ppn = 0;
-        try { ppn = window.__synChoiceCount ? window.__synChoiceCount('SYN_OSC_' + L + '_WT_PRESET', psel) : psel.options.length; } catch (e) { ppn = psel.options.length; }
+        try { ppn = window.__synChoiceCount ? window.__synChoiceCount(tpid, psel) : psel.options.length; } catch (e) { ppn = psel.options.length; }
         var i = Math.max(0, Math.min((ppn || psel.options.length) - 1, sIdx(ps)));
         try { psel.value = String(i); } catch (e) {}
-        if (pdisp) pdisp.textContent = (psel.selectedIndex >= 0) ? psel.options[psel.selectedIndex].text : ('#' + i);
+        /* fb601 — an IMPORTED table has no index in either choice list; its name is owned by
+           wtWaterfall.restoreImports (which lands at 500/1500/3200 ms, i.e. INSIDE this ladder).
+           Writing a factory name over it here is how the header would forget an import. */
+        var imp = false; try { imp = !!(window.wtWaterfall && window.wtWaterfall.imported && window.wtWaterfall.imported[o]); } catch (e) {}
+        if (pdisp && ! imp) pdisp.textContent = (psel.selectedIndex >= 0) ? psel.options[psel.selectedIndex].text : ('#' + i);
+        /* fb601 — SAY WHICH PARAM THE NAME CAME FROM. This is the boot authority for the header, so
+           a silent per-engine branch here is exactly the shape that hides a wrong read (the header
+           says Sine while the DSP plays Prophet Saw). Once per osc per param — an engine flip
+           re-announces because the answer genuinely changed. */
+        try { var k = o + '|' + tpid; if (! tblSaid[k]) { tblSaid[k] = 1;
+          console.info('[fb601] osc ' + o + ' header name <- ' + tpid + ' = ' + i + ' "'
+            + (imp ? '(import) ' : '') + (pdisp ? pdisp.textContent : '') + '"'); } } catch (e) {}
       }
       var es = ss('SYN_OSC_' + L + '_ENGINE'),
           esel = document.getElementById('osc-' + o + '-engine-select'),
@@ -38666,7 +38758,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       }
     });
   }
-  function boot () { resync(); [120, 400, 1000, 2200].forEach(function (t) { setTimeout(resync, t); }); }
+  /* fb601 — HARM_TABLE hangs off no [data-syn] control (the header <select> stays bound to
+     WT_PRESET), so without this listener a DAW automating the Harmonics table would move the sound
+     and leave the name behind. One listener per osc, wired once, on the same readiness ladder. */
+  var tblWired = {}, tblSaid = {};
+  function wireTbl () {
+    if (! (window.Juce && window.Juce.getSliderState)) return;
+    ['a','b','c','d'].forEach(function (o) {
+      if (tblWired[o]) return;
+      var st = ss('SYN_OSC_' + o.toUpperCase() + '_HARM_TABLE');
+      if (st && st.valueChangedEvent && st.valueChangedEvent.addListener) {
+        tblWired[o] = 1; st.valueChangedEvent.addListener (resync); }
+    });
+  }
+  try { window.__oscHeaderResync = function () { try { wireTbl(); } catch (e) {} resync(); }; } catch (e) {}
+  function boot () { resync(); wireTbl(); [120, 400, 1000, 2200].forEach(function (t) { setTimeout(function () { wireTbl(); resync(); }, t); }); }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', boot); else boot();
 })();
 </script>

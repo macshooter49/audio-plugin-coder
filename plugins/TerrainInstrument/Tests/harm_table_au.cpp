@@ -12,18 +12,38 @@
 //  parameters, menu wiring, threading and all — because a bank that only works in a test harness
 //  is not a feature.
 //
+//  fb601 — RETUNED, AND TWO BARS REWRITTEN. Two things happened to this file's world:
+//    · fb599 pinned h.mainMode = 6 in the HARM gather (PluginProcessor.cpp:9546). Max: "I only
+//      want to use tables for this ... I don't want the families anymore." Every stored HARM_MODE
+//      index now renders the TABLE.
+//    · fb601 split the roster parameter in two: HARM reads SYN_OSC_x_HARM_TABLE, the wavetable
+//      engine keeps SYN_OSC_x_WT_PRESET.
+//  This gate kept driving "Synth OSC A WT Preset" on the HARM path through a FUZZY NAME MATCH, so
+//  after fb601 it was setting a parameter the harmonics engine no longer reads and measuring the
+//  0.0 dB that follows. The fuzzy fallback is gone (see the PREFLIGHT), and bars [2] and [5] —
+//  which asserted PRE-fb599 behaviour — now certify what actually ships.
+//
 //  THE BARS
 //   0  the AU actually offers a SEVENTH harmonic family
 //   1  IT SOUNDS — Table is not a silent option (case 6 renders silence on a null table, so this
 //      is the bar that catches a bake lane that never published)
-//   2  IT SOUNDS LIKE THE TABLE — HARM/Table on a given wavetable lands far closer to the WAVETABLE
-//      ENGINE on that same table than to any of the six procedural families. This is the feature.
-//   3  THE MENU DRIVES IT — changing the wavetable preset changes the additive sound. "The same
-//      menu" is a claim about wiring, and this is the measurement of it.
+//   2  THE HARMONICS TABLE *IS* THE WAVETABLE'S SPECTRUM — the same table rendered through the
+//      HARM engine and through the WAVETABLE engine must land on top of each other, and a SECOND
+//      table must sit far away, so a pair of dead engines cannot read as agreement. (fb601: was
+//      "not like a procedural family", which fb599's pin made unpassable and meaningless.)
+//   3  THE MENU DRIVES IT — changing SYN_OSC_A_HARM_TABLE changes the additive sound, while
+//      WT_PRESET stays parked on Sine. "The same menu" is a claim about wiring; this measures it.
 //   4  HUE SCANS THE TABLE — the frame axis is live, and modulatable, because it is read on the
 //      audio thread after the mod matrix
-//   5  THE SIX FAMILIES ARE UNHARMED — each still sounds, and each is still ITSELF
+//   5  TABLES ONLY — every stored HARM_MODE index renders the SAME table, because fb599 pinned
+//      the six procedural families out. (fb601: was "THE SIX FAMILIES ARE UNHARMED", i.e. the
+//      exact opposite of shipped behaviour.)
 //   6  NO CLICKS sweeping HUE under a held note (the frame scan crosses all 16 frames)
+//
+//  MUTATION CONTROL:  HARM_TBL_MUT=1 in the environment redirects every HARM-path table write
+//  back onto "Synth OSC A WT Preset" — the fb601 rot, re-committed on purpose. Bars [2] [3] [4]
+//  and [5] must ALL go red. Run it both ways; a bar that stays green under the mutation is not
+//  measuring what its name says.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include <AudioToolbox/AudioToolbox.h>
 #include <CoreFoundation/CoreFoundation.h>
@@ -145,20 +165,70 @@ static double dist (const std::vector<double>& a, const std::vector<double>& b)
 static const char* ENG   = "Synth OSC A Engine";
 static const char* HMODE = "Synth OSC A Harmonic Mode";
 static const char* HUE   = "Synth OSC A Harmonic Hue";
-static const char* WTPRE = "Synth OSC A Wavetable Preset";
+
+// ── fb601 · THE TABLE PARAMETER IS RESOLVED PER ENGINE, BY EXACT NAME ─────────────────────
+//    fb601 split the 46-name roster across TWO AudioParameterChoices with the same strings:
+//    the HARMONICS engine reads SYN_OSC_x_HARM_TABLE, the WAVETABLE engine still reads
+//    SYN_OSC_x_WT_PRESET. index.html's __synTablePid() picks between them per engine; so does
+//    this file, and for the same reason.
+//    🚨 THIS FILE USED TO PICK ONE BY SUBSTRING — find("Wavetable") || find("WT Preset") — and
+//    that is exactly how it rotted: after fb601 it kept driving "Synth OSC A WT Preset" on the
+//    HARM path, the harmonics engine had stopped reading it, and bars [3] and [4] dutifully
+//    reported 0.0 dB of change while still LOOKING like they exercised the menu. A gate that
+//    measures the wrong parameter is worse than no gate. So there is NO fuzzy fallback here: a
+//    missing name aborts the run by name (setTbl below), it never guesses a neighbour.
+static const char* HARMTBL = "Synth OSC A Harm Table";   // fb601 — the HARMONICS path
+static const char* WTPRE   = "Synth OSC A WT Preset";    //         the WAVETABLE path
+
+// ── MUTATION CONTROL · HARM_TBL_MUT=1 in the environment ─────────────────────────────────────
+//    Re-commits the exact fb601 rot: every HARM-path write is redirected to the WAVETABLE
+//    parameter, i.e. what the old fuzzy match did. Bars [2] [3] [4] [5] must all go RED.
+//    A green bar that cannot go red is not a gate — this is how this one proves it can.
+static bool gMut = false;
+static const char* route (const char* param)
+{ return (gMut && std::strcmp (param, HARMTBL) == 0) ? WTPRE : param; }
+
+// drive one of the two table parameters — LOUDLY. Never silently no-ops.
+static void setTbl (AU& a, const char* want, int idx)
+{
+    const char* param = route (want);
+    if (! a.has (param))
+    { std::printf ("\n  !! FATAL — the installed AU has no parameter named '%s'.\n"
+                   "     This gate resolves the table parameter PER ENGINE and refuses to guess:\n"
+                   "     quietly measuring the other one is precisely how it went 0.0 dB after fb601.\n"
+                   "     If the parameter was renamed, fix the name here — do NOT restore a fuzzy match.\n\n", param);
+      std::exit (2); }
+    if (! a.setAbs (param, (float) idx))
+    { std::printf ("\n  !! FATAL — AudioUnitSetParameter failed on '%s' (index %d)\n\n", param, idx);
+      std::exit (2); }
+}
 
 int main()
 {
-    std::printf ("\n══ harm_table_au — fb588 ══  additive synthesis from the wavetables, on the INSTALLED AU\n\n");
+    std::printf ("\n══ harm_table_au — fb588, retuned fb601 ══  additive synthesis from the wavetables, on the INSTALLED AU\n\n");
     AU a; if (! a.open()) return 1;
 
-    // find the wavetable-preset parameter by fuzzy name (it has never needed one before)
-    std::string wtName;
-    for (auto& kv : a.byName)
-        if (kv.first.find ("OSC A") != std::string::npos
-            && (kv.first.find ("Wavetable") != std::string::npos || kv.first.find ("WT Preset") != std::string::npos)
-            && kv.first.find ("Preset") != std::string::npos) { wtName = kv.first; break; }
-    if (wtName.empty()) wtName = WTPRE;
+    gMut = (std::getenv ("HARM_TBL_MUT") != nullptr);
+    if (gMut) std::printf ("  \xe2\x9a\xa0\xef\xb8\x8f  MUTATION ACTIVE: HARM_TBL_MUT set — every HARM-path table write is redirected to\n"
+                           "      '%s', which is exactly what the pre-fb601 fuzzy name match did.\n"
+                           "      Bars [2] [3] [4] [5] are EXPECTED to go red. If they do not, they are not\n"
+                           "      reading the parameter they name.\n\n", WTPRE);
+
+    // ── PREFLIGHT · both table parameters, resolved by EXACT name and PRINTED ─────────────────
+    //    A detector that can silently no-op has to say whether it fired. These two lines are that
+    //    statement: they name the parameter each engine will be driven through, and its range.
+    for (const char* p : { HARMTBL, WTPRE })
+    {
+        if (! a.has (p))
+        { std::printf ("  !! FATAL — the installed AU has no parameter named '%s'.\n"
+                       "     Every measurement below would silently land on the OTHER table parameter,\n"
+                       "     which is the fb601 rot this preflight exists to prevent. Refusing to run.\n\n", p);
+          a.close(); return 2; }
+        std::printf ("  ·  %-24s -> '%s'  (choice 0..%.0f)\n",
+                     std::strcmp (p, HARMTBL) == 0 ? "HARM path table param" : "WAVETABLE path table param",
+                     p, a.maxOf (p));
+    }
+    std::printf ("\n");
 
     // ── 0 · a seventh family exists ───────────────────────────────────────────────────────────
     const float mx = a.maxOf (HMODE);
@@ -167,8 +237,12 @@ int main()
 
     a.setAbs (ENG, 5);                      // HARM
     a.set ("Synth OSC A Level", 1.0f);
-    a.setAbs (HMODE, 6);                    // Table
-    a.setAbs (wtName.c_str(), 4);           // ProphetSaw
+    a.setAbs (HMODE, 6);                    // Table (fb599 pins this anyway — see bar [5])
+    setTbl (a, HARMTBL, 4);                 // Prophet Saw, on the HARM path's OWN parameter
+    setTbl (a, WTPRE,   0);                 // 🚨 and PARK the wavetable parameter on Sine. Every
+                                            //    HARM bar below moves only HARM_TABLE, so a distance
+                                            //    that moves is proof the additive bank reads the
+                                            //    fb601 id — not the shared one it used to read.
     a.set (HUE, 0.35f);
     const auto table = a.note (57);
     const double dbT = rmsDb (table, 2048);
@@ -177,42 +251,58 @@ int main()
     { char b[160]; std::snprintf (b, sizeof b, "HARM/Table on a wavetable renders %.1f dB RMS", dbT);
       chk (dbT > -50.0, "[1] IT SOUNDS — Table is not a silent option", b); }
 
-    // ── 2 · it sounds like the table ──────────────────────────────────────────────────────────
-    a.setAbs (ENG, 0);                      // the WAVETABLE engine, same table
-    a.set ("Synth OSC A WT Frame", 0.35f);   // the wavetable engine's frame axis
-    const auto wt = a.note (57);
-    a.setAbs (ENG, 5);
-    const auto sT = spec (table), sW = spec (wt);
-    const double dTW = dist (sT, sW);
-    double nearestFam = 1e9; int nearIdx = -1; double wtVsBlade = 0;
-    for (int m = 0; m < 6; ++m)
-    { a.setAbs (HMODE, (float) m); const auto f = a.note (57); const auto sf = spec (f);
-      if (m == 0) wtVsBlade = dist (sW, sf);
-      const double d = dist (sT, sf); if (d < nearestFam) { nearestFam = d; nearIdx = m; } }
-    static const char* FAM[6] = { "Blade","Neon","Console","Chant","Bronze","Hornet" };
-    a.setAbs (HMODE, 6);
-    // 🚨 A ZERO HERE IS ONLY MEANINGFUL IF THE TWO RENDERS CAME FROM DIFFERENT ENGINES. If the
-    //    engine switch had silently failed, both would be the SAME render and the distance would
-    //    also be 0.0 — the exact degenerate shape that hid the never-baked grid. So the wavetable
-    //    render must first be shown to differ from a procedural family; only then does its
-    //    closeness to HARM/Table mean the bank really did rebuild that table.
-    { char b[240]; std::snprintf (b, sizeof b,
-        "%.2f dB from the WAVETABLE engine on the same table; nearest procedural family (%s) is %.1f dB away"
-        " [switch proof: that same wavetable render is %.1f dB from Blade]",
-        dTW, nearIdx >= 0 ? FAM[nearIdx] : "?", nearestFam, wtVsBlade);
-      chk (wtVsBlade > 3.0 && dTW < nearestFam * 0.5,
-           "[2] IT SOUNDS LIKE THE TABLE, not like a procedural family", b); }
+    // ── 2 · the harmonics table IS the wavetable's spectrum ───────────────────────────────────
+    //    🔁 fb601 — REWRITTEN, AND THE GATE WAS THE THING THAT WAS WRONG. This bar used to read
+    //    "IT SOUNDS LIKE THE TABLE, not like a procedural family" and passed only if HARM/Table sat
+    //    far closer to the wavetable engine than to the nearest of the six families. fb599 pinned
+    //    h.mainMode = 6 in the HARM gather (PluginProcessor.cpp:9546), so the six families now
+    //    RENDER THE TABLE and are 0.0 dB away by design — Tests/harm_tables_cert.cpp certifies that
+    //    pin offline on the prepared partial bank. The old bar therefore asserted the exact opposite
+    //    of shipped, intended behaviour: it could never pass again, and "fixing" it would have meant
+    //    un-shipping the pin. What is worth protecting is the claim fb588 actually made — "0.01 dB
+    //    from the wavetable engine on the installed AU" — so that is now the bar, and it is a far
+    //    stronger one than "not like a family" ever was.
+    //
+    //    🚨 CLOSENESS IS ONLY MEANINGFUL WITH A SCALE. Two dead engines are also 0.00 dB apart —
+    //    the degenerate shape that hid the never-baked grid in fb588, and the shape this very file
+    //    printed all over its report after fb601. So the pairing is measured on TWO tables and the
+    //    cross pair must be far: same table -> near AND different table -> far, or nothing is shown.
+    struct Pair { std::vector<double> harm, wt; };
+    auto renderPair = [&] (int idx) -> Pair
+    {
+        Pair pr;
+        a.setAbs (ENG, 5); setTbl (a, HARMTBL, idx); setTbl (a, WTPRE, 0);   // HARM: its own param
+        pr.harm = spec (a.note (57));
+        a.setAbs (ENG, 0); setTbl (a, WTPRE, idx);                            // WT: its own param
+        a.set ("Synth OSC A WT Frame", 0.35f);                                // the same frame as HUE
+        pr.wt = spec (a.note (57));
+        a.setAbs (ENG, 5); setTbl (a, WTPRE, 0);
+        return pr;
+    };
+    const Pair P1 = renderPair (4), P2 = renderPair (16);        // Prophet Saw · Vowel Morph
+    const double dSame1 = dist (P1.harm, P1.wt), dSame2 = dist (P2.harm, P2.wt);
+    const double dCross = dist (P1.harm, P2.wt), dHH = dist (P1.harm, P2.harm);
+    { char b[320]; std::snprintf (b, sizeof b,
+        "SAME table through both engines: Prophet Saw %.2f dB, Vowel Morph %.2f dB. "
+        "SCALE — HARM(Prophet Saw) vs WT(Vowel Morph) %.1f dB, HARM vs HARM across the two %.1f dB "
+        "(without these two a pair of dead engines also reads 0.00)", dSame1, dSame2, dCross, dHH);
+      chk (dSame1 < 3.0 && dSame2 < 3.0 && dCross > 8.0 && dHH > 8.0,
+           "[2] THE HARMONICS TABLE *IS* THE WAVETABLE'S SPECTRUM", b); }
 
     // ── 3 · the menu drives it ────────────────────────────────────────────────────────────────
-    a.setAbs (wtName.c_str(), 2);  const auto pA = a.note (57);
-    a.setAbs (wtName.c_str(), 16); const auto pB = a.note (57);
-    a.setAbs (wtName.c_str(), 12); const auto pC = a.note (57);
+    //    fb601 — only HARM_TABLE moves here; WT_PRESET stays parked on Sine from the setup. That
+    //    is the whole point: if the additive bank ever went back to reading the wavetable id, these
+    //    three renders would be one sound and the bar would go red instead of looking busy.
+    setTbl (a, HARMTBL, 2);  const auto pA = a.note (57);
+    setTbl (a, HARMTBL, 16); const auto pB = a.note (57);
+    setTbl (a, HARMTBL, 12); const auto pC = a.note (57);
     const double d32 = dist (spec (pA), spec (pB)), d33 = dist (spec (pB), spec (pC));
-    { char b[200]; std::snprintf (b, sizeof b, "Square->VowelMorph %.1f dB, VowelMorph->D50Bell %.1f dB", d32, d33);
-      chk (d32 > 6.0 && d33 > 6.0, "[3] THE MENU DRIVES IT — the wavetable preset picks the bank", b); }
+    { char b[220]; std::snprintf (b, sizeof b, "Square->VowelMorph %.1f dB, VowelMorph->D50Bell %.1f dB"
+                                               " (WT Preset held at Sine throughout)", d32, d33);
+      chk (d32 > 6.0 && d33 > 6.0, "[3] THE MENU DRIVES IT — SYN_OSC_A_HARM_TABLE picks the bank", b); }
 
     // ── 4 · HUE scans the table ───────────────────────────────────────────────────────────────
-    a.setAbs (wtName.c_str(), 16);            // VowelMorph: its frames genuinely differ
+    setTbl (a, HARMTBL, 16);                  // VowelMorph: its frames genuinely differ
     a.set (HUE, 0.0f);  const auto h0 = a.note (57);
     a.set (HUE, 0.5f);  const auto h1 = a.note (57);
     a.set (HUE, 1.0f);  const auto h2 = a.note (57);
@@ -220,20 +310,48 @@ int main()
     { char b[200]; std::snprintf (b, sizeof b, "HUE 0->0.5 moves %.1f dB, 0.5->1 moves %.1f dB", dh01, dh12);
       chk (dh01 > 4.0 && dh12 > 4.0, "[4] HUE SCANS THE TABLE — the frame axis is live", b); }
 
-    // ── 5 · the six families are unharmed ─────────────────────────────────────────────────────
-    { bool ok = true; std::string worst; double minPair = 1e9;
+    // ── 5 · TABLES ONLY ───────────────────────────────────────────────────────────────────────
+    //    🔁 fb601 — INVERTED ON PURPOSE, AND THE GATE WAS THE THING THAT WAS WRONG. This bar used
+    //    to be "[5] THE SIX FAMILIES ARE UNHARMED" and required the six procedural families to stay
+    //    more than 3 dB apart. fb599 pinned h.mainMode = 6 in the HARM gather
+    //    (PluginProcessor.cpp:9546-9547, sculptMode pinned to Keel alongside it) — Max: "I only want
+    //    to use tables for this ... I don't want the families anymore" — so every stored HARM_MODE
+    //    index renders the TABLE and the six sit 0.0 dB apart BY DESIGN. The old bar asserted the
+    //    opposite of shipped behaviour; it is rewritten to certify the pin instead of the ghost.
+    //
+    //    WHY IT ASSERTS SAMENESS, for whoever reads this next: HARM_MODE is still REGISTERED — a
+    //    choice param's cardinality is frozen at birth and is never renumbered — it is simply never
+    //    read. So the shipped property is that all SEVEN indices are one sound, including the six
+    //    that a pre-fb599 preset may still have stored. Tests/harm_tables_cert.cpp certifies the
+    //    same pin OFFLINE against the prepared partial bank, with its own HM_MUT mutation seam;
+    //    no code is shared, because that cert never opens an AU (it includes HarmonicEngine.h with
+    //    `#define private public`) and this one never touches the engine header.
+    //
+    //    🚨 SAMENESS NEEDS A SCALE, or "all 0.0 dB apart" is exactly what a dead gate prints too —
+    //    which is what bar [3] was doing five minutes ago. So the same metric is shown MOVING on the
+    //    one axis that is still live, the table, and it is moved at HARM_MODE = 0 (Blade, a RETIRED
+    //    index) so the scale doubles as proof that a retired index still resolves down the table path.
+    { setTbl (a, HARMTBL, 4);
+      bool ok = true; std::string silent; double worstPair = 0;
       std::vector<std::vector<double>> ss;
-      for (int m = 0; m < 6; ++m) { a.setAbs (HMODE, (float) m); const auto f = a.note (57);
-        if (rmsDb (f, 2048) < -50.0) { ok = false; worst += std::to_string (m) + " "; }
+      for (int m = 0; m <= 6; ++m) { a.setAbs (HMODE, (float) m); const auto f = a.note (57);
+        if (rmsDb (f, 2048) < -50.0) { ok = false; silent += std::to_string (m) + " "; }
         ss.push_back (spec (f)); }
       for (size_t i = 0; i < ss.size(); ++i) for (size_t j = i + 1; j < ss.size(); ++j)
-        minPair = std::min (minPair, dist (ss[i], ss[j]));
-      char b[200]; std::snprintf (b, sizeof b, "%s; closest pair of the six is still %.1f dB apart",
-                                  ok ? "all six sound" : ("SILENT: " + worst).c_str(), minPair);
-      chk (ok && minPair > 3.0, "[5] THE SIX FAMILIES ARE UNHARMED", b); }
+        worstPair = std::max (worstPair, dist (ss[i], ss[j]));
+      a.setAbs (HMODE, 0);                                   // Blade — retired, still table-only
+      setTbl (a, HARMTBL, 16); const auto other = a.note (57);
+      const double scale = dist (ss[0], spec (other));
+      setTbl (a, HARMTBL, 4); a.setAbs (HMODE, 6);
+      char b[320]; std::snprintf (b, sizeof b,
+        "%s; the 7 stored HARM_MODE indices are at most %.2f dB apart on one table, while the SAME "
+        "metric moves %.1f dB when only the table changes (mode still 0 = Blade)",
+        ok ? "all seven sound" : ("SILENT: " + silent).c_str(), worstPair, scale);
+      chk (ok && worstPair < 2.0 && scale > 8.0,
+           "[5] TABLES ONLY — fb599 pinned the six families out", b); }
 
     // ── 6 · no clicks sweeping HUE across all 16 frames under a held note ─────────────────────
-    a.setAbs (HMODE, 6); a.setAbs (wtName.c_str(), 16); a.set (HUE, 0.0f);
+    a.setAbs (HMODE, 6); setTbl (a, HARMTBL, 16); a.set (HUE, 0.0f);
     a.pump (0.3); a.midi (0x90, 57, 100); a.render (8);
     std::vector<float> swept;
     for (int s = 0; s <= 40; ++s) { a.set (HUE, (float) s / 40.0f); const auto c = a.render (2);

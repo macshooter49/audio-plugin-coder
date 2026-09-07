@@ -1113,6 +1113,21 @@ namespace ParameterIDs
     constexpr char SYN_OSC_D_HARM_SHINE[]        = "SYN_OSC_D_HARM_SHINE";
     constexpr char SYN_OSC_D_HARM_WILT[]         = "SYN_OSC_D_HARM_WILT";
     constexpr char SYN_OSC_D_HARM_FIZZ[]         = "SYN_OSC_D_HARM_FIZZ";
+    // fb601 — HARMONICS GETS ITS OWN TABLE SELECTION. fb599 pinned h.mainMode = 6, so the additive
+    // bank ALWAYS plays a wavetable's spectrum — and it was reading SYN_OSC_x_WT_PRESET, whose
+    // registered default is 0 = Sine. Sine is a near-degenerate additive source: its whole 16-frame
+    // axis spans 0.43 semitones of spectral centroid, so on the default patch, knob 0 -> 1 measured
+    // CHURN 1.00 dB · Braid 0.24 · Root 0.04 · Fan 0.56 · Wilt 0.77 · Grit 0.86 — all inaudible.
+    // The same six on Prophet Saw: 4.53 · 2.19 · 0.45 · 5.53 · 22.30 · 4.74, over a 19.15 st axis.
+    // SAME 46-name roster as WT_PRESET (captured, never retyped — see createParameterLayout),
+    // DEFAULT = Prophet Saw (index 4).
+    // The Wavetable engine keeps Sine and is untouched; a blob written before fb601 has no
+    // HARM_TABLE child at all and seeds each osc's from its own WT_PRESET, so nothing already
+    // saved changes timbre (marker property "harmTableSplit", see get/setStateInformation).
+    constexpr char SYN_OSC_A_HARM_TABLE[]        = "SYN_OSC_A_HARM_TABLE";   // choice 0..45, the SYN_OSC_x_WT_PRESET roster
+    constexpr char SYN_OSC_B_HARM_TABLE[]        = "SYN_OSC_B_HARM_TABLE";
+    constexpr char SYN_OSC_C_HARM_TABLE[]        = "SYN_OSC_C_HARM_TABLE";
+    constexpr char SYN_OSC_D_HARM_TABLE[]        = "SYN_OSC_D_HARM_TABLE";
 
     // ── UNIVERSAL OSC BOXES (2026-07-09) — COARSE + SUB on every oscillator ──
     // COARSE: continuous ±64 st pitch lane, NO snap — the smooth modulatable pitch

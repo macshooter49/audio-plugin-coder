@@ -1,0 +1,12 @@
+{
+  "name": "terrain-instrument-ui-gates",
+  "version": "1.0.0",
+  "private": true,
+  "description": "fb601 — the ONE dependency the JS UI gates in this directory need. Installed HERE (Tests/node_modules) on purpose: node resolves a bare require() from the requiring FILE's directory upward, so `node Tests/harm_waterfall_gate.js` finds it with no NODE_PATH, from any cwd.",
+  "scripts": {
+    "postinstall": "node -e \"try{require.resolve('puppeteer-core');console.log('[ui-gates] puppeteer-core '+require('puppeteer-core/package.json').version+' resolvable from Tests/ — the JS gates will RUN')}catch(e){console.error('[ui-gates] puppeteer-core NOT resolvable — the JS gates would silently MODULE_NOT_FOUND');process.exit(1)}\""
+  },
+  "devDependencies": {
+    "puppeteer-core": "25.10.0"
+  }
+}
