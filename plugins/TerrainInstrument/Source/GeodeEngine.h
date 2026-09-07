@@ -515,25 +515,29 @@ public:
         // op) only touches partials we will actually render. QUALITY sets the ceiling (its floor is
         // the lo-fi zone — see applyBitrate); CONSTANT-COST UNISON divides it; the shared processor
         // budget is the final hard ceiling (thins gracefully).
-        int active = geode::kMinActive + (int) (clamp01 (p_.quality)
+        // rs-shapefix: `quota` = the partial count this voice is ALLOWED (QUALITY → unison → shared
+        // budget), NOT clamped to the source count — SHAPE may spawn up to it. `active` = the thin.
+        int quota = geode::kMinActive + (int) (clamp01 (p_.quality)
                         * (float) (geode::kMaxActive - geode::kMinActive));
-        if (unisonDiv_ > 1) active = std::max (std::min (active, geode::kUnisonFloor), active / unisonDiv_);
-        active = std::min (active, nP);
+        if (unisonDiv_ > 1) quota = std::max (std::min (quota, geode::kUnisonFloor), quota / unisonDiv_);
         if (budgetUsed_ != nullptr && budgetCap_ > 0)
         {
             const int room = budgetCap_ - *budgetUsed_;
-            if (room < active) active = std::max (0, room);
+            if (room < quota) quota = std::max (0, room);
         }
+        const int active = std::min (quota, nP);
         if (active < nP) keepLoudest (nP, active);   // zero all but the loudest `active` (slots preserved)
 
-        applySculpt (nP);   // SHAPE/FORMANT/TILT/CUT/SIEVE (amp-only, never ratios) — skips zeroed slots
+        nP = applySculpt (nP, quota);   // SHAPE/FORMANT/TILT/CUT/SIEVE — SHAPE may SPAWN (≤ quota), returns the new count
 
         applyBitrate (nP);  // QUALITY low = spectral bit-crush: quantize amps to few levels (lossy encode)
 
         // BLOOM/GLINT/MOIRE spectral drive — children partials appended within the shared budget
+        int alive = 0;
+        for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) ++alive;
         int childRoom = 16;
         if (budgetUsed_ != nullptr && budgetCap_ > 0)
-            childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - active));
+            childRoom = std::max (0, std::min (16, budgetCap_ - *budgetUsed_ - alive));
         nP = applyDriveChildren (nP, childRoom);
 
         regionGain_ = fadeGain (pos01_);             // sampler-parity FADE IN/OUT (positional gain)
@@ -557,6 +561,10 @@ public:
     void reserveBudget() noexcept { if (budgetUsed_ != nullptr) { *budgetUsed_ += preparedActive_; reserved_ = preparedActive_; } }
     void releaseBudget() noexcept { if (budgetUsed_ != nullptr && reserved_ > 0) { *budgetUsed_ -= reserved_; reserved_ = 0; } }
     int  preparedActive() const noexcept { return preparedActive_; }
+    // fb596 test seams (the HarmonicEngine::partialsForTesting precedent): the cert's G6 counts live
+    // slots whose ratio jumps between blocks — the property the SHAPE home-slot map exists to hold.
+    const float* wrRatioForTesting() const noexcept { return wr_.ratio.data(); }
+    const float* ampZForTesting()    const noexcept { return ampZ_.data(); }
 
     void renderBankAdd (float* L, float* R, int n) noexcept
     {
@@ -750,11 +758,11 @@ public:
         if (! neutral)
         {
             applySmear (clamp01 (pos01), nf);
-            int active = geode::kMinActive + (int) (clamp01 (p_.quality)
+            const int quota = geode::kMinActive + (int) (clamp01 (p_.quality)
                             * (float) (geode::kMaxActive - geode::kMinActive));
-            active = std::min (active, nP);
+            const int active = std::min (quota, nP);
             if (active < nP) keepLoudest (nP, active);      // (no shared budget / unison for display)
-            applySculpt (nP);
+            nP = applySculpt (nP, quota);                   // rs-shapefix: spawned harmonics show in the viz for free
             applyBitrate (nP);
             nP = applyDriveChildren (nP, 16);
         }
@@ -1027,7 +1035,7 @@ private:
             case 1:  return (n & 1) ? 1.f / fn : 0.f;                               // Square — odd 1/n
             case 2:  return 1.f / fn;                                               // Saw    — all 1/n
             case 3:  return (n & 1) ? 1.f / (fn * fn) : 0.f;                        // Triangle — odd 1/n²
-            case 4:  return std::fabs (std::sin (fn * geode::kPi * 0.28f)) / fn;    // Pulse  — |sin(nπd)|/n, d≈0.28
+            case 4:  return std::fabs (std::sin (fn * geode::kPi * 0.25f)) / fn;    // Pulse  — |sin(nπd)|/n, d=0.25 (rs-shapefix: was 0.28 = 3.7 dB from Saw; 25 % pulse = 11.9 dB from Saw, every 4th harmonic notched)
             case 5:  return (n & 1) ? std::pow (fn, -1.5f) : 0.f;                   // Hollow — odd 1/n^1.5 (clarinet)
             case 6:  switch (n) { case 1: return 1.f;  case 2: return 0.8f; case 3: return 0.6f;   // Organ drawbar
                                   case 4: return 0.5f; case 5: return 0.4f; case 6: return 0.3f;
@@ -1036,7 +1044,7 @@ private:
             case 8:  { const float a = fn - 3.f, b = fn - 9.f;                      // Vowel "ah" (formant bumps @ n≈3,9)
                        return std::exp (-a * a / 4.5f) + 0.7f * std::exp (-b * b / 8.f); }
             case 9:  return std::pow (fn, -0.6f);                                   // Bright — 1/n^0.6 (supersaw-ish)
-            case 10: return std::pow (fn, 0.3f) * std::exp (-fn / 12.f) * (n == 1 ? 0.4f : 1.f);   // Metal — clang/tine
+            case 10: return std::pow (fn, 0.3f) * std::exp (-fn / 12.f) * (n == 1 ? 0.4f : 1.f);   // Metal — clang/tine (its peak trim lives AFTER the level match below — a recipe scale would be undone by equal-RMS)
             default: return 1.f / fn;
         }
     }
@@ -1044,8 +1052,11 @@ private:
     // sculpt the working partial bank in place. AMPLITUDE-domain, except SHAPE may glide OVERTONE
     // ratios onto exact harmonics (it tunes them — the fundamental at ratio 1 never moves, so the
     // played pitch is fixed). Order: SHAPE → FORMANT → TILT → CUT → SIEVE. All identity at neutral.
-    void applySculpt (int nP) noexcept
+    int applySculpt (int nP, int quota) noexcept
     {
+#ifdef GEODE_MUT_SHAPE0
+        if (nP > 0) wr_.amp[0] *= 1.0001f;   // cert seam: touches the bank OUTSIDE the SHAPE gate → G7 must go red
+#endif
         // ── SHAPE — morph the sample toward a synth waveform (sine / square / saw). ──────────────
         // A real sample's partials sit at ARBITRARY ratios: inharmonic overtones + a sub-fundamental
         // peak. A synth wave is a pure HARMONIC series, so SHAPE:
@@ -1060,8 +1071,12 @@ private:
         const float shape = std::pow (clamp01 (p_.shape), 0.72f);   // amplified: reaches fuller morph earlier
         if (shape > 1e-3f && nP > 0)
         {
-            float ref = 1e-9f;
-            for (int j = 0; j < nP; ++j) ref = std::max (ref, wr_.amp[(size_t) j]);
+            float ref = 1e-9f, srcE = 0.f;   // loudest / energy of the SOURCE bank (post-thin) — energy feeds the level match below
+            for (int j = 0; j < nP; ++j)
+            {
+                const float a = wr_.amp[(size_t) j];
+                if (a > 0.f) { ref = std::max (ref, a); srcE += a * a; }
+            }
 
             // Multiple messy partials can round to the SAME harmonic; if they all took the target
             // weight they'd SUM and overpower the fundamental (a saw whose 2nd harmonic is louder
@@ -1093,6 +1108,79 @@ private:
                 const float target = ref * w;
                 wr_.amp[(size_t) j] = wr_.amp[(size_t) j] * (1.f - shape) + target * shape;
             }
+
+#ifndef GEODE_NO_SPAWN
+            // ── rs-shapefix (1): SPAWN the target's MISSING harmonics — "the sample BECOMES the wave".
+            // winner[n] == -1 is the "no source partial rounds to n" map. Each such harmonic is born
+            // at ratio n EXACTLY with amp = ref·W(n)·shape (the blend above with a zero source term),
+            // in a slot ABOVE the source bank. HOME slot = kMaxPartials-kMaxH-1+n, so harmonic n keeps
+            // the SAME slot (same phase_/ampZ_ → phase-continuous) block after block while the source
+            // set churns; a home slot the source occupies falls back to the lowest free slot. Births
+            // ramp from ampZ_=0 through the declick loop → click-free by construction. Cost is bounded
+            // by `quota` (QUALITY → unison → shared budget) in the post-thin below.
+            for (int j = nP; j < geode::kMaxPartials; ++j) wr_.amp[(size_t) j] = 0.f;   // stale children/spawns of earlier blocks
+            int hi = nP;
+            const float nyqR   = 0.48f * (float) rate_ / (float) (playedHz_ * pitchMul_);   // the bank loop's own Nyquist gate
+            const float floorA = ref * 1e-3f;                                             // -60 dB re loudest: not worth a sine
+            int pend[kMaxH]; int nPend = 0;
+            for (int n = 1; n <= kMaxH; ++n)
+            {
+                if (winner[n] >= 0) continue;
+                if ((float) n >= nyqR) break;
+                const float a = ref * shapeWeight (p_.shapeTarget, n) * shape;
+                if (a < floorA) continue;
+ #ifdef GEODE_SPAWN_APPEND_ONLY
+                const int s = -1;
+ #else
+                const int s = geode::kMaxPartials - kMaxH - 1 + n;
+ #endif
+                if (s >= nP) { wr_.ratio[(size_t) s] = (float) n; wr_.amp[(size_t) s] = a; if (s + 1 > hi) hi = s + 1; }
+                else if (nPend < kMaxH) pend[nPend++] = n;
+            }
+            for (int k = 0, cur = nP; k < nPend; ++k)
+            {
+                while (cur < geode::kMaxPartials && wr_.amp[(size_t) cur] > 0.f) ++cur;
+                if (cur >= geode::kMaxPartials) break;
+                const int n = pend[k];
+                wr_.ratio[(size_t) cur] = (float) n;
+                wr_.amp[(size_t) cur]   = ref * shapeWeight (p_.shapeTarget, n) * shape;
+                if (cur + 1 > hi) hi = cur + 1;
+            }
+            nP = hi; wr_.nPartials = hi;
+#endif
+
+#ifndef GEODE_NO_LEVELMATCH
+            // ── rs-shapefix (3): LEVEL — SHAPE changes timbre, not loudness. Match the shaped bank's
+            // RMS to the source bank's, blended by `shape` so SHAPE=0 stays bit-identical. Removes the
+            // 17 dB spread between targets (Metal +9.6 dB, Half -7.4 dB measured on the default store).
+            // Peaks: a zero-phase Metal has crest 4.7 vs the saw's 2.0 → its peak sits +7.5 dB over the
+            // source's (1.51 on the default store); every other kept target ≤ +4.6 dB.
+            // (Measured alternative, rejected: g = min(sqrt(srcE/shE), srcSum/shSum) is peak-safe (≤ 1.08 on
+            // the default store) but lands a Saw 5-8 dB BELOW the sample it came from on sparse sources.)
+            {
+                float shE = 0.f;
+                for (int j = 0; j < nP; ++j) { const float a = wr_.amp[(size_t) j]; if (a > 0.f) shE += a * a; }
+                if (shE > 1e-12f && srcE > 0.f)
+                {
+                    float g = std::sqrt (srcE / shE);                         // equal RMS: measured 0.1 dB spread across targets on every source
+                    if (p_.shapeTarget == 10) g *= 0.7f;                      // fb596 — METAL's zero-phase crest is 4.7 vs a saw's 2.0: at equal RMS its PEAK sat +7.5 dB over the source's (1.50 abs). ×0.7 AFTER the match holds it near 1.05 (Vowel 1.08) for 3 dB of Metal and nothing else. (A recipe scale would be cancelled by the match above.)
+                    g = 1.f + (g - 1.f) * shape;
+                    for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) wr_.amp[(size_t) j] *= g;
+                }
+            }
+#endif
+
+#ifndef GEODE_NO_POSTTHIN
+            // ── rs-shapefix (2): the governor thinned on SOURCE loudness before it knew the target;
+            // re-thin on SHAPED loudness so the quota holds the target's loudest harmonics (an odd-only
+            // target no longer wastes half of it on evens the sculpt just killed) — and spawns above
+            // the quota are cut here, so SHAPE can never cost more than QUALITY allows.
+            {
+                int alive = 0;
+                for (int j = 0; j < nP; ++j) if (wr_.amp[(size_t) j] > 0.f) ++alive;
+                if (alive > quota) keepLoudest (nP, quota);
+            }
+#endif
         }
 
         // ── FORMANT — pitch-preserving envelope shift (true-envelope method) ──
@@ -1246,6 +1334,7 @@ private:
                 }
             }
         }
+        return nP;
     }
 
     // smooth spectral envelope sampled at `ratio` — Gaussian kernel over the (snapshot) partial bank.
