@@ -787,6 +787,58 @@ public:
     tw::SampleBuffer& getSampleBuffer() noexcept { return layers[(size_t) editingLayer.load()].sampleBuffer; }
     tw::SampleLoader& getSampleLoader() noexcept { return sampleLoader; }
 
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    //  fb602 · SAMPLE RESTORE LIVES ON THE PROCESSOR NOW (was editor-only — bug (c)).
+    // ══════════════════════════════════════════════════════════════════════════════════════════
+    //  Before this, the ONLY thing that filled a sample slot after a project load was
+    //  TerrainUiCore's constructor callAsync loop. Open a project and render without ever opening
+    //  Terrain's window and every Sample/Granular/Resynth/Modal oscillator played SILENCE.
+    //  restoreSampleSlotsFromState() runs at the end of setStateInformation, SYNCHRONOUSLY, so the
+    //  buffers are live before it returns and the host's first processBlock already has audio —
+    //  the same reason prefetchOscWavetables(4) is called there. It never touches the message
+    //  thread (no callAsync, no WebView), so it is correct on the non-message threads some hosts
+    //  call setStateInformation from; the handoff is SampleBuffer's lock-free atomic_store, which
+    //  is exactly the contract the editor already used.
+    //  Returns the number of slots it actually decoded.
+    int          restoreSampleSlotsFromState();
+    // A MISS MUST NOT BE SILENT (it used to be `continue`). Every slot whose stored path/blob did
+    // not produce audio is recorded here and published as JSON for the UI:
+    //   {"n":<total>,"misses":[{"slot":"osc A","path":"mem:kick.wav","why":"dropped-bytes-not-embedded"}, …]}
+    // "{}" when the last restore lost nothing. The `why` vocabulary, verbatim from the one place
+    // that writes it (restoreSampleSlotsFromState): dropped-bytes-not-embedded ·
+    // not-an-absolute-path · file-missing · decode-failed · blend-bake-is-editor-side ·
+    // blend-source-missing · selection-json-unparseable · unknown-selection-kind ·
+    // factory-file-missing · base64-decode-failed · too-short.
+    juce::String getRestoreMissesJson() const;
+    int          getRestoreMissCount() const noexcept { return restoreMissCount_.load (std::memory_order_relaxed); }
+    // ONE synchronous decode for the restore path. It is tw::SampleLoader's body with the worker
+    // thread and the MessageManager::callAsync callbacks taken out — same registerBasicFormats,
+    // same jmax (2, numChans) destination, same mono→stereo duplication (SampleLoader.h:125), same
+    // kMaxSampleSeconds = 600 cap (SampleLoader.h:45). NOT a third decoder: SampleLoader itself
+    // cannot serve this path (it is async, it needs a pumping message thread, and ONE loader
+    // serves all four front layers while load() begins with cancel(), so four back-to-back calls
+    // would cancel three of them). readerChansOut, when given, reports the FILE's channel count —
+    // the destination is always ≥ 2 — because that is the number the UI payload prints.
+    static std::shared_ptr<juce::AudioBuffer<float>> decodeAudioFile   (const juce::File& f, double& rateOut,
+                                                                       int* readerChansOut = nullptr);
+    static std::shared_ptr<juce::AudioBuffer<float>> decodeAudioMemory (const void* data, size_t size, double& rateOut,
+                                                                       int* readerChansOut = nullptr);
+    // fb602 — THE "dropped bytes, no disk file" MARKER, single-sourced here (bug (b)). A drop hands
+    // the editor BYTES and never a path, and the slot's source field used to get the bare FILENAME,
+    // which File(...).existsAsFile() answers false to forever. "mem:<filename>" is deliberately not
+    // a path, so the restore below records an honest miss instead of a phantom file-not-found.
+    // PluginEditor.cpp's tiMemSourceRef / tiIsMemSourceRef build and test exactly this prefix.
+    static constexpr const char* kMemSourcePrefix = "mem:";
+    static bool isMemSourceRef (const juce::String& p) { return p.startsWith (kMemSourcePrefix); }
+    // NOISE IMPORT (P5) — the equal-power seam crossfade + 0.9 peak-normalise bake, lifted VERBATIM
+    // from PluginEditor.cpp's file-static of the same name so the headless restore can bake the
+    // identical loop. ⚠️ THE EDITOR'S COPY IS STILL THERE (PluginEditor.cpp:13805, a different
+    // file's owner): until it calls this one instead, the same body exists twice. Deleting it and
+    // calling TerrainInstrumentAudioProcessor::bakeSeamlessNoiseLoop is a one-line change and is
+    // handed over as part of the fb602 editor contract.
+    static std::shared_ptr<juce::AudioBuffer<float>>
+        bakeSeamlessNoiseLoop (const std::shared_ptr<juce::AudioBuffer<float>>& in);
+
     // PEROSC-BUFFERS — per-OSC Sample oscillator buffers (synth-side; A/B/C/D independent).
     tw::SampleBuffer& getOscSampleBuffer (int idx) noexcept { return oscSampleBuffers_[(size_t) juce::jlimit (0, 3, idx)]; }
     // NOISE IMPORT (P5) — one shared looping-sample source for the Noise module (user drop or factory sample).
@@ -884,6 +936,13 @@ public:
       return it != cardStates_.end() ? it->second : juce::String(); }
     mutable juce::CriticalSection cardStateLock_;
     std::map<juce::String, juce::String> cardStates_;
+    // fb602 — CARD STATE IS SERIALISED FROM HERE ON. cardStates_ is the FLOW multi-slot chain
+    // (arp/gli/rbn/chop/crv/lfo); it survived pop-out/dock/editor-reopen and was destroyed by every
+    // DAW project reload, because grep cardStates_ PluginProcessor.cpp returned NOTHING. One JSON
+    // object, { "<card>": "<that card's chain JSON>", … } — the values are themselves JSON text,
+    // carried as strings so this side never has to know a card's schema.
+    juce::String getCardStatesJson() const;                       // "" when nothing is set (writes 0 bytes)
+    void         setCardStatesFromJson (const juce::String& json); // "" ⇒ no-op, never a clear
     std::atomic<int> flowPlayingViz_ { 0 };   // fb137 — transport state for the feeds ("pl")
     juce::String      getArpLanesJson() const;                          // for JS restore + state save
     float             getReverbBloom() const noexcept { return hallBloomViz_.load (std::memory_order_relaxed); }  // fb280 — wet bloom 0..1 for the FX-rack core viz
@@ -2090,6 +2149,19 @@ private:
     // PEROSC-BUFFERS — dedicated per-OSC buffers/loaders/payloads/paths (one loader each so
     // rapid drops on A..D don't cancel one another). Guarded by samplePayloadLock for payloads.
     std::array<tw::SampleBuffer, 4>           oscSampleBuffers_;
+    // fb602 — the restore MISS LEDGER. A slot that could not be filled used to be a silent
+    // `continue` in the editor; it is now a row here, and getRestoreMissesJson() publishes it.
+    struct RestoreMiss { juce::String slot, path, why; };
+    mutable juce::CriticalSection             restoreMissLock_;
+    std::vector<RestoreMiss>                  restoreMisses_;
+    std::atomic<int>                          restoreMissCount_ { 0 };
+    // What restoreSampleSlotsFromState() has ACTUALLY got decoded into each buffer right now, so a
+    // second setStateInformation into a LIVE instance (host undo, an A/B compare) re-decodes exactly
+    // the slots whose source moved and no others. Empty ⇒ nothing decoded for that slot. Measured:
+    // pushing the same blob twice reports filled=1 then filled=0, and pushing a patch whose file is
+    // gone CLEARS the osc buffer (-200 dB) instead of leaving the previous patch's sample playing.
+    std::array<juce::String, 4>               layerLoadedPath_ {}, oscLoadedPath_ {};
+    juce::String                              noiseLoadedSel_;
     tw::SampleBuffer                          noiseSampleBuffer_;   // NOISE IMPORT (P5) — shared looping-sample noise source
     juce::String                              noiseSampleSelJson_;  // NOISE IMPORT (P5c) — persisted selection (factory path / user audio)
     double                                    noiseFreePos_ = 0.0;  // fb66 — NOISE Free-mode global tape playhead (samples; audio thread)
@@ -2823,6 +2895,14 @@ private:
     // Both helpers clear ALL 4 layers first, then populate their respective sets.
     void loadV1State (const juce::ValueTree& loaded);
     void loadV2State (const juce::ValueTree& loaded);
+    // fb602 — the per-OSC sample paths and the BLEND source pairs, restored on BOTH branches.
+    // They used to be read only inside loadV1State, and getStateInformation has written
+    // version=2-or-3 since Task 12 — so on every modern patch oscSourcePaths_/blendSrcPaths_ came
+    // back EMPTY and nothing, editor or processor, had a path to reload the oscillator from. The
+    // blob still LOOKED right on a re-save only because apvts.replaceState carries unknown root
+    // properties through untouched and the empty-guarded write then declines to overwrite the
+    // echo. One body, called from both loaders.
+    void loadOscAndBlendPaths (const juce::ValueTree& loaded);
     // Parses a pitchSliceJson string into a LayerState's pitchModeSlice.
     // Centralises the deserialization logic shared by V1 and V2 paths.
     static void applyPitchSliceJson (const juce::String& psJson,

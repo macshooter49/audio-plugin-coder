@@ -19,15 +19,59 @@ void  tiDisarmPeerRescue (void* peerHwnd, void* token);
 #endif
 #include "BinaryData.h"
 
+// fb602 — ONE data root for everything this TU writes. JUCE resolves
+// userApplicationDataDirectory to "~/Library" on macOS (juce_Files_mac.mm:209) and to
+// %APPDATA% on Windows (CSIDL_APPDATA, juce_Files_windows.cpp:719), so on macOS this is
+// BYTE-IDENTICAL to the userHomeDirectory/"Library/..." string fb132 hand-built
+// (~/Library/WavesCrate/TerrainInstrument — the 5 card-preset folders on disk keep
+// resolving with zero migration) while on Windows it finally lands beside the import
+// registry instead of the bogus C:\Users\<u>\Library\WavesCrate\... that the old
+// spelling produced. Noise, Blends, cardwin.log and presets all hang off this.
+static juce::File terrainDataDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument");
+}
+
+// fb602 — LEGACY ROOTS, accessor-unified but LOCATION FROZEN. Shipped builds read these
+// exact paths and moving them would strand the owner's files, so terrainDataDir() does NOT
+// swallow them; these two just kill the 5x / 3x copy-paste of the same literal.
+//   InstrumentSettings.json : userAppData/"Waves Crate"/Terrain   (brand with a SPACE, short name)
+//   Wavetables/             : userAppData/Noizefield/"Terrain Instrument"
+static juce::File terrainSettingsFile()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Waves Crate").getChildFile ("Terrain")
+             .getChildFile ("InstrumentSettings.json");
+}
+static juce::File terrainWavetablesDir()
+{
+    return juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
+             .getChildFile ("Noizefield").getChildFile ("Terrain Instrument")
+             .getChildFile ("Wavetables");
+}
+
+// fb602 — card-id slug, ACCESSOR-UNIFIED AND DELIBERATELY UNCHANGED. This is fb132's exact
+// character set. A draft of this commit widened it to lowercase-then-[a-z0-9]; measured over
+// every card id the page can actually produce (5 extension cards + FLT + the 16 FX preset
+// namespaces crossed with their type tables = 122 ids, Tests/preset_path_cert.cpp) that widening
+//   • fixes 0 folder collisions — there are ZERO today, because index.html:12204 already maps
+//     'Diode 1'/'Diode 2' to diodeone/diodetwo by hand, and
+//   • MOVES 1 folder: cmp_fet 76  cmpfet -> cmpfet76.
+// One stranded folder to buy nothing is a bad trade, and relocating saved presets is not what
+// this commit is for. Widen it WITH a migration, in the commit that owns the preset browser.
+static juce::String tiCardSlug (const juce::String& card)
+{
+    return card.retainCharacters ("abcdefghijklmnopqrstuvwxyz");
+}
+
 // fb132 — CARD PRESETS: user presets live beside the imports registry
-// (~/Library/WavesCrate/TerrainInstrument/presets/<card>/<name>.json — the proven
-// sandbox-writable home; App Support and temp are NOT). Each file IS one preset
-// payload (the JS owns the schema); the natives below are dumb couriers.
+// (<terrainDataDir>/presets/<card>/<name>.json — the proven sandbox-writable home;
+// App Support and temp are NOT). Each file IS one preset payload (the JS owns the
+// schema); the natives below are dumb couriers.
 static juce::File tiPresetDir (const juce::String& card)
 {
-    return juce::File::getSpecialLocation (juce::File::userHomeDirectory)
-             .getChildFile ("Library/WavesCrate/TerrainInstrument/presets")
-             .getChildFile (card.retainCharacters ("abcdefghijklmnopqrstuvwxyz"));
+    return terrainDataDir().getChildFile ("presets").getChildFile (tiCardSlug (card));
 }
 // fb135 — HOST-KEY BRIDGE: KeyPress -> the DOM KeyboardEvent key name __tiHostKey expects
 static juce::String tiKeyToWebKey (const juce::KeyPress& k)
@@ -60,6 +104,50 @@ static juce::String tiSafePresetName (const juce::String& name)
         out << (ok ? juce::String::charToString (c) : juce::String ("_"));
     }
     return out.trim();
+}
+
+// fb602 — CARD-PRESET DELETE, ONE BODY. It used to be registered as "deletePreset" in BOTH
+// the main Options chain (with the patch-index deletePreset) and the popped-card chain.
+// juce::WebBrowserComponent::Options::withNativeFunction does
+//   `copy.nativeFunctions[name] = std::move (callback);`   (juce_WebBrowserComponent.h:324)
+// behind `jassert (copy.nativeFunctions.count (name) == 0);` (:323) — assert compiled out in
+// Release, LAST registration WINS. So in the docked editor every card/FX preset ✕ ran the
+// PATCH deleter with a card id: static_cast<int>("gli") == 0, the processor early-returns,
+// and the file was never touched. Measured: 1 colliding name in a 260-registration chain.
+// The name is now unique per meaning; the popped-card chain keeps the legacy alias until
+// index.html adopts deleteCardPreset (index.html is owned by nobody this build).
+static void tiDeleteCardPresetNative (const juce::Array<juce::var>& args,
+                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+{
+    if (args.size() >= 2)
+        tiPresetDir (args[0].toString())
+            .getChildFile (tiSafePresetName (args[1].toString()) + ".json").deleteFile();
+    complete (juce::var{});
+}
+
+// fb602 — A DROP HANDS YOU BYTES, NEVER A PATH. loadSampleFromMemory / loadOscSampleFromMemory
+// used to store the bare FILENAME ("kick.wav") in the field that restore feeds to
+// juce::File(path).existsAsFile() — always false (and jassertfalse in Debug, since a relative
+// path is illegal for juce::File), so a drag-dropped sample has NEVER survived a reload.
+// Store an explicit marker instead. WHY IT CANNOT BE READ AS A PATH, checked against
+// juce_File.cpp:142 parseAbsolutePath both ways:
+//   • macOS/Linux: an absolute path starts '/' or '~'; every sourcePath we ever write is a
+//     getFullPathName(), so a real one can never start "mem:".
+//   • Windows: a drive prefix is ONE letter + ':' ("M:\..."), never three, and startsWith is
+//     case-sensitive — so "mem:" is unreachable as a real path. (Note for the restore side:
+//     Windows' parseAbsolutePath only asserts when the string has NO ':', so a "mem:" ref slips
+//     the assert and then just fails existsAsFile(). The prefix test below is the ONLY real
+//     defence — call it BEFORE constructing a juce::File, on both sides of the wire.)
+// It is greppable, and fb603 hangs the embedded audio payload off exactly this key rather than
+// migrating the field a second time.
+static constexpr const char* kTiMemSourcePrefix = "mem:";
+static juce::String tiMemSourceRef (const juce::String& filename)
+{
+    return juce::String (kTiMemSourcePrefix) + filename;
+}
+static bool tiIsMemSourceRef (const juce::String& p)
+{
+    return p.startsWith (kTiMemSourcePrefix);
 }
 
 #if JUCE_MAC
@@ -1094,14 +1182,9 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 out << "]";
                 complete (juce::var (out));
             })
-            .withNativeFunction("deletePreset", [](const juce::Array<juce::var>& args,
-                                                   juce::WebBrowserComponent::NativeFunctionCompletion complete)
-            {
-                if (args.size() >= 2)
-                    tiPresetDir (args[0].toString())
-                        .getChildFile (tiSafePresetName (args[1].toString()) + ".json").deleteFile();
-                complete (juce::var{});
-            })
+            // fb602 — was "deletePreset"; it collided with the patch-index deletePreset later in
+            // this SAME chain (:~1690) and lost, so this courier was dead in the docked editor.
+            .withNativeFunction("deleteCardPreset", tiDeleteCardPresetNative)
             .withNativeFunction("setArpLanes", [this](const juce::Array<juce::var>& args,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -1315,8 +1398,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             {
                 // NOISE FACTORY (P5d) — scan the CC0 library folder → { path, exists, total, cats:{Cat:[files]} }.
                 // Returns the RESOLVED path + count so the UI can breadcrumb WHERE it looked (diagnoses sandbox paths).
-                auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                              .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Noise");
+                auto root = terrainDataDir().getChildFile ("Noise");   // fb602 — one root
                 juce::DynamicObject::Ptr cats = new juce::DynamicObject();
                 int total = 0;
                 if (root.isDirectory())
@@ -1340,8 +1422,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             {
                 // NOISE FACTORY (P5d) — load a factory sound from the folder → looping noise (in-memory read).
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
-                auto root = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                              .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Noise");
+                auto root = terrainDataDir().getChildFile ("Noise");   // fb602 — one root
                 auto f = root.getChildFile (args[0].toString()).getChildFile (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
@@ -1570,7 +1651,9 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
                 juce::MemoryBlock mb;
                 if (! f.loadFileAsData (mb) || mb.getSize() == 0) { complete (juce::var ("read-failed")); return; }
-                loadOscSampleFromMemory (oscIdx, std::move (mb), f.getFileName());
+                // fb602 — this caller HAS the file; pass the real path so the slot restores from
+                // disk after a project reload instead of filing a bare filename that never resolves.
+                loadOscSampleFromMemory (oscIdx, std::move (mb), f.getFileName(), f.getFullPathName());
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("removeSampleImport", [this](const juce::Array<juce::var>& args,
@@ -1670,6 +1753,21 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withNativeFunction("deletePreset", [this](const juce::Array<juce::var>& args,
                                                         juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
+                // fb602 — ONE NAME, TWO MEANINGS, and the page still asks for both under it:
+                // index.html:12207 and :33601 call delFn(cardId, presetName) for card/FX presets,
+                // index.html:17000 calls deletePresetFn(patchIdx) for the patch index. Registering
+                // both bodies under "deletePreset" in this same chain was the fb602 bug (a): JUCE
+                // does copy.nativeFunctions[name] = std::move(callback) behind a jassert that is
+                // compiled out in Release, so THIS body won and every card ✕ in the docked editor
+                // ran static_cast<int>("gli") == 0 into the patch deleter, which early-returned.
+                // Measured: 1 colliding name in a 260-registration chain (Tests/cert_native_dupes.py).
+                // The two calls are unambiguous by SHAPE — the card call is (String, String), the
+                // patch call is (Number) — so dispatch on it and index.html needs no edit today.
+                if (args.size() >= 2 && args[0].isString())
+                {
+                    tiDeleteCardPresetNative (args, std::move (complete));
+                    return;
+                }
                 if (args.size() > 0)
                     audioProcessor.deletePreset(static_cast<int>(args[0]));
                 complete({});
@@ -2055,8 +2153,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             .withNativeFunction("getSettings", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                auto f = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                           .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
+                auto f = terrainSettingsFile();   // fb602 — one accessor, SAME legacy location
                 complete(f.existsAsFile() ? f.loadFileAsString() : juce::String("{}"));
             })
             .withNativeFunction("saveSettings", [this](const juce::Array<juce::var>& args,
@@ -2064,8 +2161,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
             {
                 if (args.size() > 0)
                 {
-                    auto dir = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                                 .getChildFile("Waves Crate").getChildFile("Terrain");
+                    auto dir = terrainSettingsFile().getParentDirectory();   // fb602 — one accessor
                     dir.createDirectory();
                     dir.getChildFile("InstrumentSettings.json").replaceWithText(args[0].toString());
 
@@ -3374,8 +3470,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // Wavetable EXTENDER — the user's wavetable Imports folder; create + reveal in Finder/Explorer.
-                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 if (! dir.exists()) dir.createDirectory();
                 dir.revealToUser();
                 complete (juce::var (dir.getFullPathName()));
@@ -3396,8 +3491,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // Wavetable EXTENDER — scan the Imports folder → JSON array of table names (no extension).
-                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 if (! dir.exists()) dir.createDirectory();
                 juce::String json = "[";
                 if (dir.isDirectory())
@@ -3423,8 +3517,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
                 const juce::String oscStr = args[0].toString();
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 auto name = args[1].toString();
-                auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                               .getChildFile ("Noizefield").getChildFile ("Terrain Instrument").getChildFile ("Wavetables");
+                auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 juce::File file = dir.getChildFile (name);
                 if (! file.existsAsFile()) file = dir.getChildFile (name + ".wav");
                 if (! file.existsAsFile()) { complete (juce::var ("not-found")); return; }
@@ -3693,8 +3786,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
     // Read saved theme immediately so strip paints with correct color on first frame
     // Also restore EQ panel open state from same settings file (editor-side UI state)
     {
-        auto sf = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                    .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
+        auto sf = terrainSettingsFile();   // fb602 — one accessor, SAME legacy location
         if (sf.existsAsFile())
         {
             auto contents = sf.loadFileAsString();
@@ -4893,8 +4985,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
 
     // fb148 — one boot-time read of the settings file (the pre-ready push used to re-read it every tick)
     {
-        auto sf = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                    .getChildFile ("Waves Crate").getChildFile ("Terrain").getChildFile ("InstrumentSettings.json");
+        auto sf = terrainSettingsFile();   // fb602 — one accessor, SAME legacy location
         if (sf.existsAsFile())
             bootSettingsJson_ = sf.loadFileAsString().replace ("\\", "\\\\").replace ("'", "\\'");
     }
@@ -4926,21 +5017,44 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
         // (The cache only holds the waveform display payload for ONE layer at a
         // time; audio buffers for all layers are either live or need reloading.)
 
+        // fb602 — EVERY EXIT BELOW IS COUNTED. All four used to be a bare `continue` (HEAD
+        // :4932 and :4947), which is why a project whose samples had moved reloaded to silence
+        // with nothing said anywhere. Nothing here changes WHICH slots load; it changes whether
+        // you can tell that one did not.
+        int alreadyFilled = 0, decoded = 0, memRefs = 0;
+        juce::StringArray missing;
+
         for (int li = 0; li < 4; ++li)
         {
             auto& L = safeThis->audioProcessor.layers[(size_t) li];
 
             // If the audio buffer is already populated, nothing to do for this layer.
-            if (L.hasSample()) continue;
+            // fb602 — this IS the anti-double-load contract with the processor's
+            // setStateInformation restore: the public "is this slot filled" signal is the buffer
+            // itself, so whichever side fills it first, the other skips. The check predates
+            // fb602 — no new mechanism was invented — but it was invisible, and a guard you
+            // cannot see fire is not a guard, hence the counter.
+            if (L.hasSample()) { ++alreadyFilled; continue; }
 
             const juce::String path = L.sourcePath;
             if (path.isEmpty()) continue;
 
+            // fb602 — a "mem:" ref came from a drop and has no disk file. Check the prefix BEFORE
+            // constructing juce::File: a relative path trips jassertfalse in parseAbsolutePath.
+            // fb603 restores these from the embedded audio; until then the slot stays empty by
+            // DESIGN, not by an accident that looked like a working path.
+            if (tiIsMemSourceRef (path)) { ++memRefs; continue; }
+
             const juce::File f (path);
-            if (! f.existsAsFile()) continue;
+            if (! f.existsAsFile())
+            {
+                missing.add ("layer " + juce::String (li + 1) + " -> " + f.getFileName());
+                continue;
+            }
 
             // Fire the per-layer async decode.
             safeThis->loadSampleIntoLayer (f, li);
+            ++decoded;
         }
 
         // PEROSC-RELOAD — reload each oscillator's saved sample from disk (DAW project reload).
@@ -4948,13 +5062,36 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
         // path handles a fresh processor whose oscSampleBuffers_ are empty but paths were restored.
         for (int oi = 0; oi < 4; ++oi)
         {
-            if (safeThis->audioProcessor.getOscSampleBuffer (oi).getNumSamples() > 0) continue;
+            // fb602 — same anti-double-load contract as the layer loop above.
+            if (safeThis->audioProcessor.getOscSampleBuffer (oi).getNumSamples() > 0) { ++alreadyFilled; continue; }
             const juce::String op = safeThis->audioProcessor.oscSourcePath (oi);
             if (op.isEmpty()) continue;
+            if (tiIsMemSourceRef (op)) { ++memRefs; continue; }   // fb602 — dropped bytes, no disk file (see layer loop)
             const juce::File of (op);
-            if (! of.existsAsFile()) continue;
+            if (! of.existsAsFile())
+            {
+                missing.add (juce::String ("osc ") + (char) ('A' + oi) + " -> " + of.getFileName());
+                continue;
+            }
             safeThis->loadOscSampleAsync (oi, of);
+            ++decoded;
         }
+
+        // fb602 — SAY WHETHER IT FIRED. One console line on every editor open (devtools, zero UI
+        // noise) and a real toast only when the stored state asked for a file that is not there.
+        if (safeThis->webView != nullptr)
+        {
+            const juce::String line = "[fb602] editor sample restore: already-filled=" + juce::String (alreadyFilled)
+                                    + " decoded=" + juce::String (decoded)
+                                    + " mem-refs=" + juce::String (memRefs)
+                                    + " missing=" + juce::String (missing.size())
+                                    + (missing.isEmpty() ? juce::String() : " [" + missing.joinIntoString ("; ") + "]");
+            safeThis->webView->evaluateJavascript ("console.log(" + juce::JSON::toString (juce::var (line)) + ");", nullptr);
+        }
+        if (! missing.isEmpty())
+            safeThis->reportLoadError ("restore", juce::String (missing.size())
+                                       + (missing.size() == 1 ? " sample is missing: " : " samples are missing: ")
+                                       + missing.joinIntoString ("; "));
     });
 }
 
@@ -4983,8 +5120,7 @@ TerrainUiCore::TerrainUiCore (TerrainInstrumentAudioProcessor& p)
 static void terrainCardLog (const juce::String& msg)
 {
    #if TERRAIN_CARDWIN_LOG   // fb158 — gated with its processor twin (see PluginProcessor.cpp)
-    auto f = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-               .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("cardwin.log");
+    auto f = terrainDataDir().getChildFile ("cardwin.log");   // fb602 — one root
     f.getParentDirectory().createDirectory();
     f.appendText (juce::Time::getCurrentTime().toString (true, true, true, true) + "  " + msg + "\n");
    #else
@@ -5230,14 +5366,12 @@ public:
                     out << "]";
                     complete (juce::var (out));
                 })
-                .withNativeFunction ("deletePreset", [](const juce::Array<juce::var>& args,
-                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
-                {
-                    if (args.size() >= 2)
-                        tiPresetDir (args[0].toString())
-                            .getChildFile (tiSafePresetName (args[1].toString()) + ".json").deleteFile();
-                    complete (juce::var{});
-                })
+                // fb602 — SAME body under both names. The popped-card page is today's shipped
+                // index.html, which still asks for "deletePreset"; the alias keeps popped-out card
+                // delete working (it is the ONE surface where it was never broken) until the JS
+                // renames. There is no patch-index deletePreset in this chain, so no collision.
+                .withNativeFunction ("deleteCardPreset", tiDeleteCardPresetNative)
+                .withNativeFunction ("deletePreset",     tiDeleteCardPresetNative)   // fb602 — legacy alias, drop when index.html adopts deleteCardPreset
                 .withNativeFunction ("setArpLanes", [&proc](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
                 {
@@ -7013,8 +7147,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     // the build splices in (today just the saved dark-theme flag), so a theme flip changes the
     // key and naturally misses. getResource can run on a WebView2 (non-message) thread, hence
     // the mutex-guarded function-local statics.
-    auto settingsFile = juce::File::getSpecialLocation(juce::File::userApplicationDataDirectory)
-                          .getChildFile("Waves Crate").getChildFile("Terrain").getChildFile("InstrumentSettings.json");
+    auto settingsFile = terrainSettingsFile();   // fb602 — one accessor, SAME legacy location
     const bool tiDark = settingsFile.existsAsFile() && settingsFile.loadFileAsString().contains("\"dark\"");
     const juce::String tiCacheKey (tiDark ? "dark" : "light");
 
@@ -13313,15 +13446,9 @@ void TerrainUiCore::loadSampleAsync (const juce::File& file)
         },
         [this] (tw::SampleLoader::Result r)
         {
-            if (! r.success)
-            {
-                if (webView != nullptr)
-                    webView->evaluateJavascript (
-                        "if (window.onLoadError) window.onLoadError("
-                        + juce::JSON::toString (juce::var (r.errorMessage)) + ");",
-                        nullptr);
-                return;
-            }
+            // fb602 — RECYCLED: this is the same five lines reportLoadError() now owns, and with an
+            // empty `where` it emits the byte-identical onLoadError call. One courier, five slots.
+            if (! r.success) { reportLoadError ({}, r.errorMessage); return; }
 
             // Task 8: dispatch sample load into the currently-editing layer so
             // clicking a pad and dragging a file always loads into the right slot.
@@ -13395,13 +13522,30 @@ void TerrainUiCore::loadSampleAsync (const juce::File& file)
         });
 }
 
+// fb602 — ONE error courier for every sample slot. The front sampler already spoke through
+// window.onLoadError (PluginEditor.cpp inline JS, "window.onLoadError = function (msg)"); the
+// per-layer / per-osc paths just returned. Same channel, prefixed with WHICH slot failed.
+void TerrainUiCore::reportLoadError (const juce::String& where, const juce::String& message)
+{
+    if (webView == nullptr) return;
+    const auto msg = where.isEmpty() ? message : (where + ": " + message);
+    webView->evaluateJavascript (
+        "if (window.onLoadError) window.onLoadError("
+        + juce::JSON::toString (juce::var (msg)) + ");",
+        nullptr);
+}
+
 // FRONT SAMPLER — sandbox-safe load straight from the base64-decoded bytes (NO temp file). Mirrors
 // loadSampleAsync but feeds SampleLoader::loadFromMemory, so the front #hero drop works even when the
 // host sandbox / macOS TCC blocks disk writes (the same trap that broke the per-osc sample drop).
-void TerrainUiCore::loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename,
+                                          const juce::String& sourcePath)
 {
-    currentSampleSourcePath = filename;
-    audioProcessor.setLoadedSamplePath (filename);
+    // fb602 — was `currentSampleSourcePath = filename;`. A bare "kick.wav" is not a path:
+    // restore does juce::File(path).existsAsFile(), which is false for every relative string
+    // (and jassertfalse in Debug), so a dropped front sample has never survived a reload.
+    currentSampleSourcePath = sourcePath.isNotEmpty() ? sourcePath : tiMemSourceRef (filename);
+    audioProcessor.setLoadedSamplePath (currentSampleSourcePath);
 
     auto& loader = audioProcessor.getSampleLoader();
     auto& target = audioProcessor.getSampleBuffer();
@@ -13424,15 +13568,9 @@ void TerrainUiCore::loadSampleFromMemory (juce::MemoryBlock data, const juce::St
         },
         [this] (tw::SampleLoader::Result r)
         {
-            if (! r.success)
-            {
-                if (webView != nullptr)
-                    webView->evaluateJavascript (
-                        "if (window.onLoadError) window.onLoadError("
-                        + juce::JSON::toString (juce::var (r.errorMessage)) + ");",
-                        nullptr);
-                return;
-            }
+            // fb602 — RECYCLED: this is the same five lines reportLoadError() now owns, and with an
+            // empty `where` it emits the byte-identical onLoadError call. One courier, five slots.
+            if (! r.success) { reportLoadError ({}, r.errorMessage); return; }
 
             {
                 const size_t li = (size_t) audioProcessor.editingLayer.load();
@@ -13523,7 +13661,10 @@ void TerrainUiCore::loadSampleIntoLayer (const juce::File& file,
         },
         [this, layerIdx, isEditingLayer] (tw::SampleLoader::Result r)
         {
-            if (! r.success) return;  // Non-editing layer errors: silent skip (no UI to show).
+            // fb602 — was a silent `return`. A layer that fails to decode now says so; the
+            // waveform display still belongs to the editing layer only, but the FAILURE is never
+            // swallowed again.
+            if (! r.success) { reportLoadError ("layer " + juce::String (layerIdx + 1), r.errorMessage); return; }
 
             // Persist filename + path into the layer state.
             {
@@ -13625,7 +13766,9 @@ void TerrainUiCore::loadOscSampleAsync (int oscIdx, const juce::File& file)
         [] (float) {},   // per-OSC drops are short one-shots — no progress UI
         [this, oscIdx, oscLetter] (tw::SampleLoader::Result r)
         {
-            if (! r.success) return;   // SampleLoader already stored the buffer (rate set) into target.
+            // fb602 — was a silent `return`; a failed per-osc decode looked exactly like a
+            // successful one that drew nothing.
+            if (! r.success) { reportLoadError (juce::String ("osc ") + (char) ('A' + oscIdx), r.errorMessage); return; }
 
             // Build the peaks JSON — identical shape to the front sampler's onSampleLoaded.
             juce::Array<juce::var> minArr, maxArr;
@@ -13656,11 +13799,17 @@ void TerrainUiCore::loadOscSampleAsync (int oscIdx, const juce::File& file)
 // PEROSC — sandbox-safe sample load straight from the base64-decoded bytes (NO temp file). Mirrors
 // loadOscSampleAsync but feeds SampleLoader::loadFromMemory, so a dropped sample loads even when the
 // host sandbox / macOS TCC blocks disk writes (which is what broke sample drops in FL Studio).
-void TerrainUiCore::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename)
+void TerrainUiCore::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename,
+                                             const juce::String& sourcePath)
 {
     if (oscIdx < 0 || oscIdx > 3) return;
     const char oscLetter = (char) ('a' + oscIdx);
-    audioProcessor.oscSourcePath (oscIdx) = filename;   // no disk path; the cached payload restores the waveform on reopen
+    // fb602 — was `= filename;`. The cached payload only restores the WAVEFORM PICTURE on an
+    // editor reopen; a DAW project reload rebuilds the processor and the bare filename failed
+    // File::existsAsFile() every time, so the oscillator came back silent. Store the real path
+    // when the caller has one, otherwise an explicit marker (fb603 embeds the audio behind it).
+    audioProcessor.oscSourcePath (oscIdx) = sourcePath.isNotEmpty() ? sourcePath
+                                                                    : tiMemSourceRef (filename);
 
     auto& loader = audioProcessor.getOscSampleLoader (oscIdx);
     auto& target = audioProcessor.getOscSampleBuffer (oscIdx);
@@ -13670,7 +13819,8 @@ void TerrainUiCore::loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data,
         [] (float) {},
         [this, oscIdx, oscLetter] (tw::SampleLoader::Result r)
         {
-            if (! r.success) return;
+            // fb602 — was a silent `return`: the drop path, the one users actually hit.
+            if (! r.success) { reportLoadError (juce::String ("osc ") + (char) ('A' + oscIdx), r.errorMessage); return; }
 
             juce::Array<juce::var> minArr, maxArr;
             minArr.ensureStorageAllocated ((int) r.peaksMin.size());
@@ -13735,7 +13885,14 @@ void TerrainUiCore::loadNoiseSampleFromMemory (juce::MemoryBlock data, const juc
 {
     double rate = 0.0;
     auto raw = readAudioFromMemory (data.getData(), data.getSize(), rate);
-    if (raw == nullptr || raw->getNumSamples() < 64 || rate <= 0.0) return;
+    // fb602 — the FOURTH silent slot (the brief named three; this one decodes through
+    // readAudioFromMemory instead of SampleLoader, which is why it was missed). A noise import
+    // that would not decode used to leave the old texture playing with no word to anyone.
+    if (raw == nullptr || raw->getNumSamples() < 64 || rate <= 0.0)
+    {
+        reportLoadError ("noise", "Could not decode " + filename + " (empty, or not WAV/AIFF/FLAC/MP3).");
+        return;
+    }
     const int cap = (int) (rate * 30.0);   // cap noise textures at 30 s (bounded memory / preset size)
     if (cap > 0 && raw->getNumSamples() > cap)
     {
@@ -13763,8 +13920,7 @@ static const char* kBlendSuffixes[6] = { "MORPH", "ATTACK", "BODY", "BREATH", "S
 
 juce::File TerrainUiCore::blendCacheDir() const
 {
-    auto dir = juce::File::getSpecialLocation (juce::File::userApplicationDataDirectory)
-                 .getChildFile ("WavesCrate").getChildFile ("TerrainInstrument").getChildFile ("Blends");
+    auto dir = terrainDataDir().getChildFile ("Blends");   // fb602 — one root
     dir.createDirectory();
     return dir;
 }

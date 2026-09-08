@@ -17,10 +17,19 @@
 //                                push it back, read the parameter out with AudioUnitGetParameter.
 //                                That is a real project reload, through the real
 //                                setStateInformation — not a transcription of its predicate.
+//    midi/render/note          fb602: DRIVE it. Lifted VERBATIM from Tests/harm_table_au.cpp
+//                              (:114-131) because the fb602 restore certs have to prove a slot
+//                              RENDERS, and a second copy of the AudioUnitRender loop is exactly
+//                              what RECYCLE forbids. rmsDb() is that file's metric, unchanged.
 //    setParam/getParam         edit and read a <PARAM id=".." value=".."/> child
 //    dropParam/hasParam        delete / test for a PARAM child outright (a pre-migration blob may
 //                              not have the child at all)
 //    hasProperty/dropProperty  the root's migration MARKERS, which is what gates every migration
+//    setRootAttr/getRootAttr   fb602: ADD/EDIT/READ an attribute on the <Parameters …> root tag.
+//                              hasProperty/dropProperty could only test and delete; a blob saved
+//                              by a session that HAD a sample carries oscSamplePath0="…"
+//                              (PluginProcessor.cpp:14687) and a blob from this idle AU does not,
+//                              so the restore certs must be able to PUT one there.
 //    sliceMarked               print the shipped migration's own lines, between its own markers
 //
 //  WHY THE INSTALLED AU AND NOT AN OFFLINE HARNESS: a migration lives inside a 600-line
@@ -46,8 +55,25 @@
 static const double SR = 48000.0;
 static const int    BLK = 512;
 static int pass = 0, fail = 0;
+// fb602 — WHICH bar went red, in one line at the end. A cert whose tail is captured (a sweep, a
+// CI log, a scrollback) reports "13 passed, 1 FAILED" and nothing about WHICH, and a flake you
+// cannot name is a flake you cannot fix: one appeared here at roughly 1 run in 25 and could not be
+// identified afterwards because only the summary line had been kept.
+static std::vector<std::string> failedBars;
 static void chk (bool ok, const char* label, const std::string& detail)
-{ if (ok) ++pass; else ++fail; std::printf ("  %s  %s\n        %s\n", ok ? "PASS" : "FAIL", label, detail.c_str()); }
+{ if (ok) ++pass; else { ++fail; failedBars.push_back (label); }
+  std::printf ("  %s  %s\n        %s\n", ok ? "PASS" : "FAIL", label, detail.c_str()); }
+[[maybe_unused]] static int summary()
+{
+    std::printf ("\n  %d passed, %d FAILED\n", pass, fail);
+    if (! failedBars.empty())
+    {
+        std::printf ("  FAILED BARS:\n");
+        for (const auto& b : failedBars) std::printf ("    - %s\n", b.c_str());
+    }
+    std::printf ("\n");
+    return fail ? 1 : 0;
+}
 
 [[maybe_unused]] static std::string cf2s (CFStringRef s)
 { if (! s) return ""; char b[1024] = {0}; CFStringGetCString (s, b, sizeof b, kCFStringEncodingUTF8); return b; }
@@ -87,6 +113,30 @@ struct AU
     }
     void close() { if (au) { AudioUnitUninitialize (au); AudioComponentInstanceDispose (au); au = nullptr; } }
     void pump (double seconds) { double t = 0; while (t < seconds) { CFRunLoopRunInMode (kCFRunLoopDefaultMode, 0.02, false); t += 0.02; } }
+
+    // ── fb602: DRIVING it. harm_table_au.cpp:114-131, VERBATIM. ───────────────────────────────
+    //  A state cert that only reads parameters back proves the blob was parsed. It cannot tell a
+    //  restored SAMPLE SLOT from an empty one, because the slot is a buffer and not a parameter —
+    //  which is precisely how bug (c) stayed invisible for the whole life of the plugin.
+    double clock_ = 0.0;
+    void midi (UInt32 s, UInt32 a, UInt32 b) { MusicDeviceMIDIEvent (au, s, a, b, 0); }
+    std::vector<float> render (int nblk)
+    {
+        std::vector<float> out; std::vector<float> bl ((size_t) BLK), br ((size_t) BLK);
+        AudioBufferList* abl = (AudioBufferList*) calloc (1, sizeof (AudioBufferList) + sizeof (AudioBuffer)); abl->mNumberBuffers = 2;
+        AudioTimeStamp ts {}; ts.mFlags = kAudioTimeStampSampleTimeValid; ts.mSampleTime = clock_;
+        for (int b = 0; b < nblk; ++b)
+        {
+            abl->mBuffers[0] = { 1, (UInt32) (BLK * 4), bl.data() }; abl->mBuffers[1] = { 1, (UInt32) (BLK * 4), br.data() };
+            AudioUnitRenderActionFlags fl = 0; if (AudioUnitRender (au, &fl, &ts, 0, BLK, abl) != noErr) break;
+            ts.mSampleTime += BLK; clock_ += BLK;
+            for (int i = 0; i < BLK; ++i) out.push_back (0.5f * (bl[(size_t) i] + br[(size_t) i]));
+        }
+        free (abl); return out;
+    }
+    // the bake runs on the MESSAGE thread at 60 Hz, so a change needs a real run-loop pump
+    // before the note — not just more audio blocks.
+    std::vector<float> note (int nn) { pump (0.30); midi (0x90, (UInt32) nn, 100); render (10); auto b = render (26); midi (0x80, (UInt32) nn, 0); render (30); return b; }
     bool has (const std::string& n) const { return byName.count (n) != 0; }
     float get (const std::string& n)
     { auto it = byName.find (n); if (it == byName.end()) return -999.f;
@@ -171,6 +221,53 @@ struct AU
     return true;
 }
 
+// ── fb602: PUT an attribute on the root that this blob does not have ───────────────────────────
+//    getStateInformation writes oscSamplePath0.. / cardStates / convIRRaw1.. as ROOT attributes
+//    (PluginProcessor.cpp:14544, :14561, :14687). An AU that never had a sample or a card chain
+//    emits none of them, so a restore cert has to synthesise the blob a real session would have
+//    saved. Insert just before the '>' of the opening <Parameters …> tag — the same place JUCE's
+//    XmlElement writer would have put it.
+[[maybe_unused]] static std::string xmlEsc (const std::string& v)
+{
+    std::string o;
+    for (char c : v) { if (c=='&') o+="&amp;"; else if (c=='<') o+="&lt;"; else if (c=='>') o+="&gt;";
+                       else if (c=='"') o+="&quot;"; else o+=c; }
+    return o;
+}
+[[maybe_unused]] static std::string xmlUnesc (const std::string& v)
+{
+    std::string o; size_t i = 0;
+    while (i < v.size())
+    {
+        if (v[i]=='&') { if (!v.compare(i,5,"&amp;")) { o+='&'; i+=5; continue; }
+                         if (!v.compare(i,4,"&lt;"))  { o+='<'; i+=4; continue; }
+                         if (!v.compare(i,4,"&gt;"))  { o+='>'; i+=4; continue; }
+                         if (!v.compare(i,6,"&quot;")){ o+='"'; i+=6; continue; } }
+        o += v[i++];
+    }
+    return o;
+}
+[[maybe_unused]] static std::string getRootAttr (const std::string& xml, const std::string& name)
+{
+    const std::string key = " " + name + "=\"";
+    const size_t at = xml.find (key); if (at == std::string::npos) return "";
+    const size_t s = at + key.size(); const size_t q = xml.find ('"', s);
+    if (q == std::string::npos) return "";
+    return xmlUnesc (xml.substr (s, q - s));
+}
+[[maybe_unused]] static bool setRootAttr (std::string& xml, const std::string& name, const std::string& value)
+{
+    dropProperty (xml, name);                                  // idempotent: replace, never duplicate
+    const size_t tag = xml.find ("<Parameters");
+    if (tag == std::string::npos) return false;
+    const size_t gt = xml.find ('>', tag);
+    if (gt == std::string::npos) return false;
+    size_t ins = gt;
+    while (ins > tag && (xml[ins-1] == '/' || xml[ins-1] == ' ' || xml[ins-1] == '\n')) --ins;
+    xml.insert (ins, " " + name + "=\"" + xmlEsc (value) + "\"");
+    return true;
+}
+
 // ── two more of the same, for a migration that ADDS a PARAM child rather than editing one ──────
 //    (a pre-fb601 blob has no <PARAM id="SYN_OSC_x_HARM_TABLE"> at all, so a cert for it has to be
 //    able to DELETE one and to ASK whether one is there.)
@@ -201,3 +298,10 @@ struct AU
     const size_t el = src.rfind ('\n', e);  if (el == std::string::npos || el <= bl) return "";
     return src.substr (bl + 1, el - bl - 1);
 }
+
+// ── fb602: the project's loudness metric, harm_table_au.cpp:134-136 VERBATIM ───────────────────
+//    Report the NUMBER, never a boolean: "restored" and "restored to silence" are the same
+//    boolean and completely different bugs.
+[[maybe_unused]] static double rmsDb (const std::vector<float>& v, size_t from = 0)
+{ double s = 0; size_t n = 0; for (size_t i = from; i < v.size(); ++i) { s += (double) v[i]*v[i]; ++n; }
+  return 10.0 * std::log10 (std::max (1e-20, s / std::max<size_t> (1, n))); }

@@ -60,13 +60,24 @@ private:
     // Sample / patch loading helpers (Task 11; loadPatch + importTerrainPack
     // are stubs implemented in Tasks 18 / 22 of the v0a plan)
     void loadSampleAsync      (const juce::File& file);
-    void loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // front sampler — sandbox-safe (no temp file)
+    // fb602 — sourcePath is what RESTORE will feed to juce::File(...).existsAsFile(); filename is
+    // only ever DISPLAY. Callers that hold a real file pass its full path; a drop (bytes only)
+    // leaves it empty and the loader stores an explicit "mem:<filename>" marker instead of a bare
+    // filename that looks like a path and silently fails forever. fb603 embeds audio behind that
+    // marker, so no second migration.
+    void loadSampleFromMemory (juce::MemoryBlock data, const juce::String& filename,
+                               const juce::String& sourcePath = {});   // front sampler — sandbox-safe (no temp file)
     // Task 13: targets a specific layer index (0..3) instead of editingLayer.
     // Used by the editor constructor to fan out V2 preset reloads across all
     // 4 layer slots without temporarily changing editingLayer on the audio thread.
     void loadSampleIntoLayer  (const juce::File& file, int layerIdx);
     void loadOscSampleAsync   (int oscIdx, const juce::File& file);   // PEROSC
-    void loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename);   // PEROSC — sandbox-safe (no temp file)
+    void loadOscSampleFromMemory (int oscIdx, juce::MemoryBlock data, const juce::String& filename,
+                                  const juce::String& sourcePath = {});   // PEROSC — sandbox-safe (no temp file)
+    // fb602 — EVERY slot reports. Before this, only the front sampler surfaced onLoadError; the
+    // per-layer, per-osc and osc-from-memory callbacks all did a bare `if (! r.success) return;`
+    // so a bad decode was invisible. `where` names the slot ("osc B", "layer 2", …).
+    void reportLoadError (const juce::String& where, const juce::String& message);
     void loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // NOISE IMPORT (P5) — sandbox-safe looping-noise sample
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
