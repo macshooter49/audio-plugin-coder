@@ -70,28 +70,28 @@ build-base/       # fb527 -- cert lanes build a HEAD reference here; never commi
 scratchpad/
 
 # fb601 — the JS UI gates' npm dependency. INSTALLED, NOT VENDORED: `scripts/setup-ui-gates.sh`
-# runs `npm ci` from the COMMITTED plugins/TerrainInstrument/Tests/package-lock.json, so the tree
+# runs `npm ci` from the COMMITTED plugins/Terrain/Tests/package-lock.json, so the tree
 # is reproducible byte-for-byte without 25 packages / 5.4 MB of somebody else's JS in git.
-plugins/TerrainInstrument/Tests/node_modules/
+plugins/Terrain/Tests/node_modules/
 
-# fb601 — GATE ARTIFACTS. A full gate run drops these into plugins/TerrainInstrument/ and they come
+# fb601 — GATE ARTIFACTS. A full gate run drops these into plugins/Terrain/ and they come
 # back on the very next run, so they sit one careless `git add -A` away from a commit. Ignored by
 # EXACT NAME, never by a wildcard that could also swallow a source file (Tests/ has no extension on
 # its cert binaries, so `*` patterns there are dangerous).
 #   Tests/au_eq_null.cpp:69 — outPath defaults to "eqnull.raw", relative to the run dir
-plugins/TerrainInstrument/eqnull.raw
+plugins/Terrain/eqnull.raw
 #   Tests/tpb_states.js:4   — OUT defaults to './shots_states' (a directory of PNGs)
-plugins/TerrainInstrument/shots_states/
+plugins/Terrain/shots_states/
 #   ── the same sweep, for the four certs whose DOCUMENTED build line uses a bare `-o name` instead
 #   of `-o /tmp/name` like every other harness in Tests/. The executable lands next to Source/ (or
 #   inside Tests/, depending which of the two documented run dirs you used), never in /tmp.
 #     Tests/spl_cert.cpp:3 · Tests/utl_cert.cpp:3 · Tests/bod_cert.cpp:3   -> -o spl_cert / utl_cert / bod_cert
 #     Tests/harm_tables_cert.cpp:4                                          -> -o hm_tables_cert
-plugins/TerrainInstrument/spl_cert
-plugins/TerrainInstrument/utl_cert
-plugins/TerrainInstrument/bod_cert
-plugins/TerrainInstrument/hm_tables_cert
-plugins/TerrainInstrument/Tests/spl_cert
-plugins/TerrainInstrument/Tests/utl_cert
-plugins/TerrainInstrument/Tests/bod_cert
-plugins/TerrainInstrument/Tests/hm_tables_cert
+plugins/Terrain/spl_cert
+plugins/Terrain/utl_cert
+plugins/Terrain/bod_cert
+plugins/Terrain/hm_tables_cert
+plugins/Terrain/Tests/spl_cert
+plugins/Terrain/Tests/utl_cert
+plugins/Terrain/Tests/bod_cert
+plugins/Terrain/Tests/hm_tables_cert

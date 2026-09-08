@@ -14,6 +14,6 @@ git submodule update --init --recursive
 # died on MODULE_NOT_FOUND and five gates were silently skipped. Prints whether it
 # fired; never fails the whole setup when node/npm is absent.
 info "Setting up the JS UI gates (puppeteer-core)..."
-"$SCRIPT_DIR/setup-ui-gates.sh" || warn "UI gate setup did not complete — see above; the JS gates in plugins/TerrainInstrument/Tests will not run."
+"$SCRIPT_DIR/setup-ui-gates.sh" || warn "UI gate setup did not complete — see above; the JS gates in plugins/Terrain/Tests will not run."
 
 success "Setup Complete."

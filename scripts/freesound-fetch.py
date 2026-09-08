@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 freesound-fetch.py  --  Bulk-acquire CC0 noise/texture/foley for the
-Terrain Instrument "Noise" factory library (Waves Crate).
+Terrain "Noise" factory library (Waves Crate).
 
 Legal note: this tool ONLY keeps sounds whose license is *exactly*
 "Creative Commons 0" (public-domain dedication -> commercial use +
@@ -75,7 +75,7 @@ FIELDS = "id,name,license,previews,download,type,duration,username,url,tags"
 PAGE_SIZE = 150          # documented maximum
 MIN_REQUEST_INTERVAL = 1.2   # seconds between requests (<=50/min; limit is 60/min)
 MAX_RETRIES = 5
-USER_AGENT = "TerrainInstrument-NoiseFactory/1.0 (+wavescrate)"
+USER_AGENT = "Terrain-NoiseFactory/1.0 (+wavescrate)"
 
 # --------------------------------------------------------------------------
 # Category -> search plan.  Sums to ~250 targets so we still clear 200+ after

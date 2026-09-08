@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Terrain Instrument -- one-command Windows setup. Installs what is missing, clones, builds, runs.
+    Terrain -- one-command Windows setup. Installs what is missing, clones, builds, runs.
 .DESCRIPTION
     Written for a machine that has never built this project. Every step announces what it is doing
     and why, checks that it worked, and stops with a plain-English message if it did not.
@@ -35,7 +35,7 @@ param(
 $ErrorActionPreference = 'Stop'
 $RepoUrl  = 'https://github.com/macshooter49/audio-plugin-coder.git'
 $RepoDir  = Join-Path $Root 'audio-plugin-coder'
-$Artefact = 'build\plugins\TerrainInstrument\TerrainInstrument_artefacts\Release'
+$Artefact = 'build\plugins\Terrain\Terrain_artefacts\Release'
 
 function Say  ($m) { Write-Host "`n=== $m" -ForegroundColor Cyan }
 function Note ($m) { Write-Host "    $m" -ForegroundColor DarkGray }
@@ -257,17 +257,17 @@ Good 'Build configured'
 # -- 5. BUILD ---------------------------------------------------------------------------------
 Say '5/6  Building the standalone app  --  THIS IS THE SLOW ONE, 10-20 minutes'
 Note 'Pages of scrolling text are normal. Only lines containing the word "error" matter.'
-cmake --build build --config Release --target TerrainInstrument_Standalone
+cmake --build build --config Release --target Terrain_Standalone
 if ($LASTEXITCODE -ne 0) { Pop-Location; Die 'The standalone build failed. Scroll up to the first line containing "error" and send me that.' }
 
-$exe = Join-Path $RepoDir "$Artefact\Standalone\Terrain Instrument.exe"
+$exe = Join-Path $RepoDir "$Artefact\Standalone\Terrain.exe"
 if (-not (Test-Path $exe)) { Pop-Location; Die "The build reported success but I cannot find:`n  $exe" }
 Good 'Standalone built'
 
 Say '6/6  Building the VST3 plugin (much quicker now)'
-cmake --build build --config Release --target TerrainInstrument_VST3
+cmake --build build --config Release --target Terrain_VST3
 $vstOk = ($LASTEXITCODE -eq 0)
-$vst3  = Join-Path $RepoDir "$Artefact\VST3\Terrain Instrument.vst3"
+$vst3  = Join-Path $RepoDir "$Artefact\VST3\Terrain.vst3"
 if ($vstOk -and (Test-Path $vst3)) { Good 'VST3 built' } else { Note 'The VST3 did not build, but the standalone did -- that is still a successful test of the synth.' }
 Pop-Location
 

@@ -34,7 +34,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-TESTS_DIR="$REPO_ROOT/plugins/TerrainInstrument/Tests"
+TESTS_DIR="$REPO_ROOT/plugins/Terrain/Tests"
 
 # HARD LAW: a step that can silently no-op must PRINT whether it fired.
 say () { printf '[ui-gates] %s\n' "$*"; }
@@ -62,7 +62,7 @@ fi
 # Did it actually fire? Resolve the module the way a gate does, from a gate's directory.
 if ( cd "$TESTS_DIR" && node -e "require.resolve('puppeteer-core')" >/dev/null 2>&1 ); then
   say "OK — puppeteer-core $(cd "$TESTS_DIR" && node -p "require('puppeteer-core/package.json').version") resolves from Tests/"
-  say "     run a gate with:  cd plugins/TerrainInstrument && node Tests/harm_waterfall_gate.js"
+  say "     run a gate with:  cd plugins/Terrain && node Tests/harm_waterfall_gate.js"
 else
   say "FAILED — puppeteer-core still does not resolve from $TESTS_DIR"
   exit 1

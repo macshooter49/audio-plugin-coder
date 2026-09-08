@@ -12,7 +12,7 @@
 # ==============================================================================================
 $ErrorActionPreference = 'Stop'
 
-$dst = "C:\Program Files\Common Files\VST3\Terrain Instrument.vst3"
+$dst = "C:\Program Files\Common Files\VST3\Terrain.vst3"
 
 $id = [Security.Principal.WindowsIdentity]::GetCurrent()
 $pr = New-Object Security.Principal.WindowsPrincipal($id)
