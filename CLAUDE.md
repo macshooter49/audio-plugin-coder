@@ -1,4 +1,4 @@
-# CLAUDE.md — Terrain Instrument / Waves Crate (project root authority)
+# CLAUDE.md — Terrain / Waves Crate (project root authority)
 
 **Read this first, every session.** This is the single file Max owns. If anything in
 `.claude/rules/*.md` conflicts with what's written here, **THIS file wins**. For deep
@@ -24,7 +24,7 @@ Two trigger phrases. When Max says them, run the ritual without being asked to s
 meaningful commits), rebuild **`~/Desktop/terrain-CURRENT.zip`** = the FULL `Source/` tree (the UI
 `ui/public/index.html` + ALL the C++) plus a `_STATE-FOR-OPUS.md` (HEAD hash, date, what changed, where
 things live). This is so **Opus sees exactly what we see in Terrain**. Stable name = it overwrites (no
-accumulation); the hash/summary lives inside. Build from `plugins/TerrainInstrument/` with
+accumulation); the hash/summary lives inside. Build from `plugins/Terrain/` with
 `zip -r ~/Desktop/terrain-CURRENT.zip Source _STATE-FOR-OPUS.md` (write the STATE file, zip, then delete
 the STATE file so the repo tree stays clean). Desktop listing may be TCC-blocked — operate by full path.
 
@@ -66,16 +66,16 @@ Copy each present file into the repo (under the plugin `Source/` dir), then buil
 Only copy the files actually present in the drop — not every file changes each time.
 
 ```bash
-SRC="$HOME/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/TerrainInstrument/Source"
+SRC="$HOME/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/Terrain/Source"
 DROP="$HOME/terrain-drop"
 cp "$DROP/index.html"          "$SRC/ui/public/index.html"
 cp "$DROP/PluginEditor.cpp"    "$SRC/PluginEditor.cpp"
 # ...only the files present in the drop...
 ```
 
-> **WebView path is `Source/ui/public/index.html` for TerrainInstrument** — NOT `WebUI/`.
+> **WebView path is `Source/ui/public/index.html` for Terrain** — NOT `WebUI/`.
 > The generic "WebView lives in WebUI/" rule in `juce-build-protocols.md` does **not** apply
-> to this plugin. Do not move index.html. The CMake target `TerrainInstrument_WebUI` embeds
+> to this plugin. Do not move index.html. The CMake target `Terrain_WebUI` embeds
 > it from `Source/ui/public/index.html`.
 
 ---
@@ -85,7 +85,7 @@ cp "$DROP/PluginEditor.cpp"    "$SRC/PluginEditor.cpp"
 ### A. Build BOTH formats, every time
 Max runs **Ableton AND FL Studio**; either may load either format. Building only one strands
 him on a stale plugin in the other (looks like "my change didn't take effect"). **Always build
-`TerrainInstrument_VST3` AND `TerrainInstrument_AU`.** Verify both with `strings` after.
+`Terrain_VST3` AND `Terrain_AU`.** Verify both with `strings` after.
 
 ### B. index.html changed? You MUST bust the BinaryData cache (or you embed STALE HTML)
 This is the #1 repeatedly-tripped trap. `touch` / a plain rebuild does **not** reliably
@@ -95,13 +95,13 @@ re-run cmake configure before building:
 
 ```bash
 # from repo root (adjust 'build/' if your tree differs):
-rm -rf build/plugins/TerrainInstrument/juce_binarydata_TerrainInstrument_WebUI \
-       build/plugins/TerrainInstrument/CMakeFiles/TerrainInstrument_WebUI.dir \
-       build/plugins/TerrainInstrument/libTerrainInstrument_WebUI.a
+rm -rf build/plugins/Terrain/juce_binarydata_Terrain_WebUI \
+       build/plugins/Terrain/CMakeFiles/Terrain_WebUI.dir \
+       build/plugins/Terrain/libTerrain_WebUI.a
 cmake -S . -B build -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64"
-cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_AU
+cmake --build build --target Terrain_VST3 --target Terrain_AU
 ```
-**Verify it embedded:** `strings "$HOME/Library/Audio/Plug-Ins/VST3/TerrainInstrument.vst3/Contents/MacOS/TerrainInstrument" | grep -c "<a-string-from-the-new-html>"` -> non-zero. (Grepping BinaryData*.cpp returns 0 because it's numeric byte arrays — use `strings` on the compiled binary.)
+**Verify it embedded:** `strings "$HOME/Library/Audio/Plug-Ins/VST3/Terrain.vst3/Contents/MacOS/Terrain" | grep -c "<a-string-from-the-new-html>"` -> non-zero. (Grepping BinaryData*.cpp returns 0 because it's numeric byte arrays — use `strings` on the compiled binary.)
 
 ### C. Generator / configure (current reality on Max's Mac)
 - **No full Xcode** on this Mac -> use the **`"Unix Makefiles"`** generator, NOT `"Xcode"`.
@@ -118,24 +118,34 @@ cmake --build build --target TerrainInstrument_VST3 --target TerrainInstrument_A
 ### E. RE-INSTALL: `rm -rf` the old bundle FIRST, then `cp`, then RE-SIGN (fb292 trap — cost hours)
 **Never `cp -R` a rebuilt bundle *over* an existing installed one** — macOS caches the code signature per inode, so an in-place overwrite of a hot (recently-loaded) bundle leaves a STALE signature → the kernel `SIGKILL`s the host on load with **"Code Signature Invalid" / CODESIGNING "Invalid Page"**. In pluginval this looks exactly like a **hang/crash at "Open plugin (cold)" (exit 137)** and masquerades as a code bug (it is NOT). The build's own signature is fine ("valid on disk"); the corruption is purely at install. **Correct install, every time:**
 ```bash
-rm -rf "$DST/Terrain Instrument.vst3"                 # fresh inode
-cp -R "$ART/VST3/Terrain Instrument.vst3" "$DST/"
-codesign --force --deep --sign - "$DST/Terrain Instrument.vst3"   # ad-hoc re-sign
-xattr -cr "$DST/Terrain Instrument.vst3"              # clear quarantine
+rm -rf "$DST/Terrain.vst3"                 # fresh inode
+cp -R "$ART/VST3/Terrain.vst3" "$DST/"
+codesign --force --deep --sign - "$DST/Terrain.vst3"   # ad-hoc re-sign
+xattr -cr "$DST/Terrain.vst3"              # clear quarantine
 ```
 Same for the `.component`. If pluginval `Open plugin (cold)` fails with exit 137 / no assert, **check `~/Library/Logs/DiagnosticReports/pluginval-*.ips` FIRST** — an `EXC_BAD_ACCESS … SIGKILL (Code Signature Invalid)` in `dyld dlopen` = this trap, not your code.
 
 ---
 
-## 3. NAMING LOCK (do not violate)
+## 3. NAMING LOCK (do not violate)  — ⭐ REVISED BY MAX, fb605 (2026-09-08). This supersedes the
+##    old "never rename TerrainInstrument back to Terrain" rule, which is now WRONG and retired.
 
-- **`Terrain Instrument`** = the **synth** (this project). Dir `plugins/TerrainInstrument/`,
-  bundle `com.wavescrate.terraininstrument`, AU subtype `Tern`.
-- **`Terrain` / `Terrain FX`** = the separate **FX/sampler** plugin. Dir `plugins/Terrain/`,
-  bundle `com.wavescrate.terrain`, AU subtype `Trrn`. Different plugin, different source.
-- **Never** rename TerrainInstrument back to "Terrain" (bundle-ID collision — was deliberately
-  removed). **Never** create "Terrain 2". Company: **Waves Crate**, mfr code `Wvcr`.
-- All synth work lives in `plugins/TerrainInstrument/`. Don't touch FX data paths.
+- **`Terrain`** = the **synth** (this project). Dir `plugins/Terrain/`, target `Terrain`,
+  bundle `com.wavescrate.terrain`, PRODUCT_NAME "Terrain", AU `aumu` subtype `Tern`.
+  Build with `Terrain_VST3` / `Terrain_AU`. (fb605 — was "Terrain Instrument" in
+  `plugins/Terrain/`. The rename is DONE. **Do not revert it.**)
+- **`Terrain FX`** = the separate **FX/sampler** plugin. Dir `plugins/TerrainFX/`, target
+  `TerrainFX`, bundle `com.wavescrate.terrainfx`, AU `aufx` subtype `Trrn`. Different
+  plugin, different source. (fb605 — was plain "Terrain" in `plugins/Terrain/`.)
+- **Resynth** is the engine's name. It was called Geode; that name is retired.
+  ⛔ The `SYN_OSC_*_GEODE_*` parameter IDs stay `GEODE` on disk forever — they are in every
+  saved patch. Rename labels, never IDs.
+- 🔒 **`PLUGIN_CODE` (`Tern` / `Trrn`) and `PLUGIN_MANUFACTURER_CODE` (`Wvcr`) are IDENTITY.**
+  The VST3 class UID is built from them, not from the name. Change one and every saved
+  session loses the plugin. `Tests/identity_lock_gate.py` enforces this.
+- Company: **Waves Crate**, mfr code `Wvcr`. **Never** create "Terrain 2".
+- ⚠️ Terrain FX still owns `Noizefield/Terrain` and `Music/Waves Crate/Terrain` on disk, so the
+  synth's resolvers for those two roots are deliberately LEGACY-FIRST. See fb605.
 
 ---
 
@@ -317,7 +327,7 @@ Same for the `.component`. If pluginval `Open plugin (cold)` fails with exit 137
 
 ## 6. Current state & roadmap (as of 2026-06-05)
 
-- **Filter system COMPLETE** — 27 types, 7 DSP cores, all offline-validated, both formats built.
+- **Filter system: 118 types** (fb604), every one measured — see terrain-filter-overpass-fb603.
   Branch `feature/terrain-instrument`.
 - **TWO independent filters** just added (this session): `filterSlot_` + `filterSlot2_` in
   SynthVoice — series/parallel routing (`SYN_FILTER_ROUTING`) + per-filter wet/dry mix
