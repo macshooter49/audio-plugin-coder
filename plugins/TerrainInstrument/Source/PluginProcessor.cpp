@@ -79,11 +79,12 @@ static inline float masterSoftClip (float x) noexcept
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// fb377 — THE ONE ENGINE LIST. TerrainFilters.h ships 94 filter types behind one enum,
-// and TWO surfaces now choose from it: the synth FILTER panel (SYN_FILTER1/2_TYPE) and the
-// FX rack FILTER device (SYN_FLT_ENGINE). They were about to hold two hand-maintained copies
-// of the same 94 strings, which is the recycle law broken and a drift waiting to happen —
-// rename one engine on one side and the two menus disagree forever. One source, both callers.
+// fb377 — THE ONE ENGINE LIST. TerrainFilters.h ships 118 filter types behind one enum (94
+// at fb377, 118 since fb604), and TWO surfaces choose from it: the synth FILTER panel
+// (SYN_FILTER1/2_TYPE) and the FX rack FILTER device (SYN_FLT_ENGINE). They were about to
+// hold two hand-maintained copies of the same strings, which is the recycle law broken and
+// a drift waiting to happen — rename one engine on one side and the two menus disagree
+// forever. One source, both callers.
 //
 // ⚠️ ORDER IS THE ENUM ORDER and index N here MUST be Type(N). The choice param stores the
 // index raw, so reordering this list silently repoints every saved patch (the fb165 law in
@@ -228,7 +229,63 @@ static juce::StringArray terrainFilterEngineNames()
         filterTypeChoices.add ("Radio");
         filterTypeChoices.add ("Reverb Dark");
         filterTypeChoices.add ("Reverb Metal");
-    static_assert (tw::filters::kNumTypes == 94, "engine list and Type enum must stay the same size");
+        // ══════════════════════════════════════════════════════════════════════════════════════
+        //  fb604 — 94 → 118. TWENTY-FOUR APPENDED AT 94..117, in this exact order, and the order
+        //  is the CONTRACT: index N here IS Type(N) is case N in FilterSlot's switch is
+        //  FLT_ENGINES[N] in index.html. Appending (never inserting) is what keeps every saved
+        //  patch pointing at the engine it was saved with — the APVTS tree stores an
+        //  AudioParameterChoice as its DENORMALISED value, i.e. the RAW INDEX (confirmed in
+        //  juce_AudioProcessorValueTreeState.cpp: ParameterAdapter::denormalise ->
+        //  convertFrom0to1 over AudioParameterChoice's range {0, size-1, interval 1}), so a patch
+        //  holding 27.0 still reads NONE at 118 entries exactly as it did at 94. Host AUTOMATION
+        //  lanes are the one thing that DOES move: a lane stores the NORMALISED value, so
+        //  27/93 = 0.2903 now resolves to round(0.2903 x 117) = 34. Accepted by Max — pre-release,
+        //  only his own lanes exist. The menu clears his "at least 100" at index 99, Phaser 24P.
+        //
+        //  94-98 · PHASER N — the SAME allpass chain as 4P/6P/8P/12P/16P with the output mix
+        //  polarity inverted: 0.5*(in + v) becomes 0.5*(in - v). Provably NOT a duplicate of its
+        //  P twin. For a unity-magnitude allpass A, |1 + A|^2 + |1 - A|^2 = 2(1 + |A|^2) = 4, so
+        //  the two responses are exact complements: the N variant's notches sit precisely where
+        //  the P variant's peaks are. Interleaved notch sets, not a re-voicing.
+        //  99-104 · PHASER 24P/32P/48P (+N) — stage counts past the old PhaserCore::MAXST = 16.
+        //  At ~24 notches a phaser stops sweeping like a phaser and reads as a static spectral
+        //  comb with a vowel-ish resonance; the roster had no such timbre.
+        //  105-110 · THE COMB MATRIX — our comb ships a FIXED, always-on, never-user-reachable
+        //  one-pole LP in the loop (fcDamp = 2*f0 + 6000). The matrix exposes that axis:
+        //  {none, HP, LP+HP band} x {+, -} feedback. Moorer: undamped = pipe, LP = string,
+        //  HP = tin-can, LP+HP = tuned formant resonator. Four instruments, not four presets.
+        //  111-112 · FLANGE — the same comb circuit at flanger settings (0.1-10 ms, ~50 % mix) in
+        //  both polarities. Range and mix are the audible split from a comb, not topology.
+        //  113-114 · 6 dB SHELVES — we shipped only the 2nd-order (S = 1) pair; a 1st-order shelf
+        //  is a genuinely different transition slope, not a gentler setting of the same one.
+        //  115-117 · FORMANT REGISTERS — pure DATA, no new DSP. The shipped vowel table is a bass
+        //  register; these are the soprano/tenor/alto sets from the published formant tables.
+        // ══════════════════════════════════════════════════════════════════════════════════════
+        filterTypeChoices.add ("Phaser 4P N");        //  94
+        filterTypeChoices.add ("Phaser 6P N");        //  95
+        filterTypeChoices.add ("Phaser 8P N");        //  96
+        filterTypeChoices.add ("Phaser 12P N");       //  97
+        filterTypeChoices.add ("Phaser 16P N");       //  98
+        filterTypeChoices.add ("Phaser 24P");         //  99  ← the 100th engine
+        filterTypeChoices.add ("Phaser 24P N");       // 100
+        filterTypeChoices.add ("Phaser 32P");         // 101
+        filterTypeChoices.add ("Phaser 32P N");       // 102
+        filterTypeChoices.add ("Phaser 48P");         // 103
+        filterTypeChoices.add ("Phaser 48P N");       // 104
+        filterTypeChoices.add ("Comb Raw +");         // 105  no damping at all — pipe
+        filterTypeChoices.add ("Comb Raw -");         // 106
+        filterTypeChoices.add ("Comb Bright +");      // 107  HP damping — tin-can
+        filterTypeChoices.add ("Comb Bright -");      // 108
+        filterTypeChoices.add ("Comb Band +");        // 109  LP+HP damping — tuned formant
+        filterTypeChoices.add ("Comb Band -");        // 110
+        filterTypeChoices.add ("Flange +");           // 111
+        filterTypeChoices.add ("Flange -");           // 112
+        filterTypeChoices.add ("Low EQ 6");           // 113  1st-order (6 dB/oct) low shelf
+        filterTypeChoices.add ("High EQ 6");          // 114  1st-order high shelf
+        filterTypeChoices.add ("Formant Soprano");    // 115
+        filterTypeChoices.add ("Formant Tenor");      // 116
+        filterTypeChoices.add ("Formant Alto");       // 117
+    static_assert (tw::filters::kNumTypes == 118, "engine list and Type enum must stay the same size");   // fb604 — 94 -> 118
     return filterTypeChoices;
 }
 
@@ -5146,15 +5203,16 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainInstrumentAudioProces
         // the back carries the synth filter's own engine controls (Env · Track · Spread · Poles ·
         // Post) plus the three an envelope FOLLOWER needs to exist at all (Sense · Attack ·
         // Release). No new filter DSP is written: this device HOSTS one FilterSlot, which is the
-        // same 2,195-line, 94-engine core the synth panel already drives.
+        // same multi-thousand-line, 118-engine core the synth panel already drives (94 at fb377).
         //
-        // 🔑 ENGINE is the ONLY thing the DSP reads. It is choice(94) over terrainFilterEngineNames(),
-        // index == Type(index), read raw with (int)*rawParam — the AudioParameterChoice law. TYPE is
+        // 🔑 ENGINE is the ONLY thing the DSP reads. It is choice(kNumTypes) over terrainFilterEngineNames(),
+        // index == Type(index), read raw with roundToInt(*rawParam) — the AudioParameterChoice law
+        // (fb604: ROUND, never truncate; see applyFlt for the measured reason). TYPE is
         // the header pill's GROUP and is a DISPLAY MIRROR ONLY, derived from ENGINE by the UI and
         // never read by C++, so the two can never disagree in a way you can hear. That is the fb373
         // lesson applied at design time rather than after four rounds of measurement.
         {
-            const juce::StringArray fltEngines = terrainFilterEngineNames();       // 94, enum order
+            const juce::StringArray fltEngines = terrainFilterEngineNames();       // 118, enum order (fb604)
             // the header pill's group roster: 10 live + 6 reserved so adding a group later can
             // never renumber a saved patch (RACK LAW C — cardinality is fixed at birth).
             const juce::StringArray fltGroups { "Ladder","Xpander","State-Var","Multi","Comb",
@@ -6254,7 +6312,20 @@ void TerrainInstrumentAudioProcessor::applyFlt (int inst0, float inL, float inR,
     tw::FilterFxEngine::Params fp;
     // 🔑 the AudioParameterChoice law: raw IS the index. Never lround(raw * N) — that is the
     // fb50 noise-type bug and the fb373 tape-type bug, one denominator apart.
-    fp.engine  = juce::jlimit (0, tw::filters::kNumTypes - 1, (int) V.engine->load());
+    // ⚠️ fb604 — but raw is a FLOAT, and it is NOT guaranteed to be integral, so ROUND it, never
+    // truncate. Every write into a choice param passes through setValueNotifyingHost, which takes
+    // a NORMALISED float: AudioParameterChoice::setValue then stores jlimit(0,end, norm*end), and
+    // norm for index i is float(i)/end. That divide-then-multiply is not exact in float. MEASURED
+    // through the real juce::NormalisableRange built with AudioParameterChoice's own lambdas: at
+    // the fb603 roster of 94 (end = 93) indices 49, 55 and 61 all come back as 48.999996185 /
+    // 54.999996185 / 60.999996185, so `(int)` truncated them ONE ENGINE EARLY — SEM Notch played
+    // SEM LP, Multi HP+BP played Multi LP+Notch, Multi Peak+HP played Multi Notch+Notch. Three
+    // engines the menu could not reach, silently, and invisible to flt_gate/fltmeas because those
+    // construct a Type by enum and never touch the parameter. 119 of the 199 cardinalities in
+    // 2..200 have at least one such index; 118 happens to have none, which is LUCK, not a fix —
+    // so the round goes in now, while it is a provable no-op, rather than after the next append.
+    // juce::roundToInt is exactly what AudioParameterChoice::getIndex() itself uses.
+    fp.engine  = juce::jlimit (0, tw::filters::kNumTypes - 1, juce::roundToInt (V.engine->load()));
     fp.charIdx = juce::jlimit (0, 5, (int) V.chr->load());
     fp.cut     = M (V.cut);      fp.res     = M (V.res);
     fp.drive   = M (V.drive);    fp.mix     = M (V.mix);
@@ -9107,14 +9178,14 @@ void TerrainInstrumentAudioProcessor::processBlock (juce::AudioBuffer<float>& bu
         const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
         const float fltKt1  =         100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack1, 0.0f, 1.0f);   // fb78 Track mod · fb184 ownership
         // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
-        const int   filtType= (int)   *rawParam (ParameterIDs::SYN_FILTER1_TYPE);
+        const int   filtType= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER1_TYPE));   // fb604 — ROUND, never truncate: see applyFlt's engine read
         const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
         const float filtEnv =         mdP (ParameterIDs::SYN_FILTER1_ENV, wc::ModDest::FEnv1, -1.0f, 1.0f);
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
         const float fltKt2   =        100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
-        const int   filtType2= (int)  *rawParam (ParameterIDs::SYN_FILTER2_TYPE);
+        const int   filtType2= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER2_TYPE));  // fb604 — ditto
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
         const float filtEnv2 =        mdP (ParameterIDs::SYN_FILTER2_ENV, wc::ModDest::FEnv2, -1.0f, 1.0f);
         const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);

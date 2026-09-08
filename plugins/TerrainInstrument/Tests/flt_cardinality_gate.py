@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-#  flt_cardinality_gate.py — fb603 · THE FILTER ROSTER MOVES AS ONE NUMBER, OR IT DOES NOT MOVE.
+#  flt_cardinality_gate.py — fb604 · THE FILTER ROSTER MOVES AS ONE NUMBER, OR IT DOES NOT MOVE.
 #
 #      python3 Tests/flt_cardinality_gate.py                 # from plugins/TerrainInstrument
 #      python3 Tests/flt_cardinality_gate.py --root <dir>    # against another copy of the tree
 #      TI_CARD_MUT=<list> python3 Tests/flt_cardinality_gate.py     # mutation control (see below)
 #
-#  WHY THIS FILE EXISTS.  The filter roster is written down NINE times and nothing compares them:
+#  WHY THIS FILE EXISTS.  The filter roster is written down TEN times and nothing compares them:
 #
 #      Source/TerrainFilters.h        enum class Type          highest value + 1
 #      Source/TerrainFilters.h        constexpr int kNumTypes  = 94                  ← the truth
@@ -17,6 +17,7 @@
 #      Source/ui/public/index.html    CAT[]                    94 display-model keys
 #      Source/ui/public/index.html    FILTER_TYPES[]           94 {idx,label,group,active}
 #      Source/ui/public/index.html    window.FLT_TYPE_COUNT = 94                     ← the JS truth
+#      Tests/flt_measure.h            kName[]                  the HARNESS's labels  ← fb604
 #
 #  index.html USED to carry two more bare integers — the FX card's `tpN:94` and a typed
 #  "Search 94 filters…" — plus `const FILTER_NUM_CHOICES = 94` feeding both halves of the type
@@ -40,8 +41,8 @@
 #  ONE list in the copy, and runs every check against the copy. The gate must go RED and NAME THE
 #  LIST IT BROKE — a gate that fails without saying which of nine places is wrong has not helped.
 #      TI_CARD_MUT=kNumTypes | enum | names_add | static_assert | FLT_ENGINES | FLT_ENGGRP |
-#                   CAT | FILTER_TYPES | FLT_TYPE_COUNT | name_order | filter_types_idx |
-#                   cat_key | relapse_tpN | relapse_search
+#                   CAT | FILTER_TYPES | FLT_TYPE_COUNT | kName | name_order |
+#                   filter_types_idx | cat_key | relapse_tpN | relapse_search
 #      TI_CARD_MUT=all   runs every one of them in turn and reports the matrix.
 #  There is no "make it green" mutation: this gate is green on the shipping tree today, and the
 #  control's whole job is to prove it can stop being green.
@@ -115,14 +116,52 @@ def x_static_assert(root):
     return int(m.group(1)), "Source/PluginProcessor.cpp:%d" % lineof(s, m.start()), None
 
 
+def _strip_js(body):
+    """Blank out // and /* */ comments, leaving every other byte at its own offset.
+
+       fb604 — THE PARSER USED TO COUNT COMMENTS AS ENTRIES. The append documents itself inside
+       these lists ("/* fb604 — THE COMB DAMPING MATRIX ... */"), and a block comment carrying a
+       top-level comma split into TWO phantom items with no `idx:`, which surfaced as
+       `duplicates=[-1]` and a length nobody could reconcile with the file. A roster gate that
+       miscounts the roster because someone explained the roster is not a gate. Offsets are
+       preserved (comments become spaces) so every index into the body stays valid."""
+    out, i, n = list(body), 0, len(body)
+    while i < n:
+        c = body[i]
+        if c in "'\"`":
+            q = c
+            i += 1
+            while i < n and body[i] != q:
+                i += 2 if body[i] == "\\" else 1
+            i += 1
+        elif c == "/" and i + 1 < n and body[i + 1] == "/":
+            while i < n and body[i] != "\n":
+                out[i] = " "
+                i += 1
+        elif c == "/" and i + 1 < n and body[i + 1] == "*":
+            j = body.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            for k in range(i, j):
+                if out[k] != "\n":
+                    out[k] = " "
+            i = j
+        else:
+            i += 1
+    return "".join(out)
+
+
 def _js_body(src, name):
-    """(open-bracket-end, close-bracket-index, body) of the JS array literal `name = [ ... ]`."""
+    """(start, open-bracket-end, close-bracket-index, body) of the JS array literal
+       `name = [ ... ]`. Brackets inside strings and comments do NOT count."""
     m = re.search(r"\b%s\s*=\s*\[" % re.escape(name), src)
     if not m:
         raise LookupError("%s = [ ... ] not found in index.html" % name)
-    i, depth = m.end(), 1
+    tail = _strip_js(src[m.end():])
+    i, depth = 0, 1
     while depth:
-        c = src[i]
+        if i >= len(tail):
+            raise LookupError("%s = [ ... ] is not closed in index.html" % name)
+        c = tail[i]
         if c == "[":
             depth += 1
         elif c == "]":
@@ -130,7 +169,7 @@ def _js_body(src, name):
             if depth == 0:
                 break
         i += 1
-    return m.start(), m.end(), i, src[m.end():i]
+    return m.start(), m.end(), m.end() + i, _strip_js(src[m.end():m.end() + i])
 
 
 def _split_top(body):
@@ -205,6 +244,22 @@ def x_FLT_TYPE_COUNT(root):
     return int(m.group(1)), "Source/ui/public/index.html:%d" % lineof(s, m.start()), None
 
 
+def x_kName(root):
+    # fb604 — THE TENTH SITE. Tests/flt_measure.h carries its own label table, and both C++
+    # harnesses print every measured number under it. Nothing compared it to anything, so a
+    # roster append that forgot it would have printed 24 rows of real measurements under the
+    # wrong 24 names — a report that is worse than no report, in the file whose entire job is to
+    # be the one that does not lie. Same failure shape as the nine below, one layer out.
+    s = read(root, "Tests/flt_measure.h")
+    m = re.search(r"static const char\* kName\s*\[\s*\]\s*=\s*\{", s)
+    if not m:
+        raise LookupError("static const char* kName[] = { ... } not found in Tests/flt_measure.h")
+    i = s.index("};", m.end())
+    body = re.sub(r"//[^\n]*", "", s[m.end():i])
+    names = re.findall(r'"((?:[^"\\]|\\.)*)"', body)
+    return len(names), "Tests/flt_measure.h:%d" % lineof(s, m.start()), names
+
+
 SOURCES = [
     ("kNumTypes",      x_kNumTypes,      "constexpr int kNumTypes            (THE TRUTH)"),
     ("enum",           x_enum,           "enum class Type — highest value + 1"),
@@ -215,6 +270,7 @@ SOURCES = [
     ("CAT",            x_CAT,            "index.html CAT[]                   (display-model keys)"),
     ("FILTER_TYPES",   x_FILTER_TYPES,   "index.html FILTER_TYPES[]          (category browser)"),
     ("FLT_TYPE_COUNT", x_FLT_TYPE_COUNT, "index.html window.FLT_TYPE_COUNT  (the JS truth)"),
+    ("kName",          x_kName,          "Tests/flt_measure.h kName[]        (the HARNESS's labels)"),
 ]
 
 # ── the mutations. Each is (list-name, a function that edits the copied tree). ────────────────
@@ -242,30 +298,141 @@ def _drop_last_js_item(root, name):
         f.write(s[:ob] + ",".join(items[:-1]) + s[cb:])
 
 
+def _last_js_item(root, name):
+    """The text of the LAST entry of a JS array literal in index.html, and its span."""
+    with open(os.path.join(root, "Source/ui/public/index.html"), "r", encoding="utf-8", errors="replace") as f:
+        s = f.read()
+    _, ob, cb, body = _js_body(s, name)
+    items = _split_top(body)
+    return s, ob, cb, items
+
+
+def _rewrite_js_items(root, name, items):
+    p = os.path.join(root, "Source/ui/public/index.html")
+    with open(p, "r", encoding="utf-8", errors="replace") as f:
+        s = f.read()
+    _, ob, cb, _ = _js_body(s, name)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(s[:ob] + ",".join(items) + s[cb:])
+
+
+def _mut_kNumTypes(root):
+    n = x_kNumTypes(root)[0]
+    _sub(root, "Source/TerrainFilters.h",
+         r"constexpr int kNumTypes\s*=\s*%d\s*;" % n, "constexpr int kNumTypes = %d;" % (n + 1))
+
+
+def _mut_enum(root):
+    """Push the HIGHEST enumerator one past the end, whatever it is called today."""
+    s = read(root, "Source/TerrainFilters.h")
+    vals = x_enum(root)[2]
+    top = max(vals, key=lambda k: vals[k])
+    _sub(root, "Source/TerrainFilters.h",
+         r"\b%s\s*=\s*%d\b" % (top, vals[top]), "%s = %d" % (top, vals[top] + 6))
+
+
+def _mut_names_add(root):
+    """Delete the LAST .add() — the roster's newest entry, not a name typed in 2024."""
+    names = x_names_add(root)[2]
+    _sub(root, "Source/PluginProcessor.cpp",
+         r'\n *filterTypeChoices\.add \("%s"\);' % re.escape(names[-1]), "", count=1)
+
+
+def _mut_static_assert(root):
+    n = x_static_assert(root)[0]
+    _sub(root, "Source/PluginProcessor.cpp",
+         r"tw::filters::kNumTypes == %d" % n, "tw::filters::kNumTypes == %d" % (n - 1))
+
+
+def _mut_type_count(root):
+    n = x_FLT_TYPE_COUNT(root)[0]
+    _sub(root, "Source/ui/public/index.html",
+         r"window\.FLT_TYPE_COUNT\s*=\s*%d\s*;" % n, "window.FLT_TYPE_COUNT = %d;" % (n + 1))
+
+
+def _mut_name_order(root):
+    """Swap two ADJACENT display names. A shifted name is a wrong ENGINE, not a typo — the
+       dropdown writes idx/(N-1) into a choice(N) param, so the DSP obeys the INDEX."""
+    s, ob, cb, items = _last_js_item(root, "FLT_ENGINES")
+    i = min(5, len(items) - 2)
+    items[i], items[i + 1] = items[i + 1], items[i]
+    _rewrite_js_items(root, "FLT_ENGINES", items)
+
+
+def _mut_filter_types_idx(root):
+    """Point the LAST browser entry at the FIRST engine: same length, one engine unreachable
+       and one selectable twice."""
+    s, ob, cb, items = _last_js_item(root, "FILTER_TYPES")
+    last = items[-1]
+    m = re.search(r"idx:\s*(\d+)", last)
+    if not m:
+        raise RuntimeError("FILTER_TYPES last entry has no idx:")
+    items[-1] = last[:m.start(1)] + "0" + last[m.end(1):]
+    _rewrite_js_items(root, "FILTER_TYPES", items)
+
+
+def _mut_cat_key(root):
+    """Corrupt ONE display-model key so it names no mag() branch — the engine then draws the
+       generic 2-pole lowpass from mag()'s trailing else, i.e. a placeholder curve."""
+    s, ob, cb, items = _last_js_item(root, "CAT")
+    for i, it in enumerate(items):
+        k = it.strip().strip("'\"")
+        if k and k != "none" and not (len(k) == 3 and k[0] == "m"):
+            items[i] = "'%s_zz'" % k
+            _rewrite_js_items(root, "CAT", items)
+            return
+    raise RuntimeError("no mutable CAT key found")
+
+
+# fb604 — EVERY MUTATION IS NOW ROSTER-SIZE-AGNOSTIC. They were written as literals against 94
+# ("kNumTypes = 94", "REVERB_METAL = 93", drop `.add("Reverb Metal")`, set FLT_TYPE_COUNT to 118).
+# At 118 five of the fourteen would not have matched at all and one — FLT_TYPE_COUNT -> 118 —
+# would have become a NO-OP that still printed GREEN-BROKEN's opposite: a mutation that changes
+# nothing, on a gate whose whole job is to prove it can go red. The controls are the last thing
+# anyone re-reads, so they are the first thing that has to survive the append.
 MUTATIONS = {
-    "kNumTypes":        lambda r: _sub(r, "Source/TerrainFilters.h", r"constexpr int kNumTypes = 94;", "constexpr int kNumTypes = 95;"),
-    "enum":             lambda r: _sub(r, "Source/TerrainFilters.h", r"REVERB_METAL = 93", "REVERB_METAL = 99"),
-    "names_add":        lambda r: _sub(r, "Source/PluginProcessor.cpp", r'\n *filterTypeChoices\.add \("Reverb Metal"\);', ""),
-    "static_assert":    lambda r: _sub(r, "Source/PluginProcessor.cpp", r"tw::filters::kNumTypes == 94", "tw::filters::kNumTypes == 93"),
+    "kNumTypes":        _mut_kNumTypes,
+    "enum":             _mut_enum,
+    "names_add":        _mut_names_add,
+    "static_assert":    _mut_static_assert,
     "FLT_ENGINES":      lambda r: _drop_last_js_item(r, "FLT_ENGINES"),
     "FLT_ENGGRP":       lambda r: _drop_last_js_item(r, "FLT_ENGGRP"),
     "CAT":              lambda r: _drop_last_js_item(r, "CAT"),
     "FILTER_TYPES":     lambda r: _drop_last_js_item(r, "FILTER_TYPES"),
-    "FLT_TYPE_COUNT":   lambda r: _sub(r, "Source/ui/public/index.html", r"window\.FLT_TYPE_COUNT = 94;", "window.FLT_TYPE_COUNT = 118;"),
+    "FLT_TYPE_COUNT":   _mut_type_count,
     # the regression that matters most next commit: someone re-types the count at a use site
     "relapse_tpN":      lambda r: _sub(r, "Source/ui/public/index.html", r"tpN:window\.FLT_TYPE_COUNT", "tpN:94"),
     "relapse_search":   lambda r: _sub(r, "Source/ui/public/index.html",
                                        r"searchPlaceholder:window\.__fltRoster\.searchPlaceholder\(FLT_ENGINES\.length\)",
                                        "searchPlaceholder:'Search 94 filters…'"),
     # the three that keep every LENGTH right and are still wrong — a pure count gate misses these
-    "name_order":       lambda r: _sub(r, "Source/ui/public/index.html", r"'SVF LP','SVF HP'", "'SVF HP','SVF LP'"),
-    "filter_types_idx": lambda r: _sub(r, "Source/ui/public/index.html", r"\{ idx: 93, label: 'Reverb Metal'", "{ idx: 92, label: 'Reverb Metal'"),
-    "cat_key":          lambda r: _sub(r, "Source/ui/public/index.html", r"'diffusor','bode','tilt'", "'diffuseur','bode','tilt'"),
+    "name_order":       _mut_name_order,
+    "filter_types_idx": _mut_filter_types_idx,
+    "cat_key":          _mut_cat_key,
+    # fb604 — the tenth site: the measurement harness's own label table. A kName[] that has
+    # drifted from terrainFilterEngineNames() mis-attributes every number flt_gate prints, and
+    # nothing else in the tree compares them.
+    "kName":            lambda r: _drop_last_js_item_cxx(r),
 }
 
 
+def _drop_last_js_item_cxx(root):
+    """Delete the LAST name from Tests/flt_measure.h's kName[] table."""
+    p = os.path.join(root, "Tests/flt_measure.h")
+    with open(p, "r", encoding="utf-8", errors="replace") as f:
+        s = f.read()
+    ob = s.index("static const char* kName[] = {") + len("static const char* kName[] = {")
+    cb = s.index("};", ob)
+    body = s[ob:cb]
+    k = body.rindex('"')
+    k0 = body.rindex('"', 0, k)
+    k0 = body.rindex(",", 0, k0)
+    with open(p, "w", encoding="utf-8") as f:
+        f.write(s[:ob] + body[:k0] + " " + s[cb:])
+
+
 def run_checks(root, label):
-    print("══ fb603 · FILTER ROSTER CARDINALITY GATE ══   root: %s" % label)
+    print("══ fb604 · FILTER ROSTER CARDINALITY GATE ══   root: %s" % label)
     print()
     got, missing = {}, []
     print("  the %d places the roster is written down:" % len(SOURCES))
@@ -320,9 +487,21 @@ def run_checks(root, label):
     mm = re.search(r"function mag\(type,f,fc,res,drv,t\)\{(.*?)\n    return A\*A; \}", s, re.S)
     branches = set()
     if mm:
-        branches |= set(re.findall(r"type===\s*'([a-z0-9]+)'", mm.group(1)))
-        if "type.length===3&&type.charAt(0)==='m'" in mm.group(1):
+        body = mm.group(1)
+        branches |= set(re.findall(r"type===\s*'([A-Za-z0-9]+)'", body))
+        if "type.length===3&&type.charAt(0)==='m'" in body:
             branches |= {c for c in got["CAT"][2] if len(c) == 3 and c[0] == "m"}
+        # fb604 — FAMILY BRANCHES. The 11 appended phasers are dispatched by PREFIX
+        # (`type.indexOf('phaser')===0`), not by 16 more === literals, and the old extractor —
+        # which only understood `type==='x'` and the mHN family — reported all 16 phaser keys as
+        # ORPHANS drawing a generic 2-pole lowpass. They are not: they reach a real branch. A
+        # false orphan is as corrosive as a missed one, because the next person deletes the bar.
+        # NOTE THE LIMIT, so nobody reads more into a green [4] than it says: this asserts the key
+        # REACHES a branch, never that the branch draws the right curve. That is
+        # Tests/flt_curve_diff.js's job, and it currently rates all 11 phasers > 3 dB out.
+        for pre in re.findall(r"type\.indexOf\(\s*'([A-Za-z0-9]+)'\s*\)===0", body) + \
+                   re.findall(r"type\.startsWith\(\s*'([A-Za-z0-9]+)'\s*\)", body):
+            branches |= {c for c in got["CAT"][2] if c.startswith(pre)}
         if "if(type==='none')return 1" in s[mm.start() - 90:mm.start() + 60]:
             branches.add("none")
     orphan = sorted({c for c in got["CAT"][2] if c not in branches})
@@ -360,6 +539,17 @@ def run_checks(root, label):
         "tpN, the search placeholder and the round-trip cardinality all read window.FLT_TYPE_COUNT"
         if not relapses else "RE-TYPED: " + " | ".join(relapses))
 
+    # [7] the harness's labels, index for index. Bar [2] does this for the UI; this does it for
+    #     the measurement, and the two together are what make "type 84 moves 14.2 dB" a sentence
+    #     about Samp-Hold - rather than about whichever type happens to sit at 84 in one file.
+    cxx2, hn = got["names_add"][2], got["kName"][2]
+    d2 = [(i, a, b) for i, (a, b) in enumerate(zip(cxx2, hn)) if a != b]
+    chk(not d2 and len(cxx2) == len(hn),
+        "[7] Tests/flt_measure.h kName[] IS terrainFilterEngineNames() INDEX FOR INDEX",
+        "%d harness labels identical to the shipping roster" % len(hn) if not d2 and len(cxx2) == len(hn) else
+        ("DIVERGED at " + ", ".join("[%d] C++ %r vs harness %r" % (i, a, b) for i, a, b in d2[:6])
+         if d2 else "LENGTH: C++ %d vs harness %d" % (len(cxx2), len(hn))))
+
     print()
     print("  %d passed, %d FAILED" % (_pass, _fail))
     if _failed_bars:
@@ -371,14 +561,17 @@ def run_checks(root, label):
 
 
 def mutate_and_run(which):
-    """Copy the tree, break ONE list in the copy, run the gate against the copy."""
+    """Copy the tree, break ONE list in the copy, run the gate against the copy.
+       `which=None` copies WITHOUT mutating — that run is the BASELINE (see evidence())."""
     tmp = tempfile.mkdtemp(prefix="fltcard_mut_")
     try:
-        for rel in ("Source/TerrainFilters.h", "Source/PluginProcessor.cpp", "Source/ui/public/index.html"):
+        for rel in ("Source/TerrainFilters.h", "Source/PluginProcessor.cpp",
+                    "Source/ui/public/index.html", "Tests/flt_measure.h"):
             dst = os.path.join(tmp, rel)
             os.makedirs(os.path.dirname(dst), exist_ok=True)
             shutil.copy2(os.path.join(ROOT, rel), dst)
-        MUTATIONS[which](tmp)
+        if which is not None:
+            MUTATIONS[which](tmp)
         env = dict(os.environ)
         env.pop("TI_CARD_MUT", None)
         r = subprocess.run([sys.executable, os.path.abspath(__file__), "--root", tmp],
@@ -386,6 +579,26 @@ def mutate_and_run(which):
         return r.returncode, r.stdout + r.stderr
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def evidence(out):
+    """Every falsifiable claim a run makes: the site table (name -> count), each bar's verdict,
+       and each detail line. fb604 — the matrix used to accept `rc != 0` as proof the mutation
+       fired. THAT IS ONLY TRUE ON A GREEN TREE. Four agents are editing the roster in parallel
+       and the tree is red for minutes at a time while an append lands; during those minutes a
+       mutation that changed NOTHING would still have printed RED and the matrix would still
+       have said 'the gate is live'. So a row now has to add a claim the unmutated copy of the
+       same tree did not make."""
+    ev = set()
+    for l in out.splitlines():
+        t = l.rstrip()
+        if re.match(r"^    \w+ +(\d+|\?\?) ", t):        # the site table
+            ev.add("SITE " + re.sub(r"\s+", " ", t))
+        elif re.match(r"^  (PASS|FAIL)  ", t):             # bar verdicts
+            ev.add("BAR " + re.sub(r"\s+", " ", t))
+        elif t.startswith("        "):                      # bar details
+            ev.add("DETAIL " + re.sub(r"\s+", " ", t.strip())[:200])
+    return ev
 
 
 if __name__ == "__main__":
@@ -396,37 +609,59 @@ if __name__ == "__main__":
     mut = os.environ.get("TI_CARD_MUT", "")
 
     if mut == "all":
-        print("══ fb603 · CARDINALITY GATE — MUTATION MATRIX ══")
+        print("══ fb604 · CARDINALITY GATE — MUTATION MATRIX ══")
         print("   Each row breaks ONE roster site in a throwaway copy of the tree.")
-        print("   A row is OK only if the gate goes RED *and* its FAILED BARS name the break.\n")
+        print("   A row is OK only if the gate goes RED *and* makes a claim the UNMUTATED copy of")
+        print("   the same tree did not — so the matrix stays meaningful while the roster is mid-append.\n")
+        brc, bout = mutate_and_run(None)
+        base = evidence(bout)
+        bbars = sorted(l.strip()[2:] for l in bout.splitlines() if l.strip().startswith("- ["))
+        print("   baseline (no mutation): rc=%d  %s" % (brc, ("already RED: " + "; ".join(b[:44] for b in bbars))
+                                                        if brc else "GREEN"))
+        print()
         bad = 0
         for name in MUTATIONS:
             rc, out = mutate_and_run(name)
+            gained = sorted(evidence(out) - base)
             bars = [l.strip()[2:] for l in out.splitlines() if l.strip().startswith("- [")]
-            detail = ""
-            for l in out.splitlines():
-                if "MISMATCHED:" in l or "DIVERGED at" in l or "ORPHAN KEYS" in l \
-                   or "FILTER_TYPES: gaps" in l or "MISSING ENUM" in l or "UNPARSEABLE" in l:
-                    detail = l.strip()
-                    break
-            ok = rc != 0
+            newbars = [b for b in bars if b not in bbars]
+            ok = rc != 0 and bool(gained)
             if not ok:
                 bad = 1
-            print("   %-17s rc=%d  %-4s  %s" % (name, rc, "RED" if rc else "GREEN-BROKEN", bars))
-            if detail:
-                print("                     %s" % detail[:150])
+            print("   %-17s rc=%d  %-12s  +%d new claim(s)  new bars: %s"
+                  % (name, rc, "RED" if rc else "GREEN-BROKEN", len(gained),
+                     newbars if newbars else "(none — see the claim below)"))
+            shown = 0
+            for g in gained:
+                if g.startswith("BAR PASS"):
+                    continue
+                print("                     %s" % g[:150])
+                shown += 1
+                if shown == 2:
+                    break
+            if not ok:
+                print("                     ^^ THIS ROW PROVED NOTHING: the mutation changed no claim "
+                      "the gate makes.")
         print()
-        print("   %s" % ("every mutation went red — the gate is live"
-                         if not bad else "AT LEAST ONE MUTATION DID NOT GO RED — the gate is not a gate"))
+        print("   %s" % ("every mutation added a NEW failing claim — the gate is live"
+                         if not bad else "AT LEAST ONE MUTATION PROVED NOTHING — the gate is not a gate"))
         sys.exit(bad)
 
     if mut:
         if mut not in MUTATIONS:
             print("unknown TI_CARD_MUT=%r; pick one of: %s" % (mut, ", ".join(MUTATIONS) + ", all"))
             sys.exit(2)
+        brc, bout = mutate_and_run(None)
         rc, out = mutate_and_run(mut)
+        gained = sorted(evidence(out) - evidence(bout))
         print(out, end="")
-        print("  MUTATION CONTROL TI_CARD_MUT=%s — the gate must be RED above.  rc=%d" % (mut, rc))
-        sys.exit(0 if rc != 0 else 1)   # the control PASSES when the mutated gate FAILED
+        print("  MUTATION CONTROL TI_CARD_MUT=%s — rc=%d (baseline rc=%d)" % (mut, rc, brc))
+        for g in gained:
+            if not g.startswith("BAR PASS"):
+                print("    NEW CLAIM: %s" % g[:150])
+        ok = rc != 0 and bool(gained)
+        print("    %s" % ("the control FIRED" if ok else
+                          "THE CONTROL PROVED NOTHING — the mutation changed no claim the gate makes"))
+        sys.exit(0 if ok else 1)   # the control PASSES when the mutation manufactured a NEW failure
 
     sys.exit(run_checks(root, "shipping tree" if root == ROOT else root))

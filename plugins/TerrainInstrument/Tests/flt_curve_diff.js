@@ -1,20 +1,21 @@
 #!/usr/bin/env node
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  flt_curve_diff.js — fb603 · THE DRAWN CURVE vs THE FILTER THAT ACTUALLY RUNS.
+//  flt_curve_diff.js — fb604 · THE DRAWN CURVE vs THE FILTER THAT ACTUALLY RUNS.
 //
 //      node Tests/flt_curve_diff.js                       # from plugins/TerrainInstrument
 //      node Tests/flt_curve_diff.js --csv <curves.csv>    # against another measurement
 //      TI_CURVE_MUT=<name> node Tests/flt_curve_diff.js   # mutation control (see below)
 //
 //  WHY THIS FILE EXISTS.  index.html draws the filter response from a hand-written model —
-//  mag(type,f,fc,res,drv,t) in the analyser block, 94 enum indices mapped onto 45 model keys by
-//  CAT[]. fb384's own comment says "One source, 94 shapes, no drift", and the project law is that
+//  mag(type,f,fc,res,drv,t) in the analyser block, one enum index per roster entry mapped onto
+//  model keys by CAT[]. fb384's own comment says "One source, N shapes, no drift", and the law is
 //  every filter curve mirrors the DSP and moves with the knobs, no flat placeholder lines ever.
 //  NOBODY HAS EVER CHECKED IT AGAINST THE DSP. This is that check.
 //
-//  GROUND TRUTH is Tests/flt_curves.csv, written by Tests/fltmeas.cpp: 94 types x 8 knob
-//  conditions x 120 log-spaced points, measured out of the real FilterSlot through the real
-//  SynthVoice 2x wrapper. Regenerate it with `Tests/fltmeas --csv Tests/flt_curves.csv`.
+//  GROUND TRUTH is Tests/flt_curves.csv, written by Tests/fltmeas.cpp: EVERY roster type
+//  (the count is read from the csv, never typed here) x 8 knob conditions x 120 log-spaced
+//  points, measured out of the real FilterSlot through the real SynthVoice 2x converter.
+//  Regenerate it with `Tests/fltmeas --csv Tests/flt_curves.csv`.
 //
 //  HOW THE COMPARISON IS MADE HONEST
 //   · mag() returns POWER, so the drawn dB is 10*log10(mag). Compared like for like.
@@ -22,10 +23,15 @@
 //     metric is SHAPE: the minimax constant offset is removed first and reported separately. A
 //     large offset is itself a finding (the curve sits in the wrong part of the display window),
 //     but it is not the same defect as a wrong shape.
-//   · BAND 30 Hz .. 10 kHz. Above that the measured curve of the 26 oversampled types carries the
-//     voice's own 2x box-decimator droop (-2.11 dB @ 12 k, -3.70 dB @ 16 k, -4.98 dB @ 20 k,
-//     measured) which the display model neither has nor should have. Judging 16 kHz against a
-//     3 dB rule would report the WRAPPER as a curve bug. The full-band error is printed too.
+//   · BAND 30 Hz .. 16 kHz — WIDENED at fb604, and the widening is the point. The old ceiling was
+//     10 kHz for exactly one reason: above it the measured curve of the 26 oversampled types
+//     carried the voice's 2x BOX-DECIMATOR droop (-2.11 dB @ 12 k, -3.70 dB @ 16 k, -4.98 dB
+//     @ 20 k) which the display model neither has nor should have, so a 3 dB rule up there would
+//     have reported the WRAPPER as a curve bug. fb603 replaced that converter with a half-band
+//     and fb604 taught the harness about it: the identity path now measures +0.00 dB to 20 kHz,
+//     so the reason is gone and the top 0.7 of an octave stops being a blind spot. (20 kHz still
+//     is not judged: that is the model's own band edge, not the DSP's.) The full-band error is
+//     printed too, and TI_CURVE_MUT=band_full still reports the 20 Hz..20 kHz sensitivity.
 //   · ANIMATED models (MAG_ANIM: comb/phaser/grain/...) are time-varying by design. Their model
 //     is averaged in POWER over one full animation period, which is what a Welch PSD of the real
 //     filter measures. Their animation swing is printed so an "error" that is really motion is
@@ -43,8 +49,8 @@
 //  MUTATION CONTROL.  TI_CURVE_MUT=<name> perturbs one input of the comparison and the offender
 //  count MUST RISE. A diff that cannot grow its own offender list is not measuring anything.
 //      model_flat   every model becomes a flat line  -> every judgeable type must be an offender
-//      model_shift  every model's fc is halved       -> every shaped type must move
-//      csv_shift    the MEASURED curve slides an octave -> same fault, from the truth side
+//      model_shift  every model's fc drops TWO octaves -> every shaped type must move
+//      csv_shift    the MEASURED curve slides two octaves -> same fault, from the truth side
 //      band_full    NOT a control — a sensitivity check on the band choice, reported separately
 //      TI_CURVE_MUT=all runs the matrix.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -77,7 +83,7 @@ if ((process.env.TI_CURVE_MUT || '') === 'all') {
   // target set for the same reason it is excluded from the diff: not measurable, and SAID so.
   const INVISIBLE = ['75'];
   const target = base.clean.filter(i => INVISIBLE.indexOf(i) < 0);
-  console.log('══ fb603 · CURVE DIFF — MUTATION MATRIX ══');
+  console.log('══ fb604 · CURVE DIFF — MUTATION MATRIX ══');
   console.log('   baseline: ' + base.off + ' offenders, clean types = [' + base.clean.join(',') + ']');
   console.log('   structurally invisible, excluded from the control: [' + INVISIBLE.join(',') +
               ']  (Diffusor — allpass magnitude is unity on BOTH sides)');
@@ -94,8 +100,10 @@ if ((process.env.TI_CURVE_MUT || '') === 'all') {
   }
   const bf = run('band_full');
   console.log('\n   band sensitivity (NOT a control): judging the full 20 Hz..20 kHz band instead of');
-  console.log('     30 Hz..10 kHz gives ' + bf.off + ' offenders vs ' + base.off + '. The 2x wrapper droop');
-  console.log('     above 10 kHz is therefore NOT what any of these findings rest on.');
+  console.log('     30 Hz..' + (Number(process.env.TI_CURVE_BAND_HI || 16000) / 1000) + ' kHz gives ' +
+              bf.off + ' offenders vs ' + base.off + '. None of these findings rests on');
+  console.log('     the band edge; fb604 widened the ceiling 10 k -> 16 k (the 2x converter that');
+  console.log('     forced the old ceiling is gone) and that alone moved the count by one.');
   console.log('\n   ' + (bad ? 'A MUTATION DID NOT CATCH A CLEAN TYPE — the diff is not a gate'
                               : 'every mutation caught every clean type — the diff is live'));
   process.exit(bad);
@@ -202,6 +210,28 @@ caveat([13, 18, 26, 66, 67, 92, 93],
        'measured curve is a MODAL spectrum; judged at the 1/6-octave smoothing the probe uses, ' +
        'not mode by mode.');
 
+// fb604 — THE APPENDED 24. Every one of them is LINEAR and time-invariant except the phasers'
+// and combs' own animation (which MAG_ANIM already averages), so every one of them is JUDGED.
+// None is skipped: a new engine whose curve nobody checked is the exact debt this file exists
+// to stop accruing, and "it is new" is not a statement about the metric.
+caveat([94, 95, 96, 97, 98, 99, 100, 101, 102, 103, 104],
+       'phaser (fb604) — the N variants invert the output mix, so for a unity-magnitude allpass ' +
+       'chain |1+A|^2 + |1-A|^2 = 4: the model must put its notches where the P variant has ' +
+       'PEAKS. A model that draws the P shape for an N index is a 3 dB-plus error at every notch, ' +
+       'and it is the failure this caveat exists to make legible rather than excuse.');
+caveat([105, 106, 107, 108, 109, 110, 111, 112],
+       'comb matrix / flange (fb604) — the damping variant is IN THE LOOP, so it changes the ' +
+       'peak heights and the peak SPACING decay, not just a tilt over the top. Judged against ' +
+       'the measured comb, animated-averaged like the existing combs.');
+caveat([113, 114],
+       'first-order shelf (fb604) — a 1st-order shelf reaches its plateau over a much wider ' +
+       'transition than the 2nd-order (S=1) shelves at 78/79. If the model draws the same curve ' +
+       'for both orders that is a real duplicate in the DISPLAY even where the DSP differs.');
+caveat([115, 116, 117],
+       'formant register (fb604) — soprano / tenor / alto are the SAME DSP as the bass register ' +
+       'at 14-17 with different published formant tables, so CUT is a vocal-tract shift here too. ' +
+       'The model needs the register\'s own F1..F3, not the bass table with a gain on it.');
+
 const KNOWN_INVISIBLE = new Map([
   [75, 'Diffusor — an allpass chain has unity magnitude BY CONSTRUCTION. The DSP measures flat ' +
        '(0.0 dB res-sensitivity, structural). A magnitude metric cannot say whether its RES does ' +
@@ -209,7 +239,11 @@ const KNOWN_INVISIBLE = new Map([
 ]);
 
 // ── 5. THE COMPARISON ────────────────────────────────────────────────────────────────────────
-const BAND = (MUT === 'band_full') ? [20, 20000] : [30, 10000];
+// fb604 — 10 k -> 16 k, see the banner. TI_CURVE_BAND_HI overrides the ceiling for the
+// sensitivity check that justified the widening ("how many offenders come from the top octave
+// alone?"), so the answer is reproducible instead of a sed of this file.
+const BAND_HI = Number(process.env.TI_CURVE_BAND_HI || 16000);
+const BAND = (MUT === 'band_full') ? [20, 20000] : [30, BAND_HI];
 const inBand = GRID.map(f => f >= BAND[0] && f <= BAND[1]);
 const NBAND = inBand.filter(Boolean).length;
 
@@ -273,12 +307,26 @@ for (let t = 0; t < NT; t++) {
     const alive = mv.some((v, i) => inBand[i] && v > -80);
     if (!alive && MUT !== 'csv_flat') { deadConds++; r.deadConds.push(c.key); continue; }
     liveConds++;
-    // csv_shift rotates the MEASURED curve one octave up. (An earlier control flattened it
+    // csv_shift rotates the MEASURED curve TWO octaves up. (An earlier control flattened it
     // instead — that made the offender count FALL 69 -> 64, because several near-flat models
     // then matched a flat truth. A mutation that can make a gate greener is not a control.)
+    //
+    // fb604 — WHY TWO OCTAVES AND NOT ONE. Both shift controls were one octave, and both went
+    // BROKEN the moment the roster gained a FIRST-ORDER shelf: at 6 dB/oct the transition is so
+    // wide that an octave of fc error is only a 2.7 dB shape error on Low EQ 6(113) and 1.8 dB on
+    // High EQ 6(114) once the minimax offset comes off — UNDER the 3.0 dB bar, so the control
+    // could not prove the diff sees those two types at all. That is a fact about the gentlest
+    // curve in the roster, not about the detector, and the cure is an injected fault big enough
+    // to be a fault for EVERY judgeable type rather than for most of them. Two octaves takes
+    // Low EQ 6 to 5.2 dB (model_shift) / 3.9 dB (csv_shift) and High EQ 6 to 3.3 dB on both.
+    // \u26a0\ufe0f 3.3 against a 3.0 bar is a 0.3 dB margin: the first-order shelves are the roster's
+    // SENSITIVITY FLOOR for any fc-shift control, and a third order of shelf, or a gentler one,
+    // would need a bigger shift again. Written down here so the next person who sees a shift
+    // control go BROKEN checks the slope of the new type before suspecting the diff.
+    const SHIFT = 0.25;                       // two octaves down, the model side
     if (MUT === 'csv_shift') { const g = mv.slice(); mv = GRID.map((f, i) => {
-      let j = 0; while (j < GRID.length - 1 && GRID[j] < f * 0.5) j++; return g[j]; }); }
-    let mo = modelDb(catKey, MUT === 'model_shift' ? c.fc * 0.5 : c.fc, c.res, c.drv, animated);
+      let j = 0; while (j < GRID.length - 1 && GRID[j] < f * SHIFT) j++; return g[j]; }); }
+    let mo = modelDb(catKey, MUT === 'model_shift' ? c.fc * SHIFT : c.fc, c.res, c.drv, animated);
     if (MUT === 'model_flat') mo = { db: GRID.map(() => 0), swing: GRID.map(() => 0) };
     const e = shapeErr(mo.db, mv);
     r.maxSwing = Math.max(r.maxSwing, Math.max(...mo.swing.filter((_, i) => inBand[i])));

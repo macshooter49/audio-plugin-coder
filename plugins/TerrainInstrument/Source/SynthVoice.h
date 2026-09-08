@@ -6238,11 +6238,11 @@ namespace tw
                     //  filters, here. A filter value read by the blend stage is therefore one whole
                     //  BLOCK old, not one sample, and a modulator whose delay is the host's buffer
                     //  size is not a sound you can ship. Merging the loops is the fix and it is a
-                    //  real one: 94 filter types, oversampling, send and pooled duplicates, series
-                    //  and parallel routing, all on the hottest path in the voice. An ENVELOPE of
-                    //  the filter has no such problem — a block of delay on a contour is nothing —
-                    //  so that is what ships, and the audio-rate version stays open with its price
-                    //  written down rather than half-built.
+                    //  real one: 118 filter types (94 until fb604), oversampling, send and pooled
+                    //  duplicates, series and parallel routing, all on the hottest path in the
+                    //  voice. An ENVELOPE of the filter has no such problem — a block of delay
+                    //  on a contour is nothing — so that is what ships, and the audio-rate
+                    //  version stays open with its price written down rather than half-built.
                     if (anyFollowArmed_)
                         for (int fk = 0; fk < 2; ++fk)
                         {
@@ -6774,6 +6774,20 @@ namespace tw
         // reverb hears the FILTERED signal (the fb280 send tapped PRE-filter → filtered oscs sent dry).
         // Own state (a different input than the main filters), used only when a route is active + a filter
         // is engaged; otherwise the send is the raw routed sum (byte-identical to before).
+        //
+        // 💰 fb604 — THE PRICE OF A FILTER SLOT, MEASURED. There are TEN eager FilterSlots per voice
+        // (filterSlot_, filterSlot2_ and these eight); the pooled pairs below are heap-allocated on
+        // first route and cost nothing until then. sizeof(FilterSlot) MEASURED 126,888 B at fb603
+        // and 127,784 B at fb604 — the whole 94 → 118 roster append costs +896 B/slot (+0.71 %),
+        // and 768 of those 896 are PhaserCore::MAXST going 16 → 48 for the new 24P/32P/48P types
+        // (2 cores x 32 extra AllpassStage x 12 B); the remaining 112 B are the new per-core
+        // fields the append needed. Per instance that is 10 x 96 voices, so 116.17 MB → 116.98 MB,
+        // +0.806 MB. The 24 engines themselves add almost nothing: they are new SWITCH CASES over
+        // cores that already exist, which is what the recycle law buys — a 24-engine append that
+        // wrote 24 new engines would have cost orders of magnitude more.
+        // ⚠️ Read this before adding a core with its own buffer — a new delay line here is measured
+        // in HUNDREDS of MB per instance, not kilobytes. sizeof(CombCore) is 120 B only because its
+        // delay line lives outside it; the slot's real bulk is elsewhere.
         tw::filters::FilterSlot sendFilterSlot_;
         tw::filters::FilterSlot sendFilterSlot2_;
         tw::filters::FilterSlot sendFilterSlot3_;   // fb296 — delay-send filter mirror (independent from reverb send)

@@ -36,13 +36,39 @@ namespace filters
 
 // ─── helpers ─────────────────────────────────────────────────────────────
 
-/** Fast tanh approximation, ~1e-4 accurate over [-5, +5]. Padé form from
- *  the report §1.3 (last paragraph): tanh(x) ≈ x*(27+x²)/(27+9x²). Clamp
- *  input to ±5 so big self-osc spikes can't blow up the denominator. */
+/** Fast tanh approximation. Padé form from the report §1.3 (last paragraph):
+ *  tanh(x) ≈ x*(27+x²)/(27+9x²).
+ *
+ *  fb604 — THE CLAMP WAS AT THE WRONG PLACE, AND IT WAS THE ONLY DISCONTINUITY IN THE FILE.
+ *
+ *  The rail was ±5, but the Padé does not stay inside ±1 that far. Measured: it crosses 1 and
+ *  keeps climbing to 1.031746 at x = 5.0, then the old clamp DROPPED it to 1.0 at 5.000001 —
+ *  a 3.2 % STEP in a saturator's transfer curve, which is a click on any signal that crosses
+ *  the rail (i.e. every loud transient into a driven core), and a non-monotonic "tanh" besides.
+ *  It is also why two types measured a STRESS PEAK OF 4.13 against a 4.0 bar: the house soft
+ *  limiter is 4*fastTanh(0.25*y), so its ceiling was 4*1.031746 = 4.127, not 4. Reverb Filter
+ *  (18) and Reverb Dark (92) were sitting on that rail exactly — 4.13, both of them, at HEAD.
+ *
+ *  x = 3 IS WHERE THE CURVE ACTUALLY REACHES 1, and not by fitting. Setting the Padé equal to 1,
+ *      x(27 + x²) = 27 + 9x²   <=>   x³ - 9x² + 27x - 27 = 0   <=>   (x - 3)³ = 0,
+ *  a TRIPLE root — so exactly
+ *      1 - fastTanh(x) = (3 - x)³ / (27 + 9x²),
+ *  and the curve meets 1.0 at x = 3 tangentially, with zero first AND second derivative.
+ *
+ *  The rail is 2.95 rather than 3 for one reason, and it is arithmetic, not taste. That cubic
+ *  vanishes so fast that near x = 3 the shortfall drops under a float ULP and the evaluation
+ *  ROUNDS ABOVE ONE: sweeping every representable float in [0, 3] the Padé peaks at 1.00000012
+ *  (x = 2.9832556), which is how a limiter that rails at 4 measured 4.00000048 and tripped a
+ *  "<= 4.0" bar by half an ULP. At 2.95 the same brute-force sweep peaks at 0.999998927, so
+ *  |fastTanh| <= 1 is true of the CODE and not just of the algebra. The discontinuity left at
+ *  the join is 1.07e-6 — that is -119 dBFS, against the 3.2 % (-30 dB) step the old rail had.
+ *
+ *  Below 2.95 the function is bit-identical to what shipped, so every filter that never
+ *  saturates that hard is unchanged; above it, a soft limiter finally rails where it says. */
 inline float fastTanh (float x) noexcept
 {
-    if (x >  5.0f) return  1.0f;
-    if (x < -5.0f) return -1.0f;
+    if (x >  2.95f) return  1.0f;
+    if (x < -2.95f) return -1.0f;
     const float x2 = x * x;
     return x * (27.0f + x2) / (27.0f + 9.0f * x2);
 }
@@ -177,9 +203,30 @@ enum class Type : int
     SCREAM_LP   = 85,   SCREAM_BP   = 86,
     WASP        = 87,   MS20_LP     = 88,    POLIVOKS    = 89,
     RING_X2     = 90,   RADIO       = 91,
-    REVERB_DARK = 92,   REVERB_METAL = 93
+    REVERB_DARK = 92,   REVERB_METAL = 93,
+    // ── fb604 — THE APPEND TO 118. Same law as fb165: APPEND ONLY, never insert, never
+    //    reorder. A saved patch stores the AudioParameterChoice's RAW INDEX, so 27 still
+    //    reads NONE at 118 entries exactly as it did at 94. Index N here IS case N in
+    //    FilterSlot::setParams, entry N in terrainFilterEngineNames(), FLT_ENGINES[N] in
+    //    index.html and kName[N] in Tests/flt_measure.h — five lists, one order.
+    //    94-98   PHASER N   — the shipped allpass chain with the output mix polarity flipped.
+    //    99-104  PHASER 24/32/48 (+N) — stage counts past the old PhaserCore::MAXST = 16.
+    //    105-110 COMB MATRIX — {no damping, HP, LP+HP} x {+, -} on the one comb loop.
+    //    111-112 FLANGE +/- — the same comb at 0.1-10 ms and 50 % mix.
+    //    113-114 6 dB SHELVES — first-order, alongside the shipped 2nd-order (S = 1) pair.
+    //    115-117 FORMANT REGISTERS — data only: soprano / tenor / alto vowel tables.
+    PHASER_4P_N  = 94,  PHASER_6P_N  = 95,  PHASER_8P_N  = 96,
+    PHASER_12P_N = 97,  PHASER_16P_N = 98,
+    PHASER_24P   = 99,  PHASER_24P_N = 100, PHASER_32P   = 101, PHASER_32P_N = 102,
+    PHASER_48P   = 103, PHASER_48P_N = 104,
+    COMB_RAW_P    = 105, COMB_RAW_M    = 106,
+    COMB_BRIGHT_P = 107, COMB_BRIGHT_M = 108,
+    COMB_BAND_P   = 109, COMB_BAND_M   = 110,
+    FLANGE_P      = 111, FLANGE_M      = 112,
+    LOW_EQ6       = 113, HIGH_EQ6      = 114,
+    FORMANT_SOP   = 115, FORMANT_TEN   = 116, FORMANT_ALTO = 117
 };
-constexpr int kNumTypes = 94;
+constexpr int kNumTypes = 118;   // fb604 — 94 -> 118
 
 // ─── 1. Moog Ladder LP·24 (Huovilainen, corrected ZDF) — report §1 ─────
 //
@@ -720,6 +767,17 @@ struct DiodeLP
 
 enum class CombMode : int { Plus, Minus, Shimmer, Karplus };
 
+/** fb604 — THE LOOP-FILTER AXIS. Until now the comb's in-loop damping was a FIXED, always-on,
+ *  never-user-reachable one-pole LP (fcDamp = 2*f0 + 6000). That single choice is the whole
+ *  difference between four instruments, not four presets (Moorer, "Signal Processing Aspects of
+ *  Computer Music", on the loop filter of a recirculating delay):
+ *      None  no loop filter          — every partial decays at the same rate: a PIPE.
+ *      Lp    the shipped one-pole LP — highs die first: a STRING.
+ *      Hp    one-pole HP             — the fundamental dies first: a TIN CAN.
+ *      Band  LP and HP together      — only a band survives: a TUNED FORMANT RESONATOR.
+ *  Lp is index 0 so every pre-fb604 comb type keeps the value it always had. */
+enum class LoopDamp : int { Lp = 0, None, Hp, Band };
+
 struct CombCore
 {
     std::vector<float> buf;
@@ -735,7 +793,18 @@ struct CombCore
                                // tiny and jumps are violently large relative. A comb sweep now
                                // BENDS like a flanger (that's the physics). <0 = snap on first use.
     float dSlewA = 0.001f;     // per-sample glide coef (~2.5 ms), set in prepare
-    float dampA = 0.0f, dampZ = 0.0f;     // in-loop one-pole damping
+    float dampA = 0.0f, dampZ = 0.0f;     // in-loop one-pole damping (LP)
+    float hpA   = 0.0f, hpZ   = 0.0f;     // fb604 — in-loop one-pole HP (see LoopDamp)
+    LoopDamp loopDamp = LoopDamp::Lp;     // fb604 — Lp == every pre-fb604 comb type
+    float fbkScale = 1.0f;                // fb604 — per-type feedback taper (Raw / Flange)
+    /** fb604 — THE DELAYED TAP, published for FLANGE.
+     *  process() returns the LOOP NODE v[n] = x[n] + g*v[n-D], which is what belongs in the
+     *  delay line and is the right output for a 100 %-wet comb. It is the WRONG output for a
+     *  flanger: mixing v[n] with the dry gives 0.5*(x + x) = x at RES 0, and the type measured
+     *  DEAD FLAT (0.5 dB of ripple, +0.00 dB at 1/8/16 kHz) — a flanger with no flange. The
+     *  delayed path is v[n-D], which process() already has in hand; it is published here so the
+     *  classic y = 0.5*(x[n] + v[n-D]) can be formed outside without a second delay line. */
+    float tapOut = 0.0f;
     float dcX = 0.0f, dcY = 0.0f;         // in-loop DC blocker
 
     // shimmer pitch-shifter (dual-window crossfaded sliding tap)
@@ -777,7 +846,7 @@ struct CombCore
     void reset() noexcept
     {
         std::fill (buf.begin(), buf.end(), 0.0f);
-        w = 0; dampZ = 0.0f; dcX = dcY = 0.0f; shimPhase = 0.0f; exciteCount = 0;
+        w = 0; dampZ = 0.0f; hpZ = 0.0f; tapOut = 0.0f; dcX = dcY = 0.0f; shimPhase = 0.0f; exciteCount = 0;
         dCur = -1.0f;                                        // fb126 — snap to target on first use
     }
 
@@ -825,15 +894,35 @@ struct CombCore
             default:                fcDamp = juce::jlimit (2000.0f, nyq, 2.0f * f0 + 6000.0f); break;
         }
         dampA = std::exp (-2.0f * juce::MathConstants<float>::pi * fcDamp / (float) fs);
-        const float wf   = 2.0f * juce::MathConstants<float>::pi * f0 / (float) fs;
-        const float ph   = -std::atan2 (dampA * std::sin (wf), 1.0f - dampA * std::cos (wf));
-        const float pdLp = (wf > 1e-6f) ? (-ph / wf) : 0.0f;   // damping phase delay at f0
+        // fb604 — the in-loop HIGHPASS corner (LoopDamp::Hp / Band). A tin can is a comb whose
+        // FUNDAMENTAL dies faster than its partials, so the corner has to track f0: at 0.5*f0 the
+        // one-pole HP passes |H(f0)| = 0.894 of the fundamental against ~1.0 of everything above
+        // it, which is a clearly brighter decay without killing the pitch the user dialled. The
+        // +60 Hz floor keeps it from collapsing to DC at the very bottom of the CUT range.
+        hpA = std::exp (-2.0f * juce::MathConstants<float>::pi
+                        * juce::jlimit (30.0f, 0.45f * nyq, 0.5f * f0 + 60.0f) / (float) fs);
+
+        // fb604 — RETUNE FOR WHATEVER IS ACTUALLY IN THE LOOP. The comb stays in tune only if the
+        // delay line is shortened by the loop filter's own phase delay at f0, and the loop filter
+        // is no longer always the LP. Angles, one-pole each (w = 2*pi*f0/fs):
+        //     LP  H = (1-a)/(1 - a e^-jw)          arg = -atan2(a sin w, 1 - a cos w)
+        //     HP  H = b(1 - e^-jw)/(1 - b e^-jw)   arg = (pi - w)/2 - atan2(b sin w, 1 - b cos w)
+        // (the HP numerator's angle is atan2(sin w, 1 - cos w) = (pi - w)/2 by the half-angle
+        // identity). Phase delay in samples is -arg/w, and the delays of cascaded sections add.
+        const float wf = 2.0f * juce::MathConstants<float>::pi * f0 / (float) fs;
+        float phTot = 0.0f;
+        if (loopDamp == LoopDamp::Lp || loopDamp == LoopDamp::Band)
+            phTot += -std::atan2 (dampA * std::sin (wf), 1.0f - dampA * std::cos (wf));
+        if (loopDamp == LoopDamp::Hp || loopDamp == LoopDamp::Band)
+            phTot += 0.5f * (juce::MathConstants<float>::pi - wf)
+                   - std::atan2 (hpA * std::sin (wf), 1.0f - hpA * std::cos (wf));
+        const float pdLp = (wf > 1e-6f) ? (-phTot / wf) : 0.0f;   // loop-filter phase delay at f0
         dLine = juce::jlimit (4.0f, (float) size - (float) shimW - 4.0f, dTotal - pdLp);
 
         switch (mode)
         {
             case CombMode::Plus:
-            case CombMode::Minus:   fbk = 0.995f * res01;            break;
+            case CombMode::Minus:   fbk = 0.995f * fbkScale * res01;  break;
             case CombMode::Shimmer: fbk = 0.85f  * res01; shimBlend = 0.45f; break;   // fb603 — 45% straight tap = a real comb peak
             case CombMode::Karplus: fbk = 0.90f + 0.0995f * res01;   break;   // long ring
         }
@@ -858,8 +947,14 @@ struct CombCore
         float d = (mode == CombMode::Shimmer)
                     ? (shimBlend * readCubic (dCur) + (1.0f - shimBlend) * shimmerRead (dCur))
                     : readCubic (dCur);
-        dampZ = (1.0f - dampA) * d + dampA * dampZ;          // in-loop damping LP
-        d = dampZ;
+        // fb604 — THE LOOP FILTER. Lp is the shipped path and is bit-identical to fb603 (the
+        // branch is on a member that is Lp for all nine pre-fb604 comb types). None skips the
+        // filter entirely — a pipe — which is why Raw carries its own feedback taper instead.
+        if (loopDamp == LoopDamp::Lp || loopDamp == LoopDamp::Band)
+        { dampZ = (1.0f - dampA) * d + dampA * dampZ; d = dampZ; }
+        if (loopDamp == LoopDamp::Hp || loopDamp == LoopDamp::Band)
+        { hpZ = (1.0f - hpA) * d + hpA * hpZ; d = d - hpZ; }  // one-pole HP = signal minus its LP
+        tapOut = d;                                          // fb604 — v[n-D], for FLANGE's dry mix
         const float fb = (mode == CombMode::Minus) ? (-fbk * d) : (fbk * d);
 
         float s = in + fb;
@@ -896,30 +991,103 @@ struct CombCore
 
 struct FormantBank
 {
-    // Bass-voice singer table (Csound Book), nodes a,e,i,o,u × formants F1..F4.
-    static constexpr float VF[5][4] = {
-        { 600.f, 1040.f, 2250.f, 2450.f },   // a
-        { 400.f, 1620.f, 2400.f, 2800.f },   // e
-        { 250.f, 1750.f, 2600.f, 3050.f },   // i
-        { 400.f,  750.f, 2400.f, 2600.f },   // o
-        { 350.f,  600.f, 2400.f, 2675.f } }; // u
-    static constexpr float VB[5][4] = {
-        {  60.f,  70.f, 110.f, 120.f },      // a
-        {  40.f,  80.f, 100.f, 120.f },      // e
-        {  60.f,  90.f, 100.f, 120.f },      // i
-        {  40.f,  80.f, 100.f, 120.f },      // o
-        {  40.f,  80.f, 100.f, 120.f } };    // u
-    static constexpr float VDB[5][4] = {
-        { 0.f,  -7.f,  -9.f,  -9.f },        // a
-        { 0.f, -12.f,  -9.f, -12.f },        // e
-        { 0.f, -30.f, -16.f, -22.f },        // i
-        { 0.f, -11.f, -21.f, -20.f },        // o
-        { 0.f, -20.f, -32.f, -28.f } };      // u
+    // Singer's-formant tables (Csound Book, appendix "Formant Values"), nodes a,e,i,o,u ×
+    // formants F1..F4. Registers: 0 = BASS (the only one shipped before fb604), 1 = SOPRANO,
+    // 2 = TENOR, 3 = ALTO.
+    //
+    // fb604 — REGISTER IS DATA, NOT DSP. The bank was already literature-grade (parallel
+    // resonators, Klatt alternating signs, per-vowel normalisation); it was just wired to one
+    // table. The registers are not transpositions of each other — a soprano /a/ sits at
+    // 800/1150/2900/3900 against the bass 600/1040/2250/2450, and its F2..F4 weights differ by
+    // up to 25 dB — so they are different vowels, not the same vowel shifted. That is also why
+    // they are separate entries rather than a CUT offset on the bass bank: CUT already IS the
+    // vocal-tract-length shift, and a shift cannot move four formants by four different ratios.
+    static constexpr int kNumRegisters = 4;
+    static constexpr float VF[kNumRegisters][5][4] = {
+      { { 600.f, 1040.f, 2250.f, 2450.f },   // BASS    a
+        { 400.f, 1620.f, 2400.f, 2800.f },   //         e
+        { 250.f, 1750.f, 2600.f, 3050.f },   //         i
+        { 400.f,  750.f, 2400.f, 2600.f },   //         o
+        { 350.f,  600.f, 2400.f, 2675.f } }, //         u
+      { { 800.f, 1150.f, 2900.f, 3900.f },   // SOPRANO a
+        { 350.f, 2000.f, 2800.f, 3600.f },   //         e
+        { 270.f, 2140.f, 2950.f, 3900.f },   //         i
+        { 450.f,  800.f, 2830.f, 3800.f },   //         o
+        { 325.f,  700.f, 2700.f, 3800.f } }, //         u
+      { { 650.f, 1080.f, 2650.f, 2900.f },   // TENOR   a
+        { 400.f, 1700.f, 2600.f, 3200.f },   //         e
+        { 290.f, 1870.f, 2800.f, 3250.f },   //         i
+        { 400.f,  800.f, 2600.f, 2800.f },   //         o
+        { 350.f,  600.f, 2700.f, 2900.f } }, //         u
+      { { 800.f, 1150.f, 2800.f, 3500.f },   // ALTO    a
+        { 400.f, 1600.f, 2700.f, 3300.f },   //         e
+        { 350.f, 1700.f, 2700.f, 3700.f },   //         i
+        { 450.f,  800.f, 2830.f, 3500.f },   //         o
+        { 325.f,  700.f, 2530.f, 3500.f } } };
+    static constexpr float VB[kNumRegisters][5][4] = {
+      { {  60.f,  70.f, 110.f, 120.f },      // BASS
+        {  40.f,  80.f, 100.f, 120.f },
+        {  60.f,  90.f, 100.f, 120.f },
+        {  40.f,  80.f, 100.f, 120.f },
+        {  40.f,  80.f, 100.f, 120.f } },
+      { {  80.f,  90.f, 120.f, 130.f },      // SOPRANO
+        {  60.f, 100.f, 120.f, 150.f },
+        {  60.f,  90.f, 100.f, 120.f },
+        {  70.f,  80.f, 100.f, 130.f },
+        {  50.f,  60.f, 170.f, 180.f } },
+      { {  80.f,  90.f, 120.f, 130.f },      // TENOR
+        {  70.f,  80.f, 100.f, 120.f },
+        {  40.f,  90.f, 100.f, 120.f },
+        {  40.f,  80.f, 100.f, 120.f },
+        {  40.f,  60.f, 100.f, 120.f } },
+      { {  80.f,  90.f, 120.f, 130.f },      // ALTO
+        {  60.f,  80.f, 120.f, 150.f },
+        {  50.f, 100.f, 120.f, 150.f },
+        {  70.f,  80.f, 100.f, 130.f },
+        {  50.f,  60.f, 170.f, 180.f } } };
+    static constexpr float VDB[kNumRegisters][5][4] = {
+      { { 0.f,  -7.f,  -9.f,  -9.f },        // BASS
+        { 0.f, -12.f,  -9.f, -12.f },
+        { 0.f, -30.f, -16.f, -22.f },
+        { 0.f, -11.f, -21.f, -20.f },
+        { 0.f, -20.f, -32.f, -28.f } },
+      { { 0.f,  -6.f, -32.f, -20.f },        // SOPRANO
+        { 0.f, -20.f, -15.f, -40.f },
+        { 0.f, -12.f, -26.f, -26.f },
+        { 0.f, -11.f, -22.f, -22.f },
+        { 0.f, -16.f, -35.f, -40.f } },
+      { { 0.f,  -6.f,  -7.f,  -8.f },        // TENOR
+        { 0.f, -14.f, -12.f, -14.f },
+        { 0.f, -15.f, -18.f, -20.f },
+        { 0.f, -10.f, -12.f, -12.f },
+        { 0.f, -20.f, -17.f, -14.f } },
+      { { 0.f,  -4.f, -20.f, -36.f },        // ALTO
+        { 0.f, -24.f, -30.f, -35.f },
+        { 0.f, -20.f, -30.f, -36.f },
+        { 0.f,  -9.f, -16.f, -28.f },
+        { 0.f, -12.f, -30.f, -40.f } } };
 
-    // Per-vowel output normalization (measured offline vs LP24 on white noise,
-    // then scaled for headroom; seats the five vowels at even loudness so MORPH
-    // doesn't pump and A/E/I switch evenly).
-    static constexpr float kVowelNorm[5] = { 5.01f, 5.67f, 5.58f, 5.00f, 5.07f };
+    // Per-vowel output normalization (measured offline vs LP24 on white noise, then scaled for
+    // headroom; seats the five vowels at even loudness so MORPH doesn't pump and A/E/I switch
+    // evenly).
+    //
+    // fb604 — the three new rows are MEASURED AGAINST THE SHIPPED BASS ROW, vowel for vowel:
+    // norm[r][v] = kVowelNorm[BASS][v] * rawGain[BASS][v] / rawGain[r][v], where rawGain is the
+    // bank's own broadband gain on white noise with outTrim forced to 1 (RES 0, DRV 0, 48 kHz,
+    // 400 k samples). That makes soprano /a/ exactly as loud as bass /a/ rather than merely
+    // "about as loud on average" — a register whose F2..F4 are 25 dB down would otherwise arrive
+    // quiet, and switching register would read as a volume control. Measured rawGain, x1000:
+    //   BASS    103.70  88.48  89.47  76.05  70.14
+    //   SOPRANO 106.51  90.24  91.98  96.64  79.44
+    //   TENOR   121.59 103.24  75.61  82.07  73.35
+    //   ALTO    111.88  88.22  80.20  98.69  80.75
+    static constexpr float kVowelNorm[kNumRegisters][5] = {
+        { 5.01f, 5.67f, 5.58f, 5.00f, 5.07f },   // BASS    (fb165, untouched)
+        { 4.88f, 5.56f, 5.43f, 3.93f, 4.48f },   // SOPRANO (fb604, measured)
+        { 4.27f, 4.86f, 6.60f, 4.63f, 4.85f },   // TENOR   (fb604, measured)
+        { 4.64f, 5.69f, 6.22f, 3.85f, 4.40f } }; // ALTO    (fb604, measured)
+
+    int reg = 0;   // fb604 — active register (0 = bass; reset() does NOT clear it, setParams does)
 
     struct Reson {
         float a1 = 0.f, a2 = 0.f, gain = 0.f;
@@ -954,12 +1122,12 @@ struct FormantBank
     {
         const float nyq = 0.45f * (float) fs;
         for (int k = 0; k < 4; ++k) {
-            const float F  = juce::jlimit (20.0f, nyq, VF[v][k] * shift);
-            const float BW = juce::jmax (25.0f, VB[v][k] * qScale);
+            const float F  = juce::jlimit (20.0f, nyq, VF[reg][v][k] * shift);
+            const float BW = juce::jmax (25.0f, VB[reg][v][k] * qScale);
             f[k].set (F, BW, fs);
-            g[k] = std::pow (10.0f, VDB[v][k] / 20.0f);
+            g[k] = std::pow (10.0f, VDB[reg][v][k] / 20.0f);
         }
-        outTrim = kVowelNorm[v];
+        outTrim = kVowelNorm[reg][v];
     }
 
     // morph 0..1 across a→e→i→o→u (log-freq / dB-linear / BW-linear).
@@ -971,13 +1139,13 @@ struct FormantBank
         const float p = x - (float) i;
         for (int k = 0; k < 4; ++k) {
             const float F  = juce::jlimit (20.0f, nyq,
-                                std::exp ((1.0f - p) * std::log (VF[i][k]) + p * std::log (VF[i+1][k])));
-            const float BW = juce::jmax (25.0f, ((1.0f - p) * VB[i][k] + p * VB[i+1][k]) * qScale);
-            const float dB = (1.0f - p) * VDB[i][k] + p * VDB[i+1][k];
+                                std::exp ((1.0f - p) * std::log (VF[reg][i][k]) + p * std::log (VF[reg][i+1][k])));
+            const float BW = juce::jmax (25.0f, ((1.0f - p) * VB[reg][i][k] + p * VB[reg][i+1][k]) * qScale);
+            const float dB = (1.0f - p) * VDB[reg][i][k] + p * VDB[reg][i+1][k];
             f[k].set (F, BW, fs);
             g[k] = std::pow (10.0f, dB / 20.0f);
         }
-        outTrim = (1.0f - p) * kVowelNorm[i] + p * kVowelNorm[i+1];
+        outTrim = (1.0f - p) * kVowelNorm[reg][i] + p * kVowelNorm[reg][i+1];
     }
 
     void setDrive (float driveLin) noexcept { drive = juce::jmax (1.0f, driveLin); driveMk = std::pow (drive, 0.30f); }
@@ -1019,10 +1187,33 @@ struct AllpassStage
 // (DRV, louder). 4 stages -> 2 notches; 8 -> 4. CUT/ENV sweep the notches.
 struct PhaserCore
 {
-    static constexpr int MAXST = 16;   // fb165 — 12P/16P types
+    // fb604 — MAXST 16 -> 48. The 24/32/48-stage entries are not "more phaser": past about
+    // 24 notches the sweep stops reading as a sweep and the chain reads as a STATIC spectral
+    // comb with a vowel-ish resonance, which the roster had no example of. Cost measured at
+    // 48 stages (both channels, host rate, no oversampling): see the fb604 CPU table.
+    static constexpr int MAXST = 48;
     AllpassStage ap[MAXST];
     int   nStages = 4;
     float fb = 0.f, fbState = 0.f, preDrv = 1.f, drvMk = 1.f;
+
+    /** fb604 — OUTPUT MIX POLARITY. The core hard-coded 0.5*(in + v); the N variants use
+     *  0.5*(in - v). This is NOT the same filter with a sign on the output: for a
+     *  unity-magnitude allpass A,
+     *          |1 + A|^2 + |1 - A|^2 = 2(1 + |A|^2) = 4,
+     *  so the two responses are exact complements — wherever the P variant notches (|1+A| = 0)
+     *  the N variant peaks (|1 - A| = 2) and vice versa. The two notch sets are INTERLEAVED,
+     *  which is why the pair measures far more than 3 dB apart rather than being a duplicate.
+     *  (Every stage count we ship is EVEN, so at RES 0 the N variant additionally nulls DC and
+     *  Nyquist, where A = 1 — it reads as a band-comb, not a phaser.) */
+    float mixSign = 1.0f;
+
+    // fb604 — the stage ladder's total span, in octaves, at the shipped 16-stage maximum:
+    // 15 * log2(1.5). Capping the span here is what makes 24/32/48 stages DENSER instead of
+    // WIDER: with the old geometric law, 48 stages spanned 1.5^47 (27 octaves), so 31 of them
+    // clamped onto the 20 Hz / 0.45*fs rails and the type degenerated into a lopsided pile.
+    // For every stage count the plugin already shipped (4/6/8/12/16) the cap is inactive and
+    // the coefficients are bit-identical to fb603.
+    static constexpr float kMaxSpanOct = 15.0f * 0.5849625f;
 
     void reset() noexcept { for (auto& a : ap) a.reset(); fbState = 0.f; }
 
@@ -1030,9 +1221,12 @@ struct PhaserCore
     {
         nStages = juce::jlimit (2, MAXST, stages);
         const float nyq = 0.45f * (float) fs;
-        const float fratio = 1.5f;
+        // octaves per stage: the shipped 1.5 ratio (0.58496 oct) until the span cap bites.
+        const float stepOct = (nStages > 1)
+                            ? juce::jmin (0.5849625f, kMaxSpanOct / (float) (nStages - 1))
+                            : 0.0f;
         for (int k = 0; k < nStages; ++k) {
-            float fk = cutHz * std::pow (fratio, (float) k - (float)(nStages - 1) * 0.5f);
+            float fk = cutHz * std::exp2 (stepOct * ((float) k - (float)(nStages - 1) * 0.5f));
             fk = juce::jlimit (20.0f, nyq, fk);
             const float t = std::tan (juce::MathConstants<float>::pi * fk / (float) fs);
             ap[k].g = (t - 1.0f) / (t + 1.0f);
@@ -1048,7 +1242,7 @@ struct PhaserCore
         float v = in + fb * fbState;
         for (int k = 0; k < nStages; ++k) v = ap[k].process (v);
         fbState = v;
-        const float out = 0.5f * (in + v) * drvMk * 1.45f;   // 1.45 = level-match trim
+        const float out = 0.5f * (in + mixSign * v) * drvMk * 1.45f;   // 1.45 = level-match trim
         return 4.0f * fastTanh (0.25f * out);                 // soft limiter (transparent at normal level)
     }
 };
@@ -1303,8 +1497,27 @@ struct BodeShifter
         oscCos = std::cos (w);  oscSin = std::sin (w);
         dc.setRate (fs);           // fb603 — per-rate DC corner (the blocker sits INSIDE the feedback loop)
         fb     = 0.95f * res01;
-        preDrv = driveLin;  drvMk = std::pow (driveLin, 0.30f);
+        // fb604 — STRESS PEAK 4.14 -> 3.32 against a 4.0 bar, and it is a TAPER on the makeup,
+        // not a clamp on the output.
+        //
+        // WHERE THE 4.14 CAME FROM, measured: run the gate's own stress sweep with drvMk forced
+        // to 1 and this core peaks at 1.81, and the peak then tracks drvMk EXACTLY
+        // (0.30 -> 4.14, 0.24 -> 3.51, 0.22 -> 3.32, 0.20 -> 3.14, i.e. 1.81 * driveLin^e every
+        // time). So the overshoot is not the feedback loop — fb603 already pinned that at 0.95 —
+        // it is intrinsic: a quadrature all-pass PAIR is only exactly 90 deg apart inside its
+        // design band, and where it is not, I*cos + Q*sin sums toward |I| + |Q| instead of the
+        // envelope, which is the 1.81. Every other special makes up drive at ^0.30 because none
+        // of them starts 1.8x above its own input.
+        //
+        // 0.22 is where 1.81 * 15.85^e lands comfortably under the bar. It costs 1.92 dB off the
+        // TOP of the knob and nothing anywhere else (driveLin = 1 at DRV 0 gives drvMk = 1
+        // exactly, so the bottom of the travel is bit-identical): DRV still runs 0 -> 1 for
+        // +29.27 dB instead of +31.19 dB, measured broadband at CUT 1 kHz / RES 0.3. The drive
+        // CHARACTER is untouched — preDrv still hits the input tanh just as hard.
+        preDrv = driveLin;  drvMk = std::pow (driveLin, kBodeDrvMkExp);
     }
+    static constexpr float kBodeDrvMkExp = 0.22f;
+
     inline float process (float x) noexcept
     {
         // fb603 — RUNAWAY. preDrv multiplied the FEEDBACK as well as the input, so the
@@ -1528,6 +1741,39 @@ struct BellEQ
         }
         b0 /= A0; b1 /= A0; b2 /= A0; a1 /= A0; a2 /= A0;
     }
+
+    /** fb604 — FIRST-ORDER (6 dB/oct) SHELF, alongside the 2nd-order (S = 1) pair above.
+     *
+     *  Not a gentler setting of the same filter: a 2nd-order shelf reaches its plateau over
+     *  about one octave and a 1st-order one takes three, so between the two corners they differ
+     *  by up to a third of the shelf's gain — a genuinely different transition, which is what the
+     *  Pultec-vs-console distinction actually is.
+     *
+     *  Analogue prototype, gain G at the shelved end and unity at the other:
+     *      low   H(s) = (s/w0 + G) / (s/w0 + 1)        high  H(s) = (G s/w0 + 1) / (s/w0 + 1)
+     *  with w0 = wc/sqrt(G) (low) or wc*sqrt(G) (high), which is what puts the HALF-GAIN point
+     *  exactly on the dialled fc: |H(jwc)| = sqrt(G) either way. Bilinear with K = tan(pi f0/fs)
+     *  (prewarped at f0, so fc is exact at any sample rate):
+     *      low   H(z) = [ (1 + G K) + (G K - 1) z^-1 ] / [ (1 + K) + (K - 1) z^-1 ]
+     *      high  H(z) = [ (G + K)   + (K - G)   z^-1 ] / [ (1 + K) + (K - 1) z^-1 ]
+     *  Check: low at z = 1 gives 2GK/2K = G and at z = -1 gives 2/2 = 1; high is the mirror.
+     *  b2 = a2 = 0 — the TDF2 kernel below runs it as a biquad with a dead second tap, so no
+     *  new process() path and no branch on the audio thread. */
+    void setShelf1 (float fc, float gainDb, bool high, double fs) noexcept
+    {
+        const float G  = std::pow (10.0f, gainDb / 20.0f);
+        const float sq = std::sqrt (juce::jmax (1.0e-6f, G));
+        const float f0 = juce::jlimit (10.0f, 0.49f * (float) fs,
+                                       high ? (fc * sq) : (fc / sq));
+        const float K  = std::tan (juce::MathConstants<float>::pi * f0 / (float) fs);
+        const float d  = 1.0f + K;
+        b0 = (high ? (G + K)     : (1.0f + G * K)) / d;
+        b1 = (high ? (K - G)     : (G * K - 1.0f)) / d;
+        b2 = 0.0f;
+        a1 = (K - 1.0f) / d;
+        a2 = 0.0f;
+    }
+
     inline float process (float x) noexcept
     {
         const float y = b0 * x + z1;
@@ -1585,26 +1831,63 @@ struct VarAllpass
     // fractional read; measured after: 1.0x.
     float lenT = 256.0f, lenC = -1.0f, slewA = 0.00833f;
 
-    void reset() noexcept { for (int i = 0; i < LEN; ++i) buf[i] = 0.0f; w = 0; lenC = -1.0f; }
+    void reset() noexcept { for (int i = 0; i < LEN; ++i) buf[i] = 0.0f; w = 0; lenC = -1.0f;
+                            apX1 = apY1 = 0.0f; }
     void setSlew (double fs) noexcept
     { slewA = 1.0f - std::exp (-1.0f / (0.0025f * (float) juce::jmax (1000.0, fs))); }
     void setLen (float L) noexcept { lenT = juce::jlimit (4.0f, (float) LEN - 4.0f, L); }
 
-    /** Linear read — 2 loads. DIFFUSOR runs EIGHT of these per sample (4 stages x 2 channels),
-     *  so a 4-tap kernel here cost 73 ns/sample on its own; a smear stage does not need it. */
-    inline float readLin (float D) const noexcept
+    /** fb604 — ALL-PASS FRACTIONAL READ, replacing fb603's linear interpolation.
+     *
+     *  THE BUG IT FIXES. fb603 turned this from an integer delay line into a fractional one and
+     *  interpolated LINEARLY. Linear interpolation is a lowpass whose loss depends on the
+     *  fractional part: at frac 0.5 it is -6.0 dB at 16 kHz, and DIFFUSOR runs four of these in
+     *  series per channel. The right channel's lengths are detuned (x1.011 + 1), so its four
+     *  fractions differ from the left's and the two channels lost DIFFERENT amounts of top:
+     *  measured 3.73 dB of L/R imbalance at 14.5 kHz on a fresh patch (up to 12.0 dB across the
+     *  ten-condition set), on a structure whose defining property is that it has NO magnitude
+     *  response at all. It also cost the mono signal 7.0 dB at 16 kHz that a diffusor should
+     *  never take.
+     *
+     *  THE FIX. A first-order all-pass interpolator, H(z) = (a + z^-1)/(1 + a z^-1) with
+     *  a = (1 - frac)/(1 + frac), is EXACTLY unity-magnitude at every frequency (Laakso et al.,
+     *  "Splitting the Unit Delay", §3.2). The Schroeder section is therefore a true all-pass
+     *  again — unity magnitude by construction, in both channels, at any pair of lengths — so
+     *  the imbalance cannot come back for any length the CUT knob produces. The fractional part
+     *  is kept in [0.5, 1.5) (the standard range: a stays in [-0.2, +0.333], well away from the
+     *  a -> 1 pole crowding that makes this interpolator ring) by borrowing one whole sample
+     *  from the integer part. Cost is one multiply and two adds over the linear read.
+     *  fb603's SLEW is untouched — that is the anti-click fix and it still does its job. */
+    float apX1 = 0.0f, apY1 = 0.0f;              // fb604 — all-pass interpolator state
+
+    /** COST, and why this is the straight-line form. The coefficient needs a DIVIDE and DIFFUSOR
+     *  runs eight of these per stereo sample, so the fix costs Diffusor 21.5 -> 43.4 ns/sample
+     *  (best of 12 runs, 240 k samples, CUT 1 kHz / RES 0.5 / DRV 0.5). D only actually moves
+     *  while lenC is slewing toward a new CUT, so the obvious saving is to cache the coefficient
+     *  and skip the divide — BOTH forms of that were MEASURED AND ARE SLOWER:
+     *      cache inside the read   (branch on D != last)          55.8 ns
+     *      hoist into process()    (branch on lenC != lenT)       54.2 ns
+     *      straight-line divide    (this)                         43.4 ns
+     *  The divide pipelines against the buffer load; the branch does not, and its stores land in
+     *  the middle of a one-sample recurrence. So the "optimisation" is the pessimisation here,
+     *  and the honest version is also the fast one. 43.4 ns is 1.4x the 118-type roster mean and
+     *  under half of the ladder family's 105 ns, on the one type that needed it. */
+    inline float readAp (float D) noexcept
     {
-        const float rp = (float) w - D + (float) LEN;
-        const int   i  = (int) rp;
-        const float fr = rp - (float) i;
-        const float y1 = buf[i & MASK], y2 = buf[(i + 1) & MASK];
-        return y1 + fr * (y2 - y1);
+        int   Di = (int) D;
+        float fr = D - (float) Di;
+        if (fr < 0.5f) { --Di; fr += 1.0f; }               // keep frac in [0.5, 1.5)
+        const float a  = (1.0f - fr) / (1.0f + fr);
+        const float xd = buf[(w - Di + LEN) & MASK];
+        const float y  = a * (xd - apY1) + apX1;
+        apX1 = xd; apY1 = y;
+        return y;
     }
     inline float process (float x) noexcept
     {
         if (lenC < 0.0f) lenC = lenT;
         else             lenC += slewA * (lenT - lenC);
-        const float d = readLin (lenC);
+        const float d = readAp (lenC);
         // fb603 — saturating the allpass node is the ONLY drive an allpass chain can have: it is
         // unity-magnitude by construction, so a linear DIFFUSOR could only ever be +24 dB of
         // volume (measured THD 0.00% -> 0.00%). Saturation breaks the allpass identity, which is
@@ -1668,6 +1951,12 @@ public:
         ladderHpL_.outMakeup = ladderHpR_.outMakeup = 1.0f;
         ladderL_.tapBlend = ladderR_.tapBlend = 0.0f;
         combL_.dampScale = combR_.dampScale = 1.0f;
+        // fb604 — the same invalidation for the three config axes this commit adds. Each is a
+        // per-type CHOICE living on a shared core, i.e. exactly the class fb603's leak was.
+        combL_.loopDamp = combR_.loopDamp = LoopDamp::Lp;
+        combL_.fbkScale = combR_.fbkScale = 1.0f;
+        phaserL_.mixSign = phaserR_.mixSign = 1.0f;
+        formantL_.reg = formantR_.reg = 0;
         dampL_.sat = dampR_.sat = 0.0f;
         for (int i = 0; i < 4; ++i) { vapL_[i].sat = 0.0f; vapR_[i].sat = 0.0f; }
         screamDrv_ = 1.0f; screamFb_ = 0.0f; satMix_ = 0.0f;
@@ -1816,6 +2105,11 @@ public:
             case Type::KARPLUS:
             {
                 combL_.dampScale = 1.0f; combR_.dampScale = 1.0f;
+                // fb604 — the comb matrix put a LOOP-FILTER axis on this core, so every type that
+                // shares it must write its own cell (the fb603 config-leak law): Lp + full feedback
+                // is what all nine pre-fb604 comb types have always run.
+                combL_.loopDamp = LoopDamp::Lp; combR_.loopDamp = LoopDamp::Lp;
+                combL_.fbkScale = 1.0f;         combR_.fbkScale = 1.0f;
                 const CombMode m = (type_ == Type::COMB_PLUS)    ? CombMode::Plus
                                  : (type_ == Type::COMB_MINUS)   ? CombMode::Minus
                                  : (type_ == Type::COMB_SHIMMER) ? CombMode::Shimmer
@@ -1836,6 +2130,7 @@ public:
                 const float cut01  = juce::jlimit (0.0f, 1.0f,
                     std::log (juce::jmax (20.0f, cutHz) / 20.0f) / std::log (1000.0f));
                 const float qScale = std::pow (0.1f, res01) * 2.0f;     // RES0 broad → RES1 sharp
+                formantL_.reg = 0; formantR_.reg = 0;   // fb604 — BASS register, written not inherited
                 if (type_ == Type::FORMANT_MORPH) {
                     // CUT sweeps the vowel a→e→i→o→u (the "talking" knob).
                     formantL_.setMorph (cut01, qScale, fs);
@@ -1858,6 +2153,7 @@ public:
             case Type::PHASER_8P:
             {
                 const int stages = (type_ == Type::PHASER_8P) ? 8 : 4;
+                phaserL_.mixSign = 1.0f; phaserR_.mixSign = 1.0f;   // fb604 — P polarity, written not inherited
                 phaserL_.setParams (stages, cutHz, res01, driveLin, fs);
                 phaserR_.setParams (stages, cutHz, res01, driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;   // handled inside
@@ -2026,7 +2322,22 @@ public:
                           : (type_ == Type::MULTI_NN) ? M{ O::Notch, O::Notch }
                           :                             M{ O::Peak, O::HP };
                 setSvf (m.a, 2000.0f, cutHz_, res01, driveLin, fs);
-                const float f2   = juce::jmin (cutHz_ * 4.0f, 18000.0f);
+                // fb604 — THE SECOND BAND WAS STILL WEARING fb602's CEILING. fb603 opened the SVF
+                // family from 0.49*nyq to 0.49*fs and 33 types stopped measuring -12 to -24 dB at
+                // 16 kHz on a fresh patch — but this hard-coded 18 kHz survived it, and on the six
+                // MULTI types whose second band is a NOTCH it is the thing you actually hear:
+                // wide open (CUT 20 kHz) the +2-octave band pins its null at 18 kHz, which at the
+                // second band's RES-0 Q of 0.5 is broad enough to eat the whole top octave.
+                // Multi HP+Notch measured -19.04 dB at 16 kHz on the patch you land on.
+                //
+                // The fix is NOT to re-lower fb603's ceiling — that would undo its best fix. It is
+                // to stop capping the second band lower than the first: it now clamps against the
+                // SAME kFcCeilOverFs the first band uses, so the +2-octave relationship survives to
+                // the top of the CUT range and the null leaves the audible band instead of sitting
+                // in it. Below CUT 4.5 kHz nothing changes at all (4*cut was under 18 kHz there),
+                // so every MULTI curve in the lower nine tenths of the knob is bit-identical.
+                const float f2   = juce::jmin (cutHz_ * 4.0f,
+                                               SvfMultimode::kFcCeilOverFs * (float) fs);
                 const float sMul = std::exp2 (spread_ * kSpreadSemis / 12.0f);
                 svf2L_.qMax = 2000.0f; svf2R_.qMax = 2000.0f; svf2L_.out = m.b; svf2R_.out = m.b;
                 svf2L_.setCoeffs (f2 / sMul, res01 * 0.7f, fs);
@@ -2038,6 +2349,11 @@ public:
             case Type::COMB_WIDE: case Type::COMB_OCTAVE: case Type::COMB_FIFTH:
             {
                 combL_.dampScale = 1.0f; combR_.dampScale = 1.0f;
+                // fb604 — the comb matrix put a LOOP-FILTER axis on this core, so every type that
+                // shares it must write its own cell (the fb603 config-leak law): Lp + full feedback
+                // is what all nine pre-fb604 comb types have always run.
+                combL_.loopDamp = LoopDamp::Lp; combR_.loopDamp = LoopDamp::Lp;
+                combL_.fbkScale = 1.0f;         combR_.fbkScale = 1.0f;
                 // fb603 — these three retuned only the RIGHT channel, so in the LEFT channel (and
                 // therefore in mono) they were BYTE-IDENTICAL to COMB+ and to each other: fb602
                 // measured 0.00 dB max deviation on all three pairs. Split the interval
@@ -2057,6 +2373,8 @@ public:
                 const float rr = (type_ == Type::KARPLUS_BRIGHT)
                                ? juce::jmin (1.0f, res01 * 1.15f + 0.08f) : res01 * 0.45f;
                 combL_.mode = CombMode::Karplus; combR_.mode = CombMode::Karplus;
+                combL_.loopDamp = LoopDamp::Lp; combR_.loopDamp = LoopDamp::Lp;   // fb604 — own cell
+                combL_.fbkScale = 1.0f;         combR_.fbkScale = 1.0f;
                 // fb603 — the damping corner is what "Bright" and "Mute" actually mean.
                 const float ds = (type_ == Type::KARPLUS_BRIGHT) ? 3.2f : 0.30f;
                 combL_.dampScale = ds; combR_.dampScale = ds;
@@ -2082,6 +2400,7 @@ public:
                     std::log (juce::jmax (20.0f, cutHz_) / 20.0f) / std::log (1000.0f));
                 const float qScale = std::pow (0.1f, res01) * 2.0f;
                 const float shift  = std::exp2 ((cut01 - 0.5f) * 2.0f);
+                formantL_.reg = 0; formantR_.reg = 0;   // fb604 — BASS register, written not inherited
                 const int   v      = (type_ == Type::FORMANT_O) ? 3 : 4;
                 formantL_.setVowel (v, shift, qScale, fs);
                 formantR_.setVowel (v, shift, qScale, fs);
@@ -2096,6 +2415,7 @@ public:
                 const float qScale = (type_ == Type::FORMANT_WIDE)
                                    ? std::pow (0.1f, res01) * 4.5f
                                    : std::pow (0.1f, juce::jmin (1.0f, res01 * 1.2f + 0.15f)) * 1.6f;
+                formantL_.reg = 0; formantR_.reg = 0;   // fb604 — BASS register, written not inherited
                 formantL_.setMorph (cut01, qScale, fs);
                 formantR_.setMorph (cut01, qScale, fs);
                 const float dd = (type_ == Type::FORMANT_GROWL) ? driveLin * 2.0f : driveLin;
@@ -2106,6 +2426,7 @@ public:
             case Type::PHASER_6P: case Type::PHASER_12P: case Type::PHASER_16P:
             {
                 const int st = (type_ == Type::PHASER_6P) ? 6 : (type_ == Type::PHASER_12P) ? 12 : 16;
+                phaserL_.mixSign = 1.0f; phaserR_.mixSign = 1.0f;   // fb604 — P polarity, written not inherited
                 phaserL_.setParams (st, cutHz_, res01, driveLin, fs);
                 phaserR_.setParams (st, cutHz_, res01, driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -2282,6 +2603,113 @@ public:
                 combrevR_.setParams (cutHz_, juce::jmin (1.0f, res01 * 1.25f + 0.1f), driveLin, fs);
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
                 break;
+            // ═══ fb604 — THE APPEND TO 118. Six axes on five cores that were already here. ═══
+            case Type::PHASER_4P_N:  case Type::PHASER_6P_N:  case Type::PHASER_8P_N:
+            case Type::PHASER_12P_N: case Type::PHASER_16P_N:
+            case Type::PHASER_24P:   case Type::PHASER_24P_N:
+            case Type::PHASER_32P:   case Type::PHASER_32P_N:
+            case Type::PHASER_48P:   case Type::PHASER_48P_N:
+            {
+                // mixSign -1 is the N variant: 0.5*(in - v) instead of 0.5*(in + v). See
+                // PhaserCore::mixSign for why |1+A|^2 + |1-A|^2 = 4 makes that a different
+                // filter (interleaved notch sets) and not a duplicate with a sign on it.
+                struct P { int st; float sign; };
+                const P p = (type_ == Type::PHASER_4P_N)  ? P{  4, -1.0f }
+                          : (type_ == Type::PHASER_6P_N)  ? P{  6, -1.0f }
+                          : (type_ == Type::PHASER_8P_N)  ? P{  8, -1.0f }
+                          : (type_ == Type::PHASER_12P_N) ? P{ 12, -1.0f }
+                          : (type_ == Type::PHASER_16P_N) ? P{ 16, -1.0f }
+                          : (type_ == Type::PHASER_24P)   ? P{ 24, +1.0f }
+                          : (type_ == Type::PHASER_24P_N) ? P{ 24, -1.0f }
+                          : (type_ == Type::PHASER_32P)   ? P{ 32, +1.0f }
+                          : (type_ == Type::PHASER_32P_N) ? P{ 32, -1.0f }
+                          : (type_ == Type::PHASER_48P)   ? P{ 48, +1.0f }
+                          :                                 P{ 48, -1.0f };
+                phaserL_.mixSign = p.sign; phaserR_.mixSign = p.sign;
+                phaserL_.setParams (p.st, cutHz_, res01, driveLin, fs);
+                phaserR_.setParams (p.st, cutHz_, res01, driveLin, fs);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;   // handled inside
+                break;
+            }
+            case Type::COMB_RAW_P:    case Type::COMB_RAW_M:
+            case Type::COMB_BRIGHT_P: case Type::COMB_BRIGHT_M:
+            case Type::COMB_BAND_P:   case Type::COMB_BAND_M:
+            {
+                // THE COMB MATRIX — {no loop filter, HP, LP+HP} x {+, -} feedback. The shipped
+                // comb's loop filter was a fixed, always-on one-pole LP; these are the other
+                // three cells of an axis that was never exposed (see LoopDamp).
+                const bool minus = (type_ == Type::COMB_RAW_M || type_ == Type::COMB_BRIGHT_M
+                                                             || type_ == Type::COMB_BAND_M);
+                const LoopDamp ld = (type_ == Type::COMB_RAW_P    || type_ == Type::COMB_RAW_M)    ? LoopDamp::None
+                                  : (type_ == Type::COMB_BRIGHT_P || type_ == Type::COMB_BRIGHT_M) ? LoopDamp::Hp
+                                  :                                                                  LoopDamp::Band;
+                combL_.dampScale = 1.0f;  combR_.dampScale = 1.0f;
+                combL_.loopDamp  = ld;    combR_.loopDamp  = ld;
+                // RAW has NOTHING in the loop taking energy out — the shipped 0.995 feedback
+                // relies on the LP to bleed the recirculation, so without it the pipe rings into
+                // the loop's own soft limiter and the stress sweep runs at the 4.0 bar. A TAPER
+                // on the top of RES (the whole knob is scaled, so there is no step and 10-50 %
+                // is untouched in character), not a ceiling: it still rings for many seconds.
+                const float fbTap = (ld == LoopDamp::None) ? kCombRawFbTaper : 1.0f;
+                combL_.fbkScale = fbTap;  combR_.fbkScale = fbTap;
+                const CombMode m = minus ? CombMode::Minus : CombMode::Plus;
+                combL_.mode = m; combR_.mode = m;
+                combL_.setParams (cutHzL,           res01, fs);
+                combR_.setParams (cutHzR * 1.0015f, res01, fs);   // +2.6 cents base width, plus Spread
+                preDrive_  = driveLin;
+                postMakeup_= combMakeup (m);
+                break;
+            }
+            case Type::FLANGE_P: case Type::FLANGE_M:
+            {
+                // FLANGE — the same comb circuit at flanger settings. Duda's point is that a comb
+                // and a flanger are one circuit; what splits them audibly is RANGE and MIX, so
+                // both move: CUT spans 0.1-10 ms of delay (a comb fundamental of 10 kHz down to
+                // 100 Hz) instead of the comb's 16 Hz-0.45*nyq, and the output is the classic
+                // 50/50 dry+wet sum rather than the comb's 100 % wet loop.
+                const float cut01 = juce::jlimit (0.0f, 1.0f,
+                    std::log (juce::jmax (20.0f, cutHz_) / 20.0f) / std::log (1000.0f));
+                const float f0    = 100.0f * std::pow (100.0f, cut01);       // 100 Hz .. 10 kHz
+                const float sMul  = std::exp2 (spread_ * kSpreadSemis / 12.0f);
+                combL_.dampScale = 1.0f;  combR_.dampScale = 1.0f;
+                combL_.loopDamp  = LoopDamp::None; combR_.loopDamp = LoopDamp::None;
+                combL_.fbkScale  = kFlangeFbTaper; combR_.fbkScale = kFlangeFbTaper;
+                const CombMode m = (type_ == Type::FLANGE_M) ? CombMode::Minus : CombMode::Plus;
+                combL_.mode = m; combR_.mode = m;
+                combL_.setParams (f0 / sMul,            res01, fs);
+                combR_.setParams (f0 * sMul * 1.0015f,  res01, fs);
+                preDrive_  = driveLin;
+                postMakeup_= driveMakeup (driveLin);
+                break;
+            }
+            case Type::LOW_EQ6: case Type::HIGH_EQ6:
+            {
+                // The 6 dB/oct shelves. Same +/-12 dB travel on RES as Low EQ / High EQ so the
+                // pair is compared at matched settings and the ONLY difference is the slope.
+                const bool  hi = (type_ == Type::HIGH_EQ6);
+                const float g  = res01 * 24.0f - 12.0f;
+                eqAL_.setShelf1 (cutHz_, g, hi, fs); eqAR_.setShelf1 (cutHz_, g, hi, fs);
+                satMix_ = driveMix (driveLin);          // fb603's EQ grammar: drive is the output stage
+                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                break;
+            }
+            case Type::FORMANT_SOP: case Type::FORMANT_TEN: case Type::FORMANT_ALTO:
+            {
+                // REGISTERS — pure data. CUT sweeps the vowel a->e->i->o->u inside the chosen
+                // register (the register's whole vowel set on one knob, which is what makes each
+                // one an instrument rather than a preset of Formant Morph), RES is the Q.
+                const float cut01  = juce::jlimit (0.0f, 1.0f,
+                    std::log (juce::jmax (20.0f, cutHz_) / 20.0f) / std::log (1000.0f));
+                const float qScale = std::pow (0.1f, res01) * 2.0f;
+                const int   r      = (type_ == Type::FORMANT_SOP) ? 1
+                                   : (type_ == Type::FORMANT_TEN) ? 2 : 3;
+                formantL_.reg = r; formantR_.reg = r;
+                formantL_.setMorph (cut01, qScale, fs);
+                formantR_.setMorph (cut01, qScale, fs);
+                formantL_.setDrive (driveLin); formantR_.setDrive (driveLin);
+                preDrive_ = 1.0f; postMakeup_ = 1.0f;
+                break;
+            }
             case Type::NONE:
             default:
                 preDrive_ = 1.0f; postMakeup_ = 1.0f;
@@ -2334,21 +2762,47 @@ public:
             case Type::KARPLUS:
             case Type::COMB_WIDE: case Type::COMB_OCTAVE: case Type::COMB_FIFTH:
             case Type::KARPLUS_BRIGHT: case Type::KARPLUS_MUTE:
+            // fb604 — the comb matrix is the SAME loop with a different filter in it, so it is the
+            // same call; only CombCore::loopDamp (set in setParams) differs.
+            case Type::COMB_RAW_P:    case Type::COMB_RAW_M:
+            case Type::COMB_BRIGHT_P: case Type::COMB_BRIGHT_M:
+            case Type::COMB_BAND_P:   case Type::COMB_BAND_M:
                 l = combL_.process (l * preDrive_) * postMakeup_;
                 r = combR_.process (r * preDrive_) * postMakeup_;
                 break;
+            case Type::FLANGE_P: case Type::FLANGE_M:
+            {
+                // fb604 — 50/50 dry + DELAYED. THIS is the other half of what separates a flanger
+                // from a comb: the group above is 100 % wet off the loop node, a flanger's notches
+                // are the interference between the DELAYED path and the dry one, so they null hard
+                // and the between-notch peaks reach +6 dB. process() advances the loop (and writes
+                // v[n]); tapOut is the v[n-D] it read on the way — see CombCore::tapOut for why
+                // mixing its RETURN value instead measured dead flat at RES 0.
+                const float li = l * preDrive_, ri = r * preDrive_;
+                combL_.process (li); combR_.process (ri);
+                l = 0.5f * (li + combL_.tapOut) * postMakeup_;
+                r = 0.5f * (ri + combR_.tapOut) * postMakeup_;
+                break;
+            }
             case Type::FORMANT_A:
             case Type::FORMANT_E:
             case Type::FORMANT_I:
             case Type::FORMANT_MORPH:
             case Type::FORMANT_O: case Type::FORMANT_U:
             case Type::FORMANT_WIDE: case Type::FORMANT_GROWL:
+            case Type::FORMANT_SOP: case Type::FORMANT_TEN: case Type::FORMANT_ALTO:   // fb604 — registers, same bank
                 l = formantL_.process (l * preDrive_) * postMakeup_;
                 r = formantR_.process (r * preDrive_) * postMakeup_;
                 break;
             case Type::PHASER_4P:
             case Type::PHASER_8P:
             case Type::PHASER_6P: case Type::PHASER_12P: case Type::PHASER_16P:
+            // fb604 — the polarity and stage-count variants ride the same core and the same call.
+            case Type::PHASER_4P_N:  case Type::PHASER_6P_N:  case Type::PHASER_8P_N:
+            case Type::PHASER_12P_N: case Type::PHASER_16P_N:
+            case Type::PHASER_24P:   case Type::PHASER_24P_N:
+            case Type::PHASER_32P:   case Type::PHASER_32P_N:
+            case Type::PHASER_48P:   case Type::PHASER_48P_N:
                 l = phaserL_.process (l); r = phaserR_.process (r); break;
             case Type::RING_MOD:
                 l = ringL_.process (l);   r = ringR_.process (r);   break;
@@ -2401,6 +2855,7 @@ public:
                 r = eqBR_.process (eqAR_.process (driveSat (r * preDrive_, satMix_))) * postMakeup_;
                 break;
             case Type::LOW_EQ: case Type::HIGH_EQ: case Type::AIR: case Type::BAND_EQ:
+            case Type::LOW_EQ6: case Type::HIGH_EQ6:   // fb604 — 1st-order shelf, same TDF2 kernel (b2 = a2 = 0)
                 l = eqAL_.process (driveSat (l * preDrive_, satMix_)) * postMakeup_;   // fb603 — satMix_ is 0 for BAND_EQ (bit-exact bypass)
                 r = eqAR_.process (driveSat (r * preDrive_, satMix_)) * postMakeup_;
                 break;
@@ -2557,6 +3012,13 @@ private:
     // fb603 — RADIO: 8-bit converter behind a fixed AGC (see Type::RADIO).
     static constexpr float kRadioBits       = 0.3333f;   // -> 4 + 0.3333*12 = 8 bits
     static constexpr float kRadioAgc        = 10.0f;
+
+    // fb604 — feedback tapers for the two comb cells that have NO loop filter. The shipped
+    // 0.995 assumed the one-pole LP was bleeding the recirculation; with nothing in the loop
+    // the pipe rings straight into the in-loop soft limiter. Both scale the WHOLE knob, so
+    // there is no step and the bottom half of RES is untouched in character.
+    static constexpr float kCombRawFbTaper  = 0.94f;
+    static constexpr float kFlangeFbTaper   = 0.90f;   // 0.995*0.90 = 0.90 max, the flanger range
 
     // Comb output trims (measured; the in-loop limiter caps level, these just
     // seat the four comb types near the LP24 reference so switching is neutral).

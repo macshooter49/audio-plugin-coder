@@ -1,5 +1,5 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  fltmeas.cpp — fb603 · THE MEASURED RESPONSE OF ALL 94 SHIPPING FILTER TYPES.
+//  fltmeas.cpp — fb604 · THE MEASURED RESPONSE OF EVERY SHIPPING FILTER TYPE (94 -> 118).
 //
 //    c++ -std=c++17 -O2 -I Tests -I Tests/shim -I Source Tests/fltmeas.cpp \
 //        -framework Accelerate -o /tmp/fltmeas
@@ -28,7 +28,11 @@ int main (int argc, char** argv)
     }
     std::printf ("# fltmeas — Terrain filter measurement (fs=%.0f, kNumTypes=%d)\n", FS, kNumTypes);
     std::printf ("# probe: white noise rms 0.002 (linear-region), sine probes amp 0.01 / THD 0.25\n");
-    std::printf ("# oversampled types run the SynthVoice 2x wrapper (linear-interp up / box decimate)\n\n");
+    // fb604 — this line USED TO SAY "linear-interp up / box decimate", and it was true of the
+    // harness and false of the plugin for a whole commit. It is no longer a claim typed by hand:
+    // halfbandCheckLine() re-cuts Source/SynthVoice.h and reports what is actually compiled in.
+    std::printf ("# oversampled types run the SynthVoice 2x POLYPHASE ALL-PASS HALF-BAND\n");
+    std::printf ("# %s\n\n", halfbandCheckLine().c_str());
 
     // ── OS wrapper reference: what the 2x wrapper alone does to a flat signal
     Curve WRAP;
@@ -37,7 +41,11 @@ int main (int argc, char** argv)
         Curve cl, cr; RunFlags fl;
         noiseCurve (R, 1000.0f, 0.0f, 0.0f, 0.002f, cl, cr, fl);
         WRAP = cl;
-        std::printf ("[OS-WRAPPER REFERENCE] identity filter through the voice's 2x path:\n ");
+        // fb604 — through the shipping half-band this row is +0.00 dB end to end. It is KEPT and
+        // still printed because it went to zero: it is the standing proof that the converter is
+        // transparent, and the fb603 row (-3.70 dB @ 16 kHz, -4.98 @ 20 kHz) is what a droop the
+        // tables were silently charging to 26 filters looks like when nobody prints it.
+        std::printf ("[OS-CONVERTER REFERENCE] identity filter through the voice's 2x path:\n ");
         for (double fq : { 100.0, 1000.0, 4000.0, 8000.0, 12000.0, 16000.0, 20000.0 })
         {
             size_t bi = 0; double bd = 1e9;
@@ -80,7 +88,7 @@ int main (int argc, char** argv)
         double denormRatio = 1.0;
         bool   silent = false;
     };
-    std::vector<Res> R (94);
+    std::vector<Res> R ((size_t) kNumTypes);
 
     auto gridIdx = [] (double f) { size_t bi = 0; double bd = 1e9;
         for (size_t i = 0; i < GRID.size(); ++i) if (std::fabs (GRID[i] - f) < bd) { bd = std::fabs (GRID[i] - f); bi = i; }
@@ -99,7 +107,7 @@ int main (int argc, char** argv)
         const double d = n * sxx - sx * sx;
         return (std::fabs (d) < 1e-12) ? 0.0 : (n * sxy - sx * sy) / d; };
 
-    const int NT = quick ? 6 : 94;
+    const int NT = quick ? 6 : kNumTypes;
     for (int t = 0; t < NT; ++t)
     {
         Runner rn; rn.init (t);

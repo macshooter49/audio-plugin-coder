@@ -10,17 +10,34 @@
 //  difference RMS is never used as an audibility metric.
 //
 //  It drives FilterSlot EXACTLY as SynthVoice does:
-//    · needsOversampling() types run through the voice's 2x linear-interp upsample / two filter
-//      calls / box decimate wrapper, with coefSr = 2*fs.
+//    · needsOversampling() types run through the voice's 2x POLYPHASE ALL-PASS HALF-BAND —
+//      HalfBandUp2x / HalfBandDown2x, COMPILED FROM Source/SynthVoice.h itself (see below),
+//      with coefSr = 2*fs.
 //    · everything else runs once at fs.
 //    · setParams(cutHz, res01, drv01, coefSr) per sample (change-gated inside).
 //  Any deviation from that and the numbers are about a filter the plugin does not ship.
+//
+//  🚨 fb604 — THE SILENT DETECTOR THAT LIVED INSIDE THE GATE.  Until this commit the block
+//  below was a HAND-WRITTEN COPY of the pre-fb603 wrapper: linear-interp up, 2-tap box decimate.
+//  fb603 replaced that in the plugin with the half-band and nobody re-typed it here, so the
+//  committed acceptance gate spent a whole commit judging an oversampler the plugin does not
+//  have — pessimistic by up to 5.0 dB at 20 kHz for all 26 needsOversampling() types, because
+//  for an identity filter the old cascade IS the base-rate FIR [0.25, 0.75].  flt_gate bar [9]
+//  (WIDE OPEN IS WIDE OPEN) was reading the wrapper's own rolloff as the filter's.
+//  The cure is structural: Tests/extract_halfband.py slices the five shipping structs out of
+//  Source/SynthVoice.h:74-126 VERBATIM into Tests/flt_halfband_extracted.h, and
+//  halfbandSourceCheck() below RE-CUTS SynthVoice.h at runtime and compares a hash.  A stale
+//  header, an edited SynthVoice.h, or a hand-edit of the generated copy all print
+//  HALF-BAND SOURCE DRIFT.  The detector prints whether it fired either way.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #pragma once
 
 #include "TerrainFilters.h"
+#include "flt_halfband_extracted.h"   // fb604 — GENERATED verbatim from Source/SynthVoice.h
 
 #include <cstdio>
+#include <cstdlib>
+#include <cctype>
 #include <cstdint>
 #include <cmath>
 #include <cstring>
@@ -36,7 +53,14 @@ static constexpr double FS = 48000.0;
 
 // ─────────────────────────────────────────────────────────── names (must
 // mirror terrainFilterEngineNames() in PluginProcessor.cpp, index for index).
-static const char* kName[94] = {
+// fb604 — the table is UNSIZED and carries the whole frozen 118-entry roster, so the harness is
+// index-for-index correct at 94 (today) and at 118 (the append) without a second edit landing in
+// the same commit as the DSP's. Two things keep it honest rather than merely long:
+//   · the static_assert below fails to COMPILE the moment kNumTypes outgrows the table;
+//   · flt_cardinality_gate.py site [kName] diffs it against terrainFilterEngineNames() name for
+//     name — a harness whose labels have quietly shifted mis-attributes every number it prints,
+//     which is the fb373 bug shape wearing a test's clothes.
+static const char* kName[] = {
  "Ladder LP 24","Ladder LP 12","Ladder HP 24","Diode LP","Acid 303",
  "SVF LP","SVF HP","SVF BP","SVF Notch","OB-X SVF",
  "Comb +","Comb -","Comb Shimmer","Karplus-Strong",
@@ -55,7 +79,117 @@ static const char* kName[94] = {
  "Phaser 6P","Phaser 12P","Phaser 16P","Diffusor","Bode Down",
  "Tilt","Low EQ","High EQ","Band EQ","Air","Add Bass",
  "Samp-Hold","Samp-Hold -","Scream LP","Scream BP",
- "Wasp","MS-20 LP","Polivoks","Ring Mod X2","Radio","Reverb Dark","Reverb Metal" };
+ "Wasp","MS-20 LP","Polivoks","Ring Mod X2","Radio","Reverb Dark","Reverb Metal",
+ // ── fb604 APPEND · 94..117 — the ROSTER CONTRACT, frozen. Order is load-bearing:
+ //    the dropdown writes idx/(N-1) into a choice(N) param, so a shifted name is a wrong ENGINE.
+ "Phaser 4P N","Phaser 6P N","Phaser 8P N","Phaser 12P N","Phaser 16P N",
+ "Phaser 24P","Phaser 24P N","Phaser 32P","Phaser 32P N","Phaser 48P","Phaser 48P N",
+ "Comb Raw +","Comb Raw -","Comb Bright +","Comb Bright -","Comb Band +","Comb Band -",
+ "Flange +","Flange -",
+ "Low EQ 6","High EQ 6",
+ "Formant Soprano","Formant Tenor","Formant Alto" };
+static constexpr int kNameCount = (int) (sizeof (kName) / sizeof (kName[0]));
+static_assert (kNameCount == kNumTypes,
+               "flt_measure.h kName[] does not have exactly tw::filters::kNumTypes entries — the "
+               "harness would print measured numbers under the wrong engine names, which is the "
+               "one failure a measurement file must not have. Add (or remove) roster entries in "
+               "kName[] and in flt_curve_diff.js's NAME. flt_cardinality_gate.py site [kName] "
+               "checks the CONTENT the same way; this catches the COUNT at compile time.");
+
+// ─────────────────────────────────────────────────────────── half-band drift check (fb604)
+//  The generated header is only trustworthy while it still matches the file it was cut from, so
+//  we re-cut SynthVoice.h HERE, at runtime, with the same rule extract_halfband.py uses, and
+//  compare FNV-1a/64 of the whitespace-canonicalised slices.  A DETECTOR THAT CAN NO-OP MUST
+//  PRINT WHETHER IT FIRED: halfbandCheckLine() always returns a line, including the case where
+//  the source could not be opened at all (which is itself a failure, not a pass).
+struct HbCheck { bool ok = false; bool readable = false; std::string where, detail;
+                 unsigned long long want = 0, got = tw::kHalfBandSrcHash; };
+
+static unsigned long long hbFnv1a (const std::string& s)
+{
+    unsigned long long h = 0xCBF29CE484222325ULL;
+    for (unsigned char c : s) { h ^= (unsigned long long) c; h *= 0x100000001B3ULL; }
+    return h;
+}
+
+static HbCheck halfbandSourceCheck()
+{
+    static const char* kStructs[5] = { "HalfBandCoefs", "HbAllpass", "HbBranch",
+                                       "HalfBandUp2x", "HalfBandDown2x" };
+    HbCheck R;
+    const char* env = std::getenv ("TI_SRC_ROOT");
+    std::vector<std::string> cand;
+    if (env && *env) cand.push_back (std::string (env) + "/Source/SynthVoice.h");
+    cand.push_back ("Source/SynthVoice.h");
+    cand.push_back ("../Source/SynthVoice.h");
+    cand.push_back ("plugins/TerrainInstrument/Source/SynthVoice.h");
+    std::string src;
+    for (const auto& c : cand)
+        if (FILE* fp = std::fopen (c.c_str(), "rb"))
+        {
+            std::fseek (fp, 0, SEEK_END); const long n = std::ftell (fp); std::fseek (fp, 0, SEEK_SET);
+            src.resize ((size_t) (n > 0 ? n : 0));
+            if (n > 0 && std::fread (&src[0], 1, (size_t) n, fp) != (size_t) n) src.clear();
+            std::fclose (fp);
+            if (! src.empty()) { R.readable = true; R.where = c; break; }
+        }
+    if (! R.readable)
+    {
+        R.detail = "Source/SynthVoice.h NOT READABLE from cwd — run the harness from "
+                   "plugins/TerrainInstrument, or set TI_SRC_ROOT";
+        return R;
+    }
+    std::string canon;
+    for (int k = 0; k < 5; ++k)
+    {
+        const std::string key = std::string ("struct ") + kStructs[k];
+        size_t m = std::string::npos;
+        for (size_t p = src.find (key); p != std::string::npos; p = src.find (key, p + 1))
+        {
+            const size_t ls = src.rfind ('\n', p); const size_t l0 = (ls == std::string::npos) ? 0 : ls + 1;
+            bool onlyWs = true;
+            for (size_t q = l0; q < p; ++q) if (! std::isspace ((unsigned char) src[q])) { onlyWs = false; break; }
+            const char after = (p + key.size() < src.size()) ? src[p + key.size()] : '\0';
+            if (onlyWs && ! (std::isalnum ((unsigned char) after) || after == '_')) { m = l0; break; }
+        }
+        if (m == std::string::npos)
+        { R.detail = "struct " + std::string (kStructs[k]) + " NOT FOUND in " + R.where; return R; }
+        const size_t ob = src.find ('{', m); if (ob == std::string::npos) { R.detail = "no body"; return R; }
+        int d = 0; size_t j = ob;
+        for (; j < src.size(); ++j)
+        { if (src[j] == '{') ++d; else if (src[j] == '}') { if (--d == 0) break; } }
+        const size_t sc = src.find (';', j); if (sc == std::string::npos) { R.detail = "no ;"; return R; }
+        std::string t = src.substr (m, sc + 1 - m), c;   // collapse whitespace runs, then trim
+        bool ws = false;
+        for (unsigned char ch : t) { if (std::isspace (ch)) ws = true;
+                                     else { if (ws && ! c.empty()) c.push_back (' '); ws = false; c.push_back ((char) ch); } }
+        if (! canon.empty()) canon.push_back ('\x1e');
+        canon += kStructs[k]; canon.push_back ('\x1f'); canon += c;
+    }
+    R.want = hbFnv1a (canon);
+    R.ok   = (R.want == R.got);
+    if (! R.ok)
+        R.detail = "the generated copy is NOT what " + R.where + " says today — "
+                   "run: python3 Tests/extract_halfband.py";
+    return R;
+}
+
+// One line, always printed by every tool that includes this header.
+static std::string halfbandCheckLine()
+{
+    const HbCheck c = halfbandSourceCheck();
+    char b[512];
+    if (c.ok)
+        std::snprintf (b, sizeof b, "HALF-BAND SOURCE CHECK: FIRED, MATCHED — %d structs cut from %s "
+                                    "(hash 0x%016llX). The 2x path measured here IS the shipping one.",
+                       tw::kHalfBandStructs, c.where.c_str(), c.got);
+    else if (! c.readable)
+        std::snprintf (b, sizeof b, "HALF-BAND SOURCE CHECK: DID NOT FIRE — %s", c.detail.c_str());
+    else
+        std::snprintf (b, sizeof b, "HALF-BAND SOURCE DRIFT: FIRED, MISMATCH — header 0x%016llX vs source "
+                                    "0x%016llX. %s", c.got, c.want, c.detail.c_str());
+    return std::string (b);
+}
 
 // ─────────────────────────────────────────────────────────── runner
 struct Runner
@@ -63,9 +197,15 @@ struct Runner
     FilterSlot f;
     bool   os = false;
     double coefSr = FS;
-    float  prevL = 0.0f, prevR = 0.0f;
     bool   isNone = false;
     bool   bypassIdentity = false;   // "OS wrapper alone" reference mode
+
+    // fb604 — the SHIPPING converters, compiled from Source/SynthVoice.h (flt_halfband_extracted.h).
+    // One interpolator per channel and one decimator per channel, exactly the voice's layout at
+    // SynthVoice.h:6762 (osUp1L_/osUp1R_ + osDnL_/osDnR_). The old two-line linear-interp/box copy
+    // that used to live here cost -3.70 dB @ 16 kHz / -4.98 dB @ 20 kHz before the filter ran.
+    tw::HalfBandUp2x   upL, upR;
+    tw::HalfBandDown2x dnL, dnR;
 
     void init (int typeIdx)
     {
@@ -74,9 +214,9 @@ struct Runner
         os     = f.needsOversampling();
         coefSr = os ? FS * 2.0 : FS;
         isNone = (typeIdx == (int) Type::NONE);
-        prevL = prevR = 0.0f;
+        upL.reset(); upR.reset(); dnL.reset(); dnR.reset();
     }
-    void resetState() { f.reset(); prevL = prevR = 0.0f; }
+    void resetState() { f.reset(); upL.reset(); upR.reset(); dnL.reset(); dnR.reset(); }
     void setP (float cut, float res, float drv) { f.setParams (cut, res, drv, coefSr); }
 
     inline void step (float xL, float xR, float& oL, float& oR)
@@ -87,11 +227,16 @@ struct Runner
             if (! bypassIdentity) f.processStereo (l, r);
             oL = l; oR = r; return;
         }
-        const float mL = 0.5f * (prevL + xL), mR = 0.5f * (prevR + xR);
-        float aL = mL, aR = mR; if (! bypassIdentity) f.processStereo (aL, aR);
-        float bL = xL, bR = xR; if (! bypassIdentity) f.processStereo (bL, bR);
-        prevL = xL; prevR = xR;
-        oL = 0.5f * (aL + bL); oR = 0.5f * (aR + bR);
+        // Upsample both channels, run the filter ONCE PER PHASE (stereo, as the voice does:
+        // filterBuses(phase0) then filterBuses(phase1)), decimate. 4 multiplies per channel
+        // per direction, no delay line — see the fb603 comment block in SynthVoice.h.
+        float eL, oddL, eR, oddR;
+        upL.process (xL, eL, oddL);
+        upR.process (xR, eR, oddR);
+        float p0L = eL,   p0R = eR;   if (! bypassIdentity) f.processStereo (p0L, p0R);
+        float p1L = oddL, p1R = oddR; if (! bypassIdentity) f.processStereo (p1L, p1R);
+        oL = dnL.process (p0L, p1L);
+        oR = dnR.process (p0R, p1R);
     }
 };
 

@@ -1,19 +1,30 @@
 #!/usr/bin/env bash
 # ══════════════════════════════════════════════════════════════════════════════════════════════
-#  fb603_filter_gates.sh — the three fb603 filter gates, each run with its mutation control.
+#  fb604_filter_gates.sh — the three fb603 filter gates, each run with its mutation control.
 #
-#      bash Tests/fb603_filter_gates.sh              # from plugins/TerrainInstrument, ~4 min
-#      bash Tests/fb603_filter_gates.sh --quick      # the 12-type spine, 29 s (measured)
-#      TI_GATE_OUT=<dir> bash Tests/fb603_filter_gates.sh
+#      bash Tests/fb604_filter_gates.sh              # from plugins/TerrainInstrument, ~4 min
+#      bash Tests/fb604_filter_gates.sh --quick      # the spine only, ~35 s (measured)
+#      TI_GATE_OUT=<dir> bash Tests/fb604_filter_gates.sh
 #
-#  THE THREE GATES
-#    Tests/flt_gate.cpp            the filter section's acceptance test — 11 bars over all 94
-#                                  types in 18 s, sharing Tests/flt_measure.h with the report.
-#    Tests/flt_cardinality_gate.py the roster moves as ONE number across all nine places it is
-#                                  written down (this is what unblocks the growth to 118). <1 s.
+#  THE FOUR GATES
+#    Tests/extract_halfband.py     \U0001f6a8 fb604, AND IT RUNS FIRST. The 2x oversampler the two C++
+#                                  harnesses compile is SLICED OUT OF Source/SynthVoice.h, not
+#                                  copied by hand. fb603 replaced the plugin's converter and left
+#                                  a hand-written copy of the OLD one in Tests/flt_measure.h, so
+#                                  the committed acceptance gate judged an oversampler the plugin
+#                                  does not have for a whole commit: every oversampled type read
+#                                  up to 5.0 dB dark at 20 kHz, and bar [2] read Bode Shifter's
+#                                  stress peak as 3.69 (PASS) where it is really 4.14 (FAIL).
+#                                  A gate that models the wrong DSP is worse than no gate.
+#    Tests/flt_gate.cpp            the filter section's acceptance test — 12 bars over every
+#                                  roster type in 18-24 s, sharing Tests/flt_measure.h with the
+#                                  report. Bar [H] re-verifies the slice above at RUNTIME.
+#    Tests/flt_cardinality_gate.py the roster moves as ONE number across all TEN places it is
+#                                  written down (this is what made the growth to 118 safe). <1 s.
 #    Tests/flt_curve_diff.js       index.html's drawn curve vs the DSP that actually runs. <1 s
 #                                  against Tests/flt_curves.csv, which Tests/fltmeas.cpp writes.
 #  Supporting: Tests/flt_measure.h (the one measurement both C++ tools share),
+#              Tests/flt_halfband_extracted.h (GENERATED — do not edit),
 #              Tests/fltmeas.cpp (the human-readable report + the csv),
 #              Tests/flt_gate_control.py (the mutation-control bookkeeping).
 #
@@ -23,8 +34,12 @@
 #                       OWN OFFENDERS: line, so it is always a type that currently PASSES that
 #                       bar. A hardcoded victim that later started failing on its own would turn
 #                       the control into a tautology without anyone noticing.
-#    · cardinality    — 13 mutations, each breaking one roster site in a throwaway copy of the
-#                       tree; the gate must go red AND name the site.
+#    · cardinality    — 15 mutations, each breaking one roster site in a throwaway copy of the
+#                       tree. fb604: going red is no longer enough. The matrix now runs an
+#                       UNMUTATED copy first and a row only counts if it adds a claim that
+#                       baseline did not make — because with four agents editing the roster in
+#                       parallel the tree is red for minutes at a time, and during those minutes
+#                       'rc != 0' proved nothing at all.
 #    · curve diff     — 3 mutations; each must catch every type that was clean before it.
 #
 #  ⚠️ flt_gate is EXPECTED TO BE RED until the fb603 fix pass lands — it is the acceptance test
@@ -33,17 +48,38 @@
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 set -u
 export LC_ALL=C          # the gate prints box-drawing UTF-8; sed on macOS needs a byte locale
-OUT="${TI_GATE_OUT:-/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/fb603/gates}"
+OUT="${TI_GATE_OUT:-/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/fb604/gates}"
 QUICK=""
 SPINE=""
-# mirrors SPINE[] in flt_gate.cpp — the 12 types --quick measures. A victim outside the
-# measured set would make every control read BROKEN for a reason that is not the detector.
-[ "${1:-}" = "--quick" ] && { QUICK="--quick"; SPINE="0 3 5 9 10 23 43 48 75 83 85 91"; }
+# fb604 — the spine is NOT re-typed here any more. flt_gate.cpp prints `SPINE: ...` on every run
+# and Tests/flt_gate_control.py reads it from the normal run's own output. The copy that used to
+# live on this line was already one roster short of the gate's when the append landed, and a
+# victim outside the measured set makes every control read BROKEN for a reason that is not the
+# detector.
+[ "${1:-}" = "--quick" ] && QUICK="--quick"
 mkdir -p "$OUT"
 rc_all=0
 
-echo "══ fb603 FILTER GATES ══  $(date '+%Y-%m-%d %H:%M')  ${QUICK:-full 94 types}"
+echo "══ fb604 FILTER GATES ══  $(date '+%Y-%m-%d %H:%M')  ${QUICK:-full roster}"
 echo "   Source/TerrainFilters.h  $(stat -f '%Sm' -t '%Y-%m-%d %H:%M' Source/TerrainFilters.h 2>/dev/null)"
+echo
+
+# ── [0/4] THE OVERSAMPLER SLICE — regenerate, then prove it matches ──────────────────────────
+echo "── [0/4] extract_halfband.py — the harness compiles the SHIPPING 2x converter ────────"
+python3 Tests/extract_halfband.py       | sed 's/^/   /' || rc_all=1
+python3 Tests/extract_halfband.py --check | sed 's/^/   /' || { echo "   STALE AFTER REGENERATION — impossible unless the slicer is broken"; rc_all=1; }
+# the control: a hand-edit of the generated copy must be caught, both by --check and by the
+# gate's own runtime bar [H]. A detector that can no-op must print whether it fired.
+cp Tests/flt_halfband_extracted.h "$OUT/hb.orig"
+sed -i '' 's/a0 = 0\.0890947891f/a0 = 0.0890947892f/' Tests/flt_halfband_extracted.h 2>/dev/null \
+  || sed -i 's/a0 = 0\.0890947891f/a0 = 0.0890947892f/' Tests/flt_halfband_extracted.h
+if python3 Tests/extract_halfband.py --check > "$OUT/hb.mut.txt" 2>&1; then
+  echo "   MUTATION CONTROL: BROKEN — a changed coefficient in the generated copy read FRESH"
+  rc_all=1
+else
+  echo "   MUTATION CONTROL: one digit of a0 changed in the generated copy -> $(cat "$OUT/hb.mut.txt")"
+fi
+cp "$OUT/hb.orig" Tests/flt_halfband_extracted.h
 echo
 
 # ── build ─────────────────────────────────────────────────────────────────────────────────────
@@ -54,7 +90,7 @@ done
 [ -x "$OUT/flt_gate" ] || exit 1
 
 # ── 1. THE ACCEPTANCE GATE, and one mutation per bar ─────────────────────────────────────────
-echo "── [1/3] flt_gate — the filter section's acceptance test ─────────────────────────────"
+echo "── [1/4] flt_gate — the filter section's acceptance test ─────────────────────────────"
 "$OUT/flt_gate" $QUICK > "$OUT/flt_gate.normal.txt" 2>&1
 gate_rc=$?
 grep -E '^  (PASS|FAIL)  ' "$OUT/flt_gate.normal.txt" | sed 's/^/   /'
@@ -62,6 +98,16 @@ echo "   -> rc=$gate_rc   full output: $OUT/flt_gate.normal.txt"
 echo
 echo "   MUTATION CONTROLS — each injects that bar's own defect into a type that currently PASSES it."
 echo "   A row is OK only if the injected type appears as a NEW offender for that bar."
+# bar [H] takes no victim — its subject is the compiled-in oversampler hash, not a type.
+TI_FLT_MUT=hb "$OUT/flt_gate" $QUICK > "$OUT/flt_gate.mut.hb.txt" 2>&1
+if grep -q '^  FAIL  \[H\]' "$OUT/flt_gate.mut.hb.txt" && grep -q '^  PASS  \[H\]' "$OUT/flt_gate.normal.txt"; then
+  printf '     %-7s the compiled oversampler hash                      PASS -> FAIL      OK\n' "hb"
+else
+  printf '     %-7s BROKEN CONTROL — bar [H] did not move (normal %s, mutated %s)\n' "hb" \
+         "$(grep -m1 -o '^  \(PASS\|FAIL\)  \[H\]' "$OUT/flt_gate.normal.txt"  | tr -s ' ')" \
+         "$(grep -m1 -o '^  \(PASS\|FAIL\)  \[H\]' "$OUT/flt_gate.mut.hb.txt" | tr -s ' ')"
+  rc_all=1
+fi
 for m in nan leak stress loop silent mono thd dup osc open; do
   # The victim must be CLEAN for this bar in the normal run — neither an existing offender nor a
   # type the bar skips by design. Tests/flt_gate_control.py reads both machine lines and says so.
@@ -84,7 +130,7 @@ done
 echo
 
 # ── 2. THE CARDINALITY GUARD ──────────────────────────────────────────────────────────────────
-echo "── [2/3] flt_cardinality_gate.py — the roster moves as ONE number ───────────────────"
+echo "── [2/4] flt_cardinality_gate.py — the roster moves as ONE number ───────────────────"
 python3 Tests/flt_cardinality_gate.py > "$OUT/cardinality.normal.txt" 2>&1
 crc=$?
 grep -E '^  (PASS|FAIL)  ' "$OUT/cardinality.normal.txt" | sed 's/^/   /'
@@ -98,9 +144,12 @@ tail -1 "$OUT/cardinality.mutations.txt" | sed 's/^/   /'
 echo
 
 # ── 3. THE CURVE-vs-DSP DIFF ──────────────────────────────────────────────────────────────────
-echo "── [3/3] flt_curve_diff.js — the drawn curve vs the filter that runs ────────────────"
-if [ ! -f Tests/flt_curves.csv ] || [ Source/TerrainFilters.h -nt Tests/flt_curves.csv ]; then
-  echo "   Tests/flt_curves.csv is older than Source/TerrainFilters.h — regenerating (~40 s)"
+echo "── [3/4] flt_curve_diff.js — the drawn curve vs the filter that runs ────────────────"
+# fb604 — SynthVoice.h counts as ground truth too now: the 2x converter lives there, and a csv
+# measured through yesterday's converter is exactly the failure mode this commit exists to close.
+if [ ! -f Tests/flt_curves.csv ] || [ Source/TerrainFilters.h -nt Tests/flt_curves.csv ] \
+   || [ Source/SynthVoice.h -nt Tests/flt_curves.csv ]; then
+  echo "   Tests/flt_curves.csv is older than the DSP (TerrainFilters.h / SynthVoice.h) — regenerating (~50 s)"
   "$OUT/fltmeas" --csv Tests/flt_curves.csv > "$OUT/fltmeas.txt" 2>/dev/null
 fi
 node Tests/flt_curve_diff.js > "$OUT/curve_diff.normal.txt" 2>&1

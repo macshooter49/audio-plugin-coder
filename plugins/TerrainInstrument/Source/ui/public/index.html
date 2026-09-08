@@ -744,7 +744,14 @@ if(window.__cardOnly)document.documentElement.className+=' card-only';
    declaration, never a wrapper around it — Tests/flt_cardinality_gate.py extracts them by
    matching `NAME = [`, and a wrapper would make all four unparseable at once.
    ══════════════════════════════════════════════════════════════════════════════════════════ */
-window.FLT_TYPE_COUNT = 94;   /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  Grows HERE first. */
+window.FLT_TYPE_COUNT = 118;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  Grows HERE first.
+                                 fb604 — 94 → 118: twenty-four APPENDED at 94..117 (5 inverted-mix
+                                 phasers · 24/32/48-stage phasers ± · the comb damping matrix ×
+                                 polarity · 2 flangers · 2 first-order shelves · 3 formant
+                                 registers). Indices 0..93 are untouched, so every saved patch
+                                 recalls the engine it was written with. This line moved FIRST and
+                                 the four lists below shouted until they caught up — which is
+                                 exactly what fb603 built the shout for. */
 (function () {
   var PARAMS = ['SYN_FILTER1_TYPE', 'SYN_FILTER2_TYPE', 'SYN_FLT_ENGINE'];
   var lists = {}, shouted = {}, problems = [];
@@ -755,7 +762,11 @@ window.FLT_TYPE_COUNT = 94;   /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  
     try { console.error ('[FILTER ROSTER] ' + msg); } catch (e) {}
     try { window.__fltDesync = { ok: false, problems: problems.slice (), count: N (), lists: lists }; } catch (e) {}
   }
-  function N () { return (window.FLT_TYPE_COUNT | 0) || 94; }
+  /* fb604 — the || fallback is the LAST roster-length literal on the page, and it was still 94
+     after the count moved to 118: it only fires if the declaration above somehow did not run,
+     and firing it silently would normalise every type index against the OLD cardinality —
+     the exact fb373 failure this whole block exists to stop, hiding in its own safety net. */
+  function N () { return (window.FLT_TYPE_COUNT | 0) || 118; }
 
   /* THE PARAMETER IS THE AUTHORITY (fb373).  0 = the WebView has not handed the properties
      over yet, which is unknowable, not wrong — so it is a PASS, never a guess. */
@@ -9954,12 +9965,12 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // bug exactly, where Cassette wrote 1.0 and got clamped back to Studio. Handing the
           // writer all 94 makes opts.length === the param's cardinality, so the generic path is
           // correct by construction and needs no special case at all.
-          var FLT_ENGINES=['Ladder LP 24','Ladder LP 12','Ladder HP 24','Diode LP','Acid 303','SVF LP','SVF HP','SVF BP','SVF Notch','OB-X SVF','Comb +','Comb -','Comb Shimmer','Karplus-Strong','Formant A','Formant E','Formant I','Formant Morph','Reverb Filter','Phaser 4P','Phaser 8P','Ring Mod','Bode Shifter','Bit-Crush','Waveshaper','Grain Mask','Reverb Filter 2','None','Ladder LP 6','Ladder LP 18','German LP','Germanium LP','French LP','Acid Scream','Xpd HP 6','Xpd HP 12','Xpd HP 18','Xpd BP 12','Xpd BP 24','Xpd BP 6','Xpd Notch','Xpd Phase','Xpd 1-Pole','SVF LP 24','SVF HP 24','SVF BP 24','SVF Notch 24','SVF Peak','SEM LP','SEM Notch','SEM HP','SEM BP','Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP','Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Karplus Bright','Karplus Mute','Formant O','Formant U','Formant Wide','Formant Growl','Phaser 6P','Phaser 12P','Phaser 16P','Diffusor','Bode Down','Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass','Samp-Hold','Samp-Hold -','Scream LP','Scream BP','Wasp','MS-20 LP','Polivoks','Ring Mod X2','Radio','Reverb Dark','Reverb Metal'];
+          var FLT_ENGINES=['Ladder LP 24','Ladder LP 12','Ladder HP 24','Diode LP','Acid 303','SVF LP','SVF HP','SVF BP','SVF Notch','OB-X SVF','Comb +','Comb -','Comb Shimmer','Karplus-Strong','Formant A','Formant E','Formant I','Formant Morph','Reverb Filter','Phaser 4P','Phaser 8P','Ring Mod','Bode Shifter','Bit-Crush','Waveshaper','Grain Mask','Reverb Filter 2','None','Ladder LP 6','Ladder LP 18','German LP','Germanium LP','French LP','Acid Scream','Xpd HP 6','Xpd HP 12','Xpd HP 18','Xpd BP 12','Xpd BP 24','Xpd BP 6','Xpd Notch','Xpd Phase','Xpd 1-Pole','SVF LP 24','SVF HP 24','SVF BP 24','SVF Notch 24','SVF Peak','SEM LP','SEM Notch','SEM HP','SEM BP','Multi LP+HP','Multi LP+BP','Multi LP+Notch','Multi HP+BP','Multi HP+Notch','Multi BP+BP','Multi BP+Notch','Multi Peak+Peak','Multi Notch+Notch','Multi Peak+HP','Comb Wide','Comb Octave','Comb Fifth','Comb Damp','Karplus Bright','Karplus Mute','Formant O','Formant U','Formant Wide','Formant Growl','Phaser 6P','Phaser 12P','Phaser 16P','Diffusor','Bode Down','Tilt','Low EQ','High EQ','Band EQ','Air','Add Bass','Samp-Hold','Samp-Hold -','Scream LP','Scream BP','Wasp','MS-20 LP','Polivoks','Ring Mod X2','Radio','Reverb Dark','Reverb Metal','Phaser 4P N','Phaser 6P N','Phaser 8P N','Phaser 12P N','Phaser 16P N','Phaser 24P','Phaser 24P N','Phaser 32P','Phaser 32P N','Phaser 48P','Phaser 48P N','Comb Raw +','Comb Raw -','Comb Bright +','Comb Bright -','Comb Band +','Comb Band -','Flange +','Flange -','Low EQ 6','High EQ 6','Formant Soprano','Formant Tenor','Formant Alto'];   /* fb604 — 94..117 APPENDED */
           // group index PER ENGINE, generated by classifying the enum-order names. The enum is
           // NOT grouped contiguously (Ladder LP 24 sits at 0, Comb - at 11), so a range table
           // is wrong by construction — this is a straight lookup.
           var FLT_GRPNAMES=['Ladder','Xpander','State-Var','Multi','Comb','Formant','Phase','EQ & Tone','Reverb','Dirty'];
-          var FLT_ENGGRP=[0,0,0,0,0,2,2,2,2,2,4,4,4,4,5,5,5,5,8,6,6,9,6,9,9,9,8,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,9,9,9,9,2,2,0,9,9,8,8];
+          var FLT_ENGGRP=[0,0,0,0,0,2,2,2,2,2,4,4,4,4,5,5,5,5,8,6,6,9,6,9,9,9,8,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,9,9,9,9,2,2,0,9,9,8,8,6,6,6,6,6,6,6,6,6,6,6,4,4,4,4,4,4,4,4,7,7,5,5,5];   /* fb604 — 94..117: 11 Phase, 8 Comb, 2 EQ & Tone, 3 Formant */
           /* fb603 — both roster-length lists register against window.FLT_TYPE_COUNT. A short
              FLT_ENGGRP used to silently file every engine past the gap under group 0 ("Ladder");
              a short FLT_ENGINES made the FX picker write idx/(len-1) — a different engine. Now
@@ -22345,6 +22356,21 @@ setTimeout(function wireSynControls () {
         { idx: 61, label: 'Multi Peak+HP', group: 'MULTI', active: true },
         { idx: 10, label: 'Comb +', group: 'COMB & RESO', active: true },
         { idx: 11, label: 'Comb -', group: 'COMB & RESO', active: true },
+        /* fb604 — THE COMB DAMPING MATRIX, filed next to the comb it is a variant of. Our comb
+           ships a FIXED, never-user-reachable one-pole LP in the loop (fcDamp = 2·f0 + 6000,
+           TerrainFilters.h CombCore::setParams) — Moorer's "string". The matrix is the other
+           three loop filters × both feedback polarities: none = open pipe, HP = tin can,
+           LP+HP = tuned formant resonator. Four instruments, not four presets. */
+        { idx: 105, label: 'Comb Raw +', group: 'COMB & RESO', active: true },
+        { idx: 106, label: 'Comb Raw -', group: 'COMB & RESO', active: true },
+        { idx: 107, label: 'Comb Bright +', group: 'COMB & RESO', active: true },
+        { idx: 108, label: 'Comb Bright -', group: 'COMB & RESO', active: true },
+        { idx: 109, label: 'Comb Band +', group: 'COMB & RESO', active: true },
+        { idx: 110, label: 'Comb Band -', group: 'COMB & RESO', active: true },
+        /* fb604 — the same delay-line circuit at FLANGER settings: 0.1–10 ms from CUT at ~50 %
+           mix, both polarities. The audible split from a comb is range and mix, not topology. */
+        { idx: 111, label: 'Flange +', group: 'COMB & RESO', active: true },
+        { idx: 112, label: 'Flange -', group: 'COMB & RESO', active: true },
         { idx: 62, label: 'Comb Wide', group: 'COMB & RESO', active: true },
         { idx: 63, label: 'Comb Octave', group: 'COMB & RESO', active: true },
         { idx: 64, label: 'Comb Fifth', group: 'COMB & RESO', active: true },
@@ -22361,17 +22387,48 @@ setTimeout(function wireSynControls () {
         { idx: 17, label: 'Formant Morph', group: 'FORMANT', active: true },
         { idx: 70, label: 'Formant Wide', group: 'FORMANT', active: true },
         { idx: 71, label: 'Formant Growl', group: 'FORMANT', active: true },
+        /* fb604 — PURE DATA, no new DSP. All eight shipping formant engines read ONE vowel table:
+           the Csound BASS register. These are the soprano, tenor and alto sets from the same
+           published table, so CUT sweeps a→e→i→o→u in a voice that is not a bass. */
+        { idx: 115, label: 'Formant Soprano', group: 'FORMANT', active: true },
+        { idx: 116, label: 'Formant Tenor', group: 'FORMANT', active: true },
+        { idx: 117, label: 'Formant Alto', group: 'FORMANT', active: true },
         { idx: 19, label: 'Phaser 4P', group: 'PHASE & DIFFUSE', active: true },
         { idx: 72, label: 'Phaser 6P', group: 'PHASE & DIFFUSE', active: true },
         { idx: 20, label: 'Phaser 8P', group: 'PHASE & DIFFUSE', active: true },
         { idx: 73, label: 'Phaser 12P', group: 'PHASE & DIFFUSE', active: true },
         { idx: 74, label: 'Phaser 16P', group: 'PHASE & DIFFUSE', active: true },
+        /* fb604 — THE INVERTED-MIX PHASERS. The phaser core hardcodes 0.5·(in + v); these are the
+           same allpass chain at 0.5·(in − v). NOT a duplicate, and provably so: for a
+           unity-magnitude allpass A, |1+A|² + |1−A|² = 4, so the two notch sets INTERLEAVE — the
+           N variant's notches sit exactly where the P variant's peaks are. Drawn from the same
+           evaluator with sign = −1, so the picture shows the interleave rather than asserting it. */
+        { idx: 94, label: 'Phaser 4P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 95, label: 'Phaser 6P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 96, label: 'Phaser 8P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 97, label: 'Phaser 12P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 98, label: 'Phaser 16P N', group: 'PHASE & DIFFUSE', active: true },
+        /* fb604 — PAST MAXST = 16 the phaser stops being a phaser. At ~24 notches the sweep no
+           longer reads as motion; it reads as a static spectral comb with a vowel-ish resonance,
+           a timbre the roster has none of. 99 (Phaser 24P) is the index that clears the owner's
+           "at least 100 filters" bar. */
+        { idx: 99, label: 'Phaser 24P', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 100, label: 'Phaser 24P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 101, label: 'Phaser 32P', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 102, label: 'Phaser 32P N', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 103, label: 'Phaser 48P', group: 'PHASE & DIFFUSE', active: true },
+        { idx: 104, label: 'Phaser 48P N', group: 'PHASE & DIFFUSE', active: true },
         { idx: 75, label: 'Diffusor', group: 'PHASE & DIFFUSE', active: true },
         { idx: 22, label: 'Bode Shifter', group: 'PHASE & DIFFUSE', active: true },
         { idx: 76, label: 'Bode Down', group: 'PHASE & DIFFUSE', active: true },
         { idx: 77, label: 'Tilt', group: 'EQ & TONE', active: true },
         { idx: 78, label: 'Low EQ', group: 'EQ & TONE', active: true },
         { idx: 79, label: 'High EQ', group: 'EQ & TONE', active: true },
+        /* fb604 — FIRST-ORDER shelves. Low/High EQ are RBJ 2nd-order at S = 1 (BellEQ::setShelf);
+           we ship no 6 dB/oct shelf at all, and the transition is a genuinely different sound —
+           a gentle tilt you can push to ±12 dB without the corner announcing itself. */
+        { idx: 113, label: 'Low EQ 6', group: 'EQ & TONE', active: true },
+        { idx: 114, label: 'High EQ 6', group: 'EQ & TONE', active: true },
         { idx: 80, label: 'Band EQ', group: 'EQ & TONE', active: true },
         { idx: 81, label: 'Air', group: 'EQ & TONE', active: true },
         { idx: 82, label: 'Add Bass', group: 'EQ & TONE', active: true },
@@ -31477,7 +31534,7 @@ restoreThemeFromBackend();
     hard-coded 48000, so on a 44.1 k session every spectrum sat 8.8 % sharp against its own curve. */
   }catch(e){} if(base) base(d); };
   // Per-index category — every filter type gets its own representative, knob-reactive shape.
-  var CAT=['lp24','lp','hp24','lp24','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formanta','formante','formanti','formantm','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp6','lp18','lp24','lp24','lp24','acid','hp6','hp','hp18','bp','bp24','bp','notch','ap','lp6','lp24','hp24','bp24','notch24','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','comb','comb','comb','comb','karplus','karplus','formanto','formantu','formantw','formantg','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','air','addbass','samphold','samphm','scream','screambp','lp','lp','lp24','ring','radio','reverbd','creverb'];   // fb165 — 94 entries, enum order (display model key per type)
+  var CAT=['lp24','lp','hp24','lp24','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formanta','formante','formanti','formantm','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp6','lp18','lp24','lp24','lp24','acid','hp6','hp','hp18','bp','bp24','bp','notch','ap','lp6','lp24','hp24','bp24','notch24','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','combwide','comboct','comb5th','combdamp','karplus','karplus','formanto','formantu','formantw','formantg','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','air','addbass','samphold','samphm','scream','screambp','lp','lp','lp24','ring','radio','reverbd','creverb','phaserN4','phaserN6','phaserN8','phaserN12','phaserN16','phaser24','phaserN24','phaser32','phaserN32','phaser48','phaserN48','combraw','combrawn','combbri','combbrin','combband','combbandn','flange','flangen','loweq6','higheq6','fmtsop','fmtten','fmtalt'];   // fb165 — enum order (display model key per type) · fb604 — 118 entries, 94..117 appended
   /* fb603 — CAT is the fourth roster-length list: index N here is the DISPLAY MODEL for engine N.
      Short by one and every engine past the gap draws its NEIGHBOUR's curve — the "no flat
      placeholder lines, ever" law broken in the quietest possible way. It registers like the
@@ -31489,7 +31546,13 @@ restoreThemeFromBackend();
      phasers / grain / etc.) can never be cached across frames; every key ABSENT here is a pure
      static function of (type, fc, res, drv). ⚠️ Add any NEW t-reading type here or its idle
      motion freezes (knob response stays correct either way — all knob inputs are in the key). */
-  var MAG_ANIM={comb:1,combn:1,shimmer:1,karplus:1,reverb:1,reverbd:1,creverb:1,formanta:1,formante:1,formanti:1,formanto:1,formantu:1,formantm:1,formantw:1,formantg:1,phaser4:1,phaser8:1,phaser6:1,phaser12:1,phaser16:1,ring:1,bode:1,crush:1,shaper:1,grain:1,diffusor:1,addbass:1,samphold:1,samphm:1,radio:1};   /* fb603 — samphm joins; `ap` LEAVES: the new Xpd Phase model reads no t, so it caches like every other static shape */
+  var MAG_ANIM={combdamp:1,shimmer:1,karplus:1,reverb:1,reverbd:1,creverb:1,formanta:1,formante:1,formanti:1,formanto:1,formantu:1,formantm:1,formantw:1,formantg:1,fmtsop:1,fmtten:1,fmtalt:1,ring:1,bode:1,crush:1,shaper:1,grain:1,diffusor:1,addbass:1,samphold:1,samphm:1,radio:1};   /* fb603 — samphm joins; `ap` LEAVES: the new Xpd
+     Phase model reads no t, so it caches like every other static shape.  fb604 — the SEVEN keys `comb`, `combn`
+     and the five phasers LEAVE for the same reason: combMag() and apChain() are the DSP's own transfer
+     functions and neither reads t, so those thirteen engines (2 combs + 4 comb aliases + … + 16 phaser keys)
+     now cache like every static shape instead of re-evaluating 12 time samples per pixel per frame. The three
+     new formant REGISTERS join, because the vowel bank's vibrato does read t. `combdamp` joins: Comb Damp keeps
+     the animated heuristic under its own key. */
   // single biquad-notch amplitude (0 at fk, →1 away) — used to build phaser combs
   function ntch(f,fk,Qn){ var r=f/fk, n=1-r*r; return Math.abs(n)/Math.sqrt(n*n+(r/Qn)*(r/Qn)); }
   // resonant peak amplitude around fp
@@ -31507,10 +31570,30 @@ restoreThemeFromBackend();
   var VF=[[600,1040,2250,2450],[400,1620,2400,2800],[250,1750,2600,3050],[400,750,2400,2600],[350,600,2400,2675]];
   var VB=[[60,70,110,120],[40,80,100,120],[60,90,100,120],[40,80,100,120],[40,80,100,120]];
   var VG=[[0,-7,-9,-9],[0,-12,-9,-12],[0,-30,-16,-22],[0,-11,-21,-20],[0,-20,-32,-28]];
-  var FMB={v:-9,c:-9,q:-9,F:[0,0,0,0],Q:[0,0,0,0],G:[0,0,0,0]};
-  function fmtBank(v,c01,qs){
-    if(FMB.v===v&&FMB.c===c01&&FMB.q===qs) return FMB;
-    FMB.v=v; FMB.c=c01; FMB.q=qs; var k;
+  /* ══ fb604 — THREE MORE REGISTERS OF THE SAME PUBLISHED TABLE ══════════════════════════════
+     VF/VB/VG above are the Csound vowel table's BASS register, copied index for index by fb603
+     because that is the one row FormantBank holds. All eight shipping formant engines therefore
+     sing in the same voice. 115..117 add the SOPRANO, TENOR and ALTO rows of that same table —
+     data, not DSP, which is why the roster contract calls them free. Format is identical:
+     [F1..F4] Hz · [BW1..BW4] Hz · [dB1..dB4], vowels in a,e,i,o,u order.
+     Soprano vs bass on /a/ is F1 800 vs 600 and F3 2900 vs 2250 — a different singer, not a
+     detune. FREG[0] IS VF/VB/VG, so the eight existing engines are bit-identical. */
+  var VFS=[[800,1150,2900,3900],[350,2000,2800,3600],[270,2140,2950,3900],[450,800,2830,3800],[325,700,2700,3800]];
+  var VBS=[[80,90,120,130],[60,100,120,150],[60,90,100,120],[70,80,100,130],[50,60,170,180]];
+  var VGS=[[0,-6,-32,-20],[0,-20,-15,-40],[0,-12,-26,-26],[0,-11,-22,-22],[0,-16,-35,-40]];
+  var VFT=[[650,1080,2650,2900],[400,1700,2600,3200],[290,1870,2800,3250],[400,800,2600,2800],[350,600,2700,2900]];
+  var VBT=[[80,90,120,130],[70,80,100,120],[40,90,100,120],[40,80,100,120],[40,60,100,120]];
+  var VGT=[[0,-6,-7,-8],[0,-14,-12,-14],[0,-15,-18,-20],[0,-10,-12,-12],[0,-20,-17,-14]];
+  var VFA=[[800,1150,2800,3500],[400,1600,2700,3300],[350,1700,2700,3700],[450,800,2830,3500],[325,700,2530,3500]];
+  var VBA=[[80,90,120,130],[60,80,120,150],[50,100,120,150],[70,80,100,130],[50,60,170,180]];
+  var VGA=[[0,-4,-20,-36],[0,-24,-30,-35],[0,-20,-30,-36],[0,-9,-16,-28],[0,-12,-30,-40]];
+  var FREG=[[VF,VB,VG],[VFS,VBS,VGS],[VFT,VBT,VGT],[VFA,VBA,VGA]];   /* 0 bass · 1 soprano · 2 tenor · 3 alto */
+  var FMB={v:-9,c:-9,q:-9,r:-9,F:[0,0,0,0],Q:[0,0,0,0],G:[0,0,0,0]};
+  function fmtBank(v,c01,qs,rg){
+    rg=rg|0;
+    if(FMB.v===v&&FMB.c===c01&&FMB.q===qs&&FMB.r===rg) return FMB;
+    FMB.v=v; FMB.c=c01; FMB.q=qs; FMB.r=rg; var k;
+    var VF=FREG[rg][0], VB=FREG[rg][1], VG=FREG[rg][2];   /* shadows the bass table for this call */
     if(v>=0){ var sh=Math.pow(2,(c01-0.5)*2);                     // setVowel: CUT = tract size
       for(k=0;k<4;k++){ var F=Math.min(21600,Math.max(20,VF[v][k]*sh)), B=Math.max(25,VB[v][k]*qs);
         FMB.F[k]=F; FMB.Q[k]=F/B; FMB.G[k]=Math.pow(10,VG[v][k]/20); } }
@@ -31548,6 +31631,116 @@ restoreThemeFromBackend();
      which is the sinc envelope to within the probe's smoothing. Bit-Crush's downsampler is the
      same shape (TerrainFilters.h BitCrush: rate = 20·(fs/20)^cut01), so both share this. */
   function zoh(f,rate){ var x=Math.PI*f/rate; return (x<1e-6)?1:Math.abs(Math.sin(x)/x); }
+  /* ══ fb604 — THE S&H RESONANCE IS A ONE-POLE IN THE HELD DOMAIN ═══════════════════════════
+     fb603 wired RES into SampHoldFx (TerrainFilters.h:1553) and left a note saying the drawing
+     was still honest BECAUSE the DSP was dead. The DSP is not dead any more: the diff reported
+     `RES DRAWN DEAD — model moves 0.0 dB, DSP moves 20.5 dB` on Samp-Hold and 14.2 dB on
+     Samp-Hold −, i.e. the one case fb603 documented as honest became the two worst RES lies in
+     the roster the moment its own fix landed.
+     WHAT THE DSP DOES: `held = norm·xs + fb·held` runs ONCE PER HOLD, so it is a one-pole at the
+     S&H rate, not at fs — a comb-lowpass periodic in f with period R, normalised (norm = 1−fb)
+     to unity at DC so RES sharpens without a level jump. Its magnitude is
+     (1−fb)/|1 − fb·e^{-j2πf/R}|, fb = 0.92·res01. Checked point by point against the measured
+     curves at cut 1 k / res 1.0 (Tests/flt_curves.csv): predicted −17.5 / −26.1 / −27.6 / −25.4 dB
+     at 101 / 320 / 508 / 718 Hz against a measured −17.5 / −26.2 / −27.6 / −25.3. It is the
+     filter, not a fit — so it MULTIPLIES the whole drawn curve, aliasing floor included, because
+     H_hold is periodic in R and therefore shapes the sinc images exactly as it shapes the
+     baseband. (Adding the floor AFTER instead left the res-1.0 curve 14 dB flat-bottomed and the
+     max error grew 13.2 → 15.2 dB. Measured both ways; the physics is also the better fit.) */
+  function shComb(f,R,res){ var fb=0.92*res, w=2*Math.PI*f/R,
+    dr=1-fb*Math.cos(w), di=fb*Math.sin(w); return (1-fb)/Math.sqrt(dr*dr+di*di); }
+  /* ══ fb604 — ONE PHASER EVALUATOR FOR ALL SIXTEEN PHASER ENTRIES ═══════════════════════════
+     THE ROSTER GREW SIX PHASERS WHOSE WHOLE CLAIM IS A SHAPE RELATIONSHIP, so the P and the N
+     variants have to come out of the SAME function or the picture cannot show it. This is
+     PhaserCore's own transfer function (TerrainFilters.h:1017-1050), not a lookalike:
+        A(z) = Π (g_k + z⁻¹)/(1 + g_k z⁻¹),  g_k from tan(π f_k/fs), f_k = CUT·1.5^(k−(N−1)/2)
+        H(z) = 0.5·(1 ± A/(1 − fb·A)),        fb = 0.9·RES
+     THE + AND − ARE INTERLEAVED, NOT DUPLICATES. |1+A|² + |1−A|² = 4 for a unity-magnitude
+     allpass, so wherever the P variant peaks the N variant nulls and vice versa — the identity
+     the roster contract cites, evaluated rather than asserted.
+     ⚠️ WHY THIS REPLACED THE HAND-ROLLED `ntch()` PRODUCT the five shipping phasers used: scored
+     against Tests/flt_curves.csv (8 conditions × 120 points, minimax offset removed) the real
+     chain beats the heuristic on mean RMS for EVERY shipping phaser — 4P 8.61→5.50, 8P
+     8.83→7.60, 6P 8.85→6.00, 12P 8.39→6.82, 16P 7.58→5.80 dB. A heuristic whose notches sit at
+     invented ratios could not have placed an interleaved partner anywhere honest.
+     It reads no t, so all sixteen keys are CACHEABLE — they leave MAG_ANIM (fb603 did the same
+     for `ap`). 48 stages × one canvas column is 48 complex multiplies, paid once per knob move
+     instead of once per frame. */
+  function apChain(f,fc,N,res,sign){
+    var SR=48000, w=2*Math.PI*f/SR, cw=Math.cos(w), sw=Math.sin(w), nyq=0.45*SR, aR=1, aI=0, k;
+    /* fb604 — THE SPAN CAP, copied from PhaserCore::setParams. The stage ladder is 1.5 per stage
+       (0.58496 oct) until 24/32/48 stages would push it past the 16-stage total span of
+       15·log2(1.5) octaves; beyond that the extra stages make the comb DENSER, not wider. Drawing
+       the uncapped 1.5^k here put 31 of a 48-stage chain's corners on the 20 Hz / 0.45·fs rails
+       that the DSP never lets them reach — 38.7 dB of error on Phaser 48P before this line. For
+       4/6/8/12/16 stages the cap is inactive and the coefficients are unchanged. */
+    var stepOct=(N>1)?Math.min(0.5849625,15.0*0.5849625/(N-1)):0;
+    for(k=0;k<N;k++){
+      var fk=fc*Math.pow(2,stepOct*(k-(N-1)*0.5)); if(fk<20)fk=20; else if(fk>nyq)fk=nyq;
+      var tg=Math.tan(Math.PI*fk/SR), g=(tg-1)/(tg+1);
+      var nR=g+cw, nI=-sw, dR=1+g*cw, dI=-g*sw, dd=dR*dR+dI*dI;
+      var hR=(nR*dR+nI*dI)/dd, hI=(nI*dR-nR*dI)/dd;
+      var t1=aR*hR-aI*hI; aI=aR*hI+aI*hR; aR=t1; }
+    var fb=0.9*res, pR=1-fb*aR, pI=-fb*aI, pd=pR*pR+pI*pI;
+    var wR=(aR*pR+aI*pI)/pd, wI=(aI*pR-aR*pI)/pd;
+    var mR=0.5*(1+sign*wR), mI=0.5*sign*wI;
+    return Math.sqrt(mR*mR+mI*mI); }
+  /* ══ fb604 — ONE COMB EVALUATOR, AND THE LOOP FILTER IS THE WHOLE POINT ════════════════════
+     Our comb ships a FIXED, never-user-reachable one-pole LP in its feedback loop
+     (fcDamp = 2·f0 + 6000, CombCore::setParams) — Moorer's "string". The matrix appended at
+     105..110 is the other three loop filters × both polarities: NONE = open pipe, HP = tin can,
+     LP+HP = tuned formant resonator. That difference lives ENTIRELY in L(f), so a model that
+     does not carry L cannot draw four different instruments — it draws one comb four times.
+        H(z) = 1 / (1 ∓ g·L(z)·z⁻ᴰ),  g = 0.995·RES,  D = fs/f0 (＋) or fs/2f0 (−)
+     peak-normalised by (1−g), which is exact because |L| reaches 1 at DC (LP) or at Nyquist (HP).
+     ⚠️ AND IT FIXES A LIE THE OLD MODEL TOLD AT EVERY FRESH PATCH. A feedback comb with g = 0
+     has no comb: Comb + and Comb − MEASURE DEAD FLAT at RES 0 (0.0 dB at every one of the 120
+     probe points, Tests/flt_curves.csv), and the shipping `0.2+0.8·cos^…` model drew full-depth
+     teeth there anyway. The teeth now arrive when the resonance does, exactly as they do in the
+     audio. loop: bit 0 = the LP, bit 1 = the HP. mix < 1 = the flanger's dry blend. */
+  function combMag(f,f0,res,neg,loop,fbs,fl){
+    var SR=48000, nyq=0.5*SR;
+    if(f0<16)f0=16; else if(f0>0.45*nyq)f0=0.45*nyq;
+    var w=2*Math.PI*f/SR, wf=2*Math.PI*f0/SR, lr=1, li=0, ph=0, a=0, b=0, t;
+    if(loop&1){ var fcD=2*f0+6000; if(fcD<2000)fcD=2000; else if(fcD>nyq)fcD=nyq;
+      a=Math.exp(-2*Math.PI*fcD/SR);
+      var ar=1-a*Math.cos(w), ai=a*Math.sin(w), ad=ar*ar+ai*ai;
+      var pr=(1-a)*ar/ad, pi=-(1-a)*ai/ad; t=lr*pr-li*pi; li=lr*pi+li*pr; lr=t;
+      ph+=-Math.atan2(a*Math.sin(wf),1-a*Math.cos(wf)); }
+    if(loop&2){ var fcH=0.5*f0+60; if(fcH<30)fcH=30; else if(fcH>0.45*nyq)fcH=0.45*nyq;
+      b=Math.exp(-2*Math.PI*fcH/SR);
+      /* one-pole HP = signal minus its own LP:  b(1−z⁻¹)/(1−b z⁻¹)  (TerrainFilters.h:921) */
+      var ur=b*(1-Math.cos(w)), ui=b*Math.sin(w);
+      var vr=1-b*Math.cos(w), vi=b*Math.sin(w), vd=vr*vr+vi*vi;
+      var hr=(ur*vr+ui*vi)/vd, hi=(ui*vr-ur*vi)/vd; t=lr*hr-li*hi; li=lr*hi+li*hr; lr=t;
+      ph+=0.5*(Math.PI-wf)-Math.atan2(b*Math.sin(wf),1-b*Math.cos(wf)); }
+    /* the DSP shortens the delay line by the loop filter's phase delay at f0 so the comb stays
+       IN TUNE whatever is in the loop (TerrainFilters.h:876-887). Drawing the uncorrected delay
+       would put every tooth flat by that amount, worst on the Band cell where two sections add. */
+    var D=(neg?(SR/(2*f0)):(SR/f0))-((wf>1e-6)?(-ph/wf):0); if(D<4)D=4;
+    var g=0.995*fbs*res*(neg?-1:1), wd=w*D, er=Math.cos(wd), ei=-Math.sin(wd);
+    var kr=g*(lr*er-li*ei), ki=g*(lr*ei+li*er), qr=1-kr, qi=-ki, qd=qr*qr+qi*qi;
+    /* fb604 — NOT peak-normalised, and that is a measurement, not a preference. Comb + at RES 1.0
+       measures its VALLEY at exactly −6.0 dB below the RES-0 line and 1/(1+g) = 1/1.995 = −6.0 dB
+       predicts it to the decimal, so the un-normalised comb is already sitting where the audio is:
+       a (1−g) normalisation dropped the whole curve 11.4 dB on average (mean |offset| over the 13
+       comb/flange types × 8 conditions, 11.4 → 3.6 dB) and, at RES 1.0, parked a filter that is
+       LOUD at the bottom of a −30…+24 dB window. Flat at RES 0, teeth growing UPWARD, like the DSP.
+       THE CAP IS THE LOOP'S OWN LIMITER. `4·tanh(0.25·s)` inside the recirculation (CombCore::
+       process) is why the measured RES-1.0 peak is +26.5 dB and not the +46 dB a linear
+       1/(1−0.995) would give; 20.0 = +26.0 dB is that measured ceiling. It lowers the worst-case
+       comb error 14.5 → 12.5 dB rather than hiding anything. */
+    var CAP=20.0;
+    if(!fl) return Math.min(CAP,1/Math.sqrt(qd));
+    /* FLANGE — 0.5·(dry + the SAME loop's output), TerrainFilters.h:2713. Not a different
+       topology: the split from a comb is the 0.1–10 ms range and this 50/50 sum. */
+    var cr=qr/qd, ci=-qi/qd, mR=0.5*(1+cr), mI=0.5*ci;
+    return Math.min(CAP,Math.sqrt(mR*mR+mI*mI)); }
+  /* fb604 — FIRST-ORDER SHELF, pole and zero placed so the gain is exactly √G at CUT (the same
+     midpoint convention RBJ's 2nd-order shelf uses), G = 10^((RES·24−12)/20) — the identical
+     ±12 dB law Low EQ / High EQ run (TerrainFilters.h:2149-2155). 6 dB/oct against their 12. */
+  function shelf1(w,G,hi){ var w2=w*w;
+    return hi ? Math.sqrt((w2*G+1)/(w2/G+1)) : Math.sqrt((w2+G)/(w2+1/G)); }
   /* Re/Im of k·G⁴ where G = 1/(1+jw): the ladder's global feedback term. (1+jw)⁴ = a+jb. */
   function k4r(a,b,k,im){ var d=a*a+b*b; return im?(-k*b/d):(k*a/d); }
   // mag(): returns POWER (amplitude²) so curveY's 10·log10 reads true dB. t = seconds, for animation.
@@ -31573,8 +31766,38 @@ restoreThemeFromBackend();
        the roster measures FLAT (-0.0 dB/oct, report TABLE 1 idx 10/11/62-65), so at CUT 100 the
        drawn curve buried 15 kHz by 27.3 dB that the filter does not touch. A comb's teeth are
        the whole shape; the tilt was drawing a lowpass that is not there. */
-    else if(type==='comb'){ var rp=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.6); A=(0.2+0.8*Math.pow(rp,1+res*5)); }
-    else if(type==='combn'){ var rn=0.5+0.5*Math.cos(2*Math.PI*f/fc + Math.PI + t*0.6); A=(0.2+0.8*Math.pow(rn,1+res*5)); }
+    /* fb604 — the delay-line comb family now comes out of combMag() (see above): the shipping
+       LP-damped pair, the six-entry damping × polarity matrix at 105..110, and the two flangers.
+       Measured against Tests/flt_curves.csv the physical model takes Comb + from 18.0 → 4.4 dB
+       worst-case error and Comb − from 17.7 → 4.4, most of it won back at RES 0 where the DSP is
+       flat to 0.0 dB and the old teeth were pure invention. */
+    else if(type==='comb'){ A=combMag(f,fc,res,0,1,1,0); }
+    else if(type==='combn'){ A=combMag(f,fc,res,1,1,1,0); }
+    /* fb604 — COMB WIDE / OCTAVE / FIFTH split the interval SYMMETRICALLY (L below the dialled
+       pitch, R above — TerrainFilters.h:2296), so the LEFT channel this curve draws is CUT/half.
+       Drawing all three as plain Comb + is what let the fb602 pass call them byte-identical: at
+       RES 0 a comb has no teeth at all, so three different tunings measured the same. */
+    else if(type==='combwide'){ A=combMag(f,fc/1.012,res,0,1,1,0); }
+    else if(type==='comboct'){ A=combMag(f,fc/1.41421,res,0,1,1,0); }
+    else if(type==='comb5th'){ A=combMag(f,fc/1.22474,res,0,1,1,0); }
+    else if(type==='combraw'){ A=combMag(f,fc,res,0,0,0.94,0); }      /* no loop filter — open pipe */
+    else if(type==='combrawn'){ A=combMag(f,fc,res,1,0,0.94,0); }
+    else if(type==='combbri'){ A=combMag(f,fc,res,0,2,1,0); }         /* HP in the loop — tin can */
+    else if(type==='combbrin'){ A=combMag(f,fc,res,1,2,1,0); }
+    else if(type==='combband'){ A=combMag(f,fc,res,0,3,1,0); }        /* LP+HP — tuned resonator */
+    else if(type==='combbandn'){ A=combMag(f,fc,res,1,3,1,0); }
+    /* FLANGE ± — CUT spans 100 Hz…10 kHz of comb fundamental (0.1–10 ms of delay) against the
+       comb's 16 Hz…0.45·nyq, and the feedback tapers to 0.90 (TerrainFilters.h:2597-2616). */
+    else if(type==='flange'||type==='flangen'){
+      var c01f=Math.min(1,Math.max(0,Math.log(Math.max(20,fc)/20)/Math.log(1000)));
+      A=combMag(f,100*Math.pow(100,c01f),res,type==='flangen'?1:0,0,0.90,1); }
+    /* fb604 — COMB DAMP (65) KEEPS THE OLD HEURISTIC ON PURPOSE, under its own key. It is not a
+       delay-line comb at all: DampComb is a resonant SVF into four Schroeder allpasses in a
+       damped loop (TerrainFilters.h:1382-1405), and it measures ±15 dB notches at 0.5·f0 / 1.5·f0
+       with a flat-ish top — a shape combMag() cannot make. Modelling that core honestly is its
+       own job; giving it a comb's curve just because the name says "Comb" is what fb603 was
+       cleaning up. Named, not silently aliased. */
+    else if(type==='combdamp'){ var rd=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.6); A=(0.2+0.8*Math.pow(rd,1+res*5)); }
     else if(type==='shimmer'){ var rs=0.5+0.5*Math.cos(2*Math.PI*f/(fc*0.5) + t*1.3); A=(0.25+0.75*Math.pow(rs,1+res*4))*(0.7+0.5*Math.min(1,w*0.3))*(1+0.12*Math.sin(t*1.7)); }
     /* fb603 — same invented droop; the three Karplus voices measure +1.3 dB/oct, i.e. flat. */
     else if(type==='karplus'){ var rk=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.4); A=(0.12+0.88*Math.pow(rk,6+res*14)); }
@@ -31582,15 +31805,21 @@ restoreThemeFromBackend();
        are summed + − + − (FormantBank::process) with the DSP's own per-formant dB weights, so
        the inter-formant notches fill exactly the way they do in the audio. CUT is a tract SHIFT
        on a/e/i/o/u and the a→e→i→o→u MORPH on m/w/g — never a corner frequency. */
+    /* fb604 — fmtsop / fmtten / fmtalt join here rather than getting a branch of their own: they
+       are the SAME resonator sum over the SAME morph law, reading a different register of the
+       same published table. CUT is the a→e→i→o→u vowel (the setMorph path, vI = −1), which is
+       the only shape a single roster slot can give a whole register. */
     else if(type==='formanta'||type==='formante'||type==='formanti'||type==='formanto'||type==='formantu'
-          ||type==='formantm'||type==='formantw'||type==='formantg'){
-      var vch=type.charAt(7);
+          ||type==='formantm'||type==='formantw'||type==='formantg'
+          ||type==='fmtsop'||type==='fmtten'||type==='fmtalt'){
+      var reg=(type==='fmtsop')?1:(type==='fmtten')?2:(type==='fmtalt')?3:0;
+      var vch=reg?'m':type.charAt(7);
       var vI=(vch==='a')?0:(vch==='e')?1:(vch==='i')?2:(vch==='o')?3:(vch==='u')?4:-1;
       var qs=(vch==='w')?Math.pow(0.1,res)*4.5
             :(vch==='g')?Math.pow(0.1,Math.min(1,res*1.2+0.15))*1.6
             :Math.pow(0.1,res)*2.0;                                      // TerrainFilters.h:1563 / 1786 / 1789
       var c01=Math.min(1,Math.max(0,Math.log(Math.max(20,fc)/20)/Math.log(1000)));
-      var FB=fmtBank(vI,c01,qs), vib=1+0.012*Math.sin(t*4), fre=0, fim=0;
+      var FB=fmtBank(vI,c01,qs,reg), vib=1+0.012*Math.sin(t*4), fre=0, fim=0;
       for(var fi=0;fi<4;fi++){ var Fk=FB.F[fi]*vib, uu=f/Fk-Fk/f, dq=FB.Q[fi]*uu, dn=1+dq*dq, sg=(fi&1)?-1:1;
         fre+=sg*FB.G[fi]/dn; fim-=sg*FB.G[fi]*dq/dn; }
       A=Math.sqrt(fre*fre+fim*fim); }
@@ -31606,8 +31835,13 @@ restoreThemeFromBackend();
        a low cut that opens up as RES rises (−7 / −12 dB at 20 Hz by RES 0.5). The model drew deep
        comb teeth and a 4 dB/oct rolloff neither engine has: 29.6 dB out at 20 Hz. */
     else if(type==='creverb'){ var rc=0.5+0.5*Math.cos(2*Math.PI*f/(fc*0.55)+t*1.1); A=(0.82+0.22*rc)*(f/Math.sqrt(f*f+Math.pow(13+res*44,2))); }
-    else if(type==='phaser4'){ var sw=1+0.28*Math.sin(t*0.8), fks=[1.0,2.4,4.3,6.8], pr=1; for(var pi=0;pi<4;pi++) pr*=ntch(f,fc*fks[pi]*sw,3.0); var dph=0.45+0.5*res; A=(1-dph)+dph*pr; }
-    else if(type==='phaser8'){ var sw2=1+0.34*Math.sin(t*0.95), fk8=[1.0,1.9,3.0,4.3,5.9,7.8,10.0,12.7], p8=1; for(var qi=0;qi<8;qi++) p8*=ntch(f,fc*fk8[qi]*sw2,3.4); var d8=0.5+0.5*res; A=(1-d8)+d8*p8; }
+    /* fb604 — ALL SIXTEEN PHASERS, ONE EVALUATOR (apChain, above). The key carries the stage
+       count and, after 'phaser', an optional N for the inverted output mix: phaser4 / phaserN4 /
+       … / phaser48 / phaserN48. Nothing else in CAT[] starts with 'phaser', so the prefix test is
+       safe; a typo'd key falls through to the default 1/den instead of drawing a neighbour. */
+    else if(type.charAt(0)==='p'&&type.indexOf('phaser')===0){
+      var pneg=(type.charAt(6)==='N'), pn=+(pneg?type.substring(7):type.substring(6));
+      A=apChain(f,fc,pn,res,pneg?-1:1); }
     else if(type==='ring'){ var shf=fc*(0.3+res*0.7)*(1+0.05*Math.sin(t*1.2)); A=pk(f,Math.abs(fc-shf),0.09)+pk(f,fc+shf,0.09)+0.18; }
     else if(type==='bode'){ var sp=Math.max(fc,40), dep=0.3+0.62*res; A=(1-dep)+dep*(0.5+0.5*Math.cos(2*Math.PI*f/sp + t*1.5)); }
     /* fb603 — RES IS THE BIT DEPTH AND CUT IS THE SAMPLE RATE (TerrainFilters.h BitCrush:
@@ -31652,7 +31886,6 @@ restoreThemeFromBackend();
       var acc=[0,0];
       hc(type.charAt(1),f,fc,Qf,acc); hc(type.charAt(2),f,Math.min(fc*4,18000),Q2,acc);
       A=0.62*Math.sqrt(acc[0]*acc[0]+acc[1]*acc[1]); }
-    else if(type==='phaser6'||type==='phaser12'||type==='phaser16'){ var nst=type==='phaser6'?3:type==='phaser12'?6:8; var swp=1+0.3*Math.sin(t*0.9), prod=1; for(var zi=0;zi<nst;zi++) prod*=ntch(f,fc*Math.pow(1.9,zi-(nst-1)*0.5)*swp,3.2); var dpp=0.45+0.5*res; A=(1-dpp)+dpp*prod; }
     else if(type==='diffusor'){ var pr2=1; for(var di=0;di<5;di++) pr2*=0.55+0.45*Math.abs(Math.cos(2*Math.PI*f/(fc*(1.1+di*0.53))+t*(0.7+di*0.21))); A=0.35+0.65*pr2; }
     else if(type==='tilt'){ var tg=(res-0.5)*2.2; A=Math.max(0.15,Math.min(6,Math.pow(Math.max(w,0.05),tg*0.5))); }
     else if(type==='loweq'){ var gl=res*2-1; A=Math.max(0.1,1+gl*0.85/(1+w*w)); }
@@ -31662,6 +31895,11 @@ restoreThemeFromBackend();
        engine. Same measured shape, opposite sign, at the setting a fresh patch opens on. */
     else if(type==='air'){ A=1+res*2.6*(w*w/(1+w*w)); }
     else if(type==='higheq'){ var gh=res*2-1; A=Math.max(0.1,1+gh*0.85*(w*w/(1+w*w))); }
+    /* fb604 — the 6 dB/oct pair (113/114). Same ±12 dB law as Low/High EQ, half the order: at
+       three octaves below CUT a 1st-order low shelf has reached 11.0 of its 12 dB while the
+       2nd-order one is already flat there — that gentler, wider tilt IS the new sound. */
+    else if(type==='loweq6'){ A=shelf1(w,Math.pow(10,(res*24-12)/20),0); }
+    else if(type==='higheq6'){ A=shelf1(w,Math.pow(10,(res*24-12)/20),1); }
     else if(type==='bandeq'){ var gb=res*2-1; A=Math.max(0.1,1+gb*0.9*pk(f,fc,0.35)); }
     /* fb603 — the folded band is a RESONANT LP whose Q is res01 (TerrainFilters.h ADD_BASS:
        setSvf(LP, …, 0.15 + res01·0.30)). The model's `1/(1+w²)` was a fixed 1-pole read off DRIVE,
@@ -31672,13 +31910,24 @@ restoreThemeFromBackend();
     /* fb603 — CUT is the S&H RATE IN HERTZ (TerrainFilters.h:1862, jmax(30, cutHz)), so the shape
        is the zero-order-hold sinc: measured nulls at 1000 / 2000 / 3000 Hz on the 1 kHz knob and a
        35 dB fall across the band. The model drew a quantiser staircase off DRIVE.
-       ⚠️ RES IS DRAWN DEAD HERE ON PURPOSE — it IS dead in the shipping DSP (defect 7: res01 is
-       never passed to SampHoldFx::setParams; measured res 0 / 0.5 / 1.0 are bit-identical rows).
-       When the DSP wires it, this model needs whatever RES then controls, or it goes back to
-       lying — the one case in this pass where the honest curve is the still one. */
-    else if(type==='samphold'){ A=zoh(f,Math.max(30,fc))*(0.94+0.06*Math.sin(t*0.7))+0.05; }
-    /* Samp-Hold − is (x − held)·1.4 — the same rate, the notch far shallower and the top flat. */
-    else if(type==='samphm'){ A=0.30+0.70*zoh(f,Math.max(30,fc))*(0.94+0.06*Math.sin(t*0.7)); }
+       fb603 drew RES STILL here on purpose, because RES was dead in the DSP. ⚠️ fb604 — THAT
+       CLAUSE EXPIRED IN THE SAME COMMIT THAT WROTE IT: fb603 also wired res01 into
+       SampHoldFx::setParams, so the still curve stopped being the honest one. shComb() above is
+       the hold-domain one-pole the DSP now runs; RES movement drawn 0.0 → 20.5 dB against a DSP
+       that moves 20.5 dB, and the res-condition shape error falls 8.4 / 12.1 / 13.2 → 6.3 / 7.0 /
+       7.0 dB at res 0.5 / 0.9 / 1.0 (mean RMS over all 8 conditions 4.55 → 4.06). Bit-identical
+       at RES 0, where shComb() is exactly 1. */
+    else if(type==='samphold'){ A=(zoh(f,Math.max(30,fc))*(0.94+0.06*Math.sin(t*0.7))+0.05)*shComb(f,Math.max(30,fc),res); }
+    /* Samp-Hold − is (x − held)·1.4 — the same rate, the notch far shallower and the top flat.
+       fb604 — the difference is what SURVIVES the hold, so RES works the opposite way round: wind
+       it up, `held` collapses towards zero and (x − held) → x, i.e. the engine goes FLAT. Measured
+       at cut 1 k, that is 20.6 → 5.7 dB at 101 Hz and 19.1 → 3.2 dB at 202 Hz between res 0 and
+       1.0, ending 2.9 dB flat from 200 Hz up — and the old model drew all of it as one still line.
+       The residual floor is re-fitted 0.30 → 0.14 on the same 8×120-point measurement (0.30 could
+       only ever move 7.5 dB of the DSP's 14.2): worst-case shape error 8.8 → 6.0 dB, mean RMS
+       3.02 → 1.62, RES movement 0.0 → 11.6 dB. Scanned 0.06…0.34 in 0.02 steps; 0.14 is the
+       minimum of BOTH the worst-case and the mean. */
+    else if(type==='samphm'){ A=0.14+0.86*zoh(f,Math.max(30,fc))*shComb(f,Math.max(30,fc),res)*(0.94+0.06*Math.sin(t*0.7)); }
     else if(type==='scream'){ A=(1/den)*(1+(0.8+res*2.6)*pk(f,fc,0.07))*(0.85+drv*0.35); }
     else if(type==='screambp'){ A=((w/Qf)/den)*(1+(0.8+res*2.6)*pk(f,fc,0.07))*(1.4+drv*0.4); }
     else if(type==='radio'){ var rb=(w/Qf)/den; A=Math.pow(rb,1.35)*(0.9+0.1*Math.sin(t*13+f*0.03))*2.2+0.045; }

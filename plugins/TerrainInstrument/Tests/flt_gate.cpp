@@ -1,12 +1,12 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
-//  flt_gate.cpp — fb603 · THE FILTER SECTION'S STANDING ACCEPTANCE TEST.
+//  flt_gate.cpp — fb604 · THE FILTER SECTION'S STANDING ACCEPTANCE TEST.
 //
 //    c++ -std=c++17 -O2 -I Tests -I Tests/shim -I Source Tests/flt_gate.cpp \
 //        -framework Accelerate -o /tmp/fltgate
-//    /tmp/fltgate                      # all 94 types — 18 s, measured
+//    /tmp/fltgate                      # every type in the roster (94 -> 118) — 18 s / 24 s
 //    /tmp/fltgate --quick              # a 12-type spine — 2 s, for a tight edit loop
 //    TI_FLT_MUT=<bar> /tmp/fltgate     # mutation control — see MUTATION CONTROLS below
-//    bash Tests/fb603_filter_gates.sh  # every gate, normal + mutated, in one run
+//    bash Tests/fb604_filter_gates.sh  # every gate, normal + mutated, in one run
 //
 //  WHY THIS FILE EXISTS.  fb603 measured all 94 shipping filter types for the first time and
 //  found THIRTEEN defect classes that had shipped unnoticed — a 22.28 dB state leak between
@@ -16,9 +16,19 @@
 //  of that was caught by anything, because nothing measured it. This is that something.
 //
 //  IT SHARES ONE MEASUREMENT WITH THE REPORT. Tests/flt_measure.h drives FilterSlot exactly as
-//  SynthVoice does (2x wrapper and all); Tests/fltmeas.cpp prints it as tables, this file asserts
-//  on it. There is no second implementation of the probe, and no number here that fltmeas.cpp
-//  cannot be asked to print.
+//  SynthVoice does (2x oversampler and all); Tests/fltmeas.cpp prints it as tables, this file
+//  asserts on it. There is no second implementation of the probe, and no number here that
+//  fltmeas.cpp cannot be asked to print.
+//
+//  \U0001f6a8 fb604 — AND UNTIL THIS COMMIT "EXACTLY AS SYNTHVOICE DOES" WAS FALSE.  flt_measure.h
+//  carried a hand-written copy of the PRE-fb603 wrapper (linear-interp up / box decimate) while
+//  the plugin had moved to the half-band, so every number this gate printed for the 26
+//  oversampled types described an oversampler that does not exist.  It was not merely
+//  pessimistic.  Bar [2]'s stress peak for Bode Shifter(22) read 3.69 through the old copy —
+//  UNDER the 4.0 bar, a green light — and reads 4.14 through the shipping half-band: the stale
+//  model was hiding a real failure, not just adding a safety margin.  Bar [H] below is what
+//  makes that impossible to repeat: the converter is COMPILED FROM Source/SynthVoice.h and the
+//  hash is re-checked against that file at runtime.
 //
 //  ── WHAT IT ASSERTS ───────────────────────────────────────────────────────────────────────
 //   [0] every type instantiates and passes audio, with no NaN and no Inf
@@ -36,6 +46,8 @@
 //   [7] NO DUPLICATE ENGINES — every pair must differ by >= 3 dB in the LEFT channel
 //   [8] SELF-OSCILLATION STAYS BELOW FULL SCALE (oscillating is wanted; +5 dBFS is not)
 //   [9] WIDE OPEN IS OPEN — at the shipped 20 kHz default a lowpass must still pass 16 kHz
+//   [H] THE HARNESS MEASURES THE SHIPPING OVERSAMPLER — the 2x converter compiled into this
+//       binary is byte-for-byte the one in Source/SynthVoice.h, re-verified at runtime
 //
 //  ── THE LAWS THESE BARS COME FROM ─────────────────────────────────────────────────────────
 //  THE LIFEGUARD LAW: a knob's 100 % must be the algorithm's 100 %, unused headroom is a defect,
@@ -76,10 +88,14 @@
 //      TI_FLT_MUT=mono    the nominated type's res-0.75 curve is pushed 4 dB DOWN
 //      TI_FLT_MUT=thd     the nominated type's DRV-1 THD run is secretly done at DRV 0
 //      TI_FLT_MUT=dup     the nominated type's curves are replaced by another type's
-//      TI_FLT_MUT=osc     the nominated type's self-osc tail is multiplied by 1e5
+//      TI_FLT_MUT=osc     the nominated type's self-osc tail is multiplied by 1e5 (+100 dB).
+//                         Types whose tail sits at the -200 dBFS floor cannot be pushed over
+//                         0 dBFS by that and are published on the SKIPPED line as ...:osc
 //      TI_FLT_MUT=open    the nominated type loses 12 dB at 16 kHz wide open
 //      TI_FLT_MUT=nan     the nominated type emits a NaN
-//  TI_FLT_INJ=<idx> chooses the victim; Tests/fb603_filter_gates.sh sets it from the normal run's
+//      TI_FLT_MUT=hb      bar [H] is told the compiled-in oversampler hash does not match
+//                         Source/SynthVoice.h — i.e. exactly the fb603 state this commit fixed
+//  TI_FLT_INJ=<idx> chooses the victim; Tests/fb604_filter_gates.sh sets it from the normal run's
 //  own OFFENDERS: line so the victim always currently PASSES the bar. Bar [3] additionally
 //  CALIBRATES its estimator two-sidedly on every run, against synthetic tails of known growth —
 //  printed whether it fired or not, so "no runaway found" can never be confused with an
@@ -92,6 +108,7 @@
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 #include "flt_measure.h"
 #include <cstdlib>
+#include <cstring>
 #include <set>
 #include <map>
 
@@ -122,6 +139,34 @@ static std::string join (const std::vector<int>& v, const char* sep = ", ")
     return s;
 }
 
+// ── fb604 · THE SKIP SETS, DERIVED FROM THE ROSTER NAMES, NOT TYPED AS INDEX LISTS ───────────
+//  These were three hand-typed index literals ({14,15,16,17,68,69,70,71,...}). At 94 that was
+//  merely brittle; at 118 it is WRONG THE MOMENT THE APPEND LANDS — Formant Soprano/Tenor/Alto
+//  (115-117) would be judged on a -3 dB corner they do not have, and Low/High EQ 6 (113-114)
+//  would be asked for a monotonic RES when their RES is a shelf gain sweeping cut->flat->boost.
+//  A skip is a statement about a FAMILY, and the family is what the name says, so the name is
+//  what decides. Verified index-for-index against fb603's typed sets on the 94 shipping types
+//  (the gate prints the resolved indices on every run — a skip you cannot see is a waiver).
+static bool nameHas (int t, const char* sub)
+{ return t >= 0 && t < kNameCount && std::strstr (kName[(size_t) t], sub) != nullptr; }
+
+//  CUT is not a corner here: a vowel shift (Formant), a tank rate (Reverb), a pitch (Karplus),
+//  a grain rate (Grain), or a shift amount (Ring / Bode). 'None' is a bypass.
+static bool skipOpenFamily (int t)
+{ return nameHas (t, "Formant") || nameHas (t, "Reverb") || nameHas (t, "Karplus")
+      || nameHas (t, "Grain")   || nameHas (t, "Ring")   || nameHas (t, "Bode")
+      || nameHas (t, "None"); }
+//  RES is a shelf/bell GAIN sweeping cut -> flat -> boost: a V through zero, non-monotonic BY
+//  DESIGN. Tilt / Air / every EQ, first-order and second.
+static bool skipMonoFamily (int t)
+{ return nameHas (t, "EQ") || nameHas (t, "Tilt") || nameHas (t, "Air")
+      || nameHas (t, "Diffusor") || nameHas (t, "None"); }
+//  THD is meaningless where energy MOVES between bins instead of multiplying.
+static bool skipThdFamily (int t)
+{ return nameHas (t, "Ring") || nameHas (t, "Bode") || nameHas (t, "None"); }
+static std::set<int> skipSet (bool (*pred) (int))
+{ std::set<int> s; for (int i = 0; i < kNumTypes; ++i) if (pred (i)) s.insert (i); return s; }
+
 // ── mutation control ──────────────────────────────────────────────────────────────────────────
 static const std::string MUT = std::getenv ("TI_FLT_MUT") ? std::getenv ("TI_FLT_MUT") : "";
 static bool mut (const char* n) { return MUT == n; }
@@ -129,7 +174,7 @@ static bool mut (const char* n) { return MUT == n; }
 // build, so the mutation manufactures a genuinely NEW offender rather than re-flagging a
 // known one. 5 = SVF LP (stress 1.95, monotonic, not silent, not a duplicate, no leak);
 // 0 = Ladder LP 24 (a real character drive, THD 0.10 -> 28.94 %); 81 = Air (flat wide open).
-//  TI_FLT_INJ=<idx> overrides the target. Tests/fb603_filter_gates.sh sets it from the NORMAL
+//  TI_FLT_INJ=<idx> overrides the target. Tests/fb604_filter_gates.sh sets it from the NORMAL
 //  run's own OFFENDERS: line, so the injected type is guaranteed to be one that currently PASSES
 //  the bar even as the DSP moves underneath — a hardcoded target that later starts failing on its
 //  own would quietly turn the control into a tautology.
@@ -251,17 +296,64 @@ int main (int argc, char** argv)
       INJ_LEAK = INJ_STRESS = INJ_LOOP = INJ_SILENT = INJ_MONO = INJ_THD = INJ_DUP = INJ_OSC
                = INJ_OPEN = INJ_NAN = v; }
 
-    // A 12-type spine for the tight loop: one of every DSP core family, plus the types the
-    // fb603 measurement found at the extremes of each bar.
-    static const int SPINE[] = { 0, 3, 5, 9, 10, 23, 43, 48, 75, 83, 85, 91 };
+    // A spine for the tight loop: one of every DSP core family, plus the types the fb603
+    // measurement found at the extremes of each bar. fb604 adds one member of each APPENDED
+    // family (phaser-N, deep phaser, comb matrix, flange, 1st-order shelf, new formant register)
+    // and FILTERS BY kNumTypes, so the same array is correct at 94 and at 118 — a --quick run
+    // that silently stopped covering the new half of the roster would be the same silent
+    // detector this commit exists to kill.
+    static const int SPINE[] = { 0, 3, 5, 9, 10, 23, 43, 48, 75, 83, 85, 91,
+                                 94, 99, 105, 109, 111, 113, 115 };
     std::vector<int> T;
-    if (quick) for (int i : SPINE) T.push_back (i);
-    else       for (int i = 0; i < kNumTypes; ++i) T.push_back (i);
+    if (quick) { for (int i : SPINE) if (i < kNumTypes) T.push_back (i); }
+    else       { for (int i = 0; i < kNumTypes; ++i)    T.push_back (i); }
     const int NT = (int) T.size();
 
-    std::printf ("\n══ fb603 · FILTER SECTION ACCEPTANCE GATE ══  %d of %d types%s\n",
+    std::printf ("\n══ fb604 · FILTER SECTION ACCEPTANCE GATE ══  %d of %d types%s\n",
                  NT, kNumTypes, quick ? "  (--quick spine)" : "");
-    std::printf ("   MUTATION CONTROL TI_FLT_MUT=%s\n\n", MUT.empty() ? "(none)" : MUT.c_str());
+    std::printf ("   MUTATION CONTROL TI_FLT_MUT=%s\n", MUT.empty() ? "(none)" : MUT.c_str());
+    // machine-readable, so Tests/fb604_filter_gates.sh never has to re-type the spine or the
+    // roster size (it used to carry both as literals; a spine that drifted from this one made
+    // every mutation control read BROKEN for a reason that was not the detector).
+    std::printf ("ROSTER %d\nSPINE:", kNumTypes);
+    for (int i : T) std::printf (" %d", i);
+    std::printf ("\n\n");
+
+    //  The three by-design skips, resolved from the roster names (see skipOpenFamily above) and
+    //  PRINTED, because a bar that quietly ignores a type has waived it.
+    const std::set<int> SK_OPEN = skipSet (skipOpenFamily);
+    const std::set<int> SK_MONO = skipSet (skipMonoFamily);
+    const std::set<int> SK_THD  = skipSet (skipThdFamily);
+    {
+        auto show = [] (const char* w, const std::set<int>& v)
+        { std::printf ("   skip[%s] %2d:", w, (int) v.size());
+          for (int i : v) std::printf (" %d", i); std::printf ("\n"); };
+        std::printf ("   BY-DESIGN SKIPS, derived from the roster names (never a typed index list):\n");
+        show ("open", SK_OPEN); show ("mono", SK_MONO); show ("thd ", SK_THD);
+        std::printf ("\n");
+    }
+
+    // ── [H] THE HARNESS MEASURES THE SHIPPING OVERSAMPLER ─────────────────────────────────────
+    //  FIRST, and unconditionally, because every other bar's numbers depend on it. fb604: this
+    //  is the bar that would have caught fb603's stale copy of the 2x wrapper on the day it went
+    //  stale, instead of a whole commit later. TI_FLT_MUT=hb corrupts the compiled-in hash so the
+    //  bar can be shown going red without touching Source/.
+    {
+        const HbCheck hb = halfbandSourceCheck();
+        const bool inj = mut ("hb");
+        const bool ok = hb.ok && ! inj;
+        std::string d = halfbandCheckLine();
+        if (inj) d = "INJECTED (TI_FLT_MUT=hb): the compiled-in hash is treated as 0xDEADBEEF — "
+                     "this is what a stale flt_halfband_extracted.h looks like from here.";
+        bar (ok, "[H] THE HARNESS MEASURES THE SHIPPING OVERSAMPLER — the 2x converter in this "
+                 "binary IS Source/SynthVoice.h's", d);
+        detector ("drift", ok ? 0 : 1, ok ? "" : "regenerate: python3 Tests/extract_halfband.py");
+        std::printf ("        why it is bar zero: through the PRE-fb604 copy of this harness, Bode Shifter(22)\n"
+                     "        measured a stress peak of 3.69 (PASS) where the shipping half-band gives 4.14\n"
+                     "        (FAIL), and every oversampled type read up to 5.0 dB dark at 20 kHz. A gate that\n"
+                     "        models the wrong DSP does not merely mis-measure — it goes GREEN on a real defect.\n");
+        std::printf ("        mutation target: the compiled hash itself (TI_FLT_MUT=hb)\n");
+    }
 
     // ═════ MEASURE ════════════════════════════════════════════════════════════════════════════
     struct Res
@@ -283,10 +375,13 @@ int main (int argc, char** argv)
     };
     std::vector<Res> R ((size_t) NT);
 
-    // The voice's own 2x wrapper (linear-interp up / box decimate) droops at the top whether a
-    // filter is in it or not. Measure it ONCE with an identity filter so bar [9] can judge the
-    // CORE rather than re-reporting the wrapper 26 times. The wrapper's cost is a real finding —
-    // it is printed on [9] as its own line, attributed to the wrapper, not to the filter.
+    // The voice's own 2x converter is measured ONCE with an identity filter in it, so bar [9]
+    // judges the CORE rather than re-reporting the converter 26 times. fb604 — with the shipping
+    // half-band this is now +0.00 dB to 20 kHz, so the correction it applies is ZERO and the bar
+    // reads the filter directly. It is kept, and still printed, precisely BECAUSE it went to
+    // zero: the number is the standing proof that the converter is transparent, and the day it
+    // stops being (a coefficient edit, a new prototype) bar [9] keeps judging the filter instead
+    // of silently blaming it. Through the pre-fb604 wrapper it was -3.70 dB at 14-17 kHz.
     double WRAPHF = 0.0;
     {
         Runner w; w.init ((int) Type::LADDER_LP24); w.bypassIdentity = true;
@@ -509,6 +604,12 @@ int main (int argc, char** argv)
                 if (i > total - (int) (0.5 * FS)) { acc += (double) a * a; ++n; }
             }
             double rms = n ? std::sqrt (acc / n) : 0.0;
+            //  fb604 — the 1e5 is +100 dB, and a type whose tail is at the -200 dBFS floor
+            //  (a comb that decays to nothing in 100 ms) still lands at -100 dBFS after it: the
+            //  control read BROKEN on Comb Band -(110) for a reason that was the INJECTION's
+            //  reach, not the bar's blindness. The gate now publishes which types this injection
+            //  cannot reach (SKIPPED: ...:osc) so Tests/flt_gate_control.py stops nominating
+            //  them, rather than the runner reporting a broken detector once per roster append.
             if (mut ("osc") && t == INJ_OSC) rms *= 1e5;
             r.soRms = 20.0 * std::log10 (std::max (1e-12, rms));
         }
@@ -730,6 +831,11 @@ int main (int argc, char** argv)
         //  distinct and it is the SAME FILTER with a trim on it.
         std::vector<std::string> dups; std::set<int> flagged;
         double closest = 1e9; std::string closestPair;
+        // fb604 — the MARGIN LADDER. "No duplicates" is a pass/fail sentence about 6 903 pairs at
+        // 118 types, and a single global minimum hides how much room is actually left. The twelve
+        // tightest surviving pairs are printed so the next append can see which neighbourhoods are
+        // already full before it adds to them — Low EQ vs Low EQ 6 clears the bar by 0.74 dB.
+        std::vector<std::pair<double, std::string>> ladder;
         for (int a = 0; a < NT; ++a)
             for (int b = a + 1; b < NT; ++b)
             {
@@ -743,9 +849,13 @@ int main (int argc, char** argv)
                         hi = std::max (hi, d); lo = std::min (lo, d);
                     }
                 const double shapeDev = 0.5 * (hi - lo);         // minimax offset removed
-                if (absDev < closest) { closest = absDev;
-                    closestPair = std::string (kName[(size_t) R[(size_t)a].idx]) + "(" + std::to_string (R[(size_t)a].idx)
-                                + ") vs " + kName[(size_t) R[(size_t)b].idx] + "(" + std::to_string (R[(size_t)b].idx) + ")"; }
+                { char pb[160];
+                  std::snprintf (pb, sizeof pb, "%s(%d) vs %s(%d)",
+                                 kName[(size_t) R[(size_t)a].idx], R[(size_t)a].idx,
+                                 kName[(size_t) R[(size_t)b].idx], R[(size_t)b].idx);
+                  if (absDev < closest) { closest = absDev; closestPair = pb; }
+                  ladder.emplace_back (absDev, pb); }   // all N(N-1)/2 — a cap here would
+                  // silently truncate the LAST types measured, i.e. exactly the appended ones.
                 if (absDev < 3.0 || shapeDev < 0.5)
                 {
                     char s[220];
@@ -769,6 +879,13 @@ int main (int argc, char** argv)
         std::printf ("        note: LEFT channel by design — the Comb Wide/Octave/Fifth retunes touch the\n"
                      "              RIGHT channel only, so in mono they collapse onto Comb + and a\n"
                      "              stereo-averaged test would never see it.\n");
+        std::sort (ladder.begin(), ladder.end(),
+                   [] (const std::pair<double, std::string>& x, const std::pair<double, std::string>& y)
+                   { return x.first < y.first; });
+        std::printf ("        MARGIN LADDER — the %d tightest of %d pairs (bar is 3.00 dB):\n",
+                     (int) std::min<size_t> (12, ladder.size()), NT * (NT - 1) / 2);
+        for (size_t i = 0; i < ladder.size() && i < 12; ++i)
+            std::printf ("          %6.2f dB  %s\n", ladder[i].first, ladder[i].second.c_str());
         std::printf ("        mutation target: %s (TI_FLT_MUT=dup)\n", kName[INJ_DUP]);
     }
 
@@ -796,13 +913,7 @@ int main (int argc, char** argv)
     {
         //  The shipped default cutoff is 20 kHz. A lowpass or flat engine parked there is what
         //  the user hears on a FRESH PATCH before touching anything, so it has to be open.
-        static const std::set<int> NOT_A_CORNER = {
-            14,15,16,17,68,69,70,71,      // formant — CUT is a vowel shift
-            18,26,92,93,                  // reverb  — CUT is a tank rate
-            13,66,67,                     // karplus — CUT is a pitch
-            25,                           // grain   — CUT is a grain rate
-            21,22,76,90,                  // freq shift / ring
-            27 };                         // None
+        const std::set<int>& NOT_A_CORNER = SK_OPEN;   // fb604 — one set, derived from the names
         std::vector<int> bad, sk; double wv = 0; std::string worst;
         for (const auto& r : R)
         {
@@ -835,18 +946,10 @@ int main (int argc, char** argv)
         std::printf ("  FAILED BARS:\n");
         for (const auto& b : gFailed) std::printf ("    - %s\n", b.c_str());
     }
-    // machine-readable, for fb603_filter_gates.sh's mutation check
+    // machine-readable, for fb604_filter_gates.sh's mutation check
     std::printf ("\nBARS pass=%d fail=%d\n", gPass, gFail);
     //  The machine line has to honour the SAME skips the bars do, or the runner reads a skipped
     //  type as an offender and the two halves of this file disagree with each other.
-    static const std::set<int> SK_MONO = { (int) Type::NONE, (int) Type::DIFFUSOR, (int) Type::TILT,
-                                           (int) Type::LOW_EQ, (int) Type::HIGH_EQ,
-                                           (int) Type::BAND_EQ, (int) Type::AIR };
-    static const std::set<int> SK_THD  = { (int) Type::RING_MOD, (int) Type::BODE_SHIFT,
-                                           (int) Type::BODE_DOWN, (int) Type::RING_X2,
-                                           (int) Type::NONE };
-    static const std::set<int> SK_OPEN = { 14,15,16,17,68,69,70,71, 18,26,92,93, 13,66,67, 25,
-                                           21,22,76,90, 27 };
     std::printf ("OFFENDERS:");
     for (const auto& r : R)
     {
@@ -866,7 +969,7 @@ int main (int argc, char** argv)
         if (! f.empty()) std::printf (" %d:%s", r.idx, f.c_str());
     }
     std::printf ("\n");
-    //  Which types each bar SKIPS, so Tests/fb603_filter_gates.sh never injects a fault into a
+    //  Which types each bar SKIPS, so Tests/fb604_filter_gates.sh never injects a fault into a
     //  type that bar ignores by design. (It did: the [9] control landed on Ladder HP 24, an HP
     //  shape [9] skips because an HP is SUPPOSED to cut at 16 kHz, and read "broken" for a
     //  reason that had nothing to do with the detector.)
@@ -876,6 +979,11 @@ int main (int argc, char** argv)
         std::string f;
         if (r.idx == (int) Type::NONE) f += "silent,thd,mono,open,";
         else {
+            //  [8]'s injection is a x1e5 (+100 dB) on the measured tail. A tail already at the
+            //  -200 dBFS floor cannot be pushed over 0 dBFS by it, so this bar is UNREACHABLE by
+            //  the control on those types — which is a fact about the injection, not a waiver of
+            //  the bar: [8] still judges them on every normal run.
+            if (r.soRms + 100.0 <= 0.0) f += "osc,";
             if (SK_MONO.count (r.idx)) f += "mono,";
             if (SK_THD.count  (r.idx)) f += "thd,";
             if (SK_OPEN.count (r.idx) || r.shape == "HP" || r.shape == "BP" || r.shape == "NOTCH")
