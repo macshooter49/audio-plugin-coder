@@ -39,6 +39,92 @@ namespace tw
         bool appliesToChannel (int /*midiChannel*/)    override { return true; }
     };
 
+    // ══ fb603 · THE 2× HALF-BAND OVERSAMPLER ═══════════════════════════════════════════════════
+    //  WHAT IT REPLACES, MEASURED: the old wrapper upsampled by LINEAR INTERPOLATION and decimated
+    //  with a 2-tap BOX average. For an identity filter that cascade is exactly the base-rate FIR
+    //  [0.25, 0.75] — a lowpass — so all 26 oversampled types paid **−3.70 dB @ 16 kHz / −4.98 dB
+    //  @ 20 kHz BEFORE the filter did anything** (fltmeas `[OS-WRAPPER REFERENCE]`), and it was not
+    //  even doing the job it cost that for: image rejection at the 28 kHz mirror was only −8.6 dB
+    //  on the way up and −4.3 dB on the way down.
+    //
+    //  THE REPLACEMENT — the power-complementary polyphase ALL-PASS half-band:
+    //      H(Z) = ½·[ A0(Z²) + Z⁻¹·A1(Z²) ],   A(z) = Π (aᵢ + z⁻¹)/(1 + aᵢ z⁻¹)
+    //    interpolate: u[2n] = A0·x[n] ,  u[2n+1] = A1·x[n]
+    //    decimate:    y[n]  = ½·( A0·v_even[n] + A1·v_odd[n−1] )
+    //  Both branches run at the BASE rate (the z² of the prototype IS the base-rate z), one multiply
+    //  per section ⇒ the whole 2× conversion is 4 multiplies per channel per direction, and no delay
+    //  line of any kind.
+    //
+    //  ⚠️ WHY ALL-PASS AND NOT A SYMMETRIC FIR HALF-BAND. An FIR half-band is *power-symmetric*:
+    //  its passband ripple EQUALS its stopband ripple. Flat to 0.1 dB at 20 kHz therefore buys only
+    //  39 dB of image rejection, and 60 dB costs ~43 taps ⇒ **21 samples of round-trip latency on
+    //  the wet path**. That latency is unpayable HERE, and not because of the host: `busCoD_`
+    //  (this file, ≈:3164) splits ONE oscillator between the filtered bus and the dry bypass
+    //  (dry = 1 − m1 − m2), so a delayed wet sums against its OWN undelayed dry — 21 samples combs
+    //  at 1.1 kHz on any partly-routed source, and the offset would appear/vanish with the filter
+    //  TYPE (26 types oversample, 68 don't). The all-pass form is POWER-complementary instead:
+    //  |H(ω)|² + |H(π−ω)|² = 1, so −63 dB of stopband costs a passband ripple of 0.000008 dB and the
+    //  round trip is ~2.2 samples (46 µs) — below anything that needs host reporting, and inside the
+    //  filter's own group delay.
+    //
+    //  COEFFICIENTS: 4 taps, minimax-optimised (Nelder–Mead over the stopband, /hb/design.py) for a
+    //  20 kHz passband edge and its half-band mirror 28 kHz at 2×48 kHz. Stopband −63.3 dB. They are
+    //  NORMALISED to the sample rate, so the same four numbers are correct at 44.1 / 96 / 192 kHz
+    //  (the passband edge tracks as 0.4167·fs).
+    struct HalfBandCoefs
+    {
+        static constexpr float a0 = 0.0890947891f;   // branch A (prototype's even coefficients)
+        static constexpr float a1 = 0.3083589660f;   // branch B (odd — carries the Z⁻¹)
+        static constexpr float a2 = 0.5744241747f;   // branch A
+        static constexpr float a3 = 0.8493897684f;   // branch B
+    };
+
+    /** One first-order all-pass, one-multiply form: y = a·(x − y₁) + x₁. */
+    struct HbAllpass
+    {
+        float x1 = 0.0f, y1 = 0.0f;
+        inline float process (float x, float a) noexcept
+        { const float y = a * (x - y1) + x1; x1 = x; y1 = y; return y; }
+        void reset() noexcept { x1 = y1 = 0.0f; }
+    };
+
+    /** Two cascaded all-passes = one polyphase branch. */
+    struct HbBranch
+    {
+        HbAllpass s0, s1;
+        inline float process (float x, float c0, float c1) noexcept
+        { return s1.process (s0.process (x, c0), c1); }
+        void reset() noexcept { s0.reset(); s1.reset(); }
+    };
+
+    /** 2× interpolator — one base-rate sample in, the two oversampled phases out. */
+    struct HalfBandUp2x
+    {
+        HbBranch A, B;
+        inline void process (float x, float& even, float& odd) noexcept
+        {
+            even = A.process (x, HalfBandCoefs::a0, HalfBandCoefs::a2);
+            odd  = B.process (x, HalfBandCoefs::a1, HalfBandCoefs::a3);
+        }
+        void reset() noexcept { A.reset(); B.reset(); }
+    };
+
+    /** 2× decimator — the two oversampled phases in, one base-rate sample out. The odd phase
+     *  carries the prototype's Z⁻¹, which at the base rate is exactly one sample of history. */
+    struct HalfBandDown2x
+    {
+        HbBranch A, B;
+        float oddZ = 0.0f;
+        inline float process (float even, float odd) noexcept
+        {
+            const float a = A.process (even, HalfBandCoefs::a0, HalfBandCoefs::a2);
+            const float b = B.process (oddZ, HalfBandCoefs::a1, HalfBandCoefs::a3);
+            oddZ = odd;
+            return 0.5f * (a + b);
+        }
+        void reset() noexcept { A.reset(); B.reset(); oddZ = 0.0f; }
+    };
+
     /** One synth voice — Phase 1 MPV.
      *  PolyBLEP saw oscillator → AMP ADSR → pan.
      *  Subsequent phases (per Design/v1-syn-spec.md) add filter,
@@ -811,8 +897,16 @@ namespace tw
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            // fb603 — the 2× converters are LINEAR and see only the BUS, never the filter, so their
+            // ~2 samples of history stay VALID across a 2×→2× swap: clearing them there would be a
+            // self-inflicted blip on exactly the change a user makes most (auditioning the ladder
+            // variants against each other). Clear them only when the path goes IDLE — the last
+            // oversampled type leaves — so stale history can never be released minutes later.
+            const bool wasOs = filterSlot_.needsOversampling() || filterSlot2_.needsOversampling();
             filterType1_ = clamped;
             filterSlot_.setType (static_cast<tw::filters::Type> (clamped));
+            if (wasOs && ! (filterSlot_.needsOversampling() || filterSlot2_.needsOversampling()))
+                resetOversamplers();
             sendFilterSlot_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
             sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
@@ -828,8 +922,11 @@ namespace tw
         void setFilterType2 (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            const bool wasOs = filterSlot_.needsOversampling() || filterSlot2_.needsOversampling();   // fb603 — see F1
             filterType2_ = clamped;
             filterSlot2_.setType (static_cast<tw::filters::Type> (clamped));
+            if (wasOs && ! (filterSlot_.needsOversampling() || filterSlot2_.needsOversampling()))
+                resetOversamplers();
             sendFilterSlot2_.setType (static_cast<tw::filters::Type> (clamped));   // fb287 — send mirror
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
             sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
@@ -883,6 +980,21 @@ namespace tw
           sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2);
           sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2);
           for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->setPoles (tap1); if (ps.flt2) ps.flt2->setPoles (tap2); } }  // fb348 — pooled mirrors
+        /** fb603 — MORPH plumbing for the OB-X / SEM tap. `SvfMultimode::setMorph()` (0 = LP,
+         *  .5 = Notch, 1 = HP) had ZERO callers, which is why `OB-X SVF`(9) measured identical to
+         *  `SEM LP`(48) to 0.00 dB — `morph_` was frozen at 0.0. This is the voice-side half of the
+         *  fix, mirroring setFilterPoles verbatim (all ten slots + the pooled duplicates) so a morph
+         *  value reaches EVERY path the audible filter reaches, sends included.
+         *  ⚠️ NOT yet driven by a parameter — adding SYN_FILTER*_MORPH is menu growth and belongs to
+         *  the append commit. Until then TerrainFilters can voice OB-X with a fixed morph of its own
+         *  and this setter is the single hook a knob will need. */
+        void setFilterMorph (float m1, float m2) noexcept
+        { filterSlot_.setMorph (m1); filterSlot2_.setMorph (m2);
+          sendFilterSlot_.setMorph (m1); sendFilterSlot2_.setMorph (m2);
+          sendFilterSlot3_.setMorph (m1); sendFilterSlot4_.setMorph (m2);
+          sendFilterSlot5_.setMorph (m1); sendFilterSlot6_.setMorph (m2);
+          sendFilterSlot7_.setMorph (m1); sendFilterSlot8_.setMorph (m2);
+          for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->setMorph (m1); if (ps.flt2) ps.flt2->setMorph (m2); } }
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -2931,6 +3043,7 @@ namespace tw
             filterSlot2_.reset();
             sendFilterSlot_.reset();     // fb287 — send mirror
             sendFilterSlot2_.reset();
+            resetOversamplers();         // fb603 — the 2× converters hold ~4 samples of history
 
             // Phase 8a polish — reset steal-fade state on new note
             stealing_         = false;
@@ -3171,6 +3284,10 @@ namespace tw
                 noiseCoD_ = (! noiseSrc1_ && ! noiseSrc2_) ? 1.0f : 0.0f;
                 anySrc1_ = anySrc1_ || (noiseCo1_ != 0.0f);
                 anySrc2_ = anySrc2_ || (noiseCo2_ != 0.0f);
+                // fb603 — CPU: with bus2 silent the per-sample path skips its 2× interpolator, so hold
+                // it at rest here (once per block, not per sample). Zero in ⇒ zero state, so re-arming
+                // it starts from exactly the state a run of zeros would have left. Click-free.
+                if (! anySrc2_) { osUp2L_.reset(); osUp2R_.reset(); }
 
                 // fb123 — DRIVE NORMALIZATION: the post-filter drive is a SATURATOR; feeding it a
                 // send-scaled signal ERASES the send once hot (tanh ceiling: a 5% send and a 100%
@@ -6081,21 +6198,30 @@ namespace tw
                     const float dryL = busDryL[i], dryR = busDryR[i];
                     if (oversample)
                     {
-                        // 2× linear-interp upsample → filter twice → box decimate. Interp bus1 (via
-                        // the existing osPrev feedback) + bus2; dry bypasses (added once, post-decimate).
-                        const float m1L = 0.5f * (osPrevL_   + sL[i]),     m1R = 0.5f * (osPrevR_   + sR[i]);
-                        const float m2L = 0.5f * (osPrevB2L_ + busB2L[i]), m2R = 0.5f * (osPrevB2R_ + busB2R[i]);
-                        float yMidL, yMidR; filterBuses (m1L, m1R, m2L, m2R, yMidL, yMidR, filterSlot_, filterSlot2_);
-                        float yL, yR;       filterBuses (sL[i], sR[i], busB2L[i], busB2R[i], yL, yR, filterSlot_, filterSlot2_);
-                        float wetL = 0.5f * (yMidL + yL), wetR = 0.5f * (yMidR + yR);
-                        // fb237 — ROUTING INTEGRITY: the interp history is the BUS INPUT (bus2's exact
-                        // grammar below). It stored the OUTPUT (wet + dry) — so every UNROUTED source
-                        // bled at half gain into the oversampled filter input (Ladder/Acid303 only) and
-                        // got filtered + driven against the pills (Max: 'my osc C is still being shaped'),
-                        // plus a covert half-sample output-feedback color on the routed signal itself.
-                        osPrevL_ = sL[i]; osPrevR_ = sR[i];
-                        osPrevB2L_ = busB2L[i]; osPrevB2R_ = busB2R[i];
-                        widen (wetL, wetR);
+                        // fb603 — 2× HALF-BAND (polyphase all-pass, see HalfBandUp2x above). Upsample
+                        // bus1 + bus2 → run the WHOLE filterBuses grammar on each of the two phases →
+                        // decimate. Replaces the linear-interp/box pair that cost −3.70 dB @ 16 kHz on
+                        // its own; the identity path through this one measures +0.00 dB to 20 kHz.
+                        // fb237 — ROUTING INTEGRITY (kept): the converter's input is the BUS INPUT, never
+                        // the output (wet + dry) — an output history bled every UNROUTED source at half
+                        // gain into the oversampled filter (Max: 'my osc C is still being shaped').
+                        float b1L0, b1L1, b1R0, b1R1;
+                        osUp1L_.process (sL[i], b1L0, b1L1);
+                        osUp1R_.process (sR[i], b1R0, b1R1);
+                        float b2L0 = 0.0f, b2L1 = 0.0f, b2R0 = 0.0f, b2R1 = 0.0f;
+                        // CPU: bus2 is silent on most patches — its converter is held at rest (reset once
+                        // per block where anySrc2_ is resolved), so skipping it here starts from zero
+                        // state, which is exactly what a zero input would have produced. No click.
+                        if (anySrc2_)
+                        {
+                            osUp2L_.process (busB2L[i], b2L0, b2L1);
+                            osUp2R_.process (busB2R[i], b2R0, b2R1);
+                        }
+                        float y0L, y0R, y1L, y1R;
+                        filterBuses (b1L0, b1R0, b2L0, b2R0, y0L, y0R, filterSlot_, filterSlot2_);
+                        filterBuses (b1L1, b1R1, b2L1, b2R1, y1L, y1R, filterSlot_, filterSlot2_);
+                        float wetL = osDnL_.process (y0L, y1L), wetR = osDnR_.process (y0R, y1R);
+                        widen (wetL, wetR);   // base rate: widen()'s all-pass is stateful, it must NOT run at 2×
                         sL[i] = wetL + dryL; sR[i] = wetR + dryR;
                     }
                     else
@@ -6249,8 +6375,7 @@ namespace tw
                     filterSlot_.reset();
             filterSlot2_.reset();
                     sendFilterSlot_.reset(); sendFilterSlot2_.reset();   // fb287 — send mirror
-                    osPrevL_ = osPrevR_ = 0.0f;
-                    osPrevB2L_ = osPrevB2R_ = 0.0f;
+                    resetOversamplers();                                 // fb603 — half-band state too
                     juce::FloatVectorOperations::clear (sL, numSamples);
                     juce::FloatVectorOperations::clear (sR, numSamples);
                 }
@@ -6632,11 +6757,14 @@ namespace tw
         float                   analogDriftCents_  = 0.0f;          // slow OU wander (~±2¢)
         double                  analogDetuneSemis_ = 0.0;           // (static+drift)/100 → semitones
 
-        // 2× oversampling input-prev for linear-interp upsample (Ladder + Acid303)
-        float                   osPrevL_     = 0.0f;
-        float                   osPrevR_     = 0.0f;
-        float                   osPrevB2L_   = 0.0f;   // oversample prev-state for the F2 routing bus
-        float                   osPrevB2R_   = 0.0f;
+        // fb603 — 2× HALF-BAND converters for the 26 needsOversampling() types. Two interpolators per
+        // bus (L/R) + one decimator per channel; 4 multiplies each, 200 bytes of state for all six.
+        HalfBandUp2x            osUp1L_, osUp1R_;      // bus1 (F1's sources)
+        HalfBandUp2x            osUp2L_, osUp2R_;      // bus2 (F2 / parallel routing)
+        HalfBandDown2x          osDnL_,  osDnR_;
+        /** Clear every 2× converter — note-on, type swap, and the NaN guard. */
+        void resetOversamplers() noexcept
+        { osUp1L_.reset(); osUp1R_.reset(); osUp2L_.reset(); osUp2R_.reset(); osDnL_.reset(); osDnR_.reset(); }
 
         // Filter 2 — fully independent second FilterSlot (own type/cut/res/drv/env).
         // Shares the FLT envelope shape + EROSION drift, with its own ENV amount.

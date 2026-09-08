@@ -712,6 +712,141 @@ if(window.__cardOnly)document.documentElement.className+=' card-only';
   setTimeout(fire,W515?2600:1200);
 })();
 </script>
+<script>
+/* ══════════════════════════════════════════════════════════════════════════════════════════
+   fb603 — THE FILTER ROSTER HAS ONE LENGTH, AND A DESYNC NAMES THE LIST THAT IS WRONG.
+
+   THE BARE 94 IS GONE.  This page carried the filter roster's cardinality in SIX places —
+   four parallel 94-long lists (FLT_ENGINES · FLT_ENGGRP · FILTER_TYPES · CAT) and two bare
+   integer literals (`const FILTER_NUM_CHOICES = 94`, the FX card's `tpN:94`) — plus two
+   hard-typed "Search 94 filters…" placeholders.  Every one of them has to move in lockstep
+   with C++'s kNumTypes (TerrainFilters.h:138, static_assert PluginProcessor.cpp:231) or the
+   plugin breaks in the quietest way it can:  `idx / (94 - 1)` written against a 118-choice
+   param sends 0.774 where 0.615 was meant — it compiles, it renders, the label under the
+   cursor is right, and the sound is somebody else's.  That is the fb373 / fb413 / fb524 trap
+   for the fourth time, on the biggest list in the plugin, and the roster grows next commit.
+
+   SO: the count is declared ONCE, here, as window.FLT_TYPE_COUNT.  Every normaliser asks
+   __fltRoster for it, every roster-length list registers its own length as it is declared,
+   and a length that disagrees is a console.error that NAMES THE LIST.  Nothing renormalises
+   silently.  The two halves of a round trip (norm ↔ index) call the same function, so they
+   cannot disagree with each other even mid-desync.
+
+   ♻️ RECYCLED, not invented — this is the warp guard's shape (index.html:20379): declare the
+   frozen count, ask window.__paramCardinality what the BACKEND says, treat 0 as "unknowable,
+   not wrong", re-check when the properties land.  window.__fltDesync mirrors
+   window.__warpDesync so one external gate reads both rosters.
+
+   ⚠️ WHY ITS OWN SCRIPT TAG, ABOVE EVERYTHING.  The four lists live in three different script
+   tags and three different closures (9010-13208 · 13723-30244 · 31268-31647); the only thing
+   they share is `window`.  This tag runs before all of them.
+   ⚠️ THE LISTS STAY PLAIN ARRAY LITERALS.  Registration is a SEPARATE statement after each
+   declaration, never a wrapper around it — Tests/flt_cardinality_gate.py extracts them by
+   matching `NAME = [`, and a wrapper would make all four unparseable at once.
+   ══════════════════════════════════════════════════════════════════════════════════════════ */
+window.FLT_TYPE_COUNT = 94;   /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  Grows HERE first. */
+(function () {
+  var PARAMS = ['SYN_FILTER1_TYPE', 'SYN_FILTER2_TYPE', 'SYN_FLT_ENGINE'];
+  var lists = {}, shouted = {}, problems = [];
+
+  function shout (key, msg) {
+    if (shouted[key]) return; shouted[key] = 1;
+    problems.push (msg);
+    try { console.error ('[FILTER ROSTER] ' + msg); } catch (e) {}
+    try { window.__fltDesync = { ok: false, problems: problems.slice (), count: N (), lists: lists }; } catch (e) {}
+  }
+  function N () { return (window.FLT_TYPE_COUNT | 0) || 94; }
+
+  /* THE PARAMETER IS THE AUTHORITY (fb373).  0 = the WebView has not handed the properties
+     over yet, which is unknowable, not wrong — so it is a PASS, never a guess. */
+  function paramCount () {
+    for (var i = 0; i < PARAMS.length; i++) {
+      var n = 0; try { n = window.__paramCardinality ? window.__paramCardinality (PARAMS[i]) : 0; } catch (e) {}
+      if (n > 1) return n | 0;
+    }
+    return 0;
+  }
+
+  var R = {
+    /* the number every filter-type normalisation divides by. ONE answer for the whole page:
+       a desync SHOUTS but never splits the page into two numberings. */
+    count: N,
+    norm:  function (idx) { var n = N (); return n > 1 ? Math.max (0, Math.min (1, idx / (n - 1))) : 0; },
+    index: function (v)   { var n = N (); return Math.max (0, Math.min (n - 1, Math.round (v * (n - 1)))); },
+
+    /* every roster-length list registers itself AS IT IS DECLARED, so a wrong length names
+       itself instead of silently mis-labelling (or mis-drawing) every engine past the gap. */
+    list: function (name, arr) {
+      var len = (arr && arr.length) | 0; lists[name] = len;
+      if (len !== N ()) shout ('L' + name, name + ' has ' + len + ' entries; the roster is ' + N ()
+        + ' — THAT list is the one to fix (window.FLT_TYPE_COUNT is the count).');
+      return arr;
+    },
+
+    /* FILTER_TYPES is a MAP, not a list: it must reach 0..N-1 exactly once, or an engine is
+       unreachable from the browser (gap) / unselectable under two names (duplicate). */
+    cover: function (name, idxs) {
+      var seen = {}, dup = [], i, n = N ();
+      for (i = 0; i < idxs.length; i++) {
+        if (!(idxs[i] >= 0 && idxs[i] < n)) shout ('O' + name, name + ' lists index ' + idxs[i]
+          + ', off the end of a ' + n + '-type roster');
+        else if (seen[idxs[i]]) dup.push (idxs[i]); else seen[idxs[i]] = 1;
+      }
+      if (dup.length) shout ('D' + name, name + ' files ' + dup.join (', ') + ' more than once — those engines cannot be selected');
+      var miss = []; for (i = 0; i < n; i++) if (! seen[i]) miss.push (i);
+      if (miss.length) shout ('M' + name, name + ' never lists ' + miss.length + ' of ' + n
+        + ' engines, so no menu can reach them: ' + miss.join (', '));
+      return idxs;
+    },
+
+    /* "Search 94 filters…" was typed twice.  It now counts what the menu actually offers. */
+    searchPlaceholder: function (n) { return 'Search ' + ((n | 0) || N ()) + ' filters…'; },
+
+    /* a label lookup that MISSES used to return 'Ladder LP · 24' — the header would name the
+       wrong engine with total confidence.  It still returns something drawable, and says so. */
+    missingLabel: function (i) { shout ('X' + i, 'no FILTER_TYPES row for engine index ' + i
+      + ' — the header cannot name it (showing the index instead).'); return 'Type ' + i; },
+
+    lists: function () { return lists; },
+
+    /* cross-check the declared count against the backend; called at boot and again whenever a
+       type param's properties land. */
+    check: function () {
+      var p = paramCount ();
+      if (p && p !== N ()) shout ('P', 'the PARAMETER carries ' + p + ' filter types, this page carries '
+        + N () + ' — set window.FLT_TYPE_COUNT to ' + p + ' and grow the four lists to match.');
+      var ok = ! problems.length;
+      try { window.__fltDesync = ok ? null : { ok: false, problems: problems.slice (), count: N (), param: p, lists: lists }; } catch (e) {}
+      return { ok: ok, problems: problems.slice (), count: N (), param: p, lists: lists };
+    }
+  };
+  try { window.__fltRoster = R; window.__fltDesync = null; } catch (e) {}
+
+  /* HARD LAW: a detector that can silently no-op must print whether it fired. */
+  try { window.__fltRosterReport = function () {
+    var r = R.check (); var ks = Object.keys (lists);
+    console.log ('[FILTER ROSTER] count ' + r.count + ' · param ' + (r.param || 'not answered yet')
+      + ' · lists ' + (ks.length ? ks.map (function (k) { return k + '=' + lists[k]; }).join (' ') : 'NONE REGISTERED')
+      + ' · ' + (r.ok ? 'OK' : 'DESYNC (' + r.problems.length + ')'));
+    return r; }; } catch (e) {}
+
+  (function arm () {
+    try {
+      setTimeout (function () { R.check (); }, 0);
+      setTimeout (function () {
+        PARAMS.forEach (function (p) {
+          try {
+            var st = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (p) : null;
+            if (st && st.propertiesChangedEvent && st.propertiesChangedEvent.addListener)
+              st.propertiesChangedEvent.addListener (function () { R.check (); });
+          } catch (e) {}
+        });
+        R.check ();
+      }, 2500);
+    } catch (e) {}
+  })();
+})();
+</script>
 <style>
 /* ============ RESET & TOKENS ============ */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -9825,6 +9960,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // is wrong by construction — this is a straight lookup.
           var FLT_GRPNAMES=['Ladder','Xpander','State-Var','Multi','Comb','Formant','Phase','EQ & Tone','Reverb','Dirty'];
           var FLT_ENGGRP=[0,0,0,0,0,2,2,2,2,2,4,4,4,4,5,5,5,5,8,6,6,9,6,9,9,9,8,0,0,0,0,0,0,0,1,1,1,1,1,1,1,1,1,2,2,2,2,2,2,2,2,2,3,3,3,3,3,3,3,3,3,3,4,4,4,4,4,4,5,5,5,5,6,6,6,6,6,7,7,7,7,7,7,9,9,9,9,2,2,0,9,9,8,8];
+          /* fb603 — both roster-length lists register against window.FLT_TYPE_COUNT. A short
+             FLT_ENGGRP used to silently file every engine past the gap under group 0 ("Ladder");
+             a short FLT_ENGINES made the FX picker write idx/(len-1) — a different engine. Now
+             either one NAMES ITSELF in the console at boot. */
+          try{ window.__fltRoster.list('FLT_ENGINES',FLT_ENGINES); window.__fltRoster.list('FLT_ENGGRP',FLT_ENGGRP); }catch(e){}
           // fb413 — cho/fla/pha join at 6 each. A core missing from THIS map silently caps at
           // `||1`: one card works and duplication does not, which is the fb381 FX_PREFIX bug one
           // registry over. The fx3 UI gate now asks for EIGHT of each and requires exactly six
@@ -9894,7 +10034,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
              // the header pill IS the engine selector now: one menu, categorised, searchable —
              // the same one the main filter uses. The old group pill ("Multi", "Xpander") selected
              // nothing the DSP could hear, which is exactly why it goes.
-             types:FLT_ENGINES, tpN:94, tp2:'SYN_FLT_ENGINE',
+             types:FLT_ENGINES, tpN:window.FLT_TYPE_COUNT, tp2:'SYN_FLT_ENGINE',   /* fb603 — was a bare 94 */
              preset:'Init',code:'',on:false,pwrP:'SYN_FLT_POWER',tp:'SYN_FLT_ENGINE',
              rp:['SYN_FLT_SRC_A','SYN_FLT_SRC_B','SYN_FLT_SRC_C','SYN_FLT_SRC_D','SYN_FLT_SRC_SUB','SYN_FLT_SRC_NOISE'],
              pills:[{t:'Wide',on:false},{t:'Punch',on:false}],pp:['SYN_FLT_WIDE','SYN_FLT_PUNCH'],
@@ -11362,7 +11502,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 byG[g].items.push({ name:FLT_ENGINES[idx], sel:(idx===cur), pick:function(){
                   dev.type = FLT_ENGINES[idx];
                   if (dev.back && dev.back.d1) dev.back.d1.v = FLT_ENGINES[idx];
-                  try{ window.__setSynParam(dev.pfx+'ENGINE', idx/(FLT_ENGINES.length-1)); }catch(e){}
+                  /* fb603 — ONE normaliser for both filter menus. Was idx/(list.length-1): right only
+                     while the list happens to equal the param. __fltRoster.norm is the same call the main
+                     filter makes, so the two pickers cannot drift apart. */
+                  try{ window.__setSynParam(dev.pfx+'ENGINE', window.__fltRoster.norm(idx)); }catch(e){}
                   render();
                 }});
               })(i);
@@ -11370,7 +11513,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             var openCat = 0;
             for (var k = 0; k < cats.length; k++) if (cats[k].items.some(function(it){return it.sel;})) { openCat = k; break; }
             try{ window.openTwoPaneBrowser(ev, { cats:cats, openCat:openCat,
-                                                 searchPlaceholder:'Search 94 filters…' }); }catch(e){}
+                                                 searchPlaceholder:window.__fltRoster.searchPlaceholder(FLT_ENGINES.length) }); }catch(e){}   /* fb603 — counts the list, never a typed 94 */
           }
           window.__fltOpenBrowser = fltOpenBrowser;
 
@@ -22247,10 +22390,19 @@ setTimeout(function wireSynControls () {
         { idx: 86, label: 'Scream BP', group: 'DIRTY & WEIRD', active: true },
         { idx: 91, label: 'Radio', group: 'DIRTY & WEIRD', active: true },
       ];
-      const FILTER_NUM_CHOICES = 94;
+      /* fb603 — FILTER_TYPES is the CATEGORY BROWSER's map, so its failure mode is worse than a
+         wrong length: a missing idx is an engine no menu can reach and a duplicate is one that
+         can never be selected. Both are silent today. cover() walks 0..N-1 and names either. */
+      try{ window.__fltRoster.list('FILTER_TYPES',FILTER_TYPES);
+           window.__fltRoster.cover('FILTER_TYPES',FILTER_TYPES.map(t=>t.idx)); }catch(e){}
+      /* fb603 — WAS `const FILTER_NUM_CHOICES = 94`, a bare literal feeding BOTH halves of the
+         type round-trip. Now both halves call __fltRoster, which reads window.FLT_TYPE_COUNT —
+         so they cannot disagree with each other, and a backend that says otherwise shouts. */
       const labelByIdx = (i) => {
         const e = FILTER_TYPES.find(t => t.idx === i);
-        return e ? e.label : 'Ladder LP · 24';
+        /* a miss used to return 'Ladder LP · 24' — the header named the WRONG engine with total
+           confidence, which is exactly how a roster grows in C++ and nobody notices in the UI. */
+        return e ? e.label : ((window.__fltRoster && window.__fltRoster.missingLabel(i)) || ('Type ' + i));
       };
 
       const ddTriggerEl = document.querySelector('#syn-panel .device.filter .dd-trigger');
@@ -22276,12 +22428,11 @@ setTimeout(function wireSynControls () {
       const filterStType = mkSlotState('TYPE');
 
       const setFilterTypeIdx = (idx) => {
-        try { filterStType.setNormalisedValue(idx / (FILTER_NUM_CHOICES - 1)); } catch (e) {}
+        try { filterStType.setNormalisedValue(window.__fltRoster.norm(idx)); } catch (e) {}
       };
       const getFilterTypeIdx = () => {
         try {
-          const n = filterStType.getNormalisedValue();
-          return Math.round(n * (FILTER_NUM_CHOICES - 1));
+          return window.__fltRoster.index(filterStType.getNormalisedValue());
         } catch (e) { return 0; }
       };
 
@@ -22319,7 +22470,8 @@ setTimeout(function wireSynControls () {
           let openCat = 0;
           for (let k = 0; k < cats.length; k++) if (cats[k].items.some((it) => it.sel)) { openCat = k; break; }
           window.openTwoPaneBrowser(ev, { cats: cats, openCat: openCat,
-                                          searchPlaceholder: 'Search 94 filters…' });
+                                          searchPlaceholder: window.__fltRoster.searchPlaceholder(
+                                            cats.reduce((n, c) => n + c.items.length, 0)) });   /* fb603 — counts the rows it just built */
         };
         ddTriggerEl.addEventListener('click', (e) => { e.preventDefault(); e.stopPropagation(); window.__fltTypeMenuOpen(e); });
         // fb170 — \u2039 \u203a steppers (the engines' wt-nav grammar): walk the curated
@@ -31283,6 +31435,15 @@ restoreThemeFromBackend();
     '#syn-panel .device.filter .filter-display{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) > .device-label{display:none;}'+
     '#syn-panel .device.filter:not(.swapped) .dd-trigger{position:absolute;top:7px;left:11px;z-index:3;height:16px;min-height:0;padding:0;width:auto;max-width:calc(100% - 88px);background:transparent;border:none;border-radius:0;color:rgba(255,255,255,.62);font-size:9px;letter-spacing:1.1px;font-weight:300;text-shadow:0 1px 3px rgba(0,0,0,.9);gap:5px;align-items:center;}'+
+    /* fb603 — THE max-width DID NOT BIND. The label lived in a flex item at the default
+       min-width:auto, so a name longer than the cap OVERFLOWED it: the trigger stopped growing
+       and the ‹ › steppers walked out past its right edge instead. Measured at 820x656 with a
+       48-char name — the right stepper ended at x=268 on a device whose right edge is 346, i.e.
+       59 px past the cap and on top of the hover readout. Every shipped name fits today (the
+       longest, "Multi Notch+Notch", makes the trigger 133 px of the 244 px allowed), so this is
+       bit-identical NOW and is what keeps the cap honest when the roster grows. */
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger>span:not(.flt-nav){flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}'+
+    '#syn-panel .device.filter:not(.swapped) .dd-trigger>.flt-nav{flex:none;}'+
     '#syn-panel .device.filter:not(.swapped) .dd-trigger:hover{color:#fff;border:none;background:transparent;}'+
     '#syn-panel .device.filter:not(.swapped) .dd-trigger .dd-chev{color:inherit;opacity:.6;}'+
     '#syn-panel .device.filter:not(.swapped) .filter-toggle{top:7px;right:12px;z-index:3;gap:8px;height:16px;align-items:center;}'+
@@ -31316,51 +31477,208 @@ restoreThemeFromBackend();
     hard-coded 48000, so on a 44.1 k session every spectrum sat 8.8 % sharp against its own curve. */
   }catch(e){} if(base) base(d); };
   // Per-index category — every filter type gets its own representative, knob-reactive shape.
-  var CAT=['lp','lp','hp','lp','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formant','formant','formant','formant','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp','lp','lp','lp','lp','acid','hp','hp','hp','bp','bp','bp','notch','ap','lp','lp','hp','bp','notch','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','comb','comb','comb','comb','karplus','karplus','formant','formant','formant','formant','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','higheq','addbass','samphold','samphold','scream','screambp','lp','lp','lp','ring','radio','reverb','creverb'];   // fb165 — 94 entries, enum order (display model key per type)
+  var CAT=['lp24','lp','hp24','lp24','acid','lp','hp','bp','notch','lp','comb','combn','shimmer','karplus','formanta','formante','formanti','formantm','reverb','phaser4','phaser8','ring','bode','crush','shaper','grain','creverb','none','lp6','lp18','lp24','lp24','lp24','acid','hp6','hp','hp18','bp','bp24','bp','notch','ap','lp6','lp24','hp24','bp24','notch24','peak','lp','notch','hp','bp','mLH','mLB','mLN','mHB','mHN','mBB','mBN','mPP','mNN','mPH','comb','comb','comb','comb','karplus','karplus','formanto','formantu','formantw','formantg','phaser6','phaser12','phaser16','diffusor','bode','tilt','loweq','higheq','bandeq','air','addbass','samphold','samphm','scream','screambp','lp','lp','lp24','ring','radio','reverbd','creverb'];   // fb165 — 94 entries, enum order (display model key per type)
+  /* fb603 — CAT is the fourth roster-length list: index N here is the DISPLAY MODEL for engine N.
+     Short by one and every engine past the gap draws its NEIGHBOUR's curve — the "no flat
+     placeholder lines, ever" law broken in the quietest possible way. It registers like the
+     other three, so a short CAT names itself in the console at boot. */
+  try{ window.__fltRoster.list('CAT',CAT); }catch(e){}
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
   function Q(res){ return 0.6+res*res*16; }
   /* fb510 — MODEL-CURVE CACHE. Display models whose mag() branch reads t (animated combs /
      phasers / grain / etc.) can never be cached across frames; every key ABSENT here is a pure
      static function of (type, fc, res, drv). ⚠️ Add any NEW t-reading type here or its idle
      motion freezes (knob response stays correct either way — all knob inputs are in the key). */
-  var MAG_ANIM={comb:1,combn:1,shimmer:1,karplus:1,formant:1,reverb:1,creverb:1,phaser4:1,phaser8:1,phaser6:1,phaser12:1,phaser16:1,ring:1,bode:1,crush:1,shaper:1,grain:1,ap:1,diffusor:1,addbass:1,samphold:1,radio:1};
+  var MAG_ANIM={comb:1,combn:1,shimmer:1,karplus:1,reverb:1,reverbd:1,creverb:1,formanta:1,formante:1,formanti:1,formanto:1,formantu:1,formantm:1,formantw:1,formantg:1,phaser4:1,phaser8:1,phaser6:1,phaser12:1,phaser16:1,ring:1,bode:1,crush:1,shaper:1,grain:1,diffusor:1,addbass:1,samphold:1,samphm:1,radio:1};   /* fb603 — samphm joins; `ap` LEAVES: the new Xpd Phase model reads no t, so it caches like every other static shape */
   // single biquad-notch amplitude (0 at fk, →1 away) — used to build phaser combs
   function ntch(f,fk,Qn){ var r=f/fk, n=1-r*r; return Math.abs(n)/Math.sqrt(n*n+(r/Qn)*(r/Qn)); }
   // resonant peak amplitude around fp
   function pk(f,fp,bw){ var d=(f-fp)/(fp*bw); return 1/Math.sqrt(1+d*d); }
+  /* ══ fb603 — THE VOWEL BANK IS THE DSP'S TABLE, NOT A GUESS ═══════════════════════════════
+     The eight formant engines all drew ONE invented model: three resonators at fc·0.7 / 1.5 /
+     2.7, i.e. peaks that track CUT one-for-one. The DSP does nothing of the sort — FormantBank
+     (TerrainFilters.h:770) holds the Csound bass-voice table and CUT is a vocal-tract SHIFT of
+     0.5×..2× on A/E/I/O/U, or the a→e→i→o→u MORPH on the other three. So at CUT 100 Hz the
+     picture put the vowel at 70/150/270 Hz while the filter was resonating at 5.4 kHz:
+     37.8 dB of error at 21 Hz on Formant A, 40.8 dB on Formant Growl (measured, cut100_res0).
+     These three tables and the two laws below ARE the DSP's, copied index for index. The bank
+     is memoised on a NUMERIC dirty compare (fb509: never build a key string per frame), so the
+     four exp/pow per formant run once per frame instead of once per pixel. ══════════════════ */
+  var VF=[[600,1040,2250,2450],[400,1620,2400,2800],[250,1750,2600,3050],[400,750,2400,2600],[350,600,2400,2675]];
+  var VB=[[60,70,110,120],[40,80,100,120],[60,90,100,120],[40,80,100,120],[40,80,100,120]];
+  var VG=[[0,-7,-9,-9],[0,-12,-9,-12],[0,-30,-16,-22],[0,-11,-21,-20],[0,-20,-32,-28]];
+  var FMB={v:-9,c:-9,q:-9,F:[0,0,0,0],Q:[0,0,0,0],G:[0,0,0,0]};
+  function fmtBank(v,c01,qs){
+    if(FMB.v===v&&FMB.c===c01&&FMB.q===qs) return FMB;
+    FMB.v=v; FMB.c=c01; FMB.q=qs; var k;
+    if(v>=0){ var sh=Math.pow(2,(c01-0.5)*2);                     // setVowel: CUT = tract size
+      for(k=0;k<4;k++){ var F=Math.min(21600,Math.max(20,VF[v][k]*sh)), B=Math.max(25,VB[v][k]*qs);
+        FMB.F[k]=F; FMB.Q[k]=F/B; FMB.G[k]=Math.pow(10,VG[v][k]/20); } }
+    else { var x=Math.max(0,Math.min(1,c01))*4, i=Math.max(0,Math.min(3,Math.floor(x))), p=x-i;   // setMorph: CUT = the vowel
+      for(k=0;k<4;k++){ var F2=Math.min(21600,Math.max(20,Math.exp((1-p)*Math.log(VF[i][k])+p*Math.log(VF[i+1][k])))),
+            B2=Math.max(25,((1-p)*VB[i][k]+p*VB[i+1][k])*qs);
+        FMB.F[k]=F2; FMB.Q[k]=F2/B2; FMB.G[k]=Math.pow(10,((1-p)*VG[i][k]+p*VG[i+1][k])/20); } }
+    return FMB; }
+  /* ══ fb603 — THE SLOPE IS PART OF THE SHAPE ═════════════════════════════════════════════════
+     Every ladder / Xpander / SVF lowpass drew the SAME 2-pole curve whatever its real order.
+     Measured (report TABLE 1, asymptotic dB/oct with the 2x-wrapper droop removed):
+     Ladder LP 24 = 23.8 dB/oct drawn at 12.0 — three octaves past the corner the picture was
+     35 dB too loud; Ladder LP 6 = 6.0 drawn at 12.0, too STEEP by the same margin; SVF HP 24 =
+     23.9 and Xpd BP 24 = 11.8/11.7 per skirt, both drawn at half. Seventeen engines.
+
+     ns = how many 2-pole sections the engine really is (0.5 = a single pole). The PER-SECTION Q
+     is Q(res)^(1/ns), so ns sections peak exactly as high as the one section the old model drew.
+     That matters: the peak height is NOT what was broken. Measured peak above passband at
+     RES 0.5, cut 1 k — Ladder LP 6 / 12 / 18 / 24 = 34.6 / 31.5 / 28.4 / 25.3 dB, a 9.3 dB
+     spread across the whole 6→24 dB/oct span. A plain `pow(2-pole, ns)` cascade would have
+     DOUBLED the 24 dB/oct peak (13.3 → 26.6 dB at RES 0.5) and HALVED the 6 dB/oct one — the
+     spread backwards and four times too wide. Only the asymptote was ever wrong.
+     ⚠️ The absolute peak HEIGHTS above are the shipping DSP's, and the resonance taper is being
+     re-cut in this same commit; this model reads the RES knob through the shared Q(res), so it
+     follows whatever taper lands rather than freezing today's numbers into the picture.
+     Cost: one extra Math.pow per point on 17 of 94 engines (cached for all of them — none is in
+     MAG_ANIM), against the divide it replaces. ═══════════════════════════════════════════════ */
+  function ordA(kind,w,res,ns){
+    var qs=Math.pow(Q(res),1/ns), d=Math.sqrt((1-w*w)*(1-w*w)+(w/qs)*(w/qs));
+    var b=(kind===0)?1/d:(kind===1)?w*w/d:(kind===2)?(w/qs)/d:Math.abs(1-w*w)/d;
+    return Math.pow(b,ns); }
+  /* fb603 — a SAMPLE-AND-HOLD's magnitude is the zero-order-hold sinc at its ABSOLUTE rate: nulls
+     at every multiple of the rate, a 6 dB/oct envelope between them. Samp-Hold measures its first
+     null at exactly 1000 Hz on the 1 kHz knob (−12 dB in the 1/6-oct probe) and −34 dB by 12 kHz,
+     which is the sinc envelope to within the probe's smoothing. Bit-Crush's downsampler is the
+     same shape (TerrainFilters.h BitCrush: rate = 20·(fs/20)^cut01), so both share this. */
+  function zoh(f,rate){ var x=Math.PI*f/rate; return (x<1e-6)?1:Math.abs(Math.sin(x)/x); }
+  /* Re/Im of k·G⁴ where G = 1/(1+jw): the ladder's global feedback term. (1+jw)⁴ = a+jb. */
+  function k4r(a,b,k,im){ var d=a*a+b*b; return im?(-k*b/d):(k*a/d); }
   // mag(): returns POWER (amplitude²) so curveY's 10·log10 reads true dB. t = seconds, for animation.
   function mag(type,f,fc,res,drv,t){ if(type==='none')return 1;
     var w=f/fc, Qf=Q(res), den=Math.sqrt((1-w*w)*(1-w*w)+(w/Qf)*(w/Qf)), A=1;
     if(type==='lp'){ A=1/den; }
+    else if(type==='lp6'){ A=ordA(0,w,res,0.5); }
+    else if(type==='lp18'){ A=ordA(0,w,res,1.5); }
+    else if(type==='lp24'){ A=ordA(0,w,res,2); }
     else if(type==='hp'){ A=w*w/den; }
+    else if(type==='hp6'){ A=ordA(1,w,res,0.5); }
+    else if(type==='hp18'){ A=ordA(1,w,res,1.5); }
+    else if(type==='hp24'){ A=ordA(1,w,res,2); }
     else if(type==='bp'){ A=(w/Qf)/den; }
+    else if(type==='bp24'){ A=ordA(2,w,res,2); }
     else if(type==='notch'){ A=Math.abs(1-w*w)/den; }
-    else if(type==='acid'){ var Qa=Q(Math.min(1,res*1.15+0.18)), da=Math.sqrt((1-w*w)*(1-w*w)+(w/Qa)*(w/Qa)); A=(1/da)*(1+drv*0.5); }
-    else if(type==='comb'){ var rp=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.6); A=(0.2+0.8*Math.pow(rp,1+res*5))/Math.sqrt(1+Math.pow(w*0.18,2)); }
-    else if(type==='combn'){ var rn=0.5+0.5*Math.cos(2*Math.PI*f/fc + Math.PI + t*0.6); A=(0.2+0.8*Math.pow(rn,1+res*5))/Math.sqrt(1+Math.pow(w*0.18,2)); }
+    else if(type==='notch24'){ A=ordA(3,w,res,2); }
+    /* Acid 303 / Acid Scream measure 22.3 / 23.3 dB/oct — a 4-pole 303 ladder, drawn at 12.
+       Two sections at the SQUARE ROOT of the 303's own Q, so the slope doubles and the peak
+       does not (measured 8.4 / 8.7 dB above passband at RES 0.5 — the 303 is a gentle peak). */
+    else if(type==='acid'){ var Qa=Math.sqrt(Q(Math.min(1,res*1.15+0.18))), da=Math.sqrt((1-w*w)*(1-w*w)+(w/Qa)*(w/Qa)); A=Math.pow(1/da,2)*(1+drv*0.5); }
+    /* fb603 — the /sqrt(1+(w·0.18)²) was an invented 6 dB/oct droop above ~5·fc. Every comb in
+       the roster measures FLAT (-0.0 dB/oct, report TABLE 1 idx 10/11/62-65), so at CUT 100 the
+       drawn curve buried 15 kHz by 27.3 dB that the filter does not touch. A comb's teeth are
+       the whole shape; the tilt was drawing a lowpass that is not there. */
+    else if(type==='comb'){ var rp=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.6); A=(0.2+0.8*Math.pow(rp,1+res*5)); }
+    else if(type==='combn'){ var rn=0.5+0.5*Math.cos(2*Math.PI*f/fc + Math.PI + t*0.6); A=(0.2+0.8*Math.pow(rn,1+res*5)); }
     else if(type==='shimmer'){ var rs=0.5+0.5*Math.cos(2*Math.PI*f/(fc*0.5) + t*1.3); A=(0.25+0.75*Math.pow(rs,1+res*4))*(0.7+0.5*Math.min(1,w*0.3))*(1+0.12*Math.sin(t*1.7)); }
-    else if(type==='karplus'){ var rk=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.4); A=(0.12+0.88*Math.pow(rk,6+res*14))/Math.sqrt(1+Math.pow(w*0.12,2)); }
-    else if(type==='formant'){ var vib=1+0.012*Math.sin(t*4), fps=[fc*0.7*vib,fc*1.5*vib,fc*2.7*vib], H2=0; for(var fi=0;fi<3;fi++){ var ww=f/fps[fi], dd=Math.sqrt((1-ww*ww)*(1-ww*ww)+(ww/Q(res*0.7+0.22))*(ww/Q(res*0.7+0.22))); H2+=(1/dd)*(1-fi*0.22); } A=H2/2.2; }
-    else if(type==='reverb'){ A=pk(f,fc,1.3)*(0.85+0.25*Math.sin(f*0.011+t*2.0))*(0.9+drv*0.25)+0.12; }
-    else if(type==='creverb'){ var rc=0.5+0.5*Math.cos(2*Math.PI*f/(fc*0.55)+t*1.1); A=(0.18+0.82*Math.pow(rc,2+res*4))/Math.sqrt(1+Math.pow(w*0.4,2))+0.06; }
+    /* fb603 — same invented droop; the three Karplus voices measure +1.3 dB/oct, i.e. flat. */
+    else if(type==='karplus'){ var rk=0.5+0.5*Math.cos(2*Math.PI*f/fc + t*0.4); A=(0.12+0.88*Math.pow(rk,6+res*14)); }
+    /* fb603 — ONE key per vowel, because the DSP has one vowel per engine. The four resonators
+       are summed + − + − (FormantBank::process) with the DSP's own per-formant dB weights, so
+       the inter-formant notches fill exactly the way they do in the audio. CUT is a tract SHIFT
+       on a/e/i/o/u and the a→e→i→o→u MORPH on m/w/g — never a corner frequency. */
+    else if(type==='formanta'||type==='formante'||type==='formanti'||type==='formanto'||type==='formantu'
+          ||type==='formantm'||type==='formantw'||type==='formantg'){
+      var vch=type.charAt(7);
+      var vI=(vch==='a')?0:(vch==='e')?1:(vch==='i')?2:(vch==='o')?3:(vch==='u')?4:-1;
+      var qs=(vch==='w')?Math.pow(0.1,res)*4.5
+            :(vch==='g')?Math.pow(0.1,Math.min(1,res*1.2+0.15))*1.6
+            :Math.pow(0.1,res)*2.0;                                      // TerrainFilters.h:1563 / 1786 / 1789
+      var c01=Math.min(1,Math.max(0,Math.log(Math.max(20,fc)/20)/Math.log(1000)));
+      var FB=fmtBank(vI,c01,qs), vib=1+0.012*Math.sin(t*4), fre=0, fim=0;
+      for(var fi=0;fi<4;fi++){ var Fk=FB.F[fi]*vib, uu=f/Fk-Fk/f, dq=FB.Q[fi]*uu, dn=1+dq*dq, sg=(fi&1)?-1:1;
+        fre+=sg*FB.G[fi]/dn; fim-=sg*FB.G[fi]*dq/dn; }
+      A=Math.sqrt(fre*fre+fim*fim); }
+    /* fb603 — Reverb Filter and Reverb Dark measure 12.3 / 12.4 dB/oct LOWPASS that tracks CUT
+       (−3 dB at 1000 Hz on the 1 kHz knob; TABLE 1's "corner" column reads 0.04 because its
+       detector trips on the +5 dB modal bump at 100 Hz, not because the corner is at 40 Hz).
+       The model drew a broad resonant BUMP at 2.3 dB/oct with a −18 dB floor, so above 4 kHz the
+       picture was 30 dB too loud and the knob barely moved it. It is the 2-pole LP the audio is,
+       times the modal ripple that makes it a reverb. Dark is the same filter 1.2 octaves lower. */
+    else if(type==='reverbd'){ var wd=w*2.2, dd2=Math.sqrt((1-wd*wd)*(1-wd*wd)+(wd/Qf)*(wd/Qf)); A=(1/dd2)*(0.85+0.25*Math.sin(f*0.011+t*2.0))*(0.9+drv*0.25)+0.004; }
+    else if(type==='reverb'){ A=(1/den)*(0.85+0.25*Math.sin(f*0.011+t*2.0))*(0.9+drv*0.25)+0.004; }
+    /* fb603 — Reverb Filter 2 and Reverb Metal measure FLAT (+2 dB, 20 Hz…18 kHz) at RES 0, with
+       a low cut that opens up as RES rises (−7 / −12 dB at 20 Hz by RES 0.5). The model drew deep
+       comb teeth and a 4 dB/oct rolloff neither engine has: 29.6 dB out at 20 Hz. */
+    else if(type==='creverb'){ var rc=0.5+0.5*Math.cos(2*Math.PI*f/(fc*0.55)+t*1.1); A=(0.82+0.22*rc)*(f/Math.sqrt(f*f+Math.pow(13+res*44,2))); }
     else if(type==='phaser4'){ var sw=1+0.28*Math.sin(t*0.8), fks=[1.0,2.4,4.3,6.8], pr=1; for(var pi=0;pi<4;pi++) pr*=ntch(f,fc*fks[pi]*sw,3.0); var dph=0.45+0.5*res; A=(1-dph)+dph*pr; }
     else if(type==='phaser8'){ var sw2=1+0.34*Math.sin(t*0.95), fk8=[1.0,1.9,3.0,4.3,5.9,7.8,10.0,12.7], p8=1; for(var qi=0;qi<8;qi++) p8*=ntch(f,fc*fk8[qi]*sw2,3.4); var d8=0.5+0.5*res; A=(1-d8)+d8*p8; }
     else if(type==='ring'){ var shf=fc*(0.3+res*0.7)*(1+0.05*Math.sin(t*1.2)); A=pk(f,Math.abs(fc-shf),0.09)+pk(f,fc+shf,0.09)+0.18; }
     else if(type==='bode'){ var sp=Math.max(fc,40), dep=0.3+0.62*res; A=(1-dep)+dep*(0.5+0.5*Math.cos(2*Math.PI*f/sp + t*1.5)); }
-    else if(type==='crush'){ var bs=1/Math.sqrt(1+Math.pow(w*0.6,2)), steps=2+Math.round((1-drv)*6); A=Math.round(bs*steps)/steps; if(f>fc) A+=0.18*Math.abs(Math.cos(Math.PI*f/fc + t*0.5)); A*= (0.97+0.03*Math.sin(t*9+f*0.02)); }
+    /* fb603 — RES IS THE BIT DEPTH AND CUT IS THE SAMPLE RATE (TerrainFilters.h BitCrush:
+       bits = 1 + res·15, rate = 20·(fs/20)^cut01). The model read DRIVE for its step count and
+       RES not at all, so the one knob that owns the sound drew nothing — the Tests curve diff
+       reports "model moves 0.0 dB, DSP moves 299.9 dB". Now: the downsampler's ZOH sinc from CUT,
+       plus the quantisation floor (−6.02 dB per bit) from RES, which is what fills the sinc nulls
+       and what you hear when you wind the bits down. */
+    else if(type==='crush'){ var c01c=Math.min(1,Math.max(0,Math.log(Math.max(20,fc)/20)/Math.log(1000)));
+      var rtc=20*Math.pow(2400,c01c), bitsc=1+res*15, nzc=Math.pow(10,-0.301*bitsc);
+      A=(0.62+0.38*Math.abs(Math.cos(t*0.5+f*0.002)))*zoh(f,rtc)*(1-0.25*nzc)+0.055+nzc*0.5; }
     else if(type==='shaper'){ var har=0; for(var hk=2;hk<=6;hk++) har+=pk(f,fc*hk,0.05)/(hk-1); A=(0.55+0.45/Math.sqrt(1+Math.pow(w*0.5,2)))*(1+drv*1.6*har*(0.8+0.2*Math.sin(t*2.4)))*(1+res*0.3); }
     else if(type==='grain'){ var lg=Math.log(Math.max(f,20)/fc), win=Math.exp(-(lg*lg)/(2*Math.pow(0.55+res*0.5,2))); var gn=0.55+0.45*Math.abs(Math.sin(f*0.04 + t*6.0)*Math.cos(f*0.017 - t*3.3)); A=win*gn+0.05; }
-    else if(type==='peak'){ A=1+(0.5+res*3)*pk(f,fc,0.10+0.25*(1-res)); }
-    else if(type==='ap'){ A=0.93+0.06*Math.sin(Math.log(Math.max(f,20)/fc)*3+t*1.2); }
-    else if(type.length===3&&type.charAt(0)==='m'){ var h1=function(o,ff,fcx){ var ww=ff/fcx, dd=Math.sqrt((1-ww*ww)*(1-ww*ww)+(ww/Qf)*(ww/Qf)); if(o==='L')return 1/dd; if(o==='H')return ww*ww/dd; if(o==='B')return (ww/Qf)/dd; if(o==='N')return Math.abs(1-ww*ww)/dd; return 1+res*2.2*pk(ff,fcx,0.14); }; A=0.62*(h1(type.charAt(1),f,fc)+h1(type.charAt(2),f,Math.min(fc*4,18000))); }
+    /* fb603 — SVF Peak measures dead flat at RES 0 (−3.1 dB, 20 Hz…18 kHz) and +26 dB at RES 0.5.
+       The model's `0.5 + res*3` drew a +3.5 dB bell with the resonance knob at zero — a peak the
+       engine does not make — and then under-drew it by 18 dB once RES was up. */
+    else if(type==='peak'){ A=1+(res*res*42)*pk(f,fc,0.055+0.30*(1-res)); }
+    /* fb603 — Xpd Phase is not an allpass: it is the Oberheim pole mix W{1,−4,4,0,0} on the ladder
+       taps with the resonance around the same 4-pole loop (TerrainFilters.h:1723), i.e.
+       H = (1−2G)² / (1 + k·G⁴), G = one pole at fc. The model drew a ±0.5 dB ripple that ignored
+       RES entirely — measured, RES takes it from flat to −14 dB at 20 Hz with a +36 dB spike at
+       the corner. Flat at RES 0 is still flat; everything above that now exists. */
+    else if(type==='ap'){ var kp=3.96*res*res;
+      var g2d=1+w*w, gr=1/g2d, gi=-w/g2d;                       // G = 1/(1+jw)
+      var nr=1-2*gr, ni=-2*gi, n2r=nr*nr-ni*ni, n2i=2*nr*ni;    // (1-2G)²
+      var a4=1-6*w*w+w*w*w*w, b4=4*w-4*w*w*w;                   // (1+jw)⁴
+      var dnr=1+k4r(a4,b4,kp,0), dni=k4r(a4,b4,kp,1);           // 1 + k·G⁴
+      A=Math.sqrt((n2r*n2r+n2i*n2i)/(dnr*dnr+dni*dni))*(1+kp); }
+    /* fb603 — TWO SVFs IN PARALLEL SUM IN THE TIME DOMAIN, SO THE SUM IS COMPLEX. The model
+       added |H1| + |H2|, which can only ever be right where the two bands do not overlap: where
+       they do, phase decides whether they reinforce or cancel and the magnitude sum draws a
+       crossover bump that the filter does not have. Multi Peak+HP measured 31.2 dB out at
+       14.5 kHz for exactly that reason. Summing Re/Im and taking the modulus at the end costs
+       two divides more and takes the ten Multi engines from 2.51 dB mean RMS error to 1.20.
+       And the second band really does run res01·0.7 (TerrainFilters.h:1737), not the same Q. */
+    else if(type.length===3&&type.charAt(0)==='m'){ var Q2=Q(res*0.7);
+      var hc=function(o,ff,fcx,qq,acc){ var ww=ff/fcx, dr=1-ww*ww, di=ww/qq, dd=dr*dr+di*di, nr, ni;
+        if(o==='L'){ nr=1; ni=0; } else if(o==='H'){ nr=-ww*ww; ni=0; }
+        else if(o==='B'){ nr=0; ni=di; } else if(o==='N'){ nr=dr; ni=0; }
+        else { nr=1+ww*ww; ni=0; }                                   /* Peak = LP − HP */
+        acc[0]+=(nr*dr+ni*di)/dd; acc[1]+=(ni*dr-nr*di)/dd; };
+      var acc=[0,0];
+      hc(type.charAt(1),f,fc,Qf,acc); hc(type.charAt(2),f,Math.min(fc*4,18000),Q2,acc);
+      A=0.62*Math.sqrt(acc[0]*acc[0]+acc[1]*acc[1]); }
     else if(type==='phaser6'||type==='phaser12'||type==='phaser16'){ var nst=type==='phaser6'?3:type==='phaser12'?6:8; var swp=1+0.3*Math.sin(t*0.9), prod=1; for(var zi=0;zi<nst;zi++) prod*=ntch(f,fc*Math.pow(1.9,zi-(nst-1)*0.5)*swp,3.2); var dpp=0.45+0.5*res; A=(1-dpp)+dpp*prod; }
     else if(type==='diffusor'){ var pr2=1; for(var di=0;di<5;di++) pr2*=0.55+0.45*Math.abs(Math.cos(2*Math.PI*f/(fc*(1.1+di*0.53))+t*(0.7+di*0.21))); A=0.35+0.65*pr2; }
     else if(type==='tilt'){ var tg=(res-0.5)*2.2; A=Math.max(0.15,Math.min(6,Math.pow(Math.max(w,0.05),tg*0.5))); }
     else if(type==='loweq'){ var gl=res*2-1; A=Math.max(0.1,1+gl*0.85/(1+w*w)); }
+    /* fb603 — Air had NO model of its own: it borrowed High EQ's BIPOLAR shelf, whose `res*2−1`
+       draws a −6 dB HF CUT with the knob at zero. Air measures dead flat at RES 0 and +8 dB of
+       shelf at RES 0.5 — its RES is unipolar (0 = no air), which is the whole point of the
+       engine. Same measured shape, opposite sign, at the setting a fresh patch opens on. */
+    else if(type==='air'){ A=1+res*2.6*(w*w/(1+w*w)); }
     else if(type==='higheq'){ var gh=res*2-1; A=Math.max(0.1,1+gh*0.85*(w*w/(1+w*w))); }
     else if(type==='bandeq'){ var gb=res*2-1; A=Math.max(0.1,1+gb*0.9*pk(f,fc,0.35)); }
-    else if(type==='addbass'){ A=(1+0.9*(0.6+drv*0.8)/(1+w*w))*(0.97+0.03*Math.sin(t*3+f*0.01)); }
-    else if(type==='samphold'){ var bsh=0.75+0.25/Math.sqrt(1+Math.pow(w*0.4,2)), st2=3+Math.round((1-drv)*5); A=Math.round(bsh*st2)/st2+0.1*Math.abs(Math.cos(Math.PI*f/Math.max(fc,60)+t*0.7)); }
+    /* fb603 — the folded band is a RESONANT LP whose Q is res01 (TerrainFilters.h ADD_BASS:
+       setSvf(LP, …, 0.15 + res01·0.30)). The model's `1/(1+w²)` was a fixed 1-pole read off DRIVE,
+       so RES drew nothing while the filter moves 8 dB at the corner (measured +2 → +5 → +10 dB at
+       1 kHz across RES 0 / 0.5 / 1.0). */
+    else if(type==='addbass'){ var qb=Q(0.15+res*0.30), db=Math.sqrt((1-w*w)*(1-w*w)+(w/qb)*(w/qb));
+      A=(1+0.9*(0.6+drv*0.8)*(1/db))*(0.97+0.03*Math.sin(t*3+f*0.01)); }
+    /* fb603 — CUT is the S&H RATE IN HERTZ (TerrainFilters.h:1862, jmax(30, cutHz)), so the shape
+       is the zero-order-hold sinc: measured nulls at 1000 / 2000 / 3000 Hz on the 1 kHz knob and a
+       35 dB fall across the band. The model drew a quantiser staircase off DRIVE.
+       ⚠️ RES IS DRAWN DEAD HERE ON PURPOSE — it IS dead in the shipping DSP (defect 7: res01 is
+       never passed to SampHoldFx::setParams; measured res 0 / 0.5 / 1.0 are bit-identical rows).
+       When the DSP wires it, this model needs whatever RES then controls, or it goes back to
+       lying — the one case in this pass where the honest curve is the still one. */
+    else if(type==='samphold'){ A=zoh(f,Math.max(30,fc))*(0.94+0.06*Math.sin(t*0.7))+0.05; }
+    /* Samp-Hold − is (x − held)·1.4 — the same rate, the notch far shallower and the top flat. */
+    else if(type==='samphm'){ A=0.30+0.70*zoh(f,Math.max(30,fc))*(0.94+0.06*Math.sin(t*0.7)); }
     else if(type==='scream'){ A=(1/den)*(1+(0.8+res*2.6)*pk(f,fc,0.07))*(0.85+drv*0.35); }
     else if(type==='screambp'){ A=((w/Qf)/den)*(1+(0.8+res*2.6)*pk(f,fc,0.07))*(1.4+drv*0.4); }
     else if(type==='radio'){ var rb=(w/Qf)/den; A=Math.pow(rb,1.35)*(0.9+0.1*Math.sin(t*13+f*0.03))*2.2+0.045; }
@@ -31464,7 +31782,10 @@ restoreThemeFromBackend();
     ctx.strokeStyle='rgba(139,92,246,0.09)'; [0.25,0.5,0.75].forEach(function(gy){ ctx.beginPath(); ctx.moveTo(0,H*gy); ctx.lineTo(W,H*gy); ctx.stroke(); });
     var fc=cutS?cutS.getScaledValue():1000, res=resS?resS.getScaledValue():0.3, drv=drvS?drvS.getScaledValue():0;
     if(liveFc>0){ fc=liveFc; res=liveRes; }   // fb163 — the glided live/post-mod values (falls back to base via the glide itself)
-    var ti=typeS?Math.round(typeS.getNormalisedValue()*(CAT.length-1)):0, type=CAT[ti]||'lp';
+    /* fb603 — index by the ROSTER, not by CAT.length: the curve and the menu now decode the same
+       normalised value the same way. Dividing by the list's own length is the fb373 shape — a
+       short CAT would shift EVERY engine's curve by a fraction of an index instead of shouting. */
+    var ti=typeS?window.__fltRoster.index(typeS.getNormalisedValue()):0, type=CAT[ti]||'lp';
     // Curve lives inside [yTop,yBot]; yBot is lifted above the bottom emblems so it respects them (clean overlap only).
     var t=curT, yTop=(isExt?12:29)*dpr, yBot=H-(isExt?10:38)*dpr, breath=1+0.05*Math.sin(t*1.8);   // fb164 — 29 = header bottom (24, measured) + 5px air (the stroke's glow needs the extra 2): the resonant peak tops out JUST BELOW the 1/2/K/E row, never on it (Max's no-overlap law)
     var N=Math.floor(W/dpr), spec=[], crv=[], lvlAcc=0, lvlN=0;
