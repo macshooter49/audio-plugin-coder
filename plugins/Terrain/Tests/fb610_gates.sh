@@ -72,5 +72,11 @@ run stale            0 node Tests/wt_stale_gate.js
 for m in nostamp notick; do run "stale:$m" 1 STALE_MUT="$m" node Tests/wt_stale_gate.js; done
 
 echo
+echo "  ── fb611: the file may not be on this disk, and the read must not block the UI ──"
+run locality         0 python3 Tests/wt_locality_gate.py
+for m in inline nopool nodataless; do run "locality:$m" 1 WTLOC_MUT="$m" python3 Tests/wt_locality_gate.py; done
+run "stale:noclear"  1 STALE_MUT=noclear node Tests/wt_stale_gate.js
+
+echo
 echo "  full output: $OUT"
 exit $rc_all

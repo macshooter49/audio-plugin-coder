@@ -890,6 +890,16 @@ public:
     { if (idx < 0 || idx > 3) return; juce::ScopedLock sl (samplePayloadLock); cachedOscPayloads_[(size_t) idx] = json; }
     // Wavetable EXTENDER (message thread) — build/clear an imported table for osc 0..3.
     void importAudioAsWavetable (int osc, const float* pcm, int numSamples);
+    /* fb611 — read + decode + mono-fold a wavetable file OFF the message thread, then hand the PCM
+       back to the message thread for importAudioAsWavetable (which owns importedPcm_). `done` runs
+       on the message thread; ok=false means unreadable or empty. */
+    void loadWavetableFileAsync (int osc, const juce::File& f,
+                                 std::function<void (bool ok, juce::String name)> done);
+    /* Is the file's CONTENT actually on this disk? A dataless file is a real directory entry with
+       real metadata whose bytes live in iCloud (or another provider) — stat() succeeds, a folder
+       scan lists it, and the first read BLOCKS until it downloads. Worth saying out loud rather
+       than letting it look like a slow plugin. macOS only; false everywhere else. */
+    static bool fileIsDataless (const juce::File& f) noexcept;
     void clearImportedWavetable (int osc);
     void setImportFrames (int osc, int frames);   // re-slice the stored import at a new frame count (resolution)
     void setImportName (int osc, const juce::String& name);   // display/persist name for an import
@@ -1939,6 +1949,17 @@ private:
     // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
     juce::ThreadPool   wtBuildPool_ { 1 };
+    /* fb611 — FILE READS GET THEIR OWN WORKER, and the reason is not tidiness. Reading a wavetable
+       used to happen on the MESSAGE THREAD inside the native call. That is fine at 3.8 ms/file on
+       a local disk and catastrophic anywhere else: MEASURED on Max's own folder, 105 of its 120
+       files had been evicted by iCloud "Optimise Mac Storage" and averaged 923 ms EACH to read —
+       a whole second of frozen UI per pick, with no way to tell it from a hung plugin. Same story
+       for a network share, an external drive that has spun down, or any file provider.
+       Separate from wtBuildPool_ so a slow download cannot sit in front of a queued bake. */
+    juce::ThreadPool   wtIoPool_ { 1 };
+    /* the pool's own destructor drains, but a job's callAsync may already be in the message queue
+       when this processor dies. The flag it captures by value outlives us and says so. */
+    std::shared_ptr<std::atomic<bool>> ioAlive_ { std::make_shared<std::atomic<bool>> (true) };
     std::atomic<juce::uint32> wtBuildReq_[4] { {0}, {0}, {0}, {0} };   // fb610 — newest-request ticket per osc; a queued bake for a table the user has stepped past returns without working
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
     juce::String       macroNamesJson_;                                    // fb564 — ["Cutoff","",…] as the page wrote it

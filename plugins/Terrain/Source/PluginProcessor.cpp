@@ -1,4 +1,7 @@
 #include "PluginProcessor.h"
+#if JUCE_MAC
+ #include <sys/stat.h>   // fb611 — SF_DATALESS: the flag that says a listed file's bytes are still in iCloud
+#endif
 #include <cstdlib>   // fb496 — std::getenv for the TERRAIN_CPU_PROBE gate
 #include <cstdio>    // fb602 — std::fprintf for the TERRAIN_RESTORE_PROBE line (opt-in; silent otherwise)
 
@@ -540,6 +543,11 @@ TerrainAudioProcessor::TerrainAudioProcessor()
 
 TerrainAudioProcessor::~TerrainAudioProcessor()
 {
+    // fb611 — stop the file readers FIRST: a job in flight touches importedPcm_ via its callAsync,
+    // and the flag is what makes an already-queued callAsync a no-op rather than a use-after-free.
+    ioAlive_->store (false, std::memory_order_release);
+    wtIoPool_.removeAllJobs (true, 2000);
+
    #if JUCE_WINDOWS || JUCE_MAC
     beaconStop_.store (true, std::memory_order_relaxed);   // fb481 — join before members die
     beaconWake_.signal();                                   // fb567 — wake the 500 ms wait so the join is immediate
@@ -720,6 +728,67 @@ void TerrainAudioProcessor::rebuildImportAsync (int osc)
         slot.buf[idx].buildFromPcm (snap->data(), (int) snap->size(), frames);
         slot.live.store (&slot.buf[idx], std::memory_order_release);
         slot.nextIdx = 1 - idx;
+    });
+}
+
+/* ═══ fb611 — THE FILE MIGHT NOT BE ON THE DISK ═══════════════════════════════════════════════
+   Max: "factory is solid now but the user folder like TERRA does the same thing."
+   The two are the SAME 120 files, byte for byte (1,048,632 B each) — so it was never the code, and
+   the pick calls the identical native with an absolute path either way (proved by driving the real
+   payload through the real JS). The difference is WHERE they live:
+       ~/Library/WavesCrate/.../Factory   local            3.81 ms/file
+       ~/Desktop/TERRAIN-WAVETABLES       iCloud-evicted   922.92 ms/file   (105 of 120 dataless)
+   Desktop & Documents sync had evicted the bodies. `stat` still works, the folder scan still lists
+   every name, and the first read blocks for about a second while iCloud fetches it.
+   NOTHING IN A PLUGIN MAKES AN ABSENT FILE ARRIVE FASTER. What was ours to fix is that the read
+   ran on the MESSAGE THREAD, so that second was a frozen UI indistinguishable from a hang. */
+bool TerrainAudioProcessor::fileIsDataless (const juce::File& f) noexcept
+{
+   #if JUCE_MAC
+    struct stat st {};
+    if (stat (f.getFullPathName().toRawUTF8(), &st) != 0) return false;
+    return (st.st_flags & SF_DATALESS) != 0;   // 0x40000000 — set by the file provider, cleared once materialised
+   #else
+    juce::ignoreUnused (f); return false;
+   #endif
+}
+
+void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f,
+                                                    std::function<void (bool, juce::String)> done)
+{
+    osc = juce::jlimit (0, 3, osc);
+    const juce::String nm = f.getFileNameWithoutExtension();
+    auto alive = ioAlive_;
+    wtIoPool_.addJob ([this, osc, f, nm, done, alive]
+    {
+        auto mono = std::make_shared<std::vector<float>> ();
+        {
+            juce::AudioFormatManager fm; fm.registerBasicFormats();
+            std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));   // ← the blocking read, off the message thread
+            if (reader != nullptr)
+            {
+                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
+                if (n > 0)
+                {
+                    juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+                    reader->read (&buf, 0, n, 0, true, true);
+                    mono->assign ((size_t) n, 0.0f);
+                    const int ch = buf.getNumChannels();
+                    for (int c = 0; c < ch; ++c)
+                    { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) (*mono)[(size_t) i] += p[i]; }
+                    if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) (*mono)[(size_t) i] *= g; }
+                }
+            }
+        }
+        /* back to the message thread: importedPcm_ is message-thread state (setImportFrames reads
+           it), so the decode is what moves, not the ownership. */
+        juce::MessageManager::callAsync ([this, osc, mono, nm, done, alive]
+        {
+            if (! alive->load (std::memory_order_acquire)) return;   // the processor went away while we read
+            const bool ok = ! mono->empty();
+            if (ok) importAudioAsWavetable (osc, mono->data(), (int) mono->size());
+            if (done) done (ok, nm);
+        });
     });
 }
 

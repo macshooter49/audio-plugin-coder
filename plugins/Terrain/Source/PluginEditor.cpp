@@ -1631,23 +1631,26 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;
                 juce::File f (args[1].toString());
                 if (! f.existsAsFile()) { complete (juce::var ("not-found")); return; }
-                juce::AudioFormatManager fm; fm.registerBasicFormats();
-                std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
-                if (reader == nullptr) { complete (juce::var ("unreadable")); return; }
-                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
-                if (n <= 0) { complete (juce::var ("empty")); return; }
-                juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
-                reader->read (&buf, 0, n, 0, true, true);
-                std::vector<float> mono ((size_t) n, 0.0f);
-                const int ch = buf.getNumChannels();
-                for (int c = 0; c < ch; ++c) { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
-                if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
-                audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
-                const juce::String nm = f.getFileNameWithoutExtension();
+                /* fb611 — SAY IT BEFORE THE READ, because the read is the part that takes the time.
+                   A dataless file is one iCloud has evicted: it is listed, it stats, and its first
+                   read blocks (measured on Max's Desktop folder: 923 ms/file against 3.8 ms local).
+                   Announcing it turns a second of apparent hang into a visible wait. */
+                const juce::juce_wchar oc = (juce::juce_wchar) ('a' + oscIdx);
                 if (webView != nullptr)
                     webView->evaluateJavascript (
-                        juce::String ("if(window.onWavetableImported)window.onWavetableImported('")
-                        + juce::String::charToString ((juce::juce_wchar) ('a' + oscIdx)) + "'," + juce::JSON::toString (juce::var (nm)) + ");", nullptr);
+                        juce::String ("if(window.onWavetableFetching)window.onWavetableFetching('")
+                        + juce::String::charToString (oc) + "',"
+                        + juce::JSON::toString (juce::var (f.getFileNameWithoutExtension())) + ","
+                        + (TerrainAudioProcessor::fileIsDataless (f) ? "true" : "false") + ");", nullptr);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                audioProcessor.loadWavetableFileAsync (oscIdx, f, [safe, oc] (bool ok, juce::String nm)
+                {
+                    if (safe == nullptr || safe->webView == nullptr) return;
+                    safe->webView->evaluateJavascript (
+                        juce::String (ok ? "if(window.onWavetableImported)window.onWavetableImported('"
+                                         : "if(window.onWavetableFetchFailed)window.onWavetableFetchFailed('")
+                        + juce::String::charToString (oc) + "'," + juce::JSON::toString (juce::var (nm)) + ");", nullptr);
+                });
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("removeNoiseImport", [this](const juce::Array<juce::var>& args,
@@ -3580,20 +3583,26 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 if (! file.existsAsFile()) file = dir.getChildFile (name + ".wav");
                 if (! file.existsAsFile()) { complete (juce::var ("not-found")); return; }
 
-                juce::AudioFormatManager fm; fm.registerBasicFormats();
-                std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (file));
-                if (reader == nullptr) { complete (juce::var ("unreadable")); return; }
-                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
-                if (n <= 0) { complete (juce::var ("empty")); return; }
-                juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
-                reader->read (&buf, 0, n, 0, true, true);
-                std::vector<float> mono ((size_t) n, 0.0f);
-                const int ch = buf.getNumChannels();
-                for (int c = 0; c < ch; ++c)
-                { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) mono[(size_t) i] += p[i]; }
-                if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) mono[(size_t) i] *= g; }
-
-                audioProcessor.importAudioAsWavetable (oscIdx, mono.data(), n);
+                /* fb611 — SAY IT BEFORE THE READ, because the read is the part that takes the time.
+                   A dataless file is one iCloud has evicted: it is listed, it stats, and its first
+                   read blocks (measured on Max's Desktop folder: 923 ms/file against 3.8 ms local).
+                   Announcing it turns a second of apparent hang into a visible wait. */
+                const juce::juce_wchar oc = (juce::juce_wchar) ('a' + oscIdx);
+                if (webView != nullptr)
+                    webView->evaluateJavascript (
+                        juce::String ("if(window.onWavetableFetching)window.onWavetableFetching('")
+                        + juce::String::charToString (oc) + "',"
+                        + juce::JSON::toString (juce::var (file.getFileNameWithoutExtension())) + ","
+                        + (TerrainAudioProcessor::fileIsDataless (file) ? "true" : "false") + ");", nullptr);
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                audioProcessor.loadWavetableFileAsync (oscIdx, file, [safe, oc] (bool ok, juce::String nm)
+                {
+                    if (safe == nullptr || safe->webView == nullptr) return;
+                    safe->webView->evaluateJavascript (
+                        juce::String (ok ? "if(window.onWavetableImported)window.onWavetableImported('"
+                                         : "if(window.onWavetableFetchFailed)window.onWavetableFetchFailed('")
+                        + juce::String::charToString (oc) + "'," + juce::JSON::toString (juce::var (nm)) + ");", nullptr);
+                });
                 complete (juce::var ("ok"));
             })
             .withNativeFunction("getOscSamplePayload", [this](const juce::Array<juce::var>& args,

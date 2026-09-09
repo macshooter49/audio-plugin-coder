@@ -37711,10 +37711,39 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // ═══ CASCADING FOLDER MENU (Serum-2 style) ═══ left-click the header name → Basic Shapes / Factory /
   // Imported folders; hover a folder → its submenu flies out to the side; a leaf = a built-in preset or
   // an imported table. Replaces the old single flat scrolling list.
+  /* ═══ fb611 — THE FILE MIGHT NOT BE ON THE DISK YET ═══════════════════════════════════════
+     Max: "factory is solid now but the user folder like TERRA does the same thing."
+     Same 120 files, byte for byte — but his are on the Desktop, and iCloud "Optimise Mac Storage"
+     had evicted 105 of them. MEASURED: 922.92 ms per file against 3.81 ms for the identical local
+     copy. Nothing here can make an absent file arrive sooner; what it CAN do is stop the wait
+     looking like a hang. C++ now calls this the moment the pick lands, BEFORE the read, so the
+     name appears at once and — when the file really is still in the cloud — says so.
+     `dataless` is read from the file's own SF_DATALESS flag, not guessed from how long it took. */
+  window.__wtFetching = {};
+  window.onWavetableFetching = function (osc, name, dataless) {
+    try {
+      var disp = document.getElementById ('osc-' + osc + '-preset-display');
+      if (disp && name) {
+        disp.textContent = name;                       // optimistic: the click always shows immediately
+        window.__wtFetching[osc] = true;
+        /* only the CLOUD case gets a visible wait. A local read is 3.8 ms — dimming for that would
+           be a flicker on every single pick, which is worse than saying nothing. */
+        if (dataless) { disp.style.opacity = '0.5';
+          disp.title = name + ' — downloading from iCloud (this file\u2019s contents are not on this Mac yet)'; }
+      }
+    } catch (e) {}
+  };
+  window.onWavetableFetchFailed = function (osc, name) {
+    try { var disp = document.getElementById ('osc-' + osc + '-preset-display');
+          if (disp) { disp.style.opacity = ''; disp.title = (name || '') + ' — could not be read'; }
+          window.__wtFetching[osc] = false; } catch (e) {}
+  };
   window.onWavetableImported = function (osc, name) {   // WT IMPORT — native file-picker result: show the name + mark imported (mirrors applyImport)
     try {
       var WT = window.wtWaterfall;
       var disp = document.getElementById ('osc-' + osc + '-preset-display'); if (disp && name) disp.textContent = name;
+      /* fb611 — the wait is over however it started (cloud or local) */
+      if (disp) { disp.style.opacity = ''; disp.title = ''; } window.__wtFetching[osc] = false;
       var gnf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction : null;
       if (gnf) { var snf = gnf ('setWavetableName'); if (snf) snf (osc, name); }
       if (WT) { WT.imported[osc] = true; if (! WT.importName) WT.importName = {}; WT.importName[osc] = name; if (WT.fetch) WT.fetch (osc); }

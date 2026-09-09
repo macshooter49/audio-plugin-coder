@@ -1,5 +1,6 @@
 // ══ fb610 — DOES A NEWLY PICKED TABLE ACTUALLY REDRAW? ════════════════════════════════════════
 //   node Tests/wt_stale_gate.js [path/to/index.html]
+//   STALE_MUT=noclear   fb611 — the wait never clears when the table lands → bar [6] reds
 //   STALE_MUT=nostamp   the pre-fb610 signature, consistent on BOTH sides → bar [2] reds
 //   STALE_MUT=notick    the stamp on only one side → the picture re-bakes for ever → bar [1] reds
 //
@@ -33,6 +34,12 @@ const gate = (ok, name, detail) => {
   const errs = []; p.on('pageerror', e => errs.push(String(e).slice(0, 140)));
   await p.goto('file://' + PAGE, { waitUntil: 'load', timeout: 60000 });
   await new Promise(r => setTimeout(r, 1400));
+
+  if (MUT === 'noclear')   // the fb611 wait state gets set and never taken off again
+    await p.evaluate(() => { const f = window.onWavetableImported;
+      window.onWavetableImported = function (o, n) { const d = document.getElementById('osc-' + o + '-preset-display');
+        const op = d && d.style.opacity, ti = d && d.title; f.call(window, o, n);
+        if (d) { d.style.opacity = op; d.title = ti; } }; });
 
   const R = await p.evaluate((MUT) => {
     const W = window.wtWaterfall;
@@ -93,7 +100,33 @@ const gate = (ok, name, detail) => {
   gate(R.knob === 1, '[3] AND A KNOB MOVE STILL RE-BAKES AS IT ALWAYS DID', 'fetches = ' + R.knob);
   gate(R.sigHasStamp === true, '[4] THE TABLE STAMP REALLY REACHES THE SIGNATURE',
        R.sigHasStamp ? 'present on both sides' : '*** neither signature carries it ***');
-  gate(errs.length === 0, '[5] NO PAGE ERRORS', errs.length ? errs.slice(0, 2).join(' | ') : 'clean');
+  // ── fb611 — and the WAIT itself is visible while a cloud-evicted file downloads ─────────────
+  const fetchStates = await p.evaluate(() => {
+    const d = document.getElementById('osc-a-preset-display');
+    if (!d || !window.onWavetableFetching) return { ERROR: 'no display or no onWavetableFetching' };
+    const R = {};
+    window.onWavetableFetching('a', 'TERRA CHIRIKOV', true);            // still in iCloud
+    R.cloudName = d.textContent; R.cloudDim = d.style.opacity; R.cloudTitle = /iCloud/.test(d.title || '');
+    window.onWavetableImported('a', 'TERRA CHIRIKOV');                  // it landed
+    R.clearedDim = d.style.opacity; R.clearedTitle = d.title;
+    window.onWavetableFetching('a', 'TERRA CANTOR', false);             // a LOCAL file — 3.8 ms
+    R.localName = d.textContent; R.localDim = d.style.opacity;
+    window.onWavetableImported('a', 'TERRA CANTOR');
+    return R;
+  });
+  gate(!fetchStates.ERROR && fetchStates.cloudName === 'TERRA CHIRIKOV'
+       && fetchStates.cloudDim === '0.5' && fetchStates.cloudTitle === true,
+       '[5] A CLOUD-EVICTED FILE NAMES ITSELF AT ONCE AND SHOWS IT IS WAITING',
+       fetchStates.ERROR || ('name "' + fetchStates.cloudName + '"  opacity ' + fetchStates.cloudDim
+         + '  says-iCloud ' + fetchStates.cloudTitle));
+  gate(fetchStates.clearedDim === '' && fetchStates.clearedTitle === '',
+       '[6] AND THE WAIT CLEARS WHEN THE TABLE LANDS',
+       'opacity "' + fetchStates.clearedDim + '"  title "' + fetchStates.clearedTitle + '"');
+  gate(fetchStates.localName === 'TERRA CANTOR' && fetchStates.localDim === '',
+       '[7] A LOCAL FILE NAMES ITSELF WITHOUT DIMMING (3.8 ms would only flicker)',
+       'name "' + fetchStates.localName + '"  opacity "' + fetchStates.localDim + '"');
+
+  gate(errs.length === 0, '[8] NO PAGE ERRORS', errs.length ? errs.slice(0, 2).join(' | ') : 'clean');
 
   console.log('\n  ' + PASS + ' pass, ' + FAIL + ' fail' + (MUT ? '   (mutation: ' + MUT + ')' : ''));
   await b.close();
