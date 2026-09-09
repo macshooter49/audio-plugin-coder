@@ -37185,7 +37185,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       /* fb467 — lo/hi ride here too, in the SAME ORDER __wtDisp emits them (PluginEditor.cpp).
          Order matters as much as presence: a mismatch makes the two signatures differ forever,
          which is not a stale table but a table that re-bakes at the maximum rate for good. */
-      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi,t.fm,t.hm].map(function(v){ return (+v).toFixed(3); }).join(','):''; },   /* fb587 — t.fm, then fb589 — t.hm LAST, matching __wtDisp */
+      /* 🚨 fb610 — t.tg IS WHICH TABLE THIS PICTURE IS OF, and its absence was the whole bug.
+         Every other entry here describes what is DONE to the table; none said WHICH table. So a
+         freshly picked wavetable produced identical signatures, maybeRebake returned early, and
+         the waterfall kept drawing the previous table until some unrelated value drifted — which
+         is the "2-3 seconds" Max saw, and why it was never the same length twice. Last in the
+         list, matching __wtDisp's own last element (PluginEditor.cpp). */
+      return (t&&t.wm!=null)?[t.wm,t.wa,t.w2m,t.w2a,t.fs,t.fa,t.sa,t.st,t.bl,t.lo,t.hi,t.fm,t.hm,t.tg].map(function(v){ return (+v).toFixed(3); }).join(','):''; },   /* fb587 — t.fm · fb589 — t.hm · fb610 — t.tg LAST, matching __wtDisp */
     maybeRebake:function(o,now){
       if(wtWaterfall.busy[o]) return;
       if(now-(wtWaterfall.lastReq[o]||0) < (wtWaterfall.rebakeMs[o]||wtWaterfall.REBAKE_MS)) return;
@@ -37335,7 +37341,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         ctx.globalAlpha=0.55; ctx.lineWidth=1.0;
         ctx.beginPath(); wtWaterfall.churnTrace(ctx,g,tbl,pz,false); ctx.stroke(); }
       ctx.restore(); },
-    draw:function(o){ var cv=document.getElementById('osc-wave-'+o); if(!cv)return; var tbl=wtWaterfall.cache[o]; if(!tbl){ wtWaterfall.fetch(o); return; }
+    /* fb610 — AND THE EMPTY-CACHE PATH IS RATE-LIMITED TOO. `fetch` sets busy[o], but only
+       maybeRebake ever read it: while the cache was empty this line fired a fetch on EVERY rAF
+       frame — up to 60 full 64x160 bakes per second through the whole warp chain, on the message
+       thread, until the first reply landed. One in flight is enough. */
+    draw:function(o){ var cv=document.getElementById('osc-wave-'+o); if(!cv)return; var tbl=wtWaterfall.cache[o]; if(!tbl){ if(!wtWaterfall.busy[o]) wtWaterfall.fetch(o); return; }
       /* fb463 — morph from the previous table into this one across the measured arrival gap. The
          wrapper is a FRESH object every frame on purpose: buildCache keys its offscreen on table
          identity, so a new one rebuilds the stack for this frame (measured 0.32 ms) and the motion

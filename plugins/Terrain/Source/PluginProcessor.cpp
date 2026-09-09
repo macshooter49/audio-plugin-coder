@@ -706,8 +706,15 @@ void TerrainAudioProcessor::rebuildImportAsync (int osc)
     osc = juce::jlimit (0, 3, osc);
     auto snap = std::make_shared<std::vector<float>> (importedPcm_[osc]);
     const int frames = importFrames_[osc];
-    wtBuildPool_.addJob ([this, osc, snap, frames]
+    /* fb610 — LATEST WINS. The pool is ONE serialized worker and a 128-frame bake is 32 ms, so
+       holding the ‹ › stepper across the 120-table bank used to queue 120 bakes = ~3.9 s of
+       backlog, every one of them for a table the user had already stepped past. Each request takes
+       a ticket; a job whose ticket is no longer the newest returns before doing any work. The last
+       request always holds the newest ticket, so exactly one bake survives and it is the right one. */
+    const juce::uint32 ticket = wtBuildReq_[(size_t) osc].fetch_add (1, std::memory_order_acq_rel) + 1;
+    wtBuildPool_.addJob ([this, osc, snap, frames, ticket]
     {
+        if (wtBuildReq_[(size_t) osc].load (std::memory_order_acquire) != ticket) return;   // superseded while queued
         auto& slot = importSlot_[osc];
         const int idx = slot.nextIdx;
         slot.buf[idx].buildFromPcm (snap->data(), (int) snap->size(), frames);
@@ -1073,6 +1080,36 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
     return j + "]}";
 }
 
+/* ═══ fb610 — THE STAMP ════════════════════════════════════════════════════════════════════
+   Max: "the tables take a FEW SECONDS. Serum's take NONE."
+   MEASURED, and it was never the bake: the shipping Wavetable.h bakes a real 128-frame factory
+   table in 32.3 ms (Tests/wt_bake_bench.cpp, vDSP, 7,936 transforms). The stall was a RACE with
+   no retry — loadWavetableByPath queues the build on wtBuildPool_ and returns IMMEDIATELY, the JS
+   .then() fetches the waterfall while the build is still running, gets the OLD table, and then
+   maybeRebake compares a signature that contains warp/fold/spectral/FM/harm and NOTHING about
+   which table is loaded. Signatures matched, so the picture was declared fresh and never asked
+   again. It only corrected when some unrelated value drifted — hence "a few seconds", and hence
+   non-deterministic.
+   🔑 DERIVED, NOT COUNTED. A bumped counter needs every publish site to remember it, and the one
+   that forgets recreates this bug silently. This reads the SAME pointer the display resolves,
+   folded with the table's own buildEpoch and frame count: any new table, any rebuild, any morph
+   swap changes it by construction. 23 bits, so it is exact as a double and under toFixed(3) on
+   the JS side; never 0, so "absent" and "table 0" stay distinguishable. */
+int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
+{
+    osc = juce::jlimit (0, 3, osc);
+    static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
+    const tw::Wavetable* wt = wavetableForDisplay (osc, ms, (int) *apvts.getRawParameterValue (WTPS[osc]));
+    if (wt == nullptr) return 0;
+    std::uint64_t h = (std::uint64_t) (std::uintptr_t) wt >> 4;
+    h = h * 0x9E3779B97F4A7C15ull + (std::uint64_t) (std::uint32_t) wt->buildEpoch();
+    h ^= ((std::uint64_t) (std::uint32_t) wt->getNumFrames()) << 32;
+    h *= 0xff51afd7ed558ccdull; h ^= h >> 33;
+    return (int) (h & 0x7FFFFFull) + 1;
+}
+
 juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
@@ -1160,6 +1197,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
                << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st
                << ",\"lo\":" << juce::String (sl, 4) << ",\"hi\":" << juce::String (sh, 4)
                << ",\"hm\":" << juce::String (harmDisplaySignature (osc), 4)
+               << ",\"tg\":" << wtTableStamp (osc)   /* fb610 — LAST, matching __wtDisp */
                << ",\"d\":[";
             for (int r = 0; r < rows; ++r)
                 for (int q = 0; q < pts; ++q)
@@ -1236,6 +1274,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
         out << ",\"sa\":" << juce::String (sa, 4) << ",\"st\":" << st
             << ",\"lo\":" << juce::String (sl, 4) << ",\"hi\":" << juce::String (sh, 4);   // fb472 — the cuts
     }
+    out << ",\"tg\":" << wtTableStamp (osc);   /* fb610 — LAST, matching __wtDisp */
     out << ",\"d\":[";
     for (int i = 0; i < dispN; ++i)
     {

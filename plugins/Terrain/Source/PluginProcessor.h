@@ -899,6 +899,12 @@ public:
     // Wavetable EXTENDER viz — compact JSON of the osc's LIVE table (imported or factory) for the
     // 3D waterfall: { n:<displayFrames>, p:<pointsPerFrame>, nf:<realFrames>, d:[ n*p samples ] }.
     juce::String getOscWavetableJson (int osc);
+    /* fb610 — WHICH TABLE THE DISPLAY WOULD DRAW, as one number. The waterfall decides it is stale
+       by comparing a signature of warp/fold/spectral/FM/harm — and NOTHING in that list said which
+       TABLE was loaded, so a newly picked table was invisible until some other value happened to
+       move. DERIVED from the resolved table (pointer + buildEpoch + frame count), never stored, so
+       no publish site can forget to bump it. Rides in __wtDisp and in the payload, LAST in both. */
+    int wtTableStamp (int osc) noexcept;
     juce::String getOscLfoWaveJson (int osc);   // fb248 — exact current frame for WT→LFO
 
     juce::String getCachedOscPayload (int idx) const
@@ -1933,6 +1939,7 @@ private:
     // frames × 2048 is heavy (Serum-size tables freeze the UI when built on the message thread + flash purple).
     // Declared AFTER importSlot_/importedPcm_ so it destructs FIRST (joins any in-flight build before those die).
     juce::ThreadPool   wtBuildPool_ { 1 };
+    std::atomic<juce::uint32> wtBuildReq_[4] { {0}, {0}, {0}, {0} };   // fb610 — newest-request ticket per osc; a queued bake for a table the user has stepped past returns without working
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
     juce::String       macroNamesJson_;                                    // fb564 — ["Cutoff","",…] as the page wrote it
     mutable juce::CriticalSection macroNamesLock_;

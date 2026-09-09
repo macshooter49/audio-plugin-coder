@@ -6373,9 +6373,12 @@ void TerrainUiCore::timerCallback()
                    << "," << SF (sa, 4) << "," << st << "," << SF (D.feedback, 4)
                    << "," << SF (sl, 4) << "," << SF (sh, 4)
                    << "," << SF (audioProcessor.fmDisplaySignature (o), 4)             // fb587 — FM
-                   << "," << SF (audioProcessor.harmDisplaySignature (o), 4) << "]";   // fb589 — HARM/Table
-                                                       // fb460 blur · fb472 cuts — THE ORDER HERE
-                                                       // MUST MATCH cachedSig in index.html
+                   << "," << SF (audioProcessor.harmDisplaySignature (o), 4)             // fb589 — HARM/Table
+                   << "," << audioProcessor.wtTableStamp (o) << "]";                     // fb610 — WHICH TABLE
+                                                       // fb460 blur · fb472 cuts · fb610 stamp —
+                                                       // THE ORDER HERE MUST MATCH cachedSig in
+                                                       // index.html, and Tests/wt_stamp_gate.py
+                                                       // compares the two lists element by element
             }
             js << "];";
         }
