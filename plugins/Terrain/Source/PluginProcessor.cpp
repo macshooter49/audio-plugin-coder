@@ -15792,8 +15792,11 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         // slicesJson — same JSON format as V1 (slicesToJson produces
         // {"slices":[...]}), so Task 13's parse path is identical.
         const auto layerSlices = std::atomic_load (&L.currentSlices);
+        // fb617 — an absent list and an empty list must serialise IDENTICALLY, or a virgin instance and
+        // the same instance after one reload disagree by one space per layer ({"slices":[]} vs the
+        // emitter's {"slices": []}) and save → load → save is not a fixed point.
         const auto sliceJson = layerSlices ? tw::slicesToJson (*layerSlices)
-                                           : juce::String ("{\"slices\":[]}");
+                                           : tw::slicesToJson (tw::SliceList{});
         layerNode.setProperty ("slicesJson", sliceJson, nullptr);
 
         // pitchSliceJson — same JSON format as V1.
@@ -15801,6 +15804,13 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
         layersTree.addChild (layerNode, -1, nullptr);
     }
+    // fb617 — copyState() carries whatever replaceState() loaded, and that already holds the previous
+    // save's <layers> child. Appending a fresh one on top of it duplicated the tree on EVERY save
+    // (1 → 2 → 3, ~3.1 KB per generation, measured against the shipping AU) and loadV2State then read
+    // the first — the STALE — copy: after one reload, every later load restored old layer state.
+    // Remove every existing one, then add. Tests/preset_roundtrip_cert.cpp is the gate.
+    for (auto old = state.getChildWithName ("layers"); old.isValid(); old = state.getChildWithName ("layers"))
+        state.removeChild (old, nullptr);
     state.addChild (layersTree, -1, nullptr);
 
     // ── V1 root-level properties — KEPT for backward compat ──────────────────
@@ -15841,10 +15851,11 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
         // V1 slicesJson / activeSliceIndex from layer A (same data as layersTree[0]).
         const auto layerASlices = std::atomic_load (&layers[0].currentSlices);
-        const auto sliceJson = layerASlices ? tw::slicesToJson (*layerASlices)
-                                            : juce::String ("{\"slices\":[]}");
-        if (sliceJson.isNotEmpty() && sliceJson != "{\"slices\":[]}")
-            state.setProperty ("slicesJson", sliceJson, nullptr);
+        // fb617 — ask the LIST whether it is empty. The old guard compared the emitted string against
+        // {"slices":[]} while slicesToJson writes {"slices": []} (JSON::toString spaces after the colon),
+        // so an empty list loaded from a blob echoed a root slicesJson from the second save on.
+        if (layerASlices != nullptr && ! layerASlices->empty())
+            state.setProperty ("slicesJson", tw::slicesToJson (*layerASlices), nullptr);
         state.setProperty ("activeSliceIndex", layers[0].activeSliceIndex.load(), nullptr);
 
         // V1 pitchSliceJson from layer A.
@@ -16703,7 +16714,11 @@ void TerrainAudioProcessor::loadV1State (const juce::ValueTree& loaded)
 // Populates all 4 layers.  Falls back to loadV1State if the tree is absent.
 void TerrainAudioProcessor::loadV2State (const juce::ValueTree& loaded)
 {
-    auto layersTree = loaded.getChildWithName ("layers");
+    // fb617 — a session saved by a pre-fix build carries one <layers> child per save, oldest first.
+    // getChildWithName returns the FIRST; the state the user last saw is the LAST. Walk backwards.
+    juce::ValueTree layersTree;
+    for (int i = loaded.getNumChildren(); --i >= 0;)
+        if (loaded.getChild (i).hasType ("layers")) { layersTree = loaded.getChild (i); break; }
     if (! layersTree.isValid())
     {
         // Defensive: V2 marker set but no layers tree (shouldn't happen with

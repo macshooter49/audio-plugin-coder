@@ -110,6 +110,7 @@ cost a diagnosis once already.
 | `fb608_gates.sh` | **fb608/fb609 — the header gate run once clean and once per control**, 10 that must go red and **one that must stay green** (`push`). | 12 runs |
 | `fb610_gates.sh` | **fb610/fb611 — runs the BAKE BENCH FIRST** (the measurement that stopped the run going into the FFT), then the signature, staleness and locality gates against their controls. | 13 runs |
 | `fb614_gates.sh` | **fb612/fb613/fb614 — the factory library, the loudness stall and the distortion curve**, every gate against every control. | 12 runs |
+| `preset_roundtrip_cert.cpp` | fb617 | save → load → save is byte-identical against the installed AU; an empty slice list echoes no root slicesJson; a pre-fix session with two `<layers>` loads the NEWEST and saves one. Control `RT_MUT=stale` expects the old first-wins read and must go red. | `bash Tests/fb617_gates.sh` |
 
 ## 🚨 THE JS GATES — RUN THE SETUP ONCE, THEN THEY ARE PLAIN `node` (fb601)
 
