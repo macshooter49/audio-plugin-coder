@@ -340,7 +340,10 @@ const HELP = () => {
       'CPU — 480 tables across 12 subfolders: the tree builds, descends and searches without stalling the WebView',
       'BIG count ' + st2.bigCount + ' · ' + st2.subs + ' subfolders · descend ' + st2.descendMs + ' ms · '
       + 'search over the whole subtree ' + st2.searchMs + ' ms · open+scan ' + stress.built + ' ms (synchronous JS only; no native call, no audio thread)');
-  chk(st2.geom.w === 384 && st2.geom.h === 342,
+  /* fb608 — 342 became 294 when the search band and the breadcrumb band folded into the header.
+     The LAW is unchanged (480 rows must not resize the panel); only the constant moved, and it is
+     still a hard equality rather than a floor so a future collapse cannot pass unnoticed. */
+  chk(st2.geom.w === 384 && st2.geom.h === 294,
       'FIXED POSITIONS — 480 rows do not resize the panel by a pixel', JSON.stringify(st2.geom));
 
   console.log('\n  console (the detectors that must print whether they fired):');

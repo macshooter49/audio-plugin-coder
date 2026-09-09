@@ -145,8 +145,13 @@ let FAIL=0; const bad=m=>{FAIL++; return '  ✗ '+m;};
              words:head.textContent.trim(),
              hasExtPath:kids.some(k=>/M15 3h6v6/.test(k.innerHTML)),
              xIsLast:/M5 5l14 14/.test(kids.length?kids[kids.length-1].innerHTML:''),
+             /* fb608 — this used to assert `i.closest('.tpb-srow')`, which the fold KEPT TRUE by
+                reusing the class name on the in-header seat: the bar would have gone on printing
+                "the search row is untouched" about a band that no longer exists. It now asserts the
+                new truth — the field is INSIDE THE HEADER, and there is no separate band under it. */
              rows:(function(){ const i=panel.querySelector('input.tpb-srch');
-                     return !!(i && /[0-9]+ warp modes/.test(i.placeholder) && i.closest('.tpb-srow')); })() };
+                     return !!(i && /[0-9]+ warp modes/.test(i.placeholder)
+                                 && head.contains(i) && panel.children.length === 2); })() };
   });
   console.log('\nBAR 3 — the EXTEND emblem in the warp browser header');
   if(r3.err){ console.log(bad(r3.err)); }
@@ -156,7 +161,8 @@ let FAIL=0; const bad=m=>{FAIL++; return '  ✗ '+m;};
     const same = r3.boxes.length>=2 && Math.abs(r3.boxes[r3.boxes.length-2].w - r3.boxes[r3.boxes.length-1].w)<1.2;
     console.log(same ? '  ✓ emblem and ✕ are the same size: '+JSON.stringify(r3.boxes.slice(-2)) : bad('sizes differ: '+JSON.stringify(r3.boxes)));
     console.log(!/EXTEND/i.test(r3.words) ? '  ✓ the word EXTEND is gone from the header' : bad('the word EXTEND is still there'));
-    console.log(r3.rows ? '  ✓ the search row is untouched' : bad('the search row moved'));
+    console.log(r3.rows ? '  ✓ the search rides the header and there is no band under it (fb608)'
+                        : bad('the search is not in the header, or a second band is back'));
   }
   console.log('\npage errors: '+(errs.length?errs.join(' | '):'none'));
   if(errs.length) FAIL++;

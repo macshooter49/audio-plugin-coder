@@ -38410,7 +38410,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var CATS = ROOT_CATS;                       // the level the left column is showing right now
       var NAVON = !! cfg.nav;                     // arrows + breadcrumb only where the caller asks
       var hist = [[]], histAt = 0, lastNav = 0;
-      var navBack = null, navFwd = null, crumbEl = null;
+      var navBack = null, navFwd = null, crumbEl = null, crumbTx = null;
       function curPath () { return hist[histAt] || []; }
       function levelFor (path) {
         if (! path.length) return ROOT_CATS;
@@ -38427,6 +38427,22 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
          once. Walking the subs as well would list every nested hit twice. */
       function eachRootCat (fn) { ROOT_CATS.forEach (function (c) { if (c && ! c.isAll) fn (c); }); }
       var WHITE = '#FFFFFF', DIM = 'rgba(255,255,255,.5)', HOV = 'rgba(255,255,255,.86)';
+      /* ═══ fb608 — THE HEADER'S WIDTH BUDGET, in LAYOUT px ═══════════════════════════════════
+         The header is 384 − 2×9 = 365px wide. Everything below was MEASURED on this build with
+         Tests/tpb_head.js, not estimated: the UI renders under a ~1.36× CSS transform, so
+         getBoundingClientRect is inflated by that factor and every figure here is divided back out.
+           SRCH_MIN   floor for the search SEAT — 21px of it is the seat's own chrome (5px inset +
+                      10px magnifier + 6px gap), so 117 leaves the INPUT itself 96px. "Search…" is
+                      42px, so that is room to type rather than only to read the placeholder.
+                      ⚠️ Measured as a floor on the INPUT, not on the row: the gate reds at 96 on
+                      `input.tpb-srch`, and the first cut of this put 96 on the row and shipped an
+                      87px field the moment "Delete Folder" joined the cluster.
+           CRUMB_MAX  132px ≈ 20 characters at 8.5px/.6 tracking — "Wavetables › CHAOS" entire.
+                      A path longer than this ELLIPSES; it never widens the box or pushes search.
+         When "Delete Folder" appears the path is what gives way: it is the only `flex:0 1 auto` box
+         on the row, so it ellipses instead of pushing anything off — which is why there is no third
+         constant here. Measured with the folder selected: field 126.6px, path 79.5px, no overlap. */
+      var SRCH_MIN = 117, CRUMB_MAX = 132;
       if (! document.getElementById ('tpb-style')) { var _st = document.createElement ('style'); _st.id = 'tpb-style';   // thin translucent scrollbars (Max: no chunky white bars)
         _st.textContent = '.tpb-pane::-webkit-scrollbar{width:5px;height:5px}.tpb-pane::-webkit-scrollbar-track{background:transparent}'
           + '.tpb-pane::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.13);border-radius:3px}.tpb-pane::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,0.30)}'
@@ -38438,36 +38454,48 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var esc = function (s) { return String (s).replace (/&/g, '&amp;').replace (/</g, '&lt;').replace (/>/g, '&gt;'); };
       var panel = document.createElement ('div');
       panel.className = 'tpb-panel';   // fb560 — so the modulation marks can tell when this is covering them
-      // fb394 — where search gets its OWN row (any browser with an Import label) that row is 26px of NEW
-      // chrome, so the panel grows by 26px instead of stealing 26px from the list: the two panes keep the
-      // exact height they had before search existed. Where search rides the header row, nothing changes.
-      var PANEL_H = (cfg.search === false || ! cfg.onImport) ? 294 : 320;
-      /* fb606 — the breadcrumb is 22px of NEW chrome, so the PANEL grows by 22px. It does not
-         steal 22px from the list: the two panes keep the exact height they had before navigation
-         existed, which is fb394's rule for the search row applied to the row below it. */
-      if (cfg.nav) PANEL_H += 22;
+      /* ═══ fb608 — ONE BAND OF CHROME. Max: "idk about the 3 lines and separators, just looks
+         weird… I need the folder directory to be at the very top of the menu header… put it next
+         to the arrows logos and all", then "actually, i want the SEARCH to be at the header, same
+         rules apply."
+         fb394 gave search its own 26px row and fb606 gave the path its own 22px row, so the
+         wavetable browser had stacked THREE ruled bands above the list. Both now ride INSIDE the
+         header, and the panel is a single 31px bar with a single rule under it.
+         🔑 fb394's LAW IS UNCHANGED, RUN BACKWARDS: chrome rows add to the PANEL and never steal
+         from the list — so deleting 48px of chrome SHRINKS the panel by 48px and the two panes keep
+         the exact 262px they have always had. That is why this is one constant and not a sum. */
+      var PANEL_H = 294;
       panel.style.cssText = 'position:fixed;z-index:2147483646;width:384px;height:' + PANEL_H + 'px;display:flex;flex-direction:column;'
         + 'background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);'
         + 'border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);'
         + "overflow:hidden;font-family:-apple-system,'SF Pro Text',sans-serif;";
       var head = document.createElement ('div');
       head.style.cssText = 'display:flex;align-items:center;justify-content:space-between;height:31px;padding:0 9px;border-bottom:1px solid rgba(255,255,255,0.07);flex:none;';
-      // LEFT — Import button replaces the old "Noise Library" title (Max's call)
-      var impBtn = document.createElement ('div');
-      // fb558 — importIcon:true moves this action OUT of the left title slot and into the ✕'s
-      // cluster on the right, as the shared emblem at the ✕'s exact size. `onImport` stays set
-      // either way, so PANEL_H and the search row's placement are untouched to the pixel — the
-      // header keeps its two-row shape, only the button's form and seat change.
-      if (cfg.onImport && cfg.importIcon) { impBtn = null; }
-      else if (cfg.onImport) { impBtn.innerHTML = cfg.importLabel || '＋ Import';
-        // fb394 — flex:none + nowrap make "does not move" STRUCTURAL: whatever else lands in this row,
-        // the import label can never be shrunk, wrapped or ellipsed by it. (fb389's search sat here and
-        // crowded it — Max: "import wavetables, import noise, all that shit looks clobbered.")
-        impBtn.style.cssText = 'flex:none;white-space:nowrap;color:rgba(255,255,255,.62);font-size:8.5px;letter-spacing:1px;padding:4px 4px 4px 5px;cursor:pointer;';   // NO box (Max); left inset aligns the ＋ with the category letters below (measured)
-        impBtn.onmouseenter = function () { impBtn.style.color = WHITE; };
-        impBtn.onmouseleave = function () { impBtn.style.color = 'rgba(255,255,255,.62)'; };
-        impBtn.onclick = function () { try { cfg.onImport (); } catch (e) {} close (); }; }
-      head.appendChild (impBtn || document.createElement ('span'));
+      // LEFT — an empty 0px slot since fb608; the search line that follows it owns the left of the row
+      // fb558 — importIcon:true moved this action OUT of the left title slot and into the ✕'s
+      // cluster on the right, as the shared emblem at the ✕'s exact size. fb608 made that the ONLY
+      // form: `onImport` is unchanged either way, so no caller needed an edit.
+      /* ═══ fb608 — THE WORDS BECOME A ＋, AND THE LEFT RAIL IS WHY ═══════════════════════════
+         Not taste, and not a width squeeze — a LAW this file already had and could only keep in
+         half the browsers. fb394: the magnifier, the ＋ and the category letters below must share
+         ONE left edge at 14px "so the panel reads as one column of chrome." That held only where
+         search owned its own row. Put the label first in the header and the magnifier lands
+         wherever the words happen to end — MEASURED at rail 100.0 against the categories' 14.5, a
+         spread of 85.5px, and `Tests/tpb_head.js` reds on it.
+         So SEARCH LEADS THE ROW IN EVERY BROWSER and the import action takes fb558's emblem seat
+         beside the ✕: same callback, same 13px spec, and the label's own words survive as its
+         tooltip. The rail now holds in all eight browsers, which is the first time it ever has.
+         The wavetable header could not have kept the words in any case — measured in LAYOUT px
+         (the UI renders under a ~1.36× transform, so getBoundingClientRect is inflated by that and
+         every figure here is divided back out): words 108 + path 132 + cluster 112 + gaps 22 = 374
+         against 365 of usable width, which hands the search field −9px. But uniformity is the
+         reason, not the arithmetic: eight browsers with one header grammar. */
+      var impEmblem = !! (cfg.onImport && ! cfg.importIcon);   // ＋ glyph in the cluster; importIcon callers keep their own extend glyph
+      /* ⚠️ THE EMPTY LEFT SLOT IS LOAD-BEARING. The header is `justify-content:space-between`, and
+         with `search:false` there would otherwise be a SINGLE child — which space-between parks at
+         flex-START, throwing the whole icon cluster to the left edge. This 0px span is the second
+         child that keeps the icons on the right in that one configuration. */
+      head.appendChild (document.createElement ('span'));
       // RIGHT — [headphone preview TOGGLE] [X close], BOTH no-box, on the same baseline as Import (Max: no box on
       // the headphone either; move it left to make room for an X so there's a way out of the menu).
       var right = document.createElement ('div'); right.style.cssText = 'flex:none;display:flex;align-items:center;gap:11px;';
@@ -38507,8 +38535,15 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // OS folder — delete the file in Finder and it disappears from here; the registry auto-prunes dead paths).
       // Only ever un-references — never touches a file on disk, never a factory sound (Max's rule).
       var delBtn = null;
+      /* fb608 — "Delete Folder" was the last WORDS in a cluster that is otherwise all 13px glyphs,
+         and 57px of them: with the path and the field now sharing this row, those words pushed the
+         search field to 87px — under its floor — the moment a user folder was selected. It becomes
+         a TRASH GLYPH at the ✕'s exact spec, and the words move into its tooltip. The action, the
+         guard (`kind !== 'factory'`) and the soft-red destructive hover are all unchanged, and the
+         right-click Locate/Remove menu fb606 added is untouched, so nothing loses a route. */
       if (cfg.onDelete) { delBtn = document.createElement ('div');
-        delBtn.style.cssText = 'font-size:8.5px;letter-spacing:.5px;color:rgba(255,255,255,.5);cursor:pointer;white-space:nowrap;padding:2px 1px;display:none;';
+        delBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16M9.5 7V5.2A1.2 1.2 0 0 1 10.7 4h2.6a1.2 1.2 0 0 1 1.2 1.2V7M6.5 7l.9 12.0A1.6 1.6 0 0 0 9 20.5h6a1.6 1.6 0 0 0 1.6-1.5L17.5 7"/></svg>';
+        delBtn.style.cssText = 'flex:none;display:none;align-items:center;justify-content:center;padding:2px 1px;color:rgba(255,255,255,.5);cursor:pointer;';
         delBtn.onmouseenter = function () { delBtn.style.color = '#FF8B8B'; };   // soft red on hover = destructive cue
         delBtn.onmouseleave = function () { delBtn.style.color = 'rgba(255,255,255,.5)'; };
         delBtn.onclick = function () { var cat = CATS[selCat]; if (! cat) return;   /* fb606 — the LEVEL being shown, not the root list: at a sub-level cfg.cats[selCat] was a different folder entirely */
@@ -38532,6 +38567,22 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         eb.onmouseleave = function () { eb.style.color = 'rgba(255,255,255,.5)'; };
         eb.onclick = function () { try { cfg.onImport (); } catch (e) {} close (); };
         right.appendChild (eb); }
+      /* fb608 — THE ＋ EMBLEM. Not a new control: it is fb558's emblem seat (immediately left of
+         the ✕, built to the ✕'s spec — 13px glyph, viewBox 24, stroke 2.2, 2px/1px padding) with a
+         ＋ instead of the extend arrow. It fires the SAME cfg.onImport the words fired, and it
+         carries the label's own text as its tooltip, so nothing is lost but the space. */
+      var plusBtn = null;
+      function mkPlus () {
+        if (plusBtn || ! cfg.onImport) return null;
+        plusBtn = document.createElement ('div');
+        plusBtn.title = String (cfg.importLabel || '＋ Import').replace (/^[＋+]\s*/, '');
+        plusBtn.style.cssText = 'flex:none;display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;color:rgba(255,255,255,.5);';
+        plusBtn.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>';
+        plusBtn.onmouseenter = function () { plusBtn.style.color = WHITE; };
+        plusBtn.onmouseleave = function () { plusBtn.style.color = 'rgba(255,255,255,.5)'; };
+        plusBtn.onclick = function () { try { cfg.onImport (); } catch (e) {} close (); };
+        return plusBtn; }
+      if (impEmblem) right.appendChild (mkPlus ());
       var xb = document.createElement ('div'); xb.title = 'Close';   // explicit way out (Max) — one click closes
       xb.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;color:rgba(255,255,255,.5);';
       xb.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>';
@@ -38552,17 +38603,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       //     moves by a single pixel whether the search exists or not. ═══
       var srch = document.createElement ('input'), srchRow = null;
       if (cfg.search !== false) {
-        // THE ONE RULE: search never shares a row with the Import label. Where there IS an import label
-        // (wavetable / sample / noise) search takes its own row below the header and the header is left
-        // untouched to the pixel. Where there ISN'T (the two filter browsers) the header row is empty
-        // but for the ✕, so search takes THAT row rather than leaving a 31px band of dead chrome — same
-        // glyph, same rail, same transparent field either way.
-        var inHead = ! cfg.onImport;
+        /* fb608 — SEARCH IS IN THE HEADER FOR EVERY CALLER. Max: "actually, i want the SEARCH to
+           be at the header, same rules apply."
+           fb394's rule was "search never shares a row with the Import label", because fb389 had
+           dropped a BORDERED, FILLED input into the title row and shoved the words into the corner
+           ("import wavetables, import noise, all that shit looks clobbered"). What made that fail
+           was the BOX, not the row — and the box has been gone since fb394. The field is a bare
+           transparent line now, and it LEADS the row rather than following the words, so there is
+           nothing left for it to shove. Measured field widths after the fold: wavetable 152 (100 at
+           the deepest folder) · sample 276 · noise 276 · filter 329 · warp 303 · mods 329.
+           The 14px LEFT RAIL is preserved exactly: 9px of header padding + 5px here puts the
+           magnifier on the same column as the ＋ that used to sit there and the category letters
+           below it, so the panel still reads as one column of chrome. */
         srchRow = document.createElement ('div');
         srchRow.className = 'tpb-srow';
-        srchRow.style.cssText = inHead
-          ? 'display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:0;padding-left:5px;'
-          : 'display:flex;align-items:center;gap:6px;height:26px;padding:0 9px 0 14px;flex:none;border-bottom:1px solid rgba(255,255,255,0.05);';
+        srchRow.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1 1 auto;min-width:' + SRCH_MIN + 'px;padding-left:5px;';
         var mag = document.createElement ('span');
         mag.style.cssText = 'flex:none;display:flex;color:rgba(255,255,255,.32);transition:color .12s;';
         mag.innerHTML = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.4 15.4L21 21"/></svg>';
@@ -38578,29 +38633,67 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         srch.onkeydown = function (e) { e.stopPropagation();                                   // never let a query reach the synth's key handlers
           if (e.key === 'Escape') { if (srch.value) { srch.value = ''; srch.oninput (); } else close (); } };   // Esc clears, then closes — so no ✕ has to exist
         srchRow.appendChild (mag); srchRow.appendChild (srch);
-        if (inHead) head.insertBefore (srchRow, right); else panel.appendChild (srchRow);
+        head.insertBefore (srchRow, right);
         setTimeout (function () { try { srch.focus ({ preventScroll: true }); } catch (e) { try { srch.focus (); } catch (e2) {} } }, 0);   // opens ready to type (Max: "I'm tired of having to find Acid 303")
       }
-      /* ═══ fb606 — THE BREADCRUMB. "so it is never unclear where you are." ═══
-         FIXED-POSITION LAW: a fixed 22px row, and the path itself lives in a `flex:1;min-width:0`
-         box with `text-overflow:ellipsis`. min-width:0 is the half people leave out — without it
-         a flex child refuses to shrink below its content and the ROW grows instead of the text
-         ellipsing, which is precisely the "navigating must not resize anything" failure. The full
-         path goes in `title`, so nothing is lost to the ellipsis. The row exists at the ROOT too
-         (reading the root label), so descending never adds or removes a row: the panel's shape is
-         identical at every depth. */
+      /* ═══ fb608 — THE PATH RIDES THE HEADER, HARD AGAINST THE ARROWS ═══════════════════════
+         Max: "the 'wavetables' folder directory needs to go next to the arrows… at the very top of
+         the menu header… put it next to the arrows logos and all."
+         Literally that: `crumbBox` is inserted immediately before `right`, whose FIRST child is the
+         ‹ › pair — so the path and the two controls that change it are one cluster with nothing
+         between them, and no separator under either.
+
+         🔑 WHY IT HUGS THE ARROWS AND NOT THE LEFT EDGE. Search is `flex:1 1 auto`, so it eats all
+         the slack; the path is `flex:0 1 auto`, so its RIGHT edge is pinned to the icon cluster and
+         never moves. Navigating changes the text inside a box whose right edge is fixed — the
+         fb606 "navigating must not resize anything" law, kept in a row instead of a band.
+
+         🔑 THE ELLIPSIS IS STRUCTURAL. Max: "make sure the '...' gets there if there are any LONG
+         directorys." A long path can only grow LEFTWARD into search's slack, and only as far as
+         CRUMB_MAX; past that the TEXT ellipses instead of the BOX growing. The full path is always
+         in `title`, so the ellipsis hides nothing you cannot read.
+         ⚠️ AND THE MECHANISM IS NOT THE ONE EVERYONE NAMES. The usual folklore credits `min-width:0`
+         for letting a nowrap flex child shrink — but per Flexbox §4.5 the automatic minimum size is
+         already clamped to ZERO on any box whose `overflow` is not `visible`, and both boxes here
+         are `overflow:hidden`. So min-width:0 is belt-and-braces, not the load-bearing part: what
+         actually produces the "…" is `overflow:hidden` + `text-overflow:ellipsis` ON THE TEXT, and
+         `flex:0 1 auto` + `max-width` on the box around it. PROVEN, not asserted — the `push`
+         mutation in Tests/tpb_head.js strips min-width and the gate stays GREEN (a real ellipsis is
+         still rendering); the `clip` mutation strips the text's overflow and the gate REDS. */
+      var crumbBox = null;
       if (NAVON) {
-        var crumbRow = document.createElement ('div');
-        crumbRow.className = 'tpb-crumb';
-        crumbRow.style.cssText = 'display:flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 14px;flex:none;'
-          + 'border-bottom:1px solid rgba(255,255,255,0.05);overflow:hidden;';
+        crumbBox = document.createElement ('div');
+        crumbBox.className = 'tpb-crumb';
+        crumbBox.style.cssText = 'flex:0 1 auto;min-width:0;max-width:' + CRUMB_MAX + 'px;display:flex;align-items:center;'
+          + 'gap:5px;overflow:hidden;padding-left:14px;';   /* 14px of air so the path never touches the search caret */
         var fic = document.createElement ('span');
         fic.style.cssText = 'flex:none;display:flex;align-items:center;color:rgba(255,255,255,.26);';
         fic.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2.2 2.6H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+        /* 🔑 THE "…" GOES ON THE LEFT, AND THAT IS THE WHOLE POINT OF THE CRUMB.
+           `text-overflow:ellipsis` truncates the END, so a deep path rendered the ordinary way reads
+           "Wavetables › TERRAI…" — it tells you where you STARTED and hides where you ARE, which is
+           the exact opposite of what fb606 built this for ("so it is never unclear where you are").
+           `direction:rtl` moves the clip to the START, so the same box reads "…RAL FORMANT SHIFT".
+           The inner span is not decoration, and the reason is narrower and nastier than it looks:
+           an all-Latin path renders IDENTICALLY with or without it, so this reads like a no-op — but
+           give one folder a non-Latin name and the RTL paragraph direction reorders the SEGMENTS.
+           Measured: "Wavetables › צלילים › BASS" renders as "BASS › צלילים › Wavetables" without the
+           embedding — THE PATH BACKWARDS — and correctly with it. So it is dead weight for Max's own
+           folders and load-bearing for somebody else's, which is exactly the kind of line a later
+           session deletes as unused. `Tests/tpb_head.js` bar [8b] is the proof, on a Hebrew-named
+           fixture folder, reading the rendered segment order off glyph positions. `text-align:left` keeps a SHORT path
+           (the root) flush left instead of drifting to the right edge, so nothing moves until there
+           is actually something to elide. Verified on all four cases, root through three deep. */
         crumbEl = document.createElement ('div');
+        crumbEl.className = 'tpb-crumbtext';
         crumbEl.style.cssText = 'flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+          + 'direction:rtl;text-align:left;'
           + 'color:rgba(255,255,255,.45);font-size:8.5px;letter-spacing:.6px;font-weight:300;';
-        crumbRow.appendChild (fic); crumbRow.appendChild (crumbEl); panel.appendChild (crumbRow);
+        crumbTx = document.createElement ('span');
+        crumbTx.style.cssText = 'direction:ltr;unicode-bidi:embed;';
+        crumbEl.appendChild (crumbTx);
+        crumbBox.appendChild (fic); crumbBox.appendChild (crumbEl);
+        head.insertBefore (crumbBox, right);   /* immediately left of ‹ › — "next to the arrows" */
       }
       var bodyEl = document.createElement ('div'); bodyEl.style.cssText = 'flex:1;display:flex;min-height:0;';
       var catsEl = document.createElement ('div'); catsEl.className = 'tpb-pane'; catsEl.style.cssText = 'width:126px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:5px;';
@@ -38670,7 +38763,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         /* fb606 — NEVER on factory content and never on a SUBFOLDER of a registered folder: the
            registry only knows the root the user added, so "remove" on either would be a lie about
            what the click does. Callers that pass no `kind` at all (noise, samples) are unchanged. */
-        if (cat && cat.delKind === 'folder' && cat.kind !== 'factory' && cat.kind !== 'sub') { delBtn.textContent = 'Delete Folder'; delBtn.style.display = ''; }
+        if (cat && cat.delKind === 'folder' && cat.kind !== 'factory' && cat.kind !== 'sub') { delBtn.title = 'Delete Folder — ' + (cat.label || ''); delBtn.style.display = 'flex'; }
         else { delBtn.style.display = 'none'; } }   // fb73 — no "Delete Import" (Finder owns single imports; dead paths auto-prune)
       function renderCats () { catsEl.innerHTML = ''; CATS.forEach (function (cat, ci) {
         var kids = (cat.subs && cat.subs.length) ? cat.subs.length : 0;
@@ -38745,9 +38838,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
            box, same seat: swapping states cannot move a pixel. */
         if (navBack) { navBack.style.color = canB ? DIM : 'rgba(255,255,255,.16)'; navBack.style.cursor = canB ? 'pointer' : 'default'; }
         if (navFwd)  { navFwd.style.color  = canF ? DIM : 'rgba(255,255,255,.16)'; navFwd.style.cursor  = canF ? 'pointer' : 'default'; }
-        if (crumbEl) {
+        if (crumbTx) {
           var full = [cfg.rootCrumb || 'All Folders'].concat (curPath ().map (function (nd) { return nd.label; })).join ('  \u203a  ');
-          crumbEl.textContent = full; crumbEl.title = full;   // the ellipsis hides nothing you cannot read
+          crumbTx.textContent = full; crumbEl.title = full;   // the ellipsis hides nothing you cannot read
         }
       }
       renderCats (); renderItems (selCat); paintDelete (); paintNav ();
