@@ -582,6 +582,42 @@ public:
     void getStateInformation (juce::MemoryBlock& destData) override;
     void setStateInformation (const void* data, int sizeInBytes) override;
 
+    // ═══ fb618 — THE PRESET ═══════════════════════════════════════════════════════════════════
+    //  A preset IS a state chunk (fb617 made the chunk a fixed point). Two additions:
+    //   · PresetMeta rides INSIDE the chunk as the <preset> child — name · bank · author · type ·
+    //     styles · note · fv (the .terrain format version: an attribute HERE, never the root
+    //     "version", which gates two migrations) — so a DAW session remembers which preset it
+    //     holds. Remove-then-add at save, like <layers>, or copyState() echoes the last one.
+    //   · A .terrain FILE wraps the chunk: "TRN1" · u32 manifestLen · manifest JSON · u32 chunkLen
+    //     · chunk. The manifest is the same metadata plus what the preset CARRIES, so a catalogue
+    //     scan reads the first kilobyte of a file, never 19 MB of base64 to find a name. A bare
+    //     "VC2!" chunk also loads. Design/PRESET-SYSTEM-v1.md is the contract; the gate is
+    //     Tests/preset_null_cert.cpp.
+    struct PresetMeta
+    {
+        juce::String name, bank, author, type, styles, note;   // styles = "Dark,Wide"
+        int fv = 1;
+        juce::var toVar() const;  void fromVar (const juce::var& v);
+        juce::String toJson() const { return juce::JSON::toString (toVar(), true); }
+        void fromJson (const juce::String& s) { fromVar (juce::JSON::parse (s)); }
+        juce::ValueTree toTree() const;  void fromTree (const juce::ValueTree& t);
+    };
+    PresetMeta   getPresetMeta() const;
+    void         setPresetMeta (const PresetMeta& m);
+    juce::String getPresetMetaJson() const { return getPresetMeta().toJson(); }
+    bool savePatchToFile   (const juce::File& f, const juce::String& metaJson, juce::String& error);
+    bool loadPatchFromFile (const juce::File& f, juce::String& error);          // MESSAGE THREAD (the restore law)
+    static bool readPatchHeader  (const juce::File& f, juce::String& manifestJsonOut, juce::String& error);
+    static bool unwrapPatchBytes (const juce::MemoryBlock& file, juce::String& manifestOut, juce::MemoryBlock& chunkOut, juce::String& error);
+    //  Everything a .terrain must NOT inherit from the patch before it. setStateInformation treats an
+    //  absent property as "leave it" for most JSON blobs (the isNotEmpty() guards), which is right for
+    //  a host restoring into a fresh instance and wrong for a preset loading over a live one.
+    void resetPatchState();
+    //  The cheap half of that, called INSIDE setStateInformation before the guarded blobs are read:
+    //  every JSON / engine blob goes to its virgin value first, so "absent" means "clear" on the
+    //  host path too (a DAW session, an undo step) without touching any decoded audio slot.
+    void clearPatchBlobs();
+
     // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
     // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
     // setSynthModMatrix(). No-op for a blob that already carries version >= 3.
@@ -2960,6 +2996,9 @@ private:
     // Centralises the deserialization logic shared by V1 and V2 paths.
     static void applyPitchSliceJson (const juce::String& psJson,
                                      tw::LayerState& layer);
+
+    PresetMeta presetMeta_;                       // fb618
+    mutable juce::CriticalSection presetMetaLock_;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (TerrainAudioProcessor)
 };

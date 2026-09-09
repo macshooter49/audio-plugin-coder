@@ -858,6 +858,34 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     audioProcessor.setSynthModMatrix(args[0].toString());
                 complete(juce::var{});
             })
+            // ═══ fb618 — THE PRESET FILE: dumb couriers, the JS owns the metadata schema ═══════════
+            .withNativeFunction ("savePatchFile", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 0 && audioProcessor.savePatchToFile (juce::File (args[0].toString()), args.size() > 1 ? args[1].toString() : juce::String(), err);
+                complete (juce::var (ok ? juce::String ("ok") : "error:" + err));
+            })
+            .withNativeFunction ("loadPatchFile", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 0 && audioProcessor.loadPatchFromFile (juce::File (args[0].toString()), err);
+                complete (juce::var (ok ? audioProcessor.getPresetMetaJson() : "error:" + err));
+            })
+            .withNativeFunction ("readPatchHeader", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String json, err;
+                const bool ok = args.size() > 0 && TerrainAudioProcessor::readPatchHeader (juce::File (args[0].toString()), json, err);
+                complete (juce::var (ok ? json : juce::String()));
+            })
+            .withNativeFunction ("getPresetMeta", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                complete (juce::var (audioProcessor.getPresetMetaJson()));
+            })
+            .withNativeFunction ("setPresetMeta", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                if (args.size() > 0) { auto m = audioProcessor.getPresetMeta(); m.fromJson (args[0].toString()); audioProcessor.setPresetMeta (m); }
+                complete (juce::var{});
+            })
             .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -14279,13 +14307,13 @@ void TerrainUiCore::restoreBlendsFromState()
 
 // ── Stubs (real implementations land in Tasks 18 and 22 of the v0a plan) ────
 
-void TerrainUiCore::loadPatch (const juce::File&)
+void TerrainUiCore::loadPatch (const juce::File& f)
 {
-    // Task 18 (Phase E) — read .terrain JSON, restore APVTS, trigger sample load
+    // fb618 — a dropped .terrain loads through the processor (message thread: filesDropped is one).
+    juce::String err;
+    if (! audioProcessor.loadPatchFromFile (f, err)) { reportLoadError ("preset", err); return; }
     if (webView != nullptr)
-        webView->evaluateJavascript (
-            "if (window.onLoadError) window.onLoadError('Patch loading lands in v0a Phase E.');",
-            nullptr);
+        webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
 }
 
 void TerrainUiCore::importTerrainPack (const juce::File&)

@@ -15607,11 +15607,42 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
 }
 
 //==============================================================================
+// fb618 — what a saved tree CARRIES: imported wavetables, one-shots, IRs, flow cards, LFO shapes.
+// Read off the tree that getStateInformation just built, never off live members, so the number
+// in the file is the number in the file. nodes is the environment seat (0 until the patcher).
+static juce::var tiCarriesOf (const juce::ValueTree& s)
+{
+    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0;
+    for (int o = 0; o < 4; ++o)
+    {
+        if (s.getProperty ("wtImportPcm"   + juce::String (o), "").toString().isNotEmpty()) ++wt;
+        if (s.getProperty ("oscSamplePath" + juce::String (o), "").toString().isNotEmpty()) ++smp;
+    }
+    for (int i = 1; i <= 6; ++i)
+        if (s.getProperty ("convIRRaw" + juce::String (i), "").toString().isNotEmpty()) ++ir;
+    if (auto layers = s.getChildWithName ("layers"); layers.isValid())
+        for (int i = 0; i < layers.getNumChildren(); ++i)
+            if (layers.getChild (i).getProperty ("sourcePath", "").toString().isNotEmpty()) ++smp;
+    if (auto v = juce::JSON::parse (s.getProperty ("cardStates", "").toString()); v.getDynamicObject() != nullptr)
+        flow = v.getDynamicObject()->getProperties().size();
+    if (auto v = juce::JSON::parse (s.getProperty ("lfoShapesJson", "").toString()); v.isObject())
+        if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("wt", wt); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
+    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", 0);
+    return juce::var (o);
+}
+
 void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 {
     // DAW state: parameter values + preset index + XY auto state
     // Presets themselves live on disk only (getUserPresetsFile)
     auto state = apvts.copyState();
+    // fb618 — copyState() carries every root property the last replaceState() installed, and each
+    // guarded property below is written only when its member is non-empty: an EMPTY member used to
+    // leave the previous patch's value in the tree (the fb617 echo, one level up). Every guard now
+    // has an else that REMOVES the stale property — in place, so a present property keeps its
+    // position and the virgin blob stays byte-identical to its own reload.
     state.setProperty("presetIndex",      currentPresetIndex.load(),  nullptr);
     state.setProperty("editorWidth",      editorWidth.load(),         nullptr);   // fb514 — clones/reloads keep the user's size (fb96 removed this before the FL junk-replay era; the editor-side latch now stops junk from ever entering this atomic)
     state.setProperty("xyAutoEnabled",    xyAutoEnabled.load(),     nullptr);
@@ -15633,43 +15664,52 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     state.setProperty("uiPage",             uiPage.load(),                nullptr);
     if (modStateJson.isNotEmpty())
         state.setProperty("modStateJson", modStateJson, nullptr);
-    { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); }   // fb563 (4)
-    { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); }   // fb564
+    else state.removeProperty ("modStateJson", nullptr);   // fb618
+    { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); else state.removeProperty ("midiCcMap", nullptr); }   // fb563 (4) · fb618
+    { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); else state.removeProperty ("macroNames", nullptr); }   // fb564 · fb618
     {
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
             state.setProperty("synModJson", synModJson, nullptr);
+        else state.removeProperty ("synModJson", nullptr);   // fb618
         {
             const juce::ScopedLock del (dynEnvLock_);
             if (dynEnvJson_.isNotEmpty())
                 state.setProperty ("dynEnvJson", dynEnvJson_, nullptr);   // fb177
+            else state.removeProperty ("dynEnvJson", nullptr);   // fb618
         }
     }
     {
         const juce::ScopedLock sl (arpLaneLock_);
         if (arpLanesJson_.isNotEmpty())
             state.setProperty ("arpLanesJson", arpLanesJson_, nullptr);   // FLOW · ARP lane pattern (fb105)
+        else state.removeProperty ("arpLanesJson", nullptr);   // fb618
     }
     {
         const juce::ScopedLock lsl (lfoShapeLock_);
         if (lfoShapesJson_.isNotEmpty())
             state.setProperty ("lfoShapesJson", lfoShapesJson_, nullptr);   // LFO ARC L1 — drawn shapes
+        else state.removeProperty ("lfoShapesJson", nullptr);   // fb618
         if (dstCurvesJson_.isNotEmpty())
             state.setProperty ("dstCurvesJson", dstCurvesJson_, nullptr);   // fb328 — drawn distortion curves
+        else state.removeProperty ("dstCurvesJson", nullptr);   // fb618
         if (dstTableSrc_ >= 0)
             state.setProperty ("dstTableSrc", dstTableSrc_, nullptr);       // fb339 — Table source pill
+        else state.removeProperty ("dstTableSrc", nullptr);   // fb618
     }
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
+    else state.removeProperty ("noiseSampleSel", nullptr);   // fb618
     if (noiseVizMode_ != 1)
         state.setProperty ("noiseVizMode", noiseVizMode_, nullptr);   // fb66 — noise waveform/particle viz choice (default particle)
+    else state.removeProperty ("noiseVizMode", nullptr);   // fb618
     // fb602 — HOLE 1: THE FLOW CARD CHAIN. cardStates_ is what index.html:33710 calls "ONE truth"
     // for the multi-slot arp/gli/rbn/chop/crv/lfo chain. It survived pop-out, dock-back and editor
     // reopen and was destroyed by every DAW project reload, because it had never been written here
     // at all (grep cardStates_ PluginProcessor.cpp returned nothing before this line). Empty-guarded
     // like every blob above it: a patch with no cards gains 0 bytes. Measured cost with all six FLOW
     // cards carrying a chain: see the fb602 cert.
-    { const juce::String cs = getCardStatesJson(); if (cs.isNotEmpty()) state.setProperty ("cardStates", cs, nullptr); }
+    { const juce::String cs = getCardStatesJson(); if (cs.isNotEmpty()) state.setProperty ("cardStates", cs, nullptr); else state.removeProperty ("cardStates", nullptr); }   // fb618
     // fb602 — HOLE 2: THE USER CONVOLUTION IR AUDIO. getConvIRRawJson (fb311, :16049) already
     // produces exactly the right shape and setConvIRRawFromJson already consumes it — this
     // RECYCLES them, it does not add a second encoder. It has to be the AUDIO and not a path:
@@ -15694,6 +15734,7 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         const juce::String ir = getConvIRRawJson (ci);
         if (ir.isNotEmpty() && ir != "{}")
             state.setProperty ("convIRRaw" + juce::String (ci), ir, nullptr);
+        else state.removeProperty ("convIRRaw" + juce::String (ci), nullptr);   // fb618
     }
 
     // ── V2 format marker ─────────────────────────────────────────────────────
@@ -15828,6 +15869,7 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         for (int oi = 0; oi < 4; ++oi)
             if (oscSourcePaths_[(size_t) oi].isNotEmpty())
                 state.setProperty ("oscSamplePath" + juce::String (oi), oscSourcePaths_[(size_t) oi], nullptr);
+            else state.removeProperty ("oscSamplePath" + juce::String (oi), nullptr);   // fb618
 
         // BLEND-STATE — persist each osc's live blend source pair; the editor reloads both
         // files on reopen so the blend knobs stay live (knob values ride in the APVTS).
@@ -15836,6 +15878,7 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
                 if (blendSrcPaths_[(size_t) oi][(size_t) w].isNotEmpty())
                     state.setProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi),
                                        blendSrcPaths_[(size_t) oi][(size_t) w], nullptr);
+                else state.removeProperty ("blendSrc" + juce::String (w ? "B" : "A") + juce::String (oi), nullptr);   // fb618
 
         // Full path for the V1 sample-path restore path (layers[0] only).
         if (layers[0].sourcePath.isNotEmpty())
@@ -15869,7 +15912,8 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // so they survive reload. Only oscs with a live import write anything.
     for (int o = 0; o < 4; ++o)
     {
-        if (importedPcm_[o].empty()) continue;
+        if (importedPcm_[o].empty())   // fb618 — no import: leave no echo of the last one
+        { for (const char* k : { "wtImportPcm", "wtImportFrames", "wtImportFile", "wtImportName" }) state.removeProperty (k + juce::String (o), nullptr); continue; }
         const int cap = tw::Wavetable::kMaxFrames * tw::Wavetable::kFrameSize;
         const int nn  = juce::jmin ((int) importedPcm_[o].size(), cap);
         juce::MemoryBlock mb (importedPcm_[o].data(), (size_t) nn * sizeof (float));
@@ -15885,7 +15929,19 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     for (int i = 0; i < 8; ++i)
         if (drawTable_[i].load (std::memory_order_acquire) != nullptr)
             state.setProperty ("warpDraw" + juce::String (i), getWarpDrawCurveCsv (i / 2, i % 2), nullptr);
+        else state.removeProperty ("warpDraw" + juce::String (i), nullptr);   // fb618
     for (int o = 0; o < 4; ++o) state.setProperty ("wt3dView" + juce::String (o), wt3dView_[o], nullptr);
+
+    // fb618 — the <preset> child. Remove every existing one first (copyState() carries the one the
+    // last load brought in — the fb617 law), then add the live metadata at index 0, so it is the
+    // first child after the root tag. "carries" is read off the tree just built: one source of truth.
+    for (auto old = state.getChildWithName ("preset"); old.isValid(); old = state.getChildWithName ("preset"))
+        state.removeChild (old, nullptr);
+    {
+        auto pt = getPresetMeta().toTree();
+        pt.setProperty ("carries", juce::JSON::toString (tiCarriesOf (state), true), nullptr);
+        state.addChild (pt, 0, nullptr);
+    }
 
     std::unique_ptr<juce::XmlElement> xml (state.createXml());
     copyXmlToBinary (*xml, destData);
@@ -16227,6 +16283,10 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
         {
             auto newState = juce::ValueTree::fromXml (*xmlState);
 
+            // fb618 — the <preset> child names the patch this blob holds. Absent == an older blob: keep.
+            if (auto pt = newState.getChildWithName ("preset"); pt.isValid())
+            { PresetMeta m; m.fromTree (pt); setPresetMeta (m); }
+
             // ── fb346 migration: THE EMPTY RACK.
             // A fresh instance now boots with an empty chain (SYN_*_ACTIVE default false) because the
             // rack is dynamic. A session saved BEFORE fb346 has no _ACTIVE params at all, and for it
@@ -16431,6 +16491,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // NOISE IMPORT (P5c) — restore the noise-sample selection (factory path or embedded user audio).
             // The editor re-loads the buffer on GUI open via getNoiseSampleSel. Empty = algorithmic type.
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
+            if (noiseSampleSelJson_.isEmpty())   // fb618 — absent means algorithmic noise, not the previous patch's loop
+            { noiseLoadedSel_.clear(); noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0); }
             noiseVizMode_ = (int) newState.getProperty ("noiseVizMode", 1);   // fb66 — restore noise viz choice (default particle)
 
             // fb550 — DRAWN WARP CURVES. Absent property == never drawn == the identity, which is
@@ -16461,6 +16523,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                 rebuildImport (o);
             }
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
+            clearPatchBlobs();   // fb618 — absent means CLEAR for every blob below, on the host path too
             setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
             setMacroNamesJson (newState.getProperty ("macroNames", "").toString());   // fb564 — empty = the eight defaults
             modStateJson = newState.getProperty("modStateJson", "").toString();
@@ -16475,7 +16538,6 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                 if (lsj.isNotEmpty()) setSynthLfoShapes (lsj);
                 auto dcv = newState.getProperty ("dstCurvesJson", "").toString();   // fb328
                 if (dcv.isNotEmpty()) setDistortionCurves (dcv);
-                setDistortionTableSrc ((int) newState.getProperty ("dstTableSrc", -1));   // fb339 — re-reads the osc's CURRENT table
             }
             {
                 auto al = newState.getProperty ("arpLanesJson", "").toString();
@@ -16492,6 +16554,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             {
                 const juce::String ir = newState.getProperty ("convIRRaw" + juce::String (ci), juce::String()).toString();
                 if (ir.isNotEmpty() && ir != "{}") setConvIRRawFromJson (ir, ci);
+                else clearConvUserIR (ci);   // fb618 — absent means the synthetic IR, not the previous patch's file
             }
 
             // ── Task 13: V1 / V2 branching ────────────────────────────────────
@@ -16540,6 +16603,9 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // Absent property == a blob older than fb537: fall back to 1 (SYN), the new default.
             uiPage.store (juce::jlimit (0, 4, (int) newState.getProperty ("uiPage", 1)));
             apvts.replaceState (newState);
+            // fb618 — moved from the blob section above: with no import live it bakes from the osc's
+            // WT_PRESET, which before replaceState was the PREVIOUS patch's table.
+            setDistortionTableSrc ((int) newState.getProperty ("dstTableSrc", -1));   // fb339 — re-reads the osc's CURRENT table
 
             // Mark 2 Phase 1 audio-fix: V1 backward-compat. V1 presets carry
             // sliceMode and sampleLoopMode only in APVTS (global). Engine now
@@ -17358,6 +17424,203 @@ void TerrainAudioProcessor::setConvIRRawFromJson (const juce::String& json, int 
 }
 
 //==============================================================================
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//  fb618 — THE PRESET: metadata, the <preset> child, the .terrain file
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+juce::var TerrainAudioProcessor::PresetMeta::toVar() const
+{
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("name", name); o->setProperty ("bank", bank); o->setProperty ("author", author);
+    o->setProperty ("type", type); o->setProperty ("styles", styles); o->setProperty ("note", note);
+    o->setProperty ("fv", fv);
+    return juce::var (o);
+}
+void TerrainAudioProcessor::PresetMeta::fromVar (const juce::var& v)
+{
+    if (! v.isObject()) return;
+    auto g = [&] (const char* k, juce::String& dst) { if (v.hasProperty (k)) dst = v.getProperty (k, juce::String()).toString(); };
+    g ("name", name); g ("bank", bank); g ("author", author); g ("type", type); g ("styles", styles); g ("note", note);
+    if (v.hasProperty ("fv")) fv = juce::jmax (1, (int) v.getProperty ("fv", 1));
+}
+juce::ValueTree TerrainAudioProcessor::PresetMeta::toTree() const
+{
+    juce::ValueTree t ("preset");
+    t.setProperty ("name", name, nullptr); t.setProperty ("bank", bank, nullptr); t.setProperty ("author", author, nullptr);
+    t.setProperty ("type", type, nullptr); t.setProperty ("styles", styles, nullptr); t.setProperty ("note", note, nullptr);
+    t.setProperty ("fv", fv, nullptr);
+    return t;
+}
+void TerrainAudioProcessor::PresetMeta::fromTree (const juce::ValueTree& t)
+{
+    name = t.getProperty ("name", name).toString(); bank = t.getProperty ("bank", bank).toString();
+    author = t.getProperty ("author", author).toString(); type = t.getProperty ("type", type).toString();
+    styles = t.getProperty ("styles", styles).toString(); note = t.getProperty ("note", note).toString();
+    fv = juce::jmax (1, (int) t.getProperty ("fv", fv));
+}
+TerrainAudioProcessor::PresetMeta TerrainAudioProcessor::getPresetMeta() const
+{ const juce::ScopedLock sl (presetMetaLock_); return presetMeta_; }
+void TerrainAudioProcessor::setPresetMeta (const PresetMeta& m)
+{ const juce::ScopedLock sl (presetMetaLock_); presetMeta_ = m; }
+
+static const char* const kTrnMagic = "TRN1";
+
+bool TerrainAudioProcessor::savePatchToFile (const juce::File& f, const juce::String& metaJson, juce::String& error)
+{
+    if (metaJson.isNotEmpty()) { PresetMeta m = getPresetMeta(); m.fromJson (metaJson); setPresetMeta (m); }
+    juce::MemoryBlock chunk; getStateInformation (chunk);
+    // the manifest is the <preset> child read back off the chunk just written — one source of truth
+    juce::String manifest;
+    if (auto xml = getXmlFromBinary (chunk.getData(), (int) chunk.getSize()))
+        if (auto* pe = xml->getChildByName ("preset"))
+        {
+            auto* o = new juce::DynamicObject();
+            for (int i = 0; i < pe->getNumAttributes(); ++i)
+            {
+                const auto k = pe->getAttributeName (i), v = pe->getAttributeValue (i);
+                if (k == "carries") o->setProperty (k, juce::JSON::parse (v));
+                else if (k == "fv") o->setProperty (k, v.getIntValue());
+                else o->setProperty (k, v);
+            }
+            manifest = juce::JSON::toString (juce::var (o), true);
+        }
+    if (manifest.isEmpty()) { error = "the chunk carries no <preset> child"; return false; }
+    juce::MemoryOutputStream out;
+    const juce::MemoryBlock mj (manifest.toRawUTF8(), manifest.getNumBytesAsUTF8());
+    out.write (kTrnMagic, 4);
+    out.writeInt ((int) mj.getSize());    out.write (mj.getData(), mj.getSize());
+    out.writeInt ((int) chunk.getSize()); out.write (chunk.getData(), chunk.getSize());
+    out.flush();
+    if (! f.getParentDirectory().exists() && ! f.getParentDirectory().createDirectory())
+    { error = "could not create " + f.getParentDirectory().getFullPathName(); return false; }
+    if (! f.replaceWithData (out.getData(), out.getDataSize()))
+    { error = "could not write " + f.getFullPathName(); return false; }
+    return true;
+}
+
+bool TerrainAudioProcessor::unwrapPatchBytes (const juce::MemoryBlock& file, juce::String& manifestOut, juce::MemoryBlock& chunkOut, juce::String& error)
+{
+    const auto* p = (const char*) file.getData(); const size_t n = file.getSize();
+    if (n >= 8 && std::memcmp (p, "VC2!", 4) == 0) { chunkOut = file; manifestOut = {}; return true; }   // a bare chunk
+    if (n < 12 || std::memcmp (p, kTrnMagic, 4) != 0) { error = "not a Terrain preset"; return false; }
+    juce::MemoryInputStream in (file, false); in.setPosition (4);
+    const int ml = in.readInt();
+    if (ml < 0 || (size_t) ml > n) { error = "bad manifest length"; return false; }
+    { juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, ml); manifestOut = juce::String::fromUTF8 ((const char*) mb.getData(), (int) mb.getSize()); }
+    const int cl = in.readInt();
+    if (cl <= 8 || (size_t) cl > n) { error = "bad chunk length"; return false; }
+    chunkOut.reset(); in.readIntoMemoryBlock (chunkOut, cl);
+    if (chunkOut.getSize() != (size_t) cl) { error = "truncated preset"; return false; }
+    return true;
+}
+
+bool TerrainAudioProcessor::readPatchHeader (const juce::File& f, juce::String& manifestJsonOut, juce::String& error)
+{
+    juce::FileInputStream in (f);
+    if (! in.openedOk()) { error = "could not open " + f.getFileName(); return false; }
+    char magic[4] = {}; if (in.read (magic, 4) != 4 || std::memcmp (magic, kTrnMagic, 4) != 0) { error = "not a Terrain preset"; return false; }
+    const int ml = in.readInt();
+    if (ml < 0 || ml > (1 << 20)) { error = "bad manifest length"; return false; }
+    juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, ml);
+    manifestJsonOut = juce::String::fromUTF8 ((const char*) mb.getData(), (int) mb.getSize());
+    return manifestJsonOut.isNotEmpty();
+}
+
+bool TerrainAudioProcessor::loadPatchFromFile (const juce::File& f, juce::String& error)
+{
+    juce::MemoryBlock file;
+    if (! f.loadFileAsData (file)) { error = "could not read " + f.getFileName(); return false; }
+    juce::String manifest; juce::MemoryBlock chunk;
+    if (! unwrapPatchBytes (file, manifest, chunk, error)) return false;
+    resetPatchState();
+    setStateInformation (chunk.getData(), (int) chunk.getSize());
+    if (manifest.isNotEmpty()) { PresetMeta m = getPresetMeta(); m.fromJson (manifest); setPresetMeta (m); }
+    return true;
+}
+
+void TerrainAudioProcessor::clearPatchBlobs()
+{
+    // Every line names what an ABSENT property would otherwise leave behind from the previous patch.
+    // Each write takes the WRITER's lock and bumps the version the audio side watches. The JSON
+    // setters cannot do this job: their "empty" inputs either return before touching anything or
+    // leave a non-virgin string that the next save then writes (the clears recon, fb618).
+    setSynthModMatrix ({});                                   // "" not "{}": zero routes, curves unset, synModJson stays ""
+    modStateJson = {};
+    modulationEngine.updateConfig (ModulationEngine::Config{});   // the pair loadPreset already uses
+    setMidiMapJson ({});                                      // the 128 CC bindings
+    setMacroNamesJson ({});                                   // the eight default names
+    {
+        const juce::ScopedLock sl (dynEnvLock_);
+        for (auto& s : dynEnvShapes_) s = DynEnvShape();
+        dynEnvCount_ = 0; dynEnvJson_ = {};
+    }
+    dynEnvVersion_.fetch_add (1, std::memory_order_release);
+    {
+        const juce::ScopedLock sl (lfoShapeLock_);
+        for (int li = 0; li < wc::NUM_LFOS; ++li)
+        {
+            for (int lk = 0; lk <= wc::kLfoTableN; ++lk)       // the ctor's triangle bake, verbatim
+            {
+                const float lp = (float) (lk % wc::kLfoTableN) / (float) wc::kLfoTableN;
+                lfoTableShared_[li][lk] = 1.0f - 4.0f * std::fabs (lp - 0.5f);
+            }
+            lfoPtNpShared_[li] = 0; lfoPtHasModShared_[li] = false; lfoMotionShared_[li] = LfoMotion();
+        }
+        lfoShapesJson_ = {};
+    }
+    lfoShapeVersion_.fetch_add (1, std::memory_order_release);
+    distortionEngine.clearUserCurves();
+    {
+        static const float kBars[16] = { 1.0f, 0.55f, 0.8f, 0.3f, 0.65f, 0.2f, 0.5f, 0.15f, 0.4f, 0.1f, 0.3f, 0.08f, 0.22f, 0.06f, 0.15f, 0.1f };
+        distortionEngine.setHarmonicBars (kBars);            // the engine's private default, restated
+    }
+    { const juce::ScopedLock sl (dstCurveLock_); dstCurvesJson_ = {}; }
+    for (int bk = 0; bk < 4; ++bk) dstPtNpShared_[bk] = 0;
+    dstPtHasModShared_ = false;
+    dstPtVersion_.fetch_add (1, std::memory_order_release);
+    setDistortionTableSrc (-1);
+    for (int i = 0; i < 8; ++i) drawTable_[i].store (nullptr, std::memory_order_release);   // the identity warp
+    { const juce::ScopedLock sl (arpLaneLock_); arpLanesShared_ = wc::ArpLaneData{}; arpLanesJson_.clear(); }
+    arpLanesVersion_.fetch_add (1, std::memory_order_release);
+    { const juce::ScopedLock sl (cardStateLock_); cardStates_.clear(); }
+    noiseVizMode_ = 1;
+    for (int o = 0; o < 4; ++o) wt3dView_[o] = false;
+}
+
+void TerrainAudioProcessor::resetPatchState()
+{
+    // The .terrain path: the blobs, then every decoded audio slot and the loaders that could still
+    // land into one. Message thread — the same thread the restore code documents.
+    clearPatchBlobs();
+    for (int ci = 1; ci <= ParameterIDs::kFxInstances; ++ci) clearConvUserIR (ci);
+    noiseSampleSelJson_.clear(); noiseLoadedSel_.clear();
+    noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0);
+    for (int o = 0; o < 4; ++o)
+    {
+        clearImportedWavetable (o);
+        importFrames_[o] = 40;                                     // neither clear path resets this
+        wtBuildReq_[o].fetch_add (1, std::memory_order_acq_rel);   // supersede any queued async bake
+    }
+    for (int oi = 0; oi < 4; ++oi)
+    {
+        oscSampleLoaders_[(size_t) oi].cancel();                   // join an in-flight load first
+        oscSampleBuffers_[(size_t) oi].store (nullptr); oscSampleBuffers_[(size_t) oi].setSampleRate (0.0);
+        oscSourcePaths_[(size_t) oi].clear(); oscLoadedPath_[(size_t) oi].clear();
+        setCachedOscPayload ({}, oi);
+    }
+    for (auto& p : blendSrcPaths_) { p[0].clear(); p[1].clear(); }
+    { const juce::ScopedLock sl (sampleSourcePathLock); loadedSamplePath.clear(); }
+    sampleLoader.cancel();                                         // the one loader behind all four layers
+    for (int li = 0; li < 4; ++li)
+    {
+        auto& L = layers[(size_t) li];
+        L.sourcePath.clear();
+        L.sampleLoopMode.store (0);                                // the one LayerState member no loader resets
+        L.sampleBuffer.setSampleRate (0.0);
+        setCachedSamplePayload ({}, li);
+        layerLoadedPath_[(size_t) li].clear();
+    }
+}
+
 juce::AudioProcessor* JUCE_CALLTYPE createPluginFilter()
 {
     return new TerrainAudioProcessor();

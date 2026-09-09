@@ -156,8 +156,13 @@ int main()
                + "\n           got       " + (got.empty() ? std::string ("(nothing)") : got.substr (0, 150)));
     }
 
-    // ── [2] THE NASTY ONE. An empty / absent cardStates must NOT clear what is already there. ─
-    //        This is the bar that stops fb602 from being WORSE than the bug it fixes.
+    // ── [2] THE LAW CHANGED IN fb618. fb602 wrote this bar as "an absent cardStates must NOT clear
+    //        what is already there", fearing a legacy project would lose its FLOW chains. But a
+    //        pre-fb602 blob never CARRIED chains — nothing saved is lost — and keeping a live
+    //        instance's chains on top of a different blob is exactly the inheritance the preset
+    //        gate (Tests/preset_null_cert.cpp) forbids: preset B must not play preset A's cards.
+    //        Absent means CLEAR now, on the host path too (clearPatchBlobs at the top of the
+    //        guarded section). An open editor re-pushes its own mirror either way.
     {
         std::string second = base;                       // a PRE-fb602 blob: no cardStates at all
         setParam (second, "SYN_OSC_A_LEVEL", 0.4321);    // ...but it is a real, different patch
@@ -165,12 +170,11 @@ int main()
         std::string w; const std::string after = b.readXml (w);
         const std::string got = getRootAttr (after, "cardStates");
         const double lvl = getParam (after, "SYN_OSC_A_LEVEL");
-        chk (MUT ? true : (! got.empty() && contains (got, "arp") && contains (got, "gli")),
-             "[2] A BLOB WITH NO cardStates IS A NO-OP, NEVER A CLEAR  ◀── worse-than-the-bug bar",
+        chk (MUT ? true : got.empty(),
+             "[2] A BLOB WITH NO cardStates CLEARS THE CHAIN — absent means clear (fb618)",
              "pushed a pre-fb602 blob (OSC A Level -> " + std::to_string (lvl)
                + ", proving the restore ran); cardStates after = "
-               + (got.empty() ? std::string ("<WIPED — this would destroy every FLOW chain on a legacy project>")
-                              : got.substr (0, 120))
+               + (got.empty() ? std::string ("cleared") : "<INHERITED: " + got.substr (0, 120) + ">")
                + (MUT ? "   [mutated: nothing was stored, bar not meaningful]" : ""));
 
         // and an explicitly EMPTY string is the same no-op
@@ -178,10 +182,10 @@ int main()
         b.writeXml (third);
         std::string w2; const std::string after2 = b.readXml (w2);
         const std::string got2 = getRootAttr (after2, "cardStates");
-        chk (MUT ? true : (! got2.empty() && contains (got2, "arp")),
-             "[2b] cardStates=\"\" IS ALSO A NO-OP (setCardStatesFromJson's first line)",
+        chk (MUT ? true : got2.empty(),
+             "[2b] cardStates=\"\" CLEARS TOO (the setter's first line is a no-op; clearPatchBlobs ran first)",
              "cardStates after an explicit empty string = "
-               + (got2.empty() ? std::string ("<WIPED>") : got2.substr (0, 120)));
+               + (got2.empty() ? std::string ("cleared") : "<INHERITED: " + got2.substr (0, 120) + ">"));
     }
 
     // ── [3] HOLE 2: the IR AUDIO went THROUGH convUserIrL_/R_ ───────────────────────────────
@@ -218,17 +222,16 @@ int main()
                                          : "re-emitted " + std::to_string (got.size()) + " chars, n recomputed, L byte-identical");
     }
 
-    // ── [5] AN ABSENT convIRRaw LEAVES THE RETAINED IR ALONE (same law as [2]) ───────────────
+    // ── [5] AN ABSENT convIRRaw CLEARS THE RETAINED IR (same law as [2], fb618) ─────────────────
     {
         std::string fourth = base;                       // no convIRRaw at all
         b.writeXml (fourth);
         std::string w; const std::string after = b.readXml (w);
         const std::string got = getRootAttr (after, "convIRRaw1");
-        chk (MUT ? true : (! got.empty() && contains (got, b64L)),
-             "[5] AN ABSENT convIRRaw IS A NO-OP — a legacy patch keeps the IR already loaded",
-             got.empty() ? std::string ("<WIPED — the property is gone, so it was only ever the ValueTree "
-                                        "echo and the retained samples do not exist>")
-                         : "still there, " + std::to_string (got.size()) + " chars re-emitted from convUserIrL_");
+        chk (MUT ? true : got.empty(),
+             "[5] AN ABSENT convIRRaw CLEARS THE RETAINED IR — absent means the synthetic IR (fb618)",
+             got.empty() ? std::string ("cleared — the synthetic factory IR is back")
+                         : "<INHERITED: " + std::to_string (got.size()) + " chars re-emitted from convUserIrL_>");
     }
 
     // ── [6] THE COST, MEASURED. The comment at PluginProcessor.cpp:14550 states a size; state it
