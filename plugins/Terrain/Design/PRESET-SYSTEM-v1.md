@@ -14,6 +14,12 @@ Load rules: single click = select + audition, double-click / `↵` = load and cl
 
 **No caps, no boxes, one font.** Nothing new is uppercase. Env / User / Environment are plain purple or grey letters on the baseline — never a badge. The header's + ‹ › and gear have no boxes. One font family, hierarchy by colour (`--text-soft` for labels).
 
+**One selection grammar, no fills — copied from the four mode tiles (`#syn-panel .flow-mode`, fb118/fb119).** Resting: an outline (`rgba(255,255,255,.45)` dark / `rgba(42,32,53,.30)` light), transparent inside, secondary text. Hover: text goes primary, nothing else moves. Selected: `border-color: var(--purple-400); color: #fff; background: transparent`, glyphs get `drop-shadow(0 0 4px rgba(255,255,255,.5))`. Applies to the header pills (SYN MIX DLY EQ MOD included), chips, rail rows, list rows, menu lines, toggles, the heart, Load/Save/Import/Export. Icon buttons with no box at rest (dice, heart, + ‹ ›, gear) show the outline only on hover/selected. The shipping `.pmenu` hover/current wash and the filled `.mod-btn.active` change to this when the browser is built.
+
+**Furniture.** One + glyph (the 24-box, 2.2-stroke plus) and one ✕ (`__xGlyph`) everywhere. The browser's sticky column header is opaque `--bg-surface`, never glass. Dice and heart sit flush to the ✕ (4 px gaps); the ✕'s right edge is the gear's right edge.
+
+**Notes.** Every preset has a free-text note (inspector, click to edit, saved with the preset, read by search). Analog Lab's comment field: "turn the mod wheel up, it's connected to Macro 3". Inspector blocks never shrink; notes absorb the leftover height and scroll inside, so Load never moves. Chip strips scroll sideways with the + inline at the end — as many types and styles as anyone adds.
+
 ## 2. Naming, taxonomy
 - A preset's display name is **`Bank - Name`**, always. The dash is the bank. `Terra - Glacier`, `User - Slatt`, `Lowland - Heron`. Same law as the wavetables.
 - **Terra** is the factory bank (100 presets, 10 per type). **User** is the one you save into. Imported packs are their own banks, named by the pack.
