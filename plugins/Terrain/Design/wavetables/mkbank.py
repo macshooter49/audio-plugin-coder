@@ -13,7 +13,14 @@ import soundfile as sf, numpy as np, os, sys, glob, collections
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import wtlib   # fb612 — the naming law lives in ONE place; a second copy here is how the two drift
 
-SRC = os.path.expanduser(sys.argv[1] if len(sys.argv) > 1 else "~/Library/WavesCrate/TerrainInstrument/Wavetables/Factory")
+# default to the generator's own output first; the legacy install path is the fallback so this
+# still works on a machine where the bank was rendered before fb612 moved it into the repo.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_DEFAULTS = [os.path.join(_HERE, "bank"),
+             os.path.expanduser("~/Library/WavesCrate/Terrain/Wavetables/Factory"),
+             os.path.expanduser("~/Library/WavesCrate/TerrainInstrument/Wavetables/Factory")]
+SRC = os.path.expanduser(sys.argv[1]) if len(sys.argv) > 1 and not sys.argv[1].startswith("-") \
+      else next((d for d in _DEFAULTS if os.path.isdir(d)), _DEFAULTS[0])
 DST = sys.argv[2] if len(sys.argv) > 2 else "."
 WRITE = "--write" in sys.argv
 
