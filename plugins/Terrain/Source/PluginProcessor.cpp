@@ -1686,7 +1686,36 @@ namespace {
     // ⚠️ This is terrainDataDirP() (WavesCrate/Terrain, falling back to WavesCrate/TerrainInstrument)
     // — fb605's resolver, NOT a second accessor, and NOT the Noizefield Wavetables folder that
     // holds the user's own drops. The two are different roots on purpose: one ships, one is his.
-    juce::File wtFactoryRoot() { return terrainDataDirP().getChildFile ("Wavetables").getChildFile ("Factory"); }
+    /* ═══ fb612 — WHERE THE FACTORY LIBRARY LIVES ════════════════════════════════════════════
+       Max: "make this a factory lib. automatically installed on EVERYONE'S COMPUTER."
+       It ships INSIDE the plugin bundle (CMakeLists copies Resources/Wavetables into
+       Contents/Resources at build time), so installing the plugin installs the library — there is
+       no installer yet and this needs none.
+       ⚠️ `currentExecutableFile`, NOT `currentApplicationFile`. For a plugin the latter is the HOST
+       application: asking it where we live would point at Ableton. The executable is
+       …/Terrain.vst3/Contents/MacOS/Terrain, so the walk up looks for a Resources/Wavetables beside
+       or above it and stops at the first hit — which also covers the .component, the standalone
+       .app and the Windows <name>.vst3/Contents/<arch>/ layout without naming any of them.
+       The old data-directory location stays as the fallback, so a machine that already has the
+       bank installed there (and any dev tree without a built bundle) still finds it. */
+    juce::File wtFactoryRoot()
+    {
+        static const juce::File bundled = []
+        {
+            auto p = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+            for (int up = 0; up < 5 && p.exists(); ++up)
+            {
+                const auto a = p.getChildFile ("Resources").getChildFile ("Wavetables");
+                if (a.isDirectory()) return a;
+                const auto b = p.getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Wavetables");
+                if (b.isDirectory()) return b;
+                p = p.getParentDirectory();
+            }
+            return juce::File();
+        }();
+        if (bundled.isDirectory()) return bundled;
+        return terrainDataDirP().getChildFile ("Wavetables").getChildFile ("Factory");
+    }
 
     // "FOUNDATION" -> "Foundation", "ASH FALL" -> "Ash Fall". Only used for a pack folder whose name
     // is NOT one of the ten, so a stranger's drop-in bank still reads like the rest of the browser.

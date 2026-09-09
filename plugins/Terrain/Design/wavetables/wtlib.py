@@ -147,3 +147,34 @@ def selfcheck(name, frames, min_h60=60, min_span=8.0):
     ok = m['dead'] == 0 and m['harm60'] >= min_h60 and m['span'] >= min_span
     flag = "ok " if ok else "LOW"
     return ok, f"{flag} {name:<30} harm60 {m['harm60']:>4}  span {m['span']:>6.1f} st  dead {m['dead']}"
+
+
+# ══ fb612 — THE SHIPPING NAME ═════════════════════════════════════════════════════════════════
+#  Max: "everything respective capitals, not ALL CAPS. preset names 'Terra - (Name)' just so we
+#  have organization, the dash will give us that."
+#  The generators keep their ALL-CAPS identifiers ("TERRA BIT LADDER") because those are what the
+#  TABLES lists and every log line use. This is the one place that turns an identifier into the
+#  name a user reads, so gate.py (which renders the bank) and mkbank.py (which converts it for
+#  shipping) cannot drift apart.
+SHIP_KEEP_UPPER = {"CZ", "FB", "PD", "PWM", "VCO", "XOR", "FM", "Y"}   # initialisms, not words
+SHIP_SPLIT = {          # all-caps single tokens that are really two words; .capitalize() alone
+    "BITFLIP":  "Bit Flip",     # gives "Pidigits", "Primegap", "Xorfold"
+    "GRAYCODE": "Gray Code",
+    "PIDIGITS": "Pi Digits",
+    "PRIMEGAP": "Prime Gap",
+    "XORFOLD":  "XOR Fold",
+    "RULE30":   "Rule 30",
+    "RINGMOD":  "Ring Mod",
+}
+
+def shipping_name(stem):
+    """'TERRA BIT LADDER' -> 'Terra - Bit Ladder'.  Pure; duplicates are the caller's problem."""
+    if not stem.startswith("TERRA "):
+        raise ValueError("not a Terra table identifier: %r" % (stem,))
+    out = []
+    for w in stem[len("TERRA "):].split():
+        if   w in SHIP_SPLIT:      out.append(SHIP_SPLIT[w])
+        elif w in SHIP_KEEP_UPPER: out.append(w)
+        elif w.isdigit():          out.append(w)
+        else:                      out.append(w.capitalize())
+    return "Terra - " + " ".join(out)

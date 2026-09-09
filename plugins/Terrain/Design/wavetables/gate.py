@@ -227,10 +227,23 @@ def main():
           + (f"FIRED — {len(clash)} CLASH(ES): {'; '.join(clash)}" if clash
              else f"did not fire — all {len(S)} names unique within their folder"))
 
+    # fb612 — the file on disk carries the SHIPPING name ("Terra - Bit Ladder"), not the
+    # generator's identifier ("TERRA BIT LADDER"). Two tables genuinely share an identifier across
+    # categories (SHATTER in Chaos/Vocal, SIERPINSKI in Chaos/Spectral — different sounds, verified
+    # max|diff| 1.42 and 1.94), and in a shipping library a duplicate name is unpickable, so the
+    # non-primary one carries its category. The rule lives in wtlib.shipping_name so this and
+    # mkbank.py cannot drift.
+    SHIP_PRIMARY = {"TERRA SHATTER": "Chaos", "TERRA SIERPINSKI": "Chaos"}
+    _ident = {}
+    for e in S: _ident.setdefault(e['name'], []).append(e['cat'])
+    _dupes = {n for n, c in _ident.items() if len(c) > 1}
     bycat = {}
     for e in S:
         d = os.path.join(OUT, e['cat']); os.makedirs(d, exist_ok=True)
-        wtlib.write_wav(os.path.join(d, e['name'] + ".wav"), e['frames'])
+        ship = wtlib.shipping_name(e['name'])
+        if e['name'] in _dupes and SHIP_PRIMARY.get(e['name']) != e['cat']: ship += " " + e['cat']
+        e['ship'] = ship
+        wtlib.write_wav(os.path.join(d, ship + ".wav"), e['frames'])
         bycat.setdefault(e['cat'], []).append(e)
 
     # fb606 — NO EMPTY CATEGORIES. "delete anything that doesn't have a table inside of it."

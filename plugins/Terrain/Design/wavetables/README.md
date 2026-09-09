@@ -3,6 +3,24 @@
 120 wavetables, 128 frames each, in **TEN categories** (fb606). **This directory regenerates them.**
 The rendered `.wav` bank is NOT in git (120 MB); it is produced by running the pipeline below.
 
+## fb612 — THE BANK NOW SHIPS
+`../../Resources/Wavetables/` holds the same 120 tables as **24-bit FLAC** (61.1 MB, worst
+round-trip **−138.5 dBr** measured across all 120), and `CMakeLists.txt` copies that tree into every
+plugin bundle's `Contents/Resources/`. Installing the plugin installs the library — there is no
+installer yet and this needs none. `wtFactoryRoot()` finds it from `currentExecutableFile` (NOT
+`currentApplicationFile`, which for a plugin is the HOST app).
+
+**Names are the shipping names now:** `TERRA BIT LADDER` → `Terra - Bit Ladder`. The rule is
+`wtlib.shipping_name()` — ONE definition, used by `gate.py` when it renders the bank and by
+`mkbank.py` when it converts it, so the two cannot drift. Generators keep their ALL-CAPS
+identifiers; only the file on disk carries the pretty name.
+
+```bash
+python3 gate.py                                   # render the bank (now with shipping names)
+python3 mkbank.py <bank-dir> ../../Resources/Wavetables --write   # -> 24-bit FLAC for shipping
+python3 ../../Tests/wt_factory_gate.py            # 6 bars, 5 mutation controls
+```
+
 ## fb606 — THE MERGED TEN
 The bank used to ship eight generated folders while the browser showed a different set for its
 built-ins, so the same sound had two names depending on where you looked. There is now ONE

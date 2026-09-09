@@ -55,6 +55,44 @@ target_sources(Terrain
         Source/Wavetable_test.cpp
 )
 
+# ══ fb612 — THE FACTORY WAVETABLE LIBRARY SHIPS INSIDE THE BUNDLE ═════════════════════════════
+#  Max: "we may have to make terra a factory lib … automatically installed on EVERYONE'S COMPUTER."
+#  120 tables, 128 frames x 2048 each. As float32 .wav that is 120 MB; as 24-bit FLAC it is 61 MB
+#  with a worst round-trip of -138.5 dBr measured across all 120 — the same order as the bake's own
+#  float64 noise floor (WtFft.h), so it is transparent by this project's own standard. The loader
+#  reads FLAC natively (registerBasicFormats), so nothing decodes at install time; the bytes are
+#  simply there.
+#
+#  🔑 BUNDLE RESOURCES, NOT BinaryData. Embedding 61 MB would compile to a ~300 MB generated .cpp
+#  and put the whole bank in RAM for the lifetime of the plugin. As bundle resources it costs the
+#  build a file copy, costs runtime nothing, and — the point — every user who installs the plugin
+#  HAS the library, with no installer, which we do not have yet.
+set(TERRAIN_WT_BANK "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Wavetables")
+if (EXISTS "${TERRAIN_WT_BANK}")
+    foreach(_fmt VST3 AU Standalone)
+        if (TARGET Terrain_${_fmt})
+            if (APPLE)
+                set(_dst "$<TARGET_BUNDLE_CONTENT_DIR:Terrain_${_fmt}>/Resources/Wavetables")
+            elseif (WIN32 AND _fmt STREQUAL "VST3")
+                #  JUCE builds the VST3 bundle layout on Windows too: <name>.vst3/Contents/<arch>/…
+                set(_dst "$<TARGET_FILE_DIR:Terrain_${_fmt}>/../Resources/Wavetables")
+            else()
+                set(_dst "")
+            endif()
+            if (NOT _dst STREQUAL "")
+                add_custom_command(TARGET Terrain_${_fmt} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory "${TERRAIN_WT_BANK}" "${_dst}"
+                    COMMENT "Terrain: installing the 120-table factory wavetable library into the ${_fmt} bundle")
+            endif()
+        endif()
+    endforeach()
+    message(STATUS "Terrain: factory wavetable library found — it will be copied into each bundle")
+else()
+    #  LOUD, not silent: a build without the bank produces a plugin whose factory drawer is empty,
+    #  and that must not look like a code bug to whoever hits it.
+    message(WARNING "Terrain: ${TERRAIN_WT_BANK} is MISSING — this build will ship with NO factory wavetables")
+endif()
+
 # ── Include paths ──
 target_include_directories(Terrain
     PRIVATE
