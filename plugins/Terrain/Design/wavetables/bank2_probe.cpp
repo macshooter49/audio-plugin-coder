@@ -141,13 +141,34 @@ int main (int argc, char** argv)
     const MS M[] = {
         {"GRAND_STRIKE",  modal::GRAND, 0, 0.10f,0.90f, 0.40f,0.60f, 0.15f,0.95f, 0.05f,0.45f, 0.80f, 0.0f},
         {"PLUCK_NAIL",    modal::PLUCK, 0, 0.15f,0.85f, 0.40f,0.65f, 0.10f,0.95f, 0.02f,0.48f, 0.75f, 0.0f},
-        {"BOW_PRESSURE",  modal::BOW,   0, 0.10f,0.90f, 0.40f,0.60f, 0.10f,0.90f, 0.08f,0.42f, 0.85f, 0.35f},
+        // fb606 — REVERSED. Swept upward this was 4.23 dB from BRASS_BLARE, under the 5.10 dB
+        // calibration floor, and the gate cut it: two reed-bore families opening in the same
+        // direction over the same ranges read as one table. Bowing that RELEASES is a different
+        // gesture, not a re-tilt of the same one, and it measures like one.
+        {"BOW_PRESSURE",  modal::BOW,   0, 0.90f,0.08f, 0.62f,0.34f, 0.92f,0.06f, 0.46f,0.03f, 0.85f, 0.55f},
         {"FLUTE_BREATH",  modal::FLUTE, 0, 0.15f,0.85f, 0.40f,0.60f, 0.15f,0.90f, 0.10f,0.40f, 0.80f, 0.55f},
         {"REED_BITE",     modal::REED,  0, 0.10f,0.90f, 0.35f,0.70f, 0.20f,0.95f, 0.06f,0.44f, 0.80f, 0.30f},
         {"BRASS_BLARE",   modal::BRASS, 0, 0.10f,0.95f, 0.35f,0.70f, 0.20f,0.98f, 0.05f,0.45f, 0.82f, 0.25f},
         {"BARS_WOOD",     modal::BARS,  0, 0.02f,0.70f, 0.30f,0.75f, 0.25f,0.85f, 0.10f,0.40f, 0.82f, 0.0f},
-        {"BARS_GLASS",    modal::BARS,  2, 0.50f,0.99f, 0.60f,0.30f, 0.40f,0.95f, 0.30f,0.10f, 0.88f, 0.0f},
-        {"BELLS_METAL",   modal::BELLS, 0, 0.02f,0.98f, 0.25f,0.80f, 0.30f,0.88f, 0.10f,0.45f, 0.86f, 0.0f},
+        // fb606 — REVERSED. It collapsed its geometry in parallel with BELLS_GONG (4.79 dB apart,
+        // under the 5.10 dB floor) and the gate cut it; swept the other way it OPENS instead, and
+        // clears the gong. ⚠️ THIS PAIRING IS THE BANK'S MEASURED FLOOR CASE: BARS_GLASS and
+        // BELLS_METAL sit ~4.6 dB apart no matter what, and four attempts are recorded so nobody
+        // repeats them — reversing BARS_GLASS's material (4.55), re-aiming its stretch/pos path
+        // (4.26), pinning its material to glass so only geometry travels (4.17), and moving
+        // BELLS_METAL from form 1 back to its native form 0 (which cleared this pair but landed
+        // BELLS_METAL 4.08 dB from SKIN_TENSION instead — the collision only moved). The cause is
+        // the harmonic projection in gen_engine._from_modal: summing inharmonic modal energy onto
+        // the 55 Hz integer grid quantises away exactly the partial-ratio detail that separates
+        // one dense modal-bank geometry from another, so two struck-bar renders converge no
+        // matter how their PARAMETERS differ. Fixing it properly means a finer projection grid,
+        // not another parameter tweak. Until then the gate cuts the lower-scoring one, which is
+        // correct behaviour: Physical still fills its quota from the remaining eleven.
+        {"BARS_GLASS",    modal::BARS,  2, 0.99f,0.42f, 0.18f,0.88f, 0.95f,0.28f, 0.04f,0.47f, 0.88f, 0.0f},
+        // fb606 — REVERSED, and moved to form 1. Rising, it measured 3.78 dB from BARS_WOOD: the
+        // harmonic projection washes out the family difference when two modal-bank tables sweep
+        // the same parameters the same way, so the SWEEP has to differ, not just the family.
+        {"BELLS_METAL",   modal::BELLS, 1, 0.96f,0.18f, 0.86f,0.28f, 0.90f,0.22f, 0.47f,0.06f, 0.92f, 0.0f},
         {"BELLS_GONG",    modal::BELLS, 3, 0.30f,0.95f, 0.75f,0.25f, 0.20f,0.70f, 0.40f,0.08f, 0.90f, 0.0f},
         {"SKIN_DRUM",     modal::SKIN,  0, 0.05f,0.80f, 0.30f,0.75f, 0.20f,0.90f, 0.06f,0.46f, 0.72f, 0.0f},
         {"SKIN_TENSION",  modal::SKIN,  2, 0.40f,0.95f, 0.70f,0.20f, 0.35f,0.95f, 0.35f,0.05f, 0.78f, 0.20f},

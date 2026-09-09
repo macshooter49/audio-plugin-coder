@@ -3547,29 +3547,30 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             .withNativeFunction("listImports", [this](const juce::Array<juce::var>&,
                                                       juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
-                // Wavetable EXTENDER — scan the Imports folder → JSON array of table names (no extension).
+                // fb606 — RECURSIVE, AND IT CARRIES THE SUBFOLDER. This was the SECOND non-recursive
+                // scan in the plugin: findChildFiles (findFiles, FALSE, "*.wav") over the managed
+                // Wavetables folder, so a pack dropped in as a folder showed nothing — the same
+                // defect as the registry scan, in a different function. It now goes through the ONE
+                // walker in PluginProcessor.cpp (depth cap 6, 1500/root, 4000 total, all reported).
+                // ⚠️ SHAPE CHANGE: this used to return a bare JSON ARRAY of names, hand-escaped for
+                //    only \ and " — a control character in a name (the owner's PLUTO 2 folder starts
+                //    with a literal 0x7F) could break the parse. It now returns an OBJECT built
+                //    through juce::var: { root, exists, total, dirs, depth, subs:[…],
+                //    items:[{name,path,rel}], truncated, cap, depthCap, ms }. `rel` is the subfolder
+                //    path relative to the Wavetables root, "" for a file sitting directly in it.
                 auto dir = terrainWavetablesDir();   // fb602 — one accessor, SAME legacy location
                 if (! dir.exists()) dir.createDirectory();
-                juce::String json = "[";
-                if (dir.isDirectory())
-                {
-                    auto files = dir.findChildFiles (juce::File::findFiles, false, "*.wav");
-                    files.sort();
-                    for (int i = 0; i < files.size(); ++i)
-                    {
-                        if (i) json += ",";
-                        auto nm = files[i].getFileNameWithoutExtension().replace ("\\", "\\\\").replace ("\"", "\\\"");
-                        json += "\"" + nm + "\"";
-                    }
-                }
-                json += "]";
-                complete (juce::var (json));
+                complete (juce::var (audioProcessor.getManagedWavetablesJson()));
             })
             .withNativeFunction("loadImportedWavetable", [this](const juce::Array<juce::var>& args,
                                                                 juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 // Wavetable EXTENDER — load a wavetable file from the Imports folder into an osc.
                 // args[0]=osc 'a'..'d', args[1]=file name (with or without .wav). Auto-detects wavetable frames.
+                // fb606 — listImports now returns a `rel` per item, so args[1] may be SUBFOLDER-QUALIFIED
+                // ("Pack/Table" or "Pack/Table.wav"). juce::File::getChildFile resolves a relative path,
+                // so both forms work unchanged — but prefer loadWavetableByPath with the item's absolute
+                // `path`, which is what the recursive payload carries and what cannot be ambiguous.
                 if (args.size() < 2) { complete (juce::var ("bad-args")); return; }
                 const juce::String oscStr = args[0].toString();
                 const int oscIdx = oscStr.isNotEmpty() ? juce::jlimit (0, 3, (int) oscStr[0] - 'a') : 0;

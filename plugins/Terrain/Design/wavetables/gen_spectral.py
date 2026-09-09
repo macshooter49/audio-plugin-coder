@@ -11,7 +11,7 @@ mirror) and sweeps it across 128 frames so you hear something a filter physicall
 do — partials moving relative to each other, not a curve moving over static partials.
 """
 import sys
-sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 import numpy as np
 import wtlib
 
@@ -518,6 +518,19 @@ TABLES = [
     ("TERRA SHEAR", terra_shear),
     ("TERRA PARTIAL CHORD", terra_partial_chord),
 ]
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# fb606 — SPECTRAL ABSORBS THE OLD 'Morph' CATEGORY. Every table here IS a morph: the frame
+# axis moves a spectral process, which is exactly what the browser's Morph folder held.
+CATEGORY = {nm: "Spectral" for nm, _ in TABLES}
+
 
 if __name__ == "__main__":
     built = []

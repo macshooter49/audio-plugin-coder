@@ -14,7 +14,7 @@ truncation, not a naive decimation, so nothing folds back. Tables whose partials
 are exact by construction (Chebyshev) are built at base resolution directly.
 """
 import sys
-sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 import numpy as np
 import wtlib
 
@@ -415,6 +415,18 @@ TABLES = [
     ("TERRA WARP FOLD",     terra_warp_fold),
     ("TERRA OVERLOAD",      terra_overload),
 ]
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# FM, phase distortion, bit/rate reduction, sync, ring mod — the whole module is one folder.
+CATEGORY = {nm: "Digital" for nm, _ in TABLES}
+
 
 if __name__ == "__main__":
     built = []

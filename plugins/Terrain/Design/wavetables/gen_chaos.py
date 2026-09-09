@@ -7,7 +7,7 @@ material, no borrowed tables. The frame axis of every table is a real trajectory
 through a parameter space — a bifurcation, a CA generation count, a permutation depth.
 """
 import sys
-sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 
 import math
 import numpy as np
@@ -788,6 +788,19 @@ TABLES = [
     ("TERRA CHIRIKOV",   terra_chirikov),
     ("TERRA ROSSLER",    terra_rossler),
 ]
+
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# fb606 — CHAOS ABSORBS THE OLD 'Experimental' CATEGORY. Maps, automata and integer
+# arithmetic were the whole of what Experimental meant, and 'Chaos' says it out loud.
+CATEGORY = {nm: "Chaos" for nm, _ in TABLES}
 
 
 if __name__ == "__main__":

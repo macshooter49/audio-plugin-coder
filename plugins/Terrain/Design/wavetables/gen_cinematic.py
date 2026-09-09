@@ -9,7 +9,7 @@ the clang survives while the frame stays periodic.
 Design order for every table: the JOURNEY of the frame axis first, the timbre second.
 """
 import sys
-sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 import numpy as np, wtlib
 
 F, SZ, NH = wtlib.FRAMES, wtlib.SIZE, wtlib.NH
@@ -453,6 +453,21 @@ TABLES = [
     ("TERRA HAMMER MILL",     terra_hammer_mill),
     ("TERRA IRON LUNG",       terra_iron_lung),
 ]
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# This module was always two banks in one file (see the section banners above): twelve
+# atmospheric drones and twelve struck/rung metal tables. The merged taxonomy has a folder
+# for each, so the split that was already in the source is now the split on disk.
+DRONE = {nm for nm, _ in TABLES[:12]}
+CATEGORY = {nm: ("Cinematic" if nm in DRONE else "Metallic") for nm, _ in TABLES}
+
 
 if __name__ == "__main__":
     built, fps = [], []

@@ -18,7 +18,7 @@ A wavetable frame is periodic, so "noise" here is a DENSE, IRREGULAR but FIXED h
 spectrum. All randomness is seeded and interpolated ACROSS the frame axis (rndpath), so the
 morph glides instead of hashing.
 """
-import sys; sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 import numpy as np, wtlib
 
 FR, NH = wtlib.FRAMES, wtlib.NH
@@ -597,6 +597,20 @@ TABLES = [
     ("TERRA VELVET",      terra_velvet),
     ("TERRA SHATTER",     terra_shatter),
 ]
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# Formant tables and the granular/breath textures that share their anatomy — one folder.
+# The texture half stays here rather than moving to Cinematic: it is built from the same
+# vocal-tract material and a user hunting a breath bed looks for it next to the choir.
+CATEGORY = {nm: "Vocal" for nm, _ in TABLES}
+
 
 if __name__ == "__main__":
     _fp, _names = {}, []

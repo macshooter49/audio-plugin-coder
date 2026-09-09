@@ -17,7 +17,11 @@ import numpy as np
 import wtlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-DUMP = os.path.join(HERE, "dump2")
+# fb606 — the dumps are 102 MB of raw float; they do NOT belong in the worktree. bank2_probe
+# writes wherever you point it, so honour the same env var here and say out loud which path
+# won and whether anything was actually found. A silent empty DUMP is how you get a bank with
+# no HARMONIC and no PHYSICAL folder at all and no error to explain it.
+DUMP = os.environ.get("TERRAIN_WT_DUMP") or os.path.join(HERE, "dump2")
 MODAL_F0 = 55.0
 
 # what each table is FOR, musically
@@ -36,13 +40,13 @@ PURPOSE = {
     "HORNET CULL":   "buzz thinned to a whistle across the sweep — tension risers",
     "GRAND STRIKE":  "STRING WAVEGUIDE — struck piano-like, strike position sweeping",
     "PLUCK NAIL":    "STRING WAVEGUIDE — plucked, flesh to nail; guitars and kotos",
-    "BOW PRESSURE":  "REED-BORE — bow pressure from whisper to crush; strings that breathe",
+    "BOW PRESSURE":  "REED-BORE — bow pressure RELEASING, crush back to whisper (fb606: swept\n                     the other way; forwards it measured 4.23 dB from BRASS BLARE and was cut)",
     "FLUTE BREATH":  "REED-BORE — air-column tone, breath opening across the sweep",
     "REED BITE":     "REED-BORE — clarinet-ish odd-harmonic bite growing to a squeal",
     "BRASS BLARE":   "REED-BORE — brass overblow; the spectrum opens as it gets loud",
     "BARS WOOD":     "MODAL BANK — marimba to glass bar, the material morphing under you",
-    "BARS GLASS":    "MODAL BANK — glassy struck bars, geometry compressing across the sweep",
-    "BELLS METAL":   "MODAL BANK — bell partials from small and dry to huge and metallic",
+    "BARS GLASS":    "MODAL BANK — glassy bars OPENING, geometry expanding (fb606: reversed;\n                     compressing it sat 4.79 dB from BELLS GONG and was cut)",
+    "BELLS METAL":   "MODAL BANK — a huge metal bell CLOSING to small and dry (fb606: reversed;\n                     rising it sat 3.78 dB from BARS WOOD and was cut)",
     "BELLS GONG":    "MODAL BANK — gong geometry, stretch collapsing; cinematic impacts",
     "SKIN DRUM":     "MODAL BANK — membrane modes; toms and hand percussion beds",
     "SKIN TENSION":  "MODAL BANK — a drum head tightening to a rattle; industrial textures",
@@ -91,13 +95,31 @@ for p in sorted(glob.glob(os.path.join(DUMP, "H_*.spec"))):
 for p in sorted(glob.glob(os.path.join(DUMP, "M_*.audio"))):
     TABLES.append(("TERRA " + os.path.basename(p)[2:-6].replace("_", " "), _mk(p, True)))
 
-CATEGORY = {}
-for name, _ in TABLES:
-    key = name[6:]
-    CATEGORY[name] = "PHYSICAL" if key in (
-        "GRAND STRIKE", "PLUCK NAIL", "BOW PRESSURE", "FLUTE BREATH", "REED BITE",
-        "BRASS BLARE", "BARS WOOD", "BARS GLASS", "BELLS METAL", "BELLS GONG",
-        "SKIN DRUM", "SKIN TENSION") else "HARMONIC"
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. Additive bank -> "Harmonic", modal engine -> "Physical".
+#
+# ⚠️ THE BELLS STAY HERE. The obvious re-file was BELLS METAL / BELLS GONG -> "Metallic", next
+# to the additive clang tables imitating them, and it was MEASURED AND REJECTED: in Metallic the
+# two modal bells compete against twelve bright additive tables, the selection score rewards
+# brightness, and BOTH bells were cut while Physical shipped 8 instead of 10. That is the EXACT
+# failure the per-category quota was written to stop (gate.py: "a global score deleted all 12
+# PHYSICAL tables") — moving a dark table into a bright category re-creates it inside one folder.
+# A physical-modelled bell is a physical-model table first; Metallic is served by the twelve
+# struck/rung tables in gen_cinematic. Do not move these two without re-running the gate.
+# ══════════════════════════════════════════════════════════════════════════════════════
+_PHYSICAL = ("GRAND STRIKE", "PLUCK NAIL", "BOW PRESSURE", "FLUTE BREATH", "REED BITE",
+             "BRASS BLARE", "BARS WOOD", "BARS GLASS", "BELLS METAL", "BELLS GONG",
+             "SKIN DRUM", "SKIN TENSION")
+
+CATEGORY = {name: ("Physical" if name[6:] in _PHYSICAL else "Harmonic") for name, _ in TABLES}
+
+if not TABLES:
+    print(f"  !! gen_engine: NO DUMPS in {DUMP} — the Harmonic and Physical folders will be "
+          f"EMPTY. Build bank2_probe.cpp and run it into that directory first.")
+else:
+    print(f"  gen_engine: {len(TABLES)} engine dumps found in {DUMP}  "
+          f"({sum(v=='Harmonic' for v in CATEGORY.values())} Harmonic, "
+          f"{sum(v=='Physical' for v in CATEGORY.values())} Physical)")
 
 if __name__ == "__main__":
     fps = {}

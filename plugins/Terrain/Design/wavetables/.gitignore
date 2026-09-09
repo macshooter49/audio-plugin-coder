@@ -1,0 +1,5 @@
+# fb606 — the rendered bank and the engine dumps are ~220 MB of raw float.
+# They are PRODUCED by gate.py + bank2_probe.cpp, never committed. Point TERRAIN_WT_OUT
+# and TERRAIN_WT_DUMP somewhere outside the worktree and neither of these appears at all.
+bank/
+dump2/

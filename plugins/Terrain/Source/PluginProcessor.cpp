@@ -1465,6 +1465,133 @@ namespace {
         return terrainDataDirP().getChildFile (kRegNames[juce::jlimit (0, 2, kind)]);   // fb602 — one root
     }
     const char* const kImportWild = "*.wav;*.aif;*.aiff;*.flac;*.ogg;*.mp3";
+
+    // ═══ fb606 — THE SCAN RECURSES, AND IT CARRIES THE SUBFOLDER WITH IT ════════════════════
+    // Max, pointing at the Import Wavetable browser: "it's hard to open them up because it's
+    // subfolders in the MASTER folder, and for some reason Terrain can't open them unless it's
+    // DIRECTLY INSIDE OF THE SUB FOLDER."  He was right and the reason was one boolean: the scan
+    // below used to be findChildFiles (findFiles, FALSE, kImportWild) — `false` is
+    // searchRecursively. Register a master folder, see nothing, because every wav is one level
+    // down. It is also why the PLUTO 2 pack had to be registered at its exact tables subfolder.
+    //
+    // ⚠️ FLIPPING THE BOOLEAN ALONE MAKES IT WORSE. The payload was a FLAT {name,path} list per
+    // registered folder, so a recursive scan of a 120-table master folder would land 120
+    // undifferentiated names in one blob with no way to tell which pack they came from. So the
+    // scan is hand-rolled instead of JUCE's recursive flag: it carries each hit's `rel` — the
+    // subfolder path RELATIVE to the registered root, '/'-separated on every platform, "" for a
+    // file sitting directly in the root — and it publishes the sorted set of those in `subs`.
+    // That is the tree the UI navigates. juce::File::findChildFiles's own recursion cannot give
+    // us that, and has no depth limit, which is the other half of the problem:
+    //
+    // 🚨 SOMEBODY WILL POINT THIS AT THEIR WHOLE SAMPLES DRIVE. Hence three hard caps, and — per
+    // this project's law that anything which can silently no-op must say so — every one of them
+    // is REPORTED in the payload (`folders[].truncated` / `folders[].cap`, and the `scan` block's
+    // `truncated` / `capHit`) rather than quietly returning a short list. A caller that never
+    // trips a cap sees truncated:false and cap:"", which is itself the proof the cap was checked.
+    //   DEPTH  6 subfolder levels below the registered root (root files are depth 0). Serum's own
+    //          packs nest 2–3; 6 is double the deepest real layout and still bounds a stat() storm.
+    //   ROOT   1500 audio files per registered folder.
+    //   TOTAL  4000 audio files across ALL registered folders in one payload.
+    // Measured cost of the caps at their ceiling: ~130 bytes of JSON per item (name + absolute
+    // path + rel), so a root at its cap is ~195 KB and a payload at the total cap ~520 KB. The
+    // owner's real bank (120 tables) measures ~20 KB — see Tests/wt_folder_scan_cert.
+    //
+    // MESSAGE THREAD ONLY. This does file I/O; it is called from the WebView native functions and
+    // from nothing else. The audio thread never sees it.
+    constexpr int kWtScanMaxDepth      = 6;      // subfolder levels below the registered root
+    constexpr int kWtScanMaxFilesRoot  = 1500;   // audio files per registered folder
+    constexpr int kWtScanMaxFilesTotal = 4000;   // audio files across the whole payload
+
+    // 🔬 THE ONE SWITCH THAT MAKES THE RECURSION FALSIFIABLE. The fb605 bug WAS a boolean
+    // (searchRecursively=false), and the temptation is to gate this fix by grepping for that
+    // boolean — but juce::File's recursive flag has no depth limit and cannot report `rel`, so
+    // the walk below is hand-rolled and the per-directory findChildFiles call is CORRECTLY
+    // non-recursive (this function is the recursion). Flip this to false and the walker reverts
+    // to exactly the shipped defect — one level, master folder shows nothing. That is the
+    // mutation control certs should drive, in place of the boolean that is no longer there.
+    constexpr bool kWtScanRecursive = true;
+
+    struct WtScanHit { juce::File file; juce::String rel; };
+
+    struct WtScanStats
+    {
+        int  dirs = 0;          // directories visited (the root counts as one)
+        int  deepest = 0;       // deepest rel depth actually reached
+        bool hitDepth = false;  // a subfolder existed below kWtScanMaxDepth and was NOT entered
+        bool hitRoot  = false;  // this root filled kWtScanMaxFilesRoot
+        bool hitTotal = false;  // the payload filled kWtScanMaxFilesTotal
+        juce::String cap() const { return hitTotal ? "total" : (hitRoot ? "root" : (hitDepth ? "depth" : juce::String())); }
+    };
+
+    // Depth-limited, cap-reporting, rel-carrying folder walk. `rel` is "" at the root and
+    // "Sub/Deeper" below it — ALWAYS '/'-separated, because it is a UI path, not a filesystem one.
+    // Non-ASCII and control characters (the owner's PLUTO 2 folder name begins with a literal 0x7F
+    // DEL) pass straight through as juce::String → juce::var → juce::JSON::toString, which is the
+    // whole reason this builds a var tree instead of concatenating JSON by hand.
+    void wtScanFolder (const juce::File& dir, const juce::String& rel, int depth,
+                       juce::Array<WtScanHit>& out, WtScanStats& st, int& totalBudget)
+    {
+        ++st.dirs;
+        st.deepest = juce::jmax (st.deepest, depth);
+
+        // NOT the bug: this call is deliberately one-level, because THIS FUNCTION is the recursion
+        // (JUCE's own recursive flag has no depth limit and cannot tell us `rel`). fb605's defect
+        // was that there was no caller like the loop below. kWtScanRecursive is the switch.
+        auto found = dir.findChildFiles (juce::File::findFiles, /* searchRecursively */ false, kImportWild);
+        found.sort();
+        for (auto& f : found)
+        {
+            if (totalBudget <= 0)                    { st.hitTotal = true; return; }
+            if (out.size() >= kWtScanMaxFilesRoot)   { st.hitRoot  = true; return; }
+            out.add ({ f, rel });
+            --totalBudget;
+        }
+
+        if (! kWtScanRecursive) return;   // fb605 behaviour, kept reachable ONLY as the mutation target
+        auto subs = dir.findChildFiles (juce::File::findDirectories, /* searchRecursively */ false);
+        subs.sort();
+        for (auto& sd : subs)
+        {
+            const auto nm = sd.getFileName();
+            if (nm.startsWithChar ('.')) continue;                 // .Trashes, .git, resource forks
+            if (sd.isSymbolicLink())     continue;                 // a link can point back up = infinite walk
+            if (depth + 1 > kWtScanMaxDepth) { st.hitDepth = true; continue; }   // REPORTED, not silent
+            wtScanFolder (sd, rel.isEmpty() ? nm : (rel + "/" + nm), depth + 1, out, st, totalBudget);
+            if (st.hitTotal) return;
+        }
+    }
+
+    juce::var wtHitVar (const juce::File& f, const juce::String& rel)
+    {
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty ("name", f.getFileNameWithoutExtension());
+        o->setProperty ("path", f.getFullPathName());
+        o->setProperty ("rel",  rel);        // "" == directly in the registered root
+        return juce::var (o.get());
+    }
+
+    // ═══ fb606 — THE FACTORY BANK ROOT ══════════════════════════════════════════════════════
+    // <terrainDataDirP()>/Wavetables/Factory/<CATEGORY>/*.wav — the 120-table bank as FACTORY
+    // content: scanned automatically, no user action, and structurally NOT REMOVABLE, because it
+    // is emitted under its own `factory` key and never appears in `folders[]`, which is the only
+    // array "Remove Folder" walks. There is no conditional to get wrong.
+    // ⚠️ This is terrainDataDirP() (WavesCrate/Terrain, falling back to WavesCrate/TerrainInstrument)
+    // — fb605's resolver, NOT a second accessor, and NOT the Noizefield Wavetables folder that
+    // holds the user's own drops. The two are different roots on purpose: one ships, one is his.
+    juce::File wtFactoryRoot() { return terrainDataDirP().getChildFile ("Wavetables").getChildFile ("Factory"); }
+
+    // "FOUNDATION" -> "Foundation", "ASH FALL" -> "Ash Fall". Only used for a pack folder whose name
+    // is NOT one of the ten, so a stranger's drop-in bank still reads like the rest of the browser.
+    juce::String wtTitleCase (const juce::String& s)
+    {
+        juce::String out; bool start = true;
+        for (auto c : s)
+        {
+            out += start ? juce::CharacterFunctions::toUpperCase (c) : juce::CharacterFunctions::toLowerCase (c);
+            start = (c == ' ' || c == '-' || c == '_');
+        }
+        return out;
+    }
 }
 
 void TerrainAudioProcessor::addImportPath (int kind, const juce::String& path)
@@ -1474,20 +1601,147 @@ void TerrainAudioProcessor::addImportPath (int kind, const juce::String& path)
     if (! f.exists()) return;
     if (f.isDirectory()) { if (! importFolders_[i].contains (path)) importFolders_[i].add (path); }
     else                 { if (! importFiles_[i].contains (path))   importFiles_[i].add (path); }
+    importsCacheValid_[i] = false;   // fb606 — a new root must show up on the very next open, TTL or not
     saveImportsRegistry (i);
 }
 
 void TerrainAudioProcessor::removeImportPath (int kind, const juce::String& path)
 {
     const int i = juce::jlimit (0, 2, kind);
+    // 🔒 fb606 — FACTORY CONTENT IS NOT REMOVABLE. The 120-table bank is never in importFiles_ /
+    // importFolders_ (it is discovered by wtFactoryRoot(), and is published under the payload's
+    // own `factory` key, not in `folders[]`), so the two removeString calls below are already
+    // no-ops for it. This guard exists so that stays true by INTENT rather than by accident, and
+    // so it SAYS SO when someone wires a Remove Folder onto factory content by mistake.
+    if (juce::File (path).isAChildOf (wtFactoryRoot()) || juce::File (path) == wtFactoryRoot())
+    {
+        DBG ("fb606 removeImportPath: refused — factory content is not removable: " << path);
+        return;
+    }
     importFiles_[i].removeString (path);      // remove a single import OR
     importFolders_[i].removeString (path);    // a whole user folder (only one array holds it) — file on disk untouched
+    importsCacheValid_[i] = false;   // fb606 — the removal must be visible on the very next open
     saveImportsRegistry (i);
+}
+
+// ─── fb606 — THE MERGED TAXONOMY: TEN CATEGORIES, AND AN EMPTY ONE DOES NOT EXIST ───────────
+// ⚠️ The rule chars here are U+2500 (─), NOT the usual U+2550 (═). Tests/extract_imports_scan.py
+//    ends its slice of this section at the next COLUMN-0 `// ═══`, so a ═ banner here would cut
+//    getImportsJson out of the very slice the cert compiles. Same for the one below.
+// Max: "just categorize them correctly so that people actually know what we're doing here… put
+// them into their respective folders and then delete anything that doesn't have a table inside
+// of it."  The browser used to show the eight <optgroup> labels (Basic/Analog/Digital/Vocal/
+// Metallic/Experimental/Morph/Terra) and the 120-table bank shipped eight of its OWN (Foundation/
+// Digital/Vocal/Spectral/Chaos/Cinematic/Harmonic/Physical). Two sets of eight for one browser is
+// the thing he was complaining about, so they collapse into TEN:
+//   Basic Shapes · Analog · Digital · Vocal · Metallic · Spectral · Chaos · Cinematic · Harmonic · Physical
+// Experimental is absorbed into Chaos, Morph into Spectral, and the 16 Terra built-ins are re-filed
+// by what they SOUND like rather than by when we made them (Bell/Bar/Glass → Metallic, Vox/Choir →
+// Vocal, Bow/Reed/Hollow → Physical, Fold/Dust/Growl → Chaos, …). Their reasons are one line each
+// below and every one of them is quoting that table's OWN spec comment in Wavetable.h.
+//
+// 🔒 NOTHING ON DISK MOVES. This is a VIEW. The <optgroup> labels in index.html, the Preset enum in
+// WavetableBank.h and the SYN_OSC_?_WT_PRESET StringArrays are all untouched — they are SITES of
+// Tests/wt_list_gate.py's ten-site law and re-labelling them would be a renumber risk for zero gain.
+// The index → category table below is INTEGERS ONLY; the 46 NAMES are captured live from the
+// SYN_OSC_A_WT_PRESET parameter exactly as fb601 does, never retyped.
+namespace {
+    struct WtCatDef { const char* name; };
+    // The ten, in display order. An index here is what kWtBuiltinCat[] stores.
+    const WtCatDef kWtCats[] = { { "Basic Shapes" }, { "Analog" }, { "Digital" }, { "Vocal" },
+                                 { "Metallic" }, { "Spectral" }, { "Chaos" }, { "Cinematic" },
+                                 { "Harmonic" }, { "Physical" } };
+    constexpr int kWtNumCats = (int) (sizeof (kWtCats) / sizeof (kWtCats[0]));
+    enum { CAT_BASIC = 0, CAT_ANALOG, CAT_DIGITAL, CAT_VOCAL, CAT_METALLIC,
+           CAT_SPECTRAL, CAT_CHAOS, CAT_CINEMATIC, CAT_HARMONIC, CAT_PHYSICAL };
+
+    // 46 entries, index-for-index with the WT_PRESET roster. Position IS the preset index.
+    const int kWtBuiltinCat[] = {
+        CAT_BASIC,    CAT_BASIC,    CAT_BASIC,    CAT_BASIC,        //  0 Sine · 1 Triangle · 2 Square · 3 Pulse
+        CAT_ANALOG,   CAT_ANALOG,   CAT_ANALOG,                     //  4 Prophet Saw · 5 Jupiter PWM · 6 Moog Sqr
+        CAT_ANALOG,   CAT_ANALOG,   CAT_ANALOG,                     //  7 OB-X Saw · 8 CS-80 Brass · 9 Juno Str
+        CAT_DIGITAL,  CAT_DIGITAL,  CAT_DIGITAL,  CAT_DIGITAL,      // 10 PPG · 11 DX7 EP · 12 D-50 Bell · 13 M1 Piano
+        CAT_VOCAL,    CAT_VOCAL,    CAT_VOCAL,                      // 14 Choir A->O · 15 Whisper · 16 Vowel Morph
+        CAT_METALLIC, CAT_METALLIC, CAT_METALLIC,                   // 17 Bowed Metal · 18 Glass Harmonics · 19 Railroad
+        CAT_CHAOS,    CAT_CHAOS,    CAT_CHAOS,    CAT_CHAOS,        // 20..23 the Experimental four, absorbed into Chaos
+        CAT_SPECTRAL, CAT_SPECTRAL, CAT_SPECTRAL,                   // 24 Rise · 25 Even · 26 Drift   — Morph, absorbed
+        CAT_SPECTRAL, CAT_SPECTRAL, CAT_SPECTRAL,                   // 27 Sweep · 28 Formant · 29 Stack — into Spectral
+        CAT_ANALOG,                                                 // 30 Terra Stack   "the analog super-stack; frame 0 IS the exact 1/h saw law"
+        CAT_ANALOG,                                                 // 31 Terra Drift   "the same stack detuned… widen it into a chorus"
+        CAT_ANALOG,                                                 // 32 Terra Pulse   "a true duty morph, 0.50 -> 0.02" = PWM, the analog idiom
+        CAT_PHYSICAL,                                               // 33 Terra Hollow  "a REED-CLASS duty morph on a kneed source"
+        CAT_VOCAL,                                                  // 34 Terra Vox     "source-filter… four additive formants"
+        CAT_VOCAL,                                                  // 35 Terra Choir   "many voices of the Vox source"
+        CAT_METALLIC,                                               // 36 Terra Bell    "Fletcher's stiff string on the partial path"
+        CAT_METALLIC,                                               // 37 Terra Bar     "the same physics driven past a string… bar and plate"
+        CAT_CHAOS,                                                  // 38 Terra Fold    a time-domain wavefolder at 8x oversampling
+        CAT_SPECTRAL,                                               // 39 Terra Sweep   "a filter without a filter": one resonance travelling h2 -> h400
+        CAT_CINEMATIC,                                              // 40 Terra Cloud   "the DENSE-AND-WIDE ground… hundreds of partials within 30 dB"
+        CAT_CHAOS,                                                  // 41 Terra Dust    "Cloud pushed PAST MUSIC: white grit and full phase scatter"
+        CAT_METALLIC,                                               // 42 Terra Glass   "the bright end… two wide resonances climbing the top of the band"
+        CAT_PHYSICAL,                                               // 43 Terra Bow     "bow pressure as the frame axis… the stick-slip period"
+        CAT_PHYSICAL,                                               // 44 Terra Reed    "a blown pipe… as the pipe overblows"
+        CAT_CHAOS                                                   // 45 Terra Growl   "the aggressive one"
+    };
+    constexpr int kWtNumBuiltin = (int) (sizeof (kWtBuiltinCat) / sizeof (kWtBuiltinCat[0]));
+
+    // Factory folder name -> merged category. The bank ships eight UPPERCASE folders; FOUNDATION is
+    // the only one whose name is not already one of the ten, and its contents settle it — Juno
+    // Chorus, Ladder, PWM Duo, Saw Steps, Supersaw, Sync Lead, VCO Drift, Varishape: that is ANALOG.
+    // A folder that matches nothing here keeps its own Title Case name and becomes its own category,
+    // so dropping a new pack in never silently disappears.
+    int wtCatForFactoryDir (const juce::String& dirName)
+    {
+        const auto u = dirName.toUpperCase();
+        if (u == "FOUNDATION")  return CAT_ANALOG;
+        for (int c = 0; c < kWtNumCats; ++c)
+            if (u == juce::String (kWtCats[c].name).toUpperCase()) return c;
+        if (u == "BASIC" || u == "SHAPES") return CAT_BASIC;
+        return -1;   // unknown pack folder — it gets its own category, never dropped
+    }
+}
+
+// fb606 — the 46 built-ins, grouped by the merged taxonomy. NAMES ARE CAPTURED from the
+// SYN_OSC_A_WT_PRESET parameter (fb601's rule: a second typed copy of a 46-entry list is how a
+// silent renumber starts); only the index -> category map above is written down. An oscillator's
+// <select> value is the preset index, so `preset` is exactly what the UI already sets.
+juce::Array<juce::var> TerrainAudioProcessor::builtinWtCatItems (int cat) const
+{
+    juce::Array<juce::var> items;
+    juce::StringArray roster;
+    if (auto* p = dynamic_cast<juce::AudioParameterChoice*> (apvts.getParameter (ParameterIDs::SYN_OSC_A_WT_PRESET)))
+        roster = p->choices;
+    const int n = juce::jmin (roster.size(), kWtNumBuiltin);
+    for (int i = 0; i < n; ++i)
+    {
+        if (kWtBuiltinCat[i] != cat) continue;
+        juce::DynamicObject::Ptr o = new juce::DynamicObject();
+        o->setProperty ("name",   roster[i]);
+        o->setProperty ("preset", i);
+        items.add (juce::var (o.get()));
+    }
+    return items;
 }
 
 juce::String TerrainAudioProcessor::getImportsJson (int kind)
 {
     const int idx = juce::jlimit (0, 2, kind);
+
+    // fb606 — SCAN CACHE. The browser re-reads this on every open, every reopen after an import,
+    // and once per arrow step through a folder; a recursive walk of a registered Samples tree is
+    // not something to redo three times a second on the thread that also runs the WebView. 1.5 s
+    // TTL, invalidated outright by addImportPath/removeImportPath, so a drop-and-reopen is never
+    // stale in practice. The payload SAYS whether it came from the cache (`scan.cached`) — a
+    // silent cache is a detector that can no-op without saying so.
+    const juce::uint32 nowMs = juce::Time::getMillisecondCounter();
+    if (importsCacheValid_[idx] && (nowMs - importsCacheAt_[idx]) < kImportsCacheTtlMs)
+    {
+        if (auto* co = importsCache_[idx].getDynamicObject())
+            if (auto* cs = co->getProperty ("scan").getDynamicObject())
+                cs->setProperty ("cached", true);          // it SAYS it came from the cache
+        return juce::JSON::toString (importsCache_[idx], /* allOnOneLine */ true);
+    }
+
     juce::Array<juce::var> files;
     juce::StringArray deadFiles;   // fb73 — a single import whose file is gone (Finder-deleted) is PRUNED from the
                                    // registry, not just hidden: Max's model is "delete it in the OS folder = it's gone".
@@ -1506,32 +1760,260 @@ juce::String TerrainAudioProcessor::getImportsJson (int kind)
         for (auto& p : deadFiles) importFiles_[idx].removeString (p);
         saveImportsRegistry (idx);
     }
+
+    // ── registered folders: RECURSIVE, depth-capped, each hit carrying its subfolder ──
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    int totalBudget = kWtScanMaxFilesTotal;
+    int totalFiles = 0, totalDirs = 0;
+    bool anyTrunc = false;
+    juce::String capHit;
     juce::Array<juce::var> folders;
     for (auto& p : importFolders_[idx])
     {
         juce::File d (p);
         if (! d.isDirectory()) continue;
-        auto found = d.findChildFiles (juce::File::findFiles, false, kImportWild);
-        found.sort();
-        juce::Array<juce::var> items;
-        for (auto& cf : found)
+
+        juce::Array<WtScanHit> hits;
+        WtScanStats st;
+        wtScanFolder (d, juce::String(), 0, hits, st, totalBudget);
+
+        // Sort so FOLDERS GROUP: primary key the relative subfolder, secondary the file name, both
+        // natural-order so "Table 2" sorts before "Table 10". A stable predictable order is what
+        // lets the UI page through a folder with the header arrows without the list re-shuffling.
+        std::stable_sort (hits.begin(), hits.end(), [] (const WtScanHit& a, const WtScanHit& b)
         {
-            juce::DynamicObject::Ptr io = new juce::DynamicObject();
-            io->setProperty ("name", cf.getFileNameWithoutExtension());
-            io->setProperty ("path", cf.getFullPathName());
-            items.add (juce::var (io.get()));
+            const int r = a.rel.compareNatural (b.rel);
+            if (r != 0) return r < 0;
+            return a.file.getFileName().compareNatural (b.file.getFileName()) < 0;
+        });
+
+        juce::Array<juce::var> items;
+        juce::StringArray subs;
+        for (auto& h : hits)
+        {
+            items.add (wtHitVar (h.file, h.rel));
+            if (h.rel.isNotEmpty()) subs.addIfNotAlreadyThere (h.rel);
         }
+        juce::Array<juce::var> subsVar;
+        for (auto& s : subs) subsVar.add (juce::var (s));
+
+        const auto cap = st.cap();
+        if (cap.isNotEmpty()) { anyTrunc = true; if (capHit.isEmpty()) capHit = cap; }
+        totalFiles += items.size();
+        totalDirs  += st.dirs;
+
         juce::DynamicObject::Ptr o = new juce::DynamicObject();
-        o->setProperty ("name",  d.getFileName());
-        o->setProperty ("path",  d.getFullPathName());
-        o->setProperty ("count", items.size());
-        o->setProperty ("items", items);
+        o->setProperty ("name",      d.getFileName());
+        o->setProperty ("path",      d.getFullPathName());
+        o->setProperty ("kind",      "user");        // fb606 — user imports are removable; factory is not (and is not in this array)
+        o->setProperty ("count",     items.size());
+        o->setProperty ("dirs",      st.dirs);
+        o->setProperty ("depth",     st.deepest);    // deepest rel level actually reached
+        o->setProperty ("subs",      subsVar);       // sorted unique relative subfolder paths, "/"-separated
+        o->setProperty ("items",     items);
+        o->setProperty ("truncated", cap.isNotEmpty());
+        o->setProperty ("cap",       cap);           // "" | "depth" | "root" | "total"
         folders.add (juce::var (o.get()));
     }
+
     juce::DynamicObject::Ptr root = new juce::DynamicObject();
+    root->setProperty ("kind",    idx);
     root->setProperty ("files",   files);
     root->setProperty ("folders", folders);
-    return juce::JSON::toString (juce::var (root.get()));
+
+    // ── FACTORY + BUILT-INS: wavetable registry only (kind 1). Noise and Sample have their own
+    //    factory surfaces (scanNoiseFactory) and adding a second one here would be a third menu. ──
+    if (idx == 1)
+    {
+        const auto froot = wtFactoryRoot();
+        juce::Array<juce::var> fcats;
+        juce::Array<int> factoryPerCat; factoryPerCat.insertMultiple (0, 0, kWtNumCats);
+        juce::Array<juce::var> extraCats;   // pack folders whose name matches none of the ten
+        int factoryTotal = 0;
+        const bool fexists = froot.isDirectory();
+        if (fexists)
+        {
+            auto dirs = froot.findChildFiles (juce::File::findDirectories, false);
+            dirs.sort();
+            for (auto& sub : dirs)
+            {
+                if (sub.getFileName().startsWithChar ('.')) continue;
+                juce::Array<WtScanHit> hits; WtScanStats st; int budget = kWtScanMaxFilesTotal;
+                wtScanFolder (sub, juce::String(), 0, hits, st, budget);
+                if (hits.isEmpty()) continue;                         // 🚨 AN EMPTY CATEGORY DOES NOT EXIST
+                std::stable_sort (hits.begin(), hits.end(), [] (const WtScanHit& a, const WtScanHit& b)
+                { const int r = a.rel.compareNatural (b.rel); return r != 0 ? (r < 0)
+                    : (a.file.getFileName().compareNatural (b.file.getFileName()) < 0); });
+                juce::Array<juce::var> items;
+                for (auto& h : hits) items.add (wtHitVar (h.file, h.rel));
+                const int c = wtCatForFactoryDir (sub.getFileName());
+                juce::DynamicObject::Ptr o = new juce::DynamicObject();
+                o->setProperty ("dir",   sub.getFileName());                                                   // the folder as it is on disk (UPPERCASE in the shipped bank)
+                o->setProperty ("name",  c >= 0 ? juce::String (kWtCats[c].name)
+                                                : wtTitleCase (sub.getFileName()));                            // unknown pack -> its own Title Case category
+                o->setProperty ("cat",   c);                                                                   // index into `cats`, or -1 = its own category
+                o->setProperty ("path",  sub.getFullPathName());
+                o->setProperty ("kind",  "factory");   // 🔒 NOT removable — and it is not in `folders` either
+                o->setProperty ("count", items.size());
+                o->setProperty ("items", items);
+                fcats.add (juce::var (o.get()));
+                factoryTotal += items.size();
+                if (c >= 0) factoryPerCat.set (c, factoryPerCat[c] + items.size());
+                else        extraCats.add (juce::var (sub.getFileName()));
+            }
+        }
+        juce::DynamicObject::Ptr fo = new juce::DynamicObject();
+        fo->setProperty ("root",   froot.getFullPathName());
+        fo->setProperty ("exists", fexists);
+        fo->setProperty ("total",  factoryTotal);
+        fo->setProperty ("cats",   fcats);
+        // ⚠️ NO INSTALLER YET: say so, in words the UI can put on screen, instead of rendering an
+        // empty shell. exists:false + total:0 + this note is the whole graceful-absence contract.
+        fo->setProperty ("note",   fexists ? (factoryTotal > 0 ? juce::String()
+                                                               : juce::String ("factory folder is present but holds no audio files"))
+                                           : juce::String ("factory bank not installed at this path"));
+        root->setProperty ("factory", juce::var (fo.get()));
+
+        // built-ins, grouped the same way
+        juce::Array<juce::var> bcats;
+        int builtinTotal = 0;
+        juce::Array<int> builtinPerCat; builtinPerCat.insertMultiple (0, 0, kWtNumCats);
+        for (int c = 0; c < kWtNumCats; ++c)
+        {
+            auto items = builtinWtCatItems (c);
+            builtinPerCat.set (c, items.size());
+            builtinTotal += items.size();
+            if (items.isEmpty()) continue;                           // 🚨 AN EMPTY CATEGORY DOES NOT EXIST
+            juce::DynamicObject::Ptr o = new juce::DynamicObject();
+            o->setProperty ("name",  kWtCats[c].name);
+            o->setProperty ("cat",   c);
+            o->setProperty ("count", items.size());
+            o->setProperty ("items", items);
+            bcats.add (juce::var (o.get()));
+        }
+        juce::DynamicObject::Ptr bo = new juce::DynamicObject();
+        bo->setProperty ("total", builtinTotal);
+        bo->setProperty ("cats",  bcats);
+        root->setProperty ("builtin", juce::var (bo.get()));
+
+        // THE MERGED ORDER — the ten, minus every one that ended up with nothing in it. This is the
+        // list the left column should render, and it is computed here rather than in JS so the
+        // "no empty categories" law has exactly one implementation and one gate.
+        juce::Array<juce::var> cats;
+        for (int c = 0; c < kWtNumCats; ++c)
+        {
+            const int b = builtinPerCat[c], f = factoryPerCat[c];
+            if (b + f <= 0) continue;
+            juce::Array<juce::var> fdirs;
+            for (auto& fv : fcats)
+                if (auto* fd = fv.getDynamicObject())
+                    if ((int) fd->getProperty ("cat") == c) fdirs.add (fd->getProperty ("dir"));
+            juce::DynamicObject::Ptr o = new juce::DynamicObject();
+            o->setProperty ("name",        kWtCats[c].name);
+            o->setProperty ("cat",         c);
+            o->setProperty ("builtin",     b);
+            o->setProperty ("factory",     f);
+            o->setProperty ("total",       b + f);
+            o->setProperty ("factoryDirs", fdirs);
+            cats.add (juce::var (o.get()));
+        }
+        for (auto& ev : extraCats)   // an unrecognised pack folder is its own category, after the ten
+        {
+            int n = 0;
+            for (auto& fv : fcats)
+                if (auto* fd = fv.getDynamicObject())
+                    if (fd->getProperty ("dir").toString() == ev.toString()) n = (int) fd->getProperty ("count");
+            juce::Array<juce::var> fdirs; fdirs.add (ev);
+            juce::DynamicObject::Ptr o = new juce::DynamicObject();
+            o->setProperty ("name",        wtTitleCase (ev.toString()));
+            o->setProperty ("cat",         -1);
+            o->setProperty ("builtin",     0);
+            o->setProperty ("factory",     n);
+            o->setProperty ("total",       n);
+            o->setProperty ("factoryDirs", fdirs);
+            cats.add (juce::var (o.get()));
+        }
+        root->setProperty ("cats", cats);
+    }
+
+    juce::DynamicObject::Ptr sc = new juce::DynamicObject();
+    sc->setProperty ("ms",             juce::roundToInt ((juce::Time::getMillisecondCounterHiRes() - t0) * 10.0) / 10.0);
+    sc->setProperty ("roots",          folders.size());
+    sc->setProperty ("files",          totalFiles);
+    sc->setProperty ("dirs",           totalDirs);
+    sc->setProperty ("cached",         false);      // a fresh walk; a cache HIT never reaches this line
+    sc->setProperty ("depthCap",       kWtScanMaxDepth);
+    sc->setProperty ("fileCapPerRoot", kWtScanMaxFilesRoot);
+    sc->setProperty ("fileCapTotal",   kWtScanMaxFilesTotal);
+    sc->setProperty ("truncated",      anyTrunc);
+    sc->setProperty ("capHit",         capHit);     // "" | "depth" | "root" | "total" — WHICH cap stopped it
+    root->setProperty ("scan", juce::var (sc.get()));
+
+    const juce::var rootVar (root.get());
+    importsCache_[idx]      = rootVar;
+    importsCacheAt_[idx]    = juce::Time::getMillisecondCounter();
+    importsCacheValid_[idx] = true;
+    // allOnOneLine: measured 12.9 % smaller over the bridge for the 120-table bank (21,483 ->
+    // 18,720 B for the item array alone) and nobody reads this by eye. JSON::toString is the only
+    // writer either way — every name is escaped by JUCE, which is what carries the 0x7F folder.
+    return juce::JSON::toString (rootVar, /* allOnOneLine */ true);
+}
+
+
+// ─── fb606 — THE MANAGED WAVETABLES FOLDER, ALSO RECURSIVE ──────────────────────────────────
+// This is what PluginEditor.cpp's `listImports` native returns: the folder "Open Imports Folder"
+// reveals (Noizefield/<resolved>/Wavetables — byte-identical to PluginEditor.cpp's
+// terrainWavetablesDir(), which is the SAME two-line legacy-first rule). It had the SECOND
+// non-recursive scan in the codebase — findChildFiles (findFiles, false, "*.wav") — so dropping a
+// pack in as a folder made it vanish exactly the way a registered master folder did.
+// It runs through the SAME walker, the same three caps and the same `rel`, so there is one scan
+// implementation in this plugin and not two that drift.
+//
+// 🚨 SHAPE CHANGE, ON PURPOSE. This used to be a bare JSON array of names, hand-escaped for only
+//    `\` and `"` — which meant a control character in a file name (the owner's PLUTO 2 folder
+//    starts with a literal 0x7F) produced JSON the WebView could mis-parse. It is now an object,
+//    built through juce::var, so every name is escaped by juce::JSON and nothing has to be trusted.
+juce::String TerrainAudioProcessor::getManagedWavetablesJson()
+{
+    auto dir = terrainNoizefieldDirP().getChildFile ("Wavetables");   // == PluginEditor.cpp::terrainWavetablesDir()
+    const double t0 = juce::Time::getMillisecondCounterHiRes();
+    juce::Array<WtScanHit> hits;
+    WtScanStats st;
+    int budget = kWtScanMaxFilesTotal;
+    const bool exists = dir.isDirectory();
+    if (exists) wtScanFolder (dir, juce::String(), 0, hits, st, budget);
+
+    std::stable_sort (hits.begin(), hits.end(), [] (const WtScanHit& a, const WtScanHit& b)
+    {
+        const int r = a.rel.compareNatural (b.rel);
+        if (r != 0) return r < 0;
+        return a.file.getFileName().compareNatural (b.file.getFileName()) < 0;
+    });
+
+    juce::Array<juce::var> items;
+    juce::StringArray subs;
+    for (auto& h : hits)
+    {
+        items.add (wtHitVar (h.file, h.rel));
+        if (h.rel.isNotEmpty()) subs.addIfNotAlreadyThere (h.rel);
+    }
+    juce::Array<juce::var> subsVar;
+    for (auto& s : subs) subsVar.add (juce::var (s));
+
+    const auto cap = st.cap();
+    juce::DynamicObject::Ptr o = new juce::DynamicObject();
+    o->setProperty ("root",      dir.getFullPathName());
+    o->setProperty ("exists",    exists);
+    o->setProperty ("total",     items.size());
+    o->setProperty ("dirs",      st.dirs);
+    o->setProperty ("depth",     st.deepest);
+    o->setProperty ("subs",      subsVar);
+    o->setProperty ("items",     items);
+    o->setProperty ("truncated", cap.isNotEmpty());
+    o->setProperty ("cap",       cap);        // "" | "depth" | "root" | "total" — reported, never silent
+    o->setProperty ("depthCap",  kWtScanMaxDepth);
+    o->setProperty ("ms",        juce::roundToInt ((juce::Time::getMillisecondCounterHiRes() - t0) * 10.0) / 10.0);
+    return juce::JSON::toString (juce::var (o.get()), /* allOnOneLine */ true);
 }
 
 void TerrainAudioProcessor::saveImportsRegistry (int kind)
@@ -1560,6 +2042,7 @@ void TerrainAudioProcessor::loadImportsRegistry ()
             importFiles_[k].clear(); importFolders_[k].clear();
             if (auto* fa = o->getProperty ("files").getArray())   for (auto& e : *fa) importFiles_[k].add (e.toString());
             if (auto* da = o->getProperty ("folders").getArray()) for (auto& e : *da) importFolders_[k].add (e.toString());
+            importsCacheValid_[k] = false;   // fb606
         }
     }
 }

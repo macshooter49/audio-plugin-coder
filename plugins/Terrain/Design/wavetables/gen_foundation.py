@@ -11,7 +11,7 @@ cores. Everything is computed from first principles — band-limited additive se
 integer/continuous sync on an exact single cycle, and honest waveshaping followed
 by bandlimit().
 """
-import sys; sys.path.insert(0, "/private/tmp/claude-501/-Users-macshooter/941a8123-ffc6-4f73-84a3-70aee55ea3c3/scratchpad/wt")
+import sys, os; sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))   # fb606
 import numpy as np, wtlib
 
 F, N, SZ = wtlib.FRAMES, wtlib.NH, wtlib.SIZE
@@ -360,6 +360,20 @@ TABLES = [
 ]
 
 FOUNDATION = {nm for nm, _ in TABLES[:12]}
+
+# ══════════════════════════════════════════════════════════════════════════════════════
+# fb606 — THE MERGED TEN. The bank shipped as eight generated folders; the browser showed a
+# DIFFERENT set for its built-ins, so the same sound had two names depending on where you
+# looked. The two sets are now ONE ten-folder taxonomy, and every module declares which of
+# the ten each of its tables belongs to. gate.py reads CATEGORY and never guesses from the
+# module name — a table with no entry here is a hard error, not a silent "GEN_WHATEVER".
+# ══════════════════════════════════════════════════════════════════════════════════════
+
+# The file's own two sections ARE the split: the first twelve are the known quantities
+# (sine, saw, pulse, organ) and become "Basic Shapes"; the fourteen after them are the
+# vintage-hardware lane — drift, PWM, ladder, tape, brownout — and become "Analog".
+CATEGORY = {nm: ("Basic Shapes" if nm in FOUNDATION else "Analog") for nm, _ in TABLES}
+
 
 if __name__ == "__main__":
     built = []

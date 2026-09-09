@@ -37401,16 +37401,94 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // into a random table, and the browser reopened on whatever folder happened to contain the
   // current table rather than the one he was in (notably: he was in ALL, it reopened in Analog).
   window.__wtFolder = window.__wtFolder || {};
-  // the option VALUES of a folder, straight off the <select>'s optgroups (one source of truth,
-  // so a folder rename or the fb540 Terra merge needs no second edit here).
+  /* ═══ fb606 — THE MERGED TEN CATEGORIES ══════════════════════════════════════════
+     Max: "just categorize them correctly so that people actually know what we're doing here…
+     put them into their respective folders and then delete anything that doesn't have a table
+     inside of it."  The browser used to build its left column straight off this <select>'s
+     <optgroup> labels, which is why re-filing looks like it should be an HTML edit.
+
+     ⚠️ IT IS NOT, AND MUST NOT BE. Tests/wt_list_gate.py asserts, for all four oscillators,
+     that the option VALUES are 0..N-1 IN DOM ORDER and that option i's label equals entry i of
+     the SYN_OSC_?_WT_PRESET StringArray. Moving a single <option> between <optgroup>s reorders
+     the DOM and reds four of the ten sites — and every saved patch stores the INDEX, so a
+     reorder that slipped past the gate would silently repoint every existing preset at a
+     different table. So the <select> is frozen exactly as it ships, and the FILING lives here:
+     one index list per category, read by the browser, the cascade menu and the ‹ › arrows.
+
+     THE MERGE (owner-approved): Experimental folds into Chaos, Morph folds into Spectral, and
+     the sixteen Terra tables are re-filed by WHAT THEY SOUND LIKE rather than by when we made
+     them — Bell/Bar/Glass → Metallic, Vox/Choir → Vocal, Cloud/Dust → Cinematic, Bow/Reed →
+     Physical, Fold/Growl → Chaos, Drift/Sweep → Spectral, Stack → Harmonic, Pulse/Hollow →
+     Analog. Nothing here touches an index; it only says which drawer the index is filed in. */
+  window.__WT_TEN = ['Basic Shapes', 'Analog', 'Digital', 'Vocal', 'Metallic',
+                     'Spectral', 'Chaos', 'Cinematic', 'Harmonic', 'Physical'];
+  window.__WT_FILING = {
+    'Basic Shapes': [0, 1, 2, 3],                                  /* Sine Triangle Square Pulse */
+    'Analog':       [4, 5, 6, 7, 8, 9, 32, 33],                    /* + Terra Pulse, Terra Hollow */
+    'Digital':      [10, 11, 12, 13],
+    'Vocal':        [14, 15, 16, 34, 35],                          /* + Terra Vox, Terra Choir */
+    'Metallic':     [17, 18, 19, 36, 37, 42],                      /* + Terra Bell, Bar, Glass */
+    'Spectral':     [24, 25, 26, 27, 28, 29, 31, 39],              /* Morph 6 + Terra Drift, Sweep */
+    'Chaos':        [20, 21, 22, 23, 38, 45],                      /* Experimental 4 + Terra Fold, Growl */
+    'Cinematic':    [40, 41],                                      /* Terra Cloud, Terra Dust */
+    'Harmonic':     [30],                                          /* Terra Stack */
+    'Physical':     [43, 44]                                       /* Terra Bow, Terra Reed */
+  };
+  /* The 120-table factory bank ships its own eight folder names; these are the two that do not
+     already spell one of the ten. Anything unrecognised keeps its own name rather than being
+     guessed into the wrong drawer. */
+  window.__wtTenOf = function (nm) {
+    if (! nm) return null;
+    var k = String (nm).trim ().toLowerCase ();
+    var alias = { 'foundation': 'Basic Shapes', 'basic': 'Basic Shapes', 'basics': 'Basic Shapes',
+                  'shapes': 'Basic Shapes', 'experimental': 'Chaos', 'morph': 'Spectral' };
+    if (alias[k]) return alias[k];
+    for (var i = 0; i < window.__WT_TEN.length; i++)
+      if (window.__WT_TEN[i].toLowerCase () === k) return window.__WT_TEN[i];
+    return null;
+  };
+  /* THE ONE BUILDER — the browser, the cascade menu and the arrows all read this, so they cannot
+     disagree about which folder a table is in. A CATEGORY WITH NO TABLES IS NOT RETURNED (Max:
+     "delete anything that doesn't have a table inside of it"), so an empty drawer cannot render. */
+  window.__wtFactoryCats = function (o) {
+    var sel = document.getElementById ('osc-' + o + '-preset-select');
+    if (! sel) return [];
+    var opts = sel.options, n = opts.length, filed = {}, cats = [];
+    window.__WT_TEN.forEach (function (lab) {
+      var items = [];
+      (window.__WT_FILING[lab] || []).forEach (function (ix) {
+        var op = (ix >= 0 && ix < n) ? opts[ix] : null; if (! op) return;
+        filed[ix] = 1; items.push ({ kind: 'preset', name: op.textContent, value: op.value });
+      });
+      if (items.length) cats.push ({ label: lab, items: items });
+    });
+    /* 🚨 A DETECTOR THAT CAN NO-OP MUST PRINT WHETHER IT FIRED. If the bank grows in C++ and this
+       filing is not extended with it, those tables would be UNREACHABLE from every menu in the
+       plugin — the silent half of the ten-site trap. They are swept into "Unfiled" and NAMED on
+       the console instead, so the failure is loud and the table is still playable. */
+    var orphan = [];
+    for (var i = 0; i < n; i++) if (! filed[i]) orphan.push (i);
+    if (orphan.length) {
+      cats.push ({ label: 'Unfiled', items: orphan.map (function (ix) {
+        return { kind: 'preset', name: opts[ix].textContent, value: opts[ix].value }; }) });
+      try { console.warn ('[fb606] wt filing FIRED: ' + orphan.length + ' of ' + n
+        + ' tables are not in __WT_FILING → "Unfiled": '
+        + orphan.map (function (ix) { return ix + ' ' + opts[ix].textContent; }).join (', ')); } catch (e) {}
+    } else {
+      try { console.log ('[fb606] wt filing FIRED: all ' + n + ' factory tables filed into '
+        + cats.length + ' categories, 0 unfiled, 0 empty'); } catch (e) {}
+    }
+    return cats;
+  };
+  // the option VALUES of a folder — fb606: off __WT_FILING, not the <optgroup>s (one source of truth).
   window.__wtFolderValues = function (o, folder) {
     var sel = document.getElementById ('osc-' + o + '-preset-select'); if (! sel) return [];
     var all = Array.prototype.map.call (sel.options, function (op) { return op.value; });
     if (! folder || folder === 'All') return all;                       // All == the whole list
-    var gs = sel.getElementsByTagName ('optgroup');
-    for (var i = 0; i < gs.length; i++)
-      if (gs[i].label === folder)
-        return Array.prototype.map.call (gs[i].getElementsByTagName ('option'), function (op) { return op.value; });
+    var fc = window.__wtFactoryCats (o);
+    for (var i = 0; i < fc.length; i++)
+      if (fc[i].label === folder)
+        return fc[i].items.map (function (it) { return it.value; });
     return all;                                                          // import folder etc. -> whole list
   };
   // fb548 — WHICH FOLDER IS THE CURRENT TABLE IN? Derived from the <select>'s own optgroups every
@@ -37473,14 +37551,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     var sel = document.getElementById ('osc-' + o + '-preset-select');
     var cats = [];
     if (sel) {
-      var gs = sel.getElementsByTagName ('optgroup');
-      if (gs.length) {
-        for (var i = 0; i < gs.length; i++) {
-          var ops = gs[i].getElementsByTagName ('option'), items = [];
-          for (var j = 0; j < ops.length; j++) items.push ({ kind: 'preset', name: ops[j].textContent, value: ops[j].value });
-          cats.push ({ label: gs[i].label, items: items });
-        }
-      } else {   // no optgroups (a stripped page): one flat factory category, still steppable
+      /* fb606 — the arrows step the SAME ten folders the browser draws, because both call
+         __wtFactoryCats. Reading the <optgroup>s here (as this did) would have left the steppers
+         walking the OLD eight-folder shape while the menu showed the new ten. */
+      cats = window.__wtFactoryCats (o).map (function (c) {
+        return { label: c.label, items: c.items.map (function (it) {
+          return { kind: 'preset', name: it.name, value: it.value }; }) }; });
+      if (! cats.length) {   // no options at all (a stripped page): one flat factory category, still steppable
         var it2 = Array.prototype.map.call (sel.options, function (op) { return { kind: 'preset', name: op.textContent, value: op.value }; });
         if (it2.length) cats.push ({ label: 'Presets', items: it2 });
       }
@@ -37621,14 +37698,16 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     var esc = function (s) { return String (s).replace (/&/g, '&amp;').replace (/</g, '&lt;').replace (/>/g, '&gt;'); };
     if (window.__wtCascadeClose) { try { window.__wtCascadeClose (); } catch (e) {} }
 
-    // ── build the folder tree from the <select>'s optgroups ── Basic (group 0) → "Basic Shapes";
-    // the rest → subfolders of "Factory"; "Imported" is filled from a folder scan on hover.
-    var groups = Array.prototype.slice.call (sel.getElementsByTagName ('optgroup'));
-    var optLeaf = function (op) { return { kind: 'preset', label: op.text, value: op.value }; };
-    var groupLeaves = function (g) { return Array.prototype.map.call (g.getElementsByTagName ('option'), optLeaf); };
-    var tree = [];
-    if (groups.length) tree.push ({ folder: 'Basic Shapes', children: groupLeaves (groups[0]) });
-    tree.push ({ folder: 'Factory', children: groups.slice (1).map (function (g) { return { folder: g.label, children: groupLeaves (g) }; }) });
+    // ── fb606 — the folder tree is THE MERGED TEN (__wtFactoryCats), not the <select>'s
+    //    <optgroup>s. The <select> keeps its shipped grouping because the ten-site gate pins its
+    //    DOM ORDER; the FILING that users see lives in __WT_FILING. One builder, so this menu and
+    //    the two-pane browser and the ‹ › arrows can never disagree about where a table is filed.
+    //    Ten flat folders replace the old "Basic Shapes / Factory ›" split — with ten well-named
+    //    drawers there is nothing left for that extra level of nesting to organise.
+    var factoryCats = window.__wtFactoryCats (osc);
+    var tree = factoryCats.map (function (c) {
+      return { folder: c.label, children: c.items.map (function (it) {
+        return { kind: 'preset', label: it.name, value: it.value }; }) }; });
     var impNode = { folder: 'Imported', load: function (cb) {
         if (impNode._cache) { cb (impNode._cache); return; }
         var lf = wtNfn ('listImports');
@@ -37714,9 +37793,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
     function selLeaf (leaf) { return (leaf.kind === 'preset' && leaf.value === curVal ()) || (leaf.kind === 'import' && leaf.label === curImp ()); }
     function toItems (leaves) { return (leaves || []).filter (function (l) { return ! l.disabled; }).map (function (l) { return { name: l.label, sel: selLeaf (l), pick: pickLeaf (l) }; }); }
     var wcats = [];
-    tree.forEach (function (node) {
-      if (node.folder === 'Basic Shapes') wcats.push ({ label: 'Basic Shapes', items: toItems (node.children) });
-      else if (node.folder === 'Factory') (node.children || []).forEach (function (sub) { wcats.push ({ label: sub.folder, items: toItems (sub.children) }); });
+    /* fb606 — the ten, in order. Built from factoryCats, NOT from `tree`: `tree` also carries the
+       lazy "Imported" cascade node, which has no children until you hover it — pushing that into
+       the left column is exactly the EMPTY CATEGORY the owner said to delete. */
+    factoryCats.forEach (function (c) {
+      var items = toItems (c.items.map (function (it) { return { kind: 'preset', label: it.name, value: it.value }; }));
+      if (items.length) wcats.push ({ label: c.label, kind: 'factory', items: items });   /* no table inside it ⇒ it does not exist */
     });
     window.__wtReopen = function () { window.openWtSelectMenu (osc, ev); };
     function loadWtByPathJS (path) {
@@ -37725,10 +37807,147 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
          (wtApplyItem) so a stale path can never match a later step. */
       window.__wtPath = window.__wtPath || {}; window.__wtPath[osc] = path;
       var f = wtNfn ('loadWavetableByPath'); if (f) { try { f (osc, path); } catch (e) {} } }   // load a referenced table by abs path
+    /* ═══ fb606 — THE REGISTRY PAYLOAD BECOMES A NAVIGABLE TREE ═════════════════════════
+       The C++ scan is recursive now (it was `findChildFiles (..., false, ...)` — that `false` is
+       searchRecursively, and it is the whole reason registering a master folder showed NOTHING).
+       Recursion alone would land 120 names in one undifferentiated blob, so the thing that makes
+       a hierarchy out of that flat list is EACH FILE'S RELATIVE SUBFOLDER.
+
+       THIS READS IT THREE WAYS, IN ORDER, so no key-name handshake with the backend can break the
+       browser:
+         1. an explicit key on the item — rel / relPath / sub / subfolder / dir / relative
+         2. failing that, DERIVED HERE: item.path with the registered folder's own path prefix
+            removed, minus the file name
+         3. failing both (no key, no path), the item is a direct child — the old flat behaviour
+       (2) is the one that matters: it needs NOTHING from C++ but the recursion itself, so this UI
+       is correct whether the payload gains a new key or not. */
+    function wtRelSegs (it, rootPath) {
+      var r = null;
+      if (it) { var K = ['rel', 'relPath', 'sub', 'subfolder', 'dir', 'relative'];
+                for (var i = 0; i < K.length; i++) if (it[K[i]] != null) { r = it[K[i]]; break; } }
+      var derived = false;
+      if (r == null && it && it.path && rootPath) {
+        var p = String (it.path).replace (/\\/g, '/');
+        var rp = String (rootPath).replace (/\\/g, '/').replace (/\/+$/, '');
+        r = (p.length > rp.length && p.slice (0, rp.length + 1) === rp + '/') ? p.slice (rp.length + 1) : '';
+        derived = true;
+      }
+      var segs = String (r == null ? '' : r).replace (/\\/g, '/').split ('/')
+                   .filter (function (x) { return x && x !== '.'; });
+      /* A derived path always ends in the FILE; an explicit key might or might not. Drop a last
+         segment that looks like one of our audio files either way — a folder is not a .wav. */
+      if (segs.length && (derived || /\.(wav|aif|aiff|flac|ogg|mp3)$/i.test (segs[segs.length - 1]))) segs.pop ();
+      return segs;
+    }
+    /* One registered folder → one category with `subs` all the way down. THE ROOT'S `items` ARE
+       EVERY LEAF BENEATH IT — Max: "I should be able to open the MASTER FOLDER and see all of the
+       tables in the SUB FOLDERS too" — and every intermediate node collects the leaves beneath
+       IT, so descending narrows the list the way the Finder does. Each leaf is ONE object shared
+       by every level that lists it, which is what keeps All a view rather than a copy. */
+    function wtFolderNode (fld, mkImp, kind) {
+      var root = { label: fld.name || 'Folder', items: [], subs: [], _kids: {},
+                   delKind: 'folder', delPath: fld.path, kind: kind };
+      var rootPath = fld.path ? String (fld.path).replace (/\/+$/, '') : '';
+      (fld.items || []).forEach (function (raw) {
+        var segs = wtRelSegs (raw, fld.path);
+        var item = mkImp (raw);
+        if (segs.length) item.sub = segs[segs.length - 1];   // the dim "which folder" hint on the row
+        root.items.push (item);
+        var node = root, walked = '';
+        for (var i = 0; i < segs.length; i++) {
+          walked += '/' + segs[i];
+          if (! node._kids[segs[i]]) {
+            /* a SUBFOLDER is 'sub', never 'user': the registry only knows the ROOT the user added,
+               so Remove Folder must not be offered on a child (Locate still is — it has a path). */
+            var kid = { label: segs[i], items: [], subs: [], _kids: {},
+                        delKind: 'folder', delPath: rootPath ? (rootPath + walked) : null, kind: 'sub' };
+            node._kids[segs[i]] = kid; node.subs.push (kid);
+          }
+          node = node._kids[segs[i]];
+          node.items.push (item);
+        }
+      });
+      (function sortSubs (nd) { (nd.subs || []).sort (function (a, b) { return a.label.localeCompare (b.label); });
+                                (nd.subs || []).forEach (sortSubs); }) (root);
+      return root;
+    }
     function openWtBrowser (importLeaves, reg) {
       reg = reg || { files: [], folders: [] };
       var mkImp = function (it) { return { name: it.name, path: it.path, sel: (curImp () === it.name), pick: (function (p) { return function () { loadWtByPathJS (p); }; }) (it.path) }; };
-      (reg.folders || []).forEach (function (fld) { wcats.push ({ label: fld.name, delKind: 'folder', delPath: fld.path, items: (fld.items || []).map (mkImp) }); });   // import FOLDER → own category (deletable)
+      /* ═══ THE PAYLOAD CONTRACT, read off the C++ side's own emitter rather than guessed ═════
+         USER folders are `folders[]`:
+             { name, path, kind:'user', count, dirs, depth, subs[], truncated, cap,
+               items: [ { name, path, rel } ] }            rel = the "/"-separated SUBFOLDER, "" at top
+         FACTORY IS NOT IN THAT ARRAY. It is `factory.cats[]`:
+             { dir, name, cat, path, kind:'factory', count, items: [ { name, path, rel } ] }
+         where `name` is ALREADY resolved to one of the ten and `cat` is its index in that ten
+         (or -1 = "this folder is its own category").
+         ⚠️ `reg.factory` is an OBJECT. Concatenating it as if it were an array would have pushed
+         one nameless, itemless drawer into the left column — the exact empty category the owner
+         told us to delete. Both shapes are tolerated so neither side can break the other. */
+      var factObj  = reg.factory;
+      var factCats = (factObj && factObj.cats) ? factObj.cats
+                   : (Object.prototype.toString.call (factObj) === '[object Array]' ? factObj : []);
+      var allFolders = (reg.folders || []).concat (factCats);
+      /* 🚨 TWO FILES, ONE ORDER. `cat` is an index into the C++ side's kWtCats, and __WT_TEN is
+         this file's copy of that same list. If the two ever drift, every factory folder would be
+         filed one drawer over — silently. `reg.cats[]` carries {name, cat} pairs, so the two lists
+         can be compared at runtime, every open, for free. It SHOUTS rather than guessing. */
+      try {
+        var drift = (reg.cats || []).filter (function (c) {
+          return typeof c.cat === 'number' && c.cat >= 0 && window.__WT_TEN[c.cat] !== c.name; });
+        if (drift.length) console.warn ('[fb606] ⚠️ CATEGORY ORDER DRIFT between index.html\u2019s __WT_TEN and the C++ kWtCats: '
+          + drift.map (function (c) { return 'cat ' + c.cat + ' = "' + c.name + '" there, "' + window.__WT_TEN[c.cat] + '" here'; }).join (' · '));
+        else if (reg.cats) console.log ('[fb606] category order agrees with C++ (' + reg.cats.length + ' categories cross-checked)');
+      } catch (e) {}
+      /* THE SCAN'S OWN LIMITS ARE NEWS, NOT A DETAIL. A capped scan looks exactly like a small
+         folder from in here, so if the backend says it truncated, that gets said out loud. */
+      try {
+        var trunc = (reg.folders || []).filter (function (f) { return f && f.truncated; });
+        if (trunc.length || (reg.scan && reg.scan.truncated))
+          console.warn ('[fb606] ⚠️ THE SCAN WAS CAPPED — this browser is showing a PARTIAL tree: '
+            + trunc.map (function (f) { return f.name + ' (cap ' + f.cap + ')'; }).join (', ')
+            + (reg.scan ? ('  · scan ' + JSON.stringify (reg.scan)) : ''));
+        else if (reg.scan) console.log ('[fb606] scan: ' + reg.scan.files + ' file(s) in ' + reg.scan.dirs
+            + ' dir(s), ' + reg.scan.ms + ' ms, cached=' + reg.scan.cached + ', not truncated');
+      } catch (e) {}
+      /* A folder the backend tags factory MERGES into whichever of the ten it names, so the
+         owner's 120 tables land in the SAME drawers as the built-ins instead of beside them. An
+         unrecognised name (cat -1) keeps its own category rather than being guessed into the
+         wrong one; nothing is ever dropped. */
+      var tenOfFolder = function (fld) {
+        if (typeof fld.cat === 'number' && fld.cat >= 0 && fld.cat < window.__WT_TEN.length) return window.__WT_TEN[fld.cat];
+        return window.__wtTenOf (fld.name || fld.category || fld.dir);   /* cat -1, or an older payload with no cat at all */
+      };
+      var nFact = 0, nMerged = 0, nUser = 0, nSub = 0;
+      allFolders.forEach (function (fld) {
+        if (! fld) return;
+        var isFact = (fld.kind === 'factory' || fld.type === 'factory' || fld.factory === true);
+        var node = wtFolderNode (fld, mkImp, isFact ? 'factory' : 'user');
+        nSub += (node.subs || []).length;
+        if (isFact) {
+          nFact++;
+          var lab = tenOfFolder (fld);
+          if (lab) {
+            var host = null;
+            for (var i = 0; i < wcats.length; i++) if (wcats[i].label === lab) { host = wcats[i]; break; }
+            if (! host) { host = { label: lab, kind: 'factory', items: [] }; wcats.push (host); }
+            host.items = host.items.concat (node.items);
+            if (node.subs && node.subs.length) host.subs = (host.subs || []).concat (node.subs);
+            /* LOCATE, NEVER REMOVE. A factory drawer that has a REAL directory behind it can be
+               revealed in the Finder (revealing is never destructive); `kind:'factory'` is what
+               keeps Remove Folder off it. No path (an embedded bank) ⇒ no delKind ⇒ no menu at
+               all, rather than a "Locate" that would fall through to the user's imports folder. */
+            if (! host.delKind && fld.path) { host.delKind = 'folder'; host.delPath = fld.path; }
+            nMerged++; return;
+          }
+        } else nUser++;
+        wcats.push (node);   // import FOLDER → own category (deletable), now with its subfolders
+      });
+      /* 🚨 A DETECTOR THAT CAN NO-OP MUST PRINT WHETHER IT FIRED. */
+      try { console.log ('[fb606] wt registry FIRED: ' + allFolders.length + ' folder(s) — '
+        + nFact + ' factory (' + nMerged + ' merged into the ten), ' + nUser + ' user, '
+        + nSub + ' top-level subfolder(s) found'); } catch (e) {}
       var impItems = (reg.files || []).map (mkImp);                                                                             // single FILES → Imports (per-item delete)
       if (importLeaves && importLeaves.length) impItems = impItems.concat (toItems (importLeaves));                             // + legacy Wavetables-folder drops (no path → not deletable here)
       if (impItems.length) wcats.push ({ label: 'Imports', delKind: 'imports', items: impItems });
@@ -37749,7 +37968,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (openCat === null) { openCat = 0;
           for (var k = 0; k < wcats.length; k++) { if ((wcats[k].items || []).some (function (i) { return i.sel; })) { openCat = k; break; } } }
       }
-      var wtCfg = { importLabel: '＋ Import Wavetable',
+      var wtCfg = { nav: true, rootCrumb: 'Wavetables',   /* fb606 — ‹ › + breadcrumb on THIS browser */
+        importLabel: '＋ Import Wavetable',
         onImport:   function () { var f = wtNfn ('pickWavetableImport'); if (f) { try { f (osc); } catch (e) {} } },   // file OR folder dialog
         onAudition: function () { var f = wtNfn ('auditionWavetable'); if (f) { try { f (osc); } catch (e) {} } },   // WT headphone — pluck this osc's table
         onDelete:   function (kind, path) { var rf = wtNfn ('removeWtImport'); if (rf) { try { rf (path); } catch (e) {} } },   // un-reference folder / import
@@ -38075,6 +38295,59 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       if (! all.length) return cats;
       return [{ label: 'All', isAll: true, items: all }].concat (cats);
     };
+    /* ═══ fb606 — THE FOLDER MENU COMES OUT FROM BEHIND THE BROWSER ═══════════════════════════
+       Max: "delete + locate folder is behind the menu AKA impossible to get to lol."
+
+       MEASURED, not guessed. `.tpb-panel` (this browser, :3-digit z below) and
+       `#syn-panel .syn-ctx-menu.act` (the menu it used to open) BOTH carry
+       `z-index: 2147483646`, and at EQUAL z-index the later DOM node wins. The panel is
+       `document.body.appendChild`ed at open time; `#syn-panel` is markup near the top of <body>.
+       So the panel is always the later sibling and the menu always loses.
+
+       ⚠️ RAISING THE NUMBER CANNOT FIX IT. The menu is scoped INSIDE #syn-panel and is trapped in
+       that element's stacking context — the trap this file already documents elsewhere: "a huge z
+       inside an auto-z branch loses to any positive sibling". No value of z on a descendant beats
+       a body-level sibling of its ancestor.
+
+       `.pmenu` is defined at BODY level with NO #syn-panel prefix — THAT is how it escapes — and
+       it is this project's canonical recycled menu, clamp included. So the folder actions move
+       onto it. NO THIRD MENU IS INVENTED: this builds the existing `.pmenu` / `.ps` / `.pi` /
+       `.nm` classes that already ship, and adds no CSS at all.
+       rows: [{ label, danger, onPick }] ═══ */
+    window.__tpbFolderMenu = function (title, rows, x, y) {
+      if (window.__tpbMenuClose) { try { window.__tpbMenuClose (); } catch (e) {} }
+      if (! rows || ! rows.length) return null;
+      var m = document.createElement ('div'); m.className = 'pmenu';
+      if (title) { var h = document.createElement ('div'); h.className = 'ps';
+                   h.textContent = String (title); m.appendChild (h); }
+      rows.forEach (function (r) {
+        var d = document.createElement ('div'); d.className = 'pi';
+        var nm = document.createElement ('span'); nm.className = 'nm';
+        nm.textContent = r.label; d.appendChild (nm);
+        if (r.danger) {   // the house destructive cue: soft red, brighter on hover (fb61's delBtn)
+          d.style.color = 'rgba(255,139,139,.78)';
+          d.addEventListener ('mouseenter', function () { d.style.color = '#FF8B8B'; });
+          d.addEventListener ('mouseleave', function () { d.style.color = 'rgba(255,139,139,.78)'; });
+        }
+        d.addEventListener ('click', function (e) { e.stopPropagation ();
+          try { r.onPick (); } catch (x2) {} closeM (); });
+        m.appendChild (d);
+      });
+      /* body level, and appended AFTER .tpb-panel — so at the same z-index DOM order now puts the
+         MENU on top, which is the exact rule that was burying it. */
+      document.body.appendChild (m);
+      /* THE CLAMP, reused verbatim from .pmenu's own opener: max(6, min(v, edge - size - 6)).
+         A menu never runs off the screen — the house law. */
+      var mw = m.offsetWidth || 176, mh = m.offsetHeight || 60;
+      m.style.left = Math.max (6, Math.min (x, window.__vw () - mw - 6)) + 'px';
+      m.style.top  = Math.max (6, Math.min (y, window.__vh () - mh - 6)) + 'px';
+      function closeM () { if (m.parentNode) m.parentNode.removeChild (m);
+        document.removeEventListener ('pointerdown', outM, true); window.__tpbMenuClose = null; }
+      function outM (e) { if (! m.contains (e.target)) closeM (); }
+      setTimeout (function () { document.addEventListener ('pointerdown', outM, true); }, 0);
+      window.__tpbMenuClose = closeM;
+      return m;
+    };
     window.openTwoPaneBrowser = function (ev, cfg) {
       if (window.__tpbClose) { try { window.__tpbClose (); } catch (e) {} }
       // ALL rides at the TOP of the category column. `openCat` is an index into the list the CALLER
@@ -38085,6 +38358,47 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         cfg.cats = window.__catsWithAll (__c0);
         if (cfg.cats.length > __c0.length && typeof cfg.openCat === 'number' && cfg.openCat >= 0) cfg.openCat += 1;
       }
+      /* ═══ fb606 — FOLDER NAVIGATION, THE FINDER MODEL ═════════════════════════════════════════
+         Max: "I should be able to go within subfolders by clicking them or double clicking them
+         similar to an Apple navigation system, and load these tables… We should be able to go
+         inside of folders and navigate, especially with those arrows at the top next to the
+         headphones."
+
+         THE MODEL, in four rules:
+           • A category may carry `subs` — child folders, same shape, any depth. Every existing
+             caller passes none, so every existing browser behaves EXACTLY as it did.
+           • A category's `items` are EVERY leaf beneath it, not just its direct children. That is
+             the owner's other sentence — "I should be able to open the MASTER FOLDER and see all
+             of the tables in the SUB FOLDERS too" — and it is also what keeps `All` honest: the
+             root categories already hold the whole tree once, so All is still their concatenation
+             with nothing doubled and nothing missing.
+           • ONE CLICK on a folder that HAS children descends into it, and the level it lands on
+             opens on ITS All row. So the same single click both goes in AND shows everything
+             underneath. Double-click does the same thing (guarded so it descends once, not twice).
+           • ‹ › walk the navigation HISTORY, not the folder list — Back/Forward, exactly like the
+             Finder. They live in the header cluster with the headphone.
+         `hist` is a list of PATHS; a path is a list of the folder NODES walked into. Holding the
+         nodes (not indices) means a re-render can never make a history entry point somewhere else. */
+      var ROOT_CATS = cfg.cats || [];
+      var CATS = ROOT_CATS;                       // the level the left column is showing right now
+      var NAVON = !! cfg.nav;                     // arrows + breadcrumb only where the caller asks
+      var hist = [[]], histAt = 0, lastNav = 0;
+      var navBack = null, navFwd = null, crumbEl = null;
+      function curPath () { return hist[histAt] || []; }
+      function levelFor (path) {
+        if (! path.length) return ROOT_CATS;
+        var nd = path[path.length - 1];
+        /* fb524's law holds at EVERY depth — Max: "Every single folder, every single subfolder, at
+           the top is the top of the folder name ALL." Built explicitly here rather than by
+           __catsWithAll, because a node's own items ARE everything beneath it: All is that list
+           exactly, so there is no concatenation that could double a table that sits in two levels. */
+        return [{ label: 'All', isAll: true, items: nd.items || [] }].concat (nd.subs || []);
+      }
+      /* SEARCH and the selection sweep walk the ROOT categories only, at every depth. A root
+         category's items already hold every leaf beneath it — and they are the SAME OBJECTS the
+         sub-levels hand out (__catsWithAll's own rule) — so this IS the whole subtree, listed
+         once. Walking the subs as well would list every nested hit twice. */
+      function eachRootCat (fn) { ROOT_CATS.forEach (function (c) { if (c && ! c.isAll) fn (c); }); }
       var WHITE = '#FFFFFF', DIM = 'rgba(255,255,255,.5)', HOV = 'rgba(255,255,255,.86)';
       if (! document.getElementById ('tpb-style')) { var _st = document.createElement ('style'); _st.id = 'tpb-style';   // thin translucent scrollbars (Max: no chunky white bars)
         _st.textContent = '.tpb-pane::-webkit-scrollbar{width:5px;height:5px}.tpb-pane::-webkit-scrollbar-track{background:transparent}'
@@ -38101,6 +38415,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // chrome, so the panel grows by 26px instead of stealing 26px from the list: the two panes keep the
       // exact height they had before search existed. Where search rides the header row, nothing changes.
       var PANEL_H = (cfg.search === false || ! cfg.onImport) ? 294 : 320;
+      /* fb606 — the breadcrumb is 22px of NEW chrome, so the PANEL grows by 22px. It does not
+         steal 22px from the list: the two panes keep the exact height they had before navigation
+         existed, which is fb394's rule for the search row applied to the row below it. */
+      if (cfg.nav) PANEL_H += 22;
       panel.style.cssText = 'position:fixed;z-index:2147483646;width:384px;height:' + PANEL_H + 'px;display:flex;flex-direction:column;'
         + 'background:rgba(22,20,34,0.72);-webkit-backdrop-filter:blur(20px) saturate(1.4);backdrop-filter:blur(20px) saturate(1.4);'
         + 'border:1px solid rgba(255,255,255,0.11);border-radius:12px;box-shadow:0 20px 50px rgba(0,0,0,.6),inset 0 1px 0 rgba(255,255,255,.06);'
@@ -38126,6 +38444,36 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       // RIGHT — [headphone preview TOGGLE] [X close], BOTH no-box, on the same baseline as Import (Max: no box on
       // the headphone either; move it left to make room for an X so there's a way out of the menu).
       var right = document.createElement ('div'); right.style.cssText = 'flex:none;display:flex;align-items:center;gap:11px;';
+      /* ═══ fb606 — ‹ › BACK / FORWARD, "those arrows at the top next to the headphones" ═══
+         A RECYCLE, not an invention: the wavetable header already flanks its name with this exact
+         ‹ › idiom (mkFNav / .wt-nav). Same grammar, same seat, applied to navigation history.
+
+         CENTRELINE LAW — they ride in the SAME `align-items:center` flex row as the headphone and
+         the ✕, in 13px SVG glyph BOXES built to the ✕'s spec (13px viewBox 24, stroke 2.2, the
+         same 2px/1px padding). They are SVG paths, never text glyphs, so no font metric can drop
+         them off the baseline; and enabled/disabled changes ONLY `color`, never the glyph, never
+         the box — so nothing moves by a pixel in either state.
+         They sit in their own 3px-gap box so the pair reads as one control instead of two lonely
+         items spread on the cluster's 11px rhythm. */
+      if (NAVON) {
+        var navBox = document.createElement ('div');
+        navBox.style.cssText = 'flex:none;display:flex;align-items:center;gap:3px;';
+        var mkNav = function (dpath, title, can, go) {
+          var b = document.createElement ('div'); b.title = title;
+          b.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;color:rgba(255,255,255,.5);';
+          b.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="' + dpath + '"/></svg>';
+          b.onmouseenter = function () { if (can ()) b.style.color = WHITE; };
+          b.onmouseleave = function () { paintNav (); };
+          b.onclick = function (e) { e.stopPropagation (); if (can ()) { go (); } };
+          return b; };
+        navBack = mkNav ('M15 5l-7 7 7 7', 'Back',
+                         function () { return histAt > 0; },
+                         function () { histAt--; applyLevel (); });
+        navFwd  = mkNav ('M9 5l7 7-7 7', 'Forward',
+                         function () { return histAt < hist.length - 1; },
+                         function () { histAt++; applyLevel (); });
+        navBox.appendChild (navBack); navBox.appendChild (navFwd); right.appendChild (navBox);
+      }
       var prevOn = function () { return !! window.__tpbPreviewOn; };   // shared across opens + both engines (Ableton-style preview switch)
       // DELETE (fb61, narrowed fb73) — context button LEFT of the headphone: "Delete Folder" on a user folder,
       // HIDDEN everywhere else. fb73 removed "Delete Import" + the per-row ✕ (Max: single imports reference the
@@ -38136,8 +38484,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         delBtn.style.cssText = 'font-size:8.5px;letter-spacing:.5px;color:rgba(255,255,255,.5);cursor:pointer;white-space:nowrap;padding:2px 1px;display:none;';
         delBtn.onmouseenter = function () { delBtn.style.color = '#FF8B8B'; };   // soft red on hover = destructive cue
         delBtn.onmouseleave = function () { delBtn.style.color = 'rgba(255,255,255,.5)'; };
-        delBtn.onclick = function () { var cat = cfg.cats[selCat]; if (! cat) return;
-          if (cat.delKind === 'folder') { try { cfg.onDelete ('folder', cat.delPath); } catch (e) {} } };
+        delBtn.onclick = function () { var cat = CATS[selCat]; if (! cat) return;   /* fb606 — the LEVEL being shown, not the root list: at a sub-level cfg.cats[selCat] was a different folder entirely */
+          if (cat.delKind === 'folder' && cat.kind !== 'factory' && cat.kind !== 'sub') { try { cfg.onDelete ('folder', cat.delPath); } catch (e) {} } };
         right.appendChild (delBtn); }
       if (cfg.onAudition) { var hp = document.createElement ('div'); hp.title = 'Preview (headphone) — while on, click a sound to hear it';
         hp.style.cssText = 'display:flex;align-items:center;justify-content:center;padding:2px 1px;cursor:pointer;';
@@ -38206,6 +38554,27 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (inHead) head.insertBefore (srchRow, right); else panel.appendChild (srchRow);
         setTimeout (function () { try { srch.focus ({ preventScroll: true }); } catch (e) { try { srch.focus (); } catch (e2) {} } }, 0);   // opens ready to type (Max: "I'm tired of having to find Acid 303")
       }
+      /* ═══ fb606 — THE BREADCRUMB. "so it is never unclear where you are." ═══
+         FIXED-POSITION LAW: a fixed 22px row, and the path itself lives in a `flex:1;min-width:0`
+         box with `text-overflow:ellipsis`. min-width:0 is the half people leave out — without it
+         a flex child refuses to shrink below its content and the ROW grows instead of the text
+         ellipsing, which is precisely the "navigating must not resize anything" failure. The full
+         path goes in `title`, so nothing is lost to the ellipsis. The row exists at the ROOT too
+         (reading the root label), so descending never adds or removes a row: the panel's shape is
+         identical at every depth. */
+      if (NAVON) {
+        var crumbRow = document.createElement ('div');
+        crumbRow.className = 'tpb-crumb';
+        crumbRow.style.cssText = 'display:flex;align-items:center;gap:6px;height:22px;padding:0 9px 0 14px;flex:none;'
+          + 'border-bottom:1px solid rgba(255,255,255,0.05);overflow:hidden;';
+        var fic = document.createElement ('span');
+        fic.style.cssText = 'flex:none;display:flex;align-items:center;color:rgba(255,255,255,.26);';
+        fic.innerHTML = '<svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7a2 2 0 0 1 2-2h4l2.2 2.6H19a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>';
+        crumbEl = document.createElement ('div');
+        crumbEl.style.cssText = 'flex:1 1 auto;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;'
+          + 'color:rgba(255,255,255,.45);font-size:8.5px;letter-spacing:.6px;font-weight:300;';
+        crumbRow.appendChild (fic); crumbRow.appendChild (crumbEl); panel.appendChild (crumbRow);
+      }
       var bodyEl = document.createElement ('div'); bodyEl.style.cssText = 'flex:1;display:flex;min-height:0;';
       var catsEl = document.createElement ('div'); catsEl.className = 'tpb-pane'; catsEl.style.cssText = 'width:126px;border-right:1px solid rgba(255,255,255,0.07);overflow-y:auto;padding:5px;';
       var itemsEl = document.createElement ('div'); itemsEl.className = 'tpb-pane'; itemsEl.style.cssText = 'flex:1;overflow-y:auto;padding:5px;';
@@ -38216,6 +38585,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         // label in its OWN flex-shrink span so long folder/file names truncate with a real … and the count stays visible (Max)
         d.innerHTML = (o.dot ? '<span style="color:#fff;font-size:9px;line-height:1;flex:none;">•</span>' : '')
           + '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">' + esc (label) + '</span>'
+          /* fb606 — when the list you are looking at spans subfolders (the master-folder view),
+             each row says which one it came from, dimmer than the name and capped at 74px so the
+             longest subfolder name in the world cannot widen a row. flex:none + its own ellipsis. */
+          + (o.hint ? '<span style="flex:none;margin-left:6px;max-width:74px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:rgba(255,255,255,.22);font-size:8px;letter-spacing:0;">' + esc (o.hint) + '</span>' : '')
           + (o.count != null ? '<span style="flex:none;margin-left:6px;color:rgba(255,255,255,.26);font-size:8px;letter-spacing:0;">' + o.count + '</span>' : '');
         if (! o.sel) { d.onmouseenter = function () { d.style.color = HOV; d.style.background = 'rgba(255,255,255,0.05)'; };
                        d.onmouseleave = function () { d.style.color = DIM; d.style.background = 'none'; }; }
@@ -38224,11 +38597,15 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       function renderSearch (q) {
         itemsEl.innerHTML = ''; catsEl.style.opacity = '0.35'; catsEl.style.pointerEvents = 'none';
         var n = 0;
-        (cfg.cats || []).forEach (function (cat) {
-          if (cat && cat.isAll) return;   // All MIRRORS the folders below it; searching both would list every hit twice
+        /* fb606 — WHOLE SUBTREE, NOT THE CURRENT LEVEL. eachRootCat walks the ROOT categories at
+           whatever depth the left column happens to be showing, and a root category's items are
+           every leaf beneath it — so a query typed three folders deep still finds a table that
+           lives in a different branch. All is skipped inside eachRootCat because it MIRRORS those
+           folders; searching both would list every hit twice. */
+        eachRootCat (function (cat) {
           (cat.items || []).forEach (function (it) {
             if (String (it.name).toLowerCase().indexOf (q) < 0) return;
-            var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
+            var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub });
             /* fb563 — a MULTI browser (the modulator picker) toggles and stays open: you add three
                sources in a row without reopening it. Its pick() owns `sel`; the list just repaints. */
             d.onclick = function (ev) {
@@ -38247,8 +38624,8 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (! q) { catsEl.style.opacity = ''; catsEl.style.pointerEvents = ''; renderItems (selCat); }
         else renderSearch (q);
       };
-      function renderItems (ci) { itemsEl.innerHTML = ''; var cat = cfg.cats[ci]; if (! cat) return;
-        (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel });
+      function renderItems (ci) { itemsEl.innerHTML = ''; var cat = CATS[ci]; if (! cat) return;   /* fb606 — CATS is the level being shown, ROOT_CATS is the whole tree */
+        (cat.items || []).forEach (function (it) { var d = mkRow (it.name, { sel: it.sel, dot: it.sel, hint: it.sub });
           d.onclick = function (ev) {
             /* fb564 — DOUBLE-CLICK ASSIGNS. Max: "I double-click something, it just closes the menu
                without assigning it at all... if we double-click a parameter or modulation source, it
@@ -38257,17 +38634,50 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
                second click (ev.detail 2) now guarantees the source is assigned and closes. */
             if (cfg.multi && ev && ev.detail >= 2) { if (! it.sel) { try { it.pick (); } catch (e) {} } close (); return; }
             try { it.pick (); } catch (e) {}   // single-click = SELECT (commit) + (if headphone on) audition it ONCE
-            if (! cfg.multi) { cfg.cats.forEach (function (c) { (c.items || []).forEach (function (x) { x.sel = false; }); }); it.sel = true; }   /* fb563 — multi: pick() owns sel, several rows may carry the dot */
+            if (! cfg.multi) { eachRootCat (function (c) { (c.items || []).forEach (function (x) { x.sel = false; }); }); it.sel = true; }   /* fb563 — multi: pick() owns sel, several rows may carry the dot */   /* fb606 — the root cats hold every leaf ONCE, and sub-levels hand out the SAME objects, so one sweep clears the whole tree */
             renderItems (ci);
             if (window.__tpbPreviewOn && cfg.onAudition) { clearTimeout (window.__tpbPrevT); window.__tpbPrevT = setTimeout (function () { try { cfg.onAudition (); } catch (e) {} }, 120); } };   // 120ms lets the commit propagate; re-click = re-trigger
           d.ondblclick = function () { clearTimeout (window.__tpbPrevT); if (cfg.multi && ! it.sel) { try { it.pick (); } catch (e) {} } close (); };   // double-click = select (already committed on click) + close the menu; fb564: a multi picker makes sure it is ON
           itemsEl.appendChild (d); }); }
-      function paintDelete () { if (! delBtn) return; var cat = cfg.cats[selCat];
-        if (cat && cat.delKind === 'folder') { delBtn.textContent = 'Delete Folder'; delBtn.style.display = ''; }
+      function paintDelete () { if (! delBtn) return; var cat = CATS[selCat];
+        /* fb606 — NEVER on factory content and never on a SUBFOLDER of a registered folder: the
+           registry only knows the root the user added, so "remove" on either would be a lie about
+           what the click does. Callers that pass no `kind` at all (noise, samples) are unchanged. */
+        if (cat && cat.delKind === 'folder' && cat.kind !== 'factory' && cat.kind !== 'sub') { delBtn.textContent = 'Delete Folder'; delBtn.style.display = ''; }
         else { delBtn.style.display = 'none'; } }   // fb73 — no "Delete Import" (Finder owns single imports; dead paths auto-prune)
-      function renderCats () { catsEl.innerHTML = ''; cfg.cats.forEach (function (cat, ci) {
+      function renderCats () { catsEl.innerHTML = ''; CATS.forEach (function (cat, ci) {
+        var kids = (cat.subs && cat.subs.length) ? cat.subs.length : 0;
         var d = mkRow (cat.label, { sel: ci === selCat, count: (cat.items ? cat.items.length : 0) });
-        d.onclick = function () { selCat = ci; renderCats (); renderItems (ci); paintDelete (); };
+        if (kids) {
+          /* fb606 — the Finder's affordance: a folder that CONTAINS folders says so. A fixed 8px
+             box, inserted BEFORE the count span (never after) so the count stays the row's last
+             element — the row's shape, height and left rail are identical with or without it. */
+          var cv = document.createElement ('span');
+          cv.title = kids + ' subfolder' + (kids === 1 ? '' : 's');
+          cv.style.cssText = 'flex:none;width:8px;margin-left:5px;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.32);';
+          cv.innerHTML = '<svg width="6" height="9" viewBox="0 0 6 9" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 1.3L4.3 4.5 1.5 7.7"/></svg>';
+          d.insertBefore (cv, d.lastChild);
+        }
+        /* Max: "clicking them or double clicking them" — BOTH, and both mean the same thing.
+           ONE click on a folder with children descends; the level it lands on opens on its All
+           row, which is every table beneath that folder, so the same click also answers "open the
+           MASTER FOLDER and see all of the tables in the SUB FOLDERS too".
+
+           ⚠️ THE TWO GUARDS ARE NOT COSMETIC, and they guard different things. A single click
+           already re-rendered this column, so by the time the SECOND half of a double-click
+           arrives the node under the cursor is a DIFFERENT folder's row. Unguarded, a double-click
+           descends into the folder you aimed at and then straight into whatever slid under the
+           pointer — two levels for one gesture.
+             • `detail >= 2` drops the second CLICK of a double-click; the dblclick owns it.
+             • the 350 ms window drops that DBLCLICK when a descend just happened.
+           What neither of them touches is a deliberate second single click a beat later, or a
+           fast click on a DIFFERENT row (the pointer moved, so the browser restarts detail at 1)
+           — both still descend, which is the whole point of a Finder-style column. */
+        var descend = function () { lastNav = Date.now (); navTo (curPath ().concat ([cat])); };
+        d.onclick = function (e) {
+          if (kids) { if (e && e.detail >= 2) return; descend (); return; }
+          selCat = ci; renderCats (); renderItems (ci); paintDelete (); };
+        d.ondblclick = function () { if (kids && (Date.now () - lastNav) >= 350) descend (); };
         // fb540 — RIGHT-CLICK A FOLDER -> locate / remove. Max: "i'd like to right click on a
         // folder and have the option to locate the folder and or delete." Gated to folders that
         // REALLY EXIST ON DISK (an import folder, or Imports): the factory groups are generated in
@@ -38275,25 +38685,59 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         // menu offering it would be a lie.
         d.oncontextmenu = function (e) {
           e.preventDefault (); e.stopPropagation ();
-          if (! cat.delKind || ! window.__synShowMenu) return;
+          if (! cat.delKind || ! window.__tpbFolderMenu) return;
           var mi = [];
           if (cfg.onReveal) mi.push ({ label: 'Locate Folder',
-            onPick: function () { try { cfg.onReveal (cat.delKind, cat.delPath); } catch (x) {} } });
-          if (cfg.onDelete && cat.delKind === 'folder') mi.push ({ label: 'Remove Folder',
-            onPick: function () { try { cfg.onDelete ('folder', cat.delPath); } catch (x) {} } });
-          if (mi.length) window.__synShowMenu (cat.label, mi, e.clientX, e.clientY);
+            onPick: function () { try { cfg.onReveal (cat.delKind, cat.delPath, cat.label); } catch (x) {} } });
+          /* fb606 — REMOVE IS NEVER OFFERED ON FACTORY CONTENT. The C++ payload tags a factory
+             folder `kind:'factory'`; a subfolder of a registered folder is tagged 'sub' (the
+             registry only knows the ROOT the user added, so removing a child is not a thing that
+             can happen). Both can still be LOCATED — revealing a folder is never destructive. */
+          if (cfg.onDelete && cat.delKind === 'folder' && cat.kind !== 'factory' && cat.kind !== 'sub')
+            mi.push ({ label: 'Remove Folder', danger: true,
+              onPick: function () { try { cfg.onDelete ('folder', cat.delPath); } catch (x) {} } });
+          /* fb606 — was window.__synShowMenu, which is #syn-panel-SCOPED and therefore rendered
+             BEHIND this panel at equal z-index no matter what number it carried. __tpbFolderMenu
+             is the body-level .pmenu, appended after the panel, with .pmenu's own clamp. */
+          if (mi.length) window.__tpbFolderMenu (cat.label, mi, e.clientX, e.clientY);
         };
         catsEl.appendChild (d); }); }
-      renderCats (); renderItems (selCat); paintDelete ();
+      /* ── the three lines that move you between levels ──────────────────────────────────────
+         navTo pushes a path and TRUNCATES anything forward of it (a browser's Forward stack dies
+         the moment you take a new turn — the Finder's rule, and Safari's).                    */
+      function navTo (path) {
+        hist = hist.slice (0, histAt + 1); hist.push (path); histAt = hist.length - 1; applyLevel (); }
+      function applyLevel () {
+        CATS = levelFor (curPath ());
+        selCat = 0;                       // every level opens on its own All = everything beneath it
+        renderCats (); renderItems (selCat); paintDelete (); paintNav (); }
+      function paintNav () {
+        if (! NAVON) return;
+        var canB = histAt > 0, canF = histAt < hist.length - 1;
+        /* CENTRELINE LAW — only the COLOUR changes between enabled and disabled. Same SVG, same
+           box, same seat: swapping states cannot move a pixel. */
+        if (navBack) { navBack.style.color = canB ? DIM : 'rgba(255,255,255,.16)'; navBack.style.cursor = canB ? 'pointer' : 'default'; }
+        if (navFwd)  { navFwd.style.color  = canF ? DIM : 'rgba(255,255,255,.16)'; navFwd.style.cursor  = canF ? 'pointer' : 'default'; }
+        if (crumbEl) {
+          var full = [cfg.rootCrumb || 'All Folders'].concat (curPath ().map (function (nd) { return nd.label; })).join ('  \u203a  ');
+          crumbEl.textContent = full; crumbEl.title = full;   // the ellipsis hides nothing you cannot read
+        }
+      }
+      renderCats (); renderItems (selCat); paintDelete (); paintNav ();
       document.body.appendChild (panel);
       var pw = panel.offsetWidth || 384, ph = panel.offsetHeight || PANEL_H;
       var ex = (ev && ev.clientX) || 120, ey = (ev && ev.clientY) || 120;
       panel.style.left = Math.max (6, Math.min (ex, window.__vw() - pw - 6)) + 'px';
       panel.style.top  = Math.max (6, Math.min (ey, window.__vh() - ph - 6)) + 'px';
       function close () { clearTimeout (window.__tpbPrevT);
+        if (window.__tpbMenuClose) { try { window.__tpbMenuClose (); } catch (e) {} }   /* fb606 — the folder menu never outlives its browser */
         try { var sf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('stopPreview') : null; if (sf) sf (); } catch (e) {}   // silence any active audition (Max: it kept playing)
         if (panel.parentNode) panel.parentNode.removeChild (panel); document.removeEventListener ('pointerdown', onDown, true); window.__tpbClose = null; }
-      function onDown (e) { if (! panel.contains (e.target)) close (); }
+      /* fb606 — the folder menu is a body-level .pmenu, so it is literally "outside the panel".
+         Without this line the first click on Locate/Remove would shut the browser out from under
+         it — which is the same bug in a new costume. */
+      function onDown (e) { if (e.target && e.target.closest && e.target.closest ('.pmenu')) return;
+        if (! panel.contains (e.target)) close (); }
       setTimeout (function () { document.addEventListener ('pointerdown', onDown, true); }, 0);
       window.__tpbClose = close; return panel;
     };

@@ -23,7 +23,10 @@ import numpy as np
 import wtlib
 
 HERE   = os.path.dirname(os.path.abspath(__file__))
-OUT    = os.path.join(HERE, "bank")
+# fb606 — the bank is ~120 MB of wav and must not land in the worktree. Point TERRAIN_WT_OUT
+# at the real destination (<terrainDataDir()>/Wavetables/Factory) and gate.py writes straight
+# there; with nothing set it still falls back to ./bank so the documented run works unchanged.
+OUT    = os.environ.get("TERRAIN_WT_OUT") or os.path.join(HERE, "bank")
 TARGET = 120
 
 # The collision threshold is MEASURED, not invented: two tables must be at least as far apart as
@@ -31,13 +34,32 @@ TARGET = 120
 COLLIDE = None   # set from calibration
 CLOSE   = None   # 1.5x the floor — "related but clearly distinguishable"
 
-# Per-category quotas. WITHOUT THESE the global score cut deleted all 12 PHYSICAL tables, because
-# modal and waveguide sources are darker than spectral ones and the score rewards brightness —
-# i.e. the selection was throwing away precisely the tables no other synth can ship. Quotas also
-# guarantee FOUNDATION exists, which is the "few basic ones, in their own folder" the owner asked
-# for. Any category that cannot fill its quota releases the remainder to the others.
-QUOTA = {"FOUNDATION": 16, "HARMONIC": 12, "PHYSICAL": 12, "DIGITAL": 16,
-         "SPECTRAL": 16, "CHAOS": 16, "CINEMATIC": 16, "VOCAL": 16}
+# ══════════════════════════════════════════════════════════════════════════════════════════
+# PER-CATEGORY QUOTAS — fb606, re-balanced from eight categories to the merged TEN.
+#
+# ⚠️ WITHOUT THESE the global score cut deleted ALL TWELVE PHYSICAL TABLES. The score rewards
+# brightness and modal/waveguide sources are darker by nature, so an unquota'd selection throws
+# away precisely the tables no other synth can ship. That failure is the reason this table
+# exists and it is just as live with ten categories as it was with eight: Physical and Basic
+# Shapes are BOTH structurally dark (a sine is one harmonic by definition) and would BOTH be
+# cut by a global ranking. Do not replace this with a score threshold.
+#
+# How the ten are sized. Each quota is set from the candidate pool behind it, so no category is
+# asked for tables that do not exist and none of them ships its weakest material just to hit a
+# round number. Candidates -> quota:
+#     Basic Shapes 12->10 · Analog 14->12 · Digital 22->14 · Vocal 24->14 · Metallic 12->12
+#     Spectral 22->14 · Chaos 24->14 · Cinematic 12->10 · Harmonic 12->10 · Physical 12->10
+# The quotas sum to exactly TARGET, so nothing is left to the "spare" pass unless a category
+# under-fills — and when one does, the remainder is released to the others rather than
+# shipping a short bank. Metallic is quota==pool: those twelve struck/rung tables have no
+# competition to survive, they simply all ship. Physical is deliberately quota < pool so it
+# can absorb the one modal collision the projection grid still cannot resolve (see
+# bank2_probe.cpp, BARS_GLASS) and STILL fill its ten slots.
+# ══════════════════════════════════════════════════════════════════════════════════════════
+QUOTA = {"Basic Shapes": 10, "Analog":    12, "Digital":   14, "Vocal":    14,
+         "Metallic":     12, "Spectral":  14, "Chaos":     14, "Cinematic": 10,
+         "Harmonic":     10, "Physical":  10}
+assert sum(QUOTA.values()) == 120, "quotas must sum to TARGET"
 
 
 def load_modules():
@@ -59,10 +81,20 @@ def load_modules():
 
 
 def category_of(mod, name):
+    """fb606 — every generator DECLARES its merged-ten folder; guessing is a hard error.
+
+    This used to fall back to the module name upper-cased, which is exactly how the bank ended
+    up with folders the browser had never heard of. If a table has no CATEGORY entry that is a
+    bug in the generator, and a loud one beats a table silently filed under "GEN_SOMETHING".
+    """
     if hasattr(mod, "CATEGORY") and name in mod.CATEGORY:
-        return mod.CATEGORY[name]
-    n = mod.__name__.replace("gen_", "").upper()
-    return n.split("_")[0]
+        c = mod.CATEGORY[name]
+        if c not in QUOTA:
+            raise KeyError(f"{mod.__name__}: '{name}' claims category '{c}', "
+                           f"which is not one of the merged ten {sorted(QUOTA)}")
+        return c
+    raise KeyError(f"{mod.__name__}: '{name}' has no CATEGORY entry — add it to that module's "
+                   f"CATEGORY dict. The merged ten are {sorted(QUOTA)}.")
 
 
 def calibrate():
@@ -166,20 +198,63 @@ def main():
     tri = DS[np.triu_indices(m, 1)]
 
     os.makedirs(OUT, exist_ok=True)
+
+    # fb606 — SWEEP THE OLD TAXONOMY. This directory is the live factory folder, so a rerun that
+    # renames FOUNDATION to "Basic Shapes" must not leave FOUNDATION sitting next to it — the
+    # browser would show both and the owner asked for no folder that isn't one of the ten.
+    swept = []
+    for d in sorted(os.listdir(OUT)):
+        p = os.path.join(OUT, d)
+        if os.path.isdir(p) and d not in QUOTA:
+            for f in glob.glob(os.path.join(p, "*.wav")): os.remove(f)
+            try: os.rmdir(p); swept.append(d)
+            except OSError: print(f"   sweep: {d} is not one of the ten but is NOT EMPTY of "
+                                  f"non-wav files — left in place, look at it")
+    print("   sweep of folders outside the merged ten: "
+          + (f"FIRED — removed {', '.join(swept)}" if swept else "did not fire (nothing stale)"))
+
+    # fb606 — FILENAME COLLISION DETECTOR. Four table names exist twice in the candidate pool
+    # (SIERPINSKI, DUST, SHATTER, SIEVE each appear in two generators). Today the merged
+    # taxonomy keeps every such pair in DIFFERENT folders, so nothing collides — but re-file one
+    # of them and the second write would silently overwrite the first and the bank would be 119
+    # tables while every count still said 120. Check it every run and say so either way.
+    seen, clash = {}, []
+    for e in S:
+        k = (e['cat'], e['name'])
+        if k in seen: clash.append(f"{e['cat']}/{e['name']} (from {seen[k]} and {e['mod']})")
+        seen[k] = e['mod']
+    print("   filename-collision check: "
+          + (f"FIRED — {len(clash)} CLASH(ES): {'; '.join(clash)}" if clash
+             else f"did not fire — all {len(S)} names unique within their folder"))
+
     bycat = {}
     for e in S:
         d = os.path.join(OUT, e['cat']); os.makedirs(d, exist_ok=True)
         wtlib.write_wav(os.path.join(d, e['name'] + ".wav"), e['frames'])
         bycat.setdefault(e['cat'], []).append(e)
 
-    print(f"{'category':<12} {'tables':>6} {'mean harm60':>12} {'median span':>12}")
-    print("-" * 46)
+    # fb606 — NO EMPTY CATEGORIES. "delete anything that doesn't have a table inside of it."
+    empty = [c for c in QUOTA if c not in bycat]
+    print("   empty-category check: "
+          + (f"FIRED — DROPPED {', '.join(empty)} (zero tables)" if empty
+             else f"did not fire — all {len(QUOTA)} categories have content"))
+    for c in empty:
+        p = os.path.join(OUT, c)
+        if os.path.isdir(p):
+            for f in glob.glob(os.path.join(p, "*.wav")): os.remove(f)
+            try: os.rmdir(p)
+            except OSError: pass
+
+    print(f"{'category':<14} {'tables':>6} {'quota':>6} {'mean harm60':>12} {'median span':>12}")
+    print("-" * 54)
     for c in sorted(bycat):
         v = bycat[c]
-        print(f"{c:<12} {len(v):>6} {int(np.mean([x['harm60'] for x in v])):>12} "
+        print(f"{c:<14} {len(v):>6} {QUOTA.get(c, 0):>6} "
+              f"{int(np.mean([x['harm60'] for x in v])):>12} "
               f"{np.median([x['span'] for x in v]):>11.1f}")
-    print("-" * 46)
-    print(f"{'TOTAL':<12} {m:>6} {int(np.mean([x['harm60'] for x in S])):>12} "
+    print("-" * 54)
+    print(f"{'TOTAL':<14} {m:>6} {sum(QUOTA.values()):>6} "
+          f"{int(np.mean([x['harm60'] for x in S])):>12} "
           f"{np.median([x['span'] for x in S]):>11.1f}")
     print(f"\nSerum 2 factory: 371 tables · mean harm60 278 · median span 19.9 st")
 

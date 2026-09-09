@@ -862,7 +862,23 @@ public:
     //    Msg-thread only. Persisted best-effort to a small JSON in app-data (survives where writable).
     void         addImportPath (int kind, const juce::String& path);   // decides file-vs-folder via File::isDirectory
     void         removeImportPath (int kind, const juce::String& path);// un-reference a user folder OR single import (NEVER touches the file on disk)
-    juce::String getImportsJson (int kind);                            // {files:[{name,path}], folders:[{name,path,count,items:[…]}]}
+    // fb606 — THE PAYLOAD THE WAVETABLE BROWSER NAVIGATES. Recursive (depth-capped), and every
+    // item carries `rel`, its subfolder path relative to the registered root, so the UI has a tree.
+    //   { kind, files:[{name,path}],
+    //     folders:[{ name, path, kind:"user", count, dirs, depth, subs:["Sub","Sub/Deeper"],
+    //                items:[{name,path,rel}], truncated, cap:""|"depth"|"root"|"total" }],
+    //     factory:{ root, exists, total, note, cats:[{dir,name,cat,path,kind:"factory",count,items:[…]}] },
+    //     builtin:{ total, cats:[{name,cat,count,items:[{name,preset}]}] },
+    //     cats:[{ name, cat, builtin, factory, total, factoryDirs:[…] }],     // the merged ten, EMPTIES DROPPED
+    //     scan:{ ms, roots, files, dirs, cached, depthCap, fileCapPerRoot, fileCapTotal, truncated, capHit } }
+    // `factory`, `builtin` and `cats` are wavetable-only (kind 1); noise/sample get the first three keys.
+    // FACTORY CONTENT IS NEVER IN `folders[]` — that is what makes "Remove Folder" structurally
+    // unable to reach it. MESSAGE THREAD ONLY (it walks the filesystem).
+    juce::String getImportsJson (int kind);
+    // fb606 — the MANAGED Wavetables folder (what "Open Imports Folder" reveals), same recursive
+    // walker and same caps. { root, exists, total, dirs, depth, subs:[…], items:[{name,path,rel}],
+    // truncated, cap, depthCap, ms }. ⚠️ This REPLACES listImports' old bare array of names.
+    juce::String getManagedWavetablesJson();
     void         loadImportsRegistry ();
     void         saveImportsRegistry (int kind);
     tw::SampleLoader& getOscSampleLoader (int idx) noexcept { return oscSampleLoaders_[(size_t) juce::jlimit (0, 3, idx)]; }
@@ -2197,6 +2213,15 @@ private:
     bool   sampAudPending_ = false;
     // IMPORTS REGISTRY (fb60, 3-way fb74) — msg-thread-only path lists (reference-in-place); [0]=noise, [1]=wavetable, [2]=sample
     juce::StringArray importFiles_[3], importFolders_[3];
+    // fb606 — SCAN CACHE. A recursive walk is not something to redo three times a second on the
+    // thread that also runs the WebView. Cached as the VAR TREE, not the string, so a cache hit can
+    // flip scan.cached to true and tell the truth about where the answer came from. Invalidated
+    // outright by addImportPath / removeImportPath / loadImportsRegistry.
+    juce::var    importsCache_[3];
+    juce::uint32 importsCacheAt_[3] { 0, 0, 0 };
+    bool         importsCacheValid_[3] { false, false, false };
+    static constexpr juce::uint32 kImportsCacheTtlMs = 1500;
+    juce::Array<juce::var> builtinWtCatItems (int cat) const;   // fb606 — the 46 built-ins for one merged category
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;
