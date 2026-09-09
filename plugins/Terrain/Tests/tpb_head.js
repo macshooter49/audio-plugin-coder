@@ -15,7 +15,8 @@
 // — so deleting the search row made `railMag` null, the bar compared what was left, and it went
 // GREEN having stopped measuring the law it exists for. Every bar here fails on a MISSING number.
 //
-// Mutation controls:  HDR_MUT=band | clip | noellip | ltr | nobidi | nocap | notitle | pad  (each must go RED)
+// Mutation controls:  HDR_MUT=band | clip | noellip | ltr | nobidi | nocap | notitle | pad | tight
+//                      | nofloor                                               (each must go RED)
 //                     HDR_MUT=push                                 (must stay GREEN — see below)
 const puppeteer = require('puppeteer-core');
 const P   = require('path').join(__dirname, '..') + '/Source/ui/public/index.html';
@@ -102,6 +103,8 @@ const CASES = [
       const panel = window.openTwoPaneBrowser({ clientX: 300, clientY: 160 }, cfg);
       const head  = panel.children[0];
       const crumbBox = panel.querySelector('.tpb-crumb');
+      const srowEarly = panel.querySelector('.tpb-srow');
+      const right = head.children[head.children.length - 1];
 
       /* ── MUTATIONS: each puts the header back into a state fb608 removed, so a green bar here
             would mean the bar cannot see the thing it claims to measure. ── */
@@ -135,6 +138,9 @@ const CASES = [
         [].slice.call(head.querySelectorAll('[title]')).forEach(e => { if (/import/i.test(e.title)) e.title = ''; }); }
       if (MUT === 'pad') { const r = panel.querySelector('.tpb-srow');    // the magnifier off the 14px rail
         if (r) r.style.paddingLeft = '0px'; }
+      /* fb609 — the path back HARD against the ‹, which is what fb608 shipped and Max rejected on
+         sight: "the directory is WAY too close to the ARROWS." Bar [6] used to ASSERT this state. */
+      if (MUT === 'tight' && crumbBox) crumbBox.style.marginRight = '0px';
 
       /* descend, so the crumb carries a real path */
       if (opts.descend || opts.descendRTL) {
@@ -144,6 +150,14 @@ const CASES = [
         hit(/^TERRAIN-WAVETABLES/);
         if (opts.descendRTL)      hit(/^\u05e6/);              // צלילים
         else if (opts.descend > 1) hit(/^SPECTRAL/);
+      }
+      /* ⚠️ CROWD THE CLUSTER — the only way to reach SRCH_MIN. In every shipping configuration the
+         seat's natural flex basis already keeps it above its floor, so the floor is a guard for a
+         cluster that grows later. These stand-in glyphs ARE that later cluster. */
+      if (opts.crowd) for (let i = 0; i < opts.crowd; i++) {
+        const d = document.createElement('div');
+        d.style.cssText = 'flex:none;width:15px;height:13px;';
+        right.insertBefore(d, right.lastChild);
       }
       /* select the deletable folder, so "Delete Folder" claims part of the row */
       if (opts.pickDeletable) {
@@ -159,7 +173,7 @@ const CASES = [
         return +(box(e).l + parseFloat(getComputedStyle(e).paddingLeft || 0)).toFixed(2); };
 
       const kids  = [].slice.call(panel.children);
-      const right = head.children[head.children.length - 1];
+      if (MUT === 'nofloor' && srowEarly) srowEarly.style.minWidth = '0px';
       const inp   = panel.querySelector('input.tpb-srch');
       const srow  = panel.querySelector('.tpb-srow');
       const mag   = srow ? srow.querySelector('svg') : null;
@@ -260,7 +274,10 @@ const CASES = [
        over.length ? over.map(c => c.key + ': ' + M[c.key].overlap.join(' ')).join(' | ')
                    : 'wavetable row → ' + M.wavetable.leaves);
   const minSrch = Math.min(...CASES.map(c => M[c.key].inpW));
-  gate(minSrch >= 96, '[4] THE FIELD IS STILL A FIELD IN EVERY BROWSER (≥ 96px)',
+  /* fb609 — the floor came down from 96 with Max's blessing ("i don't mind the search getting a
+     little smaller") to buy the path its air. 74 is still ~12 characters against a 42px
+     placeholder — room to TYPE, not merely to read the prompt. */
+  gate(minSrch >= 74, '[4] THE FIELD IS STILL A FIELD IN EVERY BROWSER (≥ 74px)',
        CASES.map(c => c.key + ' ' + M[c.key].inpW).join(' / '));
 
   // ── [5] THE ＋ CARRIES THE WORDS, AND IT STILL IMPORTS ──────────────────────────────────────
@@ -272,11 +289,16 @@ const CASES = [
        '[5] THE ＋ EMBLEM IS IN THE CLUSTER, KEEPS THE LABEL’S WORDS, AND FIRES onImport',
        impCases.map(c => c.key + ' "' + M[c.key].plusTitle + '" fired=' + M[c.key].plusFired).join('  '));
 
-  // ── [6] THE PATH HUGS THE ARROWS ────────────────────────────────────────────────────────────
-  const wv = M.wavetable;
-  const hug = wv.crumbExists && wv.crumbInHead && wv.navBox && Math.abs(wv.crumbBox.r - wv.navBox.l) <= 1.0;
-  gate(hug, '[6] THE PATH IS IN THE HEADER, HARD AGAINST THE ‹ › PAIR',
-       'crumb ends ' + (wv.crumbBox && wv.crumbBox.r) + ', arrows start ' + (wv.navBox && wv.navBox.l));
+  // ── [6] THE PATH HAS REAL AIR ON BOTH SIDES ─────────────────────────────────────────────────
+  /* ⚠️ THIS BAR USED TO ASSERT THE BUG. fb608 read "put it next to the arrows" literally and gated
+     `|crumb.right − nav.left| <= 1` — a GREEN BAR CERTIFYING A COLLISION. Max, on the screenshot:
+     "the directory is WAY too close to the ARROWS." The gap is now the claim. */
+  const NAV_AIR = 42;
+  const wv = M.wavetable, air = wv.navBox ? +(wv.navBox.l - wv.crumbBox.r).toFixed(1) : null;
+  gate(wv.crumbExists && wv.crumbInHead && air != null && Math.abs(air - NAV_AIR) <= 1.5,
+       '[6] THE PATH IS IN THE HEADER WITH ' + NAV_AIR + 'px OF AIR BEFORE THE ‹ ›',
+       'path ends ' + wv.crumbBox.r + ', arrows start ' + wv.navBox.l + '  →  ' + air + 'px'
+       + (air < 8 ? '   *** TOUCHING ***' : ''));
   gate(CASES.filter(c => !c.nav).every(c => !M[c.key].crumbExists),
        '[7] AND IT DOES NOT EXIST WHERE THERE IS NO NAVIGATION',
        CASES.filter(c => !c.nav).map(c => c.key + '=' + M[c.key].crumbExists).join(' '));
@@ -292,9 +314,9 @@ const CASES = [
   gate(deep.crumbEllipsed === true && deep.crumbOv === 'hidden' && deep.crumbTov === 'ellipsis' && headClipped
        && deep.crumbTitle && deep.crumbTitle.indexOf('SPECTRAL') >= 0
        && deep.crumbTitle === deep.crumbText && stillPut && deep.overlap.length === 0
-       && Math.abs(deep.crumbBox.w - 132) <= 1,
+       && Math.abs(deep.crumbBox.w - 102) <= 1,   /* the CAP binds here — see [9] for the FLOOR */
        '[8] A LONG PATH ELLIPSES INSIDE A CAPPED BOX — THE ICONS DO NOT MOVE A PIXEL',
-       'path "' + deep.crumbText + '"  box ' + deep.crumbBox.w + 'px (cap 132)  field ' + deep.inpW
+       'path "' + deep.crumbText + '"  box ' + deep.crumbBox.w + 'px (cap 102)  field ' + deep.inpW
        + 'px  overflows=' + deep.crumbEllipsed + '  first char at ' + (ch && ch.first.l) + ', last at '
        + (ch && ch.last.r) + ', box ' + (ch && ch.boxL) + '..' + (ch && ch.boxR)
        + '  → ' + (headClipped ? 'HEAD clipped, tail visible (… on the LEFT)' : '*** WRONG END ***')
@@ -310,10 +332,39 @@ const CASES = [
 
   // ── [9] "DELETE FOLDER" JOINS THE ROW AND STILL NOTHING BREAKS ──────────────────────────────
   const del = await pg.evaluate(c => window.__hdr(c, { pickDeletable: true }), CASES[0]);
-  gate(del.delShown && del.overlap.length === 0 && del.inpW >= 96,
-       '[9] "DELETE FOLDER" APPEARS AND THE ROW STILL SEATS EVERYTHING',
+  /* the FLOOR's own regime: the trash glyph widens the cluster, the path drops BELOW its cap, and
+     the seat holds at SRCH_MIN. If this and [8] ever report the same path width, one of the two
+     constants has stopped doing anything. */
+  gate(del.delShown && del.overlap.length === 0 && del.inpW >= 74 && del.crumbBox.w < 100,
+       '[9] THE TRASH GLYPH JOINS THE ROW — THE PATH GIVES WAY, THE FIELD HOLDS ITS FLOOR',
        'delete shown=' + del.delShown + '  field ' + del.inpW + 'px  overlap=' + (del.overlap.join(',') || 'none')
        + '  path ' + (del.crumbBox && del.crumbBox.w) + 'px');
+
+  // ── [9b] TYPING A LONG QUERY MUST NOT REACH THE PATH ────────────────────────────────────────
+  /* the input scrolls its own text, so a long query must never widen the seat and shove the path.
+     Measured with the field full, not empty — the state the resting screenshot cannot show. */
+  const typed = await pg.evaluate(async c => {
+    const r = window.__hdr(c, { descend: 2, noClick: 1 });
+    const inp = document.querySelector('input.tpb-srch');
+    inp.value = 'TERRA SIERPINSKI GASKET LADDER'; inp.oninput();
+    await new Promise(z => setTimeout(z, 30));
+    const panel = document.querySelector('.tpb-panel'), head = panel.children[0];
+    const rp = panel.getBoundingClientRect(), K = rp.width / 384;
+    const X = e => { const b = e.getBoundingClientRect();
+      return { l: +((b.left - rp.left) / K).toFixed(1), r: +((b.right - rp.left) / K).toFixed(1) }; };
+    const cr = X(panel.querySelector('.tpb-crumb')), nb = X(head.children[head.children.length - 1].children[0]);
+    return { seat: X(panel.querySelector('.tpb-srow')), crumb: cr, air: +(nb.l - cr.r).toFixed(1),
+             overlaps: X(panel.querySelector('.tpb-srow')).r > cr.l + 0.5 };
+  }, CASES[0]);
+  gate(!typed.overlaps && Math.abs(typed.air - NAV_AIR) <= 1.5,
+       '[9b] A LONG QUERY SCROLLS INSIDE THE FIELD — IT DOES NOT PUSH THE PATH',
+       'seat ends ' + typed.seat.r + ', path starts ' + typed.crumb.l + ', air before ‹ › ' + typed.air + 'px');
+
+  // ── [9c] AND THE SEAT'S FLOOR ENGAGES WHEN THE CLUSTER GROWS ────────────────────────────────
+  const crowd = await pg.evaluate(c => window.__hdr(c, { descend: 2, crowd: 3, noClick: 1 }), CASES[0]);
+  gate(crowd.inpW >= 74 && crowd.crumbBox.w < 45 && crowd.overlap.length === 0,
+       '[9c] THREE MORE GLYPHS IN THE CLUSTER — THE PATH COLLAPSES, THE FIELD STOPS AT ITS FLOOR',
+       'field ' + crowd.inpW + 'px  path ' + crowd.crumbBox.w + 'px  overlap=' + (crowd.overlap.join(',') || 'none'));
 
   // ── [10] fb394's SURVIVING LAW: the field is chrome, not a widget ───────────────────────────
   const boxy = CASES.filter(c => { const x = M[c.key].box; return !x

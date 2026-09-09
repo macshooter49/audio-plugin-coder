@@ -22,6 +22,11 @@
 #    nocap    the path box loses its max-width → it grows into the search field
 #    notitle  the ＋ emblem loses the words the label used to show
 #    pad      the magnifier comes off the 14px rail the categories sit on
+#    tight    the path back HARD against the ‹ — the state fb608 shipped and Max rejected on sight,
+#             and which bar [6] used to ASSERT as a feature ("hard against the ‹ › pair")
+#    nofloor  the search seat loses its min-width. It changes NOTHING in any shipping layout, so the
+#             gate crowds the cluster with three extra glyphs to reach it: with the floor the field
+#             holds 75px and the path collapses to 25px; without it the field collapses to 11.2px.
 #    push     the path text loses min-width:0 → NOTHING HAPPENS, and that is the point: Flexbox
 #             §4.5 already clamps the automatic minimum to zero on an overflow:hidden box, so the
 #             folklore that credits min-width:0 for the ellipsis is wrong. Kept as a standing
@@ -49,7 +54,7 @@ run () {  # run <name> <expected-exit>
 echo "══ fb608 HEADER GATES ══"
 run ""        0        # as it ships
 echo "  ── controls that MUST go red ──"
-for m in band clip noellip ltr nobidi nocap notitle pad; do run "$m" 1; done
+for m in band clip noellip ltr nobidi nocap notitle pad tight nofloor; do run "$m" 1; done
 echo "  ── the control that must STAY green (min-width:0 is not the mechanism) ──"
 run push      0
 

@@ -138,7 +138,10 @@ let FAIL=0; const bad=m=>{FAIL++; return '  ✗ '+m;};
     if(!panel) return {err:'panel not found'};
     const svgs=[...panel.querySelectorAll('svg')];
     const head=panel.firstChild;
-    const right=[...head.children].find(c=>c.style.gap==='11px');
+    /* fb609 — this used to be `.find(c => c.style.gap === '11px')`. The cluster's rhythm went to
+       13px and this returned undefined, which empties `kids` and makes every bar below vacuous
+       rather than red. The cluster is the LAST child of the header; find it structurally. */
+    const right=head.children[head.children.length-1];
     const kids=right?[...right.children]:[];
     const box=e=>{const r=e.getBoundingClientRect();return {w:+r.width.toFixed(1),h:+r.height.toFixed(1),x:+r.left.toFixed(1)};};
     return { nRight:kids.length, boxes:kids.map(box),
