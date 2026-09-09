@@ -37548,6 +37548,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 
   // the ordered categories, factory + imports, in the browser's own order
   window.__wtAllCats = function (o, cb) {
+    /* 🚨 fb607 — cb MUST FIRE EXACTLY ONCE, WHATEVER HAPPENS BELOW. An arrow that never gets its
+       callback is an arrow the user presses and presses while nothing moves — which is precisely
+       how fb606's shape change presented. One latch, so a throw anywhere costs at most the
+       categories we had, never the press. */
+    var fired = false;
+    var _cb = cb;
+    cb = function (c) { if (fired) return; fired = true; try { _cb (c || []); } catch (e) {} };
     var sel = document.getElementById ('osc-' + o + '-preset-select');
     var cats = [];
     if (sel) {
@@ -37580,13 +37587,33 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
               .catch (function () { land (null); }); }
         catch (e) { land (null); } }); };
     Promise.all ([pj ('listWtImports'), pj ('listImports')]).then (function (r) {
-      var reg = r[0] || {}, legacy = r[1] || [];
+      /* 🚨 fb607 — THE ARROWS WENT DEAD HERE, AND ONLY ON A REAL BACKEND.
+         fb606 changed `listImports` from a bare JSON ARRAY OF NAMES to a structured OBJECT
+         ({root, exists, items:[{name,path,rel}], …}) and did not update this reader. `legacy.map`
+         on an object throws — and the `.then(success, failure)` form three lines below CANNOT
+         catch a throw inside its own success handler (that is the fb562 note, read the other way
+         round). So cb() was never called, wtStepBusy stayed 1 until the 1500 ms backstop, and the
+         arrow did nothing. Headless never saw it: with no backend `pj` times out, `legacy` falls
+         back to [], and `.map` is fine — which is exactly why every gate stayed green.
+         Both shapes are accepted now, and cb() is guaranteed to fire exactly once below. */
+      var reg = r[0] || {}, legacy = r[1];
       (reg.folders || []).forEach (function (f) {
         cats.push ({ label: f.name, items: (f.items || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; }) }); });
+      /* fb607 — the FACTORY bank (the 120 tables) was never added, so the arrows could not reach
+         it even once the throw was fixed. It is a separate branch of the payload by design:
+         factory is deliberately NOT in folders[] so "Remove Folder" cannot reach it (fb606). */
+      ((reg.factory && reg.factory.cats) || []).forEach (function (c) {
+        var its = (c.items || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; });
+        if (its.length) cats.push ({ label: c.name || c.cat || c.dir, items: its }); });
+      var legacyItems = Array.isArray (legacy)                                   // pre-fb606 shape
+            ? legacy.map (function (nm) { return { kind: 'import', name: nm, path: null }; })
+          : (legacy && Array.isArray (legacy.items))                             // fb606 shape
+            ? legacy.items.map (function (it) { return { kind: 'import', name: it.name, path: it.path || null }; })
+          : [];
       var loose = (reg.files || []).map (function (it) { return { kind: 'import', name: it.name, path: it.path }; })
-        .concat ((legacy || []).map (function (nm) { return { kind: 'import', name: nm, path: null }; }));
+        .concat (legacyItems);
       if (loose.length) cats.push ({ label: 'Imports', items: loose });
-      cb (cats);
+      cb (cats);   // fb607 — latched: safe even if a shape below ever changes again
     /* ⚠️ fb562 — .then(f).catch(g) IS NOT try/catch. If cb() itself throws inside the then, the
        catch fires and calls cb() A SECOND TIME — one arrow press, two steps. The two-argument
        form only runs the failure handler when the PROMISE rejects, never when the success handler
