@@ -86,3 +86,11 @@ Five readers over the code, every fact with file:line, several RAN. Full reports
 - A stale second AU bundle claims `aumu/Tern/Wvcr` at `/Library/Audio/Plug-Ins/Components` (Feb 11). Hosts and gates may pick it. Remove it before trusting any AU cert.
 
 **Build order, corrected:** 0 · serialiser fixed point (+ gate) → 1 · `<preset>` child + load/save natives + clears-first + the two-bar gate → 2 · assets travel (factory by name, one-shots and IRs as FLAC-24, format version) → 3 · banks, catalogue courier, Terra in the bundle, `.terrainpack` in/out, AU program list → 4 · the surfaces in the WebView (body-level, freeze flag, notes, favourites, vocab) → 5 · the environment seat.
+
+## 10. Build log
+
+- **Stage 0 — fb617 `01b5b16`**: fixed-point serialiser (`<layers>` remove-then-add, slice-list guard, last child wins). `preset_roundtrip_cert` 5/5.
+- **Stage 1 — fb618 `62abcfe` / fb618a `bfd98fc`**: `<preset>` child (first child, remove-then-add), TRN1 `.terrain`, `savePatchFile/loadPatchFile/readPatchHeader/getPresetMeta/setPresetMeta` natives, ABSENT MEANS CLEAR (`clearPatchBlobs` in `setStateInformation`, `resetPatchState` on the file path). `preset_null_cert` 4/4; `state_holes` bars 2/2b/5 flipped to the new law.
+- **Stage 3 — fb619 `0684612`**: `Source/PresetBank.h` (juce_core only, `tw::bank`), `banksUserRoot()` = `<terrainData>/Banks`, `banksFactoryRoot()` = bundle `Resources/Banks`, `getPresetCatalogJson()`, `savePresetToBank()`; natives `listPresets savePresetToBank updatePresetMeta movePresetFile deletePresetFile createBank renameBank deleteBank setFavourite getFavourites getVocab setVocab exportBank exportPreset importPack`; `.terrainpack` = `pack.json` + `presets/*.terrain`; dialogs report through `window.onBankExported/onPresetExported/onBankImported`. `preset_bank_cert` 13/13. Terra seat = `Resources/Banks/Terra/bank.json` (content is a separate job).
+- **Stage 4 — next**: the two surfaces in `index.html` (body-level above z30, `.pmenu` + `openTwoPaneBrowser` reuse), the receivers, the post-load re-pull, replace the FX-era PRESETS wiring, BinaryData bust.
+- **Stage 2 — after**: assets travel by name + FLAC (fv=2). **Stage 5**: environment seat.
