@@ -356,6 +356,7 @@
   var reg = new Map(), lastPush = nowMs(), laneSeen = false;   /* fb581 — see THE LANE IS THE CLOCK below */
   function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function run(ts){
+    if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
     reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
   }
   window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
@@ -886,6 +887,12 @@ window.FLT_TYPE_COUNT = 118;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  
   --mesh-line: rgba(139,92,246,0.25);
   --mesh-contour: rgba(167,139,250,0.5);
   --mesh-peak: rgba(124,58,237,0.7);
+  /* fb620 — the preset system's tokens (Design/preset-system-v1-mockup.html) */
+  --text-soft: #4A4058; --rose: #f43f5e;
+  --menu-bg: rgba(240,237,245,0.96); --menu-fg: #2A2035; --menu-fg-dim: rgba(42,32,53,.82); --menu-fg-faint: rgba(42,32,53,.60);
+  --menu-line: rgba(124,92,191,0.18); --menu-wash: rgba(139,92,246,0.14); --menu-wash-cur: rgba(139,92,246,0.20);
+  --sel: rgba(139,92,246,0.18); --sel-strong: rgba(139,92,246,0.26); --sel-fg: #7C3AED;
+  --edge: rgba(42,32,53,0.30); --edge-soft: rgba(42,32,53,0.18); --on-fg: #2A2035; --wash: rgba(236,232,241,0.80);
 }
 
 [data-theme="dark"] {
@@ -911,6 +918,12 @@ window.FLT_TYPE_COUNT = 118;  /* ← THE ONE PLACE.  = tw::filters::kNumTypes.  
   --mesh-line: rgba(139,92,246,0.25);
   --mesh-contour: rgba(167,139,250,0.5);
   --mesh-peak: rgba(124,58,237,0.7);
+  /* fb620 — the preset system's tokens: hover washes purple; the selected line's words turn purple (Analog Lab's blue) */
+  --text-soft: #C4BDD6; --rose: #f43f5e;
+  --menu-bg: rgba(22,20,34,0.72); --menu-fg: #fff; --menu-fg-dim: rgba(255,255,255,.78); --menu-fg-faint: rgba(255,255,255,.50);
+  --menu-line: rgba(255,255,255,0.11); --menu-wash: rgba(139,92,246,0.18); --menu-wash-cur: rgba(139,92,246,0.26);
+  --sel: rgba(139,92,246,0.18); --sel-strong: rgba(139,92,246,0.28); --sel-fg: #B794FF;
+  --edge: rgba(255,255,255,0.45); --edge-soft: rgba(255,255,255,0.22); --on-fg: #fff; --wash: rgba(18,18,31,0.82);
 }
 
 body {
@@ -1048,172 +1061,6 @@ body {
   background: rgba(139,92,246,0.1);
 }
 
-/* ============ PRESET BROWSER ============ */
-#preset-browser {
-  position: absolute;
-  top: 44px;
-  left: 0;
-  right: 0;
-  max-height: 0;
-  overflow: hidden;
-  z-index: 15;
-  transition: max-height 0.2s ease-out;
-  background: var(--bg-surface);
-  border-bottom: 1px solid transparent;
-}
-#preset-browser.open {
-  max-height: 320px;
-  border-bottom-color: var(--border);
-  overflow-y: auto;
-  overflow-x: hidden;
-}
-/* Hide scrollbar entirely — trackpad/wheel still scrolls. */
-#preset-browser::-webkit-scrollbar { width: 0; height: 0; display: none; }
-#preset-browser { scrollbar-width: none; -ms-overflow-style: none; }
-
-.browser-inner {
-  padding: 12px 16px 16px;
-}
-
-.browser-top {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 12px;
-}
-
-.browser-search {
-  flex: 1;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0 8px 0 28px;
-  font-size: 11px;
-  background: var(--bg-surface);
-  color: var(--text-primary);
-  outline: none;
-  font-family: inherit;
-  position: relative;
-}
-.browser-search:focus { border-color: var(--purple-500); }
-
-.search-wrap {
-  position: relative;
-  flex: 1;
-}
-.search-wrap::before {
-  content: '';
-  position: absolute;
-  left: 9px;
-  top: 50%;
-  transform: translateY(-50%);
-  width: 11px;
-  height: 11px;
-  border: 1.5px solid var(--text-dim);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 1;
-  box-sizing: border-box;
-}
-.search-wrap::after {
-  content: '';
-  position: absolute;
-  left: 18px;
-  top: calc(50% + 4px);
-  width: 4px;
-  height: 1.5px;
-  background: var(--text-dim);
-  transform: rotate(45deg);
-  pointer-events: none;
-  z-index: 1;
-}
-
-.browser-cats {
-  display: flex;
-  gap: 4px;
-}
-
-.cat-btn {
-  padding: 4px 8px;
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  background: transparent;
-  font-size: 8px;
-  font-weight: 500;
-  letter-spacing: 1px;
-  text-transform: uppercase;
-  color: var(--text-secondary);
-  cursor: pointer;
-  transition: all 0.1s;
-}
-.cat-btn:hover { border-color: var(--purple-400); color: var(--purple-500); }
-.cat-btn.active {
-  background: var(--purple-500);
-  color: white;
-  border-color: var(--purple-500);
-}
-
-.browser-grid {
-  display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 6px;
-  /* Locked height (was max-height) so the preset browser stays the same
-     size regardless of how many presets are in the selected category —
-     no more ugly collapse when filtering to AMBIENT / RHYTHMIC etc. */
-  height: 208px;
-  overflow-y: auto;
-  overflow-x: hidden;
-  padding-right: 0;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  align-content: start;
-}
-/* Hide both scrollbars on the preset grid — trackpad/wheel still scrolls vertically. */
-.browser-grid::-webkit-scrollbar { width: 0; height: 0; display: none; }
-
-.preset-card {
-  padding: 8px 10px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  background: var(--bg-surface);
-  cursor: pointer;
-  transition: all 0.1s;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 6px;
-  overflow: hidden;
-  min-width: 0;
-}
-.preset-card:hover {
-  border-color: var(--purple-400);
-  background: rgba(139,92,246,0.06);
-}
-.preset-card.selected {
-  border-color: var(--purple-500);
-  background: rgba(139,92,246,0.1);
-}
-
-.preset-card-name {
-  font-size: 10px;
-  font-weight: 500;
-  color: var(--text-primary);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  flex: 1;
-  min-width: 0;
-}
-
-.preset-card-cat {
-  font-size: 7px;
-  font-weight: 500;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--text-dim);
-}
-
-
 /* Header: brand+preset on left, all pills on right */
 .header-left {
   display: flex;
@@ -1255,218 +1102,210 @@ body {
 .preset-area .preset-save-btn { margin-right: 6px; }
 .header-left .preset-save-btn { margin-left: 12px; }
 
-/* User preset card styling */
-.preset-card.user-preset {
-  border-left: 2.5px solid var(--purple-400);
-}
-.preset-card.user-preset:hover { border-left-color: var(--purple-500); }
-.preset-card.user-preset.selected { border-left-color: var(--purple-600); }
-.user-badge { font-size: 8px; font-weight: 700; color: var(--purple-400); background: rgba(139,92,246,0.12); padding: 1px 5px; border-radius: 3px; text-transform: uppercase; letter-spacing: 0.5px; }
-.preset-rename-input { width: 100%; background: transparent; border: 1px solid var(--purple-400); color: var(--text-primary); font-size: 12px; padding: 4px 6px; border-radius: 4px; outline: none; font-family: inherit; }
+/* ═══ fb620 — THE PRESET SYSTEM (Design/preset-system-v1-mockup.html, signed off fb616f) ═══════════
+   Two surfaces, one system: the QUICK MENU under the header name (bank → preset) and the BROWSER
+   (glass, covering the window below the header). Everything here is Terrain's own vocabulary: the
+   .pmenu glass is recycled verbatim for every menu, the four mode tiles' outline rule is the only
+   selection grammar for BUTTONS, and selection MENUS (banks, authors, rows, the quick menu) wash
+   purple with the selected line's words in purple. One font. No all caps. No new furniture. */
 
-.preset-card-bottom {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
+/* the header's + ‹ › lose their boxes; the glyphs stay where they are */
+.preset-nav-btn, .header-left .preset-save-btn { border-color: transparent; }
+.preset-nav-btn:hover, .header-left .preset-save-btn:hover { border-color: var(--edge-soft); color: var(--text-primary); background: transparent; }
+.preset-name { min-width: 0; max-width: 236px; padding: 0 6px; height: 28px; line-height: 28px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.preset-name:hover { color: var(--purple-400); }
+.preset-name.open { box-shadow: inset 0 0 0 1px var(--purple-400); color: var(--on-fg); }
 
-.preset-card-badge {
-  font-size: 6px;
-  font-weight: 600;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--purple-400);
-  background: rgba(139,92,246,0.08);
-  padding: 1px 4px;
-  border-radius: 2px;
-}
+/* the glass — .pmenu's coat, worn by the browser too (fb613: flat wash for the sheets, the blur is paid per frame) */
+.tp-glass { background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); }
 
-.preset-card-rename {
-  width: 100%;
-  border: 1px solid var(--purple-500);
-  border-radius: 3px;
-  padding: 2px 4px;
-  font-size: 10px;
-  font-weight: 500;
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  outline: none;
-  margin-bottom: 3px;
-}
+/* ── every menu is the page's .pmenu; these rows follow the signed-off mockup's type ─────────── */
+.pmenu.tp-menu { display: none; max-width: none; max-height: none; font-family: inherit; color: #fff;
+  --menu-fg: #fff; --menu-fg-dim: rgba(255,255,255,.78); --menu-fg-faint: rgba(255,255,255,.50); --menu-line: rgba(255,255,255,0.11);
+  --menu-wash: rgba(139,92,246,0.18); --menu-wash-cur: rgba(139,92,246,0.26); --sel-fg: #B794FF; }
+.pmenu.tp-menu.on { display: block; }
+.pmenu.tp-menu .ps { font-size: 9px; font-weight: 500; letter-spacing: 0; text-transform: none; color: var(--menu-fg-faint); padding: 8px 9px 3px; }
+.pmenu.tp-menu .pi { align-items: baseline; font-size: 10.5px; letter-spacing: 0; color: var(--menu-fg-dim); line-height: 1.2; }
+.pmenu.tp-menu .pi .ct { color: var(--menu-fg-faint); font-size: 9.5px; flex: none; }
+.pmenu.tp-menu .pi:hover { color: var(--menu-fg); background: var(--menu-wash); }
+.pmenu.tp-menu .pi.cur { color: var(--sel-fg); background: var(--menu-wash-cur); }
+.pmenu.tp-menu .pi.cur .ct { color: var(--sel-fg); }
+.pmenu.tp-menu .pi.cur::before { color: var(--purple-400); font-size: 10px; align-self: center; }
+.pmenu.tp-menu .pi .dx { color: var(--menu-fg-faint); font-size: 9px; display: none; flex: none; }
+.pmenu.tp-menu .pi:hover .dx { display: block; }
+.pmenu.tp-menu .pi .dx:hover { color: var(--rose); }
+.pmenu.tp-menu .pi.imp, .pmenu.tp-menu .pi.imp:hover { color: var(--purple-400); }
+.pmenu.tp-menu .pi.dim { color: var(--menu-fg-faint); cursor: default; }
+.pmenu.tp-menu .pi.dim:hover { background: transparent; color: var(--menu-fg-faint); }
+.pmenu.tp-menu .pi.off { opacity: .4; pointer-events: none; }
+.pmenu.tp-menu .pi.rose { color: var(--rose); }
+.pmenu.tp-menu .pi .env { font-size: 9px; font-weight: 500; color: var(--purple-400); flex: none; }
+.pmenu.tp-menu .pi .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
-/* Save prompt */
-.save-prompt {
-  display: none;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: rgba(139,92,246,0.04);
-  border-bottom: 1px solid var(--border);
-}
-.save-prompt.visible { display: flex; }
-.save-prompt-label {
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-.save-prompt-input {
-  flex: 1;
-  height: 28px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  padding: 0 10px;
-  font-size: 11px;
-  font-family: inherit;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  outline: none;
-}
-.save-prompt-input:focus { border-color: var(--purple-500); }
-.save-tag-select {
-  height: 28px;
-  padding: 0 24px 0 8px;
-  border: 1px solid var(--border);
-  border-radius: 5px;
-  font-size: 9px;
-  font-weight: 500;
-  letter-spacing: 0.8px;
-  text-transform: uppercase;
-  color: var(--text-primary);
-  background: var(--bg-surface);
-  outline: none;
-  font-family: inherit;
-  cursor: pointer;
-  -webkit-appearance: none;
-  appearance: none;
-}
-.save-tag-select:focus { border-color: var(--purple-500); }
-.save-prompt-btn {
-  height: 28px;
-  padding: 0 14px;
-  border: none;
-  border-radius: 5px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.5px;
-  cursor: pointer;
-  transition: all 0.1s;
-}
-.save-prompt-confirm { background: var(--purple-500); color: white; }
-.save-prompt-confirm:hover { background: var(--purple-600); }
-.save-prompt-cancel { background: transparent; color: var(--text-secondary); border: 1px solid var(--border); }
-.save-prompt-cancel:hover { border-color: var(--text-secondary); }
+/* the quick menu — .pmenu grown to two columns */
+.pmenu.tp-q { width: 372px; }
+.pmenu.tp-q .qcols { display: flex; gap: 4px; }
+.pmenu.tp-q .qcol { max-height: 300px; overflow-y: auto; scrollbar-width: none; }
+.pmenu.tp-q .qcol::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.pmenu.tp-q .qcol.banks { width: 150px; border-right: 1px solid var(--menu-line); padding-right: 4px; }
+.pmenu.tp-q .qcol.list { flex: 1; min-width: 0; }
+.pmenu.tp-q .foot { margin-top: 5px; height: 30px; display: flex; align-items: center; justify-content: center; border-top: 1px solid var(--menu-line); border-radius: 0 0 8px 8px;
+  color: var(--menu-fg); font-size: 10.5px; font-weight: 500; cursor: pointer; }
+.pmenu.tp-q .foot:hover { color: var(--purple-400); }
+.pmenu.tp-ctx { min-width: 160px; }
+.pmenu.tp-sug { min-width: 160px; max-height: 200px; overflow-y: auto; }
 
-/* Preset context menu */
-.preset-ctx-menu {
-  position: fixed;
-  z-index: 100;
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 4px 0;
-  min-width: 160px;
-  box-shadow: 0 4px 16px rgba(91,79,112,0.12), 0 1px 4px rgba(91,79,112,0.08);
-  display: none;
-}
-.preset-ctx-menu.visible { display: block; }
-.preset-ctx-menu-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 7px 14px;
-  font-size: 11px;
-  font-weight: 500;
-  color: var(--text-primary);
-  cursor: pointer;
-  transition: background 0.1s;
-}
-.preset-ctx-menu-item:hover { background: rgba(139,92,246,0.06); }
-.preset-ctx-menu-item.danger { color: #DC2626; }
-.preset-ctx-menu-item.danger:hover { background: rgba(220,38,38,0.06); }
-.preset-ctx-menu-icon { width: 14px; text-align: center; font-size: 10px; opacity: 0.6; }
-.preset-ctx-menu-sep { height: 1px; background: var(--border); margin: 3px 10px; }
-.preset-ctx-menu-disabled {
-  display: flex; align-items: center; gap: 8px; padding: 7px 14px;
-  font-size: 11px; font-weight: 500; color: var(--text-dim); cursor: default;
-}
+/* ── THE BROWSER — glass, covering 44 → 656, above the page, below every menu ─────────────────── */
+#tp-b { position: absolute; left: 0; right: 0; top: 44px; bottom: 0; z-index: 2000; display: none; flex-direction: column; color: var(--text-primary); font-family: inherit; }
+#tp-b.on { display: flex; }
+#tp-b button, #tp-b input { font-family: inherit; }
+#tp-b .tb { height: 38px; display: flex; align-items: center; gap: 4px; padding: 0 16px; border-bottom: 1px solid var(--menu-line); flex: none; }
+#tp-b .sw { position: relative; flex: 1; max-width: 300px; }
+#tp-b .sw::before { content: ''; position: absolute; left: 1px; top: 50%; transform: translateY(-50%); width: 11px; height: 11px; border: 1.5px solid var(--text-secondary); border-radius: 50%; pointer-events: none; }
+#tp-b .sw::after { content: ''; position: absolute; left: 10px; top: calc(50% + 4px); width: 4px; height: 1.5px; background: var(--text-secondary); transform: rotate(45deg); pointer-events: none; }
+#tp-b .search { width: 100%; height: 26px; border: none; border-radius: 5px; padding: 0 8px 0 21px; font-size: 11.5px; background: transparent; color: var(--text-primary); outline: none; }
+#tp-b .search::placeholder { color: var(--text-muted); }
+#tp-b .search:focus { box-shadow: inset 0 0 0 1px var(--purple-400); }
+#tp-b .count { margin-left: auto; font-size: 10px; color: var(--text-soft); white-space: nowrap; margin-right: 4px; }
+#tp-b .count b { color: var(--text-primary); font-weight: 500; }
+#tp-b .ibtn { width: 26px; height: 26px; border: none; border-radius: 5px; background: transparent; color: var(--text-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; transition: color .15s, box-shadow .15s; }
+#tp-b .ibtn:hover { color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--edge-soft); }
+#tp-b .ibtn.on { color: var(--on-fg); box-shadow: inset 0 0 0 1px var(--purple-400); }
+#tp-b .ibtn.on svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
+#tp-b .ibtn svg { width: 15px; height: 15px; }
 
-/* Tag picker submenu */
-.preset-ctx-menu-submenu { position: relative; }
-.preset-ctx-menu-submenu > .preset-ctx-menu-item::after {
-  content: ''; margin-left: auto; border: 4px solid transparent; border-left-color: var(--text-dim);
-}
-.tag-picker {
-  position: fixed; z-index: 120;
-  background: var(--bg-surface); border: 1px solid var(--border); border-radius: 6px;
-  padding: 4px 0; min-width: 160px;
-  box-shadow: 0 4px 16px rgba(91,79,112,0.12), 0 1px 4px rgba(91,79,112,0.08);
-  display: none;
-}
-.tag-picker.visible { display: block; }
-.tag-picker-title { padding: 8px 12px 4px; font-size: 9px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.8px; color: var(--text-dim); }
-.tag-picker-item {
-  display: flex; align-items: center; gap: 6px; padding: 6px 12px;
-  font-size: 10px; font-weight: 500; letter-spacing: 0.5px; text-transform: uppercase;
-  color: var(--text-primary); cursor: pointer; transition: background 0.1s;
-}
-.tag-picker-item:hover { background: rgba(139,92,246,0.06); }
-.tag-picker-item.current { color: var(--purple-500); font-weight: 600; }
-.tag-picker-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
-.tag-picker-del {
-  margin-left: auto; width: 14px; height: 14px; display: none; align-items: center;
-  justify-content: center; font-size: 9px; color: var(--text-dim); cursor: pointer;
-  border-radius: 2px; transition: all 0.1s;
-}
-.tag-picker-item:hover .tag-picker-del { display: flex; }
-.tag-picker-del:hover { color: #DC2626; background: rgba(220,38,38,0.08); }
-.tag-picker-sep { height: 1px; background: var(--border); margin: 3px 8px; }
-.tag-picker-new {
-  display: flex; align-items: center; gap: 6px; padding: 6px 12px;
-  font-size: 10px; font-weight: 500; color: var(--purple-500); cursor: pointer;
-}
-.tag-picker-new:hover { background: rgba(139,92,246,0.06); }
-.tag-picker-input-wrap { display: none; padding: 4px 8px; gap: 4px; }
-.tag-picker-input-wrap.visible { display: flex; }
-.tag-picker-input {
-  flex: 1; height: 22px; border: 1px solid var(--purple-400); border-radius: 3px;
-  padding: 0 6px; font-size: 9px; font-family: inherit; color: var(--text-primary);
-  background: var(--bg-surface); outline: none; text-transform: uppercase; letter-spacing: 0.5px;
-}
-.tag-picker-add-btn {
-  height: 22px; padding: 0 8px; border: none; border-radius: 3px;
-  background: var(--purple-500); color: white; font-size: 9px; font-weight: 600; cursor: pointer;
-}
-.tag-picker-add-btn:hover { background: var(--purple-600); }
+#tp-b .chips { display: flex; align-items: center; gap: 4px; padding: 0 16px; height: 30px; border-bottom: 1px solid var(--menu-line); flex: none; }
+#tp-b .chips .lb { width: 40px; flex: none; font-size: 10px; font-weight: 500; color: var(--text-soft); }
+#tp-b .chips .strip { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding: 2px 0;
+  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
+#tp-b .chips .strip::-webkit-scrollbar { display: none; height: 0; }
+#tp-b .chips .strip.end { -webkit-mask-image: none; mask-image: none; }
+.tp-chip { padding: 4px 9px; border: 1px solid var(--edge-soft); border-radius: 4px; background: transparent; font-size: 9.5px; font-weight: 500; color: var(--text-soft); cursor: pointer; transition: color .15s, border-color .15s; white-space: nowrap; line-height: 1.2; flex: none; font-family: inherit; }
+.tp-chip:hover { color: var(--text-primary); }
+.tp-chip.active { background: transparent; border-color: var(--purple-400); color: var(--on-fg); }   /* the tile rule, verbatim */
+.tp-chip.add { border-style: dashed; color: var(--purple-400); padding: 0; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; margin-right: 2px; }
+.tp-chip.add svg { width: 11px; height: 11px; }
+.tp-chip.add:hover { border-color: var(--purple-400); color: var(--on-fg); }
 
-/* Delete confirm dialog */
-.delete-confirm {
-  position: fixed; z-index: 110; background: var(--bg-surface);
-  border: 1px solid var(--border); border-radius: 8px; padding: 16px 20px;
-  min-width: 240px; box-shadow: 0 8px 32px rgba(91,79,112,0.15), 0 2px 8px rgba(91,79,112,0.1);
-  display: none; left: 50%; top: 50%; transform: translate(-50%, -50%);
-}
-.delete-confirm.visible { display: block; }
-.delete-confirm-text { font-size: 12px; color: var(--text-primary); margin-bottom: 14px; line-height: 1.5; }
-.delete-confirm-name { font-weight: 600; color: var(--purple-600); }
-.delete-confirm-btns { display: flex; justify-content: flex-end; gap: 8px; }
-.delete-btn-cancel {
-  height: 28px; padding: 0 14px; border: 1px solid var(--border); border-radius: 5px;
-  background: transparent; font-size: 10px; font-weight: 600; color: var(--text-secondary); cursor: pointer;
-}
-.delete-btn-cancel:hover { border-color: var(--text-secondary); }
-.delete-btn-confirm {
-  height: 28px; padding: 0 14px; border: none; border-radius: 5px;
-  background: #DC2626; font-size: 10px; font-weight: 600; color: white; cursor: pointer;
-}
-.delete-btn-confirm:hover { background: #B91C1C; }
+#tp-b .body { flex: 1; min-height: 0; display: flex; }
+#tp-b .rail { width: 150px; flex: none; border-right: 1px solid var(--menu-line); overflow-y: auto; padding: 8px 0 12px; scrollbar-width: none; }
+#tp-b .rail::-webkit-scrollbar, #tp-b .list::-webkit-scrollbar, #tp-b .insp::-webkit-scrollbar { width: 0; height: 0; display: none; }
+#tp-b .rail .sec { font-size: 10px; font-weight: 500; color: var(--text-soft); padding: 12px 16px 5px; }
+#tp-b .rail .ri { display: flex; align-items: center; gap: 7px; height: 23px; padding: 0 16px 0 14px; cursor: pointer; font-size: 10.5px; color: var(--text-soft); border-left: 2px solid transparent; transition: color .1s, background .1s; }
+#tp-b .rail .ri .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#tp-b .rail .ri .ct { font-size: 9.5px; color: var(--text-secondary); }
+#tp-b .rail .ri:hover { color: var(--text-primary); background: var(--sel); }
+#tp-b .rail .ri.cur { color: var(--sel-fg); border-left-color: var(--purple-500); background: var(--sel-strong); }
+#tp-b .rail .ri.cur .ct { color: var(--sel-fg); }
+#tp-b .rail .ri.imp, #tp-b .rail .ri.imp:hover { color: var(--purple-400); }
+#tp-b .rail .ri svg { width: 11px; height: 11px; flex: none; }
 
-/* Overlay for click-away dismiss */
-.preset-overlay {
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 90; display: none;
-}
-.preset-overlay.visible { display: block; }
+#tp-b .listcol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+#tp-b .list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; outline: none; }
+/* the column header sits ABOVE the scroll region: rows are clipped at its bottom edge, nothing passes under it. Transparent. */
+#tp-b .hd { flex: none; display: flex; align-items: center; height: 24px; padding: 0 14px; background: transparent; border-bottom: 1px solid var(--menu-line); font-size: 10px; font-weight: 500; color: var(--text-soft); }
+#tp-b .hd span[data-sort] { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+#tp-b .hd span[data-sort]:hover { color: var(--purple-400); }
+#tp-b .hd span[data-sort].on { color: var(--text-primary); }
+#tp-b .hd span[data-sort] i { font-style: normal; font-size: 8px; color: var(--purple-400); opacity: 0; }
+#tp-b .hd span[data-sort].on i { opacity: 1; }
+#tp-rows { display: flex; flex-direction: column; }
+.tp-row { display: flex; align-items: center; height: 26px; padding: 0 14px; cursor: pointer; transition: background .08s; }
+.tp-row:hover { background: var(--sel); }
+.tp-row:hover .c-ty, .tp-row:hover .c-st { color: var(--text-primary); }
+.tp-row.sel { background: var(--sel-strong); }
+.tp-row.sel .c-nm, .tp-row.sel .c-ty, .tp-row.sel .c-st, .tp-row.sel .tag { color: var(--sel-fg); }
+.tp-row.sel .c-nm .bk { color: var(--sel-fg); opacity: .7; }
+.tp-row.off { display: none; }
+.tp-row .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
+.tp-row .c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row .c-nm .bk, .tp-bk { color: var(--text-secondary); font-weight: 400; }
+.tp-row .tag { font-size: 9px; font-weight: 500; color: var(--purple-400); flex: none; }
+.tp-row .tag.user { color: var(--text-secondary); }
+.tp-row .c-car { width: 92px; flex: none; display: flex; gap: 3px; align-items: center; }
+.tp-car { width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); opacity: .10; }
+.tp-car.on { opacity: 1; color: var(--text-soft); }
+.tp-car.on.node { color: var(--purple-400); }
+.tp-car svg { width: 11px; height: 11px; }
+.tp-row.sel .tp-car.on { color: var(--text-primary); }
+.tp-row.sel .tp-car.on.node { color: var(--purple-400); }
+.tp-row .c-ty { width: 64px; flex: none; font-size: 9.5px; color: var(--text-soft); }
+.tp-row .c-st { width: 74px; flex: none; font-size: 9.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row .c-fv { width: 16px; flex: none; display: flex; align-items: center; justify-content: flex-end; color: var(--text-dim); opacity: .35; }
+.tp-row .c-fv.on { opacity: 1; color: var(--purple-400); }
+.tp-row .c-fv svg { width: 11px; height: 11px; }
+#tp-empty { padding: 60px 30px; text-align: center; color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
+#tp-empty b { display: block; color: var(--text-primary); font-weight: 500; margin-bottom: 2px; }
+
+#tp-b .insp { width: 222px; flex: none; border-left: 1px solid var(--menu-line); padding: 14px 18px 12px; display: flex; flex-direction: column; overflow: hidden; }
+#tp-b .insp .nm, #tp-b .insp .sub, #tp-b .insp .kv, #tp-b .insp .carries, #tp-b .insp .acts { flex: none; }
+#tp-b .insp .nm { font-size: 13px; font-weight: 500; color: var(--text-primary); line-height: 1.3; letter-spacing: .2px; }
+#tp-b .insp .nm .bk { color: var(--text-secondary); font-weight: 400; }
+#tp-b .insp .sub { margin-top: 3px; height: 14px; font-size: 10px; font-weight: 500; color: var(--purple-400); line-height: 14px; }
+#tp-b .insp .sub .user { color: var(--text-secondary); }
+#tp-b .insp .kv { display: grid; grid-template-columns: 52px 1fr; row-gap: 5px; column-gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
+#tp-b .insp .k { font-size: 10px; font-weight: 500; color: var(--text-soft); line-height: 14px; }
+#tp-b .insp .v { font-size: 10.5px; color: var(--text-primary); line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tp-b .insp .carries { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
+#tp-b .insp .carries .k { margin-bottom: 6px; }
+#tp-b .insp .cl { display: flex; align-items: center; gap: 8px; height: 19px; font-size: 10.5px; color: var(--text-primary); }
+#tp-b .insp .cl svg { width: 12px; height: 12px; flex: none; color: var(--text-soft); }
+#tp-b .insp .cl.node, #tp-b .insp .cl.node svg { color: var(--purple-400); }
+#tp-b .insp .cl .n { flex: 1; }
+#tp-b .insp .cl.none, #tp-b .insp .cl.none svg { color: var(--text-secondary); }
+#tp-b .insp .notes { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); flex: 1 1 auto; min-height: 56px; display: flex; flex-direction: column; overflow: hidden; }
+#tp-b .insp .notes .k { margin-bottom: 4px; flex: none; }
+.tp-notebox { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; border-radius: 6px; padding: 5px 7px; margin: 0 -7px; font-size: 10.5px; line-height: 1.45; color: var(--text-primary); outline: none;
+  white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; cursor: text; transition: box-shadow .15s; }
+.tp-notebox::-webkit-scrollbar { display: none; }
+.tp-notebox:empty::before { content: attr(data-ph); color: var(--text-muted); }
+.tp-notebox[contenteditable]:hover { box-shadow: inset 0 0 0 1px var(--edge-soft); }
+.tp-notebox:focus { box-shadow: inset 0 0 0 1px var(--purple-400); }
+.tp-notebox.ro { cursor: default; user-select: none; -webkit-user-select: none; }
+#tp-b .insp .acts { margin-top: 10px; display: flex; gap: 6px; }
+.tp-btn { height: 28px; border: 1px solid var(--edge-soft); border-radius: 6px; background: transparent; color: var(--text-soft); font-size: 10.5px; font-weight: 500; cursor: pointer; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 6px; transition: border-color .15s, color .15s; font-family: inherit; }
+.tp-btn:hover { color: var(--text-primary); border-color: var(--edge); }
+.tp-btn.pri { border-color: var(--purple-400); color: var(--on-fg); flex: 1; }   /* the tile rule: purple outline, white letters, no fill */
+.tp-btn.pri:hover { border-color: var(--purple-600); }
+.tp-btn.ic { width: 28px; padding: 0; }
+.tp-btn.ic svg { width: 13px; height: 13px; }
+.tp-btn.ic.on { color: var(--on-fg); border-color: var(--purple-400); }
+.tp-btn.ic.on svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
+.tp-btn:disabled { opacity: .3; pointer-events: none; }
+
+/* ── SHEETS — save, new bank, rename, delete, export. One card grammar. Flat wash, no blur. ────── */
+#tp-sheet { position: absolute; inset: 0; z-index: 2100; background: var(--wash); display: none; align-items: center; justify-content: center; color: var(--text-primary); }
+#tp-sheet.on { display: flex; }
+#tp-sheet .tp-card { width: 340px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px 22px 18px; box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+#tp-sheet .tp-hd { font-size: 11.5px; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; }
+#tp-sheet .tp-f { display: grid; grid-template-columns: 56px 1fr; align-items: center; column-gap: 10px; row-gap: 9px; }
+#tp-sheet .tp-f .k { font-size: 10px; font-weight: 500; color: var(--text-soft); align-self: start; padding-top: 7px; }
+#tp-sheet .tp-f .v { font-size: 10.5px; color: var(--text-primary); padding-top: 6px; line-height: 1.5; }
+#tp-sheet .tp-in { height: 28px; border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 9px; font-size: 11px; background: var(--bg-main); color: var(--text-primary); outline: none; width: 100%; font-family: inherit; }
+#tp-sheet .tp-in:focus { border-color: var(--purple-500); }
+#tp-sheet .tp-in::placeholder { color: var(--text-muted); }
+#tp-sheet .chp { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
+#tp-sheet .chp .tp-in { width: 110px; height: 22px; font-size: 10px; padding: 0 7px; }
+#tp-sheet .tp-acts { display: flex; gap: 6px; margin-top: 18px; justify-content: flex-end; }
+#tp-sheet .tp-acts .tp-btn.pri { flex: none; padding: 0 18px; }
+#tp-sheet .tp-note { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); line-height: 1.5; }
+#tp-sheet .tp-text { font-size: 11px; color: var(--text-primary); line-height: 1.55; }
+#tp-sheet .tp-text b { font-weight: 500; }
+#tp-sheet .manifest .mn { font-size: 12.5px; font-weight: 500; color: var(--text-primary); }
+#tp-sheet .manifest .mn .by { color: var(--text-secondary); font-weight: 400; }
+#tp-sheet .manifest .ml { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; row-gap: 5px; }
+#tp-sheet .manifest .ml div { font-size: 10px; color: var(--text-soft); display: flex; align-items: center; gap: 6px; }
+#tp-sheet .manifest .ml svg { width: 11px; height: 11px; color: var(--text-secondary); }
+#tp-sheet .manifest .ml b { font-weight: 500; color: var(--text-primary); }
+#tp-sheet .manifest .ml .node, #tp-sheet .manifest .ml .node svg { color: var(--purple-400); }
+#tp-sheet .manifest .tot { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); }
+
+/* toast — glass, bottom centre, above everything */
+#tp-toast { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 8px); z-index: 2200; border: 1px solid rgba(255,255,255,0.11); border-radius: 8px; padding: 7px 12px; font-size: 10.5px; color: #fff;
+  background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; white-space: nowrap; max-width: 560px; overflow: hidden; text-overflow: ellipsis; }
+#tp-toast.on { opacity: 1; transform: translate(-50%, 0); }
+#tp-toast .tp-bk { color: rgba(255,255,255,.5); }
 
 /* ============ HERO ============ */
 #hero {
@@ -6429,25 +6268,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
       <button class="settings-btn" id="settings-btn" title="Settings">
         <canvas id="settings-icon" width="28" height="28"></canvas>
       </button>
-    </div>
-  </div>
-
-  <!-- PRESET BROWSER -->
-  <div id="preset-browser">
-    <div class="browser-inner">
-      <div class="browser-top">
-        <div class="search-wrap">
-          <input class="browser-search" type="text" placeholder="Search presets..." id="browser-search">
-        </div>
-        <div class="browser-cats" id="browser-cats"></div>
-      </div>
-      <!-- Save Prompt -->
-      <div class="save-prompt" id="save-prompt" style="display:none;">
-        <input class="save-prompt-input" id="save-prompt-input" type="text" placeholder="Preset name..." maxlength="32">
-        <button class="save-prompt-btn save" id="save-prompt-confirm">Save</button>
-        <button class="save-prompt-btn cancel" id="save-prompt-cancel">Cancel</button>
-      </div>
-      <div class="browser-grid" id="browser-grid"></div>
     </div>
   </div>
 
@@ -13311,7 +13131,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             function paintNames(){ for(var i=0;i<NM;i++){ if(mls[i]&&!mls[i].querySelector('input')) mls[i].textContent=window.__macroName(i+1); } try{ if(window.__macroNamesChanged) window.__macroNamesChanged(); }catch(_){} }   /* fb574 — never over an OPEN field (measured on the installed AU: the field died at +400 ms with no blur — the late names seed had repainted the word over it) */
             function seedNames(){ try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getMacroNames'):null; if(!g) return;
               var r=g(); if(r&&r.then) r.then(function(js){ try{ var arr=JSON.parse(String(js||'[]')); if(Array.isArray(arr)){ for(var i=0;i<NM;i++) names[i]=String(arr[i]||''); paintNames(); } }catch(_){} }); }catch(_){} }
-            seedNames(); [900,2500].forEach(function(ms){ setTimeout(seedNames,ms); });
+            seedNames(); [900,2500].forEach(function(ms){ setTimeout(seedNames,ms); }); window.__tiSeedMacroNames=seedNames;   /* fb620 — a preset load re-seeds */
             function commitName(i,nm){ names[i]=String(nm||'').trim().slice(0,24); paintNames();
               try{ var sf=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setMacroNames'):null; if(sf) sf(JSON.stringify(names)); }catch(_){} }
             function renameM(i){ var lab=mls[i]; if(!lab||lab.querySelector('input')) return; var old=window.__macroName(i+1);
@@ -13459,31 +13279,6 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
   <div class="ctx-item" data-action="reset">Reset to default</div>
   <div class="ctx-item" data-action="midi">MIDI learn</div>
 </div>
-
-<!-- PRESET CONTEXT MENU -->
-<div class="preset-ctx-menu" id="preset-ctx-menu" style="display:none;"></div>
-
-<!-- TAG PICKER -->
-<div class="tag-picker" id="tag-picker" style="display:none;">
-  <div class="tag-picker-title">Assign Tag</div>
-  <div class="tag-picker-list" id="tag-picker-list"></div>
-  <div class="tag-picker-input-wrap visible">
-    <input class="tag-picker-input" id="tag-picker-input" type="text" placeholder="New tag..." maxlength="16">
-    <button class="tag-picker-add-btn" id="tag-picker-add-btn">+</button>
-  </div>
-</div>
-
-<!-- DELETE CONFIRM -->
-<div class="delete-confirm" id="delete-confirm" style="display:none;">
-  <p>Delete "<span id="delete-confirm-name"></span>"?</p>
-  <div class="delete-confirm-btns">
-    <button class="delete-confirm-btn cancel" id="delete-cancel">Cancel</button>
-    <button class="delete-confirm-btn confirm" id="delete-do">Delete</button>
-  </div>
-</div>
-
-<!-- OVERLAY for menus/dialogs -->
-<div class="preset-overlay" id="overlay" style="display:none;"></div>
 
 <!-- JUCE Native Interop (inlined from juce/check_native_interop.js) -->
 <script>
@@ -13858,6 +13653,7 @@ window.__tiHostKey = function (k) {
   document.addEventListener('keydown',function(e){
     if(!GUARD[e.key]) return;
     if(tiEditable(e.target)) return;
+    if(e.target&&e.target.closest&&e.target.closest('#tp-b')) return;   /* fb620 — the preset browser's list walks with the arrow keys */
     e.preventDefault(); e.stopPropagation();
     try{ if(e.target&&e.target.blur) e.target.blur(); }catch(_){}
   }, true);
@@ -14705,58 +14501,6 @@ async function initJuceBindings() {
   }
 }
 
-let loadPresetFn, getPresetNameFn, getNumPresetsFn, getCurrentPresetIndexFn;
-let saveNewPresetFn, deletePresetFn, renamePresetFn, overwritePresetFn;
-let getFactoryPresetCountFn, getPresetTagFn, setPresetTagFn, getCustomTagsFn, setCustomTagsFn;
-
-async function initJucePresets() {
-  try {
-    loadPresetFn = window.Juce.getNativeFunction('loadPreset');
-    getPresetNameFn = window.Juce.getNativeFunction('getPresetName');
-    getNumPresetsFn = window.Juce.getNativeFunction('getNumPresets');
-    getCurrentPresetIndexFn = window.Juce.getNativeFunction('getCurrentPresetIndex');
-    saveNewPresetFn = window.Juce.getNativeFunction('saveNewPreset');
-    deletePresetFn = window.Juce.getNativeFunction('deletePreset');
-    renamePresetFn = window.Juce.getNativeFunction('renamePreset');
-    overwritePresetFn = window.Juce.getNativeFunction('overwritePreset');
-    getFactoryPresetCountFn = window.Juce.getNativeFunction('getFactoryPresetCount');
-    getPresetTagFn = window.Juce.getNativeFunction('getPresetTag');
-    setPresetTagFn = window.Juce.getNativeFunction('setPresetTag');
-    getCustomTagsFn = window.Juce.getNativeFunction('getCustomTags');
-    setCustomTagsFn = window.Juce.getNativeFunction('setCustomTags');
-
-    // Load factory preset count
-    state.factoryPresetCount = await getFactoryPresetCountFn();
-
-    // Load custom tags
-    const tagsStr = await getCustomTagsFn();
-    state.customTags = tagsStr ? tagsStr.split(',').filter(t => t.trim()) : [];
-
-    const count = await getNumPresetsFn();
-    PRESETS.length = 0;
-    for (let i = 0; i < count; i++) {
-      const name = await getPresetNameFn(i);
-      const tag = await getPresetTagFn(i);
-      const isUser = i >= state.factoryPresetCount;
-      PRESETS.push({
-        name: name,
-        cat: tag || PRESET_CATEGORIES[name] || 'ALL',
-        vals: null,
-        idx: i,
-        isUser: isUser
-      });
-    }
-    const currentIdx = await getCurrentPresetIndexFn();
-    state.presetIdx = currentIdx;
-    document.getElementById('preset-name').textContent = PRESETS[currentIdx]?.name || 'Init';
-    buildCategoryButtons();
-    buildPresetGrid();
-    console.log('JUCE presets loaded: ' + count + ' (factory: ' + state.factoryPresetCount + ')');
-  } catch (e) {
-    console.log('Preview mode: using mock presets', e);
-  }
-}
-
 function pushParamToJuce(id) {
   if (!juceMode) return;
   const jp = JUCE_PARAMS[id];
@@ -14767,85 +14511,6 @@ function pushParamToJuce(id) {
     jp.sliderState.sliderDragEnded();
   }
 }
-
-// ---- Factory Presets (mock — replaced by JUCE in plugin mode) ----
-const PRESETS = [
-  { name: 'Crystal Shimmer',  cat: 'AMBIENT',   vals: {grainSize:180,density:40,spray:60,pitch:7,wander:10,mix:70,wowFlutter:5,saturation:10,hiss:3} },
-  { name: 'Tape Haze',        cat: 'TAPE',      vals: {grainSize:120,density:25,spray:20,pitch:0,wander:5,mix:60,wowFlutter:35,saturation:55,hiss:12} },
-  { name: 'Grain Storm',      cat: 'EXTREME',   vals: {grainSize:10,density:95,spray:90,pitch:-5,wander:80,mix:85,wowFlutter:20,saturation:70,hiss:8} },
-  { name: 'Dusty Vinyl',      cat: 'TAPE',      vals: {grainSize:200,density:15,spray:10,pitch:0,wander:2,mix:50,wowFlutter:15,saturation:40,hiss:25} },
-  { name: 'Ethereal Pad',     cat: 'AMBIENT',   vals: {grainSize:350,density:30,spray:45,pitch:12,wander:15,mix:80,wowFlutter:8,saturation:5,hiss:2} },
-  { name: 'Stutter Gate',     cat: 'RHYTHMIC',  vals: {grainSize:25,density:60,spray:5,pitch:0,wander:0,mix:90,wowFlutter:0,saturation:30,hiss:0} },
-  { name: 'Pitch Drift',      cat: 'GRAIN',     vals: {grainSize:100,density:35,spray:30,pitch:3,wander:45,mix:65,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Warm Saturation',  cat: 'TAPE',      vals: {grainSize:150,density:20,spray:15,pitch:0,wander:0,mix:50,wowFlutter:10,saturation:65,hiss:8} },
-  { name: 'Noise Floor',      cat: 'TAPE',      vals: {grainSize:80,density:20,spray:0,pitch:0,wander:0,mix:40,wowFlutter:5,saturation:20,hiss:40} },
-  { name: 'Particle Cloud',   cat: 'GRAIN',     vals: {grainSize:40,density:80,spray:70,pitch:5,wander:30,mix:75,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Deep Space',       cat: 'AMBIENT',   vals: {grainSize:400,density:10,spray:80,pitch:-12,wander:20,mix:90,wowFlutter:12,saturation:15,hiss:5} },
-  { name: 'Broken Radio',     cat: 'EXTREME',   vals: {grainSize:15,density:70,spray:95,pitch:-7,wander:90,mix:100,wowFlutter:60,saturation:80,hiss:30} },
-  { name: 'Subtle Texture',   cat: 'GRAIN',     vals: {grainSize:160,density:18,spray:25,pitch:0,wander:8,mix:30,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Lo-Fi Dreams',     cat: 'TAPE',      vals: {grainSize:130,density:22,spray:20,pitch:0,wander:5,mix:55,wowFlutter:25,saturation:45,hiss:18} },
-  { name: 'Frozen Time',      cat: 'AMBIENT',   vals: {grainSize:500,density:8,spray:50,pitch:0,wander:0,mix:85,wowFlutter:3,saturation:8,hiss:1} },
-  { name: 'Pulse Engine',     cat: 'RHYTHMIC',  vals: {grainSize:30,density:50,spray:10,pitch:0,wander:0,mix:80,wowFlutter:0,saturation:45,hiss:0} },
-  { name: 'Micro Grains',     cat: 'GRAIN',     vals: {grainSize:5,density:100,spray:40,pitch:2,wander:15,mix:70,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Cassette Warble',  cat: 'TAPE',      vals: {grainSize:140,density:20,spray:15,pitch:0,wander:3,mix:50,wowFlutter:55,saturation:35,hiss:15} },
-  { name: 'Quantum Scatter',  cat: 'EXTREME',   vals: {grainSize:20,density:85,spray:100,pitch:-3,wander:70,mix:95,wowFlutter:40,saturation:55,hiss:12} },
-  { name: 'Dawn Chorus',      cat: 'AMBIENT',   vals: {grainSize:250,density:28,spray:55,pitch:5,wander:12,mix:65,wowFlutter:6,saturation:10,hiss:3} },
-  { name: 'Step Sequence',    cat: 'RHYTHMIC',  vals: {grainSize:50,density:45,spray:8,pitch:0,wander:0,mix:75,wowFlutter:0,saturation:20,hiss:0} },
-  { name: 'Thick Glue',       cat: 'GRAIN',     vals: {grainSize:220,density:50,spray:35,pitch:-1,wander:5,mix:60,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'VHS Memory',       cat: 'TAPE',      vals: {grainSize:160,density:18,spray:25,pitch:0,wander:8,mix:55,wowFlutter:45,saturation:50,hiss:22} },
-  { name: 'Time Stretch',     cat: 'RHYTHMIC',  vals: {grainSize:300,density:12,spray:15,pitch:0,wander:0,mix:80,wowFlutter:0,saturation:10,hiss:0} },
-  { name: 'Event Horizon',    cat: 'EXTREME',   vals: {grainSize:8,density:100,spray:100,pitch:-24,wander:100,mix:100,wowFlutter:70,saturation:90,hiss:35} },
-  // ── Wander presets ──
-  { name: 'Gentle Wander',    cat: 'GRAIN',     vals: {grainSize:150,density:25,spray:20,pitch:0,wander:15,mix:55,wowFlutter:10,saturation:15,hiss:2} },
-  { name: 'Scattered',         cat: 'GRAIN',     vals: {grainSize:80,density:65,spray:45,pitch:0,wander:55,mix:70,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Disintegration',    cat: 'EXTREME',   vals: {grainSize:120,density:12,spray:30,pitch:12,wander:85,mix:100,wowFlutter:0,saturation:0,hiss:0} },
-  { name: 'Breathing Texture', cat: 'AMBIENT',   vals: {grainSize:350,density:60,spray:15,pitch:0,wander:25,mix:60,wowFlutter:5,saturation:8,hiss:1} },
-  { name: 'Glitch Cloud',      cat: 'EXTREME',   vals: {grainSize:20,density:15,spray:50,pitch:0,wander:70,mix:80,wowFlutter:0,saturation:0,hiss:0} },
-];
-
-const BUILTIN_CATEGORIES = ['ALL','GRAIN','TAPE','AMBIENT','RHYTHMIC','EXTREME'];
-
-function getAllCategories() {
-  const cats = [...BUILTIN_CATEGORIES];
-  // Add custom tags (user presets distinguished by purple outline, not a category)
-  for (const t of state.customTags) {
-    if (!cats.includes(t.toUpperCase())) cats.push(t.toUpperCase());
-  }
-  return cats;
-}
-
-// Category map for factory presets (name → category)
-const PRESET_CATEGORIES = {
-  'Init': 'ALL',
-  'Soft Keys': 'AMBIENT',
-  'Movements': 'AMBIENT',
-  'Super Messed Up': 'EXTREME',
-  'Tape Master': 'TAPE',
-  'Delay The Pluck': 'RHYTHMIC',
-  'Synced Grains': 'RHYTHMIC',
-  'Clown Delay': 'RHYTHMIC',
-  'Instant Pad': 'AMBIENT',
-  'Slow Changes': 'AMBIENT',
-  'Mood': 'TAPE',
-  'Soundscape': 'AMBIENT',
-  'Use A Key': 'RHYTHMIC',
-  'Blank Forms': 'GRAIN',
-  'Habits': 'GRAIN',
-  'Pitch Drifter': 'EXTREME',
-  'Mandalorian': 'EXTREME',
-  'See The Light': 'AMBIENT',
-  'Back To The Future': 'GRAIN',
-  'Saturation': 'TAPE',
-  'Chop Shop': 'EXTREME',
-  'Depressed': 'GRAIN',
-  'Deep Rest': 'TAPE',
-  'Final Tape': 'TAPE',
-  'Gentle Wander': 'GRAIN',
-  'Scattered': 'GRAIN',
-  'Disintegration': 'EXTREME',
-  'Breathing Texture': 'AMBIENT',
-  'Glitch Cloud': 'EXTREME',
-};
 
 // ---- Precision Formatting ----
 function formatValue(id, val) {
@@ -16946,422 +16611,6 @@ async function syncDeepStateFromCpp() {
   const eqPanel = document.getElementById('eq-panel');
   if (eqPanel && !eqPanel.classList.contains('hidden')) redrawEqCanvas();
 }
-
-async function loadPreset(idx) {
-  state.presetIdx = idx;
-  const preset = PRESETS[idx];
-  document.getElementById('preset-name').textContent = preset.name;
-  if (juceMode && loadPresetFn) {
-    // In JUCE mode, let the backend load the preset — slider value change listeners will update local state
-    await loadPresetFn(idx);
-    // Pull all non-APVTS state (atomics, choice params, etc.) and reflect
-    // it in the UI so every engine's visuals match the preset's audio.
-    await syncDeepStateFromCpp();
-    // Refresh modulation UI to match this preset's saved LFO/mod state
-    if (getModStateFn) {
-      const modJson = await getModStateFn();
-      if (modJson && modJson !== '') {
-        restoreModState(modJson);
-      } else {
-        // Preset has no saved mod state — clear all LFOs and assignments
-        modState.assignments = [];
-        for (let i = 0; i < 3; i++) {
-          Object.assign(modState.lfos[i], { shape: 0, rate: [1.0, 0.5, 0.25][i], sync: false, syncIdx: 5, depth: 1.0, phase: 0, polarity: 'bi' });
-        }
-        buildShapeButtons();
-        buildLFOKnobs();
-        updateModBadges();
-        updateTargetLists();
-      }
-    }
-  } else if (preset.vals) {
-    // Browser preview mode — apply mock values
-    for (const [id, val] of Object.entries(preset.vals)) {
-      state.params[id] = val;
-    }
-  }
-  updateAllKnobs();
-  buildPresetGrid();
-}
-
-document.getElementById('preset-prev').addEventListener('click', () => {
-  loadPreset((state.presetIdx - 1 + PRESETS.length) % PRESETS.length);
-});
-document.getElementById('preset-next').addEventListener('click', () => {
-  loadPreset((state.presetIdx + 1) % PRESETS.length);
-});
-
-// ---- Preset Browser ----
-function togglePresetBrowser() {
-  state.browserOpen = !state.browserOpen;
-  document.getElementById('preset-browser').classList.toggle('open', state.browserOpen);
-}
-document.getElementById('preset-name').addEventListener('click', togglePresetBrowser);
-
-function buildCategoryButtons() {
-  const container = document.getElementById('browser-cats');
-  container.innerHTML = '';
-  for (const cat of getAllCategories()) {
-    const btn = document.createElement('button');
-    btn.className = 'cat-btn' + (cat === state.browserCat ? ' active' : '');
-    btn.textContent = cat;
-    btn.addEventListener('click', () => {
-      state.browserCat = cat;
-      buildCategoryButtons();
-      buildPresetGrid();
-    });
-    container.appendChild(btn);
-  }
-}
-
-function buildPresetGrid() {
-  const container = document.getElementById('browser-grid');
-  container.innerHTML = '';
-  const search = state.browserSearch.toLowerCase();
-
-  for (let i = 0; i < PRESETS.length; i++) {
-    const p = PRESETS[i];
-    // Filter by category
-    if (state.browserCat !== 'ALL' && p.cat !== state.browserCat) continue;
-    if (search && !p.name.toLowerCase().includes(search)) continue;
-
-    const card = document.createElement('div');
-    card.className = 'preset-card' + (i === state.presetIdx ? ' selected' : '') + (p.isUser ? ' user-preset' : '');
-
-    // Inline rename mode
-    if (state.renamingIdx === i) {
-      const input = document.createElement('input');
-      input.className = 'preset-rename-input';
-      input.type = 'text';
-      input.value = p.name;
-      input.maxLength = 32;
-      input.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { finishRename(i, input.value); }
-        if (e.key === 'Escape') { state.renamingIdx = -1; buildPresetGrid(); }
-      });
-      input.addEventListener('blur', () => { finishRename(i, input.value); });
-      card.appendChild(input);
-      card.addEventListener('click', (e) => e.stopPropagation());
-      container.appendChild(card);
-      setTimeout(() => { input.focus(); input.select(); }, 10);
-      continue;
-    }
-
-    const nameEl = document.createElement('div');
-    nameEl.className = 'preset-card-name';
-    nameEl.textContent = p.name;
-    card.appendChild(nameEl);
-
-    const rightSide = document.createElement('div');
-    rightSide.style.cssText = 'display:flex;align-items:center;gap:6px;flex-shrink:0;';
-
-    if (p.isUser) {
-      const badge = document.createElement('span');
-      badge.className = 'user-badge';
-      badge.textContent = 'USER';
-      rightSide.appendChild(badge);
-    }
-
-    const catBadge = document.createElement('span');
-    catBadge.className = 'preset-card-cat';
-    catBadge.textContent = p.cat !== 'ALL' ? p.cat : '';
-    rightSide.appendChild(catBadge);
-
-    card.appendChild(rightSide);
-
-    card.addEventListener('click', () => loadPreset(i));
-
-    // Right-click context menu on all preset cards
-    card.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      showPresetContextMenu(e.clientX, e.clientY, i, p.isUser);
-    });
-
-    container.appendChild(card);
-  }
-}
-
-// Prevent native context menu in entire preset browser area
-document.getElementById('preset-browser').addEventListener('contextmenu', (e) => { e.preventDefault(); });
-
-document.getElementById('browser-search').addEventListener('input', (e) => {
-  state.browserSearch = e.target.value;
-  buildPresetGrid();
-});
-
-// ---- Save Preset ----
-document.getElementById('preset-save-btn').addEventListener('click', () => {
-  if (!state.browserOpen) togglePresetBrowser();
-  openSavePrompt();
-});
-
-function openSavePrompt() {
-  state.savePromptOpen = true;
-  const prompt = document.getElementById('save-prompt');
-  const input = document.getElementById('save-prompt-input');
-  prompt.style.display = 'flex';
-  input.value = '';
-  input.focus();
-}
-
-function closeSavePrompt() {
-  state.savePromptOpen = false;
-  document.getElementById('save-prompt').style.display = 'none';
-}
-
-document.getElementById('save-prompt-confirm').addEventListener('click', async () => {
-  const name = document.getElementById('save-prompt-input').value.trim();
-  if (!name) return;
-  closeSavePrompt();
-  if (juceMode && saveNewPresetFn) {
-    const newIdx = await saveNewPresetFn(name, '');
-    // Reload preset list
-    await reloadPresetList();
-    loadPreset(PRESETS.length - 1);
-  }
-});
-
-document.getElementById('save-prompt-cancel').addEventListener('click', closeSavePrompt);
-
-document.getElementById('save-prompt-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('save-prompt-confirm').click();
-  if (e.key === 'Escape') closeSavePrompt();
-});
-
-// ---- Reload Preset List from Backend ----
-async function reloadPresetList() {
-  if (!juceMode) return;
-  try {
-    state.factoryPresetCount = await getFactoryPresetCountFn();
-    const tagsStr = await getCustomTagsFn();
-    state.customTags = tagsStr ? tagsStr.split(',').filter(t => t.trim()) : [];
-    const count = await getNumPresetsFn();
-    PRESETS.length = 0;
-    for (let i = 0; i < count; i++) {
-      const name = await getPresetNameFn(i);
-      const tag = await getPresetTagFn(i);
-      const isUser = i >= state.factoryPresetCount;
-      PRESETS.push({ name, cat: tag || PRESET_CATEGORIES[name] || 'ALL', vals: null, idx: i, isUser });
-    }
-    buildCategoryButtons();
-    buildPresetGrid();
-  } catch (e) {
-    console.log('Error reloading presets:', e);
-  }
-}
-
-// ---- Preset Context Menu ----
-function showPresetContextMenu(x, y, idx, isUser) {
-  state.presetCtxTarget = idx;
-  const menu = document.getElementById('preset-ctx-menu');
-  const overlay = document.getElementById('overlay');
-
-  // Build menu items dynamically based on factory vs user
-  menu.innerHTML = '';
-  if (isUser) {
-    menu.innerHTML = `
-      <div class="preset-ctx-menu-item" data-action="rename">Rename</div>
-      <div class="preset-ctx-menu-item" data-action="overwrite">Overwrite with current</div>
-      <div class="preset-ctx-menu-item" data-action="tag">Tag...</div>
-      <div class="preset-ctx-menu-sep"></div>
-      <div class="preset-ctx-menu-item danger" data-action="delete">Delete</div>
-    `;
-  } else {
-    menu.innerHTML = `
-      <div class="preset-ctx-menu-disabled">Factory preset</div>
-      <div class="preset-ctx-menu-sep"></div>
-      <div class="preset-ctx-menu-item" data-action="save-copy">Save as copy</div>
-    `;
-  }
-
-  menu.style.left = x + 'px';
-  menu.style.top = y + 'px';
-  menu.style.display = 'block';
-  overlay.style.display = 'block';
-}
-
-function hidePresetContextMenu() {
-  document.getElementById('preset-ctx-menu').style.display = 'none';
-  document.getElementById('overlay').style.display = 'none';
-  document.getElementById('tag-picker').style.display = 'none';
-  document.getElementById('delete-confirm').style.display = 'none';
-}
-
-document.getElementById('overlay').addEventListener('click', hidePresetContextMenu);
-
-document.getElementById('preset-ctx-menu').addEventListener('click', async (e) => {
-  const action = e.target.dataset.action;
-  if (!action) return;
-  const idx = state.presetCtxTarget;
-  hidePresetContextMenu();
-
-  if (action === 'rename') {
-    state.renamingIdx = idx;
-    buildPresetGrid();
-  } else if (action === 'overwrite') {
-    if (juceMode && overwritePresetFn) {
-      await overwritePresetFn(idx);
-      await reloadPresetList();
-    }
-  } else if (action === 'tag') {
-    showTagPicker(idx);
-  } else if (action === 'delete') {
-    showDeleteConfirm(idx);
-  } else if (action === 'save-copy') {
-    // Save a copy of the factory preset as a new user preset
-    if (juceMode && loadPresetFn && saveNewPresetFn) {
-      await loadPresetFn(idx);
-      const copyName = (PRESETS[idx]?.name || 'Preset') + ' (Copy)';
-      await saveNewPresetFn(copyName, PRESETS[idx]?.cat || '');
-      await reloadPresetList();
-      loadPreset(PRESETS.length - 1);
-    }
-  }
-});
-
-// ---- Inline Rename ----
-async function finishRename(idx, newName) {
-  newName = newName.trim();
-  if (state.renamingIdx !== idx) return;
-  state.renamingIdx = -1;
-  if (newName && newName !== PRESETS[idx].name) {
-    if (juceMode && renamePresetFn) {
-      await renamePresetFn(idx, newName);
-      await reloadPresetList();
-      if (idx === state.presetIdx) {
-        document.getElementById('preset-name').textContent = newName;
-      }
-    }
-  } else {
-    buildPresetGrid();
-  }
-}
-
-// ---- Delete Confirmation ----
-function showDeleteConfirm(idx) {
-  const dialog = document.getElementById('delete-confirm');
-  const overlay = document.getElementById('overlay');
-  document.getElementById('delete-confirm-name').textContent = PRESETS[idx]?.name || '';
-  dialog.dataset.idx = idx;
-  dialog.style.display = 'block';
-  overlay.style.display = 'block';
-}
-
-document.getElementById('delete-cancel').addEventListener('click', hidePresetContextMenu);
-
-document.getElementById('delete-do').addEventListener('click', async () => {
-  const idx = parseInt(document.getElementById('delete-confirm').dataset.idx);
-  hidePresetContextMenu();
-  if (juceMode && deletePresetFn) {
-    await deletePresetFn(idx);
-    // If deleted preset was active, move to previous
-    if (state.presetIdx === idx) {
-      state.presetIdx = Math.max(0, idx - 1);
-    } else if (state.presetIdx > idx) {
-      state.presetIdx--;
-    }
-    await reloadPresetList();
-    loadPreset(state.presetIdx);
-  }
-});
-
-// ---- Tag Picker ----
-function showTagPicker(idx) {
-  state.presetCtxTarget = idx;
-  const picker = document.getElementById('tag-picker');
-  const overlay = document.getElementById('overlay');
-  const list = document.getElementById('tag-picker-list');
-  list.innerHTML = '';
-
-  const allTags = [...BUILTIN_CATEGORIES.filter(t => t !== 'ALL'), ...state.customTags.map(t => t.toUpperCase())];
-  const currentTag = PRESETS[idx]?.cat || '';
-
-  for (const tag of allTags) {
-    const row = document.createElement('div');
-    row.className = 'tag-picker-item' + (tag === currentTag ? ' current' : '');
-
-    const dot = document.createElement('span');
-    dot.className = 'tag-picker-dot';
-    dot.style.background = tag === currentTag ? 'var(--purple-500)' : 'var(--border)';
-    row.appendChild(dot);
-
-    const label = document.createElement('span');
-    label.textContent = tag;
-    label.style.cssText = 'flex:1;cursor:pointer;';
-    row.appendChild(label);
-
-    // Show delete X for custom tags only
-    const isCustom = state.customTags.map(t => t.toUpperCase()).includes(tag);
-    if (isCustom) {
-      const delBtn = document.createElement('span');
-      delBtn.className = 'tag-picker-del';
-      delBtn.textContent = '\u00d7';
-      delBtn.title = 'Delete custom tag';
-      delBtn.addEventListener('click', async (e) => {
-        e.stopPropagation();
-        state.customTags = state.customTags.filter(t => t.toUpperCase() !== tag);
-        if (juceMode && setCustomTagsFn) await setCustomTagsFn(state.customTags.join(','));
-        for (let pi = 0; pi < PRESETS.length; pi++) {
-          if (PRESETS[pi].cat === tag && PRESETS[pi].isUser && juceMode && setPresetTagFn) {
-            await setPresetTagFn(pi, '');
-          }
-        }
-        await reloadPresetList();
-        showTagPicker(idx);
-      });
-      row.appendChild(delBtn);
-    }
-
-    // Click row to assign tag
-    row.addEventListener('click', async (e) => {
-      if (e.target.classList.contains('tag-picker-del')) return;
-      if (juceMode && setPresetTagFn) {
-        await setPresetTagFn(idx, tag);
-        await reloadPresetList();
-      }
-      hidePresetContextMenu();
-    });
-
-    list.appendChild(row);
-  }
-
-  // Separator before create input
-  const sep = document.createElement('div');
-  sep.className = 'tag-picker-sep';
-  list.appendChild(sep);
-
-  picker.style.display = 'block';
-  overlay.style.display = 'block';
-  // Center in viewport
-  picker.style.left = '50%';
-  picker.style.top = '50%';
-  picker.style.transform = 'translate(-50%, -50%)';
-}
-
-document.getElementById('tag-picker-add-btn').addEventListener('click', async () => {
-  const input = document.getElementById('tag-picker-input');
-  const tag = input.value.trim().toUpperCase();
-  if (!tag || BUILTIN_CATEGORIES.includes(tag) || state.customTags.map(t => t.toUpperCase()).includes(tag)) {
-    input.value = '';
-    return;
-  }
-  state.customTags.push(tag);
-  if (juceMode && setCustomTagsFn) await setCustomTagsFn(state.customTags.join(','));
-  input.value = '';
-  // Assign to current preset
-  const idx = state.presetCtxTarget;
-  if (idx >= 0 && PRESETS[idx]?.isUser && juceMode && setPresetTagFn) {
-    await setPresetTagFn(idx, tag);
-  }
-  await reloadPresetList();
-  hidePresetContextMenu();
-});
-
-document.getElementById('tag-picker-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') document.getElementById('tag-picker-add-btn').click();
-  if (e.key === 'Escape') hidePresetContextMenu();
-});
 
 // ---- Section Toggle (enable/disable only, no collapse) ----
 document.getElementById('grain-header').addEventListener('click', (e) => {
@@ -21383,6 +20632,7 @@ setTimeout(function wireSynControls () {
           dynPushT=setTimeout(function(){ dynPushT=null;
             try{ if(!dynFn&&window.Juce&&window.Juce.getNativeFunction)dynFn=window.Juce.getNativeFunction('setSynthEnvs');
                  if(dynFn)dynFn(dynBlob()); }catch(e){} },120); }
+        window.__tiPullDynEnvs=function(){ dynTouched=false; dynPull(); };   /* fb620 — a preset load outranks the local hand */
         function dynPull(){ try{
           var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthEnvs'):null;
           if(!g)return;
@@ -30485,8 +29735,6 @@ function init() {
   drawRandomizeIcon();
   drawSpeedKnob();
   buildKnobs();
-  buildCategoryButtons();
-  buildPresetGrid();
   setupTapeReelCanvas();
   drawTransportIcons();
   drawUndoIcon();
@@ -30498,11 +29746,6 @@ function init() {
   initChorusContextMenu();
   // Initialize JUCE bindings (sync param values from DAW)
   initJuceBindings();
-  initJucePresets();
-  if (!juceMode) {
-    // Browser preview — load first mock preset
-    loadPreset(0);
-  }
   updateOutputDisplay();
   updateMasterMixDisplay();
   initModSystem();
@@ -30619,6 +29862,7 @@ restoreThemeFromBackend();
       (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null,pm:e.pm?1:0};
         if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:0,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1,rs:e.mo.rs||0,pol:e.mo.pol||0}; } });
       if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
+  window.__tiPullLfoShapes=function(){ shTouched=false; for(var k in shapes) delete shapes[k]; for(var k2 in motion) delete motion[k2]; shPull(); try{ render(); }catch(e){} };   /* fb620 — a preset load: the old shapes go, the pull brings the new ones (absent means clear) */
   function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
   function shPathD(pts,w,g){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
     d='M'+shX(pts[0][0]).toFixed(1)+' '+shY(pts[0][1],g).toFixed(1)+' ';
@@ -33659,11 +32903,11 @@ restoreThemeFromBackend();
      'mod' (the palette) still exits: it has no destinations, so a mirror there would be an empty
      array pushed over a live matrix. */
   var lastLocalEdit=0;   /* fb524 — stamped by every local add/remove/depth change */
-  function restore(cb){ var done=function(){ if(cb){ var c=cb; cb=null; try{ c(); }catch(e){} } };   /* fb570 — an optional completion, called exactly once, after the merge or on any bail */
+  function restore(cb,strict){ var done=function(){ if(cb){ var c=cb; cb=null; try{ c(); }catch(e){} } };   /* fb570 — an optional completion, called exactly once, after the merge or on any bail */
     if(window.__cardOnly==='mod'){ done(); return; }
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g){ done(); return; }
     g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr)){ done(); return; }   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
-      var live=window.__cardOnly?Object.create(null):null;
+      var live=(window.__cardOnly||strict)?Object.create(null):null;   /* fb620 — a preset load mirrors STRICTLY: routes the new patch lacks are pruned */
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
       /* fb563 — ONE decoder (decodeSrc, beside the encoder). The hand-written chain that lived
          here stopped at `sv<215` while fb556 had grown the followers to seven: a Filter 1 /
@@ -33682,7 +32926,7 @@ restoreThemeFromBackend();
         /* fb570 — and so does the CURVE (with bypass and Scale by): a curve drawn in the popped window never
            reached the docked assigns, so the docked window's next push() wrote the stale one back — the fb524
            drift, curve edition. Merged only once the local hand has been idle 1.5 s, like the prune. */
-        if(!badgeBusy&&(Date.now()-lastLocalEdit)>1500){ var nc=null; if(o.c){ try{ nc=String(o.c).split(',').map(Number); }catch(e){} }
+        if(strict||(!badgeBusy&&(Date.now()-lastLocalEdit)>1500)){ var nc=null; if(o.c){ try{ nc=String(o.c).split(',').map(Number); }catch(e){} }
           ex.curve=nc; ex.pts=(o.p&&window.__crvUtil)?o.p.map(window.__crvUtil.unpackPt):null;   /* fb573 */
           if(o.b) ex.byp=1; else delete ex.byp;
           if(o.x!=null){ var X2=decodeSrc(o.x|0); if(X2) ex.aux=X2; else delete ex.aux; } else delete ex.aux; }
@@ -33693,7 +32937,7 @@ restoreThemeFromBackend();
       if(o.b) a.byp=1;                                                          /* fb563 (3) */
       if(o.x!=null){ var X=decodeSrc(o.x|0); if(X) a.aux=X; }
       assigns.push(a); });
-      if(live&&!badgeBusy&&(Date.now()-lastLocalEdit)>1500)
+      if(live&&(strict||(!badgeBusy&&(Date.now()-lastLocalEdit)>1500)))
         for(var q=assigns.length-1;q>=0;q--){ var aq=assigns[q];
           if(!live[srcKey(aq)+'_'+aq.dest]) assigns.splice(q,1); }
       /* fb570 — a popped MOD curve editor whose route was removed in the main view would keep editing a
@@ -33706,7 +32950,7 @@ restoreThemeFromBackend();
           if(window.__crvCloseWin) window.__crvCloseWin(); else closeCurveEditor(); } }catch(e){} }
       restoredOnce=true; markTargets(); }catch(e){} done(); }).catch(function(){ done(); }); }catch(e){ done(); } }
   var restoredOnce=false;   /* fb524 — a card must never push() an empty mirror over a live matrix before its first read lands */
-  window.__tiModRestore=function(){ try{ restore(); }catch(e){} };   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
+  window.__tiModRestore=function(){ try{ restore(); }catch(e){} }; window.__tiModRestoreStrict=function(cb){ try{ restore(cb,true); }catch(e){} };   /* fb620 */   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
   setInterval(function(){ try{ if(window.__tiQuiet)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
      the DOCKED UI too. Local coords come pre-transformed from the main getModDrag native. */
@@ -34474,6 +33718,11 @@ restoreThemeFromBackend();
         function pull(){ if(!getF)return;
           try{ Promise.resolve(getF(id)).then(function(x){ if(!x)return;
             try{ var st=JSON.parse(String(x)); if(st&&st.chain&&st.chain.length) sc.setState(st,true); }catch(e){} }).catch(function(){}); }catch(e){} }
+        /* fb620 — a preset load pulls with CLEAR semantics: no state for this card means its chain is gone (absent means clear) */
+        function pullOrClear(){ if(!getF)return;
+          try{ Promise.resolve(getF(id)).then(function(x){ var st=null; try{ st=x?JSON.parse(String(x)):null; }catch(e){}
+            try{ if(st&&st.chain&&st.chain.length) sc.setState(st,true); else sc.setState({chain:[]},true); }catch(e){} }).catch(function(){}); }catch(e){} }
+        (window.__tiCardPulls=window.__tiCardPulls||[]).push(pullOrClear);
         sc.onMutate=push;
         S.on(function(){ push(); });
         pull();
@@ -34696,9 +33945,11 @@ restoreThemeFromBackend();
         function pushLanes(){ if(!laneSetFn)return; clearTimeout(pushT);
           pushT=setTimeout(function(){ try{ laneSetFn(JSON.stringify({steps:N,pitch:P.pitch,gate:P.gate,
             vel:P.vel,oct:P.oct,ratchet:P.ratchet,prob:P.prob,wt:P.wt})); }catch(e){} },120); }
-        if(laneGetFn){ try{ Promise.resolve(laneGetFn()).then(function(s){ try{ var o=JSON.parse(s);
-          for(var k in P) if(o[k]&&o[k].length) P[k]=o[k].slice(0,N).map(Number);
+        var P0=JSON.parse(JSON.stringify(P));   /* fb620 — the boot lanes: a preset without lanes lands here, not on the last preset's */
+        function pullLanes(){ if(!laneGetFn)return; try{ Promise.resolve(laneGetFn()).then(function(s){ var o=null; try{ o=JSON.parse(s||'null'); }catch(e){} o=o||{};
+          try{ for(var k in P) P[k]=(o[k]&&o[k].length)?o[k].slice(0,N).map(Number):P0[k].slice();
           heroPaint(); }catch(e){} }).catch(function(){}); }catch(e){} }
+        pullLanes(); window.__tiPullArpLanes=pullLanes;
 
         /* MOTION pane */
         var mb=TIC.el('<div class="gbox"><span class="gbl">Feel</span><div class="gr4"></div></div>');
@@ -38308,6 +37559,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         }
       }).catch (function () {}); } catch (e) {}
     }
+    window.__tiRestoreNoiseSel = restoreNoiseSel;   /* fb620 — a preset load re-loads its noise selection (the C++ clears an absent one) */
     function prettyNoise (file) { var s = String (file).replace (/\.[a-z0-9]+$/i, '').replace (/_\d+$/, '').replace (/^[A-Za-z]+_/, '').replace (/(wav|aiff?|flac|mp3|ogg)$/i, '').replace (/[_-]+/g, ' ').trim (); return s || String (file); }
     function loadFactAt (idx) {   // pick a factory sound by flat index → in-memory looping noise
       if (idx < 0 || idx >= FACT.length) return; factIdx = idx; var f = FACT[idx];
@@ -40203,5 +39455,579 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
 select { color-scheme: light; }
 select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 </style>
+<!-- ═══ fb620 — THE PRESET SYSTEM: the two surfaces (body-level, above #syn-panel z30, below every .pmenu) ═══ -->
+<div class="pmenu tp-menu tp-q" id="tp-q">
+  <div class="qcols">
+    <div class="qcol banks" id="tp-q-banks"></div>
+    <div class="qcol list" id="tp-q-list"></div>
+  </div>
+  <div class="foot" id="tp-q-browse">Browse all</div>
+</div>
+
+<div id="tp-b" class="tp-glass">
+  <div class="tb">
+    <div class="sw"><input class="search" id="tp-search" type="text" placeholder="Search names, styles, authors" autocomplete="off" spellcheck="false"></div>
+    <div class="count" id="tp-count"></div>
+    <button class="ibtn" id="tp-dice" title="Random preset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg></button>
+    <button class="ibtn" id="tp-fav-only" title="Favourites only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/></svg></button>
+    <button class="ibtn" id="tp-close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg></button>
+  </div>
+  <div class="chips" id="tp-chips-type"><span class="lb">Type</span><div class="strip"></div></div>
+  <div class="chips" id="tp-chips-style"><span class="lb">Style</span><div class="strip"></div></div>
+  <div class="body">
+    <div class="rail" id="tp-rail"></div>
+    <div class="listcol">
+      <div class="hd">
+        <span data-sort="name" style="flex:1">Name<i>▾</i></span>
+        <span data-sort="carries" style="width:92px">Carries<i>▾</i></span>
+        <span data-sort="type" style="width:64px">Type<i>▾</i></span>
+        <span data-sort="style" style="width:74px">Style<i>▾</i></span>
+        <span style="width:16px"></span>
+      </div>
+      <div class="list" id="tp-list" tabindex="0">
+        <div id="tp-rows"></div>
+        <div id="tp-empty" style="display:none"></div>
+      </div>
+    </div>
+    <div class="insp" id="tp-insp"></div>
+  </div>
+</div>
+
+<div class="pmenu tp-menu tp-ctx" id="tp-ctx"></div>
+<div class="pmenu tp-menu tp-sug" id="tp-sug"></div>
+<div id="tp-sheet"><div class="tp-card"></div></div>
+<div id="tp-toast"></div>
+
+<script>
+/* ═══ fb620 — THE PRESET SYSTEM (page side). Design/PRESET-SYSTEM-v1.md, mockup fb616f. ═══════════
+   The JS owns the catalogue view and the metadata schema; the C++ is a courier (fb618/fb619 natives):
+     listPresets · savePresetToBank · updatePresetMeta · renamePresetFile · copyPresetFile · deletePresetFile
+     createBank · renameBank · deleteBank · setFavourite/getFavourites · getVocab/setVocab
+     loadPatchFile (→ C++ afterPatchLoad → window.onPatchLoaded) · getPresetMeta/setPresetMeta
+     exportBank/exportPreset/exportPresetFile/importPack (dialogs; results arrive as window.onBankImported / onBankExported / onPresetExported)
+   A LOAD is one native call; the page hears about it ONCE, through onPatchLoaded, and re-pulls every
+   blob the widgets seeded at boot (macro names, LFO shapes, envelopes, the mod matrix, arp lanes, flow
+   cards, the noise selection) — the C++ side pushes the samples, blends, wavetable names and clears.
+   No prompt()/confirm(): WKWebView has no panels for them, so every question is a sheet. */
+(function(){
+  'use strict';
+  const $ = id => document.getElementById(id);
+  const NF = n => { try { return (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction(n) : null; } catch (e) { return null; } };
+  const call = (n, ...a) => { const f = NF(n); if (!f) return Promise.resolve(null); try { return Promise.resolve(f(...a)); } catch (e) { return Promise.resolve(null); } };
+  const isErr = r => typeof r === 'string' && r.indexOf('error:') === 0;
+  const errOf = r => String(r).slice(6);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  const VW = () => (window.__vw ? window.__vw() : window.innerWidth) || 820;
+  const VH = () => (window.__vh ? window.__vh() : window.innerHeight) || 656;
+  const tidy = raw => String(raw || '').trim().replace(/\s+/g, ' ').replace(/^./, ch => ch.toUpperCase());
+  const same = (a, b) => String(a || '').trim().toLowerCase() === String(b || '').trim().toLowerCase();
+
+  /* ═══ GLYPHS — the __extGlyph grammar (24 box · 2.2 stroke · round caps), one definition each ═══ */
+  const G = d => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+  const CAR_KEY  = ['wt', 'smp', 'ir', 'flow', 'lfo', 'nodes'];
+  const CAR_GLYPH = [
+    G('<path d="M3 12c3-6 6-6 9 0s6 6 9 0"/>'),                                                   /* wavetable — the sine */
+    G('<circle cx="8" cy="17" r="3" fill="currentColor" stroke="none"/><path d="M11 17V4.5l6 2.5"/>'), /* one-shot — a single note */
+    G('<path d="M4 20 4 8M9 20 9 4M14 20v-9M19 20v-4"/>'),                                        /* IR — the decay */
+    G('<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>'),             /* flow card */
+    G('<path d="M6 17 18 7" opacity=".35"/><g fill="currentColor" stroke="none"><circle cx="6" cy="17" r="2.3"/><circle cx="12" cy="12" r="2.3"/><circle cx="18" cy="7" r="2.3"/></g>'), /* LFO shape — the climbing notes (Max's call) */
+    G('<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M7 8l4 8M17 8l-4 8"/>'), /* nodes */
+  ];
+  const CAR_NAME = ['wavetables', 'one-shots', 'impulse responses', 'flow cards', 'LFO shapes', 'nodes'];
+  const CAR_ONE  = ['wavetable', 'one-shot', 'impulse response', 'flow card', 'LFO shape', 'node'];
+  const HEART = G('<path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/>');
+  const PLUS  = G('<path d="M12 5v14M5 12h14"/>');
+  const LIST  = G('<path d="M5 7h14M5 12h14M5 17h14"/>');
+  const DEF_TYPES  = ['Bass', 'Lead', 'Pad', 'Keys', 'Pluck', 'Texture', 'Perc', 'FX', 'Arp'];
+  const DEF_STYLES = ['Dark', 'Bright', 'Warm', 'Metallic', 'Glassy', 'Dirty', 'Clean', 'Evolving', 'Punchy', 'Wide', 'Hollow', 'Organic'];
+  const FAVS = '♥';   /* the Favourites row's key in the quick menu */
+
+  /* ═══ STATE ═══════════════════════════════════════════════════════════════════════════════════ */
+  const S = { banks: [], presets: [], favs: {}, types: DEF_TYPES.slice(), styles: DEF_STYLES.slice(), vocabLoaded: false,
+    cur: blankMeta(), curId: -1, sel: -1, bank: null, type: null, style: null, author: null, favOnly: false, q: '', qBank: null, sort: { key: null, dir: 1 },
+    author0: 'Me' };
+  function blankMeta() { return { name: '', bank: '', author: '', type: '', styles: '', note: '', fv: 1 }; }
+  function metaFrom(v) { let m = null; try { m = (typeof v === 'string') ? JSON.parse(v || 'null') : v; } catch (e) {} m = m && typeof m === 'object' ? m : {};
+    const o = blankMeta(); for (const k in o) if (m[k] != null) o[k] = k === 'fv' ? (+m[k] || 1) : String(m[k]); return o; }
+  const favKey = p => String(p.bank || '').trim() + '/' + String(p.name || '').trim();
+  const isFav = p => !!S.favs[favKey(p)];
+  const label = p => `<span class="bk">${esc(p.bank)} - </span>${esc(p.name)}`;
+  const plain = p => (p.bank ? p.bank + ' - ' : '') + p.name;
+  const bankOf = n => S.banks.find(b => same(b.name, n)) || null;
+  const stylesOf = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+  const carriesOf = c => CAR_KEY.map(k => (c && typeof c === 'object' && +c[k]) ? (+c[k] | 0) : 0);
+  function findCur() { const m = S.cur; if (!m.name) return -1; return S.presets.findIndex(p => same(p.bank, m.bank) && same(p.name, m.name)); }
+
+  /* ═══ THE CATALOGUE — one scan, normalised once; rows are rebuilt only when it changes ═════════ */
+  function ingest(json) {
+    let o = null; try { o = (typeof json === 'string') ? JSON.parse(json || 'null') : json; } catch (e) {}
+    const banks = (o && Array.isArray(o.banks)) ? o.banks : [];
+    S.banks = []; S.presets = [];
+    for (const b of banks) {
+      const bank = { name: String(b.name || ''), author: String(b.author || ''), version: String(b.version || ''), factory: !!b.factory, dir: String(b.dir || ''), n: 0 };
+      for (const r of (Array.isArray(b.presets) ? b.presets : [])) {
+        const c = carriesOf(r.carries);
+        S.presets.push({ id: S.presets.length, name: String(r.name || ''), bank: bank.name, author: String(r.author || bank.author || ''), type: tidy(r.type) || '',
+          styles: stylesOf(r.styles).map(tidy), note: String(r.note || ''), fv: +r.fv || 1, c, env: c[5] > 0, path: String(r.path || ''), mtime: +r.mtime || 0,
+          factory: !!r.factory, user: !r.factory });
+        bank.n++;
+      }
+      S.banks.push(bank);
+    }
+    S.banks.sort((a, b) => (a.factory === b.factory) ? a.name.localeCompare(b.name) : (a.factory ? -1 : 1));
+    /* every word a preset uses is in the vocabulary, appended after the user's own order */
+    for (const p of S.presets) { if (p.type && !S.types.some(t => same(t, p.type))) S.types.push(p.type); for (const s of p.styles) if (!S.styles.some(t => same(t, s))) S.styles.push(s); }
+    if (o && o.caps && (+o.caps.presets >= +o.caps.maxPresets || +o.caps.banks >= +o.caps.maxBanks)) toast('The library is at its cap — some presets were not listed');
+    rowsBuilt = -1; S.curId = findCur();
+    if (S.sel >= S.presets.length) S.sel = S.curId;
+  }
+  function rescan() { return call('listPresets').then(j => { if (j != null) ingest(j); renderAll(); }); }
+  function renderAll() { setHeader(); if (browserOpen()) { buildChips(); renderRail(); renderRows(); renderInsp(); } renderQuick(); }
+
+  /* ═══ HEADER ═══════════════════════════════════════════════════════════════════════════════════ */
+  function setHeader() { const el = $('preset-name'); if (!el) return; el.textContent = S.cur.name ? plain(S.cur) : 'Init'; el.title = el.textContent; }
+  function setCurrent(meta) { S.cur = metaFrom(meta); S.curId = findCur(); if (S.curId >= 0) S.sel = S.curId; setHeader(); }
+  function pool() { const bk = S.curId >= 0 ? S.presets[S.curId].bank : (S.cur.bank || null); const p = bk ? S.presets.filter(x => same(x.bank, bk)) : []; return p.length ? p : S.presets; }
+  function step(d) { const p = pool(); if (!p.length) { toast('Nothing to step through yet — save a preset first'); return; }
+    const at = p.findIndex(x => x.id === S.curId); const nx = p[((at < 0 ? (d > 0 ? -1 : 0) : at) + d + p.length) % p.length]; load(nx.id); }
+  $('preset-prev').addEventListener('click', e => { e.stopPropagation(); step(-1); });
+  $('preset-next').addEventListener('click', e => { e.stopPropagation(); step(1); });
+  $('preset-name').addEventListener('click', e => { e.stopPropagation(); closeCtx(); toggleQuick(); });
+  $('preset-save-btn').addEventListener('click', e => { e.stopPropagation(); toggleQuick(false); openSaveMenu(); });
+  function openSaveMenu() {
+    const p = S.curId >= 0 ? S.presets[S.curId] : null, canSave = !!(p && p.user);
+    const r = $('preset-save-btn').getBoundingClientRect();
+    menuAt(r.left, r.bottom + 4, `<div class="ps">${S.cur.name ? esc(plain(S.cur)) : 'Init'}</div>
+      <div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
+      <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
+      <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`,
+      a => { if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportCurrent(); });
+  }
+  function saveCurrent() {
+    const p = S.curId >= 0 ? S.presets[S.curId] : null;
+    if (!p || !p.user) { openSave(); return; }   /* a factory preset cannot be overwritten — Save as instead */
+    const meta = Object.assign({}, S.cur, { name: p.name, bank: p.bank });
+    call('savePresetToBank', p.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; } setCurrent(meta); rescan().then(() => toast(`Saved <span class="tp-bk">${esc(p.bank)} - </span>${esc(p.name)}`)); });
+  }
+  function exportCurrent() { if (!NF('exportPreset')) { toast('Export needs the plugin'); return; } call('exportPreset').then(r => { if (isErr(r)) toast(errOf(r)); }); }
+  window.onPresetExported = r => { if (isErr(r)) toast(errOf(r)); else toast(`Exported <span class="tp-bk">${esc(String(r).split('/').pop())}</span>`); };
+  document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && String(e.key).toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) openSave(); else saveCurrent(); } });
+
+  /* ═══ QUICK MENU — click the name; pick a bank (click, never hover), then a preset ═══════════════ */
+  function quickOpen() { return $('tp-q').classList.contains('on'); }
+  function toggleQuick(force) {
+    const on = force != null ? force : !quickOpen();
+    $('tp-q').classList.toggle('on', on); $('preset-name').classList.toggle('open', on);
+    if (!on) return;
+    S.qBank = S.curId >= 0 ? S.presets[S.curId].bank : (bankOf(S.cur.bank) ? S.cur.bank : (S.banks[0] ? S.banks[0].name : null));
+    renderQuick();
+    const r = $('preset-name').getBoundingClientRect(); placeMenu($('tp-q'), r.left - 40, r.bottom + 6);
+  }
+  function renderQuick() {
+    if (!quickOpen()) return;
+    const b = $('tp-q-banks'); let h = '<div class="ps">Banks</div>';
+    for (const bk of S.banks) h += `<div class="pi${same(bk.name, S.qBank) ? ' cur' : ''}" data-bank="${esc(bk.name)}"><span class="nm">${esc(bk.name)}</span><span class="ct">${bk.n}</span></div>`;
+    const nf = S.presets.filter(isFav).length;
+    h += `<div class="pi${S.qBank === FAVS ? ' cur' : ''}" data-bank="${FAVS}"><span class="nm">Favourites</span><span class="ct">${nf}</span></div>`;
+    h += `<div class="pi imp" data-do="import"><span class="nm">Import bank…</span></div>`;
+    b.innerHTML = h;
+    b.querySelectorAll('.pi[data-bank]').forEach(el => { el.onclick = () => { S.qBank = el.dataset.bank; renderQuick(); }; });
+    b.querySelector('[data-do=import]').onclick = () => { toggleQuick(false); importPack(); };
+    const l = $('tp-q-list'), fav = S.qBank === FAVS;
+    const pl = fav ? S.presets.filter(isFav) : S.presets.filter(p => same(p.bank, S.qBank));
+    let g = '';
+    if (!pl.length) g += `<div class="ps">${esc(fav ? 'Favourites' : (S.qBank || 'Presets'))}</div><div class="pi dim"><span class="nm">${fav ? 'Heart a preset to keep it here' : (S.banks.length ? 'Nothing saved here yet' : 'Save a preset with + in the header')}</span></div>`;
+    const types = S.types.slice(); for (const p of pl) if (!types.some(t => same(t, p.type))) types.push(p.type);
+    for (const t of types) {
+      const rows = pl.filter(p => same(p.type, t)); if (!rows.length) continue;
+      g += `<div class="ps">${esc(t || 'Untyped')}</div>`;
+      for (const p of rows) g += `<div class="pi${p.id === S.curId ? ' cur' : ''}" data-id="${p.id}"><span class="nm">${fav ? label(p) : esc(p.name)}</span>${p.env ? '<span class="env">Env</span>' : ''}${p.user ? '<span class="dx" title="Delete">✕</span>' : ''}</div>`;
+    }
+    l.innerHTML = g;
+    l.querySelectorAll('.pi[data-id]').forEach(el => { el.onclick = e => { if (e.target.classList.contains('dx')) { e.stopPropagation(); askDelete(+el.dataset.id); return; } toggleQuick(false); load(+el.dataset.id); }; });
+    const c = l.querySelector('.cur'); if (c) c.scrollIntoView({ block: 'center' });
+  }
+  $('tp-q-browse').onclick = () => { toggleQuick(false); openBrowser(); };
+
+  /* ═══ BROWSER ══════════════════════════════════════════════════════════════════════════════════ */
+  function browserOpen() { return $('tp-b').classList.contains('on'); }
+  function openBrowser() {
+    $('tp-b').classList.add('on'); window.__tiFrozen = true;   /* the glass covers every painter; nothing under it needs a frame */
+    S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp();
+    if (S.sel < 0) { const v = visibleIds(); if (v.length) { S.sel = v[0]; renderRows(); renderInsp(); } }
+    $('tp-list').focus();
+  }
+  function closeBrowser() { $('tp-b').classList.remove('on'); window.__tiFrozen = false; closeCtx(); closeSug(); try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
+  $('tp-close').onclick = closeBrowser;
+  window.__tiOpenPresetBrowser = openBrowser;
+
+  function buildChips() {
+    const ADD = k => `<button class="tp-chip add" data-add="${k}" title="Add a ${k}">${PLUS}</button>`;
+    const t = $('tp-chips-type').querySelector('.strip');
+    t.innerHTML = ['All', ...S.types].map(x => `<button class="tp-chip${(x === 'All' ? S.type == null : same(S.type, x)) ? ' active' : ''}" data-t="${esc(x)}">${esc(x)}</button>`).join('') + ADD('type');
+    t.querySelectorAll('.tp-chip[data-t]').forEach(b => { b.onclick = () => { S.type = b.dataset.t === 'All' ? null : b.dataset.t; buildChips(); renderRows(); };
+      if (b.dataset.t !== 'All') b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'type', b.dataset.t); }; });
+    const s = $('tp-chips-style').querySelector('.strip');
+    s.innerHTML = ['All', ...S.styles].map(x => `<button class="tp-chip${(x === 'All' ? S.style == null : same(S.style, x)) ? ' active' : ''}" data-s="${esc(x)}">${esc(x)}</button>`).join('') + ADD('style');
+    s.querySelectorAll('.tp-chip[data-s]').forEach(b => { b.onclick = () => { S.style = b.dataset.s === 'All' ? null : b.dataset.s; buildChips(); renderRows(); };
+      if (b.dataset.s !== 'All') b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'style', b.dataset.s); }; });
+    for (const st of [t, s]) { st.querySelector('[data-add]').onclick = () => addVocab(st.querySelector('[data-add]').dataset.add); const a = st.querySelector('.active'); if (a) a.scrollIntoView({ inline: 'nearest', block: 'nearest' }); stripEdge(st); }
+  }
+  function stripEdge(st) { st.classList.toggle('end', st.scrollLeft + st.clientWidth >= st.scrollWidth - 2); }
+  document.querySelectorAll('#tp-b .chips .strip').forEach(st => {
+    st.addEventListener('wheel', e => { if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) { st.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+    st.addEventListener('scroll', () => stripEdge(st));
+  });
+  function renderRail() {
+    const r = $('tp-rail'); let h = '<div class="sec">Banks</div>';
+    h += `<div class="ri${S.bank == null ? ' cur' : ''}" data-bank=""><span class="nm">All banks</span><span class="ct">${S.presets.length}</span></div>`;
+    for (const bk of S.banks) h += `<div class="ri${same(S.bank, bk.name) ? ' cur' : ''}" data-bank="${esc(bk.name)}"><span class="nm">${esc(bk.name)}</span><span class="ct">${bk.n}</span></div>`;
+    h += `<div class="ri imp" data-do="newbank">${PLUS}<span class="nm">New bank…</span></div>`;
+    h += `<div class="ri imp" data-do="import">${PLUS}<span class="nm">Import bank…</span></div>`;
+    const authors = [...new Set(S.presets.map(p => p.author).filter(Boolean))];
+    h += '<div class="sec">Author</div>';
+    h += `<div class="ri${S.author == null ? ' cur' : ''}" data-author=""><span class="nm">All</span></div>`;
+    for (const a of authors) h += `<div class="ri${S.author === a ? ' cur' : ''}" data-author="${esc(a)}"><span class="nm">${esc(a)}</span><span class="ct">${S.presets.filter(p => p.author === a).length}</span></div>`;
+    r.innerHTML = h;
+    r.querySelectorAll('[data-bank]').forEach(el => { el.onclick = () => { S.bank = el.dataset.bank || null; renderRail(); renderRows(); };
+      const bk = bankOf(el.dataset.bank); if (bk && !bk.factory) el.oncontextmenu = e => { e.preventDefault(); openBankCtx(e, bk); }; });
+    r.querySelectorAll('[data-author]').forEach(el => el.onclick = () => { S.author = el.dataset.author || null; renderRail(); renderRows(); });
+    r.querySelector('[data-do=import]').onclick = importPack;
+    r.querySelector('[data-do=newbank]').onclick = openNewBank;
+  }
+  function matches(p) {
+    if (S.bank && !same(p.bank, S.bank)) return false;
+    if (S.type && !same(p.type, S.type)) return false;
+    if (S.style && !p.styles.some(s => same(s, S.style))) return false;
+    if (S.author && p.author !== S.author) return false;
+    if (S.favOnly && !isFav(p)) return false;
+    if (S.q) { const hay = (p.bank + ' ' + p.name + ' ' + p.type + ' ' + p.styles.join(' ') + ' ' + p.author + ' ' + p.note + (p.env ? ' environment env' : '')).toLowerCase();
+      for (const w of S.q.split(/\s+/)) if (w && !hay.includes(w)) return false; }
+    return true;
+  }
+  let rowsBuilt = -1, lastClick = { id: -1, t: 0 };
+  function buildRows() {
+    const r = $('tp-rows'); let h = '';
+    for (const p of S.presets) h += `<div class="tp-row" data-id="${p.id}">
+      <span class="c-nm"><span class="t">${label(p)}</span>${p.env ? '<span class="tag">Env</span>' : ''}${p.user ? '<span class="tag user">User</span>' : ''}</span>
+      <span class="c-car">${p.c.map((n, i) => `<span class="tp-car${n ? ' on' : ''}${i === 5 ? ' node' : ''}" title="${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}">${CAR_GLYPH[i]}</span>`).join('')}</span>
+      <span class="c-ty">${esc(p.type)}</span>
+      <span class="c-st">${esc(p.styles[0] || '')}</span>
+      <span class="c-fv${isFav(p) ? ' on' : ''}">${HEART}</span></div>`;
+    r.innerHTML = h; rowsBuilt = S.presets.length;
+    r.querySelectorAll('.tp-row').forEach(el => {
+      const id = +el.dataset.id;
+      el.onclick = e => { if (e.target.closest('.c-fv')) { toggleFav(id); return; }
+        /* two clicks on one row = load. Counted by hand, not by the engine's dblclick: every engine delivers two clicks */
+        const t = Date.now(); if (lastClick.id === id && t - lastClick.t < 380) { lastClick = { id: -1, t: 0 }; load(id, { close: true }); return; }
+        lastClick = { id, t }; select(id); };
+      el.oncontextmenu = e => { e.preventDefault(); select(id); openCtx(e, id); };
+    });
+  }
+  const sortKey = (p, k) => k === 'name' ? (p.bank + ' ' + p.name).toLowerCase() : k === 'carries' ? -p.c.reduce((a, b) => a + b, 0) : k === 'type' ? (p.type + ' ' + p.name).toLowerCase() : ((p.styles[0] || '') + ' ' + p.name).toLowerCase();
+  function renderRows() {
+    if (rowsBuilt !== S.presets.length) buildRows();
+    let n = 0, nEnv = 0; const rows = [...$('tp-rows').querySelectorAll('.tp-row')];
+    rows.forEach(el => { const p = S.presets[+el.dataset.id]; const ok = matches(p); el.classList.toggle('off', !ok); el.classList.toggle('sel', p.id === S.sel); el.querySelector('.c-fv').classList.toggle('on', isFav(p)); if (ok) { n++; if (p.env) nEnv++; } });
+    if (S.sort.key) { const k = S.sort.key, d = S.sort.dir;
+      const order = S.presets.map(p => p.id).sort((a, b) => { const ka = sortKey(S.presets[a], k), kb = sortKey(S.presets[b], k); return (ka < kb ? -1 : ka > kb ? 1 : 0) * d; });
+      const pos = {}; order.forEach((id, i) => pos[id] = i); rows.forEach(el => el.style.order = pos[+el.dataset.id]); }
+    else rows.forEach(el => el.style.order = el.dataset.id);
+    document.querySelectorAll('#tp-b .hd [data-sort]').forEach(h => { const on = h.dataset.sort === S.sort.key; h.classList.toggle('on', on); h.querySelector('i').textContent = S.sort.dir > 0 ? '▾' : '▴'; });
+    $('tp-count').innerHTML = `<b>${n}</b> preset${n === 1 ? '' : 's'}${nEnv ? ` · <b>${nEnv}</b> environment${nEnv === 1 ? '' : 's'}` : ''}`;
+    const e = $('tp-empty'); e.style.display = n ? 'none' : 'block';
+    if (!n) e.innerHTML = `<b>Nothing here yet</b>${S.q ? 'No preset matches “' + esc(S.q) + '”.' : S.favOnly ? 'Mark a favourite with the heart on any row.' : 'Save one with + in the header, or import a bank.'}`;
+    const sel = $('tp-rows').querySelector('.tp-row.sel'); if (sel && !sel.classList.contains('off')) sel.scrollIntoView({ block: 'nearest' });
+  }
+  document.querySelectorAll('#tp-b .hd [data-sort]').forEach(h => h.onclick = () => { const k = h.dataset.sort; if (S.sort.key === k) { if (S.sort.dir > 0) S.sort.dir = -1; else S.sort = { key: null, dir: 1 }; } else S.sort = { key: k, dir: 1 }; renderRows(); });
+  function select(id) { S.sel = id; renderRows(); renderInsp(); }
+  function visibleIds() { return [...$('tp-rows').querySelectorAll('.tp-row:not(.off)')].sort((a, b) => (+a.style.order) - (+b.style.order)).map(el => +el.dataset.id); }
+  let noteT = null;
+  function renderInsp() {
+    const p = S.presets[S.sel], el = $('tp-insp'); if (!p) { el.innerHTML = ''; return; }
+    let cl = '';
+    p.c.forEach((n, i) => { if (n) cl += `<div class="cl${i === 5 ? ' node' : ''}">${CAR_GLYPH[i]}<span class="n">${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}</span></div>`; });
+    if (!cl) cl = `<div class="cl none">${CAR_GLYPH[0]}<span class="n">Parameters only</span></div>`;
+    el.innerHTML = `
+      <div class="nm">${label(p)}</div>
+      <div class="sub">${p.env ? 'Environment' : ''}${p.env && p.user ? ' · ' : ''}${p.user ? '<span class="user">User</span>' : ''}</div>
+      <div class="kv">
+        <span class="k">Type</span><span class="v">${esc(p.type || '—')}</span>
+        <span class="k">Style</span><span class="v" title="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · ') || '—')}</span>
+        <span class="k">Author</span><span class="v">${esc(p.author || '—')}</span>
+        <span class="k">Bank</span><span class="v">${esc(p.bank)}</span>
+        <span class="k">Load</span><span class="v">${p.env ? 'A few seconds' : 'Instant'}</span>
+      </div>
+      <div class="carries"><div class="k">Carries</div>${cl}</div>
+      <div class="notes"><div class="k">Notes</div><div class="tp-notebox${p.user ? '' : ' ro'}" id="tp-note"${p.user ? ' contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note"' : ' data-ph="No notes"'}></div></div>
+      <div class="acts"><button class="tp-btn ic${isFav(p) ? ' on' : ''}" id="tp-i-fav" title="Favourite">${HEART}</button><button class="tp-btn pri" id="tp-i-load">Load</button></div>`;
+    const nb = $('tp-note'); nb.textContent = p.note || '';
+    if (p.user) {
+      nb.oninput = () => { p.note = nb.textContent; clearTimeout(noteT); noteT = setTimeout(() => saveNote(p), 600); };
+      nb.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') nb.blur(); };
+      nb.onblur = () => { clearTimeout(noteT); saveNote(p); };
+    }
+    $('tp-i-fav').onclick = () => toggleFav(p.id);
+    $('tp-i-load').onclick = () => load(p.id, { close: true });
+  }
+  function saveNote(p) { if (!p.user || !p.path) return; if (p.__savedNote === p.note) return; p.__savedNote = p.note;
+    call('updatePresetMeta', p.path, JSON.stringify({ note: p.note })).then(r => { if (isErr(r)) toast(errOf(r)); });
+    if (p.id === S.curId) { S.cur.note = p.note; call('setPresetMeta', JSON.stringify(S.cur)); } }
+  function toggleFav(id) { const p = S.presets[id]; if (!p) return; const k = favKey(p), on = !S.favs[k]; if (on) S.favs[k] = true; else delete S.favs[k];
+    call('setFavourite', p.bank, p.name, on); renderRows(); renderInsp(); renderQuick(); }
+  $('tp-search').oninput = e => { S.q = e.target.value.trim().toLowerCase(); renderRows(); };
+  $('tp-search').onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') { if (S.q) { e.target.value = ''; S.q = ''; renderRows(); } else closeBrowser(); } if (e.key === 'ArrowDown') { $('tp-list').focus(); e.preventDefault(); } };
+  $('tp-fav-only').onclick = () => { S.favOnly = !S.favOnly; $('tp-fav-only').classList.toggle('on', S.favOnly); renderRows(); };
+  $('tp-dice').onclick = () => { const ids = visibleIds().filter(i => i !== S.sel); if (!ids.length) return; select(ids[Math.floor(Math.random() * ids.length)]); };
+  $('tp-list').onkeydown = e => {
+    const ids = visibleIds(); const at = ids.indexOf(S.sel);
+    if (e.key === 'ArrowDown') { if (ids.length) select(ids[Math.min(ids.length - 1, at + 1)]); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { if (ids.length) select(ids[Math.max(0, at - 1)]); e.preventDefault(); }
+    else if (e.key === 'Enter') { if (S.sel >= 0) load(S.sel, { close: true }); }
+    else if (e.key === 'Escape') closeBrowser();
+    else if (e.key === ' ') { if (S.sel >= 0) toggleFav(S.sel); e.preventDefault(); }
+    else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) { $('tp-search').focus(); return; }
+    e.stopPropagation();
+  };
+
+  /* ═══ MENUS — the page's .pmenu, positioned with its own clamp: max(6, min(v, edge - size - 6)) ═ */
+  function placeMenu(m, x, y) { m.classList.add('on'); const w = m.offsetWidth, h = m.offsetHeight; m.style.left = Math.max(6, Math.min(x, VW() - w - 6)) + 'px'; m.style.top = Math.max(6, Math.min(y, VH() - h - 6)) + 'px'; }
+  function menuAt(x, y, html, onPick) { const m = $('tp-ctx'); m.innerHTML = html; placeMenu(m, x, y);
+    m.querySelectorAll('.pi[data-a]').forEach(el => el.onclick = () => { closeCtx(); onPick(el.dataset.a); }); }
+  function closeCtx() { $('tp-ctx').classList.remove('on'); }
+  function closeSug() { $('tp-sug').classList.remove('on'); }
+  document.addEventListener('mousedown', e => {
+    if (quickOpen() && !e.target.closest('#tp-q') && !e.target.closest('#preset-name')) toggleQuick(false);
+    if (!e.target.closest('#tp-ctx')) closeCtx();
+  }, true);
+  function openCtx(e, id) {
+    const p = S.presets[id]; if (!p) return;
+    let h = `<div class="ps">${esc(p.name)}</div><div class="pi" data-a="load"><span class="nm">Load</span></div><div class="pi" data-a="fav"><span class="nm">${isFav(p) ? 'Remove favourite' : 'Favourite'}</span></div>`;
+    h += `<div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>`;
+    if (p.user) h += `<div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div>`;
+    else h += `<div class="pi" data-a="dup"><span class="nm">Copy to User</span></div>`;
+    h += `<div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`;
+    if (p.user) h += `<div class="pi rose" data-a="del"><span class="nm">Delete</span></div>`;
+    menuAt(e.clientX, e.clientY, h, a => {
+      if (a === 'load') load(id, { close: true });
+      if (a === 'fav') toggleFav(id);
+      if (a === 'saveas') openSave(p);
+      if (a === 'export') { if (id === S.curId) exportCurrent(); else call('exportPresetFile', p.path).then(r => { if (isErr(r)) toast(errOf(r)); }); }
+      if (a === 'del') askDelete(id);
+      if (a === 'rename') askRename(id);
+      if (a === 'over') { const meta = Object.assign({}, S.cur, { name: p.name, bank: p.bank, author: p.author, type: p.type, styles: p.styles.join(','), note: p.note });
+        call('savePresetToBank', p.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; } setCurrent(meta); rescan().then(() => toast(`Overwrote <span class="tp-bk">${esc(p.bank)} - </span>${esc(p.name)}`)); }); }
+      if (a === 'dup') call('copyPresetFile', p.path, 'User').then(r => { if (isErr(r)) { toast(errOf(r)); return; } rescan().then(() => toast(`Copied <span class="tp-bk">${esc(p.name)}</span> to User`)); });
+    });
+  }
+  function askDelete(id) { const p = S.presets[id]; if (!p || !p.user) return;
+    sheet({ title: 'Delete preset', body: `<div class="tp-text">Delete <b>${label(p)}</b>? This cannot be undone.</div>`, ok: 'Delete', onOk: () => {
+      closeSheet(); call('deletePresetFile', p.path).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+        if (S.sel === id) S.sel = -1; rescan().then(() => toast(`Deleted <span class="tp-bk">${esc(p.bank)} - </span>${esc(p.name)}`)); }); } }); }
+  function askRename(id) { const p = S.presets[id]; if (!p || !p.user) return;
+    sheet({ title: 'Rename preset', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-rn" maxlength="40" value="${esc(p.name)}"></div>`, ok: 'Rename', focus: 'tp-rn', onOk: () => {
+      const n = tidy($('tp-rn').value); if (!n) { $('tp-rn').focus(); return; } if (n === p.name) { closeSheet(); return; }
+      closeSheet(); const wasCur = id === S.curId;
+      call('renamePresetFile', p.path, n).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+        if (wasCur) { S.cur.name = n; call('setPresetMeta', JSON.stringify(S.cur)); }
+        rescan().then(() => toast(`${esc(p.name)} is now <span class="tp-bk">${esc(n)}</span>`)); }); } }); }
+  function openBankCtx(e, bk) {
+    const protectedBank = same(bk.name, 'User');
+    const h = `<div class="ps">${esc(bk.name)}${bk.author ? ' · ' + esc(bk.author) : ''}</div>${protectedBank ? '' : '<div class="pi" data-a="rename"><span class="nm">Rename…</span></div>'}<div class="pi" data-a="export"><span class="nm">Export bank…</span></div>${protectedBank ? '' : '<div class="pi rose" data-a="remove"><span class="nm">Remove bank</span></div>'}`;
+    menuAt(e.clientX, e.clientY, h, a => {
+      if (a === 'export') openExport(bk);
+      if (a === 'rename') sheet({ title: 'Rename bank', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bn" maxlength="30" value="${esc(bk.name)}"></div>`, ok: 'Rename', focus: 'tp-bn', onOk: () => {
+        const w = tidy($('tp-bn').value); if (!w) { $('tp-bn').focus(); return; } if (w === bk.name) { closeSheet(); return; }
+        if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
+        closeSheet(); const old = bk.name, curIn = same(S.cur.bank, old);
+        call('renameBank', old, w).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+          if (curIn) { S.cur.bank = w; call('setPresetMeta', JSON.stringify(S.cur)); }
+          if (same(S.bank, old)) S.bank = w; if (same(S.qBank, old)) S.qBank = w;
+          rescan().then(() => toast(`${esc(old)} is now <span class="tp-bk">${esc(w)}</span> · every preset re-filed`)); }); } });
+      if (a === 'remove') sheet({ title: 'Remove bank', body: `<div class="tp-text">Remove <b>${esc(bk.name)}</b> and its ${bk.n} preset${bk.n === 1 ? '' : 's'}? This cannot be undone.</div>`, ok: 'Remove', onOk: () => {
+        closeSheet(); call('deleteBank', bk.name).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+          if (same(S.bank, bk.name)) S.bank = null; if (same(S.qBank, bk.name)) S.qBank = null; S.sel = -1;
+          rescan().then(() => toast(`Removed ${esc(bk.name)}`)); }); } });
+    });
+  }
+
+  /* ═══ EDITABLE VOCABULARIES — add, rename, remove. A rename re-files every user preset that used the word. ═══ */
+  const vocab = k => k === 'type' ? S.types : S.styles;
+  const usersOf = (k, w) => S.presets.filter(p => k === 'type' ? same(p.type, w) : p.styles.some(s => same(s, w)));
+  function persistVocab() { call('setVocab', JSON.stringify({ types: S.types, styles: S.styles })); }
+  function ensureVocab(k, raw) { const w = tidy(raw); if (!w) return null; const list = vocab(k); const hit = list.find(x => same(x, w)); if (hit) return hit; list.push(w); persistVocab(); toast(`Added ${k} <span class="tp-bk">${esc(w)}</span>`); return w; }
+  function addVocab(k) { sheet({ title: k === 'type' ? 'New type' : 'New style', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" placeholder="${k === 'type' ? 'Type name' : 'Style name'}"></div>`, ok: 'Add', focus: 'tp-vn',
+    onOk: () => { const w = ensureVocab(k, $('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } closeSheet(); buildChips(); renderQuick(); } }); }
+  function renameVocab(k, old) { sheet({ title: 'Rename ' + old, body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" value="${esc(old)}"></div>`, ok: 'Rename', focus: 'tp-vn', onOk: () => {
+    const w = tidy($('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } if (w === old) { closeSheet(); return; }
+    const list = vocab(k), i = list.findIndex(x => same(x, old)); if (i < 0) { closeSheet(); return; }
+    if (list.some(x => same(x, w))) { toast(`${esc(w)} already exists`); return; }
+    closeSheet(); list[i] = w; persistVocab();
+    const used = usersOf(k, old), writes = [];
+    for (const p of used) { if (k === 'type') p.type = w; else p.styles = p.styles.map(s => same(s, old) ? w : s);
+      if (p.user && p.path) writes.push(call('updatePresetMeta', p.path, JSON.stringify(k === 'type' ? { type: w } : { styles: p.styles.join(',') }))); }
+    if (k === 'type' ? same(S.cur.type, old) : stylesOf(S.cur.styles).some(s => same(s, old))) { if (k === 'type') S.cur.type = w; else S.cur.styles = stylesOf(S.cur.styles).map(s => same(s, old) ? w : s).join(','); call('setPresetMeta', JSON.stringify(S.cur)); }
+    if (k === 'type' && same(S.type, old)) S.type = w; if (k === 'style' && same(S.style, old)) S.style = w;
+    const nu = used.filter(p => p.user).length, nf = used.length - nu;
+    Promise.all(writes).then(() => rescan()).then(() => toast(`${esc(old)} is now <span class="tp-bk">${esc(w)}</span> · ${nu} preset${nu === 1 ? '' : 's'} re-filed${nf ? ` · ${nf} factory kept the old word` : ''}`)); } }); }
+  function removeVocab(k, w) { const used = usersOf(k, w).length; if (used) { toast(`${used} preset${used === 1 ? ' uses' : 's use'} ${esc(w)} — re-file them first`); return; }
+    const list = vocab(k), i = list.findIndex(x => same(x, w)); if (i >= 0) list.splice(i, 1); persistVocab();
+    if (k === 'type' && same(S.type, w)) S.type = null; if (k === 'style' && same(S.style, w)) S.style = null;
+    buildChips(); renderRows(); renderQuick(); toast(`Removed ${esc(w)}`); }
+  function openVocabCtx(e, k, w) { const used = usersOf(k, w).length;
+    menuAt(e.clientX, e.clientY, `<div class="ps">${esc(w)} · ${used} preset${used === 1 ? '' : 's'}</div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div><div class="pi${used ? ' off' : ' rose'}" data-a="remove"><span class="nm">Remove</span></div>`,
+      a => a === 'rename' ? renameVocab(k, w) : removeVocab(k, w)); }
+
+  /* ═══ SUGGESTIONS under a text field — the same .pmenu ═══════════════════════════════════════ */
+  function attachSuggest(input, getItems, onPick, createLabel) {
+    const m = $('tp-sug');
+    function show() {
+      const raw = input.value.trim(), q = raw.toLowerCase(), all = getItems();
+      const items = all.filter(x => !q || x.toLowerCase().includes(q)).slice(0, 8);
+      const isNew = q && !all.some(x => x.toLowerCase() === q);
+      let h = items.map(x => `<div class="pi" data-v="${esc(x)}"><span class="nm">${esc(x)}</span></div>`).join('');
+      if (isNew && createLabel) h += `<div class="pi imp" data-v="${esc(raw)}"><span class="nm">${createLabel} “${esc(raw)}”</span></div>`;
+      if (!h) { closeSug(); return; }
+      m.innerHTML = h; const r = input.getBoundingClientRect(); m.style.minWidth = r.width + 'px'; placeMenu(m, r.left, r.bottom + 3);
+      m.querySelectorAll('.pi').forEach(el => el.onmousedown = ev => { ev.preventDefault(); input.value = el.dataset.v; closeSug(); onPick && onPick(el.dataset.v); });
+    }
+    input.addEventListener('focus', show); input.addEventListener('input', show);
+    input.addEventListener('blur', () => setTimeout(closeSug, 120));
+    input.addEventListener('keydown', e => { if (e.key === 'Escape' || e.key === 'Enter') closeSug(); });
+  }
+
+  /* ═══ LOADING — one native call; the page hears about it once, through onPatchLoaded ═══════════ */
+  function load(id, opts) {
+    const p = S.presets[id]; if (!p) return;
+    if (opts && opts.close) closeBrowser();
+    if (!NF('loadPatchFile')) { window.onPatchLoaded(JSON.stringify({ name: p.name, bank: p.bank, author: p.author, type: p.type, styles: p.styles.join(','), note: p.note, fv: p.fv })); return; }   /* preview: no backend */
+    call('loadPatchFile', p.path).then(r => { if (isErr(r)) toast(errOf(r)); });
+  }
+  window.onPatchLoaded = function (meta) {
+    setCurrent(meta);
+    if (browserOpen()) { renderRows(); renderInsp(); } renderQuick();
+    toast(S.cur.name ? `Loaded <span class="tp-bk">${esc(S.cur.bank)} - </span>${esc(S.cur.name)}` : 'Loaded');
+    repull();
+  };
+  /* every widget that SEEDED itself from a native at boot re-seeds here — the C++ has already pushed the
+     samples, blends, wavetable names and clears (afterPatchLoad); this is the page's half of the law */
+  function repull() {
+    const T = f => { try { f(); } catch (e) {} };
+    T(() => window.__tiSeedMacroNames && window.__tiSeedMacroNames());
+    T(() => window.__tiPullLfoShapes && window.__tiPullLfoShapes());
+    T(() => window.__tiPullDynEnvs && window.__tiPullDynEnvs());
+    T(() => window.__tiModRestoreStrict ? window.__tiModRestoreStrict() : (window.__tiModRestore && window.__tiModRestore()));
+    T(() => window.__tiPullArpLanes && window.__tiPullArpLanes());
+    T(() => (window.__tiCardPulls || []).forEach(f => { try { f(); } catch (e) {} }));
+    T(() => window.__tiRestoreNoiseSel && window.__tiRestoreNoiseSel());
+    T(() => typeof syncDeepStateFromCpp === 'function' && syncDeepStateFromCpp());
+    T(() => { if (typeof getModStateFn !== 'undefined' && getModStateFn && typeof restoreModState === 'function') Promise.resolve(getModStateFn()).then(j => { if (j) restoreModState(j); }).catch(() => {}); });
+    T(() => window.__fxrRender && window.__fxrRender());
+    T(() => { const W = window.wtWaterfall; if (W && W.fetch) ['a', 'b', 'c', 'd'].forEach(o => W.fetch(o)); });
+  }
+
+  /* ═══ SAVE — every field typed; Bank joins or creates; Type adds; Style chips + type-to-add ═══ */
+  let svStyles = [];
+  function openSave(from) {
+    const cur = from || (S.curId >= 0 ? S.presets[S.curId] : null);
+    const m = S.cur, name0 = cur ? (cur.user ? cur.name : cur.name + ' 2') : (m.name || ''), bank0 = cur ? (cur.user ? cur.bank : 'User') : (bankOf(m.bank) && !bankOf(m.bank).factory ? m.bank : 'User');
+    const author0 = cur && cur.user ? cur.author : (m.author || S.author0), type0 = cur ? cur.type : m.type;
+    svStyles = cur ? cur.styles.slice() : stylesOf(m.styles);
+    sheet({ title: 'Save preset', ok: 'Save', focus: 'tp-sv-name', body: `<div class="tp-f">
+        <span class="k">Name</span><input type="text" class="tp-in" id="tp-sv-name" maxlength="40" placeholder="Preset name" value="${esc(name0)}">
+        <span class="k">Bank</span><input type="text" class="tp-in" id="tp-sv-bank" maxlength="30" placeholder="Type a bank — new name makes one" value="${esc(bank0)}">
+        <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
+        <span class="k">Type</span><input type="text" class="tp-in" id="tp-sv-type" maxlength="20" placeholder="Type a type — new word adds one" value="${esc(type0)}">
+        <span class="k">Style</span><div class="chp" id="tp-sv-style"></div>
+      </div>`,
+      init: () => { renderSaveStyles();
+        attachSuggest($('tp-sv-bank'), () => S.banks.filter(b => !b.factory).map(b => b.name), null, 'New bank');
+        attachSuggest($('tp-sv-author'), () => [...new Set(S.presets.map(p => p.author).filter(Boolean))], null, null);
+        attachSuggest($('tp-sv-type'), () => S.types, null, 'Add type'); },
+      onOk: () => {
+        const n = tidy($('tp-sv-name').value); if (!n) { $('tp-sv-name').focus(); return; }
+        const bk = tidy($('tp-sv-bank').value) || 'User'; const b = bankOf(bk); if (b && b.factory) { toast(`${esc(b.name)} is a factory bank — choose or create another`); return; }
+        const pending = $('tp-sv-style-add').value.trim(); if (pending) { const w = ensureVocab('style', pending); if (w && !svStyles.includes(w)) svStyles.push(w); }
+        const type = ensureVocab('type', $('tp-sv-type').value) || '';
+        const author = $('tp-sv-author').value.trim(); if (author) S.author0 = author;
+        const meta = { name: n, bank: b ? b.name : bk, author, type, styles: svStyles.slice().join(','), note: (cur && cur.id === S.curId) || !cur ? (S.cur.note || '') : '', fv: 1 };
+        const existing = S.presets.find(p => same(p.bank, meta.bank) && same(p.name, n));
+        const go = () => { closeSheet(); call('savePresetToBank', meta.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+          setCurrent(meta); rescan().then(() => { if (!b) toast(`Created bank <span class="tp-bk">${esc(meta.bank)}</span> · saved ${esc(n)}`); else toast(`Saved <span class="tp-bk">${esc(meta.bank)} - </span>${esc(n)}`); }); }); };
+        if (existing) sheet({ title: 'Overwrite preset', body: `<div class="tp-text"><b>${label(existing)}</b> already exists. Overwrite it with the current sound?</div>`, ok: 'Overwrite', onOk: go }); else go();
+      } });
+  }
+  function renderSaveStyles() {
+    const box = $('tp-sv-style'); if (!box) return;
+    box.innerHTML = svStyles.map(s => `<button class="tp-chip active" data-s="${esc(s)}" title="Remove">${esc(s)}</button>`).join('') + `<input type="text" class="tp-in" id="tp-sv-style-add" placeholder="Add a style" maxlength="20">`;
+    box.querySelectorAll('.tp-chip').forEach(b => b.onclick = () => { svStyles = svStyles.filter(x => x !== b.dataset.s); renderSaveStyles(); });
+    const inp = $('tp-sv-style-add');
+    const take = raw => { const w = ensureVocab('style', raw); if (w && !svStyles.includes(w)) svStyles.push(w); renderSaveStyles(); };
+    attachSuggest(inp, () => S.styles.filter(s => !svStyles.includes(s)), v => take(v), 'Add style');
+    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); if (inp.value.trim()) take(inp.value); } if (e.key === 'Escape') closeSheet(); };
+  }
+
+  /* ═══ NEW BANK · IMPORT · EXPORT ═══════════════════════════════════════════════════════════════ */
+  function openNewBank() { sheet({ title: 'New bank', ok: 'Create', focus: 'tp-bk-name',
+    body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bk-name" maxlength="30" placeholder="Bank name"><span class="k">Author</span><input type="text" class="tp-in" id="tp-bk-author" maxlength="30" placeholder="Your name" value="${esc(S.author0)}"></div>`,
+    note: 'Save presets into it by typing its name in the Bank field. Right-click it in the browser to export it as a .terrainpack.',
+    onOk: () => { const w = tidy($('tp-bk-name').value); if (!w) { $('tp-bk-name').focus(); return; }
+      if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
+      const a = $('tp-bk-author').value.trim(); if (a) S.author0 = a; closeSheet();
+      call('createBank', w, a).then(r => { if (isErr(r)) { toast(errOf(r)); return; } S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created bank <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
+  function importPack() { if (!NF('importPack')) { toast('Import needs the plugin'); return; } call('importPack').then(r => { if (isErr(r)) toast(errOf(r)); }); }
+  window.onBankImported = r => { if (isErr(r)) { toast(errOf(r)); return; } const name = String(r); S.bank = name; S.sel = -1;
+    rescan().then(() => { const bk = bankOf(name); if (!browserOpen()) openBrowser(); toast(`Imported <span class="tp-bk">${esc(name)} · </span>${bk ? bk.n : 0} preset${bk && bk.n === 1 ? '' : 's'}`); }); };
+  function openExport(bk) {
+    const ps = S.presets.filter(p => same(p.bank, bk.name)); const a = [0, 0, 0, 0, 0]; let nodes = 0, envs = 0;
+    for (const p of ps) { for (let i = 0; i < 5; i++) a[i] += p.c[i]; nodes += p.c[5]; if (p.env) envs++; }
+    const file = bk.name.replace(/\s+/g, '-') + '.terrainpack';
+    sheet({ title: 'Export bank', ok: 'Export', body: `<div class="manifest"><div class="mn">${esc(bk.name)}${bk.author ? ` <span class="by">· ${esc(bk.author)}</span>` : ''}</div>
+      <div class="ml"><div>${LIST}<b>${ps.length}</b> preset${ps.length === 1 ? '' : 's'}</div>${[0, 1, 2, 3, 4].map(i => `<div>${CAR_GLYPH[i]}<b>${a[i]}</b> ${a[i] === 1 ? CAR_ONE[i] : CAR_NAME[i]}</div>`).join('')}${envs ? `<div class="node">${CAR_GLYPH[5]}<b>${envs}</b> environment${envs === 1 ? '' : 's'} · ${nodes} nodes</div>` : ''}</div>
+      <div class="tot">Everything above goes into ${esc(file)}</div></div>`,
+      onOk: () => { if (!ps.length) { toast('Nothing to export yet'); return; } closeSheet(); if (!NF('exportBank')) { toast('Export needs the plugin'); return; } call('exportBank', bk.name).then(r => { if (isErr(r)) toast(errOf(r)); }); } });
+  }
+  window.onBankExported = r => { if (isErr(r)) toast(errOf(r)); else toast(`Exported <span class="tp-bk">${esc(String(r).split('/').pop())}</span>`); };
+
+  /* ═══ SHEETS — one card, every question ════════════════════════════════════════════════════════ */
+  let sheetSpec = null;
+  function sheet(spec) {
+    sheetSpec = spec; const sh = $('tp-sheet'), card = sh.querySelector('.tp-card');
+    card.innerHTML = `<div class="tp-hd">${esc(spec.title)}</div>${spec.body || ''}${spec.note ? `<div class="tp-note">${spec.note}</div>` : ''}<div class="tp-acts"><button class="tp-btn" id="tp-sh-cancel">Cancel</button><button class="tp-btn pri" id="tp-sh-ok">${esc(spec.ok || 'OK')}</button></div>`;
+    sh.classList.add('on'); $('tp-sh-cancel').onclick = closeSheet; $('tp-sh-ok').onclick = () => spec.onOk && spec.onOk();
+    if (spec.init) spec.init();
+    if (spec.focus) setTimeout(() => { const f = $(spec.focus); if (f) { f.focus(); if (f.select) f.select(); } }, 30);
+  }
+  function closeSheet() { closeSug(); const sh = $('tp-sheet'); sh.classList.remove('on'); sh.querySelector('.tp-card').innerHTML = ''; sheetSpec = null; if (browserOpen()) $('tp-list').focus(); }
+  $('tp-sheet').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeSheet(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.id !== 'tp-sv-style-add' && sheetSpec && sheetSpec.onOk) { e.preventDefault(); sheetSpec.onOk(); } });
+  $('tp-sheet').addEventListener('mousedown', e => { if (e.target === $('tp-sheet')) closeSheet(); });
+  /* the fb135 host-key bridge types into the ARMED input — every field in these surfaces arms itself */
+  for (const id of ['tp-b', 'tp-sheet']) {
+    $(id).addEventListener('focusin', e => { const t = e.target; if (t && (t.tagName === 'INPUT' || t.isContentEditable)) { window.__tiActiveInp = t; if (window.__tiEditArm) window.__tiEditArm(1); } });
+    $(id).addEventListener('focusout', e => { if (window.__tiActiveInp === e.target) { window.__tiActiveInp = null; if (window.__tiEditArm) window.__tiEditArm(0); } });
+  }
+  document.addEventListener('keydown', e => { if (e.key !== 'Escape') return; if ($('tp-sheet').classList.contains('on')) { closeSheet(); return; } if ($('tp-ctx').classList.contains('on')) { closeCtx(); return; } if (quickOpen()) toggleQuick(false); });
+
+  /* the C++ half of a load pushes this for every osc WITHOUT an import: the name on the pill is the factory table's again */
+  window.onWavetableImportCleared = o => { try { const W = window.wtWaterfall; if (W) { W.imported[o] = false; if (W.importName) W.importName[o] = ''; }
+    const sel = $('osc-' + o + '-preset-select'), disp = $('osc-' + o + '-preset-display'); if (sel && disp && sel.selectedIndex >= 0) disp.textContent = sel.options[sel.selectedIndex].text; } catch (e) {} };
+
+  /* ═══ TOAST · LOAD ERRORS ══════════════════════════════════════════════════════════════════════ */
+  let toastT = null;
+  function toast(html) { const t = $('tp-toast'); t.innerHTML = html; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1900); }
+  if (!window.onLoadError) window.onLoadError = m => toast(esc(m));
+
+  /* ═══ BOOT — the current name, the catalogue, favourites, vocabulary ═══════════════════════════ */
+  function boot() {
+    call('getPresetMeta').then(m => { if (m != null) setCurrent(m); else setHeader(); });
+    call('getFavourites').then(j => { try { const o = JSON.parse(j || 'null'); if (o && typeof o === 'object') S.favs = o; } catch (e) {} });
+    call('getVocab').then(j => { try { const o = JSON.parse(j || 'null'); if (o && Array.isArray(o.types) && o.types.length) S.types = o.types.map(tidy); if (o && Array.isArray(o.styles) && o.styles.length) S.styles = o.styles.map(tidy); } catch (e) {} S.vocabLoaded = true; })
+      .then(() => rescan());
+  }
+  setHeader();
+  if (window.Juce && window.Juce.getNativeFunction) boot(); else setTimeout(() => { if (window.Juce && window.Juce.getNativeFunction) boot(); }, 900);
+  window.__tiPresets = { rescan, openBrowser, load, state: S };   /* the gate hook */
+})();
+</script>
 </body>
 </html>

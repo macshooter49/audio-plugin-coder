@@ -870,6 +870,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 juce::String err;
                 const bool ok = args.size() > 0 && audioProcessor.loadPatchFromFile (juce::File (args[0].toString()), err);
+                if (ok) afterPatchLoad();   // fb620 — the page hears about the load ONCE, through onPatchLoaded
                 complete (juce::var (ok ? audioProcessor.getPresetMetaJson() : "error:" + err));
             })
             .withNativeFunction ("readPatchHeader", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -984,6 +985,55 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     juce::String err; const bool ok = safe->audioProcessor.savePatchToFile (f, {}, err);
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onPresetExported)window.onPresetExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:" + err), true) + ");", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            // fb620 — three more file couriers the surfaces need: rename (the file moves WITH the name, or a later
+            // save under the old name would overwrite it), copy a factory preset into a user bank, export any row's file
+            .withNativeFunction ("renamePresetFile", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err; const auto root = TerrainAudioProcessor::banksUserRoot();
+                const juce::File f (args.size() > 0 ? args[0].toString() : juce::String());
+                const auto nm = args.size() > 1 ? args[1].toString().trim() : juce::String();
+                if (nm.isEmpty() || ! f.existsAsFile() || ! tw::bank::isInside (f, root)) { complete (juce::var ("error:not a user preset")); return; }
+                const auto dst = f.getSiblingFile (tw::bank::safeName (nm) + ".terrain");
+                if (dst != f && dst.existsAsFile()) { complete (juce::var ("error:a preset called " + nm + " is already in this bank")); return; }
+                if (dst != f && ! f.moveFileTo (dst)) { complete (juce::var ("error:could not rename " + f.getFileName())); return; }
+                auto* p = new juce::DynamicObject(); p->setProperty ("name", nm);
+                complete (juce::var (tw::bank::rewriteMeta (dst, root, juce::var (p), err) ? dst.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("copyPresetFile", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err; const auto root = TerrainAudioProcessor::banksUserRoot();
+                const juce::File src (args.size() > 0 ? args[0].toString() : juce::String());
+                const auto bank = args.size() > 1 ? args[1].toString().trim() : juce::String ("User");
+                if (! src.existsAsFile()) { complete (juce::var ("error:no such preset")); return; }
+                juce::File dir; if (! tw::bank::ensureBank (root, bank, {}, dir, err)) { complete (juce::var ("error:" + err)); return; }
+                const auto dst = dir.getChildFile (src.getFileName());
+                if (dst.existsAsFile()) { complete (juce::var ("error:" + src.getFileNameWithoutExtension() + " is already in " + bank)); return; }
+                if (! src.copyFileTo (dst)) { complete (juce::var ("error:could not copy " + src.getFileName())); return; }
+                auto* p = new juce::DynamicObject(); p->setProperty ("bank", bank);
+                complete (juce::var (tw::bank::rewriteMeta (dst, root, juce::var (p), err) ? dst.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("exportPresetFile", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const juce::File src (args.size() > 0 ? args[0].toString() : juce::String());
+                if (! src.existsAsFile()) { complete (juce::var ("error:no such preset")); return; }
+                juce::String manifest, err; juce::String leaf = src.getFileNameWithoutExtension();
+                if (TerrainAudioProcessor::readPatchHeader (src, manifest, err))
+                    if (auto v = juce::JSON::parse (manifest); v.isObject())
+                        leaf = tw::bank::safeName (v.getProperty ("bank", "Terrain").toString() + " - " + v.getProperty ("name", leaf).toString());
+                auto chooser = std::make_shared<juce::FileChooser> ("Export preset", juce::File::getSpecialLocation (juce::File::userDesktopDirectory).getChildFile (leaf + ".terrain"), "*.terrain");
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                    [safe, chooser, src] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    auto f = fc.getResult(); if (f == juce::File()) return;
+                    if (f.getFileExtension() != ".terrain") f = f.withFileExtension ("terrain");
+                    const bool ok = src.copyFileTo (f);
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript ("if(window.onPresetExported)window.onPresetExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:could not write " + f.getFileName()), true) + ");", nullptr);
                 });
                 complete (juce::var ("ok"));
             })
@@ -14428,8 +14478,36 @@ void TerrainUiCore::loadPatch (const juce::File& f)
     // fb618 — a dropped .terrain loads through the processor (message thread: filesDropped is one).
     juce::String err;
     if (! audioProcessor.loadPatchFromFile (f, err)) { reportLoadError ("preset", err); return; }
-    if (webView != nullptr)
-        webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
+    afterPatchLoad();
+}
+
+void TerrainUiCore::afterPatchLoad()
+{
+    // fb620 — ONE law for every load (a drop, the browser, the quick menu, the ‹ › arrows): the processor
+    // has replaced its state (absent means clear, fb618) and the page must now show THAT patch, not the
+    // last one. The C++ half: the seat, the loaded samples and live blends (resyncAfterReattach, verbatim),
+    // then the CLEARS it never sent — an osc whose sample is gone, a blend that is not live, an import
+    // that is not there, a noise slot back to the algorithm — and the imported wavetable's name. The page's
+    // half runs from onPatchLoaded (index.html repull(): macro names, LFO shapes, envelopes, the mod
+    // matrix, arp lanes, flow cards, the noise selection). The APVTS itself needs no courier: the relays
+    // already moved every knob.
+    if (webView == nullptr) return;
+    resyncAfterReattach();
+    for (int oi = 0; oi < 4; ++oi)
+    {
+        const juce::String letter (juce::String::charToString ((juce::juce_wchar) ('a' + oi)));
+        if (audioProcessor.getCachedOscPayload (oi).isEmpty())
+            webView->evaluateJavascript ("if(window.onOscSampleCleared)window.onOscSampleCleared('" + letter + "');", nullptr);
+        if (! oscBlends_[oi].live)
+            webView->evaluateJavascript ("if(window.onBlendState)window.onBlendState('" + letter + "',false);", nullptr);
+        if (audioProcessor.hasOscImport (oi))
+            webView->evaluateJavascript ("if(window.onWavetableImported)window.onWavetableImported('" + letter + "'," + juce::JSON::toString (juce::var (audioProcessor.getImportName (oi))) + ");", nullptr);
+        else
+            webView->evaluateJavascript ("if(window.onWavetableImportCleared)window.onWavetableImportCleared('" + letter + "');", nullptr);
+    }
+    if (audioProcessor.getNoiseSampleSel().isEmpty())
+        webView->evaluateJavascript ("if(window.onNoiseSampleCleared)window.onNoiseSampleCleared();", nullptr);
+    webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
 }
 
 void TerrainUiCore::importTerrainPack (const juce::File& f)

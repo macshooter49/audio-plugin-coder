@@ -82,6 +82,7 @@ private:
     void reportLoadError (const juce::String& where, const juce::String& message);
     void loadNoiseSampleFromMemory (juce::MemoryBlock data, const juce::String& filename);   // NOISE IMPORT (P5) — sandbox-safe looping-noise sample
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
+    void afterPatchLoad();                                   // fb620 — the one law for every load: C++ pushes, then onPatchLoaded
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
 
     juce::String currentSampleSourcePath;
