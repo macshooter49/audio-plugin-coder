@@ -42,7 +42,8 @@
   --text-primary: #2A2035; --text-soft: #4A4058; --text-secondary: #5C5068; --text-muted: #8A7F96; --text-dim: #A89BBE;
   --rose: #f43f5e;
   --menu-bg: rgba(240,237,245,0.96); --menu-fg: #2A2035; --menu-fg-dim: rgba(42,32,53,.82); --menu-fg-faint: rgba(42,32,53,.60);
-  --menu-line: rgba(124,92,191,0.18); --menu-wash: rgba(139,92,246,0.09); --menu-wash-cur: rgba(139,92,246,0.16);
+  --menu-line: rgba(124,92,191,0.18); --menu-wash: rgba(139,92,246,0.14); --menu-wash-cur: rgba(139,92,246,0.20);
+  --sel: rgba(139,92,246,0.18); --sel-strong: rgba(139,92,246,0.26); --sel-fg: #7C3AED;
   --edge: rgba(42,32,53,0.30); --edge-soft: rgba(42,32,53,0.18); --on-fg: #2A2035;
   --wash: rgba(236,232,241,0.80);
 }
@@ -53,7 +54,8 @@
   --border: rgba(58,58,88,0.5); --border-strong: rgba(88,88,128,0.5);
   --text-primary: #E0DCE8; --text-soft: #C4BDD6; --text-secondary: #9B93B0; --text-muted: #6B6080; --text-dim: #504870;
   --menu-bg: rgba(22,20,34,0.72); --menu-fg: #fff; --menu-fg-dim: rgba(255,255,255,.78); --menu-fg-faint: rgba(255,255,255,.50);
-  --menu-line: rgba(255,255,255,0.11); --menu-wash: rgba(139,92,246,0.12); --menu-wash-cur: rgba(139,92,246,0.24);
+  --menu-line: rgba(255,255,255,0.11); --menu-wash: rgba(139,92,246,0.18); --menu-wash-cur: rgba(139,92,246,0.26);
+  --sel: rgba(139,92,246,0.18); --sel-strong: rgba(139,92,246,0.28); --sel-fg: #B794FF;   /* hover washes purple; the selected line's words turn purple (Analog Lab's blue) */
   --edge: rgba(255,255,255,0.45); --edge-soft: rgba(255,255,255,0.22); --on-fg: #fff;   /* fb118: the mode tiles' outline */
   --wash: rgba(18,18,31,0.82);
 }
@@ -126,8 +128,8 @@ button, input { font-family: inherit; }
 .pmenu .pi .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pmenu .pi .ct { color: var(--menu-fg-faint); font-size: 9.5px; flex: none; }
 .pmenu .pi:hover { color: var(--menu-fg); background: var(--menu-wash); }
-.pmenu .pi.cur { color: var(--menu-fg); background: var(--menu-wash-cur); }
-.pmenu .pi.cur .ct { color: var(--menu-fg-dim); }
+.pmenu .pi.cur { color: var(--sel-fg); background: var(--menu-wash-cur); }
+.pmenu .pi.cur .ct { color: var(--sel-fg); }
 .pmenu .pi.cur::before { content: '•'; color: var(--purple-400); font-size: 10px; line-height: 1; flex: none; align-self: center; }
 .pmenu .pi .dx { color: var(--menu-fg-faint); font-size: 9px; display: none; flex: none; }
 .pmenu .pi:hover .dx { display: block; }
@@ -195,8 +197,8 @@ button, input { font-family: inherit; }
 .rail .ri .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail .ri .ct { font-size: 9.5px; color: var(--text-secondary); }
 .rail .ri:hover { color: var(--text-primary); background: var(--sel); }
-.rail .ri.cur { color: var(--text-primary); border-left-color: var(--purple-500); background: var(--sel-strong); }
-.rail .ri.cur .ct { color: var(--text-primary); }
+.rail .ri.cur { color: var(--sel-fg); border-left-color: var(--purple-500); background: var(--sel-strong); }
+.rail .ri.cur .ct { color: var(--sel-fg); }
 .rail .ri.imp { color: var(--purple-400); }
 .rail .ri.imp:hover { color: var(--purple-400); }
 .rail .ri svg { width: 11px; height: 11px; flex: none; }
@@ -213,7 +215,11 @@ button, input { font-family: inherit; }
 #rows { display: flex; flex-direction: column; }
 .row { display: flex; align-items: center; height: 26px; padding: 0 14px 0 14px; cursor: pointer; transition: background .08s; }
 .row:hover { background: var(--sel); }
+.row:hover .c-ty, .row:hover .c-st { color: var(--text-primary); }
 .row.sel { background: var(--sel-strong); }
+.row.sel .c-nm, .row.sel .c-ty, .row.sel .c-st { color: var(--sel-fg); }
+.row.sel .c-nm .t .bk { color: var(--sel-fg); opacity: .7; }
+.row.sel .tag { color: var(--sel-fg); }
 .row.off { display: none; }
 .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
 .c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -475,7 +481,7 @@ button, input { font-family: inherit; }
   <button class="rb" data-do="theme">Theme</button>
 </div>
 <div id="notes">
-  <b>Selection</b> — buttons (pills, chips, Load, the heart) use the four mode tiles' rule: an outline, transparent inside; selected turns it purple with white letters. Selection menus (banks, authors, rows, the quick menu) highlight with the wash. <b>Quick menu</b> — click the preset name. Left column is banks (click one), right column is that bank's presets grouped by type; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Click Name, Carries, Type or Style to sort; again to flip. Right-click a User preset for rename / delete.
+  <b>Selection</b> — buttons (pills, chips, Load, the heart) use the four mode tiles' rule: an outline, transparent inside; selected turns it purple with white letters. Selection menus (banks, authors, rows, the quick menu): hover washes purple, the selected line's words turn purple. <b>Quick menu</b> — click the preset name. Left column is banks (click one), right column is that bank's presets grouped by type; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Click Name, Carries, Type or Style to sort; again to flip. Right-click a User preset for rename / delete.
   <b>Editable</b> — the <span class="k">+</span> at the end of Type and Style adds a word; right-click a chip to rename or remove it, and every preset re-files itself. At save, type into Bank (an existing name joins it, a new one creates it), Author, Type and Style. Right-click any bank you made or imported to rename, export or remove it. Search reads names, types, styles, effects, authors and banks; every word must match.
   <b>Carries</b> — wavetables · one-shots · IRs · flow cards · LFO shapes · nodes. A preset with nodes is an environment; loading one greys the window and shows the bar. <b>Notes</b> — click under Notes in the inspector and type; it saves with the preset and search reads it. The Type and Style strips scroll sideways when they overflow.
 </div>
@@ -779,7 +785,7 @@ function renderInsp() {
       <span class="k">Size</span><span class="v">${fmtB(p.bytes)}</span>
     </div>
     <div class="carries"><div class="k">Carries</div>${cl}</div>
-    <div class="notes"><div class="k">Notes</div><div class="note-box" id="i-note" contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note — what to turn, what it's for"></div></div>
+    <div class="notes"><div class="k">Notes</div><div class="note-box" id="i-note" contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note"></div></div>
     <div class="acts"><button class="btn ic${p.fav ? ' on' : ''}" id="i-fav" title="Favourite">${HEART}</button><button class="btn pri" id="i-load">Load</button></div>`;
   const nb = $('i-note'); nb.textContent = p.note || '';
   nb.oninput = () => { p.note = nb.textContent; };
