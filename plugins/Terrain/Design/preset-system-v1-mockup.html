@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=900">
+<title>Terrain — Preset System v1</title>
+<style>
+/* ══════════════════════════════════════════════════════════════════════════════════════════════
+   TERRAIN — PRESET SYSTEM v1 (interactive + audible mockup)
+
+   Two surfaces, one system:
+     1. THE QUICK MENU — click the preset name in the header. Pick a BANK, then a preset. Glass.
+     2. THE BROWSER — "Browse all" or the dice. Covers the window below the header. Search, type,
+        style, bank, author, favourites, random. Names, not photos.
+
+   Everything visual is Terrain's own vocabulary, copied from Source/ui/public/index.html:
+   the :root / [data-theme=dark] tokens, the 44px header, .mod-btn pills, .cat-btn chips, the
+   .pmenu glass (rgba(22,20,34,.72) + blur 20), the hidden-scrollbar idiom, the dashed "Add
+   Effects" drop box, the __extGlyph SVG grammar (24-unit box, 2.2 stroke, round caps).
+
+   The one thing that is only Terrain's: CARRIES. A preset here embeds its own audio and its own
+   sub-presets, so every row shows what it carries — wavetables · one-shots · IRs · flow cards ·
+   LFO shapes · nodes — and the inspector prices it in bytes. That is what makes an ENVIRONMENT
+   a visible species and what makes the loading bar honest.
+   ══════════════════════════════════════════════════════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  /* Lunar Haze Light — verbatim */
+  --bg-main: #ECE8F1; --bg-hero: #2D2545; --bg-surface: #E8E4EF; --bg-footer: #E5E1EC;
+  --bg-glass: rgba(224,218,234,0.88); --bg-card: #E0DAE6; --bg-card-hover: #D8D2DE;
+  --purple-600: #7C3AED; --purple-500: #8B5CF6; --purple-400: #A78BFA;
+  --border: rgba(124,92,191,0.12); --border-strong: rgba(124,92,191,0.20);
+  --text-primary: #2A2035; --text-secondary: #5C5068; --text-muted: #8A7F96; --text-dim: #A89BBE;
+  --rose: #f43f5e;
+  --menu-bg: rgba(236,232,241,0.86); --menu-fg: #2A2035; --menu-fg-dim: rgba(42,32,53,.55); --menu-fg-faint: rgba(42,32,53,.32);
+  --menu-line: rgba(124,92,191,0.16); --menu-wash: rgba(124,92,191,0.07); --menu-wash-cur: rgba(124,92,191,0.12);
+  --wash: rgba(236,232,241,0.80);
+}
+[data-theme="dark"] {
+  --bg-main: #1A1A2E; --bg-hero: #12121F; --bg-surface: #232340; --bg-footer: #1E1E36;
+  --bg-glass: rgba(26,26,46,0.9); --bg-card: #2A2A48; --bg-card-hover: #33335C;
+  --purple-600: #9B6DFF; --purple-500: #8B5CF6; --purple-400: #B794FF;
+  --border: rgba(58,58,88,0.5); --border-strong: rgba(88,88,128,0.5);
+  --text-primary: #E0DCE8; --text-secondary: #9B93B0; --text-muted: #6B6080; --text-dim: #504870;
+  --menu-bg: rgba(22,20,34,0.72); --menu-fg: #fff; --menu-fg-dim: rgba(255,255,255,.5); --menu-fg-faint: rgba(255,255,255,.30);
+  --menu-line: rgba(255,255,255,0.11); --menu-wash: rgba(255,255,255,0.05); --menu-wash-cur: rgba(255,255,255,0.07);
+  --wash: rgba(18,18,31,0.82);
+}
+
+html { background: #0d0d16; }
+body {
+  font-family: -apple-system, 'SF Pro Display', 'Inter', 'Segoe UI', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  user-select: none; -webkit-user-select: none;
+  display: flex; flex-direction: column; align-items: center; gap: 18px;
+  padding: 26px 0 60px;
+}
+[data-theme="light"] html, html:has([data-theme="light"]) { background: #d9d3e2; }
+
+/* ─── THE PLUGIN BOX — 820 × 656, exactly ─────────────────────────────────────────────────── */
+#plugin {
+  width: 820px; height: 656px; position: relative; overflow: hidden;
+  background: var(--bg-surface);
+  border-radius: 6px;
+  box-shadow: 0 30px 80px rgba(0,0,0,.55);
+}
+
+/* header — verbatim geometry */
+#header {
+  height: 44px; display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px; background: var(--bg-surface); border-bottom: 1px solid var(--border);
+  position: relative; z-index: 20;
+}
+.header-left { display: flex; align-items: center; gap: 8px; }
+.header-right { display: flex; align-items: center; gap: 6px; }
+.brand-logo img { width: 32px; height: 32px; display: block; }
+.brand-name { font-weight: 600; font-size: 18px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-primary); }
+.brand-version { font-size: 9px; letter-spacing: 1.2px; color: var(--text-dim); margin-left: -2px; }
+.hbtn {
+  width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 5px; background: transparent;
+  cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--text-secondary);
+  font-size: 16px; line-height: 1; font-family: inherit; transition: border-color .15s, color .15s, background .15s;
+}
+.hbtn:hover { border-color: var(--purple-500); color: var(--purple-500); background: rgba(139,92,246,0.05); }
+.hbtn.save { margin-left: 12px; margin-right: 6px; }
+.hbtn.nav { font-size: 14px; }
+.preset-name {
+  font-weight: 500; font-size: 12px; letter-spacing: .5px; color: var(--text-primary);
+  min-width: 140px; text-align: center; cursor: pointer; padding: 0 6px; height: 28px; line-height: 28px;
+  border-radius: 5px; transition: color .15s, background .15s; white-space: nowrap;
+}
+.preset-name:hover { color: var(--purple-400); }
+.preset-name.open { background: rgba(139,92,246,0.10); }
+.mod-btn {
+  display: flex; align-items: center; justify-content: center; padding: 3px 10px 3px 11.5px;
+  border-radius: 12px; border: 1.5px solid rgba(139,92,246,0.2); background: transparent; cursor: pointer;
+  font-size: 9px; font-weight: 600; letter-spacing: 1.5px; text-transform: uppercase; color: var(--text-secondary);
+  font-family: inherit; height: 24px;
+}
+.mod-btn.active { background: var(--purple-500); border-color: var(--purple-500); color: #fff; }
+.gear { width: 28px; height: 28px; border: 1px solid var(--border); border-radius: 5px; display: flex; align-items: center; justify-content: center; color: var(--text-secondary); }
+
+/* ─── THE PAGE BEHIND — a quiet stand-in for the synth page so the browser has something to sit over */
+#page { position: absolute; inset: 44px 0 0 0; background: var(--bg-main); padding: 18px 26px; display: grid;
+  grid-template-columns: 1fr 1fr; grid-template-rows: 150px 190px 1fr; gap: 14px; }
+#page .pn { border: 1px solid var(--border); border-radius: 12px; background: var(--bg-surface); position: relative; overflow: hidden; }
+#page .pn.wide { grid-column: 1 / 3; }
+#page .pn .lbl { position: absolute; left: 16px; top: 12px; font-size: 9px; letter-spacing: 2.4px; text-transform: uppercase; color: var(--text-muted); }
+#page .pn svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+#page .pn.dashed { border: 1px dashed var(--border-strong); background: transparent; display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 10px; color: var(--text-muted); font-size: 13px; }
+#page .pn.dashed .plus { font-size: 34px; font-weight: 200; color: var(--text-dim); line-height: 1; }
+
+/* ─── THE QUICK MENU — .pmenu glass, verbatim, grown to two columns ────────────────────────── */
+.pmenu {
+  position: absolute; z-index: 300; display: none;
+  background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--menu-line); border-radius: 12px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06);
+  padding: 5px; font-family: -apple-system, 'SF Pro Text', 'Helvetica Neue', sans-serif; color: var(--menu-fg);
+}
+.pmenu.on { display: block; }
+.pmenu .ps { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--menu-fg-faint); padding: 6px 9px 3px; }
+.pmenu .pi { display: flex; align-items: center; gap: 7px; padding: 6px 9px; border-radius: 6px; cursor: pointer;
+  font-size: 9.5px; letter-spacing: .5px; color: var(--menu-fg-dim); transition: .1s; }
+.pmenu .pi .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pmenu .pi .ct { color: var(--menu-fg-faint); font-size: 8.5px; flex: none; }
+.pmenu .pi:hover { color: var(--menu-fg); background: var(--menu-wash); }
+.pmenu .pi.cur { color: var(--menu-fg); background: var(--menu-wash-cur); }
+.pmenu .pi.cur::before { content: '•'; color: var(--menu-fg); font-size: 9px; line-height: 1; flex: none; }
+.pmenu .pi .dx { color: var(--menu-fg-faint); font-size: 9px; display: none; flex: none; }
+.pmenu .pi:hover .dx { display: block; }
+.pmenu .pi .dx:hover { color: var(--rose); }
+.pmenu .psave { justify-content: center; margin-top: 3px; border-top: 1px solid var(--menu-line); border-radius: 0 0 6px 6px; padding-top: 8px; }
+.pmenu .pi.imp { color: var(--purple-400); }
+.pmenu::-webkit-scrollbar, .qcol::-webkit-scrollbar { width: 5px; height: 5px; }
+.pmenu::-webkit-scrollbar-thumb, .qcol::-webkit-scrollbar-thumb { background: rgba(127,127,160,0.25); border-radius: 3px; }
+.pmenu::-webkit-scrollbar-track, .qcol::-webkit-scrollbar-track { background: transparent; }
+
+#qmenu { left: 190px; top: 40px; width: 372px; }
+#qmenu .qcols { display: flex; gap: 4px; }
+#qmenu .qcol { max-height: 300px; overflow-y: auto; }
+#qmenu .qcol.banks { width: 150px; border-right: 1px solid var(--menu-line); padding-right: 4px; }
+#qmenu .qcol.list { flex: 1; min-width: 0; }
+#qmenu .pi .env { font-size: 6.5px; letter-spacing: 1px; color: var(--purple-400); background: rgba(139,92,246,0.14); padding: 1px 4px; border-radius: 3px; flex: none; }
+
+/* ─── THE BROWSER — covers 44 → 656, above everything (the drawer today is z 15 under a z 30 page) */
+#browser {
+  position: absolute; inset: 44px 0 0 0; z-index: 200; background: var(--bg-surface);
+  display: none; flex-direction: column;
+}
+#browser.on { display: flex; }
+
+.tb { height: 38px; display: flex; align-items: center; gap: 8px; padding: 0 16px; border-bottom: 1px solid var(--border); flex: none; }
+.search-wrap { position: relative; flex: 1; max-width: 300px; }
+.search-wrap::before { content: ''; position: absolute; left: 9px; top: 50%; transform: translateY(-50%); width: 11px; height: 11px;
+  border: 1.5px solid var(--text-dim); border-radius: 50%; pointer-events: none; }
+.search-wrap::after { content: ''; position: absolute; left: 18px; top: calc(50% + 4px); width: 4px; height: 1.5px; background: var(--text-dim); transform: rotate(45deg); pointer-events: none; }
+.browser-search { width: 100%; height: 26px; border: 1px solid var(--border); border-radius: 5px; padding: 0 8px 0 28px; font-size: 11px;
+  background: var(--bg-surface); color: var(--text-primary); outline: none; font-family: inherit; }
+.browser-search::placeholder { color: var(--text-dim); }
+.browser-search:focus { border-color: var(--purple-500); }
+.tb .count { margin-left: auto; font-size: 8px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-muted); white-space: nowrap; }
+.tb .count b { color: var(--text-secondary); font-weight: 500; }
+.ibtn { width: 26px; height: 26px; border: 1px solid var(--border); border-radius: 5px; background: transparent; color: var(--text-secondary);
+  display: flex; align-items: center; justify-content: center; cursor: pointer; font-family: inherit; transition: border-color .15s, color .15s, background .15s; }
+.ibtn:hover { border-color: var(--purple-500); color: var(--purple-500); background: rgba(139,92,246,0.05); }
+.ibtn.on { border-color: var(--purple-500); color: var(--purple-500); background: rgba(139,92,246,0.10); }
+.ibtn svg { width: 14px; height: 14px; }
+
+.chips { display: flex; align-items: center; gap: 4px; padding: 0 16px; height: 30px; border-bottom: 1px solid var(--border); flex: none; overflow: hidden; }
+.chips .lb { width: 40px; flex: none; font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); }
+.cat-btn { padding: 4px 8px; border: 1px solid var(--border); border-radius: 4px; background: transparent; font-size: 8px; font-weight: 500;
+  letter-spacing: 1px; text-transform: uppercase; color: var(--text-secondary); cursor: pointer; transition: all .1s; font-family: inherit; white-space: nowrap; }
+.cat-btn:hover { border-color: var(--purple-400); color: var(--purple-500); }
+.cat-btn.active { background: var(--purple-500); color: #fff; border-color: var(--purple-500); }
+
+.body { flex: 1; min-height: 0; display: flex; }
+.rail { width: 150px; flex: none; border-right: 1px solid var(--border); overflow-y: auto; padding: 8px 0 12px; scrollbar-width: none; }
+.rail::-webkit-scrollbar, .list::-webkit-scrollbar, .insp::-webkit-scrollbar { width: 0; height: 0; display: none; }
+.rail .sec { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); padding: 10px 16px 4px; }
+.rail .ri { display: flex; align-items: center; gap: 7px; height: 22px; padding: 0 16px 0 14px; cursor: pointer; font-size: 10px; letter-spacing: .3px; color: var(--text-secondary);
+  border-left: 2px solid transparent; transition: color .1s, background .1s; }
+.rail .ri .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rail .ri .ct { font-size: 8.5px; color: var(--text-dim); }
+.rail .ri:hover { color: var(--text-primary); background: rgba(139,92,246,0.05); }
+.rail .ri.cur { color: var(--text-primary); border-left-color: var(--purple-500); background: rgba(139,92,246,0.08); }
+.rail .ri.cur .ct { color: var(--text-secondary); }
+.rail .ri.imp { color: var(--purple-400); }
+.rail .ri.imp:hover { color: var(--purple-500); }
+.rail .ri svg { width: 11px; height: 11px; flex: none; opacity: .7; }
+
+.list { flex: 1; min-width: 0; overflow-y: auto; scrollbar-width: none; outline: none; }
+.list .hd { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; height: 24px; padding: 0 14px 0 12px; background: var(--bg-surface);
+  border-bottom: 1px solid var(--border); font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); }
+.row { display: flex; align-items: center; height: 26px; padding: 0 14px 0 12px; cursor: pointer; border-bottom: 1px solid transparent;
+  transition: background .08s; }
+.row:hover { background: rgba(139,92,246,0.05); }
+.row.sel { background: rgba(139,92,246,0.11); }
+.row.off { display: none; }
+.c-ic { width: 22px; flex: none; display: flex; align-items: center; color: var(--text-dim); }
+.c-ic svg { width: 13px; height: 13px; }
+.row.sel .c-ic { color: var(--purple-400); }
+.c-nm { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
+.c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-nm .t .bk { color: var(--text-muted); font-weight: 400; }
+.badge { font-size: 6.5px; font-weight: 700; letter-spacing: .9px; text-transform: uppercase; color: var(--purple-400); background: rgba(139,92,246,0.12); padding: 1px 5px; border-radius: 3px; flex: none; }
+.badge.user { color: var(--text-secondary); background: rgba(127,127,160,0.14); }
+.c-car { width: 92px; flex: none; display: flex; gap: 3px; align-items: center; }
+.car { width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); opacity: .10; }
+.car.on { opacity: 1; color: var(--text-secondary); }
+.car.on.node { color: var(--purple-400); }
+.car svg { width: 11px; height: 11px; }
+.row.sel .car.on { color: var(--text-primary); }
+.row.sel .car.on.node { color: var(--purple-400); }
+.c-ty { width: 64px; flex: none; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-secondary); }
+.c-st { width: 74px; flex: none; font-size: 8px; letter-spacing: 1px; text-transform: uppercase; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.c-fv { width: 16px; flex: none; display: flex; align-items: center; justify-content: flex-end; color: var(--text-dim); opacity: .28; }
+.c-fv.on { opacity: 1; color: var(--purple-400); }
+.c-fv svg { width: 11px; height: 11px; }
+.empty { padding: 60px 30px; text-align: center; color: var(--text-muted); font-size: 11px; line-height: 1.7; }
+.empty b { display: block; color: var(--text-secondary); font-weight: 500; margin-bottom: 2px; }
+
+.insp { width: 222px; flex: none; border-left: 1px solid var(--border); padding: 16px 18px 14px; display: flex; flex-direction: column; gap: 0; overflow-y: auto; scrollbar-width: none; }
+.insp .nm { font-size: 13px; font-weight: 500; color: var(--text-primary); line-height: 1.3; letter-spacing: .2px; }
+.insp .nm .bk { color: var(--text-muted); font-weight: 400; }
+.insp .sub { margin-top: 5px; display: flex; align-items: center; gap: 6px; }
+.insp .kv { display: grid; grid-template-columns: 52px 1fr; row-gap: 7px; column-gap: 8px; margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.insp .k { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); line-height: 14px; }
+.insp .v { font-size: 10px; color: var(--text-secondary); line-height: 14px; }
+.insp .v.p { color: var(--text-primary); }
+.insp .carries { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.insp .carries .k { margin-bottom: 8px; }
+.insp .cl { display: flex; align-items: center; gap: 8px; height: 20px; font-size: 10px; color: var(--text-secondary); }
+.insp .cl svg { width: 12px; height: 12px; flex: none; color: var(--text-secondary); }
+.insp .cl.node svg, .insp .cl.node { color: var(--purple-400); }
+.insp .cl .n { flex: 1; }
+.insp .cl .sz { color: var(--text-dim); font-size: 9px; }
+.insp .cl.none { color: var(--text-dim); }
+.insp .cl.none svg { color: var(--text-dim); opacity: .5; }
+.insp .tot { margin-top: 8px; display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 9px; color: var(--text-dim); letter-spacing: .3px; }
+.insp .tot b { color: var(--text-secondary); font-weight: 500; white-space: nowrap; flex: none; }
+.insp .acts { margin-top: auto; padding-top: 16px; display: flex; gap: 6px; }
+.btn { height: 28px; border: 1px solid var(--border); border-radius: 6px; background: transparent; color: var(--text-secondary); font-family: inherit;
+  font-size: 10px; font-weight: 500; letter-spacing: .3px; cursor: pointer; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 6px;
+  transition: border-color .15s, color .15s, background .15s; }
+.btn:hover { border-color: var(--purple-500); color: var(--purple-500); background: rgba(139,92,246,0.05); }
+.btn.pri { background: var(--purple-500); border-color: var(--purple-500); color: #fff; flex: 1; }
+.btn.pri:hover { background: var(--purple-600); border-color: var(--purple-600); color: #fff; }
+.btn.ic { width: 28px; padding: 0; }
+.btn.ic svg { width: 13px; height: 13px; }
+.btn.ic.on { color: var(--purple-400); border-color: rgba(139,92,246,0.45); }
+.btn.danger:hover { border-color: var(--rose); color: var(--rose); background: rgba(244,63,94,0.06); }
+.btn:disabled { opacity: .3; pointer-events: none; }
+
+/* ─── THE LOADING OVERLAY — a wash, a name, a bar. No backdrop-filter (fb613: the renderer pays for it). */
+#loading { position: absolute; inset: 0; z-index: 900; background: var(--wash); display: none; align-items: center; justify-content: center; }
+#loading.on { display: flex; }
+#loading .card { width: 300px; text-align: center; }
+#loading .lk { font-size: 7px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 10px; }
+#loading .ln { font-size: 13px; font-weight: 500; color: var(--text-primary); letter-spacing: .2px; }
+#loading .ln .bk { color: var(--text-muted); font-weight: 400; }
+#loading .bar { height: 2px; background: var(--border-strong); border-radius: 1px; margin: 18px 0 10px; overflow: hidden; }
+#loading .bar i { display: block; height: 100%; width: 0; background: var(--purple-500); border-radius: 1px; transition: width .12s linear; }
+#loading .lp { font-size: 10px; color: var(--text-muted); letter-spacing: .3px; }
+
+/* ─── SHEETS — save, import. Same card grammar. ─────────────────────────────────────────────── */
+.sheet { position: absolute; inset: 0; z-index: 800; background: var(--wash); display: none; align-items: center; justify-content: center; }
+.sheet.on { display: flex; }
+.sheet .card { width: 340px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px 22px 18px; box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+.sheet .hd { font-size: 7px; letter-spacing: 2px; text-transform: uppercase; color: var(--text-dim); margin-bottom: 12px; }
+.sheet .f { display: grid; grid-template-columns: 56px 1fr; align-items: center; column-gap: 10px; row-gap: 10px; }
+.sheet .f .k { font-size: 7px; letter-spacing: 1.4px; text-transform: uppercase; color: var(--text-dim); align-self: start; padding-top: 9px; }
+.sheet input[type=text] { height: 28px; border: 1px solid var(--border); border-radius: 5px; padding: 0 9px; font-size: 11px; background: var(--bg-main); color: var(--text-primary); outline: none; font-family: inherit; width: 100%; }
+.sheet input[type=text]:focus { border-color: var(--purple-500); }
+.sheet .chp { display: flex; flex-wrap: wrap; gap: 4px; }
+.sheet .acts { display: flex; gap: 6px; margin-top: 18px; justify-content: flex-end; }
+.sheet .drop { border: 1px dashed var(--border-strong); border-radius: 10px; height: 110px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; color: var(--text-muted); font-size: 11px; cursor: pointer; transition: border-color .15s, background .15s; }
+.sheet .drop:hover, .sheet .drop.hot { border-color: var(--purple-500); background: rgba(139,92,246,0.05); color: var(--text-secondary); }
+.sheet .drop .plus { font-size: 26px; font-weight: 200; color: var(--text-dim); line-height: 1; }
+.sheet .drop small { font-size: 9px; color: var(--text-dim); letter-spacing: .3px; }
+.sheet .manifest { margin-top: 12px; display: none; }
+.sheet .manifest.on { display: block; }
+.sheet .manifest .mn { font-size: 12px; font-weight: 500; color: var(--text-primary); }
+.sheet .manifest .mn .by { color: var(--text-muted); font-weight: 400; }
+.sheet .manifest .ml { margin-top: 8px; display: grid; grid-template-columns: 1fr 1fr; row-gap: 5px; }
+.sheet .manifest .ml div { font-size: 9.5px; color: var(--text-secondary); display: flex; align-items: center; gap: 6px; }
+.sheet .manifest .ml svg { width: 11px; height: 11px; color: var(--text-muted); }
+.sheet .manifest .ml b { font-weight: 500; color: var(--text-primary); }
+
+/* toast */
+#toast { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 8px); z-index: 950; background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); border: 1px solid var(--menu-line); border-radius: 8px;
+  padding: 7px 12px; font-size: 10px; color: var(--menu-fg); letter-spacing: .3px; opacity: 0; transition: opacity .18s, transform .18s; pointer-events: none; white-space: nowrap; }
+#toast.on { opacity: 1; transform: translate(-50%, 0); }
+#toast .bk { color: var(--menu-fg-dim); }
+
+/* context menu — the .pmenu again */
+#ctx { min-width: 150px; }
+
+/* ─── DEMO RAIL — scaffolding outside the plugin, not part of the design ────────────────────── */
+#rail { width: 820px; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#rail .t { font-size: 8px; letter-spacing: 1.6px; text-transform: uppercase; color: #6B6080; margin-right: 6px; }
+#rail .rb { height: 26px; padding: 0 12px; border: 1px solid rgba(139,92,246,.22); border-radius: 13px; background: transparent; color: #9B93B0;
+  font-family: inherit; font-size: 9px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; cursor: pointer; }
+#rail .rb:hover { border-color: #8B5CF6; color: #B794FF; }
+#rail .rb.on { background: #8B5CF6; border-color: #8B5CF6; color: #fff; }
+#notes { width: 820px; color: #6B6080; font-size: 11px; line-height: 1.65; }
+#notes b { color: #9B93B0; font-weight: 500; }
+#notes .k { display: inline-block; min-width: 16px; text-align: center; border: 1px solid #3a3a58; border-radius: 3px; padding: 0 4px; font-size: 9px; color: #9B93B0; margin: 0 1px; }
+</style>
+</head>
+<body>
+
+<div id="plugin">
+  <!-- HEADER — unchanged from the shipping one. The preset name is the only thing that gained a job. -->
+  <div id="header">
+    <div class="header-left">
+      <div class="brand-logo"><img id="logo-img" src="data:image/png;base64,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" alt="Waves Crate"></div>
+      <span class="brand-name">Terrain</span>
+      <span class="brand-version">V1</span>
+      <button class="hbtn save" id="save-btn" title="Save preset">+</button>
+      <button class="hbtn nav" id="prev-btn" title="Previous preset">&lsaquo;</button>
+      <span class="preset-name" id="preset-name">Terra - Glacier</span>
+      <button class="hbtn nav" id="next-btn" title="Next preset">&rsaquo;</button>
+    </div>
+    <div class="header-right">
+      <button class="mod-btn active">SYN</button>
+      <button class="mod-btn">MIX</button>
+      <button class="mod-btn">DLY</button>
+      <button class="mod-btn">EQ</button>
+      <button class="mod-btn">MOD</button>
+      <div class="gear"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.6a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></div>
+    </div>
+  </div>
+
+  <!-- THE PAGE BEHIND — stand-in synth page, so the browser and the wash have something to cover -->
+  <div id="page">
+    <div class="pn"><span class="lbl">Osc · Wavetable</span>
+      <svg viewBox="0 0 380 150" preserveAspectRatio="none"><path d="M20 78 C 60 20, 100 20, 140 78 S 220 136, 260 78 S 340 20, 360 78" fill="none" stroke="rgba(139,92,246,.55)" stroke-width="1.6"/><path d="M20 84 C 60 30, 100 30, 140 84 S 220 138, 260 84 S 340 30, 360 84" fill="none" stroke="rgba(139,92,246,.18)" stroke-width="1.2"/></svg></div>
+    <div class="pn"><span class="lbl">Osc · Wavetable</span>
+      <svg viewBox="0 0 380 150" preserveAspectRatio="none"><path d="M20 78 L60 30 L100 120 L140 40 L180 110 L220 50 L260 100 L300 60 L340 90 L360 78" fill="none" stroke="rgba(139,92,246,.55)" stroke-width="1.6"/></svg></div>
+    <div class="pn"><span class="lbl">Ladder LP · 24</span>
+      <svg viewBox="0 0 380 190" preserveAspectRatio="none"><path d="M0 40 L110 40 C 150 40, 165 120, 380 120" fill="none" stroke="rgba(167,139,250,.9)" stroke-width="2"/><g stroke="rgba(139,92,246,.10)"><path d="M95 0V190M190 0V190M285 0V190M0 63H380M0 126H380"/></g></svg></div>
+    <div class="pn"><span class="lbl">LFO 1 · Sine</span>
+      <svg viewBox="0 0 380 190" preserveAspectRatio="none"><path d="M0 95 C 60 10, 130 10, 190 95 S 320 180, 380 95" fill="none" stroke="rgba(224,220,232,.75)" stroke-width="2"/></svg></div>
+    <div class="pn wide dashed"><span class="plus">+</span>Add Effects</div>
+  </div>
+
+  <!-- THE QUICK MENU -->
+  <div class="pmenu" id="qmenu">
+    <div class="qcols">
+      <div class="qcol banks" id="q-banks"></div>
+      <div class="qcol list" id="q-list"></div>
+    </div>
+    <div class="pi psave" id="q-browse"><span class="nm" style="text-align:center;letter-spacing:1.2px;text-transform:uppercase;font-size:8px;">Browse all</span></div>
+  </div>
+
+  <!-- THE BROWSER -->
+  <div id="browser">
+    <div class="tb">
+      <div class="search-wrap"><input class="browser-search" id="search" type="text" placeholder="Search presets, styles, authors…" autocomplete="off" spellcheck="false"></div>
+      <button class="ibtn" id="dice" title="Random preset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor"/></svg></button>
+      <button class="ibtn" id="fav-only" title="Favourites only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/></svg></button>
+      <div class="count" id="count"></div>
+      <button class="ibtn" id="close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg></button>
+    </div>
+    <div class="chips" id="chips-type"><span class="lb">Type</span></div>
+    <div class="chips" id="chips-style"><span class="lb">Style</span></div>
+    <div class="body">
+      <div class="rail" id="rail-l"></div>
+      <div class="list" id="list" tabindex="0">
+        <div class="hd"><span style="width:22px"></span><span style="flex:1">Name</span><span style="width:92px">Carries</span><span style="width:64px">Type</span><span style="width:74px">Style</span><span style="width:16px"></span></div>
+        <div id="rows"></div>
+        <div class="empty" id="empty" style="display:none"></div>
+      </div>
+      <div class="insp" id="insp"></div>
+    </div>
+  </div>
+
+  <!-- CONTEXT MENU (right-click a preset) -->
+  <div class="pmenu" id="ctx"></div>
+
+  <!-- SAVE SHEET -->
+  <div class="sheet" id="save-sheet">
+    <div class="card">
+      <div class="hd">Save preset</div>
+      <div class="f">
+        <span class="k">Name</span><input type="text" id="sv-name" maxlength="40" placeholder="Preset name">
+        <span class="k">Bank</span><div class="v" id="sv-bank" style="font-size:10px;color:var(--text-secondary)">User</div>
+        <span class="k">Type</span><div class="chp" id="sv-type"></div>
+        <span class="k">Style</span><div class="chp" id="sv-style"></div>
+        <span class="k">Carries</span><div class="v" id="sv-carries" style="font-size:9.5px;color:var(--text-secondary);line-height:1.5"></div>
+      </div>
+      <div class="acts"><button class="btn" id="sv-cancel">Cancel</button><button class="btn pri" id="sv-ok" style="flex:none;padding:0 18px">Save</button></div>
+    </div>
+  </div>
+
+  <!-- IMPORT SHEET -->
+  <div class="sheet" id="imp-sheet">
+    <div class="card">
+      <div class="hd">Import bank</div>
+      <div class="drop" id="imp-drop"><span class="plus">+</span><span>Drop a .terrainpack, or click to choose</span><small>Presets, wavetables, one-shots and cards arrive together</small></div>
+      <div class="manifest" id="imp-man"></div>
+      <div class="acts"><button class="btn" id="imp-cancel">Cancel</button><button class="btn pri" id="imp-ok" style="flex:none;padding:0 18px" disabled>Import</button></div>
+    </div>
+  </div>
+
+  <!-- LOADING OVERLAY -->
+  <div id="loading"><div class="card"><div class="lk" id="ld-k">Loading environment</div><div class="ln" id="ld-n"></div><div class="bar"><i id="ld-bar"></i></div><div class="lp" id="ld-p">0%</div></div></div>
+
+  <div id="toast"></div>
+</div>
+
+<!-- DEMO RAIL -->
+<div id="rail">
+  <span class="t">Drive it</span>
+  <button class="rb" data-do="quick">Quick menu</button>
+  <button class="rb" data-do="browse">Browser</button>
+  <button class="rb" data-do="load">Load a preset</button>
+  <button class="rb" data-do="env">Load an environment</button>
+  <button class="rb" data-do="import">Import a bank</button>
+  <button class="rb" data-do="save">Save</button>
+  <span style="flex:1"></span>
+  <button class="rb on" data-do="sound" id="rb-sound">Sound on</button>
+  <button class="rb" data-do="theme">Theme</button>
+</div>
+<div id="notes">
+  <b>Quick menu</b> — click the preset name. Left column is banks, right column is that bank's presets; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Right-click a User preset for rename / delete. The dice picks a random preset from whatever is filtered — narrow first, then roll.
+  <b>Carries</b> — the six marks are wavetables · one-shots · IRs · flow cards · LFO shapes · nodes. A preset with nodes is an environment; loading one greys the window and shows the bar.
+</div>
+
+<script>
+/* ═══ DATA ═══════════════════════════════════════════════════════════════════════════════════ */
+const TYPES  = ['Bass','Lead','Pad','Keys','Pluck','Sequence','Texture','Perc','FX','Arp'];
+const STYLES = ['Dark','Bright','Warm','Metallic','Glassy','Dirty','Clean','Evolving','Punchy','Wide','Hollow','Organic'];
+
+/* name, type, styles, carries [wt smp ir flow lfo nodes] — the Terra bank. 10 of each type. */
+const TERRA = [
+ ['Tectonic','Bass',['Dark','Punchy'],[1,0,0,1,0,0]], ['Subduction','Bass',['Dark','Dirty'],[2,0,0,2,1,0]], ['Bedrock','Bass',['Warm','Clean'],[1,0,0,0,0,0]],
+ ['Magma Sub','Bass',['Warm','Dirty'],[1,0,0,1,1,0]], ['Fault Line','Bass',['Metallic','Punchy'],[2,0,0,1,0,0]], ['Deep Shelf','Bass',['Dark','Wide'],[1,0,0,0,1,0]],
+ ['Gravel Bass','Bass',['Dirty','Punchy'],[1,1,0,2,0,0]], ['Trench','Bass',['Dark','Hollow'],[1,0,0,0,0,0]], ['Basalt','Bass',['Clean','Punchy'],[1,0,0,1,0,0]], ['Undertow','Bass',['Evolving','Dark'],[2,0,0,1,2,0]],
+ ['Ridge Runner','Lead',['Bright','Punchy'],[1,0,0,1,0,0]], ['Solar Wire','Lead',['Bright','Metallic'],[2,0,0,0,1,0]], ['Flint Lead','Lead',['Dirty','Bright'],[1,0,0,1,0,0]],
+ ['Peak Cry','Lead',['Bright','Wide'],[1,0,0,1,1,0]], ['Copper Lead','Lead',['Warm','Metallic'],[1,0,0,0,0,0]], ['Sirocco','Lead',['Warm','Evolving'],[2,0,0,1,2,0]],
+ ['Anvil','Lead',['Metallic','Punchy'],[1,0,0,2,0,0]], ['Glass Lead','Lead',['Glassy','Clean'],[1,0,0,0,1,0]], ['Signal Fire','Lead',['Bright','Dirty'],[2,0,0,1,0,0]], ['Spire','Lead',['Clean','Bright'],[1,0,0,0,0,0]],
+ ['Glacier','Pad',['Glassy','Evolving'],[2,0,0,0,2,0]], ['Cirrus','Pad',['Bright','Wide'],[1,0,0,0,1,0]], ['Ash Cloud','Pad',['Dark','Evolving'],[2,0,0,1,2,0]],
+ ['Thermal','Pad',['Warm','Wide'],[1,0,0,0,1,0]], ['Moss Bed','Pad',['Organic','Warm'],[1,1,0,0,1,0]], ['Aurora Shelf','Pad',['Glassy','Wide'],[2,0,1,0,2,0]],
+ ['Slow Erosion','Pad',['Evolving','Dark'],[2,0,0,1,3,0]], ['Sediment','Pad',['Hollow','Dark'],[1,0,0,0,1,0]], ['Permafrost','Pad',['Glassy','Clean'],[1,0,0,0,1,0]], ['Weather Front','Pad',['Evolving','Wide'],[2,0,1,1,2,0]],
+ ['Quartz Keys','Keys',['Glassy','Clean'],[1,0,0,0,0,0]], ['Rainhouse','Keys',['Warm','Organic'],[1,0,1,0,0,0]], ['Cold Chapel','Keys',['Hollow','Glassy'],[1,0,1,0,1,0]],
+ ['Salt Flat','Keys',['Bright','Clean'],[1,0,0,0,0,0]], ['Driftwood','Keys',['Warm','Organic'],[1,1,0,0,0,0]], ['Marble Hall','Keys',['Glassy','Wide'],[1,0,1,0,0,0]],
+ ['Frost Piano','Keys',['Glassy','Clean'],[1,1,0,0,0,0]], ['Kalimba Ridge','Keys',['Organic','Bright'],[1,1,0,1,0,0]], ['Tundra Keys','Keys',['Hollow','Dark'],[1,0,0,0,1,0]], ['Bell Mine','Keys',['Metallic','Glassy'],[2,0,0,0,0,0]],
+ ['Shale','Pluck',['Clean','Punchy'],[1,0,0,0,0,0]], ['Icicle','Pluck',['Glassy','Bright'],[1,0,0,0,0,0]], ['Pebble','Pluck',['Organic','Warm'],[1,0,0,1,0,0]],
+ ['Flint Spark','Pluck',['Bright','Punchy'],[1,0,0,1,0,0]], ['Dew','Pluck',['Glassy','Clean'],[1,0,0,0,1,0]], ['Slate Pluck','Pluck',['Dark','Punchy'],[1,0,0,0,0,0]],
+ ['Splinter','Pluck',['Metallic','Dirty'],[2,0,0,1,0,0]], ['Hail','Pluck',['Bright','Wide'],[1,0,0,2,0,0]], ['Bone Chime','Pluck',['Hollow','Metallic'],[1,1,0,0,0,0]], ['Spark Gap','Pluck',['Dirty','Bright'],[1,0,0,1,0,0]],
+ ['Drift Sequence','Sequence',['Evolving','Clean'],[1,0,0,3,1,0]], ['Migration','Sequence',['Warm','Evolving'],[2,0,0,3,2,0]], ['Tide Table','Sequence',['Dark','Wide'],[1,0,0,2,1,0]],
+ ['Braided River','Sequence',['Organic','Evolving'],[2,1,0,4,3,24]], ['Stone Steps','Sequence',['Punchy','Clean'],[1,0,0,2,0,0]], ['Pulse Delta','Sequence',['Bright','Punchy'],[1,0,0,3,1,0]],
+ ['Karst','Sequence',['Hollow','Dark'],[2,0,0,2,1,0]], ['Terrace','Sequence',['Clean','Warm'],[1,0,0,2,0,0]], ['Meltwater','Sequence',['Glassy','Evolving'],[1,0,0,3,2,0]], ['Switchback','Sequence',['Dirty','Punchy'],[2,0,0,3,1,0]],
+ ['Static Field','Texture',['Dirty','Evolving'],[3,1,1,2,3,36]], ['Dust Devil','Texture',['Dirty','Wide'],[1,1,0,2,1,0]], ['Lichen','Texture',['Organic','Warm'],[1,1,0,0,1,0]],
+ ['Deep Hum','Texture',['Dark','Warm'],[1,0,0,0,2,0]], ['Cave Air','Texture',['Hollow','Dark'],[2,1,1,1,2,18]], ['Silt','Texture',['Organic','Dark'],[1,1,0,1,1,0]],
+ ['Pumice','Texture',['Metallic','Dirty'],[2,0,0,1,1,0]], ['Ozone','Texture',['Bright','Evolving'],[2,0,0,0,2,0]], ['Rust Bloom','Texture',['Dirty','Evolving'],[2,1,0,2,2,0]], ['Barometer','Texture',['Evolving','Wide'],[1,0,1,1,2,0]],
+ ['Talus','Perc',['Punchy','Dirty'],[0,2,0,1,0,0]], ['Rockfall','Perc',['Punchy','Dark'],[1,2,0,2,0,0]], ['Hollow Log','Perc',['Hollow','Organic'],[0,1,0,0,0,0]],
+ ['Knapper','Perc',['Metallic','Punchy'],[1,1,0,1,0,0]], ['Shale Snare','Perc',['Punchy','Bright'],[0,2,0,1,0,0]], ['Grit Kit','Perc',['Dirty','Punchy'],[0,2,0,2,0,0]],
+ ['Cinder','Perc',['Warm','Punchy'],[1,1,0,0,0,0]], ['Riverbed','Perc',['Organic','Warm'],[0,2,0,1,0,0]], ['Skipping Stone','Perc',['Clean','Bright'],[1,1,0,2,0,0]], ['Tin Roof','Perc',['Metallic','Bright'],[0,2,0,1,0,0]],
+ ['Sinkhole','FX',['Dark','Evolving'],[3,2,1,3,3,48]], ['Whiteout','FX',['Bright','Wide'],[1,1,1,1,2,0]], ['Landslide','FX',['Dirty','Punchy'],[2,2,0,2,1,0]],
+ ['Doppler Pass','FX',['Evolving','Wide'],[1,0,0,2,2,0]], ['Rip Current','FX',['Dark','Wide'],[2,1,0,1,2,0]], ['Fracture','FX',['Metallic','Dirty'],[2,0,0,3,1,0]],
+ ['Storm Cell','FX',['Dark','Evolving'],[3,2,1,4,3,42]], ['Reversal','FX',['Glassy','Evolving'],[1,1,1,1,1,0]], ['Tremor','FX',['Dark','Punchy'],[1,1,0,2,1,0]], ['Vanishing Point','FX',['Hollow','Evolving'],[2,1,1,2,3,30]],
+ ['Contour Lines','Arp',['Clean','Bright'],[1,0,0,1,0,0]], ['Scree','Arp',['Dirty','Punchy'],[1,0,0,2,1,0]], ['Windmill','Arp',['Warm','Evolving'],[1,0,0,1,1,0]],
+ ['Isobar','Arp',['Glassy','Clean'],[1,0,0,1,1,0]], ['Ripple Count','Arp',['Bright','Wide'],[2,0,0,1,0,0]], ['Gradient','Arp',['Evolving','Warm'],[2,0,0,1,2,0]],
+ ['Fern Spiral','Arp',['Organic','Bright'],[1,0,0,2,1,0]], ['Compass','Arp',['Clean','Punchy'],[1,0,0,1,0,0]], ['Stepwell','Arp',['Hollow','Dark'],[1,0,0,1,1,0]], ['Latitude','Arp',['Wide','Evolving'],[2,0,0,2,2,0]],
+];
+
+/* Max's real five, from ~/Library/Application Support/Noizefield/Terrain Instrument/UserPresets.xml */
+const USER = [
+ ['Monte Cristo','Keys',['Warm','Clean'],[1,0,0,0,0,0]], ['Slatt','Bass',['Dark','Dirty'],[1,0,0,1,0,0]], ['One Shot Killer','Perc',['Punchy','Dirty'],[0,2,0,2,0,0]],
+ ['This Is Scary','Texture',['Dark','Evolving'],[2,1,1,1,2,0]], ['M.I.A.','Lead',['Bright','Wide'],[1,0,0,1,1,0]],
+];
+
+/* a fictional third-party pack, for the import demo */
+const LOWLAND = [
+ ['Peat','Bass',['Warm','Dark'],[1,0,0,0,0,0]], ['Reed Bed','Pad',['Organic','Wide'],[2,1,0,0,2,0]], ['Fen Light','Keys',['Glassy','Warm'],[1,0,1,0,0,0]],
+ ['Sluice','Sequence',['Clean','Evolving'],[1,0,0,3,1,0]], ['Dyke Walk','Arp',['Bright','Clean'],[1,0,0,1,0,0]], ['Marsh Gas','Texture',['Dirty','Hollow'],[2,1,0,1,2,0]],
+ ['Heron','Lead',['Clean','Bright'],[1,0,0,0,1,0]], ['Tidal Flat','Pad',['Evolving','Dark'],[2,0,1,1,2,0]], ['Silt Kit','Perc',['Punchy','Organic'],[0,2,0,2,0,0]],
+ ['Polder','Bass',['Punchy','Clean'],[1,0,0,1,0,0]], ['Mudlark','Pluck',['Organic','Warm'],[1,1,0,0,0,0]], ['Estuary','FX',['Wide','Evolving'],[2,1,1,2,2,0]],
+ ['Bittern','Keys',['Hollow','Dark'],[1,0,0,0,1,0]], ['Wetland','Pad',['Organic','Evolving'],[2,1,0,0,3,0]], ['Lock Gate','Perc',['Metallic','Punchy'],[1,1,0,1,0,0]],
+ ['Bog Oak','Bass',['Dark','Warm'],[1,0,0,0,1,0]], ['Flood Plain','Texture',['Evolving','Wide'],[3,1,1,2,3,20]], ['Cormorant','Lead',['Metallic','Punchy'],[2,0,0,1,0,0]],
+ ['Salt Marsh','Sequence',['Glassy','Evolving'],[1,0,0,2,2,0]], ['Wader','Arp',['Organic','Clean'],[1,0,0,2,1,0]], ['Alluvium','Pluck',['Glassy','Clean'],[1,0,0,0,0,0]],
+ ['Groyne','Perc',['Dirty','Punchy'],[0,2,0,2,0,0]], ['Low Water','Keys',['Warm','Clean'],[1,0,0,0,0,0]], ['Sea Fret','Texture',['Hollow','Wide'],[2,1,1,1,2,0]],
+];
+
+/* bytes: a preset is ~15 KB of XML gzipped; imported wavetables ~60 KB each as FLAC-24; a one-shot ~600 KB; an IR ~1.2 MB.
+   Factory tables are REFERENCED, not embedded — so a Terra preset's wt count shows what it uses, not what it carries. */
+function bytesOf(c, factory) {
+  return 15000 + (factory ? 0 : c[0]*60000) + c[1]*600000 + c[2]*1200000 + c[3]*1800 + c[4]*900 + c[5]*2600;
+}
+function fmtB(b) { return b < 1e6 ? Math.round(b/1000) + ' KB' : (b/1e6).toFixed(1) + ' MB'; }
+
+const BANKS = [];
+let PRESETS = [];
+function addBank(name, author, rows, opts) {
+  const bank = { name, author, factory: !!(opts && opts.factory), user: !!(opts && opts.user), n: 0 };
+  BANKS.push(bank);
+  for (const r of rows) {
+    PRESETS.push({ id: PRESETS.length, name: r[0], bank: bank.name, author: (opts && opts.authors) ? opts.authors[PRESETS.length % opts.authors.length] : author,
+      type: r[1], styles: r[2], c: r[3], env: r[3][5] > 0, fav: false, user: bank.user, bytes: bytesOf(r[3], bank.factory) });
+    bank.n++;
+  }
+  return bank;
+}
+addBank('Terra', 'Waves Crate', TERRA, { factory: true, authors: ['Waves Crate','Waves Crate','Max','Waves Crate'] });
+addBank('User', 'Max', USER, { user: true });
+
+/* a few favourites so the filter has something to show */
+[20, 3, 61, 47, 84, 101].forEach(i => PRESETS[i] && (PRESETS[i].fav = true));
+
+/* ═══ GLYPHS — one definition each, the __extGlyph grammar (24 box · 2.2 stroke · round caps) ═══ */
+const G = (d, extra) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="${extra||2.2}" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${d}</svg>`;
+const TYPE_GLYPH = {
+  Bass:     G('<path d="M3 15c3 0 3-6 6-6s3 6 6 6 3-6 6-6"/><path d="M3 20h18"/>'),
+  Lead:     G('<path d="M4 18 12 5l8 13"/><path d="M8 13h8"/>'),
+  Pad:      G('<path d="M3 12c3-5 6-5 9 0s6 5 9 0"/><path d="M3 17c3-5 6-5 9 0s6 5 9 0" opacity=".45"/>'),
+  Keys:     G('<rect x="3" y="6" width="18" height="12" rx="2"/><path d="M9 6v7M15 6v7"/>'),
+  Pluck:    G('<path d="M5 19 19 5"/><path d="M5 5c4 0 6 2 6 6" opacity=".5"/>'),
+  Sequence: G('<path d="M4 16h4v-6H4zM10 12h4v-2h-4zM16 18h4V6h-4z"/>'),
+  Texture:  G('<path d="M4 8h16M4 12h10M4 16h14" opacity=".9"/><circle cx="18" cy="12" r="1.2" fill="currentColor"/>'),
+  Perc:     G('<circle cx="12" cy="12" r="8"/><path d="M12 4v16"/>'),
+  FX:       G('<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>'),
+  Arp:      G('<path d="M4 18 8 12l4 4 8-11"/>'),
+};
+const CAR_GLYPH = [
+  G('<path d="M3 12c3-6 6-6 9 0s6 6 9 0"/>'),                                   /* wavetable */
+  G('<path d="M4 12h2l2-6 3 12 3-9 2 5 2-2h2"/>'),                              /* one-shot */
+  G('<path d="M4 20 4 8M9 20 9 4M14 20v-9M19 20v-4"/>'),                        /* IR (decay) */
+  G('<rect x="4" y="5" width="16" height="14" rx="2"/><path d="M8 10h8M8 14h5"/>'), /* flow card */
+  G('<path d="M3 12c2-5 4-5 6 0s4 5 6 0 4-5 6 0"/>'),                          /* LFO shape */
+  G('<circle cx="6" cy="6" r="2"/><circle cx="18" cy="6" r="2"/><circle cx="12" cy="18" r="2"/><path d="M8 6h8M7 8l4 8M17 8l-4 8"/>'), /* nodes */
+];
+const CAR_NAME = ['wavetables','one-shots','impulse responses','flow cards','LFO shapes','nodes'];
+const CAR_ONE  = ['wavetable','one-shot','impulse response','flow card','LFO shape','node'];
+const HEART = G('<path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/>');
+const BANK_GLYPH = G('<path d="M4 7h16M4 12h16M4 17h16" opacity=".8"/>');
+const PLUS = G('<path d="M12 5v14M5 12h14"/>');
+
+/* ═══ STATE ═══════════════════════════════════════════════════════════════════════════════════ */
+const S = { cur: 20 /* Glacier */, sel: 20, bank: null /* null = all */, type: null, style: null, author: null, favOnly: false, q: '', qBank: 'Terra', sound: true };
+const $ = id => document.getElementById(id);
+const label = p => `<span class="bk">${p.bank} - </span>${p.name}`;
+
+/* ═══ HEADER ═══════════════════════════════════════════════════════════════════════════════════ */
+function setCurrent(i, opts) {
+  const p = PRESETS[i]; if (!p) return;
+  S.cur = i; S.sel = i;
+  $('preset-name').textContent = p.bank + ' - ' + p.name;
+  if (!(opts && opts.quiet)) audition(p);
+  renderRows(); renderInsp(); renderQuick();
+}
+function step(d) {
+  const cur = PRESETS[S.cur];
+  const pool = PRESETS.filter(p => p.bank === cur.bank);
+  const at = pool.findIndex(p => p.id === S.cur);
+  const nx = pool[(at + d + pool.length) % pool.length];
+  setCurrent(nx.id);
+}
+$('prev-btn').onclick = () => step(-1);
+$('next-btn').onclick = () => step(1);
+$('preset-name').onclick = e => { e.stopPropagation(); toggleQuick(); };
+$('save-btn').onclick = e => { e.stopPropagation(); openSave(); };
+
+/* ═══ QUICK MENU ═══════════════════════════════════════════════════════════════════════════════ */
+function toggleQuick(force) {
+  const on = force != null ? force : !$('qmenu').classList.contains('on');
+  $('qmenu').classList.toggle('on', on);
+  $('preset-name').classList.toggle('open', on);
+  if (on) { S.qBank = PRESETS[S.cur].bank; renderQuick(); }
+}
+const FAVS = '♥ Favourites';
+function renderQuick() {
+  if (!$('qmenu').classList.contains('on')) return;
+  const b = $('q-banks'); let h = '<div class="ps">Banks</div>';
+  for (const bk of BANKS) h += `<div class="pi${bk.name === S.qBank ? ' cur' : ''}" data-bank="${bk.name}"><span class="nm">${bk.name}</span><span class="ct">${bk.n}</span></div>`;
+  const nf = PRESETS.filter(p => p.fav).length;
+  h += `<div class="pi${S.qBank === FAVS ? ' cur' : ''}" data-bank="${FAVS}"><span class="nm">Favourites</span><span class="ct">${nf}</span></div>`;
+  h += `<div class="pi imp" data-do="import"><span class="nm">Import bank…</span></div>`;
+  b.innerHTML = h;
+  b.querySelectorAll('.pi[data-bank]').forEach(el => { el.onmouseenter = el.onclick = () => { S.qBank = el.dataset.bank; renderQuick(); }; });
+  b.querySelector('[data-do=import]').onclick = () => { toggleQuick(false); openImport(); };
+  const l = $('q-list'); const isFav = S.qBank === FAVS; const bk = isFav ? null : BANKS.find(x => x.name === S.qBank);
+  const pool = isFav ? PRESETS.filter(p => p.fav) : PRESETS.filter(p => p.bank === S.qBank);
+  let g = '';
+  if (!pool.length) g += `<div class="ps">${isFav ? 'Favourites' : bk.name}</div><div class="pi" style="color:var(--menu-fg-faint);cursor:default"><span class="nm">${isFav ? 'Heart a preset to keep it here' : 'Nothing saved here yet'}</span></div>`;
+  /* grouped by TYPE under .ps section labels — the same grammar the wavetable menu uses for its categories */
+  for (const t of TYPES) {
+    const rows = pool.filter(p => p.type === t); if (!rows.length) continue;
+    g += `<div class="ps">${t}</div>`;
+    for (const p of rows) g += `<div class="pi${p.id === S.cur ? ' cur' : ''}" data-id="${p.id}"><span class="nm">${isFav ? label(p) : p.name}</span>${p.env ? '<span class="env">env</span>' : ''}${p.user ? '<span class="dx" title="Delete">✕</span>' : ''}</div>`;
+  }
+  l.innerHTML = g;
+  l.querySelectorAll('.pi[data-id]').forEach(el => {
+    el.onclick = e => { if (e.target.classList.contains('dx')) { e.stopPropagation(); del(+el.dataset.id); return; } loadPreset(+el.dataset.id); toggleQuick(false); };
+  });
+  const c = l.querySelector('.cur'); if (c) c.scrollIntoView({ block: 'center' });
+}
+$('q-browse').onclick = () => { toggleQuick(false); openBrowser(); };
+document.addEventListener('mousedown', e => {
+  if (!e.target.closest('#qmenu') && !e.target.closest('#preset-name')) toggleQuick(false);
+  if (!e.target.closest('#ctx')) $('ctx').classList.remove('on');
+});
+
+/* ═══ BROWSER ══════════════════════════════════════════════════════════════════════════════════ */
+function openBrowser() { $('browser').classList.add('on'); S.sel = S.cur; buildChips(); renderRail(); renderRows(); renderInsp(); $('list').focus(); }
+function closeBrowser() { $('browser').classList.remove('on'); }
+$('close').onclick = closeBrowser;
+
+function buildChips() {
+  const t = $('chips-type'); t.innerHTML = '<span class="lb">Type</span>' + ['All', ...TYPES].map(x => `<button class="cat-btn${(x === 'All' ? S.type == null : S.type === x) ? ' active' : ''}" data-t="${x}">${x}</button>`).join('');
+  t.querySelectorAll('.cat-btn').forEach(b => b.onclick = () => { S.type = b.dataset.t === 'All' ? null : b.dataset.t; buildChips(); renderRows(); });
+  const s = $('chips-style'); s.innerHTML = '<span class="lb">Style</span>' + ['All', ...STYLES].map(x => `<button class="cat-btn${(x === 'All' ? S.style == null : S.style === x) ? ' active' : ''}" data-s="${x}">${x}</button>`).join('');
+  s.querySelectorAll('.cat-btn').forEach(b => b.onclick = () => { S.style = b.dataset.s === 'All' ? null : b.dataset.s; buildChips(); renderRows(); });
+}
+function renderRail() {
+  const r = $('rail-l'); let h = '<div class="sec">Banks</div>';
+  h += `<div class="ri${S.bank == null ? ' cur' : ''}" data-bank=""><span class="nm">All banks</span><span class="ct">${PRESETS.length}</span></div>`;
+  for (const bk of BANKS) h += `<div class="ri${S.bank === bk.name ? ' cur' : ''}" data-bank="${bk.name}"><span class="nm">${bk.name}</span><span class="ct">${bk.n}</span></div>`;
+  h += `<div class="ri imp" data-do="import">${PLUS}<span class="nm">Import bank…</span></div>`;
+  const authors = [...new Set(PRESETS.map(p => p.author))];
+  h += '<div class="sec">Author</div>';
+  h += `<div class="ri${S.author == null ? ' cur' : ''}" data-author=""><span class="nm">Anyone</span></div>`;
+  for (const a of authors) h += `<div class="ri${S.author === a ? ' cur' : ''}" data-author="${a}"><span class="nm">${a}</span><span class="ct">${PRESETS.filter(p => p.author === a).length}</span></div>`;
+  r.innerHTML = h;
+  r.querySelectorAll('[data-bank]').forEach(el => el.onclick = () => { S.bank = el.dataset.bank || null; renderRail(); renderRows(); });
+  r.querySelectorAll('[data-author]').forEach(el => el.onclick = () => { S.author = el.dataset.author || null; renderRail(); renderRows(); });
+  r.querySelector('[data-do=import]').onclick = openImport;
+}
+function matches(p) {
+  if (S.bank && p.bank !== S.bank) return false;
+  if (S.type && p.type !== S.type) return false;
+  if (S.style && !p.styles.includes(S.style)) return false;
+  if (S.author && p.author !== S.author) return false;
+  if (S.favOnly && !p.fav) return false;
+  if (S.q) { const q = S.q; const hay = (p.bank + ' ' + p.name + ' ' + p.type + ' ' + p.styles.join(' ') + ' ' + p.author + (p.env ? ' environment env' : '')).toLowerCase(); if (!hay.includes(q)) return false; }
+  return true;
+}
+let rowsBuilt = 0;
+function buildRows() {
+  /* rows are built ONCE per catalogue change and filtered by class — no DOM churn on every keystroke */
+  const r = $('rows'); let h = '';
+  for (const p of PRESETS) {
+    h += `<div class="row" data-id="${p.id}">
+      <span class="c-ic">${TYPE_GLYPH[p.type]}</span>
+      <span class="c-nm"><span class="t">${label(p)}</span>${p.env ? '<span class="badge">env</span>' : ''}${p.user ? '<span class="badge user">user</span>' : ''}</span>
+      <span class="c-car">${p.c.map((n, i) => `<span class="car${n ? ' on' : ''}${i === 5 ? ' node' : ''}" title="${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}">${CAR_GLYPH[i]}</span>`).join('')}</span>
+      <span class="c-ty">${p.type}</span>
+      <span class="c-st">${p.styles[0]}</span>
+      <span class="c-fv${p.fav ? ' on' : ''}">${HEART}</span></div>`;
+  }
+  r.innerHTML = h; rowsBuilt = PRESETS.length;
+  r.querySelectorAll('.row').forEach(el => {
+    const id = +el.dataset.id;
+    el.onclick = e => { if (e.target.closest('.c-fv')) { PRESETS[id].fav = !PRESETS[id].fav; el.querySelector('.c-fv').classList.toggle('on', PRESETS[id].fav); renderInsp(); return; } select(id); };
+    el.ondblclick = () => loadPreset(id, { close: true });
+    el.oncontextmenu = e => { e.preventDefault(); select(id); openCtx(e, id); };
+  });
+}
+function renderRows() {
+  if (rowsBuilt !== PRESETS.length) buildRows();
+  let n = 0, nEnv = 0;
+  $('rows').querySelectorAll('.row').forEach(el => {
+    const p = PRESETS[+el.dataset.id]; const ok = matches(p);
+    el.classList.toggle('off', !ok); el.classList.toggle('sel', p.id === S.sel);
+    if (ok) { n++; if (p.env) nEnv++; }
+  });
+  $('count').innerHTML = `<b>${n}</b> preset${n === 1 ? '' : 's'}${nEnv ? ` · <b>${nEnv}</b> environment${nEnv === 1 ? '' : 's'}` : ''}`;
+  const e = $('empty'); e.style.display = n ? 'none' : 'block';
+  if (!n) e.innerHTML = `<b>Nothing here yet</b>${S.q ? 'No preset matches “' + S.q + '”.' : S.favOnly ? 'Mark a favourite with the heart on any row.' : 'Save one with + in the header, or import a bank.'}`;
+  const sel = $('rows').querySelector('.row.sel'); if (sel && !sel.classList.contains('off')) sel.scrollIntoView({ block: 'nearest' });
+}
+function select(id) { S.sel = id; renderRows(); renderInsp(); audition(PRESETS[id]); }
+function visibleIds() { return [...$('rows').querySelectorAll('.row:not(.off)')].map(el => +el.dataset.id); }
+function renderInsp() {
+  const p = PRESETS[S.sel]; const el = $('insp'); if (!p) { el.innerHTML = ''; return; }
+  const total = fmtB(p.bytes);
+  let cl = '';
+  p.c.forEach((n, i) => {
+    if (!n) return;
+    let sz = '';
+    if (i === 0) sz = BANKS.find(b => b.name === p.bank)?.factory ? 'factory' : fmtB(n * 60000);
+    else if (i === 1) sz = fmtB(n * 600000);
+    else if (i === 2) sz = fmtB(n * 1200000);
+    cl += `<div class="cl${i === 5 ? ' node' : ''}">${CAR_GLYPH[i]}<span class="n">${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}</span><span class="sz">${sz}</span></div>`;
+  });
+  if (!cl) cl = `<div class="cl none">${CAR_GLYPH[0]}<span class="n">Parameters only</span></div>`;
+  el.innerHTML = `
+    <div class="nm">${label(p)}</div>
+    <div class="sub"><span class="badge${p.env ? '' : ' user'}" style="${p.env ? '' : 'visibility:hidden'}">environment</span>${p.user ? '<span class="badge user">user</span>' : ''}</div>
+    <div class="kv">
+      <span class="k">Type</span><span class="v p">${p.type}</span>
+      <span class="k">Style</span><span class="v">${p.styles.join(' · ')}</span>
+      <span class="k">Author</span><span class="v">${p.author}</span>
+      <span class="k">Bank</span><span class="v">${p.bank}</span>
+    </div>
+    <div class="carries"><div class="k">Carries</div>${cl}<div class="tot"><span>${p.env ? 'Greys the window while it loads' : 'Loads instantly'}</span><b>${total}</b></div></div>
+    <div class="acts"><button class="btn ic${p.fav ? ' on' : ''}" id="i-fav" title="Favourite">${HEART}</button><button class="btn pri" id="i-load">Load</button></div>`;
+  $('i-fav').onclick = () => { p.fav = !p.fav; renderRows(); renderInsp(); };
+  $('i-load').onclick = () => loadPreset(p.id, { close: true });
+}
+$('search').oninput = e => { S.q = e.target.value.trim().toLowerCase(); renderRows(); };
+$('search').onkeydown = e => { if (e.key === 'Escape') { if (S.q) { e.target.value = ''; S.q = ''; renderRows(); } else closeBrowser(); } if (e.key === 'ArrowDown') { $('list').focus(); e.preventDefault(); } };
+$('fav-only').onclick = () => { S.favOnly = !S.favOnly; $('fav-only').classList.toggle('on', S.favOnly); renderRows(); };
+$('dice').onclick = () => { const ids = visibleIds().filter(i => i !== S.sel); if (!ids.length) return; const id = ids[Math.floor(Math.random() * ids.length)]; select(id); };
+$('list').onkeydown = e => {
+  const ids = visibleIds(); if (!ids.length) return; const at = ids.indexOf(S.sel);
+  if (e.key === 'ArrowDown') { select(ids[Math.min(ids.length - 1, at + 1)]); e.preventDefault(); }
+  else if (e.key === 'ArrowUp') { select(ids[Math.max(0, at - 1)]); e.preventDefault(); }
+  else if (e.key === 'Enter') { loadPreset(S.sel, { close: true }); }
+  else if (e.key === 'Escape') { closeBrowser(); }
+  else if (e.key === ' ') { S.favOnly = false; PRESETS[S.sel].fav = !PRESETS[S.sel].fav; renderRows(); renderInsp(); e.preventDefault(); }
+  else if (e.key.length === 1 && !e.metaKey && !e.ctrlKey) { $('search').focus(); }
+};
+
+/* ═══ CONTEXT MENU ═════════════════════════════════════════════════════════════════════════════ */
+function openCtx(e, id) {
+  const p = PRESETS[id]; const m = $('ctx');
+  const rect = $('plugin').getBoundingClientRect();
+  let h = `<div class="ps">${p.name}</div>`;
+  h += `<div class="pi" data-a="load"><span class="nm">Load</span></div>`;
+  h += `<div class="pi" data-a="fav"><span class="nm">${p.fav ? 'Remove favourite' : 'Favourite'}</span></div>`;
+  if (p.user) { h += `<div class="pi" data-a="rename"><span class="nm">Rename…</span></div><div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="del" style="color:var(--rose)"><span class="nm">Delete</span></div>`; }
+  else h += `<div class="pi" data-a="dup"><span class="nm">Copy to User</span></div>`;
+  m.innerHTML = h;
+  /* the .pmenu clamp, verbatim: max(6, min(v, edge - size - 6)) */
+  m.classList.add('on');
+  const w = m.offsetWidth, hh = m.offsetHeight;
+  m.style.left = Math.max(6, Math.min(e.clientX - rect.left, 820 - w - 6)) + 'px';
+  m.style.top  = Math.max(6, Math.min(e.clientY - rect.top,  656 - hh - 6)) + 'px';
+  m.querySelectorAll('.pi').forEach(el => el.onclick = () => {
+    const a = el.dataset.a; m.classList.remove('on');
+    if (a === 'load') loadPreset(id, { close: true });
+    if (a === 'fav') { p.fav = !p.fav; renderRows(); renderInsp(); }
+    if (a === 'del') del(id);
+    if (a === 'rename') { const n = prompt('Rename preset', p.name); if (n) { p.name = n.trim(); rowsBuilt = 0; renderRows(); renderInsp(); setCurrent(S.cur, { quiet: true }); } }
+    if (a === 'over') toast(`Overwrote <span class="bk">${p.bank} - </span>${p.name}`);
+    if (a === 'dup') { saveNew(p.name, p.type, p.styles.slice(), p.c.slice()); }
+  });
+}
+function del(id) {
+  const p = PRESETS[id]; if (!p.user) return;
+  if (!confirm('Delete "' + p.name + '"? This cannot be undone.')) return;
+  PRESETS = PRESETS.filter(x => x.id !== id); PRESETS.forEach((x, i) => x.id = i);
+  BANKS.find(b => b.name === p.bank).n--;
+  if (S.cur >= PRESETS.length) S.cur = 0; if (S.sel >= PRESETS.length) S.sel = S.cur;
+  rowsBuilt = 0; renderRail(); renderRows(); renderInsp(); renderQuick(); setCurrent(S.cur, { quiet: true });
+  toast(`Deleted <span class="bk">${p.bank} - </span>${p.name}`);
+}
+
+/* ═══ LOADING ══════════════════════════════════════════════════════════════════════════════════ */
+/* A normal preset is applied in one shot — no overlay, no flash. An environment shows the wash after 120 ms
+   (so a fast one never flickers it) and keeps it up at least 400 ms (so a medium one never strobes it). */
+let loadTimer = null;
+function loadPreset(id, opts) {
+  const p = PRESETS[id]; if (!p) return;
+  if (opts && opts.close) closeBrowser();
+  if (!p.env) { setCurrent(id); toast(`Loaded <span class="bk">${p.bank} - </span>${p.name}`); return; }
+  const ms = 900 + p.c[5] * 28 + p.c[1] * 120 + p.c[2] * 180;   /* honest-ish: nodes, samples and IRs cost */
+  const ov = $('loading'); $('ld-n').innerHTML = label(p); $('ld-bar').style.width = '0%'; $('ld-p').textContent = '0%';
+  const t0 = performance.now(); let shown = false;
+  clearInterval(loadTimer);
+  const show = setTimeout(() => { ov.classList.add('on'); shown = true; }, 120);
+  loadTimer = setInterval(() => {
+    const k = Math.min(1, (performance.now() - t0) / ms);
+    const pct = Math.round(k * 100); $('ld-bar').style.width = pct + '%'; $('ld-p').textContent = pct + '%';
+    if (k >= 1) {
+      clearInterval(loadTimer); clearTimeout(show);
+      const hold = shown ? Math.max(0, 400 - (performance.now() - t0 - 120)) : 0;
+      setTimeout(() => { ov.classList.remove('on'); setCurrent(id); toast(`Loaded <span class="bk">${p.bank} - </span>${p.name} · ${p.c[5]} nodes`); }, hold);
+    }
+  }, 40);
+}
+
+/* ═══ SAVE ═════════════════════════════════════════════════════════════════════════════════════ */
+let svType = 'Pad', svStyles = ['Warm'];
+function openSave() {
+  const cur = PRESETS[S.cur];
+  svType = cur.type; svStyles = cur.styles.slice();
+  $('sv-name').value = cur.user ? cur.name : cur.name + ' 2';
+  $('sv-carries').innerHTML = cur.c.map((n, i) => n ? `${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}` : '').filter(Boolean).join(' · ') || 'Parameters only';
+  renderSaveChips(); $('save-sheet').classList.add('on'); setTimeout(() => { $('sv-name').focus(); $('sv-name').select(); }, 30);
+}
+function renderSaveChips() {
+  $('sv-type').innerHTML = TYPES.map(t => `<button class="cat-btn${t === svType ? ' active' : ''}" data-t="${t}">${t}</button>`).join('');
+  $('sv-type').querySelectorAll('.cat-btn').forEach(b => b.onclick = () => { svType = b.dataset.t; renderSaveChips(); });
+  $('sv-style').innerHTML = STYLES.map(s => `<button class="cat-btn${svStyles.includes(s) ? ' active' : ''}" data-s="${s}">${s}</button>`).join('');
+  $('sv-style').querySelectorAll('.cat-btn').forEach(b => b.onclick = () => { const s = b.dataset.s; svStyles = svStyles.includes(s) ? svStyles.filter(x => x !== s) : (svStyles.length < 2 ? [...svStyles, s] : [svStyles[1], s]); renderSaveChips(); });
+}
+function saveNew(name, type, styles, c) {
+  const bank = BANKS.find(b => b.user);
+  PRESETS.push({ id: PRESETS.length, name, bank: bank.name, author: bank.author, type, styles, c, env: c[5] > 0, fav: false, user: true, bytes: bytesOf(c, false) });
+  bank.n++; rowsBuilt = 0; renderRail(); renderRows(); renderInsp(); setCurrent(PRESETS.length - 1, { quiet: true });
+  toast(`Saved <span class="bk">${bank.name} - </span>${name}`);
+}
+$('sv-cancel').onclick = () => $('save-sheet').classList.remove('on');
+$('sv-ok').onclick = () => { const n = $('sv-name').value.trim(); if (!n) { $('sv-name').focus(); return; } $('save-sheet').classList.remove('on'); saveNew(n, svType, svStyles.length ? svStyles : ['Clean'], PRESETS[S.cur].c.slice()); };
+$('sv-name').onkeydown = e => { if (e.key === 'Enter') $('sv-ok').click(); if (e.key === 'Escape') $('sv-cancel').click(); };
+
+/* ═══ IMPORT ═══════════════════════════════════════════════════════════════════════════════════ */
+let impReady = null;
+function openImport() { impReady = null; $('imp-man').classList.remove('on'); $('imp-ok').disabled = true; $('imp-drop').style.display = ''; $('imp-sheet').classList.add('on'); }
+$('imp-cancel').onclick = () => $('imp-sheet').classList.remove('on');
+$('imp-drop').onclick = () => {
+  /* stands in for the file chooser: "read" the pack header — name, author, counts — WITHOUT loading its presets */
+  if (BANKS.find(b => b.name === 'Lowland')) { toast('Lowland is already installed'); return; }
+  const wt = 14, smp = 9, ir = 3, cards = 22, lfo = 11;
+  impReady = { name: 'Lowland', author: 'Ines Varga', rows: LOWLAND, bytes: 15000 * LOWLAND.length + wt * 60000 + smp * 600000 + ir * 1200000 };
+  $('imp-drop').style.display = 'none';
+  $('imp-man').innerHTML = `<div class="mn">Lowland <span class="by">· Ines Varga</span></div>
+    <div class="ml"><div>${TYPE_GLYPH.Pad}<b>${LOWLAND.length}</b> presets</div><div>${CAR_GLYPH[0]}<b>${wt}</b> wavetables</div><div>${CAR_GLYPH[1]}<b>${smp}</b> one-shots</div><div>${CAR_GLYPH[2]}<b>${ir}</b> impulse responses</div><div>${CAR_GLYPH[3]}<b>${cards}</b> flow cards</div><div>${CAR_GLYPH[4]}<b>${lfo}</b> LFO shapes</div></div>
+    <div class="tot" style="margin-top:10px;display:flex;justify-content:space-between;font-size:9px;color:var(--text-dim)"><span>Assets stored once per bank, shared by its presets</span><b style="color:var(--text-secondary);font-weight:500">${fmtB(impReady.bytes)}</b></div>`;
+  $('imp-man').classList.add('on'); $('imp-ok').disabled = false;
+};
+$('imp-drop').ondragover = e => { e.preventDefault(); $('imp-drop').classList.add('hot'); };
+$('imp-drop').ondragleave = () => $('imp-drop').classList.remove('hot');
+$('imp-drop').ondrop = e => { e.preventDefault(); $('imp-drop').classList.remove('hot'); $('imp-drop').click(); };
+$('imp-ok').onclick = () => {
+  if (!impReady) return; $('imp-sheet').classList.remove('on');
+  const first = PRESETS.length;
+  const b = addBank(impReady.name, impReady.author, impReady.rows, {});
+  rowsBuilt = 0; S.bank = b.name; S.sel = first; renderRail(); buildChips(); renderRows(); renderInsp(); renderQuick();
+  if (!$('browser').classList.contains('on')) openBrowser();
+  toast(`Imported <span class="bk">${b.name} · </span>${b.n} presets`);
+};
+
+/* ═══ TOAST ════════════════════════════════════════════════════════════════════════════════════ */
+let toastT = null;
+function toast(html) { const t = $('toast'); t.innerHTML = html; t.classList.add('on'); clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('on'), 1600); }
+
+/* ═══ AUDITION — a short voice per type so the mockup is audible. Off until Max turns it on. ═══ */
+let AC = null;
+function audition(p) {
+  if (!S.sound) return;
+  try {
+    AC = AC || new (window.AudioContext || window.webkitAudioContext)();
+    if (AC.state === 'suspended') AC.resume();
+    const t = AC.currentTime, out = AC.createGain(); out.gain.value = 0; out.connect(AC.destination);
+    const seed = [...(p.name)].reduce((a, c) => a + c.charCodeAt(0), 0);
+    const base = { Bass: 55, Lead: 330, Pad: 165, Keys: 262, Pluck: 392, Sequence: 220, Texture: 110, Perc: 90, FX: 140, Arp: 294 }[p.type] || 220;
+    const f = base * Math.pow(2, ((seed % 7) - 3) / 12);
+    const dur = { Pluck: .35, Perc: .22, Keys: .7, Bass: .55, Lead: .6, Pad: 1.4, Texture: 1.3, FX: 1.1, Sequence: .5, Arp: .45 }[p.type] || .6;
+    const mk = (type, freq, det, g) => { const o = AC.createOscillator(); o.type = type; o.frequency.value = freq; o.detune.value = det; const gg = AC.createGain(); gg.gain.value = g; o.connect(gg); gg.connect(flt); o.start(t); o.stop(t + dur + .3); };
+    const flt = AC.createBiquadFilter(); flt.type = 'lowpass'; flt.connect(out);
+    const dark = p.styles.includes('Dark') || p.styles.includes('Hollow'); const bright = p.styles.includes('Bright') || p.styles.includes('Glassy');
+    flt.frequency.setValueAtTime(bright ? 6000 : dark ? 700 : 1800, t); flt.frequency.exponentialRampToValueAtTime(dark ? 300 : 900, t + dur);
+    const wave = p.styles.includes('Dirty') || p.styles.includes('Metallic') ? 'sawtooth' : p.type === 'Bass' ? 'square' : 'triangle';
+    mk(wave, f, 0, .5); if (p.styles.includes('Wide') || p.type === 'Pad') { mk(wave, f, -9, .3); mk(wave, f, 9, .3); }
+    if (p.type === 'Perc') { const n = AC.createBufferSource(); const buf = AC.createBuffer(1, AC.sampleRate * .2, AC.sampleRate); const d = buf.getChannelData(0); for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / d.length, 3); n.buffer = buf; const ng = AC.createGain(); ng.gain.value = .6; n.connect(ng); ng.connect(flt); n.start(t); }
+    const atk = p.type === 'Pad' || p.type === 'Texture' ? .25 : .008;
+    out.gain.setValueAtTime(0, t); out.gain.linearRampToValueAtTime(.16, t + atk); out.gain.exponentialRampToValueAtTime(.0008, t + dur);
+    if (p.type === 'Arp' || p.type === 'Sequence') { for (let i = 1; i < 4; i++) { const g2 = AC.createGain(); g2.gain.value = 0; g2.connect(AC.destination); const o2 = AC.createOscillator(); o2.type = 'triangle'; o2.frequency.value = f * [1.5, 2, 2.5][i - 1]; o2.connect(g2); const tt = t + i * .11; g2.gain.setValueAtTime(0, tt); g2.gain.linearRampToValueAtTime(.09, tt + .006); g2.gain.exponentialRampToValueAtTime(.0008, tt + .18); o2.start(tt); o2.stop(tt + .25); } }
+  } catch (e) {}
+}
+
+/* ═══ DEMO RAIL ════════════════════════════════════════════════════════════════════════════════ */
+document.querySelectorAll('#rail .rb').forEach(b => b.onclick = () => {
+  const a = b.dataset.do;
+  if (a === 'quick') { closeBrowser(); toggleQuick(true); }
+  if (a === 'browse') { toggleQuick(false); openBrowser(); }
+  if (a === 'load') { const ids = PRESETS.filter(p => !p.env && p.id !== S.cur).map(p => p.id); loadPreset(ids[Math.floor(Math.random() * ids.length)], { close: true }); }
+  if (a === 'env') { const ids = PRESETS.filter(p => p.env).map(p => p.id); loadPreset(ids[Math.floor(Math.random() * ids.length)], { close: true }); }
+  if (a === 'import') { toggleQuick(false); openImport(); }
+  if (a === 'save') openSave();
+  if (a === 'sound') { S.sound = !S.sound; b.classList.toggle('on', S.sound); b.textContent = S.sound ? 'Sound on' : 'Sound off'; if (S.sound) audition(PRESETS[S.cur]); }
+  if (a === 'theme') { const h = document.documentElement; h.dataset.theme = h.dataset.theme === 'dark' ? 'light' : 'dark'; }
+});
+$('rb-sound').classList.add('on');
+
+/* boot */
+setCurrent(20, { quiet: true });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') { toggleQuick(false); $('save-sheet').classList.remove('on'); $('imp-sheet').classList.remove('on'); $('ctx').classList.remove('on'); } });
+</script>
+</body>
+</html>

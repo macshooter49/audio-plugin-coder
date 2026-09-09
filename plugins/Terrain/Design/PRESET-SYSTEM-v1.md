@@ -1,0 +1,54 @@
+# Terrain — Preset System v1 (build contract)
+
+Mockup: `Design/preset-system-v1-mockup.html` — interactive + audible. Open it, click things.
+Ground truth it is built on: memory `terrain-preset-system-ground-truth` + `terrain-preset-and-environment-vision`.
+This page is the decisions, not the research. Sign the mockup off; then this is what gets built.
+
+## 1. Two surfaces, one system
+| surface | opens from | is |
+|---|---|---|
+| **Quick menu** | click the preset name in the header | the `.pmenu` glass, grown to two columns: BANKS · that bank's presets grouped by TYPE. `‹ ›` step inside the current bank. Favourites is a pseudo-bank. "Browse all" at the foot. |
+| **Browser** | Browse all, or the dice | covers 44→656, **above `#syn-panel`** (today's drawer is z 15 under a z 30 page — it renders behind the synth). Search · TYPE chips · STYLE chips · BANKS rail · AUTHOR rail · list · inspector. |
+
+Load rules: single click = select + audition, double-click / `↵` = load and close, `↑↓` step, `esc` closes, space = favourite, dice = random inside the current filter. Right-click a User preset: Load · Favourite · Rename · Overwrite with current · Delete (rose). Factory: Copy to User.
+
+## 2. Naming, taxonomy
+- A preset's display name is **`Bank - Name`**, always. The dash is the bank. `Terra - Glacier`, `User - Slatt`, `Lowland - Heron`. Same law as the wavetables.
+- **Terra** is the factory bank (100 presets, 10 per type). **User** is the one you save into. Imported packs are their own banks, named by the pack.
+- TYPE (one per preset, fixed): Bass · Lead · Pad · Keys · Pluck · Sequence · Texture · Perc · FX · Arp.
+- STYLE (up to two, fixed vocabulary): Dark · Bright · Warm · Metallic · Glassy · Dirty · Clean · Evolving · Punchy · Wide · Hollow · Organic.
+- AUTHOR is free text, set at save, filterable.
+- Fixed vocabularies are deliberate: filters only work when everyone uses the same words. Free tags can come later on top.
+
+## 3. CARRIES — what a preset embeds (the Terrain-only part)
+Six slots on every row and in the inspector: **wavetables · one-shots · impulse responses · flow cards · LFO shapes · nodes**.
+- A preset **embeds** its imported audio (FLAC-24 → base64, the fb602 decision) so it is portable Mac↔Windows and machine-to-machine.
+- **Factory wavetables and factory one-shots are referenced by name, never embedded** — `Terra - Bit Ladder` resolves against the bundle on any machine. Only imported audio is carried.
+- A preset with **nodes > 0 is an ENVIRONMENT**: the same file plus a patcher graph. The badge, the purple node mark and the loading wash all key off that one number. (Patcher graph schema is reserved, not designed here — the seat exists so the format never has to change.)
+- The inspector prices it: a plain Terra preset ≈ 17 KB; one embedded one-shot ≈ 600 KB; an IR ≈ 1.2 MB. Users see the cost before they click.
+
+## 4. Format
+- **`.terrain`** = the existing state chunk (`"VC2!"` + LE u32 + XML — so host sessions and presets are the same bytes) with one added root child `<preset>` carrying name · bank · author · type · styles · carries · format-version. Assets ride as root properties exactly as `wtImportPcm0..3` already does, re-encoded FLAC-24. **No new serialiser** — `setStateInformation`'s load order (migrations → JSON blobs → V1/V2 branch → `replaceState`) is load-bearing and is reused verbatim.
+- **`.terrainpack`** = a zip: `pack.json` (name, author, version, counts) · `presets/*.terrain` · `assets/` (wavetables, one-shots, IRs as `.flac`; cards and LFO shapes as `.json`). Presets inside a pack reference pack assets **by content hash** so a bank of 100 presets sharing 3 wavetables stores them once. Import = unzip to the user root + register the bank; nothing is loaded until a preset is clicked.
+- Both extensions are already claimed by `isInterestedInFileDrag` (PluginEditor.cpp:13228) and stubbed at `loadPatch` / `importTerrainPack`. Fill those seats.
+- Sub-presets (a flow card, an LFO shape, a convolution IR) are the same asset files a pack carries; `TIC.presets` keeps its per-card menu and gains "add to pack".
+
+## 5. DSP 100 % correct — the gate, not a promise
+A preset is correct when **save → load is a null**. Two bars, both required:
+1. **State round-trip**: every APVTS parameter (4072 at HEAD) and every root property (`synModJson`, `dynEnvJson_`, `lfoShapesJson_`, `dstCurvesJson_`, `warpDraw0..7`, `midiCcMap`, `macroNames`, `arpLanesJson_`, `noiseSampleSel`, `wtImportPcm0..3`, `cardStates_`, IR audio) byte-identical after a reload into a fresh processor.
+2. **Audio null**: render a fixed note for 2 s before save and after load into a fresh instance — difference < −100 dBFS. Catches anything derived, cached, or rebuilt at load that the param dump would miss.
+Both run headless against the shipped binary, with a mutant that drops one root property and must go red.
+
+## 6. Load path and CPU
+- **Normal preset**: parse on the message thread (15 KB gzipped, sub-ms), decode any embedded audio on the fb611 worker, hand the finished buffers back, one atomic swap under the existing lock. No overlay. Nothing on the audio thread but the swap.
+- **Environment**: staged — parse → decode assets → build graph → swap. Progress is bytes-weighted across the stages, so the bar is honest. Overlay appears **after 120 ms** (a fast one never flashes it) and stays **≥ 400 ms** once shown (a medium one never strobes it). Wash is a flat rgba — **no backdrop-filter** on a full-window surface (fb613: the renderer pays for it, the CPU meter never shows it).
+- **Browser**: rows built once per catalogue change and filtered by class — measured in the mockup: 3,890 DOM nodes at 105 presets, **0.92 ms per keystroke**, zero animation loops. The catalogue is one JSON index per bank, read once at scan, never re-parsed per keystroke. Virtualise the list only above ~600 rows.
+- The browser never touches the audio thread; audition is a real load, same path as click-to-load.
+
+## 7. Recycle map (no new code for existing things)
+`.pmenu` → quick menu and context menu · `.cat-btn` → chips · `.user-badge` grammar → ENV/USER badges · `__extGlyph` SVG grammar → every icon · the dashed "Add Effects" box → the import drop zone · `savePreset / getPresets / deletePreset` natives → unchanged couriers · `#preset-browser` → replaced by the new surface at a z-index above 30 · AU program list follows the bank automatically.
+
+## 8. Open with Max
+- Author on factory presets: all "Waves Crate", or some "Max"? (Mockup shows both.)
+- Node cap per type for environments (50?) — it changes nothing here, only the worst-case bar.
+- Should a loaded environment show its node count in the header, or only in the inspector?
