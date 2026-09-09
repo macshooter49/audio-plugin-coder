@@ -125,8 +125,8 @@ button, input { font-family: inherit; }
 .pmenu .pi { display: flex; align-items: baseline; gap: 7px; padding: 6px 9px; border-radius: 6px; cursor: pointer; font-size: 10.5px; color: var(--menu-fg-dim); transition: .1s; line-height: 1.2; }
 .pmenu .pi .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pmenu .pi .ct { color: var(--menu-fg-faint); font-size: 9.5px; flex: none; }
-.pmenu .pi:hover { color: var(--menu-fg); box-shadow: inset 0 0 0 1px var(--edge-soft); }
-.pmenu .pi.cur { color: var(--on-fg); box-shadow: inset 0 0 0 1px var(--purple-400); }
+.pmenu .pi:hover { color: var(--menu-fg); background: var(--menu-wash); }
+.pmenu .pi.cur { color: var(--menu-fg); background: var(--menu-wash-cur); }
 .pmenu .pi.cur .ct { color: var(--menu-fg-dim); }
 .pmenu .pi.cur::before { content: '•'; color: var(--purple-400); font-size: 10px; line-height: 1; flex: none; align-self: center; }
 .pmenu .pi .dx { color: var(--menu-fg-faint); font-size: 9px; display: none; flex: none; }
@@ -191,28 +191,29 @@ button, input { font-family: inherit; }
 .rail { width: 150px; flex: none; border-right: 1px solid var(--menu-line); overflow-y: auto; padding: 8px 0 12px; scrollbar-width: none; }
 .rail::-webkit-scrollbar, .list::-webkit-scrollbar, .insp::-webkit-scrollbar { width: 0; height: 0; display: none; }
 .rail .sec { font-size: 10px; font-weight: 500; color: var(--text-soft); padding: 12px 16px 5px; }
-.rail .ri { display: flex; align-items: center; gap: 7px; height: 23px; margin: 0 8px; padding: 0 8px 0 6px; border-radius: 6px; cursor: pointer; font-size: 10.5px; color: var(--text-soft); transition: color .1s, box-shadow .1s; }
+.rail .ri { display: flex; align-items: center; gap: 7px; height: 23px; padding: 0 16px 0 14px; cursor: pointer; font-size: 10.5px; color: var(--text-soft); border-left: 2px solid transparent; transition: color .1s, background .1s; }
 .rail .ri .nm { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rail .ri .ct { font-size: 9.5px; color: var(--text-secondary); }
-.rail .ri:hover { color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--edge-soft); }
-.rail .ri.cur { color: var(--on-fg); box-shadow: inset 0 0 0 1px var(--purple-400); }
-.rail .ri.cur .ct { color: var(--on-fg); }
+.rail .ri:hover { color: var(--text-primary); background: var(--sel); }
+.rail .ri.cur { color: var(--text-primary); border-left-color: var(--purple-500); background: var(--sel-strong); }
+.rail .ri.cur .ct { color: var(--text-primary); }
 .rail .ri.imp { color: var(--purple-400); }
 .rail .ri.imp:hover { color: var(--purple-400); }
 .rail .ri svg { width: 11px; height: 11px; flex: none; }
 
-.list { flex: 1; min-width: 0; overflow-y: auto; scrollbar-width: none; outline: none; }
-.list .hd { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; height: 24px; padding: 0 14px 0 14px; background: var(--bg-surface);   /* NOT glass — nothing shows through it (Max) */ border-bottom: 1px solid var(--menu-line); font-size: 10px; font-weight: 500; color: var(--text-soft); }
-.list .hd span[data-sort] { cursor: pointer; display: flex; align-items: center; gap: 4px; }
-.list .hd span[data-sort]:hover { color: var(--purple-400); }
-.list .hd span[data-sort].on { color: var(--text-primary); }
-.list .hd span[data-sort] i { font-style: normal; font-size: 8px; color: var(--purple-400); opacity: 0; }
-.list .hd span[data-sort].on i { opacity: 1; }
+.listcol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.list { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; outline: none; }
+/* the column header is not inside the scroll region: rows are clipped at its bottom edge, so nothing ever passes under it. Transparent, like everything else. */
+.listcol .hd { flex: none; display: flex; align-items: center; height: 24px; padding: 0 14px 0 14px; background: transparent; border-bottom: 1px solid var(--menu-line); font-size: 10px; font-weight: 500; color: var(--text-soft); }
+.listcol .hd span[data-sort] { cursor: pointer; display: flex; align-items: center; gap: 4px; }
+.listcol .hd span[data-sort]:hover { color: var(--purple-400); }
+.listcol .hd span[data-sort].on { color: var(--text-primary); }
+.listcol .hd span[data-sort] i { font-style: normal; font-size: 8px; color: var(--purple-400); opacity: 0; }
+.listcol .hd span[data-sort].on i { opacity: 1; }
 #rows { display: flex; flex-direction: column; }
-.row { display: flex; align-items: center; height: 26px; margin: 0 8px; padding: 0 6px 0 6px; border-radius: 6px; cursor: pointer; transition: box-shadow .08s; }
-.row:hover { box-shadow: inset 0 0 0 1px var(--edge-soft); }
-.row.sel { box-shadow: inset 0 0 0 1px var(--purple-400); }
-.row.sel .c-nm { color: var(--on-fg); }
+.row { display: flex; align-items: center; height: 26px; padding: 0 14px 0 14px; cursor: pointer; transition: background .08s; }
+.row:hover { background: var(--sel); }
+.row.sel { background: var(--sel-strong); }
 .row.off { display: none; }
 .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
 .c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -388,7 +389,7 @@ button, input { font-family: inherit; }
     <div class="chips" id="chips-style"><span class="lb">Style</span><div class="strip"></div></div>
     <div class="body">
       <div class="rail" id="rail-l"></div>
-      <div class="list" id="list" tabindex="0">
+      <div class="listcol">
         <div class="hd">
           <span data-sort="name" style="flex:1">Name<i>▾</i></span>
           <span data-sort="carries" style="width:92px">Carries<i>▾</i></span>
@@ -396,8 +397,10 @@ button, input { font-family: inherit; }
           <span data-sort="style" style="width:74px">Style<i>▾</i></span>
           <span style="width:16px"></span>
         </div>
-        <div id="rows"></div>
-        <div class="empty" id="empty" style="display:none"></div>
+        <div class="list" id="list" tabindex="0">
+          <div id="rows"></div>
+          <div class="empty" id="empty" style="display:none"></div>
+        </div>
       </div>
       <div class="insp" id="insp"></div>
     </div>
@@ -472,7 +475,7 @@ button, input { font-family: inherit; }
   <button class="rb" data-do="theme">Theme</button>
 </div>
 <div id="notes">
-  <b>Selection</b> — one rule, copied from the four mode tiles: an outline, transparent inside; hover brightens the letters; selected turns the outline purple and the letters white. No fills anywhere. <b>Quick menu</b> — click the preset name. Left column is banks (click one), right column is that bank's presets grouped by type; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Click Name, Carries, Type or Style to sort; again to flip. Right-click a User preset for rename / delete.
+  <b>Selection</b> — buttons (pills, chips, Load, the heart) use the four mode tiles' rule: an outline, transparent inside; selected turns it purple with white letters. Selection menus (banks, authors, rows, the quick menu) highlight with the wash. <b>Quick menu</b> — click the preset name. Left column is banks (click one), right column is that bank's presets grouped by type; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Click Name, Carries, Type or Style to sort; again to flip. Right-click a User preset for rename / delete.
   <b>Editable</b> — the <span class="k">+</span> at the end of Type and Style adds a word; right-click a chip to rename or remove it, and every preset re-files itself. At save, type into Bank (an existing name joins it, a new one creates it), Author, Type and Style. Right-click any bank you made or imported to rename, export or remove it. Search reads names, types, styles, effects, authors and banks; every word must match.
   <b>Carries</b> — wavetables · one-shots · IRs · flow cards · LFO shapes · nodes. A preset with nodes is an environment; loading one greys the window and shows the bar. <b>Notes</b> — click under Notes in the inspector and type; it saves with the preset and search reads it. The Type and Style strips scroll sideways when they overflow.
 </div>
@@ -742,13 +745,13 @@ function renderRows() {
     const order = PRESETS.map(p => p.id).sort((a, b) => { const ka = sortKey(PRESETS[a], k), kb = sortKey(PRESETS[b], k); return (ka < kb ? -1 : ka > kb ? 1 : 0) * d; });
     const pos = {}; order.forEach((id, i) => pos[id] = i); rows.forEach(el => el.style.order = pos[+el.dataset.id]);
   } else rows.forEach(el => el.style.order = el.dataset.id);
-  document.querySelectorAll('.list .hd [data-sort]').forEach(h => { const on = h.dataset.sort === S.sort.key; h.classList.toggle('on', on); h.querySelector('i').textContent = S.sort.dir > 0 ? '▾' : '▴'; });
+  document.querySelectorAll('.listcol .hd [data-sort]').forEach(h => { const on = h.dataset.sort === S.sort.key; h.classList.toggle('on', on); h.querySelector('i').textContent = S.sort.dir > 0 ? '▾' : '▴'; });
   $('count').innerHTML = `<b>${n}</b> preset${n === 1 ? '' : 's'}${nEnv ? ` · <b>${nEnv}</b> environment${nEnv === 1 ? '' : 's'}` : ''}`;
   const e = $('empty'); e.style.display = n ? 'none' : 'block';
   if (!n) e.innerHTML = `<b>Nothing here yet</b>${S.q ? 'No preset matches “' + S.q + '”.' : S.favOnly ? 'Mark a favourite with the heart on any row.' : 'Save one with + in the header, or import a bank.'}`;
   const sel = $('rows').querySelector('.row.sel'); if (sel && !sel.classList.contains('off')) sel.scrollIntoView({ block: 'nearest' });
 }
-document.querySelectorAll('.list .hd [data-sort]').forEach(h => h.onclick = () => { const k = h.dataset.sort; if (S.sort.key === k) { if (S.sort.dir > 0) S.sort.dir = -1; else S.sort = { key: null, dir: 1 }; } else S.sort = { key: k, dir: 1 }; renderRows(); });
+document.querySelectorAll('.listcol .hd [data-sort]').forEach(h => h.onclick = () => { const k = h.dataset.sort; if (S.sort.key === k) { if (S.sort.dir > 0) S.sort.dir = -1; else S.sort = { key: null, dir: 1 }; } else S.sort = { key: k, dir: 1 }; renderRows(); });
 function select(id) { S.sel = id; renderRows(); renderInsp(); audition(PRESETS[id]); }
 function visibleIds() { return [...$('rows').querySelectorAll('.row:not(.off)')].sort((a, b) => (+a.style.order) - (+b.style.order)).map(el => +el.dataset.id); }
 function renderInsp() {
