@@ -15,6 +15,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
     e.setLoop (lp);
 }
 #include "PluginEditor.h"
+#include "PresetBank.h"   // fb619 — the bank file layer
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
@@ -17462,67 +17463,75 @@ TerrainAudioProcessor::PresetMeta TerrainAudioProcessor::getPresetMeta() const
 void TerrainAudioProcessor::setPresetMeta (const PresetMeta& m)
 { const juce::ScopedLock sl (presetMetaLock_); presetMeta_ = m; }
 
-static const char* const kTrnMagic = "TRN1";
+// the chunk with its <preset> child, as a wrapped .terrain (manifest read back off the chunk — one source of truth)
+static bool tiWrapCurrent (TerrainAudioProcessor& p, juce::MemoryBlock& chunkOut, juce::String& manifestOut, juce::String& error)
+{
+    p.getStateInformation (chunkOut);
+    if (auto xml = tw::bank::chunkToXml (chunkOut))
+        if (auto* pe = xml->getChildByName ("preset")) manifestOut = tw::bank::manifestFromChild (*pe);
+    if (manifestOut.isEmpty()) { error = "the chunk carries no <preset> child"; return false; }
+    return true;
+}
 
 bool TerrainAudioProcessor::savePatchToFile (const juce::File& f, const juce::String& metaJson, juce::String& error)
 {
     if (metaJson.isNotEmpty()) { PresetMeta m = getPresetMeta(); m.fromJson (metaJson); setPresetMeta (m); }
-    juce::MemoryBlock chunk; getStateInformation (chunk);
-    // the manifest is the <preset> child read back off the chunk just written — one source of truth
-    juce::String manifest;
-    if (auto xml = getXmlFromBinary (chunk.getData(), (int) chunk.getSize()))
-        if (auto* pe = xml->getChildByName ("preset"))
-        {
-            auto* o = new juce::DynamicObject();
-            for (int i = 0; i < pe->getNumAttributes(); ++i)
-            {
-                const auto k = pe->getAttributeName (i), v = pe->getAttributeValue (i);
-                if (k == "carries") o->setProperty (k, juce::JSON::parse (v));
-                else if (k == "fv") o->setProperty (k, v.getIntValue());
-                else o->setProperty (k, v);
-            }
-            manifest = juce::JSON::toString (juce::var (o), true);
-        }
-    if (manifest.isEmpty()) { error = "the chunk carries no <preset> child"; return false; }
-    juce::MemoryOutputStream out;
-    const juce::MemoryBlock mj (manifest.toRawUTF8(), manifest.getNumBytesAsUTF8());
-    out.write (kTrnMagic, 4);
-    out.writeInt ((int) mj.getSize());    out.write (mj.getData(), mj.getSize());
-    out.writeInt ((int) chunk.getSize()); out.write (chunk.getData(), chunk.getSize());
-    out.flush();
+    juce::MemoryBlock chunk; juce::String manifest;
+    if (! tiWrapCurrent (*this, chunk, manifest, error)) return false;
     if (! f.getParentDirectory().exists() && ! f.getParentDirectory().createDirectory())
     { error = "could not create " + f.getParentDirectory().getFullPathName(); return false; }
-    if (! f.replaceWithData (out.getData(), out.getDataSize()))
-    { error = "could not write " + f.getFullPathName(); return false; }
+    juce::MemoryOutputStream out; tw::bank::wrap (out, manifest, chunk);
+    if (! f.replaceWithData (out.getData(), out.getDataSize())) { error = "could not write " + f.getFullPathName(); return false; }
     return true;
 }
 
 bool TerrainAudioProcessor::unwrapPatchBytes (const juce::MemoryBlock& file, juce::String& manifestOut, juce::MemoryBlock& chunkOut, juce::String& error)
-{
-    const auto* p = (const char*) file.getData(); const size_t n = file.getSize();
-    if (n >= 8 && std::memcmp (p, "VC2!", 4) == 0) { chunkOut = file; manifestOut = {}; return true; }   // a bare chunk
-    if (n < 12 || std::memcmp (p, kTrnMagic, 4) != 0) { error = "not a Terrain preset"; return false; }
-    juce::MemoryInputStream in (file, false); in.setPosition (4);
-    const int ml = in.readInt();
-    if (ml < 0 || (size_t) ml > n) { error = "bad manifest length"; return false; }
-    { juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, ml); manifestOut = juce::String::fromUTF8 ((const char*) mb.getData(), (int) mb.getSize()); }
-    const int cl = in.readInt();
-    if (cl <= 8 || (size_t) cl > n) { error = "bad chunk length"; return false; }
-    chunkOut.reset(); in.readIntoMemoryBlock (chunkOut, cl);
-    if (chunkOut.getSize() != (size_t) cl) { error = "truncated preset"; return false; }
-    return true;
-}
+{ return tw::bank::unwrap (file, manifestOut, chunkOut, error); }
 
 bool TerrainAudioProcessor::readPatchHeader (const juce::File& f, juce::String& manifestJsonOut, juce::String& error)
+{ return tw::bank::readHeader (f, manifestJsonOut, error); }
+
+// ═══ fb619 — BANKS ════════════════════════════════════════════════════════════════════════════
+juce::File TerrainAudioProcessor::banksUserRoot() { return terrainDataDirP().getChildFile ("Banks"); }
+
+juce::File TerrainAudioProcessor::banksFactoryRoot()
 {
-    juce::FileInputStream in (f);
-    if (! in.openedOk()) { error = "could not open " + f.getFileName(); return false; }
-    char magic[4] = {}; if (in.read (magic, 4) != 4 || std::memcmp (magic, kTrnMagic, 4) != 0) { error = "not a Terrain preset"; return false; }
-    const int ml = in.readInt();
-    if (ml < 0 || ml > (1 << 20)) { error = "bad manifest length"; return false; }
-    juce::MemoryBlock mb; in.readIntoMemoryBlock (mb, ml);
-    manifestJsonOut = juce::String::fromUTF8 ((const char*) mb.getData(), (int) mb.getSize());
-    return manifestJsonOut.isNotEmpty();
+    // wtFactoryRoot()'s up-walk, verbatim, for Resources/Banks
+    static const juce::File bundled = []
+    {
+        auto p = juce::File::getSpecialLocation (juce::File::currentExecutableFile);
+        for (int up = 0; up < 5 && p.exists(); ++up)
+        {
+            const auto a = p.getChildFile ("Resources").getChildFile ("Banks");
+            if (a.isDirectory()) return a;
+            const auto b = p.getChildFile ("Contents").getChildFile ("Resources").getChildFile ("Banks");
+            if (b.isDirectory()) return b;
+            p = p.getParentDirectory();
+        }
+        return juce::File();
+    }();
+    return bundled;
+}
+
+juce::String TerrainAudioProcessor::getPresetCatalogJson() const
+{
+    tw::bank::ScanStats st; tw::bank::Caps caps;
+    return juce::JSON::toString (tw::bank::scan (banksFactoryRoot(), banksUserRoot(), caps, st), true);
+}
+
+bool TerrainAudioProcessor::savePresetToBank (const juce::String& bank, const juce::String& metaJson, juce::File& out, juce::String& error)
+{
+    const auto bankName = bank.trim().isEmpty() ? juce::String ("User") : bank.trim();
+    if (banksFactoryRoot().getChildFile (tw::bank::safeName (bankName)).isDirectory())
+    { error = bankName + " is a factory bank — choose or create another"; return false; }
+    PresetMeta m = getPresetMeta(); if (metaJson.isNotEmpty()) m.fromJson (metaJson);
+    m.bank = bankName; if (m.name.trim().isEmpty()) { error = "a preset needs a name"; return false; }
+    setPresetMeta (m);
+    juce::File dir; if (! tw::bank::ensureBank (banksUserRoot(), bankName, m.author, dir, error)) return false;
+    juce::MemoryBlock chunk; juce::String manifest;
+    if (! tiWrapCurrent (*this, chunk, manifest, error)) return false;
+    out = tw::bank::presetPath (banksUserRoot(), bankName, m.name);
+    return tw::bank::writePreset (out, banksUserRoot(), manifest, chunk, error);
 }
 
 bool TerrainAudioProcessor::loadPatchFromFile (const juce::File& f, juce::String& error)

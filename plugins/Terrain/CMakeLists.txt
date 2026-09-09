@@ -93,6 +93,31 @@ else()
     message(WARNING "Terrain: ${TERRAIN_WT_BANK} is MISSING — this build will ship with NO factory wavetables")
 endif()
 
+#  fb619 — THE FACTORY PRESET BANKS ride in the same seat: Resources/Banks/<Bank>/<Name>.terrain, found at
+#  runtime by the same bundle up-walk wtFactoryRoot() uses (banksFactoryRoot()). Terra is the first.
+set(TERRAIN_BANKS "${CMAKE_CURRENT_SOURCE_DIR}/Resources/Banks")
+if (IS_DIRECTORY "${TERRAIN_BANKS}")
+    foreach(_fmt VST3 AU Standalone)
+        if (TARGET Terrain_${_fmt})
+            if (APPLE)
+                set(_dst "$<TARGET_BUNDLE_CONTENT_DIR:Terrain_${_fmt}>/Resources/Banks")
+            elseif (WIN32 AND _fmt STREQUAL "VST3")
+                set(_dst "$<TARGET_FILE_DIR:Terrain_${_fmt}>/../Resources/Banks")
+            else()
+                set(_dst "")
+            endif()
+            if (NOT _dst STREQUAL "")
+                add_custom_command(TARGET Terrain_${_fmt} POST_BUILD
+                    COMMAND ${CMAKE_COMMAND} -E copy_directory "${TERRAIN_BANKS}" "${_dst}"
+                    COMMENT "Terrain: installing the factory preset banks into the ${_fmt} bundle")
+            endif()
+        endif()
+    endforeach()
+    message(STATUS "Terrain: factory preset banks found — they will be copied into each bundle")
+else()
+    message(WARNING "Terrain: Resources/Banks is missing — the plugin will ship with NO factory presets")
+endif()
+
 # ── Include paths ──
 target_include_directories(Terrain
     PRIVATE

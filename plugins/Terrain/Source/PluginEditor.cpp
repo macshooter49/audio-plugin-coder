@@ -1,5 +1,6 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
+#include "PresetBank.h"   // fb619
 #include <cstdlib>   // fb491 — getenv/_putenv_s for the WebView2 browser args
 #include <cstdio>    // fb509 — snprintf: the frame builders format floats without juce::String heap churn
 #include <cstring>
@@ -885,6 +886,121 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             {
                 if (args.size() > 0) { auto m = audioProcessor.getPresetMeta(); m.fromJson (args[0].toString()); audioProcessor.setPresetMeta (m); }
                 complete (juce::var{});
+            })
+            // ═══ fb619 — BANKS: couriers over Source/PresetBank.h. Every write is confined to the user root. ═══
+            .withNativeFunction ("listPresets", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { complete (juce::var (audioProcessor.getPresetCatalogJson())); })
+            .withNativeFunction ("savePresetToBank", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::File out; juce::String err;
+                const bool ok = args.size() > 1 && audioProcessor.savePresetToBank (args[0].toString(), args[1].toString(), out, err);
+                complete (juce::var (ok ? out.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("updatePresetMeta", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 1 && tw::bank::rewriteMeta (juce::File (args[0].toString()), TerrainAudioProcessor::banksUserRoot(), juce::JSON::parse (args[1].toString()), err);
+                complete (juce::var (ok ? juce::String ("ok") : "error:" + err));
+            })
+            .withNativeFunction ("movePresetFile", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::File out; juce::String err;
+                const bool ok = args.size() > 1 && tw::bank::movePreset (juce::File (args[0].toString()), TerrainAudioProcessor::banksUserRoot(), args[1].toString(), out, err);
+                complete (juce::var (ok ? out.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("deletePresetFile", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 0 && tw::bank::removePreset (juce::File (args[0].toString()), TerrainAudioProcessor::banksUserRoot(), err);
+                complete (juce::var (ok ? juce::String ("ok") : "error:" + err));
+            })
+            .withNativeFunction ("createBank", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::File dir; juce::String err;
+                const bool ok = args.size() > 0 && tw::bank::ensureBank (TerrainAudioProcessor::banksUserRoot(), args[0].toString(), args.size() > 1 ? args[1].toString() : juce::String(), dir, err);
+                complete (juce::var (ok ? dir.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("renameBank", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 1 && tw::bank::renameBank (TerrainAudioProcessor::banksUserRoot(), args[0].toString(), args[1].toString(), err);
+                complete (juce::var (ok ? juce::String ("ok") : "error:" + err));
+            })
+            .withNativeFunction ("deleteBank", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::String err;
+                const bool ok = args.size() > 0 && tw::bank::removeBank (TerrainAudioProcessor::banksUserRoot(), args[0].toString(), err);
+                complete (juce::var (ok ? juce::String ("ok") : "error:" + err));
+            })
+            .withNativeFunction ("setFavourite", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const bool ok = args.size() > 2 && tw::bank::setFavourite (TerrainAudioProcessor::banksUserRoot(), args[0].toString(), args[1].toString(), (bool) args[2]);
+                complete (juce::var (ok ? "ok" : "error:could not write favourites"));
+            })
+            .withNativeFunction ("getFavourites", [] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { complete (juce::var (juce::JSON::toString (tw::bank::readJson (tw::bank::favouritesFile (TerrainAudioProcessor::banksUserRoot())), true))); })
+            .withNativeFunction ("getVocab", [] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { const auto v = tw::bank::readJson (tw::bank::vocabFile (TerrainAudioProcessor::banksUserRoot())); complete (juce::var (v.isObject() ? juce::JSON::toString (v, true) : juce::String())); })
+            .withNativeFunction ("setVocab", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const bool ok = args.size() > 0 && tw::bank::writeJson (tw::bank::vocabFile (TerrainAudioProcessor::banksUserRoot()), juce::JSON::parse (args[0].toString()));
+                complete (juce::var (ok ? "ok" : "error:could not write vocab"));
+            })
+            // the three that open an OS dialog complete at once and report through a page event when the user is done
+            .withNativeFunction ("exportBank", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const auto bank = args.size() > 0 ? args[0].toString().trim() : juce::String();
+                auto dir = TerrainAudioProcessor::banksUserRoot().getChildFile (tw::bank::safeName (bank));
+                if (! dir.isDirectory()) dir = TerrainAudioProcessor::banksFactoryRoot().getChildFile (tw::bank::safeName (bank));
+                if (! dir.isDirectory()) { complete (juce::var ("error:no bank " + bank)); return; }
+                auto chooser = std::make_shared<juce::FileChooser> ("Export " + bank, juce::File::getSpecialLocation (juce::File::userDesktopDirectory).getChildFile (tw::bank::safeName (bank) + ".terrainpack"), "*.terrainpack");
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                    [safe, chooser, dir, bank] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    auto f = fc.getResult(); if (f == juce::File()) return;   // cancelled
+                    if (f.getFileExtension() != ".terrainpack") f = f.withFileExtension ("terrainpack");
+                    auto info = tw::bank::readJson (dir.getChildFile ("bank.json"));
+                    if (! info.isObject()) { auto* o = new juce::DynamicObject(); o->setProperty ("name", bank); o->setProperty ("version", "1"); info = juce::var (o); }
+                    juce::String err; const bool ok = tw::bank::exportPack (dir, info, f, err);
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript ("if(window.onBankExported)window.onBankExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:" + err), true) + ");", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction ("exportPreset", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                const auto m = audioProcessor.getPresetMeta();
+                const auto leaf = tw::bank::safeName ((m.bank.isEmpty() ? juce::String ("Terrain") : m.bank) + " - " + (m.name.isEmpty() ? juce::String ("Preset") : m.name)) + ".terrain";
+                auto chooser = std::make_shared<juce::FileChooser> ("Export preset", juce::File::getSpecialLocation (juce::File::userDesktopDirectory).getChildFile (leaf), "*.terrain");
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                chooser->launchAsync (juce::FileBrowserComponent::saveMode | juce::FileBrowserComponent::canSelectFiles | juce::FileBrowserComponent::warnAboutOverwriting,
+                    [safe, chooser] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    auto f = fc.getResult(); if (f == juce::File()) return;
+                    if (f.getFileExtension() != ".terrain") f = f.withFileExtension ("terrain");
+                    juce::String err; const bool ok = safe->audioProcessor.savePatchToFile (f, {}, err);
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript ("if(window.onPresetExported)window.onPresetExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:" + err), true) + ");", nullptr);
+                });
+                complete (juce::var ("ok"));
+            })
+            .withNativeFunction ("importPack", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                auto chooser = std::make_shared<juce::FileChooser> ("Import a bank", juce::File::getSpecialLocation (juce::File::userDesktopDirectory), "*.terrainpack");
+                juce::Component::SafePointer<TerrainUiCore> safe (this);
+                chooser->launchAsync (juce::FileBrowserComponent::openMode | juce::FileBrowserComponent::canSelectFiles,
+                    [safe, chooser] (const juce::FileChooser& fc)
+                {
+                    if (safe == nullptr) return;
+                    const auto f = fc.getResult(); if (! f.existsAsFile()) return;
+                    juce::File dir; juce::String err; const bool ok = tw::bank::importPack (f, TerrainAudioProcessor::banksUserRoot(), dir, err);
+                    if (safe->webView != nullptr)
+                        safe->webView->evaluateJavascript ("if(window.onBankImported)window.onBankImported(" + juce::JSON::toString (juce::var (ok ? dir.getFileName() : "error:" + err), true) + ");", nullptr);
+                });
+                complete (juce::var ("ok"));
             })
             .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
@@ -14316,13 +14432,14 @@ void TerrainUiCore::loadPatch (const juce::File& f)
         webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
 }
 
-void TerrainUiCore::importTerrainPack (const juce::File&)
+void TerrainUiCore::importTerrainPack (const juce::File& f)
 {
-    // Task 22 (Phase E) — unzip .terrainpack to User/Patches + User/Samples, then loadPatch
+    // fb619 — a dropped .terrainpack installs as a bank under the user root
+    juce::File dir; juce::String err;
+    const bool ok = tw::bank::importPack (f, TerrainAudioProcessor::banksUserRoot(), dir, err);
+    if (! ok) { reportLoadError ("bank", err); return; }
     if (webView != nullptr)
-        webView->evaluateJavascript (
-            "if (window.onLoadError) window.onLoadError('Pack import lands in v0a Phase E.');",
-            nullptr);
+        webView->evaluateJavascript ("if(window.onBankImported)window.onBankImported(" + juce::JSON::toString (juce::var (dir.getFileName()), true) + ");", nullptr);
 }
 
 // fb135 — HOST-KEY BRIDGE: while a web inline editor is armed, keystrokes the host delivers

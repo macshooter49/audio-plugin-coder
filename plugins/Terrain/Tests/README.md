@@ -112,6 +112,7 @@ cost a diagnosis once already.
 | `fb614_gates.sh` | **fb612/fb613/fb614 — the factory library, the loudness stall and the distortion curve**, every gate against every control. | 12 runs |
 | `preset_roundtrip_cert.cpp` | fb617 | save → load → save is byte-identical against the installed AU; an empty slice list echoes no root slicesJson; a pre-fix session with two `<layers>` loads the NEWEST and saves one. Control `RT_MUT=stale` expects the old first-wins read and must go red. | `bash Tests/fb617_gates.sh` |
 | `preset_null_cert.cpp` | fb618 | a preset loads clean, through the DAW's door (ClassInfo): the `<preset>` child survives once and first with `carries`; a fresh instance round-trips the chunk byte-identical; a chunk WITHOUT a property leaves nothing of the previous patch (cards, macro names); the first note on two fresh instances nulls below −100 dBFS. Controls `PN_MUT=inherit` and `PN_MUT=drift` must go red. | `bash Tests/fb618_gates.sh` |
+| `preset_bank_cert.cpp` | fb619 | the bank file layer (`Source/PresetBank.h`) on a throwaway root with real juce_core: bank folder + bank.json, header-only catalogue scan, byte-clean meta rewrite, move, favourites sidecar, `.terrainpack` export → import into a fresh root byte-identical, rename re-files, delete, writes outside the user root refused, zip-slip dropped, caps report. Controls `BK_MUT=nocap` / `BK_MUT=escape` must go red. | `bash Tests/fb619_gates.sh` |
 
 ## 🚨 THE JS GATES — RUN THE SETUP ONCE, THEN THEY ARE PLAIN `node` (fb601)
 

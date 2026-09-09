@@ -618,6 +618,13 @@ public:
     //  host path too (a DAW session, an undo step) without touching any decoded audio slot.
     void clearPatchBlobs();
 
+    // ═══ fb619 — BANKS. The file layer is Source/PresetBank.h (juce_core only, certified standalone);
+    //  these are the processor's two roots and the couriers the natives call.
+    static juce::File banksUserRoot();      // <terrainDataDir>/Banks — every write lands under here
+    static juce::File banksFactoryRoot();   // the bundle's Resources/Banks — wtFactoryRoot's up-walk
+    juce::String getPresetCatalogJson() const;
+    bool savePresetToBank (const juce::String& bank, const juce::String& metaJson, juce::File& out, juce::String& error);
+
     // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
     // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
     // setSynthModMatrix(). No-op for a blob that already carries version >= 3.
