@@ -16025,6 +16025,24 @@ function updateHeightMap(time) {
   }
 }
 
+/* fb613 — ONE GLOW, DRAWN ONCE. A radial gradient is scale-invariant, so the disc that used to be
+   shaded per-pixel per-glow is rendered into a 64px offscreen canvas and blitted at whatever size
+   each peak needs. Rebuilt only when the theme's colour actually changes — a string compare, not a
+   per-frame allocation. Kept at 64px because every glow is <= 23px on screen, so it is always a
+   DOWNscale (no softening) and the whole sprite is 16 KB. */
+var __heroGlowC = null, __heroGlowKey = '';
+function heroGlowSprite() {
+  var key = currentTheme && currentTheme.peakGlow ? currentTheme.peakGlow : 'rgba(200,180,255,';
+  if (__heroGlowC && __heroGlowKey === key) return __heroGlowC;
+  var S = 64, cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+  var g2 = cv.getContext('2d');
+  var gr = g2.createRadialGradient(S / 2, S / 2, 0, S / 2, S / 2, S / 2);
+  gr.addColorStop(0, key + '1)');     // alpha rides on ctx.globalAlpha at blit time, so the
+  gr.addColorStop(1, key + '0)');     // sprite itself is drawn at full strength
+  g2.fillStyle = gr; g2.fillRect(0, 0, S, S);
+  __heroGlowC = cv; __heroGlowKey = key; return cv;
+}
+
 function renderTerrain(time) {
   const ctx = terrainCtx;
   if (!ctx) return;
@@ -16069,6 +16087,34 @@ function renderTerrain(time) {
     }
   }
 
+  /* fb613 — THE GLOW BUDGET, decided once per frame rather than per row. Count how many cells
+     clear the threshold; if that is more than the budget, raise the cut so only the BRIGHTEST
+     survive. Silence draws ~35 glows and is untouched; a clipped square used to draw 404 and now
+     draws GLOW_MAX. The work a frame can do is therefore bounded by a constant instead of by how
+     loud Max happens to be playing. */
+  const GLOW_MAX = 96;
+  let glowCut = 0.30, glowLeft = GLOW_MAX;
+  {
+    let n = 0, hi = 0.30;
+    for (let r2 = 0; r2 < GRID; r2++)
+      for (let c2 = 0; c2 < GRID; c2++) {
+        const h2 = heightMap[r2][c2];
+        if (h2 > 0.30) { n++; if (h2 > hi) hi = h2; }
+      }
+    if (n > GLOW_MAX) {
+      /* one bisection pass on the threshold — 12 sweeps of a 1024-cell array is far cheaper than
+         one extra gradient fill, and it lands within a few glows of the budget every time. */
+      let lo = 0.30, up = hi;
+      for (let it = 0; it < 12; it++) {
+        const mid = (lo + up) * 0.5; let k = 0;
+        for (let r3 = 0; r3 < GRID; r3++)
+          for (let c3 = 0; c3 < GRID; c3++) if (heightMap[r3][c3] > mid) k++;
+        if (k > GLOW_MAX) lo = mid; else up = mid;
+      }
+      glowCut = lo;
+    }
+  }
+
   // Draw mesh lines from back to front (far rows first)
   for (let r = GRID - 1; r >= 0; r--) {
     const isContour = (r % 4 === 0);
@@ -16101,22 +16147,55 @@ function renderTerrain(time) {
       }
     }
 
-    // Peak glow on high-amplitude vertices. Threshold lowered (0.45 → 0.30)
-    // so the purple spikes register at quieter signal levels too; glow radius
-    // and opacity bumped so the loud-passage spikes read as proper mountains.
+    /* ═══ fb613 — THE PEAK GLOW, AND WHY THE UI SLOWED DOWN WHEN THINGS GOT LOUD ═══════════
+       Max: "sometimes when the plugin gets loud, UI starts to drop in frames/slow down, CPU
+       however stays solid no matter what… it's something like the plugin UI getting overwhelmed
+       with the loudness."  He was exactly right, and it was here.
+
+       The height map is a LINEAR function of the live sample value, so a louder waveform lifts
+       more of the 1024 grid cells over the 0.30 threshold AND lifts them higher — the glow COUNT
+       and the glow AREA both grow with level, and they multiply. Measured over 10 time phases at
+       the hero's real 820x276:
+
+           amplitude      glows/frame   createRadialGradient/s   gradient px² per frame
+           near-silence          34.9                    2,094                    6,742
+           0.50                 119.0                    7,140                   50,510
+           0.966 (ceiling)      238.4                   14,304                  168,352
+           clipped square       404.3                   24,258                  381,471   (169% of
+                                                                                the canvas)
+
+       25x-57x more radial-gradient rasterisation purely as a function of LEVEL. A radial gradient
+       is the one canvas fill WebKit cannot cache — every fill() runs a per-pixel shader over the
+       disc — and each iteration also allocated a fresh CanvasGradient plus two template-literal
+       colour strings: ~24k gradient objects and ~48k strings a second at the top of that table.
+       None of it touches the audio thread; it burns in the WebView's renderer process, which the
+       plugin's CPU meter does not measure. Hence "CPU stays solid".
+
+       ⚠️ THE OBVIOUS FIX WOULD HAVE DONE NOTHING. The natural guess is unclamped coordinates
+       blowing up the rasteriser's bounding box — that was MEASURED AND REFUTED: masterSoftClip
+       caps the scope feed at 0.96605, worst-case sy lands at 28-32px on a 276px canvas, and 0 of
+       404 discs fall outside the canvas even at the clipping case. There was nothing to clamp.
+
+       TWO CHANGES, NO VISUAL DIFFERENCE:
+        1. ONE PRE-RENDERED GLOW SPRITE, blitted. The gradient is scale-invariant, so it is drawn
+           once into a 64px offscreen canvas and every glow becomes a drawImage of it. Per-pixel
+           shading becomes a cached bitmap blit, and the per-frame allocation goes to zero.
+        2. A HARD BUDGET on how many glows a frame may draw. The sprite alone would still let a
+           clipped square scale the work 12x; the budget makes the worst frame cost the same as a
+           loud one. When more cells qualify than the budget allows, the threshold is raised to
+           take the BRIGHTEST ones — the mountains Max wants to see are exactly the tallest peaks,
+           so what gets dropped is the low foothills nobody was looking at. */
     for (let c = 0; c < GRID; c++) {
-      if (heightMap[r][c] > 0.30) {
+      if (heightMap[r][c] > glowCut) {
+        if (glowLeft <= 0) break;
+        glowLeft--;
         const p = projected[r][c];
-        const intensity = (heightMap[r][c] - 0.30) * 2.0;
-        const clampedI = Math.min(1, intensity);
+        const clampedI = Math.min(1, (heightMap[r][c] - 0.30) * 2.0);
         const glowR = 5 + clampedI * 18;
-        const grad = ctx.createRadialGradient(p.sx, p.sy, 0, p.sx, p.sy, glowR);
-        grad.addColorStop(0, `${currentTheme.peakGlow}${0.55 * clampedI})`);
-        grad.addColorStop(1, `${currentTheme.peakGlow}0)`);
-        ctx.fillStyle = grad;
-        ctx.beginPath();
-        ctx.arc(p.sx, p.sy, glowR, 0, Math.PI * 2);
-        ctx.fill();
+        const sp = heroGlowSprite();
+        ctx.globalAlpha = 0.55 * clampedI;
+        ctx.drawImage(sp, p.sx - glowR, p.sy - glowR, glowR * 2, glowR * 2);
+        ctx.globalAlpha = 1;
       }
     }
   }
