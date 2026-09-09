@@ -482,7 +482,7 @@ button, input { font-family: inherit; }
 </div>
 <div id="notes">
   <b>Selection</b> — buttons (pills, chips, Load, the heart) use the four mode tiles' rule: an outline, transparent inside; selected turns it purple with white letters. Selection menus (banks, authors, rows, the quick menu): hover washes purple, the selected line's words turn purple. <b>Quick menu</b> — click the preset name. Left column is banks (click one), right column is that bank's presets grouped by type; <span class="k">‹</span><span class="k">›</span> step inside the current bank. <b>Browser</b> — single click selects and auditions, double-click or <span class="k">↵</span> loads and closes, <span class="k">↑</span><span class="k">↓</span> step, <span class="k">esc</span> closes. Click Name, Carries, Type or Style to sort; again to flip. Right-click a User preset for rename / delete.
-  <b>Editable</b> — the <span class="k">+</span> at the end of Type and Style adds a word; right-click a chip to rename or remove it, and every preset re-files itself. At save, type into Bank (an existing name joins it, a new one creates it), Author, Type and Style. Right-click any bank you made or imported to rename, export or remove it. Search reads names, types, styles, effects, authors and banks; every word must match.
+  <b>Saving</b> — the <span class="k">+</span> in the header opens Save (overwrites the current user preset, <span class="k">⌘S</span>) · Save as… (<span class="k">⇧⌘S</span>) · Export preset… (a .terrain file). Right-click any row for Save as…, Overwrite with current, Export preset… <b>Editable</b> — the <span class="k">+</span> at the end of Type and Style adds a word; right-click a chip to rename or remove it, and every preset re-files itself. At save, type into Bank (an existing name joins it, a new one creates it), Author, Type and Style. Right-click any bank you made or imported to rename, export or remove it. Search reads names, types, styles, effects, authors and banks; every word must match.
   <b>Carries</b> — wavetables · one-shots · IRs · flow cards · LFO shapes · nodes. A preset with nodes is an environment; loading one greys the window and shows the bar. <b>Notes</b> — click under Notes in the inspector and type; it saves with the preset and search reads it. The Type and Style strips scroll sideways when they overflow.
 </div>
 
@@ -632,7 +632,24 @@ function step(d) {
 $('prev-btn').onclick = () => step(-1);
 $('next-btn').onclick = () => step(1);
 $('preset-name').onclick = e => { e.stopPropagation(); toggleQuick(); };
-$('save-btn').onclick = e => { e.stopPropagation(); openSave(); };
+$('save-btn').onclick = e => { e.stopPropagation(); openSaveMenu(); };
+function openSaveMenu() {
+  const p = PRESETS[S.cur]; const m = $('ctx'); const r = $('save-btn').getBoundingClientRect(), pr = $('plugin').getBoundingClientRect();
+  m.innerHTML = `<div class="ps">${p.bank} - ${p.name}</div>
+    <div class="pi" data-a="save" style="${p.user ? '' : 'opacity:.4'}"><span class="nm">Save</span><span class="ct">⌘S</span></div>
+    <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
+    <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`;
+  placeMenu(m, r.left - pr.left, r.bottom - pr.top + 4);
+  m.querySelectorAll('.pi[data-a]').forEach(el => el.onclick = () => { m.classList.remove('on'); const a = el.dataset.a;
+    if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportPreset(p); });
+}
+function saveCurrent() {
+  const p = PRESETS[S.cur];
+  if (!p.user) { openSave(); return; }   /* a factory preset cannot be overwritten — Save as instead */
+  toast(`Saved <span class="bk">${p.bank} - </span>${p.name}`);
+}
+function exportPreset(p) { toast(`Exported <span class="bk">${p.bank} - ${p.name}</span>.terrain`); }
+document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) openSave(); else saveCurrent(); } });
 
 /* ═══ QUICK MENU ═══════════════════════════════════════════════════════════════════════════════ */
 const FAVS = '♥ Favourites';
@@ -819,11 +836,16 @@ function menuAt(e, html, onPick) {
 function openCtx(e, id) {
   const p = PRESETS[id];
   let h = `<div class="ps">${p.name}</div><div class="pi" data-a="load"><span class="nm">Load</span></div><div class="pi" data-a="fav"><span class="nm">${p.fav ? 'Remove favourite' : 'Favourite'}</span></div>`;
-  if (p.user) h += `<div class="pi" data-a="rename"><span class="nm">Rename…</span></div><div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="del" style="color:var(--rose)"><span class="nm">Delete</span></div>`;
+  h += `<div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>`;
+  if (p.user) h += `<div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div>`;
   else h += `<div class="pi" data-a="dup"><span class="nm">Copy to User</span></div>`;
+  h += `<div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`;
+  if (p.user) h += `<div class="pi" data-a="del" style="color:var(--rose)"><span class="nm">Delete</span></div>`;
   menuAt(e, h, a => {
     if (a === 'load') loadPreset(id, { close: true });
     if (a === 'fav') { p.fav = !p.fav; renderRows(); renderInsp(); }
+    if (a === 'saveas') openSave(p);
+    if (a === 'export') exportPreset(p);
     if (a === 'del') del(id);
     if (a === 'rename') { const n = prompt('Rename preset', p.name); if (n) { p.name = n.trim(); rowsBuilt = 0; renderRows(); renderInsp(); setCurrent(S.cur, { quiet: true }); } }
     if (a === 'over') toast(`Overwrote <span class="bk">${p.bank} - </span>${p.name}`);
@@ -924,8 +946,8 @@ function loadPreset(id, opts) {
 
 /* ═══ SAVE — every field typed; Bank joins or creates; Type adds; Style chips + type-to-add ═══ */
 let svStyles = [];
-function openSave() {
-  const cur = PRESETS[S.cur];
+function openSave(from) {
+  const cur = from || PRESETS[S.cur];   /* Save as… from a row prefills that row's fields; the sound is always the current one */
   $('sv-name').value = cur.user ? cur.name : cur.name + ' 2';
   $('sv-bank').value = cur.user && cur.bank !== 'Terra' ? cur.bank : 'User';
   $('sv-author').value = cur.user ? cur.author : 'Max';
