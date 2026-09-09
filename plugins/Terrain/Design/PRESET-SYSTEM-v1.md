@@ -31,7 +31,7 @@ Six slots on every row and in the inspector: **wavetables · one-shots · impuls
 - A preset with **nodes > 0 is an ENVIRONMENT**: the same file plus a patcher graph. The badge, the purple node mark and the loading wash all key off that one number. (Patcher graph schema is reserved, not designed here — the seat exists so the format never has to change.)
 - The inspector prices it: a plain Terra preset ≈ 17 KB; one embedded one-shot ≈ 600 KB; an IR ≈ 1.2 MB. Users see the cost before they click.
 - The inspector shows a **Load** row — `Instant` · `2–3 s` · `5–6 s` — never a sentence. Estimate from bytes + node count; the real build measures its own first load and refines it. The loading card shows the full `Bank - Name` in one colour.
-- Carries marks, in order: sine (wavetable) · single note (one-shot) · decaying bars (IR) · card (flow card) · square wave (LFO shape) · three joined circles (nodes). Chosen so no two read as "another sine".
+- Carries marks, in order: sine (wavetable) · single note (one-shot) · decaying bars (IR) · card (flow card) · climbing notes — the old Arp icon (LFO shape) · three joined circles (nodes). Chosen so no two read as "another sine".
 
 ## 4. Format
 - **`.terrain`** = the existing state chunk (`"VC2!"` + LE u32 + XML — so host sessions and presets are the same bytes) with one added root child `<preset>` carrying name · bank · author · type · styles · carries · format-version. Assets ride as root properties exactly as `wtImportPcm0..3` already does, re-encoded FLAC-24. **No new serialiser** — `setStateInformation`'s load order (migrations → JSON blobs → V1/V2 branch → `replaceState`) is load-bearing and is reused verbatim.
