@@ -14957,8 +14957,14 @@ juce::String TerrainAudioProcessor::getDistortionCurveVizJson()
     distortionEngine.sampleCurve (cv, 128);
     distortionEngine.copyOcc (oc);
     juce::String s; s.preallocateBytes (1600);
+    /* fb614 — "x" IS THE AXIS THE CURVE WAS SAMPLED ON, and it was the missing half of the
+       picture. sampleCurve sweeps v = (i/(n-1)*2 - 1) * occSpan(), and occSpan is PER FAMILY:
+       4.5 for FOLD, 3.0 default, 1.6 for DIGITAL, 1/kShDom for SHAPER. The UI never knew that, so
+       it drew a reference diagonal implying an x-axis of +/-1 under a curve plotted over +/-4.5 —
+       Max: "make sure everything is scaled properly". One number closes it. */
     s << "{\"m\":" << (int) *rawParam (ParameterIDs::SYN_DST_TYPE) << ",\"b\":"
-      << juce::String (dstBloomViz_.load (std::memory_order_relaxed), 3) << ",\"c\":[";
+      << juce::String (dstBloomViz_.load (std::memory_order_relaxed), 3)
+      << ",\"x\":" << juce::String (distortionEngine.vizSpan(), 3) << ",\"c\":[";
     for (int i = 0; i < 128; ++i) { if (i) s << ','; s << juce::String (cv[i], 3); }
     s << "],\"o\":[";
     for (int i = 0; i < 48; ++i) { if (i) s << ','; s << juce::String (oc[i], 3); }

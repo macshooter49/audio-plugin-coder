@@ -2228,6 +2228,12 @@ public:
 
     /** fb328 — max-normalised occupancy snapshot (48 bins over the same driven axis as sampleCurve).
         Silence reads all-zero so the glow goes DARK at idle (the audio-reactive hard rule). */
+    /* fb614 — the x-axis the viz curve is sampled on, for the UI. sampleCurve sweeps
+       +/-occSpan() and occSpan is PER FAMILY (4.5 FOLD · 3.0 default · 1.6 DIGITAL · 1/kShDom
+       SHAPER), so a display that assumes +/-1 draws its reference line against the wrong axis.
+       Exposed rather than duplicated: a second copy of that switch in the processor is exactly
+       how the two would drift. */
+    float vizSpan() const noexcept { return occSpan(); }
     void copyOcc (float* out48) noexcept
     {
         float mx = 1.0e-6f;

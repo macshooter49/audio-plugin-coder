@@ -7013,6 +7013,29 @@ void TerrainUiCore::timerCallback()
         // dispatch-free (it only feeds wd9/__tickT); painter liveness with a dead push lane is
         // handled by the dispatcher's own 250 ms fallback in the page. Rides both lanes as-is:
         // the Windows terrainFrame receiver evals the string, Mac evaluateJavascript executes it.
+    /* ═══ fb614 — THE CURVE IS A FUNCTION OF THE KNOBS, NOT OF THE AUDIO ════════════════════
+       Max, on a screenshot of an idle Distortion: "there's no curve present."
+       The painter is fine and it does tick — `__tiFrame` below is OUTSIDE the `if (! uiQuiet)`
+       block (which closes at 6432), so it fires whether or not anything is playing. What did NOT
+       fire was the DATA: `window.__dstVizPush` lives inside that quiet block, so opening the
+       editor on a silent, untouched session meant the variable was never defined at all, the JS
+       fell to its native-poll fallback, and that poll has three documented silent death modes
+       (a promise that never settles, a rejection, a parse throw inside a bare catch). The path
+       shipped as `d=""` and stayed empty, while the axes and the dashed line — static markup —
+       kept drawing. Exactly the screenshot.
+
+       🔑 THE FIX IS LESS TRAFFIC, NOT MORE. The transfer curve only changes when a KNOB changes,
+       and a knob move sets uiTouched, which un-quiets the full-rate lane. So the quiet lane needs
+       nothing but a slow, change-gated heartbeat: at 2 Hz, generate the payload and send it ONLY
+       if it differs from the last one sent. On a silent idle plugin that is one push after the
+       editor opens and then nothing at all — strictly cheaper than the broken poll it replaces,
+       which was firing a native call every frame it was reached. */
+    if (uiQuiet && ++dstVizQuietCtr_ >= 30)
+    {
+        dstVizQuietCtr_ = 0;
+        auto dj = audioProcessor.getDistortionCurveVizJson();
+        if (dj != lastDstVizQuiet_) { lastDstVizQuiet_ = dj; js << "window.__dstVizPush=" << dj << ";"; }
+    }
         js << ";window.__tiFrame&&window.__tiFrame();";
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)

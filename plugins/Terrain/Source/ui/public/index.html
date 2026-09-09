@@ -9923,7 +9923,13 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                +'<line x1="6.5" y1="66" x2="219.5" y2="66" stroke="var(--border)" stroke-width="1"/>'
                +'<line x1="6.5" y1="66" x2="6.5" y2="8" stroke="var(--border)" stroke-width="1"/>'
                +'<g stroke="var(--border)" stroke-width="1"><line x1="59.8" y1="66" x2="59.8" y2="62"/><line x1="113" y1="66" x2="113" y2="62"/><line x1="166.3" y1="66" x2="166.3" y2="62"/><line x1="6.5" y1="49" x2="10.5" y2="49"/><line x1="6.5" y1="32" x2="10.5" y2="32"/><line x1="6.5" y1="15" x2="10.5" y2="15"/></g>'
-               +'<line x1="6.5" y1="66" x2="219.5" y2="10" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
+               /* fb614 — the UNITY REFERENCE, and it is now driven, not drawn once. Its corner-to-
+                  corner endpoints only told the truth on an x-axis of ±1, and the curve above it is
+                  plotted over ±occSpan — 4.5 on Linear Fold. applyDstViz re-aims it from the SAME
+                  px()/py() the curve uses, so "no distortion sits on the dotted line" is true by
+                  construction rather than by two constants happening to agree (they did not: 27
+                  units per ±1 for the curve against 28 for this line). */
+               +'<line class="dst-unity" x1="6.5" y1="66" x2="219.5" y2="10" stroke="currentColor" stroke-width="1" opacity=".14" stroke-dasharray="2 3"/>'
                +'<g class="dst-occ">'+occ+'</g>'
                +'<path class="dst-curve" d=""/></svg>';
             }
@@ -12962,6 +12968,19 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                     function py(v){ return Math.max(8,Math.min(70,CY-Math.max(-1.1,Math.min(1.1,v))*SY)); }
                     if(path&&!dcP){ var d=''; for(i=0;i<N;i++) d+=(i?'L':'M')+px(i).toFixed(1)+' '+py(o.c[i]*sc).toFixed(1)+' ';
                       if(path.getAttribute('d')!==d){ path.setAttribute('d',d); } }   // fb343 write-gated (fb356 — the halo trio is gone)
+                    /* fb614 — AIM THE DOTTED LINE AT THE AXIS THE CURVE IS ACTUALLY ON. `o.x` is
+                       occSpan from the engine; an older payload without it falls back to 1, which
+                       is exactly the pre-fb614 picture, so a stale push can never throw. y=x leaves
+                       the ±1 display window at x=±1, so the segment is drawn between those two
+                       points and nowhere else — on Linear Fold (span 4.5) that is a short steep
+                       line through the centre, which is what unity genuinely looks like on a ±4.5
+                       axis. Write-gated like everything else on this row: idle costs zero writes. */
+                    var uni=svg?svg.querySelector('.dst-unity'):null;
+                    if(uni){ var span=(+o.x)||1, yv=Math.min(1,span), fr=yv/span,
+                             uxL=((X0+X1)/2-fr*(X1-X0)/2).toFixed(1), uxR=((X0+X1)/2+fr*(X1-X0)/2).toFixed(1),
+                             uy1=py(-yv).toFixed(1), uy2=py(yv).toFixed(1);
+                      if(uni.getAttribute('x1')!==uxL){ uni.setAttribute('x1',uxL); uni.setAttribute('x2',uxR);
+                        uni.setAttribute('y1',uy1); uni.setAttribute('y2',uy2); } }
                     if(og){ var segs=og.children, lum=0.15+0.85*Math.min(1,(+o.b||0)*2.0);
                       for(var s2=0;s2<segs.length&&s2<48;s2++){ var i0=Math.round(s2*(N-1)/48), i1=Math.round((s2+1)*(N-1)/48);
                         // fb343 — formatted-string write gates (fb334 idiom): idle = zero writes
