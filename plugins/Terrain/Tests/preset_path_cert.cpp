@@ -114,8 +114,11 @@ int main()
     }
     chk (moved == 0, "all " + juce::String (dirs.size()) + " on-disk card folders are slug fixed points ("
                      + juce::String (fixed) + " resolve, " + juce::String (moved) + " moved)");
-    chk (filesFound == filesOnDisk && filesOnDisk == 29,
-         "all 29 preset files resolve through tiPresetDir+tiSafePresetName (found "
+    // fb622 — the law is that EVERY file on disk resolves, not that there are exactly 29 of them:
+    // the owner saves presets, and a count baked into a cert makes his own work look like a defect.
+    // The controls still bite — TI_CERT_MUTATE=miss drives filesFound to 0 against a non-zero disk.
+    chk (filesFound == filesOnDisk && filesOnDisk > 0,
+         "every preset file on disk resolves through tiPresetDir+tiSafePresetName (found "
          + juce::String (filesFound) + " of " + juce::String (filesOnDisk) + " on disk)");
 
     // ── 3. THE SLUG OVER EVERY CARD ID THE PAGE CAN PRODUCE ───────────────────────────────────

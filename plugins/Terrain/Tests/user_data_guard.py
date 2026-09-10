@@ -135,12 +135,19 @@ if os.path.isdir(bk_cards_dir):
 
 bk_xml = os.path.join(BACKUP, 'Noizefield-Terrain-Instrument', 'UserPresets.xml')
 xml_ok = os.path.isfile(bk_xml) and os.path.isfile(USER_XML) and sha(bk_xml) == sha(USER_XML)
-missing = sorted(set(live_cards) - set(bk_cards))
+# fb622 — THE QUESTION IS LOSS, NOT SAMENESS. This bar used to demand that live and backup match
+# exactly, which meant every preset the owner legitimately saved turned the gate red — and a gate
+# that goes red on healthy work is a gate people learn to ignore. What must never happen is that
+# something WHICH WAS BACKED UP is gone or has changed underneath us. New files are growth: they
+# are reported, loudly, so a stale backup is visible, and they are not a failure.
+lost    = sorted(set(bk_cards) - set(live_cards))
 drifted = sorted(k for k in set(live_cards) & set(bk_cards) if live_cards[k] != bk_cards[k])
-chk(len(live_cards) > 0 and not missing and not drifted and xml_ok,
-    '[0] THE BACKUP COVERS EVERYTHING LIVE, SHA-256 FOR SHA-256',
-    f'{len(live_cards)} live card presets · {len(bk_cards)} backed up · not-backed-up: {missing or "none"} · '
-    f'content drift: {drifted or "none"} · UserPresets.xml identical: {xml_ok}')
+added   = sorted(set(live_cards) - set(bk_cards))
+chk(len(live_cards) > 0 and not lost and not drifted and xml_ok,
+    '[0] NOTHING THAT WAS BACKED UP IS LOST OR CHANGED, SHA-256 FOR SHA-256',
+    f'{len(live_cards)} live card presets · {len(bk_cards)} backed up · LOST: {lost or "none"} · '
+    f'content drift: {drifted or "none"} · UserPresets.xml identical: {xml_ok}\n'
+    f'        new since the backup (healthy — re-run the backup to fold them in): {added or "none"}')
 
 # ── [1] THE COUNT. 29 card presets and 5 patches, on the real disk, right now. ────────────────
 try:
@@ -148,9 +155,11 @@ try:
 except Exception as e:
     names = []; print(f'        !! UserPresets.xml did not parse: {e}')
 EXPECT = ['Monte Cristo', 'Slatt', 'One Shot Killer', 'This Is Scary', 'M.I.A.']
-chk(len(live_cards) == 29 and names == EXPECT,
-    '[1] THE OWNER\'S DATA IS ALL THERE — 29 card presets, 5 named patches',
-    f'card presets: {len(live_cards)} (expected 29) · patches: {names}')
+# fb622 — a SUPERSET, not an equality: the owner adds presets, that is the point of the plugin.
+chk(len(live_cards) >= len(bk_cards) and all(n in names for n in EXPECT),
+    '[1] THE OWNER\'S DATA IS ALL THERE — every card preset and every named patch still present',
+    f'card presets: {len(live_cards)} (backed up: {len(bk_cards)}) · patches: {names}\n'
+    f'        the five that must never vanish: {[n for n in EXPECT if n in names]}')
 
 # ── [2] PATH IDENTITY. Every id that has a folder today must land on the SAME folder. ────────
 #     The id set is not invented: it is read out of index.html.
@@ -228,8 +237,8 @@ for rel in sorted(live_cards):
         with open(p, encoding='utf-8') as f: j = json.load(f)
         if not isinstance(j, (dict, list)) or (isinstance(j, dict) and not j): bad.append((rel, 'empty/!object'))
     except Exception as e: bad.append((rel, str(e)[:60]))
-chk(not bad and len(live_cards) == 29,
-    '[4] ALL 29 CARD PRESETS PARSE AS JSON off the real disk',
+chk(not bad and len(live_cards) > 0,
+    '[4] EVERY CARD PRESET PARSES AS JSON off the real disk',
     f'ok: {len(live_cards) - len(bad)}/{len(live_cards)} · bad: {bad or "none"}\n'
     f'        by folder: { {d: len([r for r in live_cards if r.startswith(d + os.sep)]) for d in on_disk} }')
 
@@ -238,7 +247,7 @@ try:
     root = ET.parse(USER_XML).getroot()
     rows = [(p.get('name'), len(p.attrib)) for p in root.findall('Preset')]
     thin = [r for r in rows if r[1] < 20]
-    chk(len(rows) == 5 and not thin and [r[0] for r in rows] == EXPECT,
+    chk(len(rows) >= 5 and not thin and all(n in [r[0] for r in rows] for n in EXPECT),
         '[5] ALL 5 UserPresets.xml PATCHES LOAD, WITH THEIR PARAMETERS INTACT',
         f'{rows} · suspiciously thin: {thin or "none"} · root tag <{root.tag}>')
 except Exception as e:

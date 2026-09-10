@@ -30,6 +30,8 @@
 //  11  DELETE ASKS — a sheet, never confirm(); Delete → deletePresetFile(path) → the row is gone
 //  12  NO prompt()/confirm()/alert() ANYWHERE — WKWebView has no panels for them
 //  13  ESCAPE closes the sheet, the menu, the browser; a mousedown outside closes the quick menu
+//  14  fb622 — the preset cluster is CENTRED in the header and EQ/DLY have no button (code intact)
+//  15  fb622 — selection is the WORDS (name, type, style go accent), never a fill, row or rail
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
@@ -167,6 +169,15 @@ const STUB = (MUT) => {
   const hooks = await p.evaluate (() => { window.__hookCalls = {}; const names = ['__tiSeedMacroNames', '__tiPullLfoShapes', '__tiPullDynEnvs', '__tiModRestoreStrict', '__tiPullArpLanes', '__tiRestoreNoiseSel'];
     const have = []; for (const n of names) { const real = window[n]; if (typeof real !== 'function') continue; have.push (n); window.__hookCalls[n] = 0;
       window[n] = function () { window.__hookCalls[n]++; return real.apply (this, arguments); }; }
+    /* fb622 — the two the owner caught by eye. The FX rack rebuild and the wavetable view restore
+       are spied whether or not the real widget initialised headless: what is being pinned is that
+       repull() CALLS them, which is precisely what was missing — fxrRestoreChain already worked and
+       nothing could reach it, so a loaded preset redrew the previous rack and painted "Add Effects". */
+    { const real = window.__fxrRestoreChain; window.__hookCalls.__fxrRestoreChain = 0; have.push ('__fxrRestoreChain');
+      window.__fxrRestoreChain = function () { window.__hookCalls.__fxrRestoreChain++; if (typeof real === 'function') return real.apply (this, arguments); }; }
+    { window.wtWaterfall = window.wtWaterfall || {}; const real = window.wtWaterfall.restoreView;
+      window.__hookCalls.restoreView = 0; have.push ('wtWaterfall.restoreView');
+      window.wtWaterfall.restoreView = function (force) { if (force) window.__hookCalls.restoreView++; if (typeof real === 'function') return real.apply (this, arguments); }; }
     if (window.__tiCardPulls && window.__tiCardPulls.length) { have.push ('__tiCardPulls×' + window.__tiCardPulls.length); window.__hookCalls.cards = 0; window.__tiCardPulls = window.__tiCardPulls.map (f => () => { window.__hookCalls.cards++; return f(); }); }
     return have; });
   const cir = await rowByName ('Cirrus'); await cir.click(); await wait (90); await cir.click(); await wait (300);   // two clicks, as a hand does it
@@ -230,6 +241,43 @@ const STUB = (MUT) => {
   await p.keyboard.press ('Escape'); await wait (60); const b1 = await p.evaluate (() => document.getElementById ('tp-b').classList.contains ('on'));
   await p.click ('#preset-name'); await wait (80); await p.mouse.click (700, 500); await wait (60); const q1 = await p.evaluate (() => document.getElementById ('tp-q').classList.contains ('on'));
   gate (! s1 && ! b1 && ! q1, '[13] ESCAPE closes the sheet, then the browser; a mousedown outside closes the quick menu', `sheet ${s1} · browser ${b1} · quick ${q1}`);
+
+  // [14] the header — the preset cluster is CENTRED and the two dead pills are gone
+  {
+    const h = await p.evaluate (() => {
+      const cl = document.querySelector ('.header-preset'), hd = document.getElementById ('header');
+      if (! cl || ! hd) return { ok: false, why: 'no .header-preset' };
+      const r = cl.getBoundingClientRect(), hr = hd.getBoundingClientRect();
+      const vis = id => { const e = document.getElementById (id); return !! (e && e.offsetParent !== null); };
+      const nm = document.getElementById ('preset-name');
+      return { off: Math.abs ((r.left + r.width / 2) - (hr.left + hr.width / 2)), eq: vis ('eq-btn'), dly: vis ('delay-btn'),
+               syn: vis ('syn-btn'), size: nm ? getComputedStyle (nm).fontSize : '?' };
+    });
+    gate (h.off != null && h.off <= 2 && ! h.eq && ! h.dly && h.syn,
+      '[14] THE PRESET CLUSTER IS CENTRED, AND EQ / DLY HAVE NO BUTTON (their code stays)',
+      `centre offset ${h.off == null ? '—' : h.off.toFixed (1) + 'px'} (must be ≤ 2) · EQ visible ${h.eq} · DLY visible ${h.dly} · SYN still visible ${h.syn} · name ${h.size}`);
+  }
+
+  // [15] selection is the WORDS, never a block
+  {
+    await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
+    const sl = await rowByName ('Slatt'); await sl.click(); await wait (120);
+    const g = await p.evaluate (() => {
+      const row = document.querySelector ('#tp-rows .tp-row.sel'); if (! row) return null;
+      const cs = getComputedStyle (row), nm = getComputedStyle (row.querySelector ('.c-nm'));
+      const ty = getComputedStyle (row.querySelector ('.c-ty')), st = getComputedStyle (row.querySelector ('.c-st'));
+      const other = document.querySelector ('#tp-rows .tp-row:not(.sel)');
+      const rail = document.querySelector ('#tp-b .rail .ri.cur');
+      return { bg: cs.backgroundColor, nm: nm.color, ty: ty.color, st: st.color,
+               plain: other ? getComputedStyle (other.querySelector ('.c-nm')).color : '',
+               railBg: rail ? getComputedStyle (rail).backgroundColor : '', railLine: rail ? getComputedStyle (rail).borderLeftColor : '' };
+    });
+    const clear = v => v === 'rgba(0, 0, 0, 0)' || v === 'transparent';
+    gate (!! g && clear (g.bg) && g.nm === g.ty && g.ty === g.st && g.nm !== g.plain && clear (g.railBg),
+      '[15] SELECTION IS THE WORDS — name, type and style go accent; no fill on the row OR the rail',
+      g ? `row background ${g.bg} · name ${g.nm} · type ${g.ty} · style ${g.st} · an unselected name ${g.plain} · rail fill ${g.railBg}, rail line ${g.railLine}`
+        : 'no selected row');
+  }
 
   await b.close();
   console.log (`  ${pass} pass, ${fail} fail` + (errors.length ? ` · page errors: ${errors.join (' | ')}` : ''));

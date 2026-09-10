@@ -853,11 +853,20 @@ void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f
         tiDecodeWavetableMono (f, *mono);   // fb621 — the shared decode (the blocking read, off the message thread)
         /* back to the message thread: importedPcm_ is message-thread state (setImportFrames reads
            it), so the decode is what moves, not the ownership. */
-        juce::MessageManager::callAsync ([this, osc, mono, nm, done, alive]
+        const juce::String srcPath = f.getFullPathName();
+        juce::MessageManager::callAsync ([this, osc, mono, nm, done, alive, srcPath]
         {
             if (! alive->load (std::memory_order_acquire)) return;   // the processor went away while we read
             const bool ok = ! mono->empty();
-            if (ok) importAudioAsWavetable (osc, mono->data(), (int) mono->size());
+            if (ok)
+            {
+                importAudioAsWavetable (osc, mono->data(), (int) mono->size());
+                // fb622 — REMEMBER WHERE IT CAME FROM. Without this every table embeds: the save side
+                // cannot tell a shipped Terra table from a user's own file, so it embeds both, and a
+                // preset using one of the 120 factory tables carried ~600 KB it never needed to.
+                // (importAudioAsWavetable clears the path first — it takes bytes, which may have no file.)
+                importPath_[(size_t) osc] = srcPath;
+            }
             if (done) done (ok, nm);
         });
     });
@@ -866,6 +875,7 @@ void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f
 void TerrainAudioProcessor::importAudioAsWavetable (int osc, const float* pcm, int numSamples)
 {
     osc = juce::jlimit (0, 3, osc);
+    importPath_[(size_t) osc].clear();   // fb622 — bytes, not a file: the caller sets a path if it HAS one
     importedPcm_[osc].assign (pcm, pcm + juce::jmax (0, numSamples));   // keep the source so resolution can change later
     // Auto-detect a WAVETABLE FILE (concatenated kFrameSize single-cycles, e.g. Serum/Vital): an exact
     // multiple of kFrameSize giving 2..kMaxFrames frames → use its REAL frames. buildFromPcm's evenly-
@@ -892,6 +902,7 @@ void TerrainAudioProcessor::clearImportedWavetable (int osc)
     importedPcm_[osc].clear();
     importName_[osc]   = {};
     importIsFile_[osc] = false;
+    importPath_[(size_t) osc].clear();   // fb622
 }
 
 void TerrainAudioProcessor::setImportName (int osc, const juce::String& name)
@@ -16832,8 +16843,12 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                 assetB64Wt_[(size_t) o] = neu; assetKeyWt_[(size_t) o] = neu.isEmpty() ? 0 : tiKeyOf (importedPcm_[o]);
                 rebuildImport (o);
             }
-            for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             clearPatchBlobs();   // fb618 — absent means CLEAR for every blob below, on the host path too
+            // 🚨 fb622 — AFTER the clear, not before. clearPatchBlobs ends by zeroing wt3dView_, so
+            // reading the property first meant the restored value was wiped one line later and
+            // getWaterfallViewJson answered all-false after EVERY load. Max: "I saved it in the
+            // waterfall mode… please let it load up directly." The view is part of the patch.
+            for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
             setMacroNamesJson (newState.getProperty ("macroNames", "").toString());   // fb564 — empty = the eight defaults
             modStateJson = newState.getProperty("modStateJson", "").toString();
