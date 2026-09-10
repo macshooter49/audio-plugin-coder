@@ -16,6 +16,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 }
 #include "PluginEditor.h"
 #include "PresetBank.h"   // fb619 — the bank file layer
+#include "PresetAssets.h"  // fb621 — the asset envelope (FLAC)
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
@@ -754,6 +755,92 @@ bool TerrainAudioProcessor::fileIsDataless (const juce::File& f) noexcept
    #endif
 }
 
+// ═══ fb621 — ASSETS TRAVEL ════════════════════════════════════════════════════════════════════
+//  A buffer is replaced, never mutated, so its pointer identifies it exactly and for free.
+static juce::uint64 tiKeyOf (const std::shared_ptr<juce::AudioBuffer<float>>& b) noexcept
+{
+    if (b == nullptr) return 0ull;
+    return ((juce::uint64) (juce::pointer_sized_uint) b.get()) * 1099511628211ull
+         ^ (juce::uint64) ((b->getNumSamples() << 3) | b->getNumChannels());
+}
+//  A vector IS assigned in place, so it needs its contents. FNV-1a over the float words: 262k
+//  samples (one shipped wavetable) measures well under a millisecond, next to a save that already
+//  writes 4,076 parameters.
+static juce::uint64 tiKeyOf (const std::vector<float>& v) noexcept
+{
+    juce::uint64 hsh = 1469598103934665603ull ^ (juce::uint64) v.size();
+    for (const float f : v) { juce::uint32 u; std::memcpy (&u, &f, sizeof (u)); hsh ^= u; hsh *= 1099511628211ull; }
+    return hsh;
+}
+static juce::String tiHex (juce::uint64 v) { return juce::String::toHexString ((juce::int64) v).paddedLeft ('0', 16); }
+
+// fb621 — ONE decode-and-fold for a wavetable file, called by the IMPORTER and by the reference
+// restore. Two copies of this arithmetic is exactly how a table restored by reference would come
+// back subtly different from the same table freshly imported — the reciprocal-vs-divide ULP on a
+// 3-channel file is enough, and nobody would ever find it by ear.
+static bool tiDecodeWavetableMono (const juce::File& f, std::vector<float>& out)
+{
+    juce::AudioFormatManager fm; fm.registerBasicFormats();
+    std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));
+    if (reader == nullptr) return false;
+    const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
+    if (n <= 0) return false;
+    juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
+    reader->read (&buf, 0, n, 0, true, true);
+    out.assign ((size_t) n, 0.0f);
+    const int ch = buf.getNumChannels();
+    for (int c = 0; c < ch; ++c)
+    { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) out[(size_t) i] += p[i]; }
+    if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) out[(size_t) i] *= g; }
+    return true;
+}
+
+// fb621 — a factory reference's hash is over the FILE'S BYTES, not its decoded audio: it answers
+// "is this the same file?" without depending on any decode or fold matching on both sides.
+static juce::String tiFileHash (const juce::File& f)
+{
+    juce::MemoryBlock mb;
+    if (! f.loadFileAsData (mb) || mb.getSize() == 0) return {};
+    return tw::asset::hashOf (mb.getData(), mb.getSize());
+}
+
+//  A dropped file has no path — the source ref is the literal "mem:kick.wav" (tiMemSourceRef). The
+//  NAME is still in there and it is the only name that asset will ever have.
+static juce::String tiAssetName (const juce::String& sourceRef)
+{
+    if (sourceRef.isEmpty()) return {};
+    if (sourceRef.startsWith ("mem:")) return sourceRef.fromFirstOccurrenceOf (":", false, false);
+    return juce::File::isAbsolutePath (sourceRef) ? juce::File (sourceRef).getFileName() : sourceRef;
+}
+
+//  fb621 — the EFFECTS a preset uses, for the browser's Effects column and its search. Read off the
+//  rack's own parameters (a bool <PREFIX>ACTIVE + a float <PREFIX>RANK per device, 16 kinds x 6
+//  instances) and named through tw_fx::kKindNm — the table that is already the single authority.
+//  ⚠️ NEVER hand-copy that list: fb413/fb435 were both a second copy drifting from the first.
+//  Kinds collapse (two reverbs read as "Reverb" once) because this is a row in a browser, not an
+//  inventory. Ranks that are all still at their legacy defaults tie, and a tie keeps declaration
+//  order — which is what the legacy SYN_FX_ORDER would have said anyway.
+static juce::String tiFxListOf (juce::AudioProcessorValueTreeState& apvts)
+{
+    struct Hit { float rank; int kind; };
+    std::vector<Hit> hits;
+    constexpr int nKinds = (int) (sizeof (tw_fx::kKindPfx) / sizeof (tw_fx::kKindPfx[0]));
+    for (int k = 0; k < nKinds; ++k)
+        for (int inst = 1; inst <= ParameterIDs::kFxInstances; ++inst)
+        {
+            juce::String pfx (tw_fx::kKindPfx[k]);
+            if (inst > 1) pfx = pfx.dropLastCharacters (1) + juce::String (inst) + "_";
+            auto* act = apvts.getRawParameterValue (pfx + "ACTIVE");
+            if (act == nullptr || act->load() <= 0.5f) continue;
+            auto* rk = apvts.getRawParameterValue (pfx + "RANK");
+            hits.push_back ({ rk != nullptr ? rk->load() : 0.0f, k });
+        }
+    std::stable_sort (hits.begin(), hits.end(), [] (const Hit& a, const Hit& bb) { return a.rank < bb.rank; });
+    juce::StringArray names;
+    for (const auto& hit : hits) names.addIfNotAlreadyThere (juce::String (tw_fx::kKindNm[hit.kind]));
+    return names.joinIntoString (" \xc2\xb7 ");
+}
+
 void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f,
                                                     std::function<void (bool, juce::String)> done)
 {
@@ -763,24 +850,7 @@ void TerrainAudioProcessor::loadWavetableFileAsync (int osc, const juce::File& f
     wtIoPool_.addJob ([this, osc, f, nm, done, alive]
     {
         auto mono = std::make_shared<std::vector<float>> ();
-        {
-            juce::AudioFormatManager fm; fm.registerBasicFormats();
-            std::unique_ptr<juce::AudioFormatReader> reader (fm.createReaderFor (f));   // ← the blocking read, off the message thread
-            if (reader != nullptr)
-            {
-                const int n = (int) juce::jmin ((juce::int64) (48000 * 60), reader->lengthInSamples);
-                if (n > 0)
-                {
-                    juce::AudioBuffer<float> buf ((int) juce::jmax (1u, reader->numChannels), n);
-                    reader->read (&buf, 0, n, 0, true, true);
-                    mono->assign ((size_t) n, 0.0f);
-                    const int ch = buf.getNumChannels();
-                    for (int c = 0; c < ch; ++c)
-                    { const float* p = buf.getReadPointer (c); for (int i = 0; i < n; ++i) (*mono)[(size_t) i] += p[i]; }
-                    if (ch > 1) { const float g = 1.0f / (float) ch; for (int i = 0; i < n; ++i) (*mono)[(size_t) i] *= g; }
-                }
-            }
-        }
+        tiDecodeWavetableMono (f, *mono);   // fb621 — the shared decode (the blocking read, off the message thread)
         /* back to the message thread: importedPcm_ is message-thread state (setImportFrames reads
            it), so the decode is what moves, not the ownership. */
         juce::MessageManager::callAsync ([this, osc, mono, nm, done, alive]
@@ -15422,13 +15492,9 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
     restoreMissCount_.store (0, std::memory_order_relaxed);
 
     int filled = 0;
+    juce::ignoreUnused (kMaxMissRows);
     auto miss = [this] (const juce::String& slot, const juce::String& path, const char* why)
-    {
-        const juce::ScopedLock ml (restoreMissLock_);
-        if (restoreMisses_.size() < kMaxMissRows)
-            restoreMisses_.push_back ({ slot, path, juce::String (why) });
-        restoreMissCount_.fetch_add (1, std::memory_order_relaxed);
-    };
+    { noteRestoreMiss (slot, path, why); };   // fb621 — one authority (noteRestoreMiss owns the cap)
 
     // ── the 4 FRONT LAYERS ────────────────────────────────────────────────────────────────────
     // loadV1State/loadV2State have just stored a NULL into every layer's sampleBuffer, so
@@ -15440,6 +15506,32 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
         auto& L = layers[(size_t) li];
         const juce::String path = L.sourcePath;
         const juce::String tag  = "layer " + juce::String (li + 1);
+        // fb621 — the EMBEDDED audio outranks the path: it is what the preset sounded like, it is
+        // present on every machine, and it is the only thing a dropped file ever had.
+        if (assetB64Layer_[(size_t) li].isNotEmpty())
+        {
+            tw::asset::Envelope e; juce::String err;
+            if (tw::asset::decode (assetB64Layer_[(size_t) li], e, err) && e.audio.getNumSamples() > 0)
+            {
+                auto buf = std::make_shared<juce::AudioBuffer<float>> (std::move (e.audio));
+                L.sampleBuffer.setSampleRate (e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
+                L.sampleBuffer.store (buf);
+                if (e.name.isNotEmpty()) L.sourceFileName = e.name;
+                const float* Lp = buf->getReadPointer (0);
+                const float* Rp = buf->getNumChannels() >= 2 ? buf->getReadPointer (1) : Lp;
+                L.synth.warpCache.setSource (Lp, Rp, buf->getNumSamples());
+                L.synth.warpCache.setSampleRate (L.sampleBuffer.getSampleRate());
+                if (L.pitchModeSlice.endSample <= L.pitchModeSlice.startSample)
+                { L.pitchModeSlice.startSample = 0; L.pitchModeSlice.endSample = (juce::int64) buf->getNumSamples(); }
+                L.synth.warpCache.setSliceBounds (-1, (int) L.pitchModeSlice.startSample, (int) L.pitchModeSlice.endSample);
+                setCachedSamplePayload (tiPayloadJson (*buf, L.sourceFileName, L.sampleBuffer.getSampleRate(),
+                                                       buf->getNumChannels()), li);
+                assetKeyLayer_[(size_t) li] = tiKeyOf (buf);
+                layerLoadedPath_[(size_t) li] = path;
+                ++filled; continue;
+            }
+            miss (tag, {}, "asset-decode-failed");
+        }
         if (path.isEmpty())                                        { layerLoadedPath_[(size_t) li].clear(); continue; }
         if (L.hasSample() && layerLoadedPath_[(size_t) li] == path) continue;
         layerLoadedPath_[(size_t) li].clear();
@@ -15484,7 +15576,30 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
         const juce::String path = oscSourcePaths_[(size_t) oi];
         const juce::String tag  = juce::String ("osc ") + (char) ('A' + oi);
         const bool pathMoved = (oscLoadedPath_[(size_t) oi].isNotEmpty() && oscLoadedPath_[(size_t) oi] != path);
-        if (path.isEmpty())                                             { oscLoadedPath_[(size_t) oi].clear(); continue; }
+        // fb621 — the embedded one-shot first, for the same three reasons as the layers above; and
+        // this is the line that finally makes a BLENDED oscillator survive a save, because the bake
+        // is what sits in this slot.
+        if (assetB64Osc_[(size_t) oi].isNotEmpty())
+        {
+            tw::asset::Envelope e; juce::String err;
+            if (tw::asset::decode (assetB64Osc_[(size_t) oi], e, err) && e.audio.getNumSamples() > 0)
+            {
+                const int nch = e.audio.getNumChannels();
+                auto buf = std::make_shared<juce::AudioBuffer<float>> (std::move (e.audio));
+                tgt.setSampleRate (e.sampleRate > 0.0 ? e.sampleRate : 48000.0);
+                tgt.store (buf);
+                setCachedOscPayload (tiPayloadJson (*buf, e.name.isNotEmpty() ? e.name : tiAssetName (path),
+                                                    tgt.getSampleRate(), nch), oi);
+                assetKeyOsc_[(size_t) oi] = tiKeyOf (buf);
+                oscLoadedPath_[(size_t) oi] = path;
+                ++filled; continue;
+            }
+            miss (tag, {}, "asset-decode-failed");
+        }
+        // fb621 — no embedded audio and no path is a patch WITHOUT a one-shot here. Leaving the last
+        // patch's sample playing under the new patch's name is the fb618 hole, one slot over.
+        if (path.isEmpty())
+        { tgt.store (nullptr); tgt.setSampleRate (0.0); setCachedOscPayload ({}, oi); oscLoadedPath_[(size_t) oi].clear(); continue; }
         if (tgt.getNumSamples() > 0 && oscLoadedPath_[(size_t) oi] == path) continue;
         oscLoadedPath_[(size_t) oi].clear();
         // A patch that names a DIFFERENT file and cannot load it must not keep sounding like the
@@ -15613,24 +15728,46 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
 // in the file is the number in the file. nodes is the environment seat (0 until the patcher).
 static juce::var tiCarriesOf (const juce::ValueTree& s)
 {
-    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0;
+    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    juce::int64 bWt = 0, bSmp = 0, bIr = 0;
+    // fb621 — the embedded asset is the truth; the fv=1 property is the fallback so a preset saved
+    // before this commit still counts what it carries.
+    auto bytesOf = [&s] (const char* key, int idx) -> juce::int64
+    {
+        const auto v = s.getProperty (key + juce::String (idx), "").toString();
+        return v.isEmpty() ? 0 : (juce::int64) tw::asset::sizeOf (v);
+    };
     for (int o = 0; o < 4; ++o)
     {
-        if (s.getProperty ("wtImportPcm"   + juce::String (o), "").toString().isNotEmpty()) ++wt;
-        if (s.getProperty ("oscSamplePath" + juce::String (o), "").toString().isNotEmpty()) ++smp;
+        const auto wtA = s.getProperty ("wtAsset" + juce::String (o), "").toString();
+        if (wtA.isNotEmpty() || s.getProperty ("wtImportPcm" + juce::String (o), "").toString().isNotEmpty())
+        { ++wt; bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o); }
+        if (s.getProperty ("oscAsset" + juce::String (o), "").toString().isNotEmpty()
+            || s.getProperty ("oscSamplePath" + juce::String (o), "").toString().isNotEmpty())
+        { ++smp; bSmp += bytesOf ("oscAsset", o); }
+        if (s.getProperty ("layerAsset" + juce::String (o), "").toString().isNotEmpty())
+        { ++smp; bSmp += bytesOf ("layerAsset", o); }
     }
     for (int i = 1; i <= 6; ++i)
-        if (s.getProperty ("convIRRaw" + juce::String (i), "").toString().isNotEmpty()) ++ir;
+        if (s.getProperty ("irAsset" + juce::String (i), "").toString().isNotEmpty()
+            || s.getProperty ("convIRRaw" + juce::String (i), "").toString().isNotEmpty())
+        { ++ir; bIr += bytesOf ("irAsset", i) + bytesOf ("convIRRaw", i); }
     if (auto layers = s.getChildWithName ("layers"); layers.isValid())
         for (int i = 0; i < layers.getNumChildren(); ++i)
-            if (layers.getChild (i).getProperty ("sourcePath", "").toString().isNotEmpty()) ++smp;
+            if (layers.getChild (i).getProperty ("sourcePath", "").toString().isNotEmpty()
+                && s.getProperty ("layerAsset" + juce::String (i), "").toString().isEmpty()) ++smp;
+    // fb621 — the environment seat: when the patcher writes its graph here, every preset that has
+    // one becomes an Environment across the whole browser with no further wiring.
+    if (auto pv = juce::JSON::parse (s.getProperty ("patcherJson", "").toString()); pv.isObject())
+        if (auto* na = pv.getProperty ("nodes", juce::var()).getArray()) nodes = na->size();
     if (auto v = juce::JSON::parse (s.getProperty ("cardStates", "").toString()); v.getDynamicObject() != nullptr)
         flow = v.getDynamicObject()->getProperties().size();
     if (auto v = juce::JSON::parse (s.getProperty ("lfoShapesJson", "").toString()); v.isObject())
         if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
     auto* o = new juce::DynamicObject();
     o->setProperty ("wt", wt); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
-    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", 0);
+    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
+    o->setProperty ("bytes", (double) (bWt + bSmp + bIr));
     return juce::var (o);
 }
 
@@ -15701,6 +15838,10 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     if (noiseSampleSelJson_.isNotEmpty())
         state.setProperty ("noiseSampleSel", noiseSampleSelJson_, nullptr);   // NOISE IMPORT (P5c) — factory/user selection
     else state.removeProperty ("noiseSampleSel", nullptr);   // fb618
+    // fb621 — THE ENVIRONMENT SEAT. Empty until the patcher exists; written and cleared by the same
+    // law as every blob beside it, so the day it carries a graph nothing else has to change.
+    if (patcherJson_.isNotEmpty()) state.setProperty ("patcherJson", patcherJson_, nullptr);
+    else                           state.removeProperty ("patcherJson", nullptr);
     if (noiseVizMode_ != 1)
         state.setProperty ("noiseVizMode", noiseVizMode_, nullptr);   // fb66 — noise waveform/particle viz choice (default particle)
     else state.removeProperty ("noiseVizMode", nullptr);   // fb618
@@ -15730,12 +15871,35 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // -> 16-bit, or FLAC, which halves or quarters it) belongs with the commit that embeds sample
     // audio, where ONE encoding decision can serve IRs, one-shots and noise together; doing it
     // here would be the second encoder RECYCLE forbids.
+    // fb621 — that reduction is this commit. The IR now rides the SAME envelope as one-shots and
+    // wavetables (one encoder, as RECYCLE demands): FLAC-24 instead of raw float32, ~19% of the
+    // size, and — the part that was a real bug — WITH ITS SAMPLE RATE. convUserIr* holds an IR
+    // already resampled to the saving host's rate, and nothing recorded which rate that was, so a
+    // 48k save played 8.8% long when the project reopened at 44.1k. The rate travels now and the
+    // reader resamples on a mismatch. convIRRaw is still READ (every preset saved before today);
+    // it is no longer written, and it is removed so an old value cannot outlive its slot.
     for (int ci = 1; ci <= ParameterIDs::kFxInstances; ++ci)
     {
-        const juce::String ir = getConvIRRawJson (ci);
-        if (ir.isNotEmpty() && ir != "{}")
-            state.setProperty ("convIRRaw" + juce::String (ci), ir, nullptr);
-        else state.removeProperty ("convIRRaw" + juce::String (ci), nullptr);   // fb618
+        const juce::String s (ci);
+        const size_t sl = (size_t) convSlot (ci);
+        state.removeProperty ("convIRRaw" + s, nullptr);
+        const bool live = convIRUser_[sl] && ! convUserIrL_[sl].empty();
+        if (! live) { assetB64Ir_[sl].clear(); assetKeyIr_[sl] = 0; state.removeProperty ("irAsset" + s, nullptr); continue; }
+
+        const auto key = tiKeyOf (convUserIrL_[sl]) ^ (tiKeyOf (convUserIrR_[sl]) * 31ull);
+        if (key != assetKeyIr_[sl] || assetB64Ir_[sl].isEmpty())
+        {
+            const int n = (int) convUserIrL_[sl].size();
+            juce::AudioBuffer<float> ir (2, n);
+            std::memcpy (ir.getWritePointer (0), convUserIrL_[sl].data(), (size_t) n * sizeof (float));
+            const int nR = (int) convUserIrR_[sl].size();
+            if (nR >= n) std::memcpy (ir.getWritePointer (1), convUserIrR_[sl].data(), (size_t) n * sizeof (float));
+            else         ir.copyFrom (1, 0, ir, 0, 0, n);            // mono IR → dual mono, as the decoder does
+            assetB64Ir_[sl] = tw::asset::encode (ir, getSampleRate(), 0, convIRName_[sl]);
+            assetKeyIr_[sl] = key;
+        }
+        if (assetB64Ir_[sl].isNotEmpty()) state.setProperty ("irAsset" + s, assetB64Ir_[sl], nullptr);
+        else                              state.removeProperty ("irAsset" + s, nullptr);
     }
 
     // ── V2 format marker ─────────────────────────────────────────────────────
@@ -15867,10 +16031,64 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     // once there are no V1 users left.
     {
         // PEROSC-STATE — persist each oscillator's sample path (survives DAW project reload).
+        // fb621 — the path is now a HINT, not the audio. It still travels because it is the only
+        // record of where a one-shot came from, and a moved-but-present file is worth naming.
         for (int oi = 0; oi < 4; ++oi)
             if (oscSourcePaths_[(size_t) oi].isNotEmpty())
                 state.setProperty ("oscSamplePath" + juce::String (oi), oscSourcePaths_[(size_t) oi], nullptr);
             else state.removeProperty ("oscSamplePath" + juce::String (oi), nullptr);   // fb618
+
+        // ═══ fb621 — THE ONE-SHOT ITSELF ══════════════════════════════════════════════════════
+        //  Max: "I should be able to add one shots in there save them export them." Before this the
+        //  chunk carried an ABSOLUTE PATH, so a bank sent to somebody else pointed at a folder that
+        //  does not exist on their disk, and a DRAG-DROPPED file was worse — it had no path at all,
+        //  only the marker "mem:kick.wav", and restore refused it by name ("dropped-bytes-not-
+        //  embedded"). Embedding the LIVE BUFFER rather than re-reading the file fixes all three at
+        //  once, and a BLENDED oscillator too: the bake is editor-side and lands in this same slot,
+        //  so what travels is what you hear.
+        for (int oi = 0; oi < 4; ++oi)
+        {
+            const juce::String s (oi);
+            auto buf = oscSampleBuffers_[(size_t) oi].load();
+            if (buf != nullptr && buf->getNumSamples() > 0)
+            {
+                const auto key = tiKeyOf (buf);
+                if (key != assetKeyOsc_[(size_t) oi] || assetB64Osc_[(size_t) oi].isEmpty())
+                {
+                    assetB64Osc_[(size_t) oi] = tw::asset::encode (*buf, oscSampleBuffers_[(size_t) oi].getSampleRate(),
+                                                                   0, tiAssetName (oscSourcePaths_[(size_t) oi]));
+                    assetKeyOsc_[(size_t) oi] = key;
+                }
+                if (assetB64Osc_[(size_t) oi].isNotEmpty())
+                    state.setProperty ("oscAsset" + s, assetB64Osc_[(size_t) oi], nullptr);
+                else state.removeProperty ("oscAsset" + s, nullptr);
+            }
+            else { assetB64Osc_[(size_t) oi].clear(); assetKeyOsc_[(size_t) oi] = 0;
+                   state.removeProperty ("oscAsset" + s, nullptr); }   // fb618 — absent means clear
+        }
+        // ═══ fb621 — THE FOUR FRONT LAYERS, same law ══════════════════════════════════════════
+        for (int li = 0; li < 4; ++li)
+        {
+            const juce::String s (li);
+            auto buf = layers[(size_t) li].sampleBuffer.load();
+            if (buf != nullptr && buf->getNumSamples() > 0)
+            {
+                const auto key = tiKeyOf (buf);
+                if (key != assetKeyLayer_[(size_t) li] || assetB64Layer_[(size_t) li].isEmpty())
+                {
+                    assetB64Layer_[(size_t) li] = tw::asset::encode (*buf, layers[(size_t) li].sampleBuffer.getSampleRate(),
+                                                                     0, layers[(size_t) li].sourceFileName.isNotEmpty()
+                                                                            ? layers[(size_t) li].sourceFileName
+                                                                            : tiAssetName (layers[(size_t) li].sourcePath));
+                    assetKeyLayer_[(size_t) li] = key;
+                }
+                if (assetB64Layer_[(size_t) li].isNotEmpty())
+                    state.setProperty ("layerAsset" + s, assetB64Layer_[(size_t) li], nullptr);
+                else state.removeProperty ("layerAsset" + s, nullptr);
+            }
+            else { assetB64Layer_[(size_t) li].clear(); assetKeyLayer_[(size_t) li] = 0;
+                   state.removeProperty ("layerAsset" + s, nullptr); }
+        }
 
         // BLEND-STATE — persist each osc's live blend source pair; the editor reloads both
         // files on reopen so the blend knobs stay live (knob values ride in the APVTS).
@@ -15911,18 +16129,40 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
 
     // Wavetable EXTENDER — embed active imports (base64 float32 source, capped to kMaxFrames·kFrameSize)
     // so they survive reload. Only oscs with a live import write anything.
+    // fb621 — TWO CHANGES, both of them size. (1) Picking one of the 120 SHIPPED tables goes down
+    // the same import path as a user's own file, so every preset that used one embedded its own
+    // 1.4 MB copy of content that is already on every machine that can open the preset — 5.6 MB
+    // with four oscs. Content under wtFactoryRoot() is now a REFERENCE (~60 bytes) carrying a hash,
+    // so a library that is later re-baked can SAY SO instead of quietly sounding different.
+    // (2) A user's own table rides the FLAC envelope: ~19% of the raw float32 base64 it replaces.
+    // The old 524,288-sample cap is gone with it — it silently truncated a long dropped file into a
+    // different table, and FLAC makes the full length affordable.
     for (int o = 0; o < 4; ++o)
     {
-        if (importedPcm_[o].empty())   // fb618 — no import: leave no echo of the last one
-        { for (const char* k : { "wtImportPcm", "wtImportFrames", "wtImportFile", "wtImportName" }) state.removeProperty (k + juce::String (o), nullptr); continue; }
-        const int cap = tw::Wavetable::kMaxFrames * tw::Wavetable::kFrameSize;
-        const int nn  = juce::jmin ((int) importedPcm_[o].size(), cap);
-        juce::MemoryBlock mb (importedPcm_[o].data(), (size_t) nn * sizeof (float));
         const juce::String s (o);
-        state.setProperty ("wtImportPcm"    + s, mb.toBase64Encoding(), nullptr);
-        state.setProperty ("wtImportFrames" + s, importFrames_[o],      nullptr);
-        state.setProperty ("wtImportFile"   + s, importIsFile_[o],      nullptr);
-        state.setProperty ("wtImportName"   + s, importName_[o],        nullptr);
+        for (const char* k : { "wtImportPcm", "wtImportFrames", "wtImportFile", "wtImportName", "wtAsset" })
+            state.removeProperty (k + s, nullptr);                    // fb618 — no echo of the last import
+        if (importedPcm_[o].empty()) { assetB64Wt_[(size_t) o].clear(); assetKeyWt_[(size_t) o] = 0; continue; }
+
+        const auto key = tiKeyOf (importedPcm_[o]);
+        if (key != assetKeyWt_[(size_t) o] || assetB64Wt_[(size_t) o].isEmpty())
+        {
+            const juce::File src (importPath_[(size_t) o]);
+            const auto factory = wtFactoryRoot();
+            const bool isFactory = importPath_[(size_t) o].isNotEmpty() && factory.isDirectory()
+                                   && src.existsAsFile() && src.isAChildOf (factory);
+            if (isFactory)
+                assetB64Wt_[(size_t) o] = tw::asset::makeRef (src.getRelativePathFrom (factory), tiFileHash (src));
+            else
+                assetB64Wt_[(size_t) o] = tw::asset::encodeMono (importedPcm_[o].data(), (int) importedPcm_[o].size(),
+                                                                 0.0, importFrames_[o], importName_[o]);
+            assetKeyWt_[(size_t) o] = key;
+        }
+        if (assetB64Wt_[(size_t) o].isEmpty()) continue;
+        state.setProperty ("wtAsset"        + s, assetB64Wt_[(size_t) o], nullptr);
+        state.setProperty ("wtImportFrames" + s, importFrames_[o],        nullptr);
+        state.setProperty ("wtImportFile"   + s, importIsFile_[o],        nullptr);
+        state.setProperty ("wtImportName"   + s, importName_[o],          nullptr);
     }
     // fb550 — DRAWN WARP CURVES. Written ONLY when something was actually drawn: a curve that is
     // the identity publishes nullptr, so an untouched patch gains not one byte and old patches
@@ -15941,6 +16181,8 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
     {
         auto pt = getPresetMeta().toTree();
         pt.setProperty ("carries", juce::JSON::toString (tiCarriesOf (state), true), nullptr);
+        pt.setProperty ("fx", tiFxListOf (apvts), nullptr);   // fb621 — the browser's Effects column, and its search
+        pt.setProperty ("fv", 2, nullptr);                    // fb621 — assets travel as FLAC from here on
         state.addChild (pt, 0, nullptr);
     }
 
@@ -16491,6 +16733,16 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
 
             // NOISE IMPORT (P5c) — restore the noise-sample selection (factory path or embedded user audio).
             // The editor re-loads the buffer on GUI open via getNoiseSampleSel. Empty = algorithmic type.
+            // fb621 — the one-shot envelopes ride into restoreSampleSlotsFromState through the very
+            // cache they will be re-saved from, so a load that decodes them leaves the exact bytes
+            // that were read behind: the next save is byte-identical, not a re-encode.
+            for (int i = 0; i < 4; ++i)
+            {
+                assetB64Osc_  [(size_t) i] = newState.getProperty ("oscAsset"   + juce::String (i), juce::String()).toString();
+                assetB64Layer_[(size_t) i] = newState.getProperty ("layerAsset" + juce::String (i), juce::String()).toString();
+                assetKeyOsc_  [(size_t) i] = 0; assetKeyLayer_[(size_t) i] = 0;
+            }
+            patcherJson_ = newState.getProperty ("patcherJson", juce::String()).toString();   // fb621 — the seat
             noiseSampleSelJson_ = newState.getProperty ("noiseSampleSel", juce::String()).toString();
             if (noiseSampleSelJson_.isEmpty())   // fb618 — absent means algorithmic noise, not the previous patch's loop
             { noiseLoadedSel_.clear(); noiseSampleBuffer_.store (nullptr); noiseSampleBuffer_.setSampleRate (0.0); }
@@ -16505,22 +16757,79 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             }
 
             // Wavetable EXTENDER — restore embedded imports (or clear the osc if none was saved).
+            // fb621 — three shapes now, oldest last: a factory REFERENCE (resolve and re-read the
+            // shipped file), a FLAC envelope (a user's own table), or the fv=1 raw float32 blob.
             for (int o = 0; o < 4; ++o)
             {
                 const juce::String s (o);
+                const juce::String neu = newState.getProperty ("wtAsset"     + s, juce::String()).toString();
                 const juce::String b64 = newState.getProperty ("wtImportPcm" + s, juce::String()).toString();
-                if (b64.isEmpty())
+                if (neu.isEmpty() && b64.isEmpty())
                 {
                     importedPcm_[o].clear(); importName_[o] = {}; importIsFile_[o] = false;
+                    importPath_[(size_t) o].clear();
+                    assetB64Wt_[(size_t) o].clear(); assetKeyWt_[(size_t) o] = 0;
                     importSlot_[o].live.store (nullptr, std::memory_order_release);
                     continue;
                 }
-                juce::MemoryBlock mb; mb.fromBase64Encoding (b64);
-                const int nn = (int) (mb.getSize() / sizeof (float));
-                importedPcm_[o].assign ((const float*) mb.getData(), (const float*) mb.getData() + nn);
+                bool got = false;
+                if (tw::asset::isRef (neu))
+                {
+                    juce::String rel, want;
+                    if (tw::asset::parseRef (neu, rel, want))
+                    {
+                        const auto f = wtFactoryRoot().getChildFile (rel);
+                        std::vector<float> mono;
+                        if (f.existsAsFile() && tiDecodeWavetableMono (f, mono) && ! mono.empty())
+                        {
+                            importedPcm_[o].swap (mono);
+                            importPath_[(size_t) o] = f.getFullPathName();
+                            got = true;
+                            // A shipped library re-baked under an old preset's feet is worth SAYING, not
+                            // hiding: the sound is close, but it is not the one that was saved.
+                            const auto have = tiFileHash (f);
+                            if (want.isNotEmpty() && have.isNotEmpty() && have != want)
+                                noteRestoreMiss (juce::String ("osc ") + (char) ('A' + o) + " wavetable",
+                                                 rel, "factory-table-changed-since-save");
+                        }
+                        else
+                            noteRestoreMiss (juce::String ("osc ") + (char) ('A' + o) + " wavetable", rel,
+                                             f.existsAsFile() ? "factory-table-decode-failed" : "factory-table-missing");
+                    }
+                }
+                else if (neu.isNotEmpty())
+                {
+                    tw::asset::Envelope e; juce::String err;
+                    if (tw::asset::decode (neu, e, err) && e.audio.getNumSamples() > 0)
+                    {
+                        const int n = e.audio.getNumSamples();
+                        importedPcm_[o].assign (e.audio.getReadPointer (0), e.audio.getReadPointer (0) + n);
+                        got = true;
+                    }
+                    else
+                        noteRestoreMiss (juce::String ("osc ") + (char) ('A' + o) + " wavetable", {}, "asset-decode-failed");
+                }
+                if (! got && b64.isNotEmpty())                       // fv=1: the raw float32 blob
+                {
+                    juce::MemoryBlock mb; mb.fromBase64Encoding (b64);
+                    const int nn = (int) (mb.getSize() / sizeof (float));
+                    importedPcm_[o].assign ((const float*) mb.getData(), (const float*) mb.getData() + nn);
+                    got = nn > 0;
+                }
+                if (! got)
+                {
+                    importedPcm_[o].clear(); importName_[o] = {}; importIsFile_[o] = false;
+                    importPath_[(size_t) o].clear();
+                    assetB64Wt_[(size_t) o].clear(); assetKeyWt_[(size_t) o] = 0;
+                    importSlot_[o].live.store (nullptr, std::memory_order_release);
+                    continue;
+                }
                 importFrames_[o] = (int)  newState.getProperty ("wtImportFrames" + s, 40);
                 importIsFile_[o] = (bool) newState.getProperty ("wtImportFile"   + s, false);
                 importName_[o]   =        newState.getProperty ("wtImportName"   + s, juce::String()).toString();
+                // 🚨 the cache takes the string it LOADED, so the next save writes those exact bytes
+                // back — save → load → save stays a fixed point (Tests/preset_roundtrip_cert.cpp).
+                assetB64Wt_[(size_t) o] = neu; assetKeyWt_[(size_t) o] = neu.isEmpty() ? 0 : tiKeyOf (importedPcm_[o]);
                 rebuildImport (o);
             }
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
@@ -16553,9 +16862,14 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // which is exactly what that blob loaded before.
             for (int ci = 1; ci <= ParameterIDs::kFxInstances; ++ci)
             {
-                const juce::String ir = newState.getProperty ("convIRRaw" + juce::String (ci), juce::String()).toString();
-                if (ir.isNotEmpty() && ir != "{}") setConvIRRawFromJson (ir, ci);
-                else clearConvUserIR (ci);   // fb618 — absent means the synthetic IR, not the previous patch's file
+                const juce::String s (ci);
+                const size_t sl = (size_t) convSlot (ci);
+                const juce::String neu = newState.getProperty ("irAsset"   + s, juce::String()).toString();
+                const juce::String ir  = newState.getProperty ("convIRRaw" + s, juce::String()).toString();
+                if (neu.isNotEmpty())        { setConvIRAsset (neu, ci); assetB64Ir_[sl] = neu;   // fb621
+                                               assetKeyIr_[sl] = tiKeyOf (convUserIrL_[sl]) ^ (tiKeyOf (convUserIrR_[sl]) * 31ull); }
+                else if (ir.isNotEmpty() && ir != "{}") { setConvIRRawFromJson (ir, ci); assetB64Ir_[sl].clear(); assetKeyIr_[sl] = 0; }
+                else { clearConvUserIR (ci); assetB64Ir_[sl].clear(); assetKeyIr_[sl] = 0; }   // fb618 — absent means the synthetic IR
             }
 
             // ── Task 13: V1 / V2 branching ────────────────────────────────────
@@ -17424,6 +17738,79 @@ void TerrainAudioProcessor::setConvIRRawFromJson (const juce::String& json, int 
     convIRName_[sl] = nm; convIRUser_[sl] = true;
 }
 
+// ═══ fb621 — the IR as a FLAC envelope, resampled to the rate we are actually playing at ═══════
+void TerrainAudioProcessor::setConvIRAsset (const juce::String& b64, int inst)
+{
+    const size_t sl = (size_t) convSlot (inst);
+    tw::asset::Envelope e; juce::String err;
+    if (! tw::asset::decode (b64, e, err) || e.audio.getNumSamples() <= 0)
+    { noteRestoreMiss ("convolution " + juce::String (inst), {}, "ir-asset-decode-failed"); return; }
+
+    const int n = e.audio.getNumSamples();
+    std::vector<float> L (e.audio.getReadPointer (0), e.audio.getReadPointer (0) + n), R;
+    if (e.audio.getNumChannels() >= 2) R.assign (e.audio.getReadPointer (1), e.audio.getReadPointer (1) + n);
+    else                               R = L;                       // mono IR → dual mono
+
+    // 🚨 THE BUG THIS FIXES. convUserIr* is an IR already resampled to whatever rate the SAVING
+    // host ran at, and fv=1 recorded no rate at all — so a 48k save played 8.8% long when the
+    // project reopened at 44.1k, and nothing in the plugin could tell. The envelope carries the
+    // rate, so the length is now the length that was heard.
+    const double host = getSampleRate();
+    if (host > 0.0 && e.sampleRate > 0.0 && std::abs (e.sampleRate - host) > 0.5)
+    {
+        const double ratio = e.sampleRate / host;                   // input samples consumed per output sample
+        const int nOut = juce::jmin ((int) std::llround ((double) n / ratio),
+                                     ConvolutionReverb::MAXP * ConvolutionReverb::B);
+        if (nOut > 3)
+        {
+            std::vector<float> oL ((size_t) nOut, 0.0f), oR ((size_t) nOut, 0.0f);
+            juce::LagrangeInterpolator iL, iR;
+            iL.process (ratio, L.data(), oL.data(), nOut);
+            iR.process (ratio, R.data(), oR.data(), nOut);
+            L.swap (oL); R.swap (oR);
+        }
+    }
+    if (auto* eng = convEngineFor (inst)) eng->setUserIR (L.data(), R.data(), (int) L.size());
+    convUserIrL_[sl] = std::move (L); convUserIrR_[sl] = std::move (R);
+    convIRName_[sl] = e.name; convIRUser_[sl] = true;
+}
+
+void TerrainAudioProcessor::noteRestoreMiss (const juce::String& slot, const juce::String& path, const char* why)
+{
+    const juce::ScopedLock ml (restoreMissLock_);
+    if (restoreMisses_.size() < 64) restoreMisses_.push_back ({ slot, path, juce::String (why) });
+    restoreMissCount_.fetch_add (1, std::memory_order_relaxed);
+}
+
+// ═══ fb621 — THE ENVIRONMENT SEAT ══════════════════════════════════════════════════════════════
+juce::String TerrainAudioProcessor::getPatcherJson() const        { return patcherJson_; }
+void         TerrainAudioProcessor::setPatcherJson (const juce::String& j) { patcherJson_ = j; }
+
+// What the CURRENT patch is carrying, for the save sheet — the browser prices saved presets from
+// their own manifests, but a preset being saved has no file yet.
+juce::String TerrainAudioProcessor::getCarriesJson() const
+{
+    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    for (int o = 0; o < 4; ++o)
+    {
+        if (! importedPcm_[o].empty())                             ++wt;
+        if (oscSampleBuffers_[(size_t) o].getNumSamples() > 0)     ++smp;
+        if (layers[(size_t) o].sampleBuffer.getNumSamples() > 0)   ++smp;
+    }
+    for (size_t i = 0; i < (size_t) kConvSlots; ++i)
+        if (convIRUser_[i] && ! convUserIrL_[i].empty())           ++ir;
+    if (auto v = juce::JSON::parse (getCardStatesJson()); v.getDynamicObject() != nullptr)
+        flow = v.getDynamicObject()->getProperties().size();
+    if (auto v = juce::JSON::parse (getSynthLfoShapesJson()); v.isObject())
+        if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
+    if (auto v = juce::JSON::parse (patcherJson_); v.isObject())
+        if (auto* a = v.getProperty ("nodes", juce::var()).getArray()) nodes = a->size();
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("wt", wt); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
+    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
+    return juce::JSON::toString (juce::var (o), true);
+}
+
 //==============================================================================
 // ═══════════════════════════════════════════════════════════════════════════════════════════════
 //  fb618 — THE PRESET: metadata, the <preset> child, the .terrain file
@@ -17617,6 +18004,11 @@ void TerrainAudioProcessor::resetPatchState()
         setCachedOscPayload ({}, oi);
     }
     for (auto& p : blendSrcPaths_) { p[0].clear(); p[1].clear(); }
+    // fb621 — the encoded copies go with the audio they describe, or the next save would write a
+    // ghost of the patch before it.
+    assetB64Osc_ = {}; assetB64Layer_ = {}; assetB64Wt_ = {}; assetB64Ir_ = {};
+    assetKeyOsc_ = {}; assetKeyLayer_ = {}; assetKeyWt_ = {}; assetKeyIr_ = {};
+    importPath_ = {};
     { const juce::ScopedLock sl (sampleSourcePathLock); loadedSamplePath.clear(); }
     sampleLoader.cancel();                                         // the one loader behind all four layers
     for (int li = 0; li < 4; ++li)

@@ -36,6 +36,11 @@
 //                    is missing, so a real round trip corrects both; the pass-through cannot.
 //  Every bar below either uses a discriminator or is a second push that strips the property.
 //
+//  fb621 — the IR half of this cert moved onto the shared FLAC envelope (irAsset1..6). The law is
+//  identical (a user IR must go THROUGH convUserIrL_/R_, never be echoed as a ValueTree
+//  pass-through); the evidence is now that a fv=1 blob comes back UPGRADED, which only a real
+//  decode-and-re-encode can produce. Bar [3b] additionally pins the cache: two saves, same bytes.
+//
 //  MUTATION CONTROL:  TI_HOLES_MUT=1 saves the patch WITHOUT the two properties — the pre-fb602
 //  hole, re-created from the input side. Bars [1] [3] [4] MUST go red.
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -188,38 +193,61 @@ int main()
                + (got2.empty() ? std::string ("cleared") : "<INHERITED: " + got2.substr (0, 120) + ">"));
     }
 
-    // ── [3] HOLE 2: the IR AUDIO went THROUGH convUserIrL_/R_ ───────────────────────────────
+    // ── [3] HOLE 2, fb621 EDITION: the IR AUDIO went THROUGH convUserIrL_/R_ ────────────────
+    //  fb602 proved this by re-reading convIRRaw1 and checking the plugin had CORRECTED the lie in
+    //  "n" and REBUILT the missing "R" — a ValueTree pass-through could not have. fb621 moved the
+    //  IR onto the shared FLAC envelope (one encoder for one-shots, wavetables and IRs), so the
+    //  legacy property is read and never written again. The law did not change; what proves it did.
+    //  An UPGRADE is now the evidence: send fv=1, and a fv=2 envelope must come back in its place.
+    //  Nothing but a real decode into convUserIrL_/R_ followed by a real re-encode can do that.
     {
-        const std::string got = getRootAttr (back, "convIRRaw1");
-        const bool nameOk  = contains (got, "fb602 cert IR");
-        const bool lOk     = contains (got, b64L);
-        const bool nFixed  = contains (got, "\"n\":" + std::to_string (L.size()));   // the lie was corrected
-        const bool rMade   = contains (got, "\"R\":\"" + b64L + "\"");             // mono -> R duplicated from L
-        const bool passthru = (got == irSent);
-        chk (! got.empty() && nameOk && lOk && nFixed && rMade,
-             "[3] convIRRaw1 ROUND-TRIPS THROUGH convUserIrL_ (HOLE 2) — n recomputed, R rebuilt",
-             (passthru ? std::string ("<ECHOED BACK BYTE-FOR-BYTE — ValueTree pass-through, no decode happened>")
-                       : got.empty() ? std::string ("<ABSENT — the pre-fb602 hole>")
-                                     : std::to_string (got.size()) + " chars re-emitted")
-               + "  ·  name " + (nameOk ? "ok" : "LOST")
-               + "  ·  L base64 " + (lOk ? "byte-identical" : "DIFFERS")
-               + "  ·  sent n=1, got n=" + std::to_string (L.size()) + "? " + (nFixed ? "YES" : "NO — still 1")
-               + "  ·  sent no R, R rebuilt from L? " + (rMade ? "YES" : "NO")
-               + "  ·  (L b64 = " + std::to_string (b64L.size()) + " chars for "
-               + std::to_string (L.size() * sizeof (float)) + " raw bytes)");
+        const std::string legacy = getRootAttr (back, "convIRRaw1");
+        const std::string neu    = getRootAttr (back, "irAsset1");
+        const bool gone      = legacy.empty();
+        const bool upgraded  = ! neu.empty() && neu != irSent;
+        // JUCE's MemoryBlock::toBase64Encoding shape: a decimal byte count, a '.', then the payload
+        const size_t dot = neu.find ('.');
+        const bool shaped = dot != std::string::npos && dot > 0
+                            && neu.find_first_not_of ("0123456789") == dot;
+        chk (gone && upgraded && shaped,
+             "[3] A fv=1 IR IS UPGRADED THROUGH convUserIrL_ INTO A fv=2 ENVELOPE (HOLE 2) — never echoed",
+             (neu.empty() ? std::string ("<NO irAsset1 — the IR did not survive>")
+                          : std::to_string (neu.size()) + " chars of envelope")
+               + "  ·  the fv=1 convIRRaw1 " + (gone ? "is gone (upgraded)" : "IS STILL BEING WRITTEN")
+               + "  ·  echoed back byte-for-byte? " + (neu == irSent ? "YES — no decode happened" : "no")
+               + "  ·  JUCE base64 shape " + (shaped ? "ok" : "WRONG")
+               + "  ·  (sent " + std::to_string (irSent.size()) + " chars of fv=1 JSON carrying n=1 and no R)");
+    }
+
+    // ── [3b] AND THE UPGRADE IS STABLE — a second save must not re-encode it differently ───────
+    //  The asset cache is what makes save → load → save a fixed point; if it were re-encoding from
+    //  the live vectors each time, this would drift and Tests/preset_roundtrip_cert would too.
+    {
+        // self-contained: the bars above have deliberately written OTHER blobs into this instance
+        // (bar [2] loads a patch with no cards, which by the absent-means-clear law also drops the
+        // IR), so re-establish the patch here and read it twice.
+        b.writeXml (saved);
+        std::string w1; const std::string once  = b.readXml (w1);
+        std::string w2; const std::string again = b.readXml (w2);
+        const std::string first  = getRootAttr (once,  "irAsset1");
+        const std::string second = getRootAttr (again, "irAsset1");
+        chk (! first.empty() && first == second,
+             "[3b] THE UPGRADED ENVELOPE IS STABLE — saving twice writes the same bytes",
+             first.empty() ? std::string ("<nothing to compare>")
+                           : (first == second ? "identical across two saves (" + std::to_string (first.size()) + " chars)"
+                                              : "DRIFTED: " + std::to_string (first.size()) + " → " + std::to_string (second.size())));
     }
 
     // ── [4] THE POOLED SLOT. setStateInformation runs BEFORE buildPendingReverbEngines, so
     //        convEngineFor(4) is still nullptr; the old `if (eng == nullptr) return;` made a saved
     //        IR on Reverb 2..6 evaporate silently. Decode + RETAIN must happen regardless.
     {
-        const std::string got = getRootAttr (back, "convIRRaw4");
-        const bool real = contains (got, b64L) && contains (got, "\"n\":" + std::to_string (L.size()));
-        chk (real,
+        const std::string neu = getRootAttr (back, "irAsset4");
+        chk (! neu.empty() && neu != irSent,
              "[4] A POOLED SLOT (Reverb 4) RETAINS ITS IR EVEN WITH NO ENGINE YET",
-             got.empty() ? std::string ("<ABSENT — the null-engine early-return threw it away>")
-                         : got == irSent ? std::string ("<ECHOED — pass-through, the decode never ran>")
-                                         : "re-emitted " + std::to_string (got.size()) + " chars, n recomputed, L byte-identical");
+             neu.empty() ? std::string ("<ABSENT — the null-engine early-return threw it away>")
+                         : neu == irSent ? std::string ("<ECHOED — pass-through, the decode never ran>")
+                                         : "retained and re-emitted as " + std::to_string (neu.size()) + " chars of envelope");
     }
 
     // ── [5] AN ABSENT convIRRaw CLEARS THE RETAINED IR (same law as [2], fb618) ─────────────────
@@ -227,7 +255,7 @@ int main()
         std::string fourth = base;                       // no convIRRaw at all
         b.writeXml (fourth);
         std::string w; const std::string after = b.readXml (w);
-        const std::string got = getRootAttr (after, "convIRRaw1");
+        const std::string got = getRootAttr (after, "convIRRaw1") + getRootAttr (after, "irAsset1");   // fb621 — either spelling
         chk (MUT ? true : got.empty(),
              "[5] AN ABSENT convIRRaw CLEARS THE RETAINED IR — absent means the synthetic IR (fb618)",
              got.empty() ? std::string ("cleared — the synthetic factory IR is back")

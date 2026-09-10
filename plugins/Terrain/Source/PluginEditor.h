@@ -84,6 +84,7 @@ private:
     void loadPatch         (const juce::File& patchFile);    // Task 18 stub
     void afterPatchLoad();                                   // fb620 — the one law for every load: C++ pushes, then onPatchLoaded
     void importTerrainPack (const juce::File& packFile);     // Task 22 stub
+    void offerPack         (const juce::File& packFile);     // fb621 — inspect, show, then install
 
     juce::String currentSampleSourcePath;
     bool synthPageActive_ = false;   // PEROSC-DRAGGUARD — true while the synth page is visible (message-thread only)

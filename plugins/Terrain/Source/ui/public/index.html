@@ -1300,6 +1300,17 @@ body {
 #tp-sheet .manifest .ml .node, #tp-sheet .manifest .ml .node svg { color: var(--purple-400); }
 #tp-sheet .manifest .tot { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); }
 
+/* ─── THE LOADING OVERLAY — a wash, a name, a bar. Flat, never blurred: fb613 measured the
+   renderer paying for every gradient, and this one is on screen exactly when the machine is busy. */
+#tp-load { position: absolute; inset: 0; z-index: 2150; background: var(--wash); display: none; align-items: center; justify-content: center; }
+#tp-load.on { display: flex; }
+#tp-load .card { width: 300px; text-align: center; }
+#tp-load .lk { font-size: 10px; font-weight: 500; color: var(--text-secondary); margin-bottom: 8px; }
+#tp-load .ln { font-size: 13px; font-weight: 500; color: var(--text-primary); letter-spacing: .2px; }
+#tp-load .bar { height: 2px; background: var(--border-strong); border-radius: 1px; margin: 18px 0 10px; overflow: hidden; }
+#tp-load .bar i { display: block; height: 100%; width: 0; background: var(--purple-500); border-radius: 1px; transition: width .12s linear; }
+#tp-load .lp { font-size: 10px; color: var(--text-secondary); }
+
 /* toast — glass, bottom centre, above everything */
 #tp-toast { position: absolute; left: 50%; bottom: 18px; transform: translate(-50%, 8px); z-index: 2200; border: 1px solid rgba(255,255,255,0.11); border-radius: 8px; padding: 7px 12px; font-size: 10.5px; color: #fff;
   background: rgba(22,20,34,0.72); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
@@ -39466,7 +39477,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 
 <div id="tp-b" class="tp-glass">
   <div class="tb">
-    <div class="sw"><input class="search" id="tp-search" type="text" placeholder="Search names, styles, authors" autocomplete="off" spellcheck="false"></div>
+    <div class="sw"><input class="search" id="tp-search" type="text" placeholder="Search names, styles, effects, authors" autocomplete="off" spellcheck="false"></div>
     <div class="count" id="tp-count"></div>
     <button class="ibtn" id="tp-dice" title="Random preset"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8.5" cy="8.5" r="1" fill="currentColor"/><circle cx="15.5" cy="8.5" r="1" fill="currentColor"/><circle cx="12" cy="12" r="1" fill="currentColor"/><circle cx="8.5" cy="15.5" r="1" fill="currentColor"/><circle cx="15.5" cy="15.5" r="1" fill="currentColor"/></svg></button>
     <button class="ibtn" id="tp-fav-only" title="Favourites only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/></svg></button>
@@ -39496,6 +39507,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 <div class="pmenu tp-menu tp-ctx" id="tp-ctx"></div>
 <div class="pmenu tp-menu tp-sug" id="tp-sug"></div>
 <div id="tp-sheet"><div class="tp-card"></div></div>
+<div id="tp-load"><div class="card"><div class="lk" id="tp-ld-k">Loading</div><div class="ln" id="tp-ld-n"></div><div class="bar"><i id="tp-ld-bar"></i></div><div class="lp" id="tp-ld-p">0%</div></div></div>
 <div id="tp-toast"></div>
 
 <script>
@@ -39552,6 +39564,17 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   const favKey = p => String(p.bank || '').trim() + '/' + String(p.name || '').trim();
   const isFav = p => !!S.favs[favKey(p)];
   const label = p => `<span class="bk">${esc(p.bank)} - </span>${esc(p.name)}`;
+  const fmtB = b => !b ? '—' : b < 1e6 ? Math.round(b / 1000) + ' KB' : (b / 1e6).toFixed(1) + ' MB';
+  /* What the user is about to wait for. A preset is params + audio: the params are instant, the audio
+     is a FLAC decode, and an ENVIRONMENT will additionally build a node graph when the patcher lands.
+     The estimate is honest about which of those it is — and the overlay only appears when there is
+     genuinely something to wait for, because a wash that flashes on every click is worse than none. */
+  const loadEst = p => {
+    const heavy = (p.carried || 0) + (p.env ? 4e6 : 0);
+    if (p.env) return { txt: heavy > 3e7 ? '5–6 s' : '2–3 s', ms: heavy > 3e7 ? 5400 : 2400, show: true };
+    if (heavy > 3e6) return { txt: 'A moment', ms: Math.min(2400, 300 + heavy / 4000), show: true };
+    return { txt: 'Instant', ms: 0, show: false };
+  };
   const plain = p => (p.bank ? p.bank + ' - ' : '') + p.name;
   const bankOf = n => S.banks.find(b => same(b.name, n)) || null;
   const stylesOf = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
@@ -39569,6 +39592,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         const c = carriesOf(r.carries);
         S.presets.push({ id: S.presets.length, name: String(r.name || ''), bank: bank.name, author: String(r.author || bank.author || ''), type: tidy(r.type) || '',
           styles: stylesOf(r.styles).map(tidy), note: String(r.note || ''), fv: +r.fv || 1, c, env: c[5] > 0, path: String(r.path || ''), mtime: +r.mtime || 0,
+          fx: String(r.fx || ''), bytes: +r.bytes || 0, carried: (r.carries && +r.carries.bytes) || 0,
           factory: !!r.factory, user: !r.factory });
         bank.n++;
       }
@@ -39701,7 +39725,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     if (S.style && !p.styles.some(s => same(s, S.style))) return false;
     if (S.author && p.author !== S.author) return false;
     if (S.favOnly && !isFav(p)) return false;
-    if (S.q) { const hay = (p.bank + ' ' + p.name + ' ' + p.type + ' ' + p.styles.join(' ') + ' ' + p.author + ' ' + p.note + (p.env ? ' environment env' : '')).toLowerCase();
+    if (S.q) { const hay = (p.bank + ' ' + p.name + ' ' + p.type + ' ' + p.styles.join(' ') + ' ' + p.author + ' ' + p.fx + ' ' + p.note + (p.env ? ' environment env' : '')).toLowerCase();
       for (const w of S.q.split(/\s+/)) if (w && !hay.includes(w)) return false; }
     return true;
   }
@@ -39754,11 +39778,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       <div class="kv">
         <span class="k">Type</span><span class="v">${esc(p.type || '—')}</span>
         <span class="k">Style</span><span class="v" title="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · ') || '—')}</span>
+        <span class="k">Effects</span><span class="v" title="${esc(p.fx)}">${esc(p.fx || 'None')}</span>
         <span class="k">Author</span><span class="v">${esc(p.author || '—')}</span>
         <span class="k">Bank</span><span class="v">${esc(p.bank)}</span>
-        <span class="k">Load</span><span class="v">${p.env ? 'A few seconds' : 'Instant'}</span>
+        <span class="k">Load</span><span class="v">${loadEst(p).txt}</span>
+        <span class="k">Size</span><span class="v">${fmtB(p.bytes)}</span>
       </div>
-      <div class="carries"><div class="k">Carries</div>${cl}</div>
+      <div class="carries"><div class="k">Carries${p.carried ? ` · ${fmtB(p.carried)} embedded` : ''}</div>${cl}</div>
       <div class="notes"><div class="k">Notes</div><div class="tp-notebox${p.user ? '' : ' ro'}" id="tp-note"${p.user ? ' contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note"' : ' data-ph="No notes"'}></div></div>
       <div class="acts"><button class="tp-btn ic${isFav(p) ? ' on' : ''}" id="tp-i-fav" title="Favourite">${HEART}</button><button class="tp-btn pri" id="tp-i-load">Load</button></div>`;
     const nb = $('tp-note'); nb.textContent = p.note || '';
@@ -39900,10 +39926,12 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function load(id, opts) {
     const p = S.presets[id]; if (!p) return;
     if (opts && opts.close) closeBrowser();
+    const est = loadEst(p); if (est.show) loadStart(p, est);
     if (!NF('loadPatchFile')) { window.onPatchLoaded(JSON.stringify({ name: p.name, bank: p.bank, author: p.author, type: p.type, styles: p.styles.join(','), note: p.note, fv: p.fv })); return; }   /* preview: no backend */
-    call('loadPatchFile', p.path).then(r => { if (isErr(r)) toast(errOf(r)); });
+    call('loadPatchFile', p.path).then(r => { if (isErr(r)) { loadDone(); toast(errOf(r)); } });
   }
   window.onPatchLoaded = function (meta) {
+    loadDone();
     setCurrent(meta);
     if (browserOpen()) { renderRows(); renderInsp(); } renderQuick();
     toast(S.cur.name ? `Loaded <span class="tp-bk">${esc(S.cur.bank)} - </span>${esc(S.cur.name)}` : 'Loaded');
@@ -39926,6 +39954,33 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     T(() => { const W = window.wtWaterfall; if (W && W.fetch) ['a', 'b', 'c', 'd'].forEach(o => W.fetch(o)); });
   }
 
+  /* ═══ THE LOADING OVERLAY ══════════════════════════════════════════════════════════════════════
+     Max: "greys the window while it loads" was the thing he rejected — so this shows the NAME and an
+     honest estimate, and it only appears for a preset heavy enough to be worth waiting for. The bar
+     is an ESTIMATE, and it says so by never claiming 100% until the load actually lands: it eases to
+     92% over the estimate and snaps when onPatchLoaded arrives. When the patcher can report real
+     progress, window.onPresetLoadProgress overrides it and the estimate steps aside. */
+  let ldT = null, ldStart = 0, ldEst = 1, ldReal = -1;
+  function loadStart(p, est) {
+    ldReal = -1; ldStart = performance.now(); ldEst = Math.max(200, est.ms);
+    $('tp-ld-k').textContent = p.env ? 'Loading environment' : 'Loading';
+    $('tp-ld-n').textContent = plain(p); $('tp-ld-bar').style.width = '0%'; $('tp-ld-p').textContent = '0%';
+    $('tp-load').classList.add('on');
+    clearInterval(ldT);
+    ldT = setInterval(() => {
+      const k = ldReal >= 0 ? ldReal : Math.min(0.92, (performance.now() - ldStart) / ldEst);
+      const pct = Math.round(k * 100);
+      $('tp-ld-bar').style.width = pct + '%'; $('tp-ld-p').textContent = pct + '%';
+    }, 40);
+  }
+  function loadDone() {
+    if (!$('tp-load').classList.contains('on')) return;
+    clearInterval(ldT); ldT = null;
+    $('tp-ld-bar').style.width = '100%'; $('tp-ld-p').textContent = '100%';
+    setTimeout(() => $('tp-load').classList.remove('on'), 160);
+  }
+  window.onPresetLoadProgress = v => { const n = +v; if (isFinite(n)) ldReal = Math.max(0, Math.min(1, n)); };
+
   /* ═══ SAVE — every field typed; Bank joins or creates; Type adds; Style chips + type-to-add ═══ */
   let svStyles = [];
   function openSave(from) {
@@ -39939,8 +39994,18 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
         <span class="k">Type</span><input type="text" class="tp-in" id="tp-sv-type" maxlength="20" placeholder="Type a type — new word adds one" value="${esc(type0)}">
         <span class="k">Style</span><div class="chp" id="tp-sv-style"></div>
+        <span class="k">Carries</span><div class="v" id="tp-sv-carries">Parameters only</div>
       </div>`,
       init: () => { renderSaveStyles();
+        /* what THIS patch is about to embed — the browser prices saved presets from their own
+           manifests, but the one being saved has no file yet. */
+        call('getCarries').then(j => {
+          const el = $('tp-sv-carries'); if (!el) return;
+          let o = null; try { o = JSON.parse(j || 'null'); } catch (e) {}
+          const c = carriesOf(o);
+          const words = c.map((n, i) => n ? `${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}` : '').filter(Boolean);
+          el.textContent = words.length ? words.join(' · ') : 'Parameters only';
+        });
         attachSuggest($('tp-sv-bank'), () => S.banks.filter(b => !b.factory).map(b => b.name), null, 'New bank');
         attachSuggest($('tp-sv-author'), () => [...new Set(S.presets.map(p => p.author).filter(Boolean))], null, null);
         attachSuggest($('tp-sv-type'), () => S.types, null, 'Add type'); },
@@ -39976,15 +40041,37 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       const a = $('tp-bk-author').value.trim(); if (a) S.author0 = a; closeSheet();
       call('createBank', w, a).then(r => { if (isErr(r)) { toast(errOf(r)); return; } S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created bank <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
   function importPack() { if (!NF('importPack')) { toast('Import needs the plugin'); return; } call('importPack').then(r => { if (isErr(r)) toast(errOf(r)); }); }
+  /* ═══ THE MANIFEST — one card, drawn the same for a pack coming IN and a bank going OUT ═══════
+     The mockup's rule: you see what is in the box before you say yes. Nothing is written to disk
+     until Import is clicked; the C++ has only READ the pack's headers to build this. */
+  function manifestHtml(o, foot) {
+    const c = carriesOf(o.carries), n = +o.presets || 0, envs = +o.environments || 0;
+    const rows = [`<div>${LIST}<b>${n}</b> preset${n === 1 ? '' : 's'}</div>`];
+    for (let i = 0; i < 5; i++) if (c[i]) rows.push(`<div>${CAR_GLYPH[i]}<b>${c[i]}</b> ${c[i] === 1 ? CAR_ONE[i] : CAR_NAME[i]}</div>`);
+    if (envs) rows.push(`<div class="node">${CAR_GLYPH[5]}<b>${envs}</b> environment${envs === 1 ? '' : 's'} · ${c[5]} nodes</div>`);
+    return `<div class="manifest"><div class="mn">${esc(o.name || 'Bank')}${o.author ? ` <span class="by">· ${esc(o.author)}</span>` : ''}</div>
+      <div class="ml">${rows.join('')}</div><div class="tot">${foot}</div></div>`;
+  }
+  /* the C++ has looked inside a chosen or dropped pack and is offering it */
+  window.onPackOffered = function (json) {
+    let o = null; try { o = JSON.parse(json || 'null'); } catch (e) {}
+    if (!o || !o.path) { toast('That pack could not be read'); return; }
+    sheet({ title: 'Import bank', ok: 'Import',
+      body: manifestHtml(o, `Every preset carries its own audio, so this bank plays on any machine · <b>${fmtB(+o.bytes || 0)}</b>`),
+      onOk: () => { closeSheet(); toast(`Installing ${esc(o.name)}…`);
+        call('installPack', o.path).then(r => { if (isErr(r)) toast(errOf(r)); }); } });
+  };
   window.onBankImported = r => { if (isErr(r)) { toast(errOf(r)); return; } const name = String(r); S.bank = name; S.sel = -1;
     rescan().then(() => { const bk = bankOf(name); if (!browserOpen()) openBrowser(); toast(`Imported <span class="tp-bk">${esc(name)} · </span>${bk ? bk.n : 0} preset${bk && bk.n === 1 ? '' : 's'}`); }); };
   function openExport(bk) {
-    const ps = S.presets.filter(p => same(p.bank, bk.name)); const a = [0, 0, 0, 0, 0]; let nodes = 0, envs = 0;
-    for (const p of ps) { for (let i = 0; i < 5; i++) a[i] += p.c[i]; nodes += p.c[5]; if (p.env) envs++; }
+    const ps = S.presets.filter(p => same(p.bank, bk.name));
+    const a = [0, 0, 0, 0, 0, 0]; let envs = 0, bytes = 0;
+    for (const p of ps) { for (let i = 0; i < 6; i++) a[i] += p.c[i]; if (p.env) envs++; bytes += p.bytes || 0; }
     const file = bk.name.replace(/\s+/g, '-') + '.terrainpack';
-    sheet({ title: 'Export bank', ok: 'Export', body: `<div class="manifest"><div class="mn">${esc(bk.name)}${bk.author ? ` <span class="by">· ${esc(bk.author)}</span>` : ''}</div>
-      <div class="ml"><div>${LIST}<b>${ps.length}</b> preset${ps.length === 1 ? '' : 's'}</div>${[0, 1, 2, 3, 4].map(i => `<div>${CAR_GLYPH[i]}<b>${a[i]}</b> ${a[i] === 1 ? CAR_ONE[i] : CAR_NAME[i]}</div>`).join('')}${envs ? `<div class="node">${CAR_GLYPH[5]}<b>${envs}</b> environment${envs === 1 ? '' : 's'} · ${nodes} nodes</div>` : ''}</div>
-      <div class="tot">Everything above goes into ${esc(file)}</div></div>`,
+    sheet({ title: 'Export bank', ok: 'Export',
+      body: manifestHtml({ name: bk.name, author: bk.author, presets: ps.length, environments: envs,
+                           carries: { wt: a[0], smp: a[1], ir: a[2], flow: a[3], lfo: a[4], nodes: a[5] } },
+                         `Everything above goes into ${esc(file)} · <b>${fmtB(bytes)}</b>`),
       onOk: () => { if (!ps.length) { toast('Nothing to export yet'); return; } closeSheet(); if (!NF('exportBank')) { toast('Export needs the plugin'); return; } call('exportBank', bk.name).then(r => { if (isErr(r)) toast(errOf(r)); }); } });
   }
   window.onBankExported = r => { if (isErr(r)) toast(errOf(r)); else toast(`Exported <span class="tp-bk">${esc(String(r).split('/').pop())}</span>`); };

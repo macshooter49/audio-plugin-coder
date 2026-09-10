@@ -965,6 +965,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     auto info = tw::bank::readJson (dir.getChildFile ("bank.json"));
                     if (! info.isObject()) { auto* o = new juce::DynamicObject(); o->setProperty ("name", bank); o->setProperty ("version", "1"); info = juce::var (o); }
                     juce::String err; const bool ok = tw::bank::exportPack (dir, info, f, err);
+                    if (ok) f.revealToUser();   // fb621 — Max: the folder pops up and SHOWS you the file
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onBankExported)window.onBankExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:" + err), true) + ");", nullptr);
                 });
@@ -983,6 +984,7 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     auto f = fc.getResult(); if (f == juce::File()) return;
                     if (f.getFileExtension() != ".terrain") f = f.withFileExtension ("terrain");
                     juce::String err; const bool ok = safe->audioProcessor.savePatchToFile (f, {}, err);
+                    if (ok) f.revealToUser();   // fb621
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onPresetExported)window.onPresetExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:" + err), true) + ");", nullptr);
                 });
@@ -1032,11 +1034,15 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                     auto f = fc.getResult(); if (f == juce::File()) return;
                     if (f.getFileExtension() != ".terrain") f = f.withFileExtension ("terrain");
                     const bool ok = src.copyFileTo (f);
+                    if (ok) f.revealToUser();   // fb621
                     if (safe->webView != nullptr)
                         safe->webView->evaluateJavascript ("if(window.onPresetExported)window.onPresetExported(" + juce::JSON::toString (juce::var (ok ? f.getFullPathName() : "error:could not write " + f.getFileName()), true) + ");", nullptr);
                 });
                 complete (juce::var ("ok"));
             })
+            // fb621 — IMPORT IS TWO STEPS NOW, as the signed-off mockup drew it: choose a pack, SEE
+            // what is inside it (presets, what they carry, how big), then say yes. Nothing is written
+            // until installPack. The drop path goes through the same two steps.
             .withNativeFunction ("importPack", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 auto chooser = std::make_shared<juce::FileChooser> ("Import a bank", juce::File::getSpecialLocation (juce::File::userDesktopDirectory), "*.terrainpack");
@@ -1046,12 +1052,28 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 {
                     if (safe == nullptr) return;
                     const auto f = fc.getResult(); if (! f.existsAsFile()) return;
-                    juce::File dir; juce::String err; const bool ok = tw::bank::importPack (f, TerrainAudioProcessor::banksUserRoot(), dir, err);
-                    if (safe->webView != nullptr)
-                        safe->webView->evaluateJavascript ("if(window.onBankImported)window.onBankImported(" + juce::JSON::toString (juce::var (ok ? dir.getFileName() : "error:" + err), true) + ");", nullptr);
+                    safe->offerPack (f);
                 });
                 complete (juce::var ("ok"));
             })
+            .withNativeFunction ("readPackManifest", [] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::var man; juce::String err;
+                const bool ok = args.size() > 0 && tw::bank::inspectPack (juce::File (args[0].toString()), man, err);
+                complete (juce::var (ok ? juce::JSON::toString (man, true) : "error:" + err));
+            })
+            .withNativeFunction ("installPack", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                juce::File dir; juce::String err;
+                const bool ok = args.size() > 0
+                                && tw::bank::importPack (juce::File (args[0].toString()), TerrainAudioProcessor::banksUserRoot(), dir, err);
+                if (webView != nullptr)
+                    webView->evaluateJavascript ("if(window.onBankImported)window.onBankImported("
+                                                 + juce::JSON::toString (juce::var (ok ? dir.getFileName() : "error:" + err), true) + ");", nullptr);
+                complete (juce::var (ok ? dir.getFullPathName() : "error:" + err));
+            })
+            .withNativeFunction ("getCarries", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { complete (juce::var (audioProcessor.getCarriesJson())); })   // fb621 — what the CURRENT patch carries, for the save sheet
             .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -14510,14 +14532,17 @@ void TerrainUiCore::afterPatchLoad()
     webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
 }
 
-void TerrainUiCore::importTerrainPack (const juce::File& f)
+void TerrainUiCore::importTerrainPack (const juce::File& f) { offerPack (f); }   // fb621 — drop = the same two steps
+
+// fb621 — show the box before it is opened: the manifest goes to the page, the page shows the sheet,
+// and NOTHING is written until installPack comes back.
+void TerrainUiCore::offerPack (const juce::File& f)
 {
-    // fb619 — a dropped .terrainpack installs as a bank under the user root
-    juce::File dir; juce::String err;
-    const bool ok = tw::bank::importPack (f, TerrainAudioProcessor::banksUserRoot(), dir, err);
-    if (! ok) { reportLoadError ("bank", err); return; }
+    juce::var man; juce::String err;
+    if (! tw::bank::inspectPack (f, man, err)) { reportLoadError ("bank", err); return; }
     if (webView != nullptr)
-        webView->evaluateJavascript ("if(window.onBankImported)window.onBankImported(" + juce::JSON::toString (juce::var (dir.getFileName()), true) + ");", nullptr);
+        webView->evaluateJavascript ("if(window.onPackOffered)window.onPackOffered("
+                                     + juce::JSON::toString (juce::var (juce::JSON::toString (man, true)), true) + ");", nullptr);
 }
 
 // fb135 — HOST-KEY BRIDGE: while a web inline editor is armed, keystrokes the host delivers

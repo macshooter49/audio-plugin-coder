@@ -173,6 +173,7 @@ inline juce::var scanRoot (const juce::File& root, bool factory, const Caps& cap
             if (b->getProperty ("author").toString().isEmpty() && p->getProperty ("author").toString().isNotEmpty())
                 b->setProperty ("author", p->getProperty ("author"));
             p->setProperty ("path",  f.getFullPathName());
+            p->setProperty ("bytes", (double) f.getSize());   // fb621 — the inspector's Size row
             p->setProperty ("mtime", (juce::int64) f.getLastModificationTime().toMilliseconds());
             p->setProperty ("factory", factory);
             presets.add (m); ++st.presets;
@@ -332,6 +333,66 @@ inline bool exportPack (const juce::File& dir, const juce::var& bankInfo, const 
     const bool ok = b.writeToStream (out, nullptr);
     out.flush(); tmp.deleteFile();
     if (! ok) { err = "could not write the pack"; return false; }
+    return true;
+}
+
+// ═══ fb621 — LOOK INSIDE A PACK WITHOUT INSTALLING IT ══════════════════════════════════════════
+//  Max's law from the mockup: the import sheet shows you WHAT IS IN THE BOX before you say yes —
+//  how many presets, what they carry, how big. Cheap because of the file layout: a .terrain leads
+//  with its manifest, so this reads a few hundred bytes per entry, not the whole preset.
+inline bool inspectPack (const juce::File& zipFile, juce::var& out, juce::String& err)
+{
+    juce::ZipFile zip (zipFile);
+    if (zip.getNumEntries() <= 0) { err = "not a readable .terrainpack"; return false; }
+    auto* o = new juce::DynamicObject();
+    o->setProperty ("name",   zipFile.getFileNameWithoutExtension());
+    o->setProperty ("author", juce::String());
+    juce::int64 bytes = 0; int count = 0, envs = 0;
+    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    for (int i = 0; i < zip.getNumEntries(); ++i)
+    {
+        const auto* e = zip.getEntry (i);
+        if (e == nullptr) continue;
+        const auto nm = e->filename;
+        if (nm.endsWithIgnoreCase ("pack.json"))
+        {
+            std::unique_ptr<juce::InputStream> s (zip.createStreamForEntry (i));
+            if (s != nullptr)
+                if (auto v = juce::JSON::parse (s->readEntireStreamAsString()); v.isObject())
+                {
+                    if (v.getProperty ("name", "").toString().isNotEmpty())   o->setProperty ("name",   v.getProperty ("name", ""));
+                    o->setProperty ("author",  v.getProperty ("author", ""));
+                    o->setProperty ("version", v.getProperty ("version", ""));
+                }
+            continue;
+        }
+        if (! nm.endsWithIgnoreCase (".terrain")) continue;
+        ++count; bytes += e->uncompressedSize;
+        std::unique_ptr<juce::InputStream> s (zip.createStreamForEntry (i));
+        if (s == nullptr) continue;
+        // the header only: "TRN1" · i32 manifest length · manifest
+        char magic[4] = {}; if (s->read (magic, 4) != 4 || std::memcmp (magic, kMagic, 4) != 0) continue;
+        const int mlen = s->readInt();
+        if (mlen <= 0 || mlen > 1 << 20) continue;
+        juce::MemoryBlock mb ((size_t) mlen);
+        if (s->read (mb.getData(), mlen) != mlen) continue;
+        const auto man = juce::JSON::parse (juce::String::fromUTF8 (static_cast<const char*> (mb.getData()), mlen));
+        if (! man.isObject()) continue;
+        const auto car = man.getProperty ("carries", juce::var());
+        auto n = [&car] (const char* k) { return (int) car.getProperty (k, 0); };
+        wt += n ("wt"); smp += n ("smp"); ir += n ("ir"); flow += n ("flow"); lfo += n ("lfo");
+        const int nd = n ("nodes"); nodes += nd; if (nd > 0) ++envs;
+    }
+    if (count == 0) { err = "the pack holds no presets"; return false; }
+    auto* c = new juce::DynamicObject();
+    c->setProperty ("wt", wt); c->setProperty ("smp", smp); c->setProperty ("ir", ir);
+    c->setProperty ("flow", flow); c->setProperty ("lfo", lfo); c->setProperty ("nodes", nodes);
+    o->setProperty ("carries", juce::var (c));
+    o->setProperty ("presets", count);
+    o->setProperty ("environments", envs);
+    o->setProperty ("bytes", (double) bytes);
+    o->setProperty ("path", zipFile.getFullPathName());
+    out = juce::var (o);
     return true;
 }
 

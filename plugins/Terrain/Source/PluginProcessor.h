@@ -625,6 +625,20 @@ public:
     juce::String getPresetCatalogJson() const;
     bool savePresetToBank (const juce::String& bank, const juce::String& metaJson, juce::File& out, juce::String& error);
 
+    // ═══ fb621 — THE ENVIRONMENT SEAT ══════════════════════════════════════════════════════════
+    //  There is no patcher yet. This is the hole it will drop into: one blob, round-tripped and
+    //  CLEARED like every other (fb618's law), counted by tiCarriesOf as a preset's `nodes`. The
+    //  day the patcher writes here, a preset becomes an ENVIRONMENT everywhere — the Env tag, the
+    //  browser's count, the load estimate and the loading bar — with no format change and no
+    //  second decision. Building the seat now is the cheap half; leaving it out is what would
+    //  force a format break later.
+    juce::String getPatcherJson() const;
+    void         setPatcherJson (const juce::String& j);
+
+    // fb621 — what the CURRENT patch carries, so the save sheet can price a preset before it has a
+    // file (the browser prices saved ones from their own manifests).
+    juce::String getCarriesJson() const;
+
     // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
     // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
     // setSynthModMatrix(). No-op for a blob that already carries version >= 3.
@@ -844,6 +858,9 @@ public:
     //  is exactly the contract the editor already used.
     //  Returns the number of slots it actually decoded.
     int          restoreSampleSlotsFromState();
+    // fb621 — one authority for the miss log, so a restore path outside that loop (a factory
+    // wavetable re-baked since the save, an asset that will not decode) can say so the same way.
+    void         noteRestoreMiss (const juce::String& slot, const juce::String& path, const char* why);
     // A MISS MUST NOT BE SILENT (it used to be `continue`). Every slot whose stored path/blob did
     // not produce audio is recorded here and published as JSON for the UI:
     //   {"n":<total>,"misses":[{"slot":"osc A","path":"mem:kick.wav","why":"dropped-bytes-not-embedded"}, …]}
@@ -1038,6 +1055,7 @@ public:
     bool          isConvIRUser         (int inst = 1) const { return convIRUser_[(size_t) convSlot (inst)]; }
     juce::String  getConvIRRawJson     (int inst = 1) const;                  // fb311 — {name,n,L,R} (base64 float) for embedding in a preset
     void          setConvIRRawFromJson (const juce::String& json, int inst = 1);   // fb311 — restore the EXACT one-shot from a preset
+    void          setConvIRAsset       (const juce::String& b64,  int inst = 1);   // fb621 — the FLAC envelope, resampled to the live rate
     juce::String      getArpFeedJson() const;                           // playhead/fire/wave snapshot (rAF-polled)
     juce::String      getChopFeedJson() const;                          // fb106: Ribbon playhead/slice/wet snapshot
     void              requestChopWipe() noexcept { chopWipeReq_.store (true); }   // Wipe button → audio thread
@@ -2296,6 +2314,23 @@ private:
     std::array<tw::SampleLoader, 4>           oscSampleLoaders_;
     std::array<juce::String, 4>               cachedOscPayloads_;
     std::array<juce::String, 4>               oscSourcePaths_;
+    // ═══ fb621 — THE ASSET CACHE ═══════════════════════════════════════════════════════════════
+    //  getStateInformation runs on EVERY host project save. Encoding megabytes of FLAC there would
+    //  turn a ⌘S into a stall, so every asset is encoded ONCE and kept, keyed by the audio's own
+    //  identity: an osc/layer buffer is REPLACED (never mutated), so its pointer is an exact key;
+    //  importedPcm_ and the IR vectors are assigned in place, so they get a content hash. A save
+    //  then copies a string. 🚨 The cache is also what makes save → load → save BYTE-IDENTICAL
+    //  (Tests/preset_roundtrip_cert.cpp): a load stores the string it decoded, so the next save
+    //  writes those exact bytes back instead of re-encoding a decoded buffer into a near-miss.
+    std::array<juce::String, 4>               assetB64Osc_ {}, assetB64Layer_ {}, assetB64Wt_ {};
+    std::array<juce::String, (size_t) 6>      assetB64Ir_ {};
+    std::array<juce::uint64, 4>               assetKeyOsc_ {}, assetKeyLayer_ {}, assetKeyWt_ {};
+    std::array<juce::uint64, (size_t) 6>      assetKeyIr_ {};
+    //  Where a wavetable import CAME FROM. Before fb621 the only identity a loaded table had was
+    //  its display name, so a factory table could never be referenced by path and every preset
+    //  embedded its own 1.4 MB copy of shipped content.
+    std::array<juce::String, 4>               importPath_ {};
+    juce::String                              patcherJson_;   // fb621 — the environment seat
     std::array<std::array<juce::String, 2>, 4> blendSrcPaths_;   // BLEND source pair (A/B) per osc
 
     // Grain engines (one per channel)
