@@ -682,6 +682,51 @@ window.__bootPage=+((location.search.match(/[?&]page=([1-4])/)||[])[1]||0);   /*
   W.addEventListener('resize',kick);
   setTimeout(apply,1300); setTimeout(apply,2600); setTimeout(apply,5000);
 })();
+
+/* ═══ fb623 — THE PRESET PILLS REMEMBER THEIR NAMES ════════════════════════════════════════════
+   Max: "whenever I have a preset saved such as Deep Passage on my phaser, and I make another
+   preset and then go back to that old one, it should still say Deep Passage in my flanger. Right
+   now it says Init — it's gonna get people confused: oh, what preset is this again? — and then
+   they're gonna have to re-save it."
+
+   Every card and every FX device shows the name of the preset it is playing (the ‹ Deep Passage ›
+   walker in its header). That name was pure JS: the SOUND was saved into the patch, the WORD was
+   not, so a reloaded patch sounded right under a pill that said Init. This is the one map that
+   fixes both surfaces at once — keyed by card id ('arp', 'gli', 'rbn', 'chop', 'lfo') and by FX
+   device slot ('fxpha1'), persisted in the patch beside macroNames, and cleared with it, so a
+   preset that never had a name for a card shows Init again rather than inheriting the last one.
+
+   It is defined HERE, above everything, because the rack reads it at ~12k and the flow cards at
+   ~33k — both long before the preset module at the end of the file exists. */
+(function(){
+  var map = {}, listeners = {}, pushT = null;
+  function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
+  function push(){
+    if (window.__tiRestoring) return;   /* a restore must never write back the state it is replacing */
+    clearTimeout(pushT);
+    pushT = setTimeout(function(){ var f = NF('setPresetPills'); if (f) { try { f(JSON.stringify(map)); } catch(e){} } }, 220);
+  }
+  window.__tiPills = {
+    get: function(k){ return map[k] || null; },
+    set: function(k, name){ name = String(name || ''); if (!k || map[k] === name) return;
+      if (name && name !== 'Init') map[k] = name; else delete map[k];   /* Init is the ABSENCE of a name, not a name */
+      push(); },
+    on: function(k, fn){ (listeners[k] = listeners[k] || []).push(fn); },
+    /* absent means Init — the same law the blobs follow (fb618) */
+    apply: function(){ for (var k in listeners) { var nm = map[k] || 'Init';
+      for (var i = 0; i < listeners[k].length; i++) { try { listeners[k][i](nm); } catch(e){} } } },
+    pull: function(cb){
+      var f = NF('getPresetPills');
+      if (!f) { if (cb) cb(); return; }
+      try { Promise.resolve(f()).then(function(j){
+        try { var o = JSON.parse(String(j || '{}')); map = (o && typeof o === 'object') ? o : {}; } catch(e){ map = {}; }
+        try { window.__tiPills.apply(); } catch(e){}
+        if (cb) cb();
+      }).catch(function(){ if (cb) cb(); }); } catch(e){ if (cb) cb(); }
+    }
+  };
+  setTimeout(function(){ try { window.__tiPills.pull(); } catch(e){} }, 900);   /* the boot read, once the bridge is up */
+})();
 if(window.__cardOnly)document.documentElement.className+=' card-only';
 /* fb147 — CLEAN ENTRANCE (Max: "it kind of forges itself... ugly"): the page builds at
    opacity 0 and fades in as ONE finished piece after load + two frames. The failsafe
@@ -1118,11 +1163,18 @@ body {
    purple with the selected line's words in purple. One font. No all caps. No new furniture. */
 
 /* the header's + ‹ › lose their boxes; the glyphs stay where they are */
-.preset-nav-btn, .header-left .preset-save-btn { border-color: transparent; }
-.preset-nav-btn:hover, .header-left .preset-save-btn:hover { border-color: var(--edge-soft); color: var(--text-primary); background: transparent; }
+/* fb623 — NO BOXES on the header's + ‹ ›. fb622 moved the cluster into .header-preset and this
+   selector still said .header-left, so the + quietly grew its border back. The glyph brightens on
+   hover and nothing draws a frame around it — the fb616 law, and Max caught it by eye. */
+.header-preset .preset-nav-btn, .header-preset .preset-save-btn {
+  border-color: transparent !important; background: transparent !important; }
+.header-preset .preset-nav-btn:hover, .header-preset .preset-save-btn:hover {
+  border-color: transparent !important; background: transparent !important; color: var(--purple-400) !important; }
 .preset-name { min-width: 0; max-width: 236px; padding: 0 6px; height: 28px; line-height: 28px; border-radius: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .preset-name:hover { color: var(--purple-400); }
-.preset-name.open { box-shadow: inset 0 0 0 1px var(--purple-400); color: var(--on-fg); }
+/* fb623 — an OPEN quick menu is said by the WORDS going purple, never by a box around them. Max:
+   "there's also a purple box around it, I don't like that purple box selector." */
+.preset-name.open { color: var(--purple-400); }
 
 /* the glass — .pmenu's coat, worn by the browser too (fb613: flat wash for the sheets, the blur is paid per frame) */
 .tp-glass { background: var(--menu-bg); -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4); }
@@ -2951,10 +3003,14 @@ body {
   border-color: rgba(139,92,246,0.4);
   color: var(--purple-500);
 }
+/* fb623 — Max: "get rid of that fill and have that purple outline with the white in the middle,
+   the same code we did for buttons like Load." That is the four-mode-tile rule (fb118) which the
+   browser's chips, its Load button and the header pills now all share: an outline, transparent
+   inside, white letters. One selection grammar for every button in the plugin. */
 .mod-btn.active {
-  background: var(--purple-500);
-  border-color: var(--purple-500);
-  color: #fff;
+  background: transparent;
+  border-color: var(--purple-400);
+  color: var(--on-fg);
 }
 .mod-btn.has-routes {
   border-color: var(--purple-500);
@@ -10243,6 +10299,9 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               o[k]=reIdDeep(o[k],base,pre); return o; }
             return o;
           }
+          /* fb623 — a device's pill name is keyed by its SLOT (core + instance), not by its type:
+             two phasers are two different pills, and the name has to come back onto the right one. */
+          function pillKey(core,inst){ return 'fx'+core+(inst||1); }
           function makeInst(core,inst){
             var t=null; for(var i=0;i<DEV_TEMPLATES.length;i++) if(DEV_TEMPLATES[i].core===core) t=DEV_TEMPLATES[i];
             if(!t) return null;
@@ -10250,6 +10309,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             var base=FX_PREFIX[core], pre=instPrefix(core,inst);
             if(pre!==base) reIdDeep(c,base,pre);
             c.inst=inst; c.pfx=pre;
+            try{ var pnm=window.__tiPills&&window.__tiPills.get(pillKey(core,inst)); if(pnm) c.preset=pnm; }catch(e){}   /* fb623 — the patch remembers what this slot was playing */
             c.actP=pre+'ACTIVE'; c.rankP=pre+'RANK';
             c.send=false;                      // fb414 — INSERT by default: every old project loads identical
             try{ fx4ApplyType(c,c.type); }catch(e){}   // fb437 — Widen hero / EQ Trait wear the Type's name from birth
@@ -12127,7 +12187,8 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var sw=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
             var dv=rack.querySelectorAll('.fxr-dev'); for(var s=0;s<dv.length;s++){ if(sw[s]){ dv[s].classList.add('swapped'); var ac=dv[s].querySelector('[data-act="swap"]'); if(ac)ac.classList.add('act'); } }
           }catch(e){} }
-          function setPillName(idx,nm){ try{ var dv=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'); if(dv){ var pn=dv.querySelector('.fxr-pname'); if(pn)pn.textContent=nm; } if(DEVS[idx])DEVS[idx].preset=nm; }catch(e){} }
+          function setPillName(idx,nm){ try{ var _d=DEVS[idx]; if(_d&&window.__tiPills) window.__tiPills.set(pillKey(_d.core,_d.inst),nm); }catch(e){}   /* fb623 */
+            try{ var dv=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'); if(dv){ var pn=dv.querySelector('.fxr-pname'); if(pn)pn.textContent=nm; } if(DEVS[idx])DEVS[idx].preset=nm; }catch(e){} }
           function rvbCollect(d,name){ var o={ name:name, k:d.knobs.map(function(x){return Math.round(x.v);}),
             d1:d.back.d1.v, d2:d.back.d2.v, bk:d.back.knobs.map(function(x){return Math.round(x[1]);}), pl:d.pills.map(function(p){return p.on?1:0;}) };
             /* fb441 — the Equalizer's free bells + per-band Q ride along: a preset without them is not the sound you saved */
@@ -12155,7 +12216,9 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             if(p.crv){ var sCrv=NFX('setDistortionCurves'); if(sCrv){ try{ sCrv(p.crv); }catch(e){} } }
             if(p.tblSrc!=null){ var sT2=NFX('setDstTableSrc'); if(sT2){ try{ sT2(p.tblSrc); }catch(e){} } }
             if((p.crv||p.tblSrc!=null)&&window.__crvPull){ try{ window.__crvPull(); }catch(e){} }   // card refreshes even if closed at apply time
-            d.preset=p.name||d.preset; reRenderKeepSwap();
+            d.preset=p.name||d.preset;
+            try{ if(window.__tiPills) window.__tiPills.set(pillKey(d.core,d.inst),d.preset); }catch(e){}   /* fb623 — applying a device preset names the slot */
+            reRenderKeepSwap();
           }catch(e){} }
           var rvbMenu=null, rvbUserCache={};
           function closeRvbMenu(){ if(rvbMenu){ try{ rvbMenu.remove(); }catch(e){} rvbMenu=null; document.removeEventListener('pointerdown',rvbOutside,true);
@@ -33578,6 +33641,11 @@ restoreThemeFromBackend();
           +'<span class="pa" title="Next preset">›</span></span>');
         h.insertBefore(ctl,h.querySelector('.mix'));
         var pas=ctl.querySelectorAll('.pa'), pn=ctl.querySelector('.pn');
+        /* fb623 — this card's pill name lives in the patch now. Seed from whatever is loaded, and
+           register so a preset load can push the new name straight onto the pill. */
+        try{ var pv0=window.__tiPills&&window.__tiPills.get(cfg.id); if(pv0){ curName=pv0; pn.textContent=pv0; } }catch(e){}
+        try{ if(window.__tiPills) window.__tiPills.on(cfg.id,function(nm){ curName=nm; pn.textContent=nm; }); }catch(e){}
+        function pillIs(nm){ try{ if(window.__tiPills) window.__tiPills.set(cfg.id,nm); }catch(e){} }
         ctl.addEventListener('pointerdown',function(e){ e.stopPropagation(); });
         function mergeV(){ var o={},i,k; for(k in cfg.DEF)o[k]=cfg.DEF[k];
           for(i=0;i<arguments.length;i++){ var a=arguments[i]; if(a)for(k in a)o[k]=a[k]; } return o; }
@@ -33598,7 +33666,7 @@ restoreThemeFromBackend();
             if(p.slots)for(var n in p.slots){ var sv=p.slots[n];
               st.slots[n]=(typeof sv==='string')?sv:mkSlot(p,sv); } }
           cfg.sc.setState(st);
-          curName=p.name; pn.textContent=p.name; }
+          curName=p.name; pn.textContent=p.name; pillIs(p.name); }
         function allP(){ return cfg.factory.concat(user); }
         function step(d){ var L=allP(); if(!L.length)return; var i=0,j;
           for(j=0;j<L.length;j++)if(L[j].name===curName){ i=j; break; }
@@ -33638,7 +33706,7 @@ restoreThemeFromBackend();
         var saveArmed=false;
         function doSave(nm,payload){ saveArmed=false;
           if(saveFn){ try{ saveFn(cfg.id,nm,JSON.stringify(payload||collect(nm))); }catch(e){} }
-          curName=nm; pn.textContent=nm;
+          curName=nm; pn.textContent=nm; pillIs(nm);
           refresh(function(){ if(menu){ closeMenu(); buildMenu(); } }); }
         function beginSaveInput(rowEl){
           if(rowEl.querySelector('input'))return;
@@ -33691,7 +33759,7 @@ restoreThemeFromBackend();
               try{ saveFn(cfg.id,nm,JSON.stringify(o)); }catch(e){}
               var wasUser=false; for(var i=0;i<user.length;i++)if(user[i].name===old)wasUser=true;
               if(wasUser&&delFn){ try{ delFn(cfg.id,old); }catch(e2){} }   // true rename for user presets
-              curName=nm; pn.textContent=nm; refresh(); } }
+              curName=nm; pn.textContent=nm; pillIs(nm); refresh(); } }
           inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
             if(ev.key==='Enter')done(true); else if(ev.key==='Escape')done(false); });
           inp.addEventListener('pointerdown',function(ev){ ev.stopPropagation(); }); }
@@ -33730,7 +33798,7 @@ restoreThemeFromBackend();
                       var np={}; for(var k2 in p)np[k2]=p[k2]; np.name=nm;
                       try{ saveFn(cfg.id,nm,JSON.stringify(np)); }catch(e2){}
                       if(delFn){ try{ delFn(cfg.id,nm0); }catch(e3){} }
-                      if(curName===nm0){ curName=nm; pn.textContent=nm; }
+                      if(curName===nm0){ curName=nm; pn.textContent=nm; pillIs(nm); }
                       refresh(function(){ closeMenu(); buildMenu(); }); }
                     else nmEl.textContent=nm0; }
                   inp.addEventListener('keydown',function(ev){ ev.stopPropagation();
@@ -39682,8 +39750,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     menuAt(r.left, r.bottom + 4, `<div class="ps">${S.cur.name ? esc(plain(S.cur)) : 'Init'}</div>
       <div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
       <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
-      <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`,
-      a => { if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportCurrent(); });
+      <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>
+      <div class="ps">Start over</div>
+      <div class="pi" data-a="init"><span class="nm">Init preset</span></div>`,
+      a => { if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportCurrent(); if (a === 'init') initPatch(); });
   }
   function saveCurrent() {
     const p = S.curId >= 0 ? S.presets[S.curId] : null;
@@ -39692,6 +39762,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     call('savePresetToBank', p.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; } setCurrent(meta); rescan().then(() => toast(`Saved <span class="tp-bk">${esc(p.bank)} - </span>${esc(p.name)}`)); });
   }
   function exportCurrent() { if (!NF('exportPreset')) { toast('Export needs the plugin'); return; } call('exportPreset').then(r => { if (isErr(r)) toast(errOf(r)); }); }
+  /* fb623 — a blank slate to build the next one on. The C++ replays the chunk a brand-new instance
+     produced, so this is Init by definition rather than by a list of things to remember to reset,
+     and it comes back through onPatchLoaded like any other load — same law, same re-seed. */
+  function initPatch() {
+    if (!NF('initPatch')) { setCurrent({}); toast('Init'); return; }
+    call('initPatch').then(r => { if (isErr(r)) toast(errOf(r)); else toast('Init — a clean patch to build on'); });
+  }
   window.onPresetExported = r => { if (isErr(r)) toast(errOf(r)); else toast(`Exported <span class="tp-bk">${esc(String(r).split('/').pop())}</span>`); };
   document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && String(e.key).toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) openSave(); else saveCurrent(); } });
 
@@ -40010,7 +40087,14 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     T(() => window.__tiModRestoreStrict ? window.__tiModRestoreStrict() : (window.__tiModRestore && window.__tiModRestore()));
     T(() => window.__tiPullArpLanes && window.__tiPullArpLanes());
     T(() => (window.__tiCardPulls || []).forEach(f => { try { f(); } catch (e) {} }));
-    T(() => window.__fxrRestoreChain && window.__fxrRestoreChain());   /* fb622 — REBUILD from the parameters, not a redraw of the stale list */
+    /* fb623 — the pill names first, THEN the rack: makeInst reads the map as it rebuilds each
+       device, so a rack rebuilt before the names arrive would show Init under every one of them.
+       __tiPills.pull also repaints the flow cards (absent means Init — the fb618 law, applied to
+       words instead of blobs). */
+    T(() => {
+      const rebuildRack = () => { try { window.__fxrRestoreChain && window.__fxrRestoreChain(); } catch (e) {} };
+      if (window.__tiPills) window.__tiPills.pull(rebuildRack); else rebuildRack();
+    });
     T(() => { const W = window.wtWaterfall; if (W && W.restoreView) W.restoreView(true); });   /* fb622 — waterfall vs scope is part of the patch */
     T(() => window.__tiRestoreNoiseSel && window.__tiRestoreNoiseSel());
     T(() => typeof syncDeepStateFromCpp === 'function' && syncDeepStateFromCpp());

@@ -204,7 +204,7 @@ const STUB = (MUT) => {
   await wait (60); await p.click ('#tp-sh-ok'); await wait (350);
   const sv = await calls ('savePresetToBank'); let svm = {}; try { svm = JSON.parse (sv[0].args[1]); } catch (e) {}
   const h8 = await header();
-  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Pad' && /Wide/.test (svm.styles) && h8 === 'User - Gate Pad',
+  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Pad' && /Wide/.test (svm.styles) && h8 === 'User - Gate Pad',
     '[8] SAVE AS — the + menu (Save off on a factory preset) → the sheet → savePresetToBank(\'User\', meta) → the header is the saved name',
     `menu ${menuRows.join (' / ')} · sheet ${sheetOn} · native ×${sv.length} bank ${sv[0] ? sv[0].args[0] : '—'} meta ${JSON.stringify (svm)} · header "${h8}"`);
 

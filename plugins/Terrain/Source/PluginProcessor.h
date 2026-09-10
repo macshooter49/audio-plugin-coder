@@ -1202,6 +1202,18 @@ public:
     juce::String getMidiMapJson() const;
     // fb564 — MACRO NAMES ("Cutoff", not "Macro 3"): a JSON array of eight strings owned by the page,
     // persisted in the state as macroNames. Message thread only (the natives and the state).
+    // fb623 — THE PRESET PILLS. One map of "surface → the preset name showing on it", for every
+    // flow card and every FX device slot. The SOUND was always saved; the WORD was not, so a
+    // reloaded patch played the right phaser under a pill that said Init.
+    void         setPresetPillsJson (const juce::String& json);
+    juce::String getPresetPillsJson() const;
+
+    // fb623 — INIT. Make this instance identical to a brand-new one, without touching the window
+    // the user is looking at. Snapshotting the virgin chunk at construction is what makes that
+    // exact: a fresh instance IS the definition, so there is no list of things to remember to
+    // reset — and no atomic anybody forgot about.
+    void initPatch();
+
     void setMacroNamesJson (const juce::String& json);
     juce::String getMacroNamesJson() const;
     // fb564 — COPY / PASTE AN OSCILLATOR: the imported wavetable goes across with the parameters
@@ -2023,6 +2035,8 @@ private:
     std::shared_ptr<std::atomic<bool>> ioAlive_ { std::make_shared<std::atomic<bool>> (true) };
     std::atomic<juce::uint32> wtBuildReq_[4] { {0}, {0}, {0}, {0} };   // fb610 — newest-request ticket per osc; a queued bake for a table the user has stepped past returns without working
     juce::String       importName_[4];                                     // display/persist name (file/table) per osc
+    juce::String       presetPillsJson_;                                   // fb623 — card/device pill names
+    juce::MemoryBlock  virginChunk_;                                       // fb623 — what a brand-new instance is
     juce::String       macroNamesJson_;                                    // fb564 — ["Cutoff","",…] as the page wrote it
     mutable juce::CriticalSection macroNamesLock_;
     bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)

@@ -541,6 +541,12 @@ TerrainAudioProcessor::TerrainAudioProcessor()
    #endif
 
     loadImportsRegistry();   // IMPORTS (fb60) — restore referenced files/folders from the app-data JSON
+
+    // fb623 — WHAT A BRAND-NEW INSTANCE IS. Taken here, at the end of construction, before any host
+    // blob or preset can touch anything: this IS Init, and initPatch() replays it. Storing the
+    // answer beats maintaining a list of things to reset — a list would silently fall behind every
+    // atomic added after it. ~180 KB, once per instance.
+    getStateInformation (virginChunk_);
 }
 
 TerrainAudioProcessor::~TerrainAudioProcessor()
@@ -14514,6 +14520,37 @@ juce::String TerrainAudioProcessor::getMidiMapJson() const
     }
     return out + "}";
 }
+void TerrainAudioProcessor::setPresetPillsJson (const juce::String& json)
+{
+    const juce::ScopedLock sl (macroNamesLock_);   // the same message-thread blob lock
+    presetPillsJson_ = json.trim();
+}
+
+juce::String TerrainAudioProcessor::getPresetPillsJson() const
+{
+    const juce::ScopedLock sl (macroNamesLock_);
+    return presetPillsJson_;
+}
+
+// ═══ fb623 — INIT ══════════════════════════════════════════════════════════════════════════════
+//  Max: "have the plus button give us an init preset… that brings us back to a new preset that I
+//  can save, so I can keep saving presets." The obvious implementation — walk every parameter and
+//  write its default — is the wrong one: it would miss every non-APVTS atomic (the XY auto state,
+//  the section enables, the tape flags, the view modes) and each new one added later would silently
+//  stop being reset. A brand-new instance is the DEFINITION of Init, so that is what gets stored,
+//  once, at construction, and replayed here. The window size and the page the user is looking at
+//  are not part of the patch and survive.
+void TerrainAudioProcessor::initPatch()
+{
+    if (virginChunk_.getSize() == 0) return;
+    const int w = editorWidth.load(), pg = uiPage.load();
+    resetPatchState();
+    setStateInformation (virginChunk_.getData(), (int) virginChunk_.getSize());
+    editorWidth.store (w); uiPage.store (pg);
+    setPresetMeta ({});                                   // the header goes back to Init
+    presetPillsJson_.clear();                             // and so does every card and device pill
+}
+
 void TerrainAudioProcessor::setMacroNamesJson (const juce::String& json)
 {
     const juce::ScopedLock sl (macroNamesLock_);
@@ -15815,7 +15852,9 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.setProperty("modStateJson", modStateJson, nullptr);
     else state.removeProperty ("modStateJson", nullptr);   // fb618
     { const juce::String mm = getMidiMapJson(); if (mm != "{}") state.setProperty ("midiCcMap", mm, nullptr); else state.removeProperty ("midiCcMap", nullptr); }   // fb563 (4) · fb618
-    { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); else state.removeProperty ("macroNames", nullptr); }   // fb564 · fb618
+    { const juce::String mn = getMacroNamesJson(); if (mn.isNotEmpty() && mn != "[]") state.setProperty ("macroNames", mn, nullptr); else state.removeProperty ("macroNames", nullptr); }
+    // fb623 — the pill names ride with the sound they name
+    { const juce::String pp = getPresetPillsJson(); if (pp.isNotEmpty() && pp != "{}") state.setProperty ("presetPills", pp, nullptr); else state.removeProperty ("presetPills", nullptr); }   // fb564 · fb618
     {
         const juce::ScopedLock sl (synModLock);
         if (synModJson.isNotEmpty())
@@ -16851,6 +16890,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             for (int o = 0; o < 4; ++o) wt3dView_[o] = (bool) newState.getProperty ("wt3dView" + juce::String (o), false);
             setMidiMapJson (newState.getProperty ("midiCcMap", "").toString());   // fb563 (4) — empty = no bindings
             setMacroNamesJson (newState.getProperty ("macroNames", "").toString());   // fb564 — empty = the eight defaults
+            setPresetPillsJson (newState.getProperty ("presetPills", "").toString());   // fb623 — absent = every pill reads Init
             modStateJson = newState.getProperty("modStateJson", "").toString();
             if (modStateJson.isNotEmpty())
                 modulationEngine.updateConfig(ModulationEngine::parseJSON(modStateJson));
@@ -17959,6 +17999,7 @@ void TerrainAudioProcessor::clearPatchBlobs()
     modulationEngine.updateConfig (ModulationEngine::Config{});   // the pair loadPreset already uses
     setMidiMapJson ({});                                      // the 128 CC bindings
     setMacroNamesJson ({});                                   // the eight default names
+    setPresetPillsJson ({});                                  // fb623 — absent means every pill reads Init
     {
         const juce::ScopedLock sl (dynEnvLock_);
         for (auto& s : dynEnvShapes_) s = DynEnvShape();

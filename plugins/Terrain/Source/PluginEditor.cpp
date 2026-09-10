@@ -1074,6 +1074,17 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
             })
             .withNativeFunction ("getCarries", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
             { complete (juce::var (audioProcessor.getCarriesJson())); })   // fb621 — what the CURRENT patch carries, for the save sheet
+            // fb623 — the pill names every card and FX device is showing, and the Init that clears them
+            .withNativeFunction ("getPresetPills", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { complete (juce::var (audioProcessor.getPresetPillsJson())); })
+            .withNativeFunction ("setPresetPills", [this] (const juce::Array<juce::var>& args, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            { if (args.size() > 0) audioProcessor.setPresetPillsJson (args[0].toString()); complete (juce::var ("ok")); })
+            .withNativeFunction ("initPatch", [this] (const juce::Array<juce::var>&, juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                audioProcessor.initPatch();
+                afterPatchLoad();   // the same law as every other load: the C++ pushes, then the page re-seeds
+                complete (juce::var ("ok"));
+            })
             .withNativeFunction("getSynthMod", [this](const juce::Array<juce::var>&,
                                                        juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
