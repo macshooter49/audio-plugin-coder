@@ -1022,7 +1022,12 @@ body {
    whatever it holds IS the header's colour. While the synth page is up we make that the synth
    page's own --bg-main, and the seam at y=44 disappears because both sides are the same literal.
    Scoped to .ti-syn-open so the front page keeps fb271's deliberate --bg-surface slack band. */
-body.ti-syn-open #plugin { background: var(--bg-main); }
+body.ti-syn-open #plugin {
+  /* fb630 — the synth page's own ground, vignette included, painted ONCE across header and page.
+     The ellipse now centres on the window's top edge instead of the page's, which is the only way
+     the header can carry the same paint rather than a copy of it. */
+  background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
+}
 /* AND WHEN THE BROWSER IS UP, the header wears the browser's coat — the same --menu-bg and the same
    blur(20px) saturate(1.4) that .tp-glass uses, so the bar and the sheet below it are one material.
    ⚠️ Keyed on tp-glassup, NOT tp-browsing: tp-browsing is also true for the quick menu and the save
@@ -1039,7 +1044,10 @@ html.tp-glassup #header {
   gap: 8px;
 }
 
-/* fb629 — THE CONSCIOUSNESS-THROUGH-SOUND MARK. Two inline SVGs, ~6.3 KB for the pair, replacing a
+/* fb630 — THE MARK IS PARKED. Max: "I actually want to see what it looks like with no logo." The
+   header carries the wordmark alone; the SVGs and their generator live in Design/mark/ and the rules
+   below stay so it drops back in with one pasted line (see Design/mark/README.md).
+   fb629 — THE CONSCIOUSNESS-THROUGH-SOUND MARK. Two inline SVGs, ~6.3 KB for the pair, replacing a
    25 KB base64 PNG. The box HUGS THE GLYPH (width:auto, and each svg's viewBox is cropped to its own
    ink) so .header-left's 8px flex gap measures from the back of the head to the T of TERRAIN — the
    same 8px of air the old mark had. Height 34 in a 44px bar: the old PNG sat in a 38px box but its
@@ -4671,6 +4679,9 @@ html.card-only .ti-popcard{left:0!important;top:0!important;border-radius:0!impo
   display: flex; flex-direction: column;   /* fb272 — realize the intended .ti-syn-page flex:1 fill; the panel was never flex, so the grid sat at auto-height and left ~30px dead space at the bottom */
 }
 #syn-panel.hidden { display: none; }
+/* fb630 — under the synth view the panel paints nothing: #plugin owns the ground (fb497's cover still
+   holds — #hero/#controls/#footer are visibility:hidden, so nothing of the front page shows through). */
+body.ti-syn-open #syn-panel { background: transparent; }
 /* fb497 — THE COVERED PAGE. #syn-panel is opaque and spans top:44px→bottom, so while it is open
    #hero, #controls and #footer are behind it with not one pixel showing — and were still being
    styled, laid out, painted, layerized and rastered every frame. Hiding them changes NOTHING on
@@ -4715,7 +4726,13 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .ti-syn-page {
   flex: 1; padding: 12px 14px 6px;   /* fb272 — bottom pad 12→6: the grown FX/voice boxes sit closer to the (thinner) capture strip, less dead space */
   display: grid; grid-template-rows: 140px 140px 96px 1fr; gap: 12px;   /* fb272 — row-4 (FX rack + voice column) = 1fr: absorbs all remaining height so devices/macros/voice column fill to the bottom (no dead space) and stay filled at every window size (resize-robust — Always/Scaled can't clip since the grid fills the panel by construction) */
-  background: radial-gradient(ellipse at top, rgba(139,92,246,0.04), transparent 60%), var(--bg-main);
+  /* fb630 — the ground is painted by #plugin now (see body.ti-syn-open #plugin). This element used to
+     carry var(--bg-main) PLUS a 4% purple radial vignette whose brightest point sat at (410,44) —
+     the exact seam under the header — so the header read "slightly darker" than the page no matter
+     what flat colour it wore. Max: "take the exact colour, not a fake replica." A gradient cannot be
+     replicated across two boxes; it can only be painted ONCE, so it moved to #plugin, which spans
+     0→656 and paints one continuous ellipse under the header and the page alike. */
+  background: transparent;
 }
 
 /* ── device card ── */
@@ -5176,6 +5193,18 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .knob-ring .kr-v   { fill: none; stroke: var(--syn-arc); stroke-width: 2; stroke-linecap: round; }
 #syn-panel .knob-ring .kr-n   { fill: var(--syn-arc); opacity: .5; display: none; }
 #syn-panel .knob-ring.kr-bip .kr-n { display: block; }
+/* fb630 — THE VALUE LIVES INSIDE THE RING, the way the FX rack's dials already do. Max: "take what we
+   already did for the effect rack cards, the numbers how they're already in there, and just put them
+   inside all of the engines." Same face: SF Pro 300, --text-secondary, tabular digits, centred. The
+   font-size is set per string by JS with the rack's own law scaled to this 24px ring (≤3 chars 7.5px,
+   4 → 6.5, 5 → 5.8) so the text FITS BY CONSTRUCTION; the gate then measures every glyph box against
+   the circle. WT Pos is a stacked fraction (frame over frames) because "64/128" cannot be both inside
+   an 18px circle and readable, and "64 over 128" can. */
+#syn-panel .knob-ring .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+  pointer-events: none; font-family: -apple-system, 'SF Pro Display', sans-serif; font-weight: 300; color: var(--text-secondary);
+  line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
+#syn-panel .knob-ring .kv.st { flex-direction: column; gap: 1px; }
+#syn-panel .knob-ring .kv.st i { font-style: normal; display: block; }
 #syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; text-transform: none; }
 /* OSCFIX-READOUT-CSS — knob label swaps to live value while dragging (zero reflow) */
 #syn-panel .knob .knob-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
@@ -6451,7 +6480,6 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
   <!-- HEADER -->
   <div id="header">
     <div class="header-left">
-      <div class="brand-logo"><svg class="tmk tmk-lite" viewBox="9 0 91 126" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Terrain"><defs><path id="htkl" d="M50 1C77.5 1 99 20 99 44.5C99 58.5 96 67.5 92.2 74.2C89.2 79.2 87.4 83.4 87.4 89C87.4 100.5 88.1 114 89.2 126L47.6 126C47.6 113.6 48.4 103.4 45.6 96.6C43.2 90.8 37.2 88.2 31.4 84.8C27.6 82.6 25.2 80.6 23.6 77.8C22.5 75.8 23.8 74 22.2 71.8C19.8 68.6 15.2 67.4 14.2 64.2C13.1 61 9.6 60 10 57C10.5 54.4 18 55 19.1 51C20.1 47.4 17.6 44.8 18.7 40C20.2 28.2 23.2 13 34 6C39.4 2.4 44 1 50 1Z"/><radialGradient id="gltkl"><stop offset="0" stop-color="#a78bfa" stop-opacity="0.50"/><stop offset="1" stop-color="#a78bfa" stop-opacity="0"/></radialGradient><linearGradient id="wvtkl" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#c9b8ff"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#c9b8ff"/></linearGradient><mask id="mtkl0" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkl" xlink:href="#htkl" fill="#fff"/><use href="#htkl" xlink:href="#htkl" fill="#000" transform="translate(63 82) scale(0.8370) translate(-63 -82)"/></mask><mask id="mtkl1" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkl" xlink:href="#htkl" fill="#fff" transform="translate(63 82) scale(0.8370) translate(-63 -82)"/><use href="#htkl" xlink:href="#htkl" fill="#000" transform="translate(63 82) scale(0.7006) translate(-63 -82)"/></mask><mask id="mtkl2" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkl" xlink:href="#htkl" fill="#fff" transform="translate(63 82) scale(0.7006) translate(-63 -82)"/><use href="#htkl" xlink:href="#htkl" fill="#000" transform="translate(63 82) scale(0.5864) translate(-63 -82)"/></mask><mask id="mtkl3" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkl" xlink:href="#htkl" fill="#fff" transform="translate(63 82) scale(0.5864) translate(-63 -82)"/><use href="#htkl" xlink:href="#htkl" fill="#000" transform="translate(63 82) scale(0.4908) translate(-63 -82)"/></mask></defs><rect width="100" height="126" fill="#ece7fa" mask="url(#mtkl0)"/><rect width="100" height="126" fill="#d7cdf3" mask="url(#mtkl1)"/><rect width="100" height="126" fill="#b9a8e8" mask="url(#mtkl2)"/><rect width="100" height="126" fill="#8f76d8" mask="url(#mtkl3)"/><use href="#htkl" xlink:href="#htkl" fill="#33246e" transform="translate(63 82) scale(0.4908) translate(-63 -82)"/><ellipse cx="59.07" cy="66.29" rx="17.3" ry="14.4" fill="url(#gltkl)"/><g fill="url(#wvtkl)"><rect x="45.70" y="61.92" width="2.11" height="8.75" rx="1.05"/><rect x="48.78" y="59.52" width="2.11" height="13.56" rx="1.05"/><rect x="51.86" y="56.67" width="2.11" height="19.24" rx="1.05"/><rect x="54.94" y="60.28" width="2.11" height="12.03" rx="1.05"/><rect x="58.02" y="59.73" width="2.11" height="13.12" rx="1.05"/><rect x="61.10" y="55.36" width="2.11" height="21.87" rx="1.05"/><rect x="64.18" y="58.42" width="2.11" height="15.74" rx="1.05"/><rect x="67.26" y="60.83" width="2.11" height="10.93" rx="1.05"/><rect x="70.34" y="62.14" width="2.11" height="8.31" rx="1.05"/></g></svg><svg class="tmk tmk-dark" viewBox="9 0 91 126" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" role="img" aria-label="Terrain"><defs><path id="htkd" d="M50 1C77.5 1 99 20 99 44.5C99 58.5 96 67.5 92.2 74.2C89.2 79.2 87.4 83.4 87.4 89C87.4 100.5 88.1 114 89.2 126L47.6 126C47.6 113.6 48.4 103.4 45.6 96.6C43.2 90.8 37.2 88.2 31.4 84.8C27.6 82.6 25.2 80.6 23.6 77.8C22.5 75.8 23.8 74 22.2 71.8C19.8 68.6 15.2 67.4 14.2 64.2C13.1 61 9.6 60 10 57C10.5 54.4 18 55 19.1 51C20.1 47.4 17.6 44.8 18.7 40C20.2 28.2 23.2 13 34 6C39.4 2.4 44 1 50 1Z"/><radialGradient id="gltkd"><stop offset="0" stop-color="#ffffff" stop-opacity="0.50"/><stop offset="1" stop-color="#ffffff" stop-opacity="0"/></radialGradient><linearGradient id="wvtkd" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#b9a5f5"/><stop offset=".5" stop-color="#ffffff"/><stop offset="1" stop-color="#b9a5f5"/></linearGradient><mask id="mtkd0" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkd" xlink:href="#htkd" fill="#fff"/><use href="#htkd" xlink:href="#htkd" fill="#000" transform="translate(63 82) scale(0.8370) translate(-63 -82)"/></mask><mask id="mtkd1" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkd" xlink:href="#htkd" fill="#fff" transform="translate(63 82) scale(0.8370) translate(-63 -82)"/><use href="#htkd" xlink:href="#htkd" fill="#000" transform="translate(63 82) scale(0.7006) translate(-63 -82)"/></mask><mask id="mtkd2" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkd" xlink:href="#htkd" fill="#fff" transform="translate(63 82) scale(0.7006) translate(-63 -82)"/><use href="#htkd" xlink:href="#htkd" fill="#000" transform="translate(63 82) scale(0.5864) translate(-63 -82)"/></mask><mask id="mtkd3" maskUnits="userSpaceOnUse" x="0" y="0" width="100" height="126"><use href="#htkd" xlink:href="#htkd" fill="#fff" transform="translate(63 82) scale(0.5864) translate(-63 -82)"/><use href="#htkd" xlink:href="#htkd" fill="#000" transform="translate(63 82) scale(0.4908) translate(-63 -82)"/></mask></defs><rect width="100" height="126" fill="rgba(255,255,255,.20)" mask="url(#mtkd0)"/><rect width="100" height="126" fill="rgba(255,255,255,.36)" mask="url(#mtkd1)"/><rect width="100" height="126" fill="rgba(255,255,255,.56)" mask="url(#mtkd2)"/><rect width="100" height="126" fill="rgba(255,255,255,.80)" mask="url(#mtkd3)"/><ellipse cx="59.07" cy="66.29" rx="17.3" ry="14.4" fill="url(#gltkd)"/><g fill="url(#wvtkd)"><rect x="45.70" y="61.92" width="2.11" height="8.75" rx="1.05"/><rect x="48.78" y="59.52" width="2.11" height="13.56" rx="1.05"/><rect x="51.86" y="56.67" width="2.11" height="19.24" rx="1.05"/><rect x="54.94" y="60.28" width="2.11" height="12.03" rx="1.05"/><rect x="58.02" y="59.73" width="2.11" height="13.12" rx="1.05"/><rect x="61.10" y="55.36" width="2.11" height="21.87" rx="1.05"/><rect x="64.18" y="58.42" width="2.11" height="15.74" rx="1.05"/><rect x="67.26" y="60.83" width="2.11" height="10.93" rx="1.05"/><rect x="70.34" y="62.14" width="2.11" height="8.31" rx="1.05"/></g></svg></div>
       <span class="brand-name">Terrain</span>
       <span class="brand-version">V1</span>
     </div>
@@ -14882,6 +14910,16 @@ window.addEventListener('__dprchange', function(){ DPR = window.devicePixelRatio
 // One SVG per #syn-panel .knob-ring: faint 270° track + white value arc with round caps
 // (+ a center notch for bipolar). Geometry mirrors drawFxKnob (start 7:30 / 135°, sweep 270°).
 // Injected lazily so it never depends on init ordering; the 4 knob painters just set the value.
+/* fb630 — how many frames each osc's live table has: the WT Pos readout's denominator. Pushed by the
+   editor timer (window.onWtFrames) whenever a table changes, and pulled once at bind (getWtFrames).
+   Defined EARLY so no push can land before its listener exists. 16 = Wavetable.h's bank default. */
+window.__wtFrames = [16, 16, 16, 16];
+window.onWtFrames = function (o, n) {
+  o = o | 0; if (o < 0 || o > 3) return; n = Math.max (1, n | 0);
+  if (window.__wtFrames[o] === n) return;
+  window.__wtFrames[o] = n;
+  try { if (window.__synRepaintWtPos) window.__synRepaintWtPos (o); } catch (e) {}
+};
 window.__synEnsureArc = function (ring) {
   if (! ring) return null;
   var v = ring.querySelector ('.kr-v');
@@ -18811,7 +18849,62 @@ setTimeout(function wireSynControls () {
         if (paramId.indexOf ('_FM_')      >= 0) return pct + '%';   // depths / feedback / weathering suite
         return pct + '%';
       }
-      window.__fmtSynReadout = fmtSynReadout;   // exposed so reassigned grain knobs keep proper readouts
+      window.__fmtSynReadout = fmtSynReadout;
+
+      /* fb630 — THE COMPACT READOUT FOR INSIDE THE RING. fmtSynReadout above is the drag-time LEGEND
+         (units and words — "Freeze", "Flat→Dome", "+7 st"); this is the number that lives in the ring
+         permanently, in the rack's idiom: bare digits, no unit, the label under the knob carries the
+         unit's meaning. Bipolar and signed values keep their sign; choice knobs keep their word. WT Pos
+         returns {a,b} — frame over frames — and the painter stacks it. */
+      function fmtRing (paramId, n) {
+        n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
+        const pct = Math.round (n * 100), sgn = v => (v > 0 ? '+' : '') + v;
+        if (paramId.indexOf ('_WT_FRAME') >= 0) {
+          const o = 'ABCD'.indexOf (paramId.charAt (8));
+          const M = Math.max (1, (window.__wtFrames && window.__wtFrames[o]) || FRAME_COUNT);
+          return { a: 1 + Math.round (n * (M - 1)), b: M };
+        }
+        if (paramId.indexOf ('_HARM_COUNT')   >= 0) return String (Math.round (8 * Math.pow (64, n)));
+        if (paramId.indexOf ('_SPECTRAL_LO')  >= 0 || paramId.indexOf ('_SPECTRAL_HI') >= 0) return fmtSynReadout (paramId, n);
+        if (paramId.indexOf ('_OCT')  >= 0) return sgn (Math.round (-3   + n * 6));
+        if (paramId.indexOf ('_SEMI') >= 0) return sgn (Math.round (-12  + n * 24));
+        if (paramId.indexOf ('_CENT') >= 0) return sgn (Math.round (-100 + n * 200));
+        if (paramId.indexOf ('_PAN')  >= 0) { const v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
+        if (paramId.indexOf ('_SAMPLE_SCAN') >= 0 || paramId.indexOf ('_GRAIN_SCAN') >= 0) { const s = -1 + n * 2; return Math.abs (s) < 0.02 ? '0' : sgn (Math.round (s * 200)); }
+        if (paramId.indexOf ('_GRAIN_DENSITY') >= 0) return String (Math.round (Math.pow (200, n)));
+        if (paramId.indexOf ('_GRAIN_SIZE')    >= 0) return String (Math.round (2 * Math.pow (250, n)));
+        if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chord','Maj','Min','Penta'][Math.round (n * 6)] || 'Off';
+        if (paramId.indexOf ('_GRAIN_PITCH')   >= 0) return sgn (Math.round (-24 + n * 48));
+        if (paramId.indexOf ('_GRAIN_DIR')     >= 0) { const d = -1 + n * 2; return Math.abs (d) < 0.02 ? 'Rnd' : sgn (Math.round (d * 100)); }
+        if (paramId.indexOf ('_GRAIN_SKEW')    >= 0) { const s = -1 + n * 2; return Math.abs (s) < 0.02 ? '0' : sgn (Math.round (s * 100)); }
+        if (paramId.indexOf ('_FM_RATIO') >= 0) { const r = Math.round ((0.25 + 15.75 * n * n) * 4) / 4; return r >= 10 ? String (Math.round (r * 10) / 10) : String (r); }
+        return String (pct);
+      }
+      window.__fmtRing = fmtRing;
+      /* the painter: one .kv per ring, created on first use; only touches the DOM when the text changes */
+      function paintRingVal (ring, val) {
+        let el = ring.__kv;
+        if (! el) { el = ring.querySelector ('.kv'); if (! el) { el = document.createElement ('div'); el.className = 'kv'; ring.appendChild (el); } ring.__kv = el; }
+        if (val && typeof val === 'object') {
+          if (! el.__st) { el.classList.add ('st'); el.style.fontSize = '6.2px'; el.__st = true; }
+          if (el.__a !== val.a || el.__b !== val.b) { el.innerHTML = '<i>' + val.a + '</i><i>' + val.b + '</i>'; el.__a = val.a; el.__b = val.b; }
+          return;
+        }
+        const s = String (val == null ? '' : val);
+        if (el.__st) { el.classList.remove ('st'); el.__st = false; el.__a = el.__b = undefined; }
+        const fs = s.length <= 3 ? '7.5px' : s.length === 4 ? '6.5px' : '5.8px';
+        if (el.style.fontSize !== fs) el.style.fontSize = fs;
+        if (el.__s !== s) { el.textContent = s; el.__s = s; }
+      }
+      window.__synRingVal = paintRingVal;
+      /* WT Pos repaints when its table changes frames (window.onWtFrames → here) */
+      window.__synRepaintWtPos = function (o) {
+        const k = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_' + 'ABCD'.charAt (o) + '_WT_FRAME"] .knob-ring');
+        if (k && typeof k.__n === 'number') paintRingVal (k, fmtRing ('SYN_OSC_' + 'ABCD'.charAt (o) + '_WT_FRAME', k.__n));
+      };
+      /* pull the real counts once at bind; the timer keeps them fresh from here on */
+      try { const gf = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('getWtFrames') : null;
+            if (gf) Promise.resolve (gf ()).then (a => { if (a && a.length === 4) for (let o = 0; o < 4; ++o) window.onWtFrames (o, a[o]); }).catch (() => {}); } catch (e) {}   // exposed so reassigned grain knobs keep proper readouts
 
       // ════════ GRANULAR two-page knob rows — the far-right arrow toggles page 1 <-> page 2 ════════
       // (The old right-click "reassign" menu was removed 2026-07-02. Page 1 = essentials, page 2 =
@@ -18901,7 +18994,7 @@ setTimeout(function wireSynControls () {
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
           const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN|_GEODE_(FORMANT|TILT|BEDROCK))$/.test (paramId);
-          const applyFill = (n) => { window.__synArc (ring, n, isBipolar); };
+          const applyFill = (n) => { window.__synArc (ring, n, isBipolar); ring.__n = n; paintRingVal (ring, fmtRing (paramId, n)); };   /* fb630 — arc AND number */
 
           // Initial fill from current APVTS value.
           try {
@@ -21875,6 +21968,21 @@ setTimeout(function wireSynControls () {
           return [{ label: modeRowLabel(cfg.modeParam), badge: (cfg.options[cur] || '') + '  ›',
                     keepOpen: true, onPick: () => openModeMenu(e) }];
         });
+      });
+
+      /* fb630 — SHAPE's resting label is the TARGET WAVEFORM, not the word "Shape". Max: "if it turns to a
+         triangle it's at this percent, if it turns to a square it's at this percent" — the ring holds the
+         percent, so the label has to hold the waveform, or the knob never says which one. The name comes
+         from the same live read the right-click badge uses, so a Hollow/Bright patch still says so. */
+      ['A', 'B', 'C', 'D'].forEach ((L) => {
+        const knob = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_' + L + '_GEODE_DISTILL"]');
+        const lab = knob && knob.querySelector ('.knob-label'); if (! lab) return;
+        const mp = 'SYN_OSC_' + L + '_GEODE_SHAPE_TARGET';
+        const put = () => { try { const nm = GEODE_SHAPES[getChoiceIndex (mp, GEODE_SHAPES.length)] || 'Shape';
+                                  lab.dataset.lbl = nm; if (! lab.classList.contains ('kv-live')) lab.textContent = nm; } catch (e) {} };
+        put ();
+        try { const st = window.Juce && window.Juce.getSliderState && window.Juce.getSliderState (mp);
+              if (st && st.valueChangedEvent && st.valueChangedEvent.addListener) st.valueChangedEvent.addListener (put); } catch (e) {}
       });
 
       // rs2-cut — the RESYNTH CUT knob (and its LP/HP label-follow + right-click mode menu) is RETIRED: the
@@ -38597,7 +38705,11 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       }
       function showVal () { if (lab) lab.textContent = fmt (v); }
       function revert () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; }, 750); }   // labels revert → no lasting reflow
-      function fill (nn) { try { if (window.__synArc) window.__synArc (ring, nn, spec.bip); } catch (e) {} }
+      function fill (nn) { try { if (window.__synArc) window.__synArc (ring, nn, spec.bip);
+        /* fb630 — the number inside, in the rack's idiom: Level %, Scan rate, Pan L/C/R */
+        if (window.__synRingVal) window.__synRingVal (ring, spec.kind === 'pan' ? (function () { var p = Math.round ((nn - 0.5) * 200); return p === 0 ? 'C' : (p > 0 ? 'R' + p : 'L' + (-p)); })()
+                                                       : spec.kind === 'scan' ? ((nn < 0.5) ? (0.1 + 1.8 * nn) : (1.0 + 2.0 * (nn - 0.5))).toFixed (2)
+                                                       : String (Math.round (nn * 100))); } catch (e) {} }
       fill (v); ring.style.cursor = 'grab';
       ring.addEventListener ('pointerdown', function (ev2) { if (ev2.button !== 0) return; ev2.preventDefault (); try { ring.setPointerCapture (ev2.pointerId); } catch (e) {}
         var y0 = ev2.clientY, v0 = v; ring.style.cursor = 'grabbing';
@@ -39989,6 +40101,21 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
        glass coat gets its own flag. It lives here because surfaceUp() is the one authority every
        open and close already routes through — nowhere else can forget to set it. */
     document.documentElement.classList.toggle('tp-glassup', br);
+    /* fb630 — the CAPTURE strip under the window is a native juce::Component (it has to be: drag-to-DAW
+       needs a real OS drag). It cannot backdrop-blur the WebView, so it gets the exact alpha-over of the
+       same two values the CSS composites — var(--menu-bg) over #plugin's ground — computed HERE from the
+       live tokens and pushed, so C++ holds no copied literal for it. Max: "the footer should be the same
+       colour as the browse-all page." */
+    try {
+      const f = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('setBrowserGlass') : null;
+      if (f) {
+        const mb = (getComputedStyle (document.documentElement).getPropertyValue ('--menu-bg') || '').match (/[\d.]+/g);
+        const gb = (getComputedStyle (document.getElementById ('plugin')).backgroundColor || '').match (/[\d.]+/g);
+        const m = mb && mb.length >= 4 ? mb.map (Number) : [22, 20, 34, 0.72], g = gb && gb.length >= 3 ? gb.map (Number) : [26, 26, 46];
+        const a = m[3], mix = i => Math.round (m[i] * a + g[i] * (1 - a)), hx = v => v.toString (16).padStart (2, '0');
+        f (br ? 1 : 0, 'ff' + hx (mix (0)) + hx (mix (1)) + hx (mix (2)));
+      }
+    } catch (e) {}
     if (on) { try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {} }
   }
   function openBrowser() {

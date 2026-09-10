@@ -2473,6 +2473,22 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 }
                 complete(juce::var{});
             })
+            .withNativeFunction("setBrowserGlass", [this](const juce::Array<juce::var>& args,
+                                                          juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb630 — the preset browser's glass reaches the native capture strip (CaptureDragStrip::setBrowserGlass)
+                if (args.size() > 1)
+                    captureDragStrip.setBrowserGlass (static_cast<int>(args[0]) != 0, juce::Colour::fromString (args[1].toString()));
+                complete(juce::var{});
+            })
+            .withNativeFunction("getWtFrames", [this](const juce::Array<juce::var>&,
+                                                      juce::WebBrowserComponent::NativeFunctionCompletion complete)
+            {
+                // fb630 — the four frame counts, pulled once when the knobs bind (the timer pushes changes after that)
+                juce::Array<juce::var> a;
+                for (int o = 0; o < 4; ++o) a.add (audioProcessor.getOscNumFrames (o));
+                complete (juce::var (a));
+            })
             .withNativeFunction("setChorusEnabled", [this](const juce::Array<juce::var>& args,
                                                             juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
@@ -6426,6 +6442,17 @@ void TerrainUiCore::timerCallback()
     // Update native drag strip state
     captureDragStrip.updateState(captureState, captureAvail);
 
+    // fb630 — the WT Pos readout's denominator: four int compares a tick, a push only when a table changes.
+    for (int o = 0; o < 4; ++o)
+    {
+        const int nf = audioProcessor.getOscNumFrames (o);
+        if (nf != wtFramesSeen_[o])
+        {
+            wtFramesSeen_[o] = nf;
+            webView->evaluateJavascript ("if(window.onWtFrames)window.onWtFrames(" + juce::String (o) + "," + juce::String (nf) + ");");
+        }
+    }
+
 
     // ── Envelope follower (playhead dot) ──
     // Push the most-active voice's live AMP-env level to the WebUI. -1 = no voice
@@ -7368,7 +7395,8 @@ void TerrainUiCore::CaptureDragStrip::paint (juce::Graphics& g)
     const bool dark = isDarkMode || synthViewActive;
     // fb269 — front page: match the GRAIN ENGINE / FX panels (--bg-surface), not the darker body.
     // Under the synth view keep the panel-dark (--bg-main) so it stays seamless with #syn-panel.
-    g.fillAll(synthViewActive ? juce::Colour(0xFF1A1A2E)                   // synth view: seamless with #syn-panel (--bg-main)
+    g.fillAll(browserGlass    ? glassColour                            // fb630 — the browser's glass, composited by JS from the live tokens
+            : synthViewActive ? juce::Colour(0xFF1A1A2E)                   // synth view: seamless with #syn-panel (--bg-main)
                               : (isDarkMode ? juce::Colour(0xFF232340)     // fb271 — front: EXACT GRAIN ENGINE color (--bg-surface dark), not fb270's lighter #2F2B54
                                             : juce::Colour(0xFFE8E4EF)));  // front light (--bg-surface light = grain engine)
 

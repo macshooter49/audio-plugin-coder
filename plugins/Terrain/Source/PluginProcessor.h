@@ -975,6 +975,7 @@ public:
        move. DERIVED from the resolved table (pointer + buildEpoch + frame count), never stored, so
        no publish site can forget to bump it. Rides in __wtDisp and in the payload, LAST in both. */
     int wtTableStamp (int osc) noexcept;
+    int getOscNumFrames (int osc) noexcept;   // fb630 — frames in the table WT Pos steps through (the readout's denominator)
     juce::String getOscLfoWaveJson (int osc);   // fb248 — exact current frame for WT→LFO
 
     juce::String getCachedOscPayload (int idx) const

@@ -1267,6 +1267,20 @@ int TerrainAudioProcessor::wtTableStamp (int osc) noexcept
     return (int) (h & 0x7FFFFFull) + 1;
 }
 
+// fb630 — how many frames WT Pos steps through, resolved exactly as the voice resolves the table
+// (wavetableForDisplay is wavetableForOsc's read-only twin: morph slot → import → bank). The knob
+// shows "frame over frames" and this is the denominator. Max: "one out of 16 and one out of 32, it
+// depends on which wavetable they're at — people always need to be able to see their wavetable."
+int TerrainAudioProcessor::getOscNumFrames (int osc) noexcept
+{
+    osc = juce::jlimit (0, 3, osc);
+    static const char* const WTPS[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
+                                         ParameterIDs::SYN_OSC_C_WT_PRESET, ParameterIDs::SYN_OSC_D_WT_PRESET };
+    const MorphSlot& ms = (osc == 0 ? morphA_ : osc == 1 ? morphB_ : osc == 2 ? morphC_ : morphD_);
+    const tw::Wavetable* wt = wavetableForDisplay (osc, ms, (int) *apvts.getRawParameterValue (WTPS[osc]));
+    return wt == nullptr ? 0 : juce::jmax (1, wt->getNumFrames());
+}
+
 juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);

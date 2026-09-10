@@ -995,6 +995,16 @@ private:
             if (synthViewActive != active) { synthViewActive = active; repaint(); }
         }
 
+        // fb630 — while the preset browser is up the strip wears the browser's glass. A native component
+        // cannot backdrop-blur the WebView, so the closest exact thing is the alpha-over of the SAME two
+        // values the CSS composites (var(--menu-bg) over #plugin's ground) — JS computes it from the live
+        // tokens and pushes the result, so this class holds NO copied literal for it. Max: "the footer
+        // should be the same colour as the browse-all page."
+        void setBrowserGlass (bool on, juce::Colour c)
+        {
+            if (browserGlass != on || glassColour != c) { browserGlass = on; glassColour = c; repaint(); }
+        }
+
         void paint (juce::Graphics& g) override;
         void mouseDown (const juce::MouseEvent&) override;
         void mouseDrag (const juce::MouseEvent& e) override;
@@ -1008,9 +1018,12 @@ private:
         bool isDragging = false;
         bool isDarkMode = false;
         bool synthViewActive = false;
+        bool browserGlass = false;      // fb630
+        juce::Colour glassColour;       // fb630 — pushed from JS, never a literal here
     };
 
     CaptureDragStrip captureDragStrip { audioProcessor };
+    int wtFramesSeen_[4] = { -1, -1, -1, -1 };   // fb630 — last frame count pushed per osc (window.onWtFrames)
 
     // 3. PARAMETER ATTACHMENTS LAST (destroyed first)
     std::unique_ptr<juce::WebSliderParameterAttachment> grainSizeAttachment;

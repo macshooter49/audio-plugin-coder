@@ -42,15 +42,24 @@
 //  20  fb628 — every column is a lane: the author cannot be pushed into Carries by a long name
 //  21  fb629 — the header has NO COLOUR OF ITS OWN: it takes the synth page's ground, then the
 //      browser's glass. Proved in PIXELS across the y=44 seam, not by reading the stylesheet.
-//  22  fb629 — the brand mark sits on the wordmark's centreline, at a size you can actually read,
-//      and swaps with the theme (negative on dark, purple on light)
+//  22  fb630 — the header carries the wordmark ALONE (the mark is parked in Design/mark/): no
+//      img/svg in .header-left, TERRAIN at the padding edge, on the centreline
+//  23  fb630 — every engine knob carries its VALUE inside the ring, in every engine and the noise
+//      strip, and every glyph box sits inside the circle at a readable size; nothing else moved
+//  24  fb630 — the readouts say the right thing: WT Pos is frame-over-frames from the live table's
+//      count, Pan is L/C/R, signed things keep their sign, choices keep their word, Shape's label
+//      is its target waveform
+//  25  fb630 — the native capture strip is told the browser's glass colour, composited from the
+//      live tokens, when the browser opens, and told to drop it when it closes
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
 //    TP_MUT=lanes    the pre-fb628 world: .sm-ul reaches over the preset surfaces again and the
 //                    author's lane loses its clearance → [19] and [20] must both go RED
-//    TP_MUT=header   the pre-fb629 world: the header paints its own bar again and the mark is
-//                    shrunk → [21] and [22] must both go RED
+//    TP_MUT=header   the header paints its own bar again and a mark is put back in it →
+//                    [21] and [22] must both go RED
+//    TP_MUT=knobval  the ring text is blown up to 14px and the stacked fraction hidden, and the
+//                    strip's native call is swallowed → [23] [24] [25] must all go RED
 //    TP_MUT=nopush   the courier loads but never pushes onPatchLoaded (the pre-fb620 world) →
 //                    [6] and [7] must go RED
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -84,6 +93,7 @@ const STUB = (MUT) => {
   const metaOfPath = (p) => { for (const b of window.__CAT.banks) for (const r of b.presets) if (r.path === p) return { name: r.name, bank: r.bank, author: r.author, type: r.type, styles: r.styles, note: r.note, fv: 1 }; return null; };
   let curMeta = { name: 'Glacier', bank: 'Terra', author: 'Waves Crate', type: 'Pad', styles: 'Glassy,Evolving', note: 'Mod wheel opens the filter.', fv: 1 };
   const nf = (n) => (...a) => new Promise (r => {
+    if (n === 'setBrowserGlass' && MUT === 'knobval') return r (0);   // fb630's control: the strip never hears
     window.__gateCalls.push ({ fn: n, args: a.map (String) });
     if (n === 'listPresets')   return r (JSON.stringify (window.__CAT));
     if (n === 'getPresetMeta') return r (JSON.stringify (curMeta));
@@ -132,8 +142,13 @@ const STUB = (MUT) => {
      preset surfaces again, and the author's lane loses its clearance so it can touch Carries. */
   /* fb629's control: give the header its bar back and shrink the mark to nothing */
   if (MUT === 'header') await p.evaluate (() => { const st = document.createElement ('style');
-    st.textContent = '#header{background:#232340 !important;border-bottom:1px solid rgba(58,58,88,.5) !important}'
-                   + '.brand-logo,.brand-logo .tmk{height:12px !important}';
+    st.textContent = '#header{background:#232340 !important;border-bottom:1px solid rgba(58,58,88,.5) !important}';
+    document.head.appendChild (st);
+    const m = document.createElement ('div'); m.className = 'brand-logo'; m.innerHTML = '<svg viewBox="0 0 10 10"><circle r="5" cx="5" cy="5" fill="#fff"/></svg>';
+    document.querySelector ('#header .header-left').prepend (m); });
+  /* fb630's control: the ring text can no longer fit, the fraction vanishes */
+  if (MUT === 'knobval') await p.evaluate (() => { const st = document.createElement ('style');
+    st.textContent = '#syn-panel .knob-ring .kv{font-size:14px !important} #syn-panel .knob-ring .kv.st{display:none !important}';
     document.head.appendChild (st); });
   if (MUT === 'lanes') await p.evaluate (() => { const st = document.createElement ('style');
     st.textContent = 'html.tp-browsing .sm-ul{display:block !important} .tp-row .c-au{margin-right:0 !important}';
@@ -501,11 +516,15 @@ const STUB = (MUT) => {
   // While browsing there IS empty glass to compare against, so that side is pixel-to-pixel.
   const rgb = (css) => (css.match (/\d+(\.\d+)?/g) || []).slice (0, 3).map (Number);
   const SHOT = path.join (require ('os').tmpdir(), 'tp_seam_' + process.pid + '.png');
-  const seam = async (ref, bx0, bx1) => {
+  /* fb630 — the ground under the synth view is #plugin's radial vignette painted ONCE across header
+     and page, so "same colour" is asked in the SAME COLUMN on both sides of y=44: the header band
+     (y 24-40) against the page's bare top padding (y 46-56, above every device at y=56). Two columns:
+     the far left where the vignette has faded flat, and x 300-330 where it is still rising. */
+  const seam = async (hx0, hx1, bx0, bx1, by0 = 46, by1 = 56) => {
     await p.screenshot ({ path: SHOT, clip: { x: 0, y: 0, width: 820, height: 120 } });
     const img = decode (fs.readFileSync (SHOT));
-    const above = band (img, 22, 40, 180, 270);       // header, past "TERRAIN V1", short of the "+"
-    const below = ref ? rgb (ref) : band (img, 50, 70, bx0, bx1);
+    const above = band (img, 24, 40, hx0, hx1);
+    const below = band (img, by0, by1, bx0, bx1);
     return { above, below, d: dist (above, below) };
   };
   {
@@ -520,11 +539,15 @@ const STUB = (MUT) => {
                                         && ! document.getElementById ('tp-b').classList.contains ('on'));
     const rest = await p.evaluate (() => {
       const cs = getComputedStyle (document.getElementById ('header'));
+      const pg = document.querySelector ('#syn-panel .ti-syn-page');
       return { bg: cs.backgroundColor, border: cs.borderBottomWidth,
-               plugin: getComputedStyle (document.getElementById ('plugin')).backgroundColor,
-               panel:  getComputedStyle (document.getElementById ('syn-panel')).backgroundColor };
+               plugin: getComputedStyle (document.getElementById ('plugin')).backgroundImage,
+               panel:  getComputedStyle (document.getElementById ('syn-panel')).backgroundColor,
+               page:   pg ? getComputedStyle (pg).backgroundColor : '?' };
     });
-    const sRest = await seam (rest.panel);    // against the synth page's own declared background
+    const sEdge = await seam (180, 270, 180, 270);     // past "TERRAIN V1", short of the "+"
+    const sMid  = await seam (540, 570, 540, 570);     // between the preset "›" and SYN
+    const sRest = sEdge.d > sMid.d ? sEdge : sMid;      // report the worse of the two
     await openBrowser(); await wait (320);
     const brow = await p.evaluate (() => {
       const cs = getComputedStyle (document.getElementById ('header'));
@@ -533,59 +556,135 @@ const STUB = (MUT) => {
                glassBg: gl.backgroundColor, glassBlur: gl.backdropFilter || gl.webkitBackdropFilter,
                flag: document.documentElement.classList.contains ('tp-glassup') };
     });
-    const sBrow = await seam (null, 350, 600); // browser: empty glass between search and the count
+    const sBrow = await seam (180, 270, 350, 600, 50, 70); // browser: header vs empty glass between search and the count
     await p.keyboard.press ('Escape'); await wait (220);
     await p.evaluate (() => document.documentElement.removeAttribute ('data-theme'));
     try { fs.unlinkSync (SHOT); } catch (e) {}
     const clear = /rgba\(0, 0, 0, 0\)|transparent/.test (rest.bg);
-    gate (atRest && clear && rest.border === '0px' && rest.plugin === rest.panel && sRest.d <= 2
+    const onePainter = /radial-gradient/.test (rest.plugin) && /rgba\(0, 0, 0, 0\)/.test (rest.panel) && /rgba\(0, 0, 0, 0\)/.test (rest.page);
+    gate (atRest && clear && rest.border === '0px' && onePainter && sEdge.d <= 2 && sMid.d <= 2
           && brow.flag && brow.bg === brow.glassBg && brow.blur === brow.glassBlur && sBrow.d <= 4,
       '[21] THE HEADER HAS NO COLOUR OF ITS OWN — it takes the page, then the glass',
       `at rest ${atRest} · own background ${rest.bg} · border ${rest.border}`
-      + ` · ground ${rest.plugin} vs synth page ${rest.panel} ${rest.plugin === rest.panel ? 'SAME' : 'DIFFER'}`
-      + ` · the header band paints ${hex (sRest.above)} against the page's own ${hex (sRest.below)}`
-      + ` Δ${sRest.d.toFixed (2)} (must be ≤2)`
+      + ` · one painter: #plugin ${/radial-gradient/.test (rest.plugin) ? 'carries the vignette' : 'HAS NO VIGNETTE'}, #syn-panel ${rest.panel}, .ti-syn-page ${rest.page}`
+      + ` · seam left ${hex (sEdge.above)}|${hex (sEdge.below)} Δ${sEdge.d.toFixed (2)}, right ${hex (sMid.above)}|${hex (sMid.below)} Δ${sMid.d.toFixed (2)} (both ≤2, same column each side of y=44)`
       + ` · browsing: tp-glassup ${brow.flag}, header ${brow.bg} vs glass ${brow.glassBg}`
       + ` ${brow.bg === brow.glassBg ? 'SAME' : 'DIFFER'}, blur ${brow.blur === brow.glassBlur ? 'SAME' : 'DIFFER'}`
       + ` · seam Δ${sBrow.d.toFixed (2)} (must be ≤4)`);
   }
 
-  // ── fb629 — THE MARK: on the centreline, readable, and it swaps with the theme ────────────────
-  // Max: "make sure this symbol properly aligns with everything... use the centre line... and make
-  // sure you size it to where people can actually see it." All three are numbers, so all three are
-  // asserted. The 30px floor is the "actually see it" clause; the old PNG carried ~24px of ink.
+  // ── fb630 — NO MARK. Max: "I actually want to see what it looks like with no logo." ────────────
+  // The wordmark stands alone at the header's left padding, on the centreline. The mark is parked in
+  // Design/mark/ — if it comes back, this bar flips back to fb629's shape (readable size, centred,
+  // theme swap); until then a mark in the header is a regression.
   {
     const m = await p.evaluate (() => {
-      const set = t => { if (t) document.documentElement.setAttribute ('data-theme', t);
-                         else document.documentElement.removeAttribute ('data-theme'); };
-      const box = document.querySelector ('.brand-logo'), nm = document.querySelector ('.brand-name');
-      const dk = document.querySelector ('.brand-logo .tmk-dark'), lt = document.querySelector ('.brand-logo .tmk-lite');
-      if (! box || ! nm || ! dk || ! lt) return { missing: true };
-      set ('dark');  const onDark = [getComputedStyle (dk).display, getComputedStyle (lt).display];
-      set (null);    const onLite = [getComputedStyle (dk).display, getComputedStyle (lt).display];
-      set ('dark');
-      const b = box.getBoundingClientRect(), n = nm.getBoundingClientRect(),
-            h = document.getElementById ('header').getBoundingClientRect();
-      const r = document.querySelector ('.brand-logo .tmk-dark').getBoundingClientRect();
-      set (null);
-      return { h: +r.height.toFixed (1), w: +r.width.toFixed (1), bar: +h.height.toFixed (1),
-               gap: +(n.left - b.right).toFixed (2),
-               dCentre: +Math.abs ((b.top + b.height / 2) - (n.top + n.height / 2)).toFixed (2),
-               onDark, onLite, raster: !! document.querySelector ('.brand-logo img') };
+      const left = document.querySelector ('#header .header-left'), nm = document.querySelector ('.brand-name'),
+            h = document.getElementById ('header');
+      if (! left || ! nm || ! h) return { missing: true };
+      const marks = left.querySelectorAll ('img, svg, .brand-logo').length;
+      const n = nm.getBoundingClientRect(), hr = h.getBoundingClientRect();
+      const pad = parseFloat (getComputedStyle (h).paddingLeft);
+      return { marks, x: +n.left.toFixed (2), pad, dCentre: +Math.abs ((n.top + n.height / 2) - (hr.top + hr.height / 2)).toFixed (2) };
     });
-    gate (!! m && ! m.missing && ! m.raster
-          && m.h >= 30 && m.h <= m.bar - 6 && m.dCentre < 1
-          && m.gap >= 6 && m.gap <= 11
-          && m.onDark[0] !== 'none' && m.onDark[1] === 'none'
-          && m.onLite[0] === 'none' && m.onLite[1] !== 'none',
-      '[22] THE MARK IS ON THE CENTRELINE, BIG ENOUGH TO READ, AND SWAPS WITH THE THEME',
+    gate (!! m && ! m.missing && m.marks === 0 && Math.abs (m.x - m.pad) < 0.5 && m.dCentre < 1,
+      '[22] THE HEADER CARRIES THE WORDMARK ALONE — no mark, at the padding edge, on the centreline',
       m && ! m.missing
-        ? `${m.w}x${m.h} in a ${m.bar}px bar (height must be 30..${m.bar - 6})`
-          + ` · centre off the wordmark's by ${m.dCentre}px (must be <1) · gap ${m.gap}px (6..11)`
-          + ` · dark theme shows ${m.onDark[0] !== 'none' ? 'negative' : 'NOTHING'},`
-          + ` light shows ${m.onLite[1] !== 'none' ? 'purple' : 'NOTHING'}`
-          + ` · raster <img> still present: ${m.raster}`
-        : 'the mark or the wordmark is missing');
+        ? `marks in the header: ${m.marks} (must be 0) · TERRAIN starts at x=${m.x} against a ${m.pad}px padding · centre off the bar's by ${m.dCentre}px`
+        : 'header or wordmark missing');
+  }
+
+
+  // ── fb630 — THE VALUE LIVES INSIDE THE RING ─────────────────────────────────────────────────
+  // Max: "take what we already did for the effect rack cards and just put them inside all of the
+  // engines... use your design skill: all of them perfectly inside the circle. None outside. But not
+  // too small — people need to be able to read it." Three numbers, three assertions: every visible
+  // knob in every engine (and the noise strip) has a value; every glyph box's four corners lie inside
+  // the ring's inner circle; no value is set below the rack's own smallest size. And the row did not
+  // grow — the fixed-positions law.
+  {
+    const r = await p.evaluate (() => {
+      const dev = document.getElementById ('osc-a-device');
+      const all = ['engine-sample', 'engine-granular', 'engine-geode', 'engine-fm', 'engine-harm', 'engine-modal', 'swapped', 'uni-page'];
+      const modes = [[], ['engine-sample'], ['engine-granular'], ['engine-geode'], ['engine-fm'], ['engine-harm'], ['engine-modal'], ['swapped'], ['uni-page']];
+      const out = { seen: 0, noVal: [], outside: [], small: [], sizes: {} };
+      const measure = (root, tag) => root.querySelectorAll ('.knob').forEach (k => {
+        const ring = k.querySelector ('.knob-ring'); if (! ring || ! ring.offsetParent || ! ring.offsetWidth) return;
+        const id = k.dataset.syn || (k.querySelector ('.knob-label') || {}).textContent || '?';
+        out.seen++;
+        const kv = ring.querySelector ('.kv');
+        if (! kv || ! kv.textContent.trim()) { out.noVal.push (tag + ':' + id); return; }
+        const rr = ring.getBoundingClientRect(), cx = rr.left + rr.width / 2, cy = rr.top + rr.height / 2, R = rr.width / 2 - 3;   // inside the 2px arc at r=10
+        const fs = parseFloat (getComputedStyle (kv).fontSize); out.sizes[fs] = (out.sizes[fs] || 0) + 1;
+        if (fs < 5.8) out.small.push (tag + ':' + id + '@' + fs);
+        const nodes = kv.classList.contains ('st') ? [...kv.querySelectorAll ('i')] : [kv];
+        for (const n of nodes) { const rg = document.createRange(); rg.selectNodeContents (n); const b = rg.getBoundingClientRect();
+          let worst = 0; for (const [x, y] of [[b.left, b.top], [b.right, b.top], [b.left, b.bottom], [b.right, b.bottom]]) worst = Math.max (worst, Math.hypot (x - cx, y - cy));
+          if (worst > R + 0.5) { out.outside.push (tag + ':' + id + ' "' + kv.textContent.trim() + '" ' + worst.toFixed (1) + '>' + R.toFixed (1)); break; } }
+      });
+      for (const m of modes) { all.forEach (c => dev.classList.remove (c)); m.forEach (c => dev.classList.add (c)); measure (dev, m.join ('+') || 'wt'); }
+      all.forEach (c => dev.classList.remove (c));
+      measure (document.getElementById ('noise-mod'), 'noise');
+      const row = dev.querySelector ('.wt-knob-wrap .osc-knobs');
+      out.rowH = row ? +row.getBoundingClientRect().height.toFixed (1) : -1;
+      return out;
+    });
+    gate (r.seen >= 50 && r.noVal.length === 0 && r.outside.length === 0 && r.small.length === 0 && r.rowH === 38,
+      '[23] EVERY ENGINE KNOB CARRIES ITS VALUE INSIDE THE RING — inside the circle, readable, and nothing moved',
+      `${r.seen} visible knobs across 9 views + noise · without a value: ${r.noVal.length ? r.noVal.slice (0, 4).join (', ') : 'none'}`
+      + ` · glyphs outside the circle: ${r.outside.length ? r.outside.slice (0, 3).join (' | ') : 'none'}`
+      + ` · below 5.8px: ${r.small.length ? r.small.slice (0, 3).join (', ') : 'none'} · sizes ${JSON.stringify (r.sizes)} · knob row ${r.rowH}px (must stay 38)`);
+  }
+
+  // ── fb630 — what the readouts SAY ───────────────────────────────────────────────────────────
+  {
+    const r = await p.evaluate (() => {
+      const f = window.__fmtRing, o = {};
+      o.wt16  = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0));          // the bank default, before any push
+      window.onWtFrames (0, 128);                                        // the editor timer's push: a Terra table
+      o.wt128a = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0)); o.wt128z = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 1)); o.wt128m = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0.5));
+      const rg = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_A_WT_FRAME"] .knob-ring');
+      o.live = rg && rg.__kv ? rg.__kv.textContent.replace (/\s+/g, '') : '?';   // the live ring, repainted by the push
+      o.liveWant = rg ? String (1 + Math.round ((rg.__n || 0) * 127)) + '128' : '?';   // from what the knob actually holds
+      o.panL = f ('SYN_OSC_A_PAN', 0); o.panC = f ('SYN_OSC_A_PAN', 0.5); o.panR = f ('SYN_OSC_A_PAN', 1);
+      o.semi = f ('SYN_OSC_A_SEMI', 1); o.oct = f ('SYN_OSC_A_OCT', 0); o.key = f ('SYN_OSC_A_GRAIN_KEY', 0.5); o.warp = f ('SYN_OSC_A_WARP_AMOUNT', 0.48);
+      o.scan = f ('SYN_OSC_A_GRAIN_SCAN', 0.5); o.ratio = f ('SYN_OSC_A_FM_RATIO', 0);
+      const nz = [...document.querySelectorAll ('#noise-mod .noise-knobs .knob-ring .kv')].map (e => e.textContent.trim());
+      o.noise = nz.join ('|');
+      const lab = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_A_GEODE_DISTILL"] .knob-label');
+      o.shape = lab ? lab.textContent : '?';
+      window.onWtFrames (0, 16);
+      return o;
+    });
+    const shapes = ['Sine','Square','Saw','Triangle','Pulse','Hollow','Organ','Half','Vowel','Bright','Metal'];
+    gate (r.wt16 === '{"a":1,"b":16}' && r.wt128a === '{"a":1,"b":128}' && r.wt128z === '{"a":128,"b":128}' && r.wt128m === '{"a":65,"b":128}'
+          && r.live === r.liveWant
+          && r.panL === 'L100' && r.panC === 'C' && r.panR === 'R100' && r.semi === '+12' && r.oct === '-3' && r.key === 'Chord'
+          && r.warp === '48' && r.scan === '0' && r.ratio === '0.25'
+          && /^\d+\|\d\.\d\d\|(C|[LR]\d+)$/.test (r.noise) && shapes.indexOf (r.shape) >= 0,
+      '[24] THE READOUTS SAY THE RIGHT THING — frame over frames from the live count, L/C/R, signs, words, and Shape names its target',
+      `WT Pos ${r.wt16} → after a 128-frame push ${r.wt128a} … ${r.wt128m} … ${r.wt128z}, live ring "${r.live}" (must be ${r.liveWant})`
+      + ` · pan ${r.panL}/${r.panC}/${r.panR} · semi ${r.semi} · oct ${r.oct} · key ${r.key} · warp ${r.warp} · scan-centre ${r.scan} · ratio ${r.ratio}`
+      + ` · noise ${r.noise} (level|rate|pan) · Shape's label "${r.shape}"`);
+  }
+
+  // ── fb630 — the native capture strip hears about the glass ─────────────────────────────────
+  {
+    const r = await p.evaluate (() => {
+      const calls = window.__gateCalls.filter (c => c.fn === 'setBrowserGlass');
+      document.documentElement.setAttribute ('data-theme', 'dark');   // the last open happened under dark ([21])
+      const mb = (getComputedStyle (document.documentElement).getPropertyValue ('--menu-bg') || '').match (/[\d.]+/g).map (Number);
+      const gb = (getComputedStyle (document.getElementById ('plugin')).backgroundColor || '').match (/[\d.]+/g).map (Number);
+      const a = mb[3], mix = i => Math.round (mb[i] * a + gb[i] * (1 - a)), hx = v => v.toString (16).padStart (2, '0');
+      const ons = calls.filter (c => c.args[0] === '1');
+      const out = { n: calls.length, on: ons[ons.length - 1], off: calls.filter (c => c.args[0] === '0').length,
+                    expect: 'ff' + hx (mix (0)) + hx (mix (1)) + hx (mix (2)) };
+      document.documentElement.removeAttribute ('data-theme');
+      return out;
+    });
+    gate (r.n >= 2 && !! r.on && /^ff[0-9a-f]{6}$/.test (r.on.args[1]) && r.on.args[1] === r.expect && r.off >= 1,
+      '[25] THE NATIVE CAPTURE STRIP IS TOLD THE GLASS — composited from the live tokens on open, dropped on close',
+      `setBrowserGlass called ${r.n}× · on open: ${r.on ? r.on.args.join (',') : 'NEVER'} (expected 1,${r.expect} = --menu-bg over #plugin's ground) · off calls ${r.off}`);
   }
 
   await b.close();
