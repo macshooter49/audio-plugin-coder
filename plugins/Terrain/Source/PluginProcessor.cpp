@@ -15776,7 +15776,7 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
 // in the file is the number in the file. nodes is the environment seat (0 until the patcher).
 static juce::var tiCarriesOf (const juce::ValueTree& s)
 {
-    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    int wt = 0, wtf = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;   // fb624 — wtf: of those, how many are SHIPPED
     juce::int64 bWt = 0, bSmp = 0, bIr = 0;
     // fb621 — the embedded asset is the truth; the fv=1 property is the fallback so a preset saved
     // before this commit still counts what it carries.
@@ -15789,7 +15789,11 @@ static juce::var tiCarriesOf (const juce::ValueTree& s)
     {
         const auto wtA = s.getProperty ("wtAsset" + juce::String (o), "").toString();
         if (wtA.isNotEmpty() || s.getProperty ("wtImportPcm" + juce::String (o), "").toString().isNotEmpty())
-        { ++wt; bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o); }
+        { ++wt;
+          // fb624 — Max: "the wavetable is factory though, so you should probably let them know."
+          // A reference IS the answer: shipped content is referenced, a user's own table is embedded.
+          if (tw::asset::isRef (wtA)) ++wtf;
+          bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o); }
         if (s.getProperty ("oscAsset" + juce::String (o), "").toString().isNotEmpty()
             || s.getProperty ("oscSamplePath" + juce::String (o), "").toString().isNotEmpty())
         { ++smp; bSmp += bytesOf ("oscAsset", o); }
@@ -15813,7 +15817,7 @@ static juce::var tiCarriesOf (const juce::ValueTree& s)
     if (auto v = juce::JSON::parse (s.getProperty ("lfoShapesJson", "").toString()); v.isObject())
         if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
     auto* o = new juce::DynamicObject();
-    o->setProperty ("wt", wt); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
+    o->setProperty ("wt", wt); o->setProperty ("wtf", wtf); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
     o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
     o->setProperty ("bytes", (double) (bWt + bSmp + bIr));
     return juce::var (o);
@@ -16828,7 +16832,8 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                     juce::String rel, want;
                     if (tw::asset::parseRef (neu, rel, want))
                     {
-                        const auto f = wtFactoryRoot().getChildFile (rel);
+                        // fb624 — the reference always speaks '/'; the file system gets its own separator back
+                        const auto f = wtFactoryRoot().getChildFile (rel.replaceCharacter ('/', juce::File::getSeparatorChar()));
                         std::vector<float> mono;
                         if (f.existsAsFile() && tiDecodeWavetableMono (f, mono) && ! mono.empty())
                         {
@@ -17845,10 +17850,16 @@ void         TerrainAudioProcessor::setPatcherJson (const juce::String& j) { pat
 // their own manifests, but a preset being saved has no file yet.
 juce::String TerrainAudioProcessor::getCarriesJson() const
 {
-    int wt = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    int wt = 0, wtf = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
+    const auto factoryRoot = wtFactoryRoot();
     for (int o = 0; o < 4; ++o)
     {
-        if (! importedPcm_[o].empty())                             ++wt;
+        if (! importedPcm_[o].empty())
+        {
+            ++wt;   // fb624 — shipped content is REFERENCED, so it costs the preset nothing
+            if (importPath_[(size_t) o].isNotEmpty() && factoryRoot.isDirectory()
+                && juce::File (importPath_[(size_t) o]).isAChildOf (factoryRoot)) ++wtf;
+        }
         if (oscSampleBuffers_[(size_t) o].getNumSamples() > 0)     ++smp;
         if (layers[(size_t) o].sampleBuffer.getNumSamples() > 0)   ++smp;
     }
@@ -17861,7 +17872,7 @@ juce::String TerrainAudioProcessor::getCarriesJson() const
     if (auto v = juce::JSON::parse (patcherJson_); v.isObject())
         if (auto* a = v.getProperty ("nodes", juce::var()).getArray()) nodes = a->size();
     auto* o = new juce::DynamicObject();
-    o->setProperty ("wt", wt); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
+    o->setProperty ("wt", wt); o->setProperty ("wtf", wtf); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
     o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
     return juce::JSON::toString (juce::var (o), true);
 }

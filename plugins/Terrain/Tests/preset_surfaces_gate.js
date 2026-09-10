@@ -32,6 +32,9 @@
 //  13  ESCAPE closes the sheet, the menu, the browser; a mousedown outside closes the quick menu
 //  14  fb622 — the preset cluster is CENTRED in the header and EQ/DLY have no button (code intact)
 //  15  fb622 — selection is the WORDS (name, type, style go accent), never a fill, row or rail
+//  16  fb624 — the Load BUTTON keeps the browser open; only a double-click on a row closes it
+//  17  fb624 — the inspector: author under the name and editable, Effects/Author rows gone, the
+//      type/style filters moved OUT of the top and into the scrolling column
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
@@ -277,6 +280,45 @@ const STUB = (MUT) => {
       '[15] SELECTION IS THE WORDS — name, type and style go accent; no fill on the row OR the rail',
       g ? `row background ${g.bg} · name ${g.nm} · type ${g.ty} · style ${g.st} · an unselected name ${g.plain} · rail fill ${g.railBg}, rail line ${g.railLine}`
         : 'no selected row');
+  }
+
+  // [16] fb624 — the Load BUTTON keeps the browser open; only a double-click on a row closes it
+  {
+    await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
+    const row = await rowByName ('Tectonic'); await row.click(); await wait (120);
+    const before = await header();
+    await p.click ('#tp-i-load'); await wait (300);
+    const afterLoad = await p.evaluate (() => ({ open: document.getElementById ('tp-b').classList.contains ('on'),
+                                                 h: document.getElementById ('preset-name').textContent.trim() }));
+    const dbl = await rowByName ('Anvil'); await dbl.click(); await wait (90); await dbl.click(); await wait (300);
+    const afterDbl = await p.evaluate (() => ({ open: document.getElementById ('tp-b').classList.contains ('on'),
+                                                h: document.getElementById ('preset-name').textContent.trim() }));
+    gate (afterLoad.open && afterLoad.h !== before && ! afterDbl.open && afterDbl.h === 'Terra - Anvil',
+      '[16] THE LOAD BUTTON KEEPS THE BROWSER OPEN — only a double-click on a row closes it',
+      `before "${before}" · after Load: open ${afterLoad.open}, header "${afterLoad.h}" · after a double-click: open ${afterDbl.open}, header "${afterDbl.h}"`);
+  }
+
+  // [17] fb624 — the inspector: the author under the name, no Effects/Author rows, filters moved in
+  {
+    if (! await p.evaluate (() => document.getElementById ('tp-b').classList.contains ('on'))) {
+      await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
+    }
+    const sl = await rowByName ('Slatt'); await sl.click(); await wait (150);
+    const i = await p.evaluate (() => {
+      const keys = [...document.querySelectorAll ('#tp-insp .kv .k')].map (e => e.textContent.trim());
+      const au = document.getElementById ('tp-author');
+      const sc = document.getElementById ('tp-iscroll');
+      const chipsInside = !! (sc && sc.querySelector ('#tp-chips-type') && sc.querySelector ('#tp-chips-style'));
+      const chipsAtTop = !! document.querySelector ('#tp-b > .chips');
+      const acts = document.getElementById ('tp-acts');
+      return { keys, author: au ? au.textContent.trim() : null, editable: !!(au && au.isContentEditable),
+               chipsInside, chipsAtTop, scrolls: !!(sc && getComputedStyle (sc).overflowY === 'auto'),
+               actsPinned: !!(acts && acts.parentElement && acts.parentElement.classList.contains ('insp')) };
+    });
+    gate (i.keys.join ('|') === 'Type|Style|Bank|Load|Size' && i.author === 'Max' && i.editable
+          && i.chipsInside && ! i.chipsAtTop && i.scrolls && i.actsPinned,
+      '[17] THE INSPECTOR — author under the name (editable), no Effects/Author rows, filters moved in, column scrolls',
+      `kv rows ${i.keys.join (' / ')} · author "${i.author}" editable ${i.editable} · chips in the inspector ${i.chipsInside}, still at the top ${i.chipsAtTop} · scrolls ${i.scrolls} · Load pinned ${i.actsPinned}`);
   }
 
   await b.close();

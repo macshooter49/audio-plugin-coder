@@ -75,9 +75,13 @@ inline juce::String hashOf (const void* data, size_t bytes)
 //  and embedding it would put ~1.4 MB of the SAME audio in every preset that used it. A reference
 //  names the file relative to its factory root and carries a hash, so a library that changed under
 //  a preset's feet can SAY SO instead of quietly sounding different.
+//  🚨 THE SEPARATOR IS ALWAYS '/'. getRelativePathFrom answers in the PLATFORM's separator, so a
+//  bank exported on a Mac would carry "Analog/Terra - Brownout.flac" and one exported on Windows
+//  would carry "Analog\\Terra - Brownout.flac" — and each would fail to resolve on the other
+//  machine, silently, as a missing factory table. Packs cross platforms; the format does not get to.
 inline juce::String makeRef (const juce::String& relPath, const juce::String& hash)
 {
-    return "ref:1|" + relPath.replaceCharacter ('|', '/') + "|" + hash;
+    return "ref:1|" + relPath.replaceCharacter ('|', '/').replaceCharacter ('\\', '/') + "|" + hash;
 }
 inline bool isRef (const juce::String& s) { return s.startsWith ("ref:1|"); }
 inline bool parseRef (const juce::String& s, juce::String& relOut, juce::String& hashOut)

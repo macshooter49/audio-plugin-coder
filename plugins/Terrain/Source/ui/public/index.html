@@ -1239,12 +1239,12 @@ body {
 #tp-b .ibtn.on svg { filter: drop-shadow(0 0 4px rgba(255,255,255,0.5)); }
 #tp-b .ibtn svg { width: 15px; height: 15px; }
 
-#tp-b .chips { display: flex; align-items: center; gap: 4px; padding: 0 16px; height: 30px; border-bottom: 1px solid var(--menu-line); flex: none; }
-#tp-b .chips .lb { width: 40px; flex: none; font-size: 10px; font-weight: 500; color: var(--text-soft); }
-#tp-b .chips .strip { flex: 1; min-width: 0; display: flex; gap: 4px; overflow-x: auto; overflow-y: hidden; scrollbar-width: none; padding: 2px 0;
-  -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent); }
-#tp-b .chips .strip::-webkit-scrollbar { display: none; height: 0; }
-#tp-b .chips .strip.end { -webkit-mask-image: none; mask-image: none; }
+/* fb624 — the filters live in the inspector now: a label, then chips that WRAP. Nothing scrolls
+   sideways any more (a 230px column has no room for it), and the column's own scroller carries
+   however many words the user invents — "we could also keep adding to it". */
+#tp-b .chips { display: block; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
+#tp-b .chips .lb { display: block; margin-bottom: 6px; font-size: 10px; font-weight: 500; color: var(--text-soft); }
+#tp-b .chips .strip { display: flex; flex-wrap: wrap; gap: 4px; }
 .tp-chip { padding: 4px 9px; border: 1px solid var(--edge-soft); border-radius: 4px; background: transparent; font-size: 9.5px; font-weight: 500; color: var(--text-soft); cursor: pointer; transition: color .15s, border-color .15s; white-space: nowrap; line-height: 1.2; flex: none; font-family: inherit; }
 .tp-chip:hover { color: var(--text-primary); }
 .tp-chip.active { background: transparent; border-color: var(--purple-400); color: var(--on-fg); }   /* the tile rule, verbatim */
@@ -1311,15 +1311,32 @@ body {
 #tp-empty { padding: 60px 30px; text-align: center; color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
 #tp-empty b { display: block; color: var(--text-primary); font-weight: 500; margin-bottom: 2px; }
 
-#tp-b .insp { width: 222px; flex: none; border-left: 1px solid var(--menu-line); padding: 14px 18px 12px; display: flex; flex-direction: column; overflow: hidden; }
-#tp-b .insp .nm, #tp-b .insp .sub, #tp-b .insp .kv, #tp-b .insp .carries, #tp-b .insp .acts { flex: none; }
+#tp-b .insp { width: 230px; flex: none; border-left: 1px solid var(--menu-line); display: flex; flex-direction: column; overflow: hidden; }
+/* the scroll region — the house 5px translucent slider, the same one every menu in this file uses */
+#tp-b .iscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 18px 14px; }
+#tp-b .iscroll::-webkit-scrollbar { width: 5px; height: 5px; }
+#tp-b .iscroll::-webkit-scrollbar-track { background: transparent; }
+#tp-b .iscroll::-webkit-scrollbar-thumb { background: rgba(127,127,160,0.25); border-radius: 3px; }
+#tp-b .iscroll::-webkit-scrollbar-thumb:hover { background: rgba(127,127,160,0.45); }
+#tp-b .insp .nm, #tp-b .insp .sub, #tp-b .insp .kv, #tp-b .insp .carries { flex: none; }
 #tp-b .insp .nm { font-size: 13px; font-weight: 500; color: var(--text-primary); line-height: 1.3; letter-spacing: .2px; }
 #tp-b .insp .nm .bk { color: var(--text-secondary); font-weight: 400; }
-#tp-b .insp .sub { margin-top: 3px; height: 14px; font-size: 10px; font-weight: 500; color: var(--purple-400); line-height: 14px; }
-#tp-b .insp .sub .user { color: var(--text-secondary); }
+/* fb624 — the AUTHOR sits under the name (it used to say "User", which the bank already says two
+   rows down). Max: "I want that to be User - Snare Jordan / Macshooter, small enough that it stays
+   in between that space and doesn't overlap anything." Editable on your own presets. */
+#tp-b .insp .sub { margin-top: 3px; min-height: 14px; font-size: 10px; font-weight: 500; color: var(--text-secondary); line-height: 14px; }
+#tp-b .insp .sub .env { color: var(--purple-400); }
+#tp-b .insp .sub .au { display: inline-block; min-width: 30px; border-radius: 4px; padding: 0 3px; margin: 0 -3px; outline: none; transition: box-shadow .15s; }
+#tp-b .insp .sub .au[contenteditable]:hover { box-shadow: inset 0 0 0 1px var(--edge-soft); }
+#tp-b .insp .sub .au:focus { box-shadow: inset 0 0 0 1px var(--purple-400); color: var(--text-primary); }
+#tp-b .insp .sub .au:empty::before { content: attr(data-ph); color: var(--text-muted); }
 #tp-b .insp .kv { display: grid; grid-template-columns: 52px 1fr; row-gap: 5px; column-gap: 8px; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
 #tp-b .insp .k { font-size: 10px; font-weight: 500; color: var(--text-soft); line-height: 14px; }
 #tp-b .insp .v { font-size: 10.5px; color: var(--text-primary); line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#tp-b .insp .v.clamp:hover { color: var(--purple-400); cursor: default; }   /* fb624 — hover the … to read the rest */
+.pmenu.tp-menu.tp-tip { max-width: 250px; }
+.pmenu.tp-menu.tp-tip .pi { color: rgba(255,255,255,.86); }
+.pmenu.tp-menu.tp-tip .pi .nm { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.45; }
 #tp-b .insp .carries { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
 #tp-b .insp .carries .k { margin-bottom: 6px; }
 #tp-b .insp .cl { display: flex; align-items: center; gap: 8px; height: 19px; font-size: 10.5px; color: var(--text-primary); }
@@ -1327,16 +1344,16 @@ body {
 #tp-b .insp .cl.node, #tp-b .insp .cl.node svg { color: var(--purple-400); }
 #tp-b .insp .cl .n { flex: 1; }
 #tp-b .insp .cl.none, #tp-b .insp .cl.none svg { color: var(--text-secondary); }
-#tp-b .insp .notes { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); flex: 1 1 auto; min-height: 56px; display: flex; flex-direction: column; overflow: hidden; }
-#tp-b .insp .notes .k { margin-bottom: 4px; flex: none; }
-.tp-notebox { flex: 1; min-height: 0; overflow-y: auto; scrollbar-width: none; border-radius: 6px; padding: 5px 7px; margin: 0 -7px; font-size: 10.5px; line-height: 1.45; color: var(--text-primary); outline: none;
+/* fb624 — the note starts small and GROWS with what you type; the column scrolls, the box does not. */
+#tp-b .insp .notes { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
+#tp-b .insp .notes .k { margin-bottom: 4px; }
+.tp-notebox { min-height: 34px; border-radius: 6px; padding: 5px 7px; margin: 0 -7px; font-size: 10.5px; line-height: 1.45; color: var(--text-primary); outline: none;
   white-space: pre-wrap; word-break: break-word; user-select: text; -webkit-user-select: text; cursor: text; transition: box-shadow .15s; }
-.tp-notebox::-webkit-scrollbar { display: none; }
 .tp-notebox:empty::before { content: attr(data-ph); color: var(--text-muted); }
 .tp-notebox[contenteditable]:hover { box-shadow: inset 0 0 0 1px var(--edge-soft); }
 .tp-notebox:focus { box-shadow: inset 0 0 0 1px var(--purple-400); }
 .tp-notebox.ro { cursor: default; user-select: none; -webkit-user-select: none; }
-#tp-b .insp .acts { margin-top: 10px; display: flex; gap: 6px; }
+#tp-b .insp .acts { flex: none; display: flex; gap: 6px; padding: 10px 18px 12px; border-top: 1px solid var(--menu-line); }
 .tp-btn { height: 28px; border: 1px solid var(--edge-soft); border-radius: 6px; background: transparent; color: var(--text-soft); font-size: 10.5px; font-weight: 500; cursor: pointer; padding: 0 12px; display: flex; align-items: center; justify-content: center; gap: 6px; transition: border-color .15s, color .15s; font-family: inherit; }
 .tp-btn:hover { color: var(--text-primary); border-color: var(--edge); }
 .tp-btn.pri { border-color: var(--purple-400); color: var(--on-fg); flex: 1; }   /* the tile rule: purple outline, white letters, no fill */
@@ -1373,6 +1390,13 @@ body {
 #tp-sheet .manifest .ml b { font-weight: 500; color: var(--text-primary); }
 #tp-sheet .manifest .ml .node, #tp-sheet .manifest .ml .node svg { color: var(--purple-400); }
 #tp-sheet .manifest .tot { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); }
+
+/* fb624 — WHILE THE BROWSER IS UP, THE PAGE'S FLOATING OVERLAYS STAND DOWN. Everything here is
+   position:fixed at the top of the z range and belongs to the synth page, which the glass has
+   covered: the modulation attenuator (2147483647), the drag ghost, and any popped-out card. This
+   is a visibility rule, not a stacking fight — the stacking order at that end is saturated, and
+   fb606 already proved that a bigger number cannot fix a covered surface. */
+html.tp-browsing .sm-att, html.tp-browsing .sm-ghost, html.tp-browsing .ti-card { display: none !important; }
 
 /* ─── THE LOADING OVERLAY — a wash, a name, a bar. Flat, never blurred: fb613 measured the
    renderer paying for every gradient, and this one is on screen exactly when the machine is busy. */
@@ -31850,6 +31874,13 @@ restoreThemeFromBackend();
     att.style.left=Math.max(M+OV, Math.min(xLayout, window.__vw()-W-M-OV))+'px';
     att.style.top=Math.max(HEAD+M, Math.min(yLayout, window.__vh()-H-M))+'px'; }
   function hideAtt(){ att.classList.remove('on'); }
+  /* fb624 — the preset browser covers the whole window, and this meter is position:fixed at
+     z-index 2147483647 (fb455 made it the maximum on purpose, so nothing could paint over it on
+     the synth page). Left showing from a modulated control, it then floated over the browser —
+     Max caught his filter cutoff's attenuator sitting under "All" in the author rail. The meter
+     belongs to a surface that is no longer visible, so the browser puts it away rather than
+     fighting it for a z-index nobody can win. */
+  window.__tiHideModMeter = hideAtt;
 
   function ss(id){ try{ return (window.Juce&&window.Juce.getSliderState)?window.Juce.getSliderState(id):null; }catch(e){ return null; } }
   var pushFn=null; function push(){ try{ if(!pushFn&&window.Juce&&window.Juce.getNativeFunction)pushFn=window.Juce.getNativeFunction('setSynthMod'); }catch(e){}
@@ -39607,8 +39638,6 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     <button class="ibtn" id="tp-fav-only" title="Favourites only"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20.5 4.4 13a4.6 4.6 0 0 1 6.5-6.5l1.1 1.1 1.1-1.1a4.6 4.6 0 0 1 6.5 6.5z"/></svg></button>
     <button class="ibtn" id="tp-close" title="Close"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 5l14 14"/><path d="M19 5L5 19"/></svg></button>
   </div>
-  <div class="chips" id="tp-chips-type"><span class="lb">Type</span><div class="strip"></div></div>
-  <div class="chips" id="tp-chips-style"><span class="lb">Style</span><div class="strip"></div></div>
   <div class="body">
     <div class="rail" id="tp-rail"></div>
     <div class="listcol">
@@ -39624,12 +39653,25 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         <div id="tp-empty" style="display:none"></div>
       </div>
     </div>
-    <div class="insp" id="tp-insp"></div>
+    <!-- fb624 — Max: "I want the type and the style to not be at the top any more, I want them under
+         the notes… we should have a side scroller… so now the header has way more room: just a
+         search, our two presets, the dice, the heart and the x." The filters live in the inspector
+         now and the column scrolls; the action row stays pinned, which matters more now that Load
+         keeps the browser open. -->
+    <div class="insp">
+      <div class="iscroll" id="tp-iscroll">
+        <div id="tp-insp"></div>
+        <div class="chips" id="tp-chips-type"><span class="lb">Type</span><div class="strip"></div></div>
+        <div class="chips" id="tp-chips-style"><span class="lb">Style</span><div class="strip"></div></div>
+      </div>
+      <div class="acts" id="tp-acts"></div>
+    </div>
   </div>
 </div>
 
 <div class="pmenu tp-menu tp-ctx" id="tp-ctx"></div>
 <div class="pmenu tp-menu tp-sug" id="tp-sug"></div>
+<div class="pmenu tp-menu tp-tip" id="tp-tip"></div>
 <div id="tp-sheet"><div class="tp-card"></div></div>
 <div id="tp-load"><div class="card"><div class="lk" id="tp-ld-k">Loading</div><div class="ln" id="tp-ld-n"></div><div class="bar"><i id="tp-ld-bar"></i></div><div class="lp" id="tp-ld-p">0%</div></div></div>
 <div id="tp-toast"></div>
@@ -39717,6 +39759,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         S.presets.push({ id: S.presets.length, name: String(r.name || ''), bank: bank.name, author: String(r.author || bank.author || ''), type: tidy(r.type) || '',
           styles: stylesOf(r.styles).map(tidy), note: String(r.note || ''), fv: +r.fv || 1, c, env: c[5] > 0, path: String(r.path || ''), mtime: +r.mtime || 0,
           fx: String(r.fx || ''), bytes: +r.bytes || 0, carried: (r.carries && +r.carries.bytes) || 0,
+          cf: (r.carries && +r.carries.wtf) || 0,   /* fb624 — of the wavetables, how many are factory */
           factory: !!r.factory, user: !r.factory });
         bank.n++;
       }
@@ -39812,11 +39855,14 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function browserOpen() { return $('tp-b').classList.contains('on'); }
   function openBrowser() {
     $('tp-b').classList.add('on'); window.__tiFrozen = true;   /* the glass covers every painter; nothing under it needs a frame */
+    document.documentElement.classList.add('tp-browsing');     /* fb624 — the page's floating overlays stand down */
+    try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {}
     S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp();
     if (S.sel < 0) { const v = visibleIds(); if (v.length) { S.sel = v[0]; renderRows(); renderInsp(); } }
     $('tp-list').focus();
   }
-  function closeBrowser() { $('tp-b').classList.remove('on'); window.__tiFrozen = false; closeCtx(); closeSug(); try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
+  function closeBrowser() { $('tp-b').classList.remove('on'); window.__tiFrozen = false;
+    document.documentElement.classList.remove('tp-browsing'); closeCtx(); closeSug(); try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
   $('tp-close').onclick = closeBrowser;
   window.__tiOpenPresetBrowser = openBrowser;
 
@@ -39868,10 +39914,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function buildRows() {
     const r = $('tp-rows'); let h = '';
     for (const p of S.presets) h += `<div class="tp-row" data-id="${p.id}">
-      <span class="c-nm"><span class="t">${label(p)}</span>${p.env ? '<span class="tag">Env</span>' : ''}${p.user ? '<span class="tag user">User</span>' : ''}</span>
+      <span class="c-nm"><span class="t" data-full="${esc(plain(p))}">${label(p)}</span>${p.env ? '<span class="tag">Env</span>' : ''}${p.user ? '<span class="tag user">User</span>' : ''}</span>
       <span class="c-car">${p.c.map((n, i) => `<span class="tp-car${n ? ' on' : ''}${i === 5 ? ' node' : ''}" title="${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}">${CAR_GLYPH[i]}</span>`).join('')}</span>
       <span class="c-ty">${esc(p.type)}</span>
-      <span class="c-st">${esc(p.styles[0] || '')}</span>
+      <span class="c-st" data-full="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · '))}</span>
       <span class="c-fv${isFav(p) ? ' on' : ''}">${HEART}</span></div>`;
     r.innerHTML = h; rowsBuilt = S.presets.length;
     r.querySelectorAll('.tp-row').forEach(el => {
@@ -39901,41 +39947,86 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   document.querySelectorAll('#tp-b .hd [data-sort]').forEach(h => h.onclick = () => { const k = h.dataset.sort; if (S.sort.key === k) { if (S.sort.dir > 0) S.sort.dir = -1; else S.sort = { key: null, dir: 1 }; } else S.sort = { key: k, dir: 1 }; renderRows(); });
   function select(id) { S.sel = id; renderRows(); renderInsp(); }
   function visibleIds() { return [...$('tp-rows').querySelectorAll('.tp-row:not(.off)')].sort((a, b) => (+a.style.order) - (+b.style.order)).map(el => +el.dataset.id); }
-  let noteT = null;
+  let noteT = null, authorT = null;
   function renderInsp() {
-    const p = S.presets[S.sel], el = $('tp-insp'); if (!p) { el.innerHTML = ''; return; }
+    const p = S.presets[S.sel], el = $('tp-insp'), ac = $('tp-acts');
+    if (!p) { el.innerHTML = ''; ac.innerHTML = ''; return; }
     let cl = '';
-    p.c.forEach((n, i) => { if (n) cl += `<div class="cl${i === 5 ? ' node' : ''}">${CAR_GLYPH[i]}<span class="n">${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}</span></div>`; });
+    p.c.forEach((n, i) => {
+      if (!n) return;
+      let what = n === 1 ? CAR_ONE[i] : CAR_NAME[i];
+      /* fb624 — Max: "the wavetable is factory though, so you should probably let them know."
+         A shipped table is REFERENCED (it costs the preset nothing and is already on every
+         machine); a table someone made is EMBEDDED. The word says which. */
+      if (i === 0 && p.cf) what = p.cf >= n ? (n === 1 ? 'factory wavetable' : 'factory wavetables')
+                                            : `${CAR_NAME[0]} · ${p.cf} factory`;
+      cl += `<div class="cl${i === 5 ? ' node' : ''}">${CAR_GLYPH[i]}<span class="n">${n} ${what}</span></div>`;
+    });
     if (!cl) cl = `<div class="cl none">${CAR_GLYPH[0]}<span class="n">Parameters only</span></div>`;
+    const styles = p.styles.join(' · ');
     el.innerHTML = `
       <div class="nm">${label(p)}</div>
-      <div class="sub">${p.env ? 'Environment' : ''}${p.env && p.user ? ' · ' : ''}${p.user ? '<span class="user">User</span>' : ''}</div>
+      <div class="sub">${p.env ? '<span class="env">Environment · </span>' : ''}<span class="au" id="tp-author"${p.user ? ' contenteditable="plaintext-only" spellcheck="false" data-ph="Your name"' : ''}></span></div>
       <div class="kv">
         <span class="k">Type</span><span class="v">${esc(p.type || '—')}</span>
-        <span class="k">Style</span><span class="v" title="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · ') || '—')}</span>
-        <span class="k">Effects</span><span class="v" title="${esc(p.fx)}">${esc(p.fx || 'None')}</span>
-        <span class="k">Author</span><span class="v">${esc(p.author || '—')}</span>
+        <span class="k">Style</span><span class="v clamp" data-full="${esc(styles)}">${esc(styles || '—')}</span>
         <span class="k">Bank</span><span class="v">${esc(p.bank)}</span>
         <span class="k">Load</span><span class="v">${loadEst(p).txt}</span>
         <span class="k">Size</span><span class="v">${fmtB(p.bytes)}</span>
       </div>
       <div class="carries"><div class="k">Carries${p.carried ? ` · ${fmtB(p.carried)} embedded` : ''}</div>${cl}</div>
-      <div class="notes"><div class="k">Notes</div><div class="tp-notebox${p.user ? '' : ' ro'}" id="tp-note"${p.user ? ' contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note"' : ' data-ph="No notes"'}></div></div>
-      <div class="acts"><button class="tp-btn ic${isFav(p) ? ' on' : ''}" id="tp-i-fav" title="Favourite">${HEART}</button><button class="tp-btn pri" id="tp-i-load">Load</button></div>`;
+      <div class="notes"><div class="k">Notes</div><div class="tp-notebox${p.user ? '' : ' ro'}" id="tp-note"${p.user ? ' contenteditable="plaintext-only" spellcheck="false" data-ph="Add a note"' : ' data-ph="No notes"'}></div></div>`;
     const nb = $('tp-note'); nb.textContent = p.note || '';
     if (p.user) {
       nb.oninput = () => { p.note = nb.textContent; clearTimeout(noteT); noteT = setTimeout(() => saveNote(p), 600); };
       nb.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') nb.blur(); };
       nb.onblur = () => { clearTimeout(noteT); saveNote(p); };
     }
+    /* fb624 — the author line. On your own presets it is a field: type your name once and every
+       preset you save after it defaults to the same. */
+    const au = $('tp-author'); au.textContent = p.author || '';
+    if (p.user) {
+      au.oninput = () => { clearTimeout(authorT); authorT = setTimeout(() => saveAuthor(p, au.textContent), 600); };
+      au.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); au.blur(); } };
+      au.onblur = () => { clearTimeout(authorT); saveAuthor(p, au.textContent); };
+    }
+    ac.innerHTML = `<button class="tp-btn ic${isFav(p) ? ' on' : ''}" id="tp-i-fav" title="Favourite">${HEART}</button><button class="tp-btn pri" id="tp-i-load">Load</button>`;
     $('tp-i-fav').onclick = () => toggleFav(p.id);
-    $('tp-i-load').onclick = () => load(p.id, { close: true });
+    /* fb624 — Max: "when I press Load, the preset menu should stay open. It's only when I double
+       click on one that it should close." Clicking a row still only SELECTS, so you can read a
+       preset before you commit to it. */
+    $('tp-i-load').onclick = () => load(p.id);
   }
   function saveNote(p) { if (!p.user || !p.path) return; if (p.__savedNote === p.note) return; p.__savedNote = p.note;
     call('updatePresetMeta', p.path, JSON.stringify({ note: p.note })).then(r => { if (isErr(r)) toast(errOf(r)); });
     if (p.id === S.curId) { S.cur.note = p.note; call('setPresetMeta', JSON.stringify(S.cur)); } }
-  function toggleFav(id) { const p = S.presets[id]; if (!p) return; const k = favKey(p), on = !S.favs[k]; if (on) S.favs[k] = true; else delete S.favs[k];
+  function toggleFav(id) { const p = S.presets[id]; if (!p) return; const k = favKey(p), on = !S.favs[k];
+    if (on) S.favs[k] = true; else delete S.favs[k];
     call('setFavourite', p.bank, p.name, on); renderRows(); renderInsp(); renderQuick(); }
+  function saveAuthor(p, name) {
+    name = tidy(name); if (!p.user || !p.path || p.author === name) return;
+    p.author = name; S.author0 = name || S.author0;
+    call('updatePresetMeta', p.path, JSON.stringify({ author: name })).then(r => { if (isErr(r)) toast(errOf(r)); else renderRail(); });
+    if (p.id === S.curId) { S.cur.author = name; call('setPresetMeta', JSON.stringify(S.cur)); }
+  }
+
+  /* ═══ fb624 — HOVER THE … AND READ THE REST ════════════════════════════════════════════════════
+     Max: "anything that's being shortened down that requires a dot dot dot, I want to be able to
+     hover over it and a menu shows the rest — dark, phasing, dirty." It only opens when the text is
+     ACTUALLY clipped, so a short style list never grows a popup nobody asked for. */
+  function tipShow(el) {
+    const full = el.getAttribute('data-full');
+    if (!full || el.scrollWidth <= el.clientWidth + 1) return;
+    const m = $('tp-tip');
+    m.innerHTML = `<div class="pi dim"><span class="nm">${esc(full)}</span></div>`;
+    const r = el.getBoundingClientRect();
+    m.classList.add('on'); m.style.left = '0px'; m.style.top = '0px';
+    placeMenu(m, r.left - 6, r.bottom + 4);
+  }
+  function tipHide() { $('tp-tip').classList.remove('on'); }
+  $('tp-b').addEventListener('mouseover', e => { const t = e.target.closest && e.target.closest('[data-full]'); if (t) tipShow(t); });
+  $('tp-b').addEventListener('mouseout',  e => { if (e.target.closest && e.target.closest('[data-full]')) tipHide(); });
+
   $('tp-search').oninput = e => { S.q = e.target.value.trim().toLowerCase(); renderRows(); };
   $('tp-search').onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape') { if (S.q) { e.target.value = ''; S.q = ''; renderRows(); } else closeBrowser(); } if (e.key === 'ArrowDown') { $('tp-list').focus(); e.preventDefault(); } };
   $('tp-fav-only').onclick = () => { S.favOnly = !S.favOnly; $('tp-fav-only').classList.toggle('on', S.favOnly); renderRows(); };
