@@ -37,6 +37,8 @@
 //  17  fb624 — the inspector: author under the name and editable, Effects/Author rows gone, the
 //      type/style filters moved OUT of the top and into the scrolling column
 //  18  fb625 — the header name CLOSES the browser (back to the synth), never stacks a menu on it
+//  19  fb626 — every preset surface (quick menu, browser, sheet) stands the synth page's floating
+//      overlays down: the modulation attenuator sits at the maximum z and belongs to a covered page
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
@@ -247,12 +249,13 @@ const STUB = (MUT) => {
   await p.evaluate (() => document.querySelector ('#tp-ctx .pi[data-a=saveas]').click()); await wait (150);
   const sheetOn = await p.evaluate (() => document.getElementById ('tp-sheet').classList.contains ('on') && !! document.getElementById ('tp-sv-name'));
   await p.evaluate (() => { const n = document.getElementById ('tp-sv-name'); n.value = 'Gate Pad'; document.getElementById ('tp-sv-bank').value = 'User'; document.getElementById ('tp-sv-type').value = 'Pad';
-    const add = document.getElementById ('tp-sv-style-add'); add.value = 'Wide'; add.dispatchEvent (new KeyboardEvent ('keydown', { key: 'Enter', bubbles: true })); });
+    const add = document.getElementById ('tp-sv-style-add'); add.value = 'Wide'; add.dispatchEvent (new KeyboardEvent ('keydown', { key: 'Enter', bubbles: true }));
+    document.getElementById ('tp-sv-note').textContent = 'Written in the save sheet.';   /* fb626 */ });
   await wait (60); await p.click ('#tp-sh-ok'); await wait (350);
   const sv = await calls ('savePresetToBank'); let svm = {}; try { svm = JSON.parse (sv[0].args[1]); } catch (e) {}
   const h8 = await header();
-  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Pad' && /Wide/.test (svm.styles) && h8 === 'User - Gate Pad',
-    '[8] SAVE AS — the + menu (Save off on a factory preset) → the sheet → savePresetToBank(\'User\', meta) → the header is the saved name',
+  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Pad' && /Wide/.test (svm.styles) && svm.note === 'Written in the save sheet.' && h8 === 'User - Gate Pad',
+    '[8] SAVE AS — the + menu (no title row) → the sheet, NOTE AND ALL → savePresetToBank(\'User\', meta) → the header is the saved name',
     `menu ${menuRows.join (' / ')} · sheet ${sheetOn} · native ×${sv.length} bank ${sv[0] ? sv[0].args[0] : '—'} meta ${JSON.stringify (svm)} · header "${h8}"`);
 
   // [9] save (overwrite) on a user preset
@@ -375,6 +378,26 @@ const STUB = (MUT) => {
     gate (! after.browser && ! after.quick && reopened,
       '[18] THE HEADER NAME CLOSES THE BROWSER — it never stacks a quick menu on top of it',
       `while browsing, one click → browser ${after.browser}, quick menu ${after.quick} · a second click from the synth reopens the quick menu ${reopened}`);
+  }
+
+  // [19] fb626 — every preset surface clears the page's floating overlays, not just the browser
+  {
+    await p.keyboard.press ('Escape'); await wait (150); await p.keyboard.press ('Escape'); await wait (200);
+    const cls = () => p.evaluate (() => document.documentElement.classList.contains ('tp-browsing'));
+    const atRest = await cls();
+    await p.click ('#preset-name'); await wait (200); const onQuick = await cls();
+    await p.click ('#tp-q-browse'); await wait (280); const onBrowser = await cls();
+    await p.click ('#preset-save-btn'); await wait (160);
+    await p.evaluate (() => { const r = document.querySelector ('#tp-ctx .pi[data-a=saveas]'); if (r) r.click(); }); await wait (240);
+    const onSheet = await cls();
+    /* the attenuator is the one that bit him twice; prove the rule actually hides it */
+    const hidden = await p.evaluate (() => { const t = document.createElement ('div'); t.className = 'sm-att on';
+      document.body.appendChild (t); const gone = getComputedStyle (t).display === 'none'; t.remove(); return gone; });
+    await p.keyboard.press ('Escape'); await wait (180); await p.keyboard.press ('Escape'); await wait (220);
+    const backAtRest = await cls();
+    gate (! atRest && onQuick && onBrowser && onSheet && hidden && ! backAtRest,
+      '[19] EVERY PRESET SURFACE STANDS THE PAGE’S FLOATING OVERLAYS DOWN (quick menu, browser, sheet)',
+      `at rest ${atRest} · quick ${onQuick} · browser ${onBrowser} · sheet ${onSheet} · a live .sm-att is display:none while up ${hidden} · back at rest ${backAtRest}`);
   }
 
   await b.close();

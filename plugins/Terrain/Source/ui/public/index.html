@@ -1376,13 +1376,28 @@ body {
 /* ── SHEETS — save, new bank, rename, delete, export. One card grammar. Flat wash, no blur. ────── */
 #tp-sheet { position: absolute; inset: 0; z-index: 2100; background: var(--wash); display: none; align-items: center; justify-content: center; color: var(--text-primary); }
 #tp-sheet.on { display: flex; }
-#tp-sheet .tp-card { width: 340px; background: var(--bg-surface); border: 1px solid var(--border-strong); border-radius: 12px; padding: 20px 22px 18px; box-shadow: 0 30px 70px rgba(0,0,0,.5); }
+/* fb626 — Max: "make this the same glass menu we have for the quick select — that cool dark purple
+   glass." So the sheet stops being a solid card and wears the .pmenu coat verbatim: the same
+   rgba(22,20,34,.72), the same blur(20) saturate(1.4), the same hairline and 12px radius that every
+   menu in this file has had since fb133. One material for every surface that floats. */
+#tp-sheet .tp-card { width: 340px; background: var(--menu-bg);
+  -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
+  border: 1px solid var(--menu-line); border-radius: 12px; padding: 20px 22px 18px;
+  box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
 #tp-sheet .tp-hd { font-size: 11.5px; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; }
 #tp-sheet .tp-f { display: grid; grid-template-columns: 56px 1fr; align-items: center; column-gap: 10px; row-gap: 9px; }
 #tp-sheet .tp-f .k { font-size: 10px; font-weight: 500; color: var(--text-soft); align-self: start; padding-top: 7px; }
 #tp-sheet .tp-f .v { font-size: 10.5px; color: var(--text-primary); padding-top: 6px; line-height: 1.5; }
-#tp-sheet .tp-in { height: 28px; border: 1px solid var(--border-strong); border-radius: 5px; padding: 0 9px; font-size: 11px; background: var(--bg-main); color: var(--text-primary); outline: none; width: 100%; font-family: inherit; }
-#tp-sheet .tp-in:focus { border-color: var(--purple-500); }
+#tp-sheet .tp-in { height: 28px; border: 1px solid var(--menu-line); border-radius: 5px; padding: 0 9px; font-size: 11px; background: rgba(255,255,255,0.05); color: var(--text-primary); outline: none; width: 100%; font-family: inherit; }
+#tp-sheet .tp-in:focus { border-color: var(--purple-400); background: rgba(255,255,255,0.07); }
+/* fb626 — the note rides with the sound. Max: "I need to be able to add the comments or the notes
+   here as well, so I can start adding my notes and then it saves automatically." */
+#tp-sheet .tp-note-in { height: auto; min-height: 46px; max-height: 108px; overflow-y: auto; padding: 6px 9px; line-height: 1.45;
+  white-space: pre-wrap; word-break: break-word; text-align: left; cursor: text; user-select: text; -webkit-user-select: text; }
+#tp-sheet .tp-note-in:empty::before { content: attr(data-ph); color: var(--text-muted); }
+#tp-sheet .tp-note-in::-webkit-scrollbar { width: 5px; }
+#tp-sheet .tp-note-in::-webkit-scrollbar-thumb { background: rgba(127,127,160,0.25); border-radius: 3px; }
+#tp-sheet .tp-note-in::-webkit-scrollbar-track { background: transparent; }
 #tp-sheet .tp-in::placeholder { color: var(--text-muted); }
 #tp-sheet .chp { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #tp-sheet .chp .tp-in { width: 110px; height: 22px; font-size: 10px; padding: 0 7px; }
@@ -1400,12 +1415,16 @@ body {
 #tp-sheet .manifest .ml .node, #tp-sheet .manifest .ml .node svg { color: var(--purple-400); }
 #tp-sheet .manifest .tot { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); }
 
-/* fb624 — WHILE THE BROWSER IS UP, THE PAGE'S FLOATING OVERLAYS STAND DOWN. Everything here is
-   position:fixed at the top of the z range and belongs to the synth page, which the glass has
-   covered: the modulation attenuator (2147483647), the drag ghost, and any popped-out card. This
-   is a visibility rule, not a stacking fight — the stacking order at that end is saturated, and
-   fb606 already proved that a bigger number cannot fix a covered surface. */
-html.tp-browsing .sm-att, html.tp-browsing .sm-ghost, html.tp-browsing .ti-card { display: none !important; }
+/* fb624 → fb626 — WHILE ANY PRESET SURFACE IS UP, THE PAGE'S FLOATING OVERLAYS STAND DOWN.
+   Everything listed here is position:fixed at the very top of the z range and belongs to the SYNTH
+   PAGE: the modulation attenuator (2147483647 — fb455 made it the maximum on purpose), the drag
+   ghost, and the floating cards. It is a visibility rule, not a stacking fight: that end of the
+   order is saturated, and fb606 already proved a bigger number cannot fix a covered surface.
+   fb626 — Max, seeing an LFO mark sitting on the save sheet: "it should not be on top of nothing."
+   So it is no longer only the browser that clears them — the sheet and the quick menu do too. */
+html.tp-browsing .sm-att, html.tp-browsing .sm-ghost, html.tp-browsing .ti-card,
+html.tp-browsing .mv-ext, html.tp-browsing .warp-ext, html.tp-browsing .filt-ext,
+html.tp-browsing .mv-menu, html.tp-browsing .mv-toast { display: none !important; }
 
 /* ─── THE LOADING OVERLAY — a wash, a name, a bar. Flat, never blurred: fb613 measured the
    renderer paying for every gradient, and this one is on screen exactly when the machine is busy. */
@@ -39781,6 +39800,14 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     S.banks.sort((a, b) => (a.factory === b.factory) ? a.name.localeCompare(b.name) : (a.factory ? -1 : 1));
     /* every word a preset uses is in the vocabulary, appended after the user's own order */
     for (const p of S.presets) { if (p.type && !S.types.some(t => same(t, p.type))) S.types.push(p.type); for (const s of p.styles) if (!S.styles.some(t => same(t, s))) S.styles.push(s); }
+    /* fb626 — the save sheet said "Me" forever because nothing ever told it otherwise. The presets
+       already on disk know the answer: take the name that appears on most of your own. */
+    if (S.author0 === 'Me') {
+      const tally = {};
+      for (const q of S.presets) if (q.user && q.author) tally[q.author] = (tally[q.author] || 0) + 1;
+      const best = Object.keys(tally).sort((a, b) => tally[b] - tally[a])[0];
+      if (best) S.author0 = best;
+    }
     if (o && o.caps && (+o.caps.presets >= +o.caps.maxPresets || +o.caps.banks >= +o.caps.maxBanks)) toast('The library is at its cap — some presets were not listed');
     rowsBuilt = -1; S.curId = findCur();
     if (S.sel >= S.presets.length) S.sel = S.curId;
@@ -39807,8 +39834,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function openSaveMenu() {
     const p = S.curId >= 0 ? S.presets[S.curId] : null, canSave = !!(p && p.user);
     const r = $('preset-save-btn').getBoundingClientRect();
-    menuAt(r.left, r.bottom + 4, `<div class="ps">${S.cur.name ? esc(plain(S.cur)) : 'Init'}</div>
-      <div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
+    menuAt(r.left, r.bottom + 4, `<div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
       <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
       <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>
       <div class="pi" data-a="init"><span class="nm">Init preset</span></div>`,
@@ -39836,6 +39862,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function toggleQuick(force) {
     const on = force != null ? force : !quickOpen();
     $('tp-q').classList.toggle('on', on); $('preset-name').classList.toggle('open', on);
+    surfaceUp();   /* fb626 */
     if (!on) return;
     S.qBank = S.curId >= 0 ? S.presets[S.curId].bank : (bankOf(S.cur.bank) ? S.cur.bank : (S.banks[0] ? S.banks[0].name : null));
     renderQuick();
@@ -39869,16 +39896,21 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 
   /* ═══ BROWSER ══════════════════════════════════════════════════════════════════════════════════ */
   function browserOpen() { return $('tp-b').classList.contains('on'); }
+  /* fb626 — one authority for "a preset surface is covering the synth page". Called by everything
+     that opens or closes one, so no surface can forget and let an overlay float over it. */
+  function surfaceUp() {
+    const on = browserOpen() || $('tp-sheet').classList.contains('on') || $('tp-q').classList.contains('on');
+    document.documentElement.classList.toggle('tp-browsing', on);
+    if (on) { try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {} }
+  }
   function openBrowser() {
     $('tp-b').classList.add('on'); window.__tiFrozen = true;   /* the glass covers every painter; nothing under it needs a frame */
-    document.documentElement.classList.add('tp-browsing');     /* fb624 — the page's floating overlays stand down */
-    try { window.__tiHideModMeter && window.__tiHideModMeter(); } catch (e) {}
+    surfaceUp();     /* fb624/fb626 — the page's floating overlays stand down */
     S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp();
     if (S.sel < 0) { const v = visibleIds(); if (v.length) { S.sel = v[0]; renderRows(); renderInsp(); } }
     $('tp-list').focus();
   }
-  function closeBrowser() { $('tp-b').classList.remove('on'); window.__tiFrozen = false;
-    document.documentElement.classList.remove('tp-browsing'); closeCtx(); closeSug(); try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
+  function closeBrowser() { $('tp-b').classList.remove('on'); window.__tiFrozen = false; surfaceUp(); closeCtx(); closeSug(); try { document.activeElement && document.activeElement.blur(); } catch (e) {} }
   $('tp-close').onclick = closeBrowser;
   window.__tiOpenPresetBrowser = openBrowser;
 
@@ -40063,7 +40095,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     if (bp && p.user) bp.onclick = e => {
       e.stopPropagation();
       const banks = S.banks.filter(b => !b.factory && !same(b.name, p.bank));
-      let h = '<div class="ps">Move to</div>';
+      let h = '';
       if (!banks.length) h += '<div class="pi dim"><span class="nm">No other bank yet</span></div>';
       for (const b of banks) h += `<div class="pi" data-a="b:${esc(b.name)}"><span class="nm">${esc(b.name)}</span><span class="ct">${b.n}</span></div>`;
       h += '<div class="pi imp" data-a="new"><span class="nm">New bank…</span></div>';
@@ -40175,7 +40207,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         rescan().then(() => toast(`${esc(p.name)} is now <span class="tp-bk">${esc(n)}</span>`)); }); } }); }
   function openBankCtx(e, bk) {
     const protectedBank = same(bk.name, 'User');
-    const h = `<div class="ps">${esc(bk.name)}${bk.author ? ' · ' + esc(bk.author) : ''}</div>${protectedBank ? '' : '<div class="pi" data-a="rename"><span class="nm">Rename…</span></div>'}<div class="pi" data-a="export"><span class="nm">Export bank…</span></div>${protectedBank ? '' : '<div class="pi rose" data-a="remove"><span class="nm">Remove bank</span></div>'}`;
+    const h = `${protectedBank ? '' : '<div class="pi" data-a="rename"><span class="nm">Rename…</span></div>'}<div class="pi" data-a="export"><span class="nm">Export bank…</span></div>${protectedBank ? '' : '<div class="pi rose" data-a="remove"><span class="nm">Remove bank</span></div>'}`;
     menuAt(e.clientX, e.clientY, h, a => {
       if (a === 'export') openExport(bk);
       if (a === 'rename') sheet({ title: 'Rename bank', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bn" maxlength="30" value="${esc(bk.name)}"></div>`, ok: 'Rename', focus: 'tp-bn', onOk: () => {
@@ -40320,6 +40352,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function openSave(from) {
     const cur = from || (S.curId >= 0 ? S.presets[S.curId] : null);
     const m = S.cur, name0 = cur ? (cur.user ? cur.name : cur.name + ' 2') : (m.name || ''), bank0 = cur ? (cur.user ? cur.bank : 'User') : (bankOf(m.bank) && !bankOf(m.bank).factory ? m.bank : 'User');
+    const note0 = (cur && cur.id === S.curId) || !cur ? (m.note || '') : (cur ? cur.note : '');
     const author0 = cur && cur.user ? cur.author : (m.author || S.author0), type0 = cur ? cur.type : m.type;
     svStyles = cur ? cur.styles.slice() : stylesOf(m.styles);
     sheet({ title: 'Save preset', ok: 'Save', focus: 'tp-sv-name', body: `<div class="tp-f">
@@ -40328,9 +40361,14 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
         <span class="k">Type</span><input type="text" class="tp-in" id="tp-sv-type" maxlength="20" placeholder="Type a type — new word adds one" value="${esc(type0)}">
         <span class="k">Style</span><div class="chp" id="tp-sv-style"></div>
+        <span class="k">Notes</span><div class="tp-in tp-note-in" id="tp-sv-note" contenteditable="plaintext-only" spellcheck="false" data-ph="What should someone know about this sound?"></div>
         <span class="k">Carries</span><div class="v" id="tp-sv-carries">Parameters only</div>
       </div>`,
       init: () => { renderSaveStyles();
+        /* fb626 — the note the preset is about to carry, written here rather than found later in
+           the inspector. Enter inside it means a NEW LINE, not Save — the sheet's Enter handler
+           already skips anything that is not a plain input. */
+        { const nb = $('tp-sv-note'); nb.textContent = note0; nb.onkeydown = e => e.stopPropagation(); }
         /* what THIS patch is about to embed — the browser prices saved presets from their own
            manifests, but the one being saved has no file yet. */
         call('getCarries').then(j => {
@@ -40349,7 +40387,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         const pending = $('tp-sv-style-add').value.trim(); if (pending) { const w = ensureVocab('style', pending); if (w && !svStyles.includes(w)) svStyles.push(w); }
         const type = ensureVocab('type', $('tp-sv-type').value) || '';
         const author = $('tp-sv-author').value.trim(); if (author) S.author0 = author;
-        const meta = { name: n, bank: b ? b.name : bk, author, type, styles: svStyles.slice().join(','), note: (cur && cur.id === S.curId) || !cur ? (S.cur.note || '') : '', fv: 1 };
+        const meta = { name: n, bank: b ? b.name : bk, author, type, styles: svStyles.slice().join(','),
+                       note: ($('tp-sv-note') ? $('tp-sv-note').textContent : '').trim(), fv: 1 };
         const existing = S.presets.find(p => same(p.bank, meta.bank) && same(p.name, n));
         const go = () => { closeSheet(); call('savePresetToBank', meta.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
           setCurrent(meta); rescan().then(() => { if (!b) toast(`Created bank <span class="tp-bk">${esc(meta.bank)}</span> · saved ${esc(n)}`); else toast(`Saved <span class="tp-bk">${esc(meta.bank)} - </span>${esc(n)}`); }); }); };
@@ -40417,11 +40456,12 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function sheet(spec) {
     sheetSpec = spec; const sh = $('tp-sheet'), card = sh.querySelector('.tp-card');
     card.innerHTML = `<div class="tp-hd">${esc(spec.title)}</div>${spec.body || ''}${spec.note ? `<div class="tp-note">${spec.note}</div>` : ''}<div class="tp-acts"><button class="tp-btn" id="tp-sh-cancel">Cancel</button><button class="tp-btn pri" id="tp-sh-ok">${esc(spec.ok || 'OK')}</button></div>`;
-    sh.classList.add('on'); $('tp-sh-cancel').onclick = closeSheet; $('tp-sh-ok').onclick = () => spec.onOk && spec.onOk();
+    sh.classList.add('on'); surfaceUp();   /* fb626 */
+    $('tp-sh-cancel').onclick = closeSheet; $('tp-sh-ok').onclick = () => spec.onOk && spec.onOk();
     if (spec.init) spec.init();
     if (spec.focus) setTimeout(() => { const f = $(spec.focus); if (f) { f.focus(); if (f.select) f.select(); } }, 30);
   }
-  function closeSheet() { closeSug(); const sh = $('tp-sheet'); sh.classList.remove('on'); sh.querySelector('.tp-card').innerHTML = ''; sheetSpec = null; if (browserOpen()) $('tp-list').focus(); }
+  function closeSheet() { closeSug(); const sh = $('tp-sheet'); sh.classList.remove('on'); sh.querySelector('.tp-card').innerHTML = ''; sheetSpec = null; surfaceUp(); if (browserOpen()) $('tp-list').focus(); }
   $('tp-sheet').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeSheet(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.id !== 'tp-sv-style-add' && sheetSpec && sheetSpec.onOk) { e.preventDefault(); sheetSpec.onOk(); } });
   $('tp-sheet').addEventListener('mousedown', e => { if (e.target === $('tp-sheet')) closeSheet(); });
   /* the fb135 host-key bridge types into the ARMED input — every field in these surfaces arms itself */
