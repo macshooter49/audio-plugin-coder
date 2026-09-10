@@ -1253,7 +1253,7 @@ body {
 .tp-chip.add:hover { border-color: var(--purple-400); color: var(--on-fg); }
 
 #tp-b .body { flex: 1; min-height: 0; display: flex; }
-#tp-b .rail { width: 150px; flex: none; border-right: 1px solid var(--menu-line); overflow-y: auto; padding: 8px 0 12px; scrollbar-width: none; }
+#tp-b .rail { width: 138px; flex: none; border-right: 1px solid var(--menu-line); overflow-y: auto; padding: 8px 0 12px; scrollbar-width: none; }
 #tp-b .rail::-webkit-scrollbar, #tp-b .list::-webkit-scrollbar, #tp-b .insp::-webkit-scrollbar { width: 0; height: 0; display: none; }
 #tp-b .rail .sec { font-size: 10px; font-weight: 500; color: var(--text-soft); padding: 12px 16px 5px; }
 #tp-b .rail .ri { display: flex; align-items: center; gap: 7px; height: 23px; padding: 0 16px 0 14px; cursor: pointer; font-size: 10.5px; color: var(--text-soft); border-left: 2px solid transparent; transition: color .1s, background .1s; }
@@ -1295,29 +1295,39 @@ body {
 .tp-row.sel .c-nm, .tp-row.sel .c-ty, .tp-row.sel .c-st { color: var(--sel-fg); }
 
 .tp-row.off { display: none; }
-.tp-row .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
-.tp-row .c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-row .c-nm .au { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 96px; }
-.tp-row.sel .c-nm .au { color: var(--sel-fg); opacity: .6; }
+/* fb628 — EVERY COLUMN IS A LANE. Max: "I don't think anything should touch carries. Carries should
+   be perfectly spaced, and if anything tries to come over that space it turns into dot dot dot."
+   The author used to ride INSIDE the name cell, so a long name pushed it rightwards until it sat
+   against the carries glyphs. It is its own fixed lane now: the name has flex and shrinks to an
+   ellipsis (min-width:0 is what actually lets it — without it a flex item refuses to go below its
+   own content width), the author never moves, and a reserved gap sits in front of Carries so the
+   two can never meet. Hover either and fb624's tip reads it out in full. */
+.tp-row .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); padding-right: 6px; }
+.tp-row .c-nm .t { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* the clearance is a MARGIN, not padding — padding lives INSIDE the box, so the author's rect
+   would still butt straight up against the Carries rect at 0px and a wide glyph could kiss it. */
+.tp-row .c-au { width: 78px; flex: none; margin-right: 10px; font-size: 9.5px; font-weight: 400; color: var(--text-secondary);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row.sel .c-au { color: var(--sel-fg); opacity: .6; }
 .tp-bk { color: var(--text-secondary); font-weight: 400; }
 .tp-row .tag { font-size: 9px; font-weight: 500; color: var(--purple-400); flex: none; }
 .tp-row .tag.user { color: var(--text-secondary); }
-.tp-row .c-car { width: 92px; flex: none; display: flex; gap: 3px; align-items: center; }
+.tp-row .c-car { width: 88px; flex: none; display: flex; gap: 3px; align-items: center; }
 .tp-car { width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; color: var(--text-dim); opacity: .10; }
 .tp-car.on { opacity: 1; color: var(--text-soft); }
 .tp-car.on.node { color: var(--purple-400); }
 .tp-car svg { width: 11px; height: 11px; }
 .tp-row.sel .tp-car.on { color: var(--text-primary); }
 .tp-row.sel .tp-car.on.node { color: var(--purple-400); }
-.tp-row .c-ty { width: 64px; flex: none; font-size: 9.5px; color: var(--text-soft); }
-.tp-row .c-st { width: 74px; flex: none; font-size: 9.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row .c-ty { width: 60px; flex: none; padding-right: 6px; font-size: 9.5px; color: var(--text-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tp-row .c-st { width: 70px; flex: none; font-size: 9.5px; color: var(--text-secondary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tp-row .c-fv { width: 16px; flex: none; display: flex; align-items: center; justify-content: flex-end; color: var(--text-dim); opacity: .35; }
 .tp-row .c-fv.on { opacity: 1; color: var(--purple-400); }
 .tp-row .c-fv svg { width: 11px; height: 11px; }
 #tp-empty { padding: 60px 30px; text-align: center; color: var(--text-secondary); font-size: 11px; line-height: 1.7; }
 #tp-empty b { display: block; color: var(--text-primary); font-weight: 500; margin-bottom: 2px; }
 
-#tp-b .insp { width: 230px; flex: none; border-left: 1px solid var(--menu-line); display: flex; flex-direction: column; overflow: hidden; }
+#tp-b .insp { width: 224px; flex: none; border-left: 1px solid var(--menu-line); display: flex; flex-direction: column; overflow: hidden; }
 /* the scroll region — the house 5px translucent slider, the same one every menu in this file uses */
 #tp-b .iscroll { flex: 1; min-height: 0; overflow-y: auto; padding: 14px 18px 14px; }
 #tp-b .iscroll::-webkit-scrollbar { width: 5px; height: 5px; }
@@ -1380,11 +1390,19 @@ body {
    glass." So the sheet stops being a solid card and wears the .pmenu coat verbatim: the same
    rgba(22,20,34,.72), the same blur(20) saturate(1.4), the same hairline and 12px radius that every
    menu in this file has had since fb133. One material for every surface that floats. */
-#tp-sheet .tp-card { width: 340px; background: var(--menu-bg);
+#tp-sheet .tp-card { width: 340px; display: flex; flex-direction: column; max-height: calc(100% - 56px); background: var(--menu-bg);
   -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid var(--menu-line); border-radius: 12px; padding: 20px 22px 18px;
   box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
-#tp-sheet .tp-hd { font-size: 11.5px; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; }
+#tp-sheet .tp-hd { font-size: 11.5px; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; flex: none; }
+/* fb627 — Max: "I think this save is going to have to scroll." Every word in the vocabulary is a box
+   now, so the field list grows with his library; the head and the buttons stay put and the middle
+   carries the house 5px slider. */
+#tp-sheet .tp-sbody { flex: 1; min-height: 0; overflow-y: auto; margin: 0 -6px; padding: 0 6px; }
+#tp-sheet .tp-sbody::-webkit-scrollbar { width: 5px; }
+#tp-sheet .tp-sbody::-webkit-scrollbar-track { background: transparent; }
+#tp-sheet .tp-sbody::-webkit-scrollbar-thumb { background: rgba(127,127,160,0.25); border-radius: 3px; }
+#tp-sheet .tp-sbody::-webkit-scrollbar-thumb:hover { background: rgba(127,127,160,0.45); }
 #tp-sheet .tp-f { display: grid; grid-template-columns: 56px 1fr; align-items: center; column-gap: 10px; row-gap: 9px; }
 #tp-sheet .tp-f .k { font-size: 10px; font-weight: 500; color: var(--text-soft); align-self: start; padding-top: 7px; }
 #tp-sheet .tp-f .v { font-size: 10.5px; color: var(--text-primary); padding-top: 6px; line-height: 1.5; }
@@ -1401,7 +1419,7 @@ body {
 #tp-sheet .tp-in::placeholder { color: var(--text-muted); }
 #tp-sheet .chp { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; }
 #tp-sheet .chp .tp-in { width: 110px; height: 22px; font-size: 10px; padding: 0 7px; }
-#tp-sheet .tp-acts { display: flex; gap: 6px; margin-top: 18px; justify-content: flex-end; }
+#tp-sheet .tp-acts { display: flex; gap: 6px; margin-top: 18px; justify-content: flex-end; flex: none; }
 #tp-sheet .tp-acts .tp-btn.pri { flex: none; padding: 0 18px; }
 #tp-sheet .tp-note { margin-top: 10px; font-size: 9.5px; color: var(--text-secondary); line-height: 1.5; }
 #tp-sheet .tp-text { font-size: 11px; color: var(--text-primary); line-height: 1.55; }
@@ -1422,9 +1440,21 @@ body {
    order is saturated, and fb606 already proved a bigger number cannot fix a covered surface.
    fb626 — Max, seeing an LFO mark sitting on the save sheet: "it should not be on top of nothing."
    So it is no longer only the browser that clears them — the sheet and the quick menu do too. */
-html.tp-browsing .sm-att, html.tp-browsing .sm-ghost, html.tp-browsing .ti-card,
-html.tp-browsing .mv-ext, html.tp-browsing .warp-ext, html.tp-browsing .filt-ext,
-html.tp-browsing .mv-menu, html.tp-browsing .mv-toast { display: none !important; }
+/* fb628 — 🚨 THE LIST IS NOW EXHAUSTIVE, because guessing it twice was the bug. Max, on the third
+   sighting: "the white LFO visual or modular lines still popping up — I want those lines to be on
+   the synth page only." Those white lines are .sm-ul, the MODULATION UNDERLINE: a body-level
+   position:fixed element at z-index 2147483644 whose .smu-rail and .smu-span are white at 16% and
+   40% with a glowing comet on top. It was never in the set — the attenuator and the cards were
+   hidden and I assumed that was the whole family.
+   This set is every body-level position:fixed rule in this file carrying a 2147483xxx z-index,
+   found by SWEEPING for them rather than by remembering:
+     grep -oE "\.[a-z-]+\{position:fixed;z-index:214748[0-9]+" index.html
+   .pmenu is deliberately ABSENT — that is the preset system's OWN menu class, and hiding it would
+   take the quick menu, the context menus, the suggestions and the hover tips with it. */
+html.tp-browsing .sm-att,    html.tp-browsing .sm-ghost, html.tp-browsing .sm-ul,
+html.tp-browsing .sm-routes, html.tp-browsing .ti-card,  html.tp-browsing .mv-ext,
+html.tp-browsing .warp-ext,  html.tp-browsing .filt-ext, html.tp-browsing .mv-menu,
+html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !important; }
 
 /* ─── THE LOADING OVERLAY — a wash, a name, a bar. Flat, never blurred: fb613 measured the
    renderer paying for every gradient, and this one is on screen exactly when the machine is busy. */
@@ -8648,10 +8678,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .rr-klabel{ font-size:7.5px; letter-spacing:1.2px; color:var(--text-primary); font-weight:300; }
         /* boxed WHITE toggles (purple only on select) */
         #syn-panel .ribbon-row.rr-new .voice-toggle-row{ gap:6px; }
-        #syn-panel .ribbon-row.rr-new .voice-toggle{ flex:1; border:1px solid rgba(255,255,255,.42); border-radius:5px; padding:3px 0; text-align:center; color:var(--text-primary); background:transparent; transition:.14s; }
+        /* fb627 — THE FOUR-MODE TILE RULE (fb118/fb119), verbatim, on Mono · Legato · Poly · Macros
+           and Always · Scaled. Max: "the outside color is wrong and the inside color is wrong…
+           purple outline and then the white letters inside with a small little glow." They had a
+           purple-500 outline with PURPLE-400 LETTERS, which is the one combination the law does not
+           allow: the outline carries the colour, the letters go white, and the lit one JUMPS. */
+        #syn-panel .ribbon-row.rr-new .voice-toggle{ flex:1; border:1px solid rgba(255,255,255,.42); border-radius:5px; padding:3px 0; text-align:center; color:var(--text-secondary); background:transparent; transition:.14s; }
         #syn-panel .ribbon-row.rr-new .voice-mode-row .voice-toggle:first-child{ text-align:center; padding-left:0; }
         #syn-panel .ribbon-row.rr-new .voice-toggle:hover{ border-color:rgba(255,255,255,.72); color:var(--text-primary); }
-        #syn-panel .ribbon-row.rr-new .voice-toggle.on{ border-color:var(--purple-500); color:var(--purple-400); }
+        #syn-panel .ribbon-row.rr-new .voice-toggle.on{ background:transparent; border-color:var(--purple-400); color:#fff;
+          text-shadow:0 0 6px rgba(255,255,255,.35); }   /* fb627 — the text's answer to fb119's drop-shadow on the emblem */
         /* NO-GLASS transparent assign popout */
         #syn-panel .rr-pop{ position:absolute; z-index:60; width:212px; background:rgba(18,18,31,.9); border:1px solid var(--border-strong); border-radius:9px; padding:10px 11px 9px; display:none; box-shadow:0 12px 34px rgba(0,0,0,.55); }
         #syn-panel .rr-pop.show{ display:block; }
@@ -30913,6 +30949,13 @@ restoreThemeFromBackend();
     // feed inside it). A popped card whose editor has closed receives nothing at all — no truth, so no head:
     // it parks, instead of freezing or lying the way the old simulation did, while notes sound unseen.
     var naT=window.__notesActiveT, live=!!window.__notesActive&&!!naT&&(Date.now()-naT)<700;
+    /* fb628 — AND IT MUST BE ASSIGNED TO SOMETHING. fb567/fb581 made the head rest when the notes
+       stop; this adds the other half Max asked for: an LFO routed nowhere is not modulating
+       anything, so watching it swing was the display claiming work that is not happening. The park
+       is the SAME one — held phase, .mv-idle fade, the painter rests — so an unrouted LFO simply
+       never leaves it, and the moment a route lands the next frame picks it up. Absent helper (a
+       popped card without the matrix) reads as routed: better to animate than to freeze wrongly. */
+    if(live && window.__tiLfoRouted && !window.__tiLfoRouted(st.tab)) live=false;
     if(__lfoRafMode){ if(live||!__lfoIdle){ __lfoRafArmed=1; requestAnimationFrame(lfoFrame); } else __lfoRafArmed=0; }   // rAF mode: the loop lives while notes sound (+ one parking pass), then STOPS — Max: "stop the animation loop when nothing is played"; __lfoKick restarts it on the next push
     // THE HEAD FADES OUT IN SILENCE AND THE PAINTER RESTS. Not live → one last placement below (the held phase),
     // the .mv-idle fade, and every call after that returns before it touches the DOM — until a note brings the
@@ -33127,6 +33170,11 @@ restoreThemeFromBackend();
           if(window.__crvCloseWin) window.__crvCloseWin(); else closeCurveEditor(); } }catch(e){} }
       restoredOnce=true; markTargets(); }catch(e){} done(); }).catch(function(){ done(); }); }catch(e){ done(); } }
   var restoredOnce=false;   /* fb524 — a card must never push() an empty mirror over a live matrix before its first read lands */
+  /* fb628 — Max: "if it's not assigned to something, it moving doesn't make sense. It needs to be
+     assigned to something, THEN be played, in order for it to move." One question, asked of the
+     matrix that already knows the answer: LFO numbers here are 1-based, the same as decodeSrc's
+     {lfo: sv+1}. */
+  window.__tiLfoRouted=function(n){ n=+n||0; for(var i=0;i<assigns.length;i++) if((+assigns[i].lfo||0)===n) return true; return false; };
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} }; window.__tiModRestoreStrict=function(cb){ try{ restore(cb,true); }catch(e){} };   /* fb620 */   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
   setInterval(function(){ try{ if(window.__tiQuiet)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
@@ -39670,10 +39718,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     <div class="rail" id="tp-rail"></div>
     <div class="listcol">
       <div class="hd">
-        <span data-sort="name" style="flex:1">Name<i>▾</i></span>
-        <span data-sort="carries" style="width:92px">Carries<i>▾</i></span>
-        <span data-sort="type" style="width:64px">Type<i>▾</i></span>
-        <span data-sort="style" style="width:74px">Style<i>▾</i></span>
+        <span data-sort="name" style="flex:1;min-width:0;padding-right:6px">Name<i>▾</i></span>
+        <span data-sort="author" style="width:84px;padding-right:10px">Author<i>▾</i></span>
+        <span data-sort="carries" style="width:88px">Carries<i>▾</i></span>
+        <span data-sort="type" style="width:60px;padding-right:6px">Type<i>▾</i></span>
+        <span data-sort="style" style="width:70px">Style<i>▾</i></span>
         <span style="width:16px"></span>
       </div>
       <div class="list" id="tp-list" tabindex="0">
@@ -40017,7 +40066,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function buildRows() {
     const r = $('tp-rows'); let h = '';
     for (const p of S.presets) h += `<div class="tp-row" data-id="${p.id}">
-      <span class="c-nm"><span class="t" data-full="${esc(p.name)}">${esc(p.name)}</span>${p.env ? '<span class="tag">Env</span>' : ''}<span class="au">${esc(p.author)}</span></span>
+      <span class="c-nm"><span class="t" data-full="${esc(p.name)}">${esc(p.name)}</span>${p.env ? '<span class="tag">Env</span>' : ''}</span>
+      <span class="c-au" data-full="${esc(p.author)}">${esc(p.author)}</span>
       <span class="c-car">${p.c.map((n, i) => `<span class="tp-car${n ? ' on' : ''}${i === 5 ? ' node' : ''}" title="${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}">${CAR_GLYPH[i]}</span>`).join('')}</span>
       <span class="c-ty">${esc(p.type)}</span>
       <span class="c-st" data-full="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · '))}</span>
@@ -40034,7 +40084,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       el.oncontextmenu = e => { e.preventDefault(); select(id); openCtx(e, id); };
     });
   }
-  const sortKey = (p, k) => k === 'name' ? (p.bank + ' ' + p.name).toLowerCase() : k === 'carries' ? -p.c.reduce((a, b) => a + b, 0) : k === 'type' ? (p.type + ' ' + p.name).toLowerCase() : ((p.styles[0] || '') + ' ' + p.name).toLowerCase();
+  const sortKey = (p, k) => k === 'name' ? p.name.toLowerCase()
+    : k === 'author' ? ((p.author || '~') + ' ' + p.name).toLowerCase()
+    : k === 'carries' ? -p.c.reduce((a, b) => a + b, 0)
+    : k === 'type' ? (p.type + ' ' + p.name).toLowerCase()
+    : ((p.styles[0] || '') + ' ' + p.name).toLowerCase();
   function renderRows() {
     if (rowsBuilt !== S.presets.length) buildRows();
     let n = 0, nEnv = 0; const rows = [...$('tp-rows').querySelectorAll('.tp-row')];
@@ -40348,7 +40402,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   window.onPresetLoadProgress = v => { const n = +v; if (isFinite(n)) ldReal = Math.max(0, Math.min(1, n)); };
 
   /* ═══ SAVE — every field typed; Bank joins or creates; Type adds; Style chips + type-to-add ═══ */
-  let svStyles = [];
+  let svStyles = [], svType = '';
   function openSave(from) {
     const cur = from || (S.curId >= 0 ? S.presets[S.curId] : null);
     const m = S.cur, name0 = cur ? (cur.user ? cur.name : cur.name + ' 2') : (m.name || ''), bank0 = cur ? (cur.user ? cur.bank : 'User') : (bankOf(m.bank) && !bankOf(m.bank).factory ? m.bank : 'User');
@@ -40359,12 +40413,12 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         <span class="k">Name</span><input type="text" class="tp-in" id="tp-sv-name" maxlength="40" placeholder="Preset name" value="${esc(name0)}">
         <span class="k">Bank</span><input type="text" class="tp-in" id="tp-sv-bank" maxlength="30" placeholder="Type a bank — new name makes one" value="${esc(bank0)}">
         <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
-        <span class="k">Type</span><input type="text" class="tp-in" id="tp-sv-type" maxlength="20" placeholder="Type a type — new word adds one" value="${esc(type0)}">
+        <span class="k">Type</span><div class="chp" id="tp-sv-type"></div>
         <span class="k">Style</span><div class="chp" id="tp-sv-style"></div>
         <span class="k">Notes</span><div class="tp-in tp-note-in" id="tp-sv-note" contenteditable="plaintext-only" spellcheck="false" data-ph="What should someone know about this sound?"></div>
         <span class="k">Carries</span><div class="v" id="tp-sv-carries">Parameters only</div>
       </div>`,
-      init: () => { renderSaveStyles();
+      init: () => { svType = type0; renderSaveChips();
         /* fb626 — the note the preset is about to carry, written here rather than found later in
            the inspector. Enter inside it means a NEW LINE, not Save — the sheet's Enter handler
            already skips anything that is not a plain input. */
@@ -40380,12 +40434,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         });
         attachSuggest($('tp-sv-bank'), () => S.banks.filter(b => !b.factory).map(b => b.name), null, 'New bank');
         attachSuggest($('tp-sv-author'), () => [...new Set(S.presets.map(p => p.author).filter(Boolean))], null, null);
-        attachSuggest($('tp-sv-type'), () => S.types, null, 'Add type'); },
+ },
       onOk: () => {
         const n = tidy($('tp-sv-name').value); if (!n) { $('tp-sv-name').focus(); return; }
         const bk = tidy($('tp-sv-bank').value) || 'User'; const b = bankOf(bk); if (b && b.factory) { toast(`${esc(b.name)} is a factory bank — choose or create another`); return; }
-        const pending = $('tp-sv-style-add').value.trim(); if (pending) { const w = ensureVocab('style', pending); if (w && !svStyles.includes(w)) svStyles.push(w); }
-        const type = ensureVocab('type', $('tp-sv-type').value) || '';
+        const type = svType || '';
         const author = $('tp-sv-author').value.trim(); if (author) S.author0 = author;
         const meta = { name: n, bank: b ? b.name : bk, author, type, styles: svStyles.slice().join(','),
                        note: ($('tp-sv-note') ? $('tp-sv-note').textContent : '').trim(), fv: 1 };
@@ -40395,14 +40448,43 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         if (existing) sheet({ title: 'Overwrite preset', body: `<div class="tp-text"><b>${label(existing)}</b> already exists. Overwrite it with the current sound?</div>`, ok: 'Overwrite', onOk: go }); else go();
       } });
   }
-  function renderSaveStyles() {
-    const box = $('tp-sv-style'); if (!box) return;
-    box.innerHTML = svStyles.map(s => `<button class="tp-chip active" data-s="${esc(s)}" title="Remove">${esc(s)}</button>`).join('') + `<input type="text" class="tp-in" id="tp-sv-style-add" placeholder="Add a style" maxlength="20">`;
-    box.querySelectorAll('.tp-chip').forEach(b => b.onclick = () => { svStyles = svStyles.filter(x => x !== b.dataset.s); renderSaveStyles(); });
-    const inp = $('tp-sv-style-add');
-    const take = raw => { const w = ensureVocab('style', raw); if (w && !svStyles.includes(w)) svStyles.push(w); renderSaveStyles(); };
-    attachSuggest(inp, () => S.styles.filter(s => !svStyles.includes(s)), v => take(v), 'Add style');
-    inp.onkeydown = e => { e.stopPropagation(); if (e.key === 'Enter') { e.preventDefault(); if (inp.value.trim()) take(inp.value); } if (e.key === 'Escape') closeSheet(); };
+  /* ═══ fb627 — THE SAVE SHEET PICKS BOXES TOO ══════════════════════════════════════════════════
+     Max: "on the information tab we can click the boxes and not type in, and we can only type in
+     whenever there's plus boxes. I want that exact thing at the save preset menu — I'm tired of
+     having to type them in, I think it's obsolete." So Type and Style are the same chips as the
+     inspector: every word you own is a box, one Type, as many Styles as you like. The + is the only
+     place typing survives, and it appears INLINE rather than opening a second sheet over this one —
+     a nested sheet would replace this card and take the half-filled form with it. */
+  function renderSaveChips() {
+    const mk = (list, isOn, kind) => list.map(x =>
+      `<button class="tp-chip${isOn(x) ? ' active' : ''}" data-${kind}="${esc(x)}">${esc(x)}</button>`).join('')
+      + `<button class="tp-chip add" data-add="${kind}" title="New ${kind === 't' ? 'type' : 'style'}">${PLUS}</button>`;
+    const t = $('tp-sv-type'), st = $('tp-sv-style');
+    if (!t || !st) return;
+    t.innerHTML  = mk(S.types,  x => same(svType, x), 't');
+    st.innerHTML = mk(S.styles, x => svStyles.some(y => same(y, x)), 's');
+    t.querySelectorAll('[data-t]').forEach(b => b.onclick = () => { svType = same(svType, b.dataset.t) ? '' : b.dataset.t; renderSaveChips(); });
+    st.querySelectorAll('[data-s]').forEach(b => b.onclick = () => {
+      const at = svStyles.findIndex(x => same(x, b.dataset.s));
+      if (at >= 0) svStyles.splice(at, 1); else svStyles.push(b.dataset.s);
+      renderSaveChips(); });
+    t.querySelector('[data-add]').onclick  = () => inlineAdd(t, 'type');
+    st.querySelector('[data-add]').onclick = () => inlineAdd(st, 'style');
+  }
+  function inlineAdd(box, kind) {
+    if (box.querySelector('input')) return;
+    const inp = document.createElement('input');
+    inp.type = 'text'; inp.className = 'tp-in'; inp.maxLength = 20;
+    inp.style.width = '110px'; inp.style.height = '22px'; inp.style.fontSize = '10px';
+    inp.placeholder = kind === 'type' ? 'New type' : 'New style';
+    box.appendChild(inp); setTimeout(() => inp.focus(), 20);
+    const take = () => { const w = ensureVocab(kind, inp.value);
+      if (w) { if (kind === 'type') svType = w; else if (!svStyles.some(x => same(x, w))) svStyles.push(w); }
+      renderSaveChips(); };
+    inp.onkeydown = e => { e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); take(); }
+      else if (e.key === 'Escape') { e.preventDefault(); renderSaveChips(); } };
+    inp.onblur = () => { if (inp.value.trim()) take(); else renderSaveChips(); };
   }
 
   /* ═══ NEW BANK · IMPORT · EXPORT ═══════════════════════════════════════════════════════════════ */
@@ -40455,14 +40537,16 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   let sheetSpec = null;
   function sheet(spec) {
     sheetSpec = spec; const sh = $('tp-sheet'), card = sh.querySelector('.tp-card');
-    card.innerHTML = `<div class="tp-hd">${esc(spec.title)}</div>${spec.body || ''}${spec.note ? `<div class="tp-note">${spec.note}</div>` : ''}<div class="tp-acts"><button class="tp-btn" id="tp-sh-cancel">Cancel</button><button class="tp-btn pri" id="tp-sh-ok">${esc(spec.ok || 'OK')}</button></div>`;
+    card.innerHTML = `<div class="tp-hd">${esc(spec.title)}</div>`
+      + `<div class="tp-sbody">${spec.body || ''}${spec.note ? `<div class="tp-note">${spec.note}</div>` : ''}</div>`
+      + `<div class="tp-acts"><button class="tp-btn" id="tp-sh-cancel">Cancel</button><button class="tp-btn pri" id="tp-sh-ok">${esc(spec.ok || 'OK')}</button></div>`;
     sh.classList.add('on'); surfaceUp();   /* fb626 */
     $('tp-sh-cancel').onclick = closeSheet; $('tp-sh-ok').onclick = () => spec.onOk && spec.onOk();
     if (spec.init) spec.init();
     if (spec.focus) setTimeout(() => { const f = $(spec.focus); if (f) { f.focus(); if (f.select) f.select(); } }, 30);
   }
   function closeSheet() { closeSug(); const sh = $('tp-sheet'); sh.classList.remove('on'); sh.querySelector('.tp-card').innerHTML = ''; sheetSpec = null; surfaceUp(); if (browserOpen()) $('tp-list').focus(); }
-  $('tp-sheet').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeSheet(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && e.target.id !== 'tp-sv-style-add' && sheetSpec && sheetSpec.onOk) { e.preventDefault(); sheetSpec.onOk(); } });
+  $('tp-sheet').addEventListener('keydown', e => { e.stopPropagation(); if (e.key === 'Escape') closeSheet(); if (e.key === 'Enter' && e.target.tagName === 'INPUT' && ! e.target.closest('.chp') && sheetSpec && sheetSpec.onOk) { e.preventDefault(); sheetSpec.onOk(); } });
   $('tp-sheet').addEventListener('mousedown', e => { if (e.target === $('tp-sheet')) closeSheet(); });
   /* the fb135 host-key bridge types into the ARMED input — every field in these surfaces arms itself */
   for (const id of ['tp-b', 'tp-sheet']) {

@@ -5,6 +5,7 @@
 #  menu, Browse all, rows, +, the sheets. Two controls, each must go RED:
 #    TP_MUT=zorder   #syn-panel raised over the glass  → the hit-test bar [3]
 #    TP_MUT=nopush   the courier never pushes onPatchLoaded → the load bars [6] [7]
+#    TP_MUT=lanes    the pre-fb628 world (overlay reaches over, lane loses clearance) → [19] [20]
 #  Plus every inline <script> must still parse (ui_syntax.js).
 #
 #    bash Tests/fb620_gates.sh          # from plugins/Terrain
@@ -24,4 +25,5 @@ node Tests/ui_syntax.js Source/ui/public/index.html > "$OUT/ui_syntax.txt" 2>&1;
 printf '  %-22s %s\n' "ui_syntax" "$([ $s -eq 0 ] && echo OK || echo 'RED — an inline <script> does not parse')"; [ $s -ne 0 ] && rc_all=1
 run surfaces:zorder  TP_MUT=zorder  node Tests/preset_surfaces_gate.js
 run surfaces:nopush  TP_MUT=nopush  node Tests/preset_surfaces_gate.js
+run surfaces:lanes   TP_MUT=lanes   node Tests/preset_surfaces_gate.js
 echo; echo "  full output: $OUT"; exit $rc_all

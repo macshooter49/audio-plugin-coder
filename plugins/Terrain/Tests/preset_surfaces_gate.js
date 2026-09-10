@@ -39,9 +39,12 @@
 //  18  fb625 — the header name CLOSES the browser (back to the synth), never stacks a menu on it
 //  19  fb626 — every preset surface (quick menu, browser, sheet) stands the synth page's floating
 //      overlays down: the modulation attenuator sits at the maximum z and belongs to a covered page
+//  20  fb628 — every column is a lane: the author cannot be pushed into Carries by a long name
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
+//    TP_MUT=lanes    the pre-fb628 world: .sm-ul reaches over the preset surfaces again and the
+//                    author's lane loses its clearance → [19] and [20] must both go RED
 //    TP_MUT=nopush   the courier loads but never pushes onPatchLoaded (the pre-fb620 world) →
 //                    [6] and [7] must go RED
 // ══════════════════════════════════════════════════════════════════════════════════════════════
@@ -117,6 +120,11 @@ const STUB = (MUT) => {
   await p.evaluate (() => { const sp = document.getElementById ('syn-panel'); if (sp) { sp.classList.remove ('hidden'); sp.style.display = 'block'; } window.dispatchEvent (new Event ('resize')); });
   await new Promise (r => setTimeout (r, 2000));
   if (MUT === 'zorder') await p.evaluate (() => { const st = document.createElement ('style'); st.textContent = '#syn-panel{z-index:5000 !important}'; document.head.appendChild (st); });
+  /* fb628's control: put the PRE-fb628 world back — the modulation underline reaches over the
+     preset surfaces again, and the author's lane loses its clearance so it can touch Carries. */
+  if (MUT === 'lanes') await p.evaluate (() => { const st = document.createElement ('style');
+    st.textContent = 'html.tp-browsing .sm-ul{display:block !important} .tp-row .c-au{margin-right:0 !important}';
+    document.head.appendChild (st); });
   const calls = (fn) => p.evaluate (fn => window.__gateCalls.filter (c => c.fn === fn), fn);
   const wait = (ms) => new Promise (r => setTimeout (r, ms));
   const centreIn = (sel) => p.evaluate (sel => { const el = document.querySelector (sel); if (! el) return { ok: false, why: 'no ' + sel }; const r = el.getBoundingClientRect();
@@ -248,15 +256,34 @@ const STUB = (MUT) => {
   const menuRows = await p.evaluate (() => [...document.querySelectorAll ('#tp-ctx .pi')].map (e => e.querySelector ('.nm').textContent.trim() + (e.classList.contains ('off') ? '(off)' : '')));
   await p.evaluate (() => document.querySelector ('#tp-ctx .pi[data-a=saveas]').click()); await wait (150);
   const sheetOn = await p.evaluate (() => document.getElementById ('tp-sheet').classList.contains ('on') && !! document.getElementById ('tp-sv-name'));
-  await p.evaluate (() => { const n = document.getElementById ('tp-sv-name'); n.value = 'Gate Pad'; document.getElementById ('tp-sv-bank').value = 'User'; document.getElementById ('tp-sv-type').value = 'Pad';
-    const add = document.getElementById ('tp-sv-style-add'); add.value = 'Wide'; add.dispatchEvent (new KeyboardEvent ('keydown', { key: 'Enter', bubbles: true }));
-    document.getElementById ('tp-sv-note').textContent = 'Written in the save sheet.';   /* fb626 */ });
+  /* fb627 — Type and Style are BOXES in the sheet now, so the gate clicks them the way a hand does */
+  const sheetChips = () => p.evaluate (() => ({
+    type:  [...document.querySelectorAll ('#tp-sv-type .tp-chip.active')].map (e => e.textContent.trim()),
+    style: [...document.querySelectorAll ('#tp-sv-style .tp-chip.active')].map (e => e.textContent.trim()),
+    typed: !! document.querySelector ('#tp-sv-type input') }));
+  const chipsBefore = await sheetChips();   /* Save as… from Cirrus prefills its Type — Pad should already be lit */
+  const clickChip = (where, word) => p.evaluate ((where, word) => {
+    const c = [...document.querySelectorAll (where + ' .tp-chip')].find (x => x.textContent.trim() === word);
+    if (c) c.click();
+  }, where, word);
+  await p.evaluate (() => { document.getElementById ('tp-sv-name').value = 'Gate Pad';
+    document.getElementById ('tp-sv-bank').value = 'User';
+    document.getElementById ('tp-sv-note').textContent = 'Written in the save sheet.'; });
+  /* one click per turn: each one rebuilds the strip, so a second click in the same pass would land
+     on a detached node — the same staleness the row list has */
+  await clickChip ('#tp-sv-type', 'Keys');   await wait (70);
+  await clickChip ('#tp-sv-style', 'Dark');  await wait (70);   /* one it does NOT have — clicking a lit one removes it */
+  const chipsAfter = await sheetChips();
   await wait (60); await p.click ('#tp-sh-ok'); await wait (350);
   const sv = await calls ('savePresetToBank'); let svm = {}; try { svm = JSON.parse (sv[0].args[1]); } catch (e) {}
   const h8 = await header();
-  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Pad' && /Wide/.test (svm.styles) && svm.note === 'Written in the save sheet.' && h8 === 'User - Gate Pad',
-    '[8] SAVE AS — the + menu (no title row) → the sheet, NOTE AND ALL → savePresetToBank(\'User\', meta) → the header is the saved name',
-    `menu ${menuRows.join (' / ')} · sheet ${sheetOn} · native ×${sv.length} bank ${sv[0] ? sv[0].args[0] : '—'} meta ${JSON.stringify (svm)} · header "${h8}"`);
+  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Keys' && /Wide/.test (svm.styles) && /Dark/.test (svm.styles) && svm.note === 'Written in the save sheet.' && h8 === 'User - Gate Pad'
+          && ! chipsBefore.typed && chipsBefore.type.join () === 'Pad'
+          && chipsAfter.type.join () === 'Keys' && chipsAfter.style.includes ('Dark') && chipsAfter.style.includes ('Wide'),
+    '[8] SAVE AS — the sheet PICKS BOXES (no typing), carries the note, and savePresetToBank gets all of it',
+    `menu ${menuRows.join (' / ')} · sheet ${sheetOn} · a type TEXT FIELD still there? ${chipsBefore.typed}`
+    + ` · opened with type [${chipsBefore.type}] · after clicking boxes: type [${chipsAfter.type}] style [${chipsAfter.style}]`
+    + ` · native ×${sv.length} bank ${sv[0] ? sv[0].args[0] : '—'} meta ${JSON.stringify (svm)} · header "${h8}"`);
 
   // [9] save (overwrite) on a user preset
   await p.click ('#preset-save-btn'); await wait (120);
@@ -391,13 +418,61 @@ const STUB = (MUT) => {
     await p.evaluate (() => { const r = document.querySelector ('#tp-ctx .pi[data-a=saveas]'); if (r) r.click(); }); await wait (240);
     const onSheet = await cls();
     /* the attenuator is the one that bit him twice; prove the rule actually hides it */
-    const hidden = await p.evaluate (() => { const t = document.createElement ('div'); t.className = 'sm-att on';
-      document.body.appendChild (t); const gone = getComputedStyle (t).display === 'none'; t.remove(); return gone; });
+    /* fb628 — every body-level fixed overlay, not just the attenuator: .sm-ul (the modulation
+       UNDERLINE, white rails at z 2147483644) is the one that reached him three times. */
+    const hidden = await p.evaluate (() => {
+      const names = ['sm-att', 'sm-ul', 'sm-routes', 'sm-ghost', 'ti-card', 'mv-ext', 'warp-ext', 'filt-ext', 'mv-menu', 'mv-toast', 'samp-menu'];
+      const left = [];
+      for (const n of names) { const t = document.createElement ('div'); t.className = n; document.body.appendChild (t);
+        if (getComputedStyle (t).display !== 'none') left.push (n); t.remove(); }
+      /* and the preset system's own menus must SURVIVE the same rule */
+      const mine = document.createElement ('div'); mine.className = 'pmenu tp-menu on'; document.body.appendChild (mine);
+      const mineOk = getComputedStyle (mine).display !== 'none'; mine.remove();
+      return { left, mineOk };
+    });
     await p.keyboard.press ('Escape'); await wait (180); await p.keyboard.press ('Escape'); await wait (220);
     const backAtRest = await cls();
-    gate (! atRest && onQuick && onBrowser && onSheet && hidden && ! backAtRest,
+    gate (! atRest && onQuick && onBrowser && onSheet && hidden.left.length === 0 && hidden.mineOk && ! backAtRest,
       '[19] EVERY PRESET SURFACE STANDS THE PAGE’S FLOATING OVERLAYS DOWN (quick menu, browser, sheet)',
-      `at rest ${atRest} · quick ${onQuick} · browser ${onBrowser} · sheet ${onSheet} · a live .sm-att is display:none while up ${hidden} · back at rest ${backAtRest}`);
+      `at rest ${atRest} · quick ${onQuick} · browser ${onBrowser} · sheet ${onSheet}`
+      + ` · overlays still visible while up: ${hidden.left.length ? hidden.left.join (',') : 'none'}`
+      + ` · the preset system's own .pmenu survives ${hidden.mineOk} · back at rest ${backAtRest}`);
+  }
+
+  // [20] fb628 — every column is a LANE: nothing can crowd Carries, a long name ellipsises
+  {
+    await openBrowser();
+    const lanes = await p.evaluate (() => {
+      const rows = [...document.querySelectorAll ('#tp-rows .tp-row:not(.off)')];
+      if (! rows.length) return null;
+      const worst = { gap: 1e9, over: 0 };
+      for (const r of rows) {
+        const nm = r.querySelector ('.c-nm'), au = r.querySelector ('.c-au'), car = r.querySelector ('.c-car');
+        if (! nm || ! au || ! car) return { missing: true };
+        const a = au.getBoundingClientRect(), c = car.getBoundingClientRect(), t = nm.querySelector ('.t');
+        worst.gap = Math.min (worst.gap, c.left - a.right);        // author → carries clearance
+        if (t && t.scrollWidth > t.clientWidth + 1) worst.over++;   // names that had to ellipsise
+      }
+      /* 🚨 the case Max named — "Alice in Wonderland … my name is coming very close to the
+         wavetable emblem". No preset in the store is long enough to prove it, so FORCE it: shove a
+         runaway name into the first row and demand the author does not move one pixel. */
+      const r0 = rows[0], t0 = r0.querySelector ('.c-nm .t'), a0 = r0.querySelector ('.c-au');
+      const before = a0.getBoundingClientRect().left, keep = t0.textContent;
+      t0.textContent = 'Alice in Wonderland and the Very Long Preset Name That Keeps Going';
+      const after = a0.getBoundingClientRect().left;
+      const clipped = t0.scrollWidth > t0.clientWidth + 1;
+      t0.textContent = keep;
+      const heads = [...document.querySelectorAll ('#tp-b .hd [data-sort]')].map (e => e.dataset.sort);
+      return { gap: worst.gap, ellipsised: worst.over, heads, rows: rows.length,
+               shifted: Math.abs (after - before), clipped };
+    });
+    gate (!! lanes && ! lanes.missing && lanes.gap >= 6 && lanes.heads.join () === 'name,author,carries,type,style'
+          && lanes.clipped && lanes.shifted < 0.5,
+      '[20] EVERY COLUMN IS A LANE — a runaway name ellipsises instead of pushing, and Carries keeps its clearance',
+      lanes ? `narrowest author→Carries gap ${lanes.gap == null ? '—' : lanes.gap.toFixed (1)}px across ${lanes.rows} rows (must be ≥ 6)`
+              + ` · a 64-char name: ellipsised ${lanes.clipped}, author moved ${lanes.shifted.toFixed (1)}px (must be 0)`
+              + ` · columns ${lanes.heads.join (' / ')}`
+            : 'no rows');
   }
 
   await b.close();
