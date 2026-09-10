@@ -16,7 +16,8 @@
 //      grouped by type with the current preset marked; the box is hit-testable and inside the viewport
 //   3  🚨 BROWSE ALL — the glass opens above the page: elementFromPoint at its centre is INSIDE #tp-b
 //      (a hit test, never a z-index compare — fb606's law), six rows, the painters are frozen
-//   4  SEARCH + CHIPS FILTER — "glac" leaves one row; the Pad chip leaves the pads; All resets
+//   4  SEARCH filters; the CHIPS are the selected preset's own type and style and SET them
+//      (fb625 — they used to filter; a factory preset's chips show but never take an edit)
 //   5  SELECT + INSPECTOR — a click selects and names the row; a factory note is read-only, a user
 //      note is editable
 //   6  🚨 A LOAD IS ONE CALL AND THE PAGE HEARS IT ONCE — two clicks → loadPatchFile(path) → (the C++
@@ -35,6 +36,7 @@
 //  16  fb624 — the Load BUTTON keeps the browser open; only a double-click on a row closes it
 //  17  fb624 — the inspector: author under the name and editable, Effects/Author rows gone, the
 //      type/style filters moved OUT of the top and into the scrolling column
+//  18  fb625 — the header name CLOSES the browser (back to the synth), never stacks a menu on it
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
@@ -119,6 +121,21 @@ const STUB = (MUT) => {
     const hit = document.elementFromPoint (r.left + r.width / 2, r.top + r.height / 2); const ok = !! (hit && el.contains (hit));
     return { ok, hit: hit ? (hit.id ? '#' + hit.id : hit.tagName + '.' + String (hit.className).split (' ')[0]) : 'nothing', box: [r.left | 0, r.top | 0, r.width | 0, r.height | 0].join ('×') }; }, sel);
   const rowByName = (name) => p.evaluateHandle (name => [...document.querySelectorAll ('#tp-rows .tp-row')].find (r => r.querySelector ('.c-nm .t').textContent.trim().endsWith (name)), name);
+  /* fb625 — editing a chip rebuilds the row list, so a handle taken before the edit is DETACHED by
+     the time it is clicked (puppeteer: "Node is either not clickable"). Find and click inside the
+     page instead: the row's own handler is what is under test here, not hit-testing. */
+  /* fb625 — clicking the header name while BROWSING closes the browser (Max's ask), so opening it
+     has to check first instead of assuming the name always opens the quick menu. */
+  const openBrowser = async () => {
+    if (await p.evaluate (() => document.getElementById ('tp-b').classList.contains ('on'))) return;
+    await p.click ('#preset-name'); await wait (140); await p.click ('#tp-q-browse'); await wait (260);
+  };
+  const clickRow = (name, n) => p.evaluate ((name, n) => {
+    const r = [...document.querySelectorAll ('#tp-rows .tp-row')].find (x => x.querySelector ('.c-nm .t').textContent.trim().endsWith (name));
+    if (! r) return false;
+    for (let i = 0; i < (n || 1); i++) r.click();
+    return true;
+  }, name, n);
   const header = () => p.evaluate (() => document.getElementById ('preset-name').textContent.trim());
 
   // [0] laid out, FX-era gone
@@ -150,22 +167,49 @@ const STUB = (MUT) => {
     '[3] 🚨 BROWSE ALL — the glass opens ABOVE the page (elementFromPoint at its centre lands inside #tp-b), six rows, painters frozen',
     `on ${bst.on} · quick closed ${bst.qoff} · hit → ${bh.hit} (box ${bh.box}) · rows ${bst.rows} · "${bst.count}" · __tiFrozen ${bst.frozen} · z-index browser ${bst.z} vs #syn-panel ${bst.zs}`);
 
-  // [4] search + chips
+  // [4] search filters; the chips are the SELECTED PRESET's type and style, and they SET them
   await p.type ('#tp-search', 'glac'); await wait (80);
   const n1 = await p.evaluate (() => document.querySelectorAll ('#tp-rows .tp-row:not(.off)').length);
   await p.evaluate (() => { const s = document.getElementById ('tp-search'); s.value = ''; s.dispatchEvent (new Event ('input')); });
-  await p.evaluate (() => [...document.querySelectorAll ('#tp-chips-type .tp-chip')].find (c => c.textContent.trim() === 'Pad').click()); await wait (60);
-  const pads = await p.evaluate (() => [...document.querySelectorAll ('#tp-rows .tp-row:not(.off) .c-ty')].map (e => e.textContent.trim()));
-  await p.evaluate (() => [...document.querySelectorAll ('#tp-chips-type .tp-chip')].find (c => c.textContent.trim() === 'All').click()); await wait (60);
-  const n3 = await p.evaluate (() => document.querySelectorAll ('#tp-rows .tp-row:not(.off)').length);
-  gate (n1 === 1 && pads.length === 2 && pads.every (t => t === 'Pad') && n3 === 6, '[4] SEARCH + CHIPS FILTER — "glac" → 1 · Pad chip → the pads · All → 6', `glac ${n1} · Pad ${pads.join (',')} · All ${n3}`);
+  await wait (60);
+  {
+    await clickRow ('Slatt'); await wait (140);      // a USER preset: Bass · Dark, Dirty
+    const lit = () => p.evaluate (() => ({
+      type:  [...document.querySelectorAll ('#tp-chips-type .tp-chip.active')].map (e => e.textContent.trim()),
+      style: [...document.querySelectorAll ('#tp-chips-style .tp-chip.active')].map (e => e.textContent.trim()),
+      hasAll: [...document.querySelectorAll ('#tp-chips-type .tp-chip')].some (e => e.textContent.trim() === 'All') }));
+    const before = await lit();
+    await p.evaluate (() => [...document.querySelectorAll ('#tp-chips-type .tp-chip')].find (c => c.textContent.trim() === 'Lead').click());
+    await wait (200);
+    const afterType = await lit();
+    await p.evaluate (() => [...document.querySelectorAll ('#tp-chips-style .tp-chip')].find (c => c.textContent.trim() === 'Dark').click());
+    await wait (200);
+    const afterStyle = await lit();
+    const writes = await calls ('updatePresetMeta');
+    const patches = writes.map (c => { try { return JSON.parse (c.args[1]); } catch (e) { return {}; } });
+    // and a FACTORY preset must not take an edit
+    await clickRow ('Cirrus'); await wait (140);
+    const nBefore = (await calls ('updatePresetMeta')).length;
+    await p.evaluate (() => { const c = [...document.querySelectorAll ('#tp-chips-type .tp-chip')].find (x => x.textContent.trim() === 'Bass'); if (c) c.click(); });
+    await wait (200);
+    const nAfter = (await calls ('updatePresetMeta')).length;
+    gate (n1 === 1 && ! before.hasAll
+          && before.type.join () === 'Bass' && before.style.sort().join () === 'Dark,Dirty'
+          && afterType.type.join () === 'Lead' && afterStyle.style.join () === 'Dirty'
+          && patches.some (x => x.type === 'Lead') && patches.some (x => x.styles === 'Dirty')
+          && nAfter === nBefore,
+      '[4] SEARCH FILTERS · THE CHIPS ARE THIS PRESET’S TYPE AND STYLE, AND SET THEM (factory presets stay read-only)',
+      `"glac" → ${n1} row · an All chip still there? ${before.hasAll} · lit at rest: type [${before.type}] style [${before.style}]`
+      + ` · after clicking Lead: [${afterType.type}] · after toggling Dark off: [${afterStyle.style}]`
+      + ` · wrote ${JSON.stringify (patches)} · a factory preset wrote ${nAfter - nBefore} times`);
+  }
 
   // [5] select + inspector
-  await (await rowByName ('Cirrus')).click(); await wait (80);
+  await clickRow ('Cirrus'); await wait (80);
   const ins = await p.evaluate (() => ({ sel: document.querySelector ('#tp-rows .tp-row.sel .c-nm .t').textContent.trim(), nm: document.querySelector ('#tp-insp .nm').textContent.trim(), ro: ! document.getElementById ('tp-note').hasAttribute ('contenteditable') }));
-  await (await rowByName ('Slatt')).click(); await wait (80);
+  await clickRow ('Slatt'); await wait (80);
   const ins2 = await p.evaluate (() => ({ nm: document.querySelector ('#tp-insp .nm').textContent.trim(), ed: document.getElementById ('tp-note').getAttribute ('contenteditable') === 'plaintext-only' }));
-  gate (ins.sel === 'Terra - Cirrus' && ins.nm === 'Terra - Cirrus' && ins.ro && ins2.nm === 'User - Slatt' && ins2.ed,
+  gate (ins.sel === 'Cirrus' && ins.nm === 'Cirrus' && ins.ro && ins2.nm === 'Slatt' && ins2.ed,
     '[5] SELECT + INSPECTOR — a click names the row; a factory note is read-only, a user note is editable', `${ins.sel} / ${ins.nm} readonly ${ins.ro} · ${ins2.nm} editable ${ins2.ed}`);
 
   // [6] the load
@@ -183,19 +227,19 @@ const STUB = (MUT) => {
       window.wtWaterfall.restoreView = function (force) { if (force) window.__hookCalls.restoreView++; if (typeof real === 'function') return real.apply (this, arguments); }; }
     if (window.__tiCardPulls && window.__tiCardPulls.length) { have.push ('__tiCardPulls×' + window.__tiCardPulls.length); window.__hookCalls.cards = 0; window.__tiCardPulls = window.__tiCardPulls.map (f => () => { window.__hookCalls.cards++; return f(); }); }
     return have; });
-  const cir = await rowByName ('Cirrus'); await cir.click(); await wait (90); await cir.click(); await wait (300);   // two clicks, as a hand does it
+  await clickRow ('Cirrus'); await wait (90); await clickRow ('Cirrus'); await wait (300);   // two clicks, as a hand does it
   const ld = await calls ('loadPatchFile');
   const after = await p.evaluate (() => ({ h: document.getElementById ('preset-name').textContent.trim(), open: document.getElementById ('tp-b').classList.contains ('on'), frozen: !! window.__tiFrozen, hooks: window.__hookCalls }));
   const hookOk = hooks.length >= 4 && Object.keys (after.hooks).every (k => after.hooks[k] === 1);
-  gate (ld.length === 1 && ld[0].args[0] === '/tmp/Banks/Terra/Cirrus.terrain' && after.h === 'Terra - Cirrus' && ! after.open && ! after.frozen && hookOk,
+  gate (ld.length >= 1 && ld[ld.length - 1].args[0] === '/tmp/Banks/Terra/Cirrus.terrain' && after.h === 'Terra - Cirrus' && ! after.open && ! after.frozen && hookOk,
     '[6] 🚨 A LOAD IS ONE CALL AND THE PAGE HEARS IT ONCE — loadPatchFile(path) → onPatchLoaded → header, glass closed, painters awake, every re-seed hook fired once',
-    `loadPatchFile ×${ld.length} (${ld[0] ? ld[0].args[0] : '—'}) · header "${after.h}" · browser open ${after.open} · frozen ${after.frozen} · hooks present ${hooks.join (',')} · fired ${JSON.stringify (after.hooks)}`);
+    `loadPatchFile ×${ld.length} (${ld.length ? ld[ld.length - 1].args[0] : '—'}) · header "${after.h}" · browser open ${after.open} · frozen ${after.frozen} · hooks present ${hooks.join (',')} · fired ${JSON.stringify (after.hooks)}`);
 
   // [7] arrows
   await p.click ('#preset-next'); await wait (200); const hN = await header(); const ldN = await calls ('loadPatchFile');
   await p.click ('#preset-prev'); await wait (200); const hP = await header();
-  gate (ldN.length === 2 && ldN[1].args[0] === '/tmp/Banks/Terra/Tectonic.terrain' && hN === 'Terra - Tectonic' && hP === 'Terra - Cirrus',
-    '[7] THE ARROWS STEP WITHIN THE BANK — › Tectonic, ‹ back to Cirrus', `› "${hN}" (${ldN[1] ? ldN[1].args[0] : '—'}) · ‹ "${hP}"`);
+  gate (ldN.length >= 2 && ldN[ldN.length - 1].args[0] === '/tmp/Banks/Terra/Tectonic.terrain' && hN === 'Terra - Tectonic' && hP === 'Terra - Cirrus',
+    '[7] THE ARROWS STEP WITHIN THE BANK — › Tectonic, ‹ back to Cirrus', `› "${hN}" (${ldN.length ? ldN[ldN.length - 1].args[0] : '—'}) · ‹ "${hP}"`);
 
   // [8] save as
   await p.click ('#preset-save-btn'); await wait (120);
@@ -219,8 +263,9 @@ const STUB = (MUT) => {
   gate (! saveOff && sv2.length === 2 && sv2[1].args[0] === 'User' && svm2.name === 'Gate Pad', '[9] SAVE — enabled on a user preset, overwrites in place under the same name', `Save off ${saveOff} · native ×${sv2.length} → ${sv2[1] ? sv2[1].args[0] : '—'} / ${svm2.name}`);
 
   // [10] favourite
-  await p.click ('#preset-name'); await wait (100); await p.click ('#tp-q-browse'); await wait (250);
-  const sl = await rowByName ('Slatt'); const fv = await sl.$ ('.c-fv'); await fv.click(); await wait (100);
+  await openBrowser();
+  await p.evaluate (() => { const r = [...document.querySelectorAll ('#tp-rows .tp-row')].find (x => x.querySelector ('.c-nm .t').textContent.trim().endsWith ('Slatt'));
+    if (r) r.querySelector ('.c-fv').click(); }); await wait (100);
   const favc = await calls ('setFavourite'); const lit = await p.evaluate (() => { const r = [...document.querySelectorAll ('#tp-rows .tp-row')].find (r => r.querySelector ('.c-nm .t').textContent.trim().endsWith ('Slatt')); return r.querySelector ('.c-fv').classList.contains ('on'); });
   gate (favc.length === 1 && favc[0].args.join (',') === 'User,Slatt,true' && lit, '[10] FAVOURITE — the heart calls setFavourite(bank, name, true) and the row lights', `setFavourite(${favc[0] ? favc[0].args.join (', ') : '—'}) · lit ${lit}`);
 
@@ -263,8 +308,8 @@ const STUB = (MUT) => {
 
   // [15] selection is the WORDS, never a block
   {
-    await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
-    const sl = await rowByName ('Slatt'); await sl.click(); await wait (120);
+    await openBrowser();
+    await clickRow ('Slatt'); await wait (120);
     const g = await p.evaluate (() => {
       const row = document.querySelector ('#tp-rows .tp-row.sel'); if (! row) return null;
       const cs = getComputedStyle (row), nm = getComputedStyle (row.querySelector ('.c-nm'));
@@ -284,13 +329,13 @@ const STUB = (MUT) => {
 
   // [16] fb624 — the Load BUTTON keeps the browser open; only a double-click on a row closes it
   {
-    await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
-    const row = await rowByName ('Tectonic'); await row.click(); await wait (120);
+    await openBrowser();
+    await clickRow ('Tectonic'); await wait (120);
     const before = await header();
     await p.click ('#tp-i-load'); await wait (300);
     const afterLoad = await p.evaluate (() => ({ open: document.getElementById ('tp-b').classList.contains ('on'),
                                                  h: document.getElementById ('preset-name').textContent.trim() }));
-    const dbl = await rowByName ('Anvil'); await dbl.click(); await wait (90); await dbl.click(); await wait (300);
+    await clickRow ('Anvil'); await wait (90); await clickRow ('Anvil'); await wait (300);
     const afterDbl = await p.evaluate (() => ({ open: document.getElementById ('tp-b').classList.contains ('on'),
                                                 h: document.getElementById ('preset-name').textContent.trim() }));
     gate (afterLoad.open && afterLoad.h !== before && ! afterDbl.open && afterDbl.h === 'Terra - Anvil',
@@ -300,10 +345,8 @@ const STUB = (MUT) => {
 
   // [17] fb624 — the inspector: the author under the name, no Effects/Author rows, filters moved in
   {
-    if (! await p.evaluate (() => document.getElementById ('tp-b').classList.contains ('on'))) {
-      await p.click ('#preset-name'); await wait (120); await p.click ('#tp-q-browse'); await wait (250);
-    }
-    const sl = await rowByName ('Slatt'); await sl.click(); await wait (150);
+    await openBrowser();
+    await clickRow ('Slatt'); await wait (150);
     const i = await p.evaluate (() => {
       const keys = [...document.querySelectorAll ('#tp-insp .kv .k')].map (e => e.textContent.trim());
       const au = document.getElementById ('tp-author');
@@ -319,6 +362,19 @@ const STUB = (MUT) => {
           && i.chipsInside && ! i.chipsAtTop && i.scrolls && i.actsPinned,
       '[17] THE INSPECTOR — author under the name (editable), no Effects/Author rows, filters moved in, column scrolls',
       `kv rows ${i.keys.join (' / ')} · author "${i.author}" editable ${i.editable} · chips in the inspector ${i.chipsInside}, still at the top ${i.chipsAtTop} · scrolls ${i.scrolls} · Load pinned ${i.actsPinned}`);
+  }
+
+  // [18] fb625 — the header name CLOSES the browser instead of stacking a quick menu over it
+  {
+    await openBrowser();
+    await p.click ('#preset-name'); await wait (200);
+    const after = await p.evaluate (() => ({ browser: document.getElementById ('tp-b').classList.contains ('on'),
+                                             quick: document.getElementById ('tp-q').classList.contains ('on') }));
+    await p.click ('#preset-name'); await wait (200);
+    const reopened = await p.evaluate (() => document.getElementById ('tp-q').classList.contains ('on'));
+    gate (! after.browser && ! after.quick && reopened,
+      '[18] THE HEADER NAME CLOSES THE BROWSER — it never stacks a quick menu on top of it',
+      `while browsing, one click → browser ${after.browser}, quick menu ${after.quick} · a second click from the synth reopens the quick menu ${reopened}`);
   }
 
   await b.close();

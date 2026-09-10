@@ -1265,6 +1265,10 @@ body {
 #tp-b .rail .ri.cur { color: var(--sel-fg); border-left-color: var(--purple-500); background: transparent; }
 #tp-b .rail .ri.cur .ct { color: var(--sel-fg); }
 #tp-b .rail .ri.imp, #tp-b .rail .ri.imp:hover { color: var(--purple-400); }
+/* fb625 — a bank lights up when a preset is over it */
+#tp-b .rail .ri.drop { color: var(--on-fg); box-shadow: inset 0 0 0 1px var(--purple-400); border-radius: 4px; }
+#tp-b .insp .v.pick { cursor: pointer; }
+#tp-b .insp .v.pick:hover { color: var(--purple-400); }
 #tp-b .rail .ri svg { width: 11px; height: 11px; flex: none; }
 
 #tp-b .listcol { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -1289,11 +1293,13 @@ body {
 .tp-row:hover .c-ty, .tp-row:hover .c-st { color: var(--text-primary); }
 .tp-row.sel { background: transparent; }
 .tp-row.sel .c-nm, .tp-row.sel .c-ty, .tp-row.sel .c-st { color: var(--sel-fg); }
-.tp-row.sel .c-nm .bk { color: var(--sel-fg); opacity: .55; }
+
 .tp-row.off { display: none; }
 .tp-row .c-nm { flex: 1; min-width: 0; display: flex; align-items: baseline; gap: 7px; font-size: 10.5px; font-weight: 500; color: var(--text-primary); }
 .tp-row .c-nm .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tp-row .c-nm .bk, .tp-bk { color: var(--text-secondary); font-weight: 400; }
+.tp-row .c-nm .au { color: var(--text-secondary); font-weight: 400; font-size: 9.5px; flex: none; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 96px; }
+.tp-row.sel .c-nm .au { color: var(--sel-fg); opacity: .6; }
+.tp-bk { color: var(--text-secondary); font-weight: 400; }
 .tp-row .tag { font-size: 9px; font-weight: 500; color: var(--purple-400); flex: none; }
 .tp-row .tag.user { color: var(--text-secondary); }
 .tp-row .c-car { width: 92px; flex: none; display: flex; gap: 3px; align-items: center; }
@@ -1334,7 +1340,10 @@ body {
 #tp-b .insp .k { font-size: 10px; font-weight: 500; color: var(--text-soft); line-height: 14px; }
 #tp-b .insp .v { font-size: 10.5px; color: var(--text-primary); line-height: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tp-b .insp .v.clamp:hover { color: var(--purple-400); cursor: default; }   /* fb624 — hover the … to read the rest */
-.pmenu.tp-menu.tp-tip { max-width: 250px; }
+/* fb625 — 🚨 A TOOLTIP MUST NEVER EAT A CLICK. It opens just below whatever you hovered, which is
+   exactly on top of the NEXT row: without this, hovering one preset made the one under it
+   unclickable. Found by the surfaces gate, not by eye — puppeteer's own mouse hit the tip. */
+.pmenu.tp-menu.tp-tip { max-width: 250px; pointer-events: none; }
 .pmenu.tp-menu.tp-tip .pi { color: rgba(255,255,255,.86); }
 .pmenu.tp-menu.tp-tip .pi .nm { white-space: normal; overflow: visible; text-overflow: clip; line-height: 1.45; }
 #tp-b .insp .carries { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
@@ -39722,14 +39731,18 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 
   /* ═══ STATE ═══════════════════════════════════════════════════════════════════════════════════ */
   const S = { banks: [], presets: [], favs: {}, types: DEF_TYPES.slice(), styles: DEF_STYLES.slice(), vocabLoaded: false,
-    cur: blankMeta(), curId: -1, sel: -1, bank: null, type: null, style: null, author: null, favOnly: false, q: '', qBank: null, sort: { key: null, dir: 1 },
+    cur: blankMeta(), curId: -1, sel: -1, bank: null, author: null, favOnly: false, q: '', qBank: null, sort: { key: null, dir: 1 },
     author0: 'Me' };
   function blankMeta() { return { name: '', bank: '', author: '', type: '', styles: '', note: '', fv: 1 }; }
   function metaFrom(v) { let m = null; try { m = (typeof v === 'string') ? JSON.parse(v || 'null') : v; } catch (e) {} m = m && typeof m === 'object' ? m : {};
     const o = blankMeta(); for (const k in o) if (m[k] != null) o[k] = k === 'fv' ? (+m[k] || 1) : String(m[k]); return o; }
   const favKey = p => String(p.bank || '').trim() + '/' + String(p.name || '').trim();
   const isFav = p => !!S.favs[favKey(p)];
-  const label = p => `<span class="bk">${esc(p.bank)} - </span>${esc(p.name)}`;
+  /* fb625 — Max: "it should literally just be Corinthians, and then Macshooter. No more user
+     dashes." The bank is already the thing you picked in the rail and it is a row in the
+     inspector, so spelling it in front of every name said nothing twice. The AUTHOR takes that
+     place instead, which is the one fact a row could not tell you before. */
+  const label = p => esc(p.name);
   const fmtB = b => !b ? '—' : b < 1e6 ? Math.round(b / 1000) + ' KB' : (b / 1e6).toFixed(1) + ' MB';
   /* What the user is about to wait for. A preset is params + audio: the params are instant, the audio
      is a FLAC decode, and an ENVIRONMENT will additionally build a node graph when the patcher lands.
@@ -39785,7 +39798,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const at = p.findIndex(x => x.id === S.curId); const nx = p[((at < 0 ? (d > 0 ? -1 : 0) : at) + d + p.length) % p.length]; load(nx.id); }
   $('preset-prev').addEventListener('click', e => { e.stopPropagation(); step(-1); });
   $('preset-next').addEventListener('click', e => { e.stopPropagation(); step(1); });
-  $('preset-name').addEventListener('click', e => { e.stopPropagation(); closeCtx(); toggleQuick(); });
+  $('preset-name').addEventListener('click', e => { e.stopPropagation(); closeCtx();
+    /* fb625 — Max: "if I'm in Browse All and I click the preset menu, it should close it and take
+       me back to the synth, instead of opening a brand new quick select menu [on top of it]." */
+    if (browserOpen()) { closeBrowser(); return; }
+    toggleQuick(); });
   $('preset-save-btn').addEventListener('click', e => { e.stopPropagation(); toggleQuick(false); openSaveMenu(); });
   function openSaveMenu() {
     const p = S.curId >= 0 ? S.presets[S.curId] : null, canSave = !!(p && p.user);
@@ -39794,7 +39811,6 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       <div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
       <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
       <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>
-      <div class="ps">Start over</div>
       <div class="pi" data-a="init"><span class="nm">Init preset</span></div>`,
       a => { if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportCurrent(); if (a === 'init') initPatch(); });
   }
@@ -39866,17 +39882,66 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   $('tp-close').onclick = closeBrowser;
   window.__tiOpenPresetBrowser = openBrowser;
 
+  /* ═══ fb625 — THE CHIPS ARE THIS PRESET'S TYPE AND STYLE, NOT A FILTER ═══════════════════════
+     Max: "it says Type is Keys, right? But I don't see Keys highlighted at the bottom… the keys
+     need to be highlighted too, or else we're just like, what the fuck. And we need to be able to
+     CHANGE the type." So the strip that used to filter the list now shows what the selected preset
+     IS and sets it: Type is one word, Style is as many as you like, and the + adds a word to the
+     vocabulary and puts it on this preset in the same click. Finding by type is the search box and
+     the sortable Type column; this surface answers a different question and now says so.
+     A factory preset is read-only on disk, so its chips show but do not take. */
   function buildChips() {
-    const ADD = k => `<button class="tp-chip add" data-add="${k}" title="Add a ${k}">${PLUS}</button>`;
+    const p = S.presets[S.sel] || null;
+    const ADD = k => `<button class="tp-chip add" data-add="${k}" title="Add a ${k} and put it on this preset">${PLUS}</button>`;
     const t = $('tp-chips-type').querySelector('.strip');
-    t.innerHTML = ['All', ...S.types].map(x => `<button class="tp-chip${(x === 'All' ? S.type == null : same(S.type, x)) ? ' active' : ''}" data-t="${esc(x)}">${esc(x)}</button>`).join('') + ADD('type');
-    t.querySelectorAll('.tp-chip[data-t]').forEach(b => { b.onclick = () => { S.type = b.dataset.t === 'All' ? null : b.dataset.t; buildChips(); renderRows(); };
-      if (b.dataset.t !== 'All') b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'type', b.dataset.t); }; });
-    const s = $('tp-chips-style').querySelector('.strip');
-    s.innerHTML = ['All', ...S.styles].map(x => `<button class="tp-chip${(x === 'All' ? S.style == null : same(S.style, x)) ? ' active' : ''}" data-s="${esc(x)}">${esc(x)}</button>`).join('') + ADD('style');
-    s.querySelectorAll('.tp-chip[data-s]').forEach(b => { b.onclick = () => { S.style = b.dataset.s === 'All' ? null : b.dataset.s; buildChips(); renderRows(); };
-      if (b.dataset.s !== 'All') b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'style', b.dataset.s); }; });
-    for (const st of [t, s]) { st.querySelector('[data-add]').onclick = () => addVocab(st.querySelector('[data-add]').dataset.add); const a = st.querySelector('.active'); if (a) a.scrollIntoView({ inline: 'nearest', block: 'nearest' }); stripEdge(st); }
+    t.innerHTML = S.types.map(x => `<button class="tp-chip${p && same(p.type, x) ? ' active' : ''}" data-t="${esc(x)}">${esc(x)}</button>`).join('') + ADD('type');
+    t.querySelectorAll('.tp-chip[data-t]').forEach(b => {
+      b.onclick = () => setType(b.dataset.t);
+      b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'type', b.dataset.t); };
+    });
+    const st = $('tp-chips-style').querySelector('.strip');
+    st.innerHTML = S.styles.map(x => `<button class="tp-chip${p && p.styles.some(y => same(y, x)) ? ' active' : ''}" data-s="${esc(x)}">${esc(x)}</button>`).join('') + ADD('style');
+    st.querySelectorAll('.tp-chip[data-s]').forEach(b => {
+      b.onclick = () => toggleStyle(b.dataset.s);
+      b.oncontextmenu = e => { e.preventDefault(); openVocabCtx(e, 'style', b.dataset.s); };
+    });
+    for (const strip of [t, st]) strip.querySelector('[data-add]').onclick = () => addVocab(strip.querySelector('[data-add]').dataset.add);
+  }
+  function editable(p) {
+    if (!p) return false;
+    if (!p.user) { toast('A factory preset cannot be edited — Save as… to make it yours'); return false; }
+    return true;
+  }
+  function setType(word) {
+    const p = S.presets[S.sel]; if (!editable(p)) return;
+    p.type = same(p.type, word) ? '' : tidy(word);           /* clicking the current one clears it */
+    persistMeta(p, { type: p.type });
+  }
+  function toggleStyle(word) {
+    const p = S.presets[S.sel]; if (!editable(p)) return;
+    const at = p.styles.findIndex(x => same(x, word));
+    if (at >= 0) p.styles.splice(at, 1); else p.styles.push(tidy(word));
+    persistMeta(p, { styles: p.styles.join(',') });
+  }
+  /* fb625 — Max: "I can drag Corinthians over to Windows Test and it copies over… if we change it
+     from User to Windows Test it needs to be MOVED." Both, and the difference is principled: your
+     own preset MOVES (it lives in one place), a FACTORY preset COPIES (it lives in the bundle and
+     cannot leave). Either way the whole .terrain travels, so every one-shot, wavetable and IR it
+     carries goes with it — there is no second path that could forget them. */
+  function moveTo(p, bank) {
+    if (!p || !bank || same(p.bank, bank)) return;
+    const native = p.user ? 'movePresetFile' : 'copyPresetFile';
+    call(native, p.path, bank).then(r => {
+      if (isErr(r)) { toast(errOf(r)); return; }
+      if (p.id === S.curId && p.user) { S.cur.bank = bank; call('setPresetMeta', JSON.stringify(S.cur)); }
+      rescan().then(() => toast(p.user ? `Moved ${esc(p.name)} to ${esc(bank)}` : `Copied ${esc(p.name)} to ${esc(bank)}`));
+    });
+  }
+  function persistMeta(p, patch) {
+    if (!p.path) return;
+    call('updatePresetMeta', p.path, JSON.stringify(patch)).then(r => { if (isErr(r)) toast(errOf(r)); });
+    if (p.id === S.curId) { Object.assign(S.cur, patch); call('setPresetMeta', JSON.stringify(S.cur)); }
+    rowsBuilt = -1; renderRows(); renderInsp();
   }
   function stripEdge(st) { st.classList.toggle('end', st.scrollLeft + st.clientWidth >= st.scrollWidth - 2); }
   document.querySelectorAll('#tp-b .chips .strip').forEach(st => {
@@ -39895,15 +39960,21 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     for (const a of authors) h += `<div class="ri${S.author === a ? ' cur' : ''}" data-author="${esc(a)}"><span class="nm">${esc(a)}</span><span class="ct">${S.presets.filter(p => p.author === a).length}</span></div>`;
     r.innerHTML = h;
     r.querySelectorAll('[data-bank]').forEach(el => { el.onclick = () => { S.bank = el.dataset.bank || null; renderRail(); renderRows(); };
-      const bk = bankOf(el.dataset.bank); if (bk && !bk.factory) el.oncontextmenu = e => { e.preventDefault(); openBankCtx(e, bk); }; });
+      const bk = bankOf(el.dataset.bank); if (bk && !bk.factory) el.oncontextmenu = e => { e.preventDefault(); openBankCtx(e, bk); };
+      /* fb625 — drop a preset here to put it in this bank */
+      if (bk && !bk.factory) {
+        el.ondragover  = e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; el.classList.add('drop'); };
+        el.ondragleave = () => el.classList.remove('drop');
+        el.ondrop = e => { e.preventDefault(); el.classList.remove('drop');
+          let id = -1; try { id = +e.dataTransfer.getData('text/tp-preset'); } catch (err) {}
+          if (id >= 0 && S.presets[id]) moveTo(S.presets[id], bk.name); };
+      } });
     r.querySelectorAll('[data-author]').forEach(el => el.onclick = () => { S.author = el.dataset.author || null; renderRail(); renderRows(); });
     r.querySelector('[data-do=import]').onclick = importPack;
     r.querySelector('[data-do=newbank]').onclick = openNewBank;
   }
   function matches(p) {
     if (S.bank && !same(p.bank, S.bank)) return false;
-    if (S.type && !same(p.type, S.type)) return false;
-    if (S.style && !p.styles.some(s => same(s, S.style))) return false;
     if (S.author && p.author !== S.author) return false;
     if (S.favOnly && !isFav(p)) return false;
     if (S.q) { const hay = (p.bank + ' ' + p.name + ' ' + p.type + ' ' + p.styles.join(' ') + ' ' + p.author + ' ' + p.fx + ' ' + p.note + (p.env ? ' environment env' : '')).toLowerCase();
@@ -39914,7 +39985,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function buildRows() {
     const r = $('tp-rows'); let h = '';
     for (const p of S.presets) h += `<div class="tp-row" data-id="${p.id}">
-      <span class="c-nm"><span class="t" data-full="${esc(plain(p))}">${label(p)}</span>${p.env ? '<span class="tag">Env</span>' : ''}${p.user ? '<span class="tag user">User</span>' : ''}</span>
+      <span class="c-nm"><span class="t" data-full="${esc(p.name)}">${esc(p.name)}</span>${p.env ? '<span class="tag">Env</span>' : ''}<span class="au">${esc(p.author)}</span></span>
       <span class="c-car">${p.c.map((n, i) => `<span class="tp-car${n ? ' on' : ''}${i === 5 ? ' node' : ''}" title="${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}">${CAR_GLYPH[i]}</span>`).join('')}</span>
       <span class="c-ty">${esc(p.type)}</span>
       <span class="c-st" data-full="${esc(p.styles.join(' · '))}">${esc(p.styles.join(' · '))}</span>
@@ -39922,6 +39993,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     r.innerHTML = h; rowsBuilt = S.presets.length;
     r.querySelectorAll('.tp-row').forEach(el => {
       const id = +el.dataset.id;
+      el.draggable = true;
+      el.ondragstart = e => { try { e.dataTransfer.setData('text/tp-preset', String(id)); e.dataTransfer.effectAllowed = 'copyMove'; } catch (err) {} select(id); };
       el.onclick = e => { if (e.target.closest('.c-fv')) { toggleFav(id); return; }
         /* two clicks on one row = load. Counted by hand, not by the engine's dblclick: every engine delivers two clicks */
         const t = Date.now(); if (lastClick.id === id && t - lastClick.t < 380) { lastClick = { id: -1, t: 0 }; load(id, { close: true }); return; }
@@ -39970,7 +40043,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       <div class="kv">
         <span class="k">Type</span><span class="v">${esc(p.type || '—')}</span>
         <span class="k">Style</span><span class="v clamp" data-full="${esc(styles)}">${esc(styles || '—')}</span>
-        <span class="k">Bank</span><span class="v">${esc(p.bank)}</span>
+        <span class="k">Bank</span><span class="v pick" id="tp-bankpick" title="${p.user ? 'Move this preset to another bank' : 'Factory presets stay where they are'}">${esc(p.bank)}</span>
         <span class="k">Load</span><span class="v">${loadEst(p).txt}</span>
         <span class="k">Size</span><span class="v">${fmtB(p.bytes)}</span>
       </div>
@@ -39984,12 +40057,29 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     }
     /* fb624 — the author line. On your own presets it is a field: type your name once and every
        preset you save after it defaults to the same. */
+    /* fb625 — Max: "if we change it from User to Windows Test it needs to be MOVED over there."
+       The whole .terrain moves, so everything it carries goes with it by construction. */
+    const bp = $('tp-bankpick');
+    if (bp && p.user) bp.onclick = e => {
+      e.stopPropagation();
+      const banks = S.banks.filter(b => !b.factory && !same(b.name, p.bank));
+      let h = '<div class="ps">Move to</div>';
+      if (!banks.length) h += '<div class="pi dim"><span class="nm">No other bank yet</span></div>';
+      for (const b of banks) h += `<div class="pi" data-a="b:${esc(b.name)}"><span class="nm">${esc(b.name)}</span><span class="ct">${b.n}</span></div>`;
+      h += '<div class="pi imp" data-a="new"><span class="nm">New bank…</span></div>';
+      const r = bp.getBoundingClientRect();
+      menuAt(r.left, r.bottom + 4, h, a => {
+        if (a === 'new') { openNewBank(p); return; }
+        moveTo(p, a.slice(2));
+      });
+    };
     const au = $('tp-author'); au.textContent = p.author || '';
     if (p.user) {
       au.oninput = () => { clearTimeout(authorT); authorT = setTimeout(() => saveAuthor(p, au.textContent), 600); };
       au.onkeydown = e => { e.stopPropagation(); if (e.key === 'Escape' || e.key === 'Enter') { e.preventDefault(); au.blur(); } };
       au.onblur = () => { clearTimeout(authorT); saveAuthor(p, au.textContent); };
     }
+    buildChips();   /* fb625 — which chips are lit is a property of the SELECTION */
     ac.innerHTML = `<button class="tp-btn ic${isFav(p) ? ' on' : ''}" id="tp-i-fav" title="Favourite">${HEART}</button><button class="tp-btn pri" id="tp-i-load">Load</button>`;
     $('tp-i-fav').onclick = () => toggleFav(p.id);
     /* fb624 — Max: "when I press Load, the preset menu should stay open. It's only when I double
@@ -40054,7 +40144,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }, true);
   function openCtx(e, id) {
     const p = S.presets[id]; if (!p) return;
-    let h = `<div class="ps">${esc(p.name)}</div><div class="pi" data-a="load"><span class="nm">Load</span></div><div class="pi" data-a="fav"><span class="nm">${isFav(p) ? 'Remove favourite' : 'Favourite'}</span></div>`;
+    let h = `<div class="pi" data-a="load"><span class="nm">Load</span></div><div class="pi" data-a="fav"><span class="nm">${isFav(p) ? 'Remove favourite' : 'Favourite'}</span></div>`;
     h += `<div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>`;
     if (p.user) h += `<div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div>`;
     else h += `<div class="pi" data-a="dup"><span class="nm">Copy to User</span></div>`;
@@ -40109,7 +40199,12 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function persistVocab() { call('setVocab', JSON.stringify({ types: S.types, styles: S.styles })); }
   function ensureVocab(k, raw) { const w = tidy(raw); if (!w) return null; const list = vocab(k); const hit = list.find(x => same(x, w)); if (hit) return hit; list.push(w); persistVocab(); toast(`Added ${k} <span class="tp-bk">${esc(w)}</span>`); return w; }
   function addVocab(k) { sheet({ title: k === 'type' ? 'New type' : 'New style', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" placeholder="${k === 'type' ? 'Type name' : 'Style name'}"></div>`, ok: 'Add', focus: 'tp-vn',
-    onOk: () => { const w = ensureVocab(k, $('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } closeSheet(); buildChips(); renderQuick(); } }); }
+    onOk: () => { const w = ensureVocab(k, $('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } closeSheet();
+      /* fb625 — adding a word here MEANS putting it on this preset; the vocabulary grows as a side effect */
+      const p = S.presets[S.sel];
+      if (p && p.user) { if (k === 'type') setType(w); else if (!p.styles.some(x => same(x, w))) toggleStyle(w); }
+      else { buildChips(); }
+      renderQuick(); } }); }
   function renameVocab(k, old) { sheet({ title: 'Rename ' + old, body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" value="${esc(old)}"></div>`, ok: 'Rename', focus: 'tp-vn', onOk: () => {
     const w = tidy($('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } if (w === old) { closeSheet(); return; }
     const list = vocab(k), i = list.findIndex(x => same(x, old)); if (i < 0) { closeSheet(); return; }
@@ -40119,12 +40214,12 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     for (const p of used) { if (k === 'type') p.type = w; else p.styles = p.styles.map(s => same(s, old) ? w : s);
       if (p.user && p.path) writes.push(call('updatePresetMeta', p.path, JSON.stringify(k === 'type' ? { type: w } : { styles: p.styles.join(',') }))); }
     if (k === 'type' ? same(S.cur.type, old) : stylesOf(S.cur.styles).some(s => same(s, old))) { if (k === 'type') S.cur.type = w; else S.cur.styles = stylesOf(S.cur.styles).map(s => same(s, old) ? w : s).join(','); call('setPresetMeta', JSON.stringify(S.cur)); }
-    if (k === 'type' && same(S.type, old)) S.type = w; if (k === 'style' && same(S.style, old)) S.style = w;
+
     const nu = used.filter(p => p.user).length, nf = used.length - nu;
     Promise.all(writes).then(() => rescan()).then(() => toast(`${esc(old)} is now <span class="tp-bk">${esc(w)}</span> · ${nu} preset${nu === 1 ? '' : 's'} re-filed${nf ? ` · ${nf} factory kept the old word` : ''}`)); } }); }
   function removeVocab(k, w) { const used = usersOf(k, w).length; if (used) { toast(`${used} preset${used === 1 ? ' uses' : 's use'} ${esc(w)} — re-file them first`); return; }
     const list = vocab(k), i = list.findIndex(x => same(x, w)); if (i >= 0) list.splice(i, 1); persistVocab();
-    if (k === 'type' && same(S.type, w)) S.type = null; if (k === 'style' && same(S.style, w)) S.style = null;
+
     buildChips(); renderRows(); renderQuick(); toast(`Removed ${esc(w)}`); }
   function openVocabCtx(e, k, w) { const used = usersOf(k, w).length;
     menuAt(e.clientX, e.clientY, `<div class="ps">${esc(w)} · ${used} preset${used === 1 ? '' : 's'}</div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div><div class="pi${used ? ' off' : ' rose'}" data-a="remove"><span class="nm">Remove</span></div>`,
@@ -40272,13 +40367,15 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
 
   /* ═══ NEW BANK · IMPORT · EXPORT ═══════════════════════════════════════════════════════════════ */
-  function openNewBank() { sheet({ title: 'New bank', ok: 'Create', focus: 'tp-bk-name',
+  function openNewBank(moveMe) { sheet({ title: 'New bank', ok: 'Create', focus: 'tp-bk-name',
     body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bk-name" maxlength="30" placeholder="Bank name"><span class="k">Author</span><input type="text" class="tp-in" id="tp-bk-author" maxlength="30" placeholder="Your name" value="${esc(S.author0)}"></div>`,
     note: 'Save presets into it by typing its name in the Bank field. Right-click it in the browser to export it as a .terrainpack.',
     onOk: () => { const w = tidy($('tp-bk-name').value); if (!w) { $('tp-bk-name').focus(); return; }
       if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
       const a = $('tp-bk-author').value.trim(); if (a) S.author0 = a; closeSheet();
-      call('createBank', w, a).then(r => { if (isErr(r)) { toast(errOf(r)); return; } S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created bank <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
+      call('createBank', w, a).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+        if (moveMe) { moveTo(moveMe, w); return; }                 /* fb625 — created FOR this preset */
+        S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created bank <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
   function importPack() { if (!NF('importPack')) { toast('Import needs the plugin'); return; } call('importPack').then(r => { if (isErr(r)) toast(errOf(r)); }); }
   /* ═══ THE MANIFEST — one card, drawn the same for a pack coming IN and a bank going OUT ═══════
      The mockup's rule: you see what is in the box before you say yes. Nothing is written to disk
