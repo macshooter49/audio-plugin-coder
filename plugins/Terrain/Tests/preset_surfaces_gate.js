@@ -40,16 +40,24 @@
 //  19  fb626 — every preset surface (quick menu, browser, sheet) stands the synth page's floating
 //      overlays down: the modulation attenuator sits at the maximum z and belongs to a covered page
 //  20  fb628 — every column is a lane: the author cannot be pushed into Carries by a long name
+//  21  fb629 — the header has NO COLOUR OF ITS OWN: it takes the synth page's ground, then the
+//      browser's glass. Proved in PIXELS across the y=44 seam, not by reading the stylesheet.
+//  22  fb629 — the brand mark sits on the wordmark's centreline, at a size you can actually read,
+//      and swaps with the theme (negative on dark, purple on light)
 //
 //  MUTATION CONTROLS
 //    TP_MUT=zorder   #syn-panel is raised over the browser → [3] must go RED (the hit test)
 //    TP_MUT=lanes    the pre-fb628 world: .sm-ul reaches over the preset surfaces again and the
 //                    author's lane loses its clearance → [19] and [20] must both go RED
+//    TP_MUT=header   the pre-fb629 world: the header paints its own bar again and the mark is
+//                    shrunk → [21] and [22] must both go RED
 //    TP_MUT=nopush   the courier loads but never pushes onPatchLoaded (the pre-fb620 world) →
 //                    [6] and [7] must go RED
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const path = require ('path');
+const fs = require ('fs');
 const puppeteer = require ('puppeteer-core');
+const { decode, band, dist, hex } = require ('./png_pixels');
 const PAGE = process.argv[2] || path.resolve (__dirname, '../Source/ui/public/index.html');
 const MUT  = process.env.TP_MUT || '';
 
@@ -122,6 +130,11 @@ const STUB = (MUT) => {
   if (MUT === 'zorder') await p.evaluate (() => { const st = document.createElement ('style'); st.textContent = '#syn-panel{z-index:5000 !important}'; document.head.appendChild (st); });
   /* fb628's control: put the PRE-fb628 world back — the modulation underline reaches over the
      preset surfaces again, and the author's lane loses its clearance so it can touch Carries. */
+  /* fb629's control: give the header its bar back and shrink the mark to nothing */
+  if (MUT === 'header') await p.evaluate (() => { const st = document.createElement ('style');
+    st.textContent = '#header{background:#232340 !important;border-bottom:1px solid rgba(58,58,88,.5) !important}'
+                   + '.brand-logo,.brand-logo .tmk{height:12px !important}';
+    document.head.appendChild (st); });
   if (MUT === 'lanes') await p.evaluate (() => { const st = document.createElement ('style');
     st.textContent = 'html.tp-browsing .sm-ul{display:block !important} .tp-row .c-au{margin-right:0 !important}';
     document.head.appendChild (st); });
@@ -473,6 +486,106 @@ const STUB = (MUT) => {
               + ` · a 64-char name: ellipsised ${lanes.clipped}, author moved ${lanes.shifted.toFixed (1)}px (must be 0)`
               + ` · columns ${lanes.heads.join (' / ')}`
             : 'no rows');
+  }
+
+
+  // ── fb629 — THE HEADER TAKES THE PAGE'S COLOUR ────────────────────────────────────────────────
+  // Max: "I'm tired of having the header be separate colours... it should blend in with everything."
+  // The claim is about PIXELS, so the bar reads pixels. It samples an EMPTY column (x 180-270: past
+  // "TERRAIN V1", short of the preset "+") on both sides of the y=44 line and demands they match.
+  // The shipped plugin is served with data-theme="dark" injected by PluginEditor.cpp; the harness is
+  // not, so the theme is set here — without it every html-level token reads LIGHT and the bar lies.
+  // WHAT IS BEING COMPARED IS THE GROUND. At rest the header band is measured against the synth
+  // page's DECLARED background rather than against the pixels under it: the OSC panel's own fill
+  // begins immediately below y=44, so a pixel-to-pixel read there measures content, not a seam.
+  // While browsing there IS empty glass to compare against, so that side is pixel-to-pixel.
+  const rgb = (css) => (css.match (/\d+(\.\d+)?/g) || []).slice (0, 3).map (Number);
+  const SHOT = path.join (require ('os').tmpdir(), 'tp_seam_' + process.pid + '.png');
+  const seam = async (ref, bx0, bx1) => {
+    await p.screenshot ({ path: SHOT, clip: { x: 0, y: 0, width: 820, height: 120 } });
+    const img = decode (fs.readFileSync (SHOT));
+    const above = band (img, 22, 40, 180, 270);       // header, past "TERRAIN V1", short of the "+"
+    const below = ref ? rgb (ref) : band (img, 50, 70, bx0, bx1);
+    return { above, below, d: dist (above, below) };
+  };
+  {
+    // bar [20] leaves the browser up and Escape does not reach it from here — press the product's
+    // own close control, then PROVE we are at rest before measuring anything.
+    await p.evaluate (() => { const x = document.getElementById ('tp-close'); if (x) x.click(); });
+    await wait (300); await p.keyboard.press ('Escape'); await wait (220);
+    await p.evaluate (() => { document.documentElement.setAttribute ('data-theme', 'dark');
+                              document.body.classList.add ('ti-syn-open'); });
+    await wait (280);
+    const atRest = await p.evaluate (() => ! document.documentElement.classList.contains ('tp-glassup')
+                                        && ! document.getElementById ('tp-b').classList.contains ('on'));
+    const rest = await p.evaluate (() => {
+      const cs = getComputedStyle (document.getElementById ('header'));
+      return { bg: cs.backgroundColor, border: cs.borderBottomWidth,
+               plugin: getComputedStyle (document.getElementById ('plugin')).backgroundColor,
+               panel:  getComputedStyle (document.getElementById ('syn-panel')).backgroundColor };
+    });
+    const sRest = await seam (rest.panel);    // against the synth page's own declared background
+    await openBrowser(); await wait (320);
+    const brow = await p.evaluate (() => {
+      const cs = getComputedStyle (document.getElementById ('header'));
+      const gl = getComputedStyle (document.getElementById ('tp-b'));
+      return { bg: cs.backgroundColor, blur: cs.backdropFilter || cs.webkitBackdropFilter,
+               glassBg: gl.backgroundColor, glassBlur: gl.backdropFilter || gl.webkitBackdropFilter,
+               flag: document.documentElement.classList.contains ('tp-glassup') };
+    });
+    const sBrow = await seam (null, 350, 600); // browser: empty glass between search and the count
+    await p.keyboard.press ('Escape'); await wait (220);
+    await p.evaluate (() => document.documentElement.removeAttribute ('data-theme'));
+    try { fs.unlinkSync (SHOT); } catch (e) {}
+    const clear = /rgba\(0, 0, 0, 0\)|transparent/.test (rest.bg);
+    gate (atRest && clear && rest.border === '0px' && rest.plugin === rest.panel && sRest.d <= 2
+          && brow.flag && brow.bg === brow.glassBg && brow.blur === brow.glassBlur && sBrow.d <= 4,
+      '[21] THE HEADER HAS NO COLOUR OF ITS OWN — it takes the page, then the glass',
+      `at rest ${atRest} · own background ${rest.bg} · border ${rest.border}`
+      + ` · ground ${rest.plugin} vs synth page ${rest.panel} ${rest.plugin === rest.panel ? 'SAME' : 'DIFFER'}`
+      + ` · the header band paints ${hex (sRest.above)} against the page's own ${hex (sRest.below)}`
+      + ` Δ${sRest.d.toFixed (2)} (must be ≤2)`
+      + ` · browsing: tp-glassup ${brow.flag}, header ${brow.bg} vs glass ${brow.glassBg}`
+      + ` ${brow.bg === brow.glassBg ? 'SAME' : 'DIFFER'}, blur ${brow.blur === brow.glassBlur ? 'SAME' : 'DIFFER'}`
+      + ` · seam Δ${sBrow.d.toFixed (2)} (must be ≤4)`);
+  }
+
+  // ── fb629 — THE MARK: on the centreline, readable, and it swaps with the theme ────────────────
+  // Max: "make sure this symbol properly aligns with everything... use the centre line... and make
+  // sure you size it to where people can actually see it." All three are numbers, so all three are
+  // asserted. The 30px floor is the "actually see it" clause; the old PNG carried ~24px of ink.
+  {
+    const m = await p.evaluate (() => {
+      const set = t => { if (t) document.documentElement.setAttribute ('data-theme', t);
+                         else document.documentElement.removeAttribute ('data-theme'); };
+      const box = document.querySelector ('.brand-logo'), nm = document.querySelector ('.brand-name');
+      const dk = document.querySelector ('.brand-logo .tmk-dark'), lt = document.querySelector ('.brand-logo .tmk-lite');
+      if (! box || ! nm || ! dk || ! lt) return { missing: true };
+      set ('dark');  const onDark = [getComputedStyle (dk).display, getComputedStyle (lt).display];
+      set (null);    const onLite = [getComputedStyle (dk).display, getComputedStyle (lt).display];
+      set ('dark');
+      const b = box.getBoundingClientRect(), n = nm.getBoundingClientRect(),
+            h = document.getElementById ('header').getBoundingClientRect();
+      const r = document.querySelector ('.brand-logo .tmk-dark').getBoundingClientRect();
+      set (null);
+      return { h: +r.height.toFixed (1), w: +r.width.toFixed (1), bar: +h.height.toFixed (1),
+               gap: +(n.left - b.right).toFixed (2),
+               dCentre: +Math.abs ((b.top + b.height / 2) - (n.top + n.height / 2)).toFixed (2),
+               onDark, onLite, raster: !! document.querySelector ('.brand-logo img') };
+    });
+    gate (!! m && ! m.missing && ! m.raster
+          && m.h >= 30 && m.h <= m.bar - 6 && m.dCentre < 1
+          && m.gap >= 6 && m.gap <= 11
+          && m.onDark[0] !== 'none' && m.onDark[1] === 'none'
+          && m.onLite[0] === 'none' && m.onLite[1] !== 'none',
+      '[22] THE MARK IS ON THE CENTRELINE, BIG ENOUGH TO READ, AND SWAPS WITH THE THEME',
+      m && ! m.missing
+        ? `${m.w}x${m.h} in a ${m.bar}px bar (height must be 30..${m.bar - 6})`
+          + ` · centre off the wordmark's by ${m.dCentre}px (must be <1) · gap ${m.gap}px (6..11)`
+          + ` · dark theme shows ${m.onDark[0] !== 'none' ? 'negative' : 'NOTHING'},`
+          + ` light shows ${m.onLite[1] !== 'none' ? 'purple' : 'NOTHING'}`
+          + ` · raster <img> still present: ${m.raster}`
+        : 'the mark or the wordmark is missing');
   }
 
   await b.close();

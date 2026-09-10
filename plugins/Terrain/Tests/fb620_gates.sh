@@ -6,6 +6,7 @@
 #    TP_MUT=zorder   #syn-panel raised over the glass  → the hit-test bar [3]
 #    TP_MUT=nopush   the courier never pushes onPatchLoaded → the load bars [6] [7]
 #    TP_MUT=lanes    the pre-fb628 world (overlay reaches over, lane loses clearance) → [19] [20]
+#    TP_MUT=header   the pre-fb629 world (the header paints its own bar, the mark shrinks) → [21] [22]
 #  Plus every inline <script> must still parse (ui_syntax.js).
 #
 #    bash Tests/fb620_gates.sh          # from plugins/Terrain
@@ -26,4 +27,5 @@ printf '  %-22s %s\n' "ui_syntax" "$([ $s -eq 0 ] && echo OK || echo 'RED — an
 run surfaces:zorder  TP_MUT=zorder  node Tests/preset_surfaces_gate.js
 run surfaces:nopush  TP_MUT=nopush  node Tests/preset_surfaces_gate.js
 run surfaces:lanes   TP_MUT=lanes   node Tests/preset_surfaces_gate.js
+run surfaces:header  TP_MUT=header  node Tests/preset_surfaces_gate.js
 echo; echo "  full output: $OUT"; exit $rc_all
