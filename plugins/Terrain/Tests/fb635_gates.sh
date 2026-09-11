@@ -40,7 +40,7 @@ for m in noheal noro;               do run "osc:$m"   "OG_MUT=$m" node Tests/fb6
 for m in custom-only hosttoast;     do run "lfo:$m"   "LG_MUT=$m" node Tests/fb635_lfo_gate.js;   done
 run "state:nohook" "SG_MUT=nohook" node Tests/fb635_state_gate.js
 # fb635 — the LFO PLAYHEAD gate (fb567) was in no runner and went stale at fb628 (an unrouted LFO rests); it now plays
-# an ASSIGNED LFO and lives here, with its own control (the idle class never applied → bars 3/4 and friends red)
+# an ASSIGNED LFO and lives here, with its own control (the idle class never applied → bars 0 3 6 8 9 10 red)
 run "lfo_park:idle" "LFO_PARK_MUTATE=2" node Tests/lfo_park.js
 for m in nokick noro;               do run "face:$m"  "FG_MUT=$m" node Tests/fb635_face_gate.js;  done
 # the sweep (Max's "double check everything else"): preset A→B shows B, on six of his presets (fixtures, audio stripped)

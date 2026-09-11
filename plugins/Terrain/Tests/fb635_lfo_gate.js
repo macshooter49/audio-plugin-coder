@@ -17,9 +17,11 @@
 //   2  A CUSTOM TAB DRAWS ITS SAVED SHAPE — the same load with the shape at Custom: the curve passes the saved
 //      points (the path that always worked, kept working)
 //   3  THE PULL PUSHES NOTHING BACK — neither load wrote setSynthLfoShapes (the page never overwrote the DSP)
+//   4  A HOST RESTORE THROUGH THE C++'s DOOR — onPatchLoaded(meta,'host'): the restored path draws, the next LFO2 edit
+//      pushes LFO1 back as the Path (6 pts, pm 1), and no Loaded toast
 //
 //  MUTATION CONTROLS
-//    LG_MUT=custom-only   the pull repaints only for Custom again (the fb634 page)   → [1] RED
+//    LG_MUT=custom-only   the pull repaints only for Custom again (the fb634 page)   → [1] [4] RED
 //    LG_MUT=hosttoast     a host restore shows the "Loaded" toast again               → [4] RED
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const puppeteer = require(require('path').join(__dirname, 'node_modules', 'puppeteer-core'));

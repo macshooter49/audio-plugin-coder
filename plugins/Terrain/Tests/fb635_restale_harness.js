@@ -140,7 +140,7 @@ const SNAP = () => {
 (async () => {
   const [mode, a1, a2, a3] = process.argv.slice(2);
   const A = pack(mode === 'fresh' ? a1 : a1), B = mode === 'load' ? pack(a2) : null, OUT = mode === 'load' ? a3 : a2;
-  const b = await puppeteer.launch({ executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox', '--allow-file-access-from-files'] });
+  const b = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: 'new', args: ['--no-sandbox', '--allow-file-access-from-files'] });
   const p = await b.newPage(); await p.setViewport({ width: 1100, height: 760, deviceScaleFactor: 1 });
   const errors = []; p.on('pageerror', e => errors.push(String(e.message || e).slice(0, 200)));
   await p.evaluateOnNewDocument(STUB, A, RELAYS, process.env.HOST === '1');

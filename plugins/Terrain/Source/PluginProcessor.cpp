@@ -5591,9 +5591,13 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     // are read as the INDEX ((int)*rawParam) per the CLAUDE.md hard rule.
 
     // ════════ FX RACK · REVERB (Hall) — fb276. setSynParam-only; choices = INDEX; routes default OFF. ════════
+    // fb635 — ONE reverb-type list for instance 1 and the pool (fb352: a duplicate must be the same device), so the
+    // carries tripwire guards the list convPlays reads for EVERY instance, the most-used one first.
+    const juce::StringArray rvbTypes { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" };
+    jassert (rvbTypes.indexOf ("Convolution") == tw::carries::kRvbConvolution);   // fb635 — an IR is carried only on this type
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SYN_RVB_TYPE, 1 }, "Reverb Type",
-        juce::StringArray { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" }, 0));
+        rvbTypes, 0));
     layout.add (std::make_unique<juce::AudioParameterChoice>(
         juce::ParameterID { ParameterIDs::SYN_RVB_CHARACTER, 1 }, "Reverb Character",
         juce::StringArray { "Smooth","Random","Vintage","Cathedral","Chamber","Dark","Bright","Ethereal" }, 0));
@@ -5772,8 +5776,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         //    lazily-built instances in the next pass rather than 6x memory per slot up front.
         // fb352 — the pooled REVERB choice lists, verbatim from instance 1 (a duplicate must be the
         // same device; a differently-voiced clone is a bug, not a feature).
-        const juce::StringArray rvbTypes { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" };
-        jassert (rvbTypes.indexOf ("Convolution") == tw::carries::kRvbConvolution);   // fb635 — an IR is carried only on this type
+        // (rvbTypes is the ONE list hoisted above SYN_RVB_TYPE — fb635)
         const juce::StringArray rvbChars { "Smooth","Random","Vintage","Cathedral","Chamber","Dark","Bright","Ethereal" };
         const juce::StringArray rvbModModes { "Off","Subtle","Lush","Chorale","Random","Chaos" };
         const juce::StringArray dlyTypes { "Digital","Tape","BBD","Diffuse" };
@@ -15872,6 +15875,8 @@ static_assert ((int) tw::SynthVoice::Engine::FM == tw::carries::kEngFM
             && (int) wc::LFOShape::Path   == tw::carries::kLfoPath
             && wc::NUM_LFOS == tw::carries::kNumLfos,
                "fb635 — the carries gates name FM/HARM, LFO Custom/Path and the LFO count; one of them moved");
+static_assert ((int) tw::DistortionEngine::Table == tw::carries::kDstTable,
+               "fb635 — the carries wt gate names the Table distortion (it plays dstTableSrc's import)");
 
 // fb632 — the tree getStateInformation serialises, as a function of its own, so the save sheet
 // can price the CURRENT patch off the very tree the file will carry (getCarriesJson below).
@@ -16289,9 +16294,9 @@ juce::ValueTree TerrainAudioProcessor::buildStateTree()
         state.removeChild (old, nullptr);
     {
         auto pt = getPresetMeta().toTree();
-        pt.setProperty ("carries", juce::JSON::toString (tw::carries::of (state), true), nullptr);   // fb632 — engine-gated, shared
+        pt.setProperty ("carries", juce::JSON::toString (tw::carries::of (state), true), nullptr);   // fb632/fb635 — counted only when something ON plays it, shared
         pt.setProperty ("fx", tiFxListOf (apvts), nullptr);   // fb621 — the browser's Effects column, and its search
-        pt.setProperty ("fv", tw::carries::kFormatVersion, nullptr);   // 2: assets travel as FLAC (fb621) · 3: counts are engine-gated (fb632)
+        pt.setProperty ("fv", tw::carries::kFormatVersion, nullptr);   // 2: assets travel as FLAC (fb621) · 3: counts are engine-gated (fb632) · 4: off is not carried (fb635)
         state.addChild (pt, 0, nullptr);
     }
 
@@ -18034,9 +18039,9 @@ juce::String TerrainAudioProcessor::getPresetCatalogJson() const
 {
     tw::bank::ScanStats st; tw::bank::Caps caps;
     auto cat = tw::bank::scan (banksFactoryRoot(), banksUserRoot(), caps, st);
-    // fb632 — a manifest written before fv 3 counted one-shots without the engine rule (Michael
-    // Myers: a Harmonic oscillator with a sample-name hint said "1 one-shot"). Every such row that
-    // claims one is recounted off its own chunk and, under the user root, written back once.
+    // fb632/fb635 — a manifest written before fv 4 (kFormatVersion) counted without the on/off rule; every such
+    // row is recounted off its own chunk (no "a 0 is exact" shortcut: the flow rule can RAISE a count) and, under
+    // the user root, written back once.
     tw::carries::healCatalogue (cat, banksUserRoot());
     return juce::JSON::toString (cat, true);
 }

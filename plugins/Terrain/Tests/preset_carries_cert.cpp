@@ -1,12 +1,12 @@
-// ══ fb635 — OFF IS NOT CARRIED (drafted in scratch; the proposed Tests/preset_carries_cert.cpp) ═══
+// ══ fb635 — OFF IS NOT CARRIED (the on/off carries rules, 21 bars) ═══
 //   Max: "if one thing in the preset is off or gone, then it shouldn't say it's carrying it."
 //   Uses ONLY API the fb632 header already has (of · healCatalogue · oscEngineOf · isSampleEngine ·
-//   kEngModal · kEngineDefault) and literal numbers, so the SAME file compiles against the shipped
-//   header (must go RED) and the new one (must go GREEN).
+//   kEngModal · kEngineDefault) and literal numbers, so the SAME file compiles against the fb632
+//   header (goes RED) and this commit's (GREEN).
 //   CR_MUT=ungated   bar [1] expects the Michael Myers shape to count ONE          → RED
 //   CR_MUT=noheal    bar [7] expects the healed July row to still say flow 3      → RED
 //   CR_MUT=flowblob  bar [11] expects the blob count (4th Of July = 3)            → RED
-//   CR_MUT=offcounts bars [8] [10] [12] expect the ungated count                  → RED
+//   CR_MUT=offcounts bars [8] [9b] [10] [10b] [12] expect the ungated count        → RED
 #include "PresetCarries.h"
 #include <cstdio>
 #include <cstdlib>
@@ -197,6 +197,16 @@ int main (int argc, char** argv)
           const int want = (e == 0 || e == 4 || e == 5) ? 1 : 0;
           ok = ok && get (s, "wt") == want && bytesOf (s) == B_WT; got += juce::String (NAME[e]) + "=" + juce::String (get (s, "wt")) + " "; }
         chk (ok, "[9] AN IMPORTED WAVETABLE IS CARRIED BY WT · FM · HARMONIC — Sample · Granular · Resynth · Modal never read it; priced on every engine", got);
+    }
+    // ── [9b] fb635 — THE TABLE DISTORTION READS AN IMPORT whatever the osc's power or engine ─────────────────
+    {
+        auto mk = [&] (int type) { auto s = juce::ValueTree ("Parameters"); s.setProperty ("wtAsset1", WT, nullptr); engine (s, 1, 1); on (s, 1, 0);
+            s.setProperty ("dstTableSrc", 1, nullptr); param (s, "SYN_DST_TYPE", type); param (s, "SYN_DST_POWER", 1); param (s, "SYN_DST_ACTIVE", 1); return s; };
+        const auto table = mk (19), clip = mk (4);
+        const int w0 = offMut ? 1 : 0;
+        chk (get (table, "wt") == 1 && get (clip, "wt") == w0 && bytesOf (table) == B_WT,
+             "[9b] AN IMPORT THE TABLE DISTORTION PLAYS IS CARRIED — even on an OFF osc set to Sample; the same import under another distortion type is not",
+             "table=" + juce::String (get (table, "wt")) + " other-type=" + juce::String (get (clip, "wt")) + " (want 1/" + juce::String (w0) + ")");
     }
     // ── [10] THE IR — Convolution, powered, in the rack, on ITS OWN instance ─────────────────
     {

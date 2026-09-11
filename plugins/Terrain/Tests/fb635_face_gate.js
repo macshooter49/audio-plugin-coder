@@ -43,7 +43,7 @@ const STUB = (MUT) => {
   const mk = (id) => states[id] || (states[id] = (function () {
     const L = [];
     const notify = () => L.slice().forEach (f => { try { f (); } catch (e) {} });
-    return { __listeners: L, __notify: notify,
+    return { __listeners: L, __notify: notify, get scaledValue () { return (window.__VALS[id] != null ? window.__VALS[id] : 0.5); },
       getScaledValue: () => (window.__VALS[id] != null ? window.__VALS[id] : 0.5),
       getNormalisedValue: () => (window.__VALS[id] != null ? window.__VALS[id] : 0.5),
       setScaledValue (v) { window.__VALS[id] = v; notify (); }, setNormalisedValue (v) { window.__VALS[id] = v; notify (); },
@@ -104,11 +104,6 @@ async function boot (b, hide) {
   p.__errs = errs; return p;
 }
 // click the REAL letter box of the currently shown device in a slot (the user's click)
-async function flip (p, fromOsc) {
-  const sel = '#osc-' + fromOsc + '-device .osc-letter';
-  try { await p.click (sel); } catch (e) { await p.evaluate (s => document.querySelector (s).click (), sel); }
-  await wait (450);
-}
 async function flip (p, fromOsc) {
   const sel = '#osc-' + fromOsc + '-device .osc-letter';
   try { await p.click (sel); } catch (e) { await p.evaluate (s => document.querySelector (s).click (), sel); }

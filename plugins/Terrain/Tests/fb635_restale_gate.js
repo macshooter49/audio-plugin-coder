@@ -1,6 +1,6 @@
 // fb635_restale_gate.js — PRESET A→B SHOWS B (the "everything else" surfaces). Runs the relay-faithful harness (harness.js)
 // against a page, loads real presets A→B the way loadPatchFromFile + afterPatchLoad do, and asks the page what it SHOWS.
-//   node Tests/fb635_restale_gate.js [page.html]     (default: Source/ui/public/index.html; ~4 min)
+//   node Tests/fb635_restale_gate.js [page.html]     (default: Source/ui/public/index.html; ~2.5 min)
 //   RG_MUT=blend   the blend pills' repull re-read removed                 → [0] RED
 //   RG_MUT=mirror  onOscSampleCleared calls clearLoaded again (it WRITES)   → [3] [3h] RED
 // [3] and [3h] are the NO-MIRROR-WRITE law (the sweep skeptic's widening): after a load settles, no parameter may differ
@@ -8,11 +8,12 @@
 // A/B, host preset recall: fb635's editor timer announces it, so a writing mirror would now fire on every one of them).
 // [5] retired: the osc A WT selector is a transparent overlay (0/1224 pixels change with its opacity).
 // Fixtures: Tests/fixtures/fb635_restale_presets.json (six of Max's presets, audio stripped) + fb635_relays.json.
-// Every bar compares the LOADED page with a FRESH boot of B (the truth the page must reach), except [3] which asks
-// the processor-side stub what the page WROTE.
+// Every bar compares the LOADED page with a FRESH boot of B (the truth the page must reach), except [3]/[3h] (what the
+// page WROTE, vs what a fresh boot writes) and [6] (the card-state log of one load).
 const { execFileSync } = require('child_process'); const fs = require('fs'); const path = require('path'); const os = require('os');
 const PAGE0 = path.resolve(process.argv[2] || process.env.PAGE || path.join(__dirname, '..', 'Source', 'ui', 'public', 'index.html'));
 const MUT = process.env.RG_MUT || '';
+process.on('uncaughtException', e => { console.log('  CRASH ' + (e && e.stack || e)); process.exit(2); });   /* a crash is a broken run, never a red control */
 (function () { let s = fs.readFileSync(PAGE0, 'utf8'); const sub = (a, b) => { if (s.split(a).length !== 2) { console.log('  MUTATION anchor not unique: ' + a.slice(0, 70)); process.exit(2); } s = s.replace(a, b); };
   if (MUT === 'blend')  sub("    T(() => window.__tiBlendRefresh && window.__tiBlendRefresh());\n", '');
   if (MUT === 'mirror') sub('if (S && S.clearVisual) S.clearVisual (); else if (S && S.clearLoaded) S.clearLoaded ();', 'if (S && S.clearLoaded) S.clearLoaded ();');

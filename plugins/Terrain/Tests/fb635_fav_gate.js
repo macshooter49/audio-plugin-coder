@@ -18,7 +18,7 @@
 //   4  ANOTHER INSTANCE'S HEART APPEARS — the file gains "Terra/Cirrus" behind the page's back; reopening the browser lights it
 //
 //  MUTATION CONTROLS
-//    FV_MUT=rawread   boot assigns the file object to the map again (the fb634 page)   → [1] [2] RED
+//    FV_MUT=rawread   boot assigns the file object to the map again (the fb634 page)   → [1] [2] [3] [4] RED
 //    FV_MUT=nokey     a rename does not re-key the heart                                → [3] RED
 //    FV_MUT=nopull    the file is read only at boot, never again                        → [4] RED
 // ══════════════════════════════════════════════════════════════════════════════════════════════

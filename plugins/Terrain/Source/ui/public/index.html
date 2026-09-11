@@ -17460,7 +17460,6 @@ setTimeout(function wireSynControls () {
           try {
             var oL = (dev.id || '').replace (/^osc-([a-d])-device$/, '$1');
             if (oL && oL.length === 1) {
-              var c = dev.classList;
               if (window.__oscFaceHeal) window.__oscFaceHeal (oL);   /* fb635 — the one heal (sample family · Resynth · waterfall) */
             }
           } catch (eRp) {}
@@ -30323,7 +30322,7 @@ restoreThemeFromBackend();
   function shEval(n,p){ if(n===st.tab&&__shEffCache)return shEvalPts(__shEffCache,p)*2-1;   /* fb238 — the live modulated curve IS the audible read */ var sp=shapes[n]; if(!sp)return 1-4*Math.abs((((p%1)+1)%1)-0.5); return shEvalPts(sp.pts,p)*2-1; }
   window.__lfoCustomEval=shEval;   // the badge-module mirror (mval) + any future consumer reads this
   /* fb635 — PATH for the same mirror: y along the drawing's ARC LENGTH (pathPointAt's walk, which mirrors the C++
-     bakeLfoPathTable), -1..1 like shEval. The badges had no Path branch and read Path as Random (the *7 scale below). */
+     bakeLfoPathTable), -1..1 like shEval. The badges had no Path branch and read Path as Random (lfoShape's old *7 scale, fixed in fb635). */
   window.__lfoPathEval=function(n,t){ var sp=shapes[n], p=(sp&&sp.pts)||[]; if(p.length<2) return 0;
     var seg=[],tot=0,i; for(i=0;i<p.length-1;i++){ var dx=p[i+1][0]-p[i][0],dy=p[i+1][1]-p[i][1]; seg[i]=Math.sqrt(dx*dx+dy*dy); tot+=seg[i]; }
     if(tot<1e-6) return p[0][1]*2-1;
@@ -32289,8 +32288,8 @@ restoreThemeFromBackend();
   var DIVB=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // fb219 tail appended
   var SHA=[.65,.2,.85,.4,.95,.15,.7,.35], RPA=[.5,.85,.15,.7,.3,.95,.2,.6,.4,.5];
   function mval(k,t,n){ t=((t%1)+1)%1;
-    if(k===7)return window.__lfoCustomEval?window.__lfoCustomEval(n||1,t):0;
-    if(k===8)return window.__lfoPathEval?window.__lfoPathEval(n||1,t):0;   // fb635 — the drawn Path, along its arc length   // fb206 — drawn shape (shared eval, cross-IIFE via window)
+    if(k===7)return window.__lfoCustomEval?window.__lfoCustomEval(n||1,t):0;   // fb206 — drawn shape (shared eval, cross-IIFE via window)
+    if(k===8)return window.__lfoPathEval?window.__lfoPathEval(n||1,t):0;   // fb635 — the drawn Path, along its arc length
     if(k===0)return Math.sin(t*6.2831853); if(k===1)return 1-4*Math.abs(t-0.5);
     if(k===2)return 2*t-1; if(k===3)return 1-2*t; if(k===4)return t<0.5?1:-1;
     if(k===5){var i=Math.floor(t*SHA.length)%SHA.length;return SHA[i]*2-1;}
@@ -32299,7 +32298,7 @@ restoreThemeFromBackend();
   function lfoHz(n){ var sy=ss('LFO'+n+'_SYNC'), rt=ss('LFO'+n+'_RATE'), dv=ss('LFO'+n+'_DIV');
     if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*(DIVB.length-1)):5; return (120/60)/(DIVB[di]||1); }   // fb219 — norm scale = N-1, never a hardcode (the *13 trap)
     return rt?rt.getScaledValue():1; }
-  function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*((window.__LFO_NSHAPE||11)-1)):0; }   /* fb635 — 11 choices since fb239/fb240 (Path · Lorenz · Rossler): the *7 read Custom as S&H and Path as Random */   // fb206 — 8 choices (CUSTOM appended); norm scale = N-1
+  function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*((window.__LFO_NSHAPE||11)-1)):0; }   /* fb635 — 11 choices since fb239/fb240 (Path · Lorenz · Rossler): the *7 read Custom as S&H and Path as Random; norm scale = N-1 */
   function lfoMaster(n){ var s=ss('LFO'+n+'_DEPTH'); return s?s.getScaledValue():0.35; }
   var phase=[0,0,0,0,0,0,0,0,0,0], lastT=0;
   // resolve a route's live target element — LFO→LFO tabs re-render (and page), so look them up fresh
@@ -40684,13 +40683,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
         closeSheet(); const old = bk.name, curIn = same(S.cur.bank, old);
         call('renameBank', old, w).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
-          Object.keys(S.favs).filter(k => k.startsWith(String(old).trim() + '/')).forEach(k => { const nm = k.slice(String(old).trim().length + 1); refav(old, nm, w, nm); });   /* fb635 — every heart in the pack follows it */
+          S.presets.filter(p => same(p.bank, old) && S.favs[favKey(p)]).forEach(p => refav(p.bank, p.name, w, p.name));   /* fb635 — every heart in the pack follows it (chosen from the catalogue, not by key prefix: a pack name may contain '/') */
           if (curIn) { S.cur.bank = w; call('setPresetMeta', JSON.stringify(S.cur)); }
           if (same(S.bank, old)) S.bank = w; if (same(S.qBank, old)) S.qBank = w;
           rescan().then(() => toast(`${esc(old)} is now <span class="tp-bk">${esc(w)}</span> · every preset re-filed`)); }); } });
       if (a === 'remove') sheet({ title: 'Remove bank', body: `<div class="tp-text">Remove <b>${esc(bk.name)}</b> and its ${bk.n} preset${bk.n === 1 ? '' : 's'}? This cannot be undone.</div>`, ok: 'Remove', onOk: () => {
         closeSheet(); call('deleteBank', bk.name).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
-          Object.keys(S.favs).filter(k => k.startsWith(String(bk.name).trim() + '/')).forEach(k => refav(bk.name, k.slice(String(bk.name).trim().length + 1), null, null));   /* fb635 */
+          S.presets.filter(p => same(p.bank, bk.name) && S.favs[favKey(p)]).forEach(p => refav(p.bank, p.name, null, null));   /* fb635 — from the catalogue, not a key prefix */
           if (same(S.bank, bk.name)) S.bank = null; if (same(S.qBank, bk.name)) S.qBank = null; S.sel = -1;
           rescan().then(() => toast(`Removed ${esc(bk.name)}`)); }); } });
     });

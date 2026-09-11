@@ -49,7 +49,8 @@
 //  THE RULE — counted iff PRESENT and something that is ON plays/reads it:
 //    wt    wtAsset{o} (or fv1 wtImportPcm{o}) AND SYN_OSC_{o}_ENABLE AND engine ∈ {WT, FM, HARM}
 //          (FM's carrier is the osc's wavetable; HARM: "the IMPORT still wins" — PluginProcessor.cpp
-//          rebuildHarmTableIfNeeded). Sample/Granular/Resynth/Modal never read it.
+//          rebuildHarmTableIfNeeded). Sample/Granular/Resynth/Modal never read it — OR the Table distortion
+//          reads it (dstTableSrc == o, SYN_DST_TYPE Table, POWER, in the rack), whatever the osc's power/engine.
 //    wtf   of those, how many are a shipped REFERENCE (unchanged meaning)
 //    smp   oscAsset{o} AND SYN_OSC_{o}_ENABLE AND slotPlaysSample (fb632) · layerAsset{l} (the pad
 //          sampler's embedded audio, unchanged). A layer that has only a sourcePath is a NAME: the
@@ -100,6 +101,7 @@ inline constexpr int kLfoCustom = 7, kLfoPath = 8;             // wc::LFOShape �
 inline constexpr int kNumLfos = 10;                            // LFO1_SHAPE … LFO10_SHAPE
 inline constexpr int kRvbConvolution = 8;                      // SYN_RVB*_TYPE { Hall … Shimmer, Convolution }
 inline constexpr int kFxInstances = ParameterIDs::kFxInstances; // irAsset1 … irAsset6 = reverb instance 1 … 6
+inline constexpr int kDstTable = 19;                          // SYN_DST_TYPE "Table" — asserted against the DistortionEngine enum
 inline constexpr int kFormatVersion = 4;     // fv: 1 paths · 2 FLAC assets (fb621) · 3 engine-gated counts (fb632) · 4 off is not carried (fb635)
 inline constexpr const char* kMemSourcePrefix = "mem:";   // a dropped file's ref (PluginEditor.cpp kTiMemSourcePrefix — asserted equal there)
 
@@ -149,6 +151,16 @@ inline bool slotPlaysSample (const juce::ValueTree& s, int o)
 }
 // Does oscillator o, as saved, read its imported wavetable?
 inline bool slotReadsTable (const juce::ValueTree& s, int o) { return isTableEngine (oscEngineOf (s, o)); }
+// fb339/fb635 — the Table DISTORTION (instance 1: setDistortionTableSrc) bakes osc dstTableSrc's IMPORT as its transfer
+// stack whatever that osc's power or engine, so a Table distortion that plays is a reader of the import too.
+inline bool dstReadsTable (const juce::ValueTree& s, int o)
+{
+    if ((int) s.getProperty ("dstTableSrc", -1) != o) return false;
+    const bool preRack = ! s.getChildWithProperty ("id", juce::var (ParameterIDs::SYN_RVB_ACTIVE)).isValid();   // fb346 appends DST_ACTIVE too
+    return choiceOf (s, ParameterIDs::SYN_DST_TYPE, 0) == kDstTable
+        && boolOf (s, ParameterIDs::SYN_DST_POWER, false)
+        && (preRack || boolOf (s, ParameterIDs::SYN_DST_ACTIVE, false));
+}
 
 // Reverb instance i (1 … 6): SYN_RVB_TYPE, SYN_RVB2_TYPE … SYN_RVB6_TYPE (cacheFxInstanceParams).
 inline juce::String rvbId (int inst, const char* suffix)
@@ -203,7 +215,7 @@ inline juce::var of (const juce::ValueTree& s)
         const auto wtA = s.getProperty ("wtAsset" + juce::String (o), "").toString();
         if (wtA.isNotEmpty() || has ("wtImportPcm", o))
         {
-            if (on && slotReadsTable (s, o))
+            if ((on && slotReadsTable (s, o)) || dstReadsTable (s, o))
             { ++wt;
               // fb624 — Max: "the wavetable is factory though, so you should probably let them know."
               if (tw::asset::isRef (wtA)) ++wtf; }
