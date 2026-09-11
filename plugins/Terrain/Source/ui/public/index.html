@@ -567,7 +567,10 @@
         if (! cvVisible(cv)) continue;
         if (cvInked(cv)){ cv.__tiOffer = null; continue; }
         var key = cv.width + 'x' + cv.height;
-        if (cv.__tiOffer === key) continue;   /* offered already in this exact state: not chased again */
+        /* offered already in this exact state: not chased again — except a card's spectrum canvas (fb633):
+           its painter always inks (the live layer or the idle ladder), so a blank one is a LOST picture
+           (a purged backing store, a rebuilt card), and at 1 Hz chasing it costs nothing. */
+        if (cv.__tiOffer === key && ! (cv.classList && cv.classList.contains('fx-spec'))) continue;
         cv.__tiOffer = key; need = true;
       }
       if (need){ window.__tiHeals = (window.__tiHeals | 0) + 1; window.__tiWhy.heal++;
@@ -1441,6 +1444,11 @@ html.tp-glassup #header {
   -webkit-backdrop-filter: blur(20px) saturate(1.4); backdrop-filter: blur(20px) saturate(1.4);
   border: 1px solid var(--menu-line); border-radius: 12px; padding: 20px 22px 18px;
   box-shadow: 0 20px 50px rgba(0,0,0,.6), inset 0 1px 0 rgba(255,255,255,.06); }
+/* fb633 — Max: "make the save presets menu wider, not lengthier but wider — not edge to edge — so our styles
+   and types could be wide instead of clamped together; I had added way more styles and types." The Save
+   sheet alone wears .wide: 480px (the other sheets are one field and stay 340), never past the panel's
+   edges on a narrow window. The chips reflow into the room; nothing else changes. */
+#tp-sheet .tp-card.wide { width: 480px; max-width: calc(100% - 80px); }
 #tp-sheet .tp-hd { font-size: 11.5px; font-weight: 500; color: var(--text-primary); margin-bottom: 14px; flex: none; }
 /* fb627 — Max: "I think this save is going to have to scroll." Every word in the vocabulary is a box
    now, so the field list grows with his library; the head and the buttons stay put and the middle
@@ -8974,6 +8982,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
            wiring, drawn (fb447). Same strokes, same purple, nothing new invented. */
         #syn-panel .fxr-core .bod-n{ cursor:grab; }
         #syn-panel .fxr-core .bod-n.hot{ fill:var(--purple-400); }
+        /* fb633 — the node and span are DRAWN on the card's canvas (fx4DrawBod); the SVG copies stay as the
+           pointer's hit target and the fb457 gate's probe but paint nothing — a moving SVG element is what
+           WKWebView left a trail of ("multiple dots") on Max's rail. */
+        #syn-panel .fxr-core[data-core="bod"] .bod-n, #syn-panel .fxr-core[data-core="bod"] .bod-span{ opacity:0; }
         #syn-panel .fxr-core[data-core="bod"].bod-over{ cursor:grab; }
         #syn-panel .fxr-core .spl-n{ cursor:ew-resize; }
         #syn-panel .fxr-core .spl-n.hot{ fill:var(--purple-400); }
@@ -10529,13 +10541,18 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // menu opened at the BOTTOM of the plugin flips up instead of being cut off (Max's ask).
           function fxAddMenu(x,y,lane,afterIdx){
             var rows=[];
-            for(var i=0;i<DEV_TEMPLATES.length;i++){
+            /* fb633 — Max: "whenever we press add effect I want the effects categorized by name, A through Z.
+               Compressor at C, Granular at G. Every time I'm trying to add an effect I be getting confused."
+               The list used to follow DEV_TEMPLATES (the order the cores were BUILT in) — so the menu was a
+               changelog, not an index. Sorted by name here, at the one place the menu is built. */
+            var ordered=DEV_TEMPLATES.slice().sort(function(a,b){ return String(a.name).localeCompare(String(b.name),'en',{sensitivity:'base'}); });
+            for(var i=0;i<ordered.length;i++){
               (function(t){
                 var used=0; for(var q=0;q<DEVS.length;q++) if(DEVS[q].core===t.core) used++;
                 var full=used>=(FX_MAXINST[t.core]||1);
                 rows.push({label:t.name+(full?'  (max)':(used?'  ×'+used:'')),white:!full,
                            onPick:function(){ if(!full) fxAdd(t.core, lane, afterIdx); }});
-              })(DEV_TEMPLATES[i]);
+              })(ordered[i]);
             }
             // fb368 — Max: "take away where it says add effect. We don't need the word that
             // says add effect. Take away that and resize it. It should just have the effects."
@@ -10865,23 +10882,36 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
           // fb156 dead-feed law (no signal, no ink) — authored once. The fb442 lessons live here now:
           // a 60 Hz redraw on a stretched SVG path reads as dithered and static; a canvas sized in
           // device pixels and cleared every frame cannot freeze.
+          // fb633 — THE PICTURE LANDS ON SCREEN ONLY ONCE THE WHOLE DRAW SUCCEEDED. The visible canvas used
+          // to be cleared FIRST and painted in up to eleven layers after; a throw anywhere in between (an
+          // invalid alpha, a NaN colour stop — the fb445 blanking) left a cleared canvas that fx4Tick's
+          // try/catch then hid, frame after frame: a permanently blank card with no error anywhere. The
+          // layers now draw into an offscreen buffer the same size; fx4SpecCommit blits it after the draw
+          // returns. A draw that throws is counted (window.__fx4Errs) and the last good frame stays.
           function fx4SpecCanvas(core){
             var cv=core.querySelector('canvas.fx-spec'); if(!cv) return null;
             var r=core.getBoundingClientRect(); if(r.width<6||r.height<6) return null;
             var dpr=Math.min(window.devicePixelRatio||1,3);
             var W=Math.max(2,Math.round(r.width*dpr)), Hp=Math.max(2,Math.round(r.height*dpr));
-            if(cv.width!==W||cv.height!==Hp){ cv.width=W; cv.height=Hp; }
-            var ctx=cv.getContext('2d'); ctx.clearRect(0,0,W,Hp); return {ctx:ctx,W:W,Hp:Hp,dpr:dpr};
+            var buf=core.__specBuf||(core.__specBuf=document.createElement('canvas'));
+            if(buf.width!==W||buf.height!==Hp){ buf.width=W; buf.height=Hp; }
+            core.__specTarget=cv;
+            var ctx=buf.getContext('2d'); ctx.clearRect(0,0,W,Hp); return {ctx:ctx,W:W,Hp:Hp,dpr:dpr};
+          }
+          function fx4SpecCommit(core){
+            var buf=core.__specBuf, cv=core.__specTarget; if(!buf||!cv||!buf.width||!cv.isConnected) return;
+            if(cv.width!==buf.width||cv.height!==buf.height){ cv.width=buf.width; cv.height=buf.height; }
+            var vc=cv.getContext('2d'); vc.clearRect(0,0,cv.width,cv.height); vc.drawImage(buf,0,0);
           }
           function fx4SpecLayer(ctx,W,Hp,dpr,remap,rgb,aMul,fillA,lineA,lw){
             if(!(window.__fltHasBins&&window.__fltHasBins())) return 0;
             var BM=window.__fltBandMag||window.__fltBinMag, SY=window.__fltSpecY, band=!!window.__fltBandMag;
             var sx=W/226, sy=Hp/78, x0=6.5*sx, pw=213*sx;
             var n=Math.max(24,Math.round(213*sx/dpr));      // ONE POINT PER CSS PIXEL — the main filter's density
-            var pts=new Float32Array(n+1), raw=new Float32Array(n+1), lvl=0, hw=Math.pow(1000,0.5/n);   // half a pixel, as a frequency ratio
+            var pts=new Float32Array(n+1), raw=new Float32Array(n+1), lvl=0, pk=0, hw=Math.pow(1000,0.5/n);   // half a pixel, as a frequency ratio
             for(var i=0;i<=n;i++){ var u=i/n, fc=20*Math.pow(1000,u), fs=remap?remap(fc):fc, m=0;
               if(fs>10&&fs<22000) m=band?BM(fs/hw,fs*hw):BM(fs);
-              lvl+=m; raw[i]=2+SY(m,74); }
+              lvl+=m; if(m>pk) pk=m; raw[i]=2+SY(m,74); }
             var kw=Math.max(1,Math.round(n/140));            // half-width: (2kw+1) px ~= 1/6 octave at any n
             for(var p=0;p<=n;p++){ var acc=0,ws=0;
               for(var t=-kw;t<=kw;t++){ var j=p+t; if(j<0) j=0; else if(j>n) j=n; var wt=kw+1-(t<0?-t:t); acc+=raw[j]*wt; ws+=wt; }
@@ -10889,7 +10919,17 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             // aMul lets a layer read bolder at the same level; the CLAMP after it is not optional —
             // an alpha over 1 is an invalid colour, the canvas throws, and the card blanks (fb445 found
             // exactly that: Bode showed its idle ladder over a loud Utility because rgba(...,2.09) threw).
-            var a=Math.min(1,Math.min(1,(lvl/(n+1))*300)*(aMul==null?1:aMul)); if(a<=0.02) return 0;
+            // fb633 — THE LEVEL IS THE PEAK, NOT ONLY THE MEAN. Max: "the Bode visualization can disappear
+            // sometimes." The level term was the MEAN of linear magnitude over 213 log-spaced pixels, so a
+            // narrow spectrum — one note through a Bode, which is what an oscillator IS — was declared "no
+            // signal" ~25 dB before broadband material: measured, a 1 kHz sine lost its live layer at
+            // -36 dBFS while white noise still drew at -60 dBFS rms, and the idle ladder had already taken
+            // over at -30. The strongest bin now carries its own vote: full scale is 0.25 (a Hann-windowed
+            // sine at 0 dBFS, PluginEditor.cpp's 1/FFT_SIZE scale), -60 dBFS is silence, and the slope is
+            // set so the house -26 dBFS bus reads the same ~0.19 the mean gave broadband. The fb156 law
+            // stands: no signal, no ink — the cutoff just measures signal where a tone has it.
+            var pkDb=20*Math.log10(Math.max(1e-9,pk)/0.25), pkA=fx4C01((pkDb+60)/180);
+            var a=Math.min(1,Math.max(Math.min(1,(lvl/(n+1))*300),pkA)*(aMul==null?1:aMul)); if(a<=0.02) return 0;
             var yB=76*sy;
             ctx.beginPath(); ctx.moveTo(x0,yB);
             for(var k=0;k<=n;k++) ctx.lineTo(x0+pw*k/n, pts[k]);
@@ -11002,20 +11042,36 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             // the rail: the node sits at the knob's position (linear in knob = exponential in Hz, so
             // the fine region near zero is wide by construction); the purple span is the reach from 0
             var cx=FX4_X0+FX4_PW*0.5, nx=FX4_X0+FX4_PW*shK, z0=isRing?FX4_X0:cx;
+            // fb633 — THE NODE IS DRAWN ON THE CANVAS (below), which is cleared every frame. The SVG circle
+            // and span stay as the pointer's hit target and the fb457 gate's probe, but paint nothing
+            // (opacity 0 in CSS): Max's "multiple dots" were WKWebView repainting the moving circle
+            // without erasing where it had been — a trail of one node along the rail, structurally
+            // impossible to make in the DOM (one circle, one template, one insertion) and invisible to
+            // Chromium. Nothing that moves is left on the SVG.
             var node=core.querySelector('.bod-n'); if(node) node.setAttribute('cx',nx.toFixed(1));
             var sp=core.querySelector('.bod-span'); if(sp){ sp.setAttribute('x1',Math.min(z0,nx).toFixed(1)); sp.setAttribute('x2',Math.max(z0,nx).toFixed(1)); sp.setAttribute('opacity',(Math.abs(nx-z0)<0.8?0:0.55).toFixed(2)); }
             var st=dev.__st||(dev.__st={}); st.ph=((st.ph||0)+1/84)%1;   // one lap ≈ 1.4 s; the DISTANCE is Δ, so a bigger shift reads as a faster slide — which is the truth
+            // fb633 — THE STREAMS WAIT FOR A STILL SHIFT. Max: "multiple dots being bugged out every time
+            // there's modulation to the Shift." Under an LFO Δ changes every frame, and every ghost and
+            // stream copy is re-positioned with it: six pictures scattering per frame instead of partials
+            // travelling. Δ is glided; while the raw Δ is still moving against the glide the copies fade
+            // out (a crossfade, never a switch — fb447), and the card shows the live layer + the node,
+            // which still move with the modulation (fb457). The moment the shift rests they fade back in
+            // and the partials stream as approved.
+            var adG=fx4GlLog(st,'adG',Math.max(ad,0.5),0.12), steady=Math.abs(ad-adG)<0.08*adG+0.3;
+            st.stillN=steady?(st.stillN|0)+1:0;   // an LFO pauses at its turning points — a third of a second of stillness, not an instant, brings the copies back
+            var strA=fx4Gl(st,'strA',(st.stillN>=20)?1:0,0.15); if(strA<0.02) strA=0;
             var c=fx4SpecCanvas(core), live=0;
             if(c){
               var X=c.ctx, W=c.W, Hp=c.Hp, dp=c.dpr;
               // the ghost first (underneath), only once something has actually moved: for a rise by Δ the
               // content now at f came from f−Δ, so sample the feed at f+Δ to draw it where it WAS
-              if(ad>=0.5&&wRise>0.01) live=Math.max(live,fx4SpecLayer(X,W,Hp,dp,function(fc){ return fc+ad; },'255,255,255',2.4*wRise,0.07,0.40,0.9));
-              if(ad>=0.5&&wFall>0.01) live=Math.max(live,fx4SpecLayer(X,W,Hp,dp,function(fc){ return fc-ad; },'255,255,255',2.4*wFall,0.07,0.40,0.9));
+              if(ad>=0.5&&strA>0&&wRise>0.01) live=Math.max(live,fx4SpecLayer(X,W,Hp,dp,function(fc){ return fc+ad; },'255,255,255',2.4*wRise*strA,0.07,0.40,0.9));
+              if(ad>=0.5&&strA>0&&wFall>0.01) live=Math.max(live,fx4SpecLayer(X,W,Hp,dp,function(fc){ return fc-ad; },'255,255,255',2.4*wFall*strA,0.07,0.40,0.9));
               // THE STREAMS: K copies of the feed at p·Δ between the ghost and the live, p running 0→1 and
               // wrapping, each fading in as it leaves the ghost and out as it arrives — the partials
               // visibly travel in the shift's direction (fb447).
-              if(ad>=0.5&&live>0.02){ for(var i=0;i<BOD_FLOW_K;i++){ var p=(st.ph+i/BOD_FLOW_K)%1, env=Math.sin(Math.PI*p);
+              if(ad>=0.5&&strA>0&&live>0.02){ for(var i=0;i<BOD_FLOW_K;i++){ var p=(st.ph+i/BOD_FLOW_K)%1, env=Math.sin(Math.PI*p)*strA;
                   if(wRise>0.01) fx4SpecLayer(X,W,Hp,dp,(function(q){ return function(fc){ return fc+ad*(1-q); }; })(p),'183,148,255',2.0*wRise*env,0.0,0.55,0.9);
                   if(wFall>0.01) fx4SpecLayer(X,W,Hp,dp,(function(q){ return function(fc){ return fc-ad*(1-q); }; })(p),'183,148,255',2.0*wFall*env,0.0,0.55,0.9);
               } }
@@ -11031,13 +11087,25 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               var laps=1+(fbK>0.05?Math.min(2,Math.round(fbK*2.5)):0);   // with feedback the streams keep going: 2Δ, 3Δ — the barberpole, seen
               for(var k=0;k<12;k++){ var hz=f0*(k+1), xr=fx4HzX(hz)*sx;
                 ctx.strokeStyle='rgba(255,255,255,'+(0.28*laddA).toFixed(3)+')'; ctx.beginPath(); ctx.moveTo(xr,50*sy); ctx.lineTo(xr,74*sy); ctx.stroke();   // the rung: where the partial IS when nothing moves
-                if(ad<0.5) continue;
+                if(ad<0.5||strA<=0) continue;
                 for(var lp=0;lp<laps;lp++){ var wl=Math.pow(Math.max(fbK,0.001),lp);
-                  for(var i2=0;i2<BOD_FLOW_K;i2++){ var p2=(st.ph+i2/BOD_FLOW_K)%1, env2=Math.sin(Math.PI*p2), dist=ad*(lp+p2);
-                    if(wRise>0.01){ var xu=fx4HzX(Math.min(20000,hz+dist))*sx; ctx.strokeStyle='rgba(183,148,255,'+(0.85*laddA*env2*wl*wRise).toFixed(3)+')'; ctx.beginPath(); ctx.moveTo(xu,38*sy); ctx.lineTo(xu,66*sy); ctx.stroke(); }
-                    if(wFall>0.01){ var xd=fx4HzX(Math.max(20,hz-dist))*sx; ctx.strokeStyle='rgba(183,148,255,'+(0.85*laddA*env2*wl*wFall).toFixed(3)+')'; ctx.beginPath(); ctx.moveTo(xd,38*sy); ctx.lineTo(xd,66*sy); ctx.stroke(); }
+                  for(var i2=0;i2<BOD_FLOW_K;i2++){ var p2=(st.ph+i2/BOD_FLOW_K)%1, env2=Math.sin(Math.PI*p2)*strA, dist=ad*(lp+p2);
+                    // fb633 — a stream that has left the axis is gone, not parked at the rail: clamping piled every
+                    // far-shifted rung into one bright bar at 20 Hz / 20 kHz.
+                    if(wRise>0.01&&hz+dist<=20000){ var xu=fx4HzX(hz+dist)*sx; ctx.strokeStyle='rgba(183,148,255,'+(0.85*laddA*env2*wl*wRise).toFixed(3)+')'; ctx.beginPath(); ctx.moveTo(xu,38*sy); ctx.lineTo(xu,66*sy); ctx.stroke(); }
+                    if(wFall>0.01&&hz-dist>=20){ var xd=fx4HzX(hz-dist)*sx; ctx.strokeStyle='rgba(183,148,255,'+(0.85*laddA*env2*wl*wFall).toFixed(3)+')'; ctx.beginPath(); ctx.moveTo(xd,38*sy); ctx.lineTo(xd,66*sy); ctx.stroke(); }
                 } }
               } }
+            // fb633 — THE NODE AND ITS SPAN, ON THE CANVAS. One dot, drawn once per frame on a surface that is
+            // cleared every frame; the hover colour and size follow the SVG circle's .hot (the pointer code
+            // still owns that), the ink is the core's own currentColor. The SVG paints nothing (CSS).
+            if(c){ var nc=c.ctx, nsx=c.W/226, nsy=c.Hp/78, hot=!!(node&&node.classList.contains('hot'));
+              if(!st.inkAt||(st.inkAt|0)%30===0){ try{ st.ink=window.getComputedStyle(core).color||'#fff'; }catch(e){ st.ink='#fff'; } }
+              st.inkAt=(st.inkAt|0)+1;
+              if(Math.abs(nx-z0)>=0.8){ nc.strokeStyle='rgba(183,148,255,0.55)'; nc.lineWidth=1.6*nsy; nc.lineCap='butt';
+                nc.beginPath(); nc.moveTo(z0*nsx,10*nsy); nc.lineTo(nx*nsx,10*nsy); nc.stroke(); }
+              var nr=hot?3.2:2.4; nc.fillStyle=hot?'#B794FF':st.ink;
+              nc.beginPath(); nc.ellipse(nx*nsx,10*nsy,nr*nsx,nr*nsy,0,0,Math.PI*2); nc.fill(); }
           }
           // ═══ fb445 — SPLITTER: lanes are regions on the spectrum, crossovers are the handles. ═══
           var SPL_LANE_NAMES={0:['Low','High'],1:['Low','Mid','High'],2:['Sub','Low','Mid','High'],3:['Mid','Side'],4:['Left','Right']};
@@ -11164,7 +11232,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
               var core=cards[c].querySelector('.fxr-core[data-core="'+dev.core+'"]'); if(!core) continue;
               var bank=feed?feed[dev.core]:null, f=(bank&&bank.length)?bank[(dev.inst||1)-1]:null;
               if(f) dev.__vz=f;                                  // the readouts read it (Attack/Release/Ratio/crossovers)
-              try{ FX4_DRAW[dev.core](core,dev,f); }catch(e){}   // fb445 — the pool law, applied to the tick: one card's draw can never blank the others
+              // fb445 — the pool law, applied to the tick: one card's draw can never blank the others.
+              // fb633 — and a draw that throws cannot blank ITSELF: the buffer is committed only after the
+              // draw returns, the throw is counted, the last good frame stays on screen.
+              try{ FX4_DRAW[dev.core](core,dev,f); fx4SpecCommit(core); }
+              catch(e){ dev.__err=(dev.__err|0)+1; window.__fx4Errs=(window.__fx4Errs|0)+1; }
             }
           }
           (function(){ function l4(){ try{ if(!window.__cardOnly && !(window.__tiOff&&window.__tiOff('fxr-rack'))) fx4Tick(); }catch(e){}   /* fb497 */ 
@@ -12225,6 +12297,9 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var h=DEVS.map(devHTML).join('');
             h+='<div class="fxr-add" data-act="add"><span class="fxr-plus">+</span><span class="fxr-t">Add effect</span></div>';
             rack.innerHTML=h;
+            // fb633 — a rebuilt rack has fresh, BLANK canvases; at rest no frame is coming to paint them
+            // (the push lane is idle by design), so paint them now rather than on the next note.
+            try{ if(window.__fx4Tick) window.__fx4Tick(); }catch(e){}
           }catch(e){} }
           /* ═══ fb292 — CONVOLUTION IR core (waveform + drop) + reused .pmenu preset menu (all 9 types) ═══ */
           function NFX(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
@@ -40633,7 +40708,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const note0 = (cur && cur.id === S.curId) || !cur ? (m.note || '') : (cur ? cur.note : '');
     const author0 = cur && cur.user ? cur.author : (m.author || S.author0), type0 = cur ? cur.type : m.type;
     svStyles = cur ? cur.styles.slice() : stylesOf(m.styles);
-    sheet({ title: 'Save preset', ok: 'Save', focus: 'tp-sv-name', body: `<div class="tp-f">
+    sheet({ title: 'Save preset', ok: 'Save', focus: 'tp-sv-name', wide: true, body: `<div class="tp-f">
         <span class="k">Name</span><input type="text" class="tp-in" id="tp-sv-name" maxlength="40" placeholder="Preset name" value="${esc(name0)}">
         <span class="k">Pack</span><input type="text" class="tp-in" id="tp-sv-bank" maxlength="30" placeholder="Type a pack — new name makes one" value="${esc(bank0)}">
         <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
@@ -40774,6 +40849,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   let sheetSpec = null;
   function sheet(spec) {
     sheetSpec = spec; const sh = $('tp-sheet'), card = sh.querySelector('.tp-card');
+    card.classList.toggle('wide', !!spec.wide);   /* fb633 — the Save sheet is the wide one */
     card.innerHTML = `<div class="tp-hd">${esc(spec.title)}</div>`
       + `<div class="tp-sbody">${spec.body || ''}${spec.note ? `<div class="tp-note">${spec.note}</div>` : ''}</div>`
       + `<div class="tp-acts"><button class="tp-btn" id="tp-sh-cancel">Cancel</button><button class="tp-btn pri" id="tp-sh-ok">${esc(spec.ok || 'OK')}</button></div>`;

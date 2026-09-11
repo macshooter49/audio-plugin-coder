@@ -7101,8 +7101,14 @@ void TerrainUiCore::timerCallback()
             std::vector<char> ob;
             ob.reserve (48 * 1024);
             auto AP  = [&ob] (const char* p) { ob.insert (ob.end(), p, p + std::strlen (p)); };
+            // fb633 — FOUR DECIMALS, AND A BARE 0 FOR SILENCE. Two decimals on a scale whose full scale
+            // is 0.25 (a Hann-windowed 0 dBFS sine × 1/FFT_SIZE) floored every bin below ~-28 dBFS to
+            // "0.00": a quiet note through a Bode arrived as an empty spectrum and the card showed its
+            // idle ladder while the note played. 0.0001 reaches -68 dBFS; a silent bin prints as one
+            // character, so the frame is SMALLER than before, not larger (most bins are silent).
             auto APF = [&ob] (float v) { char b[24]; if (! std::isfinite (v)) v = 0.0f;
-                                         const int n = std::snprintf (b, sizeof b, "%.2f", (double) v);
+                                         if (v < 0.00005f) { ob.push_back ('0'); return; }
+                                         const int n = std::snprintf (b, sizeof b, "%.4f", (double) v);
                                          if (n > 0) ob.insert (ob.end(), b, b + n); };
             AP ("try{window.__terrainEqAnalyzer && window.__terrainEqAnalyzer({pre:[");
             for (int i = 0; i < SpectrumAnalyzer::NUM_BINS; ++i) { if (i > 0) ob.push_back (','); APF (preBins[i]); }
