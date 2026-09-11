@@ -641,6 +641,13 @@ public:
     // (Source/PresetCarries.h) on buildStateTree(): the sheet and the manifest cannot disagree.
     juce::String getCarriesJson();
 
+    // fb635 — THE LOAD GENERATION. Bumped at the end of every setStateInformation: a host restore, a browser or
+    // drop load, Init. The editor announces a load to the page whenever this moved since its last announcement, so
+    // a HOST-driven restore (undo, A/B compare, a host preset recall, a project reload into a live window) reaches
+    // the page's repull() like every other load — before fb635 only loadPatch/loadPatchFile/initPatch told the
+    // page, and a live page kept the previous patch's LFO shapes, rack cards and noise, then pushed them back.
+    std::atomic<uint32_t> stateLoadGen_ { 0 };
+
     // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
     // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
     // setSynthModMatrix(). No-op for a blob that already carries version >= 3.

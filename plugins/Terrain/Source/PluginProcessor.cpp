@@ -5773,6 +5773,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
         // fb352 — the pooled REVERB choice lists, verbatim from instance 1 (a duplicate must be the
         // same device; a differently-voiced clone is a bug, not a feature).
         const juce::StringArray rvbTypes { "Hall","Room","Plate","Spring","Digital","Vintage","Basin","Shimmer","Convolution" };
+        jassert (rvbTypes.indexOf ("Convolution") == tw::carries::kRvbConvolution);   // fb635 — an IR is carried only on this type
         const juce::StringArray rvbChars { "Smooth","Random","Vintage","Cathedral","Chamber","Dark","Bright","Ethereal" };
         const juce::StringArray rvbModModes { "Off","Subtle","Lush","Chorale","Random","Chaos" };
         const juce::StringArray dlyTypes { "Digital","Tape","BBD","Diffuse" };
@@ -15863,6 +15864,14 @@ static_assert ((int) tw::SynthVoice::Engine::SAMP == tw::carries::kEngSample
             && (int) tw::SynthVoice::Engine::MODAL == tw::carries::kEngModal
             && (int) tw::SynthVoice::Engine::WT   == tw::carries::kEngineDefault,
                "fb632 — the carries gate names the engines that play a sample slot; SynthVoice::Engine moved");
+// fb635 — the carries rules also name the engines that READ an imported table, the two LFO shapes that
+// read a drawn table, and the LFO count: a renumbered enum cannot move a gate silently.
+static_assert ((int) tw::SynthVoice::Engine::FM == tw::carries::kEngFM
+            && (int) tw::SynthVoice::Engine::HARM == tw::carries::kEngHarmonic
+            && (int) wc::LFOShape::Custom == tw::carries::kLfoCustom
+            && (int) wc::LFOShape::Path   == tw::carries::kLfoPath
+            && wc::NUM_LFOS == tw::carries::kNumLfos,
+               "fb635 — the carries gates name FM/HARM, LFO Custom/Path and the LFO count; one of them moved");
 
 // fb632 — the tree getStateInformation serialises, as a function of its own, so the save sheet
 // can price the CURRENT patch off the very tree the file will carry (getCarriesJson below).
@@ -17086,6 +17095,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
     // tables they point at NOW: setStateInformation is the message thread and is not
     // realtime, and the host can start calling processBlock immediately after it returns.
     prefetchOscWavetables (4);
+    stateLoadGen_.fetch_add (1, std::memory_order_release);   // fb635 — the editor tells the page (TerrainUiCore::timerCallback)
 
 }
 

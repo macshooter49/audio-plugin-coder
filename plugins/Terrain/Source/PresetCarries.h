@@ -26,44 +26,97 @@
 //  open; the processor now stops such a fossil at the door (restoreSampleSlotsFromState clears it,
 //  so it never travels again). The layers (the pad sampler's own audio) are unchanged.
 //
+//  ── fb635 — OFF IS NOT CARRIED. ─────────────────────────────────────────────────────────────────
+//  Max (2026-09-11): "I turn the flow cards off. Every time I save it, it says carrying 3 new flow
+//  cards … If the flow cards are off, then it shouldn't carry a flow card … Carries has to exactly
+//  represent what's inside of the preset. And if one thing in the preset is off or gone, then it
+//  shouldn't say it's carrying it."
+//
+//  WHAT WENT WRONG. fb632 gated one kind (one-shots) by what plays it and left the other four
+//  counting BLOBS. flow was the size of cardStates — and a card's blob is written the first time
+//  ANYTHING touches its S (index.html cardSync: S.on → push → setCardState), including the topo
+//  dice, which rolls the arp/chop/gli/rbn cards Max has ticked in its picker whether their tiles
+//  are lit or not (roll → diceMode → __tiEnsure[id]() → d.S.set). Nothing ever removes a key
+//  (setCardStateJson only inserts; only resetPatchState clears), and turning a tile off only writes
+//  FLOW_CHAIN_1..4 / FLOW_MODE. One dice roll with arp+chop+gli ticked = "3 flow cards" with every
+//  tile dark (4th Of July, Paulo); the default pick chop+gli = "2" (Bloodlust, Razor Blade). The map
+//  also holds cards that are not FLOW cards at all (the LFO card 'lfo', the curve pop-out 'crv').
+//  lfo counted lfoShapesJson.shapes — a shape the Shaper seeded for a tab (shGet) whose LFO then
+//  plays Sine or S&H (Don't Go: three shapes, one Custom). ir counted irAsset{i} on a reverb that
+//  is not Convolution, or is powered off, or is not in the rack. wt counted wtAsset{o} on an
+//  oscillator that is OFF (Little Nightmares, osc D) or on an engine that never reads the import.
+//
+//  THE RULE — counted iff PRESENT and something that is ON plays/reads it:
+//    wt    wtAsset{o} (or fv1 wtImportPcm{o}) AND SYN_OSC_{o}_ENABLE AND engine ∈ {WT, FM, HARM}
+//          (FM's carrier is the osc's wavetable; HARM: "the IMPORT still wins" — PluginProcessor.cpp
+//          rebuildHarmTableIfNeeded). Sample/Granular/Resynth/Modal never read it.
+//    wtf   of those, how many are a shipped REFERENCE (unchanged meaning)
+//    smp   oscAsset{o} AND SYN_OSC_{o}_ENABLE AND slotPlaysSample (fb632) · layerAsset{l} (the pad
+//          sampler's embedded audio, unchanged). A layer that has only a sourcePath is a NAME: the
+//          fb621 writer embeds layerAsset whenever the layer holds samples, so no layerAsset = no
+//          audio when it was saved (Max Voltage: '© open-hat …wav', no audio, said "1 one-shot").
+//    ir    irAsset{i} (or legacy convIRRaw{i}) AND reverb i is Convolution (8) AND its POWER AND its
+//          ACTIVE (In Chain) — fb287 "power gates everything"; a device not in the rack is not run.
+//    flow  the FLOW cards that are ON: wc::resolveFlowChain (FLOW_CHAIN_1..4, FLOW_MODE legacy) —
+//          the processor's own flowChainNow(). A lit tile is a card in the preset (its settings are
+//          parameters; the cardStates blob is only its slot store), so a lit card with no blob
+//          counts, and a blob for a dark card, the LFO card or the curve pop-out never does.
+//    lfo   a drawn shape for LFO n (1..10, ≥2 points) AND LFO{n}_SHAPE ∈ {Custom 7, Path 8} — the
+//          only two shapes that read the table (SynthLFO.h).
+//    nodes the patcher graph's node count (unchanged — the environment seat).
+//    bytes EVERYTHING EMBEDDED, on or off — it answers "how big / how long to load" (every asset
+//          is decoded on load whatever its switch says), never "what plays".
+//  THE DATA STAYS. of() only READS. Every asset, blob and shape is still written by
+//  getStateInformation and restored by setStateInformation exactly as before (STATE PERSISTS):
+//  turn the oscillator, the reverb, the tile or the Custom shape back on and it is all there.
+//
 //  ONE FUNCTION, THREE READERS. The file's manifest (getStateInformation → the <preset> child), the
-//  save sheet (getCarriesJson, which now builds the same tree) and the cert
+//  save sheet (getCarriesJson, which builds the same tree) and the cert
 //  (Tests/preset_carries_cert.cpp) all call of(). They cannot disagree.
 //
-//  THE HEAL. A manifest written before fv 3 carries a count made without the rule. healCatalogue()
-//  recounts every such row that claims a one-shot off its own chunk — the number in the file is
-//  still the number in the file — corrects the catalogue row, and under the user root writes the
-//  corrected manifest back ONCE (fv 3, chunk untouched, mtime put back). Rows with smp 0 are exact
-//  already: the new rule is a strict subset of the old one, a count can only go down.
+//  THE HEAL. A manifest written before fv 4 carries a count made without the rule. healCatalogue()
+//  recounts EVERY such row off its own chunk — fv 3's shortcut ("a 0 is exact") is gone, because the
+//  flow rule can RAISE a count (a lit Glitch tile with no card blob was 0 and is 1) — corrects the
+//  catalogue row, and under the user root writes the corrected manifest back ONCE (fv 4, chunk
+//  untouched, mtime put back).
 #pragma once
 #include <juce_core/juce_core.h>
 #include <juce_data_structures/juce_data_structures.h>
 #include <cmath>
 #include "ParameterIDs.hpp"
+#include "FlowChain.h"      // wc::resolveFlowChain — the DSP's own rule for which FLOW cards are ON
 #include "PresetAssets.h"   // isRef / sizeOf — what a wavetable weighs, and whether it is shipped
 #include "PresetBank.h"     // unwrap / chunkToXml / rewriteCarries — the heal
 
 namespace tw::carries
 {
-// The engines that play an oscillator's sample slot. PluginProcessor.cpp static_asserts these
-// against SynthVoice::Engine, so a renumbered enum cannot move the gate silently.
-inline constexpr int kEngSample = 1, kEngGranular = 2, kEngResynth = 3, kEngModal = 6;
-inline constexpr int kEngineDefault = 0;     // the layout's default (WT) — what an absent PARAM means
+// The engines. PluginProcessor.cpp static_asserts these against SynthVoice::Engine, so a renumbered
+// enum cannot move a gate silently.
+inline constexpr int kEngWavetable = 0, kEngSample = 1, kEngGranular = 2, kEngResynth = 3,
+                     kEngFM = 4, kEngHarmonic = 5, kEngModal = 6;
+inline constexpr int kEngineDefault = kEngWavetable;   // the layout's default (WT) — what an absent PARAM means
 inline constexpr int kModalSrcAuto = 0, kModalSrcSample = 3;   // SYN_OSC_x_MODAL_SOURCE: Auto · Noise · Click · Sample
-inline constexpr int kFormatVersion = 3;     // fv: 1 paths · 2 FLAC assets (fb621) · 3 engine-gated counts (fb632)
+inline constexpr int kLfoCustom = 7, kLfoPath = 8;             // wc::LFOShape — asserted in PluginProcessor.cpp
+inline constexpr int kNumLfos = 10;                            // LFO1_SHAPE … LFO10_SHAPE
+inline constexpr int kRvbConvolution = 8;                      // SYN_RVB*_TYPE { Hall … Shimmer, Convolution }
+inline constexpr int kFxInstances = ParameterIDs::kFxInstances; // irAsset1 … irAsset6 = reverb instance 1 … 6
+inline constexpr int kFormatVersion = 4;     // fv: 1 paths · 2 FLAC assets (fb621) · 3 engine-gated counts (fb632) · 4 off is not carried (fb635)
 inline constexpr const char* kMemSourcePrefix = "mem:";   // a dropped file's ref (PluginEditor.cpp kTiMemSourcePrefix — asserted equal there)
 
 inline bool isSampleEngine (int e) noexcept { return e == kEngSample || e == kEngGranular || e == kEngResynth; }
+inline bool isTableEngine  (int e) noexcept { return e == kEngWavetable || e == kEngFM || e == kEngHarmonic; }
 inline bool isMemRef (const juce::String& p) { return p.startsWith (kMemSourcePrefix); }
 
-// A choice parameter as the tree carries it: <PARAM id="…" value="5.0"/> — the choice INDEX
-// (CLAUDE.md §4), never normalised. Absent → the layout's default.
-inline int choiceOf (const juce::ValueTree& s, const char* id, int def)
+// A parameter as the tree carries it: <PARAM id="…" value="5.0"/> — the REAL value, a choice's
+// INDEX (CLAUDE.md §4), never normalised. Absent → the layout's default.
+inline double valueOf (const juce::ValueTree& s, const juce::String& id, double def)
 {
     const auto p = s.getChildWithProperty ("id", juce::var (id));
-    if (! p.isValid()) return def;
-    return (int) std::lround ((double) p.getProperty ("value", (double) def));
+    return p.isValid() ? (double) p.getProperty ("value", def) : def;
 }
+inline int  choiceOf (const juce::ValueTree& s, const juce::String& id, int def)  { return (int) std::lround (valueOf (s, id, (double) def)); }
+inline bool boolOf   (const juce::ValueTree& s, const juce::String& id, bool def) { return valueOf (s, id, def ? 1.0 : 0.0) > 0.5; }
+
 inline int oscEngineOf (const juce::ValueTree& s, int o)
 {
     static const char* const ids[4] = { ParameterIDs::SYN_OSC_A_ENGINE, ParameterIDs::SYN_OSC_B_ENGINE,
@@ -76,6 +129,16 @@ inline int modalSourceOf (const juce::ValueTree& s, int o)
                                         ParameterIDs::SYN_OSC_C_MODAL_SOURCE, ParameterIDs::SYN_OSC_D_MODAL_SOURCE };
     return choiceOf (s, ids[juce::jlimit (0, 3, o)], kModalSrcAuto);
 }
+// THE POWER — SYN_OSC_x_ENABLE, the white OSC letter: OFF skips the oscillator's whole render path
+// (PluginProcessor.cpp oscGate). The layout's default: a fresh instance has only OSC A on. (MUTE and
+// SOLO are monitoring switches on a playing oscillator, not its power — they do not gate a count.)
+inline bool oscOn (const juce::ValueTree& s, int o)
+{
+    static const char* const ids[4] = { ParameterIDs::SYN_OSC_A_ENABLE, ParameterIDs::SYN_OSC_B_ENABLE,
+                                        ParameterIDs::SYN_OSC_C_ENABLE, ParameterIDs::SYN_OSC_D_ENABLE };
+    const int i = juce::jlimit (0, 3, o);
+    return boolOf (s, ids[i], i == 0);
+}
 // THE GATE — does oscillator o, as saved, play whatever sits in its sample slot?
 inline bool slotPlaysSample (const juce::ValueTree& s, int o)
 {
@@ -83,6 +146,42 @@ inline bool slotPlaysSample (const juce::ValueTree& s, int o)
     if (isSampleEngine (e)) return true;
     if (e == kEngModal) { const int src = modalSourceOf (s, o); return src == kModalSrcAuto || src == kModalSrcSample; }
     return false;
+}
+// Does oscillator o, as saved, read its imported wavetable?
+inline bool slotReadsTable (const juce::ValueTree& s, int o) { return isTableEngine (oscEngineOf (s, o)); }
+
+// Reverb instance i (1 … 6): SYN_RVB_TYPE, SYN_RVB2_TYPE … SYN_RVB6_TYPE (cacheFxInstanceParams).
+inline juce::String rvbId (int inst, const char* suffix)
+{ return (inst <= 1 ? juce::String ("SYN_RVB_") : "SYN_RVB" + juce::String (inst) + "_") + suffix; }
+// Does reverb instance i, as saved, convolve with its IR? Convolution, powered, in the rack.
+inline bool convPlays (const juce::ValueTree& s, int inst)
+{
+    // fb346 — a tree with NO SYN_RVB_ACTIVE PARAM is a pre-rack save: setStateInformation ("THE EMPTY RACK")
+    // appends ACTIVE = 1 for reverb 1 before replaceState, so that reverb IS in the chain.
+    const bool preRack = inst <= 1 && ! s.getChildWithProperty ("id", juce::var (ParameterIDs::SYN_RVB_ACTIVE)).isValid();
+    return choiceOf (s, rvbId (inst, "TYPE"), 0) == kRvbConvolution
+        && boolOf (s, rvbId (inst, "POWER"), false)
+        && (preRack || boolOf (s, rvbId (inst, "ACTIVE"), false));
+}
+
+// The FLOW cards that are ON, exactly as the processor resolves them every block.
+inline int flowCardsOn (const juce::ValueTree& s)
+{
+    const int slots[4] = { choiceOf (s, ParameterIDs::FLOW_CHAIN_1, 0), choiceOf (s, ParameterIDs::FLOW_CHAIN_2, 0),
+                           choiceOf (s, ParameterIDs::FLOW_CHAIN_3, 0), choiceOf (s, ParameterIDs::FLOW_CHAIN_4, 0) };
+    return wc::resolveFlowChain (slots, choiceOf (s, ParameterIDs::FLOW_MODE, 0)).len;
+}
+
+// Does LFO n (1 … 10), as saved, play its drawn table?
+inline bool lfoPlaysDrawn (const juce::ValueTree& s, int n)
+{
+    static const char* const ids[kNumLfos] = { ParameterIDs::LFO1_SHAPE, ParameterIDs::LFO2_SHAPE, ParameterIDs::LFO3_SHAPE,
+                                               ParameterIDs::LFO4_SHAPE, ParameterIDs::LFO5_SHAPE, ParameterIDs::LFO6_SHAPE,
+                                               ParameterIDs::LFO7_SHAPE, ParameterIDs::LFO8_SHAPE, ParameterIDs::LFO9_SHAPE,
+                                               ParameterIDs::LFO10_SHAPE };
+    if (n < 1 || n > kNumLfos) return false;
+    const int k = choiceOf (s, ids[n - 1], 0);
+    return k == kLfoCustom || k == kLfoPath;
 }
 
 // fb618 — what a saved tree CARRIES: imported wavetables, one-shots, IRs, flow cards, LFO shapes.
@@ -92,8 +191,7 @@ inline juce::var of (const juce::ValueTree& s)
 {
     int wt = 0, wtf = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;   // fb624 — wtf: of those, how many are SHIPPED
     juce::int64 bWt = 0, bSmp = 0, bIr = 0;
-    // fb621 — the embedded asset is the truth. (Its fv=1 fallback — count a bare oscSamplePath — is
-    // gone with fb632: a name is not audio, and every file on disk is fv 2 or later.)
+    auto has = [&s] (const char* key, int idx) { return s.getProperty (key + juce::String (idx), "").toString().isNotEmpty(); };
     auto bytesOf = [&s] (const char* key, int idx) -> juce::int64
     {
         const auto v = s.getProperty (key + juce::String (idx), "").toString();
@@ -101,38 +199,45 @@ inline juce::var of (const juce::ValueTree& s)
     };
     for (int o = 0; o < 4; ++o)
     {
+        const bool on = oscOn (s, o);
         const auto wtA = s.getProperty ("wtAsset" + juce::String (o), "").toString();
-        if (wtA.isNotEmpty() || s.getProperty ("wtImportPcm" + juce::String (o), "").toString().isNotEmpty())
-        { ++wt;
-          // fb624 — Max: "the wavetable is factory though, so you should probably let them know."
-          // A reference IS the answer: shipped content is referenced, a user's own table is embedded.
-          if (tw::asset::isRef (wtA)) ++wtf;
-          bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o); }
-        // fb632 — THE GATE. A slot's one-shot is its EMBEDDED audio, counted only while the
-        // oscillator PLAYS the slot. The bytes price what is embedded, played or not — they answer
-        // "how big", the count answers "what plays".
-        const bool slotHolds = s.getProperty ("oscAsset" + juce::String (o), "").toString().isNotEmpty();
-        if (slotHolds && slotPlaysSample (s, o)) ++smp;
+        if (wtA.isNotEmpty() || has ("wtImportPcm", o))
+        {
+            if (on && slotReadsTable (s, o))
+            { ++wt;
+              // fb624 — Max: "the wavetable is factory though, so you should probably let them know."
+              if (tw::asset::isRef (wtA)) ++wtf; }
+            bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o);
+        }
+        // fb632 — a slot's one-shot is its EMBEDDED audio, counted only while the oscillator is ON
+        // and PLAYS the slot. The bytes price what is embedded, played or not.
+        if (has ("oscAsset", o) && on && slotPlaysSample (s, o)) ++smp;
         bSmp += bytesOf ("oscAsset", o);
-        if (s.getProperty ("layerAsset" + juce::String (o), "").toString().isNotEmpty())
-        { ++smp; bSmp += bytesOf ("layerAsset", o); }
+        if (has ("layerAsset", o)) { ++smp; bSmp += bytesOf ("layerAsset", o); }
     }
-    for (int i = 1; i <= 6; ++i)
-        if (s.getProperty ("irAsset" + juce::String (i), "").toString().isNotEmpty()
-            || s.getProperty ("convIRRaw" + juce::String (i), "").toString().isNotEmpty())
-        { ++ir; bIr += bytesOf ("irAsset", i) + bytesOf ("convIRRaw", i); }
-    if (auto layers = s.getChildWithName ("layers"); layers.isValid())
-        for (int i = 0; i < layers.getNumChildren(); ++i)
-            if (layers.getChild (i).getProperty ("sourcePath", "").toString().isNotEmpty()
-                && s.getProperty ("layerAsset" + juce::String (i), "").toString().isEmpty()) ++smp;
+    // (a layer's sourcePath without its layerAsset is a NAME — see the header; not counted.)
+    for (int i = 1; i <= kFxInstances; ++i)
+        if (has ("irAsset", i) || has ("convIRRaw", i))
+        { if (convPlays (s, i)) ++ir;
+          bIr += bytesOf ("irAsset", i) + bytesOf ("convIRRaw", i); }
     // fb621 — the environment seat: when the patcher writes its graph here, every preset that has
     // one becomes an Environment across the whole browser with no further wiring.
     if (auto pv = juce::JSON::parse (s.getProperty ("patcherJson", "").toString()); pv.isObject())
         if (auto* na = pv.getProperty ("nodes", juce::var()).getArray()) nodes = na->size();
-    if (auto v = juce::JSON::parse (s.getProperty ("cardStates", "").toString()); v.getDynamicObject() != nullptr)
-        flow = v.getDynamicObject()->getProperties().size();
+    flow = flowCardsOn (s);
     if (auto v = juce::JSON::parse (s.getProperty ("lfoShapesJson", "").toString()); v.isObject())
-        if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
+        if (auto* a = v.getProperty ("shapes", juce::var()).getArray())
+        {
+            int seen = 0;   // one per LFO (bit n), whatever the blob repeats
+            for (auto& e : *a)
+            {
+                const int n = (int) e.getProperty ("n", 0);
+                const auto* pts = e.getProperty ("pts", juce::var()).getArray();
+                if (n < 1 || n > kNumLfos || pts == nullptr || pts->size() < 2 || (seen & (1 << n))) continue;
+                seen |= 1 << n;
+                if (lfoPlaysDrawn (s, n)) ++lfo;
+            }
+        }
     auto* o = new juce::DynamicObject();
     o->setProperty ("wt", wt); o->setProperty ("wtf", wtf); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
     o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
@@ -141,14 +246,13 @@ inline juce::var of (const juce::ValueTree& s)
 }
 
 // ── THE HEAL ──────────────────────────────────────────────────────────────────────────────────
-//  Runs on the catalogue tw::bank::scan just returned. A row saved before fv 3 that claims a one-shot
-//  is recounted off its own chunk with of(); the row is corrected in place; under the user root the
-//  file's manifest + <preset> child are rewritten once with the corrected count and fv 3 (the chunk
-//  is re-serialised and is byte-identical outside that child — the rewriteMeta law; the mtime is put
-//  back — a corrected number is not an edit). A file that changed under us between the read and the
-//  write is left alone for the next scan. Factory files are corrected in memory only, every scan:
-//  ship them at fv 3 (getStateInformation writes fv 3 from here on). Returns how many files were
-//  rewritten.
+//  Runs on the catalogue tw::bank::scan just returned. EVERY row saved before fv 4 is recounted off
+//  its own chunk with of(); the row is corrected in place; under the user root the file's manifest
+//  + <preset> child are rewritten once with the corrected count and fv 4 (the chunk is re-serialised
+//  and is byte-identical outside that child — the rewriteMeta law; the mtime is put back — a
+//  corrected number is not an edit). A file that changed under us between the read and the write is
+//  left alone for the next scan. Factory files are corrected in memory only, every scan: ship them at
+//  fv 4 (getStateInformation writes fv 4 from here on). Returns how many files were rewritten.
 inline int healCatalogue (juce::var& catalogue, const juce::File& userRoot)
 {
     int rewritten = 0;
@@ -164,8 +268,7 @@ inline int healCatalogue (juce::var& catalogue, const juce::File& userRoot)
             auto* po = p.getDynamicObject();
             if (po == nullptr) continue;
             if ((int) po->getProperty ("fv") >= kFormatVersion) continue;
-            const auto c = po->getProperty ("carries");
-            if (c.isObject() && (int) c.getProperty ("smp", 0) <= 0) continue;   // a 0 is exact already; no carries at all → recount
+            // fb635 — no "a 0 is exact" shortcut any more: the flow rule can raise a count.
             const juce::File f (po->getProperty ("path").toString());
             const auto sizeBefore = f.getSize(); const auto mtimeBefore = f.getLastModificationTime();
             juce::MemoryBlock file; juce::String manifest, err; juce::MemoryBlock chunk;

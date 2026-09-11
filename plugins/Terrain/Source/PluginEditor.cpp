@@ -322,6 +322,7 @@ struct TerrainWebView final : juce::WebBrowserComponent
 TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
     : audioProcessor (p)
 {
+    announcedLoadGen_ = p.stateLoadGen_.load (std::memory_order_acquire);   // fb635 — a fresh page boots from the state as it is NOW
    #if JUCE_WINDOWS
     // fb491 — WINDOW-DRAG LAG. Max: "even when moving Terrain around it visually lags." While any
     // Chromium-family window is visible, Windows' native occlusion tracker hooks desktop-wide
@@ -6109,6 +6110,14 @@ TerrainUiCore::~TerrainUiCore()
 void TerrainUiCore::timerCallback()
 {
     if (webView == nullptr) return;
+
+    // fb635 — A RESTORE THE PAGE WAS NOT TOLD ABOUT. setStateInformation has three callers and only two of them (the
+    // browser/drop load and Init) ever called afterPatchLoad; the HOST's (undo, A/B compare, a host preset recall, a
+    // project reloaded into a live window) left the page on the previous patch — and the page's next LFO edit pushed
+    // its stale shapes over the restored ones (a saved Path became a triangle in the DSP and in the next save). One
+    // relaxed-cost atomic compare per tick; a parked core catches up on its first tick after attach().
+    if (pageReady && audioProcessor.stateLoadGen_.load (std::memory_order_acquire) != announcedLoadGen_)
+        afterPatchLoad (true);
 
     // fb501 — THE MESSAGE-THREAD METER. Measured on Windows with one WT osc, no notes, idle:
     // opening the editor costs the process +17.5 points of CPU, and the biggest single share is
@@ -14551,8 +14560,9 @@ void TerrainUiCore::loadPatch (const juce::File& f)
     afterPatchLoad();
 }
 
-void TerrainUiCore::afterPatchLoad()
+void TerrainUiCore::afterPatchLoad (bool fromHost)
 {
+    announcedLoadGen_ = audioProcessor.stateLoadGen_.load (std::memory_order_acquire);   // fb635 — this load is announced
     // fb620 — ONE law for every load (a drop, the browser, the quick menu, the ‹ › arrows): the processor
     // has replaced its state (absent means clear, fb618) and the page must now show THAT patch, not the
     // last one. The C++ half: the seat, the loaded samples and live blends (resyncAfterReattach, verbatim),
@@ -14577,7 +14587,8 @@ void TerrainUiCore::afterPatchLoad()
     }
     if (audioProcessor.getNoiseSampleSel().isEmpty())
         webView->evaluateJavascript ("if(window.onNoiseSampleCleared)window.onNoiseSampleCleared();", nullptr);
-    webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true) + ");", nullptr);
+    webView->evaluateJavascript ("if(window.onPatchLoaded)window.onPatchLoaded(" + juce::JSON::toString (juce::var (audioProcessor.getPresetMetaJson()), true)
+                                 + (fromHost ? ",'host'" : "") + ");", nullptr);   // fb635 — 'host': the page re-seeds without a Loaded toast
 }
 
 void TerrainUiCore::importTerrainPack (const juce::File& f) { offerPack (f); }   // fb621 — drop = the same two steps

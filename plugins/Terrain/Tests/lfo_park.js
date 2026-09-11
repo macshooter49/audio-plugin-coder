@@ -151,6 +151,10 @@ async function boot (pg, P, rafMode) {
     document.querySelectorAll('.ti-preboot').forEach(e => e.classList.remove('ti-preboot'));
     const sp = document.getElementById('syn-panel'); sp.classList.remove('hidden'); sp.style.display = 'block';
     try { document.getElementById('syn-btn').click(); } catch(e){} dispatchEvent(new Event('resize')); });
+  /* fb635 — fb628 made an LFO routed NOWHERE rest on purpose (Max: "it needs to be assigned to something, THEN be
+     played, in order for it to move"), and this stub has no matrix, so bars 1/5/9/10 went red on a correct page. The
+     gate is about the PLAYHEAD, so it plays an ASSIGNED LFO: the page's own question answers yes. */
+  await pg.evaluate(() => { window.__tiLfoRouted = function(){ return true; }; });
   await sleep(900);
 }
 

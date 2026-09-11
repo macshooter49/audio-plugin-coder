@@ -3348,6 +3348,8 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
   border:1px solid rgba(255,255,255,0.10);border-radius:10px;box-shadow:0 16px 40px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.06);
   padding:5px;display:none;font-family:-apple-system,'SF Pro Text',sans-serif;max-height:228px;overflow-y:auto;overflow-x:hidden;}
 .mv-menu.open{display:block;}
+.mv-menu.fit{max-height:none;}   /* fb635 — the LFO shape list: every row visible, no scroll */
+.mv-menu.fit.tight div{padding-top:3px;padding-bottom:3px;}   /* fb635 — only when a small window has no room for 6px rows */
 /* fb343 review — .mv-toast had NO CSS anywhere: the mod-engine toast (24673) has been INVISIBLE
    since it shipped, and the new seed watchdog toasts inherited the ghost. Same glass as .mv-menu. */
 .mv-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:2147483646;
@@ -11276,6 +11278,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                numbers are different on purpose and must never be confused: the menu shows 5, the
                parameter holds 8. */
             var EQZ_SHAPES=['Bell','Low Cut','High Cut','Low Shelf','High Shelf'], EQZ_SHAPE_PN=8;
+            window.__EQZ_SHAPE_PN=EQZ_SHAPE_PN; window.__EQZ_SHAPES_N=EQZ_SHAPES.length;   /* fb635 — the rack's generic reader (another closure) scales the saved shape with it */
             function shGet(d,b){ return (b>=4&&d.xsh&&d.xsh[b-4]!=null)?d.xsh[b-4]:0; }
             function shSet(d,b,v){ if(b<4||!d.xsh) return; var k=b-4; d.xsh[k]=v;
               try{ if(d.xshp&&d.xshp[k]) window.__setSynParam(d.xshp[k], v/(EQZ_SHAPE_PN-1)); }catch(e){} }
@@ -12749,8 +12752,12 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
              reader for all of them, driven by the template itself: type (by tpN — the PARAM's
              cardinality, fb373), power, every front knob (.p), the two back dropdowns (pN), every
              back knob ([2]), the pills (pp) and the routes (rp). Cores with a dedicated restore
-             keep it; cores without the grammar (the filter's 94-engine picker) are left alone. */
-          var FX4_GENERIC_SKIP={reverb:1,delay:1,saturate:1,granular:1,tape:1,flt:1};
+             keep it. fb635 — the FILTER is no longer skipped. It was left out as "without the grammar", so NOTHING ever read a rack
+             filter back: every load drew the template (off, Ladder LP 24, 62/35/0/100, no routes) while the DSP ran the patch —
+             Max's "two filters that looked off with a different shape, but were on". Its engine is tp/tpN (118 = FLT_TYPE_COUNT)
+             and back.d1 (the same SYN_FLT_ENGINE, the curve's source); power, the four knobs, Wide/Punch, the routes and Char
+             are all the grammar this reader already speaks. */
+          var FX4_GENERIC_SKIP={reverb:1,delay:1,saturate:1,granular:1,tape:1};
           function fxrRestoreGeneric(){ for(var q=0;q<DEVS.length;q++) if(DEVS[q]&&!FX4_GENERIC_SKIP[DEVS[q].core]) fxrRestoreGenericOne(q); }
           function fxrRestoreGenericOne(idx){ try{
             var g=NFX('getSynParam'); if(!g) return;
@@ -12763,6 +12770,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
             var rp=d.rp||[]; for(var r=0;r<rp.length;r++) ids.push(rp[r]);
             var xp=d.xp||[]; for(var x=0;x<xp.length;x++){ ids.push(xp[x][0]); ids.push(xp[x][1]); ids.push(xp[x][2]); }   /* fb438 — the free bells */
             var xqp=d.xqp||[]; for(var xq=0;xq<xqp.length;xq++) ids.push(xqp[xq]);   /* fb441 — per-band Q */
+            var xsp=d.xshp||[]; for(var xs=0;xs<xsp.length;xs++) ids.push(xsp[xs]);   /* fb635 — per-band SHAPE (Bell/Cut/Shelf): a saved Low Cut came back as a Bell */
             ids.push(d.pfx?d.pfx+'LANE':null);   /* fb444 — which Splitter band this card lives in */
             Promise.all(ids.map(rd)).then(function(v){ try{
               var i2=0, T=d.types||[];
@@ -12776,6 +12784,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
               for(var q=0;q<rp.length;q++){ if(v[i2]!=null&&d.route) d.route[q]=v[i2]>0.5?1:0; i2++; }
               for(var x2=0;x2<xp.length;x2++){ if(!d.xb) d.xb=[]; if(!d.xb[x2]) d.xb[x2]=[50,50,0]; if(v[i2]!=null) d.xb[x2][0]=v[i2]*100; i2++; if(v[i2]!=null) d.xb[x2][1]=v[i2]*100; i2++; if(v[i2]!=null) d.xb[x2][2]=v[i2]>0.5?1:0; i2++; }
               for(var q3=0;q3<xqp.length;q3++){ if(!d.xq) d.xq=[50,50,50,50,50,50,50,50]; if(v[i2]!=null) d.xq[q3]=v[i2]*100; i2++; }   /* fb441 */
+              for(var s3=0;s3<xsp.length;s3++){ if(!d.xsh) d.xsh=[0,0,0,0]; if(v[i2]!=null){ var sh3=Math.round(v[i2]*((window.__EQZ_SHAPE_PN||8)-1)); d.xsh[s3]=(sh3>=0&&sh3<(window.__EQZ_SHAPES_N||5))?sh3:0; } i2++; }   /* fb635 — NOT the bare EQZ_SHAPE_PN: it lives in the EQ closure, and a ReferenceError here would abort this whole reader (no re-render) */
               if(v[i2]!=null) d.lane=Math.round(v[i2]*7); i2++;   /* fb444 — choice(8), so *7 */
               reRenderKeepSwap();
             }catch(e){} }).catch(function(){});
@@ -13276,7 +13285,7 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
 
           rack.addEventListener('change',function(e){ try{
             var t=e.target, dv=t.closest&&t.closest('.fxr-dev'); if(!dv) return; var di=+dv.getAttribute('data-dev');
-            if(t.classList.contains('fxr-type-native')){ var tp=t.closest('.fxr-type'), tl=tp&&tp.querySelector('.fxr-tl'); if(tl&&tl.firstChild) tl.firstChild.nodeValue=t.value; if(DEVS[di]) DEVS[di].type=t.value; var tpid=t.getAttribute('data-p'); if(tpid){ var tn=(DEVS[di]&&DEVS[di].tpN)?DEVS[di].tpN:t.options.length;   /* fb373 — the PARAM's cardinality, never the list's */ window.__setSynParam(tpid, tn>1?t.selectedIndex/(tn-1):0); }
+            if(t.classList.contains('fxr-type-native')){ var tp=t.closest('.fxr-type'), tl=tp&&tp.querySelector('.fxr-tl'); if(tl&&tl.firstChild) tl.firstChild.nodeValue=t.value; if(DEVS[di]) DEVS[di].type=t.value; if(DEVS[di]&&DEVS[di].core==='flt'&&DEVS[di].back&&DEVS[di].back.d1) DEVS[di].back.d1.v=t.value;   /* fb635 — the curve reads d1 */ var tpid=t.getAttribute('data-p'); if(tpid){ var tn=(DEVS[di]&&DEVS[di].tpN)?DEVS[di].tpN:t.options.length;   /* fb373 — the PARAM's cardinality, never the list's */ window.__setSynParam(tpid, tn>1?t.selectedIndex/(tn-1):0); }
               if(DEVS[di]&&DEVS[di].core==='reverb'){ DEVS[di].back=rvbBuildBack(DEVS[di],t.value);   /* fb281 — relabel back panel per type (Hall↔Room) */
                 var pl=rvbPillsFor(DEVS[di],t.value); DEVS[di].pills=pl.pills; DEVS[di].pp=pl.pp;   /* fb287 — type-unique front pills (Mod vs Duck) */
                 var sw=[].map.call(rack.querySelectorAll('.fxr-dev'),function(x){return x.classList.contains('swapped');}); render();
@@ -17452,10 +17461,7 @@ setTimeout(function wireSynControls () {
             var oL = (dev.id || '').replace (/^osc-([a-d])-device$/, '$1');
             if (oL && oL.length === 1) {
               var c = dev.classList;
-              if (c.contains ('engine-sample') || c.contains ('engine-granular')
-                  || c.contains ('engine-geode') || c.contains ('engine-modal'))
-              { if (window.__terrainSampleRedraw) window.__terrainSampleRedraw (oL);
-                if (window.__geodeRepaint) window.__geodeRepaint (oL); }
+              if (window.__oscFaceHeal) window.__oscFaceHeal (oL);   /* fb635 — the one heal (sample family · Resynth · waterfall) */
             }
           } catch (eRp) {}
         }
@@ -18354,6 +18360,15 @@ setTimeout(function wireSynControls () {
           try { var dv = view.closest ('.device.osc'); if (dv) { dv.classList.remove ('blend-on'); dv.classList.remove ('blend-pg2'); } } catch (e) {}
           syncParams (); place (); redraw ();
         }
+        function clearVisual () {   /* the processor says this slot is empty: show that, and READ the region back — never write it */
+          peaks = null; view.classList.remove ('loaded');
+          try { var dv2 = view.closest ('.device.osc'); if (dv2) { dv2.classList.remove ('blend-on'); dv2.classList.remove ('blend-pg2'); } } catch (e) {}
+          st.s = rd (pStart, st.s / 100) * 100; st.e = rd (pEnd, st.e / 100) * 100; st.ls = rd (pLS, st.ls / 100) * 100; st.le = rd (pLE, st.le / 100) * 100;
+          st.fin = rd (pFadeIn, st.fin); st.fout = rd (pFadeOut, st.fout); st.finc = rd (pFinCurve, st.finc); st.foutc = rd (pFoutCurve, st.foutc); st.xfade = rd (pXfade, st.xfade);
+          st.mode = rdChoice (pMode, 5, st.mode); st.snap = rdChoice (pSnap, 3, st.snap); st.loop = (SAMP_MODES[st.mode] !== 'One-Shot');
+          try { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } catch (e) {}
+          place (); redraw ();
+        }
         function pctOf (e) { var r = disp.getBoundingClientRect (); return Math.max (0, Math.min (100, ((e.clientX - r.left) / r.width) * 100)); }
         function syncParams () { wr (pStart, st.s / 100); wr (pEnd, st.e / 100); wr (pLS, st.ls / 100); wr (pLE, st.le / 100); wr (pFadeIn, st.fin); wr (pFadeOut, st.fout); wr (pFinCurve, st.finc); wr (pFoutCurve, st.foutc); wr (pXfade, st.xfade); wrChoice (pMode, st.mode, 5); wrChoice (pSnap, st.snap, 3); }   // fb74 — snap commits here too (header dropdown removed → right-click row)
 
@@ -18516,7 +18531,19 @@ setTimeout(function wireSynControls () {
         disp.addEventListener ('contextmenu', function (e) { e.preventDefault (); openSampMenu (e, SAMP[osc]); });
         var exp = view.querySelector ('.samp-exp'); if (exp) exp.addEventListener ('click', function () { /* chop editor — next increment */ });
 
-        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded, clearLoaded: clearLoaded,
+        /* fb635 — THE PICTURE HEALS ITSELF WHEN IT BECOMES VISIBLE. Max: "oscillators A and C load up their one shots
+           correctly, but B and D forget them ... whenever I switch to B and D they're gone and there's no way to get
+           them back." B and D are the BACK of each slot (display:none until their letter is clicked). A preset load
+           pushes all four payloads; setLoaded() on a hidden view marks it .loaded while drawPeaks() returns on the
+           zero-size box (the fb590 trap), and the reopen retry skips anything .loaded — so the back oscillators held
+           their peaks and never painted them. The observer repaints from the peaks already held whenever this canvas
+           gains or changes its box — a slot flip, a page flip, a window reopen, anything that ever hides it again. */
+        if (window.ResizeObserver) { try { var roW = 0, roH = 0;
+          new ResizeObserver (function () { var r = canvas.getBoundingClientRect (), w = Math.round (r.width), h = Math.round (r.height);
+            if (w < 2 || h < 2) { roW = roH = 0; return; }   /* hidden: forget the box, so the next reveal repaints even at the same size */
+            if (w === roW && h === roH) return; roW = w; roH = h;
+            if (peaks) requestAnimationFrame (function () { try { redraw (); place (); } catch (e) {} }); }).observe (canvas); } catch (eRO) {} }
+        SAMP[osc] = { st: st, data: data, place: place, redraw: redraw, ph: ph, phPool: phPool, view: view, setLoaded: setLoaded, clearLoaded: clearLoaded, clearVisual: clearVisual,
           syncParams: syncParams, repaintHeader: function () { if (modePaint) modePaint (); if (snapPaint) snapPaint (); } };
         place (); redraw ();
       }
@@ -18573,7 +18600,7 @@ setTimeout(function wireSynControls () {
         try { window.__geodePeaks = window.__geodePeaks || {}; if (payload && payload.peaksMin && payload.peaksMax) window.__geodePeaks[osc] = { min: payload.peaksMin, max: payload.peaksMax }; } catch (eP) {}
         try { var hd = document.getElementById ('osc-' + osc + '-sampname-display');   // fb74 — header SAMPLE NAME (next to the emblems); fires on drop, browser pick, AND the reopen re-push → restores itself
               if (hd && payload && payload.filename) hd.textContent = String (payload.filename).replace (/\.[a-z0-9]+$/i, '') || 'Load Sample'; } catch (eN) {} };
-      window.onOscSampleCleared = function (osc) { try { var S = SAMP[osc]; if (S && S.clearLoaded) S.clearLoaded (); } catch (e) {}
+      window.onOscSampleCleared = function (osc) { try { var S = SAMP[osc]; if (S && S.clearVisual) S.clearVisual (); else if (S && S.clearLoaded) S.clearLoaded (); } catch (e) {}
         try { if (window.__geodePeaks) delete window.__geodePeaks[osc]; } catch (eC) {}
         try { var hd = document.getElementById ('osc-' + osc + '-sampname-display'); if (hd) hd.textContent = 'Load Sample'; } catch (eN) {} };   // fb74 — cleared → back to the call-to-action
       window.__terrainSampleRedraw = function (osc) {
@@ -18583,6 +18610,18 @@ setTimeout(function wireSynControls () {
         try { var g = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('getOscSamplePayload') : null;
           if (g) { var p = g (osc); if (p && p.then) p.then (function (j) { if (j && window.onOscSampleLoaded) window.onOscSampleLoaded (osc, j); }); } } catch (_) {}
       };
+      /* fb635 — ONE HEAL FOR AN OSCILLATOR'S FACE (the recycle law: the slot letter, the page flip and every preset load call
+         this, nothing else). For a visible device: the sample family repaints and re-pulls its payload, the Resynth painter
+         repaints, and a 3D waterfall that is ON for it restarts its loop (a waterfall that is on only for a hidden oscillator
+         parks its rAF — nothing visible drew — and stayed blank on reveal). A hidden device is skipped: it has no box to paint
+         (the sample canvas' own ResizeObserver catches it the moment it gets one). */
+      window.__oscFaceHeal = function (o) { try {
+        var dev = document.getElementById ('osc-' + o + '-device'); if (! dev || dev.classList.contains ('osc-hidden')) return;
+        var c = dev.classList;
+        if (c.contains ('engine-sample') || c.contains ('engine-granular') || c.contains ('engine-geode') || c.contains ('engine-modal'))
+        { if (window.__terrainSampleRedraw) window.__terrainSampleRedraw (o); if (window.__geodeRepaint) window.__geodeRepaint (o); }
+        var W = window.wtWaterfall; if (W && W.on && W.on[o] && W.kick) W.kick ();
+      } catch (e) {} };
       document.querySelectorAll ('#syn-panel .sample-view').forEach (wireSample);
 
       // RESYNTH loop mode — a header selector at the TOP of the visualizer (matches the Sample /
@@ -19712,6 +19751,11 @@ setTimeout(function wireSynControls () {
               // hide the panel you clicked (currently shown), reveal its sibling
               d.classList.toggle('osc-hidden', d === current);
             });
+            /* fb635 — a revealed back oscillator heals its face NOW (fb590's page-flip law, which the slot letter never
+               had): the one-shot / granular / modal picture, the Resynth painter, and its 3D waterfall. */
+            slot.querySelectorAll('.device.osc:not(.osc-hidden)').forEach(function(d){
+              var oL=(d.id||'').replace(/^osc-([a-d])-device$/,'$1'); if(oL.length===1&&window.__oscFaceHeal) window.__oscFaceHeal(oL);
+            });
           });
         });
       });
@@ -19815,8 +19859,10 @@ setTimeout(function wireSynControls () {
             var push = function () { try { window.__setSynParam(id, norm); } catch (e) {} };
             // the processor is the authority — but getSynParam is a native fn and ASYNC, so it
             // cannot be read inside a drag. Read it once here and hold the value in `norm`.
-            if (getFn) { try { getFn(id).then(function (v) {
-                if (typeof v === 'number' && !drag) { norm = Math.max(0, Math.min(1, v)); paint(); } }); } catch (e) {} }
+            var readBack = function () { var g = getFn; try { if (!g && window.Juce && window.Juce.getNativeFunction) g = getFn = window.Juce.getNativeFunction('getSynParam'); } catch (e) {}
+              if (g) { try { g(id).then(function (v) {
+                if (typeof v === 'number' && !drag) { norm = Math.max(0, Math.min(1, v)); paint(); } }); } catch (e) {} } };
+            readBack(); (window.__tiPhaseReaders = window.__tiPhaseReaders || []).push(readBack);
             var mv = function (ev) { if (!drag) return;
               norm = Math.max(0, Math.min(1, n0 + (y0 - ev.clientY) / 150));
               paint(); push(); };
@@ -20010,6 +20056,7 @@ setTimeout(function wireSynControls () {
         }
         refresh();
         [250, 700, 1500].forEach(function (ms) { setTimeout(refresh, ms); });   // beat the WKWebView init race
+        window.__tiBlendRefresh = refresh;   /* a preset load re-reads the four slots of every osc */
       } catch (e) { console.warn('[BLEND] init failed', e); }
     })();
 
@@ -22529,6 +22576,11 @@ setTimeout(function wireSynControls () {
             p.addEventListener('click', () => { const f = curF(); setSrc(f, i, ! fst[f].src[i]); renderFb(); }));
           syncSrc();
           [250, 700, 1500].forEach(ms => setTimeout(syncSrc, ms));   // beat the WKWebView init race
+          /* fb635 — AND ON EVERY PRESET LOAD. Max: "I turn the filter on and off and it lets me know the filter was
+             actually on this whole time, but it looked like it was off." fst (the A/B/C/D/S/N routing pills — a filter's
+             "on" — plus poles, drive type, spread) was read only in the boot window above, so a loaded patch that routed
+             oscillators into a filter showed dark pills; one click wrote "on" (already on: nothing), the next wrote off. */
+          window.__tiFltBackSync = syncSrc;
           const env = document.getElementById('filter-env-emblem');
           if (env) env.addEventListener('click', () => { const st = fst[curF()]; st.env = ! st.env; renderFb(); });
           // Poles — left-click DRAG up/down through 6/12/18/24 dB (same feel as the Spread pill).
@@ -30240,7 +30292,7 @@ restoreThemeFromBackend();
 (function(){
   if(window.__modv4)return; window.__modv4=true;
   var SHORT=['Sine','Tri','Saw','Saw↓','Sqr','S&H','Rand','Custom','Path','Lorenz','Rossler'];   // fb239/fb240 — idx5 S&H (ever-going wander); PATH/LORENZ/ROSSLER appended
-  var NSHAPE=11;
+  var NSHAPE=11; window.__LFO_NSHAPE=NSHAPE;   /* fb635 — the mod-badge mirror (another IIFE) scales the shape param by it */
   var CYC=3;   // wave cycles drawn across the scope — the follower sweep is divided by this so its rise/fall matches the audible rate
   var DIVS=['8 bar','4 bar','2 bar','1 bar','1/2','1/4','1/8','1/16','1/32','1/4.','1/8.','1/4T','1/8T','1/16T','32 bar','16 bar','1/64','1/128','1/256'];   // fb219 — appended (enum order = saved indices)
   var DIVORD=[14,15,0,1,2,3,4,5,6,7,8,16,17,18,9,10,11,12,13];   // fb219 — MENU display order: slow→fast then dotted/triplet (data stays append-only)
@@ -30270,6 +30322,13 @@ restoreThemeFromBackend();
     return a[1]+(b[1]-a[1])*shBias((p-a[0])/w,a[2]||0); }
   function shEval(n,p){ if(n===st.tab&&__shEffCache)return shEvalPts(__shEffCache,p)*2-1;   /* fb238 — the live modulated curve IS the audible read */ var sp=shapes[n]; if(!sp)return 1-4*Math.abs((((p%1)+1)%1)-0.5); return shEvalPts(sp.pts,p)*2-1; }
   window.__lfoCustomEval=shEval;   // the badge-module mirror (mval) + any future consumer reads this
+  /* fb635 — PATH for the same mirror: y along the drawing's ARC LENGTH (pathPointAt's walk, which mirrors the C++
+     bakeLfoPathTable), -1..1 like shEval. The badges had no Path branch and read Path as Random (the *7 scale below). */
+  window.__lfoPathEval=function(n,t){ var sp=shapes[n], p=(sp&&sp.pts)||[]; if(p.length<2) return 0;
+    var seg=[],tot=0,i; for(i=0;i<p.length-1;i++){ var dx=p[i+1][0]-p[i][0],dy=p[i+1][1]-p[i][1]; seg[i]=Math.sqrt(dx*dx+dy*dy); tot+=seg[i]; }
+    if(tot<1e-6) return p[0][1]*2-1;
+    var tg=(((t%1)+1)%1)*tot,acc=0,k=0; while(k<p.length-2&&acc+seg[k]<tg){acc+=seg[k];k++;}
+    var f=seg[k]>1e-6?(tg-acc)/seg[k]:0; return (p[k][1]+(p[k+1][1]-p[k][1])*f)*2-1; };
   function shFlipH(pts){ var n=pts.length,out=[],i;   // fb221 — time-mirror: reverse order, x -> 1-x; each segment's tension lands on its mirrored segment NEGATED (bias with -P is the exact horizontal mirror of bias with P)
     for(i=n-1;i>=0;i--)out.push([1-pts[i][0],pts[i][1],(i>0)?-(pts[i-1][2]||0):0]);
     return out; }
@@ -30287,6 +30346,7 @@ restoreThemeFromBackend();
       var out=[],k; for(k in shapes){ var sp=shapes[k];
         var en={n:+k,pts:sp.pts.map(function(q){var t3=[+q[0].toFixed(4),+q[1].toFixed(4),+(q[2]||0).toFixed(3)]; if(q[3]&&(q[3].xs>0||q[3].ys>0))t3.push(q[3]); return t3;}),gh:sp.gh,gv:sp.gv,sn:sp.sn?1:0,nm:sp.nm||''};   /* fb238 — per-point mods ride at index 3 */
         if(sp.pm)en.pm=1;   /* fb239 — Path mode: bake by arc-length */
+        if(sp.pp&&sp.pp.length>1)en.pp=sp.pp.map(function(q){ return [+q[0].toFixed(4),+q[1].toFixed(4),0]; });   /* fb635 — the PARKED Path drawing rides beside the shape (the C++ keeps this JSON verbatim and bakes only pts/pm) */
         if(motion[k])en.mo=motion[k];   // fb229 — motion rides beside the points
         out.push(en); }
       var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setSynthLfoShapes'):null;
@@ -30294,12 +30354,12 @@ restoreThemeFromBackend();
   function shPush(){ window.__shTouchT=Date.now(); clearTimeout(shPushT);
     if(Date.now()-shPushLastT>90){ shPushLastT=Date.now(); shPushNow(); }   // fb235 — leading edge: the OTHER window mirrors WHILE you draw (and the DSP rides the stroke)
     shPushT=setTimeout(function(){ shPushLastT=Date.now(); shPushNow(); },130); }   // trailing — the settled truth
-  function shPull(){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
+  function shPull(force){ try{ var f=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthLfoShapes'):null; if(!f)return;
     f().then(function(j){ if(shTouched)return; try{ var v=JSON.parse(j);   // RACE LAW: a local edit outranks any pull
-      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null,pm:e.pm?1:0};
+      (v.shapes||[]).forEach(function(e){ if(e.n>=1&&e.n<=10&&e.pts&&e.pts.length>1){ shapes[e.n]={pts:e.pts.map(function(q){var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3;}),gh:e.gh||8,gv:e.gv||8,sn:e.sn!==0?1:0,nm:e.nm||null,pm:e.pm?1:0}; if(e.pp&&e.pp.length>1) shapes[e.n].pp=e.pp.map(function(q){ return [q[0],q[1],q[2]||0]; });   /* fb635 — the parked Path drawing */
         if(e.mo)motion[e.n]={tg:e.mo.tg!=null?e.mo.tg:0,lb:e.mo.lb!=null?e.mo.lb:-1,dir:e.mo.dir||0,mn:e.mo.mn||0,ri:e.mo.ri||0,de:e.mo.de||0,sm:e.mo.sm||0,sw:e.mo.sw||0,td:e.mo.td||0,ho:e.mo.ho!=null?e.mo.ho:1,rs:e.mo.rs||0,pol:e.mo.pol||0}; } });
-      if(st.shape===7)render(); }catch(e2){} }); }catch(e){} }
-  window.__tiPullLfoShapes=function(){ shTouched=false; for(var k in shapes) delete shapes[k]; for(var k2 in motion) delete motion[k2]; shPull(); try{ render(); }catch(e){} };   /* fb620 — a preset load: the old shapes go, the pull brings the new ones (absent means clear) */
+      if(st.shape===7||st.shape===8||force)render(); }catch(e2){} }); }catch(e){} }   /* fb635 — Custom AND Path repaint once the pull lands (Path drew its seed; not every shape: a boot pull must not rebuild the pane under a knob drag). Max: "I have the path here but it's a triangle." A preset load empties the shapes and renders at once (shGet seeds a Tri into the empty tab); the pull then landed the real path and repainted ONLY for Custom — so a Path tab kept showing the seed. */
+  window.__tiPullLfoShapes=function(){ shTouched=false; for(var k in shapes) delete shapes[k]; for(var k2 in motion) delete motion[k2]; shPull(true); try{ render(); }catch(e){} };   /* fb620 — a preset load: the old shapes go, the pull brings the new ones (absent means clear) */
   function shY(y01,g){ var B=g?g.B:SH_BOT, T=g?g.T:SH_TOP; return B-(B-T)*y01; }   // fb232 — geometry-aware: the card hero renders in its OWN taller band (uniform scale, zero stretch)
   function shPathD(pts,w,g){ var d,i;   // fb208 — SEGMENT-EXACT (the env buildPath idiom): straight segs = ONE line, verticals exact, curves sampled INSIDE the segment with exact endpoints — every angle lands ON its node (Max: 'like the ENV')
     d='M'+shX(pts[0][0]).toFixed(1)+' '+shY(pts[0][1],g).toFixed(1)+' ';
@@ -30503,19 +30563,24 @@ restoreThemeFromBackend();
     if(out.length>160)return false;
     out.sort(function(a,b){return a[0]-b[0];});   // stable: ties keep insertion order (entry tie → stamp → exit tie = clean vertical steps)
     sp.pts=out; return true; }
-  function seedTo(pts,nm){ shSelClear(); var gs=shGet(); gs.pts=pts; gs.nm=nm||'Custom'; gs.pm=0;   // fb212 — grid/snap survive re-seeding · fb239 clears path mode
+  /* fb635 — THE PATH DRAWING IS PARKED, NEVER THROWN AWAY. Max: "I want my path or my drawing to always stay wherever it's at."
+     Leaving Path for a stock seed (0-4) or Custom overwrote the points and cleared pm, so coming back to Path drew the figure-8
+     seed. shParkPath keeps a copy (pp) that enterPath restores and the preset carries. */
+  function shParkPath(gs){ if(gs&&gs.pm&&gs.pts&&gs.pts.length>1) gs.pp=gs.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }); }
+  function seedTo(pts,nm){ shSelClear(); var gs=shGet(); shParkPath(gs); gs.pts=pts; gs.nm=nm||'Custom'; gs.pm=0;   // fb212 — grid/snap survive re-seeding · fb239 clears path mode
     setNorm(cur().shape,7/(NSHAPE-1)); st.shape=7; shTouched=true; shPush(); render(); }
   function shConvert(){ if(st.shape===7)return; seedTo(seedFor(st.shape),SHORT[st.shape]); }
   function seedPath(){   // fb239 — a friendly starter loop so Path shows its 2D nature at a glance
     var pts=[],i,N=40; for(i=0;i<N;i++){ var a=i/N*6.2831853; pts.push([0.5+0.42*Math.sin(a),0.5+0.42*Math.sin(2*a),0]); } pts.push([pts[0][0],pts[0][1],0]); return pts; }   // fb240 — a bigger figure-8 seed (shows the 2D nature)
   function enterPath(){   // fb239 — free 2D drawing mode
-    var gs=shGet(); if(!gs.pm||!gs.pts||gs.pts.length<2){ gs.pts=seedPath(); gs.nm='Path'; }
+    var gs=shGet(); if(!gs.pm||!gs.pts||gs.pts.length<2){ if(gs.pp&&gs.pp.length>1){ gs.pts=gs.pp.map(function(q){ return [q[0],q[1],q[2]||0]; }); delete gs.pp; } else gs.pts=seedPath(); gs.nm='Path'; }   /* fb635 — the parked drawing first */
     gs.pm=1; setNorm(cur().shape,8/(NSHAPE-1)); st.shape=8; shTouched=true; shPush(); render(); }
   function pickShape(i){
     if(i<=4){ seedTo(seedFor(i),SHORT[i]); return; }        // 0-4 editable seeds
-    if(i===7){ var g=shGet(); g.pm=0; setNorm(cur().shape,7/(NSHAPE-1)); st.shape=7; render(); return; }   // Custom shaper
+    if(i===7){ var g=shGet(); shParkPath(g); g.pm=0; setNorm(cur().shape,7/(NSHAPE-1)); st.shape=7; render(); return; }   // Custom shaper
     if(i===8){ enterPath(); return; }                       // Path free-draw
-    var g2=shGet(); if(g2)g2.pm=0;                           // 5 Dune · 6 Rand · 9 Eddy · 10 Vortex = generative
+    /* fb635 — the generative shapes (5 Dune · 6 Rand · 9 Eddy · 10 Vortex) never read the table, so they no longer clear pm:
+       Path → S&H → Path used to replace the drawing with the figure-8 and push it. */
     setNorm(cur().shape,i/(NSHAPE-1)); st.shape=i; chaosTrail=[]; duneHist=[]; render(); }
   function shRand(kind){   // fb227 — THE RANDOM DICE (Max: 'complete randomness... random both goes the craziest'). One-shot UI RNG (the never-reseed law guards DSP RNG, not dice).
     var sp=shGet(), n=sp.gv||8, pts=[], i, r=Math.random;
@@ -30566,15 +30631,15 @@ restoreThemeFromBackend();
       sc.oncontextmenu=function(e){ arm(); e.preventDefault(); shPathMenu(e); };
       sc.onpointerdown=function(e){ if(e.button===2)return; arm(); e.preventDefault();
         var svg=sc.querySelector('svg'); if(!svg)return; try{svg.setPointerCapture(e.pointerId);}catch(e0){}
-        var sp=shGet(); sp.pts=[]; sp.pm=1;
+        var sp=shGet(), prevP=sp.pts, prevM=sp.pm; sp.pts=[]; sp.pm=1;   /* fb635 — remember it: a click is not a drawing */
         function add(ev){ var q=shPos(sc,ev); sp.pts.push([Math.max(0,Math.min(1,q.x)),Math.max(0,Math.min(1,q.y)),0]); }
         add(e);
         function live(){ var pth=sc.querySelector('.mv-path'); if(pth){ var d='',i; for(i=0;i<sp.pts.length;i++){ d+=(i?'L':'M')+shX(sp.pts[i][0]).toFixed(1)+' '+shY(sp.pts[i][1],sc.__shGeo||null).toFixed(1)+' '; } pth.setAttribute('d',d); } }
         function mv(ev){ ev.preventDefault(); var q=shPos(sc,ev),last=sp.pts[sp.pts.length-1];
           if(!last||Math.abs(q.x-last[0])+Math.abs(q.y-last[1])>0.012){ add(ev); if(sp.pts.length>160)sp.pts.shift(); shTouched=true; live(); shPush(); } }
-        function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e0){} svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up);
-          if(sp.pts.length<2)sp.pts=seedPath(); shTouched=true; shPush(); render(); }
-        svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); };
+        function up(ev){ try{svg.releasePointerCapture(ev.pointerId);}catch(e0){} svg.removeEventListener('pointermove',mv); svg.removeEventListener('pointerup',up); svg.removeEventListener('pointercancel',up);
+          if(sp.pts.length<2){ if(prevP&&prevP.length>1){ sp.pts=prevP; sp.pm=prevM; render(); return; } sp.pts=seedPath(); } shTouched=true; shPush(); render(); }   /* fb635 — a click with no stroke restores the drawing (it used to plant the figure-8) */
+        svg.addEventListener('pointermove',mv); svg.addEventListener('pointerup',up); svg.addEventListener('pointercancel',up); };   /* fb635 — a cancelled gesture restores the same way */
       return;
     }
     if(shTool){   // fb213 — a BRUSH is armed: clicks/drags stamp cells (works from stock too — converts first); node editing pauses until Point is re-picked
@@ -30846,7 +30911,15 @@ restoreThemeFromBackend();
               8:'M2 6C2 2.5 7 2.5 7 6C7 9.5 13 9.5 13 6C13 2.5 18 3 18 6',   // Path: a traced loop
               9:'M10 5.5C7 2.5 2 3 2.5 5.5C3 8 7 8.5 10 5.5C13 2.5 17 3 17.5 5.5C18 8 13 8.5 10 5.5',   // fb243 — Lorenz: box-filling butterfly (matches S&H/Path size)
               10:'M9.8 5.6C10.6 5.2 10.9 6.1 10.2 6.6C9.2 7.3 8.2 5.9 8.8 4.8C9.6 3.2 12.2 3.6 12.4 5.6C12.7 8 8.8 8.8 6.8 6.8C4.4 4.4 8 1.6 11.4 2.4C15 3.2 16.4 6.4 14.6 8.4' };   // fb243 — Rossler: box-filling spiral scroll
-  function icon(k,phOff){ if(ICONG[k]) return '<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="'+ICONG[k]+'"/></svg>';
+  /* fb635 — CUSTOM WEARS THE PEN. Max: "I do not like that custom emblem ... it has to be something different." It was
+     the tab's own points drawn small (a ramp, most of the time: it read as a second Saw). Now the vector-edit mark —
+     a curve, its node and the node's two handles — which says "your own shape" and resembles no stock shape. The node
+     is HOLLOW (the curve stops at its edges), so it sits right on any row: plain, hover or the purple current one. */
+  var ICON_CUSTOM='<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round">'
+    +'<path d="M1.5 9.5C5 9.5 6.6 3 8.6 3M11.4 3C13.4 3 15 9.5 18.5 9.5"/><path d="M5.2 3H8.6M11.4 3H14.8" stroke-width=".9"/>'
+    +'<rect x="8.6" y="1.6" width="2.8" height="2.8" rx=".4"/>'
+    +'<circle cx="5.2" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="14.8" cy="3" r="1" fill="currentColor" stroke="none"/></svg>';
+  function icon(k,phOff){ if(k===7) return ICON_CUSTOM; if(ICONG[k]) return '<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="'+ICONG[k]+'"/></svg>';
     phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
   var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
   // Bipolar ring: purple fills from top-center toward the value — RIGHT for +, LEFT for − (so negative shows, fixing the "grayed out" bug).
@@ -30911,11 +30984,18 @@ restoreThemeFromBackend();
 
   // ---- body-level menu (glass) ----
   var menu=document.createElement('div'); menu.className='mv-menu'; document.body.appendChild(menu);
-  function openMenu(items,cur,atEl,cb){
+  function openMenu(items,cur,atEl,cb,fit){
     menu.innerHTML=items.map(function(it,i){return '<div class="'+(i===cur?'cur':'')+'" data-i="'+i+'">'+(it.ic||'')+'<span>'+it.t+'</span></div>';}).join('');
     var r=atEl.getBoundingClientRect();
     menu.style.left=r.left+'px'; menu.style.top=''; menu.style.bottom=(window.__vh()-r.top+6)+'px';
+    menu.classList.remove('fit','tight'); menu.style.maxHeight='';
     menu.classList.add('open');
+    /* fb635 — THE SHAPE MENU HAS NO SCROLL. Max had to scroll to reach Lorenz and Rossler under Path: the glass caps
+       at 228 px and eleven rows are ~274. A `fit` menu takes its natural height; only if the room above the pill is
+       smaller (a small popped window) do the rows tighten, and only if even that fails does it fall back to the cap. */
+    if(fit){ menu.classList.add('fit'); var room=r.top-12;
+      if(menu.scrollHeight>room) menu.classList.add('tight');
+      if(menu.scrollHeight>room) menu.style.maxHeight=Math.max(96,room)+'px'; }
     menu.querySelectorAll('div[data-i]').forEach(function(d){ d.onclick=function(){ cb(+d.getAttribute('data-i')); menu.classList.remove('open'); }; });
   }
   document.addEventListener('mousedown',function(e){ if(menu.classList.contains('open') && !menu.contains(e.target)) menu.classList.remove('open'); }, true);
@@ -30923,7 +31003,7 @@ restoreThemeFromBackend();
   function bindFront(){
     var sb=root.querySelector('#mv-shape');
     // fb239 — the picker router: 0-4 editable seeds · 7 Custom shaper · 8 Path free-draw · 5/6/9/10 generative
-    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){ pickShape(i); }); };
+    if(sb)sb.onclick=function(){ openMenu(SHORT.map(function(s2,i){return {t:s2,ic:icon(i)};}), st.shape, sb, function(i){ pickShape(i); }, true); };
     var dv=root.querySelector('#mv-div');
     if(dv)dv.onclick=function(){ openMenu(DIVORD.map(function(ri){return {t:DIVS[ri]};}), DIVORD.indexOf(st.div), dv, function(i){ var ri=DIVORD[i]; setNorm(cur().div,ri/(NDIV-1)); st.div=ri; render(); }); };   // fb219 — ladder-ordered display
     var bpm=root.querySelector('#mv-bpm'), hz=root.querySelector('#mv-hz');
@@ -31135,8 +31215,15 @@ restoreThemeFromBackend();
         f().then(function(j){ j=String(j||''); if(!j||j===last)return; var first=(last===null); last=j;
           if(first)return;   // seed silently — shPull already loaded boot state
           if(Date.now()-(window.__shTouchT||0)<450)return;
-          try{ var v=JSON.parse(j); (v.shapes||[]).forEach(function(e2){ if(e2.n>=1&&e2.n<=10&&e2.pts&&e2.pts.length>1){
-              shapes[e2.n]={ pts:e2.pts.map(function(q){ return [q[0],q[1],q[2]||0]; }), gh:e2.gh||8, gv:e2.gv||8, sn:e2.sn!==0?1:0, nm:e2.nm||null };
+          try{ var v=JSON.parse(j);
+            /* fb635 — the mirror is the pull's twin: pm, the per-point mods (q[3]) and the parked path survive it (a Path mirrored
+               without pm was re-pushed as a CUSTOM shape and the DSP stopped playing the path), and a tab the blob no longer
+               carries is dropped, not kept from the previous preset. */
+            var seenN={}; (v.shapes||[]).forEach(function(e0){ if(e0&&e0.n) seenN[e0.n]=1; });
+            for(var kk in shapes) if(!seenN[kk]) delete shapes[kk]; for(var km in motion) if(!seenN[km]) delete motion[km];
+            (v.shapes||[]).forEach(function(e2){ if(e2.n>=1&&e2.n<=10&&e2.pts&&e2.pts.length>1){
+              shapes[e2.n]={ pts:e2.pts.map(function(q){ var t3=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')t3[3]=q[3]; return t3; }), gh:e2.gh||8, gv:e2.gv||8, sn:e2.sn!==0?1:0, nm:e2.nm||null, pm:e2.pm?1:0 };
+              if(e2.pp&&e2.pp.length>1) shapes[e2.n].pp=e2.pp.map(function(q){ return [q[0],q[1],q[2]||0]; });
               if(e2.mo)motion[e2.n]={ tg:e2.mo.tg!=null?e2.mo.tg:0, lb:e2.mo.lb!=null?e2.mo.lb:-1, dir:e2.mo.dir||0, mn:e2.mo.mn||0,
                 ri:e2.mo.ri||0, de:e2.mo.de||0, sm:e2.mo.sm||0, sw:e2.mo.sw||0, td:e2.mo.td||0, ho:e2.mo.ho!=null?e2.mo.ho:1, rs:e2.mo.rs||0, pol:e2.mo.pol||0 }; } });
             render(); }catch(e3){} }).catch(function(){}); }catch(e){}
@@ -32202,7 +32289,8 @@ restoreThemeFromBackend();
   var DIVB=[32,16,8,4,2,1,0.5,0.25,0.125,1.5,0.75,2/3,1/3,1/6,128,64,0.0625,0.03125,0.015625];   // fb219 tail appended
   var SHA=[.65,.2,.85,.4,.95,.15,.7,.35], RPA=[.5,.85,.15,.7,.3,.95,.2,.6,.4,.5];
   function mval(k,t,n){ t=((t%1)+1)%1;
-    if(k===7)return window.__lfoCustomEval?window.__lfoCustomEval(n||1,t):0;   // fb206 — drawn shape (shared eval, cross-IIFE via window)
+    if(k===7)return window.__lfoCustomEval?window.__lfoCustomEval(n||1,t):0;
+    if(k===8)return window.__lfoPathEval?window.__lfoPathEval(n||1,t):0;   // fb635 — the drawn Path, along its arc length   // fb206 — drawn shape (shared eval, cross-IIFE via window)
     if(k===0)return Math.sin(t*6.2831853); if(k===1)return 1-4*Math.abs(t-0.5);
     if(k===2)return 2*t-1; if(k===3)return 1-2*t; if(k===4)return t<0.5?1:-1;
     if(k===5){var i=Math.floor(t*SHA.length)%SHA.length;return SHA[i]*2-1;}
@@ -32211,7 +32299,7 @@ restoreThemeFromBackend();
   function lfoHz(n){ var sy=ss('LFO'+n+'_SYNC'), rt=ss('LFO'+n+'_RATE'), dv=ss('LFO'+n+'_DIV');
     if(sy&&sy.getNormalisedValue()>0.5){ var di=dv?Math.round(dv.getNormalisedValue()*(DIVB.length-1)):5; return (120/60)/(DIVB[di]||1); }   // fb219 — norm scale = N-1, never a hardcode (the *13 trap)
     return rt?rt.getScaledValue():1; }
-  function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*7):0; }   // fb206 — 8 choices (CUSTOM appended); norm scale = N-1
+  function lfoShape(n){ var s=ss('LFO'+n+'_SHAPE'); return s?Math.round(s.getNormalisedValue()*((window.__LFO_NSHAPE||11)-1)):0; }   /* fb635 — 11 choices since fb239/fb240 (Path · Lorenz · Rossler): the *7 read Custom as S&H and Path as Random */   // fb206 — 8 choices (CUSTOM appended); norm scale = N-1
   function lfoMaster(n){ var s=ss('LFO'+n+'_DEPTH'); return s?s.getScaledValue():0.35; }
   var phase=[0,0,0,0,0,0,0,0,0,0], lastT=0;
   // resolve a route's live target element — LFO→LFO tabs re-render (and page), so look them up fresh
@@ -34210,11 +34298,11 @@ restoreThemeFromBackend();
       function cardSync(id,sc,S,card){
         function NF(n){ try{ return (window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction(n):null; }catch(e){ return null; } }
         var setF=NF('setCardState'), getF=NF('getCardState'), t=null;
-        function pushNow(){ if(setF){ try{ setF(id, JSON.stringify(sc.getState())); }catch(e){} } }
+        function pushNow(){ if (window.__tiRestoring) return; if (card.__absent && !(window.__tiGestureLive && window.__tiGestureLive())) return; if(setF){ try{ setF(id, JSON.stringify(sc.getState())); }catch(e){} } }
         /* fb622 — a restore must not write back. Every parameter-driven S.set during a preset load
            schedules a push, and a push that lands before the pull resolves writes the OLD chain
            straight back into the processor — then the pull reads the stale blob it just wrote. */
-        function push(){ if (window.__tiRestoring) return; clearTimeout(t); t=setTimeout(pushNow,200); }
+        function push(){ if (window.__tiRestoring) return; if (card.__absent) { if (!(window.__tiGestureLive && window.__tiGestureLive())) return; card.__absent = 0; } clearTimeout(t); t=setTimeout(pushNow,200); }
         function pull(){ if(!getF)return;
           try{ Promise.resolve(getF(id)).then(function(x){ if(!x)return;
             try{ var st=JSON.parse(String(x)); if(st&&st.chain&&st.chain.length) sc.setState(st,true); }catch(e){} }).catch(function(){}); }catch(e){} }
@@ -34227,7 +34315,7 @@ restoreThemeFromBackend();
            chop's lane) actually change. */
         function pullOrClear(){ if(!getF)return;
           try{ Promise.resolve(getF(id)).then(function(x){ var st=null; try{ st=x?JSON.parse(String(x)):null; }catch(e){}
-            try{ if(st&&st.chain&&st.chain.length) sc.setState(st,false); else sc.setState({chain:[]},false); }catch(e){} }).catch(function(){}); }catch(e){} }
+            try{ if(st&&st.chain&&st.chain.length){ card.__absent=0; sc.setState(st,false); } else { card.__absent=1; sc.setState({chain:[]},false); } }catch(e){} }).catch(function(){}); }catch(e){} }
         (window.__tiCardPulls=window.__tiCardPulls||[]).push(pullOrClear);
         sc.onMutate=push;
         S.on(function(){ push(); });
@@ -35549,6 +35637,7 @@ restoreThemeFromBackend();
     c:(function(){ var pF=[],i; for(i=0;i<=16;i++){ var x=i/16; pF.push([+x.toFixed(4),+(0.5+0.42*Math.sin(x*4.712389-2.3561945)).toFixed(4),0]); } return pF; })(),   // sine fold = bank C (fb330)
     d:[[0,0,0],[0.6667,1,0],[0.668,0,0],[1,0.5,0]],   // wrap saw = bank D (fb330)
     bars:[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0] };
+  var CV0=JSON.parse(JSON.stringify({ a:CV.a, b:CV.b, c:CV.c, d:CV.d, bars:CV.bars, gh:CV.gh, gv:CV.gv, sn:CV.sn }));   /* what a cleared blob restores */
   var card=null, crvSh=null, hero=null, foot=null, hdrChip=null, pSig=null, sel=-1, pushT=null, lastPush='', lastM=-1;
   window.__crvTouchT=0;
   function PS(id,def){ try{ if(window.__cardOnly&&window.__synSliderShim) return window.__synSliderShim(id,def);
@@ -35757,6 +35846,7 @@ restoreThemeFromBackend();
   function cPush(){ window.__crvTouchT=Date.now(); if(pushT)return; pushT=setTimeout(function(){ pushT=null; try{ curHost().push(); }catch(e){} },40); }   /* fb559 — whichever host is mounted */
   window.__crvFlush=function(){ if(!pushT) return; clearTimeout(pushT); pushT=null; try{ curHost().push(); }catch(e){} };   /* fb570 — a popped window's Dock/✕ must not lose the last 40 ms of ink */
   function applyBlob(j){ try{ var v=JSON.parse(j); if(!v)return;
+    if(!(v.a||v.b||v.c||v.d||v.bars)){ var z=JSON.parse(JSON.stringify(CV0)); CV.a=z.a; CV.b=z.b; CV.c=z.c; CV.d=z.d; CV.bars=z.bars; CV.gh=z.gh; CV.gv=z.gv; CV.sn=z.sn; CV.src=''; return; }
     function mpIn(q){ var p2=[q[0],q[1],q[2]||0]; if(q[3]&&typeof q[3]==='object')p2[3]=q[3]; return p2; }   /* fb340 — mods survive the round-trip */
     if(v.a&&v.a.length>1) CV.a=v.a.map(mpIn);
     if(v.b&&v.b.length>1) CV.b=v.b.map(mpIn);
@@ -39013,15 +39103,21 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       var kEls = document.querySelectorAll ('#noise-mod .noise-knobs .knob');
       Array.prototype.forEach.call (kEls, function (k, idx) { if (k._nw || ! KN[idx]) return; k._nw = true; wireKnob (k, KN[idx]); });
       var ne0 = nName (); if (ne0) ne0.textContent = FLAT[cur];
-      // sync from APVTS (reflect defaults + survive reopen) — no writes on load
-      getP ('SYN_NOISE_ON',   function (v) { on = v > 0.5; applyOn (); });
-      getP ('SYN_NOISE_TYPE', function (v) { cur = Math.round (v * (FLAT.length - 1)); var ne = nName (); if (ne) ne.textContent = FLAT[cur]; });
-      Array.prototype.forEach.call (kEls, function (k, idx) { if (! KN[idx]) return; getP (KN[idx].id, function (v) { if (k._setv) k._setv (v); }); });
-      // fb66 — restore play mode (param) + viz mode (UI state) + wire the right-click engine.
-      getP ('SYN_NOISE_PLAYMODE', function (v) { playMode = Math.max (0, Math.min (2, Math.round (v * 2))); });
-      getP ('SYN_NOISE_WIDTH', function (v) { noiseWidth = Math.max (0, Math.min (2, v * 2)); });   // fb69 — restore stereo width
-      var gvm = nfnJ ('getNoiseVizMode');
-      if (gvm) { try { Promise.resolve (gvm ()).then (function (v) { vizMode = (parseInt (v, 10) === 2) ? 2 : 1; if (vizMode === 2) refreshWave (); }).catch (function () {}); } catch (e) {} }
+      /* fb635 — THE NOISE READS ITSELF BACK ON EVERY PRESET LOAD. Max: "the noise might be on, but visually it's off ...
+         and it gets rid of the settings too." Every value below was read ONCE, here at boot (getSynParam — the noise
+         has no relays), so a loaded patch played its noise while the pill, the type and the knobs kept the previous
+         patch. resync() is that same read, callable: repull() runs it after every load. No writes — it only reads. */
+      function resync () {
+        getP ('SYN_NOISE_ON',   function (v) { on = v > 0.5; applyOn (); });
+        getP ('SYN_NOISE_TYPE', function (v) { cur = Math.round (v * (FLAT.length - 1)); var ne = nName (); if (ne && ! sampleActive) ne.textContent = FLAT[cur]; });   /* fb635 — a loaded sample keeps its own name */
+        Array.prototype.forEach.call (kEls, function (k, idx) { if (! KN[idx]) return; getP (KN[idx].id, function (v) { if (k._setv) k._setv (v); }); });
+        // fb66 — restore play mode (param) + viz mode (UI state) + wire the right-click engine.
+        getP ('SYN_NOISE_PLAYMODE', function (v) { playMode = Math.max (0, Math.min (2, Math.round (v * 2))); });
+        getP ('SYN_NOISE_WIDTH', function (v) { noiseWidth = Math.max (0, Math.min (2, v * 2)); });   // fb69 — restore stereo width
+        var gvm2 = nfnJ ('getNoiseVizMode');
+        if (gvm2) { try { Promise.resolve (gvm2 ()).then (function (v) { vizMode = (parseInt (v, 10) === 2) ? 2 : 1; refreshWave (); }).catch (function () {}); } catch (e) {} }
+      }
+      resync (); window.__tiNoiseResync = resync;   /* (the view-mode read that stood here is inside resync now) */
       var nmod = document.getElementById ('noise-mod');
       if (nmod && ! nmod._nctx) { nmod._nctx = true; nmod.addEventListener ('contextmenu', openNoiseCtx); }
       refreshWave ();
@@ -39046,7 +39142,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
   // when a note sounds. (The static single-cycle renderer is retained as drawOscStatic for a
   // future dedicated wavetable / 3D view, but it's no longer the idle render.)
   function drawOsc(o) {
-    if (wtWaterfall.on[o]) return;   // 3D waterfall owns this osc's canvas
+    if (wtWaterfall.on[o]) { wtWaterfall.kick(); return; }   // 3D waterfall owns this osc's canvas · fb635 — and a redraw (a reveal) restarts its parked loop
     var cv = document.getElementById('osc-wave-' + o);
     if (!cv) return;
     // Live loop driving this VISIBLE osc → it owns the canvas; skip to avoid double-paint /
@@ -40132,7 +40228,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     rowsBuilt = -1; S.curId = findCur();
     if (S.sel >= S.presets.length) S.sel = S.curId;
   }
-  function rescan() { return call('listPresets').then(j => { if (j != null) ingest(j); renderAll(); }); }
+  function rescan() { return Promise.all([call('listPresets'), pullFavs()]).then(([j]) => { if (j != null) ingest(j); renderAll(); }); }   /* fb635 — hearts re-read with every scan */
   function renderAll() { setHeader(); if (browserOpen()) { buildChips(); renderRail(); renderRows(); renderInsp(); } renderQuick(); }
 
   /* ═══ HEADER ═══════════════════════════════════════════════════════════════════════════════════ */
@@ -40157,7 +40253,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function openSaveMenu() {
     const p = S.curId >= 0 ? S.presets[S.curId] : null, canSave = !!(p && p.user);
     const r = $('preset-save-btn').getBoundingClientRect();
-    menuAt(r.left, r.bottom + 4, `<div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
+    menuAt(r.left, r.bottom + 4, `<div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span></div>
       <div class="pi" data-a="saveas"><span class="nm">Save as</span></div>
       <div class="pi" data-a="export"><span class="nm">Export preset</span></div>
       <div class="pi" data-a="init"><span class="nm">Init preset</span></div>`,
@@ -40178,7 +40274,9 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     call('initPatch').then(r => { if (isErr(r)) toast(errOf(r)); else toast('Init — a clean patch to build on'); });
   }
   window.onPresetExported = r => { if (isErr(r)) toast(errOf(r)); else toast(`Exported <span class="tp-bk">${esc(String(r).split('/').pop())}</span>`); };
-  document.addEventListener('keydown', e => { if ((e.metaKey || e.ctrlKey) && !e.altKey && String(e.key).toLowerCase() === 's') { e.preventDefault(); if (e.shiftKey) openSave(); else saveCurrent(); } });
+  /* fb635 — NO SAVE SHORTCUT. Max: "take away that Control S ... I use FL Studio and it might confuse people, and
+     sometimes I don't want to Ctrl-S and accidentally override a preset." Cmd/Ctrl+S belongs to the host (it saves
+     the PROJECT); a preset is saved only from the Save menu or the Save sheet. The menu row lost its ⌘S hint too. */
 
   /* ═══ QUICK MENU — click the name; pick a bank (click, never hover), then a preset ═══════════════ */
   function quickOpen() { return $('tp-q').classList.contains('on'); }
@@ -40188,7 +40286,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     surfaceUp();   /* fb626 */
     if (!on) return;
     S.qBank = S.curId >= 0 ? S.presets[S.curId].bank : (bankOf(S.cur.bank) ? S.cur.bank : (S.banks[0] ? S.banks[0].name : null));
-    renderQuick();
+    renderQuick(); pullFavs().then(() => { if (quickOpen()) renderQuick(); });   /* fb635 — a heart set in another instance */
     const r = $('preset-name').getBoundingClientRect(); placeMenu($('tp-q'), r.left - 40, r.bottom + 6);
   }
   function renderQuick() {
@@ -40251,7 +40349,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function openBrowser() {
     $('tp-b').classList.add('on'); window.__tiFrozen = true;   /* the glass covers every painter; nothing under it needs a frame */
     surfaceUp();     /* fb624/fb626 — the page's floating overlays stand down */
-    S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp();
+    S.sel = S.curId >= 0 ? S.curId : S.sel; buildChips(); renderRail(); renderRows(); renderInsp(); pullFavs().then(() => { if (browserOpen()) { renderRows(); renderInsp(); } });   /* fb635 */
     if (S.sel < 0) { const v = visibleIds(); if (v.length) { S.sel = v[0]; renderRows(); renderInsp(); } }
     $('tp-list').focus();
   }
@@ -40310,6 +40408,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const native = p.user ? 'movePresetFile' : 'copyPresetFile';
     call(native, p.path, bank).then(r => {
       if (isErr(r)) { toast(errOf(r)); return; }
+      if (p.user) refav(p.bank, p.name, bank, p.name);   /* fb635 — the heart moves with it (a copy starts unhearted) */
       if (p.id === S.curId && p.user) { S.cur.bank = bank; call('setPresetMeta', JSON.stringify(S.cur)); }
       rescan().then(() => toast(p.user ? `Moved ${esc(p.name)} to ${esc(bank)}` : `Copied ${esc(p.name)} to ${esc(bank)}`));
     });
@@ -40322,7 +40421,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
   function stripEdge(st) { st.classList.toggle('end', st.scrollLeft + st.clientWidth >= st.scrollWidth - 2); }
   document.querySelectorAll('#tp-b .chips .strip').forEach(st => {
-    st.addEventListener('wheel', e => { if (Math.abs(e.deltaX) < Math.abs(e.deltaY)) { st.scrollLeft += e.deltaY; e.preventDefault(); } }, { passive: false });
+    /* fb635 — NO WHEEL HIJACK. The strips wrap (flex-wrap), so there is nothing to scroll sideways: the old handler
+       turned every vertical wheel over a chip into scrollLeft += deltaY (a no-op) and preventDefault()ed it, which
+       stopped the inspector dead whenever the pointer crossed Type or Style (Max had to middle-click-drag). The wheel
+       now always belongs to the inspector's own scroller (.iscroll). */
     st.addEventListener('scroll', () => stripEdge(st));
   });
   function renderRail() {
@@ -40472,6 +40574,23 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function saveNote(p) { if (!p.user || !p.path) return; if (p.__savedNote === p.note) return; p.__savedNote = p.note;
     call('updatePresetMeta', p.path, JSON.stringify({ note: p.note })).then(r => { if (isErr(r)) toast(errOf(r)); });
     if (p.id === S.curId) { S.cur.note = p.note; call('setPresetMeta', JSON.stringify(S.cur)); } }
+  /* fb635 — THE HEART IS REMEMBERED. Max: "every time I favourite a preset and load up a new instance, it doesn't save — my
+     heart is gone ... Terrain has to remember you favourited this." The C++ writes <userRoot>/favourites.json as
+     {"keys":["Bank/Name", …]} (tw::bank::setFavourite) and every heart WAS saved (his file held "User/Clic Up" and
+     "User/Kassava"), but boot assigned that object straight to S.favs, a MAP keyed by "Bank/Name" — so no key ever matched
+     and every new instance drew every heart dark. The heart only showed in the session that clicked it. favsFrom reads the
+     file's own format (and a map, should one exist); pullFavs re-reads it on every scan / browser open / quick menu, so a
+     heart set in another instance appears too; refav carries a heart through a rename, a move or a pack rename (the key is
+     the preset's NAME, which only the page knows: the file name is sanitised) and drops it on a delete. */
+  function favsFrom(j) { let o = null; try { o = typeof j === 'string' ? JSON.parse(j || 'null') : j; } catch (e) {}
+    const m = {}; if (o && Array.isArray(o.keys)) o.keys.forEach(k => { if (typeof k === 'string' && k) m[k] = true; });
+    else if (o && typeof o === 'object') for (const k in o) if (o[k] === true) m[k] = true;
+    return m; }
+  function pullFavs() { return Promise.resolve(call('getFavourites')).then(j => { if (j != null) S.favs = favsFrom(j); }).catch(() => {}); }
+  function refav(oldBank, oldName, newBank, newName) {
+    const ok = favKey({ bank: oldBank, name: oldName }); if (!S.favs[ok]) return;
+    delete S.favs[ok]; call('setFavourite', oldBank, oldName, false);
+    if (newBank != null && newName != null) { S.favs[favKey({ bank: newBank, name: newName })] = true; call('setFavourite', newBank, newName, true); } }
   function toggleFav(id) { const p = S.presets[id]; if (!p) return; const k = favKey(p), on = !S.favs[k];
     if (on) S.favs[k] = true; else delete S.favs[k];
     call('setFavourite', p.bank, p.name, on); renderRows(); renderInsp(); renderQuick(); }
@@ -40546,13 +40665,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
   function askDelete(id) { const p = S.presets[id]; if (!p || !p.user) return;
     sheet({ title: 'Delete preset', body: `<div class="tp-text">Delete <b>${label(p)}</b>? This cannot be undone.</div>`, ok: 'Delete', onOk: () => {
-      closeSheet(); call('deletePresetFile', p.path).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+      closeSheet(); call('deletePresetFile', p.path).then(r => { if (isErr(r)) { toast(errOf(r)); return; } refav(p.bank, p.name, null, null);   /* fb635 */
         if (S.sel === id) S.sel = -1; rescan().then(() => toast(`Deleted <span class="tp-bk">${esc(p.bank)} - </span>${esc(p.name)}`)); }); } }); }
   function askRename(id) { const p = S.presets[id]; if (!p || !p.user) return;
     sheet({ title: 'Rename preset', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-rn" maxlength="40" value="${esc(p.name)}"></div>`, ok: 'Rename', focus: 'tp-rn', onOk: () => {
       const n = tidy($('tp-rn').value); if (!n) { $('tp-rn').focus(); return; } if (n === p.name) { closeSheet(); return; }
       closeSheet(); const wasCur = id === S.curId;
-      call('renamePresetFile', p.path, n).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+      call('renamePresetFile', p.path, n).then(r => { if (isErr(r)) { toast(errOf(r)); return; } refav(p.bank, p.name, p.bank, n);   /* fb635 — the heart keeps its preset */
         if (wasCur) { S.cur.name = n; call('setPresetMeta', JSON.stringify(S.cur)); }
         rescan().then(() => toast(`${esc(p.name)} is now <span class="tp-bk">${esc(n)}</span>`)); }); } }); }
   function openBankCtx(e, bk) {
@@ -40565,11 +40684,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
         closeSheet(); const old = bk.name, curIn = same(S.cur.bank, old);
         call('renameBank', old, w).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+          Object.keys(S.favs).filter(k => k.startsWith(String(old).trim() + '/')).forEach(k => { const nm = k.slice(String(old).trim().length + 1); refav(old, nm, w, nm); });   /* fb635 — every heart in the pack follows it */
           if (curIn) { S.cur.bank = w; call('setPresetMeta', JSON.stringify(S.cur)); }
           if (same(S.bank, old)) S.bank = w; if (same(S.qBank, old)) S.qBank = w;
           rescan().then(() => toast(`${esc(old)} is now <span class="tp-bk">${esc(w)}</span> · every preset re-filed`)); }); } });
       if (a === 'remove') sheet({ title: 'Remove bank', body: `<div class="tp-text">Remove <b>${esc(bk.name)}</b> and its ${bk.n} preset${bk.n === 1 ? '' : 's'}? This cannot be undone.</div>`, ok: 'Remove', onOk: () => {
         closeSheet(); call('deleteBank', bk.name).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
+          Object.keys(S.favs).filter(k => k.startsWith(String(bk.name).trim() + '/')).forEach(k => refav(bk.name, k.slice(String(bk.name).trim().length + 1), null, null));   /* fb635 */
           if (same(S.bank, bk.name)) S.bank = null; if (same(S.qBank, bk.name)) S.qBank = null; S.sel = -1;
           rescan().then(() => toast(`Removed ${esc(bk.name)}`)); }); } });
     });
@@ -40638,7 +40759,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     if (!NF('loadPatchFile')) { window.onPatchLoaded(JSON.stringify({ name: p.name, bank: p.bank, author: p.author, type: p.type, styles: p.styles.join(','), note: p.note, fv: p.fv })); return; }   /* preview: no backend */
     call('loadPatchFile', p.path).then(r => { if (isErr(r)) { loadDone(); toast(errOf(r)); } });
   }
-  window.onPatchLoaded = function (meta) {
+  window.onPatchLoaded = function (meta, how) {   /* fb635 — how: 'host' = a host-driven restore (undo, A/B, host preset recall) */
     loadDone();
     /* fb622 — hold every card's write-back until the restore has settled. The parameter relays fire
        at once, but the shim-bound flow-card controls only notice a preset on their next 700 ms poll,
@@ -40647,7 +40768,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     clearTimeout(restoreHold); restoreHold = setTimeout(() => { window.__tiRestoring = false; }, 900);
     setCurrent(meta);
     if (browserOpen()) { renderRows(); renderInsp(); } renderQuick();
-    toast(S.cur.name ? `Loaded <span class="tp-bk">${esc(S.cur.bank)} - </span>${esc(S.cur.name)}` : 'Loaded');
+    if (how !== 'host') toast(S.cur.name ? `Loaded <span class="tp-bk">${esc(S.cur.bank)} - </span>${esc(S.cur.name)}` : 'Loaded');
     repull();
   };
   /* every widget that SEEDED itself from a native at boot re-seeds here — the C++ has already pushed the
@@ -40669,10 +40790,20 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       if (window.__tiPills) window.__tiPills.pull(rebuildRack); else rebuildRack();
     });
     T(() => { const W = window.wtWaterfall; if (W && W.restoreView) W.restoreView(true); });   /* fb622 — waterfall vs scope is part of the patch */
-    T(() => window.__tiRestoreNoiseSel && window.__tiRestoreNoiseSel());
+    /* fb635 — the two modules that read their state ONCE at boot (getSynParam, no relays) read it again: the noise
+       (on · type · level · scan · pan · play mode · width · view) and the filter back panel (routing pills · poles ·
+       drive type · spread). A second pass after the relays settle costs two dozen reads and nothing else. */
+    T(() => window.__tiNoiseResync && window.__tiNoiseResync());
+    T(() => window.__tiBlendRefresh && window.__tiBlendRefresh());
+    T(() => window.__tiRestoreNoiseSel && window.__tiRestoreNoiseSel());   /* after the type read: a sample's own name lands last */
+    T(() => window.__tiFltBackSync && window.__tiFltBackSync());
+    T(() => (window.__tiPhaseReaders || []).forEach(f => { try { f(); } catch (e) {} }));
+    T(() => window.__crvPull && window.__crvPull());   /* fb635 — the curve card re-reads its blob AND its Table source (CV.tsrc was boot-only) */
+    T(() => setTimeout(() => { try { window.__tiNoiseResync && window.__tiNoiseResync(); window.__tiFltBackSync && window.__tiFltBackSync(); } catch (e) {} }, 450));
     T(() => typeof syncDeepStateFromCpp === 'function' && syncDeepStateFromCpp());
     T(() => { if (typeof getModStateFn !== 'undefined' && getModStateFn && typeof restoreModState === 'function') Promise.resolve(getModStateFn()).then(j => { if (j) restoreModState(j); }).catch(() => {}); });
     T(() => { const W = window.wtWaterfall; if (W && W.fetch) ['a', 'b', 'c', 'd'].forEach(o => W.fetch(o)); });
+    T(() => ['a', 'b', 'c', 'd'].forEach(o => window.__oscFaceHeal && window.__oscFaceHeal(o)));   /* fb635 — Max: "every time we load up a preset, an automatic heal" */
   }
 
   /* ═══ THE LOADING OVERLAY ══════════════════════════════════════════════════════════════════════
@@ -40882,13 +41013,13 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   /* ═══ BOOT — the current name, the catalogue, favourites, vocabulary ═══════════════════════════ */
   function boot() {
     call('getPresetMeta').then(m => { if (m != null) setCurrent(m); else setHeader(); });
-    call('getFavourites').then(j => { try { const o = JSON.parse(j || 'null'); if (o && typeof o === 'object') S.favs = o; } catch (e) {} });
+    pullFavs();   /* fb635 — the file's {keys:[…]}, not a raw assign */
     call('getVocab').then(j => { try { const o = JSON.parse(j || 'null'); if (o && Array.isArray(o.types) && o.types.length) S.types = o.types.map(tidy); if (o && Array.isArray(o.styles) && o.styles.length) S.styles = o.styles.map(tidy); } catch (e) {} S.vocabLoaded = true; })
       .then(() => rescan());
   }
   setHeader();
   if (window.Juce && window.Juce.getNativeFunction) boot(); else setTimeout(() => { if (window.Juce && window.Juce.getNativeFunction) boot(); }, 900);
-  window.__tiPresets = { rescan, openBrowser, load, state: S };   /* the gate hook */
+  window.__tiPresets = { rescan, openBrowser, load, state: S, askRename };   /* the gate hook (fb635: + askRename) */
 })();
 </script>
 </body>

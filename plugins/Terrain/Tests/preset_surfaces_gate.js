@@ -252,7 +252,7 @@ const STUB = (MUT) => {
     '[5] SELECT + INSPECTOR — a click names the row; a factory note is read-only, a user note is editable', `${ins.sel} / ${ins.nm} readonly ${ins.ro} · ${ins2.nm} editable ${ins2.ed}`);
 
   // [6] the load
-  const hooks = await p.evaluate (() => { window.__hookCalls = {}; const names = ['__tiSeedMacroNames', '__tiPullLfoShapes', '__tiPullDynEnvs', '__tiModRestoreStrict', '__tiPullArpLanes', '__tiRestoreNoiseSel'];
+  const hooks = await p.evaluate (() => { window.__hookCalls = {}; const names = ['__tiBlendRefresh', '__crvPull', '__tiSeedMacroNames', '__tiPullLfoShapes', '__tiPullDynEnvs', '__tiModRestoreStrict', '__tiPullArpLanes', '__tiRestoreNoiseSel'];
     const have = []; for (const n of names) { const real = window[n]; if (typeof real !== 'function') continue; have.push (n); window.__hookCalls[n] = 0;
       window[n] = function () { window.__hookCalls[n]++; return real.apply (this, arguments); }; }
     /* fb622 — the two the owner caught by eye. The FX rack rebuild and the wavetable view restore

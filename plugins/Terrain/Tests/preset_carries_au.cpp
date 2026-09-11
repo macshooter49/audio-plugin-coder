@@ -6,6 +6,7 @@
 //    door a DAW uses — and reads the <preset carries="…"> the plugin writes back. A green bar here is
 //    the number the browser will show.
 //
+//    CA_MUT=flowblob  the control for bar [7]: expects the dark card blobs to count 3 — the fb635 tile rule makes it fail.
 //    CA_MUT=ungated   the control: bar [1] flips to expect the Michael Myers shape to count ONE — a
 //                     plugin that correctly counts 0 makes the mutated run fail, which is the point.
 //    argv[1]          a payload dir with osc.b64 (Tests/preset_carries_cert --emit) — bar [3] embeds it
@@ -40,6 +41,13 @@ static int smpOf (const std::string& xml)
     return std::atoi (j.c_str() + c + 1);
 }
 static int fvOf (const std::string& xml) { const auto v = childAttr (xml, "fv"); return v.empty() ? -1 : std::atoi (v.c_str()); }
+static int carryOf (const std::string& xml, const char* k)   // fb635 — any kind out of <preset carries="…">
+{
+    const std::string j = childAttr (xml, "carries"), key = std::string ("\"") + k + "\"";
+    const size_t at = j.find (key); if (at == std::string::npos) return -1;
+    const size_t c = j.find (':', at); if (c == std::string::npos) return -1;
+    return std::atoi (j.c_str() + c + 1);
+}
 
 // "TRN1" · u32 manifestLen · manifest · u32 chunkLen · chunk(VC2! · u32 len · xml · NUL)
 static bool unwrapTerrain (const std::string& path, std::string& xmlOut)
@@ -127,7 +135,7 @@ int main (int argc, char** argv)
     }
     else std::printf ("  SKIP  [3] no payload dir — run Tests/preset_carries_cert --emit <dir> and pass it\n");
     // ── [4] the manifest's format version ─────────────────────────────────────────────────────
-    chk (fvOf (out) == 3, "[4] THE <preset> CHILD SAYS fv 3 — a count made with the engine rule", "fv=" + std::to_string (fvOf (out)));
+    chk (fvOf (out) == 4, "[4] THE <preset> CHILD SAYS fv 4 — a count made with the engine AND the on/off rules (fb635)", "fv=" + std::to_string (fvOf (out)));
     // ── [5] Michael Myers itself, when the file is on this machine ────────────────────────────
     {
         const char* home = std::getenv ("HOME");
@@ -136,8 +144,8 @@ int main (int argc, char** argv)
         if (unwrapTerrain (mm, xml))
         {
             roundTrip (xml, out);
-            chk (smpOf (out) == 0 && fvOf (out) == 3 && getRootAttr (out, "oscSamplePath0").empty(),
-                 "[5] MICHAEL MYERS ITSELF — the file's own chunk through the installed AU: smp 0, fv 3, and the fossil hint is gone from the state",
+            chk (smpOf (out) == 0 && fvOf (out) == 4 && getRootAttr (out, "oscSamplePath0").empty(),
+                 "[5] MICHAEL MYERS ITSELF — the file's own chunk through the installed AU: smp 0, fv 4, and the fossil hint is gone from the state",
                  "smp=" + std::to_string (smpOf (out)) + " fv=" + std::to_string (fvOf (out)) + "  A engine=" + std::to_string ((int) getParam (out, "SYN_OSC_A_ENGINE"))
                  + "  hint back=\"" + getRootAttr (out, "oscSamplePath0") + "\"");
         }
@@ -152,6 +160,23 @@ int main (int argc, char** argv)
         chk (fossilBack.empty() && fossilSmp == 0 && absBack == ABS && absSmp == 0,
              "[6] A BARE-NAME HINT DIES ON LOAD AND NEVER TRAVELS AGAIN — an absolute path that is merely missing keeps its name (and, being a name, counts nothing)",
              "fossil back=\"" + fossilBack + "\" smp=" + std::to_string (fossilSmp) + "  absolute back=\"" + absBack + "\" smp=" + std::to_string (absSmp));
+    }
+    // ── [7] fb635 — THE FLOW CARDS THAT ARE ON. Max: "I turn the flow cards off. Every time I save it, it says carrying
+    //    3 flow cards." 4th Of July's shape: three dice-rolled card blobs (arp · chop · gli) and every tile dark → 0; light
+    //    Glitch → 1. CA_MUT=flowblob expects the blob count (3) for the dark case — a counter that counts tiles makes it fail.
+    {
+        std::string P = virgin;
+        setRootAttr (P, "cardStates", "{\"arp\":\"{\\\"cur\\\":1}\",\"chop\":\"{\\\"cur\\\":1}\",\"gli\":\"{\\\"cur\\\":1}\"}");
+        bool ok = true; for (int i = 1; i <= 4; ++i) ok = setParam (P, "FLOW_CHAIN_" + std::to_string (i), 0.0) && ok;
+        ok = setParam (P, "FLOW_MODE", 0.0) && ok;
+        roundTrip (P, out); const int dark = carryOf (out, "flow"); const bool blobsKept = ! getRootAttr (out, "cardStates").empty();
+        ok = setParam (P, "FLOW_CHAIN_1", 3.0) && setParam (P, "FLOW_MODE", 3.0) && ok;
+        roundTrip (P, out); const int lit = carryOf (out, "flow");
+        const int wantDark = (mut == "flowblob") ? 3 : 0;
+        chk (ok && dark == wantDark && lit == 1 && blobsKept,
+             "[7] A FLOW CARD IS CARRIED WHILE ITS TILE IS LIT — three card blobs with every tile dark carry 0; Glitch lit carries 1; the blobs stay in the state",
+             "dark=" + std::to_string (dark) + " (want " + std::to_string (wantDark) + ")  lit=" + std::to_string (lit) + "  blobs kept=" + (blobsKept ? "yes" : "NO")
+             + (ok ? "" : "  (a FLOW PARAM was missing from the virgin state)"));
     }
     return summary();
 }
