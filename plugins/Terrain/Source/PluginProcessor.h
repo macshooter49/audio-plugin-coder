@@ -580,6 +580,7 @@ public:
     void changeProgramName (int index, const juce::String& newName) override;
 
     void getStateInformation (juce::MemoryBlock& destData) override;
+    juce::ValueTree buildStateTree();   // fb632 — the tree getStateInformation serialises; getCarriesJson prices it
     void setStateInformation (const void* data, int sizeInBytes) override;
 
     // ═══ fb618 — THE PRESET ═══════════════════════════════════════════════════════════════════
@@ -636,8 +637,9 @@ public:
     void         setPatcherJson (const juce::String& j);
 
     // fb621 — what the CURRENT patch carries, so the save sheet can price a preset before it has a
-    // file (the browser prices saved ones from their own manifests).
-    juce::String getCarriesJson() const;
+    // file (the browser prices saved ones from their own manifests). fb632 — the file's own counter
+    // (Source/PresetCarries.h) on buildStateTree(): the sheet and the manifest cannot disagree.
+    juce::String getCarriesJson();
 
     // fb522 · LANE P — the version-3 blob migration. Runs inside setStateInformation, on the
     // ValueTree, BEFORE apvts.replaceState() and BEFORE synModJson is handed to
@@ -2338,6 +2340,7 @@ private:
     //  (Tests/preset_roundtrip_cert.cpp): a load stores the string it decoded, so the next save
     //  writes those exact bytes back instead of re-encoding a decoded buffer into a near-miss.
     std::array<juce::String, 4>               assetB64Osc_ {}, assetB64Layer_ {}, assetB64Wt_ {};
+    std::mutex                                stateBuildLock_;   // fb632 — buildStateTree() has two callers (host save · save sheet)
     std::array<juce::String, (size_t) 6>      assetB64Ir_ {};
     std::array<juce::uint64, 4>               assetKeyOsc_ {}, assetKeyLayer_ {}, assetKeyWt_ {};
     std::array<juce::uint64, (size_t) 6>      assetKeyIr_ {};

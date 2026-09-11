@@ -256,6 +256,25 @@ inline bool rewriteMeta (const juce::File& f, const juce::File& userRoot, const 
     return true;
 }
 
+// fb632 — the heal's writer (Source/PresetCarries.h::healCatalogue): the chunk the caller already
+// parsed, its <preset> child re-stamped with the recomputed carries and fv, wrapped back with a
+// manifest read off that child — the same one-source-of-truth path writePreset/rewriteMeta take —
+// and the file's mtime put back, because a corrected number is not an edit.
+inline bool rewriteCarries (const juce::File& f, const juce::File& userRoot, juce::XmlElement& xml,
+                            const juce::String& carriesJson, int fv, juce::String& err)
+{
+    if (! isInside (f, userRoot)) { err = "outside the user root"; return false; }
+    auto* pe = xml.getChildByName ("preset");
+    if (pe == nullptr) { pe = new juce::XmlElement ("preset"); xml.insertChildElement (pe, 0); }
+    pe->setAttribute ("carries", carriesJson); pe->setAttribute ("fv", fv);
+    const auto mtime = f.getLastModificationTime();
+    juce::MemoryBlock chunk2; xmlToChunk (xml, chunk2);
+    juce::MemoryOutputStream out; wrap (out, manifestFromChild (*pe), chunk2);
+    if (! f.replaceWithData (out.getData(), out.getDataSize())) { err = "could not write " + f.getFullPathName(); return false; }
+    f.setLastModificationTime (mtime);
+    return true;
+}
+
 inline bool movePreset (const juce::File& f, const juce::File& userRoot, const juce::String& toBank, juce::File& out, juce::String& err)
 {
     if (! isInside (f, userRoot)) { err = "outside the user root"; return false; }

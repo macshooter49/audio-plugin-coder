@@ -17,6 +17,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 #include "PluginEditor.h"
 #include "PresetBank.h"   // fb619 — the bank file layer
 #include "PresetAssets.h"  // fb621 — the asset envelope (FLAC)
+#include "PresetCarries.h" // fb632 — what a preset carries, counted where it is played (the file, the sheet, the heal)
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
 #include "ParametricEQ.h"
@@ -15721,7 +15722,15 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
         // one before it. Silence + a recorded miss is wrong; the wrong sample is wronger.
         auto failed = [&] (const char* why) { if (pathMoved) tgt.store (nullptr); miss (tag, path, why); };
         if (isMemSourceRef (path))               { failed ("dropped-bytes-not-embedded"); continue; }
-        if (! juce::File::isAbsolutePath (path)) { failed ("not-an-absolute-path");       continue; }
+        if (! juce::File::isAbsolutePath (path))
+        {
+            // fb632 — a bare file name is a pre-fb602 fossil (the drop path once wrote `= filename`):
+            // nothing can open it, nothing has written one since, and left in place it toasted
+            // "1 sample is missing" on every editor open and rode every save — Michael Myers' "1
+            // one-shot" on a Harmonic oscillator was this fossil. It dies here, so the next save
+            // does not carry it. An absolute path that is merely missing keeps its name (fb621).
+            failed ("not-an-absolute-path"); oscSourcePaths_[(size_t) oi].clear(); continue;
+        }
         const juce::File f (path);
         if (! f.existsAsFile())                  { failed ("file-missing");               continue; }
         double rate = 0.0; int rch = 0;
@@ -15838,60 +15847,25 @@ int TerrainAudioProcessor::restoreSampleSlotsFromState()
 }
 
 //==============================================================================
-// fb618 — what a saved tree CARRIES: imported wavetables, one-shots, IRs, flow cards, LFO shapes.
-// Read off the tree that getStateInformation just built, never off live members, so the number
-// in the file is the number in the file. nodes is the environment seat (0 until the patcher).
-static juce::var tiCarriesOf (const juce::ValueTree& s)
-{
-    int wt = 0, wtf = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;   // fb624 — wtf: of those, how many are SHIPPED
-    juce::int64 bWt = 0, bSmp = 0, bIr = 0;
-    // fb621 — the embedded asset is the truth; the fv=1 property is the fallback so a preset saved
-    // before this commit still counts what it carries.
-    auto bytesOf = [&s] (const char* key, int idx) -> juce::int64
-    {
-        const auto v = s.getProperty (key + juce::String (idx), "").toString();
-        return v.isEmpty() ? 0 : (juce::int64) tw::asset::sizeOf (v);
-    };
-    for (int o = 0; o < 4; ++o)
-    {
-        const auto wtA = s.getProperty ("wtAsset" + juce::String (o), "").toString();
-        if (wtA.isNotEmpty() || s.getProperty ("wtImportPcm" + juce::String (o), "").toString().isNotEmpty())
-        { ++wt;
-          // fb624 — Max: "the wavetable is factory though, so you should probably let them know."
-          // A reference IS the answer: shipped content is referenced, a user's own table is embedded.
-          if (tw::asset::isRef (wtA)) ++wtf;
-          bWt += tw::asset::isRef (wtA) ? 0 : bytesOf ("wtAsset", o) + bytesOf ("wtImportPcm", o); }
-        if (s.getProperty ("oscAsset" + juce::String (o), "").toString().isNotEmpty()
-            || s.getProperty ("oscSamplePath" + juce::String (o), "").toString().isNotEmpty())
-        { ++smp; bSmp += bytesOf ("oscAsset", o); }
-        if (s.getProperty ("layerAsset" + juce::String (o), "").toString().isNotEmpty())
-        { ++smp; bSmp += bytesOf ("layerAsset", o); }
-    }
-    for (int i = 1; i <= 6; ++i)
-        if (s.getProperty ("irAsset" + juce::String (i), "").toString().isNotEmpty()
-            || s.getProperty ("convIRRaw" + juce::String (i), "").toString().isNotEmpty())
-        { ++ir; bIr += bytesOf ("irAsset", i) + bytesOf ("convIRRaw", i); }
-    if (auto layers = s.getChildWithName ("layers"); layers.isValid())
-        for (int i = 0; i < layers.getNumChildren(); ++i)
-            if (layers.getChild (i).getProperty ("sourcePath", "").toString().isNotEmpty()
-                && s.getProperty ("layerAsset" + juce::String (i), "").toString().isEmpty()) ++smp;
-    // fb621 — the environment seat: when the patcher writes its graph here, every preset that has
-    // one becomes an Environment across the whole browser with no further wiring.
-    if (auto pv = juce::JSON::parse (s.getProperty ("patcherJson", "").toString()); pv.isObject())
-        if (auto* na = pv.getProperty ("nodes", juce::var()).getArray()) nodes = na->size();
-    if (auto v = juce::JSON::parse (s.getProperty ("cardStates", "").toString()); v.getDynamicObject() != nullptr)
-        flow = v.getDynamicObject()->getProperties().size();
-    if (auto v = juce::JSON::parse (s.getProperty ("lfoShapesJson", "").toString()); v.isObject())
-        if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
-    auto* o = new juce::DynamicObject();
-    o->setProperty ("wt", wt); o->setProperty ("wtf", wtf); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
-    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
-    o->setProperty ("bytes", (double) (bWt + bSmp + bIr));
-    return juce::var (o);
-}
+// fb618 — what a saved tree CARRIES. fb632 moved tiCarriesOf to Source/PresetCarries.h
+// (tw::carries::of) so the file, the save sheet, the heal and the cert share ONE counter — and
+// gated the one-shot count on the oscillator's engine. Max: "the only time a carry should even be
+// activated is if there's a Sampler, Resynth, or a Granular engine going on." The three constants
+// the gate names are tied to the voice's enum here, so renumbering Engine cannot move the gate.
+static_assert ((int) tw::SynthVoice::Engine::SAMP == tw::carries::kEngSample
+            && (int) tw::SynthVoice::Engine::GRAN == tw::carries::kEngGranular
+            && (int) tw::SynthVoice::Engine::SPEC == tw::carries::kEngResynth
+            && (int) tw::SynthVoice::Engine::MODAL == tw::carries::kEngModal
+            && (int) tw::SynthVoice::Engine::WT   == tw::carries::kEngineDefault,
+               "fb632 — the carries gate names the engines that play a sample slot; SynthVoice::Engine moved");
 
-void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+// fb632 — the tree getStateInformation serialises, as a function of its own, so the save sheet
+// can price the CURRENT patch off the very tree the file will carry (getCarriesJson below).
+juce::ValueTree TerrainAudioProcessor::buildStateTree()
 {
+    // fb632 — two callers now (the host's save and the save sheet's getCarriesJson); the asset caches
+    // below are plain members, so the builders take turns.
+    const std::lock_guard<std::mutex> buildLock (stateBuildLock_);
     // DAW state: parameter values + preset index + XY auto state
     // Presets themselves live on disk only (getUserPresetsFile)
     auto state = apvts.copyState();
@@ -16301,13 +16275,18 @@ void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
         state.removeChild (old, nullptr);
     {
         auto pt = getPresetMeta().toTree();
-        pt.setProperty ("carries", juce::JSON::toString (tiCarriesOf (state), true), nullptr);
+        pt.setProperty ("carries", juce::JSON::toString (tw::carries::of (state), true), nullptr);   // fb632 — engine-gated, shared
         pt.setProperty ("fx", tiFxListOf (apvts), nullptr);   // fb621 — the browser's Effects column, and its search
-        pt.setProperty ("fv", 2, nullptr);                    // fb621 — assets travel as FLAC from here on
+        pt.setProperty ("fv", tw::carries::kFormatVersion, nullptr);   // 2: assets travel as FLAC (fb621) · 3: counts are engine-gated (fb632)
         state.addChild (pt, 0, nullptr);
     }
 
-    std::unique_ptr<juce::XmlElement> xml (state.createXml());
+    return state;
+}
+
+void TerrainAudioProcessor::getStateInformation (juce::MemoryBlock& destData)
+{
+    std::unique_ptr<juce::XmlElement> xml (buildStateTree().createXml());
     copyXmlToBinary (*xml, destData);
 }
 
@@ -17938,34 +17917,13 @@ juce::String TerrainAudioProcessor::getPatcherJson() const        { return patch
 void         TerrainAudioProcessor::setPatcherJson (const juce::String& j) { patcherJson_ = j; }
 
 // What the CURRENT patch is carrying, for the save sheet — the browser prices saved presets from
-// their own manifests, but a preset being saved has no file yet.
-juce::String TerrainAudioProcessor::getCarriesJson() const
+// their own manifests, but a preset being saved has no file yet. fb632: this used to be a second
+// counter over live members (oscSampleBuffers_, layers — engine-blind, like the file's was); it
+// is now the file's own counter on the file's own tree, so the sheet and the manifest cannot
+// disagree.
+juce::String TerrainAudioProcessor::getCarriesJson()
 {
-    int wt = 0, wtf = 0, smp = 0, ir = 0, flow = 0, lfo = 0, nodes = 0;
-    const auto factoryRoot = wtFactoryRoot();
-    for (int o = 0; o < 4; ++o)
-    {
-        if (! importedPcm_[o].empty())
-        {
-            ++wt;   // fb624 — shipped content is REFERENCED, so it costs the preset nothing
-            if (importPath_[(size_t) o].isNotEmpty() && factoryRoot.isDirectory()
-                && juce::File (importPath_[(size_t) o]).isAChildOf (factoryRoot)) ++wtf;
-        }
-        if (oscSampleBuffers_[(size_t) o].getNumSamples() > 0)     ++smp;
-        if (layers[(size_t) o].sampleBuffer.getNumSamples() > 0)   ++smp;
-    }
-    for (size_t i = 0; i < (size_t) kConvSlots; ++i)
-        if (convIRUser_[i] && ! convUserIrL_[i].empty())           ++ir;
-    if (auto v = juce::JSON::parse (getCardStatesJson()); v.getDynamicObject() != nullptr)
-        flow = v.getDynamicObject()->getProperties().size();
-    if (auto v = juce::JSON::parse (getSynthLfoShapesJson()); v.isObject())
-        if (auto* a = v.getProperty ("shapes", juce::var()).getArray()) lfo = a->size();
-    if (auto v = juce::JSON::parse (patcherJson_); v.isObject())
-        if (auto* a = v.getProperty ("nodes", juce::var()).getArray()) nodes = a->size();
-    auto* o = new juce::DynamicObject();
-    o->setProperty ("wt", wt); o->setProperty ("wtf", wtf); o->setProperty ("smp", smp); o->setProperty ("ir", ir);
-    o->setProperty ("flow", flow); o->setProperty ("lfo", lfo); o->setProperty ("nodes", nodes);
-    return juce::JSON::toString (juce::var (o), true);
+    return juce::JSON::toString (tw::carries::of (buildStateTree()), true);
 }
 
 //==============================================================================
@@ -18060,7 +18018,12 @@ juce::File TerrainAudioProcessor::banksFactoryRoot()
 juce::String TerrainAudioProcessor::getPresetCatalogJson() const
 {
     tw::bank::ScanStats st; tw::bank::Caps caps;
-    return juce::JSON::toString (tw::bank::scan (banksFactoryRoot(), banksUserRoot(), caps, st), true);
+    auto cat = tw::bank::scan (banksFactoryRoot(), banksUserRoot(), caps, st);
+    // fb632 — a manifest written before fv 3 counted one-shots without the engine rule (Michael
+    // Myers: a Harmonic oscillator with a sample-name hint said "1 one-shot"). Every such row that
+    // claims one is recounted off its own chunk and, under the user root, written back once.
+    tw::carries::healCatalogue (cat, banksUserRoot());
+    return juce::JSON::toString (cat, true);
 }
 
 bool TerrainAudioProcessor::savePresetToBank (const juce::String& bank, const juce::String& metaJson, juce::File& out, juce::String& error)

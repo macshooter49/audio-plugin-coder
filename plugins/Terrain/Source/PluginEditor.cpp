@@ -1,6 +1,8 @@
 #include "PluginProcessor.h"
 #include "PluginEditor.h"
 #include "PresetBank.h"   // fb619
+#include <string_view>
+#include "PresetCarries.h"   // fb632 — the mem: prefix is asserted against tw::carries::kMemSourcePrefix below
 #include <cstdlib>   // fb491 — getenv/_putenv_s for the WebView2 browser args
 #include <cstdio>    // fb509 — snprintf: the frame builders format floats without juce::String heap churn
 #include <cstring>
@@ -203,6 +205,7 @@ static void tiDeleteCardPresetNative (const juce::Array<juce::var>& args,
 // It is greppable, and fb603 hangs the embedded audio payload off exactly this key rather than
 // migrating the field a second time.
 static constexpr const char* kTiMemSourcePrefix = "mem:";
+static_assert (std::string_view (kTiMemSourcePrefix) == std::string_view (tw::carries::kMemSourcePrefix), "fb632 — the mem: prefix must be one literal (PresetCarries.h counts a mem: hint as a one-shot)");
 static juce::String tiMemSourceRef (const juce::String& filename)
 {
     return juce::String (kTiMemSourcePrefix) + filename;
