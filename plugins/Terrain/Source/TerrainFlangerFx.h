@@ -1138,7 +1138,25 @@ private:
         s.dLagZ += dLagS_ * (lag - s.dLagZ); s.dLagZ = flush (s.dLagZ); lag = s.dLagZ;
         if (matched) { s.dRefZ += dLagS_ * (ref - s.dRefZ); s.dRefZ = flush (s.dRefZ); ref = s.dRefZ; }
 
-        float w = (ref + c.pol * g.m * lag) * nrmS_;
+        // fb634 — THE CROSSING IS A BREATH, NOT A HOLE. Max: "tape zero has some weird-ass clicks …
+        // this weird crackle … fix that dropout." Measured on a sustained saw at Mix 100: the Sub
+        // polarity's through-zero crossing cancelled the two decks to −75 dBFS (59 dB below the
+        // programme) for 5–35 ms, and the DEFAULT patch did it 75 times in 7 s — the dwell parks
+        // the sweep near zero while the tape drift wobbles it back and forth ACROSS zero, so one
+        // crossing became a burst of holes: the crackle. Itchycoo's 30 dB holes were the clicks.
+        // The comb's teeth away from zero are the flanger; the broadband cancellation AT zero is
+        // the defect. So the lag deck's weight rolls off only inside the zone where the notch
+        // spacing exceeds the band (|Δ| under a few hundred µs): full-depth notches everywhere a
+        // flanger has notches, and at Δ = 0 the wet dips ~8 dB instead of vanishing. Exponential in
+        // |Δ| — no corner, nothing to click. Sub polarity only (Add never cancels); the two-deck
+        // path only (Jet's short-delay hollowing is a different, musical thing Max likes).
+        float lagW = 1.0f;
+        if (matched && c.pol < 0.0f)
+        {
+            const float dm = std::fabs (g.comb) * msInv_;                        // |Δ| in ms
+            lagW = 1.0f - kZeroFloor_ * fexp2 (-dm * (1.4426950f / kZeroWidthMs_));
+        }
+        float w = (ref + c.pol * g.m * lag * lagW) * nrmS_;
 
         // the BBD's output reconstruction - a gentler 2-pole at the same tracking
         // corner across the WHOLE wet, so the Type darkens as the comb lengthens.
@@ -1227,6 +1245,13 @@ private:
     // is |cos(ωΔ/2)|, mean power 0.5); this puts unity-through back inside ±1 dB at
     // the default patch. Measured, not guessed — flanger_cert §A.
     static constexpr float kWetTrim_ = 1.0f;
+    // fb634 — the through-zero crossing's floor (see deck()): at Δ = 0 the lag deck weighs
+    // 1 − kZeroFloor_, so the wet is kZeroFloor_ of the input (−4 dB, a breath); the floor is
+    // gone by ~3·kZeroWidthMs_ (1.4 ms), where a sub comb's teeth are 700 Hz apart and every one
+    // of them is still a full notch. Measured (a 220 Hz saw, Mix 100, 20 ms envelope): the
+    // default's 23 dB holes → an 8 dB dip; Deep Zero's 28 dB → 9; Duck Zero's 36 dB → 1.
+    static constexpr float kZeroFloor_   = 0.62f;
+    static constexpr float kZeroWidthMs_ = 0.45f;
 };
 
 } // namespace tw

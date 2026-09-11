@@ -252,3 +252,18 @@ And per the same advice, the null detector is now shown to work **in both direct
 self-check planted a hole that was only deep at its midpoint and the detector correctly read -7 dB —
 the probe was wrong, not the detector, which is exactly the failure mode a one-directional
 self-check would have shipped.
+
+## fb634 (2026-09-11) — the through-zero crossing was a dropout; it is a breath now
+
+Max: *"tape zero has some weird-ass clicks … this weird crackle … fix that dropout … I like Jet."*
+Measured (a 220 Hz saw, Mix 100, a 20 ms envelope): the Sub polarity's crossing cancelled the two
+decks to −75 dBFS — 23 dB under the programme on the default patch, 28 on Deep Zero, 36 on
+Envelope/Duck Zero — for 5–35 ms at a time; and because the dwell parks the sweep near zero while
+the tape drift wobbles it back and forth across zero, the default did it **75 times in 7 s**: a
+burst of holes, heard as crackle. The engine itself never clicks (every param swept, per-sample
+calls, 44.1/48 k — the §F metric stays flat); the hole *was* the design's "analytically silent
+null", and Max ruled it a defect. `deck()` now rolls the lag deck's weight off inside the
+broadband zone — `lagW = 1 − 0.62·exp(−|Δ|/0.45 ms)`, Sub polarity on the two-deck path only —
+so at Δ = 0 the wet is −4 dB, the default's holes are an 8.6 dB dip, Duck Zero's 0.5 dB, and every
+notch beyond ~1.5 ms keeps its full depth (26 dB at 2 ms, 27 at 1 ms, 20 at 0.6 ms). Three §A/B
+bars were re-based to the new law and a hole bar added. A fresh Flanger starts on **Jet**.

@@ -10183,7 +10183,9 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                           ['Drift',0,'SYN_CHO_DRIFT'],['Colour',50,'SYN_CHO_COLOUR'],['Low Keep',0,'SYN_CHO_LOWKEEP'],['Phase',100,'SYN_CHO_PHASE']]}},
             // ⚠️ FLANGER Fdbk IS BIPOLAR: 50 is the CENTRE and means no regeneration. Its
             // default is 50, not 0 — 0 here is −100 % feedback, not none.
-            {name:'Flanger',core:'fla',type:'Tape Zero',
+            /* fb634 — Max: "I like Jet … this is a flanger, not a tape." A fresh Flanger starts on Jet
+               (the pedal comb); Tape Zero stays in the list, with its crossing fixed (TerrainFlangerFx.h). */
+            {name:'Flanger',core:'fla',type:'Jet',
              types:['Tape Zero','Jet','BBD','Endless','Envelope','Step'], tpN:16,
              preset:'Init',code:'',on:false,pwrP:'SYN_FLA_POWER',tp:'SYN_FLA_TYPE',
              rp:['SYN_FLA_SRC_A','SYN_FLA_SRC_B','SYN_FLA_SRC_C','SYN_FLA_SRC_D','SYN_FLA_SRC_SUB','SYN_FLA_SRC_NOISE'],
@@ -10191,7 +10193,7 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
              route:[0,0,0,0,0,0],
              knobs:[{l:'Rate',v:30,p:'SYN_FLA_RATE'},{l:'Depth',v:55,p:'SYN_FLA_DEPTH'},
                     {l:'Fdbk',v:50,p:'SYN_FLA_FEEDBACK'},{l:'Mix',v:50,p:'SYN_FLA_MIX'}],
-             back:{d1:{k:'Character',v:'Sub',opts:['Sub','Add','Worn Deck','Servo','Wide Zero','Deep Zero','Drifting Zero','Counter Reel'],p:'SYN_FLA_CHAR'},
+             back:{d1:{k:'Character',v:'Silver',opts:['Silver','Compact','Deep Sweep','Hollow','Screamer','Drop','Thin Air','Twin Jet'],p:'SYN_FLA_CHAR'},
                    // fb418 — the flanger could NOT take Motion: its Shape KNOB already owns the
                    // waveform, and two controls on one axis is the "params play their roles"
                    // violation. What only a flanger has is a regeneration LOOP, so the slot is

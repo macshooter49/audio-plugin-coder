@@ -6116,7 +6116,7 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
                 {
                     const juce::String p = "SYN_FLA" + sfxN + "_";
                     const juce::String d = "Flanger" + sfxD + " ";
-                    C (p + "TYPE", d + "Type", flaTypes, 0);            // Tape Zero, the flagship
+                    C (p + "TYPE", d + "Type", flaTypes, 1);            // fb634 — Jet (Max: "this is a flanger, not a tape"); was 0 Tape Zero
                     C (p + "CHAR", d + "Char", flaChars, 0);
                     F (p + "RATE",     d + "Rate",     0.30f);
                     F (p + "DEPTH",    d + "Depth",    0.55f);

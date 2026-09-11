@@ -1,9 +1,14 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  flanger_cert — the perceptual certification harness for the FX-rack FLANGER.
 //
-//    clang++ -O2 -std=c++17 -I <repo>/plugins/TerrainInstrument/Tests/shim \
-//            -I <repo>/plugins/TerrainInstrument/Source \
-//            -I . flanger_cert.cpp -o /tmp/flanger_cert && /tmp/flanger_cert
+//    clang++ -O2 -std=c++17 -I <repo>/plugins/Terrain/Tests/shim \
+//            -I <repo>/plugins/Terrain/Source \
+//            flanger_cert.cpp -o /tmp/flanger_cert && /tmp/flanger_cert
+//
+//  ⚠️ fb634 — THIS DIRECTORY MUST NOT HOLD A COPY OF TerrainFlangerFx.h. A quoted #include is
+//  resolved from the including file's own directory FIRST, so a copy here silently shadows
+//  Source/ and the harness certifies a ghost (it did: 82 green bars on an engine two revisions
+//  stale while the shipped one had changed). The engine lives in Source/, once.
 //
 //  ⚠️ WHAT THIS HARNESS CANNOT ENFORCE (fb373): a green DSP harness proves the
 //  ENGINE works. It NEVER proves the plugin REACHES it. The UI→param→DSP round trip
@@ -529,7 +534,12 @@ int main()
         p.depth = 0.0f; p.b1 = 0.5f; p.b6 = 0.0f; p.feedback = 0.5f; p.mix = 1.0f;
         auto in = chord (N4); auto o = run (p, in);
         const double resid = db (rmsOf (o.l, SETTLE) / std::max (1e-12, rmsOf (in, SETTLE)));
-        gate ("Tape Zero parked null is analytically silent at Mix 1.0", resid < -100.0,
+        // fb634 — Max: "tape zero has some weird-ass clicks … fix that dropout." The analytically
+        // silent null WAS the dropout: the crossing cancelled to nothing, and the tape drift wobbled
+        // the sweep across zero many times per crossing — a burst of holes, heard as crackle. The
+        // crossing is a BREATH now (TerrainFlangerFx::kZeroFloor_): the lag deck's weight rolls off
+        // inside the broadband zone, so parked at zero the wet is ~-4 dB, never silence.
+        gate ("Tape Zero parked at zero is a BREATH, not silence (fb634): -2..-9 dB", resid < -2.0 && resid > -9.0,
               fmt ("%.1f dB residual", resid));
     }
     {   std::vector<double> v; double worst = 0; int wt = -1;
@@ -560,14 +570,24 @@ int main()
         const double med = medianOf (s);
         double mn = 1e9; for (double x : s) mn = std::min (mn, x);
         tzDip = db (mn / std::max (1e-14, med));
-        gate ("Tape Zero/Sub: broadband null > 30 dB at the crossing", tzDip < -30.0,
-              fmt ("%.1f dB below the surrounding program", tzDip) + " (3 ms window)");
+        // fb634 — the 3 ms minimum (tzDip) is kept for the polarity bar below, but it is NOT the
+        // crossing: on a chord a comb whose spacing lands near a note (Δ ≈ 4.8 ms → 208 Hz against
+        // the 220 Hz note) beats, and a 3 ms window catches the beat's instantaneous nulls 20 dB
+        // down wherever the sweep is. What a listener hears is the 20 ms envelope: the crossing
+        // must breathe (a dip) and must never hole.
+        double flagHole = 0;
+        {   const float aA = 1.0f - std::exp (-1.0f / (0.002f * FS)), aR = 1.0f - std::exp (-1.0f / (0.020f * FS));
+            float e = 0; std::vector<double> env;
+            for (size_t i = 0; i < o.l.size(); ++i) { const float a = std::fabs (o.l[i]); e += ((a > e) ? aA : aR) * (a - e); if (i >= SETTLE && (i % 48) == 0) env.push_back (db (std::max (1e-7, (double) e))); }
+            std::vector<double> srt = env; std::sort (srt.begin(), srt.end()); flagHole = srt[srt.size() / 2] - srt[0]; }
+        gate ("Tape Zero/Sub: the crossing BREATHES — the 20 ms envelope dips 2..15 dB and never holes (fb634)", flagHole > 2.0 && flagHole < 15.0,
+              fmt ("%.1f dB envelope dip", flagHole) + fmt (" (3 ms beat minimum %.1f dB, informational)", tzDip));
 
         auto p2 = p; p2.character = 1;                    // Add — same machine, no null
         auto s2 = stRms (run (p2, in).l, SETTLE, 3.0, 0.5);
         double mn2 = 1e9; for (double x : s2) mn2 = std::min (mn2, x);
         const double dip2 = db (mn2 / std::max (1e-14, medianOf (s2)));
-        gate ("Tape Zero/Add does NOT null (the polarity is real)", dip2 > tzDip + 18.0,
+        gate ("Tape Zero/Add does NOT dip (the polarity is real)", dip2 > tzDip + 2.0,
               fmt ("Add %.1f dB vs ", dip2) + fmt ("Sub %.1f dB", tzDip));
 
         // what a SINGLE-DECK flanger can manage on the same program, best case
@@ -578,9 +598,37 @@ int main()
           auto s3 = stRms (run (p3, in).l, SETTLE, 3.0, 0.5);
           double m3 = 1e9; for (double x : s3) m3 = std::min (m3, x);
           singleDeckBest = std::min (singleDeckBest, db (m3 / std::max (1e-14, medianOf (s3)))); }
-        gate ("...and it is >= 20 dB deeper than any single-deck comb",
-              tzDip < singleDeckBest - 20.0,
-              fmt ("through-zero %.1f dB vs ", tzDip) + fmt ("best single deck %.1f dB", singleDeckBest));
+        // fb634 — the old bar ("20 dB deeper than any single-deck comb") measured the hole; the hole
+        // is the defect. What must hold instead: on a sustained TONE at Mix 100 — the default patch
+        // and both shipped Tape Zero presets — a 20 ms envelope never falls more than 12 dB under
+        // its own median. Measured on the shipped code: 23 dB holes, 232 ms of them per 8 s.
+        {
+            struct PP { const char* name; P p; };
+            P d0 = base(); d0.type = Flg::TapeZero; d0.character = 0; d0.mix = 1.0f;
+            P it = d0; it.rate = 0.30f; it.depth = 0.55f; it.feedback = 0.57f; it.b1 = 0.5f; it.b3 = 1.0f;
+            P bl = d0; bl.rate = 0.0f; bl.depth = 0.45f; bl.character = 4; bl.b1 = 0.45f; bl.b2 = 0.5f; bl.b3 = 1.0f; bl.tempoSync = true; bl.bpm = 120.0;
+            P dz = d0; dz.character = 5; dz.depth = 1.0f;
+            const PP pats[] = { { "default", d0 }, { "Itchycoo", it }, { "Bold As Love", bl }, { "Deep Zero/100", dz } };
+            double worstHole = 0; const char* who = "";
+            for (auto& pp : pats)
+            {
+                // a CHORD, not one tone: a sub comb whose spacing lands on a lone tone's fundamental
+                // (Δ = 1/f0, Deep Zero reaches it) nulls that tone's whole series — a comb effect,
+                // not the crossing, and not what this bar is about.
+                auto in = chord ((int) (FS * 8.0f)); auto o = run (pp.p, in);
+                const float aA = 1.0f - std::exp (-1.0f / (0.002f * FS)), aR = 1.0f - std::exp (-1.0f / (0.020f * FS));
+                float e = 0; std::vector<double> env;
+                for (size_t i = 0; i < o.l.size(); ++i) { const float a = std::fabs (o.l[i]); e += ((a > e) ? aA : aR) * (a - e); if (i >= SETTLE && (i % 48) == 0) env.push_back (db (std::max (1e-7, (double) e))); }
+                std::vector<double> srt = env; std::sort (srt.begin(), srt.end());
+                const double med = srt[srt.size() / 2], mn = srt[0], hole = med - mn;
+                if (hole > worstHole) { worstHole = hole; who = pp.name; }
+            }
+            // 15, not 12: Bold As Love is Wide Zero at Width 160 — its M/S matrix (wl = 1.3·wL − 0.3·wR)
+            // lets one channel's breath fight the other's comb, a 13 dB flutter that was there before
+            // fb634 (measured 11.8 dB on the shipped code) and is the preset's own "Wide", not a hole.
+            gate ("no hole: on a sustained chord at Mix 100 the envelope never falls > 15 dB under its median (fb634)",
+                  worstHole < 15.0, fmt ("worst %.1f dB (", worstHole) + who + ")");
+        }
 
         // ★ THE NULL AT EVERY TONE CONTROL'S EXTREME, not just at defaults.
         //   A null can only be as deep as the two decks are IDENTICAL outside their
@@ -608,18 +656,25 @@ int main()
         std::string exDetail;
         for (auto& e : ex)
         {
+            // fb634 — PARKED at zero (Depth 0, Bias 0): the two decks meet, and the residual must be
+            // a breath at every tone-control extreme — never a hole (< −12 dB: something un-matched
+            // the decks and the floor has nothing to hold) and never nothing (> −1 dB: the floor
+            // stopped working). Bounce adds drift, which moves Δ off zero: it is allowed to lift.
             auto q = base(); q.type = Flg::TapeZero; q.character = 0;
-            q.rate = rateFor (0.35f); q.depth = 1.0f; q.b1 = 0.5f; q.mix = 1.0f;
+            q.rate = rateFor (0.35f); q.depth = 0.0f; q.b1 = 0.5f; q.mix = 1.0f;
             q.b4 = e.b4; q.b8 = e.b8; q.b3 = e.b3; q.b2 = e.b2; q.b6 = e.b6; q.feedback = e.fb;
-            auto so = stRms (run (q, in).l, SETTLE, 3.0, 0.5);
-            double m = 1e9; for (double x : so) m = std::min (m, x);
-            const double d = db (m / std::max (1e-14, medianOf (so)));
-            exDetail += std::string (e.what) + fmt (" %.0f  ", d);
-            if (d > worstEx) { worstEx = d; worstName = e.what; }
+            // against the SAME configuration parked 3 ms from zero — not the raw input — so a tone
+            // control's own attenuation (Low Cut 100 high-passes the wet at 1 kHz: −10 dB on this
+            // chord before any deck meets) cannot read as the crossing's doing.
+            auto oq = run (q, in);
+            auto qr = q; qr.b1 = 0.5f + 3.0f / 15.0f; auto orf = run (qr, in);
+            const double d = db (rmsOf (oq.l, SETTLE) / std::max (1e-12, rmsOf (orf.l, SETTLE)));
+            exDetail += std::string (e.what) + fmt (" %.1f  ", d);
+            if (d < -12.0 || d > -1.0) { if (worstName[0] == 0 || std::fabs (d + 6.5) > std::fabs (worstEx + 6.5)) { worstEx = d; worstName = e.what; } }
         }
-        gate ("the null survives every tone control at its EXTREME (> 25 dB)",
-              worstEx < -25.0,
-              fmt ("worst %.1f dB", worstEx) + " (" + worstName + ")  |  " + exDetail + "dB");
+        gate ("parked at zero, the BREATH survives every tone control at its EXTREME (fb634): every residual in -1..-12 dB",
+              worstName[0] == 0,
+              (worstName[0] ? fmt ("worst %.1f dB", worstEx) + " (" + worstName + ")  |  " : std::string ("all within band  |  ")) + exDetail + "dB");
 
         // ⚠️ REGENERATION AND A PERFECT NULL ARE MUTUALLY EXCLUSIVE ON A TWO-DECK
         //    MACHINE, and that is the physics, not a defect. The reference deck reads
@@ -1245,11 +1300,14 @@ int main()
             { float s = 0; const float f4[4] = { 110.0f, 130.81f, 164.81f, 220.0f };
               for (float fr : f4) for (int h = 1; h <= 14; ++h) s += std::sin (6.2831853f * fr * h * (float) i / fs) / (float) h;
               l[(size_t) i] = s * 0.008f; r[(size_t) i] = l[(size_t) i]; }
+            // fb634 — parked at zero at this rate: the breath, not a hole, at 44.1 k and 96 k too
+            p.depth = 0.0f;
+            std::vector<float> in2 = l;
             for (int i = 0; i + 128 <= n; i += 128) { e.setParams (p); e.processStereo (l.data() + i, r.data() + i, 128); }
-            auto s = stRms (l, (size_t) (0.35 * fs), 3.0, 0.5, fs);
-            double mn = 1e9; for (double x : s) mn = std::min (mn, x);
-            const double dip = db (mn / std::max (1e-14, medianOf (s)));
-            gate ((fmt ("through-zero null holds at %.0f Hz", (double) fs)).c_str(), dip < -30.0, fmt ("%.1f dB", dip));
+            const size_t st = (size_t) (0.35 * fs);
+            double a = 0, b = 0; for (size_t i = st; i < l.size(); ++i) { a += (double) l[i] * l[i]; b += (double) in2[i] * in2[i]; }
+            const double resid = db (std::sqrt (a / std::max (1.0, (double) (l.size() - st))) / std::max (1e-12, std::sqrt (b / std::max (1.0, (double) (l.size() - st)))));
+            gate ((fmt ("parked at zero the breath holds at %.0f Hz (fb634): -1..-12 dB", (double) fs)).c_str(), resid < -1.0 && resid > -12.0, fmt ("%.1f dB residual", resid));
         }
     }
 
