@@ -4,7 +4,7 @@
 //   and every setSynthMod kicks window.__tiModRestore() a tick later (the fb570 editor relay).
 const puppeteer = require('puppeteer-core');
 const fs = require('fs'), path = require('path');
-const ROOT = '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/Terrain';
+const ROOT = path.resolve(__dirname, '..');   // the plugin dir, wherever the repo lives
 const PAGE = path.join(ROOT, 'Source/ui/public/index.html');
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 let pass = 0, fail = 0;

@@ -7,7 +7,7 @@
 //   node vocab_repro.js            plain (editArm is a no-op, like the gate)
 //   STEAL=1 node vocab_repro.js    editArm(1) blurs the active element (what the C++ grabKeyboardFocus does in WKWebView)
 const path = require('path');
-const puppeteer = require('/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/Terrain/Tests/node_modules/puppeteer-core');
+const puppeteer = require(require('path').join(__dirname, 'node_modules', 'puppeteer-core'));
 const PAGE = '/Users/macshooter/Developer/VST-Plugins/audio-plugin-coder/.worktrees/terrain-instrument/plugins/Terrain/Source/ui/public/index.html';
 const STEAL = true;   // the real WKWebView steal, always
 const MUT = process.env.VS_MUT || '';
