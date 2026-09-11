@@ -17,6 +17,7 @@ static void terrain_setEnvDAHDSR (terrain::TerrainEnvelope& e, float dl, float a
 #include "PluginEditor.h"
 #include "PresetBank.h"   // fb619 — the bank file layer
 #include "PresetAssets.h"  // fb621 — the asset envelope (FLAC)
+#include <string_view>
 #include "PresetCarries.h" // fb632 — what a preset carries, counted where it is played (the file, the sheet, the heal)
 
 static void terrainCardLogP (const juce::String& msg);   // fb84 — card-window forensic log (defined with the card-window methods below)
@@ -817,7 +818,7 @@ static juce::String tiFileHash (const juce::File& f)
 static juce::String tiAssetName (const juce::String& sourceRef)
 {
     if (sourceRef.isEmpty()) return {};
-    if (sourceRef.startsWith ("mem:")) return sourceRef.fromFirstOccurrenceOf (":", false, false);
+    if (tw::carries::isMemRef (sourceRef)) return sourceRef.fromFirstOccurrenceOf (":", false, false);   // fb634a — one literal
     return juce::File::isAbsolutePath (sourceRef) ? juce::File (sourceRef).getFileName() : sourceRef;
 }
 
@@ -15603,6 +15604,10 @@ juce::String TerrainAudioProcessor::getRestoreMissesJson() const
 // Returns how many slots it actually decoded.
 int TerrainAudioProcessor::restoreSampleSlotsFromState()
 {
+    // fb634a — the mem: prefix is ONE literal (tw::carries::kMemSourcePrefix); the processor's own copy
+    // is tied to it here, where a private member is in scope, exactly as PluginEditor.cpp ties its.
+    static_assert (std::string_view (kMemSourcePrefix) == std::string_view (tw::carries::kMemSourcePrefix),
+                   "fb634a — the mem: prefix must be one literal");
     static constexpr size_t kMaxMissRows = 64;
     { const juce::ScopedLock ml (restoreMissLock_); restoreMisses_.clear(); }
     restoreMissCount_.store (0, std::memory_order_relaxed);
