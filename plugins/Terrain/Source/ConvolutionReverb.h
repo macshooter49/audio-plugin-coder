@@ -97,7 +97,11 @@ public:
         userLen  = n;       // publish LENGTH after the samples are written (audio reads userLen, then userL[0..userLen))
         irDirty  = true;
     }
-    void clearUserIR () { userLen = 0; baseChar = -1; irDirty = true; }
+    // fb631 — a NO-OP when no user IR is held. resetPatchState() calls this for all six instances on
+    // EVERY preset load; unconditionally setting baseChar=-1 forced a full synth() + shaping + FFT
+    // partition bake on the audio thread ~50 ms after each load (4-9 ms in ONE block at 48k) even
+    // when nothing about the reverb had changed. Clearing an IR that is not there changes nothing.
+    void clearUserIR () { if (userLen == 0) return; userLen = 0; baseChar = -1; irDirty = true; }
 
     void updateCoefficients()
     {

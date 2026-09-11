@@ -1003,8 +1003,13 @@ body {
   height: 44px;
   display: flex;
   align-items: center;
-  justify-content: space-between;
   padding: 0 16px;
+  /* fb631 — THE EXPERIMENT. Max: "put TERRAIN dead set in the middle of the header and swap it out with
+     the preset — the plus button and the preset menu over to the left, lined up even with the settings
+     button on the right. SYN / MIX / MOD and the gear stay where they are. It may not be the way, but it
+     might be." So: the wordmark is the absolutely-centred group now, the preset cluster sits at the same
+     16px inset the gear keeps on the right, and .header-right is the only flow child — hence flex-end. */
+  justify-content: flex-end;
   /* fb629 — THE HEADER HAS NO COLOUR OF ITS OWN. Max: "I'm tired of having the header be separate
      colours... the header should now blend in with everything."
      It was never a deliberately purple bar. It painted var(--bg-surface) #232340 — and so does its
@@ -1111,7 +1116,7 @@ html.tp-glassup #header {
   color: var(--purple-500);
 }
 
-.header-preset { position: absolute; left: 50%; top: 0; height: 44px; transform: translateX(-50%);
+.header-preset { position: absolute; left: 16px; top: 0; height: 44px;   /* fb631 — 16px = the gear's own right inset, mirrored */
   display: flex; align-items: center; gap: 6px; }   /* fb622 — the centreline law, horizontally */
 /* fb622 — EQ and DLY lose their ACCESS, not their code. Max: "EQ and DLY are pointless, we do not
    use them at all. Get rid of the access to them. Don't delete them." The elements STAY in the DOM:
@@ -1155,11 +1160,11 @@ html.tp-glassup #header {
 }
 
 /* Header: brand+preset on left, all pills on right */
-.header-left {
+.header-left {   /* fb631 — the wordmark, dead centre (the centreline law, horizontally) */
+  position: absolute; left: 50%; top: 0; height: 44px; transform: translateX(-50%);
   display: flex;
   align-items: center;
   gap: 8px;
-  flex-shrink: 0;
 }
 .header-right {
   display: flex;
@@ -1270,7 +1275,8 @@ html.tp-glassup #header {
 #tp-b .sw::after { content: ''; position: absolute; left: 10px; top: calc(50% + 4px); width: 4px; height: 1.5px; background: var(--text-secondary); transform: rotate(45deg); pointer-events: none; }
 #tp-b .search { width: 100%; height: 26px; border: none; border-radius: 5px; padding: 0 8px 0 21px; font-size: 11.5px; background: transparent; color: var(--text-primary); outline: none; }
 #tp-b .search::placeholder { color: var(--text-muted); }
-#tp-b .search:focus { box-shadow: inset 0 0 0 1px var(--purple-400); }
+/* fb631 — no box while typing. Max: "the magnifying glass is way too close to the box and it does not
+   look good — remove that box." The caret is the focus. */
 #tp-b .count { margin-left: auto; font-size: 10px; color: var(--text-soft); white-space: nowrap; margin-right: 4px; }
 #tp-b .count b { color: var(--text-primary); font-weight: 500; }
 #tp-b .ibtn { width: 26px; height: 26px; border: none; border-radius: 5px; background: transparent; color: var(--text-soft); display: flex; align-items: center; justify-content: center; cursor: pointer; padding: 0; transition: color .15s, box-shadow .15s; }
@@ -1285,7 +1291,8 @@ html.tp-glassup #header {
 #tp-b .chips { display: block; margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--menu-line); }
 #tp-b .chips .lb { display: block; margin-bottom: 6px; font-size: 10px; font-weight: 500; color: var(--text-soft); }
 #tp-b .chips .strip { display: flex; flex-wrap: wrap; gap: 4px; }
-.tp-chip { padding: 4px 9px; border: 1px solid var(--edge-soft); border-radius: 4px; background: transparent; font-size: 9.5px; font-weight: 500; color: var(--text-soft); cursor: pointer; transition: color .15s, border-color .15s; white-space: nowrap; line-height: 1.2; flex: none; font-family: inherit; }
+.tp-chip { padding: 4px 9px; border: 1px solid var(--edge-soft); border-radius: 4px; background: transparent; font-size: 9.5px; font-weight: 500; color: var(--text-soft); cursor: pointer; transition: color .15s, border-color .15s; white-space: nowrap; line-height: 1.2; flex: none; font-family: inherit;
+  max-width: 100%; overflow: hidden; text-overflow: ellipsis; }   /* fb631 — a word longer than the strip ellipsises inside its box, never past it */
 .tp-chip:hover { color: var(--text-primary); }
 .tp-chip.active { background: transparent; border-color: var(--purple-400); color: var(--on-fg); }   /* the tile rule, verbatim */
 .tp-chip.add { border-style: dashed; color: var(--purple-400); padding: 0; width: 22px; height: 20px; display: flex; align-items: center; justify-content: center; margin-right: 2px; }
@@ -5198,13 +5205,11 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
    inside all of the engines." Same face: SF Pro 300, --text-secondary, tabular digits, centred. The
    font-size is set per string by JS with the rack's own law scaled to this 24px ring (≤3 chars 7.5px,
    4 → 6.5, 5 → 5.8) so the text FITS BY CONSTRUCTION; the gate then measures every glyph box against
-   the circle. WT Pos is a stacked fraction (frame over frames) because "64/128" cannot be both inside
-   an 18px circle and readable, and "64 over 128" can. */
+   the circle. fb631: bare numbers only — WT Pos is the frame number, no fraction. */
 #syn-panel .knob-ring .kv { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
   pointer-events: none; font-family: -apple-system, 'SF Pro Display', sans-serif; font-weight: 300; color: var(--text-secondary);
   line-height: 1; letter-spacing: 0; font-variant-numeric: tabular-nums; white-space: nowrap; }
-#syn-panel .knob-ring .kv.st { flex-direction: column; gap: 1px; }
-#syn-panel .knob-ring .kv.st i { font-style: normal; display: block; }
+
 #syn-panel .knob-label { font-size: 8px; letter-spacing: 1.6px; color: var(--text-primary); font-weight: 300; text-transform: none; }
 /* OSCFIX-READOUT-CSS — knob label swaps to live value while dragging (zero reflow) */
 #syn-panel .knob .knob-label { white-space: nowrap; overflow: hidden; text-overflow: clip; max-width: 100%; text-align: center; font-variant-numeric: tabular-nums; }
@@ -18851,47 +18856,56 @@ setTimeout(function wireSynControls () {
       }
       window.__fmtSynReadout = fmtSynReadout;
 
-      /* fb630 — THE COMPACT READOUT FOR INSIDE THE RING. fmtSynReadout above is the drag-time LEGEND
-         (units and words — "Freeze", "Flat→Dome", "+7 st"); this is the number that lives in the ring
-         permanently, in the rack's idiom: bare digits, no unit, the label under the knob carries the
-         unit's meaning. Bipolar and signed values keep their sign; choice knobs keep their word. WT Pos
-         returns {a,b} — frame over frames — and the painter stacks it. */
+      /* fb631 — THE READOUT INSIDE THE RING IS A BARE NUMBER. Max, on seeing "L100" in the pan ring
+         and "1 over 128" in WT Pos: "No L100, no four letters, no decimals, no milliseconds. Just three
+         numbers — or two if it's a fraction. People will get the gist." So:
+           · at most three digits, a leading minus only where the arc cannot show the sign (Oct/Semi/
+             Cent/Pitch fill from the left, so -7 and 7 look alike without it);
+           · BIPOLAR arcs — Pan, Scan, Formant, Tilt, Dir, Skew, the noise strip's Scan and Pan — show
+             the distance from centre and let the arc show the side. Pan hard left is "100" with the
+             arc swung left, not "L100";
+           · WT Pos is the frame number, nothing over nothing: "60" is the 60th frame, "128" is the end;
+           · no units — the label under the knob carries what the number means;
+           · fractions ONLY where the value IS one: the FM ratio sits on a quarter grid, so 0.25 is "1/4"
+             and 2.5 is "5/2", and whole ratios are bare;
+           · a choice knob keeps a word of at most three letters (Off / Oct / 5th / Chd / Maj / Min / Pen).
+         fmtSynReadout above is still the drag-time legend under the knob, with its units and words. */
       function fmtRing (paramId, n) {
         n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
-        const pct = Math.round (n * 100), sgn = v => (v > 0 ? '+' : '') + v;
+        const pct = Math.round (n * 100);
+        const fromCentre = () => String (Math.round (Math.abs (n - 0.5) * 200));   // bipolar arc: the arc shows the side
         if (paramId.indexOf ('_WT_FRAME') >= 0) {
           const o = 'ABCD'.indexOf (paramId.charAt (8));
           const M = Math.max (1, (window.__wtFrames && window.__wtFrames[o]) || FRAME_COUNT);
-          return { a: 1 + Math.round (n * (M - 1)), b: M };
+          return String (1 + Math.round (n * (M - 1)));
         }
         if (paramId.indexOf ('_HARM_COUNT')   >= 0) return String (Math.round (8 * Math.pow (64, n)));
-        if (paramId.indexOf ('_SPECTRAL_LO')  >= 0 || paramId.indexOf ('_SPECTRAL_HI') >= 0) return fmtSynReadout (paramId, n);
-        if (paramId.indexOf ('_OCT')  >= 0) return sgn (Math.round (-3   + n * 6));
-        if (paramId.indexOf ('_SEMI') >= 0) return sgn (Math.round (-12  + n * 24));
-        if (paramId.indexOf ('_CENT') >= 0) return sgn (Math.round (-100 + n * 200));
-        if (paramId.indexOf ('_PAN')  >= 0) { const v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
-        if (paramId.indexOf ('_SAMPLE_SCAN') >= 0 || paramId.indexOf ('_GRAIN_SCAN') >= 0) { const s = -1 + n * 2; return Math.abs (s) < 0.02 ? '0' : sgn (Math.round (s * 200)); }
+        if (paramId.indexOf ('_SPECTRAL_LO')  >= 0 || paramId.indexOf ('_SPECTRAL_HI') >= 0) return fmtSynReadout (paramId, n);   // a harmonic number, or 'off'
+        if (paramId.indexOf ('_OCT')  >= 0) return String (Math.round (-3   + n * 6));
+        if (paramId.indexOf ('_SEMI') >= 0) return String (Math.round (-12  + n * 24));
+        if (paramId.indexOf ('_CENT') >= 0) return String (Math.round (-100 + n * 200));
+        if (paramId.indexOf ('_PAN')  >= 0) return fromCentre ();
+        if (paramId.indexOf ('_SAMPLE_SCAN') >= 0 || paramId.indexOf ('_GRAIN_SCAN') >= 0) return String (Math.round (Math.abs (-1 + n * 2) * 200));   // ±200 → 0..200, the arc shows the side
+        if (/_(SAMPLE_FORMANT|GEODE_FORMANT|GEODE_TILT|GEODE_BEDROCK|GRAIN_DIR|GRAIN_SKEW)$/.test (paramId)) return fromCentre ();
         if (paramId.indexOf ('_GRAIN_DENSITY') >= 0) return String (Math.round (Math.pow (200, n)));
         if (paramId.indexOf ('_GRAIN_SIZE')    >= 0) return String (Math.round (2 * Math.pow (250, n)));
-        if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chord','Maj','Min','Penta'][Math.round (n * 6)] || 'Off';
-        if (paramId.indexOf ('_GRAIN_PITCH')   >= 0) return sgn (Math.round (-24 + n * 48));
-        if (paramId.indexOf ('_GRAIN_DIR')     >= 0) { const d = -1 + n * 2; return Math.abs (d) < 0.02 ? 'Rnd' : sgn (Math.round (d * 100)); }
-        if (paramId.indexOf ('_GRAIN_SKEW')    >= 0) { const s = -1 + n * 2; return Math.abs (s) < 0.02 ? '0' : sgn (Math.round (s * 100)); }
-        if (paramId.indexOf ('_FM_RATIO') >= 0) { const r = Math.round ((0.25 + 15.75 * n * n) * 4) / 4; return r >= 10 ? String (Math.round (r * 10) / 10) : String (r); }
+        if (paramId.indexOf ('_GRAIN_KEY')     >= 0) return ['Off','Oct','5th','Chd','Maj','Min','Pen'][Math.round (n * 6)] || 'Off';
+        if (paramId.indexOf ('_GRAIN_PITCH')   >= 0) return String (Math.round (-24 + n * 48));
+        if (paramId.indexOf ('_FM_RATIO') >= 0) {
+          let p = Math.round ((0.25 + 15.75 * n * n) * 4), q = 4;            // the param's own quarter grid
+          while (q > 1 && p % 2 === 0) { p /= 2; q /= 2; }
+          return q === 1 ? String (p) : p + '/' + q;
+        }
         return String (pct);
       }
       window.__fmtRing = fmtRing;
-      /* the painter: one .kv per ring, created on first use; only touches the DOM when the text changes */
+      /* the painter: one .kv per ring, created on first use; only touches the DOM when the text changes.
+         The rack's font law scaled to the 24px ring: three glyphs at 7.5px, four at 6.5 (a minus on a
+         three-digit number, "63/4"), anything longer at 5.8 — and fmtRing never makes anything longer. */
       function paintRingVal (ring, val) {
         let el = ring.__kv;
         if (! el) { el = ring.querySelector ('.kv'); if (! el) { el = document.createElement ('div'); el.className = 'kv'; ring.appendChild (el); } ring.__kv = el; }
-        if (val && typeof val === 'object') {
-          if (! el.__st) { el.classList.add ('st'); el.style.fontSize = '6.2px'; el.__st = true; }
-          if (el.__a !== val.a || el.__b !== val.b) { el.innerHTML = '<i>' + val.a + '</i><i>' + val.b + '</i>'; el.__a = val.a; el.__b = val.b; }
-          return;
-        }
         const s = String (val == null ? '' : val);
-        if (el.__st) { el.classList.remove ('st'); el.__st = false; el.__a = el.__b = undefined; }
         const fs = s.length <= 3 ? '7.5px' : s.length === 4 ? '6.5px' : '5.8px';
         if (el.style.fontSize !== fs) el.style.fontSize = fs;
         if (el.__s !== s) { el.textContent = s; el.__s = s; }
@@ -31118,7 +31132,7 @@ restoreThemeFromBackend();
     if(!lastT)lastT=t; var dt=(t-lastT)/1000; lastT=t;
     if(dt<0.001)dt=0.001; else if(dt>0.1)dt=0.1;   // real inter-push gap, clamped (first call / tab-suspend safe)
     var rP=window.__mvLfoPh;   // fb217 — THE TRUTH FEED: the DSP's actual LFO phase (Max: 'the follower is seconds off' — it was a free-running JS clock at a fake 120 BPM; now the dot IS the audible read position, sync/rate-mod/transport all inherently exact)
-    if(rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){
+    if(live&&rP&&window.__mvLfoPhT&&(Date.now()-window.__mvLfoPhT)<250){   /* fb631 — a PARKED painter holds its phase: the DSP feed keeps advancing while a note sounds whether or not the LFO is routed, and a gesture on the panel (pointer, wheel, a key) used to re-enter here and move the faded head. Max: "if it's not assigned to something it shouldn't be animating at all." */
       // THE PLL IS DEAD (was fb487→fb493→fb506). This painter now runs once per C++ push (the
       // fb483 coalesced 60 Hz frame is the clock), so the pushed phase IS the playhead — paint it
       // directly. No rate estimate, no free-run, no correction, no trigger heuristics: a retrig
@@ -31127,7 +31141,7 @@ restoreThemeFromBackend();
       var __i5=st.tab-1;
       ph=(((rP[__i5]||0)%1)+1)%1;
     }
-    else if(!window.Juce&&!window.__JUCE__){ ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   // fb567 — the simulation is the BROWSER PREVIEW's only (no backend at all). Inside the plugin a stale feed is fb511's IDLE by design, and since fb566 the DSP LFO is PARKED there: the head holds — it used to keep sweeping on this clock ("it pauses, then it just keeps going")
+    else if(live&&!window.Juce&&!window.__JUCE__){ ph+=dt*effHz(); if(ph>=1)ph-=Math.floor(ph); }   /* fb631 — same law in the preview */   // fb567 — the simulation is the BROWSER PREVIEW's only (no backend at all). Inside the plugin a stale feed is fb511's IDLE by design, and since fb566 the DSP LFO is PARKED there: the head holds — it used to keep sweeping on this clock ("it pauses, then it just keeps going")
     // (fb567 — the park / wake bookkeeping sits at the top of this function)
     // fb245 — CHAIN advance: step the LFO snapshot chain on each cycle wrap (phase 1→0), the direct analog of
     // how ARP/CHOP/GLITCH advance on pattern wrap. Restart on the silence→life edge; freeze in true silence.
@@ -32135,6 +32149,16 @@ restoreThemeFromBackend();
       var e1=a.el;
       if(!e1||e1.isConnected===false||!e1.getAttribute||e1.getAttribute('data-mod-dest')!==String(a.dest)) a.el=elForDest(a.dest);
       return a.el; }
+    /* fb631 — THE ENVELOPE FAMILY (EnvPBase 481 .. LfoRateBase 673) GETS THE FX RULE. Max: "I try to
+       modulate the envelope attack and I don't see the underline any more — I can see it everywhere else,
+       even on the effect rack." Two holes, one cause: the shelf's six chips only ADVERTISE the envelope on
+       screen (refreshChips re-stamps data-mod-dest on every switch), and this function (a) never re-resolved
+       a NULL el for a non-FX dest — so a route restored while its envelope was off screen (the 2.5 s poll,
+       the preset-load mirror) had a.el=null for ever, no mark, even after you switched to it — and (b) never
+       checked the chip still advertises the route's dest, so Env 1's mark sat under Env 2's chip. The FX
+       branch above already does both; this is the same rule for the same reason. A dest whose envelope is
+       not displayed resolves to null → mark down, route intact (the fb453 law). */
+    if(a.dest>=481&&a.dest<673){ var eE=a.el; if(!eE||eE.isConnected===false||!eE.getAttribute||eE.getAttribute('data-mod-dest')!==String(a.dest)) a.el=elForDest(a.dest); return a.el; }
     if(a.el&&a.el.isConnected===false){ var e2=elForDest(a.dest); if(e2)a.el=e2; }   /* fb145 — card grids REBUILD on lane/effect switch */
     /* fb524 — and a card surface can go DARK without being replaced: closing a card leaves its
        cells in the DOM with no layout box, and a shared dest (23/24/25) may be advertised by
@@ -32244,6 +32268,17 @@ restoreThemeFromBackend();
   window.__selMod = window.__selMod || { env:1 };
   document.addEventListener('click',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t');
     if(!t)return; var n=+t.getAttribute('data-tab'); if(n>=1&&n<=10) window.__selMod={lfo:n}; });
+  /* fb631 — HOVER AN LFO NUMBER, SEE WHAT IT MODULATES. Max: "I should be able to hover over the LFO
+     numbers 1 through 10 long enough to where it shows me what's being modulated — similarly to how we
+     can hover over the attenuation and see. Sometimes you can't tell what's connected to what." The
+     same .sm-routes list the marks open, asked the inverse question (every route whose SOURCE is this
+     LFO), each row named by its destination; the ✕ and the ⤢ work as they do under a mark. Delegated on
+     document because render() rebuilds the tabs; mouseover/mouseout bubble where mouseenter does not.
+     Nothing opens during a drag, and a tab with no routes opens nothing (the list's own early return). */
+  document.addEventListener('mouseover',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t[data-tab]'); if(!t||document.body.classList.contains('sm-dragging'))return;
+    var n=+t.getAttribute('data-tab'); if(!(n>=1&&n<=10))return; if(rtHideT)clearTimeout(rtHideT);
+    showRoutes(t,t,function(a){ return (+a.lfo||0)===n; },function(a){ return destShortName(a.dest)+(a.aux?(' × '+srcName(a.aux)):'')+' · '+(a.byp?'off':(Math.round(a.depth*100)+'%')); }); });
+  document.addEventListener('mouseout',function(e){ var t=e.target.closest&&e.target.closest('#mod-engine .mv-tabs .t[data-tab]'); if(t) hideRoutesSoon(); });
   /* fb257 — FOCUS FOLLOWS INTERACTION: the underline glow must track whichever modulator you're
      actually on, with NO re-click. Touching the LFO panel (#mod-engine) selects the current LFO;
      touching the envelope editor (.device.envs) selects the current envelope — so switching between
@@ -32582,7 +32617,7 @@ restoreThemeFromBackend();
   /* fb563 (3) — "LFO 2 × Macro 1 · 45%", "Env 1 · off": one spelling for the hover list and the menu row */
   function routeLabel(a){ return srcName(a)+(a.aux?(' \u00D7 '+srcName(a.aux)):'')+' \u00B7 '+(a.byp?'off':(Math.round(a.depth*100)+'%')); }
   function updRouteList(a){ if(!rtMenu||!rtMenu.__rows)return;   /* fb190 */
-    rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=routeLabel(a); }); }
+    rtMenu.__rows.forEach(function(r){ if(r.a===a) r.lab.textContent=(rtMenu.__label||routeLabel)(a); }); }
   function hideRoutesSoon(){ if(rtHideT)clearTimeout(rtHideT); rtHideT=setTimeout(function(){ if(!badgeBusy)hideRoutes(); },250); }   /* fb190 — never hide mid-drag */
   document.addEventListener('pointerdown',function(e){ if(rtMenu&&!rtMenu.contains(e.target)&&!(e.target.closest&&e.target.closest('.sm-ul'))) hideRoutes(); });   /* fb190 — closest: the ul's children are the target now */
   /* ═══ fb554 · OVERPASS 10A — THE MOD-CONNECTION CURVE EDITOR ════════════════════════════
@@ -32852,12 +32887,16 @@ restoreThemeFromBackend();
       var a=addRoute(c.S,dest,el); if(!a) return; a.depth=c.depth; a.curve=c.curve?c.curve.slice():null; a.pts=(c.pts&&window.__crvUtil)?c.pts.map(window.__crvUtil.clonePt):null; a.byp=c.byp||0; a.aux=c.aux?srcOf(c.aux):null; n++; });
     markTargets(); push(); return n; };
 
-  function showRoutes(el,u){ hideRoutes();
-    var list=assigns.filter(function(a){ return curEl(a)===el; }); if(!list.length)return;
+  /* fb631 — showRoutes now takes an optional PICKER and LABEL so the same list, same chrome, same ✕ and
+     ⤢, can answer the inverse question: not "what modulates this control" but "what does THIS SOURCE
+     modulate". The LFO tabs use it (below). Defaults reproduce the fb188 behaviour exactly. */
+  function showRoutes(el,u,pick,label){ hideRoutes();
+    var list=assigns.filter(pick||function(a){ return curEl(a)===el; }); if(!list.length)return;
     rtMenu=document.createElement('div'); rtMenu.className='sm-routes';
     rtMenu.__rows=[];   /* fb190 — the list IS the attenuator readout: rows update live during drags */
+    rtMenu.__label=label||routeLabel;
     list.forEach(function(a){ var row=document.createElement('div'); row.className='rr';
-      var lab=document.createElement('span'); lab.textContent=routeLabel(a); if(a.byp) lab.style.opacity='.45';   /* fb563 (3) */
+      var lab=document.createElement('span'); lab.textContent=(label||routeLabel)(a); if(a.byp) lab.style.opacity='.45';   /* fb563 (3) */
       var x=document.createElement('span'); x.className='rx'; x.innerHTML=(window.__xGlyph?window.__xGlyph(11):'\u2715'); x.title='remove';   /* fb564 — the same cross as the menu, on the ⤢'s geometry */
       x.addEventListener('click',function(ev){ ev.stopPropagation(); removeAssign(a); hideRoutes(); });
       /* fb554 — EDIT CURVE. The connection is a straight multiply until you draw something here;
@@ -33266,8 +33305,19 @@ restoreThemeFromBackend();
   function restore(cb,strict){ var done=function(){ if(cb){ var c=cb; cb=null; try{ c(); }catch(e){} } };   /* fb570 — an optional completion, called exactly once, after the merge or on any bail */
     if(window.__cardOnly==='mod'){ done(); return; }
     try{ var g=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('getSynthMod'):null; if(!g){ done(); return; }
-    g().then(function(js){ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr)){ done(); return; }   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
-      var live=(window.__cardOnly||strict)?Object.create(null):null;   /* fb620 — a preset load mirrors STRICTLY: routes the new patch lacks are pruned */
+    var issued=Date.now(); g().then(function(js){
+      /* fb631 — a reply that left BEFORE our last local edit describes a matrix that no longer exists:
+         merging it would resurrect the route we just removed (the relay fires a re-read after every
+         setSynthMod, and the 2.5 s poll adds more). Drop it; the edit's own relay kick re-reads fresh. */
+      if(!strict&&lastLocalEdit>=issued){ done(); return; }   /* >= : an edit in the SAME millisecond as the request can still be the one this reply predates */ try{ var arr=JSON.parse(js||'[]'); if(!Array.isArray(arr)){ done(); return; }   /* fb524 — a stubbed/absent native answers 0; a bad read must not be read as "the matrix is empty" and prune the mirror */
+      /* fb631 — THE DOCKED MIRROR PRUNES TOO. fb524 made this grow-only in the docked window: every
+         getSynthMod reply re-added routes, and only a card window or a strict preset load ever
+         deleted. So the C++ could lose "LFO 2 → Warp" and the docked `assigns` kept it for ever —
+         __tiLfoRouted kept saying "routed", the head never parked, and the next push() wrote the
+         ghost route BACK into the C++. Max: "once I take it off it still moves — it thinks it's
+         still assigned." fb524's in-flight-edit guard below (lastLocalEdit) still protects a route
+         you are mid-drag on. */
+      var live=Object.create(null);   /* fb620 — a preset load mirrors STRICTLY: routes the new patch lacks are pruned */
       arr.forEach(function(o){ var sv=o.s|0, dest=o.d|0, el=elForDest(dest);
       /* fb563 — ONE decoder (decodeSrc, beside the encoder). The hand-written chain that lived
          here stopped at `sv<215` while fb556 had grown the followers to seven: a Filter 1 /
@@ -33314,7 +33364,7 @@ restoreThemeFromBackend();
      assigned to something, THEN be played, in order for it to move." One question, asked of the
      matrix that already knows the answer: LFO numbers here are 1-based, the same as decodeSrc's
      {lfo: sv+1}. */
-  window.__tiLfoRouted=function(n){ n=+n||0; for(var i=0;i<assigns.length;i++) if((+assigns[i].lfo||0)===n) return true; return false; };
+  window.__tiLfoRouted=function(n){ n=+n||0; for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(!a.byp && +a.depth!==0 && (+a.lfo||0)===n) return true; } return false; };   /* fb631 — bypassed / zero-depth routes contribute nothing (the C++ agrees), so they do not animate */
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} }; window.__tiModRestoreStrict=function(cb){ try{ restore(cb,true); }catch(e){} };   /* fb620 */   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
   setInterval(function(){ try{ if(window.__tiQuiet)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
@@ -38707,9 +38757,9 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       function revert () { if (! lab) return; if (tmr) clearTimeout (tmr); tmr = setTimeout (function () { lab.textContent = name; }, 750); }   // labels revert → no lasting reflow
       function fill (nn) { try { if (window.__synArc) window.__synArc (ring, nn, spec.bip);
         /* fb630 — the number inside, in the rack's idiom: Level %, Scan rate, Pan L/C/R */
-        if (window.__synRingVal) window.__synRingVal (ring, spec.kind === 'pan' ? (function () { var p = Math.round ((nn - 0.5) * 200); return p === 0 ? 'C' : (p > 0 ? 'R' + p : 'L' + (-p)); })()
-                                                       : spec.kind === 'scan' ? ((nn < 0.5) ? (0.1 + 1.8 * nn) : (1.0 + 2.0 * (nn - 0.5))).toFixed (2)
-                                                       : String (Math.round (nn * 100))); } catch (e) {} }
+        /* fb631 — bare numbers: Level is its percent; Scan and Pan are bipolar, so the number is the
+           distance from centre and the arc shows the side (Max: "no L100") */
+        if (window.__synRingVal) window.__synRingVal (ring, spec.bip ? String (Math.round (Math.abs (nn - 0.5) * 200)) : String (Math.round (nn * 100))); } catch (e) {} }
       fill (v); ring.style.cursor = 'grab';
       ring.addEventListener ('pointerdown', function (ev2) { if (ev2.button !== 0) return; ev2.preventDefault (); try { ring.setPointerCapture (ev2.pointerId); } catch (e) {}
         var y0 = ev2.clientY, v0 = v; ring.style.cursor = 'grabbing';
@@ -40010,7 +40060,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 
   /* ═══ HEADER ═══════════════════════════════════════════════════════════════════════════════════ */
   function setHeader() { const el = $('preset-name'); if (!el) return;
-    el.innerHTML = S.cur.name ? (S.cur.bank ? `<span class="bk">${esc(S.cur.bank)} - </span>` : '') + esc(S.cur.name) : 'Init';
+    /* fb631 — the prefix is the TYPE, not the bank. Max: "people could tell, oh okay, I'm using a bass.
+       I don't think they want to see what bank they're in — that's in the information section." */
+    const ty = tidy(S.cur.type || '');
+    el.innerHTML = S.cur.name ? (ty ? `<span class="bk">${esc(ty)} - </span>` : '') + esc(S.cur.name) : 'Init';
     el.title = S.cur.name ? plain(S.cur) : 'Init'; }
   function setCurrent(meta) { S.cur = metaFrom(meta); S.curId = findCur(); if (S.curId >= 0) S.sel = S.curId; setHeader(); }
   function pool() { const bk = S.curId >= 0 ? S.presets[S.curId].bank : (S.cur.bank || null); const p = bk ? S.presets.filter(x => same(x.bank, bk)) : []; return p.length ? p : S.presets; }
@@ -40028,8 +40081,8 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const p = S.curId >= 0 ? S.presets[S.curId] : null, canSave = !!(p && p.user);
     const r = $('preset-save-btn').getBoundingClientRect();
     menuAt(r.left, r.bottom + 4, `<div class="pi${canSave ? '' : ' off'}" data-a="save"><span class="nm">Save</span><span class="ct">⌘S</span></div>
-      <div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>
-      <div class="pi" data-a="export"><span class="nm">Export preset…</span></div>
+      <div class="pi" data-a="saveas"><span class="nm">Save as</span></div>
+      <div class="pi" data-a="export"><span class="nm">Export preset</span></div>
       <div class="pi" data-a="init"><span class="nm">Init preset</span></div>`,
       a => { if (a === 'save') saveCurrent(); if (a === 'saveas') openSave(); if (a === 'export') exportCurrent(); if (a === 'init') initPatch(); });
   }
@@ -40063,11 +40116,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
   function renderQuick() {
     if (!quickOpen()) return;
-    const b = $('tp-q-banks'); let h = '<div class="ps">Banks</div>';
+    const b = $('tp-q-banks'); let h = '<div class="ps">Packs</div>';
     for (const bk of S.banks) h += `<div class="pi${same(bk.name, S.qBank) ? ' cur' : ''}" data-bank="${esc(bk.name)}"><span class="nm">${esc(bk.name)}</span><span class="ct">${bk.n}</span></div>`;
     const nf = S.presets.filter(isFav).length;
     h += `<div class="pi${S.qBank === FAVS ? ' cur' : ''}" data-bank="${FAVS}"><span class="nm">Favourites</span><span class="ct">${nf}</span></div>`;
-    h += `<div class="pi imp" data-do="import"><span class="nm">Import bank…</span></div>`;
+    h += `<div class="pi imp" data-do="import"><span class="nm">Import pack…</span></div>`;
     b.innerHTML = h;
     b.querySelectorAll('.pi[data-bank]').forEach(el => { el.onclick = () => { S.qBank = el.dataset.bank; renderQuick(); }; });
     b.querySelector('[data-do=import]').onclick = () => { toggleQuick(false); importPack(); };
@@ -40156,7 +40209,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   }
   function editable(p) {
     if (!p) return false;
-    if (!p.user) { toast('A factory preset cannot be edited — Save as… to make it yours'); return false; }
+    if (!p.user) { toast('A factory preset cannot be edited — Save as to make it yours'); return false; }
     return true;
   }
   function setType(word) {
@@ -40196,11 +40249,11 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     st.addEventListener('scroll', () => stripEdge(st));
   });
   function renderRail() {
-    const r = $('tp-rail'); let h = '<div class="sec">Banks</div>';
-    h += `<div class="ri${S.bank == null ? ' cur' : ''}" data-bank=""><span class="nm">All banks</span><span class="ct">${S.presets.length}</span></div>`;
+    const r = $('tp-rail'); let h = '<div class="sec">Packs</div>';
+    h += `<div class="ri${S.bank == null ? ' cur' : ''}" data-bank=""><span class="nm">All packs</span><span class="ct">${S.presets.length}</span></div>`;
     for (const bk of S.banks) h += `<div class="ri${same(S.bank, bk.name) ? ' cur' : ''}" data-bank="${esc(bk.name)}"><span class="nm">${esc(bk.name)}</span><span class="ct">${bk.n}</span></div>`;
-    h += `<div class="ri imp" data-do="newbank">${PLUS}<span class="nm">New bank…</span></div>`;
-    h += `<div class="ri imp" data-do="import">${PLUS}<span class="nm">Import bank…</span></div>`;
+    h += `<div class="ri imp" data-do="newbank">${PLUS}<span class="nm">New pack…</span></div>`;
+    h += `<div class="ri imp" data-do="import">${PLUS}<span class="nm">Import pack…</span></div>`;
     const authors = [...new Set(S.presets.map(p => p.author).filter(Boolean))];
     h += '<div class="sec">Author</div>';
     h += `<div class="ri${S.author == null ? ' cur' : ''}" data-author=""><span class="nm">All</span></div>`;
@@ -40295,7 +40348,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       <div class="kv">
         <span class="k">Type</span><span class="v">${esc(p.type || '—')}</span>
         <span class="k">Style</span><span class="v clamp" data-full="${esc(styles)}">${esc(styles || '—')}</span>
-        <span class="k">Bank</span><span class="v pick" id="tp-bankpick" title="${p.user ? 'Move this preset to another bank' : 'Factory presets stay where they are'}">${esc(p.bank)}</span>
+        <span class="k">Pack</span><span class="v pick" id="tp-bankpick" title="${p.user ? 'Move this preset to another pack' : 'Factory presets stay where they are'}">${esc(p.bank)}</span>
         <span class="k">Load</span><span class="v">${loadEst(p).txt}</span>
         <span class="k">Size</span><span class="v">${fmtB(p.bytes)}</span>
       </div>
@@ -40316,9 +40369,9 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       e.stopPropagation();
       const banks = S.banks.filter(b => !b.factory && !same(b.name, p.bank));
       let h = '';
-      if (!banks.length) h += '<div class="pi dim"><span class="nm">No other bank yet</span></div>';
+      if (!banks.length) h += '<div class="pi dim"><span class="nm">No other pack yet</span></div>';
       for (const b of banks) h += `<div class="pi" data-a="b:${esc(b.name)}"><span class="nm">${esc(b.name)}</span><span class="ct">${b.n}</span></div>`;
-      h += '<div class="pi imp" data-a="new"><span class="nm">New bank…</span></div>';
+      h += '<div class="pi imp" data-a="new"><span class="nm">New pack…</span></div>';
       const r = bp.getBoundingClientRect();
       menuAt(r.left, r.bottom + 4, h, a => {
         if (a === 'new') { openNewBank(p); return; }
@@ -40397,10 +40450,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   function openCtx(e, id) {
     const p = S.presets[id]; if (!p) return;
     let h = `<div class="pi" data-a="load"><span class="nm">Load</span></div><div class="pi" data-a="fav"><span class="nm">${isFav(p) ? 'Remove favourite' : 'Favourite'}</span></div>`;
-    h += `<div class="pi" data-a="saveas"><span class="nm">Save as…</span></div>`;
-    if (p.user) h += `<div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div>`;
+    h += `<div class="pi" data-a="saveas"><span class="nm">Save as</span></div>`;
+    if (p.user) h += `<div class="pi" data-a="over"><span class="nm">Overwrite with current</span></div><div class="pi" data-a="rename"><span class="nm">Rename</span></div>`;
     else h += `<div class="pi" data-a="dup"><span class="nm">Copy to User</span></div>`;
-    h += `<div class="pi" data-a="export"><span class="nm">Export preset…</span></div>`;
+    h += `<div class="pi" data-a="export"><span class="nm">Export preset</span></div>`;
     if (p.user) h += `<div class="pi rose" data-a="del"><span class="nm">Delete</span></div>`;
     menuAt(e.clientX, e.clientY, h, a => {
       if (a === 'load') load(id, { close: true });
@@ -40427,10 +40480,10 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
         rescan().then(() => toast(`${esc(p.name)} is now <span class="tp-bk">${esc(n)}</span>`)); }); } }); }
   function openBankCtx(e, bk) {
     const protectedBank = same(bk.name, 'User');
-    const h = `${protectedBank ? '' : '<div class="pi" data-a="rename"><span class="nm">Rename…</span></div>'}<div class="pi" data-a="export"><span class="nm">Export bank…</span></div>${protectedBank ? '' : '<div class="pi rose" data-a="remove"><span class="nm">Remove bank</span></div>'}`;
+    const h = `${protectedBank ? '' : '<div class="pi" data-a="rename"><span class="nm">Rename</span></div>'}<div class="pi" data-a="export"><span class="nm">Export pack…</span></div>${protectedBank ? '' : '<div class="pi rose" data-a="remove"><span class="nm">Remove bank</span></div>'}`;
     menuAt(e.clientX, e.clientY, h, a => {
       if (a === 'export') openExport(bk);
-      if (a === 'rename') sheet({ title: 'Rename bank', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bn" maxlength="30" value="${esc(bk.name)}"></div>`, ok: 'Rename', focus: 'tp-bn', onOk: () => {
+      if (a === 'rename') sheet({ title: 'Rename pack', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bn" maxlength="30" value="${esc(bk.name)}"></div>`, ok: 'Rename', focus: 'tp-bn', onOk: () => {
         const w = tidy($('tp-bn').value); if (!w) { $('tp-bn').focus(); return; } if (w === bk.name) { closeSheet(); return; }
         if (S.banks.some(b => same(b.name, w))) { toast(`${esc(w)} already exists`); return; }
         closeSheet(); const old = bk.name, curIn = same(S.cur.bank, old);
@@ -40449,12 +40502,17 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
   const vocab = k => k === 'type' ? S.types : S.styles;
   const usersOf = (k, w) => S.presets.filter(p => k === 'type' ? same(p.type, w) : p.styles.some(s => same(s, w)));
   function persistVocab() { call('setVocab', JSON.stringify({ types: S.types, styles: S.styles })); }
-  function ensureVocab(k, raw) { const w = tidy(raw); if (!w) return null; const list = vocab(k); const hit = list.find(x => same(x, w)); if (hit) return hit; list.push(w); persistVocab(); toast(`Added ${k} <span class="tp-bk">${esc(w)}</span>`); return w; }
+  const VOCAB_CAP = 1000;   /* fb631 — Max: "let's say 500 to a thousand, so people can add up to like 500 styles and 500 types" */
+  function ensureVocab(k, raw) { const w = tidy(raw); if (!w) return null; const list = vocab(k); const hit = list.find(x => same(x, w)); if (hit) return hit;
+    if (list.length >= VOCAB_CAP) { toast(`${k === 'type' ? 'Types' : 'Styles'} are full (${VOCAB_CAP})`); return null; }
+    list.push(w); persistVocab(); toast(`Added ${k} <span class="tp-bk">${esc(w)}</span>`); return w; }
   function addVocab(k) { sheet({ title: k === 'type' ? 'New type' : 'New style', body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" placeholder="${k === 'type' ? 'Type name' : 'Style name'}"></div>`, ok: 'Add', focus: 'tp-vn',
     onOk: () => { const w = ensureVocab(k, $('tp-vn').value); if (!w) { $('tp-vn').focus(); return; } closeSheet();
       /* fb625 — adding a word here MEANS putting it on this preset; the vocabulary grows as a side effect */
       const p = S.presets[S.sel];
-      if (p && p.user) { if (k === 'type') setType(w); else if (!p.styles.some(x => same(x, w))) toggleStyle(w); }
+      /* fb631 — setType TOGGLES (clicking the lit chip clears it), so adding the word the preset already
+         carries used to CLEAR its type. Adding a word means putting it on the preset; never taking it off. */
+      if (p && p.user) { if (k === 'type') { if (!same(p.type, w)) setType(w); } else if (!p.styles.some(x => same(x, w))) toggleStyle(w); }
       else { buildChips(); }
       renderQuick(); } }); }
   function renameVocab(k, old) { sheet({ title: 'Rename ' + old, body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-vn" maxlength="20" value="${esc(old)}"></div>`, ok: 'Rename', focus: 'tp-vn', onOk: () => {
@@ -40474,7 +40532,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
 
     buildChips(); renderRows(); renderQuick(); toast(`Removed ${esc(w)}`); }
   function openVocabCtx(e, k, w) { const used = usersOf(k, w).length;
-    menuAt(e.clientX, e.clientY, `<div class="ps">${esc(w)} · ${used} preset${used === 1 ? '' : 's'}</div><div class="pi" data-a="rename"><span class="nm">Rename…</span></div><div class="pi${used ? ' off' : ' rose'}" data-a="remove"><span class="nm">Remove</span></div>`,
+    menuAt(e.clientX, e.clientY, `<div class="ps">${esc(w)} · ${used} preset${used === 1 ? '' : 's'}</div><div class="pi" data-a="rename"><span class="nm">Rename</span></div><div class="pi${used ? ' off' : ' rose'}" data-a="remove"><span class="nm">Remove</span></div>`,
       a => a === 'rename' ? renameVocab(k, w) : removeVocab(k, w)); }
 
   /* ═══ SUGGESTIONS under a text field — the same .pmenu ═══════════════════════════════════════ */
@@ -40577,7 +40635,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     svStyles = cur ? cur.styles.slice() : stylesOf(m.styles);
     sheet({ title: 'Save preset', ok: 'Save', focus: 'tp-sv-name', body: `<div class="tp-f">
         <span class="k">Name</span><input type="text" class="tp-in" id="tp-sv-name" maxlength="40" placeholder="Preset name" value="${esc(name0)}">
-        <span class="k">Bank</span><input type="text" class="tp-in" id="tp-sv-bank" maxlength="30" placeholder="Type a bank — new name makes one" value="${esc(bank0)}">
+        <span class="k">Pack</span><input type="text" class="tp-in" id="tp-sv-bank" maxlength="30" placeholder="Type a pack — new name makes one" value="${esc(bank0)}">
         <span class="k">Author</span><input type="text" class="tp-in" id="tp-sv-author" maxlength="30" placeholder="Your name" value="${esc(author0)}">
         <span class="k">Type</span><div class="chp" id="tp-sv-type"></div>
         <span class="k">Style</span><div class="chp" id="tp-sv-style"></div>
@@ -40598,19 +40656,19 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
           const words = c.map((n, i) => n ? `${n} ${n === 1 ? CAR_ONE[i] : CAR_NAME[i]}` : '').filter(Boolean);
           el.textContent = words.length ? words.join(' · ') : 'Parameters only';
         });
-        attachSuggest($('tp-sv-bank'), () => S.banks.filter(b => !b.factory).map(b => b.name), null, 'New bank');
+        attachSuggest($('tp-sv-bank'), () => S.banks.filter(b => !b.factory).map(b => b.name), null, 'New pack');
         attachSuggest($('tp-sv-author'), () => [...new Set(S.presets.map(p => p.author).filter(Boolean))], null, null);
  },
       onOk: () => {
         const n = tidy($('tp-sv-name').value); if (!n) { $('tp-sv-name').focus(); return; }
-        const bk = tidy($('tp-sv-bank').value) || 'User'; const b = bankOf(bk); if (b && b.factory) { toast(`${esc(b.name)} is a factory bank — choose or create another`); return; }
+        const bk = tidy($('tp-sv-bank').value) || 'User'; const b = bankOf(bk); if (b && b.factory) { toast(`${esc(b.name)} is a factory pack — choose or create another`); return; }
         const type = svType || '';
         const author = $('tp-sv-author').value.trim(); if (author) S.author0 = author;
         const meta = { name: n, bank: b ? b.name : bk, author, type, styles: svStyles.slice().join(','),
                        note: ($('tp-sv-note') ? $('tp-sv-note').textContent : '').trim(), fv: 1 };
         const existing = S.presets.find(p => same(p.bank, meta.bank) && same(p.name, n));
         const go = () => { closeSheet(); call('savePresetToBank', meta.bank, JSON.stringify(meta)).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
-          setCurrent(meta); rescan().then(() => { if (!b) toast(`Created bank <span class="tp-bk">${esc(meta.bank)}</span> · saved ${esc(n)}`); else toast(`Saved <span class="tp-bk">${esc(meta.bank)} - </span>${esc(n)}`); }); }); };
+          setCurrent(meta); rescan().then(() => { if (!b) toast(`Created pack <span class="tp-bk">${esc(meta.bank)}</span> · saved ${esc(n)}`); else toast(`Saved <span class="tp-bk">${esc(meta.bank)} - </span>${esc(n)}`); }); }); };
         if (existing) sheet({ title: 'Overwrite preset', body: `<div class="tp-text"><b>${label(existing)}</b> already exists. Overwrite it with the current sound?</div>`, ok: 'Overwrite', onOk: go }); else go();
       } });
   }
@@ -40643,18 +40701,31 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     inp.type = 'text'; inp.className = 'tp-in'; inp.maxLength = 20;
     inp.style.width = '110px'; inp.style.height = '22px'; inp.style.fontSize = '10px';
     inp.placeholder = kind === 'type' ? 'New type' : 'New style';
-    box.appendChild(inp); setTimeout(() => inp.focus(), 20);
-    const take = () => { const w = ensureVocab(kind, inp.value);
+    box.appendChild(inp);
+    /* fb631 — NO BLUR HANDLER (the fb574 law, third time it has bitten). Focusing the field arms the
+       host-key bridge, the C++ editArm grabs keyboard focus, WebKit fires blur on the field the instant
+       JUCE takes it — and the old blur→"empty, so re-render" destroyed the input before a key could
+       land. Max: "I click the plus button of the styles and it just deletes." The macro rename and the
+       preset rename dropped their blur handlers for exactly this; the save sheet's name field never had
+       one, which is why typing a NAME works and typing a STYLE did not. Enter commits, Escape cancels,
+       a click anywhere outside the strip commits — the field is never torn down by focus alone. */
+    let closed = false;
+    const done = (save) => { if (closed || !inp.parentNode) return; closed = true;
+      document.removeEventListener('pointerdown', out, true);
+      const w = save ? ensureVocab(kind, inp.value) : null;
       if (w) { if (kind === 'type') svType = w; else if (!svStyles.some(x => same(x, w))) svStyles.push(w); }
       renderSaveChips(); };
+    const out = (ev) => { if (!box.contains(ev.target)) done(true); };
+    setTimeout(() => document.addEventListener('pointerdown', out, true), 0);
+    try { inp.focus(); } catch (e) {} setTimeout(() => { try { inp.focus(); } catch (e) {} }, 80);
     inp.onkeydown = e => { e.stopPropagation();
-      if (e.key === 'Enter') { e.preventDefault(); take(); }
-      else if (e.key === 'Escape') { e.preventDefault(); renderSaveChips(); } };
-    inp.onblur = () => { if (inp.value.trim()) take(); else renderSaveChips(); };
+      if (e.key === 'Enter') { e.preventDefault(); done(true); }
+      else if (e.key === 'Escape') { e.preventDefault(); done(false); } };
+    inp.addEventListener('pointerdown', ev => ev.stopPropagation());
   }
 
   /* ═══ NEW BANK · IMPORT · EXPORT ═══════════════════════════════════════════════════════════════ */
-  function openNewBank(moveMe) { sheet({ title: 'New bank', ok: 'Create', focus: 'tp-bk-name',
+  function openNewBank(moveMe) { sheet({ title: 'New pack', ok: 'Create', focus: 'tp-bk-name',
     body: `<div class="tp-f"><span class="k">Name</span><input type="text" class="tp-in" id="tp-bk-name" maxlength="30" placeholder="Bank name"><span class="k">Author</span><input type="text" class="tp-in" id="tp-bk-author" maxlength="30" placeholder="Your name" value="${esc(S.author0)}"></div>`,
     note: 'Save presets into it by typing its name in the Bank field. Right-click it in the browser to export it as a .terrainpack.',
     onOk: () => { const w = tidy($('tp-bk-name').value); if (!w) { $('tp-bk-name').focus(); return; }
@@ -40662,7 +40733,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
       const a = $('tp-bk-author').value.trim(); if (a) S.author0 = a; closeSheet();
       call('createBank', w, a).then(r => { if (isErr(r)) { toast(errOf(r)); return; }
         if (moveMe) { moveTo(moveMe, w); return; }                 /* fb625 — created FOR this preset */
-        S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created bank <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
+        S.bank = w; rescan().then(() => { if (!browserOpen()) openBrowser(); toast(`Created pack <span class="tp-bk">${esc(w)}</span> · save into it by typing its name`); }); }); } }); }
   function importPack() { if (!NF('importPack')) { toast('Import needs the plugin'); return; } call('importPack').then(r => { if (isErr(r)) toast(errOf(r)); }); }
   /* ═══ THE MANIFEST — one card, drawn the same for a pack coming IN and a bank going OUT ═══════
      The mockup's rule: you see what is in the box before you say yes. Nothing is written to disk
@@ -40672,15 +40743,15 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const rows = [`<div>${LIST}<b>${n}</b> preset${n === 1 ? '' : 's'}</div>`];
     for (let i = 0; i < 5; i++) if (c[i]) rows.push(`<div>${CAR_GLYPH[i]}<b>${c[i]}</b> ${c[i] === 1 ? CAR_ONE[i] : CAR_NAME[i]}</div>`);
     if (envs) rows.push(`<div class="node">${CAR_GLYPH[5]}<b>${envs}</b> environment${envs === 1 ? '' : 's'} · ${c[5]} nodes</div>`);
-    return `<div class="manifest"><div class="mn">${esc(o.name || 'Bank')}${o.author ? ` <span class="by">· ${esc(o.author)}</span>` : ''}</div>
+    return `<div class="manifest"><div class="mn">${esc(o.name || 'Pack')}${o.author ? ` <span class="by">· ${esc(o.author)}</span>` : ''}</div>
       <div class="ml">${rows.join('')}</div><div class="tot">${foot}</div></div>`;
   }
   /* the C++ has looked inside a chosen or dropped pack and is offering it */
   window.onPackOffered = function (json) {
     let o = null; try { o = JSON.parse(json || 'null'); } catch (e) {}
     if (!o || !o.path) { toast('That pack could not be read'); return; }
-    sheet({ title: 'Import bank', ok: 'Import',
-      body: manifestHtml(o, `Every preset carries its own audio, so this bank plays on any machine · <b>${fmtB(+o.bytes || 0)}</b>`),
+    sheet({ title: 'Import pack', ok: 'Import',
+      body: manifestHtml(o, `Every preset carries its own audio, so this pack plays on any machine · <b>${fmtB(+o.bytes || 0)}</b>`),
       onOk: () => { closeSheet(); toast(`Installing ${esc(o.name)}…`);
         call('installPack', o.path).then(r => { if (isErr(r)) toast(errOf(r)); }); } });
   };
@@ -40691,7 +40762,7 @@ select option, select optgroup { color: #111111; background-color: #FFFFFF; }
     const a = [0, 0, 0, 0, 0, 0]; let envs = 0, bytes = 0;
     for (const p of ps) { for (let i = 0; i < 6; i++) a[i] += p.c[i]; if (p.env) envs++; bytes += p.bytes || 0; }
     const file = bk.name.replace(/\s+/g, '-') + '.terrainpack';
-    sheet({ title: 'Export bank', ok: 'Export',
+    sheet({ title: 'Export pack', ok: 'Export',
       body: manifestHtml({ name: bk.name, author: bk.author, presets: ps.length, environments: envs,
                            carries: { wt: a[0], smp: a[1], ir: a[2], flow: a[3], lfo: a[4], nodes: a[5] } },
                          `Everything above goes into ${esc(file)} · <b>${fmtB(bytes)}</b>`),

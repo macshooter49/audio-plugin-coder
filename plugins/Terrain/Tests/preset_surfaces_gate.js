@@ -11,8 +11,8 @@
 //
 //  THE BARS
 //   0  THE PAGE LAID OUT and the FX-era preset furniture is GONE (#preset-browser, the tag picker)
-//   1  THE HEADER NAMES THE PATCH — getPresetMeta → "Terra - Glacier"
-//   2  THE QUICK MENU — click the name: banks · Favourites · Import bank…; the current bank's list
+//   1  THE HEADER NAMES THE PATCH — getPresetMeta → "Pad - Glacier"
+//   2  THE QUICK MENU — click the name: banks · Favourites · Import pack…; the current bank's list
 //      grouped by type with the current preset marked; the box is hit-testable and inside the viewport
 //   3  🚨 BROWSE ALL — the glass opens above the page: elementFromPoint at its centre is INSIDE #tp-b
 //      (a hit test, never a z-index compare — fb606's law), six rows, the painters are frozen
@@ -42,13 +42,14 @@
 //  20  fb628 — every column is a lane: the author cannot be pushed into Carries by a long name
 //  21  fb629 — the header has NO COLOUR OF ITS OWN: it takes the synth page's ground, then the
 //      browser's glass. Proved in PIXELS across the y=44 seam, not by reading the stylesheet.
-//  22  fb630 — the header carries the wordmark ALONE (the mark is parked in Design/mark/): no
-//      img/svg in .header-left, TERRAIN at the padding edge, on the centreline
+//  22  fb631 — the header carries the wordmark ALONE (the mark is parked in Design/mark/): no
+//      img/svg in .header-left, TERRAIN dead centre, on the centreline; the preset cluster is at
+//      the left, at the gear's inset ([14])
 //  23  fb630 — every engine knob carries its VALUE inside the ring, in every engine and the noise
 //      strip, and every glyph box sits inside the circle at a readable size; nothing else moved
-//  24  fb630 — the readouts say the right thing: WT Pos is frame-over-frames from the live table's
-//      count, Pan is L/C/R, signed things keep their sign, choices keep their word, Shape's label
-//      is its target waveform
+//  24  fb631 — the readouts are BARE NUMBERS: WT Pos is the frame number from the live table's
+//      count, bipolar arcs show distance from centre, no units, no decimals, fractions only for the
+//      FM ratio, a choice keeps a word of ≤3 letters, Shape's label is its target waveform
 //  25  fb630 — the native capture strip is told the browser's glass colour, composited from the
 //      live tokens, when the browser opens, and told to drop it when it closes
 //
@@ -183,7 +184,7 @@ const STUB = (MUT) => {
     `header ${laid.h}px · #tp-q ${laid.q} · #tp-b ${laid.b} · old ids left: ${laid.old.join (',') || 'none'} · errors: ${errors.join (' | ') || 'none'}`);
 
   // [1] header
-  gate (await header() === 'Terra - Glacier', '[1] THE HEADER NAMES THE PATCH (getPresetMeta)', 'reads "' + await header() + '"');
+  gate (await header() === 'Pad - Glacier', '[1] THE HEADER NAMES THE PATCH (getPresetMeta)', 'reads "' + await header() + '"');
 
   // [2] quick menu
   await p.click ('#preset-name'); await wait (150);
@@ -191,7 +192,7 @@ const STUB = (MUT) => {
     const secs = [...m.querySelectorAll ('#tp-q-list .ps')].map (e => e.textContent.trim()); const cur = m.querySelector ('#tp-q-list .pi.cur .nm'); const r = m.getBoundingClientRect();
     return { on: m.classList.contains ('on'), banks, secs, cur: cur ? cur.textContent.trim() : null, inside: r.left >= 0 && r.top >= 40 && r.right <= 820 && r.bottom <= 656, box: [r.left | 0, r.top | 0, r.width | 0, r.height | 0].join ('×') }; });
   const qh = await centreIn ('#tp-q');
-  gate (q.on && q.banks.join ('|') === 'Terra|User|Favourites|Import bank…' && q.secs.join ('|') === 'Bass|Lead|Pad' && q.cur === 'Glacier' && q.inside && qh.ok,
+  gate (q.on && q.banks.join ('|') === 'Terra|User|Favourites|Import pack…' && q.secs.join ('|') === 'Bass|Lead|Pad' && q.cur === 'Glacier' && q.inside && qh.ok,
     '[2] THE QUICK MENU — banks · Favourites · Import; the bank\'s list by type with the current marked; hit-testable, inside the box',
     `on ${q.on} · banks ${q.banks.join (' / ')} · sections ${q.secs.join (' / ')} · cur ${q.cur} · box ${q.box} inside ${q.inside} · elementFromPoint → ${qh.hit}`);
 
@@ -269,14 +270,14 @@ const STUB = (MUT) => {
   const ld = await calls ('loadPatchFile');
   const after = await p.evaluate (() => ({ h: document.getElementById ('preset-name').textContent.trim(), open: document.getElementById ('tp-b').classList.contains ('on'), frozen: !! window.__tiFrozen, hooks: window.__hookCalls }));
   const hookOk = hooks.length >= 4 && Object.keys (after.hooks).every (k => after.hooks[k] === 1);
-  gate (ld.length >= 1 && ld[ld.length - 1].args[0] === '/tmp/Banks/Terra/Cirrus.terrain' && after.h === 'Terra - Cirrus' && ! after.open && ! after.frozen && hookOk,
+  gate (ld.length >= 1 && ld[ld.length - 1].args[0] === '/tmp/Banks/Terra/Cirrus.terrain' && after.h === 'Pad - Cirrus' && ! after.open && ! after.frozen && hookOk,
     '[6] 🚨 A LOAD IS ONE CALL AND THE PAGE HEARS IT ONCE — loadPatchFile(path) → onPatchLoaded → header, glass closed, painters awake, every re-seed hook fired once',
     `loadPatchFile ×${ld.length} (${ld.length ? ld[ld.length - 1].args[0] : '—'}) · header "${after.h}" · browser open ${after.open} · frozen ${after.frozen} · hooks present ${hooks.join (',')} · fired ${JSON.stringify (after.hooks)}`);
 
   // [7] arrows
   await p.click ('#preset-next'); await wait (200); const hN = await header(); const ldN = await calls ('loadPatchFile');
   await p.click ('#preset-prev'); await wait (200); const hP = await header();
-  gate (ldN.length >= 2 && ldN[ldN.length - 1].args[0] === '/tmp/Banks/Terra/Tectonic.terrain' && hN === 'Terra - Tectonic' && hP === 'Terra - Cirrus',
+  gate (ldN.length >= 2 && ldN[ldN.length - 1].args[0] === '/tmp/Banks/Terra/Tectonic.terrain' && hN === 'Bass - Tectonic' && hP === 'Pad - Cirrus',
     '[7] THE ARROWS STEP WITHIN THE BANK — › Tectonic, ‹ back to Cirrus', `› "${hN}" (${ldN.length ? ldN[ldN.length - 1].args[0] : '—'}) · ‹ "${hP}"`);
 
   // [8] save as
@@ -305,7 +306,7 @@ const STUB = (MUT) => {
   await wait (60); await p.click ('#tp-sh-ok'); await wait (350);
   const sv = await calls ('savePresetToBank'); let svm = {}; try { svm = JSON.parse (sv[0].args[1]); } catch (e) {}
   const h8 = await header();
-  gate (menuRows.join ('|') === 'Save(off)|Save as…|Export preset…|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Keys' && /Wide/.test (svm.styles) && /Dark/.test (svm.styles) && svm.note === 'Written in the save sheet.' && h8 === 'User - Gate Pad'
+  gate (menuRows.join ('|') === 'Save(off)|Save as|Export preset|Init preset' && sheetOn && sv.length === 1 && sv[0].args[0] === 'User' && svm.name === 'Gate Pad' && svm.type === 'Keys' && /Wide/.test (svm.styles) && /Dark/.test (svm.styles) && svm.note === 'Written in the save sheet.' && h8 === 'Keys - Gate Pad'
           && ! chipsBefore.typed && chipsBefore.type.join () === 'Pad'
           && chipsAfter.type.join () === 'Keys' && chipsAfter.style.includes ('Dark') && chipsAfter.style.includes ('Wide'),
     '[8] SAVE AS — the sheet PICKS BOXES (no typing), carries the note, and savePresetToBank gets all of it',
@@ -356,12 +357,17 @@ const STUB = (MUT) => {
       const r = cl.getBoundingClientRect(), hr = hd.getBoundingClientRect();
       const vis = id => { const e = document.getElementById (id); return !! (e && e.offsetParent !== null); };
       const nm = document.getElementById ('preset-name');
-      return { off: Math.abs ((r.left + r.width / 2) - (hr.left + hr.width / 2)), eq: vis ('eq-btn'), dly: vis ('delay-btn'),
+      /* fb631 — the experiment: the cluster's LEFT inset equals the gear's RIGHT inset, and the
+         wordmark is the centred group instead */
+      const gear = document.getElementById ('settings-btn').getBoundingClientRect(), wm = document.querySelector ('.header-left').getBoundingClientRect();
+      return { leftInset: +(r.left - hr.left).toFixed (2), rightInset: +(hr.right - gear.right).toFixed (2),
+               wmOff: Math.abs ((wm.left + wm.width / 2) - (hr.left + hr.width / 2)), eq: vis ('eq-btn'), dly: vis ('delay-btn'),
                syn: vis ('syn-btn'), size: nm ? getComputedStyle (nm).fontSize : '?' };
     });
-    gate (h.off != null && h.off <= 2 && ! h.eq && ! h.dly && h.syn,
-      '[14] THE PRESET CLUSTER IS CENTRED, AND EQ / DLY HAVE NO BUTTON (their code stays)',
-      `centre offset ${h.off == null ? '—' : h.off.toFixed (1) + 'px'} (must be ≤ 2) · EQ visible ${h.eq} · DLY visible ${h.dly} · SYN still visible ${h.syn} · name ${h.size}`);
+    gate (h.leftInset != null && Math.abs (h.leftInset - h.rightInset) < 0.5 && h.wmOff <= 2 && ! h.eq && ! h.dly && h.syn,
+      '[14] THE PRESET CLUSTER SITS AT THE GEAR\'S INSET, MIRRORED, AND THE WORDMARK IS CENTRED; EQ / DLY HAVE NO BUTTON',
+      `cluster left inset ${h.leftInset}px vs gear right inset ${h.rightInset}px (must match) · wordmark centre offset ${h.wmOff == null ? '—' : h.wmOff.toFixed (1) + 'px'} (≤2)`
+      + ` · EQ visible ${h.eq} · DLY visible ${h.dly} · SYN still visible ${h.syn} · name ${h.size}`);
   }
 
   // [15] selection is the WORDS, never a block
@@ -396,7 +402,7 @@ const STUB = (MUT) => {
     await clickRow ('Anvil'); await wait (90); await clickRow ('Anvil'); await wait (300);
     const afterDbl = await p.evaluate (() => ({ open: document.getElementById ('tp-b').classList.contains ('on'),
                                                 h: document.getElementById ('preset-name').textContent.trim() }));
-    gate (afterLoad.open && afterLoad.h !== before && ! afterDbl.open && afterDbl.h === 'Terra - Anvil',
+    gate (afterLoad.open && afterLoad.h !== before && ! afterDbl.open && afterDbl.h === 'Lead - Anvil',
       '[16] THE LOAD BUTTON KEEPS THE BROWSER OPEN — only a double-click on a row closes it',
       `before "${before}" · after Load: open ${afterLoad.open}, header "${afterLoad.h}" · after a double-click: open ${afterDbl.open}, header "${afterDbl.h}"`);
   }
@@ -416,7 +422,7 @@ const STUB = (MUT) => {
                chipsInside, chipsAtTop, scrolls: !!(sc && getComputedStyle (sc).overflowY === 'auto'),
                actsPinned: !!(acts && acts.parentElement && acts.parentElement.classList.contains ('insp')) };
     });
-    gate (i.keys.join ('|') === 'Type|Style|Bank|Load|Size' && i.author === 'Max' && i.editable
+    gate (i.keys.join ('|') === 'Type|Style|Pack|Load|Size' && i.author === 'Max' && i.editable
           && i.chipsInside && ! i.chipsAtTop && i.scrolls && i.actsPinned,
       '[17] THE INSPECTOR — author under the name (editable), no Effects/Author rows, filters moved in, column scrolls',
       `kv rows ${i.keys.join (' / ')} · author "${i.author}" editable ${i.editable} · chips in the inspector ${i.chipsInside}, still at the top ${i.chipsAtTop} · scrolls ${i.scrolls} · Load pinned ${i.actsPinned}`);
@@ -584,13 +590,14 @@ const STUB = (MUT) => {
       if (! left || ! nm || ! h) return { missing: true };
       const marks = left.querySelectorAll ('img, svg, .brand-logo').length;
       const n = nm.getBoundingClientRect(), hr = h.getBoundingClientRect();
-      const pad = parseFloat (getComputedStyle (h).paddingLeft);
-      return { marks, x: +n.left.toFixed (2), pad, dCentre: +Math.abs ((n.top + n.height / 2) - (hr.top + hr.height / 2)).toFixed (2) };
+      const lr = left.getBoundingClientRect();
+      return { marks, xOff: +Math.abs ((lr.left + lr.width / 2) - (hr.left + hr.width / 2)).toFixed (2),
+               dCentre: +Math.abs ((n.top + n.height / 2) - (hr.top + hr.height / 2)).toFixed (2) };
     });
-    gate (!! m && ! m.missing && m.marks === 0 && Math.abs (m.x - m.pad) < 0.5 && m.dCentre < 1,
-      '[22] THE HEADER CARRIES THE WORDMARK ALONE — no mark, at the padding edge, on the centreline',
+    gate (!! m && ! m.missing && m.marks === 0 && m.xOff <= 2 && m.dCentre < 1,
+      '[22] THE HEADER CARRIES THE WORDMARK ALONE — no mark, dead centre, on the centreline',
       m && ! m.missing
-        ? `marks in the header: ${m.marks} (must be 0) · TERRAIN starts at x=${m.x} against a ${m.pad}px padding · centre off the bar's by ${m.dCentre}px`
+        ? `marks in the header: ${m.marks} (must be 0) · wordmark group off the window centre by ${m.xOff}px (≤2) · centre off the bar's by ${m.dCentre}px`
         : 'header or wordmark missing');
   }
 
@@ -640,15 +647,17 @@ const STUB = (MUT) => {
   {
     const r = await p.evaluate (() => {
       const f = window.__fmtRing, o = {};
-      o.wt16  = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0));          // the bank default, before any push
+      o.wt16  = f ('SYN_OSC_A_WT_FRAME', 1);                             // the bank default, before any push: the last of 16
       window.onWtFrames (0, 128);                                        // the editor timer's push: a Terra table
-      o.wt128a = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0)); o.wt128z = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 1)); o.wt128m = JSON.stringify (f ('SYN_OSC_A_WT_FRAME', 0.5));
+      o.wt128a = f ('SYN_OSC_A_WT_FRAME', 0); o.wt128z = f ('SYN_OSC_A_WT_FRAME', 1); o.wt128m = f ('SYN_OSC_A_WT_FRAME', 0.5);
       const rg = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_A_WT_FRAME"] .knob-ring');
       o.live = rg && rg.__kv ? rg.__kv.textContent.replace (/\s+/g, '') : '?';   // the live ring, repainted by the push
-      o.liveWant = rg ? String (1 + Math.round ((rg.__n || 0) * 127)) + '128' : '?';   // from what the knob actually holds
+      o.liveWant = rg ? String (1 + Math.round ((rg.__n || 0) * 127)) : '?';   // from what the knob actually holds
       o.panL = f ('SYN_OSC_A_PAN', 0); o.panC = f ('SYN_OSC_A_PAN', 0.5); o.panR = f ('SYN_OSC_A_PAN', 1);
       o.semi = f ('SYN_OSC_A_SEMI', 1); o.oct = f ('SYN_OSC_A_OCT', 0); o.key = f ('SYN_OSC_A_GRAIN_KEY', 0.5); o.warp = f ('SYN_OSC_A_WARP_AMOUNT', 0.48);
-      o.scan = f ('SYN_OSC_A_GRAIN_SCAN', 0.5); o.ratio = f ('SYN_OSC_A_FM_RATIO', 0);
+      o.scan = f ('SYN_OSC_A_GRAIN_SCAN', 0.5); o.ratio = f ('SYN_OSC_A_FM_RATIO', 0); o.ratio2 = f ('SYN_OSC_A_FM_RATIO', Math.sqrt (2.25 / 15.75));
+      o.longest = 0; ['_WT_FRAME','_PAN','_SEMI','_OCT','_CENT','_GRAIN_KEY','_GRAIN_SCAN','_GRAIN_PITCH','_GRAIN_SIZE','_GRAIN_DENSITY','_HARM_COUNT','_FM_RATIO','_WARP_AMOUNT']
+        .forEach (t => { for (let i = 0; i <= 20; ++i) { const v = f ('SYN_OSC_A' + t, i / 20); if (/[.a-zA-Z]{4,}|ms|Hz|%|[LR]\d/.test (v)) o.bad = (o.bad || '') + t + '=' + v + ' '; o.longest = Math.max (o.longest, v.length); } });
       const nz = [...document.querySelectorAll ('#noise-mod .noise-knobs .knob-ring .kv')].map (e => e.textContent.trim());
       o.noise = nz.join ('|');
       const lab = document.querySelector ('#syn-panel .knob[data-syn="SYN_OSC_A_GEODE_DISTILL"] .knob-label');
@@ -657,15 +666,16 @@ const STUB = (MUT) => {
       return o;
     });
     const shapes = ['Sine','Square','Saw','Triangle','Pulse','Hollow','Organ','Half','Vowel','Bright','Metal'];
-    gate (r.wt16 === '{"a":1,"b":16}' && r.wt128a === '{"a":1,"b":128}' && r.wt128z === '{"a":128,"b":128}' && r.wt128m === '{"a":65,"b":128}'
+    gate (r.wt16 === '16' && r.wt128a === '1' && r.wt128z === '128' && r.wt128m === '65'
           && r.live === r.liveWant
-          && r.panL === 'L100' && r.panC === 'C' && r.panR === 'R100' && r.semi === '+12' && r.oct === '-3' && r.key === 'Chord'
-          && r.warp === '48' && r.scan === '0' && r.ratio === '0.25'
-          && /^\d+\|\d\.\d\d\|(C|[LR]\d+)$/.test (r.noise) && shapes.indexOf (r.shape) >= 0,
-      '[24] THE READOUTS SAY THE RIGHT THING — frame over frames from the live count, L/C/R, signs, words, and Shape names its target',
-      `WT Pos ${r.wt16} → after a 128-frame push ${r.wt128a} … ${r.wt128m} … ${r.wt128z}, live ring "${r.live}" (must be ${r.liveWant})`
-      + ` · pan ${r.panL}/${r.panC}/${r.panR} · semi ${r.semi} · oct ${r.oct} · key ${r.key} · warp ${r.warp} · scan-centre ${r.scan} · ratio ${r.ratio}`
-      + ` · noise ${r.noise} (level|rate|pan) · Shape's label "${r.shape}"`);
+          && r.panL === '100' && r.panC === '0' && r.panR === '100' && r.semi === '12' && r.oct === '-3' && r.key === 'Chd'
+          && r.warp === '48' && r.scan === '0' && r.ratio === '1/4' && r.ratio2 === '5/2'
+          && ! r.bad && r.longest <= 4
+          && /^\d+\|\d+\|\d+$/.test (r.noise) && shapes.indexOf (r.shape) >= 0,
+      '[24] THE READOUTS ARE BARE NUMBERS — the frame from the live count, distance-from-centre on bipolar arcs, no units, no decimals, fractions only for the FM ratio',
+      `WT Pos on 16 frames at full: ${r.wt16} → after a 128-frame push ${r.wt128a} … ${r.wt128m} … ${r.wt128z}, live ring "${r.live}" (must be ${r.liveWant})`
+      + ` · pan ${r.panL}/${r.panC}/${r.panR} (must be 100/0/100) · semi ${r.semi} · oct ${r.oct} · key ${r.key} · warp ${r.warp} · scan-centre ${r.scan} · ratio ${r.ratio}, ${r.ratio2}`
+      + ` · forbidden shapes across 13 knobs × 21 values: ${r.bad || 'none'} · longest ${r.longest} glyphs (≤4) · noise ${r.noise} (bare|bare|bare) · Shape's label "${r.shape}"`);
   }
 
   // ── fb630 — the native capture strip hears about the glass ─────────────────────────────────

@@ -129,7 +129,24 @@ namespace tw
      *  PolyBLEP saw oscillator → AMP ADSR → pan.
      *  Subsequent phases (per Design/v1-syn-spec.md) add filter,
      *  more engines, filter envelope, cross-mod, FLOW glide, etc. */
-    class SynthVoice : public juce::SynthesiserVoice
+    // ══ fb631 — THE ROUTE SNAPSHOT. The processor's fb414 block used to push the rack's routes to ALL
+//    96 voices every time they changed — and on a preset change they always change — building two
+//    FilterSlots per voice per pooled send on the audio thread as it went: 8–13 ms in one block, the
+//    spike Max sees in Ableton's meter. Now the processor writes the routes here ONCE, pushes them only
+//    to voices that are sounding, and an idle voice pulls the snapshot at note-on (startNote). Both
+//    sides are the audio thread; the version is what tells a voice it is behind.
+struct RouteSnapshot
+{
+    static constexpr int kPools = 93;
+    float hall[6] {}, dly[6] {}, dst[6] {}, ex[6] {};
+    float* rsL = nullptr; float* rsR = nullptr; float* dsL = nullptr; float* dsR = nullptr;
+    float* dtL = nullptr; float* dtR = nullptr; float* exL = nullptr; float* exR = nullptr;
+    float  poolG[kPools * 6] {};
+    float* poolL[kPools] {}; float* poolR[kPools] {};
+    std::atomic<juce::uint32> version { 0 };
+};
+
+class SynthVoice : public juce::SynthesiserVoice
     {
     public:
         SynthVoice() = default;
@@ -673,7 +690,7 @@ namespace tw
             sendFilterSlot6_.prepare (sr);
             sendFilterSlot7_.prepare (sr);   // fb347 — shared exclusion-bus filter pair
             poolFltSr_ = sr;                 // fb348 — pooled slots prepare themselves on first use
-            for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->prepare (sr); if (ps.flt2) ps.flt2->prepare (sr); }
+            for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->prepare (sr); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->prepare (sr); }
             sendFilterSlot8_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
@@ -897,6 +914,17 @@ namespace tw
         void setFilterType (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            // fb631 — AN IDLE VOICE ONLY RECORDS THE TYPE. FilterSlot::setType RESETS the slot — some thirty
+            // engines, comb and reverb buffers included — and this setter mirrors it into four send slots
+            // and every built pooled pair. On a preset change whose filter type differs, 96 voices × 2
+            // filters × those mirrors did that in ONE block: 2.9 ms measured (Tests/preset_load_spike_au.cpp,
+            // TERRAIN_PROFILE=1, the "oscA" group). A voice that is not sounding applies it at note-on,
+            // where a reset is free; a sounding voice still switches instantly.
+            if (! isVoiceActive()) { filterType1_ = clamped; filterTypePending1_ = true; return; }
+            applyFilterType1 (clamped);
+        }
+        void applyFilterType1 (int clamped) noexcept
+        {
             // fb603 — the 2× converters are LINEAR and see only the BUS, never the filter, so their
             // ~2 samples of history stay VALID across a 2×→2× swap: clearing them there would be a
             // self-inflicted blip on exactly the change a user makes most (auditioning the ladder
@@ -911,7 +939,7 @@ namespace tw
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
             sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
             sendFilterSlot7_.setType (static_cast<tw::filters::Type> (clamped));  // fb347 — exclusion mirror
-            for (auto& ps : poolSend_) if (ps.flt1) ps.flt1->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
+            for (auto& ps : poolSend_) if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -922,6 +950,11 @@ namespace tw
         void setFilterType2 (int typeIdx) noexcept
         {
             const int clamped = juce::jlimit (0, (int) tw::filters::kNumTypes - 1, typeIdx);
+            if (! isVoiceActive()) { filterType2_ = clamped; filterTypePending2_ = true; return; }   // fb631 — see setFilterType
+            applyFilterType2 (clamped);
+        }
+        void applyFilterType2 (int clamped) noexcept
+        {
             const bool wasOs = filterSlot_.needsOversampling() || filterSlot2_.needsOversampling();   // fb603 — see F1
             filterType2_ = clamped;
             filterSlot2_.setType (static_cast<tw::filters::Type> (clamped));
@@ -931,7 +964,7 @@ namespace tw
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
             sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
             sendFilterSlot8_.setType (static_cast<tw::filters::Type> (clamped));   // fb347 — exclusion mirror
-            for (auto& ps : poolSend_) if (ps.flt2) ps.flt2->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
+            for (auto& ps : poolSend_) if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
         void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
@@ -979,7 +1012,7 @@ namespace tw
           sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2);     // fb296 — delay-send mirror
           sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2);
           sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2);
-          for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->setPoles (tap1); if (ps.flt2) ps.flt2->setPoles (tap2); } }  // fb348 — pooled mirrors
+          for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setPoles (tap1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setPoles (tap2); } }  // fb348 — pooled mirrors
         /** fb603 — MORPH plumbing for the OB-X / SEM tap. `SvfMultimode::setMorph()` (0 = LP,
          *  .5 = Notch, 1 = HP) had ZERO callers, which is why `OB-X SVF`(9) measured identical to
          *  `SEM LP`(48) to 0.00 dB — `morph_` was frozen at 0.0. This is the voice-side half of the
@@ -994,7 +1027,7 @@ namespace tw
           sendFilterSlot3_.setMorph (m1); sendFilterSlot4_.setMorph (m2);
           sendFilterSlot5_.setMorph (m1); sendFilterSlot6_.setMorph (m2);
           sendFilterSlot7_.setMorph (m1); sendFilterSlot8_.setMorph (m2);
-          for (auto& ps : poolSend_) { if (ps.flt1) ps.flt1->setMorph (m1); if (ps.flt2) ps.flt2->setMorph (m2); } }
+          for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setMorph (m1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setMorph (m2); } }
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -2815,6 +2848,11 @@ namespace tw
             // thread-safe even though startNote runs under the Synthesiser lock.
             static std::atomic<juce::uint32> globalNoteCounter { 1 };
             noteStartStamp_ = globalNoteCounter.fetch_add (1, std::memory_order_relaxed);
+            // fb631 — an idle voice is no longer pushed routes every block (that push, × 96 voices × 93
+            // sends, was the preset-change spike); it takes the current snapshot the moment it is needed.
+            if (routeSnap_ != nullptr && routesSeen_ != routeSnap_->version.load (std::memory_order_acquire)) pullRoutes (*routeSnap_);
+            if (filterTypePending1_) { filterTypePending1_ = false; applyFilterType1 (filterType1_); }   // fb631 — the deferred reset, now free
+            if (filterTypePending2_) { filterTypePending2_ = false; applyFilterType2 (filterType2_); }
 
             // ── LEGATO retarget: slide pitch to the new note, retrigger NOTHING ──
             // Armed by UnisonSynth::beginLegatoRetarget() just before startVoice().
@@ -3146,17 +3184,33 @@ namespace tw
             p.any = sum > 0.0f;
         }
         void setExclusionSendTarget (float* L, float* R) noexcept { exSendL_ = L; exSendR_ = R; }
-        // Build a pooled slot's send-filter pair on first use. ⚠️ ALLOCATES — call from the message
-        // thread only (PluginProcessor does this in its per-block param scope, before render).
-        void ensurePoolFilters (int s)
+        // fb631 — THE POOL FILTERS ARE BUILT OFF THE AUDIO THREAD. ensurePoolFilters used to run inside
+        // processBlock's route push, for all 96 voices, for every pooled send that lit — two FilterSlot
+        // allocations and prepares each, on the audio thread, in ONE block. The processor's timer now
+        // calls this for every voice whenever the wanted-send mask changes; the render treats a send as
+        // ON only once its pair is published (poolOn keys on flt1), so a freshly lit send is silent for
+        // at most one timer tick instead of costing a block. Built pairs are kept, as before.
+        void buildPoolFilters (int s)   // MESSAGE THREAD
         {
             if ((unsigned) s >= kPoolSends) return;
             auto& p = poolSend_[s];
-            if (p.flt1 != nullptr) return;
-            p.flt1 = std::make_unique<tw::filters::FilterSlot>();
-            p.flt2 = std::make_unique<tw::filters::FilterSlot>();
-            p.flt1->prepare (poolFltSr_); p.flt2->prepare (poolFltSr_);
-            p.flt1->setType (sendFilterSlot_.getType()); p.flt2->setType (sendFilterSlot2_.getType());
+            if (p.flt1.load (std::memory_order_acquire) != nullptr) return;
+            auto* f1 = new tw::filters::FilterSlot(); auto* f2 = new tw::filters::FilterSlot();
+            f1->prepare (poolFltSr_); f2->prepare (poolFltSr_);
+            f1->setType (static_cast<tw::filters::Type> (filterType1_)); f2->setType (static_cast<tw::filters::Type> (filterType2_));   // the recorded types (an idle voice's mirrors may lag)
+            p.flt2.store (f2, std::memory_order_release);
+            p.flt1.store (f1, std::memory_order_release);   // flt1 last — it is the gate
+        }
+        void setRouteSnapshot (const RouteSnapshot* r) noexcept { routeSnap_ = r; }
+        // fb631 — take the processor's current routes (audio thread; see RouteSnapshot above)
+        void pullRoutes (const RouteSnapshot& R) noexcept
+        {
+            setReverbRoutes     (R.hall[0], R.hall[1], R.hall[2], R.hall[3], R.hall[4], R.hall[5]); setReverbSendTarget     (R.rsL, R.rsR);
+            setDelayRoutes      (R.dly[0],  R.dly[1],  R.dly[2],  R.dly[3],  R.dly[4],  R.dly[5]);  setDelaySendTarget      (R.dsL, R.dsR);
+            setDistortionRoutes (R.dst[0],  R.dst[1],  R.dst[2],  R.dst[3],  R.dst[4],  R.dst[5]);  setDistortionSendTarget (R.dtL, R.dtR);
+            setExclusionRoutes  (R.ex[0],   R.ex[1],   R.ex[2],   R.ex[3],   R.ex[4],   R.ex[5]);   setExclusionSendTarget  (R.exL, R.exR);
+            for (int q = 0; q < kPoolSends; ++q) { setPoolSendRoutes (q, &R.poolG[q * 6]); setPoolSendTarget (q, R.poolL[q], R.poolR[q]); }
+            routesSeen_ = R.version.load (std::memory_order_acquire);
         }
         void setExclusionRoutes (float a, float b, float c, float d, float sub, float noise) noexcept
         {
@@ -3253,7 +3307,7 @@ namespace tw
             for (int ps = 0; ps < kPoolSends; ++ps)
             {
                 auto& P = poolSend_[ps];
-                poolOn[ps] = (P.L != nullptr) && P.any && (P.flt1 != nullptr);
+                poolOn[ps] = (P.L != nullptr) && P.any && (P.flt1.load (std::memory_order_acquire) != nullptr);   // fb631 — a pair the timer has not built yet is a send that is not on yet
                 if (poolOn[ps] && (P.f1.getNumChannels() < 2 || P.f1.getNumSamples() < numSamples))
                 { P.f1.setSize (2, numSamples, false, true, true);
                   P.f2.setSize (2, numSamples, false, true, true);
@@ -6345,8 +6399,8 @@ namespace tw
                         if (a1 || a2)
                         {
                             if ((i & 3) == 0)   // fb441 — see the named mirrors above
-                            { P.flt1->setParams (lastCutHz1_, res1, sentDrv1_, sr);
-                              P.flt2->setParams (lastCutHz2_, res2, sentDrv2_, sr); }
+                            { P.flt1.load (std::memory_order_relaxed)->setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              P.flt2.load (std::memory_order_relaxed)->setParams (lastCutHz2_, res2, sentDrv2_, sr); }
                             float soL, soR; filterBuses (f1l, f1r, f2l, f2r, soL, soR, *P.flt1, *P.flt2);
                             P.L[oi] += soL + dl_;
                             P.R[oi] += soR + dr_;
@@ -6800,7 +6854,8 @@ namespace tw
         float                   baseRes012_  = 0.0f;
         float                   drv012_      = 0.0f;
         float                   envAmount2_  = 0.0f;   // -1..+1 (bipolar)
-        int                     filterType1_ = 0;      // tracked for NONE-aware routing
+        int                     filterType1_ = 0;
+        bool filterTypePending1_ = false, filterTypePending2_ = false;   // fb631 — a type recorded while idle, applied at note-on      // tracked for NONE-aware routing
         int                     filterType2_ = (int) tw::filters::Type::NONE;
         // CPU: semitone→Hz pow() change-gates (unmodulated cutoff = bit-identical per sample).
         // Sentinel -1e9 never matches a real semitone sum, so the first sample always computes.
@@ -6860,9 +6915,13 @@ namespace tw
             float  g[6] { 0, 0, 0, 0, 0, 0 };
             bool   any = false;
             juce::AudioBuffer<float> f1, f2, dry;
-            std::unique_ptr<tw::filters::FilterSlot> flt1, flt2;   // lazy — see ensurePoolFilters()
+            std::atomic<tw::filters::FilterSlot*> flt1 { nullptr }, flt2 { nullptr };   // fb631 — built on the MESSAGE thread (buildPoolFilters), published atomically; the render sees a send as ON only once flt1 is non-null
+            ~PoolSend() { delete flt1.load(); delete flt2.load(); }
         };
         PoolSend poolSend_[kPoolSends];
+        static_assert (RouteSnapshot::kPools == kPoolSends, "the route snapshot must cover every pooled send");
+        const RouteSnapshot* routeSnap_ = nullptr;   // fb631 — set once by the processor
+        juce::uint32 routesSeen_ = 0;                // fb631 — the snapshot version this voice holds
         double   poolFltSr_ = 44100.0;
         // fb347 — the SHARED routed-dry exclusion bus (union of every device mask, each osc once).
         juce::AudioBuffer<float> exSendF1_, exSendF2_, exSendDry_;

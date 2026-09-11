@@ -2529,6 +2529,14 @@ private:
     float  lastHallEntryG_[6] {}, lastDlyEntryG_[6] {}, lastDstEntryG_[6] {}, lastExUnionG_[6] {};
     float  lastPoolEntryG_[kPoolSendCount * 6] {};
     bool   lastPoolRouteAny_[kPoolSendCount] {};
+    // fb631 — THE ROUTE SNAPSHOT (see tw::RouteSnapshot in SynthVoice.h): written by the audio thread in
+    // the fb414 push, handed to every voice once at construction; a voice that was idle when the routes
+    // changed pulls it at note-on. poolWantMask_ tells the timer (message thread) which pooled sends
+    // need their per-voice filter pairs built; poolBuiltMask_ is what it has built so far.
+    tw::RouteSnapshot          routeSnap_;
+    std::atomic<juce::uint64>  poolWantMask_[2] { { 0 }, { 0 } };
+    juce::uint64               poolBuiltMask_[2] { 0, 0 };
+    static_assert (tw::RouteSnapshot::kPools == kPoolSendCount, "the route snapshot must cover every pooled send");
     float* lastPoolPtrL_[kPoolSendCount] {};
     float* lastPoolPtrR_[kPoolSendCount] {};
     float* lastRsL_ = nullptr; float* lastRsR_ = nullptr;

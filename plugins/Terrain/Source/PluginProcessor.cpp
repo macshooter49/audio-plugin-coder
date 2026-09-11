@@ -400,6 +400,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
+        v->setRouteSnapshot (&routeSnap_);   // fb631 — set ONCE; the routes inside change when the rack does
         // CPU: instance-wide grain budget — every granular engine shares one live-grain
         // counter, so 4 dense granular oscs × polyphony thin gracefully at kGranBudget
         // instead of multiplying to thousands of grains (≈8.5 ns per grain-sample each).
@@ -2547,6 +2548,20 @@ void TerrainAudioProcessor::timerCallback()
     // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
+    // fb631 — build pooled send filters OFF the audio thread (SynthVoice::buildPoolFilters). The fb414
+    // push publishes which pooled sends are lit; anything lit that has not been built gets its pair on
+    // every voice here, on the message thread, and the render sees the send come on when the pair lands.
+    {
+        const juce::uint64 m0 = poolWantMask_[0].load (std::memory_order_acquire), m1 = poolWantMask_[1].load (std::memory_order_acquire);
+        if ((m0 & ~poolBuiltMask_[0]) != 0 || (m1 & ~poolBuiltMask_[1]) != 0)
+        {
+            for (int q = 0; q < kPoolSendCount; ++q)
+                if (q < 64 ? ((m0 >> q) & 1ull) : ((m1 >> (q - 64)) & 1ull))
+                    for (int v = 0; v < kSynthVoiceCount; ++v)
+                        if (auto* sv = synthVoices_[(size_t) v]) sv->buildPoolFilters (q);
+            poolBuiltMask_[0] |= m0; poolBuiltMask_[1] |= m1;                    // built stays built, as before
+        }
+    }
     buildPendingGranularEngines();   // fb362 — same message-thread contract
     buildPendingTapeEngines();       // fb365 — ditto
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
@@ -5200,13 +5215,17 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { id.w2var, 1 }, n + "Warp 2 Var",
                 juce::NormalisableRange<float> (0.0f, 100.0f, 0.1f), 0.0f));
-            // PHASE — note-on phase offset in degrees. 0 = today's alignment. (Serum's own A Phase
-            // defaults to 180; Terrain keeps 0 so nothing moves.)
+            // PHASE — note-on phase offset, in cycles. fb631 — THE DEFAULT IS 180° (0.5). Max: "I want
+            // every init preset to have a phase of 180 and random 100. Why do you think Serum has a
+            // default sine at phase 180? 180 sounds amazing with the random 100." Random (PHASE_MODE=2)
+            // and amount 1.0 were already the defaults; this is the last of the three. Init is a
+            // snapshot of a fresh instance (virginChunk_), so it follows automatically. A blob written
+            // BEFORE this parameter existed keeps 0 through the migration in setStateInformation.
             layout.add (std::make_unique<juce::AudioParameterFloat> (
                 juce::ParameterID { id.phase, 1 }, n + "Phase",
                 // fb538 — 0..1, ONE CYCLE, not degrees. Measured off Serum 2: "A Phase" and
                 // "A Rand Phase" are both 0..1. Max: "phasing goes from 0 to 1, not even 100."
-                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.0f));
+                juce::NormalisableRange<float> (0.0f, 1.0f, 0.001f), 0.5f));
             // PHASE AMOUNT — scales RANDOM's randomisation and SPREAD's fan. 100 = unscaled =
             // exactly what resolvePhase already does, so 100 = today.
             layout.add (std::make_unique<juce::AudioParameterFloat> (
@@ -9060,9 +9079,39 @@ RvbEngineSet TerrainAudioProcessor::rvbEngineSet1() noexcept
 }
 
 
+
+// ══ fb631 — SECTION TIMING FOR THE SPIKE HUNT. Off unless TERRAIN_PROFILE is set in the environment
+//    when the plugin loads; then every block whose total exceeds TERRAIN_PROFILE_US (default 3000)
+//    prints ONE line of per-section microseconds to stderr. Max: "every time I change presets there's
+//    a big spike in CPU — investigate that spike." The sampler cannot see inside this 5,000-line
+//    function (everything inlines), so the function times itself. When off, each probe is one
+//    predictable branch; nothing allocates, nothing locks.
+namespace
+{
+struct TiProf
+{
+    bool on = false; double thresholdUs = 3000.0;
+    static constexpr int kMax = 96; const char* names[kMax] {}; double us[kMax] {}; int n = 0; double t0 = 0, last = 0;
+    TiProf() { on = std::getenv ("TERRAIN_PROFILE") != nullptr; if (const char* t = std::getenv ("TERRAIN_PROFILE_US")) thresholdUs = std::atof (t); }
+    void begin() noexcept { if (! on) return; n = 0; t0 = last = juce::Time::getMillisecondCounterHiRes() * 1000.0; }
+    void mark (const char* name) noexcept { if (! on || n >= kMax) return; const double t = juce::Time::getMillisecondCounterHiRes() * 1000.0; names[n] = name; us[n] = t - last; last = t; ++n; }
+    // accumulators: totals across the 96 iterations of the per-voice push loop, by setter group
+    static constexpr int kAcc = 12; double accUs[kAcc] {}; const char* accNames[kAcc] {}; double accLast = 0;
+    void accStart() noexcept { if (on) accLast = juce::Time::getMillisecondCounterHiRes() * 1000.0; }
+    void acc (int k, const char* nm) noexcept { if (! on || k < 0 || k >= kAcc) return; const double t = juce::Time::getMillisecondCounterHiRes() * 1000.0; accUs[k] += t - accLast; accLast = t; accNames[k] = nm; }
+    void end() noexcept { if (! on) return; const double tot = last - t0; const bool print = tot >= thresholdUs;
+        if (print) { std::fprintf (stderr, "[tiprof] %6.0f us :", tot); for (int i = 0; i < n; ++i) std::fprintf (stderr, " %s=%.0f", names[i], us[i]);
+                     std::fprintf (stderr, "  | voices:"); for (int k = 0; k < kAcc; ++k) if (accNames[k]) std::fprintf (stderr, " %s=%.0f", accNames[k], accUs[k]); std::fprintf (stderr, "\n"); }
+        for (int k = 0; k < kAcc; ++k) accUs[k] = 0; }
+};
+TiProf tiProf_;
+}
+#define TI_PROF(name) tiProf_.mark (name)
+
 void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    tiProf_.begin();
     const bool vizLive = vizConsumersLive();   // fb148 — no UI, no viz work (Serum does the same)
 
     const auto numSamples = buffer.getNumSamples();
@@ -9178,6 +9227,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("pre");
     // === Sampler engine (Terrain v0a + slicer v0b) ================
     // Pull sampler params from APVTS into the lock-free atomics that voices read.
     // Phase 1 task 9: APVTS is global — broadcast every block to ALL layers so
@@ -9407,6 +9457,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("sampler");
     // ── Mark 2 task 4 / task 9: render each populated layer into its own scratch
     // buffer, then sum (with vol/mute/solo) into master `buffer`.
     // Task 9 complete: each layer now receives its own per-layer SliceContext.
@@ -9558,18 +9609,22 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("layers");
     // ── Synth section render (Phase 1 MPV) ──────────────────────────────
     // Push current SYN_* APVTS values onto every SynthVoice each block
     // — same pattern as the per-layer atomic broadcast above.
+    TI_PROF ("P01");   // FLOW · ARP reads synModCfg + synModBpm at the synth-rende
     // FLOW · ARP reads synModCfg + synModBpm at the synth-render site (which sits
     // AFTER this SYN_* scope closes), so their declarations are hoisted out here.
     // [CC integration note: wiring patch anchored 5b/5c against these but they were
     //  scope-local; hoisting keeps Opus's 5b/5c code verbatim and in-scope.]
+    TI_PROF ("P02");   // fb492 — these are assigned INSIDE the gather and consumed
     // fb492 — these are assigned INSIDE the gather and consumed AFTER it (the FLOW ARP render
     // site), so they must survive a block on which the gather is skipped. References keep every
     // existing use site byte-identical.
     wc::ModConfig& synModCfg = synModCfgPersist_;
     float&         synModBpm = synModBpmPersist_;
+    TI_PROF ("P03");   // fb453 T5b — HOISTED FOR THE SAME REASON synModCfg IS, one
     // fb453 T5b — HOISTED FOR THE SAME REASON synModCfg IS, one comment up: a consumer BELOW this
     // scope needs them. The three mod sums and modP() were scope-local, so the one value that has
     // to be resolved AFTER wc::buildFxMod() — the Distortion's Knee, see the note at its resolve
@@ -9579,6 +9634,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     float modSums[(int) wc::ModDest::NumDests] = { 0 };
     float envOwnW[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth| of env claims per Linear01 dest
     float envOwnV[(int) wc::ModDest::NumDests] = { 0 };   // fb184 — Σ|depth|·env: the owned target (0..1 of span)
+    TI_PROF ("P04");   // fb193 — S4b env-param dests: the same ownership law appli
     // fb193 — S4b env-param dests: the same ownership law applied in the param's own
     // normalized space (convertTo0to1 honors range+skew). Early-out when unrouted.
     auto modP = [&] (const char* pid, float raw, int d) -> float
@@ -9594,6 +9650,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         return raw;
     };
     {
+        TI_PROF ("Q01");   // ═══ fb75 — UNIVERSAL LFO MOD (block-rate) ═══════════
         // ═══ fb75 — UNIVERSAL LFO MOD (block-rate) ═══════════════════════════════════
         // ONE O(routes) pass turns the mod matrix into per-destination offsets for every
         // newly-routable target (filters 1/2, noise, blend depths, per-osc level/pan, and
@@ -9603,6 +9660,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         // change-gates below hold and this whole feature costs NOTHING at idle. Dests below
         // Res1 (the per-voice batch: frame/warp/fold/cutoff/coarse/sub…) keep their richer
         // per-voice application in SynthVoice and are skipped here (no double-modulation).
+        TI_PROF ("Q02");   // ZPROBE-ENV (TERRAIN_ENV_PROBE=1): drive the whole env
         // ZPROBE-ENV (TERRAIN_ENV_PROBE=1): drive the whole env→global chain without a UI or MIDI
         {
             static const bool envProbe = (getenv ("TERRAIN_ENV_PROBE") != nullptr);
@@ -9636,6 +9694,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 }
             }
         }
+        TI_PROF ("Q03");   // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env
         // ── fb178 — MONO ENVELOPE TAP upkeep (only when an env feeds a global dest) ──
         {
             const uint32_t gm = monoEnvGlobalMask_.load (std::memory_order_acquire);
@@ -9849,6 +9908,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                     + " vA1=" + juce::String (envOwnV[(int) wc::ModDest::EnvPBase + 1], 4) + "\n");
             }
         }
+        TI_PROF ("Q04");   // fb184 — OWNERSHIP at the app site: the env's claim w 
         // fb184 — OWNERSHIP at the app site: the env's claim w crossfades the (LFO-modulated)
         // base toward the env's own shape mapped across lo..hi. w=0 → legacy additive exactly.
         auto ownM = [&] (float base, int d, float lo, float hi)
@@ -9874,6 +9934,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             const float w = w0 > 1.0f ? 1.0f : w0;
             return juce::jlimit (0.0f, 1.0f, (s + modSums[d]) * (1.0f - w) + envOwnV[d]);
         };
+        TI_PROF ("Q05");   // fb565 — MACROS AS DESTINATIONS. Max: 'there's no way 
         // fb565 — MACROS AS DESTINATIONS. Max: "there's no way to modulate the macros." A macro is a
         // global 0..1 value, so its routes are summed in THIS pass under the same ownership law as
         // every other Linear01 knob, and the result is what every "Macro n" source reads next block
@@ -9887,6 +9948,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             macroModded_[k] = routed;
             if (routed) globalSrc_.macro[k].store (ownM (macroBaseVis_[k].load (std::memory_order_relaxed), d, 0.0f, 1.0f), std::memory_order_relaxed);
         }
+        TI_PROF ("Q06");   // fb252 — SPECTRAL MOD: publish the effective (base + L
         // fb252 — SPECTRAL MOD: publish the effective (base + LFO/env) spectral amount per osc so the
         // message-thread morph rebuild (rebuildMorphIfNeeded reads spectralEffAmt_) follows modulation.
         // mdP applies the same ownership law as every other Linear01 dest (LFO additive via modSums, env
@@ -9970,6 +10032,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float filtSpread2=      mdP (ParameterIDs::SYN_FILTER2_SPREAD, wc::ModDest::FSpread2, 0.0f, 1.0f);
         const int   filtRoute= (int)  *rawParam (ParameterIDs::SYN_FILTER_ROUTING);
         // Per-osc filter routing masks (A,B,C,D,Sub) for each filter — bool as >0.5.
+        TI_PROF ("Q07");   // fb79 — PER-OSC CONTINUOUS FILTER SENDS (the F1/F2 pil
         // fb79 — PER-OSC CONTINUOUS FILTER SENDS (the F1/F2 pills, each osc independent, default 0 =
         // dry). Replaces the binary A-D masks (SYN_FILTER*_SRC_A..D are no longer consumed for oscs —
         // the pills + the filter back-panel A-D toggles both drive these send params now). Sub stays
@@ -10006,6 +10069,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if (gatherDue)
         {
 
+        TI_PROF ("Q08");   // ── Envelope DAHDSR extension reads (Batch 2/3) ──
         // ── Envelope DAHDSR extension reads (Batch 2/3) ──
         const float ampDly = modP (ParameterIDs::SYN_ENV_AMP_DLY, *rawParam (ParameterIDs::SYN_ENV_AMP_DLY), (int) wc::ModDest::EnvPBase + 0);   // fb193
         const float ampHld = modP (ParameterIDs::SYN_ENV_AMP_H, *rawParam (ParameterIDs::SYN_ENV_AMP_H), (int) wc::ModDest::EnvPBase + 2);   // fb193
@@ -10059,17 +10123,21 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float env4Depth =       *rawParam (ParameterIDs::SYN_ENV4_DEPTH);
         const int   env5Dest  = (int) *rawParam (ParameterIDs::SYN_ENV5_DEST);
         const float env5Depth =       *rawParam (ParameterIDs::SYN_ENV5_DEPTH);
+        TI_PROF ("Q09");   // Phase 2A wavetable selection — resolve preset enum to
         // Phase 2A wavetable selection — resolve preset enum to const Wavetable*.
         const int            wtPreset = (int) *rawParam (ParameterIDs::SYN_OSC_A_WT_PRESET);
         const float          wtFrame  =       *rawParam (ParameterIDs::SYN_OSC_A_WT_FRAME);
         const tw::Wavetable* wt       = wavetableForOsc (0, morphA_, wtPreset);
+        TI_PROF ("Q10");   // Phase 2C — warp mode + amount
         // Phase 2C — warp mode + amount
         const int   warpMode   = (int) *rawParam (ParameterIDs::SYN_OSC_A_WARP_MODE);
         const int   phaseModeA = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmount =       *rawParam (ParameterIDs::SYN_OSC_A_WARP_AMOUNT);
+        TI_PROF ("Q11");   // Phase 3 — OSC A engine choice
         // Phase 3 — OSC A engine choice
         const int engineIdx = (int) *rawParam (ParameterIDs::SYN_OSC_A_ENGINE);
 
+        TI_PROF ("Q12");   // Phase 9 — OSC B params
         // Phase 9 — OSC B params
         const int   octB       = (int)  *rawParam (ParameterIDs::SYN_OSC_B_OCT);
         const int   semiB      = (int)  *rawParam (ParameterIDs::SYN_OSC_B_SEMI);
@@ -10082,20 +10150,24 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const int   warpModeB  = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP_MODE);
         const int   phaseModeB = /* fb538 — FORCED 2 (Random): the mode menu is retired, and Rand 0 is the old Retrig while Rand 1 is the old Random, so Phase+Rand cover it exactly as Serum does. FREE would ignore BOTH knobs (the fb532 finding). */ 2;
         const float warpAmountB =       *rawParam (ParameterIDs::SYN_OSC_B_WARP_AMOUNT);
+        TI_PROF ("Q13");   // WARP 2 — chained second slot per OSC
         // WARP 2 — chained second slot per OSC
         const int   warp2ModeA = (int)  *rawParam (ParameterIDs::SYN_OSC_A_WARP2_MODE);
         const float warp2AmtA  =        mdP (ParameterIDs::SYN_OSC_A_WARP2_AMT, wc::ModDest::Warp2A, 0.0f, 1.0f);   // fb77 — back-panel WARP2 amount mod
         const int   warp2ModeB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_WARP2_MODE);
         const float warp2AmtB  =        mdP (ParameterIDs::SYN_OSC_B_WARP2_AMT, wc::ModDest::Warp2B, 0.0f, 1.0f);
         const int   engineIdxB = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ENGINE);
+        TI_PROF ("Q14");   // WAVER — per-OSC analog pitch-drift depth (0..100 %). 
         // WAVER — per-OSC analog pitch-drift depth (0..100 %). Pushed per voice below.
         const float waverA      =       *rawParam (ParameterIDs::SYN_OSC_A_WAVER);
         const float waverB      =       *rawParam (ParameterIDs::SYN_OSC_B_WAVER);
+        TI_PROF ("Q15");   // KEYTRACK — per-OSC note->destination depth (0..100 %)
         // KEYTRACK — per-OSC note->destination depth (0..100 %) + destination choice.
         const float ktDepthA    =       *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK);
         const int   ktDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_KEYTRACK_DEST);
         const float ktDepthB    =       *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK);
         const int   ktDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_KEYTRACK_DEST);
+        TI_PROF ("Q16");   // ROUTE — per-OSC source + destination + bipolar amount
         // ROUTE — per-OSC source + destination + bipolar amount (-100..100 %).
         const int   rtSrcA      = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_SRC);
         const int   rtDestA     = (int)  *rawParam (ParameterIDs::SYN_OSC_A_ROUTE_DEST);
@@ -10104,6 +10176,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const int   rtDestB     = (int)  *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_DEST);
         const float rtAmtB      =       *rawParam (ParameterIDs::SYN_OSC_B_ROUTE_AMT);
 
+        TI_PROF ("Q17");   // ── OSC C / D params (4-osc) — mirror OSC B; pushed pe
         // ── OSC C / D params (4-osc) — mirror OSC B; pushed per voice below ──
         const int   octC=(int)*rawParam (ParameterIDs::SYN_OSC_C_OCT), semiC=(int)*rawParam (ParameterIDs::SYN_OSC_C_SEMI);
         const float centC=*rawParam (ParameterIDs::SYN_OSC_C_CENT), lvlC=mdP (ParameterIDs::SYN_OSC_C_LEVEL, wc::ModDest::LevelC, 0.0f, 1.0f), panC=mdP (ParameterIDs::SYN_OSC_C_PAN, wc::ModDest::PanC, -1.0f, 1.0f);
@@ -10136,6 +10209,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const int   rtSrcD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_SRC), rtDestD=(int)*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_DEST);
         const float rtAmtD=*rawParam (ParameterIDs::SYN_OSC_D_ROUTE_AMT);
 
+        TI_PROF ("Q18");   // ── SOLO / MUTE per OSC — bool params (getRawParameter
         // ── SOLO / MUTE per OSC — bool params (getRawParameterValue returns normalized 0..1 → >0.5) ──
         const bool muteA = *rawParam (ParameterIDs::SYN_OSC_A_MUTE) > 0.5f;
         const bool soloA = *rawParam (ParameterIDs::SYN_OSC_A_SOLO) > 0.5f;
@@ -10146,6 +10220,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const bool muteD = *rawParam (ParameterIDs::SYN_OSC_D_MUTE) > 0.5f;
         const bool soloD = *rawParam (ParameterIDs::SYN_OSC_D_SOLO) > 0.5f;
         const bool anySolo = soloA || soloB || soloC || soloD;
+        TI_PROF ("Q19");   // OSC ENABLE — the real per-osc ON/OFF (the white OSC l
         // OSC ENABLE — the real per-osc ON/OFF (the white OSC letters in the UI). Rides the
         // same click-free gate one-pole as solo/mute; once the gate settles at silence the
         // voice SKIPS the osc's whole render path (engines included), so OFF costs ~nothing —
@@ -10158,6 +10233,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float gateA = oscGate(enA, muteA, soloA), gateB = oscGate(enB, muteB, soloB),
                     gateC = oscGate(enC, muteC, soloC), gateD = oscGate(enD, muteD, soloD);
 
+        TI_PROF ("Q20");   // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample par
         // ════════ SAMPLE-ENGINE-PUSH — read per-OSC Sample params (Opus) ════════
         tw::SynthVoice::SampleEngineParams spA;
         spA.scan      = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_SCAN);       spA.stretch = *rawParam (ParameterIDs::SYN_OSC_A_SAMPLE_STRETCH);
@@ -10220,11 +10296,13 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         spD.fadeInCurve  = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEIN_CURVE);
         spD.fadeOutCurve = *rawParam (ParameterIDs::SYN_OSC_D_SAMPLE_FADEOUT_CURVE);
 
+        TI_PROF ("Q21");   // ── GRAIN engine: gather the 12 grain functions per OS
         // ── GRAIN engine: gather the 12 grain functions per OSC (GRAIN-ENGINE-GATHER) ──
         // ID order: scan,density,size,spray,shape,key, position,pitch,pspray,width,dir,skew.
         // 'key' is the only choice → cast to index. static table = built once (no per-block alloc).
         // Air/Stretch/StretchMode + region(start/end) are patched in AFTER from the already-gathered
         // Sample params (spA..spD) — they reuse the Sample osc's params (waveform right-click + handles).
+        TI_PROF ("Q22");   // ── fb75 — SAMPLE-ENGINE knob mod (block-rate; also fl
         // ── fb75 — SAMPLE-ENGINE knob mod (block-rate; also flows into GRANULAR via withSampleExtras).
         //    MUST run before the gpX gather below and before the engChanged compare (a modulated
         //    struct must differ from lastSpX_ so it pushes). Region/loop points stay UNMODDED. ──
@@ -10282,6 +10360,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         tw::GranularEngineParams gpB = withSampleExtras (gatherGrain (GRAIN_IDS[1]), spB);
         tw::GranularEngineParams gpC = withSampleExtras (gatherGrain (GRAIN_IDS[2]), spC);
         tw::GranularEngineParams gpD = withSampleExtras (gatherGrain (GRAIN_IDS[3]), spD);
+        TI_PROF ("Q23");   // ── fb75 — GRANULAR knob mod (block-rate; the 'star po
         // ── fb75 — GRANULAR knob mod (block-rate; the "star position" ask lives here: GrainPos). ──
         {
             tw::GranularEngineParams* gpMod[4] = { &gpA, &gpB, &gpC, &gpD };
@@ -10303,6 +10382,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             }
         }
 
+        TI_PROF ("Q24");   // ── FM engine: gather the 12 wavetable-carrier FM para
         // ── FM engine: gather the 12 wavetable-carrier FM params per OSC (FM-ENGINE-GATHER) ──
         // ID order: algo, ratio1, depth1, ratio2, depth2, feedback, then the WEATHERING page:
         // strike, age, rust, gale, bend, storm. 'algo' is the only choice.
@@ -10320,6 +10400,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         for (int o = 0; o < 4; ++o)
             for (int k = 0; k < 12; ++k)
                 fmVals[o][k] = *rawParam (FM_IDS[o][k]);
+        TI_PROF ("Q25");   // fb75/78 — FM knob mod (block-rate): ratios/depths (k=
         // fb75/78 — FM knob mod (block-rate): ratios/depths (k=1..4), fb (k=5), WEATHERING (k=6..11). algo untouched.
         for (int o = 0; o < 4; ++o)
         {
@@ -10336,8 +10417,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             fmVals[o][11] = ownM (fmVals[o][11], (int) wc::ModDest::FmStormA + o, 0.0f, 1.0f);
         }
 
+        TI_PROF ("Q26");   // ── RESYNTH engine: gather the resynthesis params per 
         // ── RESYNTH engine: gather the resynthesis params per OSC (GEODE-ENGINE-GATHER) ──
         // ID strings keep GEODE_* (preset stability); meaning REMAPPED to the Resynth fields:
+        TI_PROF ("Q27");   // POSITION→start, FOSSIL→stretch, CREEP→scan, SILT→crus
         // POSITION→start, FOSSIL→stretch, CREEP→scan, SILT→crush, DISTILL→shape, HAZE→drive.
         // FRACTURE(id9)=MELT smear; BEDROCK(id14) reserved. id15=Shape id16=Cut id17=Drive id18=Sieve modes.
         static const char* const GEODE_IDS[4][28] = {
@@ -10385,6 +10468,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             g.sieve   = ownM (g.sieve, (int) wc::ModDest::GeoSieveA + o, 0.0f, 1.0f);
             geodeP[o] = g;
         }
+        TI_PROF ("Q28");   // ── HARMONIC engine: gather the additive params per OS
         // ── HARMONIC engine: gather the additive params per OSC (HARM-ENGINE-GATHER) ──
         static const char* const HARM_IDS[4][14] = {
             { ParameterIDs::SYN_OSC_A_HARM_MODE, ParameterIDs::SYN_OSC_A_HARM_SCULPT, ParameterIDs::SYN_OSC_A_HARM_HUE, ParameterIDs::SYN_OSC_A_HARM_COUNT, ParameterIDs::SYN_OSC_A_HARM_LEAN, ParameterIDs::SYN_OSC_A_HARM_FAN, ParameterIDs::SYN_OSC_A_HARM_GRIT, ParameterIDs::SYN_OSC_A_HARM_BRAID, ParameterIDs::SYN_OSC_A_HARM_CARVE, ParameterIDs::SYN_OSC_A_HARM_CHURN, ParameterIDs::SYN_OSC_A_HARM_ROOT, ParameterIDs::SYN_OSC_A_HARM_SHINE, ParameterIDs::SYN_OSC_A_HARM_WILT, ParameterIDs::SYN_OSC_A_HARM_FIZZ },
@@ -10463,6 +10547,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         harmDisplayParams_[0] = harmP[0]; harmDisplayParams_[1] = harmP[1];   // HARM-VIZ — message-thread
         harmDisplayParams_[2] = harmP[2]; harmDisplayParams_[3] = harmP[3];   // display engines read these
 
+        TI_PROF ("Q29");   // ── MODAL engine: gather the physical-model params per
         // ── MODAL engine: gather the physical-model params per OSC (MODAL-ENGINE-GATHER) ──
         static const char* const MODAL_IDS[4][13] = {
             { ParameterIDs::SYN_OSC_A_MODAL_FAMILY, ParameterIDs::SYN_OSC_A_MODAL_FORM, ParameterIDs::SYN_OSC_A_MODAL_SOURCE, ParameterIDs::SYN_OSC_A_MODAL_HARD, ParameterIDs::SYN_OSC_A_MODAL_POS, ParameterIDs::SYN_OSC_A_MODAL_DECAY, ParameterIDs::SYN_OSC_A_MODAL_MATERIAL, ParameterIDs::SYN_OSC_A_MODAL_BREATH, ParameterIDs::SYN_OSC_A_MODAL_STRETCH, ParameterIDs::SYN_OSC_A_MODAL_BLOOM, ParameterIDs::SYN_OSC_A_MODAL_HALO, ParameterIDs::SYN_OSC_A_MODAL_AGE, ParameterIDs::SYN_OSC_A_MODAL_BODY },
@@ -10499,6 +10584,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             modalP[o] = m;
         }
 
+        TI_PROF ("Q30");   // ── BLEND MODES: gather the 4 warp slots × 4 oscs once
         // ── BLEND MODES: gather the 4 warp slots × 4 oscs once (cross-osc FM/PD/AM/RM) ──
         static const char* const WSLOT_IDS[4][12] = {
             { ParameterIDs::SYN_OSC_A_WSLOT1_MODE, ParameterIDs::SYN_OSC_A_WSLOT1_SRC, ParameterIDs::SYN_OSC_A_WSLOT1_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT2_MODE, ParameterIDs::SYN_OSC_A_WSLOT2_SRC, ParameterIDs::SYN_OSC_A_WSLOT2_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT3_MODE, ParameterIDs::SYN_OSC_A_WSLOT3_SRC, ParameterIDs::SYN_OSC_A_WSLOT3_DEPTH, ParameterIDs::SYN_OSC_A_WSLOT4_MODE, ParameterIDs::SYN_OSC_A_WSLOT4_SRC, ParameterIDs::SYN_OSC_A_WSLOT4_DEPTH },
@@ -10516,8 +10602,10 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 blendCfg[o][s].depth = ownM (blendCfg[o][s].depth, (int) wc::ModDest::BlendDepthA1 + o * 4 + s, 0.0f, 1.0f);   // fb75 blend-slot depth mod · fb184 ownership
             }
 
+        TI_PROF ("Q31");   // PEROSC-PUSH — Sample sources are per-OSC now; pushed 
         // PEROSC-PUSH — Sample sources are per-OSC now; pushed via setSampleSources below.
 
+        TI_PROF ("Q32");   // ── Batch 1 — assemble the synth modulation config fro
         // ── Batch 1 — assemble the synth modulation config from params + transport,
         //    then publish it to every voice. One LFO (L1, sine, free rate) and one
         //    default route L1 → Filter 1 cutoff (depth from LFO1_DEPTH) so the slice
@@ -10669,6 +10757,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             engParamsPushed_ = true;
         }
 
+        TI_PROF ("Q33");   // ── UNIVERSAL OSC BOXES — COARSE folds into the cents 
         // ── UNIVERSAL OSC BOXES — COARSE folds into the cents lane (±6400 c: one term,
         //    every engine); SUB params push straight to the voice lanes. Read once per block.
         const float coarseA = *rawParam (ParameterIDs::SYN_OSC_A_COARSE);
@@ -10683,6 +10772,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float subWgtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_WEIGHT), subHtB = *rawParam (ParameterIDs::SYN_OSC_B_SUB_HEAT);
         const float subWgtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_WEIGHT), subHtC = *rawParam (ParameterIDs::SYN_OSC_C_SUB_HEAT);
         const float subWgtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_WEIGHT), subHtD = *rawParam (ParameterIDs::SYN_OSC_D_SUB_HEAT);
+        TI_PROF ("Q34");   // ── NOISE ENGINE reads ──
         // ── NOISE ENGINE reads ──
         // getRawParameterValue() for an AudioParameterChoice returns the INDEX (0..N-1) directly —
         // exactly like SYN_FILTER*_DRIVETYPE / _POLES / SYN_OSC_*_ENGINE are read below. The old
@@ -10696,6 +10786,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const int   noisePlayMode = (int) *rawParam (ParameterIDs::SYN_NOISE_PLAYMODE);   // fb66 — 0 Random · 1 Envelope · 2 Free
         const float noiseWidth    = mdP (ParameterIDs::SYN_NOISE_WIDTH, wc::ModDest::NoiseWidth, 0.0f, 2.0f);   // fb69 — stereo width 0..2 (M/S)
 
+        TI_PROF ("Q35");   // fb66 — FREE play mode: a GLOBAL always-running tape p
         // fb66 — FREE play mode: a GLOBAL always-running tape playhead. Advanced once per block (even with
         // no notes) at the rate the voices read the loop, wrapped to length. Voices in Free mode resync to
         // this at block start (setNoiseFreePos) so every note reads the ONE shared tape; the waveform
@@ -10720,6 +10811,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else { noiseFreePos_ = 0.0; noiseFreeNorm_.store (0.0f, std::memory_order_relaxed); }
         }
 
+        TI_PROF ("Q36");   // fb68 — Free mode is MONOPHONIC noise: stacked polypho
         // fb68 — Free mode is MONOPHONIC noise: stacked polyphonic tape copies comb/phase, so pick ONE carrier voice
         // (newest key-HELD active voice; fallback newest active so a release tail still sounds) and let only it add the
         // audible noise. Poly modes / no sample → every voice carries (no-op). A note started mid-block is promoted
@@ -10741,12 +10833,14 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             noiseCarrierVoice = (held != nullptr) ? held : anyv;
         }
 
+        TI_PROF ("Q37");   // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): the sum
         // fb77 — BACK-PANEL TUNING MOD (Oct/Semi/Cent): the sums arrive in SEMITONES and fold
         // into the voice's CENTS lane next to COARSE. fb233 (Max) — THE OCTAVE SNAP LAW: the Oct
         // lane (±48 st = ±4 octaves at full depth) is clamped then ROUNDED to whole octaves before
         // the fold — an octave knob under an LFO JUMPS through octaves (square = octave gate,
         // triangle = staircase), it never reads as continuous detune. Semi/Cent stay continuous
         // (the vibrato lanes). Steps are phase-continuous frequency changes — clickless by nature.
+        TI_PROF ("Q38");   // fb131 — MODE CHAIN: resolve once for this scope's voi
         // fb131 — MODE CHAIN: resolve once for this scope's voice hooks (the flow stage
         // below re-resolves; both read the same params so the truth cannot diverge).
         const wc::FlowChainState flowChain = flowChainNow();
@@ -10765,8 +10859,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             if (auto* sv = synthVoices_[(size_t) i])   // typed array — no per-voice RTTI
             {
+                tiProf_.accStart();
                 if (synCfgChanged)
                     sv->setModConfig          (synModCfg, synModBpm);
+                tiProf_.acc (0, "modcfg");
+                tiProf_.acc (8, "dyn");
                 sv->setTuning                 (oct, semi, cent + coarseA * 100.0f + tuneModCents[0]);   // + COARSE + Oct/Semi/Cent mod (cents lane)
                 sv->setLevel                  (lvl);
                 sv->setPan                    (pan);
@@ -10823,6 +10920,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setWavetableFrame         (wtFrame);
                 sv->setWarp                   (warpMode, warpAmount);
                 sv->setEngine                 (engineIdx);
+                tiProf_.acc (1, "oscA");
                 // Phase 9 — OSC B setters
                 sv->setTuningB                (octB, semiB, centB + coarseB * 100.0f + tuneModCents[1]);
                 sv->setLevelB                 (lvlB);
@@ -10836,6 +10934,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setKeytrack               (ktDepthA / 100.0f, ktDestA, ktDepthB / 100.0f, ktDestB);  // KEYTRACK
                 sv->setRoute                  (rtSrcA, rtDestA, rtAmtA / 100.0f, rtSrcB, rtDestB, rtAmtB / 100.0f);  // ROUTE
                 sv->setEngineB                (engineIdxB);
+                tiProf_.acc (2, "oscB");
                 // ── OSC C / D pushes (4-osc) ──
                 sv->setTuningC (octC, semiC, centC + coarseC * 100.0f + tuneModCents[2]);  sv->setTuningD (octD, semiD, centD + coarseD * 100.0f + tuneModCents[3]);
                 sv->setLevelC (lvlC);                 sv->setLevelD (lvlD);
@@ -10846,6 +10945,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setSub (3, subRngD, subFrmD, subWgtD, subHtD);
                 sv->setNoise (noiseOn, noiseType, noiseLevel, noisePitch, noisePan);   // NOISE engine (center module)
                 sv->setNoiseSampleSource (&noiseSampleBuffer_);   // NOISE IMPORT (P5) — looping-sample override (empty buffer = algorithmic type)
+                tiProf_.acc (3, "cd+sub+noise");
                 sv->setNoisePlayMode      (noisePlayMode);        // fb66 — Random / Envelope / Free (sample playback)
                 sv->setNoiseFreePos       (noiseFreePos_);        // fb66/fb67 — latest global tape position (a Free note reads it once at note-on; no per-block resync)
                 sv->setNoiseCarrier       (! monoNoise || (sv == noiseCarrierVoice));   // fb68 — Free = only the newest voice sounds the noise (mono); poly modes = all carry
@@ -10864,15 +10964,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setKeytrackCD (ktDepthC / 100.0f, ktDestC, ktDepthD / 100.0f, ktDestD);
                 sv->setRouteCD (rtSrcC, rtDestC, rtAmtC / 100.0f, rtSrcD, rtDestD, rtAmtD / 100.0f);
                 sv->setEngineC (engineIdxC);          sv->setEngineD (engineIdxD);
+                tiProf_.acc (4, "flow/wt/warp/eng");
                 sv->setGeodeParamsA (geodeP[0]); sv->setGeodeParamsB (geodeP[1]);   // GEODE-ENGINE-PUSH (cheap stores, ungated)
                 sv->setGeodeParamsC (geodeP[2]); sv->setGeodeParamsD (geodeP[3]);
                 sv->setHarmParamsA (harmP[0]);   sv->setHarmParamsB (harmP[1]);   // HARM-ENGINE-PUSH (cheap stores, ungated)
                 sv->setHarmParamsC (harmP[2]);   sv->setHarmParamsD (harmP[3]);
                 sv->setModalParamsA (modalP[0]); sv->setModalParamsB (modalP[1]); // MODAL-ENGINE-PUSH
                 sv->setModalParamsC (modalP[2]); sv->setModalParamsD (modalP[3]);
+                tiProf_.acc (5, "geo/harm/modal");
                 for (int bo = 0; bo < 4; ++bo)                                     // BLEND-MODES-PUSH (cross-osc warp slots)
                     for (int bs = 0; bs < 4; ++bs)
                         sv->setBlendSlot (bo, bs, blendCfg[bo][bs].mode, blendCfg[bo][bs].src, blendCfg[bo][bs].depth);
+                tiProf_.acc (6, "blend");
                 // ── SAMPLE engine: push params + shared buffer source (SAMPLE-ENGINE-PUSH) ──
                 if (engChanged)
                 {
@@ -10889,10 +10992,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                                    fmVals[o][9], fmVals[o][10], fmVals[o][11]);
                 }
                 sv->setSampleSources (&getOscSampleBuffer (0), &getOscSampleBuffer (1),
-                                      &getOscSampleBuffer (2), &getOscSampleBuffer (3));   // PEROSC-PUSH
+                                      &getOscSampleBuffer (2), &getOscSampleBuffer (3));
+                tiProf_.acc (7, "smp/gran/fm/src");   // PEROSC-PUSH
             }
         }
 
+        TI_PROF ("Q39");   // Phase 8b — Voice settings: UNISON+SPREAD pushed per-v
         // Phase 8b — Voice settings: UNISON+SPREAD pushed per-voice (in-voice unison).
         // The voice computes per-sine detune+pan internally and renders all sines as one note.
         const int   unisonCount = (int) *rawParam (ParameterIDs::SYN_UNISON);
@@ -10912,6 +11017,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float uniBlnB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UBLEND)  / 100.0f, (int) wc::ModDest::UniBlendB, 0.0f, 1.0f);
         const float uniWidB   =       ownM (*rawParam (ParameterIDs::SYN_OSC_B_UWIDTH)  / 100.0f, (int) wc::ModDest::UniWidthB, -1.0f, 1.0f);   // fb522 — bipolar
 
+        TI_PROF ("Q40");   // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 
         // Phase 11a — per-OSC FRAME SPREAD (real DSP). Other 4 new params per OSC
         // (SPECTRAL_TYPE/AMT, FOLD_SHAPE/AMT, INTERP_MODE) persist via APVTS but
         // have no audio-thread effect yet — render path will start reading them
@@ -11021,6 +11127,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float glCurve01 = glCurvePct / 100.0f;
         const float velDepth01 = *rawParam (ParameterIDs::SYN_VEL_DEPTH) * 0.01f;   // fb260 — vel→amp depth 0..1
         const bool  glAnyHeld = synthNotesHeld_ > 0;
+        TI_PROF ("synth:pull");
         for (int v = 0; v < synthEngine.getNumVoices(); ++v)
         {
             if (auto* tv = synthVoices_[(size_t) v])   // typed array — no per-voice RTTI
@@ -11079,6 +11186,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }   // ══ fb492 — CONTROL-RATE GATHER GUARD CLOSES ═══════════════════════════════════
     }
 
+    TI_PROF ("synth");
     // ── FLOW transport + global LFO bank (block-rate mirror; free or transport-locked) ──
     double flowBpm = (double) synModBpm, flowPpq = 0.0; bool flowPlaying = false;
     // (fb137: flowPlayingViz_ stored right after the playhead read below)
@@ -11285,6 +11393,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("lfobank");
     // ── fb453 — THE RACK'S MODULATION. LFO ADDS, ENV OWNS: the same law flowKnob() applies to the
     //    FLOW knobs (fb184) — the accumulation, the ownership crossfade and the single clamp are
     //    that lambda's, term for term. Walked ONCE over the <=128 assignments; the 1,152
@@ -11411,10 +11520,12 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         for (int k = 0; k < 6; ++k) dstG_[k] = 0.0f;
     dstRouteActive_ = (dstG_[0] + dstG_[1] + dstG_[2] + dstG_[3] + dstG_[4] + dstG_[5]) > 0.0f;
 
+    TI_PROF ("rackmod");
     // ════════ fb347 — THE UNION MASK for the shared routed-dry exclusion bus ════════
     // An osc counts ONCE here no matter how many devices route it. Route gains are binary
     // (:6036/:6054/:6075 all read `> 0.5f ? 1 : 0`), so OR-ing them is exact — there is no
     // partial-fade case to average. This is the mask that fixes the double-subtract.
+    TI_PROF ("T01");   // fb348 — read EVERY pooled instance's route pills. This is
     // fb348 — read EVERY pooled instance's route pills. This is what was missing: the pills
     // rendered on duplicate cards but nothing read them, so those instances silently fell back to
     // main-send and processed the WHOLE mix — "my delay on osc C is affecting osc A".
@@ -11437,6 +11548,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         poolRouteAny_[(size_t) (kFxExtra + e)]     = ts > 0.0f;
         poolRouteAny_[(size_t) (2 * kFxExtra + e)] = vs > 0.0f;
     }
+    TI_PROF ("T02");   // fb362 — GRANULAR route pills, all six instances through o
     // fb362 — GRANULAR route pills, all six instances through one loop.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
@@ -11450,6 +11562,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         poolRouteAny_[(size_t) q] = gs > 0.0f;
     }
+    TI_PROF ("T03");   // fb365 — TAPE route pills, all six, same single loop. Max:
     // fb365 — TAPE route pills, all six, same single loop. Max: "make sure it's per routable."
     // This read is the whole of that promise: without it the pills render and NOTHING consumes
     // them, which is not a dead control but a silent one — poolRouteAny_ stays false, so the
@@ -11467,6 +11580,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         poolRouteAny_[(size_t) q2] = ps > 0.0f;
     }
 
+    TI_PROF ("T04");   // fb377 — FILTER: engines are EAGER (no buffers to allocate
     // fb377 — FILTER: engines are EAGER (no buffers to allocate), so they are prepared once on
     // the first block at this rate and simply told the transport every block. The one-clock law
     // needs ppq, not a free-running accumulator.
@@ -11487,6 +11601,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         for (auto& e : fltPool_) e.setTempo (bpmNow, ppqNow, playingNow);
     }
 
+    TI_PROF ("T05");   // fb377 — FILTER route gates, the same per-instance shape a
     // fb377 — FILTER route gates, the same per-instance shape as every other device.
     for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
     {
@@ -11501,6 +11616,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         poolRouteAny_[(size_t) q3] = ps > 0.0f;
     }
 
+    TI_PROF ("T06");   // fb415 — 🚨 the fx3 engines are prepared in prepareToPlay, 
     // fb415 — 🚨 the fx3 engines are prepared in prepareToPlay, NOT here. fb413 copied the
     // filter's shape (a rate-change guard inside processBlock), and that is safe for the FILTER
     // because FilterFxEngine::prepare touches coefficient state only — it never allocates. The
@@ -11554,6 +11670,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
 
     pushFx3Params();     // fb413 — ONE setParams per instance per block, not per sample
 
+    TI_PROF ("T07");   // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every
     // ════════ fb351 — THE SERIAL CHAIN TOPOLOGY (rebuilt every block, no allocation) ════════
     // Collect each chain slot's route mask IN CHAIN ORDER, then work out (a) which oscillators each
     // device TAPS — a source enters the rack exactly once, at the first device routed to it — and
@@ -11618,6 +11735,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("T08");   // ═══ fb414 — WHICH OSCILLATORS ACTUALLY LEAVE THE MAIN MIX
     // ═══ fb414 — WHICH OSCILLATORS ACTUALLY LEAVE THE MAIN MIX ═════════════════════════════
     // This used to be "any device is routed to source s" and it read the raw ROUTE masks. Two
     // things change, and the first is a correctness fix that stands on its own:
@@ -11707,33 +11825,32 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
         if (routesDirty)
         {
-        for (int vi = 0; vi < kSynthVoiceCount; ++vi)
-            if (auto* sv = synthVoices_[(size_t) vi])
+        // fb631 — THE SPIKE. This push used to reach ALL 96 voices, and for every pooled send that was
+        // on it built two FilterSlots per voice on the audio thread — 8–13 ms in ONE block on every
+        // preset change (Tests/preset_load_spike_au.cpp, TERRAIN_PROFILE=1: the "T09" section). Now the
+        // routes are written ONCE into the snapshot, pushed only to the voices that are sounding, and an
+        // idle voice pulls the snapshot at note-on (SynthVoice::startNote). The pooled filters are built
+        // by the timer, off the audio thread, from the wanted-send mask published here.
+        {
+            auto& R = routeSnap_;
+            for (int k = 0; k < 6; ++k) { R.hall[k] = hallEntryG_[k]; R.dly[k] = dlyEntryG_[k]; R.dst[k] = dstEntryG_[k]; R.ex[k] = exUnionG_[k]; }
+            R.rsL = rsL; R.rsR = rsR; R.dsL = dsL; R.dsR = dsR; R.dtL = dtL; R.dtR = dtR; R.exL = exL; R.exR = exR;
+            juce::uint64 m0 = 0, m1 = 0;
+            for (int q = 0; q < kPoolSendCount; ++q)
             {
-                // fb351 — ENTRY masks, not the full route masks: a source is tapped by the FIRST
-                // device routed to it and then travels the chain, so it is never summed twice.
-                sv->setReverbRoutes (hallEntryG_[0], hallEntryG_[1], hallEntryG_[2], hallEntryG_[3], hallEntryG_[4], hallEntryG_[5]);
-                sv->setReverbSendTarget (rsL, rsR);
-                sv->setDelayRoutes (dlyEntryG_[0], dlyEntryG_[1], dlyEntryG_[2], dlyEntryG_[3], dlyEntryG_[4], dlyEntryG_[5]);
-                sv->setDelaySendTarget (dsL, dsR);
-                sv->setDistortionRoutes (dstEntryG_[0], dstEntryG_[1], dstEntryG_[2], dstEntryG_[3], dstEntryG_[4], dstEntryG_[5]);
-                sv->setDistortionSendTarget (dstRouteActive_ ? distortionSendBuf_.getWritePointer (0) : nullptr,
-                                             dstRouteActive_ ? distortionSendBuf_.getWritePointer (1) : nullptr);
-                // fb347 — the shared routed-dry bus (each routed osc exactly once)
-                sv->setExclusionRoutes (exUnionG_[0], exUnionG_[1], exUnionG_[2], exUnionG_[3], exUnionG_[4], exUnionG_[5]);
-                sv->setExclusionSendTarget (exUnionAny_ ? routedDryBuf_.getWritePointer (0) : nullptr,
-                                            exUnionAny_ ? routedDryBuf_.getWritePointer (1) : nullptr);
-                // fb348 — every POOLED instance gets its own mask + its own bus, so its wet can only
-                // ever contain the oscs it is routed to. Filters are built on demand (message thread).
-                for (int q = 0; q < kPoolSendCount; ++q)
-                {
-                    const bool on = poolRouteAny_[(size_t) q];
-                    if (on) sv->ensurePoolFilters (q);
-                    sv->setPoolSendRoutes (q, &poolEntryG_[(size_t) (q * 6)]);   // fb351 — entry mask
-                    sv->setPoolSendTarget (q, on ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr,
-                                              on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr);
-                }
+                const bool on = poolRouteAny_[(size_t) q];
+                for (int k = 0; k < 6; ++k) R.poolG[q * 6 + k] = poolEntryG_[(size_t) (q * 6 + k)];
+                R.poolL[q] = on ? poolSendBuf_[(size_t) q].getWritePointer (0) : nullptr;
+                R.poolR[q] = on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
+                if (on) { if (q < 64) m0 |= (1ull << q); else m1 |= (1ull << (q - 64)); }
             }
+            poolWantMask_[0].store (m0, std::memory_order_release);
+            poolWantMask_[1].store (m1, std::memory_order_release);
+            R.version.fetch_add (1, std::memory_order_release);
+            for (int vi = 0; vi < kSynthVoiceCount; ++vi)
+                if (auto* sv = synthVoices_[(size_t) vi])
+                    if (sv->isVoiceActive()) sv->pullRoutes (R);          // the sounding few; the rest catch up at note-on
+        }
         // fb495 — the push happened, so the cache now describes what every voice holds.
         for (int k = 0; k < 6; ++k)
         {
@@ -11754,19 +11871,23 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("T09");   // GEODE — the partial budget is a PER-BLOCK quota (partials
     // GEODE — the partial budget is a PER-BLOCK quota (partials are re-rendered every block,
     // unlike grains which persist and retire). Reset it to 0 before the voices render, or it
     // grows unbounded and clamps every SPEC voice to 0 active partials (static → silence).
     geodePartialsLive_ = 0;
+    TI_PROF ("T10");   // fb599 — and the HARM census rolls over with it: last bloc
     // fb599 — and the HARM census rolls over with it: last block's count of drawing banks is this
     // block's fair-share divisor, so every additive voice knows its share before the first renders.
     harmBanksPrev_ = harmBanksLive_ > 0 ? harmBanksLive_ : 1;
     harmBanksLive_ = 0;
 
+    TI_PROF ("T11");   // fb489 — PROBE A: everything above this line is block-rate
     // fb489 — PROBE A: everything above this line is block-rate gather (runs with no notes).
     dspTA_ = (long long) juce::Time::getHighResolutionTicks();
     dspGather_.fetch_add (dspTA_ - dspT0_, std::memory_order_relaxed);
 
+    TI_PROF ("topology");
     // ── FLOW · ARP / SEQ: transform incoming MIDI (0=Off, 1=Arp, 2=Seq; 3/4 Glitch/Drift not built) ──
     // fb131 — MODE CHAIN: re-resolve at the flow stage (the voice scope above owns its own
     // copy). Multiple modes run at once now — the chop/glitch audio inserts process in CHAIN
@@ -11905,6 +12026,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             else
                 flowMidi.addEvent (juce::MidiMessage::noteOff (1, ev[i].note), juce::jlimit (0, numSamples - 1, ev[i].sampleOffset));
         }
+        TI_PROF ("synth:params");
         synthEngine.renderNextBlock (synthScratch, flowMidi, 0, numSamples);
 
         // publish the live playhead/fire feed (UI rAF-polls getArpFeed) + the WAVE
@@ -11934,6 +12056,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             synthEngine.renderNextBlock (synthScratch, midiMessages, 0, numSamples);
     }
 
+    TI_PROF ("flow");
     // ── Envelope follower tap ──
     // After the block renders, sample the most-active synth voice's AMP envelope
     // output for the UI playhead dot. "Most active" = the highest live level, so a
@@ -12228,6 +12351,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // fb489 — PROBE B: gather..here is MIDI + voice rendering; everything after is FX + master.
     dspVoices_.fetch_add ((long long) juce::Time::getHighResolutionTicks() - dspTA_, std::memory_order_relaxed);
 
+    TI_PROF ("follower");
     // ── ANNULUS RESONATOR — on the SYNTH-SECTION output (PRE-FX). ───────────────
     //    Moved here from end-of-block (2026-07-01, per Max). Reasons:
     //      • The front-panel FX (delay / reverb / grain / tape) now process the
@@ -12454,6 +12578,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("annulus");
     // ── Run the indy chain into indySumBuffer ───────────────────────────
     // Grow + clear the sum buffer for this block; snapshot APVTS into
     // ParamTargets; run the chain on indyCaptureBus (which holds whatever
@@ -13637,6 +13762,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     // Update grain count for visualization
     activeGrainCount.store(grainEngineL.getActiveGrainCount() + grainEngineR.getActiveGrainCount());
 
+    TI_PROF ("fxchain");
     // ── FLOW · CHOP (mode 2): audio insert — re-groove the fully-FX'd output IN PLACE,
     //    click-free (FlowChop.h). MIDI passed through normally above; this chops the mix.
     //    Engine defaults (AlwaysOn, 8 slices, full wet) groove out of the box; the 5 mode-2
@@ -13861,6 +13987,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         }
     }
 
+    TI_PROF ("inserts");
     // PREVIEW STOP (Max: double-click to select / closing the browser must SILENCE the audition immediately —
     // otherwise a sample's ~3.5s tail "keeps fucking playing"). Kills both one-shots this block.
     if (previewStop_.exchange (false, std::memory_order_relaxed))
@@ -14103,6 +14230,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     }
 
     // (ANNULUS RESONATOR moved UP to the synth-section output — pre-FX — see above.)
+    TI_PROF ("auditions"); tiProf_.end();
 }
 
 //==============================================================================
@@ -16597,6 +16725,30 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // fb618 — the <preset> child names the patch this blob holds. Absent == an older blob: keep.
             if (auto pt = newState.getChildWithName ("preset"); pt.isValid())
             { PresetMeta m; m.fromTree (pt); setPresetMeta (m); }
+
+            // ── fb631 migration: A BLOB FROM BEFORE fb522 HAS NO PHASE PARAMETER. The default moved
+            // 0 → 0.5 (180°) for new patches; a pre-fb522 project would otherwise load with a phase it
+            // never had. Presence of the parameter is the discriminator, so no version bump is needed.
+            {
+                static const char* const PH[4] = { ParameterIDs::SYN_OSC_A_PHASE, ParameterIDs::SYN_OSC_B_PHASE,
+                                                   ParameterIDs::SYN_OSC_C_PHASE, ParameterIDs::SYN_OSC_D_PHASE };
+                bool seen[4] = { false, false, false, false };
+                for (int c = 0; c < newState.getNumChildren(); ++c)
+                {
+                    auto ch = newState.getChild (c);
+                    if (! ch.hasType ("PARAM")) continue;
+                    const auto idv = ch.getProperty ("id").toString();
+                    for (int o = 0; o < 4; ++o) if (idv == PH[o]) seen[o] = true;
+                }
+                for (int o = 0; o < 4; ++o)
+                    if (! seen[o])
+                    {
+                        juce::ValueTree p ("PARAM");
+                        p.setProperty ("id", PH[o], nullptr);
+                        p.setProperty ("value", 0.0f, nullptr);   // today's alignment, for a blob that predates the knob
+                        newState.appendChild (p, nullptr);
+                    }
+            }
 
             // ── fb346 migration: THE EMPTY RACK.
             // A fresh instance now boots with an empty chain (SYN_*_ACTIVE default false) because the
