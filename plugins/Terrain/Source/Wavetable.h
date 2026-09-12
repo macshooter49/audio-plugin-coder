@@ -111,8 +111,14 @@ namespace tw
     {
         static constexpr int kMaxHarmonics = 1024;  // fb530 — 512→1024. A 2048-point frame represents 1023 harmonics; the old 512 was HALF of what the frame can hold, and it BOUND at the bottom of the keyboard: at C1 (32.70 Hz) Nyquist permits 733 harmonics, so a 512-cap table used 69.8% of the available band and read h511=−55.7, h512=−72.5, h513=−108.6 dBc — a cliff with 11 kHz still free. MEASURED: no existing generator reaches 512 (the largest hand-written list in the bank is 28), so this is bit-identical for all 30 factory tables — it exists to unblock the TERRA generators, whose loops run to THIS constant by law (see makeTerra*). Paired with kMipMaxHarmonics[0] = 1023 below: buildFromSpec sizes its resolve arrays from THAT, and HB = min(hMax, N/2−1) = 1023 is the true representable ceiling.
                                                     // fb300 (kept for the history): 256→512 was the Serum-grade raise that let deep-bass notes (f0 ≤ ~46 Hz) past the old 256-cap wall at ~12.5 kHz. The mip SELECTION still guarantees no aliasing (it only ever picks a cap ≤ Nyquist/f0), so a higher ceiling is strictly richer, never dirtier.
-        std::array<float, kMaxHarmonics> amplitudes {};  // value-initialized to 0
-        std::array<float, kMaxHarmonics> phases     {};  // value-initialized to 0
+        // 🪟 fb636d — ON THE HEAP, NOT INLINE. Windows gives a thread a 1 MB stack (a Mac main thread has 8 MB). Inline,
+        //    these arrays (plus partials below) made one WavetableSpec 229 KB, and the by-value specs in the startup
+        //    chain (WavetableBank(), prefetchOscWavetables, getOscWavetableJson inlined into TerrainUiCore's constructor,
+        //    rebuildHarm/MorphIfNeeded at 459 KB) overflowed it: 0xC00000FD at launch, FL "problem opening the plugin".
+        //    Same size, zero-filled, same indexing — every value is identical; a spec is ~1.3 KB of stack now. Specs are
+        //    only ever built on the message thread / bake worker, never the audio thread, so the allocations are legal.
+        std::vector<float> amplitudes = std::vector<float> (kMaxHarmonics, 0.0f);
+        std::vector<float> phases     = std::vector<float> (kMaxHarmonics, 0.0f);
         int numHarmonics = 0;
 
         // ── Batch 2 — arbitrary (inharmonic) partials ──────────────────────
@@ -137,7 +143,7 @@ namespace tw
         //    ⚠️ This CHANGES THE SOUND of any existing patch that morphs a table with more than 96
         //    harmonics — it stops silently low-passing it. That is a bug fix, not a regression.
         static constexpr int kMaxPartials = 512;
-        std::array<Partial, kMaxPartials> partials {};
+        std::vector<Partial> partials = std::vector<Partial> (kMaxPartials);   // fb636d — heap, see amplitudes
         int numPartials = 0;
     };
 
