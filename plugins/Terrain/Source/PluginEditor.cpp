@@ -12136,7 +12136,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
   //
   // Per-slice entry in _scanInterp[idx]:
   //   truth        — last values from C++ { pos, winStart, winEnd, timestamp }
-  //   predictedPos — interpolated draw position [0..1]
+)TIHX") + juce::String (R"TIHX(  //   predictedPos — interpolated draw position [0..1]
   //   velocity     — dPos/ms (EMA-smoothed), used to extrapolate between polls
   //   opacity      — current draw opacity [0..1], lerps toward opacityTarget
   //   opacityTarget— 1.0 when voice active, 0.0 when silent
