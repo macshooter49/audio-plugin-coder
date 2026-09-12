@@ -22,7 +22,10 @@ param(
     [switch]$NoWait,
     [switch]$LastGood
 )
-$ErrorActionPreference = 'Stop'
+# Windows PowerShell 5.1 turns a native command's stderr into a terminating error under 'Stop' (gh prints even its
+# "logged in" status on stderr), so native calls are judged by $LASTEXITCODE and file operations opt in with
+# -ErrorAction Stop.
+$ErrorActionPreference = 'Continue'
 
 if (-not (Get-Command gh -ErrorAction SilentlyContinue)) {
     Write-Host "GitHub CLI not found. Install it once:  winget install GitHub.cli   then run:  gh auth login" -ForegroundColor Yellow
@@ -65,6 +68,8 @@ if (Test-Path $tmp) { Remove-Item -Recurse -Force $tmp }
 Write-Host "Downloading build $sha ($($run.createdAt))..." -ForegroundColor Cyan
 & gh run download $run.databaseId --repo $Repo --name Terrain-windows-vst3 --dir $tmp
 if ($LASTEXITCODE -ne 0) { Write-Host "Download failed." -ForegroundColor Red; exit 1 }
+# Terrain Glitch + Terrain Chop ship as their own artifact since fb636 (absent on older runs - not an error).
+& gh run download $run.databaseId --repo $Repo --name TerrainFX-cards-windows-vst3 --dir (Join-Path $tmp 'cards') *> $null
 
 $vst3Dst  = 'C:\Program Files\Common Files\VST3'
 $bundles  = Get-ChildItem -Path $tmp -Recurse -Directory -Filter '*.vst3' | Where-Object { $_.Parent.Name -eq 'VST3' }
@@ -75,9 +80,9 @@ $needAdmin = @()
 foreach ($b in $bundles) {
     $target = Join-Path $vst3Dst $b.Name
     try {
-        if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force | Out-Null }
-        Get-ChildItem -Path $target -Force | Remove-Item -Recurse -Force
-        Copy-Item -Path (Join-Path $b.FullName '*') -Destination $target -Recurse -Force
+        if (-not (Test-Path $target)) { New-Item -ItemType Directory -Path $target -Force -ErrorAction Stop | Out-Null }
+        Get-ChildItem -Path $target -Force -ErrorAction Stop | Remove-Item -Recurse -Force -ErrorAction Stop
+        Copy-Item -Path (Join-Path $b.FullName '*') -Destination $target -Recurse -Force -ErrorAction Stop
         Write-Host "installed $($b.Name)" -ForegroundColor Green
     } catch {
         $needAdmin += $b
