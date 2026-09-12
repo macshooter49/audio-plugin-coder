@@ -5,6 +5,7 @@
 #include <vector>
 #include <algorithm>
 #include "HarmonicSculptor.h"
+#include "TerrainDeterminism.h"
 
 //==============================================================================
 // TapeMachines.h — Three distinct tape machine DSP algorithms for Terrain v2.0
@@ -308,7 +309,7 @@ protected:
 
     void initRng()
     {
-        rng.seed(static_cast<unsigned>(reinterpret_cast<uintptr_t>(this)));
+        rng.seed(static_cast<unsigned>(tw::seedAddr (this, 0x5EEDu)));   // fb636 — == (uintptr_t) this in a real session
     }
 
     double prevOversampleInput = 0.0;

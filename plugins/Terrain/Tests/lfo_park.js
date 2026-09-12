@@ -37,7 +37,9 @@
 //      head is gone by 700 ms. Bar 3 alone could not tell a 120 ms fade from a 350 ms one — which is how
 //      fb567 shipped a fade-out that lost its `transition` to the base rule by specificity (Max: "it just
 //      static clicks out... it's supposed to fade away").
-//  10  BREATH RESTS (fb570) — in silence the curve's breathing (mvBreathe) is PAUSED, not removed: no
+//  10  BREATH RESTS (fb570; re-based fb636 h2) — in silence the curve FINISHES the breath it is in and rests PAUSED
+//      EXACTLY on its .9 pose (the clock on the 3.2 s boundary), never frozen mid-cycle (Max, 02:34: "not frozen on the
+//      screen like this, same for everything else"); PAUSED, not removed: no
 //      blink of the line at the park edge, nothing in the panel moves; it breathes again on the first note.
 //
 //  PROOF THE BARS CAN FAIL: against 9356ab0's page bars 2, 3, 4 and 6 are red; against d493db0..8e6b551
@@ -68,7 +70,7 @@ function mutatedPage () {
   if (MUT === 2) sub("function lfoIdle(on){", "function lfoIdle(on){ return;");
   if (MUT === 3) { sub("#mod-engine.mv-idle .mv-play,#mod-engine.mv-idle .mv-foll,.lfo-ext.mv-idle .card-scope .mv-play,.lfo-ext.mv-idle .card-scope .mv-foll,.mv-ext.mv-idle .es .mv-play,.mv-ext.mv-idle .es .mv-foll{opacity:0;transition:opacity .35s ease;}",
                         ".mv-idle .mv-play,.mv-idle .mv-foll{opacity:0;transition:opacity .35s ease;}");
-                   sub("#mod-engine.mv-idle .mv-stroke,.mv-ext.mv-idle .es .mv-stroke{animation-play-state:paused;}", ".mv-idle .mv-stroke{animation:none;}"); }
+                   sub("#mod-engine.mv-idle .mv-stroke:not(.mv-br-run),.mv-ext.mv-idle .es .mv-stroke:not(.mv-br-run){animation-play-state:paused;}", ".mv-idle .mv-stroke{animation:none;}"); }
   const p = path.join(os.tmpdir(), 'lfo_park_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }
 
@@ -240,16 +242,22 @@ async function boot (pg, P, rafMode) {
       samples.push([t, +getComputedStyle(fd).opacity, +getComputedStyle(pl).opacity]);
     }
     const at = (ms) => { let b = samples[0]; for (const s of samples) if (Math.abs(s[0] - ms) < Math.abs(b[0] - ms)) b = s; return b; };
-    // and the first note brings the breath back
+    /* fb636 h2 — the breath FINISHES before it rests, so it may still be running here: wait for it to land (≤ one 3.2 s breath,
+       or the 3.3 s cap), read the pose, and only then let the first note bring it back */
+    let restAt = -1, pr = null;
+    while (performance.now() - t0 < 4200) { await raf();
+      const a = stroke && stroke.getAnimations().find(x => x.animationName === 'mvBreathe');
+      if (a && a.playState === 'paused') { restAt = performance.now() - t0; pr = { ct: +a.currentTime, op: +getComputedStyle(stroke).opacity }; break; } }
     await window.__lp.push(0.5, 1); await raf(); const ps2 = stroke ? getComputedStyle(stroke).animationPlayState : '';
-    return { o0, ps0, idleAt, dur, ps1, ps2, s150: at(150), s300: at(300), end: samples[samples.length - 1], n: samples.length }; });
+    return { o0, ps0, idleAt, dur, ps1, restAt, pr, ps2, s150: at(150), s300: at(300), end: samples[samples.length - 1], n: samples.length }; });
   chk(fade.o0 > 0.99 && fade.idleAt >= 0 && fade.dur === '0.35s' && fade.s150[1] > 0.2 && fade.s150[2] > 0.2 && fade.end[1] < 0.01 && fade.end[2] < 0.01,
       '9  FADE SHAPE: the fade-out runs on the .35 s curve — still > 20 % visible at 150 ms, transition 0.35s, gone by 700 ms',
       'idle at ' + fade.idleAt.toFixed(0) + ' ms, transition ' + (fade.dur || '?') + ', opacity @150 ms ' + fade.s150[1].toFixed(2) + '/' + fade.s150[2].toFixed(2)
       + ', @300 ms ' + fade.s300[1].toFixed(2) + ', end ' + fade.end[1].toFixed(2) + ' (' + fade.n + ' samples)');
-  chk(fade.ps0 === 'running' && fade.ps1 === 'paused' && fade.ps2 === 'running',
-      '10 BREATH RESTS: the curve\'s breathing is PAUSED in silence (no blink) and runs again on the first note',
-      'live ' + fade.ps0 + ' → idle ' + fade.ps1 + ' → note ' + fade.ps2);
+  const brOff = fade.pr ? Math.min(fade.pr.ct % 3200, 3200 - (fade.pr.ct % 3200)) : NaN;
+  chk(fade.ps0 === 'running' && fade.restAt >= 0 && brOff < 0.5 && Math.abs(fade.pr.op - 0.9) < 0.002 && fade.ps2 === 'running',
+      '10 BREATH RESTS: in silence the curve finishes its breath and rests PAUSED exactly on its .9 pose (fb636 h2), then breathes again on the first note',
+      'live ' + fade.ps0 + ' → park edge ' + fade.ps1 + ' → ' + (fade.pr ? 'paused at ' + fade.restAt.toFixed(0) + ' ms, ' + brOff.toFixed(3) + ' ms from the pose, opacity ' + fade.pr.op.toFixed(4) : 'NEVER paused in 4.2 s') + ' → note ' + fade.ps2);
 
   // ── 7 · NO REGRESSION (main page) ───────────────────────────────────────────────────────
   chk(errs.length === 0, '7  zero page errors on the main page', errs.length ? errs.join(' | ') : '');

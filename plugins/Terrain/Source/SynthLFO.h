@@ -1,4 +1,6 @@
 #pragma once
+#include <cstring>
+#include <cstdint>
 // =============================================================================
 //  SynthLFO.h  —  Terrain · per-voice LFO (Batch 1)
 //  Waves Crate
@@ -361,10 +363,21 @@ private:
     // fb142-lfo — one-pole toward target across n samples of wall-time (n=1 uses the
     // precomputed per-sample coefficient; block spans compound: 1-exp(-n/(τ·sr))).
     // First call after prepare() SNAPS — reset must equal load-default.
+    bool slewMemoOk_ = false; std::uint32_t slewMemoN_ = 0, slewMemoR_ = 0; float slewMemoK_ = 0.0f;   // fb636 — see slewAdvance
     float slewAdvance (float target, float n) noexcept
     {
         if (! slewInit_) { slew_ = target; slewInit_ = true; return slew_; }
-        const float k = (n == 1.0f) ? slewK1_ : 1.0f - std::exp (-n * slewRate_);
+        // fb636 — the compound coefficient is the same expression on the same (n, slewRate_) block after block
+        //  (9 skipped LFOs per voice per block); cached on both inputs' bits.
+        float k;
+        if (n == 1.0f) k = slewK1_;
+        else
+        {
+            std::uint32_t nb, rb; std::memcpy (&nb, &n, 4); std::memcpy (&rb, &slewRate_, 4);
+            if (! slewMemoOk_ || nb != slewMemoN_ || rb != slewMemoR_)
+            { slewMemoOk_ = true; slewMemoN_ = nb; slewMemoR_ = rb; slewMemoK_ = 1.0f - std::exp (-n * slewRate_); }
+            k = slewMemoK_;
+        }
         slew_ += k * (target - slew_);
         return slew_;
     }

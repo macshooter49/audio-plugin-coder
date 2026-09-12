@@ -79,6 +79,24 @@ static void chk (bool ok, const char* label, const std::string& detail)
 { if (! s) return ""; char b[1024] = {0}; CFStringGetCString (s, b, sizeof b, kCFStringEncodingUTF8); return b; }
 
 // ── the AU, opened the way every other au_* harness in this directory opens it ─────────────────
+#include <dlfcn.h>
+// fb636 — register a Terrain.component from any path in THIS process (the factory symbol the bundle's
+// Info.plist names), under subtype 'TrnX' so it can never be confused with the installed 'Tern'.
+[[maybe_unused]] static bool sideLoad (const char* bundle, AudioComponentDescription& d)
+{
+    static AudioComponent reg = nullptr;
+    d.componentSubType = 'TrnX';
+    if (reg) return true;
+    const std::string bin = std::string (bundle) + "/Contents/MacOS/Terrain";
+    void* h = dlopen (bin.c_str(), RTLD_NOW | RTLD_LOCAL);
+    if (! h) { std::printf ("  !! dlopen %s: %s\n", bin.c_str(), dlerror()); return false; }
+    auto fn = (AudioComponentFactoryFunction) dlsym (h, "TerrainAUFactory");
+    if (! fn) { std::printf ("  !! no TerrainAUFactory in %s\n", bin.c_str()); return false; }
+    reg = AudioComponentRegister (&d, CFSTR ("Waves Crate: Terrain (side-loaded)"), 0x10000, fn);
+    if (! reg) { std::printf ("  !! AudioComponentRegister failed\n"); return false; }
+    return true;
+}
+
 struct AU
 {
     AudioUnit au = nullptr;
@@ -87,6 +105,10 @@ struct AU
     {
         AudioComponentDescription d {};
         d.componentType = kAudioUnitType_MusicDevice; d.componentSubType = 'Tern'; d.componentManufacturer = 'Wvcr';
+        // fb636 — TERRAIN_AU_BUNDLE=/path/Terrain.component opens THAT build (registered in-process under
+        // subtype 'TrnX') instead of the installed one, so a baseline and a candidate can be A/B'd without
+        // installing either. Unset = the installed AU, exactly as before.
+        if (const char* bundle = std::getenv ("TERRAIN_AU_BUNDLE")) { if (! sideLoad (bundle, d)) return false; }
         AudioComponent c = AudioComponentFindNext (nullptr, &d);
         if (! c) { std::printf ("  !! AU not found (is Terrain installed?)\n"); return false; }
         if (AudioComponentInstanceNew (c, &au) != noErr) { std::printf ("  !! instantiate failed\n"); return false; }

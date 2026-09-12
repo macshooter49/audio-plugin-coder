@@ -19,9 +19,12 @@
 // its own FilterSlot, mutated only from the audio thread.
 
 #pragma once
+#include <cstring>
+#include <limits>
 
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
+#include <algorithm>
 #include <array>
 #include <atomic>
 #include <cmath>
@@ -243,6 +246,7 @@ constexpr int kNumTypes = 118;   // fb604 — 94 -> 118
 
 struct LadderLP24
 {
+    int tapMemoTap_ = -1; float tapMemoRatio_ = 1.0f;   // fb636 — setCoeffs tap-ratio memo
     // State
     float s1 = 0, s2 = 0, s3 = 0, s4 = 0;
     float tV1 = 0, tV2 = 0, tV3 = 0, tV4 = 0, tVfb = 0;
@@ -299,7 +303,10 @@ struct LadderLP24
         // level matches the 24 dB tap at RES 1. A TAPER, not a ceiling — it still self-oscillates,
         // which is exactly why musicians pick this filter.
         const float kx       = juce::jlimit (0.0f, 1.0f, k * 0.25f);
-        const float tapRatio = std::pow (0.70710678f, (float) (3 - poleTap));
+        // fb636 — pow(1/√2, 3 − poleTap) depends only on the pole tap (0..3), yet ran on every cutoff redesign
+        //  (every 1-9 samples under an LFO on Cut). Memoized on the tap: the same integer in, the same float out.
+        if (poleTap != tapMemoTap_) { tapMemoTap_ = poleTap; tapMemoRatio_ = std::pow (0.70710678f, (float) (3 - poleTap)); }
+        const float tapRatio = tapMemoRatio_;
         poleMakeup = poleMkFlat * ((1.0f - kx) + kx * tapRatio);
     }
 
@@ -780,6 +787,9 @@ enum class LoopDamp : int { Lp = 0, None, Hp, Band };
 
 struct CombCore
 {
+    // fb636 — M1u: this ring is ALSO the owning FilterSlot's SHARED HEAVY BLOCK (see the note above
+    // class FilterSlot). prepare() takes a floor so the four buffered cores fit in it; size and mask
+    // are unchanged, so the comb itself never reads or writes past `size`.
     std::vector<float> buf;
     int   mask = 0, w = 0, size = 0;
     CombMode mode = CombMode::Plus;
@@ -832,12 +842,12 @@ struct CombCore
         return (float) ((int32_t) rng) * (1.0f / 2147483648.0f);   // ~-1..1
     }
 
-    void prepare (double fs) noexcept
+    void prepare (double fs, int minCap = 0) noexcept
     {
         shimW = (int) (0.030 * fs);                          // 30 ms shimmer window
         int need = (int) std::ceil (fs / 16.0) + shimW + 16; // lowest ~16 Hz + window
         size = 1; while (size < need) size <<= 1;            // power of two
-        buf.assign ((size_t) size, 0.0f);
+        buf.assign ((size_t) std::max (size, minCap), 0.0f); // fb636 — M1u: never below the slot's shared-block floor
         mask = size - 1;
         dSlewA = 1.0f - std::exp (-1.0f / (0.0025f * (float) fs));   // fb126 — 2.5 ms delay glide
         reset();
@@ -1383,10 +1393,12 @@ struct WaveShaper
 template <int N>
 struct APDiffuser
 {
-    float buf[N] = { 0.0f };
+    static constexpr int kFloats = N;
+    float* buf = nullptr;   // fb636 — M1u: a VIEW of N floats in the owning FilterSlot's shared block
     int   idx = 0;
     float g = 0.55f;
-    void reset() noexcept { for (int i = 0; i < N; ++i) buf[i] = 0.0f; idx = 0; }
+    void bind (float* p) noexcept { buf = p; }
+    void reset() noexcept { if (buf != nullptr) { for (int i = 0; i < N; ++i) buf[i] = 0.0f; } idx = 0; }
     inline float process (float x) noexcept
     {
         const float d = buf[idx];        // v[n-M]
@@ -1410,6 +1422,10 @@ struct ReverbFilter
     DCBlocker  dc;
     float loopState = 0.0f, mix = 0.5f, gLoop = 0.5f, preDrv = 1.0f, drvMk = 1.0f, dampA = 0.4f;
     int   dnsign = 1;
+
+    // fb636 — M1u: the four diffusers' 1486 floats, back to back in the slot's shared block.
+    static constexpr int kFloats = 173 + 281 + 419 + 613;
+    void bind (float* p) noexcept { ap0.bind (p); ap1.bind (p + 173); ap2.bind (p + 454); ap3.bind (p + 873); }
 
     void reset() noexcept
     {
@@ -1594,7 +1610,8 @@ struct GrainMask
 template <int MAXLEN>
 struct DampComb
 {
-    float buf[MAXLEN] = { 0.0f };
+    static constexpr int kFloats = MAXLEN;
+    float* buf = nullptr;   // fb636 — M1u: a VIEW of MAXLEN floats in the owning FilterSlot's shared block
     int   w = 0;
     float fb = 0.5f, damp = 0.4f, lpZ = 0.0f;
     float sat = 0.0f;   // fb603 — DRIVE blend INSIDE the feedback (0 = exact bypass; CombReverb keeps 0)
@@ -1606,8 +1623,9 @@ struct DampComb
     // interpolation, so a sweep BENDS like a flanger instead of clicking. Measured after: 1.0x.
     float lenT = 64.0f, lenC = -1.0f, slewA = 0.00833f;   // <0 = snap on first use
 
+    void bind (float* p) noexcept { buf = p; }
     void reset() noexcept
-    { for (int i = 0; i < MAXLEN; ++i) buf[i] = 0.0f; w = 0; lpZ = 0.0f; lenC = -1.0f; }
+    { if (buf != nullptr) { for (int i = 0; i < MAXLEN; ++i) buf[i] = 0.0f; } w = 0; lpZ = 0.0f; lenC = -1.0f; }
     void setSlew (double fs) noexcept
     { slewA = 1.0f - std::exp (-1.0f / (0.0025f * (float) juce::jmax (1000.0, fs))); }   // ~2.5 ms glide
     void setLen (float L) noexcept { lenT = juce::jlimit (4.0f, (float) MAXLEN - 4.0f, L); }
@@ -1648,6 +1666,10 @@ struct CombReverb
     APDiffuser<225> ap;
     DCBlocker dc;
     float mix = 0.5f, preDrv = 1.0f, drvMk = 1.0f;
+
+    // fb636 — M1u: three combs + the diffuser, 3 x 1600 + 225 = 5025 floats of the slot's shared block.
+    static constexpr int kFloats = 3 * ML + 225;
+    void bind (float* p) noexcept { c0.bind (p); c1.bind (p + ML); c2.bind (p + 2 * ML); ap.bind (p + 3 * ML); }
 
     void reset() noexcept { c0.reset(); c1.reset(); c2.reset(); ap.reset(); dc.reset(); }
 
@@ -1822,7 +1844,7 @@ struct SampHoldFx
 struct VarAllpass
 {
     static constexpr int LEN = 1024, MASK = LEN - 1;
-    float buf[LEN] = { 0.0f };
+    float* buf = nullptr;   // fb636 — M1u: a VIEW of LEN floats in the owning FilterSlot's shared block
     int   w = 0;
     float g = 0.5f;
     float sat = 0.0f;   // fb603 — DRIVE blend inside the allpass recirculation (0 = exact bypass)
@@ -1831,7 +1853,8 @@ struct VarAllpass
     // fractional read; measured after: 1.0x.
     float lenT = 256.0f, lenC = -1.0f, slewA = 0.00833f;
 
-    void reset() noexcept { for (int i = 0; i < LEN; ++i) buf[i] = 0.0f; w = 0; lenC = -1.0f;
+    void bind (float* p) noexcept { buf = p; }
+    void reset() noexcept { if (buf != nullptr) { for (int i = 0; i < LEN; ++i) buf[i] = 0.0f; } w = 0; lenC = -1.0f;
                             apX1 = apY1 = 0.0f; }
     void setSlew (double fs) noexcept
     { slewA = 1.0f - std::exp (-1.0f / (0.0025f * (float) juce::jmax (1000.0, fs))); }
@@ -1900,14 +1923,40 @@ struct VarAllpass
     }
 };
 
+// fb636 — M1u, THE SHARED HEAVY BLOCK. Four cores carry real delay memory: ReverbFilter (4 diffusers,
+// 1486 floats), CombReverb (3 combs + a diffuser, 5025), DampComb<4800> and VarAllpass x4 (4 x 1024). They
+// were INLINE arrays, 123,256 B of every FilterSlot whatever its type, and there are ten eager slots per
+// voice. No type runs more than ONE of those families (processStereo: COMB/KARPLUS/FLANGE -> combL_/R_,
+// REVERB_FILT/DARK -> reverb, REVERB_FILT_2/METAL -> combrev, COMB_DAMP -> damp, DIFFUSOR and ADD_BASS ->
+// vap), and CombCore already owns a heap ring only the comb family uses. So the ring is sized to at least
+// kShare floats per channel and the four buffered cores hold VIEWS into it (bindViews).
+// THE INVARIANT that makes the aliasing inaudible: only the ACTIVE type's view may hold non-zero data.
+//   * type_ changes only in setType(), which calls reset();
+//   * reset() zero-fills the whole ring (CombCore::reset) whenever the slot has run since its last full
+//     reset (stateTouched_), and a slot that has not run is still all zeros;
+//   * setParams() and excite() write CONFIG only, never a buffer.
+// So a family always starts on zeros, exactly as its own array did: bit-identical, with no arming and no
+// window. A slot must be prepare()d before it processes (every production slot is); reset() before that
+// is safe, since the views are null and skip their fills. The views point into this object's own
+// vectors, so a FilterSlot cannot be copied.
 class FilterSlot
 {
 public:
+    static constexpr int kDampLen = 4800;   // COMB DAMP's loop (fs/20Hz fits at 48k x2)
+    static constexpr int kShare   = std::max ({ ReverbFilter::kFloats, CombReverb::kFloats,
+                                                DampComb<kDampLen>::kFloats, 4 * VarAllpass::LEN });   // fb636 — M1u: 5025
+
+    FilterSlot() = default;
+    FilterSlot (const FilterSlot&) = delete;              // fb636 — M1u: the views would alias the source
+    FilterSlot& operator= (const FilterSlot&) = delete;
+
     void prepare (double sampleRate) noexcept
     {
+        stateTouched_ = true;   // fb636 — a prepare always ends in a FULL reset
         fsLocal_ = sampleRate;
-        combL_.prepare (sampleRate);
-        combR_.prepare (sampleRate);
+        combL_.prepare (sampleRate, kShare);   // fb636 — M1u: the ring doubles as the shared heavy block
+        combR_.prepare (sampleRate, kShare);
+        bindViews();                           // fb636 — M1u: assign() may have moved the block
         dampL_.setSlew (sampleRate); dampR_.setSlew (sampleRate);       // fb603 — comb-click law
         for (int i = 0; i < 4; ++i) { vapL_[i].setSlew (sampleRate); vapR_[i].setSlew (sampleRate); }
         reset();
@@ -1915,6 +1964,14 @@ public:
 
     void reset() noexcept
     {
+        // fb636 — THE CLEAN SLOT. Every core's STATE is written only by processStereo() and excite(); a slot
+        //  neither has touched since its last reset still holds exactly its reset state, so zeroing ~187 KB
+        //  of buffers again changes no byte. Note-on resets 4 slots per voice (~750 KB per note at 48 kHz,
+        //  all of it in the chord's first block — a meter-peak contributor). The CONFIG invalidation below
+        //  (the memo, outMakeup, loopDamp...) is written by setParams without processing, so it stays unconditional.
+        if (stateTouched_)
+        {
+        stateTouched_ = false;
         ladderL_.reset();   ladderR_.reset();
         ladderHpL_.reset(); ladderHpR_.reset();
         svfL_.reset();      svfR_.reset();
@@ -1937,6 +1994,7 @@ public:
         shfxL_.reset();     shfxR_.reset();
         for (int i = 0; i < 4; ++i) { vapL_[i].reset(); vapR_[i].reset(); }
         fbScrL_ = 0.0f; fbScrR_ = 0.0f;
+        }
         // fb603 — STATE LEAK, the structural half. reset() clears every core's STATE but the
         // cores also carry CONFIG written by setParams (DiodeLP::outMakeup, LadderPoleMix::
         // outMakeup, poleTap, SVF morph/qMax...). setParams is change-gated on
@@ -1965,6 +2023,11 @@ public:
     /** Set the active type. State of inactive filters is left dirty —
      *  reset() everything on a swap so a stale tail doesn't kick in when
      *  the user comes back to that type. */
+    // fb636 — setParams memos (see there). NaN seeds never match a real input.
+    static bool memoSame (float a, float b) noexcept { std::uint32_t x, y; std::memcpy (&x, &a, 4); std::memcpy (&y, &b, 4); return x == y; }
+    float drvMemoIn_ = std::numeric_limits<float>::quiet_NaN(), drvMemoLin_ = 1.0f, drvMemoMk_ = 1.0f;
+    float sprMemoIn_ = std::numeric_limits<float>::quiet_NaN(), sprMemoMul_ = 1.0f;
+    bool stateTouched_ = true;   // fb636 — set by processStereo/excite/prepare; reset() skips the zero-fill when clear
     void setType (Type t) noexcept
     {
         if (t == type_) return;
@@ -1997,11 +2060,16 @@ public:
         lastCut_ = cutHz; lastRes_ = res01; lastDrv_ = drv01;
         lastFs_ = fs; lastType_ = type_; lastMorph_ = morph_;
         lastPoleTap_ = poleTapSel_; lastSpread_ = spread_;
-        const float driveLin = driveLinear (drv01);
+        // fb636 — when only the CUTOFF moves (an LFO on Cut: 10 of Max's presets redesign every 1-9 samples), the
+        //  drive pair and the spread factor are the same functions of the same inputs every time: memoized on their
+        //  inputs' bits. Every use below reads the value the call would have returned.
+        if (! memoSame (drv01, drvMemoIn_)) { drvMemoIn_ = drv01; drvMemoLin_ = driveLinear (drv01); drvMemoMk_ = driveMakeup (drvMemoLin_); }
+        const float driveLin = drvMemoLin_;
         // STEREO SPREAD: split the cutoff +/-kSpreadSemis around the set value (L below / R above) so a
         // resonant filter blooms into a wide stereo image. spread_=0 -> sMul=1 -> cutHzL=cutHzR=cutHz
         // (byte-identical to the mono path). Each core clamps cutoff internally, so extremes are safe.
-        const float sMul   = std::exp2 (spread_ * kSpreadSemis / 12.0f);
+        if (! memoSame (spread_, sprMemoIn_)) { sprMemoIn_ = spread_; sprMemoMul_ = std::exp2 (spread_ * kSpreadSemis / 12.0f); }   // fb636
+        const float sMul   = sprMemoMul_;
         const float cutHzL = cutHz / sMul;
         const float cutHzR = cutHz * sMul;
         switch (type_)
@@ -2017,7 +2085,7 @@ public:
                 ladderL_.setCoeffs (cutHzL, res01, fs);
                 ladderR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             }
             case Type::LADDER_LP12:
@@ -2028,7 +2096,7 @@ public:
                 ladderL_.setCoeffs (cutHzL, res01, fs);
                 ladderR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::LADDER_HP24:
             {
@@ -2048,7 +2116,7 @@ public:
                   m.outMakeup = kLadderHp24Makeup; m.setCoeffs (c, res01, fs); };
                 cfgHp (ladderHpL_, cutHzL); cfgHp (ladderHpR_, cutHzR);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             }
             case Type::DIODE_LP:
@@ -2061,27 +2129,27 @@ public:
                 // of 20-125 Hz its 76 Hz corner was eating, so the passband measured +3.9 dB
                 // against the LP24 reference's -0.1. kDiodeMakeup stays 13.0 — it is the DRIVE
                 // into the soft clip, i.e. the grit — and the level comes off AFTER it.
-                postMakeup_= driveMakeup (driveLin) * kDiodeBassTrim;
+                postMakeup_= drvMemoMk_ * kDiodeBassTrim;
                 break;
             case Type::SVF_LP:
                 setSvf (SvfMultimode::Output::LP, 2000.0f, cutHz, res01, driveLin, fs);
                 preDrive_  = driveLin;   // DRV boosts input into the filter (consistent w/ ladder)
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::SVF_HP:
                 setSvf (SvfMultimode::Output::HP, 2000.0f, cutHz, res01, driveLin, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::SVF_BP:
                 setSvf (SvfMultimode::Output::BP, 2000.0f, cutHz, res01, driveLin, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::SVF_NOTCH:
                 setSvf (SvfMultimode::Output::Notch, 2000.0f, cutHz, res01, driveLin, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::OBX_SVF:
                 // fb603 — OB-X is the MORPHING SEM (kObxMorph, and morph_ ADDS to it once a Var
@@ -2091,13 +2159,13 @@ public:
                 svfR_.morph = svfL_.morph;
                 setSvf (SvfMultimode::Output::SEM, 90.0f, cutHz, res01, driveLin, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin) * kObxMakeup;
+                postMakeup_= drvMemoMk_ * kObxMakeup;
                 break;
             case Type::ACID_303:
                 acidL_.setCoeffs (cutHzL, res01, fs);
                 acidR_.setCoeffs (cutHzR, res01, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             case Type::COMB_PLUS:
             case Type::COMB_MINUS:
@@ -2206,7 +2274,7 @@ public:
                 ladderL_.tapBlend = 0.0f; ladderR_.tapBlend = 0.0f;
                 ladderL_.setCoeffs (cutHzL, res01, fs);
                 ladderR_.setCoeffs (cutHzR, res01, fs);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::GERMAN_LP:      // clean ZDF voicing (Serum "German LP" homage): tamed res, soft drive
@@ -2239,18 +2307,18 @@ public:
                 diodeL_.outMakeup = kDiodeMakeup; diodeR_.outMakeup = kDiodeMakeup;
                 diodeL_.setCoeffs (cutHzL * 0.80f, juce::jmin (1.0f, res01 * 1.15f), fs);
                 diodeR_.setCoeffs (cutHzR * 0.80f, juce::jmin (1.0f, res01 * 1.15f), fs);
-                preDrive_ = driveLin * 1.8f; postMakeup_ = driveMakeup (driveLin) * 0.358f;   // fb603 — was 0.8 (+7.0 dB after the DC-blocker fix)
+                preDrive_ = driveLin * 1.8f; postMakeup_ = drvMemoMk_ * 0.358f;   // fb603 — was 0.8 (+7.0 dB after the DC-blocker fix)
                 break;
             case Type::FRENCH_LP:      // nonlinear-responding LP (Serum "French LP" homage)
                 diodeL_.outMakeup = kDiodeMakeup; diodeR_.outMakeup = kDiodeMakeup;   // fb603 — was inherited (22.28 dB recall leak)
                 diodeL_.setCoeffs (cutHzL * 1.30f, std::pow (res01, 0.7f) * 0.85f, fs);   // fb603 — own corner + res skew (was == Diode LP to 0.20 dB)
                 diodeR_.setCoeffs (cutHzR * 1.30f, std::pow (res01, 0.7f) * 0.85f, fs);
-                preDrive_ = driveLin * 1.3f; postMakeup_ = driveMakeup (driveLin) * 0.494f;   // fb603 — was 0.9 (+5.2 dB)
+                preDrive_ = driveLin * 1.3f; postMakeup_ = drvMemoMk_ * 0.494f;   // fb603 — was 0.9 (+5.2 dB)
                 break;
             case Type::ACID_SCREAM:
                 acidL_.setCoeffs (cutHzL, juce::jmin (1.0f, res01 * 1.1f), fs);
                 acidR_.setCoeffs (cutHzR, juce::jmin (1.0f, res01 * 1.1f), fs);
-                preDrive_ = driveLin * 2.2f; postMakeup_ = driveMakeup (driveLin) * 0.75f;
+                preDrive_ = driveLin * 2.2f; postMakeup_ = drvMemoMk_ * 0.75f;
                 break;
             case Type::XPD_HP6:  case Type::XPD_HP12: case Type::XPD_HP18:
             case Type::XPD_BP12: case Type::XPD_BP24: case Type::XPD_BP6:
@@ -2276,7 +2344,7 @@ public:
                 { m.w0 = w.w0; m.w1 = w.w1; m.w2 = w.w2; m.w3 = w.w3; m.w4 = w.w4;
                   m.outMakeup = w.mk; m.setCoeffs (c, res01, fs); };
                 cfg (ladderHpL_, cutHzL); cfg (ladderHpR_, cutHzR);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin) * kLadderHp24Makeup;
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_ * kLadderHp24Makeup;
                 break;
             }
             case Type::SVF_LP24: case Type::SVF_HP24: case Type::SVF_BP24: case Type::SVF_N24:
@@ -2286,12 +2354,12 @@ public:
                                              : (type_ == Type::SVF_BP24) ? SvfMultimode::Output::BP
                                              :                             SvfMultimode::Output::Notch;
                 setSvf24 (o, cutHz_, res01, driveLin, fs);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);   // fb603 — was 1/1 (DRV-INERT)
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;   // fb603 — was 1/1 (DRV-INERT)
                 break;
             }
             case Type::SVF_PEAK:
                 setSvf (SvfMultimode::Output::Peak, 2000.0f, cutHz_, res01, driveLin, fs);
-                preDrive_ = driveLin; postMakeup_ = 0.7f * driveMakeup (driveLin);   // fb603 — was 1/0.7 (DRV-INERT)
+                preDrive_ = driveLin; postMakeup_ = 0.7f * drvMemoMk_;   // fb603 — was 1/0.7 (DRV-INERT)
                 break;
             case Type::SEM_LP: case Type::SEM_NOTCH: case Type::SEM_HP: case Type::SEM_BP:
                 if (type_ == Type::SEM_BP)
@@ -2302,7 +2370,7 @@ public:
                     svfR_.morph = svfL_.morph;
                     setSvf (SvfMultimode::Output::SEM, 60.0f, cutHz_, res01, driveLin, fs);
                 }
-                preDrive_ = driveLin; postMakeup_ = kObxMakeup * driveMakeup (driveLin);   // fb603 — was 1/1 (DRV-INERT)
+                preDrive_ = driveLin; postMakeup_ = kObxMakeup * drvMemoMk_;   // fb603 — was 1/1 (DRV-INERT)
                 break;
             case Type::MULTI_LH: case Type::MULTI_LB: case Type::MULTI_LN: case Type::MULTI_HB:
             case Type::MULTI_HN: case Type::MULTI_BB: case Type::MULTI_BN: case Type::MULTI_PP:
@@ -2343,7 +2411,7 @@ public:
                 svf2L_.setCoeffs (f2 / sMul, res01 * 0.7f, fs);
                 svf2R_.setCoeffs (f2 * sMul, res01 * 0.7f, fs);
                 svf2L_.setDrive (driveLin); svf2R_.setDrive (driveLin);
-                preDrive_ = driveLin; postMakeup_ = 0.7f * driveMakeup (driveLin);   // fb603 — was 1/0.7 (all 10 DRV-INERT)
+                preDrive_ = driveLin; postMakeup_ = 0.7f * drvMemoMk_;   // fb603 — was 1/0.7 (all 10 DRV-INERT)
                 break;
             }
             case Type::COMB_WIDE: case Type::COMB_OCTAVE: case Type::COMB_FIFTH:
@@ -2391,7 +2459,7 @@ public:
                 dampL_.fb = 0.5f + res01 * 0.47f;  dampR_.fb = dampL_.fb;
                 dampL_.damp = 0.5f;                dampR_.damp = 0.5f;
                 dampL_.sat = dampR_.sat = driveMix (driveLin);       // fb603 — drive in the recirculation
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::FORMANT_O: case Type::FORMANT_U:
@@ -2446,7 +2514,7 @@ public:
                     // whole point); putting one in all four cost 8 serial tanh per sample = 56 ns.
                     vapL_[i].sat = vapR_[i].sat = (i == 3) ? driveMix (driveLin) : 0.0f;
                 }
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::BODE_DOWN:
@@ -2464,7 +2532,7 @@ public:
                 // is linear by definition, so without a saturator DRV could only ever be the
                 // measured "+12.0 dB, THD 0.00% -> 0.00%".
                 satMix_ = driveMix (driveLin);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::LOW_EQ: case Type::HIGH_EQ: case Type::AIR:
@@ -2474,7 +2542,7 @@ public:
                 const float g   = (type_ == Type::AIR) ? res01 * 15.0f : res01 * 24.0f - 12.0f;
                 eqAL_.setShelf (fc2, g, hi, fs); eqAR_.setShelf (fc2, g, hi, fs);
                 satMix_ = driveMix (driveLin);          // fb603 — post-EQ saturator (was VOLUME-ONLY +12.0 dB)
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::BAND_EQ:
@@ -2503,7 +2571,7 @@ public:
                 shfxL_.minus = shfxR_.minus = (type_ == Type::SAMPHOLD_MINUS);
                 shfxL_.setParams (juce::jmax (30.0f, cutHz_), res01, driveLin, fs);          // fb603 — res01/drive were never passed
                 shfxR_.setParams (juce::jmax (30.0f, cutHz_) * 1.003f, res01, driveLin, fs);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             case Type::SCREAM_LP: case Type::SCREAM_BP:
             {
@@ -2523,7 +2591,7 @@ public:
                 const float resU = 0.05f + 0.55f * juce::jlimit (0.0f, 1.0f, res01);
                 setSvf (isLp ? SvfMultimode::Output::LP : SvfMultimode::Output::BP,
                         400.0f, cutHz_, resU, driveLin, fs);
-                preDrive_ = driveLin; postMakeup_ = 0.8f * driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = 0.8f * drvMemoMk_;
                 screamDrv_ = 1.0f + drv01 * 6.0f;
                 // peak gain of the tap actually in the loop: ~Q for the LP, exactly 1 for the
                 // NORMALISED BP (which returns k*v1).
@@ -2538,14 +2606,14 @@ public:
                 // (satMix 0.55) and fully at DRV 1; the input gain rides the knob so the drive has
                 // something to bite on. Before, preDrive_ was a fixed 1.2 and DRV moved nothing.
                 setSvf (SvfMultimode::Output::LP, 200.0f, cutHz_, res01, driveLin * 2.2f, fs);
-                preDrive_ = 1.2f * driveLin; postMakeup_ = 0.9f * driveMakeup (driveLin);
+                preDrive_ = 1.2f * driveLin; postMakeup_ = 0.9f * drvMemoMk_;
                 break;
             case Type::MS20_LP:
                 // fb603 — same fix, gentler voicing (the MS-20 is dirty at the top of the knob,
                 // not at the bottom): satMix 0.29 at DRV 0 -> 0.96 at DRV 1.
                 setSvf (SvfMultimode::Output::LP, 500.0f, cutHz_, std::pow (res01, 0.8f),
                         driveLin * 1.4f, fs);
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             case Type::POLIVOKS:
                 diodeL_.outMakeup = kDiodeMakeup; diodeR_.outMakeup = kDiodeMakeup;   // fb603 — was inherited (22.28 dB recall leak)
@@ -2555,7 +2623,7 @@ public:
                 // aggressive one of the family, so it gets the brightest effective corner.
                 diodeL_.setCoeffs (cutHzL * 1.60f, juce::jmin (1.0f, res01 * 1.25f), fs);
                 diodeR_.setCoeffs (cutHzR * 1.60f, juce::jmin (1.0f, res01 * 1.25f), fs);
-                preDrive_ = driveLin * 2.5f; postMakeup_ = driveMakeup (driveLin) * 0.257f;   // fb603 — was 0.7 (+8.7 dB)
+                preDrive_ = driveLin * 2.5f; postMakeup_ = drvMemoMk_ * 0.257f;   // fb603 — was 0.7 (+8.7 dB)
                 break;
             case Type::RING_X2:
                 ringL_.setParams (cutHz_, res01, driveLin, fs);
@@ -2679,7 +2747,7 @@ public:
                 combL_.setParams (f0 / sMul,            res01, fs);
                 combR_.setParams (f0 * sMul * 1.0015f,  res01, fs);
                 preDrive_  = driveLin;
-                postMakeup_= driveMakeup (driveLin);
+                postMakeup_= drvMemoMk_;
                 break;
             }
             case Type::LOW_EQ6: case Type::HIGH_EQ6:
@@ -2690,7 +2758,7 @@ public:
                 const float g  = res01 * 24.0f - 12.0f;
                 eqAL_.setShelf1 (cutHz_, g, hi, fs); eqAR_.setShelf1 (cutHz_, g, hi, fs);
                 satMix_ = driveMix (driveLin);          // fb603's EQ grammar: drive is the output stage
-                preDrive_ = driveLin; postMakeup_ = driveMakeup (driveLin);
+                preDrive_ = driveLin; postMakeup_ = drvMemoMk_;
                 break;
             }
             case Type::FORMANT_SOP: case Type::FORMANT_TEN: case Type::FORMANT_ALTO:
@@ -2720,6 +2788,7 @@ public:
     /** Process one stereo sample in-place. */
     inline void processStereo (float& l, float& r) noexcept
     {
+        stateTouched_ = true;   // fb636 — see reset(): this slot now holds state a reset must clear
         switch (type_)
         {
             case Type::LADDER_LP24:
@@ -2934,6 +3003,7 @@ public:
      *  whatever the oscillators feed in (exciter mode). No-op for other types. */
     void excite (float level = 1.0f) noexcept
     {
+        stateTouched_ = true;   // fb636 — excite writes core state
         // fb390 — ALL THREE Karplus voices pluck, not just the first. The guard read
         // `type_ == Type::KARPLUS` alone, so KARPLUS_BRIGHT and KARPLUS_MUTE were silent no-ops:
         // a character literally named "Pluck" that could not pluck. All three run the same
@@ -2945,6 +3015,19 @@ public:
     }
 
 private:
+    /** fb636 — M1u: point the four buffered cores into the comb rings (L into combL_, R into combR_).
+     *  Offsets are from 0 for each family because only one family is ever live (see the note above
+     *  the class). Re-run on every prepare: assign() reallocates when the rate changes the ring size. */
+    void bindViews() noexcept
+    {
+        float* const L = combL_.buf.data();
+        float* const R = combR_.buf.data();
+        reverbL_.bind (L);   reverbR_.bind (R);
+        combrevL_.bind (L);  combrevR_.bind (R);
+        dampL_.bind (L);     dampR_.bind (R);
+        for (int i = 0; i < 4; ++i) { vapL_[i].bind (L + i * VarAllpass::LEN); vapR_[i].bind (R + i * VarAllpass::LEN); }
+    }
+
     /** Configure both SVF channels for a given output tap + Q ceiling. */
     void setSvf (SvfMultimode::Output o, float qMax,
                  float cutHz, float res01, float driveLin, double fs) noexcept
@@ -3059,24 +3142,24 @@ private:
     SvfMultimode  svfL_,      svfR_;
     Acid303       acidL_,     acidR_;
     DiodeLP       diodeL_,    diodeR_;
-    CombCore      combL_,     combR_;        // COMB ± / SHIMMER / KARPLUS
+    CombCore      combL_,     combR_;        // COMB ± / SHIMMER / KARPLUS — fb636 M1u: + the shared heavy block
     FormantBank   formantL_,  formantR_;     // FORMANT A / E / I / MORPH
     PhaserCore    phaserL_,   phaserR_;       // PHASER 4P / 8P
     RingMod       ringL_,     ringR_;         // RING MOD
     BitCrush      crushL_,    crushR_;        // BIT-CRUSH
     WaveShaper    shaperL_,   shaperR_;       // WAVESHAPER
-    ReverbFilter  reverbL_,   reverbR_;       // REVERB FILTER
+    ReverbFilter  reverbL_,   reverbR_;       // REVERB FILTER             (fb636 M1u: views into comb*_)
     BodeShifter   bodeL_,     bodeR_;         // BODE SHIFTER
     GrainMask     grainL_,    grainR_;        // GRAIN MASK
-    CombReverb    combrevL_,  combrevR_;      // REVERB FILTER 2 (Serum/Pigments comb)
+    CombReverb    combrevL_,  combrevR_;      // REVERB FILTER 2 (Serum/Pigments comb)  (fb636 M1u: views)
 
     // ── fb165 expansion cores ──
     SvfMultimode   svf2L_,  svf2R_;      // 24 dB cascades / MULTI 2nd band / RADIO 2nd BP
     RingMod        ring2L_, ring2R_;     // RING X2 second carrier
-    DampComb<4800> dampL_,  dampR_;      // COMB DAMP (fs/20Hz fits at 48k x2)
+    DampComb<kDampLen> dampL_, dampR_;   // COMB DAMP (fs/20Hz fits at 48k x2)
     BellEQ         eqAL_, eqAR_, eqBL_, eqBR_;   // EQ & TONE (B pair = TILT's high band)
     SampHoldFx     shfxL_,  shfxR_;
-    VarAllpass     vapL_[4], vapR_[4];   // DIFFUSOR 4-stage + ADD BASS rotator (stages 0-1)
+    VarAllpass     vapL_[4], vapR_[4];   // DIFFUSOR 4-stage + ADD BASS rotator (stages 0-1) — fb636 M1u: views
     float          fbScrL_ = 0.0f, fbScrR_ = 0.0f;   // SCREAM feedback state
     float          screamDrv_ = 1.0f, screamFb_ = 0.0f;   // fb603 — SCREAM loop taper (computed in setParams)
     float          satMix_ = 0.0f;                        // fb603 — post-EQ drive saturator blend

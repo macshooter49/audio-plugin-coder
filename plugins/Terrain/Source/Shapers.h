@@ -362,7 +362,8 @@ namespace shapers {
     //      33          ripple order k = 2..12 (integer, so the ±1 rails are ripple NODES)
     //
     //  🚨 fb470 — THE DEFAULT BELOW IS `return s`, AND THAT IS A TRAP FOR THE NEXT PERSON.
-    //  Modes 35-47 are the RESERVED tail of the choice param and are SUPPOSED to be inert. A new
+    //  Modes 35-37 reach it and are SUPPOSED to be inert (filter / Draw, handled elsewhere); fb636's Alt
+    //  Warp 39-46 and the reserved 47 never reach it (applyAmpWarp's gate). A new
     //  LIVE mode added without a `case` compiles clean, shows its name in the menu, draws in the
     //  waterfall and makes no sound. Every new mode needs a cert row that a mutation to its case
     //  label makes FAIL, and an entry in warpAmpNeedsDc (SynthVoice.h) if it is not odd-symmetric.
@@ -532,7 +533,7 @@ namespace shapers {
                 return wsExpand (s, 4.0f * t, v);
             }
 
-            default: return s;   // 🚨 reserved tail 35-47 — see the fb470 note above
+            default: return s;   // 🚨 35-37 (+ 39-47, gated out before this) — see the fb470 note above
         }
     }
 

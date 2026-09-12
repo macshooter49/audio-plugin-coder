@@ -276,7 +276,8 @@ const PILL = { 'SYN_OSC_A_WARP2_MODE':'#osc-a-warp2-val', 'SYN_OSC_B_WARP2_MODE'
         'FAMILIES — the browser renders exactly the live modes',
         rows ? (rows.all.length + ' rows over ' + rows.cats.length + ' categories [' + rows.cats.join(' · ') + ']') : 'no browser');
     if (rows) {
-      const names = rows.all.map((s) => s.split('/')[1]).sort();
+      // fb636 — split on the FIRST '/' only: a mode name may hold one (Serum's own 'Bend +/-', 'Odd/Even').
+      const names = rows.all.map((s) => s.slice(s.indexOf('/') + 1)).sort();
       const want  = live.map((i) => cppUi[i]).sort();
       chk(JSON.stringify(names) === JSON.stringify(want), 'FAMILIES — every rendered row is a real C++ mode name',
           names.length + ' rendered');

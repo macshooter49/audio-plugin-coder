@@ -35,11 +35,21 @@
 //   4b THE SAME STALL WITH rAF DEAD — fb577's trap (WebKit suspends rAF on a hidden/occluded page): the clear must
 //      reach the canvas directly, and the picture must stay
 //   6  ZERO FRAMES AT REST — the clears dispatched no painter frame: the frame clock stayed parked
+//      fb636 RE-BASE: a stall is also the moment the sounding flag's stamp goes stale with no frame left to notice
+//      it, and the motion clock (index.html, THE MOTION CLOCK) then grants ONE bounded wind-down tail (≤ 1.5 s, never
+//      gTell) so a loop that was moving finishes onto its rest pose instead of freezing mid-frame (Max's motion law).
+//      So bar 6 now asserts that the stall costs at most that one tail and that the clock is PARKED again afterwards
+//      (0 frames over a further 1 s, still stalled). The rAF-dead stall (4b) stays at 0.
+//      fb636 h1 RE-BASE: every FLOW tile now winds down (lit or not) onto ONE home pose, and a home can be most of a loop
+//      away (GLITCH ≤ 4.7 s, ROBIN ≤ 4.1 s, never faster than it played) — so the gate WAITS for the wind-down to land
+//      (≤ 8 s) instead of assuming 1.5 s, and the one tail may cost ≤ 420 frames (the watchdog's ≤ 1.5 s to notice the
+//      stale stamp + the longest home tail, at 60 fps); the clock must still be parked afterwards.
 //
 //  RED ON THE SHIPPED PAGE: bar 4 (the head survives a stall forever). Mutations on the fixed page:
 //      GEODE_FOLLOWER_MUTATE=1  the watchdog is removed                → 4 red
 //      GEODE_FOLLOWER_MUTATE=2  the watchdog clears but never repaints → 4b red (rAF dead: nothing else paints)
 //      GEODE_FOLLOWER_MUTATE=3  the repaint wipes instead of painting  → 4 red (the picture half), 0 intact
+//      GEODE_FOLLOWER_MUTATE=4  (fb636) the wind-down tail never ends  → 6 red (the stall runs a clock)
 // ══════════════════════════════════════════════════════════════════════════════════════════════
 const puppeteer = require ('puppeteer-core');
 const fs = require ('fs'), path = require ('path'), os = require ('os');
@@ -63,6 +73,7 @@ function mutatedPage () {
   if (MUT === 1) sub ("          if (! window.__followT || Date.now () - window.__followT < 700) return;", "          return;");
   if (MUT === 2) sub ("            if (window.__geodeFollowRepaint) window.__geodeFollowRepaint (o);", "");
   if (MUT === 3) sub ("    try { var s = st[o]; if (! s || ! s.on || (! s.ghost && ! s.bright)) return; paint (o); } catch (e) {}", "    try { var s = st[o]; if (! s || ! s.on) return; wipe (o); } catch (e) {}");
+  if (MUT === 4) { sub ("if (edge || t >= wTail) wTail = Math.max(wTail, t + 1500);", "wTail = t + 1e9;"); sub ("  function windBusy(){ if (MOT.m > 0) return true;", "  function windBusy(){ return true;"); }
   const p = path.join (os.tmpdir(), 'geode_follower_mut' + MUT + '.html'); fs.writeFileSync (p, src); return p;
 }
 
@@ -174,6 +185,13 @@ async function boot (P) {
        '4  A STALLED FEED ⇒ GONE, PICTURE STAYS — the head is cleared within 1.5 s of the last push; the spectrogram is intact',
        `feed: ${s4b.sent - sent4a} frames, ${s4b.keep - s4a.keep} keepalives in 2 s (stalled=${stalled}); head ${s4a.head} → ${s4b.head} px at x ${s4a.headX}; .samp-ph on ${s4b.domOn} opacity ${s4b.domOp}; picture ${s4b.pic} px (was ${s0.pic})`);
 
+  // fb636 — the stall continues: whatever wind-down the motion clock granted lands (fb636 h1: wait for it, ≤ 8 s — a home
+  // pose can be most of a loop away), and then the clock is parked
+  const wd0 = Date.now ();
+  for (let i = 0; i < 160 && await host (() => !! (window.__tiWindBusy && window.__tiWindBusy ())); i++) await sleep (50);
+  const windMs = Date.now () - wd0;
+  await sleep (300); const s4e = await SAMPLE (); await sleep (1000); const s4f = await SAMPLE ();
+
   // 5 — the feed returns: a new note draws its head again
   await host (() => { let p = 0.60; window.__host.pre = () => { p = Math.min (0.90, p + 0.004); window.__host.list.a = [5, p]; }; });
   await sleep (170);   // 10 frames
@@ -195,7 +213,12 @@ async function boot (P) {
   await sleep (200);
 
   // 6 — the clear cost no painter frame: during the stalls the frame clock stayed parked
-  chk (s4b.frames - f4a === 0 && s4d.frames - s4c.frames === 0, '6  ZERO FRAMES AT REST — the clears dispatched no painter frame during the two 2 s stalls', `painter frames ${s4b.frames - f4a} / ${s4d.frames - s4c.frames}`);
+  /* fb636 RE-BASE (see the header): the first stall may carry the motion clock's ONE bounded wind-down — at most 420 frames
+     (fb636 h1: the longest home tail) — and must then be parked (0 frames over a further 1 s with the feed still stalled);
+     the rAF-dead stall stays at 0. */
+  chk (s4f.sent === sent4a && s4f.frames - f4a <= 420 && s4f.frames - s4e.frames === 0 && s4d.frames - s4c.frames === 0,
+       '6  ZERO FRAMES AT REST — the clears dispatched no painter frame; a stall costs at most the one bounded wind-down, then the clock parks',
+       `stall 1: ${s4f.frames - f4a} painter frames (≤ 420: the one wind-down tail, landed ${windMs} ms after bar 4), ${s4f.frames - s4e.frames} in the 1 s after it landed (still stalled: ${s4f.sent === sent4a}) · rAF-dead stall: ${s4d.frames - s4c.frames}`);
 
   if (errs.length) console.log ('\n  page errors: ' + errs.join (' | '));
   console.log (`\n  ${fail ? '❌' : '✅'} ${pass} passed, ${fail} failed\n`);

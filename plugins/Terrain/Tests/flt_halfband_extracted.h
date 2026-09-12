@@ -9,7 +9,7 @@
 
 namespace tw {
 
-#line 74 "Source/SynthVoice.h"
+#line 75 "Source/SynthVoice.h"
     struct HalfBandCoefs
     {
         static constexpr float a0 = 0.0890947891f;   // branch A (prototype's even coefficients)
@@ -18,7 +18,7 @@ namespace tw {
         static constexpr float a3 = 0.8493897684f;   // branch B
     };
 
-#line 83 "Source/SynthVoice.h"
+#line 84 "Source/SynthVoice.h"
     struct HbAllpass
     {
         float x1 = 0.0f, y1 = 0.0f;
@@ -27,7 +27,7 @@ namespace tw {
         void reset() noexcept { x1 = y1 = 0.0f; }
     };
 
-#line 92 "Source/SynthVoice.h"
+#line 93 "Source/SynthVoice.h"
     struct HbBranch
     {
         HbAllpass s0, s1;
@@ -36,7 +36,7 @@ namespace tw {
         void reset() noexcept { s0.reset(); s1.reset(); }
     };
 
-#line 101 "Source/SynthVoice.h"
+#line 102 "Source/SynthVoice.h"
     struct HalfBandUp2x
     {
         HbBranch A, B;
@@ -48,7 +48,7 @@ namespace tw {
         void reset() noexcept { A.reset(); B.reset(); }
     };
 
-#line 114 "Source/SynthVoice.h"
+#line 115 "Source/SynthVoice.h"
     struct HalfBandDown2x
     {
         HbBranch A, B;

@@ -105,7 +105,9 @@ static inline float masterSoftClip (float x) noexcept
 // 🔑🔑 RACK LAW C — THE CARDINALITY IS 48 AND IT IS FROZEN AT BIRTH.
 //   0-10   the eleven that shipped (indices UNCHANGED — every saved patch keeps its mode)
 //   11-34  the shaper roster (tw::shapers::warpShaper)
-//   35-47  RESERVED. Add a mode by FILLING one of these, never by appending a 49th.
+//   35-38  the warp filter (LP/HP) and the two drawn modes
+//   39-46  fb636 ALT WARP — Serum 2's "Alt Warp" modes, filled into the reserved tail
+//   47     RESERVED. Add a mode by FILLING it, never by appending a 49th.
 // Growing a choice param renumbers every host automation lane (which stores the NORMALISED
 // value), and the UI writes a selection as idx/(count-1), so the JS list length and this
 // length must agree forever — that is the fb373 bug, and the guard for it on the JS side is
@@ -133,7 +135,11 @@ static juce::StringArray terrainWarpModeNames()
         // points MEAN. 37 is a PHASE map (where in the cycle to read — fb550), 38 an AMP transfer
         // (what to do to the sample — fb559). 38 exists so "capture this warp mode and edit it"
         // works on the 26 shapers too, not only on the 8 phase warps.
-        "Draw", "Draw Amp" };
+        "Draw", "Draw Amp",
+        // 39-46 — fb636 ALT WARP: Serum 2's "Alt Warp" modes Terrain did not have, in Serum's own order and
+        // with its own ASCII labels. The maths is SynthVoice::applyPhaseWarp 39-45 + altOddEvenGains (46),
+        // calibrated against Serum 2 itself (kAltBendC). Only 47 is padded now: the one slot left.
+        "Bend +", "Bend -", "Bend +/-", "Asym +", "Asym -", "Asym +/-", "Flip", "Odd/Even" };
     for (int i = w.size(); i < 48; ++i) w.add ("Reserved " + juce::String (i));
     jassert (w.size() == 48);
     return w;
@@ -402,6 +408,7 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         v->setDrawTable (drawTable_);     // fb550 — set ONCE; the table's CONTENTS change later,
                                           // so no per-block push is needed for drawn curves
         synthVoices_[i] = v;              // owned by synthEngine; array never changes after this
+        v->setDeterministicIndex (i);     // fb636 — test-only stable seeds (a no-op in a real session)
         v->setRouteSnapshot (&routeSnap_);   // fb631 — set ONCE; the routes inside change when the rack does
         // CPU: instance-wide grain budget — every granular engine shares one live-grain
         // counter, so 4 dense granular oscs × polyphony thin gracefully at kGranBudget
@@ -412,6 +419,51 @@ TerrainAudioProcessor::TerrainAudioProcessor()
         v->setGeodeStores (&geodeSlot_[0].live, &geodeSlot_[1].live,
                            &geodeSlot_[2].live, &geodeSlot_[3].live);      // GEODE-ENGINE — atomic store pointers
         synthEngine.addVoice (v);
+    }
+    if (tw::deterministic()) triggerRandom.setSeed (0x5EED);   // fb636 — test-only
+
+    // fb636 bugA — every pooled send's six route pills, resolved ONCE (strings are legal here). These are
+    // the IDs the cache functions build (cacheFxInstanceParams, cacheGranularParams, cacheTapeParams,
+    // cacheFilterRefs, cacheFx3Refs, cacheFx4Refs, cacheUtlRefs, cacheSplRefs) at the send bases the
+    // fb348/fb362/fb365/fb377/fb435 route loops in processBlock use; prepareToPlay checks that every one is
+    // the very pointer processBlock reads. They exist from construction, so a state set before the first
+    // prepareToPlay can be read too. See buildPoolPairsLocked.
+    {
+        static const char* sfx[6] = { "SRC_A","SRC_B","SRC_C","SRC_D","SRC_SUB","SRC_NOISE" };
+        poolQOfParam_.assign ((size_t) getParameters().size(), -1);
+        auto add = [this] (int q, const juce::String& pfx)
+        {
+            for (int k = 0; k < 6; ++k)
+            {
+                const juce::String id = pfx + sfx[k];
+                auto* p = apvts.getParameter (id);
+                jassert (p != nullptr);
+                if (p == nullptr) continue;
+                jassert (p->getNormalisableRange().start == 0.0f && p->getNormalisableRange().end == 1.0f);   // normalised == value (prebuildPoolSend)
+                poolSrcRaw_[q][k] = apvts.getRawParameterValue (id);
+                poolSrcDef_[q][k] = p->convertFrom0to1 (p->getDefaultValue()) > 0.5f;
+                poolSrcSlot_[id]  = q * 6 + k;
+                const int idx = p->getParameterIndex();
+                if (idx >= 0 && idx < (int) poolQOfParam_.size()) poolQOfParam_[(size_t) idx] = q;
+            }
+        };
+        for (int e = 0; e < kFxExtra; ++e)   // the legacy three pool instances 2..6 only (instance 1 is inline)
+        {
+            add (e,                "SYN_DLY" + juce::String (e + 2) + "_");
+            add (kFxExtra + e,     "SYN_DST" + juce::String (e + 2) + "_");
+            add (2 * kFxExtra + e, "SYN_RVB" + juce::String (e + 2) + "_");
+        }
+        static const std::pair<int, const char*> kAll[] = {   // every instance pooled; instance 1 has no number
+            { kGrnSendBase, "SYN_GRN" }, { kTpeSendBase, "SYN_TPE" }, { kFltSendBase, "SYN_FLT" },
+            { kChoSendBase, "SYN_CHO" }, { kFlaSendBase, "SYN_FLA" }, { kPhaSendBase, "SYN_PHA" },
+            { kEqzSendBase, "SYN_EQZ" }, { kWidSendBase, "SYN_WID" }, { kCmpSendBase, "SYN_CMP" },
+            { kOttSendBase, "SYN_OTT" }, { kBodSendBase, "SYN_BOD" }, { kUtlSendBase, "SYN_UTL" },
+            { kSplSendBase, "SYN_SPL" } };
+        static_assert (3 * kFxExtra == kGrnSendBase && kSplSendBase + ParameterIDs::kFxInstances == kPoolSendCount,
+                       "the table covers every pooled send exactly once");
+        for (const auto& [base, pfx] : kAll)
+            for (int i = 0; i < ParameterIDs::kFxInstances; ++i)
+                add (base + i, juce::String (pfx) + (i == 0 ? juce::String() : juce::String (i + 1)) + "_");
     }
 
     // Spectral-morph rebuild runs on the message thread (the rebuild is ~2.3 ms since fb467,
@@ -690,7 +742,7 @@ TerrainAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetIdx) noexce
     // report which buffer we're reading so the rebuild never overwrites it.
     // RACE HARDENING: a buffer whose rebuild is IN FLIGHT (ready == false) is never
     // handed to voices — fall back to the plain bank table (sound, never zeros).
-    const tw::Wavetable* m = slot.live.load (std::memory_order_acquire);
+    const tw::Wavetable* m = slot.live.load (std::memory_order_seq_cst);   // fb636 F4 — the grace fence's audio half (see publishMorph)
     if (m != nullptr)
     {
         const int idx = (m == &slot.buf[1]) ? 1 : 0;
@@ -710,11 +762,9 @@ TerrainAudioProcessor::resolveMorphTable (MorphSlot& slot, int presetIdx) noexce
 void TerrainAudioProcessor::rebuildImport (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
-    auto& slot = importSlot_[osc];
-    const int idx = slot.nextIdx;                                   // build into the NON-live buffer
-    slot.buf[idx].buildFromPcm (importedPcm_[osc].data(), (int) importedPcm_[osc].size(), importFrames_[osc]);
-    slot.live.store (&slot.buf[idx], std::memory_order_release);    // publish only AFTER the build finishes
-    slot.nextIdx = 1 - idx;
+    const std::lock_guard<std::mutex> g (importSlot_[osc].mx);             // fb636 M2r — waits out a bake in progress
+    wtBuildReq_[(size_t) osc].fetch_add (1, std::memory_order_acq_rel);    // fb636 M2r — and supersedes every queued one
+    buildImportLocked (osc, importedPcm_[osc].data(), (int) importedPcm_[osc].size(), importFrames_[osc]);
 }
 
 // fb248 — the SAME build, off the message thread. Snapshot the source (fast copy on the msg thread), then
@@ -734,12 +784,145 @@ void TerrainAudioProcessor::rebuildImportAsync (int osc)
     wtBuildPool_.addJob ([this, osc, snap, frames, ticket]
     {
         if (wtBuildReq_[(size_t) osc].load (std::memory_order_acquire) != ticket) return;   // superseded while queued
-        auto& slot = importSlot_[osc];
-        const int idx = slot.nextIdx;
-        slot.buf[idx].buildFromPcm (snap->data(), (int) snap->size(), frames);
-        slot.live.store (&slot.buf[idx], std::memory_order_release);
-        slot.nextIdx = 1 - idx;
+        const std::lock_guard<std::mutex> g (importSlot_[osc].mx);                          // fb636 M2r — one builder at a time
+        if (wtBuildReq_[(size_t) osc].load (std::memory_order_acquire) != ticket) return;   // ...or by the restore/clear it waited behind
+        buildImportLocked (osc, snap->data(), (int) snap->size(), frames);
     });
+}
+
+//==============================================================================
+// fb636 M2 / M2r — ImportSlot lifetime (see ImportSlot in PluginProcessor.h).
+//==============================================================================
+// THE GRACE FENCE. A buffer retired at count s is out of every block's reach once
+//   · s is EVEN — no block was running, and every block that starts later loads the new `live`:
+//     the seq_cst store in publishImportLocked, the seq_cst increment at the top of processBlock
+//     and the seq_cst load in wavetableForOsc make that a guarantee (the Dekker pairing), or
+//   · the count has moved PAST s — the block that was running has returned (a host never runs two
+//     processBlock calls of one instance at once, and the exit increment releases its reads).
+// The audio side is two increments per block: no lock, no allocation, nothing it can wait on.
+bool TerrainAudioProcessor::importGraceOver (juce::uint64 retiredAt) const noexcept
+{
+    return (retiredAt & 1) == 0 || audioSeq_.load (std::memory_order_seq_cst) > retiredAt;
+}
+
+// mx HELD. The buffer the next build writes into. If it was retired inside the block running NOW
+// (two publishes within one block) that block may still be reading it — wait the block out: at most
+// one block, never on the audio thread. fb636 F1 — and wait out an off-audio read that pinned it while
+// it was live (ImportRead: a display bake, a few ms), or assign() could unmap the pages under it. Its
+// pages are still resident unless the timer freed them (unmapped since F1), and then assign() maps and
+// faults them in again (measured 5.9-7.3 ms for 128 frames, 10.0-11.5 ms for 256).
+tw::Wavetable& TerrainAudioProcessor::claimImportBufLocked (ImportSlot& slot)
+{
+    const int idx = slot.nextIdx;
+    while ((slot.pending[idx] && ! importGraceOver (slot.retiredAt[idx]))
+           || slot.readers[idx].load (std::memory_order_seq_cst) != 0)
+        std::this_thread::sleep_for (std::chrono::milliseconds (1));
+    slot.pending[idx] = false;
+    return slot.buf[idx];
+}
+
+// mx HELD. Publish `to` (a finished build, or nullptr = no import) and retire what it replaces.
+void TerrainAudioProcessor::publishImportLocked (ImportSlot& slot, const tw::Wavetable* to) noexcept
+{
+    const tw::Wavetable* was = slot.live.load (std::memory_order_relaxed);   // written only under mx
+    slot.live.store (to, std::memory_order_seq_cst);                          // publish only AFTER the build finishes
+    if (was == nullptr || was == to) return;
+    const int r = (was == &slot.buf[1]) ? 1 : 0;
+    slot.retiredAt[r] = audioSeq_.load (std::memory_order_seq_cst);          // AFTER the store: the fence's other half
+    slot.retiredMs[r] = juce::Time::getMillisecondCounter();
+    slot.pending[r]   = true;
+}
+
+// mx HELD. Both builders: build into the non-live buffer, publish, rotate.
+void TerrainAudioProcessor::buildImportLocked (int osc, const float* pcm, int numSamples, int frames)
+{
+    auto& slot = importSlot_[osc];
+    auto& b = claimImportBufLocked (slot);
+    b.buildFromPcm (pcm, numSamples, frames);
+    publishImportLocked (slot, &b);
+    slot.nextIdx = 1 - slot.nextIdx;
+}
+
+// Every path that leaves an osc with NO import — the UI clear, copy-osc from an empty osc, the patch
+// reset, a host restore of an osc that carries none. Storing nullptr was not enough: a bake queued
+// just before still held the newest ticket and brought the import back (the M2r skeptic's finding).
+void TerrainAudioProcessor::dropImportTable (int osc)
+{
+    auto& slot = importSlot_[osc];
+    const std::lock_guard<std::mutex> g (slot.mx);                          // waits out a bake in progress
+    wtBuildReq_[(size_t) osc].fetch_add (1, std::memory_order_acq_rel);    // a queued bake must not bring it back
+    publishImportLocked (slot, nullptr);
+}
+
+// 60 Hz timer, message thread. try_lock: a bake holds mx for 32-64 ms and the UI must never wait
+// behind one — the buffer is simply freed on a later tick.
+void TerrainAudioProcessor::freeRetiredImports()
+{
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    for (auto& slot : importSlot_)
+    {
+        std::unique_lock<std::mutex> lk (slot.mx, std::try_to_lock);
+        if (! lk.owns_lock()) continue;
+        const tw::Wavetable* live = slot.live.load (std::memory_order_relaxed);
+        for (int i = 0; i < 2; ++i)
+            if (slot.pending[i] && &slot.buf[i] != live
+                && now - slot.retiredMs[i] >= kImportFreeHoldMs
+                && importGraceOver (slot.retiredAt[i])
+                && slot.readers[i].load (std::memory_order_seq_cst) == 0)   // fb636 F1 — a read pinned on ANOTHER thread (setStateInformation's Table source)
+            {
+                slot.buf[i].releaseStorage();                              // fb636 F1 — munmap: the 61-122 MiB really leave phys_footprint
+                slot.pending[i] = false;
+            }
+    }
+}
+
+//==============================================================================
+// fb636 F4 — MorphSlot lifetime, the morph half of M2 (see MorphSlot in PluginProcessor.h).
+//==============================================================================
+// Message thread only. The rebuild, this publish and the free all run on the 60 Hz timer, and so do the
+// display readers (wavetableForDisplay), so the one reader a free can overlap is an audio block — which
+// is exactly what the grace fence covers (importGraceOver: this seq_cst store + the seq_cst audioSeq_
+// load below, against processBlock's seq_cst increment + wavetableForOsc's seq_cst load).
+// Publish `to` (a finished build, or nullptr = no morph) and retire what it replaces.
+// 🚨 The None branch calls this EVERY tick with nullptr. `was == nullptr` returns before the stamp, so a
+//    morph left off keeps the stamp it got when it went off; a fresh stamp per tick would push the hold
+//    out for ever and nothing would be freed (the F4 skeptic's first trap).
+void TerrainAudioProcessor::publishMorph (MorphSlot& slot, const tw::Wavetable* to) noexcept
+{
+    const tw::Wavetable* was = slot.live.load (std::memory_order_relaxed);   // written only on this thread
+    slot.live.store (to, std::memory_order_seq_cst);                          // publish only AFTER the build finishes
+    if (was == nullptr || was == to) return;
+    const int r = (was == &slot.buf[1]) ? 1 : 0;
+    slot.retiredAt[r] = audioSeq_.load (std::memory_order_seq_cst);          // AFTER the store: the fence's other half
+    slot.retiredMs[r] = juce::Time::getMillisecondCounter();
+    slot.pending[r]   = true;
+}
+
+// 60 Hz timer, AFTER the four rebuilds (a buffer a rebuild claims this tick is no longer pending and keeps
+// its pages). buf[i] is freed once it is retired, not live, not the buffer the audio thread last reported,
+// past the grace fence and unused for M2's hold — so a modulated amount (a rebuild every few ticks) keeps
+// reusing its pages and only a morph left alone, or switched off, gives its buffers back.
+// ⚠️ retireCooldown is deliberately NOT a condition: it only counts down while a rebuild is wanted, so on a
+//    static morph it sits at 2 for good and would free nothing. Nor does this write it, buildIdx, ready[]
+//    or the built* keys: WHEN the next rebuild runs, and into which buffer, is exactly what it was. That
+//    rebuild's buildFromSpec assign()s from empty (a spec build is always 61 x 16 x 2048) and faults its
+//    7.63 MiB in again; the floats are the same.
+void TerrainAudioProcessor::freeRetiredMorphs()
+{
+    const juce::uint32 now = juce::Time::getMillisecondCounter();
+    for (MorphSlot* slot : { &morphA_, &morphB_, &morphC_, &morphD_ })
+    {
+        const tw::Wavetable* live = slot->live.load (std::memory_order_relaxed);   // written only on this thread
+        for (int i = 0; i < 2; ++i)
+            if (slot->pending[i] && &slot->buf[i] != live
+                && slot->audioReadingIdx.load (std::memory_order_acquire) != i
+                && now - slot->retiredMs[i] >= kImportFreeHoldMs
+                && importGraceOver (slot->retiredAt[i]))
+            {
+                slot->buf[i].releaseStorage();                             // munmap (F1): 7.63 MiB leave phys_footprint
+                slot->pending[i] = false;
+            }
+    }
 }
 
 /* ═══ fb611 — THE FILE MIGHT NOT BE ON THE DISK ═══════════════════════════════════════════════
@@ -907,7 +1090,7 @@ void TerrainAudioProcessor::setImportFrames (int osc, int frames)
 void TerrainAudioProcessor::clearImportedWavetable (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
-    importSlot_[osc].live.store (nullptr, std::memory_order_release);
+    dropImportTable (osc);   // fb636 M2r — and a bake queued before the clear can no longer bring it back
     importedPcm_[osc].clear();
     importName_[osc]   = {};
     importIsFile_[osc] = false;
@@ -1052,6 +1235,7 @@ tw::SynthVoice::WtDisp TerrainAudioProcessor::wtDispEffective (int osc) const no
 //  One card, three kinds, because a warp mode is exactly one of three things and each is already
 //  a pure static on SynthVoice. Nothing here re-derives anything:
 //     phase  (1-8)    w = applyPhaseWarp(...)    — where in the cycle it reads
+//            (39-46)  fb636 Alt Warp: 39-44 phase maps, 45 a polarity window, 46 a parity mix
 //     amp    (9-34)   y = applyAmpWarp(...)      — the transfer curve
 //     filter (35-36)  |H| vs HARMONIC NUMBER     — an impulse through warpFiltTick, then a DFT
 //  🚨 The filter magnitude is measured by running the SHIPPED coefficients through the SHIPPED
@@ -1198,7 +1382,11 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
         return j + "]}";
     }
 
-    if (mode >= 9)                                     // AMP domain — the transfer curve
+    // fb636 ALT — 39-46 are NOT transfer curves. Left to `mode >= 9` they would be DRAWN as a flat identity
+    //  and CAPTURED into Draw Amp (38): a different sound wearing a straight line. 39-44 are phase maps, 45 a
+    //  phase-keyed polarity window, 46 a parity mix — all three belong to the phase branch below.
+    const bool altWarp = (mode >= 39 && mode <= 46);
+    if (mode >= 9 && ! altWarp)                        // AMP domain — the transfer curve
     {
         constexpr int P = 129;
         j << ",\"kind\":\"amp\",\"x0\":-1,\"x1\":1,\"pts\":[";
@@ -1226,6 +1414,27 @@ juce::String TerrainAudioProcessor::getWarpCurveJson (int osc, int slot)
         float window = 1.0f; bool skip = false;
         tw::SynthVoice::applyPhaseWarp (mode, amt, p0, window, skip, var);
         if (skip || std::abs (window - 1.0f) > 1.0e-4f) pure = false;
+    }
+    // fb636 ALT — ODD/EVEN's phase stage is the identity, so the probe above calls it "pure"; but a curve cannot
+    //  carry its second read, and capturing it into Draw (37) would be the DRY sound. Refuse it, as for Formant
+    //  and PWM. `odd` / `even` are its two harmonic gains (2 − 2a, 2a) for the card to draw.
+    if (mode == 46)
+    {
+        float g0 = 1.0f, g1 = 0.0f;
+        if (tw::SynthVoice::altOddEvenGains (46, amt, 0, 0.0f, g0, g1)) pure = false;
+        j << ",\"odd\":" << juce::String (g0 - g1, 4) << ",\"even\":" << juce::String (g0 + g1, 4);
+    }
+    // fb636 ALT — FLIP's polarity over the cycle (+1 / −1, hard edges: this is the LAW; the voice band-limits it).
+    if (mode == 45)
+    {
+        j << ",\"win\":[";
+        for (int i = 0; i < P; ++i)
+        {
+            float window = 1.0f; bool skip = false;
+            tw::SynthVoice::applyPhaseWarp (mode, amt, (double) i / (double) (P - 1), window, skip, var);
+            j << (i ? "," : "") << (window < 0.0f ? "-1" : "1");
+        }
+        j << "]";
     }
     j << ",\"kind\":\"phase\",\"pure\":" << (pure ? "true" : "false")
       << ",\"rate\":" << juce::String (tw::SynthVoice::warpReadRate (mode, amt), 4)
@@ -1384,7 +1593,12 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
         }
     }
 
-    const tw::Wavetable* wt = wavetableForDisplay (osc, mslot, wtPresetIdx);
+    // fb636 F1 — the import is PINNED for the rest of this bake (ImportRead): a bake finishing on
+    // wtBuildPool_ may retire it and the next one claim it, and with page-backed tables that is an
+    // unmapped page, not a stale float. The morph needs no pin (it is rebuilt on THIS thread), nor
+    // the bank (nothing frees a bank table).
+    const ImportRead pin (importSlot_[(size_t) osc]);
+    const tw::Wavetable* wt = wavetableForDisplay (mslot, wtPresetIdx, pin.wt);
     if (wt == nullptr) return "{}";
 
     const int numFrames = juce::jmax (1, wt->getNumFrames());
@@ -1491,6 +1705,7 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
                     ph  = fmO.carrierPhase;
                     tw::FmOps::advance (fmS, fmP, fmInc);
                 }
+                const double phIn = ph;                             // fb636 ALT — the phase ENTERING slot 1 (Odd/Even's q there)
                 ph = tw::SynthVoice::applyPhaseWarp (D.warpMode, D.warpAmt, ph, window, skip);
                 if (! skip && D.warp2Mode != 0)
                     ph = tw::SynthVoice::applyPhaseWarp (D.warp2Mode, D.warp2Amt, ph, window, skip);
@@ -1508,7 +1723,17 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
                     // the loop closes on the RAW table output, before the window and the warps —
                     // exactly where SynthVoice closes it
                     if (doFb) { fbState = 0.5f * (fbState + v); fbRaw = v; }
-                    v *= window;                                    // PWM / FORMANT post-lookup window
+                    // fb636 ALT — ODD/EVEN (46): the voice's pair read, drawn. The table at q + ½, bent by the same
+                    //  feedback offset (r − frac(ph)), never re-warped by a later slot — SynthVoice::altOddEvenGains.
+                    float oeG0 = 1.0f, oeG1 = 0.0f;
+                    if (tw::SynthVoice::altOddEvenGains (D.warpMode, D.warpAmt, D.warp2Mode, D.warp2Amt, oeG0, oeG1))
+                    {
+                        double rq = (D.warpMode == 46 ? phIn : ph) + 0.5 + (r - (ph - std::floor (ph)));
+                        rq -= std::floor (rq);
+                        v = oeG0 * v + oeG1 * (doBlur ? tw::Wavetable::readCycle (cyc.data(), (float) rq)
+                                                      : wt->lookup (0, fpUse, (float) rq));
+                    }
+                    v *= window;                                    // PWM / FORMANT / FLIP post-lookup window
                     v  = tw::SynthVoice::applyAmpWarp (D.warpMode,  D.warpAmt,  v);
                     v  = tw::SynthVoice::applyAmpWarp (D.warp2Mode, D.warp2Amt, v);
                 }
@@ -1535,7 +1760,8 @@ juce::String TerrainAudioProcessor::getOscWavetableJson (int osc)
 juce::String TerrainAudioProcessor::getOscLfoWaveJson (int osc)
 {
     osc = juce::jlimit (0, 3, osc);
-    const tw::Wavetable* wt = importSlot_[osc].live.load (std::memory_order_acquire);
+    const ImportRead pin (importSlot_[osc]);   // fb636 F1 — the import stays mapped while it is sampled below (ImportRead)
+    const tw::Wavetable* wt = pin.wt;
     if (wt == nullptr)
     {
         static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
@@ -1648,7 +1874,8 @@ void TerrainAudioProcessor::setDistortionTableSrc (int osc)
 {
     dstTableSrc_ = juce::jlimit (-1, 3, osc);
     if (dstTableSrc_ < 0) { distortionEngine.clearUserTable(); return; }
-    const tw::Wavetable* wt = importSlot_[dstTableSrc_].live.load (std::memory_order_acquire);
+    const ImportRead pin (importSlot_[dstTableSrc_]);   // fb636 F1 — pinned while it is sampled below; this one also runs on a host thread (setStateInformation)
+    const tw::Wavetable* wt = pin.wt;
     if (wt == nullptr)
     {
         static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
@@ -2299,7 +2526,8 @@ const tw::WavetableSpec* TerrainAudioProcessor::oscSourceSpec (int oscIdx, int p
                                                                         tw::WavetableSpec& scratch)
 {
     const int oi = juce::jlimit (0, 3, oscIdx);
-    const tw::Wavetable* imp = importSlot_[(size_t) oi].live.load (std::memory_order_acquire);
+    const ImportRead pin (importSlot_[(size_t) oi]);   // fb636 F1 — pinned while toSpec() reads it (ImportRead)
+    const tw::Wavetable* imp = pin.wt;
     if (imp != nullptr)
     {
         const int impEpoch = imp->buildEpoch();
@@ -2426,7 +2654,7 @@ void TerrainAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
     {
         if (slot.live.load (std::memory_order_relaxed) != nullptr)
             slot.retireCooldown = 2;   // voices may still be mid-block on the retiring buffer
-        slot.live.store (nullptr, std::memory_order_release);
+        publishMorph (slot, nullptr);        // fb636 F4 — every tick; it stamps only the transition (see publishMorph)
         slot.builtPreset = preset;
         slot.builtMode   = mode;
         slot.builtAmount = amount;
@@ -2467,6 +2695,7 @@ void TerrainAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
     tw::WavetableSpec presetSpec;
     const tw::WavetableSpec* srcSpec = oscSourceSpec (oi, preset, presetSpec);
 
+    slot.pending[target] = false;   // fb636 F4 — claimed: it is rebuilt here, on the free's own thread, so it keeps its pages
     slot.ready[target].store (false, std::memory_order_release);
     const double bakeT0 = juce::Time::getMillisecondCounterHiRes();   // fb481 — the beacon reports this
     slot.buf[target].buildFromSpec (
@@ -2475,7 +2704,7 @@ void TerrainAudioProcessor::rebuildMorphIfNeeded (MorphSlot& slot, int oscIdx,
     bakeCount_.fetch_add (1, std::memory_order_relaxed);
     slot.ready[target].store (true, std::memory_order_release);
 
-    slot.live.store (&slot.buf[target], std::memory_order_release);
+    publishMorph (slot, &slot.buf[target]);   // fb636 F4 — seq_cst, and it retires the buffer this replaces
     slot.buildIdx  ^= 1;
     slot.retireCooldown = 2;   // let in-flight blocks leave the buffer we just retired
     slot.builtPreset = preset;
@@ -2547,25 +2776,28 @@ void TerrainAudioProcessor::timerCallback()
     // prepareToPlay/setStateInformation already built the four a loaded patch uses, so
     // this only ever fires for a preset the user changes live.
     prefetchOscWavetables (1);
+    // fb636 M2 — give retired import tables back once no audio block can hold them (see ImportSlot).
+    freeRetiredImports();
     // fb352 — build any pooled reverb engine the audio thread has asked for. Allocation belongs
     // HERE, not in processBlock: a ConvolutionReverb built on the audio thread would glitch.
     buildPendingReverbEngines();
     // fb631 — build pooled send filters OFF the audio thread (SynthVoice::buildPoolFilters). The fb414
     // push publishes which pooled sends are lit; anything lit that has not been built gets its pair on
     // every voice here, on the message thread, and the render sees the send come on when the pair lands.
-    {
-        const juce::uint64 m0 = poolWantMask_[0].load (std::memory_order_acquire), m1 = poolWantMask_[1].load (std::memory_order_acquire);
-        if ((m0 & ~poolBuiltMask_[0]) != 0 || (m1 & ~poolBuiltMask_[1]) != 0)
-        {
-            for (int q = 0; q < kPoolSendCount; ++q)
-                if (q < 64 ? ((m0 >> q) & 1ull) : ((m1 >> (q - 64)) & 1ull))
-                    for (int v = 0; v < kSynthVoiceCount; ++v)
-                        if (auto* sv = synthVoices_[(size_t) v]) sv->buildPoolFilters (q);
-            poolBuiltMask_[0] |= m0; poolBuiltMask_[1] |= m1;                    // built stays built, as before
-        }
-    }
+    // fb636 bugA — the loop moved into buildPoolPairsLocked, unchanged. This tick is now the FALLBACK:
+    // state loads, prepareToPlay, UI pill clicks and learned CCs build before the audio can ask.
+    // fb636 review — ...and the tick itself keeps a pair BEHIND its engine. It used to build every wanted pair
+    // first and the granular/tape engines after, so on this path (host automation of a pill, and the sends the
+    // message side left to the timer via dropSendsAwaitingEngine) a tape/granular pair could publish while its
+    // engine was still being built, and the slot passed the routed oscillator through unprocessed meanwhile.
+    // Now the pairs whose engine is not live are held back until the engines below have been built, then the
+    // SAME snapshot of the want-mask is built in full: what is built by the end of the tick is unchanged.
+    const juce::uint64 poolWant0 = poolWantMask_[0].load (std::memory_order_acquire),
+                       poolWant1 = poolWantMask_[1].load (std::memory_order_acquire);
+    { juce::uint64 m0 = poolWant0, m1 = poolWant1; dropSendsAwaitingEngine (m0, m1); buildPoolPairsLocked (m0, m1); }
     buildPendingGranularEngines();   // fb362 — same message-thread contract
     buildPendingTapeEngines();       // fb365 — ditto
+    buildPoolPairsLocked (poolWant0, poolWant1);   // fb636 review — the pairs held back above, now behind their engines
     // fb149 — NATIVE mod-drag tracking: while an LFO drag is live, the PROCESSOR follows
     // the real mouse (Desktop) and detects the release itself. WebKit's event delivery
     // outside a window can never strand a cross-window drag, and screen coords are
@@ -2601,6 +2833,7 @@ void TerrainAudioProcessor::timerCallback()
                           ParameterIDs::SYN_OSC_D_SPECTRAL_AMT,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_LO,
                           ParameterIDs::SYN_OSC_D_SPECTRAL_HI);
+    freeRetiredMorphs();   // fb636 F4 — AFTER the rebuilds: give back morph buffers no audio block can still hold (see MorphSlot)
     for (int o = 0; o < 4; ++o) rebuildHarmTableIfNeeded (o);   // fb588 — HARMONICS <- WAVETABLES
     // fb584 — THE BLUR TWIN BUILDER IS GONE. A twin only ever existed to make renderBlend average
     //  frames in the MAGNITUDE domain instead of cancelling in the phasor domain, and nothing calls
@@ -2705,6 +2938,7 @@ void TerrainAudioProcessor::rebuildGeodeIfNeeded (int o)
     if (engineIdx != 3)   // not GEODE (Engine::SPEC = 3) → publish nothing, force re-analyze on return
     {
         slot.live.store (nullptr);
+        ++slot.gen;   // fb636 — the editor's republish detector
         slot.built = false;              // force re-analyze when this osc returns to GEODE
         slot.builtEngine = engineIdx;
         return;
@@ -2748,6 +2982,7 @@ void TerrainAudioProcessor::rebuildGeodeIfNeeded (int o)
     {
         slot.buildIdx      = bi;
         slot.live.store (&slot.buf[bi]);
+        ++slot.gen;   // fb636 — the editor's republish detector
         slot.built         = true;
         slot.builtSample   = srcPtr;
         slot.builtEngine   = engineIdx;
@@ -3620,7 +3855,8 @@ juce::AudioProcessorValueTreeState::ParameterLayout TerrainAudioProcessor::creat
     }
 
     // ── Batch 1 Filter — TYPE (27 choices, NONE last in enum but first in UI),
-    //                     DRV (0..1 → 0..+24 dB drive), ENV (bipolar -1..+1).
+    //                     DRV (0..1 → 0..+24 dB drive), ENV (bipolar -1..+1; fb636 — no DSP reader,
+    //                     kept for saved states and the page's Env-knob mirror).
     {
         const juce::StringArray filterTypeChoices = terrainFilterEngineNames();
         layout.add (std::make_unique<juce::AudioParameterChoice> (
@@ -6923,8 +7159,12 @@ void TerrainAudioProcessor::applyGrn (int inst0, float inL, float inR,
     env += (tgt - env) * 0.0015f;
     if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
 
-    // ── params, gathered once per sample from the cached pointers (no strings, no allocation) ──
-    tw::GranularFxParams gp;
+    // ── params, gathered once per BLOCK (fb636 — see grnPar_ in the header; they were built every sample) ──
+    const bool grnFresh = (grnParBlk_[(size_t) inst0] != fxBlockGen_);
+    tw::GranularFxParams& gp = grnPar_[(size_t) inst0];
+    float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
+    if (grnFresh)
+    {
     gp.density = M (V.density);
     gp.size    = M (V.size);
     gp.decay   = M (V.decay) * 1.10f;               // 0..1.10 — the drama is at the top
@@ -6941,7 +7181,6 @@ void TerrainAudioProcessor::applyGrn (int inst0, float inL, float inR,
     gp.freezeLatch = V.freezePill != nullptr && V.freezePill->load() > 0.5f;
     // Window: synced to the host grid when the Sync pill is lit, otherwise free 50 ms..16 s log.
     // The 16 s ceiling is the DelayEngine's, and it is also where the ring runs out.
-    float bpmNow = currentBPM.load(); if (bpmNow < 20.0f) bpmNow = 120.0f;
     const float qms = 60000.0f / bpmNow;
     const int   sd  = (int) V.syncdiv->load();
     if (V.sync != nullptr && V.sync->load() > 0.5f && sd > 0)
@@ -6951,7 +7190,9 @@ void TerrainAudioProcessor::applyGrn (int inst0, float inL, float inR,
         gp.windowMs = juce::jlimit (50.0f, 16000.0f, qms * fxDivMult (sd));
     else
         gp.windowMs = 50.0f * std::pow (320.0f, M (V.window));   // 50 ms → 16 s, log
-    eng->setParams (gp);
+    }
+    if (grnFresh || grnParEng_[(size_t) inst0] != eng)
+    { eng->setParams (gp); grnParBlk_[(size_t) inst0] = fxBlockGen_; grnParEng_[(size_t) inst0] = eng; }
     // Scatter's grid clock, in Hz — a 1/16 at the host tempo. Density picks the division from it.
     eng->setSyncClockHz (4.0f * bpmNow / 60.0f);
 
@@ -6972,7 +7213,12 @@ void TerrainAudioProcessor::applyGrn (int inst0, float inL, float inR,
 
     // Equal-power mix, ramped. 100 % = fully wet, zero dry (the house law).
     const float m   = M (V.mix);
-    const float wetT = std::sin (m * 1.5707963f), dryT = std::cos (m * 1.5707963f);
+    // fb636 — the same mix in, the same sin/cos out (bit key; the first sample of an instance always computes)
+    std::uint32_t mBits; std::memcpy (&mBits, &m, 4);
+    if (! grnMixValid_[(size_t) inst0] || grnMixBits_[(size_t) inst0] != mBits)
+    { grnMixValid_[(size_t) inst0] = true; grnMixBits_[(size_t) inst0] = mBits;
+      grnMixWet_[(size_t) inst0] = std::sin (m * 1.5707963f); grnMixDry_[(size_t) inst0] = std::cos (m * 1.5707963f); }
+    const float wetT = grnMixWet_[(size_t) inst0], dryT = grnMixDry_[(size_t) inst0];
     float& dry = grnDry_[(size_t) inst0];  float& wet = grnWet_[(size_t) inst0];
     dry += (dryT - dry) * 0.0015f;         wet += (wetT - wet) * 0.0015f;
 
@@ -7580,6 +7826,125 @@ void TerrainAudioProcessor::cacheSendRefs()
         }
 }
 
+// ═══ fb636 bugA — BUILD A POOLED SEND'S PAIR BEFORE THE AUDIO CAN ASK FOR IT ════════════════════════
+// The render treats a pooled send as ON only once its per-voice pair is published (poolOn keys on flt1),
+// while the insert subtraction removes the routed dry as soon as the pill is lit. Built only by the timer,
+// one tick after the audio thread's route push, a freshly loaded patch played its first blocks with the
+// send missing and, in insert mode, the routed oscillator gone. See poolSrcRaw_ in PluginProcessor.h.
+//
+// prepLock_ HELD, never the audio thread. This is the timer's fb631 loop moved here verbatim: every set
+// bit, every voice; buildPoolFilters is idempotent (it returns once flt1 is set) and publishes flt2, then
+// flt1, then the voice's poolBuilt_ bit. Built stays built.
+void TerrainAudioProcessor::buildPoolPairsLocked (juce::uint64 m0, juce::uint64 m1)
+{
+    if ((m0 & ~poolBuiltMask_[0]) == 0 && (m1 & ~poolBuiltMask_[1]) == 0) return;
+    for (int q = 0; q < kPoolSendCount; ++q)
+        if (q < 64 ? ((m0 >> q) & 1ull) : ((m1 >> (q - 64)) & 1ull))
+            for (int v = 0; v < kSynthVoiceCount; ++v)
+                if (auto* sv = synthVoices_[(size_t) v]) sv->buildPoolFilters (q);
+    poolBuiltMask_[0] |= m0; poolBuiltMask_[1] |= m1;                    // built stays built, as before
+}
+
+// ...but NOT for a send whose device ENGINE is still unbuilt. Pooled reverb 2-6, granular and tape build their
+// engines on the timer as well (buildPendingReverbEngines / buildPendingGranularEngines / buildPendingTapeEngines),
+// and until one exists its chain slot PASSES THROUGH (applyTpe / applyGrn: "until it exists the slot PASSES
+// THROUGH"; applyPoolRvb likewise). A pair built ahead of its engine would feed that slot the routed oscillator
+// UNPROCESSED for up to a tick — measured on Max's "Damaged Tapes" (tape inserts on A and C): blocks 1-4 of a
+// no-pump load read +10.0 dB over the warmed level, where the reference read -0.45 dB. The timer lands the pair
+// and the engine in the SAME tick, so for these the message side leaves the pair to it, exactly as before —
+// unless the engine is already live (tape and granular hold ONE engine per instance, whatever the type; reverb
+// builds one per TYPE, which the new state has not told the audio thread yet, so reverb 2-6 always waits).
+// prepLock_ HELD: the timer publishes tpeLive_/grnLive_ under the same lock.
+void TerrainAudioProcessor::dropSendsAwaitingEngine (juce::uint64& m0, juce::uint64& m1) const noexcept
+{
+    static_assert (2 * kFxExtra < kGrnSendBase + 1 && kTpeSendBase + ParameterIDs::kFxInstances == kFltSendBase,
+                   "reverb 2-6, granular and tape are the contiguous sends 2*kFxExtra .. kFltSendBase-1");
+    for (int q = 2 * kFxExtra; q < kFltSendBase; ++q)
+    {
+        bool live = false;
+        if      (q >= kTpeSendBase) live = tpeLive_[(size_t) (q - kTpeSendBase)].load (std::memory_order_acquire) != nullptr;
+        else if (q >= kGrnSendBase) live = grnLive_[(size_t) (q - kGrnSendBase)].load (std::memory_order_acquire) != nullptr;
+        if (! live) (q < 64 ? m0 : m1) &= ~(1ull << (q & 63));
+    }
+}
+
+// The six route pills of pooled send q, as processBlock caches them — the same base arithmetic as the
+// route loops (dly2-6 0..4 · dst2-6 5..9 · rvb2-6 10..14 · then six per kind from kGrnSendBase).
+std::atomic<float>* TerrainAudioProcessor::poolSrcRef (int q, int k) const noexcept
+{
+    if (q < 0 || q >= kPoolSendCount || k < 0 || k >= 6) return nullptr;
+    const auto I = [] (int qq, int base) { return (size_t) (qq - base); };
+    if (q < kFxExtra)      return dlyRefs_[I (q, 0)].src[k];
+    if (q < 2 * kFxExtra)  return dstRefs_[I (q, kFxExtra)].src[k];
+    if (q < kGrnSendBase)  return rvbRefs_[I (q, 2 * kFxExtra)].src[k];
+    if (q < kTpeSendBase)  return grnRefs_[I (q, kGrnSendBase)].src[k];
+    if (q < kFltSendBase)  return tpeRefs_[I (q, kTpeSendBase)].src[k];
+    if (q < kChoSendBase)  return fltRefs_[I (q, kFltSendBase)].src[k];
+    if (q < kFlaSendBase)  return choRefs_[I (q, kChoSendBase)].src[k];
+    if (q < kPhaSendBase)  return flaRefs_[I (q, kFlaSendBase)].src[k];
+    if (q < kEqzSendBase)  return phaRefs_[I (q, kPhaSendBase)].src[k];
+    if (q < kWidSendBase)  return eqzRefs_[I (q, kEqzSendBase)].src[k];
+    if (q < kCmpSendBase)  return widRefs_[I (q, kWidSendBase)].src[k];
+    if (q < kOttSendBase)  return cmpRefs_[I (q, kCmpSendBase)].src[k];
+    if (q < kBodSendBase)  return ottRefs_[I (q, kOttSendBase)].src[k];
+    if (q < kUtlSendBase)  return bodRefs_[I (q, kBodSendBase)].src[k];
+    if (q < kSplSendBase)  return utlRefs_[I (q, kUtlSendBase)].src[k];
+    return splRefs_[I (q, kSplSendBase)].src[k];
+}
+
+// The sends whose pills are lit RIGHT NOW, read exactly as processBlock reads them (> 0.5f, no power
+// gate: poolRouteAny_ comes from the six pills alone).
+void TerrainAudioProcessor::wantedPoolMaskLive (juce::uint64& m0, juce::uint64& m1) const noexcept
+{
+    m0 = m1 = 0;
+    for (int q = 0; q < kPoolSendCount; ++q)
+        for (int k = 0; k < 6; ++k)
+            if (auto* a = poolSrcRaw_[q][k]; a != nullptr && a->load() > 0.5f)
+            { (q < 64 ? m0 : m1) |= 1ull << (q & 63); break; }
+}
+
+// The sends whose pills a state tree WILL light once replaceState installs it. A PARAM with no value
+// property loads as its default (setNewState reads the property with the default as its fallback). A PARAM
+// the tree does not carry at all KEEPS ITS CURRENT VALUE: updateParameterConnectionsToChildTrees never calls
+// setNewState for it — it appends a fresh child and flushParameterValuesToValueTree writes the parameter's
+// live value into it (JUCE 8 juce_AudioProcessorValueTreeState.cpp, 417-439). fb636 review — this used to
+// seed absent PARAMs from poolSrcDef_ as well, so a pill lit before the load and missing from the blob was
+// predicted dark (only the live-pill net after replaceState caught it). The same two rules JUCE applies,
+// so the prediction is exact.
+void TerrainAudioProcessor::wantedPoolMaskTree (const juce::ValueTree& st, juce::uint64& m0, juce::uint64& m1) const
+{
+    static const juce::Identifier kParam ("PARAM"), kId ("id"), kValue ("value");
+    bool lit[kPoolSendCount][6];
+    for (int q = 0; q < kPoolSendCount; ++q)   // absent from the tree: the live pill, read as processBlock reads it
+        for (int k = 0; k < 6; ++k)
+            lit[q][k] = poolSrcRaw_[q][k] != nullptr && poolSrcRaw_[q][k]->load() > 0.5f;
+    for (const auto& ch : st)
+    {
+        if (! ch.hasType (kParam)) continue;
+        const auto it = poolSrcSlot_.find (ch.getProperty (kId).toString());
+        if (it == poolSrcSlot_.end()) continue;
+        const int q = it->second / 6, k = it->second % 6;
+        lit[q][k] = ch.hasProperty (kValue) ? ((float) ch.getProperty (kValue) > 0.5f) : poolSrcDef_[q][k];
+    }
+    m0 = m1 = 0;
+    for (int q = 0; q < kPoolSendCount; ++q)
+        for (int k = 0; k < 6; ++k)
+            if (lit[q][k]) { (q < 64 ? m0 : m1) |= 1ull << (q & 63); break; }
+}
+
+// MESSAGE THREAD (the setSynParam natives, applyPendingMidiCc). Pills are 0..1 parameters, so the
+// normalised value IS the value processBlock compares with 0.5.
+void TerrainAudioProcessor::prebuildPoolSend (int paramIndex, float newValue01)
+{
+    if (paramIndex < 0 || paramIndex >= (int) poolQOfParam_.size() || ! (newValue01 > 0.5f)) return;
+    const int q = poolQOfParam_[(size_t) paramIndex];
+    if (q < 0) return;
+    const std::lock_guard<std::mutex> g (prepLock_);
+    juce::uint64 m0 = q < 64 ? (1ull << q) : 0ull, m1 = q < 64 ? 0ull : (1ull << (q - 64));
+    dropSendsAwaitingEngine (m0, m1);
+    buildPoolPairsLocked (m0, m1);
+}
+
 // ═══ fb453 — the rack's modulation destinations resolved to the parameter pointers the rack
 // ALREADY reads. One pointer per (kind, instance, knob), built from the GENERATED map so the
 // dial and its destination stay authored in one place. Message thread only: it builds ID strings.
@@ -8184,7 +8549,9 @@ void TerrainAudioProcessor::applyTpe (int inst0, float inL, float inR,
     auto* eng = tpeLive_[(size_t) inst0].load (std::memory_order_acquire);   // fb528 — pairs with the release store
     if (eng == nullptr) return;                       // until it exists the slot PASSES THROUGH
 
-    tw::TapeFxEngine::Params tp;
+    // fb636 — the Params are built once per block (see tpePar_ in the header); the power fade below stays per sample.
+    const bool tpeFresh = (tpeParBlk_[(size_t) inst0] != fxBlockGen_);
+    tw::TapeFxEngine::Params& tp = tpePar_[(size_t) inst0];
     const int ty = (int) V.type->load();              // choice params read as the INDEX
     const int wantType = (ty >= 0 && ty <= 1) ? ty : 0;   // the 6 reserved slots clamp to Studio
 
@@ -8193,6 +8560,8 @@ void TerrainAudioProcessor::applyTpe (int inst0, float inL, float inR,
     const float tgt = powered ? 1.0f : 0.0f;
     env += (tgt - env) * 0.0015f;                     // click-free power: fade, never a hard cut
     if (! powered && env <= 1.0e-4f) { env = 0.0f; return; }
+    if (tpeFresh)
+    {
     tp.type = wantType;
     tp.character = (int) V.chr->load();
     tp.heads     = (int) V.heads->load();
@@ -8219,7 +8588,9 @@ void TerrainAudioProcessor::applyTpe (int inst0, float inL, float inR,
         tp.timeSec = juce::jlimit (0.010f, 8.0f, (60.0f / bpmNow) * fxDivMult (sd));
     else
         tp.timeSec = 0.010f * std::pow (800.0f, M (V.time));
-    eng->setParams (tp);
+    }
+    if (tpeFresh || tpeParEng_[(size_t) inst0] != eng)
+    { eng->setParams (tp); tpeParBlk_[(size_t) inst0] = fxBlockGen_; tpeParEng_[(size_t) inst0] = eng; }
 
     float wl = inL, wr = inR;
     eng->process (inL, inR, wl, wr);
@@ -8512,6 +8883,12 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     cacheUtlRefs();      // fb444 — Utility's six-pill roster
     cacheSplRefs();      // fb444 — the Splitter's own roster shape
     cacheSendRefs();     // fb414 — the insert/send tap mode, every kind x every instance
+    // fb636 bugA — the constructor's pill table must BE the pointers processBlock just cached; then build
+    // every lit send's pair now, under this prepGuard, at the rate the voices were prepared at above.
+    for (int q = 0; q < kPoolSendCount; ++q)
+        for (int k = 0; k < 6; ++k)
+            jassert (poolSrcRaw_[q][k] == poolSrcRef (q, k));
+    { juce::uint64 m0 = 0, m1 = 0; wantedPoolMaskLive (m0, m1); dropSendsAwaitingEngine (m0, m1); buildPoolPairsLocked (m0, m1); }
     cacheFxModRefs();    // fb453 — every rack dial's parameter, for the modulation matrix
     for (auto& tp : tpePool_) if (tp != nullptr) tp->prepare (sampleRate);
     grnEnv_.fill (0.0f); grnDry_.fill (1.0f); grnWet_.fill (0.0f); grnBlockPk_.fill (0.0f);
@@ -8565,6 +8942,8 @@ void TerrainAudioProcessor::prepareToPlay (double sampleRate, int samplesPerBloc
     smoothedChorusCharacter.setCurrentAndTargetValue (rawParam (ParameterIDs::CHORUS_CHARACTER)->load());
 
     eqL.prepare(sampleRate, samplesPerBlock);
+    for (auto& b : perLayerMidi_) b.ensureSize (8192);   // fb636 — the per-block MIDI buffers never allocate in processBlock
+    flowMidi_.ensureSize (8192); mixedMidi_.ensureSize (8192);
     eqR.prepare(sampleRate, samplesPerBlock);
     analyzerPre.prepare (sampleRate);
     analyzerPost.prepare (sampleRate);
@@ -8721,7 +9100,7 @@ void TerrainAudioProcessor::releaseResources()
     grainEngineR.reset();
     tapeProcessorL.reset();
     tapeProcessorR.reset();
-    tapeLoop.reset();
+    { const std::lock_guard<std::mutex> prepGuard (prepLock_); tapeLoop.reset(); }   // fb636 M4t — reset() fills the ring the record native may be arming
     spaceReverb.reset();
     moogDelay.reset();
     terrainChorus.reset();
@@ -9118,7 +9497,16 @@ TiProf tiProf_;
 void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce::MidiBuffer& midiMessages)
 {
     juce::ScopedNoDenormals noDenormals;
+    // fb636 M2 — the import tables' grace fence (importGraceOver): odd while this block runs. Before
+    // any return, so every block that can load an import table is counted. Two atomic increments.
+    struct AudioSeqScope
+    {
+        std::atomic<juce::uint64>& n;
+        explicit AudioSeqScope (std::atomic<juce::uint64>& c) noexcept : n (c) { n.fetch_add (1, std::memory_order_seq_cst); }
+        ~AudioSeqScope() { n.fetch_add (1, std::memory_order_seq_cst); }
+    } audioSeqScope (audioSeq_);
     tiProf_.begin();
+    ++fxBlockGen_;   // fb636 — keys the rack's once-per-block parameter builds (applyTpe / applyGrn)
     const bool vizLive = vizConsumersLive();   // fb148 — no UI, no viz work (Serum does the same)
 
     const auto numSamples = buffer.getNumSamples();
@@ -9328,7 +9716,11 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     //
     // After this block, per-layer renderNextBlock uses perLayerMidi[li]
     // instead of the shared midiMessages.
-    std::array<juce::MidiBuffer, 4> perLayerMidi;
+    // fb636 — members, cleared per block (clear() keeps the storage) and pre-sized in prepareToPlay: a stack-built
+    //  MidiBuffer grew by heap allocation on the AUDIO thread whenever a block carried MIDI (every note-off is
+    //  broadcast to all four). Same events, same order, same buffers the render reads.
+    auto& perLayerMidi = perLayerMidi_;
+    for (auto& b : perLayerMidi) b.clear();
     {
         const int  tmode = triggerMode.load();
         const auto isPopulated = [this] (int li) {
@@ -10008,17 +10400,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float cut     =         *rawParam (ParameterIDs::SYN_FILTER1_CUT);
         const float res     =         mdP (ParameterIDs::SYN_FILTER1_RES, wc::ModDest::Res1, 0.0f, 1.0f);
         const float fltKt1  =         100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER1_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack1, 0.0f, 1.0f);   // fb78 Track mod · fb184 ownership
-        // Batch 1 Filter — TYPE, DRV, bipolar ENV, and the dedicated FLT ADSR.
+        // Batch 1 Filter — TYPE, DRV and the dedicated FLT ADSR. (fb636 — SYN_FILTER1/2_ENV are no longer read
+        // here: nothing in the voice used them. The FLT env reaches cutoff through its Env → Cutoff route.)
         const int   filtType= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER1_TYPE));   // fb604 — ROUND, never truncate: see applyFlt's engine read
         const float filtDrv =         mdP (ParameterIDs::SYN_FILTER1_DRV, wc::ModDest::FDrv1, 0.0f, 1.0f);
-        const float filtEnv =         mdP (ParameterIDs::SYN_FILTER1_ENV, wc::ModDest::FEnv1, -1.0f, 1.0f);
         // Filter 2 (independent) + per-filter mix + routing.
         const float cut2     =        *rawParam (ParameterIDs::SYN_FILTER2_CUT);
         const float res2     =        mdP (ParameterIDs::SYN_FILTER2_RES, wc::ModDest::Res2, 0.0f, 1.0f);
         const float fltKt2   =        100.0f * ownM (*rawParam (ParameterIDs::SYN_FILTER2_KEYTRACK) * 0.01f, (int) wc::ModDest::FTrack2, 0.0f, 1.0f);   // fb184 ownership
         const int   filtType2= juce::roundToInt ((float) *rawParam (ParameterIDs::SYN_FILTER2_TYPE));  // fb604 — ditto
         const float filtDrv2 =        mdP (ParameterIDs::SYN_FILTER2_DRV, wc::ModDest::FDrv2, 0.0f, 1.0f);
-        const float filtEnv2 =        mdP (ParameterIDs::SYN_FILTER2_ENV, wc::ModDest::FEnv2, -1.0f, 1.0f);
         const float filtMix1 =        mdP (ParameterIDs::SYN_FILTER1_MIX, wc::ModDest::FMix1, 0.0f, 1.0f);
         const float filtMix2 =        mdP (ParameterIDs::SYN_FILTER2_MIX, wc::ModDest::FMix2, 0.0f, 1.0f);
         const float filtVel1 =        mdP (ParameterIDs::SYN_FILTER1_VEL, wc::ModDest::FVel1, 0.0f, 1.0f);   // fb78 — back-panel Vel mod
@@ -10091,7 +10482,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         const float pitCd = *rawParam (ParameterIDs::SYN_ENV_PIT_CD);
         const float pitCr = *rawParam (ParameterIDs::SYN_ENV_PIT_CR);
         const bool  pitLoop = *rawParam (ParameterIDs::SYN_ENV_PIT_LOOP) > 0.5f;
-        const float pitDepth = *rawParam (ParameterIDs::SYN_ENV_PIT_DEPTH);
         const float m1eDly = modP (ParameterIDs::SYN_ENV_M1_DLY, *rawParam (ParameterIDs::SYN_ENV_M1_DLY), (int) wc::ModDest::EnvPBase + 18);   // fb193
         const float m1eA = modP (ParameterIDs::SYN_ENV_M1_A, *rawParam (ParameterIDs::SYN_ENV_M1_A), (int) wc::ModDest::EnvPBase + 19);   // fb193
         const float m1eHld = modP (ParameterIDs::SYN_ENV_M1_H, *rawParam (ParameterIDs::SYN_ENV_M1_H), (int) wc::ModDest::EnvPBase + 20);   // fb193
@@ -10825,7 +11215,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setFilterKeytrack2        (fltKt2 / 100.0f);
                 sv->setFilterType             (filtType);
                 sv->setFilterDrive            (filtDrv);
-                sv->setFilterEnvAmount        (filtEnv);
                 sv->setFltEnvDAHDSR           (fltDly, fltEnvA, fltHld, fltEnvD, fltEnvS, fltEnvR, fltCa, fltCd, fltCr, fltLoop);
                 // fb177 — dynamic envelope pool: version-gated copy (once per change,
                 // try-lock never blocks audio), then the per-voice broadcast.
@@ -10851,7 +11240,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setFilterParameters2      (cut2, res2);
                 sv->setFilterType2            (filtType2);
                 sv->setFilterDrive2           (filtDrv2);
-                sv->setFilterEnvAmount2       (filtEnv2);
                 sv->setFilterMix1             (filtMix1);
                 sv->setFilterMix2             (filtMix2);
                 sv->setFilterRouting          (filtRoute);
@@ -10864,7 +11252,6 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 sv->setFilterSpread           (filtSpread1, filtSpread2);
                 sv->setAmpEnv                 (ampDly, ampA, ampHld, ampD, ampS, ampR, ampCa, ampCd, ampCr, ampLoop);
                 sv->setPitchEnv               (pitDly, pitA, pitHld, pitD, pitS, pitR, pitCa, pitCd, pitCr, pitLoop);
-                sv->setPitchEnvDepth          (pitDepth);
                 sv->setMod1Env                (m1eDly, m1eA, m1eHld, m1eD, m1eS, m1eR, m1eCa, m1eCd, m1eCr, m1eLoop);
                 sv->setMod2Env                (m2eDly, m2eA, m2eHld, m2eD, m2eS, m2eR, m2eCa, m2eCd, m2eCr, m2eLoop);
                 sv->setEnvRouting             (env2Dest, env2Depth, env3Dest, env3Depth,
@@ -11780,6 +12167,34 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 R.poolR[q] = on ? poolSendBuf_[(size_t) q].getWritePointer (1) : nullptr;
                 if (on) { if (q < 64) m0 |= (1ull << q); else m1 |= (1ull << (q - 64)); }
             }
+            // fb636 review — THE ENGINE WANT TRAVELS WITH THE MASK. applyTpe/applyGrn raise tpeWantBuild_/grnWantBuild_,
+            //  but only in the rack, LATER in this block — so a timer tick landing between the release-store below and
+            //  that sample saw a lit tape/granular send with no engine wanted: dropSendsAwaitingEngine held its pair back,
+            //  the engine builders built nothing, and the tick's full-snapshot build published the pair anyway, leaving
+            //  the slot passing the routed oscillator through UNPROCESSED until a later tick built the engine. The want
+            //  is now raised here too, on applyTpe/applyGrn's own condition (POWER > 0.5 and the send lit) for the
+            //  instances the rack will run, BEFORE the mask: its release-store publishes both, and the tick's acquire
+            //  load of the mask sees the want. Relaxed stores to preallocated atomics — no lock, no allocation.
+            { const int nW = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
+              for (int c = 0; c < nW; ++c)
+              {
+                  const auto& ce = chainOrder_[(size_t) c];
+                  const int i0 = ce.inst - 1;
+                  if ((ce.kind != 3 && ce.kind != 4) || i0 < 0 || i0 >= ParameterIDs::kFxInstances) continue;
+                  if (ce.kind == 3)
+                  {
+                      const auto* pw = grnRefs_[(size_t) i0].power;
+                      if (pw != nullptr && pw->load() > 0.5f && poolRouteAny_[(size_t) (kGrnSendBase + i0)])
+                          grnWantBuild_[(size_t) i0].store (true, std::memory_order_relaxed);
+                  }
+                  else
+                  {
+                      const auto* pw = tpeRefs_[(size_t) i0].power;
+                      if (pw != nullptr && pw->load() > 0.5f && poolRouteAny_[(size_t) (kTpeSendBase + i0)])
+                          tpeWantBuild_[(size_t) i0].store (true, std::memory_order_relaxed);
+                  }
+              }
+            }
             poolWantMask_[0].store (m0, std::memory_order_release);
             poolWantMask_[1].store (m1, std::memory_order_release);
             R.version.fetch_add (1, std::memory_order_release);
@@ -11921,7 +12336,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
             flowArp.setExt (X);
         }
         flowArp.setLatch (kLatch);
-        juce::MidiBuffer flowMidi;
+        juce::MidiBuffer& flowMidi = flowMidi_; flowMidi.clear();   // fb636 — member, no audio-thread allocation
         for (const auto meta : midiMessages)
         {
             const auto m = meta.getMessage();
@@ -11978,7 +12393,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         wc::ArpEvent arel[wc::kArpMaxEvents]; const int an = flowArp.releaseAll (arel, wc::kArpMaxEvents);
         if (an > 0)
         {
-            juce::MidiBuffer mixed;
+            juce::MidiBuffer& mixed = mixedMidi_; mixed.clear();   // fb636 — member, no audio-thread allocation
             mixed.addEvents (midiMessages, 0, numSamples, 0);
             for (int i = 0; i < an; ++i) mixed.addEvent (juce::MidiMessage::noteOff (1, arel[i].note), 0);
             synthEngine.renderNextBlock (synthScratch, mixed, 0, numSamples);
@@ -12589,6 +13004,18 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
     const int dlyPitchIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_PITCH)->load());
     const int dlyWidthIdx   = static_cast<int> (rawParam (ParameterIDs::DLY_WIDTH)->load());
 
+    // fb636 — the master EQ's switches, once per block (host parameter changes land between blocks), and the
+    //  one-block memo of the arguments its setters last received (see the EQ section below).
+    const bool eqHpBypBlk     = rawParam (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
+    const bool eqLpBypBlk     = rawParam (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
+    const bool eqMasterBypBlk = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
+    bool eqBandBypBlk[7];
+    { static const char* const kBandByp[7] = { ParameterIDs::EQ_B1_BYPASS, ParameterIDs::EQ_B2_BYPASS, ParameterIDs::EQ_B3_BYPASS,
+                                               ParameterIDs::EQ_B4_BYPASS, ParameterIDs::EQ_B5_BYPASS, ParameterIDs::EQ_B6_BYPASS,
+                                               ParameterIDs::EQ_B7_BYPASS };
+      for (int b = 0; b < 7; ++b) eqBandBypBlk[b] = rawParam (kBandByp[b])->load() > 0.5f; }
+    bool  eqMemoOn = false, eqMemoMaster = false, eqMemoHpB = false, eqMemoLpB = false;
+    float eqMemoHp = 0.0f, eqMemoLp = 0.0f, eqMemoF[7] = {}, eqMemoG[7] = {}, eqMemoQ[7] = {}; bool eqMemoB[7] = {};
     for (int i = 0; i < numSamples; ++i)
     {
         // Advance LFOs and compute per-param offsets
@@ -12883,28 +13310,35 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         {
             const float hpF    = smoothedEqHpFreq.getNextValue();
             const float lpF    = smoothedEqLpFreq.getNextValue();
-            const bool hpByp  = rawParam (ParameterIDs::EQ_HP_BYPASS)->load() > 0.5f;
-            const bool lpByp  = rawParam (ParameterIDs::EQ_LP_BYPASS)->load() > 0.5f;
-            const bool eqByp  = rawParam (ParameterIDs::EQ_MASTER_BYPASS)->load() > 0.5f;
-            eqL.setMasterBypass (eqByp); eqR.setMasterBypass (eqByp);
-            eqL.setHp (hpF, hpSlopeIdx, hpByp);   // fb494 hoisted
-            eqR.setHp (hpF, hpSlopeIdx, hpByp);
-            eqL.setLp (lpF, lpSlopeIdx, lpByp);
-            eqR.setLp (lpF, lpSlopeIdx, lpByp);
+            const bool hpByp  = eqHpBypBlk;    // fb636 — the ten bypass switches are read once per block (below the loop's top)
+            const bool lpByp  = eqLpBypBlk;
+            const bool eqByp  = eqMasterBypBlk;
+            // fb636 — A SETTER CALLED WITH ITS LAST ARGUMENTS IS A NO-OP (setTargetValue returns on an equal
+            //  target; the bypass/slope flags are plain stores of the value they already hold), so the ten
+            //  EQ setters now run only when an argument changed since the previous sample of this block. The
+            //  memo lives for one block and nothing else touches eqL/eqR inside the loop.
+            if (! eqMemoOn || eqByp != eqMemoMaster) { eqL.setMasterBypass (eqByp); eqR.setMasterBypass (eqByp); eqMemoMaster = eqByp; }
+            if (! eqMemoOn || hpF != eqMemoHp || hpByp != eqMemoHpB)
+            { eqL.setHp (hpF, hpSlopeIdx, hpByp);   // fb494 hoisted
+              eqR.setHp (hpF, hpSlopeIdx, hpByp); eqMemoHp = hpF; eqMemoHpB = hpByp; }
+            if (! eqMemoOn || lpF != eqMemoLp || lpByp != eqMemoLpB)
+            { eqL.setLp (lpF, lpSlopeIdx, lpByp);
+              eqR.setLp (lpF, lpSlopeIdx, lpByp); eqMemoLp = lpF; eqMemoLpB = lpByp; }
 
             for (int b = 0; b < 7; ++b)
             {
                 const float bf = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Freq + b * 3, smoothedEqBandFreq[b].getNextValue());
                 const float bg = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Gain + b * 3, smoothedEqBandGain[b].getNextValue());
                 const float bq = modulationEngine.getModulatedValue (ModulationEngine::pEqB1Q    + b * 3, smoothedEqBandQ[b].getNextValue());
-                const bool bByp = rawParam (
-                                       b == 0 ? ParameterIDs::EQ_B1_BYPASS : b == 1 ? ParameterIDs::EQ_B2_BYPASS :
-                                       b == 2 ? ParameterIDs::EQ_B3_BYPASS : b == 3 ? ParameterIDs::EQ_B4_BYPASS :
-                                       b == 4 ? ParameterIDs::EQ_B5_BYPASS : b == 5 ? ParameterIDs::EQ_B6_BYPASS :
-                                                                                       ParameterIDs::EQ_B7_BYPASS)->load() > 0.5f;
-                eqL.setBandParams (b, bf, bg, bq, bByp);
-                eqR.setBandParams (b, bf, bg, bq, bByp);
+                const bool bByp = eqBandBypBlk[b];
+                if (! eqMemoOn || bf != eqMemoF[b] || bg != eqMemoG[b] || bq != eqMemoQ[b] || bByp != eqMemoB[b])
+                {
+                    eqL.setBandParams (b, bf, bg, bq, bByp);
+                    eqR.setBandParams (b, bf, bg, bq, bByp);
+                    eqMemoF[b] = bf; eqMemoG[b] = bg; eqMemoQ[b] = bq; eqMemoB[b] = bByp;
+                }
             }
+            eqMemoOn = true;
 
             if (vizLive) analyzerPre.pushSample (0.5f * (wetL + wetR));
             wetL = eqL.processSample (wetL);
@@ -13488,11 +13922,16 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
                 leftChannel[i] -= (exDryL != nullptr ? exDryL[i] : 0.0f) * sc;
                 if (rightChannel != nullptr) rightChannel[i] -= (exDryR != nullptr ? exDryR[i] : 0.0f) * sc;
             }
-            float pendL[(size_t) kChainMax] = {}, pendR[(size_t) kChainMax] = {};
+            // fb636 — NOT zero-filled per sample any more (960 bytes x 48,000/s). Every slot writes pendL[c]/pendR[c]
+            //  at the end of its iteration, and every read is of an EARLIER slot (the feed mask: j < c; a lane's
+            //  previous device: pv < c) or, after the loop, of a slot < nSlots — so no read ever sees an unwritten
+            //  entry. The Splitter bands are read only under laneAny_, so only then are they zeroed.
+            float pendL[(size_t) kChainMax], pendR[(size_t) kChainMax];
             // fb444 — the Splitter's published bands. Only a Splitter slot writes here, so this is
             // six instances x four lanes, not one per chain slot.
-            float lnL[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] = {};
-            float lnR[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes] = {};
+            float lnL[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes];
+            float lnR[(size_t) ParameterIDs::kFxInstances][(size_t) kMaxLanes];
+            if (laneAny_) { std::memset (lnL, 0, sizeof lnL); std::memset (lnR, 0, sizeof lnR); }
             const int nSlots = juce::jmin (chainCount_, (int) tw::FxChainTopology::kMaxSlots);
             for (int c = 0; c < nSlots; ++c)
             {
@@ -14048,7 +14487,7 @@ void TerrainAudioProcessor::processBlock (juce::AudioBuffer<float>& buffer, juce
         if ((wtAudCtr_ > 0 || wtAudFade_ > 0) && buffer.getNumChannels() >= 1)
         {
             const int o = wtAudOsc_;
-            const tw::Wavetable* wt = importSlot_[o].live.load (std::memory_order_acquire);
+            const tw::Wavetable* wt = importSlot_[o].live.load (std::memory_order_seq_cst);   // fb636 M2 — the grace fence's audio half
             if (wt == nullptr)
             {
                 static const char* const WTP[4] = { ParameterIDs::SYN_OSC_A_WT_PRESET, ParameterIDs::SYN_OSC_B_WT_PRESET,
@@ -14702,6 +15141,7 @@ void TerrainAudioProcessor::applyPendingMidiCc()
         if (idx >= 0 && idx < params.size())
         {
             const float v = juce::jlimit (0.0f, 1.0f, midiCcPending_[cc].load (std::memory_order_relaxed));
+            prebuildPoolSend (idx, v);   // fb636 bugA — a learned pooled pill: its pair first (this runs BEFORE timerCallback's prepGuard)
             params[idx]->setValueNotifyingHost (v);
             for (int k = 0; k < wc::kNumMacros; ++k)   // fb575 — the parameter now carries this value: hand the audio back to it (a NEWER CC keeps its lead)
                 if (idx == macroParamIdx_[k]) { float e = v; macroCcT_[k].compare_exchange_strong (e, -1.0f, std::memory_order_relaxed); }
@@ -16912,7 +17352,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                     importedPcm_[o].clear(); importName_[o] = {}; importIsFile_[o] = false;
                     importPath_[(size_t) o].clear();
                     assetB64Wt_[(size_t) o].clear(); assetKeyWt_[(size_t) o] = 0;
-                    importSlot_[o].live.store (nullptr, std::memory_order_release);
+                    dropImportTable (o);   // fb636 M2r — a bake queued before this restore must not bring an import back
                     continue;
                 }
                 bool got = false;
@@ -16965,7 +17405,7 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
                     importedPcm_[o].clear(); importName_[o] = {}; importIsFile_[o] = false;
                     importPath_[(size_t) o].clear();
                     assetB64Wt_[(size_t) o].clear(); assetKeyWt_[(size_t) o] = 0;
-                    importSlot_[o].live.store (nullptr, std::memory_order_release);
+                    dropImportTable (o);   // fb636 M2r — a bake queued before this restore must not bring an import back
                     continue;
                 }
                 importFrames_[o] = (int)  newState.getProperty ("wtImportFrames" + s, 40);
@@ -17066,7 +17506,14 @@ void TerrainAudioProcessor::setStateInformation (const void* data, int sizeInByt
             // pushes the right one (the ?page=N parse-time apply means the front never paints).
             // Absent property == a blob older than fb537: fall back to 1 (SYN), the new default.
             uiPage.store (juce::jlimit (0, 4, (int) newState.getProperty ("uiPage", 1)));
+            // fb636 bugA — the pooled pairs this patch lights are built BEFORE replaceState publishes its
+            // pills to the audio thread (predicted from the tree, after every migration above has edited
+            // it), then once more from the live pills as a net for anything the blob left out.
+            { const std::lock_guard<std::mutex> g (prepLock_);
+              juce::uint64 m0 = 0, m1 = 0; wantedPoolMaskTree (newState, m0, m1); dropSendsAwaitingEngine (m0, m1); buildPoolPairsLocked (m0, m1); }
             apvts.replaceState (newState);
+            { const std::lock_guard<std::mutex> g (prepLock_);
+              juce::uint64 m0 = 0, m1 = 0; wantedPoolMaskLive (m0, m1); dropSendsAwaitingEngine (m0, m1); buildPoolPairsLocked (m0, m1); }
             // fb618 — moved from the blob section above: with no import live it bakes from the osc's
             // WT_PRESET, which before replaceState was the PREVIOUS patch's table.
             setDistortionTableSrc ((int) newState.getProperty ("dstTableSrc", -1));   // fb339 — re-reads the osc's CURRENT table

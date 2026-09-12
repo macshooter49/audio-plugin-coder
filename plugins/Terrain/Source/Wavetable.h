@@ -21,10 +21,85 @@
 #include <complex>
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>   // fb636 F1 — PageBackedAllocator's small-block path
+#include <new>
+#if defined (__APPLE__) || defined (__linux__)
+ #include <sys/mman.h>              // fb636 F1 — the tables' own pages
+#endif
+#if defined (__APPLE__)
+ #include <mach/vm_statistics.h>    // VM_MAKE_TAG — the tables show in vmmap as "Memory Tag 240"
+#endif
 #include <juce_core/juce_core.h>
 
 namespace tw
 {
+    // ══ fb636 F1 — A TABLE LIVES IN ITS OWN PAGES, SO A FREED ONE LEAVES THE FOOTPRINT ══════════════
+    //  M2 frees a retired import table (61 MiB per 128 frames) once no block can reach it — and on the
+    //  Mac that free() went to libmalloc's LARGE cache, which keeps the pages dirty and COUNTED. MEASURED
+    //  (memgrowth harness, one instance, the 52-preset bank twice): MALLOC_LARGE (empty) 200 MB at the end
+    //  of pass 1 and 311 MB at the end of pass 2, a footprint swinging by ±300 MB while live data sat
+    //  still, and malloc_zone_pressure_relief handing back 0 bytes. So a block of 256 KiB or more now
+    //  comes straight from the kernel (mmap) and goes straight back (munmap): freed means gone.
+    //  🔑 SAME BYTES, SAME ORDER. Only the address source changes. Every table is still assign()ed to
+    //     zero and written by the same code in the same order; a Mac large-malloc block was already
+    //     page-aligned, so even the alignment is what it was.
+    //  COST, measured here: the first touch of a fresh 128-frame table is 5.9-7.3 ms (256 frames:
+    //     10.0-11.5 ms) inside a 32-64 ms bake, on the bake worker or the message thread; munmap is
+    //     0.5-1.4 ms on the 60 Hz timer. The audio thread never allocates or frees a table.
+    //  ⚠️ AN UNMAPPED PAGE CRASHES where a freed malloc block only read stale floats. An import buffer
+    //     reaches deallocate() through two doors only, and both wait out every reader: the timer free
+    //     and a build's claim (importGraceOver for audio blocks, ImportRead pins for everything else —
+    //     PluginProcessor.h). Bank tables get the same storage and are never freed or reallocated while
+    //     an instance lives. fb636 F4 — a morph slot's buffer is freed through one door, the timer's
+    //     freeRetiredMorphs, behind the same grace fence, and never reallocated in place (a spec build is
+    //     always 61 x 16 x 2048, so a rebuild over a resident buffer keeps its pages).
+    //  Windows: the CRT heap, unchanged. The NT heap already VirtualAllocs a block this size and
+    //  VirtualFrees it on free(), and windows.h must never enter this header — it reaches
+    //  PluginEditor.cpp (the fb515 law, see TerrainUiPark.cpp).
+    template <typename T>
+    struct PageBackedAllocator
+    {
+        using value_type = T;
+        static constexpr std::size_t kMapMinBytes = 256 * 1024;   // below this: malloc (legacy 1-mip tables, tests)
+
+        PageBackedAllocator() noexcept = default;
+        template <typename U> PageBackedAllocator (const PageBackedAllocator<U>&) noexcept {}
+
+        T* allocate (std::size_t n)
+        {
+            if (n > (std::size_t) -1 / sizeof (T)) throw std::bad_array_new_length();
+            const std::size_t bytes = n * sizeof (T);
+           #if defined (__APPLE__) || defined (__linux__)
+            if (bytes >= kMapMinBytes)
+            {
+               #if defined (__APPLE__)
+                const int fd = VM_MAKE_TAG (VM_MEMORY_APPLICATION_SPECIFIC_1);   // anonymous: the fd slot carries the tag
+               #else
+                const int fd = -1;
+               #endif
+                void* p = ::mmap (nullptr, bytes, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANON, fd, 0);
+                if (p == MAP_FAILED) throw std::bad_alloc();
+                return static_cast<T*> (p);   // page-aligned and zero; munmap takes the same length back
+            }
+           #endif
+            if (void* p = std::malloc (bytes > 0 ? bytes : 1)) return static_cast<T*> (p);
+            throw std::bad_alloc();
+        }
+
+        // std::allocator_traits hands back the n it allocated, so the size test picks the same door.
+        void deallocate (T* p, std::size_t n) noexcept
+        {
+           #if defined (__APPLE__) || defined (__linux__)
+            if (n * sizeof (T) >= kMapMinBytes) { ::munmap (p, n * sizeof (T)); return; }
+           #endif
+            std::free (p);
+        }
+
+        template <typename U> bool operator== (const PageBackedAllocator<U>&) const noexcept { return true; }
+        template <typename U> bool operator!= (const PageBackedAllocator<U>&) const noexcept { return false; }
+    };
+    using TableStore = std::vector<float, PageBackedAllocator<float>>;   // fb636 F1 — mipData_ / twinData_
+
     /** Frequency-domain spec for a single wavetable frame.
      *  amplitudes[h-1] is the gain of the h-th harmonic (1-indexed mathematically,
      *  0-indexed in the array). phases[h-1] is its phase offset in radians.
@@ -669,6 +744,22 @@ namespace tw
          *  writes, audio-thread reads; NOT copied by the (deleted-by-atomic) implicit
          *  copy — tables are built in place, never copied. */
         int buildEpoch() const noexcept { return buildEpoch_.load (std::memory_order_acquire); }
+
+        /** fb636 M2 — give the table's memory back (61 MiB for 128 frames; since F1 its pages are unmapped
+         *  here, so it leaves phys_footprint at once — see PageBackedAllocator). MESSAGE THREAD, and ONLY on
+         *  a table nothing can reach any more: a retired ImportSlot buffer past its audio-block grace
+         *  (TerrainAudioProcessor::freeRetiredImports), or since fb636 F4 a retired MorphSlot buffer past
+         *  the same grace (freeRetiredMorphs). The next buildFromPcm/buildFromSpec assign()s
+         *  from empty and bumps buildEpoch_, so it behaves exactly like a first build — it only has to
+         *  fault its pages in again. The blur twin goes with it (always empty today: buildBlurTwin has
+         *  no caller), back to "untried". */
+        void releaseStorage() noexcept
+        {
+            twinLive_.store (nullptr, std::memory_order_release);
+            TableStore().swap (twinData_);
+            twinState_ = 0;
+            TableStore().swap (mipData_);
+        }
 
         /** Canonical render-path lookup. mipLevel is clamped to
          *  [0, numMipLevels_-1] (so legacy single-tier tables, numMipLevels_=1,
@@ -2803,14 +2894,14 @@ namespace tw
         //  Lifetime: built once on the message thread and never freed, so the pointer the audio
         //  thread loads can never dangle. Published LAST, with a release store.
         float                     twinCoherence_ = 1.0f, twinMove_ = 0.0f;   // what the decision saw
-        std::vector<float>        twinData_;
+        TableStore                twinData_;          // fb636 F1 — page-backed (PageBackedAllocator)
         std::atomic<const float*> twinLive_ { nullptr };
         int                       twinState_ = 0;   // 0 = untried · 1 = built · -1 = refused
 
         int                  numFrames_     = 1;
         int                  frameSize_     = kFrameSize;
         int                  numMipLevels_  = 1;
-        std::vector<float>   mipData_;     // flat [mipLevel][frame][sample]
+        TableStore           mipData_;     // flat [mipLevel][frame][sample] — fb636 F1: page-backed (PageBackedAllocator)
 
     public:
         // BUILD EPOCH storage — deliberately the LAST member (offsets of everything

@@ -72,8 +72,11 @@ public:
         bufferR[(size_t) writePos] = compressedR;
 
         // Per-sample LFO advance (sine, anti-phase L/R, slightly detuned rates)
-        const float lfoSamL = advancePhase (phaseL, leftLfoRate,  sampleRate);
-        const float lfoSamR = advancePhase (phaseR, rightLfoRate, sampleRate);
+        // fb636 — AT AMOUNT 0 the LFO's value is multiplied by a depth of exactly 0 (delay = base + lfo·±0 = base), so
+        //  only the PHASE is advanced, exactly as before, and the two sines are skipped.
+        const bool dryOnly = (amount == 0.0f);
+        const float lfoSamL = dryOnly ? advancePhaseOnly (phaseL, leftLfoRate,  sampleRate) : advancePhase (phaseL, leftLfoRate,  sampleRate);
+        const float lfoSamR = dryOnly ? advancePhaseOnly (phaseR, rightLfoRate, sampleRate) : advancePhase (phaseR, rightLfoRate, sampleRate);
 
         // Depth in samples: BASE_DELAY_MS × 0.6 × AMOUNT × sampleRate / 1000
         const float depthSamples     = BASE_DELAY_MS * 0.6f * amount * (float) sampleRate / 1000.0f;
@@ -115,8 +118,10 @@ public:
 
         // Wet gain boost (chorus felt too subtle at unity AMOUNT) + soft-clip
         // via tanh to prevent harshness at extreme settings.
-        const float wetLgained = std::tanh (wetLwide * WET_GAIN);
-        const float wetRgained = std::tanh (wetRwide * WET_GAIN);
+        // fb636 — at amount 0 this value only enters as wet·amount = ±0; tanh(x·G) has x's sign (G > 0), so x itself
+        //  gives the identical signed zero and the tanh is skipped.
+        const float wetLgained = dryOnly ? wetLwide : std::tanh (wetLwide * WET_GAIN);
+        const float wetRgained = dryOnly ? wetRwide : std::tanh (wetRwide * WET_GAIN);
 
         // AMOUNT crossfade
         inL = inL * (1.0f - amount) + wetLgained * amount;
@@ -143,6 +148,14 @@ private:
     }
 
     // Advances an LFO phase by one sample and returns sin(phase).
+    static float advancePhaseOnly (float& phase, float rateHz, double sr) noexcept   // fb636 — advancePhase without the sine
+    {
+        const float twoPi = juce::MathConstants<float>::twoPi;
+        phase += (twoPi * rateHz) / (float) sr;
+        if (phase >= twoPi)  phase -= twoPi;
+        if (phase <  0.0f)   phase += twoPi;
+        return 0.0f;
+    }
     static float advancePhase (float& phase, float rateHz, double sr) noexcept
     {
         const float twoPi = juce::MathConstants<float>::twoPi;
@@ -210,6 +223,8 @@ private:
         // Character knob moves. The idle profile caught it — setCutoff + assignImpl + ~Coefficients
         // together were ~20% of processBlock with NO NOTES PLAYING, and heap traffic is precisely
         // what costs multiples more under Windows' allocator than macOS's.
+        // fb636 — and when the knob DOES move it no longer touches the heap: the std::array from
+        // ArrayCoefficients goes through the same assignImpl on the same floats as `*makeLowPass`.
         float lastSr_ = 0.0f, lastCutoff_ = -1.0f;
         void setCutoff (double sr, float cutoffHz) noexcept
         {
@@ -217,8 +232,8 @@ private:
             lastCutoff_ = cutoffHz; lastSr_ = (float) sr;
             // Two cascaded biquads with Q values from Butterworth tables for 4th order:
             // Q1 = 0.541, Q2 = 1.307
-            *stage1.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass (sr, cutoffHz, 0.541f);
-            *stage2.coefficients = *juce::dsp::IIR::Coefficients<float>::makeLowPass (sr, cutoffHz, 1.307f);
+            *stage1.coefficients = juce::dsp::IIR::ArrayCoefficients<float>::makeLowPass (sr, cutoffHz, 0.541f);
+            *stage2.coefficients = juce::dsp::IIR::ArrayCoefficients<float>::makeLowPass (sr, cutoffHz, 1.307f);
         }
 
         float processSample (float x) noexcept

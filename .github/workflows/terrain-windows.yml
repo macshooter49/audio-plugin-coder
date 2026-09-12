@@ -81,6 +81,18 @@ jobs:
         shell: pwsh
         run: cmake --build build --config Release --target Terrain_Standalone -- /m
 
+      # fb636 — Terrain's download is uploaded the moment Terrain has built, BEFORE the side plugins:
+      # a broken Glitch/Chop build (fb605's rename left their include path on TerrainInstrument/)
+      # failed every run from 1bb1b55 to dcaa9fb and took Terrain's artifact down with it.
+      - name: Upload Terrain
+        uses: actions/upload-artifact@v4
+        with:
+          name: Terrain-windows-vst3
+          path: |
+            build/plugins/Terrain/Terrain_artefacts/Release/VST3/**
+            build/plugins/Terrain/Terrain_artefacts/Release/Standalone/**
+          if-no-files-found: error
+
       # fb522 -- the standalone FX plugins (Terrain Glitch / Terrain Chop) ride the same build
       - name: Build Terrain Glitch (VST3)
         run: cmake --build build --config Release --target TerrainGlitch_VST3 -- /m
@@ -97,13 +109,11 @@ jobs:
           Write-Host "validating $($vst3.FullName)"
           & .\pv\pluginval.exe --strictness-level 5 --validate "$($vst3.FullName)"
 
-      - name: Upload the plugin
+      - name: Upload Terrain Glitch + Terrain Chop
         uses: actions/upload-artifact@v4
         with:
-          name: Terrain-windows-vst3
+          name: TerrainFX-cards-windows-vst3
           path: |
-            build/plugins/Terrain/Terrain_artefacts/Release/VST3/**
-            build/plugins/Terrain/Terrain_artefacts/Release/Standalone/**
             build/plugins/TerrainGlitch/TerrainGlitch_artefacts/Release/VST3/**
             build/plugins/TerrainChop/TerrainChop_artefacts/Release/VST3/**
           if-no-files-found: error

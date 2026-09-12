@@ -92,6 +92,10 @@ const HELPERS = () => {
   };
   window.__ulLfoFeed = function(v){
     const a = new Array(10).fill(0); a[0] = v;
+    /* fb636 RE-BASE — the C++ writes the sounding flag and its stamp beside every modViz push, and since fb636 an LFO's
+       comet winds with the notes (the motion clock) and is DOWN in silence, as the LFO head is. A feed with no note is not
+       a state the plugin produces while an LFO runs; the control that can still fail is the comet's position, below. */
+    window.__notesActive = 1; window.__notesActiveT = Date.now();
     window.__modViz(null, a, null); window.__mvLfoValTPrev = Date.now() - 33;
   };
   window.__ulEnvFeed = function(v){

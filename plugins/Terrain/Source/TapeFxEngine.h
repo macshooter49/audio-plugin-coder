@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TapeProcessor.h"
+#include "TerrainDeterminism.h"
 #include <vector>
 #include <cmath>
 #include <algorithm>
@@ -238,7 +239,7 @@ public:
         ringL_.assign ((size_t) sz, 0.0f);
         ringR_.assign ((size_t) sz, 0.0f);
 
-        rng_.seed (0x7A9E1u ^ (unsigned) (uintptr_t) this);
+        rng_.seed (0x7A9E1u ^ (unsigned) tw::seedAddr (this, 0x5EEDu));   // fb636 — == (uintptr_t) this in a real session
         reset();
     }
 

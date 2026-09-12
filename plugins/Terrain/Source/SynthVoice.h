@@ -4,10 +4,12 @@
 // PluginProcessor against a single SynthSound sentinel.
 #pragma once
 
+#include <bit>      // fb636 — std::countr_zero (forBuiltPools)
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_dsp/juce_dsp.h>
 #include "Wavetable.h"
+#include "TerrainDeterminism.h"   // fb636 — test-only stable seeds (seedAddr / setDeterministicIndex)
 #include "FmOperators.h"   // fb587 — the FM operator stage, shared with the display
 #include "TerrainFilters.h"
 #include "Shapers.h"          // fb313 — shared waveshapers (tw::shapers): the fold + its ADAA antiderivative,
@@ -450,9 +452,9 @@ class SynthVoice : public juce::SynthesiserVoice
             env.setLoop (loop);
         }
 
-        /** PITCH envelope depth in semitones (bipolar). env(0..1) × depth is summed
-         *  into the oscillator pitch each block. 0 = off (preset-safe default). */
-        void setPitchEnvDepth (float semis) noexcept { pitchEnvDepth_ = juce::jlimit (-48.0f, 48.0f, semis); }
+        // fb636 — setPitchEnvDepth retired: nothing read pitchEnvDepth_. Since Batch 10 (6587a82) the
+        // pitch envelope reaches pitch only through an Env N → Pitch route (envDest_/envDepth_, × 48 st).
+        // SYN_ENV_PIT_DEPTH stays in the layout (and its relay) so every saved state still loads.
 
         /** Per-envelope DAHDSR broadcasts from the processor (EFFECTIVE values). */
         void setAmpEnv (float dl,float a,float h,float d,float s,float r,
@@ -690,7 +692,7 @@ class SynthVoice : public juce::SynthesiserVoice
             sendFilterSlot6_.prepare (sr);
             sendFilterSlot7_.prepare (sr);   // fb347 — shared exclusion-bus filter pair
             poolFltSr_ = sr;                 // fb348 — pooled slots prepare themselves on first use
-            for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->prepare (sr); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->prepare (sr); }
+            forBuiltPools ([sr] (PoolSend& ps) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->prepare (sr); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->prepare (sr); });   // fb636 — built pairs only
             sendFilterSlot8_.prepare (sr);
 
             // Batch 1 — prepare the per-voice LFO bank (sample rate only; each LFO's
@@ -698,13 +700,14 @@ class SynthVoice : public juce::SynthesiserVoice
             for (auto& lfo : synthLfo_) lfo.prepare (sr);
 
             // FLT envelope is a TerrainEnvelope (prepared alongside AMP in
-            // setCurrentPlaybackSampleRate); it drives cutoff via SYN_FILTER1_ENV.
+            // setCurrentPlaybackSampleRate); it reaches cutoff only through an Env → Cutoff route
+            // (envCutBlk1_/2_) — fb636: SYN_FILTER1_ENV has no DSP reader.
 
             // Per-voice EROSION drift state. One-pole-LP'd uniform noise at
             // ~0.5 Hz so the random walk happens slowly (analog-like). Per-
             // voice seed so two voices don't drift in lockstep.
             const std::uint32_t voiceHash = static_cast<std::uint32_t> (
-                                                reinterpret_cast<std::uintptr_t> (this))
+                                                seedAddr())
                                           ^ 0xC0FFEE17u;
             driftRng_.setSeed ((juce::int64) voiceHash);
             driftState_ = 0.0f;
@@ -939,7 +942,7 @@ class SynthVoice : public juce::SynthesiserVoice
             sendFilterSlot3_.setType (static_cast<tw::filters::Type> (clamped));  // fb296 — delay-send mirror
             sendFilterSlot5_.setType (static_cast<tw::filters::Type> (clamped));  // fb338 — distortion-send mirror
             sendFilterSlot7_.setType (static_cast<tw::filters::Type> (clamped));  // fb347 — exclusion mirror
-            for (auto& ps : poolSend_) if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
+            forBuiltPools ([clamped] (PoolSend& ps) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped)); });   // fb348 — pooled mirrors (fb636: built pairs only)
         }
         // ── Filter 2 (independent) + routing/mix setters ──
         void setFilterParameters2 (float cutoffHz, float resonance) noexcept
@@ -964,10 +967,9 @@ class SynthVoice : public juce::SynthesiserVoice
             sendFilterSlot4_.setType (static_cast<tw::filters::Type> (clamped));   // fb296 — delay-send mirror
             sendFilterSlot6_.setType (static_cast<tw::filters::Type> (clamped));   // fb338 — distortion-send mirror
             sendFilterSlot8_.setType (static_cast<tw::filters::Type> (clamped));   // fb347 — exclusion mirror
-            for (auto& ps : poolSend_) if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped));   // fb348 — pooled mirrors
+            forBuiltPools ([clamped] (PoolSend& ps) { if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setType (static_cast<tw::filters::Type> (clamped)); });   // fb348 — pooled mirrors (fb636: built pairs only)
         }
         void setFilterDrive2 (float drv01) noexcept   { drv012_ = juce::jlimit (0.0f, 1.0f, drv01); }
-        void setFilterEnvAmount2 (float env) noexcept { envAmount2_ = juce::jlimit (-1.0f, 1.0f, env); }
         void setFilterMix1 (float mix) noexcept       { filterMix1_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterMix2 (float mix) noexcept       { filterMix2_ = juce::jlimit (0.0f, 1.0f, mix); }
         void setFilterRouting (int mode) noexcept     { filterRouting_ = (mode != 0) ? 1 : 0; }
@@ -1012,7 +1014,7 @@ class SynthVoice : public juce::SynthesiserVoice
           sendFilterSlot3_.setPoles (tap1); sendFilterSlot4_.setPoles (tap2);     // fb296 — delay-send mirror
           sendFilterSlot5_.setPoles (tap1); sendFilterSlot6_.setPoles (tap2);
           sendFilterSlot7_.setPoles (tap1); sendFilterSlot8_.setPoles (tap2);
-          for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setPoles (tap1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setPoles (tap2); } }  // fb348 — pooled mirrors
+          forBuiltPools ([tap1, tap2] (PoolSend& ps) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setPoles (tap1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setPoles (tap2); }); }  // fb348 — pooled mirrors (fb636: built pairs only)
         /** fb603 — MORPH plumbing for the OB-X / SEM tap. `SvfMultimode::setMorph()` (0 = LP,
          *  .5 = Notch, 1 = HP) had ZERO callers, which is why `OB-X SVF`(9) measured identical to
          *  `SEM LP`(48) to 0.00 dB — `morph_` was frozen at 0.0. This is the voice-side half of the
@@ -1027,7 +1029,7 @@ class SynthVoice : public juce::SynthesiserVoice
           sendFilterSlot3_.setMorph (m1); sendFilterSlot4_.setMorph (m2);
           sendFilterSlot5_.setMorph (m1); sendFilterSlot6_.setMorph (m2);
           sendFilterSlot7_.setMorph (m1); sendFilterSlot8_.setMorph (m2);
-          for (auto& ps : poolSend_) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setMorph (m1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setMorph (m2); } }
+          forBuiltPools ([m1, m2] (PoolSend& ps) { if (auto* f = ps.flt1.load (std::memory_order_acquire)) f->setMorph (m1); if (auto* f = ps.flt2.load (std::memory_order_acquire)) f->setMorph (m2); }); }   // fb636: built pairs only
         // STEREO SPREAD — L/R cutoff offset (0..1), per filter.
         // filter SPREAD → POST-filter stereo width (mid/side all-pass, see widen()). NOTE: no longer
         // fed to the filter cores (their spread_ stays 0) — the old L/R cutoff offset DETUNED pitched
@@ -1055,12 +1057,9 @@ class SynthVoice : public juce::SynthesiserVoice
         {
             drv01_ = juce::jlimit (0.0f, 1.0f, drv01);
         }
-        /** Bipolar -1..+1 amount of the FLT envelope applied to cutoff
-         *  in semitone space (±96 ST at ±1.0). Sign inverts the env. */
-        void setFilterEnvAmount (float env) noexcept
-        {
-            envAmount_ = juce::jlimit (-1.0f, 1.0f, env);
-        }
+        // fb636 — setFilterEnvAmount / setFilterEnvAmount2 retired: nothing read envAmount_/envAmount2_.
+        // The FLT envelope reaches cutoff only through an Env → Cutoff route (envCutBlk1_/2_). SYN_FILTER1/2_ENV
+        // stay in the layout (and their relays) for saved states and the page's Env-knob mirror.
         /** FLT envelope ADSR (ms / 0..1 / ms / ms). */
         void setFilterEnvParameters (float attackMs, float decayMs,
                                      float sustain,  float releaseMs) noexcept
@@ -1084,8 +1083,15 @@ class SynthVoice : public juce::SynthesiserVoice
         }
 
         /** Equal-power pan -1 (full L) .. 0 (center) .. +1 (full R). */
+        // fb636 — a setter called with its last argument rewrites the same targets (they have no other writer),
+        //  so the cos/sin is skipped when the argument's BITS repeat. 96 voices x every gather, identical args.
+        static bool sameArgBits (float a, float b) noexcept { std::uint32_t x, y; std::memcpy (&x, &a, 4); std::memcpy (&y, &b, 4); return x == y; }
+        float panArgA_ = std::numeric_limits<float>::quiet_NaN(), panArgB_ = std::numeric_limits<float>::quiet_NaN(),
+              panArgC_ = std::numeric_limits<float>::quiet_NaN(), panArgD_ = std::numeric_limits<float>::quiet_NaN(),
+              noisePanArg_ = std::numeric_limits<float>::quiet_NaN();
         void setPan (float pan) noexcept
         {
+            if (sameArgBits (pan, panArgA_)) return; panArgA_ = pan;   // fb636
             const float p = juce::jlimit (-1.0f, 1.0f, pan);
             const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
             panLT_ = std::cos (angle);   // fb202 — PAN GLIDE (Max: "no static"): targets only;
@@ -1099,14 +1105,18 @@ class SynthVoice : public juce::SynthesiserVoice
         {
             octOffset_   = oct;
             semiOffset_  = semi;
-            centsOffset_ = cent;
-            if (playing_)
-                updateUnisonPhaseIncrementsA (glideNote_);
+            centsOffset_ = cent; // fb636 — no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         }
 
-        /** Set which wavetable this voice reads from. Pointer is borrowed —
-         *  caller (PluginProcessor) guarantees lifetime ≥ voice lifetime
-         *  (WavetableBank lives for the entire plugin instance). */
+        /** Set which wavetable this voice reads from. Pointer is borrowed, and
+         *  since fb636 M2 it is valid for the CURRENT processBlock only: an
+         *  imported table (ImportSlot) is freed by the timer once no audio
+         *  block can still hold it, so the voice may not keep it across
+         *  blocks. The caller must re-broadcast it before every render — the
+         *  per-voice broadcast in PluginProcessor::processBlock does, for
+         *  every voice, every block (factory tables from WavetableBank do
+         *  live for the whole instance, but the voice cannot tell them apart).
+         *  setWavetableB/C/D carry the same contract. */
         void setWavetable (const tw::Wavetable* wt) noexcept
         {
             currentWavetable_ = wt;
@@ -1334,6 +1344,13 @@ class SynthVoice : public juce::SynthesiserVoice
             //  at the top where the Lifeguard law puts it. RM keeps the house curve: its depth is
             //  ALSO its dry/wet and its level, so a 361:1 curve there would just make the mode
             //  inaudible for the first two thirds of the knob.
+            // fb636 — 16 of these per voice per gather on all 96 voices, the exp recomputed from unchanged
+            //  inputs. The same (mode, dc) gives the same float, so reuse it (bitwise key; NaN never matches).
+            {
+                std::uint32_t dcBits; std::memcpy (&dcBits, &dc, 4);
+                if (b.memoValid && b.memoMode == mode && b.memoDcBits == dcBits) return;
+                b.memoValid = true; b.memoMode = mode; b.memoDcBits = dcBits;
+            }
             b.depth = blendIsLinTaper (b.mode)
                     ? dc                                                            // FM EXP — the depth IS the exponent (octaves); see blendIsLinTaper
                     : blendIsFmTaper (b.mode)                                       // fb551 — FM / PD / AM + FM CLAMP
@@ -1355,9 +1372,7 @@ class SynthVoice : public juce::SynthesiserVoice
         {
             octOffsetB_   = oct;
             semiOffsetB_  = semi;
-            centsOffsetB_ = cent;
-            if (playing_)
-                updateUnisonPhaseIncrementsB (glideNote_);
+            centsOffsetB_ = cent; // fb636 — no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         }
 
         void setLevelB (float level) noexcept
@@ -1367,6 +1382,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void setPanB (float pan) noexcept
         {
+            if (sameArgBits (pan, panArgB_)) return; panArgB_ = pan;   // fb636
             const float p = juce::jlimit (-1.0f, 1.0f, pan);
             const float angle = (p + 1.0f) * 0.25f * juce::MathConstants<float>::pi;
             panLBT_ = std::cos (angle);   // fb202 — glide target
@@ -1417,16 +1433,14 @@ class SynthVoice : public juce::SynthesiserVoice
             setUnisonImpl (0, activeUnisonA_, uDetuneCentsA_, uPanLTA_, uPanRTA_, uNormTA_,
                            uPanLA_, uPanRA_, uNormA_, uniSnapA_,
                            count, detune01, blend01, width01);
-            updateUnisonFramePositions();
-            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsA (glideNote_);
+            // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         }
         void setUnisonB (int count, float detune01, float blend01, float width01) noexcept
         {
             setUnisonImpl (1, activeUnisonB_, uDetuneCentsB_, uPanLTB_, uPanRTB_, uNormTB_,
                            uPanLB_, uPanRB_, uNormB_, uniSnapB_,
                            count, detune01, blend01, width01);
-            updateUnisonFramePositions();
-            if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsB (glideNote_);
+            // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         }
 
         /** SOFT BOUND (fb522) — a ceiling with an EXACTLY LINEAR core.
@@ -1498,7 +1512,7 @@ class SynthVoice : public juce::SynthesiserVoice
             return (x < 0.0f) ? -y : y;
         }
 
-        /** WARP phase-domain remap (modes 1-8) — EXACT math of the original inline
+        /** WARP phase-domain remap (modes 1-8, and fb636's 39-45) — EXACT math of the original inline
          *  switches, factored so two slots chain in series (slot 2 transforms slot 1's
          *  output). Pure function of the input phase p; FORMANT's window MULTIPLIES into
          *  `window` (slot-1 entry value is 1.0 → identical to the old assign) and PWM's
@@ -1548,10 +1562,25 @@ class SynthVoice : public juce::SynthesiserVoice
         //  the set it points at is replaced on every matrix edit, and the voice must always read
         //  the current one.
         void setModCurves (const std::atomic<const wc::ModCurveSet*>* a) noexcept { modCurves_ = a; }
-        void setGlobalSources (wc::GlobalModSources* g) noexcept { gsrc_ = g; }   // fb563 — set ONCE; the values inside change per block
+        void setGlobalSources (wc::GlobalModSources* g) noexcept { gsrc_ = g; }
+        // fb636 — TEST-ONLY (TerrainDeterminism.h). Set once at construction. In a real session it only records
+        //  the index; with TERRAIN_DETERMINISTIC set, the clock- and address-seeded streams restart from it.
+        void setDeterministicIndex (int i) noexcept
+        {
+            detAddr_ = (std::uintptr_t) 0x10000u + (std::uintptr_t) i * 0x1000u;
+            if (! tw::deterministic()) return;
+            const auto a = (std::uint32_t) detAddr_;
+            noiseState_  = 0x9E3779B9u ^ a;  noiseStateB_ = 0x6A09E667u ^ a;
+            noiseStateC_ = 0xBB67AE85u ^ a;  noiseStateD_ = 0x3C6EF372u ^ a;
+            rng_.setSeed ((juce::int64) 0x5EED0000 + i);
+        }   // fb563 — set ONCE; the values inside change per block
         const DrawCurve* drawFor (int osc, int slot) const noexcept
         { return (drawTable_ != nullptr) ? drawTable_[(size_t) (osc * 2 + slot)].load (std::memory_order_relaxed)
                                          : nullptr; }
+        // fb636 — the per-sample warp calls pass the curve only to the two modes that read it (37 DRAW, 38 DRAW AMP);
+        //  every other mode ignores the argument, so skipping the atomic load there changes nothing.
+        const DrawCurve* drawIf (int mode, int osc, int slot) const noexcept
+        { return (mode == 37 || mode == 38) ? drawFor (osc, slot) : nullptr; }
 
         /** fb561 — THE READ-RATE A WARP MODE ASKS THE MIP LAW FOR. Lifted out of renderNextBlock's
             lambda so the PROCESSOR can ask the identical question when it captures a mode into a
@@ -1571,6 +1600,19 @@ class SynthVoice : public juce::SynthesiserVoice
             if (mode == 2)  return std::pow (2.0, (double) amt * kSyncExp2);      // SYNC    (1..24.25x)
             if (mode == 3)  return std::pow (2.0, (double) amt * kFormantExp2);   // FORMANT (1..16x)
             if (mode == 7)  return 1.0 + (double) amt * kFractalMul;              // FRACTALIZE (1..8.5x)
+            // fb636 ALT — BEND's "+" side reads the mip for its steepest stretch, r (the mid-cycle slope).
+            //  MEASURED on Serum 2 (which of its own dry-note tables predicts each warped render): 1.50 / 2.24 /
+            //  3.78 / 7.55x at r = 1.5 / 2.33 / 4 / 9. Bend − and all three Asym stay on the BASE table (1.00x
+            //  at every amount, 7-10 dB clear of a max-slope mip): that IS Serum's Asym brightness, corners and
+            //  aliasing included, and max(r, 1/r) there would sound duller than the reference.
+            //  ⚠️ OPEN: the checker's full-band centroid puts Serum's Bend + nearer r^0.8-0.9 at the very top
+            //  (rate ~6 at r = 9, i.e. −18 % if we read at 9). It picks which mip plays, so settle it by A/B
+            //  BEFORE presets use Bend +, here, in this one line.
+            if (mode >= 39 && mode <= 41)
+            {
+                const double s = altSigned (mode, amt);
+                return s > 0.0 ? (0.5 + kAltBendC * s) / (0.5 - kAltBendC * s) : 1.0;
+            }
             return 1.0;
         }
 
@@ -1591,9 +1633,80 @@ class SynthVoice : public juce::SynthesiserVoice
         //      still a bad one. Sync is the exception, not the rule: it is the only one of the
         //      three whose content is CREATED by the discontinuity.
 
+        // ═══ fb636 ALT WARP — SERUM 2's "ALT WARP" MODES, FILLED INTO THE RESERVED SLOTS 39-46 ════════════
+        //  39 Bend +   40 Bend -   41 Bend +/-   42 Asym +   43 Asym -   44 Asym +/-   45 Flip   46 Odd/Even
+        //  47 stays RESERVED: the one hatch left for a later mode without a 49th value. Serum's other Alt Warp
+        //  entries already live here under other names: PWM 4, Mirror 6, P-Quantize 8, Draw 37 (= Remap 1).
+        //
+        //  ⚖️ THE LAWS ARE MEASURED, NOT DESIGNED. Serum 2 v2.1.4 (AU, wavetable osc, its default saw frame
+        //  used as a phase probe, 96 and 48 kHz, notes 21-69) was read back map by map, and an independent
+        //  checker re-measured every constant at off-grid amounts, another rate and another phase (verdict:
+        //  confirmed). The design's first guesses were WRONG and are written down so nobody "tidies" back:
+        //    · BEND is a RATIONAL law, not 2^(k·s): r = (½ + c·s)/(½ − c·s), c = 0.4 (fit 0.400004, log2 r
+        //      within 7e-5 over 81 renders). exp2 at its best k (2.753) misses by 3.7e-2 of a cycle.
+        //    · ASYM is ONE SHARP KNEE (m, ½), m = ½ − c·s, c = 0.4 — not a Möbius curve (misses by 0.16)
+        //      and not Skew (5), whose knee is 0.45 with a 0.05 floor; Skew stays exactly as it ships.
+        //      Asym + moves mid-table EARLIER (the guide's "to the right" is wrong in time) and Asym − is
+        //      its POINT-MIRROR, not its inverse. Bend − IS the exact inverse of Bend +.
+        //    · The +/- modes put the "+" mode on the LOW half of the knob: s = −(2a − 1).
+        //  They freeze once presets use them, like every other mode here.
+        //
+        //  🔑 THE DEAD BAND (the skeptic's trap). The 2.5 ms amount glide is a FLOAT one-pole and it STALLS
+        //  short of ½ — at 48 kHz from 0 it parks at 0.49999821, from 1 at 0.5000036 — and the fb636
+        //  settled-glide check then freezes it there. So "exactly 50 % is dry" never happens in a playing
+        //  voice. |s| < 1e-4 IS 0: the early return is exact, the pair read of 46 switches OFF, and the step
+        //  at the edge of the band is 2e-5 of a cycle (Bend) / 4e-5 (Asym). The glide itself is NOT snapped:
+        //  that would move the bits of every existing preset.
+        static constexpr double kAltBendC    = 0.4;     // BEND ±   r = (½ + c·s)/(½ − c·s): 1 .. 9x at |s| = 1
+        static constexpr double kAltAsymC    = 0.4;     // ASYM ±   knee m = ½ − c·s: 0.1 .. 0.9
+        static constexpr double kAltPmSign   = -1.0;    // +/-      s = sign·(2a − 1): the low half is the "+" mode
+        static constexpr double kAltDeadBand = 1.0e-4;  // |s| (Flip: a, 1 − a) below this is EXACTLY dry
+
+        /** fb636 ALT — the signed strength of the six Bend/Asym modes (39-44): +a, −a, or
+         *  kAltPmSign·(2a − 1) for the +/- pair; 0 inside the dead band. ONE definition, read by
+         *  applyPhaseWarp AND warpReadRate (the fb561 lockstep: the mip is picked for the law that plays). */
+        static inline double altSigned (int mode, float amount) noexcept
+        {
+            const int    k = (mode - 39) % 3;             // 0 "+", 1 "−", 2 "+/-"   (39-41 Bend, 42-44 Asym)
+            const double a = (double) amount;
+            const double s = (k == 0) ? a : (k == 1) ? -a : kAltPmSign * (2.0 * a - 1.0);
+            return std::abs (s) < kAltDeadBand ? 0.0 : s;
+        }
+
+        /** fb636 ALT — ODD/EVEN (46). NOT a phase map: an output-parity mix of the table read,
+         *      y = y(q) + s·y(q + ½),   s = 2a − 1      (odd gain 2 − 2a, even gain 2a — measured: c0 = 1.0000,
+         *                                               c1 = 2a − 1 at all 27 amounts, residual 2.2e-6)
+         *  q is the phase ENTERING the Odd/Even slot, and the second read is NOT re-warped by a later slot
+         *  (Serum, measured in chains: T(W(x)) + s·T(x + ½) fits at −29/−37 dB; "the whole chain at x + ½"
+         *  misses by −3.5/−6 dB). It mixes after both phase stages and BEFORE the amp stages, so the parity
+         *  guarantee is NARROW and written as such:
+         *    · even-only (100 %) is exact with the other slot on None or on ANY amp mode — a memoryless
+         *      shaper of a half-period signal keeps the half period;
+         *    · odd-only (0 %) is exact with None or an ODD-SYMMETRIC shaper only: Rectify, Half Rect, the
+         *      Diodes, Asym, Stomp Box, a saturator biased by VAR > 0, and the per-sine FOLD bring evens back;
+         *    · a PHASE warp in the other slot bends the first tap and not the second, so no parity is claimed
+         *      there (Serum does exactly the same).
+         *  50 % is dry (the dead band). The peak is up to 2x (+6 dB) at 0 % and 100 %, as in Serum. Both slots
+         *  on 46 cascade and their gains multiply: (1 + s1·s2)·y0 + (s1 + s2)·y1. */
+        static inline float altOddEvenS (float amount) noexcept
+        {
+            const float s = 2.0f * amount - 1.0f;
+            return std::abs (s) < (float) kAltDeadBand ? 0.0f : s;
+        }
+        static inline bool altOddEvenGains (int mode1, float amt1, int mode2, float amt2,
+                                            float& g0, float& g1) noexcept
+        {
+            const float s1 = (mode1 == 46) ? altOddEvenS (amt1) : 0.0f;
+            const float s2 = (mode2 == 46) ? altOddEvenS (amt2) : 0.0f;
+            g0 = 1.0f + s1 * s2;
+            g1 = s1 + s2;
+            return s1 != 0.0f || s2 != 0.0f;              // false = dry: no second read at all
+        }
+
         static double applyPhaseWarp (int mode, float amount, double p,
                                       float& window, bool& skipLookup, float var = 0.0f,
-                                      const DrawCurve* draw = nullptr) noexcept
+                                      const DrawCurve* draw = nullptr,
+                                      double* flipPrev = nullptr) noexcept   // fb636 ALT — FLIP's step history (45 only)
         {
             switch (mode)
             {
@@ -1744,7 +1857,75 @@ class SynthVoice : public juce::SynthesiserVoice
                     const double steps = std::round (std::pow (2.0, 5.0 - 4.0 * (double) amount));
                     return (std::floor (p * steps) + 0.25) / steps;
                 }
-                default: return p;   // NONE (0) + every AMP-domain mode (9-34) + the reserved tail
+                // ═══ fb636 ALT WARP (39-46). The laws, the constants and the dead band are at kAltBendC. ═══
+                case 39: case 40: case 41:   // BEND + / BEND − / BEND +/-   (Serum 2 idx 2-4)
+                {
+                    const double s = altSigned (mode, amount);
+                    if (s == 0.0) return p;                                   // 0 (and 50 % on +/-) is EXACTLY dry
+                    // g = r − 1 with r = (½ + c·s)/(½ − c·s), so r(−s) = 1/r(s) IN CLOSED FORM: Bend − is the exact
+                    // inverse of Bend + at the same amount, with no exp2 to disagree with its own reciprocal.
+                    const double g = 4.0 * kAltBendC * s / (1.0 - 2.0 * kAltBendC * s);
+                    const double x = p - std::floor (p);
+                    const double d = x - 0.5;
+                    const double u = 2.0 * std::abs (d);                      // 0 at mid-cycle, 1 at the wrap
+                    const double M = u + g * u * (1.0 - u) / (1.0 + g * u);   // the Möbius bias; 1 + g·u >= 1/r > 0
+                    // 🚨 THE SIGN OF d IS A MULTIPLIER. The first draft wrote copysign(0.5·(M − u), d), which keeps
+                    // only the MAGNITUDE of a delta that is NEGATIVE whenever r < 1 — so every Bend − folded
+                    // through the wrap (w(0.9) = 0.0071 where 0.7929 is right). This form is monotone for all s.
+                    const double w = 0.5 + (d >= 0.0 ? 0.5 * M : -0.5 * M);
+                    return w - std::floor (w);
+                }
+                case 42: case 43: case 44:   // ASYM + / ASYM − / ASYM +/-   (Serum 2 idx 6-8)
+                {
+                    const double s = altSigned (mode, amount);
+                    if (s == 0.0) return p;
+                    const double m = 0.5 - kAltAsymC * s;                     // the knee (m, ½): 0.1 .. 0.9, never 0 or 1
+                    const double x = p - std::floor (p);
+                    const double w = (x < m) ? x * (0.5 / m) : 0.5 + (x - m) * (0.5 / (1.0 - m));
+                    return w - std::floor (w);
+                }
+                case 45:   // FLIP (Serum 2 idx 9) — a POLARITY WINDOW keyed off the phase entering this slot
+                {
+                    // MEASURED LAW (0 of 13,056 bins off): inverted on [2a − 1, 2a) ∩ [0, 1) — the region grows from
+                    // the cycle start to the whole cycle at 50 %, then un-inverts from the start; 0 and 100 % are
+                    // dry. The design's P = 1 − a was wrong in half the bins and made 100 % a full inversion.
+                    const double a    = (double) amount;
+                    const double x    = p - std::floor (p);
+                    const double prev = (flipPrev != nullptr) ? *flipPrev : -1.0;
+                    if (flipPrev != nullptr) *flipPrev = x;                   // the history stays fresh even while dry
+                    if (a < kAltDeadBand || a > 1.0 - kAltDeadBand) return p;
+                    const double lo = juce::jmax (0.0, 2.0 * a - 1.0);
+                    const double hi = juce::jmin (1.0, 2.0 * a);
+                    double sgn = (x >= lo && x < hi) ? -1.0 : 1.0;
+                    // BAND-LIMITED EDGES. The flip is a ±2·y step at lo (+1 → −1) and at hi (−1 → +1), so the WINDOW
+                    // takes the 2-sample polyBLEP residual and window·y is exactly "the residual scaled by 2y" — no
+                    // new stage. It needs the TRUE step of THIS slot's input phase, which only slot 1 on the WT
+                    // engine could have borrowed from the oscillator: after Sync it runs R times faster, after
+                    // Mirror it runs BACKWARDS half the cycle, on the FM carrier it is modulated, after Bend it is
+                    // not uniform. So the voice keeps one previous-input phase per sine per slot (flipPrev) and the
+                    // step is measured here, signed and wrapped. A backward step mirrors the residual. A jump (a
+                    // Sync reset, a P-Quantize stair) reads as one fast step: its residual lands on one sample and
+                    // stays between the two values that edge joins — never an overshoot, and the clamp makes
+                    // |window| <= 1 a law. No history (note-on, the waterfall, the curve card) = hard edges.
+                    if (prev >= 0.0 && ! (lo <= 0.0 && hi >= 1.0))               // 50 %: inverted everywhere, no edge
+                    {
+                        double dt = x - prev;  dt -= std::floor (dt + 0.5);       // signed, wrapped to [−½, ½)
+                        if (dt != 0.0)
+                        {
+                            const double eUp = hi - std::floor (hi);              // hi = 1 is the wrap
+                            const double adt = std::abs (dt);
+                            double tDn = (dt > 0.0) ? x - lo  : lo  - x;  tDn -= std::floor (tDn);
+                            double tUp = (dt > 0.0) ? x - eUp : eUp - x;  tUp -= std::floor (tUp);
+                            const double r = polyBlep (tUp, adt) - polyBlep (tDn, adt);
+                            sgn = juce::jlimit (-1.0, 1.0, sgn + (dt > 0.0 ? r : -r));
+                        }
+                    }
+                    window *= static_cast<float> (sgn);
+                    return p;
+                }
+                case 46:   // ODD/EVEN (Serum 2 idx 16) — the phase stage IS the identity. The pair read needs the
+                    return p;   // TABLE, not the phase, so it lives in the voice's read (altOddEvenGains).
+                default: return p;   // NONE (0) + the amp-domain modes (9-36, 38) + the reserved 47
             }
         }
 
@@ -1782,7 +1963,7 @@ class SynthVoice : public juce::SynthesiserVoice
             // they are out, before any of the shaper family is even considered. This is also
             // CHEAPER than what shipped (two compares to fall through to `return s`), so the
             // bit-identity gates stay green and the idle cost goes DOWN, not up.
-            if (mode < 9) return s;
+            if (mode < 9 || mode > 38) return s;   // fb636 ALT — 39-47 too: Alt Warp is phase-domain or a pair read, never a shaper
             if (mode == 9)         // RECTIFY: blend dry with |x|×2−1 by amount, VAR = pre-gain
             {
                 // fb522 OVERPASS: [M] we already beat Serum's `Rectify` by 1.89x on centroid and
@@ -1815,12 +1996,14 @@ class SynthVoice : public juce::SynthesiserVoice
             }
             // 11..34 — THE SHAPER ROSTER (Shapers.h warpShaper). Pure, stateless, allocation-free,
             // so the waterfall display gets all 24 for free through getOscWavetableJson (fb458).
-            // 35..47 are the RESERVED tail and fall through to identity there, by design.
+            // 35..37 (the warp filter, Draw) fall through to identity there, by design; 39..47 never get
+            // this far (fb636 — the gate above).
             return tw::shapers::warpShaper (mode, amount, s, var);
         }
 
         /** ⛔ THE CARDINALITY. SYN_OSC_x_WARP_MODE / _WARP2_MODE is choice(48): 0-10 the shipped
-         *  eleven, 11-34 the shaper roster, 35-47 RESERVED. It is FROZEN here (RACK LAW C) —
+         *  eleven, 11-34 the shaper roster, 35-38 filter + draw, 39-46 Alt Warp (fb636), 47 RESERVED.
+         *  It is FROZEN here (RACK LAW C) —
          *  growing a choice param renumbers every saved patch AND every host automation lane, and
          *  the UI normalises a selection by an array length (index.html), so the two counts must
          *  agree forever. Add a mode by filling a RESERVED slot, never by appending a 49th. */
@@ -1929,6 +2112,14 @@ class SynthVoice : public juce::SynthesiserVoice
                     return false;   // 🚨 WARP FILTER. Falling into `default: return true` below
                                     // would arm the 38 Hz DC blocker on top of a LOW-PASS and
                                     // quietly high-pass it — the fb470 trap, exactly.
+                case 39: case 40: case 41: case 42: case 43: case 44:
+                    return false;   // fb636 ALT — BEND ± / ASYM ± are PHASE maps and answer as 1-8 do.
+                case 46:
+                    return false;   // fb636 ALT — ODD/EVEN mixes two reads of a zero-mean table: no DC.
+                case 45:            // fb636 ALT — FLIP makes DC (|sin| at 50 %, −A/2 on a saw at 25 %) and Max chose to
+                                    // REMOVE it, as for Rectify. Flip is dry at 100 % (and at 0, the line above), so
+                                    // the blocker disarms there instead of high-passing a dry oscillator.
+                    return (double) amount <= 1.0 - kAltDeadBand;
                 case 38:
                     return true;    // fb559 — DRAW AMP. An arbitrary drawn transfer curve is the
                                     // ONE amp mode that can make DC at any var, so `true` is the
@@ -2263,12 +2454,13 @@ class SynthVoice : public juce::SynthesiserVoice
          *  skipped entirely once |target − current| falls under 1e-4 cents. */
         void advanceUnisonRangeGlide (int numSamples) noexcept
         {
-            const float c = 1.0f - std::exp (-(float) numSamples
-                                             / (0.0025f * (float) juce::jmax (1.0, sampleRate_)));
+            float c = -1.0f;   // fb636 — computed only when an osc is actually gliding (same expression, same value)
             for (int o = 0; o < 4; ++o)
             {
                 const float d = uniRangeT_[(size_t) o] - uniRangeSm_[(size_t) o];
                 if (std::fabs (d) < 1.0e-4f) { uniRangeSm_[(size_t) o] = uniRangeT_[(size_t) o]; continue; }
+                if (c < 0.0f) c = 1.0f - std::exp (-(float) numSamples
+                                                   / (0.0025f * (float) juce::jmax (1.0, sampleRate_)));
                 uniRangeSm_[(size_t) o] += d * c;
                 reapplyUnison (o);
             }
@@ -2305,9 +2497,13 @@ class SynthVoice : public juce::SynthesiserVoice
             // "Scan" (formerly Pitch): drives the noise scan/playback RATE — 0 = very slow (0.1×) … 0.5 = 1× … 1 = 2×.
             const float sc = juce::jlimit (0.0f, 1.0f, pitch);
             noiseScanRateT_ = (sc < 0.5f) ? (0.1f + 1.8f * sc) : (1.0f + 2.0f * (sc - 0.5f));
+            if (! sameArgBits (pan, noisePanArg_))   // fb636 — the same pan argument, the same equal-power pair
+            {
+            noisePanArg_ = pan;
             const float th = juce::jlimit (0.0f, 1.0f, pan) * 1.5707963268f;   // equal-power pan (−3 dB center)
             noisePanLT_ = std::cos (th);   // fb202 — glide targets
             noisePanRT_ = std::sin (th);
+            }
         }
         // fb66 — NOISE play mode (sample playback): 0 Random · 1 Envelope (one-shot) · 2 Free (global tape).
         void setNoisePlayMode (int m) noexcept { noisePlayMode_ = m; }
@@ -2549,7 +2745,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // One-time decorrelated seed for FREE mode (per voice ptr / sine / osc), 0..1.
         double seedPhase (int u, int osc) const noexcept
         {
-            const std::uint32_t h = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+            const std::uint32_t h = static_cast<std::uint32_t> (seedAddr())
                                   ^ static_cast<std::uint32_t> ((u   + 1) * 0x9E3779B9u)
                                   ^ static_cast<std::uint32_t> ((osc + 1) * 2654435761u);
             return (double) (h & 0xFFFF) / 65535.0;
@@ -2719,8 +2915,8 @@ class SynthVoice : public juce::SynthesiserVoice
         }
 
         // ════ OSC C + D setters (4-osc, spec P5) — twins of the B / combined setters ════
-        void setTuningC (int oct, int semi, float cent) noexcept { octOffsetC_=oct; semiOffsetC_=semi; centsOffsetC_=cent; if (playing_) updateUnisonPhaseIncrementsC (glideNote_); }
-        void setTuningD (int oct, int semi, float cent) noexcept { octOffsetD_=oct; semiOffsetD_=semi; centsOffsetD_=cent; if (playing_) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setTuningC (int oct, int semi, float cent) noexcept { octOffsetC_=oct; semiOffsetC_=semi; centsOffsetC_=cent; }  // fb636 — no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
+        void setTuningD (int oct, int semi, float cent) noexcept { octOffsetD_=oct; semiOffsetD_=semi; centsOffsetD_=cent; }  // fb636 — no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setLevelC (float level) noexcept { levelC_ = juce::jlimit (0.0f, 1.0f, level); }
         void setLevelD (float level) noexcept { levelD_ = juce::jlimit (0.0f, 1.0f, level); }
         // SOLO/MUTE — set per-osc gate targets (A,B,C,D). Click-free: smoothed toward target in render.
@@ -2758,8 +2954,8 @@ class SynthVoice : public juce::SynthesiserVoice
             oscGateTarget_[0] = a; oscGateTarget_[1] = b; oscGateTarget_[2] = c; oscGateTarget_[3] = d;
             if (! playing_) { for (int k = 0; k < 4; ++k) oscGate_[k] = robinGate (k); }  // snap when idle → fresh notes respect gate from sample 0, no blip
         }
-        void setPanC (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLCT_=std::cos(a); panRCT_=std::sin(a); }   // fb202 — glide targets
-        void setPanD (float pan) noexcept { const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLDT_=std::cos(a); panRDT_=std::sin(a); }   // fb202 — glide targets
+        void setPanC (float pan) noexcept { if (sameArgBits (pan, panArgC_)) return; panArgC_ = pan; /* fb636 */ const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLCT_=std::cos(a); panRCT_=std::sin(a); }   // fb202 — glide targets
+        void setPanD (float pan) noexcept { if (sameArgBits (pan, panArgD_)) return; panArgD_ = pan; /* fb636 */ const float p=juce::jlimit(-1.0f,1.0f,pan); const float a=(p+1.0f)*0.25f*juce::MathConstants<float>::pi; panLDT_=std::cos(a); panRDT_=std::sin(a); }   // fb202 — glide targets
         void setWavetableC (const tw::Wavetable* wt) noexcept { currentWavetableC_ = wt; }
         void setWavetableD (const tw::Wavetable* wt) noexcept { currentWavetableD_ = wt; }
         void setWavetableFrameC (float pos) noexcept { framePosBaseC_ = juce::jlimit (0.0f, 1.0f, pos); }
@@ -2768,8 +2964,8 @@ class SynthVoice : public juce::SynthesiserVoice
         void setWarpD (int mode, float amount) noexcept { warpModeD_ = juce::jlimit(0,kWarpModeMax,mode); warpAmountBaseD_ = juce::jlimit(0.0f,1.0f,amount); }
         void setEngineC (int idx) noexcept { engineC_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
         void setEngineD (int idx) noexcept { engineD_ = static_cast<Engine> (juce::jlimit(0,6,idx)); }
-        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsC (glideNote_); }
-        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); updateUnisonFramePositions(); if (currentMidiNote_ >= 0) updateUnisonPhaseIncrementsD (glideNote_); }
+        void setUnisonC (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (2, activeUnisonC_, uDetuneCentsC_, uPanLTC_, uPanRTC_, uNormTC_, uPanLC_, uPanRC_, uNormC_, uniSnapC_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
+        void setUnisonD (int count, float detune01, float blend01, float width01) noexcept { setUnisonImpl (3, activeUnisonD_, uDetuneCentsD_, uPanLTD_, uPanRTD_, uNormTD_, uPanLD_, uPanRD_, uNormD_, uniSnapD_, count, detune01, blend01, width01); }   // fb636 — no frame-position update (uFramePos* has no reader) and no increment recompute here: renderNextBlock rewrites every increment it reads before reading it
         void setWarp2CD (int modeC, float amountC, int modeD, float amountD) noexcept { warp2ModeC_=juce::jlimit(0,kWarpModeMax,modeC); warp2AmountBaseC_=juce::jlimit(0.0f,1.0f,amountC); warp2ModeD_=juce::jlimit(0,kWarpModeMax,modeD); warp2AmountBaseD_=juce::jlimit(0.0f,1.0f,amountD); }
 
         /** FM-ENGINE-VOICE — per-OSC wavetable-carrier FM params (osc 0..3 = A..D).
@@ -2878,7 +3074,7 @@ class SynthVoice : public juce::SynthesiserVoice
                               (float) (midiNote - kKtLowNote) / (float) (kKtHighNote - kKtLowNote));
                 // FM key scaling follows the retargeted pitch (index rolloff above C5)
                 fmKs_ = (float) std::pow (0.5, (double) std::max (0, midiNote - 72) / 18.0);
-                updateUnisonFramePositions();
+                // fb636 — updateUnisonFramePositions() was here: it wrote uFramePos*, which nothing reads
                 updateUnisonPhaseIncrementsA (glideNote_);
                 updateUnisonPhaseIncrementsB (glideNote_);
                 playing_ = true;
@@ -2973,7 +3169,7 @@ class SynthVoice : public juce::SynthesiserVoice
             // is masked → click-free. FREE keeps the running accumulator (carried) across
             // notes for true analog behaviour; it's seeded decorrelated once (phaseSeeded_).
             if (phaseRng_ == 0u)
-                phaseRng_ = (static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this)) ^ 0xA5A5A5A5u) | 1u;
+                phaseRng_ = (static_cast<std::uint32_t> (seedAddr()) ^ 0xA5A5A5A5u) | 1u;
 
             // fb544 — every branch of resolvePhase folds `base` into the value it returns, so the
             // accumulators seeded below already CONTAIN the knob. Sync the tracker to that or the
@@ -3004,6 +3200,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 fmFbC_[(size_t) u] = 0.0f;  fmFbD_[(size_t) u] = 0.0f;
                 fmPrevM1A_[(size_t) u] = 0.0f;  fmPrevM1B_[(size_t) u] = 0.0f;   // STORM cross memory
                 fmPrevM1C_[(size_t) u] = 0.0f;  fmPrevM1D_[(size_t) u] = 0.0f;
+                for (auto& fp : flipPrev_) fp[(size_t) u] = -1.0;   // fb636 ALT — FLIP has no step history at note-on
                 // QUAKE — per-voice subharmonic phase starts aligned to the note (phase-locked, click-free)
                 fmQuakePhaseA_[(size_t) u] = 0.0;  fmQuakePhaseB_[(size_t) u] = 0.0;
                 fmQuakePhaseC_[(size_t) u] = 0.0;  fmQuakePhaseD_[(size_t) u] = 0.0;
@@ -3013,7 +3210,7 @@ class SynthVoice : public juce::SynthesiserVoice
             // WAVER — seed per-(osc × unison sine) OU drift streams, decorrelated per
             // voice+note. The (2u+1)/(2u+2) interleave gives all 16 streams distinct,
             // well-separated inputs; waverSeedMix() avalanches them to ~zero cross-corr.
-            const std::uint32_t waverHash = static_cast<std::uint32_t> (reinterpret_cast<std::uintptr_t> (this))
+            const std::uint32_t waverHash = static_cast<std::uint32_t> (seedAddr())
                                           ^ static_cast<std::uint32_t> (midiNote * 2654435761u);
             for (int u = 0; u < kMaxUnison; ++u)
             {
@@ -3043,7 +3240,7 @@ class SynthVoice : public juce::SynthesiserVoice
 
             for (auto& sl : sub_) sl.osc.noteOn();   // SUB — fresh phase + reseeded heat shaper
             // Phase 8b — populate per-sine increments
-            updateUnisonFramePositions();
+            // fb636 — updateUnisonFramePositions() was here: it wrote uFramePos*, which nothing reads
             updateUnisonPhaseIncrementsA (glideNote_);
             updateUnisonPhaseIncrementsB (glideNote_);
             updateUnisonPhaseIncrementsC (glideNote_);
@@ -3200,6 +3397,7 @@ class SynthVoice : public juce::SynthesiserVoice
             f1->setType (static_cast<tw::filters::Type> (filterType1_)); f2->setType (static_cast<tw::filters::Type> (filterType2_));   // the recorded types (an idle voice's mirrors may lag)
             p.flt2.store (f2, std::memory_order_release);
             p.flt1.store (f1, std::memory_order_release);   // flt1 last — it is the gate
+            poolBuilt_[s >> 6].fetch_or (std::uint64_t (1) << (s & 63), std::memory_order_release);   // fb636 — the setters walk these bits
         }
         void setRouteSnapshot (const RouteSnapshot* r) noexcept { routeSnap_ = r; }
         // fb631 — take the processor's current routes (audio thread; see RouteSnapshot above)
@@ -3304,6 +3502,14 @@ class SynthVoice : public juce::SynthesiserVoice
             // fb348 — POOLED instance sends. Only slots that are BOTH routed and given a bus do any
             // work; everything else costs one bool test per block.
             bool  poolOn[kPoolSends] = {};
+            // fb636 — THE LIT SENDS, ONCE PER BLOCK. The per-sample loops used to walk all 93 slots and `continue`
+            //  past the dark ones — twice per sample per voice, 23 % of the whole render on the init patch (measured,
+            //  exact-PC profile). They now walk this list: the same slots, in the same ascending order, running the
+            //  same statements, so not one float operation changes. The bus pointers and the filter pair are taken
+            //  here too: a built pair is never replaced (buildPoolFilters returns once flt1 is set) and setSize only
+            //  happens in this loop, so the per-sample atomic loads and getWritePointer calls returned these values.
+            int   poolAct[kPoolSends]; int nPoolAct = 0;
+            tw::filters::FilterSlot* poolF1[kPoolSends]; tw::filters::FilterSlot* poolF2[kPoolSends];
             for (int ps = 0; ps < kPoolSends; ++ps)
             {
                 auto& P = poolSend_[ps];
@@ -3312,6 +3518,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 { P.f1.setSize (2, numSamples, false, true, true);
                   P.f2.setSize (2, numSamples, false, true, true);
                   P.dry.setSize (2, numSamples, false, true, true); }
+                if (poolOn[ps])
+                { poolF1[nPoolAct] = P.flt1.load (std::memory_order_acquire); poolF2[nPoolAct] = P.flt2.load (std::memory_order_acquire);
+                  poolAct[nPoolAct++] = ps; }
             }
             // Per-block routing coefficients (independent + dry-bypass model): each source
             // (A,B,C,D,Sub) → F1 bus if in F1; → F2 bus if in F2 (parallel) or F2-only (series);
@@ -3569,18 +3778,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 updateWaverOU (waverCentsC_, waverRngC_, waverC_, dt);
                 updateWaverOU (waverCentsD_, waverRngD_, waverD_, dt);
 
-                // fb302 — advance the subtle ALWAYS-ON analog pitch drift (single per-voice OU
-                // wander; same AR(1) form as WAVER but slow τ≈1.2 s and shallow ~±2¢, no depth gate).
-                // Combined with the per-note static offset → analogDetuneSemis_ feeds every osc pitch.
-                {
-                    const float phi = std::exp (-dt / 1.2f);                 // τ = 1.2 s (slow)
-                    const float sig = 2.0f * std::sqrt (1.0f - phi * phi);   // ~±2¢ drift σ
-                    float x = phi * analogDriftCents_ + sig * waverGaussian (analogRng_);
-                    x = juce::jlimit (-6.0f, 6.0f, x);                       // never run away
-                    if (x < 1.0e-20f && x > -1.0e-20f) x = 0.0f;            // denormal flush
-                    analogDriftCents_  = x;
-                    analogDetuneSemis_ = (double) (analogStaticCents_ + analogDriftCents_) * 0.01;
-                }
+                // fb636 — the fb302 analog drift walk that stood here fed analogDetuneSemis_, which nothing has read
+                //  since fb325 removed the global analog detune (exp + sqrt + Box-Muller per voice per block, for
+                //  nobody). Its RNG (analogRng_) was its own, so no other random stream moves.
             }
             // PORTAMENTO — advance the pitch slide for this block (no-op once arrived).
             advanceGlide (numSamples);
@@ -3608,13 +3808,31 @@ class SynthVoice : public juce::SynthesiserVoice
                 const bool needPit = (envDepth_[2] != 0.0f) || (legEnvUsedMask_ & 2u) != 0;
                 const bool needM1  = (envDepth_[3] != 0.0f) || (legEnvUsedMask_ & 4u) != 0;
                 const bool needM2  = (envDepth_[4] != 0.0f) || (legEnvUsedMask_ & 8u) != 0;
+                // fb636 — AND ONLY WHERE SOMEBODY READS EACH SAMPLE. The per-sample readers of envs 2–5 are
+                //  the Amp route (×eAmpFree[k][i]) and the Filter 1/2 routes (×eFltFree[k][i]); a Pitch or
+                //  Mod-bus route reads the block-END value (envScratch_[last]) and a matrix source reads
+                //  level() after this pass. The stored depths are never exactly 0 (a 4.7e-8 snap residue in
+                //  every preset), so all four ticked with an exp() per sample for those block-end readers.
+                //  advance() lands on the identical state and the identical last value; the rest of the
+                //  channel is filled with that value (its per-sample slots have no reader this block).
+                auto perSample = [this] (int c) { const int d = envDest_[c];
+                                                  return d == kEnvAmp || d == kEnvFilt1 || d == kEnvFilt2 || d == kEnvFilt12; };
+                const bool tFlt = needFlt && perSample (1), tPit = needPit && perSample (2);
+                const bool tM1  = needM1  && perSample (3), tM2  = needM2  && perSample (4);
                 for (int k = 0; k < numSamples; ++k)
                 {
                     eAmp[k] = (float) ampEnv_.tick();
-                    eFlt[k] = needFlt ? (float) fltEnvT_.tick() : 0.0f;
-                    ePit[k] = needPit ? (float) pitchEnvT_.tick() : 0.0f;
-                    eM1[k]  = needM1  ? (float) mod1EnvT_.tick() : 0.0f;
-                    eM2[k]  = needM2  ? (float) mod2EnvT_.tick() : 0.0f;
+                    eFlt[k] = tFlt ? (float) fltEnvT_.tick() : 0.0f;
+                    ePit[k] = tPit ? (float) pitchEnvT_.tick() : 0.0f;
+                    eM1[k]  = tM1  ? (float) mod1EnvT_.tick() : 0.0f;
+                    eM2[k]  = tM2  ? (float) mod2EnvT_.tick() : 0.0f;
+                }
+                if (numSamples > 0)
+                {
+                    if (needFlt && ! tFlt) std::fill (eFlt, eFlt + numSamples, (float) fltEnvT_.advance (numSamples));
+                    if (needPit && ! tPit) std::fill (ePit, ePit + numSamples, (float) pitchEnvT_.advance (numSamples));
+                    if (needM1  && ! tM1)  std::fill (eM1,  eM1  + numSamples, (float) mod1EnvT_.advance (numSamples));
+                    if (needM2  && ! tM2)  std::fill (eM2,  eM2  + numSamples, (float) mod2EnvT_.advance (numSamples));
                 }
             }
             // PITCH + MOD-bus routing (per-block; block-end value of each free env).
@@ -3700,6 +3918,16 @@ class SynthVoice : public juce::SynthesiserVoice
               //  will actually read. Zero when no mode-6 slot is armed, so this stays bit-identical.
               const float w = std::fabs (uniWarp_[(size_t) osc]) + blendWarpMax_[(size_t) osc];
               return w == 0.0f ? amt : juce::jlimit (0.0f, 1.0f, amt + w); };
+            // fb636 ALT — BEND +/- (41) is steepest on the LOW half of its knob (its "+" side), so under a fan the
+            //  LOWER end can be the fast read there. Every other mode asks warpFan's upper end exactly as before:
+            //  the same call and the same double, so the mip every existing patch picks does not move.
+            auto warpRateFan = [&warpRateMul, &warpFan, this] (int osc, int mode, float amt, double drawSlope) -> double
+            {
+                const double hi = warpRateMul (mode, warpFan (osc, amt), drawSlope);
+                if (mode != 41) return hi;
+                const float w = std::fabs (uniWarp_[(size_t) osc]) + blendWarpMax_[(size_t) osc];
+                return w == 0.0f ? hi : juce::jmax (hi, warpRateMul (mode, juce::jlimit (0.0f, 1.0f, amt - w), drawSlope));
+            };
             // ── FM-ENGINE-VOICE block-rate conditioning + WEATHERING SUITE slow processes ──
             // Smooth every knob, run STRIKE's decay and AGE's drift walks, then fold it all
             // into the per-osc EFFECTIVE values the per-sample core reads. All pow()/exp()
@@ -3846,10 +4074,10 @@ class SynthVoice : public juce::SynthesiserVoice
                     }
                 }
             }
-            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateMul (warpMode_,  warpFan (0, warpAmount_), (drawFor (0, 0) ? (double) drawFor (0, 0)->slope : 1.0))  * warpRateMul (warp2ModeA_, warpFan (0, warp2AmountA_), (drawFor (0, 1) ? (double) drawFor (0, 1)->slope : 1.0)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
-            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateMul (warpModeB_, warpFan (1, warpAmountB_), (drawFor (1, 0) ? (double) drawFor (1, 0)->slope : 1.0)) * warpRateMul (warp2ModeB_, warpFan (1, warp2AmountB_), (drawFor (1, 1) ? (double) drawFor (1, 1)->slope : 1.0)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
-            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateMul (warpModeC_, warpFan (2, warpAmountC_), (drawFor (2, 0) ? (double) drawFor (2, 0)->slope : 1.0)) * warpRateMul (warp2ModeC_, warpFan (2, warp2AmountC_), (drawFor (2, 1) ? (double) drawFor (2, 1)->slope : 1.0)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
-            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateMul (warpModeD_, warpFan (3, warpAmountD_), (drawFor (3, 0) ? (double) drawFor (3, 0)->slope : 1.0)) * warpRateMul (warp2ModeD_, warpFan (3, warp2AmountD_), (drawFor (3, 1) ? (double) drawFor (3, 1)->slope : 1.0)) * fmRateMul (engineD_, 3) * uniRateMul (uDetuneCentsD_, activeUnisonD_));
+            currentMipLevelA_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncA_[0] * warpRateFan (0, warpMode_, warpAmount_, (drawFor (0, 0) ? (double) drawFor (0, 0)->slope : 1.0))  * warpRateFan (0, warp2ModeA_, warp2AmountA_, (drawFor (0, 1) ? (double) drawFor (0, 1)->slope : 1.0)) * fmRateMul (engine_,  0) * uniRateMul (uDetuneCentsA_, activeUnisonA_));
+            currentMipLevelB_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncB_[0] * warpRateFan (1, warpModeB_, warpAmountB_, (drawFor (1, 0) ? (double) drawFor (1, 0)->slope : 1.0)) * warpRateFan (1, warp2ModeB_, warp2AmountB_, (drawFor (1, 1) ? (double) drawFor (1, 1)->slope : 1.0)) * fmRateMul (engineB_, 1) * uniRateMul (uDetuneCentsB_, activeUnisonB_));
+            currentMipLevelC_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncC_[0] * warpRateFan (2, warpModeC_, warpAmountC_, (drawFor (2, 0) ? (double) drawFor (2, 0)->slope : 1.0)) * warpRateFan (2, warp2ModeC_, warp2AmountC_, (drawFor (2, 1) ? (double) drawFor (2, 1)->slope : 1.0)) * fmRateMul (engineC_, 2) * uniRateMul (uDetuneCentsC_, activeUnisonC_));
+            currentMipLevelD_ = tw::Wavetable::mipLevelForPhaseIncrement (uPhaseIncD_[0] * warpRateFan (3, warpModeD_, warpAmountD_, (drawFor (3, 0) ? (double) drawFor (3, 0)->slope : 1.0)) * warpRateFan (3, warp2ModeD_, warp2AmountD_, (drawFor (3, 1) ? (double) drawFor (3, 1)->slope : 1.0)) * fmRateMul (engineD_, 3) * uniRateMul (uDetuneCentsD_, activeUnisonD_));
 
             // ── WT BLUR — smooth the amount, then (re)build each OSC's blended single-
             // cycle buffer ONCE per block (only when frame pos / blur / mip changed). Every
@@ -3860,6 +4088,10 @@ class SynthVoice : public juce::SynthesiserVoice
             // Per BLOCK, never per sample: the taper is a pow() and the knob cannot move inside
             // a block anyway.
             const float fbAmtA = fbAmtA_, fbAmtB = fbAmtB_, fbAmtC = fbAmtC_, fbAmtD = fbAmtD_;
+            // fb636 ALT — ODD/EVEN (46) arms a SECOND table read per sine. One flag per osc per block: false for
+            //  every existing patch, so their per-sample path is one predicted branch longer and nothing else.
+            const bool oeArmA = (warpMode_  == 46 || warp2ModeA_ == 46), oeArmB = (warpModeB_ == 46 || warp2ModeB_ == 46),
+                       oeArmC = (warpModeC_ == 46 || warp2ModeC_ == 46), oeArmD = (warpModeD_ == 46 || warp2ModeD_ == 46);
             // fb585 — RAISING THE CEILING WITHOUT DIRTYING THE FLOOR. Turning the two depths up on
             // their own would have pushed grit down into the bottom of the knob, which the law
             // forbids. Steepening the TAPERS at the same time pays for it: a steeper exponent drags
@@ -3974,6 +4206,10 @@ class SynthVoice : public juce::SynthesiserVoice
             // higher notes get high-shelf boost (airier).
             // CPU: makeHighShelf heap-allocates a ref-counted temp — it used to run TWICE per
             // block per voice (even at amount 0). Recompute only when the tilt actually changes.
+            // fb636 — and build it with NO heap at all: Coefficients::makeHighShelf is `*new
+            // Coefficients (ArrayCoefficients::makeHighShelf (...))` (3 malloc/free per shelf, on the
+            // audio thread, at every note-on). Assigning the std::array runs the SAME assignImpl<6>
+            // on the SAME five floats into storage the filter already owns (capacity >= 8).
             {
                 // Phase 8a polish — boost HORIZON range so it's audible at normal MIDI notes
                 const float horizonTilt = horizonAmount_ * static_cast<float>(currentMidiNote_ - 60) / 24.0f;
@@ -3981,9 +4217,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 {
                     lastHorizonTilt_ = horizonTilt;
                     const float shelfGain = std::pow (2.0f, horizonTilt);  // ±12dB at extremes
-                    *horizonShelfL_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                    *horizonShelfL_.coefficients = juce::dsp::IIR::ArrayCoefficients<float>::makeHighShelf (
                         sampleRate_, 2500.0f, 0.7071f, shelfGain);
-                    *horizonShelfR_.coefficients = *juce::dsp::IIR::Coefficients<float>::makeHighShelf (
+                    *horizonShelfR_.coefficients = juce::dsp::IIR::ArrayCoefficients<float>::makeHighShelf (
                         sampleRate_, 2500.0f, 0.7071f, shelfGain);
                 }
             }
@@ -4168,29 +4404,64 @@ class SynthVoice : public juce::SynthesiserVoice
                 phaseOffStep_[(size_t) o]    = d / (double) juce::jmax (1, numSamples);
                 phaseOffApplied_[(size_t) o] = (double) phaseOff_[(size_t) o];
             }
+            // fb636 — SETTLED GLIDES. Every per-sample one-pole in this loop and in the filter loop below glides toward
+            //  a target that is fixed for the whole block (set by a setter or the block-rate matrix, never in the loop),
+            //  with a fixed coefficient. If ONE application of the loop's own statement leaves a group's bits unchanged,
+            //  every later application does too (x == f(x) ⇒ f(f(x)) == x), so sample 0 runs the group, compares the
+            //  bits, and the rest of the block skips it once it has settled. memcmp compares BITS: a -0 that would
+            //  become +0 is a change, and is never skipped. About 60 read-modify-writes per voice-sample, for nothing,
+            //  whenever nothing is gliding — which is almost always.
+            static constexpr int kOscGlideN = 20 + 8 * kMaxUnison;
+            auto oscGlideSnap = [this] (float* s) noexcept
+            {
+                s[0] = warpAmount_;   s[1] = warpAmountB_;  s[2] = warpAmountC_;  s[3] = warpAmountD_;
+                s[4] = warp2AmountA_; s[5] = warp2AmountB_; s[6] = warp2AmountC_; s[7] = warp2AmountD_;
+                s[8] = foldAmountA_;  s[9] = foldAmountB_;  s[10] = foldAmountC_; s[11] = foldAmountD_;
+                s[12] = uNormA_; s[13] = uNormB_; s[14] = uNormC_; s[15] = uNormD_;
+                for (int k = 0; k < 4; ++k) s[16 + k] = monoTapCorr_[k];
+                const std::array<float, kMaxUnison>* t[8] = { &uPanLA_, &uPanRA_, &uPanLB_, &uPanRB_, &uPanLC_, &uPanRC_, &uPanLD_, &uPanRD_ };
+                for (int k = 0; k < 8; ++k) std::memcpy (s + 20 + k * kMaxUnison, t[k]->data(), sizeof (float) * kMaxUnison);
+            };
+            bool oscGlideSettled = false;
+            static constexpr int kMixGlideN = 16;
+            auto mixGlideSnap = [this] (float* s) noexcept
+            {
+                for (int k = 0; k < 4; ++k) s[k] = oscGate_[k];
+                s[4] = lvlSmA_; s[5] = lvlSmB_; s[6] = lvlSmC_; s[7] = lvlSmD_;
+                s[8] = panL_; s[9] = panR_; s[10] = panLB_; s[11] = panRB_; s[12] = panLC_; s[13] = panRC_; s[14] = panLD_; s[15] = panRD_;
+            };
+            bool mixGlideSettled = false;
             for (int i = 0; i < numSamples; ++i)
             {
                 const float blendFrac = (float) (i + 1) * invNsBlend;   // fb248 — 0→1 across the block: prev blend → new blend (seamless frame move)
                 // fb204 — WARP/WARP2 glide (2.5ms) + FOLD ramp + UNISON table glide: every
                 // block-pushed shape amount steps at block rate when modulated; the applied
                 // values move per sample instead (the fb180 law, applied to the osc lane).
-                warpAmount_   += (warpAmtT_   - warpAmount_)   * lvlSmCoef_;
-                warpAmountB_  += (warpAmtTB_  - warpAmountB_)  * lvlSmCoef_;
-                warpAmountC_  += (warpAmtTC_  - warpAmountC_)  * lvlSmCoef_;
-                warpAmountD_  += (warpAmtTD_  - warpAmountD_)  * lvlSmCoef_;
-                warp2AmountA_ += (warp2AmtTA_ - warp2AmountA_) * lvlSmCoef_;
-                warp2AmountB_ += (warp2AmtTB_ - warp2AmountB_) * lvlSmCoef_;
-                warp2AmountC_ += (warp2AmtTC_ - warp2AmountC_) * lvlSmCoef_;
-                warp2AmountD_ += (warp2AmtTD_ - warp2AmountD_) * lvlSmCoef_;
-                foldAmountA_ += foldStepA_; foldAmountB_ += foldStepB_;
-                foldAmountC_ += foldStepC_; foldAmountD_ += foldStepD_;
-                for (int gu = 0; gu < activeUnisonA_; ++gu) { uPanLA_[(size_t) gu] += (uPanLTA_[(size_t) gu] - uPanLA_[(size_t) gu]) * lvlSmCoef_; uPanRA_[(size_t) gu] += (uPanRTA_[(size_t) gu] - uPanRA_[(size_t) gu]) * lvlSmCoef_; }
-                for (int gu = 0; gu < activeUnisonB_; ++gu) { uPanLB_[(size_t) gu] += (uPanLTB_[(size_t) gu] - uPanLB_[(size_t) gu]) * lvlSmCoef_; uPanRB_[(size_t) gu] += (uPanRTB_[(size_t) gu] - uPanRB_[(size_t) gu]) * lvlSmCoef_; }
-                for (int gu = 0; gu < activeUnisonC_; ++gu) { uPanLC_[(size_t) gu] += (uPanLTC_[(size_t) gu] - uPanLC_[(size_t) gu]) * lvlSmCoef_; uPanRC_[(size_t) gu] += (uPanRTC_[(size_t) gu] - uPanRC_[(size_t) gu]) * lvlSmCoef_; }
-                for (int gu = 0; gu < activeUnisonD_; ++gu) { uPanLD_[(size_t) gu] += (uPanLTD_[(size_t) gu] - uPanLD_[(size_t) gu]) * lvlSmCoef_; uPanRD_[(size_t) gu] += (uPanRTD_[(size_t) gu] - uPanRD_[(size_t) gu]) * lvlSmCoef_; }
-                uNormA_ += (uNormTA_ - uNormA_) * lvlSmCoef_; uNormB_ += (uNormTB_ - uNormB_) * lvlSmCoef_;
-                uNormC_ += (uNormTC_ - uNormC_) * lvlSmCoef_; uNormD_ += (uNormTD_ - uNormD_) * lvlSmCoef_;
-                for (int mo = 0; mo < 4; ++mo) monoTapCorr_[mo] += (monoTapCorrT_[mo] - monoTapCorr_[mo]) * lvlSmCoef_;   // fb523 — the modulator-tap pan correction rides the SAME 2.5 ms glide as the pan tables
+                // fb636 — SETTLED GLIDES (see oscGlideSnap above the loop): sample 0 runs these exactly as before and
+                //  compares bits; once nothing moves, the rest of the block skips them.
+                if (! oscGlideSettled)
+                {
+                    float oscPre[kOscGlideN];
+                    if (i == 0) oscGlideSnap (oscPre);
+                    warpAmount_   += (warpAmtT_   - warpAmount_)   * lvlSmCoef_;
+                    warpAmountB_  += (warpAmtTB_  - warpAmountB_)  * lvlSmCoef_;
+                    warpAmountC_  += (warpAmtTC_  - warpAmountC_)  * lvlSmCoef_;
+                    warpAmountD_  += (warpAmtTD_  - warpAmountD_)  * lvlSmCoef_;
+                    warp2AmountA_ += (warp2AmtTA_ - warp2AmountA_) * lvlSmCoef_;
+                    warp2AmountB_ += (warp2AmtTB_ - warp2AmountB_) * lvlSmCoef_;
+                    warp2AmountC_ += (warp2AmtTC_ - warp2AmountC_) * lvlSmCoef_;
+                    warp2AmountD_ += (warp2AmtTD_ - warp2AmountD_) * lvlSmCoef_;
+                    foldAmountA_ += foldStepA_; foldAmountB_ += foldStepB_;
+                    foldAmountC_ += foldStepC_; foldAmountD_ += foldStepD_;
+                    for (int gu = 0; gu < activeUnisonA_; ++gu) { uPanLA_[(size_t) gu] += (uPanLTA_[(size_t) gu] - uPanLA_[(size_t) gu]) * lvlSmCoef_; uPanRA_[(size_t) gu] += (uPanRTA_[(size_t) gu] - uPanRA_[(size_t) gu]) * lvlSmCoef_; }
+                    for (int gu = 0; gu < activeUnisonB_; ++gu) { uPanLB_[(size_t) gu] += (uPanLTB_[(size_t) gu] - uPanLB_[(size_t) gu]) * lvlSmCoef_; uPanRB_[(size_t) gu] += (uPanRTB_[(size_t) gu] - uPanRB_[(size_t) gu]) * lvlSmCoef_; }
+                    for (int gu = 0; gu < activeUnisonC_; ++gu) { uPanLC_[(size_t) gu] += (uPanLTC_[(size_t) gu] - uPanLC_[(size_t) gu]) * lvlSmCoef_; uPanRC_[(size_t) gu] += (uPanRTC_[(size_t) gu] - uPanRC_[(size_t) gu]) * lvlSmCoef_; }
+                    for (int gu = 0; gu < activeUnisonD_; ++gu) { uPanLD_[(size_t) gu] += (uPanLTD_[(size_t) gu] - uPanLD_[(size_t) gu]) * lvlSmCoef_; uPanRD_[(size_t) gu] += (uPanRTD_[(size_t) gu] - uPanRD_[(size_t) gu]) * lvlSmCoef_; }
+                    uNormA_ += (uNormTA_ - uNormA_) * lvlSmCoef_; uNormB_ += (uNormTB_ - uNormB_) * lvlSmCoef_;
+                    uNormC_ += (uNormTC_ - uNormC_) * lvlSmCoef_; uNormD_ += (uNormTD_ - uNormD_) * lvlSmCoef_;
+                    for (int mo = 0; mo < 4; ++mo) monoTapCorr_[mo] += (monoTapCorrT_[mo] - monoTapCorr_[mo]) * lvlSmCoef_;   // fb523 — the modulator-tap pan correction rides the SAME 2.5 ms glide as the pan tables
+                    if (i == 0) { float oscPost[kOscGlideN]; oscGlideSnap (oscPost); oscGlideSettled = std::memcmp (oscPre, oscPost, sizeof oscPre) == 0; }
+                }
                 // Per-osc SUB contributions this sample (mono, post-normalization) — filled by
                 // subMix, used by the filter router to route the Sub independently of its osc.
                 float subMono0 = 0.f, subMono1 = 0.f, subMono2 = 0.f, subMono3 = 0.f;
@@ -4355,10 +4626,15 @@ class SynthVoice : public juce::SynthesiserVoice
 
                                 // WARP slot 1 — phase-domain remap (exact original math, factored to
                                 // applyPhaseWarp so a second slot can chain on its output).
-                                warpedPhase = applyPhaseWarp (warpMode_, wAmt1A, warpedPhase, window, skipLookup, warpVar_[0], drawFor (0, 0));
+                                warpedPhase = applyPhaseWarp (warpMode_, wAmt1A, warpedPhase, window, skipLookup, warpVar_[0], drawIf (warpMode_, 0, 0), &flipPrev_[0][(size_t) u]);
                                 // WARP 2 — second slot, in SERIES on slot 1's output (Serum parity).
                                 if (! skipLookup && warp2ModeA_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeA_, wAmt2A, warpedPhase, window, skipLookup, warp2Var_[0], drawFor (0, 1));
+                                    warpedPhase = applyPhaseWarp (warp2ModeA_, wAmt2A, warpedPhase, window, skipLookup, warp2Var_[0], drawIf (warp2ModeA_, 0, 1), &flipPrev_[1][(size_t) u]);
+
+                                // fb636 ALT — ODD/EVEN (46): this sine's pair gains; dry (or no 46) = no second read at all.
+                                float oeG0 = 1.0f, oeG1 = 0.0f;
+                                const bool   oeMix = oeArmA && altOddEvenGains (warpMode_, wAmt1A, warp2ModeA_, wAmt2A, oeG0, oeG1);
+                                const double oeQ   = oeMix ? (warpMode_ == 46 ? uPhaseA_[(size_t) u] : warpedPhase) + 0.5 : 0.0;   // q + ½
 
                                 if (skipLookup)
                                 {
@@ -4380,13 +4656,21 @@ class SynthVoice : public juce::SynthesiserVoice
                                         sAu = currentWavetable_->lookup (currentMipLevelA_, fpf, (float) rpf);
                                         wtFbA_[(size_t) u]  = 0.5f * (mn + sAu);   // the DX7 mean filter
                                         wtFbYA_[(size_t) u] = sAu;                 // ...and the RAW tap it is blended against
+                                        if (oeMix)   // fb636 ALT — the pair's SECOND read, bent by the same feedback; the loop closed on the FIRST
+                                        { double rq = oeQ + (double) blendOff[0] + (double) (fbPhNowA_ * fbv); rq -= std::floor (rq);
+                                          sAu = oeG0 * sAu + oeG1 * currentWavetable_->lookup (currentMipLevelA_, fpf, (float) rq); }
                                     }
                                     else
+                                    {
                                         sAu = wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rpA);   // BLEND inject · fb248 crossfade
+                                        if (oeMix)   // fb636 ALT — ODD/EVEN's second read: the table at q + ½, never re-warped by a later slot
+                                        { double rq = oeQ + (double) blendOff[0]; rq -= std::floor (rq);
+                                          sAu = oeG0 * sAu + oeG1 * wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rq); }
+                                    }
                                     sAu *= window;
 
-                                    sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0], drawFor (0, 0));   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
-                                    sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));   // WARP 2 amp-domain, chained
+                                    sAu = applyAmpWarp (warpMode_, wAmt1A, sAu, warpVar_[0], drawIf (warpMode_, 0, 0));   // slot 1 amp-domain (RECTIFY / SINE SHAPER)
+                                    sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawIf (warp2ModeA_, 0, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -4463,19 +4747,29 @@ class SynthVoice : public juce::SynthesiserVoice
                             // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
                             const float wAmt1Afm = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warpAmount_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warpAmount_;
                             if (warpMode_ != 0)
-                                cPh = applyPhaseWarp (warpMode_, wAmt1Afm, cPh, fmWin, fmSkip, warpVar_[0], drawFor (0, 0));
+                                cPh = applyPhaseWarp (warpMode_, wAmt1Afm, cPh, fmWin, fmSkip, warpVar_[0], drawIf (warpMode_, 0, 0), &flipPrev_[0][(size_t) u]);
                             const float wAmt2A = (uniWarpOnA_ || blendWarpArmed_[0]) ? juce::jlimit (0.0f, 1.0f, warp2AmountA_ + (uniWarpOnA_ ? uWarpOffA_[(size_t) u] : 0.0f) + blendWarp[0]) : warp2AmountA_;
                             if (! fmSkip && warp2ModeA_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0], drawFor (0, 1));
+                                cPh = applyPhaseWarp (warp2ModeA_, wAmt2A, cPh, fmWin, fmSkip, warp2Var_[0], drawIf (warp2ModeA_, 0, 1), &flipPrev_[1][(size_t) u]);
                             if (fmSkip) sAu = 0.0f;
                             else
                             {
                                 sAu = (currentWavetable_ != nullptr)
                                         ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));   // no table → pure-sine DX
+                                {   // fb636 ALT — ODD/EVEN (46) on the carrier: the second read at (the phase entering the 46 slot) + ½
+                                    float oeG0 = 1.0f, oeG1 = 0.0f;
+                                    if (oeArmA && altOddEvenGains (warpMode_, wAmt1Afm, warp2ModeA_, wAmt2A, oeG0, oeG1))
+                                    {
+                                        double rq = (warpMode_ == 46 ? fmO.carrierPhase : cPh) + 0.5;  rq -= std::floor (rq);
+                                        sAu = oeG0 * sAu + oeG1 * ((currentWavetable_ != nullptr)
+                                                ? wtBlendRead (blendA_.data(), blendPrevA_.data(), blendXfA_, blendFrac, (float) rq)
+                                                : static_cast<float> (std::sin (pi2 * rq)));
+                                    }
+                                }
                                 sAu *= fmWin;
-                                sAu = applyAmpWarp (warpMode_, wAmt1Afm, sAu, warpVar_[0], drawFor (0, 0));   // fb586 — slot 1 first
-                                sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawFor (0, 1));
+                                sAu = applyAmpWarp (warpMode_, wAmt1Afm, sAu, warpVar_[0], drawIf (warpMode_, 0, 0));   // fb586 — slot 1 first
+                                sAu = applyAmpWarp (warp2ModeA_, wAmt2A, sAu, warp2Var_[0], drawIf (warp2ModeA_, 0, 1));
                             }
                             if (alg == 2) sAu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
                             tw::FmOps::advance (fmS, fmP, inc);   // fb587
@@ -4533,7 +4827,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // with nonzero amount; dormant (bit-identical) otherwise.
                 if ((engine_ == Engine::WT && (warpAmpNeedsDc (warpMode_, warpAmount_, warpVar_[0])
                                              || warpAmpNeedsDc (warp2ModeA_, warp2AmountA_, warp2Var_[0])))
-                    || (engine_ == Engine::FM && warpAmpNeedsDc (warp2ModeA_, warp2AmountA_, warp2Var_[0])))
+                    || (engine_ == Engine::FM && (warpAmpNeedsDc (warp2ModeA_, warp2AmountA_, warp2Var_[0])
+                                                  || (warpMode_ == 45 && warpAmpNeedsDc (warpMode_, warpAmount_, warpVar_[0])))))   // fb636 ALT — FLIP in FM slot 1, and ONLY Flip: a slot-1 mode that defaults to DC on an existing FM patch must not arm it
                 { sA_L = wtRectDcAL_.process (sA_L); sA_R = wtRectDcAR_.process (sA_R); }
                 if (engine_ == Engine::GRAN) { sA_L = granBlkAL_[(size_t) i]; sA_R = granBlkAR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engine_ == Engine::SPEC) { sA_L = geodeBlkAL_[(size_t) i]; sA_R = geodeBlkAR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -4722,9 +5017,14 @@ class SynthVoice : public juce::SynthesiserVoice
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeB_, wAmt1B, warpedPhase, window, skipLookup, warpVar_[1], drawFor (1, 0));
+                                warpedPhase = applyPhaseWarp (warpModeB_, wAmt1B, warpedPhase, window, skipLookup, warpVar_[1], drawIf (warpModeB_, 1, 0), &flipPrev_[2][(size_t) u]);
                                 if (! skipLookup && warp2ModeB_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeB_, wAmt2B, warpedPhase, window, skipLookup, warp2Var_[1], drawFor (1, 1));
+                                    warpedPhase = applyPhaseWarp (warp2ModeB_, wAmt2B, warpedPhase, window, skipLookup, warp2Var_[1], drawIf (warp2ModeB_, 1, 1), &flipPrev_[3][(size_t) u]);
+
+                                // fb636 ALT — ODD/EVEN (46): this sine's pair gains; dry (or no 46) = no second read at all.
+                                float oeG0 = 1.0f, oeG1 = 0.0f;
+                                const bool   oeMix = oeArmB && altOddEvenGains (warpModeB_, wAmt1B, warp2ModeB_, wAmt2B, oeG0, oeG1);
+                                const double oeQ   = oeMix ? (warpModeB_ == 46 ? uPhaseB_[(size_t) u] : warpedPhase) + 0.5 : 0.0;   // q + ½
 
                                 if (skipLookup)
                                 {
@@ -4745,13 +5045,21 @@ class SynthVoice : public juce::SynthesiserVoice
                                         sBu = currentWavetableB_->lookup (currentMipLevelB_, fpf, (float) rpf);
                                         wtFbB_[(size_t) u]  = 0.5f * (mn + sBu);   // the DX7 mean filter
                                         wtFbYB_[(size_t) u] = sBu;                 // ...and the RAW tap it is blended against
+                                        if (oeMix)   // fb636 ALT — the pair's SECOND read, bent by the same feedback; the loop closed on the FIRST
+                                        { double rq = oeQ + (double) blendOff[1] + (double) (fbPhNowB_ * fbv); rq -= std::floor (rq);
+                                          sBu = oeG0 * sBu + oeG1 * currentWavetableB_->lookup (currentMipLevelB_, fpf, (float) rq); }
                                     }
                                     else
+                                    {
                                         sBu = wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rpB);   // BLEND inject · fb248 crossfade
+                                        if (oeMix)   // fb636 ALT — ODD/EVEN's second read: the table at q + ½, never re-warped by a later slot
+                                        { double rq = oeQ + (double) blendOff[1]; rq -= std::floor (rq);
+                                          sBu = oeG0 * sBu + oeG1 * wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rq); }
+                                    }
                                     sBu *= window;
 
-                                    sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1], drawFor (1, 0));   // slot 1 amp-domain
-                                    sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));   // WARP 2 amp-domain, chained
+                                    sBu = applyAmpWarp (warpModeB_, wAmt1B, sBu, warpVar_[1], drawIf (warpModeB_, 1, 0));   // slot 1 amp-domain
+                                    sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawIf (warp2ModeB_, 1, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -4816,19 +5124,29 @@ class SynthVoice : public juce::SynthesiserVoice
                             // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
                             const float wAmt1Bfm = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warpAmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warpAmountB_;
                             if (warpModeB_ != 0)
-                                cPh = applyPhaseWarp (warpModeB_, wAmt1Bfm, cPh, fmWin, fmSkip, warpVar_[1], drawFor (1, 0));
+                                cPh = applyPhaseWarp (warpModeB_, wAmt1Bfm, cPh, fmWin, fmSkip, warpVar_[1], drawIf (warpModeB_, 1, 0), &flipPrev_[2][(size_t) u]);
                             const float wAmt2B = (uniWarpOnB_ || blendWarpArmed_[1]) ? juce::jlimit (0.0f, 1.0f, warp2AmountB_ + (uniWarpOnB_ ? uWarpOffB_[(size_t) u] : 0.0f) + blendWarp[1]) : warp2AmountB_;
                             if (! fmSkip && warp2ModeB_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1], drawFor (1, 1));
+                                cPh = applyPhaseWarp (warp2ModeB_, wAmt2B, cPh, fmWin, fmSkip, warp2Var_[1], drawIf (warp2ModeB_, 1, 1), &flipPrev_[3][(size_t) u]);
                             if (fmSkip) sBu = 0.0f;
                             else
                             {
                                 sBu = (currentWavetableB_ != nullptr)
                                         ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
+                                {   // fb636 ALT — ODD/EVEN (46) on the carrier: the second read at (the phase entering the 46 slot) + ½
+                                    float oeG0 = 1.0f, oeG1 = 0.0f;
+                                    if (oeArmB && altOddEvenGains (warpModeB_, wAmt1Bfm, warp2ModeB_, wAmt2B, oeG0, oeG1))
+                                    {
+                                        double rq = (warpModeB_ == 46 ? fmO.carrierPhase : cPh) + 0.5;  rq -= std::floor (rq);
+                                        sBu = oeG0 * sBu + oeG1 * ((currentWavetableB_ != nullptr)
+                                                ? wtBlendRead (blendB_.data(), blendPrevB_.data(), blendXfB_, blendFrac, (float) rq)
+                                                : static_cast<float> (std::sin (pi2 * rq)));
+                                    }
+                                }
                                 sBu *= fmWin;
-                                sBu = applyAmpWarp (warpModeB_, wAmt1Bfm, sBu, warpVar_[1], drawFor (1, 0));   // fb586 — slot 1 first
-                                sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawFor (1, 1));
+                                sBu = applyAmpWarp (warpModeB_, wAmt1Bfm, sBu, warpVar_[1], drawIf (warpModeB_, 1, 0));   // fb586 — slot 1 first
+                                sBu = applyAmpWarp (warp2ModeB_, wAmt2B, sBu, warp2Var_[1], drawIf (warp2ModeB_, 1, 1));
                             }
                             if (alg == 2) sBu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
                             tw::FmOps::advance (fmS, fmP, inc);   // fb587
@@ -4885,7 +5203,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineB_ == Engine::WT && (warpAmpNeedsDc (warpModeB_, warpAmountB_, warpVar_[1])
                                              || warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])))
-                    || (engineB_ == Engine::FM && warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])))
+                    || (engineB_ == Engine::FM && (warpAmpNeedsDc (warp2ModeB_, warp2AmountB_, warp2Var_[1])
+                                                  || (warpModeB_ == 45 && warpAmpNeedsDc (warpModeB_, warpAmountB_, warpVar_[1])))))   // fb636 ALT — FLIP in FM slot 1, and ONLY Flip: a slot-1 mode that defaults to DC on an existing FM patch must not arm it
                 { sB_L = wtRectDcBL_.process (sB_L); sB_R = wtRectDcBR_.process (sB_R); }
                 if (engineB_ == Engine::GRAN) { sB_L = granBlkBL_[(size_t) i]; sB_R = granBlkBR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineB_ == Engine::SPEC) { sB_L = geodeBlkBL_[(size_t) i]; sB_R = geodeBlkBR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -4993,8 +5312,9 @@ class SynthVoice : public juce::SynthesiserVoice
                         const float drive = 1.0f + spectralAmtB_ * spectralAmtB_ * 9.0f;
                         const float bias = 0.15f * spectralAmtB_;
                         const float invSat = 1.0f / std::tanh (drive);
-                        sB_L = std::tanh (sB_L * drive + bias) * invSat - bias * invSat;
-                        sB_R = std::tanh (sB_R * drive + bias) * invSat - bias * invSat;
+                        const float dcOff = std::tanh (bias) * invSat;   // fb636 — fb313's exact DC removal, as OSC A (was bias·invSat)
+                        sB_L = std::tanh (sB_L * drive + bias) * invSat - dcOff;
+                        sB_R = std::tanh (sB_R * drive + bias) * invSat - dcOff;
                     }
                     else if (spectralTypeB_ == 8)
                     {
@@ -5062,9 +5382,14 @@ class SynthVoice : public juce::SynthesiserVoice
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeC_, wAmt1C, warpedPhase, window, skipLookup, warpVar_[2], drawFor (2, 0));
+                                warpedPhase = applyPhaseWarp (warpModeC_, wAmt1C, warpedPhase, window, skipLookup, warpVar_[2], drawIf (warpModeC_, 2, 0), &flipPrev_[4][(size_t) u]);
                                 if (! skipLookup && warp2ModeC_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeC_, wAmt2C, warpedPhase, window, skipLookup, warp2Var_[2], drawFor (2, 1));
+                                    warpedPhase = applyPhaseWarp (warp2ModeC_, wAmt2C, warpedPhase, window, skipLookup, warp2Var_[2], drawIf (warp2ModeC_, 2, 1), &flipPrev_[5][(size_t) u]);
+
+                                // fb636 ALT — ODD/EVEN (46): this sine's pair gains; dry (or no 46) = no second read at all.
+                                float oeG0 = 1.0f, oeG1 = 0.0f;
+                                const bool   oeMix = oeArmC && altOddEvenGains (warpModeC_, wAmt1C, warp2ModeC_, wAmt2C, oeG0, oeG1);
+                                const double oeQ   = oeMix ? (warpModeC_ == 46 ? uPhaseC_[(size_t) u] : warpedPhase) + 0.5 : 0.0;   // q + ½
 
                                 if (skipLookup)
                                 {
@@ -5085,13 +5410,21 @@ class SynthVoice : public juce::SynthesiserVoice
                                         sCu = currentWavetableC_->lookup (currentMipLevelC_, fpf, (float) rpf);
                                         wtFbC_[(size_t) u]  = 0.5f * (mn + sCu);   // the DX7 mean filter
                                         wtFbYC_[(size_t) u] = sCu;                 // ...and the RAW tap it is blended against
+                                        if (oeMix)   // fb636 ALT — the pair's SECOND read, bent by the same feedback; the loop closed on the FIRST
+                                        { double rq = oeQ + (double) blendOff[2] + (double) (fbPhNowC_ * fbv); rq -= std::floor (rq);
+                                          sCu = oeG0 * sCu + oeG1 * currentWavetableC_->lookup (currentMipLevelC_, fpf, (float) rq); }
                                     }
                                     else
+                                    {
                                         sCu = wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rpC);   // BLEND inject · fb248 crossfade
+                                        if (oeMix)   // fb636 ALT — ODD/EVEN's second read: the table at q + ½, never re-warped by a later slot
+                                        { double rq = oeQ + (double) blendOff[2]; rq -= std::floor (rq);
+                                          sCu = oeG0 * sCu + oeG1 * wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rq); }
+                                    }
                                     sCu *= window;
 
-                                    sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2], drawFor (2, 0));   // slot 1 amp-domain
-                                    sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));   // WARP 2 amp-domain, chained
+                                    sCu = applyAmpWarp (warpModeC_, wAmt1C, sCu, warpVar_[2], drawIf (warpModeC_, 2, 0));   // slot 1 amp-domain
+                                    sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawIf (warp2ModeC_, 2, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -5156,19 +5489,29 @@ class SynthVoice : public juce::SynthesiserVoice
                             // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
                             const float wAmt1Cfm = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warpAmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warpAmountC_;
                             if (warpModeC_ != 0)
-                                cPh = applyPhaseWarp (warpModeC_, wAmt1Cfm, cPh, fmWin, fmSkip, warpVar_[2], drawFor (2, 0));
+                                cPh = applyPhaseWarp (warpModeC_, wAmt1Cfm, cPh, fmWin, fmSkip, warpVar_[2], drawIf (warpModeC_, 2, 0), &flipPrev_[4][(size_t) u]);
                             const float wAmt2C = (uniWarpOnC_ || blendWarpArmed_[2]) ? juce::jlimit (0.0f, 1.0f, warp2AmountC_ + (uniWarpOnC_ ? uWarpOffC_[(size_t) u] : 0.0f) + blendWarp[2]) : warp2AmountC_;
                             if (! fmSkip && warp2ModeC_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2], drawFor (2, 1));
+                                cPh = applyPhaseWarp (warp2ModeC_, wAmt2C, cPh, fmWin, fmSkip, warp2Var_[2], drawIf (warp2ModeC_, 2, 1), &flipPrev_[5][(size_t) u]);
                             if (fmSkip) sCu = 0.0f;
                             else
                             {
                                 sCu = (currentWavetableC_ != nullptr)
                                         ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
+                                {   // fb636 ALT — ODD/EVEN (46) on the carrier: the second read at (the phase entering the 46 slot) + ½
+                                    float oeG0 = 1.0f, oeG1 = 0.0f;
+                                    if (oeArmC && altOddEvenGains (warpModeC_, wAmt1Cfm, warp2ModeC_, wAmt2C, oeG0, oeG1))
+                                    {
+                                        double rq = (warpModeC_ == 46 ? fmO.carrierPhase : cPh) + 0.5;  rq -= std::floor (rq);
+                                        sCu = oeG0 * sCu + oeG1 * ((currentWavetableC_ != nullptr)
+                                                ? wtBlendRead (blendC_.data(), blendPrevC_.data(), blendXfC_, blendFrac, (float) rq)
+                                                : static_cast<float> (std::sin (pi2 * rq)));
+                                    }
+                                }
                                 sCu *= fmWin;
-                                sCu = applyAmpWarp (warpModeC_, wAmt1Cfm, sCu, warpVar_[2], drawFor (2, 0));   // fb586 — slot 1 first
-                                sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawFor (2, 1));
+                                sCu = applyAmpWarp (warpModeC_, wAmt1Cfm, sCu, warpVar_[2], drawIf (warpModeC_, 2, 0));   // fb586 — slot 1 first
+                                sCu = applyAmpWarp (warp2ModeC_, wAmt2C, sCu, warp2Var_[2], drawIf (warp2ModeC_, 2, 1));
                             }
                             if (alg == 2) sCu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
                             tw::FmOps::advance (fmS, fmP, inc);   // fb587
@@ -5225,7 +5568,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineC_ == Engine::WT && (warpAmpNeedsDc (warpModeC_, warpAmountC_, warpVar_[2])
                                              || warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])))
-                    || (engineC_ == Engine::FM && warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])))
+                    || (engineC_ == Engine::FM && (warpAmpNeedsDc (warp2ModeC_, warp2AmountC_, warp2Var_[2])
+                                                  || (warpModeC_ == 45 && warpAmpNeedsDc (warpModeC_, warpAmountC_, warpVar_[2])))))   // fb636 ALT — FLIP in FM slot 1, and ONLY Flip: a slot-1 mode that defaults to DC on an existing FM patch must not arm it
                 { sC_L = wtRectDcCL_.process (sC_L); sC_R = wtRectDcCR_.process (sC_R); }
                 if (engineC_ == Engine::GRAN) { sC_L = granBlkCL_[(size_t) i]; sC_R = granBlkCR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineC_ == Engine::SPEC) { sC_L = geodeBlkCL_[(size_t) i]; sC_R = geodeBlkCR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -5333,8 +5677,9 @@ class SynthVoice : public juce::SynthesiserVoice
                         const float drive = 1.0f + spectralAmtC_ * spectralAmtC_ * 9.0f;
                         const float bias = 0.15f * spectralAmtC_;
                         const float invSat = 1.0f / std::tanh (drive);
-                        sC_L = std::tanh (sC_L * drive + bias) * invSat - bias * invSat;
-                        sC_R = std::tanh (sC_R * drive + bias) * invSat - bias * invSat;
+                        const float dcOff = std::tanh (bias) * invSat;   // fb636 — fb313's exact DC removal, as OSC A (was bias·invSat)
+                        sC_L = std::tanh (sC_L * drive + bias) * invSat - dcOff;
+                        sC_R = std::tanh (sC_R * drive + bias) * invSat - dcOff;
                     }
                     else if (spectralTypeC_ == 8)
                     {
@@ -5402,9 +5747,14 @@ class SynthVoice : public juce::SynthesiserVoice
                                 bool   skipLookup  = false;
 
                                 // WARP slot 1 + chained WARP 2 (see OSC A — identical structure).
-                                warpedPhase = applyPhaseWarp (warpModeD_, wAmt1D, warpedPhase, window, skipLookup, warpVar_[3], drawFor (3, 0));
+                                warpedPhase = applyPhaseWarp (warpModeD_, wAmt1D, warpedPhase, window, skipLookup, warpVar_[3], drawIf (warpModeD_, 3, 0), &flipPrev_[6][(size_t) u]);
                                 if (! skipLookup && warp2ModeD_ != 0)
-                                    warpedPhase = applyPhaseWarp (warp2ModeD_, wAmt2D, warpedPhase, window, skipLookup, warp2Var_[3], drawFor (3, 1));
+                                    warpedPhase = applyPhaseWarp (warp2ModeD_, wAmt2D, warpedPhase, window, skipLookup, warp2Var_[3], drawIf (warp2ModeD_, 3, 1), &flipPrev_[7][(size_t) u]);
+
+                                // fb636 ALT — ODD/EVEN (46): this sine's pair gains; dry (or no 46) = no second read at all.
+                                float oeG0 = 1.0f, oeG1 = 0.0f;
+                                const bool   oeMix = oeArmD && altOddEvenGains (warpModeD_, wAmt1D, warp2ModeD_, wAmt2D, oeG0, oeG1);
+                                const double oeQ   = oeMix ? (warpModeD_ == 46 ? uPhaseD_[(size_t) u] : warpedPhase) + 0.5 : 0.0;   // q + ½
 
                                 if (skipLookup)
                                 {
@@ -5425,13 +5775,21 @@ class SynthVoice : public juce::SynthesiserVoice
                                         sDu = currentWavetableD_->lookup (currentMipLevelD_, fpf, (float) rpf);
                                         wtFbD_[(size_t) u]  = 0.5f * (mn + sDu);   // the DX7 mean filter
                                         wtFbYD_[(size_t) u] = sDu;                 // ...and the RAW tap it is blended against
+                                        if (oeMix)   // fb636 ALT — the pair's SECOND read, bent by the same feedback; the loop closed on the FIRST
+                                        { double rq = oeQ + (double) blendOff[3] + (double) (fbPhNowD_ * fbv); rq -= std::floor (rq);
+                                          sDu = oeG0 * sDu + oeG1 * currentWavetableD_->lookup (currentMipLevelD_, fpf, (float) rq); }
                                     }
                                     else
+                                    {
                                         sDu = wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rpD);   // BLEND inject · fb248 crossfade
+                                        if (oeMix)   // fb636 ALT — ODD/EVEN's second read: the table at q + ½, never re-warped by a later slot
+                                        { double rq = oeQ + (double) blendOff[3]; rq -= std::floor (rq);
+                                          sDu = oeG0 * sDu + oeG1 * wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rq); }
+                                    }
                                     sDu *= window;
 
-                                    sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3], drawFor (3, 0));   // slot 1 amp-domain
-                                    sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));   // WARP 2 amp-domain, chained
+                                    sDu = applyAmpWarp (warpModeD_, wAmt1D, sDu, warpVar_[3], drawIf (warpModeD_, 3, 0));   // slot 1 amp-domain
+                                    sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawIf (warp2ModeD_, 3, 1));   // WARP 2 amp-domain, chained
                                 }
                             }
                             else
@@ -5496,19 +5854,29 @@ class SynthVoice : public juce::SynthesiserVoice
                             // FIRST and slot 2 chains on its output, the same series order the WT engine uses.
                             const float wAmt1Dfm = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warpAmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warpAmountD_;
                             if (warpModeD_ != 0)
-                                cPh = applyPhaseWarp (warpModeD_, wAmt1Dfm, cPh, fmWin, fmSkip, warpVar_[3], drawFor (3, 0));
+                                cPh = applyPhaseWarp (warpModeD_, wAmt1Dfm, cPh, fmWin, fmSkip, warpVar_[3], drawIf (warpModeD_, 3, 0), &flipPrev_[6][(size_t) u]);
                             const float wAmt2D = (uniWarpOnD_ || blendWarpArmed_[3]) ? juce::jlimit (0.0f, 1.0f, warp2AmountD_ + (uniWarpOnD_ ? uWarpOffD_[(size_t) u] : 0.0f) + blendWarp[3]) : warp2AmountD_;
                             if (! fmSkip && warp2ModeD_ != 0)
-                                cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3], drawFor (3, 1));
+                                cPh = applyPhaseWarp (warp2ModeD_, wAmt2D, cPh, fmWin, fmSkip, warp2Var_[3], drawIf (warp2ModeD_, 3, 1), &flipPrev_[7][(size_t) u]);
                             if (fmSkip) sDu = 0.0f;
                             else
                             {
                                 sDu = (currentWavetableD_ != nullptr)
                                         ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) cPh)
                                         : static_cast<float> (std::sin (pi2 * cPh));
+                                {   // fb636 ALT — ODD/EVEN (46) on the carrier: the second read at (the phase entering the 46 slot) + ½
+                                    float oeG0 = 1.0f, oeG1 = 0.0f;
+                                    if (oeArmD && altOddEvenGains (warpModeD_, wAmt1Dfm, warp2ModeD_, wAmt2D, oeG0, oeG1))
+                                    {
+                                        double rq = (warpModeD_ == 46 ? fmO.carrierPhase : cPh) + 0.5;  rq -= std::floor (rq);
+                                        sDu = oeG0 * sDu + oeG1 * ((currentWavetableD_ != nullptr)
+                                                ? wtBlendRead (blendD_.data(), blendPrevD_.data(), blendXfD_, blendFrac, (float) rq)
+                                                : static_cast<float> (std::sin (pi2 * rq)));
+                                    }
+                                }
                                 sDu *= fmWin;
-                                sDu = applyAmpWarp (warpModeD_, wAmt1Dfm, sDu, warpVar_[3], drawFor (3, 0));   // fb586 — slot 1 first
-                                sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawFor (3, 1));
+                                sDu = applyAmpWarp (warpModeD_, wAmt1Dfm, sDu, warpVar_[3], drawIf (warpModeD_, 3, 0));   // fb586 — slot 1 first
+                                sDu = applyAmpWarp (warp2ModeD_, wAmt2D, sDu, warp2Var_[3], drawIf (warp2ModeD_, 3, 1));
                             }
                             if (alg == 2) sDu *= fmO.ringGain;   // fb587 — ring dry→wet, from the shared stage
                             tw::FmOps::advance (fmS, fmP, inc);   // fb587
@@ -5565,7 +5933,8 @@ class SynthVoice : public juce::SynthesiserVoice
                 // RECTIFY DC block — wavetable warp == Rectify (slot 1 or 2), else dormant/bit-identical.
                 if ((engineD_ == Engine::WT && (warpAmpNeedsDc (warpModeD_, warpAmountD_, warpVar_[3])
                                              || warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])))
-                    || (engineD_ == Engine::FM && warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])))
+                    || (engineD_ == Engine::FM && (warpAmpNeedsDc (warp2ModeD_, warp2AmountD_, warp2Var_[3])
+                                                  || (warpModeD_ == 45 && warpAmpNeedsDc (warpModeD_, warpAmountD_, warpVar_[3])))))   // fb636 ALT — FLIP in FM slot 1, and ONLY Flip: a slot-1 mode that defaults to DC on an existing FM patch must not arm it
                 { sD_L = wtRectDcDL_.process (sD_L); sD_R = wtRectDcDR_.process (sD_R); }
                 if (engineD_ == Engine::GRAN) { sD_L = granBlkDL_[(size_t) i]; sD_R = granBlkDR_[(size_t) i]; }   // GRANULAR-ENGINE-VOICE
                 if (engineD_ == Engine::SPEC) { sD_L = geodeBlkDL_[(size_t) i]; sD_R = geodeBlkDR_[(size_t) i]; } // GEODE-ENGINE-VOICE
@@ -5673,8 +6042,9 @@ class SynthVoice : public juce::SynthesiserVoice
                         const float drive = 1.0f + spectralAmtD_ * spectralAmtD_ * 9.0f;
                         const float bias = 0.15f * spectralAmtD_;
                         const float invSat = 1.0f / std::tanh (drive);
-                        sD_L = std::tanh (sD_L * drive + bias) * invSat - bias * invSat;
-                        sD_R = std::tanh (sD_R * drive + bias) * invSat - bias * invSat;
+                        const float dcOff = std::tanh (bias) * invSat;   // fb636 — fb313's exact DC removal, as OSC A (was bias·invSat)
+                        sD_L = std::tanh (sD_L * drive + bias) * invSat - dcOff;
+                        sD_R = std::tanh (sD_R * drive + bias) * invSat - dcOff;
                     }
                     else if (spectralTypeD_ == 8)
                     {
@@ -5734,27 +6104,34 @@ class SynthVoice : public juce::SynthesiserVoice
                 }
 
                 // SOLO/MUTE — advance the per-osc click-free gates one sample (one-pole toward target)
-                for (int g = 0; g < 4; ++g) oscGate_[g] += (robinGate (g) - oscGate_[g]) * oscGateCoef_;
+                // fb636 — SETTLED GLIDES (see mixGlideSnap above the loop)
+                if (! mixGlideSettled)
+                {
+                    float mixPre[kMixGlideN];
+                    if (i == 0) mixGlideSnap (mixPre);
+                    for (int g = 0; g < 4; ++g) oscGate_[g] += (robinGate (g) - oscGate_[g]) * oscGateCoef_;
+
+                    // fb180 — LEVELS GLIDE (2.5ms one-pole, the slew law): fb178 made LevelA-D
+                    // live mod dests, so a plucking envelope stepped the gain at block rate —
+                    // audible crackle. Same pattern as the mute gates one line up.
+                    // fb183 — OWNERSHIP CROSSFADE: eff = (1−Σd)·knob + Σ(d·env), per voice.
+                    const float _loA = juce::jmin (1.0f, envLvlOwn_[0]), _loB = juce::jmin (1.0f, envLvlOwn_[1]);
+                    const float _loC = juce::jmin (1.0f, envLvlOwn_[2]), _loD = juce::jmin (1.0f, envLvlOwn_[3]);
+                    lvlSmA_ += (juce::jlimit (0.0f, 1.0f, level_  * (1.0f - _loA) + envLvlDrive_[0]) - lvlSmA_) * lvlSmCoef_;
+                    lvlSmB_ += (juce::jlimit (0.0f, 1.0f, levelB_ * (1.0f - _loB) + envLvlDrive_[1]) - lvlSmB_) * lvlSmCoef_;
+                    lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2]) - lvlSmC_) * lvlSmCoef_;
+                    lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3]) - lvlSmD_) * lvlSmCoef_;
+
+                    // fb202 — PAN GLIDE (Max: "no static"): the pan gains were still stepping at
+                    // block rate while the levels beside them glided (fb180) — an LFO/env on any
+                    // Pan crackled a sustained tone. Same one-pole, same 2.5ms coefficient.
+                    panL_  += (panLT_  - panL_)  * lvlSmCoef_;  panR_  += (panRT_  - panR_)  * lvlSmCoef_;
+                    panLB_ += (panLBT_ - panLB_) * lvlSmCoef_;  panRB_ += (panRBT_ - panRB_) * lvlSmCoef_;
+                    panLC_ += (panLCT_ - panLC_) * lvlSmCoef_;  panRC_ += (panRCT_ - panRC_) * lvlSmCoef_;
+                    panLD_ += (panLDT_ - panLD_) * lvlSmCoef_;  panRD_ += (panRDT_ - panRD_) * lvlSmCoef_;
+                    if (i == 0) { float mixPost[kMixGlideN]; mixGlideSnap (mixPost); mixGlideSettled = std::memcmp (mixPre, mixPost, sizeof mixPre) == 0; }
+                }
                 const float gA = oscGate_[0], gB = oscGate_[1], gC = oscGate_[2], gD = oscGate_[3];
-
-                // fb180 — LEVELS GLIDE (2.5ms one-pole, the slew law): fb178 made LevelA-D
-                // live mod dests, so a plucking envelope stepped the gain at block rate —
-                // audible crackle. Same pattern as the mute gates one line up.
-                // fb183 — OWNERSHIP CROSSFADE: eff = (1−Σd)·knob + Σ(d·env), per voice.
-                const float _loA = juce::jmin (1.0f, envLvlOwn_[0]), _loB = juce::jmin (1.0f, envLvlOwn_[1]);
-                const float _loC = juce::jmin (1.0f, envLvlOwn_[2]), _loD = juce::jmin (1.0f, envLvlOwn_[3]);
-                lvlSmA_ += (juce::jlimit (0.0f, 1.0f, level_  * (1.0f - _loA) + envLvlDrive_[0]) - lvlSmA_) * lvlSmCoef_;
-                lvlSmB_ += (juce::jlimit (0.0f, 1.0f, levelB_ * (1.0f - _loB) + envLvlDrive_[1]) - lvlSmB_) * lvlSmCoef_;
-                lvlSmC_ += (juce::jlimit (0.0f, 1.0f, levelC_ * (1.0f - _loC) + envLvlDrive_[2]) - lvlSmC_) * lvlSmCoef_;
-                lvlSmD_ += (juce::jlimit (0.0f, 1.0f, levelD_ * (1.0f - _loD) + envLvlDrive_[3]) - lvlSmD_) * lvlSmCoef_;
-
-                // fb202 — PAN GLIDE (Max: "no static"): the pan gains were still stepping at
-                // block rate while the levels beside them glided (fb180) — an LFO/env on any
-                // Pan crackled a sustained tone. Same one-pole, same 2.5ms coefficient.
-                panL_  += (panLT_  - panL_)  * lvlSmCoef_;  panR_  += (panRT_  - panR_)  * lvlSmCoef_;
-                panLB_ += (panLBT_ - panLB_) * lvlSmCoef_;  panRB_ += (panRBT_ - panRB_) * lvlSmCoef_;
-                panLC_ += (panLCT_ - panLC_) * lvlSmCoef_;  panRC_ += (panRCT_ - panRC_) * lvlSmCoef_;
-                panLD_ += (panLDT_ - panLD_) * lvlSmCoef_;  panRD_ += (panRDT_ - panRD_) * lvlSmCoef_;
 
                 // Sum to stereo with INDEPENDENT per-osc level + pan (× solo/mute gate), split
                 // into the 3 filter-routing buses. Each osc's full signal = osc-only (sX-subMono)
@@ -5899,10 +6276,9 @@ class SynthVoice : public juce::SynthesiserVoice
                 }
                 // fb348 — pooled instance sends: identical per-osc split, each gated by ITS OWN mask.
                 // This is what makes "delay on C" untouchable by "delay on A".
-                for (int ps = 0; ps < kPoolSends; ++ps)
+                for (int pq = 0; pq < nPoolAct; ++pq)   // fb636 — the lit sends only (see poolAct)
                 {
-                    if (! poolOn[ps]) continue;
-                    auto& P = poolSend_[ps];
+                    auto& P = poolSend_[poolAct[pq]];
                     float* pF1L = P.f1.getWritePointer (0);  float* pF1R = P.f1.getWritePointer (1);
                     float* pF2L = P.f2.getWritePointer (0);  float* pF2R = P.f2.getWritePointer (1);
                     float* pDL  = P.dry.getWritePointer (0); float* pDR  = P.dry.getWritePointer (1);
@@ -5953,7 +6329,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (dlySendActive) { dF1L[i]*=robinAmpL_; dF1R[i]*=robinAmpR_; dF2L[i]*=robinAmpL_; dF2R[i]*=robinAmpR_; dDryL[i]*=robinAmpL_; dDryR[i]*=robinAmpR_; }   // fb296 — delay send matches
                     if (dstSendActive) { tF1L[i]*=robinAmpL_; tF1R[i]*=robinAmpR_; tF2L[i]*=robinAmpL_; tF2R[i]*=robinAmpR_; tDryL[i]*=robinAmpL_; tDryR[i]*=robinAmpR_; }   // fb338 — distortion send matches
                     if (exSendActive)  { xF1L[i]*=robinAmpL_; xF1R[i]*=robinAmpR_; xF2L[i]*=robinAmpL_; xF2R[i]*=robinAmpR_; xDryL[i]*=robinAmpL_; xDryR[i]*=robinAmpR_; }   // fb347 — the exclusion MUST track the sends exactly, or the subtraction stops cancelling
-                    for (int ps = 0; ps < kPoolSends; ++ps) if (poolOn[ps]) { auto& P = poolSend_[ps];
+                    for (int pq = 0; pq < nPoolAct; ++pq) { auto& P = poolSend_[poolAct[pq]];   // fb636 — lit sends only
                         P.f1.getWritePointer(0)[i]*=robinAmpL_; P.f1.getWritePointer(1)[i]*=robinAmpR_;
                         P.f2.getWritePointer(0)[i]*=robinAmpL_; P.f2.getWritePointer(1)[i]*=robinAmpR_;
                         P.dry.getWritePointer(0)[i]*=robinAmpL_; P.dry.getWritePointer(1)[i]*=robinAmpR_; }   // fb348
@@ -5972,7 +6348,7 @@ class SynthVoice : public juce::SynthesiserVoice
                     if (dlySendActive) { dF1L[i]*=sf; dF1R[i]*=sf; dF2L[i]*=sf; dF2R[i]*=sf; dDryL[i]*=sf; dDryR[i]*=sf; }   // fb296 — delay send fades too
                     if (dstSendActive) { tF1L[i]*=sf; tF1R[i]*=sf; tF2L[i]*=sf; tF2R[i]*=sf; tDryL[i]*=sf; tDryR[i]*=sf; }   // fb338 — distortion send fades too
                     if (exSendActive)  { xF1L[i]*=sf; xF1R[i]*=sf; xF2L[i]*=sf; xF2R[i]*=sf; xDryL[i]*=sf; xDryR[i]*=sf; }   // fb347 — exclusion fades identically
-                    for (int ps = 0; ps < kPoolSends; ++ps) if (poolOn[ps]) { auto& P = poolSend_[ps];
+                    for (int pq = 0; pq < nPoolAct; ++pq) { auto& P = poolSend_[poolAct[pq]];   // fb636 — lit sends only
                         P.f1.getWritePointer(0)[i]*=sf; P.f1.getWritePointer(1)[i]*=sf;
                         P.f2.getWritePointer(0)[i]*=sf; P.f2.getWritePointer(1)[i]*=sf;
                         P.dry.getWritePointer(0)[i]*=sf; P.dry.getWritePointer(1)[i]*=sf; }   // fb348
@@ -6033,6 +6409,7 @@ class SynthVoice : public juce::SynthesiserVoice
                 // drops 10 sin() calls per sample per voice to 1.
                 unsigned lfoTickMask = 1u;   // L1 always (viz dot)
                 bool anyCutRoute = false, anyAmtRoute = false;
+                int  cutRouteIdx[wc::MAX_ASSIGNMENTS]; int nCutRoutes = 0;   // fb636 — enabled Cut1/Cut2 routes, in order
                 for (int a = 0; a < modConfig_.numAssignments; ++a)
                 {
                     const auto& as = modConfig_.assignments[a];
@@ -6042,29 +6419,40 @@ class SynthVoice : public juce::SynthesiserVoice
                     // fb568 — a NON-LFO cutoff route (macro/wheel/aftertouch/bend/random/alt/follower/key)
                     //  arms the cut gather too; only an LFO source needs its per-sample tick.
                     if (as.dest == wc::ModDest::Cut1 || as.dest == wc::ModDest::Cut2)
-                    { if (sIsLfo) lfoTickMask |= (1u << sI); anyCutRoute = true; }
+                    { if (sIsLfo) lfoTickMask |= (1u << sI); anyCutRoute = true; cutRouteIdx[nCutRoutes++] = a; }   // fb636 — the list the per-sample gather walks
                     else if (sIsLfo && dI >= (int) wc::ModDest::LfoAmt1 && dI < (int) wc::ModDest::LfoAmt1 + wc::NUM_LFOS)
                     { lfoTickMask |= (1u << sI) | (1u << (dI - (int) wc::ModDest::LfoAmt1)); anyAmtRoute = true; }
                 }
+                bool laneGlideSettled = false;   // fb636 — see SETTLED GLIDES above the first loop
                 for (int i = 0; i < numSamples; ++i)
                 {
                     // fb204 — FILTER-LANE GLIDE (2.5ms, fb180 law): every block-pushed value this
                     // loop consumes steps at block rate when modulated — res, mix, vel, keytrack,
                     // post-drive, and the env→cutoff latches all crackled under LFO/env routes.
-                    envCutSm1_ += (envCutBlk1_ - envCutSm1_) * lvlSmCoef_;
-                    envCutSm2_ += (envCutBlk2_ - envCutSm2_) * lvlSmCoef_;
-                    resSm1_    += (baseRes01_  - resSm1_)    * lvlSmCoef_;
-                    resSm2_    += (baseRes012_ - resSm2_)    * lvlSmCoef_;
-                    mixSm1_    += (filterMix1_ - mixSm1_)    * lvlSmCoef_;
-                    mixSm2_    += (filterMix2_ - mixSm2_)    * lvlSmCoef_;
-                    velSm1_    += (velAmt1_    - velSm1_)    * lvlSmCoef_;
-                    velSm2_    += (velAmt2_    - velSm2_)    * lvlSmCoef_;
-                    ktSm1_     += (ktCutSemis1 - ktSm1_)     * lvlSmCoef_;
-                    ktSm2_     += (ktCutSemis2 - ktSm2_)     * lvlSmCoef_;
-                    pdrvSm1_   += (postDrv1_   - pdrvSm1_)   * lvlSmCoef_;
-                    pdrvSm2_   += (postDrv2_   - pdrvSm2_)   * lvlSmCoef_;
-                    drvSm1_    += (drv01_      - drvSm1_)    * lvlSmCoef_;
-                    drvSm2_    += (drv012_     - drvSm2_)    * lvlSmCoef_;
+                    // fb636 — SETTLED GLIDES (see the note above the first loop); the 14 lane glides skip once settled.
+                    if (! laneGlideSettled)
+                    {
+                        float lanePre[14];
+                        auto laneSnap = [this] (float* s) noexcept
+                        { s[0] = envCutSm1_; s[1] = envCutSm2_; s[2] = resSm1_; s[3] = resSm2_; s[4] = mixSm1_; s[5] = mixSm2_; s[6] = velSm1_;
+                          s[7] = velSm2_; s[8] = ktSm1_; s[9] = ktSm2_; s[10] = pdrvSm1_; s[11] = pdrvSm2_; s[12] = drvSm1_; s[13] = drvSm2_; };
+                        if (i == 0) laneSnap (lanePre);
+                        envCutSm1_ += (envCutBlk1_ - envCutSm1_) * lvlSmCoef_;
+                        envCutSm2_ += (envCutBlk2_ - envCutSm2_) * lvlSmCoef_;
+                        resSm1_    += (baseRes01_  - resSm1_)    * lvlSmCoef_;
+                        resSm2_    += (baseRes012_ - resSm2_)    * lvlSmCoef_;
+                        mixSm1_    += (filterMix1_ - mixSm1_)    * lvlSmCoef_;
+                        mixSm2_    += (filterMix2_ - mixSm2_)    * lvlSmCoef_;
+                        velSm1_    += (velAmt1_    - velSm1_)    * lvlSmCoef_;
+                        velSm2_    += (velAmt2_    - velSm2_)    * lvlSmCoef_;
+                        ktSm1_     += (ktCutSemis1 - ktSm1_)     * lvlSmCoef_;
+                        ktSm2_     += (ktCutSemis2 - ktSm2_)     * lvlSmCoef_;
+                        pdrvSm1_   += (postDrv1_   - pdrvSm1_)   * lvlSmCoef_;
+                        pdrvSm2_   += (postDrv2_   - pdrvSm2_)   * lvlSmCoef_;
+                        drvSm1_    += (drv01_      - drvSm1_)    * lvlSmCoef_;
+                        drvSm2_    += (drv012_     - drvSm2_)    * lvlSmCoef_;
+                        if (i == 0) { float lanePost[14]; laneSnap (lanePost); laneGlideSettled = std::memcmp (lanePre, lanePost, sizeof lanePre) == 0; }
+                    }
                     // ── Batch 1 — per-voice LFO tick + route accumulation ──
                     // Tick the NEEDED LFOs once per output sample (free/synced Hz already
                     // resolved in setModConfig), then sum any enabled LFO→cutoff routes
@@ -6094,11 +6482,9 @@ class SynthVoice : public juce::SynthesiserVoice
                     }
                     float lfoSemis1 = 0.0f, lfoSemis2 = 0.0f;
                     if (anyCutRoute)
-                        for (int a = 0; a < modConfig_.numAssignments; ++a)
+                        for (int cq = 0; cq < nCutRoutes; ++cq)   // fb636 — only the enabled Cut1/Cut2 routes, in their original order
                         {
-                            const auto& as = modConfig_.assignments[a];
-                            if (! as.enabled) continue;
-                            if (as.dest != wc::ModDest::Cut1 && as.dest != wc::ModDest::Cut2) continue;
+                            const auto& as = modConfig_.assignments[cutRouteIdx[cq]];
                             const int sIdx = (int) as.source;
                             // fb568 — THE CUT GATHER KNEW ONLY LFOs. A macro/wheel/aftertouch/bend/random/alt route to
                             //  the cutoff was gathered into envCutBlk1_ in the mod-matrix prelude — but that accumulator
@@ -6388,10 +6774,10 @@ class SynthVoice : public juce::SynthesiserVoice
                     }
                     // fb348 — pooled instance sends, same post-filter treatment, each through its
                     // OWN lazily-built filter pair (its mask differs from every other slot's).
-                    for (int ps = 0; ps < kPoolSends; ++ps)
+                    for (int pq = 0; pq < nPoolAct; ++pq)   // fb636 — the lit sends only, their pairs taken once per block
                     {
-                        if (! poolOn[ps]) continue;
-                        auto& P = poolSend_[ps];
+                        auto& P = poolSend_[poolAct[pq]];
+                        tw::filters::FilterSlot& F1 = *poolF1[pq]; tw::filters::FilterSlot& F2 = *poolF2[pq];
                         const int oi = startSample + i;
                         const float f1l = P.f1.getReadPointer(0)[i], f1r = P.f1.getReadPointer(1)[i];
                         const float f2l = P.f2.getReadPointer(0)[i], f2r = P.f2.getReadPointer(1)[i];
@@ -6399,9 +6785,9 @@ class SynthVoice : public juce::SynthesiserVoice
                         if (a1 || a2)
                         {
                             if ((i & 3) == 0)   // fb441 — see the named mirrors above
-                            { P.flt1.load (std::memory_order_relaxed)->setParams (lastCutHz1_, res1, sentDrv1_, sr);
-                              P.flt2.load (std::memory_order_relaxed)->setParams (lastCutHz2_, res2, sentDrv2_, sr); }
-                            float soL, soR; filterBuses (f1l, f1r, f2l, f2r, soL, soR, *P.flt1, *P.flt2);
+                            { F1.setParams (lastCutHz1_, res1, sentDrv1_, sr);
+                              F2.setParams (lastCutHz2_, res2, sentDrv2_, sr); }
+                            float soL, soR; filterBuses (f1l, f1r, f2l, f2r, soL, soR, F1, F2);
                             P.L[oi] += soL + dl_;
                             P.R[oi] += soR + dr_;
                         }
@@ -6514,7 +6900,11 @@ class SynthVoice : public juce::SynthesiserVoice
         // Phase 8b — populate per-sine phase-increment update helpers to SynthVoice. They populate the `uPhaseIncA_` / `uPhaseIncB_` arrays from MIDI note + octave/semi/cents tuning + per-sine per-OSC `uDetuneCents{A,B}_[u]` + WAVER drift. Called from `startNote` after the existing scalar updates, and from `renderNextBlock` per-block right after the existing erosion-drift recompute.
         void updateUnisonPhaseIncrementsA (double pitchNote) noexcept
         {
-            for (int u = 0; u < kMaxUnison; ++u)
+            // fb636 — only the sounding sines. Every reader indexes u < activeUnisonA_ (or slot 0), and each block
+            //  re-runs this before its first read with the count that block renders, so the slots above it were
+            //  written for nobody (64 double pow per voice per block → 4 at unison 1).
+            const int nU = std::max (1, std::min ((int) kMaxUnison, activeUnisonA_));
+            for (int u = 0; u < nU; ++u)
             {
                 const double semitones =
                       (pitchNote - 69.0)
@@ -6532,7 +6922,11 @@ class SynthVoice : public juce::SynthesiserVoice
 
         void updateUnisonPhaseIncrementsB (double pitchNote) noexcept
         {
-            for (int u = 0; u < kMaxUnison; ++u)
+            // fb636 — only the sounding sines. Every reader indexes u < activeUnisonB_ (or slot 0), and each block
+            //  re-runs this before its first read with the count that block renders, so the slots above it were
+            //  written for nobody (64 double pow per voice per block → 4 at unison 1).
+            const int nU = std::max (1, std::min ((int) kMaxUnison, activeUnisonB_));
+            for (int u = 0; u < nU; ++u)
             {
                 const double semitones =
                       (pitchNote - 69.0)
@@ -6549,7 +6943,11 @@ class SynthVoice : public juce::SynthesiserVoice
         }
         void updateUnisonPhaseIncrementsC (double pitchNote) noexcept
         {
-            for (int u = 0; u < kMaxUnison; ++u)
+            // fb636 — only the sounding sines. Every reader indexes u < activeUnisonC_ (or slot 0), and each block
+            //  re-runs this before its first read with the count that block renders, so the slots above it were
+            //  written for nobody (64 double pow per voice per block → 4 at unison 1).
+            const int nU = std::max (1, std::min ((int) kMaxUnison, activeUnisonC_));
+            for (int u = 0; u < nU; ++u)
             {
                 const double semitones =
                       (pitchNote - 69.0)
@@ -6566,7 +6964,11 @@ class SynthVoice : public juce::SynthesiserVoice
         }
         void updateUnisonPhaseIncrementsD (double pitchNote) noexcept
         {
-            for (int u = 0; u < kMaxUnison; ++u)
+            // fb636 — only the sounding sines. Every reader indexes u < activeUnisonD_ (or slot 0), and each block
+            //  re-runs this before its first read with the count that block renders, so the slots above it were
+            //  written for nobody (64 double pow per voice per block → 4 at unison 1).
+            const int nU = std::max (1, std::min ((int) kMaxUnison, activeUnisonD_));
+            for (int u = 0; u < nU; ++u)
             {
                 const double semitones =
                       (pitchNote - 69.0)
@@ -6587,6 +6989,7 @@ class SynthVoice : public juce::SynthesiserVoice
         // gets offset u_norm × spread × 0.5 (max ±0.5 of [0,1] frame range).
         // At UNISON=1 or SPREAD=0 every entry is 0.0 → render path falls back
         // to the voice-global framePos_ exactly (zero behaviour change vs pre-11a).
+        // fb636 — NO CALLERS: uFramePos*/frameSpread* have no reader and no writer anywhere else (kept for its history)
         void updateUnisonFramePositions() noexcept
         {
             // OSC A frame offsets across its own voice count.
@@ -6730,6 +7133,8 @@ class SynthVoice : public juce::SynthesiserVoice
         uint32_t noteSeed_ = 0;                        // fb572 — this note's seed (was rand_[4]: four shared draws)
         float  alt_ = 0.0f;                            // fb563 — this note's Alt (0 or 1)
         juce::Random rng_;                             // fb563 — per-voice, time-seeded
+        std::uintptr_t detAddr_ = 0;                   // fb636 — test-only stable stand-in for `this` (setDeterministicIndex)
+        std::uintptr_t seedAddr() const noexcept { return tw::seedAddr (this, detAddr_); }   // == (uintptr_t) this in every real session
 
         // ── OSC SCOPE — per-osc audio-thread ring buffers (A/B/C/D) ─────────────
         // Live oscilloscope tap: per output sample the render loop writes each
@@ -6785,19 +7190,17 @@ class SynthVoice : public juce::SynthesiserVoice
         float    ktSm1_ = 0.0f, ktSm2_ = 0.0f;             // fb204 — glided keytrack semis
         float    pdrvSm1_ = 0.0f, pdrvSm2_ = 0.0f;         // fb204 — glided post-drive
         float    drvSm1_ = 0.0f, drvSm2_ = 0.0f;           // fb204 — glided filter DRIVE (into setParams)
-        float  pitchEnvDepth_ = 0.0f;     // semitones, bipolar (Batch 3)
         double pitchEnvSemis_ = 0.0;      // per-block: depth × pitchEnv tick
 
         // Batch 1 Filter — FilterSlot replaces juce::dsp::LadderFilter.
         // baseCutHz / baseRes01 are the knob values; the renderNextBlock
-        // loop adds envAmount * fltEnv + drift before each sample's
-        // filterSlot_.setParams call (per-sample modulation, semitone space).
+        // loop adds the glided env→cutoff route (envCutSm1_) + drift before each
+        // sample's filterSlot_.setParams call (per-sample modulation, semitone space).
         tw::filters::FilterSlot filterSlot_;
         float                   baseCutHz_   = 20000.0f;
         float                   baseRes01_   = 0.0f;
         float                   filterKeytrack1_ = 0.0f, filterKeytrack2_ = 0.0f;  // 0..1 (cutoff tracks note)
         float                   drv01_       = 0.0f;
-        float                   envAmount_   = 0.0f;   // -1..+1 (bipolar)
         float                   fltErosionAmount_ = 0.0f;
 
         // Per-voice EROSION drift state (cutoff random walk, ~0.5 Hz LP)
@@ -6842,6 +7245,11 @@ class SynthVoice : public juce::SynthesiserVoice
         // ⚠️ Read this before adding a core with its own buffer — a new delay line here is measured
         // in HUNDREDS of MB per instance, not kilobytes. sizeof(CombCore) is 120 B only because its
         // delay line lives outside it; the slot's real bulk is elsewhere.
+        // 💰 fb636 — M1u: sizeof(FilterSlot) 127,824 B → 4,792 B. That bulk WAS four buffered cores (ReverbFilter,
+        // CombReverb, DampComb<4800>, VarAllpass x4 — 123,256 B of inline arrays). No type runs more than one of
+        // them, so they are now VIEWS into CombCore's heap ring (the note above class FilterSlot in TerrainFilters.h)
+        // and every type is bit-identical. Ten slots x 96 voices: 117.0 MB → 4.4 MB per instance (MiB, as above);
+        // the ring itself is unchanged at 48k/96k (8192/16384 floats a channel) and grows 4096 → 5025 below ~47 kHz.
         tw::filters::FilterSlot sendFilterSlot_;
         tw::filters::FilterSlot sendFilterSlot2_;
         tw::filters::FilterSlot sendFilterSlot3_;   // fb296 — delay-send filter mirror (independent from reverb send)
@@ -6853,7 +7261,6 @@ class SynthVoice : public juce::SynthesiserVoice
         float                   baseCutHz2_  = 20000.0f;
         float                   baseRes012_  = 0.0f;
         float                   drv012_      = 0.0f;
-        float                   envAmount2_  = 0.0f;   // -1..+1 (bipolar)
         int                     filterType1_ = 0;
         bool filterTypePending1_ = false, filterTypePending2_ = false;   // fb631 — a type recorded while idle, applied at note-on      // tracked for NONE-aware routing
         int                     filterType2_ = (int) tw::filters::Type::NONE;
@@ -6919,6 +7326,19 @@ class SynthVoice : public juce::SynthesiserVoice
             ~PoolSend() { delete flt1.load(); delete flt2.load(); }
         };
         PoolSend poolSend_[kPoolSends];
+        // fb636 — WHICH PAIRS EXIST, as bits (buildPoolFilters sets one after publishing flt1; nothing clears one:
+        //  a built pair is never replaced or freed before the voice). The setters below walked all 93 slots,
+        //  two acquire loads each, for every voice at every gather (setFilterPoles alone: 1.4-3.7 % of the
+        //  render, measured). They now visit the set bits in ascending order — the same pairs in the same order
+        //  the null tests used to pass through.
+        std::atomic<std::uint64_t> poolBuilt_[2] { {0}, {0} };
+        template <typename Fn> void forBuiltPools (Fn&& fn) noexcept
+        {
+            for (int w = 0; w < 2; ++w)
+                for (std::uint64_t m = poolBuilt_[w].load (std::memory_order_acquire); m != 0; m &= m - 1)
+                    fn (poolSend_[w * 64 + std::countr_zero (m)]);   // fb636 — C++20 <bit>: the same index as __builtin_ctzll, and MSVC has no __builtin_ctzll
+        }
+        static_assert (kPoolSends <= 128, "poolBuilt_ holds 128 bits");
         static_assert (RouteSnapshot::kPools == kPoolSends, "the route snapshot must cover every pooled send");
         const RouteSnapshot* routeSnap_ = nullptr;   // fb631 — set once by the processor
         juce::uint32 routesSeen_ = 0;                // fb631 — the snapshot version this voice holds
@@ -7151,7 +7571,7 @@ class SynthVoice : public juce::SynthesiserVoice
         tw::ModalParams modalParamsA_, modalParamsB_, modalParamsC_, modalParamsD_;
 
         // ── BLEND MODES (Serum-2-style cross-osc warp) — per-voice state ──
-        struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; };   // depth = exp-biased target
+        struct BlendSlotV { int mode = 0; int src = 0; float depth = 0.f; bool memoValid = false; int memoMode = -1; std::uint32_t memoDcBits = 0;   /* fb636 — setBlendSlot taper memo */ };   // depth = exp-biased target
         BlendSlotV blendSlot_[4][4];
         float blendDepthSm_[4][4] = {};   // per-sample de-zippered depth
         float blendLfoSm_[4][4]   = {};   // fb225 — per-sample glide over the BLOCK-STEPPED LFO value (peek updates once per block; consumed per sample = a ~344Hz staircase = Max's 'heavy static'. The COMB-CLICK law applied at the consumption site.)
@@ -7908,6 +8328,10 @@ class SynthVoice : public juce::SynthesiserVoice
         std::array<double, kMaxUnison> uPhaseIncB_    {};
         std::array<double, kMaxUnison> uModPhaseB_    {};
         std::array<double, kMaxUnison> uSyncPhaseB_   {};
+        // fb636 ALT — FLIP's step history: the phase that ENTERED each warp slot on the previous sample, per sine,
+        //  [osc * 2 + slot][u]; −1 = none. Its polyBLEP needs the TRUE signed step of that phase (applyPhaseWarp
+        //  case 45). 8 x 16 doubles, written only while a slot is on Flip, reset at note-on.
+        std::array<std::array<double, kMaxUnison>, 8> flipPrev_ {};
 
         // ── FM-ENGINE-VOICE — wavetable-carrier FM (per-osc, indexed 0..3 = A..D) ──
         // M1 phase reuses uModPhase*_; M2 gets its own accumulator; fmFb*_ is M1's

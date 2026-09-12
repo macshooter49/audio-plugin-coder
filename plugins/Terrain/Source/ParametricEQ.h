@@ -35,6 +35,7 @@ public:
 
     void prepare (double sampleRate, int samplesPerBlock)
     {
+        settled_ = false;   // fb636 — see processSample
         sr = sampleRate;
         juce::dsp::ProcessSpec spec { sampleRate, (juce::uint32) samplesPerBlock, 1 };
 
@@ -74,6 +75,7 @@ public:
 
     void reset()
     {
+        settled_ = false;   // fb636 — see processSample
         for (auto& f : hpStages) f.reset();
         for (auto& f : lpStages) f.reset();
         for (auto& f : bandFilters) f.reset();
@@ -82,6 +84,7 @@ public:
     // Per-block parameter setters (called from processBlock before processSample loop).
     void setBandParams (int idx, float freq, float gainDb, float q, bool bypassed)
     {
+        settled_ = false;   // fb636
         if (idx < 0 || idx >= NUM_BANDS) return;
         smoothFreq[idx].setTargetValue (freq);
         smoothGain[idx].setTargetValue (gainDb);
@@ -93,6 +96,7 @@ public:
     }
     void setHp (float freq, int slopeChoice, bool bypassed)
     {
+        settled_ = false;   // fb636
         smoothHpFreq.setTargetValue (freq);
         const int newSlope = juce::jlimit (0, 2, slopeChoice);
         if (newSlope != hpSlope || hpBypass != bypassed) hpDirty = true;   // fb456 — stage COUNT changes with slope
@@ -101,19 +105,21 @@ public:
     }
     void setLp (float freq, int slopeChoice, bool bypassed)
     {
+        settled_ = false;   // fb636
         smoothLpFreq.setTargetValue (freq);
         const int newSlope = juce::jlimit (0, 2, slopeChoice);
         if (newSlope != lpSlope || lpBypass != bypassed) lpDirty = true;   // fb456
         lpSlope = newSlope;
         lpBypass = bypassed;
     }
-    void setMasterBypass (bool b) noexcept { masterBypass = b; }
+    void setMasterBypass (bool b) noexcept { masterBypass = b; settled_ = false; }   // fb636
 
     // Solo: -1 = no solo, 0..6 = which band to solo.
     // When soloing, processSample returns a band-pass at the soloed band's freq+Q
     // applied to the EQ's INPUT, ignoring all other bands.
     void setSolo (int band) noexcept
     {
+        settled_ = false;   // fb636 — see processSample
         const int nb = juce::jlimit (-1, NUM_BANDS - 1, band);
         if (nb != soloBand) soloDirty = true;   // fb456
         soloBand = nb;
@@ -124,7 +130,15 @@ public:
         if (masterBypass) return x;
 
         // Update smoothed coefficients (cheap if no change targeted)
-        updateAllCoefficients();
+        // fb636 — ONCE SETTLED, NOT AT ALL. With no smoother gliding and no pending topology change, a call rebuilds
+        //  nothing and changes no state (a settled LinearSmoothedValue returns its target untouched; every compare is
+        //  equal), so it is skipped until a setter, prepare or reset clears settled_. 23 smoother reads per sample per
+        //  channel, for nothing, in every preset. Solo keeps the old path.
+        if (! settled_ || soloBand >= 0)
+        {
+            updateAllCoefficients();
+            settled_ = (soloBand < 0) && allSettled();
+        }
 
         if (soloBand >= 0)
             return processSolo (x);
@@ -149,6 +163,16 @@ public:
     }
 
 private:
+    bool settled_ = false;   // fb636 — see processSample
+    bool allSettled() const noexcept
+    {
+        for (int b = 0; b < NUM_BANDS; ++b)
+            if (smoothFreq[b].isSmoothing() || smoothGain[b].isSmoothing() || smoothQ[b].isSmoothing()
+                || (bandDirty[b] && ! bandBypass[b])) return false;
+        if (smoothHpFreq.isSmoothing() || smoothLpFreq.isSmoothing()) return false;
+        if ((hpDirty && ! hpBypass) || (lpDirty && ! lpBypass)) return false;
+        return true;
+    }
     static int stagesForSlope (int slopeChoice) noexcept
     {
         // 12 dB/oct = 1 biquad, 24 = 2, 48 = 4
@@ -168,6 +192,10 @@ private:
     // advanced every sample, unconditionally, so ramp timing is bit-for-bit what it was.
     void updateAllCoefficients() noexcept
     {
+        // fb636 — every rebuild below assigns ArrayCoefficients' std::array straight into the filter's
+        // own Coefficients: Coefficients::makeX is `*new Coefficients (ArrayCoefficients::makeX (...))`,
+        // so this is the SAME assignImpl on the SAME five floats with no malloc/free on the audio thread
+        // (3 per rebuild before, per sample while a band glides). Storage capacity is already >= 8.
         // Bands: peaking EQ
         for (int b = 0; b < NUM_BANDS; ++b)
         {
@@ -182,7 +210,7 @@ private:
 
             bandDirty[b] = false; lastF[b] = f; lastG[b] = g; lastQ[b] = q;
             *bandFilters[b].coefficients
-                = *juce::dsp::IIR::Coefficients<float>::makePeakFilter (sr, f, q, juce::Decibels::decibelsToGain (g));
+                = juce::dsp::IIR::ArrayCoefficients<float>::makePeakFilter (sr, f, q, juce::Decibels::decibelsToGain (g));
         }
         // HP / LP cascades — Butterworth Q per stage
         const float hpF = smoothHpFreq.getNextValue();
@@ -192,7 +220,7 @@ private:
             const int hpN = stagesForSlope (hpSlope);
             for (int i = 0; i < hpN; ++i)
                 *hpStages[i].coefficients
-                    = *juce::dsp::IIR::Coefficients<float>::makeHighPass (sr, hpF, butterworthQ (hpN, i));
+                    = juce::dsp::IIR::ArrayCoefficients<float>::makeHighPass (sr, hpF, butterworthQ (hpN, i));
         }
 
         const float lpF = smoothLpFreq.getNextValue();
@@ -202,7 +230,7 @@ private:
             const int lpN = stagesForSlope (lpSlope);
             for (int i = 0; i < lpN; ++i)
                 *lpStages[i].coefficients
-                    = *juce::dsp::IIR::Coefficients<float>::makeLowPass (sr, lpF, butterworthQ (lpN, i));
+                    = juce::dsp::IIR::ArrayCoefficients<float>::makeLowPass (sr, lpF, butterworthQ (lpN, i));
         }
     }
 
@@ -237,7 +265,7 @@ private:
         if (soloDirty || f != lastSoloF || q != lastSoloQ)   // fb456 — was allocating every sample
         {
             soloDirty = false; lastSoloF = f; lastSoloQ = q;
-            *soloFilter.coefficients = *juce::dsp::IIR::Coefficients<float>::makeBandPass (sr, f, q);
+            *soloFilter.coefficients = juce::dsp::IIR::ArrayCoefficients<float>::makeBandPass (sr, f, q);   // fb636 — no heap (see above)
         }
         const float y = soloFilter.processSample (x);
         return std::isfinite (y) ? y : 0.0f;

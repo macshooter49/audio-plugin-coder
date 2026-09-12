@@ -2,6 +2,8 @@
 # ══════════════════════════════════════════════════════════════════════════════════════════════
 #  fb631 — the preset-change SPIKE, the LFO that kept moving, the vocab field that deleted itself.
 #    spike:lenient   SP_MUT=lenient  the spike cert must EXPECT a spike → a fixed plugin fails it
+#    spike:latespike SP_MUT=latespike  fb636 bugA — a synthetic 60% block AFTER the pump → the re-scoped bar (the
+#                    whole load window, not just its first 24 blocks) must go RED
 #    lfo:route       (no control of its own — bars E/F went red on the shipped code; see the file)
 #    lfo:card        the popped card stays green
 #    vocab:blurkill  VS_MUT=blurkill re-installs destroy-on-blur → the field dies → RED
@@ -19,9 +21,16 @@ echo "══ fb631 GATE ══"
 AUBIN="$HOME/Library/Audio/Plug-Ins/Components/Terrain.component/Contents/MacOS/Terrain"
 [ -f "$AUBIN" ] || { echo "  the AU is not installed — build and install first"; exit 1; }
 c++ -std=c++17 -O2 -I Tests -I Tests/shim Tests/preset_load_spike_au.cpp -framework Accelerate -framework AudioToolbox -framework CoreFoundation -framework CoreAudio -o "$OUT/spike" 2> "$OUT/compile.txt" || { echo "  spike: COMPILE FAIL — $OUT/compile.txt"; exit 1; }
-PRESETS=$(ls "$HOME/Library/WavesCrate/TerrainInstrument/Banks/User/"*.terrain 2>/dev/null | head -8)
-[ -n "$PRESETS" ] || { echo "  no user presets to load — the spike cert needs real .terrain files"; exit 1; }
-run spike:lenient  SP_MUT=lenient  "$OUT/spike" $PRESETS
+# fb636 review — an ARRAY, quoted on expansion. This was PRESETS=$(ls ... | head -8) expanded unquoted, so every
+# name with a space ("Max Voltage.terrain") split into fragments the harness could not read — 17 "could not read"
+# lines, and the re-scoped load-window bar only ever judged the 2 presets whose names had no space. The harness
+# now fails its bar [0] on any argument it cannot read, so a short list can never pass again. (A glob, not mapfile:
+# macOS ships bash 3.2.) Read-only: the files are only opened, never written.
+shopt -s nullglob; ALLP=("$HOME/Library/WavesCrate/TerrainInstrument/Banks/User/"*.terrain); shopt -u nullglob
+[ ${#ALLP[@]} -gt 0 ] || { echo "  no user presets to load — the spike cert needs real .terrain files"; exit 1; }
+PRESETS=("${ALLP[@]:0:8}")
+run spike:lenient  SP_MUT=lenient  "$OUT/spike" "${PRESETS[@]}"
+run spike:latespike SP_MUT=latespike "$OUT/spike" "${PRESETS[@]}"
 export NODE_PATH="$PWD/Tests/node_modules"
 run lfo:route      ""              node Tests/lfo_route_gate.js
 run lfo:card       ""              node Tests/lfo_route_card_gate.js

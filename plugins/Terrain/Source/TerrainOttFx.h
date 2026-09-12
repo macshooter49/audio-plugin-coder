@@ -49,6 +49,7 @@
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "DynamicsCore.h"
+#include <limits>
 
 namespace tw {
 
@@ -185,6 +186,7 @@ public:
         biteRelA_  = dyn::coefTau (0.005f, fs_);
         vizEvery_  = (int) (fs_ / 60.0f); if (vizEvery_ < 32) vizEvery_ = 32;
         primed_ = false;
+        xoMemoLo_ = xoMemoHi_ = xoMemoFs_ = std::numeric_limits<float>::quiet_NaN();   // fb636 — a prepare re-derives the crossover
         reset();
     }
 
@@ -851,8 +853,15 @@ private:
         return C[dyn::clampi (t, 0, kNumTypes - 1)][dyn::clampi (c, 0, kNumChars - 1)];
     }
 
+    // fb636 — Svf1::setLR / LR4::set write only coefficients, as a pure function of (fc, fs): the same
+    //  (xl, xh, fs_) rewrites the same floats, so skip the 18 tan() when nothing moved. The rack runs this
+    //  device one sample at a time, so this was 18 tan per sample per OTT (Watchmen: 17 % of the render).
+    //  The memo is cleared by reset()/prepare() (NaN never compares equal).
+    float xoMemoLo_ = std::numeric_limits<float>::quiet_NaN(), xoMemoHi_ = std::numeric_limits<float>::quiet_NaN(), xoMemoFs_ = std::numeric_limits<float>::quiet_NaN();
     void applyXover (float xl, float xh) noexcept
     {
+        if (xl == xoMemoLo_ && xh == xoMemoHi_ && fs_ == xoMemoFs_) return;
+        xoMemoLo_ = xl; xoMemoHi_ = xh; xoMemoFs_ = fs_;
         for (int c = 0; c < 2; ++c)
         {
             splitLo_[c].set (xl, fs_);

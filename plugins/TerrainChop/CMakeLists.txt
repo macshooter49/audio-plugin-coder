@@ -66,7 +66,7 @@ target_sources(TerrainChop
 target_include_directories(TerrainChop
     PRIVATE
         Source
-        ${CMAKE_CURRENT_SOURCE_DIR}/../TerrainInstrument/Source
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Terrain/Source
 )
 
 # ── Link libraries ──

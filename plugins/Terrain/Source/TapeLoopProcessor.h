@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <algorithm>
+#include <atomic>
 
 //==============================================================================
 // TapeLoopProcessor: BPM-synced stereo tape looper
@@ -35,13 +36,33 @@ public:
 
     TapeLoopProcessor() = default;
 
+    // fb636 M4t — THE 60 s RING (22 MiB at 48k, 44 MiB at 96k) IS ARMED BY THE FIRST RECORD PRESS,
+    // not by prepare(). Nothing reads or writes bufL/bufR before a count-in completes (the STOPPED
+    // tail, playback and updateLength all need hasContent_, which only the count-in sets), so every
+    // instance that never records never pays for it. prepare() re-sizes the ring only once armed
+    // (and a host never runs prepare() and process concurrently); arm() is idempotent.
     void prepare(double sampleRate, int /*samplesPerBlock*/)
     {
         sr = sampleRate;
         maxSamples = static_cast<int>(sr * MAX_BUFFER_SECONDS);
+        if (armed_.load(std::memory_order_relaxed))
+        {
+            bufL.assign(static_cast<size_t>(maxSamples), 0.0f);
+            bufR.assign(static_cast<size_t>(maxSamples), 0.0f);
+        }
+        reset();
+    }
+
+    // Message thread, under the processor's prepLock_ (armTapeLoop) — the same lock prepare() runs
+    // under. NEVER re-assigns once armed: a re-assign during a recording would free the ring under
+    // the audio thread. The release store pairs with the acquire at count-in completion, the first
+    // sample that touches the ring.
+    void arm()
+    {
+        if (armed_.load(std::memory_order_relaxed)) return;
         bufL.assign(static_cast<size_t>(maxSamples), 0.0f);
         bufR.assign(static_cast<size_t>(maxSamples), 0.0f);
-        reset();
+        armed_.store(true, std::memory_order_release);
     }
 
     void reset()
@@ -263,10 +284,16 @@ public:
             if (countInSampleCounter >= countInSamplesPerBeat)
             {
                 countInSampleCounter = 0;
-                countInBeatIndex++;
+                if (countInBeatIndex < 4) countInBeatIndex++;   // fb636 review — held at 4 while it waits for arm()
             }
 
-            if (countInBeatIndex >= 4)
+            // fb636 M4t — the record native stores the flag FIRST and arms after, so the count-in
+            // starts exactly when it always did; the ring is armed (a few ms on the message thread)
+            // long before 4 beats pass. Only if it is not can this hold on the last beat.
+            // fb636 review — and the hold is a HOLD: the index stops at 4 (the UI's GO) instead of
+            // counting on to 5, 6, ... for every further beat the arm takes. Armed in time, the index
+            // reaches 4 and completes on the same sample exactly as before.
+            if (countInBeatIndex >= 4 && armed_.load(std::memory_order_acquire))
             {
                 // Count-in complete — start actual recording
                 countInActive = false;
@@ -886,6 +913,7 @@ private:
     int maxSamples = 0;
 
     std::vector<float> bufL, bufR;
+    std::atomic<bool> armed_ { false };   // fb636 M4t — bufL/bufR allocated (see arm())
 
     int loopLength = 0;
     int writePos = 0;

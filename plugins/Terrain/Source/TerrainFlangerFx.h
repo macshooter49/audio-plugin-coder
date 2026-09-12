@@ -230,7 +230,7 @@ public:
         viz_ = Viz{};
     }
 
-    void setParams (const Params& p) noexcept { p_ = p; }
+    void setParams (const Params& p) noexcept { p_ = p; ++pGen_; }   // fb636 — pGen_ keys the cookBlock memo
 
     // ═════════════════════════════════════════════════════════════════════════
     //  IN PLACE. Owns its own equal-power dry/wet from Params::mix.
@@ -248,7 +248,11 @@ public:
         if (! primed_) { type_ = wantT; chr_ = wantC; pendType_ = pendChr_ = -1; dip_ = 1.0f; }
 
         const CharSpec* cs = &spec (type_, chr_);
-        cookBlock (*cs);
+        // fb636 — cookBlock is the SOLE writer of every value it computes (its targets, rates and time constants),
+        //  and a pure function of p_, the CharSpec, fs_, type_ and chr_. The rack calls this one sample at a time,
+        //  so it re-cooked ~10 pow/exp/cos/sin per sample from unchanged inputs; now once per parameter push.
+        if (pGen_ != cookGen_ || cs != cookCs_ || fs_ != cookFs_ || type_ != cookType_ || chr_ != cookChr_)
+        { cookBlock (*cs); cookGen_ = pGen_; cookCs_ = cs; cookFs_ = fs_; cookType_ = type_; cookChr_ = chr_; }
         if (! primed_) { snapSmoothers(); primed_ = true; }
 
         const float twoPi = 6.2831853071795864f;
@@ -268,6 +272,7 @@ public:
                     reseat();                       // followers / companders / filters
                     cs = &spec (type_, chr_);
                     cookBlock (*cs);                // new type's targets
+                    cookGen_ = pGen_; cookCs_ = cs; cookFs_ = fs_; cookType_ = type_; cookChr_ = chr_;   // fb636 — the memo follows
                     snapDelays();                   // and land on them, silently
                 }
             }
@@ -1203,6 +1208,8 @@ private:
     int   type_ = 0, chr_ = 0, pendType_ = -1, pendChr_ = -1;
     bool  primed_ = false;
     float dip_ = 1.0f;
+    std::uint32_t pGen_ = 0, cookGen_ = 0xFFFFFFFFu;   // fb636 — cookBlock memo key (see processStereo)
+    const CharSpec* cookCs_ = nullptr; float cookFs_ = -1.0f; int cookType_ = -1, cookChr_ = -1;
 
     // targets (block) / smoothed (per sample)
     float manT_ = 1.4f,  manS_ = 1.4f;

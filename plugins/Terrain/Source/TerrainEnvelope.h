@@ -26,6 +26,7 @@
 //  Output is in [0,1] for unipolar envelopes; the owner applies polarity/depth.
 // =============================================================================
 #pragma once
+#include <cstring>
 
 #include <cmath>
 #include <algorithm>
@@ -180,7 +181,70 @@ public:
         return 0.0;
     }
 
+    /** fb636 — ADVANCE n SAMPLES, EXACTLY AS n CALLS OF tick() WOULD, and return what the n-th tick
+     *  returns. For an envelope whose only consumer this block reads its BLOCK-END value (a Pitch or
+     *  Mod-bus route, a matrix source via level(), or nothing at all), the n-1 shaped values in
+     *  between were computed for nobody: one exp() and a divide per sample per envelope. tickSilent()
+     *  runs every recurrence tick() runs (the sustain glide, the segment clock, every stage change)
+     *  and skips only the shape of a sample that is not the last. Every stage change assigns an
+     *  exact constant before it latches (Attack→1, Decay→susSm_, Release→0, Hold/Delay flat), so
+     *  no transition ever consumes a shaped value, and the last sample is a real tick(). */
+    double advance (int n) noexcept
+    {
+        if (n <= 0) return level_;
+        int left = n - 1;                       // silent ticks before the real last one
+        while (left > 0)
+        {
+            const double susBefore = susSm_; const Stage stBefore = stage_;
+            tickSilent(); --left;
+            // fb636 — FAST-FORWARD. The probe tick above ran the whole recurrence. If it left the sustain glide's
+            //  bits unchanged (a settled one-pole: every later step is the identity too) and did not change stage,
+            //  the ticks before the next stage boundary only add 1.0 to segPos_ (exact: an integer-valued double)
+            //  and rewrite constants the probe already wrote — so they are taken in one step. The boundary itself
+            //  is always walked tick by tick.
+            if (left > 0 && stage_ == stBefore && std::memcmp (&susSm_, &susBefore, sizeof susSm_) == 0)
+                left -= fastForwardSilent (left);
+        }
+        return tick();
+    }
+
 private:
+    // fb636 — how many of the next m silent ticks can be taken in one step (see advance). Idle and Sustain ticks are
+    //  the identity once the glide is settled; a timed segment moves only segPos_, up to the tick before its boundary.
+    int fastForwardSilent (int m) noexcept
+    {
+        if (stage_ == Stage::Idle || stage_ == Stage::Sustain) return m;
+        const double room = segLen_ - segPos_;        // a tick after j more is still inside iff segPos_ + j < segLen_
+        if (! (room > 1.0)) return 0;
+        const double fl = std::floor (room);
+        int j = (fl >= room) ? (int) fl - 1 : (int) fl;
+        if (j > m) j = m;
+        if (j <= 0) return 0;
+        segPos_ += (double) j;
+        return j;
+    }
+
+    void tickSilent() noexcept
+    {
+        susSm_ += (sustain_ - susSm_) * susSmCoef_;
+        switch (stage_)
+        {
+            case Stage::Idle:    return;
+            case Stage::Delay:   if (advanceSeg()) enterStage (Stage::Attack); level_ = segStart_; return;
+            case Stage::Attack:  if (advanceSeg()) { level_ = segTarget_; enterStage (Stage::Hold); } return;
+            case Stage::Hold:    if (advanceSeg()) enterStage (Stage::Decay); level_ = 1.0; return;
+            case Stage::Decay:
+            {
+                const bool done = advanceSeg();
+                segTarget_ = susSm_;
+                if (done) { level_ = susSm_; if (loop_ && gateOn_) enterStage (Stage::Attack); else enterStage (Stage::Sustain); }
+                return;
+            }
+            case Stage::Sustain: level_ = susSm_; return;
+            case Stage::Release: if (advanceSeg()) { level_ = 0.0; enterStage (Stage::Idle); } return;
+        }
+    }
+
     // ── stage entry: latches segment length + start/target from CURRENT level ─
     void enterStage (Stage s) noexcept
     {

@@ -52,7 +52,7 @@ target_sources(TerrainGlitch
 target_include_directories(TerrainGlitch
     PRIVATE
         Source
-        ${CMAKE_CURRENT_SOURCE_DIR}/../TerrainInstrument/Source
+        ${CMAKE_CURRENT_SOURCE_DIR}/../Terrain/Source
 )
 
 # ── Link libraries ──

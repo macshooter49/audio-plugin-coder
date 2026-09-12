@@ -1221,7 +1221,11 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                 // args = [ paramId (string), normalised 0..1 ].
                 if (args.size() >= 2)
                     if (auto* p = audioProcessor.getAPVTS().getParameter (args[0].toString()))
-                        p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (args[1]))));
+                    {
+                        const float v = juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (args[1])));
+                        audioProcessor.prebuildPoolSend (p->getParameterIndex(), v);   // fb636 bugA — a lit pooled pill's pair exists before the audio sees the pill
+                        p->setValueNotifyingHost (v);
+                    }
                 complete (juce::var{});
             })
             .withNativeFunction("getSynParam", [this](const juce::Array<juce::var>& args,
@@ -2239,7 +2243,11 @@ TerrainUiCore::TerrainUiCore (TerrainAudioProcessor& p)
                                                              juce::WebBrowserComponent::NativeFunctionCompletion complete)
             {
                 if (args.size() >= 1)
+                {
                     audioProcessor.tapeLoopRecording.store(static_cast<float>(args[0]));
+                    if (static_cast<float>(args[0]) > 0.5f)
+                        audioProcessor.armTapeLoop();   // fb636 M4t — flag first, then the ring (count-in timing unchanged)
+                }
                 complete({});
             })
             .withNativeFunction("getTapeLoopRecord", [this](const juce::Array<juce::var>&,
@@ -5484,8 +5492,11 @@ public:
                     // popped card's blend/latch live without any relay.
                     if (args.size() >= 2)
                         if (auto* p = proc.getAPVTS().getParameter (args[0].toString()))
-                            p->setValueNotifyingHost (juce::jlimit (0.0f, 1.0f,
-                                static_cast<float> (static_cast<double> (args[1]))));
+                        {
+                            const float v = juce::jlimit (0.0f, 1.0f, static_cast<float> (static_cast<double> (args[1])));
+                            proc.prebuildPoolSend (p->getParameterIndex(), v);   // fb636 bugA — same as the main view's
+                            p->setValueNotifyingHost (v);
+                        }
                     complete (juce::var{});
                 })
                 .withNativeFunction ("getSynParam", [&proc](const juce::Array<juce::var>& args,
@@ -6353,9 +6364,6 @@ void TerrainUiCore::timerCallback()
 
     pollBlendKnobs();   // BLEND — debounced re-bake on knob moves (offline; ~ms renders)
 
-    // Read grain count
-    int grainCount = audioProcessor.activeGrainCount.load();
-
     // VIZ-BULLETPROOF — every float printed into the tick script MUST be finite: a NaN/Inf
     // prints as the bare token `nan`/`inf`, which is a JS ReferenceError that kills EVERY
     // segment after it in this one evaluateJavascript string. (This is how the osc scope
@@ -6386,24 +6394,13 @@ void TerrainUiCore::timerCallback()
     // the 400 ms stamps; when the hand stops, rest returns exactly as before and idle stays 0.
     const bool uiTouched = (juce::Time::getMillisecondCounterHiRes() - uiGestureAtMs_) < 1500.0;
     const bool uiQuiet   = (eqQuietTicks_ >= 90) && ! uiTouched;
-    // Read scope buffer — only while the output has been audible within ~1.5 s (fb567). A quiet
-    // scope is flat; the page keeps its last (flat) frame and the bytes stop changing.
-    juce::String scopeData;
-    if (! uiQuiet)
-    {
-        scopeData.preallocateBytes(2048);
-        scopeData << "[";
-        for (int i = 0; i < TerrainAudioProcessor::SCOPE_SIZE; ++i)
-        {
-            if (i > 0) scopeData << ",";
-            float val = audioProcessor.scopeBuffer[static_cast<size_t>(i)].load(std::memory_order_relaxed);
-            scopeData << SF(val, 4);
-        }
-        scopeData << "]";
-    }
-
-    // Read BPM for grain sync display
-    float bpm = audioProcessor.currentBPM.load();
+    // fb636 — THE HERO SCOPE STRING IS GONE. 256 values at "%.4f" (~2 KB) were built here and shipped
+    // as window.updateVisualization(grainCount, scope, bpm) on every audible tick, on EVERY page. Its
+    // one reader was renderTerrain's height map on the front page, and the front page is now a still
+    // picture (index.html, fb636 animate()) that never reads the scope. grainCount and bpm had no page
+    // reader at all (bpmFromJuce feeds updateLFOs, a no-op in the plugin).
+    // 🚨 THE PROCESSOR'S scopeBuffer RING IS UNTOUCHED AND MUST STAY: its tail is oscScopeORms, which is
+    //    `audible` below, which is eqQuietTicks_, which is uiQuiet — the rest gate of the whole UI.
 
     // Read tape loop state
     float tapeLoopRec  = audioProcessor.tapeLoopRecording.load();
@@ -6420,13 +6417,16 @@ void TerrainUiCore::timerCallback()
     // never take down the segments after it. The osc scope sits LAST in this chain and used
     // to die whenever anything upstream threw.
     juce::String js;
+    // fb636 — ONE ALLOCATION PER FRAME, NOT HUNDREDS. A juce::String grows by EXACT-size realloc +
+    // memcpy of everything so far (juce_String.cpp StringHolder::makeUniqueWithByteSize), and this
+    // frame is built from hundreds of small appends after 10-40 KB of scope/EQ have landed: every
+    // later SF() re-copied the whole frame. Reserve what the last frame needed plus headroom; the
+    // bytes shipped (and so the idle-skip hash) are identical — only the allocation pattern changes.
+    js.preallocateBytes ((size_t) juce::jmax (4096, lastFrameBytes_ + lastFrameBytes_ / 4 + 1024));
     js << "window.__tickT=(window.performance&&performance.now)?performance.now():0;";   // fb483 heartbeat rides first
     if (audioProcessor.wrapperType == juce::AudioProcessor::wrapperType_Standalone)
         js << "window.__isStandalone=1;";   // fb484 — arms the page's QWERTY-to-MIDI handler
     juce::String* frameOut = &js;   // fb483 -- reachable inside blocks that shadow the name js
-    if (! uiQuiet)   // fb567 — the hero scope rests with the rest of the page in silence
-        js << "try{if(window.updateVisualization){"
-           << "window.updateVisualization(" << grainCount << "," << scopeData << "," << SF(bpm, 1) << ");}}catch(e){}";
     js << "try{if(window.updateTapeLoopState){"
        << "window.updateTapeLoopState("
        << (tapeLoopRec > 0.5f ? "true" : "false") << ","
@@ -6439,17 +6439,9 @@ void TerrainUiCore::timerCallback()
        << "window.updateFeedState(" << (feedToGrain ? "true" : "false") << ");}}catch(e){}";
     int captureState = audioProcessor.captureExportState.load();
     float captureAvail = audioProcessor.getCaptureAvailableSeconds();
-    // fb567 — the capture strip's "seconds available" grows every tenth of a second, in silence
-    // too (measured: it alone kept 10 frames/s shipping on a silent page). It rides only while the
-    // output is audible — or when the export STATE changes, which must always reach the page.
-    if (! uiQuiet || captureState != lastCapturePushed_)
-    {
-        lastCapturePushed_ = captureState;
-        js << "try{if(window.updateCaptureState){"
-           << "window.updateCaptureState("
-           << captureState << ","
-           << SF(captureAvail, 1) << ");}}catch(e){}";
-    }
+    // fb636 — the page segment window.updateCaptureState(state, seconds) is gone: the page only stored
+    // the two numbers (state.captureExportState / captureAvailSeconds) and nothing ever read them. The
+    // capture UI is the NATIVE CaptureDragStrip, fed directly below — that call is what shows it.
 
     // Update native drag strip state
     captureDragStrip.updateState(captureState, captureAvail);
@@ -6707,14 +6699,40 @@ void TerrainUiCore::timerCallback()
     const bool haveCrv = itCv != audioProcessor.cardWindows_.end() && itCv->second != nullptr;
     const bool crvIsDst = haveCrv && [this]{ const juce::String cs = audioProcessor.getCardStateJson ("crv");
                                              return cs.isEmpty() || cs.contains ("\"dst\""); }();
-    if (crvIsDst)
-        if (auto* cwv2 = dynamic_cast<TerrainCardWindow*> (itCv->second.get()))
+    // fb636 — AT REST THE CARD GETS A HEARTBEAT, NOT A 60 Hz STREAM. This eval ran every tick with the
+    // output silent and no hand on anything (Date.now() made every string unique, so nothing could ever
+    // skip it). uiQuiet means inaudible for ~1.5 s AND no gesture — the occupancy trace has nothing to
+    // show and a knob move un-quiets the lane (uiTouched), so the full-rate feed returns the moment it
+    // matters. Quiet: every 20 ticks (~330 ms, inside the card's 600 ms trust window, so its 15 Hz
+    // fallback poll stays asleep) stamp the freshness and send the curve only if it CHANGED (host
+    // automation of Drive at rest still lands) — the fb614 change-gated-heartbeat grammar.
+    if (! crvIsDst) { crvQuietCtr_ = 0; lastCrvQuiet_.clear(); }
+    else if (auto* cwv2 = dynamic_cast<TerrainCardWindow*> (itCv->second.get()))
+    {
+        if (! uiQuiet)
+        {
+            crvQuietCtr_ = 0; lastCrvQuiet_.clear();
             cwv2->evalJs ("try{window.__crvPushT=Date.now();var o=" + audioProcessor.getDistortionCurveVizJson()
                           + ";if(o&&o.c&&o.c.length){window.__dstViz=o;"
                             "window.__crvLiveTick&&window.__crvLiveTick(o);}}catch(e){}");
                           // fb343 review — __crvPushT = freshness stamp: the card's fallback poll
                           // sleeps while this push lane is alive and revives at 15Hz when the
                           // editor closes (popped cards OUTLIVE the editor — processor-owned).
+        }
+        else if (++crvQuietCtr_ >= 20)
+        {
+            crvQuietCtr_ = 0;
+            const auto cj = audioProcessor.getDistortionCurveVizJson();
+            if (cj != lastCrvQuiet_)
+            {
+                lastCrvQuiet_ = cj;
+                cwv2->evalJs ("try{window.__crvPushT=Date.now();var o=" + cj
+                              + ";if(o&&o.c&&o.c.length){window.__dstViz=o;"
+                                "window.__crvLiveTick&&window.__crvLiveTick(o);}}catch(e){}");
+            }
+            else cwv2->evalJs ("try{window.__crvPushT=Date.now();}catch(e){}");   // the stamp alone: the lane is alive, nothing changed
+        }
+    }
 
     // fb343 — fb236's relay, CURVE-BLOB edition: an ink edit on either surface lands on the
     // OTHER window at timer rate via __crvXApply (which reuses crvXWin's compare/touch-guarded
@@ -6810,19 +6828,23 @@ void TerrainUiCore::timerCallback()
             js << "try{if(window.updateSynthLFO){window.updateSynthLFO(" << SF(lfo1, 4) << ");}}catch(e){}";
     }
 
-    // ── ANNULUS resonator live feed — real modal energy + output level drive the
-    //    harmonograph's purple audio-reactive layer (glow/streaks follow the signal). ──
-    {
-        const float e0 = audioProcessor.resoVizEnergy_[0].load(std::memory_order_relaxed);
-        const float e1 = audioProcessor.resoVizEnergy_[1].load(std::memory_order_relaxed);
-        const float e2 = audioProcessor.resoVizEnergy_[2].load(std::memory_order_relaxed);
-        const float e3 = audioProcessor.resoVizEnergy_[3].load(std::memory_order_relaxed);
-        const float ro = audioProcessor.resoVizOut_.load(std::memory_order_relaxed);
-        const float rpos = audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::SYN_RESO_POSITION)->load();
-        js << "try{if(window.__terrainReso){window.__terrainReso({energy:["
-           << SF(e0, 3) << "," << SF(e1, 3) << "," << SF(e2, 3) << "," << SF(e3, 3)
-           << "],out:" << SF(ro, 3) << ",position:" << SF(rpos, 3) << "});}}catch(e){}";
-    }
+    // ── ANNULUS resonator live feed — DORMANT (fb636). It fed the harmonograph's purple audio-reactive
+    //    layer through window.__terrainReso, which is defined only inside that viz's boot(), and boot()
+    //    never runs: index.html hard-wires `window.__TOPO_MAP = true; if (! window.__TOPO_MAP) {...}`.
+    //    So every tick built 7 loads + ~100 bytes the page tested and threw away — and while the
+    //    resonator's energy decayed, those bytes kept frames from being byte-identical. Kept here, whole,
+    //    for the V2 revival (fb168 "dormant until V2"): un-comment together with the page's boot.
+    // {
+    //     const float e0 = audioProcessor.resoVizEnergy_[0].load(std::memory_order_relaxed);
+    //     const float e1 = audioProcessor.resoVizEnergy_[1].load(std::memory_order_relaxed);
+    //     const float e2 = audioProcessor.resoVizEnergy_[2].load(std::memory_order_relaxed);
+    //     const float e3 = audioProcessor.resoVizEnergy_[3].load(std::memory_order_relaxed);
+    //     const float ro = audioProcessor.resoVizOut_.load(std::memory_order_relaxed);
+    //     const float rpos = audioProcessor.getAPVTS().getRawParameterValue(ParameterIDs::SYN_RESO_POSITION)->load();
+    //     js << "try{if(window.__terrainReso){window.__terrainReso({energy:["
+    //        << SF(e0, 3) << "," << SF(e1, 3) << "," << SF(e2, 3) << "," << SF(e3, 3)
+    //        << "],out:" << SF(ro, 3) << ",position:" << SF(rpos, 3) << "});}}catch(e){}";
+    // }
 
 
     // ── HARMONIC-ENGINE viz — white partial bars + purple base ghost (60 fps) ──
@@ -7027,6 +7049,14 @@ void TerrainUiCore::timerCallback()
                 if (auto* val = result.getResult())
                 {
                     auto json = val->toString();
+                    // fb636 — THE COMPARE. This poll re-parsed the page's matrix and re-armed the engine
+                    // 4x a second forever, identical or not. parseJSON of byte-identical JSON is an
+                    // identical Config, and beginBlock only COPIES a pending Config (phaseInc is
+                    // recomputed every block regardless) — so skipping an unchanged one cannot change
+                    // a sample. It also shuts a window where this thread rewrote pendingConfig while
+                    // the audio thread was copying it. Real edits differ, and still land here.
+                    if (json.isNotEmpty() && json == audioProcessor.modStateJson)
+                        return;
                     if (json.isNotEmpty())
                     {
                         // Defensive guard: if the polled JSON has zero assignments
@@ -7158,7 +7188,12 @@ void TerrainUiCore::timerCallback()
             auto rp  = [&vt] (const char* id) noexcept { auto* a = vt.getRawParameterValue (id); return a != nullptr ? a->load() : 0.0f; };
             // finite-guard + clamp (bins are ~0..1.5; POSITION 0..1) — a NaN token would kill the eval (wd9)
             auto SFG = [] (float v) { float x = std::isfinite (v) ? v : 0.0f; x = x < 0.f ? 0.f : (x > 2.f ? 2.f : x); return juce::String (x, 4); };
-            const float dt = 1.0f / 60.0f;                 // timer cadence → CREEP auto-scan step
+            /* fb636 — THE SCAN RESTS WITH THE PAGE. A Resynth osc with CREEP > 0 advanced this display scan by 1/60 on EVERY
+               tick, quiet or not: the bins changed every tick, so the whole coalesced frame shipped at 60 Hz with no note and
+               no hand (fb567's open item) and woke every painter. While the UI is quiet the scan holds — advanceHead is
+               guarded by dt > 0 (ResynthEngine.h), so dt 0 leaves pos where the sound left it and the bins repeat byte for
+               byte: idle-skip fires. A hand un-quiets it (uiTouched), like every other quiet-gated feed (fb591). */
+            const float dt = uiQuiet ? 0.0f : 1.0f / 60.0f;   // timer cadence → CREEP auto-scan step
             static const char* const oscKey[4] = { "a", "b", "c", "d" };
             constexpr int NB = 96;
             float bins[NB];
@@ -7210,8 +7245,9 @@ void TerrainUiCore::timerCallback()
                             || a.sieveMode != b.sieveMode || a.formantKeep != b.formantKeep;
                     };
                     if (geodeImgCooldown_[o] > 0)  --geodeImgCooldown_[o];
-                    if (geodeImgHeartbeat_[o] > 0) --geodeImgHeartbeat_[o];
-                    const bool storeChanged = (store != geodeImgStore_[o]);
+                    if ((! uiQuiet || geodeImgHeartbeat_[o] < 16) && geodeImgHeartbeat_[o] > 0) --geodeImgHeartbeat_[o];   // fb636 — the ~5 s healer counts only while the UI is awake: at rest its push was an idle byte-changer (a reloaded page is healed by resyncAfterReattach)
+                    const int  storeGen     = audioProcessor.geodeLiveGen (o);   // fb636 — the live store ping-pongs between two buffers: two rebuilds between ticks return the same address
+                    const bool storeChanged = (store != geodeImgStore_[o]) || storeGen != geodeImgStoreGen_[o];
                     const bool fullPush     = storeChanged || geodeImgHeartbeat_[o] <= 0;
                     const bool brightPush   = contentChanged (gp, geodeImgParams_[o]) && geodeImgCooldown_[o] <= 0;
                     if (fullPush || brightPush)
@@ -7255,6 +7291,7 @@ void TerrainUiCore::timerCallback()
                            << "'," << IW << "," << IH << ");}catch(e){}";
                         *frameOut << js;   // fb483 coalesced (js here is the block-local image string)
                         geodeImgStore_[o]     = store;
+                        geodeImgStoreGen_[o]  = storeGen;
                         geodeImgParams_[o]    = gp;
                         geodeImgCooldown_[o]  = 10;    // ≥ ~166ms between bright re-bakes on knob drags
                         geodeImgHeartbeat_[o] = 300;   // unconditional full refresh every ~5s (healer)
@@ -7309,6 +7346,7 @@ void TerrainUiCore::timerCallback()
         if (dj != lastDstVizQuiet_) { lastDstVizQuiet_ = dj; js << "window.__dstVizPush=" << dj << ";"; }
     }
         js << ";window.__tiFrame&&window.__tiFrame();";
+        lastFrameBytes_ = (int) js.getNumBytesAsUTF8();   // fb636 — sizes the next frame's one allocation
         uint64_t fh = 1469598103934665603ULL;
         for (const char* q = js.toRawUTF8(); *q != 0; ++q)
             fh = (fh ^ (uint64_t) (unsigned char) *q) * 1099511628211ULL;
@@ -12020,7 +12058,50 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }
   }
 
-  setInterval(pollSliceGlow, 16);   // ~60 Hz
+  /* ═══ fb636 — THE HERO SAMPLER'S POLLS EXIST ONLY WHILE THE FRONT PAGE IS SHOWN ════════════════
+     These started once at injection and never stopped: pollSliceGlow (2 natives every 16 ms, one of
+     them a 4-layer x 32-voice dynamic_cast walk), pollLayerEmptyState (10 Hz) and pollScanViz (16 ms),
+     plus a self-re-arming rAF that cleared ti-scan-viz-canvas every frame — ~146 native round trips a
+     second on EVERY page, the synth page included, idle included. Each is now an interval that EXISTS
+     only while the front page shows (currentActivePanel === null) AND its own need holds, and is re-made
+     the moment the page comes back ('tipanelchange', dispatched by setActivePanel) or the need returns:
+       · slice glow + pad activity, the scan poll — the editing layer holds a sample;
+       · the empty-state prompt — the page alone. Its whole job is the NO-sample case (it ADDS
+         'empty-state'), so gating it on a sample would kill the prompt it exists to show.
+     A popped card window loads this same page (?card=): it has no hero sampler, so nothing runs there. */
+  function tiFrontShown () {
+    if (window.__cardOnly || window.__uiParked) return false;   // fb636 (M3) — a closed editor shows nothing
+    try { return (typeof currentActivePanel === 'undefined') || ! currentActivePanel; } catch (_) { return true; }
+  }
+  var _tiEdHas = false;   // the editing layer holds a sample — pollLayerEmptyState's own answer
+  function tiHeroHasSample () {
+    if (_tiEdHas) return true;
+    var h = document.getElementById('hero');
+    return !! (h && h.classList.contains('has-sample'));
+  }
+  // fb636 — AT REST the glow and scan polls park too (their onStop darkens the pads and fades the lines: the wind-down);
+  // the page's 'tiactive' edge (first frame / touch / note after rest) brings them back within one poll.
+  function tiAwake () { try { return ! (window.__tiRest && window.__tiRest()); } catch (_) { return true; } }
+  function tiGlowNeed () { return tiHeroHasSample() && tiAwake(); }
+  var _tiFrontLoops = [];
+  function tiFrontLoop (fn, ms, need, onStop) {
+    var id = 0;
+    function stop () { if (! id) return; clearInterval(id); id = 0; if (onStop) { try { onStop(); } catch (_) {} } }
+    function tick () { if (! tiFrontShown() || (need && ! need())) { stop(); return; } fn(); }
+    function start () { if (id || ! tiFrontShown() || (need && ! need())) return; id = setInterval(tick, ms); }
+    _tiFrontLoops.push(start); start();
+    return start;
+  }
+  function tiKickFrontLoops () { for (var i = 0; i < _tiFrontLoops.length; ++i) { try { _tiFrontLoops[i](); } catch (_) {} } }
+  window.addEventListener('tipanelchange', function () { tiKickFrontLoops(); try { kickScanViz(); } catch (_) {} });
+  window.addEventListener('tiactive',      function () { tiKickFrontLoops(); try { kickScanViz(); } catch (_) {} });
+
+  tiFrontLoop(pollSliceGlow, 16, tiGlowNeed, function () {   // ~60 Hz while it can be seen; parked, the pads go dark
+    var pads = document.querySelectorAll('#ti-layer-pads .ti-layer-pad');
+    for (var i = 0; i < pads.length; ++i) pads[i].classList.remove('playing');
+    for (var j = 0; j < state.sliceGlow.length; ++j) state.sliceGlow[j] = 0;
+    applySliceGlow();
+  });
 
   // ── Per-layer empty-state prompt polling (Mark 2 Phase 1 Task 7) ─────────
   // Polls ~10 Hz — slow is fine, only changes on layer-switch or sample-load.
@@ -12031,6 +12112,8 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     var fn = getNativeFn('getLayerHasSample');
     if (!fn) return;
     fn().then(function (has) {
+      _tiEdHas = !! has;
+      if (has) tiKickFrontLoops();   // fb636 — a sample arrived: the glow and scan polls come back
       var hero = document.getElementById('hero');
       if (!hero) return;
       if (has) hero.classList.remove('empty-state');
@@ -12038,7 +12121,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }).catch(function () {});
   }
 
-  setInterval(pollLayerEmptyState, 100);  // 10 Hz
+  tiFrontLoop(pollLayerEmptyState, 100, null);  // 10 Hz — while the front page is shown (fb636)
 
   // ── Scan-line viz polling ─────────────────────────────────────────────────
   // Draws a 1.5px purple line on each scan-active chop while a note is
@@ -12115,6 +12198,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
           } else {
             pEntry.truth = null; pEntry.velocity = 0;
           }
+          kickScanViz();   // fb636
         }
         pPosPromise.then(function (v) {
           pPosVal = (typeof v === 'number') ? v : -1; pGotPos = true; tryMergePitch();
@@ -12201,6 +12285,7 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
             entry.truth    = null;
             entry.velocity = 0;
           }
+          kickScanViz();   // fb636 — the draw loop parks when nothing scans; fresh truth wakes it
         }
         posPromise.then(function (v) {
           posVal = (typeof v === 'number') ? v : -1;
@@ -12245,7 +12330,21 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     // from being scheduled. Previously a single throw here killed the
 )TIHX") + juce::String (R"TIHX(    // entire scan-viz loop for the life of the editor session.
     try { drawScanViz(); } catch (_) {}
-    _scanRafId = requestAnimationFrame(tickScanViz);
+    /* fb636 — THE LOOP PARKS. It re-armed rAF forever and cleared this canvas every frame with nothing
+       on it. Now it runs only while a line is visible or fading (and the front is shown): the frame
+       that lands every line at opacity 0 has just drawn the canvas clear, so parking leaves it clear.
+       pollScanViz's fresh truth (kickScanViz) and a return to the front page wake it again. */
+    _scanRafId = (tiFrontShown() && tiScanBusy()) ? requestAnimationFrame(tickScanViz) : null;
+  }
+  function tiScanBusy () {
+    for (var k in _scanInterp) {
+      var e = _scanInterp[k];
+      if (e && (e.opacity > 0 || e.opacityTarget > 0)) return true;
+    }
+    return false;
+  }
+  function kickScanViz () {
+    if (_scanRafId === null && tiFrontShown() && tiScanBusy()) _scanRafId = requestAnimationFrame(tickScanViz);
   }
 
   function drawScanViz () {
@@ -12353,9 +12452,15 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }
   }
 
-  // Start the rAF draw loop once, and keep the slower C++ poll running too.
-  requestAnimationFrame(tickScanViz);
-  setInterval(pollScanViz, 16);   // ~60 Hz truth updates from C++ (Bug C: halved lag at direction flips)
+  // Start the rAF draw loop once (it parks itself when nothing scans — fb636), and the C++ poll.
+  _scanRafId = requestAnimationFrame(tickScanViz);
+  // ~60 Hz truth updates from C++ (Bug C: halved lag at direction flips) — fb636: only while the front
+  // page is shown and the editing layer holds a sample. Parked, every line is told to fade out (a
+  // stale scan line must not sit on the waveform), and the draw loop runs just long enough to fade it.
+  tiFrontLoop(function () { pollScanViz(); kickScanViz(); }, 16, tiGlowNeed, function () {
+    for (var k in _scanInterp) { var e = _scanInterp[k]; if (e) { e.opacityTarget = 0.0; e.truth = null; e.velocity = 0; } }
+    kickScanViz();
+  });
 
   // Initial render kick after DOM ready (handles mid-page-load injection too).
   if (document.readyState === 'loading') {
@@ -13045,6 +13150,11 @@ std::optional<juce::WebBrowserComponent::Resource> TerrainUiCore::getResource (c
     }
 
     function pullLayerStatusDots () {
+      // fb636 — the dots live in the Mix panel: poll only while it is open, like the four siblings
+      // below (pollMixMeters / pollStripsPlayingDots / pollRrDots / pollStemCaptureMeters). It was the
+      // one that asked 4 natives, 4x a second, on every page for the life of the editor.
+      var panel = document.getElementById('mix-panel');
+      if (! panel || ! panel.classList.contains('open')) return;
       // Light up dots for layers that have a sample.
       for (var i = 0; i < 4; ++i) {
         (function (idx) {
@@ -14772,18 +14882,27 @@ void TerrainUiCore::attach (TerrainAudioProcessorEditor* shell)
         }
         startTimerHz (uiHz);
     }
+    // fb636 (M3) — back from parked: the polls resume and the parked front loops are kicked
+    if (webView != nullptr) webView->evaluateJavascript ("window.__uiParked=0;try{window.dispatchEvent(new Event('tiactive'));}catch(e){}", nullptr);
     resyncAfterReattach();   // typeof-guarded no-ops on a first (pre-ready) attach; the real payload on reopen
 }
 
 void TerrainUiCore::detach()
 {
     stopTimer();
+    // fb636 (M3) — the kept-alive page is told it is parked: its rest-gated polls stop until the next attach
+    if (webView != nullptr) webView->evaluateJavascript ("window.__uiParked=1;", nullptr);
     audioProcessor.uiClients_.fetch_sub (1, std::memory_order_relaxed);   // fb148 -- viz census
     shell_ = nullptr;
 }
 
 void TerrainUiCore::resyncAfterReattach()
 {
+                // fb636 — a (re)loaded page gets its Resynth strips NOW: the ~5 s image heartbeat no longer counts down while
+                // the UI is quiet, so the reattach arms it — one full push on the next tick, even at rest.
+                // Staggered 0/3/6/9 ticks so 4 oscs never bake on one tick (the PluginEditor.h stagger's reason); a count
+                // under 16 runs down even while quiet, so the push still lands at rest.
+                for (int o = 0; o < 4; ++o) geodeImgHeartbeat_[o] = o * 3;
                 // fb514 -- BELT for the page restore: the pre-ready RESTORE pushes ride the Windows
                 // terrainFrame web-message lane, whose page-side listener registers ~6,500 lines
                 // AFTER the script that fires signalPageReady -- pushes into a listenerless lane are

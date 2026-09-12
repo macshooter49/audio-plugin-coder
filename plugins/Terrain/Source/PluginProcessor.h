@@ -746,6 +746,7 @@ public:
      *  visualizer. Safe on the message thread: rebuilds run on the same (message) thread. */
     const tw::ResynthFrameStore* geodeLiveStore (int osc) const noexcept
     { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].live.load (std::memory_order_acquire) : nullptr; }
+    int geodeLiveGen (int osc) const noexcept { return (osc >= 0 && osc < 4) ? geodeSlot_[(size_t) osc].gen.load (std::memory_order_relaxed) : 0; }   // fb636
     /** HARM viz — the latest gathered knob snapshot for one osc. The editor's DISPLAY
      *  HarmonicEngine instances rebuild their banks from this on the message-thread tick
      *  (plain struct copy of block-rate floats — a torn read costs one cosmetic frame). */
@@ -1235,6 +1236,11 @@ public:
     int  midiLearnedCc()  const noexcept { return midiLearnedCc_.load (std::memory_order_relaxed); }
     void midiCcSeen (int cc, int value) noexcept;        // audio thread
     void applyPendingMidiCc();                            // message thread (the processor timer)
+    // fb636 bugA — a pooled send's route pill is about to be LIT from the message thread (a UI pill
+    // click, a card add, a learned CC): build that send's per-voice filter pair FIRST, so the audio
+    // thread never sees the pill before the pair exists. Call it before setValueNotifyingHost. A no-op
+    // for every other parameter and for a pill going dark. Takes prepLock_ (never the audio thread).
+    void prebuildPoolSend (int paramIndex, float newValue01);
     std::atomic<int>   midiLearnParam_ { -1 };            // parameter INDEX to learn, −1 = idle
     std::atomic<int>   midiCcParam_[128];                 // parameter index per CC, −1 = unmapped
     std::atomic<float> midiCcPending_[128];
@@ -1626,6 +1632,20 @@ public:
         tapeLoopRecording.store(0.f);
     }
 
+    // fb636 M4t — the first record press allocates the 60 s ring (TapeLoopProcessor::arm), here on the
+    // message thread and under prepLock_ so it can never race prepareToPlay's re-size. The editor's
+    // native calls it AFTER storing tapeLoopRecording, so the count-in starts when it always did.
+    // fb636 review — an allocation that fails must not escape into the WebView native, and must not leave
+    // record pressed: the count-in would hold on its last beat forever waiting for a ring that never comes.
+    // arm() sets armed_ only after both buffers exist, so a failed arm leaves it unarmed and the next press
+    // simply tries again.
+    void armTapeLoop()
+    {
+        const std::lock_guard<std::mutex> prepGuard (prepLock_);
+        try { tapeLoop.arm(); }
+        catch (...) { tapeLoopRecording.store (0.f); }
+    }
+
     // Rolling capture buffer state
     // 0 = idle, 1 = exporting, 2 = ready (file saved), 3 = error
     std::atomic<int> captureExportState { 0 };
@@ -1893,6 +1913,11 @@ private:
     // reports which buffer it's reading (audioReadingIdx); the message thread
     // never rebuilds the buffer the audio thread is currently on. mode == None
     // publishes nullptr → voices fall back to the plain bank table.
+    // fb636 F4 — A BUFFER THAT STOPS BEING LIVE IS GIVEN BACK (the morph half of M2). Both buffers
+    // stayed resident for the life of the instance once a morph had run, Spectral off or not (7.63 MiB
+    // each: Razor Blade and Watchmen / Watchmen V2 left up to 61 MiB behind). publishMorph stamps the
+    // buffer a publish replaces with audioSeq_, and the 60 Hz timer frees it once no audio block can
+    // still hold it (importGraceOver) and it has sat unused for M2's hold (freeRetiredMorphs).
     struct MorphSlot
     {
         tw::Wavetable                     buf[2];
@@ -1917,6 +1942,9 @@ private:
         float builtHi     = -1.0f;
         const tw::Wavetable* builtImportPtr = nullptr;   // fb253 — morph SOURCE was this import (nullptr = a factory preset)
         int   builtImportEpoch = -1;                     // fb253 — the import's buildEpoch when morphed (re-import → re-morph)
+        bool         pending[2]   {};     // fb636 F4 — message thread: buf[i] was retired and may still hold its table
+        juce::uint64 retiredAt[2] {};     // fb636 F4 — audioSeq_ when buf[i] stopped being live (the grace fence)
+        juce::uint32 retiredMs[2] {};     // fb636 F4 — when (the hold before the free)
     };
     MorphSlot morphA_, morphB_, morphC_, morphD_;
     // fb76 — the audio thread publishes the EFFECTIVE (LFO-modulated) spectral amount per osc each
@@ -1975,11 +2003,65 @@ private:
     // published to voices, exactly like MorphSlot. When live != null the voice reads the
     // imported table instead of the factory bank. 2-buffer rotation: a re-import builds into
     // the buffer the audio thread is NOT on, then publishes, so there is no torn/zeroed read.
+    //
+    // fb636 M2r — TWO BUILDERS, ONE BUFFER. The pool job (UI steps, drops, copy-osc) and a host
+    // restore's synchronous rebuildImport both read nextIdx and assign()ed into buf[nextIdx]: run
+    // together they wrote the same vector (a torn table, or a corrupted heap when the sizes
+    // differed), and a bake queued before a DAW undo / A-B / project load held the newest ticket and
+    // published the PRE-restore table after it — for good, while a save wrote the restored PCM.
+    // Every build, publish and clear now holds `mx` and takes a fresh wtBuildReq_ ticket, and a job
+    // re-checks its ticket once it holds the lock, so the last request always wins. The audio thread
+    // never takes `mx`. (Left alone: a UI file pick whose wtIoPool_ decode lands after a restore
+    // still imports on top of it — that one is the user's own request, arriving late.)
+    // fb636 M2 — A RETIRED TABLE IS GIVEN BACK. The table a re-import or clear replaced stayed
+    // resident until the next build into that buffer (61 MiB per 128 frames, up to two per osc).
+    // publishImportLocked stamps it with audioSeq_ and the 60 Hz timer frees it once no audio block
+    // can still hold it (importGraceOver) and it has sat unused for kImportFreeHoldMs, so a burst of
+    // table steps keeps reusing its pages and only a table left alone is freed.
     struct ImportSlot
     {
         tw::Wavetable                     buf[2];
         std::atomic<const tw::Wavetable*> live { nullptr };
-        int nextIdx = 0;
+        int nextIdx = 0;                   // mx HELD — the buffer the next build writes into (never the live one)
+        std::mutex   mx;                   // fb636 M2r — builders, clears and the timer free; NEVER the audio thread
+        bool         pending[2]   {};      // fb636 M2 — mx HELD: buf[i] was retired and may still hold its table
+        juce::uint64 retiredAt[2] {};      // fb636 M2 — mx HELD: audioSeq_ when buf[i] stopped being live
+        juce::uint32 retiredMs[2] {};      // fb636 M2 — mx HELD: when (the hold before the free)
+        std::atomic<int> readers[2] { {0}, {0} };   // fb636 F1 — off-audio reads pinning buf[i] (ImportRead); a claim or the free waits them out
+    };
+    // fb636 F1 — AN OFF-AUDIO READ PINS THE BUFFER IT SAMPLES. The grace fence covers audio blocks only,
+    // and four readers sample an import with no lock: the display bake (getOscWavetableJson), WT→LFO
+    // (getOscLfoWaveJson), the Table distortion's source (setDistortionTableSrc, also run by
+    // setStateInformation on a host thread) and the spectral / HARM analysis (oscSourceSpec → toSpec).
+    // A bake finishing on wtBuildPool_ could retire the table one of them holds and the NEXT bake claim
+    // it and assign() a bigger one over it: a torn read with malloc'd tables, an unmapped page (SIGSEGV)
+    // with page-backed ones (the F1 skeptic's finding). A pin counts the buffer, then re-loads `live`,
+    // and keeps only a buffer that was STILL live after the count — so a claim or free that loads the
+    // count after its retire either sees the pin, or the reader has already moved to the new table
+    // (the Dekker pairing importGraceOver uses, all seq_cst). claimImportBufLocked waits pins out;
+    // freeRetiredImports skips a pinned buffer. A pinned reader takes no lock, so it always finishes;
+    // the audio thread never pins.
+    struct ImportRead
+    {
+        explicit ImportRead (ImportSlot& s) noexcept : slot (s)
+        {
+            for (;;)
+            {
+                const tw::Wavetable* p = s.live.load (std::memory_order_seq_cst);
+                if (p == nullptr) return;                                           // no import: nothing pinned
+                const int i = (p == &s.buf[1]) ? 1 : 0;
+                s.readers[i].fetch_add (1, std::memory_order_seq_cst);
+                if (s.live.load (std::memory_order_seq_cst) == p) { wt = p; idx = i; return; }
+                s.readers[i].fetch_sub (1, std::memory_order_release);              // retired under us: take the new one
+            }
+        }
+        ~ImportRead() { if (idx >= 0) slot.readers[idx].fetch_sub (1, std::memory_order_release); }
+        ImportRead (const ImportRead&) = delete;
+        ImportRead& operator= (const ImportRead&) = delete;
+
+        ImportSlot&          slot;
+        const tw::Wavetable* wt  = nullptr;   // the import to read, or nullptr (none live)
+        int                  idx = -1;
     };
     ImportSlot importSlot_[4];
     std::vector<float> importedPcm_[4];                          // stored mono source per osc (re-slice on resolution change)
@@ -2052,6 +2134,18 @@ private:
     bool               wt3dView_[4] = { false, false, false, false };       // 3D-waterfall view toggle per osc (survives editor reopen + preset)
     void rebuildImport (int osc);                                // message thread — (re)build importSlot_[osc] from importedPcm_
     void rebuildImportAsync (int osc);                           // fb248 — snapshot on msg thread, build on wtBuildPool_ (UI never freezes)
+    // fb636 M2 / M2r — ImportSlot lifetime (see ImportSlot). "Locked" = slot.mx HELD.
+    std::atomic<juce::uint64> audioSeq_ { 0 };                   // processBlock +1 on entry and +1 on exit: odd while a block runs
+    static constexpr juce::uint32 kImportFreeHoldMs = 500;       // a retired table sits this long before the timer frees it
+    bool importGraceOver (juce::uint64 retiredAt) const noexcept;
+    tw::Wavetable& claimImportBufLocked (ImportSlot& slot);
+    void publishImportLocked (ImportSlot& slot, const tw::Wavetable* to) noexcept;
+    void buildImportLocked (int osc, const float* pcm, int numSamples, int frames);
+    void dropImportTable (int osc);                              // "no import" on every path that leaves an osc without one
+    void freeRetiredImports();                                   // 60 Hz timer (message thread)
+    // fb636 F4 — MorphSlot lifetime (see MorphSlot). Message thread only: the rebuild, the publish and the free all run on the timer.
+    void publishMorph (MorphSlot& slot, const tw::Wavetable* to) noexcept;
+    void freeRetiredMorphs();                                    // 60 Hz timer, after the four rebuilds
 
     // fb481 — STALL BEACON. Max's Windows laptop froze every control in the host while audio ran;
     // the message thread was the casualty and NOTHING reported it. The beacon is a tiny watchdog
@@ -2079,44 +2173,37 @@ private:
     //    it refills one in place (~2.3 ms, fb467). Calling it from the message thread would forge that
     //    claim and could stall or mis-sequence the rebuild. This twin only READS. It still honours
     //    ready[], so a half-built table is never drawn.
-    // fb469 — the SAME resolution, mutable, for the ONE message-thread job that needs to write to
-    // a table: building its blur twin. Same preference order and the same ready[] honour as the
-    // display twin, and like it, it never touches audioReadingIdx. The const_casts are safe: every
-    // one of these objects is a non-const member of this processor; only the ACCESSOR is const.
-    tw::Wavetable* wavetableForBlurTwin (int osc, MorphSlot& slot, int presetIdx) noexcept
-    {
-        osc = juce::jlimit (0, 3, osc);
-        if (auto* m = slot.live.load (std::memory_order_acquire))
-        {
-            const int idx = (m == &slot.buf[1]) ? 1 : 0;
-            if (slot.ready[idx].load (std::memory_order_acquire)) return &slot.buf[idx];
-        }
-        if (auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire))
-            return const_cast<tw::Wavetable*> (imp);
-        return const_cast<tw::Wavetable*> (wavetableBank.getTable (presetIdx));
-    }
+    // fb636 M2 — wavetableForBlurTwin (fb469) is gone: it had no caller, and it handed out a WRITABLE
+    // import buffer, which the retire/free lifetime above now owns.
 
     const tw::Wavetable* wavetableForDisplay (int osc, const MorphSlot& slot, int presetIdx) const noexcept
     {
         osc = juce::jlimit (0, 3, osc);
+        return wavetableForDisplay (slot, presetIdx, importSlot_[(size_t) osc].live.load (std::memory_order_acquire));
+    }
+    // fb636 F1 — the same order with the import already resolved. A caller that SAMPLES the table passes its
+    // ImportRead's pinned buffer; the pointer-only callers (wtTableStamp, getOscNumFrames) use the one above.
+    const tw::Wavetable* wavetableForDisplay (const MorphSlot& slot, int presetIdx, const tw::Wavetable* imp) const noexcept
+    {
         if (auto* m = slot.live.load (std::memory_order_acquire))
         {
             const int idx = (m == &slot.buf[1]) ? 1 : 0;
             if (slot.ready[idx].load (std::memory_order_acquire)) return m;
         }
-        if (auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire)) return imp;
+        if (imp != nullptr) return imp;
         return wavetableBank.getTable (presetIdx);
     }
 
     const tw::Wavetable* wavetableForOsc (int osc, MorphSlot& slot, int presetIdx) noexcept
     {
         osc = juce::jlimit (0, 3, osc);
-        auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_acquire);
+        auto* imp = importSlot_[(size_t) osc].live.load (std::memory_order_seq_cst);   // fb636 M2 — seq_cst: the grace fence's audio half (importGraceOver)
         // fb253 — the morph now applies to the IMPORT too (rebuildMorphIfNeeded sources its spec from the
         // loaded table). A live+ready morph wins (morph-of-import OR morph-of-preset); otherwise fall back to
         // the RAW import if one is loaded (NEVER the factory bank — that was the wrong sound), else the bank.
         // (Inlines resolveMorphTable's race-hardened read so the fallback can be the import, not the bank.)
-        if (auto* m = slot.live.load (std::memory_order_acquire))
+        // fb636 F4 — seq_cst: the grace fence's audio half for the MORPH buffers too (publishMorph / freeRetiredMorphs).
+        if (auto* m = slot.live.load (std::memory_order_seq_cst))
         {
             const int idx = (m == &slot.buf[1]) ? 1 : 0;
             if (slot.ready[idx].load (std::memory_order_acquire))
@@ -2166,6 +2253,7 @@ private:
         tw::ResynthFrameStore                     buf[2];
         std::atomic<const tw::ResynthFrameStore*> live { nullptr };
         int         buildIdx      = 0;
+        std::atomic<int> gen { 0 };   // fb636 — bumped on every publish: the editor sees a rebuild even when it lands on the same buffer address
         bool        built         = false;
         const void* builtSample   = nullptr;
         int         builtEngine   = -1;
@@ -2546,6 +2634,25 @@ private:
     tw::RouteSnapshot          routeSnap_;
     std::atomic<juce::uint64>  poolWantMask_[2] { { 0 }, { 0 } };
     juce::uint64               poolBuiltMask_[2] { 0, 0 };
+    // fb636 bugA — THE PAIRS NO LONGER WAIT FOR THE TIMER. poolWantMask_ is written by the audio thread
+    //  only when the routes change, so a lit send's pair used to land one timer tick AFTER the first block
+    //  that wanted it (15 Hz with no editor, fb514) — and until then the send was missing and, in insert
+    //  mode, the routed oscillator too (the routed dry is subtracted whether or not the pair exists). Now
+    //  every message-side path that can light a pill builds from the PILLS themselves, before the audio
+    //  can see them: setStateInformation (from the incoming tree, then from the live pills), prepareToPlay,
+    //  the UI's setSynParam natives and a learned CC (prebuildPoolSend). The timer stays the universal
+    //  fallback — host automation, and the Splitter's lane devices, which resolveLanes marks wanted with
+    //  no pill lit — so the pairs built are a SUPERSET of today's pill-derived wants. EXCEPT the sends whose
+    //  device ENGINE is timer-built too (reverb 2-6, granular, tape): see dropSendsAwaitingEngine.
+    void buildPoolPairsLocked (juce::uint64 m0, juce::uint64 m1);   // prepLock_ HELD, never the audio thread
+    void dropSendsAwaitingEngine (juce::uint64& m0, juce::uint64& m1) const noexcept;   // prepLock_ HELD
+    void wantedPoolMaskLive (juce::uint64& m0, juce::uint64& m1) const noexcept;                   // the live pills, read as processBlock reads them
+    void wantedPoolMaskTree (const juce::ValueTree& st, juce::uint64& m0, juce::uint64& m1) const;   // the pills a state tree WILL load
+    std::atomic<float>* poolSrcRef (int q, int k) const noexcept;   // the CACHED src[k] processBlock reads (null before prepareToPlay)
+    std::atomic<float>*  poolSrcRaw_[kPoolSendCount][6] {};         // constructor-resolved — the same atomics as poolSrcRef
+    bool                 poolSrcDef_[kPoolSendCount][6] {};         // each pill's default (a PARAM with no value property loads it; an ABSENT one keeps its live value)
+    std::unordered_map<juce::String, int> poolSrcSlot_;             // pill ID -> q * 6 + k
+    std::vector<int>     poolQOfParam_;                             // parameter index -> pooled send q, or -1
     static_assert (tw::RouteSnapshot::kPools == kPoolSendCount, "the route snapshot must cover every pooled send");
     float* lastPoolPtrL_[kPoolSendCount] {};
     float* lastPoolPtrR_[kPoolSendCount] {};
@@ -2663,6 +2770,22 @@ private:
     std::array<TpeRefs, (size_t) ParameterIDs::kFxInstances> tpeRefs_ {};
     std::array<std::unique_ptr<tw::TapeFxEngine>, (size_t) ParameterIDs::kFxInstances> tpePool_;
     std::array<std::atomic<tw::TapeFxEngine*>, (size_t) ParameterIDs::kFxInstances> tpeLive_ {};   // fb528 — see grnLive_
+    // fb636 — THE RACK'S TAPE AND GRANULAR PARAMETERS, ONCE PER BLOCK. The rack runs every device one sample at a
+    //  time; applyTpe/applyGrn rebuilt their Params (a dozen M() reads, a pow) and called setParams EVERY SAMPLE.
+    //  M() is const (a parameter atomic through the per-block fxMod_ table), the tempo is per block, and setParams
+    //  is the engines' only writer of what it sets, so the struct and its effect are identical at every sample of a
+    //  block. Built on the first sample of a block and re-applied only when the block or the engine changes.
+    std::uint32_t fxBlockGen_ = 0;
+    std::array<juce::MidiBuffer, 4> perLayerMidi_;   // fb636 — processBlock's per-block MIDI buffers, pre-sized
+    juce::MidiBuffer flowMidi_, mixedMidi_;
+    std::array<std::uint32_t, (size_t) ParameterIDs::kFxInstances> tpeParBlk_ {}, grnParBlk_ {};
+    std::array<tw::TapeFxEngine*, (size_t) ParameterIDs::kFxInstances> tpeParEng_ {};
+    std::array<tw::GranularFxEngine*, (size_t) ParameterIDs::kFxInstances> grnParEng_ {};
+    std::array<tw::TapeFxEngine::Params, (size_t) ParameterIDs::kFxInstances> tpePar_ {};
+    std::array<tw::GranularFxParams, (size_t) ParameterIDs::kFxInstances> grnPar_ {};
+    std::array<std::uint32_t, (size_t) ParameterIDs::kFxInstances> grnMixBits_ {};   // granular mix sin/cos memo (bits)
+    std::array<float, (size_t) ParameterIDs::kFxInstances> grnMixWet_ {}, grnMixDry_ {};
+    std::array<bool, (size_t) ParameterIDs::kFxInstances> grnMixValid_ {};
     std::array<std::atomic<bool>, (size_t) ParameterIDs::kFxInstances> tpeWantBuild_ {};
     std::array<float, (size_t) ParameterIDs::kFxInstances> tpeEnv_ {};    // power fade, click-free
     void applyTpe (int inst0, float inL, float inR, float& outL, float& outR) noexcept;

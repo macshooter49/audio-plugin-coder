@@ -76,7 +76,7 @@ function mutatedPage () {
   const sub = (f, t) => { const n = src.split(f).length - 1; if (n !== 1) { console.error('MUTATION ' + MUT + ': anchor matched ' + n + ' times -> ' + f.slice(0, 90)); process.exit(2); } src = src.replace(f, t); console.log('   mutation ' + MUT + ' applied'); };
   if (MUT === 1) sub("function wakeCounted(why){ window.__tiWakes++; if (why) window.__tiWhy[why]++; wakeBurst(); }", "function wakeCounted(why){ window.__tiWakes++; if (why) window.__tiWhy[why]++; }");
   if (MUT === 2) sub(".forEach(function(fn){ if (typeof window[fn] === 'function') window[fn](); }); }catch(e){}\n        wake(); }", ".forEach(function(fn){ if (typeof window[fn] === 'function') window[fn](); }); }catch(e){}\n        }");   /* the watchdog finds the blank canvas and repairs nothing */
-  if (MUT === 3) sub("if (cv.__tiOffer === key) continue;   /* offered already in this exact state: not chased again */", "if (false) continue;");
+  if (MUT === 3) sub("if (cv.__tiOffer === key && ! (cv.classList && cv.classList.contains('fx-spec'))) continue;", "if (false) continue;");   /* fb636 — re-based: fb633 added the fx-spec exception to this line, so the old anchor matched 0 times and this control tested nothing (exit 2, on the fb635a tree too) */
   if (MUT === 4) sub("wokeAt = t; window.__fxRestDrawn = false; window.__heroDrawn = false; runOnce(t);", "wokeAt = t; runOnce(t);");
   const p = path.join(os.tmpdir(), 'canvas_alive_mut' + MUT + '.html'); fs.writeFileSync(p, src); return p;
 }

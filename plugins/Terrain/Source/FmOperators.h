@@ -102,11 +102,19 @@ namespace tw
         {
             const double pi2 = 6.2831853071795865;
 
-            float m2 = static_cast<float> (std::sin (pi2 * (st.m2Phase
+            // fb636 — M2 reaches the sound only as d2·m2 (into M1, or into the carrier on SPLIT) and storm21·m2.
+            //  With both exactly 0 (6 of Max's 7 FM slots) its double sine was computed for nobody; the terms
+            //  it fed become +0·m2 = ±0 added to a phase that is never -0 (phases live in [+0,1)), i.e. the
+            //  same value. m2Phase still advances in `advance`, untouched.
+            float m2 = 0.0f;
+            if (p.d2 != 0.0f || p.storm21 != 0.0f)
+            {
+                m2 = static_cast<float> (std::sin (pi2 * (st.m2Phase
                                          + static_cast<double> (p.storm12 * st.prevM1))));
-            // SCORCH — asymmetric drive on M2 (adds harmonics → richer sidebands)
-            if (p.scorchPre > 1.0f)
-                m2 = (fastTanh (p.scorchPre * m2 + p.scorchBias) - p.scorchTanhBias) * p.scorchMakeup;
+                // SCORCH — asymmetric drive on M2 (adds harmonics → richer sidebands)
+                if (p.scorchPre > 1.0f)
+                    m2 = (fastTanh (p.scorchPre * m2 + p.scorchBias) - p.scorchTanhBias) * p.scorchMakeup;
+            }
 
             double m1Arg = st.m1Phase + static_cast<double> (p.fbk * st.fbMem)
                                       + static_cast<double> (p.storm21 * m2);

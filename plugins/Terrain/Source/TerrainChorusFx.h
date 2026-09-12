@@ -61,6 +61,9 @@
 //    setLatencySamples from this device, and never add lookahead to it.
 // ═══════════════════════════════════════════════════════════════════════════════
 
+#include <limits>
+#include <cstring>
+#include <cstdint>
 #include <cmath>
 #include <cstdint>
 #include <vector>
@@ -415,8 +418,9 @@ public:
                     // DOWN wants d' = +(1 - 2^(-c/1200)). They are not the same number, and
                     // using one for both leaves the down side 1.5 cents flat at 50 cents.
                     const bool dual = (T.phaseMode == 4 && (C.flags & kDualMono)) != 0;
-                    rc[0] = std::exp2 (cents / 1200.0f) - 1.0f;
-                    rc[1] = dual ? rc[0] : (1.0f - std::exp2 (-cents / 1200.0f));
+                    if (! sameBits (cents, rcMemoC_)) { rcMemoC_ = cents; rcMemoUp_ = std::exp2 (cents / 1200.0f); rcMemoDn_ = std::exp2 (-cents / 1200.0f); }   // fb636 — memo: same float in, same float out
+                    rc[0] = rcMemoUp_ - 1.0f;
+                    rc[1] = dual ? rc[0] : (1.0f - rcMemoDn_);
                     dirc[0] = 1; dirc[1] = dual ? 1 : -1;
                     for (int c = 0; c < 2; ++c)
                     { q_[c] += rc[c] / std::max (1.0f, spanSamp); if (q_[c] >= 1.0f) q_[c] -= 1.0f; }
@@ -518,7 +522,8 @@ public:
                 // Colour moves both a drive and a cutoff at once.
                 const float gritK = 1.0f + (1.0f - colorSm_) * gritSpan_;
                 const float gritI = 1.0f / gritK;
-                const float colHz = clampf (colBase_ * std::exp2 (colorSm_ * 3.1521f), 700.0f, 18000.0f);
+                if (! sameBits (colorSm_, colMemoIn_)) { colMemoIn_ = colorSm_; colMemoExp_ = std::exp2 (colorSm_ * 3.1521f); }   // fb636 — memo
+                const float colHz = clampf (colBase_ * colMemoExp_, 700.0f, 18000.0f);
                 const float lkA   = (lkSm_ > 22.0f) ? onePoleFast (lkSm_) : 0.0f;
 
                 for (int c = 0; c < 2; ++c)
@@ -662,8 +667,9 @@ public:
                 //       it as the effect comes up. With Low Keep off, loL = loR = 0 and this
                 //       reduces to the plain crossfade, bit-exactly.
                 const float m  = (C.flags & kWetOnly) ? 1.0f : mixSm_;
-                const float dg = std::cos (m * 1.5707963f);
-                const float wg = std::sin (m * 1.5707963f);
+                if (! sameBits (m, mixMemoM_)) { mixMemoM_ = m; mixMemoDg_ = std::cos (m * 1.5707963f); mixMemoWg_ = std::sin (m * 1.5707963f); }   // fb636 — memo
+                const float dg = mixMemoDg_;
+                const float wg = mixMemoWg_;
                 const float loM = 0.5f * (loL + loR);
                 L[i] = inL * dg + wL * wg + loL * (1.0f - dg) + (loM - loL) * m;
                 R[i] = inR * dg + wR * wg + loR * (1.0f - dg) + (loM - loR) * m;
@@ -1250,6 +1256,12 @@ private:
     float fbTg_   = 0.0f,  fbSm_   = 0.0f;
     float lkTg_   = 20.0f, lkSm_   = 20.0f;
     float mixTg_  = 0.5f,  mixSm_  = 0.5f;
+    // fb636 — per-sample transcendental memos, keyed on the input's BITS (so -0 and +0 are different keys, exactly
+    //  as they are different arguments). The NaN seed never matches a real input.
+    static bool sameBits (float a, float b) noexcept { std::uint32_t x, y; std::memcpy (&x, &a, 4); std::memcpy (&y, &b, 4); return x == y; }
+    float rcMemoC_ = std::numeric_limits<float>::quiet_NaN(), rcMemoUp_ = 1.0f, rcMemoDn_ = 1.0f;
+    float colMemoIn_ = std::numeric_limits<float>::quiet_NaN(), colMemoExp_ = 1.0f;
+    float mixMemoM_ = std::numeric_limits<float>::quiet_NaN(), mixMemoDg_ = 1.0f, mixMemoWg_ = 0.0f;
 
     // per-block resolved
     // fb397 — Max: "we should be able to MAX OUT our amplifications... feedback at 100%% sounds

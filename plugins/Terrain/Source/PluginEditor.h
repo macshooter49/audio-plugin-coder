@@ -52,6 +52,9 @@ private:
     int dstVizPushCtr_ = 0;   // fb354 — rate-limits the distortion-curve push to ~15 Hz
     int dstVizQuietCtr_ = 0;        // fb614 — the 2 Hz heartbeat that reaches an IDLE editor
     juce::String lastDstVizQuiet_;  // fb614 — change gate: idle sends ONE push, then nothing
+    int crvQuietCtr_ = 0;           // fb636 — the popped curve card's quiet heartbeat (~3 Hz, stamp + change-gated curve)
+    juce::String lastCrvQuiet_;     // fb636 — the curve last sent to the card while quiet
+    int lastFrameBytes_ = 0;        // fb636 — the last frame's size: the next frame preallocates once
     void timerCallback() override;
     // fb214 — OSC-scope dead-feed guard: oscScopeSeq advances ONLY when the audio thread
     // publishes a frame; if it stalls (host stopped calling processBlock) the latched
@@ -1579,7 +1582,6 @@ private:
     std::atomic<int> evalInFlight_ { 0 };
     double           evalSentMs_ = 0.0;
     uint64_t         lastFrameHash_ = 0;   // fb483 -- idle-skip: hash of the last SENT frame
-    int              lastCapturePushed_ = -1;   // fb567 — the export state last pushed (a change always ships, even in silence)
     juce::String     lastFrameJs_;         // fb567 — FRAME-DIFF PROBE (opt-in, TERRAIN_CPU_PROBE): the last sent frame, to name the bytes that broke idle
     double           lastDiffDumpMs_ = 0.0;
     int              idleSkips_     = 0;   // frames skipped since; every 30th sends a keep-alive
@@ -1608,6 +1610,7 @@ private:
     // data) is re-baked when the STORE changes (or on the 5s heartbeat = self-heal for a reloaded
     // page); bright (current-knob survivors) also re-bakes on content-param changes, throttled.
     const tw::ResynthFrameStore* geodeImgStore_[4] = { nullptr, nullptr, nullptr, nullptr };
+    int  geodeImgStoreGen_[4]  = { -1, -1, -1, -1 };   // fb636 — the store generation last pushed (a rebuild onto the same address)
     tw::ResynthParams geodeImgParams_[4];
     int  geodeImgGen_[4]       = { 0, 0, 0, 0 };
     int  geodeImgCooldown_[4]  = { 0, 0, 0, 0 };   // ticks until the next bright re-bake

@@ -285,17 +285,17 @@ namespace ParameterIDs
     //   later additions don't reshuffle the enum.
     // SYN_FILTER{1,2}_DRV: 0..1 → 0..+24 dB into nonlinearity; output
     //   makeup gain = drive^-0.5 (~−3 dB per +6 dB drive). §4 of prompt.
-    // SYN_FILTER{1,2}_ENV: BIPOLAR -1..+1, signed amount of the dedicated
-    //   FLT envelope applied to cutoff in semitone space (±96 ST at ±1).
+    // SYN_FILTER{1,2}_ENV: BIPOLAR -1..+1. fb636 — NO DSP READER: the FLT envelope reaches cutoff
+    //   only through its Env → Cutoff route; these stay for saved states and the page's Env-knob mirror.
     constexpr char SYN_FILTER_SLOT[]   = "SYN_FILTER_SLOT";    // int 0..1
     constexpr char SYN_FILTER1_TYPE[]  = "SYN_FILTER1_TYPE";   // choice 0..26 (active: 0=Ladder LP·24, 4=Acid 303, 5=SVF LP, 26=NONE)
     constexpr char SYN_FILTER1_DRV[]   = "SYN_FILTER1_DRV";    // float 0..1
-    constexpr char SYN_FILTER1_ENV[]   = "SYN_FILTER1_ENV";    // float -1..+1 (bipolar)
-    constexpr char SYN_FILTER2_TYPE[]  = "SYN_FILTER2_TYPE";   // RESERVED (inert this batch)
-    constexpr char SYN_FILTER2_CUT[]   = "SYN_FILTER2_CUT";    // RESERVED
-    constexpr char SYN_FILTER2_RES[]   = "SYN_FILTER2_RES";    // RESERVED
-    constexpr char SYN_FILTER2_DRV[]   = "SYN_FILTER2_DRV";    // RESERVED
-    constexpr char SYN_FILTER2_ENV[]   = "SYN_FILTER2_ENV";    // RESERVED
+    constexpr char SYN_FILTER1_ENV[]   = "SYN_FILTER1_ENV";    // float -1..+1 (bipolar) — state-only (fb636, see above)
+    constexpr char SYN_FILTER2_TYPE[]  = "SYN_FILTER2_TYPE";   // choice 0..26 — live (fb636: no longer RESERVED, Filter 2 is wired)
+    constexpr char SYN_FILTER2_CUT[]   = "SYN_FILTER2_CUT";    // live
+    constexpr char SYN_FILTER2_RES[]   = "SYN_FILTER2_RES";    // live
+    constexpr char SYN_FILTER2_DRV[]   = "SYN_FILTER2_DRV";    // live
+    constexpr char SYN_FILTER2_ENV[]   = "SYN_FILTER2_ENV";    // float -1..+1 (bipolar) — state-only (fb636, see above)
     // Back-panel per-filter knobs: VEL = velocity→cutoff depth (0..1), PDRV = post-filter output
     // drive/saturation (0..1). (Env=SYN_FILTER*_ENV, Track=SYN_FILTER*_KEYTRACK, Mix=SYN_FILTER*_MIX.)
     constexpr char SYN_FILTER1_VEL[]   = "SYN_FILTER1_VEL";
@@ -466,7 +466,7 @@ namespace ParameterIDs
     constexpr char SYN_ENV_PIT_CA[]    = "SYN_ENV_PIT_CA";   // float -1..+1
     constexpr char SYN_ENV_PIT_CD[]    = "SYN_ENV_PIT_CD";   // float -1..+1
     constexpr char SYN_ENV_PIT_CR[]    = "SYN_ENV_PIT_CR";   // float -1..+1
-    constexpr char SYN_ENV_PIT_DEPTH[] = "SYN_ENV_PIT_DEPTH";  // float -48..+48 semitones
+    constexpr char SYN_ENV_PIT_DEPTH[] = "SYN_ENV_PIT_DEPTH";  // float -48..+48 semitones — LEGACY, inert since Batch 10 (6587a82; Env N → Pitch routes replaced it). fb636: no DSP reader; kept for saved states
     constexpr char SYN_ENV_PIT_LOOP[]  = "SYN_ENV_PIT_LOOP";  // bool
     constexpr char SYN_ENV_M1_DLY[]    = "SYN_ENV_M1_DLY";   // float ms (skewed)
     constexpr char SYN_ENV_M1_A[]      = "SYN_ENV_M1_A";   // float ms (skewed)
@@ -516,7 +516,7 @@ namespace ParameterIDs
     constexpr char SYN_OSC_A_WT_FRAME[]  = "SYN_OSC_A_WT_FRAME";  // float 0..1 frame position within wavetable
 
     // ── Synth section — Phase 2C (Warp modes: BEND / SYNC / FORMANT) ─────
-    constexpr char SYN_OSC_A_WARP_MODE[]   = "SYN_OSC_A_WARP_MODE";   // choice(48) FROZEN — 0-10 shipped, 11-34 shapers, 35-47 reserved
+    constexpr char SYN_OSC_A_WARP_MODE[]   = "SYN_OSC_A_WARP_MODE";   // choice(48) FROZEN — 0-10 shipped, 11-34 shapers, 35-38 filter/draw, 39-46 Alt Warp (fb636), 47 reserved
     constexpr char SYN_OSC_A_WARP_AMOUNT[] = "SYN_OSC_A_WARP_AMOUNT"; // float 0..1
     constexpr char SYN_OSC_A_WARP2_MODE[]  = "SYN_OSC_A_WARP2_MODE";  // choice(48) FROZEN, chained slot 2 — same list as slot 1
     constexpr char SYN_OSC_A_WARP2_AMT[]   = "SYN_OSC_A_WARP2_AMT";   // float 0..1

@@ -244,93 +244,12 @@
     (document.head || document.documentElement).appendChild(stK);
   } catch(e) {}
 
-  var smilList = [], smilScan = 0;
-  function smilTick(dt){
-    if ((++smilScan & 255) === 1){                 /* re-scan every ~4 s: cards built later carry SMIL too */
-      smilList = [];
-      try {
-        /* fb508b — ONLY the FLOW emblem svgs. The first cut scrubbed every svg that carried an
-           <animate> — dozens across the page, most of them one-shot transition helpers — and
-           setCurrentTime forces a full re-render of each per call: measured, it DOUBLED the
-           page's idle cost (WebView 116 -> 225). The looping SMIL decorations all live in the
-           four FLOW tiles. Everything else keeps its boot-time pause. */
-        var s2 = document.querySelectorAll('.flow-mode svg');
-        for (var j = 0; j < s2.length; j++){
-          try {
-            if (s2[j].getElementsByTagName('animate').length || s2[j].getElementsByTagName('animateTransform').length){
-              if (!s2[j].animationsPaused()) s2[j].pauseAnimations();
-              smilList.push(s2[j]);
-            }
-          } catch(e) {}
-        }
-      } catch(e) {}
-    }
-    if (window.__tiOff && window.__tiOff('syn-panel')) return;   /* fb508b — tiles off screen: no scrub */
-    for (var i = 0; i < smilList.length; i++){
-      try { smilList[i].setCurrentTime(smilList[i].getCurrentTime() + dt); } catch(e) {}
-    }
-    arpTick(dt);   /* fb509b — the ARP tile rides the same paced clock */
-  }
-
-  /* fb509b — THE ARP TILE'S PULSES, as a paced JS tween. Byte-faithful to the killed CSS:
-       flwArpFire 1.9s: 0/68-100% op .4 sc 1 · 8% op 1 sc 1.55 · 34% op .4  (n2 +0.2s, n3 +0.4s)
-       flwArpFlow 1.0s linear: stroke-dashoffset 0 -> -22                    (l2 +.18s, l3 +.36s)
-       flwChord   1.9s: op .75 <-> 1 · flwSeqLit 2.2s: op .35 <-> 1          (s2/.4 s3/.8 s4/1.2)
-     Inline styles only — geometry untouched (the fixed-positions law). */
-  var arpT = 0, arpEls = null, arpScan = 0;
-  function arpAt(t, a, b, c, oa, ob2, oc){ /* piecewise: 0..a..b..c(=1) keyframe fractions */
-    if (t < a) return oa + (ob2 - oa) * (t / a);
-    if (t < b) return ob2 + (oc - ob2) * ((t - a) / (b - a));
-    return oc;
-  }
-  function arpTick(dt){
-    arpT += dt;
-    if ((++arpScan & 255) === 1 || !arpEls){
-      arpEls = {
-        notes: document.querySelectorAll('.flow-mode .arpNote'),
-        lines: document.querySelectorAll('.flow-mode .arpLine'),
-        holds: document.querySelectorAll('.flow-mode .arpHold'),
-        sqs:   document.querySelectorAll('.flow-mode .sq'),
-      };
-    }
-    var i, el, ph, v;
-    for (i = 0; i < arpEls.notes.length; i++){
-      el = arpEls.notes[i];
-      ph = ((arpT - i * 0.2) / 1.9 % 1 + 1) % 1;
-      v  = arpAt(ph, 0.08, 0.34, 1, 0.4, 1, 0.4);
-      var sc = arpAt(ph, 0.08, 0.34, 1, 1, 1.55, 1);
-      try { el.style.opacity = v.toFixed(3); el.style.transform = 'scale(' + sc.toFixed(3) + ')'; } catch(e) {}
-    }
-    for (i = 0; i < arpEls.lines.length; i++){
-      el = arpEls.lines[i];
-      ph = ((arpT - i * 0.18) / 1.0 % 1 + 1) % 1;
-      try { el.style.strokeDashoffset = (-22 * ph).toFixed(2); } catch(e) {}
-    }
-    for (i = 0; i < arpEls.holds.length; i++){
-      el = arpEls.holds[i];
-      ph = (arpT / 1.9 % 1);
-      try { el.style.opacity = (0.75 + 0.25 * (0.5 - 0.5 * Math.cos(ph * 6.2832))).toFixed(3); } catch(e) {}
-    }
-    for (i = 0; i < arpEls.sqs.length; i++){
-      el = arpEls.sqs[i];
-      ph = (((arpT - i * 0.4) / 2.2) % 1 + 1) % 1;
-      try { el.style.opacity = (0.35 + 0.65 * (0.5 - 0.5 * Math.cos(ph * 6.2832))).toFixed(3); } catch(e) {}
-    }
-  }
-  function smilLoop(){
-    var last = 0, alt = 0;
-    function frame(ts){
-      var dt = last ? Math.min(0.1, (ts - last) / 1000) : 1/60;
-      last = ts;
-      /* fb511 — 30 fps: the emblem scrub + arp tween at 60 were most of the true-idle residual
-         (WebView 75% with the push lane fully asleep); at ~20 px the halving is imperceptible. */
-      if (((++alt) & 1) === 0) smilTick(dt * 2);
-      window.requestAnimationFrame(frame);         /* rides the paced arbiter clock */
-    }
-    window.requestAnimationFrame(frame);
-  }
-  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', smilLoop);
-  else smilLoop();
+  /* fb636 — THE FLOW TILES' SCRUBBER LEFT THIS WINDOWS-ONLY BLOCK. smilTick / arpTick (fb508 / fb509b) were the one
+     faithful copy of the tiles' motion; they now serve BOTH platforms from the frame dispatcher below (flowTiles), on
+     the motion clock: a tile moves while it is lit and a note sounds, winds up on the first note, finishes its loop
+     onto a rest pose when the sound ends, and then costs nothing. The smilLoop rAF chain that re-armed here FOREVER —
+     every other frame scrubbing three SVGs and writing eleven styles with nobody playing — is gone (a pending rAF was
+     never free: fb506b). The kill list above stays exactly as it was. */
 })();
 
 /* ══ fb511 — THE FRAME DISPATCHER (both platforms — deliberately OUTSIDE the Windows-only
@@ -356,7 +275,9 @@
   var reg = new Map(), lastPush = nowMs(), laneSeen = false;   /* fb581 — see THE LANE IS THE CLOCK below */
   function nowMs(){ return (window.performance && performance.now) ? performance.now() : Date.now(); }
   function run(ts){
+    motionStep();                    /* fb636 — THE MOTION CLOCK (below) steps once per painter pass, glass or not, so its envelope stays true */
     if (window.__tiFrozen) return;   /* fb620 — the preset browser's glass covers every painter; nothing under it needs a frame */
+    lastRunAt = nowMs();
     reg.forEach(function(fn){ try { fn(ts); } catch(e) {} });
   }
   window.__tiFrameReg   = function(name, fn){ reg.set(name, fn); };
@@ -367,9 +288,11 @@
      widget: counterbalanced A/B read +32 points during play. So a dispatch only marks pending
      and arms ONE (arbiter-paced) rAF; the painters run vsync-aligned with the freshest pushed
      data. No pushes -> nothing pending -> zero frames at idle, exactly as designed. */
-  var pend = false;
+  var pend = false, framedAt = -1e9;   /* fb636 — when the C++ last shipped a REAL frame (the rest flag below reads it) */
   window.__tiFrame = function(){
     lastPush = nowMs(); laneSeen = true;   /* fb581 — a real push: this page HAS a lane */
+    if (lastPush - framedAt >= 1500) tiActive();   /* fb636 — the first real frame after rest: parked front polls resume */
+    framedAt = lastPush;
     if (pend) return;
     pend = true;
     window.requestAnimationFrame(function(ts){ pend = false; run(ts || nowMs()); });
@@ -504,11 +427,15 @@
         there would run every painter BEFORE the app's own handler — the re-ordering that made
         Tests/all_menus.js fail 2-3 of 42 bars at random (see the note on wakeBurst above). A
         frame scheduled on rAF lands after the handler, which is the whole point. */
-  var gRaf = 0, gDown = false, gTail = 0;
+  var gRaf = 0, gDown = false, gTail = 0, handAt = -1e9;   /* fb636 — handAt: the last pointer/wheel/key, for the rest flag */
   function gFrame(ts){
     gRaf = 0;
-    runOnce(ts || nowMs());
-    if (gDown || nowMs() < gTail) { gTell(); gRaf = window.requestAnimationFrame(gFrame); }
+    var t0 = nowMs();
+    if (gDown || t0 < gTail || t0 - lastRunAt > 8) runOnce(ts || t0);   /* a hand always paints; a tail frame (fb636) skips a vsync a push already painted */
+    if (gDown || nowMs() < gTail) { gTell(); if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }   /* fb636 — only when none is pending: runOnce may already have armed one (tailKick on the live→still edge), and two chains double every pass for the rest of the gesture */
+    /* fb636 — THE WIND-DOWN TAIL (THE MOTION CLOCK, below): after the sound ends, frames continue only while something is
+       still winding, never past the cap, and WITHOUT gTell — the C++ is not woken, its frame stays idle-skipped. */
+    else if (! MOT.live && windBusy()) { if (nowMs() < wTail) { if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); } else windSnap(); }
   }
   /* fb591 — AND TELL THE C++ SIDE. Painting faster is only half of it: the whole fx-rack / LFO /
      filter viz push lives behind `if (! uiQuiet)` in PluginEditor, and uiQuiet was driven purely by
@@ -524,7 +451,7 @@
             gNat = window.Juce.getNativeFunction('uiGesture') || false;
           if (gNat) gNat(); } catch (e) {}
   }
-  function gKick(){ gTell(); if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }
+  function gKick(){ if (nowMs() - handAt >= 1500) tiActive(); handAt = nowMs(); gTell(); if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }
   function gEnd(){ gDown = false; gTail = nowMs() + 450; gKick(); }   /* a tail, so the release frame lands */
   document.addEventListener('pointerdown',   function(){ gDown = true; gKick(); }, true);
   document.addEventListener('pointerup',     gEnd, true);
@@ -534,6 +461,293 @@
   document.addEventListener('wheel',   function(){ gTail = nowMs() + 350; gKick(); }, true);
   document.addEventListener('keydown', function(){ gTail = nowMs() + 350; gKick(); }, true);
   window.__tiGestureLive = function(){ return gDown || nowMs() < gTail; };   /* the gate reads it */
+  /* fb636 — THE EDGE OUT OF REST, announced once: a first real frame, a first touch, or the first note after rest.
+     Whatever parked itself at rest (the hero sampler's polls in PluginEditor.cpp's overlay) listens and resumes;
+     at rest nothing fires, so nothing polls to find out. */
+  function tiActive(){ try { window.dispatchEvent(new Event('tiactive')); } catch (e) {} }
+  /* ═══ fb636 — THE REST FLAG BOTH PLATFORMS READ ═══════════════════════════════════════════════════
+     The fb504 gates (`if (window.__tiQuiet) return;`) read a flag that ONLY the Windows arbiter writes —
+     its IIFE returns on any other UA — so on the Mac every one of them has stood open since fb504:
+     the getSynthMod merge every 2.5 s, eight FMIX getSynParam reads every 1.5 s, the rack compressor
+     dials' innerHTML every 400 ms, idle or not, forever. __tiQuiet must NOT simply be defined here: the
+     Mac front/FX paths were chosen by `window.__tiQuiet === undefined` (fb508/fb510). So a second name,
+     one definition, fed only by what the page already knows. AT REST means all three:
+       · no note sounding — __notesActive, trusted only while its stamp is fresh (lfoFrame's 700 ms
+         rule: a card window whose feed has gone quiet is not "playing");
+       · no hand on this page — fb591's gesture clock, plus the arbiter's own 1.5 s of grace;
+       · no REAL C++ push for 1.5 s — a preset load, a pushed value moving under automation, a release
+         tail: the plugin changing is not rest either.
+     A poll that serves a real edit keeps its full rate the whole time a hand is on the controls, and
+     resumes the instant one is. On Windows the arbiter's flag stays the authority, byte for byte:
+     __tiRest() IS __tiQuiet there. A receiver of a drag born in ANOTHER window (a popped card's chip)
+     must not read this — nothing happens on this page during such a drag — and none does. */
+  window.__tiRest = function(){
+    if (window.__uiParked) return true;   /* fb636 (M3) — the editor is closed: nothing on this page is seen (PluginEditor detach/attach) */
+    if (window.__tiQuiet !== undefined) return !! window.__tiQuiet;   /* Windows — the arbiter's own flag */
+    if (window.__tiForceActive) return false;
+    var t = nowMs();
+    if (gDown || t < gTail || t - handAt < 1500 || t - framedAt < 1500) return false;
+    var nt = window.__notesActiveT;
+    return ! (window.__notesActive && (nt == null || Date.now() - nt < 700));
+  };
+
+  /* ═══ fb636 — THE MOTION CLOCK: EVERY LOOP WINDS UP, WINDS DOWN, AND MOVES ONLY WHILE MIDI SOUNDS ═══════════════════
+     Max: "the four modes that we have, the flow cards — I want those to have an ending animation and a startup
+     animation. The startup animation is when the MIDI is being brought in and it plays, it starts to move. The ending
+     animation — to stop it from just staying plain static still, 'cause it might be in the middle of a frame and just
+     the MIDI stops and it just pauses, I don't want that... make this a hard rule — animation loops stop by also giving
+     us an animation loop ending... a wind up and a wind down and then it stops. That's the Serum 2 method. Same with the
+     filter, knobs and everything. Anything that's moving. I only want things to be moving officially when MIDI's coming
+     in... but we want to keep all the paint there. We don't want the paint or the visualization to break or disappear."
+
+     ONE mechanism, built from parts that were already here (fb567's live rule, fb591's bounded clock, ROBIN's arm ease):
+       · __tiLive()     THE truth: the sounding flag AND its freshness stamp (lfoFrame's fb567 rule — lfoFrame now calls
+                        this). A hand is NOT live: it repaints (fb591) but it does not animate decoration.
+       · MOT            the envelope, stepped once per painter pass (run): m climbs over 250 ms while live and falls over
+                        700 ms when not; e = smoothstep(m); tau = the integral of e — MOTION TIME. Decorative animators
+                        read tau and e instead of the wall clock, so they wind up and down with the sound, and at rest tau
+                        HOLDS: a heal or a gesture repaint draws the pose already on screen (fb577 / fb590) instead of
+                        jumping to a new one, which is what the wall clock did on every wake.
+       · __tiWind()     a LOOP's own clock (the FLOW tiles): winds up in 250 ms; when its `on` drops it FINISHES THE LOOP —
+                        decelerates from the speed it had onto the next rest pose (never backwards; a velocity-continuous
+                        ease of at most 1.2 s) and stops there.
+       · __tiEnv()      the envelope alone, keyed, for a loop that is not periodic (a card's scroll).
+       · THE TAIL       the C++ stops shipping frames once its bytes go still, which can come before a wind-down has
+                        landed. So the live→still EDGE arms a page-side clock on fb591's gFrame: it runs only while
+                        something is still winding, it is capped at 1.5 s, and it NEVER calls gTell — the C++ stays
+                        quiet. It is not a clock invented from silence (fb581): it starts on a real edge and ends by
+                        itself. At idle nothing is pending, so mac_idle_frames stays 0.
+       · html.ti-still  the CSS breathers' rest (THE BREATHERS, below). */
+  var K = {}, MOT = { m: 0, e: 0, tau: 0, dt: 0, ts: 0, live: false, pass: 0, offPass: -1 }, wTail = 0, wdT = 0, lastRunAt = 0;
+  window.__tiMot = MOT;
+  function sstep(x){ return x * x * (3 - 2 * x); }
+  function isstep(y){ y = y < 0 ? 0 : (y > 1 ? 1 : y); return 0.5 - Math.sin(Math.asin(1 - 2 * y) / 3); }   /* smoothstep's inverse */
+  window.__tiLive = function(){ var t = window.__notesActiveT; return !! window.__notesActive && !! t && (Date.now() - t) < 700; };
+  /* a key's own step: a gap longer than 100 ms is a clock that was STOPPED, not time that passed — it counts as one
+     frame, so a wind-up after a rest starts from its first step instead of leaping a tenth of a second in.
+     fb636 h3 — st.lapse keeps the RAW gap: an ending whose key was not called for over 250 ms was not on screen (its card
+     closed, its page hidden) and is not resumed with no MIDI — it lands at once (__tiWind / __tiEnv, below). */
+  function kdt(st){ var t = nowMs(), d = st.ts ? (t - st.ts) / 1000 : 0; st.ts = t; st.lapse = d; return d < 0 ? 0 : (d > 0.1 ? 1 / 60 : d); }
+  function motionStep(){
+    var dt = kdt(MOT), live = window.__tiLive(); MOT.pass++;
+    MOT.m = live ? Math.min(1, MOT.m + dt / 0.25) : Math.max(0, MOT.m - dt / 0.70);
+    MOT.e = sstep(MOT.m); MOT.tau += dt * MOT.e; MOT.dt = dt;
+    if (live !== MOT.live){ MOT.live = live; if (live) { brEdge(true); tiActive(); } else { MOT.offPass = MOT.pass; tailKick(true); brEdge(false); } }
+    if (live && ! wdT) wdT = setTimeout(watchLive, 800);
+  }
+  /* The flag can go stale with no frame left to notice it: a held note on a silent patch lets the C++ idle-skip, and a
+     stalled message thread ships nothing — no painter runs, so nobody reads the stamp expiring and the motion would
+     freeze mid-loop. While live, ONE timer looks; if the frames have stopped it gives the tail a frame, which sees the
+     edge and winds down. It exists only while live: at rest there is no timer. */
+  function watchLive(){ wdT = 0; if (! MOT.live) return;
+    if (nowMs() - MOT.ts > 700) tailKick(true); else wdT = setTimeout(watchLive, 800); }
+  function tailKick(edge){ var t = nowMs(); if (edge || t >= wTail) wTail = Math.max(wTail, t + 1500);
+    if (! gRaf) gRaf = window.requestAnimationFrame(gFrame); }
+  function windBusy(){ if (MOT.m > 0) return true; var t = nowMs();
+    for (var k in K){ var s = K[k]; if (s.w && (s.park || (! s.on && s.m > 0)) && t - s.ts < 2000) return true; }
+    return false; }
+  /* the cap's safety net: a wind that could not land inside 1.5 s (its frames were starved) lands NOW, and one frame
+     paints it — a loop may never be left mid-frame. */
+  function windSnap(){ for (var k in K){ var s = K[k]; if (! s.w || s.on) continue;
+      if (s.park) land(s, s.park.g, s.park.P, s.park.B); else if (s.m > 0 && s.P) land(s, nextRest(s.tau, s.P, s.B), s.P, s.B);
+      s.m = 0; s.r = 1; }
+    MOT.m = 0; MOT.e = 0; runOnce(nowMs()); }
+  /* the first rest pose at or after x: B lists the rest bands [lo, hi] inside one period P (seconds of the loop) */
+  function nextRest(x, P, B){ var base = Math.floor(x / P) * P, r = x - base, best = Infinity;
+    for (var i = 0; i < B.length; i++){ var c = (r <= B[i][1]) ? base + Math.max(r, B[i][0]) : base + P + B[i][0]; if (c < best) best = c; }
+    return best; }
+  /* THE LANDING (fb636 h1 — Max, 02:34: "dots should be organized and stable, not frozen on the screen like this"): a loop
+     that has stopped is FOLDED back into its first period and snapped onto the band edge it touches, so a rest is the same
+     number every time — the same SMIL time, the same styles, the same pixels — wherever the motion happened to stop, and
+     the clock never grows without bound. Every element a tile draws is periodic in P (or blended out at rest), so the
+     fold changes nothing on screen. */
+  function land(st, g, P, B){
+    var f = g - Math.floor(g / P + 1e-9) * P;
+    if (f < 1e-7 || P - f < 1e-7) f = 0;
+    for (var i = 0; i < B.length; i++){ if (Math.abs(f - B[i][0]) < 1e-7) f = B[i][0]; else if (Math.abs(f - B[i][1]) < 1e-7) f = B[i][1]; }
+    st.tau = f; st.park = null; st.m = 0; st.r = 1; }
+  /* __tiWind(key, P, B, on[, rate[, own[, vmax]]]) → the loop's time, in loop units (seconds when rate is 1).
+       rate   loop units per second at full speed (a card's steps per second); default 1
+       own    the caller has its own frame source (an open card's rAF): the key neither arms the page tail nor counts as busy
+       vmax   (fb636 h3) the element's FASTEST playing speed, in the same units: an ending that would take longer than 2.5 s
+              at this rate walks faster instead — still forward, still a velocity-continuous ease, its peak never above vmax
+              (a card at 1/1 walked home for up to 48 s: T >= 1.5·D/rate with home a whole pattern away)
+     The first band's start is the boot pose AND the home pose.
+     st.r — THE REST WEIGHT (fb636 h1): 1 at rest, 0 at full speed. It falls with the wind-up (1 − smoothstep(m)) and climbs
+     back to exactly 1 over the ending, in step with the Hermite, so a painter can blend each drawn value onto its designed
+     home pose (the ARP tile's dots even and still, the fan solid) and land on it EXACTLY, whatever the stop point. */
+  window.__tiWind = function(key, P, B, on, rate, own, vmax){
+    rate = rate > 0 ? rate : 1;
+    var st = K[key] || (K[key] = { w: own ? 0 : 1, m: 0, ts: 0, on: false, tau: B[0][0], park: null, r: 1, P: P, B: B });
+    var dt = kdt(st), was = st.on; st.on = !! on; st.P = P; st.B = B; st.snap = false;
+    if (on){
+      if (st.park){ st.m = isstep(Math.min(1, st.park.v / rate)); st.park = null; }   /* back to life mid-finish: pick up at the speed it had */
+      st.m = Math.min(1, st.m + dt / 0.25); st.tau += dt * rate * sstep(st.m);
+      /* fb636 h3 — A NOTE MID-ENDING NEVER JUMPS THE POSE. During the ending r climbed with elapsed time; re-deriving it
+         from the speed (1 − v/rate) dropped it up to 0.39 in one frame (the ARP fan's dash 18.2 → 11.6). So r comes down from
+         wherever it is, no faster than the wind-up's steepest (smoothstep' ≤ 1.5 × 4/s = 6/s — 0.1 a frame at 60 fps), until
+         it meets the speed's own weight; from rest that limit never binds, so a wind-up from rest is unchanged. */
+      var rT = 1 - sstep(st.m); if (rT < st.r) st.r = Math.max(rT, st.r - dt * 6);
+      return st.tau; }
+    /* fb636 h3 — AN ENDING NOBODY WATCHED IS NOT RESUMED WITH NO MIDI. A key not called for over 250 ms was off screen (its
+       card closed, #syn-panel hidden — drawEmblems skips) or its page's frames stopped; kdt would have picked the owed
+       ending up as if one frame had passed, so the card walked home at rest with no MIDI and em-drv re-armed the tail from a
+       hand's repaint. It lands on its home at once instead — no walk, no tail. The one exception is the ending that BEGINS
+       now: a page key whose last call was live and whose live→still edge is this very pass (the watchdog's stall, a late
+       note-off frame) winds down as designed — that is the note's own ending, seen from its start. */
+    if (st.lapse > 0.25 && (st.park || st.m > 0) && ! (st.w && was && MOT.offPass === MOT.pass)){
+      land(st, st.park ? st.park.g : nextRest(st.tau, P, B), P, B); st.snap = true; return st.tau; }
+    if (! st.park){
+      if (st.m <= 0) return st.tau;                                /* at rest: the pose holds */
+      /* THE ENDING: from speed v0, a 700 ms stop would travel v0*0.35 — the next rest pose past that is the goal, and the
+         ease is a Hermite from (tau, v0) to (goal, 0): constant deceleration when the goal is near, a short finishing
+         move (still monotonic: v0*T <= 3*D) when it is further, never longer than 1.2 s. */
+      var v0 = rate * Math.max(0.05, sstep(st.m)), g = nextRest(st.tau + v0 * 0.35, P, B), D = g - st.tau;
+      /* and never FASTER than it played: T >= 1.5·D/rate holds the Hermite's peak at or under full speed (still monotonic:
+         T·v0 <= 3·D); a far home pose therefore takes longer, and the tail's cap stretches to cover it */
+      var T = Math.max(Math.min(1.2, 2 * D / v0), 1.5 * D / rate);
+      /* fb636 h3 — BOUNDED: an element that can play faster (vmax) never takes more than 2.5 s to get home; the shorter T
+         keeps T·v0 <= 3·D (still forward) and holds the peak, 1.5·D/T, at or under vmax */
+      if (vmax > rate && T > 2.5) T = Math.max(2.5, 1.5 * D / vmax);
+      st.park = { t0: st.tau, g: g, v0: v0, T: T, s: 0, v: v0, r0: st.r, P: P, B: B };
+      if (st.w){ tailKick(false); wTail = Math.max(wTail, nowMs() + T * 1000 + 100); } }
+    var k = st.park, s = k.s = Math.min(1, k.s + dt / k.T), s2 = s * s, s3 = s2 * s;
+    st.tau = (2 * s3 - 3 * s2 + 1) * k.t0 + (s3 - 2 * s2 + s) * k.T * k.v0 + (3 * s2 - 2 * s3) * k.g;
+    k.v = ((6 * s2 - 6 * s) * k.t0 + (3 * s2 - 4 * s + 1) * k.T * k.v0 + (6 * s - 6 * s2) * k.g) / k.T;
+    st.r = k.r0 + (1 - k.r0) * sstep(s);
+    if (s >= 1) land(st, k.g, k.P, k.B);
+    return st.tau; };
+  /* __tiEnv(key, on) → 0..1: the same 250 ms wind-up / 700 ms wind-down, for a motion that has no loop to finish */
+  window.__tiEnv = function(key, on){ var st = K[key] || (K[key] = { m: 0, ts: 0, on: false }); var dt = kdt(st);
+    /* fb636 h3 — a stale call with no MIDI (the card was closed or its page hidden for over 250 ms) is an ending nobody
+       watched: it rests at once, and st.snap tells the caller to land what it owns (ROBIN's wheel) */
+    st.on = !! on; st.snap = ! on && st.lapse > 0.25;
+    st.m = st.snap ? 0 : (on ? Math.min(1, st.m + dt / 0.25) : Math.max(0, st.m - dt / 0.70)); return sstep(st.m); };
+  window.__tiWindState = function(key){ return K[key] || null; };   /* the gate reads it */
+  window.__tiWindBusy = windBusy;
+
+  /* ═══ THE BREATHERS (Mac: #env-line, the header's mod button, the rack's distortion curve and granular wave; Windows
+     killed them outright in fb505). animation-play-state:paused alone — the fb567 idiom — FREEZES A BREATH MID-CYCLE,
+     which is exactly the "pauses in the middle of a frame" Max refuses. So the still edge lets each one FINISH its
+     cycle: its next animationiteration is the instant it is back on its 0 % / 100 % pose, and that is where it pauses
+     (.ti-br-held). html.ti-still then holds every breather on that pose until the first note, which resumes each from
+     where it rests — the wind-up starts on the pose the wind-down ended on. A breather that never reports (display:none,
+     not running) is caught by the cap just past the longest cycle (3.4 s). The page boots still. The LFO curve's own
+     breathing is NOT here: it rests with the LFO head (.mv-idle, fb567 / fb570), which already has its own rules. */
+  var BR_SEL = '#syn-panel #env-line, .mod-btn.has-routes, #syn-panel .fxr-core .dst-curve, #syn-panel .fxr-core .grn-wave';
+  var brEnding = false, brCap = 0;
+  function brRelease(){ try { var h = document.querySelectorAll('.ti-br-held'); for (var i = 0; i < h.length; i++) h[i].classList.remove('ti-br-held'); } catch (e) {} }
+  function brStill(on){ try { document.documentElement.classList.toggle('ti-still', on); } catch (e) {} }
+  /* fb636 h2 — THE HELD POSE IS THE DESIGNED ONE, EXACTLY (Max, 02:34: "organized and stable, not frozen ... same for
+     everything else"). The iteration event lands a frame AFTER the boundary, so the pause held a few ms past the 0 % pose
+     (#env-line measured .900017) — a different few ms every time. brHome puts the paused breath's clock back ON the
+     boundary (0 % and 100 % are the same keyframe), so every rest is the same picture. Called only once the pause has
+     taken effect (the computed play-state is read first): a paused animation's currentTime is its hold time, so the pose
+     stays exactly there. A breather the cap caught mid-breath (it began during the ending, or never reported) is put on
+     its pose too, instead of being frozen wherever it was. Never pause() through the API: that would detach the
+     animation from the CSS play-state that resumes it on the first note. */
+  function brHome(el){ try { if (! el || ! el.getAnimations) return; void getComputedStyle(el).animationPlayState;
+      var A = el.getAnimations(); for (var i = 0; i < A.length; i++){ var a = A[i], d = a.effect && a.effect.getTiming ? +a.effect.getTiming().duration : 0;
+        if (d > 0 && a.currentTime != null) a.currentTime = Math.round(a.currentTime / d) * d; } } catch (e) {} }
+  window.__tiBrHome = brHome;   /* the LFO curve's own ending (lfoIdle) lands the same way */
+  function brHomeAll(){ try { var L = document.querySelectorAll(BR_SEL); for (var i = 0; i < L.length; i++) brHome(L[i]); } catch (e) {} }
+  function brEdge(live){
+    clearTimeout(brCap); brCap = 0;
+    if (live){ brEnding = false; brStill(false); brRelease(); return; }
+    brEnding = true;
+    brCap = setTimeout(function(){ brCap = 0; brEnding = false; brStill(true); brRelease(); brHomeAll(); }, 3600);
+  }
+  document.addEventListener('animationiteration', function(ev){
+    var el = ev.target;
+    /* the LFO curve finishing its breath after its head parked (lfoIdle → .mv-br-run): the idle rule pauses it once the
+       class comes off, on the boundary it just crossed */
+    try { if (el && el.classList && el.classList.contains('mv-br-run')) { el.classList.remove('mv-br-run'); brHome(el); return; } } catch (e) {}
+    if (! brEnding) return;
+    try { if (el && el.matches && el.matches(BR_SEL)) { el.classList.add('ti-br-held'); brHome(el); } } catch (e) {}
+  }, true);
+  brStill(true);
+
+  /* ═══ fb636 — THE FOUR FLOW TILES RIDE THE MOTION CLOCK, ON BOTH PLATFORMS ════════════════════════════════════════
+     The Mac ran 11 CSS-infinite tweens and 7 SMIL animations on the tiles forever — lit or not, MIDI or not (nothing on
+     the Mac ever paused them); Windows ran fb508's scrubber on a rAF chain that re-armed forever. Now ONE painter does
+     both with the same parts: the paused SMIL timeline scrubbed by setCurrentTime (fb508) and the byte-faithful tween of
+     the killed keyframes (arpTick, fb509b), driven by each tile's __tiWind clock.
+     fb636 h1 — Max, 2026-09-12 02:34: "the 4 modes dont move AT ALL unless selected, i dont want that. i want them to move
+     regardless of on/off, just about the MIDI my g, and the ARP should not have the dots still in motion when inactive,
+     dots should be organized and stable not frozen on the screen like this same for everything else."
+     So ALL FOUR tiles move while a note sounds, lit or not (lit only restyles them: colour, glow), wind up on the first
+     note, and when the sound ends each finishes its loop onto ONE designed HOME pose — the same picture every time,
+     wherever the motion stopped — and stops. Boot draws the same home. The homes, in seconds into each loop:
+       ARP    any of 1.06–1.90 of 1.9, blended by the rest weight r: the six dots even (op .75, scale 1), the fan lines
+              SOLID (each dash grows forward into the whole line) at stroke-opacity .38 — a still, organised fan
+       CHOP   1.20–1.52 of 2.2 (the SMIL keeps the ball docked on the last, big step there); the four step dots even at .6
+       GLITCH the four windows where the dice sits in the TOP-LEFT cell (the 16 hops are discrete: the picture is identical
+              anywhere inside them); its hops slow and it settles there
+       ROBIN  exactly 1.8 of 2.4: the flap is retimed 0.72 → 0.8 s so wing and bob share the 2.4 s loop; there the bob is
+              level (0) and the wings are up; the two wind streaks fade out with r ("the wind dies") — their own 2.8/3.4 s
+              loops never repeat inside 2.4 s, so they are never seen at rest
+     fb104's law holds: SMIL still animates attributes in viewBox space, and arpTick writes the SAME scale() the killed
+     keyframes wrote on fill-box circles. */
+  var TILES = { arp: { P: 1.9, B: [[1.06, 1.9]] }, chop: { P: 2.2, B: [[1.2, 1.52]] },
+                glitch: { P: 9.6, B: [[0, 0.6], [2.2, 2.65], [4.63, 4.95], [7.7, 8.03]] }, drift: { P: 2.4, B: [[1.8, 1.8]] } };
+  var tileList = null, tileScan = 0;
+  function tileFind(){ var out = [];
+    try { var ts = document.querySelectorAll('#syn-panel .flow-mode');
+      for (var i = 0; i < ts.length; i++){ var el = ts[i], m = el.getAttribute('data-mode'); if (! TILES[m]) continue;
+        var sv = el.querySelector('svg'), smil = null;
+        try { if (sv && (sv.getElementsByTagName('animate').length || sv.getElementsByTagName('animateTransform').length)){
+                if (! sv.animationsPaused()) sv.pauseAnimations(); smil = sv; } } catch (e) {}
+        out.push({ el: el, mode: m, smil: smil, notes: el.querySelectorAll('.arpNote'), lines: el.querySelectorAll('.arpLine'),
+                   holds: el.querySelectorAll('.arpHold'), sqs: el.querySelectorAll('.sq'), wind: el.querySelectorAll('.rbnWind'),
+                   last: NaN, lastR: NaN }); } } catch (e) {}
+    return out; }
+  /* fb509b — THE ARP TILE'S PULSES (and CHOP's four dots), byte-faithful to the killed CSS:
+       flwArpFire 1.9s: 0/68-100% op .4 sc 1 · 8% op 1 sc 1.55 · 34% op .4  (n2 +0.2s, n3 +0.4s)
+       flwArpFlow 1.0s linear: stroke-dashoffset 0 -> -22                    (l2 +.18s, l3 +.36s)
+       flwChord   1.9s: op .75 <-> 1 · flwSeqLit 2.2s: op .35 <-> 1          (s2/.4 s3/.8 s4/1.2)
+     Inline styles only — geometry untouched (the fixed-positions law). */
+  function arpAt(t, a, b, c, oa, ob2, oc){ /* piecewise: 0..a..b..c(=1) keyframe fractions */
+    if (t < a) return oa + (ob2 - oa) * (t / a);
+    if (t < b) return ob2 + (oc - ob2) * ((t - a) / (b - a));
+    return oc;
+  }
+  /* r — the key's REST WEIGHT (0 playing, 1 at rest, __tiWind): every value is blended onto its home, so the ending
+     lands on the organised pose exactly, and a wind-up leaves it as the motion comes up to speed. */
+  function mix(a, b, r){ return r >= 1 ? b : a + (b - a) * r; }
+  function tilePaint(tl, tau, r){
+    if (tl.smil){ try { tl.smil.setCurrentTime(tau); } catch (e) {} }
+    var i, el, ph, dash;
+    for (i = 0; i < tl.notes.length; i++){ el = tl.notes[i]; ph = ((tau - i * 0.2) / 1.9 % 1 + 1) % 1;
+      try { el.style.opacity = mix(arpAt(ph, 0.08, 0.34, 1, 0.4, 1, 0.4), 0.75, r).toFixed(3);
+            el.style.transform = 'scale(' + mix(arpAt(ph, 0.08, 0.34, 1, 1, 1.55, 1), 1, r).toFixed(3) + ')'; } catch (e) {} }
+    /* the fan: the travelling 5-on-17 dash GROWS FORWARD (5 + 17r) until it is the whole line, and dims to .38 */
+    dash = mix(5, 22, r);
+    for (i = 0; i < tl.lines.length; i++){ ph = ((tau - i * 0.18) / 1.0 % 1 + 1) % 1;
+      try { el = tl.lines[i].style;
+            el.strokeDashoffset = r >= 1 ? '0' : (-22 * ph).toFixed(2);
+            el.strokeDasharray = r > 0 ? dash.toFixed(2) + ' ' + (22 - dash).toFixed(2) : '';
+            el.strokeOpacity = r > 0 ? mix(1, 0.38, r).toFixed(3) : ''; } catch (e) {} }
+    for (i = 0; i < tl.holds.length; i++){ ph = (tau / 1.9 % 1 + 1) % 1;
+      try { tl.holds[i].style.opacity = mix(0.75 + 0.25 * (0.5 - 0.5 * Math.cos(ph * 6.2832)), 0.75, r).toFixed(3); } catch (e) {} }
+    for (i = 0; i < tl.sqs.length; i++){ ph = (((tau - i * 0.4) / 2.2) % 1 + 1) % 1;
+      try { tl.sqs[i].style.opacity = mix(0.35 + 0.65 * (0.5 - 0.5 * Math.cos(ph * 6.2832)), 0.6, r).toFixed(3); } catch (e) {} }
+    for (i = 0; i < tl.wind.length; i++){   /* ROBIN's wind streaks: they fade with the ending (multiplies the .35 / lit .75) */
+      try { tl.wind[i].style.strokeOpacity = r > 0 ? (1 - r).toFixed(3) : ''; } catch (e) {} }
+  }
+  function flowTiles(force){
+    if (window.__cardOnly) return;
+    if (! tileList || (++tileScan & 255) === 1) tileList = tileFind();   /* the markup is static; a re-find now and then means a rebuild never strands us */
+    var off = force !== true && !! (window.__tiOff && window.__tiOff('syn-panel')), live = MOT.live;
+    for (var i = 0; i < tileList.length; i++){ var tl = tileList[i], T = TILES[tl.mode], key = 'tile-' + tl.mode;
+      /* the clock runs even off screen, so a wind-down never strands half-way; only the drawing waits for the tiles.
+         fb636 h1 — every tile, lit or not: the MIDI is the only thing that moves them */
+      var tau = window.__tiWind(key, T.P, T.B, live), r = K[key].r;
+      if (off || (tau === tl.last && r === tl.lastR)) continue;
+      tl.last = tau; tl.lastR = r; tilePaint(tl, tau, r); } }
+  reg.set('flowTiles', flowTiles);   /* the dispatcher's own map: a page that hides window.__tiFrameReg (lfo_park's rAF mode) must not abort this IIFE */
+  /* boot: the SMIL is paused before it can run a single free frame, and every tile is drawn on its rest pose */
+  function tilesBoot(){ tileList = tileFind(); flowTiles(true); }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', tilesBoot); else tilesBoot();
   /* NO transitionend TRIGGER. It looks like the right signal for "a panel finished opening" and it is a
      trap: MEASURED on the synth panel, transitionend fires ~25 times a SECOND for as long as the panel is
      open (a re-armed CSS transition somewhere in it), which would wake a frame 25 times a second forever —
@@ -578,7 +792,7 @@
            settings and randomize glyphs, the section icons, the EQ curve. A frame does not restore those, so a
            heal redraws them by name. MEASURED on the installed AU: #output-icon-canvas came back blank after a
            trip to the synth panel and no frame could bring it back. Draw-only functions, run only on a heal. */
-        try{ ['updateSectionIcons','drawRandomizeIcon','_drawRandomizeChevron','drawSettingsIcon','drawOutputIcon','redrawEqCanvas','redrawEqHandles']
+        try{ ['updateSectionIcons','drawRandomizeIcon','_drawRandomizeChevron','drawSettingsIcon','drawOutputIcon','redrawEqCanvas','redrawEqHandles','drawUndoIcon']   /* fb636 — the undo glyph is change-gated now, no longer redrawn by every frame */
           .forEach(function(fn){ if (typeof window[fn] === 'function') window[fn](); }); }catch(e){}
         wake(); }
     }catch(e){}
@@ -2029,7 +2243,9 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
      the disabled-state fade-in completed (opacity hit 1, then animation
      pulled it back to 0.85). Starting mid-cycle aligns the animation's
      initial value with the static one, so re-enable is seamless. */
-  animation: grainIconBreathe 3s ease-in-out -1.5s infinite;
+  /* fb636 — THE FRONT PAGE IS STILL: the breathing (grainIconBreathe, infinite) is retired with the
+     front's other loops. The icon rests at its static style; hover/drag still enlarge it. */
+  animation: none;
 }
 @keyframes grainIconBreathe {
   0%, 100% { opacity: 0.85; transform: translate(-50%, -50%) scale(1); }
@@ -3156,6 +3372,9 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
 .mod-btn.has-routes.active {
   animation: none;
 }
+/* fb636 — at rest the glow is held on its 0 % pose (no glow) after finishing its breath, never frozen mid-breath
+   (THE BREATHERS, in the frame dispatcher). */
+html.ti-still .mod-btn.has-routes, .mod-btn.has-routes.ti-br-held { animation-play-state: paused; }
 .mod-btn .mod-dot { display: none; }
 
 @keyframes mod-btn-breathe {
@@ -3284,7 +3503,7 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
    end 0.02 -> ~0.5. The stroke's breathing is PAUSED rather than removed: animation:none never won the cascade either,
    and had it won it would have blinked the line from its mid-cycle opacity to 1 at the park edge (bar 10). */
 #mod-engine.mv-idle .mv-play,#mod-engine.mv-idle .mv-foll,.lfo-ext.mv-idle .card-scope .mv-play,.lfo-ext.mv-idle .card-scope .mv-foll,.mv-ext.mv-idle .es .mv-play,.mv-ext.mv-idle .es .mv-foll{opacity:0;transition:opacity .35s ease;}   /* the fade OUT: the head dissolves */
-#mod-engine.mv-idle .mv-stroke,.mv-ext.mv-idle .es .mv-stroke{animation-play-state:paused;}   /* fb567/fb570 — the curve's breathing (mvBreathe) holds mid-cycle in silence: nothing in the panel moves */
+#mod-engine.mv-idle .mv-stroke:not(.mv-br-run),.mv-ext.mv-idle .es .mv-stroke:not(.mv-br-run){animation-play-state:paused;}   /* fb567/fb570 — in silence the curve's breathing (mvBreathe) rests; fb636 h2 — it first FINISHES the breath it is in (.mv-br-run, see lfoIdle) and rests on its .9 pose, never mid-cycle */
 @keyframes mvBreathe{0%,100%{opacity:.9}50%{opacity:1}}
 #mod-engine .mv-ov{position:absolute;left:0;right:0;display:flex;align-items:center;z-index:2;}
 #mod-engine .mv-ov.bot{bottom:0;padding:0 11px 4px;justify-content:space-between;}
@@ -3336,6 +3555,14 @@ html.tp-browsing .mv-toast,  html.tp-browsing .samp-menu { display: none !import
 #mod-engine .mv-ov.bot #mv-rate{min-width:62px;justify-content:flex-start;}   /* fb211 — '40.00 Hz ⇅' still fits; frees room at 1:1 width */
 #mod-engine .mv-ov.bot #mv-div{min-width:62px;justify-content:center;}   /* fb219 — the division sits CENTERED in its slot (Max: BPM mode left dead end-space with the short labels left-justified) */
 #mod-engine .mv-ov.bot #mv-shape{min-width:64px;}   /* fb206 — 'Custom' is the longest label; no-jitter law */
+/* fb636 h2 — THE SHAPE EMBLEM RESTS ON ITS HOME. The little living emblem scrolls with the LFO phase, so in silence it held
+   the phase the LFO parked on (a different emblem every stop). It is phase-bearing like the head, so it parks like the
+   head: its svg carries the live path AND its phase-0 home path in the same box (iconLive — nothing moves or resizes),
+   and .mv-idle dissolves live → home on the head's own .35 s curve; a note brings the live path back on the .12 s one. */
+#mod-engine #mv-shape .ic .ic-live,#mod-engine #mv-shape .ic .ic-home{transition:opacity .12s ease;}
+#mod-engine #mv-shape .ic .ic-home{opacity:0;}
+#mod-engine.mv-idle #mv-shape .ic .ic-live{opacity:0;transition:opacity .35s ease;}
+#mod-engine.mv-idle #mv-shape .ic .ic-home{opacity:1;transition:opacity .35s ease;}
 /* Extender scope = the same live glowing LFO (body-level, so it needs its own copy of the styling). */
 .mv-ext .es .mv-grid line{stroke:rgba(139,92,246,.14);stroke-width:.5;} .mv-ext .es .mv-grid line.mid{stroke:rgba(139,92,246,.22);}
 .mv-ext .es .mv-fill{fill:rgba(224,216,245,0.07);}
@@ -5966,22 +6193,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
 #syn-panel .flow-mode .emb [stroke] { stroke: currentColor; }
 #syn-panel .flow-mode .emb circle { transform-box: fill-box; transform-origin: center; }
 
-/* emblem animations */
-@keyframes flwArpFire { 0%,68%{opacity:.4;transform:scale(1);} 8%{opacity:1;transform:scale(1.55);} 34%{opacity:.4;transform:scale(1);} }
-#syn-panel .flow-mode .arpNote { animation: flwArpFire 1.9s ease-in-out infinite; will-change: transform,opacity; }
-#syn-panel .flow-mode .arpNote.n2 { animation-delay: .2s; } #syn-panel .flow-mode .arpNote.n3 { animation-delay: .4s; }
-@keyframes flwArpFlow { to { stroke-dashoffset: -22; } }
-#syn-panel .flow-mode .arpLine { stroke-dasharray: 5 17; animation: flwArpFlow 1s linear infinite; }
-#syn-panel .flow-mode .arpLine.l2 { animation-delay: .18s; } #syn-panel .flow-mode .arpLine.l3 { animation-delay: .36s; }
-@keyframes flwChord { 0%,100%{opacity:.75;} 50%{opacity:1;} }
-#syn-panel .flow-mode .arpHold { animation: flwChord 1.9s ease-in-out infinite; }
+/* emblem animations — fb636: NOT CSS ANY MORE, ON EITHER PLATFORM. The four tile pulses (flwArpFire 1.9 s, flwArpFlow
+   1 s, flwChord 1.9 s, flwSeqLit 2.2 s, with their staggers) are fb509b's byte-faithful JS tween of those keyframes,
+   written inline by the frame dispatcher's flowTiles painter on the MOTION CLOCK: an infinite CSS animation can neither
+   wind down nor rest on a pose, and these ran lit or not, MIDI or not, for as long as the synth panel was open. */
+#syn-panel .flow-mode .arpNote { will-change: transform,opacity; }
+#syn-panel .flow-mode .arpLine { stroke-dasharray: 5 17; }
 /* fb104 LAW — mode-tile emblems animate via SMIL ONLY: CSS px transforms on SVG
    children resolve WRONG under WKWebView pageZoom (ball overshot the tile, orbit
    went off-center). SMIL animates ATTRIBUTES in viewBox space — zoom-immune.
    fb119: all four emblems are pure SMIL (glitch echo bars, robin step ring). */
-@keyframes flwSeqLit { 0%,100%{opacity:.35;} 50%{opacity:1;} }
-#syn-panel .flow-mode .sq { animation: flwSeqLit 2.2s ease-in-out infinite; }
-#syn-panel .flow-mode .sq.s2 { animation-delay: .4s; } #syn-panel .flow-mode .sq.s3 { animation-delay: .8s; } #syn-panel .flow-mode .sq.s4 { animation-delay: 1.2s; }
 /* fb120 — GLITCH (teleport dice) + ROBIN (the bird) emblems are pure SMIL;
    the old flwJit px-translate leftover was retired in fb119 */
 @keyframes flwDrift { 0%{transform:translate(0,0);} 25%{transform:translate(6px,-5px);} 50%{transform:translate(-4px,4px);} 75%{transform:translate(5px,3px);} 100%{transform:translate(0,0);} }
@@ -6099,6 +6320,9 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
   filter: drop-shadow(0 0 2px rgba(183,148,255,0.95)) drop-shadow(0 0 4.5px rgba(183,148,255,0.5));
   animation: envBreathe 3.4s ease-in-out infinite; }
 @keyframes envBreathe { 0%,100%{opacity:.9} 50%{opacity:1} }
+/* fb636 — it breathes while a note sounds; when the sound ends it finishes the breath and rests on the .9 pose (THE
+   BREATHERS, in the frame dispatcher) instead of freezing wherever it was. */
+html.ti-still #syn-panel #env-line, #syn-panel #env-line.ti-br-held { animation-play-state: paused; }
 
 /* ── MOD / LFO / PATCHBAY ── */
 #syn-panel .mod { padding-top: 22px; display: grid; grid-template-columns: 156px 1fr; gap: 12px; }
@@ -8589,14 +8813,16 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
                 <span class="clip"><span class="orbit"></span></span>
                 <svg class="emb" viewBox="0 0 42 42" fill="none" stroke-linecap="round">
                   <!-- fb120 "the robin" (Max's idea, F3 flap variant) — a white bird in a
-                       little world: two-frame Game&Watch wing flap + drifting wind streaks -->
-                  <path d="M30,13 H35" stroke="currentColor" stroke-width="1.4" opacity="0.35">
+                       little world: two-frame Game&Watch wing flap + drifting wind streaks.
+                       fb636 h1: the flap is 0.8 s (was 0.72) so three flaps are exactly the bob's 2.4 s loop —
+                       the tile has one home (1.8 s: level, wings up) and the streaks fade out at rest -->
+                  <path class="rbnWind" d="M30,13 H35" stroke="currentColor" stroke-width="1.4" opacity="0.35">
                     <animateTransform attributeName="transform" type="translate" dur="2.8s" repeatCount="indefinite" calcMode="linear" values="4 0;-28 0"/></path>
-                  <path d="M27,30 H31" stroke="currentColor" stroke-width="1.4" opacity="0.35">
+                  <path class="rbnWind" d="M27,30 H31" stroke="currentColor" stroke-width="1.4" opacity="0.35">
                     <animateTransform attributeName="transform" type="translate" dur="3.4s" begin="1.4s" repeatCount="indefinite" calcMode="linear" values="6 0;-26 0"/></path>
                   <g>
                     <path stroke="currentColor" stroke-width="2" d="M10,21 Q16,14 21,20 Q26,14 32,21">
-                      <animate attributeName="d" dur="0.72s" repeatCount="indefinite" calcMode="discrete"
+                      <animate attributeName="d" dur="0.8s" repeatCount="indefinite" calcMode="discrete"
                         values="M10,21 Q16,14 21,20 Q26,14 32,21;M10,23 Q16,26 21,20 Q26,26 32,23"/></path>
                     <circle cx="21" cy="20.5" r="1.8" fill="currentColor"/>
                     <animateTransform attributeName="transform" type="translate" dur="2.4s" repeatCount="indefinite"
@@ -8910,6 +9136,10 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
         #syn-panel .fxr-core .grn-wave{ fill:none; stroke:#ECE8F2; stroke-width:1.3;
           filter:drop-shadow(0 0 1.54px rgba(183,148,255,0.85)) drop-shadow(0 0 3.84px rgba(183,148,255,0.5));
           animation:mvBreathe 3.2s ease-in-out infinite; }
+        /* fb636 — both breathe while a note sounds, then finish the breath and rest on the .9 pose (THE BREATHERS, in the
+           frame dispatcher). The rack's exception is its meters and spectra, which are untouched. */
+        html.ti-still #syn-panel .fxr-core .dst-curve, html.ti-still #syn-panel .fxr-core .grn-wave,
+        #syn-panel .fxr-core .dst-curve.ti-br-held, #syn-panel .fxr-core .grn-wave.ti-br-held{ animation-play-state:paused; }
         #syn-panel .fxr-ctrls{ display:flex; align-items:flex-end; gap:10px; padding:5px 10px 9px; }
         /* fb451 — THE DIVIDER IS CENTRED BY CONSTRUCTION, on every card. Cards are content-wide (their headers decide: 284..357 css px),
            so a stretching 1fr grid put the last dial 10..20 px from the divider depending on the card. The four dials are now FIXED 36 px
@@ -9212,21 +9442,25 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             function tick(){ if(window.__cardOnly)return;
               /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ return; }
               try{
-              t+=0.016*(window.__uiStepScale||1); var arr=BANKS[bank];
-              for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
+              /* fb636 — the wander winds with the sound and, at rest, settles on the macro's TRUE value (it froze on a wandered one) */
+              var __me=window.__tiMot?window.__tiMot.e:1;
+              t+=0.016*(window.__uiStepScale||1)*__me; var arr=BANKS[bank];
+              for(var i=0;i<8;i++){ if(arr[i].live){ arr[i]._v=Math.max(0,Math.min(1,arr[i].v+0.12*__me*Math.sin(t*0.7+i))); arc(els[i].querySelector('.knob-ring'),arr[i]._v,false); } }
             }catch(e){} }   /* fb505 deco -- analog wander is decoration; fb511 rides __tiFrame */
             window.__tiFrameReg('rr-wander', tick);
             // SWAY lane — scrolling analog drift trace
             var cv=document.getElementById('rr-lane');
             if(cv&&cv.getContext){
-              var cx=cv.getContext('2d'), buf=[]; for(var b2=0;b2<180;b2++) buf.push(0);
+              var cx=cv.getContext('2d'), buf=[], laneAcc=0; for(var b2=0;b2<180;b2++) buf.push(0);
               function lane(){ if(window.__cardOnly)return;
                 /* fb497 */ if(window.__tiOff&&window.__tiOff('syn-panel')){ return; }
                 try{
                 var now=t*1000+performance.now()*0; // t drives it; performance.now avoided for determinism-safety
-                var pn=(typeof performance!=='undefined'&&performance.now)?performance.now():t*1000;
-                var y=Math.sin(pn/900)*0.5+Math.sin(pn/1700+1)*0.3+Math.sin(pn/430+2)*0.14;
-                buf.push(y); buf.shift();
+                /* fb636 — the trace scrolls on MOTION time: one sample a frame while the sound plays (as before), fewer as it
+                   winds down, none at rest — it stops instead of freezing, and a repaint at rest redraws the same trace */
+                var __M=window.__tiMot, pn=__M?__M.tau*1000:((typeof performance!=='undefined'&&performance.now)?performance.now():t*1000);
+                laneAcc+=__M?__M.e:1;
+                if(laneAcc>=1){ laneAcc-=1; var y=Math.sin(pn/900)*0.5+Math.sin(pn/1700+1)*0.3+Math.sin(pn/430+2)*0.14; buf.push(y); buf.shift(); }
                 cx.clearRect(0,0,cv.width,cv.height);
                 cx.strokeStyle='rgba(255,255,255,0.14)'; cx.lineWidth=1; cx.setLineDash([2,4]);
                 cx.beginPath(); cx.moveTo(0,cv.height/2); cx.lineTo(cv.width,cv.height/2); cx.stroke(); cx.setLineDash([]);
@@ -11247,7 +11481,8 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
             } window.__tiFrameReg('fxr-fx4', l4); })();
           window.__fx4Tick=fx4Tick;   // headless gate hook
           /* the engine-fed readouts (Attack/Release/Ratio/knee/crossovers) refresh at a gentle rate */
-          setInterval(function(){ try{ if(window.__tiQuiet)return; for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d); } }catch(e){} },400);   /* fb504 gated */
+          setInterval(function(){ try{ if(window.__tiRest&&window.__tiRest())return; if(window.__tiOff&&window.__tiOff('fxr-rack'))return;
+            for(var i=0;i<DEVS.length;i++){ var d=DEVS[i]; if(d&&d.__vz&&(d.core==='cmp'||d.core==='ott')) window.__fxRedrawKnobs(d,1); } }catch(e){} },400);   /* fb504 gated · fb636: the both-platform rest flag (it never closed on the Mac), the rack on screen, and a dial is rebuilt only when its face CHANGED */
 
           /* ═══ THE EQUALIZER'S NODES — the Pro-Q grammar (CONTRACT R12), as SVG in the card.
              Drag X = that band's Hz knob (the engine's own lo/hi per band), drag Y = its gain knob
@@ -12093,19 +12328,26 @@ body.ti-syn-open > #plugin > #footer { visibility: hidden; }
              front dial (data-k) and every back dial (data-bk, keyed by LABEL — the rack's own
              convention) is re-faced from DEVS with the readout law applied, and the labels follow
              the model too, so a per-Type relabel shows without a full re-render. */
-          window.__fxRedrawKnobs=function(d){ try{
+          /* fb636 — onlyChanged (the 400 ms readout pass): a dial's SVG is re-parsed only when its face's inputs
+             (value, label, param) moved, AND the face on screen is still the one this wrote — any other writer
+             (a drag, a re-render) replaces the node, and then it is always redrawn. Every other caller redraws all. */
+          function fxFaceSame(el,rk){ return el.__rk===rk && el.__rkN && el.firstChild===el.__rkN; }
+          function fxFaceSet(el,rk,html){ el.innerHTML=html; el.__rk=rk; el.__rkN=el.firstChild; }
+          window.__fxRedrawKnobs=function(d,onlyChanged){ try{
             var idx=DEVS.indexOf(d); if(idx<0) return;
             var card=rack.querySelector('.fxr-dev[data-dev="'+idx+'"]'); if(!card) return;
             var fd=card.querySelectorAll('.fxr-dial[data-k]');
             for(var i=0;i<fd.length;i++){ var k=d.knobs[+fd[i].getAttribute('data-k')]; if(!k) continue;
               var lb=(d.core==='delay'&&fd[i].getAttribute('data-k')==='0')?dlyTimeLabel(d):fxFmt(d.core,k.p,k.v,d);
-              fd[i].innerHTML=knobSVG(k.v,lb,fxGlyph(d.core,k.p,k.v));
+              var rk=k.v+'|'+lb+'|'+k.p;
+              if(!(onlyChanged&&fxFaceSame(fd[i],rk))) fxFaceSet(fd[i],rk,knobSVG(k.v,lb,fxGlyph(d.core,k.p,k.v)));
               var la=fd[i].parentNode&&fd[i].parentNode.querySelector('.fxr-lab'); if(la&&la.textContent!==k.l) la.textContent=k.l; }
             if(d.back&&d.back.knobs){ var bd=card.querySelectorAll('.fxr-dial[data-bk]');
               for(var j=0;j<bd.length;j++){ var lbl=bd[j].getAttribute('data-bk'), row=null, ri=-1;
                 for(var q=0;q<d.back.knobs.length;q++) if(d.back.knobs[q][0]===lbl){ row=d.back.knobs[q]; ri=q; break; }
                 if(!row) continue;
-                var lb2=fxFmt(d.core,row[2],row[1],d); bd[j].innerHTML=knobSVG(row[1],lb2,fxGlyph(d.core,row[2],row[1]));
+                var lb2=fxFmt(d.core,row[2],row[1],d), rk2=row[1]+'|'+lb2+'|'+row[2];
+                if(!(onlyChanged&&fxFaceSame(bd[j],rk2))) fxFaceSet(bd[j],rk2,knobSVG(row[1],lb2,fxGlyph(d.core,row[2],row[1])));
                 var wrap=bd[j].parentNode; if(wrap&&wrap.classList){ var dead2=(lb2==='—');
                   wrap.classList.toggle('fxr-bk-dead',dead2);   /* fb447 — dead cells follow the Type */
                   /* fb453 — and so does the DESTINATION. The class alone made this cell dim and
@@ -12997,17 +13239,24 @@ function refreshDlyTimeKnob(di){ try{ var dd=DEVS[di]; if(!dd||dd.core!=='delay'
                 if(geo.bloomG){ var bop=(0.30+0.70*smooth).toFixed(3);
                   if(bop!==geo.lbo){ geo.lbo=bop; geo.bloomG.setAttribute('opacity',bop); } }
                 // pulse sweeps at the echo rate: crossing one tap-spacing takes exactly ONE delay time
-                st.pulseT+=dt; var span=213, totMs=span/geo.spL*geo.msL;   /* fb360 — 6.5 → 219.5 */
+                /* fb636 h2 — THE PULSE IS DECORATION: it rides the motion envelope. On the wall clock it swept on ANY frame (a hand
+                   on a knob at rest moved it, fb591) and froze wherever the last frame left it, at opacity .5, a tap sometimes
+                   still lit. Now it sweeps while a note sounds, fades and slows with the ending, and once that has landed it is
+                   back at the source, hidden, with no tap flashing — the same picture every time. The taps' floor and the
+                   bloom still follow the wet (the audio), untouched. The x is written only when it changes. */
+                var __Md=window.__tiMot, __de=__Md?__Md.e:1;
+                if(__Md&&__Md.m<=0&&!__Md.live){ st.pulseT=0; __de=0; } else st.pulseT+=dt*__de;
+                var span=213, totMs=span/geo.spL*geo.msL;   /* fb360 — 6.5 → 219.5 */
                 var px=6.5+((st.pulseT%totMs)/totMs)*span;
-                if(geo.pulse){ geo.pulse.setAttribute('x1',px.toFixed(1)); geo.pulse.setAttribute('x2',px.toFixed(1));
-                  var pop=(0.5+0.5*smooth).toFixed(2);
+                if(geo.pulse){ var pxs=px.toFixed(1); if(pxs!==geo.lpx){ geo.lpx=pxs; geo.pulse.setAttribute('x1',pxs); geo.pulse.setAttribute('x2',pxs); }
+                  var pop=((0.5+0.5*smooth)*__de).toFixed(2);
                   if(pop!==geo.lpo){ geo.lpo=pop; geo.pulse.setAttribute('opacity',pop); } }
                 var wrapped=(px<prevPX);
                 var fdec=Math.pow(0.82,dt/16.7);                           // tap flash tail ~150ms
                 if(!geo.lop) geo.lop=[];
                 for(var t=0;t<geo.taps.length;t++){ var tap=geo.taps[t];
-                  if(!wrapped&&prevPX<tap.x&&tap.x<=px) geo.flash[t]=1; else geo.flash[t]*=fdec;
-                  var op=tap.base*(0.32+1.0*smooth)+geo.flash[t]*(0.30+0.70*smooth);   // idle floor .32 — dragging Time while STOPPED must still read (Max)
+                  if(!wrapped&&prevPX<tap.x&&tap.x<=px) geo.flash[t]=1; else geo.flash[t]*=fdec; if(__de<=0) geo.flash[t]=0;
+                  var op=tap.base*(0.32+1.0*smooth)+geo.flash[t]*__de*(0.30+0.70*smooth);   // idle floor .32 — dragging Time while STOPPED must still read (Max)
                   var ops=Math.max(0,Math.min(1,op)).toFixed(3);
                   if(geo.els[t]&&ops!==geo.lop[t]){ geo.lop[t]=ops; geo.els[t].setAttribute('opacity',ops); }
                 }
@@ -14578,6 +14827,7 @@ window.updateVisualization = function(grainCount, scopeArray, bpm) {
   bpmFromJuce = bpm;
 };
 
+let _tapeHeadLeft = '';
 window.updateTapeLoopState = function(recording, playing, hasContent, progress, hasUndo, countInBeat) {
   const changed = state.tapeLoop.recording !== recording || state.tapeLoop.playing !== playing;
   state.tapeLoop.recording = recording;
@@ -14585,6 +14835,12 @@ window.updateTapeLoopState = function(recording, playing, hasContent, progress, 
   state.tapeLoop.hasContent = hasContent;
   state.tapeLoop.loopProgress = progress;
   if (hasUndo !== undefined) state.tapeLoop.hasUndo = hasUndo;
+  // fb636 — the playhead is TRANSPORT, not decoration: it follows the loop from here (change-gated), since the reel
+  // painter now only runs when the still front owes a picture.
+  { const head = document.getElementById('tape-progress-head');
+    if (head) {
+      if (head.classList.contains('visible') !== !! hasContent) head.classList.toggle('visible', !! hasContent);
+      if (hasContent && (playing || recording)) { const l = (progress * 100) + '%'; if (_tapeHeadLeft !== l) { _tapeHeadLeft = l; head.style.left = l; } } } }
   if (changed) updateTransportButtons();
   updateUndoButton();
 
@@ -14661,6 +14917,7 @@ async function initJuceBindings() {
         state.params[key] = p.sliderState.scaledValue;
         modBaseValues[key] = p.sliderState.scaledValue;
         updateKnobDisplay(key);
+        if (! currentActivePanel && window.__tiOweFront) window.__tiOweFront();   // fb636 — the still front's icons and FX readouts follow automation / recall
         // Chorus blocks have no .knob-group, so updateKnobDisplay is a no-op for them.
         // Update the chorus block fill explicitly here.
         if (key === 'chorusAmount' || key === 'chorusWidth' || key === 'chorusCharacter') {
@@ -15281,6 +15538,21 @@ window.__synArc = function (ring, n, bipolar) {
       return __segN;   /* points written; the caller walks __segX/__segY in pairs */
     }
     var LEV=[0.10,0.19,0.28,0.37,0.46,0.55,0.66];
+    /* fb636 h2 — THE FIELD RESTS ON ONE MAP. It drew hAt(…, tau) and held whatever map tau stopped on — a completely
+       different landscape every stop. The field now has its own motion clock (__tT, advancing with motion time) and a rest
+       weight (__tR = 1 − e): over the ending every height eases onto the map at t = 0 — the boot map — and once the ending
+       has landed the clock goes back to 0, so the next wind-up flows out of that same map with no jump. The home grid is
+       sampled once (per dice roll: it depends on the field offset), so a rest costs nothing new and the blend costs one
+       extra lerp pass only while winding down. */
+    var __tT=0, __tLast=0, __tR=1, __homeRows=null, __homeKey='';
+    function topoClock(M){ if(!M){ __tR=0; return; } var d=M.tau-__tLast; __tLast=M.tau; if(d>0) __tT+=d; __tR=1-M.e;
+      if(M.m<=0&&!M.live){ __tT=0; __tR=1; } }
+    function homeRows(){ var k=F.ox+'|'+F.oy; if(__homeRows&&__homeKey===k) return __homeRows;
+      var g=sampleGrid(46,34,0), c=[]; for(var j=0;j<g.length;j++) c.push(Float64Array.from(g[j])); __homeRows=c; __homeKey=k; return c; }
+    function topoGrid(){ if(__tR>=1||__tT===0) return homeRows(); if(__tR<=0) return sampleGrid(46,34,__tT);
+      var h=homeRows(), g=sampleGrid(46,34,__tT);
+      for(var j=0;j<g.length;j++){ var a=g[j], b=h[j]; for(var i=0;i<a.length;i++) a[i]+=(b[i]-a[i])*__tR; } return g; }
+    function hB(nx,ny){ var a=hAt(nx,ny,__tT); return __tR>0?a+(hAt(nx,ny,0)-a)*__tR:a; }
     /* ── the dice ── */
     var SEL={arp:0,chop:1,gli:1,rbn:0};   // fb171 — chains stay Max's (dice = knobs only)
     try{ var sv=JSON.parse(localStorage.getItem('tiDiceSel')||''); if(sv&&typeof sv==='object') SEL=sv; }catch(e){}
@@ -15372,6 +15644,8 @@ window.__synArc = function (ring, n, bipolar) {
       /* fb497 */ if(window.__tiOff&&window.__tiOff('reso-cv')){ return; }   /* fb505 deco -- fb511: __tiFrame re-calls */   // the whole synth page is away: no grid, no contours, no gBCR
       if(window.__WIN_LITE&&((window.__uiPaceFps|0)>45)&&((window.__topoAlt=(window.__topoAlt||0)+1)&1)){ return; }   // 1645 fbm samples + 11k cell evals + 4 gradients/frame; 30fps is imperceptible on a t*0.05 drift
       var t=ts/1000, dt=Math.min(0.05,t-last); last=t; tickF(dt);
+      if(window.__tiMot) t=window.__tiMot.tau;   /* fb636 — the field's drift is DECORATION: motion time, so it winds with the sound and a repaint at rest draws the pose on screen (the roll glide above answers a click and keeps real time) */
+      topoClock(window.__tiMot);   /* fb636 h2 — and it rests on ONE map (topoGrid / hB, above) */
       /* fb497 — the 32-frame rect cache drawInto() already uses, for the same reason: this box is
          fixed by layout and was costing one forced-layout gBCR every frame. A DEGENERATE cached
          rect always re-reads, so the 0x0 latched while the synth page was away self-heals on the
@@ -15383,7 +15657,7 @@ window.__synArc = function (ring, n, bipolar) {
       ctx.setTransform(dpr,0,0,dpr,0,0); ctx.clearRect(0,0,r.width,r.height);
       if(r.width<8||r.height<8){ return; }
       var w=r.width, h=r.height;
-      var g=sampleGrid(46,34,t);
+      var g=topoGrid();
       LEV.forEach(function(th,li){
         ctx.strokeStyle='rgba(255,255,255,'+(0.16+li*0.115)+')';
         ctx.lineWidth=(li===3)?1.1:0.6;
@@ -15394,8 +15668,8 @@ window.__synArc = function (ring, n, bipolar) {
       });
       ctx.fillStyle='rgba(255,255,255,0.9)';
       for(var i=2;i<12;i++)for(var j=2;j<9;j++){
-        var nx=i/13, ny=j/10, hh=hAt(nx,ny,t);
-        if(hh>0.68&&hh>hAt(nx-0.08,ny,t)&&hh>hAt(nx+0.08,ny,t)&&hh>hAt(nx,ny-0.1,t)&&hh>hAt(nx,ny+0.1,t))
+        var nx=i/13, ny=j/10, hh=hB(nx,ny);
+        if(hh>0.68&&hh>hB(nx-0.08,ny)&&hh>hB(nx+0.08,ny)&&hh>hB(nx,ny-0.1)&&hh>hB(nx,ny+0.1))
           ctx.fillRect(nx*w-1,ny*h-1,2,2);
       }
       /* seamless edges layer 2: whatever ink still nears a border DISSOLVES —
@@ -16421,11 +16695,13 @@ function buildKnobs() {
 
     group.addEventListener('mouseenter', () => {
       state.hoveredKnob = id;
+      if (window.__tiOweFront) window.__tiOweFront();   // fb636 — hover recolours the still icon
       if (state.tooltipLocked) return;
       state.tooltipTimer = setTimeout(() => showTooltip(group, id), 300);
     });
     group.addEventListener('mouseleave', () => {
       state.hoveredKnob = null;
+      if (window.__tiOweFront) window.__tiOweFront();
       clearTimeout(state.tooltipTimer);
       if (!state.tooltipLocked) hideTooltip();
     });
@@ -17032,7 +17308,7 @@ function applyModPanelOpen(open) {
   const modPanel = document.getElementById('mod-panel');
   const controls = document.getElementById('controls');
   if (!modBtn || !modPanel || !controls) return;
-  modState.panelOpen = open;
+  try { modState.panelOpen = open; } catch (e) { window.__modPanelOpenPending = open; }   // fb636 — the fb514 parse-time restore runs before `const modState` exists; the throw used to leave currentActivePanel null all session
   modBtn.classList.toggle('active', open);
   modPanel.classList.toggle('open', open);
   controls.style.display = open ? 'none' : 'flex';
@@ -17050,13 +17326,21 @@ function applySynPanelOpen(open) {
   // the OS-level filesDropped still loaded the front-panel layer on a synth-oscillator drop.
   try { var _ssv = (window.Juce && window.Juce.getNativeFunction) ? window.Juce.getNativeFunction ('setSynthView') : null; if (_ssv) _ssv (open ? 1 : 0); } catch (e) {}
 }
-function setActivePanel(which) {
+function setActivePanel(which, restoring) {
   // which = 'syn' | 'eq' | 'dly' | 'mod' | null
+  currentActivePanel = which;   // fb636 — first: a step below that throws must never leave the page believing the front is shown
   applySynPanelOpen(which === 'syn');
   applyEqPanelOpen(which === 'eq');
   applyDelayPanelOpen(which === 'dly');
   applyModPanelOpen(which === 'mod');
   currentActivePanel = which;
+  /* fb636 — the front page is a STILL picture now, painted when it is owed and never per frame (animate).
+     Showing it clears both still latches so the next paint — this click's own wake burst, or the one asked
+     for here when the page is shown by code — draws it; and everything that runs only while the front shows
+     (the hero sampler's polls in PluginEditor.cpp's overlay) hears the page change and parks or resumes. */
+  if (! which) { window.__heroDrawn = false; window.__fxRestDrawn = false; try { if (window.__tiWakeBurst) window.__tiWakeBurst(); } catch (e) {} }
+  try { window.dispatchEvent(new CustomEvent('tipanelchange', { detail: { panel: which } })); } catch (e) {}
+  if (restoring) return;   // fb636 — a restore re-applies the saved page: nothing to write back (at parse time, nothing to write with)
   // Persist EQ-panel state to PluginSettings.json (only EQ has a native fn).
   if (juceMode && setEqPanelOpenFn) setEqPanelOpenFn(which === 'eq' ? 1 : 0);
   // Persist the active section PER INSTANCE (processor atomic, in-memory): close/reopen the
@@ -17070,12 +17354,12 @@ var _uiPageRestored = -1;   // last applied restore (the C++ tick re-pushes unti
 function restoreUiPage(n) {
   n = n | 0;
   if (n === _uiPageRestored) return;   // idempotent — the restore push repeats every tick
-  _uiPageRestored = n;
   // fb622 — EQ and DLY have no button any more, and a preset saved with one of them open would
   // otherwise reopen every user into a panel they never chose. Those two pages fall back to SYN.
   var page = (n >= 1 && n <= 4) ? UI_PAGE_IDS[n - 1] : null;
   if (page === 'eq' || page === 'dly') page = 'syn';
-  if (typeof setActivePanel === 'function') setActivePanel(page);
+  if (typeof setActivePanel === 'function') setActivePanel(page, true);
+  _uiPageRestored = n;   // fb636 — only once it has applied (a throw retries on the next push instead of locking the page out)
 }
   if(!window.__cardOnly&&window.__bootPage>=1&&window.__bootPage<=4){try{restoreUiPage(window.__bootPage);}catch(e){}}   /* fb514 -- parse-time apply: runs before init() registers the front painter, so the front page never boots when reopening onto a panel */
 document.getElementById('eq-btn').addEventListener('click', () => {
@@ -17953,12 +18237,18 @@ setTimeout(function wireSynControls () {
         if (/_LEVEL$/.test (pid)) { if (/_A_/.test (pid)) return 0.7; if (/_B_/.test (pid)) return 0.5; return 0.0; }  // C/D start silent (spec)
         return 0.5;                                      // PAN + SEMI centre
       }
-      function oscqReadout (suf, n) {                    // matches fmtSynReadout exactly
+      /* fb636 review — "matches fmtSynReadout exactly" was a comment, not a fact anything held: two formatters that agree
+         today drift the day one of them learns something (the ALT warp readouts just taught fmtSynReadout its modes). So
+         the quick controls ask fmtSynReadout itself; the copy below is only for the moment before it exists, and
+         altwarp_ui_gate [3o] requires the two to print the same text at every step. */
+      function oscqReadout (suf, n, L) {
+        if (window.__fmtSynReadout) return window.__fmtSynReadout ('SYN_OSC_' + (L || 'A') + '_' + suf, n);
         n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
         if (suf === 'LEVEL') return Math.round (n * 100) + '%';
         if (suf === 'PAN') { var v = Math.round (-100 + n * 200); return v === 0 ? 'C' : (v < 0 ? 'L' + (-v) : 'R' + v); }
         var s = Math.round (-12 + n * 24); return (s > 0 ? '+' : '') + s + ' st';   // SEMI
       }
+      window.__oscqReadout = oscqReadout;
       function buildOscQuick (oscLetter) {
         var L = (oscLetter || 'a').toUpperCase ();
         var wrap = document.createElement ('div'); wrap.className = 'oscq';
@@ -18011,7 +18301,7 @@ setTimeout(function wireSynControls () {
             if (R.bip) { if (n >= 0.5) { fill.style.left = '50%'; fill.style.width = (pct - 50) + '%'; }
                          else          { fill.style.left = pct + '%'; fill.style.width = (50 - pct) + '%'; } }
             else { fill.style.left = '0%'; fill.style.width = pct + '%'; }
-            val.textContent = oscqReadout (R.suf, n);
+            val.textContent = oscqReadout (R.suf, n, L);
           }
           render (curN ());
           function fromX (cx) {
@@ -18925,13 +19215,55 @@ setTimeout(function wireSynControls () {
          and the corner is exponential in it, which is why there is no skew to mirror any more. */
       const SPECCUT_LO_BASE = 0.25, SPECCUT_LO_OCT = 11;
       const SPECCUT_HI_BASE = 0.5,  SPECCUT_HI_OCT = 13;
+      /* fb636 ALT WARP — THE AMOUNT READS IN ITS MODE'S OWN TERMS. A warp amount is a plain 0-100 % on every mode
+         but four, where a share of knob travel says nothing about what you hear:
+           41 Bend +/-, 44 Asym +/-  CENTRED. 12 o'clock is dry, and the readout is the signed strength the DSP
+                                     plays, s = kAltPmSign * (2a - 1) (SynthVoice.h altSigned): "+100%" is exactly
+                                     Bend + / Asym + at 100 %, "0%" is dry. MEASURED on Serum 2, the "+" side is
+                                     the LOW half of the knob, so the readout says "+" on the left. The sign is
+                                     copied here once and altwarp_ui_gate [3s] compares it with kAltPmSign.
+           46 Odd/Even               CENTRED. 0 % "Odd 100%" (odd harmonics only), 50 % "Orig", 100 % "Even 100%"
+                                     (altOddEvenGains: odd gain 2 - 2a, even gain 2a).
+           45 Flip                   the band of the cycle the flip inverts, [2a - 1, 2a) within [0, 1): the
+                                     MEASURED law in applyPhaseWarp, not the design's 1 - a. "Flip 0–74%" at 37 %,
+                                     "Flip 60–100%" at 80 %, "Dry" at the two ends.
+         The ring follows: on a centred mode its arc swings from 12 o'clock and its number is the distance from
+         centre, the house bipolar grammar (fb631). The mode is read LIVE off the slot's own mode parameter, so a
+         preset load or automation that changes the mode re-reads the amount with it. The host's parameter text
+         is NOT touched (no stringFromValue edit). */
+      const ALT_PM_SIGN = -1;                                  // == SynthVoice.h kAltPmSign
+      const WARP_CENTRED = { 41: true, 44: true, 46: true };   // Bend +/-, Asym +/-, Odd/Even: dry at 12 o'clock
+      window.__warpCentred = function (m) { return WARP_CENTRED[m] === true; };
+      function warpSlotMode (paramId) {          // the live mode of the slot an amount belongs to; -1 when unknowable
+        const m = /^SYN_OSC_([A-D])_WARP(2?)_(AMOUNT|AMT)$/.exec (String (paramId || ''));
+        if (! m) return -1;
+        const mp = 'SYN_OSC_' + m[1] + (m[2] ? '_WARP2_MODE' : '_WARP_MODE');
+        try {
+          const st = (window.Juce && window.Juce.getSliderState) ? window.Juce.getSliderState (mp) : null;
+          const card = (window.__paramCardinality && window.__paramCardinality (mp)) || window.WARP_MODE_COUNT || 0;
+          if (! st || card < 2) return -1;
+          return Math.round (st.getNormalisedValue () * (card - 1));
+        } catch (e) { return -1; }
+      }
+      function fmtWarpAmt (mode, n) {
+        n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
+        if (mode === 41 || mode === 44) { const v = Math.round (ALT_PM_SIGN * (2 * n - 1) * 100) || 0; return (v > 0 ? '+' : '') + v + '%'; }
+        if (mode === 46) { const v = Math.round (Math.abs (2 * n - 1) * 100); return v === 0 ? 'Orig' : (n < 0.5 ? 'Odd ' : 'Even ') + v + '%'; }
+        if (mode === 45) { const lo = Math.round (Math.max (0, 2 * n - 1) * 100), hi = Math.round (Math.min (1, 2 * n) * 100);
+                           return lo === hi ? 'Dry' : 'Flip ' + lo + '\u2013' + hi + '%'; }
+        return Math.round (n * 100) + '%';
+      }
+      window.__fmtWarpAmt = fmtWarpAmt;              // (mode, n): the WARP 2 pill reads its own mode and asks here
+      window.__warpSlotMode = warpSlotMode;
+      // the picker's repaint: JUCE's setNormalisedValue fires no LOCAL listener, so a pick on this page repaints by hand
+      window.__warpAmtRepaint = function () { (window.__warpAmtRepaints || []).forEach (function (f) { f (); }); };
       function fmtSynReadout (paramId, n) {
         n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
         const pct = Math.round (n * 100);
         if (paramId.indexOf ('_WT_FRAME')     >= 0) return (1 + Math.round (n * (FRAME_COUNT - 1))) + ' / ' + FRAME_COUNT;
         if (paramId.indexOf ('_HARM_COUNT')   >= 0) return Math.round (8 * Math.pow (64, n)) + ' pt';
         if (paramId.indexOf ('_FRAME_SPREAD') >= 0) return pct + '%';
-        if (paramId.indexOf ('_WARP_AMOUNT')  >= 0) return pct + '%';
+        if (paramId.indexOf ('_WARP_AMOUNT')  >= 0 || paramId.indexOf ('_WARP2_AMT') >= 0) return fmtWarpAmt (warpSlotMode (paramId), n);   // fb636 ALT
         if (paramId.indexOf ('_SPECTRAL_AMT') >= 0) return pct + '%';
         /* fb472 — the spectral CUTS. A bare harmonic number: the corner the fourth-order Butterworth
            sits at. Each knob's far end SKIPS the filter outright — an exact identity, which parking a
@@ -18989,6 +19321,7 @@ setTimeout(function wireSynControls () {
         n = n < 0 ? 0 : (n > 1 ? 1 : (n || 0));
         const pct = Math.round (n * 100);
         const fromCentre = () => String (Math.round (Math.abs (n - 0.5) * 200));   // bipolar arc: the arc shows the side
+        if (/_WARP(_AMOUNT|2_AMT)$/.test (paramId) && WARP_CENTRED[warpSlotMode (paramId)] === true) return fromCentre ();   // fb636 ALT — a centred mode
         if (paramId.indexOf ('_WT_FRAME') >= 0) {
           const o = 'ABCD'.indexOf (paramId.charAt (8));
           const M = Math.max (1, (window.__wtFrames && window.__wtFrames[o]) || FRAME_COUNT);
@@ -19123,7 +19456,11 @@ setTimeout(function wireSynControls () {
           // Track spans 270deg total; fillDeg=270 at value=1 fills the full track.
           // Bipolar params (Sample SCAN / FORMANT) fill from 12 o'clock toward + or −.
           const isBipolar = /(_SAMPLE_(SCAN|FORMANT)|_GRAIN_SCAN|_GEODE_(FORMANT|TILT|BEDROCK))$/.test (paramId);
-          const applyFill = (n) => { window.__synArc (ring, n, isBipolar); ring.__n = n; paintRingVal (ring, fmtRing (paramId, n)); };   /* fb630 — arc AND number */
+          /* fb636 ALT — a WARP amount's arc is bipolar exactly while its slot sits on a centred mode (41 / 44 / 46), so
+             it is asked on every paint, off the live mode, never frozen at wiring time. */
+          const isWarpAmt = /_WARP_AMOUNT$/.test (paramId);
+          const bipNow = () => isBipolar || (isWarpAmt && WARP_CENTRED[warpSlotMode (paramId)] === true);
+          const applyFill = (n) => { window.__synArc (ring, n, bipNow ()); ring.__n = n; paintRingVal (ring, fmtRing (paramId, n)); };   /* fb630 — arc AND number */
 
           // Initial fill from current APVTS value.
           try {
@@ -19186,6 +19523,15 @@ setTimeout(function wireSynControls () {
                 applyFill (n);
               } catch (e) { console.warn ('[SYN-knob] reverse-sync failed for', paramId, e); }
             });
+          }
+          /* fb636 ALT — THE MODE REPAINTS THE AMOUNT. The ring's shape and number depend on the slot's mode, so a mode
+             change repaints it: from the backend through the mode relay's valueChangedEvent (automation, preset load),
+             and from a pick on this page through __warpAmtRepaint, which the picker calls itself. */
+          if (isWarpAmt) {
+            const repaint = () => { try { applyFill (state.getNormalisedValue ()); } catch (e) {} };
+            (window.__warpAmtRepaints = window.__warpAmtRepaints || []).push (repaint);
+            try { const ms = window.Juce.getSliderState (paramId.replace (/_WARP_AMOUNT$/, '_WARP_MODE'));
+                  if (ms && ms.valueChangedEvent && ms.valueChangedEvent.addListener) ms.valueChangedEvent.addListener (repaint); } catch (e) {}
           }
 
           // P9 polish — double-click resets knob to its default normalised value.
@@ -20093,7 +20439,7 @@ setTimeout(function wireSynControls () {
           pill.addEventListener ('dblclick', function (ev) { ev.preventDefault (); ev.stopPropagation (); wr (0.0); paint (); showVal (); });   // reset = ZERO (the default)
           function refresh () { if (window.__tiQuiet || dragging) return; gp (function (val) { if (! isNaN (val)) { v = Math.max (0, Math.min (1, val)); paint (); } }); }   /* fb504 — 8 of these poll a native every 1.5 s */
           refresh (); [250, 700, 1500].forEach (function (ms) { setTimeout (refresh, ms); });
-          setInterval (refresh, 1500);   // stays fresh across back-panel toggles / preset loads (cheap)
+          setInterval (function () { if (window.__tiRest && window.__tiRest ()) return; refresh (); }, 1500);   // stays fresh across back-panel toggles / preset loads (cheap) — fb636: not at rest (the both-platform flag: a load or a hand un-rests it)
         });
       } catch (e) { console.warn ('[FMIX] init failed', e); }
     })();
@@ -20244,8 +20590,8 @@ setTimeout(function wireSynControls () {
     //   THE FIX IS STRUCTURAL, not a bigger literal:
     //     · there is EXACTLY ONE warp array and it is declared here;
     //     · it is 48 long because the C++ cardinality is FROZEN at 48 (PluginProcessor.cpp:96);
-    //     · the RESERVED rows 35-47 are part of it — they are what makes the length right — and
-    //       are filtered out at RENDER time only. NEVER shorten the array to hide them;
+    //     · the RESERVED row 47 is part of it — it is what makes the length right — and is
+    //       filtered out at RENDER time only. NEVER shorten the array to hide it (fb636 filled 39-46);
     //     · nothing anywhere else in this file may hold a warp list, a fallback copy, or a count.
     //
     // 🔑 THE GUARD — __warpGuard() below compares this array against the PARAMETER's own
@@ -20271,11 +20617,13 @@ setTimeout(function wireSynControls () {
       /* 27 */ 'Half Rect',     /* 28 */ 'Doubler',
       /* 29 */ 'Bitcrush',      /* 30 */ 'Harmonics',   /* 31 */ 'Bias Fold',   /* 32 */ 'Cheby Odd',
       /* 33 */ 'Ripple',        /* 34 */ 'Exciter',
-      // 35-47 — RESERVED. They exist so the LENGTH is right; the picker never lists them.
-      // Filling one in C++ means filling it HERE, in the same slot, and filing it in a family
-      // below — the guard fails the boot if a live index is not filed.
-      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   /* 37 */ 'Draw',   /* 38 */ 'Draw Amp',   'Reserved 39', 'Reserved 40',
-      'Reserved 41', 'Reserved 42', 'Reserved 43', 'Reserved 44', 'Reserved 45', 'Reserved 46',
+      // 35-38 — the warp filter and the two drawn modes. 39-46 — fb636 ALT WARP: Serum 2's "Alt Warp"
+      // modes, the same strings in the same slots as terrainWarpModeNames(). 47 — RESERVED: it exists so
+      // the LENGTH is right and the picker never lists it. Filling it in C++ means filling it HERE, in the
+      // same slot, and filing it in a family below — the guard fails the boot if a live index is not filed.
+      /* 35 */ 'LP Filter',   /* 36 */ 'HP Filter',   /* 37 */ 'Draw',        /* 38 */ 'Draw Amp',
+      /* 39 */ 'Bend +',      /* 40 */ 'Bend -',      /* 41 */ 'Bend +/-',    /* 42 */ 'Asym +',
+      /* 43 */ 'Asym -',      /* 44 */ 'Asym +/-',    /* 45 */ 'Flip',        /* 46 */ 'Odd/Even',
       'Reserved 47'
     ];
     try { window.WARP_MODES = WARP_MODES; window.WARP_MODE_COUNT = WARP_MODE_COUNT; } catch (e) {}
@@ -20288,23 +20636,37 @@ setTimeout(function wireSynControls () {
     //   Every live index appears in exactly one family; the guard proves it.
     const WARP_FAMILIES = [
       { label: 'None',        idx: [0] },
-      { label: 'Geometry',    idx: [1, 2, 3, 4, 5, 6, 7, 8] },            // phase-domain: the shipped eight
-      { label: 'Saturation',  idx: [10, 11, 12, 15, 16, 17, 18] },
-      { label: 'Clip',        idx: [13, 14, 22] },
-      { label: 'Diode & Asym',idx: [19, 20, 21] },
-      { label: 'Fold',        idx: [23, 24, 25, 26, 31] },
-      { label: 'Rectify',     idx: [9, 27, 28] },
-      { label: 'Digital',     idx: [29, 30, 32, 33, 34] },
-      // fb543 — OVERPASS ONE item 4. Its own family: these are the only warp modes that are
-      // FILTERS (stateful) rather than per-sample shapers, and the reference files them apart too.
-      { label: 'Filter',      idx: [35, 36] },
+      /* fb636 ALT WARP — THE MENU IN SERUM 2's ORDER. Serum files its phase warps as Sync, Alt Warp, Remap, in that
+         order and each in its own in-group order. The browser renders `idx` exactly as listed (warpPickerOpen maps
+         f.idx in order), so a family reads in Serum's order although its indices are not contiguous. ONLY THE
+         FILING MOVED: every index is the switch case it always was, so no patch, lane or saved state changes
+         meaning (the ORDER law above is about WARP_MODES, which this does not touch).
+           Sync      Serum's Sync group: Sync, Formant, Fractalize.
+           Alt Warp  Serum idx 2-16 less the Remaps: Bend +, Bend -, Bend +/-, PWM, Asym +, Asym -, Asym +/-, Flip,
+                     Mirror, P-Quantize, Odd/Even. PWM, Mirror and P-Quantize are Terrain's renderings of Serum's
+                     modes of those names, and they stand where Serum puts them.
+           Draw      Serum's Remap slot (fb559 made 37 and 38 one editor, so they stay one family).
+           Geometry  Bend (1) and Skew (5): Terrain's own shapes, not Serum's. They keep their names (Max).
+         Filter and the six distortion families are unchanged; altwarp_ui_gate [1] compares them with git HEAD. */
+      { label: 'Sync',        idx: [2, 3, 7] },
+      { label: 'Alt Warp',    idx: [39, 40, 41, 4, 42, 43, 44, 45, 6, 8, 46] },
       // fb550 — OVERPASS ONE item 6C. Its own family because it is the only mode whose shape is
       // DATA rather than an algorithm: the curve lives in the patch, not in the code.
       // fb559 — 38 joins 37 here. 37 is a PHASE map (where in the cycle to read), 38 an AMP
       // transfer (what to do to the sample). Two domains, one drawn table per slot, one editor:
       // capturing any warp mode's real shape picks whichever of the two matches its domain, so
       // "make this mode mine and edit it" now works on 34 modes instead of 8.
-      { label: 'Draw',        idx: [37, 38] }
+      { label: 'Draw',        idx: [37, 38] },
+      { label: 'Geometry',    idx: [1, 5] },
+      // fb543 — OVERPASS ONE item 4. Its own family: these are the only warp modes that are
+      // FILTERS (stateful) rather than per-sample shapers, and the reference files them apart too.
+      { label: 'Filter',      idx: [35, 36] },
+      { label: 'Saturation',  idx: [10, 11, 12, 15, 16, 17, 18] },
+      { label: 'Clip',        idx: [13, 14, 22] },
+      { label: 'Diode & Asym',idx: [19, 20, 21] },
+      { label: 'Fold',        idx: [23, 24, 25, 26, 31] },
+      { label: 'Rectify',     idx: [9, 27, 28] },
+      { label: 'Digital',     idx: [29, 30, 32, 33, 34] }
     ];
 
     // Every warp-mode PARAMETER in the plugin — the guard reads its cardinality from each.
@@ -20405,6 +20767,33 @@ setTimeout(function wireSynControls () {
       for (var i = 0; i < WARP_FAMILIES.length; i++) if (WARP_FAMILIES[i].idx.indexOf(idx) >= 0) return i;
       return 0; };
     const warpLiveCount = WARP_FAMILIES.reduce(function (n, f) { return n + f.idx.length; }, 0);
+    /* fb636 ALT WARP — A PICKED CENTRED MODE OPENS AT 12 O'CLOCK. Bend +/- (41), Asym +/- (44) and Odd/Even (46)
+       are DRY at 50 % and at their most extreme at 0 %, so picking one onto a slot whose amount reads 0 % would
+       slam the sound to full Bend + or odd-only the instant you clicked. Max: "jump to 50% only on a menu pick of a
+       centred mode when the knob is at 0; never on preset load or automation." So:
+         · ONLY HERE, in the picker's own pick. A preset load, a state restore, host automation and MIDI learn all
+           reach the mode through its relay and never pass this line (altwarp_ui_gate [2e] pushes the three
+           centred modes through all 8 mode relays and requires ZERO writes);
+         · only FROM 0, meaning what the knob reads: 0 % (under 0.005). Any other amount is the user's and stays;
+         · only on a CHANGE of mode. Re-picking the mode the slot is already on changes nothing, so neither does
+           the amount (a knob parked at 0 % on Bend +/- is a deliberate full Bend +);
+         · the amount lands FIRST, then the mode. From None (the usual case) the amount is inert, so the new mode
+           starts dry instead of spending a block at its extreme.
+       The amount goes through the same relay its knob and pill drag through. The centred set is the readouts'
+       (window.__warpCentred), defined once. */
+    const warpCentreOnPick = function (modeParamId, i) {
+      try {
+        if (! (window.__warpCentred && window.__warpCentred (i))) return;
+        var mp = String (modeParamId || ''), ap = mp.replace (/_WARP_MODE$/, '_WARP_AMOUNT').replace (/_WARP2_MODE$/, '_WARP2_AMT');
+        if (ap === mp || ! window.Juce || ! window.Juce.getSliderState) return;
+        var ms = window.Juce.getSliderState (mp), as = window.Juce.getSliderState (ap);
+        if (! ms || ! as) return;
+        var card = warpParamCardinality (mp) || WARP_MODES.length;       // the writer's own fallback (choiceCount)
+        if (Math.round (ms.getNormalisedValue () * (card - 1)) === i) return;   // not a change of mode
+        if (Math.round (as.getNormalisedValue () * 100) !== 0) return;         // the knob does not read 0 %
+        as.setNormalisedValue (0.5);
+      } catch (e) {}
+    };
     // fb546 — `modeParamId` is the 5th argument and both call sites already had it in hand
     // (SYN_OSC_x_WARP_MODE / _WARP2_MODE), so osc and slot are DERIVED rather than plumbed
     // through two unrelated pill implementations. No new state, nothing to keep in sync.
@@ -20413,7 +20802,8 @@ setTimeout(function wireSynControls () {
       if (!g.ok) { window.__warpGuard(); return null; }      // refuse to write an index we cannot trust
       var cats = WARP_FAMILIES.map(function (f) {
         return { label: f.label, items: f.idx.map(function (i) {
-          return { name: WARP_MODES[i], sel: (i === curIdx), pick: function () { pick(i); } }; }) }; });
+          return { name: WARP_MODES[i], sel: (i === curIdx),
+                   pick: function () { warpCentreOnPick (modeParamId, i); pick (i); if (window.__warpAmtRepaint) window.__warpAmtRepaint (); } }; }) }; });
       // fb546 — EXTEND rides the browser's top action row, the slot the Import button uses
       // everywhere else (index.html:34676). Max: "we have an option to extend at the top of the
       // menu". Offered only when a mode is actually selected — None has no curve to open.
@@ -20554,11 +20944,15 @@ setTimeout(function wireSynControls () {
           // how every filter display in every synth behaves. amount 1 = closed = far left.
           var amt = (dat.kind === 'filter') ? (1 - xn) : xn;
           var vr  = 1 - yn;
-          dat.amt = amt; dat.var = vr;                       // paint from the gesture immediately
+          /* fb636 ALT — VAR IS INERT ON 39-46 (no Alt kernel reads it), so the Y axis writes nothing there. Writing it
+             anyway parks a hidden VAR on the slot that comes alive on the next switch to Mirror (VAR = folds) or a
+             shaper: a sound change nobody asked for, made by a drag that did nothing audible. */
+          var varLive = ! ((dat.mode | 0) >= 39 && (dat.mode | 0) <= 46);
+          dat.amt = amt; if (varLive) dat.var = vr;          // paint from the gesture immediately
           try { window.__setSynParam (cur.slot ? 'SYN_OSC_' + cur.O + '_WARP2_AMT'
                                                : 'SYN_OSC_' + cur.O + '_WARP_AMOUNT', amt); } catch (e) {}
-          try { window.__setSynParam (cur.slot ? 'SYN_OSC_' + cur.O + '_W2VAR'
-                                               : 'SYN_OSC_' + cur.O + '_WVAR', vr); } catch (e) {}
+          if (varLive) { try { window.__setSynParam (cur.slot ? 'SYN_OSC_' + cur.O + '_W2VAR'
+                                                            : 'SYN_OSC_' + cur.O + '_WVAR', vr); } catch (e) {} }
           paint();
         }
         body.addEventListener ('mousedown', function (ev) {
@@ -20610,6 +21004,7 @@ setTimeout(function wireSynControls () {
                                                     : String (Math.round (dat.amt * 100));
         el.querySelector ('.yv').textContent = filt ? (0.5 + dat['var'] * 9.5).toFixed (1)
                                                     : (drw ? (dat.drawn ? 'drawn' : 'straight')
+                                                           : ((dat.mode | 0) >= 39 && (dat.mode | 0) <= 46) ? '\u2014'   // fb636 ALT — VAR is inert
                                                            : String (Math.round (dat['var'] * 100)));
       }
 
@@ -20923,6 +21318,7 @@ setTimeout(function wireSynControls () {
           try {
             const valEl  = pill.querySelector('.warp2-val');
             const numEl  = valEl ? valEl.querySelector('b') : null;
+            const sufEl  = valEl ? valEl.querySelector('.warp2-suffix') : null;   // fb636 ALT — 'Orig' / 'Dry' carry no %
             const modeEl = pill.querySelector('.warp2-mode-value');
             if (!valEl || !numEl || !modeEl || !window.Juce || !window.Juce.getSliderState) return;
             // Wavetable WARP 2 states (existing behavior).
@@ -20980,7 +21376,13 @@ setTimeout(function wireSynControls () {
                 const c = ctx();
                 const m = modeIdxOf(c);
                 modeEl.textContent = c.modes[m] || c.modes[0];
-                numEl.textContent  = Math.round((c.amtState.getNormalisedValue ? c.amtState.getNormalisedValue() : 0) * 100);
+                const an = c.amtState.getNormalisedValue ? c.amtState.getNormalisedValue() : 0;
+                /* fb636 ALT — the WARP 2 amount reads in its mode's terms, the knob's own words (fmtWarpAmt): the number
+                   in <b>, its unit in the suffix. The SAMPLE engines' list has no Alt modes and keeps its percent. */
+                const at = (c.isWarp && window.__fmtWarpAmt) ? window.__fmtWarpAmt(m, an) : (Math.round(an * 100) + '%');
+                const pm = /^(.*?)(%?)$/.exec(at);
+                numEl.textContent  = pm[1];
+                if (sufEl) sufEl.textContent = pm[2];
                 pill.classList.toggle('act', m !== 0);
               } catch (e) {}
             };
@@ -21574,9 +21976,46 @@ setTimeout(function wireSynControls () {
           var d=destIdx(id), tn=depthNorm(id);
           if(d===2||d===4){ var s1=ssOf('SYN_FILTER1_ENV'); if(s1 && Math.abs(nv(s1)-tn)>1e-4){ try{ s1.setNormalisedValue(tn); }catch(e){} } }
           if(d===3||d===4){ var s2=ssOf('SYN_FILTER2_ENV'); if(s2 && Math.abs(nv(s2)-tn)>1e-4){ try{ s2.setNormalisedValue(tn); }catch(e){} } } }
-        function syncDepthFromFilterKnob(f){ var id=envRoutedToFilter(f); if(!id) return;
+        /* fb636 (bugC-b) — THE MIRROR FOLLOWS THE SETTLED ROUTE. A load pushes every changed relay in the tree's child order
+           (APVTS updateParameterConnectionsToChildTrees), and SYN_ENV2_DEST precedes SYN_FILTER1_ENV there, so the knob's event
+           saw the NEW destination only because of that order: fed backwards, Paulo → All You Need mirrored All You Need's -0.088
+           into Env 2's depth through Paulo's stale Filter 1 route (fb636_envknob_gate [a2]). The knob's event now only books the
+           mirror; it runs one task later, after the burst, against the route that exists then. A hand's drag and host automation
+           still move the routed depth — one task later.
+           fb636 review — "one task later" was not "after the burst": WKWebView runs every relay push the native side sends as
+           its OWN task, so the booked mirror could run between two pushes of one load (fb636_envknob_gate [a2t]: Paulo → All You
+           Need reversed, FILTER1_ENV at push #164 and ENV2_DEST at #180, wrote ENV2_DEPTH = -0.088). The mirror now waits for the
+           relays to SETTLE: it runs once an FK_SETTLE_MS window passes in which no relay NEW to this booking pushed (fkNoteRelay,
+           wired to every other relay in wireFilterLink). A load pushes a different relay every task, so it waits the burst out;
+           a hand's drag or host automation (the same few relays again and again) settles within one or two windows. */
+        var FK_SETTLE_MS = 30, _fkSyncDue = { 1:false, 2:false }, _fkSeen = null, _fkSeenN = 0;
+        function fkNoteRelay(nm){ if(_fkSeen && !_fkSeen[nm]){ _fkSeen[nm]=1; _fkSeenN++; } }
+        function syncDepthFromFilterKnob(f){ if(_fkSyncDue[f]) return; _fkSyncDue[f]=true;
+          if(!_fkSeen){ _fkSeen={}; _fkSeenN=0; }
+          var n0=_fkSeenN; (function settle(){ setTimeout(function(){
+            if(_fkSeenN!==n0){ n0=_fkSeenN; settle(); return; }        // a relay new to this booking landed: a load is still arriving
+            _fkSyncDue[f]=false; if(!_fkSyncDue[1]&&!_fkSyncDue[2]) _fkSeen=null;
+            syncDepthNow(f); }, FK_SETTLE_MS); })(); }
+        function syncDepthNow(f){ var id=envRoutedToFilter(f); if(!id) return;
           var sf=ssOf(FILT_ENV_PARAM[f]); if(!sf) return; var tn=nv(sf);   // 0..1, same mapping as depth
           var ss=ssOf(DEPTH_PARAM[id]); if(ss && Math.abs(nv(ss)-tn)>1e-4){ try{ ss.setNormalisedValue(tn); }catch(e){} } }
+        /* fb636 (bugC-b) — A HAND'S ENV KNOB NEVER TURNS NOTHING. The knob only mirrors into the depth of an envelope ALREADY
+           routed to its filter, and 50 of 52 presets and every fresh patch route none (fb180), so turning it did nothing. On the
+           FIRST REAL MOVE of a hand's drag (wireSlotKnob's onMove, the fk-em emblem's mv — never a press, a double-click, a
+           wheel, a load or host automation) this routes ONE envelope: Env 2 (FLT, the filter envelope the knob's title names),
+           and only while Env 2 is Off. DEPTH first, from the knob's already-moved value, then DEST directly — setDest would run
+           syncFilterKnobFromDepth and snap the knob to the old depth (All You Need's -0.088 lost at the touch). A busy Env 2
+           (the other filter, Mod, Pitch) is never re-targeted, never widened to Filter 1 + 2, and no other envelope is picked:
+           the hint says why instead. Returns 'routed' | 'claimed' | 'busy' | null (states not ready). */
+        function ensureFilterRoute(f){ f=(f===2)?2:1;
+          if(envRoutedToFilter(f)) return 'routed';                 // an envelope already feeds it: the mirror drives it
+          var sd=ssOf(DEST_PARAM.FLT), sp=ssOf(DEPTH_PARAM.FLT), sf=ssOf(FILT_ENV_PARAM[f]); if(!sd||!sp||!sf) return null;
+          var cur=destIdx('FLT'), want=(f===1)?2:3;
+          if(cur!==0){ try{ if(window.__tiToast) window.__tiToast('No envelope feeds Filter '+f+' \u2014 Env 2 is routed to '+DEST_LABELS[cur]); }catch(e){} return 'busy'; }
+          try{ sp.setNormalisedValue(nv(sf)); }catch(e){}
+          try{ sd.setNormalisedValue(want/7); }catch(e){}
+          updateChip(); scheduleRender(); return 'claimed'; }
+        window.__envEnsureFilterRoute = ensureFilterRoute;
         function setDest(id, idx){ var ss=ssOf(DEST_PARAM[id]);
           if(ss){ try{ ss.setNormalisedValue(idx/7); }catch(e){} } updateChip(); syncFilterKnobFromDepth(id); scheduleRender(); }
         function setDepthVal(id, v){ v=Math.max(-1,Math.min(1,v));
@@ -21587,6 +22026,11 @@ setTimeout(function wireSynControls () {
           [[1,s1],[2,s2]].forEach(function(p){ var f=p[0], sf=p[1];
             if(sf.valueChangedEvent && sf.valueChangedEvent.addListener && !sf._envLink){
               sf._envLink=true; sf.valueChangedEvent.addListener(function(){ syncDepthFromFilterKnob(f); }); } });
+          // fb636 review — every OTHER relay reports its push to a booked mirror (fkNoteRelay: one flag test when none is booked)
+          var all=(window.__JUCE__&&window.__JUCE__.initialisationData&&window.__JUCE__.initialisationData.__juce__sliders)||[];
+          all.forEach(function(nm){ if(nm==='SYN_FILTER1_ENV'||nm==='SYN_FILTER2_ENV') return;
+            var st=null; try{ st=window.Juce.getSliderState(nm); }catch(e){}
+            if(st && st.valueChangedEvent && st.valueChangedEvent.addListener && !st._fkNote){ st._fkNote=true; st.valueChangedEvent.addListener(function(){ fkNoteRelay(nm); }); } });
           ['FLT','PIT','M1','M2'].forEach(function(id){ syncFilterKnobFromDepth(id); }); })();
 
         function buildDepthNode(){
@@ -22408,10 +22852,14 @@ setTimeout(function wireSynControls () {
         const onMove = (ev) => {
           if (! dragging) return;
           const dy = dragStartY - ev.clientY;
+          const first = (Math.abs(dy) > 2) && ! dragMoved;   // fb636 (bugC-b) — this drag's first REAL move
           if (Math.abs(dy) > 2) dragMoved = true;
           const newN = juce_clamp01(dragStartN + dy / 200);
           applyFill(newN);
           proxy.setNormalisedValue(newN);
+          /* fb636 (bugC-b) — the Env knob on a filter no envelope feeds routes Env 2 there, AFTER the move lands so the depth
+             takes the moved value. Once per drag; never on pointerdown or dblclick (a reset to centre is not a route). */
+          if (first && base === 'ENV' && window.__envEnsureFilterRoute) window.__envEnsureFilterRoute (activeFilterSlot);
         };
         const onUp = () => {
           dragging = false;
@@ -25255,6 +25703,13 @@ function drawFeedIcon() {
 }
 
 function updateUndoButton() {
+  /* fb636 — updateTapeLoopState rides EVERY shipped frame, on every page, and this re-allocated the undo
+     canvas (canvas.width = ...) and redrew it each time. Redraw only when what it draws changes: hasUndo
+     (the colour) or the device pixel ratio (the backing size). A theme change redraws it too (themechange),
+     and a purged or wiped canvas is a heal (the fb577 watchdog names drawUndoIcon). */
+  const k = (state.tapeLoop.hasUndo ? 1 : 0) + '@' + (window.devicePixelRatio || 1);
+  if (k === updateUndoButton.__k) return;
+  updateUndoButton.__k = k;
   const btn = document.getElementById('btn-undo');
   if (btn) btn.classList.toggle('has-undo', state.tapeLoop.hasUndo);
   drawUndoIcon();
@@ -25373,7 +25828,7 @@ function setupTapeReelCanvas() {
   canvas.style.height = h + 'px';
 }
 
-function drawTapeReels(time) {
+function drawTapeReels(time, still) {
   const canvas = document.getElementById('tape-reel-canvas');
   if (!canvas || canvas.style.display === 'none') return;
   if (state.tapeSubTab !== 'loop') return;
@@ -25398,7 +25853,7 @@ function drawTapeReels(time) {
   ctx.lineCap = 'round';
 
   // Reel rotation
-  if (state.tapeLoop.playing || state.tapeLoop.recording) {
+  if (! still && (state.tapeLoop.playing || state.tapeLoop.recording)) {   // fb636 — a still picture never turns the reels
     state.tapeLoop.reelAngle += 0.05*(window.__uiStepScale||1);
   }
   const angle = state.tapeLoop.reelAngle;
@@ -26430,6 +26885,18 @@ function updateAnimatedIcons(time) {
 
 // ---- Animation Loop ----
 let _prevAnimTime = 0;
+var HERO_STILL_T = 1.5;   /* fb636 — the front page's one pose: every still paint draws at this time, so every repaint is the same picture */
+/* fb636 — A VALUE THAT CHANGES OWES A PICTURE. The front is still (animate below), so a knob that moves with no hand on
+   it — host automation, a CC, a state recall, a preset whose values land after the wake burst — or a hover would
+   otherwise leave its icon and the FX suite's arc/readout on the old value. Both latches clear and ONE repaint is
+   asked for per frame, however many values arrive. At rest nothing changes, so nothing is asked for. */
+var _tiOweRaf = 0;
+window.__tiOweFront = function () {
+  if (window.__cardOnly) return;
+  window.__heroDrawn = false; window.__fxRestDrawn = false;
+  if (_tiOweRaf) return;
+  _tiOweRaf = window.requestAnimationFrame(function () { _tiOweRaf = 0; try { if (window.__tiRepaint) window.__tiRepaint(); } catch (e) {} });
+};
 function animate(timestamp) {
   if(window.__cardOnly)return; 
   if (typeof currentActivePanel !== 'undefined' && currentActivePanel) {
@@ -26444,56 +26911,44 @@ function animate(timestamp) {
   _prevAnimTime = time;
   state.terrainTime = time;
 
-  // fb508 — THE REST POSE (Windows only; macOS runs exactly as before). Max's design, in his
-  // words: "some animations don't move until there's audio coming in, and once audio and MIDI
-  // completely stops they go back to default, unmoved — but they don't just freeze." So while
-  // notes sound (or the user interacts) the front page animates fully at the paced 60. When the
-  // last note ends, the motion EASES to a stop over ~1.5 s — a graceful settle, never a
-  // mid-motion freeze — and once settled the heavy painters draw ONE final rest frame and stop
-  // burning entirely. The first note (or any input) resumes instantly. Measured need: the hero
-  // alone at a continuous paced 60 costs ~200% of a core on Windows at idle.
-  if (window.__tiQuiet !== undefined) {
-    if (window.__heroRest === undefined) { window.__heroRest = 0; window.__heroT = time; window.__heroDrawn = false; }
-    if (!window.__tiQuiet) { window.__heroRest = 0; window.__heroDrawn = false; }
-    else window.__heroRest = Math.min(1, window.__heroRest + dt / 1.5);
-    window.__heroT += dt * (1 - window.__heroRest);           /* motion eases to stillness */
-    var __rt = window.__heroT;
-    if (window.__heroRest < 1 || !window.__heroDrawn) {
-      /* fb510 — the hero draws at 30 fps while animating (measured: it is the front page's
-         whole play-time cost, ~150% gpu at paced 60). At 3,696 canvas ops per frame, 30 fps on
-         a t*0.4 Perlin drift is imperceptible — the same call fb487 made for the topo map. The
-         final rest frame always draws so the settle never half-finishes. */
-      var __heroHalf = (window.__heroRest < 1) && ((window.__uiPaceFps|0) > 45) && (((window.__heroAlt2 = (window.__heroAlt2 | 0) + 1) & 1) === 1);
-      if (!__heroHalf) renderTerrain(__rt);
-      updateSectionIcons();
-      updateAnimatedIcons(__rt);
-      drawTapeReels(__rt);
-      if (typeof drawDelayPanel === 'function') drawDelayPanel(__rt, dt * (1 - window.__heroRest));   /* fb510 — the delay comet rests with the hero */
-      if (window.__heroRest >= 1) {
-        window.__heroDrawn = true;                            /* the rest frame is down — sleep */
-        /* the simulated meters bounce on Math.random even in silence — at rest they FALL, like
-           real meters, instead of jittering forever and keeping the compositor awake */
-        try { var __mL = window.__mtL, __mR = window.__mtR;
-              if (__mL) __mL.style.height = '0%'; if (__mR) __mR.style.height = '0%'; } catch(e) {}
-      }
-    }
-    if (!window.__heroDrawn) updateMeters(time);
-    updateXYAuto(time);
-  } else {
-    renderTerrain(time);
-    updateMeters(time);
-    updateSectionIcons();
-    updateXYAuto(time);
-    updateAnimatedIcons(time);
-  }
-  // Safari preview: simulate loop progress when no JUCE backend
-  if (!juceMode && (state.tapeLoop.playing || state.tapeLoop.recording)) {
-    state.tapeLoop.loopProgress = (state.tapeLoop.loopProgress + 0.003) % 1.0;
-  }
-  if (window.__tiQuiet === undefined) drawTapeReels(time);
-  updateModulation(time, dt);
-  if (window.__tiQuiet === undefined && typeof drawDelayPanel === 'function') drawDelayPanel(time, dt);   /* fb510 -- Mac path; Windows draws it inside the rest-pose block */
-
+  /* ═══ fb636 — THE FRONT PAGE IS STILL ═══════════════════════════════════════════════════════════
+     Max: "kill all animation loops on the hero. The hero is not the synth page, but the page behind the
+     synth page... we're getting ready to replace that page with the Terrain patcher."
+     This painter no longer animates anything. It draws ONE still picture whenever a picture is owed — the
+     page shown (setActivePanel), a resize, a theme change, a heal (the fb577 wake clears __heroDrawn), or
+     a hand on a control (fb591: while a gesture lasts it repaints on every gesture frame, so a knob's icon
+     follows its drag) — and on every other frame the C++ ships while the synth plays it returns here.
+     The terrain is drawn at ONE pose (HERO_STILL_T), so any repaint is the same picture (fb590); the
+     simulated meters (Math.random) sit at rest, fb508's rest pose; the section icons, the knob icons, the
+     loop reels and the delay panel are drawn once. Nothing reads the hero scope any more — PluginEditor.cpp
+     stopped building and shipping it. fb508/fb510's Windows ease-to-rest is gone with the motion it eased.
+     TWO THINGS KEEP THEIR CLOCK, because they are not pictures:
+       · XY AUTO-PLAY WRITES AUDIO (updateXYAuto → applyXYToParams → setXYPad → ModulationEngine sources
+         3/4). None of Max's 52 presets turn it on; for a patch that does, it still steps on every call,
+         exactly as before (and it still stops whenever a panel covers the front, as it always did).
+       · a legacy MOD route (modState): its display modulation keeps the per-frame path while one is on,
+         exactly as before; with none on (all 52 presets) it runs once per picture. */
+  var xyLive = !!(state.xyEnabled && state.xyAutoPlay && !state.draggingHero);
+  if (xyLive || animate.__xyWas) updateXYAuto(time);   /* the frame it stops on, too: updateXYAuto clears .xy-active */
+  animate.__xyWas = xyLive;
+  var modLive = modState.assignments.some(a => a.enabled);
+  if (modLive) updateModulation(time, dt);
+  if (window.__heroDrawn && ! (window.__tiGestureLive && window.__tiGestureLive())) return;   /* fb636 — still */
+  /* latched FIRST, and every step on its own: a step that throws can never turn the still page back into a
+     per-frame loop, nor keep the steps after it from drawing (a blank result is the fb577 watchdog's to heal) */
+  window.__heroDrawn = true;
+  var __st = function (f) { try { f(); } catch (e) {} };
+  __st(function () { renderTerrain(HERO_STILL_T); });
+  __st(function () { var mL = window.__mtL || (window.__mtL = document.getElementById('meter-l')),
+                         mR = window.__mtR || (window.__mtR = document.getElementById('meter-r'));
+    if (mL) { mL.style.height = '0%'; mL.classList.remove('clip'); }
+    if (mR) { mR.style.height = '0%'; mR.classList.remove('clip'); } });
+  __st(updateSectionIcons);
+  if (!xyLive) __st(function () { updateXYAuto(time); });   /* off: it only clears .xy-active */
+  __st(function () { updateAnimatedIcons(HERO_STILL_T); });
+  __st(function () { drawTapeReels(HERO_STILL_T, true); });
+  if (!modLive) __st(function () { updateModulation(time, dt); });
+  if (typeof drawDelayPanel === 'function') __st(function () { drawDelayPanel(HERO_STILL_T, 0); });
 }
 
 // ==== MODULATION SYSTEM ====
@@ -26518,6 +26973,7 @@ const modState = {
   lfoOutputs: [0, 0, 0],
   ctxMenuParam: null,
 };
+if (window.__modPanelOpenPending !== undefined) { modState.panelOpen = !! window.__modPanelOpenPending; window.__modPanelOpenPending = undefined; }   // fb636 — a parse-time restore's pending write
 
 // ---- LFO Waveform Generators ----
 function lfoWaveform(shape, phase) {
@@ -28178,6 +28634,7 @@ function initFxSuite() {
 
     canvas.addEventListener('mouseenter', function() {
       fxSuite.hoveredKnob = id;
+      if (window.__tiOweFront) window.__tiOweFront();   // fb636 — hover recolours the still FX knob
       if (state.tooltipLocked) return;
       var paramKey = FX_KNOB_PARAM_MAP[id];
       if (paramKey && PARAMS[paramKey]) {
@@ -28189,6 +28646,7 @@ function initFxSuite() {
     });
     canvas.addEventListener('mouseleave', function() {
       fxSuite.hoveredKnob = null;
+      if (window.__tiOweFront) window.__tiOweFront();
       clearTimeout(state.tooltipTimer);
       if (!state.tooltipLocked) hideTooltip();
     });
@@ -29859,30 +30317,22 @@ function initFxSuite() {
       lastFxTime = timestamp;   // fb487 -- occluded (see animate); the tape viz's ~15 blurred strokes/frame vanish
       return;   /* fb511 -- __tiFrame re-calls */
     }
-    var dt = Math.min((timestamp - lastFxTime) / 1000, 0.1);
     lastFxTime = timestamp;
 
-    /* fb510 — the FX-suite rest ease lives HERE, before the page branches, so it advances no
-       matter which page (tape/space) is showing. Mac: __tiQuiet undefined, factor stays 0. */
-    if (window.__tiQuiet !== undefined) {
-      if (window.__fxRest === undefined) window.__fxRest = 0;
-      if (!window.__tiQuiet) { window.__fxRest = 0; window.__fxRestDrawn = false; }
-      else window.__fxRest = Math.min(1, window.__fxRest + dt / 1.5);
-    }
+    /* ═══ fb636 — THE FRONT FX SUITE IS STILL (see animate). The tape machine, the Space view and their
+       knob faces are drawn ONCE per owed picture — shown, resized, re-themed, healed (the fb577 wake clears
+       __fxRestDrawn), or while a hand is on a control (fb591) — at one fixed pose: tapeTime and spaceTime
+       no longer advance, so a repaint is the same picture. fb576's direct redraw after a resize and the
+       1 Hz tape watchdog below are unchanged. fb510's Windows ease-to-rest went with the motion. */
+    if (window.__fxRestDrawn && ! (window.__tiGestureLive && window.__tiGestureLive())) return;   /* fb636 — still */
+    window.__fxRestDrawn = true;
 
     // Only draw active page
     if (fxSuite.page === 0) {
-      /* fb510 — the tape mech viz rests like the hero: motion eases to a stop over 1.5 s of
-         quiet (a stopped tape LOOKS stopped — that is its rest state, not a freeze), draws one
-         final frame, then sleeps until notes or input return. The ease accumulator lives at the
-         top of fxAnimate. Mac: factor 0, skip never fires — byte-identical. */
-      var __fxr = (window.__fxRest || 0);
-      tapeTime += dt * (1 - __fxr);
       var tapeCanvas = document.getElementById('tapeMechCanvas');
-      if (tapeCanvas && tapeCanvas.width > 0 && (__fxr < 1 || !window.__fxRestDrawn)) {
+      if (tapeCanvas && tapeCanvas.width > 0) {
         drawTapeVisualization(tapeCanvas.getContext('2d'), tapeCanvas.width / DPR, tapeCanvas.height / DPR, tapeTime);
         tapeCanvas.__ink = true;
-        if (__fxr >= 1) window.__fxRestDrawn = true;
       }
       var tapeKnobIds = ['wow', 'saturation', 'hiss'];
       for (var tki = 0; tki < tapeKnobIds.length; tki++) {
@@ -29907,10 +30357,8 @@ function initFxSuite() {
     }
 
     if (fxSuite.page === 1) {
-      var __fxr2 = (window.__fxRest || 0);   /* fb510 — same rest ease as the tape page */
-      spaceTime += dt * (1 - __fxr2);
       var spaceCanvas = document.getElementById('spaceVisCanvas');
-      if (spaceCanvas && spaceCanvas.width > 0 && (__fxr2 < 1 || !window.__fxRestDrawn)) {
+      if (spaceCanvas && spaceCanvas.width > 0) {
         drawSpace(spaceCanvas.getContext('2d'), spaceCanvas.width / DPR, spaceCanvas.height / DPR, spaceTime);
       }
       var spaceKnobIds = ['spaceSize', 'spaceDecay', 'spaceTone', 'spaceMix'];
@@ -30243,6 +30691,20 @@ function init() {
 // Handle resize
 window.addEventListener('resize', () => {
   initTerrain();
+  /* fb636 — initTerrain re-sizes (so WIPES) the hero canvas even when its size did not change, and the still
+     front has no next frame to redraw it: repaint the one picture right here, directly (fb576's tape idiom),
+     so a resize can never leave it blank. Under an open panel the latch is simply cleared — the page's return
+     paints it. */
+  window.__heroDrawn = false;
+  if (!currentActivePanel && !window.__cardOnly) { try { renderTerrain(HERO_STILL_T); } catch (e) {} }
+});
+/* fb636 — a theme change is a new picture, and the still painters only draw when one is owed: clear both
+   latches and ask for one repaint (the toggle is a click whose wake burst would cover it; a theme the host
+   restores at boot is not). The undo glyph is change-gated (updateUndoButton), so it is redrawn here too. */
+window.addEventListener('themechange', () => {
+  window.__heroDrawn = false; window.__fxRestDrawn = false;
+  try { drawUndoIcon(); } catch (e) {}
+  setTimeout(() => { try { if (window.__tiRepaint) window.__tiRepaint(); } catch (e) {} }, 0);
 });
 
 // Redraw all static canvas icons whose bitmaps get purged by the JUCE WebView
@@ -30920,6 +31382,12 @@ restoreThemeFromBackend();
     +'<circle cx="5.2" cy="3" r="1" fill="currentColor" stroke="none"/><circle cx="14.8" cy="3" r="1" fill="currentColor" stroke="none"/></svg>';
   function icon(k,phOff){ if(k===7) return ICON_CUSTOM; if(ICONG[k]) return '<svg viewBox="0 0 20 11" fill="none" stroke="currentColor" stroke-width="1.25" stroke-linecap="round" stroke-linejoin="round"><path d="'+ICONG[k]+'"/></svg>';
     phOff=phOff||0;var w=20,h=11,mid=h/2,n=60,d='';for(var i=0;i<=n;i++){var t=i/n;d+=(i?'L':'M')+(t*w).toFixed(1)+' '+(mid-yfor(k,(t+phOff)%1)*(h*0.34)).toFixed(1)+' ';}return '<svg viewBox="0 0 '+w+' '+h+'" fill="none" stroke="currentColor" stroke-width="1.3"><path d="'+d+'"/></svg>';}
+  /* fb636 h2 — the living emblem's markup: the live path at phase ph plus the phase-0 HOME path, in one svg (see the
+     #mv-shape .ic rules: .mv-idle dissolves live → home). Fixed glyphs (Custom, the ICONG shapes) carry no phase: unchanged. */
+  var __icHome={};
+  function iconLive(k,ph){ if(k===7||ICONG[k]) return icon(k,ph);
+    if(__icHome[k]==null){ var hm=/<path d="([^"]*)"/.exec(icon(k,0)); __icHome[k]=hm?hm[1]:''; }
+    return icon(k,ph).replace('<path d=','<path class="ic-live" d=').replace('</svg>','<path class="ic-home" d="'+__icHome[k]+'"/></svg>'); }
   var CHEV='<svg class="chev" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.4"><path d="M2 4l3 3 3-3"/></svg>';
   // Bipolar ring: purple fills from top-center toward the value — RIGHT for +, LEFT for − (so negative shows, fixing the "grayed out" bug).
   var RINGBG=function(d){d=Math.max(-1,Math.min(1,d||0));var lo=d>=0?140:140+d*140,hi=d>=0?140+d*140:140;return 'conic-gradient(from 220deg,var(--knob-track) 0 '+lo+'deg,var(--purple-400) '+lo+'deg '+hi+'deg,var(--knob-track) '+hi+'deg 280deg,transparent 280deg)';};
@@ -31258,14 +31726,29 @@ restoreThemeFromBackend();
   var __lfoRafMode=0;   // set in boot(): 1 = rAF is the clock (popped card / no dispatcher), 0 = the C++ push clock drives us via __tiFrameReg
   var __lfoRafArmed=0, __lfoIdle=false;   // fb567 — rAF-mode loop armed? · the head is parked (faded) and the painter rests
   function lfoIdle(on){   // fb567 — the fade is CSS (.mv-idle → opacity 0 over .35 s): one class write per edge, nothing per frame
-    try{ if(root) root.classList.toggle('mv-idle', on); if(ext) ext.classList.toggle('mv-idle', on); }catch(e){} }
+    try{ if(root) root.classList.toggle('mv-idle', on); if(ext) ext.classList.toggle('mv-idle', on); }catch(e){} mvBreath(on); }
+  /* fb636 h2 — THE CURVE FINISHES ITS BREATH, THEN RESTS ON ITS POSE. fb570 paused mvBreathe the instant the head parked,
+     so the line held wherever the breath was (anywhere in .9..1: a different pose every stop). Max, 02:34: "not frozen on
+     the screen like this, same for everything else". Now the park edge lets the breath run on to its next boundary
+     (.mv-br-run keeps the idle pause off it); the frame dispatcher's animationiteration listener takes the class off there
+     and puts the clock exactly on the 0 %/100 % pose (opacity .9, __tiBrHome). A breath that never reports (a hidden
+     panel) is landed by the cap. Before any note has ever sounded (boot) there is no ending to play: the curve goes
+     straight onto its pose. Nothing per frame, and the head's .35 s fade is untouched. */
+  var __mvBrCap=0, __mvWasLive=false;
+  function mvStrokes(){ var L=[]; try{ if(root) L=L.concat([].slice.call(root.querySelectorAll('.mv-stroke'))); if(ext) L=L.concat([].slice.call(ext.querySelectorAll('.es .mv-stroke'))); }catch(e){} return L; }
+  function mvLand(s){ s.classList.remove('mv-br-run'); if(window.__tiBrHome) window.__tiBrHome(s); }
+  function mvBreath(idle){ clearTimeout(__mvBrCap); __mvBrCap=0; var L=mvStrokes();
+    if(!idle){ __mvWasLive=true; L.forEach(function(s){ s.classList.remove('mv-br-run'); }); return; }
+    if(!__mvWasLive){ L.forEach(mvLand); return; }
+    L.forEach(function(s){ s.classList.add('mv-br-run'); });
+    __mvBrCap=setTimeout(function(){ __mvBrCap=0; mvStrokes().forEach(function(s){ if(s.classList.contains('mv-br-run')) mvLand(s); }); }, 3300); }
   window.__lfoKick=function(){ if(__lfoRafMode&&!__lfoRafArmed){ __lfoRafArmed=1; requestAnimationFrame(lfoFrame); } };   // fb567 — a fresh push (__modViz) wakes a parked rAF-mode loop (the popped card)
   function lfoFrame(t){ if(window.__cardOnly&&window.__cardOnly!=='lfo')return;
     // fb567 — THE SOUNDING FLAG (any voice, release tails included), and only while its FEED IS ALIVE: the C++
     // frame stamps __notesActiveT beside it (the main frame every tick outside the quiet gate; a popped card's
     // feed inside it). A popped card whose editor has closed receives nothing at all — no truth, so no head:
     // it parks, instead of freezing or lying the way the old simulation did, while notes sound unseen.
-    var naT=window.__notesActiveT, live=!!window.__notesActive&&!!naT&&(Date.now()-naT)<700;
+    var live=window.__tiLive();   /* fb636 — the same rule (flag AND stamp < 700 ms), now kept in ONE place: the frame dispatcher's motion clock */
     /* fb628 — AND IT MUST BE ASSIGNED TO SOMETHING. fb567/fb581 made the head rest when the notes
        stop; this adds the other half Max asked for: an LFO routed nowhere is not modulating
        anything, so watching it swing was the display claiming work that is not happening. The park
@@ -31331,7 +31814,7 @@ restoreThemeFromBackend();
       // fb342 — the emblem was an innerHTML SVG RE-PARSE at 60Hz. Gate on shape + a 1/32
       // phase bucket: it still visibly lives (32 steps/cycle) at ~1/8th the parse cost.
       if(sic){ var ib=st.shape+'|'+((ph*32)|0);
-        if(ib!==sic.__b){ sic.__b=ib; sic.innerHTML=icon(st.shape, ph); } } }   // little living shape emblem
+        if(ib!==sic.__b){ sic.__b=ib; sic.innerHTML=iconLive(st.shape, ph); } } }   // little living shape emblem (fb636 h2 — with its home path: it parks on phase 0)
   }
 
   function boot(){
@@ -31889,7 +32372,12 @@ restoreThemeFromBackend();
   }
   var inLvl=0; // smoothed input level (drives the curve's aliveness)
   var extOpen=false, extCv=null, extCtx=null, ext=null;
-  var curT=0;
+  var curT=0, curE=1;   /* fb636 — motion time and its envelope (the frame dispatcher's MOT), set by loop() */
+  /* fb636 h2 — curTF: the ANIMATED filter types' own motion clock (MAG_ANIM: comb, shimmer, karplus, formant, reverb, ring,
+     crush…). It advances with motion time and goes back to 0 once the ending has landed (MOT.m 0, not live), so their
+     curve rests on ONE shape — its t = 0 shape, the one it boots with — wherever the motion stopped. */
+  var curTF=0, __tfLast=0;
+  function fltTick(M,t){ if(!M){ curTF=t; return; } var d=M.tau-__tfLast; __tfLast=M.tau; if(d>0) curTF+=d; if(M.m<=0&&!M.live) curTF=0; }
   function drawAnalyzer(){ if(anaCv) drawInto(anaCv,anaCtx,false); if(extOpen&&extCv) drawInto(extCv,extCtx,true); }
   function drawInto(cv,ctx,isExt){
     getP();
@@ -31913,7 +32401,7 @@ restoreThemeFromBackend();
        short CAT would shift EVERY engine's curve by a fraction of an index instead of shouting. */
     var ti=typeS?window.__fltRoster.index(typeS.getNormalisedValue()):0, type=CAT[ti]||'lp';
     // Curve lives inside [yTop,yBot]; yBot is lifted above the bottom emblems so it respects them (clean overlap only).
-    var t=curT, yTop=(isExt?12:29)*dpr, yBot=H-(isExt?10:38)*dpr, breath=1+0.05*Math.sin(t*1.8);   // fb164 — 29 = header bottom (24, measured) + 5px air (the stroke's glow needs the extra 2): the resonant peak tops out JUST BELOW the 1/2/K/E row, never on it (Max's no-overlap law)
+    var t=curT, yTop=(isExt?12:29)*dpr, yBot=H-(isExt?10:38)*dpr, breath=1+0.05*Math.sin(t*1.8)*curE;   // fb164 — 29 = header bottom (24, measured) + 5px air (the stroke's glow needs the extra 2): the resonant peak tops out JUST BELOW the 1/2/K/E row, never on it (Max's no-overlap law)
     var N=Math.floor(W/dpr), spec=[], crv=[], lvlAcc=0, lvlN=0;
     /* fb510 — CACHE THE 94-TYPE MODEL. mag() is the transcendental half of this painter and for
        static (non-MAG_ANIM) types depends ONLY on (type, fc, res, drv). NUMERIC dirty compare
@@ -31927,7 +32415,10 @@ restoreThemeFromBackend();
     if(mc.N!==N||mc.W!==W){ mc.F=new Float64Array(N+1); mc.Hb=new Float64Array(N+1);
       for(var mi=0;mi<=N;mi++) mc.F[mi]=fAtX(mi/N*(W/dpr),W/dpr); mc.N=N; mc.W=W; mc.ti=-1; }
     if(MAG_ANIM[type]===1||mc.ti!==ti||mc.fc!==fc||mc.res!==res||mc.drv!==drv||mc.slot!==curSlot){
-      for(var mj=0;mj<=N;mj++) mc.Hb[mj]=mag(type,mc.F[mj],fc,res,drv,t);
+      /* fb636 h2 — the animated types run on curTF and blend onto their t = 0 shape by the rest weight 1 − e, so the curve
+         eases into its resting shape over the ending and a wind-up grows out of it (two model passes only while winding). */
+      var __rw=(MAG_ANIM[type]===1)?1-curE:0;
+      for(var mj=0;mj<=N;mj++){ var hv=mag(type,mc.F[mj],fc,res,drv,curTF); if(__rw>0&&curTF!==0) hv+=(mag(type,mc.F[mj],fc,res,drv,0)-hv)*__rw; mc.Hb[mj]=hv; }
       mc.ti=ti; mc.fc=fc; mc.res=res; mc.drv=drv; mc.slot=curSlot; }
     for(var i=0;i<=N;i++){ var x=i/N*W, f=fAtX(i/N*(W/dpr),W/dpr), ie=binMag(f);
       if((i&3)===0){ lvlAcc+=ie; lvlN++; }
@@ -31961,48 +32452,59 @@ restoreThemeFromBackend();
       ctx.strokeStyle='rgba(183,148,255,0.20)'; ctx.lineWidth=dpr*3;   ctx.stroke();
       ctx.strokeStyle='#C9B3FF'; ctx.lineWidth=dpr*1.8; ctx.stroke(); ctx.restore();
       // travelling energy highlight — a bright segment sweeping along the curve, faster when the audio is louder
+      /* fb636 h2 — ...and it is DECORATION: it fades with the motion envelope (it slows and dims over the ending), so at rest
+         the curve is plain — no bright segment parked wherever tau stopped. */
+      var __hE=curE; if(__hE>0){
       var sweep=(t*(0.06+inLvl*0.55))%1, c0=Math.floor(sweep*N), seg=Math.max(6,Math.round(N*0.05));
       ctx.save(); ctx.lineCap='round';
       ctx.beginPath(); for(var k=0;k<=seg;k++){ var idx=c0+k; if(idx>N)break; var p=crv[idx]; k?ctx.lineTo(p[0],p[1]):ctx.moveTo(p[0],p[1]); }
-      ctx.strokeStyle='rgba(201,179,255,'+(0.05+inLvl*0.07).toFixed(3)+')'; ctx.lineWidth=dpr*14;  ctx.stroke();   // fb342 — graduated halo (was shadowBlur 10*dpr)
-      ctx.strokeStyle='rgba(201,179,255,'+(0.08+inLvl*0.11).toFixed(3)+')'; ctx.lineWidth=dpr*7.5; ctx.stroke();
-      ctx.strokeStyle='rgba(201,179,255,'+(0.12+inLvl*0.16).toFixed(3)+')'; ctx.lineWidth=dpr*4;   ctx.stroke();
-      ctx.strokeStyle='rgba(245,240,255,'+(0.32+inLvl*0.5).toFixed(3)+')'; ctx.lineWidth=dpr*2.1; ctx.stroke(); ctx.restore();
+      ctx.strokeStyle='rgba(201,179,255,'+((0.05+inLvl*0.07)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*14;  ctx.stroke();   // fb342 — graduated halo (was shadowBlur 10*dpr)
+      ctx.strokeStyle='rgba(201,179,255,'+((0.08+inLvl*0.11)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*7.5; ctx.stroke();
+      ctx.strokeStyle='rgba(201,179,255,'+((0.12+inLvl*0.16)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*4;   ctx.stroke();
+      ctx.strokeStyle='rgba(245,240,255,'+((0.32+inLvl*0.5)*__hE).toFixed(3)+')'; ctx.lineWidth=dpr*2.1; ctx.stroke(); ctx.restore(); }
     }
   }
   // ---- emblems (TE×Serum: thin white, purple ping-pong follower, grab-aware) ----
   function pingpong(x){ x=((x%2)+2)%2; return x<1?x:2-x; }
   function envShape(x){ if(x<0.13)return x/0.13; if(x<0.42)return 1-(x-0.13)/0.29*0.4; if(x<0.72)return 0.6; return 0.6*(1-(x-0.72)/0.28); }
   function eS(ctx,grab){ ctx.lineWidth=grab?1.7:1.35; ctx.lineCap='round'; ctx.lineJoin='round'; ctx.strokeStyle=grab?'#FFFFFF':'#ECE8F2'; ctx.fillStyle='#B794FF'; ctx.shadowBlur=0; }
-  function emCUT(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,x1=cx+r,ytop=cy-r*0.5,ybot=cy+r*0.72,knee=cx-r*0.45+v*r*0.85;
+  function emCUT(ctx,W,H,v,t,grab,me){ if(me==null)me=1; eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,x1=cx+r,ytop=cy-r*0.5,ybot=cy+r*0.72,knee=cx-r*0.45+v*r*0.85;
     function sy(px){ if(px<=knee)return ytop; var d=(px-knee)/(x1-knee); return ytop+d*d*(ybot-ytop); }
     ctx.beginPath(); for(var i=0;i<=40;i++){var px=x0+i/40*2*r; i?ctx.lineTo(px,sy(px)):ctx.moveTo(px,sy(px));} ctx.stroke();
-    var p=grab?v:pingpong(t*0.5),px=x0+p*2*r; ctx.beginPath(); ctx.arc(px,sy(px),2,0,7); ctx.fill(); }
-  function emRES(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,amp=(0.12+v*0.62)*r,osc=grab?1:Math.sin(t*(3+v*8));
+    var p=grab?v:v+(pingpong(t*0.5)-v)*me,px=x0+p*2*r; ctx.beginPath(); ctx.arc(px,sy(px),2,0,7); ctx.fill(); }
+  function emRES(ctx,W,H,v,t,grab,me){ if(me==null)me=1; eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,amp=(0.12+v*0.62)*r,osc=grab?1:1+(Math.sin(t*(3+v*8))-1)*me;
     ctx.beginPath(); for(var i=0;i<=44;i++){var x=i/44,px=x0+x*2*r,py=cy-Math.sin(x*Math.PI)*amp*osc; i?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.stroke();
     ctx.beginPath(); ctx.arc(cx,cy-amp*osc,2,0,7); ctx.fill(); }
   function emDRV(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,k=1+v*10,nrm=Math.tanh(k);
     ctx.beginPath(); for(var i=0;i<=48;i++){var x=i/48,ph=x*Math.PI*2-t*3.2,s=Math.tanh(Math.sin(ph)*k)/nrm,px=cx-r+x*2*r,py=cy-s*r*0.7; i?ctx.lineTo(px,py):ctx.moveTo(px,py);} ctx.stroke(); }
-  function emENV(ctx,W,H,v,t,grab){ eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,base=cy+r*0.7,top=base-r*1.35*(0.35+v*0.65);
+  function emENV(ctx,W,H,v,t,grab,me){ if(me==null)me=1; eS(ctx,grab); var cx=W/2,cy=H/2,r=Math.min(W,H)*0.42,x0=cx-r,base=cy+r*0.7,top=base-r*1.35*(0.35+v*0.65);
     function ey(x){return base-envShape(x)*(base-top);}
     ctx.beginPath(); for(var i=0;i<=44;i++){var x=i/44,px=x0+x*2*r; i?ctx.lineTo(px,ey(x)):ctx.moveTo(px,ey(x));} ctx.stroke();
-    var p=grab?v:pingpong(t*0.45); ctx.beginPath(); ctx.arc(x0+p*2*r,ey(p),2,0,7); ctx.fill(); }
+    var p=grab?v:v+(pingpong(t*0.45)-v)*me; ctx.beginPath(); ctx.arc(x0+p*2*r,ey(p),2,0,7); ctx.fill(); }
   var EMD={cut:emCUT,res:emRES,drv:emDRV,env:emENV};
   var EM=[{t:'cut',sfx:'CUT'},{t:'res',sfx:'RES'},{t:'drv',sfx:'DRV'},{t:'env',sfx:'ENV'}];
   var emblems=[], hud=null, hudT=0, emPrev=null, hudSlot=0;
   function regEmblem(cv,type,sfx){ var e={cv:cv,ctx:cv.getContext('2d'),type:type,sfx:sfx,id:'SYN_FILTER1_'+sfx,ss:null,grab:false}; emblems.push(e);
-    cv.addEventListener('mousedown',function(ev){ ev.preventDefault(); e.grab=true; if(!e.ss)e.ss=ss(e.id); var y0=ev.clientY,v0=e.ss?e.ss.getNormalisedValue():0.5;
-      function mv(m){ if(e.ss){ var nv=Math.max(0,Math.min(1,v0+(y0-m.clientY)*0.006)); try{e.ss.setNormalisedValue(nv);}catch(x){} } }
+    cv.addEventListener('mousedown',function(ev){ ev.preventDefault(); e.grab=true; if(!e.ss)e.ss=ss(e.id); var y0=ev.clientY,v0=e.ss?e.ss.getNormalisedValue():0.5,moved=false;
+      /* fb636 (bugC-b) — the ENV emblem's first REAL move (> 2 px, wireSlotKnob's threshold) on a filter no envelope feeds routes
+         Env 2 there, after the move lands. Its slot is the one this drag writes (e.id, which getP rebinds), never a second actSlot(). */
+      function mv(m){ if(e.ss){ var nv=Math.max(0,Math.min(1,v0+(y0-m.clientY)*0.006)); try{e.ss.setNormalisedValue(nv);}catch(x){}
+          if(!moved&&Math.abs(y0-m.clientY)>2){ moved=true; if(e.type==='env'&&window.__envEnsureFilterRoute) window.__envEnsureFilterRoute(e.id.indexOf('SYN_FILTER2_')===0?2:1); } } }
       function up(){ e.grab=false; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); }
       document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); }); }
-  function drawEmblems(t){ emblems.forEach(function(e){ if(!e.ss)e.ss=ss(e.id); var v=e.ss?e.ss.getNormalisedValue():0.5;
+  /* fb636 h2 — THE DRV WAVE FINISHES ITS CYCLE. It scrolled on motion time (phase x·2π − tau·3.2) and was not blended, so
+     at rest it held whatever phase tau stopped on — a U-notch one stop, a bump the next. It now has its own loop clock
+     (__tiWind, one cycle = 2π/3.2 s): it winds up in 250 ms with the notes and, when they end, finishes the cycle FORWARD
+     onto phase 0 — one clean tanh-sine starting on the centre line, the picture it boots with. */
+  function drawEmblems(t){ var M=window.__tiMot, tD=(M&&window.__tiWind)?window.__tiWind('em-drv',2*Math.PI/3.2,[[0,0]],M.live):t;
+    emblems.forEach(function(e){ if(!e.ss)e.ss=ss(e.id); var v=e.ss?e.ss.getNormalisedValue():0.5;
     /* fb497 — four fixed-size emblem canvases, four forced-layout gBCRs EVERY frame: 480 rect
        reads a second, the largest self-time entry left on the synth page. Same 32-frame cache as
        drawInto(), same degenerate-rect self-heal. */
     var __ec=e.cv; __ec.__rN=(__ec.__rN||0)+1; if(!__ec.__r||__ec.__r.width<2||(__ec.__rN&31)===1) __ec.__r=__ec.getBoundingClientRect();
     var r=__ec.__r, W=Math.max(1,Math.round(r.width*dpr)), H=Math.max(1,Math.round(r.height*dpr));
     if(e.cv.width!==W)e.cv.width=W; if(e.cv.height!==H)e.cv.height=H;
-    var ctx=e.ctx; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); ctx.setTransform(dpr,0,0,dpr,0,0); EMD[e.type](ctx,W/dpr,H/dpr,v,t,e.grab); }); }
+    var ctx=e.ctx; ctx.setTransform(1,0,0,1,0,0); ctx.clearRect(0,0,W,H); ctx.setTransform(dpr,0,0,dpr,0,0); EMD[e.type](ctx,W/dpr,H/dpr,v,e.type==='drv'?tD:t,e.grab,curE); }); }
   function fmtHz(v){ return v>=1000?(v/1000).toFixed(v>=10000?0:1)+'k':Math.round(v)+''; }
   // Ephemeral HUD — like the envelope: just the letter + value, pops up only while a control moves, then fades.
   function fmtEm(e){ if(!e.ss)return ''; var sv=e.ss.getScaledValue?e.ss.getScaledValue():e.ss.getNormalisedValue();
@@ -32018,7 +32520,11 @@ restoreThemeFromBackend();
   // try/catch so ONE bad frame (e.g. a slider state not ready during boot) can never permanently
   // kill the loop — a dead loop froze the canvas at a 1×1 buffer that CSS then stretched into a
   // solid purple block (filter "messed up" on reopen). The loop always reschedules.
-  function loop(ts){ if(window.__cardOnly)return; var t=ts/1000; curT=t;
+  function loop(ts){ if(window.__cardOnly)return; var __M=window.__tiMot, t=__M?__M.tau:ts/1000; curT=t; curE=__M?__M.e:1; fltTick(__M,t);
+    /* fb636 — THE EMBLEMS WIND TO THEIR GRAB POSE. They ran on the wall clock (ts), so they froze mid-motion when the frames
+       stopped and jumped to a new pose on every wake. Now: motion time (tau holds at rest, so a repaint draws the pose on
+       screen) and the envelope e blends each follower toward the pose the emblem already shows while you hold it —
+       CUT/ENV's dot on the knob's value, RES at full swing, DRV spinning down on tau. e = 1 while playing: unchanged. */
     var __sp=document.getElementById('syn-panel');   // fb487 -- the filter is not on screen and the
     if(__sp&&__sp.classList.contains('hidden')&&!extOpen){ return; }   // overlay is closed: no poll, no draw (fb511 -- __tiFrame re-calls)
     // fb492 -- Max: "FL's frames only start dropping on the SYNTH PAGE". This loop is the page's
@@ -33340,7 +33846,7 @@ restoreThemeFromBackend();
       u.classList.toggle('sel',m.sel); u.classList.toggle('byp',!m.live);   /* fb563 (3) */
       /* fb189 — THE COMET: territory = [(1−d)·knob, (1−d)·knob + d]; the live value rides it.
          Fast attack = streak, slow = pour, LFO = breathe. −1 (no voice) → still. */
-      var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=uw;   /* fb453 — the children live in the ul's own (layout) space */
+      var ra=routeFor(el), sp=u.children[1], cm=u.children[2], gw=uw, __cmL=0;   /* fb453 — the children live in the ul's own (layout) space */
       if(ra){
         var d=Math.min(1,Math.abs(ra.depth)), kn=knobNorm(ra);
         var v=(p2v(ra)!=null)?p2v(ra)   /* fb563 — macros · wheel · aftertouch · bend · random · alt ride the same comet */
@@ -33348,14 +33854,18 @@ restoreThemeFromBackend();
              :ra.fol?((window.__mvFol&&window.__mvFol[ra.fol-1]!=null)?window.__mvFol[ra.fol-1]:-1)   /* fb552 — a follower's comet rides the SOUND it follows (Max's law: if it is audible it is visible) */
              :ra.vel?((window.__mvVel!=null&&window.__mvVel>=0)?window.__mvVel:-1)   /* fb262 — the velocity STREAK rides the live per-note velocity on the same comet as env/LFO */
              :ra.env?((mvE&&mvE[ra.env-1]!=null)?mvE[ra.env-1]:-1)
-                    :(function(){ var __lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null;   /* fb498 -- smoothed; falls back to the raw latch, never to 0 */
+                    :(function(){ __cmL=1; var __lv=window.__mvLfoValAt?window.__mvLfoValAt(ra.lfo-1):null;   /* fb498 -- smoothed; falls back to the raw latch, never to 0 */
                         if(__lv==null)__lv=(mvL&&mvL[ra.lfo-1]!=null)?mvL[ra.lfo-1]:null;
                         return (__lv==null)?-1:(__lv+1)/2; })();
         var anchor=(1-d)*kn;
         sp.style.left=(anchor*gw)+'px'; sp.style.width=(Math.max(0.02,d)*gw)+'px';
-        if(v>=0&&!(ra.env&&v<0.004)){
+        /* fb636 — AN LFO'S COMET WINDS OUT WITH THE LFO HEAD. Its value falls back to the parked latch once the feed is
+           stale, so at rest it stayed lit, frozen mid-swing. Now it fades on the motion envelope and is down at rest, the
+           way an envelope's comet already goes (v < 0.004); the territory underneath stays. */
+        var __ce=__cmL?(window.__tiMot?window.__tiMot.e:1):1;
+        if(v>=0&&!(ra.env&&v<0.004)&&__ce>0.001){
           var eff=anchor+d*v, a1=Math.min(anchor,eff), tl=Math.min(0.32,Math.max(0.06,Math.abs(eff-anchor)));
-          cm.style.display='block';
+          cm.style.display='block'; cm.style.opacity=(__ce<1)?__ce.toFixed(3):'';
           if(eff>=anchor){ cm.classList.remove('rev'); cm.style.left=(Math.max(a1,eff-tl)*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,eff-a1))*gw)+'px'; }
           else { cm.classList.add('rev'); cm.style.left=(eff*gw)+'px'; cm.style.width=(Math.max(0.012,Math.min(tl,anchor-eff))*gw)+'px'; }
         } else cm.style.display='none';
@@ -33530,7 +34040,7 @@ restoreThemeFromBackend();
      {lfo: sv+1}. */
   window.__tiLfoRouted=function(n){ n=+n||0; for(var i=0;i<assigns.length;i++){ var a=assigns[i]; if(!a.byp && +a.depth!==0 && (+a.lfo||0)===n) return true; } return false; };   /* fb631 — bypassed / zero-depth routes contribute nothing (the C++ agrees), so they do not animate */
   window.__tiModRestore=function(){ try{ restore(); }catch(e){} }; window.__tiModRestoreStrict=function(cb){ try{ restore(cb,true); }catch(e){} };   /* fb620 */   /* fb524 — fb145's drop receiver kicks the mirror so the mark appears on the drop, not up to 2.5 s later */
-  setInterval(function(){ try{ if(window.__tiQuiet)return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
+  setInterval(function(){ try{ if(window.__tiRest&&window.__tiRest())return; restore();}catch(e){} },2500);   /* fb145 — popped-card assigns merge in continuously */   /* fb636 — the both-platform rest flag (__tiQuiet never existed on the Mac); a real write anywhere is relayed within a tick (fb570's synModVersion_ kick), so at rest this reconciliation has nothing to find */   /* fb504 gated — edits in a popped card involve pointer input there; the merge resumes on any interaction here */
   /* fb149 — FOREIGN-drag receiver: drags born in the LFO PALETTE window (src 1) land on
      the DOCKED UI too. Local coords come pre-transformed from the main getModDrag native. */
   (function(){ if(window.__cardOnly)return;
@@ -33539,6 +34049,14 @@ restoreThemeFromBackend();
       TGf.forEach(function(g){ g.el.classList.remove('sm-target','sm-hot'); }); TGf=null; hotFel=null; }
     setInterval(function(){ try{
       if(window.__tiQuiet)return;   /* fb504 — a 30 Hz native round-trip was the worst idle timer; a mod drag begins with a pointer event, which wakes the arbiter before this can matter */
+      /* fb636 — ...and a PALETTE drag (c===1) is born only in a POPPED card window. With none floating there is
+         nothing this receiver can ever receive, so the 30 Hz round trip does not run — on the Mac, where
+         __tiQuiet never exists, it had run forever. While any card floats it polls exactly as before, at rest
+         too: that drag happens in ANOTHER window, so no rest flag of this page may gate it. __tiModIn (fb151's
+         occlusion cache for LOCAL drops) only means something while a card can cover the editor: with none it
+         is cleared, never left stale. */
+      var pcs=window.__poppedCards, anyPc=false; if(pcs) for(var pk in pcs){ if(pcs[pk]){ anyPc=true; break; } }
+      if(!anyPc){ if(window.__tiModIn!==undefined) window.__tiModIn=undefined; clear(); return; }
       if(!gmd&&window.Juce&&window.Juce.getNativeFunction){ try{ gmd=window.Juce.getNativeFunction('getModDrag'); }catch(e){} }
       if(!gmd)return;
       gmd().then(function(js){ var o=null; try{ o=JSON.parse(js); }catch(e){}
@@ -34607,6 +35125,7 @@ restoreThemeFromBackend();
            on every Direction (direction shapes the NOTES, not the timeline).
            Other FLOW modes: gentle self-clock so the card never looks dead. */
         var acc=0, feed=null, feedBusy=false, lastC=-1, prevStp=0;
+        var ARP_VMAX=Math.max.apply(null,RATE_LIST.map(TIC.stepsPerSec));   /* fb636 h3 — the playhead's fastest playing speed */
         var start=TIC.runLoop(sh.card,function(dt){
           if(feedFn&&!feedBusy){ feedBusy=true;
             try{ Promise.resolve(feedFn()).then(function(fs){ feedBusy=false;
@@ -34625,9 +35144,19 @@ restoreThemeFromBackend();
             if(rp)heroPaint();
           } else {
             var sps=TIC.stepsPerSec(RATE_LIST[S.v.rate]);
-            acc+=dt*sps; var moved=false;
-            while(acc>=1){ acc-=1; moved=true; ph.step=(ph.step+1)%N; }
-            if(moved||rp)heroPaint();
+            if(feed){
+              /* fb636 h1 — with a feed, this branch is a card whose mode is NOT in the chain, and its playhead is decoration
+                 (this branch never steps the chain). Max: it moves "just about the MIDI" — a wound step clock (the motion
+                 clock's __tiWind, in steps at the rate's steps/s): it winds up with the first note, and when the sound ends
+                 it walks FORWARD with lengthening dwells onto its home, step 1 (LED 1, the purple dot on the first step).
+                 fb636 h3 — at a slow rate that walk is bounded to 2.5 s (vmax: the playhead's fastest rate, 1/256). */
+              var wt=window.__tiWind('card-arp',N,[[0,0]],window.__tiLive(),sps,true,ARP_VMAX), ws=Math.floor(wt+1e-9)%N;
+              if(ws!==ph.step){ ph.step=ws; rp=true; }
+              if(rp)heroPaint();
+            } else {   /* no feed (a browser): the self-clock, as before */
+              acc+=dt*sps; var moved=false;
+              while(acc>=1){ acc-=1; moved=true; ph.step=(ph.step+1)%N; }
+              if(moved||rp)heroPaint(); }
           }
         });
         heroPaint();
@@ -34708,6 +35237,7 @@ restoreThemeFromBackend();
         /* buffer sim */
         var H=[]; (function(){ var s=7; for(var i=0;i<16;i++){ s=(s*16807)%2147483647; H.push(18+(s%1000)/1000*34); } })();
         var sim={ slice:0, frac:0, firing:null, last:null, hist:[], seed:7, t:0 };
+        var GLI_VMAX=Math.max.apply(null,RATE_DIV_RICH.map(TIC.stepsPerSec))/0.4;   /* fb636 h3 — the fastest slice it can play */
 
         /* hero screen */
         var scr=TIC.el('<div class="screen">'
@@ -35005,14 +35535,33 @@ restoreThemeFromBackend();
             if(sim.lvl){ sim.lvl*=(1-dt*4); if(sim.lvl<0.01){ sim.lvl=0; } matrixPaint(); }
             var sps=TIC.stepsPerSec(RATE_DIV_RICH[S.v.grate]);
             var sw=S.v.swing*0.6, mult=(sim.slice%2===0)?(1+sw):(1-sw);
-            acc+=dt*sps/mult; sim.frac=Math.min(1,acc);
             if(sim.firing&&sim.firing.rem==null)sim.firing=null;   /* live-feed leftover */
             var stepped=false;
-            while(acc>=1){ acc-=1; stepped=true;
-              sim.slice=(sim.slice+1)%16;
-              if(sim.slice===0&&!feed) sc.advance();   /* fb137 — the sim drives the chain only in a browser (no feed) */
-              if(sim.firing){ sim.firing.rem--; if(sim.firing.rem<=0)sim.firing=null; }
-              if(!sim.firing&&Math.random()<S.v.chance*(0.30+S.v.chaos*0.4)) fire(false); }
+            if(feed){
+              /* fb636 h1 — out of the chain, with a feed: the monitor is decoration and moves "just about the MIDI" — a wound
+                 slice clock (__tiWind, slices at the grid's rate): it winds up with the note, fires only at full speed, and when
+                 the sound ends it walks forward onto its home — slice 1, no fire overlay, 'Idle'. (fire() writes sim only.) */
+              /* fb636 h3 — vmax: the monitor's fastest slice (the richest grid, the swing's short step): a slow grid's walk
+                 home is bounded to 2.5 s */
+              var gw=window.__tiWind('card-gli',16,[[0,0]],window.__tiLive(),sps/mult,true,GLI_VMAX), gr=window.__tiWindState('card-gli').r,
+                  gs=Math.floor(gw+1e-9)%16;
+              sim.frac=Math.max(0,Math.min(1,gw-Math.floor(gw+1e-9)));
+              for(var gk=0;gk<16&&sim.slice!==gs;gk++){ stepped=true; sim.slice=(sim.slice+1)%16;
+                if(sim.firing){ sim.firing.rem--; if(sim.firing.rem<=0)sim.firing=null; }
+                if(!sim.firing&&gr<=0&&Math.random()<S.v.chance*(0.30+S.v.chaos*0.4)) fire(false); }
+              if(gr>=1&&sim.firing){ sim.firing=null; stepped=true; }
+              /* fb636 h3 — LANDED: the 'last FX' readout comes home too. fire() wrote a random effect into it while the note
+                 played, so the card rested on a different FX name after every note; home is the boot picture, '—' (nothing
+                 fired). sim only — the chain and the DSP never read it. */
+              if(gr<1) sim.wound=1;
+              else if(sim.wound){ sim.wound=0; sim.last=null; sim.lastKey=null; rFx.textContent='—'; stepped=true; }
+            } else {   /* no feed (a browser): the self-clock, as before — the only place the sim steps the chain */
+              acc+=dt*sps/mult; sim.frac=Math.min(1,acc);
+              while(acc>=1){ acc-=1; stepped=true;
+                sim.slice=(sim.slice+1)%16;
+                if(sim.slice===0&&!feed) sc.advance();   /* fb137 — the sim drives the chain only in a browser (no feed) */
+                if(sim.firing){ sim.firing.rem--; if(sim.firing.rem<=0)sim.firing=null; }
+                if(!sim.firing&&Math.random()<S.v.chance*(0.30+S.v.chaos*0.4)) fire(false); } }
             graphPaint(); if(stepped){ roPaint(); paintBank(); matrixPaint(); }
           }
         });
@@ -35257,15 +35806,37 @@ restoreThemeFromBackend();
             if(feed.wr>prevWr){ if(prevWr>0&&go===1)sc.advance(); prevWr=feed.wr; }
           } else {
             sim.live=false; sim.liveNext=null;
-            sim.timer-=dt; sim.silent+=dt;
-            if(sim.timer<=0){ advance(); statPaint(); bankPaint();
-              var base=0.55+Math.random()*0.5;
-              if(Math.random()<0.18){ base+=1.4; sim.notes=0; }   // phrase gap → A-First shows itself
-              sim.timer=base*(1+(Math.random()-0.5)*S.v.wobble*1.4); }
+            /* fb636 h1 — out of the chain, with a feed: the wheel is the card's own picture (advance() writes sim only, never
+               the chain) and it moves "just about the MIDI": while a note sounds it turns by the real mode, its timer wound
+               up with the envelope; when the sound ends it hops FORWARD in cycle order, each dwell longer than the last and
+               never shorter than a playing one, onto its home — the first station of the cycle — and rests there. A wheel
+               that comes to rest with no ending to finish (boot, opened at rest, the cycle edited at rest) simply IS home.
+               No feed (a browser): the self-clock, as before. */
+            var rLive=feed?window.__tiLive():true, rE=feed?window.__tiEnv('card-rbn',rLive):1;
+            sim.silent+=dt;
+            if(rLive){ if(feed){ sim.fwd=0; sim.homing=1; }   /* an ending is owed only to motion the MIDI made (not to a browser frame before the first feed) */
+              sim.timer-=dt*rE;
+              if(sim.timer<=0){ advance(); statPaint(); bankPaint();
+                var base=0.55+Math.random()*0.5;
+                if(Math.random()<0.18){ base+=1.4; sim.notes=0; }   // phrase gap → A-First shows itself
+                sim.timer=base*(1+(Math.random()-0.5)*S.v.wobble*1.4); } }
+            else { var hc=inCycleList(), h0=hc.length?hc[0]:sim.now;
+              /* fb636 h3 — an ending nobody watched (the card closed, or its page hidden, mid-play or mid-ending): no hops
+                 with no MIDI — the wheel lands on its home at once, the arm on the station and the ring at rest */
+              if(window.__tiWindState('card-rbn').snap){ sim.homing=0; sim.pulse=0; if(sim.now===h0){ sim.armT=ANG[h0]; sim.arm=ANG[h0]; } }
+              /* fb636 h3 — AT HOME THE READOUTS ARE HOME: advance() and the phrase gap left a random NOTES digit (0-3), so the
+                 card rested on a different number after every note; the boot picture is 0 */
+              if(sim.now===h0){ sim.homing=0; if(sim.notes!==0){ sim.notes=0; statPaint(); } }
+              else if(sim.homing){ if(sim.homing===1){ sim.homing=2; sim.hopN=0; sim.hopT=0.6; }
+                sim.hopT-=dt;
+                if(sim.hopT<=0){ var hi=hc.indexOf(sim.now), hx=hi<0?h0:hc[(hi+1)%hc.length];
+                  sim.now=hx; sim.armT=ANG[hx]; sim.fwd=1; sim.hopN++; sim.hopT=0.6+0.25*sim.hopN; statPaint(); bankPaint(); } }
+              else { sim.now=h0; sim.armT=ANG[h0]; sim.arm=ANG[h0]; sim.fwd=0; sim.notes=0; statPaint(); bankPaint(); } }
           }
           /* arm eases onto the station; wrap the short way */
           var d=sim.armT-sim.arm;
           while(d>Math.PI)d-=Math.PI*2; while(d<-Math.PI)d+=Math.PI*2;
+          if(sim.fwd&&d<-1e-3)d+=Math.PI*2;   /* fb636 h1 — a homing hop turns clockwise, never back */
           sim.arm+=d*Math.min(1,dt*10);
           sim.pulse=Math.max(0,sim.pulse-dt*2.2);
           wheelPaint(); });
@@ -35406,7 +35977,7 @@ restoreThemeFromBackend();
           s+='<rect x="4" y="6" width="280" height="30" rx="5" fill="none" stroke="rgba(255,255,255,.28)" stroke-width="1"/>';
           /* the memory waveform: dim past, bright inside the loop window */
           function seg(x0,x1,op){ if(x1-x0<3)return '';
-            var p=''; for(var x=x0;x<=x1;x+=3){ var v=waveAt((x+sim.off)*.09);
+            var p=''; for(var x=x0;x<=x1;x+=3){ var v=waveAt((x+sim.off)*.09); if(sim.rw>0)v+=(waveAt(x*.09)-v)*sim.rw;
               p+=(p?' L':'M')+x.toFixed(1)+','+(21-v*9).toFixed(1); }
             return '<path d="'+p+'" fill="none" stroke="rgba(255,255,255,'+op+')" stroke-width="1"/>'; }
           s+=seg(6,wl-1,'.28'); s+=seg(wr+1,282,'.28');
@@ -35550,7 +36121,13 @@ restoreThemeFromBackend();
            gentle self-clock so the card never looks dead. */
         var acc=0, feed=null, feedBusy=false, prevSub=0;
         var start=TIC.runLoop(sh.card,function(dt){
-          if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30);
+          /* fb636 — the memory ribbon scrolls while its mode plays a note, winding up and down with it; out of the chain, or
+             in silence, it rests. No feed (a browser): as before. The feed poll and the chain below are untouched. */
+          /* fb636 h1 — in the chain or not: the MIDI moves it. At rest the waveform is HOME: seg() blends the scrolled wave onto
+             offset 0 by 1 − envelope, and when the envelope reaches 0 the offset IS 0, so the next wind-up scrolls out of home. */
+          var ribE=feed?window.__tiEnv('card-chop-ribbon',window.__tiLive()):1;
+          if(!S.v.freeze) sim.off+=dt*(22+S.v.feed*30)*ribE;
+          sim.rw=1-ribE; if(ribE<=0) sim.off=0;
           if(chopFeedFn&&!feedBusy){ feedBusy=true;
             try{ Promise.resolve(chopFeedFn()).then(function(fs){ feedBusy=false;
               try{ feed=JSON.parse(fs); }catch(e){} }).catch(function(){ feedBusy=false; }); }
@@ -35566,7 +36143,16 @@ restoreThemeFromBackend();
             if(sub!==prevSub){ prevSub=sub; }
             sim.sub=sub;
             ribbonPaint();
-          } else {
+          } else if(feed){
+            /* fb636 h1 — out of the chain, with a feed: the playhead is decoration and moves "just about the MIDI" — a wound
+               slice clock (__tiWind, 8 slices/s) that winds up with the note and, when the sound ends, walks forward onto its
+               home: slice 1 at the loop window's left edge. (The chain step below needs !feed, so it is untouched.) */
+            /* fb636 h3 — vmax 4n: the playhead's fastest out-of-chain speed (8 slices/s over the smallest grid, 2 — the loop
+               window in 0.25 s), in this grid's slices: a 16-slice walk home is bounded to 2.5 s */
+            var cw=window.__tiWind('card-chop',n,[[0,0]],window.__tiLive(),8,true,4*n), cf=Math.floor(cw+1e-9);
+            sim.sub=cf%n; sim.frac=Math.max(0,Math.min(1,cw-cf));
+            ribbonPaint();
+          } else {   /* no feed (a browser): the self-clock, as before — the only place the sim steps the chain */
             var sps=8;                                  // fallback grid clock
             if(!S.v.always){ sim.idle+=dt; if(sim.idle%3>1.6){ ribbonPaint(); return; } }
             acc+=dt*sps; sim.frac=Math.min(1,acc);
@@ -36717,7 +37303,10 @@ restoreThemeFromBackend();
     var v=(def==null?0.5:def), ls=[], g=NF('getSynParam'), s=NF('setSynParam');
     function fire(){ for(var i=0;i<ls.length;i++){ try{ls[i]();}catch(e){} } }
     function poll(){ if(!g)return; try{ Promise.resolve(g(id)).then(function(nv){ nv=parseFloat(nv); if(!isNaN(nv)&&Math.abs(nv-v)>0.0005){ v=nv; fire(); } }).catch(function(){}); }catch(e){} }
-    setInterval(poll,700); poll();
+    /* fb636 (M2) — at rest it looks every 2.8 s instead of every 0.7 s, and not at all while the editor is closed; the
+       first frame / touch / note after rest ('tiactive') looks at once. 4 of these run at boot, ~46 once RBN/CHOP open. */
+    var nT=0; setInterval(function(){ nT++; if(window.__uiParked)return; if((nT&3)&&window.__tiRest&&window.__tiRest())return; poll(); },700); poll();
+    window.addEventListener('tiactive',poll);
     return { getNormalisedValue:function(){ return v; },
              setNormalisedValue:function(n){ v=Math.max(0,Math.min(1,n)); if(s){ try{ s(id,v); }catch(e){} } fire(); },
              valueChangedEvent:{ addListener:function(f){ ls.push(f); } } };
@@ -37205,8 +37794,30 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       try{ var sv=(window.Juce&&window.Juce.getNativeFunction)?window.Juce.getNativeFunction('setWaterfallView'):null; if(sv) sv(o, wtWaterfall.on[o]); }catch(e){}   // remember the view so it survives editor reopen
       if(wtWaterfall.on[o]){ wtWaterfall.fetch(o); wtWaterfall.kick(); }
       else { var cv=document.getElementById('osc-wave-'+o); if(cv){ cv.getContext('2d').clearRect(0,0,cv.width,cv.height); } if(typeof kickScope==='function') kickScope(); } },
-    kick:function(){ if(!wtWaterfall.raf) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
+    /* fb636 — kick = "draw now" (a table landed, a view came on, a reveal): it forces one draw and starts the loop.
+       nudge = "look": starts the loop, which then draws only what changed (the dispatcher's 'wtfall' painter nudges). */
+    kick:function(){ wtWaterfall.force=true; if(!wtWaterfall.raf) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
+    nudge:function(){ if(!wtWaterfall.raf) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
+    force:false, lastSig:{a:'',b:'',c:'',d:''}, chPh:{a:0,b:0,c:0,d:0}, chT:{a:0,b:0,c:0,d:0}, chE:{a:0,b:0,c:0,d:0},
+    /* what the picture is made of, besides the table (a new table arrives through fetch, which kicks) */
+    sigOf:function(o,cv){ var pe=cv.parentElement, i={a:0,b:1,c:2,d:3}[String(o).toLowerCase()], B=window.__harmChurnBand;
+      return wtWaterfall.wtpos(o).toFixed(4)+'|'+(pe?pe.clientWidth+'x'+pe.clientHeight:'')+'|'+cv.width+'x'+cv.height+'|'
+           +((B&&B[i]!=null)?(+B[i]).toFixed(4):'')+'|'+(window.DPR||window.devicePixelRatio||1); },
+    /* churnBand's own early-outs: a band that is really drawn, with a drift indicator that sweeps */
+    churnOn:function(o){ var i={a:0,b:1,c:2,d:3}[String(o).toLowerCase()];
+      try{ var B=window.__harmChurnBand, R=window.__harmChurnRate;
+        return !!(B&&B[i]!=null&&+B[i]>0.0005&&R&&R[i]!=null&&+R[i]>0&&wtWaterfall.isHarmTable(o)); }catch(e){ return false; } },
+    /* ═══ fb636 — THE LOOP RESTS WHEN NOTHING MOVES. It re-armed for as long as a 3D view was on and visible: a forced
+       layout read, a clear and a full blit sixty times a second with nothing playing, the view persisting across
+       sessions — and fb600's churn drift rode that free clock. Now a pass DRAWS only when its picture changed
+       (position · size · churn band · a crossfade · a table still coming) or while the churn drift is winding, and the
+       loop RE-ARMS only while one of those holds, a re-bake is pending, or a hand is on the controls. Parked it costs
+       nothing and the canvas keeps its last picture (fb577 / fb590); it wakes on a note or a hand (the dispatcher's
+       'wtfall' painter nudges it on every pass), on a knob's own event (wireLive), and on kick (a table landing, a
+       view turned on, a reveal). */
     loop:function(){ wtWaterfall.raf=0; var any=false, now=(window.performance&&performance.now)?performance.now():Date.now();
+      var force=wtWaterfall.force, M=window.__tiMot, wind=!!(M&&(M.live||M.m>0)), hand=!!(window.__tiGestureLive&&window.__tiGestureLive());
+      wtWaterfall.force=false;
       for(var k=0;k<OSC_IDS.length;k++){ var o=OSC_IDS[k]; var cv=document.getElementById('osc-wave-'+o);
         /* fb590 — AND THE LOOP OBEYS THE ENGINE TOO. canWaterfall() gated only the CLICK, so a
            waterfall switched on while the osc was Wavetable/FM kept its on[o] flag through an
@@ -37215,7 +37826,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
            right question; "is this engine allowed a waterfall" is. */
         if(wtWaterfall.on[o]&&cv&&cv.offsetParent!==null&&wtWaterfall.canWaterfall(o)){
           try{ wtWaterfall.maybeRebake(o,now); }catch(e){}   /* fb458 — only for a VISIBLE waterfall */
-          try{ wtWaterfall.draw(o); }catch(e){} any=true; } }
+          var sig=wtWaterfall.sigOf(o,cv), moved=(sig!==wtWaterfall.lastSig[o]);
+          var busy=!!(wtWaterfall.busy[o]||wtWaterfall.prev[o]||!wtWaterfall.cache[o]), drift=(wind||wtWaterfall.chE[o]>0)&&wtWaterfall.churnOn(o);   /* fb636 h2 — chE: one more draw once the ending has landed, so the line is drawn ON the centre */
+          if(force||moved||busy||drift){ wtWaterfall.lastSig[o]=sig; try{ wtWaterfall.draw(o); }catch(e){} }
+          if(moved||busy||drift||hand||wtWaterfall.shapeSig(o)!==wtWaterfall.cachedSig(o)) any=true; } }
       if(any) wtWaterfall.raf=requestAnimationFrame(wtWaterfall.loop); },
     geo:function(w,h){ return {flx:w*0.04,frx:w*0.96,fby:h*0.82,blx:w*0.30,brx:w*0.90,bby:h*0.14,ampF:h*0.14,ampB:h*0.055}; },
     proj:function(g,u,a,d){ var lx=g.flx+(g.blx-g.flx)*d, rx=g.frx+(g.brx-g.frx)*d, by=g.fby+(g.bby-g.fby)*d, amp=g.ampF+(g.ampB-g.ampF)*d; return {x:lx+u*(rx-lx), y:by-a*amp}; },
@@ -37247,6 +37861,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
        churn 0 — or with no feed at all — churnBand returns on two global reads before it touches
        the context or the DOM, so the idle canvas and the idle frame count are byte-identical to
        fb599's. */
+    /* fb636 — NO LONGER TRUE: the loop rests now (see loop), and the sweep winds with the motion clock (below). */
     /* the folded excursion, as a DEPTH INTERVAL. Reflection means the interval is not simply
        pos±hw once an end is crossed: at pos 1.0 / hw 0.2 the bank sweeps [0.8,1.0], not [0.8,1.2]. */
     churnSpan:function(pos,hw){ var lo=pos-hw, hi=pos+hw;
@@ -37280,8 +37895,19 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
          the way the audio folds it. Dim on purpose: the drift is per-voice, so no single line is
          the truth; the BAND is the truth and this only carries the speed. */
       if(isFinite(rt)&&rt>0){
-        var tn=(window.performance&&performance.now)?performance.now():Date.now();
-        var pz=wtWaterfall.churnFold(pos+bw*Math.sin(2*Math.PI*rt*tn*0.001));
+        /* fb636 — the sweep rides MOTION time: its phase advances at the published rate times the motion envelope, so it
+           winds up with the notes, slows to a stop when they end, and a repaint at rest draws it where it stopped (on
+           performance.now() it swept on any frame at all, and the loop that drew it never stopped). */
+        var tn=(window.performance&&performance.now)?performance.now():Date.now(), __M=window.__tiMot;
+        var cdt=Math.max(0,Math.min(0.1,(tn-(wtWaterfall.chT[o]||tn))*0.001)); wtWaterfall.chT[o]=tn;
+        /* fb636 h2 — AND IT SETTLES ON THE CENTRE. It held the phase where it stopped (a different depth every stop). Its swing
+           now shrinks with the envelope, so when the notes end it glides onto the band's centre — the bank's read position —
+           and once the ending has landed its phase goes back to 0, so the next wind-up grows out from that centre. */
+        var __ce=__M?__M.e:1;
+        if(__M&&__M.m<=0&&!__M.live){ wtWaterfall.chPh[o]=0; __ce=0; }
+        else wtWaterfall.chPh[o]=((wtWaterfall.chPh[o]||0)+cdt*rt*__ce)%1;
+        wtWaterfall.chE[o]=__ce;
+        var pz=wtWaterfall.churnFold(pos+bw*Math.sin(2*Math.PI*wtWaterfall.chPh[o])*__ce);
         ctx.globalAlpha=0.55; ctx.lineWidth=1.0;
         ctx.beginPath(); wtWaterfall.churnTrace(ctx,g,tbl,pz,false); ctx.stroke(); }
       ctx.restore(); },
@@ -37321,6 +37947,12 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
       ctx.restore(); }
   };
   try { window.wtWaterfall = wtWaterfall; } catch(e){}
+  /* fb636 — THE WATERFALL'S WAKE. Every painter pass (a shipped frame while notes sound or knobs move, a gesture, a heal)
+     nudges the parked loop, which then draws only what changed; a wake or a heal (fb577's counters moved) forces one
+     draw, so a wiped canvas is repainted even when nothing about its picture changed. */
+  if (window.__tiFrameReg) window.__tiFrameReg('wtfall', function(){ if (window.__cardOnly) return;
+    var wk = (window.__tiWakes|0) + '|' + (window.__tiHeals|0); if (wk !== wtWaterfall._wk){ wtWaterfall._wk = wk; wtWaterfall.force = true; }
+    for (var q in wtWaterfall.on){ if (wtWaterfall.on[q]){ wtWaterfall.nudge(); return; } } });
   // Live-attentive: when the wavetable SHAPE (WT_PRESET) or ENGINE changes, refresh the waterfall for
   // that osc so the 3D view always reflects what's actually playing (no toggle needed). Retries until
   // the Juce backend is ready, then wires once.
@@ -37338,6 +37970,13 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           ss.valueChangedEvent.addListener (function () { try { if (wtWaterfall.on[o]) wtWaterfall.fetch (o); } catch (e) {} });
           any = true;
         }
+      });
+      /* fb636 — the loop rests now, so a POSITION moved with no frame and no hand (host automation at rest) must say so
+         itself: the knob's own event nudges the loop (an event, not a clock). */
+      ['SYN_OSC_' + o.toUpperCase() + '_WT_FRAME', 'SYN_OSC_' + o.toUpperCase() + '_HARM_HUE'].forEach (function (id) {
+        var ss = null; try { ss = window.Juce.getSliderState (id); } catch (e) {}
+        if (ss && ss.valueChangedEvent && ss.valueChangedEvent.addListener)
+          ss.valueChangedEvent.addListener (function () { try { if (wtWaterfall.on[o]) wtWaterfall.nudge (); } catch (e) {} });
       });
     });
     if (any) wtWaterfall._wired = true;
@@ -39013,6 +39652,7 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         dxp: Math.random () * 6.2831853, dyp: Math.random () * 6.2831853, wp: Math.random () * 6.2831853,
         dxs: 0.6 + 0.8 * Math.random (), dys: 0.6 + 0.8 * Math.random (), ws: 0.6 + 0.8 * Math.random (),
         al: 0.5 + 0.5 * Math.random (), sz: 0.7 + 0.7 * Math.random () });
+      P.forEach (function (q) { q.dxp0 = q.dxp; q.dyp0 = q.dyp; q.wp0 = q.wp; });   /* fb636 h2 — each particle's home phases */
       var breathPh = 0;
       function resize () { var r = cv.parentElement.getBoundingClientRect (); var dpr = window.DPR || window.devicePixelRatio || 1;
         var w = Math.max (1, Math.round (r.width)), h = Math.max (1, Math.round (r.height));
@@ -39032,6 +39672,14 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         // act tracks the noise's ACTUAL output → 0 when nothing plays. Asymmetric: gentle attack, SLOWER release so
         // the cloud fades out organically (Max: fade out slower / breathe / not robotic).
         act += (targetAct - act) * (targetAct > act ? 0.06 : 0.028) * (window.__uiStepScale||1);
+        /* fb636 h2 — THE CLOUD SETTLES ON ITS HOME. It froze mid-drift, mid-breath and mid-fade (act decays per FRAME, and
+           the frames stop). Now every moving part is scaled by the motion envelope: over the ending the drift, the wobble,
+           the twinkle and the breath ease to zero and the bloom (act) fades with them, and once the ending has landed the
+           phases go back to their seeds — breath 1, every particle on its base spot, twinkle .8, the calm act-0 cloud:
+           the picture it boots with. The next wind-up starts from exactly there. */
+        var __M2 = window.__tiMot, __me = __M2 ? __M2.e : 1, __rest = !! (__M2 && __M2.m <= 0 && ! __M2.live);
+        if (__rest) { act = 0; breathPh = 0; for (var ri = 0; ri < P.length; ri++) { var q = P[ri]; q.dxp = q.dxp0; q.dyp = q.dyp0; q.wp = q.wp0; } }
+        var actD = act * __me;
         if (! cv._w || cv._w < 2) resize ();
         var w = cv._w, h = cv._h, dpr = cv._dpr;
         ctx.setTransform (dpr, 0, 0, dpr, 0, 0); ctx.clearRect (0, 0, w, h);
@@ -39043,10 +39691,10 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if (vizMode === 2) {
           // WAVEFORM (fb66) — the loaded sample drawn white + a fading playhead follower (Serum-compact).
           // No sample (algorithmic type) → fall back to the live oscilloscope so the box is never empty.
-          if (wavePeaks) { drawNoiseWave (ctx, w, h, act); }
+          if (wavePeaks) { drawNoiseWave (ctx, w, h, actD); }
           else {
-            var amp = h * 0.46 * act;
-            ctx.beginPath (); ctx.strokeStyle = 'rgba(255,255,255,' + (0.42 + act * 0.5).toFixed (3) + ')'; ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
+            var amp = h * 0.46 * actD;
+            ctx.beginPath (); ctx.strokeStyle = 'rgba(255,255,255,' + (0.42 + actD * 0.5).toFixed (3) + ')'; ctx.lineWidth = 1.4; ctx.lineJoin = 'round';
             for (var xx = 0; xx <= w; xx += step) { var yy = h * 0.5 + (Math.random () - 0.5) * amp * jag; xx ? ctx.lineTo (xx, yy) : ctx.moveTo (xx, yy); }
             ctx.stroke ();
           }
@@ -39054,20 +39702,22 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
           // PARTICLE CLOUD — an organic, BREATHING cloud. Smooth continuous drift (each particle floats on its own
           // slow sine paths, no per-frame teleporting), a slow global breath, brighter/wider when a note plays.
           var cx = w * 0.5, cy = h * 0.5, base = Math.min (w, h) * 0.5;
-          breathPh += 0.018*(window.__uiStepScale||1);    // slow global breath (~6 s / cycle) — "take it easy"
-          var breath = 0.86 + 0.14 * Math.sin (breathPh);  // gentle overall pulse
-          var e = 0.18 + 0.82 * act;
-          var R = base * (0.34 + 0.42 * act) * breath;     // cloud radius: grows with activity, breathes slowly
-          var al = (0.18 + 0.55 * act) * breath;           // brightness: grows with activity, breathes
-          var drift = base * (0.10 + 0.16 * act);          // how far particles free-float from their base spot
-          var dspd = 0.006 + 0.016 * act;                  // drift SPEED — slow at rest, a touch livelier when playing
+          /* fb636 — breath and drift wind with the sound (__me, above); fb636 h2 — and every offset is scaled by it, so the
+             ending eases each particle home instead of freezing it wherever it drifted */
+          breathPh += 0.018*(window.__uiStepScale||1)*__me;    // slow global breath (~6 s / cycle) — "take it easy"
+          var breath = 1 + (0.86 + 0.14 * Math.sin (breathPh) - 1) * __me;  // gentle overall pulse (home: 1)
+          var e = 0.18 + 0.82 * actD;
+          var R = base * (0.34 + 0.42 * actD) * breath;     // cloud radius: grows with activity, breathes slowly
+          var al = (0.18 + 0.55 * actD) * breath;           // brightness: grows with activity, breathes
+          var drift = base * (0.10 + 0.16 * actD) * __me;   // how far particles free-float from their base spot (home: on it)
+          var dspd = (0.006 + 0.016 * actD) * __me;         // drift SPEED — slow at rest, a touch livelier when playing (fb636: x the motion envelope)
           for (var i = 0; i < P.length; i++) { var p = P[i];
             p.dxp += dspd * p.dxs; p.dyp += dspd * p.dys; p.wp += dspd * p.ws;   // advance each particle's own slow phases
-            var rad = R * p.r + Math.sin (p.wp) * base * 0.09 * e;               // smooth radial wobble
+            var rad = R * p.r + Math.sin (p.wp) * base * 0.09 * e * __me;        // smooth radial wobble (home: none)
             var px = cx + Math.cos (p.a) * rad + Math.cos (p.dxp) * drift;       // smooth free-form drift (no random)
             var py = cy + Math.sin (p.a) * rad * 0.82 + Math.sin (p.dyp) * drift * 0.82;
-            var tw = 0.6 + 0.4 * Math.sin (p.wp * 1.3 + p.dxp);                  // smooth twinkle (no flicker)
-            var s = (0.7 + 1.0 * act) * p.sz;
+            var tw = 0.8 + (0.4 * Math.sin (p.wp * 1.3 + p.dxp) - 0.2) * __me;   // smooth twinkle (no flicker; home: .8)
+            var s = (0.7 + 1.0 * actD) * p.sz;
             ctx.fillStyle = 'rgba(255,255,255,' + (al * p.al * tw).toFixed (3) + ')';
             ctx.fillRect (px, py, s, s);
           }
@@ -40023,7 +40673,14 @@ function driftScopePath(cy,seed){ var s='M10,'+cy.toFixed(1), i, n=24, w=276/n;
         if(o.s)seen=o.s; clearMarks(); }
     }); }catch(e){} }
     if(marked&&Date.now()-lastMove>700) clearMarks();     /* a drag that died mid-air */
-    requestAnimationFrame(tick); }
+    /* fb636 — THE RECEIVER POLLS AT THE PACE OF ITS NEED. It asked getModDrag on EVERY frame for the life of the
+       window — 60 round trips a second, editor open or closed. Every frame still, whenever anything is live: a
+       drag seen in the last second (its own answers), marks up, a note sounding or a hand on this window
+       (__tiRest). Only at true rest does it slow to every 50 ms — never slower: the drag it receives is born in
+       ANOTHER window, and a quick flick (Tests/flowmod_gesture.js bar 7: a 90 ms move, then the drop) must still
+       be seen moving before it lands, or its drop is not accepted. */
+    if(marked||Date.now()-lastMove<1000||!(window.__tiRest&&window.__tiRest())) requestAnimationFrame(tick);
+    else setTimeout(function(){ requestAnimationFrame(tick); },50); }
   /* ═══ fb524 — THE BADGES ARE RETIRED HERE TOO; THE UNDERLINE IS THE GRAMMAR ═══════════════
      fb188 retired the letter badges on the synth page and deleted their stylesheet with them.
      THIS module was never migrated: it kept building `.sm-badge` divs and toggling `.sm-modded`,
